@@ -19,6 +19,7 @@ import (
 // "columns" are characters and the arithmetic matches lipgloss.Width for the
 // ASCII paths covered here.
 func TestElidePathJSPortMatchesGo(t *testing.T) {
+	t.Parallel()
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("node not installed; the JS port guard needs it")

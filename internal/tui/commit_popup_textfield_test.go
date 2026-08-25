@@ -5,6 +5,7 @@ import (
 )
 
 func TestCommitPopupCursorEdit(t *testing.T) {
+	t.Parallel()
 	p := &commitPopup{}
 	// type "abc" into the title, move left twice, insert "X" -> "aXbc"
 	p.applyEditKey(keyMsg("abc"))
@@ -17,6 +18,7 @@ func TestCommitPopupCursorEdit(t *testing.T) {
 }
 
 func TestCommitPopupEnterAdvancesThenNewline(t *testing.T) {
+	t.Parallel()
 	p := &commitPopup{}
 	p.applyEditKey(keyMsg("subj"))
 	p.applyEditKey(keyMsg("enter")) // title -> desc
@@ -32,6 +34,7 @@ func TestCommitPopupEnterAdvancesThenNewline(t *testing.T) {
 }
 
 func TestCommitPopupSubmitCancel(t *testing.T) {
+	t.Parallel()
 	p := &commitPopup{}
 	if s, c := p.applyEditKey(keyMsg("ctrl+s")); !s || c {
 		t.Fatalf("ctrl+s = (%v,%v), want submit", s, c)
@@ -42,6 +45,7 @@ func TestCommitPopupSubmitCancel(t *testing.T) {
 }
 
 func TestCommitMessageAndSplit(t *testing.T) {
+	t.Parallel()
 	p := &commitPopup{title: newTextField("subj"), desc: newTextField("body")}
 	if got := p.message(); got != "subj\n\nbody" {
 		t.Fatalf("message = %q", got)

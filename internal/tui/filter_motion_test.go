@@ -10,6 +10,7 @@ import (
 // and pages move (returning true), everything else — crucially printable runes
 // like j/k/z — falls through (returns false, no move) so it stays query text.
 func TestFilterMotionContract(t *testing.T) {
+	t.Parallel()
 	const page = 12
 	cases := []struct {
 		name    string

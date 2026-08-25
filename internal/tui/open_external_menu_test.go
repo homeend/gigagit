@@ -17,6 +17,7 @@ func menuIDs(m Model) map[string]bool {
 // surface. The blame surface on top must own its menu: copy rows + its own
 // "Open in external editor" only.
 func TestBlameMenuExcludesLeakedCommitOps(t *testing.T) {
+	t.Parallel()
 	base := filesViewGraphModel(false) // commit side: commit ops WOULD show here
 	if !menuIDs(base)["commit-cherry-pick"] {
 		t.Fatal("precondition: the files-view commit side should offer commit ops")
@@ -39,6 +40,7 @@ func TestBlameMenuExcludesLeakedCommitOps(t *testing.T) {
 // files-view View file / Open in external editor rows must not leak into the
 // diff `.` menu.
 func TestDiffMenuExcludesLeakedFilesViewRows(t *testing.T) {
+	t.Parallel()
 	base := filesViewGraphModel(false) // commit side, no diff yet: commit ops show
 	if !menuIDs(base)["commit-cherry-pick"] {
 		t.Fatal("precondition: the files-view commit side should offer commit ops")
@@ -56,6 +58,7 @@ func TestDiffMenuExcludesLeakedFilesViewRows(t *testing.T) {
 // Same leak for the history surface (the user's first report: "it looks like the
 // commit window menu").
 func TestHistoryMenuExcludesLeakedCommitOps(t *testing.T) {
+	t.Parallel()
 	base := filesViewGraphModel(false)
 	if !menuIDs(base)["commit-cherry-pick"] {
 		t.Fatal("precondition: the files-view commit side should offer commit ops")

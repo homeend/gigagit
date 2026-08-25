@@ -9,6 +9,7 @@ import (
 )
 
 func TestAddToShelfRowOnFilesPanel(t *testing.T) {
+	t.Parallel()
 	m := filesMenuModel() // panelFiles focused with one tracked file
 	m.currentWorktree = "/wt"
 	if _, ok := findRow(availableActions(m), "shelf-add"); !ok {
@@ -21,6 +22,7 @@ func TestAddToShelfRowOnFilesPanel(t *testing.T) {
 }
 
 func TestShelfAddCaptureFromBlame(t *testing.T) {
+	t.Parallel()
 	// Working-tree blame (ctx.rev == "") captures the current worktree's working
 	// file — the worktree/branch come from the Model (derived ad-hoc), not stored
 	// on the view. Mirrors the working-tree diff-view capture.
@@ -40,6 +42,7 @@ func TestShelfAddCaptureFromBlame(t *testing.T) {
 }
 
 func TestAddToShelfRowAbsentWhenNoFileFocused(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	if _, ok := m.focusedShelfAddress(); ok {
@@ -51,6 +54,7 @@ func TestAddToShelfRowAbsentWhenNoFileFocused(t *testing.T) {
 }
 
 func TestShelfRestorePopupRequiresDest(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(&shelfRestorePopup{entryID: "unstaged-a-go-deadbeef", origin: "a.go"})
 	// Enter with an empty dest is a no-op (popup stays open).

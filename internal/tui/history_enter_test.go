@@ -10,6 +10,7 @@ import (
 // stack above the history view. The diff is the top layer and owns key routing;
 // esc pops the diff and returns to the history view beneath.
 func TestHistoryEnterOpensFullScreenDiff(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	h := histFixture()
 	m = m.pushLayer(h)
@@ -33,6 +34,7 @@ func TestHistoryEnterOpensFullScreenDiff(t *testing.T) {
 // The full-screen loader must yield a diffMsg (lands in m.diffLayer()), not the
 // right-pane historyDiffMsg, and carry the matching tag so the handler keeps it.
 func TestHistoryEnterDiffLoadYieldsDiffMsg(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := Model{width: 100, height: 30, svc: domain.New(repo)}
 	h := histFixture() // fake hashes → the load errors, but still returns a diffMsg

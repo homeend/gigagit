@@ -39,6 +39,7 @@ func withSearchStore(t *testing.T, m Model) Model {
 }
 
 func TestPanelFilterEnterRecords(t *testing.T) {
+	t.Parallel()
 	m := withSearchStore(t, loadedModel(t))
 	m.focus = panelBranches
 	m, _ = upd(t, m, keyMsg("/")) // start filter
@@ -50,6 +51,7 @@ func TestPanelFilterEnterRecords(t *testing.T) {
 }
 
 func TestFilterEscDoesNotRecord(t *testing.T) {
+	t.Parallel()
 	m := withSearchStore(t, loadedModel(t))
 	m.focus = panelBranches
 	m, _ = upd(t, m, keyMsg("/"))
@@ -61,6 +63,7 @@ func TestFilterEscDoesNotRecord(t *testing.T) {
 }
 
 func TestHighlightSharesPanelRing(t *testing.T) {
+	t.Parallel()
 	m := withSearchStore(t, loadedModel(t))
 	m.focus = panelCommits
 	m, _ = upd(t, m, keyMsg("@")) // start highlight
@@ -73,6 +76,7 @@ func TestHighlightSharesPanelRing(t *testing.T) {
 }
 
 func TestStartupLoadPopulatesRings(t *testing.T) {
+	t.Parallel()
 	store := searchhist.NewFileStore(t.TempDir())
 	_ = store.Record(scopePanel, "preexisting", 20)
 	m := loadedModel(t)
@@ -89,6 +93,7 @@ func seedPanelRing(m Model, phrases ...string) Model {
 }
 
 func TestRecallAltDownOpensNewest(t *testing.T) {
+	t.Parallel()
 	m := seedPanelRing(loadedModel(t), "newest", "older", "oldest")
 	m.focus = panelBranches
 	m, _ = upd(t, m, keyMsg("/"))
@@ -104,6 +109,7 @@ func TestRecallAltDownOpensNewest(t *testing.T) {
 }
 
 func TestRecallAltUpAboveNewestRestoresDraft(t *testing.T) {
+	t.Parallel()
 	m := seedPanelRing(loadedModel(t), "newest", "older")
 	m.focus = panelBranches
 	m, _ = upd(t, m, keyMsg("/"))
@@ -116,6 +122,7 @@ func TestRecallAltUpAboveNewestRestoresDraft(t *testing.T) {
 }
 
 func TestRecallEscRestoresDraftKeepsTyping(t *testing.T) {
+	t.Parallel()
 	m := seedPanelRing(loadedModel(t), "newest")
 	m.focus = panelBranches
 	m, _ = upd(t, m, keyMsg("/"))
@@ -128,6 +135,7 @@ func TestRecallEscRestoresDraftKeepsTyping(t *testing.T) {
 }
 
 func TestRecallTypingClosesDropdown(t *testing.T) {
+	t.Parallel()
 	m := seedPanelRing(loadedModel(t), "newest")
 	m.focus = panelBranches
 	m, _ = upd(t, m, keyMsg("/"))
@@ -142,6 +150,7 @@ func TestRecallTypingClosesDropdown(t *testing.T) {
 }
 
 func TestRecallEnterCommitsHighlighted(t *testing.T) {
+	t.Parallel()
 	m := withSearchStore(t, seedPanelRing(loadedModel(t), "newest", "older"))
 	m.focus = panelBranches
 	m, _ = upd(t, m, keyMsg("/"))
@@ -161,6 +170,7 @@ func TestRecallEnterCommitsHighlighted(t *testing.T) {
 }
 
 func TestRecallBoxShowsTenWithScroll(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	ring := make([]string, 0, 12)
 	for i := 0; i < 12; i++ {
@@ -192,6 +202,7 @@ func TestRecallBoxShowsTenWithScroll(t *testing.T) {
 }
 
 func TestRecallBoxClosedIsEmpty(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	if got := m.recallBox(40); got != "" {
 		t.Fatalf("closed dropdown renders nothing, got %q", got)
@@ -199,6 +210,7 @@ func TestRecallBoxClosedIsEmpty(t *testing.T) {
 }
 
 func TestViewShowsRecallDropdown(t *testing.T) {
+	t.Parallel()
 	m := seedPanelRing(loadedModel(t), "UNIQUE_RECALL_ENTRY", "other")
 	m.width, m.height = 100, 30
 	m.focus = panelBranches
@@ -215,6 +227,7 @@ func TestViewShowsRecallDropdown(t *testing.T) {
 }
 
 func TestRecordPersistsToStore(t *testing.T) {
+	t.Parallel()
 	store := searchhist.NewFileStore(t.TempDir())
 	m := loadedModel(t)
 	m.svc.SetSearchStore(store)

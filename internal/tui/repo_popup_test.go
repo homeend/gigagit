@@ -37,6 +37,7 @@ func seededModel(t *testing.T) (Model, string, string) {
 }
 
 func TestLoadTouchesRegistry(t *testing.T) {
+	t.Parallel()
 	m, state, _ := seededModel(t)
 	entries := repos.Load(state)
 	if len(entries) != 2 {
@@ -50,6 +51,7 @@ func TestLoadTouchesRegistry(t *testing.T) {
 }
 
 func TestRKeyOpensPopupMRUFirst(t *testing.T) {
+	t.Parallel()
 	m, _, otherDir := seededModel(t)
 	u, _ := m.Update(keyMsg("R"))
 	m = u.(Model)
@@ -68,6 +70,7 @@ func TestRKeyOpensPopupMRUFirst(t *testing.T) {
 }
 
 func TestPopupFilterAndSwitch(t *testing.T) {
+	t.Parallel()
 	m, _, otherDir := seededModel(t)
 	u, _ := m.Update(keyMsg("R"))
 	m = u.(Model)
@@ -105,6 +108,7 @@ func TestPopupFilterAndSwitch(t *testing.T) {
 }
 
 func TestEnterOnCurrentRepoIsNoOp(t *testing.T) {
+	t.Parallel()
 	m, _, _ := seededModel(t)
 	u, _ := m.Update(keyMsg("R"))
 	m = u.(Model)
@@ -120,6 +124,7 @@ func TestEnterOnCurrentRepoIsNoOp(t *testing.T) {
 }
 
 func TestCtrlDRemovesEntry(t *testing.T) {
+	t.Parallel()
 	m, state, otherDir := seededModel(t)
 	u, _ := m.Update(keyMsg("R"))
 	m = u.(Model)
@@ -141,6 +146,7 @@ func TestCtrlDRemovesEntry(t *testing.T) {
 }
 
 func TestPopupEscCancelsAndSwallowsKeys(t *testing.T) {
+	t.Parallel()
 	m, _, _ := seededModel(t)
 	u, _ := m.Update(keyMsg("R"))
 	m = u.(Model)
@@ -167,6 +173,7 @@ func TestPopupEscCancelsAndSwallowsKeys(t *testing.T) {
 // (in nav mode z cycles the display mode), and arrows move the selection while
 // typing — the same model as the finder and bookmark/shelf switchers.
 func TestRepoPopupSlashFilterAndZNotCollision(t *testing.T) {
+	t.Parallel()
 	m, _, _ := seededModel(t)
 	u, _ := m.Update(keyMsg("R"))
 	m = u.(Model)
@@ -193,6 +200,7 @@ func TestRepoPopupSlashFilterAndZNotCollision(t *testing.T) {
 }
 
 func TestPopupRendersAndFits(t *testing.T) {
+	t.Parallel()
 	m, _, _ := seededModel(t)
 	m.width, m.height = 80, 24
 	u, _ := m.Update(keyMsg("R"))
@@ -209,6 +217,7 @@ func TestPopupRendersAndFits(t *testing.T) {
 }
 
 func TestAgeString(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(100000, 0)
 	cases := []struct {
 		t    time.Time
@@ -227,6 +236,7 @@ func TestAgeString(t *testing.T) {
 }
 
 func TestRepoPopupDoesNotWrapLongPath(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	long := "/very/deeply/nested/path/that/is/way/longer/than/the/popup/box/myrepo"
 	m = m.pushLayer(&repoPopup{
@@ -267,6 +277,7 @@ func TestRepoPopupDoesNotWrapLongPath(t *testing.T) {
 // continuations hang-indent under the entry name (past the "> ● " column), so
 // multi-line entries stay readable.
 func TestRepoPopupWrapModeIndentsContinuations(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 60, height: 30}
 	long1 := "/very/deeply/nested/path/that/is/longer/than/the/box/one-tail"
 	long2 := "/very/deeply/nested/path/that/is/longer/than/the/box/two-tail"
@@ -325,6 +336,7 @@ func TestRepoPopupWrapModeIndentsContinuations(t *testing.T) {
 // renders at the maximized width and row budget from the start, and ctrl+t is
 // inert (the popup no longer implements maximizableLayer).
 func TestRepoPopupOpensFullscreen(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &repoPopup{now: time.Now()}
@@ -362,6 +374,7 @@ func TestRepoPopupOpensFullscreen(t *testing.T) {
 // different name lengths, the name, slow-fs, path, and age fields each start
 // at one shared column.
 func TestRepoPopupTableAlignsColumns(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	m := Model{width: 120, height: 40}
 	long := "/tmp/repos/a-much-longer-repository-name"
@@ -410,6 +423,7 @@ func TestRepoPopupTableAlignsColumns(t *testing.T) {
 // landing must not shift the path column: the slow-fs column is reserved even
 // while foreign is nil.
 func TestRepoPopupSlowColumnAlwaysReserved(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	entries := []repos.Entry{{Path: "/tmp/repos/alpha", LastOpened: now}}
 	m := Model{width: 120, height: 40}
@@ -432,6 +446,7 @@ func TestRepoPopupSlowColumnAlwaysReserved(t *testing.T) {
 // TestRepoPopupColumnsStableWhileFiltering pins that column widths derive from
 // ALL entries, so narrowing the filtered view does not re-flow the table.
 func TestRepoPopupColumnsStableWhileFiltering(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	m := Model{width: 120, height: 40}
 	p := &repoPopup{
@@ -458,6 +473,7 @@ func TestRepoPopupColumnsStableWhileFiltering(t *testing.T) {
 }
 
 func TestRepoPopupTKeyIsLiteralWhileFiltering(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &repoPopup{filtering: true}

@@ -32,6 +32,7 @@ func branchRowIDs(rows []actionRow) []string {
 }
 
 func TestCommitBranchRowsNonHeadTip(t *testing.T) {
+	t.Parallel()
 	m := commitBranchModel([]model.Ref{localRef("feature", false)})
 	rows := m.commitBranchRows()
 	if len(rows) != 2 || rows[0].id != "rename-branch" || rows[1].id != "delete-branch" {
@@ -43,6 +44,7 @@ func TestCommitBranchRowsNonHeadTip(t *testing.T) {
 }
 
 func TestCommitBranchRowsHeadTipNoDelete(t *testing.T) {
+	t.Parallel()
 	m := commitBranchModel([]model.Ref{localRef("main", true)})
 	ids := branchRowIDs(m.commitBranchRows())
 	if len(ids) != 1 || ids[0] != "rename-branch" {
@@ -51,6 +53,7 @@ func TestCommitBranchRowsHeadTipNoDelete(t *testing.T) {
 }
 
 func TestCommitBranchRowsOtherWorktreeNoDelete(t *testing.T) {
+	t.Parallel()
 	m := commitBranchModel([]model.Ref{localRef("topic", false)})
 	m.worktrees = []model.Worktree{{Branch: "topic", Path: "/elsewhere"}}
 	ids := branchRowIDs(m.commitBranchRows())
@@ -60,6 +63,7 @@ func TestCommitBranchRowsOtherWorktreeNoDelete(t *testing.T) {
 }
 
 func TestCommitBranchRowsTwoTips(t *testing.T) {
+	t.Parallel()
 	m := commitBranchModel([]model.Ref{localRef("main", true), localRef("topic", false)})
 	var rename, del int
 	for _, id := range branchRowIDs(m.commitBranchRows()) {
@@ -76,6 +80,7 @@ func TestCommitBranchRowsTwoTips(t *testing.T) {
 }
 
 func TestCommitBranchRowsNonTip(t *testing.T) {
+	t.Parallel()
 	if rows := commitBranchModel(nil).commitBranchRows(); rows != nil {
 		t.Fatalf("no rows for a non-tip commit, got %v", branchRowIDs(rows))
 	}
@@ -86,6 +91,7 @@ func TestCommitBranchRowsNonTip(t *testing.T) {
 }
 
 func TestCommitBranchRowsGating(t *testing.T) {
+	t.Parallel()
 	m := commitBranchModel([]model.Ref{localRef("feature", false)})
 	m.focus = panelBranches
 	if m.commitBranchRows() != nil {
@@ -99,6 +105,7 @@ func TestCommitBranchRowsGating(t *testing.T) {
 }
 
 func TestAvailableActionsIncludesCommitBranchRows(t *testing.T) {
+	t.Parallel()
 	m := commitBranchModel([]model.Ref{localRef("feature", false)})
 	if _, ok := findRow(availableActions(m), "rename-branch"); !ok {
 		t.Fatal("availableActions missing rename-branch on a tip commit")

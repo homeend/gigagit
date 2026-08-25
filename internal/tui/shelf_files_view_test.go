@@ -23,6 +23,7 @@ func shelfFilesModel(t *testing.T, paths ...string) Model {
 }
 
 func TestShelfSwitcherEnterOpensCommitFilesView(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shCommitEntry("ce"))
 	mm, cmd := m.Update(keyMsg("enter"))
 	m = mm.(Model)
@@ -44,6 +45,7 @@ func TestShelfSwitcherEnterOpensCommitFilesView(t *testing.T) {
 }
 
 func TestShelfFilesMsgPopulatesTree(t *testing.T) {
+	t.Parallel()
 	m := shelfFilesModel(t, "top.txt", "sub/inner.txt")
 	var all []string
 	for _, l := range m.filesView.lines {
@@ -67,6 +69,7 @@ func TestShelfFilesMsgPopulatesTree(t *testing.T) {
 }
 
 func TestShelfFilesFocusedBookmarkIsShelfMember(t *testing.T) {
+	t.Parallel()
 	m := shelfFilesModel(t, "top.txt")
 	// Select the file row (skip any heading rows).
 	vis := m.filesView.visible()
@@ -89,6 +92,7 @@ func TestShelfFilesFocusedBookmarkIsShelfMember(t *testing.T) {
 }
 
 func TestShelfFilesEnterOpensMemberVsWorkingDiff(t *testing.T) {
+	t.Parallel()
 	m := shelfFilesModel(t, "top.txt")
 	m.width, m.height = 100, 30
 	mm, cmd := m.openDiffForFileLine(contentLine{path: "top.txt"})
@@ -105,6 +109,7 @@ func TestShelfFilesEnterOpensMemberVsWorkingDiff(t *testing.T) {
 }
 
 func TestCloseFilesViewClearsShelfCluster(t *testing.T) {
+	t.Parallel()
 	m := shelfFilesModel(t, "top.txt")
 	m = m.closeFilesView()
 	if m.filesShelfID != "" || m.filesShelfLabel != "" || m.filesMode == filesModeShelf {
@@ -113,6 +118,7 @@ func TestCloseFilesViewClearsShelfCluster(t *testing.T) {
 }
 
 func TestShelfFilesRightColumnInert(t *testing.T) {
+	t.Parallel()
 	m := shelfFilesModel(t, "top.txt")
 	if m2 := m.focusRight(); !m2.filesTreeFocused {
 		t.Fatal("focusRight must be inert in shelf mode")

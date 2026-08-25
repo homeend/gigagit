@@ -8,6 +8,7 @@ import (
 )
 
 func TestCommitFilterPopupOpensOnBackslash(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelCommits
 	m2, _ := m.Update(keyMsg("\\"))
@@ -18,6 +19,7 @@ func TestCommitFilterPopupOpensOnBackslash(t *testing.T) {
 }
 
 func TestCommitFilterPopupApplySetsFilter(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	p := &commitFilterPopup{}
 	p.focus = cfGrep
@@ -37,6 +39,7 @@ func TestCommitFilterPopupApplySetsFilter(t *testing.T) {
 }
 
 func TestCommitFilterPopupCtrlRClearsAllFilters(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.commitFilter = commitFilterFields{Paths: []string{"sub"}, Author: "alice", Grep: "race"}
 	p := newCommitFilterPopup(m.commitFilter)
@@ -53,6 +56,7 @@ func TestCommitFilterPopupCtrlRClearsAllFilters(t *testing.T) {
 }
 
 func TestCommitFilterPopupEscCancels(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m = m.pushLayer(&commitFilterPopup{})
 	beforeAuthor := m.commitFilter.Author
@@ -75,6 +79,7 @@ func TestCommitFilterPopupEscCancels(t *testing.T) {
 }
 
 func TestCommitFilterPopupSwallowsGlobalKeys(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m = m.pushLayer(&commitFilterPopup{})
 	m2, cmd := m.Update(keyMsg("p")) // 'p' is pull globally; must NOT fire here

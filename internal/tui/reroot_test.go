@@ -23,6 +23,7 @@ func runGit(t *testing.T, dir string, args ...string) {
 // the commit filter must be dropped with it — otherwise the Branches panel keeps
 // marking the old solo branch while the Commits panel shows all branches.
 func TestReRootClearsCommitScope(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	updated, _ := m.Update(m.loadCmd()())
@@ -49,6 +50,7 @@ func TestReRootClearsCommitScope(t *testing.T) {
 }
 
 func TestReRootPointsAtNewWorktreeAndReloads(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	updated, _ := m.Update(m.loadCmd()())

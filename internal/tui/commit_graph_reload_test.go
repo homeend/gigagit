@@ -54,6 +54,7 @@ func requireSingleLane(t *testing.T, m Model) {
 // no-op — it kept painting the previous walk's fork lanes beside the new
 // linear rows.
 func TestSoloReloadRelaysGraphWithSameTip(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	svc := domain.New(&git.Repo{Runner: f})
 	m := branchesPanelModel("main", "feat")
@@ -82,6 +83,7 @@ func TestSoloReloadRelaysGraphWithSameTip(t *testing.T) {
 // upstream refs moved mid-list after a fetch) must not inherit the previous
 // walk's lanes.
 func TestFeedSourceArrivalRelaysGraphWithSameTip(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.srcInflight = map[sourceKey]bool{}
 	m.srcLoading = map[sourceKey]bool{}

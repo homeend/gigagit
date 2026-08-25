@@ -8,6 +8,7 @@ import (
 )
 
 func TestMiddleSlotRendersTagsWhenActive(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width = 100
 	m.height = 30
@@ -24,6 +25,7 @@ func TestMiddleSlotRendersTagsWhenActive(t *testing.T) {
 }
 
 func TestMiddleSlotShowsFilesByDefault(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width = 100
 	m.height = 30

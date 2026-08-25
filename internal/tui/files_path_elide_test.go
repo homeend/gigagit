@@ -11,6 +11,7 @@ import (
 // elideFilePath keeps the leading status glyph + space and middle-elides the
 // path so BOTH the path's beginning and the filename survive a narrow column.
 func TestElideFilePath(t *testing.T) {
+	t.Parallel()
 	if got := elideFilePath("M short.go", 20); got != "M short.go" {
 		t.Errorf("fits: got %q, want unchanged", got)
 	}
@@ -38,6 +39,7 @@ func TestElideFilePath(t *testing.T) {
 // The file-row elision keeps the path's beginning AND the directory nearest
 // the file around the "…" (elidePath's alternating priority).
 func TestElideFileMiddle(t *testing.T) {
+	t.Parallel()
 	// "aa/bb/cc/dd/view.go" is 19 cols; at 16 the middle dirs (bb, cc) go.
 	got := elidePath("aa/bb/cc/dd/view.go", 16)
 	if got != "aa/…/dd/view.go" {
@@ -53,6 +55,7 @@ func TestElideFileMiddle(t *testing.T) {
 // cutoff mode: the path's beginning, the directory nearest the file, and the
 // filename stay; the middle directories are dropped.
 func TestFilesPanelMiddleElidesPath(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{
 		{Path: "internal/tui/some/deep/view.go", Kind: model.KindTracked, Unstaged: 'M'},
@@ -79,6 +82,7 @@ func TestFilesPanelMiddleElidesPath(t *testing.T) {
 // The Staged panel (bottom of the left column) middle-elides long paths the
 // same way the Files panel does.
 func TestStagedPanelMiddleElidesPath(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{
 		{Path: "internal/tui/some/deep/view.go", Kind: model.KindTracked, Staged: 'M'},

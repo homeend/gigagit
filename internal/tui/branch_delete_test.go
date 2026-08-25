@@ -7,6 +7,7 @@ import (
 // TestDKeyDeletesBranchThroughConfirmModal presses d on a branch row, answers
 // the delete-branch confirm with "delete", and asserts the branch is gone.
 func TestDKeyDeletesBranchThroughConfirmModal(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "branch", "feat/doomed")
 
@@ -57,6 +58,7 @@ func TestDKeyDeletesBranchThroughConfirmModal(t *testing.T) {
 
 // TestDKeyOnBranchesEscKeepsBranch answers the confirm with esc (= abort).
 func TestDKeyOnBranchesEscKeepsBranch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "branch", "feat/safe")
 

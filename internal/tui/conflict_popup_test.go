@@ -94,6 +94,7 @@ func selectConflictProc(t *testing.T, cp *conflictProcess, path string) {
 // --- the notice (unchanged: a passive affordance to enter the process) ---
 
 func TestStatusBarShowsConflictNotice(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	out := m.View()
 	if !strings.Contains(out, "2 conflicts") || !strings.Contains(out, "[x]") {
@@ -102,6 +103,7 @@ func TestStatusBarShowsConflictNotice(t *testing.T) {
 }
 
 func TestStatusBarShowsConflictSource(t *testing.T) {
+	t.Parallel()
 	out := conflictModelWithSource().View()
 	if !strings.Contains(out, "merging feature into main") {
 		t.Errorf("status bar should name the source:\n%s", out)
@@ -111,6 +113,7 @@ func TestStatusBarShowsConflictSource(t *testing.T) {
 // --- entering / leaving the process via x ---
 
 func TestXStartsConflictProcess(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	mm, _ := m.Update(keyMsg("x"))
 	if _, ok := mm.(Model).proc.(*conflictProcess); !ok {
@@ -119,6 +122,7 @@ func TestXStartsConflictProcess(t *testing.T) {
 }
 
 func TestXNoOpWithoutConflicts(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 30, sel: map[panel]int{}}
 	mm, _ := m.Update(keyMsg("x"))
 	if mm.(Model).proc != nil {
@@ -127,6 +131,7 @@ func TestXNoOpWithoutConflicts(t *testing.T) {
 }
 
 func TestConflictProcessShowsSourceSubtitle(t *testing.T) {
+	t.Parallel()
 	m := conflictModelWithSource()
 	mm, _ := m.Update(keyMsg("x"))
 	out := mm.(Model).View()
@@ -136,6 +141,7 @@ func TestConflictProcessShowsSourceSubtitle(t *testing.T) {
 }
 
 func TestConflictProcessZCyclesMode(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 	u, _ := m.Update(keyMsg("z"))
@@ -148,6 +154,7 @@ func TestConflictProcessZCyclesMode(t *testing.T) {
 // The hint is longer than the box, so it must WRAP across lines (not truncate) —
 // every key must remain visible.
 func TestConflictProcessHintNotTruncated(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 30}
 	cp := &conflictProcess{
 		st:         confListing,
@@ -165,6 +172,7 @@ func TestConflictProcessHintNotTruncated(t *testing.T) {
 // --- real-git integration: per-file resolve actions actually dispatch ---
 
 func TestConflictProcessKeepCurrentDispatches(t *testing.T) {
+	t.Parallel()
 	m := conflictRepoTUI(t)
 	mm, _ := m.Update(keyMsg("x"))
 	m = mm.(Model)
@@ -182,6 +190,7 @@ func TestConflictProcessKeepCurrentDispatches(t *testing.T) {
 }
 
 func TestConflictProcessKeepIncomingDispatches(t *testing.T) {
+	t.Parallel()
 	m := conflictRepoTUI(t)
 	mm, _ := m.Update(keyMsg("x"))
 	m = mm.(Model)
@@ -196,6 +205,7 @@ func TestConflictProcessKeepIncomingDispatches(t *testing.T) {
 }
 
 func TestConflictProcessModifyDeleteKeys(t *testing.T) {
+	t.Parallel()
 	m := conflictRepoTUI(t)
 	mm, _ := m.Update(keyMsg("x"))
 	m = mm.(Model)
@@ -236,6 +246,7 @@ func driveChain(t *testing.T, m Model, cmd tea.Cmd) Model {
 // continue → the slot releases. This is the chain (opFinished→finished→reload→
 // refreshed→probe→inProgress) where a routing bug would hide.
 func TestConflictProcessEndToEndResolveContinueReleases(t *testing.T) {
+	t.Parallel()
 	m := conflictRepoTUI(t)
 	mm, _ := m.Update(keyMsg("x"))
 	m = mm.(Model)
@@ -271,6 +282,7 @@ func TestConflictProcessEndToEndResolveContinueReleases(t *testing.T) {
 }
 
 func TestConflictKeepModifiedMapping(t *testing.T) {
+	t.Parallel()
 	du := model.FileStatus{Path: "md.txt", Kind: model.KindUnmerged, Staged: 'D', Unstaged: 'U'}
 	if got := keepModifiedAction(du); got != engine.KeepTheirs {
 		t.Errorf("DU keep-modified = %v, want KeepTheirs", got)

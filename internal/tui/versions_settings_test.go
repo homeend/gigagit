@@ -12,6 +12,7 @@ import (
 )
 
 func TestVersionsPolicyFromConfig(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		in   config.VersionsConfig
@@ -46,6 +47,7 @@ func TestVersionsPolicyFromConfig(t *testing.T) {
 }
 
 func TestSaveVersionsRetentionWritesConfigAndPolicy(t *testing.T) {
+	t.Parallel()
 	m, dir := settingsModel(t)
 	m.repoConfigPath = filepath.Join(dir, ".gg.toml")
 
@@ -64,6 +66,7 @@ func TestSaveVersionsRetentionWritesConfigAndPolicy(t *testing.T) {
 }
 
 func TestSaveVersionsRetentionRejectsInvalidDays(t *testing.T) {
+	t.Parallel()
 	m, dir := settingsModel(t)
 	m.repoConfigPath = filepath.Join(dir, ".gg.toml")
 	m.cfg.Versions.MaxAgeDays = 90
@@ -86,6 +89,7 @@ func TestSaveVersionsRetentionRejectsInvalidDays(t *testing.T) {
 }
 
 func TestToggleVersionsRecording(t *testing.T) {
+	t.Parallel()
 	m, dir := settingsModel(t)
 	m.repoConfigPath = filepath.Join(dir, ".gg.toml")
 	if m.cfg.Versions.Disabled {
@@ -119,6 +123,7 @@ func TestToggleVersionsRecording(t *testing.T) {
 // singular "1 day", never the grammatically wrong "1 days", while other
 // values keep the plural form.
 func TestOpsHistRetentionSingularPlural(t *testing.T) {
+	t.Parallel()
 	m, dir := settingsModel(t)
 	m.repoConfigPath = filepath.Join(dir, ".gg.toml")
 	m.cfg.Versions.MaxAgeDays = 1
@@ -153,6 +158,7 @@ func TestOpsHistRetentionSingularPlural(t *testing.T) {
 // on "Operations history" opens the sub-view with both rows selectable, and
 // esc backs out to the menu (mirrors the Refresh-rates sub-view contract).
 func TestOpsHistMenuRowOpensSubView(t *testing.T) {
+	t.Parallel()
 	m, dir := settingsModel(t)
 	m.repoConfigPath = filepath.Join(dir, ".gg.toml")
 	u, _ := m.Update(keyMsg(","))
@@ -213,6 +219,7 @@ func TestOpsHistMenuRowOpensSubView(t *testing.T) {
 // silently skipped the way they were in a prior, toothless version of this
 // test.
 func TestOpsHistSubViewRendersAtWideWidth(t *testing.T) {
+	t.Parallel()
 	m, dir := settingsModel(t)
 	m.repoConfigPath = filepath.Join(dir, ".gg.toml")
 	// Use a terminal width where the difference between popupInnerWidth (56)

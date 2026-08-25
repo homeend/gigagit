@@ -11,6 +11,7 @@ import (
 // so the joinTabSegs rewrite can never silently change what the panels draw (and
 // the fit_test.go substring checks stay valid).
 func TestTabLabelsByteCompatible(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ got, want string }{
 		{tabBarLabel(panelBranches), "[Branches] R W"},
 		{tabBarLabel(panelRemotes), "B [Remotes] W"},
@@ -32,6 +33,7 @@ func TestTabLabelsByteCompatible(t *testing.T) {
 // and the single-space separators map to nothing. If the render layout and the
 // hit-test ever drift, this fails.
 func TestTabSegSyncInvariant(t *testing.T) {
+	t.Parallel()
 	slots := [][]tabSeg{
 		topTabSegs(panelBranches),
 		topTabSegs(panelRemotes),
@@ -75,6 +77,7 @@ func TestTabSegSyncInvariant(t *testing.T) {
 // TestTabClickAtGeometry verifies the click→tab mapping on a real laid-out model:
 // the top slot's header sits on row pos.y+1, text starting at pos.x+2.
 func TestTabClickAtGeometry(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 90, height: 30, activeLeftTab: panelBranches}
 	pos := m.layout().pos[panelBranches] // {0, 1}
 	labelY := pos.y + 1
@@ -113,6 +116,7 @@ func TestTabClickAtGeometry(t *testing.T) {
 // screen, so its (now dead) cells must not be clickable — otherwise a click in
 // the right-edge padding would switch to an invisible tab.
 func TestTabClickAtTruncated(t *testing.T) {
+	t.Parallel()
 	// width 48 -> leftW = 48/3 = 16 -> innerW = 12. "[Branches] R W" is 14 cells,
 	// so the trailing " W" (cols 12-13) is truncated away.
 	m := Model{width: 48, height: 30, activeLeftTab: panelBranches}
@@ -133,6 +137,7 @@ func TestTabClickAtTruncated(t *testing.T) {
 // mouse clicks: the right slot field is set, focus moves, the top slot updates
 // lastLeftPanel, and a maximized column re-pins to the new tab.
 func TestActivateTab(t *testing.T) {
+	t.Parallel()
 	m := Model{activeLeftTab: panelBranches}
 	m = m.activateTab(panelWorktrees)
 	if m.activeLeftTab != panelWorktrees || m.focus != panelWorktrees || m.lastLeftPanel != panelWorktrees {
@@ -158,6 +163,7 @@ func TestActivateTab(t *testing.T) {
 // marker in the top tab bar switches to and focuses the Remotes tab; a click on a
 // data row below does not switch tabs.
 func TestMouseClickSwitchesTab(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 90, height: 30, activeLeftTab: panelBranches, focus: panelCommits, sel: map[panel]int{}}
 	pos := m.layout().pos[panelBranches]
 	x := pos.x + 2 + 11 // the "R" marker

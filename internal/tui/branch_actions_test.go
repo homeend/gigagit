@@ -25,6 +25,7 @@ func branchMergeModel() Model {
 }
 
 func TestBranchMergeRebaseRowsPresent(t *testing.T) {
+	t.Parallel()
 	m := branchMergeModel()
 	got := ids(availableActions(m))
 	if !got["branch-merge"] || !got["branch-rebase"] {
@@ -34,6 +35,7 @@ func TestBranchMergeRebaseRowsPresent(t *testing.T) {
 
 // The current (checked-out) branch must NOT offer merge/rebase against itself.
 func TestBranchMergeRebaseAbsentOnCurrentBranch(t *testing.T) {
+	t.Parallel()
 	m := branchMergeModel()
 	m.sel[panelBranches] = 1 // "main", IsHead=true
 	got := ids(availableActions(m))
@@ -44,6 +46,7 @@ func TestBranchMergeRebaseAbsentOnCurrentBranch(t *testing.T) {
 
 // Tab-scoped: the rows must not leak when another left tab is focused.
 func TestBranchMergeRebaseAbsentWhenRemotesTabFocused(t *testing.T) {
+	t.Parallel()
 	m := branchMergeModel()
 	m.focus = panelRemotes
 	got := ids(availableActions(m))
@@ -53,6 +56,7 @@ func TestBranchMergeRebaseAbsentWhenRemotesTabFocused(t *testing.T) {
 }
 
 func TestBranchMergeRebaseHiddenOnDetachedHEAD(t *testing.T) {
+	t.Parallel()
 	m := branchMergeModel()
 	m.status.Branch = "" // detached
 	got := ids(availableActions(m))
@@ -62,6 +66,7 @@ func TestBranchMergeRebaseHiddenOnDetachedHEAD(t *testing.T) {
 }
 
 func TestBranchMergeRowDispatches(t *testing.T) {
+	t.Parallel()
 	m := branchMergeModel()
 	m.cfg.UI.DisableSlowOpConfirm = true // test op wiring, not confirm UX
 	row, ok := m.branchMergeRow()
@@ -74,6 +79,7 @@ func TestBranchMergeRowDispatches(t *testing.T) {
 }
 
 func TestBranchRebaseRowDispatches(t *testing.T) {
+	t.Parallel()
 	m := branchMergeModel()
 	m.cfg.UI.DisableSlowOpConfirm = true // test op wiring, not confirm UX
 	row, ok := m.branchRebaseRow()
@@ -89,6 +95,7 @@ func TestBranchRebaseRowDispatches(t *testing.T) {
 // ANY branch, including the current one — restore/compare have no !IsHead
 // gate) pushes the versionsPopup straight into versions mode.
 func TestBranchVersionsRowDispatches(t *testing.T) {
+	t.Parallel()
 	m := branchMergeModel()
 	row, ok := m.branchVersionsRow()
 	if !ok {
@@ -112,6 +119,7 @@ func TestBranchVersionsRowDispatches(t *testing.T) {
 // merge/rebase, restoring/browsing versions of the current branch is a valid
 // (and common) recovery flow, so there is no !IsHead gate.
 func TestBranchVersionsRowAvailableOnCurrentBranch(t *testing.T) {
+	t.Parallel()
 	m := branchMergeModel()
 	m.sel[panelBranches] = 1 // "main", IsHead=true
 	if _, ok := m.branchVersionsRow(); !ok {

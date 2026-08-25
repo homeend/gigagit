@@ -12,6 +12,7 @@ import (
 // the stash view, and the hidden commit row's reveal drew over the stash box.
 // Landing in the Commits feed must first close the surface that covers it.
 func TestFocusCommitsPanelClosesStashView(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelFiles
 	mm, _ := m.Update(keyMsg("S")) // stash window opens; lastLeftPanel=panelFiles
@@ -31,6 +32,7 @@ func TestFocusCommitsPanelClosesStashView(t *testing.T) {
 // reload lands and the goto-tip drain runs, the stash window must be closed and
 // the cursor must sit in the (now visible) Commits feed.
 func TestStashOpenBranchCtrlGLandsInVisibleCommits(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelFiles
 	mm, _ := m.Update(keyMsg("S"))
@@ -60,6 +62,7 @@ func TestStashOpenBranchCtrlGLandsInVisibleCommits(t *testing.T) {
 // enter on Branches ("Go to tip in commits") shares the landing path and must
 // equally close the covering stash window.
 func TestStashOpenBranchEnterGotoTipClosesStash(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelFiles
 	mm, _ := m.Update(keyMsg("S"))
@@ -79,6 +82,7 @@ func TestStashOpenBranchEnterGotoTipClosesStash(t *testing.T) {
 // A tip that isn't loaded falls back to the eager deep-search; the stash window
 // must close up front so the search lands in a visible feed.
 func TestGotoCommitByHashClosesStashBeforeEagerFallback(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelFiles
 	mm, _ := m.Update(keyMsg("S"))
@@ -93,6 +97,7 @@ func TestGotoCommitByHashClosesStashBeforeEagerFallback(t *testing.T) {
 // Guard against a stale entry: closing via the landing path must keep the
 // selection valid for the stash list is gone (smoke: render doesn't panic).
 func TestStashCloseViaLandingRendersCleanly(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 100, 30
 	m.focus = panelFiles

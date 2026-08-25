@@ -9,6 +9,7 @@ import (
 )
 
 func TestOpenCompareFocusedVsBookmark(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	ref := model.FileRef{Source: model.SourceCommit, Locator: "aaaa1111", Path: "a.go"}
 	bm := model.Bookmark{ID: "bm9", State: model.StateCommitted, Commit: "bbbb2222", SHA: "blob22", Path: "b.go"}
@@ -35,6 +36,7 @@ func twoBookmarkItems() []model.Bookmark {
 }
 
 func TestPendingCompareSurvivesLoad(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.pendingCompare = &pendingCompare{ref: model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}, label: "commit a.go"}
 	u, _ := m.Update(bookmarksLoadedMsg{items: twoBookmarkItems()})
@@ -48,6 +50,7 @@ func TestPendingCompareSurvivesLoad(t *testing.T) {
 }
 
 func TestCompareModeEnterRunsCompare(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(newBookmarkPopup(twoBookmarkItems()))
 	ref := model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}
@@ -66,6 +69,7 @@ func TestCompareModeEnterRunsCompare(t *testing.T) {
 }
 
 func TestCompareModeMutatorsInert(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(newBookmarkPopup(twoBookmarkItems()))
 	ref := model.FileRef{Source: model.SourceCommit, Locator: "x", Path: "a.go"}
@@ -83,6 +87,7 @@ func TestCompareModeMutatorsInert(t *testing.T) {
 }
 
 func TestCompareRowRunSetsPendingAndLoads(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(&diffView{title: "a.go", rev: "cafe9999"}) // a resolvable focused file
 	row, ok := m.compareAgainstBookmarkRow()
@@ -103,6 +108,7 @@ func TestCompareRowRunSetsPendingAndLoads(t *testing.T) {
 // of the layer stack (history + popup + diff). The diff is the topmost layer
 // and must be visible; esc returns to the picker, esc again returns to history.
 func TestCompareDiffVisibleOverHistorySurface(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(newHistoryView(navContext{path: "a.go", rev: "r"}))
 	m = m.pushLayer(newBookmarkPopup(twoBookmarkItems()))
@@ -119,6 +125,7 @@ func TestCompareDiffVisibleOverHistorySurface(t *testing.T) {
 }
 
 func TestBookmarksLoadErrorClearsPendingCompare(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.pendingCompare = &pendingCompare{ref: model.FileRef{Path: "a.go"}, label: "x"}
 	u, _ := m.Update(bookmarksLoadedMsg{err: errors.New("boom")})
@@ -128,6 +135,7 @@ func TestBookmarksLoadErrorClearsPendingCompare(t *testing.T) {
 }
 
 func TestCompareRowAccompaniesAddRow(t *testing.T) {
+	t.Parallel()
 	// Wherever "Bookmark this file" appears, so must "Compare against bookmark".
 	m := footerModel()
 	m = m.pushLayer(newBlameView(navContext{path: "a.go", rev: "abc123"}))
@@ -141,6 +149,7 @@ func TestCompareRowAccompaniesAddRow(t *testing.T) {
 }
 
 func TestCompareAgainstWorkingDirRowOpensDiff(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	// A focused commit file: the diff view with a rev makes focusedBookmark
 	// yield a committed ref (Path = the diff title).
@@ -166,6 +175,7 @@ func TestCompareAgainstWorkingDirRowOpensDiff(t *testing.T) {
 }
 
 func TestCompareAgainstWorkingDirRowAbsentForWorkingFile(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	// A working-tree file is focused (diff view with no rev) → comparing it
 	// against the working tree is itself-vs-itself, so the row is gated off.

@@ -9,6 +9,7 @@ import (
 // Exercises positive selection movement (the vacuous single-item clamp test
 // never advances), then the clamp at the last row, then moving back up.
 func TestDownAdvancesThenClampsWithMultipleItems(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.commits = []model.Commit{{Hash: "a"}, {Hash: "b"}, {Hash: "c"}}
 	m.focus = panelCommits

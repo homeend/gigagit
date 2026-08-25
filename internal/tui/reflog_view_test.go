@@ -27,6 +27,7 @@ func reflogTestModel() Model {
 }
 
 func TestReflogListLenAndRows(t *testing.T) {
+	t.Parallel()
 	m := reflogTestModel()
 	if m.panelLen(panelReflog) != 2 {
 		t.Fatalf("panelLen(reflog) = %d, want 2", m.panelLen(panelReflog))
@@ -41,6 +42,7 @@ func TestReflogListLenAndRows(t *testing.T) {
 }
 
 func TestReflogTabRendersInAssembledLeftColumn(t *testing.T) {
+	t.Parallel()
 	// Render-path coverage: the panel-logic tests run on synthetic data and
 	// never prove the Reflog tab draws in the assembled left column. Toggle the
 	// bottom slot to Reflog and assert a reflog row + the bracketed label survive
@@ -62,6 +64,7 @@ func TestReflogTabRendersInAssembledLeftColumn(t *testing.T) {
 }
 
 func TestReflogResetRowAnchorsOnCursor(t *testing.T) {
+	t.Parallel()
 	m := reflogTestModel()
 	m.focus = panelReflog
 	m.sel[panelReflog] = 1 // second entry
@@ -80,6 +83,7 @@ func TestReflogResetRowAnchorsOnCursor(t *testing.T) {
 }
 
 func TestReflogCheckoutRowOpensModal(t *testing.T) {
+	t.Parallel()
 	m := reflogTestModel()
 	m.focus = panelReflog
 	m.sel[panelReflog] = 1
@@ -99,6 +103,7 @@ func TestReflogCheckoutRowOpensModal(t *testing.T) {
 }
 
 func TestReflogCheckoutDetachedStartsOp(t *testing.T) {
+	t.Parallel()
 	m := reflogTestModel()
 	m.focus = panelReflog
 	m.sel[panelReflog] = 1
@@ -113,6 +118,7 @@ func TestReflogCheckoutDetachedStartsOp(t *testing.T) {
 }
 
 func TestReflogCheckoutCreateBranchOpensPopup(t *testing.T) {
+	t.Parallel()
 	m := reflogTestModel()
 	m.focus = panelReflog
 	m.sel[panelReflog] = 1
@@ -133,6 +139,7 @@ func TestReflogCheckoutCreateBranchOpensPopup(t *testing.T) {
 }
 
 func TestReflogEnterOpensCommitFilesView(t *testing.T) {
+	t.Parallel()
 	m := reflogTestModel()
 	m.focus = panelReflog
 	m.sel[panelReflog] = 1 // anchor on the SECOND row, not the default 0
@@ -150,6 +157,7 @@ func TestReflogEnterOpensCommitFilesView(t *testing.T) {
 }
 
 func TestReflogFilesViewOpensTreeFocusedOnCommits(t *testing.T) {
+	t.Parallel()
 	// The reflog files-view's right side is the Commits feed (not the reflog you
 	// came from), so it opens TREE-focused (up/down walks the entry's files, not
 	// the feed) and focus is panelCommits (the commit-list side / tooltip anchor),
@@ -168,6 +176,7 @@ func TestReflogFilesViewOpensTreeFocusedOnCommits(t *testing.T) {
 }
 
 func TestReflogMenuCopyAndBookmark(t *testing.T) {
+	t.Parallel()
 	m := reflogTestModel()
 	m.focus = panelReflog
 	m.sel[panelReflog] = 0
@@ -190,6 +199,7 @@ func TestReflogMenuCopyAndBookmark(t *testing.T) {
 }
 
 func TestReflogMenuNoCommitLeak(t *testing.T) {
+	t.Parallel()
 	m := reflogTestModel()
 	m.focus = panelReflog
 	m.sel[panelReflog] = 0
@@ -201,6 +211,7 @@ func TestReflogMenuNoCommitLeak(t *testing.T) {
 }
 
 func TestBottomTabTogglesStagedReflog(t *testing.T) {
+	t.Parallel()
 	m := reflogTestModel()
 	m.focus = panelStaged
 	nm, _ := m.Update(keyMsg("ctrl+right"))

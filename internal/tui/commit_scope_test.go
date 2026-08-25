@@ -26,6 +26,7 @@ func branchesPanelModel(names ...string) Model {
 }
 
 func TestCommitSoloSetsAndClearsScope(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("feat", "main")
 	r, ok := findRow(availableActions(m), "commits-solo")
 	if !ok {
@@ -46,6 +47,7 @@ func TestCommitSoloSetsAndClearsScope(t *testing.T) {
 }
 
 func TestCommitShowAllVisibilityAndClear(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("feat")
 	if _, ok := findRow(availableActions(m), "commits-showall"); ok {
 		t.Fatalf("Show all should be absent in all-mode")
@@ -63,6 +65,7 @@ func TestCommitShowAllVisibilityAndClear(t *testing.T) {
 }
 
 func TestCommitShowAllOnCommitsPanel(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelCommits
 	m.commitScopeBranches = []string{"feat"}
@@ -75,6 +78,7 @@ func TestCommitShowAllOnCommitsPanel(t *testing.T) {
 // returns a reload cmd; executing it reloads the (scoped) feed; the resulting
 // commitsReloadedMsg flows back through Update and paints the commits.
 func TestCommitSoloReloadEndToEnd(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log", gitexec.Result{Stdout: "h1\x1f\x1fAda\x1f0\x1fsubject\x1fHEAD -> feat\n"})
 	svc := domain.New(&git.Repo{Runner: f})
@@ -107,6 +111,7 @@ func TestCommitSoloReloadEndToEnd(t *testing.T) {
 }
 
 func TestClearFilterRowPresentOnlyWhenFiltered(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelCommits
 	if _, ok := m.commitClearFilterRow(); ok {
@@ -124,6 +129,7 @@ func TestClearFilterRowPresentOnlyWhenFiltered(t *testing.T) {
 }
 
 func TestCtrlRClearsOnlyFocusedWindow(t *testing.T) {
+	t.Parallel()
 	// A `/` filter bound to the Branches panel, plus an @ highlight and a `\`
 	// commit filter on the Commits panel.
 	base := func() Model {
@@ -175,6 +181,7 @@ func TestCtrlRClearsOnlyFocusedWindow(t *testing.T) {
 }
 
 func TestCanClearFiltersGating(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelCommits
 	if m.canClearFilters() {
@@ -197,6 +204,7 @@ func TestCanClearFiltersGating(t *testing.T) {
 }
 
 func TestCommitToggleAddsBranch(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("feat", "main")
 	r, ok := findRow(availableActions(m), "commits-toggle")
 	if !ok {
@@ -213,6 +221,7 @@ func TestCommitToggleAddsBranch(t *testing.T) {
 }
 
 func TestCommitToggleRemovesBranch(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("feat", "main")
 	m.commitScopeBranches = []string{"feat", "main"}
 	r, ok := findRow(availableActions(m), "commits-toggle")
@@ -230,6 +239,7 @@ func TestCommitToggleRemovesBranch(t *testing.T) {
 }
 
 func TestCommitToggleRemoveLastReturnsToAll(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("feat")
 	m.commitScopeBranches = []string{"feat"}
 	r, _ := findRow(availableActions(m), "commits-toggle")
@@ -244,6 +254,7 @@ func TestCommitToggleRemoveLastReturnsToAll(t *testing.T) {
 }
 
 func TestCommitScopeLabel(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	if m.commitScopeLabel() != "all" {
 		t.Fatalf("empty scope label = %q, want all", m.commitScopeLabel())
@@ -255,6 +266,7 @@ func TestCommitScopeLabel(t *testing.T) {
 }
 
 func TestBranchRowsMarkAllScopedBranches(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("a", "b", "c")
 	m.commitScopeBranches = []string{"a", "c"}
 	rows := m.branchRows()
@@ -275,6 +287,7 @@ func TestBranchRowsMarkAllScopedBranches(t *testing.T) {
 // TestCommitToggleReloadEndToEnd drives toggle → reload cmd → commitsReloadedMsg
 // → Update, and confirms the multi-branch label paints.
 func TestCommitToggleReloadEndToEnd(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log", gitexec.Result{Stdout: "h1\x1f\x1fAda\x1f0\x1fsubject\x1fHEAD -> feat\n"})
 	svc := domain.New(&git.Repo{Runner: f})
@@ -310,6 +323,7 @@ func TestCommitToggleReloadEndToEnd(t *testing.T) {
 }
 
 func TestCommitRowsRenderIdentityColumn(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.commits = []model.Commit{
 		{Hash: "a1b2c3d4", Subject: "do a thing", Refs: []model.Ref{
@@ -341,6 +355,7 @@ func TestCommitRowsRenderIdentityColumn(t *testing.T) {
 }
 
 func TestBranchRowsGutterOneColumnWhenNoSet(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("main", "feat")
 	m.branches[0].IsHead = true // main is head
 	rows := m.branchRows()
@@ -354,6 +369,7 @@ func TestBranchRowsGutterOneColumnWhenNoSet(t *testing.T) {
 }
 
 func TestBranchRowsGutterTwoColumnsWhenSetActive(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("main", "feat")
 	m.branches[0].IsHead = true
 	m.commitScopeBranches = []string{"feat"} // feat in the set
@@ -368,6 +384,7 @@ func TestBranchRowsGutterTwoColumnsWhenSetActive(t *testing.T) {
 }
 
 func TestBranchRowsSetMarkerIsOnTheLeft(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("feat")
 	m.commitScopeBranches = []string{"feat"}
 	row := m.branchRows()[0]
@@ -383,6 +400,7 @@ func TestBranchRowsSetMarkerIsOnTheLeft(t *testing.T) {
 }
 
 func TestCommitBranchHint(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	if m.sel == nil {
 		m.sel = map[panel]int{}
@@ -406,6 +424,7 @@ func TestCommitBranchHint(t *testing.T) {
 }
 
 func TestCommitGotoTipJumpsAndFocuses(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("feat", "main") // Branches focused, feat selected
 	m.branches[0].Hash = "t1deadbeef"       // feat's tip (short SHA, as for-each-ref gives)
 	m.commits = []model.Commit{
@@ -431,6 +450,7 @@ func TestCommitGotoTipJumpsAndFocuses(t *testing.T) {
 // The match is by tip HASH, so it works even though the commit carries no
 // decoration here (and historically the slash name was misclassified as remote).
 func TestCommitGotoTipSlashBranchByHash(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("feat/x", "main")
 	m.branches[0].Hash = "abc1234" // feat/x tip
 	m.commits = []model.Commit{
@@ -451,6 +471,7 @@ func TestCommitGotoTipSlashBranchByHash(t *testing.T) {
 // TestCommitGotoTipNotLoadedNotifies: with no feed to page (nil = cannot load
 // more), the eager fallback reports exhaustion instead of silently stopping.
 func TestCommitGotoTipNotLoadedNotifies(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("feat", "main")
 	m.branches[0].Hash = "t1deadbeef"
 	m.commits = []model.Commit{{Hash: "b0aaaaaaaaaa", Subject: "base"}} // no feat tip loaded
@@ -468,6 +489,7 @@ func TestCommitGotoTipNotLoadedNotifies(t *testing.T) {
 // TestCommitGotoTipFallsBackToEagerSearch: a tip missing from the loaded page
 // with a loadable feed starts the ctrl+f deep search on the tip hash.
 func TestCommitGotoTipFallsBackToEagerSearch(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t) // Branches focused ("main" selected), real FakeRunner feed
 	m.branches[0].Hash = "t1deadbeef"
 	m.commits = []model.Commit{{Hash: "b0aaaaaaaaaa", Subject: "base"}}
@@ -488,6 +510,7 @@ func TestCommitGotoTipFallsBackToEagerSearch(t *testing.T) {
 // TestCommitGotoTipFindsFilteredTip: a /-filter hiding an already-loaded tip no
 // longer dead-ends — the eager fallback clears the filter and lands on the tip.
 func TestCommitGotoTipFindsFilteredTip(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("feat", "main")
 	m.branches[0].Hash = "t1deadbeef"
 	m.commits = []model.Commit{
@@ -511,6 +534,7 @@ func TestCommitGotoTipFindsFilteredTip(t *testing.T) {
 // /-filtered Branches list must not clear THAT panel's filter — the go-to
 // semantics only ever clear a Commits-panel filter.
 func TestCommitGotoTipPreservesBranchesFilter(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	m.branches[0].Hash = "t1deadbeef"
 	m.commits = []model.Commit{{Hash: "b0aaaaaaaaaa", Subject: "base"}} // tip not loaded
@@ -527,6 +551,7 @@ func TestCommitGotoTipPreservesBranchesFilter(t *testing.T) {
 }
 
 func TestCommitCreateBranchRowOpensPopup(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	if m.sel == nil {
 		m.sel = map[panel]int{}
@@ -551,6 +576,7 @@ func TestCommitCreateBranchRowOpensPopup(t *testing.T) {
 }
 
 func TestDisplayStartShortensSHA(t *testing.T) {
+	t.Parallel()
 	full := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	if got := displayStart(full); got != "aaaaaaa" {
 		t.Fatalf("displayStart(sha) = %q, want 7 chars", got)
@@ -561,6 +587,7 @@ func TestDisplayStartShortensSHA(t *testing.T) {
 }
 
 func TestCommitCherryPickRowGating(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	if m.sel == nil {
 		m.sel = map[panel]int{}
@@ -589,6 +616,7 @@ func TestCommitCherryPickRowGating(t *testing.T) {
 // The ◉ marked set wins over the cursor, and targets come out oldest→newest
 // by feed rank regardless of (random) map iteration order.
 func TestCommitCherryPickMarkedTargetsOrderedOldestFirst(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	if m.sel == nil {
 		m.sel = map[panel]int{}
@@ -634,6 +662,7 @@ func TestCommitCherryPickMarkedTargetsOrderedOldestFirst(t *testing.T) {
 }
 
 func TestCommitCherryPickRowMarkedLabelsAndGuards(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	if m.sel == nil {
 		m.sel = map[panel]int{}
@@ -701,6 +730,7 @@ func TestCommitCherryPickRowMarkedLabelsAndGuards(t *testing.T) {
 }
 
 func TestCommitRevertRowGatingAndMergeGuard(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	if m.sel == nil {
 		m.sel = map[panel]int{}
@@ -739,6 +769,7 @@ func TestCommitRevertRowGatingAndMergeGuard(t *testing.T) {
 }
 
 func TestCommitResetRowGating(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	if m.sel == nil {
 		m.sel = map[panel]int{}
@@ -762,6 +793,7 @@ func TestCommitResetRowGating(t *testing.T) {
 }
 
 func TestCommitCreateWorktreeRowOpensInEdit(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	if m.sel == nil {
 		m.sel = map[panel]int{}
@@ -793,6 +825,7 @@ func TestCommitCreateWorktreeRowOpensInEdit(t *testing.T) {
 }
 
 func TestCommitCreateWorktreeRowRootCommitLocksKeep(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	if m.sel == nil {
 		m.sel = map[panel]int{}
@@ -815,6 +848,7 @@ func TestCommitCreateWorktreeRowRootCommitLocksKeep(t *testing.T) {
 }
 
 func TestWorktreeFromCommitRequiresBranchName(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	p := &worktreePopup{fromCommit: true, branchOverride: ""} // user typed nothing
 	m, cmd := m.startCreateFromPopup(p, false)
@@ -827,6 +861,7 @@ func TestWorktreeFromCommitRequiresBranchName(t *testing.T) {
 }
 
 func TestFeedScopeFoldsFilterAndBranches(t *testing.T) {
+	t.Parallel()
 	var m Model
 	m.commitScopeBranches = []string{"main"}
 	m.commitFilter = commitFilterFields{Paths: []string{"sub"}, Author: "alice", Grep: "race"}
@@ -846,6 +881,7 @@ func TestFeedScopeFoldsFilterAndBranches(t *testing.T) {
 }
 
 func TestCommitScopeLabelShowsFilterChips(t *testing.T) {
+	t.Parallel()
 	var m Model
 	m.commitFilter = commitFilterFields{Paths: []string{"sub"}, Grep: "race", Author: "alice"}
 	got := m.commitScopeLabel()
@@ -857,6 +893,7 @@ func TestCommitScopeLabelShowsFilterChips(t *testing.T) {
 }
 
 func TestCommitScopeLabelPlainWhenUnfiltered(t *testing.T) {
+	t.Parallel()
 	var m Model
 	if got := m.commitScopeLabel(); got != "all" {
 		t.Fatalf("unfiltered label should be \"all\", got %q", got)
@@ -864,6 +901,7 @@ func TestCommitScopeLabelPlainWhenUnfiltered(t *testing.T) {
 }
 
 func TestGraphSuppressedWhenFiltered(t *testing.T) {
+	t.Parallel()
 	var m Model
 	// Default: graph allowed (no filter, default sort, in-memory filter off).
 	if !m.commitGraphOn() {
@@ -880,6 +918,7 @@ func TestGraphSuppressedWhenFiltered(t *testing.T) {
 // so both rows must return ok==false for it. A normal (non-deleted) file must
 // return ok==true so the test cannot pass vacuously.
 func TestFilesViewRowsExcludeDeletedFile(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, filesModel())
 	m.filesTreeFocused = true
 
@@ -909,6 +948,7 @@ func TestFilesViewRowsExcludeDeletedFile(t *testing.T) {
 }
 
 func TestFilesViewCommitsTouchingSeedsFilter(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, filesModel())
 	// openFilesView lands on the commit-list side; switch to the tree side so
 	// the guard passes.
@@ -951,6 +991,7 @@ func TestFilesViewCommitsTouchingSeedsFilter(t *testing.T) {
 }
 
 func TestFeedUpstreamsFiltersToExistingRemoteRefs(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		branches: []model.Branch{
 			{Name: "main", Upstream: "origin/main"},
@@ -966,6 +1007,7 @@ func TestFeedUpstreamsFiltersToExistingRemoteRefs(t *testing.T) {
 }
 
 func TestFeedUpstreamsRespectsSoloScope(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		commitScopeBranches: []string{"feat"}, // soloed
 		branches: []model.Branch{
@@ -994,6 +1036,7 @@ func newTestModelForReload(t *testing.T) Model {
 }
 
 func TestDataLoadedTriggersUpstreamReload(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	msg := dataLoadedMsg{
 		gen:            m.loadGen,
@@ -1007,6 +1050,7 @@ func TestDataLoadedTriggersUpstreamReload(t *testing.T) {
 }
 
 func TestDataLoadedNoReloadWithoutTrackedUpstreams(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	msg := dataLoadedMsg{
 		gen:      m.loadGen,
@@ -1023,6 +1067,7 @@ func TestDataLoadedNoReloadWithoutTrackedUpstreams(t *testing.T) {
 // delivery fires the reload (scope differs from the zero value); the second must
 // be a no-op because feedScopeApplied already matches feedScopeSig().
 func TestReloadFeedRestoresOnFilterClear(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	svc := domain.New(&git.Repo{Runner: f})
 	m := branchesPanelModel("main")
@@ -1056,6 +1101,7 @@ func TestReloadFeedRestoresOnFilterClear(t *testing.T) {
 }
 
 func TestDataLoadedNoRedundantReloadOnSecondLoad(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	msg := dataLoadedMsg{
 		gen:            m.loadGen,
@@ -1088,6 +1134,7 @@ func TestDataLoadedNoRedundantReloadOnSecondLoad(t *testing.T) {
 // TestBranchesEnterJumpsToTip: enter on the Branches panel = the .-menu
 // "Go to tip in commits" (same code path, so they cannot drift).
 func TestBranchesEnterJumpsToTip(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel("feat", "main")
 	m.branches[0].Hash = "t1deadbeef"
 	m.commits = []model.Commit{
@@ -1104,6 +1151,7 @@ func TestBranchesEnterJumpsToTip(t *testing.T) {
 // TestBranchesEnterNoBranchNoOp: enter with nothing selectable must not panic
 // or fall through to another panel's enter behavior.
 func TestBranchesEnterNoBranchNoOp(t *testing.T) {
+	t.Parallel()
 	m := branchesPanelModel() // empty Branches list
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = nm.(Model)
@@ -1115,6 +1163,7 @@ func TestBranchesEnterNoBranchNoOp(t *testing.T) {
 // TestCtrlGSoloSetsPendingAndReloads: ctrl+g on Branches solos the branch and
 // remembers its tip for the post-reload jump.
 func TestCtrlGSoloSetsPendingAndReloads(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t) // Branches focused, "main" selected
 	m.branches[0].Hash = "t1deadbeef"
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
@@ -1135,6 +1184,7 @@ func TestCtrlGSoloSetsPendingAndReloads(t *testing.T) {
 // tip sits at a NON-zero index: index 0 is also the sel-clamp default, so
 // only a non-zero landing spot proves the drain targeted the tip hash.
 func TestReloadedMsgDrainsPendingGotoTip(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	m.branches[0].Hash = "t1deadbeef"
 	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
@@ -1156,6 +1206,7 @@ func TestReloadedMsgDrainsPendingGotoTip(t *testing.T) {
 // TestCtrlGOnSoloedBranchUnsolos: ctrl+g preserves solo's toggle — a second
 // press un-solos, and the pending jump still chains.
 func TestCtrlGOnSoloedBranchUnsolos(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	m.branches[0].Hash = "t1deadbeef"
 	m.commitScopeBranches = []string{"main"} // already soloed to the selected branch
@@ -1172,6 +1223,7 @@ func TestCtrlGOnSoloedBranchUnsolos(t *testing.T) {
 // TestCtrlGBusyNoOp: ctrl+g inherits solo's opsIdle gate — nothing mutates
 // while an operation runs.
 func TestCtrlGBusyNoOp(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	m.branches[0].Hash = "t1deadbeef"
 	m.running = true // opsIdle() == false
@@ -1197,6 +1249,7 @@ func commitsPanelSoloModel(full string) Model {
 // of branch solo), remembers the commit for the post-reload cursor landing,
 // and un-solos on a second run.
 func TestCommitSoloCommitTogglesScope(t *testing.T) {
+	t.Parallel()
 	full := strings.Repeat("a", 40)
 	m := commitsPanelSoloModel(full)
 	r, ok := findRow(availableActions(m), "commits-solo-commit")
@@ -1230,6 +1283,7 @@ func TestCommitSoloCommitTogglesScope(t *testing.T) {
 // TestCommitSoloCommitRowGating: the row is offered only on the Commits panel,
 // only when idle, and only with a real commit under the cursor.
 func TestCommitSoloCommitRowGating(t *testing.T) {
+	t.Parallel()
 	full := strings.Repeat("a", 40)
 	m := commitsPanelSoloModel(full)
 	m.focus = panelFiles
@@ -1251,6 +1305,7 @@ func TestCommitSoloCommitRowGating(t *testing.T) {
 // TestCtrlGOnCommitsSolosSelectedCommit: ctrl+g on the Commits panel runs the
 // solo-from-commit row — the commit-window twin of the Branches ctrl+g.
 func TestCtrlGOnCommitsSolosSelectedCommit(t *testing.T) {
+	t.Parallel()
 	full := strings.Repeat("b", 40)
 	m := commitsPanelSoloModel(full)
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlG})
@@ -1269,6 +1324,7 @@ func TestCtrlGOnCommitsSolosSelectedCommit(t *testing.T) {
 // TestCtrlGOnSoloedCommitUnsolos: ctrl+g keeps solo's toggle on the Commits
 // panel — a second press on the same commit restores the all-branches scope.
 func TestCtrlGOnSoloedCommitUnsolos(t *testing.T) {
+	t.Parallel()
 	full := strings.Repeat("b", 40)
 	m := commitsPanelSoloModel(full)
 	m.commitScopeBranches = []string{full} // already soloed on the selected commit
@@ -1286,6 +1342,7 @@ func TestCtrlGOnSoloedCommitUnsolos(t *testing.T) {
 // 40-hex sha) renders shortened in the panel header; branch/tag names pass
 // through untouched.
 func TestCommitScopeLabelShortensFullSha(t *testing.T) {
+	t.Parallel()
 	full := strings.Repeat("c", 40)
 	m := Model{commitScopeBranches: []string{full}}
 	if got := m.commitScopeLabel(); got != "solo: "+full[:7] {

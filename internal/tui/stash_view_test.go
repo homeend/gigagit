@@ -9,6 +9,7 @@ import (
 )
 
 func TestCapitalSOpensStashView(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelFiles
 	mm, cmd := m.Update(keyMsg("S"))
@@ -28,6 +29,7 @@ func TestCapitalSOpensStashView(t *testing.T) {
 }
 
 func TestStashWindowArrowFocusSwitch(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelCommits
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "WIP"}}}
@@ -47,6 +49,7 @@ func TestStashWindowArrowFocusSwitch(t *testing.T) {
 }
 
 func TestStashWindowCloseRestoresFocus(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelFiles
 	mm, _ := m.Update(keyMsg("S"))
@@ -63,6 +66,7 @@ func TestStashWindowCloseRestoresFocus(t *testing.T) {
 // enter already drilled in — with the tree open, enter on the stash-list side
 // is inert; the stash actions live in the "." menu.
 func TestStashListEnterUnderTreeDoesNothing(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "WIP"}}}
 	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}}}
@@ -78,6 +82,7 @@ func TestStashListEnterUnderTreeDoesNothing(t *testing.T) {
 }
 
 func TestStashListAppliedToView(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30, sel: map[panel]int{}}
 	m.stashView = &stashView{loading: true, tag: "stash"}
 	entries := []model.StashEntry{{Ref: "stash@{0}", Subject: "On main: WIP on main"}}
@@ -89,6 +94,7 @@ func TestStashListAppliedToView(t *testing.T) {
 }
 
 func TestStashViewRendersInRightColumn(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30, sel: map[panel]int{}, status: model.WorkingTreeStatus{Branch: "main"}}
 	m.stashView = &stashView{entries: []model.StashEntry{
 		{Ref: "stash@{0}", Subject: "On main: WIP on main"},
@@ -104,6 +110,7 @@ func TestStashViewRendersInRightColumn(t *testing.T) {
 }
 
 func TestStashViewNavAndClose(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30, sel: map[panel]int{}}
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}"}, {Ref: "stash@{1}"}}}
 	mm, _ := m.updateStashViewKey(keyMsg("j"))
@@ -117,6 +124,7 @@ func TestStashViewNavAndClose(t *testing.T) {
 }
 
 func TestStashViewLLoadsFiles(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "On main: WIP"}}}
 	mm, cmd := m.updateStashViewKey(keyMsg("l"))
@@ -136,6 +144,7 @@ func TestStashViewLLoadsFiles(t *testing.T) {
 }
 
 func TestStashListRefreshesAfterOp(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}"}}, tag: "stash"}
 	mm, cmd := m.Update(opFinishedMsg{res: engine.Result{Changed: true}})
@@ -149,6 +158,7 @@ func TestStashListRefreshesAfterOp(t *testing.T) {
 }
 
 func TestStashFollowLiveReloadsTree(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.stashView = &stashView{
 		entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "a"}, {Ref: "stash@{1}", Subject: "b"}},
@@ -171,6 +181,7 @@ func TestStashFollowLiveReloadsTree(t *testing.T) {
 }
 
 func TestStashLeftArrowFocusesPanelsThenRightReturns(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelFiles
 	mm, _ := m.Update(keyMsg("S")) // opens; focus → panelCommits, lastLeftPanel=panelFiles
@@ -196,6 +207,7 @@ func TestStashLeftArrowFocusesPanelsThenRightReturns(t *testing.T) {
 }
 
 func TestStashOpenSToggleClosesFromLeftPanel(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelFiles
 	mm, _ := m.Update(keyMsg("S"))
@@ -209,6 +221,7 @@ func TestStashOpenSToggleClosesFromLeftPanel(t *testing.T) {
 }
 
 func TestOneLineFlattensWhitespace(t *testing.T) {
+	t.Parallel()
 	in := "error: changes would be overwritten\n\t8.txt\nPlease commit\nAborting"
 	got := oneLine(in)
 	if got != "error: changes would be overwritten 8.txt Please commit Aborting" {
@@ -217,6 +230,7 @@ func TestOneLineFlattensWhitespace(t *testing.T) {
 }
 
 func TestStatusBarRendersMultilineErrorOnOneLine(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 200, 30
 	m.statusMsg = "error: local changes to 8.txt would be overwritten\nAborting"
@@ -229,6 +243,7 @@ func TestStatusBarRendersMultilineErrorOnOneLine(t *testing.T) {
 }
 
 func TestStashListWrapMode(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 24
 	m.focus = panelCommits

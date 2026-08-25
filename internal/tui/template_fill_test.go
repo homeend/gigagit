@@ -21,6 +21,7 @@ func neutralFillCtx() template.Ctx {
 }
 
 func TestTemplateFillNoLabelsFastPath(t *testing.T) {
+	t.Parallel()
 	f := newTemplateFill("feat/")
 	if f.needsInput() {
 		t.Fatal("literal prefix should need no input")
@@ -32,6 +33,7 @@ func TestTemplateFillNoLabelsFastPath(t *testing.T) {
 }
 
 func TestTemplateFillCollectsLabelThenResolves(t *testing.T) {
+	t.Parallel()
 	f := newTemplateFill("john/ISSUE-<user:issue-id>")
 	if !f.needsInput() {
 		t.Fatal("want needsInput")

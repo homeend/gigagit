@@ -5,6 +5,7 @@ import (
 )
 
 func TestWorktreeEditBufCursor(t *testing.T) {
+	t.Parallel()
 	p := &worktreePopup{state: stEdit, editBuf: newTextField("feat")}
 	m := Model{}
 	m, _ = p.update(m, keyMsg("left"))

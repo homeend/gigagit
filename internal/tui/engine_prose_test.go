@@ -131,6 +131,7 @@ func stringLit(e ast.Expr) (string, bool) {
 }
 
 func TestEngineProseKeysInBundles(t *testing.T) {
+	t.Parallel()
 	keys := engineProseKeys(t)
 	builtins := i18n.Builtins()
 	for _, code := range []string{"ja", "ko", "zh", "ru"} {
@@ -151,6 +152,7 @@ func TestEngineProseKeysInBundles(t *testing.T) {
 // Summary: field, any assignment to .Summary, or a DecisionRequest
 // composite with a Prompt: field would let the channels drift.
 func TestEngineProseHelperOnly(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	ents, err := os.ReadDir(engineDir)
 	if err != nil {
@@ -206,6 +208,7 @@ func TestEngineProseHelperOnly(t *testing.T) {
 }
 
 func TestEngineProseFloor(t *testing.T) {
+	t.Parallel()
 	if n := len(engineProseKeys(t)); n < 150 {
 		t.Fatalf("collected only %d engine-prose literals — the scan has gone blind (helpers renamed? dir moved?)", n)
 	}
@@ -221,6 +224,7 @@ func TestEngineProseFloor(t *testing.T) {
 // and this arms only once all ops are converted. Skips msg.go (the helper
 // definitions, where Progressf/PromptReq forward caller parameters).
 func TestEngineProseNoDynamic(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	ents, err := os.ReadDir(engineDir)
 	if err != nil {

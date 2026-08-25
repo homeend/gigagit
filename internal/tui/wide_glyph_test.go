@@ -11,6 +11,7 @@ import (
 // lipgloss/uniseg but terminals draw them as two, so an unsanitized subject
 // overflows the panel border and wraps, desyncing the renderer.
 func TestSafeRowTextNeutralizesTerminalWideSymbols(t *testing.T) {
+	t.Parallel()
 	// The trigger from this repo's own wave-3 merge subjects.
 	got := safeRowText("global ☰ menu")
 	if want := "global ? menu"; got != want {
@@ -24,6 +25,7 @@ func TestSafeRowTextNeutralizesTerminalWideSymbols(t *testing.T) {
 }
 
 func TestWidthUnsafeClassification(t *testing.T) {
+	t.Parallel()
 	// Text-presentation symbols in the guarded blocks that lipgloss/uniseg still
 	// measure as one cell (so terminals silently draw them wider) → unsafe. Only
 	// runes that actually measure width-1 qualify; a symbol uniseg already widths

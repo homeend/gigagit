@@ -82,10 +82,12 @@ func tuiI18nCatalog(t *testing.T) map[string]bool {
 }
 
 func TestI18nKeysAreLiterals(t *testing.T) {
+	t.Parallel()
 	_ = tuiI18nCatalog(t) // the walk itself reports non-literal keys
 }
 
 func TestI18nBundlesComplete(t *testing.T) {
+	t.Parallel()
 	catalog := tuiI18nCatalog(t)
 	for k := range engineProseKeys(t) { // engine formats are used keys too
 		catalog[k] = true

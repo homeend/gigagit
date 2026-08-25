@@ -37,6 +37,7 @@ func pressType(t *testing.T, m Model, kt tea.KeyType) Model {
 }
 
 func TestMarkToggle(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m = pressRune(t, m, "m")
 	if m.mark == nil || m.mark.key != "main" || m.mark.panel != panelBranches {
@@ -49,6 +50,7 @@ func TestMarkToggle(t *testing.T) {
 }
 
 func TestMarkOnCommitsUsesSelectionSet(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m = pressRune(t, m, "m") // mark main on branches (single-mark machinery)
 	m.focus = panelCommits
@@ -65,6 +67,7 @@ func TestMarkOnCommitsUsesSelectionSet(t *testing.T) {
 }
 
 func TestMarkPairOpensPopupOnBranches(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m = pressRune(t, m, "m") // mark main
 	m.sel[panelBranches] = 1 // feat/a
@@ -84,6 +87,7 @@ func TestMarkPairOpensPopupOnBranches(t *testing.T) {
 // On the Commits panel, m adds rows to the ◉ selection set rather than opening a
 // diff; the `.` menu drives Compare/Squash. No pair-op popup, no auto-diff.
 func TestMarkTwoCommitsSelect(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.focus = panelCommits
 	m = pressRune(t, m, "m")
@@ -101,6 +105,7 @@ func TestMarkTwoCommitsSelect(t *testing.T) {
 }
 
 func TestMarkSurvivesResortByIdentity(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.sel[panelBranches] = 1 // feat/a
 	m = pressRune(t, m, "m")
@@ -111,6 +116,7 @@ func TestMarkSurvivesResortByIdentity(t *testing.T) {
 }
 
 func TestDeadMarkRemarksInsteadOfPairing(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.sel[panelBranches] = 2 // feat/b
 	m = pressRune(t, m, "m")
@@ -127,6 +133,7 @@ func TestDeadMarkRemarksInsteadOfPairing(t *testing.T) {
 }
 
 func TestEscClearsMarkBeforeFilter(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m = pressRune(t, m, "m")
 	m.filterPanel = panelBranches
@@ -147,6 +154,7 @@ func TestEscClearsMarkBeforeFilter(t *testing.T) {
 // The Rebase pair-op reads marked-first, matching Merge: the MARKED branch is
 // rebased ONTO the SELECTED branch (mark XXX, select YYY → "Rebase XXX onto YYY").
 func TestRebasePairOpDirection(t *testing.T) {
+	t.Parallel()
 	ops := pairOpsFor(panelBranches)
 	var rebase *pairOp
 	for i := range ops {
@@ -172,6 +180,7 @@ func TestRebasePairOpDirection(t *testing.T) {
 // The interactive-rebase pair-op opens a view (open hook) rather than building
 // an op, and reads marked-first like the others.
 func TestInteractiveRebasePairOp(t *testing.T) {
+	t.Parallel()
 	ops := pairOpsFor(panelBranches)
 	var ir *pairOp
 	for i := range ops {
@@ -193,6 +202,7 @@ func TestInteractiveRebasePairOp(t *testing.T) {
 // Integration: enter on Rebase dispatches SmartRebase and the rebase really
 // runs (feat replayed onto main; we end on feat).
 func TestPairPopupEnterRunsSmartRebase(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	run := func(args ...string) {
 		cmd := exec.Command("git", args...)
@@ -251,6 +261,7 @@ func TestPairPopupEnterRunsSmartRebase(t *testing.T) {
 }
 
 func TestPairPopupEscKeepsMark(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m = pressRune(t, m, "m")
 	m.sel[panelBranches] = 1
@@ -265,6 +276,7 @@ func TestPairPopupEscKeepsMark(t *testing.T) {
 }
 
 func TestMarkedRowRendersDiamondAndStatusHint(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.width, m.height = 80, 24
 	m.sel[panelBranches] = 1
@@ -279,6 +291,7 @@ func TestMarkedRowRendersDiamondAndStatusHint(t *testing.T) {
 }
 
 func TestReRootClearsMark(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m = pressRune(t, m, "m")
 	if m.mark == nil {
@@ -292,6 +305,7 @@ func TestReRootClearsMark(t *testing.T) {
 
 // Integration: enter on Merge dispatches SmartMerge and the merge really runs.
 func TestPairPopupEnterRunsSmartMerge(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	run := func(args ...string) {
 		cmd := exec.Command("git", args...)

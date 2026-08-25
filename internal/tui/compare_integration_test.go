@@ -82,6 +82,7 @@ func openCompareDiffOnFile(t *testing.T, repoDir string, repo *domain.Service, h
 // compared list AND resolves to a real diff when opened — the worktree-new-side /
 // nil-old-side path.
 func TestCompareUntrackedFileDiffRenders(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	head := headHashTUI(t, dir)
 
@@ -102,6 +103,7 @@ func TestCompareUntrackedFileDiffRenders(t *testing.T) {
 // catch a broken ResolveBytes path; loadedModel's repo is clean, so its
 // comparison is empty.)
 func TestCompareCommitVsWorktreeRealDiff(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	head := headHashTUI(t, dir)
 
@@ -144,6 +146,7 @@ func TestCompareCommitVsWorktreeRealDiff(t *testing.T) {
 // directly and so cannot catch a handler that fails to clear loading; this
 // renders the assembled view, which is where the original bug was visible.
 func TestCompareDiffRendersContentNotLoading(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	head := headHashTUI(t, dir)
 
@@ -205,6 +208,7 @@ func TestCompareDiffRendersContentNotLoading(t *testing.T) {
 // second, larger edit the same (commit, worktree, path) diff has strictly more
 // rows. A cached diff would serve the first result.
 func TestCompareDiffBypassesCacheForWorktree(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	head := headHashTUI(t, dir)
 	svc := domain.New(repo)

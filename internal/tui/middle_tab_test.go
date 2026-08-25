@@ -14,6 +14,7 @@ func ctrlRight(t *testing.T, m Model) Model {
 
 // ctrl+→ while the top slot owns focus still cycles the top slot.
 func TestCtrlCycleTopSlotWhenTopFocused(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	m.activeLeftTab = panelBranches
@@ -28,6 +29,7 @@ func TestCtrlCycleTopSlotWhenTopFocused(t *testing.T) {
 
 // ctrl+→ while the middle box owns focus cycles Files⇄Tags.
 func TestCtrlCycleMiddleSlotWhenFilesFocused(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelFiles
 	m = ctrlRight(t, m)

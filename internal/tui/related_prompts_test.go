@@ -23,6 +23,7 @@ func promptTestModel(t *testing.T) (Model, promptstate.Store) {
 }
 
 func TestPromptFiresOnGraphOffWhenSortIsDateOrder(t *testing.T) {
+	t.Parallel()
 	m, _ := promptTestModel(t)
 	m.cfg.UI.CommitSort = "date-order"
 	rp := m.relatedPromptFor(settingShowGraph, "off")
@@ -35,6 +36,7 @@ func TestPromptFiresOnGraphOffWhenSortIsDateOrder(t *testing.T) {
 }
 
 func TestPromptSilentWhenSortAlreadyPlain(t *testing.T) {
+	t.Parallel()
 	m, _ := promptTestModel(t)
 	m.cfg.UI.CommitSort = "plain"
 	if rp := m.relatedPromptFor(settingShowGraph, "off"); rp != nil {
@@ -43,6 +45,7 @@ func TestPromptSilentWhenSortAlreadyPlain(t *testing.T) {
 }
 
 func TestPromptFiresOnGraphOnWhenSortIsPlain(t *testing.T) {
+	t.Parallel()
 	m, _ := promptTestModel(t)
 	m.cfg.UI.CommitSort = "plain"
 	rp := m.relatedPromptFor(settingShowGraph, "on")
@@ -55,6 +58,7 @@ func TestPromptFiresOnGraphOnWhenSortIsPlain(t *testing.T) {
 }
 
 func TestPromptSilentWhenSortUnset(t *testing.T) {
+	t.Parallel()
 	// Unset commit_sort resolves to date-order (commitSort()), so switching the
 	// graph ON has nothing to offer — the effective mode is already date-order.
 	m, _ := promptTestModel(t)
@@ -65,6 +69,7 @@ func TestPromptSilentWhenSortUnset(t *testing.T) {
 }
 
 func TestSuppressedPromptNeverFires(t *testing.T) {
+	t.Parallel()
 	m, st := promptTestModel(t)
 	m.cfg.UI.CommitSort = "date-order"
 	if err := st.SuppressPrompt("show_graph_off.commit_sort_plain"); err != nil {
@@ -76,6 +81,7 @@ func TestSuppressedPromptNeverFires(t *testing.T) {
 }
 
 func TestNilStoreStillPrompts(t *testing.T) {
+	t.Parallel()
 	// No state dir → nil store → prompts still work (suppression just can't
 	// persist). The registry must not panic on a nil store.
 	m, _ := promptTestModel(t)
@@ -87,6 +93,7 @@ func TestNilStoreStillPrompts(t *testing.T) {
 }
 
 func TestPromptFiresOnGraphOffWhenSortUnset(t *testing.T) {
+	t.Parallel()
 	// Unset commit_sort resolves to date-order (commitSort()), so switching the
 	// graph OFF must still offer plain — this is the case where reading the raw
 	// cfg field instead of commitSort() would silently kill the prompt.

@@ -9,6 +9,7 @@ import (
 // openCompareFiles must focus the file tree: in compare mode there is no live
 // commit list, and moving the commit selection would discard the comparison.
 func TestCompareOpensTreeFocused(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	mm, _ := m.openCompareFiles(
@@ -22,6 +23,7 @@ func TestCompareOpensTreeFocused(t *testing.T) {
 // In compare mode, up/down must not move the commit selection / discard the
 // comparison — it navigates the file tree instead.
 func TestCompareModeMoveKeepsComparison(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m, _ = m.openCompareFiles(
@@ -54,6 +56,7 @@ func TestCompareModeMoveKeepsComparison(t *testing.T) {
 // moveCommitUnderFilesView directly, bypassing the keyboard wrapper — it must
 // also be locked out in compare mode, or it discards the comparison.
 func TestCompareModeMouseScrollKeepsComparison(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m, _ = m.openCompareFiles(
@@ -75,6 +78,7 @@ func TestCompareModeMouseScrollKeepsComparison(t *testing.T) {
 // `.`-menu "Compare selection" then opens the whole-tree diff, ordered
 // older→newer.
 func TestMarkTwoCommitsSelectThenCompare(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3) // commits[0]=tip (newer), commits[1] older
 	m.focus = panelCommits
 
@@ -111,6 +115,7 @@ func TestMarkTwoCommitsSelectThenCompare(t *testing.T) {
 // compares the commit against the working tree (the case the user hit "no pair
 // operations" on).
 func TestSelectCommitThenWorktreeCompares(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.status = dirtyStatus()

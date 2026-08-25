@@ -8,6 +8,7 @@ import (
 )
 
 func TestCommitBookmarkStoresSubject(t *testing.T) {
+	t.Parallel()
 	c := model.Commit{Hash: "a1b2c3d4e5", Subject: "Fix the parser"}
 	b := commitBookmark(c, "")
 	if !b.IsCommit() || b.Label != "Fix the parser" {
@@ -16,6 +17,7 @@ func TestCommitBookmarkStoresSubject(t *testing.T) {
 }
 
 func TestBookmarkDisplayCommitIncludesSubject(t *testing.T) {
+	t.Parallel()
 	b := model.Bookmark{State: model.StateCommitted, Commit: "a1b2c3d4e5", Branch: "feat", Path: "", Label: "Fix the parser"}
 	got := bookmarkDisplay(b)
 	if !strings.Contains(got, "feat / a1b2c3d") || !strings.Contains(got, "Fix the parser") {
@@ -29,6 +31,7 @@ func TestBookmarkDisplayCommitIncludesSubject(t *testing.T) {
 }
 
 func TestCommitBookmarkRendersWithoutPath(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.width, m.height = 100, 30
 	cb := model.Bookmark{State: model.StateCommitted, Commit: "a1b2c3d4e5", Path: "", ID: "cb1"}
@@ -43,6 +46,7 @@ func TestCommitBookmarkRendersWithoutPath(t *testing.T) {
 }
 
 func TestCommitBookmarkRowPresentOnCommits(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	r, ok := m.commitBookmarkRow()
@@ -59,6 +63,7 @@ func TestCommitBookmarkRowPresentOnCommits(t *testing.T) {
 }
 
 func TestCommitBookmarkRowInMenu(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	found := false
@@ -80,6 +85,7 @@ func commitBmPopupModel(t *testing.T) Model {
 }
 
 func TestCommitBookmarkPasteIsNoop(t *testing.T) {
+	t.Parallel()
 	m := commitBmPopupModel(t)
 	mm, _ := m.Update(keyMsg("p"))
 	m = mm.(Model)
@@ -95,6 +101,7 @@ func TestCommitBookmarkPasteIsNoop(t *testing.T) {
 // mark-two now supports comparing two commit entries, so the guard only
 // blocks "m" when there's no second entry selected yet.
 func TestCommitBookmarkMarkTogglesOnLoneEntry(t *testing.T) {
+	t.Parallel()
 	m := commitBmPopupModel(t)
 	mm, cmd := m.Update(keyMsg("m"))
 	m = mm.(Model)
@@ -110,6 +117,7 @@ func TestCommitBookmarkMarkTogglesOnLoneEntry(t *testing.T) {
 }
 
 func TestCommitBookmarkEnterComparesVsSelected(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3) // newest-first feed: index 0 newest
 	m.focus = panelCommits
 	base := m.commits[2].Hash // an older commit — the bookmark
@@ -137,6 +145,7 @@ func TestCommitBookmarkEnterComparesVsSelected(t *testing.T) {
 }
 
 func TestCommitBookmarkEnterSelfCompareNoop(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	m.sel[panelCommits] = 0

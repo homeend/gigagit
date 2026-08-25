@@ -29,6 +29,7 @@ func slowFSPopupModel() (Model, string, string) {
 // flicker: moving the cursor between a local and a slow-fs row must NOT change
 // the popup box height (the old in-body warning line made it flip).
 func TestRepoPopupHeightStableAcrossSelection(t *testing.T) {
+	t.Parallel()
 	m, _, _ := slowFSPopupModel()
 	p := layerOf[*repoPopup](m)
 
@@ -48,6 +49,7 @@ func TestRepoPopupHeightStableAcrossSelection(t *testing.T) {
 // covered the neighbouring row — user report), and not at all while a local
 // row is selected.
 func TestRepoPopupSlowFSTooltipOverlay(t *testing.T) {
+	t.Parallel()
 	m, _, _ := slowFSPopupModel()
 	p := layerOf[*repoPopup](m)
 	below := strings.TrimSuffix(strings.Repeat(strings.Repeat(" ", m.width)+"\n", m.height), "\n")
@@ -113,6 +115,7 @@ func runeCol(line string, target rune) int {
 // raises a Yes/No modal (default No) instead of switching immediately; No is a
 // no-op.
 func TestRepoPopupSlowFSEnterConfirms(t *testing.T) {
+	t.Parallel()
 	m, _, _ := slowFSPopupModel()
 	p := layerOf[*repoPopup](m)
 	p.moveSel(1)
@@ -142,6 +145,7 @@ func TestRepoPopupSlowFSEnterConfirms(t *testing.T) {
 // TestRepoPopupLocalEnterNoConfirm pins that a local row still switches with
 // no modal in the way.
 func TestRepoPopupLocalEnterNoConfirm(t *testing.T) {
+	t.Parallel()
 	m, _, _ := slowFSPopupModel()
 	u, _ := m.Update(keyMsg("enter")) // sel 0 = local row
 	m = u.(Model)
@@ -154,6 +158,7 @@ func TestRepoPopupLocalEnterNoConfirm(t *testing.T) {
 // bypass: with slow-op confirms disabled, enter switches without the modal —
 // the same contract every other slow-op confirm honors.
 func TestRepoPopupSlowFSConfirmBypass(t *testing.T) {
+	t.Parallel()
 	m, _, _ := slowFSPopupModel()
 	m.cfg.UI.DisableSlowOpConfirm = true
 	p := layerOf[*repoPopup](m)

@@ -6,6 +6,7 @@ import (
 )
 
 func TestTranslatePath(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		goos, in, want string
 		ok             bool
@@ -52,6 +53,7 @@ func statSet(ok ...string) func(string) error {
 }
 
 func TestCheckSwitchTarget(t *testing.T) {
+	t.Parallel()
 	if v, p := checkSwitchTarget(statSet("/x"), "linux", "/x"); v != switchOK || p != "/x" {
 		t.Fatalf("reachable: got (%v, %q)", v, p)
 	}

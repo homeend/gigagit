@@ -9,6 +9,7 @@ import (
 )
 
 func TestShelfRestoreCursorEdit(t *testing.T) {
+	t.Parallel()
 	p := &shelfRestorePopup{entryID: "e1", origin: "a/b.txt"}
 	m := Model{}
 	m, _ = p.update(m, keyMsg("dir/file"))
@@ -24,6 +25,7 @@ func TestShelfRestoreCursorEdit(t *testing.T) {
 // p on a shelf entry must open the restore popup with the destination
 // prefilled with the entry's origin path, cursor at the end.
 func TestShelfRestorePrefillsOriginPath(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24, sel: map[panel]int{}, sortModes: map[panel]sortMode{}}
 	m = m.pushLayer(newShelfPopup([]model.ShelfEntry{{ID: "s1", Origin: model.FileAddress{Path: "dir/a.go"}}}))
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
@@ -45,6 +47,7 @@ func TestShelfRestorePrefillsOriginPath(t *testing.T) {
 // ctrl+r re-fills the destination with the origin path after the user
 // mangled or cleared it.
 func TestShelfRestoreCtrlRRefillsOrigin(t *testing.T) {
+	t.Parallel()
 	p := &shelfRestorePopup{entryID: "e1", origin: "dir/a.go", dest: newTextField("dir/a.go")}
 	m := Model{}
 	for i := 0; i < len("dir/a.go"); i++ {

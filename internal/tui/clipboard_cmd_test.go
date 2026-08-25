@@ -7,6 +7,7 @@ import (
 )
 
 func TestClipboardCopiedMsgSetsStatus(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	u, _ := m.Update(clipboardCopiedMsg{ok: "Copied path: dir/f.txt"})
 	if got := u.(Model).statusMsg; got != "Copied path: dir/f.txt" {
@@ -15,6 +16,7 @@ func TestClipboardCopiedMsgSetsStatus(t *testing.T) {
 }
 
 func TestClipboardCopiedMsgError(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	u, _ := m.Update(clipboardCopiedMsg{err: errors.New("boom")})
 	if got := u.(Model).statusMsg; got != "copy failed: boom" {
@@ -23,6 +25,7 @@ func TestClipboardCopiedMsgError(t *testing.T) {
 }
 
 func TestCopyFileChoice(t *testing.T) {
+	t.Parallel()
 	const p, abs = "dir/f.txt", "/repo/dir/f.txt"
 	okMsg, text, ok := copyFileChoice("Copy file path", p, abs)
 	if !ok || okMsg != "Copied path: dir/f.txt" || text != "dir/f.txt" {
@@ -44,6 +47,7 @@ func TestCopyFileChoice(t *testing.T) {
 }
 
 func TestCopyFilePromptOpensModal(t *testing.T) {
+	t.Parallel()
 	m := footerModel() // currentWorktree == "/repo"
 	m, _ = m.copyFilePrompt("", "dir/f.txt")
 	if m.modal == nil {
@@ -76,6 +80,7 @@ func TestCopyFilePromptOpensModal(t *testing.T) {
 }
 
 func TestCopyFilePromptBaseAnchorsOnEntryWorktree(t *testing.T) {
+	t.Parallel()
 	// A non-empty base (a cross-worktree bookmark) resolves the absolute option
 	// against THAT base, not the current worktree — the crux of the design.
 	m := footerModel() // currentWorktree == "/repo"

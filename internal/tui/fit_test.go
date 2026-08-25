@@ -13,6 +13,7 @@ import (
 // no line wider than width — even with far more commits than fit and an
 // over-long subject. This guards against the overflow that broke the layout.
 func TestRenderNeverExceedsTerminal(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 80, 24
 
@@ -37,6 +38,7 @@ func TestRenderNeverExceedsTerminal(t *testing.T) {
 
 // A tiny terminal must still render without panic and stay within bounds.
 func TestRenderTinyTerminal(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 20, 8
 	out := m.View()
@@ -51,6 +53,7 @@ func TestRenderTinyTerminal(t *testing.T) {
 // The 3-panel left column must also respect terminal bounds, even with many
 // worktrees and a medium height where each left panel is near its 3-row floor.
 func TestRenderThreePanelLeftFits(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 60, 12 // bodyH = 9 -> three left panels of 3 rows each
 
@@ -77,6 +80,7 @@ func TestRenderThreePanelLeftFits(t *testing.T) {
 
 // A visible tooltip must not push the frame beyond the terminal bounds.
 func TestRenderWithTooltipStaysInBounds(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 50, 24
 	m.focus = panelWorktrees
@@ -101,6 +105,7 @@ func TestRenderWithTooltipStaysInBounds(t *testing.T) {
 // The running spinner (⏳, a 2-column glyph) must not push the status line one
 // column past the terminal edge: truncate measures display columns, not runes.
 func TestRenderRunningSpinnerStatusFits(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 80, 24
 	m.running = true
@@ -115,6 +120,7 @@ func TestRenderRunningSpinnerStatusFits(t *testing.T) {
 }
 
 func TestRenderPanelWrapModeExpandsRow(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 24
 	m.focus = panelBranches
@@ -128,6 +134,7 @@ func TestRenderPanelWrapModeExpandsRow(t *testing.T) {
 }
 
 func TestRenderPanelCutoffStaysOneLine(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 24
 	m.focus = panelBranches
@@ -140,6 +147,7 @@ func TestRenderPanelCutoffStaysOneLine(t *testing.T) {
 }
 
 func TestLayoutTabbedLeftColumn(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 24
 	g := m.layout()
@@ -163,6 +171,7 @@ func TestLayoutTabbedLeftColumn(t *testing.T) {
 }
 
 func TestRenderShowsActiveTabBar(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 24
 	out := m.renderInterface()
@@ -188,6 +197,7 @@ func TestRenderShowsActiveTabBar(t *testing.T) {
 }
 
 func TestRemoteRowsContent(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.remoteBranches = []model.RemoteBranch{
 		{Name: "origin/main", Remote: "origin", Branch: "main"},
@@ -200,6 +210,7 @@ func TestRemoteRowsContent(t *testing.T) {
 }
 
 func TestTabBarLabelThreeWay(t *testing.T) {
+	t.Parallel()
 	if got := tabBarLabel(panelRemotes); !strings.Contains(got, "[Remotes]") {
 		t.Fatalf("active Remotes: %q", got)
 	}
@@ -212,6 +223,7 @@ func TestTabBarLabelThreeWay(t *testing.T) {
 }
 
 func TestBranchRowsBehindIndicator(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.branches = []model.Branch{
 		{Name: "feature", Behind: 3},

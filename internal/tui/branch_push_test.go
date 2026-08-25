@@ -5,6 +5,7 @@ import "testing"
 // footerModel() has branches: main (IsHead, row 0), feat/x (row 1); status.Branch=main.
 
 func TestPushBranchRowOnNonCurrentBranch(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	m.sel = map[panel]int{panelBranches: 1} // feat/x, not the checked-out branch
@@ -23,6 +24,7 @@ func TestPushBranchRowOnNonCurrentBranch(t *testing.T) {
 }
 
 func TestPushBranchRowOnCurrentBranch(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches // row 0 = main (IsHead)
 	r, ok := m.pushBranchRow()
@@ -35,6 +37,7 @@ func TestPushBranchRowOnCurrentBranch(t *testing.T) {
 }
 
 func TestPushBranchRowRuns(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	m.sel = map[panel]int{panelBranches: 1} // feat/x
@@ -52,6 +55,7 @@ func TestPushBranchRowRuns(t *testing.T) {
 }
 
 func TestPushBranchRowHiddenOffBranchesPanel(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelCommits
 	if _, ok := m.pushBranchRow(); ok {
@@ -60,6 +64,7 @@ func TestPushBranchRowHiddenOffBranchesPanel(t *testing.T) {
 }
 
 func TestPushBranchRowWiredIntoMenu(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	m.sel = map[panel]int{panelBranches: 1} // feat/x

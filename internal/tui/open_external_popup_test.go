@@ -14,6 +14,7 @@ import (
 // launches from g/G, and editorViewFinishedMsg must clean up the temp even with
 // the popup still open. Guards against routing custom messages to topLayer().
 func TestOpenExternalRoundTripWithPopupOpen(t *testing.T) {
+	t.Parallel()
 	path, err := writeReadOnlyTempFile("x.go", []byte("x"))
 	if err != nil {
 		t.Fatal(err)
@@ -37,6 +38,7 @@ func TestOpenExternalRoundTripWithPopupOpen(t *testing.T) {
 // e on a file bookmark resolves its bytes into the read-only temp file the
 // editorViewMsg carries.
 func TestBookmarkOpenExternalResolvesContent(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("package a\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -67,6 +69,7 @@ func TestBookmarkOpenExternalResolvesContent(t *testing.T) {
 // A commit-pointer bookmark has no file content, so e is a guarded no-op (notice,
 // no editor) — mirroring p/m.
 func TestCommitBookmarkOpenExternalIsNoop(t *testing.T) {
+	t.Parallel()
 	m := commitBmPopupModel(t)
 	mm, cmd := m.Update(keyMsg("e"))
 	m = mm.(Model)
@@ -83,6 +86,7 @@ func TestCommitBookmarkOpenExternalIsNoop(t *testing.T) {
 
 // e on a shelf entry dispatches the resolve/open command and keeps the switcher.
 func TestShelfOpenExternalDispatches(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	mm, cmd := m.Update(keyMsg("e"))
 	m = mm.(Model)
@@ -96,6 +100,7 @@ func TestShelfOpenExternalDispatches(t *testing.T) {
 
 // In compare mode the file-action keys are inert, so e must not launch anything.
 func TestShelfOpenExternalInertInCompareMode(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	m.shelfSwitcher().compareRef = &model.FileRef{Source: model.SourceUnstaged, Path: "focused.go"}
 	_, cmd := m.Update(keyMsg("e"))

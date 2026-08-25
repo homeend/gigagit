@@ -20,6 +20,7 @@ func pausedResolvedModel() Model {
 }
 
 func TestMaybeResumePromptFiresOncePerPause(t *testing.T) {
+	t.Parallel()
 	m := pausedResolvedModel()
 	m = m.maybeResumePrompt()
 	if _, ok := m.topLayer().(*resumePromptPopup); !ok {
@@ -36,6 +37,7 @@ func TestMaybeResumePromptFiresOncePerPause(t *testing.T) {
 }
 
 func TestMaybeResumePromptSkipsWhileBusyThenRetries(t *testing.T) {
+	t.Parallel()
 	m := pausedResolvedModel()
 	m.running = true // an op is in flight
 	m = m.maybeResumePrompt()
@@ -50,6 +52,7 @@ func TestMaybeResumePromptSkipsWhileBusyThenRetries(t *testing.T) {
 }
 
 func TestMaybeResumePromptSkipsWhileLayerOpen(t *testing.T) {
+	t.Parallel()
 	m := pausedResolvedModel()
 	m = m.pushLayer(&commitPopup{}) // any other window owns the screen
 	m = m.maybeResumePrompt()
@@ -62,6 +65,7 @@ func TestMaybeResumePromptSkipsWhileLayerOpen(t *testing.T) {
 }
 
 func TestMaybeResumePromptNotWhileConflictsRemain(t *testing.T) {
+	t.Parallel()
 	m := pausedResolvedModel()
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "f.txt", Kind: model.KindUnmerged}}}
 	m = m.maybeResumePrompt()
@@ -71,6 +75,7 @@ func TestMaybeResumePromptNotWhileConflictsRemain(t *testing.T) {
 }
 
 func TestMaybeResumePromptReArmsOnStateChange(t *testing.T) {
+	t.Parallel()
 	m := pausedResolvedModel()
 	m = m.maybeResumePrompt()
 	m = m.popLayer()                    // Not now
@@ -87,6 +92,7 @@ func TestMaybeResumePromptReArmsOnStateChange(t *testing.T) {
 }
 
 func TestResumePromptEscClosesWithoutOp(t *testing.T) {
+	t.Parallel()
 	m := pausedResolvedModel()
 	m = m.maybeResumePrompt()
 	p := m.topLayer().(*resumePromptPopup)
@@ -140,6 +146,7 @@ func pausedResolvedRepoDir(t *testing.T) string {
 }
 
 func TestResumePromptContinueDispatchesOp(t *testing.T) {
+	t.Parallel()
 	dir := pausedResolvedRepoDir(t)
 	m := Model{svc: domain.OpenTUI(dir), conflict: domain.ConflictState{Op: "rebase"}}
 	m = m.maybeResumePrompt()
@@ -164,6 +171,7 @@ func TestResumePromptContinueDispatchesOp(t *testing.T) {
 }
 
 func TestCanEnterConflictGates(t *testing.T) {
+	t.Parallel()
 	if (Model{}).canEnterConflict() {
 		t.Fatal("x available on a clean repo")
 	}
@@ -183,6 +191,7 @@ func TestCanEnterConflictGates(t *testing.T) {
 }
 
 func TestStartConflictProcessOpensForPausedOpWithZeroFiles(t *testing.T) {
+	t.Parallel()
 	m := Model{conflict: domain.ConflictState{Op: "rebase"}}
 	m2, cmd := startConflictProcess(m)
 	if m2.proc == nil {
@@ -197,6 +206,7 @@ func TestStartConflictProcessOpensForPausedOpWithZeroFiles(t *testing.T) {
 }
 
 func TestResolveFooterBindingAdvertisesPausedOp(t *testing.T) {
+	t.Parallel()
 	m := Model{conflict: domain.ConflictState{Op: "rebase"}}
 	for _, b := range globalBindings() {
 		if b.id == "resolve" {
@@ -213,6 +223,7 @@ func TestResolveFooterBindingAdvertisesPausedOp(t *testing.T) {
 // m.conflict, the probe reports nothing in progress, and the release must
 // clear the stale attribution so the ⏸ notice doesn't linger on a clean repo.
 func TestInProgressProbeClearsStaleConflict(t *testing.T) {
+	t.Parallel()
 	m := Model{conflict: domain.ConflictState{Op: "rebase"}}
 	m, _ = startConflictProcess(m)
 	if m.proc == nil {
@@ -231,6 +242,7 @@ func TestInProgressProbeClearsStaleConflict(t *testing.T) {
 // A stale-clear via the in-progress probe is an Op=="" transition: the spec
 // mandates the one-shot flag re-arms so a FRESH pause prompts again.
 func TestInProgressProbeReArmsResumePrompt(t *testing.T) {
+	t.Parallel()
 	m := Model{conflict: domain.ConflictState{Op: "rebase"}, resumePromptShown: true}
 	m, _ = startConflictProcess(m)
 	if m.proc == nil {
@@ -251,6 +263,7 @@ func TestInProgressProbeReArmsResumePrompt(t *testing.T) {
 
 // The probe reporting a LIVE op must not clear attribution or the flag.
 func TestInProgressProbeKeepsLiveConflict(t *testing.T) {
+	t.Parallel()
 	m := Model{conflict: domain.ConflictState{Op: "rebase"}, resumePromptShown: true}
 	m, _ = startConflictProcess(m)
 	next, _ := m.Update(inProgressMsg{op: "rebase"})
@@ -264,6 +277,7 @@ func TestInProgressProbeKeepsLiveConflict(t *testing.T) {
 }
 
 func TestMaybeResumePromptSkipsWhileActionMenuOpen(t *testing.T) {
+	t.Parallel()
 	m := Model{conflict: domain.ConflictState{Op: "rebase"}}
 	m.actionMenu = &actionMenu{rows: []actionRow{{id: "a"}}}
 	m = m.maybeResumePrompt()

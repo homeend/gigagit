@@ -28,6 +28,7 @@ func aLock(name string, age time.Duration) model.GitLock {
 }
 
 func TestStaleLockNoticeBuilder(t *testing.T) {
+	t.Parallel()
 	now := fixedNow
 	// Fires on any lock present.
 	n := staleLockNotice(lockHealth(aLock("index.lock", 3*time.Minute)), now)
@@ -58,6 +59,7 @@ func TestStaleLockNoticeBuilder(t *testing.T) {
 }
 
 func TestStaleLockNoticePluralises(t *testing.T) {
+	t.Parallel()
 	n := staleLockNotice(lockHealth(
 		aLock("index.lock", time.Minute),
 		aLock("HEAD.lock", time.Minute),
@@ -71,6 +73,7 @@ func TestStaleLockNoticePluralises(t *testing.T) {
 }
 
 func TestLockAgeLabel(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		d    time.Duration
 		want string
@@ -90,6 +93,7 @@ func TestLockAgeLabel(t *testing.T) {
 // The notice must offer removal through the real engine op — no ad-hoc
 // os.Remove in the TUI, so the guard and the exclusive reservation apply.
 func TestStaleLockNoticeActionDispatchesOp(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeTestModel(t)
 	lock := aLock("index.lock", time.Minute)
 	nm, _ := m.Update(repoHealthMsg{gen: m.noticeGen, health: lockHealth(lock)})
@@ -109,6 +113,7 @@ func TestStaleLockNoticeActionDispatchesOp(t *testing.T) {
 // A failing operation whose error is git's lock message must surface the
 // recovery immediately, not wait for the next repo load.
 func TestLockErrorArmsHealthRefreshAndPointsAtTheKey(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeTestModel(t)
 	lockErr := fmt.Errorf("git add failed (exit 128): %s",
 		"fatal: Unable to create '/r/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository")
@@ -125,6 +130,7 @@ func TestLockErrorArmsHealthRefreshAndPointsAtTheKey(t *testing.T) {
 
 // An unrelated failure must not arm anything.
 func TestNonLockErrorIsIgnored(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeTestModel(t)
 	m.statusMsg = "error: merge conflict"
 	got := m.maybeStaleLockNotice(errors.New("error: merge conflict"))
@@ -141,6 +147,7 @@ func TestNonLockErrorIsIgnored(t *testing.T) {
 // lock failure re-arms it (unlike the advisory notices, where "Not now"
 // rightly holds until the next load).
 func TestLockFailureReArmsSessionDismissal(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeTestModel(t)
 	m.noticeSessionDismissed = map[string]bool{noticeStaleLock: true}
 
@@ -162,6 +169,7 @@ func TestLockFailureReArmsSessionDismissal(t *testing.T) {
 }
 
 func TestRemoveGitLocksRefreshesStatusOnly(t *testing.T) {
+	t.Parallel()
 	got := opAffectedSources(engine.RemoveGitLocks{})
 	if len(got) != 1 || got[0] != srcStatus {
 		t.Fatalf("opAffectedSources = %v, want just srcStatus (never nil — that would fire the remote-tags probe)", got)

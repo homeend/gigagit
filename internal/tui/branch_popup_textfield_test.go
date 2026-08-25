@@ -5,6 +5,7 @@ import (
 )
 
 func TestBranchPopupCursorEditNoSpace(t *testing.T) {
+	t.Parallel()
 	p := &branchPopup{startPoint: "main"}
 	m := Model{}
 	m, _ = p.update(m, keyMsg("feat"))
@@ -18,6 +19,7 @@ func TestBranchPopupCursorEditNoSpace(t *testing.T) {
 }
 
 func TestRenameBranchPrefilledCursorAtEnd(t *testing.T) {
+	t.Parallel()
 	p := &renameBranchPopup{old: "old", name: newTextField("old")}
 	m := Model{}
 	m, _ = p.update(m, keyMsg("er")) // append -> "older"

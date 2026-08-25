@@ -21,6 +21,7 @@ func hookTypeRunes(m Model, p *hookEditorPopup, s string) Model {
 }
 
 func TestHookEditorSeedsFromConfig(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.cfg.Worktree.PostCreateHook = "echo seeded"
 	m = m.openHookEditor()
@@ -34,6 +35,7 @@ func TestHookEditorSeedsFromConfig(t *testing.T) {
 }
 
 func TestHookEditorSavesToRepoConfig(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), ".gg.toml")
 	m := Model{}
 	m.repoConfigPath = path
@@ -61,6 +63,7 @@ func TestHookEditorSavesToRepoConfig(t *testing.T) {
 }
 
 func TestHookEditorEscDoesNotSave(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), ".gg.toml")
 	m := Model{}
 	m.repoConfigPath = path
@@ -80,6 +83,7 @@ func TestHookEditorEscDoesNotSave(t *testing.T) {
 // a negative top offset and the bottom (the [ctrl+s] save help line) is clipped
 // off-screen — the "can't see the bottom of the hook editor" bug.
 func TestHookEditorBoxFitsTerminalHeight(t *testing.T) {
+	t.Parallel()
 	for _, h := range []int{14, 24, 40} {
 		p := &hookEditorPopup{buf: newTextField("echo one\necho two\necho three")}
 		box := p.box(Model{}, 100, h)
@@ -95,6 +99,7 @@ func TestHookEditorBoxFitsTerminalHeight(t *testing.T) {
 // A script with far more lines than fit still produces a box within the terminal
 // height (the window scrolls; it must not grow the box past the screen).
 func TestHookEditorBoxFitsWithTallScript(t *testing.T) {
+	t.Parallel()
 	var sb strings.Builder
 	for i := 0; i < 300; i++ {
 		fmt.Fprintf(&sb, "echo line %d\n", i)

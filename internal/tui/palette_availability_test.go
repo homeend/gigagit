@@ -12,6 +12,7 @@ import (
 // modal, or while an op is running.
 
 func TestPaletteReachableAllowsBaseAndBrowseWindows(t *testing.T) {
+	t.Parallel()
 	if !footerModel().paletteReachable() {
 		t.Error("palette should be reachable from the base panels")
 	}
@@ -31,6 +32,7 @@ func TestPaletteReachableAllowsBaseAndBrowseWindows(t *testing.T) {
 }
 
 func TestPaletteNotReachableOverPopupsEditorsModalsBusy(t *testing.T) {
+	t.Parallel()
 	block := []struct {
 		name string
 		mut  func(Model) Model
@@ -54,6 +56,7 @@ func TestPaletteNotReachableOverPopupsEditorsModalsBusy(t *testing.T) {
 // previously swallowed every key (updateFilesViewKey) so the palette was
 // unreachable there — the reported bug.
 func TestCtrlPOpensPaletteOverFilesView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}}}
 	m, _ = send(m, keyType(tea.KeyCtrlP))
@@ -64,6 +67,7 @@ func TestCtrlPOpensPaletteOverFilesView(t *testing.T) {
 
 // Integration: ctrl+p opens the palette on top of a browse layer (diff).
 func TestCtrlPOpensPaletteOverDiff(t *testing.T) {
+	t.Parallel()
 	m := footerModel().pushLayer(&diffView{title: "a.go"})
 	m, _ = send(m, keyType(tea.KeyCtrlP))
 	if p := layerOf[*commandPalette](m); p == nil || p != m.topLayer() {
@@ -73,6 +77,7 @@ func TestCtrlPOpensPaletteOverDiff(t *testing.T) {
 
 // Integration: ctrl+p over an input popup is swallowed by the popup (no palette).
 func TestCtrlPBlockedOverPopup(t *testing.T) {
+	t.Parallel()
 	m := footerModel().pushLayer(&gotoCommitPopup{input: newTextField("")})
 	m, _ = send(m, keyType(tea.KeyCtrlP))
 	if layerOf[*commandPalette](m) != nil {
@@ -82,6 +87,7 @@ func TestCtrlPBlockedOverPopup(t *testing.T) {
 
 // The palette renders over the files-view field surface without panicking.
 func TestPaletteRendersOverFilesView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}}}
 	m, _ = send(m, keyType(tea.KeyCtrlP))
@@ -95,6 +101,7 @@ func TestPaletteRendersOverFilesView(t *testing.T) {
 // and the diff window remains beneath it. Guards the run+render path that
 // layer-presence assertions alone don't cover.
 func TestPaletteRunsAndRendersOverDiff(t *testing.T) {
+	t.Parallel()
 	base := gotoModel(t, gotoFullHash).pushLayer(&diffView{title: "a.go"})
 	opened, _ := send(base, keyType(tea.KeyCtrlP))
 	if !strings.Contains(opened.View(), "Commands") {

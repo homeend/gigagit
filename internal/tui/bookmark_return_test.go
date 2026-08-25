@@ -38,6 +38,7 @@ func switcherModel(t *testing.T) Model {
 }
 
 func TestPasteEscReturnsToSwitcher(t *testing.T) {
+	t.Parallel()
 	m := switcherModel(t)
 	m.bookmarkSwitcher().filter = "ap" // a state we expect to survive
 	// open paste (p)
@@ -59,6 +60,7 @@ func TestPasteEscReturnsToSwitcher(t *testing.T) {
 }
 
 func TestPasteDestPrefilled(t *testing.T) {
+	t.Parallel()
 	m := switcherModel(t)
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
 	m = u.(Model)
@@ -74,6 +76,7 @@ func TestPasteDestPrefilled(t *testing.T) {
 // Paste success (enter) pops the paste popup and reveals the switcher beneath
 // while the WriteFile op runs.
 func TestPasteSuccessReturnsToSwitcher(t *testing.T) {
+	t.Parallel()
 	m := switcherModel(t)
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("p")})
 	m = u.(Model)
@@ -93,6 +96,7 @@ func TestPasteSuccessReturnsToSwitcher(t *testing.T) {
 // BLOCKER B1 regression: while an op is running the switcher sits visible on
 // the overlay stack but must be INERT — a keypress must not launch a second op.
 func TestSwitcherInertWhileRunning(t *testing.T) {
+	t.Parallel()
 	m := switcherModel(t)
 	m.running = true
 	m.opMsgs = make(chan tea.Msg, 1) // a sentinel we must not clobber
@@ -113,6 +117,7 @@ func TestSwitcherInertWhileRunning(t *testing.T) {
 // Remove-success refreshes the SAME switcher overlay in place (not a second
 // push), dropping the deleted row.
 func TestRemoveSuccessRefreshesSwitcher(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24, sel: map[panel]int{}, sortModes: map[panel]sortMode{}}
 	m = m.pushLayer(newBookmarkPopup([]model.Bookmark{{ID: "b1", Path: "a.go"}, {ID: "b2", Path: "b.go"}}))
 	depth := len(m.layers.entries)
@@ -129,6 +134,7 @@ func TestRemoveSuccessRefreshesSwitcher(t *testing.T) {
 
 // S4 regression: an open overlay swallows the mouse (no panel hit-test).
 func TestSwitcherSwallowsMouse(t *testing.T) {
+	t.Parallel()
 	m := switcherModel(t)
 	u, cmd := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 1, Y: 1})
 	if cmd != nil {

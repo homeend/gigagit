@@ -76,6 +76,7 @@ func keyMsg(s string) tea.KeyMsg {
 }
 
 func TestQuitOnQ(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	_, cmd := m.Update(keyMsg("q"))
 	if cmd == nil {
@@ -87,6 +88,7 @@ func TestQuitOnQ(t *testing.T) {
 }
 
 func TestWindowSizeIsRecorded(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	mm := updated.(Model)
@@ -96,6 +98,7 @@ func TestWindowSizeIsRecorded(t *testing.T) {
 }
 
 func TestCtrlLForcesLoadOnCommits(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t) // real svc+feed on a FakeRunner (see commit_scope_test.go)
 	m.focus = panelCommits
 	// Fresh feed: exhausted=false, inFlight=false → CanLoadMore true.
@@ -109,6 +112,7 @@ func TestCtrlLForcesLoadOnCommits(t *testing.T) {
 }
 
 func TestCtrlLNoopWhenExhausted(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	m.focus = panelCommits
 	// Exhaust the feed: a short initial page.
@@ -124,6 +128,7 @@ func TestCtrlLNoopWhenExhausted(t *testing.T) {
 }
 
 func TestHomeEndCommitsNav(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	m.focus = panelCommits
 	// Give the panel several rows so home/end have somewhere to go.

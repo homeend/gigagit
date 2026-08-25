@@ -113,6 +113,7 @@ func windowFixtureRows(n int) []colRow {
 }
 
 func TestRenderTwoColMatchesReference(t *testing.T) {
+	t.Parallel()
 	rows := windowFixtureRows(120)
 	for _, mode := range []dispMode{modeScroll, modeCutoff, modeWrap} {
 		for _, anchor := range []int{0, 1, 40, 59, 118, 119} {

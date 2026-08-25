@@ -8,6 +8,7 @@ import (
 )
 
 func TestExportPatchPopupEnterStartsExport(t *testing.T) {
+	t.Parallel()
 	p := &exportPatchPopup{data: []byte("From abc\n")}
 	p.dest = newTextField("/tmp/repo-parent/a1b2c3d.patch")
 	// Rendering must show the prefilled path and the key hints.
@@ -23,6 +24,7 @@ func TestExportPatchPopupEnterStartsExport(t *testing.T) {
 }
 
 func TestCommitExportPatchRowHiddenForMerge(t *testing.T) {
+	t.Parallel()
 	// A merge commit (len(Parents) > 1) must not offer the row.
 	//
 	// backingIndex(panelCommits) resolves through displayIndices, which walks
@@ -40,6 +42,7 @@ func TestCommitExportPatchRowHiddenForMerge(t *testing.T) {
 }
 
 func TestCommitExportPatchRowPresentForNonMerge(t *testing.T) {
+	t.Parallel()
 	// Sanity check for the positive path, alongside the merge-hidden case above.
 	m := Model{focus: panelCommits}
 	m.commits = []model.Commit{{Hash: "deadbeef", Parents: []string{"p1"}}}
@@ -56,6 +59,7 @@ func TestCommitExportPatchRowPresentForNonMerge(t *testing.T) {
 // (Step 5 of the brief), not just the row helper in isolation. Mirrors
 // TestCommitShelfRowInMenu (shelf_commit_test.go).
 func TestCommitExportPatchRowInMenu(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	found := false
@@ -70,6 +74,7 @@ func TestCommitExportPatchRowInMenu(t *testing.T) {
 }
 
 func TestExportFilePatchRowOnlyForCommitDiff(t *testing.T) {
+	t.Parallel()
 	// A commit-vs-parent file diff (rev set, not compare mode) offers the row.
 	// filesModeChanged is the zero value of filesMode ("a commit's changed files
 	// (vs parent)"), so this also matches a bare zero-value Model; set it
@@ -128,6 +133,7 @@ func TestExportFilePatchRowOnlyForCommitDiff(t *testing.T) {
 // makes for the neighboring files-view rows. exportFilePatchRow must key off
 // the literal top of the stack (m.topLayer()), not "a diff exists somewhere."
 func TestExportFilePatchRowHiddenBehindHistorySurface(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	dv := &diffView{title: "src/foo.go", rev: "abc123"}
 	m = m.pushLayer(dv)
@@ -143,6 +149,7 @@ func TestExportFilePatchRowHiddenBehindHistorySurface(t *testing.T) {
 // diff is front), not just the row helper in isolation. Mirrors
 // TestCommitExportPatchRowInMenu.
 func TestExportFilePatchRowInMenu(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.filesMode = filesModeChanged
 	dv := &diffView{title: "src/foo.go", rev: "abc123"}

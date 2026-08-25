@@ -52,12 +52,14 @@ func narrowRefspecRepo(t *testing.T) *git.Repo {
 }
 
 func TestNarrowRefspecNoticeNilWhenNoUnmapped(t *testing.T) {
+	t.Parallel()
 	if n := narrowRefspecNotice(model.RepoHealth{GitCommonDir: "/k"}); n != nil {
 		t.Fatalf("want nil when UnmappedBranches is empty, got %+v", n)
 	}
 }
 
 func TestNarrowRefspecNoticeBuilder(t *testing.T) {
+	t.Parallel()
 	h := model.RepoHealth{GitCommonDir: "/k", UnmappedBranches: []string{"feat"}}
 	n := narrowRefspecNotice(h)
 	if n == nil {
@@ -79,6 +81,7 @@ func TestNarrowRefspecNoticeBuilder(t *testing.T) {
 // stale/empty set) — a bogus remote or branch list here would either fail
 // the fetch outright or, worse, silently write the wrong mapping.
 func TestNarrowRefspecNoticeFixActionMapsAndFetches(t *testing.T) {
+	t.Parallel()
 	repo := narrowRefspecRepo(t)
 	m := New(domain.New(repo))
 	u, _ := m.Update(m.loadCmd()())

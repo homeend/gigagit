@@ -17,6 +17,7 @@ func lsReady(t *testing.T, m Model, paths ...string) Model {
 }
 
 func TestRepoRelPath(t *testing.T) {
+	t.Parallel()
 	root := filepath.FromSlash("/repo")
 	outside := filepath.FromSlash("/elsewhere/x.go")
 	cases := []struct{ name, in, want string }{
@@ -59,6 +60,7 @@ func palettePick(t *testing.T, m Model, label string) (Model, tea.Cmd) {
 }
 
 func TestPaletteFileHistoryOpensPopup(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "File history")
 	p := layerOf[*filePathPopup](m)
@@ -71,6 +73,7 @@ func TestPaletteFileHistoryOpensPopup(t *testing.T) {
 }
 
 func TestFilePathPopupHistoryOpensSurface(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "File history")
 	m = lsReady(t, m, "README.md")
@@ -89,6 +92,7 @@ func TestFilePathPopupHistoryOpensSurface(t *testing.T) {
 }
 
 func TestFilePathPopupBlameOpensSurface(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "File blame")
 	m = lsReady(t, m, "README.md")
@@ -104,6 +108,7 @@ func TestFilePathPopupBlameOpensSurface(t *testing.T) {
 }
 
 func TestFilePathPopupEmptyKeepsOpen(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m, _ = send(m, keyType(tea.KeyEnter)) // empty input
@@ -113,6 +118,7 @@ func TestFilePathPopupEmptyKeepsOpen(t *testing.T) {
 }
 
 func TestFilePathPopupEscRevealsPalette(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "File history")
 	m, _ = send(m, keyType(tea.KeyEsc))
@@ -125,6 +131,7 @@ func TestFilePathPopupEscRevealsPalette(t *testing.T) {
 }
 
 func TestFilePathPopupAllowsSpaces(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m, _ = send(m, key("a"))
@@ -140,6 +147,7 @@ func TestFilePathPopupAllowsSpaces(t *testing.T) {
 // history surface's navContext — proving the space is preserved end-to-end, not
 // just held in the textfield buffer.
 func TestFilePathPopupSpaceReachesNavContext(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m = lsReady(t, m, "a b.txt")
@@ -158,6 +166,7 @@ func TestFilePathPopupSpaceReachesNavContext(t *testing.T) {
 // p.box(), and p.render() (guards the green-unit/broken-render class the way
 // gotoCommitPopup's TestGotoCommitRendersWithError does).
 func TestFilePathPopupRenders(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		label string
 		title string
@@ -179,6 +188,7 @@ func TestFilePathPopupRenders(t *testing.T) {
 }
 
 func TestPaletteFindOpensFinder(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "Find")
 	if layerOf[*fileFinderPopup](m) == nil {
@@ -190,6 +200,7 @@ func TestPaletteFindOpensFinder(t *testing.T) {
 }
 
 func TestPaletteGitConfigOpensExplorer(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "Git config explorer")
 	if layerOf[*gitConfigPopup](m) == nil {
@@ -201,6 +212,7 @@ func TestPaletteGitConfigOpensExplorer(t *testing.T) {
 }
 
 func TestPaletteAgentSkillsOpensPickerDirect(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "Set up agent skills (using-gg)")
 	sp := layerOf[*settingsPopup](m)
@@ -213,6 +225,7 @@ func TestPaletteAgentSkillsOpensPickerDirect(t *testing.T) {
 }
 
 func TestPaletteAgentSkillsEscReturnsToBase(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "Set up agent skills (using-gg)")
 	m, _ = send(m, keyType(tea.KeyEsc))
@@ -222,6 +235,7 @@ func TestPaletteAgentSkillsEscReturnsToBase(t *testing.T) {
 }
 
 func TestFilePathPopupStartsLsFilesLoad(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, cmd := m.openFilePathPopup(filePathHistory)
 	p := layerOf[*filePathPopup](m)
@@ -234,6 +248,7 @@ func TestFilePathPopupStartsLsFilesLoad(t *testing.T) {
 }
 
 func TestFilePathPopupLsDeliveryBuildsSet(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m, _ = send(m, filePathLsMsg{paths: []string{"a/b.go", "README.md"}})
@@ -247,6 +262,7 @@ func TestFilePathPopupLsDeliveryBuildsSet(t *testing.T) {
 }
 
 func TestFilePathPopupLsErrorKeepsPopup(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m, _ = send(m, filePathLsMsg{err: errors.New("boom")})
@@ -257,12 +273,14 @@ func TestFilePathPopupLsErrorKeepsPopup(t *testing.T) {
 }
 
 func TestFilePathPopupLsLateDeliveryIsNoop(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = send(m, filePathLsMsg{paths: []string{"a"}}) // no popup open — must not panic
 	_ = m
 }
 
 func TestFilePathPopupNonMatchEntersSuggestionMode(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m = lsReady(t, m, "internal/tui/model.go", "internal/tui/view.go", "README.md")
@@ -281,6 +299,7 @@ func TestFilePathPopupNonMatchEntersSuggestionMode(t *testing.T) {
 }
 
 func TestFilePathPopupSuggestionEnterOpensHistory(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "File history")
 	m = lsReady(t, m, "internal/tui/model.go", "README.md")
@@ -298,6 +317,7 @@ func TestFilePathPopupSuggestionEnterOpensHistory(t *testing.T) {
 }
 
 func TestFilePathPopupSuggestionEnterOpensBlame(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathBlame)
 	m = lsReady(t, m, "internal/tui/model.go")
@@ -312,6 +332,7 @@ func TestFilePathPopupSuggestionEnterOpensBlame(t *testing.T) {
 }
 
 func TestFilePathPopupEscapeRowOpensAsTyped(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m = lsReady(t, m, "internal/tui/model.go")
@@ -325,6 +346,7 @@ func TestFilePathPopupEscapeRowOpensAsTyped(t *testing.T) {
 }
 
 func TestFilePathPopupSuggestionTypingReranks(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m = lsReady(t, m, "aaa/x.go", "bbb/y.go")
@@ -347,6 +369,7 @@ func TestFilePathPopupSuggestionTypingReranks(t *testing.T) {
 }
 
 func TestFilePathPopupSuggestionNavClamps(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m = lsReady(t, m, "aaa/x.go", "aab/y.go")
@@ -364,6 +387,7 @@ func TestFilePathPopupSuggestionNavClamps(t *testing.T) {
 }
 
 func TestFilePathPopupSuggestionEscReturnsToInput(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m = lsReady(t, m, "aaa/x.go")
@@ -384,6 +408,7 @@ func TestFilePathPopupSuggestionEscReturnsToInput(t *testing.T) {
 }
 
 func TestFilePathPopupLoadErrorOpensAsTyped(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m, _ = send(m, filePathLsMsg{err: errors.New("boom")})
@@ -396,6 +421,7 @@ func TestFilePathPopupLoadErrorOpensAsTyped(t *testing.T) {
 }
 
 func TestFilePathPopupEnterWhileLoadingThenDelivery(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m = typeRunes(t, m, "model")
@@ -411,6 +437,7 @@ func TestFilePathPopupEnterWhileLoadingThenDelivery(t *testing.T) {
 }
 
 func TestFilePathPopupEnterWhileLoadingThenError(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m = typeRunes(t, m, "model")
@@ -429,6 +456,7 @@ func TestFilePathPopupEnterWhileLoadingThenError(t *testing.T) {
 }
 
 func TestFilePathPopupRendersSuggestions(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m = lsReady(t, m, "internal/tui/model.go")
@@ -452,6 +480,7 @@ func TestFilePathPopupRendersSuggestions(t *testing.T) {
 // ctrl+t grows the frame but leaves rows/input truncated at the unmaximized
 // ~52-column text width.
 func TestFilePathPopupMaximizeRendersLongPathUntruncated(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash) // width 120
 	m, _ = m.openFilePathPopup(filePathHistory)
 	long := "internal/tui/" + strings.Repeat("nested/", 6) + "very_long_file_name.go"
@@ -479,6 +508,7 @@ func TestFilePathPopupMaximizeRendersLongPathUntruncated(t *testing.T) {
 // exact tracked path, the popup should open it right away instead of
 // stranding the user in the suggestion list waiting for a second enter.
 func TestFilePathPopupExactDeliveryAutoOpens(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "File history")
 	m = typeRunes(t, m, "README.md")
@@ -501,6 +531,7 @@ func TestFilePathPopupExactDeliveryAutoOpens(t *testing.T) {
 // (Left, Right, Home, End, and unconsumed keys) must not drop the user's
 // place in the suggestion list.
 func TestFilePathPopupSuggestionCursorKeyPreservesSel(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m = lsReady(t, m, "internal/tui/model.go", "internal/tui/view.go")
@@ -526,6 +557,7 @@ func TestFilePathPopupSuggestionCursorKeyPreservesSel(t *testing.T) {
 }
 
 func TestFilePathPopupRendersLoadingList(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = m.openFilePathPopup(filePathHistory)
 	m = typeRunes(t, m, "model")

@@ -11,6 +11,7 @@ import (
 )
 
 func TestHeaderPathElision(t *testing.T) {
+	t.Parallel()
 	const p = "/mnt/t/others/gigagit"
 	t.Run("fits unchanged", func(t *testing.T) {
 		if got := elidePath(p, 40); got != p {
@@ -44,6 +45,7 @@ func TestHeaderPathElision(t *testing.T) {
 }
 
 func TestPathLeaf(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{
 		"/mnt/t/others/gigagit":  "gigagit",
 		"/mnt/t/others/gigagit/": "gigagit",
@@ -57,6 +59,7 @@ func TestPathLeaf(t *testing.T) {
 }
 
 func TestHeaderLinePathRightAligned(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		status:          model.WorkingTreeStatus{Branch: "main"},
 		currentWorktree: "/mnt/t/others/gigagit",
@@ -77,6 +80,7 @@ func TestHeaderLinePathRightAligned(t *testing.T) {
 }
 
 func TestHeaderLineMiddleElidesWhenTight(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		status:          model.WorkingTreeStatus{Branch: "main"},
 		currentWorktree: "/mnt/t/others/some/deep/path/gigagit",
@@ -97,6 +101,7 @@ func TestHeaderLineMiddleElidesWhenTight(t *testing.T) {
 // seeding the path from configReadyMsg.top the header stays blank until the first
 // repo switch (R). Lock in that the handler seeds it.
 func TestConfigReadySeedsCurrentWorktree(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	const root = "/mnt/t/others/gigagit"
 	got, _ := m.Update(configReadyMsg{top: root})
@@ -106,6 +111,7 @@ func TestConfigReadySeedsCurrentWorktree(t *testing.T) {
 }
 
 func TestHeaderLineNoPathWhenTooNarrow(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		status:          model.WorkingTreeStatus{Branch: "main"},
 		currentWorktree: "/mnt/t/others/gigagit",
@@ -123,6 +129,7 @@ func TestHeaderLineNoPathWhenTooNarrow(t *testing.T) {
 // The top-left title is the current directory name (the worktree's leaf), not a
 // hard-coded brand, so it tracks whichever repo/worktree is open.
 func TestHeaderLineTitleIsCurrentDirName(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		status:          model.WorkingTreeStatus{Branch: "main"},
 		currentWorktree: "/home/me/projects/coolrepo",
@@ -136,6 +143,7 @@ func TestHeaderLineTitleIsCurrentDirName(t *testing.T) {
 // With no path yet (e.g. before the first snapshot loads) the title falls back
 // to the gigagit brand rather than rendering empty.
 func TestHeaderLineTitleFallsBackWhenNoPath(t *testing.T) {
+	t.Parallel()
 	m := Model{status: model.WorkingTreeStatus{Branch: "main"}}
 	plain := ansi.Strip(m.headerLine(80))
 	if !strings.HasPrefix(plain, "gigagit  branch main") {

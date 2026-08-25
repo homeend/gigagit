@@ -22,6 +22,7 @@ func histFixture() *historyView {
 }
 
 func TestHistoryRenderListsCommits(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	h := histFixture()
 	out := h.render(m, "")
@@ -34,6 +35,7 @@ func TestHistoryRenderListsCommits(t *testing.T) {
 }
 
 func TestHistoryDownMovesSelectionAndReloads(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	h := histFixture()
 	m = m.pushLayer(h)
@@ -47,6 +49,7 @@ func TestHistoryDownMovesSelectionAndReloads(t *testing.T) {
 }
 
 func TestHistoryEscPops(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	h := histFixture()
 	m = m.pushLayer(h)
@@ -60,6 +63,7 @@ func TestHistoryEscPops(t *testing.T) {
 // current path. For a commit predating a rename/copy the current name does not
 // exist in that commit's tree, so blaming it would fail (git exit 128).
 func TestHistoryBlameUsesHistoricalPath(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	h := &historyView{
 		ctx: navContext{path: "timing4.log", rev: ""},
@@ -85,6 +89,7 @@ func TestHistoryBlameUsesHistoricalPath(t *testing.T) {
 
 // q no longer quits from the history view — only the base layout quits on q.
 func TestHistoryQInert(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	h := histFixture()
 	m = m.pushLayer(h)
@@ -98,6 +103,7 @@ func TestHistoryQInert(t *testing.T) {
 }
 
 func TestStatusHOpensHistory(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30, focus: panelFiles, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Unstaged: 'M'}}}
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
@@ -112,6 +118,7 @@ func TestStatusHOpensHistory(t *testing.T) {
 }
 
 func TestStagedHOpensHistory(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30, focus: panelStaged, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Staged: 'M'}}}
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
@@ -126,6 +133,7 @@ func TestStagedHOpensHistory(t *testing.T) {
 }
 
 func TestFilesViewHOpensHistory(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}}}
 	m.filesTreeFocused = true
@@ -141,6 +149,7 @@ func TestFilesViewHOpensHistory(t *testing.T) {
 }
 
 func TestDiffViewHOpensHistory(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
 	mm, _ := m.updateDiffViewKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
@@ -154,6 +163,7 @@ func TestDiffViewHOpensHistory(t *testing.T) {
 }
 
 func TestHistoryViewWrapMode(t *testing.T) {
+	t.Parallel()
 	h := &historyView{
 		ctx:     navContext{path: "x"},
 		commits: []model.FileCommit{{Commit: model.Commit{Hash: "abcdef0", Subject: strings.Repeat("w", 80)}, Status: "M", Path: "x"}},
@@ -169,6 +179,7 @@ func TestHistoryViewWrapMode(t *testing.T) {
 // The left list is capped at 60 columns even on wide terminals; the remaining
 // width goes to the diff pane.
 func TestHistoryListWidthCappedAt60(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 200, height: 30}
 	h := histFixture()
 	out := h.render(m, "")
@@ -187,6 +198,7 @@ func TestHistoryListWidthCappedAt60(t *testing.T) {
 // Each history entry spans two lines: date+author+hash on the first, the
 // commit subject on the second.
 func TestHistoryEntryTwoLines(t *testing.T) {
+	t.Parallel()
 	ts := int64(1754800000)
 	h := &historyView{
 		ctx: navContext{path: "a.go"},
@@ -229,6 +241,7 @@ func TestHistoryEntryTwoLines(t *testing.T) {
 // A subject longer than the list width wraps onto continuation lines instead
 // of being cut off.
 func TestHistoryLongSubjectWrapsFully(t *testing.T) {
+	t.Parallel()
 	h := &historyView{
 		ctx: navContext{path: "a.go"},
 		commits: []model.FileCommit{
@@ -249,6 +262,7 @@ func TestHistoryLongSubjectWrapsFully(t *testing.T) {
 
 // A long author name is truncated in place; the hash stays visible.
 func TestHistoryLongAuthorStillShowsHash(t *testing.T) {
+	t.Parallel()
 	h := &historyView{
 		ctx: navContext{path: "a.go"},
 		commits: []model.FileCommit{

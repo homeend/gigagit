@@ -13,6 +13,7 @@ import (
 // On a focused stash file tree (filesHash holds the stash's resolved SHA), the
 // "Copy to working dir" row is offered.
 func TestCopyToWorkingDirRowPresentOnStashFile(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "dir/f.go", path: "dir/f.go"}}}
 	m.filesTreeFocused = true
@@ -27,6 +28,7 @@ func TestCopyToWorkingDirRowPresentOnStashFile(t *testing.T) {
 // On a focused Staged-panel file (Source = Staged → the index blob), the row is
 // offered — the third documented source besides stash and commit files.
 func TestCopyToWorkingDirRowPresentOnStagedFile(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m.focus = panelStaged
@@ -38,6 +40,7 @@ func TestCopyToWorkingDirRowPresentOnStagedFile(t *testing.T) {
 
 // A plain working-tree (unstaged) file is already local — the row is absent.
 func TestCopyToWorkingDirRowAbsentOnWorkingFile(t *testing.T) {
+	t.Parallel()
 	m := filesMenuModel() // panelFiles focused, one tracked file (Source = Unstaged)
 	m.currentWorktree = "/wt"
 	if _, ok := findRow(availableActions(m), "copy-working-dir"); ok {
@@ -47,6 +50,7 @@ func TestCopyToWorkingDirRowAbsentOnWorkingFile(t *testing.T) {
 
 // A file deleted in the commit/stash has no content to copy — the row is absent.
 func TestCopyToWorkingDirRowAbsentOnDeletion(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "dir/f.go", path: "dir/f.go", status: "D"}}}
 	m.filesTreeFocused = true
@@ -61,6 +65,7 @@ func TestCopyToWorkingDirRowAbsentOnDeletion(t *testing.T) {
 // absent destination keeps the test free of the Overwrite modal, which is
 // covered by engine.WriteFile's own tests.)
 func TestCopyToWorkingDirWritesFile(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("v1\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -101,6 +106,7 @@ func TestCopyToWorkingDirWritesFile(t *testing.T) {
 // A resolve failure (bogus commit) surfaces as statusMsg, synchronously, with no
 // op dispatched and no panic.
 func TestCopyToWorkingDirResolveErrorSetsStatus(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	m.filesView = &contentPopup{lines: []contentLine{{text: "nope.txt", path: "nope.txt"}}}

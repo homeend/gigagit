@@ -14,6 +14,7 @@ import (
 // ("Show graph", "Commit sort", refresh rates, the hook editor) landed in the
 // PREVIOUS repo's .gg.toml.
 func TestRepoSwitchRebindsRepoConfigPath(t *testing.T) {
+	t.Parallel()
 	m, dirA := settingsModel(t)
 	if !strings.HasSuffix(m.repoConfigPath, ".gg.toml") {
 		t.Fatalf("initial load must set repoConfigPath, got %q", m.repoConfigPath)

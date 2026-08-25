@@ -9,6 +9,7 @@ import (
 )
 
 func TestPackHintsKeepsKeyPairsIntact(t *testing.T) {
+	t.Parallel()
 	pairs := []string{
 		"[tab] switch field", "[enter] newline/next",
 		"[ctrl+g] generate", "[ctrl+s] commit", "[esc] cancel",
@@ -46,6 +47,7 @@ func TestPackHintsKeepsKeyPairsIntact(t *testing.T) {
 // cell math sees 16+2+7=25 <= 27 (both pairs fit on one line) — the two
 // counting methods disagree on the split point, which is exactly the bug.
 func TestPackHintsCJKUsesDisplayWidthNotBytes(t *testing.T) {
+	t.Parallel()
 	pair1 := "[a] 生成生成生成" // 4 ASCII + 6 CJK runes: 22 bytes, 16 display cells
 	pair2 := "[b] set"    // 7 ASCII bytes/cells
 	pairs := []string{pair1, pair2}
@@ -68,6 +70,7 @@ func TestPackHintsCJKUsesDisplayWidthNotBytes(t *testing.T) {
 }
 
 func TestCommitPopupMessageAssembly(t *testing.T) {
+	t.Parallel()
 	if got := (&commitPopup{title: newTextField("subj")}).message(); got != "subj" {
 		t.Fatalf("title-only = %q", got)
 	}
@@ -80,6 +83,7 @@ func TestCommitPopupMessageAssembly(t *testing.T) {
 }
 
 func TestSplitMessage(t *testing.T) {
+	t.Parallel()
 	ti, de := splitMessage("subject\n\nbody one\nbody two\n")
 	if ti != "subject" || de != "body one\nbody two" {
 		t.Fatalf("split = (%q, %q)", ti, de)
@@ -90,6 +94,7 @@ func TestSplitMessage(t *testing.T) {
 }
 
 func TestCommitPopupTypingAndFieldSwitch(t *testing.T) {
+	t.Parallel()
 	m := Model{sel: map[panel]int{}}
 	m = m.pushLayer(&commitPopup{})
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hi")})
@@ -122,6 +127,7 @@ func TestCommitPopupTypingAndFieldSwitch(t *testing.T) {
 }
 
 func TestCommitPopupEmptyTitleRefused(t *testing.T) {
+	t.Parallel()
 	m := Model{sel: map[panel]int{}}
 	m = m.pushLayer(&commitPopup{})
 	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})

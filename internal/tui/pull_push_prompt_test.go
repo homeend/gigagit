@@ -10,6 +10,7 @@ import (
 // ---- pullPrompt: the p-key confirm names the branch the pull targets ----
 
 func TestPullPromptNamesCurrentBranch(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.status = model.WorkingTreeStatus{Branch: "main"}
 	m.focus = panelCommits // off the Branches panel → pull-current
@@ -20,6 +21,7 @@ func TestPullPromptNamesCurrentBranch(t *testing.T) {
 }
 
 func TestPullPromptNamesBackgroundBranch(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.status = model.WorkingTreeStatus{Branch: "main"}
 	m.focus = panelBranches
@@ -31,6 +33,7 @@ func TestPullPromptNamesBackgroundBranch(t *testing.T) {
 }
 
 func TestPullPromptFallsBackWithoutBranch(t *testing.T) {
+	t.Parallel()
 	want := "Pull? This may rewrite the working tree."
 	for _, br := range []string{"", "(detached)"} {
 		m := markModel()
@@ -45,6 +48,7 @@ func TestPullPromptFallsBackWithoutBranch(t *testing.T) {
 // ---- p key end-to-end: the slow-op confirm carries the branch-naming prompt ----
 
 func TestPullKeyConfirmNamesBranch(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.status = model.WorkingTreeStatus{Branch: "main"}
 	m.focus = panelCommits
@@ -76,6 +80,7 @@ func pushTagModal(t *testing.T, tags []model.Tag, remoteSet map[string]bool) *de
 }
 
 func TestPushTagModalPromptNamesBranch(t *testing.T) {
+	t.Parallel()
 	modal := pushTagModal(t, []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}, map[string]bool{})
 	want := "Push main: branch tip has tag v1.0.0 not on the remote. Push too?"
 	if modal.req.Prompt != want {
@@ -84,6 +89,7 @@ func TestPushTagModalPromptNamesBranch(t *testing.T) {
 }
 
 func TestPushTagModalPromptPluralNamesBranch(t *testing.T) {
+	t.Parallel()
 	tags := []model.Tag{{Name: "v1.0.0", Target: "abc1234"}, {Name: "v1.1.0", Target: "abc1234"}}
 	modal := pushTagModal(t, tags, map[string]bool{})
 	want := "Push main: branch tip has tags v1.0.0, v1.1.0 not on the remote. Push too?"

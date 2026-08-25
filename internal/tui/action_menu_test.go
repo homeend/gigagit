@@ -11,6 +11,7 @@ import (
 )
 
 func TestSynthKey(t *testing.T) {
+	t.Parallel()
 	if got := synthKey("enter"); got.Type != tea.KeyEnter {
 		t.Errorf("enter -> %v, want KeyEnter", got.Type)
 	}
@@ -25,6 +26,7 @@ func TestSynthKey(t *testing.T) {
 }
 
 func TestMenuActionsAllowlistFiltersAndOrders(t *testing.T) {
+	t.Parallel()
 	m := filesMenuModel()
 	m.cfg.UI.MenuActions = []string{"file-diff", "stage"}
 	mm := m.openActionMenu()
@@ -38,6 +40,7 @@ func TestMenuActionsAllowlistFiltersAndOrders(t *testing.T) {
 }
 
 func TestDotOpensActionMenu(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	u, _ := m.Update(keyMsg("."))
@@ -48,6 +51,7 @@ func TestDotOpensActionMenu(t *testing.T) {
 }
 
 func TestActionMenuEscCloses(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	u, _ := m.Update(keyMsg("."))
@@ -59,6 +63,7 @@ func TestActionMenuEscCloses(t *testing.T) {
 }
 
 func TestDotNoOpUnderPopup(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(&repoPopup{}) // a popup owns the keyboard
 	u, _ := m.Update(keyMsg("."))
@@ -80,6 +85,7 @@ func filesMenuModel() Model {
 }
 
 func TestAvailableActionsExcludesGlobals(t *testing.T) {
+	t.Parallel()
 	m := filesMenuModel()
 	ids := map[string]bool{}
 	for _, r := range availableActions(m) {
@@ -96,6 +102,7 @@ func TestAvailableActionsExcludesGlobals(t *testing.T) {
 }
 
 func TestAvailableActionsRowBeforeWindow(t *testing.T) {
+	t.Parallel()
 	m := filesMenuModel()
 	rows := availableActions(m)
 	stageAt, stashAt := -1, -1
@@ -116,6 +123,7 @@ func TestAvailableActionsRowBeforeWindow(t *testing.T) {
 }
 
 func TestActionMenuQCloses(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	u, _ := m.Update(keyMsg("."))
@@ -133,6 +141,7 @@ func TestActionMenuQCloses(t *testing.T) {
 // Space reports String() as " ", so the direct-key match must normalize it;
 // pressing space on the [space] stage row runs (and closes the menu), not no-op.
 func TestActionMenuRunsStageBySpace(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m.focus = panelFiles
@@ -146,6 +155,7 @@ func TestActionMenuRunsStageBySpace(t *testing.T) {
 }
 
 func TestActionMenuRenders(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	u, _ := m.Update(keyMsg("."))
@@ -156,6 +166,7 @@ func TestActionMenuRenders(t *testing.T) {
 }
 
 func TestContextCopyRowsCommits(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m.focus = panelCommits
@@ -178,6 +189,7 @@ func TestContextCopyRowsCommits(t *testing.T) {
 }
 
 func TestContextCopyRowsFiles(t *testing.T) {
+	t.Parallel()
 	m := filesMenuModel() // Files panel, selected "dir/f.txt"; currentWorktree "/repo"
 	rows := m.contextCopyRows()
 	if len(rows) != 3 {
@@ -195,6 +207,7 @@ func TestContextCopyRowsFiles(t *testing.T) {
 }
 
 func TestContextCopyRowsStaged(t *testing.T) {
+	t.Parallel()
 	// The Staged panel shares m.status.Files with the Files panel, so the same
 	// copy rows must resolve there.
 	m := footerModel()
@@ -217,6 +230,7 @@ func TestContextCopyRowsStaged(t *testing.T) {
 }
 
 func TestContextCopyRowsEmpty(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelWorktrees
 	m.worktrees = nil // nothing selected → no copy rows
@@ -227,6 +241,7 @@ func TestContextCopyRowsEmpty(t *testing.T) {
 }
 
 func TestContextCopyRowsWorktrees(t *testing.T) {
+	t.Parallel()
 	m := footerModel() // worktrees: /repo (main), /repo/wt-x (feat/x)
 	m.loading = false
 	m.focus = panelWorktrees
@@ -245,6 +260,7 @@ func TestContextCopyRowsWorktrees(t *testing.T) {
 }
 
 func TestContextCopyRowsBranchWorktreePath(t *testing.T) {
+	t.Parallel()
 	m := footerModel() // main → /repo (current), feat/x → /repo/wt-x
 	m.loading = false
 	m.focus = panelBranches
@@ -271,6 +287,7 @@ func TestContextCopyRowsBranchWorktreePath(t *testing.T) {
 }
 
 func TestRunVisibleRowInvokesHandler(t *testing.T) {
+	t.Parallel()
 	m := filesMenuModel()
 	m = m.openActionMenu()
 	// The first row is the copy-file-path handler row.
@@ -287,6 +304,7 @@ func TestRunVisibleRowInvokesHandler(t *testing.T) {
 }
 
 func TestPruneRowOnRemotesTab(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelRemotes
 	found := false
@@ -301,6 +319,7 @@ func TestPruneRowOnRemotesTab(t *testing.T) {
 }
 
 func TestActionMenuMoveWraps(t *testing.T) {
+	t.Parallel()
 	a := &actionMenu{rows: []actionRow{{id: "a"}, {id: "b"}, {id: "c"}}}
 	a.sel = 0
 	a.move(-1) // up from the first row wraps to the last

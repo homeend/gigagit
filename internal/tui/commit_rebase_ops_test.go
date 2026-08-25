@@ -21,6 +21,7 @@ func rebaseOpsModel(parents []string) Model {
 }
 
 func TestCommitMoveDropRowsPresent(t *testing.T) {
+	t.Parallel()
 	m := rebaseOpsModel([]string{"p"}) // non-merge, non-root
 	for _, id := range []string{"commit-drop", "commit-move-up", "commit-move-down"} {
 		if _, ok := findRow(availableActions(m), id); !ok {
@@ -30,6 +31,7 @@ func TestCommitMoveDropRowsPresent(t *testing.T) {
 }
 
 func TestCommitMoveDropRowsGating(t *testing.T) {
+	t.Parallel()
 	// Merge commit → absent.
 	if _, ok := rebaseOpsModel([]string{"p1", "p2"}).commitDropRow(); ok {
 		t.Fatal("no drop row on a merge commit")

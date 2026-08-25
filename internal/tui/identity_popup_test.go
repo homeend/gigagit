@@ -28,6 +28,7 @@ func sampleIdentityView() *identityView {
 }
 
 func TestIdentityViewRendersCurrentAndProfiles(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 40}
 	v := sampleIdentityView()
 	out := v.box(m)
@@ -41,6 +42,7 @@ func TestIdentityViewRendersCurrentAndProfiles(t *testing.T) {
 // Regression: the action hints were truncated because the popup capped at 56
 // cols and popupBox truncates (never wraps). They must all render now.
 func TestIdentityViewRendersAllActions(t *testing.T) {
+	t.Parallel()
 	for _, w := range []int{120, 60} { // wide (one line) and narrow (wraps)
 		m := Model{width: w, height: 40}
 		out := sampleIdentityView().box(m)
@@ -53,6 +55,7 @@ func TestIdentityViewRendersAllActions(t *testing.T) {
 }
 
 func TestIdentityViewRendersUnsetLocalDistinctly(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 40}
 	v := sampleIdentityView() // LocalSet false, GlobalSet true
 	out := v.box(m)
@@ -65,6 +68,7 @@ func TestIdentityViewRendersUnsetLocalDistinctly(t *testing.T) {
 // applyOp is the pure seam translating a (name,email,global) choice into the
 // engine op, so the apply path is unit-testable without driving the TUI.
 func TestApplyOpBuildsSetIdentity(t *testing.T) {
+	t.Parallel()
 	op := applyOp("Ada", "ada@x", true)
 	want := engine.SetIdentity{Name: "Ada", Email: "ada@x", Global: true}
 	if op != want {
@@ -75,6 +79,7 @@ func TestApplyOpBuildsSetIdentity(t *testing.T) {
 // Applying to "this repo" (local) writes the temp repo's own .git/config — no
 // global isolation needed since it never touches ~/.gitconfig.
 func TestApplyWritesLocalIdentity(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	m.width, m.height = 100, 40
@@ -93,6 +98,7 @@ func TestApplyWritesLocalIdentity(t *testing.T) {
 }
 
 func TestIdentityViewSwallowsGlobalKeys(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 100, 40
 	m = m.pushLayer(&identityView{})
@@ -108,6 +114,7 @@ func TestIdentityViewSwallowsGlobalKeys(t *testing.T) {
 }
 
 func TestIdentityEscReturnsToSettings(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 100, 40
 	m = m.pushLayer(&settingsPopup{})
@@ -127,6 +134,7 @@ func TestIdentityEscReturnsToSettings(t *testing.T) {
 }
 
 func TestIdentityViewMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 200, height: 50}
 	v := sampleIdentityView()
 	for i := 0; i < 20; i++ { // more than the fixed cap of 8

@@ -8,6 +8,7 @@ import (
 )
 
 func TestShiftTabCyclesBackwards(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelBranches // the active left tab
 	// shift+tab from the active tab wraps to the bottom of the order (Commits).
@@ -32,6 +33,7 @@ func TestShiftTabCyclesBackwards(t *testing.T) {
 }
 
 func TestPageDownMovesQuarterViewportAndClamps(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 100, 27 // bodyH 24 → commits rowsCap 21 → step 5
 	m.focus = panelCommits
@@ -62,6 +64,7 @@ func TestPageDownMovesQuarterViewportAndClamps(t *testing.T) {
 }
 
 func TestPageStepFallsBackTo1WhenPanelHidden(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 80, 11 // bodyH 8 < 9: Worktrees panel hidden by layout
 	m.focus = panelWorktrees

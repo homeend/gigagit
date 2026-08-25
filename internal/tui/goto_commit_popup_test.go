@@ -35,6 +35,7 @@ func send(m Model, msg tea.Msg) (Model, tea.Cmd) {
 
 // # opens the show-commit popup from any panel (it is a global base-layout key).
 func TestGotoCommitOpensFromAnyPanel(t *testing.T) {
+	t.Parallel()
 	for _, p := range []panel{panelBranches, panelCommits, panelFiles} {
 		m := gotoModel(t, gotoFullHash)
 		m.focus = p
@@ -47,6 +48,7 @@ func TestGotoCommitOpensFromAnyPanel(t *testing.T) {
 
 // A valid commit-ish resolves and opens its files on the tree, closing the popup.
 func TestGotoCommitGoodSHAOpensFiles(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = send(m, key("#"))
 	m = typeRunes(t, m, "abc")
@@ -75,6 +77,7 @@ func TestGotoCommitGoodSHAOpensFiles(t *testing.T) {
 
 // An unresolved ref shows an inline error and keeps the popup open — no files view.
 func TestGotoCommitBadSHAInlineError(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, "") // rev-parse errors
 	m, _ = send(m, key("#"))
 	m = typeRunes(t, m, "bogus")
@@ -100,6 +103,7 @@ func TestGotoCommitBadSHAInlineError(t *testing.T) {
 
 // A resolve result for stale text (the field was edited after submit) is dropped.
 func TestGotoCommitStaleResolveRejected(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = send(m, key("#"))
 	m = typeRunes(t, m, "abc")
@@ -116,6 +120,7 @@ func TestGotoCommitStaleResolveRejected(t *testing.T) {
 
 // esc closes the popup without resolving.
 func TestGotoCommitEscCloses(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = send(m, key("#"))
 	m, _ = send(m, keyType(tea.KeyEsc))
@@ -128,6 +133,7 @@ func TestGotoCommitEscCloses(t *testing.T) {
 // the files actually LOAD (run the load cmd through Update — "landed", not just
 // "requested"). Real repo: the bug only shows against a true annotated tag.
 func TestGotoCommitAnnotatedTagLoadsFiles(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	gitIn(t, dir, "tag", "-a", "v1.0", "-m", "release one")
 	wantHash := gitOut(t, dir, "rev-parse", "v1.0^{commit}")
@@ -165,6 +171,7 @@ func TestGotoCommitAnnotatedTagLoadsFiles(t *testing.T) {
 // The render path draws the popup and surfaces the inline error after a failed
 // resolve (guards the green-unit/broken-render class).
 func TestGotoCommitRendersWithError(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, "") // rev-parse errors
 	m, _ = send(m, key("#"))
 	m = typeRunes(t, m, "bogus")

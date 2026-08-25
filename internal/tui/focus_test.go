@@ -3,6 +3,7 @@ package tui
 import "testing"
 
 func TestRightArrowFocusesCommitsFromEachLeftPanel(t *testing.T) {
+	t.Parallel()
 	for _, p := range []panel{panelBranches, panelWorktrees, panelFiles} {
 		m := markModel()
 		m.width, m.height = 80, 24
@@ -19,6 +20,7 @@ func TestRightArrowFocusesCommitsFromEachLeftPanel(t *testing.T) {
 }
 
 func TestLeftArrowReturnsToLastLeftPanel(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.width, m.height = 80, 24
 	m.focus = panelFiles
@@ -32,6 +34,7 @@ func TestLeftArrowReturnsToLastLeftPanel(t *testing.T) {
 }
 
 func TestLeftArrowAfterTabRemembersLeftPanel(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.width, m.height = 80, 24 // bodyH 21 >= 12 → Staged visible; order ends [Staged, Commits]
 	m.focus = panelStaged
@@ -47,6 +50,7 @@ func TestLeftArrowAfterTabRemembersLeftPanel(t *testing.T) {
 }
 
 func TestLeftArrowDefaultsToBranches(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.width, m.height = 80, 24
 	m.focus = panelCommits // never visited a left panel
@@ -57,6 +61,7 @@ func TestLeftArrowDefaultsToBranches(t *testing.T) {
 }
 
 func TestArrowFocusEdgesNoOp(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.width, m.height = 80, 24
 	m.focus = panelCommits
@@ -72,6 +77,7 @@ func TestArrowFocusEdgesNoOp(t *testing.T) {
 }
 
 func TestLeftArrowNoOpOnNarrowTerminal(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.width, m.height = 30, 24 // no left column below 40
 	m.focus = panelCommits

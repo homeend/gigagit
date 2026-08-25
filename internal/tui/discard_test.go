@@ -24,6 +24,7 @@ func discardModel(files []model.FileStatus) Model {
 
 // canDiscard: true only on Files panel with at least one discardable row.
 func TestCanDiscardGating(t *testing.T) {
+	t.Parallel()
 	m := discardModel([]model.FileStatus{fileStatus("a.go", model.KindTracked)})
 	if !m.canDiscard() {
 		t.Fatal("want canDiscard on Files panel with a tracked file")
@@ -42,6 +43,7 @@ func TestCanDiscardGating(t *testing.T) {
 // discardTargets: marked set wins; untracked → remove, tracked → restore;
 // unmerged dropped.
 func TestDiscardTargetsMarked(t *testing.T) {
+	t.Parallel()
 	m := discardModel([]model.FileStatus{
 		fileStatus("edit.go", model.KindTracked),
 		fileStatus("new.txt", model.KindUntracked),
@@ -62,6 +64,7 @@ func TestDiscardTargetsMarked(t *testing.T) {
 
 // discardTargets: no marks → cursor row only.
 func TestDiscardTargetsCursor(t *testing.T) {
+	t.Parallel()
 	m := discardModel([]model.FileStatus{
 		fileStatus("edit.go", model.KindTracked),
 		fileStatus("new.txt", model.KindUntracked),
@@ -75,6 +78,7 @@ func TestDiscardTargetsCursor(t *testing.T) {
 
 // d on an all-conflicted Files panel: canDiscard false → no modal.
 func TestDiscardKeyEmptyTargetNoOp(t *testing.T) {
+	t.Parallel()
 	m := discardModel([]model.FileStatus{fileStatus("c.go", model.KindUnmerged)})
 	nm, _ := m.Update(keyMsg("d"))
 	out := nm.(Model)
@@ -85,6 +89,7 @@ func TestDiscardKeyEmptyTargetNoOp(t *testing.T) {
 
 // D refuses while a conflict exists.
 func TestDiscardAllRefusesOnConflict(t *testing.T) {
+	t.Parallel()
 	m := discardModel([]model.FileStatus{
 		fileStatus("edit.go", model.KindTracked),
 		fileStatus("c.go", model.KindUnmerged),
@@ -101,6 +106,7 @@ func TestDiscardAllRefusesOnConflict(t *testing.T) {
 
 // d opens the confirm modal with the Discard/Cancel options and the filename.
 func TestDiscardKeyOpensModal(t *testing.T) {
+	t.Parallel()
 	m := discardModel([]model.FileStatus{fileStatus("edit.go", model.KindTracked)})
 	nm, _ := m.Update(keyMsg("d"))
 	out := nm.(Model)
@@ -121,6 +127,7 @@ func TestDiscardKeyOpensModal(t *testing.T) {
 // canDiscardAll: refuses on conflicts and on a clean (no unstaged/untracked)
 // panel; true only with real changes and no conflict.
 func TestCanDiscardAllGating(t *testing.T) {
+	t.Parallel()
 	// Mixed edit + conflict: D would refuse, so canDiscardAll must be false.
 	m := discardModel([]model.FileStatus{
 		fileStatus("edit.go", model.KindTracked),
@@ -146,6 +153,7 @@ func TestCanDiscardAllGating(t *testing.T) {
 // The footer must NOT advertise [D] when D would refuse (mixed conflict panel),
 // keeping the footer predicate in lockstep with the dispatch gate.
 func TestFooterHidesDiscardAllOnConflict(t *testing.T) {
+	t.Parallel()
 	m := discardModel([]model.FileStatus{
 		fileStatus("edit.go", model.KindTracked),
 		fileStatus("c.go", model.KindUnmerged),
@@ -157,6 +165,7 @@ func TestFooterHidesDiscardAllOnConflict(t *testing.T) {
 
 // D opens the confirm modal for an all-discard.
 func TestDiscardAllOpensModal(t *testing.T) {
+	t.Parallel()
 	m := discardModel([]model.FileStatus{fileStatus("edit.go", model.KindTracked)})
 	nm, _ := m.Update(keyMsg("D"))
 	out := nm.(Model)

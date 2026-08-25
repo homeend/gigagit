@@ -3,6 +3,7 @@ package tui
 import "testing"
 
 func TestForcePushRowOnCurrentBranch(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches // selection defaults to row 0 = "main" (IsHead)
 	r, ok := findRow(availableActions(m), "force-push")
@@ -15,6 +16,7 @@ func TestForcePushRowOnCurrentBranch(t *testing.T) {
 }
 
 func TestForcePushRowHiddenOnNonCurrentBranch(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	m.sel = map[panel]int{panelBranches: 1} // row 1 = "feat/x" (not IsHead)
@@ -24,6 +26,7 @@ func TestForcePushRowHiddenOnNonCurrentBranch(t *testing.T) {
 }
 
 func TestForcePushRowHiddenOffBranchesPanel(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelCommits
 	if _, ok := findRow(availableActions(m), "force-push"); ok {

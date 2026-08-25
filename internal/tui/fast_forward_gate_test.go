@@ -17,6 +17,7 @@ func gateFeed() []model.Commit {
 }
 
 func TestFeedDescendantAhead(t *testing.T) {
+	t.Parallel()
 	d, c := feedDescendant(gateFeed(), "C2", "C0")
 	if !d || !c {
 		t.Fatalf("C2 vs tip C0: got descendant=%v conclusive=%v, want true,true", d, c)
@@ -24,6 +25,7 @@ func TestFeedDescendantAhead(t *testing.T) {
 }
 
 func TestFeedDescendantBehind(t *testing.T) {
+	t.Parallel()
 	d, c := feedDescendant(gateFeed(), "C0", "C2")
 	if d || !c {
 		t.Fatalf("C0 vs tip C2: got descendant=%v conclusive=%v, want false,true", d, c)
@@ -31,6 +33,7 @@ func TestFeedDescendantBehind(t *testing.T) {
 }
 
 func TestFeedDescendantDivergent(t *testing.T) {
+	t.Parallel()
 	d, c := feedDescendant(gateFeed(), "S", "C1")
 	if d || !c {
 		t.Fatalf("S vs tip C1: got descendant=%v conclusive=%v, want false,true", d, c)
@@ -38,6 +41,7 @@ func TestFeedDescendantDivergent(t *testing.T) {
 }
 
 func TestFeedDescendantSelfIsTip(t *testing.T) {
+	t.Parallel()
 	d, c := feedDescendant(gateFeed(), "C1", "C1")
 	if d || !c {
 		t.Fatalf("tip itself: got descendant=%v conclusive=%v, want false,true", d, c)
@@ -45,6 +49,7 @@ func TestFeedDescendantSelfIsTip(t *testing.T) {
 }
 
 func TestFeedDescendantTipNotLoaded(t *testing.T) {
+	t.Parallel()
 	_, c := feedDescendant(gateFeed(), "C2", "MISSING")
 	if c {
 		t.Fatalf("tip not loaded must be inconclusive, got conclusive=%v", c)
@@ -52,6 +57,7 @@ func TestFeedDescendantTipNotLoaded(t *testing.T) {
 }
 
 func TestFeedDescendantParentOffWindow(t *testing.T) {
+	t.Parallel()
 	// C2's parent C1 is NOT loaded → the walk from C2 toward tip C0 is inconclusive.
 	feed := []model.Commit{
 		{Hash: "C2", Parents: []string{"C1"}, UnixTime: 30},

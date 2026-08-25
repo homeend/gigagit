@@ -3,6 +3,7 @@ package tui
 import "testing"
 
 func TestCommitShelfRowPresentOnCommits(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	r, ok := m.commitShelfRow()
@@ -19,6 +20,7 @@ func TestCommitShelfRowPresentOnCommits(t *testing.T) {
 }
 
 func TestCommitShelfRowInMenu(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	found := false

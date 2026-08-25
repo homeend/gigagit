@@ -8,6 +8,7 @@ import (
 
 // closeFilesView must zero the entire cluster — no stale field survives.
 func TestCloseFilesViewZeroesEverything(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	// dirty every field the way full-tree-with-preview-after-compare would
 	m.filesView = &contentPopup{}
@@ -38,6 +39,7 @@ func TestCloseFilesViewZeroesEverything(t *testing.T) {
 
 // Switching from full-tree-with-preview into compare drops the preview + full-tree.
 func TestOpenCompareDropsPreviewAndFullTree(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.filesMode = filesModeFullTree
 	m.filesPreview = &contentPopup{}
@@ -55,6 +57,7 @@ func TestOpenCompareDropsPreviewAndFullTree(t *testing.T) {
 
 // toggleFullTree drops an open preview.
 func TestToggleFullTreeDropsPreview(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.filesView = &contentPopup{}
 	m.filesHash = "abc"

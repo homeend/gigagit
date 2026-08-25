@@ -26,6 +26,7 @@ func shCommitEntry(id string) model.ShelfEntry {
 // different too, now that it arms a commit-flavored compare against a
 // bookmark instead of refusing — see TestShelfCommitEntryCompareArm below.)
 func TestShelfPopupCommitEntryGuardsFileActions(t *testing.T) {
+	t.Parallel()
 	for _, key := range []string{"p", "e"} {
 		m := shelfPopModel(shCommitEntry("ce"))
 		mm, cmd := m.Update(keyMsg(key))
@@ -57,6 +58,7 @@ func TestShelfPopupCommitEntryGuardsFileActions(t *testing.T) {
 // c on a shelved commit entry must arm a commit-flavored pendingCompare
 // targeting the bookmark picker, not refuse (mirrors TestBookmarkCommitCrossCompareArm).
 func TestShelfCommitEntryCompareArm(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shCommitEntry("ce"))
 	mm, cmd := m.Update(keyMsg("c"))
 	got := mm.(Model)
@@ -74,6 +76,7 @@ func TestShelfCommitEntryCompareArm(t *testing.T) {
 // In compare mode (a focused file picked first), enter on a shelved commit is
 // refused the same way a commit bookmark is on the bookmark side.
 func TestShelfPopupCompareModeEnterRefusesCommitEntry(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shCommitEntry("ce"))
 	m.shelfSwitcher().compareRef = &model.FileRef{Source: model.SourceUnstaged, Path: "focused.go"}
 	m.shelfSwitcher().compareLabel = "wt / unstaged / focused.go"
@@ -90,6 +93,7 @@ func TestShelfPopupCompareModeEnterRefusesCommitEntry(t *testing.T) {
 // The whole-entry actions stay available on a shelved commit: x (remove) and
 // t (copy to temp dir).
 func TestShelfPopupCommitEntryKeepsRemoveAndExport(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shCommitEntry("ce"))
 	mm, _ := m.Update(keyMsg("x"))
 	if mm.(Model).modal == nil {

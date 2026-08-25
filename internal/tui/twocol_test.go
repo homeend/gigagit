@@ -11,6 +11,7 @@ import (
 func plain(s string) string { return ansi.Strip(s) }
 
 func TestTwoColCutoffTruncates(t *testing.T) {
+	t.Parallel()
 	rows := []colRow{{
 		left:  &winCell{gutter: "[ ] ", body: "abcdefghijklmnop"},
 		right: &winCell{gutter: "[ ] ", body: "right"},
@@ -29,6 +30,7 @@ func TestTwoColCutoffTruncates(t *testing.T) {
 }
 
 func TestTwoColScrollReveals(t *testing.T) {
+	t.Parallel()
 	rows := []colRow{{
 		left:  &winCell{gutter: "", body: "0123456789ABCDEF"},
 		right: &winCell{gutter: "", body: ""},
@@ -45,6 +47,7 @@ func TestTwoColScrollReveals(t *testing.T) {
 }
 
 func TestTwoColWrapAlignsPairsAndGutterOnlyFirst(t *testing.T) {
+	t.Parallel()
 	rows := []colRow{{
 		left:  &winCell{gutter: "[x] ", body: "aaa bbb ccc"},
 		right: &winCell{gutter: "[ ] ", body: "z"},
@@ -66,6 +69,7 @@ func TestTwoColWrapAlignsPairsAndGutterOnlyFirst(t *testing.T) {
 }
 
 func TestTwoColVerticalWindowKeepsAnchor(t *testing.T) {
+	t.Parallel()
 	var rows []colRow
 	for i := 0; i < 20; i++ {
 		rows = append(rows, colRow{full: &winCell{body: string(rune('A' + i))}})
@@ -81,6 +85,7 @@ func TestTwoColVerticalWindowKeepsAnchor(t *testing.T) {
 }
 
 func TestTwoColVShiftSlidesAndClamps(t *testing.T) {
+	t.Parallel()
 	var rows []colRow
 	for i := 0; i < 20; i++ {
 		rows = append(rows, colRow{full: &winCell{body: string(rune('A' + i))}})

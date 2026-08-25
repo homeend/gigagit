@@ -17,6 +17,7 @@ func lazyModel() Model {
 
 // The lazy per-index methods must equal the old eager all-n slices entry-for-entry.
 func TestLazyCommitListMatchesEagerSlices(t *testing.T) {
+	t.Parallel()
 	m := lazyModel()
 	cl := m.listFor(panelCommits).(commitList)
 	wantHay := m.commitHaystacks()

@@ -7,6 +7,7 @@ import (
 )
 
 func TestCompareKeyResolvers(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3) // commits[0]=tip
 	wt := wipKey(wipRow{kind: wipWorktree})
 	stg := wipKey(wipRow{kind: wipStaged})
@@ -30,6 +31,7 @@ func TestCompareKeyResolvers(t *testing.T) {
 }
 
 func TestMarkCommitUnderDirtyTreeHitsRightRow(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 4)
 	m.focus = panelCommits
 	m.status = dirtyStatus()
@@ -49,6 +51,7 @@ func TestMarkCommitUnderDirtyTreeHitsRightRow(t *testing.T) {
 }
 
 func TestMarkAndToggleWipRow(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.status = dirtyStatus()
@@ -80,6 +83,7 @@ func TestMarkAndToggleWipRow(t *testing.T) {
 }
 
 func TestCompareSelectionWipVsCommit(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.status = dirtyStatus()
@@ -106,6 +110,7 @@ func TestCompareSelectionWipVsCommit(t *testing.T) {
 }
 
 func TestCompareSelectionWithWipTwo(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.status = dirtyStatus()
@@ -125,6 +130,7 @@ func TestCompareSelectionWithWipTwo(t *testing.T) {
 }
 
 func TestCompareSelectionRangeRefusesWip(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 4)
 	m.status = dirtyStatus()
 	m.wipRows = deriveWipRows(m.status)
@@ -143,6 +149,7 @@ func TestCompareSelectionRangeRefusesWip(t *testing.T) {
 // the active / filter: two selected commits must still compare even when the
 // filter hides one of them.
 func TestCompareSelectionSurvivesFilter(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 4) // subjects c0..c3
 	m.focus = panelCommits
 	m.commitCompareSet = map[string]bool{

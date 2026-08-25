@@ -16,6 +16,7 @@ func maxModel() Model {
 }
 
 func TestLeftColumnPanelsTall(t *testing.T) {
+	t.Parallel()
 	m := maxModel() // width 120, height 40
 	got := m.leftColumnPanels()
 	want := []panel{panelBranches, panelFiles, panelStaged}
@@ -25,6 +26,7 @@ func TestLeftColumnPanelsTall(t *testing.T) {
 }
 
 func TestLeftColumnPanelsShortDropsStaged(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.height = 14 // bodyH = 11 < 12, so the normal split drops Staged
 	got := m.leftColumnPanels()
@@ -35,6 +37,7 @@ func TestLeftColumnPanelsShortDropsStaged(t *testing.T) {
 }
 
 func TestLeftColumnPanelsNarrowEmpty(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.width = 30
 	if got := m.leftColumnPanels(); len(got) != 0 {
@@ -43,6 +46,7 @@ func TestLeftColumnPanelsNarrowEmpty(t *testing.T) {
 }
 
 func TestLeftColumnPanelsReflectsActiveTabs(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.activeLeftTab = panelRemotes
 	m.activeFilesTab = panelTags
@@ -54,6 +58,7 @@ func TestLeftColumnPanelsReflectsActiveTabs(t *testing.T) {
 }
 
 func TestLayoutMaximizesPinnedPanel(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.leftMaxed = true
 	m.leftMax = panelFiles
@@ -78,6 +83,7 @@ func TestLayoutMaximizesPinnedPanel(t *testing.T) {
 }
 
 func TestLayoutNormalSplitWhenNotMaximized(t *testing.T) {
+	t.Parallel()
 	m := maxModel() // leftMaxed false
 	g := m.layout()
 	for _, p := range []panel{panelBranches, panelFiles, panelStaged} {
@@ -92,6 +98,7 @@ func TestLayoutNormalSplitWhenNotMaximized(t *testing.T) {
 // the active tab without re-pinning), layout must fall back to the normal split
 // rather than delete every left box and blank the column.
 func TestLayoutMaximizePinnedNotVisibleFallsBack(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.leftMaxed = true
 	m.leftMax = panelRemotes // NOT the active top tab (panelBranches)
@@ -104,6 +111,7 @@ func TestLayoutMaximizePinnedNotVisibleFallsBack(t *testing.T) {
 }
 
 func TestFocusOrderCollapsesWhenMaximized(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.leftMaxed = true
 	m.leftMax = panelFiles
@@ -115,6 +123,7 @@ func TestFocusOrderCollapsesWhenMaximized(t *testing.T) {
 }
 
 func TestFocusOrderNormalWhenNotMaximized(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	got := m.focusOrder()
 	want := []panel{panelBranches, panelFiles, panelStaged, panelCommits}
@@ -124,6 +133,7 @@ func TestFocusOrderNormalWhenNotMaximized(t *testing.T) {
 }
 
 func TestLeftReturnTargetIsPinnedWhenMaximized(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.leftMaxed = true
 	m.leftMax = panelStaged
@@ -133,6 +143,7 @@ func TestLeftReturnTargetIsPinnedWhenMaximized(t *testing.T) {
 }
 
 func TestMaximizeKeyTogglesFocusedLeftPanel(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelBranches
 
@@ -150,6 +161,7 @@ func TestMaximizeKeyTogglesFocusedLeftPanel(t *testing.T) {
 }
 
 func TestMaximizeKeyNoOpOnCommits(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelCommits
 	u, _ := m.Update(keyMsg("t"))
@@ -159,6 +171,7 @@ func TestMaximizeKeyNoOpOnCommits(t *testing.T) {
 }
 
 func TestMaximizeKeyNoOpOnNarrowTerminal(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.width = 30
 	m.focus = panelBranches
@@ -169,6 +182,7 @@ func TestMaximizeKeyNoOpOnNarrowTerminal(t *testing.T) {
 }
 
 func TestMaximizeKeyNoOpWhileFilesViewOpen(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m.filesView = &contentPopup{} // a full-screen surface owns the left area
@@ -179,6 +193,7 @@ func TestMaximizeKeyNoOpWhileFilesViewOpen(t *testing.T) {
 }
 
 func TestCtrlArrowRepinsTopTab(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelBranches
 	m.leftMaxed = true
@@ -198,6 +213,7 @@ func TestCtrlArrowRepinsTopTab(t *testing.T) {
 }
 
 func TestCtrlArrowRepinsMiddleTab(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m.activeFilesTab = panelFiles
@@ -212,6 +228,7 @@ func TestCtrlArrowRepinsMiddleTab(t *testing.T) {
 }
 
 func TestCtrlArrowFlipsPinnedBottomTab(t *testing.T) {
+	t.Parallel()
 	// The bottom slot is now a tab group (Staged ⇄ Reflog), so ctrl+arrow on a
 	// pinned Staged flips to a maximized Reflog (re-pinning), and back. The top
 	// tab is untouched.
@@ -240,6 +257,7 @@ func TestCtrlArrowFlipsPinnedBottomTab(t *testing.T) {
 // maximized, the rendered left column shows ONLY that panel's box — the others
 // (here Staged) are not drawn at all, so no degenerate zero-height box appears.
 func TestRenderMaximizedHidesOtherLeftPanels(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelBranches
 

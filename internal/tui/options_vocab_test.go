@@ -334,6 +334,7 @@ func optionDisplayCaseKeys(t *testing.T) map[string]bool {
 // bundles and (b) have an optionDisplayName case, so the modal renders it
 // translated. Dynamic values (names) legitimately pass through.
 func TestDecisionOptionValuesTranslated(t *testing.T) {
+	t.Parallel()
 	values := map[string]string{}
 	for _, dir := range []string{".", "../engine"} {
 		for v, pos := range collectOptionValues(t, dir) {

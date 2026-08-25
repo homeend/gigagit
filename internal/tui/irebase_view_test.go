@@ -19,6 +19,7 @@ func edRows() []model.RangeCommit {
 }
 
 func TestIrebaseEditorNewestFirstAndPlanOrder(t *testing.T) {
+	t.Parallel()
 	e := newIrebaseEditor("work", "main", edRows(), "/bin/gg")
 	if e.rows[0].sha != "h3" {
 		t.Fatalf("top row = %q, want h3 (newest-first)", e.rows[0].sha)
@@ -36,6 +37,7 @@ func TestIrebaseEditorNewestFirstAndPlanOrder(t *testing.T) {
 }
 
 func TestIrebaseEditorActionsAndReorder(t *testing.T) {
+	t.Parallel()
 	e := newIrebaseEditor("work", "main", edRows(), "/bin/gg")
 	m := Model{layers: &layerStack{entries: []layer{e}}}
 	// focus top row (h3, newest), drop it
@@ -64,6 +66,7 @@ func TestIrebaseEditorActionsAndReorder(t *testing.T) {
 }
 
 func TestIrebaseEditorSquashOnOldestRefused(t *testing.T) {
+	t.Parallel()
 	e := newIrebaseEditor("work", "main", edRows(), "/bin/gg")
 	m := Model{layers: &layerStack{entries: []layer{e}}}
 	// move to the bottom (oldest) row and squash → refused
@@ -76,6 +79,7 @@ func TestIrebaseEditorSquashOnOldestRefused(t *testing.T) {
 }
 
 func TestIrebaseEditorReword(t *testing.T) {
+	t.Parallel()
 	e := newIrebaseEditor("work", "main", edRows(), "/bin/gg")
 	m := Model{layers: &layerStack{entries: []layer{e}}}
 	m, _ = e.update(m, key("r")) // open reword for h3
@@ -93,6 +97,7 @@ func TestIrebaseEditorReword(t *testing.T) {
 }
 
 func TestIrebaseLoadedMsgPushesEditor(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	updated, _ := m.Update(irebaseLoadedMsg{branch: "work", onto: "main", commits: edRows()})
 	m = updated.(Model)
@@ -102,6 +107,7 @@ func TestIrebaseLoadedMsgPushesEditor(t *testing.T) {
 }
 
 func TestIrebaseLoadedEmptyRangeNoOp(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	updated, _ := m.Update(irebaseLoadedMsg{branch: "work", onto: "main", commits: nil})
 	m = updated.(Model)
@@ -114,6 +120,7 @@ func TestIrebaseLoadedEmptyRangeNoOp(t *testing.T) {
 // through Model.Update reaches the editor surface on top of the stack (not just
 // direct e.update calls).
 func TestIrebaseEditorReceivesRoutedKeys(t *testing.T) {
+	t.Parallel()
 	e := newIrebaseEditor("work", "main", edRows(), "/bin/gg")
 	m := Model{width: 80, height: 24}
 	m = m.pushLayer(e)

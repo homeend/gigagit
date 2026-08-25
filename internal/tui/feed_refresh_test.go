@@ -95,6 +95,7 @@ func readFeed(t *testing.T, m Model, opts reloadOpts) feedPayload {
 // An automatic refresh (background lane, file watch, post-op) must keep every
 // page the user paged in — otherwise a deep ctrl+f search is wiped every tick.
 func TestAutomaticFeedRefreshKeepsPagedHistory(t *testing.T) {
+	t.Parallel()
 	m, hr := deepFeedModel(t)
 	hr.prepend("new0")
 	p := readFeed(t, m, reloadOpts{})
@@ -109,6 +110,7 @@ func TestAutomaticFeedRefreshKeepsPagedHistory(t *testing.T) {
 // A hard reload (manual r, sort/page-size change) still starts clean — the
 // user's escape hatch from a stale deep tail.
 func TestHardFeedReloadStartsFromPageZero(t *testing.T) {
+	t.Parallel()
 	m, hr := deepFeedModel(t)
 	hr.prepend("new0")
 	p := readFeed(t, m, reloadOpts{manual: true, hardFeed: true})

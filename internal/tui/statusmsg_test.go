@@ -6,6 +6,7 @@ import "testing"
 // on the next key interaction when idle — otherwise it lingers across
 // navigation and reloads forever.
 func TestStatusMsgClearsOnNextKeyWhenIdle(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.statusMsg = "error: 'feat/x' is already checked out at ..."
 	updated, _ := m.Update(keyMsg("tab")) // benign navigation, sets no message
@@ -18,6 +19,7 @@ func TestStatusMsgClearsOnNextKeyWhenIdle(t *testing.T) {
 // While an operation is running, the "working…" notice must survive a stray
 // keypress (the clear is gated on idle).
 func TestStatusMsgSurvivesKeyWhileRunning(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.running = true
 	m.statusMsg = "working…"

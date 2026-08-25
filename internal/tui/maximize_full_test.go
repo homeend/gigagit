@@ -9,6 +9,7 @@ import (
 )
 
 func TestLayoutFullscreenLeftPanel(t *testing.T) {
+	t.Parallel()
 	m := maxModel() // 120×40: Branches/Files/Staged + Commits
 	m.fullMaxed = true
 	m.fullMax = panelFiles
@@ -34,6 +35,7 @@ func TestLayoutFullscreenLeftPanel(t *testing.T) {
 }
 
 func TestLayoutFullscreenCommits(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.fullMaxed = true
 	m.fullMax = panelCommits
@@ -54,6 +56,7 @@ func TestLayoutFullscreenCommits(t *testing.T) {
 
 // Fullscreen wins over a t column-pin underneath (the ladder's top level).
 func TestLayoutFullscreenBeatsColumnPin(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.leftMaxed = true
 	m.leftMax = panelFiles
@@ -67,6 +70,7 @@ func TestLayoutFullscreenBeatsColumnPin(t *testing.T) {
 
 // Stale pin: fullMax not in the visible set ⇒ normal split, never a blank screen.
 func TestLayoutFullscreenStalePinFallsBack(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.fullMaxed = true
 	m.fullMax = panelRemotes // NOT the active top tab (panelBranches)
@@ -82,6 +86,7 @@ func TestLayoutFullscreenStalePinFallsBack(t *testing.T) {
 // their column, so an active one suspends the fullscreen pin (it resumes when
 // the surface closes — the flag is not cleared).
 func TestFullMaxActiveYieldsToSurfaces(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.fullMaxed = true
 	m.fullMax = panelFiles
@@ -106,6 +111,7 @@ func TestFullMaxActiveYieldsToSurfaces(t *testing.T) {
 }
 
 func TestCanFullMaximize(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	for _, p := range []panel{panelBranches, panelFiles, panelStaged, panelCommits} {
 		m.focus = p
@@ -143,6 +149,7 @@ func countBoxTops(v string) int {
 }
 
 func TestFullscreenToggleT(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 
@@ -160,6 +167,7 @@ func TestFullscreenToggleT(t *testing.T) {
 }
 
 func TestFullscreenOnCommits(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelCommits
 	m = press(t, m, "ctrl+t")
@@ -175,6 +183,7 @@ func TestFullscreenOnCommits(t *testing.T) {
 
 // t → T → T lands back on column-maximized: the t pin survives underneath.
 func TestLadderColumnThenFullscreenThenBack(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m = press(t, m, "t")
@@ -191,6 +200,7 @@ func TestLadderColumnThenFullscreenThenBack(t *testing.T) {
 // t while fullscreen drops exactly one level: to column-maximized, never a
 // hidden double-toggle back to normal.
 func TestLadderTDropsFullscreenToColumn(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m = press(t, m, "ctrl+t")
@@ -204,6 +214,7 @@ func TestLadderTDropsFullscreenToColumn(t *testing.T) {
 }
 
 func TestEscExitsFullscreen(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m = press(t, m, "ctrl+t")
@@ -216,6 +227,7 @@ func TestEscExitsFullscreen(t *testing.T) {
 // esc is the lowest-priority consumer: an active filter clears first and the
 // same press must NOT also drop fullscreen.
 func TestEscPrefersFilterOverFullscreen(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m = press(t, m, "ctrl+t")
@@ -234,6 +246,7 @@ func TestEscPrefersFilterOverFullscreen(t *testing.T) {
 }
 
 func TestFullscreenInertInFilesView(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m.filesView = &contentPopup{}
@@ -244,6 +257,7 @@ func TestFullscreenInertInFilesView(t *testing.T) {
 }
 
 func TestFocusOrderCollapsesFullscreen(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m = press(t, m, "ctrl+t")
@@ -261,6 +275,7 @@ func TestFocusOrderCollapsesFullscreen(t *testing.T) {
 // A stale fullscreen pin must not trap focus on a hidden panel: focusOrder
 // falls back to the normal order, mirroring layout's stale-pin fallback.
 func TestFocusOrderStaleFullscreenPinFallsBack(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.fullMaxed = true
 	m.fullMax = panelRemotes // not visible
@@ -272,6 +287,7 @@ func TestFocusOrderStaleFullscreenPinFallsBack(t *testing.T) {
 }
 
 func TestArrowsStayInsideFullscreen(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m = press(t, m, "ctrl+t")
@@ -293,6 +309,7 @@ func TestArrowsStayInsideFullscreen(t *testing.T) {
 // the leftMaxed re-pin in activateTab). From Commits the pin transfers to the
 // activated left tab instead of stranding focus on a hidden box.
 func TestTabSwitchRepinsFullscreen(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelBranches
 	m = press(t, m, "ctrl+t")
@@ -313,6 +330,7 @@ func TestTabSwitchRepinsFullscreen(t *testing.T) {
 // A deliberate jump-to-Commits action transfers the fullscreen pin instead of
 // stranding focus on a hidden panel (same rule as activateTab's re-pin).
 func TestFocusCommitsPanelTransfersFullscreenPin(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelBranches
 	m = press(t, m, "ctrl+t")
@@ -337,6 +355,7 @@ func TestFocusCommitsPanelTransfersFullscreenPin(t *testing.T) {
 // from review — file_preview.go/file_finder.go/tags_actions.go/commit_scope.go
 // all wrote m.focus = panelCommits directly, bypassing the pin).
 func TestTagSoloTransfersFullscreenPinEndToEnd(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.activeFilesTab = panelTags
 	m.tags = []model.Tag{{Name: "v1.0.0"}}
@@ -366,6 +385,7 @@ func TestTagSoloTransfersFullscreenPinEndToEnd(t *testing.T) {
 // focusCommitsPanel closes it itself (see below), so this contract now
 // covers the surfaces it does NOT close: the files view / file preview.
 func TestFocusCommitsPanelNoTransferWhileYielded(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelStaged
 	m = press(t, m, "ctrl+t") // pin Staged
@@ -384,6 +404,7 @@ func TestFocusCommitsPanelNoTransferWhileYielded(t *testing.T) {
 // Commits — leaving it on the old panel would resume a fullscreen that hides
 // the commit the user just jumped to.
 func TestFocusCommitsPanelClosesStashAndTransfersPin(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelStaged
 	m = press(t, m, "ctrl+t") // pin Staged
@@ -404,6 +425,7 @@ func TestFocusCommitsPanelClosesStashAndTransfersPin(t *testing.T) {
 // Commits — lastLeftPanel would strand focus on a panel the resuming pin
 // hides (T on Commits, S, esc = three ordinary keystrokes).
 func TestStashCloseRestoresCommitsPin(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelCommits
 	m = press(t, m, "ctrl+t")
@@ -419,6 +441,7 @@ func TestStashCloseRestoresCommitsPin(t *testing.T) {
 // following t would column-pin the WRONG (hidden) panel. The full sequence
 // must land on the panel that was actually on screen.
 func TestLadderTabThenTDropsToPinnedPanel(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m = press(t, m, "ctrl+t")
@@ -436,6 +459,7 @@ func TestLadderTabThenTDropsToPinnedPanel(t *testing.T) {
 // left-panel fullscreen, no left boxes (tab labels included) under a Commits
 // fullscreen, and never a panic.
 func TestViewFullscreenLeftPanelHidesCommits(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m = press(t, m, "ctrl+t")
@@ -459,6 +483,7 @@ func TestViewFullscreenLeftPanelHidesCommits(t *testing.T) {
 }
 
 func TestViewFullscreenCommitsHidesLeftColumn(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelCommits
 	m = press(t, m, "ctrl+t")
@@ -485,6 +510,7 @@ func TestViewFullscreenCommitsHidesLeftColumn(t *testing.T) {
 
 // The general resume rule: any pin-resume point re-asserts focus == fullMax.
 func TestReconcileFullscreenFocus(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m = press(t, m, "ctrl+t")
@@ -497,6 +523,7 @@ func TestReconcileFullscreenFocus(t *testing.T) {
 
 // Left-panel pin survives a stash excursion even when lastLeftPanel drifts.
 func TestStashCloseRestoresLeftPanelPin(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m = press(t, m, "ctrl+t")
@@ -511,6 +538,7 @@ func TestStashCloseRestoresLeftPanelPin(t *testing.T) {
 // esc must not clear a pin that isn't driving the layout (suspended by a
 // surface) — the user would see nothing happen and lose the pin silently.
 func TestEscIgnoresSuspendedPin(t *testing.T) {
+	t.Parallel()
 	m := maxModel()
 	m.focus = panelFiles
 	m = press(t, m, "ctrl+t")

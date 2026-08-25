@@ -13,6 +13,7 @@ import (
 // the same row capacity the Files tab has when IT is active — its page step
 // (pgup/pgdn jump) must not collapse to 1.
 func TestTagsTabRowsCapMatchesFiles(t *testing.T) {
+	t.Parallel()
 	mFiles := footerModel() // Files active by default
 	mTags := footerModel()
 	mTags.activeFilesTab = panelTags
@@ -24,6 +25,7 @@ func TestTagsTabRowsCapMatchesFiles(t *testing.T) {
 // A click in the middle box must resolve to whichever tab is on screen — not
 // always Files (panelFiles precedes panelTags in the panelAt scan order).
 func TestPanelAtMiddleBoxResolvesActiveTab(t *testing.T) {
+	t.Parallel()
 	mt := footerModel()
 	mt.activeFilesTab = panelTags
 	g := mt.layout()
@@ -38,6 +40,7 @@ func TestPanelAtMiddleBoxResolvesActiveTab(t *testing.T) {
 }
 
 func TestTagsPgDownPagesByMoreThanOne(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.activeFilesTab = panelTags
 	m.focus = panelTags

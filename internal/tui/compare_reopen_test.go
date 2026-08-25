@@ -8,6 +8,7 @@ import (
 )
 
 func TestReopenSamePairIsNoop(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash}
@@ -27,6 +28,7 @@ func TestReopenSamePairIsNoop(t *testing.T) {
 }
 
 func TestReopenDifferentPairReloads(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash}
@@ -44,6 +46,7 @@ func TestReopenDifferentPairReloads(t *testing.T) {
 }
 
 func TestFailedCompareLoadIsRetryable(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash}

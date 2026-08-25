@@ -9,6 +9,7 @@ import (
 // While a files-view CommitFiles read is in flight, a further j/k must not issue
 // a second read or move the selection (pure-drop); the completion clears the gate.
 func TestFilesViewDropsReadWhileInflight(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, filesModel())
 	m.filesReadInflight = true
 	before := m.sel[panelCommits]
@@ -32,6 +33,7 @@ func TestFilesViewDropsReadWhileInflight(t *testing.T) {
 // When no read is in flight, j both moves the selection and issues the reload,
 // and that reload marks a read in flight (so the next held j is paced).
 func TestFilesViewMoveMarksReadInflight(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, filesModel())
 	if m.filesReadInflight {
 		t.Fatal("after the open load completes, no read should be in flight")

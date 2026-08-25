@@ -23,6 +23,7 @@ func bmPopupModel(items ...model.Bookmark) Model {
 // reaches the bookmark switcher too: arrows move the selection while typing the
 // `/` filter, without dropping the query (same as the commit filter and finder).
 func TestBookmarkArrowsMoveWhileTyping(t *testing.T) {
+	t.Parallel()
 	m := bmPopupModel(
 		model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "alpha.go"},
 		model.Bookmark{ID: "b2", State: model.StateUnstaged, Worktree: "/wt", Path: "alpine.go"},
@@ -47,6 +48,7 @@ func TestBookmarkArrowsMoveWhileTyping(t *testing.T) {
 }
 
 func TestBookmarkRemoveConfirms(t *testing.T) {
+	t.Parallel()
 	m := bmPopupModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
 	mm, _ := m.Update(keyMsg("x"))
 	m = mm.(Model)
@@ -56,6 +58,7 @@ func TestBookmarkRemoveConfirms(t *testing.T) {
 }
 
 func TestBookmarkPasteOpensPathPopup(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("payload"), 0o644); err != nil {
 		t.Fatal(err)
@@ -72,6 +75,7 @@ func TestBookmarkPasteOpensPathPopup(t *testing.T) {
 }
 
 func TestBookmarkCompareTwoOpensDiff(t *testing.T) {
+	t.Parallel()
 	m := bmPopupModel(
 		model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"},
 		model.Bookmark{ID: "b", State: model.StateUnstaged, Worktree: "/wt", Path: "b.go"},
@@ -83,6 +87,7 @@ func TestBookmarkCompareTwoOpensDiff(t *testing.T) {
 }
 
 func TestBookmarkFilterModeTypesNotActs(t *testing.T) {
+	t.Parallel()
 	m := bmPopupModel(
 		model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "app.go"},
 		model.Bookmark{ID: "b", State: model.StateUnstaged, Worktree: "/wt", Path: "readme.md"},
@@ -103,6 +108,7 @@ func TestBookmarkFilterModeTypesNotActs(t *testing.T) {
 }
 
 func TestBookmarkPasteEnterStartsWrite(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(&bookmarkPastePopup{origin: "a.go", data: []byte("x")})
 	// Empty dest is a no-op (popup stays open).
@@ -126,6 +132,7 @@ func TestBookmarkPasteEnterStartsWrite(t *testing.T) {
 }
 
 func TestBookmarkMarkThenCompare(t *testing.T) {
+	t.Parallel()
 	m := bmPopupModel(
 		model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"},
 		model.Bookmark{ID: "b", State: model.StateUnstaged, Worktree: "/wt", Path: "b.go"},
@@ -144,6 +151,7 @@ func TestBookmarkMarkThenCompare(t *testing.T) {
 }
 
 func TestBookmarkDisplayString(t *testing.T) {
+	t.Parallel()
 	got := bookmarkDisplay(model.Bookmark{State: model.StateCommitted, Commit: "a1b2c3d4e5", Path: "src/x.go", Branch: "feat"})
 	if !strings.Contains(got, "src/x.go") || !strings.Contains(got, "a1b2c3d") || !strings.Contains(got, "feat") {
 		t.Fatalf("display = %q", got)
@@ -152,6 +160,7 @@ func TestBookmarkDisplayString(t *testing.T) {
 
 // Full path: g opens (async load), the loaded msg builds the popup, View renders it.
 func TestBookmarkPopupOpenAndRenderFullPath(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width, m.height = 100, 30
 	u, cmd := m.Update(keyMsg("g"))
@@ -173,6 +182,7 @@ func TestBookmarkPopupOpenAndRenderFullPath(t *testing.T) {
 }
 
 func TestBookmarkRowOnFilesPanel(t *testing.T) {
+	t.Parallel()
 	m := filesMenuModel() // panelFiles focused with one tracked file "dir/f.txt"
 	m.currentWorktree = "/wt"
 	if _, ok := findRow(availableActions(m), "bookmark-add"); !ok {
@@ -185,6 +195,7 @@ func TestBookmarkRowOnFilesPanel(t *testing.T) {
 }
 
 func TestBookmarkRowAbsentWhenNoFile(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	if _, ok := m.focusedBookmark(); ok {
@@ -193,6 +204,7 @@ func TestBookmarkRowAbsentWhenNoFile(t *testing.T) {
 }
 
 func TestBookmarkPopupWindowsLongList(t *testing.T) {
+	t.Parallel()
 	var items []model.Bookmark
 	for i := 0; i < 30; i++ {
 		items = append(items, model.Bookmark{
@@ -218,6 +230,7 @@ func TestBookmarkPopupWindowsLongList(t *testing.T) {
 }
 
 func TestBookmarkPopupZCyclesMode(t *testing.T) {
+	t.Parallel()
 	m := bmPopupModel(model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
 	m.bookmarkSwitcher().hscroll = 5
 	mm, _ := m.Update(keyMsg("z"))
@@ -236,6 +249,7 @@ func TestBookmarkPopupZCyclesMode(t *testing.T) {
 }
 
 func TestBookmarkPopupPanOnlyInScroll(t *testing.T) {
+	t.Parallel()
 	m := bmPopupModel(model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
 	// cutoff (default): shift+right is a no-op
 	mm, _ := m.Update(keyMsg("shift+right"))
@@ -258,6 +272,7 @@ func TestBookmarkPopupPanOnlyInScroll(t *testing.T) {
 }
 
 func TestBookmarkPopupZTypesWhileFiltering(t *testing.T) {
+	t.Parallel()
 	m := bmPopupModel(model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "zebra.go"})
 	mm, _ := m.Update(keyMsg("/")) // enter filter mode
 	m = mm.(Model)
@@ -272,6 +287,7 @@ func TestBookmarkPopupZTypesWhileFiltering(t *testing.T) {
 }
 
 func TestFocusedBookmarkHistoryUsesSelectedRow(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	h := newHistoryView(navContext{path: "old.go", rev: "starthash"})
 	h.commits = []model.FileCommit{
@@ -287,6 +303,7 @@ func TestFocusedBookmarkHistoryUsesSelectedRow(t *testing.T) {
 }
 
 func TestFocusedBookmarkDiffViewCommit(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(&diffView{title: "dir/a.go", rev: "cafe9999"})
 	b, ok := m.focusedBookmark()
@@ -296,6 +313,7 @@ func TestFocusedBookmarkDiffViewCommit(t *testing.T) {
 }
 
 func TestFocusedBookmarkDiffViewWorkingTree(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(&diffView{title: "a.go", rev: ""}) // working-tree diff
 	b, ok := m.focusedBookmark()
@@ -305,6 +323,7 @@ func TestFocusedBookmarkDiffViewWorkingTree(t *testing.T) {
 }
 
 func TestFocusedBookmarkBlameWorkingTree(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.currentWorktree = "/wt"
 	m.status.Branch = "main"
@@ -316,6 +335,7 @@ func TestFocusedBookmarkBlameWorkingTree(t *testing.T) {
 }
 
 func TestFocusedBookmarkBlameCommitted(t *testing.T) {
+	t.Parallel()
 	m := footerModel().pushLayer(&blameView{ctx: navContext{path: "a.go", rev: "abc1234def"}})
 	b, ok := m.focusedBookmark()
 	if !ok || b.State != model.StateCommitted || b.Commit != "abc1234def" || b.Path != "a.go" {
@@ -324,6 +344,7 @@ func TestFocusedBookmarkBlameCommitted(t *testing.T) {
 }
 
 func TestBookmarkToFileRef(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		in   model.Bookmark
@@ -348,6 +369,7 @@ func TestBookmarkToFileRef(t *testing.T) {
 }
 
 func TestBookmarkPopupCAgainstShelf(t *testing.T) {
+	t.Parallel()
 	m := bmPopupModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
 	mm, cmd := m.Update(keyMsg("c"))
 	m = mm.(Model)

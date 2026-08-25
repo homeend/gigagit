@@ -16,6 +16,7 @@ import (
 // TestWheelOverCommitsPages: mouse-wheeling the commit list toward the end
 // pages in more, like keyboard movement does.
 func TestWheelOverCommitsPages(t *testing.T) {
+	t.Parallel()
 	m := mouseModel() // markModel + 80x24; its feed is nil
 	m.svc = domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()})
 	m.feed = m.svc.CommitFeed() // 0 commits, not exhausted → NeedsMore true
@@ -39,6 +40,7 @@ func feedModel(n int, exhausted bool) Model {
 }
 
 func TestCommitsLabel(t *testing.T) {
+	t.Parallel()
 	if got := feedModel(37, true).panelLabel(panelCommits, "Commits"); !strings.Contains(got, "37") || strings.Contains(got, "+") {
 		t.Fatalf("exhausted label = %q, want plain 37", got)
 	}
@@ -48,6 +50,7 @@ func TestCommitsLabel(t *testing.T) {
 }
 
 func TestCommitsLabelShowsLoadingIndicator(t *testing.T) {
+	t.Parallel()
 	m := feedModel(250, false)
 	if got := m.panelLabel(panelCommits, "Commits"); strings.Contains(got, commitsLoadingGlyph) {
 		t.Fatalf("idle label must not show the loading glyph: %q", got)
@@ -63,6 +66,7 @@ func TestCommitsLabelShowsLoadingIndicator(t *testing.T) {
 }
 
 func TestPagingSetsCommitsLoading(t *testing.T) {
+	t.Parallel()
 	m := feedModel(50, false)
 	m.sel[panelCommits] = 49
 	mm, cmd := m.Update(keyMsg("down"))
@@ -75,6 +79,7 @@ func TestPagingSetsCommitsLoading(t *testing.T) {
 }
 
 func TestCommitsPagedClearsLoading(t *testing.T) {
+	t.Parallel()
 	m := feedModel(50, false)
 	m.commitsLoading = true
 	mm, _ := m.Update(commitsPagedMsg{gen: m.feed.Gen()})
@@ -84,6 +89,7 @@ func TestCommitsPagedClearsLoading(t *testing.T) {
 }
 
 func TestScopeReloadShowsAndClearsLoading(t *testing.T) {
+	t.Parallel()
 	m := feedModel(50, true)
 	m2, cmd := m.startFeedReload()
 	if cmd == nil {
@@ -100,6 +106,7 @@ func TestScopeReloadShowsAndClearsLoading(t *testing.T) {
 }
 
 func TestPagingFiresNearEnd(t *testing.T) {
+	t.Parallel()
 	// New()'s feed has 0 commits and is not exhausted, so NeedsMore(sel) is
 	// true for any sel within threshold of 0. Pressing down on the Commits
 	// panel must fire a load-more cmd.
@@ -112,6 +119,7 @@ func TestPagingFiresNearEnd(t *testing.T) {
 }
 
 func TestPagingSuppressedWhileFiltering(t *testing.T) {
+	t.Parallel()
 	// filterActive(p) == (p == m.filterPanel && m.filterQuery != ""), so these
 	// two fields make the commits filter active.
 	m := feedModel(50, false)

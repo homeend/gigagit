@@ -29,6 +29,7 @@ func pushRealGit(t *testing.T, dir string, args ...string) {
 // not the checked-out one. (The row-gating tests only check the label, which is
 // a proxy — this drives a real git push end to end.)
 func TestPushBranchRowPushesSelectedNotCurrent(t *testing.T) {
+	t.Parallel()
 	bare := t.TempDir()
 	pushRealGit(t, bare, "init", "--bare")
 

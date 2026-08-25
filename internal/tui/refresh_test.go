@@ -16,6 +16,7 @@ import (
 )
 
 func TestDueItemsRespectsIntervalAndMaster(t *testing.T) {
+	t.Parallel()
 	t0 := time.Unix(1_000_000, 0)
 	cfg := config.RefreshConfig{Enabled: true, Status: 30, Branches: 0}
 	last := map[refreshItem]time.Time{{source: srcStatus}: t0}
@@ -50,6 +51,7 @@ func TestDueItemsRespectsIntervalAndMaster(t *testing.T) {
 }
 
 func TestDueItemsFirstRunWhenUnseen(t *testing.T) {
+	t.Parallel()
 	t0 := time.Unix(1_000_000, 0)
 	cfg := config.RefreshConfig{Enabled: true, Status: 30}
 	// No lastRun entry → treat as due immediately (first poll after enable).
@@ -60,6 +62,7 @@ func TestDueItemsFirstRunWhenUnseen(t *testing.T) {
 }
 
 func TestRefreshTickFiresSilentReadAndIsSuppressed(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.cfg.Refresh = config.RefreshConfig{Enabled: true, Status: 30}
 	m.loading = false // simulate post-init: New() starts with loading=true; clear it here
@@ -140,6 +143,7 @@ func newTestModelWithRemote(t *testing.T) Model {
 // the user sees "branches: context canceled" from a refresh they never asked
 // for. (Phase A's handler currently surfaces every err to statusMsg.)
 func TestSilentReadErrorDoesNotTouchStatus(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.statusMsg = "keep me"
 	nm, _ := m.Update(dataAvailableMsg{
@@ -152,6 +156,7 @@ func TestSilentReadErrorDoesNotTouchStatus(t *testing.T) {
 }
 
 func TestBgFetchEnqueuesRemotesOnSuccess(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.bgBusy = true
 	m.bgActiveItem = fetchItem
@@ -172,6 +177,7 @@ func TestBgFetchEnqueuesRemotesOnSuccess(t *testing.T) {
 }
 
 func TestRefreshTickSkipsSourceAlreadyInflight(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.cfg.Refresh = config.RefreshConfig{Enabled: true, Remotes: 1}
 	m.loading = false
@@ -184,6 +190,7 @@ func TestRefreshTickSkipsSourceAlreadyInflight(t *testing.T) {
 }
 
 func TestWatchActiveTruthTable(t *testing.T) {
+	t.Parallel()
 	cfg := config.RefreshConfig{WorktreesWatch: true, BranchesWatch: true}
 	wt := refreshItem{source: srcWorktrees}
 	br := refreshItem{source: srcBranches}
@@ -207,6 +214,7 @@ func TestWatchActiveTruthTable(t *testing.T) {
 }
 
 func TestDueItemsSkipsWatchActive(t *testing.T) {
+	t.Parallel()
 	cfg := config.RefreshConfig{Enabled: true, Worktrees: 30, WorktreesWatch: true, MinSeconds: 10}
 	last := map[refreshItem]time.Time{} // nothing seen → everything otherwise due
 	// supported → worktrees is watch-active → must NOT be due via the timer
@@ -230,6 +238,7 @@ func TestDueItemsSkipsWatchActive(t *testing.T) {
 }
 
 func TestToggleRefreshWatchFlipsEligible(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.repoConfigPath = "" // no write; in-memory flip still applies (matches saveRefreshInterval)
 	m.cfg.Refresh = config.RefreshConfig{}
@@ -244,6 +253,7 @@ func TestToggleRefreshWatchFlipsEligible(t *testing.T) {
 }
 
 func TestToggleRefreshWatchIgnoresIneligible(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	before := m.cfg.Refresh
 	m2, cmd := m.toggleRefreshWatch(refreshItem{source: srcStatus})
@@ -259,6 +269,7 @@ func TestToggleRefreshWatchIgnoresIneligible(t *testing.T) {
 // skips them — so a dropped trigger would be permanently lost until the next
 // filesystem change or manual r.
 func TestWatchTriggerReenqueuedWhileSourceInFlight(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.cfg.Refresh = config.RefreshConfig{
 		Enabled:        true,
@@ -298,6 +309,7 @@ func TestWatchTriggerReenqueuedWhileSourceInFlight(t *testing.T) {
 }
 
 func TestWatchEligibleD2IncludesRefs(t *testing.T) {
+	t.Parallel()
 	for _, s := range []sourceKey{srcWorktrees, srcReflog, srcBranches, srcRemotes} {
 		if !watchEligible(refreshItem{source: s}) {
 			t.Errorf("%v should be watch-eligible in D2", s)

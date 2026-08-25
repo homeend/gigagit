@@ -9,6 +9,7 @@ import (
 )
 
 func TestFileFinderEnterOpensActionMenu(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openFileFinder()
 	nm, _ := m.Update(lsFilesMsg{paths: []string{"a/b.go"}})
@@ -54,6 +55,7 @@ func finderSetup(t *testing.T, path string) (Model, []actionRow) {
 }
 
 func TestFileFinderHistoryActionOpensHistoryLayer(t *testing.T) {
+	t.Parallel()
 	m, rows := finderSetup(t, "a/b.go")
 	nm, _ := finderRow(t, rows, "ff-history")(m)
 	m = nm.(Model)
@@ -66,6 +68,7 @@ func TestFileFinderHistoryActionOpensHistoryLayer(t *testing.T) {
 }
 
 func TestFileFinderDiffActionOpensDiffLayer(t *testing.T) {
+	t.Parallel()
 	const path = "a/b.go"
 	m, rows := finderSetup(t, path)
 	nm, _ := finderRow(t, rows, "ff-diff")(m)
@@ -93,6 +96,7 @@ func TestFileFinderDiffActionOpensDiffLayer(t *testing.T) {
 }
 
 func TestFileFinderBlameActionOpensBlameLayer(t *testing.T) {
+	t.Parallel()
 	m, rows := finderSetup(t, "a/b.go")
 	nm, _ := finderRow(t, rows, "ff-blame")(m)
 	m = nm.(Model)
@@ -105,6 +109,7 @@ func TestFileFinderBlameActionOpensBlameLayer(t *testing.T) {
 }
 
 func TestFileFinderViewActionOpensContentLayer(t *testing.T) {
+	t.Parallel()
 	m, rows := finderSetup(t, "a/b.go")
 	nm, _ := finderRow(t, rows, "ff-view")(m)
 	m = nm.(Model)
@@ -117,6 +122,7 @@ func TestFileFinderViewActionOpensContentLayer(t *testing.T) {
 }
 
 func TestFileFinderCommitsTouchingSeedsPathFilter(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	rows := m.fileFinderActionRows("internal/engine/ops_basic.go")
 	var run func(Model) (tea.Model, tea.Cmd)
@@ -142,6 +148,7 @@ func TestFileFinderCommitsTouchingSeedsPathFilter(t *testing.T) {
 }
 
 func TestFileFinderEditorAndCopyReturnCmds(t *testing.T) {
+	t.Parallel()
 	m, rows := finderSetup(t, "a/b.go")
 
 	editorRun := finderRow(t, rows, "ff-editor")
@@ -166,6 +173,7 @@ func TestFileFinderEditorAndCopyReturnCmds(t *testing.T) {
 }
 
 func TestFileFinderCopyAbsPathRow(t *testing.T) {
+	t.Parallel()
 	m, rows := finderSetup(t, "a/b.go")
 	run := finderRow(t, rows, "ff-copy-abspath")
 	nm, cmd := run(m)

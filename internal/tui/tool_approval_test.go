@@ -7,6 +7,7 @@ import "testing"
 // command is unapproved, remembering it approves it, and editing the command
 // text (a different hash) re-prompts.
 func TestToolApprovalRoundTrip(t *testing.T) {
+	t.Parallel()
 	m, _ := promptTestModel(t) // temp promptstate store — never the real machine file
 	const cmd = `claude -p "x"`
 	if m.toolCommandApproved(cmd) {
@@ -24,6 +25,7 @@ func TestToolApprovalRoundTrip(t *testing.T) {
 // TestToolCommandApprovedNilStore covers the nil-promptStore case (a
 // no-state-dir install): the predicate must fail closed, never panic.
 func TestToolCommandApprovedNilStore(t *testing.T) {
+	t.Parallel()
 	var m Model
 	m.promptStore = nil
 	if m.toolCommandApproved("anything") {

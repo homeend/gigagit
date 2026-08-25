@@ -13,6 +13,7 @@ import (
 )
 
 func TestCKeyCommitsStagedIndex(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	gitInDir(t, dir, "checkout", "-b", "work")
 	os.WriteFile(filepath.Join(dir, "n.txt"), []byte("hi\n"), 0o644)
@@ -43,6 +44,7 @@ func TestCKeyCommitsStagedIndex(t *testing.T) {
 }
 
 func TestCKeyNoOpWhenNothingStaged(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
@@ -56,6 +58,7 @@ func TestCKeyNoOpWhenNothingStaged(t *testing.T) {
 // While the popup is open it owns the keyboard: a global key (e.g. "p" = pull)
 // is routed into the focused field, not dispatched as its normal action.
 func TestCommitPopupSwallowsGlobalKeys(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "n.txt"), []byte("hi\n"), 0o644)
 	gitInDir(t, dir, "add", "n.txt")
@@ -89,6 +92,7 @@ func gitSubj(t *testing.T, dir string) string {
 }
 
 func TestCapCKeyAmendsLastCommit(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644)
 	gitInDir(t, dir, "add", "a.txt")

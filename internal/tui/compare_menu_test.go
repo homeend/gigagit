@@ -3,6 +3,7 @@ package tui
 import "testing"
 
 func TestCommitCompareRowsPresentOnCommit(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	if len(m.commits) == 0 {
 		t.Skip("no commits")
@@ -28,6 +29,7 @@ func TestCommitCompareRowsPresentOnCommit(t *testing.T) {
 }
 
 func TestCommitCompareRowsAbsentOffCommits(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelBranches
 	if _, ok := m.commitCompareWorktreeRow(); ok {

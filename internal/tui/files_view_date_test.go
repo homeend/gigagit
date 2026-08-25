@@ -34,6 +34,7 @@ func datedFilesModel() Model {
 
 // The point of the feature: the date is on screen without pressing i.
 func TestFilesViewShowsTheCommitDate(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, datedFilesModel())
 	want := wantStamp(testUnix, "alice")
 	if filesMetaLine(m.filesCommit) != want {
@@ -48,6 +49,7 @@ func TestFilesViewShowsTheCommitDate(t *testing.T) {
 // The line sits directly under the title, not appended to it — a long subject
 // must never truncate the date out of view.
 func TestFilesViewDateIsItsOwnLineUnderTheTitle(t *testing.T) {
+	t.Parallel()
 	m := datedFilesModel()
 	m.commits[0].Subject = strings.Repeat("long subject ", 20)
 	m = openFilesView(t, m)
@@ -72,6 +74,7 @@ func TestFilesViewDateIsItsOwnLineUnderTheTitle(t *testing.T) {
 // Walking commits with j/k under an open view repaints the date for the commit
 // now on display — a date captured once at open time would go stale here.
 func TestFilesViewDateFollowsTheCommitSelection(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, datedFilesModel())
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
 	m = updated.(Model)
@@ -89,6 +92,7 @@ func TestFilesViewDateFollowsTheCommitSelection(t *testing.T) {
 // The date must be fetched rather than left blank — those are exactly the
 // surfaces where you cannot see the date anywhere else.
 func TestFilesViewFetchesTheDateWhenTheCommitCarriesNone(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log (commit files)", gitexec.Result{
 		Stdout: "M\x00internal/tui/model.go\x00",
@@ -124,6 +128,7 @@ func TestFilesViewFetchesTheDateWhenTheCommitCarriesNone(t *testing.T) {
 // popup used to fall back to a hash-only Commit and print "Date: (unknown)"
 // under a header that now shows a real date.
 func TestFilesViewCommitCarriesTheResolvedDateToTheMessagePopup(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\x00a.go\x00"})
 	f.SetResponse("git log", gitexec.Result{
@@ -153,6 +158,7 @@ func TestFilesViewCommitCarriesTheResolvedDateToTheMessagePopup(t *testing.T) {
 // A failed lookup must not paint a placeholder date: no line at all beats
 // "(unknown)" sitting permanently under the title.
 func TestFilesViewNoDateLineWhenTheLookupFails(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, filesModel()) // feed rows carry no time, fake has no CommitMeta response
 	if filesMetaLine(m.filesCommit) != "" {
 		t.Fatalf("filesMeta = %q, want empty when the date is unknown", filesMetaLine(m.filesCommit))
@@ -165,6 +171,7 @@ func TestFilesViewNoDateLineWhenTheLookupFails(t *testing.T) {
 // Compare mode has two endpoints and no single commit date, so it keeps its
 // current header — and keeps the tree row the line would have cost.
 func TestFilesViewCompareModeHasNoDateLine(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, datedFilesModel())
 	commitRows := m.filesPageRows()
 
@@ -191,6 +198,7 @@ func TestFilesViewCompareModeHasNoDateLine(t *testing.T) {
 // rendered panel still fits the height it was given, and the hint line (the
 // bottom row) survives.
 func TestFilesViewWithDateStillFitsItsBox(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, datedFilesModel())
 	for _, h := range []int{8, 12, 20} {
 		out := m.renderFilesView(60, h)

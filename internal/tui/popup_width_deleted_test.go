@@ -15,6 +15,7 @@ const longTailPath = "internal/tui/some/deeply/nested/directory/structure/file.g
 // The switcher popups must widen past the old 56-col cap so long file paths are
 // visible by default on a roomy terminal.
 func TestShelfPopupWidensForLongPaths(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", longTailPath))
 	m.width, m.height = 160, 40
 	out := m.renderShelfPopupBox(m.shelfSwitcher())
@@ -35,6 +36,7 @@ func TestShelfPopupWidensForLongPaths(t *testing.T) {
 // The footer hint must wrap rather than truncate, so [z] mode is discoverable
 // even on a narrow terminal (the root cause of "it has no z handling").
 func TestShelfPopupFooterShowsZAtNarrowWidth(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	m.width, m.height = 80, 30
 	out := m.renderShelfPopupBox(m.shelfSwitcher())
@@ -44,6 +46,7 @@ func TestShelfPopupFooterShowsZAtNarrowWidth(t *testing.T) {
 }
 
 func TestBookmarkPopupFooterShowsZAtNarrowWidth(t *testing.T) {
+	t.Parallel()
 	m := bmPopupModel(model.Bookmark{ID: "b", State: model.StateUnstaged, Worktree: "/wt", Path: "x.go"})
 	m.width, m.height = 80, 30
 	out := m.renderBookmarkPopupBox(m.bookmarkSwitcher())
@@ -55,6 +58,7 @@ func TestBookmarkPopupFooterShowsZAtNarrowWidth(t *testing.T) {
 // Even when a path is too long for the (wide) popup, scroll mode must reveal its
 // tail — proving z genuinely works in these popups, not just that it is listed.
 func TestShelfPopupScrollRevealsPathTail(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", longTailPath))
 	m.width, m.height = 60, 30 // narrow box so the path overflows even widened
 	p := m.shelfSwitcher()
@@ -75,6 +79,7 @@ func TestShelfPopupScrollRevealsPathTail(t *testing.T) {
 // the focused-file ref (which feeds add-to-shelf/bookmark and compare-against)
 // must report "no file".
 func TestDeletedCommitFileHasNoFocusedRef(t *testing.T) {
+	t.Parallel()
 	base := footerModel()
 	base.filesHash = "abc1234"
 	base.filesTreeFocused = true

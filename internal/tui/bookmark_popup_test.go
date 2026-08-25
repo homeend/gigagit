@@ -12,6 +12,7 @@ import (
 )
 
 func TestBookmarkPopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &bookmarkPopup{}
@@ -33,6 +34,7 @@ func TestBookmarkPopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
 }
 
 func TestBookmarkPopupTKeyDoesNotMaximizeWhileFiltering(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &bookmarkPopup{filtering: true}
@@ -53,6 +55,7 @@ func bookmarkCopyModel(items ...model.Bookmark) Model {
 }
 
 func TestBookmarkPopupYOpensCopyChooser(t *testing.T) {
+	t.Parallel()
 	m := bookmarkCopyModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "dir/y.go"})
 	mm, _ := m.Update(keyMsg("y"))
 	m = mm.(Model)
@@ -68,6 +71,7 @@ func TestBookmarkPopupYOpensCopyChooser(t *testing.T) {
 }
 
 func TestBookmarkPopupYChooserHasAbsoluteOnOriginWorktree(t *testing.T) {
+	t.Parallel()
 	m := bookmarkCopyModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "dir/y.go"})
 	mm, _ := m.Update(keyMsg("y"))
 	m = mm.(Model)
@@ -87,6 +91,7 @@ func TestBookmarkPopupYChooserHasAbsoluteOnOriginWorktree(t *testing.T) {
 }
 
 func TestBookmarkPopupYOnCommitBookmarkNotices(t *testing.T) {
+	t.Parallel()
 	m := bookmarkCopyModel(model.Bookmark{ID: "cb", State: model.StateCommitted, Commit: "a1b2c3d4e5"})
 	mm, _ := m.Update(keyMsg("y"))
 	m = mm.(Model)
@@ -99,6 +104,7 @@ func TestBookmarkPopupYOnCommitBookmarkNotices(t *testing.T) {
 }
 
 func TestBookmarkPopupYInertInCompareMode(t *testing.T) {
+	t.Parallel()
 	m := bookmarkCopyModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "y.go"})
 	m.bookmarkSwitcher().compareRef = &model.FileRef{Source: model.SourceUnstaged, Path: "focused.go"}
 	mm, _ := m.Update(keyMsg("y"))
@@ -109,6 +115,7 @@ func TestBookmarkPopupYInertInCompareMode(t *testing.T) {
 }
 
 func TestBookmarkPopupYWhileFilteringIsText(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &bookmarkPopup{filtering: true}
@@ -119,6 +126,7 @@ func TestBookmarkPopupYWhileFilteringIsText(t *testing.T) {
 }
 
 func TestBookmarkPopupAdvertisesCopy(t *testing.T) {
+	t.Parallel()
 	m := bookmarkCopyModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Worktree: "/wt", Path: "y.go"})
 	if out := m.renderBookmarkPopupBox(m.bookmarkSwitcher()); !strings.Contains(out, "[y] copy") {
 		t.Errorf("hint line missing [y] copy:\n%s", out)
@@ -135,6 +143,7 @@ func TestBookmarkPopupAdvertisesCopy(t *testing.T) {
 }
 
 func TestBookmarkPopupEnterBumpsPickGen(t *testing.T) {
+	t.Parallel()
 	m := bookmarkCopyModel(commitBookmarkFixture("b1", "a1b2c3d4e5f6a7b8", "subj"))
 	before := m.pickGen
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -145,6 +154,7 @@ func TestBookmarkPopupEnterBumpsPickGen(t *testing.T) {
 }
 
 func TestBookmarkPopupAKeyStaysQueryRuneWhileFiltering(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &bookmarkPopup{filtering: true}

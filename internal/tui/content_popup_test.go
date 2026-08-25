@@ -20,6 +20,7 @@ func contentLines(n int) []contentLine {
 }
 
 func TestContentVisibleNoQueryReturnsAll(t *testing.T) {
+	t.Parallel()
 	p := newContentPopup("T", contentLines(4))
 	if got := len(p.visible()); got != 4 {
 		t.Fatalf("visible() = %d lines, want 4", got)
@@ -27,6 +28,7 @@ func TestContentVisibleNoQueryReturnsAll(t *testing.T) {
 }
 
 func TestContentVisibleFiltersAndKeepsMatchingHeadings(t *testing.T) {
+	t.Parallel()
 	p := newContentPopup("T", []contentLine{
 		{text: "Alpha", heading: true},
 		{text: "apple one"},
@@ -41,6 +43,7 @@ func TestContentVisibleFiltersAndKeepsMatchingHeadings(t *testing.T) {
 }
 
 func TestContentVisibleHeadingsAreNotMatchTargets(t *testing.T) {
+	t.Parallel()
 	p := newContentPopup("T", []contentLine{
 		{text: "Alpha", heading: true},
 		{text: "apple one"},
@@ -52,6 +55,7 @@ func TestContentVisibleHeadingsAreNotMatchTargets(t *testing.T) {
 }
 
 func TestContentMoveClamps(t *testing.T) {
+	t.Parallel()
 	p := newContentPopup("T", contentLines(10))
 	p.move(-5)
 	if p.sel != 0 {
@@ -68,6 +72,7 @@ func TestContentMoveClamps(t *testing.T) {
 }
 
 func TestContentMoveOnEmptyVisible(t *testing.T) {
+	t.Parallel()
 	p := newContentPopup("T", contentLines(3))
 	p.query = "zzz-no-match"
 	p.move(1)
@@ -86,6 +91,7 @@ func contentModel(n int) Model {
 }
 
 func TestContentPageRows(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	if got := m.contentPageRows(); got != 17 {
 		t.Errorf("contentPageRows at h=24 = %d, want 17", got)
@@ -97,6 +103,7 @@ func TestContentPageRows(t *testing.T) {
 }
 
 func TestContentPopupZCyclesMode(t *testing.T) {
+	t.Parallel()
 	m := contentModel(4)
 	if layerOf[*contentPopup](m).mode != modeCutoff {
 		t.Fatalf("default mode = %v, want modeCutoff", layerOf[*contentPopup](m).mode)
@@ -111,6 +118,7 @@ func TestContentPopupZCyclesMode(t *testing.T) {
 // In the default cutoff mode the popup renders its rows just as before the
 // renderWindow conversion: the cursor row prefixed, all rows present.
 func TestContentPopupCutoffRendersRows(t *testing.T) {
+	t.Parallel()
 	m := contentModel(4)
 	out := ansi.Strip(m.render())
 	if !strings.Contains(out, "> line-00") {
@@ -126,6 +134,7 @@ func TestContentPopupCutoffRendersRows(t *testing.T) {
 // z must NOT cycle the mode while the /-search input is capturing keys — it
 // types a literal "z" into the query instead.
 func TestContentPopupZTypesWhileSearching(t *testing.T) {
+	t.Parallel()
 	m := contentModel(4)
 	u, _ := m.Update(keyMsg("/"))
 	m = u.(Model)
@@ -140,6 +149,7 @@ func TestContentPopupZTypesWhileSearching(t *testing.T) {
 }
 
 func TestContentPopupFitsViewport(t *testing.T) {
+	t.Parallel()
 	m := contentModel(5)
 	for i := 0; i < 4; i++ { // cursor to the last line — still no scrolling
 		u, _ := m.Update(keyMsg("down"))
@@ -157,6 +167,7 @@ func TestContentPopupFitsViewport(t *testing.T) {
 }
 
 func TestContentPopupOverflowScrolls(t *testing.T) {
+	t.Parallel()
 	m := contentModel(30)
 	out := ansi.Strip(m.render())
 	if !strings.Contains(out, "line-00") || strings.Contains(out, "line-29") {
@@ -179,6 +190,7 @@ func TestContentPopupOverflowScrolls(t *testing.T) {
 }
 
 func TestContentPopupStepSizes(t *testing.T) {
+	t.Parallel()
 	m := contentModel(30)
 	p := layerOf[*contentPopup](m)
 	u, _ := m.Update(keyMsg("ctrl+down"))
@@ -204,6 +216,7 @@ func TestContentPopupStepSizes(t *testing.T) {
 }
 
 func TestContentPopupSearchWhileScrolled(t *testing.T) {
+	t.Parallel()
 	m := contentModel(30)
 	for i := 0; i < 25; i++ {
 		u, _ := m.Update(keyMsg("down"))
@@ -226,6 +239,7 @@ func TestContentPopupSearchWhileScrolled(t *testing.T) {
 }
 
 func TestContentPopupNoMatch(t *testing.T) {
+	t.Parallel()
 	m := contentModel(5)
 	u, _ := m.Update(keyMsg("/"))
 	m = u.(Model)
@@ -240,6 +254,7 @@ func TestContentPopupNoMatch(t *testing.T) {
 }
 
 func TestContentPopupEscStages(t *testing.T) {
+	t.Parallel()
 	m := contentModel(5)
 	for _, k := range []string{"/", "x", "enter"} { // search "x", commit it
 		u, _ := m.Update(keyMsg(k))
@@ -264,6 +279,7 @@ func TestContentPopupEscStages(t *testing.T) {
 }
 
 func TestContentPopupEscCancelsSearchInput(t *testing.T) {
+	t.Parallel()
 	m := contentModel(5)
 	for _, k := range []string{"/", "x", "esc"} { // esc mid-input cancels
 		u, _ := m.Update(keyMsg(k))
@@ -278,6 +294,7 @@ func TestContentPopupEscCancelsSearchInput(t *testing.T) {
 }
 
 func TestContentPopupQCloses(t *testing.T) {
+	t.Parallel()
 	m := contentModel(5)
 	u, cmd := m.Update(keyMsg("q"))
 	m = u.(Model)
@@ -290,6 +307,7 @@ func TestContentPopupQCloses(t *testing.T) {
 }
 
 func TestContentPopupVimKeysScroll(t *testing.T) {
+	t.Parallel()
 	m := contentModel(30)
 	p := layerOf[*contentPopup](m)
 	u, _ := m.Update(keyMsg("j"))
@@ -312,6 +330,7 @@ func TestContentPopupVimKeysScroll(t *testing.T) {
 }
 
 func TestContentPopupEnterCloses(t *testing.T) {
+	t.Parallel()
 	m := contentModel(5)
 	u, _ := m.Update(keyMsg("enter"))
 	m = u.(Model)
@@ -321,6 +340,7 @@ func TestContentPopupEnterCloses(t *testing.T) {
 }
 
 func TestContentPopupSwallowsGlobalKeys(t *testing.T) {
+	t.Parallel()
 	m := contentModel(5)
 	u, _ := m.Update(keyMsg("p")) // global: SmartPull — must NOT fire
 	m = u.(Model)
@@ -333,6 +353,7 @@ func TestContentPopupSwallowsGlobalKeys(t *testing.T) {
 }
 
 func TestContentPopupFitBounds(t *testing.T) {
+	t.Parallel()
 	for _, sz := range []struct{ w, h int }{{80, 24}, {40, 10}, {30, 8}} {
 		m := contentModel(40)
 		m.width, m.height = sz.w, sz.h
@@ -352,6 +373,7 @@ func TestContentPopupFitBounds(t *testing.T) {
 // TestContentVisibleAdjacentHeadings locks in the pending-overwrite behavior:
 // a heading with no matching rows before the next heading is dropped.
 func TestContentVisibleAdjacentHeadings(t *testing.T) {
+	t.Parallel()
 	p := newContentPopup("T", []contentLine{
 		{text: "Alpha", heading: true},
 		{text: "Beta", heading: true},
@@ -373,6 +395,7 @@ func wheelMsg(up bool) tea.MouseMsg {
 }
 
 func TestContentPopupWheelScrolls(t *testing.T) {
+	t.Parallel()
 	m := contentModel(30)
 	p := layerOf[*contentPopup](m)
 	u, _ := m.Update(wheelMsg(false))
@@ -388,6 +411,7 @@ func TestContentPopupWheelScrolls(t *testing.T) {
 }
 
 func TestMouseIgnoredWithoutContentPopup(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	u, _ := m.Update(wheelMsg(false)) // must not panic or change state
 	if layerOf[*contentPopup](u.(Model)) != nil {
@@ -400,6 +424,7 @@ func TestMouseIgnoredWithoutContentPopup(t *testing.T) {
 // horizontal padding, so every full-width row spilled a "…" fragment onto a
 // continuation line. A long row must occupy exactly one rendered line.
 func TestContentPopupRowsNeverWrap(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	m = m.pushLayer(newContentPopup("T", []contentLine{
 		{text: strings.Repeat("a", 200)},
@@ -420,6 +445,7 @@ func TestContentPopupRowsNeverWrap(t *testing.T) {
 // standard 56-column form popup; on a wide terminal an 80-char row must
 // survive untruncated.
 func TestContentPopupUsesWideBox(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ w, want int }{{160, 100}, {80, 72}, {30, 22}} {
 		if got := contentPopupWidth(c.w); got != c.want {
 			t.Errorf("contentPopupWidth(%d) = %d, want %d", c.w, got, c.want)
@@ -436,6 +462,7 @@ func TestContentPopupUsesWideBox(t *testing.T) {
 }
 
 func TestContentPopupMaximizeWidens(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := newContentPopup("Title", contentLines(4))
@@ -449,6 +476,7 @@ func TestContentPopupMaximizeWidens(t *testing.T) {
 }
 
 func TestContentPopupTKeyDoesNotMaximizeWhileTyping(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := newContentPopup("Title", contentLines(4))
@@ -464,6 +492,7 @@ func TestContentPopupTKeyDoesNotMaximizeWhileTyping(t *testing.T) {
 }
 
 func TestContentPopupEscClosesWhileMaximized(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := newContentPopup("Title", contentLines(4))

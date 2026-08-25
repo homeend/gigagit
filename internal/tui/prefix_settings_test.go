@@ -15,6 +15,7 @@ import (
 // (spec out-of-scope). A stray 'e' must not open the form (which would, on a
 // changed value/scope, create an orphan duplicate).
 func TestPrefixSettingsNoInPlaceEdit(t *testing.T) {
+	t.Parallel()
 	v := &prefixSettingsView{
 		items: []model.Prefix{{ID: "feat", Value: "feat/", Scope: model.ProfileScopeRepo}},
 		mode:  pfBrowse,
@@ -26,6 +27,7 @@ func TestPrefixSettingsNoInPlaceEdit(t *testing.T) {
 }
 
 func TestPrefixSettingsFormBuildsValidEntry(t *testing.T) {
+	t.Parallel()
 	v := &prefixSettingsView{mode: pfForm}
 	v.fValue = newTextField("feat/")
 	v.scope = model.ProfileScopeGlobal
@@ -39,6 +41,7 @@ func TestPrefixSettingsFormBuildsValidEntry(t *testing.T) {
 }
 
 func TestPrefixSettingsEmptyValueRejected(t *testing.T) {
+	t.Parallel()
 	v := &prefixSettingsView{mode: pfForm}
 	v.fValue = newTextField("   ")
 	if _, ok := v.formPrefix(); ok {
@@ -47,6 +50,7 @@ func TestPrefixSettingsEmptyValueRejected(t *testing.T) {
 }
 
 func TestPrefixSettingsDeleteTarget(t *testing.T) {
+	t.Parallel()
 	v := &prefixSettingsView{
 		items: []model.Prefix{{ID: "feat", Value: "feat/", Scope: model.ProfileScopeRepo}},
 		mode:  pfBrowse,
@@ -58,6 +62,7 @@ func TestPrefixSettingsDeleteTarget(t *testing.T) {
 }
 
 func TestPrefixSettingsMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	var items []model.Prefix
@@ -81,6 +86,7 @@ func TestPrefixSettingsMaximizeWidensAndLiftsRowCap(t *testing.T) {
 // An invalid value must NOT close the form or dispatch the add — the error
 // shows inline and the typed value survives so the user can fix it.
 func TestPrefixSettingsInvalidValueKeepsFormOpen(t *testing.T) {
+	t.Parallel()
 	v := &prefixSettingsView{mode: pfForm}
 	v.fValue = newTextField("x-<bogus:1>-y")
 	_, cmd := v.update(Model{}, tea.KeyMsg{Type: tea.KeyEnter})
@@ -101,6 +107,7 @@ func TestPrefixSettingsInvalidValueKeepsFormOpen(t *testing.T) {
 // The empty-value message moves inline too (it used to be a bottom-bar
 // statusMsg).
 func TestPrefixSettingsEmptyValueInlineError(t *testing.T) {
+	t.Parallel()
 	v := &prefixSettingsView{mode: pfForm}
 	v.fValue = newTextField("   ")
 	m2, cmd := v.update(Model{}, tea.KeyMsg{Type: tea.KeyEnter})
@@ -116,6 +123,7 @@ func TestPrefixSettingsEmptyValueInlineError(t *testing.T) {
 }
 
 func TestPrefixSettingsValidValueClosesFormAndDispatches(t *testing.T) {
+	t.Parallel()
 	v := &prefixSettingsView{mode: pfForm}
 	v.fValue = newTextField("feat/<date>") // bare <date> is valid since Task 1
 	_, cmd := v.update(Model{}, tea.KeyMsg{Type: tea.KeyEnter})
@@ -132,6 +140,7 @@ func TestPrefixSettingsValidValueClosesFormAndDispatches(t *testing.T) {
 
 // Reopening the form must not show a stale error from the previous attempt.
 func TestPrefixSettingsReopenClearsInlineError(t *testing.T) {
+	t.Parallel()
 	v := &prefixSettingsView{mode: pfBrowse, formErr: "stale"}
 	v.update(Model{}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	if v.formErr != "" {
@@ -140,6 +149,7 @@ func TestPrefixSettingsReopenClearsInlineError(t *testing.T) {
 }
 
 func TestPrefixSettingsFormRendersInlineError(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 120, 40
 	v := &prefixSettingsView{mode: pfForm, formErr: "invalid prefix: unknown token <bogus>"}
@@ -152,6 +162,7 @@ func TestPrefixSettingsFormRendersInlineError(t *testing.T) {
 // ctrl+d works even while typing (the textfield doesn't consume it) and must
 // not disturb the form's state.
 func TestPrefixSettingsCtrlDOpensFormatHelp(t *testing.T) {
+	t.Parallel()
 	v := &prefixSettingsView{mode: pfForm}
 	v.fValue = newTextField("feat/")
 	m2, _ := v.update(Model{}, tea.KeyMsg{Type: tea.KeyCtrlD})

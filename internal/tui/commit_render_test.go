@@ -16,6 +16,7 @@ func renderModelWithCommits(branches []model.Branch, commits []model.Commit) Mod
 }
 
 func TestCommitRowShowsBothMarkersWhenInSync(t *testing.T) {
+	t.Parallel()
 	branches := []model.Branch{{Name: "main", IsHead: true, Upstream: "origin/main"}}
 	commits := []model.Commit{{
 		Hash:    "aaaa111",
@@ -33,6 +34,7 @@ func TestCommitRowShowsBothMarkersWhenInSync(t *testing.T) {
 }
 
 func TestCommitRowRemoteOnlyTipNamesBranch(t *testing.T) {
+	t.Parallel()
 	branches := []model.Branch{{Name: "main", Upstream: "origin/main"}}
 	commits := []model.Commit{{
 		Hash:    "bbbb222",

@@ -5,6 +5,7 @@ import (
 )
 
 func TestStashPopupNameCursorEdit(t *testing.T) {
+	t.Parallel()
 	p := &stashPopup{name: newTextField("WIP"), field: 0}
 	m := Model{}
 	m, _ = p.update(m, keyMsg(" fix")) // space allowed in stash name -> "WIP fix"

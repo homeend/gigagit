@@ -40,6 +40,7 @@ func feedFilesView(t *testing.T, m Model, key string) (Model, tea.Cmd) {
 }
 
 func TestFilesViewAToggleLoadsFullTree(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, allFilesModel()) // changed-files mode
 	if m.inFullTree() {
 		t.Fatal("files view should open in changed-files mode")
@@ -63,6 +64,7 @@ func TestFilesViewAToggleLoadsFullTree(t *testing.T) {
 }
 
 func TestFilesViewAToggleBackToChanged(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, allFilesModel())
 	m, cmd := feedFilesView(t, m, "a") // → full tree
 	updated, _ := m.Update(cmd())
@@ -80,6 +82,7 @@ func TestFilesViewAToggleBackToChanged(t *testing.T) {
 }
 
 func TestFilesViewAllFilesEnterDiffsVsWorkTree(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, allFilesModel())
 	m, cmd := feedFilesView(t, m, "a")
 	updated, _ := m.Update(cmd())
@@ -102,6 +105,7 @@ func TestFilesViewAllFilesEnterDiffsVsWorkTree(t *testing.T) {
 }
 
 func TestFilesViewAllFilesFollowsCommitSelection(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, allFilesModel())
 	m, cmd := feedFilesView(t, m, "a")
 	updated, _ := m.Update(cmd())
@@ -125,6 +129,7 @@ func TestFilesViewAllFilesFollowsCommitSelection(t *testing.T) {
 // huge list must show exactly the window windowStart() picks around the cursor,
 // at the top, middle, and bottom — and nothing far outside it.
 func TestFilesViewWindowsLargeTreeCorrectly(t *testing.T) {
+	t.Parallel()
 	var lines []contentLine
 	for i := 0; i < 5000; i++ {
 		p := fmt.Sprintf("dir%04d/file%04d.go", i, i)

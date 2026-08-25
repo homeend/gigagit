@@ -37,6 +37,7 @@ func pressRuneCmd(m Model, r string) (Model, tea.Cmd) {
 // Pressing i opens a contentPopup and the async load (run through Update) fills
 // it with the full message — body included, trailing blank row trimmed.
 func TestCommitMessagePopupFillsThroughUpdate(t *testing.T) {
+	t.Parallel()
 	m := commitMsgModel(t)
 	m, cmd := pressRuneCmd(m, "i")
 	if cmd == nil {
@@ -70,6 +71,7 @@ func TestCommitMessagePopupFillsThroughUpdate(t *testing.T) {
 // The popup shows a git-show-style metadata header (hash/author/date/refs) from
 // the in-memory commit, plus a compact author·date footer line.
 func TestCommitMessageHeaderAndFooter(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log -1 --pretty=%B", gitexec.Result{Stdout: "the subject\n\nthe body line\n"})
 	m := footerModel()
@@ -105,6 +107,7 @@ func TestCommitMessageHeaderAndFooter(t *testing.T) {
 // A commitMessageMsg whose short hash doesn't match the open popup must be
 // dropped — a stale load from another commit can't overwrite the current view.
 func TestCommitMessageTagGateRejectsMismatch(t *testing.T) {
+	t.Parallel()
 	m := commitMsgModel(t)
 	m, _ = pressRuneCmd(m, "i")
 	before := layerOf[*contentPopup](m).lines
@@ -119,6 +122,7 @@ func TestCommitMessageTagGateRejectsMismatch(t *testing.T) {
 // Pressing I resolves the message bytes into a read-only temp for $EDITOR
 // (untrimmed — the editor shows it as git stores it).
 func TestCommitMessageEditorWritesBytes(t *testing.T) {
+	t.Parallel()
 	m := commitMsgModel(t)
 	m, cmd := pressRuneCmd(m, "I")
 	if cmd == nil {
@@ -139,6 +143,7 @@ func TestCommitMessageEditorWritesBytes(t *testing.T) {
 
 // Neither key fires off the Commits panel.
 func TestCommitMessageKeysNoopOffCommits(t *testing.T) {
+	t.Parallel()
 	for _, r := range []string{"i", "I"} {
 		m := commitMsgModel(t)
 		m.focus = panelBranches
@@ -156,6 +161,7 @@ func TestCommitMessageKeysNoopOffCommits(t *testing.T) {
 // the display-vs-backing class: the suite otherwise runs clean, where wipCount
 // is 0 and the offset is a no-op.)
 func TestCommitMessageKeysNoopOnWipRow(t *testing.T) {
+	t.Parallel()
 	for _, r := range []string{"i", "I"} {
 		m := commitMsgModel(t)
 		m.wipRows = []wipRow{{wipWorktree, 1}}
@@ -175,6 +181,7 @@ func TestCommitMessageKeysNoopOnWipRow(t *testing.T) {
 
 // The . menu surfaces both rows on the Commits panel, and neither elsewhere.
 func TestCommitMessageMenuRows(t *testing.T) {
+	t.Parallel()
 	m := commitMsgModel(t)
 	got := ids(availableActions(m))
 	if !got["commit-view-message"] || !got["commit-edit-message"] {

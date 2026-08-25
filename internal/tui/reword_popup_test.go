@@ -20,6 +20,7 @@ func rewordModel(t *testing.T) Model {
 }
 
 func TestRewordPopupFallsBackToSubject(t *testing.T) {
+	t.Parallel()
 	// No git log response wired: the full-message read yields nothing, so the
 	// popup falls back to the row's subject.
 	m := rewordModel(t)
@@ -37,6 +38,7 @@ func TestRewordPopupFallsBackToSubject(t *testing.T) {
 }
 
 func TestRewordPopupPrefillsFullBody(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log -1 --pretty=%B", gitexec.Result{Stdout: "real subject\n\nthe body line\n"})
 	m := footerModel()
@@ -67,6 +69,7 @@ func TestRewordPopupPrefillsFullBody(t *testing.T) {
 // unhandled edit key: no generating state, no dispatched cmd, no field
 // mutation, no layer change.
 func TestRewordPopupCtrlGIsNoOp(t *testing.T) {
+	t.Parallel()
 	m := rewordModel(t)
 	m, ok := m.openRewordPopup()
 	if !ok {
@@ -96,6 +99,7 @@ func TestRewordPopupCtrlGIsNoOp(t *testing.T) {
 }
 
 func TestRewordMenuRowPresentOnCommits(t *testing.T) {
+	t.Parallel()
 	m := rewordModel(t)
 	if got := ids(availableActions(m)); !got["reword-commit"] {
 		t.Fatalf("Commits panel menu should offer reword-commit, got %v", got)

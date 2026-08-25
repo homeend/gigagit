@@ -12,6 +12,7 @@ import (
 )
 
 func TestSuggestLocalNameFirstFree(t *testing.T) {
+	t.Parallel()
 	bs := []model.Branch{{Name: "foo"}, {Name: "main"}}
 	if got := suggestLocalName(bs, "foo"); got != "foo-2" {
 		t.Fatalf("suggest = %q, want foo-2", got)
@@ -19,6 +20,7 @@ func TestSuggestLocalNameFirstFree(t *testing.T) {
 }
 
 func TestSuggestLocalNameSkipsTaken(t *testing.T) {
+	t.Parallel()
 	bs := []model.Branch{{Name: "foo"}, {Name: "foo-2"}, {Name: "foo-3"}}
 	if got := suggestLocalName(bs, "foo"); got != "foo-4" {
 		t.Fatalf("suggest = %q, want foo-4", got)
@@ -26,6 +28,7 @@ func TestSuggestLocalNameSkipsTaken(t *testing.T) {
 }
 
 func TestCheckoutAsPopupEnterDispatchesAndArmsPending(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m = m.openCheckoutAsPopup("origin/foo", "foo", engine.CheckoutSwitch)
 	p, ok := m.topLayer().(*checkoutAsPopup)
@@ -46,6 +49,7 @@ func TestCheckoutAsPopupEnterDispatchesAndArmsPending(t *testing.T) {
 }
 
 func TestCheckoutAsPopupEmptyNameRefuses(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m = m.openCheckoutAsPopup("origin/foo", "", engine.CheckoutStay)
 	p := m.topLayer().(*checkoutAsPopup)
@@ -59,6 +63,7 @@ func TestCheckoutAsPopupEmptyNameRefuses(t *testing.T) {
 }
 
 func TestCheckoutAsPopupEscCancels(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m = m.openCheckoutAsPopup("origin/foo", "foo", engine.CheckoutStay)
 	p := m.topLayer().(*checkoutAsPopup)
@@ -72,6 +77,7 @@ func TestCheckoutAsPopupEscCancels(t *testing.T) {
 }
 
 func TestDivergedCheckoutOpensRecoveryModal(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.branches = []model.Branch{{Name: "foo"}, {Name: "foo-2"}}
 	m.pendingCheckout = pendingCheckout{remoteRef: "origin/foo", base: "foo", intent: engine.CheckoutSwitch}
@@ -98,6 +104,7 @@ func TestDivergedCheckoutOpensRecoveryModal(t *testing.T) {
 }
 
 func TestDivergedRecoveryCancelDoesNothing(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.pendingCheckout = pendingCheckout{remoteRef: "origin/foo", base: "foo", intent: engine.CheckoutStay}
 	nm, _ := m.Update(opFinishedMsg{err: engine.CheckoutDivergedError{Local: "foo", RemoteRef: "origin/foo"}})
@@ -112,6 +119,7 @@ func TestDivergedRecoveryCancelDoesNothing(t *testing.T) {
 }
 
 func TestNonDivergedErrorSkipsRecoveryModal(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.pendingCheckout = pendingCheckout{remoteRef: "origin/foo", base: "foo", intent: engine.CheckoutStay}
 	nm, _ := m.Update(opFinishedMsg{err: errors.New("boom")})
@@ -125,6 +133,7 @@ func TestNonDivergedErrorSkipsRecoveryModal(t *testing.T) {
 }
 
 func TestDivergedErrorWithoutPendingSkipsModal(t *testing.T) {
+	t.Parallel()
 	m := remoteModel() // pendingCheckout zero — e.g. error surfaced by a CLI-driven repo
 	nm, _ := m.Update(opFinishedMsg{err: engine.CheckoutDivergedError{Local: "foo", RemoteRef: "origin/foo"}})
 	if rm := nm.(Model); rm.modal != nil {
@@ -133,6 +142,7 @@ func TestDivergedErrorWithoutPendingSkipsModal(t *testing.T) {
 }
 
 func TestReRootClearsPendingCheckout(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.pendingCheckout = pendingCheckout{remoteRef: "origin/foo", base: "foo", intent: engine.CheckoutStay}
 	updated, _ := m.reRoot(t.TempDir())
@@ -142,6 +152,7 @@ func TestReRootClearsPendingCheckout(t *testing.T) {
 }
 
 func TestRemoteCheckoutKeyArmsPending(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.cfg.UI.DisableSlowOpConfirm = true // dispatch directly; pending arming is what's under test
 	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
@@ -153,6 +164,7 @@ func TestRemoteCheckoutKeyArmsPending(t *testing.T) {
 }
 
 func TestRemoteSwitchKeyArmsPending(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.cfg.UI.DisableSlowOpConfirm = true // dispatch directly; pending arming is what's under test
 	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
@@ -164,6 +176,7 @@ func TestRemoteSwitchKeyArmsPending(t *testing.T) {
 }
 
 func TestCurrentBranchCheckoutOpensModalWithPull(t *testing.T) {
+	t.Parallel()
 	m := remoteModel() // rb = origin/foo
 	m.status.Branch = "foo"
 	m.status.Upstream = "origin/foo"
@@ -191,6 +204,7 @@ func TestCurrentBranchCheckoutOpensModalWithPull(t *testing.T) {
 }
 
 func TestCurrentBranchModalNoPullWhenNotBehind(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.status.Branch = "foo"
 	m.status.Upstream = "origin/foo"
@@ -211,6 +225,7 @@ func TestCurrentBranchModalNoPullWhenNotBehind(t *testing.T) {
 }
 
 func TestCurrentBranchModalNoPullOnNonUpstreamRemote(t *testing.T) {
+	t.Parallel()
 	m := remoteModel() // rb = origin/foo …
 	m.status.Branch = "foo"
 	m.status.Upstream = "upstream/foo" // …but foo tracks a DIFFERENT remote
@@ -231,6 +246,7 @@ func TestCurrentBranchModalNoPullOnNonUpstreamRemote(t *testing.T) {
 }
 
 func TestCurrentBranchModalRenameOpensPopupWithIntent(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.branches = []model.Branch{{Name: "foo"}}
 	m.status.Branch = "foo"
@@ -253,6 +269,7 @@ func TestCurrentBranchModalRenameOpensPopupWithIntent(t *testing.T) {
 }
 
 func TestCurrentBranchModalCancelInert(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.status.Branch = "foo"
 	nm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})

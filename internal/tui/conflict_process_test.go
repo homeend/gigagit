@@ -15,6 +15,7 @@ import (
 // two unmerged files (uu.txt, md.txt).
 
 func TestConflictProcessStartsAndLeaves(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 
@@ -38,6 +39,7 @@ func TestConflictProcessStartsAndLeaves(t *testing.T) {
 }
 
 func TestConflictProcessEscLeaves(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
@@ -48,6 +50,7 @@ func TestConflictProcessEscLeaves(t *testing.T) {
 }
 
 func TestConflictProcessNoStartWithoutConflicts(t *testing.T) {
+	t.Parallel()
 	m := Model{sel: map[panel]int{}, sortModes: map[panel]sortMode{}}
 	m, _ = startConflictProcess(m)
 	if m.proc != nil {
@@ -56,6 +59,7 @@ func TestConflictProcessNoStartWithoutConflicts(t *testing.T) {
 }
 
 func TestConflictActionForGating(t *testing.T) {
+	t.Parallel()
 	uu := model.FileStatus{Path: "uu.txt", Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'} // both sides
 	du := model.FileStatus{Path: "md.txt", Kind: model.KindUnmerged, Staged: 'D', Unstaged: 'U'} // one side
 
@@ -80,6 +84,7 @@ func TestConflictActionForGating(t *testing.T) {
 }
 
 func TestConflictProcessFinishedError(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 	cp := m.proc.(*conflictProcess)
@@ -97,6 +102,7 @@ func TestConflictProcessFinishedError(t *testing.T) {
 }
 
 func TestConflictProcessOpFinishedRoutesToProcess(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 	m.proc.(*conflictProcess).st = confWorking
@@ -108,6 +114,7 @@ func TestConflictProcessOpFinishedRoutesToProcess(t *testing.T) {
 }
 
 func TestConflictProcessDataLoadedRoutesToRefreshed(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 	m.proc.(*conflictProcess).st = confWorking
@@ -123,6 +130,7 @@ func TestConflictProcessDataLoadedRoutesToRefreshed(t *testing.T) {
 }
 
 func TestConflictProcessContinueAbortGating(t *testing.T) {
+	t.Parallel()
 	cp := &conflictProcess{}
 	// nothing resolved, not in progress
 	if cp.canContinue() || cp.canAbort() {
@@ -145,6 +153,7 @@ func TestConflictProcessContinueAbortGating(t *testing.T) {
 }
 
 func TestConflictProcessReleasesWhenDone(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 	cp := m.proc.(*conflictProcess)
@@ -159,6 +168,7 @@ func TestConflictProcessReleasesWhenDone(t *testing.T) {
 }
 
 func TestConflictProcessStaysWhenResolvedButInProgress(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 	cp := m.proc.(*conflictProcess)
@@ -175,6 +185,7 @@ func TestConflictProcessStaysWhenResolvedButInProgress(t *testing.T) {
 }
 
 func TestConflictProcessCancelReturnsToList(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 	cp := m.proc.(*conflictProcess)
@@ -191,6 +202,7 @@ func TestConflictProcessCancelReturnsToList(t *testing.T) {
 }
 
 func TestConflictProcessEnterLoadsBothSides(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 	m.proc.(*conflictProcess).sel = 0 // uu.txt — both sides
@@ -205,6 +217,7 @@ func TestConflictProcessEnterLoadsBothSides(t *testing.T) {
 }
 
 func TestConflictProcessEnterRejectsOneSided(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 	m.proc.(*conflictProcess).sel = 1 // md.txt — one sided
@@ -216,6 +229,7 @@ func TestConflictProcessEnterRejectsOneSided(t *testing.T) {
 }
 
 func TestConflictProcessFileLoadedShowsPickerEscReturns(t *testing.T) {
+	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
 	m.proc.(*conflictProcess).st = confWorking
@@ -239,6 +253,7 @@ func TestConflictProcessFileLoadedShowsPickerEscReturns(t *testing.T) {
 }
 
 func TestConflictProcessRefreshedReLists(t *testing.T) {
+	t.Parallel()
 	m := conflictModel() // 2 conflicts
 	m, _ = startConflictProcess(m)
 	cp := m.proc.(*conflictProcess)
@@ -261,6 +276,7 @@ func TestConflictProcessRefreshedReLists(t *testing.T) {
 }
 
 func TestConflictProcessEscRestoresPickerZoom(t *testing.T) {
+	t.Parallel()
 	p := &conflictProcess{st: confPicking, picker: newProcessConflictPicker("f.txt", pickerDoc())}
 	m := Model{proc: p, sel: map[panel]int{}, sortModes: map[panel]sortMode{}, width: 80, height: 24}
 	m, _ = p.update(m, keyMsg("ctrl+t"))
@@ -281,6 +297,7 @@ func TestConflictProcessEscRestoresPickerZoom(t *testing.T) {
 }
 
 func TestConflictProcessRefreshKeepsPicking(t *testing.T) {
+	t.Parallel()
 	p := &conflictProcess{st: confPicking, picker: newProcessConflictPicker("f.txt", pickerDoc()), pickPath: "f.txt"}
 	m := Model{proc: p, width: 80, height: 24}
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{

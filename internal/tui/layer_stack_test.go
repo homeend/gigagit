@@ -20,6 +20,7 @@ func (l *fakeLayer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (l *fakeLayer) render(m Model, below string) string { return below + l.id }
 
 func TestLayerStackPushPopTop(t *testing.T) {
+	t.Parallel()
 	var m Model
 	if m.topLayer() != nil {
 		t.Fatal("empty stack must have nil top")
@@ -44,6 +45,7 @@ func TestLayerStackPushPopTop(t *testing.T) {
 }
 
 func TestPopLayerEmptyIsNoOp(t *testing.T) {
+	t.Parallel()
 	var m Model
 	m = m.popLayer() // must not panic
 	if m.topLayer() != nil {
@@ -52,6 +54,7 @@ func TestPopLayerEmptyIsNoOp(t *testing.T) {
 }
 
 func TestLayerOfReturnsTypedTopOrNil(t *testing.T) {
+	t.Parallel()
 	var m Model
 	// empty stack → nil
 	if got := layerOf[*bookmarkPastePopup](m); got != nil {

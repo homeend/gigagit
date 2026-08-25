@@ -34,6 +34,7 @@ func newRepo(t *testing.T) *git.Repo {
 }
 
 func TestLoadCmdReturnsPopulatedData(t *testing.T) {
+	t.Parallel()
 	repo := newRepo(t)
 	m := New(domain.New(repo))
 	msg := m.loadCmd()() // run the command synchronously
@@ -56,6 +57,7 @@ func TestLoadCmdReturnsPopulatedData(t *testing.T) {
 }
 
 func TestUpdateAppliesLoadedData(t *testing.T) {
+	t.Parallel()
 	repo := newRepo(t)
 	m := New(domain.New(repo))
 	msg := m.loadCmd()()
@@ -70,6 +72,7 @@ func TestUpdateAppliesLoadedData(t *testing.T) {
 }
 
 func TestLoadIncludesWorktrees(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	if len(m.worktrees) < 1 {
 		t.Fatalf("expected at least the main worktree, got %d", len(m.worktrees))
@@ -80,6 +83,7 @@ func TestLoadIncludesWorktrees(t *testing.T) {
 }
 
 func TestLoadIncludesConfigAndCommonDir(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	if m.cfg.Worktree.DefaultBranchTemplate == "" {
 		t.Error("expected a default branch template from config defaults")
@@ -104,6 +108,7 @@ func gitRun(t *testing.T, dir string, args ...string) {
 }
 
 func TestLoadCmdHonorsConfiguredInitialCount(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gitRun(t, dir, "init", "-q", "-b", "main")
 	for i := 0; i < 4; i++ {
@@ -138,6 +143,7 @@ func TestLoadCmdHonorsConfiguredInitialCount(t *testing.T) {
 // TestStaleSnapshotDropped: a dataLoadedMsg from an older generation is
 // ignored, so a superseded in-flight load cannot paint over a newer one.
 func TestStaleSnapshotDropped(t *testing.T) {
+	t.Parallel()
 	m := New(domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()}))
 	m.loadGen = 5
 

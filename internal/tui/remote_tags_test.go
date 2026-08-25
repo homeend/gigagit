@@ -10,6 +10,7 @@ import (
 
 // Manual remoteTagsMsg stores the set.
 func TestRemoteTagsMsgStoresSet(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	u, _ := m.Update(remoteTagsMsg{names: map[string]bool{"v1": true}, manual: true})
 	m = u.(Model)
@@ -20,6 +21,7 @@ func TestRemoteTagsMsgStoresSet(t *testing.T) {
 
 // Manual error surfaces on the status line and leaves the set unchanged.
 func TestRemoteTagsMsgManualErrorStatus(t *testing.T) {
+	t.Parallel()
 	m := Model{remoteTagNames: map[string]bool{"old": true}}
 	u, _ := m.Update(remoteTagsMsg{err: errTestRemote, manual: true})
 	m = u.(Model)
@@ -33,6 +35,7 @@ func TestRemoteTagsMsgManualErrorStatus(t *testing.T) {
 
 // Optimistic add on PushTag success; remove on DeleteRemoteTag success.
 func TestOptimisticRemoteTagAdd(t *testing.T) {
+	t.Parallel()
 	m := Model{pendingRemoteTagSet: "v9"}
 	m = m.applyPendingRemoteTag() // success-path helper
 	if !m.remoteTagNames["v9"] {
@@ -40,6 +43,7 @@ func TestOptimisticRemoteTagAdd(t *testing.T) {
 	}
 }
 func TestOptimisticRemoteTagRemove(t *testing.T) {
+	t.Parallel()
 	m := Model{remoteTagNames: map[string]bool{"v9": true}, pendingRemoteTagUnset: "v9"}
 	m = m.applyPendingRemoteTag()
 	if m.remoteTagNames["v9"] {
@@ -49,6 +53,7 @@ func TestOptimisticRemoteTagRemove(t *testing.T) {
 
 // Background remoteTagsMsg must free the single lane.
 func TestRemoteTagsBackgroundFreesLane(t *testing.T) {
+	t.Parallel()
 	m := Model{bgBusy: true, bgActiveItem: remoteTagsItem}
 	u, _ := m.Update(remoteTagsMsg{names: map[string]bool{"v1": true}, manual: false})
 	if u.(Model).bgBusy {
@@ -58,6 +63,7 @@ func TestRemoteTagsBackgroundFreesLane(t *testing.T) {
 
 // Background error must also free the lane.
 func TestRemoteTagsBackgroundErrorFreesLane(t *testing.T) {
+	t.Parallel()
 	m := Model{bgBusy: true, bgActiveItem: remoteTagsItem}
 	u, _ := m.Update(remoteTagsMsg{err: errTestRemote, manual: false})
 	if u.(Model).bgBusy {
@@ -68,6 +74,7 @@ func TestRemoteTagsBackgroundErrorFreesLane(t *testing.T) {
 // reRoot must clear remoteTagNames so tag names from the old repo don't
 // bleed into the new one and produce false ▲ markers.
 func TestReRootClearsRemoteTagNames(t *testing.T) {
+	t.Parallel()
 	m := Model{remoteTagNames: map[string]bool{"v1.0.0": true, "latest": true}}
 	updated, _ := m.reRoot(t.TempDir())
 	if got := updated.(Model).remoteTagNames; got != nil {
@@ -78,6 +85,7 @@ func TestReRootClearsRemoteTagNames(t *testing.T) {
 // Stale remoteTagsMsg (gen != loadGen) must not overwrite remoteTagNames and
 // must still free the background lane if it was occupied by remoteTagsItem.
 func TestRemoteTagsMsgStaleGenDropped(t *testing.T) {
+	t.Parallel()
 	oldNames := map[string]bool{"old": true}
 	m := Model{
 		remoteTagNames: oldNames,
@@ -103,6 +111,7 @@ func TestRemoteTagsMsgStaleGenDropped(t *testing.T) {
 
 // Current-gen remoteTagsMsg (gen == loadGen) must still apply names normally.
 func TestRemoteTagsMsgCurrentGenApplied(t *testing.T) {
+	t.Parallel()
 	m := Model{loadGen: 2}
 	u, _ := m.Update(remoteTagsMsg{names: map[string]bool{"v2": true}, manual: false, gen: 2})
 	got := u.(Model)
@@ -118,6 +127,7 @@ type errString string
 func (e errString) Error() string { return string(e) }
 
 func TestPushTagCheckDroppedWhenModalOpen(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.pushCheckGen = 3
 	m.modal = &decisionState{req: engine.DecisionRequest{
@@ -140,6 +150,7 @@ func TestPushTagCheckDroppedWhenModalOpen(t *testing.T) {
 }
 
 func TestPushTagCheckDroppedWhenOpRunning(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.pushCheckGen = 3
 	m.running = true

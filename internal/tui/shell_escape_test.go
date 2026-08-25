@@ -16,6 +16,7 @@ func fakeEnv(m map[string]string) func(string) string {
 }
 
 func TestShellEscapeBin(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		goos string
 		env  map[string]string
@@ -35,6 +36,7 @@ func TestShellEscapeBin(t *testing.T) {
 }
 
 func TestSubshellExecPosix(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shape")
 	}
@@ -74,6 +76,7 @@ func TestSubshellExecPosix(t *testing.T) {
 }
 
 func TestShellCommandExecPosix(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shape")
 	}
@@ -117,6 +120,7 @@ func TestShellCommandExecPosix(t *testing.T) {
 }
 
 func TestCtrlOOpensSubshellFromAnywhere(t *testing.T) {
+	t.Parallel()
 	// Bare panels.
 	m := footerModel()
 	mm, cmd := m.Update(keyMsg("ctrl+o"))
@@ -150,6 +154,7 @@ func shellEscTestModelWithLayer() Model {
 }
 
 func TestCtrlOBusyNotices(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.running = true
 	mm, cmd := m.Update(keyMsg("ctrl+o"))
@@ -160,6 +165,7 @@ func TestCtrlOBusyNotices(t *testing.T) {
 }
 
 func TestShellDoneReloadsAndCleans(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	f, err := os.CreateTemp(t.TempDir(), "gg-shell-*.sh")
 	if err != nil {
@@ -182,6 +188,7 @@ func TestShellDoneReloadsAndCleans(t *testing.T) {
 // reload — reloadSourcesCmd's per-source gen bump drops that stale read when
 // it lands, so skipping here would only leave the UI stale until a manual r.
 func TestShellDoneReloadsEvenWhenSourceInflight(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m.srcInflight = map[sourceKey]bool{srcStatus: true}
@@ -196,6 +203,7 @@ func TestShellDoneReloadsEvenWhenSourceInflight(t *testing.T) {
 }
 
 func TestShellDoneExitErrorIsNotAnError(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	exitErr := &exec.ExitError{}
 	mm, _ := m.Update(shellDoneMsg{err: exitErr})
@@ -213,6 +221,7 @@ func TestShellDoneExitErrorIsNotAnError(t *testing.T) {
 }
 
 func TestPaletteHasShellRows(t *testing.T) {
+	t.Parallel()
 	var labels []string
 	for _, c := range paletteCommands() {
 		labels = append(labels, c.label)
@@ -224,6 +233,7 @@ func TestPaletteHasShellRows(t *testing.T) {
 }
 
 func TestShellCmdPopupEnterRunsAndRecords(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width, m.height = 100, 30
 	mm, _ := m.openShellCmdPopup()
@@ -251,6 +261,7 @@ func TestShellCmdPopupEnterRunsAndRecords(t *testing.T) {
 }
 
 func TestShellCmdPopupEmptyEnterNoops(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width, m.height = 100, 30
 	mm, _ := m.openShellCmdPopup()
@@ -271,6 +282,7 @@ func TestShellCmdPopupEmptyEnterNoops(t *testing.T) {
 // (the "Open repo" convention), so the enter dispatch must pop BOTH — the user
 // must not land back in a stale palette after the shell returns.
 func TestShellCmdPopupFromPalettePopsBoth(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width, m.height = 100, 30
 	m, _ = palettePick(t, m, "Run shell command…")
@@ -288,6 +300,7 @@ func TestShellCmdPopupFromPalettePopsBoth(t *testing.T) {
 }
 
 func TestShellCmdPopupRecall(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width, m.height = 100, 30
 	m.searchHist = map[string][]string{scopeShellCmd: {"git status"}}
