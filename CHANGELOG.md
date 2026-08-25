@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`./test.sh` streams progress.** Long stages used to sit silent for
+  minutes and then dump everything at once; each package now prints one line
+  the moment it finishes — `ok <package> <time> <N> tests` (or `(cached)`), a
+  failing package dumps its full output inline under its `FAIL` line, and
+  `-v` keeps go test's raw stream. Two more test files that read the global
+  session-failure ring (`domain/failures_test.go`, `remote_tags_test.go`)
+  went back to serial — a parallel neighbour's recorded failure could leak
+  into their assertions.
 - **Stash window under an open file tree: consistent enter / `.` / esc.**
   With the stash's file tree open and focus on the stash-list side, `enter`
   used to open the old Apply/Pop/Drop popup and `.` showed the commit-list
