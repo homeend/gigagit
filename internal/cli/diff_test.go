@@ -11,6 +11,7 @@ import (
 )
 
 func TestRenderStat(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	renderStat(&buf, []model.DiffStat{
 		{Path: "main.go", Added: 3, Deleted: 1},
@@ -24,6 +25,7 @@ func TestRenderStat(t *testing.T) {
 }
 
 func TestRenderStatEmpty(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	renderStat(&buf, nil)
 	if buf.String() != "" {
@@ -32,6 +34,7 @@ func TestRenderStatEmpty(t *testing.T) {
 }
 
 func TestDiffStatWorkingTree(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi\nmore\nlines\n"), 0o644)
 	code, out, errb := runCLI(t, dir, "diff", "--stat")
@@ -45,6 +48,7 @@ func TestDiffStatWorkingTree(t *testing.T) {
 }
 
 func TestDiffPatchDefault(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
 	code, out, _ := runCLI(t, dir, "diff")
@@ -57,6 +61,7 @@ func TestDiffPatchDefault(t *testing.T) {
 }
 
 func TestDiffNameOnly(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
 	code, out, _ := runCLI(t, dir, "diff", "--name-only")
@@ -69,6 +74,7 @@ func TestDiffNameOnly(t *testing.T) {
 }
 
 func TestDiffEmptyPrintsNothing(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	for _, mode := range [][]string{{"diff"}, {"diff", "--stat"}, {"diff", "--name-only"}} {
 		code, out, _ := runCLI(t, dir, mode...)
@@ -79,6 +85,7 @@ func TestDiffEmptyPrintsNothing(t *testing.T) {
 }
 
 func TestDiffPathsRequireDashDash(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, _ := runCLI(t, dir, "diff", "main", "README.md")
 	if code != 2 {
@@ -87,6 +94,7 @@ func TestDiffPathsRequireDashDash(t *testing.T) {
 }
 
 func TestDiffStatBothFlagsRejected(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, _ := runCLI(t, dir, "diff", "--stat", "--name-only")
 	if code != 2 {
@@ -95,6 +103,7 @@ func TestDiffStatBothFlagsRejected(t *testing.T) {
 }
 
 func TestDiffPathsOnlyNoRev(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi\nmore\n"), 0o644)
 	code, out, errb := runCLI(t, dir, "diff", "--stat", "--", "README.md")
@@ -108,6 +117,7 @@ func TestDiffPathsOnlyNoRev(t *testing.T) {
 }
 
 func TestDiffTwoPathsNoRev(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi\nmore\n"), 0o644)
 	code, _, errb := runCLI(t, dir, "diff", "--", "README.md", "CHANGELOG.md")

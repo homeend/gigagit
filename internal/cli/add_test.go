@@ -8,6 +8,7 @@ import (
 )
 
 func TestAddPathThenCommitNewFile(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644)
 
@@ -27,6 +28,7 @@ func TestAddPathThenCommitNewFile(t *testing.T) {
 }
 
 func TestAddAllFlag(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644)
 	code, _, errb := runCLI(t, dir, "add", "-A")
@@ -40,6 +42,7 @@ func TestAddAllFlag(t *testing.T) {
 }
 
 func TestAddUsageErrors(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	if code, _, _ := runCLI(t, dir, "add"); code != 2 {
 		t.Fatalf("bare add: exit=%d, want 2", code)
@@ -50,6 +53,7 @@ func TestAddUsageErrors(t *testing.T) {
 }
 
 func TestUnstage(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644)
 	runCLI(t, dir, "add", "new.txt")

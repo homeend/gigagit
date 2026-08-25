@@ -11,6 +11,7 @@ import (
 )
 
 func TestCommitGraphWriteArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git commit-graph write", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -23,6 +24,7 @@ func TestCommitGraphWriteArgv(t *testing.T) {
 }
 
 func TestCommitGraphWriteRealRepoCreatesFile(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	writeFile(t, dir, "a.txt", "hello\n")

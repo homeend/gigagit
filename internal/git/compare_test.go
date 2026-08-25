@@ -32,6 +32,7 @@ func setStr(files []model.CommitFile) map[string]bool {
 }
 
 func TestDiffTreeFilesAllForwardForms(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // one commit: README.md
 	repo := &Repo{Runner: runner}
 	ctx := context.Background()
@@ -108,6 +109,7 @@ func TestDiffTreeFilesAllForwardForms(t *testing.T) {
 // so a non-ASCII added file must surface as a raw UTF-8 path (not git's quoted
 // "timing \342\200\224 …" form), else the compare diff's ShowFile fails.
 func TestDiffTreeFilesNonASCIIPath(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // one commit: README.md
 	repo := &Repo{Runner: runner}
 	ctx := context.Background()
@@ -132,6 +134,7 @@ func TestDiffTreeFilesNonASCIIPath(t *testing.T) {
 }
 
 func TestUntrackedFiles(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	ctx := context.Background()
@@ -163,6 +166,7 @@ func TestUntrackedFiles(t *testing.T) {
 }
 
 func TestDiffTreeFilesRejectsReversePair(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	_, err := repo.DiffTreeFiles(context.Background(),

@@ -9,6 +9,7 @@ import (
 )
 
 func TestResolveCommitArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rev-parse verify commit (resolve)", gitexec.Result{Stdout: "abc123def456\n"})
 	r := &Repo{Runner: f}
@@ -26,6 +27,7 @@ func TestResolveCommitArgv(t *testing.T) {
 }
 
 func TestResolveCommitRealRepo(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 	_ = dir
@@ -45,6 +47,7 @@ func TestResolveCommitRealRepo(t *testing.T) {
 }
 
 func TestResolveCommitBogusRefErrors(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 

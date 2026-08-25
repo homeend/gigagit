@@ -11,6 +11,7 @@ import (
 
 // Targeted: restore reverts a tracked edit; the file returns to HEAD content.
 func TestDiscardRestoresTrackedEdit(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	readme := filepath.Join(dir, "README.md")
 	orig, _ := os.ReadFile(readme)
@@ -31,6 +32,7 @@ func TestDiscardRestoresTrackedEdit(t *testing.T) {
 
 // Targeted: remove deletes an untracked new file.
 func TestDiscardRemovesUntracked(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644)
 
@@ -45,6 +47,7 @@ func TestDiscardRemovesUntracked(t *testing.T) {
 
 // All: discards every unstaged change — both a tracked edit and an untracked file.
 func TestDiscardAll(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	readme := filepath.Join(dir, "README.md")
 	orig, _ := os.ReadFile(readme)
@@ -69,6 +72,7 @@ func TestDiscardAll(t *testing.T) {
 
 // Mixed targeted: restore + remove in one op.
 func TestDiscardMixed(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	readme := filepath.Join(dir, "README.md")
 	orig, _ := os.ReadFile(readme)
@@ -89,6 +93,7 @@ func TestDiscardMixed(t *testing.T) {
 
 // Partial failure: a clean error is surfaced, not swallowed.
 func TestDiscardPartialFailureReturnsError(t *testing.T) {
+	t.Parallel()
 	fr := &discardFakeRepo{cleanErr: true}
 	_, err := Discard{Restore: []string{"a"}, Remove: []string{"b"}}.Run(context.Background(), OpDeps{Repo: fr})
 	if err == nil {

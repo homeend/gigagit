@@ -6,6 +6,7 @@ import (
 )
 
 func TestCheckoutDetached(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	if err := repo.CreateTag(context.Background(), "v1.0.0", "", "", false); err != nil {
 		t.Fatal(err)
@@ -22,6 +23,7 @@ func TestCheckoutDetached(t *testing.T) {
 }
 
 func TestCheckoutCreatesBranch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	if err := repo.CreateTag(context.Background(), "v1.0.0", "", "", false); err != nil {
 		t.Fatal(err)
@@ -39,6 +41,7 @@ func TestCheckoutCreatesBranch(t *testing.T) {
 // A plain commit SHA (not a tag) proves Checkout is commit-ish-agnostic — the
 // reflog recovery actions pass a reflog entry's SHA.
 func TestCheckoutBySHACreatesBranch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	sha := gitOut(t, dir, "rev-parse", "HEAD")
 	ch := make(chan Event, 16)
@@ -52,6 +55,7 @@ func TestCheckoutBySHACreatesBranch(t *testing.T) {
 }
 
 func TestCheckoutRequiresRef(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	ch := make(chan Event, 4)
 	if _, err := (Checkout{}).Run(context.Background(), OpDeps{Repo: repo, Events: ch}); err == nil {

@@ -9,6 +9,7 @@ import (
 )
 
 func TestLogScopedDateOrderFlag(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log", gitexec.Result{Stdout: ""})
 	repo := &Repo{Runner: f}

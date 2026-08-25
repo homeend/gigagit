@@ -59,6 +59,7 @@ func startPull(t *testing.T, ts *httptest.Server) string {
 }
 
 func TestOpHTTPPullFastForward(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	pushRemoteCommit(t, origin, "r.txt", "r\n", "remote work")
 	ts := serve(t, New(domain.Open(clone)))
@@ -79,6 +80,7 @@ func TestOpHTTPPullFastForward(t *testing.T) {
 }
 
 func TestOpHTTPPullDivergedRebase(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	pushRemoteCommit(t, origin, "r.txt", "r\n", "remote work")
 	if err := os.WriteFile(filepath.Join(clone, "l.txt"), []byte("l\n"), 0o644); err != nil {
@@ -117,6 +119,7 @@ func TestOpHTTPPullDivergedRebase(t *testing.T) {
 }
 
 func TestOpHTTPPullDivergedAbort(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	pushRemoteCommit(t, origin, "r.txt", "r\n", "remote work")
 	if err := os.WriteFile(filepath.Join(clone, "l.txt"), []byte("l\n"), 0o644); err != nil {
@@ -148,6 +151,7 @@ func TestOpHTTPPullDivergedAbort(t *testing.T) {
 }
 
 func TestOpHTTPPullConflictedRebase(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	pushRemoteCommit(t, origin, "f.txt", "remote\n", "remote edit")
 	if err := os.WriteFile(filepath.Join(clone, "f.txt"), []byte("local\n"), 0o644); err != nil {
@@ -179,6 +183,7 @@ func TestOpHTTPPullConflictedRebase(t *testing.T) {
 }
 
 func TestOpHTTPPullNoRemote(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1) // no origin at all
 	ts := serve(t, New(domain.Open(dir)))
 	events := readSSE(t, ts, startPull(t, ts), 30*time.Second)

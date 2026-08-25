@@ -72,6 +72,7 @@ func getJSON(t *testing.T, ts *httptest.Server, path string, out any) int {
 }
 
 func TestRepoEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	var got struct {
@@ -96,6 +97,7 @@ func TestRepoEndpoint(t *testing.T) {
 }
 
 func TestCommitsEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	ts := serve(t, New(domain.Open(dir)))
 	var got struct {
@@ -144,6 +146,7 @@ func TestCommitsEndpoint(t *testing.T) {
 }
 
 func TestCommitsPaging(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 30)
 	srv := New(domain.Open(dir))
 	srv.pageInitial, srv.pageBatch = 10, 10
@@ -169,6 +172,7 @@ func TestCommitsPaging(t *testing.T) {
 }
 
 func TestCommitFilesEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	sha := gitRun(t, dir, "rev-parse", "HEAD")
 	ts := serve(t, New(domain.Open(dir)))
@@ -191,6 +195,7 @@ func TestCommitFilesEndpoint(t *testing.T) {
 }
 
 func TestCommitFilesBadSha(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	if code := getJSON(t, ts, "/api/commit/zzzz", nil); code != http.StatusNotFound {
@@ -199,6 +204,7 @@ func TestCommitFilesBadSha(t *testing.T) {
 }
 
 func TestCommitFilesRejectsFlag(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	// A flag-shaped sha must not reach the git argv (argument injection).
@@ -208,6 +214,7 @@ func TestCommitFilesRejectsFlag(t *testing.T) {
 }
 
 func TestDiffEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2) // c2 rewrote f.txt: "content 1" -> "content 2"
 	sha := gitRun(t, dir, "rev-parse", "HEAD")
 	ts := serve(t, New(domain.Open(dir)))
@@ -246,6 +253,7 @@ func TestDiffEndpoint(t *testing.T) {
 }
 
 func TestDiffMissingParams(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	if code := getJSON(t, ts, "/api/diff?path=f.txt", nil); code != http.StatusBadRequest {
@@ -254,6 +262,7 @@ func TestDiffMissingParams(t *testing.T) {
 }
 
 func TestDiffRejectsFlag(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	sha := gitRun(t, dir, "rev-parse", "HEAD")
 	ts := serve(t, New(domain.Open(dir)))
@@ -264,6 +273,7 @@ func TestDiffRejectsFlag(t *testing.T) {
 }
 
 func TestDiffAddedFile(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1) // root commit: f.txt is status A, sha^ does not exist
 	sha := gitRun(t, dir, "rev-parse", "HEAD")
 	ts := serve(t, New(domain.Open(dir)))
@@ -282,6 +292,7 @@ func TestDiffAddedFile(t *testing.T) {
 }
 
 func TestHostGuardRejectsForeignHost(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	req, err := http.NewRequest("GET", ts.URL+"/api/repo", nil)
@@ -302,6 +313,7 @@ func TestHostGuardRejectsForeignHost(t *testing.T) {
 }
 
 func TestHostGuardAllowsLoopbackHost(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	// A normal loopback Host (what httptest sends) must still be served.
@@ -311,6 +323,7 @@ func TestHostGuardAllowsLoopbackHost(t *testing.T) {
 }
 
 func TestStaticServing(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	resp, err := http.Get(ts.URL + "/")

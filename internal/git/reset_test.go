@@ -11,6 +11,7 @@ import (
 )
 
 func TestResetArgv(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"soft", "mixed", "hard"} {
 		f := gitexec.NewFakeRunner()
 		f.SetResponse("git reset --"+mode, gitexec.Result{})
@@ -42,6 +43,7 @@ func resetRepo(t *testing.T) (string, *Repo, string) {
 }
 
 func TestResetSoftStagesDiff(t *testing.T) {
+	t.Parallel()
 	dir, repo, base := resetRepo(t)
 	if err := repo.Reset(context.Background(), "soft", base); err != nil {
 		t.Fatalf("reset soft: %v", err)
@@ -58,6 +60,7 @@ func TestResetSoftStagesDiff(t *testing.T) {
 }
 
 func TestResetMixedUnstagesDiff(t *testing.T) {
+	t.Parallel()
 	dir, repo, base := resetRepo(t)
 	if err := repo.Reset(context.Background(), "mixed", base); err != nil {
 		t.Fatalf("reset mixed: %v", err)
@@ -76,6 +79,7 @@ func TestResetMixedUnstagesDiff(t *testing.T) {
 }
 
 func TestResetHardDiscardsTrackedChanges(t *testing.T) {
+	t.Parallel()
 	dir, repo, base := resetRepo(t)
 	// dirty a tracked file too
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("dirty\n"), 0o644)

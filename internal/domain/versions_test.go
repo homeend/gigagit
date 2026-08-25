@@ -15,6 +15,7 @@ import (
 // NOT pick up "feat/x"'s versions (the nested-name over-catch that
 // ParseVersionRef's branch check must filter out).
 func TestBranchVersionsListsNewestFirstAndFiltersBranch(t *testing.T) {
+	t.Parallel()
 	dir := cleanDir(t) // main, base commit, f.txt = "hi\n"
 	gitRunDir(t, dir, "", "checkout", "-q", "-b", "feat/x")
 	writeFile(t, dir, "g.txt", "hi\n")
@@ -85,6 +86,7 @@ func TestBranchVersionsListsNewestFirstAndFiltersBranch(t *testing.T) {
 // AllVersionBranches reports both, correctly marking "gone" as Deleted and
 // sorting by LatestUnix descending.
 func TestAllVersionBranchesMarksDeleted(t *testing.T) {
+	t.Parallel()
 	dir := cleanDir(t) // main, base commit
 	mainSha := gitOutDir(t, dir, "rev-parse", "main")
 
@@ -122,6 +124,7 @@ func TestAllVersionBranchesMarksDeleted(t *testing.T) {
 // not-guaranteed-stable comparator on equal keys — checked across two calls
 // since map/slice construction order could otherwise vary run to run.
 func TestBranchVersionsSameUnixTieBreaksByRefDescending(t *testing.T) {
+	t.Parallel()
 	dir := cleanDir(t) // main, base commit
 	mainSha := gitOutDir(t, dir, "rev-parse", "main")
 
@@ -164,6 +167,7 @@ func TestBranchVersionsSameUnixTieBreaksByRefDescending(t *testing.T) {
 // tie-break — checked across two calls for stability, since the rows are
 // built by ranging a map before sorting.
 func TestAllVersionBranchesSameUnixTieBreaksByBranchAscending(t *testing.T) {
+	t.Parallel()
 	dir := cleanDir(t) // main, base commit
 	mainSha := gitOutDir(t, dir, "rev-parse", "main")
 
@@ -200,6 +204,7 @@ func TestAllVersionBranchesSameUnixTieBreaksByBranchAscending(t *testing.T) {
 // run through Execute with the default policy — and records nothing once the
 // policy is disabled via SetVersionsPolicy.
 func TestExecuteInjectsVersionsPolicy(t *testing.T) {
+	t.Parallel()
 	dir := cleanDir(t) // main, base commit, f.txt = "hi\n"
 	svc := svcAt(dir)
 	ctx := context.Background()

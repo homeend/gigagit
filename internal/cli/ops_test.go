@@ -43,6 +43,7 @@ func cloneBehind(t *testing.T) string {
 }
 
 func TestPullFastForward(t *testing.T) {
+	t.Parallel()
 	clone := cloneBehind(t)
 	code, out, errb := runCLI(t, clone, "pull")
 	if code != 0 {
@@ -57,6 +58,7 @@ func TestPullFastForward(t *testing.T) {
 }
 
 func TestSwitchCommand(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	gitIn(t, dir, "branch", "feature")
 	code, out, errb := runCLI(t, dir, "switch", "feature")
@@ -69,6 +71,7 @@ func TestSwitchCommand(t *testing.T) {
 }
 
 func TestSwitchRequiresBranch(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, _ := runCLI(t, dir, "switch")
 	if code == 0 {
@@ -77,6 +80,7 @@ func TestSwitchRequiresBranch(t *testing.T) {
 }
 
 func TestStashAndUndo(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirty\n"), 0o644)
 	if code, _, errb := runCLI(t, dir, "stash"); code != 0 {
@@ -93,6 +97,7 @@ func TestStashAndUndo(t *testing.T) {
 }
 
 func TestPullDivergedRebaseViaOnConflict(t *testing.T) {
+	t.Parallel()
 	clone := cloneBehind(t)
 	// Diverge locally so ff-only fails and a decision is required.
 	os.WriteFile(filepath.Join(clone, "local.txt"), []byte("l\n"), 0o644)
@@ -116,6 +121,7 @@ func TestPullDivergedRebaseViaOnConflict(t *testing.T) {
 }
 
 func TestPullBackgroundRejectsOnConflict(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, errb := runCLI(t, dir, "pull", "--background", "--on-conflict", "rebase")
 	if code != 2 {
@@ -127,6 +133,7 @@ func TestPullBackgroundRejectsOnConflict(t *testing.T) {
 }
 
 func TestStashApplyPopDropCLI(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
 	if code, _, errb := runCLI(t, dir, "stash", "-m", "wip"); code != 0 {
@@ -152,6 +159,7 @@ func TestStashApplyPopDropCLI(t *testing.T) {
 }
 
 func TestStashPopCLI(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
 	if code, _, _ := runCLI(t, dir, "stash", "-m", "wip"); code != 0 {
@@ -169,6 +177,7 @@ func TestStashPopCLI(t *testing.T) {
 }
 
 func TestStashApplyConflictCLI(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("stashed\n"), 0o644)
 	if code, _, _ := runCLI(t, dir, "stash", "-m", "wip"); code != 0 {
@@ -185,6 +194,7 @@ func TestStashApplyConflictCLI(t *testing.T) {
 }
 
 func TestStashByPathCLI(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644)
@@ -229,6 +239,7 @@ func cloneWithRemoteFoo(t *testing.T) string {
 }
 
 func TestCheckoutStayCreatesLocalTrackingBranch(t *testing.T) {
+	t.Parallel()
 	clone := cloneWithRemoteFoo(t)
 	code, _, errb := runCLI(t, clone, "checkout", "origin/foo")
 	if code != 0 {
@@ -242,6 +253,7 @@ func TestCheckoutStayCreatesLocalTrackingBranch(t *testing.T) {
 }
 
 func TestCheckoutSwitchChecksOutTheBranch(t *testing.T) {
+	t.Parallel()
 	clone := cloneWithRemoteFoo(t)
 	code, _, errb := runCLI(t, clone, "checkout", "origin/foo", "-s")
 	if code != 0 {
@@ -253,6 +265,7 @@ func TestCheckoutSwitchChecksOutTheBranch(t *testing.T) {
 }
 
 func TestCheckoutRequiresRemoteQualifiedRef(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	if code, _, _ := runCLI(t, dir, "checkout"); code == 0 {
 		t.Fatal("checkout without a ref should fail")

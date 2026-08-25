@@ -25,6 +25,7 @@ const metaPureStart = "// --- commit meta line (pure; guarded against Go) ---"
 const metaPureEnd = "// --- end commit meta line ---"
 
 func TestCommitMetaLineJSMatchesGo(t *testing.T) {
+	t.Parallel()
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("node not installed; the JS port guard needs it")

@@ -33,6 +33,7 @@ func writeIn(t *testing.T, dir, name, content string) {
 // b.txt and also a shared.txt. Origin sets must attribute paths to the branch
 // that touched them since the merge base, including both rename sides.
 func TestCompareOriginsAttributesPaths(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 	ctx := context.Background()
 
@@ -82,6 +83,7 @@ func TestCompareOriginsAttributesPaths(t *testing.T) {
 // Unrelated histories (orphan branch) have no merge base: the typed sentinel
 // lets the TUI show "filter unavailable" without string matching.
 func TestCompareOriginsNoMergeBase(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 	ctx := context.Background()
 

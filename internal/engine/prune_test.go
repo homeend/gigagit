@@ -42,6 +42,7 @@ func hasRemote(rbs []model.RemoteBranch, name string) bool {
 }
 
 func TestPruneRemovesDeletedUpstreamRef(t *testing.T) {
+	t.Parallel()
 	repo := cloneWithDeletedOriginFoo(t)
 	rbs, _ := repo.RemoteBranches(context.Background())
 	if !hasRemote(rbs, "origin/foo") {
@@ -61,6 +62,7 @@ func TestPruneRemovesDeletedUpstreamRef(t *testing.T) {
 }
 
 func TestPruneNoRemotesIsNoOp(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	res, err := Prune{}.Run(context.Background(), OpDeps{Repo: repo, Decider: MapDecider{}})
 	if err != nil {
@@ -72,6 +74,7 @@ func TestPruneNoRemotesIsNoOp(t *testing.T) {
 }
 
 func TestPruneLockModeIsRefWrite(t *testing.T) {
+	t.Parallel()
 	if (Prune{}).LockMode() != repogate.RefWrite {
 		t.Fatal("Prune must be RefWrite")
 	}

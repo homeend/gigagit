@@ -28,6 +28,7 @@ func revertFixture(t *testing.T) (dir, sha string) {
 }
 
 func TestRevertCleanCLI(t *testing.T) {
+	t.Parallel()
 	dir, sha := revertFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"revert", sha}, strings.NewReader(""), &out, &errb, "")
@@ -61,6 +62,7 @@ func revertConflictFixtureCLI(t *testing.T) (dir, sha string) {
 }
 
 func TestRevertConflictUnansweredNonTTY(t *testing.T) {
+	t.Parallel()
 	dir, sha := revertConflictFixtureCLI(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"revert", sha}, strings.NewReader(""), &out, &errb, "")
@@ -73,6 +75,7 @@ func TestRevertConflictUnansweredNonTTY(t *testing.T) {
 }
 
 func TestRevertConflictAbortFlag(t *testing.T) {
+	t.Parallel()
 	dir, sha := revertConflictFixtureCLI(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"revert", "--on-conflict=abort", sha}, strings.NewReader(""), &out, &errb, "")
@@ -86,6 +89,7 @@ func TestRevertConflictAbortFlag(t *testing.T) {
 }
 
 func TestRevertConflictKeepFlag(t *testing.T) {
+	t.Parallel()
 	dir, sha := revertConflictFixtureCLI(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"revert", "--on-conflict=keep", sha}, strings.NewReader(""), &out, &errb, "")
@@ -98,6 +102,7 @@ func TestRevertConflictKeepFlag(t *testing.T) {
 }
 
 func TestRevertUsageErrors(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	for _, args := range [][]string{
 		{"revert"},                             // missing commit

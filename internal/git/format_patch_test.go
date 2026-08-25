@@ -9,6 +9,7 @@ import (
 )
 
 func TestParentCountArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rev-list (parent count)", gitexec.Result{Stdout: "abc def\n"})
 	r := &Repo{Runner: f}
@@ -26,6 +27,7 @@ func TestParentCountArgv(t *testing.T) {
 }
 
 func TestParentCountRealRepo(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 
@@ -49,6 +51,7 @@ func TestParentCountRealRepo(t *testing.T) {
 }
 
 func TestFormatPatchArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git format-patch", gitexec.Result{Stdout: "From ...\n"})
 	r := &Repo{Runner: f}
@@ -72,6 +75,7 @@ func TestFormatPatchArgv(t *testing.T) {
 }
 
 func TestFormatPatchRealRepoScopesToPath(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "base")

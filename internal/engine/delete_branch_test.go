@@ -9,6 +9,7 @@ import (
 )
 
 func TestDeleteBranchMergedDeletes(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "merged")
 
@@ -26,6 +27,7 @@ func TestDeleteBranchMergedDeletes(t *testing.T) {
 }
 
 func TestDeleteBranchConfirmAbortKeepsBranch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "stay")
 
@@ -56,6 +58,7 @@ func unmergedBranch(t *testing.T, dir, name string) {
 }
 
 func TestDeleteBranchUnmergedForceDeletes(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	unmergedBranch(t, dir, "risky")
 
@@ -76,6 +79,7 @@ func TestDeleteBranchUnmergedForceDeletes(t *testing.T) {
 }
 
 func TestDeleteBranchUnmergedKeepKeeps(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	unmergedBranch(t, dir, "precious")
 
@@ -99,6 +103,7 @@ func TestDeleteBranchUnmergedKeepKeeps(t *testing.T) {
 }
 
 func TestDeleteBranchGuardsCurrentBranch(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	_, err := DeleteBranch{Name: "main"}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"delete-branch": "delete"}})
@@ -108,6 +113,7 @@ func TestDeleteBranchGuardsCurrentBranch(t *testing.T) {
 }
 
 func TestDeleteBranchGuardsWorktreeBranch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	addWorktree(t, dir, "feature/wt", "wt-branchdel")
 
@@ -122,6 +128,7 @@ func TestDeleteBranchGuardsWorktreeBranch(t *testing.T) {
 }
 
 func TestDeleteBranchRequiresName(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	_, err := DeleteBranch{}.Run(context.Background(), OpDeps{Repo: repo})
 	if err == nil || !strings.Contains(err.Error(), "Name is required") {
@@ -130,6 +137,7 @@ func TestDeleteBranchRequiresName(t *testing.T) {
 }
 
 func TestDeleteBranchEmitsBothDecisions(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	unmergedBranch(t, dir, "forked")
 

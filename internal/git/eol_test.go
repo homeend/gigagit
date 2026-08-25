@@ -16,6 +16,7 @@ import (
 // EOL-only one. Without this isolation the test would pass even with the flag
 // removed (ambient autocrlf would mask the CRLF file), proving nothing.
 func TestModifiedIgnoringEOL(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	gitRun(t, dir, "config", "core.autocrlf", "false")
 	repo := &Repo{Runner: runner}
@@ -47,6 +48,7 @@ func TestModifiedIgnoringEOL(t *testing.T) {
 
 // Empty input must not shell out to git at all (and returns no paths).
 func TestModifiedIgnoringEOLNoPaths(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	got, err := repo.ModifiedIgnoringEOL(context.Background(), nil)

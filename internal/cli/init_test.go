@@ -22,7 +22,19 @@ func initFixture(t *testing.T) (string, string) {
 	old := InitHomeDir
 	InitHomeDir = home
 	t.Cleanup(func() { InitHomeDir = old })
+	isolateTargets(t)
 	return proj, home
+}
+
+// isolateTargets points the custom-targets registry seam at a per-test file so
+// no init test ever reads or writes the developer's real agent-targets.toml
+// (a machine-state leak that once let one test's recorded target surface in
+// another's "Detected agents" output).
+func isolateTargets(t *testing.T) {
+	t.Helper()
+	old := InitTargetsPath
+	InitTargetsPath = filepath.Join(t.TempDir(), "agent-targets.toml")
+	t.Cleanup(func() { InitTargetsPath = old })
 }
 
 func runInitCmd(t *testing.T, proj, stdinStr string, args ...string) (int, string, string) {
@@ -164,6 +176,7 @@ func TestInitNothingDetected(t *testing.T) {
 	old := InitHomeDir
 	InitHomeDir = t.TempDir()
 	t.Cleanup(func() { InitHomeDir = old })
+	isolateTargets(t)
 	var out, errb bytes.Buffer
 	code := Run(proj, []string{"init"}, strings.NewReader(""), &out, &errb, "")
 	if code != 0 || !strings.Contains(out.String(), "no") {

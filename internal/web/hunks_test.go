@@ -50,6 +50,7 @@ type hunksResp struct {
 }
 
 func TestHunksList(t *testing.T) {
+	t.Parallel()
 	dir := hunkFixture(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -69,6 +70,7 @@ func TestHunksList(t *testing.T) {
 }
 
 func TestStageHunksFirstOnly(t *testing.T) {
+	t.Parallel()
 	dir := hunkFixture(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -102,6 +104,7 @@ func TestStageHunksFirstOnly(t *testing.T) {
 }
 
 func TestStageHunksStaleHash(t *testing.T) {
+	t.Parallel()
 	dir := hunkFixture(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -118,6 +121,7 @@ func TestStageHunksStaleHash(t *testing.T) {
 }
 
 func TestHunksGuards(t *testing.T) {
+	t.Parallel()
 	dir := hunkFixture(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -156,6 +160,7 @@ func TestHunksGuards(t *testing.T) {
 // (the hunkpick EOL fix from Task 1): index "a,b,c" (CRLF), worktree edits
 // line 2 (b -> B) and appends a new line (d), both still CRLF.
 func TestHunksCRLFRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	// Pin autocrlf off: some environments' global gitconfig sets
 	// core.autocrlf=input, which would normalize the CRLF fixture to LF on
@@ -201,6 +206,7 @@ func TestHunksCRLFRoundTrip(t *testing.T) {
 // and bare-LF line endings — the one case hunkpick's dominant-EOL rejoin
 // would silently normalize.
 func TestHunksMixedEOL422(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	writeRepoFile(t, dir, "mixed.txt", "a\nb\nc\n")
 	gitRun(t, dir, "add", "mixed.txt")
@@ -230,6 +236,7 @@ func TestHunksMixedEOL422(t *testing.T) {
 }
 
 func TestStageHunksWriteGuard(t *testing.T) {
+	t.Parallel()
 	dir := hunkFixture(t)
 	ts := serve(t, New(domain.Open(dir)))
 

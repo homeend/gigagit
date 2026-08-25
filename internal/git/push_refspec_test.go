@@ -46,6 +46,7 @@ func remoteRef(t *testing.T, origin, ref string) string {
 // "push this branch" would silently land on main. Push must name the
 // destination itself.
 func TestPushIgnoresPushDefaultUpstream(t *testing.T) {
+	t.Parallel()
 	dir, origin, repo := mappedPushRepo(t, "push.default", "upstream")
 	mainBefore := remoteRef(t, origin, "refs/heads/main")
 
@@ -65,6 +66,7 @@ func TestPushIgnoresPushDefaultUpstream(t *testing.T) {
 // TestPushIgnoresRemotePushRefspec: a configured remote.<name>.push refspec
 // remaps the destination the same way (the monorepo/gerrit shape).
 func TestPushIgnoresRemotePushRefspec(t *testing.T) {
+	t.Parallel()
 	dir, origin, repo := mappedPushRepo(t, "remote.origin.push", "refs/heads/*:refs/heads/sandbox/*")
 
 	if err := repo.Push(context.Background(), "origin", "feature", true, PushNoForce); err != nil {
@@ -83,6 +85,7 @@ func TestPushIgnoresRemotePushRefspec(t *testing.T) {
 // TestPushSetsUpstreamToTheBranchItPushed: -u must still record the branch's
 // own remote-tracking ref, not the upstream it was created from.
 func TestPushSetsUpstreamToTheBranchItPushed(t *testing.T) {
+	t.Parallel()
 	dir, _, repo := mappedPushRepo(t, "push.default", "upstream")
 
 	if err := repo.Push(context.Background(), "origin", "feature", true, PushNoForce); err != nil {
@@ -97,6 +100,7 @@ func TestPushSetsUpstreamToTheBranchItPushed(t *testing.T) {
 // TestPushForceModesKeepTheExplicitDestination: the force lanes push the same
 // refspec (a lease-protected overwrite must not land on another ref either).
 func TestPushForceModesKeepTheExplicitDestination(t *testing.T) {
+	t.Parallel()
 	dir, origin, repo := mappedPushRepo(t, "push.default", "upstream")
 	mainBefore := remoteRef(t, origin, "refs/heads/main")
 	gitRun(t, dir, "push", "origin", "feature:refs/heads/feature")

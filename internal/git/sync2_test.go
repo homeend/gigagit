@@ -8,6 +8,7 @@ import (
 )
 
 func TestPullRebaseStrategy(t *testing.T) {
+	t.Parallel()
 	clone, runner := newClonePair(t)
 	repo := &Repo{Runner: runner}
 	root := filepath.Dir(clone)
@@ -37,6 +38,7 @@ func TestPullRebaseStrategy(t *testing.T) {
 }
 
 func TestIsDirty(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -55,6 +57,7 @@ func TestIsDirty(t *testing.T) {
 }
 
 func TestRemoteForBranchDefaultsToOrigin(t *testing.T) {
+	t.Parallel()
 	clone, runner := newClonePair(t)
 	repo := &Repo{Runner: runner}
 

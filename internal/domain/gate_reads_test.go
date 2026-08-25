@@ -43,6 +43,7 @@ func assertBlocksUntilRelease(t *testing.T, res *repogate.Reservation, name stri
 }
 
 func TestConflictRunsUnderReadReservation(t *testing.T) {
+	t.Parallel()
 	svc := New(&git.Repo{Runner: gitexec.NewFakeRunner()})
 	st := model.WorkingTreeStatus{
 		Branch: "main",
@@ -61,6 +62,7 @@ func TestConflictRunsUnderReadReservation(t *testing.T) {
 // probe's design (docs/superpowers/specs/2026-07-03-resume-paused-op-design.md),
 // so this test primes that cache before asserting the gate-free path.
 func TestConflictCleanStatusSkipsGate(t *testing.T) {
+	t.Parallel()
 	fake := gitexec.NewFakeRunner()
 	fake.SetResponse("git rev-parse (git-dir)", gitexec.Result{Stdout: t.TempDir() + "\n"})
 	svc := New(&git.Repo{Runner: fake})
@@ -86,6 +88,7 @@ func TestConflictCleanStatusSkipsGate(t *testing.T) {
 }
 
 func TestBookmarkBytesRunsUnderReadReservation(t *testing.T) {
+	t.Parallel()
 	svc, f := bmSvc(t)
 	f.SetResponse("git cat-file blob", gitexec.Result{Stdout: "frozen\n"})
 	res := holdTreeWrite(t, svc)
@@ -99,6 +102,7 @@ func TestBookmarkBytesRunsUnderReadReservation(t *testing.T) {
 }
 
 func TestBookmarkAddRunsUnderReadReservation(t *testing.T) {
+	t.Parallel()
 	svc, f := bmSvc(t)
 	f.SetResponse("git rev-parse blob", gitexec.Result{Stdout: "abc123sha\n"})
 	res := holdTreeWrite(t, svc)

@@ -35,6 +35,7 @@ func hasArg(argv []string, want string) bool {
 }
 
 func TestPushNoForceSkipsDecisionAndForceFlag(t *testing.T) {
+	t.Parallel()
 	repo, f := pushFakeRepo()
 	dec := &captureDecider{answers: map[string]string{}}
 	res, err := Push{Remote: "origin", Branch: "main", SetUpstream: true}.Run(
@@ -55,6 +56,7 @@ func TestPushNoForceSkipsDecisionAndForceFlag(t *testing.T) {
 }
 
 func TestPushForceWithLeaseEmitsLeaseFlag(t *testing.T) {
+	t.Parallel()
 	repo, f := pushFakeRepo()
 	res, err := Push{Remote: "origin", Branch: "main", SetUpstream: true, Force: true}.Run(
 		context.Background(), OpDeps{Repo: repo, Decider: MapDecider{"push-force": "force-with-lease"}})
@@ -68,6 +70,7 @@ func TestPushForceWithLeaseEmitsLeaseFlag(t *testing.T) {
 }
 
 func TestPushForcePlainEmitsForceFlag(t *testing.T) {
+	t.Parallel()
 	repo, f := pushFakeRepo()
 	res, err := Push{Remote: "origin", Branch: "main", SetUpstream: true, Force: true}.Run(
 		context.Background(), OpDeps{Repo: repo, Decider: MapDecider{"push-force": "force"}})
@@ -81,6 +84,7 @@ func TestPushForcePlainEmitsForceFlag(t *testing.T) {
 }
 
 func TestPushForceAbortDoesNotPush(t *testing.T) {
+	t.Parallel()
 	repo, f := pushFakeRepo()
 	res, err := Push{Remote: "origin", Branch: "main", SetUpstream: true, Force: true}.Run(
 		context.Background(), OpDeps{Repo: repo, Decider: MapDecider{"push-force": "abort"}})
@@ -99,6 +103,7 @@ func TestPushForceAbortDoesNotPush(t *testing.T) {
 // "abort" option) lands on the no-op, never a force. The op offers "abort" by
 // name, so esc cannot trigger a history-overwriting push.
 func TestPushForceOptionsEscSafe(t *testing.T) {
+	t.Parallel()
 	repo, f := pushFakeRepo()
 	dec := &captureDecider{answers: map[string]string{"push-force": "abort"}}
 	if _, err := (Push{Remote: "origin", Branch: "main", Force: true}).Run(

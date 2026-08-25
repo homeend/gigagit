@@ -12,6 +12,7 @@ import (
 // Exit 1 from `git diff --no-index` means "files differ" — the normal outcome,
 // not an error (the ConfigUnset exit-5 pattern).
 func TestDiffNoIndexExitOneIsDiff(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git diff --no-index", gitexec.Result{Stdout: "--- a\n+++ b\n@@\n", ExitCode: 1})
 	f.SetError("git diff --no-index", errors.New("exit status 1"))
@@ -36,6 +37,7 @@ func TestDiffNoIndexExitOneIsDiff(t *testing.T) {
 }
 
 func TestDiffNoIndexIdentical(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git diff --no-index", gitexec.Result{Stdout: "", ExitCode: 0})
 	r := &Repo{Runner: f}
@@ -46,6 +48,7 @@ func TestDiffNoIndexIdentical(t *testing.T) {
 }
 
 func TestDiffNoIndexRealError(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git diff --no-index", gitexec.Result{ExitCode: 128, Stderr: "fatal: bad"})
 	f.SetError("git diff --no-index", errors.New("exit status 128"))

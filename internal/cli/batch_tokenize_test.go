@@ -6,6 +6,7 @@ import (
 )
 
 func TestTokenizeBatchLine(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		in   string
@@ -34,6 +35,7 @@ func TestTokenizeBatchLine(t *testing.T) {
 }
 
 func TestTokenizeBatchLineUnterminated(t *testing.T) {
+	t.Parallel()
 	for _, in := range []string{`commit -m "oops`, `commit -m 'oops`} {
 		if _, err := tokenizeBatchLine(in); err == nil {
 			t.Fatalf("want unterminated-quote error for %q", in)

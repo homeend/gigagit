@@ -46,6 +46,7 @@ func branchWithCommit(t *testing.T, dir, branch, file string) {
 }
 
 func TestSmartMergeGuards(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitE(t, dir, "branch", "feat")
 
@@ -68,6 +69,7 @@ func TestSmartMergeGuards(t *testing.T) {
 }
 
 func TestSmartMergeDetachedHeadNeedsExplicitTarget(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitE(t, dir, "branch", "feat")
 	gitE(t, dir, "checkout", "--detach")
@@ -79,6 +81,7 @@ func TestSmartMergeDetachedHeadNeedsExplicitTarget(t *testing.T) {
 }
 
 func TestSmartMergeIntoCurrentBranch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	branchWithCommit(t, dir, "feat", "feat.txt")
 
@@ -98,6 +101,7 @@ func TestSmartMergeIntoCurrentBranch(t *testing.T) {
 }
 
 func TestSmartMergeIntoBranchInOtherWorktree(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitE(t, dir, "branch", "side")
 	wt := filepath.Join(dir, "..", "side-wt")
@@ -123,6 +127,7 @@ func TestSmartMergeIntoBranchInOtherWorktree(t *testing.T) {
 }
 
 func TestSmartMergeIntoUncheckedOutBranchSwitchesAndStays(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitE(t, dir, "branch", "target")
 	branchWithCommit(t, dir, "feat", "feat.txt")
@@ -168,6 +173,7 @@ func conflictRepo(t *testing.T) (string, *git.Repo) {
 }
 
 func TestSmartMergeConflictAbort(t *testing.T) {
+	t.Parallel()
 	dir, repo := conflictRepo(t)
 	res, err := SmartMerge{Source: "feat"}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"merge-conflict": "abort"}})
@@ -184,6 +190,7 @@ func TestSmartMergeConflictAbort(t *testing.T) {
 }
 
 func TestSmartMergeConflictKeep(t *testing.T) {
+	t.Parallel()
 	dir, repo := conflictRepo(t)
 	res, err := SmartMerge{Source: "feat"}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"merge-conflict": "keep-conflicts"}})
@@ -200,6 +207,7 @@ func TestSmartMergeConflictKeep(t *testing.T) {
 }
 
 func TestSmartMergeConflictUndecidedLeavesMergeState(t *testing.T) {
+	t.Parallel()
 	dir, repo := conflictRepo(t)
 	_, err := SmartMerge{Source: "feat"}.Run(context.Background(), OpDeps{Repo: repo})
 	if err == nil {
@@ -215,6 +223,7 @@ func TestSmartMergeConflictUndecidedLeavesMergeState(t *testing.T) {
 // SmartMerge must not reject it as "no such branch". Also covers remote-tracking
 // refs (origin/x), which fail the same local-branch check.
 func TestSmartMergeSourceTag(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	branchWithCommit(t, dir, "feat", "feat.txt")
 	gitE(t, dir, "tag", "v1", "feat") // tag the feature commit; HEAD stays on main

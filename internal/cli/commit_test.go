@@ -10,6 +10,7 @@ import (
 )
 
 func TestCommitAmendCLI(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("x\n"), 0o644)
 	gitRun(t, dir, "add", ".")
@@ -30,6 +31,7 @@ func TestCommitAmendCLI(t *testing.T) {
 }
 
 func TestCommitAmendNoMessageReusesCLI(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	// newRepoDir's last commit is "initial". Stage a change and amend with no -m.
 	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("x\n"), 0o644)

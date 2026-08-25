@@ -20,6 +20,7 @@ func remoteFeatureClone(t *testing.T) (origin, clone string) {
 }
 
 func TestOpHTTPCheckoutRemoteStay(t *testing.T) {
+	t.Parallel()
 	_, clone := remoteFeatureClone(t)
 	ts := serve(t, New(domain.Open(clone)))
 
@@ -40,6 +41,7 @@ func TestOpHTTPCheckoutRemoteStay(t *testing.T) {
 }
 
 func TestOpHTTPCheckoutRemoteSwitch(t *testing.T) {
+	t.Parallel()
 	_, clone := remoteFeatureClone(t)
 	ts := serve(t, New(domain.Open(clone)))
 
@@ -57,6 +59,7 @@ func TestOpHTTPCheckoutRemoteSwitch(t *testing.T) {
 // an unknown one 404s before any op starts, and Remote/Branch never come
 // from the wire.
 func TestOpHTTPCheckoutRemoteRefusals(t *testing.T) {
+	t.Parallel()
 	_, clone := remoteFeatureClone(t)
 	ts := serve(t, New(domain.Open(clone)))
 
@@ -76,6 +79,7 @@ func TestOpHTTPCheckoutRemoteRefusals(t *testing.T) {
 }
 
 func TestOpHTTPDeleteRemoteBranch(t *testing.T) {
+	t.Parallel()
 	origin, clone := remoteFeatureClone(t)
 	srv := New(domain.Open(clone))
 	ts := serve(t, srv)
@@ -106,6 +110,7 @@ func TestOpHTTPDeleteRemoteBranch(t *testing.T) {
 }
 
 func TestOpHTTPDeleteRemoteBranchUnknown(t *testing.T) {
+	t.Parallel()
 	_, clone := remoteFeatureClone(t)
 	ts := serve(t, New(domain.Open(clone)))
 
@@ -119,6 +124,7 @@ func TestOpHTTPDeleteRemoteBranchUnknown(t *testing.T) {
 // the remote counterpart of the CHECKED-OUT branch, and the client owns the
 // confirm.
 func TestOpHTTPResetRemote(t *testing.T) {
+	t.Parallel()
 	_, clone := remoteFeatureClone(t)
 	localCommit(t, clone, "l.txt", "l\n", "local ahead work")
 	want := gitRun(t, clone, "rev-parse", "origin/main")
@@ -138,6 +144,7 @@ func TestOpHTTPResetRemote(t *testing.T) {
 }
 
 func TestOpHTTPResetRemoteWrongBranch(t *testing.T) {
+	t.Parallel()
 	_, clone := remoteFeatureClone(t)
 	ts := serve(t, New(domain.Open(clone)))
 
@@ -151,6 +158,7 @@ func TestOpHTTPResetRemoteWrongBranch(t *testing.T) {
 }
 
 func TestOpHTTPPrune(t *testing.T) {
+	t.Parallel()
 	origin, clone := remoteFeatureClone(t)
 	gitRun(t, origin, "branch", "-D", "feat") // deleted upstream, tracking ref stays
 	ts := serve(t, New(domain.Open(clone)))

@@ -11,6 +11,7 @@ import (
 )
 
 func TestStageHunksStagesContentLeavesWorktree(t *testing.T) {
+	t.Parallel()
 	dir, repo := newConflictRepo(t) // gives us a real repo; we ignore the conflict
 	ctx := context.Background()
 	// Start clean on a tracked file.
@@ -42,6 +43,7 @@ func TestStageHunksStagesContentLeavesWorktree(t *testing.T) {
 // index holds exactly that hunk while the other stays unstaged and the working
 // tree is untouched.
 func TestStageHunksPartialRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir, repo := newConflictRepo(t)
 	ctx := context.Background()
 	run := func(args ...string) {

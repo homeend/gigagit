@@ -48,6 +48,7 @@ func runOpOK(t *testing.T, ts *httptest.Server, body string) {
 // the fixture is a real merge run through the same transport the browser
 // uses — not a hand-written ref.
 func TestVersionsRecordedAndListed(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t) // main and feature, one unique commit each
 	beforeMerge := gitRun(t, dir, "rev-parse", "main")
 	ts := serve(t, New(domain.Open(dir)))
@@ -82,6 +83,7 @@ func TestVersionsRecordedAndListed(t *testing.T) {
 }
 
 func TestRestoreVersion(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t)
 	beforeMerge := gitRun(t, dir, "rev-parse", "main")
 	ts := serve(t, New(domain.Open(dir)))
@@ -106,6 +108,7 @@ func TestRestoreVersion(t *testing.T) {
 }
 
 func TestDeleteVersion(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	runOpOK(t, ts, `{"op":"merge","branch":"feature","onto":"main"}`)
@@ -120,6 +123,7 @@ func TestDeleteVersion(t *testing.T) {
 // The op must refuse anything outside refs/gg/versions/ — a client bug must
 // not be able to delete a real branch through it.
 func TestDeleteVersionRefusesRealRef(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	events := readSSE(t, ts, startOpJSON(t, ts, `{"op":"delete-version","ref":"refs/heads/feature"}`), 30*time.Second)
@@ -134,6 +138,7 @@ func TestDeleteVersionRefusesRealRef(t *testing.T) {
 
 // A version ref of one branch must not be usable to move another.
 func TestRestoreVersionRefusesCrossedBranch(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	runOpOK(t, ts, `{"op":"merge","branch":"feature","onto":"main"}`)
@@ -152,6 +157,7 @@ func TestRestoreVersionRefusesCrossedBranch(t *testing.T) {
 }
 
 func TestVersionsRejects(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 	if code := getJSON(t, ts, "/api/versions", nil); code != http.StatusBadRequest {
@@ -178,6 +184,7 @@ func TestVersionsRejects(t *testing.T) {
 // DELETED flag being the point — a deleted branch's snapshots (recorded by
 // delete-branch itself) are only reachable through this listing.
 func TestVersionBranches(t *testing.T) {
+	t.Parallel()
 	dir := divergedRepo(t)
 	srv := New(domain.Open(dir))
 	ts := serve(t, srv)

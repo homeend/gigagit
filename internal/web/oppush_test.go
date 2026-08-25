@@ -35,6 +35,7 @@ func localCommit(t *testing.T, clone, file, content, msg string) {
 }
 
 func TestOpHTTPPushClean(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	localCommit(t, clone, "l.txt", "l\n", "local work")
 	ts := serve(t, New(domain.Open(clone)))
@@ -53,6 +54,7 @@ func TestOpHTTPPushClean(t *testing.T) {
 }
 
 func TestOpHTTPPushRejectedAbort(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	pushRemoteCommit(t, origin, "r.txt", "r\n", "remote work")
 	localCommit(t, clone, "l.txt", "l\n", "local work")
@@ -90,6 +92,7 @@ func TestOpHTTPPushRejectedAbort(t *testing.T) {
 }
 
 func TestOpHTTPPushRejectedRebase(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	pushRemoteCommit(t, origin, "r.txt", "r\n", "remote work")
 	localCommit(t, clone, "l.txt", "l\n", "local work")
@@ -118,6 +121,7 @@ func TestOpHTTPPushRejectedRebase(t *testing.T) {
 }
 
 func TestOpHTTPPushRejectedForcePlain(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	pushRemoteCommit(t, origin, "r.txt", "r\n", "remote work")
 	localCommit(t, clone, "l.txt", "l\n", "local work")
@@ -154,6 +158,7 @@ func TestOpHTTPPushRejectedForcePlain(t *testing.T) {
 }
 
 func TestOpHTTPPushForceWithLeaseRefusedStale(t *testing.T) {
+	t.Parallel()
 	// A failed push never updates the remote-tracking ref, so the lease is
 	// stale and --force-with-lease REFUSES — the safety property, not a bug.
 	origin, clone := cloneWithOrigin(t)
@@ -187,6 +192,7 @@ func TestOpHTTPPushForceWithLeaseRefusedStale(t *testing.T) {
 }
 
 func TestOpHTTPPushDetachedHead(t *testing.T) {
+	t.Parallel()
 	_, clone := cloneWithOrigin(t)
 	gitRun(t, clone, "checkout", "--detach")
 	ts := serve(t, New(domain.Open(clone)))

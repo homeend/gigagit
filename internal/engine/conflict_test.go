@@ -48,6 +48,7 @@ func newConflictRepo(t *testing.T) (string, *git.Repo) {
 }
 
 func TestResolveConflictKeepTheirs(t *testing.T) {
+	t.Parallel()
 	dir, repo := newConflictRepo(t)
 	ctx := context.Background()
 	_, err := ResolveConflict{Path: "uu.txt", Action: KeepTheirs}.Run(ctx, OpDeps{Repo: repo, Events: make(chan Event, 16)})
@@ -64,6 +65,7 @@ func TestResolveConflictKeepTheirs(t *testing.T) {
 }
 
 func TestResolveConflictDelete(t *testing.T) {
+	t.Parallel()
 	dir, repo := newConflictRepo(t)
 	ctx := context.Background()
 	if _, err := (ResolveConflict{Path: "md.txt", Action: DeleteFile}).Run(ctx, OpDeps{Repo: repo, Events: make(chan Event, 16)}); err != nil {
@@ -75,6 +77,7 @@ func TestResolveConflictDelete(t *testing.T) {
 }
 
 func TestContinueOpFinishesMerge(t *testing.T) {
+	t.Parallel()
 	_, repo := newConflictRepo(t)
 	ctx := context.Background()
 	ev := func() OpDeps { return OpDeps{Repo: repo, Events: make(chan Event, 16)} }
@@ -108,6 +111,7 @@ func TestContinueOpFinishesMerge(t *testing.T) {
 }
 
 func TestAbortOpClearsConflict(t *testing.T) {
+	t.Parallel()
 	_, repo := newConflictRepo(t)
 	ctx := context.Background()
 	if _, err := (AbortOp{}).Run(ctx, OpDeps{Repo: repo, Events: make(chan Event, 16)}); err != nil {

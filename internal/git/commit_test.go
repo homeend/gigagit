@@ -13,6 +13,7 @@ import (
 )
 
 func TestCommitAmendArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git commit", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -26,6 +27,7 @@ func TestCommitAmendArgv(t *testing.T) {
 }
 
 func TestCommitPlainArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git commit", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -39,6 +41,7 @@ func TestCommitPlainArgv(t *testing.T) {
 }
 
 func TestLastCommitMessageArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log -1", gitexec.Result{Stdout: "subject\n\nbody\n"})
 	r := &Repo{Runner: f}
@@ -58,6 +61,7 @@ func TestLastCommitMessageArgv(t *testing.T) {
 // Real-git: amend rewrites the last commit's message and folds in staged
 // changes without adding a new commit.
 func TestCommitAmendReal(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	// newTestRepo has one commit ("initial"). Stage a change and amend.

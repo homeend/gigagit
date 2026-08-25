@@ -9,6 +9,7 @@ import (
 )
 
 func TestReflogEntriesListsHeadActions(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -52,6 +53,7 @@ func TestReflogEntriesListsHeadActions(t *testing.T) {
 }
 
 func TestReflogEntriesRespectsLimit(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	for i := 0; i < 4; i++ {
@@ -67,6 +69,7 @@ func TestReflogEntriesRespectsLimit(t *testing.T) {
 }
 
 func TestLastReflogSubjectIsCommit(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -80,6 +83,7 @@ func TestLastReflogSubjectIsCommit(t *testing.T) {
 }
 
 func TestResetSoftMovesRefKeepsWorkingTree(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 

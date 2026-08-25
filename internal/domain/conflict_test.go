@@ -16,6 +16,7 @@ import (
 )
 
 func TestInProgressOpNoneWhenClean(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	run := func(args ...string) {
 		cmd := exec.Command("git", args...)
@@ -146,6 +147,7 @@ func svcAt(dir string) *Service {
 }
 
 func TestConflictStateMerge(t *testing.T) {
+	t.Parallel()
 	svc := svcAt(mergeConflictDir(t))
 	st, err := svc.repo.Status(context.Background())
 	if err != nil {
@@ -161,6 +163,7 @@ func TestConflictStateMerge(t *testing.T) {
 }
 
 func TestConflictStateRebase(t *testing.T) {
+	t.Parallel()
 	svc := svcAt(rebaseConflictDir(t))
 	st, err := svc.repo.Status(context.Background())
 	if err != nil {
@@ -176,6 +179,7 @@ func TestConflictStateRebase(t *testing.T) {
 }
 
 func TestConflictStateCherryPick(t *testing.T) {
+	t.Parallel()
 	svc := svcAt(cherryPickConflictDir(t))
 	st, err := svc.repo.Status(context.Background())
 	if err != nil {
@@ -191,6 +195,7 @@ func TestConflictStateCherryPick(t *testing.T) {
 }
 
 func TestInProgressOpCherryPick(t *testing.T) {
+	t.Parallel()
 	svc := svcAt(cherryPickConflictDir(t))
 	op, err := svc.InProgressOp(context.Background())
 	if err != nil || op != "cherry-pick" {
@@ -199,6 +204,7 @@ func TestInProgressOpCherryPick(t *testing.T) {
 }
 
 func TestConflictStateRevert(t *testing.T) {
+	t.Parallel()
 	svc := svcAt(revertConflictDir(t))
 	st, err := svc.repo.Status(context.Background())
 	if err != nil {
@@ -214,6 +220,7 @@ func TestConflictStateRevert(t *testing.T) {
 }
 
 func TestInProgressOpRevert(t *testing.T) {
+	t.Parallel()
 	svc := svcAt(revertConflictDir(t))
 	op, err := svc.InProgressOp(context.Background())
 	if err != nil || op != "revert" {
@@ -224,6 +231,7 @@ func TestInProgressOpRevert(t *testing.T) {
 // A paused rebase pick also sets CHERRY_PICK_HEAD; probe order must report
 // "rebase", not "cherry-pick".
 func TestInProgressOpRebaseWinsOverCherryPickHead(t *testing.T) {
+	t.Parallel()
 	svc := svcAt(rebaseConflictDir(t))
 	op, err := svc.InProgressOp(context.Background())
 	if err != nil || op != "rebase" {
@@ -232,6 +240,7 @@ func TestInProgressOpRebaseWinsOverCherryPickHead(t *testing.T) {
 }
 
 func TestConflictStateCleanIsZero(t *testing.T) {
+	t.Parallel()
 	svc := svcAt(cleanDir(t))
 	st, _ := svc.repo.Status(context.Background())
 	if cs := svc.conflictState(context.Background(), st); cs.Op != "" || cs.Describe() != "" {
@@ -240,6 +249,7 @@ func TestConflictStateCleanIsZero(t *testing.T) {
 }
 
 func TestSnapshotCarriesConflictSource(t *testing.T) {
+	t.Parallel()
 	snap, err := svcAt(mergeConflictDir(t)).Snapshot(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -250,6 +260,7 @@ func TestSnapshotCarriesConflictSource(t *testing.T) {
 }
 
 func TestConflictCleanRepoIsZero(t *testing.T) {
+	t.Parallel()
 	s := svcAt(cleanDir(t))
 	st, err := s.Status(context.Background())
 	if err != nil {
@@ -269,6 +280,7 @@ func resolvePause(t *testing.T, dir string) {
 }
 
 func TestConflictDetectsResolvedPausedRebase(t *testing.T) {
+	t.Parallel()
 	dir := rebaseConflictDir(t)
 	resolvePause(t, dir)
 	s := svcAt(dir)
@@ -289,6 +301,7 @@ func TestConflictDetectsResolvedPausedRebase(t *testing.T) {
 }
 
 func TestConflictDetectsResolvedPausedMerge(t *testing.T) {
+	t.Parallel()
 	dir := mergeConflictDir(t)
 	resolvePause(t, dir)
 	s := svcAt(dir)
@@ -303,6 +316,7 @@ func TestConflictDetectsResolvedPausedMerge(t *testing.T) {
 }
 
 func TestSnapshotCarriesResolvedPausedOp(t *testing.T) {
+	t.Parallel()
 	dir := rebaseConflictDir(t)
 	resolvePause(t, dir)
 	snap, err := svcAt(dir).Snapshot(context.Background())
@@ -318,6 +332,7 @@ func TestSnapshotCarriesResolvedPausedOp(t *testing.T) {
 // repeated clean-status calls must run ZERO further git invocations — the
 // paused-op probe is pure file stats.
 func TestConflictCleanSteadyStateCachesGitDir(t *testing.T) {
+	t.Parallel()
 	fake := gitexec.NewFakeRunner()
 	gitDir := t.TempDir() // stands in for the resolved git dir; no sequencer markers
 	fake.SetResponse("git rev-parse (git-dir)", gitexec.Result{Stdout: gitDir + "\n"})
@@ -345,6 +360,7 @@ func TestConflictCleanSteadyStateCachesGitDir(t *testing.T) {
 // text is unparseable — the picker text must be regenerated from the stages
 // with oversized markers.
 func TestConflictPickerFileRegenerates(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	old := "top\n<<<<<<< HEAD\nold ours\n=======\nold theirs\n>>>>>>> old (v2)\n"
 	gitRunDir(t, dir, "", "init", "-q", "-b", "main")

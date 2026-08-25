@@ -19,6 +19,7 @@ func moveWtBody(path, dest string) string {
 // The happy path is a RENAME: same parent, new basename — which is the same
 // op as a move, and the row the sidebar offers first.
 func TestOpHTTPMoveWorktreeRename(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	wt := addWorktree(t, dir, "feature")
 	dest := filepath.Join(filepath.Dir(wt), "renamed")
@@ -44,6 +45,7 @@ func TestOpHTTPMoveWorktreeRename(t *testing.T) {
 // The main worktree cannot be moved. The engine refuses it, and the refusal
 // has to reach the browser as a failed op rather than a silent no-op.
 func TestOpHTTPMoveWorktreeRefusesMain(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	dest := filepath.Join(t.TempDir(), "elsewhere")
 	ts := serve(t, New(domain.Open(dir)))
@@ -64,6 +66,7 @@ func TestOpHTTPMoveWorktreeRefusesMain(t *testing.T) {
 // A destination INSIDE the worktree being moved would move a directory into
 // itself. Refused before git is invoked.
 func TestOpHTTPMoveWorktreeRefusesNestedDest(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	wt := addWorktree(t, dir, "feature")
 	ts := serve(t, New(domain.Open(dir)))
@@ -84,6 +87,7 @@ func TestOpHTTPMoveWorktreeRefusesNestedDest(t *testing.T) {
 // A relative path never reaches the engine: it would be resolved against the
 // server's cwd, which is not necessarily this repository at all.
 func TestOpHTTPMoveWorktreeRefusesRelativePaths(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	wt := addWorktree(t, dir, "feature")
 	ts := serve(t, New(domain.Open(dir)))
@@ -102,6 +106,7 @@ func TestOpHTTPMoveWorktreeRefusesRelativePaths(t *testing.T) {
 // A LOCKED worktree is the interesting fork: the engine parks a decision
 // rather than failing, and the browser has to be able to answer it.
 func TestOpHTTPMoveWorktreeLockedParksDecision(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	wt := addWorktree(t, dir, "feature")
 	gitRun(t, dir, "worktree", "lock", wt)
@@ -147,6 +152,7 @@ func TestOpHTTPMoveWorktreeLockedParksDecision(t *testing.T) {
 
 // Answering that same decision with abort leaves everything where it was.
 func TestOpHTTPMoveWorktreeLockedAbort(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	wt := addWorktree(t, dir, "feature")
 	gitRun(t, dir, "worktree", "lock", wt)
@@ -182,6 +188,7 @@ func keepBody(sha, name, path, mode string) string {
 // The keep modes land the new branch on the start point's PARENT with the
 // commit's diff staged (or unstaged) in the new worktree.
 func TestOpHTTPCreateWorktreeKeepStaged(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	head := gitRun(t, dir, "rev-parse", "HEAD")
 	parent := gitRun(t, dir, "rev-parse", "HEAD^")
@@ -202,6 +209,7 @@ func TestOpHTTPCreateWorktreeKeepStaged(t *testing.T) {
 }
 
 func TestOpHTTPCreateWorktreeKeepUnstaged(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	head := gitRun(t, dir, "rev-parse", "HEAD")
 	dest := filepath.Join(t.TempDir(), "kept")
@@ -223,6 +231,7 @@ func TestOpHTTPCreateWorktreeKeepUnstaged(t *testing.T) {
 // or an integer, which an older client might send for an engine constant it
 // does not know — is refused before anything is created.
 func TestOpHTTPCreateWorktreeKeepRejectsUnknownMode(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	head := gitRun(t, dir, "rev-parse", "HEAD")
 	dest := filepath.Join(t.TempDir(), "kept")
@@ -242,6 +251,7 @@ func TestOpHTTPCreateWorktreeKeepRejectsUnknownMode(t *testing.T) {
 // with a typed error BEFORE creating anything — the client hides the rows
 // there, and this is what happens if it ever stops.
 func TestOpHTTPCreateWorktreeKeepRefusesRootCommit(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	root := gitRun(t, dir, "rev-list", "--max-parents=0", "HEAD")
 	dest := filepath.Join(t.TempDir(), "kept")

@@ -8,6 +8,7 @@ import (
 )
 
 func TestDeleteTag(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	if err := repo.CreateTag(context.Background(), "v1.0.0", "", "", false); err != nil {
 		t.Fatal(err)
@@ -27,6 +28,7 @@ func TestDeleteTag(t *testing.T) {
 }
 
 func TestDeleteTagRequiresName(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	ch := make(chan Event, 4)
 	if _, err := (DeleteTag{}).Run(context.Background(), OpDeps{Repo: repo, Events: ch}); err == nil {

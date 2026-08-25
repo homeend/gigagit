@@ -13,6 +13,7 @@ import (
 
 // Cherry-pick a commit from another branch onto the checked-out one.
 func TestOpHTTPCherryPick(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	gitRun(t, dir, "checkout", "-b", "side")
 	if err := os.WriteFile(filepath.Join(dir, "picked.txt"), []byte("from side\n"), 0o644); err != nil {
@@ -39,6 +40,7 @@ func TestOpHTTPCherryPick(t *testing.T) {
 
 // Revert undoes a commit by adding a new one on top.
 func TestOpHTTPRevert(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	if err := os.WriteFile(filepath.Join(dir, "gone.txt"), []byte("doomed\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -64,6 +66,7 @@ func TestOpHTTPRevert(t *testing.T) {
 // Reword replaces a commit's message. The full text comes from the wire, so a
 // multi-line body has to survive the round trip.
 func TestOpHTTPReword(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	head := gitRun(t, dir, "rev-parse", "HEAD")
 	ts := serve(t, New(domain.Open(dir)))
@@ -83,6 +86,7 @@ func TestOpHTTPReword(t *testing.T) {
 
 // Undo the last commit: the ref moves back, the work stays staged.
 func TestOpHTTPUndoLastCommit(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	parent := gitRun(t, dir, "rev-parse", "HEAD~1")
 	ts := serve(t, New(domain.Open(dir)))
@@ -99,6 +103,7 @@ func TestOpHTTPUndoLastCommit(t *testing.T) {
 
 // A worktree cut from a COMMIT (not a branch): a new branch is created there.
 func TestOpHTTPCreateWorktreeAtCommit(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	old := gitRun(t, dir, "rev-parse", "HEAD~2")
 	ts := serve(t, New(domain.Open(dir)))
@@ -120,6 +125,7 @@ func TestOpHTTPCreateWorktreeAtCommit(t *testing.T) {
 // The reword prompt prefills with the commit's CURRENT message, so there is a
 // read for it.
 func TestCommitMessageEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "commit", "--allow-empty", "-m", "subject line\n\nbody line")
 	head := gitRun(t, dir, "rev-parse", "HEAD")

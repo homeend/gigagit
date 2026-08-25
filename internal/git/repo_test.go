@@ -37,6 +37,7 @@ func newTestRepo(t *testing.T) (string, gitexec.Runner) {
 }
 
 func TestRepoStatusCleanThenDirty(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -61,6 +62,7 @@ func TestRepoStatusCleanThenDirty(t *testing.T) {
 }
 
 func TestRepoBranches(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	bs, err := repo.Branches(context.Background())
@@ -78,6 +80,7 @@ func TestRepoBranches(t *testing.T) {
 // "heads/v8.0.0-rc.3" / "tags/v8.0.0-rc.3" — forms that break `git switch` and
 // worktree matching. Branches() and Tags() must report the bare branch/tag name.
 func TestBranchTagNameCollisionStaysUnambiguous(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	git := func(args ...string) {
 		cmd := exec.Command("git", args...)
@@ -131,6 +134,7 @@ func TestBranchTagNameCollisionStaysUnambiguous(t *testing.T) {
 }
 
 func TestBranchesIncludeCommitterDate(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	bs, err := repo.Branches(context.Background())
@@ -146,6 +150,7 @@ func TestBranchesIncludeCommitterDate(t *testing.T) {
 }
 
 func TestRepoRemoteBranches(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	// Fabricate remote-tracking refs plus the default-branch symref.
 	git := func(args ...string) {
@@ -181,6 +186,7 @@ func TestRepoRemoteBranches(t *testing.T) {
 }
 
 func TestRepoWorktrees(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	wts, err := repo.Worktrees(context.Background())

@@ -31,6 +31,7 @@ func writeAndCommit(t *testing.T, dir, msg string, files map[string]string) stri
 }
 
 func TestResolveCommitEntryEndpoint(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -67,6 +68,7 @@ func TestResolveCommitEntryEndpoint(t *testing.T) {
 }
 
 func TestCompareFilesShelfShelf(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -126,6 +128,7 @@ func TestCompareFilesShelfShelf(t *testing.T) {
 }
 
 func TestCompareFilesShelfVsCommit(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -191,6 +194,7 @@ func TestCompareFilesShelfVsCommit(t *testing.T) {
 // diverging from the same parent, each introducing twin.txt with identical
 // content alongside a branch-distinguishing file.
 func TestCompareFilesShelfShelfIdenticalOmitted(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -246,6 +250,7 @@ func TestCompareFilesShelfShelfIdenticalOmitted(t *testing.T) {
 }
 
 func TestComparePatchFrozen(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -280,6 +285,7 @@ func TestComparePatchFrozen(t *testing.T) {
 // straight into the patch. ComparePatch must detect binary content itself
 // and render the relabelled line without ever calling DiffNoIndex.
 func TestComparePatchFrozenBinary(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	ctx := context.Background()
@@ -306,6 +312,7 @@ func TestComparePatchFrozenBinary(t *testing.T) {
 }
 
 func TestComparePatchLiveCommits(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 	ctx := context.Background()
 	shaA := writeAndCommit(t, dir, "A", map[string]string{"f.txt": "old\n"})
@@ -353,6 +360,7 @@ func (f *failAfterStore) Get(entryID string) ([]byte, error) {
 // silently swallowed into a false full add/delete the way the reviewed
 // sideBytes shape did.
 func TestComparePatchResolveErrorPropagates(t *testing.T) {
+	t.Parallel()
 	dir, svc := newRealRepo(t)
 	real := shelf.NewFileStore(t.TempDir())
 	ctx := context.Background()

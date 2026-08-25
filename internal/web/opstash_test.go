@@ -29,6 +29,7 @@ func dirtyFile(t *testing.T, dir, content string) {
 }
 
 func TestStashesEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	dirtyFile(t, dir, "one\n")
 	gitRun(t, dir, "stash", "push", "-m", "first")
@@ -53,6 +54,7 @@ func TestStashesEndpoint(t *testing.T) {
 }
 
 func TestOpHTTPStashCreate(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	dirtyFile(t, dir, "wip\n")
 	ts := serve(t, New(domain.Open(dir)))
@@ -73,6 +75,7 @@ func TestOpHTTPStashCreate(t *testing.T) {
 }
 
 func TestOpHTTPStashApply(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	dirtyFile(t, dir, "wip\n")
 	gitRun(t, dir, "stash", "push", "-m", "keepme")
@@ -94,6 +97,7 @@ func TestOpHTTPStashApply(t *testing.T) {
 }
 
 func TestOpHTTPStashPop(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	dirtyFile(t, dir, "wip\n")
 	gitRun(t, dir, "stash", "push", "-m", "popme")
@@ -115,6 +119,7 @@ func TestOpHTTPStashPop(t *testing.T) {
 }
 
 func TestOpHTTPStashDrop(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	dirtyFile(t, dir, "wip\n")
 	gitRun(t, dir, "stash", "push", "-m", "dropme")
@@ -137,6 +142,7 @@ func TestOpHTTPStashDrop(t *testing.T) {
 }
 
 func TestOpHTTPStashPopConflict(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	dirtyFile(t, dir, "stashed\n")
 	gitRun(t, dir, "stash", "push", "-m", "will conflict")
@@ -160,6 +166,7 @@ func TestOpHTTPStashPopConflict(t *testing.T) {
 }
 
 func TestOpHTTPStashBadRef(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	dirtyFile(t, dir, "wip\n")
 	gitRun(t, dir, "stash", "push", "-m", "only")
@@ -177,6 +184,7 @@ func TestOpHTTPStashBadRef(t *testing.T) {
 }
 
 func TestStashUntrackedOnly(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("brand new\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -226,6 +234,7 @@ func TestStashUntrackedOnly(t *testing.T) {
 }
 
 func TestStashTrackedOnlyHasNoUntrackedSha(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	dirtyFile(t, dir, "edited\n")
 	gitRun(t, dir, "stash", "push", "-m", "tracked only")
@@ -244,6 +253,7 @@ func TestStashTrackedOnlyHasNoUntrackedSha(t *testing.T) {
 }
 
 func TestStashMixedTrackedAndUntracked(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	dirtyFile(t, dir, "edited\n")
 	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("brand new\n"), 0o644); err != nil {

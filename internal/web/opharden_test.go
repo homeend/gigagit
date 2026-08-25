@@ -13,6 +13,7 @@ import (
 // a reconnecting client re-shows then re-hides the modal (idempotent
 // replay), and a second tab's modal closes live off the same event.
 func TestDecidePublishesResolved(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	gitRun(t, dir, "branch", "feature")
 	srv := New(domain.Open(dir))
@@ -48,6 +49,7 @@ func TestDecidePublishesResolved(t *testing.T) {
 // The stash ops' optional sha is a freshness guard on top of the ref
 // allowlist: a mismatch means the stash list changed under the client.
 func TestOpHTTPStashShaGuard(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	dirtyFile(t, dir, "wip\n")
 	gitRun(t, dir, "stash", "push", "-m", "keepme")

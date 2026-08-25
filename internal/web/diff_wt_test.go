@@ -30,6 +30,7 @@ func rightContains(d wtDiffResp, s string) bool {
 }
 
 func TestWorktreeDiffUnstagedStagedAndCacheBypass(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1) // f.txt committed as "content 1\n"
 	ts := serve(t, New(domain.Open(dir)))
 	write := func(s string) {
@@ -79,6 +80,7 @@ func TestWorktreeDiffUnstagedStagedAndCacheBypass(t *testing.T) {
 }
 
 func TestWorktreeDiffUntrackedAndDeleted(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -117,6 +119,7 @@ func TestWorktreeDiffUntrackedAndDeleted(t *testing.T) {
 }
 
 func TestWorktreeDiffBadRequests(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	for _, q := range []string{
@@ -144,6 +147,7 @@ type hunkTagResp struct {
 }
 
 func TestWorktreeDiffInlineHunkTags(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	big := "l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12\n"
 	if err := os.WriteFile(filepath.Join(dir, "big.txt"), []byte(big), 0o644); err != nil {

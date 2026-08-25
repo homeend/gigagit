@@ -10,6 +10,7 @@ import (
 )
 
 func TestDiffNumstatArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git diff", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -24,6 +25,7 @@ func TestDiffNumstatArgv(t *testing.T) {
 }
 
 func TestDiffPatchArgvMinimal(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git diff", gitexec.Result{Stdout: "PATCH"})
 	r := &Repo{Runner: f}
@@ -38,6 +40,7 @@ func TestDiffPatchArgvMinimal(t *testing.T) {
 }
 
 func TestParseNumstat(t *testing.T) {
+	t.Parallel()
 	// Real -z shapes (verified empirically): ordinary "A\tD\tpath\x00",
 	// rename "A\tD\t\x00old\x00new\x00", binary "-\t-\tpath\x00".
 	in := "3\t1\tmain.go\x00-\t-\timg.png\x001\t0\t\x00old.go\x00new.go\x00"
@@ -53,12 +56,14 @@ func TestParseNumstat(t *testing.T) {
 }
 
 func TestParseNumstatEmpty(t *testing.T) {
+	t.Parallel()
 	if got := ParseNumstat(""); len(got) != 0 {
 		t.Fatalf("got %+v, want empty", got)
 	}
 }
 
 func TestParseNumstatTruncatedRename(t *testing.T) {
+	t.Parallel()
 	// A rename record cut off before its two path fields must not panic.
 	if got := ParseNumstat("1\t0\t\x00old.go"); len(got) != 1 || got[0].Path != "old.go" || got[0].OldPath != "" {
 		// acceptable: the lone trailing field is dropped OR treated as
@@ -73,6 +78,7 @@ func TestParseNumstatTruncatedRename(t *testing.T) {
 }
 
 func TestParseNumstatTruncatedRenameTrailingNul(t *testing.T) {
+	t.Parallel()
 	// Rename record whose new-path field was never written: the trailing
 	// NUL leaves an empty final field. No entry may carry an empty Path.
 	for _, s := range ParseNumstat("1\t0\t\x00old.go\x00") {

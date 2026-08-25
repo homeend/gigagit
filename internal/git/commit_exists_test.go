@@ -9,6 +9,7 @@ import (
 )
 
 func TestCommitExists(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	ctx := context.Background()

@@ -13,6 +13,7 @@ import (
 )
 
 func TestConflictVerbArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git checkout --theirs", gitexec.Result{})
 	f.SetResponse("git checkout-index (base)", gitexec.Result{})
@@ -67,6 +68,7 @@ func conflictRepo(t *testing.T) (string, *Repo) {
 }
 
 func TestCheckoutSideAndBaseReal(t *testing.T) {
+	t.Parallel()
 	dir, r := conflictRepo(t)
 	ctx := context.Background()
 	// keep theirs on the both-modified file
@@ -93,6 +95,7 @@ func TestCheckoutSideAndBaseReal(t *testing.T) {
 }
 
 func TestRemoveFileReal(t *testing.T) {
+	t.Parallel()
 	dir, r := conflictRepo(t)
 	ctx := context.Background()
 	// md.txt is a modify/delete conflict (worktree copy differs from index);
@@ -115,6 +118,7 @@ func TestRemoveFileReal(t *testing.T) {
 }
 
 func TestMergeHeadNameReal(t *testing.T) {
+	t.Parallel()
 	_, r := conflictRepo(t) // merge of feature into main
 	name, err := r.MergeHeadName(context.Background(), "")
 	if err != nil {
@@ -126,6 +130,7 @@ func TestMergeHeadNameReal(t *testing.T) {
 }
 
 func TestRebasePartiesReal(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gitRun := func(args ...string) {
 		cmd := exec.Command("git", args...)
@@ -162,6 +167,7 @@ func TestRebasePartiesReal(t *testing.T) {
 }
 
 func TestCleanRefName(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"refs/heads/feature": "feature",
 		"feature~2":          "feature",
@@ -179,6 +185,7 @@ func TestCleanRefName(t *testing.T) {
 // PausedOpIn is a pure stat probe over a git dir's sequencer markers; each
 // case fabricates the marker files directly — no git needed.
 func TestPausedOpIn(t *testing.T) {
+	t.Parallel()
 	touch := func(t *testing.T, dir string, parts ...string) {
 		t.Helper()
 		p := filepath.Join(append([]string{dir}, parts...)...)

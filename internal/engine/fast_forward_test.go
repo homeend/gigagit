@@ -8,6 +8,7 @@ import (
 )
 
 func TestFastForwardAdvancesToDescendant(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t) // real repo on main with an initial commit
 	ctx := context.Background()
 
@@ -32,6 +33,7 @@ func TestFastForwardAdvancesToDescendant(t *testing.T) {
 }
 
 func TestFastForwardRefusesNonDescendant(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	gitE(t, dir, "checkout", "--orphan", "other")
@@ -51,6 +53,7 @@ func TestFastForwardRefusesNonDescendant(t *testing.T) {
 }
 
 func TestFastForwardAlreadyUpToDate(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	head := gitOut(t, dir, "rev-parse", "HEAD")
@@ -64,6 +67,7 @@ func TestFastForwardAlreadyUpToDate(t *testing.T) {
 }
 
 func TestFastForwardDetachedHeadErrors(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	head := gitOut(t, dir, "rev-parse", "HEAD")

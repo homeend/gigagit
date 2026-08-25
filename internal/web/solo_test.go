@@ -60,6 +60,7 @@ func has(subs []string, want string) bool {
 }
 
 func TestSoloNarrowsAndRestores(t *testing.T) {
+	t.Parallel()
 	ts := serve(t, New(domain.Open(soloRepo(t))))
 
 	subs, solo := commitSubjects(t, ts)
@@ -102,6 +103,7 @@ func TestSoloNarrowsAndRestores(t *testing.T) {
 // old feed object would silently vanish with it — you would be kicked out of
 // solo by an unrelated commit, with the chip still claiming you are in it.
 func TestSoloSurvivesFeedResetAfterOp(t *testing.T) {
+	t.Parallel()
 	dir := soloRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -138,6 +140,7 @@ func TestSoloSurvivesFeedResetAfterOp(t *testing.T) {
 // would fail, taking the client's exit affordance with it. So an unknown
 // branch is refused at the door and the previous scope is left untouched.
 func TestSoloUnknownBranchRefusedAndScopeUnchanged(t *testing.T) {
+	t.Parallel()
 	ts := serve(t, New(domain.Open(soloRepo(t))))
 
 	if code := setSoloHTTP(t, ts, `{"branch":"main"}`); code != http.StatusOK {
@@ -156,6 +159,7 @@ func TestSoloUnknownBranchRefusedAndScopeUnchanged(t *testing.T) {
 }
 
 func TestSoloRejectsOptionLikeBranch(t *testing.T) {
+	t.Parallel()
 	ts := serve(t, New(domain.Open(soloRepo(t))))
 	if code := setSoloHTTP(t, ts, `{"branch":"--all"}`); code != http.StatusBadRequest {
 		t.Errorf("code = %d, want 400", code)
@@ -165,6 +169,7 @@ func TestSoloRejectsOptionLikeBranch(t *testing.T) {
 // Solo selects refs; it is not a content filter, so the lane graph must still
 // be laid out (the TUI suppresses its graph only for path/author/grep filters).
 func TestSoloKeepsGraphCells(t *testing.T) {
+	t.Parallel()
 	ts := serve(t, New(domain.Open(soloRepo(t))))
 	if code := setSoloHTTP(t, ts, `{"branch":"main"}`); code != http.StatusOK {
 		t.Fatalf("solo code = %d", code)

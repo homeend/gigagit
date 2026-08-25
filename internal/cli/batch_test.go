@@ -18,6 +18,7 @@ func runCLIStdin(t *testing.T, workdir, in string, args ...string) (int, string,
 }
 
 func TestPrefixWriter(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	p := &prefixWriter{w: &buf, prefix: "! "}
 	p.Write([]byte("one\ntw"))
@@ -29,6 +30,7 @@ func TestPrefixWriter(t *testing.T) {
 }
 
 func TestBatchTwoReads(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, out, _ := runCLIStdin(t, dir, "status\nlog -n 1\n", "batch")
 	if code != 0 {
@@ -50,6 +52,7 @@ func TestBatchTwoReads(t *testing.T) {
 }
 
 func TestBatchStopsOnFailure(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, out, _ := runCLIStdin(t, dir, "bogus-cmd\nstatus\n", "batch")
 	if code != 1 {
@@ -70,6 +73,7 @@ func TestBatchStopsOnFailure(t *testing.T) {
 }
 
 func TestBatchKeepGoing(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, out, _ := runCLIStdin(t, dir, "bogus-cmd\nstatus\n", "batch", "--keep-going")
 	if code != 1 {
@@ -84,6 +88,7 @@ func TestBatchKeepGoing(t *testing.T) {
 }
 
 func TestBatchSkipsCommentsBlanksAndStripsGG(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	script := "# a comment\n\n  \ngg status\n"
 	code, out, _ := runCLIStdin(t, dir, script, "batch")
@@ -99,6 +104,7 @@ func TestBatchSkipsCommentsBlanksAndStripsGG(t *testing.T) {
 }
 
 func TestBatchQuotedWriteFlow(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644)
 	script := "add new.txt\ncommit -m \"two words\"\nstatus\n"
@@ -115,6 +121,7 @@ func TestBatchQuotedWriteFlow(t *testing.T) {
 }
 
 func TestBatchNestedRejected(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, out, _ := runCLIStdin(t, dir, "batch\n", "batch")
 	if code != 1 {
@@ -126,6 +133,7 @@ func TestBatchNestedRejected(t *testing.T) {
 }
 
 func TestBatchUnterminatedQuoteIsUsageError(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, out, errb := runCLIStdin(t, dir, "commit -m \"oops\n", "batch")
 	if code != 2 {
@@ -137,6 +145,7 @@ func TestBatchUnterminatedQuoteIsUsageError(t *testing.T) {
 }
 
 func TestBatchEmptyScript(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, out, _ := runCLIStdin(t, dir, "", "batch")
 	if code != 0 || out != "#done 0 ok\n" {
@@ -145,6 +154,7 @@ func TestBatchEmptyScript(t *testing.T) {
 }
 
 func TestBatchRejectsPositionalArgs(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, _ := runCLIStdin(t, dir, "", "batch", "status")
 	if code != 2 {
@@ -160,6 +170,7 @@ func TestBatchRejectsPositionalArgs(t *testing.T) {
 // repo with no upstream terminates with a clear, correctly-framed failure
 // instead of blocking forever.
 func TestBatchPullNeverBlocks(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, out, _ := runCLIStdin(t, dir, "pull\n", "batch")
 	if code != 1 {
@@ -171,6 +182,7 @@ func TestBatchPullNeverBlocks(t *testing.T) {
 }
 
 func TestBatchSectionNewlineGuard(t *testing.T) {
+	t.Parallel()
 	// Simulate the cmdBatch copy path with a non-terminated section.
 	var out bytes.Buffer
 	section := bytes.NewBufferString("no trailing newline")

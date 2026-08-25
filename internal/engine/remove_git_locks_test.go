@@ -31,6 +31,7 @@ func touchLock(t *testing.T, gitDir, name string) string {
 }
 
 func TestRemoveGitLocksRemovesIndexLock(t *testing.T) {
+	t.Parallel()
 	repo, gitDir := lockRepo(t)
 	lock := touchLock(t, gitDir, "index.lock")
 
@@ -50,6 +51,7 @@ func TestRemoveGitLocksRemovesIndexLock(t *testing.T) {
 }
 
 func TestRemoveGitLocksMultiple(t *testing.T) {
+	t.Parallel()
 	repo, gitDir := lockRepo(t)
 	a := touchLock(t, gitDir, "index.lock")
 	b := touchLock(t, gitDir, "HEAD.lock")
@@ -64,6 +66,7 @@ func TestRemoveGitLocksMultiple(t *testing.T) {
 }
 
 func TestRemoveGitLocksEmptyIsNoOp(t *testing.T) {
+	t.Parallel()
 	repo, _ := lockRepo(t)
 	res, err := RemoveGitLocks{}.Run(context.Background(), lockDeps(repo))
 	if err != nil {
@@ -77,6 +80,7 @@ func TestRemoveGitLocksEmptyIsNoOp(t *testing.T) {
 // A lock that vanished between the scan and the removal is the desired state,
 // not an error — another process finished and cleaned up after itself.
 func TestRemoveGitLocksAlreadyGone(t *testing.T) {
+	t.Parallel()
 	repo, gitDir := lockRepo(t)
 	res, err := RemoveGitLocks{Paths: []string{filepath.Join(gitDir, "index.lock")}}.
 		Run(context.Background(), lockDeps(repo))
@@ -91,6 +95,7 @@ func TestRemoveGitLocksAlreadyGone(t *testing.T) {
 // The guard is what stops a frontend bug from turning this op into an
 // arbitrary file delete.
 func TestRemoveGitLocksRefusesForeignPaths(t *testing.T) {
+	t.Parallel()
 	repo, gitDir := lockRepo(t)
 	outside := filepath.Join(t.TempDir(), "index.lock")
 	if err := os.WriteFile(outside, nil, 0o644); err != nil {
@@ -127,6 +132,7 @@ func TestRemoveGitLocksRefusesForeignPaths(t *testing.T) {
 // A batch is validated up front, so one bad path cancels the whole run rather
 // than deleting the good ones first.
 func TestRemoveGitLocksValidatesBeforeRemoving(t *testing.T) {
+	t.Parallel()
 	repo, gitDir := lockRepo(t)
 	good := touchLock(t, gitDir, "index.lock")
 

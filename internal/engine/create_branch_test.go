@@ -18,6 +18,7 @@ func engineRevParse(t *testing.T, dir, ref string) string {
 }
 
 func TestCreateBranchAtHead(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ch := make(chan Event, 16)
 	res, err := CreateBranch{Name: "feat/x"}.Run(context.Background(), OpDeps{Repo: repo, Events: ch})
@@ -43,6 +44,7 @@ func TestCreateBranchAtHead(t *testing.T) {
 }
 
 func TestCreateBranchFromStartPoint(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "base")
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "advance main")
@@ -58,6 +60,7 @@ func TestCreateBranchFromStartPoint(t *testing.T) {
 }
 
 func TestCreateBranchInvalidNameFailsFast(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	res, err := CreateBranch{Name: "bad..name"}.Run(context.Background(), OpDeps{Repo: repo})
 	if err == nil || !strings.Contains(err.Error(), "invalid branch name") {
@@ -69,6 +72,7 @@ func TestCreateBranchInvalidNameFailsFast(t *testing.T) {
 }
 
 func TestCreateBranchExistingNameErrors(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "taken")
 	res, err := CreateBranch{Name: "taken"}.Run(context.Background(), OpDeps{Repo: repo})
@@ -78,6 +82,7 @@ func TestCreateBranchExistingNameErrors(t *testing.T) {
 }
 
 func TestCreateBranchRequiresName(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	_, err := CreateBranch{}.Run(context.Background(), OpDeps{Repo: repo})
 	if err == nil || !strings.Contains(err.Error(), "Name is required") {

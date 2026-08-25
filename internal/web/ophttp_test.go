@@ -94,6 +94,7 @@ func headBranchOf(t *testing.T, ts *httptest.Server) string {
 }
 
 func TestOpHTTPCleanSwitchAndFeedReset(t *testing.T) {
+	t.Parallel()
 	dir := twoBranchRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -117,6 +118,7 @@ func TestOpHTTPCleanSwitchAndFeedReset(t *testing.T) {
 }
 
 func TestOpHTTPForcedStashConflict(t *testing.T) {
+	t.Parallel()
 	// f.txt differs on side; a dirty edit on main stashes, switches, and the
 	// pop conflicts. stash-pop-conflict is NOTIFY-ONLY: decision event, then
 	// done{ok:false} with no decide.
@@ -159,6 +161,7 @@ func TestOpHTTPForcedStashConflict(t *testing.T) {
 }
 
 func TestOpHTTPParkedDecideRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := twoBranchRepo(t)
 	srv := New(domain.Open(dir))
 	ts := serve(t, srv)
@@ -189,6 +192,7 @@ func TestOpHTTPParkedDecideRoundTrip(t *testing.T) {
 }
 
 func TestOpHTTPBusyAndValidation(t *testing.T) {
+	t.Parallel()
 	dir := twoBranchRepo(t)
 	srv := New(domain.Open(dir))
 	ts := serve(t, srv)

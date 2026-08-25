@@ -11,6 +11,7 @@ import (
 )
 
 func TestResolveEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	head := gitRun(t, dir, "rev-parse", "HEAD")
 	ts := serve(t, New(domain.Open(dir)))
@@ -52,6 +53,7 @@ type fileLogTestRow struct {
 }
 
 func TestFileLogEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3) // c1..c3 each rewriting f.txt
 	gitRun(t, dir, "mv", "f.txt", "g.txt")
 	gitRun(t, dir, "commit", "-m", "rename it")
@@ -103,6 +105,7 @@ type blameTestRow struct {
 }
 
 func TestBlameEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	// one uncommitted appended line on top of committed content
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("content 3\nuncommitted\n"), 0o644); err != nil {

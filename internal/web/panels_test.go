@@ -30,6 +30,7 @@ type tagsResp struct {
 }
 
 func TestWorktreesEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	second := filepath.Join(t.TempDir(), "wt2")
 	gitRun(t, dir, "worktree", "add", "-b", "w2", second)
@@ -58,6 +59,7 @@ func TestWorktreesEndpoint(t *testing.T) {
 }
 
 func TestTagsEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "tag", "light1")
 	gitRun(t, dir, "tag", "light2")
@@ -92,6 +94,7 @@ func TestTagsEndpoint(t *testing.T) {
 }
 
 func TestTagsEndpointCap(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	for i := 0; i < 105; i++ {
 		gitRun(t, dir, "tag", fmt.Sprintf("t%03d", i))

@@ -8,6 +8,7 @@ import (
 )
 
 func TestAddFetchMappingsEmptyIsNoOp(t *testing.T) {
+	t.Parallel()
 	op := AddFetchMappings{Remote: "origin"}
 	res, err := op.Run(context.Background(), OpDeps{})
 	if err != nil || res.Changed {
@@ -16,6 +17,7 @@ func TestAddFetchMappingsEmptyIsNoOp(t *testing.T) {
 }
 
 func TestAddFetchMappingsLockModeRefWrite(t *testing.T) {
+	t.Parallel()
 	op := AddFetchMappings{}
 	if op.LockMode() != repogate.RefWrite {
 		t.Fatal("AddFetchMappings must reserve RefWrite")
@@ -23,6 +25,7 @@ func TestAddFetchMappingsLockModeRefWrite(t *testing.T) {
 }
 
 func TestAddFetchMappingsMapsAndFetches(t *testing.T) {
+	t.Parallel()
 	repo := narrowClone(t)
 	ctx := context.Background()
 	if err := repo.Push(ctx, "origin", "feat", true, 0); err != nil {

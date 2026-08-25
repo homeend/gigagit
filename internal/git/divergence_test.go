@@ -29,6 +29,7 @@ func rewrittenRepo(t *testing.T) (string, *Repo) {
 }
 
 func TestCountRangeCountsCommitsMissingFromHead(t *testing.T) {
+	t.Parallel()
 	_, repo := rewrittenRepo(t)
 	n, err := repo.CountRange(context.Background(), "HEAD", "old")
 	if err != nil {
@@ -40,6 +41,7 @@ func TestCountRangeCountsCommitsMissingFromHead(t *testing.T) {
 }
 
 func TestCountRangeUniqueIgnoresPatchEquivalentRewrites(t *testing.T) {
+	t.Parallel()
 	_, repo := rewrittenRepo(t)
 	n, err := repo.CountRangeUnique(context.Background(), "HEAD", "old")
 	if err != nil {
@@ -51,6 +53,7 @@ func TestCountRangeUniqueIgnoresPatchEquivalentRewrites(t *testing.T) {
 }
 
 func TestCountRangeUniqueCountsGenuinelyNewCommits(t *testing.T) {
+	t.Parallel()
 	dir, _ := newTestRepo(t)
 	gitRun(t, dir, "branch", "old")
 	writeFile(t, dir, "mine.txt", "mine\n")
@@ -75,6 +78,7 @@ func TestCountRangeUniqueCountsGenuinelyNewCommits(t *testing.T) {
 }
 
 func TestRemoteBranchTipResolvesWithoutFetching(t *testing.T) {
+	t.Parallel()
 	dir, _ := newTestRepo(t)
 	origin := t.TempDir()
 	gitRun(t, origin, "init", "--bare", ".")
@@ -93,6 +97,7 @@ func TestRemoteBranchTipResolvesWithoutFetching(t *testing.T) {
 }
 
 func TestRemoteBranchTipEmptyForAbsentBranch(t *testing.T) {
+	t.Parallel()
 	dir, _ := newTestRepo(t)
 	origin := t.TempDir()
 	gitRun(t, origin, "init", "--bare", ".")

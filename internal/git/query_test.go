@@ -6,6 +6,7 @@ import (
 )
 
 func TestWorktreeForBranchFindsMain(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -22,6 +23,7 @@ func TestWorktreeForBranchFindsMain(t *testing.T) {
 }
 
 func TestWorktreeForBranchMissingReturnsNil(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -35,6 +37,7 @@ func TestWorktreeForBranchMissingReturnsNil(t *testing.T) {
 }
 
 func TestCanFastForward(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 

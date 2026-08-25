@@ -3,6 +3,7 @@ package domain
 import "testing"
 
 func TestScopeKeyFoldsUpstreams(t *testing.T) {
+	t.Parallel()
 	a := scopeKey(LogScope{Branches: []string{"main"}})
 	b := scopeKey(LogScope{Branches: []string{"main"}, Upstreams: []string{"origin/main"}})
 	if a == b {
@@ -11,6 +12,7 @@ func TestScopeKeyFoldsUpstreams(t *testing.T) {
 }
 
 func TestScopeKeyFoldsFilterAxes(t *testing.T) {
+	t.Parallel()
 	base := scopeKey(LogScope{Branches: []string{"main"}})
 	grep := scopeKey(LogScope{Branches: []string{"main"}, Grep: "fix"})
 	path := scopeKey(LogScope{Branches: []string{"main"}, Paths: []string{"a"}})

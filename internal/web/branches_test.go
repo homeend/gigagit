@@ -8,6 +8,7 @@ import (
 )
 
 func TestBranchesEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := twoBranchRepo(t) // on main, plus "side"
 	ts := serve(t, New(domain.Open(dir)))
 	var body struct {

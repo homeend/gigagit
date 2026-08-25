@@ -11,6 +11,7 @@ import (
 // CommitMeta is the domain door to the single-commit metadata lookup: frontends
 // never touch internal/git, so the files-view header reaches it through here.
 func TestCommitMetaReturnsTheCommit(t *testing.T) {
+	t.Parallel()
 	f := fakeReads()
 	f.SetResponse("git log", gitexec.Result{
 		Stdout: "aaaabbbb\x1fparent1\x1falice\x1f981173106\x1fthe subject\x1f\x1f\n",
@@ -33,6 +34,7 @@ func TestCommitMetaReturnsTheCommit(t *testing.T) {
 // An unresolvable rev surfaces the error rather than a zero Commit, so a
 // caller can leave its header alone instead of painting an empty date.
 func TestCommitMetaUnknownRevErrors(t *testing.T) {
+	t.Parallel()
 	f := fakeReads()
 	f.SetResponse("git log", gitexec.Result{Stdout: ""})
 	if _, err := New(&git.Repo{Runner: f}).CommitMeta(context.Background(), "deadbeef"); err == nil {

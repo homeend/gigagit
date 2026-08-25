@@ -9,6 +9,7 @@ import (
 )
 
 func TestConflictFileVersionsBothSides(t *testing.T) {
+	t.Parallel()
 	dir := mergeConflictDir(t) // paused merge of feature into main, one conflicted file
 	svc := svcAt(dir)
 	// Discover the conflicted path from status (fixture-agnostic).
@@ -78,6 +79,7 @@ func TestConflictFileVersionsBothSides(t *testing.T) {
 }
 
 func TestConflictFileVersionsNoBase(t *testing.T) {
+	t.Parallel()
 	dir := mergeConflictDir(t)
 	svc := svcAt(dir)
 	st, _ := svc.Status(context.Background())

@@ -9,6 +9,7 @@ import (
 )
 
 func TestFastForwardCLIAdvances(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t) // repo on main with an initial commit
 	gitRun(t, dir, "branch", "feat")
 	gitRun(t, dir, "checkout", "feat")
@@ -29,6 +30,7 @@ func TestFastForwardCLIAdvances(t *testing.T) {
 }
 
 func TestFastForwardCLIUsage(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	var out, errb bytes.Buffer
 	if code := Run(dir, []string{"fast-forward"}, strings.NewReader(""), &out, &errb, ""); code != 2 {
@@ -37,6 +39,7 @@ func TestFastForwardCLIUsage(t *testing.T) {
 }
 
 func TestFastForwardCLIRegistered(t *testing.T) {
+	t.Parallel()
 	if !IsCommand("fast-forward") {
 		t.Fatal("fast-forward must be in the commands map")
 	}

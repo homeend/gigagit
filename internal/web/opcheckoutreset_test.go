@@ -9,6 +9,7 @@ import (
 )
 
 func TestOpHTTPCheckoutDetached(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	prev := gitRun(t, dir, "rev-parse", "HEAD~1")
 	ts := serve(t, New(domain.Open(dir)))
@@ -27,6 +28,7 @@ func TestOpHTTPCheckoutDetached(t *testing.T) {
 }
 
 func TestOpHTTPCheckoutNewBranch(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	prev := gitRun(t, dir, "rev-parse", "HEAD~1")
 	ts := serve(t, New(domain.Open(dir)))
@@ -48,6 +50,7 @@ func TestOpHTTPCheckoutNewBranch(t *testing.T) {
 // is no stale-identifier hazard — but names (branches, "HEAD~1") have their
 // own dedicated ops and are refused here.
 func TestOpHTTPCheckoutBadInput(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -65,6 +68,7 @@ func TestOpHTTPCheckoutBadInput(t *testing.T) {
 }
 
 func TestOpHTTPCheckoutBadName(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	head := gitRun(t, dir, "rev-parse", "HEAD")
 	ts := serve(t, New(domain.Open(dir)))
@@ -77,6 +81,7 @@ func TestOpHTTPCheckoutBadName(t *testing.T) {
 // Empty mode keeps the engine's interactive flow: the soft/mixed/hard picker
 // parks in the browser modal and is itself the deliberate confirmation.
 func TestOpHTTPResetInteractive(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	target := gitRun(t, dir, "rev-parse", "HEAD~1")
 	srv := New(domain.Open(dir))
@@ -120,6 +125,7 @@ func TestOpHTTPResetInteractive(t *testing.T) {
 }
 
 func TestOpHTTPResetCancel(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	before := gitRun(t, dir, "rev-parse", "HEAD")
 	target := gitRun(t, dir, "rev-parse", "HEAD~1")
@@ -145,6 +151,7 @@ func TestOpHTTPResetCancel(t *testing.T) {
 // A target off the current branch parks the second, non-ancestor confirm
 // after the mode pick.
 func TestOpHTTPResetNonAncestorConfirm(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "checkout", "-b", "side")
 	localCommit(t, dir, "s.txt", "s\n", "side work")
@@ -181,6 +188,7 @@ func TestOpHTTPResetNonAncestorConfirm(t *testing.T) {
 }
 
 func TestOpHTTPResetBadInput(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	head := gitRun(t, dir, "rev-parse", "HEAD")
 	ts := serve(t, New(domain.Open(dir)))

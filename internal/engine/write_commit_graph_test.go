@@ -8,6 +8,7 @@ import (
 )
 
 func TestWriteCommitGraphCreatesFile(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	res, err := WriteCommitGraph{}.Run(context.Background(), OpDeps{Repo: repo})
 	if err != nil {
@@ -22,6 +23,7 @@ func TestWriteCommitGraphCreatesFile(t *testing.T) {
 }
 
 func TestWriteCommitGraphEmitsProgressAndDone(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	events := make(chan Event, 16)
 	if _, err := (WriteCommitGraph{}).Run(context.Background(), OpDeps{Repo: repo, Events: events}); err != nil {

@@ -20,6 +20,7 @@ func (fakeOp) Run(ctx context.Context, deps OpDeps) (Result, error) {
 }
 
 func TestOpDepsEmitAndDecide(t *testing.T) {
+	t.Parallel()
 	ch := make(chan Event, 8)
 	deps := OpDeps{
 		Events:  ch,
@@ -48,6 +49,7 @@ func TestOpDepsEmitAndDecide(t *testing.T) {
 }
 
 func TestOpDepsEmitNilChannelDoesNotPanic(t *testing.T) {
+	t.Parallel()
 	deps := OpDeps{}
 	deps.emit(context.Background(), Progress{Step: "x"})
 	_, err := deps.decide(context.Background(), DecisionRequest{ID: "y"})
@@ -57,6 +59,7 @@ func TestOpDepsEmitNilChannelDoesNotPanic(t *testing.T) {
 }
 
 func TestDecideEmitsDecisionNeededThenErrsWithoutDecider(t *testing.T) {
+	t.Parallel()
 	ch := make(chan Event, 4)
 	deps := OpDeps{Events: ch} // nil Decider
 	_, err := deps.decide(context.Background(), DecisionRequest{
@@ -82,6 +85,7 @@ func TestDecideEmitsDecisionNeededThenErrsWithoutDecider(t *testing.T) {
 // configure no Escalate; the helper must be a successful no-op, matching the
 // nil-channel/nil-decider style of emit/decide.
 func TestOpDepsEscalateNilSafe(t *testing.T) {
+	t.Parallel()
 	if err := (OpDeps{}).escalate(context.Background()); err != nil {
 		t.Fatalf("nil escalate = %v, want nil", err)
 	}

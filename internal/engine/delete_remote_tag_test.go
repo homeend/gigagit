@@ -25,6 +25,7 @@ func deleteTagCalled(f *gitexec.FakeRunner) (remote, tag string, ok bool) {
 }
 
 func TestDeleteRemoteTagSingleRemoteConfirm(t *testing.T) {
+	t.Parallel()
 	repo, f := delTagFakeRepo("origin\n")
 	res, err := DeleteRemoteTag{Tag: "v1.0.0"}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"delete-remote-tag": "delete"}})
@@ -38,6 +39,7 @@ func TestDeleteRemoteTagSingleRemoteConfirm(t *testing.T) {
 }
 
 func TestDeleteRemoteTagAbortDoesNotPush(t *testing.T) {
+	t.Parallel()
 	repo, f := delTagFakeRepo("origin\n")
 	res, err := DeleteRemoteTag{Tag: "v1.0.0"}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"delete-remote-tag": "abort"}})
@@ -53,6 +55,7 @@ func TestDeleteRemoteTagAbortDoesNotPush(t *testing.T) {
 }
 
 func TestDeleteRemoteTagMultiRemotePick(t *testing.T) {
+	t.Parallel()
 	repo, f := delTagFakeRepo("origin\nbackup\n")
 	_, err := DeleteRemoteTag{Tag: "v1.0.0"}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"delete-remote-tag-remote": "backup", "delete-remote-tag": "delete"}})
@@ -65,6 +68,7 @@ func TestDeleteRemoteTagMultiRemotePick(t *testing.T) {
 }
 
 func TestDeleteRemoteTagRequiresTag(t *testing.T) {
+	t.Parallel()
 	repo, _ := delTagFakeRepo("origin\n")
 	if _, err := (DeleteRemoteTag{}).Run(context.Background(), OpDeps{Repo: repo}); err == nil {
 		t.Fatal("missing Tag must error")

@@ -31,6 +31,7 @@ func (f *writeFakeRepo) WriteWorktreeFile(_ context.Context, path string, conten
 }
 
 func TestWriteFileWritesWhenDestAbsent(t *testing.T) {
+	t.Parallel()
 	repo := newWriteFake()
 	_, err := WriteFile{Path: "x.txt", Data: []byte("new")}.Run(context.Background(),
 		OpDeps{Repo: repo})
@@ -43,6 +44,7 @@ func TestWriteFileWritesWhenDestAbsent(t *testing.T) {
 }
 
 func TestWriteFileNoopWhenIdentical(t *testing.T) {
+	t.Parallel()
 	repo := newWriteFake()
 	repo.existing["x.txt"] = []byte("same")
 	res, err := WriteFile{Path: "x.txt", Data: []byte("same")}.Run(context.Background(),
@@ -59,6 +61,7 @@ func TestWriteFileNoopWhenIdentical(t *testing.T) {
 }
 
 func TestWriteFileForksOnExistingDiffering(t *testing.T) {
+	t.Parallel()
 	// Cancel -> no write, ErrWriteCancelled.
 	repo := newWriteFake()
 	repo.existing["x.txt"] = []byte("old")

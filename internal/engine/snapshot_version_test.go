@@ -23,6 +23,7 @@ func versionRefs(t *testing.T, r *git.Repo) []string {
 }
 
 func TestSnapshotBranchTipRecordsAndSkips(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	ctx := context.Background()
 	deps := OpDeps{Repo: repo} // zero policy: disabled
@@ -57,6 +58,7 @@ func TestSnapshotBranchTipRecordsAndSkips(t *testing.T) {
 }
 
 func TestSnapshotBranchTipPrunes(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	ctx := context.Background()
 	head, _ := repo.RevParse(ctx, "HEAD")

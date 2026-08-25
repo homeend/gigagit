@@ -12,6 +12,7 @@ import (
 )
 
 func TestTouchMRURecordsServedRepo(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	sp := filepath.Join(t.TempDir(), "repos.toml")
 	touchMRU(context.Background(), domain.Open(dir), sp)
@@ -22,6 +23,7 @@ func TestTouchMRURecordsServedRepo(t *testing.T) {
 }
 
 func TestRerootRecordsNewRoot(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	wt := addWorktree(t, dir, "side")
 	srv := New(domain.Open(dir))
@@ -51,6 +53,7 @@ type reposResp struct {
 }
 
 func TestReposEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	other := newRepoDir(t, 1)
 	srv := New(domain.Open(dir))
@@ -73,6 +76,7 @@ func TestReposEndpoint(t *testing.T) {
 // neighbours must not — otherwise "switch repo" offers the repo already open
 // and switching to it does nothing.
 func TestReposMarksServedRepoCurrent(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	other := newRepoDir(t, 1)
 	srv := New(domain.Open(dir))

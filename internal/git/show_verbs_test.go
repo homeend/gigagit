@@ -9,6 +9,7 @@ import (
 )
 
 func TestShowNumstatArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git show", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -22,6 +23,7 @@ func TestShowNumstatArgv(t *testing.T) {
 }
 
 func TestShowPatchArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git show", gitexec.Result{Stdout: "PATCH"})
 	r := &Repo{Runner: f}

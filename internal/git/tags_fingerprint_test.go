@@ -8,6 +8,7 @@ import (
 )
 
 func TestTagsFingerprintArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git for-each-ref (tags fp)", gitexec.Result{Stdout: "refs/tags/v1\x00abc\n"})
 	repo := &Repo{Runner: f}
@@ -37,6 +38,7 @@ func TestTagsFingerprintArgv(t *testing.T) {
 // TestTagsFingerprintTracksTagSet pins the cache-key property: the fingerprint
 // changes exactly when the tag ref set changes, and is stable otherwise.
 func TestTagsFingerprintTracksTagSet(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	ctx := context.Background()

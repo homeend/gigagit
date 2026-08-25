@@ -31,6 +31,7 @@ const jsPureEnd = "// --- end conflict class table ---"
 var allConflictCodes = []string{"DD", "AU", "UD", "UA", "DU", "AA", "UU"}
 
 func TestConflictActionsJSPortMatchesGo(t *testing.T) {
+	t.Parallel()
 	node, err := exec.LookPath("node")
 	if err != nil {
 		t.Skip("node not installed; the JS port guard needs it")

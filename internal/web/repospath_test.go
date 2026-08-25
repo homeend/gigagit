@@ -8,6 +8,7 @@ import "testing"
 // written against an injected GOOS precisely so the Windows rules can be
 // exercised from any test run.
 func TestSameRepoPath(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		goos string
@@ -43,6 +44,7 @@ func TestSameRepoPath(t *testing.T) {
 // Separator normalization must not depend on the OS running the test, or the
 // Windows cases above would only be meaningful on Windows.
 func TestNormalizeRepoPathIsOSIndependent(t *testing.T) {
+	t.Parallel()
 	if got := normalizeRepoPath(`T:\a\b\`); got != "T:/a/b" {
 		t.Errorf("normalizeRepoPath = %q, want T:/a/b", got)
 	}

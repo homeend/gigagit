@@ -12,6 +12,7 @@ import (
 // The force flag must not force anything by itself: it asks first. This is
 // the whole posture — a client cannot express a silent force push.
 func TestOpHTTPPushForceFlagAsksFirst(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	pushRemoteCommit(t, origin, "r.txt", "r\n", "remote work")
 	localCommit(t, clone, "l.txt", "l\n", "local work")
@@ -62,6 +63,7 @@ func TestOpHTTPPushForceFlagAsksFirst(t *testing.T) {
 // And when the answer IS force, it overwrites — the flag reaches the real op,
 // not a dead end.
 func TestOpHTTPPushForceFlagThenForce(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	pushRemoteCommit(t, origin, "r.txt", "r\n", "remote work")
 	localCommit(t, clone, "l.txt", "l\n", "local work")
@@ -89,6 +91,7 @@ func TestOpHTTPPushForceFlagThenForce(t *testing.T) {
 
 // An ordinary push must be unaffected: no flag, no force prompt.
 func TestOpHTTPPushWithoutForceFlagStillPlain(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	pushRemoteCommit(t, origin, "r.txt", "r\n", "remote work")
 	localCommit(t, clone, "l.txt", "l\n", "local work")

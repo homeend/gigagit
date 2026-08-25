@@ -10,6 +10,7 @@ import (
 )
 
 func TestEscapeIgnorePattern(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"a[1].log":  `a\[1].log`,
 		"a*b":       `a\*b`,
@@ -25,6 +26,7 @@ func TestEscapeIgnorePattern(t *testing.T) {
 }
 
 func TestIgnoreLine(t *testing.T) {
+	t.Parallel()
 	if got := ignoreLine("a/b.log", false); got != "/a/b.log" {
 		t.Errorf("exact = %q", got)
 	}
@@ -37,6 +39,7 @@ func TestIgnoreLine(t *testing.T) {
 }
 
 func TestAlreadyIgnored(t *testing.T) {
+	t.Parallel()
 	content := []byte("# a comment\n\n/a/b.log\n*.tmp\n")
 	if !alreadyIgnored(content, "/a/b.log") {
 		t.Error("present exact line not detected")
@@ -56,6 +59,7 @@ func TestAlreadyIgnored(t *testing.T) {
 }
 
 func TestAppendIgnoreLine(t *testing.T) {
+	t.Parallel()
 	if got := appendIgnoreLine(nil, "/x"); string(got) != "/x\n" {
 		t.Errorf("empty = %q", got)
 	}
@@ -79,6 +83,7 @@ func gitStatus(t *testing.T, dir string) string {
 }
 
 func TestIgnoreExactRemovesUntrackedFromStatus(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "out.log"), []byte("x\n"), 0o644)
 
@@ -109,6 +114,7 @@ func TestIgnoreExactRemovesUntrackedFromStatus(t *testing.T) {
 }
 
 func TestIgnoreNestedPathActuallyIgnored(t *testing.T) {
+	t.Parallel()
 	// The dominant monorepo case: a nested untracked file. The anchored "/path"
 	// is correct only because git runs from the repo root, so f.Path is
 	// root-relative — this proves that end-to-end.
@@ -129,6 +135,7 @@ func TestIgnoreNestedPathActuallyIgnored(t *testing.T) {
 }
 
 func TestIgnoreMetacharFilenameActuallyIgnored(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "a[1].log"), []byte("x\n"), 0o644)
 
@@ -141,6 +148,7 @@ func TestIgnoreMetacharFilenameActuallyIgnored(t *testing.T) {
 }
 
 func TestIgnoreExtensionRemovesAllMatching(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "one.tmp"), []byte("x\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "two.tmp"), []byte("y\n"), 0o644)

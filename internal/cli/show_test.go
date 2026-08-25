@@ -8,6 +8,7 @@ import (
 )
 
 func TestShowDefaultStat(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\ntwo\n"), 0o644)
 	gitIn(t, dir, "add", "a.txt")
@@ -31,6 +32,7 @@ func TestShowDefaultStat(t *testing.T) {
 }
 
 func TestShowPatchFlag(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644)
 	gitIn(t, dir, "add", "a.txt")
@@ -46,6 +48,7 @@ func TestShowPatchFlag(t *testing.T) {
 }
 
 func TestShowRequiresCommit(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, _ := runCLI(t, dir, "show")
 	if code != 2 {
@@ -54,6 +57,7 @@ func TestShowRequiresCommit(t *testing.T) {
 }
 
 func TestShowPatchFlagAfterCommit(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644)
 	gitIn(t, dir, "add", "a.txt")
@@ -69,6 +73,7 @@ func TestShowPatchFlagAfterCommit(t *testing.T) {
 }
 
 func TestShowPatchFlagAfterCommitWithPaths(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("two\n"), 0o644)
@@ -82,6 +87,7 @@ func TestShowPatchFlagAfterCommitWithPaths(t *testing.T) {
 }
 
 func TestShowFileScope(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("two\n"), 0o644)

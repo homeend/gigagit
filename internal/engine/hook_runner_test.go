@@ -8,6 +8,7 @@ import (
 )
 
 func TestShellHookRunnerStreamsAndEnv(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell script")
 	}
@@ -35,6 +36,7 @@ func TestShellHookRunnerStreamsAndEnv(t *testing.T) {
 }
 
 func TestShellHookRunnerNonZeroExit(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX shell script")
 	}
@@ -52,6 +54,7 @@ func TestShellHookRunnerNonZeroExit(t *testing.T) {
 // TestHookLineWriterCRLF verifies that Windows-style CRLF hook output is
 // stripped to clean lines (no trailing \r in the emitted strings).
 func TestHookLineWriterCRLF(t *testing.T) {
+	t.Parallel()
 	var got []string
 	lw := &hookLineWriter{onLine: func(line string) { got = append(got, line) }}
 	lw.Write([]byte("a\r\nb\r\n"))

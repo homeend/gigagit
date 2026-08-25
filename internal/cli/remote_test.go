@@ -6,6 +6,7 @@ import (
 )
 
 func TestRemoteListPrintsRemoteBranches(t *testing.T) {
+	t.Parallel()
 	clone := cloneWithRemoteFoo(t) // from ops_test.go (same package)
 	code, out, errb := runCLI(t, clone, "remote", "ls")
 	if code != 0 {
@@ -20,6 +21,7 @@ func TestRemoteListPrintsRemoteBranches(t *testing.T) {
 }
 
 func TestRemoteUnknownSubcommand(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	if code, _, _ := runCLI(t, dir, "remote", "bogus"); code == 0 {
 		t.Fatal("unknown remote subcommand should fail")
@@ -27,6 +29,7 @@ func TestRemoteUnknownSubcommand(t *testing.T) {
 }
 
 func TestRemoteFetchUpdatesTrackingRefs(t *testing.T) {
+	t.Parallel()
 	clone := cloneWithRemoteFoo(t)
 	if code, _, errb := runCLI(t, clone, "remote", "fetch"); code != 0 {
 		t.Fatalf("remote fetch exit = %d (stderr: %s)", code, errb)
@@ -38,6 +41,7 @@ func TestRemoteFetchUpdatesTrackingRefs(t *testing.T) {
 }
 
 func TestRemotePruneDropsDeletedRef(t *testing.T) {
+	t.Parallel()
 	clone := cloneWithRemoteFoo(t)
 	origin := runGit(t, clone, "config", "--get", "remote.origin.url")
 	runGit(t, origin, "branch", "-D", "foo") // delete foo on the (bare) origin
@@ -51,6 +55,7 @@ func TestRemotePruneDropsDeletedRef(t *testing.T) {
 }
 
 func TestRemoteRmDeletesBranchOnOrigin(t *testing.T) {
+	t.Parallel()
 	clone := cloneWithRemoteFoo(t)
 	origin := runGit(t, clone, "config", "--get", "remote.origin.url")
 	if code, _, errb := runCLI(t, clone, "remote", "rm", "origin/foo"); code != 0 {
@@ -62,6 +67,7 @@ func TestRemoteRmDeletesBranchOnOrigin(t *testing.T) {
 }
 
 func TestRemoteRmRejectsArgWithoutSlash(t *testing.T) {
+	t.Parallel()
 	clone := cloneWithRemoteFoo(t)
 	code, _, errb := runCLI(t, clone, "remote", "rm", "noslash")
 	if code != 2 {

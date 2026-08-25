@@ -47,6 +47,7 @@ func narrowClone(t *testing.T) *git.Repo {
 }
 
 func TestPushUnmappedBranchAddMapsAndFetches(t *testing.T) {
+	t.Parallel()
 	repo := narrowClone(t)
 	ctx := context.Background()
 	ch := make(chan Event, 64)
@@ -79,6 +80,7 @@ func TestPushUnmappedBranchAddMapsAndFetches(t *testing.T) {
 }
 
 func TestPushUnmappedBranchSkipLeavesConfigAlone(t *testing.T) {
+	t.Parallel()
 	repo := narrowClone(t)
 	ctx := context.Background()
 	res, err := Push{Remote: "origin", Branch: "feat", SetUpstream: true}.Run(ctx,
@@ -95,6 +97,7 @@ func TestPushUnmappedBranchSkipLeavesConfigAlone(t *testing.T) {
 }
 
 func TestPushUnmappedBranchDeciderErrorSkips(t *testing.T) {
+	t.Parallel()
 	repo := narrowClone(t)
 	// MapDecider with no entry errors (ErrDecisionRequired) → must skip, not fail.
 	res, err := Push{Remote: "origin", Branch: "feat", SetUpstream: true}.Run(context.Background(),
@@ -108,6 +111,7 @@ func TestPushUnmappedBranchDeciderErrorSkips(t *testing.T) {
 }
 
 func TestPushMappedBranchNeverAsks(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 	root := t.TempDir()

@@ -10,6 +10,7 @@ import (
 // All of these return before the service is ever touched, so a nil
 // *domain.Service is fine here.
 func TestCmdCheckoutParseErrors(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		args    []string

@@ -9,6 +9,7 @@ import (
 // With an unbuffered, never-drained channel and a cancelled context, emit must
 // return promptly instead of blocking forever.
 func TestEmitUnblocksOnCancelledContext(t *testing.T) {
+	t.Parallel()
 	ch := make(chan Event) // unbuffered, no reader
 	deps := OpDeps{Events: ch}
 	ctx, cancel := context.WithCancel(context.Background())

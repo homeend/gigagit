@@ -9,6 +9,7 @@ import (
 )
 
 func TestLsFiles(t *testing.T) {
+	t.Parallel()
 	fr := gitexec.NewFakeRunner()
 	fr.SetResponse("git ls-files", gitexec.Result{Stdout: "a.go\x00dir/b — c.txt\x00"})
 	r := &Repo{Runner: fr}

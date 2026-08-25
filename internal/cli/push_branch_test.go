@@ -54,6 +54,7 @@ func cloneWithExtraBranch(t *testing.T) (clone, origin string) {
 // (sets upstream) without switching to it — the CLI counterpart of the TUI
 // Branches-panel "Push <branch>" action.
 func TestPushNamedNonCurrentBranch(t *testing.T) {
+	t.Parallel()
 	clone, origin := cloneWithExtraBranch(t)
 	code, out, errb := runCLI(t, clone, "push", "feature")
 	if code != 0 {
@@ -78,6 +79,7 @@ func TestPushNamedNonCurrentBranch(t *testing.T) {
 }
 
 func TestPushTooManyArgs(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, errb := runCLI(t, dir, "push", "a", "b")
 	if code != 2 {

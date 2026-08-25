@@ -16,6 +16,7 @@ func runUnlock(t *testing.T, dir string, args ...string) (int, string, string) {
 }
 
 func TestUnlockCleanRepo(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t)
 	code, out, errb := runUnlock(t, dir)
 	if code != 0 {
@@ -29,6 +30,7 @@ func TestUnlockCleanRepo(t *testing.T) {
 // Without --yes nothing is removed and the exit code is non-zero, so a script
 // can use `gg unlock` as a precondition check.
 func TestUnlockListsWithoutRemoving(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t)
 	lock := filepath.Join(dir, ".git", "index.lock")
 	if err := os.WriteFile(lock, nil, 0o644); err != nil {
@@ -51,6 +53,7 @@ func TestUnlockListsWithoutRemoving(t *testing.T) {
 }
 
 func TestUnlockRemovesWithYes(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t)
 	lock := filepath.Join(dir, ".git", "index.lock")
 	if err := os.WriteFile(lock, nil, 0o644); err != nil {
@@ -72,6 +75,7 @@ func TestUnlockRemovesWithYes(t *testing.T) {
 }
 
 func TestUnlockRejectsPositionalArgs(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t)
 	if code, _, _ := runUnlock(t, dir, "index.lock"); code != 2 {
 		t.Fatalf("usage error should exit 2, got %d", code)
@@ -81,6 +85,7 @@ func TestUnlockRejectsPositionalArgs(t *testing.T) {
 // gg batch drives every command through runOne, so unlock must be reachable
 // there too.
 func TestUnlockRunsUnderBatch(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"batch"}, strings.NewReader("unlock\n"), &out, &errb, "")

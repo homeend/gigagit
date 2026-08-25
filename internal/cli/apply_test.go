@@ -33,6 +33,7 @@ func applyRun(t *testing.T, dir string, args ...string) (int, string, string) {
 
 // usage errors: both flags, no positional, two positionals.
 func TestCmdApplyUsageErrors(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t)
 	for _, args := range [][]string{
 		{"apply", "--am", "--working", "x.patch"},
@@ -47,6 +48,7 @@ func TestCmdApplyUsageErrors(t *testing.T) {
 
 // default mode applies to the working tree; --am recreates the commit.
 func TestCmdApplyWorkingAndAm(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t)
 	// build a patch: commit, export, rewind
 	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\n"), 0o644)
@@ -89,6 +91,7 @@ func TestCmdApplyWorkingAndAm(t *testing.T) {
 // process cwd (which during `go test` is internal/cli/, not the repo) — the
 // contract the in-process e2e harness depends on.
 func TestCmdApplyRelativePathResolvesAgainstWorkdir(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t)
 	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\n"), 0o644)
 	applyGit(t, dir, "add", "f.txt")
@@ -110,6 +113,7 @@ func TestCmdApplyRelativePathResolvesAgainstWorkdir(t *testing.T) {
 
 // a conflicting working-tree apply exits 1 (conflicts left in tree).
 func TestCmdApplyConflictExit1(t *testing.T) {
+	t.Parallel()
 	dir := newCLIRepo(t)
 	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("base\n"), 0o644)
 	applyGit(t, dir, "add", "f.txt")

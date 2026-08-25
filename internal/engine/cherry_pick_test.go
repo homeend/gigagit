@@ -9,6 +9,7 @@ import (
 )
 
 func TestCherryPickGuardEmptyCommit(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	_, err := CherryPick{}.Run(context.Background(), OpDeps{Repo: repo})
 	if err == nil || !strings.Contains(err.Error(), "Commit is required") {
@@ -18,6 +19,7 @@ func TestCherryPickGuardEmptyCommit(t *testing.T) {
 
 // A clean cherry-pick lands the picked commit's change on the current branch.
 func TestCherryPickCleanApplies(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitE(t, dir, "checkout", "-b", "feat")
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("from feat\n"), 0o644)
@@ -41,6 +43,7 @@ func TestCherryPickCleanApplies(t *testing.T) {
 
 // A dirty tree is autostashed and restored across a clean cherry-pick.
 func TestCherryPickAutostashRestores(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	// seed a tracked file so we can dirty it
 	os.WriteFile(filepath.Join(dir, "wip.txt"), []byte("committed\n"), 0o644)
@@ -89,6 +92,7 @@ func setupCherryPickConflict(t *testing.T, dir string) (pick string) {
 }
 
 func TestCherryPickConflictKeepLeavesState(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	pick := setupCherryPickConflict(t, dir)
 
@@ -106,6 +110,7 @@ func TestCherryPickConflictKeepLeavesState(t *testing.T) {
 }
 
 func TestCherryPickConflictAbortRestores(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	pick := setupCherryPickConflict(t, dir)
 
@@ -128,6 +133,7 @@ func TestCherryPickConflictAbortRestores(t *testing.T) {
 // Cherry-picking a commit already on the branch leaves CHERRY_PICK_HEAD set with
 // a clean tree; the op must auto-abort and return a legible error (never trap).
 func TestCherryPickAlreadyAppliedAutoAborts(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitE(t, dir, "checkout", "-b", "feat")
 	os.WriteFile(filepath.Join(dir, "g.txt"), []byte("g\n"), 0o644)
@@ -152,6 +158,7 @@ func TestCherryPickAlreadyAppliedAutoAborts(t *testing.T) {
 
 // The autostash is restored after the abort path (dirty tree + abort).
 func TestCherryPickAbortRestoresAutostash(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("base\n"), 0o644)
 	gitE(t, dir, "add", ".")
@@ -186,6 +193,7 @@ func TestCherryPickAbortRestoresAutostash(t *testing.T) {
 
 // Several commits in one op land in the given (oldest-first) order.
 func TestCherryPickMultipleCleanApplies(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitE(t, dir, "checkout", "-b", "feat")
 	os.WriteFile(filepath.Join(dir, "one.txt"), []byte("one\n"), 0o644)
@@ -235,6 +243,7 @@ func setupTwoPickSecondConflicts(t *testing.T, dir string) (clean, conflicting s
 // Aborting a mid-sequence conflict rewinds the WHOLE sequence: commits applied
 // before the conflict are rewound too (all-or-nothing).
 func TestCherryPickMultipleConflictAbortRewindsAll(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	clean, conflicting := setupTwoPickSecondConflicts(t, dir)
 	tip := gitOut(t, dir, "rev-parse", "HEAD")
@@ -258,6 +267,7 @@ func TestCherryPickMultipleConflictAbortRewindsAll(t *testing.T) {
 // keep-conflicts on a mid-sequence conflict leaves the sequencer paused so the
 // resume lane (`cherry-pick --continue`) can finish the remaining picks.
 func TestCherryPickMultipleConflictKeepLeavesSequence(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	clean, conflicting := setupTwoPickSecondConflicts(t, dir)
 
@@ -280,6 +290,7 @@ func TestCherryPickMultipleConflictKeepLeavesSequence(t *testing.T) {
 
 // An already-applied commit inside a multi-pick is skipped and the rest land.
 func TestCherryPickMultipleSkipsAlreadyApplied(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitE(t, dir, "checkout", "-b", "feat")
 	os.WriteFile(filepath.Join(dir, "one.txt"), []byte("one\n"), 0o644)
@@ -312,6 +323,7 @@ func TestCherryPickMultipleSkipsAlreadyApplied(t *testing.T) {
 // When EVERY commit in a multi-pick is already applied, the op ends cleanly
 // with nothing applied (no error, unlike the single-commit path).
 func TestCherryPickMultipleAllAlreadyApplied(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitE(t, dir, "checkout", "-b", "feat")
 	os.WriteFile(filepath.Join(dir, "one.txt"), []byte("one\n"), 0o644)
@@ -339,6 +351,7 @@ func TestCherryPickMultipleAllAlreadyApplied(t *testing.T) {
 
 // ContinueOp routes a resolved cherry-pick to `cherry-pick --continue`.
 func TestContinueOpFinishesCherryPick(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	pick := setupCherryPickConflict(t, dir)
 
@@ -363,6 +376,7 @@ func TestContinueOpFinishesCherryPick(t *testing.T) {
 
 // AbortOp routes an in-progress cherry-pick to `cherry-pick --abort`.
 func TestAbortOpAbortsCherryPick(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	pick := setupCherryPickConflict(t, dir)
 

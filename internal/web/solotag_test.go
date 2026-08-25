@@ -11,6 +11,7 @@ import (
 // its history (the TUI's tagSoloRow). The scope-must-render invariant holds:
 // the tag resolves against a fresh read before the scope is entered.
 func TestSoloTag(t *testing.T) {
+	t.Parallel()
 	dir := soloRepo(t)
 	// Tag the main-only state; feature's extra commit is outside its history.
 	gitRun(t, dir, "tag", "v-main", "main")
@@ -48,6 +49,7 @@ func TestSoloTag(t *testing.T) {
 }
 
 func TestSoloUnknownRefStill404s(t *testing.T) {
+	t.Parallel()
 	dir := soloRepo(t)
 	ts := serve(t, New(domain.Open(dir)))
 

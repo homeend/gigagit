@@ -38,6 +38,7 @@ func conflictFixture(t *testing.T) string {
 }
 
 func TestMergeIntoCurrent(t *testing.T) {
+	t.Parallel()
 	dir := mergeFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"merge", "feat"}, strings.NewReader(""), &out, &errb, "")
@@ -53,6 +54,7 @@ func TestMergeIntoCurrent(t *testing.T) {
 }
 
 func TestMergeIntoExplicitTarget(t *testing.T) {
+	t.Parallel()
 	dir := mergeFixture(t)
 	gitRun(t, dir, "branch", "target")
 	var out, errb bytes.Buffer
@@ -68,6 +70,7 @@ func TestMergeIntoExplicitTarget(t *testing.T) {
 }
 
 func TestMergeConflictUnansweredNonTTY(t *testing.T) {
+	t.Parallel()
 	dir := conflictFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"merge", "feat"}, strings.NewReader(""), &out, &errb, "")
@@ -80,6 +83,7 @@ func TestMergeConflictUnansweredNonTTY(t *testing.T) {
 }
 
 func TestMergeConflictAbortFlag(t *testing.T) {
+	t.Parallel()
 	dir := conflictFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"merge", "--on-conflict=abort", "feat"}, strings.NewReader(""), &out, &errb, "")
@@ -93,6 +97,7 @@ func TestMergeConflictAbortFlag(t *testing.T) {
 }
 
 func TestMergeConflictKeepFlag(t *testing.T) {
+	t.Parallel()
 	dir := conflictFixture(t)
 	var out, errb bytes.Buffer
 	code := Run(dir, []string{"merge", "--on-conflict=keep", "feat"}, strings.NewReader(""), &out, &errb, "")
@@ -105,6 +110,7 @@ func TestMergeConflictKeepFlag(t *testing.T) {
 }
 
 func TestMergeUsageErrors(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	for _, args := range [][]string{
 		{"merge"},                                // missing source

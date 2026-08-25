@@ -11,6 +11,7 @@ import (
 )
 
 func TestCommitPatchAndFilePatch(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	ctx := context.Background()
 	gitRun(t, repoDir, "commit", "--allow-empty", "-m", "base")
@@ -47,6 +48,7 @@ func TestCommitPatchAndFilePatch(t *testing.T) {
 }
 
 func TestCommitPatchRefusesMerge(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	ctx := context.Background()
 	writeCommit(t, repoDir, "a.txt", "1\n", "base")
@@ -66,6 +68,7 @@ func TestCommitPatchRefusesMerge(t *testing.T) {
 }
 
 func TestCommitPatchAmRoundTrip(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	ctx := context.Background()
 	writeCommit(t, repoDir, "foo.go", "a\nb\nc\n", "base")
@@ -106,6 +109,7 @@ func TestCommitPatchAmRoundTrip(t *testing.T) {
 }
 
 func TestExportDefaultDirIsParentOfRepo(t *testing.T) {
+	t.Parallel()
 	repoDir, svc := newRealRepo(t)
 	dir, err := svc.ExportDefaultDir(context.Background())
 	if err != nil {

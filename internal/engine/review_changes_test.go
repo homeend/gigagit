@@ -13,6 +13,7 @@ import (
 )
 
 func TestReviewChangesLockModeRead(t *testing.T) {
+	t.Parallel()
 	if (ReviewChanges{}).LockMode() != repogate.Read {
 		t.Fatal("want Read")
 	}
@@ -20,6 +21,7 @@ func TestReviewChangesLockModeRead(t *testing.T) {
 
 // A task-agent writes the report to $GG_MESSAGE_FILE; that content wins over stdout.
 func TestReviewChangesPrefersMessageFile(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip()
 	}
@@ -45,6 +47,7 @@ func TestReviewChangesPrefersMessageFile(t *testing.T) {
 
 // A stdout tool (Claude) leaves the file empty; stdout is used.
 func TestReviewChangesFallsBackToStdout(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip()
 	}
@@ -66,6 +69,7 @@ func TestReviewChangesFallsBackToStdout(t *testing.T) {
 
 // $GG_REVIEW_DIFF holds the RANGE diff (not --cached); the context file names the range.
 func TestReviewChangesWritesRangeDiffAndContext(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip()
 	}

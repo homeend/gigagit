@@ -11,6 +11,7 @@ import (
 )
 
 func TestOpHTTPContinueMerge(t *testing.T) {
+	t.Parallel()
 	dir := conflictingRepo(t)
 	conflictedMergeState(t, dir)
 	// resolve by hand, stage — exactly the state Continue is for
@@ -34,6 +35,7 @@ func TestOpHTTPContinueMerge(t *testing.T) {
 }
 
 func TestOpHTTPAbortMerge(t *testing.T) {
+	t.Parallel()
 	dir := conflictingRepo(t)
 	pre := gitRun(t, dir, "rev-parse", "HEAD")
 	conflictedMergeState(t, dir)
@@ -57,6 +59,7 @@ func TestOpHTTPAbortMerge(t *testing.T) {
 
 // Nothing paused: the engine refuses; the wire reports ok=false, repo untouched.
 func TestOpHTTPContinueNothingPaused(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 

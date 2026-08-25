@@ -13,6 +13,7 @@ import (
 )
 
 func TestIsMailboxPatch(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		data string
@@ -35,6 +36,7 @@ func TestIsMailboxPatch(t *testing.T) {
 }
 
 func TestApplyPatchArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git apply", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -57,6 +59,7 @@ func TestApplyPatchArgv(t *testing.T) {
 }
 
 func TestPatchPathsArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git apply", gitexec.Result{Stdout: "1\t0\tfoo.txt\x00"})
 	r := &Repo{Runner: f}
@@ -76,6 +79,7 @@ func TestPatchPathsArgv(t *testing.T) {
 // modified file and one added file, and asserts PatchPaths reports both —
 // the shape engine.ApplyPatch's --3way-fallback unstage relies on.
 func TestPatchPathsRealRepo(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 	ctx := context.Background()
@@ -129,6 +133,7 @@ func gitOutT(t *testing.T, dir string, args ...string) string {
 }
 
 func TestAmMailboxAndAbortArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git am", gitexec.Result{})
 	f.SetResponse("git am --abort", gitexec.Result{})
@@ -152,6 +157,7 @@ func TestAmMailboxAndAbortArgv(t *testing.T) {
 // paused rebase using the apply backend — aborting am there would abort the
 // user's REBASE).
 func TestAmInProgress(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 	ctx := context.Background()

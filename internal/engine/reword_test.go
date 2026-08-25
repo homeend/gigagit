@@ -9,6 +9,7 @@ import (
 )
 
 func TestRewordHeadAmend(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t) // main: "initial"
 	if err := os.WriteFile(filepath.Join(dir, "top.txt"), []byte("top\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -31,6 +32,7 @@ func TestRewordHeadAmend(t *testing.T) {
 }
 
 func TestRewordMidBranchPreservesLater(t *testing.T) {
+	t.Parallel()
 	dir, repo := threeCommitBranch(t)                       // work: wip1 -> wip2 -> wip3
 	mid, _ := repo.RevParse(context.Background(), "work~1") // wip2
 
@@ -47,6 +49,7 @@ func TestRewordMidBranchPreservesLater(t *testing.T) {
 }
 
 func TestRewordNonHeadRootRefused(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t) // main: "initial" (the root)
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "c2")
 	root := gitOut(t, dir, "rev-list", "--max-parents=0", "HEAD")
@@ -59,6 +62,7 @@ func TestRewordNonHeadRootRefused(t *testing.T) {
 }
 
 func TestRewordOffBranchRefused(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t) // on main
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "c2")
 	gitIn(t, dir, "branch", "side")

@@ -76,6 +76,7 @@ func fileByPath(files []model.FileStatus, path string) (model.FileStatus, bool) 
 // that is staged-modified but only EOL-different in the working tree keeps its
 // staged entry (with the noise unstaged 'M' cleared).
 func TestStatusDropsEOLOnly(t *testing.T) {
+	t.Parallel()
 	dir := eolRepo(t)
 	st, err := eolService(t, dir).Status(context.Background())
 	if err != nil {
@@ -104,6 +105,7 @@ func TestStatusDropsEOLOnly(t *testing.T) {
 // SetShowEOLOnlyChanges(true) opts out of the filter: the EOL-only file is
 // surfaced as modified again (the [ui] show_eol_only_changes escape hatch).
 func TestStatusShowEOLOnlyWhenEnabled(t *testing.T) {
+	t.Parallel()
 	dir := eolRepo(t)
 	svc := eolService(t, dir)
 	svc.SetShowEOLOnlyChanges(true)

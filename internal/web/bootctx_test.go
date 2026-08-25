@@ -29,6 +29,7 @@ func serveDirect(t *testing.T, srv *Server, ctx context.Context, path string) *h
 // minute on a big repo; the every-other-F5 wireframes report). Detached from
 // the request context, the read completes regardless and the reload joins it.
 func TestBootReadsSurviveAbortedRequest(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	srv := New(domain.Open(dir))
 	cancelled, cancel := context.WithCancel(context.Background())
@@ -54,6 +55,7 @@ func TestBootReadsSurviveAbortedRequest(t *testing.T) {
 // diff must free its git read); this pins that the detachment above did not
 // leak into them.
 func TestDetailReadsStayCancellable(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	srv := New(domain.Open(dir))
 	head := gitRun(t, dir, "rev-parse", "HEAD")

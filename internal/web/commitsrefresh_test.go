@@ -37,6 +37,7 @@ func feedRows(t *testing.T, ts *httptest.Server, more bool) []string {
 // A plain reload must not throw away the pages the browser scrolled in: the
 // feed reconciles the fresh page 0 into what is already loaded.
 func TestCommitsReloadKeepsPagedDepth(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 30)
 	srv := New(domain.Open(dir))
 	srv.pageInitial, srv.pageBatch = 10, 10
@@ -69,6 +70,7 @@ func TestCommitsReloadKeepsPagedDepth(t *testing.T) {
 // The same must hold across a state-changing operation: committing from the
 // browser adds a row on top, it does not collapse the list back to page 0.
 func TestCommitsSurviveAnOp(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 30)
 	srv := New(domain.Open(dir))
 	srv.pageInitial, srv.pageBatch = 10, 10
@@ -108,6 +110,7 @@ func TestCommitsSurviveAnOp(t *testing.T) {
 // no anchor and the list must fall back to a clean walk — never keep commits
 // that no longer exist.
 func TestCommitsReloadFallsBackAfterARewrite(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 30)
 	srv := New(domain.Open(dir))
 	srv.pageInitial, srv.pageBatch = 10, 10
@@ -140,6 +143,7 @@ func TestCommitsReloadFallsBackAfterARewrite(t *testing.T) {
 // rewrite leaves a reconciled deep tail stale: the reconciling reload keeps
 // the pages already scrolled in, which is exactly wrong there.
 func TestCommitsResetStartsTheListClean(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 12)
 	srv := New(domain.Open(dir))
 	srv.pageInitial, srv.pageBatch = 4, 4

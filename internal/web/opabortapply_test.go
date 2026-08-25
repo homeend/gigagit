@@ -66,6 +66,7 @@ type statusConflictWire struct {
 // surface as a standalone conflict payload — previously absent entirely,
 // which left the client with no bar and no way out.
 func TestStatusStandaloneConflict(t *testing.T) {
+	t.Parallel()
 	dir := conflictedStashApply(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -82,6 +83,7 @@ func TestStatusStandaloneConflict(t *testing.T) {
 // untracked file AND the stash entry (retryable), and moves f.txt back to
 // HEAD's content.
 func TestOpAbortApply(t *testing.T) {
+	t.Parallel()
 	dir := conflictedStashApply(t)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -104,6 +106,7 @@ func TestOpAbortApply(t *testing.T) {
 // TestOpAbortApplyRefusals: a clean tree and a PAUSED-op conflict both
 // refuse — the paused case belongs to abort's sequencer cleanup.
 func TestOpAbortApplyRefusals(t *testing.T) {
+	t.Parallel()
 	// clean tree
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))

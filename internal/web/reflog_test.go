@@ -9,6 +9,7 @@ import (
 )
 
 func TestReflogEndpoint(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 3)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -47,6 +48,7 @@ func TestReflogEndpoint(t *testing.T) {
 // mean "this many rows" AND truncated has to mean "there is a next page" —
 // otherwise the "show more" row cannot know whether to keep offering itself.
 func TestReflogEndpointPages(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 8)
 	ts := serve(t, New(domain.Open(dir)))
 

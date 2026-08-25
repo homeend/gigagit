@@ -12,6 +12,7 @@ import (
 )
 
 func TestRebaseInteractiveArgvAndEnv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rebase -i", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -29,6 +30,7 @@ func TestRebaseInteractiveArgvAndEnv(t *testing.T) {
 
 // Real-git: --merges counting over a range with and without a merge commit.
 func TestHasMergeCommits(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // one commit "initial" on main
 	repo := &Repo{Runner: runner}
 	git := func(args ...string) {
@@ -67,6 +69,7 @@ func TestHasMergeCommits(t *testing.T) {
 }
 
 func TestRebaseArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rebase", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -80,6 +83,7 @@ func TestRebaseArgv(t *testing.T) {
 }
 
 func TestRebaseArgvWithDir(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rebase", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -93,6 +97,7 @@ func TestRebaseArgvWithDir(t *testing.T) {
 }
 
 func TestRebaseAbortArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git rebase --abort", gitexec.Result{})
 	r := &Repo{Runner: f}
@@ -108,6 +113,7 @@ func TestRebaseAbortArgv(t *testing.T) {
 // Real-git: build a conflicting rebase, observe the in-progress probe, abort,
 // observe clean — mirrors TestMergeConflictDetectAndAbortReal.
 func TestRebaseConflictDetectAndAbortReal(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 

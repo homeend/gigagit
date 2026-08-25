@@ -9,6 +9,7 @@ import (
 )
 
 func TestMoveWorktreeHappyMove(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/move", "wt-move")
 	dest := filepath.Join(filepath.Dir(dir), "moved-elsewhere")
@@ -34,6 +35,7 @@ func TestMoveWorktreeHappyMove(t *testing.T) {
 }
 
 func TestMoveWorktreeMissingFields(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	_, err := MoveWorktree{}.Run(
 		context.Background(),
@@ -44,6 +46,7 @@ func TestMoveWorktreeMissingFields(t *testing.T) {
 }
 
 func TestMoveWorktreeRefusesMainWorktree(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	dest := filepath.Join(filepath.Dir(dir), "main-dest")
 	_, err := MoveWorktree{Path: dir, Dest: dest}.Run(
@@ -55,6 +58,7 @@ func TestMoveWorktreeRefusesMainWorktree(t *testing.T) {
 }
 
 func TestMoveWorktreeDestExists(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/destexists", "wt-destexists")
 	dest := filepath.Join(filepath.Dir(dir), "wt-destexists-dest")
@@ -71,6 +75,7 @@ func TestMoveWorktreeDestExists(t *testing.T) {
 }
 
 func TestMoveWorktreeDestParentMissing(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/noparent", "wt-noparent")
 	parent := filepath.Join(filepath.Dir(dir), "nonexistent-parent")
@@ -85,6 +90,7 @@ func TestMoveWorktreeDestParentMissing(t *testing.T) {
 }
 
 func TestMoveWorktreeDestInsideSource(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/inside", "wt-inside")
 	dest := filepath.Join(wt, "sub")
@@ -98,6 +104,7 @@ func TestMoveWorktreeDestInsideSource(t *testing.T) {
 }
 
 func TestMoveWorktreeLockedUnlockAndMove(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/lockedmove", "wt-lockedmove")
 	gitIn(t, dir, "worktree", "lock", wt)
@@ -118,6 +125,7 @@ func TestMoveWorktreeLockedUnlockAndMove(t *testing.T) {
 }
 
 func TestMoveWorktreeLockedAbort(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := addWorktree(t, dir, "feature/lockedabort", "wt-lockedabort")
 	gitIn(t, dir, "worktree", "lock", wt)
@@ -139,6 +147,7 @@ func TestMoveWorktreeLockedAbort(t *testing.T) {
 }
 
 func TestMoveWorktreeDoneOnSuccessOnly(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 
 	// Case 1: happy move emits exactly one Done.

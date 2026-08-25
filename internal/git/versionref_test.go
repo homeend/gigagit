@@ -3,6 +3,7 @@ package git
 import "testing"
 
 func TestVersionRefRoundTrip(t *testing.T) {
+	t.Parallel()
 	ref := VersionRef("feat/x/y", "delete-branch", 1753100000)
 	if ref != "refs/gg/versions/feat/x/y/1753100000-delete-branch" {
 		t.Fatalf("ref = %q", ref)
@@ -14,6 +15,7 @@ func TestVersionRefRoundTrip(t *testing.T) {
 }
 
 func TestParseVersionRefRejects(t *testing.T) {
+	t.Parallel()
 	for _, bad := range []string{
 		"refs/heads/main",
 		"refs/gg/versions/",

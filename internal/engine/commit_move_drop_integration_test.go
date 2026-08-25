@@ -45,6 +45,7 @@ func runEdit(t *testing.T, dir string, repo *git.Repo, gg, targetRev string, e r
 }
 
 func TestSingleCommitDrop(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := fourCommitBranch(t)
 	if _, err := runEdit(t, dir, repo, gg, "work~1", rebaseplan.EditDrop, OpDeps{}); err != nil { // drop c
@@ -57,6 +58,7 @@ func TestSingleCommitDrop(t *testing.T) {
 }
 
 func TestSingleCommitDropNewest(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := fourCommitBranch(t)
 	// Drop d (the branch tip). The range d~1..work holds ONLY d, so the todo
@@ -72,6 +74,7 @@ func TestSingleCommitDropNewest(t *testing.T) {
 }
 
 func TestMultiCommitDropEntireRange(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := fourCommitBranch(t)
 	// Drop c and d — the two newest, so the selection IS the whole rebase
@@ -96,6 +99,7 @@ func TestMultiCommitDropEntireRange(t *testing.T) {
 }
 
 func TestMultiCommitDrop(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := fourCommitBranch(t)
 	// Drop b and d (non-adjacent) in one rebase. Base onto the oldest target's
@@ -120,6 +124,7 @@ func TestMultiCommitDrop(t *testing.T) {
 }
 
 func TestSingleCommitMoveDown(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := fourCommitBranch(t)
 	// Move c down (older): swap c with b. ~2 derivation is the load-bearing case.
@@ -133,6 +138,7 @@ func TestSingleCommitMoveDown(t *testing.T) {
 }
 
 func TestSingleCommitMoveUp(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := fourCommitBranch(t)
 	// Move b up (newer): swap b with c.
@@ -146,6 +152,7 @@ func TestSingleCommitMoveUp(t *testing.T) {
 }
 
 func TestSingleCommitEditConflictPauses(t *testing.T) {
+	t.Parallel()
 	gg := buildGG(t)
 	dir, repo := newRepo(t)
 	gitE(t, dir, "checkout", "-b", "work")

@@ -19,6 +19,7 @@ func wtHead(t *testing.T, wtPath string) string {
 }
 
 func TestCreateWorktreeForBranchHappyPath(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "existing/y")
 
@@ -48,6 +49,7 @@ func TestCreateWorktreeForBranchHappyPath(t *testing.T) {
 }
 
 func TestCreateWorktreeForBranchRelativePathResolvesAgainstRoot(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "rel/z")
 
@@ -65,6 +67,7 @@ func TestCreateWorktreeForBranchRelativePathResolvesAgainstRoot(t *testing.T) {
 }
 
 func TestCreateWorktreeForBranchMissingBranchGuard(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-none")
 	_, err := CreateWorktreeForBranch{Branch: "nope", Path: wt}.Run(
@@ -78,6 +81,7 @@ func TestCreateWorktreeForBranchMissingBranchGuard(t *testing.T) {
 }
 
 func TestCreateWorktreeForBranchAlreadyCheckedOutGuard(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	// "main" is checked out in the primary worktree.
 	wt := filepath.Join(filepath.Dir(dir), "wt-dup-main")
@@ -98,6 +102,7 @@ func TestCreateWorktreeForBranchAlreadyCheckedOutGuard(t *testing.T) {
 }
 
 func TestCreateWorktreeForBranchExistingPathGuard(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "pathy")
 	taken := filepath.Join(filepath.Dir(dir), "wt-taken")
@@ -112,6 +117,7 @@ func TestCreateWorktreeForBranchExistingPathGuard(t *testing.T) {
 }
 
 func TestCreateWorktreeForBranchRequiresFields(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	_, err := CreateWorktreeForBranch{}.Run(context.Background(), OpDeps{Repo: repo})
 	if err == nil || !strings.Contains(err.Error(), "required") {
@@ -129,6 +135,7 @@ func opDepsApprovingHook(repo GitOps) OpDeps {
 }
 
 func TestCreateWorktreeForBranchRunsHook(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "hooked/b")
 	wt := filepath.Join(filepath.Dir(dir), "wt-fb-hook")
@@ -147,6 +154,7 @@ func TestCreateWorktreeForBranchRunsHook(t *testing.T) {
 }
 
 func TestCreateWorktreeForBranchHookFailureNonFatal(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "failhook/b")
 	wt := filepath.Join(filepath.Dir(dir), "wt-fb-failhook")
@@ -165,6 +173,7 @@ func TestCreateWorktreeForBranchHookFailureNonFatal(t *testing.T) {
 }
 
 func TestCreateWorktreeForBranchEmptyHookSkips(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	gitIn(t, dir, "branch", "nohook/b")
 	wt := filepath.Join(filepath.Dir(dir), "wt-fb-nohook")

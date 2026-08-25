@@ -24,6 +24,7 @@ func startOpJSON(t *testing.T, ts *httptest.Server, body string) string {
 // Fetch takes no arguments and asks nothing, so the whole contract is: it
 // runs, and the remote-tracking ref catches up to work pushed elsewhere.
 func TestOpHTTPFetch(t *testing.T) {
+	t.Parallel()
 	origin, clone := cloneWithOrigin(t)
 	before := gitRun(t, clone, "rev-parse", "origin/main")
 	pushRemoteCommit(t, origin, "r.txt", "r\n", "remote work")

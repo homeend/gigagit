@@ -9,6 +9,7 @@ import (
 )
 
 func TestStageStagesFile(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644)
 
@@ -26,6 +27,7 @@ func TestStageStagesFile(t *testing.T) {
 }
 
 func TestStageUnstagesFile(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644)
 	gitE(t, dir, "add", "new.txt")
@@ -43,6 +45,7 @@ func TestStageUnstagesFile(t *testing.T) {
 }
 
 func TestStageAllStagesUntracked(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("x\n"), 0o644)
 
@@ -59,6 +62,7 @@ func TestStageAllStagesUntracked(t *testing.T) {
 }
 
 func TestStageAllRejectsPaths(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	if _, err := (Stage{All: true, Paths: []string{"x"}}).Run(context.Background(), OpDeps{Repo: repo}); err == nil {
 		t.Fatal("want error for All+Paths")
@@ -66,6 +70,7 @@ func TestStageAllRejectsPaths(t *testing.T) {
 }
 
 func TestStageAllRejectsUnstage(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepo(t)
 	if _, err := (Stage{All: true, Unstage: true}).Run(context.Background(), OpDeps{Repo: repo}); err == nil {
 		t.Fatal("want error for All+Unstage")

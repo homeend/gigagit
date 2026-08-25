@@ -19,6 +19,7 @@ func runCLI(t *testing.T, workdir string, args ...string) (int, string, string) 
 }
 
 func TestStatusCommand(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, out, _ := runCLI(t, dir, "status")
 	if code != 0 {
@@ -30,6 +31,7 @@ func TestStatusCommand(t *testing.T) {
 }
 
 func TestCommitCommand(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
 	code, _, errb := runCLI(t, dir, "commit", "-m", "second", "--all")
@@ -43,6 +45,7 @@ func TestCommitCommand(t *testing.T) {
 }
 
 func TestCommitShortAllAlias(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	// modify a tracked file so -a has something to stage
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644); err != nil {
@@ -55,6 +58,7 @@ func TestCommitShortAllAlias(t *testing.T) {
 }
 
 func TestCommitRequiresMessage(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, _ := runCLI(t, dir, "commit")
 	if code == 0 {
@@ -63,6 +67,7 @@ func TestCommitRequiresMessage(t *testing.T) {
 }
 
 func TestUnknownCommand(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, errb := runCLI(t, dir, "frobnicate")
 	if code == 0 {
@@ -74,6 +79,7 @@ func TestUnknownCommand(t *testing.T) {
 }
 
 func TestNoArgsReturnsUsage(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, errb := runCLI(t, dir) // no subcommand
 	if code == 0 {
@@ -90,6 +96,7 @@ func TestNoArgsReturnsUsage(t *testing.T) {
 // "unknown command" while in-process tests, which call Run directly, never
 // notice. It parses runOne's switch and asserts every case string is a command.
 func TestEverySwitchCaseIsRegistered(t *testing.T) {
+	t.Parallel()
 	for _, c := range runSwitchCases(t) {
 		if !IsCommand(c) {
 			t.Errorf("runOne handles case %q but it is missing from the commands map "+
@@ -137,6 +144,7 @@ func runSwitchCases(t *testing.T) []string {
 }
 
 func TestIsCommand(t *testing.T) {
+	t.Parallel()
 	for _, c := range []string{"status", "commit", "pull", "push", "switch", "stash", "undo", "inspect"} {
 		if !IsCommand(c) {
 			t.Fatalf("%q should be a known command", c)

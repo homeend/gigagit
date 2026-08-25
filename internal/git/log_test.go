@@ -13,6 +13,7 @@ import (
 )
 
 func TestParseLog(t *testing.T) {
+	t.Parallel()
 	// Fields separated by \x1f (unit separator), one commit per line. Trailing
 	// field is the %D decoration (empty here).
 	line1 := "aaa111" + "\x1f" + "" + "\x1f" + "Alice" + "\x1f" + "1700000000" + "\x1f" + "initial" + "\x1f" + ""
@@ -38,6 +39,7 @@ func TestParseLog(t *testing.T) {
 }
 
 func TestParseLogDecorations(t *testing.T) {
+	t.Parallel()
 	// Full refnames as emitted by --decorate=full. feat/foo is a SLASH-named
 	// local branch: it must classify as RefLocal, not RefRemote.
 	deco := "HEAD -> refs/heads/main, refs/heads/feat/foo, tag: refs/tags/v1, refs/remotes/origin/main"
@@ -76,6 +78,7 @@ func logArgvContains(t *testing.T, f *gitexec.FakeRunner, want string) bool {
 }
 
 func TestLogScopedArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log", gitexec.Result{Stdout: ""})
 	r := &Repo{Runner: f}
@@ -97,6 +100,7 @@ func TestLogScopedArgv(t *testing.T) {
 }
 
 func TestLogScopedRealDecorations(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // one commit on main
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "branch", "feature")
@@ -122,6 +126,7 @@ func TestLogScopedRealDecorations(t *testing.T) {
 }
 
 func TestLogScopedRealSource(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // one commit on main
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "checkout", "-b", "feat")
@@ -137,6 +142,7 @@ func TestLogScopedRealSource(t *testing.T) {
 }
 
 func TestParseLogSourceOptional(t *testing.T) {
+	t.Parallel()
 	// A 7-field line carries the source; a legacy 6-field line leaves it empty.
 	seven := "h1\x1f\x1fAda\x1f0\x1fsubj\x1fHEAD -> main\x1ffeat\n"
 	cs, _ := ParseLog([]byte(seven))
@@ -151,6 +157,7 @@ func TestParseLogSourceOptional(t *testing.T) {
 }
 
 func TestRepoLogReturnsCommits(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "second")
@@ -168,6 +175,7 @@ func TestRepoLogReturnsCommits(t *testing.T) {
 }
 
 func TestCommitTimesBatchesOneInvocation(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log (commit times)", gitexec.Result{Stdout: "aaa\x001000\nbbb\x002000\n"})
 	repo := &Repo{Runner: f}
@@ -188,6 +196,7 @@ func TestCommitTimesBatchesOneInvocation(t *testing.T) {
 }
 
 func TestCommitTimesEmptyInputMakesNoGitCall(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	repo := &Repo{Runner: f}
 	got, err := repo.CommitTimes(context.Background(), nil)
@@ -197,6 +206,7 @@ func TestCommitTimesEmptyInputMakesNoGitCall(t *testing.T) {
 }
 
 func TestCommitTimesRealRepo(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
@@ -217,6 +227,7 @@ func TestCommitTimesRealRepo(t *testing.T) {
 // a status token, then one path token (M/A/D/T) or two path tokens (R/C). `-z`
 // also disables git's path quoting, so non-ASCII paths arrive as raw UTF-8.
 func TestParseNameStatus(t *testing.T) {
+	t.Parallel()
 	raw := []byte("M\x00CHANGELOG.md\x00" +
 		"A\x00internal/tui/files_view.go\x00" +
 		"D\x00old.txt\x00" +
@@ -245,6 +256,7 @@ func TestParseNameStatus(t *testing.T) {
 }
 
 func TestCommitFilesArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log (commit files)", gitexec.Result{Stdout: "M\x00file.txt\x00"})
 	repo := &Repo{Runner: f}
@@ -267,6 +279,7 @@ func TestCommitFilesArgv(t *testing.T) {
 }
 
 func TestLogScopedAppendsUpstreams(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log", gitexec.Result{Stdout: ""})
 	r := &Repo{Runner: f}
@@ -285,6 +298,7 @@ func TestLogScopedAppendsUpstreams(t *testing.T) {
 // before the TUI's remote-branches list refreshes and the scope re-walks).
 // The walk must skip the gone ref, not fail with exit 128 "unknown revision".
 func TestLogScopedRealMissingUpstream(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t) // one commit on main
 	repo := &Repo{Runner: runner}
 	cs, err := repo.LogScoped(context.Background(), 10, 0,
@@ -298,6 +312,7 @@ func TestLogScopedRealMissingUpstream(t *testing.T) {
 }
 
 func TestLogScopedSkipArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log", gitexec.Result{Stdout: ""})
 	repo := &Repo{Runner: f}
@@ -327,6 +342,7 @@ func TestLogScopedSkipArgv(t *testing.T) {
 }
 
 func TestCommitFilesRealRepo(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // initial commit contains README.md
 	repo := &Repo{Runner: runner}
 
@@ -367,6 +383,7 @@ func TestCommitFilesRealRepo(t *testing.T) {
 // the follow-up `git show <rev>:<path>` failed with exit 128. CommitFiles must
 // return the raw UTF-8 path so ShowFile round-trips.
 func TestCommitFilesNonASCIIPathRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -406,6 +423,7 @@ func TestCommitFilesNonASCIIPathRoundTrip(t *testing.T) {
 }
 
 func TestTreeFilesRealRepo(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // initial commit contains README.md
 	repo := &Repo{Runner: runner}
 
@@ -443,6 +461,7 @@ func TestTreeFilesRealRepo(t *testing.T) {
 // a merge (HEAD + index parents), and a file changed against both parents must
 // be listed once, not once per parent.
 func TestCommitFilesStashNoDuplicate(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // initial commit contains README.md
 	repo := &Repo{Runner: runner}
 
@@ -474,6 +493,7 @@ func TestCommitFilesStashNoDuplicate(t *testing.T) {
 // CommitFiles must list that parent's files as adds — the first test
 // anywhere to drive ^3 (the TUI/web stash drill-ins depend on it).
 func TestCommitFilesStashUntrackedParent(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -540,6 +560,7 @@ func subjects(cs []model.Commit) []string {
 }
 
 func TestLogScopedPathFilter(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	writeFile(t, dir, "a.txt", "1")
@@ -557,6 +578,7 @@ func TestLogScopedPathFilter(t *testing.T) {
 }
 
 func TestLogScopedAuthorAndGrep(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	writeFile(t, dir, "a.txt", "1")
@@ -582,6 +604,7 @@ func TestLogScopedAuthorAndGrep(t *testing.T) {
 }
 
 func TestLogScopeFilteredPredicate(t *testing.T) {
+	t.Parallel()
 	if (LogScope{}).filtered() {
 		t.Fatal("empty scope must not be filtered")
 	}
@@ -599,6 +622,7 @@ func TestLogScopeFilteredPredicate(t *testing.T) {
 // merge: each side adds a different file, and the merge lists only what it
 // brought to the mainline (the first-parent diff), not the union of both parents.
 func TestCommitFilesMergeFirstParent(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // initial commit on main (README.md)
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "config", "user.email", "t@t")
@@ -644,6 +668,7 @@ func TestCommitFilesMergeFirstParent(t *testing.T) {
 // in LogScoped, this config would cause version refs to leak into decorations.
 // This simulates a non-default git config that the flag must protect against.
 func TestLogScopedExcludesVersionRefDecorations(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	ctx := context.Background()

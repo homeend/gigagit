@@ -11,6 +11,7 @@ import (
 // already carries a time, but the by-hash open (sidebar tags) has no row — so
 // the endpoint itself must carry the date, one source for both paths.
 func TestCommitFilesEndpointCarriesDateAndAuthor(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	sha := gitRun(t, dir, "rev-parse", "HEAD")
 	ts := serve(t, New(domain.Open(dir)))
@@ -59,6 +60,7 @@ func TestCommitFilesEndpointCarriesDateAndAuthor(t *testing.T) {
 // An unresolvable date must not take the file list down with it: the files are
 // the payload, the date is decoration.
 func TestCommitFilesEndpointStillServesFilesWithoutADate(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 2)
 	sha := gitRun(t, dir, "rev-parse", "HEAD")
 	ts := serve(t, New(domain.Open(dir)))

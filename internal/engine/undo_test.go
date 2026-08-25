@@ -8,6 +8,7 @@ import (
 )
 
 func TestUndoLastCommitMovesHeadBackAndStages(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 
@@ -30,6 +31,7 @@ func TestUndoLastCommitMovesHeadBackAndStages(t *testing.T) {
 }
 
 func TestUndoLastCommitRefusesWhenLastOpNotCommit(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepo(t)
 	ctx := context.Background()
 

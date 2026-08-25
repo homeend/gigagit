@@ -13,6 +13,7 @@ import (
 )
 
 func TestPruneWorktreesArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git worktree prune", gitexec.Result{})
 	repo := &Repo{Runner: f}
@@ -29,6 +30,7 @@ func TestPruneWorktreesArgv(t *testing.T) {
 }
 
 func TestWorktreeRepairArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git worktree repair", gitexec.Result{})
 	repo := &Repo{Runner: f}
@@ -45,6 +47,7 @@ func TestWorktreeRepairArgv(t *testing.T) {
 }
 
 func TestTopLevelReturnsRepoRoot(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -62,6 +65,7 @@ func TestTopLevelReturnsRepoRoot(t *testing.T) {
 }
 
 func TestCheckRefFormatBranch(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -74,6 +78,7 @@ func TestCheckRefFormatBranch(t *testing.T) {
 }
 
 func TestAddWorktreeCreatesDirAndBranch(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -95,6 +100,7 @@ func TestAddWorktreeCreatesDirAndBranch(t *testing.T) {
 }
 
 func TestGitCommonDirIsAbsolute(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -108,6 +114,7 @@ func TestGitCommonDirIsAbsolute(t *testing.T) {
 }
 
 func TestGitDirIsAbsolute(t *testing.T) {
+	t.Parallel()
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -121,6 +128,7 @@ func TestGitDirIsAbsolute(t *testing.T) {
 }
 
 func TestRemoveWorktreeRemovesLinkedTree(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -137,6 +145,7 @@ func TestRemoveWorktreeRemovesLinkedTree(t *testing.T) {
 }
 
 func TestUnlockWorktreeReleasesLock(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -164,6 +173,7 @@ func TestUnlockWorktreeReleasesLock(t *testing.T) {
 }
 
 func TestRemoveWorktreeRefusesDirtyUntilForced(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 
@@ -187,6 +197,7 @@ func TestRemoveWorktreeRefusesDirtyUntilForced(t *testing.T) {
 }
 
 func TestAddWorktreeForBranchChecksOutExisting(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	if err := repo.CreateBranch(context.Background(), "existing/x", ""); err != nil {
@@ -208,6 +219,7 @@ func TestAddWorktreeForBranchChecksOutExisting(t *testing.T) {
 }
 
 func TestDeleteBranchRefusesUnmergedUntilForced(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	gitDo := func(args ...string) {
@@ -242,6 +254,7 @@ func TestDeleteBranchRefusesUnmergedUntilForced(t *testing.T) {
 }
 
 func TestResetInDirArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git -C reset", gitexec.Result{})
 	repo := &Repo{Runner: f}
@@ -262,6 +275,7 @@ func TestResetInDirArgv(t *testing.T) {
 }
 
 func TestMoveWorktree(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	// create a linked worktree next to the repo

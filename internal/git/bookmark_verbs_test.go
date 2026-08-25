@@ -9,6 +9,7 @@ import (
 )
 
 func TestBlobSHAAndCatFile(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t) // README.md committed as "hello\n"
 	r := &Repo{Runner: runner}
 	ctx := context.Background()
@@ -27,6 +28,7 @@ func TestBlobSHAAndCatFile(t *testing.T) {
 }
 
 func TestShowFileInDirReadsLinkedWorktreeIndex(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 	ctx := context.Background()

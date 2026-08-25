@@ -11,6 +11,7 @@ import (
 )
 
 func TestStageRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("n\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -44,6 +45,7 @@ func TestStageRoundTrip(t *testing.T) {
 }
 
 func TestStageAll(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("edit\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -63,6 +65,7 @@ func TestStageAll(t *testing.T) {
 }
 
 func TestStageValidation(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 	cases := []struct {
@@ -82,6 +85,7 @@ func TestStageValidation(t *testing.T) {
 }
 
 func TestWriteGuard(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	if err := os.WriteFile(filepath.Join(dir, "g.txt"), []byte("g\n"), 0o644); err != nil {
 		t.Fatal(err)

@@ -27,6 +27,7 @@ func removeWtBody(path string) string {
 }
 
 func TestOpHTTPRemoveWorktreeOnly(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	wt := addWorktree(t, dir, "feature")
 	srv := New(domain.Open(dir))
@@ -61,6 +62,7 @@ func TestOpHTTPRemoveWorktreeOnly(t *testing.T) {
 }
 
 func TestOpHTTPRemoveWorktreeAbort(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	wt := addWorktree(t, dir, "feature")
 	srv := New(domain.Open(dir))
@@ -83,6 +85,7 @@ func TestOpHTTPRemoveWorktreeAbort(t *testing.T) {
 }
 
 func TestOpHTTPRemoveWorktreeAndBranch(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	wt := addWorktree(t, dir, "feature")
 	srv := New(domain.Open(dir))
@@ -108,6 +111,7 @@ func TestOpHTTPRemoveWorktreeAndBranch(t *testing.T) {
 }
 
 func TestOpHTTPRemoveWorktreeUnknownPath(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -120,6 +124,7 @@ func TestOpHTTPRemoveWorktreeUnknownPath(t *testing.T) {
 }
 
 func TestOpHTTPRemoveWorktreeMain(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 

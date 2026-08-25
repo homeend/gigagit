@@ -8,6 +8,7 @@ import (
 )
 
 func TestFetchUpdatesAllRemotes(t *testing.T) {
+	t.Parallel()
 	clone, repo := cloneOnMainBehindOrigin(t)
 	before := revAt(t, clone, "origin/main")
 	res, err := Fetch{}.Run(context.Background(), OpDeps{Repo: repo, Decider: MapDecider{}})
@@ -23,6 +24,7 @@ func TestFetchUpdatesAllRemotes(t *testing.T) {
 }
 
 func TestFetchLockModeIsRefWrite(t *testing.T) {
+	t.Parallel()
 	if (Fetch{}).LockMode() != repogate.RefWrite {
 		t.Fatal("Fetch must be RefWrite")
 	}

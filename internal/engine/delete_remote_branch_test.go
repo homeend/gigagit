@@ -24,6 +24,7 @@ func pushDeleteCalled(f *gitexec.FakeRunner) (remote, branch string, ok bool) {
 }
 
 func TestDeleteRemoteBranchConfirmDeletes(t *testing.T) {
+	t.Parallel()
 	repo, f := delRemoteFakeRepo()
 	res, err := DeleteRemoteBranch{Remote: "origin", Branch: "feat/x"}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"delete-remote-branch": "delete"}})
@@ -36,6 +37,7 @@ func TestDeleteRemoteBranchConfirmDeletes(t *testing.T) {
 }
 
 func TestDeleteRemoteBranchAbortDoesNotDelete(t *testing.T) {
+	t.Parallel()
 	repo, f := delRemoteFakeRepo()
 	res, err := DeleteRemoteBranch{Remote: "origin", Branch: "feat/x"}.Run(context.Background(),
 		OpDeps{Repo: repo, Decider: MapDecider{"delete-remote-branch": "abort"}})
@@ -51,6 +53,7 @@ func TestDeleteRemoteBranchAbortDoesNotDelete(t *testing.T) {
 }
 
 func TestDeleteRemoteBranchRequiresFields(t *testing.T) {
+	t.Parallel()
 	repo, _ := delRemoteFakeRepo()
 	if _, err := (DeleteRemoteBranch{Branch: "x"}).Run(context.Background(), OpDeps{Repo: repo}); err == nil {
 		t.Fatal("missing Remote must error")

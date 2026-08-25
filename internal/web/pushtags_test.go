@@ -14,6 +14,7 @@ import (
 
 // A tip tag missing upstream is offered.
 func TestPushTagCheckOffersUnpushedTipTags(t *testing.T) {
+	t.Parallel()
 	_, dir := cloneWithOrigin(t)
 	localCommit(t, dir, "f.txt", "work\n", "work") // so HEAD~1 exists
 	gitRun(t, dir, "tag", "v1")                    // on the tip, never pushed
@@ -34,6 +35,7 @@ func TestPushTagCheckOffersUnpushedTipTags(t *testing.T) {
 // A tip tag the remote already has is not offered, and neither is a tag that
 // sits further back in history.
 func TestPushTagCheckSkipsPushedAndNonTipTags(t *testing.T) {
+	t.Parallel()
 	_, dir := cloneWithOrigin(t)
 	localCommit(t, dir, "f.txt", "work\n", "work")
 	gitRun(t, dir, "tag", "v1")
@@ -53,6 +55,7 @@ func TestPushTagCheckSkipsPushedAndNonTipTags(t *testing.T) {
 // Answering "Push branch + tags" pushes the branch and then the tags, in one
 // run — and the tag really lands on the remote.
 func TestPushWithTipTagsPushesBoth(t *testing.T) {
+	t.Parallel()
 	remote, dir := cloneWithOrigin(t)
 	localCommit(t, dir, "f.txt", "more\n", "more work")
 	gitRun(t, dir, "tag", "v2")
@@ -70,6 +73,7 @@ func TestPushWithTipTagsPushesBoth(t *testing.T) {
 // A name off the wire is verified against what is actually at the tip: a tag
 // that is not there is dropped rather than pushed.
 func TestPushTagsIgnoresTagsNotAtTheTip(t *testing.T) {
+	t.Parallel()
 	remote, dir := cloneWithOrigin(t)
 	localCommit(t, dir, "f.txt", "more\n", "more work")
 	gitRun(t, dir, "tag", "back", "HEAD~1") // exists, but not at the tip

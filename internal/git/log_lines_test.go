@@ -10,6 +10,7 @@ import (
 )
 
 func TestLogLinesArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log", gitexec.Result{Stdout: "abc1234\x1ffirst subject\ndef5678\x1fsecond\n"})
 	r := &Repo{Runner: f}
@@ -28,6 +29,7 @@ func TestLogLinesArgv(t *testing.T) {
 }
 
 func TestCommitLineArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log", gitexec.Result{Stdout: "abc1234\x1fthe subject\n"})
 	r := &Repo{Runner: f}
@@ -45,6 +47,7 @@ func TestCommitLineArgv(t *testing.T) {
 }
 
 func TestCommitLineEmptyOutputErrors(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git log", gitexec.Result{Stdout: ""})
 	r := &Repo{Runner: f}
@@ -54,6 +57,7 @@ func TestCommitLineEmptyOutputErrors(t *testing.T) {
 }
 
 func TestParseLogLinesSkipsMalformed(t *testing.T) {
+	t.Parallel()
 	got := parseLogLines("abc\x1fok\nnot-a-log-line\n\n")
 	if len(got) != 1 || got[0].Hash != "abc" {
 		t.Fatalf("got %+v", got)

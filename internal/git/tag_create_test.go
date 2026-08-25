@@ -8,6 +8,7 @@ import (
 )
 
 func TestRepoCreateTag(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "c1")
@@ -28,6 +29,7 @@ func TestRepoCreateTag(t *testing.T) {
 }
 
 func TestCreateTagForceArgv(t *testing.T) {
+	t.Parallel()
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git tag", gitexec.Result{})
 	repo := &Repo{Runner: f}
@@ -52,6 +54,7 @@ func TestCreateTagForceArgv(t *testing.T) {
 }
 
 func TestCreateTagForceAnnotatesExisting(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "c1")

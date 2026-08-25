@@ -8,6 +8,7 @@ import (
 )
 
 func TestLogDefault(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x\n"), 0o644)
 	gitIn(t, dir, "add", "a.txt")
@@ -32,6 +33,7 @@ func TestLogDefault(t *testing.T) {
 }
 
 func TestLogCountFlag(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x\n"), 0o644)
 	gitIn(t, dir, "add", "a.txt")
@@ -47,6 +49,7 @@ func TestLogCountFlag(t *testing.T) {
 }
 
 func TestLogRange(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	gitIn(t, dir, "switch", "-c", "feat")
 	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("y\n"), 0o644)
@@ -63,6 +66,7 @@ func TestLogRange(t *testing.T) {
 }
 
 func TestLogTooManyArgs(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t)
 	code, _, _ := runCLI(t, dir, "log", "a", "b")
 	if code != 2 {

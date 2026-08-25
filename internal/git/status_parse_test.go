@@ -7,6 +7,7 @@ import (
 )
 
 func TestParseStatusV2(t *testing.T) {
+	t.Parallel()
 	// Fields within an entry are space-separated; entries are NUL-terminated.
 	entries := []string{
 		"# branch.oid abc123",
@@ -44,6 +45,7 @@ func TestParseStatusV2(t *testing.T) {
 }
 
 func TestParseStatusV2UnmergedPathWithSpace(t *testing.T) {
+	t.Parallel()
 	entries := []string{
 		"# branch.head main",
 		"u UU N... 100644 100644 100644 000000 h1 h2 h3 con flict.txt",
@@ -69,6 +71,7 @@ func TestParseStatusV2UnmergedPathWithSpace(t *testing.T) {
 }
 
 func TestParseUnmergedCapturesCode(t *testing.T) {
+	t.Parallel()
 	// Two unmerged entries: UU (both modified) and DU (deleted by us).
 	data := []byte(
 		"u UU N... 100644 100644 100644 100644 h1 h2 h3 uu.txt\x00" +
@@ -91,6 +94,7 @@ func TestParseUnmergedCapturesCode(t *testing.T) {
 }
 
 func TestParseStatusV2Rename(t *testing.T) {
+	t.Parallel()
 	// A "2" entry encodes a rename; with -z the original path is the NEXT token.
 	entries := []string{
 		"# branch.head main",

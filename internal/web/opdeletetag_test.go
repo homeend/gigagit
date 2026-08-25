@@ -10,6 +10,7 @@ import (
 )
 
 func TestOpHTTPDeleteTag(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "tag", "v1")
 	ts := serve(t, New(domain.Open(dir)))
@@ -28,6 +29,7 @@ func TestOpHTTPDeleteTag(t *testing.T) {
 }
 
 func TestOpHTTPDeleteTagMissing(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 
@@ -42,6 +44,7 @@ func TestOpHTTPDeleteTagMissing(t *testing.T) {
 }
 
 func TestOpHTTPDeleteTagBadName(t *testing.T) {
+	t.Parallel()
 	dir := newRepoDir(t, 1)
 	ts := serve(t, New(domain.Open(dir)))
 
