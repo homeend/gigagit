@@ -83,6 +83,7 @@ func TestShelfDisabledWhenNoStateDir(t *testing.T) {
 	// No injected store and no resolvable state dir → shelf disabled.
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "") // os.UserHomeDir reads this on Windows
 	t.Setenv("LocalAppData", "")
 	old := ShelfStatePath
 	ShelfStatePath = ""

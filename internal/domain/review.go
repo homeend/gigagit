@@ -157,13 +157,16 @@ func truncateLabel(s string, n int) string {
 
 // reviewsBaseDir mirrors shelfBaseDir (shelfstore.go) with a "reviews" leaf.
 func reviewsBaseDir() string {
+	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
+	// deliberate override — and the only way tests can isolate state on
+	// Windows); %LocalAppData% is the ambient Windows default.
+	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
+		return filepath.Join(s, "gg", "reviews")
+	}
 	if runtime.GOOS == "windows" {
 		if lad := os.Getenv("LocalAppData"); lad != "" {
 			return filepath.Join(lad, "gg", "reviews")
 		}
-	}
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "reviews")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

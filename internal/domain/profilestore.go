@@ -55,13 +55,16 @@ func (s *Service) profileStores(ctx context.Context) (global, repo profile.Store
 // profileBaseDir resolves <state>/gg/profile cross-platform (mirrors
 // bookmarkBaseDir). "" when no home/state dir exists.
 func profileBaseDir() string {
+	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
+	// deliberate override — and the only way tests can isolate state on
+	// Windows); %LocalAppData% is the ambient Windows default.
+	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
+		return filepath.Join(s, "gg", "profile")
+	}
 	if runtime.GOOS == "windows" {
 		if lad := os.Getenv("LocalAppData"); lad != "" {
 			return filepath.Join(lad, "gg", "profile")
 		}
-	}
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "profile")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

@@ -57,13 +57,16 @@ func (s *Service) shelfStore(ctx context.Context) shelf.Store {
 // shelfBaseDir resolves <state>/gg/shelf cross-platform (mirrors
 // repos.DefaultStatePath). "" when no home/state dir exists.
 func shelfBaseDir() string {
+	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
+	// deliberate override — and the only way tests can isolate state on
+	// Windows); %LocalAppData% is the ambient Windows default.
+	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
+		return filepath.Join(s, "gg", "shelf")
+	}
 	if runtime.GOOS == "windows" {
 		if lad := os.Getenv("LocalAppData"); lad != "" {
 			return filepath.Join(lad, "gg", "shelf")
 		}
-	}
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "shelf")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
