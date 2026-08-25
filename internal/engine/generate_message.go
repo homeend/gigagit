@@ -89,6 +89,9 @@ func (op GenerateMessage) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	if fileMsg, rerr := os.ReadFile(msgPath); rerr == nil && strings.TrimSpace(string(fileMsg)) != "" {
 		captured = string(fileMsg)
 	}
+	// A Windows agent (cmd.exe echo, a CRLF-writing editor) emits \r\n; the
+	// subject/body split downstream is \n-based, so normalize here.
+	captured = strings.ReplaceAll(captured, "\r\n", "\n")
 	if runErr != nil {
 		return Result{Captured: captured}, runErr
 	}

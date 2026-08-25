@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -73,6 +74,9 @@ func TestStaleCwdMessageLiveDir(t *testing.T) {
 }
 
 func TestStaleCwdMessageDeletedDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows refuses to delete a process's cwd — the stale-cwd start condition cannot arise")
+	}
 	d := t.TempDir()
 	t.Chdir(d)
 	if err := os.Remove(d); err != nil {

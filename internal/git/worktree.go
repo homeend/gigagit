@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/gitcmd"
@@ -15,7 +16,9 @@ func (r *Repo) TopLevel(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(res.Stdout), nil
+	// Native notation (git prints forward slashes even on Windows) — see
+	// ParseWorktrees: consumers compare these against filepath-built paths.
+	return filepath.Clean(strings.TrimSpace(res.Stdout)), nil
 }
 
 // CheckRefFormatBranch reports whether name is a legal git branch name
@@ -64,7 +67,9 @@ func (r *Repo) GitCommonDir(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(res.Stdout), nil
+	// Native notation (git prints forward slashes even on Windows) — see
+	// ParseWorktrees: consumers compare these against filepath-built paths.
+	return filepath.Clean(strings.TrimSpace(res.Stdout)), nil
 }
 
 // GitDir returns the absolute path of THIS worktree's git directory
@@ -78,7 +83,9 @@ func (r *Repo) GitDir(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(res.Stdout), nil
+	// Native notation (git prints forward slashes even on Windows) — see
+	// ParseWorktrees: consumers compare these against filepath-built paths.
+	return filepath.Clean(strings.TrimSpace(res.Stdout)), nil
 }
 
 // RemoveWorktree removes the linked worktree at path

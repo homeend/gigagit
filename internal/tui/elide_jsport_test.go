@@ -71,7 +71,10 @@ func TestElidePathJSPortMatchesGo(t *testing.T) {
 	// The script prints one line per mismatch; silence means the port agrees.
 	script := `
 import { readFileSync } from "node:fs";
-const { elidePath } = await import(process.argv[2]); // argv: node, script, core.js, cases
+import { pathToFileURL } from "node:url";
+// argv: node, script, core.js, cases — imported via a file:// URL, since a
+// raw Windows path ("T:\\…") is not a valid ESM specifier there.
+const { elidePath } = await import(pathToFileURL(process.argv[2]).href);
 for (const c of JSON.parse(readFileSync(process.argv[3], "utf8"))) {
   const got = elidePath(c.path, c.n);
   if (got !== c.want) console.log(JSON.stringify({ ...c, got }));

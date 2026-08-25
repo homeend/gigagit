@@ -21,6 +21,11 @@ var (
 func SetSpanSink(w io.Writer) {
 	sinkMu.Lock()
 	defer sinkMu.Unlock()
+	// Replacing (or clearing) the sink closes the previous one when it owns a
+	// resource — a leaked open file keeps its log undeletable on Windows.
+	if c, ok := sink.(io.Closer); ok && sink != nil {
+		_ = c.Close()
+	}
 	sink = w
 }
 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -254,7 +255,7 @@ func TestShelfPopupYChooserHasAbsoluteOnOriginWorktree(t *testing.T) {
 	}
 	// The absolute option resolves against the entry's OWN origin worktree
 	// (/wt), not the current worktree — pins copyFilePrompt(e.Origin.Worktree,…).
-	if got := m.modal.copyTexts["Copy absolute file path"]; got != "/wt/dir/x.go" {
+	if got := m.modal.copyTexts["Copy absolute file path"]; got != filepath.FromSlash("/wt/dir/x.go") {
 		t.Errorf("captured abs = %q, want /wt/dir/x.go (entry's own worktree)", got)
 	}
 }

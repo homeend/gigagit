@@ -44,7 +44,11 @@ func (ShellCaptureRunner) Capture(ctx context.Context, spec CaptureSpec, onLine 
 	defer os.Remove(name)
 	body := spec.Command
 	if runtime.GOOS == "windows" {
-		body = template.FlattenForCmd(body) // see FlattenForCmd: a .bat cannot span lines
+		// @echo off: cmd.exe otherwise echoes each command line into stdout,
+		// which would pollute the captured output (a generated commit message
+		// would start with the prompt line). The flattened command stays one
+		// line — the .bat itself may have this one preamble line.
+		body = "@echo off\r\n" + template.FlattenForCmd(body) // see FlattenForCmd: a .bat cannot span lines
 	}
 	if _, err := f.WriteString(body); err != nil {
 		f.Close()

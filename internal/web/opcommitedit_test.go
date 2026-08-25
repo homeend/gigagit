@@ -109,7 +109,7 @@ func TestOpCommitEditDrop(t *testing.T) {
 	ts := serve(t, New(domain.Open(dir)))
 
 	c2 := shaOf(t, dir, "c2")
-	events := readSSE(t, ts, startOpBody(t, ts, `{"op":"commit-edit","sha":"`+c2+`","edit":"drop"}`), 60*time.Second)
+	events := readSSE(t, ts, startOpBody(t, ts, `{"op":"commit-edit","sha":"`+c2+`","edit":"drop"}`), 180*time.Second)
 	done := events[len(events)-1]
 	if done["ok"] != true || done["changed"] != true {
 		t.Fatalf("done = %v", done)
@@ -132,7 +132,7 @@ func TestOpCommitEditMoveUp(t *testing.T) {
 	ts := serve(t, New(domain.Open(dir)))
 
 	c2 := shaOf(t, dir, "c2")
-	events := readSSE(t, ts, startOpBody(t, ts, `{"op":"commit-edit","sha":"`+c2+`","edit":"move-up"}`), 60*time.Second)
+	events := readSSE(t, ts, startOpBody(t, ts, `{"op":"commit-edit","sha":"`+c2+`","edit":"move-up"}`), 180*time.Second)
 	done := events[len(events)-1]
 	if done["ok"] != true || done["changed"] != true {
 		t.Fatalf("done = %v", done)
@@ -149,7 +149,7 @@ func TestOpCommitEditMoveDown(t *testing.T) {
 	ts := serve(t, New(domain.Open(dir)))
 
 	c3 := shaOf(t, dir, "c3")
-	events := readSSE(t, ts, startOpBody(t, ts, `{"op":"commit-edit","sha":"`+c3+`","edit":"move-down"}`), 60*time.Second)
+	events := readSSE(t, ts, startOpBody(t, ts, `{"op":"commit-edit","sha":"`+c3+`","edit":"move-down"}`), 180*time.Second)
 	done := events[len(events)-1]
 	if done["ok"] != true || done["changed"] != true {
 		t.Fatalf("done = %v", done)

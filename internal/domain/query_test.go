@@ -224,7 +224,7 @@ func TestTopLevelGatedQuery(t *testing.T) {
 	f := fakeReads() // stage-2 helper; configures "git rev-parse (toplevel)" → /repo
 	svc := New(&git.Repo{Runner: f})
 	top, err := svc.TopLevel(context.Background())
-	if err != nil || top != "/repo" {
+	if err != nil || top != filepath.Clean("/repo") {
 		t.Fatalf("TopLevel = %q, %v", top, err)
 	}
 }
@@ -254,7 +254,7 @@ func TestGitCommonDirGatedQuery(t *testing.T) {
 	f.SetResponse("git rev-parse (common-dir)", gitexec.Result{Stdout: "/repo/.git\n"})
 	svc := New(&git.Repo{Runner: f})
 	d, err := svc.GitCommonDir(context.Background())
-	if err != nil || d != "/repo/.git" {
+	if err != nil || d != filepath.Clean("/repo/.git") {
 		t.Fatalf("GitCommonDir = %q, %v", d, err)
 	}
 }

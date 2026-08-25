@@ -77,7 +77,12 @@ func TestPushBranchRowPushesSelectedNotCurrent(t *testing.T) {
 		}
 	}
 
-	out, err := exec.Command("git", "ls-remote", bare).CombinedOutput()
+	// Run from inside the work repo: Git for Windows refuses `ls-remote
+	// <local path>` when the process cwd is not a repository ("not a git
+	// repository: (NULL)").
+	lsr := exec.Command("git", "ls-remote", bare)
+	lsr.Dir = dir
+	out, err := lsr.CombinedOutput()
 	if err != nil {
 		t.Fatalf("ls-remote: %v\n%s", err, out)
 	}

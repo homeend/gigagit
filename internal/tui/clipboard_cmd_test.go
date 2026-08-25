@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -26,13 +27,13 @@ func TestClipboardCopiedMsgError(t *testing.T) {
 
 func TestCopyFileChoice(t *testing.T) {
 	t.Parallel()
-	const p, abs = "dir/f.txt", "/repo/dir/f.txt"
+	p, abs := "dir/f.txt", filepath.FromSlash("/repo/dir/f.txt")
 	okMsg, text, ok := copyFileChoice("Copy file path", p, abs)
 	if !ok || okMsg != "Copied path: dir/f.txt" || text != "dir/f.txt" {
 		t.Errorf("path choice = (%q, %q, %v)", okMsg, text, ok)
 	}
 	okMsg, text, ok = copyFileChoice("Copy absolute file path", p, abs)
-	if !ok || okMsg != "Copied absolute path: /repo/dir/f.txt" || text != "/repo/dir/f.txt" {
+	if !ok || okMsg != "Copied absolute path: "+abs || text != abs {
 		t.Errorf("abs choice = (%q, %q, %v)", okMsg, text, ok)
 	}
 	okMsg, text, ok = copyFileChoice("Copy file name", p, abs)
@@ -74,7 +75,7 @@ func TestCopyFilePromptOpensModal(t *testing.T) {
 		t.Error("Cancel should return no cmd")
 	}
 	// The inspectable seam: an empty base anchors on the current worktree.
-	if got := m.modal.copyTexts["Copy absolute file path"]; got != "/repo/dir/f.txt" {
+	if got := m.modal.copyTexts["Copy absolute file path"]; got != filepath.FromSlash("/repo/dir/f.txt") {
 		t.Errorf("captured abs = %q, want /repo/dir/f.txt", got)
 	}
 }
@@ -85,7 +86,7 @@ func TestCopyFilePromptBaseAnchorsOnEntryWorktree(t *testing.T) {
 	// against THAT base, not the current worktree — the crux of the design.
 	m := footerModel() // currentWorktree == "/repo"
 	m, _ = m.copyFilePrompt("/wt", "dir/f.txt")
-	if got := m.modal.copyTexts["Copy absolute file path"]; got != "/wt/dir/f.txt" {
+	if got := m.modal.copyTexts["Copy absolute file path"]; got != filepath.FromSlash("/wt/dir/f.txt") {
 		t.Errorf("captured abs = %q, want /wt/dir/f.txt (entry's own worktree)", got)
 	}
 	if got := m.modal.copyTexts["Copy file path"]; got != "dir/f.txt" {

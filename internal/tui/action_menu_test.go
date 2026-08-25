@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -198,7 +199,7 @@ func TestContextCopyRowsFiles(t *testing.T) {
 	if rows[0].id != "copy-file-path" || rows[0].copyText != "dir/f.txt" {
 		t.Errorf("row[0] = {%q,%q}, want copy-file-path dir/f.txt", rows[0].id, rows[0].copyText)
 	}
-	if rows[1].id != "copy-file-abspath" || rows[1].copyText != "/repo/dir/f.txt" {
+	if rows[1].id != "copy-file-abspath" || rows[1].copyText != filepath.FromSlash("/repo/dir/f.txt") {
 		t.Errorf("row[1] = {%q,%q}, want copy-file-abspath /repo/dir/f.txt", rows[1].id, rows[1].copyText)
 	}
 	if rows[2].id != "copy-file-name" || rows[2].copyText != "f.txt" {
@@ -221,7 +222,7 @@ func TestContextCopyRowsStaged(t *testing.T) {
 	if rows[0].id != "copy-file-path" || rows[0].copyText != "dir/g.txt" {
 		t.Errorf("row[0] = {%q,%q}, want copy-file-path dir/g.txt", rows[0].id, rows[0].copyText)
 	}
-	if rows[1].id != "copy-file-abspath" || rows[1].copyText != "/repo/dir/g.txt" {
+	if rows[1].id != "copy-file-abspath" || rows[1].copyText != filepath.FromSlash("/repo/dir/g.txt") {
 		t.Errorf("row[1] = {%q,%q}, want copy-file-abspath /repo/dir/g.txt", rows[1].id, rows[1].copyText)
 	}
 	if rows[2].id != "copy-file-name" || rows[2].copyText != "g.txt" {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -45,7 +46,7 @@ func TestExecuteHoldsTreeWriteByDefault(t *testing.T) {
 	svc, _ := svcWithKey("/domain-test-default")
 	var seen []repogate.Entry
 	op := fakeOp{body: func(ctx context.Context, deps engine.OpDeps) (engine.Result, error) {
-		seen = repogate.For("/domain-test-default").Queue()
+		seen = repogate.For(filepath.Clean("/domain-test-default")).Queue()
 		return engine.Result{Summary: "ok"}, nil
 	}}
 	res, err := svc.Execute(context.Background(), op, nil, nil)
@@ -55,7 +56,7 @@ func TestExecuteHoldsTreeWriteByDefault(t *testing.T) {
 	if len(seen) != 1 || seen[0].Mode != repogate.TreeWrite || seen[0].Waiting {
 		t.Fatalf("mid-op gate state = %+v, want one held TreeWrite", seen)
 	}
-	if q := repogate.For("/domain-test-default").Queue(); len(q) != 0 {
+	if q := repogate.For(filepath.Clean("/domain-test-default")).Queue(); len(q) != 0 {
 		t.Fatalf("gate not released after Execute: %+v", q)
 	}
 }
@@ -64,7 +65,7 @@ func TestExecuteRespectsLockMode(t *testing.T) {
 	svc, _ := svcWithKey("/domain-test-mode")
 	var seen []repogate.Entry
 	op := lockedOp{fakeOp{mode: modePtr(repogate.Read), body: func(ctx context.Context, deps engine.OpDeps) (engine.Result, error) {
-		seen = repogate.For("/domain-test-mode").Queue()
+		seen = repogate.For(filepath.Clean("/domain-test-mode")).Queue()
 		return engine.Result{}, nil
 	}}}
 	if _, err := svc.Execute(context.Background(), op, nil, nil); err != nil {
@@ -85,7 +86,7 @@ func TestExecuteWiresEscalate(t *testing.T) {
 		if err := deps.Escalate(ctx); err != nil {
 			return engine.Result{}, err
 		}
-		after = repogate.For("/domain-test-escalate").Queue()
+		after = repogate.For(filepath.Clean("/domain-test-escalate")).Queue()
 		return engine.Result{}, nil
 	}}}
 	if _, err := svc.Execute(context.Background(), op, nil, nil); err != nil {
@@ -94,14 +95,14 @@ func TestExecuteWiresEscalate(t *testing.T) {
 	if len(after) != 1 || after[0].Mode != repogate.TreeWrite {
 		t.Fatalf("post-escalate gate state = %+v, want one held TreeWrite", after)
 	}
-	if q := repogate.For("/domain-test-escalate").Queue(); len(q) != 0 {
+	if q := repogate.For(filepath.Clean("/domain-test-escalate")).Queue(); len(q) != 0 {
 		t.Fatalf("gate not released after escalated Execute: %+v", q)
 	}
 }
 
 func TestExecuteEscalateCancelledReleasesCleanly(t *testing.T) {
 	svc, _ := svcWithKey("/domain-test-esc-cancel")
-	blocker, err := repogate.For("/domain-test-esc-cancel").Acquire(context.Background(), repogate.Read, "blocker")
+	blocker, err := repogate.For(filepath.Clean("/domain-test-esc-cancel")).Acquire(context.Background(), repogate.Read, "blocker")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,14 +116,14 @@ func TestExecuteEscalateCancelledReleasesCleanly(t *testing.T) {
 	}
 	blocker.Release()
 	// No panic from the deferred release, and the gate is free.
-	if q := repogate.For("/domain-test-esc-cancel").Queue(); len(q) != 0 {
+	if q := repogate.For(filepath.Clean("/domain-test-esc-cancel")).Queue(); len(q) != 0 {
 		t.Fatalf("gate state after failed escalation = %+v, want empty", q)
 	}
 }
 
 func TestExecuteCancelledWhileQueued(t *testing.T) {
 	svc, _ := svcWithKey("/domain-test-cancel")
-	hold, err := repogate.For("/domain-test-cancel").Acquire(context.Background(), repogate.TreeWrite, "blocker")
+	hold, err := repogate.For(filepath.Clean("/domain-test-cancel")).Acquire(context.Background(), repogate.TreeWrite, "blocker")
 	if err != nil {
 		t.Fatal(err)
 	}
