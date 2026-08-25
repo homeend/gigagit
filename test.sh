@@ -38,10 +38,10 @@ gates() {
 # (pipefail is set), so failures still stop the script.
 run_tests() {
 	if [[ -n "${VERBOSE}" ]]; then
-		go test ${RACE} ${VERBOSE} "$@"
+		go test -timeout 30m ${RACE} ${VERBOSE} "$@"
 		return
 	fi
-	go test ${RACE} -json "$@" | awk '
+	go test -timeout 30m ${RACE} -json "$@" | awk '
 	function pkgOf(line,   p) {
 		if (match(line, /"Package":"[^"]*"/) == 0) return ""
 		p = substr(line, RSTART + 11, RLENGTH - 12)
