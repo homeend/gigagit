@@ -123,11 +123,13 @@ func TestContextCopyRowsStashFileTree(t *testing.T) {
 	}
 }
 
+// The stash-list menu is assembled directly in availableActions (not
+// contextCopyRows): the copy row leads, the Apply/Pop/Drop rows follow.
 func TestContextCopyRowsStashList(t *testing.T) {
 	m := footerModel()
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "wip"}}, sel: 0}
 	m.focus = panelCommits
-	rows := m.contextCopyRows()
+	rows := availableActions(m)
 	r, ok := findRow(rows, "copy-stash-ref")
 	if !ok || r.copyText != "stash@{0}" {
 		t.Fatalf("stash list rows = %v, want copy-stash-ref stash@{0}", rows)

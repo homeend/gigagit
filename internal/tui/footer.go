@@ -206,6 +206,12 @@ func (m Model) footerOverride() (string, bool) {
 			}
 			return i18n.T("tree: [↑/↓] move  [enter] diff") + aHint + i18n.T("  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view") + msgHint + i18n.T("  [esc/l] close"), true
 		}
+		// The list side under an open tree can be the STASH list — its keys
+		// differ (enter is inert, the graph/all-files keys don't apply, "."
+		// is the Apply/Pop/Drop menu), so it gets its own strip.
+		if m.stashView != nil {
+			return i18n.T("stash: [↑/↓] move  [.] apply/pop/drop  [tab] tree  [z] view  [esc/l] close"), true
+		}
 		return i18n.T("commits: [enter/tab] tree  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions") + msgHint + i18n.T("  [esc/l] close"), true
 	}
 	// The stash list owns the keyboard while it is the focused right column

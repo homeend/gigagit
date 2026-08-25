@@ -608,14 +608,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.cycleCompareScope(), nil
 	case "enter":
 		if !m.filesTreeFocused {
-			// List side: for a stash, enter opens the Apply/Pop/Drop popup (the
-			// list's defining verb). For a commit list, enter "drills in" — it
-			// moves focus to the file tree, mirroring enter on the Commits panel.
-			if v := m.stashView; v != nil {
-				if v.sel >= 0 && v.sel < len(v.entries) {
-					e := v.entries[v.sel]
-					m = m.pushLayer(&stashActionPopup{ref: e.Ref, subject: e.Subject})
-				}
+			// List side: enter already drilled in, so on a stash it is inert
+			// (the Apply/Pop/Drop actions live in the "." menu). For a commit
+			// list, enter moves focus to the file tree, mirroring enter on the
+			// Commits panel.
+			if m.stashView != nil {
 				return m, nil
 			}
 			return m.focusTree(), nil

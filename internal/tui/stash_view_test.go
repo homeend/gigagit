@@ -60,14 +60,20 @@ func TestStashWindowCloseRestoresFocus(t *testing.T) {
 	}
 }
 
-func TestStashListEnterUnderTreeOpensActions(t *testing.T) {
+// enter already drilled in — with the tree open, enter on the stash-list side
+// is inert; the stash actions live in the "." menu.
+func TestStashListEnterUnderTreeDoesNothing(t *testing.T) {
 	m := loadedModel(t)
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "WIP"}}}
 	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}}}
 	m.filesTreeFocused = false // focused on the stash list
-	mm, _ := m.updateFilesViewKey(keyMsg("enter"))
-	if layerOf[*stashActionPopup](mm.(Model)) == nil {
-		t.Fatal("enter on the stash-list side (tree open) should open the action popup")
+	mm, cmd := m.updateFilesViewKey(keyMsg("enter"))
+	got := mm.(Model)
+	if got.topLayer() != nil || cmd != nil {
+		t.Fatal("enter on the stash-list side (tree open) must be inert")
+	}
+	if got.filesView == nil || got.stashView == nil {
+		t.Fatal("enter must not close the files view or the stash window")
 	}
 }
 

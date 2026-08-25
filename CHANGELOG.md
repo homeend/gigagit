@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Stash window under an open file tree: consistent enter / `.` / esc.**
+  With the stash's file tree open and focus on the stash-list side, `enter`
+  used to open the old Apply/Pop/Drop popup and `.` showed the commit-list
+  menu. Now `enter` is inert there (it already drilled in), `.` shows the same
+  four stash rows it shows without the tree (Copy stash ref + Apply / Pop /
+  Drop), and the footer says so instead of advertising commit-list keys. esc
+  peels one surface at a time: first the file tree (back to the stash list),
+  then the stash window. The now-unreachable Apply/Pop/Drop popup was removed.
 - **Stash window: tab cycles focus, enter drills into files, `.` holds the
   actions.** `tab`/`shift+tab` in the stash list now cycle focus into the left
   panels and back (the window stays open, like `←`/`→`). `enter` on a stash

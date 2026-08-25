@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -125,18 +126,77 @@ func TestStashMenuDropRowConfirms(t *testing.T) {
 	}
 }
 
-// The stash rows must not leak into the menu when the file tree is open over
-// the stash list (the files view is the front surface then).
-func TestStashMenuRowsAbsentUnderFilesView(t *testing.T) {
+// The "." menu on the stash-list side is the SAME four rows whether or not
+// the file tree is open over it — the list owns the selection either way.
+func TestStashMenuSameFourRowsUnderFilesView(t *testing.T) {
 	m := stashModel(t)
 	mm, _ := m.updateStashViewKey(keyMsg("l"))
 	m = mm.(Model)
-	if m.filesView == nil {
-		t.Fatal("setup: l should open the files view over the stash list")
+	if m.filesView == nil || m.filesTreeFocused {
+		t.Fatal("setup: l should open the files view with focus on the stash list")
 	}
+	var ids []string
+	for _, r := range availableActions(m) {
+		ids = append(ids, r.id)
+	}
+	want := []string{"copy-stash-ref", "stash-apply", "stash-pop", "stash-drop"}
+	if len(ids) != len(want) {
+		t.Fatalf("menu rows = %v, want exactly %v", ids, want)
+	}
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("menu rows = %v, want %v", ids, want)
+		}
+	}
+}
+
+// The tree side keeps its file-context menu — the stash rows belong to the
+// list side only.
+func TestStashMenuTreeSideKeepsFileRows(t *testing.T) {
+	m := stashModel(t)
+	mm, _ := m.updateStashViewKey(keyMsg("l"))
+	m = mm.(Model).focusTree()
 	for _, r := range availableActions(m) {
 		if r.id == "stash-apply" || r.id == "stash-pop" || r.id == "stash-drop" {
-			t.Fatalf("stash action row %q leaked into the files-view menu", r.id)
+			t.Fatalf("stash action row %q leaked onto the tree-side menu", r.id)
 		}
+	}
+}
+
+// The footer on the stash-list side under an open tree must describe the
+// stash keys, not the commit-list keys (enter is inert there).
+func TestStashListSideFooterUnderTree(t *testing.T) {
+	m := stashModel(t)
+	mm, _ := m.updateStashViewKey(keyMsg("l"))
+	m = mm.(Model)
+	hint, ok := m.footerOverride()
+	if !ok || !strings.HasPrefix(hint, "stash:") {
+		t.Fatalf("footer = %q, want a stash: strip on the list side under the tree", hint)
+	}
+	if strings.Contains(hint, "enter") && !strings.Contains(hint, "[esc/l]") {
+		t.Fatalf("footer advertises enter on the inert stash-list side: %q", hint)
+	}
+}
+
+// esc peels one surface at a time: files view first (back to the stash list),
+// then the stash window itself.
+func TestStashEscPeelsFilesThenStash(t *testing.T) {
+	m := stashModel(t)
+	mm, _ := m.updateStashViewKey(keyMsg("enter")) // files tree opens (tree focused)
+	m = mm.(Model)
+	if m.filesView == nil {
+		t.Fatal("setup: enter should open the files view")
+	}
+	mm, _ = m.updateFilesViewKey(keyMsg("esc"))
+	m = mm.(Model)
+	if m.filesView != nil {
+		t.Fatal("first esc should close the files view")
+	}
+	if m.stashView == nil || m.focus != panelCommits {
+		t.Fatalf("first esc should land back on the stash list (stash open, focus commits); focus=%v", m.focus)
+	}
+	mm, _ = m.updateStashViewKey(keyMsg("esc"))
+	if mm.(Model).stashView != nil {
+		t.Fatal("second esc should close the stash window")
 	}
 }
