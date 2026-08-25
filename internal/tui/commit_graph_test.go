@@ -21,6 +21,7 @@ func graphModel() Model {
 }
 
 func TestCommitRowsHaveGraphInNaturalOrder(t *testing.T) {
+	t.Parallel()
 	m := graphModel()
 	rows := m.commitRows()
 	if len(rows) != 2 || !strings.HasPrefix(rows[0], "●") {
@@ -32,6 +33,7 @@ func TestCommitRowsHaveGraphInNaturalOrder(t *testing.T) {
 }
 
 func TestCommitRowsDropGraphWhenFiltered(t *testing.T) {
+	t.Parallel()
 	m := graphModel()
 	m.filterPanel = panelCommits
 	m.filterQuery = "second"
@@ -42,6 +44,7 @@ func TestCommitRowsDropGraphWhenFiltered(t *testing.T) {
 }
 
 func TestCommitRowsDropGraphWhenSorted(t *testing.T) {
+	t.Parallel()
 	m := graphModel()
 	m.sortModes[panelCommits] = sortDateDesc
 	rows := m.commitRows()
@@ -51,6 +54,7 @@ func TestCommitRowsDropGraphWhenSorted(t *testing.T) {
 }
 
 func TestRebuildCommitGraphAligns(t *testing.T) {
+	t.Parallel()
 	m := graphModel()
 	if len(m.commitGraphRows) != len(m.commits) {
 		t.Fatalf("graph rows (%d) must align with commits (%d)", len(m.commitGraphRows), len(m.commits))
@@ -58,6 +62,7 @@ func TestRebuildCommitGraphAligns(t *testing.T) {
 }
 
 func TestGraphRowFitsNarrowPanel(t *testing.T) {
+	t.Parallel()
 	// A multi-lane (wide) graph prefix at a small panel size must still fit:
 	// cutoff truncates the combined graph+subject, and box-drawing runes measure
 	// as width 1 to lipgloss.

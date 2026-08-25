@@ -13,6 +13,7 @@ import (
 // cursor on the same row in the full list.
 
 func TestSlashEntryKeepsCursor(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{
 		{Hash: "a", Subject: "one"}, {Hash: "b", Subject: "two"}, {Hash: "c", Subject: "three"},
 	})
@@ -28,6 +29,7 @@ func TestSlashEntryKeepsCursor(t *testing.T) {
 }
 
 func TestFilterTypingSnapsToMatchAtOrAfterCursor(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{
 		{Hash: "a", Subject: "docs one"}, {Hash: "b", Subject: "noise"}, {Hash: "c", Subject: "docs two"},
 	})
@@ -45,6 +47,7 @@ func TestFilterTypingSnapsToMatchAtOrAfterCursor(t *testing.T) {
 }
 
 func TestFilterTypingWrapsToTopWhenNoMatchBelow(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{
 		{Hash: "a", Subject: "docs alpha"}, {Hash: "b", Subject: "docs beta"}, {Hash: "c", Subject: "zzz"},
 	})
@@ -59,6 +62,7 @@ func TestFilterTypingWrapsToTopWhenNoMatchBelow(t *testing.T) {
 }
 
 func TestFilterBackspaceKeepsRow(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{
 		{Hash: "a", Subject: "car"}, {Hash: "b", Subject: "cart"}, {Hash: "c", Subject: "dog"},
 	})
@@ -78,6 +82,7 @@ func TestFilterBackspaceKeepsRow(t *testing.T) {
 }
 
 func TestFilterEscReseatsCursorInFullList(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "noise"}, {Hash: "b", Subject: "docs"}})
 	m.filterTyping = true
 	m.filterPanel = panelCommits
@@ -94,6 +99,7 @@ func TestFilterEscReseatsCursorInFullList(t *testing.T) {
 }
 
 func TestCommittedFilterEscReseatsCursor(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "noise"}, {Hash: "b", Subject: "docs"}})
 	m.filterPanel = panelCommits
 	m.filterQuery = "docs" // committed (not typing)
@@ -109,6 +115,7 @@ func TestCommittedFilterEscReseatsCursor(t *testing.T) {
 }
 
 func TestHighlightEngageOverFilterReseatsCursor(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "noise"}, {Hash: "b", Subject: "docs"}})
 	m.filterPanel = panelCommits
 	m.filterQuery = "docs" // committed / filter
@@ -124,6 +131,7 @@ func TestHighlightEngageOverFilterReseatsCursor(t *testing.T) {
 }
 
 func TestCtrlRClearFilterReseatsCursor(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "noise"}, {Hash: "b", Subject: "docs"}})
 	m.filterPanel = panelCommits
 	m.filterQuery = "docs"
@@ -139,6 +147,7 @@ func TestCtrlRClearFilterReseatsCursor(t *testing.T) {
 }
 
 func TestFilterTypingSnapsOnBranchesPanel(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	m.branches = []model.Branch{{Name: "one-x"}, {Name: "two"}, {Name: "three-x"}}
 	m.focus = panelBranches
@@ -156,6 +165,7 @@ func TestFilterTypingSnapsOnBranchesPanel(t *testing.T) {
 }
 
 func TestSnapFilterSelNonDefaultSort(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	m.branches = []model.Branch{{Name: "delta"}, {Name: "alpha"}, {Name: "charlie"}, {Name: "bravo"}}
 	m.sortModes[panelBranches] = sortNameAsc

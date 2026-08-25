@@ -46,6 +46,7 @@ func soloMain(t *testing.T, m Model) Model {
 // commit filter, and re-points the FEED's own scope so the post-op srcFeed
 // reload walks all branches instead of the stale solo.
 func TestSwitchBranchClearsCommitScope(t *testing.T) {
+	t.Parallel()
 	_, m := newTwoBranchRepo(t)
 	m = soloMain(t, m)
 	m.commitFilter = commitFilterFields{Author: "someone"}
@@ -82,6 +83,7 @@ func TestSwitchBranchClearsCommitScope(t *testing.T) {
 // TestFailedSwitchKeepsCommitScope: a switch that errors (target branch does
 // not exist) must leave the solo scope alone — HEAD never moved.
 func TestFailedSwitchKeepsCommitScope(t *testing.T) {
+	t.Parallel()
 	_, m := newTwoBranchRepo(t)
 	m = soloMain(t, m)
 
@@ -96,6 +98,7 @@ func TestFailedSwitchKeepsCommitScope(t *testing.T) {
 // TestNoopSwitchKeepsCommitScope: switching to the branch already checked out
 // reports Changed=false and must not clear the scope.
 func TestNoopSwitchKeepsCommitScope(t *testing.T) {
+	t.Parallel()
 	_, m := newTwoBranchRepo(t)
 	m = soloMain(t, m)
 
@@ -110,6 +113,7 @@ func TestNoopSwitchKeepsCommitScope(t *testing.T) {
 // TestNonSwitchOpKeepsCommitScope: an unrelated successful op (Commit) must
 // not clear the solo scope — only checkout-family ops do.
 func TestNonSwitchOpKeepsCommitScope(t *testing.T) {
+	t.Parallel()
 	dir, m := newTwoBranchRepo(t)
 	m = soloMain(t, m)
 	os.WriteFile(filepath.Join(dir, "new.txt"), []byte("n\n"), 0o644)

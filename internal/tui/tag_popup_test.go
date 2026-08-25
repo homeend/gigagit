@@ -15,6 +15,7 @@ func tuiTagType(t *testing.T, dir, name string) string {
 // commitCreateTagRow appears only on the Commits panel and opens a tagPopup
 // targeting the selected commit.
 func TestCommitCreateTagRowGating(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	m.focus = panelBranches
@@ -35,6 +36,7 @@ func TestCommitCreateTagRowGating(t *testing.T) {
 
 // Typing a name then enter creates a lightweight tag at the commit.
 func TestTagPopupCreatesLightweightTag(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	hash := m.commits[0].Hash
@@ -64,6 +66,7 @@ func TestTagPopupCreatesLightweightTag(t *testing.T) {
 
 // Tab to the message field + typing makes the tag annotated.
 func TestTagPopupTabMakesAnnotated(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	m = m.pushLayer(&tagPopup{commit: m.commits[0].Hash})
@@ -91,6 +94,7 @@ func TestTagPopupTabMakesAnnotated(t *testing.T) {
 }
 
 func TestTagPopupEnterEmptyNameNoOp(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	m = m.pushLayer(&tagPopup{commit: m.commits[0].Hash})

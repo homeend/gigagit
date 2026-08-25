@@ -10,6 +10,7 @@ import (
 
 // esc from a picker-opened compare diff returns to the picker beneath it.
 func TestEscFromPickerDiffReturnsToPicker(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2) // existing helper; a repo with ≥2 commits
 	// Push the bookmark switcher directly (openBookmarkSwitcher returns a cmd,
 	// not the switcher itself — the switcher opens on bookmarksLoadedMsg).
@@ -36,6 +37,7 @@ func TestEscFromPickerDiffReturnsToPicker(t *testing.T) {
 
 // mouse wheel over a diff that is the top layer scrolls the diff.
 func TestDiffWheelRoutesToTopLayer(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	v := &diffView{title: "f"}
 	for i := 0; i < 50; i++ { // give it enough display rows to be scrollable
@@ -52,6 +54,7 @@ func TestDiffWheelRoutesToTopLayer(t *testing.T) {
 
 // diffMsg populates the on-stack diff in place even when it is not the top layer.
 func TestDiffMsgPopulatesInPlaceUnderOverlay(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	v := &diffView{title: "f", loading: true}
 	m, _ = m.openPickerDiff(v, "tag1", nil)

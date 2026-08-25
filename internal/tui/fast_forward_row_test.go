@@ -26,6 +26,7 @@ func ffModel() Model {
 }
 
 func TestFastForwardRowShownOnAheadCommit(t *testing.T) {
+	t.Parallel()
 	m := ffModel() // selected = C2, ahead of main's tip C1
 	row, ok := m.commitFastForwardRow()
 	if !ok {
@@ -37,6 +38,7 @@ func TestFastForwardRowShownOnAheadCommit(t *testing.T) {
 }
 
 func TestFastForwardRowHiddenOnTip(t *testing.T) {
+	t.Parallel()
 	m := ffModel()
 	m.sel[panelCommits] = 1 // select C1 = main's own tip
 	if _, ok := m.commitFastForwardRow(); ok {
@@ -45,6 +47,7 @@ func TestFastForwardRowHiddenOnTip(t *testing.T) {
 }
 
 func TestFastForwardRowHiddenOnBehindCommit(t *testing.T) {
+	t.Parallel()
 	m := ffModel()
 	m.sel[panelCommits] = 2 // select C0 = behind main's tip
 	if _, ok := m.commitFastForwardRow(); ok {
@@ -53,6 +56,7 @@ func TestFastForwardRowHiddenOnBehindCommit(t *testing.T) {
 }
 
 func TestFastForwardRowHiddenWhenDetached(t *testing.T) {
+	t.Parallel()
 	m := ffModel()
 	// porcelain v2 "# branch.head (detached)" → status.Branch == "(detached)",
 	// NOT "" (that's the engine-side symbolic-ref representation). The TUI guard
@@ -64,6 +68,7 @@ func TestFastForwardRowHiddenWhenDetached(t *testing.T) {
 }
 
 func TestFastForwardRowWiredToOp(t *testing.T) {
+	t.Parallel()
 	m := ffModel()
 	row, ok := m.commitFastForwardRow()
 	if !ok {

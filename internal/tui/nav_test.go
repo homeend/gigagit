@@ -17,6 +17,7 @@ func loadedModel(t *testing.T) Model {
 }
 
 func TestTabCyclesFocus(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	start := m.focus
 	updated, _ := m.Update(keyMsg("tab"))
@@ -26,6 +27,7 @@ func TestTabCyclesFocus(t *testing.T) {
 }
 
 func TestDownClampsSelectionInFocusedPanel(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelBranches
 	updated, _ := m.Update(keyMsg("down"))
@@ -37,6 +39,7 @@ func TestDownClampsSelectionInFocusedPanel(t *testing.T) {
 }
 
 func TestViewRendersPanelsWithoutPanic(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 100, 30
 	// Focus off Branches: the checked-out branch row now carries its (long)
@@ -56,6 +59,7 @@ func TestViewRendersPanelsWithoutPanic(t *testing.T) {
 }
 
 func TestTabCyclesActiveTabStatusCommits(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 24 // bodyH 21 >= 12 → Staged visible
 	m.focus = panelBranches    // the active tab
@@ -74,6 +78,7 @@ func TestTabCyclesActiveTabStatusCommits(t *testing.T) {
 }
 
 func TestTabNeverFocusesInactiveTab(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 24
 	m.activeLeftTab = panelBranches
@@ -88,6 +93,7 @@ func TestTabNeverFocusesInactiveTab(t *testing.T) {
 }
 
 func TestCtrlArrowSwitchesAndFocusesTab(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 24
 	m.focus = panelBranches
@@ -109,6 +115,7 @@ func TestCtrlArrowSwitchesAndFocusesTab(t *testing.T) {
 }
 
 func TestCtrlRightCyclesBranchesRemotesWorktrees(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 24
 	m.focus = panelBranches
@@ -138,6 +145,7 @@ func TestCtrlRightCyclesBranchesRemotesWorktrees(t *testing.T) {
 }
 
 func TestLeftDoesNotFocusHiddenTab(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 24
 	m.lastLeftPanel = panelBranches
@@ -155,6 +163,7 @@ func TestLeftDoesNotFocusHiddenTab(t *testing.T) {
 }
 
 func TestCheckoutRemoteRoutesCAndS(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.remoteBranches = []model.RemoteBranch{{Name: "origin/foo", Remote: "origin", Branch: "foo"}}
 	m.focus = panelRemotes
@@ -184,6 +193,7 @@ func TestCheckoutRemoteRoutesCAndS(t *testing.T) {
 }
 
 func TestCanCheckoutRemoteGating(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	if m.canCheckoutRemote() {
 		t.Fatal("no remote selected -> false")
@@ -196,6 +206,7 @@ func TestCanCheckoutRemoteGating(t *testing.T) {
 }
 
 func TestFetchKeyOnRemotesTabStartsFetch(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelRemotes
 	u, _ := m.Update(keyMsg("f"))

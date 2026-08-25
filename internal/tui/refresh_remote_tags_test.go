@@ -7,6 +7,7 @@ import (
 )
 
 func TestRemoteTagsScheduledItem(t *testing.T) {
+	t.Parallel()
 	if refreshTomlKey(remoteTagsItem) != "remote_tags" {
 		t.Fatalf("toml key = %q, want remote_tags", refreshTomlKey(remoteTagsItem))
 	}

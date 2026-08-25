@@ -11,6 +11,7 @@ import (
 )
 
 func TestFormatElapsed(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		d    time.Duration
 		want string
@@ -32,6 +33,7 @@ func TestFormatElapsed(t *testing.T) {
 // started in Init, for the app's life) — it never depends on startOp's returned
 // command, which the many manual-drive tests rely on staying a single waitForOp.
 func TestHeartbeatIsPerpetual(t *testing.T) {
+	t.Parallel()
 	m := New(domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()}))
 
 	// Idle: still re-arms (so the next op is covered without restarting it).
@@ -53,6 +55,7 @@ func TestHeartbeatIsPerpetual(t *testing.T) {
 // TestBusyLineShowsElapsed proves the elapsed readout reaches the rendered
 // status line, so a long op visibly advances instead of looking frozen.
 func TestBusyLineShowsElapsed(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())

@@ -11,6 +11,7 @@ import (
 // Right-click = "select the row under the cursor, then open the . menu".
 
 func TestRightClickPanelSelectsAndOpensActionMenu(t *testing.T) {
+	t.Parallel()
 	m := mouseModel() // commits panel x=26.., rows from y=3
 	u, _ := m.Update(mouseMsg(30, 4, tea.MouseButtonRight))
 	m2 := u.(Model)
@@ -26,6 +27,7 @@ func TestRightClickPanelSelectsAndOpensActionMenu(t *testing.T) {
 }
 
 func TestRightClickOffPanelsOpensNothing(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	u, _ := m.Update(mouseMsg(5, 0, tea.MouseButtonRight)) // header row
 	if u.(Model).actionMenu != nil {
@@ -34,6 +36,7 @@ func TestRightClickOffPanelsOpensNothing(t *testing.T) {
 }
 
 func TestRightClickTextPopupInert(t *testing.T) {
+	t.Parallel()
 	p := &branchPopup{}
 	m := mouseModel().pushLayer(p)
 	u, _ := m.Update(mouseMsg(40, 12, tea.MouseButtonRight))
@@ -49,6 +52,7 @@ func TestRightClickTextPopupInert(t *testing.T) {
 // Double-click = "select, then enter" on the same control.
 
 func TestDoubleClickCommitDrillsIn(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.width, m.height = 80, 24
 	u, _ := m.Update(mouseMsg(30, 3, tea.MouseButtonLeft))
@@ -63,6 +67,7 @@ func TestDoubleClickCommitDrillsIn(t *testing.T) {
 }
 
 func TestDoubleClickDifferentRowsDoesNotEnter(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.width, m.height = 80, 24
 	u, _ := m.Update(mouseMsg(30, 3, tea.MouseButtonLeft))
@@ -77,6 +82,7 @@ func TestDoubleClickDifferentRowsDoesNotEnter(t *testing.T) {
 }
 
 func TestDoubleClickStaleTimerDoesNotEnter(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.width, m.height = 80, 24
 	u, _ := m.Update(mouseMsg(30, 3, tea.MouseButtonLeft))
@@ -89,6 +95,7 @@ func TestDoubleClickStaleTimerDoesNotEnter(t *testing.T) {
 }
 
 func TestTripleClickFiresEnterOnce(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	// A completing double-click clears the record: the third click starts a
 	// fresh cycle instead of firing enter again.
@@ -107,6 +114,7 @@ func TestTripleClickFiresEnterOnce(t *testing.T) {
 }
 
 func TestDoubleClickActionMenuRunsSelectedRow(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	ran := false
 	m.actionMenu = &actionMenu{rows: []actionRow{{id: "spy", label: "spy",
@@ -125,6 +133,7 @@ func TestDoubleClickActionMenuRunsSelectedRow(t *testing.T) {
 }
 
 func TestDoubleClickContentPopupClosesLikeEnter(t *testing.T) {
+	t.Parallel()
 	m := mouseModel().pushLayer(newContentPopup("t", []contentLine{{text: "x"}}))
 	u, _ := m.Update(mouseMsg(40, 12, tea.MouseButtonLeft))
 	if u.(Model).topLayer() == nil {
@@ -137,6 +146,7 @@ func TestDoubleClickContentPopupClosesLikeEnter(t *testing.T) {
 }
 
 func TestDoubleClickTextPopupInert(t *testing.T) {
+	t.Parallel()
 	p := &branchPopup{}
 	m := mouseModel().pushLayer(p)
 	u, _ := m.Update(mouseMsg(40, 12, tea.MouseButtonLeft))
@@ -150,6 +160,7 @@ func TestDoubleClickTextPopupInert(t *testing.T) {
 // double-click as enter, the full-screen readers accept right-click as ".",
 // and everything else — text-entry popups above all — stays mouse-inert.
 func TestClickLayerAllowlists(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		l           layer
 		enter, menu bool
@@ -177,6 +188,7 @@ func TestClickLayerAllowlists(t *testing.T) {
 }
 
 func TestRightClickHistoryViewOpensMenu(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.width, m.height = 80, 24
 	m = m.pushLayer(&historyView{ctx: navContext{path: "a.txt", rev: "HEAD"},
@@ -188,6 +200,7 @@ func TestRightClickHistoryViewOpensMenu(t *testing.T) {
 }
 
 func TestRightClickFilesViewTreeOpensMenu(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.width, m.height = 80, 24
 	m.focus = panelCommits
@@ -204,6 +217,7 @@ func TestRightClickFilesViewTreeOpensMenu(t *testing.T) {
 // Middle-click = esc on the same safe set of controls.
 
 func TestMiddleClickClosesContentPopup(t *testing.T) {
+	t.Parallel()
 	m := mouseModel().pushLayer(newContentPopup("t", []contentLine{{text: "x"}}))
 	u, _ := m.Update(mouseMsg(40, 12, tea.MouseButtonMiddle))
 	if u.(Model).topLayer() != nil {
@@ -212,6 +226,7 @@ func TestMiddleClickClosesContentPopup(t *testing.T) {
 }
 
 func TestMiddleClickClosesActionMenu(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	m.actionMenu = &actionMenu{rows: []actionRow{{id: "spy", label: "spy"}}}
 	u, _ := m.Update(mouseMsg(40, 12, tea.MouseButtonMiddle))
@@ -221,6 +236,7 @@ func TestMiddleClickClosesActionMenu(t *testing.T) {
 }
 
 func TestMiddleClickClosesFilesView(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.width, m.height = 80, 24
 	m.focus = panelCommits
@@ -235,6 +251,7 @@ func TestMiddleClickClosesFilesView(t *testing.T) {
 }
 
 func TestMiddleClickTextPopupInert(t *testing.T) {
+	t.Parallel()
 	p := &branchPopup{}
 	m := mouseModel().pushLayer(p)
 	u, _ := m.Update(mouseMsg(40, 12, tea.MouseButtonMiddle))

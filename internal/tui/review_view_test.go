@@ -8,6 +8,7 @@ import (
 )
 
 func TestReviewViewRendersAndScrolls(t *testing.T) {
+	t.Parallel()
 	rv := newReviewView("Review: main..HEAD", "/tmp/x.md", "line1\nline2\nline3\n")
 	m := Model{width: 80, height: 24}
 	out := rv.render(m, "")
@@ -17,6 +18,7 @@ func TestReviewViewRendersAndScrolls(t *testing.T) {
 }
 
 func TestReviewViewEscPops(t *testing.T) {
+	t.Parallel()
 	rv := newReviewView("Review: main..HEAD", "/tmp/x.md", "line1\nline2\nline3\n")
 	m := Model{width: 80, height: 24}
 	m = m.pushLayer(rv)
@@ -27,12 +29,14 @@ func TestReviewViewEscPops(t *testing.T) {
 }
 
 func TestReviewViewIsFullScreen(t *testing.T) {
+	t.Parallel()
 	if !isFullScreenLayer(&reviewView{}) {
 		t.Fatal("reviewView must be a full-screen layer")
 	}
 }
 
 func TestReviewViewScrollDownAndUp(t *testing.T) {
+	t.Parallel()
 	content := strings.Repeat("body line\n", 50)
 	rv := newReviewView("Review", "/tmp/x.md", content)
 	// Small terminal so the body window is smaller than the content.
@@ -71,6 +75,7 @@ func TestReviewViewScrollDownAndUp(t *testing.T) {
 }
 
 func TestReviewViewScrollClampsToContent(t *testing.T) {
+	t.Parallel()
 	rv := newReviewView("Review", "/tmp/x.md", "only one line\n")
 	m := Model{width: 80, height: 24}
 	m = m.pushLayer(rv)
@@ -81,6 +86,7 @@ func TestReviewViewScrollClampsToContent(t *testing.T) {
 }
 
 func TestReviewViewEditorOpensReportFile(t *testing.T) {
+	t.Parallel()
 	rv := newReviewView("Review", "/tmp/report.md", "line1\n")
 	m := Model{width: 80, height: 24}
 	m = m.pushLayer(rv)
@@ -92,6 +98,7 @@ func TestReviewViewEditorOpensReportFile(t *testing.T) {
 
 // z cycles the long-line layout through cutoff → wrap → scroll → cutoff.
 func TestReviewViewZCyclesMode(t *testing.T) {
+	t.Parallel()
 	rv := newReviewView("Review", "/tmp/x.md", "line\n")
 	m := Model{width: 40, height: 10}
 	m = m.pushLayer(rv)
@@ -115,6 +122,7 @@ func TestReviewViewZCyclesMode(t *testing.T) {
 // In wrap mode a long line's tail — cut off in cutoff mode — becomes visible on
 // a wrapped continuation line.
 func TestReviewViewWrapShowsTail(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("A", 30) + "TAILWORD"
 	rv := newReviewView("Review", "/tmp/x.md", long+"\n")
 	m := Model{width: 20, height: 10} // narrower than the line: the tail is off-screen in cutoff
@@ -134,6 +142,7 @@ func TestReviewViewWrapShowsTail(t *testing.T) {
 
 // Wrap mode inflates the display-line count, and scroll still clamps to it.
 func TestReviewViewWrapScrollClamps(t *testing.T) {
+	t.Parallel()
 	// One logical line far wider than the box → many wrapped display lines.
 	rv := newReviewView("Review", "/tmp/x.md", strings.Repeat("W", 400)+"\n")
 	m := Model{width: 20, height: 10}
@@ -157,6 +166,7 @@ func TestReviewViewWrapScrollClamps(t *testing.T) {
 }
 
 func TestReviewViewSlashSearchJumpsToMatch(t *testing.T) {
+	t.Parallel()
 	var b strings.Builder
 	for i := 0; i < 40; i++ {
 		b.WriteString("filler\n")

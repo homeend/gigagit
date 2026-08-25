@@ -21,6 +21,7 @@ func eagerModel(t *testing.T, commits []model.Commit) Model {
 }
 
 func TestEagerAdvanceJumpsOnMatch(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix bug"}, {Hash: "b", Subject: "write docs"}})
 	m.eager = eagerSearch{active: true, query: "docs", budget: 5}
 	nm, _ := m.eagerAdvance()
@@ -34,6 +35,7 @@ func TestEagerAdvanceJumpsOnMatch(t *testing.T) {
 }
 
 func TestEagerAdvancePagesWhenNoMatch(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
 	// Fresh feed → CanLoadMore true.
 	m.eager = eagerSearch{active: true, query: "zzz", budget: 5}
@@ -50,6 +52,7 @@ func TestEagerAdvancePagesWhenNoMatch(t *testing.T) {
 }
 
 func TestCtrlFFromCommittedFilterStartsEager(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
 	m.filterPanel = panelCommits
 	m.filterQuery = "zzz" // committed /-filter, no loaded match
@@ -62,6 +65,7 @@ func TestCtrlFFromCommittedFilterStartsEager(t *testing.T) {
 }
 
 func TestCtrlFWhileTypingCommitsAndSearches(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
 	m.filterTyping = true
 	m.filterPanel = panelCommits
@@ -77,6 +81,7 @@ func TestCtrlFWhileTypingCommitsAndSearches(t *testing.T) {
 }
 
 func TestCtrlFFromHighlightStartsEager(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
 	m.highlightQuery = "zzz" // committed @-highlight, no loaded match
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
@@ -93,6 +98,7 @@ func TestCtrlFFromHighlightStartsEager(t *testing.T) {
 }
 
 func TestEagerAdvanceReportsExhausted(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
 	// Exhaust the feed: short initial page (the fake serves 1 row < 50).
 	m.feed.SetPageSizes(50, 50)
@@ -110,6 +116,7 @@ func TestEagerAdvanceReportsExhausted(t *testing.T) {
 }
 
 func TestEagerAdvanceOpensPromptAtCap(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
 	// budget exhausted, no match, feed loadable → prompt.
 	m.eager = eagerSearch{active: true, query: "zzz", budget: 0}
@@ -124,6 +131,7 @@ func TestEagerAdvanceOpensPromptAtCap(t *testing.T) {
 }
 
 func TestEagerPromptSearchMoreResumes(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
 	m = m.pushLayer(&eagerPrompt{query: "zzz", scanned: 1, sel: 0})
 	p := m.topLayer().(*eagerPrompt)
@@ -138,6 +146,7 @@ func TestEagerPromptSearchMoreResumes(t *testing.T) {
 }
 
 func TestEagerPromptCancelStops(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
 	m = m.pushLayer(&eagerPrompt{query: "zzz", scanned: 1, sel: 1}) // sel 1 = Cancel
 	p := m.topLayer().(*eagerPrompt)
@@ -151,6 +160,7 @@ func TestEagerPromptCancelStops(t *testing.T) {
 }
 
 func TestEagerClearedOnExternalReload(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
 	m.eager = eagerSearch{active: true, query: "zzz", budget: 3}
 	// A scope-toggle reload arrives (e.g. user cleared a filter mid eager-search).
@@ -161,6 +171,7 @@ func TestEagerClearedOnExternalReload(t *testing.T) {
 }
 
 func TestCtrlFKeepsCommitFilter(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix docs"}})
 	m.filterPanel = panelCommits
 	m.filterQuery = "docs"
@@ -175,6 +186,7 @@ func TestCtrlFKeepsCommitFilter(t *testing.T) {
 }
 
 func TestCtrlFWhileTypingKeepsFilter(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix docs"}})
 	m.filterTyping = true
 	m.filterPanel = panelCommits
@@ -190,6 +202,7 @@ func TestCtrlFWhileTypingKeepsFilter(t *testing.T) {
 }
 
 func TestEagerAdvanceJumpsWithinFilteredView(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{
 		{Hash: "a", Subject: "docs one"},
 		{Hash: "b", Subject: "noise"},
@@ -212,6 +225,7 @@ func TestEagerAdvanceJumpsWithinFilteredView(t *testing.T) {
 }
 
 func TestCtrlFWithLoadedMatchStillPagesDeeper(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix docs"}})
 	m.filterPanel = panelCommits
 	m.filterQuery = "docs" // committed /-filter WITH a match already loaded
@@ -226,6 +240,7 @@ func TestCtrlFWithLoadedMatchStillPagesDeeper(t *testing.T) {
 }
 
 func TestEagerAdvanceSkipsMatchesBelowFrom(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "docs one"}, {Hash: "b", Subject: "docs two"}})
 	m.eager = eagerSearch{active: true, query: "docs", budget: 5, from: 1}
 	nm, _ := m.eagerAdvance()
@@ -238,6 +253,7 @@ func TestEagerAdvanceSkipsMatchesBelowFrom(t *testing.T) {
 }
 
 func TestEagerJumpRetainsQuery(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix bug"}, {Hash: "b", Subject: "write docs"}})
 	m.eager = eagerSearch{active: true, query: "docs", budget: 5}
 	nm, _ := m.eagerAdvance()
@@ -250,6 +266,7 @@ func TestEagerJumpRetainsQuery(t *testing.T) {
 }
 
 func TestCtrlFReusesRetainedQuery(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "write docs"}})
 	m.eager = eagerSearch{query: "docs"} // retained from a finished jump; no / or @ active
 	nm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
@@ -263,6 +280,7 @@ func TestCtrlFReusesRetainedQuery(t *testing.T) {
 }
 
 func TestEagerPromptResumeKeepsFrom(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "fix"}})
 	m = m.pushLayer(&eagerPrompt{query: "zzz", scanned: 1, from: 1, sel: 0})
 	p := m.topLayer().(*eagerPrompt)
@@ -273,6 +291,7 @@ func TestEagerPromptResumeKeepsFrom(t *testing.T) {
 }
 
 func TestEagerDeeperExhaustedReportsNoFurther(t *testing.T) {
+	t.Parallel()
 	m := eagerModel(t, []model.Commit{{Hash: "a", Subject: "docs"}})
 	// Exhaust the feed: short initial page (the fake serves 1 row < 50).
 	m.feed.SetPageSizes(50, 50)

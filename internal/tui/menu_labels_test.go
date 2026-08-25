@@ -205,6 +205,7 @@ func callFuncName(call *ast.CallExpr) (string, bool) {
 // labels are allowed by design. Every i18n.T key found this way must exist
 // in all four embedded bundles.
 func TestActionMenuLabelsTranslated(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
 		return !strings.HasSuffix(fi.Name(), "_test.go")

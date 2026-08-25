@@ -10,6 +10,7 @@ import (
 // scrolled selection. commitBody styles only the visible window; this proves
 // that produces the same panel output as styling every row.
 func TestCommitBodyWindowedMatchesFull(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []dispMode{modeCutoff, modeScroll, modeWrap} {
 		for _, sel := range []int{0, 25, 100, 199} {
 			m := benchModel(200, 40, 8)
@@ -37,6 +38,7 @@ func TestCommitBodyWindowedMatchesFull(t *testing.T) {
 
 // Filtering must still work with lazy rows: only matching commits remain, in order.
 func TestCommitBodyWithFilter(t *testing.T) {
+	t.Parallel()
 	m := benchModel(50, 40, 8)
 	m.commits[7].Subject = "UNIQUE_NEEDLE_subject"
 	m.filterQuery = "UNIQUE_NEEDLE"

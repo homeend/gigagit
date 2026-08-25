@@ -15,6 +15,7 @@ import (
 // the child, dropping the user to nothing on esc.
 
 func TestBookmarkCompareShelfEscReturnsToBookmark(t *testing.T) {
+	t.Parallel()
 	m := switcherModel(t)
 
 	// c: compare the highlighted bookmark against a shelf entry.
@@ -44,6 +45,7 @@ func TestBookmarkCompareShelfEscReturnsToBookmark(t *testing.T) {
 }
 
 func TestShelfCompareBookmarkEscReturnsToShelf(t *testing.T) {
+	t.Parallel()
 	m := shelfSwitcherModel()
 
 	// c: compare the highlighted shelf entry against a bookmark.

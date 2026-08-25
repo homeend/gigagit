@@ -39,6 +39,7 @@ func switchDirtyModel() Model {
 // TestSwitchDirtyPromptAppears: dirty tree + s on a switchable branch pushes
 // the switch-dirty modal instead of dispatching/confirming.
 func TestSwitchDirtyPromptAppears(t *testing.T) {
+	t.Parallel()
 	m := switchDirtyModel()
 	m.status.Files = []model.FileStatus{{Path: "a.txt", Unstaged: 'M'}} // Counts().Unstaged > 0
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
@@ -58,6 +59,7 @@ func TestSwitchDirtyPromptAppears(t *testing.T) {
 // the "confirm-slow-op" modal — assert that modal by ID, not merely the
 // absence of switch-dirty (which a no-op keypress would also satisfy).
 func TestSwitchCleanTreeSkipsDirtyPrompt(t *testing.T) {
+	t.Parallel()
 	m := switchDirtyModel() // no dirty files
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
 	m = mm.(Model)
@@ -69,6 +71,7 @@ func TestSwitchCleanTreeSkipsDirtyPrompt(t *testing.T) {
 // TestSwitchDirtyPromptResolutions: "worktree" opens the create-worktree
 // popup for the selection; "carry changes" dispatches SmartSwitch.
 func TestSwitchDirtyPromptResolutions(t *testing.T) {
+	t.Parallel()
 	// worktree lane
 	m := switchDirtyModel()
 	m.status.Files = []model.FileStatus{{Path: "a.txt", Unstaged: 'M'}}
@@ -103,6 +106,7 @@ func TestSwitchDirtyPromptResolutions(t *testing.T) {
 // TestSwitchDirtyPromptCancelDoesNothing: "cancel" leaves the model
 // unchanged — no popup opened, no op dispatched.
 func TestSwitchDirtyPromptCancelDoesNothing(t *testing.T) {
+	t.Parallel()
 	m := switchDirtyModel()
 	m.status.Files = []model.FileStatus{{Path: "a.txt", Unstaged: 'M'}}
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})

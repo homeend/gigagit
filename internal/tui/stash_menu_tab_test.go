@@ -21,6 +21,7 @@ func stashModel(t *testing.T) Model {
 // tab from the stash list cycles focus into the left column (the stash list
 // occupies the Commits slot in the normal focus order); the window stays open.
 func TestStashViewTabCyclesFocusToLeftPanels(t *testing.T) {
+	t.Parallel()
 	m := stashModel(t)
 	mm, _ := m.updateStashViewKey(keyMsg("tab"))
 	got := mm.(Model)
@@ -41,6 +42,7 @@ func TestStashViewTabCyclesFocusToLeftPanels(t *testing.T) {
 }
 
 func TestStashViewShiftTabCyclesFocus(t *testing.T) {
+	t.Parallel()
 	m := stashModel(t)
 	mm, _ := m.updateStashViewKey(keyMsg("shift+tab"))
 	got := mm.(Model)
@@ -55,6 +57,7 @@ func TestStashViewShiftTabCyclesFocus(t *testing.T) {
 // enter on a stash entry drills into its file list with focus on the tree —
 // the commits-panel enter gesture ('l' keeps opening on the list side).
 func TestStashViewEnterOpensFilesTreeFocused(t *testing.T) {
+	t.Parallel()
 	m := stashModel(t)
 	mm, cmd := m.updateStashViewKey(keyMsg("enter"))
 	got := mm.(Model)
@@ -74,6 +77,7 @@ func TestStashViewEnterOpensFilesTreeFocused(t *testing.T) {
 
 // . on the stash list offers the stash actions (and the copy row) in the menu.
 func TestStashViewDotMenuOffersApplyPopDrop(t *testing.T) {
+	t.Parallel()
 	m := stashModel(t)
 	mm, _ := m.updateStashViewKey(keyMsg("."))
 	got := mm.(Model)
@@ -93,6 +97,7 @@ func TestStashViewDotMenuOffersApplyPopDrop(t *testing.T) {
 
 // Apply / Pop rows start their op directly.
 func TestStashMenuApplyRowStartsOp(t *testing.T) {
+	t.Parallel()
 	m := stashModel(t)
 	rows := m.stashActionRows()
 	if len(rows) != 3 {
@@ -106,6 +111,7 @@ func TestStashMenuApplyRowStartsOp(t *testing.T) {
 
 // Drop confirms first: the row opens a Drop/Cancel modal; Drop resolves to the op.
 func TestStashMenuDropRowConfirms(t *testing.T) {
+	t.Parallel()
 	m := stashModel(t)
 	rows := m.stashActionRows()
 	mm, _ := rows[2].run(m)
@@ -129,6 +135,7 @@ func TestStashMenuDropRowConfirms(t *testing.T) {
 // The "." menu on the stash-list side is the SAME four rows whether or not
 // the file tree is open over it — the list owns the selection either way.
 func TestStashMenuSameFourRowsUnderFilesView(t *testing.T) {
+	t.Parallel()
 	m := stashModel(t)
 	mm, _ := m.updateStashViewKey(keyMsg("l"))
 	m = mm.(Model)
@@ -153,6 +160,7 @@ func TestStashMenuSameFourRowsUnderFilesView(t *testing.T) {
 // The tree side keeps its file-context menu — the stash rows belong to the
 // list side only.
 func TestStashMenuTreeSideKeepsFileRows(t *testing.T) {
+	t.Parallel()
 	m := stashModel(t)
 	mm, _ := m.updateStashViewKey(keyMsg("l"))
 	m = mm.(Model).focusTree()
@@ -166,6 +174,7 @@ func TestStashMenuTreeSideKeepsFileRows(t *testing.T) {
 // The footer on the stash-list side under an open tree must describe the
 // stash keys, not the commit-list keys (enter is inert there).
 func TestStashListSideFooterUnderTree(t *testing.T) {
+	t.Parallel()
 	m := stashModel(t)
 	mm, _ := m.updateStashViewKey(keyMsg("l"))
 	m = mm.(Model)
@@ -181,6 +190,7 @@ func TestStashListSideFooterUnderTree(t *testing.T) {
 // esc peels one surface at a time: files view first (back to the stash list),
 // then the stash window itself.
 func TestStashEscPeelsFilesThenStash(t *testing.T) {
+	t.Parallel()
 	m := stashModel(t)
 	mm, _ := m.updateStashViewKey(keyMsg("enter")) // files tree opens (tree focused)
 	m = mm.(Model)

@@ -49,6 +49,7 @@ func statusDiffModelMulti() Model {
 }
 
 func TestNextFileRowSkipsHeadings(t *testing.T) {
+	t.Parallel()
 	vis := []contentLine{
 		{text: "dir/", heading: true},
 		{path: "a.go"},
@@ -68,6 +69,7 @@ func TestNextFileRowSkipsHeadings(t *testing.T) {
 // TestDiffEndPrimesThenStepsTree: at the bottom, the first End primes (cue, no
 // nav); the second End steps to the next file with an arrival notice.
 func TestDiffEndPrimesThenStepsTree(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModel(1) // on a.go, empty diff (at the bottom)
 
 	u, cmd := m.Update(keyMsg("end")) // first End: prime
@@ -100,6 +102,7 @@ func TestDiffEndPrimesThenStepsTree(t *testing.T) {
 
 // TestDiffHomePrimesThenStepsTree mirrors End for the previous file.
 func TestDiffHomePrimesThenStepsTree(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModel(2) // on b.go, empty diff (at the top)
 
 	u, _ := m.Update(keyMsg("home")) // first Home: prime
@@ -124,6 +127,7 @@ func TestDiffHomePrimesThenStepsTree(t *testing.T) {
 // TestDiffEndScrollsThenPrimesThenSteps: a tall diff at the top needs THREE End
 // presses — scroll to bottom, prime, step.
 func TestDiffEndScrollsThenPrimesThenSteps(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModel(1)
 	m.height = 12
 	v := diffViewWith(sameRowsTUI(40, 20), []int{20})
@@ -156,6 +160,7 @@ func TestDiffEndScrollsThenPrimesThenSteps(t *testing.T) {
 // TestDiffEndAtLastFileNotice: at the bottom of the last file there is nothing
 // to prime — a "no next file" notice shows instead, and nothing navigates.
 func TestDiffEndAtLastFileNotice(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModel(3) // on c.go (last), empty diff
 	u, cmd := m.Update(keyMsg("end"))
 	mm := u.(Model)
@@ -171,6 +176,7 @@ func TestDiffEndAtLastFileNotice(t *testing.T) {
 }
 
 func TestDiffHomeAtFirstFileNotice(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModel(1) // on a.go (first), empty diff
 	u, _ := m.Update(keyMsg("home"))
 	mm := u.(Model)
@@ -180,6 +186,7 @@ func TestDiffHomeAtFirstFileNotice(t *testing.T) {
 }
 
 func TestDiffEndPrimesThenStepsStatus(t *testing.T) {
+	t.Parallel()
 	m := statusDiffModelMulti()
 	u, _ := m.Update(keyMsg("end")) // prime
 	mm := u.(Model)
@@ -197,6 +204,7 @@ func TestDiffEndPrimesThenStepsStatus(t *testing.T) {
 }
 
 func TestDiffStepStatusSkipsUnmerged(t *testing.T) {
+	t.Parallel()
 	m := statusDiffModelMulti()
 	m.status.Files = []model.FileStatus{
 		{Path: "a.txt", Unstaged: 'M'},
@@ -217,6 +225,7 @@ func TestDiffStepStatusSkipsUnmerged(t *testing.T) {
 }
 
 func TestDiffStepStaged(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelStaged
 	m.status.Files = []model.FileStatus{
@@ -236,6 +245,7 @@ func TestDiffStepStaged(t *testing.T) {
 }
 
 func TestDiffFileNavInertWhenNoSource(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.diffNav = diffNavNone
 	m = m.pushLayer(&diffView{}) // empty: at top and bottom
@@ -254,6 +264,7 @@ func TestDiffFileNavInertWhenNoSource(t *testing.T) {
 
 // TestDiffArmClearedByOtherKey: a primed step is cancelled by any other key.
 func TestDiffArmClearedByOtherKey(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModel(1)
 	u, _ := m.Update(keyMsg("end")) // prime
 	if u.(Model).diffLayer().fileArm != fileArmNext {
@@ -267,6 +278,7 @@ func TestDiffArmClearedByOtherKey(t *testing.T) {
 
 // TestDiffNoticeClearedOnNextKey: the arrival notice is transient.
 func TestDiffNoticeClearedOnNextKey(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModel(1)
 	u, _ := m.Update(keyMsg("end"))          // prime
 	u2, _ := u.(Model).Update(keyMsg("end")) // step → notice set
@@ -283,6 +295,7 @@ func TestDiffNoticeClearedOnNextKey(t *testing.T) {
 // diffMsg that replaces the loading diffView a moment later (diffNotice is a
 // Model field, not on diffView) — otherwise it would flash and vanish on load.
 func TestDiffNoticeSurvivesAsyncLoad(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModel(1)
 	u, _ := m.Update(keyMsg("end"))          // prime
 	u2, _ := u.(Model).Update(keyMsg("end")) // step → loading view + notice
@@ -299,6 +312,7 @@ func TestDiffNoticeSurvivesAsyncLoad(t *testing.T) {
 
 // TestOpenDiffClearsStaleNotice: opening a diff (enter) drops a leftover notice.
 func TestOpenDiffClearsStaleNotice(t *testing.T) {
+	t.Parallel()
 	m := filesViewModel()
 	m.diffNotice = "▸ stale.go"
 	u, _ := m.Update(keyMsg("enter"))
@@ -311,6 +325,7 @@ func TestOpenDiffClearsStaleNotice(t *testing.T) {
 // proactive boundary cue when idle on a boundary, the primed cue while armed,
 // and the transient arrival notice — in that priority order.
 func TestWithDiffFileNoticeRendersCueAndNotice(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModel(1) // a.go (a next file exists), empty diff → on the boundary
 	frame := m.renderDiffView()
 
@@ -334,6 +349,7 @@ func TestWithDiffFileNoticeRendersCueAndNotice(t *testing.T) {
 // TestWithDiffFileNoticeIdleNoBoundary: with no neighbour file and nothing to
 // wrap (a single-change picker compare), the overlay is absent when idle.
 func TestWithDiffFileNoticeIdleNoBoundary(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.height = 12
 	m.diffNav = diffNavNone
@@ -347,6 +363,7 @@ func TestWithDiffFileNoticeIdleNoBoundary(t *testing.T) {
 }
 
 func TestEnterSetsDiffNavTree(t *testing.T) {
+	t.Parallel()
 	m := filesViewModel() // sel 1 = a real file row
 	u, _ := m.Update(keyMsg("enter"))
 	if u.(Model).diffNav != diffNavTree {
@@ -355,6 +372,7 @@ func TestEnterSetsDiffNavTree(t *testing.T) {
 }
 
 func TestEnterSetsDiffNavStatus(t *testing.T) {
+	t.Parallel()
 	m := diffModel() // panelFiles, sel 0 = mod.txt
 	u, _ := m.Update(keyMsg("enter"))
 	if u.(Model).diffNav != diffNavStatus {
@@ -363,6 +381,7 @@ func TestEnterSetsDiffNavStatus(t *testing.T) {
 }
 
 func TestOpenPickerDiffSetsDiffNavNone(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.diffNav = diffNavTree // stale from a previous open
 	mm, _ := m.openPickerDiff(&diffView{}, "tag", nil)

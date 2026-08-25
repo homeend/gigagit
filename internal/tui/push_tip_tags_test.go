@@ -11,6 +11,7 @@ import (
 // ---- tagsAtCommit ----
 
 func TestTagsAtCommitReturnsMatchingTags(t *testing.T) {
+	t.Parallel()
 	tags := []model.Tag{
 		{Name: "v1.0.0", Target: "abc1234"},
 		{Name: "v2.0.0", Target: "def5678"},
@@ -22,6 +23,7 @@ func TestTagsAtCommitReturnsMatchingTags(t *testing.T) {
 }
 
 func TestTagsAtCommitEmptyHashReturnsNil(t *testing.T) {
+	t.Parallel()
 	tags := []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
 	if got := tagsAtCommit(tags, ""); got != nil {
 		t.Fatalf("tagsAtCommit with empty hash = %v, want nil", got)
@@ -29,6 +31,7 @@ func TestTagsAtCommitEmptyHashReturnsNil(t *testing.T) {
 }
 
 func TestTagsAtCommitNoMatchReturnsNil(t *testing.T) {
+	t.Parallel()
 	tags := []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
 	if got := tagsAtCommit(tags, "zzz9999"); got != nil {
 		t.Fatalf("tagsAtCommit with no match = %v, want nil", got)
@@ -38,6 +41,7 @@ func TestTagsAtCommitNoMatchReturnsNil(t *testing.T) {
 // ---- currentBranchTipHash ----
 
 func TestCurrentBranchTipHashFound(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.branches = []model.Branch{
 		{Name: "main", IsHead: true, Hash: "abc1234"},
@@ -50,6 +54,7 @@ func TestCurrentBranchTipHashFound(t *testing.T) {
 }
 
 func TestCurrentBranchTipHashNotFound(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	if got := m.currentBranchTipHash(); got != "" {
 		t.Fatalf("currentBranchTipHash on empty model = %q, want empty", got)
@@ -59,6 +64,7 @@ func TestCurrentBranchTipHashNotFound(t *testing.T) {
 // ---- pushTagCheckMsg: no tip tags → no remote check, straight push (startPush fast path) ----
 
 func TestStartPushNoTipTagsSkipsCheck(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.branches = []model.Branch{{Name: "main", IsHead: true, Hash: "abc1234"}}
 	m.status = model.WorkingTreeStatus{Branch: "main"}
@@ -77,6 +83,7 @@ func TestStartPushNoTipTagsSkipsCheck(t *testing.T) {
 // ---- pushTagCheckMsg: all tags already on remote → straight push ----
 
 func TestPushTagCheckMsgAllAlreadyPushed(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.branches = []model.Branch{{Name: "main", IsHead: true, Hash: "abc1234"}}
 	m.status = model.WorkingTreeStatus{Branch: "main"}
@@ -102,6 +109,7 @@ func TestPushTagCheckMsgAllAlreadyPushed(t *testing.T) {
 // ---- pushTagCheckMsg: unpushed tag → modal opens ----
 
 func TestPushTagCheckMsgUnpushedTagOpensModal(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.branches = []model.Branch{{Name: "main", IsHead: true, Hash: "abc1234"}}
 	m.status = model.WorkingTreeStatus{Branch: "main"}
@@ -131,6 +139,7 @@ func TestPushTagCheckMsgUnpushedTagOpensModal(t *testing.T) {
 // ---- pushTagCheckMsg: error / nil remoteSet → straight push ----
 
 func TestPushTagCheckMsgErrorSkipsTagCheck(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.branches = []model.Branch{{Name: "main", IsHead: true, Hash: "abc1234"}}
 	m.status = model.WorkingTreeStatus{Branch: "main"}
@@ -155,6 +164,7 @@ func TestPushTagCheckMsgErrorSkipsTagCheck(t *testing.T) {
 }
 
 func TestPushTagCheckMsgNilRemoteSetNoError(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.branches = []model.Branch{{Name: "main", IsHead: true, Hash: "abc1234"}}
 	m.status = model.WorkingTreeStatus{Branch: "main"}
@@ -180,6 +190,7 @@ func TestPushTagCheckMsgNilRemoteSetNoError(t *testing.T) {
 // ---- pushTagCheckMsg: stale gen → ignored ----
 
 func TestPushTagCheckMsgStaleGenIgnored(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.branches = []model.Branch{{Name: "main", IsHead: true, Hash: "abc1234"}}
 	m.status = model.WorkingTreeStatus{Branch: "main"}
@@ -205,6 +216,7 @@ func TestPushTagCheckMsgStaleGenIgnored(t *testing.T) {
 // ---- remoteTagNames refreshed from a successful check ----
 
 func TestPushTagCheckMsgRefreshesRemoteTagNames(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.branches = []model.Branch{{Name: "main", IsHead: true, Hash: "abc1234"}}
 	m.status = model.WorkingTreeStatus{Branch: "main"}
@@ -233,6 +245,7 @@ func TestPushTagCheckMsgRefreshesRemoteTagNames(t *testing.T) {
 // ---- modal "Push branch + tags" sets pendingPushTags ----
 
 func TestModalPushBranchAndTagsSetsPending(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.branches = []model.Branch{{Name: "main", IsHead: true, Hash: "abc1234"}}
 	m.status = model.WorkingTreeStatus{Branch: "main"}
@@ -259,6 +272,7 @@ func TestModalPushBranchAndTagsSetsPending(t *testing.T) {
 // ---- modal "Push branch only" does not set pendingPushTags ----
 
 func TestModalPushBranchOnlyNoPending(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.branches = []model.Branch{{Name: "main", IsHead: true, Hash: "abc1234"}}
 	m.status = model.WorkingTreeStatus{Branch: "main"}
@@ -280,6 +294,7 @@ func TestModalPushBranchOnlyNoPending(t *testing.T) {
 // ---- opFinishedMsg chain: branch push success with pendingPushTags ----
 
 func TestOpFinishedChainsPushTags(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.running = true
 	m.pendingPushTags = []string{"v1.0.0"}
@@ -304,6 +319,7 @@ func TestOpFinishedChainsPushTags(t *testing.T) {
 // ---- opFinishedMsg error: clears pendingPushTags and pendingRemoteTagAdds ----
 
 func TestOpFinishedErrorClearsPending(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.running = true
 	m.pendingPushTags = []string{"v1.0.0"}
@@ -322,6 +338,7 @@ func TestOpFinishedErrorClearsPending(t *testing.T) {
 // ---- No re-chain: PushTags success with pendingPushTags=nil does not re-chain ----
 
 func TestOpFinishedPushTagsSuccessNoReChain(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.running = true
 	m.pendingPushTags = nil // already cleared (this is the PushTags op completing)
@@ -343,6 +360,7 @@ func TestOpFinishedPushTagsSuccessNoReChain(t *testing.T) {
 // ---- Optimistic: applyPendingRemoteTag drains pendingRemoteTagAdds ----
 
 func TestApplyPendingRemoteTagAdds(t *testing.T) {
+	t.Parallel()
 	m := Model{pendingRemoteTagAdds: []string{"v1.0.0", "v2.0.0"}}
 	m = m.applyPendingRemoteTag()
 	if !m.remoteTagNames["v1.0.0"] || !m.remoteTagNames["v2.0.0"] {
@@ -354,6 +372,7 @@ func TestApplyPendingRemoteTagAdds(t *testing.T) {
 }
 
 func TestApplyPendingRemoteTagAddsLazyInit(t *testing.T) {
+	t.Parallel()
 	m := Model{remoteTagNames: nil, pendingRemoteTagAdds: []string{"v3.0.0"}}
 	m = m.applyPendingRemoteTag()
 	if m.remoteTagNames == nil || !m.remoteTagNames["v3.0.0"] {
@@ -367,6 +386,7 @@ func TestApplyPendingRemoteTagAddsLazyInit(t *testing.T) {
 // nothing actually happened). pendingPushTags must be cleared WITHOUT chaining
 // engine.PushTags — otherwise we'd upload tags the user explicitly skipped.
 func TestAbortedPushDoesNotChainTags(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.running = true
 	m.pendingPushTags = []string{"v1.0.0"}
@@ -392,6 +412,7 @@ func TestAbortedPushDoesNotChainTags(t *testing.T) {
 // ---- Bug-2 regression: reRoot bumps pushCheckGen and clears push-pending state ----
 
 func TestReRootBumpsCheckGen(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.pushCheckGen = 2
 	m.pendingPushTags = []string{"v1.0.0"}
@@ -414,6 +435,7 @@ func TestReRootBumpsCheckGen(t *testing.T) {
 // ---- Optimistic ordering: branch push sets pendingRemoteTagAdds, PushTags success adds them ----
 
 func TestOptimisticOrderingBranchThenTags(t *testing.T) {
+	t.Parallel()
 	// Phase 1: branch Push succeeds with pendingPushTags set
 	m := footerModel()
 	m.running = true

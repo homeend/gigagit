@@ -18,6 +18,7 @@ func treeDiffModelBlocks(sel int) Model {
 // TestDiffNStepsNextFileFromLastBlock: on the last change, the first N primes
 // (no nav), the second steps to the next file in the tree.
 func TestDiffNStepsNextFileFromLastBlock(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModelBlocks(1) // on a.go
 	m.diffLayer().focusBlock(1, m.diffBodyRows())
 
@@ -42,6 +43,7 @@ func TestDiffNStepsNextFileFromLastBlock(t *testing.T) {
 
 // TestDiffPStepsPrevFileFromFirstBlock mirrors N for the previous file.
 func TestDiffPStepsPrevFileFromFirstBlock(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModelBlocks(2) // on b.go
 	m.diffLayer().focusBlock(0, m.diffBodyRows())
 
@@ -63,6 +65,7 @@ func TestDiffPStepsPrevFileFromFirstBlock(t *testing.T) {
 
 // TestDiffNInertOffLastBlock: N anywhere but the last change does nothing.
 func TestDiffNInertOffLastBlock(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModelBlocks(1)
 	m.diffLayer().focusBlock(0, m.diffBodyRows()) // first change of two
 
@@ -76,6 +79,7 @@ func TestDiffNInertOffLastBlock(t *testing.T) {
 
 // TestDiffNNoNextFileNotice: on the last file, N posts a notice and does not prime.
 func TestDiffNNoNextFileNotice(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModelBlocks(3) // c.go: the last file
 	m.diffLayer().focusBlock(1, m.diffBodyRows())
 
@@ -88,6 +92,7 @@ func TestDiffNNoNextFileNotice(t *testing.T) {
 
 // TestDiffNPInertWithNoSourceList: a picker compare (diffNavNone) ignores N/P.
 func TestDiffNPInertWithNoSourceList(t *testing.T) {
+	t.Parallel()
 	for _, k := range []string{"N", "P"} {
 		m := footerModel()
 		m.height = 12
@@ -106,6 +111,7 @@ func TestDiffNPInertWithNoSourceList(t *testing.T) {
 
 // TestDiffNArmClearedByOtherKey: a primed N step is cancelled by any other key.
 func TestDiffNArmClearedByOtherKey(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModelBlocks(1)
 	m.diffLayer().focusBlock(1, m.diffBodyRows())
 	u, _ := m.Update(keyMsg("N")) // prime
@@ -121,6 +127,7 @@ func TestDiffNArmClearedByOtherKey(t *testing.T) {
 // TestBoundaryCueSegments: the proactive cue advertises both gestures, scoped to
 // which boundary the focused change is on.
 func TestBoundaryCueSegments(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModelBlocks(2) // b.go: both a prev (a.go) and a next (c.go) file
 
 	m.diffLayer().focusBlock(1, m.diffBodyRows()) // last change
@@ -137,6 +144,7 @@ func TestBoundaryCueSegments(t *testing.T) {
 // TestBoundaryCueSingleBlock: one change block is both first and last, so both
 // file steps are offered and there is no wrap segment.
 func TestBoundaryCueSingleBlock(t *testing.T) {
+	t.Parallel()
 	m := treeDiffModel(2) // b.go: prev a.go, next c.go
 	m.height = 12
 	v := diffViewWith(sameRowsTUI(60, 10), []int{10})
@@ -150,6 +158,7 @@ func TestBoundaryCueSingleBlock(t *testing.T) {
 // TestBoundaryCueWrapOnlyNoSourceList: a picker compare still advertises the
 // wrap (n/p works without a file list) but never a file step.
 func TestBoundaryCueWrapOnlyNoSourceList(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.height = 12
 	m.diffNav = diffNavNone
@@ -163,6 +172,7 @@ func TestBoundaryCueWrapOnlyNoSourceList(t *testing.T) {
 
 // TestBoundaryCueEmptyMidFile: off any boundary, no proactive cue.
 func TestBoundaryCueEmptyMidFile(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.height = 12
 	m.diffNav = diffNavTree

@@ -52,6 +52,7 @@ func driveStage(t *testing.T, m Model, cmd tea.Cmd) Model {
 }
 
 func TestSpaceStagesSelectedFile(t *testing.T) {
+	t.Parallel()
 	m, _ := stageTestModel(t)
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	m = driveStage(t, updated.(Model), cmd)
@@ -75,6 +76,7 @@ func TestSpaceStagesSelectedFile(t *testing.T) {
 // (key_windows.go), whereas Unix normalizes it to KeySpace. Staging must work
 // for both forms — before the normalization fix, space did nothing on Windows.
 func TestSpaceAsRunesStagesSelectedFile(t *testing.T) {
+	t.Parallel()
 	m, _ := stageTestModel(t)
 	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	if cmd == nil {
@@ -128,6 +130,7 @@ func isStaged(b byte) bool { return b != '.' && b != 0 && b != '?' }
 // marked files in one op (not just the cursor row) and clear the marks so they
 // do not carry over to the Staged panel.
 func TestSpaceStagesAllMarkedFiles(t *testing.T) {
+	t.Parallel()
 	m, _ := multiStageModel(t)
 	m.fileMarks = map[string]bool{"a.txt": true, "c.txt": true}
 	m.sel[panelFiles] = 0 // cursor is on a.txt; b.txt is unmarked
@@ -156,6 +159,7 @@ func TestSpaceStagesAllMarkedFiles(t *testing.T) {
 
 // The same gesture in the Staged panel unstages all marked files.
 func TestSpaceUnstagesAllMarkedFiles(t *testing.T) {
+	t.Parallel()
 	m, dir := multiStageModel(t)
 	gitInDir(t, dir, "add", ".") // a,b,c all staged now
 	loaded, _ := m.Update(m.loadCmd()())
@@ -182,6 +186,7 @@ func TestSpaceUnstagesAllMarkedFiles(t *testing.T) {
 }
 
 func TestSpaceOnConflictedFileIsNoOp(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	// Build a merge conflict on c.txt so it becomes an unmerged Status row.
 	gitInDir(t, dir, "checkout", "-b", "feat")
@@ -218,6 +223,7 @@ func TestSpaceOnConflictedFileIsNoOp(t *testing.T) {
 }
 
 func TestSpaceUnstagesFullyStagedFile(t *testing.T) {
+	t.Parallel()
 	m, dir := stageTestModel(t)
 	gitInDir(t, dir, "add", "README.md")
 	loaded, _ := m.Update(m.loadCmd()())
@@ -235,6 +241,7 @@ func TestSpaceUnstagesFullyStagedFile(t *testing.T) {
 }
 
 func TestFilesStagedMembership(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 30
 	m.status.Files = []model.FileStatus{
@@ -259,6 +266,7 @@ func TestFilesStagedMembership(t *testing.T) {
 // U), Staged = index state (added → A, modified → M). git's two-byte XY is
 // never shown.
 func TestFilesStagedGlyphs(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 30
 	m.status.Files = []model.FileStatus{

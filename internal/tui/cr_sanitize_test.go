@@ -20,6 +20,7 @@ import (
 // break, a lone \r BECOMES a line break (dropping it would glue words
 // together), and no \r may survive into a rendered line.
 func TestFileContentLinesNormalizesCR(t *testing.T) {
+	t.Parallel()
 	lines := fileContentLines([]byte("alpha\r\nbeta\rgamma\r\rdelta"))
 	var texts []string
 	for _, l := range lines {
@@ -44,6 +45,7 @@ func TestFileContentLinesNormalizesCR(t *testing.T) {
 // must never hold a \r rune — styledLines chunks would render it and corrupt
 // the row — so CRLF and lone \r normalize to \n at construction.
 func TestNewTextFieldNormalizesCR(t *testing.T) {
+	t.Parallel()
 	f := newTextField("one\r\ntwo\rthree")
 	if got, want := f.Value(), "one\ntwo\nthree"; got != want {
 		t.Fatalf("Value() = %q, want %q", got, want)
@@ -57,6 +59,7 @@ func TestNewTextFieldNormalizesCR(t *testing.T) {
 // the raw runes, including CRLF from Windows clipboards and bare \r from web
 // copies.
 func TestTextfieldInsertNormalizesCR(t *testing.T) {
+	t.Parallel()
 	var f textfield
 	f.insert([]rune("a\r\nb\rc"))
 	if got, want := f.Value(), "a\nb\nc"; got != want {
@@ -69,6 +72,7 @@ func TestTextfieldInsertNormalizesCR(t *testing.T) {
 // open in wrap mode like the error popup does, not cutoff mode, or the body
 // reads as a single truncated line.
 func TestCommitMessagePopupOpensWrapped(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m2, _ := m.openCommitMessagePopup(model.Commit{Hash: "0123456789abcdef0123456789abcdef01234567"})
 	p := layerOf[*contentPopup](m2)

@@ -14,6 +14,7 @@ func pairModel() Model {
 }
 
 func TestPairOpPopupZCyclesMode(t *testing.T) {
+	t.Parallel()
 	m := pairModel()
 	p := layerOf[*pairOpPopup](m)
 	if p.mode != modeCutoff {
@@ -28,6 +29,7 @@ func TestPairOpPopupZCyclesMode(t *testing.T) {
 }
 
 func TestPairOpPopupRendersOps(t *testing.T) {
+	t.Parallel()
 	m := pairModel()
 	p := layerOf[*pairOpPopup](m)
 	out := ansi.Strip(p.box(m))
@@ -47,6 +49,7 @@ func TestPairOpPopupRendersOps(t *testing.T) {
 // box, the pair-op popup opens maximized so the names — essential to knowing
 // what the merge/rebase will do — are visible without pressing ctrl+t.
 func TestPairOpPopupAutoMaximizesWhenCutOff(t *testing.T) {
+	t.Parallel()
 	ops := pairOpsFor(panelBranches)
 	const marked = "fix/modal-wrap-content"
 	const selected = "feat/external-tools-stage3-review"
@@ -65,6 +68,7 @@ func TestPairOpPopupAutoMaximizesWhenCutOff(t *testing.T) {
 // A maximized pair-op popup renders the full branch names, not a truncated
 // "Merge fix/… into feat/…" row.
 func TestPairOpPopupShowsFullNamesWhenMaximized(t *testing.T) {
+	t.Parallel()
 	ops := pairOpsFor(panelBranches)
 	const marked = "fix/modal-wrap-content"
 	const selected = "feat/external-tools-stage3-review"

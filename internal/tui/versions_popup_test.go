@@ -12,6 +12,7 @@ import (
 // fabricated model.BranchVersion rows; render; assert the box contains the
 // short sha, the translated op label, and the subject.
 func TestVersionsPopupRendersRows(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	p := &versionsPopup{
 		mode:   versionsModeVersions,
@@ -41,6 +42,7 @@ func TestVersionsPopupRendersRows(t *testing.T) {
 // resolved to HASHES (assert m.filesLeft/filesRight Endpoint hashes — never
 // a branch name).
 func TestVersionsPopupEnterOpensCompare(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m.branches = []model.Branch{{Name: "main", Hash: "tiphash0000000000"}}
 	p := &versionsPopup{
@@ -74,6 +76,7 @@ func TestVersionsPopupEnterOpensCompare(t *testing.T) {
 // must render "1 version", never the grammatically wrong "1 versions", while
 // a branch with more than one keeps the plural form.
 func TestBranchVersionRowTextSingularPlural(t *testing.T) {
+	t.Parallel()
 	one := branchVersionRowText(model.VersionedBranch{Branch: "main", Count: 1})
 	if !strings.Contains(one, i18n.T("%d version", 1)) {
 		t.Fatalf("Count=1 row = %q, want it to contain the singular form %q", one, i18n.T("%d version", 1))
@@ -91,6 +94,7 @@ func TestBranchVersionRowTextSingularPlural(t *testing.T) {
 // TestVersionsPopupRestoreOpensModal: pressing 'r' sets m.modal with options
 // ["Reset branch","New branch at version","Cancel"].
 func TestVersionsPopupRestoreOpensModal(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	p := &versionsPopup{
 		mode:   versionsModeVersions,
@@ -122,6 +126,7 @@ func TestVersionsPopupRestoreOpensModal(t *testing.T) {
 // TestVersionsPopupDeletedBranchDisablesCompare: a modeVersions popup whose
 // branch is deleted (no tip): enter sets a statusMsg instead of a compare.
 func TestVersionsPopupDeletedBranchDisablesCompare(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	p := &versionsPopup{
 		mode:    versionsModeVersions,
@@ -156,6 +161,7 @@ func TestVersionsPopupDeletedBranchDisablesCompare(t *testing.T) {
 // refuse the compare exactly like the deleted case, rather than letting a
 // name slip into Endpoint.Hash and poison the immutable diff cache.
 func TestVersionsPopupMissingFromBranchesDisablesCompare(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m.branches = []model.Branch{{Name: "other", Hash: "otherhash00000000"}} // "main" absent
 	p := &versionsPopup{

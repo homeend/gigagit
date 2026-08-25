@@ -8,6 +8,7 @@ import (
 )
 
 func TestTempExportPopupEnterStartsOp(t *testing.T) {
+	t.Parallel()
 	p := &tempExportPopup{files: []model.ExportFile{{RelPath: "a.txt", Data: []byte("x")}}}
 	p.dest = newTextField("/tmp/repo.tmp/commit-abc1234")
 	m := footerModel()
@@ -18,6 +19,7 @@ func TestTempExportPopupEnterStartsOp(t *testing.T) {
 }
 
 func TestTempExportPopupEnterNoFilesNoOp(t *testing.T) {
+	t.Parallel()
 	p := &tempExportPopup{}
 	p.dest = newTextField("/tmp/repo.tmp/commit-abc1234")
 	m := footerModel()
@@ -28,6 +30,7 @@ func TestTempExportPopupEnterNoFilesNoOp(t *testing.T) {
 }
 
 func TestTempExportPopupEnterEmptyDestNoOp(t *testing.T) {
+	t.Parallel()
 	p := &tempExportPopup{files: []model.ExportFile{{RelPath: "a.txt", Data: []byte("x")}}}
 	p.dest = newTextField("   ")
 	m := footerModel()
@@ -38,6 +41,7 @@ func TestTempExportPopupEnterEmptyDestNoOp(t *testing.T) {
 }
 
 func TestTempExportPopupEscPops(t *testing.T) {
+	t.Parallel()
 	p := &tempExportPopup{files: []model.ExportFile{{RelPath: "a.txt", Data: []byte("x")}}}
 	p.dest = newTextField("/tmp/x")
 	m := footerModel()
@@ -52,6 +56,7 @@ func TestTempExportPopupEscPops(t *testing.T) {
 }
 
 func TestTempExportResolvedMsgOpensPrefilledPopup(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m2, _ := m.Update(tempExportResolvedMsg{
 		dir:   "/tmp/repo.tmp/commit-abc1234",
@@ -70,6 +75,7 @@ func TestTempExportResolvedMsgOpensPrefilledPopup(t *testing.T) {
 }
 
 func TestTempExportResolvedMsgErrSetsStatusNoPopup(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m2, _ := m.Update(tempExportResolvedMsg{err: errors.New("boom")})
 	mm := m2.(Model)

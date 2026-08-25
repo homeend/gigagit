@@ -14,6 +14,7 @@ import (
 // answers the remove-scope modal with "worktree-only", then drives the op to
 // completion and asserts the worktree is gone from disk and the panel.
 func TestDeleteKeyRemovesWorktreeThroughModal(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-del")
 	runGit(t, dir, "worktree", "add", "-b", "feature/del", wt, "main")
@@ -91,6 +92,7 @@ func TestDeleteKeyRemovesWorktreeThroughModal(t *testing.T) {
 // and reloads; the stale selection index must be clamped so subsequent indexing
 // does not panic.
 func TestSelectionClampAfterWorktreeReload(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-clamp")
 	runGit(t, dir, "worktree", "add", "-b", "feature/clamp", wt, "main")

@@ -6,6 +6,7 @@ import (
 )
 
 func TestSpaceMarksAndUnmarksCommit(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.sel[panelCommits] = 0
@@ -23,6 +24,7 @@ func TestSpaceMarksAndUnmarksCommit(t *testing.T) {
 }
 
 func TestSecondSpaceOpensCompareAndKeepsMarks(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.sel[panelCommits] = 0
@@ -47,6 +49,7 @@ func TestSecondSpaceOpensCompareAndKeepsMarks(t *testing.T) {
 }
 
 func TestThirdSpaceRefusedAtTwoMarks(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.commitCompareSet = map[string]bool{m.commits[0].Hash: true, m.commits[1].Hash: true}
@@ -62,6 +65,7 @@ func TestThirdSpaceRefusedAtTwoMarks(t *testing.T) {
 }
 
 func TestStaleMarkDoesNotEatASpaceSlot(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.commitCompareSet = map[string]bool{
@@ -80,6 +84,7 @@ func TestStaleMarkDoesNotEatASpaceSlot(t *testing.T) {
 }
 
 func TestSpaceTogglesWipRow(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.status = dirtyStatus()
@@ -100,6 +105,7 @@ func TestSpaceTogglesWipRow(t *testing.T) {
 }
 
 func TestSpaceInertWhileOpRunning(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.sel[panelCommits] = 0
@@ -114,6 +120,7 @@ func TestSpaceInertWhileOpRunning(t *testing.T) {
 // reRoot must clear commitCompareSet so ◉ marks from the old repo don't eat
 // the two space slots or skew Unmark-all's count in the new repo.
 func TestReRootClearsCommitCompareSet(t *testing.T) {
+	t.Parallel()
 	m := Model{commitCompareSet: map[string]bool{"deadbeef": true, "beadfeed": true}}
 	updated, _ := m.reRoot(t.TempDir())
 	if got := updated.(Model).commitCompareSet; got != nil {
@@ -124,6 +131,7 @@ func TestReRootClearsCommitCompareSet(t *testing.T) {
 // Esc on the focused Commits panel clears ALL ◉ marks in one press (space/m
 // re-mark cheaply; partial unmark is what space is for).
 func TestEscClearsCommitMarksWhenCommitsFocused(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.commitCompareSet = map[string]bool{m.commits[0].Hash: true, m.commits[1].Hash: true}
@@ -136,6 +144,7 @@ func TestEscClearsCommitMarksWhenCommitsFocused(t *testing.T) {
 
 // The clear is focus-scoped: esc pressed in another panel leaves the ◉ set.
 func TestEscElsewhereLeavesCommitMarks(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelBranches
 	m.commitCompareSet = map[string]bool{m.commits[0].Hash: true}
@@ -148,6 +157,7 @@ func TestEscElsewhereLeavesCommitMarks(t *testing.T) {
 
 // Peel order: ◉ marks clear before a committed @-highlight — one state per press.
 func TestEscPeelsMarksBeforeHighlight(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.commitCompareSet = map[string]bool{m.commits[0].Hash: true}
@@ -172,6 +182,7 @@ func TestEscPeelsMarksBeforeHighlight(t *testing.T) {
 // an unmarked cursor the outcome depends on mark validity, so no space hint
 // shows — the footer never advertises an outcome that might not happen.
 func TestFooterAdvertisesSpaceStates(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.sel[panelCommits] = 0

@@ -21,6 +21,7 @@ func hasRemoteTagsItem(queue []refreshItem) bool {
 // (DisableRemoteTagsAuto=false) and a non-empty tag list, a srcTags arrival
 // enqueues remoteTagsItem in bgQueue.
 func TestSrcTagsEnqueuesRemoteTagsWhenAutoOn(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	// Default: auto enabled.
 	if m.cfg.Refresh.DisableRemoteTagsAuto {
@@ -39,6 +40,7 @@ func TestSrcTagsEnqueuesRemoteTagsWhenAutoOn(t *testing.T) {
 // TestSrcTagsNoEnqueueWhenAutoOff verifies that when DisableRemoteTagsAuto=true
 // no remoteTagsItem is enqueued on srcTags arrival.
 func TestSrcTagsNoEnqueueWhenAutoOff(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.cfg.Refresh.DisableRemoteTagsAuto = true
 	nm, _ := m.Update(dataAvailableMsg{
@@ -54,6 +56,7 @@ func TestSrcTagsNoEnqueueWhenAutoOff(t *testing.T) {
 // TestSrcTagsNoEnqueueWhenNoTags verifies that when the arriving tag list is
 // empty, no remoteTagsItem is enqueued (nothing to annotate).
 func TestSrcTagsNoEnqueueWhenNoTags(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	if m.cfg.Refresh.DisableRemoteTagsAuto {
 		t.Fatal("precondition: DisableRemoteTagsAuto must be false (auto on)")
@@ -71,6 +74,7 @@ func TestSrcTagsNoEnqueueWhenNoTags(t *testing.T) {
 // TestAutoRemoteTagsEnabledHelper verifies the autoRemoteTagsEnabled helper
 // reflects the inverted polarity of DisableRemoteTagsAuto.
 func TestAutoRemoteTagsEnabledHelper(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	// Default: field false → auto enabled.
 	if !m.autoRemoteTagsEnabled() {

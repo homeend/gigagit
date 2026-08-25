@@ -3,6 +3,7 @@ package tui
 import "testing"
 
 func TestPullKeyStartsOperation(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.cfg.UI.DisableSlowOpConfirm = true // test op routing, not confirm UX
 	updated, cmd := m.Update(keyMsg("p"))
@@ -17,6 +18,7 @@ func TestPullKeyStartsOperation(t *testing.T) {
 }
 
 func TestKeysIgnoredWhileRunning(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.running = true // pretend an op is in flight
 	updated, _ := m.Update(keyMsg("u"))
@@ -27,6 +29,7 @@ func TestKeysIgnoredWhileRunning(t *testing.T) {
 }
 
 func TestZCyclesFocusedPanelMode(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.focus = panelCommits
 	if m.dispModes[panelCommits] != modeCutoff {
@@ -43,6 +46,7 @@ func TestZCyclesFocusedPanelMode(t *testing.T) {
 }
 
 func TestZIsFilterTextWhileTyping(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.focus = panelBranches
 	m.filterTyping = true

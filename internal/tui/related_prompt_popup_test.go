@@ -29,6 +29,7 @@ func openSettingsAndToggleShowGraph(t *testing.T, m Model) Model {
 }
 
 func TestToggleShowGraphOffPushesPrompt(t *testing.T) {
+	t.Parallel()
 	m, _ := promptTestModel(t)
 	m.cfg.UI.CommitSort = "date-order"
 	m = openSettingsAndToggleShowGraph(t, m) // on → off
@@ -49,6 +50,7 @@ func TestToggleShowGraphOffPushesPrompt(t *testing.T) {
 }
 
 func TestToggleShowGraphOffNoPromptWhenAlreadyPlain(t *testing.T) {
+	t.Parallel()
 	m, _ := promptTestModel(t)
 	m.cfg.UI.CommitSort = "plain"
 	m = openSettingsAndToggleShowGraph(t, m)
@@ -61,6 +63,7 @@ func TestToggleShowGraphOffNoPromptWhenAlreadyPlain(t *testing.T) {
 }
 
 func TestPromptEscMeansNotNow(t *testing.T) {
+	t.Parallel()
 	m, _ := promptTestModel(t)
 	m.cfg.UI.CommitSort = "date-order"
 	m = openSettingsAndToggleShowGraph(t, m)
@@ -86,6 +89,7 @@ func TestPromptEscMeansNotNow(t *testing.T) {
 }
 
 func TestPromptYesAppliesCommitSortPlain(t *testing.T) {
+	t.Parallel()
 	m, _ := promptTestModel(t)
 	m.cfg.UI.CommitSort = "date-order"
 	m = openSettingsAndToggleShowGraph(t, m)
@@ -111,6 +115,7 @@ func TestPromptYesAppliesCommitSortPlain(t *testing.T) {
 }
 
 func TestPromptDontAskAgainSuppressesForever(t *testing.T) {
+	t.Parallel()
 	m, st := promptTestModel(t)
 	m.cfg.UI.CommitSort = "date-order"
 	m = openSettingsAndToggleShowGraph(t, m)
@@ -139,6 +144,7 @@ func TestPromptDontAskAgainSuppressesForever(t *testing.T) {
 }
 
 func TestPromptSwallowsGlobalKeys(t *testing.T) {
+	t.Parallel()
 	m, _ := promptTestModel(t)
 	m.cfg.UI.CommitSort = "date-order"
 	m = openSettingsAndToggleShowGraph(t, m)
@@ -156,6 +162,7 @@ func TestPromptSwallowsGlobalKeys(t *testing.T) {
 }
 
 func TestPromptFooterNamesStateFile(t *testing.T) {
+	t.Parallel()
 	m, _ := promptTestModel(t)
 	m.cfg.UI.CommitSort = "date-order"
 	m = openSettingsAndToggleShowGraph(t, m)

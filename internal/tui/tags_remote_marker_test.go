@@ -8,6 +8,7 @@ import (
 )
 
 func TestTagRowsRemoteMarker(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		tags: []model.Tag{
 			{Name: "v1.0.0", Target: "aaaaaaa", Annotated: true},
@@ -25,6 +26,7 @@ func TestTagRowsRemoteMarker(t *testing.T) {
 }
 
 func TestTagRowsNoMarkerWhenUnchecked(t *testing.T) {
+	t.Parallel()
 	m := Model{tags: []model.Tag{{Name: "v1.0.0", Target: "aaaaaaa"}}} // remoteTagNames nil
 	if strings.Contains(m.tagRows()[0], "▲") {
 		t.Errorf("unchecked tag must not carry ▲: %q", m.tagRows()[0])

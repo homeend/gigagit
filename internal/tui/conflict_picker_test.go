@@ -19,6 +19,7 @@ func pickerDoc() *hunkpick.Doc {
 }
 
 func TestConflictPickerTakeSides(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	// region 0 → current, region 1 → incoming
@@ -35,6 +36,7 @@ func TestConflictPickerTakeSides(t *testing.T) {
 }
 
 func TestConflictPickerTakeAll(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, key("I")) // take all incoming
@@ -45,6 +47,7 @@ func TestConflictPickerTakeAll(t *testing.T) {
 }
 
 func TestConflictPickerSpaceTogglesLineByLine(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	// focus region 0, current side, line 0; space picks it line-by-line
@@ -56,6 +59,7 @@ func TestConflictPickerSpaceTogglesLineByLine(t *testing.T) {
 }
 
 func TestConflictPickerSideSwitchAndCursor(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, keyMsg("right")) // → incoming
@@ -69,6 +73,7 @@ func TestConflictPickerSideSwitchAndCursor(t *testing.T) {
 }
 
 func TestConflictPickerEnterGateAndApply(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	// enter while pending: no apply, status set, surface still on top
@@ -79,6 +84,7 @@ func TestConflictPickerEnterGateAndApply(t *testing.T) {
 }
 
 func TestConflictPickerRendersMarkers(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	out := e.render(m, "")
@@ -91,6 +97,7 @@ func TestConflictPickerRendersMarkers(t *testing.T) {
 // on a single header row spanning both columns (the only line carrying both
 // labels and the column separator).
 func TestConflictPickerShowsColumnLabels(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	out := e.render(m, "")
@@ -108,6 +115,7 @@ func TestConflictPickerShowsColumnLabels(t *testing.T) {
 
 // The active side's label is highlighted so the cursor's column is obvious.
 func TestConflictPickerActiveSideMarked(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	// Current side is active by default → its label carries the focus marker.
@@ -123,6 +131,7 @@ func TestConflictPickerActiveSideMarked(t *testing.T) {
 // At a narrow width the action hint must wrap, not truncate — the last token
 // stays visible.
 func TestConflictPickerHintWrapsNotTruncated(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 40, height: 24}
 	out := e.render(m, "")
@@ -134,6 +143,7 @@ func TestConflictPickerHintWrapsNotTruncated(t *testing.T) {
 }
 
 func TestConflictFileLoadedPushesPicker(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	content := []byte("<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n")
 	updated, _ := m.Update(conflictFileLoadedMsg{path: "f.txt", content: content})
@@ -144,6 +154,7 @@ func TestConflictFileLoadedPushesPicker(t *testing.T) {
 }
 
 func TestConflictFileLoadedBinaryNoOp(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	updated, _ := m.Update(conflictFileLoadedMsg{path: "f.bin", content: []byte("\x00\x01\x02")})
 	m = updated.(Model)
@@ -153,6 +164,7 @@ func TestConflictFileLoadedBinaryNoOp(t *testing.T) {
 }
 
 func TestStagePickerNoGateAppliesImmediately(t *testing.T) {
+	t.Parallel()
 	d := hunkpick.FromDiff([]byte("a\nb\n"), []byte("a\nB\n"))
 	d.SetAll(hunkpick.TakeCurrent) // default: nothing staged
 	e := newStagePicker("f.txt", d)
@@ -173,6 +185,7 @@ func TestStagePickerNoGateAppliesImmediately(t *testing.T) {
 }
 
 func TestStageHunksLoadedPushesPicker(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	updated, _ := m.Update(stageHunksLoadedMsg{path: "f.txt", index: []byte("a\nb\n"), work: []byte("a\nB\n")})
 	m = updated.(Model)
@@ -182,6 +195,7 @@ func TestStageHunksLoadedPushesPicker(t *testing.T) {
 }
 
 func TestStageHunksLoadedNoChangeNoOp(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	updated, _ := m.Update(stageHunksLoadedMsg{path: "f.txt", index: []byte("a\n"), work: []byte("a\n")})
 	m = updated.(Model)
@@ -191,6 +205,7 @@ func TestStageHunksLoadedNoChangeNoOp(t *testing.T) {
 }
 
 func TestHunkPickerDefaultsToScroll(t *testing.T) {
+	t.Parallel()
 	e := newStagePicker("f.txt", pickerDoc())
 	if e.mode != modeScroll {
 		t.Fatalf("default mode = %v, want modeScroll", e.mode)
@@ -198,6 +213,7 @@ func TestHunkPickerDefaultsToScroll(t *testing.T) {
 }
 
 func TestHunkPickerZCyclesScrollWrapCutoff(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	if e.mode != modeScroll {
@@ -218,6 +234,7 @@ func TestHunkPickerZCyclesScrollWrapCutoff(t *testing.T) {
 }
 
 func TestHunkPickerShiftPansOnlyInScroll(t *testing.T) {
+	t.Parallel()
 	e := newStagePicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, keyMsg("shift+right"))
@@ -240,6 +257,7 @@ func TestHunkPickerShiftPansOnlyInScroll(t *testing.T) {
 }
 
 func TestHunkPickerRenderFitsHeight(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 12}
 	out := e.render(m, "")
@@ -266,6 +284,7 @@ func splitLinesTest(s string) []string {
 }
 
 func TestPickerSuffixEmptyAndFirst(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 30}
 	// Region 0: both sides on, current toggled first → " — current first".
@@ -289,6 +308,7 @@ func TestPickerSuffixEmptyAndFirst(t *testing.T) {
 // fix must hide the pane entirely at this size instead (verified empirically
 // via a scratch run — see task-3-report.md).
 func TestPickerTinyOverlayHidesOutputPane(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 12}
 	out := e.render(m, "")
@@ -301,6 +321,7 @@ func TestPickerTinyOverlayHidesOutputPane(t *testing.T) {
 }
 
 func TestConflictPickerAltScrollMovesViewNotCursor(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, tea.KeyMsg{Type: tea.KeyDown, Alt: true})
@@ -318,6 +339,7 @@ func TestConflictPickerAltScrollMovesViewNotCursor(t *testing.T) {
 }
 
 func TestUnstageHunksLoadedPushesPicker(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	mm, _ := m.Update(unstageHunksLoadedMsg{path: "f.txt",
 		index: []byte("a\nX\nc\n"), head: []byte("a\nb\nc\n")})
@@ -341,6 +363,7 @@ func TestUnstageHunksLoadedPushesPicker(t *testing.T) {
 }
 
 func TestUnstageHunksBinaryAndEmptyRefusals(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	mm, _ := m.Update(unstageHunksLoadedMsg{path: "f.bin",
 		index: []byte("x\x00y"), head: []byte("a\n")})
@@ -358,6 +381,7 @@ func TestUnstageHunksBinaryAndEmptyRefusals(t *testing.T) {
 }
 
 func TestUnstagePickerApplyDispatchesStageHunks(t *testing.T) {
+	t.Parallel()
 	doc := hunkpick.FromDiff([]byte("a\nX\nc\n"), []byte("a\nb\nc\n"))
 	doc.SetAll(hunkpick.TakeCurrent)
 	e := newUnstagePicker("f.txt", doc)
@@ -372,6 +396,7 @@ func TestUnstagePickerApplyDispatchesStageHunks(t *testing.T) {
 }
 
 func TestCanUnstageHunksGate(t *testing.T) {
+	t.Parallel()
 	st := model.WorkingTreeStatus{Files: []model.FileStatus{
 		{Path: "mod.txt", Staged: 'M', Kind: model.KindTracked},
 		{Path: "new.txt", Staged: 'A', Kind: model.KindTracked},
@@ -393,6 +418,7 @@ func TestCanUnstageHunksGate(t *testing.T) {
 }
 
 func TestConflictPickerPlainArrowSnapsBackConsumed(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, tea.KeyMsg{Type: tea.KeyDown, Alt: true})
@@ -411,6 +437,7 @@ func TestConflictPickerPlainArrowSnapsBackConsumed(t *testing.T) {
 }
 
 func TestConflictPickerOtherKeysResetViewScroll(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, tea.KeyMsg{Type: tea.KeyDown, Alt: true})
@@ -429,6 +456,7 @@ func TestConflictPickerOtherKeysResetViewScroll(t *testing.T) {
 }
 
 func TestConflictPickerRenderStoresClampedShift(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	// The doc's display lines fit the 24-row overlay, so any shift clamps to 0.
@@ -440,6 +468,7 @@ func TestConflictPickerRenderStoresClampedShift(t *testing.T) {
 }
 
 func TestConflictPickerSideTogglesBoth(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, key("c"))
@@ -460,6 +489,7 @@ func TestConflictPickerSideTogglesBoth(t *testing.T) {
 }
 
 func TestConflictPickerToggleOffIsDecidedEmpty(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, key("c"))
@@ -481,6 +511,7 @@ func TestConflictPickerToggleOffIsDecidedEmpty(t *testing.T) {
 }
 
 func TestConflictPickerMasterToggleTriState(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, key("C"))
@@ -497,6 +528,7 @@ func TestConflictPickerMasterToggleTriState(t *testing.T) {
 }
 
 func TestStagePickerSpaceMaterializesDefault(t *testing.T) {
+	t.Parallel()
 	d := hunkpick.FromDiff([]byte("a\nb\n"), []byte("a\nB\n"))
 	d.SetAll(hunkpick.TakeCurrent) // the H picker's nothing-staged default
 	e := newStagePicker("f.txt", d)
@@ -510,6 +542,7 @@ func TestStagePickerSpaceMaterializesDefault(t *testing.T) {
 }
 
 func TestConflictPickerCheckboxHierarchy(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
 	out := e.render(m, "")
@@ -546,6 +579,7 @@ func TestConflictPickerCheckboxHierarchy(t *testing.T) {
 }
 
 func TestConflictPickerMasterCheckboxStates(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
 	m, _ = e.update(m, key("C"))
@@ -559,6 +593,7 @@ func TestConflictPickerMasterCheckboxStates(t *testing.T) {
 }
 
 func TestConflictPickerOutputPane(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
 	out := e.render(m, "")
@@ -592,6 +627,7 @@ func countRule(s string) int {
 }
 
 func TestConflictPickerOutputAnchorFollowsFocus(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	lines, anchor := e.outputLines()
 	if anchor != 1 { // "top" literal, then region 0's contribution
@@ -605,6 +641,7 @@ func TestConflictPickerOutputAnchorFollowsFocus(t *testing.T) {
 }
 
 func TestConflictPickerOutputAnchorEmptyTrailingRegion(t *testing.T) {
+	t.Parallel()
 	// 30 distinct literal lines, then a final conflict block with no trailing
 	// literal; deciding that block to empty must pin the pane to the END.
 	var sb strings.Builder
@@ -635,6 +672,7 @@ func TestConflictPickerOutputAnchorEmptyTrailingRegion(t *testing.T) {
 // sanitize them — a raw \r in a padded cell makes the terminal jump to
 // column 0 and corrupts the whole frame (tabs likewise desync widths).
 func TestConflictPickerSanitizesCRLFDisplay(t *testing.T) {
+	t.Parallel()
 	d, err := hunkpick.ParseConflict([]byte("top\ttabbed\r\n<<<<<<< HEAD\r\nfoo\r\n=======\r\nbar\r\n>>>>>>> x\r\n"))
 	if err != nil {
 		t.Fatal(err)
@@ -660,6 +698,7 @@ func TestConflictPickerSanitizesCRLFDisplay(t *testing.T) {
 // handler must parse with that size so content imitating 7-char markers (an
 // old conflict committed unresolved) stays plain content.
 func TestConflictFileLoadedSizedMarkers(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	content := []byte(strings.Repeat("<", 31) + " current\n<<<<<<< HEAD\n=======\n" +
 		strings.Repeat("=", 31) + "\nb\n" + strings.Repeat(">", 31) + " incoming\n")
@@ -674,6 +713,7 @@ func TestConflictFileLoadedSizedMarkers(t *testing.T) {
 // line rows' cursor slot occupies, or its checkbox juts out two columns left
 // of every other tick in the column.
 func TestConflictPickerHeaderTicksAlign(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
 	out := plain(e.render(m, ""))
@@ -695,6 +735,7 @@ func TestConflictPickerHeaderTicksAlign(t *testing.T) {
 }
 
 func TestPickerTabTogglesOutputFocus(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
 	m, _ = e.update(m, keyMsg("tab"))
@@ -718,6 +759,7 @@ func TestPickerTabTogglesOutputFocus(t *testing.T) {
 }
 
 func TestPickerOutputFocusInertSelectionKeys(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
 	m, _ = e.update(m, keyMsg("tab"))
@@ -736,6 +778,7 @@ func TestPickerOutputFocusInertSelectionKeys(t *testing.T) {
 }
 
 func TestPickerTabExpandsCollapsedPane(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
 	m, _ = e.update(m, key("o")) // collapse under grid focus, as today
@@ -755,6 +798,7 @@ func TestPickerTabExpandsCollapsedPane(t *testing.T) {
 }
 
 func TestPickerOutputScrollMovesPaneWindow(t *testing.T) {
+	t.Parallel()
 	var sb strings.Builder
 	for i := 0; i < 30; i++ {
 		fmt.Fprintf(&sb, "line%02d\n", i)
@@ -795,6 +839,7 @@ func TestPickerOutputScrollMovesPaneWindow(t *testing.T) {
 }
 
 func TestPickerOutputRuleShowsFocus(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
 	if strings.Contains(plain(e.render(m, "")), "▶ output") {
@@ -807,6 +852,7 @@ func TestPickerOutputRuleShowsFocus(t *testing.T) {
 }
 
 func TestPickerHintsSwapWithFocus(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
 	out := plain(e.render(m, ""))
@@ -824,6 +870,7 @@ func TestPickerHintsSwapWithFocus(t *testing.T) {
 // hands the arrows back to the grid (the anchor moved with the revealed
 // region, so a retained manual scroll would land nowhere meaningful).
 func TestPickerEnterGateReturnsGridFocus(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
 	m, _ = e.update(m, keyMsg("tab"))
@@ -850,6 +897,7 @@ func TestPickerEnterGateReturnsGridFocus(t *testing.T) {
 }
 
 func TestPickerCtrlTTogglesZoom(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, keyMsg("ctrl+t"))
@@ -863,6 +911,7 @@ func TestPickerCtrlTTogglesZoom(t *testing.T) {
 }
 
 func TestPickerEscRestoresZoomFirst(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, keyMsg("ctrl+t"))
@@ -880,6 +929,7 @@ func TestPickerEscRestoresZoomFirst(t *testing.T) {
 }
 
 func TestPickerEscRestoresZoomWhileOutputFocused(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, keyMsg("tab")) // focus output
@@ -891,6 +941,7 @@ func TestPickerEscRestoresZoomWhileOutputFocused(t *testing.T) {
 }
 
 func TestPickerODropsZoom(t *testing.T) {
+	t.Parallel()
 	// Grid-focused: o unzooms AND collapses the pane.
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
@@ -911,6 +962,7 @@ func TestPickerODropsZoom(t *testing.T) {
 }
 
 func TestPickerZoomGridHidesOutput(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, keyMsg("ctrl+t")) // grid focused → grid-zoom
@@ -924,6 +976,7 @@ func TestPickerZoomGridHidesOutput(t *testing.T) {
 }
 
 func TestPickerZoomOutputHidesGrid(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, keyMsg("tab"))    // focus output
@@ -938,6 +991,7 @@ func TestPickerZoomOutputHidesGrid(t *testing.T) {
 }
 
 func TestPickerTabSwapsZoomedHalf(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, keyMsg("ctrl+t")) // grid-zoom
@@ -952,6 +1006,7 @@ func TestPickerTabSwapsZoomedHalf(t *testing.T) {
 }
 
 func TestPickerZoomRestoreShowsSplit(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
 	m, _ = e.update(m, keyMsg("ctrl+t"))
@@ -991,6 +1046,7 @@ func BenchmarkPickerRenderBig(b *testing.B) {
 }
 
 func TestPickerPageKeysGrid(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("big.txt", bigPickerDoc(t, 6, 2))
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 20}
 	_ = e.render(m, "") // records the grid page height
@@ -1019,6 +1075,7 @@ func TestPickerPageKeysGrid(t *testing.T) {
 }
 
 func TestPickerPageKeysOutput(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("big.txt", bigPickerDoc(t, 6, 20))
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 24}
 	_ = e.render(m, "")
@@ -1037,6 +1094,7 @@ func TestPickerPageKeysOutput(t *testing.T) {
 }
 
 func TestPickerPageKeyConsumedBySnapback(t *testing.T) {
+	t.Parallel()
 	e := newConflictPicker("big.txt", bigPickerDoc(t, 6, 2))
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 20}
 	_ = e.render(m, "")

@@ -11,6 +11,7 @@ import (
 )
 
 func TestRepoPopupSlowFSRowMarkerAndWarning(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	fast := "/home/fake/fastrepo"
 	slow := "/mnt/fake/slowrepo"
@@ -45,6 +46,7 @@ func TestRepoPopupSlowFSRowMarkerAndWarning(t *testing.T) {
 // TestRepoPopupSlowFSWidth pins that the marker suffix never pushes a row past
 // the terminal width (the cutoff/window math must absorb it).
 func TestRepoPopupSlowFSWidth(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	long := "/mnt/very/deeply/nested/path/that/is/way/longer/than/the/popup/box/myrepo"
 	m = m.pushLayer(&repoPopup{
@@ -65,6 +67,7 @@ func TestRepoPopupSlowFSWidth(t *testing.T) {
 // TestRepoPopupFSMsgAfterCloseIsNoop pins the late-delivery race: the probe
 // result landing after the popup closed must be dropped, not panic.
 func TestRepoPopupFSMsgAfterCloseIsNoop(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	u, cmd := m.Update(repoFSMsg{foreign: map[string]bool{"/x": true}})
 	if cmd != nil {
@@ -76,6 +79,7 @@ func TestRepoPopupFSMsgAfterCloseIsNoop(t *testing.T) {
 // TestOpenRepoPopupFiresProbe pins that opening the switcher starts the async
 // probe and that the probe covers every listed entry.
 func TestOpenRepoPopupFiresProbe(t *testing.T) {
+	t.Parallel()
 	m, _, otherDir := seededModel(t)
 	mm, cmd, ok := m.openRepoPopup()
 	if !ok {

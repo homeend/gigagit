@@ -14,6 +14,7 @@ import (
 )
 
 func TestBuildSessionSnapshotFields(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.snapshotCommonDir = "/repo/.git"
 	m.snapshotWorktree = "/repo"
@@ -62,6 +63,7 @@ func TestBuildSessionSnapshotFields(t *testing.T) {
 }
 
 func TestBuildSessionSnapshotFilterAndScope(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.filterPanel = panelCommits
 	m.filterQuery = "fix"
@@ -81,6 +83,7 @@ func TestBuildSessionSnapshotFilterAndScope(t *testing.T) {
 // shelf entry id, never fall into the default "commit" branch with an
 // empty hash (protocol misinformation for gg mcp's gg_ui_state).
 func TestEndpointProtoShelf(t *testing.T) {
+	t.Parallel()
 	e := model.Endpoint{Kind: model.EndpointShelf, ShelfID: "commit-abc1234-deadbeef"}
 	got := endpointProto(e)
 	if got == nil || got.Kind != "shelf" || got.ShelfID != "commit-abc1234-deadbeef" {
@@ -96,6 +99,7 @@ func TestEndpointProtoShelf(t *testing.T) {
 // come through buildSessionSnapshot as FilesView.Right.Kind == "shelf" with
 // the shelf id, not the misclassified default "commit"/empty-hash shape.
 func TestBuildSessionSnapshotCompareShelfEndpoint(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.filesView = &contentPopup{}
 	m.filesMode = filesModeCompare
@@ -116,6 +120,7 @@ func TestBuildSessionSnapshotCompareShelfEndpoint(t *testing.T) {
 }
 
 func TestSnapshotJSONKeys(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	s := buildSessionSnapshot(m)
 	data, err := json.Marshal(s)
@@ -134,6 +139,7 @@ func TestSnapshotJSONKeys(t *testing.T) {
 }
 
 func TestMaybeWriteSnapshotOnlyOnChange(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.snapshotPath = filepath.Join(t.TempDir(), "ui-state.json")
 
@@ -170,6 +176,7 @@ func TestMaybeWriteSnapshotOnlyOnChange(t *testing.T) {
 }
 
 func TestMaybeWriteSnapshotDisabled(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.snapshotPath = "" // no state root / not a repo
 	m = m.maybeWriteSnapshot()
@@ -183,6 +190,7 @@ func TestMaybeWriteSnapshotDisabled(t *testing.T) {
 // without touching the snapshot fields; a resolve for the CURRENT svc must
 // apply.
 func TestSnapshotTargetMsgStaleServiceDropped(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.snapshotCommonDir = "/old/.git"
 	m.snapshotWorktree = "/old"

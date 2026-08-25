@@ -16,6 +16,7 @@ func remoteNames(rbs []model.RemoteBranch) []string {
 }
 
 func TestRemoteBranchesLocalFirst(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		remotes []model.RemoteBranch

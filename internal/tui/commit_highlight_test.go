@@ -20,6 +20,7 @@ func highlightModel(subjects ...string) Model {
 }
 
 func TestCommitMatchesHighlight(t *testing.T) {
+	t.Parallel()
 	m := highlightModel("row-zero", "row-one", "row-two", "row-three", "row-four", "row-five")
 	m.highlightQuery = "three"
 	matches := 0
@@ -46,6 +47,7 @@ func TestCommitMatchesHighlight(t *testing.T) {
 }
 
 func TestScanHighlightMatchWrap(t *testing.T) {
+	t.Parallel()
 	m := highlightModel("row-zero", "row-one", "row-two", "row-three", "row-four", "row-five")
 	last := len(m.commits) - 1
 	m.highlightQuery = "row" // every row matches
@@ -100,6 +102,7 @@ func relabel(m Model) Model {
 }
 
 func TestHighlightEntryClearsFilter(t *testing.T) {
+	t.Parallel()
 	m := commitsModel(t, 6)
 	m.filterPanel = panelCommits
 	m.filterQuery = "c1"
@@ -114,6 +117,7 @@ func TestHighlightEntryClearsFilter(t *testing.T) {
 }
 
 func TestFilterEntryClearsHighlight(t *testing.T) {
+	t.Parallel()
 	m := commitsModel(t, 6)
 	m.highlightQuery = "c1"
 	u, _ := m.Update(keyMsg("/"))
@@ -127,6 +131,7 @@ func TestFilterEntryClearsHighlight(t *testing.T) {
 }
 
 func TestHighlightTypingSnapsCursorAndEnterKeeps(t *testing.T) {
+	t.Parallel()
 	m := relabel(commitsModel(t, 6)) // commits[5].Subject == "uniform" (unique)
 	u, _ := m.Update(keyMsg("@"))
 	m = u.(Model)
@@ -155,6 +160,7 @@ func TestHighlightTypingSnapsCursorAndEnterKeeps(t *testing.T) {
 }
 
 func TestHighlightCtrlNavMovesBetweenMatches(t *testing.T) {
+	t.Parallel()
 	m := commitsModel(t, 6)
 	m.highlightQuery = "c" // every subject c0..c5 matches; committed (not typing)
 	m.sel[panelCommits] = 0
@@ -189,6 +195,7 @@ func TestHighlightCtrlNavMovesBetweenMatches(t *testing.T) {
 // backing-space scan would set sel to 5 and land on the wrong row; only a
 // display-space scan lands on the target.
 func TestHighlightNavRespectsSortOrder(t *testing.T) {
+	t.Parallel()
 	m := commitsModel(t, 6)
 	subjects := []string{"b", "c", "d", "e", "f", "zzz_target"} // backing 0..5
 	for i := range m.commits {
@@ -211,6 +218,7 @@ func TestHighlightNavRespectsSortOrder(t *testing.T) {
 }
 
 func TestHighlightFooterWhileTyping(t *testing.T) {
+	t.Parallel()
 	m := commitsModel(t, 3)
 	u, _ := m.Update(keyMsg("@"))
 	m = u.(Model)

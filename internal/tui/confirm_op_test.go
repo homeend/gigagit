@@ -9,6 +9,7 @@ import (
 )
 
 func TestConfirmOpPopsModalDefaultNo(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t) // build a loaded model; reuse the existing helper
 	tm, _ := m.confirmOp(engine.SmartSwitch{Branch: "x"}, "Switch to x?")
 	mm := tm.(Model)
@@ -27,6 +28,7 @@ func TestConfirmOpPopsModalDefaultNo(t *testing.T) {
 }
 
 func TestConfirmOpDisabledRunsDirectly(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.cfg.UI.DisableSlowOpConfirm = true
 	tm, cmd := m.confirmOp(engine.SmartSwitch{Branch: "x"}, "Switch to x?")
@@ -40,6 +42,7 @@ func TestConfirmOpDisabledRunsDirectly(t *testing.T) {
 }
 
 func TestConfirmModalKeys(t *testing.T) {
+	t.Parallel()
 	key := func(s string) tea.KeyMsg {
 		if len(s) == 1 {
 			return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}

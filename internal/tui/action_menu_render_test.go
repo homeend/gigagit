@@ -8,6 +8,7 @@ import (
 )
 
 func TestMenuRendersOverDiffView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
@@ -19,6 +20,7 @@ func TestMenuRendersOverDiffView(t *testing.T) {
 }
 
 func TestMenuRendersOverHistory(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m = m.pushLayer(newHistoryView(navContext{path: "a.go", rev: "abc"}))

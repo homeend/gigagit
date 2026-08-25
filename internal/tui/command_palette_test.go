@@ -9,6 +9,7 @@ import (
 
 // ctrl+p opens the command palette.
 func TestCommandPaletteOpens(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = send(m, keyType(tea.KeyCtrlP))
 	if layerOf[*commandPalette](m) == nil {
@@ -19,6 +20,7 @@ func TestCommandPaletteOpens(t *testing.T) {
 // enter on "Show commit" opens the show-commit popup ON TOP of the palette (the
 // palette is the source, so it stays underneath for esc to reveal).
 func TestCommandPaletteEnterRunsShowCommit(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "Show commit")
 	if layerOf[*gotoCommitPopup](m) == nil {
@@ -31,6 +33,7 @@ func TestCommandPaletteEnterRunsShowCommit(t *testing.T) {
 
 // esc out of the show-commit popup returns to the palette it was opened from.
 func TestCommandPaletteEscFromGotoReturnsToPalette(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "Show commit") // opens goto over the palette
 	m, _ = send(m, keyType(tea.KeyEsc))     // back out of goto
@@ -45,6 +48,7 @@ func TestCommandPaletteEscFromGotoReturnsToPalette(t *testing.T) {
 // A successful resolve from the palette flow unwinds BOTH popups — the files view
 // must not open over a stale palette.
 func TestCommandPaletteResolveUnwindsBoth(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "Show commit")
 	m = typeRunes(t, m, "abc")
@@ -60,6 +64,7 @@ func TestCommandPaletteResolveUnwindsBoth(t *testing.T) {
 
 // esc closes the palette.
 func TestCommandPaletteEscCloses(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = send(m, keyType(tea.KeyCtrlP))
 	m, _ = send(m, keyType(tea.KeyEsc))
@@ -70,6 +75,7 @@ func TestCommandPaletteEscCloses(t *testing.T) {
 
 // The render path draws the palette (guards the green-unit/broken-render class).
 func TestCommandPaletteRenders(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = send(m, keyType(tea.KeyCtrlP))
 	out := m.View()
@@ -81,6 +87,7 @@ func TestCommandPaletteRenders(t *testing.T) {
 }
 
 func TestPaletteRegistryOrder(t *testing.T) {
+	t.Parallel()
 	want := []struct{ label, keyHint string }{
 		{"Apply patch…", ""},
 		{"Branch versions…", ""},

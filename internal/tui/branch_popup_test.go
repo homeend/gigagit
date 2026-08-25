@@ -24,6 +24,7 @@ func loadModel(t *testing.T, repo *gitRepoT) Model {
 }
 
 func TestBKeyOpensBranchPopupWithSelectedStartPoint(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	m.focus = panelBranches
@@ -44,6 +45,7 @@ func TestBKeyOpensBranchPopupWithSelectedStartPoint(t *testing.T) {
 }
 
 func TestBKeyInertOnOtherPanels(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	m.focus = panelCommits
@@ -56,6 +58,7 @@ func TestBKeyInertOnOtherPanels(t *testing.T) {
 }
 
 func TestBranchPopupTypeEnterCreatesBranch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	m.focus = panelBranches
@@ -93,6 +96,7 @@ func TestBranchPopupTypeEnterCreatesBranch(t *testing.T) {
 }
 
 func TestBranchPopupEnterOnEmptyNameDoesNothing(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	m.focus = panelBranches
@@ -110,6 +114,7 @@ func TestBranchPopupEnterOnEmptyNameDoesNothing(t *testing.T) {
 }
 
 func TestBranchPopupEscClosesWithoutOp(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	m.focus = panelBranches
@@ -124,6 +129,7 @@ func TestBranchPopupEscClosesWithoutOp(t *testing.T) {
 }
 
 func TestShiftBChainsSmartSwitchAfterCreate(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	m.focus = panelBranches
@@ -161,6 +167,7 @@ func TestShiftBChainsSmartSwitchAfterCreate(t *testing.T) {
 }
 
 func TestBranchPopupSwallowsActionKeys(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	m.focus = panelBranches

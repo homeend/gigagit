@@ -21,6 +21,7 @@ func commitGraphMenuIndex(t *testing.T) int {
 }
 
 func TestCommitGraphLabelStates(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeTestModel(t)
 	idx := commitGraphMenuIndex(t)
 
@@ -43,6 +44,7 @@ func TestCommitGraphLabelStates(t *testing.T) {
 }
 
 func TestCommitGraphRowEnterStartsWriteAndEnable(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeTestModel(t)
 	m.repoHealthKnown = true
 	m.repoHealth = model.RepoHealth{} // missing → write+enable
@@ -62,6 +64,7 @@ func TestCommitGraphRowEnterStartsWriteAndEnable(t *testing.T) {
 }
 
 func TestCommitGraphRowNoOpWhenHealthy(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeTestModel(t)
 	m.repoHealthKnown = true
 	m.repoHealth = model.RepoHealth{HasCommitGraph: true, WriteCommitGraphSet: true, WriteCommitGraphValue: "true"}
@@ -80,6 +83,7 @@ func TestCommitGraphRowNoOpWhenHealthy(t *testing.T) {
 }
 
 func TestOpenSettingsRefreshesHealth(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeTestModel(t)
 	nm, cmd := m.Update(keyMsg(","))
 	if cmd == nil {

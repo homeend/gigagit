@@ -9,6 +9,7 @@ import (
 )
 
 func TestPaletteOpenRepoOpensPopup(t *testing.T) {
+	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "Open repo")
 	if layerOf[*repoPathPopup](m) == nil {
@@ -20,6 +21,7 @@ func TestPaletteOpenRepoOpensPopup(t *testing.T) {
 }
 
 func TestRepoPathPopupGoodPathReRoots(t *testing.T) {
+	t.Parallel()
 	dir, _ := newRepoDir(t)
 	want := gitOut(t, dir, "rev-parse", "--show-toplevel")
 
@@ -43,6 +45,7 @@ func TestRepoPathPopupGoodPathReRoots(t *testing.T) {
 }
 
 func TestRepoPathPopupSubdirResolvesToRoot(t *testing.T) {
+	t.Parallel()
 	dir, _ := newRepoDir(t)
 	want := gitOut(t, dir, "rev-parse", "--show-toplevel")
 	sub := filepath.Join(dir, "sub")
@@ -61,6 +64,7 @@ func TestRepoPathPopupSubdirResolvesToRoot(t *testing.T) {
 }
 
 func TestRepoPathPopupBadPathInlineError(t *testing.T) {
+	t.Parallel()
 	nonRepo := t.TempDir() // not a git repo
 
 	m := footerModel()
@@ -84,6 +88,7 @@ func TestRepoPathPopupBadPathInlineError(t *testing.T) {
 }
 
 func TestRepoPathPopupStaleResolveRejected(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m, _ = m.openRepoPathPopup()
 	m = typeRunes(t, m, "a")
@@ -99,6 +104,7 @@ func TestRepoPathPopupStaleResolveRejected(t *testing.T) {
 }
 
 func TestRepoPathPopupEscCloses(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m, _ = m.openRepoPathPopup()
 	m, _ = send(m, keyType(tea.KeyEsc))

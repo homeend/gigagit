@@ -69,6 +69,7 @@ func conflictModelWithTools(t *testing.T, cmds ...config.ToolCommand) (Model, *c
 }
 
 func TestBuildToolRunCompleteCreatesOverviewFile(t *testing.T) {
+	t.Parallel()
 	cleanupToolTemp(t)
 	tc := config.ToolCommand{Category: "conflict_complete", Name: "Agent (yolo)", Mode: "terminal", Command: "agent"}
 	m, p := conflictModelWithTools(t, tc)
@@ -104,6 +105,7 @@ func TestBuildToolRunCompleteCreatesOverviewFile(t *testing.T) {
 }
 
 func TestToolFinishedCompleteOpensOverviewViewer(t *testing.T) {
+	t.Parallel()
 	m, p := conflictModelWithTools(t)
 	mf, err := os.CreateTemp(t.TempDir(), "overview-*.md")
 	if err != nil {
@@ -133,6 +135,7 @@ func TestToolFinishedCompleteOpensOverviewViewer(t *testing.T) {
 }
 
 func TestToolFinishedCompleteEmptyOverviewIsStatusNote(t *testing.T) {
+	t.Parallel()
 	m, p := conflictModelWithTools(t)
 	mf, err := os.CreateTemp(t.TempDir(), "overview-*.md")
 	if err != nil {
@@ -156,6 +159,7 @@ func TestToolFinishedCompleteEmptyOverviewIsStatusNote(t *testing.T) {
 }
 
 func TestToolFinishedCompleteFailureDiscardsOverview(t *testing.T) {
+	t.Parallel()
 	m, p := conflictModelWithTools(t)
 	mf, err := os.CreateTemp(t.TempDir(), "overview-*.md")
 	if err != nil {
@@ -180,6 +184,7 @@ func TestToolFinishedCompleteFailureDiscardsOverview(t *testing.T) {
 }
 
 func TestConflictTKeyOpensPicker(t *testing.T) {
+	t.Parallel()
 	m, p := conflictModelWithTools(t,
 		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "a <op>"})
 	m, _ = p.update(m, keyRunes("t"))
@@ -198,6 +203,7 @@ func TestConflictTKeyOpensPicker(t *testing.T) {
 }
 
 func TestConflictTKeyNoCommandsIsNoop(t *testing.T) {
+	t.Parallel()
 	m, p := conflictModelWithTools(t) // no commands configured
 	m, _ = p.update(m, keyRunes("t"))
 	if p.st != confListing {
@@ -209,6 +215,7 @@ func TestConflictTKeyNoCommandsIsNoop(t *testing.T) {
 }
 
 func TestConflictHintsAdvertiseTools(t *testing.T) {
+	t.Parallel()
 	files := []model.FileStatus{{Path: "a.go", Staged: 'U', Unstaged: 'U'}}
 	withTools := conflictHints(files, 0, "merge", 1)
 	found := false
@@ -228,6 +235,7 @@ func TestConflictHintsAdvertiseTools(t *testing.T) {
 }
 
 func TestToolPickEnterResolvesAndAsksApproval(t *testing.T) {
+	t.Parallel()
 	m, p := conflictModelWithTools(t,
 		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: `agent "<op> <conflicted-files>"`})
 	m.currentWorktree = "/work/repo"
@@ -266,6 +274,7 @@ func TestToolPickEnterResolvesAndAsksApproval(t *testing.T) {
 }
 
 func TestToolApproveEnterReturnsExecCmd(t *testing.T) {
+	t.Parallel()
 	m, p := conflictModelWithTools(t,
 		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "true"})
 	cleanupToolTemp(t) // the approve-enter below eagerly writes a real gg-context-* file and a gg-tool-* script
@@ -284,6 +293,7 @@ func TestToolApproveEnterReturnsExecCmd(t *testing.T) {
 // (→ confToolApprove) is already covered by
 // TestToolPickEnterResolvesAndAsksApproval.
 func TestToolApprovedFastPathSkipsGate(t *testing.T) {
+	t.Parallel()
 	tc := config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "true"}
 	m, p := conflictModelWithTools(t, tc)
 	cleanupToolTemp(t) // the approved fast path below eagerly writes a real gg-context-* file and a gg-tool-* script
@@ -302,6 +312,7 @@ func TestToolApprovedFastPathSkipsGate(t *testing.T) {
 }
 
 func TestToolUserFillStepPrecedesApproval(t *testing.T) {
+	t.Parallel()
 	m, p := conflictModelWithTools(t,
 		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "agent <user:hint>"})
 	cleanupToolTemp(t) // buildToolRun (after the fill below) eagerly writes a real gg-context-* file (and, once approved, a gg-tool-* script)
@@ -321,6 +332,7 @@ func TestToolUserFillStepPrecedesApproval(t *testing.T) {
 }
 
 func TestToolMarkResolvedOffer(t *testing.T) {
+	t.Parallel()
 	// A finished per-file run whose merged file changed (mtime moved past the
 	// snapshot) must offer mark-resolved; an unchanged one must reload instead.
 	m, p := conflictModelWithTools(t,
@@ -359,6 +371,7 @@ func TestToolMarkResolvedOffer(t *testing.T) {
 // same path as a clean exit — no confReporting, a reload cmd returned, and a
 // status hint instead of silence.
 func TestToolFinishedInterruptExitIsNotAFailure(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX-only: relies on sh -c exit codes")
 	}
@@ -389,6 +402,7 @@ func TestToolFinishedInterruptExitIsNotAFailure(t *testing.T) {
 // this fix toolFinished surfaced "Resolve failed: tool exited with an
 // error: signal: interrupt" for a completely normal quit.
 func TestToolFinishedSignalDeathIsNotAFailure(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX-only: relies on a real SIGINT process death")
 	}
@@ -415,6 +429,7 @@ func TestToolFinishedSignalDeathIsNotAFailure(t *testing.T) {
 // "Junie: exit status 7", not the old bare "tool exited with an error: exit
 // status 7" — so a screenshot or log line is actionable on its own.
 func TestToolFinishedErrorNamesTheTool(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS == "windows" {
 		t.Skip("POSIX-only: relies on sh -c exit codes")
 	}
@@ -438,6 +453,7 @@ func TestToolFinishedErrorNamesTheTool(t *testing.T) {
 }
 
 func TestConflictTKeyIncludesCompleteRows(t *testing.T) {
+	t.Parallel()
 	cmds := []config.ToolCommand{
 		{Category: "conflict", Name: "Fix", Mode: "terminal", Command: "helper"},
 		{Category: "conflict_complete", Name: "Finish (yolo)", Mode: "terminal", Command: "agent"},
@@ -453,6 +469,7 @@ func TestConflictTKeyIncludesCompleteRows(t *testing.T) {
 }
 
 func TestConflictTKeyCompleteRowsNeedPausedOp(t *testing.T) {
+	t.Parallel()
 	cmds := []config.ToolCommand{
 		{Category: "conflict", Name: "Fix", Mode: "terminal", Command: "helper"},
 		{Category: "conflict_complete", Name: "Finish (yolo)", Mode: "terminal", Command: "agent"},

@@ -44,6 +44,7 @@ func commitGenTestModel(t *testing.T) Model {
 }
 
 func TestCommitNormalWidthAndMaximize(t *testing.T) {
+	t.Parallel()
 	// The wider-than-standard default (B ii).
 	if got := commitNormalWidth(120); got != 96 { // capped
 		t.Fatalf("commitNormalWidth(120) = %d, want 96", got)
@@ -69,6 +70,7 @@ func TestCommitNormalWidthAndMaximize(t *testing.T) {
 }
 
 func TestGenSpinnerAdvancesAndSelfStops(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	p := &commitPopup{}
 	m = m.pushLayer(p)
@@ -91,6 +93,7 @@ func TestGenSpinnerAdvancesAndSelfStops(t *testing.T) {
 }
 
 func TestGenerateFillsFieldsGenGuarded(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	p := &commitPopup{}
 	m = m.pushLayer(p)
@@ -126,6 +129,7 @@ func TestGenerateFillsFieldsGenGuarded(t *testing.T) {
 }
 
 func TestGenerateNoOpGuardsNothingStaged(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	m.status = model.WorkingTreeStatus{} // nothing staged
 	p := &commitPopup{}
@@ -140,6 +144,7 @@ func TestGenerateNoOpGuardsNothingStaged(t *testing.T) {
 }
 
 func TestGenerateNoOpGuardsNoTool(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	m.cfg.Tools.Command = nil // no commit_message tool configured
 	p := &commitPopup{}
@@ -154,6 +159,7 @@ func TestGenerateNoOpGuardsNoTool(t *testing.T) {
 }
 
 func TestGenerateEscCancelDropsLateResult(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	p := &commitPopup{}
 	m = m.pushLayer(p)
@@ -182,6 +188,7 @@ func TestGenerateEscCancelDropsLateResult(t *testing.T) {
 // itself is correct: ctrl+g dispatches, and while generating every other key
 // is swallowed except esc.
 func TestCommitPopupCtrlGWiring(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	m = m.pushLayer(&commitPopup{})
 
@@ -216,6 +223,7 @@ func TestCommitPopupCtrlGWiring(t *testing.T) {
 // TestModelUpdateHandlesGenMessageMsg proves genMessageMsg is routed through
 // Model.Update (not just callable via applyGeneratedMessage directly).
 func TestModelUpdateHandlesGenMessageMsg(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	p := &commitPopup{genGen: 1}
 	m = m.pushLayer(p)
@@ -234,6 +242,7 @@ func TestModelUpdateHandlesGenMessageMsg(t *testing.T) {
 // chooser (both tools are pre-approved here so the test isolates the
 // chooser mechanic from the approval gate covered separately below).
 func TestGenerateChooserWhenMultipleTools(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	second := config.ToolCommand{Category: "commit_message", Name: "Junie", Mode: "capture", Command: "echo bye"}
 	m.cfg.Tools.Command = append(m.cfg.Tools.Command, second)
@@ -273,6 +282,7 @@ func TestGenerateChooserWhenMultipleTools(t *testing.T) {
 // TestGenerateChooserEscCancels covers the chooser's esc: it clears choosing
 // without picking any tool or dispatching.
 func TestGenerateChooserEscCancels(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	m.cfg.Tools.Command = append(m.cfg.Tools.Command,
 		config.ToolCommand{Category: "commit_message", Name: "Junie", Mode: "capture", Command: "echo bye"})
@@ -299,6 +309,7 @@ func TestGenerateChooserEscCancels(t *testing.T) {
 // or dispatching; y both records the approval (keyed by the CONFIG command
 // text) and proceeds (skipping confirm — fields are empty).
 func TestGenerateApprovalGateFirstRun(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	m.cfg.Tools.Command[0].Command = "echo unapproved" // a fresh, unapproved template
 	p := &commitPopup{}
@@ -352,6 +363,7 @@ func TestGenerateApprovalGateFirstRun(t *testing.T) {
 // accept key alongside "y" (the shared approvalBoxView hint says "[enter]
 // run").
 func TestGenerateApprovalGateEnterAlsoRuns(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	m.cfg.Tools.Command[0].Command = "echo unapproved2"
 	p := &commitPopup{}
@@ -376,6 +388,7 @@ func TestGenerateApprovalGateEnterAlsoRuns(t *testing.T) {
 // p.confirming before the run; Cancel (esc) leaves the existing text
 // untouched and does not dispatch; Replace (y) dispatches.
 func TestGenerateConfirmReplaceGate(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	p := &commitPopup{title: newTextField("existing subject")}
 	m = m.pushLayer(p)
@@ -424,6 +437,7 @@ func TestGenerateConfirmReplaceGate(t *testing.T) {
 // TestGenerateConfirmReplaceGateNonEmptyDescOnly proves a non-empty
 // description alone (title still blank) also engages the confirm gate.
 func TestGenerateConfirmReplaceGateNonEmptyDescOnly(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	p := &commitPopup{desc: newTextField("existing body")}
 	m = m.pushLayer(p)
@@ -439,6 +453,7 @@ func TestGenerateConfirmReplaceGateNonEmptyDescOnly(t *testing.T) {
 // gateGenerate/approveAndProceed rely on (m.toolCommandApproved(chosen.Command)
 // / m.rememberToolApproval(p.genCmd.Command), never the resolved text).
 func TestGenerateApprovalKeyedOnConfigTextNotResolved(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	m.cfg.Tools.Command[0].Command = "echo <repo>" // resolved text varies with currentWorktree
 	// toolRepoKey falls back to currentWorktree when repoHealth hasn't
@@ -483,6 +498,7 @@ func TestGenerateApprovalKeyedOnConfigTextNotResolved(t *testing.T) {
 // title/desc skip the confirm gate and (with an already-approved single
 // tool) dispatch straight through.
 func TestGenerateSkipsConfirmWhenFieldsEmpty(t *testing.T) {
+	t.Parallel()
 	m := commitGenTestModel(t)
 	p := &commitPopup{}
 	m = m.pushLayer(p)

@@ -19,6 +19,7 @@ func dirtyStatus() model.WorkingTreeStatus {
 }
 
 func TestWipRowsAppearAndBackingIndexGuards(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.status = dirtyStatus()
@@ -48,6 +49,7 @@ func TestWipRowsAppearAndBackingIndexGuards(t *testing.T) {
 }
 
 func TestWipRowsRender(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	u, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
 	m = u.(Model)

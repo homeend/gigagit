@@ -19,6 +19,7 @@ func selectionSet(keys ...string) map[string]bool {
 // m on the Commits panel toggles the compare selection set; a second m on a
 // different commit adds it (no diff), and m again on a selected row toggles off.
 func TestMarkOnCommitsTogglesSelectionSet(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 
@@ -50,6 +51,7 @@ func TestMarkOnCommitsTogglesSelectionSet(t *testing.T) {
 }
 
 func TestSquashNonAdjacentOpensReorderModal(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 4) // commits[0..3], newest-first
 	m.focus = panelCommits
 	// Select the newest and the third-newest (a gap at commits[1]).
@@ -91,6 +93,7 @@ func TestSquashNonAdjacentOpensReorderModal(t *testing.T) {
 // the membership check; the off-branch marks are cleared so the user can retry
 // from a valid selection, while the on-branch marks are kept.
 func TestSquashUnmarksOffBranchCommitsOnMembershipError(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3) // newest-first feed: commits[0] newest
 	m.focus = panelCommits
 
@@ -125,6 +128,7 @@ func TestSquashUnmarksOffBranchCommitsOnMembershipError(t *testing.T) {
 }
 
 func TestSquashRowVisibleWith2Commits(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	if _, ok := m.commitSquashRow(); ok {
@@ -141,6 +145,7 @@ func TestSquashRowVisibleWith2Commits(t *testing.T) {
 }
 
 func TestSquashRefusesWipInSelection(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.wipRows = []wipRow{{wipWorktree, 1}} // a live WIP row so its sentinel key is valid
@@ -158,6 +163,7 @@ func TestSquashRefusesWipInSelection(t *testing.T) {
 // The squash plan's order (Pick/Squash) is derived from the real onto..HEAD
 // range, not the feed: the older commit is Pick, the newer is Squash.
 func TestSquashBuildsAdjacentPlanFromRange(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3) // newest-first feed: commits[0] newest
 	m.focus = panelCommits
 

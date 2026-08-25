@@ -24,6 +24,7 @@ func holdPagingModel(t *testing.T) Model {
 }
 
 func TestMaybeLoadMoreDispatchesWhenIdle(t *testing.T) {
+	t.Parallel()
 	m := holdPagingModel(t)
 	mm, cmd := m.maybeLoadMoreCommits()
 	if cmd == nil {
@@ -35,6 +36,7 @@ func TestMaybeLoadMoreDispatchesWhenIdle(t *testing.T) {
 }
 
 func TestMaybeLoadMoreDroppedWhileLoading(t *testing.T) {
+	t.Parallel()
 	m := holdPagingModel(t)
 	m.commitsLoading = true // a page/reload is already in flight
 	_, cmd := m.maybeLoadMoreCommits()
@@ -44,6 +46,7 @@ func TestMaybeLoadMoreDroppedWhileLoading(t *testing.T) {
 }
 
 func TestEndKeyDropsLoadWhileLoading(t *testing.T) {
+	t.Parallel()
 	m := holdPagingModel(t)
 	m.commitsLoading = true
 	_, cmd := m.Update(keyMsg("end"))
@@ -53,6 +56,7 @@ func TestEndKeyDropsLoadWhileLoading(t *testing.T) {
 }
 
 func TestCtrlLDropsLoadWhileLoading(t *testing.T) {
+	t.Parallel()
 	m := holdPagingModel(t)
 	m.commitsLoading = true
 	_, cmd := m.Update(keyMsg("ctrl+l"))
@@ -62,6 +66,7 @@ func TestCtrlLDropsLoadWhileLoading(t *testing.T) {
 }
 
 func TestCommitsPagedRebuildsGraphInline(t *testing.T) {
+	t.Parallel()
 	m := holdPagingModel(t)
 	nm, _ := m.Update(commitsPagedMsg{gen: m.feed.Gen()})
 	got := nm.(Model)
@@ -77,6 +82,7 @@ func TestCommitsPagedRebuildsGraphInline(t *testing.T) {
 // graph rows and lanes to a full re-lay of the same final commit list — the
 // property that lets paging stay O(new) without changing what's drawn.
 func TestGraphIncrementalMatchesFullRebuild(t *testing.T) {
+	t.Parallel()
 	all := []model.Commit{
 		{Hash: "h", Parents: []string{"g", "f"}}, // merge
 		{Hash: "g", Parents: []string{"e"}},
@@ -123,6 +129,7 @@ func TestGraphIncrementalMatchesFullRebuild(t *testing.T) {
 // A changed HEAD (commits[0]) must force a full re-lay, not an append onto stale
 // lane state.
 func TestGraphFullRebuildOnNewHead(t *testing.T) {
+	t.Parallel()
 	m := lazyModel()
 	m.commits = []model.Commit{{Hash: "b", Parents: []string{"a"}}, {Hash: "a"}}
 	m = m.rebuildCommitGraph()

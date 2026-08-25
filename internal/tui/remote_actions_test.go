@@ -11,6 +11,7 @@ import (
 )
 
 func TestCopyRowsBranchesHaveIdAndSha(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	m.branches = []model.Branch{{Name: "main", Hash: "abc1234"}}
@@ -27,6 +28,7 @@ func TestCopyRowsBranchesHaveIdAndSha(t *testing.T) {
 }
 
 func TestCopyRowsRemotesHaveIdAndSha(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelRemotes
 	m.remoteBranches = []model.RemoteBranch{{Name: "origin/foo", Remote: "origin", Branch: "foo", Hash: "dead111"}}
@@ -43,6 +45,7 @@ func TestCopyRowsRemotesHaveIdAndSha(t *testing.T) {
 }
 
 func TestCopyShaRowFallsBackWithoutService(t *testing.T) {
+	t.Parallel()
 	m := footerModel() // no svc set
 	row := m.copyShaRow("origin/foo", "dead111")
 	if row.run == nil {
@@ -54,6 +57,7 @@ func TestCopyShaRowFallsBackWithoutService(t *testing.T) {
 }
 
 func TestCopyShaRowResolvesFullViaService(t *testing.T) {
+	t.Parallel()
 	fr := gitexec.NewFakeRunner()
 	fr.SetResponse("git rev-parse", gitexec.Result{Stdout: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"})
 	m := footerModel()
@@ -74,6 +78,7 @@ func remoteModel() Model {
 }
 
 func TestRemoteOpRowsPresentWhenAttached(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	got := ids(availableActions(m))
 	for _, id := range []string{"remote-worktree", "remote-merge", "remote-rebase"} {
@@ -84,6 +89,7 @@ func TestRemoteOpRowsPresentWhenAttached(t *testing.T) {
 }
 
 func TestRemoteMergeRebaseHiddenOnDetachedHEAD(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.status.Branch = "" // detached
 	got := ids(availableActions(m))
@@ -96,6 +102,7 @@ func TestRemoteMergeRebaseHiddenOnDetachedHEAD(t *testing.T) {
 }
 
 func TestRemoteMergeRowDispatchesSmartMerge(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.cfg.UI.DisableSlowOpConfirm = true // test op wiring, not confirm UX
 	row, ok := m.remoteMergeRow()
@@ -108,6 +115,7 @@ func TestRemoteMergeRowDispatchesSmartMerge(t *testing.T) {
 }
 
 func TestRemoteRebaseRowDispatchesSmartRebase(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.cfg.UI.DisableSlowOpConfirm = true // test op wiring, not confirm UX
 	row, ok := m.remoteRebaseRow()
@@ -120,6 +128,7 @@ func TestRemoteRebaseRowDispatchesSmartRebase(t *testing.T) {
 }
 
 func TestRemoteWorktreeRowOpensPopup(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	row, ok := m.remoteCreateWorktreeRow()
 	if !ok {
@@ -132,6 +141,7 @@ func TestRemoteWorktreeRowOpensPopup(t *testing.T) {
 }
 
 func TestRemoteDeleteRowPresent(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	got := ids(availableActions(m))
 	if !got["remote-delete"] {
@@ -140,6 +150,7 @@ func TestRemoteDeleteRowPresent(t *testing.T) {
 }
 
 func TestRemoteDeleteRowAbsentWithoutSelection(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.remoteBranches = nil // empty list → no selection
 	got := ids(availableActions(m))
@@ -149,6 +160,7 @@ func TestRemoteDeleteRowAbsentWithoutSelection(t *testing.T) {
 }
 
 func TestRemoteDeleteRowDispatches(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	row, ok := m.remoteDeleteRow()
 	if !ok {
@@ -164,6 +176,7 @@ func TestRemoteDeleteRowDispatches(t *testing.T) {
 // moves HEAD's branch. remoteModel() is on "main" with origin/foo selected, so
 // the row is absent there and present once foo is checked out.
 func TestRemoteResetRowGatedToCurrentBranch(t *testing.T) {
+	t.Parallel()
 	m := remoteModel() // on "main", origin/foo selected → mismatch
 	if got := ids(availableActions(m)); got["remote-reset"] {
 		t.Fatalf("remote-reset must be absent when the remote is not the current branch; got %v", got)
@@ -175,6 +188,7 @@ func TestRemoteResetRowGatedToCurrentBranch(t *testing.T) {
 }
 
 func TestRemoteResetRowHiddenOnDetachedHEAD(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.status.Branch = "" // detached
 	if got := ids(availableActions(m)); got["remote-reset"] {
@@ -187,6 +201,7 @@ func TestRemoteResetRowHiddenOnDetachedHEAD(t *testing.T) {
 // engine's own reset modals. Running the row opens the confirm modal (no op yet);
 // answering Yes starts the reset.
 func TestRemoteResetRowAlwaysConfirms(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.status.Branch = "foo"
 	m.cfg.UI.DisableSlowOpConfirm = true // disabled confirms must NOT bypass this reset
@@ -215,6 +230,7 @@ func TestRemoteResetRowAlwaysConfirms(t *testing.T) {
 // stored selection. Regression for the bug where the . menu offered "Rebase
 // current onto origin/…" while the Branches tab was active.
 func TestRemoteRowsAbsentWhenBranchesTabFocused(t *testing.T) {
+	t.Parallel()
 	m := remoteModel() // populates m.remoteBranches + a Remotes selection
 	m.focus = panelBranches
 	got := ids(availableActions(m))
@@ -226,6 +242,7 @@ func TestRemoteRowsAbsentWhenBranchesTabFocused(t *testing.T) {
 }
 
 func TestRemoteCheckoutAsRowsPresent(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	got := ids(availableActions(m))
 	for _, id := range []string{"remote-checkout-as", "remote-switch-as"} {
@@ -236,6 +253,7 @@ func TestRemoteCheckoutAsRowsPresent(t *testing.T) {
 }
 
 func TestRemoteCheckoutAsRowsAbsentWhenBranchesTabFocused(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	m.focus = panelBranches // Remotes still holds a stored selection — must not leak
 	got := ids(availableActions(m))
@@ -245,6 +263,7 @@ func TestRemoteCheckoutAsRowsAbsentWhenBranchesTabFocused(t *testing.T) {
 }
 
 func TestRemoteCheckoutAsRowOpensPrefilledPopup(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	row, ok := m.remoteCheckoutAsRow()
 	if !ok {
@@ -261,6 +280,7 @@ func TestRemoteCheckoutAsRowOpensPrefilledPopup(t *testing.T) {
 }
 
 func TestRemoteSwitchAsRowCarriesSwitchIntent(t *testing.T) {
+	t.Parallel()
 	m := remoteModel()
 	row, ok := m.remoteSwitchAsRow()
 	if !ok {

@@ -6,6 +6,7 @@ import (
 )
 
 func TestOverlayAtPlacesAtCoordinates(t *testing.T) {
+	t.Parallel()
 	bg := strings.Join([]string{
 		"aaaaaaaaaa",
 		"bbbbbbbbbb",
@@ -23,6 +24,7 @@ func TestOverlayAtPlacesAtCoordinates(t *testing.T) {
 }
 
 func TestOverlayAtClampsNegativeAndOverflow(t *testing.T) {
+	t.Parallel()
 	bg := "aaaa\nbbbb"
 	out := overlayAt(bg, "XY", -5, -5, 4, 2)
 	if lines := strings.Split(out, "\n"); lines[0] != "XYaa" {

@@ -5,6 +5,7 @@ import (
 )
 
 func TestBookmarkPasteCursorEdit(t *testing.T) {
+	t.Parallel()
 	p := &bookmarkPastePopup{origin: "a/b.txt", dest: newTextField("dir/file")}
 	m := Model{}
 	m, _ = p.update(m, keyMsg("left"))

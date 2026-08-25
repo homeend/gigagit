@@ -14,6 +14,7 @@ func toolCfg(cmds ...config.ToolCommand) Model {
 }
 
 func TestToolCommandsFiltersInvalid(t *testing.T) {
+	t.Parallel()
 	m := toolCfg(
 		config.ToolCommand{Category: "conflict", Name: "OK", Mode: "terminal", Command: "x <op>"},
 		config.ToolCommand{Category: "conflict", Name: "Cap", Mode: "capture", Command: "x"},
@@ -35,6 +36,7 @@ func TestToolCommandsFiltersInvalid(t *testing.T) {
 }
 
 func TestToolCommandsCommitMessageCaptureLive(t *testing.T) {
+	t.Parallel()
 	m := toolCfg(
 		config.ToolCommand{Category: "commit_message", Name: "Claude", Mode: "capture", Command: "claude -p <op>"},
 	)
@@ -48,6 +50,7 @@ func TestToolCommandsCommitMessageCaptureLive(t *testing.T) {
 }
 
 func TestToolCommandsReviewCaptureLive(t *testing.T) {
+	t.Parallel()
 	// Stage 3 un-inerts review capture: a valid review capture block is now a
 	// live command (backing the . -menu review lanes), not noted.
 	m := toolCfg(
@@ -63,6 +66,7 @@ func TestToolCommandsReviewCaptureLive(t *testing.T) {
 }
 
 func TestToolCommandsFrontendFilter(t *testing.T) {
+	t.Parallel()
 	m := toolCfg(
 		config.ToolCommand{Category: "conflict_complete", Name: "WebOnly", Mode: "capture", Frontends: []string{"web"}, Command: "x"},
 		config.ToolCommand{Category: "conflict_complete", Name: "Everywhere", Mode: "capture", Command: "x"},
@@ -75,6 +79,7 @@ func TestToolCommandsFrontendFilter(t *testing.T) {
 }
 
 func TestConflictToolChoices(t *testing.T) {
+	t.Parallel()
 	repoLevel := config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "a"}
 	mergeOnly := config.ToolCommand{Category: "conflict", Name: "JM", Mode: "terminal", WhenOp: "merge", Command: "j"}
 	perFile := config.ToolCommand{Category: "conflict", Name: "Meld", Mode: "terminal", PerFile: true, Command: "m"}
@@ -100,6 +105,7 @@ func TestConflictToolChoices(t *testing.T) {
 }
 
 func TestCompleteToolChoices(t *testing.T) {
+	t.Parallel()
 	cmds := []config.ToolCommand{
 		{Category: "conflict_complete", Name: "A", Mode: "terminal", Command: "x"},
 		{Category: "conflict_complete", Name: "B", Mode: "terminal", WhenOp: "rebase", Command: "x"},

@@ -27,6 +27,7 @@ func modelWithConfig(t *testing.T, branchTmpl, pathTmpl string) Model {
 }
 
 func TestPopupSwallowsGlobalKeys(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/x", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
@@ -41,6 +42,7 @@ func TestPopupSwallowsGlobalKeys(t *testing.T) {
 }
 
 func TestPopupEscCancels(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/x", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
@@ -51,6 +53,7 @@ func TestPopupEscCancels(t *testing.T) {
 }
 
 func TestPopupInputFieldsAndPreview(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/x", "wt/<user:user>-<user:issue>/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -99,6 +102,7 @@ func TestPopupInputFieldsAndPreview(t *testing.T) {
 }
 
 func TestPopupBackspaceOnEmptyField(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/x", "wt/<user:id>-<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -110,6 +114,7 @@ func TestPopupBackspaceOnEmptyField(t *testing.T) {
 }
 
 func TestPopupMultiByteRune(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/x", "wt/<user:id>-<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -121,6 +126,7 @@ func TestPopupMultiByteRune(t *testing.T) {
 }
 
 func TestPopupEditMode(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -160,6 +166,7 @@ func TestPopupEditMode(t *testing.T) {
 }
 
 func TestPopupEditEscDiscards(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -179,6 +186,7 @@ func TestPopupEditEscDiscards(t *testing.T) {
 }
 
 func TestPopupCreateLaunchesOpAndClearsPopup(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
@@ -196,6 +204,7 @@ func TestPopupCreateLaunchesOpAndClearsPopup(t *testing.T) {
 }
 
 func TestPopupCreatePreviewErrorBlocks(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/x", "wt-<bogus>/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -213,6 +222,7 @@ func TestPopupCreatePreviewErrorBlocks(t *testing.T) {
 }
 
 func TestSeqBumpOnSuccess(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir() // stand-in git common dir
 	m := loadedModel(t)
 	m.gitCommonDir = dir
@@ -231,6 +241,7 @@ func TestSeqBumpOnSuccess(t *testing.T) {
 }
 
 func TestSeqNoBumpOnError(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	m := loadedModel(t)
 	m.gitCommonDir = dir
@@ -246,6 +257,7 @@ func TestSeqNoBumpOnError(t *testing.T) {
 }
 
 func TestRenderWorktreePopupShowsPreview(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
 	m.width, m.height = 80, 24
 	updated, _ := m.Update(keyMsg("W"))
@@ -265,6 +277,7 @@ func TestRenderWorktreePopupShowsPreview(t *testing.T) {
 }
 
 func TestPopupCreateAndSwitchSetsPendingSwitch(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
@@ -282,6 +295,7 @@ func TestPopupCreateAndSwitchSetsPendingSwitch(t *testing.T) {
 }
 
 func TestPlainCreateDoesNotSwitch(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
@@ -293,6 +307,7 @@ func TestPlainCreateDoesNotSwitch(t *testing.T) {
 }
 
 func TestOpFinishedSwitchesOnPendingSwitch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	updated, _ := m.Update(m.loadCmd()())
@@ -325,6 +340,7 @@ func (e errTestType) Error() string { return string(e) }
 // The created op must carry exactly the previewed (already-resolved) names, so
 // the worktree equals what was shown — including after a hand-edit.
 func TestCreateOpEqualsPreview(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -359,6 +375,7 @@ func TestCreateOpEqualsPreview(t *testing.T) {
 // The branch name is never templated in the w/W popup, so a branch template's
 // <seq> is never consumed — only the path template's, before and after a rename.
 func TestConsumedSeqNamesAfterEdit(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "issue/<seq:issue>", "../<repo>.worktrees/<seq:wt>-<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -381,6 +398,7 @@ func TestConsumedSeqNamesAfterEdit(t *testing.T) {
 // behind it, the box is horizontally centered (not flush-left), and a long
 // branch/path never pushes any line past the terminal width.
 func TestPopupOverlaysInterfaceCenteredAndFits(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 80, 24
 	m = m.pushLayer(&worktreePopup{
@@ -429,6 +447,7 @@ func TestPopupOverlaysInterfaceCenteredAndFits(t *testing.T) {
 // the model pointed at the worktree that was actually created (closing the
 // seam between the popup, the engine op, and reRoot).
 func TestPopupCreateAndSwitchEndToEnd(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "branch", "feature/sw2")
 
@@ -464,6 +483,7 @@ func TestPopupCreateAndSwitchEndToEnd(t *testing.T) {
 // after the user types a branch name in commit mode, createOp emits a
 // CreateWorktree based at the commit with the TYPED (not templated) branch.
 func TestWorktreeFromCommitCreateOpUsesTypedBranch(t *testing.T) {
+	t.Parallel()
 	var m Model
 	full := "cccccccccccccccccccccccccccccccccccccccc"
 	p := &worktreePopup{
@@ -495,6 +515,7 @@ func TestWorktreeFromCommitCreateOpUsesTypedBranch(t *testing.T) {
 }
 
 func TestWorktreeCreateOpCarriesHookWhenEnabled(t *testing.T) {
+	t.Parallel()
 	p := &worktreePopup{previewBranch: "b/x", previewPath: "/tmp/x", runHook: true}
 	op := p.createOp("echo hi")
 	cw, ok := op.(engine.CreateWorktree)
@@ -507,6 +528,7 @@ func TestWorktreeCreateOpCarriesHookWhenEnabled(t *testing.T) {
 }
 
 func TestWorktreeCreateOpOmitsHookWhenDisabled(t *testing.T) {
+	t.Parallel()
 	p := &worktreePopup{startPoint: "b/x", previewBranch: "b/x", previewPath: "/tmp/x", existing: true, runHook: false}
 	op := p.createOp("") // startCreateFromPopup passes "" when runHook is false
 	cwb := op.(engine.CreateWorktreeForBranch)
@@ -516,6 +538,7 @@ func TestWorktreeCreateOpOmitsHookWhenDisabled(t *testing.T) {
 }
 
 func TestWorktreeHKeyTogglesHook(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.cfg.Worktree.PostCreateHook = "echo hi"
 	p := &worktreePopup{state: stAction, runHook: true}
@@ -528,6 +551,7 @@ func TestWorktreeHKeyTogglesHook(t *testing.T) {
 // TestWorktreeKeepModeCycles proves [m] cycles the three keep modes in
 // stAction and is inert when the commit is root/merge (keepLocked).
 func TestWorktreeKeepModeCycles(t *testing.T) {
+	t.Parallel()
 	var m Model
 	p := &worktreePopup{fromCommit: true, keepOffered: true, state: stAction}
 	key := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}}
@@ -552,6 +576,7 @@ func TestWorktreeKeepModeCycles(t *testing.T) {
 
 // TestWorktreeCreateOpCarriesKeep proves the chosen mode reaches the engine op.
 func TestWorktreeCreateOpCarriesKeep(t *testing.T) {
+	t.Parallel()
 	p := &worktreePopup{previewBranch: "redo/x", previewPath: "/tmp/x", keep: engine.KeepUnstaged}
 	op, ok := p.createOp("").(engine.CreateWorktree)
 	if !ok {
@@ -563,6 +588,7 @@ func TestWorktreeCreateOpCarriesKeep(t *testing.T) {
 }
 
 func TestPopupEditPathModeSticksAcrossBranchEdit(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -610,6 +636,7 @@ func TestPopupEditPathModeSticksAcrossBranchEdit(t *testing.T) {
 }
 
 func TestPopupEditPathEscDiscards(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -630,6 +657,7 @@ func TestPopupEditPathEscDiscards(t *testing.T) {
 }
 
 func TestPopupEditPathEmptyConfirmReverts(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -665,6 +693,7 @@ func TestPopupEditPathEmptyConfirmReverts(t *testing.T) {
 }
 
 func TestCreateOpCarriesPathOverride(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -688,6 +717,7 @@ func TestCreateOpCarriesPathOverride(t *testing.T) {
 }
 
 func TestConsumedSeqNamesWithPathOverride(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "wt-<seq:wt>/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -730,6 +760,7 @@ func (noopLayer) render(m Model, below string) string             { return below
 // selection (see prefixPicker.finish), so calling it directly exercises the
 // real code path without needing saved prefixes/profile plumbing.
 func TestPopupEditPathStickyAcrossPrefixPick(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -783,6 +814,7 @@ func TestPopupEditPathStickyAcrossPrefixPick(t *testing.T) {
 // w/W selection flow) and that the createOp carries both the typed branch and
 // the overridden path.
 func TestWorktreeFromCommitPathEditCreateOp(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
 	full := "dddddddddddddddddddddddddddddddddddddddd"
 	m = m.openWorktreeAt(full, "prefill")
@@ -826,6 +858,7 @@ func TestWorktreeFromCommitPathEditCreateOp(t *testing.T) {
 }
 
 func TestRenderWorktreePopupPathEdit(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)

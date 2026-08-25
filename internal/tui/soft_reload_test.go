@@ -9,6 +9,7 @@ import (
 // load and does not disturb the running reload's flags. This blocks the
 // double-r restart and the stale-flash when r is pressed during a load.
 func TestRBlockedWhileLoading(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.loading = true
 	m.srcInflight[srcStatus] = true // anySourceInflight() must return true
@@ -29,6 +30,7 @@ func TestRBlockedWhileLoading(t *testing.T) {
 // Pressing r DURING an in-flight repo switch (reRoot: loading=true, ready=false)
 // must not fire a new load — m.loading must gate it.
 func TestRDuringRepoSwitchStaysHard(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	switched, _ := m.reRoot(m.currentWorktree)
 	m = switched.(Model) // loading=true (reRoot sets it), ready=false
@@ -55,6 +57,7 @@ func TestRDuringRepoSwitchStaysHard(t *testing.T) {
 // is set (action guards depend on it). Per-source srcLoading entries carry
 // the spinner role previously held by softReload.
 func TestRKeyStartsSoftReload(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	updated, _ := m.Update(keyMsg("r"))
 	mm := updated.(Model)
@@ -65,6 +68,7 @@ func TestRKeyStartsSoftReload(t *testing.T) {
 
 // When the load completes, dataLoadedMsg sets ready=true and clears loading.
 func TestDataLoadedSetsReady(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.loading = true
 	m.ready = false
@@ -81,6 +85,7 @@ func TestDataLoadedSetsReady(t *testing.T) {
 // A superseded-generation dataLoadedMsg must NOT set ready: a newer load is
 // still in flight (loadGen=5) and must keep blank until it completes.
 func TestSupersededLoadDoesNotSetReady(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.loadGen = 5
 	m.loading = true
@@ -98,6 +103,7 @@ func TestSupersededLoadDoesNotSetReady(t *testing.T) {
 // reRoot (repo switch) sets ready=false even if the previous repo had ready,
 // so the new repo blanks the screen until its own first data arrives.
 func TestReRootResetsReady(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.ready = true
 	updated, _ := m.reRoot(m.currentWorktree)
@@ -108,6 +114,7 @@ func TestReRootResetsReady(t *testing.T) {
 
 // During a reload with ready=true the panels stay on screen (no "gigagit (loading…)").
 func TestViewKeepsPanelsDuringReload(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 100, 30
 	m.focus = panelCommits // keep every panel label visible (see TestViewRendersPanelsWithoutPanic)
@@ -124,6 +131,7 @@ func TestViewKeepsPanelsDuringReload(t *testing.T) {
 
 // A hard reload (loading without ready — startup / reRoot) still blanks.
 func TestViewBlanksForHardReload(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 100, 30
 	m.loading = true
@@ -136,6 +144,7 @@ func TestViewBlanksForHardReload(t *testing.T) {
 
 // reRoot (repo switch) sets loading=true AND ready=false, so its View blanks.
 func TestReRootIsHardReload(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 100, 30
 	updated, _ := m.reRoot(m.currentWorktree)
@@ -151,6 +160,7 @@ func TestReRootIsHardReload(t *testing.T) {
 // Every panel whose source is mid manual-refresh carries the ⏳ glyph, and
 // the status line shows "reloading…".
 func TestSourceLoadingShowsGlyphAndStatus(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 100, 30
 	m.focus = panelCommits
@@ -173,6 +183,7 @@ func TestSourceLoadingShowsGlyphAndStatus(t *testing.T) {
 // status line (which also emits ⏳), so a broken panelLabel edit can't pass on
 // the status line alone.
 func TestPanelLabelShowsGlyphWhenSourceLoading(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.srcLoading[srcBranches] = true
 	got := m.panelLabel(panelBranches, "Branches")
@@ -183,6 +194,7 @@ func TestPanelLabelShowsGlyphWhenSourceLoading(t *testing.T) {
 
 // Without any source loading the Branches title carries no glyph (no false positive).
 func TestNoGlyphWhenNotReloading(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.width, m.height = 100, 30
 	m.focus = panelCommits

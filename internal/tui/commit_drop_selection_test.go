@@ -9,6 +9,7 @@ import (
 // TestDropSelectionRowAppears: with 2+ commits in the ◉ set, "Drop N selected
 // commits" appears and counts the selection.
 func TestDropSelectionRowAppears(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 
@@ -30,6 +31,7 @@ func TestDropSelectionRowAppears(t *testing.T) {
 // the drop / squash / compare labels. Selecting 2 live commits with 1 stale key
 // in the set must read as "2", not "3".
 func TestStaleKeyDoesNotInflateCount(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	// 2 live commits + a hash that isn't in the feed (a rewritten/dropped commit).
@@ -55,6 +57,7 @@ func TestStaleKeyDoesNotInflateCount(t *testing.T) {
 // TestDropSelectionRefusesWip: a working-tree / staged row in the selection is
 // refused at run time (drop is commits-only), mirroring squash.
 func TestDropSelectionRefusesWip(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.wipRows = []wipRow{{wipWorktree, 1}} // a live WIP row so its sentinel key is valid
@@ -73,6 +76,7 @@ func TestDropSelectionRefusesWip(t *testing.T) {
 // TestDropSelectionConsumesSelection: dispatching the drop clears the ◉ set, so
 // the count can't accumulate across operations (the second symptom of the bug).
 func TestDropSelectionConsumesSelection(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.commitCompareSet = selectionSet(m.commits[0].Hash, m.commits[1].Hash)

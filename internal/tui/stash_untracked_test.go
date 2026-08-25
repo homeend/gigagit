@@ -44,6 +44,7 @@ func untrackedStashRepo(t *testing.T) (string, string) {
 }
 
 func TestStashFilesIncludeUntrackedParent(t *testing.T) {
+	t.Parallel()
 	dir, usha := untrackedStashRepo(t)
 	m := Model{svc: domain.Open(dir)}
 	msg := m.loadStashFilesCmd("stash@{0}")().(stashFilesMsg)
@@ -71,6 +72,7 @@ func TestStashFilesIncludeUntrackedParent(t *testing.T) {
 }
 
 func TestStashFilesPlainStashUnchanged(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	stashGit(t, dir, "init", "-q", "-b", "main")
 	stashGit(t, dir, "config", "user.email", "t@t")
@@ -91,6 +93,7 @@ func TestStashFilesPlainStashUnchanged(t *testing.T) {
 }
 
 func TestStashUntrackedDiffOpensAgainstParent(t *testing.T) {
+	t.Parallel()
 	dir, usha := untrackedStashRepo(t)
 	m := Model{width: 100, height: 40, sel: map[panel]int{}, svc: domain.Open(dir)}
 	m.filesHash = stashGit(t, dir, "rev-parse", "stash@{0}")

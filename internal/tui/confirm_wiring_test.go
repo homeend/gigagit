@@ -7,6 +7,7 @@ import (
 // TestMergeMenuPopsConfirm: the branch . menu merge row should open the yes/no
 // confirm modal instead of starting the op directly.
 func TestMergeMenuPopsConfirm(t *testing.T) {
+	t.Parallel()
 	m := branchMergeModel()
 	row, ok := m.branchMergeRow()
 	if !ok {
@@ -23,6 +24,7 @@ func TestMergeMenuPopsConfirm(t *testing.T) {
 // out in any other worktree should open the yes/no confirm modal (not start
 // the op immediately).
 func TestSwitchKeyPopsConfirm(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "branch", "feature/x")
 

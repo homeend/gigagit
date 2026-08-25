@@ -7,6 +7,7 @@ import (
 )
 
 func TestWipSingleSelectOpensCompare(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.status = dirtyStatus()
@@ -29,6 +30,7 @@ func TestWipSingleSelectOpensCompare(t *testing.T) {
 }
 
 func TestWipWorktreeRowComparesAgainstIndex(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.status = dirtyStatus() // both rows present
@@ -47,6 +49,7 @@ func TestWipWorktreeRowComparesAgainstIndex(t *testing.T) {
 }
 
 func TestWipEnterOpensCompare(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.status = dirtyStatus()
@@ -73,6 +76,7 @@ func TestWipEnterOpensCompare(t *testing.T) {
 // the resulting display position must round-trip back through backingIndex to the
 // same commit. A raw m.commits[ci] lookup would land on the wrong row when dirty.
 func TestJumpToCommitUnderDirtyTree(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 4)
 	m.focus = panelCommits
 	m.status = dirtyStatus() // 2 wip rows
@@ -101,6 +105,7 @@ func TestJumpToCommitUnderDirtyTree(t *testing.T) {
 }
 
 func TestWipRowRefusesCommitOps(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "u", Unstaged: 'M'}}}

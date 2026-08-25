@@ -22,6 +22,7 @@ func showGraphCfg(v string) config.Config {
 }
 
 func TestShowGraphOffAppliesOnConfigReady(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	m.refreshLastRun = map[refreshItem]time.Time{} // configReadyMsg seeds it (New() initializes it in prod)
 	nm, _ := m.Update(configReadyMsg{cfg: showGraphCfg("off")})
@@ -36,6 +37,7 @@ func TestShowGraphOffAppliesOnConfigReady(t *testing.T) {
 }
 
 func TestShowGraphDefaultOnDataLoaded(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	m.commitListMode = true                                     // a stale session toggle; a fresh load applies config
 	msg := dataLoadedMsg{gen: m.loadGen, cfg: showGraphCfg("")} // unset → on
@@ -46,6 +48,7 @@ func TestShowGraphDefaultOnDataLoaded(t *testing.T) {
 }
 
 func TestShowGraphOffAppliesOnDataLoaded(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t)
 	msg := dataLoadedMsg{gen: m.loadGen, cfg: showGraphCfg("off")}
 	nm, _ := m.Update(msg)
@@ -55,6 +58,7 @@ func TestShowGraphOffAppliesOnDataLoaded(t *testing.T) {
 }
 
 func TestToggleShowGraphPersistsAndFlips(t *testing.T) {
+	t.Parallel()
 	m, dir := settingsModel(t)
 	m.repoConfigPath = filepath.Join(dir, ".gg.toml")
 	if m.commitListMode {
@@ -88,6 +92,7 @@ func TestToggleShowGraphPersistsAndFlips(t *testing.T) {
 }
 
 func TestShowGraphMenuLabelShowsState(t *testing.T) {
+	t.Parallel()
 	m, _ := settingsModel(t)
 	idx := -1
 	for i, entry := range settingsMenu {

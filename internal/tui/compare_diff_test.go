@@ -8,6 +8,7 @@ import (
 )
 
 func TestCompareDiffCacheKeyRule(t *testing.T) {
+	t.Parallel()
 	commit := model.Endpoint{Kind: model.EndpointCommit, Hash: "aaa"}
 	commit2 := model.Endpoint{Kind: model.EndpointCommit, Hash: "bbb"}
 	work := model.Endpoint{Kind: model.EndpointWorkTree}
@@ -30,6 +31,7 @@ func TestCompareDiffCacheKeyRule(t *testing.T) {
 // view (v := m.diffLayer()), so unless the handler clears it the body stays stuck
 // on "(loading…)" forever even though the header shows real counts.
 func TestDiffMsgClearsLoading(t *testing.T) {
+	t.Parallel()
 	v := &diffView{loading: true} // pre-built loading view, reused by the loader
 	m := Model{}
 	m = m.pushLayer(v)
@@ -49,6 +51,7 @@ func TestDiffMsgClearsLoading(t *testing.T) {
 }
 
 func TestCompareEnterOpensDiff(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	if len(m.commits) == 0 {
 		t.Skip("no commits")

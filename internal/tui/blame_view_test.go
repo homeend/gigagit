@@ -11,6 +11,7 @@ import (
 )
 
 func TestGroupBlameCollapsesRuns(t *testing.T) {
+	t.Parallel()
 	lines := []model.BlameLine{
 		{Hash: "aaa"}, {Hash: "aaa"}, {Hash: "bbb"}, {Hash: "aaa"},
 	}
@@ -30,6 +31,7 @@ func TestGroupBlameCollapsesRuns(t *testing.T) {
 }
 
 func TestGroupBlameEdges(t *testing.T) {
+	t.Parallel()
 	if got := groupBlame(nil); len(got) != 0 {
 		t.Errorf("empty input → no blocks, got %+v", got)
 	}
@@ -40,6 +42,7 @@ func TestGroupBlameEdges(t *testing.T) {
 }
 
 func TestBlockAt(t *testing.T) {
+	t.Parallel()
 	blocks := []blameBlock{{start: 0, end: 1, hash: "aaa"}, {start: 2, end: 2, hash: "bbb"}}
 	if b, ok := blockAt(blocks, 1); !ok || b.hash != "aaa" {
 		t.Errorf("line 1 should be in block aaa, got %+v ok=%v", b, ok)
@@ -53,6 +56,7 @@ func TestBlockAt(t *testing.T) {
 }
 
 func TestBlameAge(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(1_000_000_000, 0)
 	cases := []struct {
 		ago  time.Duration
@@ -86,6 +90,7 @@ func blameFixture() *blameView {
 }
 
 func TestBlameRenderGutterFirstLineOnly(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	b := blameFixture()
 	out := b.render(m, "")
@@ -104,6 +109,7 @@ func TestBlameRenderGutterFirstLineOnly(t *testing.T) {
 }
 
 func TestBlameDownMovesCursorClamped(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	b := blameFixture()
 	m = m.pushLayer(b)
@@ -116,6 +122,7 @@ func TestBlameDownMovesCursorClamped(t *testing.T) {
 }
 
 func TestBlameEnterOnCommitPushesHistory(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	b := blameFixture()
 	m = m.pushLayer(b)
@@ -134,6 +141,7 @@ func TestBlameEnterOnCommitPushesHistory(t *testing.T) {
 }
 
 func TestBlameEnterOnUncommittedIsNoop(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	b := blameFixture()
 	m = m.pushLayer(b)
@@ -145,6 +153,7 @@ func TestBlameEnterOnUncommittedIsNoop(t *testing.T) {
 }
 
 func TestBlameEscAndBPop(t *testing.T) {
+	t.Parallel()
 	for _, key := range []string{"esc", "b"} {
 		m := Model{width: 100, height: 30}
 		b := blameFixture()
@@ -158,6 +167,7 @@ func TestBlameEscAndBPop(t *testing.T) {
 
 // q no longer quits from the blame view — only the base layout quits on q.
 func TestBlameQInert(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	b := blameFixture()
 	m = m.pushLayer(b)
@@ -171,6 +181,7 @@ func TestBlameQInert(t *testing.T) {
 }
 
 func TestStatusBOpensBlame(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30, focus: panelFiles, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Unstaged: 'M'}}}
 	mm, _ := m.Update(keyMsg("b"))
@@ -185,6 +196,7 @@ func TestStatusBOpensBlame(t *testing.T) {
 }
 
 func TestFilesViewBOpensBlame(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}}}
 	m.filesTreeFocused = true
@@ -200,6 +212,7 @@ func TestFilesViewBOpensBlame(t *testing.T) {
 }
 
 func TestDiffViewBOpensBlame(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
 	mm, _ := m.updateDiffViewKey(keyMsg("b"))
@@ -213,6 +226,7 @@ func TestDiffViewBOpensBlame(t *testing.T) {
 }
 
 func TestHistoryBOpensBlameAtSelected(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30}
 	h := &historyView{
 		ctx: navContext{path: "a.go", rev: ""},
@@ -237,6 +251,7 @@ func TestHistoryBOpensBlameAtSelected(t *testing.T) {
 }
 
 func TestBlamePageDownPageUpClamped(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 12} // small body so a page is a few rows
 	lines := make([]model.BlameLine, 40)
 	for i := range lines {
@@ -267,6 +282,7 @@ func TestBlamePageDownPageUpClamped(t *testing.T) {
 }
 
 func TestBlameRenderRowsFullWidthAndSanitized(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 12}
 	lines := []model.BlameLine{
 		{Hash: "aaaaaaa", Author: "Ada", LineNo: 1, Content: "\tindented with a tab"},
@@ -285,6 +301,7 @@ func TestBlameRenderRowsFullWidthAndSanitized(t *testing.T) {
 }
 
 func TestBlameViewWrapMode(t *testing.T) {
+	t.Parallel()
 	b := &blameView{
 		ctx:   navContext{path: "x"},
 		lines: []model.BlameLine{{Hash: "abcdef0", Author: "a", Content: strings.Repeat("y", 200)}},
@@ -302,6 +319,7 @@ func TestBlameViewWrapMode(t *testing.T) {
 // the block's first line only, and wrapped continuation lines stay clear of it —
 // the long content must not bleed across the author column.
 func TestBlameWrapFreezesGutter(t *testing.T) {
+	t.Parallel()
 	b := &blameView{
 		ctx:   navContext{path: "x"},
 		lines: []model.BlameLine{{Hash: "abcdef0", Author: "Zoe", Time: 1, LineNo: 1, Content: strings.Repeat("y", 200)}},
@@ -331,6 +349,7 @@ func TestBlameWrapFreezesGutter(t *testing.T) {
 // In scroll mode the gutter stays put while only the content pans; panning right
 // must not slide the author column off the left edge.
 func TestBlameScrollFreezesGutter(t *testing.T) {
+	t.Parallel()
 	b := &blameView{
 		ctx:   navContext{path: "x"},
 		lines: []model.BlameLine{{Hash: "abcdef0", Author: "Zoe", Time: 1, LineNo: 1, Content: strings.Repeat("y", 200)}},

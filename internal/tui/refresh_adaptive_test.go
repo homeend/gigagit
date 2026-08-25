@@ -14,6 +14,7 @@ import (
 )
 
 func TestMeanDuration(t *testing.T) {
+	t.Parallel()
 	if got := meanDuration(nil); got != 0 {
 		t.Fatalf("empty → 0, got %v", got)
 	}
@@ -24,6 +25,7 @@ func TestMeanDuration(t *testing.T) {
 }
 
 func TestScheduledInterval(t *testing.T) {
+	t.Parallel()
 	st := refreshItem{source: srcStatus}
 	// configured 0 → off.
 	if secs, on := scheduledInterval(config.RefreshConfig{Enabled: true}, st); on || secs != 0 {
@@ -44,6 +46,7 @@ func TestScheduledInterval(t *testing.T) {
 }
 
 func TestRefreshTomlKeyAndSetField(t *testing.T) {
+	t.Parallel()
 	// feed's display name is "commits" but its toml key is "feed".
 	if k := refreshTomlKey(refreshItem{source: srcFeed}); k != "feed" {
 		t.Fatalf("feed key = feed, got %q", k)
@@ -60,6 +63,7 @@ func TestRefreshTomlKeyAndSetField(t *testing.T) {
 }
 
 func TestRecordDurationCapsAtTen(t *testing.T) {
+	t.Parallel()
 	m := Model{refreshDur: map[refreshItem][]time.Duration{}}
 	it := refreshItem{source: srcStatus}
 	for i := 1; i <= 13; i++ {
@@ -76,6 +80,7 @@ func TestRecordDurationCapsAtTen(t *testing.T) {
 }
 
 func TestDataAvailableRecordsDuration(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.bgActiveItem = refreshItem{} // lane idle
 	it := refreshItem{source: srcTags}
@@ -91,6 +96,7 @@ func TestDataAvailableRecordsDuration(t *testing.T) {
 // A manual r read (startup=false) DOES feed the ring — its measured duration
 // is shown in the Refresh rates editor stats alongside background reads.
 func TestManualReadRecordsDuration(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.bgActiveItem = refreshItem{} // lane idle
 	it := refreshItem{source: srcTags}
@@ -105,6 +111,7 @@ func TestManualReadRecordsDuration(t *testing.T) {
 // The app-start fan-out (startup=true) must NOT feed the ring — its parallel,
 // contended durations are unrepresentative.
 func TestStartupReadDoesNotRecordDuration(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.bgActiveItem = refreshItem{} // lane idle
 	it := refreshItem{source: srcTags}
@@ -119,6 +126,7 @@ func TestStartupReadDoesNotRecordDuration(t *testing.T) {
 // A foreground fetch op records its duration into the fetch row (so the user
 // sees how long fetch takes), without enabling the background fetch task.
 func TestForegroundFetchRecordsDuration(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.running = true
 	m.opIsFetch = true
@@ -138,6 +146,7 @@ func TestForegroundFetchRecordsDuration(t *testing.T) {
 // through startOp → the op message loop → opFinishedMsg must populate the fetch
 // row. Uses a real local bare remote so the fetch actually succeeds.
 func TestForegroundFetchRecordsThroughOpLoop(t *testing.T) {
+	t.Parallel()
 	m := newTestModelWithRemote(t)
 	model, c := m.startOp(engine.Fetch{})
 	if !model.opIsFetch {
@@ -163,6 +172,7 @@ func TestForegroundFetchRecordsThroughOpLoop(t *testing.T) {
 }
 
 func TestEnqueueDueDedup(t *testing.T) {
+	t.Parallel()
 	a := refreshItem{source: srcStatus}
 	b := refreshItem{source: srcBranches}
 
@@ -184,6 +194,7 @@ func TestEnqueueDueDedup(t *testing.T) {
 }
 
 func TestRefreshTickSingleLane(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.cfg.Refresh = config.RefreshConfig{Enabled: true, Status: 1, Branches: 1}
 	m.loading = false
@@ -204,6 +215,7 @@ func TestRefreshTickSingleLane(t *testing.T) {
 }
 
 func TestManualRFreesLane(t *testing.T) {
+	t.Parallel()
 	// Reproduces the stranding bug: a bg read of branches is in flight; manual r
 	// bumps the gen; the bg message arrives stale and MUST still free the lane.
 	m := newTestModel(t)
@@ -219,6 +231,7 @@ func TestManualRFreesLane(t *testing.T) {
 }
 
 func TestStartOpClearsLaneAndQueue(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	m.bgCtx, m.bgCancel = ctx, cancel
@@ -232,6 +245,7 @@ func TestStartOpClearsLaneAndQueue(t *testing.T) {
 }
 
 func TestSaveRefreshIntervalUpdatesAndReseeds(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.repoConfigPath = filepath.Join(t.TempDir(), ".gg.toml")
 	m.refreshLastRun = map[refreshItem]time.Time{}
@@ -250,6 +264,7 @@ func TestSaveRefreshIntervalUpdatesAndReseeds(t *testing.T) {
 }
 
 func TestRatesEditorEnterEditSave(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.repoConfigPath = filepath.Join(t.TempDir(), ".gg.toml")
 	m, _ = m.openSettings()
@@ -276,6 +291,7 @@ func TestRatesEditorEnterEditSave(t *testing.T) {
 }
 
 func TestRatesEditorSpaceTogglesWatch(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.repoConfigPath = filepath.Join(t.TempDir(), ".gg.toml")
 	m, _ = m.openSettings()
@@ -300,6 +316,7 @@ func TestRatesEditorSpaceTogglesWatch(t *testing.T) {
 }
 
 func TestRatesEditorEscCancelsEdit(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m, _ = m.openSettings()
 	p := layerOf[*settingsPopup](m)
@@ -334,6 +351,7 @@ func updateModel(m Model, msg tea.Msg) (Model, tea.Cmd) {
 // TestBgFetchDoneIgnoresStaleGen verifies that a bgFetchDoneMsg from a
 // superseded fetch cycle does not clear the live background lane.
 func TestBgFetchDoneIgnoresStaleGen(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.bgBusy = true
 	m.bgActiveItem = fetchItem
@@ -353,6 +371,7 @@ func TestBgFetchDoneIgnoresStaleGen(t *testing.T) {
 }
 
 func TestBgRefreshHint(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	if m.bgRefreshHint() != "" {
 		t.Fatal("idle lane → no hint")

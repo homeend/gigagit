@@ -32,6 +32,7 @@ func (p *stubProcess) refreshed(m Model) (Model, tea.Cmd) { return m, nil }
 func (p *stubProcess) indicator(m Model) string           { return "stub running" }
 
 func TestProcessOwnsInputAndRender(t *testing.T) {
+	t.Parallel()
 	p := &stubProcess{}
 	m := Model{width: 80, height: 24, sel: map[panel]int{}, sortModes: map[panel]sortMode{}, proc: p}
 

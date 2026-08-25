@@ -16,6 +16,7 @@ func statusModel() Model {
 }
 
 func TestStatusMMultiMarks(t *testing.T) {
+	t.Parallel()
 	m := statusModel()
 	m.sel[panelFiles] = 0
 	mm, _ := m.handleMarkKey()
@@ -35,6 +36,7 @@ func TestStatusMMultiMarks(t *testing.T) {
 }
 
 func TestBranchesMUnchanged(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30, focus: panelBranches, sel: map[panel]int{}}
 	m.branches = []model.Branch{{Name: "main"}, {Name: "feat"}}
 	m.sel[panelBranches] = 0

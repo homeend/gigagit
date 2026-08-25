@@ -8,6 +8,7 @@ import (
 )
 
 func TestWatchSourceKeyMapping(t *testing.T) {
+	t.Parallel()
 	cases := map[gitwatch.Source]sourceKey{
 		gitwatch.Worktrees: srcWorktrees,
 		gitwatch.Reflog:    srcReflog,
@@ -22,6 +23,7 @@ func TestWatchSourceKeyMapping(t *testing.T) {
 }
 
 func TestEnabledWatchSourcesD2(t *testing.T) {
+	t.Parallel()
 	cfg := config.RefreshConfig{WorktreesWatch: true, ReflogWatch: true, BranchesWatch: true, RemotesWatch: true}
 	got := enabledWatchSources(cfg)
 	if len(got) != 4 {
@@ -30,6 +32,7 @@ func TestEnabledWatchSourcesD2(t *testing.T) {
 }
 
 func TestWatchAffectedSources(t *testing.T) {
+	t.Parallel()
 	has := func(ss []sourceKey, want sourceKey) bool {
 		for _, s := range ss {
 			if s == want {
@@ -61,6 +64,7 @@ func TestWatchAffectedSources(t *testing.T) {
 }
 
 func TestWatchBranchEventAlsoRefreshesFeed(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.cfg.Refresh = config.RefreshConfig{Enabled: true, BranchesWatch: true}
 	m.watchSupported = true
@@ -83,6 +87,7 @@ func TestWatchBranchEventAlsoRefreshesFeed(t *testing.T) {
 }
 
 func TestWatchEventEnqueuesWhenActive(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t) // existing helper wired to a real temp repo
 	m.cfg.Refresh = config.RefreshConfig{Enabled: true, WorktreesWatch: true}
 	m.watchSupported = true
@@ -105,6 +110,7 @@ func TestWatchEventEnqueuesWhenActive(t *testing.T) {
 }
 
 func TestWatchEventIgnoresStaleGen(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.cfg.Refresh = config.RefreshConfig{Enabled: true, WorktreesWatch: true}
 	m.watchSupported = true

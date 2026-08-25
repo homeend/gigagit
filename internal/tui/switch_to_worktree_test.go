@@ -20,6 +20,7 @@ func selectBranchRow(t *testing.T, m *Model, name string) {
 }
 
 func TestSKeyOnOtherWorktreeBranchOpensJumpModal(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-feat-e")
 	runGit(t, dir, "worktree", "add", "-b", "feature/e", wt, "main")
@@ -53,6 +54,7 @@ func TestSKeyOnOtherWorktreeBranchOpensJumpModal(t *testing.T) {
 // worktree selecting a branch checked out elsewhere must still get the
 // "switch-to-worktree" jump modal, never "switch-dirty".
 func TestSKeyOnOtherWorktreeBranchOpensJumpModalEvenWhenDirty(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-feat-e")
 	runGit(t, dir, "worktree", "add", "-b", "feature/e", wt, "main")
@@ -82,6 +84,7 @@ func TestSKeyOnOtherWorktreeBranchOpensJumpModalEvenWhenDirty(t *testing.T) {
 }
 
 func TestJumpModalGoSwitchesToWorktree(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-feat-e")
 	runGit(t, dir, "worktree", "add", "-b", "feature/e", wt, "main")
@@ -110,6 +113,7 @@ func TestJumpModalGoSwitchesToWorktree(t *testing.T) {
 }
 
 func TestJumpModalCancelDoesNothing(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-feat-e")
 	runGit(t, dir, "worktree", "add", "-b", "feature/e", wt, "main")
@@ -135,6 +139,7 @@ func TestJumpModalCancelDoesNothing(t *testing.T) {
 }
 
 func TestSKeyOnLocalBranchStillSmartSwitches(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "branch", "feature/local")
 

@@ -3,6 +3,7 @@ package tui
 import "testing"
 
 func TestRestoredPath(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"config.go":     "config_RESTORED.go",
 		"a/b/config.go": "a/b/config_RESTORED.go",

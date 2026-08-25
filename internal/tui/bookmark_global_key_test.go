@@ -19,6 +19,7 @@ func twoBookmarks() *bookmarkPopup {
 }
 
 func TestBookmarkKeyOpensFromFileTree(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "f.go", path: "f.go"}}}
 	m.filesTreeFocused = true
@@ -29,6 +30,7 @@ func TestBookmarkKeyOpensFromFileTree(t *testing.T) {
 }
 
 func TestBookmarkKeyOpensFromDiffView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(&diffView{title: "a.go"})
 	_, cmd := m.Update(keyMsg("g"))
@@ -38,6 +40,7 @@ func TestBookmarkKeyOpensFromDiffView(t *testing.T) {
 }
 
 func TestBookmarkKeyOpensFromStash(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.stashView = &stashView{}
 	m.focus = panelCommits
@@ -48,6 +51,7 @@ func TestBookmarkKeyOpensFromStash(t *testing.T) {
 }
 
 func TestBookmarkKeyOpensFromHistory(t *testing.T) {
+	t.Parallel()
 	m := footerModel().pushLayer(newHistoryView(navContext{path: "a.go"}))
 	_, cmd := m.Update(keyMsg("g"))
 	if cmd == nil {
@@ -56,6 +60,7 @@ func TestBookmarkKeyOpensFromHistory(t *testing.T) {
 }
 
 func TestBookmarkKeyOpensFromBlame(t *testing.T) {
+	t.Parallel()
 	m := footerModel().pushLayer(newBlameView(navContext{path: "a.go"}))
 	_, cmd := m.Update(keyMsg("g"))
 	if cmd == nil {
@@ -67,6 +72,7 @@ func TestBookmarkKeyOpensFromBlame(t *testing.T) {
 // reach the popup, not the window underneath. Without the hoist, esc would
 // close the diff and leave the popup orphaned.
 func TestBookmarkPopupReceivesKeysOverDiffView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(&diffView{title: "a.go"})
 	m = m.pushLayer(twoBookmarks())
@@ -82,6 +88,7 @@ func TestBookmarkPopupReceivesKeysOverDiffView(t *testing.T) {
 
 // Render hoist: the popup must paint over the diff view's full-screen render.
 func TestBookmarkPopupRendersOverDiffView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(&diffView{title: "a.go"})
 	m = m.pushLayer(twoBookmarks())
@@ -91,6 +98,7 @@ func TestBookmarkPopupRendersOverDiffView(t *testing.T) {
 }
 
 func TestBookmarkPopupRendersOverHistory(t *testing.T) {
+	t.Parallel()
 	m := footerModel().pushLayer(newHistoryView(navContext{path: "a.go"}))
 	m = m.pushLayer(twoBookmarks())
 	if !strings.Contains(m.render(), "Bookmarks") {

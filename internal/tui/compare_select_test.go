@@ -47,6 +47,7 @@ func loadedModelLinearCommits(t *testing.T, n int) Model {
 }
 
 func TestCompareSetToggleAndClear(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.sel[panelCommits] = 0
@@ -86,6 +87,7 @@ func TestCompareSetToggleAndClear(t *testing.T) {
 }
 
 func TestCompareSelectionTwoCommits(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.commitCompareSet = map[string]bool{
@@ -103,6 +105,7 @@ func TestCompareSelectionTwoCommits(t *testing.T) {
 }
 
 func TestCompareSelectionThreeCommitsSquash(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 4) // c0(root)..c3(tip); select the top 3 (oldest selected = c1, has a parent)
 	m.focus = panelCommits
 	m.commitCompareSet = map[string]bool{
@@ -123,6 +126,7 @@ func TestCompareSelectionThreeCommitsSquash(t *testing.T) {
 }
 
 func TestCompareSelectionRootSquashRefused(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3) // select all 3 → oldest selected is the root
 	m.focus = panelCommits
 	m.commitCompareSet = map[string]bool{
@@ -140,6 +144,7 @@ func TestCompareSelectionRootSquashRefused(t *testing.T) {
 }
 
 func TestCompareSelectionRowRunsRealSquashDiff(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 4)
 	m.focus = panelCommits
 	m.commitCompareSet = map[string]bool{
@@ -190,6 +195,7 @@ func TestCompareSelectionRowRunsRealSquashDiff(t *testing.T) {
 }
 
 func TestCompareSelectionRowAbsentUnderTwo(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.commitCompareSet = map[string]bool{m.commits[0].Hash: true}
@@ -202,6 +208,7 @@ func TestCompareSelectionRowAbsentUnderTwo(t *testing.T) {
 // Commits panel (the special graph-window render path), and that a set row does
 // not eat the cursor indicator on the selected row.
 func TestCompareSetMarkerRenders(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.width, m.height = 120, 40
@@ -223,6 +230,7 @@ func TestCompareSetMarkerRenders(t *testing.T) {
 // TestCompareSetMarkerBeatsMark proves a commit that is BOTH m-marked and in the
 // compare set renders ◉ (set), never ◆ (mark) — they must stay distinguishable.
 func TestCompareSetMarkerBeatsMark(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.width, m.height = 120, 40
@@ -243,6 +251,7 @@ func TestCompareSetMarkerBeatsMark(t *testing.T) {
 }
 
 func TestShiftDownGrowsCompareSelection(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m.sel[panelCommits] = 0
@@ -262,6 +271,7 @@ func TestShiftDownGrowsCompareSelection(t *testing.T) {
 // → "Unmark commit"; ≥2 marks → "Unmark all commits (N)"; exactly one mark
 // with the cursor elsewhere → "Unmark the marked commit".
 func TestUnmarkRowsVisibility(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 

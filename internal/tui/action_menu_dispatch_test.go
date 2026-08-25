@@ -14,6 +14,7 @@ func pressDot(m Model) Model {
 }
 
 func TestDotOpensMenuFromFilesView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m.filesView = &contentPopup{lines: []contentLine{{text: "a.go", path: "a.go"}}}
@@ -24,6 +25,7 @@ func TestDotOpensMenuFromFilesView(t *testing.T) {
 }
 
 func TestDotOpensMenuFromDiffView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m = m.pushLayer(&diffView{title: "a.go", rev: "abc123"})
@@ -33,6 +35,7 @@ func TestDotOpensMenuFromDiffView(t *testing.T) {
 }
 
 func TestDotOpensMenuFromStashView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m.stashView = &stashView{}
@@ -43,6 +46,7 @@ func TestDotOpensMenuFromStashView(t *testing.T) {
 }
 
 func TestDotOpensMenuFromHistory(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m = m.pushLayer(newHistoryView(navContext{path: "a.go", rev: "abc"}))
@@ -52,6 +56,7 @@ func TestDotOpensMenuFromHistory(t *testing.T) {
 }
 
 func TestDotOpensMenuFromBlame(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m = m.pushLayer(newBlameView(navContext{path: "a.go", rev: "abc"}))
@@ -63,6 +68,7 @@ func TestDotOpensMenuFromBlame(t *testing.T) {
 // The dispatch move: when the menu is open over a window, its keys reach the
 // menu (esc closes it) and the underlying window survives.
 func TestMenuOwnsKeysOverDiffView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m = m.pushLayer(&diffView{title: "a.go", rev: "abc"})
@@ -78,6 +84,7 @@ func TestMenuOwnsKeysOverDiffView(t *testing.T) {
 }
 
 func TestMenuOwnsKeysOverHistory(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m = m.pushLayer(newHistoryView(navContext{path: "a.go", rev: "abc"}))
@@ -93,6 +100,7 @@ func TestMenuOwnsKeysOverHistory(t *testing.T) {
 }
 
 func TestDotInertOverModal(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m.modal = &decisionState{}
@@ -102,6 +110,7 @@ func TestDotInertOverModal(t *testing.T) {
 }
 
 func TestDotInertOverRepoPopup(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m = m.pushLayer(&repoPopup{})
@@ -111,6 +120,7 @@ func TestDotInertOverRepoPopup(t *testing.T) {
 }
 
 func TestDotInertOverIrebaseEditor(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m = m.pushLayer(newIrebaseEditor("feat", "main", nil, "gg"))
@@ -120,6 +130,7 @@ func TestDotInertOverIrebaseEditor(t *testing.T) {
 }
 
 func TestDotInertOverHunkPicker(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m = m.pushLayer(newStagePicker("f.txt", &hunkpick.Doc{}))

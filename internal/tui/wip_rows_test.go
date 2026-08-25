@@ -11,6 +11,7 @@ func st(files ...model.FileStatus) model.WorkingTreeStatus {
 }
 
 func TestDeriveWipRows(t *testing.T) {
+	t.Parallel()
 	unstaged := model.FileStatus{Path: "a", Unstaged: 'M'}
 	staged := model.FileStatus{Path: "b", Staged: 'M'}
 	both := model.FileStatus{Path: "c", Staged: 'M', Unstaged: 'M'}
@@ -42,6 +43,7 @@ func TestDeriveWipRows(t *testing.T) {
 }
 
 func TestWipAccessors(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		wipRows: []wipRow{{wipWorktree, 2}, {wipStaged, 1}},
 		commits: []model.Commit{{Hash: "h0"}, {Hash: "h1"}},
@@ -66,6 +68,7 @@ func TestWipAccessors(t *testing.T) {
 // WorkTree). A reversed pair falls through to DiffTreeFiles' "unsupported
 // endpoint pair" error, which is the l/enter-on-WIP-row bug.
 func TestWipEndpointsOrder(t *testing.T) {
+	t.Parallel()
 	head := model.Endpoint{Kind: model.EndpointCommit, Hash: "h0"}
 
 	cases := []struct {

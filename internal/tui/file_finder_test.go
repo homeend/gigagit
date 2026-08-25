@@ -14,6 +14,7 @@ import (
 // paging in filter mode must scroll what's DRAWN, not just p.sel. With 50 matches
 // in a 16-row window, after paging the selected row must appear in the rendered box.
 func TestFileFinderPagingScrollsViewport(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 30}
 	p := &fileFinderPopup{filtering: true}
 	for i := 0; i < 50; i++ {
@@ -34,6 +35,7 @@ func TestFileFinderPagingScrollsViewport(t *testing.T) {
 }
 
 func TestFileFinderOpensAndLoads(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openFileFinder()
 	p := layerOf[*fileFinderPopup](m)
@@ -49,6 +51,7 @@ func TestFileFinderOpensAndLoads(t *testing.T) {
 }
 
 func TestFileFinderFiltersAndClamps(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openFileFinder()
 	nm, _ := m.Update(lsFilesMsg{paths: []string{"a/b.go", "c.txt", "files_view.go"}})
@@ -77,6 +80,7 @@ func TestFileFinderFiltersAndClamps(t *testing.T) {
 // a letter without pressing / first must NOT start a query (the regression that
 // made `z` cycle the display mode instead of filtering for "zdata").
 func TestFileFinderPlainKeysDoNotFilter(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openFileFinder()
 	nm, _ := m.Update(lsFilesMsg{paths: []string{"fs/erofs/zdata.c", "a/b.go"}})
@@ -93,6 +97,7 @@ func TestFileFinderPlainKeysDoNotFilter(t *testing.T) {
 // F, /, type "zdata" -> the z-containing query must reach the matches and find
 // the file (proving z is a literal query char in filter mode, not a mode-cycle).
 func TestFileFinderSlashThenZQuery(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openFileFinder()
 	nm, _ := m.Update(lsFilesMsg{paths: []string{"a/b.go", "fs/erofs/zdata.c", "c.txt"}})
@@ -121,6 +126,7 @@ func TestFileFinderSlashThenZQuery(t *testing.T) {
 // TestFileFinderEscClearsFilter checks the two-stage esc: esc in filter mode
 // clears the query (back to the full list) and stays open; a second esc closes.
 func TestFileFinderEscClearsFilter(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openFileFinder()
 	nm, _ := m.Update(lsFilesMsg{paths: []string{"foo.go", "bar.go", "baz.go"}})
@@ -152,6 +158,7 @@ func TestFileFinderEscClearsFilter(t *testing.T) {
 // list to it — the rerank-after-recall coupling the finder needs but bookmarkPopup
 // (live visibleIdx) does not. alt+up above the newest restores the draft.
 func TestFileFinderRecallReranks(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.searchHist = map[string][]string{scopeFiletree: {"erofs"}} // newest-first
 	m, _ = m.openFileFinder()
@@ -188,6 +195,7 @@ func TestFileFinderRecallReranks(t *testing.T) {
 // ↑↓/pgup/pgdn move the selection through the filtered rows WITHOUT losing the
 // query (exactly like the commit filter).
 func TestFileFinderArrowsMoveWhileTyping(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openFileFinder()
 	nm, _ := m.Update(lsFilesMsg{paths: []string{"a/file1.go", "b/file2.go", "c/file3.go"}})
@@ -221,6 +229,7 @@ func TestFileFinderArrowsMoveWhileTyping(t *testing.T) {
 // TestFileFinderJKAreQueryTextWhileTyping pins that j/k are query characters in
 // filter mode (not motions) — the collision class that started this whole arc.
 func TestFileFinderJKAreQueryTextWhileTyping(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openFileFinder()
 	nm, _ := m.Update(lsFilesMsg{paths: []string{"jk/thing.go", "a/b.go"}})
@@ -239,6 +248,7 @@ func TestFileFinderJKAreQueryTextWhileTyping(t *testing.T) {
 
 // TestFileFinderPageKeys checks pgup/pgdn move the selection by a page, clamped.
 func TestFileFinderPageKeys(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openFileFinder()
 	paths := make([]string, 0, 40)
@@ -262,6 +272,7 @@ func TestFileFinderPageKeys(t *testing.T) {
 }
 
 func TestFileFinderEscPopsLayer(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openFileFinder()
 	if layerOf[*fileFinderPopup](m) == nil {
@@ -275,6 +286,7 @@ func TestFileFinderEscPopsLayer(t *testing.T) {
 }
 
 func TestFileFinderLsFilesMsgIgnoredWhenClosed(t *testing.T) {
+	t.Parallel()
 	// If the user closes before LsFiles returns, no panic.
 	m := loadedModel(t)
 	m, _ = m.openFileFinder()
@@ -289,6 +301,7 @@ func TestFileFinderLsFilesMsgIgnoredWhenClosed(t *testing.T) {
 }
 
 func TestFileFinderBackspaceReranks(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = m.openFileFinder()
 	nm, _ := m.Update(lsFilesMsg{paths: []string{"foo.go", "bar.go"}})
@@ -310,6 +323,7 @@ func TestFileFinderBackspaceReranks(t *testing.T) {
 }
 
 func TestFileFinderMouseSwallowed(t *testing.T) {
+	t.Parallel()
 	// After open, the layer stack catches mouse via the generic topLayer() guard.
 	// We just verify the popup is on the layer stack (mouse routing covered by
 	// the existing TestClickIgnoredUnderOverlays mechanism).
@@ -321,6 +335,7 @@ func TestFileFinderMouseSwallowed(t *testing.T) {
 }
 
 func TestFileFinderMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &fileFinderPopup{}
@@ -341,6 +356,7 @@ func TestFileFinderMaximizeWidensAndLiftsRowCap(t *testing.T) {
 }
 
 func TestFileFinderTKeyDoesNotMaximizeWhileFiltering(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &fileFinderPopup{filtering: true}

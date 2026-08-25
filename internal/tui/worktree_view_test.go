@@ -8,6 +8,7 @@ import (
 )
 
 func TestBranchRowsShowWorktreePath(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		branches: []model.Branch{
 			{Name: "main", IsHead: true},
@@ -36,6 +37,7 @@ func TestBranchRowsShowWorktreePath(t *testing.T) {
 }
 
 func TestWorktreeRowsFormatAndCurrentMarker(t *testing.T) {
+	t.Parallel()
 	m := Model{
 		worktrees: []model.Worktree{
 			{Path: "/repo", Branch: "main"},
@@ -60,6 +62,7 @@ func TestWorktreeRowsFormatAndCurrentMarker(t *testing.T) {
 }
 
 func TestPanelLenWorktrees(t *testing.T) {
+	t.Parallel()
 	m := Model{worktrees: make([]model.Worktree, 3), sel: map[panel]int{}}
 	if n := m.panelLen(panelWorktrees); n != 3 {
 		t.Fatalf("panelLen(panelWorktrees) = %d, want 3", n)
@@ -70,6 +73,7 @@ func TestPanelLenWorktrees(t *testing.T) {
 // own root, so the current-worktree marker actually fires (not just on synthetic
 // equal strings) and the checked-out branch gets the has-worktree marker.
 func TestWorktreeMarkersFireOnRealRepo(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	marked := false
 	for _, row := range m.worktreeRows() {

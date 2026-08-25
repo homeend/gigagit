@@ -8,6 +8,7 @@ import (
 )
 
 func TestHelpOpensWithQuestionMark(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
@@ -21,6 +22,7 @@ func TestHelpOpensWithQuestionMark(t *testing.T) {
 }
 
 func TestHelpSearchFindsBinding(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
@@ -44,6 +46,7 @@ func TestHelpSearchFindsBinding(t *testing.T) {
 // key column is the row's first whitespace-delimited field; alternates are
 // /-separated (e.g. "q/ctrl+c").
 func TestHelpFooterCoverage(t *testing.T) {
+	t.Parallel()
 	var keys []string
 	for _, b := range contextBindings() {
 		keys = append(keys, b.key)
@@ -82,6 +85,7 @@ func TestHelpFooterCoverage(t *testing.T) {
 }
 
 func TestHelpNotOpenedWhileAnotherPopupIsOpen(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24}
 	m = m.pushLayer(&repoPopup{})
 	u, _ := m.Update(keyMsg("?"))
@@ -92,6 +96,7 @@ func TestHelpNotOpenedWhileAnotherPopupIsOpen(t *testing.T) {
 }
 
 func TestHelpDocumentsTabSwitch(t *testing.T) {
+	t.Parallel()
 	var b strings.Builder
 	for _, l := range helpContent() {
 		b.WriteString(l.text)
@@ -103,6 +108,7 @@ func TestHelpDocumentsTabSwitch(t *testing.T) {
 }
 
 func TestHelpDocumentsTags(t *testing.T) {
+	t.Parallel()
 	var b strings.Builder
 	for _, l := range helpContent() {
 		b.WriteString(l.text + "\n")
@@ -113,6 +119,7 @@ func TestHelpDocumentsTags(t *testing.T) {
 }
 
 func TestHelpDocumentsFilesStaged(t *testing.T) {
+	t.Parallel()
 	var b strings.Builder
 	for _, l := range helpContent() {
 		b.WriteString(l.text + "\n")
@@ -127,6 +134,7 @@ func TestHelpDocumentsFilesStaged(t *testing.T) {
 // overflows, ? must open help with a leading "More keys" section listing
 // exactly the bindings fitFooter dropped, in footer order.
 func TestHelpListsHiddenFooterKeysAtNarrowWidth(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width = 40
 	u, _ := m.Update(keyMsg("?"))
@@ -154,6 +162,7 @@ func TestHelpListsHiddenFooterKeysAtNarrowWidth(t *testing.T) {
 }
 
 func TestHelpNoHiddenSectionAtWideWidth(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width = 500
 	u, _ := m.Update(keyMsg("?"))

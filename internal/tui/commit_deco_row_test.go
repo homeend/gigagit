@@ -49,6 +49,7 @@ func decoRowModel() Model {
 // row contains the deco group "(branch1, ⊙v1.0)" and that it appears before
 // the subject text.
 func TestCommitRowHasDecoGroupBeforeSubject(t *testing.T) {
+	t.Parallel()
 	m := decoRowModel()
 	row := m.commitIdentRowAt(0, m.commitIdentWidth(), false, -1)
 
@@ -68,6 +69,7 @@ func TestCommitRowHasDecoGroupBeforeSubject(t *testing.T) {
 // TestCommitRowLineageUnchanged asserts that a lineage row (no extra refs, no
 // tags) has no deco-group opening parenthesis.
 func TestCommitRowLineageUnchanged(t *testing.T) {
+	t.Parallel()
 	m := decoRowModel()
 	// commits[1] is the lineage row: Source="dev", no Refs.
 	row := m.commitIdentRowAt(1, m.commitIdentWidth(), false, -1)
@@ -79,6 +81,7 @@ func TestCommitRowLineageUnchanged(t *testing.T) {
 // TestCommitHaystackIncludesTags asserts that the filter haystack for a
 // commit with a tag ref includes the tag name, so /v1.0 finds it.
 func TestCommitHaystackIncludesTags(t *testing.T) {
+	t.Parallel()
 	m := decoRowModel()
 	hay := m.commitHaystackAt(0)
 	if !strings.Contains(hay, "v1.0") {

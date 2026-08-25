@@ -25,6 +25,7 @@ func findRow(rows []actionRow, id string) (actionRow, bool) {
 }
 
 func TestInContentWindowTrueCases(t *testing.T) {
+	t.Parallel()
 	cases := map[string]func(Model) Model{
 		"diffView":  func(m Model) Model { return m.pushLayer(&diffView{title: "a.go"}) },
 		"filesView": func(m Model) Model { m.filesView = &contentPopup{}; return m },
@@ -41,6 +42,7 @@ func TestInContentWindowTrueCases(t *testing.T) {
 }
 
 func TestInContentWindowFalseCases(t *testing.T) {
+	t.Parallel()
 	if footerModel().inContentWindow() {
 		t.Error("base panel layout: inContentWindow() = true, want false")
 	}
@@ -55,6 +57,7 @@ func TestInContentWindowFalseCases(t *testing.T) {
 }
 
 func TestContextCopyRowsDiffView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(&diffView{title: "dir/b.go", rev: "deadbeefcafe0000"})
 	rows := m.contextCopyRows()
@@ -74,6 +77,7 @@ func TestContextCopyRowsDiffView(t *testing.T) {
 }
 
 func TestContextCopyRowsDiffViewWorkingTree(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(&diffView{title: "b.go", rev: ""}) // working tree: no commit
 	if got := ids(m.contextCopyRows()); got["copy-commit-id"] {
@@ -82,6 +86,7 @@ func TestContextCopyRowsDiffViewWorkingTree(t *testing.T) {
 }
 
 func TestContextCopyRowsHistory(t *testing.T) {
+	t.Parallel()
 	m := footerModel().pushLayer(newHistoryView(navContext{path: "x/y.go", rev: "abc123"}))
 	rows := m.contextCopyRows()
 	got := ids(rows)
@@ -94,6 +99,7 @@ func TestContextCopyRowsHistory(t *testing.T) {
 }
 
 func TestContextCopyRowsFilesTree(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "dir/f.go", path: "dir/f.go"}}}
 	m.filesTreeFocused = true
@@ -109,6 +115,7 @@ func TestContextCopyRowsFilesTree(t *testing.T) {
 }
 
 func TestContextCopyRowsStashFileTree(t *testing.T) {
+	t.Parallel()
 	// A stash file tree has no commit id (filesHash == "").
 	m := footerModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "dir/f.go", path: "dir/f.go"}}}
@@ -126,6 +133,7 @@ func TestContextCopyRowsStashFileTree(t *testing.T) {
 // The stash-list menu is assembled directly in availableActions (not
 // contextCopyRows): the copy row leads, the Apply/Pop/Drop rows follow.
 func TestContextCopyRowsStashList(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "wip"}}, sel: 0}
 	m.focus = panelCommits
@@ -140,6 +148,7 @@ func TestContextCopyRowsStashList(t *testing.T) {
 // h/b), the stack surface is the top visible/key-receiving layer, so the menu
 // must describe it — not the diff underneath. Precedence must match dispatch.
 func TestContextCopyRowsStackBeatsDiffView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m = m.pushLayer(&diffView{title: "old/a.go", rev: "aaaa1111"})
 	m = m.pushLayer(newBlameView(navContext{path: "new/b.go", rev: "bbbb2222"}))
@@ -153,6 +162,7 @@ func TestContextCopyRowsStackBeatsDiffView(t *testing.T) {
 }
 
 func TestContextCopyRowsBranchName(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches // selection defaults to row 0 = "main"
 	rows := m.contextCopyRows()
@@ -163,6 +173,7 @@ func TestContextCopyRowsBranchName(t *testing.T) {
 }
 
 func TestContextCopyRowsRemoteName(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelRemotes
 	m.remoteBranches = []model.RemoteBranch{{Name: "origin/foo", Remote: "origin", Branch: "foo"}}
@@ -174,6 +185,7 @@ func TestContextCopyRowsRemoteName(t *testing.T) {
 }
 
 func TestFileCopyPathNameIncludesAbsolute(t *testing.T) {
+	t.Parallel()
 	m := footerModel() // currentWorktree == "/repo"
 	rows := m.fileCopyPathName("dir/f.go")
 	got := ids(rows)
@@ -190,6 +202,7 @@ func TestFileCopyPathNameIncludesAbsolute(t *testing.T) {
 }
 
 func TestAbsFilePathDefaultsToCurrentWorktree(t *testing.T) {
+	t.Parallel()
 	m := footerModel() // currentWorktree == "/repo"
 	if got := m.absFilePath("", "a/b.go"); got != "/repo/a/b.go" {
 		t.Errorf("empty base = %q, want /repo/a/b.go", got)
@@ -200,6 +213,7 @@ func TestAbsFilePathDefaultsToCurrentWorktree(t *testing.T) {
 }
 
 func TestAvailableActionsContentWindowCopyOnly(t *testing.T) {
+	t.Parallel()
 	// File tree open while focus is still panelCommits: the commit-files [l]
 	// binding is available, but the menu must list ONLY copy rows (replaying l
 	// would close the window).

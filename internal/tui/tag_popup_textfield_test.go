@@ -5,6 +5,7 @@ import (
 )
 
 func TestTagPopupNameNoSpaceMessageSpace(t *testing.T) {
+	t.Parallel()
 	p := &tagPopup{commit: "deadbeef"}
 	m := Model{}
 	m, _ = p.update(m, keyMsg("v1"))
@@ -23,6 +24,7 @@ func TestTagPopupNameNoSpaceMessageSpace(t *testing.T) {
 }
 
 func TestTagCheckoutPrefillNoSpace(t *testing.T) {
+	t.Parallel()
 	p := &tagCheckoutPopup{tag: "v1", name: newTextField("v1")}
 	m := Model{}
 	m, _ = p.update(m, keyMsg("-x"))

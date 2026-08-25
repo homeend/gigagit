@@ -28,6 +28,7 @@ func newTestPrefixPicker(items []model.Prefix, onPick func(Model, string, []stri
 }
 
 func TestPickerLiteralPrefixInsertsImmediately(t *testing.T) {
+	t.Parallel()
 	var got string
 	onPick := func(m Model, resolved string, seq []string) (Model, tea.Cmd) {
 		got = resolved
@@ -43,6 +44,7 @@ func TestPickerLiteralPrefixInsertsImmediately(t *testing.T) {
 }
 
 func TestPickerTemplatedPrefixCollectsThenInserts(t *testing.T) {
+	t.Parallel()
 	var got string
 	onPick := func(m Model, resolved string, seq []string) (Model, tea.Cmd) {
 		got = resolved
@@ -62,6 +64,7 @@ func TestPickerTemplatedPrefixCollectsThenInserts(t *testing.T) {
 }
 
 func TestBranchPopupPrefixSeedsName(t *testing.T) {
+	t.Parallel()
 	bp := &branchPopup{startPoint: "main"}
 	onPick := bp.onPrefixPicked()
 	m := Model{}
@@ -75,6 +78,7 @@ func TestBranchPopupPrefixSeedsName(t *testing.T) {
 }
 
 func TestWorktreePopupPrefixSeedsEdit(t *testing.T) {
+	t.Parallel()
 	p := &worktreePopup{startPoint: "main", branchTmpl: "b/<random-alpha:4>", pathTmpl: "../<repo>.worktrees/<branch>", state: stAction}
 	onPick := p.onPrefixPicked()
 	m := Model{}
@@ -106,6 +110,7 @@ func containsAllSeq(have, want []string) bool {
 // Entry-point reachability: a wrong key constant would pass every behavior test
 // while making the picker unreachable, so assert the keys produce a command.
 func TestBranchPopupCtrlPOpensPicker(t *testing.T) {
+	t.Parallel()
 	bp := &branchPopup{startPoint: "main"}
 	m := Model{}
 	m = m.pushLayer(bp)
@@ -116,6 +121,7 @@ func TestBranchPopupCtrlPOpensPicker(t *testing.T) {
 }
 
 func TestWorktreePopupPOpensPicker(t *testing.T) {
+	t.Parallel()
 	p := &worktreePopup{startPoint: "main", branchTmpl: "b/x", pathTmpl: "../<repo>.worktrees/<branch>", state: stAction}
 	m := Model{}
 	m = m.pushLayer(p)
@@ -126,6 +132,7 @@ func TestWorktreePopupPOpensPicker(t *testing.T) {
 }
 
 func TestPrefixPickerMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	var items []model.Prefix

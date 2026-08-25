@@ -18,6 +18,7 @@ func mouseModel() Model {
 }
 
 func TestPanelAt(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	cases := []struct {
 		x, y int
@@ -44,6 +45,7 @@ func TestPanelAt(t *testing.T) {
 }
 
 func TestPanelAtNarrowTerminal(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	m.width = 30 // single commits column
 	if p, ok := m.panelAt(5, 5); !ok || p != panelCommits {
@@ -52,6 +54,7 @@ func TestPanelAtNarrowTerminal(t *testing.T) {
 }
 
 func TestPanelRowAt(t *testing.T) {
+	t.Parallel()
 	m := mouseModel() // branches box: border y=1, label y=2, data y=3..6
 	if idx, ok := m.panelRowAt(panelBranches, 3); !ok || idx != 0 {
 		t.Fatalf("row at y=3 = %d,%v, want 0,true", idx, ok)
@@ -68,6 +71,7 @@ func TestPanelRowAt(t *testing.T) {
 }
 
 func TestPanelRowAtScrolledPanel(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	m.branches = nil
 	for i := 0; i < 30; i++ {
@@ -80,6 +84,7 @@ func TestPanelRowAtScrolledPanel(t *testing.T) {
 }
 
 func TestWindowStartMatchesWindowRows(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ total, n, sel int }{
 		{2, 5, 0}, {10, 4, 0}, {10, 4, 9}, {30, 4, 20}, {30, 4, 2},
 	} {
@@ -92,6 +97,7 @@ func TestWindowStartMatchesWindowRows(t *testing.T) {
 }
 
 func TestWheelStepHelper(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	if m.wheelStep() != 3 {
 		t.Fatalf("wheelStep = %d before any config load, want 3", m.wheelStep())
@@ -107,6 +113,7 @@ func mouseMsg(x, y int, b tea.MouseButton) tea.MouseMsg {
 }
 
 func TestClickFocusesAndSelects(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()                                      // focus starts on Branches
 	u, _ := m.Update(mouseMsg(30, 4, tea.MouseButtonLeft)) // commits, 2nd data row
 	m = u.(Model)
@@ -122,6 +129,7 @@ func TestClickFocusesAndSelects(t *testing.T) {
 }
 
 func TestClickOnLabelFocusesWithoutSelecting(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	m.focus = panelCommits
 	m.sel[panelBranches] = 2
@@ -136,6 +144,7 @@ func TestClickOnLabelFocusesWithoutSelecting(t *testing.T) {
 }
 
 func TestClickOutsidePanelsNoOps(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	u, _ := m.Update(mouseMsg(5, 0, tea.MouseButtonLeft)) // header
 	if got := u.(Model).focus; got != panelBranches {
@@ -144,6 +153,7 @@ func TestClickOutsidePanelsNoOps(t *testing.T) {
 }
 
 func TestClickIgnoredUnderOverlays(t *testing.T) {
+	t.Parallel()
 	overlays := []func(m *Model){
 		func(m *Model) { m.modal = &decisionState{} },
 		func(m *Model) { *m = m.pushLayer(&worktreePopup{}) },
@@ -164,6 +174,7 @@ func TestClickIgnoredUnderOverlays(t *testing.T) {
 }
 
 func TestWheelScrollsHoveredPanelWithoutFocus(t *testing.T) {
+	t.Parallel()
 	m := mouseModel() // focus Branches; 2 commits
 	u, _ := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown))
 	m = u.(Model)
@@ -180,6 +191,7 @@ func TestWheelScrollsHoveredPanelWithoutFocus(t *testing.T) {
 }
 
 func TestWheelStepRespectsConfig(t *testing.T) {
+	t.Parallel()
 	m := mouseModel() // 3 branches
 	m.cfg = config.Config{UI: config.UIConfig{WheelStep: 1}}
 	u, _ := m.Update(mouseMsg(5, 4, tea.MouseButtonWheelDown))
@@ -189,6 +201,7 @@ func TestWheelStepRespectsConfig(t *testing.T) {
 }
 
 func TestWheelOutsidePanelsNoOps(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	u, _ := m.Update(mouseMsg(5, 23, tea.MouseButtonWheelDown)) // status line
 	mm := u.(Model)
@@ -198,6 +211,7 @@ func TestWheelOutsidePanelsNoOps(t *testing.T) {
 }
 
 func TestHelpWindowKeepsWheelPriority(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	m = m.pushLayer(newContentPopup("Help — keys", helpContent()))
 	u, _ := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown))
@@ -211,6 +225,7 @@ func TestHelpWindowKeepsWheelPriority(t *testing.T) {
 }
 
 func TestFilesViewTreeClickFocusesAndMovesCursor(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, filesModel())
 	u, _ := m.Update(mouseMsg(5, 4, tea.MouseButtonLeft)) // 2nd visible tree line
 	m = u.(Model)
@@ -228,6 +243,7 @@ func TestFilesViewTreeClickFocusesAndMovesCursor(t *testing.T) {
 }
 
 func TestFilesViewCommitsClickSelectsWithOneReload(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, filesModel())
 	u, _ := m.Update(mouseMsg(5, 4, tea.MouseButtonLeft)) // focus the tree first
 	m = u.(Model)
@@ -252,6 +268,7 @@ func TestFilesViewCommitsClickSelectsWithOneReload(t *testing.T) {
 }
 
 func TestFilesViewWheelTargetsHoveredSide(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, filesModel())
 	u, _ := m.Update(mouseMsg(5, 5, tea.MouseButtonWheelDown)) // over the tree
 	m = u.(Model)
@@ -273,6 +290,7 @@ func TestFilesViewWheelTargetsHoveredSide(t *testing.T) {
 }
 
 func TestFilesViewMouseOutsideColumnsNoOps(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, filesModel())
 	u, cmd := m.Update(mouseMsg(5, 0, tea.MouseButtonLeft)) // header
 	mm := u.(Model)
@@ -282,6 +300,7 @@ func TestFilesViewMouseOutsideColumnsNoOps(t *testing.T) {
 }
 
 func TestClickCommitsFilterTyping(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	m.filterPanel = panelBranches
 	m.filterQuery = "fe"
@@ -300,6 +319,7 @@ func TestClickCommitsFilterTyping(t *testing.T) {
 }
 
 func TestModalOutranksHelpWindowWheel(t *testing.T) {
+	t.Parallel()
 	m := mouseModel()
 	m = m.pushLayer(newContentPopup("Help — keys", helpContent()))
 	m.modal = &decisionState{}

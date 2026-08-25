@@ -35,6 +35,7 @@ func sortedNames(l fakeList, mode sortMode) []string {
 }
 
 func TestGenericSortOrders(t *testing.T) {
+	t.Parallel()
 	l := fakeList{
 		names: []string{"Beta", "alpha", "gamma"},
 		dates: []int64{200, 0, 100},
@@ -57,6 +58,7 @@ func TestGenericSortOrders(t *testing.T) {
 }
 
 func TestGenericSortStableOnTies(t *testing.T) {
+	t.Parallel()
 	l := fakeList{names: []string{"b1", "b2", "a"}, dates: []int64{5, 5, 5}}
 	if got := strings.Join(sortedNames(l, sortDateAsc), ","); got != "b1,b2,a" {
 		t.Errorf("ties must keep backing order, got %s", got)
@@ -64,6 +66,7 @@ func TestGenericSortStableOnTies(t *testing.T) {
 }
 
 func TestBranchesDefaultSortIsDateDesc(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.branches = []model.Branch{
 		{Name: "alpha", UnixTime: 100},
@@ -80,6 +83,7 @@ func TestBranchesDefaultSortIsDateDesc(t *testing.T) {
 }
 
 func TestOKeyCyclesModesAndLabelShowsThem(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelWorktrees
 	if m.sortModes[panelWorktrees] != sortDefault {
@@ -106,6 +110,7 @@ func TestOKeyCyclesModesAndLabelShowsThem(t *testing.T) {
 }
 
 func TestActionResolvesThroughSortedView(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	wt := filepath.Join(filepath.Dir(dir), "wt-sorted")
 	runGit(t, dir, "worktree", "add", "-b", "zzz-newest", wt, "main")
@@ -125,6 +130,7 @@ func TestActionResolvesThroughSortedView(t *testing.T) {
 }
 
 func TestLayoutOrigins(t *testing.T) {
+	t.Parallel()
 	// Wide terminal: the active tab slot (Branches by default) over Status, plus
 	// the commits column. The inactive Worktrees tab has no box.
 	m := Model{width: 90, height: 30, activeLeftTab: panelBranches}
@@ -161,6 +167,7 @@ func TestLayoutOrigins(t *testing.T) {
 }
 
 func TestLoadPopulatesWorktreeHeadTimes(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	u, _ := m.Update(m.loadCmd()())

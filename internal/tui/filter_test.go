@@ -20,6 +20,7 @@ func typeRunes(t *testing.T, m Model, s string) Model {
 }
 
 func TestSlashFilterLifecycle(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "branch", "fix-1")
 	runGit(t, dir, "branch", "fix-2")
@@ -60,6 +61,7 @@ func TestSlashFilterLifecycle(t *testing.T) {
 }
 
 func TestEscDuringTypingCancelsAndClears(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelBranches
 	u, _ := m.Update(keyMsg("/"))
@@ -73,6 +75,7 @@ func TestEscDuringTypingCancelsAndClears(t *testing.T) {
 }
 
 func TestFilterTypingSwallowsGlobalKeys(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelBranches
 	u, _ := m.Update(keyMsg("/"))
@@ -93,6 +96,7 @@ func TestFilterTypingSwallowsGlobalKeys(t *testing.T) {
 }
 
 func TestFilteredEnterSwitchesToVisibleWorktree(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	wtA := filepath.Join(filepath.Dir(dir), "wt-aaa")
 	wtB := filepath.Join(filepath.Dir(dir), "wt-bbb")
@@ -121,6 +125,7 @@ func TestFilteredEnterSwitchesToVisibleWorktree(t *testing.T) {
 }
 
 func TestFilterSurvivesReloadAndMovesBetweenPanels(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "branch", "fix-1")
 	m := New(domain.New(repo))
@@ -156,6 +161,7 @@ func TestFilterSurvivesReloadAndMovesBetweenPanels(t *testing.T) {
 // navigate the filtered rows. Confirms the reported bug is isolated to the
 // /-input (typing) mode, not the committed path.
 func TestCommittedFilterArrowNavigates(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "branch", "fix-1")
 	runGit(t, dir, "branch", "fix-2")
@@ -185,6 +191,7 @@ func TestCommittedFilterArrowNavigates(t *testing.T) {
 // The reported bug: arrows must navigate the filtered rows WHILE still in
 // /-input mode (without first pressing Enter), like the repo-switcher picker.
 func TestFilterTypingArrowNavigates(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "branch", "fix-1")
 	runGit(t, dir, "branch", "fix-2")
@@ -223,6 +230,7 @@ func TestFilterTypingArrowNavigates(t *testing.T) {
 }
 
 func TestFilterLabelRendering(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	// This test asserts the tab-bar/sort/filter label decoration, not worktree
 	// paths. Drop the worktrees so branch rows carry no (random temp) path: the
@@ -242,6 +250,7 @@ func TestFilterLabelRendering(t *testing.T) {
 }
 
 func TestFilterBackspaceCtrlHVariant(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m.focus = panelBranches
 	u, _ := m.Update(keyMsg("/"))

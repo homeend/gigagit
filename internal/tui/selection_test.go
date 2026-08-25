@@ -7,6 +7,7 @@ import (
 )
 
 func TestRestoreSelByIdentitySurvivesReorder(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.branches = []model.Branch{{Name: "a"}, {Name: "b"}, {Name: "c"}}
 	m.sel[panelBranches] = 2 // "c"
@@ -20,6 +21,7 @@ func TestRestoreSelByIdentitySurvivesReorder(t *testing.T) {
 }
 
 func TestRestoreSelClampsWhenItemGone(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.branches = []model.Branch{{Name: "a"}, {Name: "b"}}
 	m.sel[panelBranches] = 1 // "b"

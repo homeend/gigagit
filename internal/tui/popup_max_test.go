@@ -11,6 +11,7 @@ func runeKey(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes:
 func ctrlT() tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyCtrlT} }
 
 func TestToggleMaximize(t *testing.T) {
+	t.Parallel()
 	var p popupMax
 	p.toggleMaximize()
 	if !p.maxed() {
@@ -26,6 +27,7 @@ func TestToggleMaximize(t *testing.T) {
 // Model.Update — not by its own update. This locks in that the central handler
 // is wired.
 func TestCentralCtrlTMaximizesTopPopup(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := newContentPopup("Title", contentLines(4))
@@ -46,6 +48,7 @@ func TestCentralCtrlTMaximizesTopPopup(t *testing.T) {
 // capturing a filter query; and a literal capital T typed while capturing stays
 // a character (it is not the maximize key).
 func TestCtrlTMaximizesWhileCapturing(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := newContentPopup("Title", contentLines(4))
@@ -69,6 +72,7 @@ func TestCtrlTMaximizesWhileCapturing(t *testing.T) {
 }
 
 func TestPopupResolveWidth(t *testing.T) {
+	t.Parallel()
 	if got := popupResolveWidth(200, false, 56); got != 56 {
 		t.Fatalf("normal: got %d, want 56", got)
 	}
@@ -78,6 +82,7 @@ func TestPopupResolveWidth(t *testing.T) {
 }
 
 func TestPopupMaxRowCap(t *testing.T) {
+	t.Parallel()
 	if got := popupMaxRowCap(50); got != 38 {
 		t.Fatalf("tall: got %d, want 38", got)
 	}
@@ -87,6 +92,7 @@ func TestPopupMaxRowCap(t *testing.T) {
 }
 
 func TestPopupResolveRowCap(t *testing.T) {
+	t.Parallel()
 	if got := popupResolveRowCap(false, 50, 12); got != 12 {
 		t.Fatalf("normal: got %d, want 12", got)
 	}

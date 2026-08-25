@@ -24,6 +24,7 @@ func shEntry(id, path string) model.ShelfEntry {
 }
 
 func TestShelfPopupRendersOrigin(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "dir/x.go"))
 	out := m.renderShelfPopupBox(m.shelfSwitcher())
 	if !strings.Contains(out, "dir/x.go") || !strings.Contains(out, "Shelf") {
@@ -32,6 +33,7 @@ func TestShelfPopupRendersOrigin(t *testing.T) {
 }
 
 func TestShelfPopupZCyclesMode(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	mm, _ := m.Update(keyMsg("z"))
 	m = mm.(Model)
@@ -41,6 +43,7 @@ func TestShelfPopupZCyclesMode(t *testing.T) {
 }
 
 func TestShelfPopupEnterJumps(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	mm, _ := m.Update(keyMsg("enter"))
 	m = mm.(Model)
@@ -54,6 +57,7 @@ func TestShelfPopupEnterJumps(t *testing.T) {
 }
 
 func TestShelfPopupRemoveConfirms(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	mm, _ := m.Update(keyMsg("x"))
 	m = mm.(Model)
@@ -63,6 +67,7 @@ func TestShelfPopupRemoveConfirms(t *testing.T) {
 }
 
 func TestShelfPopupRestoreOpensDest(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	mm, _ := m.Update(keyMsg("p"))
 	m = mm.(Model)
@@ -72,6 +77,7 @@ func TestShelfPopupRestoreOpensDest(t *testing.T) {
 }
 
 func TestCompareAgainstShelfMenuRow(t *testing.T) {
+	t.Parallel()
 	m := filesMenuModel()
 	m.currentWorktree = "/wt"
 	r, ok := findRow(availableActions(m), "shelf-compare-against")
@@ -89,6 +95,7 @@ func TestCompareAgainstShelfMenuRow(t *testing.T) {
 }
 
 func TestShelfPopupCAgainstBookmark(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	mm, cmd := m.Update(keyMsg("c"))
 	m = mm.(Model)
@@ -104,6 +111,7 @@ func TestShelfPopupCAgainstBookmark(t *testing.T) {
 }
 
 func TestShelfCompareModeEnterDiffs(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	m.shelfSwitcher().compareRef = &model.FileRef{Source: model.SourceUnstaged, Path: "focused.go"}
 	m.shelfSwitcher().compareLabel = "wt:wt / unstaged / focused.go"
@@ -115,6 +123,7 @@ func TestShelfCompareModeEnterDiffs(t *testing.T) {
 }
 
 func TestPendingCompareStampsShelfPopup(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width, m.height = 100, 30
 	m.pendingCompare = &pendingCompare{ref: model.FileRef{Source: model.SourceUnstaged, Path: "f.go"}, label: "wt / unstaged / f.go", target: compareShelf}
@@ -129,6 +138,7 @@ func TestPendingCompareStampsShelfPopup(t *testing.T) {
 }
 
 func TestPendingCompareStampsBookmarkPopup(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width, m.height = 100, 30
 	m.pendingCompare = &pendingCompare{ref: model.FileRef{Source: model.SourceShelf, Locator: "a", Path: "x.go"}, label: "shelf #a", target: compareBookmark}
@@ -143,6 +153,7 @@ func TestPendingCompareStampsBookmarkPopup(t *testing.T) {
 }
 
 func TestShelfPopupMarkThenCompare(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "a.go"), shEntry("b", "b.go"))
 	mm, _ := m.Update(keyMsg("m"))
 	m = mm.(Model)
@@ -158,6 +169,7 @@ func TestShelfPopupMarkThenCompare(t *testing.T) {
 }
 
 func TestShelfEntryDisplayLabel(t *testing.T) {
+	t.Parallel()
 	labeled := model.ShelfEntry{
 		Kind:   model.ShelfKindCommit,
 		Origin: model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5"},
@@ -177,6 +189,7 @@ func TestShelfEntryDisplayLabel(t *testing.T) {
 }
 
 func TestShelfPopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &shelfPopup{}
@@ -198,6 +211,7 @@ func TestShelfPopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
 }
 
 func TestShelfPopupTKeyDoesNotMaximizeWhileFiltering(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &shelfPopup{filtering: true}
@@ -211,6 +225,7 @@ func TestShelfPopupTKeyDoesNotMaximizeWhileFiltering(t *testing.T) {
 }
 
 func TestShelfPopupYOpensCopyChooser(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "dir/x.go"))
 	mm, _ := m.Update(keyMsg("y"))
 	m = mm.(Model)
@@ -226,6 +241,7 @@ func TestShelfPopupYOpensCopyChooser(t *testing.T) {
 }
 
 func TestShelfPopupYChooserHasAbsoluteOnOriginWorktree(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "dir/x.go")) // Origin.Worktree == "/wt"
 	mm, _ := m.Update(keyMsg("y"))
 	m = mm.(Model)
@@ -244,6 +260,7 @@ func TestShelfPopupYChooserHasAbsoluteOnOriginWorktree(t *testing.T) {
 }
 
 func TestShelfPopupYOnCommitEntryNotices(t *testing.T) {
+	t.Parallel()
 	e := model.ShelfEntry{ID: "c1", Kind: model.ShelfKindCommit,
 		Origin: model.FileAddress{State: model.StateCommitted, Commit: "a1b2c3d4e5"}}
 	m := shelfPopModel(e)
@@ -258,6 +275,7 @@ func TestShelfPopupYOnCommitEntryNotices(t *testing.T) {
 }
 
 func TestShelfPopupYInertInCompareMode(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	m.shelfSwitcher().compareRef = &model.FileRef{Source: model.SourceUnstaged, Path: "focused.go"}
 	mm, _ := m.Update(keyMsg("y"))
@@ -268,6 +286,7 @@ func TestShelfPopupYInertInCompareMode(t *testing.T) {
 }
 
 func TestShelfPopupYEmptyListNoop(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel()
 	mm, _ := m.Update(keyMsg("y"))
 	m = mm.(Model)
@@ -277,6 +296,7 @@ func TestShelfPopupYEmptyListNoop(t *testing.T) {
 }
 
 func TestShelfPopupYWhileFilteringIsText(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &shelfPopup{filtering: true}
@@ -287,6 +307,7 @@ func TestShelfPopupYWhileFilteringIsText(t *testing.T) {
 }
 
 func TestShelfPopupAdvertisesCopy(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	if out := m.renderShelfPopupBox(m.shelfSwitcher()); !strings.Contains(out, "[y] copy") {
 		t.Errorf("hint line missing [y] copy:\n%s", out)
@@ -303,6 +324,7 @@ func TestShelfPopupAdvertisesCopy(t *testing.T) {
 }
 
 func TestShelfPopupEnterBumpsPickGen(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("e1", "dir/x.go"))
 	before := m.pickGen
 	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -313,6 +335,7 @@ func TestShelfPopupEnterBumpsPickGen(t *testing.T) {
 }
 
 func TestShelfPopupAKeyStaysQueryRuneWhileFiltering(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	p := &shelfPopup{filtering: true}

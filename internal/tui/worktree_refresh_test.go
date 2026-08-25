@@ -47,6 +47,7 @@ func worktreeCreatePopup(branch, path string) *worktreePopup {
 // the targeted per-source refresh (dataAvailableMsg) rather than a full Snapshot
 // (dataLoadedMsg), and applying it surfaces the new branch and worktree.
 func TestCreateWorktreeRefreshesRefsOnly(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
@@ -93,6 +94,7 @@ func TestCreateWorktreeRefreshesRefsOnly(t *testing.T) {
 // but discarded when reRoot fires (pendingSwitch path wins over the per-source
 // registry), so the switch still results in a full load.
 func TestCreateAndSwitchUsesFullReRoot(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())

@@ -8,6 +8,7 @@ import (
 )
 
 func TestDecoGroupFull(t *testing.T) {
+	t.Parallel()
 	id := commitIdent{extra: []string{"branch1", "branch2"}, tags: []string{"v1.0.0"}}
 	group, spans, collapsed := commitDecoGroup(id, -1)
 	if collapsed {
@@ -29,12 +30,14 @@ func TestDecoGroupFull(t *testing.T) {
 }
 
 func TestDecoGroupEmpty(t *testing.T) {
+	t.Parallel()
 	if g, _, _ := commitDecoGroup(commitIdent{name: "main", tip: true}, -1); g != "" {
 		t.Fatalf("no extras/tags must yield empty group, got %q", g)
 	}
 }
 
 func TestDecoGroupCollapses(t *testing.T) {
+	t.Parallel()
 	id := commitIdent{extra: []string{"feature-a", "feature-b"}, tags: []string{"release-2026"}}
 	group, spans, collapsed := commitDecoGroup(id, 8) // tiny budget
 	if !collapsed {
@@ -53,6 +56,7 @@ func TestDecoGroupCollapses(t *testing.T) {
 }
 
 func TestDecoGroupTagsOnlyOnLineage(t *testing.T) {
+	t.Parallel()
 	// a tag on a non-tip commit (no extras): still renders
 	id := commitIdent{name: "main", tags: []string{"v9"}} // tip=false
 	g, spans, _ := commitDecoGroup(id, -1)

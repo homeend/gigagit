@@ -20,6 +20,7 @@ func wtHeadTui(t *testing.T, wtPath string) string {
 }
 
 func TestWOpensExistingModePopup(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	mm := updated.(Model)
@@ -44,6 +45,7 @@ func TestWOpensExistingModePopup(t *testing.T) {
 }
 
 func TestExistingModeIgnoresBranchTemplateUserFields(t *testing.T) {
+	t.Parallel()
 	// The branch template's <user:...> must NOT be prompted in existing mode;
 	// only the path template's fields are.
 	m := modelWithConfig(t, "<user:who>/x", "wt/<branch>")
@@ -59,6 +61,7 @@ func TestExistingModeIgnoresBranchTemplateUserFields(t *testing.T) {
 }
 
 func TestExistingModeEditKeySeedsSelection(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/x", "wt/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -74,6 +77,7 @@ func TestExistingModeEditKeySeedsSelection(t *testing.T) {
 }
 
 func TestExistingModeCreateOpAndSeqs(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "issue/<seq:issue>", "../<repo>.worktrees/<seq:wt>-<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -93,6 +97,7 @@ func TestExistingModeCreateOpAndSeqs(t *testing.T) {
 }
 
 func TestExistingModeEndToEnd(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	runGit(t, dir, "branch", "feature/have")
 
@@ -129,6 +134,7 @@ func TestExistingModeEndToEnd(t *testing.T) {
 }
 
 func TestExistingModeRenderTitleAndHints(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/x", "wt/<branch>")
 	m.width, m.height = 80, 24
 	updated, _ := m.Update(keyMsg("w"))

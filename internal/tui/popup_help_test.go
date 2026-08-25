@@ -19,6 +19,7 @@ func helpJoin(lines []contentLine) string {
 }
 
 func TestBookmarkSwitcherHelpListsKeys(t *testing.T) {
+	t.Parallel()
 	h := helpJoin(bookmarkSwitcherHelp(false))
 	for _, want := range []string{"enter", "paste", "mark", "remove", "filter"} {
 		if !strings.Contains(h, want) {
@@ -28,6 +29,7 @@ func TestBookmarkSwitcherHelpListsKeys(t *testing.T) {
 }
 
 func TestShelfSwitcherHelpListsKeys(t *testing.T) {
+	t.Parallel()
 	h := helpJoin(shelfSwitcherHelp(false))
 	for _, want := range []string{"enter", "restore", "mark", "remove", "filter"} {
 		if !strings.Contains(h, want) {
@@ -38,6 +40,7 @@ func TestShelfSwitcherHelpListsKeys(t *testing.T) {
 
 // In compare mode the action keys are inert, so the sheet must omit them.
 func TestSwitcherHelpCompareModeOmitsInertKeys(t *testing.T) {
+	t.Parallel()
 	h := helpJoin(bookmarkSwitcherHelp(true))
 	if !strings.Contains(h, "compare the first pick") {
 		t.Errorf("compare-mode bookmark help must describe the compare action:\n%s", h)
@@ -66,6 +69,7 @@ func shelfPopupModel() Model {
 }
 
 func TestQuestionMarkOpensCheatSheetOverBookmarkPopup(t *testing.T) {
+	t.Parallel()
 	m := bookmarkPopupModel()
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
@@ -84,6 +88,7 @@ func TestQuestionMarkOpensCheatSheetOverBookmarkPopup(t *testing.T) {
 }
 
 func TestQuestionMarkOpensCheatSheetOverShelfPopup(t *testing.T) {
+	t.Parallel()
 	m := shelfPopupModel()
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
@@ -98,6 +103,7 @@ func TestQuestionMarkOpensCheatSheetOverShelfPopup(t *testing.T) {
 // With the cheat sheet open over the picker, keys must route to the cheat sheet,
 // not the picker underneath (dispatch hoist).
 func TestCheatSheetCapturesKeysOverPicker(t *testing.T) {
+	t.Parallel()
 	m := bookmarkPopupModel()
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
@@ -114,6 +120,7 @@ func TestCheatSheetCapturesKeysOverPicker(t *testing.T) {
 // esc closes the cheat sheet and returns to the picker with its filter/mark
 // state intact — the differentiator of the chosen overlay-return behavior.
 func TestCheatSheetEscReturnsToPicker(t *testing.T) {
+	t.Parallel()
 	m := bookmarkPopupModel()
 	m.bookmarkSwitcher().filter = "ab"
 	m.bookmarkSwitcher().markID = "b1"
@@ -134,6 +141,7 @@ func TestCheatSheetEscReturnsToPicker(t *testing.T) {
 
 // The cheat sheet renders on top of the picker.
 func TestCheatSheetRendersOverPicker(t *testing.T) {
+	t.Parallel()
 	m := bookmarkPopupModel()
 	u, _ := m.Update(keyMsg("?"))
 	m = u.(Model)
@@ -145,6 +153,7 @@ func TestCheatSheetRendersOverPicker(t *testing.T) {
 
 // Both switchers must advertise the new ? key in their footer hint.
 func TestSwitcherFootersAdvertiseQuestionMark(t *testing.T) {
+	t.Parallel()
 	bm := bookmarkPopupModel()
 	if f := bm.renderBookmarkPopupBox(bm.bookmarkSwitcher()); !strings.Contains(f, "[?] keys") {
 		t.Errorf("bookmark switcher footer must advertise [?] keys:\n%s", f)
@@ -156,6 +165,7 @@ func TestSwitcherFootersAdvertiseQuestionMark(t *testing.T) {
 }
 
 func TestPrefixTokensHelpContent(t *testing.T) {
+	t.Parallel()
 	now := time.Date(2026, 6, 11, 14, 5, 9, 0, time.UTC)
 	var joined strings.Builder
 	for _, l := range prefixTokensHelp(now) {

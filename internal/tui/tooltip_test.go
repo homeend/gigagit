@@ -31,6 +31,7 @@ func tooltipModel() Model {
 }
 
 func TestTooltipShowsFullRowInline(t *testing.T) {
+	t.Parallel()
 	m := tooltipModel()
 	m.width = 120 // wide enough that the full row fits when overflowing to the screen edge
 	lines, _, y, ok := m.tooltip()
@@ -57,6 +58,7 @@ func TestTooltipShowsFullRowInline(t *testing.T) {
 // (origin.y) and label (origin.y+1) lines — covering the title bar. The inline
 // reveal must land on the row itself (origin.y+2), leaving the bar untouched.
 func TestTooltipOnTopRowKeepsTitleBar(t *testing.T) {
+	t.Parallel()
 	m := tooltipModel()
 	m.width = 120
 	m.worktrees[0].Path = longPath // make the top row long…
@@ -85,6 +87,7 @@ func mustRows(t *testing.T, m Model, p panel) []string {
 // the row otherwise fits (the displayed row carries the … so the plain
 // truncation check alone would miss it).
 func TestTooltipRevealsTrimmedBranchName(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelCommits
 	if m.sel == nil {
@@ -109,6 +112,7 @@ func TestTooltipRevealsTrimmedBranchName(t *testing.T) {
 // that highlight peeking out to its right (two backgrounds on one line). The
 // reveal must be padded to cover the whole row — at least the panel inner width.
 func TestTooltipFillsSelectedRowHighlight(t *testing.T) {
+	t.Parallel()
 	m := footerModel() // width 120; Commits is the right panel
 	m.focus = panelCommits
 	if m.sel == nil {
@@ -137,6 +141,7 @@ func TestTooltipFillsSelectedRowHighlight(t *testing.T) {
 // the whole terminal width, not just the commit window; its start column shifts
 // left of the panel's content edge.
 func TestTooltipOverflowsLeftFromRightPanel(t *testing.T) {
+	t.Parallel()
 	m := footerModel() // width 120; Commits is the right panel
 	m.focus = panelCommits
 	if m.sel == nil {
@@ -190,6 +195,7 @@ func treeRevealModel(sel int) Model {
 const treeLongDir = "src/com/netstellar/feedmill/db/dao/util/"
 
 func TestFilesTreeRevealsTruncatedRow(t *testing.T) {
+	t.Parallel()
 	m := treeRevealModel(1) // the long heading
 	lines, x, y, ok := m.tooltip()
 	if !ok {
@@ -208,6 +214,7 @@ func TestFilesTreeRevealsTruncatedRow(t *testing.T) {
 }
 
 func TestFilesTreeRevealHiddenWhenRowFits(t *testing.T) {
+	t.Parallel()
 	m := treeRevealModel(0) // "M  jooq-gen.bat" fits the column
 	if _, _, _, ok := m.tooltip(); ok {
 		t.Fatal("no reveal when the tree row fits")
@@ -215,6 +222,7 @@ func TestFilesTreeRevealHiddenWhenRowFits(t *testing.T) {
 }
 
 func TestFilesTreeRevealSuppressedWhenListFocused(t *testing.T) {
+	t.Parallel()
 	m := treeRevealModel(1)
 	m.filesTreeFocused = false // the commits side owns the selection now
 	// A long commit subject so the commits-side reveal DOES fire — the test then
@@ -230,6 +238,7 @@ func TestFilesTreeRevealSuppressedWhenListFocused(t *testing.T) {
 // The render() path only reaches the reveal overlay on the non-layer/non-diff
 // branch; assert the tree reveal survives the assembled view, not just tooltip().
 func TestFilesTreeRevealRenderedInView(t *testing.T) {
+	t.Parallel()
 	m := treeRevealModel(1)
 	if !strings.Contains(ansi.Strip(m.render()), treeLongDir) {
 		t.Fatal("rendered view must composite the tree reveal's full path")
@@ -237,6 +246,7 @@ func TestFilesTreeRevealRenderedInView(t *testing.T) {
 }
 
 func TestFilesTreeRevealSuppressedOutsideCutoff(t *testing.T) {
+	t.Parallel()
 	m := treeRevealModel(1)
 	m.filesView.mode = modeWrap // the wrapped row is already fully visible
 	if _, _, _, ok := m.tooltip(); ok {
@@ -245,6 +255,7 @@ func TestFilesTreeRevealSuppressedOutsideCutoff(t *testing.T) {
 }
 
 func TestTooltipHiddenWhenRowFits(t *testing.T) {
+	t.Parallel()
 	m := tooltipModel()
 	m.sel[panelWorktrees] = 0 // "* main  /repo" fits comfortably
 	if _, _, _, ok := m.tooltip(); ok {
@@ -253,6 +264,7 @@ func TestTooltipHiddenWhenRowFits(t *testing.T) {
 }
 
 func TestTooltipHiddenOnEmptyPanel(t *testing.T) {
+	t.Parallel()
 	m := tooltipModel()
 	m.worktrees = nil
 	if _, _, _, ok := m.tooltip(); ok {
@@ -261,6 +273,7 @@ func TestTooltipHiddenOnEmptyPanel(t *testing.T) {
 }
 
 func TestTooltipOverflowsSingleLineCappedAtScreen(t *testing.T) {
+	t.Parallel()
 	m := tooltipModel()
 	m.worktrees[1].Path = strings.Repeat("x", 500) // wider than the whole viewport
 	lines, _, _, ok := m.tooltip()
@@ -287,6 +300,7 @@ func TestTooltipOverflowsSingleLineCappedAtScreen(t *testing.T) {
 // never flush against the underlying text it overflows onto, and it does NOT fill
 // the whole screen.
 func TestTooltipRevealKeepsMarginsAroundText(t *testing.T) {
+	t.Parallel()
 	m := footerModel() // width 120; Commits is the right panel
 	m.focus = panelCommits
 	if m.sel == nil {
@@ -316,6 +330,7 @@ func TestTooltipRevealKeepsMarginsAroundText(t *testing.T) {
 }
 
 func TestTooltipRenderedInView(t *testing.T) {
+	t.Parallel()
 	m := tooltipModel()
 	m.width = 120 // the inline reveal overflows to the screen edge; give it room for the full path
 	out := ansi.Strip(m.render())
@@ -325,6 +340,7 @@ func TestTooltipRenderedInView(t *testing.T) {
 }
 
 func TestTooltipSuppressedByModal(t *testing.T) {
+	t.Parallel()
 	m := tooltipModel()
 	m.modal = &decisionState{} // minimal valid value — render() early-returns on modal != nil
 	out := ansi.Strip(m.render())
@@ -334,6 +350,7 @@ func TestTooltipSuppressedByModal(t *testing.T) {
 }
 
 func TestTooltipSuppressedByPopup(t *testing.T) {
+	t.Parallel()
 	m := tooltipModel()
 	m = m.pushLayer(&repoPopup{}) // any open popup owns the screen
 	out := ansi.Strip(m.render())
@@ -348,6 +365,7 @@ func TestTooltipSuppressedByPopup(t *testing.T) {
 // pair shares one model and differs only in filesPreview, so a vacuous pass
 // (nothing truncates / degenerate geometry) can't masquerade as a fix.
 func TestTooltipSuppressedByFilePreview(t *testing.T) {
+	t.Parallel()
 	base := footerModel() // width 120; Commits is the right panel
 	base.focus = panelCommits
 	if base.sel == nil {
@@ -380,6 +398,7 @@ func TestTooltipSuppressedByFilePreview(t *testing.T) {
 }
 
 func TestWrapWidth(t *testing.T) {
+	t.Parallel()
 	got := wrapWidth("abcdef", 3, 3)
 	if len(got) != 2 || got[0] != "abc" || got[1] != "def" {
 		t.Fatalf("wrapWidth = %q", got)
@@ -391,6 +410,7 @@ func TestWrapWidth(t *testing.T) {
 }
 
 func TestTooltipSuppressedByContentPopup(t *testing.T) {
+	t.Parallel()
 	m := tooltipModel()
 	m = m.pushLayer(newContentPopup("T", contentLines(2)))
 	out := ansi.Strip(m.render())
@@ -400,6 +420,7 @@ func TestTooltipSuppressedByContentPopup(t *testing.T) {
 }
 
 func TestTooltipSuppressedOutsideCutoffMode(t *testing.T) {
+	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 24
 	m.focus = panelBranches
@@ -426,6 +447,7 @@ func TestTooltipSuppressedOutsideCutoffMode(t *testing.T) {
 // 16-col identity padding leaves an ugly gap between a short branch and the
 // subject.)
 func TestCommitRevealIsTextOnlyNoGraph(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelCommits
 	if m.sel == nil {
@@ -456,6 +478,7 @@ func TestCommitRevealIsTextOnlyNoGraph(t *testing.T) {
 // The branch-identity column sizes to the widest loaded branch label (capped at
 // commitIdentW), so a short common name like "master" leaves no fixed-width gap.
 func TestCommitIdentColumnFitsToLongestName(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.commits = []model.Commit{
 		{Hash: "aaaaaa0", Subject: "s0", Refs: []model.Ref{{Name: "master", Kind: model.RefLocal}}},
@@ -482,6 +505,7 @@ func TestCommitIdentColumnFitsToLongestName(t *testing.T) {
 // reported mislocated yellow strip). Same pattern as the file-preview guard:
 // precondition proves the reveal fires without the stash, isolating the guard.
 func TestTooltipSuppressedByStashView(t *testing.T) {
+	t.Parallel()
 	base := footerModel()
 	base.focus = panelCommits
 	if base.sel == nil {
@@ -506,6 +530,7 @@ func TestTooltipSuppressedByStashView(t *testing.T) {
 // focus there) — their truncated rows must keep revealing; only the hidden
 // Commits panel is suppressed.
 func TestTooltipLeftPanelStillRevealsWhileStashOpen(t *testing.T) {
+	t.Parallel()
 	m := tooltipModel()
 	m.width = 120
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "WIP"}}}

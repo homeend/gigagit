@@ -80,6 +80,7 @@ func diffModel() Model {
 }
 
 func TestEnterOnStatusOpensLoadingDiff(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
@@ -95,6 +96,7 @@ func TestEnterOnStatusOpensLoadingDiff(t *testing.T) {
 }
 
 func TestEnterOnStagedRowOpensStagedDiff(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.status.Files = []model.FileStatus{{Path: "s.txt", Staged: 'M', Unstaged: '.'}}
 	m.focus = panelStaged
@@ -115,6 +117,7 @@ func TestEnterOnStagedRowOpensStagedDiff(t *testing.T) {
 }
 
 func TestEnterOnConflictedRowIsNoOp(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.sel[panelFiles] = 2 // conflict.txt
 	u, cmd := m.Update(keyMsg("enter"))
@@ -125,6 +128,7 @@ func TestEnterOnConflictedRowIsNoOp(t *testing.T) {
 }
 
 func TestEnterOnStatusRefusedWhenNarrow(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.width = 59
 	u, cmd := m.Update(keyMsg("enter"))
@@ -135,6 +139,7 @@ func TestEnterOnStatusRefusedWhenNarrow(t *testing.T) {
 }
 
 func TestCanShowFileDiffZeroWidthAllowed(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.width = 0 // before the first WindowSizeMsg
 	if !m.canShowFileDiff() {
@@ -143,6 +148,7 @@ func TestCanShowFileDiffZeroWidthAllowed(t *testing.T) {
 }
 
 func TestEnterOnStatusNoOpWhileRunning(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.running = true
 	u, cmd := m.Update(keyMsg("enter"))
@@ -153,6 +159,7 @@ func TestEnterOnStatusNoOpWhileRunning(t *testing.T) {
 }
 
 func TestStatusLoaderModifiedFile(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -179,6 +186,7 @@ func TestStatusLoaderModifiedFile(t *testing.T) {
 }
 
 func TestStatusLoaderUntrackedIsAllAdded(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "u.txt"), []byte("a\nb\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -198,6 +206,7 @@ func TestStatusLoaderUntrackedIsAllAdded(t *testing.T) {
 }
 
 func TestStatusLoaderDeletedIsAllDel(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "d.txt"), []byte("a\nb\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -226,6 +235,7 @@ func TestStatusLoaderDeletedIsAllDel(t *testing.T) {
 // a line modified-then-staged shows, while a further unstaged edit on disk
 // does not. It also pins the staged tag and header label.
 func TestStatusLoaderStagedShowsIndexNotWorktree(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -277,6 +287,7 @@ func TestStatusLoaderStagedShowsIndexNotWorktree(t *testing.T) {
 // already-staged change is in the index on both sides, so it never appears as a
 // change.
 func TestStatusLoaderFilesShowsUnstagedNotStaged(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -325,6 +336,7 @@ func TestStatusLoaderFilesShowsUnstagedNotStaged(t *testing.T) {
 }
 
 func TestDiffMsgStaleTagDropped(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m = m.pushLayer(&diffView{loading: true})
 	m.diffTag = "status:current.txt"
@@ -343,6 +355,7 @@ func TestDiffMsgStaleTagDropped(t *testing.T) {
 }
 
 func TestDiffViewKeysScrollAndJump(t *testing.T) {
+	t.Parallel()
 	// Two changes (rows 20, 30) in a 40-row file, body 10; both top-anchorable.
 	mk := func() Model { return openedDiffModel(12, sameRowsTUI(40, 20, 30), []int{20, 30}) }
 
@@ -374,6 +387,7 @@ func TestDiffViewKeysScrollAndJump(t *testing.T) {
 }
 
 func TestDiffViewEscClosesAndQInert(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m = m.pushLayer(&diffView{})
 	m.diffTag = "status:x"
@@ -400,6 +414,7 @@ func TestDiffViewEscClosesAndQInert(t *testing.T) {
 // esc goes back one layout: a diff opened over the files view returns to that
 // files view (the surface beneath), not all the way to the base layout.
 func TestDiffEscReturnsToFilesViewBeneath(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "x", path: "x"}}}
 	m = m.pushLayer(&diffView{})
@@ -415,6 +430,7 @@ func TestDiffEscReturnsToFilesViewBeneath(t *testing.T) {
 }
 
 func TestDiffViewSwallowsActionKeys(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m = m.pushLayer(&diffView{})
 	m.diffTag = "status:x"
@@ -428,6 +444,7 @@ func TestDiffViewSwallowsActionKeys(t *testing.T) {
 }
 
 func TestDiffViewEscReturnsToFilesView(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "x", path: "x"}}, sel: 0}
 	m.filesTreeFocused = true
@@ -444,6 +461,7 @@ func TestDiffViewEscReturnsToFilesView(t *testing.T) {
 }
 
 func TestDiffViewClosedOnNarrowResize(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m = m.pushLayer(&diffView{})
 	m.diffTag = "status:x"
@@ -458,6 +476,7 @@ func TestDiffViewClosedOnNarrowResize(t *testing.T) {
 }
 
 func TestReRootClearsDiffView(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	m := diffModel()
 	m.svc = domain.New(repo)
@@ -471,6 +490,7 @@ func TestReRootClearsDiffView(t *testing.T) {
 }
 
 func TestDiffViewWheelScrolls(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	// Need enough rows that the scroll clamp doesn't fire: body = height-2 = 38,
 	// so we need at least body+wheelStep rows = 41.
@@ -484,6 +504,7 @@ func TestDiffViewWheelScrolls(t *testing.T) {
 }
 
 func TestDiffViewJumpAtMaxScrollIsNoOp(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.height = 12 // body = 10
 	rows := make([]textdiff.Row, 35)
@@ -509,6 +530,7 @@ func TestDiffViewJumpAtMaxScrollIsNoOp(t *testing.T) {
 }
 
 func TestEnterInTreeOpensCommitDiff(t *testing.T) {
+	t.Parallel()
 	m := filesViewModel()
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
@@ -531,6 +553,7 @@ func TestEnterInTreeOpensCommitDiff(t *testing.T) {
 // m.filesTitle — a localized title (no English "Files " prefix) would
 // otherwise leak straight into the diff header instead of being stripped.
 func TestEnterInTreeContextComesFromFilesContext(t *testing.T) {
+	t.Parallel()
 	m := filesViewModel()
 	m.filesTitle = "ファイル abc1234def subject line" // localized title: no "Files " prefix
 	m.filesContext = "abc1234def subject line"
@@ -552,6 +575,7 @@ func TestEnterInTreeContextComesFromFilesContext(t *testing.T) {
 }
 
 func TestEnterInTreeNoOpOnHeading(t *testing.T) {
+	t.Parallel()
 	m := filesViewModel()
 	m.filesView.sel = 0 // the heading row
 	u, cmd := m.Update(keyMsg("enter"))
@@ -561,6 +585,7 @@ func TestEnterInTreeNoOpOnHeading(t *testing.T) {
 }
 
 func TestEnterInTreeNoOpOnCommitsSide(t *testing.T) {
+	t.Parallel()
 	m := filesViewModel()
 	m.filesTreeFocused = false
 	u, cmd := m.Update(keyMsg("enter"))
@@ -570,6 +595,7 @@ func TestEnterInTreeNoOpOnCommitsSide(t *testing.T) {
 }
 
 func TestEnterInTreeNarrowRefusalExplains(t *testing.T) {
+	t.Parallel()
 	m := filesViewModel()
 	m.width = 55 // files view open (>=40) but diff needs >=60
 	u, cmd := m.Update(keyMsg("enter"))
@@ -583,6 +609,7 @@ func TestEnterInTreeNarrowRefusalExplains(t *testing.T) {
 }
 
 func TestCommitLoaderModifiedAndAdded(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("v1\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -624,6 +651,7 @@ func TestCommitLoaderModifiedAndAdded(t *testing.T) {
 }
 
 func TestCommitLoaderRootCommit(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	hash := gitOut(t, dir, "rev-list", "--max-parents=0", "HEAD")
 	// Every root-commit file has status "A" (CommitFiles passes --root), so
@@ -658,6 +686,7 @@ func sameRowsTUI(n int, changed ...int) []textdiff.Row {
 }
 
 func TestDiffNPAliasCtrlJumps(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.height = 12 // body = 10
 	rows := sameRowsTUI(40, 20, 30)
@@ -682,6 +711,7 @@ func TestDiffNPAliasCtrlJumps(t *testing.T) {
 }
 
 func TestDiffJumpLandsWithContextAbove(t *testing.T) {
+	t.Parallel()
 	// Focusing a change anchors it with up to diffLead(3) rows above — exercised
 	// here by the open, which focuses the first change (row 20 → offset 17).
 	m := openedDiffModel(12, sameRowsTUI(40, 20), []int{20})
@@ -691,6 +721,7 @@ func TestDiffJumpLandsWithContextAbove(t *testing.T) {
 }
 
 func TestDiffToggleFlipsModeAndSession(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.height = 12
 	m = m.pushLayer(diffViewWith(sameRowsTUI(40, 20), []int{20}))
@@ -716,6 +747,7 @@ func TestDiffToggleFlipsModeAndSession(t *testing.T) {
 }
 
 func TestDiffTogglePreservesBlock(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.height = 12 // body = 10
 	m = m.pushLayer(diffViewWith(sameRowsTUI(60, 10, 50), []int{10, 50}))
@@ -754,6 +786,7 @@ func wrapDiffModel() Model {
 }
 
 func TestDiffWrapAroundForward(t *testing.T) {
+	t.Parallel()
 	m := wrapDiffModel() // opens on the first change (cur 0 of 2)
 	u, _ := m.Update(keyMsg("n"))
 	if got := u.(Model).diffLayer().currentBlockOrdinal(); got != 1 {
@@ -779,6 +812,7 @@ func TestDiffWrapAroundForward(t *testing.T) {
 }
 
 func TestDiffWrapAroundBackward(t *testing.T) {
+	t.Parallel()
 	m := wrapDiffModel() // opens on the first change
 	if m.diffLayer().currentBlockOrdinal() != 0 {
 		t.Fatal("setup: expected to open on the first change")
@@ -797,6 +831,7 @@ func TestDiffWrapAroundBackward(t *testing.T) {
 }
 
 func TestDiffWrapDisarmedByOtherKey(t *testing.T) {
+	t.Parallel()
 	m := wrapDiffModel()
 	u, _ := m.Update(keyMsg("n"))        // last change (of 2)
 	u, _ = u.(Model).Update(keyMsg("n")) // boundary: primes wrap
@@ -823,6 +858,7 @@ func TestDiffWrapDisarmedByOtherKey(t *testing.T) {
 // 10-row body, maxOffset 30) so none can be top-anchored. The counter must
 // still step all the way to N/N, and only then does the wrap arm.
 func TestDiffCounterReachesLastWhenBottomBunched(t *testing.T) {
+	t.Parallel()
 	m := openedDiffModel(12, sameRowsTUI(40, 5, 33, 36, 38), []int{5, 33, 36, 38})
 	n := len(m.diffLayer().dispBlocks) // 4
 	u := tea.Model(m)
@@ -853,6 +889,7 @@ func TestDiffCounterReachesLastWhenBottomBunched(t *testing.T) {
 // free-scrolling down past the first changes, n must continue from the scrolled
 // position, not jump back up to change 2 off a stale focus index.
 func TestDiffNavResumesFromScrollPosition(t *testing.T) {
+	t.Parallel()
 	// 5 changes spread down an 80-row file, body 10.
 	m := openedDiffModel(12, sameRowsTUI(80, 5, 15, 25, 35, 45), []int{5, 15, 25, 35, 45})
 	u, _ := m.Update(keyMsg("pgdown"))
@@ -872,6 +909,7 @@ func TestDiffNavResumesFromScrollPosition(t *testing.T) {
 // offset is pinned at 0 forever. Navigation and the counter must still work off
 // the focus index, not the (immovable) offset.
 func TestDiffNavWhenDiffFitsOnScreen(t *testing.T) {
+	t.Parallel()
 	m := openedDiffModel(12, sameRowsTUI(8, 2, 4, 6), []int{2, 4, 6})
 	if m.diffLayer().offset != 0 {
 		t.Fatalf("setup: a diff this small can't scroll, offset = %d", m.diffLayer().offset)
@@ -898,6 +936,7 @@ func TestDiffNavWhenDiffFitsOnScreen(t *testing.T) {
 }
 
 func TestStatusLoaderOpensAtFirstDifference(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	var base, work strings.Builder
 	for i := 0; i < 60; i++ {
@@ -934,6 +973,7 @@ func TestStatusLoaderOpensAtFirstDifference(t *testing.T) {
 }
 
 func TestDiffOpenInheritsSessionMode(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\nb\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -954,6 +994,7 @@ func TestDiffOpenInheritsSessionMode(t *testing.T) {
 }
 
 func TestCommitLoaderMergeCommitUsesFirstParent(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("base\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -1011,6 +1052,7 @@ func TestCommitLoaderMergeCommitUsesFirstParent(t *testing.T) {
 }
 
 func TestCommitDiffSecondOpenServedFromCache(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -1049,6 +1091,7 @@ func TestCommitDiffSecondOpenServedFromCache(t *testing.T) {
 }
 
 func TestRelayoutWrapOffMirrorsLines(t *testing.T) {
+	t.Parallel()
 	rows := sameRowsTUI(5, 2)
 	v := diffViewWith(rows, []int{2})
 	v.relayout(0) // width 0 ⇒ wrap-off 1:1
@@ -1066,6 +1109,7 @@ func TestRelayoutWrapOffMirrorsLines(t *testing.T) {
 }
 
 func TestRelayoutWrapOnExpandsAndRemapsBlocks(t *testing.T) {
+	t.Parallel()
 	rows := []textdiff.Row{
 		{Kind: textdiff.Same, Left: "a", Right: "a", LeftNo: 1, RightNo: 1},
 		{Kind: textdiff.Changed, Left: "one two three four", Right: "one two three FOUR", LeftNo: 2, RightNo: 2},
@@ -1097,6 +1141,7 @@ func TestRelayoutWrapOnExpandsAndRemapsBlocks(t *testing.T) {
 }
 
 func TestRelayoutWrapOnGapSideHasNilSegments(t *testing.T) {
+	t.Parallel()
 	rows := []textdiff.Row{{Kind: textdiff.Add, Right: "added text here", RightNo: 1}}
 	v := diffViewWith(rows, []int{0})
 	v.long = longWrap
@@ -1109,6 +1154,7 @@ func TestRelayoutWrapOnGapSideHasNilSegments(t *testing.T) {
 }
 
 func TestDiffZCyclesLongMode(t *testing.T) {
+	t.Parallel()
 	rows := sameRowsTUI(40, 20)
 	m := diffModel()
 	m.width, m.height = 80, 24
@@ -1133,6 +1179,7 @@ func TestDiffZCyclesLongMode(t *testing.T) {
 }
 
 func TestDiffOpenInheritsSessionLongMode(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\nb\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -1153,6 +1200,7 @@ func TestDiffOpenInheritsSessionLongMode(t *testing.T) {
 }
 
 func TestDiffResizeReanchorsToTopLine(t *testing.T) {
+	t.Parallel()
 	// A long line wraps to MANY rows at width 60 and FEW at width 160, so the
 	// re-wrap genuinely moves lineStart[10]. Without re-anchoring, offset would
 	// clamp to a different line — a width where the wrap count is unchanged
@@ -1194,6 +1242,7 @@ func TestDiffResizeReanchorsToTopLine(t *testing.T) {
 }
 
 func TestDiffNextBlockWhenWrappedLandsOnChangeRow(t *testing.T) {
+	t.Parallel()
 	// Two changes among wide wrapping lines: nextBlock must bring the 2nd
 	// change's first display row into view through the wrapped display stream.
 	rows := make([]textdiff.Row, 20)
@@ -1217,6 +1266,7 @@ func TestDiffNextBlockWhenWrappedLandsOnChangeRow(t *testing.T) {
 }
 
 func TestDiffScrollPanKeys(t *testing.T) {
+	t.Parallel()
 	rows := make([]textdiff.Row, 5)
 	wide := strings.Repeat("word ", 40) // 200 cols, far wider than any pane
 	for i := range rows {
@@ -1246,6 +1296,7 @@ func TestDiffScrollPanKeys(t *testing.T) {
 }
 
 func TestDiffPanNoOpWhenNotScroll(t *testing.T) {
+	t.Parallel()
 	rows := sameRowsTUI(5, 2)
 	m := diffModel()
 	m.width, m.height = 80, 24
@@ -1262,6 +1313,7 @@ func TestDiffPanNoOpWhenNotScroll(t *testing.T) {
 }
 
 func TestDiffResizeReclampsHOffset(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("x", 200)
 	rows := make([]textdiff.Row, 3)
 	for i := range rows {

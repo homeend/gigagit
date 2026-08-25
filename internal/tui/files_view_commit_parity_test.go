@@ -18,6 +18,7 @@ func filesViewGraphModel(treeFocused bool) Model {
 // On the commit-list side the graph window keys must behave exactly as they do
 // in the bare Commits panel: > widens, shift+arrows pan, = snaps.
 func TestFilesViewCommitSideDrivesGraphWindow(t *testing.T) {
+	t.Parallel()
 	m := filesViewGraphModel(false)
 	m.cfg.UI.CommitGraphStep = 4
 	m.cfg.UI.CommitGraphPanStep = 5
@@ -39,6 +40,7 @@ func TestFilesViewCommitSideDrivesGraphWindow(t *testing.T) {
 // On the file-tree side the same keys must stay with the tree (horizontal
 // scroll), never touching the graph window.
 func TestFilesViewTreeSideKeepsTreeHscroll(t *testing.T) {
+	t.Parallel()
 	m := filesViewGraphModel(true)
 	m.filesView.mode = modeScroll
 
@@ -60,6 +62,7 @@ func TestFilesViewTreeSideKeepsTreeHscroll(t *testing.T) {
 // On the commit-list side the . menu must offer the full commit operations
 // (parity with the Commits panel) plus the graph window controls.
 func TestFilesViewCommitSideMenuHasCommitOps(t *testing.T) {
+	t.Parallel()
 	m := filesViewGraphModel(false)
 	got := map[string]bool{}
 	for _, r := range availableActions(m) {
@@ -77,6 +80,7 @@ func TestFilesViewCommitSideMenuHasCommitOps(t *testing.T) {
 // (or, for [l], close the view) — exactly the leak the copy-only early-return
 // guards against. This invariant fails fast if such a row ever leaks back in.
 func TestFilesViewCommitSideMenuRowsAllRunnable(t *testing.T) {
+	t.Parallel()
 	m := filesViewGraphModel(false)
 	for _, r := range availableActions(m) {
 		if r.run == nil {
@@ -88,6 +92,7 @@ func TestFilesViewCommitSideMenuRowsAllRunnable(t *testing.T) {
 // On the file-tree side the . menu stays copy-only (file context), with no
 // commit operations.
 func TestFilesViewTreeSideMenuIsCopyOnly(t *testing.T) {
+	t.Parallel()
 	m := filesViewGraphModel(true)
 	for _, r := range availableActions(m) {
 		if r.id == "commit-cherry-pick" {
@@ -100,6 +105,7 @@ func TestFilesViewTreeSideMenuIsCopyOnly(t *testing.T) {
 // handler executes directly (no key-replay that the files view would swallow).
 // "Create branch here" is a pure action: it pushes the branch popup.
 func TestFilesViewCommitSideMenuRowRuns(t *testing.T) {
+	t.Parallel()
 	m := filesViewGraphModel(false)
 	var row actionRow
 	for _, r := range availableActions(m) {

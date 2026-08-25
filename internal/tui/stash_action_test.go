@@ -9,6 +9,7 @@ import (
 // enter on the stash list drills into the file tree (the commits gesture);
 // the Apply/Pop/Drop actions live in the "." menu.
 func TestStashEnterOpensFiles(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30, sel: map[panel]int{}}
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "WIP"}}}
 	mm, _ := m.updateStashViewKey(keyMsg("enter"))

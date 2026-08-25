@@ -16,6 +16,7 @@ func pickModel() Model {
 }
 
 func TestPickProbeStaleGenDropped(t *testing.T) {
+	t.Parallel()
 	m := pickModel()
 	m.pickGen = 5
 	mm, cmd := m.Update(pickProbeMsg{gen: 4, target: pickTarget{sha: "abc"}, found: true})
@@ -26,6 +27,7 @@ func TestPickProbeStaleGenDropped(t *testing.T) {
 }
 
 func TestPickProbeFoundOpensCherryPickModal(t *testing.T) {
+	t.Parallel()
 	m := pickModel()
 	msg := pickProbeMsg{
 		gen:    m.pickGen,
@@ -53,6 +55,7 @@ func TestPickProbeFoundOpensCherryPickModal(t *testing.T) {
 }
 
 func TestPickProbeCancelDoesNothing(t *testing.T) {
+	t.Parallel()
 	m := pickModel()
 	mm, _ := m.Update(pickProbeMsg{gen: m.pickGen, target: pickTarget{sha: "abc"},
 		line: model.LogLine{Hash: "abc1234", Subject: "s"}, found: true})
@@ -65,6 +68,7 @@ func TestPickProbeCancelDoesNothing(t *testing.T) {
 }
 
 func TestPickProbeMissingWithPatchAppliesPatch(t *testing.T) {
+	t.Parallel()
 	m := pickModel()
 	st := shelf.NewFileStore(t.TempDir())
 	e, err := st.PutCommit("",
@@ -110,6 +114,7 @@ func TestPickProbeMissingWithPatchAppliesPatch(t *testing.T) {
 }
 
 func TestPickProbeMissingNoPatchNotices(t *testing.T) {
+	t.Parallel()
 	m := pickModel()
 	// Shelf entry without a patch.
 	mm, _ := m.Update(pickProbeMsg{gen: m.pickGen,
@@ -151,6 +156,7 @@ func commitBookmarkFixture(id, sha, label string) model.Bookmark {
 }
 
 func TestShelfPopupAOnCommitEntryProbes(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(commitShelfEntry("e1", "a1b2c3d4e5f6a7b8", "fix"))
 	gen0 := m.pickGen
 	mm, cmd := m.Update(keyMsg("a"))
@@ -161,6 +167,7 @@ func TestShelfPopupAOnCommitEntryProbes(t *testing.T) {
 }
 
 func TestShelfPopupAOnFileEntryNotices(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	mm, cmd := m.Update(keyMsg("a"))
 	m = mm.(Model)
@@ -170,6 +177,7 @@ func TestShelfPopupAOnFileEntryNotices(t *testing.T) {
 }
 
 func TestBookmarkPopupAOnCommitBookmarkProbes(t *testing.T) {
+	t.Parallel()
 	m := bookmarkPopModel(commitBookmarkFixture("b1", "a1b2c3d4e5f6a7b8", "fix thing"))
 	gen0 := m.pickGen
 	mm, cmd := m.Update(keyMsg("a"))
@@ -180,6 +188,7 @@ func TestBookmarkPopupAOnCommitBookmarkProbes(t *testing.T) {
 }
 
 func TestBookmarkPopupAOnFileBookmarkNotices(t *testing.T) {
+	t.Parallel()
 	m := bookmarkPopModel(model.Bookmark{ID: "b1", State: model.StateUnstaged, Path: "x.go"})
 	mm, cmd := m.Update(keyMsg("a"))
 	m = mm.(Model)
@@ -189,6 +198,7 @@ func TestBookmarkPopupAOnFileBookmarkNotices(t *testing.T) {
 }
 
 func TestSwitcherEscBumpsPickGen(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(commitShelfEntry("e1", "a1b2c3d4e5f6a7b8", "fix"))
 	gen0 := m.pickGen
 	mm, _ := m.Update(keyMsg("esc"))
@@ -199,6 +209,7 @@ func TestSwitcherEscBumpsPickGen(t *testing.T) {
 }
 
 func TestSwitcherCompareModeIgnoresA(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(commitShelfEntry("e1", "a1b2c3d4e5f6a7b8", "fix"))
 	ref := model.FileRef{Source: model.SourceUnstaged, Path: "x.go"}
 	m.shelfSwitcher().compareRef = &ref
@@ -211,6 +222,7 @@ func TestSwitcherCompareModeIgnoresA(t *testing.T) {
 }
 
 func TestSwitcherHintsAdvertiseCherryPick(t *testing.T) {
+	t.Parallel()
 	sm := shelfPopModel(commitShelfEntry("e1", "a1b2c3d4e5f6a7b8", "fix"))
 	if out := sm.renderShelfPopupBox(sm.shelfSwitcher()); !strings.Contains(out, "[a] cherry-pick") {
 		t.Fatalf("shelf hint line missing [a] cherry-pick:\n%s", out)
@@ -231,6 +243,7 @@ func TestSwitcherHintsAdvertiseCherryPick(t *testing.T) {
 }
 
 func TestPickProbeDroppedWhenModalOpen(t *testing.T) {
+	t.Parallel()
 	m := pickModel()
 	m.modal = &decisionState{req: engine.DecisionRequest{
 		ID: "other", Prompt: "unrelated?", Options: []string{"x", "y"}}}

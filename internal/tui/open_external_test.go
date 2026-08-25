@@ -10,6 +10,7 @@ import (
 )
 
 func TestWriteReadOnlyTempFilePreservesExtension(t *testing.T) {
+	t.Parallel()
 	path, err := writeReadOnlyTempFile("pkg/sub/foo.go", []byte("package x\n"))
 	if err != nil {
 		t.Fatal(err)
@@ -34,6 +35,7 @@ func TestWriteReadOnlyTempFilePreservesExtension(t *testing.T) {
 // removeTempFile must delete even a 0400 file (the read-only bit is cleared
 // first), which is what lets the Windows path succeed too.
 func TestRemoveTempFileDeletesReadOnly(t *testing.T) {
+	t.Parallel()
 	path, err := writeReadOnlyTempFile("foo.txt", []byte("hi"))
 	if err != nil {
 		t.Fatal(err)
@@ -45,6 +47,7 @@ func TestRemoveTempFileDeletesReadOnly(t *testing.T) {
 }
 
 func TestOpenInEditorCmdWritesResolvedBytes(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	cmd := m.openInEditorCmd("a/b/main.go", func(context.Context) ([]byte, error) {
 		return []byte("func main(){}\n"), nil
@@ -67,6 +70,7 @@ func TestOpenInEditorCmdWritesResolvedBytes(t *testing.T) {
 }
 
 func TestOpenInEditorCmdSurfacesResolveError(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	cmd := m.openInEditorCmd("x.go", func(context.Context) ([]byte, error) {
 		return nil, errors.New("boom")
@@ -81,6 +85,7 @@ func TestOpenInEditorCmdSurfacesResolveError(t *testing.T) {
 // name>" notice (the REAL name, not the temp path) — and must NOT trigger a
 // status reload.
 func TestEditorViewFinishedCleansUpAndNotices(t *testing.T) {
+	t.Parallel()
 	path, err := writeReadOnlyTempFile("foo.go", []byte("x"))
 	if err != nil {
 		t.Fatal(err)

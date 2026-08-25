@@ -9,6 +9,7 @@ import (
 )
 
 func TestCommitNamePopupEnterDispatches(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 1)
 	p := &commitNamePopup{commit: model.Commit{Hash: "a1b2c3d4e5", Subject: "subj"}, forShelf: true, name: newTextField("subj")}
 	_, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
@@ -18,6 +19,7 @@ func TestCommitNamePopupEnterDispatches(t *testing.T) {
 }
 
 func TestCommitNamePopupCtrlSInsertsShortSha(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 1)
 	p := &commitNamePopup{commit: model.Commit{Hash: "a1b2c3d4e5", Subject: ""}, forShelf: false, name: newTextField("")}
 	p.update(m, tea.KeyMsg{Type: tea.KeyCtrlS})
@@ -27,6 +29,7 @@ func TestCommitNamePopupCtrlSInsertsShortSha(t *testing.T) {
 }
 
 func TestCommitNamePopupEscNoDispatch(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 1)
 	p := &commitNamePopup{commit: model.Commit{Hash: "a1b2c3d4e5"}, forShelf: true, name: newTextField("x")}
 	_, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEsc})
@@ -36,6 +39,7 @@ func TestCommitNamePopupEscNoDispatch(t *testing.T) {
 }
 
 func TestCommitBookmarkLabelFallsBackToSubject(t *testing.T) {
+	t.Parallel()
 	if b := commitBookmark(model.Commit{Hash: "h", Subject: "the subject"}, ""); b.Label != "the subject" {
 		t.Fatalf("empty label should fall back to subject, got %q", b.Label)
 	}
@@ -51,6 +55,7 @@ func TestCommitBookmarkLabelFallsBackToSubject(t *testing.T) {
 // fails loudly.
 
 func TestCommitShelfRowOpensNamePopup(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	r, ok := m.commitShelfRow()
@@ -71,6 +76,7 @@ func TestCommitShelfRowOpensNamePopup(t *testing.T) {
 }
 
 func TestCommitBookmarkRowOpensNamePopup(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	r, ok := m.commitBookmarkRow()
@@ -91,6 +97,7 @@ func TestCommitBookmarkRowOpensNamePopup(t *testing.T) {
 }
 
 func TestReflogShelfRowOpensNamePopup(t *testing.T) {
+	t.Parallel()
 	m := reflogTestModel()
 	m.focus = panelReflog
 	r, ok := m.reflogShelfRow()
@@ -111,6 +118,7 @@ func TestReflogShelfRowOpensNamePopup(t *testing.T) {
 }
 
 func TestReflogBookmarkRowOpensNamePopup(t *testing.T) {
+	t.Parallel()
 	m := reflogTestModel()
 	m.focus = panelReflog
 	r, ok := m.reflogBookmarkRow()

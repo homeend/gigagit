@@ -26,6 +26,7 @@ func noticeModelWithNotice(t *testing.T) (Model, string) {
 }
 
 func TestBangOpensDialogAndMarksRead(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeModelWithNotice(t)
 	if !m.noticesUnread {
 		t.Fatal("precondition: unread")
@@ -44,6 +45,7 @@ func TestBangOpensDialogAndMarksRead(t *testing.T) {
 }
 
 func TestBangInertWhileFilterTyping(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeModelWithNotice(t)
 	m.filterTyping = true
 	m.filterPanel = m.focus
@@ -54,6 +56,7 @@ func TestBangInertWhileFilterTyping(t *testing.T) {
 }
 
 func TestDialogWithZeroNoticesSaysSo(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeTestModel(t)
 	nm, _ := m.Update(keyMsg("!"))
 	m = nm.(Model)
@@ -66,6 +69,7 @@ func TestDialogWithZeroNoticesSaysSo(t *testing.T) {
 }
 
 func TestEscClosesActionsThenList(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeModelWithNotice(t)
 	nm, _ := m.Update(keyMsg("!"))
 	m = nm.(Model)
@@ -90,6 +94,7 @@ func TestEscClosesActionsThenList(t *testing.T) {
 }
 
 func TestNotNowDismissesForSession(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeModelWithNotice(t)
 	nm, _ := m.Update(keyMsg("!"))
 	m = nm.(Model)
@@ -111,6 +116,7 @@ func TestNotNowDismissesForSession(t *testing.T) {
 }
 
 func TestNeverPersistsDismissal(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeModelWithNotice(t)
 	repoKey := m.notices[0].repoKey
 	nm, _ := m.Update(keyMsg("!"))
@@ -131,6 +137,7 @@ func TestNeverPersistsDismissal(t *testing.T) {
 }
 
 func TestWriteAndEnableRunsBothOpsForReal(t *testing.T) {
+	t.Parallel()
 	m, dir := noticeModelWithNotice(t)
 	nm, _ := m.Update(keyMsg("!"))
 	m = nm.(Model)
@@ -157,6 +164,7 @@ func TestWriteAndEnableRunsBothOpsForReal(t *testing.T) {
 }
 
 func TestDialogSwallowsGlobalKeys(t *testing.T) {
+	t.Parallel()
 	m, _ := noticeModelWithNotice(t)
 	nm, _ := m.Update(keyMsg("!"))
 	m = nm.(Model)
@@ -171,6 +179,7 @@ func TestDialogSwallowsGlobalKeys(t *testing.T) {
 }
 
 func TestNoticePopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
+	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
 	for i := 0; i < 20; i++ { // more than the fixed cap of 12

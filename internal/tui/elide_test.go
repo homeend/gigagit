@@ -10,6 +10,7 @@ import (
 // alternating right/left inward — and replaces the dropped contiguous middle
 // with one "…".
 func TestElidePath(t *testing.T) {
+	t.Parallel()
 	const p = "/aa/bb/cc/dd/ee" // 15 cols, 5 segments
 	cases := []struct {
 		in   string
@@ -46,6 +47,7 @@ func TestElidePath(t *testing.T) {
 
 // elideNameMiddle keeps the name's beginning and its extension (or ending).
 func TestElideNameMiddle(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		in   string
 		n    int

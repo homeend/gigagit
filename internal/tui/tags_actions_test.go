@@ -14,6 +14,7 @@ import (
 )
 
 func TestTagsCopyRows(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelTags
 	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234", Annotated: true}}
@@ -30,6 +31,7 @@ func TestTagsCopyRows(t *testing.T) {
 }
 
 func TestTagsCopyShaResolvesTarget(t *testing.T) {
+	t.Parallel()
 	fr := gitexec.NewFakeRunner()
 	fr.SetResponse("git rev-parse", gitexec.Result{Stdout: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"})
 	m := footerModel()
@@ -59,6 +61,7 @@ func TestTagsCopyShaResolvesTarget(t *testing.T) {
 }
 
 func TestEnterOnTagJumpsToCommit(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.commits = []model.Commit{
 		{Hash: "1111111aaaa", Subject: "one"},
@@ -85,6 +88,7 @@ func TestEnterOnTagJumpsToCommit(t *testing.T) {
 // same "go to" contract as the Branches-panel enter — instead of forking into
 // the commit's files view.
 func TestEnterOnTagNotLoadedStartsEagerSearch(t *testing.T) {
+	t.Parallel()
 	m := newTestModelForReload(t) // real FakeRunner feed, can load more
 	m.commits = []model.Commit{{Hash: "1111111aaaa", Subject: "one"}}
 	m.tags = []model.Tag{{Name: "v1", Target: "9999999", Subject: "rel one"}}
@@ -107,6 +111,7 @@ func TestEnterOnTagNotLoadedStartsEagerSearch(t *testing.T) {
 // With no feed to page (nil = cannot load more), the eager fallback reports
 // exhaustion instead of silently stopping or opening a files view.
 func TestEnterOnTagNotLoadedNotifies(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.commits = []model.Commit{{Hash: "1111111aaaa", Subject: "one"}}
 	m.tags = []model.Tag{{Name: "v1", Target: "9999999", Subject: "rel one"}}
@@ -127,6 +132,7 @@ func TestEnterOnTagNotLoadedNotifies(t *testing.T) {
 // opens the target commit's changed-files view directly by hash (the reflog
 // pattern, no paging).
 func TestTagShowFilesRowPresent(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.tags = []model.Tag{{Name: "v1", Target: "9999999", Subject: "rel one"}}
 	m.activeFilesTab = panelTags
@@ -147,6 +153,7 @@ func TestTagShowFilesRowPresent(t *testing.T) {
 // "(loading…)") — the short hash must match through loadCommitFilesCmd →
 // commitFilesMsg → filesHash.
 func TestTagShowFilesRowLoadsCommitFilesEndToEnd(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	if len(m.commits) == 0 {
@@ -188,6 +195,7 @@ func TestTagShowFilesRowLoadsCommitFilesEndToEnd(t *testing.T) {
 }
 
 func TestTagDeleteRowOpensConfirmThenDeletes(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	gitIn(t, dir, "tag", "v1.0.0") // before loadModel so the snapshot loads it
 	m := loadModel(t, repo)
@@ -217,6 +225,7 @@ func TestTagDeleteRowOpensConfirmThenDeletes(t *testing.T) {
 }
 
 func TestTagDeleteRowCancelKeepsTag(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	gitIn(t, dir, "tag", "v1.0.0")
 	m := loadModel(t, repo)
@@ -237,6 +246,7 @@ func TestTagDeleteRowCancelKeepsTag(t *testing.T) {
 }
 
 func TestTagDeleteRowInertOffTagsPanel(t *testing.T) {
+	t.Parallel()
 	_, repo := newRepoDir(t)
 	m := loadModel(t, repo)
 	m.focus = panelBranches
@@ -252,6 +262,7 @@ func gitCurrentBranch(t *testing.T, dir string) string {
 }
 
 func TestTagCheckoutRowDetached(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	gitIn(t, dir, "tag", "v1.0.0")
 	gitIn(t, dir, "commit", "--allow-empty", "-m", "c2")
@@ -281,6 +292,7 @@ func TestTagCheckoutRowDetached(t *testing.T) {
 }
 
 func TestTagCheckoutPopupCreatesBranch(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	gitIn(t, dir, "tag", "v1.0.0")
 	m := loadModel(t, repo)
@@ -303,6 +315,7 @@ func TestTagCheckoutPopupCreatesBranch(t *testing.T) {
 
 // Detached HEAD (CurrentBranch == "") must still render without panicking.
 func TestRenderWithDetachedHead(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.status.Branch = "" // detached
 	m.focus = panelCommits
@@ -316,6 +329,7 @@ func TestRenderWithDetachedHead(t *testing.T) {
 
 // "Create branch…" seeds the popup's branch name with the tag name.
 func TestTagCheckoutBranchPrefilledFromTag(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.tags = []model.Tag{{Name: "v1.0.0"}}
 	m.focus = panelTags
@@ -338,6 +352,7 @@ func TestTagCheckoutBranchPrefilledFromTag(t *testing.T) {
 // "Create worktree…" opens the worktree dialog seeded with the tag name, and the
 // path leaf is the tag name sanitized into a single segment ('/' -> '-').
 func TestTagCheckoutWorktreePrefilledAndSanitized(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "wt/<parent-branch>", "../<repo>.worktrees/<branch>")
 	m.tags = []model.Tag{{Name: "release/1.0"}}
 	m.focus = panelTags
@@ -367,6 +382,7 @@ func TestTagCheckoutWorktreePrefilledAndSanitized(t *testing.T) {
 }
 
 func TestTagPushRowGating(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.tags = []model.Tag{{Name: "v1.0.0"}}
 	m.focus = panelBranches
@@ -391,6 +407,7 @@ func tagsMergeModel() Model {
 }
 
 func TestTagMergeRebaseRowsPresent(t *testing.T) {
+	t.Parallel()
 	m := tagsMergeModel()
 	got := ids(availableActions(m))
 	if !got["tag-merge"] || !got["tag-rebase"] {
@@ -399,6 +416,7 @@ func TestTagMergeRebaseRowsPresent(t *testing.T) {
 }
 
 func TestTagMergeRebaseHiddenOnDetachedHEAD(t *testing.T) {
+	t.Parallel()
 	m := tagsMergeModel()
 	m.status.Branch = "" // detached
 	got := ids(availableActions(m))
@@ -408,6 +426,7 @@ func TestTagMergeRebaseHiddenOnDetachedHEAD(t *testing.T) {
 }
 
 func TestTagMergeRowDispatches(t *testing.T) {
+	t.Parallel()
 	m := tagsMergeModel()
 	m.cfg.UI.DisableSlowOpConfirm = true // test op wiring, not confirm UX
 	row, ok := m.tagMergeRow()
@@ -420,6 +439,7 @@ func TestTagMergeRowDispatches(t *testing.T) {
 }
 
 func TestTagRebaseRowDispatches(t *testing.T) {
+	t.Parallel()
 	m := tagsMergeModel()
 	m.cfg.UI.DisableSlowOpConfirm = true // test op wiring, not confirm UX
 	row, ok := m.tagRebaseRow()
@@ -432,6 +452,7 @@ func TestTagRebaseRowDispatches(t *testing.T) {
 }
 
 func TestTagDeleteRemoteRowPresent(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelTags
 	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
@@ -443,6 +464,7 @@ func TestTagDeleteRemoteRowPresent(t *testing.T) {
 }
 
 func TestTagDeleteRemoteRowInertOffTagsPanel(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	if _, ok := m.tagDeleteRemoteRow(); ok {
@@ -451,6 +473,7 @@ func TestTagDeleteRemoteRowInertOffTagsPanel(t *testing.T) {
 }
 
 func TestTagDeleteRemoteRowDispatches(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelTags
 	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
@@ -465,6 +488,7 @@ func TestTagDeleteRemoteRowDispatches(t *testing.T) {
 }
 
 func TestTagAnnotateRowPresent(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelTags
 	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
@@ -475,6 +499,7 @@ func TestTagAnnotateRowPresent(t *testing.T) {
 }
 
 func TestAnnotatePopupPrefillsSubject(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelTags
 	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234", Annotated: true, Subject: "old message"}}
@@ -492,6 +517,7 @@ func TestAnnotatePopupPrefillsSubject(t *testing.T) {
 }
 
 func TestAnnotatePopupEmptyMessageKeepsOpen(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelTags
 	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}} // lightweight → blank subject
@@ -509,6 +535,7 @@ func TestAnnotatePopupEmptyMessageKeepsOpen(t *testing.T) {
 }
 
 func TestAnnotatePopupSubmitDispatches(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelTags
 	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
@@ -523,6 +550,7 @@ func TestAnnotatePopupSubmitDispatches(t *testing.T) {
 }
 
 func TestTagSoloRowPresent(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelTags
 	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
@@ -533,6 +561,7 @@ func TestTagSoloRowPresent(t *testing.T) {
 }
 
 func TestTagSoloRowInertOffTagsPanel(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	if _, ok := m.tagSoloRow(); ok {
@@ -541,6 +570,7 @@ func TestTagSoloRowInertOffTagsPanel(t *testing.T) {
 }
 
 func TestTagSoloRowScopesAndFocusesCommits(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelTags
 	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
@@ -562,6 +592,7 @@ func TestTagSoloRowScopesAndFocusesCommits(t *testing.T) {
 }
 
 func TestTagSoloRowTogglesOff(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelTags
 	m.tags = []model.Tag{{Name: "v1.0.0", Target: "abc1234"}}
@@ -577,6 +608,7 @@ func TestTagSoloRowTogglesOff(t *testing.T) {
 // return focus to the Tags panel (the source), not leave the user on the
 // Commits panel.
 func TestEscFromTagOpenedFilesReturnsToTags(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelTags
 	m.activeFilesTab = panelTags
@@ -604,6 +636,7 @@ func TestEscFromTagOpenedFilesReturnsToTags(t *testing.T) {
 // Regression: esc from a files view opened from the Commits panel (via l) must
 // stay on the Commits panel — the focus-restore must not change the no-op case.
 func TestEscFromCommitsOpenedFilesStaysOnCommits(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, filesModel()) // filesModel focuses panelCommits; l opens the view
 	if m.filesView == nil {
 		t.Fatal("files view should be open")

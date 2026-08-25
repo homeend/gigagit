@@ -21,6 +21,7 @@ func newTestModel(t *testing.T) Model {
 }
 
 func TestSrcConsumersCoverAllSources(t *testing.T) {
+	t.Parallel()
 	for s := sourceKey(0); s < srcCount; s++ {
 		if s == srcIdentity {
 			continue // identity feeds the Settings popup, not a left panel
@@ -32,6 +33,7 @@ func TestSrcConsumersCoverAllSources(t *testing.T) {
 }
 
 func TestRegistryMapsInitialized(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t) // existing helper used across *_test.go
 	if m.srcGen == nil || m.srcInflight == nil || m.srcLoading == nil {
 		t.Fatal("registry maps must be initialized by the constructor")
@@ -39,6 +41,7 @@ func TestRegistryMapsInitialized(t *testing.T) {
 }
 
 func TestReadSourceBranchesProducesMsg(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t) // wired to a real temp repo (newRepo(t))
 	msg := m.readSourceCmd(context.Background(), srcBranches, reloadOpts{manual: true})()
 	dm, ok := msg.(dataAvailableMsg)
@@ -54,6 +57,7 @@ func TestReadSourceBranchesProducesMsg(t *testing.T) {
 }
 
 func TestReadSourceStatusCarriesConflict(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	msg := m.readSourceCmd(context.Background(), srcStatus, reloadOpts{})().(dataAvailableMsg)
 	if msg.source != srcStatus {
@@ -71,6 +75,7 @@ func TestReadSourceStatusCarriesConflict(t *testing.T) {
 }
 
 func TestReadSourceWorktreesCarriesPayload(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	msg := m.readSourceCmd(context.Background(), srcWorktrees, reloadOpts{manual: true})().(dataAvailableMsg)
 	if msg.source != srcWorktrees {
@@ -100,6 +105,7 @@ func TestReadSourceWorktreesCarriesPayload(t *testing.T) {
 }
 
 func TestDataAvailableStaleGenDropped(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.srcGen[srcBranches] = 5
 	old := []model.Branch{{Name: "old"}}
@@ -112,6 +118,7 @@ func TestDataAvailableStaleGenDropped(t *testing.T) {
 }
 
 func TestDataAvailableManualClearsSpinner(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.srcLoading[srcBranches] = true
 	m.srcInflight[srcBranches] = true
@@ -132,6 +139,7 @@ func TestDataAvailableManualClearsSpinner(t *testing.T) {
 }
 
 func TestDataAvailableAutoLeavesNoSpinner(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	// Baseline: srcLoading for this source must not be pre-set.
 	// (m.loading starts true from New() — that is the startup hard-load flag,
@@ -154,6 +162,7 @@ func TestDataAvailableAutoLeavesNoSpinner(t *testing.T) {
 }
 
 func TestReloadAllBumpsEveryGenAndBatches(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	before := map[sourceKey]int{}
 	for s := sourceKey(0); s < srcCount; s++ {
@@ -174,6 +183,7 @@ func TestReloadAllBumpsEveryGenAndBatches(t *testing.T) {
 }
 
 func TestReloadSourcesManualSetsConsumerSpinners(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m, _ = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
 	if !m.srcLoading[srcStatus] {
@@ -190,6 +200,7 @@ func TestReloadSourcesManualSetsConsumerSpinners(t *testing.T) {
 // reload must set it (so pull/push/etc. guards block during refresh) and the
 // arrival of the last source must clear it.
 func TestManualReloadDrivesLegacyLoadingFlag(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m, _ = m.reloadSourcesCmd([]sourceKey{srcTags}, reloadOpts{manual: true})
 	if !m.loading {
@@ -203,6 +214,7 @@ func TestManualReloadDrivesLegacyLoadingFlag(t *testing.T) {
 }
 
 func TestOpFinishedRefreshesOnlyPendingSources(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.pendingSources = []sourceKey{srcBranches, srcWorktrees}
 	genB, genS := m.srcGen[srcBranches], m.srcGen[srcStatus]
@@ -220,6 +232,7 @@ func TestOpFinishedRefreshesOnlyPendingSources(t *testing.T) {
 }
 
 func TestOpFinishedDefaultRefreshesAll(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.pendingSources = nil // unmapped op
 	genS := m.srcGen[srcStatus]
@@ -235,6 +248,7 @@ func TestOpFinishedDefaultRefreshesAll(t *testing.T) {
 // maybeFeedUpstreamRewalk returns false while srcFeed is in-flight, deferring
 // the re-walk to the srcFeed arrival handler instead.
 func TestBranchesDefersFeedRewalkWhileFeedInflight(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	// Wire a tracked upstream so feedUpstreams() returns non-empty.
 	m.branches = []model.Branch{{Name: "main", Upstream: "origin/main"}}
@@ -261,6 +275,7 @@ func TestBranchesDefersFeedRewalkWhileFeedInflight(t *testing.T) {
 // arrival handlers both re-check the latch; srcRemotes must too, otherwise
 // origin/main stays hidden ("not loaded") until a manual r.
 func TestRemotesArrivalFiresUpstreamRewalk(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	// Branches and the initial feed have already landed. The feed was walked
 	// WITHOUT upstreams because remotes had not loaded yet (feedUpstreams gated
@@ -296,6 +311,7 @@ func TestRemotesArrivalFiresUpstreamRewalk(t *testing.T) {
 // carries the loading glyph when srcStatus is mid manual-refresh.
 // (Step 1 — TDD RED before panelLoading is wired into panelLabel.)
 func TestManualRefreshShowsConsumerSpinner(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.width, m.height = 120, 40
 	m, _ = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true}) // Files + Staged consume status
@@ -310,6 +326,7 @@ func TestManualRefreshShowsConsumerSpinner(t *testing.T) {
 // first data has arrived keeps panels visible (no blank loading screen).
 // (Step 5 — TDD RED before the ready flag is implemented.)
 func TestReloadAfterFirstDataKeepsPanelsVisible(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.width, m.height = 120, 40
 	// Simulate first data having arrived (panels populated, ready set).
@@ -326,6 +343,7 @@ func TestReloadAfterFirstDataKeepsPanelsVisible(t *testing.T) {
 // TestInitialLoadBlanksUntilReady verifies that before any data has arrived
 // (ready=false) the loading screen is shown.
 func TestInitialLoadBlanksUntilReady(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.width, m.height = 120, 40
 	m.ready = false
@@ -339,6 +357,7 @@ func TestInitialLoadBlanksUntilReady(t *testing.T) {
 // Each checked op must map to exactly the documented sources; unmapped ops
 // must return nil (meaning: refresh all, the safe default).
 func TestOpAffectedSources(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		op   engine.Operation
 		want []sourceKey // nil = expect nil (all)
@@ -377,6 +396,7 @@ func TestOpAffectedSources(t *testing.T) {
 // that cannot change tags. (Before the mapping, these unmapped ops fell through
 // to nil = all sources, which included tags.)
 func TestBranchOpsDoNotRefreshTags(t *testing.T) {
+	t.Parallel()
 	for _, op := range []engine.Operation{engine.DeleteBranch{}, engine.RenameBranch{}} {
 		got := opAffectedSources(op)
 		if got == nil {
@@ -399,6 +419,7 @@ func TestBranchOpsDoNotRefreshTags(t *testing.T) {
 // "branch <name>" segment, which renders from srcStatus. DeleteBranch needs
 // neither: git refuses to delete a branch checked out in any worktree.
 func TestRenameBranchRefreshesWorktreesAndStatus(t *testing.T) {
+	t.Parallel()
 	got := opAffectedSources(engine.RenameBranch{})
 	for _, want := range []sourceKey{srcWorktrees, srcStatus} {
 		if !slices.Contains(got, want) {
@@ -413,6 +434,7 @@ func TestRenameBranchRefreshesWorktreesAndStatus(t *testing.T) {
 // srcTags-arrival remote-tags probe — a needless network call right after
 // fixing a huge repo.
 func TestConfigOpsAffectNoSources(t *testing.T) {
+	t.Parallel()
 	for _, op := range []engine.Operation{engine.WriteCommitGraph{}, engine.SetGitConfig{Key: "k", Value: "v"}} {
 		srcs := opAffectedSources(op)
 		if srcs == nil || len(srcs) != 0 {
@@ -425,6 +447,7 @@ func TestConfigOpsAffectNoSources(t *testing.T) {
 // refresh (e.g. after a stash pop) must call rebuildCommitGraph() so the
 // Commits panel's WIP pseudo-rows stay in sync with the new status.
 func TestSrcStatusRefreshRebuildsCommitGraph(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.width, m.height = 120, 40
 	m.ready = true
@@ -463,6 +486,7 @@ func TestSrcStatusRefreshRebuildsCommitGraph(t *testing.T) {
 // membership-split path: when files change between staged and unstaged, the
 // selection restore must find the key in the right panel (no out-of-bounds).
 func TestSrcStatusRestoresFilesPanelSelection(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.width, m.height = 120, 40
 	m.ready = true
@@ -504,6 +528,7 @@ func TestSrcStatusRestoresFilesPanelSelection(t *testing.T) {
 }
 
 func TestOpAffectedSourcesDeleteRemoteBranch(t *testing.T) {
+	t.Parallel()
 	// Unmapped, a remote-branch delete fell through to "all sources", and the
 	// tags reload auto-fired the srcTags-arrival remote-tags ls-remote probe —
 	// a needless network round-trip. Same rationale as the DeleteBranch and

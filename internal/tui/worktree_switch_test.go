@@ -8,6 +8,7 @@ import (
 )
 
 func TestEnterOnWorktreePanelSwitches(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	m := New(domain.New(repo))
 	updated, _ := m.Update(m.loadCmd()())

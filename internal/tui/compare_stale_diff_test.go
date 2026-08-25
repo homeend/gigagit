@@ -74,6 +74,7 @@ func staleRowsText(rows []textdiff.Row) string {
 // dropped, but the mutation had already happened: the view showed one file's
 // content under another file's title, so stepping looked like it did nothing.
 func TestStaleCompareDiffLoadCannotClobberLiveView(t *testing.T) {
+	t.Parallel()
 	m, left, right := loadedModelTwoFileCompare(t)
 	m.width, m.height = 100, 30
 	m, _ = m.openCompareFiles(left, right)

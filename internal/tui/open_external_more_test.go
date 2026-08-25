@@ -21,6 +21,7 @@ func showSvc(content string) *domain.Service {
 
 // e in the history view opens the selected commit's version of the file.
 func TestHistoryOpenExternalResolvesContent(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30, svc: showSvc("historic content\n")}
 	h := histFixture() // path a.go
 	m = m.pushLayer(h)
@@ -47,6 +48,7 @@ func TestHistoryOpenExternalResolvesContent(t *testing.T) {
 
 // e in the blame view opens the blamed file at its rev.
 func TestBlameOpenExternalResolvesContent(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30, svc: showSvc("blamed content\n")}
 	b := &blameView{ctx: navContext{path: "pkg/x.go", rev: "abc123"}}
 	m = m.pushLayer(b)
@@ -72,6 +74,7 @@ func TestBlameOpenExternalResolvesContent(t *testing.T) {
 // file — not ShowFile("",path), which is `git show :path` (the index blob) and
 // would swap content (or error for an unstaged file).
 func TestBlameOpenExternalWorkingTreeUsesOnDiskFile(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	if err := os.WriteFile(filepath.Join(dir, "w.go"), []byte("working edit\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -101,6 +104,7 @@ func TestBlameOpenExternalWorkingTreeUsesOnDiskFile(t *testing.T) {
 // blob, not the working file. Off on the Files panel, and off for a staged
 // deletion (no index blob).
 func TestStagedOpenExternalRow(t *testing.T) {
+	t.Parallel()
 	base := Model{
 		width: 100, height: 40, focus: panelStaged, svc: showSvc("index blob\n"),
 		sel:       map[panel]int{panelStaged: 0},

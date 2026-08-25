@@ -9,6 +9,7 @@ import (
 
 // The palette contains an "Apply patch…" entry.
 func TestPaletteHasApplyPatch(t *testing.T) {
+	t.Parallel()
 	found := false
 	for _, c := range paletteCommands() {
 		if c.label == "Apply patch…" {
@@ -23,6 +24,7 @@ func TestPaletteHasApplyPatch(t *testing.T) {
 // applyPatchDirMsg opens the popup prefilled with <dir>/; enter with a typed
 // path closes the popup and dispatches the op (a non-nil tea.Cmd).
 func TestApplyPatchPopupDispatchesOp(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 
 	m, _ = send(m, applyPatchDirMsg{dir: "/exports"})
@@ -49,6 +51,7 @@ func TestApplyPatchPopupDispatchesOp(t *testing.T) {
 
 // enter on an empty path is a no-op (popup stays, nothing dispatched).
 func TestApplyPatchPopupEmptyPathNoop(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = send(m, applyPatchDirMsg{err: errTest})
 	p, ok := m.topLayer().(*applyPatchPopup)
@@ -67,6 +70,7 @@ func TestApplyPatchPopupEmptyPathNoop(t *testing.T) {
 
 // esc closes without dispatching.
 func TestApplyPatchPopupEscCancels(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	m, _ = send(m, applyPatchDirMsg{dir: "/exports"})
 	m, _ = send(m, keyType(tea.KeyEsc))

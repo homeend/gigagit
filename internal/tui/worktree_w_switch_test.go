@@ -13,6 +13,7 @@ import (
 // NEW branch cut from the selection.
 
 func TestShiftWOpensExistingModeWithSwitchDefault(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/from-<parent-branch>-<random-alpha:4>", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	p := layerOf[*worktreePopup](updated.(Model))
@@ -34,6 +35,7 @@ func TestShiftWOpensExistingModeWithSwitchDefault(t *testing.T) {
 }
 
 func TestSmallWHasNoSwitchDefault(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -52,6 +54,7 @@ func TestSmallWHasNoSwitchDefault(t *testing.T) {
 }
 
 func TestShiftWEnterCreatesAndSwitches(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
@@ -69,6 +72,7 @@ func TestShiftWEnterCreatesAndSwitches(t *testing.T) {
 }
 
 func TestShiftWPopupPlainCreateStillOffered(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("W"))
 	m = updated.(Model)
@@ -83,6 +87,7 @@ func TestShiftWPopupPlainCreateStillOffered(t *testing.T) {
 }
 
 func TestShiftWSwitchHintRendered(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/auto", "../<repo>.worktrees/<branch>")
 	m.width, m.height = 100, 30
 	updated, _ := m.Update(keyMsg("W"))
@@ -95,6 +100,7 @@ func TestShiftWSwitchHintRendered(t *testing.T) {
 // ---- e/p fold: renaming inside the w/W popup creates a NEW branch ----
 
 func TestEditRenamesIntoNewBranchFromSelection(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -134,6 +140,7 @@ func TestEditRenamesIntoNewBranchFromSelection(t *testing.T) {
 }
 
 func TestEmptyEditFallsBackToSelection(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)
@@ -157,6 +164,7 @@ func TestEmptyEditFallsBackToSelection(t *testing.T) {
 }
 
 func TestPrefixKeyActiveInBranchPopup(t *testing.T) {
+	t.Parallel()
 	m := modelWithConfig(t, "b/from-<parent-branch>", "../<repo>.worktrees/<branch>")
 	updated, _ := m.Update(keyMsg("w"))
 	m = updated.(Model)

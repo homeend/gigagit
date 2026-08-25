@@ -11,6 +11,7 @@ import (
 )
 
 func TestKeyToken(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		msg  tea.KeyMsg
@@ -53,6 +54,7 @@ func TestKeyToken(t *testing.T) {
 // tui-capture.sh's send_tokens recognizes (else replay mis-sends them as
 // literal text). This is the round-trip contract, kept in lockstep by hand.
 func TestKeyTokenNamedVocabulary(t *testing.T) {
+	t.Parallel()
 	captureNamed := map[string]bool{
 		"enter": true, "esc": true, "space": true, "tab": true,
 		"up": true, "down": true, "left": true, "right": true, "bspace": true,
@@ -84,6 +86,7 @@ func nonCommentLines(s string) []string {
 }
 
 func TestRecorderHeaderBodyAndDroppedQuit(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "scenario.keys")
 	r, err := newRecorder(path, "/some/repo")
 	if err != nil {
@@ -112,6 +115,7 @@ func TestRecorderHeaderBodyAndDroppedQuit(t *testing.T) {
 }
 
 func TestRecorderCommentsUnsupportedKey(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "scenario.keys")
 	r, _ := newRecorder(path, "repo")
 	r.note(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
@@ -131,6 +135,7 @@ func TestRecorderCommentsUnsupportedKey(t *testing.T) {
 }
 
 func TestRecorderExpandsMultiRune(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "s.keys")
 	r, _ := newRecorder(path, "repo")
 	// A coalesced "up" (2 runes in one KeyMsg) must expand to u, p — NOT the
@@ -146,6 +151,7 @@ func TestRecorderExpandsMultiRune(t *testing.T) {
 }
 
 func TestRecorderNilSafe(t *testing.T) {
+	t.Parallel()
 	var r *recorder
 	r.note(tea.KeyMsg{Type: tea.KeyEnter}) // must not panic
 	r.close()                              // must not panic
@@ -156,6 +162,7 @@ func TestRecorderNilSafe(t *testing.T) {
 // key is flushed when the second arrives, and the second (buffered) is dropped
 // at close — so exactly the first key lands in the file.
 func TestUpdateRecordsKeystroke(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "s.keys")
 	r, err := newRecorder(path, "repo")
 	if err != nil {

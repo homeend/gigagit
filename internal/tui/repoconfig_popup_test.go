@@ -7,6 +7,7 @@ import (
 )
 
 func TestRepoConfigActions(t *testing.T) {
+	t.Parallel()
 	// committed present, private absent → offer copy/move to private only.
 	if got := repoConfigActions(true, false, true, true); len(got) != 2 ||
 		got[0] != actCopyToPrivate || got[1] != actMoveToPrivate {
@@ -32,6 +33,7 @@ func TestRepoConfigActions(t *testing.T) {
 }
 
 func TestRepoCfgEndpoints(t *testing.T) {
+	t.Parallel()
 	c, p := "/repo/.gg.toml", "/priv/config.toml"
 	cases := []struct {
 		act      repoCfgAction
@@ -61,6 +63,7 @@ func TestRepoCfgEndpoints(t *testing.T) {
 // a move-to-private that's the just-deleted committed file, which
 // setScalarLine tolerantly recreates, silently reintroducing it.
 func TestRepoConfigRunRebindsWriteTargetSynchronously(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name          string
 		act           repoCfgAction

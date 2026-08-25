@@ -69,6 +69,7 @@ func hasRow(m Model, id string) bool {
 }
 
 func TestViewFileRowGating(t *testing.T) {
+	t.Parallel()
 	m := fullTreeTreeSide(t)
 	if !hasRow(m, "view-file") {
 		t.Fatal("View file should be offered in full-tree mode on a file (tree side)")
@@ -90,6 +91,7 @@ func TestViewFileRowGating(t *testing.T) {
 // "Open in external editor" mirrors View file's gating: tree side + real file
 // row only; off on the list side, deleted rows, and in compare mode.
 func TestOpenExternalRowGating(t *testing.T) {
+	t.Parallel()
 	m := fullTreeTreeSide(t)
 	if !hasRow(m, "open-external") {
 		t.Fatal("Open in external editor should be offered on a file (tree side)")
@@ -120,6 +122,7 @@ func TestOpenExternalRowGating(t *testing.T) {
 // Running the row resolves the file's content at the commit into the temp file
 // the editorViewMsg carries.
 func TestOpenExternalRowResolvesCommitContent(t *testing.T) {
+	t.Parallel()
 	m := fullTreeTreeSide(t)
 	row, ok := m.openExternalRow()
 	if !ok {
@@ -145,6 +148,7 @@ func TestOpenExternalRowResolvesCommitContent(t *testing.T) {
 
 // A deleted file has no content at the commit, so View file must not be offered.
 func TestViewFileExcludesDeleted(t *testing.T) {
+	t.Parallel()
 	m := fullTreeTreeSide(t)
 	m.filesMode = filesModeChanged
 	m.filesView = &contentPopup{lines: []contentLine{{text: "D  gone.go", path: "gone.go", status: "D"}}}
@@ -156,6 +160,7 @@ func TestViewFileExcludesDeleted(t *testing.T) {
 
 // Compare mode has two endpoints, not a single commit, so View file is skipped.
 func TestViewFileExcludesCompareMode(t *testing.T) {
+	t.Parallel()
 	m := fullTreeTreeSide(t)
 	m.filesMode = filesModeCompare
 	if _, ok := m.viewFileRow(); ok {
@@ -166,6 +171,7 @@ func TestViewFileExcludesCompareMode(t *testing.T) {
 // End-to-end: View file works in the default changed-files view, not just the
 // full tree — it opens the right-column preview with the file's content.
 func TestViewFileChangedModeOpensPreview(t *testing.T) {
+	t.Parallel()
 	m := openFilesView(t, previewModel()) // changed-files mode (no `a` toggle)
 	if m.inFullTree() {
 		t.Fatal("expected changed-files mode")
@@ -187,6 +193,7 @@ func TestViewFileChangedModeOpensPreview(t *testing.T) {
 }
 
 func TestViewFileOpensPreview(t *testing.T) {
+	t.Parallel()
 	m := fullTreeTreeSide(t)
 	var row actionRow
 	for _, r := range availableActions(m) {
@@ -217,6 +224,7 @@ func TestViewFileOpensPreview(t *testing.T) {
 }
 
 func TestFilePreviewRendersInRightColumn(t *testing.T) {
+	t.Parallel()
 	m := fullTreeTreeSide(t)
 	for _, r := range availableActions(m) {
 		if r.id == "view-file" {
@@ -253,6 +261,7 @@ func openPreview(t *testing.T, m Model) Model {
 }
 
 func TestFilePreviewScrollAndClose(t *testing.T) {
+	t.Parallel()
 	var b strings.Builder
 	for i := 0; i < 200; i++ { // longer than the window so the pager can scroll
 		fmt.Fprintf(&b, "LINE%03d\n", i)
@@ -284,6 +293,7 @@ func TestFilePreviewScrollAndClose(t *testing.T) {
 // the top line moves off on the very first press (not after the cursor walks to
 // the middle of the window, which is how a centered list would behave).
 func TestFilePreviewScrollsViewportImmediately(t *testing.T) {
+	t.Parallel()
 	var b strings.Builder
 	for i := 0; i < 200; i++ {
 		fmt.Fprintf(&b, "LINE%03d\n", i)
@@ -310,6 +320,7 @@ func TestFilePreviewScrollsViewportImmediately(t *testing.T) {
 // column with a preview open must scroll the preview, not reload a commit under
 // it (keyboard tests don't exercise the mouse dispatch).
 func TestFilePreviewMouseWheelScrolls(t *testing.T) {
+	t.Parallel()
 	var b strings.Builder
 	for i := 0; i < 200; i++ {
 		fmt.Fprintf(&b, "LINE%03d\n", i)
@@ -334,6 +345,7 @@ func TestFilePreviewMouseWheelScrolls(t *testing.T) {
 }
 
 func TestFilePreviewClearedByAToggle(t *testing.T) {
+	t.Parallel()
 	m := openPreview(t, fullTreeTreeSide(t))
 	m, _ = feedFilesView(t, m, "a") // leaving full-tree mode drops the preview
 	if m.filesPreview != nil {

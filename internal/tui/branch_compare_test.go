@@ -15,6 +15,7 @@ import (
 // The Branches pair-op popup offers Compare as its 4th row, spelling out both
 // names in ↔ form.
 func TestPairOpsIncludeCompare(t *testing.T) {
+	t.Parallel()
 	ops := pairOpsFor(panelBranches)
 	if len(ops) != 4 {
 		t.Fatalf("pairOpsFor(panelBranches) has %d ops, want 4", len(ops))
@@ -32,6 +33,7 @@ func TestPairOpsIncludeCompare(t *testing.T) {
 // branch-name endpoints, a full-name title (Endpoint.Display would truncate
 // long branch names to 7 chars), the pair state armed, popup gone, mark gone.
 func TestCompareRowOpensBranchCompare(t *testing.T) {
+	t.Parallel()
 	const marked, selected = "feature/long-branch-name", "main"
 	m := Model{width: 120, height: 40}
 	m.mark = &markState{panel: panelBranches, key: marked, display: marked}
@@ -71,6 +73,7 @@ func TestCompareRowOpensBranchCompare(t *testing.T) {
 // A compareOriginsMsg for the live tag lands in the pair state; a stale tag
 // (view closed or a different compare opened) is dropped.
 func TestCompareOriginsMsgTagGate(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m, _ = m.openBranchCompare("feat/x", "main")
 
@@ -95,6 +98,7 @@ func TestCompareOriginsMsgTagGate(t *testing.T) {
 // name in Endpoint.Hash would poison it), while keeping the full names for
 // display (comparePair.left/right, the title).
 func TestOpenBranchCompareResolvesTipHashes(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m.branches = []model.Branch{
 		{Name: "feat/x", Hash: "aaaa111"},
@@ -117,6 +121,7 @@ func TestOpenBranchCompareResolvesTipHashes(t *testing.T) {
 // endpoint falls back to the name itself — still a valid commit-ish, just
 // without the diff-cache immutability guarantee.
 func TestOpenBranchCompareUnknownBranchFallsBack(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	if m.filesLeft.Hash != "feat/x" || m.filesRight.Hash != "main" {
@@ -128,6 +133,7 @@ func TestOpenBranchCompareUnknownBranchFallsBack(t *testing.T) {
 // against a nil list would render a transient "(no files)" via
 // filterCompareFiles(nil, set) even once origins are loaded.
 func TestFKeyRefusedBeforeFilesArrive(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	origins := model.CompareOrigins{
@@ -152,6 +158,7 @@ func TestFKeyRefusedBeforeFilesArrive(t *testing.T) {
 // handler races compareOriginsMsg (tea.Batch, no ordering), so it can't
 // blindly overwrite filesView.lines with the raw list.
 func TestLateCompareFilesRespectsActiveScope(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	files := []model.CommitFile{
@@ -194,6 +201,7 @@ func TestLateCompareFilesRespectsActiveScope(t *testing.T) {
 // The raw compare file list is retained on comparePair (Task 3 rebuilds rows
 // from it when the scope changes); non-branch compares keep the old behavior.
 func TestCompareFilesMsgRetainsRawListForBranchPair(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	files := []model.CommitFile{{Status: "M", Path: "a.txt"}}
@@ -206,6 +214,7 @@ func TestCompareFilesMsgRetainsRawListForBranchPair(t *testing.T) {
 
 // closeFilesView must drop the pair state (it is compare-view-scoped).
 func TestCloseFilesViewClearsComparePair(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	m = m.closeFilesView()
@@ -217,6 +226,7 @@ func TestCloseFilesViewClearsComparePair(t *testing.T) {
 // Re-running the SAME branch pair keeps the showing view (the
 // openCompareFiles same-tag convention) and does not re-arm state.
 func TestOpenBranchCompareSamePairKeepsView(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	m.comparePair.originsLoaded = true // pretend origins landed
@@ -229,6 +239,7 @@ func TestOpenBranchCompareSamePairKeepsView(t *testing.T) {
 // filterCompareFiles keeps rows whose new OR old path is in the set (a
 // rename matches from either side); a nil set means "all".
 func TestFilterCompareFiles(t *testing.T) {
+	t.Parallel()
 	files := []model.CommitFile{
 		{Status: "M", Path: "a.txt"},
 		{Status: "M", Path: "b.txt"},
@@ -246,6 +257,7 @@ func TestFilterCompareFiles(t *testing.T) {
 
 // f cycles all -> left-only -> right-only -> all, rebuilding rows and title.
 func TestFKeyCyclesScope(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	files := []model.CommitFile{
@@ -297,6 +309,7 @@ func TestFKeyCyclesScope(t *testing.T) {
 
 // f before the origin sets land: status note, scope unchanged.
 func TestFKeyBeforeOriginsLoaded(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	mm, _ := m.Update(keyMsg("f"))
@@ -311,6 +324,7 @@ func TestFKeyBeforeOriginsLoaded(t *testing.T) {
 
 // No merge base: the typed sentinel maps to the unavailable note.
 func TestFKeyNoMergeBase(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	mm, _ := m.Update(compareOriginsMsg{tag: m.compareTag, err: fmt.Errorf("%w: exit 1", domain.ErrNoMergeBase)})
@@ -327,6 +341,7 @@ func TestFKeyNoMergeBase(t *testing.T) {
 
 // f is inert in a NON-branch compare (comparePair == nil).
 func TestFKeyInertInNonBranchCompare(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m, _ = m.openCompareFiles(
 		model.Endpoint{Kind: model.EndpointCommit, Hash: "abc1234"},
@@ -341,6 +356,7 @@ func TestFKeyInertInNonBranchCompare(t *testing.T) {
 // The filtered view renders (guards the green-unit/broken-render class) and
 // the footer hint advertises [f] filter for a branch pair.
 func TestBranchCompareRendersWithFilter(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t) // real repo + svc (nav_test.go); cmds are not invoked
 	mm0, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
 	m = mm0.(Model)

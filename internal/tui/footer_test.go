@@ -13,6 +13,7 @@ import (
 )
 
 func TestFooterActionsAllowlistFiltersAndOrders(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m.cfg.UI.FooterActions = []string{"repo", "pull"} // order matters
@@ -33,6 +34,7 @@ func TestFooterActionsAllowlistFiltersAndOrders(t *testing.T) {
 }
 
 func TestFooterBindingIDsUniqueAndPresent(t *testing.T) {
+	t.Parallel()
 	seen := map[string]string{} // id -> label (first seen)
 	nav := map[string]bool{"tab": true, "shift+tab": true, "ctrl+←/→": true}
 	// Keys allowed to carry an empty id: "space" has both empty and non-empty
@@ -92,6 +94,7 @@ func footerModel() Model {
 // state change) — these three used to start operations git then rejects.
 
 func TestSwitchKeyNoOpOnHeadBranch(t *testing.T) {
+	t.Parallel()
 	m := footerModel() // sel 0 = main, the checked-out branch
 	u, cmd := m.Update(keyMsg("s"))
 	mm := u.(Model)
@@ -101,6 +104,7 @@ func TestSwitchKeyNoOpOnHeadBranch(t *testing.T) {
 }
 
 func TestDeleteKeyNoOpOnHeadBranch(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	u, cmd := m.Update(keyMsg("d"))
 	mm := u.(Model)
@@ -110,6 +114,7 @@ func TestDeleteKeyNoOpOnHeadBranch(t *testing.T) {
 }
 
 func TestDeleteKeyNoOpOnCurrentWorktree(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelWorktrees // sel 0 = /repo = currentWorktree
 	u, cmd := m.Update(keyMsg("d"))
@@ -120,6 +125,7 @@ func TestDeleteKeyNoOpOnCurrentWorktree(t *testing.T) {
 }
 
 func TestEnterNoOpOnCurrentWorktree(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelWorktrees
 	u, cmd := m.Update(keyMsg("enter"))
@@ -131,6 +137,7 @@ func TestEnterNoOpOnCurrentWorktree(t *testing.T) {
 }
 
 func TestSwitchKeyNoOpWhileLoading(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = true
 	m.sel[panelBranches] = 1 // feat/x would otherwise be switchable
@@ -141,6 +148,7 @@ func TestSwitchKeyNoOpWhileLoading(t *testing.T) {
 }
 
 func TestMarkKeyNoOpWhileRunning(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.running = true
 	u, _ := m.Update(keyMsg("m"))
@@ -150,6 +158,7 @@ func TestMarkKeyNoOpWhileRunning(t *testing.T) {
 }
 
 func TestPredicatesOnSelectableRows(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.sel[panelBranches] = 1 // feat/x (not HEAD)
 	if !m.canSwitchBranch() || !m.canDeleteBranch() || !m.canOpenBranchPopup() || !m.canOpenWorktreePopup() {
@@ -169,6 +178,7 @@ func TestPredicatesOnSelectableRows(t *testing.T) {
 }
 
 func TestFooterBranchesContextNonHead(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.sel[panelBranches] = 1 // feat/x
 	f := m.footerLine()
@@ -183,6 +193,7 @@ func TestFooterBranchesContextNonHead(t *testing.T) {
 }
 
 func TestFooterHeadBranchHidesSwitchAndDelete(t *testing.T) {
+	t.Parallel()
 	m := footerModel() // sel 0 = main (HEAD)
 	f := m.footerLine()
 	if strings.Contains(f, "[s]witch") || strings.Contains(f, "[d]elete") {
@@ -194,6 +205,7 @@ func TestFooterHeadBranchHidesSwitchAndDelete(t *testing.T) {
 }
 
 func TestFooterWorktreesContext(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelWorktrees
 	m.sel[panelWorktrees] = 1 // not the current worktree
@@ -212,6 +224,7 @@ func TestFooterWorktreesContext(t *testing.T) {
 }
 
 func TestFooterStatusFocusEmptyHasNoContextSegment(t *testing.T) {
+	t.Parallel()
 	// With status rows, Status focus advertises [enter] diff (tested above);
 	// with NO rows there must be no context segment and no stray separator.
 	m := footerModel() // fixture has no status files
@@ -226,6 +239,7 @@ func TestFooterStatusFocusEmptyHasNoContextSegment(t *testing.T) {
 }
 
 func TestFooterMarkStates(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.sel[panelBranches] = 1 // feat/x
 	if f := m.footerLine(); !strings.Contains(f, "[m]ark") || strings.Contains(f, "[m] pair") {
@@ -243,6 +257,7 @@ func TestFooterMarkStates(t *testing.T) {
 }
 
 func TestFooterRunningCollapses(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.running = true
 	// [enter] tip survives: it's pure navigation on the Branches panel (the
@@ -261,6 +276,7 @@ func TestFooterRunningCollapses(t *testing.T) {
 // screen, so the footer was never rendered during a load; now the footer is
 // visible during a soft reload, so an inert hint would mislead.
 func TestFooterLoadingDropsReload(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = true
 	// [enter] tip survives: same busy-tolerant navigation exception as
@@ -273,6 +289,7 @@ func TestFooterLoadingDropsReload(t *testing.T) {
 }
 
 func TestFooterFilterTypingOverride(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.filterTyping = true
 	want := "filter: type to search  [↑↓] move  [enter] keep  [esc] cancel"
@@ -282,6 +299,7 @@ func TestFooterFilterTypingOverride(t *testing.T) {
 }
 
 func TestFooterRenderedInInterface(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.sel[panelBranches] = 1 // feat/x → full Branches context
 	out := ansi.Strip(m.render())
@@ -296,6 +314,7 @@ func TestFooterRenderedInInterface(t *testing.T) {
 }
 
 func TestFooterEmptyPanelsHideRowActions(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 24, sel: map[panel]int{}, sortModes: map[panel]sortMode{}}
 	f := m.footerLine()
 	for _, banned := range []string{"[s]witch", "[b]ranch", "[w]orktree", "[d]elete", "[m]ark", "[P]ush"} {
@@ -309,6 +328,7 @@ func TestFooterEmptyPanelsHideRowActions(t *testing.T) {
 }
 
 func TestFooterTruncatedToWidth(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width, m.height = 40, 24
 	m.sel[panelBranches] = 1 // full context → longest footer
@@ -321,6 +341,7 @@ func TestFooterTruncatedToWidth(t *testing.T) {
 }
 
 func TestFooterShowsDiffOnStatusFocus(t *testing.T) {
+	t.Parallel()
 	m := diffModel() // focus = panelFiles, selectable rows
 	if !strings.Contains(m.footerLine(), "[enter] diff") {
 		t.Fatalf("footer must advertise enter on Status: %q", m.footerLine())
@@ -328,6 +349,7 @@ func TestFooterShowsDiffOnStatusFocus(t *testing.T) {
 }
 
 func TestFooterHidesDiffOffStatusFocus(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.focus = panelBranches
 	if strings.Contains(m.footerLine(), "[enter] diff") {
@@ -336,6 +358,7 @@ func TestFooterHidesDiffOffStatusFocus(t *testing.T) {
 }
 
 func TestFooterHidesDiffOnConflictedRow(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.sel[panelFiles] = 2 // conflict.txt (KindUnmerged)
 	if strings.Contains(m.footerLine(), "[enter] diff") {
@@ -344,6 +367,7 @@ func TestFooterHidesDiffOnConflictedRow(t *testing.T) {
 }
 
 func TestFooterHidesDiffWhenNarrow(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.width = 59
 	if strings.Contains(m.footerLine(), "[enter] diff") {
@@ -352,6 +376,7 @@ func TestFooterHidesDiffWhenNarrow(t *testing.T) {
 }
 
 func TestFooterFilesViewOverrideAdvertisesTreeActions(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "x", path: "x"}}}
 	m.filesTreeFocused = true // tree side: file-scoped actions
@@ -365,6 +390,7 @@ func TestFooterFilesViewOverrideAdvertisesTreeActions(t *testing.T) {
 }
 
 func TestFooterFilesViewCommitSideAdvertisesMenuAndGraph(t *testing.T) {
+	t.Parallel()
 	m := diffModel()
 	m.filesView = &contentPopup{lines: []contentLine{{text: "x", path: "x"}}}
 	m.filesTreeFocused = false // commit-list side: parity with the Commits panel
@@ -377,6 +403,7 @@ func TestFooterFilesViewCommitSideAdvertisesMenuAndGraph(t *testing.T) {
 }
 
 func TestSwitchAndWorktreeKeysWorkFromAnyPanel(t *testing.T) {
+	t.Parallel()
 	// s: only footer visibility is Branches-scoped; the key acts on the
 	// Branches selection from any focused panel. footerModel()'s fixture has
 	// feat/x checked out in another worktree, so s on it opens the
@@ -403,6 +430,7 @@ func TestSwitchAndWorktreeKeysWorkFromAnyPanel(t *testing.T) {
 }
 
 func TestFooterStageVsUnstage(t *testing.T) {
+	t.Parallel()
 	base := func(focus panel) Model {
 		m := New(nil)
 		m.loading = false // opsIdle requires not loading
@@ -438,6 +466,7 @@ func bindingByLabel(t *testing.T, label string) footerBinding {
 // the predicates directly — while an op runs the footer swaps to the heartbeat
 // line wholesale, so the rendered line can't distinguish per-binding gating.
 func TestBranchesFooterAdvertisesTipKeys(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m.focus = panelBranches
@@ -458,6 +487,7 @@ func TestBranchesFooterAdvertisesTipKeys(t *testing.T) {
 // reproduce footerLine byte-for-byte, and exactly one part (the first live
 // global after a non-empty context group) carries the bullet separator.
 func TestFooterPartsRoundTrip(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	if got := joinFooterParts(m.footerParts()); got != m.footerLine() {
 		t.Errorf("joinFooterParts(footerParts()) = %q\nfooterLine() = %q", got, m.footerLine())
@@ -477,6 +507,7 @@ func TestFooterPartsRoundTrip(t *testing.T) {
 }
 
 func TestFooterPartsAllowlistRoundTrip(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.cfg.UI.FooterActions = []string{"repo", "pull"}
 	if got := joinFooterParts(m.footerParts()); got != m.footerLine() {
@@ -490,6 +521,7 @@ func TestFooterPartsAllowlistRoundTrip(t *testing.T) {
 
 // TestFooterOverrideModes pins which states bypass the registry footer.
 func TestFooterOverrideModes(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	if _, ok := m.footerOverride(); ok {
 		t.Error("idle panels must use the registry footer")
@@ -501,6 +533,7 @@ func TestFooterOverrideModes(t *testing.T) {
 }
 
 func TestFitFooterWideUnchanged(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	line, hidden := fitFooter(m, 500)
 	if line != m.footerLine() {
@@ -512,6 +545,7 @@ func TestFitFooterWideUnchanged(t *testing.T) {
 }
 
 func TestFitFooterExactWidthUnchanged(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	full := m.footerLine()
 	line, hidden := fitFooter(m, lipgloss.Width(full))
@@ -524,6 +558,7 @@ func TestFitFooterExactWidthUnchanged(t *testing.T) {
 // labels drop from the end, the line ends with the protected tail, fits the
 // width, and hidden is exactly the contiguous dropped tail in footer order.
 func TestFitFooterNarrowDropsFromEndAndAppendsTail(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	full := m.footerLine()
 	w := lipgloss.Width(full) - 1 // one column short: at least one label drops
@@ -559,6 +594,7 @@ func TestFitFooterNarrowDropsFromEndAndAppendsTail(t *testing.T) {
 }
 
 func TestFitFooterTinyWidthFallsBackToTruncate(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	line, hidden := fitFooter(m, 8) // narrower than the tail itself (10 cols)
 	if want := truncate(m.footerLine(), 8); line != want {
@@ -570,6 +606,7 @@ func TestFitFooterTinyWidthFallsBackToTruncate(t *testing.T) {
 }
 
 func TestFitFooterPassesThroughModeFooters(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.filterTyping = true
 	line, hidden := fitFooter(m, 20)
@@ -582,6 +619,7 @@ func TestFitFooterPassesThroughModeFooters(t *testing.T) {
 }
 
 func TestFitFooterAllowlistOverflow(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.cfg.UI.FooterActions = []string{"repo", "pull", "stashes", "undo", "bookmarks", "find", "order", "view", "settings"}
 	full := m.footerLine()
@@ -602,6 +640,7 @@ func TestFitFooterAllowlistOverflow(t *testing.T) {
 // rendered frame's footer must end with the protected tail, never a
 // mid-label hard cut.
 func TestRenderFooterShowsTailWhenOverflowing(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.width = 40
 	out := ansi.Strip(m.render())
@@ -613,6 +652,7 @@ func TestRenderFooterShowsTailWhenOverflowing(t *testing.T) {
 // TestFitFooterTailOnlyWidth pins the band where nothing but the tail fits:
 // at w == the tail's own width every label is hidden and the tail stands alone.
 func TestFitFooterTailOnlyWidth(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	line, hidden := fitFooter(m, lipgloss.Width(footerOverflowTail))
 	if line != footerOverflowTail {
@@ -636,6 +676,7 @@ func TestFitFooterTailOnlyWidth(t *testing.T) {
 // running op gating [.] actions out) yields no parts — the empty line "fits"
 // at any width and nothing is hidden.
 func TestFitFooterEmptyParts(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.running = true
 	m.cfg.UI.FooterActions = []string{"notices"} // no notices in the fixture
@@ -646,6 +687,7 @@ func TestFitFooterEmptyParts(t *testing.T) {
 }
 
 func TestFooterPartsAllowlistDeduplicatesActions(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.cfg.UI.FooterActions = []string{"actions", "pull"}
 	var n int

@@ -8,6 +8,7 @@ import (
 )
 
 func TestTagRowsAndPanelView(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.tags = []model.Tag{
 		{Name: "v2.0.0", Target: "aaaaaaa", Annotated: true, Subject: "release two"},

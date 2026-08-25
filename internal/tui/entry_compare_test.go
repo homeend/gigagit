@@ -11,6 +11,7 @@ import (
 // Two commit bookmarks marked with m must dispatch an entry-compare resolve
 // (a tea.Cmd), not a notice.
 func TestBookmarkMarkTwoCommitEntries(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	a := model.Bookmark{ID: "b1", Commit: "1111111111111111111111111111111111111111", State: model.StateCommitted}
 	b := model.Bookmark{ID: "b2", Commit: "2222222222222222222222222222222222222222", State: model.StateCommitted}
@@ -30,6 +31,7 @@ func TestBookmarkMarkTwoCommitEntries(t *testing.T) {
 
 // A mixed pair (file mark + commit second) is a notice, not a compare.
 func TestBookmarkMarkMixedKindsRefused(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	a := model.Bookmark{ID: "b1", Path: "f.go", State: model.StateUnstaged}
 	b := model.Bookmark{ID: "b2", Commit: "2222222222222222222222222222222222222222", State: model.StateCommitted}
@@ -49,6 +51,7 @@ func TestBookmarkMarkMixedKindsRefused(t *testing.T) {
 
 // A stale entryCompareMsg (gen mismatch) is dropped.
 func TestEntryCompareGenGuard(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	m.entryCompareGen = 5
 	upd, _ := m.Update(entryCompareMsg{gen: 4, left: model.Endpoint{Kind: model.EndpointCommit, Hash: "a"}, right: model.Endpoint{Kind: model.EndpointCommit, Hash: "b"}})
@@ -62,6 +65,7 @@ func TestEntryCompareGenGuard(t *testing.T) {
 // toggle-mark like any other entry kind — the guard only ever blocked "m"
 // when there was no second entry to compare against.
 func TestShelfPopupMarkTogglesOnLoneCommitEntry(t *testing.T) {
+	t.Parallel()
 	m := shelfPopModel(shCommitEntry("ce"))
 	mm, cmd := m.Update(keyMsg("m"))
 	m = mm.(Model)
@@ -78,6 +82,7 @@ func TestShelfPopupMarkTogglesOnLoneCommitEntry(t *testing.T) {
 
 // Same commit on both sides (and not two distinct shelf entries) is a notice.
 func TestEntryCompareSelfCompareNotice(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	side := entrySide{sha: "3333333333333333333333333333333333333333", label: "x"}
 	mm, cmd := m.startEntryCompare(side, side)
@@ -92,6 +97,7 @@ func TestEntryCompareSelfCompareNotice(t *testing.T) {
 // Two DIFFERENT shelf entries of the SAME commit sha must dispatch a compare
 // (the distinctShelves exception) rather than the self-compare notice.
 func TestEntryCompareDistinctShelvesOfSameCommit(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	sha := "4444444444444444444444444444444444444444"
 	left := entrySide{sha: sha, shelfID: "s1", label: "shelf #s1"}
@@ -108,6 +114,7 @@ func TestEntryCompareDistinctShelvesOfSameCommit(t *testing.T) {
 // c on a commit bookmark must arm a commit-flavored pendingCompare targeting
 // the shelf picker.
 func TestBookmarkCommitCrossCompareArm(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	b := model.Bookmark{ID: "b1", Commit: "1111111111111111111111111111111111111111", State: model.StateCommitted}
 	p := newBookmarkPopup([]model.Bookmark{b})
@@ -128,6 +135,7 @@ func TestBookmarkCommitCrossCompareArm(t *testing.T) {
 
 // In commit-flavored compare mode, enter on a FILE entry is a notice.
 func TestShelfCompareModeCommitVsFileRefused(t *testing.T) {
+	t.Parallel()
 	m := newTestModel(t)
 	fileEntry := model.ShelfEntry{ID: "s1", Origin: model.FileAddress{State: model.StateUnstaged, Path: "f.go"}}
 	p := newShelfPopup([]model.ShelfEntry{fileEntry})

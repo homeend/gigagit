@@ -38,6 +38,7 @@ func assertOneLine(t *testing.T, rendered, a, b string) {
 }
 
 func TestRepoPopupNoWrap(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 30}
 	render := func(path string) string {
 		m = m.pushLayer(&repoPopup{entries: []repos.Entry{{Path: path, LastOpened: time.Now()}}, now: time.Now()})
@@ -50,6 +51,7 @@ func TestRepoPopupNoWrap(t *testing.T) {
 }
 
 func TestConflictPopupNoWrap(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 30}
 	render := func(path string) string {
 		files := []model.FileStatus{{Path: path, Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'}}
@@ -59,6 +61,7 @@ func TestConflictPopupNoWrap(t *testing.T) {
 }
 
 func TestPairOpPopupNoWrap(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 30}
 	render := func(marked string) string {
 		m = m.pushLayer(&pairOpPopup{marked: marked, selected: "main", ops: pairOpsFor(panelBranches)})

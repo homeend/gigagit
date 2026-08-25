@@ -17,6 +17,7 @@ import (
 // "non-fast-forward" decision; the test answers "rebase" through the modal and
 // asserts the op resumes and completes with both remote and local changes.
 func TestSmartPullDecisionAnsweredThroughModal(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	origin := filepath.Join(root, "origin.git")
 	seed := filepath.Join(root, "seed")

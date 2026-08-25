@@ -23,6 +23,7 @@ func pressRuneKey(m Model, r string) (Model, tea.Cmd) {
 // opens on the commit-list side. Locking both sides keeps the delta from
 // silently collapsing in a future refactor.
 func TestCommitEnterOpensFilesViewFocusedOnTree(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	m.sel[panelCommits] = 0
@@ -37,6 +38,7 @@ func TestCommitEnterOpensFilesViewFocusedOnTree(t *testing.T) {
 }
 
 func TestCommitLOpensFilesViewOnListSide(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	m.sel[panelCommits] = 0
@@ -54,6 +56,7 @@ func TestCommitLOpensFilesViewOnListSide(t *testing.T) {
 // drills in: it moves focus to the file tree without opening a diff. Mirrors
 // enter on the Commits panel.
 func TestFilesViewEnterOnListSideFocusesTree(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	m.sel[panelCommits] = 0
@@ -83,6 +86,7 @@ func TestFilesViewEnterOnListSideFocusesTree(t *testing.T) {
 // the same action as i with no tree shown — and LAYERS OVER the tree rather
 // than replacing it: filesView stays non-nil so esc returns to the tree.
 func TestFilesViewIShowsCommitMessageOverTree(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	m.sel[panelCommits] = 0
@@ -121,6 +125,7 @@ func TestFilesViewIShowsCommitMessageOverTree(t *testing.T) {
 // that is NOT the Commits-panel selection. i must show the DISPLAYED commit's
 // message (keyed by filesHash), not the Commits cursor's.
 func TestFilesViewIShowsDisplayedCommitNotCursor(t *testing.T) {
+	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.focus = panelCommits
 	m.sel[panelCommits] = 0 // cursor on commits[0]

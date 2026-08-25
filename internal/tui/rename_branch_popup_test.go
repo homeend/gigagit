@@ -9,6 +9,7 @@ import (
 )
 
 func TestRenameBranchPopupOpensPrefilled(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	m.branches = []model.Branch{{Name: "old"}}
@@ -23,6 +24,7 @@ func TestRenameBranchPopupOpensPrefilled(t *testing.T) {
 }
 
 func TestRenameBranchMenuRowPresent(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	if got := ids(availableActions(m)); !got["rename-branch"] {
@@ -35,6 +37,7 @@ func TestRenameBranchMenuRowPresent(t *testing.T) {
 }
 
 func TestRenameBranchPopupEscCancels(t *testing.T) {
+	t.Parallel()
 	m := footerModel()
 	m.focus = panelBranches
 	m.branches = []model.Branch{{Name: "old"}}

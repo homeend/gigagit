@@ -9,6 +9,7 @@ import (
 // markModel() has branches: main (IsHead), feat/a, feat/b; focus = panelBranches.
 
 func TestPullForFocusBranchesPanel(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.focus = panelBranches
 
@@ -27,6 +28,7 @@ func TestPullForFocusBranchesPanel(t *testing.T) {
 }
 
 func TestPullForFocusOtherPanelPullsCurrent(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.focus = panelCommits
 	if op := m.pullForFocus(); op.Branch != "" || op.Intent != engine.PullAndStay {
@@ -35,6 +37,7 @@ func TestPullForFocusOtherPanelPullsCurrent(t *testing.T) {
 }
 
 func TestBackgroundPullRowGating(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.focus = panelBranches
 
@@ -65,6 +68,7 @@ func TestBackgroundPullRowGating(t *testing.T) {
 }
 
 func TestBackgroundPullRowPopsConfirm(t *testing.T) {
+	t.Parallel()
 	m := markModel()
 	m.focus = panelBranches
 	m.sel[panelBranches] = 1 // feat/a, non-current

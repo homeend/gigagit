@@ -14,6 +14,7 @@ import (
 )
 
 func TestSOpensStashPopupWithCandidates(t *testing.T) {
+	t.Parallel()
 	m := statusModel() // a.go, b.go both unstaged 'M', branch main
 	mm, _ := m.Update(keyMsg("s"))
 	got := mm.(Model)
@@ -35,6 +36,7 @@ func TestSOpensStashPopupWithCandidates(t *testing.T) {
 }
 
 func TestStashPopupPrechecksMarks(t *testing.T) {
+	t.Parallel()
 	m := statusModel()
 	m.fileMarks = map[string]bool{"a.go": true}
 	mm, _ := m.Update(keyMsg("s"))
@@ -49,6 +51,7 @@ func TestStashPopupPrechecksMarks(t *testing.T) {
 }
 
 func TestStashPopupOpAssembly(t *testing.T) {
+	t.Parallel()
 	p := &stashPopup{name: newTextField("WIP on main"), files: []stashFileItem{
 		{path: "a.go", included: true, untracked: false},
 		{path: "b.go", included: false},
@@ -64,6 +67,7 @@ func TestStashPopupOpAssembly(t *testing.T) {
 }
 
 func TestStashPopupCtrlSStashesRealRepo(t *testing.T) {
+	t.Parallel()
 	dir, repo := newRepoDir(t)
 	gitInDir(t, dir, "checkout", "-b", "work")
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("base\n"), 0o644)
@@ -98,6 +102,7 @@ func TestStashPopupCtrlSStashesRealRepo(t *testing.T) {
 }
 
 func TestStashPopupEmptySelectionRefuses(t *testing.T) {
+	t.Parallel()
 	m := statusModel()
 	mm, _ := m.Update(keyMsg("s"))
 	m = mm.(Model)
@@ -112,6 +117,7 @@ func TestStashPopupEmptySelectionRefuses(t *testing.T) {
 }
 
 func TestSNoCandidatesNoOp(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 100, height: 30, focus: panelFiles, sel: map[panel]int{}}
 	m.status = model.WorkingTreeStatus{Branch: "main"} // no files
 	mm, _ := m.Update(keyMsg("s"))
@@ -121,6 +127,7 @@ func TestSNoCandidatesNoOp(t *testing.T) {
 }
 
 func TestStashPopupRendersFiles(t *testing.T) {
+	t.Parallel()
 	m := statusModel()
 	mm, _ := m.Update(keyMsg("s"))
 	m = mm.(Model)

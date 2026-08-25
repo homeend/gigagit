@@ -7,6 +7,7 @@ import (
 )
 
 func TestOpenCompareFilesPopulatesView(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	if len(m.commits) == 0 {
 		t.Skip("no commits loaded")
@@ -41,6 +42,7 @@ func TestOpenCompareFilesPopulatesView(t *testing.T) {
 }
 
 func TestCompareFilesMsgStaleDropped(t *testing.T) {
+	t.Parallel()
 	m := loadedModel(t)
 	left := model.Endpoint{Kind: model.EndpointCommit, Hash: "abc"}
 	m2, _ := m.openCompareFiles(left, model.Endpoint{Kind: model.EndpointWorkTree})

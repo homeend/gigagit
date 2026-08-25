@@ -24,6 +24,7 @@ func untracked(path string) model.FileStatus {
 }
 
 func TestFileIgnoreRowOnUntracked(t *testing.T) {
+	t.Parallel()
 	m := ignoreModel([]model.FileStatus{untracked("build/out.log")}, 0)
 	r, ok := m.fileIgnoreRow()
 	if !ok {
@@ -35,6 +36,7 @@ func TestFileIgnoreRowOnUntracked(t *testing.T) {
 }
 
 func TestFileIgnoreExtRowRequiresExtension(t *testing.T) {
+	t.Parallel()
 	m := ignoreModel([]model.FileStatus{untracked("foo.log")}, 0)
 	r, ok := m.fileIgnoreExtRow()
 	if !ok {
@@ -56,6 +58,7 @@ func TestFileIgnoreExtRowRequiresExtension(t *testing.T) {
 }
 
 func TestAvailableActionsIncludesIgnoreRows(t *testing.T) {
+	t.Parallel()
 	m := ignoreModel([]model.FileStatus{untracked("foo.log")}, 0)
 	var ids []string
 	for _, r := range availableActions(m) {
@@ -77,6 +80,7 @@ func TestAvailableActionsIncludesIgnoreRows(t *testing.T) {
 }
 
 func TestFileIgnoreRowsGating(t *testing.T) {
+	t.Parallel()
 	// Tracked file → neither row.
 	tracked := model.FileStatus{Path: "edit.go", Kind: model.KindTracked, Unstaged: 'M'}
 	m := ignoreModel([]model.FileStatus{tracked}, 0)

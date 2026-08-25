@@ -11,6 +11,7 @@ import (
 // (esc returns to it), but is not painted. This preserves the pre-merge
 // "top popup replaces" visual; the merge changed routing, not compositing.
 func TestChildPopupDoesNotRenderParentPopupBox(t *testing.T) {
+	t.Parallel()
 	m := bookmarkPopupModel() // bookmark switcher listing the "a.go" bookmark
 
 	// Sanity: the lone switcher paints its bookmark row.
