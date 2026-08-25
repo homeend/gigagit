@@ -66,13 +66,3 @@ func TestPairOpPopupNoWrap(t *testing.T) {
 	}
 	assertSameHeight(t, "pair-op body", render("feat/x"), render("feat/"+strings.Repeat("z", 300)))
 }
-
-func TestStashActionPopupNoWrap(t *testing.T) {
-	m := Model{width: 80, height: 30}
-	render := func(subject string) string {
-		m2 := m.pushLayer(&stashActionPopup{ref: "stash@{0}", subject: subject})
-		a := layerOf[*stashActionPopup](m2)
-		return a.box(m2)
-	}
-	assertSameHeight(t, "stash subject", render("WIP"), render(strings.Repeat("z", 300)))
-}

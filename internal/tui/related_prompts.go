@@ -24,7 +24,7 @@ type relatedPrompt struct {
 	// (the popup dispatches by index, never by comparing this text). It is
 	// NOT translated here: relatedPrompts is a package-level var, and an
 	// i18n.T call in its initializer would freeze the English text at
-	// package init, before any language loads (the cfLabel/stashActionLabel
+	// package init, before any language loads (the cfLabel
 	// rationale). relatedYesLabel resolves it at render time instead.
 	yesLabel string
 	// when gates the prompt on the LIVE config after the toggle applied:
@@ -69,7 +69,7 @@ var relatedPrompts = []relatedPrompt{
 // relatedYesLabel translates a relatedPrompt.yesLabel key at render time (see
 // the field's doc comment — a package var initializer would freeze the
 // English text before any language loads; identical rationale to
-// stashActionLabel/cfLabel).
+// cfLabel).
 func relatedYesLabel(key string) string {
 	switch key {
 	case "Yes, set plain":

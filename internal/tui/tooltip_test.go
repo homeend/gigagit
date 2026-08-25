@@ -476,3 +476,40 @@ func TestCommitIdentColumnFitsToLongestName(t *testing.T) {
 		t.Fatalf("ident width = %d, want cap %d when a long name is loaded", w, commitIdentW)
 	}
 }
+
+// While the stash list owns the right column, the Commits panel behind it is
+// hidden — its selected row's reveal must not draw over the stash box (the
+// reported mislocated yellow strip). Same pattern as the file-preview guard:
+// precondition proves the reveal fires without the stash, isolating the guard.
+func TestTooltipSuppressedByStashView(t *testing.T) {
+	base := footerModel()
+	base.focus = panelCommits
+	if base.sel == nil {
+		base.sel = map[panel]int{}
+	}
+	const subj = "Merge tag 'firewire-updates-7.2' of git://git.kernel.org/pub/scm/linux/kernel/git/ieee1394/linux1394"
+	base.commits = []model.Commit{{Hash: "aff3ca3aaaa", Subject: subj}}
+	base.sel[panelCommits] = 0
+
+	if _, _, _, ok := base.tooltip(); !ok {
+		t.Fatal("precondition: the long commit row must reveal when no stash window is open")
+	}
+
+	m := base
+	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "WIP"}}}
+	if _, _, _, ok := m.tooltip(); ok {
+		t.Fatal("the hidden commit row's reveal must be suppressed while the stash window owns the right column")
+	}
+}
+
+// The stash window leaves the left panels visible and focusable (← releases
+// focus there) — their truncated rows must keep revealing; only the hidden
+// Commits panel is suppressed.
+func TestTooltipLeftPanelStillRevealsWhileStashOpen(t *testing.T) {
+	m := tooltipModel()
+	m.width = 120
+	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "WIP"}}}
+	if _, _, _, ok := m.tooltip(); !ok {
+		t.Fatal("a truncated left-panel row must still reveal while the stash window is open")
+	}
+}

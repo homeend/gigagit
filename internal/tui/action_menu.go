@@ -33,6 +33,25 @@ func availableActions(m Model) []actionRow {
 	// the very window the menu was opened from). Offer only that window's copy
 	// actions.
 	if m.inContentWindow() {
+		// The stash-list side owns the selection even under an open file tree,
+		// so its "." menu is always the same four rows: Copy stash ref +
+		// Apply / Pop / Drop. A history/blame/diff surface on top out-ranks it
+		// (a single file is in view then), and the tree side keeps the
+		// file-context menu below.
+		onStashList := m.stashView != nil && m.focus == panelCommits &&
+			!m.filesTreeFocused && m.diffLayer() == nil
+		switch m.topLayer().(type) {
+		case *historyView, *blameView:
+			onStashList = false
+		}
+		if onStashList {
+			var rows []actionRow
+			if v := m.stashView; v.sel >= 0 && v.sel < len(v.entries) {
+				ref := v.entries[v.sel].Ref
+				rows = append(rows, m.copyRow("copy-stash-ref", i18n.T("Copy stash ref"), i18n.T("Copied stash ref %s", ref), ref))
+			}
+			return append(rows, m.stashActionRows()...)
+		}
 		rows := m.contextCopyRows()
 		// A history/blame surface on top is a single file at a rev, not the files
 		// view underneath it. It owns the "Open in external editor" action
@@ -403,13 +422,6 @@ func (m Model) contextCopyRows() []actionRow {
 			rows = append(rows, m.copyRow("copy-commit-id", i18n.T("Copy commit id"), i18n.T("Copied commit id %s", shortHash(m.filesHash)), m.filesHash))
 		}
 		return rows
-	}
-	if v := m.stashView; v != nil && m.focus == panelCommits {
-		if v.sel >= 0 && v.sel < len(v.entries) {
-			ref := v.entries[v.sel].Ref
-			return []actionRow{m.copyRow("copy-stash-ref", i18n.T("Copy stash ref"), i18n.T("Copied stash ref %s", ref), ref)}
-		}
-		return nil
 	}
 	switch {
 	case m.focus == panelReflog:

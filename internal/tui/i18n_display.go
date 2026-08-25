@@ -170,6 +170,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("Detached")
 	case "Discard":
 		return i18n.T("Discard")
+	case "Drop":
+		return i18n.T("Drop")
 	case "New branch at version":
 		return i18n.T("New branch at version")
 	case "No":

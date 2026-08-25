@@ -362,18 +362,41 @@ func TestTagSoloTransfersFullscreenPinEndToEnd(t *testing.T) {
 // The pin transfer is only coherent when the pin goes live immediately: a
 // jump fired under a suspending surface must leave the pin alone (the
 // surface's close path restores its own remembered focus, which would
-// otherwise mismatch a rewritten pin).
+// otherwise mismatch a rewritten pin). The stash list is the exception —
+// focusCommitsPanel closes it itself (see below), so this contract now
+// covers the surfaces it does NOT close: the files view / file preview.
 func TestFocusCommitsPanelNoTransferWhileYielded(t *testing.T) {
 	m := maxModel()
 	m.focus = panelStaged
 	m = press(t, m, "ctrl+t") // pin Staged
-	m.stashView = &stashView{}
+	m.filesPreview = &contentPopup{}
 	m = m.focusCommitsPanel()
 	if m.focus != panelCommits {
 		t.Fatalf("focus = %v, want Commits", m.focus)
 	}
 	if m.fullMax != panelStaged {
 		t.Fatalf("fullMax = %v, want untouched Staged pin", m.fullMax)
+	}
+}
+
+// A covering stash list is closed by focusCommitsPanel itself (landing in the
+// feed is the point), so the pin goes live immediately and transfers to
+// Commits — leaving it on the old panel would resume a fullscreen that hides
+// the commit the user just jumped to.
+func TestFocusCommitsPanelClosesStashAndTransfersPin(t *testing.T) {
+	m := maxModel()
+	m.focus = panelStaged
+	m = press(t, m, "ctrl+t") // pin Staged
+	m = press(t, m, "S")      // stash list opens (suspends the pin)
+	m = m.focusCommitsPanel()
+	if m.stashView != nil {
+		t.Fatal("focusCommitsPanel must close the covering stash list")
+	}
+	if m.focus != panelCommits {
+		t.Fatalf("focus = %v, want Commits", m.focus)
+	}
+	if !m.fullMaxed || m.fullMax != panelCommits {
+		t.Fatalf("fullMaxed=%v fullMax=%v, want pin transferred to Commits", m.fullMaxed, m.fullMax)
 	}
 }
 

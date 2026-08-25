@@ -8,6 +8,34 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Stash window under an open file tree: consistent enter / `.` / esc.**
+  With the stash's file tree open and focus on the stash-list side, `enter`
+  used to open the old Apply/Pop/Drop popup and `.` showed the commit-list
+  menu. Now `enter` is inert there (it already drilled in), `.` shows the same
+  four stash rows it shows without the tree (Copy stash ref + Apply / Pop /
+  Drop), and the footer says so instead of advertising commit-list keys. esc
+  peels one surface at a time: first the file tree (back to the stash list),
+  then the stash window. The now-unreachable Apply/Pop/Drop popup was removed.
+- **Stash window: tab cycles focus, enter drills into files, `.` holds the
+  actions.** `tab`/`shift+tab` in the stash list now cycle focus into the left
+  panels and back (the window stays open, like `←`/`→`). `enter` on a stash
+  drills into its file tree with focus on the tree — the same gesture as
+  `enter` on a commit (`l` still opens it focused on the list side; with the
+  tree already open, `enter` on the list keeps opening the action popup). The
+  Apply / Pop / Drop actions moved to the `.` context menu (alongside Copy
+  stash ref); Drop still confirms first. Footer and `?` help updated.
+- **Jumping to a commit while the stash window is open no longer mixes the two
+  views.** With the stash list open and focus released to the left column (←),
+  `ctrl+g` (solo + tip) or `enter` (go to tip) on Branches landed focus on the
+  Commits panel *behind* the still-open stash list: keys fell into the stash
+  view, the feed was silently re-scoped out of sight, and the hidden commit
+  row's truncation tooltip drew as a stray yellow strip over the stash box (the
+  same strip could appear from plain stash browsing whenever the covered commit
+  row was truncated). Landing in the Commits feed — goto-tip, solo, tag solo,
+  file-finder commit jump, eager search — now closes the stash window first, so
+  the jump arrives somewhere visible; and the truncation tooltip is suppressed
+  for the covered Commits panel while the stash list owns the right column
+  (left-panel tooltips still work).
 - **`push` lands on the branch it names, whatever your git push config says.**
   gg ran `git push <remote> <branch>` — a one-sided refspec, whose *destination*
   git resolves through `push.default` and any `remote.<name>.push` refspec. So
