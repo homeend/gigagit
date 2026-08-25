@@ -30,16 +30,71 @@ gates() {
 	fi
 }
 
+# run_tests streams one line per package AS IT FINISHES (ok/FAIL/no-tests,
+# with elapsed time and test count), so a long stage shows live progress
+# instead of minutes of silence followed by one burst. A failing package
+# dumps its full captured output right under its FAIL line. Verbose mode
+# keeps go test's own raw -v stream. The pipeline's exit code is go test's
+# (pipefail is set), so failures still stop the script.
+run_tests() {
+	if [[ -n "${VERBOSE}" ]]; then
+		go test ${RACE} ${VERBOSE} "$@"
+		return
+	fi
+	go test ${RACE} -json "$@" | awk '
+	function pkgOf(line,   p) {
+		if (match(line, /"Package":"[^"]*"/) == 0) return ""
+		p = substr(line, RSTART + 11, RLENGTH - 12)
+		sub(/^github\.com\/homeend\/gigagit\//, "", p)
+		return p
+	}
+	{
+		pkg = pkgOf($0)
+		if (pkg == "") next
+		isTest = ($0 ~ /"Test":"/)
+		if ($0 ~ /"Action":"output"/) {
+			# Buffer package output (decoded) so a FAIL can replay it.
+			if (match($0, /"Output":"/)) {
+				out = substr($0, RSTART + 10)
+				sub(/"\}[[:space:]]*$/, "", out)
+				gsub(/\\n/, "\n", out); gsub(/\\t/, "\t", out)
+				gsub(/\\"/, "\"", out); gsub(/\\\\/, "\\", out)
+				buf[pkg] = buf[pkg] out
+			}
+			next
+		}
+		if (isTest) {
+			if ($0 ~ /"Action":"pass"/) tests[pkg]++
+			next
+		}
+		# Package-level verdicts stream in completion order — the progress.
+		if ($0 ~ /"Action":"pass"/) {
+			el = ""
+			if (match($0, /"Elapsed":[0-9.]+/)) el = substr($0, RSTART + 10, RLENGTH - 10) "s"
+			if (buf[pkg] ~ /\(cached\)/) el = "(cached)"
+			printf "ok   %-28s %8s  %d tests\n", pkg, el, tests[pkg]
+			delete buf[pkg]; fflush()
+		} else if ($0 ~ /"Action":"fail"/) {
+			printf "FAIL %s\n", pkg
+			printf "%s", buf[pkg]
+			delete buf[pkg]; fflush()
+		} else if ($0 ~ /"Action":"skip"/) {
+			printf "--   %-28s (no test files)\n", pkg
+			fflush()
+		}
+	}'
+}
+
 # Unit tests cover every package except the e2e harness; ./cmd/... and
 # ./internal/... are the only other package roots in this module.
 unit() {
 	echo "== unit tests =="
-	go test ${RACE} ${VERBOSE} ./cmd/... ./internal/...
+	run_tests ./cmd/... ./internal/...
 }
 
 e2e() {
 	echo "== e2e scenarios (last: full CLI→engine→git stack) =="
-	go test ${RACE} ${VERBOSE} ./e2e/
+	run_tests ./e2e/
 }
 
 target="${1:-all}"

@@ -34,7 +34,6 @@ func newFakeService() *domain.Service {
 }
 
 func TestQueryFailureRecorded(t *testing.T) {
-	t.Parallel()
 	observ.ResetFailures()
 	s := newFakeService()
 	if _, err := s.Status(context.Background()); err == nil {
@@ -47,7 +46,6 @@ func TestQueryFailureRecorded(t *testing.T) {
 }
 
 func TestExecuteFailureRecorded(t *testing.T) {
-	t.Parallel()
 	observ.ResetFailures()
 	s := newFakeService()
 	if _, err := s.Execute(context.Background(), failOp{}, nil, nil); err == nil {
@@ -60,7 +58,6 @@ func TestExecuteFailureRecorded(t *testing.T) {
 }
 
 func TestCommitFeedFailureRecorded(t *testing.T) {
-	t.Parallel()
 	observ.ResetFailures()
 	s := newFakeService()
 	// A bare fake runner fails the underlying `git log`. The commit walk routes
@@ -76,7 +73,6 @@ func TestCommitFeedFailureRecorded(t *testing.T) {
 }
 
 func TestExecuteCancellationNotRecorded(t *testing.T) {
-	t.Parallel()
 	observ.ResetFailures()
 	s := newFakeService()
 	_, _ = s.Execute(context.Background(), cancelOp{}, nil, nil)
