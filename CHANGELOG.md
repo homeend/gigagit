@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Template-repo test fixtures.** The per-test `git init` + add + commit
+  setup (4+ process spawns per test, ~4,000 tests) is replaced by copying a
+  cached template repository built once per test process
+  (`internal/gittest.TemplateRepo`/`BasicRepo`) — a pure file copy, no
+  processes. On Windows, where process creation dominates the suite's wall
+  clock, the tui package runs ~20% faster; helper signatures are unchanged.
 - **The test suite runs green on Windows, and several real Windows bugs fell
   out of making it so.** Product fixes: worktree paths from git (worktree
   list, `--show-toplevel`, git dirs) are normalized to native notation, so
