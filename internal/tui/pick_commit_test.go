@@ -101,10 +101,12 @@ func TestPickProbeMissingWithPatchAppliesPatch(t *testing.T) {
 	if err != nil || !strings.HasPrefix(string(data), "From ") {
 		t.Fatalf("temp patch file bad: %q, %v", data, err)
 	}
-	// The opFinishedMsg cleanup removes the temp file.
+	// Drain the REAL dispatched op before asserting cleanup: startOp launched
+	// its goroutine at dispatch, and on Windows a synthetic opFinishedMsg would
+	// race the op's own read of the temp file — an open file cannot be removed
+	// there, so the cleanup silently failed and the stat below flaked.
 	tmp := m.pickPatchTemp
-	mm, _ = m.Update(opFinishedMsg{})
-	m = mm.(Model)
+	m = driveOp(t, m, cmd)
 	if m.pickPatchTemp != "" {
 		t.Fatal("pickPatchTemp must clear when the op finishes")
 	}
