@@ -328,6 +328,12 @@ func (m Model) commitGotoTipRow() (actionRow, bool) {
 // prompts before scanning deeper. Shared by the goto-tip row (enter / .-menu)
 // and the ctrl+g pendingGotoTip drain in the commitsReloadedMsg handler.
 func (m Model) gotoCommitByHash(hash string) (Model, tea.Cmd) {
+	// Landing in the feed is the point — close a covering stash list up front
+	// so BOTH branches (direct hit via focusCommitsPanel, and the eager-search
+	// fallback whose scan/prompt/miss paths never reach it) land visible.
+	if m.stashView != nil {
+		m = m.closeStashView()
+	}
 	idx := m.displayIndices(panelCommits)
 	for di, bi := range idx {
 		if c, ok := m.commitAtUnified(bi); ok && commitIsHash(c, hash) {

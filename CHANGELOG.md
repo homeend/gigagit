@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Jumping to a commit while the stash window is open no longer mixes the two
+  views.** With the stash list open and focus released to the left column (←),
+  `ctrl+g` (solo + tip) or `enter` (go to tip) on Branches landed focus on the
+  Commits panel *behind* the still-open stash list: keys fell into the stash
+  view, the feed was silently re-scoped out of sight, and the hidden commit
+  row's truncation tooltip drew as a stray yellow strip over the stash box (the
+  same strip could appear from plain stash browsing whenever the covered commit
+  row was truncated). Landing in the Commits feed — goto-tip, solo, tag solo,
+  file-finder commit jump, eager search — now closes the stash window first, so
+  the jump arrives somewhere visible; and the truncation tooltip is suppressed
+  for the covered Commits panel while the stash list owns the right column
+  (left-panel tooltips still work).
 - **`push` lands on the branch it names, whatever your git push config says.**
   gg ran `git push <remote> <branch>` — a one-sided refspec, whose *destination*
   git resolves through `push.default` and any `remote.<name>.push` refspec. So

@@ -2882,6 +2882,14 @@ func (m Model) activateTab(p panel) Model {
 // pin: that surface's own close path restores its own remembered focus, and
 // rewriting the pin now would go live later under a mismatched restore.
 func (m Model) focusCommitsPanel() Model {
+	// Every caller means "land the user in the Commits feed". While the stash
+	// list covers that column, focusing panelCommits would hand focus (and key
+	// routing) to the stash list instead and leave the landed-on row invisible
+	// — so close it first; its close path restores lastLeftPanel and any
+	// suspended pin, and the assignments below then take over.
+	if m.stashView != nil {
+		m = m.closeStashView()
+	}
 	m.focus = panelCommits
 	if m.fullMaxed && !m.fullscreenYielded() {
 		m.fullMax = panelCommits
