@@ -105,15 +105,15 @@ func TestReviewViewZCyclesMode(t *testing.T) {
 	if rv.mode != modeCutoff {
 		t.Fatalf("default mode = %v, want modeCutoff", rv.mode)
 	}
-	m, _ = rv.update(m, keyMsg("z"))
+	m, _ = rv.update(m, keyMsg("ctrl+w"))
 	if rv.mode != modeWrap {
 		t.Fatalf("after one z, mode = %v, want modeWrap", rv.mode)
 	}
-	m, _ = rv.update(m, keyMsg("z"))
+	m, _ = rv.update(m, keyMsg("ctrl+w"))
 	if rv.mode != modeScroll {
 		t.Fatalf("after two z, mode = %v, want modeScroll", rv.mode)
 	}
-	m, _ = rv.update(m, keyMsg("z"))
+	m, _ = rv.update(m, keyMsg("ctrl+w"))
 	if rv.mode != modeCutoff {
 		t.Fatalf("after three z, mode = %v, want modeCutoff (wrap-around)", rv.mode)
 	}
@@ -131,7 +131,7 @@ func TestReviewViewWrapShowsTail(t *testing.T) {
 	if strings.Contains(rv.render(m, ""), "TAILWORD") {
 		t.Fatal("cutoff mode should truncate the tail away")
 	}
-	m, _ = rv.update(m, keyMsg("z")) // → modeWrap
+	m, _ = rv.update(m, keyMsg("ctrl+w")) // → modeWrap
 	if rv.mode != modeWrap {
 		t.Fatalf("expected modeWrap, got %v", rv.mode)
 	}
@@ -147,7 +147,7 @@ func TestReviewViewWrapScrollClamps(t *testing.T) {
 	rv := newReviewView("Review", "/tmp/x.md", strings.Repeat("W", 400)+"\n")
 	m := Model{width: 20, height: 10}
 	m = m.pushLayer(rv)
-	m, _ = rv.update(m, keyMsg("z")) // → modeWrap
+	m, _ = rv.update(m, keyMsg("ctrl+w")) // → modeWrap
 	m, _ = rv.update(m, tea.KeyMsg{Type: tea.KeyEnd})
 	body := rv.bodyRows(m)
 	dl := rv.displayLines(20)

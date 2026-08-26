@@ -358,7 +358,7 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			e.outCollapsed, e.outFocused, e.oshift = true, false, 0
 			e.zoomed = false
 			return m, nil
-		case "esc", "enter", "z", "shift+left", "shift+right", "alt+up", "alt+down":
+		case "esc", "enter", "ctrl+w", "shift+left", "shift+right", "alt+up", "alt+down":
 		default:
 			return m, nil
 		}
@@ -390,7 +390,7 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "right":
 		e.side = hunkpick.Incoming
 		e.clampLine()
-	case "z":
+	case "ctrl+w":
 		e.mode = cyclePickerMode(e.mode)
 		e.hscroll = 0
 	case "o":
@@ -513,13 +513,13 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	// The hint wraps instead of truncating so no command is ever cut off;
 	// the set follows the focus so only live keys are advertised.
 	hintParts := []string{
-		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[z] mode"), i18n.T("[↑/↓] line"), i18n.T("[pgup/pgdn] page"), i18n.T("[alt+↑/↓] view"), i18n.T("[space] pick"),
+		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[ctrl+w] mode"), i18n.T("[↑/↓] line"), i18n.T("[pgup/pgdn] page"), i18n.T("[alt+↑/↓] view"), i18n.T("[space] pick"),
 		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[n/p] hunk"), i18n.T("[o] output"), i18n.T("[tab] output"),
 		i18n.T("[ctrl+t] full"), i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
 	}
 	if e.outFocused {
 		hintParts = []string{
-			i18n.T("[↑/↓] scroll"), i18n.T("[pgup/pgdn] page"), i18n.T("[tab] grid"), i18n.T("[o] hide"), i18n.T("[z] mode"), i18n.T("[shift+←/→] scroll"), i18n.T("[alt+↑/↓] view"),
+			i18n.T("[↑/↓] scroll"), i18n.T("[pgup/pgdn] page"), i18n.T("[tab] grid"), i18n.T("[o] hide"), i18n.T("[ctrl+w] mode"), i18n.T("[shift+←/→] scroll"), i18n.T("[alt+↑/↓] view"),
 			i18n.T("[ctrl+t] full"), i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
 		}
 	}

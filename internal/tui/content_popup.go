@@ -195,7 +195,7 @@ func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
-	case "z": // cycle the text display mode (cutoff / wrap / scroll)
+	case "ctrl+w": // cycle the text display mode (cutoff / wrap / scroll)
 		p.mode = p.mode.next()
 		p.hscroll = 0
 		return m, nil
@@ -411,7 +411,7 @@ func (p *contentPopup) box(m Model) string {
 		}
 		b.WriteString(notePad + savedNoteStyle.Width(noteW).Render(truncate(i18n.T("saved to %s", p.saved), noteW)) + "\n\n")
 	}
-	hint := i18n.T("[/] search  [z] mode  [s] save  [ctrl+t] full  [q] close")
+	hint := i18n.T("[/] search  [ctrl+w] mode  [s] save  [ctrl+t] full  [q] close")
 	if len(vis) > capRows {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
 	}

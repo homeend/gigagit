@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: the display-mode cycle is `ctrl+w` everywhere.** Every surface that
+  cycled cutoff / wrap / scroll with `z` (panels, diff/history/blame/stash,
+  files tree, and all list popups — repo switcher, bookmarks, shelf, finder,
+  git-config, settings, conflict resolver, hunk picker, pair-op, notices,
+  remote heads, help) now uses `ctrl+w`; the `.` menu's briefly-added
+  `ctrl+z` follows suit. All `[z]`/`[ctrl+z]` footer and hint labels read
+  `[ctrl+w]` (four bundles updated); the diff-view hint dropped its `lines:`
+  prefix to stay within its width budget. `z` no longer does anything in
+  those surfaces (in filter inputs it was already query text).
 - **TUI: the `.` action menu is type-to-filter.** Typing any character now
   filters the rows directly (the old `/` prefix is gone), and no key runs an
   action anymore — `enter` on the highlighted row is the only trigger, so
@@ -16,7 +25,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   ("Switch to branch", "Stage file", "Filter commits…", …) while the footer
   keeps its hint style. `esc` clears an active filter first and closes on the
   next press (or immediately when nothing is typed); the display-mode cycle
-  moved from `z` to `ctrl+z` (labels embedding long branch names still wrap).
+  moved from `z` to `ctrl+w` (labels embedding long branch names still wrap).
   The redundant footer-label rows ("[i] message [I] in editor", the inert
   graph-keys row) dropped out — their dedicated direct-run rows remain.
 - **`gg web`: ☰ menu regrouped.** Six labelled groups in a fixed authored

@@ -271,7 +271,7 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := i18n.T("%d/%d  [↑/↓] scroll  [z] view  [esc] close", start+1, len(vis))
+	hint := i18n.T("%d/%d  [↑/↓] scroll  [ctrl+w] view  [esc] close", start+1, len(vis))
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 
 	style := bluredPanel

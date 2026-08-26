@@ -484,7 +484,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.openCommitMessagePopup(m.filesViewCommit())
 		}
 		return m, nil
-	case "z":
+	case "ctrl+w":
 		if m.filesPreview != nil && !m.filesTreeFocused { // z cycles the focused preview
 			m.filesPreview.mode = m.filesPreview.mode.next()
 			m.filesPreview.hscroll = 0

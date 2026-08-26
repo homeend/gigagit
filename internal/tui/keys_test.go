@@ -28,20 +28,20 @@ func TestKeysIgnoredWhileRunning(t *testing.T) {
 	}
 }
 
-func TestZCyclesFocusedPanelMode(t *testing.T) {
+func TestCtrlWCyclesFocusedPanelMode(t *testing.T) {
 	t.Parallel()
 	m := New(nil)
 	m.focus = panelCommits
 	if m.dispModes[panelCommits] != modeCutoff {
 		t.Fatalf("default mode = %v, want modeCutoff", m.dispModes[panelCommits])
 	}
-	u, _ := m.Update(keyMsg("z"))
+	u, _ := m.Update(keyMsg("ctrl+w"))
 	if got := u.(Model).dispModes[panelCommits]; got != modeWrap {
 		t.Errorf("after z, mode = %v, want modeWrap", got)
 	}
 	// w still opens the worktree popup path, not a mode cycle.
 	if got := u.(Model).dispModes[panelCommits]; got == modeCutoff {
-		t.Errorf("z did not change the mode")
+		t.Errorf("ctrl+w did not change the mode")
 	}
 }
 

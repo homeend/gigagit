@@ -1535,7 +1535,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openErrorPopup()
 		case "F": // open the fuzzy file finder (global; see openFileFinder)
 			return m.openFileFinder()
-		case "z": // cycle the focused panel's text display mode
+		case "ctrl+w": // cycle the focused panel's text display mode
 			m.dispModes[m.focus] = m.dispModes[m.focus].next()
 			m.hscroll[m.focus] = 0
 			return m, nil

@@ -153,7 +153,7 @@ func globalBindings() []footerBinding {
 		{"last-error", "E", i18n.T("[E] full message"), func(m Model) bool { return m.lastError != "" }, scopeGlobal},
 		{"find", "F", i18n.T("[F] find file"), Model.opsIdle, scopeGlobal},
 		{"order", "o", i18n.T("[o]rder"), Model.opsIdle, scopeGlobal},
-		{"view", "z", i18n.T("[z] view"), Model.opsIdle, scopeGlobal},
+		{"view", "ctrl+w", i18n.T("[ctrl+w] view"), Model.opsIdle, scopeGlobal},
 		{"load-batch", "ctrl+l", i18n.T("[ctrl+l] more"), Model.opsIdle, scopeGlobal},
 		{"eager-find", "ctrl+f", i18n.T("[ctrl+f] find deeper"), Model.opsIdle, scopeGlobal},
 		{"filter", "/", i18n.T("[/]filter"), Model.opsIdle, scopeGlobal},
@@ -189,7 +189,7 @@ func (m Model) footerOverride() (string, bool) {
 	// Commits panel (. menu + graph keys); the tree side is file-scoped.
 	if m.filesView != nil {
 		if m.filesPreview != nil && !m.filesTreeFocused {
-			return i18n.T("file: [↑/↓] scroll  [z] view  [←/tab] back to tree  [esc] close preview"), true
+			return i18n.T("file: [↑/↓] scroll  [ctrl+w] view  [←/tab] back to tree  [esc] close preview"), true
 		}
 		// i shows the displayed commit's message — only when canShowFilesViewMessage
 		// holds (same gate as the handler, so the footer never advertises a dead i).
@@ -204,13 +204,13 @@ func (m Model) footerOverride() (string, bool) {
 			if m.stashView == nil && !m.inCompareMode() && m.filesHash != "" {
 				aHint = i18n.T("  [a] all files")
 			}
-			return i18n.T("tree: [↑/↓] move  [enter] diff") + aHint + i18n.T("  [.] view file/copy  [/] search  [h] hist  [b] blame  [z] view") + msgHint + i18n.T("  [esc/l] close"), true
+			return i18n.T("tree: [↑/↓] move  [enter] diff") + aHint + i18n.T("  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view") + msgHint + i18n.T("  [esc/l] close"), true
 		}
 		// The list side under an open tree can be the STASH list — its keys
 		// differ (enter is inert, the graph/all-files keys don't apply, "."
 		// is the Apply/Pop/Drop menu), so it gets its own strip.
 		if m.stashView != nil {
-			return i18n.T("stash: [↑/↓] move  [.] apply/pop/drop  [tab] tree  [z] view  [esc/l] close"), true
+			return i18n.T("stash: [↑/↓] move  [.] apply/pop/drop  [tab] tree  [ctrl+w] view  [esc/l] close"), true
 		}
 		return i18n.T("commits: [enter/tab] tree  [↑/↓] move  [<>=] graph  [a] all files  [/] search  [.] actions") + msgHint + i18n.T("  [esc/l] close"), true
 	}
@@ -218,7 +218,7 @@ func (m Model) footerOverride() (string, bool) {
 	// (no file tree yet). When focus has moved to a left panel, fall through to
 	// that panel's normal footer.
 	if m.stashView != nil && m.focus == panelCommits {
-		return i18n.T("stash: [↑/↓] move  [enter/l] files  [.] apply/pop/drop  [z] view  [←/tab] panels  [esc/S] close"), true
+		return i18n.T("stash: [↑/↓] move  [enter/l] files  [.] apply/pop/drop  [ctrl+w] view  [←/tab] panels  [esc/S] close"), true
 	}
 	return "", false
 }

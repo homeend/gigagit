@@ -85,7 +85,7 @@ func TestFileFinderPlainKeysDoNotFilter(t *testing.T) {
 	m, _ = m.openFileFinder()
 	nm, _ := m.Update(lsFilesMsg{paths: []string{"fs/erofs/zdata.c", "a/b.go"}})
 	m = nm.(Model)
-	nm, _ = m.Update(keyMsg("z")) // in nav mode this cycles display mode, not a query
+	nm, _ = m.Update(keyMsg("ctrl+w")) // in nav mode this cycles display mode, not a query
 	m = nm.(Model)
 	p := layerOf[*fileFinderPopup](m)
 	if p.query != "" || p.filtering {

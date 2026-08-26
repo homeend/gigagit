@@ -130,10 +130,10 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
-	// Wrap the hint to the text width so [z] mode / [esc] close stay visible even
+	// Wrap the hint to the text width so [ctrl+w] mode / [esc] close stay visible even
 	// on a narrow terminal, where a single-line footer would truncate them off
 	// (the reason z went undiscovered).
-	hint := []string{i18n.T("[?] keys"), i18n.T("[enter] diff/browse"), i18n.T("[e] editor"), i18n.T("[p] restore"), i18n.T("[t] temp dir"), i18n.T("[a] cherry-pick"), i18n.T("[y] copy"), i18n.T("[m] mark/compare"), i18n.T("[x] remove"), i18n.T("[c] vs bookmark"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
+	hint := []string{i18n.T("[?] keys"), i18n.T("[enter] diff/browse"), i18n.T("[e] editor"), i18n.T("[p] restore"), i18n.T("[t] temp dir"), i18n.T("[a] cherry-pick"), i18n.T("[y] copy"), i18n.T("[m] mark/compare"), i18n.T("[x] remove"), i18n.T("[c] vs bookmark"), i18n.T("[/] filter"), i18n.T("[ctrl+w] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -197,7 +197,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
-	case "z":
+	case "ctrl+w":
 		p.mode = p.mode.next()
 		p.hscroll = 0
 		return m, nil

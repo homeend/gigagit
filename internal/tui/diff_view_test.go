@@ -1166,7 +1166,7 @@ func TestDiffZCyclesLongMode(t *testing.T) {
 	wantSeq := []longMode{longWrap, longTruncate, longScroll}
 	cur := tea.Model(m)
 	for i, want := range wantSeq {
-		u, _ := cur.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("z")})
+		u, _ := cur.(Model).Update(tea.KeyMsg{Type: tea.KeyCtrlW})
 		mm := u.(Model)
 		if mm.diffLayer().long != want {
 			t.Fatalf("press %d: long = %d, want %d", i+1, mm.diffLayer().long, want)

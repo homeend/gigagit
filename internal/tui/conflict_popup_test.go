@@ -144,7 +144,7 @@ func TestConflictProcessZCyclesMode(t *testing.T) {
 	t.Parallel()
 	m := conflictModel()
 	m, _ = startConflictProcess(m)
-	u, _ := m.Update(keyMsg("z"))
+	u, _ := m.Update(keyMsg("ctrl+w"))
 	m = u.(Model)
 	if m.proc.(*conflictProcess).mode != modeWrap {
 		t.Fatalf("after z, mode = %v, want modeWrap", m.proc.(*conflictProcess).mode)
@@ -162,7 +162,7 @@ func TestConflictProcessHintNotTruncated(t *testing.T) {
 		inProgress: "merge",
 	}
 	out := ansi.Strip(cp.render(m, ""))
-	for _, tok := range []string{"[enter]", "[C]", "[i]", "[m]", "[A]", "[a]", "[L]", "[z]"} {
+	for _, tok := range []string{"[enter]", "[C]", "[i]", "[m]", "[A]", "[a]", "[L]", "[ctrl+w]"} {
 		if !strings.Contains(out, tok) {
 			t.Errorf("hint key %q missing (truncated, not wrapped?):\n%s", tok, out)
 		}

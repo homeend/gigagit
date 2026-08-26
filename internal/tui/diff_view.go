@@ -734,7 +734,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			v.cur, v.offset = 0, 0
 		}
-	case "z":
+	case "ctrl+w":
 		ord := v.currentBlockOrdinal()
 		v.long = (v.long + 1) % 3
 		v.hOffset = 0

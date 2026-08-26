@@ -233,7 +233,7 @@ func TestBookmarkPopupZCyclesMode(t *testing.T) {
 	t.Parallel()
 	m := bmPopupModel(model.Bookmark{ID: "a", State: model.StateUnstaged, Worktree: "/wt", Path: "a.go"})
 	m.bookmarkSwitcher().hscroll = 5
-	mm, _ := m.Update(keyMsg("z"))
+	mm, _ := m.Update(keyMsg("ctrl+w"))
 	m = mm.(Model)
 	if m.bookmarkSwitcher().mode != modeWrap {
 		t.Fatalf("z should cycle cutoff→wrap, got %v", m.bookmarkSwitcher().mode)
@@ -241,7 +241,7 @@ func TestBookmarkPopupZCyclesMode(t *testing.T) {
 	if m.bookmarkSwitcher().hscroll != 0 {
 		t.Fatalf("z should reset hscroll, got %d", m.bookmarkSwitcher().hscroll)
 	}
-	mm, _ = m.Update(keyMsg("z"))
+	mm, _ = m.Update(keyMsg("ctrl+w"))
 	m = mm.(Model)
 	if m.bookmarkSwitcher().mode != modeScroll {
 		t.Fatalf("second z should reach scroll, got %v", m.bookmarkSwitcher().mode)

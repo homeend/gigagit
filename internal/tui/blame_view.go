@@ -192,7 +192,7 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.openShelfSwitcher()
 	case "F": // global fuzzy file finder
 		return m.openFileFinder()
-	case "z":
+	case "ctrl+w":
 		b.mode = b.mode.next()
 		b.hscroll = 0
 		return m, nil

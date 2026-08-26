@@ -93,7 +93,7 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openShelfSwitcher()
 	case "F": // global fuzzy file finder
 		return m.openFileFinder()
-	case "z":
+	case "ctrl+w":
 		v.mode = v.mode.next()
 		v.hscroll = 0
 		return m, nil

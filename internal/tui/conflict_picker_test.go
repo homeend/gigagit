@@ -219,15 +219,15 @@ func TestHunkPickerZCyclesScrollWrapCutoff(t *testing.T) {
 	if e.mode != modeScroll {
 		t.Fatalf("start = %v", e.mode)
 	}
-	m, _ = e.update(m, key("z"))
+	m, _ = e.update(m, key("ctrl+w"))
 	if e.mode != modeWrap {
 		t.Fatalf("after 1st z = %v, want wrap", e.mode)
 	}
-	m, _ = e.update(m, key("z"))
+	m, _ = e.update(m, key("ctrl+w"))
 	if e.mode != modeCutoff {
 		t.Fatalf("after 2nd z = %v, want cutoff", e.mode)
 	}
-	m, _ = e.update(m, key("z"))
+	m, _ = e.update(m, key("ctrl+w"))
 	if e.mode != modeScroll {
 		t.Fatalf("after 3rd z = %v, want scroll", e.mode)
 	}
@@ -246,7 +246,7 @@ func TestHunkPickerShiftPansOnlyInScroll(t *testing.T) {
 		t.Fatalf("shift+left → hscroll=%d, want 0", e.hscroll)
 	}
 	m, _ = e.update(m, keyMsg("shift+right")) // hscroll = step
-	m, _ = e.update(m, key("z"))              // → wrap, hscroll reset
+	m, _ = e.update(m, key("ctrl+w"))         // → wrap, hscroll reset
 	if e.hscroll != 0 {
 		t.Fatalf("z must reset hscroll, got %d", e.hscroll)
 	}
@@ -884,12 +884,12 @@ func TestPickerEnterGateReturnsGridFocus(t *testing.T) {
 	}
 	// z and shift+→ keep falling through under output focus
 	m, _ = e.update(m, keyMsg("tab"))
-	m, _ = e.update(m, key("z"))
+	m, _ = e.update(m, key("ctrl+w"))
 	if e.mode != modeWrap {
 		t.Fatalf("z must keep cycling the display mode under output focus, got %v", e.mode)
 	}
-	m, _ = e.update(m, key("z"))
-	m, _ = e.update(m, key("z")) // back to scroll so shift can pan
+	m, _ = e.update(m, key("ctrl+w"))
+	m, _ = e.update(m, key("ctrl+w")) // back to scroll so shift can pan
 	m, _ = e.update(m, keyMsg("shift+right"))
 	if e.hscroll == 0 {
 		t.Fatal("shift+→ must keep panning under output focus")

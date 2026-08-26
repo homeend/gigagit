@@ -698,7 +698,7 @@ func (m Model) updateActionMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
-	case "ctrl+z":
+	case "ctrl+w":
 		a.mode = a.mode.next()
 		a.hscroll = 0
 		return m, nil
@@ -779,7 +779,7 @@ func (m Model) renderActionMenu() string {
 	parts = append(parts, bodyLines...)
 	// Wrap the hint so [esc] close survives on a narrow popup (mirrors
 	// bookmarkPopup) — a single-line footer would truncate it off.
-	hint := []string{i18n.T("type to filter"), i18n.T("[enter] run"), i18n.T("[ctrl+z] view"), i18n.T("[esc] close")}
+	hint := []string{i18n.T("type to filter"), i18n.T("[enter] run"), i18n.T("[ctrl+w] view"), i18n.T("[esc] close")}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))

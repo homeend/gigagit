@@ -108,7 +108,7 @@ func TestContentPopupZCyclesMode(t *testing.T) {
 	if layerOf[*contentPopup](m).mode != modeCutoff {
 		t.Fatalf("default mode = %v, want modeCutoff", layerOf[*contentPopup](m).mode)
 	}
-	u, _ := m.Update(keyMsg("z"))
+	u, _ := m.Update(keyMsg("ctrl+w"))
 	mm := u.(Model)
 	if layerOf[*contentPopup](mm).mode != modeWrap {
 		t.Fatalf("after z, mode = %v, want modeWrap", layerOf[*contentPopup](mm).mode)

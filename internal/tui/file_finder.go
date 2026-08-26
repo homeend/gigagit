@@ -139,7 +139,7 @@ func (p *fileFinderPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	// Navigation mode. Display-mode + pan keys act here (they are query chars
 	// while filtering).
 	switch msg.String() {
-	case "z":
+	case "ctrl+w":
 		p.mode = p.mode.next()
 		p.hscroll = 0
 		return m, nil
@@ -256,7 +256,7 @@ func (p *fileFinderPopup) box(m Model) string {
 
 	// Wrap the hint so [/] filter / [esc] survive on a narrow terminal (mirrors
 	// the bookmark/shelf switchers).
-	hint := []string{i18n.T("[enter] open"), i18n.T("[↑↓ pgup/pgdn] nav"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
+	hint := []string{i18n.T("[enter] open"), i18n.T("[↑↓ pgup/pgdn] nav"), i18n.T("[/] filter"), i18n.T("[ctrl+w] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")

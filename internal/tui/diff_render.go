@@ -20,7 +20,8 @@ var (
 )
 
 // diffHintFor builds the diff-view hint for the current long-line mode. Kept
-// short enough that [esc] close survives truncation at width 100
+// short enough that [esc] close survives truncation at width 100 (ctrl+w took
+// over from z, so the mode value lost its lines: prefix to stay under budget)
 // (TestRenderDiffViewPanes). The scroll variant appends the pan keys.
 func diffHintFor(long longMode) string {
 	mode := i18n.T("scroll")
@@ -34,7 +35,7 @@ func diffHintFor(long longMode) string {
 	if long == longScroll {
 		pan = i18n.T("  [←→/0] pan")
 	}
-	return i18n.T("[↑↓] scroll  [n/p] change  [f] part  [z] lines:%s", mode) + pan + i18n.T("  [h] hist  [b] blame  [esc] close")
+	return i18n.T("[↑↓] scroll  [n/p] change  [f] part  [ctrl+w] %s", mode) + pan + i18n.T("  [h] hist  [b] blame  [esc] close")
 }
 
 // cellSeg is one pane's text for one display row: the sanitized display runes
