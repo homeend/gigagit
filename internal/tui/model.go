@@ -1989,6 +1989,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.commitCompareSet = nil
 				return m, nil
 			}
+			// Same on the file panels: one esc drops ALL m-marked files.
+			if m.isFilesPanel(m.focus) && len(m.fileMarks) > 0 {
+				m.fileMarks = nil
+				return m, nil
+			}
 			if m.mark != nil {
 				m.mark = nil
 				return m, nil

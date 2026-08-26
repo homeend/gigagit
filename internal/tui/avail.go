@@ -215,13 +215,19 @@ func (m Model) canShowReflogFiles() bool {
 }
 
 // canMark gates m: mark/unmark/pair needs a resolvable row in the focused
-// panel (handleMarkKey re-checks and routes the three sub-cases).
+// panel (handleMarkKey re-checks and routes the three sub-cases). Only panels
+// with a mark consumer qualify: Branches (pair ops), Commits (◉ compare set),
+// and the file panels (multi-select). Elsewhere a mark would be a dead ◆
+// nothing ever acts on, so m stays inert.
 func (m Model) canMark() bool {
 	if !m.opsIdle() {
 		return false
 	}
 	if m.focus == panelCommits && m.isWipRow(m.commitSelUnified()) {
 		return true // a WIP pseudo-row can be marked for compare
+	}
+	if m.focus != panelBranches && m.focus != panelCommits && !m.isFilesPanel(m.focus) {
+		return false
 	}
 	_, ok := m.backingIndex(m.focus)
 	return ok
