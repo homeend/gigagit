@@ -16,7 +16,7 @@
 // never learns the path behind <input type=file> — only the bytes — and this
 // server is loopback-only, so the file the user means is already reachable by
 // name. That is the TUI's lane too.
-import { $, getJSON } from "./core.js";
+import { getJSON } from "./core.js";
 import { openPrompt, showCtxMenu } from "./layers.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { opLine, startOp } from "./ops.js";
@@ -170,21 +170,6 @@ async function pickEntryToCopy(x, y) {
   }
   showCtxMenu(rows, x, y);
 }
-
-
-registerRows("menu", () => [
-  { label: "apply a patch…", act: () => applyPatchPrompt() },
-  {
-    label: "copy a bookmark or shelf entry to a directory…",
-    // The ☰ button is the anchor the menu that contained this row opened
-    // from, so the picker lands under it rather than at the pointer, which is
-    // wherever the click happened to be.
-    act: () => {
-      const r = $("menu-btn").getBoundingClientRect();
-      pickEntryToCopy(r.left, r.bottom + 4);
-    },
-  },
-]);
 
 
 registerHelp({

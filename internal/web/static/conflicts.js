@@ -382,12 +382,9 @@ function openStashPick(preselect) {
 }
 
 
-// Both entry points carry the paused-op gate the mass staging rows already
-// live under: while a sequencer op is paused the working tree belongs to it,
-// git refuses to stash mid-merge, and a row that can only be refused is worse
-// than no row. openStashPick keeps its own check as the backstop.
-registerRows("menu", () => (state.wt && !state.conflict ? [{ label: "stash a selection…", act: () => openStashPick(null) }] : []));
-
+// The ☰ "stash a selection…" row lives in palette.js (the authored global
+// menu) and carries the same paused-op gate; openStashPick keeps its own
+// check as the backstop.
 registerRows("file", (f) => {
   if (!f || state.conflict) return [];
   if (f.section === "commit" || f.section === "conflicts" || f.section === "staged") return [];

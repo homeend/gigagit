@@ -530,6 +530,10 @@ function showRemoteMenu(rb, x, y) {
   items.push({ label: "copy name", act: () => copyText(rb.name, "name " + rb.name) });
   if (rb.hash) items.push({ label: "copy commit id", act: () => copyText(rb.hash, "commit id " + rb.hash) });
   items.push({ sep: true });
+  // Registered rows (browse remote branches…) sit second from the bottom,
+  // fenced from the red delete row below them.
+  items.push(...extraRows("remote", rb));
+  items.push({ sep: true });
   items.push({
     // The engine's own confirm parks in the modal before the deletion is
     // pushed (the delete-branch precedent).
@@ -537,7 +541,6 @@ function showRemoteMenu(rb, x, y) {
     danger: true,
     act: () => startOp({ op: "delete-remote-branch", ref: rb.name }, "deleting " + rb.name),
   });
-  items.push(...extraRows("remote", rb));
   showCtxMenu(items, x, y);
 }
 

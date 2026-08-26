@@ -21,7 +21,8 @@ is not an engine op, so those are listed separately below.
 
 Pull · push · force-push · smart switch · merge · rebase · fast-forward ·
 interactive rebase · branch create/rename/delete · remote checkout (stay or
-switch) · prune · delete remote branch · worktree create + remove · tags
+switch) · browse & checkout unfetched remote branches (per-branch fetch
+mapping) · prune · delete remote branch · worktree create + remove · tags
 (create, annotate, push, delete, delete from remote) · stash create/apply/pop/
 drop · commit · staging incl. the region/line hunk picker · discard ·
 `.gitignore` rows · reset (incl. reset-to-remote-tip) · conflict resolution

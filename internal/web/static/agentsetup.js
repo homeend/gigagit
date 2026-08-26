@@ -6,7 +6,7 @@
 // rule in style.css, no row added to palette.js.
 import { $, esc, getJSON, postJSON } from "./core.js";
 import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
-import { registerHelp, registerRows } from "./menus.js";
+import { registerHelp } from "./menus.js";
 import { opLine } from "./ops.js";
 
 let ag = null; // {version, project, agents, busy} while the overlay is up
@@ -162,8 +162,6 @@ function closeAgentSetup() {
   closeLayer("gg-agents");
 }
 
-
-registerRows("menu", () => [{ label: "agent setup…", act: () => openAgentSetup() }]);
 
 registerHelp({
   key: "agent setup",

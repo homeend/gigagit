@@ -14,6 +14,13 @@ import { startReview } from "./review.js";
 import { gotoCommitPrompt, openCommitFilter, toggleGraphMode } from "./commits.js";
 import { openWorkingTree } from "./files.js";
 import { extraRows } from "./menus.js";
+import { applyPatchPrompt, pickEntryToCopy } from "./patch.js";
+import { openStashPick } from "./conflicts.js";
+import { startAmend } from "./commitai.js";
+import { openGitConfig } from "./gitconfig.js";
+import { openAgentSetup } from "./agentsetup.js";
+import { openFeedFilter, openFinder } from "./search.js";
+import { openRemoteHeads } from "./remoteheads.js";
 
 // ---- command palette + global ☰ menu (wave 3) ----------------------------
 // The palette is a layer with an input INSIDE it: onKey consumes nav keys
@@ -185,40 +192,62 @@ $("palette-list").addEventListener("click", (e) => {
 
 function openGlobalMenu() {
   const r = $("menu-btn").getBoundingClientRect();
-  // Two labelled groups — git operations, then the UI's own controls — each
-  // sorted at render so a future entry cannot land unsorted within its
-  // group; a new row must pick its group, nothing else. help sits alone
-  // below a separator — the one fixed anchor.
-  const git = [
+  // Six labelled groups in a FIXED authored order (user-specified layout —
+  // not sorted): a new row picks its group and its place in it. Rows whose
+  // feature lives in another module are imported here so the whole menu
+  // reads top-to-bottom in one place; the extraRows("menu") hook remains for
+  // rows this file does not know about, appended before help.
+  const rows = [
+    { header: "Actions" },
     { label: "pull", act: () => doPull() },
     { label: "push", act: () => doPush() },
-    { label: "fetch all remotes", act: () => doFetch() },
-    { label: "prune remotes (drop deleted branches)", act: () => startOp({ op: "prune" }, "pruning remotes") },
-    { label: "create branch…", act: () => openCreateBranchPrompt() },
-    { label: "branch versions…", act: () => openVersionBranches() },
-    { label: "identity & profiles…", act: () => openIdentityView() },
-    { label: "branch prefixes…", act: () => openPrefixesView() },
-    { label: "external tools…", act: () => openExtToolsView() },
     { label: "review working changes (AI)…", act: () => startReview("working", "") },
     { label: "undo last commit", act: () => undoLastCommit() },
-  ].sort((a, b) => a.label.localeCompare(b.label));
-  // Switching the repo is neither a git operation nor a UI control, so it
-  // gets its own group between them.
-  const repositories = [
+    { label: "apply a patch…", act: () => applyPatchPrompt() },
+    {
+      label: "copy a bookmark or shelf entry to a directory…",
+      // The ☰ button is the anchor this menu opened from, so the picker
+      // lands under it rather than at the pointer.
+      act: () => {
+        const b = $("menu-btn").getBoundingClientRect();
+        pickEntryToCopy(b.left, b.bottom + 4);
+      },
+    },
+    // Stashing is gated like the mass staging rows: while a sequencer op is
+    // paused the working tree belongs to it, and git refuses to stash
+    // mid-merge. openStashPick keeps its own check as the backstop.
+    ...(state.wt && !state.conflict ? [{ label: "stash a selection…", act: () => openStashPick(null) }] : []),
+    // state.rows is commits only, so a non-empty feed IS "there is something
+    // to amend" — the TUI's canAmend gate.
+    ...((state.rows || []).length ? [{ label: "amend the last commit…", act: () => startAmend() }] : []),
+    { header: "Branches" },
+    { label: "branch prefixes…", act: () => openPrefixesView() },
+    { label: "branch versions…", act: () => openVersionBranches() },
+    { label: "create branch…", act: () => openCreateBranchPrompt() },
+    { label: "fetch all remotes", act: () => doFetch() },
+    { label: "browse remote branches…", act: () => openRemoteHeads() },
+    { label: "prune remotes (drop deleted branches)", act: () => startOp({ op: "prune" }, "pruning remotes") },
+    { header: "Search" },
+    { label: "filter the commit list… (\\)", act: () => openFeedFilter() },
+    { label: "find a file… (F)", act: () => openFinder() },
+    { header: "Repositories" },
     { label: "switch repo…", act: () => openPalette("repo") },
-  ];
-  const ui = [
-    { label: "refresh", act: () => manualRefresh() },
+    { header: "UI" },
     { label: "command palette…", act: () => openPalette("cmd") },
-    { label: "toggle sidebar", act: () => toggleSidebar() },
-    { label: "toggle graph", act: () => toggleGraphMode() },
-    { label: "settings…", act: () => openSettings() },
+    { label: "refresh", act: () => manualRefresh() },
     { label: "session errors…", act: () => openSessionErrorsView() },
-  ].sort((a, b) => a.label.localeCompare(b.label));
-  // A feature module may add its own entry to the ui group (menus.js).
-  const extra = extraRows("menu", null);
-  const rows = [{ header: "git" }, ...git, { header: "repositories" }, ...repositories,
-    { header: "ui" }, ...ui, ...extra, { sep: true }, { label: "help", act: () => openHelp() }];
+    { label: "settings…", act: () => openSettings() },
+    { label: "toggle graph", act: () => toggleGraphMode() },
+    { label: "toggle sidebar", act: () => toggleSidebar() },
+    { header: "Config" },
+    { label: "identity & profiles…", act: () => openIdentityView() },
+    { label: "agent setup…", act: () => openAgentSetup() },
+    { label: "external tools…", act: () => openExtToolsView() },
+    { label: "git config…", act: () => openGitConfig() },
+    ...extraRows("menu", null),
+    { sep: true },
+    { label: "help", act: () => openHelp() },
+  ];
   showCtxMenu(rows, r.left, r.bottom + 4);
 }
 

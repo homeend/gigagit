@@ -12,7 +12,7 @@
 // feed they page. This module imports from there; nothing there imports back.
 import { $, esc, getJSON, state } from "./core.js";
 import { closeLayer, mountOverlay, pushLayer, topLayer } from "./layers.js";
-import { registerHelp, registerRows } from "./menus.js";
+import { registerHelp } from "./menus.js";
 import { opLine } from "./ops.js";
 import { refilterFeed, searchDeeper } from "./commits.js";
 import { openFileHistory } from "./filehist.js";
@@ -320,11 +320,6 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
-
-registerRows("menu", () => [
-  { label: "filter the commit list… (\\)", act: () => openFeedFilter() },
-  { label: "find a file… (F)", act: () => openFinder() },
-]);
 
 registerHelp({ key: "\\", html: "<b>filter the commit list</b> by path, author, message or date — applied by git over ALL history, not just the loaded pages" });
 registerHelp({ key: "ctrl+f", html: "<b>search deeper</b>: page unloaded history for the next match of the / query; press again to dig past the hit" });

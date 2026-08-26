@@ -8,6 +8,28 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`gg web`: ☰ menu regrouped.** Six labelled groups in a fixed authored
+  order — Actions, Branches, Search, Repositories, UI, Config — replacing the
+  old sorted git/repositories/ui split; rows that used to self-register from
+  feature modules (git config, apply a patch, stash a selection, amend, find
+  a file, feed filter, agent setup, browse remote branches) now sit in their
+  groups in `palette.js`, with `extraRows("menu")` kept as the hook for rows
+  it doesn't know about. On a Remotes row's context menu, **browse remote
+  branches…** now sits second from the bottom, fenced by a separator from
+  the delete row below it.
+
+- **`gg web`: Browse remote branches.** The ☰ menu (and every Remotes-row
+  context menu) gains **browse remote branches…** — the web twin of the TUI
+  picker: branches that exist on the remote but were never fetched (hidden by
+  a narrowed fetch refspec, so invisible in the Remotes section), listed via
+  one `ls-remote` behind `GET /api/remote-heads` (remote chooser first when
+  the repo has several remotes), type-to-filter; clicking a branch offers
+  check out (stay) / check out and switch, starting the new
+  `checkout-remote-head` wire op. Wire values are identifiers re-resolved
+  server-side against fresh `RemoteNames`/`UnfetchedRemoteHeads` reads (the
+  add-fetch-mappings allowlist pattern), so a stale picker refuses instead of
+  double-mapping.
+
 - **Browse remote branches — check out a branch your fetch refspec doesn't
   cover.** In a narrowed/single-branch monorepo clone, branches that exist on
   the remote but were never fetched are invisible to the Remotes panel. The
