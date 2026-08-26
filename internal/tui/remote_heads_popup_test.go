@@ -44,8 +44,8 @@ func TestBrowseRemoteBranchesRowGating(t *testing.T) {
 func TestRemoteHeadsNoRemotesCloses(t *testing.T) {
 	t.Parallel()
 	m := loadedModel(t)
-	m, _ = m.openRemoteHeadsBrowser()
-	m, _ = send(m, remoteHeadNamesMsg{names: nil, gen: m.loadGen})
+	m, cmd := m.openRemoteHeadsBrowser()
+	m, _ = send(m, cmd()) // real RemoteNames read: the fixture has no remote
 	if layerOf[*remoteHeadsPopup](m) != nil {
 		t.Fatal("popup should close when there is no remote")
 	}
