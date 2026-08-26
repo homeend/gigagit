@@ -76,9 +76,9 @@ func (m Model) branchVersionsRow() (actionRow, bool) {
 }
 
 // browseRemoteBranchesRow offers the browse-remote-branches picker from the
-// Branches panel menu. Panel-scoped, not row-scoped: no selection required.
+// Remotes panel menu. Panel-scoped, not row-scoped: no selection required.
 func (m Model) browseRemoteBranchesRow() (actionRow, bool) {
-	if m.focus != panelBranches || !m.opsIdle() {
+	if m.focus != panelRemotes || !m.opsIdle() {
 		return actionRow{}, false
 	}
 	return actionRow{

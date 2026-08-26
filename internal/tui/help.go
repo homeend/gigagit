@@ -33,7 +33,7 @@ func helpContent() []contentLine {
 		r(".", i18n.T("action menu — context actions for the selected row and panel (incl. copy actions)")),
 		r("ctrl+p", i18n.T("command palette — generic command launcher, opens over the panels OR any browse window (files tree, diff, history, blame, review, stash) (↑↓/jk move, enter runs, esc closes); includes Apply patch, Branch versions, Browse remote branches, File blame, File history, Find, Git config explorer, Open repo, Open shell, Run shell command, Set up agent skills, Show commit")),
 		r("#", i18n.T("show commit by SHA: type a commit-ish (SHA / ref); enter resolves it and opens that commit's files in the files-view")),
-		r("", i18n.T("Browse remote branches (ctrl+p palette or the Branches .-menu): lists branches that exist on the remote but are not fetched locally (a narrowed fetch refspec hides them); enter checks one out — stay or switch — adding a per-branch fetch mapping first")),
+		r("", i18n.T("Browse remote branches (ctrl+p palette or the Remotes .-menu): lists branches that exist on the remote but are not fetched locally (a narrowed fetch refspec hides them); enter checks one out — stay or switch — adding a per-branch fetch mapping first")),
 		r("", i18n.T("Compare against working dir / Copy to working dir (.-menu): on any focused stash/commit/staged file, diffs that version against the same path in the working tree (Compare) or writes it into the working tree at its own path (Copy)")),
 		r("o", i18n.T("cycle the focused panel's sort order")),
 		r("z", i18n.T("cycle the focused window's text display (cutoff / wrap / scroll)")),

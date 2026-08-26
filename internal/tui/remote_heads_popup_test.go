@@ -30,13 +30,13 @@ func TestPaletteOpensRemoteHeadsBrowser(t *testing.T) {
 func TestBrowseRemoteBranchesRowGating(t *testing.T) {
 	t.Parallel()
 	m := loadedModel(t)
-	m.focus = panelBranches
+	m.focus = panelRemotes
 	if _, ok := m.browseRemoteBranchesRow(); !ok {
-		t.Fatal("row should be offered on the Branches panel")
+		t.Fatal("row should be offered on the Remotes panel")
 	}
-	m.focus = panelFiles
+	m.focus = panelBranches
 	if _, ok := m.browseRemoteBranchesRow(); ok {
-		t.Fatal("row must not be offered off the Branches panel")
+		t.Fatal("row must not be offered off the Remotes panel")
 	}
 }
 

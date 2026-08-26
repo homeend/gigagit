@@ -12,7 +12,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   cover.** In a narrowed/single-branch monorepo clone, branches that exist on
   the remote but were never fetched are invisible to the Remotes panel. The
   command palette's **Browse remote branches** entry (`ctrl+p`) and the
-  Branches panel's `.`-menu row list them via one `git ls-remote --heads`
+  Remotes panel's `.`-menu row list them via one `git ls-remote --heads`
   (a network read; no objects move), filterable with `/`; `enter` offers
   **checkout** (create the local tracking branch, stay where you are) or
   **checkout and switch** (auto-stash, via the SmartCheckout/SmartSwitch
