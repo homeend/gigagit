@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI: the `.` action menu is type-to-filter.** Typing any character now
+  filters the rows directly (the old `/` prefix is gone), and no key runs an
+  action anymore — `enter` on the highlighted row is the only trigger, so
+  every letter, `j`/`k`/`q`/`z`/space included, is filter text. Labels lost
+  their `[x]` key hints: the footer-registry rows now carry clean menu labels
+  ("Switch to branch", "Stage file", "Filter commits…", …) while the footer
+  keeps its hint style. `esc` clears an active filter first and closes on the
+  next press (or immediately when nothing is typed); the display-mode cycle
+  moved from `z` to `ctrl+z` (labels embedding long branch names still wrap).
+  The redundant footer-label rows ("[i] message [I] in editor", the inert
+  graph-keys row) dropped out — their dedicated direct-run rows remain.
 - **`gg web`: ☰ menu regrouped.** Six labelled groups in a fixed authored
   order — Actions, Branches, Search, Repositories, UI, Config — replacing the
   old sorted git/repositories/ui split; rows that used to self-register from
