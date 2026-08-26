@@ -226,8 +226,6 @@ rheads.addEventListener("click", (e) => {
   if (e.target === rheads) closeRemoteHeads(); // a click on the dim closes it
 });
 
-registerRows("menu", () => [{ label: "browse remote branches…", act: () => openRemoteHeads() }]);
-
 // Also on every remote row's context menu, so the feature is discoverable
 // from the section it extends.
 registerRows("remote", () => [{ label: "browse remote branches…", act: () => openRemoteHeads() }]);

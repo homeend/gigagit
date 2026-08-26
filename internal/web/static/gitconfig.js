@@ -8,7 +8,7 @@
 // plus its endpoints.
 import { $, esc, getJSON, postJSON } from "./core.js";
 import { closeLayer, mountOverlay, pushLayer } from "./layers.js";
-import { registerHelp, registerRows } from "./menus.js";
+import { registerHelp } from "./menus.js";
 import { followOp, opBusy, opLine } from "./ops.js";
 
 let cfg = null; // {catalog, extra, filter, open} while the overlay is up
@@ -287,8 +287,6 @@ function closeGitConfig() {
   closeLayer("gg-gitconfig");
 }
 
-
-registerRows("menu", () => [{ label: "git config…", act: () => openGitConfig() }]);
 
 registerHelp({
   key: "git config",

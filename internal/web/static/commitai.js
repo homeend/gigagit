@@ -14,7 +14,7 @@
 //     human to read, edit and send.
 import { $, esc, getJSON, postJSON, state } from "./core.js";
 import { closeLayer, hideCtxMenu, mountOverlay, openPrompt, pushLayer, showCtxMenu } from "./layers.js";
-import { registerHelp, registerRows } from "./menus.js";
+import { registerHelp } from "./menus.js";
 import { followOp, opBusy, opLine, showLocalConfirm, startOp } from "./ops.js";
 
 let run = null; // {opID} while a generate run is in flight
@@ -286,13 +286,6 @@ async function startAmend() {
   );
 }
 
-
-registerRows("menu", () =>
-  // state.rows is commits only (the working-tree row is rendered beside them,
-  // not in the list), so a non-empty feed IS "there is something to amend" —
-  // the TUI's canAmend, which gates on the commit list, not on the index.
-  (state.rows || []).length ? [{ label: "amend the last commit…", act: () => startAmend() }] : []
-);
 
 registerHelp({
   key: "commit box",
