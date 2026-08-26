@@ -31,10 +31,9 @@ func TestSameRepoPath(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			old := pathGOOS
-			pathGOOS = c.goos
-			defer func() { pathGOOS = old }()
-			if got := sameRepoPath(c.a, c.b); got != c.want {
+			// The GOOS is a parameter, not a package-var override: a pathGOOS
+			// write here raced with other parallel tests' live servers.
+			if got := sameRepoPathOn(c.goos, c.a, c.b); got != c.want {
 				t.Errorf("sameRepoPath(%q, %q) on %s = %v, want %v", c.a, c.b, c.goos, got, c.want)
 			}
 		})

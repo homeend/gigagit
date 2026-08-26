@@ -27,10 +27,6 @@ func (s *Server) handleRepos(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"repos": rows})
 }
 
-// pathGOOS is runtime.GOOS behind a seam, so the Windows comparison rules can
-// be exercised from a Linux test run.
-var pathGOOS = runtime.GOOS
-
 // sameRepoPath reports whether two recorded paths name the same repository
 // root.
 //
@@ -45,8 +41,15 @@ var pathGOOS = runtime.GOOS
 // Comparing here rather than in the browser is deliberate: the client cannot
 // know which separator or case rules apply to the server's filesystem.
 func sameRepoPath(a, b string) bool {
+	return sameRepoPathOn(runtime.GOOS, a, b)
+}
+
+// sameRepoPathOn is sameRepoPath with the GOOS as a parameter, so tests can
+// exercise the Windows rules from any OS without mutating package state (a
+// pathGOOS write raced with live httptest servers of parallel tests).
+func sameRepoPathOn(goos, a, b string) bool {
 	na, nb := normalizeRepoPath(a), normalizeRepoPath(b)
-	if pathGOOS == "windows" {
+	if goos == "windows" {
 		// Windows paths are case-insensitive, and the two sources can differ
 		// in case (a drive letter, or a directory typed with other casing).
 		return strings.EqualFold(na, nb)
