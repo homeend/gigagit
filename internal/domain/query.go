@@ -311,6 +311,37 @@ func (s *Service) RemoteBranches(ctx context.Context) ([]model.RemoteBranch, err
 	return query(ctx, s, "remote-branches", s.repo.RemoteBranches)
 }
 
+// UnfetchedRemoteHeads lists the branches that exist on remote but have no
+// local remote-tracking ref — the branches a narrowed (single-branch) fetch
+// refspec hides from the Remotes panel. NETWORK read (`git ls-remote --heads`),
+// user-invoked from the browse-remote-branches picker; routed through
+// queryQuiet like RemoteTags so an offline failure never spams the session
+// error log. Order is ls-remote's (sorted by ref name).
+func (s *Service) UnfetchedRemoteHeads(ctx context.Context, remote string) ([]model.RemoteHead, error) {
+	return queryQuiet(ctx, s, "unfetched-remote-heads:"+remote, func(ctx context.Context) ([]model.RemoteHead, error) {
+		heads, err := s.repo.ListRemoteHeads(ctx, remote)
+		if err != nil {
+			return nil, err
+		}
+		refs, err := s.repo.ForEachRef(ctx, "refs/remotes/"+remote)
+		if err != nil {
+			return nil, err
+		}
+		prefix := "refs/remotes/" + remote + "/"
+		tracked := make(map[string]bool, len(refs))
+		for _, r := range refs {
+			tracked[strings.TrimPrefix(r.Ref, prefix)] = true
+		}
+		out := make([]model.RemoteHead, 0, len(heads))
+		for _, h := range heads {
+			if !tracked[h.Name] {
+				out = append(out, h)
+			}
+		}
+		return out, nil
+	})
+}
+
 // Tags is a single gated read for the CLI tag commands and the TUI Tags tab.
 func (s *Service) Tags(ctx context.Context) ([]model.Tag, error) {
 	return query(ctx, s, "tags", s.tagsCached)

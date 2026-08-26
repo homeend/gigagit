@@ -440,3 +440,30 @@ func TestPushTagsEmpty(t *testing.T) {
 		t.Fatalf("PushTags(empty) must not invoke runner, got %d calls", len(f.Calls))
 	}
 }
+
+func TestListRemoteHeads(t *testing.T) {
+	t.Parallel()
+	clone, runner := newClonePair(t)
+	repo := &Repo{Runner: runner}
+	ctx := context.Background()
+
+	gitIn(t, clone, "branch", "topic/x")
+	gitIn(t, clone, "push", "origin", "topic/x")
+
+	heads, err := repo.ListRemoteHeads(ctx, "origin")
+	if err != nil {
+		t.Fatalf("ListRemoteHeads: %v", err)
+	}
+	byName := map[string]string{}
+	for _, h := range heads {
+		byName[h.Name] = h.Hash
+	}
+	if len(byName) != 2 {
+		t.Fatalf("heads = %v, want main + topic/x", heads)
+	}
+	for _, name := range []string{"main", "topic/x"} {
+		if len(byName[name]) != 40 {
+			t.Fatalf("head %q: hash %q, want full sha", name, byName[name])
+		}
+	}
+}
