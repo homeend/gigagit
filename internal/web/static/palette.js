@@ -203,7 +203,6 @@ function openGlobalMenu() {
     { label: "push", act: () => doPush() },
     { label: "review working changes (AI)…", act: () => startReview("working", "") },
     { label: "undo last commit", act: () => undoLastCommit() },
-    { label: "git config…", act: () => openGitConfig() },
     { label: "apply a patch…", act: () => applyPatchPrompt() },
     {
       label: "copy a bookmark or shelf entry to a directory…",
@@ -244,6 +243,7 @@ function openGlobalMenu() {
     { label: "identity & profiles…", act: () => openIdentityView() },
     { label: "agent setup…", act: () => openAgentSetup() },
     { label: "external tools…", act: () => openExtToolsView() },
+    { label: "git config…", act: () => openGitConfig() },
     ...extraRows("menu", null),
     { sep: true },
     { label: "help", act: () => openHelp() },
