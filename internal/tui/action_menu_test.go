@@ -123,7 +123,9 @@ func TestAvailableActionsRowBeforeWindow(t *testing.T) {
 	}
 }
 
-func TestActionMenuQCloses(t *testing.T) {
+// Letters never run or close the menu — they type into the filter (q included,
+// so q must NOT fall through to the quit binding either).
+func TestActionMenuLetterTypesIntoFilter(t *testing.T) {
 	t.Parallel()
 	m := footerModel()
 	m.loading = false
@@ -131,27 +133,140 @@ func TestActionMenuQCloses(t *testing.T) {
 	m = u.(Model)
 	u, cmd := m.Update(keyMsg("q"))
 	mm := u.(Model)
-	if mm.actionMenu != nil {
-		t.Fatal("q must close the menu")
+	if mm.actionMenu == nil {
+		t.Fatal("q must type into the filter, not close the menu")
 	}
 	if cmd != nil {
-		t.Fatal("q must close the menu, not quit the app")
+		t.Fatal("q must not quit the app while the menu is open")
+	}
+	if mm.actionMenu.query != "q" {
+		t.Fatalf("query = %q, want %q", mm.actionMenu.query, "q")
 	}
 }
 
-// Space reports String() as " ", so the direct-key match must normalize it;
-// pressing space on the [space] stage row runs (and closes the menu), not no-op.
-func TestActionMenuRunsStageBySpace(t *testing.T) {
+// A row's replay key pressed directly must not run it anymore: space on the
+// stage row stays filter input, and the menu stays open.
+func TestActionMenuSpaceDoesNotRunRow(t *testing.T) {
 	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	m.focus = panelFiles
 	m.status.Files = []model.FileStatus{{Path: "f.txt", Kind: model.KindTracked, Staged: '.', Unstaged: 'M'}}
-	u, _ := m.Update(keyMsg(".")) // menu includes the [space] stage row
+	u, _ := m.Update(keyMsg(".")) // menu includes the stage row (replay key: space)
 	m = u.(Model)
 	u, _ = m.Update(keyMsg("space"))
+	mm := u.(Model)
+	if mm.actionMenu == nil {
+		t.Fatal("space must not run the stage row; it extends the filter")
+	}
+	if mm.actionMenu.query != " " {
+		t.Fatalf("query = %q, want a single space", mm.actionMenu.query)
+	}
+}
+
+// Typing filters the visible rows exactly like the old / mode did — no /
+// needed — and enter runs the highlighted match.
+func TestActionMenuTypeToFilter(t *testing.T) {
+	t.Parallel()
+	m := footerModel()
+	m.loading = false
+	m.focus = panelFiles
+	m.status.Files = []model.FileStatus{{Path: "f.txt", Kind: model.KindTracked, Staged: '.', Unstaged: 'M'}}
+	u, _ := m.Update(keyMsg("."))
+	m = u.(Model)
+	for _, k := range []string{"s", "t", "a", "g", "e"} {
+		u, _ = m.Update(keyMsg(k))
+		m = u.(Model)
+	}
+	a := m.actionMenu
+	if a == nil || a.query != "stage" {
+		t.Fatalf("query after typing = %v", a)
+	}
+	vis := a.visible()
+	if len(vis) == 0 {
+		t.Fatal("filter must leave the Stage file row visible")
+	}
+	for _, r := range vis {
+		if !strings.Contains(strings.ToLower(r.label), "stage") {
+			t.Errorf("row %q must match the query", r.label)
+		}
+	}
+	u, _ = m.Update(keyMsg("enter"))
 	if u.(Model).actionMenu != nil {
-		t.Fatal("space must match the stage row and close the menu (not no-op)")
+		t.Fatal("enter must run the highlighted row and close the menu")
+	}
+}
+
+// Esc clears an active filter first; only the next esc closes the menu.
+func TestActionMenuEscClearsFilterThenCloses(t *testing.T) {
+	t.Parallel()
+	m := footerModel()
+	m.loading = false
+	u, _ := m.Update(keyMsg("."))
+	m = u.(Model)
+	u, _ = m.Update(keyMsg("x"))
+	m = u.(Model)
+	u, _ = m.Update(keyMsg("esc"))
+	m = u.(Model)
+	if m.actionMenu == nil {
+		t.Fatal("first esc must clear the filter, not close the menu")
+	}
+	if m.actionMenu.query != "" {
+		t.Fatalf("query after esc = %q, want empty", m.actionMenu.query)
+	}
+	u, _ = m.Update(keyMsg("esc"))
+	if u.(Model).actionMenu != nil {
+		t.Fatal("second esc must close the menu")
+	}
+}
+
+// ctrl+z cycles the display mode (z itself is filter text now).
+func TestActionMenuCtrlZCyclesMode(t *testing.T) {
+	t.Parallel()
+	m := footerModel()
+	m.loading = false
+	u, _ := m.Update(keyMsg("."))
+	m = u.(Model)
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlZ})
+	mm := u.(Model)
+	if mm.actionMenu.mode != modeWrap {
+		t.Fatalf("mode after ctrl+z = %v, want modeWrap", mm.actionMenu.mode)
+	}
+	if mm.actionMenu.query != "" {
+		t.Fatalf("ctrl+z must not touch the query, got %q", mm.actionMenu.query)
+	}
+}
+
+// No menu row may advertise a key hint — the [x]-style labels are footer-only.
+func TestActionMenuLabelsCarryNoKeyHints(t *testing.T) {
+	t.Parallel()
+	for _, m := range []Model{footerModel(), filesMenuModel()} {
+		m.loading = false
+		for _, r := range availableActions(m) {
+			if strings.Contains(r.label, "[") {
+				t.Errorf("menu label %q must not contain a key hint", r.label)
+			}
+		}
+	}
+}
+
+// Every menu-eligible registry binding (id, non-global scope) must have a clean
+// menu label — or be explicitly footer-only because a dedicated direct-run row
+// covers it. A new binding failing here: add an actionMenuLabel case.
+func TestActionMenuLabelCoverage(t *testing.T) {
+	t.Parallel()
+	footerOnly := map[string]bool{
+		"commit-message": true, // commitViewMessageRow / commitEditMessageRow
+		"graph-window":   true, // graphWindowRows
+	}
+	for _, b := range contextBindings() {
+		if b.id == "" || b.scope == scopeGlobal {
+			continue
+		}
+		_, ok := actionMenuLabel(b.id)
+		if ok == footerOnly[b.id] {
+			t.Errorf("binding %q: menu label %v, footer-only %v — exactly one must hold", b.id, ok, footerOnly[b.id])
+		}
 	}
 }
 
@@ -161,7 +276,7 @@ func TestActionMenuRenders(t *testing.T) {
 	m.loading = false
 	u, _ := m.Update(keyMsg("."))
 	out := ansi.Strip(u.(Model).View())
-	if !strings.Contains(out, "Actions") || !strings.Contains(out, "[b]ranch") {
+	if !strings.Contains(out, "Actions") || !strings.Contains(out, "New branch…") {
 		t.Fatalf("rendered menu missing header/rows:\n%s", out)
 	}
 }

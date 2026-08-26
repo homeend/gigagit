@@ -126,11 +126,19 @@ func availableActions(m Model) []actionRow {
 		if b.id == "" || !b.when(m) {
 			continue
 		}
+		// The menu shows clean labels, never the footer's [x]-hint style (no
+		// key runs a row directly — letters type into the filter). A binding
+		// without a menu label is footer-only: its menu presence is covered by
+		// a dedicated direct-run row (see actionMenuLabel).
+		lbl, ok := actionMenuLabel(b.id)
+		if !ok {
+			continue
+		}
 		switch b.scope {
 		case scopeRow:
-			row = append(row, actionRow{id: b.id, key: b.key, label: b.label})
+			row = append(row, actionRow{id: b.id, key: b.key, label: lbl})
 		case scopeWindow:
-			window = append(window, actionRow{id: b.id, key: b.key, label: b.label})
+			window = append(window, actionRow{id: b.id, key: b.key, label: lbl})
 		}
 	}
 	out := append(m.contextCopyRows(), row...)
@@ -375,6 +383,73 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	return out
 }
 
+// actionMenuLabel returns the . -menu label for a footer-registry binding id.
+// The footer keeps its [x]-hint labels; the menu shows these instead, since no
+// key hint is true there (rows run by enter only). Ids absent here are
+// footer-only — their menu presence is a dedicated direct-run row instead
+// ("commit-message" → commitViewMessageRow/commitEditMessageRow,
+// "graph-window" → graphWindowRows). TestActionMenuLabelCoverage keeps this
+// switch and the registry in sync.
+func actionMenuLabel(id string) (string, bool) {
+	switch id {
+	case "switch":
+		return i18n.T("Switch to branch"), true
+	case "branch":
+		return i18n.T("New branch…"), true
+	case "worktree":
+		return i18n.T("New worktree…"), true
+	case "delete-branch":
+		return i18n.T("Delete branch…"), true
+	case "mark":
+		return i18n.T("Mark branch for compare"), true
+	case "unmark":
+		return i18n.T("Unmark branch"), true
+	case "pair":
+		return i18n.T("Compare with marked branch"), true
+	case "switch-worktree":
+		return i18n.T("Switch to worktree"), true
+	case "delete-worktree":
+		return i18n.T("Delete worktree…"), true
+	case "rename-worktree":
+		return i18n.T("Rename or move worktree…"), true
+	case "checkout-remote":
+		return i18n.T("Check out remote branch"), true
+	case "switch-remote":
+		return i18n.T("Switch to remote branch"), true
+	case "fetch":
+		return i18n.T("Fetch remotes"), true
+	case "tag-goto":
+		return i18n.T("Go to commit"), true
+	case "file-diff":
+		return i18n.T("Show diff"), true
+	case "stage":
+		return i18n.T("Stage file"), true
+	case "stage-hunks":
+		return i18n.T("Stage hunks…"), true
+	case "unstage":
+		return i18n.T("Unstage file"), true
+	case "unstage-hunks":
+		return i18n.T("Unstage hunks…"), true
+	case "stash":
+		return i18n.T("Stash changes…"), true
+	case "mark-file":
+		return i18n.T("Mark file"), true
+	case "discard":
+		return i18n.T("Discard changes…"), true
+	case "discard-all":
+		return i18n.T("Discard all changes…"), true
+	case "commit-files":
+		return i18n.T("Show commit files"), true
+	case "commit-filter":
+		return i18n.T("Filter commits…"), true
+	case "maximize":
+		return i18n.T("Maximize panel"), true
+	case "fullscreen":
+		return i18n.T("Fullscreen panel"), true
+	}
+	return "", false
+}
+
 // inContentWindow reports whether a navigable content window owns the keyboard
 // (file tree, stash list, diff, history, blame), so the . menu should offer
 // only that window's copy actions. Transient stack editors (interactive-rebase
@@ -539,10 +614,11 @@ func synthKey(name string) tea.KeyMsg {
 }
 
 // actionMenu is the . overlay: a window-primitive list of runnable actions.
+// The menu is always in type-to-filter mode: printable keys extend query,
+// arrows move, enter runs — no row is ever run by a letter key.
 type actionMenu struct {
 	rows    []actionRow
 	sel     int
-	typing  bool // / filter input
 	query   string
 	mode    dispMode
 	hscroll int
@@ -616,32 +692,13 @@ func (m Model) updateActionMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	if a.typing { // / filter input captures keys
-		// Arrows/pages move the selection live while typing (no cursor reset),
-		// like the commit filter; j/k stay query text.
-		if filterMotion(msg, a.move, popupFilterPage) {
-			return m, nil
-		}
-		switch msg.Type {
-		case tea.KeyEsc:
-			a.typing = false
-			a.query = ""
-			a.sel = 0
-		case tea.KeyEnter:
-			return m.runVisibleRow(a.sel)
-		case tea.KeyBackspace, tea.KeyCtrlH:
-			if r := []rune(a.query); len(r) > 0 {
-				a.query = string(r[:len(r)-1])
-			}
-			a.sel = 0
-		case tea.KeyRunes:
-			a.query += string(msg.Runes)
-			a.sel = 0
-		}
+	// Arrows/pages move the selection live while typing (no cursor reset),
+	// like the commit filter; every printable key stays query text.
+	if filterMotion(msg, a.move, popupFilterPage) {
 		return m, nil
 	}
 	switch msg.String() {
-	case "z":
+	case "ctrl+z":
 		a.mode = a.mode.next()
 		a.hscroll = 0
 		return m, nil
@@ -657,43 +714,34 @@ func (m Model) updateActionMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.hscroll += m.hscrollStep()
 		}
 		return m, nil
-	case "esc", "q":
-		// Close like every other popup; q must NOT fall through to the quit row.
+	}
+	switch msg.Type {
+	case tea.KeyEsc:
+		// First esc clears an active filter; esc with no filter closes.
+		if a.query != "" {
+			a.query = ""
+			a.sel = 0
+			return m, nil
+		}
 		m.actionMenu = nil
 		return m, nil
-	case "/":
-		a.typing = true
-		a.query = ""
+	case tea.KeyEnter:
+		return m.runVisibleRow(a.sel)
+	case tea.KeyBackspace, tea.KeyCtrlH:
+		if r := []rune(a.query); len(r) > 0 {
+			a.query = string(r[:len(r)-1])
+		}
 		a.sel = 0
 		return m, nil
-	case "up", "k":
-		a.move(-1)
+	case tea.KeySpace:
+		// Labels contain spaces; space extends the filter like any rune.
+		a.query += " "
+		a.sel = 0
 		return m, nil
-	case "down", "j":
-		a.move(1)
+	case tea.KeyRunes:
+		a.query += string(msg.Runes)
+		a.sel = 0
 		return m, nil
-	case "pgup":
-		a.move(-popupFilterPage)
-		return m, nil
-	case "pgdown":
-		a.move(popupFilterPage)
-		return m, nil
-	case "enter":
-		return m.runVisibleRow(a.sel)
-	}
-	// Direct key: run the visible row whose key matches. Space reports its
-	// String() as " ", so normalize it to the registry's "space".
-	pressed := msg.String()
-	if msg.Type == tea.KeySpace {
-		pressed = "space"
-	}
-	vis := a.visible()
-	for i, r := range vis {
-		// r.key == "" marks a menu-only copy row (no replayable key); never
-		// match it on an empty pressed string.
-		if r.key != "" && r.key == pressed {
-			return m.runVisibleRow(i)
-		}
 	}
 	return m, nil
 }
@@ -724,13 +772,15 @@ func (m Model) renderActionMenu() string {
 		bodyLines = renderWindow(wr, o)
 	}
 	header := i18n.T("Actions")
-	if a.typing {
-		header += "  /" + a.query + "█"
-	} else if a.query != "" {
-		header += "  /" + a.query
+	if a.query != "" {
+		header += "  " + a.query + "█"
 	}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
-	parts = append(parts, "", i18n.T("[key]/[enter] run  [/] filter  [z] mode  [esc] close"))
+	// Wrap the hint so [esc] close survives on a narrow popup (mirrors
+	// bookmarkPopup) — a single-line footer would truncate it off.
+	hint := []string{i18n.T("type to filter"), i18n.T("[enter] run"), i18n.T("[ctrl+z] view"), i18n.T("[esc] close")}
+	parts = append(parts, "")
+	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
