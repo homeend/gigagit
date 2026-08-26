@@ -56,3 +56,12 @@ func TestUnfetchedRemoteHeads(t *testing.T) {
 		t.Fatalf("names = %v, want [hidden/a hidden/b]", names)
 	}
 }
+
+func TestRemoteNames(t *testing.T) {
+	t.Parallel()
+	svc := narrowSvc(t)
+	names, err := svc.RemoteNames(context.Background())
+	if err != nil || len(names) != 1 || names[0] != "origin" {
+		t.Fatalf("RemoteNames = %v, %v; want [origin]", names, err)
+	}
+}

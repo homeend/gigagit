@@ -292,6 +292,10 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		// (Branches). Mapped explicitly so it doesn't fall through to "all
 		// sources" and auto-fire the srcTags remote-tags network probe.
 		return []sourceKey{srcBranches, srcRemotes, srcFeed}
+	case engine.CheckoutRemoteBranch:
+		// Map + fetch + local tracking branch, possibly a HEAD move (switch
+		// intent): everything AddFetchMappings touches plus status.
+		return []sourceKey{srcStatus, srcBranches, srcRemotes, srcFeed}
 	case engine.CreateWorktree, engine.CreateWorktreeForBranch:
 		return []sourceKey{srcBranches, srcWorktrees}
 	case engine.RemoveWorktree:

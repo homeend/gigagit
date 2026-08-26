@@ -199,7 +199,7 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	// (direct key, confirm modal, dirty-switch chain) is covered; consumed
 	// on a Changed success in opFinishedMsg.
 	switch op.(type) {
-	case engine.SmartSwitch, engine.SmartCheckout, engine.Checkout:
+	case engine.SmartSwitch, engine.SmartCheckout, engine.Checkout, engine.CheckoutRemoteBranch:
 		m.pendingScopeClear = true
 	default:
 		m.pendingScopeClear = false

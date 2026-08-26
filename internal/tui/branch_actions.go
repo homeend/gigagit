@@ -74,3 +74,16 @@ func (m Model) branchVersionsRow() (actionRow, bool) {
 		},
 	}, true
 }
+
+// browseRemoteBranchesRow offers the browse-remote-branches picker from the
+// Branches panel menu. Panel-scoped, not row-scoped: no selection required.
+func (m Model) browseRemoteBranchesRow() (actionRow, bool) {
+	if m.focus != panelBranches || !m.opsIdle() {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "browse-remote-branches",
+		label: i18n.T("Browse remote branches…"),
+		run:   func(m Model) (tea.Model, tea.Cmd) { return m.openRemoteHeadsBrowser() },
+	}, true
+}

@@ -311,6 +311,12 @@ func (s *Service) RemoteBranches(ctx context.Context) ([]model.RemoteBranch, err
 	return query(ctx, s, "remote-branches", s.repo.RemoteBranches)
 }
 
+// RemoteNames lists the configured remote names (a local `git remote` read,
+// no network) — the browse-remote-branches picker's remote chooser.
+func (s *Service) RemoteNames(ctx context.Context) ([]string, error) {
+	return query(ctx, s, "remote-names", s.repo.RemoteNames)
+}
+
 // UnfetchedRemoteHeads lists the branches that exist on remote but have no
 // local remote-tracking ref — the branches a narrowed (single-branch) fetch
 // refspec hides from the Remotes panel. NETWORK read (`git ls-remote --heads`),

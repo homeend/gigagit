@@ -31,6 +31,7 @@ func paletteCommands() []paletteCommand {
 	return []paletteCommand{
 		{label: i18n.T("Apply patch…"), run: Model.openApplyPatchPopup},
 		{label: i18n.T("Branch versions…"), run: Model.openVersionBranchList},
+		{label: i18n.T("Browse remote branches"), run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openRemoteHeadsBrowser() }},
 		{label: i18n.T("File blame"), run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathBlame) }},
 		{label: i18n.T("File history"), run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathHistory) }},
 		{label: i18n.T("Find"), keyHint: "F", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openFileFinder() }},

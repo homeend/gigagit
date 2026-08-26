@@ -222,6 +222,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.branchVersionsRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.browseRemoteBranchesRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.pushBranchRow(); ok {
 		out = append(out, r)
 	}
