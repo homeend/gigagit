@@ -36,6 +36,7 @@ import "./gitconfig.js";
 import "./agentsetup.js";
 import "./commitai.js";
 import "./search.js";
+import "./remoteheads.js";
 
 // applyStoredLayout puts back the layout gg remembered for this machine:
 // folded sections, pane widths, the sidebar toggle, the graph mode. It runs

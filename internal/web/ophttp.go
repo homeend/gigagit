@@ -39,7 +39,8 @@ type opStartRequest struct {
 	// "branch tip has tags not on the remote" offer. Verified server-side.
 	Tags   []string `json:"tags"`
 	Mode   string   `json:"mode"`   // reset: "" (interactive picker) | soft | mixed | hard
-	Switch bool     `json:"switch"` // checkout-remote: switch to the new local branch
+	Switch bool     `json:"switch"` // checkout-remote / checkout-remote-head: switch to the new local branch
+	Remote string   `json:"remote"` // checkout-remote-head: the remote to fetch the branch from
 	Force  bool     `json:"force"`
 	Ext    bool     `json:"ext"` // ignore: the whole extension, not the one file
 	All    bool     `json:"all"` // discard: everything unstaged, no path
