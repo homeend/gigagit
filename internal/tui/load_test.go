@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/gittest"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
@@ -15,21 +17,7 @@ import (
 
 func newRepo(t *testing.T) *git.Repo {
 	t.Helper()
-	dir := t.TempDir()
-	run := func(args ...string) {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
-			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-	}
-	run("init", "-b", "main")
-	os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi\n"), 0o644)
-	run("add", ".")
-	run("commit", "-m", "initial")
+	dir := gittest.BasicRepo(t, "hi\n")
 	return &git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))}
 }
 

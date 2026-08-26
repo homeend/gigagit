@@ -428,16 +428,19 @@ func PrivateRepoPath(mainWorktreePath string) string {
 }
 
 // stateHome resolves the machine-local state root exactly like
-// repos.DefaultStatePath: %LocalAppData% on Windows, else $XDG_STATE_HOME,
+// repos.DefaultStatePath: $XDG_STATE_HOME when set, else %LocalAppData% on Windows,
 // else ~/.local/state. "" when no home exists.
 func stateHome() string {
+	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
+	// deliberate override — and the only way tests can isolate state on
+	// Windows); %LocalAppData% is the ambient Windows default.
+	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
+		return s
+	}
 	if runtime.GOOS == "windows" {
 		if lad := os.Getenv("LocalAppData"); lad != "" {
 			return lad
 		}
-	}
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return s
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

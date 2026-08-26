@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -33,6 +34,9 @@ func buildGG(t *testing.T) string {
 			return
 		}
 		ggBinPath = filepath.Join(dir, "gg-test-bin")
+		if runtime.GOOS == "windows" {
+			ggBinPath += ".exe"
+		}
 		if out, err := exec.Command("go", "build", "-o", ggBinPath, "github.com/homeend/gigagit/cmd/gg").CombinedOutput(); err != nil {
 			ggBinErr = fmt.Errorf("build gg: %v\n%s", err, out)
 		}

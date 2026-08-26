@@ -55,13 +55,16 @@ func (s *Service) bookmarkStore(ctx context.Context) bookmark.Store {
 // bookmarkBaseDir resolves <state>/gg/bookmark cross-platform (mirrors
 // shelfBaseDir). "" when no home/state dir exists.
 func bookmarkBaseDir() string {
+	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
+	// deliberate override — and the only way tests can isolate state on
+	// Windows); %LocalAppData% is the ambient Windows default.
+	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
+		return filepath.Join(s, "gg", "bookmark")
+	}
 	if runtime.GOOS == "windows" {
 		if lad := os.Getenv("LocalAppData"); lad != "" {
 			return filepath.Join(lad, "gg", "bookmark")
 		}
-	}
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "bookmark")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

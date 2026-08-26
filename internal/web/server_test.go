@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/homeend/gigagit/internal/gittest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -35,16 +36,16 @@ func gitRun(t *testing.T, dir string, args ...string) string {
 // to "content <i>\n".
 func newRepoDir(t *testing.T, n int) string {
 	t.Helper()
-	dir := t.TempDir()
-	gitRun(t, dir, "init", "-b", "main")
-	for i := 1; i <= n; i++ {
-		if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte(fmt.Sprintf("content %d\n", i)), 0o644); err != nil {
-			t.Fatal(err)
+	return gittest.TemplateRepo(t, fmt.Sprintf("web-n%d", n), func(t *testing.T, dir string) {
+		gitRun(t, dir, "init", "-b", "main")
+		for i := 1; i <= n; i++ {
+			if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte(fmt.Sprintf("content %d\n", i)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			gitRun(t, dir, "add", "-A")
+			gitRun(t, dir, "commit", "-m", fmt.Sprintf("c%d", i))
 		}
-		gitRun(t, dir, "add", "-A")
-		gitRun(t, dir, "commit", "-m", fmt.Sprintf("c%d", i))
-	}
-	return dir
+	})
 }
 
 func serve(t *testing.T, srv *Server) *httptest.Server {

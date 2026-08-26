@@ -28,16 +28,19 @@ type registry struct {
 }
 
 // DefaultStatePath resolves the platform-appropriate registry location:
-// %LocalAppData%/gg/repos.toml on Windows, else $XDG_STATE_HOME/gg/repos.toml,
+// $XDG_STATE_HOME/gg/repos.toml when set, else %LocalAppData%/gg/repos.toml on Windows,
 // else ~/.local/state/gg/repos.toml. "" (recording disabled) if no home exists.
 func DefaultStatePath() string {
+	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
+	// deliberate override — and the only way tests can isolate state on
+	// Windows); %LocalAppData% is the ambient Windows default.
+	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
+		return filepath.Join(s, "gg", "repos.toml")
+	}
 	if runtime.GOOS == "windows" {
 		if lad := os.Getenv("LocalAppData"); lad != "" {
 			return filepath.Join(lad, "gg", "repos.toml")
 		}
-	}
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "repos.toml")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

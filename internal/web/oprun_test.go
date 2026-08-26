@@ -44,9 +44,14 @@ func drainRun(t *testing.T, run *opRun, timeout time.Duration) []wireEvent {
 }
 
 // waitDecision polls until the run parks on a decision (pending != nil).
+// The ceiling is generous — a pull/push op spawns several git subprocesses
+// before it parks, which can take many seconds on a loaded machine (the old
+// 2s cap flaked the whole decision-test family under a full parallel suite
+// on Windows); a passing test still returns on its first successful poll.
 func waitDecision(t *testing.T, run *opRun) {
 	t.Helper()
-	for i := 0; i < 200; i++ {
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
 		run.mu.Lock()
 		waiting := run.pending != nil
 		run.mu.Unlock()

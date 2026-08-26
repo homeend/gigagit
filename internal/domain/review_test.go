@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -109,6 +110,9 @@ func TestWorkingReviewReportIncludesStagedChanges(t *testing.T) {
 	// Echo the review diff file's contents straight to stdout so the report
 	// content proves what the diff actually contained.
 	cmd := `cat "$GG_REVIEW_DIFF"`
+	if runtime.GOOS == "windows" { // the capture runs as a .bat via cmd.exe
+		cmd = `@type "%GG_REVIEW_DIFF%"`
+	}
 	res, err := svc.ReviewReport(context.Background(), target, cmd, nil, time.Now())
 	if err != nil {
 		t.Fatalf("review: %v", err)
@@ -274,7 +278,11 @@ func TestReviewReportEmptyReportErrors(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", stateDir)
 
 	target := WorkingReviewTarget()
-	_, err := svc.ReviewReport(context.Background(), target, "true", nil, time.Now())
+	empty := "true"
+	if runtime.GOOS == "windows" {
+		empty = "@rem" // exit 0, no output — cmd.exe's "true"
+	}
+	_, err := svc.ReviewReport(context.Background(), target, empty, nil, time.Now())
 	if err == nil {
 		t.Fatal("ReviewReport: want error for an empty report, got nil")
 	}

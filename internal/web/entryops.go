@@ -32,7 +32,11 @@ func (s *Server) buildRestore(r *http.Request, req opStartRequest) (engine.Opera
 	// WriteFile addresses the working tree, so dest is REPO-RELATIVE. An
 	// absolute path would be silently joined onto the repo root and land in a
 	// mirrored subtree ("/repo/tmp/x/f.txt") — refuse it and say so instead.
-	if filepath.IsAbs(req.Dest) || strings.HasPrefix(filepath.ToSlash(filepath.Clean(req.Dest)), "../") {
+	// A leading slash/backslash is treated as absolute even where
+	// filepath.IsAbs says otherwise ("/x" on Windows is volume-rooted, not
+	// repo-relative) — the guard must hold on every platform.
+	if filepath.IsAbs(req.Dest) || strings.HasPrefix(req.Dest, "/") || strings.HasPrefix(req.Dest, `\`) ||
+		strings.HasPrefix(filepath.ToSlash(filepath.Clean(req.Dest)), "../") {
 		return nil, http.StatusBadRequest, errors.New("dest must be a path inside the repository, relative to its root")
 	}
 	svc := s.service()

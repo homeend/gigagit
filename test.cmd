@@ -66,12 +66,12 @@ exit /b 0
 
 :unit
 echo == unit tests ==
-go test %RACE% %VERBOSE% ./cmd/... ./internal/...
+go test -timeout 30m %RACE% %VERBOSE% ./cmd/... ./internal/...
 exit /b %errorlevel%
 
 :e2e
 echo == e2e scenarios (last: full CLI-engine-git stack) ==
-go test %RACE% %VERBOSE% ./e2e/
+go test -timeout 30m %RACE% %VERBOSE% ./e2e/
 exit /b %errorlevel%
 
 :fail

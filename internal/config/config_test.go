@@ -26,6 +26,7 @@ func TestDefaultGlobalPathXDG(t *testing.T) {
 func TestDefaultGlobalPathHome(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "/home/u")
+	t.Setenv("USERPROFILE", "/home/u") // os.UserHomeDir reads this on Windows
 	if got := DefaultGlobalPath(); got != filepath.Join("/home/u", ".config", "gg", "config.toml") {
 		t.Errorf("home path = %q", got)
 	}

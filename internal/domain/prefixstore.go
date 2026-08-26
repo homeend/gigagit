@@ -58,13 +58,16 @@ func (s *Service) prefixStores(ctx context.Context) (global, repo prefix.Store) 
 
 // prefixBaseDir resolves <state>/gg/prefix cross-platform (mirrors profileBaseDir).
 func prefixBaseDir() string {
+	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
+	// deliberate override — and the only way tests can isolate state on
+	// Windows); %LocalAppData% is the ambient Windows default.
+	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
+		return filepath.Join(s, "gg", "prefix")
+	}
 	if runtime.GOOS == "windows" {
 		if lad := os.Getenv("LocalAppData"); lad != "" {
 			return filepath.Join(lad, "gg", "prefix")
 		}
-	}
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "prefix")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

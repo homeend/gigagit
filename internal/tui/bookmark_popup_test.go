@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -85,7 +86,7 @@ func TestBookmarkPopupYChooserHasAbsoluteOnOriginWorktree(t *testing.T) {
 	// The absolute option resolves against the bookmark's OWN worktree (/wt),
 	// not the current worktree (/repo). This pins the copyFilePrompt(b.Worktree,
 	// …) wiring: passing "" would capture /repo/dir/y.go and fail here.
-	if got := m.modal.copyTexts["Copy absolute file path"]; got != "/wt/dir/y.go" {
+	if got := m.modal.copyTexts["Copy absolute file path"]; got != filepath.FromSlash("/wt/dir/y.go") {
 		t.Errorf("captured abs = %q, want /wt/dir/y.go (bookmark's own worktree)", got)
 	}
 }

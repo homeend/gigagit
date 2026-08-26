@@ -23,7 +23,7 @@ func TestPaletteOpenRepoOpensPopup(t *testing.T) {
 func TestRepoPathPopupGoodPathReRoots(t *testing.T) {
 	t.Parallel()
 	dir, _ := newRepoDir(t)
-	want := gitOut(t, dir, "rev-parse", "--show-toplevel")
+	want := filepath.Clean(gitOut(t, dir, "rev-parse", "--show-toplevel")) // TopLevel normalizes to native notation
 
 	m := footerModel()
 	m, _ = m.openRepoPathPopup()
@@ -47,7 +47,7 @@ func TestRepoPathPopupGoodPathReRoots(t *testing.T) {
 func TestRepoPathPopupSubdirResolvesToRoot(t *testing.T) {
 	t.Parallel()
 	dir, _ := newRepoDir(t)
-	want := gitOut(t, dir, "rev-parse", "--show-toplevel")
+	want := filepath.Clean(gitOut(t, dir, "rev-parse", "--show-toplevel")) // TopLevel normalizes to native notation
 	sub := filepath.Join(dir, "sub")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -107,9 +108,10 @@ func TestOpHTTPCreateWorktreeAtCommit(t *testing.T) {
 	dir := newRepoDir(t, 3)
 	old := gitRun(t, dir, "rev-parse", "HEAD~2")
 	ts := serve(t, New(domain.Open(dir)))
-	path := t.TempDir() + "/wt-from-commit"
+	path := filepath.Join(t.TempDir(), "wt-from-commit")
+	pathJSON, _ := json.Marshal(path) // JSON-escapes Windows backslashes
 
-	events := readSSE(t, ts, startOpBody(t, ts, `{"op":"create-worktree","sha":"`+old+`","name":"from-commit","path":"`+path+`"}`), 60*time.Second)
+	events := readSSE(t, ts, startOpBody(t, ts, `{"op":"create-worktree","sha":"`+old+`","name":"from-commit","path":`+string(pathJSON)+`}`), 60*time.Second)
 	done := events[len(events)-1]
 	if done["ok"] != true {
 		t.Fatalf("done = %v", done)
@@ -117,7 +119,7 @@ func TestOpHTTPCreateWorktreeAtCommit(t *testing.T) {
 	if got := gitRun(t, dir, "rev-parse", "from-commit"); got != old {
 		t.Errorf("from-commit = %s, want the start point %s", got, old)
 	}
-	if code := postJSON(t, ts, "/api/op", `{"op":"create-worktree","sha":"HEAD~2","name":"x","path":"`+path+`2"}`, "application/json", "", nil); code != http.StatusBadRequest {
+	if code := postJSON(t, ts, "/api/op", `{"op":"create-worktree","sha":"HEAD~2","name":"x","path":`+string(mustJSON(path+"2"))+`}`, "application/json", "", nil); code != http.StatusBadRequest {
 		t.Errorf("a rev expression: code = %d, want 400 (hex only)", code)
 	}
 }
@@ -144,4 +146,9 @@ func TestCommitMessageEndpoint(t *testing.T) {
 	if code := getJSON(t, ts, "/api/commit-message?rev=HEAD~1", &ignored); code != http.StatusBadRequest {
 		t.Errorf("a rev expression: code = %d, want 400 (hex only)", code)
 	}
+}
+
+func mustJSON(v string) []byte {
+	b, _ := json.Marshal(v)
+	return b
 }

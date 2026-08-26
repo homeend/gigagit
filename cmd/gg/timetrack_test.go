@@ -37,8 +37,10 @@ func TestExtractTimeTrack(t *testing.T) {
 }
 
 func TestSetupTimeTrackAppendsAcrossRuns(t *testing.T) {
-	t.Cleanup(func() { observ.SetSpanSink(nil) })
 	logPath := filepath.Join(t.TempDir(), "perf.log")
+	// Registered AFTER t.TempDir() so LIFO cleanup closes the sink BEFORE the
+	// temp dir is removed — Windows cannot delete a file that is still open.
+	t.Cleanup(func() { observ.SetSpanSink(nil) })
 
 	if err := setupTimeTrack(logPath, []string{"status"}); err != nil {
 		t.Fatalf("first setup: %v", err)

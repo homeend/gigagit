@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -245,6 +246,9 @@ func TestToolsWizardPreviewShowsDestinationAndCommand(t *testing.T) {
 // invariant that keeps the footer from being clipped by overlayCenter (which
 // silently drops rows past termH).
 func TestToolsWizardPreviewCapsMultilineCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows tool commands are FlattenForCmd'd to one .bat line — the multi-line wrap/cap shape under test does not exist there")
+	}
 	t.Setenv("XDG_CONFIG_HOME", "/xdg")
 
 	claude := exttool.Builtins()[0] // Claude Code: multi-line conflict command
@@ -289,6 +293,9 @@ func TestToolsWizardPreviewCapsMultilineCommand(t *testing.T) {
 // a long flag line renders on ONE line instead of wrapping — let alone
 // wrapping mid-word, the exact live-feedback symptom ("--allowedToo" / "ls").
 func TestToolsWizardWideTerminalAvoidsMidWordWrap(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows tool commands are FlattenForCmd'd to one .bat line — the multi-line wrap/cap shape under test does not exist there")
+	}
 	t.Setenv("XDG_CONFIG_HOME", "/xdg")
 
 	claude := exttool.Builtins()[0]

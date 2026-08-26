@@ -599,13 +599,16 @@ func TestWorktreeMoveToNewPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("worktree list: %v\n%s", err, listOut)
 	}
-	if !strings.Contains(string(listOut), dest) {
+	// git prints forward slashes even on Windows; compare in one notation.
+	list := filepath.ToSlash(string(listOut))
+	destS, wtS := filepath.ToSlash(dest), filepath.ToSlash(wt)
+	if !strings.Contains(list, destS) {
 		t.Fatalf("worktree list missing new path %s:\n%s", dest, listOut)
 	}
 	// wt is a path-prefix of dest ("...-mv1" vs "...-mv1-dest"), so match the
 	// old path as its own listing entry (followed by whitespace before the
 	// sha column) rather than a bare substring check.
-	if strings.Contains(string(listOut), wt+" ") || strings.Contains(string(listOut), wt+"\t") {
+	if strings.Contains(list, wtS+" ") || strings.Contains(list, wtS+"\t") {
 		t.Fatalf("worktree list still shows old path %s:\n%s", wt, listOut)
 	}
 }

@@ -37,7 +37,8 @@ func TestOpHTTPMoveWorktreeRename(t *testing.T) {
 	}
 	// git's own record has to follow, or the worktree list still names the
 	// old path and the sidebar row would point at nothing.
-	if list := gitRun(t, dir, "worktree", "list"); !strings.Contains(list, dest) {
+	// git prints forward slashes even on Windows; compare in one notation.
+	if list := gitRun(t, dir, "worktree", "list"); !strings.Contains(filepath.ToSlash(list), filepath.ToSlash(dest)) {
 		t.Errorf("worktree list does not mention %s:\n%s", dest, list)
 	}
 }

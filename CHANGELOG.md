@@ -8,6 +8,32 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Template-repo test fixtures.** The per-test `git init` + add + commit
+  setup (4+ process spawns per test, ~4,000 tests) is replaced by copying a
+  cached template repository built once per test process
+  (`internal/gittest.TemplateRepo`/`BasicRepo`) — a pure file copy, no
+  processes. On Windows, where process creation dominates the suite's wall
+  clock, the tui package runs ~20% faster; helper signatures are unchanged.
+- **The test suite runs green on Windows, and several real Windows bugs fell
+  out of making it so.** Product fixes: worktree paths from git (worktree
+  list, `--show-toplevel`, git dirs) are normalized to native notation, so
+  `worktree remove/move` path matching, current-worktree markers, the repo
+  switcher's same-repo detection, and web re-root work with `C:\` paths;
+  shelved-commit tar members keep git's forward-slash notation (listing,
+  member lookup, and export were broken on Windows); external-tool captures
+  run their .bat with `@echo off` (cmd.exe used to echo the command line into
+  the captured output — a generated commit message began with the prompt
+  line) and generated messages normalize CRLF; the web restore-entry guard
+  now rejects `/`-rooted destinations on Windows too; replacing the span sink
+  closes the old one (an open log file was undeletable on Windows). State
+  resolution change: an explicitly-set `XDG_STATE_HOME` now wins over
+  `%LocalAppData%` on Windows (it is a deliberate override, and it is how
+  tests keep off your real gg state — test fixtures used to leak into live
+  profiles/prefixes/agent targets). Test infrastructure: a pinned git
+  environment (identity, `autocrlf=false`, no signing) makes every test repo
+  deterministic regardless of the machine's gitconfig — Git for Windows'
+  `autocrlf=true` alone accounted for ~100 CRLF failures.
+
 - **`./test.sh` streams progress.** Long stages used to sit silent for
   minutes and then dump everything at once; each package now prints one line
   the moment it finishes — `ok <package> <time> <N> tests` (or `(cached)`), a

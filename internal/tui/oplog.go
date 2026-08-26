@@ -68,15 +68,15 @@ func (l *opLog) enable() error {
 	return nil
 }
 
-// disable stops mirroring (under the sink mutex, so no further write touches the
-// handle) and closes the file. A no-op when already off.
+// disable stops mirroring (under the sink mutex, so no further write touches
+// the handle). SetSpanSink owns closing the replaced sink — closing here too
+// would double-close the file and abort the toggle on the spurious error.
 func (l *opLog) disable() error {
 	if !l.on {
 		return nil
 	}
-	observ.SetSpanSink(nil)
-	err := l.file.Close()
+	observ.SetSpanSink(nil) // closes l.file
 	l.file = nil
 	l.on = false
-	return err
+	return nil
 }

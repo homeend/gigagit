@@ -55,13 +55,16 @@ func (s *Service) searchStore(ctx context.Context) searchhist.Store {
 // searchBaseDir resolves <state>/gg/search cross-platform (mirrors shelfBaseDir).
 // "" when no home/state dir exists.
 func searchBaseDir() string {
+	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
+	// deliberate override — and the only way tests can isolate state on
+	// Windows); %LocalAppData% is the ambient Windows default.
+	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
+		return filepath.Join(s, "gg", "search")
+	}
 	if runtime.GOOS == "windows" {
 		if lad := os.Getenv("LocalAppData"); lad != "" {
 			return filepath.Join(lad, "gg", "search")
 		}
-	}
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "search")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {

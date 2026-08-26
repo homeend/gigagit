@@ -16,14 +16,25 @@ func lsReady(t *testing.T, m Model, paths ...string) Model {
 	return nm
 }
 
+// mustAbs turns a POSIX-style fixture path into a platform-absolute one
+// ("\repo" is NOT absolute on Windows — it lacks a volume).
+func mustAbs(t *testing.T, p string) string {
+	t.Helper()
+	abs, err := filepath.Abs(filepath.FromSlash(p))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return abs
+}
+
 func TestRepoRelPath(t *testing.T) {
 	t.Parallel()
-	root := filepath.FromSlash("/repo")
+	root := mustAbs(t, "/repo") // volume-qualified on Windows (\repo is not IsAbs there)
 	outside := filepath.FromSlash("/elsewhere/x.go")
 	cases := []struct{ name, in, want string }{
 		{"already relative", "internal/tui/model.go", "internal/tui/model.go"},
 		{"dot-slash relative", "./internal/x.go", "internal/x.go"},
-		{"absolute inside repo", filepath.FromSlash("/repo/internal/x.go"), "internal/x.go"},
+		{"absolute inside repo", filepath.Join(root, "internal", "x.go"), "internal/x.go"},
 		{"absolute outside repo", outside, filepath.ToSlash(filepath.Clean(outside))},
 		{"blank", "   ", ""},
 	}
