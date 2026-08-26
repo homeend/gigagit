@@ -35,13 +35,17 @@ func useGGSequenceEditor(t *testing.T) {
 			return
 		}
 		ggBinPath = bin
+		// Swap the seam HERE, inside the Once, and never restore it: a
+		// per-test swap + Cleanup restore wrote the package global from
+		// every parallel test (a data race the -race gate caught), for an
+		// override that is identical in all of them. Every reader of
+		// execPath is an op these same tests trigger after their Do call,
+		// so the write is ordered before every read.
+		execPath = func() (string, error) { return ggBinPath, nil }
 	})
 	if ggBinErr != nil {
 		t.Fatal(ggBinErr)
 	}
-	prev := execPath
-	execPath = func() (string, error) { return ggBinPath, nil }
-	t.Cleanup(func() { execPath = prev })
 }
 
 var (
