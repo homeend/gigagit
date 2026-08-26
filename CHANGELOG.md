@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Marking is gated to panels that use it; esc clears file marks.** `m` used
+  to set a dead ◆ mark on the Worktrees, Remotes, Tags, and Reflog panels —
+  nothing ever consumed it (pair operations exist only on Branches), so the
+  key is now inert there. Marking keeps working where it means something:
+  Branches (pair-op picker), Commits (◉ compare set), and the file panels
+  (multi-select). On the file panels, esc now drops ALL m-marked files at
+  once — mirroring the Commits esc behavior on the ◉ set — before falling
+  through to the mark/highlight/filter peeling order.
 - **Template-repo test fixtures.** The per-test `git init` + add + commit
   setup (4+ process spawns per test, ~4,000 tests) is replaced by copying a
   cached template repository built once per test process
