@@ -47,7 +47,7 @@ func (p *pairOpPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 	switch msg.String() {
-	case "z": // cycle the text display mode (cutoff / wrap / scroll)
+	case "ctrl+w": // cycle the text display mode (cutoff / wrap / scroll)
 		p.mode = p.mode.next()
 		p.hscroll = 0
 	case "shift+left":
@@ -114,6 +114,6 @@ func (p *pairOpPopup) box(m Model) string {
 	body := renderWindow(wr, winOpts{w: textW, h: len(p.ops), mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 	parts := []string{p.marked + " + " + p.selected, ""}
 	parts = append(parts, body...)
-	parts = append(parts, "", i18n.T("[↑/↓] choose  [enter] run  [z] mode  [esc] cancel"))
+	parts = append(parts, "", i18n.T("[↑/↓] choose  [enter] run  [ctrl+w] mode  [esc] cancel"))
 	return popupBox(inner, strings.Join(parts, "\n"))
 }

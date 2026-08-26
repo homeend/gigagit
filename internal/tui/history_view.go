@@ -297,7 +297,7 @@ func (h *historyView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.openShelfSwitcher()
 	case "F": // global fuzzy file finder
 		return m.openFileFinder()
-	case "z":
+	case "ctrl+w":
 		h.mode = h.mode.next()
 		h.hscroll = 0
 		return m, nil

@@ -47,7 +47,7 @@ func (p *noticePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	if !p.showActions {
 		switch msg.String() {
-		case "z":
+		case "ctrl+w":
 			p.mode = p.mode.next()
 			p.hscroll = 0
 			return m, nil
@@ -210,7 +210,7 @@ func (p *noticePopup) box(m Model) string {
 			// the truncate-then-style ordering.
 			b.WriteString("\n\n" + savedNoteStyle.Width(textW).Render(truncate(i18n.T("saved to %s", p.saved), textW)))
 		}
-		b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] actions  [z] mode  [s] save  [esc] close"))
+		b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] actions  [ctrl+w] mode  [s] save  [esc] close"))
 	}
 	return popupBox(inner, strings.TrimRight(b.String(), "\n"))
 }

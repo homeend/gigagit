@@ -131,7 +131,7 @@ func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 	case "L", "esc": // Leave — step out, repo as-is; resume from the notice ([x])
 		m.proc = nil
 		return m, nil
-	case "z":
+	case "ctrl+w":
 		p.mode = p.mode.next()
 		p.hscroll = 0
 		return m, nil
@@ -702,7 +702,7 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 		}
 	}
 	nTools := len(m.toolCommands("conflict")) + len(m.toolCommands(string(exttool.CatConflictComplete)))
-	hintParts := append(conflictHints(files, sel, inProgress, nTools), i18n.T("[L] leave"), i18n.T("[z] mode"))
+	hintParts := append(conflictHints(files, sel, inProgress, nTools), i18n.T("[L] leave"), i18n.T("[ctrl+w] mode"))
 	b.WriteString("\n" + strings.Join(wrapParts(hintParts, textW, "  "), "\n"))
 	return popupBox(inner, b.String())
 }

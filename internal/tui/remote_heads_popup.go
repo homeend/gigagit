@@ -154,7 +154,7 @@ func (p *remoteHeadsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() {
-	case "z":
+	case "ctrl+w":
 		p.mode = p.mode.next()
 		p.hscroll = 0
 		return m, nil
@@ -279,7 +279,7 @@ func (p *remoteHeadsPopup) box(m Model) string {
 	if p.remote == "" {
 		enterHint = i18n.T("[enter] pick remote")
 	}
-	hint := []string{enterHint, i18n.T("[↑↓ pgup/pgdn] nav"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
+	hint := []string{enterHint, i18n.T("[↑↓ pgup/pgdn] nav"), i18n.T("[/] filter"), i18n.T("[ctrl+w] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
 	parts = append(parts, "")

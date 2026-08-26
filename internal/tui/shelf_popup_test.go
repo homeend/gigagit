@@ -36,7 +36,7 @@ func TestShelfPopupRendersOrigin(t *testing.T) {
 func TestShelfPopupZCyclesMode(t *testing.T) {
 	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
-	mm, _ := m.Update(keyMsg("z"))
+	mm, _ := m.Update(keyMsg("ctrl+w"))
 	m = mm.(Model)
 	if m.shelfSwitcher().mode != modeWrap {
 		t.Fatalf("z should cycle to wrap, got %v", m.shelfSwitcher().mode)

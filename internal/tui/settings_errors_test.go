@@ -110,7 +110,7 @@ func TestSettingsErrorsViewerWrapRevealsDetail(t *testing.T) {
 		t.Fatalf("precondition: tail should be truncated in cutoff mode:\n%s", out)
 	}
 	// z -> wrap: the tail must now appear on a continuation line.
-	u, _ = m.Update(keyMsg("z"))
+	u, _ = m.Update(keyMsg("ctrl+w"))
 	m = u.(Model)
 	if p := layerOf[*settingsPopup](m); p.mode != modeWrap {
 		t.Fatalf("z should select wrap mode, got %v", p.mode)
@@ -204,35 +204,35 @@ func TestSettingsErrorsEmptyState(t *testing.T) {
 	}
 	// Nothing to wrap/scroll with no entries: don't advertise z (the user's
 	// complaint — z was advertised but inert in the empty state).
-	if strings.Contains(out, "[z] mode") {
-		t.Fatalf("empty viewer must not advertise [z] mode:\n%s", out)
+	if strings.Contains(out, "[ctrl+w] mode") {
+		t.Fatalf("empty viewer must not advertise [ctrl+w] mode:\n%s", out)
 	}
 	if !strings.Contains(out, "[esc] back") {
 		t.Fatalf("empty viewer should still offer [esc] back:\n%s", out)
 	}
 }
 
-// TestSettingsErrorsZHintGatedOnTruncation: [z] mode is advertised only when an
+// TestSettingsErrorsZHintGatedOnTruncation: [ctrl+w] mode is advertised only when an
 // entry is too long to fit (so wrap/scroll have something to reveal).
 func TestSettingsErrorsZHintGatedOnTruncation(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	m, _ := settingsModel(t)
 	observ.ResetFailures()
-	// A short error that fits the wide popup on one line -> no [z].
+	// A short error that fits the wide popup on one line -> no [ctrl+w].
 	observ.NoteFailure("op X", errors.New("short"))
 	u, _ := m.Update(keyMsg(","))
 	m = u.(Model)
 	layerOf[*settingsPopup](m).menuSel = errorsMenuIndex(t)
 	u, _ = m.Update(keyMsg("enter"))
 	m = u.(Model)
-	if out := m.View(); strings.Contains(out, "[z] mode") {
-		t.Fatalf("a short, fully-visible entry must not advertise [z] mode:\n%s", out)
+	if out := m.View(); strings.Contains(out, "[ctrl+w] mode") {
+		t.Fatalf("a short, fully-visible entry must not advertise [ctrl+w] mode:\n%s", out)
 	}
 
-	// A very long error that overflows even the wide popup -> [z] appears.
+	// A very long error that overflows even the wide popup -> [ctrl+w] appears.
 	observ.NoteFailure("op SmartPull",
 		errors.New("git pull failed (exit 1): fatal: "+strings.Repeat("very-long-token-", 12)))
-	if out := m.View(); !strings.Contains(out, "[z] mode") {
-		t.Fatalf("a truncated entry should advertise [z] mode:\n%s", out)
+	if out := m.View(); !strings.Contains(out, "[ctrl+w] mode") {
+		t.Fatalf("a truncated entry should advertise [ctrl+w] mode:\n%s", out)
 	}
 }

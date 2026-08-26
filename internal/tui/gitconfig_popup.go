@@ -145,7 +145,7 @@ func (p *gitConfigPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	// Navigation mode. Display-mode + pan keys act here (query chars while filtering).
 	switch msg.String() {
-	case "z":
+	case "ctrl+w":
 		p.mode = p.mode.next()
 		p.hscroll = 0
 		return m, nil
@@ -581,7 +581,7 @@ func (p *gitConfigPopup) box(m Model) string {
 		i18n.T("[g] set global"),
 		i18n.T("[u] unset"),
 		i18n.T("[/] filter"),
-		i18n.T("[z] mode"),
+		i18n.T("[ctrl+w] mode"),
 		i18n.T("[ctrl+t] full"),
 		i18n.T("[esc] close"),
 	}

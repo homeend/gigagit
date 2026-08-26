@@ -35,7 +35,7 @@ func bookmarkSwitcherHelp(compare bool) []contentLine {
 			cheatRow("↑/k ↓/j", i18n.T("move the selection")),
 			cheatRow("enter", i18n.T("compare the first pick against the highlighted bookmark (file vs file, or commit vs commit)")),
 			cheatRow("/", i18n.T("filter the list (enter keeps, esc cancels)")),
-			cheatRow("z", i18n.T("cycle text display: cutoff / wrap / scroll")),
+			cheatRow("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 			cheatRow("ctrl+t", i18n.T("toggle fullscreen: wider box, more visible rows")),
 			cheatRow("esc", i18n.T("cancel")),
 		}
@@ -52,7 +52,7 @@ func bookmarkSwitcherHelp(compare bool) []contentLine {
 		cheatRow("c", i18n.T("compare the highlighted bookmark against a shelf entry (file vs file, or commit vs shelved commit)")),
 		cheatRow("x", i18n.T("remove the bookmark (confirms)")),
 		cheatRow("/", i18n.T("filter the list (enter keeps, esc cancels)")),
-		cheatRow("z", i18n.T("cycle text display: cutoff / wrap / scroll")),
+		cheatRow("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 		cheatRow("ctrl+t", i18n.T("toggle fullscreen: wider box, more visible rows")),
 		cheatRow("esc", i18n.T("close the switcher")),
 	}
@@ -65,7 +65,7 @@ func shelfSwitcherHelp(compare bool) []contentLine {
 			cheatRow("↑/k ↓/j", i18n.T("move the selection")),
 			cheatRow("enter", i18n.T("compare the first pick against the highlighted entry (file vs file, or commit vs commit)")),
 			cheatRow("/", i18n.T("filter the list (enter keeps, esc cancels)")),
-			cheatRow("z", i18n.T("cycle text display: cutoff / wrap / scroll")),
+			cheatRow("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 			cheatRow("ctrl+t", i18n.T("toggle fullscreen: wider box, more visible rows")),
 			cheatRow("esc", i18n.T("cancel")),
 		}
@@ -82,7 +82,7 @@ func shelfSwitcherHelp(compare bool) []contentLine {
 		cheatRow("c", i18n.T("compare the highlighted entry against a bookmark (file vs file, or shelved commit vs commit bookmark)")),
 		cheatRow("x", i18n.T("remove from the shelf (confirms)")),
 		cheatRow("/", i18n.T("filter the list (enter keeps, esc cancels)")),
-		cheatRow("z", i18n.T("cycle text display: cutoff / wrap / scroll")),
+		cheatRow("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 		cheatRow("ctrl+t", i18n.T("toggle fullscreen: wider box, more visible rows")),
 		cheatRow("esc", i18n.T("close the switcher")),
 	}

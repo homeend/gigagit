@@ -403,7 +403,7 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	switch msg.String() { // display-mode keys apply on both screens
-	case "z":
+	case "ctrl+w":
 		p.mode = p.mode.next()
 		p.hscroll = 0
 		return m, nil
@@ -788,7 +788,7 @@ func (p *settingsPopup) box(m Model) string {
 		// Advertise z only when it does something: an entry too long to fit (in
 		// any mode) is what wrap/scroll reveal. Otherwise the hint is a lie.
 		if anyTrunc {
-			b.WriteString("\n" + i18n.T("[z] mode") + "  " + i18n.T("[esc] back"))
+			b.WriteString("\n" + i18n.T("[ctrl+w] mode") + "  " + i18n.T("[esc] back"))
 		} else {
 			b.WriteString("\n" + i18n.T("[esc] back"))
 		}
@@ -908,7 +908,7 @@ func (p *settingsPopup) box(m Model) string {
 		// hint is computed up front (not just written at the end) because the
 		// command-preview height budget below needs its line count to know how
 		// much room is actually left over.
-		hintParts := []string{i18n.T("[space] toggle"), i18n.T("[enter] write to global config"), i18n.T("[z] mode"), i18n.T("[esc] back")}
+		hintParts := []string{i18n.T("[space] toggle"), i18n.T("[enter] write to global config"), i18n.T("[ctrl+w] mode"), i18n.T("[esc] back")}
 		hintLines := wrapParts(hintParts, textW, "  ")
 
 		b.WriteString(i18n.T("External tools — detected") + "\n\n")
@@ -1071,7 +1071,7 @@ func (p *settingsPopup) box(m Model) string {
 				b.WriteString(line + "\n")
 			}
 		}
-		b.WriteString("\n" + strings.Join([]string{i18n.T("[space] toggle"), i18n.T("[enter] apply"), i18n.T("[z] mode"), i18n.T("[esc] back")}, "  "))
+		b.WriteString("\n" + strings.Join([]string{i18n.T("[space] toggle"), i18n.T("[enter] apply"), i18n.T("[ctrl+w] mode"), i18n.T("[esc] back")}, "  "))
 	}
 	return popupBox(inner, strings.TrimRight(b.String(), "\n"))
 }

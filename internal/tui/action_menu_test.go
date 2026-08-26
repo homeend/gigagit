@@ -221,19 +221,19 @@ func TestActionMenuEscClearsFilterThenCloses(t *testing.T) {
 }
 
 // ctrl+z cycles the display mode (z itself is filter text now).
-func TestActionMenuCtrlZCyclesMode(t *testing.T) {
+func TestActionMenuCtrlWCyclesMode(t *testing.T) {
 	t.Parallel()
 	m := footerModel()
 	m.loading = false
 	u, _ := m.Update(keyMsg("."))
 	m = u.(Model)
-	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlZ})
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlW})
 	mm := u.(Model)
 	if mm.actionMenu.mode != modeWrap {
-		t.Fatalf("mode after ctrl+z = %v, want modeWrap", mm.actionMenu.mode)
+		t.Fatalf("mode after ctrl+w = %v, want modeWrap", mm.actionMenu.mode)
 	}
 	if mm.actionMenu.query != "" {
-		t.Fatalf("ctrl+z must not touch the query, got %q", mm.actionMenu.query)
+		t.Fatalf("ctrl+w must not touch the query, got %q", mm.actionMenu.query)
 	}
 }
 

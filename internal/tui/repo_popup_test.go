@@ -180,7 +180,7 @@ func TestRepoPopupSlashFilterAndZNotCollision(t *testing.T) {
 	// In nav mode, z cycles the display mode (not a query char).
 	p := layerOf[*repoPopup](m)
 	mode0 := p.mode
-	u, _ = m.Update(keyMsg("z"))
+	u, _ = m.Update(keyMsg("ctrl+w"))
 	m = u.(Model)
 	p = layerOf[*repoPopup](m)
 	if p.mode == mode0 || p.query != "" {

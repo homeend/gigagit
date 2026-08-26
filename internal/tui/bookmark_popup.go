@@ -149,9 +149,9 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 
 	parts := []string{header, ""}
 	parts = append(parts, bodyLines...)
-	// Wrap the hint so [z] mode / [esc] close survive on a narrow terminal,
+	// Wrap the hint so [ctrl+w] mode / [esc] close survive on a narrow terminal,
 	// where a single-line footer would truncate them off (mirrors shelfPopup).
-	hint := []string{i18n.T("[?] keys"), i18n.T("[enter] jump"), i18n.T("[e] editor"), i18n.T("[p] paste"), i18n.T("[t] temp dir"), i18n.T("[a] cherry-pick"), i18n.T("[y] copy"), i18n.T("[m] mark/compare"), i18n.T("[x] remove"), i18n.T("[c] vs shelf"), i18n.T("[/] filter"), i18n.T("[z] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
+	hint := []string{i18n.T("[?] keys"), i18n.T("[enter] jump"), i18n.T("[e] editor"), i18n.T("[p] paste"), i18n.T("[t] temp dir"), i18n.T("[a] cherry-pick"), i18n.T("[y] copy"), i18n.T("[m] mark/compare"), i18n.T("[x] remove"), i18n.T("[c] vs shelf"), i18n.T("[/] filter"), i18n.T("[ctrl+w] mode"), i18n.T("[ctrl+t] full"), i18n.T("[esc] close")}
 	parts = append(parts, "")
 	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
@@ -225,7 +225,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	// Display-mode + pan keys take precedence over the navigation switch and
 	// only act in navigation mode (while filtering they are query characters).
 	switch msg.String() {
-	case "z":
+	case "ctrl+w":
 		p.mode = p.mode.next()
 		p.hscroll = 0
 		return m, nil

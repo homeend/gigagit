@@ -121,7 +121,7 @@ func TestSettingsPopupZCyclesMode(t *testing.T) {
 	m, _ := settingsModel(t)
 	u, _ := m.Update(keyMsg(","))
 	m = u.(Model)
-	u, _ = m.Update(keyMsg("z"))
+	u, _ = m.Update(keyMsg("ctrl+w"))
 	m = u.(Model)
 	p := layerOf[*settingsPopup](m)
 	if p == nil || p.mode != modeWrap {

@@ -20,7 +20,7 @@ func TestPairOpPopupZCyclesMode(t *testing.T) {
 	if p.mode != modeCutoff {
 		t.Fatalf("default mode = %v, want modeCutoff", p.mode)
 	}
-	u, _ := m.Update(keyMsg("z"))
+	u, _ := m.Update(keyMsg("ctrl+w"))
 	mm := u.(Model)
 	pp := layerOf[*pairOpPopup](mm)
 	if pp.mode != modeWrap {
@@ -40,8 +40,8 @@ func TestPairOpPopupRendersOps(t *testing.T) {
 	if !strings.Contains(out, "> ") {
 		t.Fatalf("selected-row cursor prefix missing:\n%s", out)
 	}
-	if !strings.Contains(out, "[z] mode") {
-		t.Fatalf("hint missing [z] mode:\n%s", out)
+	if !strings.Contains(out, "[ctrl+w] mode") {
+		t.Fatalf("hint missing [ctrl+w] mode:\n%s", out)
 	}
 }
 

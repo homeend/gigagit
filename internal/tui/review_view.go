@@ -124,7 +124,7 @@ func (r *reviewView) render(m Model, _ string) string {
 	r.clampScroll(body, len(dl))
 
 	header := truncate(r.title, w)
-	hint := truncate(i18n.T("[↑↓] scroll  [pgup/pgdn] page  [z] wrap  [e] edit  [/] search  [esc] close"), w)
+	hint := truncate(i18n.T("[↑↓] scroll  [pgup/pgdn] page  [ctrl+w] wrap  [e] edit  [/] search  [esc] close"), w)
 	if r.typing {
 		hint = truncate("/"+r.query+"█", w)
 	} else if r.query != "" {
@@ -195,7 +195,7 @@ func (r *reviewView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		r.query = ""
 	case "n": // jump to the next match of the committed search
 		r.jumpToNextMatch(w)
-	case "z": // cycle the long-line layout (cutoff / wrap / scroll)
+	case "ctrl+w": // cycle the long-line layout (cutoff / wrap / scroll)
 		r.mode = r.mode.next()
 		r.hscroll = 0
 	case "shift+left":

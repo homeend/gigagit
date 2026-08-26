@@ -33,15 +33,15 @@ func TestShelfPopupWidensForLongPaths(t *testing.T) {
 	}
 }
 
-// The footer hint must wrap rather than truncate, so [z] mode is discoverable
+// The footer hint must wrap rather than truncate, so [ctrl+w] mode is discoverable
 // even on a narrow terminal (the root cause of "it has no z handling").
 func TestShelfPopupFooterShowsZAtNarrowWidth(t *testing.T) {
 	t.Parallel()
 	m := shelfPopModel(shEntry("a", "x.go"))
 	m.width, m.height = 80, 30
 	out := m.renderShelfPopupBox(m.shelfSwitcher())
-	if !strings.Contains(out, "[z] mode") {
-		t.Fatalf("footer must advertise [z] mode at 80 cols (wrap, not truncate):\n%s", out)
+	if !strings.Contains(out, "[ctrl+w] mode") {
+		t.Fatalf("footer must advertise [ctrl+w] mode at 80 cols (wrap, not truncate):\n%s", out)
 	}
 }
 
@@ -50,8 +50,8 @@ func TestBookmarkPopupFooterShowsZAtNarrowWidth(t *testing.T) {
 	m := bmPopupModel(model.Bookmark{ID: "b", State: model.StateUnstaged, Worktree: "/wt", Path: "x.go"})
 	m.width, m.height = 80, 30
 	out := m.renderBookmarkPopupBox(m.bookmarkSwitcher())
-	if !strings.Contains(out, "[z] mode") {
-		t.Fatalf("footer must advertise [z] mode at 80 cols (wrap, not truncate):\n%s", out)
+	if !strings.Contains(out, "[ctrl+w] mode") {
+		t.Fatalf("footer must advertise [ctrl+w] mode at 80 cols (wrap, not truncate):\n%s", out)
 	}
 }
 

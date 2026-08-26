@@ -110,7 +110,7 @@ func TestExplorerWrapModeUnsetCellsNotCorrupted(t *testing.T) {
 	m = openExplorer(t, m)
 
 	// One `z` press cycles modeCutoff -> modeWrap (dispMode.next()).
-	u, _ := m.Update(keyMsg("z"))
+	u, _ := m.Update(keyMsg("ctrl+w"))
 	m = u.(Model)
 	p := layerOf[*gitConfigPopup](m)
 	if p.mode != modeWrap {
