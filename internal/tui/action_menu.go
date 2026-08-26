@@ -153,6 +153,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.shelfAddRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.browseRemoteBranchesRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.remotePruneRow(); ok {
 		out = append(out, r)
 	}

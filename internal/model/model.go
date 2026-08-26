@@ -90,6 +90,12 @@ type RefInfo struct {
 	Subject string // commit subject
 }
 
+// RemoteHead is one branch on a remote as reported by `git ls-remote --heads`.
+type RemoteHead struct {
+	Name string // short branch name (no refs/heads/ prefix)
+	Hash string // tip object id on the remote
+}
+
 // BranchVersion is one recorded pre-operation snapshot of a branch
 // (refs/gg/versions/<branch>/<unix>-<op>).
 type BranchVersion struct {

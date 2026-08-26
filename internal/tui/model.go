@@ -782,6 +782,43 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		p.loading = false
 		p.rerank()
 		return m, nil
+	case remoteHeadNamesMsg:
+		p := layerOf[*remoteHeadsPopup](m)
+		if p == nil || msg.gen != m.loadGen {
+			return m, nil // closed or repo switched before the read returned
+		}
+		if msg.err != nil {
+			m.statusMsg = i18n.T("browse remote branches: %s", msg.err.Error())
+			m = m.popLayer()
+			return m, nil
+		}
+		if len(msg.names) == 0 {
+			m.statusMsg = i18n.T("browse remote branches: no remotes configured")
+			m = m.popLayer()
+			return m, nil
+		}
+		if len(msg.names) == 1 {
+			p.remote = msg.names[0]
+			return m, m.loadRemoteHeadsCmd(p.remote)
+		}
+		p.remotes = msg.names
+		p.loading = false
+		p.refilter()
+		return m, nil
+	case remoteHeadsMsg:
+		p := layerOf[*remoteHeadsPopup](m)
+		if p == nil || msg.gen != m.loadGen || msg.remote != p.remote {
+			return m, nil
+		}
+		if msg.err != nil {
+			m.statusMsg = i18n.T("browse remote branches: %s", msg.err.Error())
+			m = m.popLayer()
+			return m, nil
+		}
+		p.heads = msg.heads
+		p.loading = false
+		p.refilter()
+		return m, nil
 	case repoFSMsg:
 		if p := layerOf[*repoPopup](m); p != nil {
 			p.foreign = msg.foreign

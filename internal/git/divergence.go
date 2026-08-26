@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/homeend/gigagit/internal/gitcmd"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // CountRange counts commits reachable from ref but not from base
@@ -54,6 +55,28 @@ func (r *Repo) RemoteBranchTip(ctx context.Context, remote, branch string) (stri
 		}
 	}
 	return "", nil
+}
+
+// ListRemoteHeads lists every branch on remote with its tip hash, without
+// fetching any object (`git ls-remote --heads <remote>`). This is a NETWORK
+// call; on big remotes the list can run to thousands of rows, but each row is
+// one line — no objects move.
+func (r *Repo) ListRemoteHeads(ctx context.Context, remote string) ([]model.RemoteHead, error) {
+	argv := gitcmd.New("ls-remote").Arg("--heads", remote).ToArgv()
+	res, err := r.Runner.Run(ctx, "git ls-remote (heads)", argv)
+	if err != nil {
+		return nil, err
+	}
+	var heads []model.RemoteHead
+	for _, ln := range strings.Split(res.Stdout, "\n") {
+		sha, ref, ok := strings.Cut(strings.TrimSpace(ln), "\t")
+		name, isHead := strings.CutPrefix(strings.TrimSpace(ref), "refs/heads/")
+		if !ok || !isHead {
+			continue
+		}
+		heads = append(heads, model.RemoteHead{Name: name, Hash: strings.TrimSpace(sha)})
+	}
+	return heads, nil
 }
 
 func parseCount(out string) (int, error) {

@@ -8,6 +8,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Browse remote branches — check out a branch your fetch refspec doesn't
+  cover.** In a narrowed/single-branch monorepo clone, branches that exist on
+  the remote but were never fetched are invisible to the Remotes panel. The
+  command palette's **Browse remote branches** entry (`ctrl+p`) and the
+  Remotes panel's `.`-menu row list them via one `git ls-remote --heads`
+  (a network read; no objects move), filterable with `/`; `enter` offers
+  **checkout** (create the local tracking branch, stay where you are) or
+  **checkout and switch** (auto-stash, via the SmartCheckout/SmartSwitch
+  path). Either writes a per-branch fetch mapping first — never the wildcard
+  refspec, so the next `git fetch` stays narrow — then fetches exactly that
+  branch (new engine op `CheckoutRemoteBranch`, new domain queries
+  `UnfetchedRemoteHeads`/`RemoteNames`). Repos with several remotes get a
+  remote chooser first.
+
 - **Marking is gated to panels that use it; esc clears file marks.** `m` used
   to set a dead ◆ mark on the Worktrees, Remotes, Tags, and Reflog panels —
   nothing ever consumed it (pair operations exist only on Branches), so the
