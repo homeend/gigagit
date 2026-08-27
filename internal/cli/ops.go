@@ -18,6 +18,7 @@ func cmdPull(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	fs.SetOutput(stderr)
 	background := fs.Bool("background", false, "update the branch's ref without checking it out")
 	onConflict := fs.String("on-conflict", "", "how to resolve divergence: rebase|merge|reset|abort (reset = hard-reset to the remote tip, discarding local commits and changes)")
+	onStaleMapping := fs.String("on-stale-mapping", "", "when a fetch mapping references a branch deleted on the remote (it blocks every fetch): remove|abort")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -36,6 +37,16 @@ func cmdPull(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	policy := map[string]string{}
 	if *onConflict != "" {
 		policy["non-fast-forward"] = *onConflict
+	}
+	switch *onStaleMapping {
+	case "":
+	case "remove":
+		policy[engine.StaleFetchMappingDecisionID] = "remove-and-retry"
+	case "abort":
+		policy[engine.StaleFetchMappingDecisionID] = "abort"
+	default:
+		fmt.Fprintln(stderr, "pull: --on-stale-mapping must be remove or abort")
+		return 2
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
 	res, err := runOperation(context.Background(), svc,

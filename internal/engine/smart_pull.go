@@ -105,7 +105,11 @@ func (op SmartPull) Run(ctx context.Context, deps OpDeps) (Result, error) {
 func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch string) (Result, error) {
 	deps.emit(ctx, Progress{Step: "fetching", Detail: remote})
 	if err := deps.Repo.Fetch(ctx, remote); err != nil {
-		return Result{}, err
+		if err = healStaleFetchMappings(ctx, deps, remote, err, func(ctx context.Context) error {
+			return deps.Repo.Fetch(ctx, remote)
+		}); err != nil {
+			return Result{}, err
+		}
 	}
 	deps.emit(ctx, Progress{Step: "pulling (ff-only)", Detail: branch})
 	if err := deps.Repo.Pull(ctx, remote, branch, git.PullFF); err == nil {
