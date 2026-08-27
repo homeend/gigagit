@@ -82,6 +82,26 @@ func (r *Repo) ConfigUnset(ctx context.Context, scope ConfigScope, key string) e
 	return err
 }
 
+// ConfigUnsetValue removes the one value of a (possibly multi-valued) key
+// that equals value exactly (`git config --unset --fixed-value <key>
+// <value>`), at the given scope (Local or Global only; an Effective/unknown
+// scope falls back to Local). Sibling values of a multivar survive — removing
+// one stale fetch refspec must not clobber the rest of the list. Exit 5 means
+// no value matched: a no-op success, so unset stays idempotent (the
+// ConfigUnset convention).
+func (r *Repo) ConfigUnsetValue(ctx context.Context, scope ConfigScope, key, value string) error {
+	f, ok := scope.flag()
+	if !ok {
+		f = "--local"
+	}
+	b := gitcmd.New("config").Arg(f, "--unset", "--fixed-value", key, value)
+	res, err := r.Runner.Run(ctx, "git config", b.ToArgv())
+	if err != nil && res.ExitCode == 5 {
+		return nil // no value matched: already in the desired state
+	}
+	return err
+}
+
 // ConfigAdd appends one value to a (possibly multi-valued) config key at the
 // given scope (Local or Global only; an Effective/unknown scope falls back to
 // Local). `git config --add` never replaces existing values — the fetch-

@@ -35,6 +35,7 @@ type GitOps interface {
 	Fetch(ctx context.Context, remote string) error
 	FetchAll(ctx context.Context) error
 	RemoteNames(ctx context.Context) ([]string, error)
+	ListRemoteHeads(ctx context.Context, remote string) ([]model.RemoteHead, error)
 	PruneRemotes(ctx context.Context, names ...string) error
 	Pull(ctx context.Context, remote, branch string, strategy git.PullStrategy) error
 	PullInWorktree(ctx context.Context, worktreePath, remote, branch string) error
@@ -129,6 +130,8 @@ type GitOps interface {
 	ConfigUnset(ctx context.Context, scope git.ConfigScope, key string) error
 	ConfigAdd(ctx context.Context, scope git.ConfigScope, key, value string) error
 	ConfigGetAll(ctx context.Context, key string) ([]string, error)
+	ConfigUnsetValue(ctx context.Context, scope git.ConfigScope, key, value string) error
+	ConfigGetRegexp(ctx context.Context, pattern string) ([][2]string, error)
 	FetchBranches(ctx context.Context, remote string, branches []string) error
 	CommitGraphWrite(ctx context.Context, onLine func(string)) error
 

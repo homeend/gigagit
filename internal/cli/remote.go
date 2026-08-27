@@ -16,7 +16,10 @@ func cmdRemote(svc *domain.Service, args []string, stdin io.Reader, stdout, stde
 	case len(args) == 0 || args[0] == "ls" || args[0] == "list":
 		return cmdRemoteList(svc, stdout, stderr)
 	case args[0] == "fetch":
-		res, err := runOperation(context.Background(), svc, engine.Fetch{}, cliDecider{}, stderr)
+		// Interactive so the stale-fetch-mapping heal can prompt; piped runs
+		// leave the fork unanswered and the original fetch error stands.
+		dec := cliDecider{in: stdin, out: stderr, interactive: stdinIsTerminal()}
+		res, err := runOperation(context.Background(), svc, engine.Fetch{}, dec, stderr)
 		return finish(res, err, stdout, stderr)
 	case args[0] == "prune":
 		res, err := runOperation(context.Background(), svc, engine.Prune{}, cliDecider{}, stderr)

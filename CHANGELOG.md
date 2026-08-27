@@ -8,6 +8,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Stale fetch mappings no longer brick every pull.** A per-branch fetch
+  refspec (the kind the post-push "add a tracking mapping?" prompt writes)
+  whose branch was later deleted on the remote makes **every** `git fetch`
+  exit 128 (`fatal: couldn't find remote ref …`), blocking pulls of unrelated
+  branches. SmartPull and fetch-all now detect that exact failure, verify via
+  `ls-remote --heads` which mapped branches the remote really lost, and raise
+  one `fetch_mapping.stale` fork covering all of them: **remove-and-retry**
+  unsets each stale refspec value (`git config --unset --fixed-value`, sibling
+  refspecs untouched), deletes the dangling `refs/remotes/<r>/<b>` tracking
+  ref, and retries the fetch; **abort** keeps everything and surfaces the
+  original error. An unanswerable decider (the background auto-refresh lane's
+  empty `MapDecider`, piped CLI runs) skips the heal — config is never mutated
+  unseen. CLI: `gg pull --on-stale-mapping remove|abort` pre-answers the fork;
+  `gg remote fetch` now prompts interactively. New verbs: `ConfigUnsetValue`
+  (fixed-value multivar unset), plus `ListRemoteHeads`/`ConfigGetRegexp`
+  exposed to the engine.
 - **TUI: the display-mode cycle is `ctrl+w` everywhere.** Every surface that
   cycled cutoff / wrap / scroll with `z` (panels, diff/history/blame/stash,
   files tree, and all list popups — repo switcher, bookmarks, shelf, finder,

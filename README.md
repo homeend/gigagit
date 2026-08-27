@@ -125,7 +125,8 @@ gg commit reword <commit> -m "msg"   # change a commit's message (HEAD=amend; ol
 gg commit export-patch <sha> [--out <path>] [--force] [-- <file>]
                                       # write a git am-able patch (git format-patch -1 --binary); with -- <file>, scope to that file; refuses merge commits; default path = parent-of-repo/<name>.patch
 gg apply [--am | --working] <path>   # import a patch file (the inverse of export-patch); default = working tree (lands unstaged, conflicts left as markers for [x], exit 1); --am recreates commits from a format-patch mailbox (atomic: rolls back whole on any conflict, exit 1); flags precede the positional
-gg pull [--background] [--on-conflict rebase|merge|reset|abort]   # reset = hard-reset to the remote tip, discarding local work
+gg pull [--background] [--on-conflict rebase|merge|reset|abort] [--on-stale-mapping remove|abort]
+                                      # reset = hard-reset to the remote tip, discarding local work; --on-stale-mapping=remove drops a per-branch fetch refspec whose branch was deleted on the remote (it blocks every fetch) and retries
 gg push [--force | --force-with-lease] [--on-reject rebase|force|force-with-lease|abort] [--map | --no-map] [<branch>]
                                          # push the current branch, or a named one by ref (no checkout); --on-reject recovers a rejected push (default: fail/prompt)
                                          # --map/--no-map answer the post-push fetch-refspec-mapping prompt; neither + non-interactive = skip

@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v59 -->
+<!-- gg:using-gg:v60 -->
 
 # Using gg (gigagit)
 
@@ -88,11 +88,15 @@ guards against removing the worktree you are standing in.
   recreates commits from a `git format-patch` mailbox (author/date/message
   preserved) and is atomic: a conflicting mailbox is rolled back completely
   (exit 1, nothing changed). `--am` on a plain diff is refused.
-- `gg pull [<branch>] [--background] [--on-conflict rebase|merge|reset|abort]` —
+- `gg pull [<branch>] [--background] [--on-conflict rebase|merge|reset|abort] [--on-stale-mapping remove|abort]` —
   smart pull; with `<branch>` + `--background` it fast-forwards that branch's
   ref without checking it out. On a diverged current branch, `--on-conflict=reset`
   hard-resets it to the remote tip, discarding local commits and uncommitted
-  changes.
+  changes. If a per-branch fetch refspec references a branch deleted on the
+  remote, every fetch exits 128 and blocks the pull; `--on-stale-mapping=remove`
+  answers the `fetch_mapping.stale` fork by removing the stale mapping(s) (and
+  their dangling tracking refs) and retrying. Without the flag a piped run
+  fails with the original fetch error (config is never mutated unseen).
 - `gg push [--force | --force-with-lease] [--on-reject ...] [--map | --no-map] [<branch>]`
   — push a branch (sets upstream when missing). With no positional it pushes the
   current branch; with `<branch>` it pushes that local branch **by name without
