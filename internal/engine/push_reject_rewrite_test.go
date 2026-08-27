@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -161,6 +162,85 @@ func TestPushRejectAfterLocalRebaseForceKeepsTheRebase(t *testing.T) {
 func TestPushRejectRewriteOnNonCurrentBranchStillSaysWhy(t *testing.T) {
 	t.Parallel()
 	clone, repo := divergedClone(t, true)
+	gitAt(t, clone, "checkout", "main")
+
+	req := captureReject(t, repo)
+	if len(req.Options) != 2 || req.Options[0] != "force" || req.Options[1] != "abort" {
+		t.Fatalf("options = %v, want [force abort] for a non-current branch", req.Options)
+	}
+	if strings.Contains(req.Prompt, "Remote has new commits") {
+		t.Fatalf("prompt = %q — the remote has no new commits, only stale copies", req.Prompt)
+	}
+}
+
+// conflictRebasedClone builds the SAME local-rewrite shape as
+// divergedClone(rewrite=true), except the rebase hits a conflict the user
+// resolves: the replayed commit's diff differs from its published copy, so
+// patch-id equivalence cannot recognize the rewrite — only the branch's
+// reflog (which still names the published tip) can.
+func conflictRebasedClone(t *testing.T) (string, *git.Repo) {
+	t.Helper()
+	root := t.TempDir()
+	origin := filepath.Join(root, "origin.git")
+	seed := filepath.Join(root, "seed")
+	clone := filepath.Join(root, "clone")
+
+	gitAt(t, root, "init", "--bare", origin)
+	gitAt(t, root, "clone", origin, seed)
+	os.WriteFile(filepath.Join(seed, "f.txt"), []byte("l1\nl2\nl3\n"), 0o644)
+	gitAt(t, seed, "checkout", "-b", "main")
+	gitAt(t, seed, "add", ".")
+	gitAt(t, seed, "commit", "-m", "v1")
+	gitAt(t, seed, "push", "-u", "origin", "main")
+
+	gitAt(t, root, "clone", origin, clone)
+	gitAt(t, clone, "config", "user.name", "t")
+	gitAt(t, clone, "config", "user.email", "t@t")
+	gitAt(t, clone, "checkout", "-b", "feature")
+	os.WriteFile(filepath.Join(clone, "f.txt"), []byte("l1\nl2\nl3-feature\n"), 0o644)
+	gitAt(t, clone, "commit", "-am", "F1 my work")
+	gitAt(t, clone, "push", "-u", "origin", "feature")
+
+	// main edits the adjacent line, so the rebase below conflicts.
+	os.WriteFile(filepath.Join(seed, "f.txt"), []byte("l1\nl2-main\nl3\n"), 0o644)
+	gitAt(t, seed, "commit", "-am", "M1 trunk moves")
+	gitAt(t, seed, "push", "origin", "main")
+
+	gitAt(t, clone, "fetch", "origin")
+	cmd := exec.Command("git", "rebase", "origin/main")
+	cmd.Dir = clone
+	if cmd.Run() == nil {
+		t.Fatal("rebase did not conflict — the fixture is wrong")
+	}
+	os.WriteFile(filepath.Join(clone, "f.txt"), []byte("l1\nl2-main\nl3-feature\n"), 0o644)
+	gitAt(t, clone, "add", "f.txt")
+	gitAt(t, clone, "-c", "core.editor=true", "rebase", "--continue")
+	return clone, &git.Repo{Runner: gitexec.NewExecRunner("git", clone, observ.NewRing(50))}
+}
+
+// TestPushRejectAfterConflictedRebaseLeadsWithForce: the user rebased over a
+// moved main and resolved a conflict along the way. The remote still holds
+// only the old copies of their commits, so force must lead — even though the
+// resolved commit is no longer patch-identical to its published copy.
+func TestPushRejectAfterConflictedRebaseLeadsWithForce(t *testing.T) {
+	t.Parallel()
+	_, repo := conflictRebasedClone(t)
+	req := captureReject(t, repo)
+
+	if len(req.Options) == 0 || req.Options[0] != "force" {
+		t.Fatalf("options = %v, want force first after a conflicted local rebase", req.Options)
+	}
+	if strings.Contains(req.Prompt, "Remote has new commits") {
+		t.Fatalf("prompt = %q — the remote has no new commits, only stale copies", req.Prompt)
+	}
+}
+
+// TestPushRejectConflictedRebaseNonCurrentBranchStillSaysWhy: the same
+// conflicted rewrite pushed while another branch is checked out — rebase is
+// off the table, and the prompt must still name the rewrite.
+func TestPushRejectConflictedRebaseNonCurrentBranchStillSaysWhy(t *testing.T) {
+	t.Parallel()
+	clone, repo := conflictRebasedClone(t)
 	gitAt(t, clone, "checkout", "main")
 
 	req := captureReject(t, repo)
