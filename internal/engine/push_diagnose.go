@@ -46,6 +46,15 @@ func diagnoseRejection(ctx context.Context, deps OpDeps, remote, branch string) 
 		// refspec sent the branch somewhere else) — don't guess.
 		return divUnknown
 	}
+	// A remote tip this branch itself pointed at before (its reflog names it)
+	// is proof of a local rewrite: everything reachable from that tip was this
+	// branch's own history, so the remote cannot be holding new work. This
+	// recognizes rewrites the patch-id comparison below cannot — a rebase
+	// whose conflicts were resolved by hand changes the replayed diffs. A
+	// missing reflog answers false and falls through to the patch-id count.
+	if wasOurs, rerr := deps.Repo.BranchReflogContains(ctx, branch, tip); rerr == nil && wasOurs {
+		return divLocalRewrite
+	}
 	fresh, err := deps.Repo.CountRangeUnique(ctx, local, tip)
 	if err != nil {
 		return divUnknown

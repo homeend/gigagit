@@ -2,6 +2,9 @@ package git
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/gitexec"
@@ -112,4 +115,57 @@ func TestRemoteBranchTipEmptyForAbsentBranch(t *testing.T) {
 	if tip != "" {
 		t.Fatalf("RemoteBranchTip(absent) = %q, want \"\"", tip)
 	}
+}
+
+func TestBranchReflogContainsFindsPreRebaseTip(t *testing.T) {
+	t.Parallel()
+	_, repo := rewrittenRepo(t)
+	old := repo.mustRev(t, "old")
+	ok, err := repo.BranchReflogContains(context.Background(), "main", old)
+	if err != nil {
+		t.Fatalf("BranchReflogContains: %v", err)
+	}
+	if !ok {
+		t.Fatal("BranchReflogContains(main, pre-rebase tip) = false, want true — main pointed there before the rebase")
+	}
+}
+
+func TestBranchReflogContainsRejectsForeignCommit(t *testing.T) {
+	t.Parallel()
+	_, repo := rewrittenRepo(t)
+	trunk := repo.mustRev(t, "trunk")
+	ok, err := repo.BranchReflogContains(context.Background(), "main", trunk)
+	if err != nil {
+		t.Fatalf("BranchReflogContains: %v", err)
+	}
+	if ok {
+		t.Fatal("BranchReflogContains(main, trunk tip) = true, want false — main never pointed at trunk's commit")
+	}
+}
+
+func TestBranchReflogContainsMissingReflogIsNotAnError(t *testing.T) {
+	t.Parallel()
+	dir, repo := rewrittenRepo(t)
+	old := repo.mustRev(t, "old")
+	// Simulate an expired/absent reflog for the branch under test.
+	if err := os.Remove(filepath.Join(dir, ".git", "logs", "refs", "heads", "main")); err != nil {
+		t.Fatalf("remove reflog: %v", err)
+	}
+	ok, err := repo.BranchReflogContains(context.Background(), "main", old)
+	if err != nil {
+		t.Fatalf("BranchReflogContains(no reflog): %v, want nil — absence is no evidence, not a failure", err)
+	}
+	if ok {
+		t.Fatal("BranchReflogContains(no reflog) = true, want false")
+	}
+}
+
+// mustRev resolves a ref through the test repo or fails the test.
+func (r *Repo) mustRev(t *testing.T, ref string) string {
+	t.Helper()
+	res, err := r.Runner.Run(context.Background(), "git rev-parse", []string{"rev-parse", ref})
+	if err != nil {
+		t.Fatalf("rev-parse %s: %v", ref, err)
+	}
+	return strings.TrimSpace(res.Stdout)
 }

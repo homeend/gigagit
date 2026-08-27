@@ -36,6 +36,27 @@ func (r *Repo) CountRangeUnique(ctx context.Context, base, ref string) (int, err
 	return parseCount(res.Stdout)
 }
 
+// BranchReflogContains reports whether refs/heads/<branch> ever pointed at
+// hash (`git rev-list -g` walks the branch's reflog entries). A branch whose
+// reflog cannot be walked — expired, disabled, or never written — reports
+// false with no error: the reflog is evidence only when it answers true.
+func (r *Repo) BranchReflogContains(ctx context.Context, branch, hash string) (bool, error) {
+	argv := gitcmd.New("rev-list").Arg("-g", "refs/heads/"+branch).ToArgv()
+	res, err := r.Runner.Run(ctx, "git rev-list -g", argv)
+	if err != nil {
+		if ctx.Err() != nil {
+			return false, ctx.Err()
+		}
+		return false, nil
+	}
+	for _, ln := range strings.Split(res.Stdout, "\n") {
+		if strings.TrimSpace(ln) == hash {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // RemoteBranchTip resolves refs/heads/<branch> on remote WITHOUT fetching any
 // object (`git ls-remote --heads <remote> <branch>`), returning "" when the
 // remote has no such branch. ls-remote's pattern matches on component
