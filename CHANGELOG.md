@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Rejected-push diagnosis now recognizes a conflicted rebase.** After
+  rebasing over a moved trunk and resolving conflicts, pushing the branch
+  wrongly led the rejection prompt with "rebase" again — the diagnosis
+  compared patch-ids, which the conflict resolution had changed, so the
+  rewrite looked like new remote work. The branch's own reflog is now
+  consulted first: a remote tip the branch itself pointed at before is a
+  local rewrite by definition, so the prompt leads with force-push and says
+  the remote holds only the old copies of your commits. Patch-id comparison
+  remains the fallback when the reflog is missing or expired.
+
 - **Stale fetch mappings no longer brick every pull.** A per-branch fetch
   refspec (the kind the post-push "add a tracking mapping?" prompt writes)
   whose branch was later deleted on the remote makes **every** `git fetch`
