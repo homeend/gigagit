@@ -97,11 +97,44 @@ type statusRefreshedMsg struct {
 
 // stageCmd runs a staging op through the domain layer, then re-reads only the
 // working-tree status. It runs synchronously inside the returned tea.Cmd
-// (staging is fast and has no decisions), yielding a single statusRefreshedMsg.
+// with no decider (staging is fast), yielding a single statusRefreshedMsg —
+// except git's ignored-paths refusal, which surfaces as a stageIgnoredMsg so
+// the model can offer force-add through a frontend modal.
 func (m Model) stageCmd(op engine.Operation) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		res, err := svc.Execute(context.Background(), op, nil, nil)
+		if err != nil {
+			if st, isStage := op.(engine.Stage); isStage && !st.Unstage {
+				if ignored, refused := engine.IgnoredPathsRefusal(err); refused {
+					if len(ignored) == 0 {
+						ignored = st.Paths
+					}
+					return stageIgnoredMsg{op: st, ignored: ignored}
+				}
+			}
+			return statusRefreshedMsg{err: err}
+		}
+		st, serr := svc.Status(context.Background())
+		return statusRefreshedMsg{summary: renderSummary(res), status: st, err: serr}
+	}
+}
+
+// stageIgnoredMsg reports a stage refused because .gitignore excludes the
+// paths. stageCmd runs deciderless, so the engine's stage.ignored fork
+// cannot fire there; the model re-raises it as a frontend modal instead.
+type stageIgnoredMsg struct {
+	op      engine.Stage
+	ignored []string
+}
+
+// stageForceCmd re-runs a refused stage with the stage.ignored fork
+// pre-answered "force-add" (git add -f under the hood).
+func (m Model) stageForceCmd(op engine.Stage) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		res, err := svc.Execute(context.Background(), op, nil,
+			engine.MapDecider{engine.IgnoredPathsDecisionID: "force-add"})
 		if err != nil {
 			return statusRefreshedMsg{err: err}
 		}

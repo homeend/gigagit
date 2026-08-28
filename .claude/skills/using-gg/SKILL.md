@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v60 -->
+<!-- gg:using-gg:v61 -->
 
 # Using gg (gigagit)
 
@@ -60,10 +60,14 @@ guards against removing the worktree you are standing in.
   picks among configured `review` commands when more than one is set up.
   Exit 0 on a produced report, 1 on tool failure/empty report/no review tool
   configured, 2 on a usage error.
-- `gg add (-A | <path>...)` / `gg unstage <path>...` — stage paths (or
+- `gg add [-f] (-A | <path>...)` / `gg unstage <path>...` — stage paths (or
   everything incl. untracked with `-A`) / remove paths from the index
   keeping working-tree content. `gg add` + `gg commit` fully replaces
-  `git add` + `git commit` for new files.
+  `git add` + `git commit` for new files. When git refuses a path because
+  .gitignore excludes it, the `stage.ignored` decision offers
+  `force-add`/`abort`; `-f` pre-answers it with `force-add` (git add -f), so
+  a non-interactive add of an ignored path needs `-f` or it fails with git's
+  refusal.
 - `gg commit -m <msg> [-a] [--amend]` — commit (`-a` also stages tracked
   modifications; `--amend` rewrites the last commit, reusing its message when
   `-m` is omitted). Prints a summary naming the commit it made:

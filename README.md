@@ -118,7 +118,7 @@ gg review [--tool <name>] [--working] [<rev>|<A..B>]
                                       # reviews the current branch's work; a single <rev> reviews just that commit's own
                                       # change; --working reviews uncommitted changes. Prints the report to stdout and
                                       # persists it under the gg state dir; --tool picks among configured review commands
-gg add (-A | <path>...)       # stage paths, or everything incl. untracked with -A
+gg add [-f] (-A | <path>...)  # stage paths (-f forces gitignored ones), or everything with -A
 gg unstage <path>...          # remove paths from the index, keeping working-tree content
 gg commit -m "msg"            # add -a to stage tracked changes; --amend rewrites the last commit
 gg commit reword <commit> -m "msg"   # change a commit's message (HEAD=amend; older=in-place rebase)

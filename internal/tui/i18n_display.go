@@ -232,6 +232,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("pull now")
 	case "rebase":
 		return i18n.T("rebase")
+	case "force-add":
+		return i18n.T("force-add")
 	case "remove-and-retry":
 		return i18n.T("remove-and-retry")
 	case "repair":

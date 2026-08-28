@@ -70,3 +70,42 @@ func TestUnstage(t *testing.T) {
 		t.Fatal("bare unstage must be usage error")
 	}
 }
+
+// writeIgnoredCLI plants a .gitignore-excluded docs/specs/a.md.
+func writeIgnoredCLI(t *testing.T, dir string) {
+	t.Helper()
+	os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("docs/specs\n"), 0o644)
+	os.MkdirAll(filepath.Join(dir, "docs", "specs"), 0o755)
+	os.WriteFile(filepath.Join(dir, "docs", "specs", "a.md"), []byte("x\n"), 0o644)
+}
+
+func TestAddForceStagesIgnored(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	writeIgnoredCLI(t, dir)
+
+	code, _, errb := runCLI(t, dir, "add", "-f", "docs/specs/a.md")
+	if code != 0 {
+		t.Fatalf("add -f exit=%d stderr=%s", code, errb)
+	}
+	code, out, _ := runCLI(t, dir, "status")
+	if code != 0 || !strings.Contains(out, "A  docs/specs/a.md") {
+		t.Fatalf("docs/specs/a.md not staged:\n%s", out)
+	}
+}
+
+// Without -f a non-interactive add of an ignored path fails with git's
+// refusal — same contract as before the stage.ignored fork existed.
+func TestAddIgnoredWithoutForceFails(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	writeIgnoredCLI(t, dir)
+
+	code, _, errb := runCLI(t, dir, "add", "docs/specs/a.md")
+	if code == 0 {
+		t.Fatal("add of ignored path without -f should fail non-interactively")
+	}
+	if !strings.Contains(errb, "ignored by one of your .gitignore files") {
+		t.Fatalf("stderr should carry git's refusal:\n%s", errb)
+	}
+}

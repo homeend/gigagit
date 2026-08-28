@@ -93,7 +93,7 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 	case "discard":
 		return cmdDiscard(svc, rest, stdin, stdout, stderr)
 	case "add":
-		return cmdAdd(svc, rest, stdout, stderr)
+		return cmdAdd(svc, rest, stdin, stdout, stderr)
 	case "unstage":
 		return cmdUnstage(svc, rest, stdout, stderr)
 	case "apply":

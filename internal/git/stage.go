@@ -14,6 +14,14 @@ func (r *Repo) StagePaths(ctx context.Context, paths []string) error {
 	return err
 }
 
+// StagePathsForce stages the given paths into the index even when .gitignore
+// rules exclude them (git add -f).
+func (r *Repo) StagePathsForce(ctx context.Context, paths []string) error {
+	b := gitcmd.New("add").Arg("-f", "--").Arg(paths...)
+	_, err := r.Runner.Run(ctx, "git add", b.ToArgv())
+	return err
+}
+
 // UnstagePaths removes the given paths from the index, keeping working-tree
 // content (git restore --staged).
 func (r *Repo) UnstagePaths(ctx context.Context, paths []string) error {
