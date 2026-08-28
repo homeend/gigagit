@@ -95,3 +95,40 @@ func findStaged(st model.WorkingTreeStatus, path string) byte {
 	}
 	return '.'
 }
+
+func TestStagePathsForceArgv(t *testing.T) {
+	t.Parallel()
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git add", gitexec.Result{})
+	r := &Repo{Runner: f}
+	if err := r.StagePathsForce(context.Background(), []string{"docs/specs/a.md"}); err != nil {
+		t.Fatalf("stage force: %v", err)
+	}
+	want := []string{"add", "-f", "--", "docs/specs/a.md"}
+	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
+		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
+	}
+}
+
+// Real-git: a gitignored path is refused by StagePaths but staged by
+// StagePathsForce.
+func TestStagePathsForceIgnoredReal(t *testing.T) {
+	t.Parallel()
+	dir, runner := newTestRepo(t)
+	repo := &Repo{Runner: runner}
+
+	os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("docs/specs\n"), 0o644)
+	os.MkdirAll(filepath.Join(dir, "docs", "specs"), 0o755)
+	os.WriteFile(filepath.Join(dir, "docs", "specs", "a.md"), []byte("x\n"), 0o644)
+
+	if err := repo.StagePaths(context.Background(), []string{"docs/specs/a.md"}); err == nil {
+		t.Fatal("StagePaths should refuse a gitignored path")
+	}
+	if err := repo.StagePathsForce(context.Background(), []string{"docs/specs/a.md"}); err != nil {
+		t.Fatalf("stage force: %v", err)
+	}
+	st, _ := repo.Status(context.Background())
+	if findStaged(st, "docs/specs/a.md") == '.' {
+		t.Fatal("docs/specs/a.md should be staged after StagePathsForce")
+	}
+}

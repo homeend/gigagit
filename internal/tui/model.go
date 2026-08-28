@@ -2461,6 +2461,27 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case stageIgnoredMsg:
+		m.running = false
+		m.opName = ""
+		op := msg.op
+		m.modal = &decisionState{
+			req: engine.DecisionRequest{
+				ID:      engine.IgnoredPathsDecisionID,
+				Prompt:  i18n.T("%s is excluded by a .gitignore rule. Stage anyway?", strings.Join(msg.ignored, ", ")),
+				Options: []string{"force-add", "abort"},
+			},
+			onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+				if opt != "force-add" {
+					return m, nil
+				}
+				m.running = true
+				m.statusMsg = i18n.T("working…")
+				return m, m.stageForceCmd(op)
+			},
+		}
+		return m, nil
+
 	case editorFinishedMsg:
 		if msg.err != nil {
 			m.statusMsg = i18n.T("edit: %s", msg.err.Error())

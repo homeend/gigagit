@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Gitignored files can now be staged (and committed) on request.** Staging
+  a path that .gitignore excludes used to die with git's raw refusal
+  ("The following paths are ignored by one of your .gitignore files…").
+  The engine's `Stage` op now raises a `stage.ignored` decision offering
+  `force-add` (retry with `git add -f`) or `abort`; the TUI shows it as a
+  modal (esc aborts), and the CLI answers it with the new `gg add -f` flag —
+  a non-interactive add of an ignored path without `-f` still fails with
+  git's refusal, exactly as before. Anything else the same `git add` staged
+  stays staged either way.
+
 - **Rejected-push diagnosis now recognizes a conflicted rebase.** After
   rebasing over a moved trunk and resolving conflicts, pushing the branch
   wrongly led the rejection prompt with "rebase" again — the diagnosis
