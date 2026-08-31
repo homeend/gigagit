@@ -76,3 +76,113 @@ func TestFastForwardDetachedHeadErrors(t *testing.T) {
 		t.Fatal("detached HEAD must error")
 	}
 }
+
+func TestFastForwardBranchAdvancesNonCurrent(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepo(t)
+	ctx := context.Background()
+
+	gitE(t, dir, "branch", "old") // old stays at the initial commit
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-m", "main ahead")
+	mainTip := gitOut(t, dir, "rev-parse", "HEAD")
+
+	res, err := FastForward{Branch: "old", Commit: "main"}.Run(ctx, OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("FastForward branch: %v", err)
+	}
+	if !res.Changed {
+		t.Fatal("Changed must be true on a real advance")
+	}
+	if got := gitOut(t, dir, "rev-parse", "old"); got != mainTip {
+		t.Fatalf("old = %s, want %s", got, mainTip)
+	}
+	if got := gitOut(t, dir, "rev-parse", "HEAD"); got != mainTip {
+		t.Fatal("HEAD (main) must not move when advancing another branch")
+	}
+}
+
+func TestFastForwardBranchCurrentUpdatesWorktree(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepo(t)
+	ctx := context.Background()
+
+	gitE(t, dir, "checkout", "-b", "feat")
+	os.WriteFile(filepath.Join(dir, "c.txt"), []byte("c\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-m", "feat ahead")
+	featTip := gitOut(t, dir, "rev-parse", "HEAD")
+	gitE(t, dir, "checkout", "main")
+
+	res, err := FastForward{Branch: "main", Commit: "feat"}.Run(ctx, OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("FastForward current branch: %v", err)
+	}
+	if !res.Changed {
+		t.Fatal("Changed must be true on a real advance")
+	}
+	if got := gitOut(t, dir, "rev-parse", "HEAD"); got != featTip {
+		t.Fatalf("HEAD = %s, want %s", got, featTip)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "c.txt")); err != nil {
+		t.Fatal("working tree must be updated when fast-forwarding the current branch")
+	}
+}
+
+func TestFastForwardBranchRefusesNonAncestor(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepo(t)
+	ctx := context.Background()
+
+	gitE(t, dir, "checkout", "-b", "feat")
+	os.WriteFile(filepath.Join(dir, "d.txt"), []byte("d\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-m", "feat ahead")
+	gitE(t, dir, "checkout", "main")
+	os.WriteFile(filepath.Join(dir, "e.txt"), []byte("e\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-m", "main diverged")
+	featBefore := gitOut(t, dir, "rev-parse", "feat")
+
+	if _, err := (FastForward{Branch: "feat", Commit: "main"}).Run(ctx, OpDeps{Repo: repo}); err == nil {
+		t.Fatal("diverged fast-forward must error")
+	}
+	if gitOut(t, dir, "rev-parse", "feat") != featBefore {
+		t.Fatal("feat must not move on a refused fast-forward")
+	}
+}
+
+func TestFastForwardBranchAlreadyUpToDate(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepo(t)
+	ctx := context.Background()
+	gitE(t, dir, "branch", "twin") // same tip as main
+	res, err := FastForward{Branch: "twin", Commit: "main"}.Run(ctx, OpDeps{Repo: repo})
+	if err != nil {
+		t.Fatalf("up-to-date FF: %v", err)
+	}
+	if res.Changed {
+		t.Fatal("Changed must be false when already at the target")
+	}
+}
+
+func TestFastForwardBranchCheckedOutElsewhereErrors(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepo(t)
+	ctx := context.Background()
+
+	gitE(t, dir, "branch", "wt") // at the initial commit
+	gitE(t, dir, "worktree", "add", filepath.Join(dir, ".wt"), "wt")
+	os.WriteFile(filepath.Join(dir, "f.txt"), []byte("f\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-m", "main ahead")
+	wtBefore := gitOut(t, dir, "rev-parse", "wt")
+
+	if _, err := (FastForward{Branch: "wt", Commit: "main"}).Run(ctx, OpDeps{Repo: repo}); err == nil {
+		t.Fatal("fast-forwarding a branch checked out in another worktree must error")
+	}
+	if gitOut(t, dir, "rev-parse", "wt") != wtBefore {
+		t.Fatal("wt must not move on a refused fast-forward")
+	}
+}

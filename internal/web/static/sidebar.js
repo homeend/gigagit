@@ -434,30 +434,45 @@ function clearDropTargets() {
 
 // showBranchPairMenu offers the two-branch operations on (dragged, dropped-on).
 // Directions are spelled out in the labels so the pair never carries implicit
-// meaning: merge ends on dst, rebase rewrites and ends on src.
-function showBranchPairMenu(src, dst, x, y) {
-  showCtxMenu(
-    [
-      {
-        label: "merge " + src + " into " + dst,
-        act: () => startOp({ op: "merge", branch: src, onto: dst }, "merging " + src + " into " + dst),
-      },
-      {
-        label: "rebase " + src + " onto " + dst,
-        act: () => startOp({ op: "rebase", branch: src, onto: dst }, "rebasing " + src + " onto " + dst),
-      },
-      {
-        // Opens an editor; nothing runs until you start it there, which is
-        // why it sits with the ops rather than below the read-only row.
-        label: "interactive rebase " + src + " onto " + dst + "…",
-        act: () => openRebaseEditor(src, dst),
-      },
-      // Read-only, so it sits below the ops that rewrite history.
-      { label: "compare " + src + " ↔ " + dst, act: () => openCompare(src, dst) },
-    ],
-    x,
-    y
-  );
+// meaning: merge ends on dst, rebase rewrites and ends on src. Before the
+// menu renders, /api/ff-pair says whether one tip is strictly behind the
+// other — only then does a fast-forward row appear, naming the direction the
+// probe fixed. A probe failure fails open: the menu still shows, without the
+// row (the standard ops carry their own guards).
+async function showBranchPairMenu(src, dst, x, y) {
+  const items = [
+    {
+      label: "merge " + src + " into " + dst,
+      act: () => startOp({ op: "merge", branch: src, onto: dst }, "merging " + src + " into " + dst),
+    },
+    {
+      label: "rebase " + src + " onto " + dst,
+      act: () => startOp({ op: "rebase", branch: src, onto: dst }, "rebasing " + src + " onto " + dst),
+    },
+  ];
+  try {
+    const ff = await getJSON("/api/ff-pair?a=" + encodeURIComponent(src) + "&b=" + encodeURIComponent(dst));
+    if (ff.ok) {
+      // Sits with the tip-movers: it advances ff.behind's ref (no merge
+      // commit, no rewrite); the engine re-checks ahead-ness at run time.
+      items.push({
+        label: "fast-forward " + ff.behind + " to " + ff.ahead,
+        act: () =>
+          startOp({ op: "fast-forward", branch: ff.behind, onto: ff.ahead }, "fast-forwarding " + ff.behind + " to " + ff.ahead),
+      });
+    }
+  } catch {
+    // fail open — no fast-forward row
+  }
+  items.push({
+    // Opens an editor; nothing runs until you start it there, which is
+    // why it sits with the ops rather than below the read-only row.
+    label: "interactive rebase " + src + " onto " + dst + "…",
+    act: () => openRebaseEditor(src, dst),
+  });
+  // Read-only, so it sits below the ops that rewrite history.
+  items.push({ label: "compare " + src + " ↔ " + dst, act: () => openCompare(src, dst) });
+  showCtxMenu(items, x, y);
 }
 
 

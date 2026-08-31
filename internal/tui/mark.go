@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"context"
+
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -118,9 +121,57 @@ func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
 		m.statusMsg = i18n.T("no pair operations for this panel")
 		return m, nil
 	}
+	// Branches: probe whether one branch can fast-forward to the other before
+	// opening, so the popup can offer the row only when it applies (and in the
+	// right direction). The probe is two ref reads + at most two ancestry
+	// checks — cheap even on a huge repo.
+	if m.focus == panelBranches && m.svc != nil {
+		m.pairProbe = &pairProbeReq{marked: m.mark.display, selected: key}
+		return m, m.loadPairOpsCmd(m.mark.display, key)
+	}
 	w, _ := m.overlayDims()
 	m = m.pushLayer(newPairOpPopup(w, m.mark.display, key, ops))
 	return m, nil
+}
+
+// pairProbeReq names the branch pair whose fast-forward probe is in flight;
+// only a msg matching Model.pairProbe may open the popup, so a re-pair while
+// an older probe runs supersedes it.
+type pairProbeReq struct {
+	marked, selected string
+}
+
+// pairOpsMsg delivers the fast-forward probe for a branch pair; the popup
+// opens when it arrives.
+type pairOpsMsg struct {
+	marked, selected string
+	ff               domain.FFPair
+}
+
+// loadPairOpsCmd probes the (marked, selected) fast-forward relation off the
+// UI thread. A probe error fails open: the popup still opens, just without
+// the fast-forward row (the standard ops carry their own guards).
+func (m Model) loadPairOpsCmd(marked, selected string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		ff, err := svc.FastForwardPair(context.Background(), marked, selected)
+		if err != nil {
+			ff = domain.FFPair{}
+		}
+		return pairOpsMsg{marked: marked, selected: selected, ff: ff}
+	}
+}
+
+// ffPairOp is the conditional fast-forward row. The probe fixed the
+// direction, so the closures ignore the (marked, selected) order.
+func ffPairOp(behind, ahead string) pairOp {
+	return pairOp{
+		label: func(_, _ string) string { return i18n.T("Fast-forward %s to %s", behind, ahead) },
+		build: func(_, _ string) engine.Operation {
+			return engine.FastForward{Branch: behind, Commit: ahead}
+		},
+		enabled: true,
+	}
 }
 
 // markedDisplayIndices returns the set of display-row indices in panel p that

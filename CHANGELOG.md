@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Branch pair menus offer fast-forward when one branch is strictly behind
+  the other.** Marking two branches in the TUI (`m` + `m`) and dropping a
+  branch onto another in the web sidebar both probe the pair first (new
+  domain query `FastForwardPair`, web `GET /api/ff-pair`); when one tip is an
+  ancestor of the other, a "Fast-forward <behind> to <ahead>" row appears
+  alongside merge/rebase — direction auto-detected, no merge commit, nothing
+  rewritten. The engine's `FastForward` op gained a `Branch` field: a named
+  branch that is not checked out advances via a same-repo ff-only fetch
+  (working trees untouched); the current branch keeps the `merge --ff-only`
+  path; git's own refusal covers a branch checked out in another worktree.
+  The web op reuses `op:"fast-forward"` with `onto` naming the tip to reach.
+
 - **Gitignored files can now be staged (and committed) on request.** Staging
   a path that .gitignore excludes used to die with git's raw refusal
   ("The following paths are ignored by one of your .gitignore files…").

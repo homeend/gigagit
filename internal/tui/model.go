@@ -96,6 +96,7 @@ type Model struct {
 	identity            model.Identity  // last-read git user identity (refreshed after SetIdentity); the identityView popup loads its own fresh copy
 
 	mark             *markState      // the m-key mark; nil = none (see mark.go)
+	pairProbe        *pairProbeReq   // in-flight branch-pair fast-forward probe; nil = none
 	fileMarks        map[string]bool // multi-selected Status file paths (keyed by path)
 	commitCompareSet map[string]bool // commits toggled into the ◉ compare selection (keyed by hash)
 	actionMenu       *actionMenu     // . action menu (list + run available actions); nil = closed
@@ -591,6 +592,31 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesView.lines = commitFileLines(msg.files)
 		}
 		m.filesView.sel = 0
+		return m, nil
+	case pairOpsMsg:
+		// Only the LATEST probe may open the popup: a re-pair while an older
+		// probe was in flight replaced pairProbe, so the older msg no longer
+		// matches and is dropped (no double popup, no wrong selected).
+		if m.pairProbe == nil || m.pairProbe.marked != msg.marked || m.pairProbe.selected != msg.selected {
+			return m, nil
+		}
+		m.pairProbe = nil
+		// The world may have moved while the probe ran: an op started, a
+		// layer opened, the mark died or was re-marked — in all of those the
+		// popup would land somewhere the synchronous version never could.
+		if m.running || m.topLayer() != nil {
+			return m, nil
+		}
+		if m.mark == nil || m.mark.panel != panelBranches || m.mark.display != msg.marked || !m.markAlive() {
+			return m, nil
+		}
+		ops := pairOpsFor(panelBranches)
+		if msg.ff.OK {
+			// After merge + rebase (the other tip-movers), before the editors.
+			ops = append(ops[:2], append([]pairOp{ffPairOp(msg.ff.Behind, msg.ff.Ahead)}, ops[2:]...)...)
+		}
+		w, _ := m.overlayDims()
+		m = m.pushLayer(newPairOpPopup(w, msg.marked, msg.selected, ops))
 		return m, nil
 	case compareOriginsMsg:
 		if m.filesView == nil || !m.inCompareMode() || m.comparePair == nil || msg.tag != m.compareTag {

@@ -27,7 +27,7 @@ func helpContent() []contentLine {
 		r("F", i18n.T("fuzzy file finder: opens a picker over every tracked file; press / then type a query (fvgo → files_view.go) to filter by path, ↑↓/pgup/pgdn to move, enter to open a per-file menu (View content, Diff HEAD↔working tree, History, Blame, Open in editor, Copy path, Copy absolute path), esc closes")),
 		r("w", i18n.T("worktree popup for the selected branch — the branch name starts as the selection (clean directory); e edits it (a different name creates a NEW branch from it), p seeds it from a saved branch prefix (Settings → Branch prefixes)")),
 		r("W", i18n.T("the same worktree popup with create & switch as enter's default (w + switch in one flow)")),
-		r("m", i18n.T("mark a branch (Branches panel); m on a second branch opens the pair-op picker (merge / rebase / interactive rebase / compare branches)")),
+		r("m", i18n.T("mark a branch (Branches panel); m on a second branch opens the pair-op picker (merge / rebase / fast-forward when one is strictly behind / interactive rebase / compare branches)")),
 		r("R", i18n.T("repo switcher popup (navigation-first: ↑↓/jk/pgup/pgdn move, / filters, enter switches — while filtering, the first enter locks the filter)")),
 		r(",", i18n.T("settings")),
 		r(".", i18n.T("action menu — context actions for the selected row and panel (incl. copy actions)")),
