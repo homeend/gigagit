@@ -553,16 +553,28 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusInternalServerError, berr)
 			return
 		}
-		known := false
-		for _, b := range bs {
-			if b.Name == req.Branch {
-				known = true
-				break
+		known := func(name string) bool {
+			for _, b := range bs {
+				if b.Name == name {
+					return true
+				}
 			}
+			return false
 		}
-		if !known {
+		if !known(req.Branch) {
 			writeErr(w, http.StatusNotFound, errors.New("unknown branch"))
 			return
+		}
+		// The pair lane (drag-drop menu): Branch is the branch to advance,
+		// Onto the tip to reach — rebase's field naming. Without Onto, Branch
+		// is the tip and the CURRENT branch advances (the original lane).
+		if req.Onto != "" {
+			if !isGitArgSafe(req.Onto) || !known(req.Onto) {
+				writeErr(w, http.StatusNotFound, errors.New("unknown target branch"))
+				return
+			}
+			op = engine.FastForward{Branch: req.Branch, Commit: req.Onto}
+			break
 		}
 		op = engine.FastForward{Commit: req.Branch}
 	case "checkout":

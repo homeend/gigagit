@@ -30,6 +30,19 @@ func pressRune(t *testing.T, m Model, r string) Model {
 	return updated.(Model)
 }
 
+// pressPair presses m to pair with the marked branch and drives the
+// fast-forward probe that now precedes the popup.
+func pressPair(t *testing.T, m Model) Model {
+	t.Helper()
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("m")})
+	m = updated.(Model)
+	if cmd == nil {
+		t.Fatal("pairing must return the probe cmd")
+	}
+	updated, _ = m.Update(cmd())
+	return updated.(Model)
+}
+
 func pressType(t *testing.T, m Model, kt tea.KeyType) Model {
 	t.Helper()
 	updated, _ := m.Update(tea.KeyMsg{Type: kt})
@@ -242,7 +255,7 @@ func TestPairPopupEnterRunsSmartRebase(t *testing.T) {
 			m.sel[panelBranches] = n
 		}
 	}
-	m = pressRune(t, m, "m") // popup: Merge is entry 0, Rebase is entry 1
+	m = pressPair(t, m) // popup: Merge is entry 0, Rebase is entry 1
 	if layerOf[*pairOpPopup](m) == nil {
 		t.Fatal("popup expected")
 	}
@@ -342,7 +355,7 @@ func TestPairPopupEnterRunsSmartMerge(t *testing.T) {
 			m.sel[panelBranches] = n
 		}
 	}
-	m = pressRune(t, m, "m") // popup: Merge feat into main is the first entry
+	m = pressPair(t, m) // popup: Merge feat into main is the first entry
 	if layerOf[*pairOpPopup](m) == nil {
 		t.Fatal("popup expected")
 	}

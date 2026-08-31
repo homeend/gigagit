@@ -108,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/solo", writeGuard(s.handleSolo))
 	mux.HandleFunc("GET /api/commit/{sha}", s.handleCommitFiles)
 	mux.HandleFunc("GET /api/compare", s.handleCompare)
+	mux.HandleFunc("GET /api/ff-pair", s.handleFFPair)
 	mux.HandleFunc("GET /api/versions", s.handleVersions)
 	mux.HandleFunc("GET /api/version-branches", s.handleVersionBranches)
 	mux.HandleFunc("GET /api/rebase-range", s.handleRebaseRange)

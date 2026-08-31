@@ -326,6 +326,11 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcStatus}
 	case engine.SmartMerge, engine.SmartRebase:
 		return []sourceKey{srcStatus, srcFeed, srcBranches}
+	case engine.FastForward:
+		// Moves a branch tip (and the working tree when it is the current
+		// branch); no remote or tag state changes. Mapped so it doesn't fall
+		// through to "all sources" and auto-fire the srcTags remote probe.
+		return []sourceKey{srcStatus, srcFeed, srcBranches}
 	case engine.CherryPick:
 		// Moves the branch tip and may leave conflicts, same shape as
 		// SmartMerge/SmartRebase. Mapping it avoids falling through to "all
