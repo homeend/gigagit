@@ -24,19 +24,21 @@ func isolateGlobal(t *testing.T) string {
 }
 
 type settingsGet struct {
-	ShowGraph          bool           `json:"show_graph"`
-	CommitSort         string         `json:"commit_sort"`
-	AutoRefresh        bool           `json:"auto_refresh"`
-	RemoteTagsAuto     bool           `json:"remote_tags_auto"`
-	OpLog              bool           `json:"op_log"`
-	VersionsEnabled    bool           `json:"versions_enabled"`
-	VersionsMaxAgeDays int            `json:"versions_max_age_days"`
-	Refresh            map[string]int `json:"refresh"`
-	Hook               string         `json:"hook"`
-	RepoConfigPath     string         `json:"repo_config_path"`
-	RepoConfigPrivate  bool           `json:"repo_config_private"`
-	GlobalConfigPath   string         `json:"global_config_path"`
-	CommitGraphKnown   bool           `json:"commit_graph_known"`
+	ShowGraph          bool            `json:"show_graph"`
+	CommitSort         string          `json:"commit_sort"`
+	AutoRefresh        bool            `json:"auto_refresh"`
+	RemoteTagsAuto     bool            `json:"remote_tags_auto"`
+	OpLog              bool            `json:"op_log"`
+	VersionsEnabled    bool            `json:"versions_enabled"`
+	VersionsMaxAgeDays int             `json:"versions_max_age_days"`
+	Refresh            map[string]int  `json:"refresh"`
+	RefreshWatch       map[string]bool `json:"refresh_watch"`
+	WatchSupported     bool            `json:"watch_supported"`
+	Hook               string          `json:"hook"`
+	RepoConfigPath     string          `json:"repo_config_path"`
+	RepoConfigPrivate  bool            `json:"repo_config_private"`
+	GlobalConfigPath   string          `json:"global_config_path"`
+	CommitGraphKnown   bool            `json:"commit_graph_known"`
 }
 
 func getSettings(t *testing.T, ts *httptest.Server) settingsGet {
@@ -190,5 +192,36 @@ func TestSettingsVersionsPolicyLive(t *testing.T) {
 	}
 	if out := gitRun(t, dir, "for-each-ref", "refs/gg/versions"); strings.TrimSpace(out) != "" {
 		t.Errorf("version snapshot recorded despite the live disable:\n%s", out)
+	}
+}
+
+func TestSettingsRefreshWatchRoundTrip(t *testing.T) {
+	isolateGlobal(t)
+	dir := newRepoDir(t, 1)
+	ts := serve(t, New(domain.Open(dir)))
+
+	got := getSettings(t, ts)
+	if len(got.RefreshWatch) != 4 || got.RefreshWatch["branches"] {
+		t.Fatalf("refresh_watch defaults = %v, want 4 false entries", got.RefreshWatch)
+	}
+	body := `{"refresh_watch":{"branches":true,"reflog":true}}`
+	if code := postJSON(t, ts, "/api/settings", body, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("POST code = %d", code)
+	}
+	repo, err := os.ReadFile(filepath.Join(dir, ".gg.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"branches_watch = true", "reflog_watch = true"} {
+		if !strings.Contains(string(repo), want) {
+			t.Errorf("repo config missing %q:\n%s", want, repo)
+		}
+	}
+	got = getSettings(t, ts)
+	if !got.RefreshWatch["branches"] || !got.RefreshWatch["reflog"] || got.RefreshWatch["remotes"] {
+		t.Fatalf("refresh_watch after write = %v", got.RefreshWatch)
+	}
+	if code := postJSON(t, ts, "/api/settings", `{"refresh_watch":{"status":true}}`, "application/json", "", nil); code != http.StatusBadRequest {
+		t.Fatalf("ineligible watch source must be 400, got %d", code)
 	}
 }

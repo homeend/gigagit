@@ -392,6 +392,11 @@ than one page holds — the list falls back to a clean walk from the top. Manual
 finishing an operation keeps the rows you scrolled in, leaves the scroll where
 it was, and re-anchors the cursor to the same commit instead of jumping to the
 top; a solo-scope change, a commit-sort change and a re-root still start clean.
+The browser UI also **refreshes itself on repo changes** — the same
+`[refresh]` file-watch and interval settings the TUI uses drive a server-side
+watcher whose pushes (`GET /api/events`) make every open tab re-fetch just the
+sources that changed; the settings panel carries the per-source file-watch
+toggles.
 
 The `▲` indicator also **auto-refreshes by default** whenever the tag list
 changes — on app load and after any tag add/remove/push/delete-from-remote — via

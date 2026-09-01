@@ -56,6 +56,12 @@ type Server struct {
 	// packThreshold overrides bigRepoPackBytes for /api/health's "big"
 	// verdict (test seam); 0 = the production const.
 	packThreshold int64
+
+	// live refresh (live.go): the watcher + ticker hub behind GET /api/events.
+	// nil until startLive; replaced wholesale on re-root and refresh-settings
+	// writes (subscribers are closed and reconnect).
+	liveMu sync.Mutex
+	live   *liveHub
 }
 
 func New(svc *domain.Service) *Server {

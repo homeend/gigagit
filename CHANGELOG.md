@@ -8,6 +8,21 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`gg web` refreshes itself.** The web server now runs the same refresh
+  machinery as the TUI: a file watcher on `.git` (branches, remotes, reflog,
+  worktrees — `[refresh] <source>_watch`) and an interval lane for the rest
+  (status, tags, the commit feed, plus the background `fetch` and
+  `remote_tags` lookups), all driven by the per-repo `[refresh]` settings
+  the TUI already honors. Changes are pushed to every open tab over one
+  persistent `GET /api/events` stream and the page re-fetches only the
+  sources that changed (the commit feed reconciles in place — paged history,
+  scroll and cursor survive). Pushes pause while an operation started from
+  the web is running; a dropped stream reconnects and reloads in full. The
+  settings panel gained a file-watch toggle on each eligible interval row
+  (and reports when the filesystem — WSL2 9p — cannot watch), and its refresh
+  section no longer says "(TUI)": the same numbers now apply to both. The
+  four `*_watch` keys ride the settings wire as `refresh_watch`.
+
 - **Soloed/scoped commit views color the ● dots by branch territory.** When
   the Commits feed is scoped (Solo this branch / Solo from this commit /
   Add to commit view), a linear history collapses to one lane and every dot

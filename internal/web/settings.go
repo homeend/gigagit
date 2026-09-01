@@ -6,10 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
+	"slices"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/gitwatch"
 	"github.com/homeend/gigagit/internal/repos"
 )
 
@@ -40,13 +42,18 @@ type settingsPayload struct {
 	VersionsEnabled    bool           `json:"versions_enabled"`
 	VersionsMaxAgeDays int            `json:"versions_max_age_days"`
 	Refresh            map[string]int `json:"refresh"`
-	Hook               string         `json:"hook"`
-	RepoConfigPath     string         `json:"repo_config_path"`
-	RepoConfigPrivate  bool           `json:"repo_config_private"` // machine-local file vs committed .gg.toml
-	GlobalConfigPath   string         `json:"global_config_path"`
-	CommitGraphKnown   bool           `json:"commit_graph_known"`
-	CommitGraphPresent bool           `json:"commit_graph_present"`
-	CommitGraphAuto    bool           `json:"commit_graph_auto"` // fetch.writeCommitGraph=true
+	// RefreshWatch is [refresh] <src>_watch for the watch-eligible sources;
+	// WatchSupported says whether this repo's filesystem can watch at all
+	// (false on WSL2 9p — the interval is used instead).
+	RefreshWatch       map[string]bool `json:"refresh_watch"`
+	WatchSupported     bool            `json:"watch_supported"`
+	Hook               string          `json:"hook"`
+	RepoConfigPath     string          `json:"repo_config_path"`
+	RepoConfigPrivate  bool            `json:"repo_config_private"` // machine-local file vs committed .gg.toml
+	GlobalConfigPath   string          `json:"global_config_path"`
+	CommitGraphKnown   bool            `json:"commit_graph_known"`
+	CommitGraphPresent bool            `json:"commit_graph_present"`
+	CommitGraphAuto    bool            `json:"commit_graph_auto"` // fetch.writeCommitGraph=true
 }
 
 func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
@@ -82,10 +89,17 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 			"feed": cfg.Refresh.Feed, "fetch": cfg.Refresh.Fetch,
 			"remote_tags": cfg.Refresh.RemoteTags,
 		},
+		RefreshWatch: map[string]bool{
+			"worktrees": cfg.Refresh.WorktreesWatch, "branches": cfg.Refresh.BranchesWatch,
+			"reflog": cfg.Refresh.ReflogWatch, "remotes": cfg.Refresh.RemotesWatch,
+		},
 		Hook:              cfg.Worktree.PostCreateHook,
 		RepoConfigPath:    active,
 		RepoConfigPrivate: filepath.Base(active) != ".gg.toml",
 		GlobalConfigPath:  config.DefaultGlobalPath(),
+	}
+	if common, cerr := svc.GitCommonDir(ctx); cerr == nil && common != "" {
+		p.WatchSupported = gitwatch.Supported(common)
 	}
 	// Best-effort: the commit-graph row degrades to "checking…" client-side
 	// when health cannot be read; the rest of the panel must still render.
@@ -109,15 +123,16 @@ func webOpLogPath() string {
 }
 
 type settingsWriteRequest struct {
-	ShowGraph          string         `json:"show_graph"`  // "on" | "off"
-	CommitSort         string         `json:"commit_sort"` // "date-order" | "plain"
-	AutoRefresh        *bool          `json:"auto_refresh"`
-	RemoteTagsAuto     *bool          `json:"remote_tags_auto"`
-	OpLog              *bool          `json:"op_log"`
-	VersionsEnabled    *bool          `json:"versions_enabled"`
-	VersionsMaxAgeDays *int           `json:"versions_max_age_days"` // -1 = keep forever, else > 0
-	Refresh            map[string]int `json:"refresh"`               // source → seconds (0 = off)
-	Hook               *string        `json:"hook"`
+	ShowGraph          string           `json:"show_graph"`  // "on" | "off"
+	CommitSort         string           `json:"commit_sort"` // "date-order" | "plain"
+	AutoRefresh        *bool            `json:"auto_refresh"`
+	RemoteTagsAuto     *bool            `json:"remote_tags_auto"`
+	OpLog              *bool            `json:"op_log"`
+	VersionsEnabled    *bool            `json:"versions_enabled"`
+	VersionsMaxAgeDays *int             `json:"versions_max_age_days"` // -1 = keep forever, else > 0
+	Refresh            map[string]int   `json:"refresh"`               // source → seconds (0 = off)
+	RefreshWatch       map[string]*bool `json:"refresh_watch"`         // watch-eligible source → on/off
+	Hook               *string          `json:"hook"`
 }
 
 // handleSettingsSet validates every named field first, then writes — a bad
@@ -157,16 +172,26 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	for src, on := range req.RefreshWatch {
+		if !slices.Contains(liveWatchSources, src) {
+			writeErr(w, http.StatusBadRequest, errors.New("not a file-watch source: "+src))
+			return
+		}
+		if on == nil {
+			writeErr(w, http.StatusBadRequest, errors.New("refresh_watch values must be booleans"))
+			return
+		}
+	}
 	if req.ShowGraph == "" && req.CommitSort == "" && req.AutoRefresh == nil && req.RemoteTagsAuto == nil &&
 		req.OpLog == nil && req.VersionsEnabled == nil && req.VersionsMaxAgeDays == nil &&
-		len(req.Refresh) == 0 && req.Hook == nil {
+		len(req.Refresh) == 0 && len(req.RefreshWatch) == 0 && req.Hook == nil {
 		writeErr(w, http.StatusBadRequest, errors.New("nothing to set"))
 		return
 	}
 
 	// Per-repo destination.
 	needRepo := req.ShowGraph != "" || req.CommitSort != "" || req.VersionsEnabled != nil ||
-		req.VersionsMaxAgeDays != nil || len(req.Refresh) > 0 || req.Hook != nil
+		req.VersionsMaxAgeDays != nil || len(req.Refresh) > 0 || len(req.RefreshWatch) > 0 || req.Hook != nil
 	repoPath := ""
 	if needRepo {
 		p, err := s.activeRepoConfigPath(r.Context(), svc)
@@ -215,6 +240,12 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	for src, on := range req.RefreshWatch {
+		if err := config.SetRefreshWatch(repoPath, src, *on); err != nil {
+			fail(err)
+			return
+		}
+	}
 	if req.Hook != nil {
 		if err := config.SetWorktreePostCreateHook(repoPath, *req.Hook); err != nil {
 			fail(err)
@@ -241,6 +272,9 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 			fail(err)
 			return
 		}
+	}
+	if req.AutoRefresh != nil || len(req.Refresh) > 0 || len(req.RefreshWatch) > 0 {
+		s.restartLive(r.Context()) // the hub re-reads [refresh]; tabs re-hello
 	}
 	writeJSON(w, map[string]bool{"ok": true})
 }

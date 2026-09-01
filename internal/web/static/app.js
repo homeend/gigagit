@@ -37,6 +37,7 @@ import "./agentsetup.js";
 import "./commitai.js";
 import "./search.js";
 import "./remoteheads.js";
+import { connectLive } from "./live.js";
 
 // applyStoredLayout puts back the layout gg remembered for this machine:
 // folded sections, pane widths, the sidebar toggle, the graph mode. It runs
@@ -72,6 +73,7 @@ async function boot() {
   await fetchHealth(true);
   await loadCommits(false);
   focusPane();
+  connectLive(); // after the first full load: pushes only name what to RE-fetch
 }
 
 boot().catch((e) => {
