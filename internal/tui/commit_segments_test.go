@@ -303,6 +303,26 @@ func TestScopedFilteredListFallsBackToLaneColor(t *testing.T) {
 	}
 }
 
+func TestScopedListDotSegmentColorWithWipRows(t *testing.T) {
+	forceColor(t)
+	// commitSegs holds REAL commits only, while display rows carry a WIP prefix:
+	// the decorator must index segs at ci-wipCount, not ci. A dirty status makes
+	// wipCount ≥ 1; the boundary commit's dot must still take segment-1 color.
+	m := scopedLinearModel()
+	m.status.Files = []model.FileStatus{{Path: "f", Kind: model.KindTracked, Unstaged: 'M'}}
+	m = m.graphLayerReset().rebuildCommitGraph() // re-derive wipRows + re-lay
+	if len(m.wipRows) == 0 {
+		t.Fatal("dirty status should derive a WIP row")
+	}
+	rows, idx := m.panelView(panelCommits)
+	decos := m.commitDecorators(rows, idx, -1)
+	wip := len(m.wipRows)
+	base := decos[wip+1]("  ● bbbbbbb", 0, 0) // display row of the boundary commit
+	if !strings.Contains(base, dotEscape(t, 1)) {
+		t.Fatalf("WIP-offset feed: boundary commit should use segment-1 color: %q", base)
+	}
+}
+
 func TestScopedGraphNodeUsesSegmentColor(t *testing.T) {
 	forceColor(t)
 	m := scopedLinearModel()
