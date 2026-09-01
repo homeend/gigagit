@@ -25,6 +25,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (non-contiguous history has no honest first-parent chain). Unscoped views
   are unchanged. Known gap: a base that exists only as a remote-tracking
   branch (no local counterpart) contributes no merge-base fork point.
+  The web UI has the same coloring: a soloed `/api/commits` feed carries a
+  per-row `seg`, and the commit list's node dots (SVG graph and flat mode)
+  take that color; unsoloed and filtered feeds omit it. The segment walker
+  moved to `commitgraph.SegmentLayer` so both frontends share one engine.
 
 - **The TUI file panels' `.` action menu offers "Stage all files".** On either
   file panel (Files or Staged), whenever anything is unstaged, the new row —

@@ -82,7 +82,9 @@ Commit amend is TUI-only too (the web's commit op has no amend lane).
   range).
 - **Solo scope.** The server stores solo as a *branch name*, so
   solo-from-a-commit (the TUI's `ctrl+g` on the Commits panel) has no wire
-  shape yet.
+  shape yet. Territory dot colors in a soloed feed are at parity (per-row
+  `seg` on `/api/commits`); the TUI's multi-branch "Add to commit view" scope
+  has no web equivalent, so the web colors only the single-ref solo.
 
 ## Neither frontend
 
