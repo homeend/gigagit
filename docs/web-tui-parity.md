@@ -29,7 +29,7 @@ drop · commit · staging incl. the region/line hunk picker · discard ·
 through the hunk picker · AI conflict-complete · diff · file history · blame ·
 compare two branches · solo scope · branch versions · AI review · identity &
 profiles · branch prefixes · external tools · session errors · repo switcher ·
-refresh settings · commit graph · command palette · cherry-pick · revert ·
+refresh settings · live refresh (file watch + intervals) · commit graph · command palette · cherry-pick · revert ·
 reword · undo last commit · worktree from a commit · fast-forward to a commit ·
 reset to a commit · annotated tags from a commit · review one commit (AI) ·
 **bookmarks and the shelf** (list, add a file or commit, name, remove, open,
@@ -63,6 +63,9 @@ Commit amend is TUI-only too (the web's commit op has no amend lane).
 
 ### Weaker in the web (present, but not equivalent)
 
+- **Live refresh.** A ref-family change (branches, remotes, worktrees, tags,
+  reflog) reloads the whole sidebar in one go rather than the one list; the
+  notification center still does not auto-refresh.
 - **Bookmarks and the shelf.** Both stores are in the sidebar now and can be
   filled, opened, restored and (for a shelved commit) cherry-picked. What is
   still missing is **comparing against** an entry — `CompareFiles` /
