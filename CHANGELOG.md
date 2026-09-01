@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **The TUI file panels' `.` action menu offers "Unstage all".** On either
+  file panel (Files or Staged), whenever anything is staged, the new row
+  pulls every staged file back out of the index in one op (`git restore
+  --staged` — the staged half of a partially-staged file included), matching
+  the web files menu's "unstage all". Hidden while a conflict exists or a
+  merge/rebase sits paused (conflicts resolved, commit pending): unstaging
+  the auto-merged results then would quietly hollow out the merge commit.
+
 - **Branch pair menus offer fast-forward when one branch is strictly behind
   the other.** Marking two branches in the TUI (`m` + `m`) and dropping a
   branch onto another in the web sidebar both probe the pair first (new
