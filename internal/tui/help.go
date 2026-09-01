@@ -115,6 +115,7 @@ func helpContent() []contentLine {
 		r("H", i18n.T("unstage hunks: open the region/line picker over the staged change (staged ↔ HEAD) — taking HEAD reverts that region of the index; the working tree is untouched")),
 		r("enter", i18n.T("side-by-side diff of the staged change (HEAD → index)")),
 		r(".", i18n.T("Open staged version in external editor: open the index blob (the staged copy, distinct from the working file) in $VISUAL/$EDITOR, read-only")),
+		r(".", i18n.T("Unstage all (.-menu on either file panel): pull every staged file back out of the index — git restore --staged (hidden while conflicted or a merge/rebase is paused)")),
 		r("m", i18n.T("mark / unmark a file; h history, b blame (as in Files)")),
 		h(i18n.T("Conflict resolution process (x)")),
 		r("x", i18n.T("enter / resume the conflict process (repo conflicted, or a merge/rebase paused after external resolution)")),
