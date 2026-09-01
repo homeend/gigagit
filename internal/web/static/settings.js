@@ -22,6 +22,10 @@ import { startOp } from "./ops.js";
 
 const REFRESH_SOURCES = ["status", "branches", "remotes", "worktrees", "tags", "reflog", "feed", "fetch", "remote_tags"];
 
+// The watch-eligible [refresh] sources — the ones gitwatch can drive from
+// .git changes instead of a timer (the server's liveWatchSources).
+const WATCH_SOURCES = ["worktrees", "branches", "reflog", "remotes"];
+
 async function openSettings() {
   let d;
   try {
@@ -170,21 +174,28 @@ function renderSettings(opts = {}) {
   // whose content goes invalid ("12e", letters on some platforms) reports
   // value="" — and Number("") is 0, so a save would silently write 0 over
   // the real value. Text inputs always report what is shown.
-  const rates = REFRESH_SOURCES.map(
-    (src) =>
-      `<label class="srate"><span>${esc(src.replace("_", " "))}</span><input type="text" inputmode="numeric" data-rate="${src}" value="${d.refresh[src] ?? 0}"></label>`
-  ).join("");
+  // Watch-eligible rows carry a file-watch toggle: on, the source refreshes
+  // on .git change and its interval is ignored (the TUI's [w] column).
+  const rates = REFRESH_SOURCES.map((src) => {
+    const watch = WATCH_SOURCES.includes(src)
+      ? `<span class="swatch">file watch ${toggleBtn("watch:" + src, !!(d.refresh_watch || {})[src])}</span>`
+      : "";
+    return `<div class="sraterow"><label class="srate"><span>${esc(src.replace("_", " "))}</span><input type="text" inputmode="numeric" data-rate="${src}" value="${d.refresh[src] ?? 0}"></label>${watch}</div>`;
+  }).join("");
+  const watchNote = d.watch_supported
+    ? "file watch: refresh on .git change instead of the interval"
+    : "file watch unsupported on this filesystem (9p) — the interval is used";
   $("settings-box").innerHTML = `
     <h2>settings</h2>
     <h3>commits</h3>
     <div class="srow"><span class="slbl">show graph</span>${toggleBtn("show_graph", d.show_graph)}<span class="snote">lane graph vs flat list (per repo)</span></div>
     <div class="srow"><span class="slbl">commit sort</span><button class="sact" data-act="commit-sort">${esc(d.commit_sort)}</button><span class="snote">date-order: perfect lanes · plain: fastest (per repo)</span></div>
     <div class="srow"><span class="slbl">commit-graph file</span>${commitGraphRow(d)}<span class="snote">speeds up history walks on big repos</span></div>
-    <h3>refresh <span class="stui">(TUI)</span></h3>
+    <h3>refresh</h3>
     <div class="srow"><span class="slbl">auto-refresh</span>${toggleBtn("auto_refresh", d.auto_refresh)}<span class="snote">background refresh master switch (global)</span></div>
     <div class="srow"><span class="slbl">auto remote-tag refresh</span>${toggleBtn("remote_tags_auto", d.remote_tags_auto)}<span class="snote">▲ markers after each fetch (global)</span></div>
     <div class="srow srates"><span class="slbl">intervals (s)</span><span class="sratewrap">${rates}</span></div>
-    <div class="srow"><span class="snote">0 = off · per repo · applies to the TUI's background lane</span></div>
+    <div class="srow"><span class="snote">0 = off · per repo · applies to the TUI and to this page · ${watchNote}</span></div>
     <h3>history &amp; logs</h3>
     <div class="srow"><span class="slbl">operations history</span>${toggleBtn("versions_enabled", d.versions_enabled)}<span class="snote">pre-operation branch snapshots (per repo)</span></div>
     <div class="srow"><span class="slbl">history retention</span><input type="text" inputmode="numeric" id="s-retention" value="${d.versions_max_age_days}"><span class="snote">days; -1 = keep forever</span></div>
@@ -217,6 +228,12 @@ function renderSettings(opts = {}) {
 $("settings-box").addEventListener("click", (e) => {
   const t = e.target.closest("button");
   if (!t || t.disabled) return;
+  if (t.dataset.k && t.dataset.k.startsWith("watch:")) {
+    const src = t.dataset.k.slice(6);
+    const cur = !!(state.settings.refresh_watch || {})[src];
+    setOpt({ refresh_watch: { [src]: !cur } });
+    return;
+  }
   if (t.dataset.k) {
     const cur = !!state.settings[t.dataset.k];
     // show_graph is an enum on the wire ("on"/"off"), a bool in the GET.

@@ -291,6 +291,8 @@ mark.r { background: var(--span-add); color: inherit; }
 #settings-box .sratewrap { display: flex; flex-direction: column; gap: 4px; }
 #settings-box .srate { color: var(--dim); font-size: 12px; display: flex; align-items: center; gap: 10px; }
 #settings-box .srate span { width: 110px; }
+#settings-box .sraterow { display: flex; align-items: center; gap: 12px; }
+#settings-box .swatch { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); font-size: 11px; }
 #settings-box .srate input, #settings-box #s-retention { width: 64px; text-align: right; }
 #settings-box .shook textarea { flex: 1 1 260px; resize: vertical; }
 #settings-box .ssave {
