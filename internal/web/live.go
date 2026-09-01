@@ -1,10 +1,17 @@
 package web
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
 	"sync"
 	"time"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/gitwatch"
 )
 
@@ -197,4 +204,273 @@ func (s *Server) opInFlight() bool {
 	live := !s.cur.done
 	s.cur.mu.Unlock()
 	return live
+}
+
+// liveInterval returns src's poll interval in seconds and whether it is
+// scheduled: 0 = off, otherwise floored at min_seconds (default 10). The
+// TUI's scheduledInterval.
+func liveInterval(cfg config.RefreshConfig, src string) (int, bool) {
+	var base int
+	switch src {
+	case "status":
+		base = cfg.Status
+	case "branches":
+		base = cfg.Branches
+	case "remotes":
+		base = cfg.Remotes
+	case "worktrees":
+		base = cfg.Worktrees
+	case "tags":
+		base = cfg.Tags
+	case "reflog":
+		base = cfg.Reflog
+	case "feed":
+		base = cfg.Feed
+	case "fetch":
+		base = cfg.Fetch
+	case "remote_tags":
+		base = cfg.RemoteTags
+	}
+	if base <= 0 {
+		return 0, false
+	}
+	min := cfg.MinSeconds
+	if min <= 0 {
+		min = liveMinSeconds
+	}
+	if base < min {
+		base = min
+	}
+	return base, true
+}
+
+// liveHubRef returns the current hub (nil before startLive / after stopLive).
+func (s *Server) liveHubRef() *liveHub {
+	s.liveMu.Lock()
+	defer s.liveMu.Unlock()
+	return s.live
+}
+
+// startLive builds the hub for the CURRENT service from the effective
+// [refresh] config and starts its watcher and ticker. Any previous hub is
+// closed first (its streams end; browsers reconnect to this one). Safe to
+// call when refresh is disabled: the hub then only answers hello messages.
+func (s *Server) startLive(ctx context.Context) {
+	svc := s.service()
+	cfg := config.RefreshConfig{}
+	if c, err := s.effectiveConfig(ctx, svc); err == nil {
+		cfg = c.Refresh
+	}
+	common, err := svc.GitCommonDir(ctx)
+	watchOK := err == nil && common != "" && gitwatch.Supported(common)
+	h := newLiveHub(cfg, watchOK, s.opInFlight)
+
+	s.liveMu.Lock()
+	prev := s.live
+	s.live = h
+	s.liveMu.Unlock()
+	if prev != nil {
+		prev.close()
+	}
+	if !cfg.Enabled {
+		return
+	}
+	// Watcher: only the eligible sources toggled on, only when the fs can.
+	var enabled []gitwatch.Source
+	if watchOK {
+		for _, p := range []struct {
+			src string
+			gs  gitwatch.Source
+		}{{"worktrees", gitwatch.Worktrees}, {"reflog", gitwatch.Reflog}, {"branches", gitwatch.Branches}, {"remotes", gitwatch.Remotes}} {
+			if h.watchActive(p.src) {
+				enabled = append(enabled, p.gs)
+			}
+		}
+	}
+	if len(enabled) > 0 {
+		worktreeDir, werr := svc.GitDir(ctx)
+		if werr != nil || worktreeDir == "" {
+			worktreeDir = common // main worktree: logs/HEAD lives at common
+		}
+		w, werr := gitwatch.New(gitwatch.Plan(common, worktreeDir, enabled), liveDebounce)
+		h.mu.Lock()
+		if werr == nil {
+			h.watcher = w
+		} else {
+			// No watcher: flip watchOK so the ticker polls those sources
+			// instead (a watch-active source has no interval backstop).
+			h.watchOK = false
+		}
+		h.mu.Unlock()
+		if werr == nil {
+			go h.watchLoop(w)
+		}
+	}
+	go h.tickLoop(svc)
+}
+
+// stopLive closes the hub (streams end, watcher/ticker exit).
+func (s *Server) stopLive() {
+	s.liveMu.Lock()
+	h := s.live
+	s.live = nil
+	s.liveMu.Unlock()
+	if h != nil {
+		h.close()
+	}
+}
+
+// restartLive re-reads config for the current service — the TUI's watchGen
+// bump after a refresh-settings write.
+func (s *Server) restartLive(ctx context.Context) { s.startLive(ctx) }
+
+// Close releases background resources (the live hub). Serve calls it after
+// the HTTP server has shut down.
+func (s *Server) Close() { s.stopLive() }
+
+// watchLoop forwards watcher events as fan-out emits until the watcher or
+// the hub stops.
+func (h *liveHub) watchLoop(w *gitwatch.Watcher) {
+	for {
+		select {
+		case src, ok := <-w.Events():
+			if !ok {
+				return
+			}
+			h.emit(liveMsg{Changed: watchFanOut(src), Reason: "watch"})
+		case <-h.stop:
+			return
+		}
+	}
+}
+
+// tickLoop runs tickOnce every liveTick until the hub stops. One lane: a
+// slow fetch simply delays the next due-check, it never overlaps it.
+func (h *liveHub) tickLoop(svc *domain.Service) {
+	t := time.NewTicker(liveTick)
+	defer t.Stop()
+	for {
+		select {
+		case <-h.stop:
+			return
+		case <-t.C:
+			h.tickOnce(svc)
+		}
+	}
+}
+
+// tickOnce runs every due interval source once: fetch and remote_tags do
+// their network work here (server-side, like the TUI's background lane) and
+// then emit the sources they changed; every other source just emits itself.
+// Skipped whole while an op is in flight. lastRun is stamped even when the
+// action fails, so a dead remote is not hammered every tick.
+func (h *liveHub) tickOnce(svc *domain.Service) {
+	if h.gate != nil && h.gate() {
+		return
+	}
+	h.mu.Lock()
+	cfg, stopped := h.cfg, h.stopped
+	h.mu.Unlock()
+	if stopped || !cfg.Enabled {
+		return
+	}
+	now := liveNow()
+	for _, src := range liveSources {
+		secs, on := liveInterval(cfg, src)
+		if !on || h.watchActive(src) {
+			continue
+		}
+		h.mu.Lock()
+		due := now.Sub(h.lastRun[src]) >= time.Duration(secs)*time.Second
+		if due {
+			h.lastRun[src] = now
+		}
+		h.mu.Unlock()
+		if !due {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		switch src {
+		case "fetch":
+			events := make(chan engine.Event, 8)
+			go func() {
+				for range events {
+				}
+			}()
+			_, _ = svc.Execute(ctx, engine.Fetch{}, events, engine.MapDecider{})
+			close(events)
+			h.emit(liveMsg{Changed: []string{"remotes", "branches", "feed"}, Reason: "interval"})
+		case "remote_tags":
+			_, _ = svc.RemoteTagsFresh(ctx)
+			h.emit(liveMsg{Changed: []string{"tags"}, Reason: "interval"})
+		default:
+			h.emit(liveMsg{Changed: []string{src}, Reason: "interval"})
+		}
+		cancel()
+	}
+}
+
+// --- GET /api/events ----------------------------------------------------------
+
+func init() {
+	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
+		mux.HandleFunc("GET /api/events", s.handleEvents)
+	})
+}
+
+// handleEvents is the persistent repo-change stream. First message is a
+// hello carrying whether refresh is enabled and whether file watch is
+// active; then one message per hub emit; a comment ping every liveKeepalive
+// keeps idle streams open. Ends when the client goes away or the hub is
+// replaced (re-root, settings write) — EventSource reconnects and gets a
+// fresh hello, which is how a tab learns the new state.
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	fl, ok := w.(http.Flusher)
+	if !ok {
+		writeErr(w, http.StatusInternalServerError, errors.New("streaming unsupported"))
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+
+	h := s.liveHubRef()
+	live, watch := false, false
+	var ch <-chan liveMsg // nil when no hub: select never fires, pings keep the stream open
+	cancel := func() {}
+	if h != nil {
+		h.mu.Lock()
+		live = h.cfg.Enabled
+		watch = live && h.watcher != nil
+		h.mu.Unlock()
+		ch, cancel = h.subscribe()
+	}
+	defer cancel()
+	writeLiveSSE(w, liveMsg{Changed: []string{}, Reason: "hello", Live: &live, Watch: &watch})
+	fl.Flush()
+
+	ping := time.NewTicker(liveKeepalive)
+	defer ping.Stop()
+	for {
+		select {
+		case m, ok := <-ch:
+			if !ok {
+				return // hub replaced or stopped; the browser reconnects
+			}
+			writeLiveSSE(w, m)
+			fl.Flush()
+		case <-ping.C:
+			fmt.Fprint(w, ": ping\n\n")
+			fl.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+func writeLiveSSE(w http.ResponseWriter, m liveMsg) {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(w, "data: %s\n\n", b)
 }
