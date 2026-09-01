@@ -151,6 +151,8 @@ type Model struct {
 	commitFilter        commitFilterFields              // path/author/grep/date narrowing of the feed
 	commitGraphRows     []string                        // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
 	commitGraphLanes    []int                           // cached node lane per unified row, parallel to the unified WIP+commits list
+	segLayer            *segLayer                       // persistent segment-fold state (the coloring analog of graphLayer); nil = rebuild from scratch
+	commitSegs          []int                           // cached development-line segment per commit (REAL commits only — no WIP prefix); colors scoped-view dots
 	wipRows             []wipRow                        // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty
 	commitListMode      bool                            // Commits feed rendered as a flat ●-gutter list, not a graph
 	commitGraphCols     int                             // graph window width in LANES; 0 = use configured default
@@ -3189,6 +3191,7 @@ func (m Model) commitFilterChips() string {
 // previous walk's lanes beside the new rows.
 func (m Model) graphLayerReset() Model {
 	m.graphLayer = nil
+	m.segLayer = nil          // segments ride the same replacement invariant as the lane fold
 	m.filterMemo.invalidate() // same undetectable same-length-replacement hole as the graph layer
 	return m
 }
@@ -3215,6 +3218,7 @@ func (m Model) rebuildCommitGraph() Model {
 	if m.graphLayer != nil && m.graphLaidReal > 0 &&
 		m.graphWipLaid == wipCount && baseHash == m.graphBaseHash &&
 		len(m.commits) >= m.graphLaidReal {
+		m = m.rebuildSegments(m.graphLaidReal)
 		if !m.identWValid { // a branches change invalidated the ident-width cache
 			m.identWCache = m.scanCommitIdentWidth(m.commits)
 			m.identWValid = true
@@ -3285,6 +3289,8 @@ func (m Model) rebuildCommitGraph() Model {
 		m.commitGraphLanes[i] = r.Lane
 	}
 	m.graphLayer = layer
+	m.segLayer = nil // full re-lay → re-walk segments from scratch too
+	m = m.rebuildSegments(0)
 	m.graphLaidReal = len(m.commits)
 	m.graphWipLaid = wipCount
 	m.graphBaseHash = baseHash

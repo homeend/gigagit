@@ -171,6 +171,7 @@ func helpContent() []contentLine {
 		r("", i18n.T("on a commit that is a branch's tip: Rename branch <name> / Delete branch <name> (.-menu) — one pair per local tip; delete is hidden for a checked-out branch")),
 		r("", i18n.T("on a non-merge commit of the current branch: Move commit up (newer) / Move commit down (older) / Drop commit (.-menu) — one-step interactive rebase; conflicts pause for `git rebase --continue`")),
 		r("", i18n.T("Show as list / Show as graph (.-menu): flat ●-gutter list vs the lane graph; lane color marks each commit's line of development")),
+		r("", i18n.T("in a soloed/scoped view the ● color marks branch territory: it changes below another branch's tip and on merged-in lines, so the commits the scoped branch adds over its base stand out even in a linear history")),
 		r("< / >", i18n.T("narrow / widen the commit graph window (in lanes); a ⋯ marks lanes beyond each edge")),
 		r("shift+←/→", i18n.T("pan the commit graph window left / right")),
 		r("=", i18n.T("snap the commit graph window to the selected commit's node")),
