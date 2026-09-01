@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Soloed/scoped commit views color the ● dots by branch territory.** When
+  the Commits feed is scoped (Solo this branch / Solo from this commit /
+  Add to commit view), a linear history collapses to one lane and every dot
+  used to share one color. The dot color now follows the commit's line of
+  development: it changes below another branch's tip (so the commits branch A
+  adds over its base B stand out, and B's over C below that) and on every
+  merged-in line — through the whole loaded history, in list mode and on the
+  graph's node dots. Boundaries come from the ref decorations already in the
+  walk (other local tips, other remote tips; the scoped branch's own tip and
+  upstream never split their own segment; tags never do). Path/author/date-
+  filtered walks keep plain lane colors (non-contiguous history has no honest
+  first-parent chain). Unscoped views are unchanged.
+
 - **The TUI file panels' `.` action menu offers "Stage all files".** On either
   file panel (Files or Staged), whenever anything is unstaged, the new row —
   placed right after "Stage file" — stages every working-tree change in one op

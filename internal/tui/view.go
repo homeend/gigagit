@@ -1476,6 +1476,7 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int, budge
 		return nil
 	}
 	laneColorOn := len(m.commitGraphLanes) == m.commitsTotal() && (m.commitListMode || m.commitGraphOn())
+	segColored := m.segColorOn()
 	graphPrefix := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == m.commitsTotal()
 	decos := make([]rowDecorator, len(rows))
 	identW := m.commitIdentWidth() // loop-invariant: compute once, not per row
@@ -1541,9 +1542,17 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int, budge
 		var dotColor lipgloss.Color
 		if laneColorOn {
 			lane := m.commitGraphLanes[ci]
+			// In a scoped (solo) view the DAG collapses toward one lane, so the
+			// dot takes its development-line segment color instead: it flips at
+			// every other branch's tip and merged-in line, showing where one
+			// branch's commits end and inherited history begins.
+			colorIdx := lane
+			if segColored {
+				colorIdx = m.commitSegs[ci-m.wipCount()]
+			}
 			if m.commitListMode {
 				dotCol = 2 // ● at content col 0 + 2 prefix
-				dotColor = laneColor(lane)
+				dotColor = laneColor(colorIdx)
 				hasDot = true
 			} else {
 				// Graph mode: the node is drawn only when its lane is inside the
@@ -1552,7 +1561,7 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int, budge
 				scroll := m.commitGraphScroll
 				if lane >= scroll && lane < scroll+cols && !(scroll > 0 && lane == scroll) {
 					dotCol = 2 + (lane-scroll)*2
-					dotColor = laneColor(lane)
+					dotColor = laneColor(colorIdx)
 					hasDot = true
 				}
 			}
