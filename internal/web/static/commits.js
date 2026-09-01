@@ -78,7 +78,7 @@ function rowHTML(row, i, flat) {
     .join("");
   const when = new Date(row.time * 1000).toISOString().slice(0, 10);
   const graph = flat
-    ? (() => { const col = runes(row.cells || "").indexOf("●"); return flatDotSVG(laneColor(col >= 0 ? col >> 1 : 0)); })()
+    ? (() => { const col = runes(row.cells || "").indexOf("●"); return flatDotSVG(dotColor(row, col >= 0 ? col >> 1 : 0)); })()
     : graphHTML(row, i - wtCount());
   return (
     `<div class="crow${sel}${fl}" data-i="${i}">` +
@@ -283,9 +283,18 @@ function graphHTML(row, feedIdx) {
     // lands exactly on the leftmost lane's centre; a text glyph would
     // centre wherever the font's advance width happens to put it.
     const col = runes(row.cells || "").indexOf("●");
-    return flatDotSVG(laneColor(col >= 0 ? col >> 1 : 0));
+    return flatDotSVG(dotColor(row, col >= 0 ? col >> 1 : 0));
   }
   return graphSVG(row, feedIdx);
+}
+
+
+// dotColor picks a commit's node color: its territory segment when the
+// server sent one (a soloed feed — a linear history is one lane, so lane
+// color alone can't show where the soloed branch's own commits end and the
+// inherited history begins), else its lane. Lines and edges keep lane color.
+function dotColor(row, lane) {
+  return laneColor(row.seg != null ? row.seg : lane);
 }
 
 
@@ -377,7 +386,7 @@ function graphSVG(row, feedIdx) {
         parts += `<path d="M${x + HALF},0 V${MID}" stroke="${color}" stroke-width="2" fill="none"/>`;
       if (TOP_TOUCH.has(next[col]))
         parts += `<path d="M${x + HALF},${MID} V${ROW_H}" stroke="${color}" stroke-width="2" fill="none"/>`;
-      parts += `<circle cx="${x + HALF}" cy="${MID}" r="4" fill="${color}"/>`;
+      parts += `<circle cx="${x + HALF}" cy="${MID}" r="4" fill="${dotColor(row, col >> 1)}"/>`;
     } else if (GLYPH_PATHS[ch]) {
       parts += `<path d="${GLYPH_PATHS[ch](x)}" stroke="${color}" stroke-width="2" fill="none" stroke-linecap="round"/>`;
     } else if (ch !== " ") {

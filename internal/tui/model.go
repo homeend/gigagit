@@ -151,7 +151,7 @@ type Model struct {
 	commitFilter        commitFilterFields              // path/author/grep/date narrowing of the feed
 	commitGraphRows     []string                        // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
 	commitGraphLanes    []int                           // cached node lane per unified row, parallel to the unified WIP+commits list
-	segLayer            *segLayer                       // persistent segment-fold state (the coloring analog of graphLayer); nil = rebuild from scratch
+	segLayer            *commitgraph.SegmentLayer       // persistent segment-fold state (the coloring analog of graphLayer); nil = rebuild from scratch
 	commitSegs          []int                           // cached development-line segment per commit (REAL commits only — no WIP prefix); colors scoped-view dots
 	segBoundaryHashes   map[string]bool                 // merge-base fork points for the active scope (async, from ScopeBoundaries); boundary marks decorations can't supply once a base branch moved past the fork
 	wipRows             []wipRow                        // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty

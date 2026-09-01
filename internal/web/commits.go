@@ -28,6 +28,11 @@ type commitRow struct {
 	// and the TUI decides that by walking parent links across the loaded feed
 	// (feedDescendant). The browser cannot walk what it cannot see.
 	ParentIDs []string `json:"parent_ids,omitempty"`
+	// Seg is the commit's development-line segment in a SOLOED feed (nil
+	// otherwise): the dot color index, changing below another branch's fork
+	// point or tip and on merged-in lines, so the soloed branch's own commits
+	// stand out from inherited history even when the graph is one lane.
+	Seg *int `json:"seg,omitempty"`
 }
 
 type refInfo struct {
@@ -132,12 +137,19 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 	// The scope rides along on the response whose content it scopes, so a
 	// reload or a second tab always learns it without a second call.
 	soloKind, soloRef := s.soloRef()
+	// Territory segments ride only a soloed, unfiltered feed: a filtered
+	// subset has no honest first-parent chain to walk, and an unsoloed feed
+	// already tells branches apart by lane.
+	var segs []int
+	if soloRef != "" && !filter.active() {
+		segs = s.soloSegments(r, soloRef, st.Commits)
+	}
 	writeJSON(w, map[string]any{
 		// A filtered feed is a non-contiguous SUBSET of history, so its lanes
 		// would connect commits that are not parent and child. The TUI drops
 		// the graph for exactly that reason; here it also drops the cost,
 		// which on a big repo is the larger half of the answer.
-		"rows":          buildRows(st.Commits, !filter.active()),
+		"rows":          buildRows(st.Commits, !filter.active(), segs),
 		"can_load_more": !st.Exhausted,
 		"solo":          soloRef,
 		"solo_kind":     soloKind,
@@ -145,9 +157,66 @@ func (s *Server) handleCommits(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// soloSegments assigns each commit of a soloed feed its territory segment
+// (commitgraph.SegmentLayer over the whole page set — the web feed is
+// re-rendered in full per response, so no incremental state is kept). The
+// boundary rule is the TUI's: a merge-base fork point against any other
+// local branch (domain.ScopeBoundaries — the only marker left once that
+// branch moved on past the fork), another local branch's tip, or a remote tip
+// that is not the soloed branch's own upstream. Best-effort: a failed branch
+// or merge-base read simply yields decoration-only boundaries.
+func (s *Server) soloSegments(r *http.Request, ref string, commits []model.Commit) []int {
+	svc := s.service()
+	ctx := readCtx(r)
+	ownUpstream := ""
+	var others []string
+	if branches, err := svc.Branches(ctx); err == nil {
+		for _, b := range branches {
+			if b.Name == ref {
+				ownUpstream = b.Upstream
+			} else {
+				others = append(others, b.Name)
+			}
+		}
+	}
+	forks := map[string]bool{}
+	if len(others) > 0 {
+		if hs, err := svc.ScopeBoundaries(ctx, []string{ref}, others); err == nil {
+			for _, h := range hs {
+				forks[h] = true
+			}
+		}
+	}
+	boundary := func(i int) bool {
+		c := commits[i]
+		if forks[c.Hash] {
+			return true
+		}
+		for _, rf := range c.Refs {
+			switch rf.Kind {
+			case model.RefLocal:
+				if rf.Name != ref {
+					return true
+				}
+			case model.RefRemote:
+				if rf.Name != ownUpstream {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	cs := make([]commitgraph.Commit, len(commits))
+	for i, c := range commits {
+		cs[i] = commitgraph.Commit{Hash: c.Hash, Parents: c.Parents}
+	}
+	return (&commitgraph.SegmentLayer{}).Append(cs, boundary)
+}
+
 // buildRows renders the feed page for the wire. lanes draws the commit graph;
 // callers pass false when the page is a filtered subset (see handleCommits).
-func buildRows(commits []model.Commit, lanes bool) []commitRow {
+// segs, when parallel to commits, sets each row's territory segment.
+func buildRows(commits []model.Commit, lanes bool, segs []int) []commitRow {
 	var graphRows []commitgraph.Row
 	if lanes {
 		cs := make([]commitgraph.Commit, len(commits))
@@ -169,6 +238,10 @@ func buildRows(commits []model.Commit, lanes bool) []commitRow {
 		if i < len(graphRows) {
 			row.Cells = graphRows[i].Cells
 			row.Lane = graphRows[i].Lane
+		}
+		if len(segs) == len(commits) {
+			seg := segs[i]
+			row.Seg = &seg
 		}
 		rows[i] = row
 	}
