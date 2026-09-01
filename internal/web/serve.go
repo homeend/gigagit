@@ -44,7 +44,10 @@ func Serve(ctx context.Context, workdir, addr string, launch bool) error {
 	if err != nil {
 		return err
 	}
-	httpSrv := &http.Server{Handler: New(svc).Handler()}
+	srv := New(svc)
+	srv.startLive(ctx) // watcher + interval ticker behind GET /api/events
+	defer srv.Close()
+	httpSrv := &http.Server{Handler: srv.Handler()}
 	fmt.Fprintln(os.Stderr, "gg web: serving", url)
 	if launch {
 		openBrowser(url)

@@ -350,3 +350,33 @@ func TestEventsStreamsHubEmits(t *testing.T) {
 		t.Fatalf("second message = %+v, want changed=[feed]", msgs[1])
 	}
 }
+
+func TestRerootRestartsLive(t *testing.T) {
+	isolateGlobal(t)
+	a := newRepoDir(t, 1)
+	b := newRepoDir(t, 2)
+	writeRepoRefresh(t, a, "enabled = true\nstatus = 10\n")
+	writeRepoRefresh(t, b, "enabled = true\nstatus = 20\n")
+	srv := New(domain.Open(a))
+	srv.startLive(context.Background())
+	t.Cleanup(srv.Close)
+	ts := serve(t, srv)
+	before := srv.liveHubRef()
+	chOld, cancel := before.subscribe()
+	defer cancel()
+	var out map[string]any
+	pb, _ := json.Marshal(b)
+	if code := postJSON(t, ts, "/api/reroot", `{"path":`+string(pb)+`}`, "application/json", ts.URL, &out); code != http.StatusOK {
+		t.Fatalf("reroot code = %d: %v", code, out)
+	}
+	after := srv.liveHubRef()
+	if after == nil || after == before {
+		t.Fatal("reroot must build a fresh hub for the new root")
+	}
+	if _, ok := <-chOld; ok {
+		t.Fatal("old hub's streams must be closed on reroot")
+	}
+	if after.cfg.Status != 20 {
+		t.Fatalf("new hub cfg.Status = %d, want the new root's 20", after.cfg.Status)
+	}
+}
