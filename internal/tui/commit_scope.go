@@ -75,11 +75,14 @@ func (m Model) canClearFilters() bool {
 
 // startFeedReload sets the Commits loading indicator and returns the scope
 // reload cmd, so the title shows it is working while the (possibly slow) re-walk
-// runs. The indicator clears when commitsReloadedMsg arrives.
+// runs. The indicator clears when commitsReloadedMsg arrives. The previous
+// scope's merge-base fork points are dropped here (they belong to the old
+// scope) and re-queried alongside the reload when the new scope is non-empty.
 func (m Model) startFeedReload() (Model, tea.Cmd) {
 	m.commitsLoading = true
 	m.feedScopeApplied = m.feedScopeSig()
-	return m, m.reloadFeedCmd()
+	m.segBoundaryHashes = nil
+	return m, tea.Batch(m.reloadFeedCmd(), m.loadScopeBoundariesCmd())
 }
 
 // feedUpstreams returns the deduped upstream refs of the local branches in the
