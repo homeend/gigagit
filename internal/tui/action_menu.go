@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -148,6 +149,11 @@ func availableActions(m Model) []actionRow {
 	}
 	if r, ok := m.stagedOpenExternalRow(); ok {
 		out = append(out, r)
+	}
+	if r, ok := m.stageAllRow(); ok {
+		// Right after "Stage file" when that row is present (Files panel);
+		// otherwise (Staged panel) it lands here, right above "Unstage all".
+		out = insertAfterID(out, "stage", r)
 	}
 	if r, ok := m.unstageAllRow(); ok {
 		out = append(out, r)
@@ -451,6 +457,17 @@ func actionMenuLabel(id string) (string, bool) {
 		return i18n.T("Fullscreen panel"), true
 	}
 	return "", false
+}
+
+// insertAfterID returns rows with r placed immediately after the row with the
+// given id, or appended when that row is absent.
+func insertAfterID(rows []actionRow, id string, r actionRow) []actionRow {
+	for i := range rows {
+		if rows[i].id == id {
+			return slices.Insert(rows, i+1, r)
+		}
+	}
+	return append(rows, r)
 }
 
 // inContentWindow reports whether a navigable content window owns the keyboard

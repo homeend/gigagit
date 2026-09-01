@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **The TUI file panels' `.` action menu offers "Stage all files".** On either
+  file panel (Files or Staged), whenever anything is unstaged, the new row —
+  placed right after "Stage file" — stages every working-tree change in one op
+  (`git add`, untracked files and the unstaged half of a partially-staged file
+  included), matching the web files menu's "stage all". Hidden while a
+  conflict exists or a merge/rebase sits paused, same gate as "Unstage all":
+  mass-staging then would mark conflicts resolved markers-and-all.
+
 - **The TUI file panels' `.` action menu offers "Unstage all".** On either
   file panel (Files or Staged), whenever anything is staged, the new row
   pulls every staged file back out of the index in one op (`git restore
