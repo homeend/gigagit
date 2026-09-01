@@ -1,6 +1,12 @@
 package tui
 
-import "github.com/homeend/gigagit/internal/model"
+import (
+	"context"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/model"
+)
 
 // segLayer folds development-line segments over the loaded feed incrementally —
 // the coloring analog of commitgraph.Layer. Each commit gets a segment id: it
@@ -95,7 +101,14 @@ func (m Model) segBoundary() func(model.Commit) bool {
 			ownUpstream[b.Upstream] = true
 		}
 	}
+	boundaries := m.segBoundaryHashes
 	return func(c model.Commit) bool {
+		// Merge-base fork points (from ScopeBoundaries): the only marker that
+		// survives the base branch moving on past the fork — its tip then sits
+		// outside the scoped walk and leaves no decoration below.
+		if boundaries[c.Hash] {
+			return true
+		}
 		for _, r := range c.Refs {
 			switch r.Kind {
 			case model.RefLocal:
@@ -109,5 +122,49 @@ func (m Model) segBoundary() func(model.Commit) bool {
 			}
 		}
 		return false
+	}
+}
+
+// scopeBoundariesMsg carries the merge-base fork points for one scope
+// signature; a msg whose sig no longer matches the live scope is dropped.
+type scopeBoundariesMsg struct {
+	sig    string
+	hashes map[string]bool
+}
+
+// loadScopeBoundariesCmd queries the fork commits between the scoped entries
+// and every OTHER local branch (domain.ScopeBoundaries, off the UI thread).
+// nil when the feed is unscoped or there is no other branch to fork from. The
+// result recolors the segments via scopeBoundariesMsg; decorations alone miss
+// a base branch whose tip moved past the fork.
+func (m Model) loadScopeBoundariesCmd() tea.Cmd {
+	if len(m.commitScopeBranches) == 0 {
+		return nil
+	}
+	scope := append([]string(nil), m.commitScopeBranches...)
+	scoped := make(map[string]bool, len(scope))
+	for _, s := range scope {
+		scoped[s] = true
+	}
+	var others []string
+	for _, b := range m.branches {
+		if !scoped[b.Name] {
+			others = append(others, b.Name)
+		}
+	}
+	if len(others) == 0 {
+		return nil
+	}
+	svc := m.svc
+	sig := m.feedScopeSig()
+	return func() tea.Msg {
+		hs, err := svc.ScopeBoundaries(context.Background(), scope, others)
+		set := make(map[string]bool, len(hs))
+		if err == nil {
+			for _, h := range hs {
+				set[h] = true
+			}
+		}
+		return scopeBoundariesMsg{sig: sig, hashes: set}
 	}
 }

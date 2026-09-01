@@ -153,6 +153,7 @@ type Model struct {
 	commitGraphLanes    []int                           // cached node lane per unified row, parallel to the unified WIP+commits list
 	segLayer            *segLayer                       // persistent segment-fold state (the coloring analog of graphLayer); nil = rebuild from scratch
 	commitSegs          []int                           // cached development-line segment per commit (REAL commits only — no WIP prefix); colors scoped-view dots
+	segBoundaryHashes   map[string]bool                 // merge-base fork points for the active scope (async, from ScopeBoundaries); boundary marks decorations can't supply once a base branch moved past the fork
 	wipRows             []wipRow                        // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty
 	commitListMode      bool                            // Commits feed rendered as a flat ●-gutter list, not a graph
 	commitGraphCols     int                             // graph window width in LANES; 0 = use configured default
@@ -642,6 +643,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case scopeBoundariesMsg:
+		if msg.sig != m.feedScopeSig() || len(m.commitScopeBranches) == 0 {
+			return m, nil // the scope changed while the merge-base query ran
+		}
+		m.segBoundaryHashes = msg.hashes
+		m.segLayer = nil // re-walk with the fork points in the predicate
+		m = m.rebuildSegments(0)
+		return m, nil
+
 	case commitsReloadedMsg:
 		if m.feed == nil || msg.gen != m.feed.Gen() {
 			return m, nil // superseded by a newer reload (gen-stamped at load time)
@@ -658,12 +668,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// e.g. a background feed refresh should still dig deeper for it.
 			m.eager = eagerSearch{query: m.eager.query}
 		}
+		// The scoped walk just landed: query its merge-base fork points now (the
+		// territory boundaries decorations can't supply once a base branch moved
+		// past the fork). After the reload rather than alongside it, so a
+		// superseded reload never fires a query for a scope that lost.
+		bcmd := m.loadScopeBoundariesCmd()
 		if tip := m.pendingGotoTip; tip != "" {
 			m.pendingGotoTip = ""
 			nm, cmd := m.gotoCommitByHash(tip)
-			return nm, cmd
+			return nm, tea.Batch(cmd, bcmd)
 		}
-		return m, nil
+		return m, bcmd
 	case historyListMsg:
 		if h := layerOf[*historyView](m); h != nil && h.listTag == msg.tag {
 			h.loading = false
@@ -1069,6 +1084,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
 				return m, reload
+			}
+			// Branch tips moved while a scope is active: the merge-base fork
+			// points may have moved with them — re-query so territory colors
+			// track the live tips (the rewalk path above already batches this).
+			if cmd := m.loadScopeBoundariesCmd(); cmd != nil {
+				return m, cmd
 			}
 		case srcRemotes:
 			key := m.panelSelKey(panelRemotes)

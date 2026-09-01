@@ -15,11 +15,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   development: it changes below another branch's tip (so the commits branch A
   adds over its base B stand out, and B's over C below that) and on every
   merged-in line — through the whole loaded history, in list mode and on the
-  graph's node dots. Boundaries come from the ref decorations already in the
-  walk (other local tips, other remote tips; the scoped branch's own tip and
-  upstream never split their own segment; tags never do). Path/author/date-
-  filtered walks keep plain lane colors (non-contiguous history has no honest
-  first-parent chain). Unscoped views are unchanged.
+  graph's node dots. Boundaries are the merge-base fork points against every
+  other local branch (queried async per scope, so they are found even when the
+  base branch has moved on past the fork and left no decoration in the walk —
+  the common case), plus any other tip decorated inside the walk (other local
+  tips, other remote tips; the scoped branch's own tip and upstream never
+  split their own segment; tags never do). Fork points re-query when branch
+  tips move. Path/author/date-filtered walks keep plain lane colors
+  (non-contiguous history has no honest first-parent chain). Unscoped views
+  are unchanged. Known gap: a base that exists only as a remote-tracking
+  branch (no local counterpart) contributes no merge-base fork point.
 
 - **The TUI file panels' `.` action menu offers "Stage all files".** On either
   file panel (Files or Staged), whenever anything is unstaged, the new row —
