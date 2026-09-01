@@ -100,6 +100,7 @@ func helpContent() []contentLine {
 		r(".", i18n.T("Reset to this entry (.-menu): move the current branch here (soft/mixed/hard) / Check out this entry (detached or as a new branch you switch to)")),
 		h(i18n.T("Files panel")),
 		r("space", i18n.T("stage the marked files (or the cursor row) — git add")),
+		r(".", i18n.T("Stage all files (.-menu on either file panel): stage every working-tree change, untracked files included — git add (hidden while conflicted or a merge/rebase is paused)")),
 		r("H", i18n.T("stage hunks: open the region/line staging picker")),
 		r("s", i18n.T("stash changes: popup to name + pick files (ctrl+s confirms)")),
 		r("m", i18n.T("mark / unmark a file (multi-select for staging, stashing, discarding)")),
