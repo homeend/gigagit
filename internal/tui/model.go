@@ -668,12 +668,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// e.g. a background feed refresh should still dig deeper for it.
 			m.eager = eagerSearch{query: m.eager.query}
 		}
+		// The scoped walk just landed: query its merge-base fork points now (the
+		// territory boundaries decorations can't supply once a base branch moved
+		// past the fork). After the reload rather than alongside it, so a
+		// superseded reload never fires a query for a scope that lost.
+		bcmd := m.loadScopeBoundariesCmd()
 		if tip := m.pendingGotoTip; tip != "" {
 			m.pendingGotoTip = ""
 			nm, cmd := m.gotoCommitByHash(tip)
-			return nm, cmd
+			return nm, tea.Batch(cmd, bcmd)
 		}
-		return m, nil
+		return m, bcmd
 	case historyListMsg:
 		if h := layerOf[*historyView](m); h != nil && h.listTag == msg.tag {
 			h.loading = false
