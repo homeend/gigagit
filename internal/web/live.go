@@ -68,6 +68,10 @@ type liveHub struct {
 	gate    func() bool // true = an op is in flight → drop
 	watcher *gitwatch.Watcher
 	lastRun map[string]time.Time
+	// onRemoteTags receives each successful interval listing of the remote's
+	// tags (the Server stores it for the sidebar's ▲; nil in tests that
+	// build a bare hub).
+	onRemoteTags func(*domain.Service, map[string]bool)
 }
 
 func newLiveHub(cfg config.RefreshConfig, watchOK bool, gate func() bool) *liveHub {
@@ -264,6 +268,7 @@ func (s *Server) startLive(ctx context.Context) {
 	common, err := svc.GitCommonDir(ctx)
 	watchOK := err == nil && common != "" && gitwatch.Supported(common)
 	h := newLiveHub(cfg, watchOK, s.opInFlight)
+	h.onRemoteTags = s.storeRemoteTags // the sidebar's ▲ (remotetags.go)
 
 	s.liveMu.Lock()
 	prev := s.live
@@ -401,7 +406,9 @@ func (h *liveHub) tickOnce(svc *domain.Service) {
 			close(events)
 			h.emit(liveMsg{Changed: []string{"remotes", "branches", "feed"}, Reason: "interval"})
 		case "remote_tags":
-			_, _ = svc.RemoteTagsFresh(ctx)
+			if names, err := svc.RemoteTagsFresh(ctx); err == nil && h.onRemoteTags != nil {
+				h.onRemoteTags(svc, names) // the sidebar's ▲ (remotetags.go)
+			}
 			h.emit(liveMsg{Changed: []string{"tags"}, Reason: "interval"})
 		default:
 			h.emit(liveMsg{Changed: []string{src}, Reason: "interval"})

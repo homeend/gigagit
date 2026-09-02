@@ -173,6 +173,10 @@ mark.r { background: var(--span-add); color: inherit; }
 /* The marker column: one glyph wide plus its separator, reserved on EVERY row
    so an unmarked name starts at the same column as a marked one. */
 .mk { display: inline-block; width: 2ch; flex: none; color: var(--accent); }
+/* tags: the TUI's ▲ (on the remote) / a dim ▵ (local only) after the name */
+.rtag { padding-left: 5px; font-size: 10px; }
+.rtag.on { color: var(--accent); }
+.rtag.off { color: var(--dim); }
 #branches-list li.head { color: var(--accent); font-weight: bold; cursor: default; }
 #branches-list li .ab { float: right; color: var(--dim); font-size: 11px; }
 /* A branch row accepting a drop — the only feedback that the pair is valid. */

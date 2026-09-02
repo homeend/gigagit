@@ -33,8 +33,7 @@ async function fetchBranches() {
   ]);
   state.branches = b.branches || [];
   state.worktrees = w.worktrees || [];
-  state.tags = tg.tags || [];
-  state.tagsTruncated = !!tg.truncated;
+  takeTags(tg);
   state.stashes = st.stashes || [];
   state.reflog = rl.entries || [];
   state.reflogTruncated = !!rl.truncated;
@@ -135,11 +134,54 @@ function renderWorktrees() {
 }
 
 
+// remoteMark is the TUI's ▲ after a tag the default remote is known to have.
+// A tag the remote is known NOT to have gets a dim ▵ ("local only") so the
+// two states read apart at a glance; a tag with no verdict yet (the remote
+// has not answered, or there is none) gets nothing — never a wrong answer.
+function remoteMark(t) {
+  if (t.remote === true) return `<span class="rtag on" title="on the remote">▲</span>`;
+  if (t.remote === false) return `<span class="rtag off" title="local only — not on the remote">▵</span>`;
+  return "";
+}
+
+
+// takeTags stores a tags payload. A payload with no remote verdict yet
+// (remote_known false: the server has just started its background listing)
+// arms ONE short re-fetch, because the hub's "tags" event that normally
+// brings the verdict can fire before this page's event stream is even
+// connected — a fast remote answers in milliseconds — and a lost event would
+// leave the rows unmarked until the next interval. The backoff stops on the
+// first verdict; a remote that never answers costs three small requests.
+const TAG_VERDICT_RETRY_MS = [1500, 4000, 10000];
+let tagVerdictTimer = null;
+let tagVerdictTry = 0;
+
+function takeTags(tg) {
+  state.tags = tg.tags || [];
+  state.tagsTruncated = !!tg.truncated;
+  if (tg.remote_known !== false) {
+    tagVerdictTry = 0;
+    clearTimeout(tagVerdictTimer);
+    tagVerdictTimer = null;
+    return;
+  }
+  if (tagVerdictTimer || tagVerdictTry >= TAG_VERDICT_RETRY_MS.length) return;
+  tagVerdictTimer = setTimeout(async () => {
+    tagVerdictTimer = null;
+    tagVerdictTry++;
+    const again = await getJSON("/api/tags?" + sortParam("tags")).catch(() => null);
+    if (!again) return;
+    takeTags(again);
+    renderTags();
+  }, TAG_VERDICT_RETRY_MS[tagVerdictTry]);
+}
+
+
 function renderTags() {
   let html = sortedBy("tags", state.tags, (t) => t.name)
     .map(
       (t) =>
-        `<li data-h="${esc(t.target)}" data-n="${esc(t.name)}">${mark(false)}${esc(t.name)}` +
+        `<li data-h="${esc(t.target)}" data-n="${esc(t.name)}">${mark(false)}${esc(t.name)}${remoteMark(t)}` +
         (t.subject ? `<span class="tsub">${esc(t.subject)}</span>` : "") +
         `</li>`
     )
@@ -668,8 +710,7 @@ async function cycleListSort(name) {
   if (name === "tags") {
     const tg = await getJSON("/api/tags?" + sortParam("tags")).catch(() => null);
     if (tg) {
-      state.tags = tg.tags || [];
-      state.tagsTruncated = !!tg.truncated;
+      takeTags(tg);
     }
     renderTags();
     return;
@@ -791,11 +832,19 @@ function showTagMenu(tg, x, y) {
       // so neither row needs a local confirm.
       { label: "push tag", act: () => startOp({ op: "push-tag", tag: tg.name }, "pushing tag " + tg.name) },
       { sep: true },
-      {
-        label: "delete " + tg.name + " from remote",
-        danger: true,
-        act: () => startOp({ op: "delete-remote-tag", tag: tg.name }, "deleting tag " + tg.name + " from remote"),
-      },
+      // "delete from remote" is offered only while the remote may have the
+      // tag: known-absent (▵) hides it, since a row that runs a remote
+      // delete against a tag the remote never had is a trap; unknown keeps
+      // it (the remote has not answered — the op's own confirm still gates).
+      ...(tg.remote === false
+        ? []
+        : [
+            {
+              label: "delete " + tg.name + " from remote",
+              danger: true,
+              act: () => startOp({ op: "delete-remote-tag", tag: tg.name }, "deleting tag " + tg.name + " from remote"),
+            },
+          ]),
       {
         label: "delete " + tg.name,
         danger: true,

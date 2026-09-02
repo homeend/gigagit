@@ -62,6 +62,10 @@ type Server struct {
 	// writes (subscribers are closed and reconnect).
 	liveMu sync.Mutex
 	live   *liveHub
+
+	// rt is the last remote tag listing (remotetags.go): the ▲ on the tags
+	// sidebar and the gate on "delete from remote".
+	rt remoteTagCache
 }
 
 func New(svc *domain.Service) *Server {
