@@ -73,6 +73,7 @@ func contextBindings() []footerBinding {
 		{"find-current", "f", i18n.T("[f]ind current"), func(m Model) bool { return m.canFindCurrent() }, scopeWindow},
 		{"tag-goto", "enter", i18n.T("[enter] go to commit"), func(m Model) bool { return m.focus == panelTags && len(m.tags) > 0 }, scopeRow},
 		{"file-diff", "enter", i18n.T("[enter] diff"), func(m Model) bool { return m.canShowFileDiff() }, scopeRow},
+		{"resolve-file", "enter", i18n.T("[enter] resolve"), func(m Model) bool { return m.canResolveConflictFile() }, scopeRow},
 		{"stage", "space", i18n.T("[space] stage"), func(m Model) bool { return m.focus == panelFiles && m.canStage() }, scopeRow},
 		{"stage-hunks", "H", i18n.T("[H] hunks"), func(m Model) bool { return m.canStageHunks() }, scopeRow},
 		{"unstage", "space", i18n.T("[space] unstage"), func(m Model) bool { return m.focus == panelStaged && m.canStage() }, scopeRow},

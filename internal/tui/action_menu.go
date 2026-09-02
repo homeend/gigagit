@@ -433,6 +433,8 @@ func actionMenuLabel(id string) (string, bool) {
 		return i18n.T("Go to commit"), true
 	case "file-diff":
 		return i18n.T("Show diff"), true
+	case "resolve-file":
+		return i18n.T("Resolve conflicts…"), true
 	case "stage":
 		return i18n.T("Stage file"), true
 	case "stage-hunks":

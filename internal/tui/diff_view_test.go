@@ -116,14 +116,17 @@ func TestEnterOnStagedRowOpensStagedDiff(t *testing.T) {
 	}
 }
 
-func TestEnterOnConflictedRowIsNoOp(t *testing.T) {
+func TestEnterOnConflictedRowOpensPickerNotDiff(t *testing.T) {
 	t.Parallel()
 	m := diffModel()
 	m.sel[panelFiles] = 2 // conflict.txt
 	u, cmd := m.Update(keyMsg("enter"))
 	mm := u.(Model)
-	if mm.diffLayer() != nil || cmd != nil {
-		t.Fatal("enter on a conflicted row must be a no-op until the conflict editor")
+	if mm.diffLayer() != nil {
+		t.Fatal("enter on a conflicted row must not open the diff view")
+	}
+	if cmd == nil {
+		t.Fatal("enter on a conflicted row must start the conflict-file load for the region picker")
 	}
 }
 

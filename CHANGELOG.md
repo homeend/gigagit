@@ -8,6 +8,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`enter` on a conflicted Files-panel row opens its hunk picker.** A `U`
+  row used to be a dead key on `enter` (the diff view refuses unmerged
+  files); now it hands the file straight to the region/line conflict
+  resolver — the same surface the `x` process's `enter` opens — without
+  passing through the process: apply writes and stages the file, `esc`
+  returns to the Files panel. A modify-delete conflict has no regions, so
+  `enter` posts the "only for files modified on both sides" line instead
+  (`x` keeps its keep/delete keys). The footer shows `[enter] resolve` on
+  such a row and the `.` menu gains **Resolve conflicts…**. Under the hood
+  the per-file pipeline is now plain functions shared by both entry points
+  (`conflictPickable` → `loadConflictFileCmd` → `parseConflictDoc` →
+  `newConflictPicker` → `ResolveConflictHunks`), replacing the inline
+  parse/gate copies.
+
 - **`gg web` tags show whether the remote has them.** The sidebar's tag
   rows now carry the TUI's ▲ after a tag the default remote is known to
   have, and a dim ▵ after one it is known NOT to have; a tag with no verdict

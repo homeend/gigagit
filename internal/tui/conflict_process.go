@@ -172,8 +172,8 @@ func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 			return m, nil
 		}
 		f := p.files[p.sel]
-		if f.ConflictClass() != model.ConflictBothSides {
-			m.statusMsg = i18n.T("line editor: only for files modified on both sides")
+		if reason := conflictPickable(f); reason != "" {
+			m.statusMsg = reason
 			return m, nil
 		}
 		p.st = confWorking // loading the file; the picker shows when it arrives
