@@ -72,14 +72,14 @@ func TestConflictPickerSideSwitchAndCursor(t *testing.T) {
 	}
 }
 
-func TestConflictPickerEnterGateAndApply(t *testing.T) {
+func TestConflictPickerCtrlSGateKeepsSurface(t *testing.T) {
 	t.Parallel()
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
-	// enter while pending: no apply, status set, surface still on top
-	m, _ = e.update(m, keyMsg("enter"))
+	// ctrl+s while pending: no apply, status set, surface still on top
+	m, _ = e.update(m, key("ctrl+s"))
 	if m.statusMsg == "" || m.topLayer() == nil {
-		t.Fatal("enter with pending regions should warn and keep the surface")
+		t.Fatal("ctrl+s with pending regions should warn and keep the surface")
 	}
 }
 
@@ -135,7 +135,7 @@ func TestConflictPickerHintWrapsNotTruncated(t *testing.T) {
 	e := newConflictPicker("f.txt", pickerDoc())
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 40, height: 24}
 	out := e.render(m, "")
-	for _, tok := range []string{"[c] current", "[i] incoming", "[enter] apply", "[esc] cancel"} {
+	for _, tok := range []string{"[c] current", "[i] incoming", "[ctrl+s] apply", "[esc] cancel"} {
 		if !strings.Contains(out, tok) {
 			t.Fatalf("hint token %q missing (truncated?):\n%s", tok, out)
 		}
@@ -294,12 +294,12 @@ func TestPickerSuffixEmptyAndFirst(t *testing.T) {
 	if !strings.Contains(out, i18n.T("%s first", i18n.T("current"))) {
 		t.Fatalf("'current first' suffix missing:\n%s", out)
 	}
-	// Region 0: clear both → touched-empty → " — empty" (not "none").
+	// Region 0: clear both → touched-empty → " — skipped" (not "none").
 	m, _ = e.update(m, keyMsg("c"))
 	m, _ = e.update(m, keyMsg("i"))
 	out = e.render(m, "")
-	if !strings.Contains(out, " — "+i18n.T("empty")) {
-		t.Fatalf("'empty' suffix missing:\n%s", out)
+	if !strings.Contains(out, " — "+i18n.T("skipped")) {
+		t.Fatalf("'skipped' suffix missing:\n%s", out)
 	}
 }
 
@@ -573,8 +573,8 @@ func TestConflictPickerCheckboxHierarchy(t *testing.T) {
 	m, _ = e.update(m, key("c"))
 	m, _ = e.update(m, key("i"))
 	out = e.render(m, "")
-	if !strings.Contains(out, "empty") {
-		t.Fatalf("touched-empty region must show the empty suffix:\n%s", out)
+	if !strings.Contains(out, "skipped") {
+		t.Fatalf("touched-empty region must show the skipped suffix:\n%s", out)
 	}
 }
 
@@ -875,9 +875,9 @@ func TestPickerEnterGateReturnsGridFocus(t *testing.T) {
 	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 30}
 	m, _ = e.update(m, keyMsg("tab"))
 	m, _ = e.update(m, keyMsg("down"))
-	m, _ = e.update(m, keyMsg("enter"))
+	m, _ = e.update(m, key("ctrl+s"))
 	if m.statusMsg == "" || m.topLayer() == nil {
-		t.Fatal("enter with pending regions must warn and keep the surface")
+		t.Fatal("ctrl+s with pending regions must warn and keep the surface")
 	}
 	if e.outFocused || e.oshift != 0 {
 		t.Fatalf("the gate must return focus to the grid: focused=%v oshift=%d", e.outFocused, e.oshift)
