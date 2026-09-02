@@ -18,6 +18,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   drops a repeat press onto the running check, and, like the TUI, cancels
   with a notice when an operation or another dialog started meanwhile.
 
+- **Tests: background git maintenance is off under the suite.** With git
+  ≥ 2.46 `git commit` detaches its auto maintenance, so a fixture's last
+  commit could return while a child still held
+  `.git/objects/maintenance.lock`; the template copy then listed a lock that
+  was gone by the time it opened it (`TestReflogEndpointPages` flake on CI).
+  The pinned test git config now sets `maintenance.auto = false` and
+  `gc.auto = 0`.
+
 - **`f` finds the current row on the Branches and Worktrees tabs.** On a
   long branch list the checked-out branch is often off-screen; `f` now
   jumps the cursor to it (the list scrolls along), honoring the active sort

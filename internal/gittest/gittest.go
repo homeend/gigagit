@@ -39,7 +39,20 @@ func Isolate() {
 			"[tag]\n" +
 			"\tgpgSign = false\n" +
 			"[init]\n" +
-			"\tdefaultBranch = main\n"
+			"\tdefaultBranch = main\n" +
+			// No background maintenance under tests. git ≥ 2.46 DETACHES the
+			// auto maintenance `git commit` kicks off (maintenance.autoDetach
+			// defaults to true), so a fixture's last commit returns while a
+			// child still holds .git/objects/maintenance.lock — and
+			// TemplateRepo's CopyFS then lists a lock file that is gone by the
+			// time it opens it ("copy template: open .git/objects/
+			// maintenance.lock: no such file or directory", seen on CI only:
+			// a git 2.43 dev box never detaches). gc.auto = 0 covers the older
+			// `git gc --auto` lane the same way.
+			"[maintenance]\n" +
+			"\tauto = false\n" +
+			"[gc]\n" +
+			"\tauto = 0\n"
 		if err := os.WriteFile(cfg, []byte(content), 0o644); err != nil {
 			return
 		}
