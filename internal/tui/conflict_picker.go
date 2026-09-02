@@ -240,6 +240,28 @@ func (e *hunkPicker) stateSuffix(b *hunkpick.Block) string {
 	return ""
 }
 
+// focusNextUndecided moves the cursor to the next Undecided region after the
+// current one, wrapping around (the current region itself is the last
+// candidate). ok=false when every region is decided; the cursor stays.
+func (e *hunkPicker) focusNextUndecided() bool {
+	n := len(e.blocks)
+	for k := 1; k <= n; k++ {
+		i := (e.bi + k) % n
+		if e.blocks[i].Mode == hunkpick.Undecided {
+			e.bi, e.line, e.side = i, 0, hunkpick.Current
+			return true
+		}
+	}
+	return false
+}
+
+// stepBlock moves the cursor delta regions, wrapping at both ends.
+func (e *hunkPicker) stepBlock(delta int) {
+	if n := len(e.blocks); n > 0 {
+		e.bi, e.line = ((e.bi+delta)%n+n)%n, 0
+	}
+}
+
 func (e *hunkPicker) focusFirstUndecided() {
 	for i, b := range e.blocks {
 		if b.Mode == hunkpick.Undecided {
@@ -358,7 +380,7 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			e.outCollapsed, e.outFocused, e.oshift = true, false, 0
 			e.zoomed = false
 			return m, nil
-		case "esc", "enter", "ctrl+w", "shift+left", "shift+right", "alt+up", "alt+down":
+		case "esc", "enter", "ctrl+s", "ctrl+w", "shift+left", "shift+right", "alt+up", "alt+down":
 		default:
 			return m, nil
 		}
@@ -455,13 +477,25 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			e.pickRev++
 		}
 	case "enter":
+		// Enter walks, never applies (ctrl+s does): the conflict picker jumps
+		// to the next region still undecided, the staging pickers to the next
+		// hunk — both wrap from the last to the first.
+		if e.requireAll {
+			if !e.focusNextUndecided() {
+				m.statusMsg = i18n.T("all regions resolved — [ctrl+s] apply")
+				return m, nil
+			}
+		} else {
+			e.stepBlock(+1)
+		}
+		// The cursor moved (and with it the pane's follow-anchor): hand the
+		// arrows back to the grid so the user lands on the region.
+		e.outFocused, e.oshift = false, 0
+	case "ctrl+s":
 		if e.requireAll {
 			if n := e.doc.Pending(); n > 0 {
 				m.statusMsg = i18n.T("%d region(s) left to resolve", n)
 				e.focusFirstUndecided()
-				// The gate moved the grid cursor (and with it the pane's
-				// follow-anchor): hand the arrows back to the grid so the
-				// user lands on the region they must resolve.
 				e.outFocused, e.oshift = false, 0
 				return m, nil
 			}
@@ -512,15 +546,19 @@ func (e *hunkPicker) render(m Model, _ string) string {
 
 	// The hint wraps instead of truncating so no command is ever cut off;
 	// the set follows the focus so only live keys are advertised.
+	enterHint := i18n.T("[enter] next hunk")
+	if e.requireAll {
+		enterHint = i18n.T("[enter] next unresolved")
+	}
 	hintParts := []string{
 		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[ctrl+w] mode"), i18n.T("[↑/↓] line"), i18n.T("[pgup/pgdn] page"), i18n.T("[alt+↑/↓] view"), i18n.T("[space] pick"),
-		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[n/p] hunk"), i18n.T("[o] output"), i18n.T("[tab] output"),
-		i18n.T("[ctrl+t] full"), i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
+		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[n] next hunk"), i18n.T("[p] prev hunk"), i18n.T("[o] output"), i18n.T("[tab] output"),
+		i18n.T("[ctrl+t] full"), enterHint, i18n.T("[ctrl+s] apply"), i18n.T("[esc] cancel"),
 	}
 	if e.outFocused {
 		hintParts = []string{
 			i18n.T("[↑/↓] scroll"), i18n.T("[pgup/pgdn] page"), i18n.T("[tab] grid"), i18n.T("[o] hide"), i18n.T("[ctrl+w] mode"), i18n.T("[shift+←/→] scroll"), i18n.T("[alt+↑/↓] view"),
-			i18n.T("[ctrl+t] full"), i18n.T("[enter] apply"), i18n.T("[esc] cancel"),
+			i18n.T("[ctrl+t] full"), enterHint, i18n.T("[ctrl+s] apply"), i18n.T("[esc] cancel"),
 		}
 	}
 	hintLines := wrapParts(hintParts, w, "  ")

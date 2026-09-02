@@ -8,6 +8,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Hunk picker: `enter` walks, `ctrl+s` applies.** In the conflict resolver
+  `enter` used to be "apply" — with any region still undecided it refused,
+  posted the count, and yanked the cursor to the first undecided region,
+  which read as "you must pick something in every block before enter does
+  anything". Now `enter` jumps to the next region still undecided (wrapping
+  from the last to the first; with nothing left it says so and points at
+  `ctrl+s`), and `ctrl+s` is the apply key — same gate as before: it refuses
+  while regions are undecided, otherwise writes + stages the file and closes
+  the picker (from the `x` process and from the Files-panel `enter` alike).
+  The `H` stage/unstage pickers share the surface, so they take the same
+  keys: `enter` = next hunk (wrapping), `ctrl+s` = apply. Hints now spell it
+  out: `[n] next hunk  [p] prev hunk  [enter] next unresolved  [ctrl+s]
+  apply` (`[enter] next hunk` in the staging pickers).
+
 - **`enter` on a conflicted Files-panel row opens its hunk picker.** A `U`
   row used to be a dead key on `enter` (the diff view refuses unmerged
   files); now it hands the file straight to the region/line conflict
