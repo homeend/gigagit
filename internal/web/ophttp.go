@@ -6,10 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 
-	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
@@ -1106,21 +1104,19 @@ func (s *Server) handleOpDecide(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// postCreateHook reads the repo's configured worktree post-create hook, the
-// same probe feedFor uses for commit-sort (committed .gg.toml only; the
-// machine-local private repo config is not consulted). Any failure yields ""
-// — no hook — because a config read must never block creating a worktree.
+// postCreateHook reads the repo's configured worktree post-create hook from
+// the ACTIVE repo config (effectiveConfig: the machine-local private file
+// when one exists, else the committed .gg.toml) — the same file the settings
+// panel writes it to, so a hook saved on a private-config repo is the hook
+// that runs. Any failure yields "" — no hook — because a config read must
+// never block creating a worktree.
 //
 // Returning the script rather than "" is deliberate: skipping it silently
 // would make the web quietly diverge from the TUI. The engine gates it behind
 // an approval decision that shows the script and defaults to skip, so it
 // reaches the browser modal before anything runs.
 func (s *Server) postCreateHook(r *http.Request) string {
-	top, err := s.service().TopLevel(r.Context())
-	if err != nil {
-		return ""
-	}
-	cfg, err := config.Load(config.DefaultGlobalPath(), filepath.Join(top, ".gg.toml"))
+	cfg, err := s.effectiveConfig(r.Context(), s.service())
 	if err != nil {
 		return ""
 	}
