@@ -262,9 +262,10 @@ func TestFooterRunningCollapses(t *testing.T) {
 	m.running = true
 	// [enter] tip survives: it's pure navigation on the Branches panel (the
 	// fixture's default focus) and its predicate deliberately ignores busy —
-	// see TestBranchesFooterAdvertisesTipKeys. Everything mutating (pull,
-	// push, commit, ...) still drops, which is the invariant this test guards.
-	want := "[enter] tip  •  [tab] focus [?] help [q] quit"
+	// see TestBranchesFooterAdvertisesTipKeys. [f]ind current is the same
+	// class (a cursor move). Everything mutating (pull, push, commit, ...)
+	// still drops, which is the invariant this test guards.
+	want := "[enter] tip [f]ind current  •  [tab] focus [?] help [q] quit"
 	if f := m.footerLine(); f != want {
 		t.Errorf("running footer = %q, want %q", f, want)
 	}
@@ -282,7 +283,7 @@ func TestFooterLoadingDropsReload(t *testing.T) {
 	// [enter] tip survives: same busy-tolerant navigation exception as
 	// TestFooterRunningCollapses above. [r] reload dropping is what this test
 	// actually guards.
-	want := "[enter] tip  •  [tab] focus [?] help [q] quit"
+	want := "[enter] tip [f]ind current  •  [tab] focus [?] help [q] quit"
 	if f := m.footerLine(); f != want {
 		t.Errorf("loading footer = %q, want %q", f, want)
 	}

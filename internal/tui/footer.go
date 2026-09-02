@@ -70,6 +70,7 @@ func contextBindings() []footerBinding {
 		{"checkout-remote", "c", i18n.T("[c]heckout"), func(m Model) bool { return m.focus == panelRemotes && m.canCheckoutRemote() }, scopeRow},
 		{"switch-remote", "s", i18n.T("[s]witch"), func(m Model) bool { return m.focus == panelRemotes && m.canCheckoutRemote() }, scopeRow},
 		{"fetch", "f", i18n.T("[f]etch"), func(m Model) bool { return m.canFetchRemotes() }, scopeWindow},
+		{"find-current", "f", i18n.T("[f]ind current"), func(m Model) bool { return m.canFindCurrent() }, scopeWindow},
 		{"tag-goto", "enter", i18n.T("[enter] go to commit"), func(m Model) bool { return m.focus == panelTags && len(m.tags) > 0 }, scopeRow},
 		{"file-diff", "enter", i18n.T("[enter] diff"), func(m Model) bool { return m.canShowFileDiff() }, scopeRow},
 		{"stage", "space", i18n.T("[space] stage"), func(m Model) bool { return m.focus == panelFiles && m.canStage() }, scopeRow},

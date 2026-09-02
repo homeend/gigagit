@@ -618,8 +618,28 @@ const COLLAPSED_DEFAULT = ["tags", "stashes", "reflog", "bookmarks", "shelf"];
 // not draw would be wiped the first time the section is toggled.
 function applySection(name, collapsed) {
   $(name + "-list").classList.toggle("collapsed", collapsed);
+  // Branches also carries the ⌖ locate control (the TUI's f on the Branches
+  // tab): the list has no keyboard cursor to jump, so a click scrolls the
+  // checked-out row into view instead.
+  const locate = name === "branches" ? `<span class="locate" title="scroll to the current branch (f in the TUI)">\u2316</span>` : "";
   $(name + "-header").innerHTML =
-    (collapsed ? "\u25b8 " : "\u25be ") + esc(name) + sortChipHTML(name);
+    (collapsed ? "\u25b8 " : "\u25be ") + esc(name) + locate + sortChipHTML(name);
+}
+
+
+// locateCurrentBranch scrolls the checked-out branch's row into view and
+// flashes it — unfolding the section first if it is collapsed. Detached HEAD
+// has no such row and says so on the op line.
+function locateCurrentBranch() {
+  if (isCollapsed("branches")) toggleSection("branches");
+  const li = $("branches-list").querySelector("li.head");
+  if (!li) {
+    opLine("no current branch: HEAD is detached", true);
+    return;
+  }
+  li.scrollIntoView({ block: "center" });
+  li.classList.add("flash");
+  setTimeout(() => li.classList.remove("flash"), 900);
 }
 
 
@@ -685,6 +705,10 @@ SECTIONS.forEach((n) => {
     // claims its own clicks rather than folding what you were re-ordering.
     if (e.target.closest(".sortchip")) {
       cycleListSort(n);
+      return;
+    }
+    if (e.target.closest(".locate")) {
+      locateCurrentBranch();
       return;
     }
     toggleSection(n);
@@ -1136,4 +1160,4 @@ $("shelf-list").addEventListener("contextmenu", (e) => {
   if (s) showShelfMenu(s, e.clientX, e.clientY);
 });
 
-export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
+export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
