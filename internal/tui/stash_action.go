@@ -13,10 +13,13 @@ import (
 // confirms first via a Drop/Cancel modal.
 func (m Model) stashActionRows() []actionRow {
 	v := m.stashView
-	if v == nil || v.sel < 0 || v.sel >= len(v.entries) {
+	if v == nil {
 		return nil
 	}
-	e := v.entries[v.sel]
+	e, ok := v.current() // honours the `/` filter: the cursor indexes the visible list
+	if !ok {
+		return nil
+	}
 	return []actionRow{
 		{id: "stash-apply", label: i18n.T("Apply stash"), run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.startOp(engine.StashApply{Ref: e.Ref})

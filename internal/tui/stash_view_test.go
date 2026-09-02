@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -251,5 +253,145 @@ func TestStashListWrapMode(t *testing.T) {
 	out := m.renderStashList(20, 6)
 	if strings.Count(out, "z") < 30 {
 		t.Errorf("stash wrap mode did not expand the long subject:\n%s", out)
+	}
+}
+
+// / opens a live filter on the stash list: each rune narrows the visible rows
+// (ref + subject, case-insensitive), the cursor snaps to the nearest match, the
+// title shows the query, and every consumer of the selection (l/enter, the .
+// menu) targets the VISIBLE row — not the raw entries index.
+func TestStashViewSlashFiltersList(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 30, sel: map[panel]int{}, focus: panelCommits, status: model.WorkingTreeStatus{Branch: "main"}}
+	m.stashView = &stashView{entries: []model.StashEntry{
+		{Ref: "stash@{0}", Subject: "On main: WIP alpha"},
+		{Ref: "stash@{1}", Subject: "On feat: Fix beta"},
+		{Ref: "stash@{2}", Subject: "On main: WIP gamma"},
+	}}
+	mm, _ := m.updateStashViewKey(keyMsg("/"))
+	m = mm.(Model)
+	if !m.stashView.typing {
+		t.Fatal("/ should enter filter-typing mode")
+	}
+	if !contains(m.View(), "filter: type to search") {
+		t.Error("the footer should show the filter strip while typing")
+	}
+	for _, r := range "fix" {
+		mm, _ = m.updateStashViewKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = mm.(Model)
+	}
+	v := m.stashView
+	if vis := v.visible(); len(vis) != 1 || vis[0] != 1 {
+		t.Fatalf("filter 'fix' should leave only entry 1 visible, got %v", vis)
+	}
+	if e, ok := v.current(); !ok || e.Ref != "stash@{1}" {
+		t.Errorf("cursor should sit on the visible match, got %+v ok=%v", e, ok)
+	}
+	out := m.View()
+	if !contains(out, "Stashes /fix█") {
+		t.Errorf("title should carry the in-progress query:\n%s", out)
+	}
+	if contains(out, "WIP alpha") || contains(out, "WIP gamma") {
+		t.Errorf("non-matching stashes must be hidden:\n%s", out)
+	}
+	// The . menu acts on the visible row.
+	if rows := m.stashActionRows(); len(rows) == 0 {
+		t.Fatal("stash action rows should exist for the filtered selection")
+	}
+	// Enter keeps the filter (typing off, query kept, cursor unchanged).
+	mm, _ = m.updateStashViewKey(keyMsg("enter"))
+	m = mm.(Model)
+	if m.stashView.typing || m.stashView.query != "fix" {
+		t.Errorf("enter should keep the filter: typing=%v query=%q", m.stashView.typing, m.stashView.query)
+	}
+	if !contains(m.View(), "Stashes /fix") {
+		t.Error("kept filter should stay in the title")
+	}
+	// l opens the files of the visible (filtered) stash, not entries[0].
+	mm, _ = m.updateStashViewKey(keyMsg("l"))
+	m = mm.(Model)
+	if m.filesView == nil || m.filesStashTag != "stash@{1}" {
+		t.Errorf("l should open the filtered stash's files, got tag %q", m.filesStashTag)
+	}
+}
+
+// Esc while typing drops the query and puts the cursor back on the same stash
+// in the full list; ctrl+r does the same for a kept filter.
+func TestStashViewFilterEscAndCtrlRClear(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 30, sel: map[panel]int{}, focus: panelCommits}
+	m.stashView = &stashView{entries: []model.StashEntry{
+		{Ref: "stash@{0}", Subject: "alpha"},
+		{Ref: "stash@{1}", Subject: "beta"},
+		{Ref: "stash@{2}", Subject: "gamma"},
+	}}
+	type step struct {
+		key   tea.KeyMsg
+		clear tea.KeyMsg
+	}
+	for _, s := range []step{
+		{keyMsg("/"), keyMsg("esc")},
+		{keyMsg("/"), tea.KeyMsg{Type: tea.KeyCtrlR}},
+	} {
+		mm, _ := m.updateStashViewKey(s.key)
+		mm, _ = mm.(Model).updateStashViewKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("gam")})
+		got := mm.(Model)
+		if e, ok := got.stashView.current(); !ok || e.Subject != "gamma" {
+			t.Fatalf("typing 'gam' should select gamma, got %+v", e)
+		}
+		if s.clear.Type == tea.KeyCtrlR { // ctrl+r clears a KEPT filter: commit it first
+			mm, _ = got.updateStashViewKey(keyMsg("enter"))
+			got = mm.(Model)
+		}
+		mm, _ = got.updateStashViewKey(s.clear)
+		got = mm.(Model)
+		if got.stashView.typing || got.stashView.query != "" {
+			t.Errorf("%v should clear the filter: typing=%v query=%q", s.clear, got.stashView.typing, got.stashView.query)
+		}
+		if len(got.stashView.visible()) != 3 || got.stashView.sel != 2 {
+			t.Errorf("after clearing, the full list shows with the cursor still on gamma (sel=2), got sel=%d", got.stashView.sel)
+		}
+	}
+}
+
+// Backspace widens the list again and the typed query is rendered with a
+// no-match placeholder when nothing passes.
+func TestStashViewFilterBackspaceAndNoMatch(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 30, sel: map[panel]int{}, focus: panelCommits}
+	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: "alpha"}}}
+	mm, _ := m.updateStashViewKey(keyMsg("/"))
+	mm, _ = mm.(Model).updateStashViewKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("zz")})
+	got := mm.(Model)
+	if !contains(got.View(), "(no match)") {
+		t.Error("an all-hiding query should render the no-match placeholder")
+	}
+	if _, ok := got.stashView.current(); ok {
+		t.Error("current() must report no entry when the filter hides everything")
+	}
+	if rows := got.stashActionRows(); rows != nil {
+		t.Error("no stash actions when nothing is visible")
+	}
+	mm, _ = got.updateStashViewKey(tea.KeyMsg{Type: tea.KeyBackspace})
+	mm, _ = mm.(Model).updateStashViewKey(tea.KeyMsg{Type: tea.KeyBackspace})
+	got = mm.(Model)
+	if got.stashView.query != "" || len(got.stashView.visible()) != 1 {
+		t.Errorf("backspace should widen the list back, query=%q", got.stashView.query)
+	}
+}
+
+// A reload while a filter is kept clamps the cursor to the FILTERED list.
+func TestStashListReloadClampsToFilteredList(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 100, height: 30, sel: map[panel]int{}}
+	m.stashView = &stashView{query: "wip", sel: 1, tag: "stash", entries: []model.StashEntry{
+		{Ref: "stash@{0}", Subject: "WIP a"}, {Ref: "stash@{1}", Subject: "WIP b"}, {Ref: "stash@{2}", Subject: "other"},
+	}}
+	mm, _ := m.Update(stashListMsg{tag: "stash", entries: []model.StashEntry{
+		{Ref: "stash@{0}", Subject: "WIP a"}, {Ref: "stash@{1}", Subject: "other"},
+	}})
+	got := mm.(Model)
+	if got.stashView.sel != 0 {
+		t.Errorf("sel should clamp to the one visible WIP row, got %d", got.stashView.sel)
 	}
 }

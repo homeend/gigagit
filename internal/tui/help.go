@@ -232,6 +232,7 @@ func helpContent() []contentLine {
 		h(i18n.T("Stash window (S)")),
 		r("↑/k ↓/j", i18n.T("move the stash selection")),
 		r("pgup/pgdn", i18n.T("page the stash list")),
+		r("/", i18n.T("filter the stash list as you type (ref + subject, case-insensitive; enter keeps the filter, esc clears it, ctrl+r clears a kept filter)")),
 		r("l", i18n.T("open the file tree for the stash (then ←/→ focus tree/list, like commit files)")),
 		r("enter", i18n.T("drill into the stash's file tree with focus on the tree (like enter on a commit); with the tree already open it does nothing")),
 		r(".", i18n.T("stash actions menu: apply / pop / drop (drop confirms) and Copy stash ref — the same menu with or without the file tree open")),

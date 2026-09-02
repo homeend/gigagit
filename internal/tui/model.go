@@ -2480,9 +2480,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.stashView.entries = msg.entries
-		if m.stashView.sel >= len(msg.entries) {
-			m.stashView.sel = max(0, len(msg.entries)-1)
-		}
+		m.stashView.clampSel() // against the `/`-filtered list, not the raw entries
 		return m, nil
 
 	case statusRefreshedMsg:
