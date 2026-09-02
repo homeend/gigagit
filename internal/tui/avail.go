@@ -285,6 +285,21 @@ func (m Model) canShowFileDiff() bool {
 	return m.opsIdle() && f.Kind != model.KindUnmerged && !(m.width > 0 && m.width < 60)
 }
 
+// canResolveConflictFile gates enter on a conflicted Files-panel row: the
+// region picker opens directly for a both-modified file (no x process in
+// between). Mirrors canShowFileDiff's exclusion of unmerged rows — the two
+// enter hints are disjoint.
+func (m Model) canResolveConflictFile() bool {
+	if m.focus != panelFiles || !m.opsIdle() {
+		return false
+	}
+	bi, ok := m.backingIndex(panelFiles)
+	if !ok {
+		return false
+	}
+	return conflictPickable(m.status.Files[bi]) == ""
+}
+
 // canDiscard gates d/D on the Files panel: at least one discardable
 // (non-conflicted) working-tree row exists and no op is running. Conflicted
 // files are excluded (they are the x editor's job), matching canShowFileDiff.

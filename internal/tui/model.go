@@ -1779,6 +1779,19 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				mm, cmd := m.openChangedFiles(m.commits[bi])
 				return mm.focusTree(), cmd
 			}
+			// Files panel, conflicted row: hand the file straight to the region
+			// picker (the same pipeline the x process's enter runs, minus the
+			// process — apply/esc land back here).
+			if m.focus == panelFiles && m.opsIdle() {
+				if bi, ok := m.backingIndex(panelFiles); ok && m.status.Files[bi].Kind == model.KindUnmerged {
+					f := m.status.Files[bi]
+					if reason := conflictPickable(f); reason != "" {
+						m.statusMsg = reason
+						return m, nil
+					}
+					return m, m.loadConflictFileCmd(f.Path)
+				}
+			}
 			if m.canShowFileDiff() {
 				bi, _ := m.backingIndex(m.focus)
 				f := m.status.Files[bi]
@@ -2760,15 +2773,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			return fail(i18n.T("conflict: %s", msg.err.Error()))
 		}
-		if textdiff.IsBinary(msg.content) {
-			return fail(i18n.T("hunk picker: binary file"))
-		}
-		doc, err := hunkpick.ParseConflictSized(msg.content, msg.markerSize)
-		if err != nil {
-			return fail(i18n.T("hunk picker: %s", err.Error()))
-		}
-		if len(doc.Blocks()) == 0 {
-			return fail(i18n.T("hunk picker: no conflict regions found"))
+		doc, reason := parseConflictDoc(msg.content, msg.markerSize)
+		if doc == nil {
+			return fail(reason)
 		}
 		if inProc {
 			cp.picker = newProcessConflictPicker(msg.path, doc)
