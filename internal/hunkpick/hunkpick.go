@@ -70,6 +70,25 @@ func (b *Block) ToggleLine(s Side, line int) {
 	b.Picks = append(b.Picks, Pick{Side: s, Line: line})
 }
 
+// Skip resolves the block with no lines from either side — the region is
+// decided (Pending drops) and contributes nothing to the result. It is the
+// state a pick-then-unpick leaves behind, reachable in one step.
+func (b *Block) Skip() {
+	b.Mode, b.Picks = LineByLine, nil
+}
+
+// Skipped reports the decided-with-nothing state Skip produces.
+func (b *Block) Skipped() bool {
+	return b.Mode == LineByLine && len(b.Picks) == 0
+}
+
+// Unskip returns a skipped block to Undecided (a no-op otherwise).
+func (b *Block) Unskip() {
+	if b.Skipped() {
+		b.Mode, b.Picks = Undecided, nil
+	}
+}
+
 // EnsurePicks converts a block to the line-pick representation: a legacy
 // whole-side mode materializes as that side's full ordered picks, Undecided
 // becomes an empty (touched) pick list. Already-LineByLine blocks are

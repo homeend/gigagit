@@ -185,3 +185,69 @@ func TestConflictProcessPickerCtrlSApplies(t *testing.T) {
 		t.Fatalf("ctrl+s must start the resolve job: st=%d picker=%v cmd=%v", cp.st, cp.picker != nil, cmd != nil)
 	}
 }
+
+func TestConflictPickerSkipDecidesAndAdvances(t *testing.T) {
+	t.Parallel()
+	e := newConflictPicker("f.txt", pickerDoc()) // 2 regions
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, key("s"))
+	if !e.blocks[0].Skipped() || e.bi != 1 || e.doc.Pending() != 1 {
+		t.Fatalf("s must skip region 0 and land on the next undecided: skipped=%v bi=%d pending=%d", e.blocks[0].Skipped(), e.bi, e.doc.Pending())
+	}
+	m, _ = e.update(m, key("p")) // back to the skipped one
+	m, _ = e.update(m, key("s")) // un-skip
+	if e.blocks[0].Skipped() || e.blocks[0].Mode != hunkpick.Undecided || e.bi != 0 {
+		t.Fatalf("s on a skipped region must un-skip in place: mode=%v bi=%d", e.blocks[0].Mode, e.bi)
+	}
+	m, _ = e.update(m, key("c")) // region 0 → current
+	m, _ = e.update(m, keyMsg("enter"))
+	m.statusMsg = ""
+	m, _ = e.update(m, key("s")) // skip region 1 — nothing left
+	if e.doc.Pending() != 0 || !strings.Contains(m.statusMsg, "ctrl+s") {
+		t.Fatalf("skipping the last undecided region must announce ctrl+s: pending=%d status=%q", e.doc.Pending(), m.statusMsg)
+	}
+	got := captureApply(e)
+	m, _ = e.update(m, key("ctrl+s"))
+	if string(*got) != "top\nfoo\nmid\n" {
+		t.Fatalf("a skipped region must contribute nothing: %q", *got)
+	}
+	if !strings.Contains(e.render(m, ""), "skipped") {
+		t.Fatal("region label must read skipped")
+	}
+}
+
+func TestStagePickerSkipResetsHunkAndSteps(t *testing.T) {
+	t.Parallel()
+	e := newStagePicker("f.txt", stageDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, key("i")) // stage hunk 0 (working side)
+	if e.blocks[0].Mode == hunkpick.TakeCurrent {
+		t.Fatal("fixture: i must change hunk 0")
+	}
+	m, _ = e.update(m, key("p")) // wrap back onto hunk 0 via p
+	m, _ = e.update(m, key("n"))
+	if e.bi != 0 {
+		t.Fatalf("p then n must land back on hunk 0, bi=%d", e.bi)
+	}
+	m, _ = e.update(m, key("s"))
+	if e.blocks[0].Mode != hunkpick.TakeCurrent || len(e.blocks[0].Picks) != 0 || e.bi != 1 {
+		t.Fatalf("s must reset the hunk to its default and step on: mode=%v picks=%d bi=%d", e.blocks[0].Mode, len(e.blocks[0].Picks), e.bi)
+	}
+}
+
+func TestPickerNextPrevWrap(t *testing.T) {
+	t.Parallel()
+	e := newConflictPicker("f.txt", pickerDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, key("p"))
+	if e.bi != 1 {
+		t.Fatalf("p on the first region must wrap to the last, bi=%d", e.bi)
+	}
+	m, _ = e.update(m, key("n"))
+	if e.bi != 0 {
+		t.Fatalf("n on the last region must wrap to the first, bi=%d", e.bi)
+	}
+	if !strings.Contains(e.render(m, ""), "[s] skip") {
+		t.Fatal("hint must advertise [s] skip")
+	}
+}

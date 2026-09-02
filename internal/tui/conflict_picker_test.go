@@ -294,12 +294,12 @@ func TestPickerSuffixEmptyAndFirst(t *testing.T) {
 	if !strings.Contains(out, i18n.T("%s first", i18n.T("current"))) {
 		t.Fatalf("'current first' suffix missing:\n%s", out)
 	}
-	// Region 0: clear both → touched-empty → " — empty" (not "none").
+	// Region 0: clear both → touched-empty → " — skipped" (not "none").
 	m, _ = e.update(m, keyMsg("c"))
 	m, _ = e.update(m, keyMsg("i"))
 	out = e.render(m, "")
-	if !strings.Contains(out, " — "+i18n.T("empty")) {
-		t.Fatalf("'empty' suffix missing:\n%s", out)
+	if !strings.Contains(out, " — "+i18n.T("skipped")) {
+		t.Fatalf("'skipped' suffix missing:\n%s", out)
 	}
 }
 
@@ -573,8 +573,8 @@ func TestConflictPickerCheckboxHierarchy(t *testing.T) {
 	m, _ = e.update(m, key("c"))
 	m, _ = e.update(m, key("i"))
 	out = e.render(m, "")
-	if !strings.Contains(out, "empty") {
-		t.Fatalf("touched-empty region must show the empty suffix:\n%s", out)
+	if !strings.Contains(out, "skipped") {
+		t.Fatalf("touched-empty region must show the skipped suffix:\n%s", out)
 	}
 }
 

@@ -20,7 +20,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   The `H` stage/unstage pickers share the surface, so they take the same
   keys: `enter` = next hunk (wrapping), `ctrl+s` = apply. Hints now spell it
   out: `[n] next hunk  [p] prev hunk  [enter] next unresolved  [ctrl+s]
-  apply` (`[enter] next hunk` in the staging pickers).
+  apply` (`[enter] next hunk` in the staging pickers). `n`/`p` wrap around
+  too. New `s` **skips** a region: resolved with no lines from either side
+  (the state a pick-then-unpick used to leave) and on to the next undecided
+  one; `s` again un-skips. In the staging pickers `s` resets the hunk to its
+  default and steps on. The region label reads "— skipped" for that state.
 
 - **`enter` on a conflicted Files-panel row opens its hunk picker.** A `U`
   row used to be a dead key on `enter` (the diff view refuses unmerged

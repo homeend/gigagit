@@ -225,8 +225,8 @@ func (e *hunkPicker) stateSuffix(b *hunkpick.Block) string {
 	if b.Mode == hunkpick.Undecided {
 		return " — " + i18n.T("undecided")
 	}
-	if b.Mode == hunkpick.LineByLine && len(b.Picks) == 0 {
-		return " — " + i18n.T("empty")
+	if b.Skipped() {
+		return " — " + i18n.T("skipped")
 	}
 	ca, _ := b.SideState(hunkpick.Current)
 	ia, _ := b.SideState(hunkpick.Incoming)
@@ -445,14 +445,30 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 		}
 	case "n":
-		if e.bi < len(e.blocks)-1 {
-			e.bi++
-			e.line = 0
-		}
+		e.stepBlock(+1)
 	case "p":
-		if e.bi > 0 {
-			e.bi--
-			e.line = 0
+		e.stepBlock(-1)
+	case "s":
+		// Skip: decide the region with nothing from either side and move on
+		// (conflict picker: next undecided; staging pickers: reset the hunk
+		// to its default — nothing staged / everything stays staged — and
+		// step to the next hunk). s on a skipped conflict region un-skips it.
+		if b == nil {
+			break
+		}
+		e.pickRev++
+		if !e.requireAll {
+			b.Mode, b.Picks = hunkpick.TakeCurrent, nil
+			e.stepBlock(+1)
+			break
+		}
+		if b.Skipped() {
+			b.Unskip()
+			break
+		}
+		b.Skip()
+		if !e.focusNextUndecided() {
+			m.statusMsg = i18n.T("all regions resolved — [ctrl+s] apply")
 		}
 	case "c":
 		if b != nil {
@@ -552,7 +568,7 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	}
 	hintParts := []string{
 		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[ctrl+w] mode"), i18n.T("[↑/↓] line"), i18n.T("[pgup/pgdn] page"), i18n.T("[alt+↑/↓] view"), i18n.T("[space] pick"),
-		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[n] next hunk"), i18n.T("[p] prev hunk"), i18n.T("[o] output"), i18n.T("[tab] output"),
+		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[s] skip"), i18n.T("[n] next hunk"), i18n.T("[p] prev hunk"), i18n.T("[o] output"), i18n.T("[tab] output"),
 		i18n.T("[ctrl+t] full"), enterHint, i18n.T("[ctrl+s] apply"), i18n.T("[esc] cancel"),
 	}
 	if e.outFocused {
