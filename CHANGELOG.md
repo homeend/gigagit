@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Backlog fixes from the comment audit.** The web worktree post-create
+  hook is now read from the *active* repo config (the machine-local private
+  file when one exists), the same file the settings panel writes it to — a
+  private-config repo used to show its hook and never run it. In the TUI, a
+  two-sided compare diff no longer offers bookmark/shelf/compare rows that
+  would have addressed a path like `a.go ↔ b.go` (the compare view is now
+  structurally marked), the help text no longer claims ctrl+p opens the
+  palette over the review viewer, and the external-tools settings test now
+  actually asserts that opt-in conflict tools default unchecked and are
+  written when checked. `TestSquashMarkedCommits` asserts the op's done
+  verdict instead of masking an aborted rebase behind a misleading message.
+
 - **`gg web` settings and confirms: fixes from a full wiring audit.** Every
   settings control, context-menu row, prompt, confirm and palette/☰ entry was
   traced statically and exercised in a headless browser; the wiring was
