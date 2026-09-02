@@ -21,6 +21,7 @@ import { openGitConfig } from "./gitconfig.js";
 import { openAgentSetup } from "./agentsetup.js";
 import { openFeedFilter, openFinder } from "./search.js";
 import { openRemoteHeads } from "./remoteheads.js";
+import { locateCurrentBranch } from "./sidebar.js";
 
 // ---- command palette + global ☰ menu (wave 3) ----------------------------
 // The palette is a layer with an input INSIDE it: onKey consumes nav keys
@@ -45,6 +46,7 @@ function paletteCommands() {
     { label: "external tools…", detail: "", run: () => openExtToolsView() },
     { label: "session errors…", detail: "", run: () => openSessionErrorsView() },
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
+    { label: "go to current branch", detail: "", run: () => locateCurrentBranch() },
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },
     { label: "file history…", detail: "", run: () => openPrompt({ title: "File history — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileHistory(p, "") }) },
     { label: "file blame…", detail: "", run: () => openPrompt({ title: "File blame — repo-relative path", placeholder: "e.g. internal/web/server.go", onSubmit: (p) => openFileBlame(p, "") }) },
@@ -224,6 +226,7 @@ function openGlobalMenu() {
     { label: "branch prefixes…", act: () => openPrefixesView() },
     { label: "branch versions…", act: () => openVersionBranches() },
     { label: "create branch…", act: () => openCreateBranchPrompt() },
+    { label: "go to current branch", act: () => locateCurrentBranch() },
     { label: "fetch all remotes", act: () => doFetch() },
     { label: "browse remote branches…", act: () => openRemoteHeads() },
     { label: "prune remotes (drop deleted branches)", act: () => startOp({ op: "prune" }, "pruning remotes") },

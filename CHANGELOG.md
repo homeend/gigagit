@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`f` finds the current row on the Branches and Worktrees tabs.** On a
+  long branch list the checked-out branch is often off-screen; `f` now
+  jumps the cursor to it (the list scrolls along), honoring the active sort
+  and reporting instead of moving when a `/` filter hides it or HEAD is
+  detached. On the Worktrees tab `f` jumps to the worktree gg is running
+  in. Remotes keeps `f` = fetch. The footer advertises `[f]ind current`,
+  the `.` menu carries the same row, and the help lists it. In `gg web`,
+  the branches section header gained a ⌖ control that scrolls the
+  checked-out row into view and flashes it (unfolding the section first);
+  the palette and the ☰ Branches group offer it as **go to current branch**.
+
 - **Stash window: `/` filters the list.** On the `S` stash window, `/`
   opens the same live filter the Commits panel has: every typed rune narrows
   the rows (ref + subject, case-insensitive), the cursor snaps to the nearest

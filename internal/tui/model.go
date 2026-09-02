@@ -1450,6 +1450,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.canFetchRemotes() {
 				return m.startOp(engine.Fetch{})
 			}
+			if m.canFindCurrent() { // Branches / Worktrees: jump to "where I am"
+				return m.findCurrentRow(), nil
+			}
 		case "P":
 			if !m.running && !m.loading && m.status.Branch != "" {
 				return m.startPush()

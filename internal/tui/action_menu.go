@@ -425,6 +425,8 @@ func actionMenuLabel(id string) (string, bool) {
 		return i18n.T("Check out remote branch"), true
 	case "switch-remote":
 		return i18n.T("Switch to remote branch"), true
+	case "find-current":
+		return i18n.T("Go to current (checked-out) row"), true
 	case "fetch":
 		return i18n.T("Fetch remotes"), true
 	case "tag-goto":
