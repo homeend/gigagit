@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -12,12 +13,75 @@ import (
 // stashView is the stash list, rendered in the right column (over Commits).
 type stashView struct {
 	entries []model.StashEntry
-	sel     int
+	sel     int      // cursor: an index into visible(), NOT entries
+	query   string   // `/` filter: case-insensitive substring of "ref  subject"; "" = all
+	typing  bool     // `/` input mode is capturing keys (mirrors Model.filterTyping)
 	mode    dispMode // text display mode; z cycles
 	hscroll int      // modeScroll horizontal offset
 	loading bool
 	err     error
 	tag     string // gates stale loads
+}
+
+// stashRowText is the text a stash row shows and the `/` filter matches on.
+func stashRowText(e model.StashEntry) string {
+	return e.Ref + "  " + e.Subject
+}
+
+// visible returns the entries indices that pass the `/` filter, in list order.
+// It is the single source of truth for what the list shows: the cursor, the
+// action menu, the file tree follow-live, and rendering all consume it.
+func (v *stashView) visible() []int {
+	idx := make([]int, 0, len(v.entries))
+	q := strings.ToLower(v.query)
+	for i, e := range v.entries {
+		if q != "" && !strings.Contains(strings.ToLower(stashRowText(e)), q) {
+			continue
+		}
+		idx = append(idx, i)
+	}
+	return idx
+}
+
+// current returns the entry under the cursor (ok=false on an empty list or
+// when the filter hides every entry).
+func (v *stashView) current() (model.StashEntry, bool) {
+	vis := v.visible()
+	if v.sel < 0 || v.sel >= len(vis) {
+		return model.StashEntry{}, false
+	}
+	return v.entries[vis[v.sel]], true
+}
+
+// clampSel pins the cursor into the visible range (after a reload or a filter
+// change that shrank the list).
+func (v *stashView) clampSel() {
+	n := len(v.visible())
+	if v.sel > n-1 {
+		v.sel = n - 1
+	}
+	if v.sel < 0 {
+		v.sel = 0
+	}
+}
+
+// setQuery re-filters and keeps the cursor on the same stash when it is still
+// visible, else on the nearest visible entry at/after it — the Commits panel's
+// `/` snapping rule, so typing never jumps back to the top.
+func (v *stashView) setQuery(q string) {
+	anchor := -1
+	if vis := v.visible(); v.sel >= 0 && v.sel < len(vis) {
+		anchor = vis[v.sel]
+	}
+	v.query = q
+	vis := v.visible()
+	v.sel = 0
+	for i, ei := range vis {
+		v.sel = i
+		if ei >= anchor {
+			break
+		}
+	}
 }
 
 type stashListMsg struct {
@@ -84,9 +148,47 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	if v.typing {
+		// `/` input mode, the Commits-panel contract: every rune narrows the
+		// list live, ↑/↓ still move, enter keeps the filter, esc drops it.
+		// Everything else is swallowed so no list key fires mid-query.
+		switch msg.Type {
+		case tea.KeyEsc:
+			v.typing = false
+			v.setQuery("")
+		case tea.KeyEnter:
+			v.typing = false
+		case tea.KeyBackspace, tea.KeyCtrlH:
+			if r := []rune(v.query); len(r) > 0 {
+				v.setQuery(string(r[:len(r)-1]))
+			}
+		case tea.KeySpace:
+			v.setQuery(v.query + " ")
+		case tea.KeyRunes:
+			v.setQuery(v.query + string(msg.Runes))
+		case tea.KeyUp:
+			if v.sel > 0 {
+				v.sel--
+			}
+		case tea.KeyDown:
+			if v.sel < len(v.visible())-1 {
+				v.sel++
+			}
+		}
+		return m, nil
+	}
 	switch msg.String() {
 	case ".":
 		return m.openActionMenu(), nil
+	case "/":
+		// Start a fresh filter. The cursor stays put (an empty query shows
+		// the full list); each typed rune snaps to the nearest match at/after it.
+		v.setQuery("")
+		v.typing = true
+		return m, nil
+	case "ctrl+r": // clear a kept filter, cursor on the same stash
+		v.setQuery("")
+		return m, nil
 	case "g": // global bookmark quick-switcher
 		return m.openBookmarkSwitcher()
 	case "G": // global shelf quick-switcher
@@ -132,7 +234,7 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "down", "j":
-		if v.sel < len(v.entries)-1 {
+		if v.sel < len(v.visible())-1 {
 			v.sel++
 		}
 		return m, nil
@@ -143,9 +245,7 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "pgdown":
 		v.sel += m.pageStep()
-		if v.sel > len(v.entries)-1 {
-			v.sel = len(v.entries) - 1
-		}
+		v.clampSel()
 		return m, nil
 	case "pgup":
 		if v.sel -= m.pageStep(); v.sel < 0 {
@@ -153,14 +253,14 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case "l":
-		if v.sel < 0 || v.sel >= len(v.entries) {
+		e, ok := v.current()
+		if !ok {
 			return m, nil
 		}
 		if m.width > 0 && m.width < 40 {
 			m.statusMsg = i18n.T("terminal too narrow for the files view")
 			return m, nil
 		}
-		e := v.entries[v.sel]
 		// Opens with focus on the stash list (follow-live), exactly like the commit
 		// files view; ←/→ move focus to/from the tree.
 		return m.openStashFiles(e.Ref, e.Subject)
@@ -168,14 +268,14 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// Drill into the stash's file list with focus on the tree — the
 		// commits-panel enter gesture (l keeps opening on the list side; the
 		// Apply/Pop/Drop menu moved to "." and stays on enter under the tree).
-		if v.sel < 0 || v.sel >= len(v.entries) {
+		e, ok := v.current()
+		if !ok {
 			return m, nil
 		}
 		if m.width > 0 && m.width < 40 {
 			m.statusMsg = i18n.T("terminal too narrow for the files view")
 			return m, nil
 		}
-		e := v.entries[v.sel]
 		mm, cmd := m.openStashFiles(e.Ref, e.Subject)
 		return mm.focusTree(), cmd
 	}
@@ -187,9 +287,10 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // while no file tree is open over it.
 func (m Model) renderStashList(boxW, boxH int) string {
 	v := m.stashView
-	rows := make([]string, len(v.entries))
-	for i, e := range v.entries {
-		rows[i] = e.Ref + "  " + e.Subject
+	vis := v.visible()
+	rows := make([]string, len(vis))
+	for i, ei := range vis {
+		rows[i] = stashRowText(v.entries[ei])
 	}
 	switch {
 	case v.loading:
@@ -198,12 +299,28 @@ func (m Model) renderStashList(boxW, boxH int) string {
 		rows = []string{i18n.T("error: %s", v.err.Error())}
 	case len(v.entries) == 0:
 		rows = []string{i18n.T("(no stashes)")}
+	case len(vis) == 0:
+		rows = []string{i18n.T("(no match)")}
+	}
+	// The title carries the `/` query exactly like panelLabel does for the
+	// panels: a block cursor while typing, the bare query once kept.
+	label := i18n.T("Stashes")
+	if v.typing {
+		label += " /" + v.query + "█"
+	} else if v.query != "" {
+		label += " /" + v.query
 	}
 	// Focused (bright border, highlighted cursor) only when it owns focus:
 	// m.focus is the right column AND the file tree isn't the active side.
 	// Mirrors panelFocused(panelCommits) for the commit files view.
 	focused := m.focus == panelCommits && !(m.filesView != nil && m.filesTreeFocused)
-	return m.renderListBox(i18n.T("Stashes"), rows, v.sel, boxW, boxH, focused, v.mode, v.hscroll)
+	return m.renderListBox(label, rows, v.sel, boxW, boxH, focused, v.mode, v.hscroll)
+}
+
+// stashFilterTyping reports whether the stash list's `/` input mode owns the
+// keyboard: the list is the focused right column with no file tree over it.
+func (m Model) stashFilterTyping() bool {
+	return m.stashView != nil && m.stashView.typing && m.focus == panelCommits && m.filesView == nil
 }
 
 // openStashView opens the stash list window in the right column and moves focus
@@ -234,18 +351,19 @@ func (m Model) closeStashView() Model {
 // Staleness is keyed on the ref (filesStashTag), since ref→SHA is async.
 func (m Model) moveStashUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 	v := m.stashView
+	vis := v.visible()
 	s := v.sel + delta
-	if s > len(v.entries)-1 {
-		s = len(v.entries) - 1
+	if s > len(vis)-1 {
+		s = len(vis) - 1
 	}
 	if s < 0 {
 		s = 0
 	}
-	if s == v.sel {
+	if s == v.sel || len(vis) == 0 {
 		return m, nil
 	}
 	v.sel = s
-	e := v.entries[s]
+	e := v.entries[vis[s]]
 	if e.Ref == m.filesStashTag { // the tree already shows this stash
 		return m, nil
 	}

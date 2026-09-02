@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Stash window: `/` filters the list.** On the `S` stash window, `/`
+  opens the same live filter the Commits panel has: every typed rune narrows
+  the rows (ref + subject, case-insensitive), the cursor snaps to the nearest
+  match at/after it, `enter` keeps the filter (shown in the title as
+  `Stashes /query`), `esc` drops it, and `ctrl+r` clears a kept filter with
+  the cursor staying on the same stash. `l`/`enter` and the `.` apply / pop /
+  drop / copy-ref menu act on the visible row, and a background reload clamps
+  the cursor against the filtered list. The footer strip and help window
+  advertise the key.
 - **`gg web` settings and confirms: fixes from a full wiring audit.** Every
   settings control, context-menu row, prompt, confirm and palette/☰ entry was
   traced statically and exercised in a headless browser; the wiring was

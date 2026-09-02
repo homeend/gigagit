@@ -47,8 +47,8 @@ func availableActions(m Model) []actionRow {
 		}
 		if onStashList {
 			var rows []actionRow
-			if v := m.stashView; v.sel >= 0 && v.sel < len(v.entries) {
-				ref := v.entries[v.sel].Ref
+			if e, ok := m.stashView.current(); ok {
+				ref := e.Ref
 				rows = append(rows, m.copyRow("copy-stash-ref", i18n.T("Copy stash ref"), i18n.T("Copied stash ref %s", ref), ref))
 			}
 			return append(rows, m.stashActionRows()...)

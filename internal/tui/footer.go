@@ -178,7 +178,7 @@ func (m Model) footerOverride() (string, bool) {
 	if m.proc != nil {
 		return m.proc.indicator(m), true
 	}
-	if m.filterTyping {
+	if m.filterTyping || m.stashFilterTyping() {
 		return i18n.T("filter: type to search  [↑↓] move  [enter] keep  [esc] cancel"), true
 	}
 	if m.highlightTyping {
@@ -218,7 +218,7 @@ func (m Model) footerOverride() (string, bool) {
 	// (no file tree yet). When focus has moved to a left panel, fall through to
 	// that panel's normal footer.
 	if m.stashView != nil && m.focus == panelCommits {
-		return i18n.T("stash: [↑/↓] move  [enter/l] files  [.] apply/pop/drop  [ctrl+w] view  [←/tab] panels  [esc/S] close"), true
+		return i18n.T("stash: [↑/↓] move  [enter/l] files  [/] filter  [.] apply/pop/drop  [ctrl+w] view  [←/tab] panels  [esc/S] close"), true
 	}
 	return "", false
 }
