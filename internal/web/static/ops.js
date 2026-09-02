@@ -244,15 +244,40 @@ function doFetch() {
 // never turns a push into a wait; a branch with no tip tags makes no network
 // call at all. Pushing a NAMED branch (the branch menu) skips this, as the TUI
 // does — that lane is not the current branch and has no tip-tag prompt.
+//
+// The check is a round trip to the remote, and against a slow one those
+// seconds are VISIBLE: the TUI's "checking remote tags…" line goes up and the
+// button is held, because a page that shows nothing for a click reads as a
+// dead button (user report: pushed, tagged the tip, hit push, "nothing
+// happened", reloaded, hit push again, got the tag prompt). A repeat press
+// during the check lands on the running one via the runOnce gate instead of
+// fanning a second ls-remote at the same remote.
 async function doPush() {
   if (opBusy()) return;
+  const run = runOnce("push-check", () => getJSON("/api/push-tag-check"));
+  opLine("⟳ checking remote tags…");
+  if (!run) return; // a check is already in flight — the line above says so
+  $("push-btn").disabled = true;
   let tags = [];
   try {
-    const got = await getJSON("/api/push-tag-check");
+    const got = await run;
     tags = got.tags || [];
   } catch {
     tags = []; // the check is an offer, never a gate
   }
+  // The TUI's two guards for what may have happened during the wait: never
+  // start a push under an op that began meanwhile (that op owns the button
+  // now), and never clobber a dialog that opened meanwhile.
+  if (state.op) {
+    opLine("push cancelled (an operation is running) — press P again", true);
+    return;
+  }
+  $("push-btn").disabled = false;
+  if (!$("modal").classList.contains("hidden")) {
+    opLine("push cancelled (another dialog opened) — press P again", true);
+    return;
+  }
+  opLine("");
   if (!tags.length) {
     startOp({ op: "push" }, "pushing");
     return;

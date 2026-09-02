@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Fixed: `gg web` push looked dead while it checked the remote for tip
+  tags.** Pushing the current branch first asks the remote which tip tags it
+  lacks (the TUI's `P` flow, bounded at 5s). The page showed nothing for that
+  round trip — no status line, an enabled button, and every extra click
+  fanning another `ls-remote` — so against a slow remote a push right after
+  tagging read as "nothing happened" until a reload. The web now shows the
+  TUI's `⟳ checking remote tags…` line, holds the push button for the check,
+  drops a repeat press onto the running check, and, like the TUI, cancels
+  with a notice when an operation or another dialog started meanwhile.
+
 - **`f` finds the current row on the Branches and Worktrees tabs.** On a
   long branch list the checked-out branch is often off-screen; `f` now
   jumps the cursor to it (the list scrolls along), honoring the active sort
