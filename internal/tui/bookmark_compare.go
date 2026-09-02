@@ -37,6 +37,7 @@ func (m Model) openCompareFocusedVsBookmark(ref model.FileRef, label string, bm 
 	v := &diffView{
 		title:   ref.Path + " ↔ " + bm.Path,
 		context: label + " → " + bookmarkDisplay(bm),
+		compare: true,
 		loading: true,
 		partial: m.diffPartial,
 		long:    m.diffLong,
@@ -54,6 +55,7 @@ func (m Model) openCompareFocusedVsShelf(ref model.FileRef, label string, e mode
 	v := &diffView{
 		title:   ref.Path + " ↔ " + e.Origin.Path,
 		context: label + " → " + shelfLabel,
+		compare: true,
 		loading: true,
 		partial: m.diffPartial,
 		long:    m.diffLong,
@@ -93,6 +95,7 @@ func (m Model) loadCompareFocusedVsBookmarkCmd(ref model.FileRef, label string, 
 	v := &diffView{
 		title:   ref.Path + " ↔ " + bm.Path,
 		context: label + " → " + bookmarkDisplay(bm),
+		compare: true,
 		partial: m.diffPartial,
 		long:    m.diffLong,
 	}

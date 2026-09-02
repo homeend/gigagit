@@ -489,7 +489,24 @@ func TestSquashMarkedCommits(t *testing.T) {
 	if code != http.StatusAccepted {
 		t.Fatalf("squash status = %d, want 202", code)
 	}
-	readSSE(t, ts, opID, 60*time.Second)
+	// readSSE returns only on the terminal done event, so by the time it
+	// returns the op has finished (the feed is never consulted here; subjects
+	// reads git directly). What the old form dropped was the done event's
+	// VERDICT: a squash whose rebase fails before it starts — git aborts
+	// cleanly when the sequence editor cannot run, leaving history untouched
+	// and no rebase in progress — still ends in a done event, just with
+	// ok=false. Reading only the log then reported the misleading "subjects =
+	// [c4 c3 c2 c1]" instead of the op's own error. That is exactly how the
+	// pre-e450bee7 useGGSequenceEditor failed under a parallel run: each
+	// caller restored the execPath global in its Cleanup, so a sibling
+	// finishing first put os.Executable (the test binary) back while this
+	// test's buildSquash was still to read it, and git ran `web.test
+	// __rebase-seq …` as the editor. Asserting the verdict first keeps any
+	// future failure of that class self-describing.
+	events := readSSE(t, ts, opID, 60*time.Second)
+	if done := events[len(events)-1]; done["ok"] != true || done["changed"] != true {
+		t.Fatalf("squash op did not succeed: done = %v", done)
+	}
 
 	got := subjects(t, dir)
 	if len(got) != 3 {

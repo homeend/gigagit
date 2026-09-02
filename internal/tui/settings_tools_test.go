@@ -96,11 +96,20 @@ func TestApplyToolsWizardWritesMissingOnly(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	rows := wizardRows(map[string]bool{"conflict\x00Claude": true}) // Claude pre-existing
 	checked := defaultToolChecked(rows)                             // use default checked state (conflict_complete unchecked)
-	// Manually check OptIn conflict rows (not conflict_complete)
+	// Manually check the OptIn conflict rows (unchecked by default): apply must
+	// honor the user's checkboxes, not re-derive the defaults.
+	optInChecked := 0
 	for i, row := range rows {
-		if row.tmpl.Category == exttool.CatConflict && !row.tmpl.OptIn {
+		if row.tmpl.Category == exttool.CatConflict && row.tmpl.OptIn {
+			if checked[i] {
+				t.Fatalf("precondition: OptIn conflict row %s must default unchecked", row.tmpl.Name)
+			}
 			checked[i] = true
+			optInChecked++
 		}
+	}
+	if optInChecked == 0 {
+		t.Fatal("catalog has no OptIn conflict row — the yolo variants are gone?")
 	}
 	m2, n, err := m.applyToolsWizard(rows, checked, path)
 	if err != nil {
@@ -124,6 +133,22 @@ func TestApplyToolsWizardWritesMissingOnly(t *testing.T) {
 	}
 	if len(cfg.Tools.Command) != expectedWrites {
 		t.Errorf("config has %d commands, want %d", len(cfg.Tools.Command), expectedWrites)
+	}
+	// Every manually checked OptIn conflict row was written (keyed on
+	// category+name, like the existing-row skip).
+	for i, row := range rows {
+		if row.tmpl.Category != exttool.CatConflict || !row.tmpl.OptIn || row.existing || !checked[i] {
+			continue
+		}
+		found := false
+		for _, tc := range cfg.Tools.Command {
+			if tc.Category == "conflict" && tc.Name == row.tmpl.Name {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("checked OptIn conflict row %s must be written", row.tmpl.Name)
+		}
 	}
 	sawCommitMsg := false
 	sawReview := false

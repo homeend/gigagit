@@ -313,7 +313,7 @@ func (s *Server) activeRepoConfigPath(ctx context.Context, svc *domain.Service) 
 // effectiveConfig loads global + the ACTIVE per-repo config (the machine-local
 // private file when one exists, else the committed .gg.toml) — the resolution
 // `gg review` uses, so a tool configured for one frontend is visible to the
-// other. Distinct from postCreateHook's narrower committed-only probe.
+// other, and the hook a worktree create runs (postCreateHook).
 func (s *Server) effectiveConfig(ctx context.Context, svc *domain.Service) (config.Config, error) {
 	active, err := s.activeRepoConfigPath(ctx, svc)
 	if err != nil {

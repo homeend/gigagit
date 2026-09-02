@@ -11,7 +11,8 @@ import (
 )
 
 // focusedBookmark builds a Bookmark for the file under focus, mirroring the
-// shelf-capture precedence. The two-sided diff view is excluded.
+// shelf-capture precedence. A two-sided compare diff (diffView.compare) is
+// excluded: its title is a composite "a ↔ b", not a path to address.
 func (m Model) focusedBookmark() (model.Bookmark, bool) {
 	switch s := m.topLayer().(type) {
 	case *historyView:
@@ -30,7 +31,7 @@ func (m Model) focusedBookmark() (model.Bookmark, bool) {
 		return model.Bookmark{State: model.StateCommitted, Commit: s.ctx.rev, Path: s.ctx.path}, true
 	}
 	if v := m.diffLayer(); v != nil {
-		if v.title == "" {
+		if v.title == "" || v.compare {
 			return model.Bookmark{}, false
 		}
 		if v.rev != "" {
@@ -258,7 +259,7 @@ func (m Model) compareAgainstWorkingDirRow() (actionRow, bool) {
 			title := i18n.T("%s ↔ working", ref.Path)
 			subtitle := i18n.T("%s → working dir", label)
 			tag := "cmpwd:" + ref.Path
-			v := &diffView{title: title, context: subtitle, loading: true, partial: m.diffPartial, long: m.diffLong}
+			v := &diffView{title: title, context: subtitle, compare: true, loading: true, partial: m.diffPartial, long: m.diffLong}
 			v.width, _ = m.overlayDims()
 			return m.openPickerDiff(v, tag, m.loadCompareTwoRefsCmd(ref, right, title, subtitle, tag))
 		},

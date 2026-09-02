@@ -184,3 +184,66 @@ func TestCompareAgainstWorkingDirRowAbsentForWorkingFile(t *testing.T) {
 		t.Fatal("row should be absent for a working-tree file")
 	}
 }
+
+// A two-sided compare diff (title "a ↔ b", no rev) addresses no single file:
+// its title is a composite, not a path, so bookmarking / shelving / comparing
+// the "focused file" there would mint an address to a path that does not
+// exist. Every opener of a compare diff must leave focusedBookmark empty,
+// and the identity must survive the async load (diffMsg swaps the layer's
+// view wholesale) — the shared loader builds its view without knowing which
+// opener asked.
+func TestFocusedBookmarkAbsentOnCompareDiff(t *testing.T) {
+	t.Parallel()
+	ref := model.FileRef{Source: model.SourceCommit, Locator: "abc1234", Path: "a.go"}
+	openers := []struct {
+		name string
+		open func(Model) Model
+	}{
+		{"compare against working dir", func(m Model) Model {
+			m = m.pushLayer(&diffView{title: "a.go", rev: "abc1234"})
+			r, ok := m.compareAgainstWorkingDirRow()
+			if !ok {
+				t.Fatal("precondition: the compare-against-working-dir row must be present")
+			}
+			u, _ := r.run(m)
+			return u.(Model)
+		}},
+		{"focused vs bookmark", func(m Model) Model {
+			m, _ = m.openCompareFocusedVsBookmark(ref, "commit a.go", model.Bookmark{ID: "bm1", State: model.StateCommitted, Commit: "def5678", Path: "b.go"})
+			return m
+		}},
+		{"focused vs shelf", func(m Model) Model {
+			m, _ = m.openCompareFocusedVsShelf(ref, "commit a.go", model.ShelfEntry{ID: "sh1", Origin: model.FileAddress{Path: "b.go"}})
+			return m
+		}},
+		{"bookmark vs bookmark", func(m Model) Model {
+			a := model.Bookmark{ID: "bm1", State: model.StateCommitted, Commit: "abc1234", Path: "a.go"}
+			b := model.Bookmark{ID: "bm2", State: model.StateCommitted, Commit: "def5678", Path: "b.go"}
+			m = m.pushLayer(newBookmarkPopup([]model.Bookmark{a, b}))
+			m, _ = m.openBookmarkCompareTwo("bm1", "bm2")
+			return m
+		}},
+	}
+	for _, o := range openers {
+		m := o.open(footerModel())
+		dv := m.diffLayer()
+		if dv == nil || !strings.Contains(dv.title, "↔") {
+			t.Fatalf("%s: precondition: a compare diff must be open, got %+v", o.name, dv)
+		}
+		if b, ok := m.focusedBookmark(); ok {
+			t.Errorf("%s: compare diff must not yield a bookmark, got %+v", o.name, b)
+		}
+		got := ids(availableActions(m))
+		for _, id := range []string{"bookmark-add", "shelf-add", "bookmark-compare", "shelf-compare-against", "compare-working-dir", "copy-working-dir"} {
+			if got[id] {
+				t.Errorf("%s: %s must be absent on a compare diff", o.name, id)
+			}
+		}
+		// The loaded view lands: a plain diffView carrying only content.
+		u, _ := m.Update(diffMsg{tag: m.diffTag, view: &diffView{title: dv.title, context: dv.context}})
+		m = u.(Model)
+		if b, ok := m.focusedBookmark(); ok {
+			t.Errorf("%s: compare identity must survive the async load, got %+v", o.name, b)
+		}
+	}
+}
