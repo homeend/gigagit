@@ -8,6 +8,29 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`gg web` settings and confirms: fixes from a full wiring audit.** Every
+  settings control, context-menu row, prompt, confirm and palette/☰ entry was
+  traced statically and exercised in a headless browser; the wiring was
+  sound, the defects were all in *effect*:
+  - The settings **show graph** toggle now redraws the open commit list and
+    brings the browser's own graph pref (what `g` writes to `/api/uistate`)
+    in line, so a reload no longer silently undoes the click.
+  - The settings **commit sort** switch re-fetches the feed the server just
+    reset instead of leaving the old order on screen.
+  - **Esc dismisses every confirm.** The modal used to map Esc only to a
+    literal `abort` option and swallow every other key, so the fast-forward
+    and reset confirms (`Yes`/`No`), the push-tags, search-deeper, repair,
+    discard and go-to-worktree confirms could only be closed with the mouse.
+    Esc now answers the non-committal option (`abort`, `cancel`, `no`,
+    `stop`, `keep`, `skip`); a list with no safe reading stays modal. The
+    fast-forward/reset confirms use the danger vocabulary (`reset` renders
+    red) like every other destructive confirm.
+  - The header stash button carries the paused-merge gate its sibling stash
+    surfaces already had; the remote-tags refresh row is captioned (TUI) —
+    the web has no ▲ markers — and the intervals note states the 10 s floor;
+    the remotes list's "… more (capped at 100)" notice no longer looks
+    clickable.
+
 - **`gg web` refreshes itself.** The web server now runs the same refresh
   machinery as the TUI: a file watcher on `.git` (branches, remotes, reflog,
   worktrees — `[refresh] <source>_watch`) and an interval lane for the rest

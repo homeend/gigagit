@@ -339,7 +339,9 @@ function stageFocused(unstage) {
 
 
 function doStash() {
-  if (state.op || !state.wt) return;
+  // Same paused-op gate as every other stash surface: mid-merge the working
+  // tree belongs to the sequencer and git refuses the stash anyway.
+  if (state.op || !state.wt || state.conflict) return;
   const message = $("commit-msg").value.trim();
   showLocalConfirm("Stash all working-tree changes?", ["stash", "abort"], (o) => {
     if (o === "stash") startOp({ op: "stash", message }, "stashing");
@@ -470,6 +472,23 @@ window.addEventListener("focus", () => {
 });
 
 
+// --- modal escape rule (pure; guarded) ---
+// escapeOption says what esc answers for a given option list. The modal owns
+// the keyboard while it is up, so esc MUST land somewhere or the user is
+// trapped until they reach for the mouse. The engine's decisions carry a
+// literal "abort" (the TUI's esc rule); the client-side confirms use plain
+// words. Any non-committal word counts; an "abort merge" style ACTION does
+// not. A list with no safe reading (ours/theirs) keeps esc inert.
+const ESCAPE_WORDS = /^(abort|cancel|no|stop|keep|skip)$/i;
+
+function escapeOption(opts) {
+  if (!opts || !opts.length) return null;
+  if (opts.includes("abort")) return "abort";
+  return opts.find((o) => ESCAPE_WORDS.test(String(o).trim())) ?? null;
+}
+// --- end modal escape rule ---
+
+
 function showModal(ev) {
   $("modal-prompt").textContent = ev.prompt;
   $("modal-options").innerHTML = (ev.options || [])
@@ -479,8 +498,8 @@ function showModal(ev) {
   pushLayer("modal", $("modal"), {
     onKey: (e) => {
       if (e.key === "Escape") {
-        const opts = JSON.parse($("modal").dataset.opts || "[]");
-        if (opts.includes("abort")) answerModal("abort"); // the TUI's esc rule
+        const esc = escapeOption(JSON.parse($("modal").dataset.opts || "[]"));
+        if (esc !== null) answerModal(esc);
       }
       e.preventDefault();
       return true; // the modal owns the keyboard — even over a focused form field

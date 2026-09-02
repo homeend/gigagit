@@ -226,7 +226,7 @@ mark.r { background: var(--span-add); color: inherit; }
 #worktrees-list li { cursor: default; } /* right-click menu only — no left-click, so no pointer (and no text I-beam) */
 #tags-list li, #stashes-list li { cursor: pointer; }
 #tags-list li:hover, #stashes-list li:hover { background: var(--bg-alt); }
-#tags-list li.more { color: var(--dim); cursor: default; }
+#tags-list li.more, #remotes-list li.more { color: var(--dim); cursor: default; }
 #commit-box { padding: 4px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
 #commit-box.hidden { display: none; }
 /* Takes the commit box's slot while a sequencer op is paused: the way to
