@@ -16,9 +16,11 @@
 // TUI-only: the external-tools WIZARD, language. Identity & profiles,
 // branch prefixes and the external-tools view have their own overlays
 // (identity.js, prefixes.js, exttools.js).
-import { $, esc, getJSON, postJSON, state } from "./core.js";
+import { $, esc, getJSON, lsSet, postJSON, state } from "./core.js";
 import { closeLayer, pushLayer } from "./layers.js";
 import { startOp } from "./ops.js";
+import { applyGraphMode, loadCommits } from "./commits.js";
+import { saveUI } from "./uistate.js";
 
 const REFRESH_SOURCES = ["status", "branches", "remotes", "worktrees", "tags", "reflog", "feed", "fetch", "remote_tags"];
 
@@ -65,6 +67,25 @@ async function setOpt(patch) {
     state.settings = await getJSON("/api/settings");
   } catch {}
   renderSettings();
+  applyToPage(patch);
+}
+
+// applyToPage makes the two keys the web itself consumes take effect on the
+// page that just changed them — storing them was never the whole intent.
+//   - show_graph: the commit list redraws in the new mode, and the browser's
+//     own graph pref (uistate + the same-session cache, what the g key
+//     writes) is brought in line, or the next boot would silently undo the
+//     click: a saved layout outranks the repo default at boot.
+//   - commit_sort: the server dropped its feed; re-read it from the top or
+//     the old order stays on screen until something else reloads.
+function applyToPage(patch) {
+  if ("show_graph" in patch) {
+    const mode = patch.show_graph === "off" ? "off" : "svg";
+    applyGraphMode(mode);
+    lsSet("gg.graph", mode);
+    saveUI({ graph: mode });
+  }
+  if ("commit_sort" in patch) loadCommits(false, true).catch(() => {});
 }
 
 // pendingEdits maps field key → raw typed value for every text field whose
@@ -193,9 +214,9 @@ function renderSettings(opts = {}) {
     <div class="srow"><span class="slbl">commit-graph file</span>${commitGraphRow(d)}<span class="snote">speeds up history walks on big repos</span></div>
     <h3>refresh</h3>
     <div class="srow"><span class="slbl">auto-refresh</span>${toggleBtn("auto_refresh", d.auto_refresh)}<span class="snote">background refresh master switch (global)</span></div>
-    <div class="srow"><span class="slbl">auto remote-tag refresh</span>${toggleBtn("remote_tags_auto", d.remote_tags_auto)}<span class="snote">▲ markers after each fetch (global)</span></div>
+    <div class="srow"><span class="slbl">auto remote-tag refresh <span class="stui">(TUI)</span></span>${toggleBtn("remote_tags_auto", d.remote_tags_auto)}<span class="snote">▲ markers after each fetch (global)</span></div>
     <div class="srow srates"><span class="slbl">intervals (s)</span><span class="sratewrap">${rates}</span></div>
-    <div class="srow"><span class="snote">0 = off · per repo · applies to the TUI and to this page · ${watchNote}</span></div>
+    <div class="srow"><span class="snote">0 = off · min 10 · per repo · applies to the TUI and to this page · ${watchNote}</span></div>
     <h3>history &amp; logs</h3>
     <div class="srow"><span class="slbl">operations history</span>${toggleBtn("versions_enabled", d.versions_enabled)}<span class="snote">pre-operation branch snapshots (per repo)</span></div>
     <div class="srow"><span class="slbl">history retention</span><input type="text" inputmode="numeric" id="s-retention" value="${d.versions_max_age_days}"><span class="snote">days; -1 = keep forever</span></div>

@@ -849,8 +849,8 @@ function showCommitMenu(c, i, x, y) {
         label: "fast-forward " + cur.name + " to here",
         // The TUI confirms this one too (confirmOp, default No).
         act: () =>
-          showLocalConfirm("Fast-forward to this commit?", ["Yes", "No"], (o) => {
-            if (o === "Yes") startOp({ op: "fast-forward", sha: c.hash }, "fast-forwarding " + cur.name + " to " + short);
+          showLocalConfirm("Fast-forward to this commit?", ["fast-forward", "abort"], (o) => {
+            if (o === "fast-forward") startOp({ op: "fast-forward", sha: c.hash }, "fast-forwarding " + cur.name + " to " + short);
           }),
       });
     }
@@ -938,8 +938,8 @@ function showCommitMenu(c, i, x, y) {
       // worth one deliberate yes, and the picker that follows is about how
       // far the working tree comes along, not about whether to do it.
       act: () =>
-        showLocalConfirm("Reset to " + short + "? This moves the current branch ref.", ["Yes", "No"], (o) => {
-          if (o === "Yes") startOp({ op: "reset", sha: c.hash }, "resetting to " + short);
+        showLocalConfirm("Reset to " + short + "? This moves the current branch ref.", ["reset", "abort"], (o) => {
+          if (o === "reset") startOp({ op: "reset", sha: c.hash }, "resetting to " + short);
         }),
     });
   }
