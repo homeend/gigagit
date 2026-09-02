@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`gg web` tags show whether the remote has them.** The sidebar's tag
+  rows now carry the TUI's ▲ after a tag the default remote is known to
+  have, and a dim ▵ after one it is known NOT to have; a tag with no verdict
+  yet shows nothing. The verdict is the last remote listing the server took
+  — the first tags load starts one in the background, the interval
+  `remote_tags` lane keeps it fresh (its answer was previously thrown away),
+  the pre-push tag check refreshes it for free, and a successful push tag /
+  delete-from-remote folds in at once. The tag menu's **delete … from
+  remote** row is hidden for a tag the remote is known not to have.
+
 - **Fixed: `gg web` push looked dead while it checked the remote for tip
   tags.** Pushing the current branch first asks the remote which tip tags it
   lacks (the TUI's `P` flow, bounded at 5s). The page showed nothing for that

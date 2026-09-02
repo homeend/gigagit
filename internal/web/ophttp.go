@@ -392,6 +392,11 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 					return res, nil, err
 				}
 				res, err = svc.Execute(ctx, engine.PushTags{Remote: "origin", Names: tags}, events, dec)
+				if err == nil && res.Changed {
+					for _, n := range tags {
+						s.markRemoteTag(svc, n, true) // the TUI's pendingRemoteTagAdds
+					}
+				}
 				return res, nil, err
 			})
 			if rerr != nil {
@@ -494,6 +499,25 @@ func (s *Server) handleOpStart(w http.ResponseWriter, r *http.Request) {
 		} else {
 			op = engine.DeleteRemoteTag{Tag: req.Tag}
 		}
+		// On success the sidebar's ▲ follows without waiting for the next
+		// listing — the TUI's pendingRemoteTagSet/Unset, folded here.
+		name, present := req.Tag, req.Op == "push-tag"
+		tagOp := op
+		run, rerr := s.startRun("op", func(ctx context.Context, svc *domain.Service, events chan<- engine.Event, dec engine.Decider) (engine.Result, map[string]any, error) {
+			res, err := svc.Execute(ctx, tagOp, events, dec)
+			if err == nil && res.Changed {
+				s.markRemoteTag(svc, name, present)
+			}
+			return res, nil, err
+		})
+		if rerr != nil {
+			writeErr(w, http.StatusConflict, rerr)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]string{"op_id": run.id})
+		return
 	case "checkout-tag":
 		// Check out a tag — detached (no name) or onto a new branch created
 		// at it (the reflog checkout's two lanes, addressed by tag name so

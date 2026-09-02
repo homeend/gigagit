@@ -58,6 +58,7 @@ func (s *Server) unpushedTipTags(ctx context.Context) ([]string, error) {
 	if err != nil || remote == nil {
 		return nil, err // timed out or unreachable: offer nothing, push normally
 	}
+	s.storeRemoteTags(svc, remote) // a free refresh of the sidebar's ▲, as in the TUI
 	var out []string
 	for _, t := range atTip {
 		if !remote[t.Name] {
