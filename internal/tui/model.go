@@ -373,8 +373,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if dv == nil || msg.tag != m.diffTag {
 			return m, nil // closed, or a stale result
 		}
+		compare := dv.compare // the opener's identity, not the loader's content (shared loaders don't know)
 		*dv = *msg.view
 		dv.loading = false
+		dv.compare = dv.compare || compare
 		return m, nil
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)

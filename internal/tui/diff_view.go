@@ -38,6 +38,7 @@ type diffView struct {
 	title      string          // file path, shown in the header
 	context    string          // "HEAD → working tree" or "@ <short-hash> <subject>"
 	rev        string          // commit-ish the NEW side came from; "" = working tree (used by h→history)
+	compare    bool            // two-sided compare (title is "a ↔ b", not a path): no single focused file to bookmark/shelve
 	full       []textdiff.Row  // immutable aligned rows (the comparison result)
 	fullBlocks []int           // immutable change-block starts into full
 	partial    bool            // mode: collapse unchanged runs (false = full)

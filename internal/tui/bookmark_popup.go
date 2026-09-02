@@ -509,7 +509,7 @@ func (m Model) openBookmarkCompareTwo(aID, bID string) (Model, tea.Cmd) {
 		return m, nil
 	}
 	width, _ := m.overlayDims()
-	v := &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), compare: true, loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
 	return m.openPickerDiff(v, "bookmark2:"+aID+":"+bID, m.loadBookmarkCompareTwoCmd(a, b))
 }
 
@@ -529,7 +529,7 @@ func (m Model) loadBookmarkCompareTwoCmd(a, b model.Bookmark) tea.Cmd {
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
 	tag := "bookmark2:" + a.ID + ":" + b.ID
-	v := &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), partial: m.diffPartial, long: m.diffLong}
+	v := &diffView{title: a.Path + " ↔ " + b.Path, context: bookmarkDisplay(a) + " → " + bookmarkDisplay(b), compare: true, partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.BookmarkBytes(ctx, a) }
