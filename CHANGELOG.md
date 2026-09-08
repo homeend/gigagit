@@ -8,6 +8,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Review notes (phase 1).** Anchor a note to a diff line and it persists —
+  per repo, machine-local, outside git. In the diff view `c` adds one at the
+  cursor line (summary + optional rationale), `E` edits and `R` replies to the
+  nearest note above the cursor, `a` hides or shows agent-written notes (your
+  own always stay visible), `}`/`{` jump between annotated lines — expanding a
+  fold when the note hides under one, and stepping to the next file that
+  carries notes on a second press — and the `.` menu deletes one. Notes render
+  as `◆` rows under their line, greyed when the line they were written about
+  has changed; the Files and Commits panels show a `◆N` badge. `gg web` mirrors
+  all of it over `/api/notes` with live updates. Notes re-anchor by a
+  fingerprint of the lines they were written on, so they follow the code as it
+  moves; a background sweep at every gg start drops notes older than
+  `[notes] max_age_days` (default 30, `-1` keeps forever) and notes whose
+  anchor is gone, and `[notes] max_entries` (default 2000) caps the store.
 - **Blame and file preview are syntax-coloured.** The blame view (`b`) and the
   files view's View file preview colour code by file type with the same lexers
   and `[ui] diff_syntax` switch as the diff views; the cursor line itself stays

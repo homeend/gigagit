@@ -84,6 +84,7 @@ feature; keep THIS file's map to one line per package.
 | `clipboard`  | System-clipboard writer: native OS command first (WSL-interop-gated `clip.exe`, Wayland-socket-resolved `wl-copy`, …), OSC 52 fallback; `Probe()` backs the clipboard notices. |
 | `shelf`      | Non-git per-file/per-commit content store (blobs + TOML index under XDG state); shelved commits keep a tar + best-effort format-patch snapshot. Owned by `domain`; frontends never import it. |
 | `bookmark`   | Persistent registry of richly-addressed file/commit references (records only, no blobs). Owned by `domain`. |
+| `notes`      | Machine-local review-note store (TOML + O_EXCL lock, write-time cap, `Sweep`); records only. Owned by `domain`; frontends never import it. |
 | `profile`    | Named git-identity presets, global + per-repo scoped. Owned by `domain`. |
 | `promptstate`| Machine-local UX memory: suppressed prompts, dismissed notices, approved external-tool command hashes (`CommandHash` shared by TUI and web). |
 | `prefix`     | Templated branch-name prefix registry, global + per-repo scoped. Owned by `domain`. |
