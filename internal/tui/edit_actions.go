@@ -66,12 +66,18 @@ func editorCommandAt(editor, absPath string, line int) *exec.Cmd {
 	}
 	args := append([]string{}, fields[1:]...)
 	if line > 0 {
-		switch editorProgram(editor) {
+		// Decide the program from fields[0] (post empty-editor substitution),
+		// not the raw editor string: an empty editor falls back to
+		// defaultEditor() above, and that fallback must still get the goto
+		// treatment when it is one of the known programs.
+		switch editorProgram(fields[0]) {
 		case "vim", "nvim", "vi", "nano", "emacs", "micro", "kak":
 			args = append(args, fmt.Sprintf("+%d", line), absPath)
 		case "code", "code-insiders", "codium", "cursor":
 			args = append(args, "--goto", fmt.Sprintf("%s:%d", absPath, line))
 		case "hx", "subl", "zed":
+			// path:N is ambiguous with a Windows drive letter's colon
+			// (C:\x\y.go:12), but these editors parse it correctly anyway.
 			args = append(args, fmt.Sprintf("%s:%d", absPath, line))
 		default:
 			args = append(args, absPath)

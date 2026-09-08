@@ -145,4 +145,19 @@ func TestEditorCommandAtByProgram(t *testing.T) {
 	if got := editorCommandAt("code -w", "/wt/a.go", 0).Args; !reflect.DeepEqual(got, []string{"code", "-w", "/wt/a.go"}) {
 		t.Errorf("line 0: %v", got)
 	}
+
+	// An empty editor string falls back to defaultEditor(): the program for
+	// the goto-syntax switch must be decided from THAT fallback (fields[0]),
+	// not from the original empty string — otherwise a goto-capable default
+	// (e.g. "vi") silently loses the line. Expectation is derived from
+	// defaultEditor() at test time so this holds on every platform.
+	def := defaultEditor()
+	want := []string{def, "/wt/a.go"}
+	switch editorProgram(def) {
+	case "vim", "nvim", "vi", "nano", "emacs", "micro", "kak":
+		want = []string{def, "+12", "/wt/a.go"}
+	}
+	if got := editorCommandAt("", "/wt/a.go", 12).Args; !reflect.DeepEqual(got, want) {
+		t.Errorf("empty editor (defaultEditor()=%q): args = %v, want %v", def, got, want)
+	}
 }

@@ -1,17 +1,31 @@
 package tui
 
 import (
+	"errors"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
+
+// leadingSGR matches a run of SGR escape sequences at the very start of a
+// string — the "carried forward" state ansi.TruncateLeft prepends so a cut
+// fragment renders correctly standalone.
+var leadingSGR = regexp.MustCompile(`^(?:\x1b\[[0-9;]*m)+`)
+
+// trimLeadingSGR strips that carried-forward prefix so two cut fragments can
+// be compared for their actual content past the cut point.
+func trimLeadingSGR(s string) string {
+	return leadingSGR.ReplaceAllString(s, "")
+}
 
 // cursorRows builds n Same rows numbered 1..n with the listed rows Changed —
 // the same shape as sameRowsTUI, local so this file reads on its own.
@@ -159,6 +173,59 @@ func TestCursorReanchorsAcrossPartialToggle(t *testing.T) {
 	v.reanchorCursor(before.LeftNo, before.RightNo)
 	if v.curLine != 30 {
 		t.Fatalf("back to full: curLine=%d, want 30", v.curLine)
+	}
+}
+
+// TestReanchorCursorFallsBackWhenRowHiddenByFold: the source row the cursor
+// was on got folded away by the partial-mode context window (not just moved),
+// so reanchorCursor's search loop never finds a match. The not-found fallback
+// must snap curLine off whatever fold it is (stalely) sitting on and land it
+// on a real row, still in range.
+func TestReanchorCursorFallsBackWhenRowHiddenByFold(t *testing.T) {
+	t.Parallel()
+	v := diffViewWith(cursorRows(40, 20), []int{20})
+	v.partial = true
+	v.rebuild()
+	if v.lines[0].Fold == 0 {
+		t.Fatal("fixture: expected line 0 to be a fold in partial mode")
+	}
+	v.curLine = 0 // stale index left sitting on the fold
+	v.reanchorCursor(1, 1)
+	if v.curLine < 0 || v.curLine >= len(v.lines) {
+		t.Fatalf("curLine=%d out of range [0,%d)", v.curLine, len(v.lines))
+	}
+	if v.lines[v.curLine].Fold > 0 {
+		t.Fatalf("not-found fallback must snap off the fold, got line %d (Fold=%d)", v.curLine, v.lines[v.curLine].Fold)
+	}
+}
+
+// TestCursorRowAndDispRangeOnEmptyView: an empty diff (no rows) must report
+// "no cursor" rather than indexing an empty slice.
+func TestCursorRowAndDispRangeOnEmptyView(t *testing.T) {
+	t.Parallel()
+	v := diffViewWith(nil, nil)
+	if _, ok := v.cursorRow(); ok {
+		t.Fatal("cursorRow on an empty view must return false")
+	}
+	if s, e := v.cursorDispRange(); s != 0 || e != 0 {
+		t.Fatalf("cursorDispRange on an empty view = (%d,%d), want (0,0)", s, e)
+	}
+}
+
+// TestCursorMoversNoopOnEmptyView: every cursor mover must tolerate an empty
+// view (no lines, no display rows) without panicking, leaving curLine at its
+// zero value.
+func TestCursorMoversNoopOnEmptyView(t *testing.T) {
+	t.Parallel()
+	v := diffViewWith(nil, nil)
+	body := 10
+	v.moveCursor(1, body)
+	v.setCursorLine(3, body)
+	v.setCursorDisp(0, body)
+	v.alignCursor(alignTop, body)
+	v.pageCursor(1, body)
+	if v.curLine != 0 {
+		t.Fatalf("curLine=%d after movers on an empty view, want 0", v.curLine)
 	}
 }
 
@@ -382,11 +449,12 @@ func TestDiffLeftClickPlacesCursor(t *testing.T) {
 }
 
 // NOTE: no t.Parallel() here or in TestCursorMarkerSkipsFoldRow /
-// TestHistoryPaneHasNoCursorMarker — they assert on the actual rendered
-// background/foreground codes, so they force the color profile like
-// diff_render_test.go's TestEmphasisActuallyChangesOutput does.
-// lipgloss.SetColorProfile is process-global; a parallel sibling's deferred
-// reset could flip the profile mid-render for another goroutine.
+// TestHistoryPaneHasNoCursorMarker / TestCursorMarkerHotRowWinsOverCursorBackground
+// — they assert on the actual rendered background/foreground codes, so they
+// force the color profile like diff_render_test.go's
+// TestEmphasisActuallyChangesOutput does. lipgloss.SetColorProfile is
+// process-global; a parallel sibling's deferred reset could flip the profile
+// mid-render for another goroutine.
 func TestCursorMarkerRowPaintsOnlyCursorRows(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -418,6 +486,32 @@ func TestCursorMarkerRowPaintsOnlyCursorRows(t *testing.T) {
 	if num[s-v.offset] == plain[s-v.offset] || num[s-v.offset] == marked[s-v.offset] {
 		t.Fatal("number style must differ from both plain and row")
 	}
+	// Localize the "number" difference: split the cursor row at the pane
+	// separator and check each pane on its own. The style only recolors the
+	// gutter (the first gutterWidth+1 display columns) — the body text after
+	// it must be byte-identical to the plain render.
+	gut := gutterWidth(v.full)
+	row := s - v.offset
+	numPanes := strings.SplitN(num[row], "│", 2)
+	plainPanes := strings.SplitN(plain[row], "│", 2)
+	if len(numPanes) != 2 || len(plainPanes) != 2 {
+		t.Fatalf("cursor row must have exactly one pane separator: %q", num[row])
+	}
+	for i := range numPanes {
+		numGut, plainGut := ansi.Truncate(numPanes[i], gut+1, ""), ansi.Truncate(plainPanes[i], gut+1, "")
+		if numGut == plainGut {
+			t.Fatalf("pane %d: number style gutter unchanged from plain: %q", i, numGut)
+		}
+		// ansi.TruncateLeft replays the SGR state active at the cut point as a
+		// leading escape prefix so the fragment renders correctly standalone —
+		// that prefix legitimately differs (it carries the gutter's own color),
+		// so trim it before comparing; what is left must be byte-identical.
+		numBody := trimLeadingSGR(ansi.TruncateLeft(numPanes[i], gut+1, ""))
+		plainBody := trimLeadingSGR(ansi.TruncateLeft(plainPanes[i], gut+1, ""))
+		if numBody != plainBody {
+			t.Fatalf("pane %d: number style body must be byte-identical to plain\n got  %q\n want %q", i, numBody, plainBody)
+		}
+	}
 }
 
 func TestCursorMarkerSkipsFoldRow(t *testing.T) {
@@ -442,6 +536,42 @@ func TestCursorMarkerSkipsFoldRow(t *testing.T) {
 	plain := m.diffPaneLines(v, 80, 10, 0, 0, "row")
 	if got[foldRow] != plain[foldRow] {
 		t.Fatal("a fold separator must never carry the cursor marker")
+	}
+}
+
+// TestCursorMarkerHotRowWinsOverCursorBackground: when the cursor lands on a
+// Changed row, the row's add/del backgrounds must win over the "row" cursor
+// marker's grey (diffCursorRow, bg 237) — diffCell/segCell apply hotStyle
+// instead of mk.base whenever hot is true. A Same neighbour row has no hot
+// background, so it must still carry 237.
+func TestCursorMarkerHotRowWinsOverCursorBackground(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+	m := openedDiffModel(12, cursorRows(40, 20), []int{20})
+	m.width = 80
+	v := m.diffLayer()
+
+	v.setCursorLine(20, m.diffBodyRows()) // the Changed row
+	s, e := v.cursorDispRange()
+	hot := m.diffPaneLines(v, 80, 10, s, e, "row")
+	hotRow := hot[s-v.offset]
+	if !strings.Contains(hotRow, "48;5;52") {
+		t.Fatalf("hot cursor row must keep the del background (52): %q", hotRow)
+	}
+	if !strings.Contains(hotRow, "48;5;22") {
+		t.Fatalf("hot cursor row must keep the add background (22): %q", hotRow)
+	}
+	if strings.Contains(hotRow, "48;5;237") {
+		t.Fatalf("hot cursor row must not carry the cursor background (237): %q", hotRow)
+	}
+
+	v.setCursorLine(19, m.diffBodyRows()) // a Same neighbour row
+	s, e = v.cursorDispRange()
+	same := m.diffPaneLines(v, 80, 10, s, e, "row")
+	sameRow := same[s-v.offset]
+	if !strings.Contains(sameRow, "48;5;237") {
+		t.Fatalf("a Same cursor row must carry the cursor background (237): %q", sameRow)
 	}
 }
 
@@ -531,6 +661,31 @@ func TestDiffEditRowGating(t *testing.T) {
 	if !ok || !strings.Contains(r.label, "line 1") {
 		t.Fatalf("commit diff row = %+v ok=%v, want an 'at line 1' row", r, ok)
 	}
+	m.diffLayer().rev = ""
+
+	m.diffLayer().loading = true
+	if _, ok := m.diffEditRow(); ok {
+		t.Fatal("a loading view has no file to edit yet: no edit row")
+	}
+	m.diffLayer().loading = false
+
+	m.diffLayer().err = errors.New("boom")
+	if _, ok := m.diffEditRow(); ok {
+		t.Fatal("an errored view: no edit row")
+	}
+	m.diffLayer().err = nil
+
+	m.diffLayer().binary = true
+	if _, ok := m.diffEditRow(); ok {
+		t.Fatal("a binary file: no edit row")
+	}
+	m.diffLayer().binary = false
+
+	m.diffLayer().tooLarge = true
+	if _, ok := m.diffEditRow(); ok {
+		t.Fatal("a too-large file: no edit row")
+	}
+	m.diffLayer().tooLarge = false
 }
 
 func TestDiffEKeyWorkingTreeUsesLiveEditor(t *testing.T) {
