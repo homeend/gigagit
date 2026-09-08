@@ -1,8 +1,10 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/config"
@@ -168,5 +170,44 @@ func TestNotesMutationEmitsLiveEvent(t *testing.T) {
 		}
 	default:
 		t.Fatal("no live event after a note mutation")
+	}
+}
+
+// TestNotesRefusesOverlongText pins Minor 5: the store's budget is an entry
+// COUNT, not a byte budget, so a single paste could otherwise put an arbitrarily
+// large string into notes.toml.
+func TestNotesRefusesOverlongText(t *testing.T) {
+	t.Parallel()
+	ts := notesServer(t)
+	huge := strings.Repeat("x", noteRationaleMax+1)
+	for _, body := range []string{
+		`{"path":"f.txt","state":"unstaged","side":"new","line":1,"summary":"` + strings.Repeat("s", noteSummaryMax+1) + `"}`,
+		`{"path":"f.txt","state":"unstaged","side":"new","line":1,"summary":"x","rationale":"` + huge + `"}`,
+		`{"path":"f.txt","state":"unstaged","side":"new","line":1,"summary":"x","author":"` + strings.Repeat("a", noteAuthorMax+1) + `"}`,
+	} {
+		if code, _ := postJSONRaw(t, ts, "/api/notes/add", body); code != http.StatusBadRequest {
+			t.Fatalf("an over-long field must be a 400, got %d", code)
+		}
+	}
+	for _, path := range []string{"/api/notes/edit", "/api/notes/reply"} {
+		if code, _ := postJSONRaw(t, ts, path, `{"id":"n1","summary":"x","rationale":"`+huge+`"}`); code != http.StatusBadRequest {
+			t.Fatalf("POST %s with an over-long rationale = %d, want 400", path, code)
+		}
+	}
+}
+
+// TestNotesUnknownIDIs404 pins the domain.ErrNoteNotFound sentinel: a stale
+// page (after a sweep, or another client's delete) must get a 404, and that is
+// now decided with errors.Is rather than by grepping the message.
+func TestNotesUnknownIDIs404(t *testing.T) {
+	t.Parallel()
+	ts := notesServer(t)
+	for _, path := range []string{"/api/notes/edit", "/api/notes/reply", "/api/notes/remove"} {
+		if code, b := postJSONRaw(t, ts, path, `{"id":"deadbeef","summary":"x"}`); code != http.StatusNotFound {
+			t.Fatalf("POST %s for an unknown id = %d (%v), want 404", path, code, b)
+		}
+	}
+	if !errors.Is(domain.ErrNoteNotFound, domain.ErrNoteNotFound) {
+		t.Fatal("the sentinel must match itself")
 	}
 }

@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -154,6 +155,35 @@ func orEmptyCounts(m map[string]int) map[string]int {
 	return m
 }
 
+// The store's budget is an entry COUNT, not a byte budget, so without these a
+// single paste could put a megabyte of text into notes.toml — a note is a
+// review remark, not a document. Loopback-only, so this is hygiene rather than
+// a security boundary; the caller is told rather than silently truncated.
+const (
+	noteSummaryMax   = 2 << 10  // a one-line remark
+	noteRationaleMax = 16 << 10 // the "why", a few paragraphs at most
+	noteAuthorMax    = 256      // a name or a tool label
+)
+
+// checkNoteText refuses over-long free-text fields. Lengths are in BYTES: the
+// point is the file's size, not a display width.
+func checkNoteText(summary, rationale, author string) error {
+	for _, f := range []struct {
+		name string
+		val  string
+		max  int
+	}{
+		{"summary", summary, noteSummaryMax},
+		{"rationale", rationale, noteRationaleMax},
+		{"author", author, noteAuthorMax},
+	} {
+		if len(f.val) > f.max {
+			return fmt.Errorf("%s is %d bytes; the limit is %d", f.name, len(f.val), f.max)
+		}
+	}
+	return nil
+}
+
 type noteReq struct {
 	ID        string `json:"id"`
 	Path      string `json:"path"`
@@ -191,6 +221,10 @@ func (s *Server) handleNoteAdd(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, errors.New("side, a 1-based line and a summary are required"))
 		return
 	}
+	if err := checkNoteText(summary, req.Rationale, req.Author); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
 	n := model.Note{
 		Source: model.NoteSourceUser, Author: strings.TrimSpace(req.Author), Address: addr,
 		Side: side, Range: [2]int{req.Line, req.Line},
@@ -217,6 +251,10 @@ func (s *Server) handleNoteEdit(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, errors.New("id and a summary are required"))
 		return
 	}
+	if err := checkNoteText(summary, req.Rationale, req.Author); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
 	if err := s.service().NoteEdit(r.Context(), req.ID, summary, strings.TrimSpace(req.Rationale)); err != nil {
 		writeErr(w, noteErrStatus(err), err)
 		return
@@ -233,6 +271,10 @@ func (s *Server) handleNoteReply(w http.ResponseWriter, r *http.Request) {
 	summary := strings.TrimSpace(req.Summary)
 	if req.ID == "" || summary == "" {
 		writeErr(w, http.StatusBadRequest, errors.New("id and a summary are required"))
+		return
+	}
+	if err := checkNoteText(summary, req.Rationale, req.Author); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
 	// The reply's anchor is the PARENT's (domain copies address/side/range and
@@ -267,13 +309,11 @@ func (s *Server) handleNoteRemove(w http.ResponseWriter, r *http.Request) {
 }
 
 // noteErrStatus separates "you named a note that is not there" (a stale page
-// after a sweep or another client's delete) from a real store failure.
-//
-// Matched on TEXT, not errors.Is: notes.ErrNotFound lives in internal/notes,
-// which archtest forbids a frontend from importing. A miss only costs the
-// caller a 500 instead of a 404 — both are refusals, and neither mutates.
+// after a sweep or another client's delete) from a real store failure. It
+// matches domain's own sentinel, which wraps the store's notes.ErrNotFound so
+// a frontend never has to import internal/notes (archtest forbids it).
 func noteErrStatus(err error) int {
-	if strings.Contains(err.Error(), "not found") {
+	if errors.Is(err, domain.ErrNoteNotFound) {
 		return http.StatusNotFound
 	}
 	return http.StatusInternalServerError

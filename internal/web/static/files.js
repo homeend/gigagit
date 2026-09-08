@@ -776,9 +776,19 @@ async function fetchNotes(rerender = true) {
     const d = await getJSON("/api/notes?" + q);
     state.notes = d.notes || [];
   } catch {
-    state.notes = []; // notes are best-effort; never break the diff
+    // Notes are best-effort — never break the diff — but a transient failure
+    // must not make every visible ◆ row VANISH until the next notes event
+    // either: keep what we already have and re-render nothing new.
+    return;
   }
-  if (rerender && state.lastDiff) renderDiff(state.lastDiff);
+  if (rerender && state.lastDiff) {
+    // A notes event is not a new diff: renderDiff resets the ‹/› change
+    // stepper, so carry diffBlockIdx across. (The marked row is a class on a
+    // <tr>, re-derived from state.diffRow by curCls, so it survives already.)
+    const at = state.diffBlockIdx;
+    renderDiff(state.lastDiff);
+    state.diffBlockIdx = at;
+  }
 }
 
 
@@ -791,7 +801,10 @@ async function refreshNoteCounts() {
       by_commit_path: c.by_commit_path || {},
     };
   } catch {
-    /* counts are decoration */
+    // Counts are decoration, but a STALE badge is worse than none: a failed
+    // fetch means we no longer know, so draw no ◆ at all until the next one
+    // succeeds.
+    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {} };
   }
   renderFiles();
 }
@@ -834,6 +847,10 @@ function markDiffRow(tr) {
   if (prev) prev.classList.remove("cur");
   tr.classList.add("cur");
   state.diffRow = { side: tr.dataset.side, no };
+  // Marking a row is an explicit "I am looking HERE", so it outranks a
+  // previous }/{ landing for nearestNote. stepNote re-claims the id right
+  // after its own call.
+  noteStepId = null;
 }
 
 
@@ -870,6 +887,12 @@ function findNote(id) {
 function nearestNote() {
   const els = noteRowEls();
   if (!els.length) return null;
+  // }/{ move the marked row to the one the stepped-to note hangs off, and a
+  // note sits one row BELOW its anchor — so after a step the "last note at or
+  // above the marked row" rule can pick the note before it. While the stepped
+  // note is still on screen it IS the one the user is looking at.
+  const stepped = els.find((el) => el.dataset.note === noteStepId);
+  if (stepped) return findNote(stepped.dataset.note);
   const all = [...$("diff-body").querySelectorAll("table.diff tr")];
   const cur = $("diff-body").querySelector("tr.cur");
   if (!cur) return findNote(els[0].dataset.note);
@@ -908,13 +931,13 @@ function stepNote(dir) {
       target = before.length ? before[before.length - 1] : els[els.length - 1];
     }
   }
-  noteStepId = target.dataset.note;
   target.scrollIntoView({ block: "center" });
   target.classList.add("flash");
   setTimeout(() => target.classList.remove("flash"), 600);
   let p = target.previousElementSibling;
   while (p && !p.dataset.no) p = p.previousElementSibling;
-  if (p) markDiffRow(p);
+  if (p) markDiffRow(p); // clears noteStepId…
+  noteStepId = target.dataset.note; // …which the step then claims for itself
 }
 
 

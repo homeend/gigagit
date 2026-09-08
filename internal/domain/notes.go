@@ -16,6 +16,13 @@ import (
 // ErrNotesDisabled means no state directory was resolvable.
 var ErrNotesDisabled = errors.New("notes: no state directory available")
 
+// ErrNoteNotFound means the named note is not in the store — a stale page after
+// a sweep, or another client's delete. It WRAPS the store's own
+// notes.ErrNotFound, so code that already matches that keeps working, while a
+// frontend (which archtest forbids from importing internal/notes) can match
+// this one with errors.Is instead of grepping the message.
+var ErrNoteNotFound = fmt.Errorf("note: %w", notes.ErrNotFound)
+
 // ResolvedNote is one note as it applies to an OPEN diff: the stored record,
 // its computed status, the range it actually occupies now (the stored range
 // when active in place, the found range when it moved, the clamped range when
@@ -117,7 +124,7 @@ func (s *Service) NoteEdit(ctx context.Context, id, summary, rationale string) e
 		s.invalidateNoteCounts()
 		return nil
 	}
-	return notes.ErrNotFound
+	return ErrNoteNotFound
 }
 
 // NoteReply stores a reply that inherits its parent's anchor (address, side,
@@ -142,7 +149,7 @@ func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) 
 	}
 	root, ok := byID[parentID]
 	if !ok {
-		return model.Note{}, notes.ErrNotFound
+		return model.Note{}, ErrNoteNotFound
 	}
 	// Walk up to the root, bounded by the record count so corrupt data (a
 	// parent cycle) cannot spin here.
@@ -165,6 +172,9 @@ func (s *Service) NoteRemove(ctx context.Context, id string) error {
 		return ErrNotesDisabled
 	}
 	if err := st.Remove(id); err != nil {
+		if errors.Is(err, notes.ErrNotFound) {
+			return ErrNoteNotFound // the sentinel frontends can match
+		}
 		return err
 	}
 	s.invalidateNoteCounts()
