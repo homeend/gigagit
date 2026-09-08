@@ -5,6 +5,7 @@
 package syntax
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/alecthomas/chroma/v2"
@@ -48,10 +49,24 @@ type Tok struct {
 	Class      Class
 }
 
+// noLexerBasenames are file names chroma matches to the wrong lexer via a
+// colliding glob rather than a dedicated grammar: go.mod/go.sum/go.work have
+// no chroma lexer of their own, but ampl.xml and modula-2.xml both register
+// "*.mod", and AMPL wins the match — lexing go.mod with AMPL's grammar
+// produces nonsense runs. Treat these as unknown (plain) instead.
+var noLexerBasenames = map[string]bool{
+	"go.mod":  true,
+	"go.sum":  true,
+	"go.work": true,
+}
+
 // Detect returns the chroma lexer name for path, or "" when no lexer matches
 // the file name. Content is never inspected (cheap, deterministic).
 func Detect(path string) string {
 	if path == "" {
+		return ""
+	}
+	if noLexerBasenames[filepath.Base(path)] {
 		return ""
 	}
 	l := lexers.Match(path)

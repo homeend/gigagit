@@ -2,6 +2,7 @@ package syntax
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -9,7 +10,11 @@ func TestDetectByFileName(t *testing.T) {
 	t.Parallel()
 	cases := map[string]bool{
 		"main.go": true, "app.tsx": true, "x.py": true, "Dockerfile": true,
-		"go.mod": true, "notes.txt": false, "": false, "archive.bin": false,
+		// go.mod has no dedicated chroma lexer: its "*.mod" glob collides
+		// with AMPL and Modula-2, and AMPL wins — lexing go.mod with AMPL's
+		// grammar would produce nonsense runs, so Detect treats it (and
+		// go.sum/go.work) as unknown.
+		"go.mod": false, "notes.txt": false, "": false, "archive.bin": false,
 	}
 	for path, want := range cases {
 		if got := Detect(path) != ""; got != want {
@@ -68,6 +73,43 @@ func TestLexUnknownLanguageIsNil(t *testing.T) {
 	}
 	if got := Lex("no-such-lexer", []byte("x\n")); got != nil {
 		t.Errorf("Lex(unknown) = %v, want nil", got)
+	}
+}
+
+func TestLexEmptySrcIsNilForKnownLanguage(t *testing.T) {
+	t.Parallel()
+	lang := Detect("a.go")
+	if got := Lex(lang, nil); got != nil {
+		t.Errorf("Lex(known, nil) = %v, want nil", got)
+	}
+	if got := Lex(lang, []byte("")); got != nil {
+		t.Errorf("Lex(known, []byte(\"\")) = %v, want nil", got)
+	}
+}
+
+func TestLexCapsRunsPerLine(t *testing.T) {
+	t.Parallel()
+	// A single minified line of 3000 "a+" pairs yields far more than
+	// MaxLineTokens runs; Lex must cap what it keeps for that line without
+	// losing line-number sync for what follows.
+	long := strings.Repeat("a+", 3000) + "\n"
+	src := []byte("x := 1\n" + long + "y := 2\n")
+	toks := Lex(Detect("a.go"), src)
+	if len(toks) != 3 {
+		t.Fatalf("lines = %d, want 3", len(toks))
+	}
+	if len(toks[1]) != MaxLineTokens {
+		t.Errorf("capped line runs = %d, want %d", len(toks[1]), MaxLineTokens)
+	}
+	// line 3 must still lex normally: keyword-free but a Name and a Number.
+	var gotNumber bool
+	for _, tk := range toks[2] {
+		if tk.Class == Number {
+			gotNumber = true
+		}
+	}
+	if !gotNumber {
+		t.Errorf("line 3 = %+v, want a Number run (line numbering desynced?)", toks[2])
 	}
 }
 
