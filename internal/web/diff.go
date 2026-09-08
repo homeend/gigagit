@@ -27,16 +27,29 @@ type diffRow struct {
 // tokTriple is one syntax run on the wire: [start, end, class-suffix].
 type tokTriple [3]any
 
+// unstyledOnWire are classes style.css has no .tk-* rule for: sending them
+// would spend wire bytes (Name alone is roughly a third of a Go file's runs)
+// and split renderCell's runs for a span that paints nothing. The TUI palette
+// leaves the same classes blank.
+var unstyledOnWire = map[syntax.Class]bool{syntax.Name: true}
+
 // tokTriples returns the wire form of side's syntax runs for source line no
-// (1-based), or nil when there is no line, the line has no runs, or
+// (1-based), or nil when there is no line, the line has no styled runs, or
 // highlighting was not computed for this diff.
 func tokTriples(side [][]syntax.Tok, no int) []tokTriple {
 	if no <= 0 || no > len(side) || len(side[no-1]) == 0 {
 		return nil
 	}
-	out := make([]tokTriple, len(side[no-1]))
-	for i, tk := range side[no-1] {
-		out[i] = tokTriple{tk.Start, tk.End, tk.Class.String()}
+	line := side[no-1]
+	out := make([]tokTriple, 0, len(line))
+	for _, tk := range line {
+		if unstyledOnWire[tk.Class] {
+			continue
+		}
+		out = append(out, tokTriple{tk.Start, tk.End, tk.Class.String()})
+	}
+	if len(out) == 0 {
+		return nil
 	}
 	return out
 }
