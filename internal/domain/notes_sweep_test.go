@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -447,8 +448,9 @@ func TestNotesDefaultsTrackConfig(t *testing.T) {
 // NotesDisabled switches the whole surface off for a test binary that cannot
 // import internal/notes; UseNotesDir opts one Service back in.
 func TestNotesDisabledSeamAndUseNotesDir(t *testing.T) {
+	prev := NotesDisabled
 	NotesDisabled = true
-	defer func() { NotesDisabled = false }()
+	defer func() { NotesDisabled = prev }()
 	ctx := context.Background()
 
 	off := New(&git.Repo{Runner: gitexec.NewFakeRunner()})
@@ -515,5 +517,61 @@ func TestNoteCountsSurvivesAFailedTopLevel(t *testing.T) {
 	}
 	if len(c.ByPath) != 0 {
 		t.Fatalf("ByPath must be empty without a resolvable checkout: %+v", c.ByPath)
+	}
+}
+
+// noteTargetGone is what licenses a deletion, and it matches on git's own
+// stderr — so it must be pinned against the INSTALLED git, not only against
+// hand-typed strings. Every note below names a target real git (or the OS)
+// reports absent, and every one of them must be swept away.
+func TestSweepDropsOrphansOnlyRealGitCanReport(t *testing.T) {
+	dir := sweepRepo(t)
+	svc := New(&git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))})
+	svc.SetNotesStore(notes.NewFileStore(t.TempDir()))
+	svc.SetNotesPolicy(30, 2000)
+	ctx := context.Background()
+
+	real := notes.Now
+	notes.Now = func() time.Time { return time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC) }
+	defer func() { notes.Now = real }()
+
+	add := func(summary string, addr model.FileAddress, side model.NoteSide, ctxLines ...string) model.Note {
+		t.Helper()
+		got, err := svc.NoteAdd(ctx, model.Note{
+			Address: addr, Side: side, Range: [2]int{1, 1},
+			Summary: summary, ContextHash: model.NoteContextHash(ctxLines),
+		})
+		if err != nil {
+			t.Fatalf("NoteAdd(%s): %v", summary, err)
+		}
+		return got
+	}
+
+	active := add("live", model.FileAddress{State: model.StateUnstaged, Worktree: dir, Path: "a.go"},
+		model.NoteSideNew, "alpha")
+	// "fatal: path '…' does not exist (neither on disk nor in the index)"
+	add("no index blob", model.FileAddress{State: model.StateStaged, Worktree: dir, Path: "never-added.go"},
+		model.NoteSideNew, "alpha")
+	// "fatal: path 'a.go' exists on disk, but not in '0000…'"
+	add("rev is gone", model.FileAddress{State: model.StateCommitted, Commit: strings.Repeat("0", 40), Path: "a.go"},
+		model.NoteSideNew, "alpha")
+	// "fatal: cannot change to '…': No such file or directory"
+	add("worktree is gone", model.FileAddress{State: model.StateUnstaged, Worktree: filepath.Join(t.TempDir(), "vanished"), Path: "a.go"},
+		model.NoteSideOld, "alpha")
+	// os.ReadFile → fs.ErrNotExist
+	add("working file is gone", model.FileAddress{State: model.StateUnstaged, Worktree: dir, Path: "never-added.go"},
+		model.NoteSideNew, "alpha")
+
+	dropped, err := svc.sweepNotes(ctx)
+	if err != nil {
+		t.Fatalf("sweepNotes: %v", err)
+	}
+	if dropped != 4 {
+		// A miss here means git's wording drifted from noteTargetGone's list:
+		// the note is KEPT (the safe direction), but the orphan never leaves.
+		t.Fatalf("dropped = %d, want 4 — noteTargetGone missed a real git 'absent' message", dropped)
+	}
+	if left, _ := svc.notesStore(ctx).Load(); len(left) != 1 || left[0].ID != active.ID {
+		t.Fatalf("only the active note may survive; left %+v", left)
 	}
 }
