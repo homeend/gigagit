@@ -62,7 +62,7 @@ func (d Diff) Size() int {
 	}
 	for _, side := range [][][]syntax.Tok{d.OldTok, d.NewTok} {
 		for _, line := range side {
-			n += 24 + 12*len(line)
+			n += 24 + 24*len(line) // 24 = slice header; syntax.Tok is 2 ints + a byte, padded to 24
 		}
 	}
 	return n
