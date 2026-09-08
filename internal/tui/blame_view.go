@@ -114,9 +114,11 @@ func (m Model) loadBlameCmd(ctx navContext, tag string) tea.Cmd {
 
 // lexBlame lexes the blamed file's content, reassembled from its lines. nil
 // (plain rendering) when the switch is off, the path has no lexer, the file is
-// past domain.MaxSyntaxBytes, or a line holds a BARE \r: the lexer keeps a \r
-// inside its line while the display strips a trailing one, so only a lone \r —
-// which nothing here turns into a break but a terminal would — is a hazard.
+// past domain.MaxSyntaxBytes, or a line holds a BARE \r. That last case is not
+// a desync here — blame lines are already split, and sanitizeCell maps an
+// interior \r to one '·' exactly as the lexer counts it — but such content is
+// pathological enough that both self-lexing surfaces refuse it alike (the file
+// preview, which turns a lone \r into a line break, genuinely must).
 func lexBlame(path string, lines []model.BlameLine, on bool) [][]syntax.Tok {
 	if !on || len(lines) == 0 {
 		return nil
