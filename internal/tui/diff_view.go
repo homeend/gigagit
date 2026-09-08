@@ -76,6 +76,15 @@ type diffView struct {
 	// hideAgent mirrors Model.notesAgentOff onto the view, because relayout
 	// (called by rebuild, ctrl+w and every resize) has no Model to ask.
 	hideAgent bool
+	// noteAddr is the address notes on THIS view hang off — the pair of texts
+	// domain.noteSideLines will re-read for the sweep. Stamped by the loader
+	// that knows which two sides it is comparing, never derived from Model
+	// state at key time: a staged diff and an unstaged diff of the same path
+	// look identical to the focus, yet name different old sides. A zero value
+	// (Path == "") means "no address": notes are inert on this view, which is
+	// what every two-sided compare loader leaves behind (a comparison's old
+	// side is the compared revision, which no stored address can name).
+	noteAddr model.FileAddress
 }
 
 // wrapDir records that a change-navigation key hit a boundary and primed a
@@ -399,6 +408,22 @@ func statusDiffContext(staged bool) string {
 	return i18n.T("index → working tree")
 }
 
+// statusNoteAddress is the note address for a Status/Staged panel diff: the
+// state naming exactly the pair of texts this view shows, so the sweep re-reads
+// the same two sides later. The Staged panel is HEAD → index (StateStaged); the
+// Files panel is index → working file (StateUnstaged), or nothing → working
+// file for a file git has no index entry for (StateUntracked).
+func (m Model) statusNoteAddress(f model.FileStatus, staged bool) model.FileAddress {
+	st := model.StateUnstaged
+	switch {
+	case staged:
+		st = model.StateStaged
+	case f.Kind == model.KindUntracked:
+		st = model.StateUntracked
+	}
+	return model.FileAddress{State: st, Worktree: m.currentWorktree, Branch: m.status.Branch, Path: f.Path}
+}
+
 // openStatusDiff opens the full-screen diff for a Status (staged=false) or
 // Staged (staged=true) panel file and records diffNav so Home/End can step the
 // panel. Shared by the panel enter handler (after canShowFileDiff) and the
@@ -411,7 +436,7 @@ func (m Model) openStatusDiff(f model.FileStatus, staged bool) (tea.Model, tea.C
 	} else {
 		m.diffNav = diffNavStatus
 	}
-	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong}
+	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, noteAddr: m.statusNoteAddress(f, staged)}
 	if dv := m.diffLayer(); dv != nil {
 		*dv = *v // stepping: reuse the entry already on the stack
 	} else {
@@ -437,7 +462,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
 	tag := statusDiffTag(f.Path, staged)
-	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", partial: m.diffPartial, long: m.diffLong, width: width, noteAddr: m.statusNoteAddress(f, staged)}
 
 	// Staged (HEAD → index): old side is the HEAD blob, absent when the file
 	// isn't in HEAD (untracked, or staged-new 'A'); renames fetch the old name.
@@ -541,7 +566,9 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
 	tag := "commit:" + hash + ":" + line.path
-	v := &diffView{title: line.path, context: "@ " + m.filesContext, rev: hash, partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: line.path, context: "@ " + m.filesContext, rev: hash, partial: m.diffPartial, long: m.diffLong, width: width,
+		// hash^ → hash is exactly StateCommitted's pair (noteSideLines).
+		noteAddr: model.FileAddress{State: model.StateCommitted, Commit: hash, Path: line.path}}
 	// Immutable: parent(hash)→hash for a path always yields the same bytes.
 	key := hash + "^.." + hash + ":" + line.path
 

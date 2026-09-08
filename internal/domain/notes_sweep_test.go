@@ -575,3 +575,51 @@ func TestSweepDropsOrphansOnlyRealGitCanReport(t *testing.T) {
 		t.Fatalf("only the active note may survive; left %+v", left)
 	}
 }
+
+// TestStagedNoteResolvesAgainstTheIndexNotTheWorkingFile is the storage half of
+// the I1 regression. A note taken on the STAGED diff (HEAD → index) must be
+// stored StateStaged: its anchor then lives in the INDEX blob, so continuing to
+// edit the working file cannot make it stale. The SAME note filed StateUnstaged
+// — what the TUI used to store for every staged diff — is resolved against the
+// working file, goes stale, and is deleted by this pass.
+func TestStagedNoteResolvesAgainstTheIndexNotTheWorkingFile(t *testing.T) {
+	dir := sweepRepo(t)
+	writeIn(t, dir, "a.go", "alpha\nbeta\ngamma\ndelta\n")
+	gitIn(t, dir, "add", "a.go")                                     // the index now holds "delta" on line 4
+	writeIn(t, dir, "a.go", "alpha\nbeta\ngamma\ndelta rewritten\n") // …and editing continues
+
+	svc := New(&git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))})
+	svc.SetNotesStore(notes.NewFileStore(t.TempDir()))
+	svc.SetNotesPolicy(30, 2000)
+	ctx := context.Background()
+
+	// Both notes carry the fingerprint of the line the user SAW on the staged
+	// diff, exactly as the TUI passes it from the rendered row.
+	hash := model.NoteContextHash([]string{"delta"})
+	add := func(state model.FileState) model.Note {
+		t.Helper()
+		got, err := svc.NoteAdd(ctx, model.Note{
+			Address: model.FileAddress{State: state, Worktree: dir, Path: "a.go"},
+			Side:    model.NoteSideNew, Range: [2]int{4, 4},
+			ContextHash: hash, Summary: "on the staged hunk",
+		})
+		if err != nil {
+			t.Fatalf("NoteAdd(%v): %v", state, err)
+		}
+		return got
+	}
+	staged := add(model.StateStaged)
+	misfiled := add(model.StateUnstaged)
+
+	dropped, err := svc.sweepNotes(ctx)
+	if err != nil {
+		t.Fatalf("sweepNotes: %v", err)
+	}
+	if dropped != 1 {
+		t.Fatalf("dropped = %d, want 1 (only the misfiled unstaged note)", dropped)
+	}
+	left, _ := svc.notesStore(ctx).Load()
+	if len(left) != 1 || left[0].ID != staged.ID {
+		t.Fatalf("the staged note must survive further working-tree edits; left %+v (misfiled %s)", left, misfiled.ID)
+	}
+}

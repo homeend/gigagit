@@ -8,17 +8,20 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// notedModel opens a diff over 40 rows with notes on lines 5 and 25. The title
-// and tag matter: diffNoteAddress() goes through focusedBookmark(), which
-// refuses a titleless view, and loadNotesCmd tags its result with m.diffTag.
+// notedModel opens a diff over 40 rows with notes on lines 5 and 25. The
+// stamped noteAddr matters: diffNoteAddress() reads it and every note key bails
+// without one, and loadNotesCmd tags its result with m.diffTag.
 func notedModel(t *testing.T) Model {
 	t.Helper()
 	m := openedDiffModel(12, cursorRows(40, 4, 24), []int{4, 24})
 	v := m.diffLayer()
 	v.title = "a/b.go"
+	v.noteAddr = model.FileAddress{State: model.StateUnstaged, Worktree: "/wt", Path: "a/b.go"}
 	m.diffTag = statusDiffTag("a/b.go", false)
 	v.notes = []domain.ResolvedNote{
 		rootNote("n1", 5, "first", "", model.NoteSourceUser, model.NoteActive),
@@ -122,10 +125,11 @@ func TestERTargetTheNoteNearestAboveTheCursor(t *testing.T) {
 func TestNoteKeysInertWithoutNotes(t *testing.T) {
 	t.Parallel()
 	m := openedDiffModel(12, cursorRows(40), nil)
-	// A titleless view makes diffNoteAddress bail before noteNearCursor is
+	// An unstamped view makes diffNoteAddress bail before noteNearCursor is
 	// ever consulted, which would make this test vacuous: give it the same
 	// address notedModel has, so E/R really do reach the no-note path.
 	m.diffLayer().title = "a/b.go"
+	m.diffLayer().noteAddr = model.FileAddress{State: model.StateUnstaged, Worktree: "/wt", Path: "a/b.go"}
 	m.diffTag = statusDiffTag("a/b.go", false)
 	for _, k := range []string{"E", "R", "}", "{"} {
 		mm, _ := m.diffLayer().update(m, synthKey(k))
@@ -164,6 +168,61 @@ func TestNoteDeleteRowOnlyWithANoteInReach(t *testing.T) {
 }
 
 var _ = tea.KeyMsg{}
+
+// TestDiffLoadersStampTheNoteAddress pins the I1 fix: the address a note is
+// stored with comes from the LOADER, which knows which two texts it is
+// showing. Panel focus cannot tell a staged diff from an unstaged one, and the
+// stored State is the pair the sweep re-reads — a staged note filed as
+// StateUnstaged is resolved against the working file and silently deleted at
+// the next start.
+func TestDiffLoadersStampTheNoteAddress(t *testing.T) {
+	t.Parallel()
+	base := Model{width: 100, height: 30, currentWorktree: "/wt",
+		svc: domain.New(&git.Repo{Runner: gitexec.NewFakeRunner()})}
+	base.status.Branch = "main"
+	mod := model.FileStatus{Path: "a.go", Staged: 'M', Unstaged: 'M'}
+	unt := model.FileStatus{Path: "n.go", Unstaged: '?', Kind: model.KindUntracked}
+
+	for _, tc := range []struct {
+		name   string
+		f      model.FileStatus
+		staged bool
+		want   model.FileState
+	}{
+		{"staged panel", mod, true, model.StateStaged},
+		{"files panel", mod, false, model.StateUnstaged},
+		{"files panel, untracked", unt, false, model.StateUntracked},
+	} {
+		// The view the enter handler puts on screen while the read is in flight…
+		u, _ := base.openStatusDiff(tc.f, tc.staged)
+		got, ok := u.(Model).diffNoteAddress()
+		if !ok || got.State != tc.want || got.Path != tc.f.Path || got.Worktree != "/wt" {
+			t.Fatalf("%s: loading-view address = %+v (ok %v), want state %v path %q", tc.name, got, ok, tc.want, tc.f.Path)
+		}
+		// …and the PRIVATE view the loader fills and the diffMsg installs.
+		msg, isDiff := base.loadStatusDiffCmd(tc.f, tc.staged)().(diffMsg)
+		if !isDiff || msg.view.noteAddr.State != tc.want || msg.view.noteAddr.Path != tc.f.Path {
+			t.Fatalf("%s: loaded-view address = %+v", tc.name, msg.view.noteAddr)
+		}
+	}
+
+	// A commit file diff is hash^ → hash, which is StateCommitted's own pair.
+	msg, ok := base.loadCommitDiffCmd("deadbeef", contentLine{path: "a.go", status: "M"})().(diffMsg)
+	if !ok || msg.view.noteAddr.State != model.StateCommitted ||
+		msg.view.noteAddr.Commit != "deadbeef" || msg.view.noteAddr.Path != "a.go" {
+		t.Fatalf("commit diff address = %+v", msg.view.noteAddr)
+	}
+
+	// A two-sided comparison names no single provenance, so it carries no
+	// address at all and every note key is inert on it.
+	cmp := base.pushLayer(&diffView{title: "a ↔ b", compare: true})
+	if addr, ok := cmp.diffNoteAddress(); ok {
+		t.Fatalf("a comparison must carry no note address, got %+v", addr)
+	}
+	if cmp.loadNotesCmd() != nil {
+		t.Fatal("a comparison must not even read notes")
+	}
+}
 
 // --- Fix round 1 -----------------------------------------------------------
 

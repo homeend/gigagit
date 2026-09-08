@@ -23,19 +23,20 @@ type notesLoadedMsg struct {
 // noteMutatedMsg reports the outcome of an add/edit/reply/remove.
 type noteMutatedMsg struct{ err error }
 
-// diffNoteAddress is the address notes hang off for the open diff: the same
-// provenance focusedBookmark builds for this surface (working tree vs commit).
-// Not available on a two-sided compare (no single file).
+// diffNoteAddress is the address notes hang off for the open diff. It is the
+// field the LOADER stamped (diffView.noteAddr), never something derived from
+// Model focus at key time: the focus cannot tell a staged diff from an unstaged
+// one, and the stored State is the pair of texts the sweep re-reads — getting
+// it wrong resolves the note against the wrong side and deletes it. A view no
+// loader stamped (every two-sided compare, and the shelf/bookmark-vs-working
+// diffs, whose old side is not any address's old side) has no address, so notes
+// are inert there.
 func (m Model) diffNoteAddress() (model.FileAddress, bool) {
 	v := m.diffLayer()
-	if v == nil || v.compare || v.title == "" {
+	if v == nil || v.noteAddr.Path == "" {
 		return model.FileAddress{}, false
 	}
-	b, ok := m.focusedBookmark()
-	if !ok || b.Path == "" {
-		return model.FileAddress{}, false
-	}
-	return b.Address(), true
+	return v.noteAddr, true
 }
 
 // loadNotesCmd resolves this diff's notes off the UI thread. The rows are the
@@ -43,8 +44,13 @@ func (m Model) diffNoteAddress() (model.FileAddress, bool) {
 // mutated.
 func (m Model) loadNotesCmd() tea.Cmd {
 	v := m.diffLayer()
-	addr, ok := m.diffNoteAddress()
-	if v == nil || !ok || m.svc == nil {
+	if v == nil || m.svc == nil {
+		return nil
+	}
+	// The address comes off the SAME view whose rows are resolved — a blame or
+	// history layer pushed over the diff cannot redirect the read any more.
+	addr := v.noteAddr
+	if addr.Path == "" {
 		return nil
 	}
 	svc, tag, rows := m.svc, m.diffTag, v.full
