@@ -61,6 +61,15 @@ function moveCursor(delta) {
 }
 
 
+// noteKey matches one of the review-note keys pressed BARE, in an open diff.
+// The modifier check is the load-bearing half: `c` and `a` are ctrl+c (copy a
+// selected diff line — the commonest thing anyone does in a diff viewer) and
+// ctrl+a (select all), and this handler sees those before the browser acts.
+function noteKey(e, key) {
+  return e.key === key && !e.ctrlKey && !e.metaKey && !e.altKey && !!state.diffCtx;
+}
+
+
 document.addEventListener("keydown", (e) => {
   const top = topLayer();
   if (top) {
@@ -133,18 +142,18 @@ document.addEventListener("keydown", (e) => {
     // file list is the one the keyboard can reach — the sidebar's lists cycle
     // from the chips in their own headers.
     if (state.pane === "files" && state.filesMode === "status") cycleFilesSort();
-  } else if (e.key === "c" && state.diffCtx) {
+  } else if (noteKey(e, "c")) {
     // Review notes (the TUI's c/E/R/a/}/{). The web has no line cursor: `c`
     // anchors on the clicked diff row (tr.cur), else the first changed row,
     // and E/R act on the nearest note at or above it.
     addNotePrompt();
-  } else if (e.key === "E" && state.diffCtx) {
+  } else if (noteKey(e, "E")) {
     editNotePrompt();
-  } else if (e.key === "R" && state.diffCtx) {
+  } else if (noteKey(e, "R")) {
     replyNotePrompt();
-  } else if (e.key === "a" && state.diffCtx) {
+  } else if (noteKey(e, "a")) {
     toggleNotesAgent();
-  } else if ((e.key === "}" || e.key === "{") && state.diffCtx) {
+  } else if (noteKey(e, "}") || noteKey(e, "{")) {
     stepNote(e.key === "}" ? 1 : -1);
   } else if (e.key === "/") {
     e.preventDefault(); // the browser's quick-find would grab it
