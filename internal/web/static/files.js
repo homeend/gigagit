@@ -1033,9 +1033,11 @@ function toggleNotesAgent() {
 
 
 // A click on a diff row marks it as the note anchor; a right-click on a ◆ row
-// opens that note's own menu.
+// opens that note's own menu. The anchor is a NOTE affordance, so it follows
+// notesArmed: on a comparison a marked row would promise a `c` that is inert.
+// (The ◆ menu needs no guard — a comparison renders no ◆ rows to right-click.)
 $("diff-body").addEventListener("click", (e) => {
-  if (!state.diffCtx) return;
+  if (!notesArmed()) return;
   const tr = e.target.closest("tr[data-no]");
   if (!tr || !getSelection().isCollapsed) return; // don't re-anchor mid-selection
   markDiffRow(tr);
