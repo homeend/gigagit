@@ -859,21 +859,35 @@ function nearestNote() {
 }
 
 
+// noteStepId is the note }/{ last landed on. Stepping is relative to IT, not
+// to the marked row: a note hangs one row BELOW its anchor, so a "next note
+// after the cursor" rule would keep re-finding the note the cursor is already
+// on and }/{ would never move. Held by id, so it survives a re-render and
+// simply stops matching once a different file is open.
+let noteStepId = null;
+
 // stepNote scrolls to the next/previous ◆ row and re-anchors on the diff row
-// it hangs off, so `E`/`R` follow the jump.
+// it hangs off, so `E`/`R` follow the jump. Both directions wrap.
 function stepNote(dir) {
   const els = noteRowEls();
   if (!els.length) return;
   const all = [...$("diff-body").querySelectorAll("table.diff tr")];
-  const cur = $("diff-body").querySelector("tr.cur");
-  const at = cur ? all.indexOf(cur) : -1;
   let target;
-  if (dir > 0) {
-    target = els.find((el) => all.indexOf(el) > at) || els[0];
+  const at = els.findIndex((el) => el.dataset.note === noteStepId);
+  if (at >= 0) {
+    target = els[(at + dir + els.length) % els.length];
   } else {
-    const before = els.filter((el) => all.indexOf(el) < at);
-    target = before.length ? before[before.length - 1] : els[els.length - 1];
+    // First step of this session: enter the list from the marked row.
+    const cur = $("diff-body").querySelector("tr.cur");
+    const row = cur ? all.indexOf(cur) : -1;
+    if (dir > 0) {
+      target = els.find((el) => all.indexOf(el) > row) || els[0];
+    } else {
+      const before = els.filter((el) => all.indexOf(el) < row);
+      target = before.length ? before[before.length - 1] : els[els.length - 1];
+    }
   }
+  noteStepId = target.dataset.note;
   target.scrollIntoView({ block: "center" });
   target.classList.add("flash");
   setTimeout(() => target.classList.remove("flash"), 600);
