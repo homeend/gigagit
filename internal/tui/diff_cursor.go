@@ -1,6 +1,11 @@
 package tui
 
-import "github.com/homeend/gigagit/internal/textdiff"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/textdiff"
+)
 
 // The diff view's line cursor. curLine indexes v.lines (the logical stream:
 // one entry per aligned row, plus fold separators in partial mode), never
@@ -164,4 +169,51 @@ func (v *diffView) reanchorCursor(leftNo, rightNo int) {
 	} else {
 		v.curLine = 0
 	}
+}
+
+// cursorStyle is the effective marker style: the session override, else config.
+func (m Model) cursorStyle() string {
+	if m.diffCursor != "" {
+		return m.diffCursor
+	}
+	return m.cfg.UI.CursorStyle()
+}
+
+// nextCursorStyle is the . menu's cycle: row → number → off → row.
+func nextCursorStyle(s string) string {
+	switch s {
+	case "row":
+		return "number"
+	case "number":
+		return "off"
+	}
+	return "row"
+}
+
+// cursorStyleLabel is the human name of a marker style for the menu row.
+func cursorStyleLabel(s string) string {
+	switch s {
+	case "number":
+		return i18n.T("number")
+	case "off":
+		return i18n.T("off")
+	}
+	return i18n.T("row")
+}
+
+// diffCursorStyleRow is the . menu row that cycles the marker style for the
+// session. Only while a diff view is on top.
+func (m Model) diffCursorStyleRow() (actionRow, bool) {
+	if _, ok := m.topLayer().(*diffView); !ok {
+		return actionRow{}, false
+	}
+	cur := m.cursorStyle()
+	return actionRow{
+		id:    "diff-cursor-style",
+		label: i18n.T("Cursor marker: %s", cursorStyleLabel(cur)),
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			m.diffCursor = nextCursorStyle(cur)
+			return m, nil
+		},
+	}, true
 }

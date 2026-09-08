@@ -253,7 +253,7 @@ func (h *historyView) renderRightPane(m Model, w, body int) string {
 	case v.tooLarge:
 		return padBox(i18n.T("  (file too large)"), w, body)
 	}
-	lines := m.diffPaneLines(v, w, body)
+	lines := m.diffPaneLines(v, w, body, 0, 0, "off")
 	for len(lines) < body {
 		lines = append(lines, "")
 	}

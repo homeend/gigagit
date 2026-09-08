@@ -130,6 +130,7 @@ type Model struct {
 	diffNotice  string      // transient bottom-left diff-view notice (file arrival / no-file); cleared on the next key
 	diffPartial bool        // session default for new diffs (false = full); the f key toggles it
 	diffLong    longMode    // session: long-line mode for new diffs (0 = scroll); w cycles
+	diffCursor  string      // session override of [ui] diff_cursor ("" = follow config); the . menu's Cursor marker row cycles it
 
 	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 

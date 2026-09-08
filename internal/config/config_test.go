@@ -585,3 +585,39 @@ func TestSessionSnapshotPath(t *testing.T) {
 		t.Fatal("distinct repos must map to distinct snapshot paths")
 	}
 }
+
+func TestUIDiffCursorLayers(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.toml")
+
+	cfg, err := Load(missing, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.DiffCursor != "row" || cfg.UI.CursorStyle() != "row" {
+		t.Errorf("default diff_cursor = %q (style %q), want row", cfg.UI.DiffCursor, cfg.UI.CursorStyle())
+	}
+
+	g := filepath.Join(dir, "global.toml")
+	writeFile(t, g, "[ui]\ndiff_cursor = \"off\"\n")
+	cfg, err = Load(g, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.CursorStyle() != "off" {
+		t.Errorf("global off: style = %q", cfg.UI.CursorStyle())
+	}
+
+	r := filepath.Join(dir, "repo.toml")
+	writeFile(t, r, "[ui]\ndiff_cursor = \"number\"\n")
+	cfg, err = Load(g, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.CursorStyle() != "number" {
+		t.Errorf("repo number must win over global off, got %q", cfg.UI.CursorStyle())
+	}
+	if (UIConfig{DiffCursor: "bogus"}).CursorStyle() != "row" {
+		t.Error("unknown value must fall back to row")
+	}
+}

@@ -1,10 +1,13 @@
 package tui
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/homeend/gigagit/internal/textdiff"
 )
@@ -350,5 +353,114 @@ func TestDiffLeftClickPlacesCursor(t *testing.T) {
 	u, _ = u.(Model).Update(mouseMsg(10, 0, tea.MouseButtonLeft))
 	if v := u.(Model).diffLayer(); v.curLine != 22 {
 		t.Fatalf("click on the header moved the cursor to %d", v.curLine)
+	}
+}
+
+// NOTE: no t.Parallel() here or in TestCursorMarkerSkipsFoldRow /
+// TestHistoryPaneHasNoCursorMarker — they assert on the actual rendered
+// background/foreground codes, so they force the color profile like
+// diff_render_test.go's TestEmphasisActuallyChangesOutput does.
+// lipgloss.SetColorProfile is process-global; a parallel sibling's deferred
+// reset could flip the profile mid-render for another goroutine.
+func TestCursorMarkerRowPaintsOnlyCursorRows(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+	m := openedDiffModel(12, cursorRows(40), nil)
+	m.width = 80
+	v := m.diffLayer()
+	v.setCursorLine(5, m.diffBodyRows())
+	s, e := v.cursorDispRange()
+	marked := m.diffPaneLines(v, 80, 10, s, e, "row")
+	plain := m.diffPaneLines(v, 80, 10, 0, 0, "row")
+	if len(marked) != len(plain) {
+		t.Fatal("row counts differ")
+	}
+	for i := range marked {
+		isCur := i+v.offset >= s && i+v.offset < e
+		if isCur && marked[i] == plain[i] {
+			t.Fatalf("row %d is the cursor row but renders unchanged", i)
+		}
+		if !isCur && marked[i] != plain[i] {
+			t.Fatalf("row %d is not the cursor row but renders differently", i)
+		}
+	}
+	// "off" is byte-identical to no marker; "number" changes the row but not the way "row" does.
+	if off := m.diffPaneLines(v, 80, 10, s, e, "off"); !reflect.DeepEqual(off, plain) {
+		t.Fatal("off must render exactly like no marker")
+	}
+	num := m.diffPaneLines(v, 80, 10, s, e, "number")
+	if num[s-v.offset] == plain[s-v.offset] || num[s-v.offset] == marked[s-v.offset] {
+		t.Fatal("number style must differ from both plain and row")
+	}
+}
+
+func TestCursorMarkerSkipsFoldRow(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+	m := openedDiffModel(12, cursorRows(40, 20), []int{20})
+	m.width = 80
+	v := m.diffLayer()
+	v.partial = true
+	v.rebuild()
+	foldRow := -1
+	for i, d := range v.disp {
+		if d.fold > 0 {
+			foldRow = i
+			break
+		}
+	}
+	v.offset = 0
+	// Force the "cursor" range onto the fold row: the renderer must not paint it.
+	got := m.diffPaneLines(v, 80, 10, foldRow, foldRow+1, "row")
+	plain := m.diffPaneLines(v, 80, 10, 0, 0, "row")
+	if got[foldRow] != plain[foldRow] {
+		t.Fatal("a fold separator must never carry the cursor marker")
+	}
+}
+
+func TestCursorStyleSessionOverrideAndCycle(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(40), nil)
+	if m.cursorStyle() != "row" {
+		t.Fatalf("default style = %q, want row", m.cursorStyle())
+	}
+	m.cfg.UI.DiffCursor = "number"
+	if m.cursorStyle() != "number" {
+		t.Fatalf("config number: style = %q", m.cursorStyle())
+	}
+	m.diffCursor = "off"
+	if m.cursorStyle() != "off" {
+		t.Fatalf("session off must win: %q", m.cursorStyle())
+	}
+	if nextCursorStyle("row") != "number" || nextCursorStyle("number") != "off" || nextCursorStyle("off") != "row" {
+		t.Fatal("cycle must be row → number → off → row")
+	}
+}
+
+func TestHistoryPaneHasNoCursorMarker(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+	m := openedDiffModel(12, cursorRows(40), nil)
+	m.width = 80
+	v := m.diffLayer()
+	v.setCursorLine(5, m.diffBodyRows())
+	if got := m.diffPaneLines(v, 80, 10, 0, 0, m.cursorStyle()); len(got) != 10 {
+		t.Fatalf("rows = %d", len(got))
+	}
+	// The full-screen render marks the cursor; strip the marker style and it must
+	// equal the unmarked render (proves the marker is the only difference).
+	full := strings.Split(m.renderDiffView(), "\n")[1:11]
+	plain := m.diffPaneLines(v, 80, 10, 0, 0, "off")
+	diffRows := 0
+	for i := range plain {
+		if full[i] != plain[i] {
+			diffRows++
+		}
+	}
+	if diffRows != 1 {
+		t.Fatalf("full-screen render differs from the unmarked pane on %d rows, want exactly 1 (the cursor)", diffRows)
 	}
 }
