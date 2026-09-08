@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Diff views colour code by file type.** The TUI side-by-side diff and the
+  `gg web` diff table now colour keywords, types, function names, strings,
+  numbers, comments and operators, chosen by file name through chroma's
+  ~300 lexers. Each side is lexed whole (block comments and raw strings keep
+  their state across lines) and the runs are cached with the diff, keyed by
+  source line so the shared aligned rows stay untouched. Word-level emphasis
+  still wins inside a changed row. Sides over 1 MB or files with no known
+  lexer render plain. `[ui] diff_syntax = "off"` disables it. New pure
+  package `internal/syntax`.
 - **Hunk picker: `enter` walks, `ctrl+s` applies.** In the conflict resolver
   `enter` used to be "apply" — with any region still undecided it refused,
   posted the count, and yanked the cursor to the first undecided region,
