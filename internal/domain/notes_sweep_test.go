@@ -82,7 +82,7 @@ func TestSweepDropsExpiredStaleAndOrphaned(t *testing.T) {
 }
 
 // sweepRepo is a real repo with one tracked, committed file the sweep can read
-// through ShowFile/WorktreeFile.
+// through the worktree-scoped side reads (ShowFileInDir / worktreeFileIn).
 func sweepRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

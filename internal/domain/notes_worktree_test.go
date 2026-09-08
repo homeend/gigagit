@@ -189,8 +189,15 @@ func TestWorktreeNotesAreScopedToTheirCheckout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NoteAdd: %v", err)
 	}
-	if n.Address.Worktree != filepath.Clean(linked) {
-		t.Fatalf("NoteAdd must pin the checkout: Worktree = %q, want %q", n.Address.Worktree, linked)
+	// Compare against git's own notion of the checkout, not the Go-built path:
+	// git resolves symlinks (on macOS t.TempDir() is /var/... and git prints
+	// /private/var/...), so a literal comparison would be a Linux-only pass.
+	wantWT, err := svcLinked.TopLevel(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.Address.Worktree != filepath.Clean(wantWT) {
+		t.Fatalf("NoteAdd must pin the Service's checkout: Worktree = %q, want %q", n.Address.Worktree, wantWT)
 	}
 	if n.ContextHash != model.NoteContextHash([]string{"linked body"}) {
 		t.Fatal("the fingerprint must come from the note's OWN worktree")
