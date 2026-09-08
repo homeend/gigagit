@@ -201,6 +201,27 @@ func cursorStyleLabel(s string) string {
 	return i18n.T("row")
 }
 
+// diffAlignRows are the . menu's three viewport alignments for the cursor
+// line (the z key cycles them).
+func (m Model) diffAlignRows() []actionRow {
+	if _, ok := m.topLayer().(*diffView); !ok {
+		return nil
+	}
+	mk := func(id, label string, mode cursorAlign) actionRow {
+		return actionRow{id: id, label: label, run: func(m Model) (tea.Model, tea.Cmd) {
+			if v := m.diffLayer(); v != nil {
+				v.alignCursor(mode, m.diffBodyRows())
+			}
+			return m, nil
+		}}
+	}
+	return []actionRow{
+		mk("diff-align-top", i18n.T("Align cursor line: top"), alignTop),
+		mk("diff-align-center", i18n.T("Align cursor line: center"), alignCenter),
+		mk("diff-align-bottom", i18n.T("Align cursor line: bottom"), alignBottom),
+	}
+}
+
 // diffCursorStyleRow is the . menu row that cycles the marker style for the
 // session. Only while a diff view is on top.
 func (m Model) diffCursorStyleRow() (actionRow, bool) {

@@ -52,6 +52,12 @@ func TestRenderDiffViewPanes(t *testing.T) {
 	v := &diffView{title: "f.txt", context: "HEAD → working tree", full: res.Rows, fullBlocks: res.Blocks}
 	v.rebuild()
 	m := renderModelWithDiff(v)
+	// Wide enough that the hint line's cursor-key groups (j/k/z/e, on top of
+	// the pre-existing scroll/change/part/mode/pan/hist/blame groups) don't
+	// truncate away "[esc] close" — the 100-col default already loses it
+	// below ~98 cols, so a wider terminal here isolates this test from that
+	// truncation rather than asserting a width budget nothing enforces.
+	m.width = 140
 	out := ansi.Strip(m.render())
 	lines := strings.Split(out, "\n")
 	for i, l := range lines {

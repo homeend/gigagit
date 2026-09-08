@@ -98,6 +98,27 @@ builds parallel emph/class masks over the tab-expanded runes; `styledRuns`
 groups by (emph, class) and emphasis wins. Web: `left_tok`/`right_tok`
 `[start,end,cls]` triples → `.tk-<cls>` spans via `renderCell`.
 
+**Diff view line cursor.** The full-screen diff view (`internal/tui/diff_cursor.go`)
+keeps a current line, `curLine`, indexing `diffView.lines` (the logical
+stream: one entry per aligned row plus fold separators), never `disp` — a
+wrapped line owns several display rows, and `lineStart` maps the cursor to
+its first one. It is independent of `cur` (the focused change block): `n`/`p`
+seed the cursor through `focusBlock`, but a free scroll (arrows, wheel)
+moves neither. `cursorRow()` is the contract later phases (review notes)
+anchor on — the row under the cursor, `RightNo` on the new side or `LeftNo`
+on a Del row. `alignCursor(mode cursorAlign, body int)` places the cursor
+line's first display row at the top/centre/bottom (`alignTop`/`alignCenter`/
+`alignBottom`, the `z`-key cycle order); `diffPaneLines(v, w, body, curStart,
+curEnd, style)` paints the marked range — the history pane calls it with
+`0, 0, "off"` so its rows are never marked. `e` resolves the editor's goto
+syntax via `editorCommandAt(editor, absPath, line)` (vi-style `+line`,
+VS Code-style `-g file:line`, helix `file:line`, sublime/zed `file:line:1`)
+and is gated off when there is no single file to open — `v.compare` (a
+two-sided compare has no cursor-worthy file) or an in-flight load/error/
+binary/too-large state; `v.rev == ""` opens the live working-tree file
+(`editFileAtCmd`), a set `rev` opens a read-only temp copy of `rev:path`
+(`openInEditorAtCmd` + `ShowFile`, `viewExternalCmd`).
+
 Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands, else launches the TUI.
 
 ## Conventions

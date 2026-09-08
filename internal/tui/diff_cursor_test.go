@@ -518,3 +518,27 @@ func TestDiffEKeyWorkingTreeUsesLiveEditor(t *testing.T) {
 		t.Fatal("e on a working-tree diff must return an editor command")
 	}
 }
+
+func TestDiffMenuOffersCursorRows(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(40), nil)
+	ids := map[string]bool{}
+	for _, r := range availableActions(m) {
+		ids[r.id] = true
+	}
+	for _, want := range []string{"diff-edit-at-line", "diff-cursor-style", "diff-align-top", "diff-align-center", "diff-align-bottom"} {
+		if !ids[want] {
+			t.Errorf("diff . menu lacks %s (have %v)", want, ids)
+		}
+	}
+}
+
+func TestDiffHintAdvertisesCursorKeys(t *testing.T) {
+	t.Parallel()
+	h := diffHintFor(longScroll)
+	for _, k := range []string{"[j/k]", "[z]", "[e]"} {
+		if !strings.Contains(h, k) {
+			t.Errorf("hint %q lacks %s", h, k)
+		}
+	}
+}
