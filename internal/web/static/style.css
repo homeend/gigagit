@@ -725,3 +725,16 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
   border-radius: 4px; padding: 2px 12px; font: inherit; font-size: 12px; cursor: pointer;
 }
 #versions-hint button:hover, #vbranches-hint button:hover { border-color: var(--accent); }
+
+/* Review notes: ◆ rows inside the diff table, and the anchored (clicked) row.
+   The anchor is drawn as an inset left rule plus an accented line number, NOT
+   a row background — tr.add/tr.del paint their own cells at higher specificity
+   and tr.flash borrows the selection colour, so a background here would be
+   invisible on exactly the rows a reviewer marks. */
+table.diff tr.cur > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+table.diff tr.cur > td.no { color: var(--accent); }
+table.diff tr.note td.note { color: var(--accent); padding-left: 12px; white-space: pre-wrap; cursor: context-menu; }
+table.diff tr.note.reply td.note { padding-left: 32px; color: var(--fg); }
+table.diff tr.note.stale td.note { color: var(--dim); }
+table.diff tr.note .note-rationale { opacity: .8; color: var(--fg); }
+.notebadge { margin-left: 6px; color: var(--accent); opacity: .85; }

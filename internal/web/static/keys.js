@@ -5,7 +5,7 @@ import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
-import { cycleFilesSort, drillOut, openFile, renderFiles, toggleMark } from "./files.js";
+import { addNotePrompt, cycleFilesSort, drillOut, editNotePrompt, openFile, renderFiles, replyNotePrompt, stepNote, toggleMark, toggleNotesAgent } from "./files.js";
 import { openPalette } from "./palette.js";
 
 // --- focus + keyboard ---
@@ -133,6 +133,19 @@ document.addEventListener("keydown", (e) => {
     // file list is the one the keyboard can reach — the sidebar's lists cycle
     // from the chips in their own headers.
     if (state.pane === "files" && state.filesMode === "status") cycleFilesSort();
+  } else if (e.key === "c" && state.diffCtx) {
+    // Review notes (the TUI's c/E/R/a/}/{). The web has no line cursor: `c`
+    // anchors on the clicked diff row (tr.cur), else the first changed row,
+    // and E/R act on the nearest note at or above it.
+    addNotePrompt();
+  } else if (e.key === "E" && state.diffCtx) {
+    editNotePrompt();
+  } else if (e.key === "R" && state.diffCtx) {
+    replyNotePrompt();
+  } else if (e.key === "a" && state.diffCtx) {
+    toggleNotesAgent();
+  } else if ((e.key === "}" || e.key === "{") && state.diffCtx) {
+    stepNote(e.key === "}" ? 1 : -1);
   } else if (e.key === "/") {
     e.preventDefault(); // the browser's quick-find would grab it
     openCommitFilter();
