@@ -50,12 +50,13 @@ func cursorMark(style string) cellMark {
 }
 
 // diffHintFor builds the diff-view hint for the current long-line mode. With
-// the cursor-key groups (j/k/z/e) it runs to ~131 columns (scroll variant, in
-// English) — past the 100-col budget earlier revisions tried to hold, so it
-// now truncates from the right (dropping [esc] close first) below roughly
-// that width; TestRenderDiffViewPanes renders wide enough to see the whole
-// line rather than asserting a budget nothing enforces. The scroll variant
-// appends the pan keys.
+// the cursor-key groups (j/k/z/e) and the review-note groups (c, }/{) it runs
+// to ~154 columns (scroll variant, in English) — past the 100-col budget
+// earlier revisions tried to hold, so it now truncates from the right
+// (dropping [esc] close first) below roughly that width;
+// TestRenderDiffViewPanes renders wide enough to see the whole line rather
+// than asserting a budget nothing enforces. The scroll variant appends the
+// pan keys.
 func diffHintFor(long longMode) string {
 	mode := i18n.T("scroll")
 	switch long {
@@ -68,7 +69,7 @@ func diffHintFor(long longMode) string {
 	if long == longScroll {
 		pan = i18n.T("  [←→/0] pan")
 	}
-	return i18n.T("[↑↓] scroll  [j/k] line  [z] align  [e] edit  [n/p] change  [f] part  [ctrl+w] %s", mode) + pan + i18n.T("  [h] hist  [b] blame  [esc] close")
+	return i18n.T("[↑↓] scroll  [j/k] line  [c] note  [}/{] notes  [z] align  [e] edit  [n/p] change  [f] part  [ctrl+w] %s", mode) + pan + i18n.T("  [h] hist  [b] blame  [esc] close")
 }
 
 // cellSeg is one pane's text for one display row: the sanitized display runes

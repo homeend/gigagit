@@ -114,6 +114,45 @@ func (m Model) peekDiffFile(dir int) bool {
 	return false
 }
 
+// diffFileSequence lists the paths the open diff would step through in
+// direction dir, in step order, starting AFTER the current selection. It walks
+// the same three sources stepDiffFile dispatches on and applies the same
+// skips (heading/placeholder rows in the tree, conflicted rows in the two
+// status panels), so the Nth entry is exactly what N stepDiffFile calls land
+// on. Read-only: nothing here moves a selection or opens a diff. Backs the
+// }/{ "next file that carries notes" step.
+func (m Model) diffFileSequence(dir int) []string {
+	if dir == 0 {
+		return nil
+	}
+	var out []string
+	switch m.diffNav {
+	case diffNavTree:
+		if m.filesView == nil {
+			return nil
+		}
+		vis := m.filesView.visible()
+		for i := m.filesView.sel + dir; i >= 0 && i < len(vis); i += dir {
+			if vis[i].path != "" {
+				out = append(out, vis[i].path)
+			}
+		}
+	case diffNavStatus, diffNavStaged:
+		p := panelFiles
+		if m.diffNav == diffNavStaged {
+			p = panelStaged
+		}
+		idx := m.displayIndices(p)
+		for s := m.sel[p] + dir; s >= 0 && s < len(idx); s += dir {
+			f := m.status.Files[idx[s]]
+			if f.Kind != model.KindUnmerged {
+				out = append(out, f.Path)
+			}
+		}
+	}
+	return out
+}
+
 // stepDiffFile opens the previous (dir<0) or next (dir>0) file's diff in the
 // open diff's source list, leaving the diff view open and posting a bottom-left
 // arrival notice naming the file. A boundary (no such file) is a no-op; so is a

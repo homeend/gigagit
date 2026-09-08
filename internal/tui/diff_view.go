@@ -688,6 +688,45 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			nm, cmd := r.run(m)
 			return nm.(Model), cmd
 		}
+	case "c":
+		return m.openNotePopup(noteAdd)
+	case "E":
+		return m.openNotePopup(noteEdit)
+	case "R":
+		return m.openNotePopup(noteReply)
+	case "a":
+		// Session-scoped: the flag lives on the Model and is mirrored onto
+		// every view that relayouts (relayout has no Model to ask).
+		m.notesAgentOff = !m.notesAgentOff
+		v.hideAgent = m.notesAgentOff
+		cr, hadRow := v.cursorRow()
+		wasVisible := v.cursorVisible(body)
+		v.relayout(v.width)
+		v.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
+	case "}":
+		var moved bool
+		if m, moved = m.jumpNote(1); !moved {
+			switch {
+			case m.diffNav == diffNavNone || !m.peekNotedFile(1):
+				m.diffNotice = i18n.T("▸ no next file with notes")
+			case fileArmed == fileArmNext:
+				return m.stepNotedFile(1)
+			default:
+				v.fileArm = fileArmNext
+			}
+		}
+	case "{":
+		var moved bool
+		if m, moved = m.jumpNote(-1); !moved {
+			switch {
+			case m.diffNav == diffNavNone || !m.peekNotedFile(-1):
+				m.diffNotice = i18n.T("▸ no previous file with notes")
+			case fileArmed == fileArmPrev:
+				return m.stepNotedFile(-1)
+			default:
+				v.fileArm = fileArmPrev
+			}
+		}
 	case "up":
 		v.scrollBy(-1, body)
 	case "down":

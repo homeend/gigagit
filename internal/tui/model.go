@@ -132,6 +132,9 @@ type Model struct {
 	diffLong    longMode    // session: long-line mode for new diffs (0 = scroll); w cycles
 	diffCursor  string      // session override of [ui] diff_cursor ("" = follow config); the . menu's Cursor marker row cycles it
 
+	noteCounts    domain.NoteCounts // badge counts (srcNotes); zero value = no badges
+	notesAgentOff bool              // `a`: hide agent-written notes for this session
+
 	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
 	svc                 *domain.Service                 // command layer; all git access goes through svc
@@ -378,7 +381,34 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		*dv = *msg.view
 		dv.loading = false
 		dv.compare = dv.compare || compare
+		// The loader built this view with no Model to ask, so re-apply the
+		// session's agent-layer choice, then resolve this address's notes off
+		// the UI thread (tag-gated on arrival, like the diff itself).
+		dv.hideAgent = m.notesAgentOff
+		return m, m.loadNotesCmd()
+	case notesLoadedMsg:
+		dv := m.diffLayer()
+		if dv == nil || msg.tag != m.diffTag {
+			return m, nil // closed, or stepped to another file
+		}
+		if msg.err != nil {
+			return m, nil // notes are best-effort; the sweep logs real failures
+		}
+		body := m.diffBodyRows()
+		cr, hadRow := dv.cursorRow()
+		wasVisible := dv.cursorVisible(body) // a free-scrolled view keeps its place
+		dv.notes = msg.notes
+		dv.relayout(dv.width)
+		dv.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
 		return m, nil
+	case noteMutatedMsg:
+		if msg.err != nil {
+			m.statusMsg = i18n.T("note: %s", msg.err.Error())
+			return m, nil
+		}
+		var counts tea.Cmd
+		m, counts = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
+		return m, tea.Batch(m.loadNotesCmd(), counts)
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
 	case snapshotTargetMsg:
@@ -1159,6 +1189,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case srcIdentity:
 			m.identity = msg.value.(model.Identity)
+		case srcNotes:
+			m.noteCounts = msg.value.(domain.NoteCounts)
+			// The badge counts just changed, so an open diff's own notes may
+			// have too (a sweep, an agent write, a manual r). Re-resolve them;
+			// the command is nil unless a note-addressable diff is open, and
+			// its result is tag-gated.
+			if cmd := m.loadNotesCmd(); cmd != nil {
+				return m, cmd
+			}
 		}
 		return m, nil
 	case tea.KeyMsg:
