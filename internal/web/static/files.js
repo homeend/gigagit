@@ -640,6 +640,8 @@ function diffHTML(d, paneWidth, notesOn = false) {
   const anchor = (side, no) => (notesOn && no ? ` data-side="${side}" data-no="${no}"` : "");
   const curCls = (side, no) =>
     notesOn && no && state.diffRow && state.diffRow.side === side && state.diffRow.no === no ? " cur" : "";
+  // A split row is "cur" when the mark sits on EITHER of its sides.
+  const curClsBoth = (r) => curCls("new", r.right_no) || curCls("old", r.left_no);
   const after = (cols, ...pairs) => {
     if (!notesOn) return "";
     let out = "";
@@ -701,8 +703,12 @@ function diffHTML(d, paneWidth, notesOn = false) {
       // pure-deletion row would answer `c` with line 0.
       const aside = r.right_no ? "new" : "old";
       const ano = r.right_no || r.left_no;
+      // Both sides' numbers ride on the row (data-lno / data-rno) so a click
+      // in the LEFT pane can anchor a note on the old side of a row whose
+      // default anchor is the new side.
+      const both = notesOn ? ` data-lno="${r.left_no || 0}" data-rno="${r.right_no || 0}"` : "";
       html +=
-        `<tr class="${r.kind}${hunkCls(r)}${curCls(aside, ano)}"${hunkAttr(r)}${anchor(aside, ano)}>` +
+        `<tr class="${r.kind}${hunkCls(r)}${curClsBoth(r)}"${hunkAttr(r)}${anchor(aside, ano)}${both}>` +
         `<td class="no l">${r.left_no || ""}</td>` +
         `<td class="side l">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</td>` +
         `<td class="no r">${r.right_no || ""}</td>` +
@@ -858,13 +864,14 @@ function noteBoxHTML(n, cols) {
 // markDiffRow makes tr the anchor `c` writes against. It toggles ONE class
 // rather than re-rendering: a full renderDiff would reset diffBlockIdx (the
 // ‹/› change stepper) and jolt the scroll position.
-function markDiffRow(tr) {
-  const no = Number(tr.dataset.no);
+function markDiffRow(tr, side, no) {
+  side = side || tr.dataset.side;
+  no = no || Number(tr.dataset.no);
   if (!no) return;
   const prev = $("diff-body").querySelector("tr.cur");
   if (prev) prev.classList.remove("cur");
   tr.classList.add("cur");
-  state.diffRow = { side: tr.dataset.side, no };
+  state.diffRow = { side, no };
   // Marking a row is an explicit "I am looking HERE", so it outranks a
   // previous }/{ landing for nearestNote. stepNote re-claims the id right
   // after its own call.
@@ -1058,7 +1065,16 @@ $("diff-body").addEventListener("click", (e) => {
   if (!notesArmed()) return;
   const tr = e.target.closest("tr[data-no]");
   if (!tr || !getSelection().isCollapsed) return; // don't re-anchor mid-selection
-  markDiffRow(tr);
+  // The pane you click is the side the note goes on: the left half anchors
+  // on the old side when the row has one, the right half on the new side.
+  const td = e.target.closest("td");
+  let side = tr.dataset.side, no = Number(tr.dataset.no);
+  if (td && tr.dataset.lno !== undefined) {
+    const wantOld = td.classList.contains("l");
+    const ln = Number(tr.dataset.lno), rn = Number(tr.dataset.rno);
+    if (wantOld && ln) { side = "old"; no = ln; } else if (!wantOld && rn) { side = "new"; no = rn; }
+  }
+  markDiffRow(tr, side, no);
 });
 
 

@@ -64,23 +64,45 @@ func (m Model) loadNotesCmd() tea.Cmd {
 
 // noteAnchorAtCursor is where `c` puts a new note: the cursor row's new-side
 // line, or the old-side line on a Del row (§4.1's cursorRow contract). The
-// fingerprint is taken from the text the user is looking at.
-func (m Model) noteAnchorAtCursor() (model.NoteSide, int, string, bool) {
+// noteAnchor is one side a new note can hang off: the side, its line number
+// and the fingerprint of that line's text.
+type noteAnchor struct {
+	side model.NoteSide
+	line int
+	hash string
+}
+
+// noteAnchorsAtCursor lists the anchors the cursor row offers: the new side
+// first (the default), then the old side — both when the row exists in both
+// versions (a Same or Changed row), one on an Add or Del row. The user picks
+// between them in the popup; nothing when the view has no cursor row.
+func (m Model) noteAnchorsAtCursor() []noteAnchor {
 	v := m.diffLayer()
 	if v == nil {
-		return "", 0, "", false
+		return nil
 	}
 	r, ok := v.cursorRow()
 	if !ok {
-		return "", 0, "", false
+		return nil
 	}
+	var out []noteAnchor
 	if r.RightNo > 0 {
-		return model.NoteSideNew, r.RightNo, model.NoteContextHash([]string{r.Right}), true
+		out = append(out, noteAnchor{model.NoteSideNew, r.RightNo, model.NoteContextHash([]string{r.Right})})
 	}
 	if r.LeftNo > 0 {
-		return model.NoteSideOld, r.LeftNo, model.NoteContextHash([]string{r.Left}), true
+		out = append(out, noteAnchor{model.NoteSideOld, r.LeftNo, model.NoteContextHash([]string{r.Left})})
 	}
-	return "", 0, "", false
+	return out
+}
+
+// noteAnchorAtCursor is the default anchor (the new side when the row has
+// one) for callers that do not offer a choice.
+func (m Model) noteAnchorAtCursor() (model.NoteSide, int, string, bool) {
+	as := m.noteAnchorsAtCursor()
+	if len(as) == 0 {
+		return "", 0, "", false
+	}
+	return as[0].side, as[0].line, as[0].hash, true
 }
 
 // noteTarget is the ONE note E / R / Delete note act on. It names a single

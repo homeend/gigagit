@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // notedModel opens a diff over 40 rows with notes on lines 5 and 25. The
@@ -529,5 +531,48 @@ func TestNoteMenuRowsOfferEditReplyDelete(t *testing.T) {
 	nm, _ = row.run(m2)
 	if p := nm.(Model).modal.req.Prompt; !strings.Contains(p, "1") || !strings.Contains(p, "◆ ada: root") {
 		t.Fatalf("the prompt must count the replies and quote the note, got %q", p)
+	}
+}
+
+// A note can go on either version of a line that exists in both: the add
+// form offers a side field (tab reaches it, ←/→ flip it) defaulting to the
+// new side; a row that exists on one side only offers no choice.
+func TestAddNoteFormOffersTheSideOnTwoSidedRows(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	body := m.diffBodyRows()
+	m.diffLayer().setCursorLine(10, body) // a Same row: both sides
+	m, _ = m.diffLayer().update(m, synthKey("c"))
+	p, ok := m.topLayer().(*notePopup)
+	if !ok || !p.hasSideField() || p.side != model.NoteSideNew {
+		t.Fatalf("c on a two-sided row must offer a side, defaulting to new: %#v", p)
+	}
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyTab})
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyTab})
+	if p.field != 2 {
+		t.Fatalf("two tabs must reach the side field, field = %d", p.field)
+	}
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyRight})
+	if p.side != model.NoteSideOld || p.line != m.diffLayer().lines[10].Row.LeftNo {
+		t.Fatalf("→ must flip to the old side at its own line number, got %s %d", p.side, p.line)
+	}
+	if !strings.Contains(p.box(m), "●") || !strings.Contains(p.box(m), "L"+strconv.Itoa(p.line)) {
+		t.Fatalf("the form must show the picked side: %s", p.box(m))
+	}
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyLeft})
+	if p.side != model.NoteSideNew {
+		t.Fatalf("← must flip back to the new side, got %s", p.side)
+	}
+	// An Add row exists on the new side only: no side field, tab stays in the
+	// two text fields.
+	m = m.popLayer()
+	v := m.diffLayer()
+	v.full[12] = textdiff.Row{Kind: textdiff.Add, Right: "added", RightNo: v.full[12].RightNo}
+	v.rebuild()
+	v.setCursorLine(12, body)
+	m, _ = v.update(m, synthKey("c"))
+	p2, ok := m.topLayer().(*notePopup)
+	if !ok || p2.hasSideField() || p2.fields() != 2 {
+		t.Fatalf("an Add row must not offer a side field: %#v", p2)
 	}
 }

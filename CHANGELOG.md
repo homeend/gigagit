@@ -10,7 +10,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 - **Review notes (phase 1).** Anchor a note to a diff line and it persists —
   per repo, machine-local, outside git. In the diff view `c` adds one at the
-  cursor line (summary + optional rationale), `E` edits and `R` replies to the
+  cursor line (summary + optional rationale; on a line that exists in both
+  versions the form's side field picks old or new, new by default — on the
+  web the half of the row you click decides), `E` edits and `R` replies to the
   note next to the cursor (a chooser when several share the line), `a` hides or shows agent-written notes (your
   own always stay visible), `}`/`{` jump between annotated lines — expanding a
   fold when the note hides under one, and stepping to the next file that
