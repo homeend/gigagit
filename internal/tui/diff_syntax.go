@@ -6,6 +6,7 @@
 package tui
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -83,6 +84,15 @@ func sanitizeCell(s string, spans []textdiff.Span, toks []syntax.Tok) (disp []ru
 		}
 	}
 	return disp, emph, cls
+}
+
+// hasBareCR reports whether data holds a \r that is NOT part of a CRLF. The
+// surfaces that lex their own content (blame, the file preview) treat such a
+// file as unhighlightable: they turn a lone \r into a line break while
+// syntax.Lex keeps it inside its line, so every line after it would receive
+// the previous line's runs. A CRLF file is safe — both sides count one line.
+func hasBareCR(data []byte) bool {
+	return bytes.Contains(bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n")), []byte("\r"))
 }
 
 // classMask marks raw rune indices [0,n) with their token class (ends clamped;

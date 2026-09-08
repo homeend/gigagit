@@ -9,8 +9,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // blameView is the single-file blame surface: the file's content with a
@@ -19,10 +21,11 @@ import (
 type blameView struct {
 	ctx     navContext
 	lines   []model.BlameLine
-	blocks  []blameBlock // grouped runs, recomputed after each load
-	sel     int          // line cursor (index into lines)
-	mode    dispMode     // text display mode; z cycles (applies to the whole gutter│code row)
-	hscroll int          // modeScroll horizontal offset
+	tok     [][]syntax.Tok // syntax runs per line (index = line−1); nil = plain
+	blocks  []blameBlock   // grouped runs, recomputed after each load
+	sel     int            // line cursor (index into lines)
+	mode    dispMode       // text display mode; z cycles (applies to the whole gutter│code row)
+	hscroll int            // modeScroll horizontal offset
 	loading bool
 	err     error
 	tag     string // gates stale loads
@@ -90,16 +93,51 @@ func blameAge(now, t time.Time) string {
 type blameMsg struct {
 	tag   string
 	lines []model.BlameLine
+	tok   [][]syntax.Tok
 	err   error
 }
 
-// loadBlameCmd fetches blame off the UI thread.
+// loadBlameCmd fetches blame off the UI thread, lexing the blamed content in
+// the same goroutine (chroma costs ~1 s at MaxSyntaxBytes — never on the UI
+// thread). The syntax switch is read at DISPATCH time so a config reload
+// mid-load cannot flip the answer under the closure.
 func (m Model) loadBlameCmd(ctx navContext, tag string) tea.Cmd {
-	svc := m.svc
+	svc, on := m.svc, m.cfg.UI.SyntaxOn()
 	return func() tea.Msg {
 		ls, err := svc.Blame(context.Background(), ctx.rev, ctx.path)
-		return blameMsg{tag: tag, lines: ls, err: err}
+		if err != nil {
+			return blameMsg{tag: tag, lines: ls, err: err}
+		}
+		return blameMsg{tag: tag, lines: ls, tok: lexBlame(ctx.path, ls, on)}
 	}
+}
+
+// lexBlame lexes the blamed file's content, reassembled from its lines. nil
+// (plain rendering) when the switch is off, the path has no lexer, the file is
+// past domain.MaxSyntaxBytes, or a line holds a BARE \r: the lexer keeps a \r
+// inside its line while the display strips a trailing one, so only a lone \r —
+// which nothing here turns into a break but a terminal would — is a hazard.
+func lexBlame(path string, lines []model.BlameLine, on bool) [][]syntax.Tok {
+	if !on || len(lines) == 0 {
+		return nil
+	}
+	lang := syntax.Detect(path)
+	if lang == "" {
+		return nil
+	}
+	parts := make([]string, len(lines))
+	for i, ln := range lines {
+		parts[i] = ln.Content
+	}
+	// Trailing "\n": blame hands back content lines without their terminator,
+	// and a CRLF file's last line would otherwise end in a \r that reads as
+	// bare. syntax.Lex adds no line for a trailing newline, so the token slice
+	// still has exactly one entry per blame line.
+	src := strings.Join(parts, "\n") + "\n"
+	if len(src) > domain.MaxSyntaxBytes || hasBareCR([]byte(src)) {
+		return nil
+	}
+	return syntax.Lex(lang, []byte(src))
 }
 
 // blameGutterW is the fixed gutter width: shortHash(7) + space + author(12) +
@@ -145,7 +183,15 @@ func (b *blameView) render(m Model, _ string) string {
 		if i == b.sel {
 			st = selectedRow
 		}
-		wr[i] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), style: st}
+		if b.tok == nil { // no lexer / colouring off: the plain (pre-syntax) path
+			wr[i] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), style: st}
+			continue
+		}
+		// sanitizeCell expands exactly like sanitizeLine but also returns the
+		// per-display-rune class mask, so tabs and control glyphs keep the
+		// colours aligned with the columns they land on.
+		disp, _, cls := sanitizeCell(ln.Content, nil, tokAt(b.tok, i+1))
+		wr[i] = winRow{prefix: gutter + "│", text: string(disp), cls: cls, style: st}
 	}
 
 	win := renderWindow(wr, winOpts{w: w, h: body, mode: b.mode, anchor: b.sel, hscroll: b.hscroll, prefixW: gw + 1})
