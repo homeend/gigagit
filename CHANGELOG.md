@@ -8,6 +8,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Diff cursor polish.** The ru/ko/zh footer hints use the same word for
+  "align" as the `.` menu rows; an empty editor setting that falls back to
+  the default editor still opens at the cursor line; more tests around the
+  cursor's empty-view, fold and marker edge cases.
 - **Diff view line cursor.** The full-screen diff now has a current line:
   `j`/`k` (or `alt+↑`/`alt+↓`) move it (the view scrolls only as needed), `↑`/`↓` and the wheel
   keep scrolling the viewport without moving it, `pgup`/`pgdn`, `home`/`end`
