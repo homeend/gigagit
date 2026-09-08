@@ -163,10 +163,10 @@ func (v *diffView) pageCursor(delta, body int) {
 // ensureCursorVisible scrolls the least amount that brings the cursor line's
 // first display row inside [offset, offset+body).
 func (v *diffView) ensureCursorVisible(body int) {
-	start, _ := v.cursorDispRange()
 	if len(v.disp) == 0 {
 		return
 	}
+	start, _ := v.cursorDispRange()
 	switch {
 	case start < v.offset:
 		v.offset = start
