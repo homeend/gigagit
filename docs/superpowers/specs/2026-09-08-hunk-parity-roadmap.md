@@ -403,9 +403,10 @@ needs a `settingDoc`, CLI changes update `using-gg.md` + `agentskill.Version`
 | 2 | Agent lane | `gg note …` verbs (hunk v1 JSON), MCP note tools, `gg review --notes`, `reviewing-with-gg` skill + `gg skill path`, `gg init` installs it | 1 |
 | 3 | Live steering | session inbox + `gg session navigate/reload/focus`, TUI watcher with poll fallback, web POST endpoint, attention marks | 1 (2 for the skill text) |
 | 4 | Syntax highlighting | chroma spike → `internal/syntax`, domain sidecars, TUI compositor, web classes, config keys | – (parallel with 1–3) |
-| 5 | Viewer parity extras | TUI unified toggle, `v`/`y` line selection + copy (folds in the "text operations" backlog item), hunk-header + line-number toggles, tab width, watch-reload of an open diff, `gg pager` / `gg diff --view` / patch-from-stdin viewer, move detection | 0 |
+| 5 | Viewer parity extras | **conflict-resolver syntax colouring** (the hunk picker renders its own cells; give it the same `syntax` runs + `styledRuns` as the diff pane), TUI unified toggle, `v`/`y` line selection + copy (folds in the "text operations" backlog item), hunk-header + line-number toggles, tab width, watch-reload of an open diff, `gg pager` / `gg diff --view` / patch-from-stdin viewer, move detection | 0 |
+| 6 | In-view text search | `/` incremental search inside the full-screen readers: diff view (both sides, jumps the line cursor), blame, the View file preview, and the conflict resolver; shared search-state helper (query, match list, next/prev with wrap, match count in the header, matches emphasised like word spans); next/prev keys must not collide with the diff view's `n`/`p` change keys (proposal: `enter`/`shift+enter` or `ctrl+n`/`ctrl+p`, decided at design time); `esc` clears; reuses the search-history dropdown (`alt+↑/↓`) | 0 (cursor) |
 
-Phases 0–2 are the shortest path to "an agent can leave notes in gg and a
+Phase 6 (in-view search) and the conflict-resolver colouring in phase 5 were added on the user's request on 2026-09-08 after phase 0 shipped. Phases 0–2 are the shortest path to "an agent can leave notes in gg and a
 human reads them in the TUI". Phase 4 is independent and can run in
 parallel. Phase 3 is where hunk's daemon complexity lives; the inbox design
 keeps it small. Phase 5 is a grab bag to schedule item by item.
