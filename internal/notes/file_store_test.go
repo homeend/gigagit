@@ -3,6 +3,7 @@ package notes
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -235,6 +236,148 @@ func TestPutWaitsForAHeldLock(t *testing.T) {
 	}
 	if got, _ := fs.Load(); len(got) != 1 {
 		t.Fatalf("the waiting writer lost its note: %+v", got)
+	}
+}
+
+// TestHeldLockGivesUpAtTheDeadline pins the retry loop's exit: a lock held
+// past lockWait fails the write instead of waiting or spinning forever.
+func TestHeldLockGivesUpAtTheDeadline(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	fs := NewFileStore(dir)
+	held, err := os.OpenFile(filepath.Join(dir, "notes.toml.lock"), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	held.Close()
+
+	done := make(chan error, 1)
+	start := time.Now()
+	go func() { done <- fs.Put(noteAt("aaaaaaaa", 1)) }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("Put must fail while the lock is held")
+		}
+		if elapsed := time.Since(start); elapsed < lockWait {
+			t.Fatalf("gave up after %v, before the %v budget", elapsed, lockWait)
+		}
+	case <-time.After(4 * lockWait):
+		t.Fatal("Put never gave up: the retry loop does not honour its deadline")
+	}
+}
+
+// TestUnremovableStaleLockStillGivesUp is the regression test for the spin: a
+// STALE lock that cannot be removed used to `continue` past both the deadline
+// check and the backoff, burning a core forever while holding fs.mu.
+func TestUnremovableStaleLockStillGivesUp(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("needs POSIX directory permissions and a non-root user")
+	}
+	dir := t.TempDir()
+	fs := NewFileStore(dir)
+	lock := filepath.Join(dir, "notes.toml.lock")
+	if err := os.WriteFile(lock, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-2 * lockStale)
+	if err := os.Chtimes(lock, old, old); err != nil {
+		t.Fatal(err)
+	}
+	// A read-only directory keeps the entry undeletable: os.Remove fails, the
+	// lock stays stale, and the loop meets the same condition every pass.
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) })
+	if err := os.Remove(lock); err == nil {
+		t.Skip("this filesystem allows deletion from a read-only directory")
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- fs.Put(noteAt("aaaaaaaa", 1)) }()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("Put must fail: the stale lock could not be broken")
+		}
+	case <-time.After(4 * lockWait):
+		t.Fatal("Put spun on an unremovable stale lock instead of giving up")
+	}
+}
+
+func TestUnreadableFileSurfacesAndDoesNotClobber(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	fs := NewFileStore(dir)
+	if err := fs.Put(noteAt("aaaaaaaa", 1)); err != nil {
+		t.Fatal(err)
+	}
+	corrupt := []byte("[[notes]]\nid = \"unterminated\n")
+	if err := os.WriteFile(filepath.Join(dir, "notes.toml"), corrupt, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fs.Load(); err == nil {
+		t.Fatal("Load on a corrupt file must surface the error, not read as empty")
+	}
+	if err := fs.Put(noteAt("bbbbbbbb", 2)); err == nil {
+		t.Fatal("Put on a corrupt file must fail rather than rewrite from an empty base")
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "notes.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(corrupt) {
+		t.Fatalf("the unreadable file was clobbered:\n%s", got)
+	}
+}
+
+func TestSweepWithNothingToDropDoesNotRewrite(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	fs := NewFileStore(dir)
+	for _, n := range []model.Note{noteAt("aaaaaaaa", 1), noteAt("bbbbbbbb", 2)} {
+		if err := fs.Put(n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	file := filepath.Join(dir, "notes.toml")
+	want, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(file, old, old); err != nil {
+		t.Fatal(err)
+	}
+	dropped, err := fs.Sweep(func(model.Note) bool { return true })
+	if err != nil || dropped != 0 {
+		t.Fatalf("Sweep = %d, %v", dropped, err)
+	}
+	fi, err := os.Stat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fi.ModTime().Equal(old) {
+		t.Fatalf("a no-op Sweep rewrote the file (mtime %v, want %v)", fi.ModTime(), old)
+	}
+	got, _ := os.ReadFile(file)
+	if string(got) != string(want) {
+		t.Fatalf("a no-op Sweep changed the content:\n%s", got)
+	}
+}
+
+func TestSweepOnAMissingStoreCreatesNothing(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join(t.TempDir(), "state", "notes")
+	fs := NewFileStore(root)
+	dropped, err := fs.Sweep(func(model.Note) bool { return false })
+	if err != nil || dropped != 0 {
+		t.Fatalf("Sweep on a missing store = %d, %v", dropped, err)
+	}
+	if _, err := os.Stat(root); !os.IsNotExist(err) {
+		t.Fatal("Sweep must not create the state directory")
 	}
 }
 

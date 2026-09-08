@@ -35,3 +35,5 @@ type Store interface {
 	Sweep(keep func(model.Note) bool) (dropped int, err error)
 	SetPolicy(p Policy) // the write-time budget lives ON the store (§4.4)
 }
+
+var _ Store = (*FileStore)(nil)

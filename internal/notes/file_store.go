@@ -4,8 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -49,24 +52,30 @@ type index struct {
 func (fs *FileStore) path() string     { return filepath.Join(fs.root, "notes.toml") }
 func (fs *FileStore) lockPath() string { return fs.path() + ".lock" }
 
-// read parses the file. A missing or corrupt file reads as empty — a note
-// store is working material, never worth failing a whole session over.
-func (fs *FileStore) read() []model.Note {
+// read parses the file. A MISSING file reads as empty (nothing has been
+// stored yet); every other failure — an unreadable file, corrupt TOML — is
+// propagated. Swallowing those would make the next mutation rewrite the file
+// from an empty base and silently destroy the whole store, which is far worse
+// than surfacing the error and leaving the file alone.
+func (fs *FileStore) read() ([]model.Note, error) {
 	data, err := os.ReadFile(fs.path())
 	if err != nil {
-		return nil
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
 	var idx index
 	if err := toml.Unmarshal(data, &idx); err != nil {
-		return nil
+		return nil, fmt.Errorf("notes: %s is corrupt: %w", fs.path(), err)
 	}
-	return idx.Notes
+	return idx.Notes, nil
 }
 
 // Load returns every stored note. NEVER writes (not even to prune): the
 // startup sweep is the only pruner, so a read-heavy session cannot rewrite
 // the file under a concurrent writer.
-func (fs *FileStore) Load() ([]model.Note, error) { return fs.read(), nil }
+func (fs *FileStore) Load() ([]model.Note, error) { return fs.read() }
 
 // lock takes the cross-process lock, breaking one that is older than
 // lockStale (a crashed writer). Returns a release func.
@@ -87,8 +96,13 @@ func (fs *FileStore) lock() (func(), error) {
 			return nil, err
 		}
 		if fi, statErr := os.Stat(fs.lockPath()); statErr == nil && time.Since(fi.ModTime()) > lockStale {
-			os.Remove(fs.lockPath()) // stale: the writer died holding it
-			continue
+			// Stale: the writer died holding it. Retry at once only if the
+			// removal actually worked — otherwise (permissions, a Windows
+			// share, a racing breaker) fall through to the deadline check and
+			// the backoff, so an unremovable stale lock can never spin.
+			if rmErr := os.Remove(fs.lockPath()); rmErr == nil {
+				continue
+			}
 		}
 		if time.Now().After(deadline) {
 			return nil, errors.New("notes: notes.toml.lock is held; try again")
@@ -127,6 +141,9 @@ func (fs *FileStore) write(ns []model.Note) error {
 // mutate is the ONE write path: process mutex → file lock → fresh read →
 // apply → drop orphaned replies → cap → atomic rewrite. Re-reading under the
 // lock is what makes the startup sweep and a concurrent `gg note add` safe.
+//
+// A mutation that changes nothing writes nothing: the startup sweep of a
+// clean store must not touch the file (nor create it).
 func (fs *FileStore) mutate(apply func([]model.Note) ([]model.Note, error)) error {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
@@ -135,13 +152,37 @@ func (fs *FileStore) mutate(apply func([]model.Note) ([]model.Note, error)) erro
 		return err
 	}
 	defer unlock()
-	ns, err := apply(fs.read())
+	before, err := fs.read()
+	if err != nil {
+		return err
+	}
+	// apply gets a CLONE: it may edit records in place (Put replaces by ID),
+	// and the unchanged-check below has to compare against the state actually
+	// read from disk, not against a slice the callback has already rewritten.
+	ns, err := apply(slices.Clone(before))
 	if err != nil {
 		return err
 	}
 	ns = dropOrphanReplies(ns)
 	ns = capOldestFirst(ns, fs.pol.MaxEntries)
+	if sameNotes(before, ns) {
+		return nil
+	}
 	return fs.write(ns)
+}
+
+// sameNotes reports whether two record lists are identical. A nil list and an
+// empty one are the same: "no notes" must not become a written empty file.
+func sameNotes(a, b []model.Note) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if !reflect.DeepEqual(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // Put adds n, or replaces the record with the same ID.
@@ -160,7 +201,7 @@ func (fs *FileStore) Put(n model.Note) error {
 // Remove deletes one note; removing a root removes its replies too.
 func (fs *FileStore) Remove(id string) error {
 	return fs.mutate(func(ns []model.Note) ([]model.Note, error) {
-		kept := ns[:0]
+		kept := make([]model.Note, 0, len(ns))
 		found := false
 		for _, n := range ns {
 			if n.ID == id || n.ParentID == id {
@@ -178,11 +219,18 @@ func (fs *FileStore) Remove(id string) error {
 
 // Sweep keeps every note the predicate accepts and reports how many records
 // went (including replies orphaned by a dropped root).
+//
+// A store with no file yet is already swept: Sweep returns without taking the
+// lock, so the common startup sweep of a repo that has never had a note
+// creates neither the state directory nor the file.
 func (fs *FileStore) Sweep(keep func(model.Note) bool) (int, error) {
+	if _, err := os.Stat(fs.path()); os.IsNotExist(err) {
+		return 0, nil
+	}
 	dropped := 0
 	err := fs.mutate(func(ns []model.Note) ([]model.Note, error) {
 		before := len(ns)
-		kept := ns[:0]
+		kept := make([]model.Note, 0, len(ns))
 		for _, n := range ns {
 			if keep(n) {
 				kept = append(kept, n)
@@ -261,13 +309,10 @@ func NewID(existing []model.Note) string {
 	}
 	var b [4]byte
 	for {
-		if _, err := rand.Read(b[:]); err != nil {
-			// crypto/rand cannot fail in practice; fall back to the clock so a
-			// note is still storable rather than lost.
-			return hex.EncodeToString([]byte{
-				byte(Now().UnixNano()), byte(Now().UnixNano() >> 8),
-				byte(Now().UnixNano() >> 16), byte(Now().UnixNano() >> 24)})
-		}
+		// crypto/rand.Read never returns an error (Go 1.24+ panics on an
+		// unusable source instead), so there is no fallback branch here — one
+		// would only be a second, collision-blind id generator.
+		rand.Read(b[:])
 		id := hex.EncodeToString(b[:])
 		if !taken[id] {
 			return id
