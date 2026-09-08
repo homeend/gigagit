@@ -1,6 +1,8 @@
 package web
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -35,5 +37,25 @@ func TestDiffJSONCarriesSyntaxRuns(t *testing.T) {
 	}
 	if _, has := second["left_tok"]; has {
 		t.Errorf("an all-add row has no old line, so no left_tok: %v", second)
+	}
+}
+
+// TestFilesJSRoutesEveryDiffCellThroughRenderCell guards against a future
+// diffHTML branch (e.g. a new layout, or the unified narrow-viewport "same"
+// row that once slipped through as a bare esc(...) call) reverting to plain
+// text instead of going through renderCell, which is what actually paints
+// left_tok/right_tok's syntax runs.
+func TestFilesJSRoutesEveryDiffCellThroughRenderCell(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile("static/files.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(src)
+	if n := strings.Count(s, "renderCell("); n < 6 {
+		t.Errorf("renderCell( call count = %d, want >= 6 (every diff cell in every layout)", n)
+	}
+	if strings.Contains(s, "markSpans(") {
+		t.Error("markSpans( still present — a diff cell is bypassing renderCell's syntax-run rendering")
 	}
 }

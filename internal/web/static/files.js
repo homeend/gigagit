@@ -609,7 +609,7 @@ function diffHTML(d, paneWidth) {
         html +=
           `<tr class="same"><td class="no l">${r.left_no || ""}</td>` +
           `<td class="no r">${r.right_no || ""}</td>` +
-          `<td class="side">${esc(r.right)}</td></tr>`;
+          `<td class="side">${renderCell(r.right, null, r.right_tok, "r")}</td></tr>`;
       } else {
         if (r.kind !== "add")
           html +=
