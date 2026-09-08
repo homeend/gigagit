@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -183,7 +184,7 @@ func TestPlainDifferNoTokensWhenOffUnknownOrLarge(t *testing.T) {
 		{"nil Syntax", DifferOptions{}, Request{Path: "a.go", Old: src([]byte("a\n")), New: src([]byte("b\n"))}},
 		{"no path", DifferOptions{Syntax: on}, Request{Old: src([]byte("a\n")), New: src([]byte("b\n"))}},
 		{"unknown ext", DifferOptions{Syntax: on}, Request{Path: "a.zzz", Old: src([]byte("a\n")), New: src([]byte("b\n"))}},
-		{"too big", DifferOptions{Syntax: on}, Request{Path: "a.go", Old: src(make([]byte, MaxSyntaxBytes+1)), New: src([]byte("b\n"))}},
+		{"binary", DifferOptions{Syntax: on}, Request{Path: "a.go", Old: src(make([]byte, MaxSyntaxBytes+1)), New: src([]byte("b\n"))}},
 	}
 	for _, c := range cases {
 		out, err := NewDiffer(c.opts, nil).Diff(context.Background(), c.req)
@@ -193,6 +194,31 @@ func TestPlainDifferNoTokensWhenOffUnknownOrLarge(t *testing.T) {
 		if out.OldTok != nil || out.NewTok != nil {
 			t.Errorf("%s: expected no tokens, got old=%v new=%v", c.name, out.OldTok, out.NewTok)
 		}
+	}
+}
+
+func TestPlainDifferPerSideMaxSyntaxBytesCap(t *testing.T) {
+	t.Parallel()
+	// Non-binary text just over MaxSyntaxBytes: unlike the all-zero "binary"
+	// case above, this must diff and lex normally — only the oversized side's
+	// tokens are dropped, the small side still gets highlighted.
+	bigOld := bytes.Repeat([]byte("// pad\n"), MaxSyntaxBytes/7+1)
+	out, err := NewDiffer(DifferOptions{Syntax: on}, nil).Diff(context.Background(), Request{
+		Path: "a.go",
+		Old:  src(bigOld),
+		New:  src([]byte("package a\n")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Binary || out.TooLarge {
+		t.Fatalf("large non-binary text under MaxDiffBytes must diff normally, got Binary=%v TooLarge=%v", out.Binary, out.TooLarge)
+	}
+	if out.OldTok != nil {
+		t.Errorf("old side over MaxSyntaxBytes must carry no tokens, got %v", out.OldTok)
+	}
+	if out.NewTok == nil {
+		t.Error("new side under MaxSyntaxBytes must still be tokenised despite the old side being too big")
 	}
 }
 

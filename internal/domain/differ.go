@@ -47,11 +47,13 @@ type Diff struct {
 
 // Size implements cache.Sized: the diff's approximate heap weight in bytes for
 // the cache byte budget — the row text on both sides (the dominant cost) plus
-// a small per-row overhead. Binary/too-large outcomes hold no rows.
+// a small per-row overhead, plus OldTok/NewTok's per-line token runs. Binary/
+// too-large outcomes hold no rows or tokens.
 //
-// The cached rows are shared across every cache hit (the loader aliases them
-// into the view); treat them as READ-ONLY — an in-place mutation of a cached
-// Row would corrupt the cache for all later opens.
+// The cached rows AND OldTok/NewTok are shared across every cache hit (the
+// loader aliases them into the view); treat all of it as READ-ONLY — an
+// in-place mutation of a cached Row or Tok slice would corrupt the cache for
+// all later opens.
 func (d Diff) Size() int {
 	n := 0
 	for _, r := range d.Result.Rows {
