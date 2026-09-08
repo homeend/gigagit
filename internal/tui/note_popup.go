@@ -57,15 +57,19 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 		p.side, p.line, p.hash = side, line, hash
 		p.summary, p.rationale = newTextField(""), newTextField("")
 	case noteEdit, noteReply:
-		r, rok := m.noteNearCursor()
+		t, rok := m.noteNearCursor()
 		if !rok {
 			return m, nil
 		}
-		p.targetID = r.Note.ID
-		p.side, p.line, p.hash = r.Note.Side, r.Range[1], r.Note.ContextHash
+		p.side, p.line, p.hash = t.side, t.line, t.hash
 		if mode == noteEdit {
-			p.summary, p.rationale = newTextField(r.Note.Summary), newTextField(r.Note.Rationale)
+			// Edit acts on the targeted ROW's own note (which may be a reply).
+			p.targetID = t.note.ID
+			p.summary, p.rationale = newTextField(t.note.Summary), newTextField(t.note.Rationale)
 		} else {
+			// Reply threads onto the ROOT — NoteReply flattens to it anyway,
+			// and inherits the root's address/side/range/fingerprint.
+			p.targetID = t.rootID
 			p.summary, p.rationale = newTextField(""), newTextField("")
 		}
 	}

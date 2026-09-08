@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
@@ -121,6 +122,11 @@ func TestERTargetTheNoteNearestAboveTheCursor(t *testing.T) {
 func TestNoteKeysInertWithoutNotes(t *testing.T) {
 	t.Parallel()
 	m := openedDiffModel(12, cursorRows(40), nil)
+	// A titleless view makes diffNoteAddress bail before noteNearCursor is
+	// ever consulted, which would make this test vacuous: give it the same
+	// address notedModel has, so E/R really do reach the no-note path.
+	m.diffLayer().title = "a/b.go"
+	m.diffTag = statusDiffTag("a/b.go", false)
 	for _, k := range []string{"E", "R", "}", "{"} {
 		mm, _ := m.diffLayer().update(m, synthKey(k))
 		if _, isPopup := mm.topLayer().(*notePopup); isPopup {
@@ -158,3 +164,220 @@ func TestNoteDeleteRowOnlyWithANoteInReach(t *testing.T) {
 }
 
 var _ = tea.KeyMsg{}
+
+// --- Fix round 1 -----------------------------------------------------------
+
+// oldSideNote is rootNote's old-side twin: NotesFor sorts new-side FIRST, so a
+// low old-side line legitimately precedes a high new-side line in v.notes.
+func oldSideNote(id string, line int, summary string) domain.ResolvedNote {
+	n := rootNote(id, line, summary, "", model.NoteSourceUser, model.NoteActive)
+	n.Note.Side = model.NoteSideOld
+	return n
+}
+
+// TestNoteTargetIsTheNearestLineNotTheLastListed: with notes on BOTH sides the
+// list order (new-side first, then by line) puts the FARTHER note last, so
+// picking "the last qualifying note" targets the wrong one.
+func TestNoteTargetIsTheNearestLineNotTheLastListed(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	v := m.diffLayer()
+	v.notes = []domain.ResolvedNote{
+		rootNote("new20", 20, "near", "", model.NoteSourceUser, model.NoteActive),
+		oldSideNote("old3", 3, "far"),
+	}
+	v.relayout(0)
+	v.setCursorLine(30, m.diffBodyRows())
+	tg, ok := m.noteNearCursor()
+	if !ok || tg.note.ID != "new20" {
+		t.Fatalf("target = %q (ok %v), want new20 — the greatest anchor line at/above the cursor", tg.note.ID, ok)
+	}
+	// Above every note the fallback takes the SMALLEST anchor line, not the
+	// first listed one.
+	v.setCursorLine(0, m.diffBodyRows())
+	tg, ok = m.noteNearCursor()
+	if !ok || tg.note.ID != "old3" {
+		t.Fatalf("fallback target = %q (ok %v), want old3 (the lowest line)", tg.note.ID, ok)
+	}
+}
+
+// TestAgentLayerTargetingMatchesRendering: with the agent layer off, a user
+// reply under an agent root still RENDERS, so it must still be targetable —
+// E edits that row's note, R replies into its (hidden) root.
+func TestAgentLayerTargetingMatchesRendering(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	v := m.diffLayer()
+	root := reply(rootNote("aroot", 5, "bot's root", "", model.NoteSourceAgent, model.NoteActive),
+		"ureply", "ada", "my reply", model.NoteSourceUser)
+	v.notes = []domain.ResolvedNote{root}
+	v.hideAgent = true
+	v.relayout(0)
+	v.setCursorLine(30, m.diffBodyRows())
+
+	// The row is on screen…
+	shown := false
+	for _, dr := range v.disp {
+		if dr.note != nil && strings.Contains(dr.note.text, "my reply") {
+			shown = true
+		}
+	}
+	if !shown {
+		t.Fatal("fixture broken: the user reply must render with the agent layer off")
+	}
+	// …so it is what E targets.
+	m2, _ := m.diffLayer().update(m, synthKey("E"))
+	p, ok := m2.topLayer().(*notePopup)
+	if !ok || p.targetID != "ureply" {
+		t.Fatalf("E must edit the VISIBLE row's note, got %#v (ok %v)", p, ok)
+	}
+	m2 = m2.popLayer()
+	m3, _ := m2.diffLayer().update(m2, synthKey("R"))
+	p, ok = m3.topLayer().(*notePopup)
+	if !ok || p.targetID != "aroot" {
+		t.Fatalf("R must reply into the row's ROOT thread, got %#v (ok %v)", p, ok)
+	}
+	// A thread with nothing left to show is not targetable at all.
+	v.notes = []domain.ResolvedNote{rootNote("only", 5, "bot", "", model.NoteSourceAgent, model.NoteActive)}
+	v.relayout(0)
+	if _, ok := m.noteNearCursor(); ok {
+		t.Fatal("a fully hidden thread must not be targetable")
+	}
+}
+
+// notedFileStepModel is treeDiffModel with c.go carrying notes (two plain file
+// steps away) and no notes in the open diff, so }/{ fall straight through to
+// the file step.
+func notedFileStepModel() Model {
+	m := treeDiffModel(1) // on a.go
+	m.noteCounts = domain.NoteCounts{ByPath: map[string]int{"c.go": 1}}
+	return m
+}
+
+// TestNoteFileStepArmDoesNotCrossTalkWithEnd: }/{ own their arm, so a primed
+// note step is never performed by end/N and vice versa.
+func TestNoteFileStepArmDoesNotCrossTalkWithEnd(t *testing.T) {
+	t.Parallel()
+	// } primes its own arm…
+	m := notedFileStepModel()
+	u, _ := m.Update(keyMsg("}"))
+	mm := u.(Model)
+	if mm.diffLayer().fileArm != fileArmNextNote {
+		t.Fatalf("} must prime fileArmNextNote, got %d", mm.diffLayer().fileArm)
+	}
+	if !strings.Contains(fileArmCue(fileArmNextNote), "}") {
+		t.Fatalf("the cue must name }, got %q", fileArmCue(fileArmNextNote))
+	}
+	// …and end must NOT perform it: it re-primes its own arm instead.
+	u2, cmd := mm.Update(keyMsg("end"))
+	mm2 := u2.(Model)
+	if mm2.filesView.sel != 1 || cmd != nil {
+		t.Fatalf("end must not step after } primed, sel=%d cmd=%v", mm2.filesView.sel, cmd)
+	}
+	if mm2.diffLayer().fileArm != fileArmNext {
+		t.Fatalf("end after } must re-prime fileArmNext, got %d", mm2.diffLayer().fileArm)
+	}
+
+	// The other direction: end primes, } must not step the note walk.
+	m = notedFileStepModel()
+	u, _ = m.Update(keyMsg("end"))
+	mm = u.(Model)
+	if mm.diffLayer().fileArm != fileArmNext {
+		t.Fatalf("end must prime fileArmNext, got %d", mm.diffLayer().fileArm)
+	}
+	u2, cmd = mm.Update(keyMsg("}"))
+	mm2 = u2.(Model)
+	if mm2.filesView.sel != 1 || cmd != nil {
+		t.Fatalf("} must not step after end primed, sel=%d cmd=%v", mm2.filesView.sel, cmd)
+	}
+	if mm2.diffLayer().fileArm != fileArmNextNote {
+		t.Fatalf("} after end must re-prime fileArmNextNote, got %d", mm2.diffLayer().fileArm)
+	}
+}
+
+// TestNoteFileStepTwoPress: }} skips the note-less neighbour and lands on the
+// next file that actually carries notes.
+func TestNoteFileStepTwoPress(t *testing.T) {
+	t.Parallel()
+	m := notedFileStepModel()
+	u, _ := m.Update(keyMsg("}"))
+	u2, cmd := u.(Model).Update(keyMsg("}"))
+	mm := u2.(Model)
+	if mm.filesView.sel != 3 || mm.diffTag != "commit:abc:c.go" {
+		t.Fatalf("}} must land on c.go, sel=%d tag=%q", mm.filesView.sel, mm.diffTag)
+	}
+	if cmd == nil {
+		t.Fatal("stepping must return the loader cmd")
+	}
+}
+
+// TestDiffHintFitsItsBudget pins the footer budget the note groups had to fit
+// into: the widest variant must survive a 140-column terminal whole.
+func TestDiffHintFitsItsBudget(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []longMode{longScroll, longWrap, longTruncate} {
+		h := diffHintFor(mode)
+		if w := lipgloss.Width(h); w > 140 {
+			t.Errorf("hint (mode %d) is %d columns, budget is 140: %q", mode, w, h)
+		}
+		for _, k := range []string{"[c/}{]", "[z]", "[e]", "[n/p]", "[f]", "[h/b]", "[esc] close"} {
+			if !strings.Contains(h, k) {
+				t.Errorf("hint (mode %d) lost %s: %q", mode, k, h)
+			}
+		}
+	}
+}
+
+// TestNoteMenuRowsOfferEditReplyDelete: E/R are not in the footer, so the .
+// menu must carry them next to Delete note — and Delete must confirm first.
+func TestNoteMenuRowsOfferEditReplyDelete(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	m.diffLayer().setCursorLine(30, m.diffBodyRows())
+	ids := map[string]actionRow{}
+	for _, r := range m.noteMenuRows() {
+		ids[r.id] = r
+	}
+	for _, want := range []string{"note-edit", "note-reply", "note-delete"} {
+		if _, ok := ids[want]; !ok {
+			t.Fatalf("the . menu must offer %s, got %v", want, ids)
+		}
+	}
+	if strings.Contains(ids["note-edit"].label, "[") {
+		t.Fatalf("menu labels carry no key hints: %q", ids["note-edit"].label)
+	}
+	// Edit opens the popup on the same target the key would.
+	nm, _ := ids["note-edit"].run(m)
+	if p, ok := nm.(Model).topLayer().(*notePopup); !ok || p.mode != noteEdit {
+		t.Fatalf("the Edit note row must open the edit popup, top is %T", nm.(Model).topLayer())
+	}
+	// Delete confirms instead of writing straight away.
+	nm, cmd := ids["note-delete"].run(m)
+	dm := nm.(Model)
+	if dm.modal == nil || dm.modal.req.ID != "note-remove" {
+		t.Fatalf("Delete note must raise a confirmation, modal = %#v", dm.modal)
+	}
+	if cmd != nil {
+		t.Fatal("Delete note must not write before the confirmation is answered")
+	}
+	if dm.modal.req.Options[len(dm.modal.req.Options)-1] != "Cancel" {
+		t.Fatalf("esc must map to Cancel, options = %v", dm.modal.req.Options)
+	}
+	// Cancel writes nothing.
+	nm, cmd = dm.resolveModal("Cancel")
+	if cmd != nil || nm.(Model).modal != nil {
+		t.Fatal("Cancel must close the modal and write nothing")
+	}
+	// With replies, the prompt says how many go with it.
+	m2 := notedModel(t)
+	v := m2.diffLayer()
+	v.notes = []domain.ResolvedNote{reply(rootNote("r", 5, "root", "", model.NoteSourceUser, model.NoteActive),
+		"c1", "ada", "reply", model.NoteSourceUser)}
+	v.relayout(0)
+	v.setCursorLine(30, m2.diffBodyRows())
+	row, _ := m2.noteDeleteRow()
+	nm, _ = row.run(m2)
+	if p := nm.(Model).modal.req.Prompt; !strings.Contains(p, "1") {
+		t.Fatalf("the prompt must count the replies, got %q", p)
+	}
+}

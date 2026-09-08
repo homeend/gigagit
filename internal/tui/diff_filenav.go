@@ -23,16 +23,23 @@ const (
 )
 
 // fileArmDir records that a file-step was primed: the next same-direction press
-// performs it. Two gestures share this arm — End/Home at the file's bottom/top,
-// and N/P on the last/first change — since both resolve to the same next/prev
-// file step. Cleared by any other key (reset at the top of updateDiffViewKey),
-// exactly like the n/p change-wrap arm (wrapArm). The cue shows bottom-left.
+// performs it. End/Home at the file's bottom/top and N/P on the last/first
+// change share the plain fileArmNext/fileArmPrev values, since both resolve to
+// the same next/prev file step. }/{ prime their OWN values instead: they step
+// to the next file that CARRIES NOTES, a different destination, so the cue
+// must name the right key and a second press of the other gesture must not
+// perform this one. A mismatched second key therefore falls through to the
+// default arm of its own case and simply re-primes. Cleared by any other key
+// (reset at the top of updateDiffViewKey), exactly like the n/p change-wrap
+// arm (wrapArm). The cue shows bottom-left.
 type fileArmDir int
 
 const (
-	fileArmNone fileArmDir = iota
-	fileArmNext            // primed: next End/N → next file
-	fileArmPrev            // primed: next Home/P → previous file
+	fileArmNone     fileArmDir = iota
+	fileArmNext                // primed: next End/N → next file
+	fileArmPrev                // primed: next Home/P → previous file
+	fileArmNextNote            // primed: next } → next file that carries notes
+	fileArmPrevNote            // primed: next { → previous file that carries notes
 )
 
 // fileArmCue is the bottom-left prompt shown while a file-step is primed.
@@ -42,6 +49,10 @@ func fileArmCue(d fileArmDir) string {
 		return i18n.T("▸ N/end again → next file")
 	case fileArmPrev:
 		return i18n.T("▸ P/home again → previous file")
+	case fileArmNextNote:
+		return i18n.T("▸ } again → next file with notes")
+	case fileArmPrevNote:
+		return i18n.T("▸ { again → previous file with notes")
 	}
 	return ""
 }

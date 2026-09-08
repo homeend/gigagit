@@ -99,9 +99,7 @@ func availableActions(m Model) []actionRow {
 			rows = append(rows, r)
 		}
 		rows = append(rows, m.diffAlignRows()...)
-		if r, ok := m.noteDeleteRow(); ok {
-			rows = append(rows, r)
-		}
+		rows = append(rows, m.noteMenuRows()...)
 		if r, ok := m.shelfAddRow(); ok {
 			rows = append(rows, r)
 		}

@@ -6,6 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/textdiff"
@@ -75,28 +76,70 @@ func (m Model) noteAnchorAtCursor() (model.NoteSide, int, string, bool) {
 	return "", 0, "", false
 }
 
-// noteNearCursor is the root note E/R/Delete act on: the last one anchored at
-// or above the cursor line, else the first note in the view.
-func (m Model) noteNearCursor() (domain.ResolvedNote, bool) {
+// noteTarget is the ONE note E / R / Delete note act on. It names a single
+// note (a root, or a reply when the root is hidden) together with its thread's
+// root and anchor, so E edits exactly the row the user can see while R still
+// replies into that row's thread.
+type noteTarget struct {
+	note    model.Note     // the targeted note itself (root or reply)
+	rootID  string         // the thread root's id (== note.ID on a root)
+	line    int            // the thread's resolved anchor line (popup heading)
+	side    model.NoteSide // the thread's side
+	hash    string         // the thread's context fingerprint
+	replies int            // replies a delete would take along (0 unless note is the root)
+}
+
+// noteTargetIn picks the targetable note inside one thread: the first note
+// whose OWN row survives the agent filter — the root, else the first visible
+// reply. This is exactly dropAgentRows' per-ROW rule, so every row the user
+// can see is targetable and no hidden row ever is. ok=false when the whole
+// thread is filtered away (it then draws no rows either).
+func (v *diffView) noteTargetIn(r domain.ResolvedNote) (noteTarget, bool) {
+	shown := func(n model.Note) bool {
+		return !v.hideAgent || n.Source != model.NoteSourceAgent
+	}
+	t := noteTarget{rootID: r.Note.ID, line: r.Range[1], side: r.Note.Side, hash: r.Note.ContextHash}
+	if shown(r.Note) {
+		// Deleting a root takes its replies, hidden ones included — the count
+		// the confirmation quotes is the STORED thread, not the shown rows.
+		t.note, t.replies = r.Note, len(r.Replies)
+		return t, true
+	}
+	for _, rep := range r.Replies {
+		if shown(rep.Note) {
+			t.note = rep.Note
+			return t, true
+		}
+	}
+	return noteTarget{}, false
+}
+
+// noteNearCursor is the note E/R/Delete act on: the one anchored on the
+// GREATEST logical line at or above the cursor, else the one on the smallest
+// line in the view. Comparison is by v.lines INDEX, never by line number:
+// NotesFor sorts new-side-first then by line, so an old-side note on line 3
+// otherwise beat a new-side note on line 20 purely by iteration order.
+func (m Model) noteNearCursor() (noteTarget, bool) {
 	v := m.diffLayer()
 	if v == nil || len(v.notes) == 0 {
-		return domain.ResolvedNote{}, false
+		return noteTarget{}, false
 	}
-	best, found := domain.ResolvedNote{}, false
-	first, hasFirst := domain.ResolvedNote{}, false
+	best, bestLi, found := noteTarget{}, 0, false
+	first, firstLi, hasFirst := noteTarget{}, 0, false
 	for _, r := range v.notes {
-		if v.hideAgent && r.Note.Source == model.NoteSourceAgent {
+		t, ok := v.noteTargetIn(r)
+		if !ok {
 			continue
 		}
 		li, _ := v.noteAnchorLine(r)
 		if li < 0 {
-			continue
+			continue // the anchor is not in this view at all
 		}
-		if !hasFirst {
-			first, hasFirst = r, true
+		if !hasFirst || li < firstLi {
+			first, firstLi, hasFirst = t, li, true
 		}
-		if li <= v.curLine {
-			best, found = r, true
+		if li <= v.curLine && (!found || li > bestLi) {
+			best, bestLi, found = t, li, true
 		}
 	}
 	if found {
@@ -209,21 +252,68 @@ func (m Model) notedFilePath(path string) bool {
 	return m.noteCounts.ByPath[path] > 0
 }
 
-// noteDeleteRow is the . menu's "Delete note" (there is no key for it).
+// noteMenuRows are the . menu's note rows — Edit / Reply / Delete — offered
+// while a diff is on top and a note sits in reach. E and R also have keys; the
+// rows make them discoverable (the diff footer has no room left for them), and
+// Delete note has no key at all.
+func (m Model) noteMenuRows() []actionRow {
+	if _, ok := m.topLayer().(*diffView); !ok {
+		return nil
+	}
+	if _, ok := m.noteNearCursor(); !ok {
+		return nil
+	}
+	open := func(id, label string, mode noteFormMode) actionRow {
+		return actionRow{id: id, label: label, run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openNotePopup(mode)
+		}}
+	}
+	rows := []actionRow{
+		open("note-edit", i18n.T("Edit note"), noteEdit),
+		open("note-reply", i18n.T("Reply to note"), noteReply),
+	}
+	if r, ok := m.noteDeleteRow(); ok {
+		rows = append(rows, r)
+	}
+	return rows
+}
+
+// noteDeleteRow is the . menu's "Delete note" (there is no key for it). The
+// write is destructive and unrecoverable — a root takes its replies with it —
+// so it goes through the same yes/no modal the bookmark/shelf removals use;
+// esc answers Cancel.
 func (m Model) noteDeleteRow() (actionRow, bool) {
 	if _, ok := m.topLayer().(*diffView); !ok {
 		return actionRow{}, false
 	}
-	r, ok := m.noteNearCursor()
+	t, ok := m.noteNearCursor()
 	if !ok {
 		return actionRow{}, false
 	}
-	id := r.Note.ID
+	id, replies := t.note.ID, t.replies
 	return actionRow{
 		id:    "note-delete",
 		label: i18n.T("Delete note"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m, m.noteRemoveCmd(id)
+			prompt := i18n.T("Delete this note?")
+			if replies > 0 {
+				prompt = i18n.T("Delete this note and its %d replies?", replies)
+			}
+			m.modal = &decisionState{
+				req: engine.DecisionRequest{
+					ID:      "note-remove",
+					Prompt:  prompt,
+					Options: []string{"Delete", "Cancel"},
+				},
+				sel: 1, // default highlight = Cancel
+				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+					if opt == "Delete" {
+						return m, m.noteRemoveCmd(id)
+					}
+					return m, nil
+				},
+			}
+			return m, nil
 		},
 	}, true
 }

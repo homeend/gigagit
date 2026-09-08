@@ -709,10 +709,10 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			switch {
 			case m.diffNav == diffNavNone || !m.peekNotedFile(1):
 				m.diffNotice = i18n.T("▸ no next file with notes")
-			case fileArmed == fileArmNext:
+			case fileArmed == fileArmNextNote:
 				return m.stepNotedFile(1)
 			default:
-				v.fileArm = fileArmNext
+				v.fileArm = fileArmNextNote
 			}
 		}
 	case "{":
@@ -721,10 +721,10 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			switch {
 			case m.diffNav == diffNavNone || !m.peekNotedFile(-1):
 				m.diffNotice = i18n.T("▸ no previous file with notes")
-			case fileArmed == fileArmPrev:
+			case fileArmed == fileArmPrevNote:
 				return m.stepNotedFile(-1)
 			default:
-				v.fileArm = fileArmPrev
+				v.fileArm = fileArmPrevNote
 			}
 		}
 	case "up":

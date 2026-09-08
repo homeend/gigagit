@@ -49,14 +49,15 @@ func cursorMark(style string) cellMark {
 	return noMark
 }
 
-// diffHintFor builds the diff-view hint for the current long-line mode. With
-// the cursor-key groups (j/k/z/e) and the review-note groups (c, }/{) it runs
-// to ~154 columns (scroll variant, in English) — past the 100-col budget
-// earlier revisions tried to hold, so it now truncates from the right
-// (dropping [esc] close first) below roughly that width;
-// TestRenderDiffViewPanes renders wide enough to see the whole line rather
-// than asserting a budget nothing enforces. The scroll variant appends the
-// pan keys.
+// diffHintFor builds the diff-view hint for the current long-line mode. Every
+// diff-view binding that is not help-only appears here, so the line is packed:
+// the widest (scroll) English variant measures 139 display columns and MUST
+// stay at or under 140, the width TestRenderDiffViewPanes renders at and the
+// narrowest common wide terminal — past that the truncation eats [esc] close
+// first, hiding the way out. That budget is why the labels are terse (chg,
+// hist/blame) and why the three note keys share one [c/}{] notes group
+// (E/R/a are help-and-menu-only). Shortening a label is the way to add a
+// group; growing the line is not. The scroll variant appends the pan keys.
 func diffHintFor(long longMode) string {
 	mode := i18n.T("scroll")
 	switch long {
@@ -69,7 +70,7 @@ func diffHintFor(long longMode) string {
 	if long == longScroll {
 		pan = i18n.T("  [←→/0] pan")
 	}
-	return i18n.T("[↑↓] scroll  [j/k] line  [c] note  [}/{] notes  [z] align  [e] edit  [n/p] change  [f] part  [ctrl+w] %s", mode) + pan + i18n.T("  [h] hist  [b] blame  [esc] close")
+	return i18n.T("[↑↓] scroll  [j/k] line  [c/}{] notes  [z] align  [e] edit  [n/p] chg  [f] part  [ctrl+w] %s", mode) + pan + i18n.T("  [h/b] hist/blame  [esc] close")
 }
 
 // cellSeg is one pane's text for one display row: the sanitized display runes
