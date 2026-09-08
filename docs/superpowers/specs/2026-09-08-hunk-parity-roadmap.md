@@ -109,7 +109,8 @@ kept like bookmarks.
   rejected: a ref must point at a git object, and most notes anchor to
   uncommitted working-tree lines that have none.
 - **Expiry**: the branch-versions rule, copied. A `notes.max_age_days`
-  config key (default 30; `0` or less keeps forever) with a `settingDoc`.
+  config key (default 30; `-1` keeps forever — `0` is "unset" at the
+  config overlay and falls back to the default) with a `settingDoc`.
   Pruning is NOT done on load: the "Growth" rule below (decided later the
   same day) moves it to a startup goroutine, and reads never rewrite.
   Orphaned notes (anchor gone after reconciliation) are dropped in the same
@@ -118,7 +119,7 @@ kept like bookmarks.
 - **Growth** (decided 2026-09-08): one `notes.toml` per repo; records are
   short text (~300 bytes). Housekeeping runs as a **background goroutine on
   every gg start** (TUI, `gg web`, and every `gg note …` CLI invocation): it
-  loads the file, drops notes past `notes.max_age_days` (default 30, `0` =
+  loads the file, drops notes past `notes.max_age_days` (default 30, `-1` =
   never) and orphaned notes (target file/commit gone, or the anchored lines'
   fingerprint no longer found), and rewrites the file once, off the UI
   thread. The entry cap (`notes.max_entries`, default 2000, oldest dropped
@@ -454,9 +455,9 @@ start.
   replies with it), then rewrites. `Load` never writes.
 - Clock seam: `notes.Now` package var (like `snapshotNow`) so expiry tests
   are deterministic.
-- Config: `[notes] max_age_days = 30` (`<= 0` keeps forever — the code
-  treats `0` and `-1` alike; the spec's `0` wording stands) and
-  `[notes] max_entries = 2000` (`<= 0` = uncapped); `NotesConfig` struct,
+- Config: `[notes] max_age_days = 30` (`-1` keeps forever; in code any
+  `<= 0` means forever, but `0` never reaches the code — the overlay treats
+  it as unset) and `[notes] max_entries = 2000` (`-1` = uncapped, same rule); `NotesConfig` struct,
   overlay, two `settingDoc` rows, `"notes"` added to the template section
   loop, `TestNotesLayers`.
 

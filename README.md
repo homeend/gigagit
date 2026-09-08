@@ -586,8 +586,9 @@ stop recording entirely. `[versions] max_age_days` (default `90`) prunes
 snapshots older than this on the branch's next write; `-1` keeps them
 forever.
 
-`[notes] max_age_days` (default `30`) and `[notes] max_entries` (default
-`2000`) bound the review-note store. Notes live outside git, per repo, under
+`[notes] max_age_days` (default `30`, `-1` keeps forever) and
+`[notes] max_entries` (default `2000`, `-1` uncapped) bound the review-note
+store. Notes live outside git, per repo, under
 your XDG state dir — they never travel with a branch. A background sweep at
 every gg start drops notes past the age limit and notes whose anchored lines
 are gone; `-1` in either key means "keep forever" / "uncapped".
