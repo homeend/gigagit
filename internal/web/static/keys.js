@@ -5,7 +5,7 @@ import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
-import { addNotePrompt, cycleFilesSort, drillOut, editNotePrompt, openFile, renderFiles, replyNotePrompt, stepNote, toggleMark, toggleNotesAgent } from "./files.js";
+import { addNotePrompt, cycleFilesSort, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleMark, toggleNotesAgent } from "./files.js";
 import { openPalette } from "./palette.js";
 
 // --- focus + keyboard ---
@@ -61,12 +61,14 @@ function moveCursor(delta) {
 }
 
 
-// noteKey matches one of the review-note keys pressed BARE, in an open diff.
+// noteKey matches one of the review-note keys pressed BARE, in a diff that is
+// note-addressable (notesArmed: never a comparison — its old side belongs to
+// no storable address).
 // The modifier check is the load-bearing half: `c` and `a` are ctrl+c (copy a
 // selected diff line — the commonest thing anyone does in a diff viewer) and
 // ctrl+a (select all), and this handler sees those before the browser acts.
 function noteKey(e, key) {
-  return e.key === key && !e.ctrlKey && !e.metaKey && !e.altKey && !!state.diffCtx;
+  return e.key === key && !e.ctrlKey && !e.metaKey && !e.altKey && notesArmed();
 }
 
 

@@ -40,7 +40,8 @@ func TestNoteRowsHTMLJS(t *testing.T) {
 	if err != nil {
 		t.Skip("node not installed; the JS guard needs it")
 	}
-	fns := jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteRowHTML")
+	fns := jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteRowHTML") +
+		"\n" + jsFunc(t, "files.js", "notesArmed")
 
 	notes := []map[string]any{
 		{"id": "n1", "side": "new", "line": 3, "source": "user", "status": "active",
@@ -105,5 +106,76 @@ func TestNoteRowsHTMLJS(t *testing.T) {
 	// renders byte-identically to before.
 	if got.OtherLine != "" || got.None != "" {
 		t.Fatalf("unanchored rows must render nothing: %q / %q", got.OtherLine, got.None)
+	}
+}
+
+// TestNotesInertOnAComparisonJS pins I2. A comparison's table shows aHash ↔
+// bHash, but a stored commit note resolves its OLD side against bHash^, so a
+// note on a line the comparison removed would be filed against a base it was
+// never taken on and deleted by the next sweep. openFile therefore marks the
+// compare context `notes: false`, and the three surfaces that could expose a
+// note — the query, the ◆ rows and the key gate — all read the same predicate.
+func TestNotesInertOnAComparisonJS(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	fns := jsFunc(t, "files.js", "notesArmed") + "\n" + jsFunc(t, "files.js", "noteQuery") +
+		"\n" + jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteRowHTML")
+
+	script := "const esc = (x) => String(x);\n" +
+		"const URLSearchParams = globalThis.URLSearchParams;\n" +
+		"const state = { diffCtx: null, notesAgentOff: false,\n" +
+		"  notes: [{id:'n1', side:'new', line:3, source:'user', status:'active', summary:'s'}] };\n" + fns +
+		"\nconst q = (ctx) => { state.diffCtx = ctx; const r = noteQuery(); return r === null ? null : r.toString(); };\n" +
+		"const rows = (ctx) => { state.diffCtx = ctx; return noteRowsHTML('new', 3, 4); };\n" +
+		"const commitCtx = {path:'a.go', rev:'beef', state:'commit'};\n" +
+		"const compareCtx = {path:'a.go', rev:'beef', state:'commit', notes:false};\n" +
+		"console.log(JSON.stringify({\n" +
+		"  commit: q(commitCtx), compare: q(compareCtx), none: q(null),\n" +
+		"  armedCommit: (state.diffCtx = commitCtx, notesArmed()),\n" +
+		"  armedCompare: (state.diffCtx = compareCtx, notesArmed()),\n" +
+		"  rowsCommit: rows(commitCtx), rowsCompare: rows(compareCtx),\n" +
+		"}));\n"
+	out, err := exec.Command(node, "-e", script).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	var got struct {
+		Commit, Compare, None     *string
+		ArmedCommit, ArmedCompare bool
+		RowsCommit, RowsCompare   string
+	}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("decode %q: %v", out, err)
+	}
+	if got.Commit == nil || !strings.Contains(*got.Commit, "rev=beef") {
+		t.Fatalf("a plain commit diff must still query notes, got %v", got.Commit)
+	}
+	if got.Compare != nil {
+		t.Fatalf("a comparison must not query notes, got %q", *got.Compare)
+	}
+	if got.None != nil {
+		t.Fatalf("no open diff must not query notes, got %q", *got.None)
+	}
+	if !got.ArmedCommit || got.ArmedCompare {
+		t.Fatalf("notesArmed: commit %v compare %v, want true/false", got.ArmedCommit, got.ArmedCompare)
+	}
+	if got.RowsCommit == "" {
+		t.Fatal("fixture broken: a commit diff must render its ◆ rows")
+	}
+	if got.RowsCompare != "" {
+		t.Fatalf("a comparison must render no ◆ rows, got %q", got.RowsCompare)
+	}
+	// The predicate is only worth as much as the flag that feeds it: openFile
+	// must mark a comparison's context inert. Pinned on the source rather than
+	// under node because openFile is async over the DOM and the network.
+	src, rerr := os.ReadFile(filepath.Join("static", "files.js"))
+	if rerr != nil {
+		t.Fatal(rerr)
+	}
+	if !strings.Contains(string(src), "notes: !cmp") {
+		t.Fatal("openFile must mark a comparison's diffCtx inert for notes (notes: !cmp)")
 	}
 }

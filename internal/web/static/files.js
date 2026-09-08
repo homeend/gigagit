@@ -208,6 +208,7 @@ async function openEntryFileDiff({ left, right, path, leftLabel, rightLabel, sta
   }
   clearDiffHunks();
   state.diffCtx = null; // history/blame need a rev; a stored copy has none
+  state.diffRow = null; // …and the previous diff's marked row must not paint a row of this one
   $("diff-title").textContent = leftLabel + " ↔ " + rightLabel + " · " + path;
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
@@ -358,15 +359,19 @@ function renderFiles() {
     $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
     $("conflict-note").classList.add("hidden");
-    // A commit file's notes are keyed "<sha>:<path>" — the sha this row's
-    // diff would open, which for a comparison is the RIGHT-hand hash.
-    const sha = state.filesMode === "compare" && state.compare ? state.compare.bHash : state.fileSha;
+    // A commit file's notes are keyed "<sha>:<path>" — the sha this row's diff
+    // would open. A COMPARISON gets no badge at all: its diff is not
+    // note-addressable (see openFile), so a ◆ would advertise notes that its
+    // rows cannot show and its keys cannot add.
+    const cmp = state.filesMode === "compare";
+    const badge = (f) =>
+      cmp ? "" : noteBadgeHTML(state.noteCounts.by_commit_path[(f.sha || state.fileSha) + ":" + f.path]);
     $("files-list").innerHTML = state.files
       .map(
         (f, i) =>
           `<li class="${i === state.fileCursor ? "sel" : ""}" data-i="${i}">` +
           `<span class="st ${esc(f.status)}">${esc(f.status)}</span>${esc(f.path)}` +
-          noteBadgeHTML(state.noteCounts.by_commit_path[(f.sha || sha) + ":" + f.path]) +
+          badge(f) +
           `</li>`
       )
       .join("");
@@ -452,13 +457,19 @@ async function openFile(i) {
       rightLabel: state.compare.b,
     });
   }
-  // A compare has two revisions and no single provenance: notes hang off the
-  // RIGHT-hand hash, exactly as the history/blame buttons already read
-  // diffCtx.rev.
+  // A compare has two revisions and no single provenance. rev stays the
+  // RIGHT-hand hash — the history/blame buttons read diffCtx.rev — but notes
+  // are OFF here: this table's new side really is bHash, while its old side is
+  // aHash, and a stored commit note resolves its old side against bHash^. A
+  // note on a line the comparison removed would therefore be filed against a
+  // base it was never taken on and swept away. The TUI refuses notes on a
+  // compare view for exactly this reason.
+  const cmp = state.filesMode === "compare";
   state.diffCtx = {
     path: f.path,
-    rev: state.filesMode === "compare" ? state.compare.bHash : f.sha || state.fileSha,
+    rev: cmp ? state.compare.bHash : f.sha || state.fileSha,
     state: "commit",
+    notes: !cmp,
   };
   state.diffRow = null;
   state.notes = [];
@@ -719,10 +730,20 @@ function renderDiff(d) {
 // the state allowlist. There is no line CURSOR here as there is in the TUI: a
 // clicked diff row is marked `tr.cur` and `c` anchors on it.
 
+// notesArmed reports whether the open diff is NOTE-ADDRESSABLE: a stored
+// address must name the same two texts the table shows. A comparison is not
+// (its old side is the compared revision, not bHash^), nor is an entry diff
+// against a frozen copy git cannot read; both leave `notes: false` (or no
+// diffCtx at all). Rows, keys and ◆ badges all gate on this one predicate.
+function notesArmed() {
+  return !!state.diffCtx && state.diffCtx.notes !== false;
+}
+
+
 // noteQuery builds the /api/notes query for the open diff. Working-tree diffs
 // carry their section as `state`; a commit diff carries rev + state=commit.
 function noteQuery() {
-  if (!state.diffCtx) return null;
+  if (!notesArmed()) return null;
   const q = new URLSearchParams({ path: state.diffCtx.path });
   if (state.diffCtx.state === "commit") {
     if (!state.diffCtx.rev) return null;
@@ -781,7 +802,7 @@ async function refreshNoteCounts() {
 // show — including a user reply under a hidden agent root (the TUI's rule:
 // the filter is per ROW, by that row's own source).
 function noteRowsHTML(side, no, cols) {
-  if (!no || !state.diffCtx || !state.notes.length) return "";
+  if (!no || !notesArmed() || !state.notes.length) return "";
   let html = "";
   for (const n of state.notes) {
     if (n.side !== side || n.line !== no) continue;
@@ -1778,4 +1799,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, addNotePrompt, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, addNotePrompt, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };
