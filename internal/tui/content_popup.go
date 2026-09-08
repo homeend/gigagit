@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // contentLine is one display line of a contentPopup. heading lines are section
@@ -21,7 +22,11 @@ import (
 // visible() returns a reordered subset. Zero-valued for headings and for
 // consumers that don't need them (the help window).
 type contentLine struct {
-	text    string
+	text string
+	// cls is an optional syntax class per DISPLAY RUNE of text (nil = plain),
+	// handed to winRow.cls by the renderers. Only the file preview fills it in;
+	// heading lines never carry one.
+	cls     []syntax.Class
 	heading bool
 	path    string // file's (new) path
 	oldPath string // set only for renames/copies
@@ -74,6 +79,16 @@ const (
 var messageBlockStyle = lipgloss.NewStyle().Background(lipgloss.Color(messageBlockColor))
 
 func (p *contentPopup) noteSaved(path string) { p.saved = path }
+
+// offsetCls shifts a line's class mask right by n plain runes — the row
+// cursor/indent prefix the renderers bake into the text. nil stays nil (the
+// plain path).
+func offsetCls(cls []syntax.Class, n int) []syntax.Class {
+	if cls == nil {
+		return nil
+	}
+	return append(make([]syntax.Class, n), cls...)
+}
 
 func newContentPopup(title string, lines []contentLine) *contentPopup {
 	return &contentPopup{title: title, lines: lines}
@@ -315,23 +330,24 @@ func (p *contentPopup) box(m Model) string {
 	for i, l := range vis {
 		switch {
 		case p.block:
-			wr[i] = winRow{text: l.text, style: messageBlockStyle}
+			wr[i] = winRow{text: l.text, cls: l.cls, style: messageBlockStyle}
 			if l.heading {
 				wr[i].style = messageBlockStyle.Bold(true)
 			}
 		case p.noCursor:
-			wr[i] = winRow{text: "  " + l.text}
+			wr[i] = winRow{text: "  " + l.text, cls: offsetCls(l.cls, 2)}
 			if l.heading {
 				wr[i].style = titleStyle
 			}
 		case i == p.sel:
 			// Cursor highlight wins over heading style: the cursor must remain
-			// visible even when it rests on a heading row.
-			wr[i] = winRow{text: "> " + l.text, style: selectedRow}
+			// visible even when it rests on a heading row. (renderWindow drops
+			// the class mask under a reverse-video style — see winRow.cls.)
+			wr[i] = winRow{text: "> " + l.text, cls: offsetCls(l.cls, 2), style: selectedRow}
 		case l.heading:
 			wr[i] = winRow{text: l.text, style: titleStyle}
 		default:
-			wr[i] = winRow{text: "  " + l.text}
+			wr[i] = winRow{text: "  " + l.text, cls: offsetCls(l.cls, 2)}
 		}
 	}
 	capRows := m.contentPageRows()

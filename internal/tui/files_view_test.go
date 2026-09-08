@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -35,7 +36,8 @@ func TestCommitFileLinesGroupsByDirectory(t *testing.T) {
 		t.Fatalf("lines = %d, want %d: %+v", len(got), len(want), got)
 	}
 	for i := range want {
-		if got[i] != want[i] {
+		// contentLine carries a class-mask slice, so it is not comparable with ==.
+		if !reflect.DeepEqual(got[i], want[i]) {
 			t.Fatalf("line[%d] = %+v, want %+v", i, got[i], want[i])
 		}
 	}
@@ -139,7 +141,7 @@ func TestCommitFileLinesRename(t *testing.T) {
 		{text: "b/", heading: true},
 		{text: "  R  a/old.go → new.go", path: "b/new.go", oldPath: "a/old.go", status: "R"},
 	}
-	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("lines = %+v, want %+v", got, want)
 	}
 }
