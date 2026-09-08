@@ -53,6 +53,10 @@ type Service struct {
 	notesMaxAgeDays int
 	notesMaxEntries int
 	notesSweepOnce  sync.Once
+	// notesSweepWG / notesSweepRuns exist for the once-semantics test; the
+	// production sweep is fire-and-forget (see StartNotesSweep).
+	notesSweepWG   sync.WaitGroup
+	notesSweepRuns atomic.Int32
 
 	profileGlobal profile.Store // lazily resolved; nil disables profiles
 	profileRepo   profile.Store // lazily resolved; nil disables profiles

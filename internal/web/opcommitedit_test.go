@@ -56,9 +56,17 @@ var (
 )
 
 // TestMain removes the shared binary after the package's tests: it outlives
-// any single test's t.TempDir(), so it needs an owner of its own.
+// any single test's t.TempDir(), so it needs an owner of its own. It also
+// points the notes store at a throwaway dir, so the background sweep that
+// applyUIPolicies starts can never reach the user's real state dir.
 func TestMain(m *testing.M) {
+	notesDir, err := os.MkdirTemp("", "gg-web-notes")
+	if err != nil {
+		panic(err)
+	}
+	domain.NotesStatePath = notesDir
 	code := m.Run()
+	_ = os.RemoveAll(notesDir)
 	if ggBinDir != "" {
 		_ = os.RemoveAll(ggBinDir)
 	}

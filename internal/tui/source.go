@@ -439,6 +439,8 @@ func (m Model) bootstrapCmd() tea.Cmd {
 		svc.SetShowEOLOnlyChanges(cfg.UI.ShowEOLOnlyChanges)
 		svc.SetSyntaxHighlighting(cfg.UI.SyntaxOn())
 		svc.SetVersionsPolicy(versionsPolicyFromConfig(cfg))
+		svc.SetNotesPolicy(cfg.Notes.MaxAgeDays, cfg.Notes.MaxEntries)
+		svc.StartNotesSweep()
 		return configReadyMsg{cfg: cfg, repoTOML: repoTOML, top: root}
 	}
 }

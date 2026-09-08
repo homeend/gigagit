@@ -300,9 +300,11 @@ func (s *Server) activeRepoConfigPathOr(ctx context.Context, svc *domain.Service
 }
 
 // applyUIPolicies loads the effective config once and pushes the Service-side
-// policies it carries: branch-version snapshots and diff syntax colouring.
-// Called at serve boot, after a re-root, and after a settings write, so the
-// long-lived server honors [versions]/[ui] like the one-shot frontends do.
+// policies it carries: branch-version snapshots, diff syntax colouring and the
+// [notes] budget (whose sweep starts here, once per Service — a re-root builds
+// a fresh one). Called at serve boot, after a re-root, and after a settings
+// write, so the long-lived server honors [versions]/[ui]/[notes] like the
+// one-shot frontends do.
 // Best-effort: a load failure keeps the current policies.
 func applyUIPolicies(ctx context.Context, svc *domain.Service, activeRepoPath string) {
 	cfg, err := config.Load(config.DefaultGlobalPath(), activeRepoPath)
@@ -311,4 +313,6 @@ func applyUIPolicies(ctx context.Context, svc *domain.Service, activeRepoPath st
 	}
 	svc.SetVersionsPolicy(engine.VersionsPolicy{Enabled: !cfg.Versions.Disabled, MaxAgeDays: cfg.Versions.MaxAgeDays})
 	svc.SetSyntaxHighlighting(cfg.UI.SyntaxOn())
+	svc.SetNotesPolicy(cfg.Notes.MaxAgeDays, cfg.Notes.MaxEntries)
+	svc.StartNotesSweep()
 }

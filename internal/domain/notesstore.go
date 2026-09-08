@@ -40,7 +40,7 @@ func (s *Service) notesStore(ctx context.Context) notes.Store {
 		s.mu.Unlock()
 		return nil
 	}
-	st, max := s.notes, s.notesMaxEntries
+	st, max := s.notes, notesEffective(s.notesMaxEntries, notesDefaultMaxEntries)
 	s.mu.Unlock()
 	if st != nil {
 		st.SetPolicy(notes.Policy{MaxEntries: max})
@@ -64,7 +64,7 @@ func (s *Service) notesStore(ctx context.Context) notes.Store {
 	if s.notes == nil {
 		s.notes = fs
 	}
-	st, max = s.notes, s.notesMaxEntries
+	st, max = s.notes, notesEffective(s.notesMaxEntries, notesDefaultMaxEntries)
 	s.mu.Unlock()
 	st.SetPolicy(notes.Policy{MaxEntries: max})
 	return st
