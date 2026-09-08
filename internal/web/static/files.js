@@ -544,7 +544,14 @@ function renderCell(text, spans, toks, side) {
   const emph = new Array(rs.length).fill(false);
   for (const [a, b] of spans || []) for (let i = a; i < b && i < rs.length; i++) emph[i] = true;
   const cls = new Array(rs.length).fill("");
-  for (const [a, b, c] of toks || []) for (let i = a; i < b && i < rs.length; i++) cls[i] = c;
+  // The class suffix goes straight into a class attribute, so only the shape
+  // syntax.Class.String() produces is accepted; anything else stays plain.
+  // Filtering here (not at emit time) lets a rejected run merge with the
+  // neighbouring plain text instead of splitting it.
+  for (const [a, b, c] of toks || []) {
+    if (!/^[a-z]{2,3}$/.test(c)) continue;
+    for (let i = a; i < b && i < rs.length; i++) cls[i] = c;
+  }
   let out = "";
   for (let i = 0; i < rs.length; ) {
     let j = i + 1;
