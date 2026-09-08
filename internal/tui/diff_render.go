@@ -457,7 +457,9 @@ func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, h
 	}
 	var b strings.Builder
 	if hasLeft {
-		b.WriteString(mk.gut.Render("‹"))
+		// The pan markers are body furniture, not gutter: "number" mode bolds
+		// the line number only, so they keep the plain gutter style.
+		b.WriteString(diffGutter.Render("‹"))
 	}
 	b.WriteString(styledRuns(wdisp, wemph, wcls, base))
 	inner := tw
@@ -471,7 +473,7 @@ func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, h
 		b.WriteString(base.Render(strings.Repeat(" ", pad)))
 	}
 	if hasRight {
-		b.WriteString(mk.gut.Render("›"))
+		b.WriteString(diffGutter.Render("›"))
 	}
 	num := fmt.Sprintf("%*d ", gut, no)
 	return mk.gut.Render(truncate(num, gut+1)) + b.String()
