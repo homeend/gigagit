@@ -193,8 +193,8 @@ func TestLoadedNotesUnderTheCursorAreRevealed(t *testing.T) {
 	m = nm.(Model)
 	v = m.diffLayer()
 	start, end := v.lineStart[v.curLine], v.lineStart[v.curLine+1]
-	if end-start != 3 {
-		t.Fatalf("expected 3 display rows for the line (line + summary + rationale), got %d", end-start)
+	if end-start != 7 { // the line + a 6-row box (top, blank, summary, rationale, blank, bottom)
+		t.Fatalf("expected 7 display rows for the line (line + note box), got %d", end-start)
 	}
 	if end > v.offset+body {
 		t.Fatalf("note rows end at %d but the viewport shows [%d,%d)", end, v.offset, v.offset+body)

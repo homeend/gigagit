@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
@@ -28,10 +29,15 @@ var (
 	diffDelCursor = lipgloss.NewStyle().Background(lipgloss.Color("88"))
 	diffGapCursor = diffGapCell.Background(lipgloss.Color("237"))
 
-	// Review note rows sit on a full-width band (a dark blue for a live note,
-	// a grey for a stale one) so they read as annotations, not as diff text.
-	diffNote      = lipgloss.NewStyle().Foreground(lipgloss.Color("110")).Background(lipgloss.Color("17"))
-	diffNoteStale = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Background(lipgloss.Color("236")) // stale: the anchored text is gone
+	// Review notes draw as hunk-style boxes in their own pane: a rounded frame
+	// (blue for a user note, purple for an agent note, grey when stale) with
+	// the title in the top rule, the summary in bold and the rationale dim.
+	noteFrameUser  = lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
+	noteFrameAgent = lipgloss.NewStyle().Foreground(lipgloss.Color("141"))
+	noteFrameStale = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	noteSummary    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
+	noteBody       = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	noteDim        = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
 
 // cellMark is the cursor marker for one rendered cell: when row is set, base
@@ -352,7 +358,7 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 	for i := v.offset; i < v.offset+body && i < len(v.disp); i++ {
 		dr := v.disp[i]
 		if dr.note != nil {
-			out = append(out, noteRowText(*dr.note, w))
+			out = append(out, noteRowCells(*dr.note, paneW))
 			continue
 		}
 		if dr.fold > 0 {
@@ -562,20 +568,51 @@ func foldSeparator(n, w int, marked bool) string {
 	return diffFold.Render(strings.Repeat("─", left) + label + strings.Repeat("─", right))
 }
 
-// noteRowText renders one note display row across the FULL width: two cells of
-// indent per depth level, then the assembled text — sanitized like any file
-// line (a note is free text an agent wrote, so a stray \n, \t or bare \r must
-// not draw a second physical row or break the width math) and truncated to w.
-// A stale row is dimmed — the note still says something, it just no longer sits
-// on the text it was written about.
-func noteRowText(nl noteLine, w int) string {
-	txt := sanitizeLine(strings.Repeat("  ", nl.depth) + nl.text)
-	style := diffNote
-	if nl.stale {
-		style = diffNoteStale
+// noteRowCells paints one box row as a full diff row: the box in the pane the
+// note belongs to (old = left, new = right) and blank space in the other, so
+// the note visibly hangs off one version of the file. The text was wrapped to
+// the pane when the rows were laid out; truncate is only a guard against a
+// width the layout has not caught up with. Frame rows draw the rounded rule
+// (the title sits in the top one), summary rows bold, rationale rows dim, and
+// a stale box is grey throughout.
+func noteRowCells(nl noteLine, paneW int) string {
+	if paneW < 4 {
+		paneW = 4
 	}
-	// Pad to the full width so the band spans the row, not just the text.
-	return style.Render(padRight(truncate(txt, w), w))
+	frame := noteFrameUser
+	if nl.agent {
+		frame = noteFrameAgent
+	}
+	text := noteBody
+	if nl.kind == noteRowSummary {
+		text = noteSummary
+	}
+	if nl.stale {
+		frame, text = noteFrameStale, noteDim
+	}
+	inner := paneW - noteBoxFrame
+	var cell string
+	switch nl.kind {
+	case noteRowTop:
+		title := truncate(sanitizeLine(nl.text), paneW-6) // "╭─ " + title + " ─╮" at least
+		rule := paneW - 4 - lipgloss.Width(title)
+		if rule < 1 {
+			rule = 1
+		}
+		cell = frame.Render("╭─ " + title + " " + strings.Repeat("─", rule-1) + "╮")
+	case noteRowBottom:
+		cell = frame.Render("╰" + strings.Repeat("─", paneW-2) + "╯")
+	case noteRowBlank:
+		cell = frame.Render("│") + strings.Repeat(" ", paneW-2) + frame.Render("│")
+	default:
+		body := padRight(truncate(sanitizeLine(nl.text), inner), inner)
+		cell = frame.Render("│ ") + text.Render(body) + frame.Render(" │")
+	}
+	blank := strings.Repeat(" ", paneW)
+	if nl.side == model.NoteSideOld {
+		return cell + "│" + blank
+	}
+	return blank + "│" + cell
 }
 
 // diffCell renders one pane cell: gutter + text, or the dim gap filler. With

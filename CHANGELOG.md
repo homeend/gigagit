@@ -15,8 +15,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   own always stay visible), `}`/`{` jump between annotated lines — expanding a
   fold when the note hides under one, and stepping to the next file that
   carries notes on a second press — and the `.` menu deletes one. Notes render
-  as `◆` rows under their line, greyed when the line they were written about
-  has changed; the Files and Commits panels show a `◆N` badge. `gg web` mirrors
+  as hunk-style boxes under their line, in the pane of the side they belong
+  to (blue frame for a person's note, purple for an agent's, grey once the
+  line they were written about has changed), the title in the top rule
+  ("agent note · ada · path R204"), the summary bold and the rationale
+  wrapped; the Files and Commits panels show a `◆N` badge. `gg web` mirrors
   all of it over `/api/notes` with live updates. Notes re-anchor by a
   fingerprint of the lines they were written on, so they follow the code as it
   moves; a background sweep at every gg start drops notes older than

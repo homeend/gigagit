@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -40,25 +41,30 @@ func TestRelayoutAppendsNoteRowsUnderTheirLine(t *testing.T) {
 	if v.disp[start].note != nil {
 		t.Fatal("the content row must come first")
 	}
+	all := noteRowsAt(v, 4)
+	if all[0].kind != noteRowTop || !strings.Contains(all[0].text, "ada") || all[len(all)-1].kind != noteRowBottom {
+		t.Fatalf("the box must open with a titled top rule and close with the bottom rule, got %+v", all)
+	}
+	content := noteContentAt(v, 4)
 	got := []string{}
-	for i := start + 1; i < len(v.disp) && v.disp[i].note != nil; i++ {
-		got = append(got, v.disp[i].note.text)
+	for _, nl := range content {
+		got = append(got, nl.text)
 	}
 	if len(got) != 3 {
 		t.Fatalf("want summary + rationale + reply rows, got %q", got)
 	}
-	if !strings.Contains(got[0], "ada") || !strings.Contains(got[0], "off by one") || !strings.HasPrefix(got[0], "◆") {
-		t.Fatalf("summary row = %q", got[0])
+	if content[0].kind != noteRowSummary || got[0] != "off by one" {
+		t.Fatalf("summary row = %q (kind %d)", got[0], content[0].kind)
 	}
 	if !strings.Contains(got[1], "the loop runs one short") {
 		t.Fatalf("rationale row = %q", got[1])
 	}
-	if !strings.Contains(got[2], "agreed") || v.disp[start+3].note.depth != 1 {
-		t.Fatalf("reply row = %q depth %d", got[2], v.disp[start+3].note.depth)
+	if !strings.Contains(got[2], "↳ bot: agreed") || content[2].depth != 1 {
+		t.Fatalf("reply row = %q depth %d", got[2], content[2].depth)
 	}
 	// The NEXT logical line must start after the note rows.
-	if v.lineStart[5] != start+4 {
-		t.Fatalf("lineStart[5] = %d, want %d (content + 3 note rows)", v.lineStart[5], start+4)
+	if want := start + 1 + len(all); v.lineStart[5] != want {
+		t.Fatalf("lineStart[5] = %d, want %d (content + the %d box rows)", v.lineStart[5], want, len(all))
 	}
 }
 
@@ -104,6 +110,18 @@ func noteRowsAt(v *diffView, li int) []noteLine {
 	return rows
 }
 
+// noteContentAt is noteRowsAt without the box frame (top/blank/bottom rows):
+// the summary and rationale rows a reader actually reads.
+func noteContentAt(v *diffView, li int) []noteLine {
+	var out []noteLine
+	for _, nl := range noteRowsAt(v, li) {
+		if nl.kind == noteRowSummary || nl.kind == noteRowText {
+			out = append(out, nl)
+		}
+	}
+	return out
+}
+
 func TestAgentLayerFiltersEachRowBySource(t *testing.T) {
 	t.Parallel()
 	// A user root with an agent reply, and an agent root with a user reply.
@@ -115,22 +133,26 @@ func TestAgentLayerFiltersEachRowBySource(t *testing.T) {
 	v.hideAgent = true
 	v.relayout(0)
 
-	rows5 := noteRowsAt(v, 4) // the user root's line
+	rows5 := noteContentAt(v, 4) // the user root's line
 	if len(rows5) != 1 || !strings.Contains(rows5[0].text, "mine") {
 		t.Fatalf("line 5 rows = %+v, want the user root only", rows5)
 	}
-	rows6 := noteRowsAt(v, 5) // the agent root's line
+	rows6 := noteContentAt(v, 5) // the agent root's line
 	if len(rows6) != 1 || !strings.Contains(rows6[0].text, "my reply") {
 		t.Fatalf("line 6 rows = %+v, want the user reply only", rows6)
 	}
 	if rows6[0].depth != 1 {
 		t.Fatalf("a surviving reply keeps its indentation, depth = %d", rows6[0].depth)
 	}
+	// The mixed thread keeps its frame (its title still says whose note it is).
+	if frame := noteRowsAt(v, 5); len(frame) == 0 || frame[0].kind != noteRowTop {
+		t.Fatalf("a thread with a visible user reply must keep its box, got %+v", frame)
+	}
 	// With the layer back on, every row returns.
 	v.hideAgent = false
 	v.relayout(0)
-	if got := len(noteRowsAt(v, 4)) + len(noteRowsAt(v, 5)); got != 4 {
-		t.Fatalf("agent layer on: %d rows, want all 4", got)
+	if got := len(noteContentAt(v, 4)) + len(noteContentAt(v, 5)); got != 4 {
+		t.Fatalf("agent layer on: %d content rows, want all 4", got)
 	}
 }
 
@@ -139,17 +161,21 @@ func TestNoteRowsSanitizeControlCharactersAndSplitRationale(t *testing.T) {
 	n := rootNote("n1", 5, "sum\nmary", "one\ttab\nsecond\rline", model.NoteSourceUser, model.NoteActive)
 	v := notedView([]domain.ResolvedNote{n})
 	rows := noteRowsAt(v, 4)
-	if len(rows) != 3 { // summary + one row per rationale line
-		t.Fatalf("want 3 rows (summary + 2 rationale lines), got %d: %+v", len(rows), rows)
+	// A box: top rule, blank, summary, one row per rationale line, blank, bottom.
+	if len(rows) != 7 {
+		t.Fatalf("want 7 rows (frame + summary + 2 rationale lines), got %d: %+v", len(rows), rows)
 	}
-	if !strings.Contains(rows[1].text, "one") || !strings.Contains(rows[2].text, "second") {
-		t.Fatalf("the rationale must split on newlines, got %+v", rows[1:])
+	if rows[2].kind != noteRowSummary || rows[3].kind != noteRowText || rows[4].kind != noteRowText {
+		t.Fatalf("row kinds = %+v", rows)
+	}
+	if !strings.Contains(rows[3].text, "one") || !strings.Contains(rows[4].text, "second") {
+		t.Fatalf("the rationale must split on newlines, got %+v", rows[3:5])
 	}
 	// What relayout counted must be what the renderer draws: one physical row
 	// each, with no raw control character surviving into the frame.
 	physical := 0
 	for _, nl := range rows {
-		got := noteRowText(nl, 80)
+		got := noteRowCells(nl, 40)
 		physical += lipgloss.Height(got)
 		if strings.ContainsAny(got, "\n\t\r") {
 			t.Fatalf("raw control character survived into %q", got)
@@ -205,13 +231,49 @@ func TestNoteRowRendersStaleDimmedAndFitsWidth(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(prev)
 
-	stale := noteLine{id: "n", text: "◆ ada: gone", stale: true}
-	long := noteLine{id: "n", text: "◆ ada: " + strings.Repeat("x", 200)}
-	if got := noteRowText(long, 40); lipgloss.Width(got) > 40 {
-		t.Fatalf("a note row must be truncated to the width, got %d cols", lipgloss.Width(got))
+	stale := noteLine{id: "n", kind: noteRowSummary, text: "gone", stale: true}
+	long := noteLine{id: "n", kind: noteRowText, text: strings.Repeat("x", 200)}
+	if got := noteRowCells(long, 40); lipgloss.Width(got) != 81 {
+		t.Fatalf("a box row must span both panes (40 + │ + 40), got %d cols", lipgloss.Width(got))
 	}
-	if noteRowText(stale, 40) == noteRowText(noteLine{id: "n", text: "◆ ada: gone"}, 40) {
+	if noteRowCells(stale, 40) == noteRowCells(noteLine{id: "n", kind: noteRowSummary, text: "gone"}, 40) {
 		t.Fatal("a stale note must render differently from an active one")
+	}
+	// The box sits in the pane of its side: an old-side row starts with the
+	// frame, a new-side row starts with the blank left pane.
+	oldRow := noteRowCells(noteLine{id: "n", kind: noteRowSummary, side: model.NoteSideOld, text: "x"}, 20)
+	newRow := noteRowCells(noteLine{id: "n", kind: noteRowSummary, side: model.NoteSideNew, text: "x"}, 20)
+	if !strings.HasPrefix(ansi.Strip(oldRow), "│ x") || !strings.HasPrefix(ansi.Strip(newRow), strings.Repeat(" ", 20)+"│") {
+		t.Fatalf("box placement: old=%q new=%q", ansi.Strip(oldRow), ansi.Strip(newRow))
+	}
+	top := ansi.Strip(noteRowCells(noteLine{id: "n", kind: noteRowTop, text: "note · ada · a.go R5"}, 30))
+	if !strings.Contains(top, "│╭─ note · ada · a.go R5 ─") || !strings.HasSuffix(top, "─╮") || lipgloss.Width(top) != 61 {
+		t.Fatalf("top rule = %q (%d cols)", top, lipgloss.Width(top))
+	}
+}
+
+// A long pasted summary wraps to the box and is never cut; every wrapped row
+// is one physical line of the pane width.
+func TestNoteSummaryWrapsInsteadOfTruncating(t *testing.T) {
+	t.Parallel()
+	words := strings.Repeat("word ", 60)
+	n := rootNote("n1", 5, strings.TrimSpace(words), "", model.NoteSourceUser, model.NoteActive)
+	v := notedView([]domain.ResolvedNote{n})
+	v.relayout(100) // pane 49, inner 45
+	rows := noteRowsAt(v, 4)
+	sum := 0
+	joined := ""
+	for _, nl := range rows {
+		if nl.kind == noteRowSummary {
+			sum++
+			joined += nl.text + " "
+			if lipgloss.Width(nl.text) > 45 {
+				t.Fatalf("summary row wider than the box: %q", nl.text)
+			}
+		}
+	}
+	if sum < 6 || strings.Count(joined, "word") != 60 {
+		t.Fatalf("summary wrapped into %d rows carrying %d words, want every word kept", sum, strings.Count(joined, "word"))
 	}
 }
 

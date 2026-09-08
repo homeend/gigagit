@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -205,6 +206,20 @@ func decodeNoteReq(w http.ResponseWriter, r *http.Request) (noteReq, bool) {
 	return req, true
 }
 
+// noteAuthor is the name a browser-written note carries: the request's own
+// author when it sends one, else the repo's effective git user.name — the
+// same source the TUI stamps, so a note reads "note · ada · file R12" from
+// either frontend.
+func (s *Server) noteAuthor(ctx context.Context, given string) string {
+	if a := strings.TrimSpace(given); a != "" {
+		return a
+	}
+	if id, err := s.service().Identity(ctx); err == nil {
+		return strings.TrimSpace(id.EffectiveName)
+	}
+	return ""
+}
+
 func (s *Server) handleNoteAdd(w http.ResponseWriter, r *http.Request) {
 	req, ok := decodeNoteReq(w, r)
 	if !ok {
@@ -226,7 +241,7 @@ func (s *Server) handleNoteAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	n := model.Note{
-		Source: model.NoteSourceUser, Author: strings.TrimSpace(req.Author), Address: addr,
+		Source: model.NoteSourceUser, Author: s.noteAuthor(r.Context(), req.Author), Address: addr,
 		Side: side, Range: [2]int{req.Line, req.Line},
 		Summary: summary, Rationale: strings.TrimSpace(req.Rationale),
 	}
@@ -280,7 +295,7 @@ func (s *Server) handleNoteReply(w http.ResponseWriter, r *http.Request) {
 	// The reply's anchor is the PARENT's (domain copies address/side/range and
 	// flattens to the thread root); nothing about it comes off the wire.
 	got, err := s.service().NoteReply(r.Context(), req.ID, model.Note{
-		Source: model.NoteSourceUser, Author: strings.TrimSpace(req.Author),
+		Source: model.NoteSourceUser, Author: s.noteAuthor(r.Context(), req.Author),
 		Summary: summary, Rationale: strings.TrimSpace(req.Rationale),
 	})
 	if err != nil {

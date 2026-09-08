@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -27,12 +29,45 @@ import (
 // names the row, while id/rootID name the note it came from so E/R/Delete can
 // find it again.
 type noteLine struct {
-	id     string // the note (root or reply) this row shows
-	rootID string // the thread's root id (== id on a root row)
-	depth  int    // 0 = root, 1 = reply (indent = 2*depth)
-	text   string // the whole row, already assembled
-	stale  bool   // the anchor text is gone: render dim
-	agent  bool   // this ROW's own note is agent-written (the `a` layer filter)
+	id     string         // the note (root or reply) this row shows
+	rootID string         // the thread's root id (== id on a root row)
+	depth  int            // 0 = root, 1 = reply (indent = 2*depth)
+	kind   noteRowKind    // which part of the box this row is
+	side   model.NoteSide // the pane the box sits in (old = left, new = right)
+	text   string         // this row's text (already wrapped to the box; frame rows: the title)
+	stale  bool           // the anchor text is gone: render dim
+	agent  bool           // this ROW's own note is agent-written (the `a` layer filter)
+}
+
+// noteRowKind is one row's role inside a note box, hunk-style: a rounded
+// frame carrying the title in its top rule, a blank line, the summary in
+// bold, the rationale, then a blank line and the bottom rule.
+type noteRowKind int
+
+const (
+	noteRowTop     noteRowKind = iota // ╭─ title ───╮
+	noteRowBlank                      // │           │
+	noteRowSummary                    // │ Summary   │  (bold; wraps, never cut)
+	noteRowText                       // │ rationale │  (wraps)
+	noteRowBottom                     // ╰───────────╯
+)
+
+// noteBoxFrame is the fixed width a box row spends on its frame and inner
+// padding: "│ " on the left and " │" on the right.
+const noteBoxFrame = 4
+
+// noteInnerWidth is the text width inside a note box for the current layout:
+// one pane less the frame. 0 (no layout yet, or a degenerate pane) means
+// "do not wrap" — one row per source line, truncated when painted.
+func (v *diffView) noteInnerWidth() int {
+	if v.width <= 0 {
+		return 0
+	}
+	paneW := (v.width - 1) / 2
+	if paneW-noteBoxFrame < 8 {
+		return 0
+	}
+	return paneW - noteBoxFrame
 }
 
 // noteRowIndex maps logical line index → its note rows, and fold line index →
@@ -47,12 +82,13 @@ func (v *diffView) noteRowIndex() (map[int][]noteLine, map[int]bool) {
 	}
 	byLine := map[int][]noteLine{}
 	foldMark := map[int]bool{}
+	innerW := v.noteInnerWidth()
 	for _, r := range v.notes {
-		rows := noteLinesOf(r)
+		rows := v.noteBoxLines(r, innerW)
 		if v.hideAgent {
 			rows = dropAgentRows(rows)
 		}
-		if len(rows) == 0 {
+		if !hasNoteContent(rows) {
 			continue
 		}
 		li, visible := v.noteAnchorLine(r)
@@ -123,40 +159,109 @@ func (v *diffView) noteAnchorLine(r domain.ResolvedNote) (int, bool) {
 	return -1, false
 }
 
-// noteLinesOf flattens one resolved note (and its replies) into display rows.
-func noteLinesOf(r domain.ResolvedNote) []noteLine {
-	rows := noteRowsFor(r, r.Note.ID, 0)
+// hasNoteContent reports whether any summary/text row survived filtering —
+// a frame with nothing inside is not a note to show.
+func hasNoteContent(rows []noteLine) bool {
+	for _, nl := range rows {
+		if nl.kind == noteRowSummary || nl.kind == noteRowText {
+			return true
+		}
+	}
+	return false
+}
+
+// noteBoxLines lays one thread out as a box: the title row, a blank, the
+// root's summary (bold, wrapped) and rationale (wrapped), each reply as a
+// "↳ author: summary" + rationale block, a blank and the bottom rule. innerW
+// is the wrap width (0 = no wrapping). Frame rows are agent-tagged only when
+// the whole thread is agent-written, so a user reply under an agent root
+// keeps its frame while the `a` layer is off.
+func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int) []noteLine {
+	stale := r.Status == model.NoteStale
+	allAgent := r.Note.Source == model.NoteSourceAgent
 	for _, rep := range r.Replies {
-		rows = append(rows, noteRowsFor(rep, r.Note.ID, 1)...)
+		if rep.Note.Source != model.NoteSourceAgent {
+			allAgent = false
+		}
+	}
+	frame := func(kind noteRowKind, text string) noteLine {
+		return noteLine{id: r.Note.ID, rootID: r.Note.ID, kind: kind, side: r.Note.Side, text: text, stale: stale, agent: allAgent}
+	}
+	rows := []noteLine{frame(noteRowTop, v.noteBoxTitle(r)), frame(noteRowBlank, "")}
+	rows = append(rows, noteBodyLines(r, r.Note.ID, 0, innerW, stale)...)
+	for _, rep := range r.Replies {
+		rows = append(rows, noteBodyLines(rep, r.Note.ID, 1, innerW, stale)...)
+	}
+	return append(rows, frame(noteRowBlank, ""), frame(noteRowBottom, ""))
+}
+
+// noteBoxTitle is the text in a box's top rule: "agent note" or "note", the
+// author, the file and the anchored line (R for the new side, L for the old),
+// plus "(stale)" when the anchor text is gone — hunk's
+// "agent note - updates/garmin.go R204".
+func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
+	kind := i18n.T("note")
+	if r.Note.Source == model.NoteSourceAgent {
+		kind = i18n.T("agent note")
+	}
+	t := kind
+	if r.Note.Author != "" {
+		t += " · " + r.Note.Author
+	}
+	sideMark := "R"
+	if r.Note.Side == model.NoteSideOld {
+		sideMark = "L"
+	}
+	t += " · " + v.noteAddr.Path + " " + sideMark + strconv.Itoa(r.Range[1])
+	if r.Status == model.NoteStale {
+		t += " " + i18n.T("(stale)")
+	}
+	return t
+}
+
+// noteBodyLines is one note's own rows inside a box: the summary (bold on a
+// root; "↳ author: summary" on a reply), wrapped to the box and never cut —
+// a pasted paragraph in the title just takes more rows — then the rationale,
+// one row per source line, each wrapped. Control characters are flattened so
+// a row is always exactly one physical line.
+func noteBodyLines(r domain.ResolvedNote, rootID string, depth, innerW int, stale bool) []noteLine {
+	agent := r.Note.Source == model.NoteSourceAgent
+	mk := func(kind noteRowKind, text string) noteLine {
+		return noteLine{id: r.Note.ID, rootID: rootID, depth: depth, kind: kind, side: r.Note.Side, text: text, stale: stale, agent: agent}
+	}
+	indent := strings.Repeat("  ", depth)
+	head := ""
+	if depth > 0 {
+		head = "↳ "
+		if r.Note.Author != "" {
+			head += r.Note.Author + ": "
+		}
+	}
+	var rows []noteLine
+	for _, ln := range noteWrap(sanitizeLine(head+r.Note.Summary), innerW-len([]rune(indent))) {
+		rows = append(rows, mk(noteRowSummary, indent+ln))
+	}
+	if r.Note.Rationale != "" {
+		for _, src := range strings.Split(r.Note.Rationale, "\n") {
+			for _, ln := range noteWrap(sanitizeLine(src), innerW-len([]rune(indent))) {
+				rows = append(rows, mk(noteRowText, indent+ln))
+			}
+		}
 	}
 	return rows
 }
 
-// noteRowsFor is one note's own rows: the summary (always exactly one row —
-// any newline inside it is flattened by the renderer's sanitizeLine), then one
-// row per line of the rationale.
-func noteRowsFor(r domain.ResolvedNote, rootID string, depth int) []noteLine {
-	stale := r.Status == model.NoteStale
-	agent := r.Note.Source == model.NoteSourceAgent
-	head := "◆ "
-	if depth > 0 {
-		head = "↳ "
+// noteWrap word-wraps one sanitized line to w columns (w <= 0: no wrap). An
+// empty line stays one empty row so a blank line in a rationale survives.
+func noteWrap(line string, w int) []string {
+	if w <= 0 || lipgloss.Width(line) <= w {
+		return []string{line}
 	}
-	if r.Note.Author != "" {
-		head += r.Note.Author + ": "
+	out := wrapWords(line, w)
+	if len(out) == 0 {
+		return []string{""}
 	}
-	head += r.Note.Summary
-	if stale {
-		head += " " + i18n.T("(stale)")
-	}
-	rows := []noteLine{{id: r.Note.ID, rootID: rootID, depth: depth, text: head, stale: stale, agent: agent}}
-	if r.Note.Rationale != "" {
-		for _, ln := range strings.Split(r.Note.Rationale, "\n") {
-			rows = append(rows, noteLine{id: r.Note.ID, rootID: rootID, depth: depth,
-				text: "  " + ln, stale: stale, agent: agent})
-		}
-	}
-	return rows
+	return out
 }
 
 // noteBadge is the trailing "◆N" a Files/Commits row carries when its target

@@ -818,21 +818,40 @@ function noteRowsHTML(side, no, cols) {
   let html = "";
   for (const n of state.notes) {
     if (n.side !== side || n.line !== no) continue;
-    if (!(state.notesAgentOff && n.source === "agent")) html += noteRowHTML(n, 0, cols);
-    for (const r of n.replies || []) {
-      if (state.notesAgentOff && r.source === "agent") continue;
-      html += noteRowHTML(r, 1, cols);
-    }
+    html += noteBoxHTML(n, cols);
   }
   return html;
 }
 
 
-function noteRowHTML(n, depth, cols) {
-  const cls = "note" + (depth ? " reply" : "") + (n.status === "stale" ? " stale" : "");
-  const head = (depth ? "↳ " : "◆ ") + (n.author ? n.author + ": " : "") + n.summary;
-  const body = n.rationale ? `<div class="note-rationale">${esc(n.rationale)}</div>` : "";
-  return `<tr class="${cls}" data-note="${esc(n.id)}"><td class="note" colspan="${cols}">${esc(head)}${body}</td></tr>`;
+// noteBoxHTML is one thread as a hunk-style box: the title in the top border
+// ("agent note · author · path R204"), the summary in bold, the rationale,
+// then each reply as its own block. In the split layout (4 columns) the box
+// sits in the pane of the note's side and the other pane stays blank, so the
+// note visibly hangs off one version; the single-column layouts span the row.
+// With the agent layer off, agent-written parts drop out row by row; a thread
+// with nothing left renders nothing.
+function noteBoxHTML(n, cols) {
+  const off = state.notesAgentOff;
+  const rootOn = !(off && n.source === "agent");
+  const reps = (n.replies || []).filter((r) => !(off && r.source === "agent"));
+  if (!rootOn && !reps.length) return "";
+  const stale = n.status === "stale";
+  const agent = n.source === "agent";
+  const title = (agent ? "agent note" : "note") + (n.author ? " · " + n.author : "") +
+    " · " + state.diffCtx.path + " " + (n.side === "old" ? "L" : "R") + n.line + (stale ? " (stale)" : "");
+  const part = (m) => `<div class="notesum">${esc(m)}</div>`;
+  const text = (r) => (r.rationale ? `<div class="notetext">${esc(r.rationale)}</div>` : "");
+  let box = `<div class="notebox ${agent ? "agent" : "user"}${stale ? " stale" : ""}"><div class="notetitle">${esc(title)}</div>`;
+  if (rootOn) box += part(n.summary) + text(n);
+  for (const r of reps) {
+    box += `<div class="notereply" data-note="${esc(r.id)}">` + part("↳ " + (r.author ? r.author + ": " : "") + r.summary) + text(r) + `</div>`;
+  }
+  box += `</div>`;
+  const cell = (span) => `<td class="note" colspan="${span}">${box}</td>`;
+  const gap = `<td class="note-gap" colspan="2"></td>`;
+  const cells = cols === 4 ? (n.side === "old" ? cell(2) + gap : gap + cell(2)) : cell(cols);
+  return `<tr class="note${stale ? " stale" : ""}${agent ? " agent" : ""}" data-note="${esc(n.id)}">${cells}</tr>`;
 }
 
 
@@ -1044,8 +1063,10 @@ $("diff-body").addEventListener("click", (e) => {
 
 
 $("diff-body").addEventListener("contextmenu", (e) => {
-  const tr = e.target.closest("tr.note[data-note]");
-  if (!tr) return; // every other row keeps the browser's own menu
+  // A reply block carries its own id inside the thread's row, so the menu
+  // targets the exact note under the pointer (root or reply).
+  const tr = e.target.closest("[data-note]");
+  if (!tr || !tr.closest("tr.note")) return; // every other row keeps the browser's own menu
   const n = findNote(tr.dataset.note);
   if (!n) return;
   e.preventDefault();

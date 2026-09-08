@@ -189,14 +189,22 @@ compare mode (no ◆ rows, no keys, no ◆N badges on the file list): their old
 side is the compared revision, which no stored address names.
 
 In the TUI, `dRow.note *noteLine` is one synthetic
-DISPLAY row `relayout` appends after its owning line's content rows (`◆
-author: summary`, one row per rationale line, indented `↳` replies, dimmed
-when stale, filtered per-row by the `a` agent-layer toggle); `cursorDispRange`
+DISPLAY row `relayout` appends after its owning line's content rows. A thread
+lays out as a hunk-style BOX (`noteBoxLines`: `noteRowTop` carrying the title
+"agent note · author · path R204", a blank, the summary rows in bold, the
+rationale rows, `↳ author:` reply blocks, a blank, `noteRowBottom`), drawn by
+`noteRowCells` in the pane of the note's side (old = left, new = right) with
+the other pane blank; text is word-wrapped to the pane at layout time
+(`noteInnerWidth`, so a pasted paragraph in the summary takes rows, never a
+cut), dimmed grey when stale, filtered per-row by the `a` agent-layer toggle
+(frame rows count as agent only when the whole thread is). `cursorDispRange`
 stops before the first note row so the cursor never rests on one, and a note
 hidden under a fold marks the fold separator (`dRow.noteMark`) instead. Web
-mirrors the same shape: `<tr class="note">` rows keyed `data-note`, a
-`notes` SSE event (`emitNotes`) tells every open page to re-fetch after a
-mutation. `srcNotes` is a refresh source (badges only) — it is never polled
+mirrors the same shape: one `<tr class="note">` per thread keyed `data-note`
+(reply blocks carry their own `data-note`), `noteBoxHTML` placing a
+`.notebox` in the side's pane (`td.note-gap` fills the other) and spanning
+the row in the single-column layouts; a `notes` SSE event (`emitNotes`)
+tells every open page to re-fetch after a mutation. `srcNotes` is a refresh source (badges only) — it is never polled
 by the background scheduler, only fired after a note mutation.
 
 Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands, else launches the TUI.

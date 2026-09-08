@@ -40,7 +40,7 @@ func TestNoteRowsHTMLJS(t *testing.T) {
 	if err != nil {
 		t.Skip("node not installed; the JS guard needs it")
 	}
-	fns := jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteRowHTML") +
+	fns := jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteBoxHTML") +
 		"\n" + jsFunc(t, "files.js", "notesArmed")
 
 	notes := []map[string]any{
@@ -79,22 +79,35 @@ func TestNoteRowsHTMLJS(t *testing.T) {
 	if !strings.Contains(got.On, "why &amp; how") {
 		t.Fatalf("the rationale must be escaped: %s", got.On)
 	}
-	if !strings.Contains(got.On, `colspan="4"`) {
-		t.Fatalf("note rows must span the whole table: %s", got.On)
+	// Split layout: the box sits in the new side's pane (two columns) with a
+	// blank two-column gap on the old side.
+	if !strings.Contains(got.On, `<td class="note-gap" colspan="2"></td><td class="note" colspan="2">`) {
+		t.Fatalf("a new-side note must occupy the right pane only: %s", got.On)
 	}
-	if n := strings.Count(got.On, "<tr "); n != 4 {
-		t.Fatalf("agent layer ON: %d rows, want 4 (root + 2 replies + the agent root): %s", n, got.On)
+	if !strings.Contains(got.On, "note · ") || !strings.Contains(got.On, " R3") {
+		t.Fatalf("the box title must name the file line: %s", got.On)
+	}
+	// One box per thread, every note keyed by its id: the user root's box
+	// holds its two replies; the agent root is its own box.
+	if n := strings.Count(got.On, "<tr "); n != 2 {
+		t.Fatalf("agent layer ON: %d boxes, want 2 (the user thread + the agent root): %s", n, got.On)
+	}
+	if n := strings.Count(got.On, "data-note="); n != 4 {
+		t.Fatalf("agent layer ON: %d note ids, want 4 (root + 2 replies + the agent root): %s", n, got.On)
 	}
 	if !strings.Contains(got.On, "note stale") {
 		t.Fatalf("a stale note must carry its class: %s", got.On)
 	}
-	if !strings.Contains(got.On, "note reply") {
-		t.Fatalf("a reply must carry its class: %s", got.On)
+	if !strings.Contains(got.On, `class="notereply" data-note="n3"`) {
+		t.Fatalf("a reply must be its own block inside the box: %s", got.On)
 	}
 	// Agent layer off: the agent root AND the agent reply go, the user reply
 	// under the visible root stays.
-	if n := strings.Count(got.Off, "<tr "); n != 2 {
-		t.Fatalf("agent layer OFF: %d rows, want 2 (user root + user reply): %s", n, got.Off)
+	if n := strings.Count(got.Off, "<tr "); n != 1 {
+		t.Fatalf("agent layer OFF: %d boxes, want 1 (the user thread; the agent root goes): %s", n, got.Off)
+	}
+	if n := strings.Count(got.Off, "data-note="); n != 2 {
+		t.Fatalf("agent layer OFF: %d note ids, want 2 (user root + user reply): %s", n, got.Off)
 	}
 	if strings.Contains(got.Off, "bot says") || strings.Contains(got.Off, "moved") {
 		t.Fatalf("agent notes must be hidden with the layer off: %s", got.Off)
@@ -122,7 +135,7 @@ func TestNotesInertOnAComparisonJS(t *testing.T) {
 		t.Skip("node not installed; the JS guard needs it")
 	}
 	fns := jsFunc(t, "files.js", "notesArmed") + "\n" + jsFunc(t, "files.js", "noteQuery") +
-		"\n" + jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteRowHTML")
+		"\n" + jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteBoxHTML")
 
 	script := "const esc = (x) => String(x);\n" +
 		"const URLSearchParams = globalThis.URLSearchParams;\n" +
