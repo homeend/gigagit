@@ -105,21 +105,22 @@ func TestCursorMoveClampsAndScrolls(t *testing.T) {
 
 func TestCursorSkipsFoldsInPartialMode(t *testing.T) {
 	t.Parallel()
-	// 40 rows, one change at row 20: partial mode folds the far context on
-	// both sides (diffContext lines kept around the change).
-	v := diffViewWith(cursorRows(40, 20), []int{20})
+	// 40 rows, changes at 10 and 30: partial mode keeps diffContext rows
+	// around each and folds the rest, so a fold sits BETWEEN two real lines
+	// (the very first line is a fold too; the test needs a middle one).
+	v := diffViewWith(cursorRows(40, 10, 30), []int{10, 30})
 	v.partial = true
 	v.rebuild()
 	body := 10
 	foldAt := -1
 	for i, ln := range v.lines {
-		if ln.Fold > 0 {
+		if ln.Fold > 0 && i > 0 {
 			foldAt = i
 			break
 		}
 	}
-	if foldAt < 0 {
-		t.Fatal("fixture: expected a fold line in partial mode")
+	if foldAt < 0 || foldAt+1 >= len(v.lines) {
+		t.Fatal("fixture: expected a middle fold line in partial mode")
 	}
 	v.setCursorLine(foldAt, body)
 	if v.lines[v.curLine].Fold > 0 {
@@ -212,23 +213,24 @@ func TestCursorReanchorsAcrossPartialToggle(t *testing.T) {
 
 func TestCursorSetDispIgnoresFoldRow(t *testing.T) {
 	t.Parallel()
-	v := diffViewWith(cursorRows(40, 20), []int{20})
+	v := diffViewWith(cursorRows(40, 10, 30), []int{10, 30})
 	v.partial = true
 	v.rebuild()
 	foldRow := -1
 	for i, d := range v.disp {
-		if d.fold > 0 {
+		if d.fold > 0 && i > 0 { // a middle fold (display row 0 is a fold as well)
 			foldRow = i
 			break
 		}
 	}
-	if foldRow < 0 {
-		t.Fatal("fixture: expected a fold display row")
+	if foldRow < 0 || foldRow+1 >= len(v.disp) {
+		t.Fatal("fixture: expected a middle fold display row")
 	}
-	v.setCursorLine(0, 10)
+	v.setCursorLine(1, 10)
+	was := v.curLine
 	v.setCursorDisp(foldRow, 10)
-	if v.curLine != 0 {
-		t.Fatalf("click on a fold row moved the cursor to %d, want 0", v.curLine)
+	if v.curLine != was {
+		t.Fatalf("click on a fold row moved the cursor to %d, want %d", v.curLine, was)
 	}
 	v.setCursorDisp(foldRow+1, 10)
 	if v.curLine != v.disp[foldRow+1].line {
