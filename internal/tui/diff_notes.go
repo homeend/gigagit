@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -156,4 +157,15 @@ func noteRowsFor(r domain.ResolvedNote, rootID string, depth int) []noteLine {
 		}
 	}
 	return rows
+}
+
+// noteBadge is the trailing "◆N" a Files/Commits row carries when its target
+// has notes. Display only — never part of a filter haystack. n <= 0 (a missing
+// map entry, or a NoteCounts that failed to load) yields "", so rows in a repo
+// without notes stay byte-identical.
+func noteBadge(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return "  ◆" + strconv.Itoa(n)
 }

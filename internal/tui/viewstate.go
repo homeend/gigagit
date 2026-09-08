@@ -262,7 +262,8 @@ type statusList struct {
 	files []model.FileStatus
 	p     panel // Files vs Staged — drives which status byte fileGlyph shows
 	root  string
-	mtime map[int]int64 // dedupes os.Stat within one sort pass; 0 = unknown (sorts last)
+	mtime map[int]int64  // dedupes os.Stat within one sort pass; 0 = unknown (sorts last)
+	notes map[string]int // NoteCounts.ByPath: the trailing ◆N badge (display only); nil = no badges
 }
 
 func (l statusList) Len() int { return len(l.files) }
@@ -270,7 +271,16 @@ func (l statusList) Len() int { return len(l.files) }
 // Row is built lazily per index (not precomputed for all files in listFor) so the
 // many idx-only callers per keystroke — displayIndices, marks, nav, the mouse
 // hit-test — never materialize 40k strings. Matches the old statusRows format.
+//
+// The ◆N note badge is DISPLAY ONLY: Haystack below feeds the / filter the
+// unbadged text, so typing a digit never matches a file because of its note
+// count. With no notes the badge is "" and the row is byte-identical to before.
 func (l statusList) Row(i int) string {
+	return l.Haystack(i) + noteBadge(l.notes[l.files[i].Path])
+}
+
+// Haystack is the filter-match text: the row WITHOUT its note badge.
+func (l statusList) Haystack(i int) string {
 	return fmt.Sprintf("%c %s", fileGlyph(l.p, l.files[i]), l.files[i].Path)
 }
 func (l statusList) Name(i int) string { return l.files[i].Path }
@@ -435,7 +445,8 @@ func (m Model) listFor(p panel) panelList {
 		// Both file panels back onto the FULL status slice; panelView's
 		// membership filter selects each panel's subset, so backingIndex keeps
 		// returning indices into m.status.Files for the action handlers.
-		return statusList{files: m.status.Files, p: p, root: m.currentWorktree, mtime: map[int]int64{}}
+		return statusList{files: m.status.Files, p: p, root: m.currentWorktree,
+			mtime: map[int]int64{}, notes: m.noteCounts.ByPath}
 	case panelCommits:
 		return commitList{items: m.commits, m: &m, identW: m.commitIdentWidth()}
 	}
