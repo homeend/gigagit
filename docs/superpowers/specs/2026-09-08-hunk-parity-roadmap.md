@@ -402,10 +402,14 @@ A reply inherits its parent's `Address`, `Side`, `Range` and `ContextHash`
 at creation time and is re-anchored with the parent. Resolution (below) is
 computed, never stored.
 
-**Old-side base.** For worktree addresses `Address.State` names the base the
-old side comes from (`FileStateModified` etc. → HEAD, staged states →
-index), matching the diff view that created the note; for commit addresses
-the old side is the first parent. A note on a Del row (no new-side line)
+**Old-side base.** `Address.State` names the pair of texts the note was
+made against, matching the diff view that created it: `StateUnstaged` =
+index → working file (the Files panel diffs index→worktree), `StateStaged`
+= HEAD → index, `StateUntracked` = nothing → working file, `StateCommitted`
+= first parent → commit, `StateShelf` = nothing → shelf blob. Within the
+working tree a note is shown for a path regardless of the stored state
+(fingerprint re-anchoring absorbs the line shift); the state matters to the
+sweep, which reads exactly that pair. A note on a Del row (no new-side line)
 anchors on the old side; everything else anchors on the new side, per
 `diffView.cursorRow()`'s contract (§4.1).
 
