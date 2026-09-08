@@ -527,7 +527,7 @@ func TestNoteMenuRowsOfferEditReplyDelete(t *testing.T) {
 	v.setCursorLine(4, m2.diffBodyRows()) // the root's anchored line
 	row, _ := m2.noteDeleteRow()
 	nm, _ = row.run(m2)
-	if p := nm.(Model).modal.req.Prompt; !strings.Contains(p, "1") {
-		t.Fatalf("the prompt must count the replies, got %q", p)
+	if p := nm.(Model).modal.req.Prompt; !strings.Contains(p, "1") || !strings.Contains(p, "◆ ada: root") {
+		t.Fatalf("the prompt must count the replies and quote the note, got %q", p)
 	}
 }

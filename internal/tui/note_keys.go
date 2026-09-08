@@ -174,6 +174,16 @@ func (m Model) noteNearCursor() (noteTarget, bool) {
 	return ts[0], true
 }
 
+// noteQuote is the one-line "◆ author: summary" a confirmation shows for a
+// note, control characters flattened and the text cut to a modal's width.
+func noteQuote(n model.Note) string {
+	who := n.Author
+	if who == "" {
+		who = string(n.Source)
+	}
+	return truncate(sanitizeLine("◆ "+who+": "+n.Summary), 72)
+}
+
 // noteChoiceOptions labels the threads in reach for the chooser modal —
 // "1: summary" … plus the trailing Cancel that esc maps to. The labels are the
 // notes' own text, so they render as-is (untranslated by design).
@@ -375,6 +385,9 @@ func (m Model) confirmNoteDelete(t noteTarget) (tea.Model, tea.Cmd) {
 	if replies > 0 {
 		prompt = i18n.T("Delete this note and its %d replies?", replies)
 	}
+	// Quote the note itself under the question — "this note" alone says
+	// nothing about which one is about to go.
+	prompt += "\n" + noteQuote(t.note)
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "note-remove",

@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // A click in the . menu is positional: the row under the pointer becomes the
@@ -76,4 +78,29 @@ func actionMenuRowY(m Model, i int) int {
 	top := (h - len(strings.Split(m.renderActionMenu(), "\n"))) / 2
 	lo, _ := windowRowBounds(len(vis), min(len(vis), 14), m.actionMenu.sel, m.actionMenu.mode)
 	return top + actionMenuBodyTop + (i - lo)
+}
+
+// A decision modal raised from the diff view (the note chooser, the delete
+// confirm) is drawn OVER the diff, not over the bare panel interface — the
+// user saw the diff "close" behind the chooser.
+func TestModalDrawsOverTheOpenDiff(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	m.width, m.height = 120, 40
+	v := m.diffLayer()
+	v.notes = append(v.notes, rootNote("n3", 25, "third", "", model.NoteSourceUser, model.NoteActive))
+	v.relayout(m.width)
+	v.setCursorLine(24, m.diffBodyRows())
+	nm, _ := v.update(m, synthKey("E"))
+	m = nm
+	if m.modal == nil {
+		t.Fatal("E with two notes must raise the chooser")
+	}
+	frame := m.render()
+	if !strings.Contains(frame, "Which note?") {
+		t.Fatal("the chooser is not on screen")
+	}
+	if !strings.Contains(frame, "diff: a/b.go") {
+		t.Fatalf("the diff view header vanished behind the modal:\n%s", frame)
+	}
 }

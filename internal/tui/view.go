@@ -271,10 +271,13 @@ func (m Model) renderLayers() string {
 // it when one is open. The output never exceeds width×height.
 func (m Model) render() string {
 	if m.modal != nil {
-		// Overlay the decision modal centered on the interface, like every other
-		// popup — not standalone in the top-left corner.
+		// Overlay the decision modal centered on whatever is open — the layer
+		// stack (an open diff, blame, a popup) or the panel interface when
+		// nothing is — like the action menu does. Drawing it over the bare
+		// panels made a note chooser or delete confirm raised from the diff
+		// view appear to close the diff.
 		w, h := m.overlayDims()
-		bg := clipToHeight(m.renderInterface(), h)
+		bg := clipToHeight(m.renderLayers(), h)
 		return overlayCenter(bg, m.renderModal(), w, h)
 	}
 	// A process owns the screen: it draws its current window over the panel
