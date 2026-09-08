@@ -116,7 +116,9 @@ func TestLexCapsRunsPerLine(t *testing.T) {
 func TestLexLineCountMatchesTextdiff(t *testing.T) {
 	t.Parallel()
 	// textdiff.splitLines: trailing \n does not add a line; \r is stripped per line.
-	for _, src := range []string{"a\nb\n", "a\nb", "a\r\nb\r\n", "", "\n"} {
+	// "a\rb\nc\n" is the lone-\r case: only \n starts a new line, so it is two
+	// lines — chroma must not be allowed to normalise the \r into a third.
+	for _, src := range []string{"a\nb\n", "a\nb", "a\r\nb\r\n", "a\rb\nc\n", "", "\n"} {
 		toks := Lex(Detect("a.go"), []byte(src))
 		want := 0
 		if src != "" {
@@ -134,6 +136,34 @@ func TestLexLineCountMatchesTextdiff(t *testing.T) {
 		if len(toks) != want {
 			t.Errorf("Lex(%q) lines = %d, want %d", src, len(toks), want)
 		}
+	}
+}
+
+// TestLexLoneCRDoesNotShiftLines pins the regression a nil TokeniseOptions
+// caused: chroma's default EnsureLF rewrote a bare \r inside a string literal
+// to \n, so chroma counted one more line than textdiff and every following
+// line inherited the PREVIOUS line's runs.
+func TestLexLoneCRDoesNotShiftLines(t *testing.T) {
+	t.Parallel()
+	src := []byte("package x\nvar a = \"p\rq\"\nfunc f() {}\n")
+	toks := Lex(Detect("a.go"), src)
+	if len(toks) != 3 {
+		t.Fatalf("lines = %d, want 3 (the lone \\r must not start a line)", len(toks))
+	}
+	// Line 2's string literal spans the \r: `var a = ` is 8 runes, the
+	// literal "p\rq" is 5 more.
+	var str Tok
+	for _, tk := range toks[1] {
+		if tk.Class == String {
+			str = tk
+		}
+	}
+	if str.Start != 8 || str.End != 13 {
+		t.Errorf("line 2 String run = [%d,%d), want [8,13) covering \"p\\rq\"", str.Start, str.End)
+	}
+	// Line 3 must be lexed as itself, not as a shifted copy of line 2.
+	if len(toks[2]) == 0 || toks[2][0].Class != Keyword || toks[2][0].Start != 0 {
+		t.Errorf("line 3 = %+v, want a Keyword run at offset 0 for `func`", toks[2])
 	}
 }
 

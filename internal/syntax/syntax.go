@@ -99,7 +99,12 @@ func Lex(lang string, src []byte) [][]Tok {
 	if l == nil {
 		return nil
 	}
-	it, err := chroma.Coalesce(l).Tokenise(nil, string(src))
+	// Explicit options, NOT nil: chroma's defaults set EnsureLF, which
+	// rewrites a bare \r to \n before lexing. textdiff.splitLines splits on
+	// \n only, so chroma would see one MORE line than the renderers do and
+	// every line after the first lone \r would receive the previous line's
+	// runs. State "root" is the entry state every lexer defines.
+	it, err := chroma.Coalesce(l).Tokenise(&chroma.TokeniseOptions{State: "root"}, string(src))
 	if err != nil {
 		return nil
 	}
