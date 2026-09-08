@@ -19,6 +19,7 @@ import (
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/prefix"
 	"github.com/homeend/gigagit/internal/profile"
@@ -41,6 +42,17 @@ type Service struct {
 	shelf      shelf.Store      // lazily resolved; nil disables the shelf
 	bookmark   bookmark.Store   // lazily resolved; nil disables bookmarks
 	searchhist searchhist.Store // lazily resolved; nil disables search history
+
+	notes      notes.Store // lazily resolved; nil disables notes
+	notesOff   bool        // hard "no store" (the disabled-path test)
+	noteCounts *NoteCounts // cached badge counts; nil = cold, invalidated by every mutation
+
+	// notesMaxAgeDays / notesMaxEntries carry [notes] into the store and the
+	// sweep. Set by SetNotesPolicy before StartNotesSweep; 0 = the built-in
+	// defaults (30 / 2000), <=0 after an explicit set = forever / uncapped.
+	notesMaxAgeDays int
+	notesMaxEntries int
+	notesSweepOnce  sync.Once
 
 	profileGlobal profile.Store // lazily resolved; nil disables profiles
 	profileRepo   profile.Store // lazily resolved; nil disables profiles
