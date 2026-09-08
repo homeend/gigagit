@@ -213,6 +213,46 @@ func TestUIWheelStepLayers(t *testing.T) {
 	}
 }
 
+func TestUIDiffSyntaxLayers(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.toml")
+
+	cfg, err := Load(missing, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.DiffSyntax != "auto" || !cfg.UI.SyntaxOn() {
+		t.Errorf("default diff_syntax = %q (on=%v), want auto/on", cfg.UI.DiffSyntax, cfg.UI.SyntaxOn())
+	}
+
+	g := filepath.Join(dir, "global.toml")
+	writeFile(t, g, "[ui]\ndiff_syntax = \"off\"\n")
+	cfg, err = Load(g, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.SyntaxOn() {
+		t.Error("global off must turn highlighting off")
+	}
+
+	r := filepath.Join(dir, "repo.toml")
+	writeFile(t, r, "[ui]\ndiff_syntax = \"auto\"\n")
+	cfg, err = Load(g, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.UI.SyntaxOn() {
+		t.Error("repo auto must win over global off")
+	}
+
+	// An empty repo value is unset and keeps the global.
+	writeFile(t, r, "[ui]\ndiff_syntax = \"\"\n")
+	cfg, _ = Load(g, r)
+	if cfg.UI.SyntaxOn() {
+		t.Error("empty repo value must not reset the global off")
+	}
+}
+
 func TestHScrollStepDefaultAndOverlay(t *testing.T) {
 	if got := Defaults().UI.HScrollStep; got != 8 {
 		t.Fatalf("default hscroll_step = %d, want 8", got)

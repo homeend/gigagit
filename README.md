@@ -331,6 +331,13 @@ set it `true` to surface them (e.g. when deliberately renormalizing line
 endings). The scriptable `gg status` is unaffected (faithful to `git status`).
 Like every entry, the repo's `.gg.toml` overrides the global config per field.
 
+`[ui] diff_syntax` (default `"auto"`) colours code in the diff views by file
+type — keywords, types, strings, numbers and comments each get a colour, on
+top of the add/del backgrounds and the word-level emphasis. The language is
+picked from the file name (about 300 lexers, via chroma); a file with no
+known lexer, or a side larger than 1 MB, renders plain. Set `"off"` to
+disable everywhere (TUI and `gg web`).
+
 `[debug] log_operations` (default `false`) turns on the **operation log**: a
 diagnostic that mirrors every operation and git invocation (argument-redacted) as
 JSON lines to `operations.log` in the gg state dir (`$XDG_STATE_HOME/gg/`, else
