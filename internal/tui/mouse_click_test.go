@@ -119,11 +119,12 @@ func TestDoubleClickActionMenuRunsSelectedRow(t *testing.T) {
 	ran := false
 	m.actionMenu = &actionMenu{rows: []actionRow{{id: "spy", label: "spy",
 		run: func(mm Model) (tea.Model, tea.Cmd) { ran = true; return mm, nil }}}}
-	u, _ := m.Update(mouseMsg(40, 12, tea.MouseButtonLeft))
+	y := actionMenuRowY(m, 0) // clicks are positional: land on the row itself
+	u, _ := m.Update(mouseMsg(40, y, tea.MouseButtonLeft))
 	if u.(Model).actionMenu == nil || ran {
 		t.Fatal("a single click must not run a menu row")
 	}
-	u2, _ := u.(Model).Update(mouseMsg(40, 12, tea.MouseButtonLeft))
+	u2, _ := u.(Model).Update(mouseMsg(40, y, tea.MouseButtonLeft))
 	if !ran {
 		t.Fatal("double-click should run the selected menu row like enter")
 	}

@@ -21,6 +21,12 @@ var (
 
 	diffCursorRow = lipgloss.NewStyle().Background(lipgloss.Color("237")) // cursor line: subtle grey under both panes
 	diffCursorNo  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
+	// On the cursor row a hot cell keeps its meaning but steps one shade
+	// brighter, and the gap side carries the grey band under its dots, so
+	// the cursor never disappears on exactly the rows a reviewer stops on.
+	diffAddCursor = lipgloss.NewStyle().Background(lipgloss.Color("28"))
+	diffDelCursor = lipgloss.NewStyle().Background(lipgloss.Color("88"))
+	diffGapCursor = diffGapCell.Background(lipgloss.Color("237"))
 
 	// Review note rows sit on a full-width band (a dark blue for a live note,
 	// a grey for a stale one) so they read as annotations, not as diff text.
@@ -44,11 +50,34 @@ var noMark = cellMark{gut: diffGutter}
 func cursorMark(style string) cellMark {
 	switch style {
 	case "row":
-		return cellMark{row: true, base: diffCursorRow, gut: diffGutter}
+		return cellMark{row: true, base: diffCursorRow, gut: diffCursorNo}
 	case "number":
 		return cellMark{gut: diffCursorNo}
 	}
 	return noMark
+}
+
+// hotFor is the background a hot (add/del) cell wears: its own shade, or the
+// one-step-brighter cursor variant when the row is the cursor row.
+func (mk cellMark) hotFor(hot lipgloss.Style) lipgloss.Style {
+	if !mk.row {
+		return hot
+	}
+	switch hot.GetBackground() {
+	case diffAddCell.GetBackground():
+		return diffAddCursor
+	case diffDelCell.GetBackground():
+		return diffDelCursor
+	}
+	return hot
+}
+
+// gapFor is the style of the dotted gap filler: banded on the cursor row.
+func (mk cellMark) gapFor() lipgloss.Style {
+	if mk.row {
+		return diffGapCursor
+	}
+	return diffGapCell
 }
 
 // diffHintFor builds the diff-view hint for the current long-line mode. Every
@@ -381,7 +410,7 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 // emphasis rides in seg.emph.
 func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipgloss.Style, mk cellMark) string {
 	if gap {
-		return diffGapCell.Render(strings.Repeat("·", width))
+		return mk.gapFor().Render(strings.Repeat("·", width))
 	}
 	if gut > width-2 { // degenerate pane: keep the cell inside its width
 		gut = width - 2
@@ -402,7 +431,7 @@ func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipglo
 		base = mk.base
 	}
 	if hot {
-		base = hotStyle
+		base = mk.hotFor(hotStyle)
 	}
 	body := styledRuns(seg.disp, seg.emph, seg.cls, base)
 	if pad := tw - lipgloss.Width(string(seg.disp)); pad > 0 {
@@ -419,7 +448,7 @@ func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipglo
 // in the sanitized masks and are sliced with the window.
 func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, hOffset, gut, width int, gap, hot bool, hotStyle lipgloss.Style, mk cellMark) string {
 	if gap {
-		return diffGapCell.Render(strings.Repeat("·", width))
+		return mk.gapFor().Render(strings.Repeat("·", width))
 	}
 	if gut > width-2 { // degenerate pane: keep the cell inside its width
 		gut = width - 2
@@ -464,7 +493,7 @@ func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, h
 		base = mk.base
 	}
 	if hot {
-		base = hotStyle
+		base = mk.hotFor(hotStyle)
 	}
 	var b strings.Builder
 	if hasLeft {
@@ -556,7 +585,7 @@ func noteRowText(nl noteLine, w int) string {
 // (optional) hot cell background.
 func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgloss.Style, spans []textdiff.Span, toks []syntax.Tok, mk cellMark) string {
 	if gap {
-		return diffGapCell.Render(strings.Repeat("·", width))
+		return mk.gapFor().Render(strings.Repeat("·", width))
 	}
 	if gut > width-2 { // degenerate pane: keep the cell inside its width
 		gut = width - 2
@@ -576,14 +605,14 @@ func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgl
 			base = mk.base
 		}
 		if hot {
-			base = hotStyle
+			base = mk.hotFor(hotStyle)
 		}
 		bodyTxt = hotEmphBody(text, spans, toks, tw, base)
 	} else {
 		bodyTxt = padRight(truncate(sanitizeLine(text), tw), tw)
 		switch {
 		case hot:
-			bodyTxt = hotStyle.Render(bodyTxt)
+			bodyTxt = mk.hotFor(hotStyle).Render(bodyTxt)
 		case mk.row:
 			bodyTxt = mk.base.Render(bodyTxt)
 		}

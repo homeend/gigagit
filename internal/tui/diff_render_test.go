@@ -579,3 +579,43 @@ func BenchmarkDiffPaneLinesScrollHighlighted(b *testing.B) {
 		}
 	}
 }
+
+// NOTE: serial (no t.Parallel) — lipgloss.SetColorProfile is process-global.
+// The "row" cursor mark must stay visible on EVERY row kind: a hot add/del
+// cell (whose own background used to win over the band, hiding the cursor on
+// exactly the rows a reviewer stops on), the dotted gap side, and a plain
+// cell. Each is compared against the same cell rendered without the mark.
+func TestCursorMarkVisibleOnHotAndGapCells(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	mk := cursorMark("row")
+	cases := []struct {
+		name       string
+		plain, cur string
+	}{
+		{"add cell", diffCell(41, "object CacheConfig {", 3, 30, false, true, diffAddCell, nil, nil, noMark),
+			diffCell(41, "object CacheConfig {", 3, 30, false, true, diffAddCell, nil, nil, mk)},
+		{"del cell", diffCell(27, "x = 3600", 3, 30, false, true, diffDelCell, nil, nil, noMark),
+			diffCell(27, "x = 3600", 3, 30, false, true, diffDelCell, nil, nil, mk)},
+		{"gap cell", diffCell(0, "", 3, 30, true, false, diffAddCell, nil, nil, noMark),
+			diffCell(0, "", 3, 30, true, false, diffAddCell, nil, nil, mk)},
+		{"wrapped add seg", segCell(41, cellSeg{disp: []rune("abc"), emph: make([]bool, 3), cls: make([]syntax.Class, 3)}, 3, 30, false, true, diffAddCell, noMark),
+			segCell(41, cellSeg{disp: []rune("abc"), emph: make([]bool, 3), cls: make([]syntax.Class, 3)}, 3, 30, false, true, diffAddCell, mk)},
+		{"wrapped gap seg", segCell(0, cellSeg{}, 3, 30, true, false, diffAddCell, noMark),
+			segCell(0, cellSeg{}, 3, 30, true, false, diffAddCell, mk)},
+		{"scroll add cell", scrollCell(41, "abc", nil, nil, 0, 3, 30, false, true, diffAddCell, noMark),
+			scrollCell(41, "abc", nil, nil, 0, 3, 30, false, true, diffAddCell, mk)},
+		{"scroll gap cell", scrollCell(0, "", nil, nil, 0, 3, 30, true, false, diffAddCell, noMark),
+			scrollCell(0, "", nil, nil, 0, 3, 30, true, false, diffAddCell, mk)},
+	}
+	for _, c := range cases {
+		if c.plain == c.cur {
+			t.Errorf("%s: cursor row renders byte-identical to the unmarked cell: %q", c.name, c.cur)
+		}
+		if lipgloss.Width(c.plain) != lipgloss.Width(c.cur) {
+			t.Errorf("%s: cursor mark changed the cell width %d → %d", c.name, lipgloss.Width(c.plain), lipgloss.Width(c.cur))
+		}
+	}
+}
