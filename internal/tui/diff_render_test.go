@@ -495,3 +495,68 @@ func TestDiffPaneLinesUseTokensBySourceLine(t *testing.T) {
 		t.Errorf("the gap side must stay a plain filler: %q", lines[1])
 	}
 }
+
+// TestWrapCellsSlicesClassMaskAlongside pins the class mask to the display
+// runes across a wrap: a segment whose cls is shorter than its disp would
+// panic in styledRuns, and one sliced at a different offset would paint the
+// wrong runes. Concatenating the segments must reproduce the input mask.
+func TestWrapCellsSlicesClassMaskAlongside(t *testing.T) {
+	t.Parallel()
+	disp := []rune("if x { return y }")
+	emph := make([]bool, len(disp))
+	cls := make([]syntax.Class, len(disp))
+	for i := 0; i < 2; i++ { // "if"
+		cls[i] = syntax.Keyword
+	}
+	for i := 7; i < 13; i++ { // "return"
+		cls[i] = syntax.Keyword
+	}
+	segs := wrapCells(disp, emph, cls, 8)
+	if len(segs) < 2 {
+		t.Fatalf("a 17-rune line at width 8 must wrap, got %d segment(s)", len(segs))
+	}
+	var joined []syntax.Class
+	for i, s := range segs {
+		if len(s.cls) != len(s.disp) {
+			t.Fatalf("seg %d: cls len %d != disp len %d", i, len(s.cls), len(s.disp))
+		}
+		joined = append(joined, s.cls...)
+	}
+	if len(joined) != len(cls) {
+		t.Fatalf("segments cover %d runes, want %d", len(joined), len(cls))
+	}
+	for i := range cls {
+		if joined[i] != cls[i] {
+			t.Fatalf("class mask desynced at rune %d: %v, want %v (%v)", i, joined[i], cls[i], joined)
+		}
+	}
+}
+
+// TestScrollCellWindowKeepsClassesAligned pins the panned-window slice: the
+// window's wcls must follow the same runes as wdisp, so only the part of the
+// keyword still visible after the pan is coloured — never the plain run that
+// follows it. Serial: lipgloss.SetColorProfile is process-global.
+func TestScrollCellWindowKeepsClassesAligned(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(prev)
+	text := "aaaaaaaaaa" + "keyword" + strings.Repeat("b", 23)
+	toks := []syntax.Tok{{Start: 10, End: 17, Class: syntax.Keyword}}
+	// tw = 20-3-1 = 16; hOffset 12 with more text to the right leaves both
+	// markers, so the content window is runes [13,27): "word" + ten 'b'.
+	raw := scrollCell(1, text, nil, toks, 12, 3, 20, false, false, lipgloss.NewStyle())
+	if got, want := ansi.Strip(raw), "  1 ‹wordbbbbbbbbbb›"; got != want {
+		t.Fatalf("visible window = %q, want %q", got, want)
+	}
+	kw := "38;5;" + syntaxColor(syntax.Keyword)
+	if n := strings.Count(raw, kw); n != 1 {
+		t.Fatalf("keyword colour appears %d times, want exactly 1 (the `word` remnant): %q", n, raw)
+	}
+	iKw, iWord, iB := strings.Index(raw, kw), strings.Index(raw, "word"), strings.Index(raw, "bbbbbbbbbb")
+	if iKw < 0 || iWord < 0 || iB < 0 {
+		t.Fatalf("missing colour or text in %q", raw)
+	}
+	if !(iKw < iWord && iWord < iB) {
+		t.Errorf("the keyword colour must open immediately before the visible `word`, not the plain 'b' run: kw@%d word@%d b@%d in %q", iKw, iWord, iB, raw)
+	}
+}
