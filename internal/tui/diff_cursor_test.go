@@ -202,6 +202,20 @@ func TestFocusBlockSeedsCursor(t *testing.T) {
 	}
 }
 
+func TestDiffKeysAltArrowsAliasJK(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(40, 20, 30), []int{20, 30})
+	u, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown, Alt: true})
+	if v := u.(Model).diffLayer(); v.curLine != 21 || v.offset != 17 {
+		t.Fatalf("alt+down: curLine=%d offset=%d, want 21/17", v.curLine, v.offset)
+	}
+	u, _ = u.(Model).Update(tea.KeyMsg{Type: tea.KeyUp, Alt: true})
+	u, _ = u.(Model).Update(tea.KeyMsg{Type: tea.KeyUp, Alt: true})
+	if v := u.(Model).diffLayer(); v.curLine != 19 {
+		t.Fatalf("alt+up ×2: curLine=%d, want 19", v.curLine)
+	}
+}
+
 func TestDiffKeysJKMoveCursorArrowsScroll(t *testing.T) {
 	t.Parallel()
 	// 40 rows, changes at 20 and 30, body 10 (height 12). Opens with the

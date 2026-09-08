@@ -670,9 +670,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.scrollBy(-1, body)
 	case "down":
 		v.scrollBy(1, body)
-	case "k":
+	case "k", "alt+up":
 		v.moveCursor(-1, body)
-	case "j":
+	case "j", "alt+down":
 		v.moveCursor(1, body)
 	case "pgup":
 		v.scrollBy(-body, body)

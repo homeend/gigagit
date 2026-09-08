@@ -245,6 +245,7 @@ func helpContent() []contentLine {
 		r("S/esc", i18n.T("close the stash window")),
 		h(i18n.T("Diff view (enter)")),
 		r("↑/↓", i18n.T("scroll one line (the cursor stays where it is)")),
+		r("alt+↑/↓", i18n.T("move the line cursor (same as j/k)")),
 		r("j/k", i18n.T("move the line cursor (the view scrolls only as needed); pgup/pgdn, home/end and n/p move it too; a click places it")),
 		r("z", i18n.T("cycle the cursor line's position in the view: center → top → bottom (also three . menu rows)")),
 		r("e", i18n.T("open the file in your editor at the cursor line — the working-tree file for a working-tree diff (for the staged diff the index is the new side, so the line is approximate), a read-only copy of the shown revision for a commit diff; not offered on a two-sided compare")),

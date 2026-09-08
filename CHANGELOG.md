@@ -9,7 +9,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 ## [Unreleased]
 
 - **Diff view line cursor.** The full-screen diff now has a current line:
-  `j`/`k` move it (the view scrolls only as needed), `↑`/`↓` and the wheel
+  `j`/`k` (or `alt+↑`/`alt+↓`) move it (the view scrolls only as needed), `↑`/`↓` and the wheel
   keep scrolling the viewport without moving it, `pgup`/`pgdn`, `home`/`end`
   and `n`/`p` move it too, and a left click places it. `z` cycles the line's
   position in the view (center → top → bottom; also `.`-menu rows). `e`
