@@ -111,9 +111,11 @@ line's first display row at the top/centre/bottom (`alignTop`/`alignCenter`/
 `alignBottom`, the `z`-key cycle order); `diffPaneLines(v, w, body, curStart,
 curEnd, style)` paints the marked range — the history pane calls it with
 `0, 0, "off"` so its rows are never marked. `e` resolves the editor's goto
-syntax via `editorCommandAt(editor, absPath, line)` (vi-style `+line`,
-VS Code-style `-g file:line`, helix `file:line`, sublime/zed `file:line:1`)
-and is gated off when there is no single file to open — `v.compare` (a
+syntax via `editorCommandAt(editor, absPath, line)`, keyed off the editor
+program name: `vim`/`nvim`/`vi`/`nano`/`emacs`/`micro`/`kak` get `+line
+path`, `code`/`code-insiders`/`codium`/`cursor` get `--goto path:line`,
+`hx`/`subl`/`zed` get `path:line`, anything else (or `line <= 0`) gets the
+plain path — and is gated off when there is no single file to open — `v.compare` (a
 two-sided compare has no cursor-worthy file) or an in-flight load/error/
 binary/too-large state; `v.rev == ""` opens the live working-tree file
 (`editFileAtCmd`), a set `rev` opens a read-only temp copy of `rev:path`

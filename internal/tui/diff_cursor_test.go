@@ -533,6 +533,31 @@ func TestDiffMenuOffersCursorRows(t *testing.T) {
 	}
 }
 
+func TestDiffAlignMenuRowFeedsZCycle(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(60), nil)
+	m.diffLayer().setCursorLine(30, m.diffBodyRows())
+	var top actionRow
+	found := false
+	for _, r := range availableActions(m) {
+		if r.id == "diff-align-top" {
+			top, found = r, true
+		}
+	}
+	if !found {
+		t.Fatal("diff-align-top row not offered")
+	}
+	nm, _ := top.run(m)
+	m = nm.(Model)
+	if v := m.diffLayer(); v.offset != 30 {
+		t.Fatalf("Align cursor line: top: offset=%d, want 30", v.offset)
+	}
+	u, _ := m.Update(keyMsg("z"))
+	if v := u.(Model).diffLayer(); v.offset != 21 {
+		t.Fatalf("z after the menu's top row: offset=%d, want 21 (bottom)", v.offset)
+	}
+}
+
 func TestDiffHintAdvertisesCursorKeys(t *testing.T) {
 	t.Parallel()
 	h := diffHintFor(longScroll)

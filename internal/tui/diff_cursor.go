@@ -211,6 +211,7 @@ func (m Model) diffAlignRows() []actionRow {
 		return actionRow{id: id, label: label, run: func(m Model) (tea.Model, tea.Cmd) {
 			if v := m.diffLayer(); v != nil {
 				v.alignCursor(mode, m.diffBodyRows())
+				v.zCycle = (mode + 1) % 3
 			}
 			return m, nil
 		}}
