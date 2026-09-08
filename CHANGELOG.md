@@ -10,7 +10,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 - **Blame and file preview are syntax-coloured.** The blame view (`b`) and the
   files view's View file preview colour code by file type with the same lexers
-  and `[ui] diff_syntax` switch as the diff views.
+  and `[ui] diff_syntax` switch as the diff views; the cursor line itself stays
+  plain reverse video rather than mixing in per-token colours.
 - **Diff cursor polish.** The ru/ko/zh footer hints use the same word for
   "align" as the `.` menu rows; an empty editor setting that falls back to
   the default editor still opens at the cursor line; more tests around the

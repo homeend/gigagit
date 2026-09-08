@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 func TestGroupBlameCollapsesRuns(t *testing.T) {
@@ -361,5 +363,119 @@ func TestBlameScrollFreezesGutter(t *testing.T) {
 	out := b.render(m, "")
 	if !strings.Contains(out, "Zoe") {
 		t.Errorf("scroll mode must keep the gutter author fixed while panning content:\n%s", out)
+	}
+}
+
+// blameHugeFixture builds a 5000-line blame view: hash blocks of varying
+// length (so the gutter's "first line of a block" text appears on scattered
+// rows, not just row 0), lines of varying length (short and >100 cols, so
+// wrap/scroll modes actually do work), and syntax tokens on every other line
+// (so the coloured winRow path is exercised alongside the plain one). All
+// Time fields are 0 (age reads as a huge, stable "Ny" no matter how many
+// microseconds separate two independent time.Now() calls in this test).
+func blameHugeFixture() *blameView {
+	const n = 5000
+	lines := make([]model.BlameLine, n)
+	tok := make([][]syntax.Tok, n)
+	hash := ""
+	for i := 0; i < n; i++ {
+		if i%7 == 0 { // new block roughly every 7 lines, varying since 7∤most windows
+			hash = fmt.Sprintf("%07x", i)
+		}
+		content := fmt.Sprintf("line %d short", i)
+		if i%5 == 0 {
+			content = fmt.Sprintf("line %d %s", i, strings.Repeat("x", 150)) // forces wrap/scroll to act
+		}
+		lines[i] = model.BlameLine{Hash: hash, Author: "Ada", Time: 0, LineNo: i + 1, Content: content}
+		if i%2 == 0 {
+			tok[i] = []syntax.Tok{{Start: 0, End: 4, Class: syntax.Keyword}}
+		}
+	}
+	b := &blameView{ctx: navContext{path: "a.go"}, lines: lines, tok: tok}
+	b.blocks = groupBlame(lines)
+	return b
+}
+
+// blameRowsFull rebuilds a winRow for EVERY line the pre-optimisation code
+// would have (finding 2's "old way"): no windowRowBounds pre-slice, full
+// b.lines range, full-index gutter lookback. Mirrors render's per-row loop
+// exactly, parameterised on gw/now so the reference build uses the same
+// values render's own call would.
+func blameRowsFull(b *blameView, gw int, now time.Time) []winRow {
+	wr := make([]winRow, len(b.lines))
+	for i, ln := range b.lines {
+		gutter := padRight("", gw)
+		if i == 0 || b.lines[i-1].Hash != ln.Hash {
+			gutter = padRight(truncate(blameGutterText(ln, now), gw), gw)
+		}
+		var st lipgloss.Style
+		if i == b.sel {
+			st = selectedRow
+		}
+		if b.tok == nil {
+			wr[i] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), style: st}
+			continue
+		}
+		disp, _, cls := sanitizeCell(ln.Content, nil, tokAt(b.tok, i+1))
+		wr[i] = winRow{prefix: gutter + "│", text: string(disp), cls: cls, style: st}
+	}
+	return wr
+}
+
+// blameBodyLines extracts the body (window) lines from a full b.render(m,"")
+// output: everything between the one-line header and the one-line hint.
+func blameBodyLines(t *testing.T, out string, body int) []string {
+	t.Helper()
+	all := strings.Split(out, "\n")
+	if len(all) != body+2 {
+		t.Fatalf("render produced %d lines, want header+%d body+hint=%d:\n%q", len(all), body, body+2, out)
+	}
+	return all[1 : 1+body]
+}
+
+// TestBlameRenderMatchesFullBuildRegardlessOfWindow is finding 2's pin: on a
+// 5000-line blame, render's optimised per-visible-row build must be
+// byte-identical to building a winRow for every line (the old way) and
+// letting renderWindow do all the windowing itself — across cutoff, wrap,
+// and scroll, with the cursor at the start, middle, and end of the file.
+func TestBlameRenderMatchesFullBuildRegardlessOfWindow(t *testing.T) {
+	t.Parallel()
+	b := blameHugeFixture()
+	m := Model{width: 100, height: 30}
+	w, _ := m.overlayDims()
+	body := m.blameBodyRows()
+	gw := blameGutterW
+	if gw > w-10 {
+		gw = w - 10
+	}
+
+	n := len(b.lines)
+	sels := []int{0, n / 2, n - 1}
+	modes := []dispMode{modeCutoff, modeWrap, modeScroll}
+	for _, mode := range modes {
+		for _, sel := range sels {
+			t.Run(fmt.Sprintf("mode=%d/sel=%d", mode, sel), func(t *testing.T) {
+				b.mode = mode
+				b.sel = sel
+				b.hscroll = 0
+				if mode == modeScroll {
+					b.hscroll = 12
+				}
+
+				now := time.Now()
+				got := blameBodyLines(t, b.render(m, ""), body)
+				full := blameRowsFull(b, gw, now)
+				want := renderWindow(full, winOpts{w: w, h: body, mode: mode, anchor: sel, hscroll: b.hscroll, prefixW: gw + 1})
+
+				if len(got) != len(want) {
+					t.Fatalf("body line count %d != reference %d", len(got), len(want))
+				}
+				for i := range want {
+					if got[i] != want[i] {
+						t.Errorf("line %d differs:\n got  %q\n want %q", i, got[i], want[i])
+					}
+				}
+			})
+		}
 	}
 }

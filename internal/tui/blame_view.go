@@ -171,9 +171,20 @@ func (b *blameView) render(m Model, _ string) string {
 	}
 
 	now := time.Now()
-	wr := make([]winRow, len(b.lines))
-	for i, ln := range b.lines {
+	// Build a winRow only for the lines renderWindow can actually show — a
+	// full-file blame is thousands of lines, and building+lex-mapping every
+	// one of them on every frame (most of it never rendered) is wasted work.
+	// windowRowBounds is the exact bound renderWindow itself would compute,
+	// so the two can never disagree.
+	lo, hi := windowRowBounds(len(b.lines), body, b.sel, b.mode)
+	wr := make([]winRow, hi-lo)
+	for i := lo; i < hi; i++ {
+		ln := b.lines[i]
 		gutter := padRight("", gw)
+		// i is the FULL (unsliced) line index, so a visible row that starts a
+		// block right at the window's top edge still looks one row back — at
+		// b.lines[i-1], which may itself be off-window — to decide whether it
+		// carries the gutter text.
 		if i == 0 || b.lines[i-1].Hash != ln.Hash {
 			gutter = padRight(truncate(blameGutterText(ln, now), gw), gw)
 		}
@@ -186,17 +197,17 @@ func (b *blameView) render(m Model, _ string) string {
 			st = selectedRow
 		}
 		if b.tok == nil { // no lexer / colouring off: the plain (pre-syntax) path
-			wr[i] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), style: st}
+			wr[i-lo] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), style: st}
 			continue
 		}
 		// sanitizeCell expands exactly like sanitizeLine but also returns the
 		// per-display-rune class mask, so tabs and control glyphs keep the
 		// colours aligned with the columns they land on.
 		disp, _, cls := sanitizeCell(ln.Content, nil, tokAt(b.tok, i+1))
-		wr[i] = winRow{prefix: gutter + "│", text: string(disp), cls: cls, style: st}
+		wr[i-lo] = winRow{prefix: gutter + "│", text: string(disp), cls: cls, style: st}
 	}
 
-	win := renderWindow(wr, winOpts{w: w, h: body, mode: b.mode, anchor: b.sel, hscroll: b.hscroll, prefixW: gw + 1})
+	win := renderWindow(wr, winOpts{w: w, h: body, mode: b.mode, anchor: b.sel - lo, hscroll: b.hscroll, prefixW: gw + 1})
 	switch {
 	case b.loading:
 		win = padLines(i18n.T("  (loading…)"), w, body)

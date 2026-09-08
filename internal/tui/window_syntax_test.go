@@ -78,23 +78,40 @@ func TestRenderWindowClsColoursCutoff(t *testing.T) {
 	}
 }
 
-// A cutoff ellipsis is a rune past the end of the mask; it renders plain
-// instead of inheriting the last run's colour.
+// truncate keeps a prefix and appends "…" after it (it does not replace a
+// kept rune), so the mask's unfixed slice lands the ellipsis on the class
+// slot of the first DROPPED rune — the one right after the kept prefix, at
+// index len(kept). `func` is Keyword and cut happens inside `main` (Func),
+// so the run "func" wears has already ended well before the cut, and this
+// test isn't about that run at all: the first-dropped rune ('i' of "main")
+// only carries a colour worth catching a bug on because `main` itself is
+// coloured too — a mask that only colours "func" could never distinguish
+// the bug here, since the first-dropped rune would already read Plain
+// either way. With `main` also coloured, an unfixed ellipsis fuses into
+// that Func run with no reset before it, while a fixed one always renders
+// after a reset, outside any `38;5;` run.
 func TestRenderWindowClsCutoffEllipsisIsPlain(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.ANSI256)
 	defer lipgloss.SetColorProfile(prev)
 
-	cls := make([]syntax.Class, len([]rune("func main() {")))
-	for i := range cls {
-		cls[i] = syntax.Keyword
+	// bodyW=8 keeps "func ma" and cuts inside "main"; the first-dropped rune
+	// ('i') falls inside main's Func-coloured run (positions 5-8).
+	out := renderWindow([]winRow{{text: "func main() {", cls: goFuncCls()}}, winOpts{w: 8, h: 1, mode: modeCutoff, anchor: 0})
+	if got := ansi.Strip(out[0]); got != "func ma…" {
+		t.Fatalf("cutoff = %q, want %q", got, "func ma…")
 	}
-	out := renderWindow([]winRow{{text: "func main() {", cls: cls}}, winOpts{w: 6, h: 1, mode: modeCutoff, anchor: 0})
-	if got := ansi.Strip(out[0]); got != "func …" {
-		t.Fatalf("cutoff = %q, want %q", got, "func …")
+	if !strings.Contains(out[0], kwSeq()+"mfunc") {
+		t.Errorf("`func` should stay coloured: %q", out[0])
 	}
-	if strings.Contains(out[0], kwSeq()+"m…") {
-		t.Errorf("the ellipsis must stay plain: %q", out[0])
+	if !strings.Contains(out[0], fnSeq()+"mma") {
+		t.Errorf("the kept part of `main` should stay coloured: %q", out[0])
+	}
+	if strings.Contains(out[0], fnSeq()+"mma…") {
+		t.Errorf("the ellipsis must not fuse into main's colour run: %q", out[0])
+	}
+	if !strings.Contains(out[0], "\x1b[0m…") {
+		t.Errorf("the ellipsis must render right after a reset, outside any coloured run: %q", out[0])
 	}
 }
 

@@ -67,6 +67,48 @@ type winOpts struct {
 	prefixW int // width of the frozen winRow.prefix column (0 = none)
 }
 
+// windowRowBounds returns the half-open [lo, hi) slice of the n logical rows
+// that a window of height h anchored on row `anchor` can ever show, for the
+// given mode. It is the same bound renderWindow computes internally (see the
+// comment inside it) before building any per-row state, factored out so a
+// caller with expensive per-row construction — e.g. blame's per-line
+// lex-mapped winRow — can build only the rows that will actually be laid
+// out. renderWindow calls this too, so the two can never disagree. Callers
+// pass n == the FULL row count; when n <= h every row is visible (lo=0,
+// hi=n) and no windowing is needed.
+func windowRowBounds(n, h, anchor int, mode dispMode) (lo, hi int) {
+	if n <= h {
+		return 0, n
+	}
+	if mode != modeWrap {
+		// Single-line modes (cutoff/scroll): each row occupies exactly one
+		// display line, so the visible slice is deterministic.
+		lo = windowStart(n, h, anchor)
+		return lo, lo + h
+	}
+	// Wrap mode: a row spans a variable number of lines, but every row is at
+	// least ONE line, so the h-line window anchored on row a can only ever
+	// show rows within h of a. Rows further away contribute only to the line
+	// COUNTS windowStart sees, and its clamps bind only when the lines on
+	// that side of the anchor number fewer than h — which implies no rows on
+	// that side were dropped. Slicing to [a-h, a+h] before wrapping is
+	// therefore output-identical to the full layout
+	// (TestRenderWindowWrapMatchesFullLayout pins this for every anchor).
+	a := anchor
+	if a < 0 || a >= n {
+		a = 0 // mirrors renderWindow's anchor scan: no matching row → line 0
+	}
+	lo = a - h
+	if lo < 0 {
+		lo = 0
+	}
+	hi = a + h + 1
+	if hi > n {
+		hi = n
+	}
+	return lo, hi
+}
+
 // renderWindow lays rows out under o and returns exactly o.h display lines,
 // each padded to o.w columns. Row styling is applied only after truncation or
 // wrapping, so it can never corrupt the width-based slicing (ANSI-safety).
@@ -85,36 +127,9 @@ func renderWindow(rows []winRow, o winOpts) []string {
 	// huge untracked or commit set pegs the CPU (and, under any extra event
 	// traffic, freezes it).
 	if len(rows) > h {
-		if o.mode != modeWrap {
-			// Single-line modes (cutoff/scroll): each row occupies exactly one
-			// display line, so the visible slice is deterministic.
-			start := windowStart(len(rows), h, o.anchor)
-			rows = rows[start : start+h]
-			o.anchor -= start
-		} else {
-			// Wrap mode: a row spans a variable number of lines, but every row is
-			// at least ONE line, so the h-line window anchored on row a can only
-			// ever show rows within h of a. Rows further away contribute only to
-			// the line COUNTS windowStart sees, and its clamps bind only when the
-			// lines on that side of the anchor number fewer than h — which implies
-			// no rows on that side were dropped. Slicing to [a-h, a+h] before
-			// wrapping is therefore output-identical to the full layout
-			// (TestRenderWindowWrapMatchesFullLayout pins this for every anchor).
-			a := o.anchor
-			if a < 0 || a >= len(rows) {
-				a = 0 // mirrors the anchor scan below: no matching row → line 0
-			}
-			lo := a - h
-			if lo < 0 {
-				lo = 0
-			}
-			hi := a + h + 1
-			if hi > len(rows) {
-				hi = len(rows)
-			}
-			rows = rows[lo:hi]
-			o.anchor -= lo
-		}
+		lo, hi := windowRowBounds(len(rows), h, o.anchor, o.mode)
+		rows = rows[lo:hi]
+		o.anchor -= lo
 	}
 
 	// A frozen prefix column (o.prefixW>0) reserves the leftmost columns; the
@@ -170,7 +185,19 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		default:
 			segs = []string{truncate(r.text, bodyW)}
 			if rcls != nil {
-				segCls = [][]syntax.Class{sliceCls(rcls, 0, len([]rune(segs[0])))}
+				mask := sliceCls(rcls, 0, len([]rune(segs[0])))
+				// When r.text is wider than bodyW, truncate keeps a prefix and
+				// appends "…" after it — the ellipsis is a synthetic rune, not
+				// part of r.text. sliceCls doesn't know that: it just slices
+				// len(segs[0]) classes off the front of rcls, so the mask's
+				// last entry lands on the class of the first DROPPED rune
+				// (the one at index len(kept), i.e. right after the prefix
+				// truncate kept). Force that slot to Plain so the ellipsis
+				// never wears a colour it didn't earn.
+				if lipgloss.Width(r.text) > bodyW && len(mask) > 0 {
+					mask[len(mask)-1] = syntax.Plain
+				}
+				segCls = [][]syntax.Class{mask}
 			}
 		}
 		if len(segs) == 0 {
