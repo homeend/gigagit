@@ -168,6 +168,16 @@ func (d cachedDiffer) Diff(ctx context.Context, req Request) (Diff, error) {
 	}
 	qkey += req.Key
 	return cache.Load[Diff](d.cache, qkey, func() (Diff, error) {
-		return d.inner.Diff(ctx, req)
+		out, err := d.inner.Diff(ctx, req)
+		// plainDiffer skips lexing when the context died (the alignment
+		// itself does not check ctx, so a cancel landing mid-Compare still
+		// yields a complete Result with NO tokens). Caching that under the
+		// syntax-ON key would render this file plain for every later open
+		// until it is evicted, so fail the load instead — nothing is
+		// stored, and the caller that cancelled discards the error anyway.
+		if err == nil && ctx.Err() != nil {
+			return Diff{}, ctx.Err()
+		}
+		return out, err
 	})
 }

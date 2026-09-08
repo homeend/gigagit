@@ -218,6 +218,31 @@ func TestPlainDifferSkipsLexingOnCancelledContext(t *testing.T) {
 	}
 }
 
+// TestCachedDifferDoesNotCacheATokenlessCancelledDiff guards the interaction
+// between the cancelled-context lex skip and the cache: the alignment does not
+// check ctx, so a cancel landing mid-Compare yields a complete Result with no
+// tokens. Storing that under the syntax-ON key would render the file plain on
+// every later open until eviction.
+func TestCachedDifferDoesNotCacheATokenlessCancelledDiff(t *testing.T) {
+	t.Parallel()
+	c := cache.NewFactory(0, 0).Cache("diff")
+	d := NewDiffer(DifferOptions{Enhanced: true, Cached: true, Syntax: on}, c)
+	req := Request{Key: "k", Path: "a.go", Old: src([]byte("package a\n")), New: src([]byte("package b\nvar x = 1\n"))}
+
+	dead, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := d.Diff(dead, req); err == nil {
+		t.Fatal("a diff computed under a dead context must not succeed into the cache")
+	}
+	out, err := d.Diff(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.NewTok == nil {
+		t.Error("the later live call must lex: the cancelled call poisoned the cache with a token-less diff")
+	}
+}
+
 func TestPlainDifferPerSideMaxSyntaxBytesCap(t *testing.T) {
 	t.Parallel()
 	// Non-binary text just over MaxSyntaxBytes: unlike the all-zero "binary"
