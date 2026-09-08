@@ -62,6 +62,7 @@ type diffView struct {
 	loading    bool
 	err        error
 	cur        int        // focused change-block index (the "X" in change X/N); set only by n/p/wrap/mode-toggle
+	curLine    int        // cursor: index into lines (never a display row; never a fold) — see diff_cursor.go
 	wrapArm    wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
 	fileArm    fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
 }
@@ -285,6 +286,9 @@ func (v *diffView) focusBlock(i, body int) {
 		i = len(v.dispBlocks) - 1
 	}
 	v.cur = i
+	if i < len(v.blocks) {
+		v.curLine = v.blocks[i] // blocks index v.lines; the block's first row
+	}
 	v.jumpTo(v.dispBlocks[i], body)
 }
 
@@ -494,7 +498,9 @@ func applyDiff(v *diffView, out domain.Diff, body int) {
 		v.truncated = out.Result.Truncated
 		v.rebuild()
 		if len(v.dispBlocks) > 0 {
-			v.focusBlock(0, body) // open on the first change (cur = 0)
+			v.focusBlock(0, body) // open on the first change (cur = 0, cursor on its first row)
+		} else {
+			v.setCursorLine(0, body)
 		}
 	}
 }
