@@ -186,6 +186,21 @@ func (m Model) renderDiffView() string {
 	if len(v.blocks) > 0 {
 		right = i18n.T("change %d/%d", v.currentBlockOrdinal()+1, len(v.blocks))
 	}
+	if r, ok := v.cursorRow(); ok {
+		ln := ""
+		if r.RightNo > 0 {
+			ln = i18n.T("line %d", r.RightNo)
+		} else if r.LeftNo > 0 {
+			ln = i18n.T("old line %d", r.LeftNo)
+		}
+		if ln != "" {
+			if right != "" {
+				right = ln + "  " + right
+			} else {
+				right = ln
+			}
+		}
+	}
 	if n := len(v.disp); n > 0 {
 		hi := v.offset + body
 		if hi > n {

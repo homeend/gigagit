@@ -1,7 +1,10 @@
 package tui
 
 import (
+	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/textdiff"
 )
@@ -192,5 +195,160 @@ func TestFocusBlockSeedsCursor(t *testing.T) {
 	v.focusBlock(0, 10)
 	if v.curLine != 20 {
 		t.Fatalf("focusBlock(0): curLine=%d, want 20", v.curLine)
+	}
+}
+
+func TestDiffKeysJKMoveCursorArrowsScroll(t *testing.T) {
+	t.Parallel()
+	// 40 rows, changes at 20 and 30, body 10 (height 12). Opens with the
+	// cursor on line 20 and offset 17.
+	m := openedDiffModel(12, cursorRows(40, 20, 30), []int{20, 30})
+	v := m.diffLayer()
+	if v.curLine != 20 || v.offset != 17 {
+		t.Fatalf("open: curLine=%d offset=%d, want 20/17", v.curLine, v.offset)
+	}
+	u, _ := m.Update(keyMsg("j"))
+	v = u.(Model).diffLayer()
+	if v.curLine != 21 || v.offset != 17 {
+		t.Fatalf("j: curLine=%d offset=%d, want 21/17 (no scroll needed)", v.curLine, v.offset)
+	}
+	u, _ = u.(Model).Update(keyMsg("k"))
+	u, _ = u.(Model).Update(keyMsg("k"))
+	v = u.(Model).diffLayer()
+	if v.curLine != 19 {
+		t.Fatalf("k k: curLine=%d, want 19", v.curLine)
+	}
+	// Arrows move the viewport only: the cursor stays on 19 even off-screen.
+	for i := 0; i < 20; i++ {
+		u, _ = u.(Model).Update(keyMsg("down"))
+	}
+	v = u.(Model).diffLayer()
+	if v.curLine != 19 || v.offset != 30 {
+		t.Fatalf("20×down: curLine=%d offset=%d, want 19/30", v.curLine, v.offset)
+	}
+	// The next j pulls the cursor back into view minimally (offset = 20).
+	u, _ = u.(Model).Update(keyMsg("j"))
+	v = u.(Model).diffLayer()
+	if v.curLine != 20 || v.offset != 20 {
+		t.Fatalf("j from off-screen: curLine=%d offset=%d, want 20/20", v.curLine, v.offset)
+	}
+}
+
+func TestDiffKeysPageHomeEndMoveCursor(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(40, 20, 30), []int{20, 30})
+	u, _ := m.Update(keyMsg("pgdown"))
+	v := u.(Model).diffLayer()
+	if v.curLine != 30 || v.offset != 27 {
+		t.Fatalf("pgdown: curLine=%d offset=%d, want 30/27", v.curLine, v.offset)
+	}
+	u, _ = u.(Model).Update(keyMsg("home"))
+	v = u.(Model).diffLayer()
+	if v.curLine != 0 || v.offset != 0 {
+		t.Fatalf("home: curLine=%d offset=%d, want 0/0", v.curLine, v.offset)
+	}
+	u, _ = u.(Model).Update(keyMsg("end"))
+	v = u.(Model).diffLayer()
+	if v.curLine != 39 || v.offset != 30 {
+		t.Fatalf("end: curLine=%d offset=%d, want 39/30", v.curLine, v.offset)
+	}
+	u, _ = u.(Model).Update(keyMsg("pgup"))
+	v = u.(Model).diffLayer()
+	if v.curLine != 29 || v.offset != 20 {
+		t.Fatalf("pgup: curLine=%d offset=%d, want 29/20", v.curLine, v.offset)
+	}
+}
+
+func TestDiffKeyNPSeedCursor(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(40, 20, 30), []int{20, 30})
+	u, _ := m.Update(keyMsg("n"))
+	if v := u.(Model).diffLayer(); v.curLine != 30 {
+		t.Fatalf("n: curLine=%d, want 30", v.curLine)
+	}
+	u, _ = u.(Model).Update(keyMsg("p"))
+	if v := u.(Model).diffLayer(); v.curLine != 20 {
+		t.Fatalf("p: curLine=%d, want 20", v.curLine)
+	}
+}
+
+func TestDiffKeyZCyclesAlignment(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(60), nil)
+	m.diffLayer().setCursorLine(30, m.diffBodyRows())
+	u, _ := m.Update(keyMsg("z"))
+	if v := u.(Model).diffLayer(); v.offset != 25 {
+		t.Fatalf("z (center): offset=%d, want 25", v.offset)
+	}
+	u, _ = u.(Model).Update(keyMsg("z"))
+	if v := u.(Model).diffLayer(); v.offset != 30 {
+		t.Fatalf("z z (top): offset=%d, want 30", v.offset)
+	}
+	u, _ = u.(Model).Update(keyMsg("z"))
+	if v := u.(Model).diffLayer(); v.offset != 21 {
+		t.Fatalf("z z z (bottom): offset=%d, want 21", v.offset)
+	}
+	u, _ = u.(Model).Update(keyMsg("z"))
+	if v := u.(Model).diffLayer(); v.offset != 25 {
+		t.Fatalf("fourth z wraps to center: offset=%d, want 25", v.offset)
+	}
+	// Any other key resets the cycle: j then z centers again.
+	u, _ = u.(Model).Update(keyMsg("z")) // top
+	u, _ = u.(Model).Update(keyMsg("j"))
+	u, _ = u.(Model).Update(keyMsg("z"))
+	if v := u.(Model).diffLayer(); v.offset != 26 {
+		t.Fatalf("j resets the cycle, z centers line 31: offset=%d, want 26", v.offset)
+	}
+}
+
+func TestDiffToggleKeepsCursorRow(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(40, 20, 30), []int{20, 30})
+	m.diffLayer().setCursorLine(31, m.diffBodyRows())
+	u, _ := m.Update(keyMsg("f")) // partial
+	r, ok := u.(Model).diffLayer().cursorRow()
+	if !ok || r.RightNo != 32 {
+		t.Fatalf("after f: cursorRow=%+v ok=%v, want RightNo 32", r, ok)
+	}
+	u, _ = u.(Model).Update(keyMsg("ctrl+w")) // wrap
+	r, ok = u.(Model).diffLayer().cursorRow()
+	if !ok || r.RightNo != 32 {
+		t.Fatalf("after ctrl+w: cursorRow=%+v ok=%v, want RightNo 32", r, ok)
+	}
+}
+
+func TestDiffHeaderNamesCursorLine(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(40, 20, 30), []int{20, 30})
+	m.width = 100
+	head := strings.SplitN(m.renderDiffView(), "\n", 2)[0]
+	if !strings.Contains(head, "line 21") {
+		t.Fatalf("header %q must name the cursor line (line 21)", head)
+	}
+	rows := cursorRows(5)
+	rows[2] = textdiff.Row{Kind: textdiff.Del, Left: "gone", LeftNo: 3}
+	for i := 3; i < 5; i++ {
+		rows[i].RightNo--
+	}
+	m = openedDiffModel(12, rows, []int{2})
+	m.width = 100
+	head = strings.SplitN(m.renderDiffView(), "\n", 2)[0]
+	if !strings.Contains(head, "old line 3") {
+		t.Fatalf("header %q must say old line 3 on a Del row", head)
+	}
+}
+
+func TestDiffLeftClickPlacesCursor(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(40, 20, 30), []int{20, 30})
+	// Body row 5 (y = 6: header is y 0, body starts at y 1) at offset 17 → display row 22.
+	u, _ := m.Update(mouseMsg(10, 6, tea.MouseButtonLeft))
+	if v := u.(Model).diffLayer(); v.curLine != 22 {
+		t.Fatalf("click y=6: curLine=%d, want 22", v.curLine)
+	}
+	// A click on the header row (y 0) is inert.
+	u, _ = u.(Model).Update(mouseMsg(10, 0, tea.MouseButtonLeft))
+	if v := u.(Model).diffLayer(); v.curLine != 22 {
+		t.Fatalf("click on the header moved the cursor to %d", v.curLine)
 	}
 }
