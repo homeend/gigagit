@@ -145,11 +145,23 @@ func (s *Service) sweepNotes(ctx context.Context) (int, error) {
 		}
 	}
 	if len(drop) == 0 {
-		return 0, nil // nothing to do: never take the store's lock
+		// Nothing to do: never take the store's lock. This deliberately skips
+		// the rewrite ENTIRELY, so a store that is over the entry cap but has
+		// no expired or dangling note is left alone until the next write — the
+		// cap is a write-time rule (global constraint), not a sweep-time one.
+		return 0, nil
 	}
 
 	// Phase 2 — apply under the store's lock with a PURE predicate.
-	return st.Sweep(func(n model.Note) bool { return !drop[n.ID] })
+	dropped, err := st.Sweep(func(n model.Note) bool { return !drop[n.ID] })
+	if dropped > 0 {
+		// The badge counts are cached, and at startup the fan-out's NoteCounts
+		// read races this goroutine and usually wins — so without this a ◆N
+		// badge would outlive the notes it counts for the whole session, and
+		// `r` would keep re-reading the same stale cache.
+		s.invalidateNoteCounts()
+	}
+	return dropped, err
 }
 
 // noteSideCached reads the side text a note anchors on, once per (side, state,

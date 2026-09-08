@@ -304,6 +304,14 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 	return c, nil
 }
 
+// InvalidateNoteCounts drops the cached badge counts so the next NoteCounts
+// call recomputes them from the store. Mutations invalidate on their own; this
+// is for an EXPLICIT refresh (the TUI's r / a srcNotes reload, the web's counts
+// endpoint), which must also see writes this process did not make: the startup
+// sweep's rewrite, another gg's note, a phase-2 `gg note add`. srcNotes is
+// never polled, so the extra Load costs one file read per deliberate refresh.
+func (s *Service) InvalidateNoteCounts() { s.invalidateNoteCounts() }
+
 func (s *Service) invalidateNoteCounts() {
 	s.mu.Lock()
 	s.noteCounts = nil

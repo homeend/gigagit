@@ -406,9 +406,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("note: %s", msg.err.Error())
 			return m, nil
 		}
+		// One reload, not two: the srcNotes arrival handler re-resolves the open
+		// diff's notes itself, and reloadSourcesCmd always dispatches (no
+		// in-flight dedupe), so adding loadNotesCmd() here would only buy a
+		// second NotesFor pass per mutation.
 		var counts tea.Cmd
 		m, counts = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
-		return m, tea.Batch(m.loadNotesCmd(), counts)
+		return m, counts
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
 	case snapshotTargetMsg:

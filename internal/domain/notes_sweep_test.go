@@ -623,3 +623,55 @@ func TestStagedNoteResolvesAgainstTheIndexNotTheWorkingFile(t *testing.T) {
 		t.Fatalf("the staged note must survive further working-tree edits; left %+v (misfiled %s)", left, misfiled.ID)
 	}
 }
+
+// TestSweepAndExplicitRefreshInvalidateTheBadgeCounts pins Minor 10. NoteCounts
+// is cached until a mutation, and at startup the TUI's panel fan-out reads it
+// while the sweep goroutine is still running — so the cache is normally filled
+// from the PRE-sweep store. Without an invalidation a ◆N badge outlives the
+// note it counts for the rest of the session, and r keeps re-reading the same
+// cache (which is also why a second gg's write could never appear).
+func TestSweepAndExplicitRefreshInvalidateTheBadgeCounts(t *testing.T) {
+	dir := sweepRepo(t)
+	store := notes.NewFileStore(t.TempDir())
+	svc := New(&git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))})
+	svc.SetNotesStore(store)
+	svc.SetNotesPolicy(-1, 2000) // no expiry: only the anchor decides
+	ctx := context.Background()
+
+	addr := model.FileAddress{State: model.StateUnstaged, Worktree: dir, Path: "a.go"}
+	for _, h := range []string{"beta", "text that is not in the file"} {
+		if _, err := svc.NoteAdd(ctx, model.Note{
+			Address: addr, Side: model.NoteSideNew, Range: [2]int{2, 2},
+			Summary: h, ContextHash: model.NoteContextHash([]string{h}),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The startup read that fills the cache from the pre-sweep store.
+	if c, err := svc.NoteCounts(ctx); err != nil || c.ByPath["a.go"] != 2 {
+		t.Fatalf("before the sweep: ByPath[a.go] = %d err %v, want 2", c.ByPath["a.go"], err)
+	}
+	if dropped, err := svc.sweepNotes(ctx); err != nil || dropped != 1 {
+		t.Fatalf("sweepNotes: dropped %d err %v, want 1", dropped, err)
+	}
+	if c, _ := svc.NoteCounts(ctx); c.ByPath["a.go"] != 1 {
+		t.Fatalf("after the sweep: ByPath[a.go] = %d, want 1 — the sweep must invalidate the cache", c.ByPath["a.go"])
+	}
+
+	// A write this Service did not make (another gg process, an agent) is
+	// invisible until an EXPLICIT refresh drops the cache — which is exactly
+	// what the TUI's srcNotes read and the web's counts endpoint now do.
+	if err := store.Put(model.Note{
+		ID: "outsider", Address: addr, Side: model.NoteSideNew, Range: [2]int{2, 2},
+		Summary: "written by another process", ContextHash: model.NoteContextHash([]string{"beta"}),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := svc.NoteCounts(ctx); c.ByPath["a.go"] != 1 {
+		t.Fatalf("cached counts must stay cached between refreshes, got %d", c.ByPath["a.go"])
+	}
+	svc.InvalidateNoteCounts()
+	if c, _ := svc.NoteCounts(ctx); c.ByPath["a.go"] != 2 {
+		t.Fatalf("an explicit refresh must re-read the store, got %d", c.ByPath["a.go"])
+	}
+}

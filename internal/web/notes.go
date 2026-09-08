@@ -128,6 +128,11 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request) {
 // handleNoteCounts serves the ◆N badges. Notes being off is not an error to a
 // painter: it simply has no badges to draw.
 func (s *Server) handleNoteCounts(w http.ResponseWriter, r *http.Request) {
+	// The page asks for counts only on a deliberate refresh (a hello, a
+	// `notes` live event, a mutation) — never on the poll ticker — so the read
+	// bypasses the cache. Without that, the startup sweep's rewrite and any
+	// write by another gg process stay invisible for the life of the server.
+	s.service().InvalidateNoteCounts()
 	c, err := s.service().NoteCounts(r.Context())
 	if err != nil && !errors.Is(err, domain.ErrNotesDisabled) {
 		writeErr(w, http.StatusInternalServerError, err)

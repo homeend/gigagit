@@ -206,6 +206,11 @@ func (m Model) readSourceCmd(ctx context.Context, s sourceKey, opts reloadOpts) 
 			id, err := svc.Identity(ctx)
 			out.value, out.err = id, err
 		case srcNotes:
+			// srcNotes is never polled — it rides only on explicit refreshes
+			// (r, a repo reroot) and note mutations — so this read always goes
+			// to the store. That is what lets r pick up the startup sweep's
+			// rewrite, another gg process's note, or an agent's note add.
+			svc.InvalidateNoteCounts()
 			c, err := svc.NoteCounts(ctx)
 			if errors.Is(err, domain.ErrNotesDisabled) {
 				// No state dir (a read-only home, a locked-down box): notes are
