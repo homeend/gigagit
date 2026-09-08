@@ -397,3 +397,61 @@ func TestNewIDAvoidsCollisions(t *testing.T) {
 		taken = append(taken, model.Note{ID: id})
 	}
 }
+
+// TestSweepCountIncludesTheCapsOwnDrops: Sweep's dropped count is the store's
+// real shrinkage, not the predicate's rejection count. mutate applies the entry
+// cap AFTER the predicate, and a count taken from the predicate alone
+// under-reports the moment the cap bites.
+func TestSweepCountIncludesTheCapsOwnDrops(t *testing.T) {
+	t.Parallel()
+	fs := NewFileStore(t.TempDir())
+	for i := 0; i < 5; i++ {
+		if err := fs.Put(noteAt(string(rune('a'+i)), i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs.SetPolicy(Policy{MaxEntries: 2})
+	// The predicate rejects one; the cap then trims the surviving four to two.
+	dropped, err := fs.Sweep(func(n model.Note) bool { return n.ID != "e" })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dropped != 3 {
+		t.Fatalf("dropped = %d, want 3 (1 by the predicate + 2 by the cap)", dropped)
+	}
+	left, _ := fs.Load()
+	if len(left) != 2 {
+		t.Fatalf("store holds %d notes, want 2", len(left))
+	}
+}
+
+// TestLockReleaseOnlyRemovesItsOwn: the release is not an unconditional
+// os.Remove. After a stale takeover a SECOND writer can hold a freshly created
+// lock under the same name, and removing that would strand it without a lock.
+func TestLockReleaseOnlyRemovesItsOwn(t *testing.T) {
+	t.Parallel()
+	mine := NewFileStore(t.TempDir())
+	unlock, err := mine.lock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+	if _, err := os.Stat(mine.lockPath()); !os.IsNotExist(err) {
+		t.Fatalf("a holder must release its OWN lock, stat err = %v", err)
+	}
+
+	taken := NewFileStore(t.TempDir())
+	unlock, err = taken.lock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Someone else declared our lock stale and re-took it under the same name.
+	if err := os.WriteFile(taken.lockPath(), []byte("another-gg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+	b, err := os.ReadFile(taken.lockPath())
+	if err != nil || string(b) != "another-gg" {
+		t.Fatalf("release must leave a lock it no longer owns alone: %q err %v", b, err)
+	}
+}

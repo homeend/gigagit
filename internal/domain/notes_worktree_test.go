@@ -244,3 +244,43 @@ func TestWorktreeNotesAreScopedToTheirCheckout(t *testing.T) {
 		t.Fatalf("a note whose worktree is gone must be swept: dropped %d err %v", dropped, err)
 	}
 }
+
+// TestNoteAddRefusesWhenTheSideCannotBeFingerprinted pins Minor 1. A note
+// stored with an EMPTY ContextHash can never re-anchor (findAnchor returns 0
+// for an empty hash), so it is born permanently stale and the next sweep
+// deletes it — silently, long after the caller was told the write succeeded.
+// An unreadable side, and a side that is not there at all, are refused instead.
+func TestNoteAddRefusesWhenTheSideCannotBeFingerprinted(t *testing.T) {
+	t.Parallel()
+	dir := noteSideRepo(t)
+	svc := svcIn(t, dir)
+	svc.SetNotesStore(notes.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	// The path is in no index and on no disk: git says "does not exist".
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Address: model.FileAddress{State: model.StateUnstaged, Worktree: dir, Path: "nowhere.go"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "unreadable side",
+	}); err == nil {
+		t.Fatal("a side that cannot be read must be an error, not a doomed note")
+	}
+	// An untracked file has NO old side at all.
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Address: model.FileAddress{State: model.StateUntracked, Worktree: dir, Path: "a.go"},
+		Side:    model.NoteSideOld, Range: [2]int{1, 1}, Summary: "absent side",
+	}); err == nil {
+		t.Fatal("an absent side must be an error, not a doomed note")
+	}
+	// Nothing was written either way.
+	if left, _ := svc.notesStore(ctx).Load(); len(left) != 0 {
+		t.Fatalf("a refused add must store nothing, got %+v", left)
+	}
+	// The readable case still fills a fingerprint and stores.
+	got, err := svc.NoteAdd(ctx, model.Note{
+		Address: model.FileAddress{State: model.StateUnstaged, Worktree: dir, Path: "a.go"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "fine",
+	})
+	if err != nil || got.ContextHash == "" {
+		t.Fatalf("a readable side must still store with a fingerprint: %v / %q", err, got.ContextHash)
+	}
+}

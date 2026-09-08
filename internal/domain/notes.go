@@ -74,10 +74,20 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 		}
 		n.Address.Worktree = wt
 	}
+	// The fingerprint is what re-anchors a note. Storing one WITHOUT it is
+	// worse than refusing: findAnchor never matches an empty hash, so such a
+	// note is born permanently stale and the next sweep deletes it — silently,
+	// long after the caller was told the write succeeded. So a side that cannot
+	// be read, or that is not there at all, is an error the caller sees now.
 	if n.ContextHash == "" {
-		if lines, lerr := s.noteSideLines(ctx, n.Address, n.Side); lerr == nil && lines != nil {
-			n.ContextHash = model.NoteContextHash(anchorLines(lines, n.Range))
+		lines, lerr := s.noteSideLines(ctx, n.Address, n.Side)
+		if lerr != nil {
+			return model.Note{}, fmt.Errorf("notes: cannot read the %s side of %s: %w", n.Side, n.Address.Path, lerr)
 		}
+		if lines == nil {
+			return model.Note{}, fmt.Errorf("notes: the %s side of %s does not exist", n.Side, n.Address.Path)
+		}
+		n.ContextHash = model.NoteContextHash(anchorLines(lines, n.Range))
 	}
 	if err := st.Put(n); err != nil {
 		return model.Note{}, err

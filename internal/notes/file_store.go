@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -89,8 +90,20 @@ func (fs *FileStore) lock() (func(), error) {
 	for {
 		f, err := os.OpenFile(fs.lockPath(), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err == nil {
-			f.Close()
-			return func() { os.Remove(fs.lockPath()) }, nil
+			// Stamp the lock with an owner token and check it before removing:
+			// after a stale takeover (below) a SECOND process can be holding a
+			// freshly created lock under the same name, and an unconditional
+			// release would delete someone else's.
+			token := lockToken()
+			_, werr := f.WriteString(token)
+			cerr := f.Close()
+			if werr != nil || cerr != nil {
+				// A token-less lock would be released by nobody but the 30 s
+				// staleness breaker, so drop it and report the failure.
+				os.Remove(fs.lockPath())
+				return nil, errors.Join(werr, cerr)
+			}
+			return func() { releaseLock(fs.lockPath(), token) }, nil
 		}
 		if !errors.Is(err, os.ErrExist) {
 			return nil, err
@@ -109,6 +122,29 @@ func (fs *FileStore) lock() (func(), error) {
 		}
 		time.Sleep(lockPoll)
 	}
+}
+
+// lockToken is one lock holder's identity: this process plus a random nonce,
+// so two runs of the same pid (or two Stores in one process) never collide.
+func lockToken() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		// Randomness is a nicety here; the pid alone still beats no token.
+		return strconv.Itoa(os.Getpid())
+	}
+	return strconv.Itoa(os.Getpid()) + "-" + hex.EncodeToString(b[:])
+}
+
+// releaseLock removes the lock only while WE still hold it. A lock file whose
+// content is someone else's token was taken over after our own was declared
+// stale, and removing it would strand that writer without a lock. A lock we
+// cannot read at all is already gone or unreadable; the Remove is then either a
+// no-op or fails harmlessly, and the staleness breaker is the backstop.
+func releaseLock(path, token string) {
+	if b, err := os.ReadFile(path); err == nil && string(b) != token {
+		return
+	}
+	os.Remove(path)
 }
 
 // write persists ns via temp-file + rename (the bookmark/seq-state pattern).
@@ -144,31 +180,38 @@ func (fs *FileStore) write(ns []model.Note) error {
 //
 // A mutation that changes nothing writes nothing: the startup sweep of a
 // clean store must not touch the file (nor create it).
-func (fs *FileStore) mutate(apply func([]model.Note) ([]model.Note, error)) error {
+//
+// It reports how many records the store holds AFTERWARDS — after the orphan
+// prune and the entry cap, neither of which the callback can see. Sweep needs
+// that to report a truthful drop count.
+func (fs *FileStore) mutate(apply func([]model.Note) ([]model.Note, error)) (int, error) {
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 	unlock, err := fs.lock()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer unlock()
 	before, err := fs.read()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	// apply gets a CLONE: it may edit records in place (Put replaces by ID),
 	// and the unchanged-check below has to compare against the state actually
 	// read from disk, not against a slice the callback has already rewritten.
 	ns, err := apply(slices.Clone(before))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	ns = dropOrphanReplies(ns)
 	ns = capOldestFirst(ns, fs.pol.MaxEntries)
 	if sameNotes(before, ns) {
-		return nil
+		return len(ns), nil
 	}
-	return fs.write(ns)
+	if werr := fs.write(ns); werr != nil {
+		return 0, werr
+	}
+	return len(ns), nil
 }
 
 // sameNotes reports whether two record lists are identical. A nil list and an
@@ -187,7 +230,7 @@ func sameNotes(a, b []model.Note) bool {
 
 // Put adds n, or replaces the record with the same ID.
 func (fs *FileStore) Put(n model.Note) error {
-	return fs.mutate(func(ns []model.Note) ([]model.Note, error) {
+	_, err := fs.mutate(func(ns []model.Note) ([]model.Note, error) {
 		for i := range ns {
 			if ns[i].ID == n.ID {
 				ns[i] = n
@@ -196,11 +239,12 @@ func (fs *FileStore) Put(n model.Note) error {
 		}
 		return append(ns, n), nil
 	})
+	return err
 }
 
 // Remove deletes one note; removing a root removes its replies too.
 func (fs *FileStore) Remove(id string) error {
-	return fs.mutate(func(ns []model.Note) ([]model.Note, error) {
+	_, err := fs.mutate(func(ns []model.Note) ([]model.Note, error) {
 		kept := make([]model.Note, 0, len(ns))
 		found := false
 		for _, n := range ns {
@@ -215,6 +259,7 @@ func (fs *FileStore) Remove(id string) error {
 		}
 		return kept, nil
 	})
+	return err
 }
 
 // Sweep keeps every note the predicate accepts and reports how many records
@@ -227,22 +272,25 @@ func (fs *FileStore) Sweep(keep func(model.Note) bool) (int, error) {
 	if _, err := os.Stat(fs.path()); os.IsNotExist(err) {
 		return 0, nil
 	}
-	dropped := 0
-	err := fs.mutate(func(ns []model.Note) ([]model.Note, error) {
-		before := len(ns)
+	before := 0
+	// The count is taken from what mutate LEAVES, not from the predicate: the
+	// orphan prune and the entry cap drop records the predicate accepted, and
+	// a Sweep that reported only its own rejections would under-report the
+	// moment the cap bites.
+	after, err := fs.mutate(func(ns []model.Note) ([]model.Note, error) {
+		before = len(ns)
 		kept := make([]model.Note, 0, len(ns))
 		for _, n := range ns {
 			if keep(n) {
 				kept = append(kept, n)
 			}
 		}
-		dropped = before - len(dropOrphanReplies(kept))
 		return kept, nil
 	})
 	if err != nil {
 		return 0, err
 	}
-	return dropped, nil
+	return before - after, nil
 }
 
 // dropOrphanReplies removes replies whose root is gone (dropped by a Remove,
