@@ -264,8 +264,10 @@ to the same line; `lineStart[curLine]` is its first display row; resize
 re-anchors for free. Fold entries (`Line.Fold > 0`) are skipped: the cursor
 only ever rests on a real row. After `f`/`ctrl+w` rebuild `v.lines`, the
 cursor re-anchors by its row's `(LeftNo, RightNo)` (first row whose numbers
-match, else clamped), independently of the focused change block `cur`. On
-open the cursor sits on the first row of the focused change, else line 0.
+match, else clamped), independently of the focused change block `cur`; the
+view scrolls to the re-anchored cursor ONLY if the cursor was visible before
+the toggle (a free-scrolled view keeps its place, as arrows already allow).
+On open the cursor sits on the first row of the focused change, else line 0.
 
 **Phase 1 contract.** `func (v *diffView) cursorRow() (textdiff.Row, bool)`
 returns the row under the cursor (Kind, LeftNo, RightNo). Notes anchor on
@@ -276,7 +278,9 @@ may scroll off-screen and the header keeps naming its line. `j`/`k` move the
 cursor one line and scroll minimally so it stays inside `[offset,
 offset+body)`. `pgup`/`pgdn`, `home`/`end` and `n`/`p` (and their wraps,
 `N`/`P` file steps) move the cursor as well: `focusBlock` sets it to the
-block's first row, page keys move it by one body, home/end put it on the
+block's first row, page keys move it by one body of DISPLAY rows
+(`lineStart[curLine] ± body`, then the owning line — logical lines would
+overshoot in wrap mode), home/end put it on the
 first/last row. `scrollBy`'s `deriveOrdinal` resync stays as is (cursor and
 `cur` are independent). `z` cycles the cursor line's viewport position:
 center → top → bottom (Emacs recenter order; `z` is unbound inside the diff
