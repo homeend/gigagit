@@ -5,6 +5,7 @@
 package syntax
 
 import (
+	"bytes"
 	"path/filepath"
 	"strings"
 
@@ -108,8 +109,9 @@ func Lex(lang string, src []byte) [][]Tok {
 	if err != nil {
 		return nil
 	}
-	// Number of lines textdiff will produce.
-	nLines := strings.Count(string(src), "\n")
+	// Number of lines textdiff will produce. Counted over the bytes: a second
+	// string(src) copy of a megabyte-sized file is pure waste.
+	nLines := bytes.Count(src, []byte{'\n'})
 	if src[len(src)-1] != '\n' {
 		nLines++
 	}
