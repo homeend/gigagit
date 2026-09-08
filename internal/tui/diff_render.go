@@ -18,12 +18,41 @@ var (
 	diffGutter  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	diffFold    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))            // dim fold rule
 	diffEmph    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231")) // bright fg over the hot cell bg
+
+	diffCursorRow = lipgloss.NewStyle().Background(lipgloss.Color("237")) // cursor line: subtle grey under both panes
+	diffCursorNo  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
 )
 
-// diffHintFor builds the diff-view hint for the current long-line mode. Kept
-// short enough that [esc] close survives truncation at width 100 (ctrl+w took
-// over from z, so the mode value lost its lines: prefix to stay under budget)
-// (TestRenderDiffViewPanes). The scroll variant appends the pan keys.
+// cellMark is the cursor marker for one rendered cell: when row is set, base
+// is laid under every non-hot run and the padding (hot add/del backgrounds
+// win — they stay as they are); gut styles the gutter number. noMark is the
+// unmarked default.
+type cellMark struct {
+	row  bool
+	base lipgloss.Style
+	gut  lipgloss.Style
+}
+
+var noMark = cellMark{gut: diffGutter}
+
+// cursorMark is the cellMark for a cursor row under the given style.
+func cursorMark(style string) cellMark {
+	switch style {
+	case "row":
+		return cellMark{row: true, base: diffCursorRow, gut: diffGutter}
+	case "number":
+		return cellMark{gut: diffCursorNo}
+	}
+	return noMark
+}
+
+// diffHintFor builds the diff-view hint for the current long-line mode. With
+// the cursor-key groups (j/k/z/e) it runs to ~131 columns (scroll variant, in
+// English) — past the 100-col budget earlier revisions tried to hold, so it
+// now truncates from the right (dropping [esc] close first) below roughly
+// that width; TestRenderDiffViewPanes renders wide enough to see the whole
+// line rather than asserting a budget nothing enforces. The scroll variant
+// appends the pan keys.
 func diffHintFor(long longMode) string {
 	mode := i18n.T("scroll")
 	switch long {
@@ -36,7 +65,7 @@ func diffHintFor(long longMode) string {
 	if long == longScroll {
 		pan = i18n.T("  [←→/0] pan")
 	}
-	return i18n.T("[↑↓] scroll  [n/p] change  [f] part  [ctrl+w] %s", mode) + pan + i18n.T("  [h] hist  [b] blame  [esc] close")
+	return i18n.T("[↑↓] scroll  [j/k] line  [z] align  [e] edit  [n/p] change  [f] part  [ctrl+w] %s", mode) + pan + i18n.T("  [h] hist  [b] blame  [esc] close")
 }
 
 // cellSeg is one pane's text for one display row: the sanitized display runes
@@ -186,6 +215,21 @@ func (m Model) renderDiffView() string {
 	if len(v.blocks) > 0 {
 		right = i18n.T("change %d/%d", v.currentBlockOrdinal()+1, len(v.blocks))
 	}
+	if r, ok := v.cursorRow(); ok {
+		ln := ""
+		if r.RightNo > 0 {
+			ln = i18n.T("line %d", r.RightNo)
+		} else if r.LeftNo > 0 {
+			ln = i18n.T("old line %d", r.LeftNo)
+		}
+		if ln != "" {
+			if right != "" {
+				right = ln + "  " + right
+			} else {
+				right = ln
+			}
+		}
+	}
 	if n := len(v.disp); n > 0 {
 		hi := v.offset + body
 		if hi > n {
@@ -226,7 +270,8 @@ func (m Model) renderDiffView() string {
 	case v.tooLarge:
 		lines = append(lines, i18n.T("  (file too large)"))
 	default:
-		lines = append(lines, m.diffPaneLines(v, w, body)...)
+		s, e := v.cursorDispRange()
+		lines = append(lines, m.diffPaneLines(v, w, body, s, e, m.cursorStyle())...)
 	}
 	for len(lines) < h-1 {
 		lines = append(lines, "")
@@ -257,8 +302,10 @@ func gutterWidth(full []textdiff.Row) int {
 // diffPaneLines renders the visible window of display rows. A fold dRow is a
 // full-width separator. Otherwise: wrap off draws the row via diffCell (raw
 // text, truncated — byte-identical to before); wrap on draws each side's
-// pre-wrapped segment via segCell.
-func (m Model) diffPaneLines(v *diffView, w, body int) []string {
+// pre-wrapped segment via segCell. Display rows in [curStart, curEnd) carry
+// the cursor marker per style ("row" | "number" | "off"); curStart == curEnd
+// (the history pane) draws no marker. A fold row is never marked.
+func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, style string) []string {
 	paneW := (w - 1) / 2
 	if paneW < 4 {
 		paneW = 4
@@ -271,6 +318,10 @@ func (m Model) diffPaneLines(v *diffView, w, body int) []string {
 		if dr.fold > 0 {
 			out = append(out, foldSeparator(dr.fold, w))
 			continue
+		}
+		mk := noMark
+		if i >= curStart && i < curEnd {
+			mk = cursorMark(style)
 		}
 		r := dr.row
 		// Syntax runs for this row's source lines (nil on a gap side or an
@@ -288,25 +339,25 @@ func (m Model) diffPaneLines(v *diffView, w, body int) []string {
 				rightNo = r.RightNo
 			}
 			left := segCell(leftNo, dr.left, gut, paneW, leftGap,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell, mk)
 			right := segCell(rightNo, dr.right, gut, paneW, rightGap,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell, mk)
 			out = append(out, left+"│"+right)
 		case longTruncate:
 			left := diffCell(r.LeftNo, r.Left, gut, paneW,
 				r.Kind == textdiff.Add,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell, r.LeftSpans, lt)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell, r.LeftSpans, lt, mk)
 			right := diffCell(r.RightNo, r.Right, gut, paneW,
 				r.Kind == textdiff.Del,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell, r.RightSpans, rt)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell, r.RightSpans, rt, mk)
 			out = append(out, left+"│"+right)
 		default: // longScroll
 			left := scrollCell(r.LeftNo, r.Left, r.LeftSpans, lt, v.hOffset, gut, paneW,
 				r.Kind == textdiff.Add,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell, mk)
 			right := scrollCell(r.RightNo, r.Right, r.RightSpans, rt, v.hOffset, gut, paneW,
 				r.Kind == textdiff.Del,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell, mk)
 			out = append(out, left+"│"+right)
 		}
 	}
@@ -317,7 +368,7 @@ func (m Model) diffPaneLines(v *diffView, w, body int) []string {
 // (number when no>0, blank on a continuation) + the styled, padded body. gap
 // draws the · filler (absent side). hot applies the add/del background;
 // emphasis rides in seg.emph.
-func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipgloss.Style) string {
+func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipgloss.Style, mk cellMark) string {
 	if gap {
 		return diffGapCell.Render(strings.Repeat("·", width))
 	}
@@ -336,6 +387,9 @@ func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipglo
 		tw = 1
 	}
 	base := lipgloss.NewStyle()
+	if mk.row {
+		base = mk.base
+	}
 	if hot {
 		base = hotStyle
 	}
@@ -343,7 +397,7 @@ func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipglo
 	if pad := tw - lipgloss.Width(string(seg.disp)); pad > 0 {
 		body += base.Render(strings.Repeat(" ", pad))
 	}
-	return diffGutter.Render(truncate(num, gut+1)) + body
+	return mk.gut.Render(truncate(num, gut+1)) + body
 }
 
 // scrollCell renders one pane's line through a horizontal window starting at
@@ -352,7 +406,7 @@ func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipglo
 // shows the column slice, with ‹ in the first column when hOffset>0 and › in
 // the last when text extends past the window. Emphasis and syntax classes ride
 // in the sanitized masks and are sliced with the window.
-func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, hOffset, gut, width int, gap, hot bool, hotStyle lipgloss.Style) string {
+func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, hOffset, gut, width int, gap, hot bool, hotStyle lipgloss.Style, mk cellMark) string {
 	if gap {
 		return diffGapCell.Render(strings.Repeat("·", width))
 	}
@@ -369,7 +423,7 @@ func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, h
 	disp, emph, cls := sanitizeCell(text, spans, toks)
 	full := lipgloss.Width(string(disp))
 	if hOffset <= 0 && full <= tw {
-		return diffCell(no, text, gut, width, false, hot, hotStyle, spans, toks)
+		return diffCell(no, text, gut, width, false, hot, hotStyle, spans, toks, mk)
 	}
 	hasLeft := hOffset > 0
 	hasRight := full > hOffset+tw
@@ -395,11 +449,16 @@ func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, h
 		col += rw
 	}
 	base := lipgloss.NewStyle()
+	if mk.row {
+		base = mk.base
+	}
 	if hot {
 		base = hotStyle
 	}
 	var b strings.Builder
 	if hasLeft {
+		// The pan markers are body furniture, not gutter: "number" mode bolds
+		// the line number only, so they keep the plain gutter style.
 		b.WriteString(diffGutter.Render("‹"))
 	}
 	b.WriteString(styledRuns(wdisp, wemph, wcls, base))
@@ -417,7 +476,7 @@ func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, h
 		b.WriteString(diffGutter.Render("›"))
 	}
 	num := fmt.Sprintf("%*d ", gut, no)
-	return diffGutter.Render(truncate(num, gut+1)) + b.String()
+	return mk.gut.Render(truncate(num, gut+1)) + b.String()
 }
 
 // maxCellWidth is the widest single cell (either side, gap sides skipped)
@@ -464,7 +523,7 @@ func foldSeparator(n, w int) string {
 // language, or enrichment give-up) it is byte-identical to the pre-enrichment
 // renderer; otherwise it layers intraline emphasis and syntax colour over the
 // (optional) hot cell background.
-func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgloss.Style, spans []textdiff.Span, toks []syntax.Tok) string {
+func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgloss.Style, spans []textdiff.Span, toks []syntax.Tok, mk cellMark) string {
 	if gap {
 		return diffGapCell.Render(strings.Repeat("·", width))
 	}
@@ -482,17 +541,23 @@ func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgl
 	var bodyTxt string
 	if len(spans) > 0 || len(toks) > 0 {
 		base := lipgloss.NewStyle()
+		if mk.row {
+			base = mk.base
+		}
 		if hot {
 			base = hotStyle
 		}
 		bodyTxt = hotEmphBody(text, spans, toks, tw, base)
 	} else {
 		bodyTxt = padRight(truncate(sanitizeLine(text), tw), tw)
-		if hot {
+		switch {
+		case hot:
 			bodyTxt = hotStyle.Render(bodyTxt)
+		case mk.row:
+			bodyTxt = mk.base.Render(bodyTxt)
 		}
 	}
-	return diffGutter.Render(truncate(num, gut+1)) + bodyTxt
+	return mk.gut.Render(truncate(num, gut+1)) + bodyTxt
 }
 
 // hotEmphBody renders an enriched cell's text into a tw-column body: sanitized

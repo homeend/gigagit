@@ -64,6 +64,13 @@ type UIConfig struct {
 	// Empty = unset (zero-is-unset overlay rule); resolved to the default.
 	DiffSyntax string `toml:"diff_syntax"`
 
+	// DiffCursor selects how the diff view marks its current line:
+	//   "row"    — a background under the cursor row on both panes. THE DEFAULT.
+	//   "number" — only the gutter line numbers are highlighted.
+	//   "off"    — no marker (the cursor still drives e / notes).
+	// Empty = unset (zero-is-unset overlay rule); resolved to the default.
+	DiffCursor string `toml:"diff_cursor"`
+
 	// ShowGraph selects how the Commits panel renders on startup:
 	//   "on"  — the lane graph. THE DEFAULT (used when the key is missing).
 	//   "off" — the flat ●-gutter list (same as the . menu's "Show as list").
@@ -91,6 +98,16 @@ type UIConfig struct {
 // the literal "off" value (including the default "auto" and any unrecognized
 // value) is on.
 func (c UIConfig) SyntaxOn() bool { return c.DiffSyntax != "off" }
+
+// CursorStyle returns the diff-view cursor marker: "row", "number" or "off".
+// Anything else (including unset) is "row".
+func (c UIConfig) CursorStyle() string {
+	switch c.DiffCursor {
+	case "number", "off":
+		return c.DiffCursor
+	}
+	return "row"
+}
 
 // DebugConfig configures diagnostic logging. TOML keys are snake_case.
 type DebugConfig struct {
@@ -161,7 +178,7 @@ func Defaults() Config {
 			DefaultBranchTemplate: "<parent-branch>-<date:yyyy-MM-dd_HH-mm>",
 		},
 		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
-			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", DiffSyntax: "auto", ShowGraph: "on"},
+			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", DiffSyntax: "auto", DiffCursor: "row", ShowGraph: "on"},
 		Versions: VersionsConfig{MaxAgeDays: 90},
 	}
 }
@@ -291,6 +308,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.DiffSyntax != "" {
 		dst.DiffSyntax = src.DiffSyntax
+	}
+	if src.DiffCursor != "" {
+		dst.DiffCursor = src.DiffCursor
 	}
 	if src.ShowGraph != "" {
 		dst.ShowGraph = src.ShowGraph

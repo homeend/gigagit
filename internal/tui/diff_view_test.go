@@ -377,15 +377,43 @@ func TestDiffViewKeysScrollAndJump(t *testing.T) {
 	if v := u.(Model).diffLayer(); v.offset != 17 || v.currentBlockOrdinal() != 0 {
 		t.Fatalf("ctrl+up: offset = %d ord = %d, want 17 / 0", v.offset, v.currentBlockOrdinal())
 	}
-	// Plain scroll keys clamp/scroll regardless of the focus index.
+	// Plain scroll keys clamp/scroll regardless of the focus index. pgup/pgdown
+	// also move the line cursor (Task 2), so reset to the top with "home" —
+	// a real key, keeping offset and the cursor consistent — rather than
+	// poking .offset directly, which would leave the cursor stranded on the
+	// still-focused change and pull the viewport right back down again.
 	p := mk()
-	p.diffLayer().offset = 0
-	if u, _ := p.Update(keyMsg("pgup")); u.(Model).diffLayer().offset != 0 {
+	u2, _ := p.Update(keyMsg("home"))
+	if u, _ := u2.(Model).Update(keyMsg("pgup")); u.(Model).diffLayer().offset != 0 {
 		t.Fatalf("pgup at top must clamp to 0, got %d", u.(Model).diffLayer().offset)
 	}
-	p.diffLayer().offset = 0
-	if u, _ := p.Update(keyMsg("pgdown")); u.(Model).diffLayer().offset != 10 {
+	if u, _ := u2.(Model).Update(keyMsg("pgdown")); u.(Model).diffLayer().offset != 10 {
 		t.Fatalf("pgdown: offset = %d, want one body page (10)", u.(Model).diffLayer().offset)
+	}
+}
+
+// TestDiffPgUpFromOffscreenCursorPullsItPartlyIntoView: offset 0 with the
+// cursor still on line 20 IS reachable through real keys — 17× "up" from the
+// fresh open (offset 17, curLine 20) scrolls only the viewport, so the
+// cursor is left stranded above it. pgup from there scrolls a page (clamped
+// at 0, already at the top) and moves the cursor a page (20→10), then the
+// minimal-scroll follow-up (ensureCursorVisible) nudges the viewport just
+// enough to bring line 10's row into view — offset 1, not 0. This pins that
+// real interaction rather than asserting a clean clamp.
+func TestDiffPgUpFromOffscreenCursorPullsItPartlyIntoView(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, sameRowsTUI(40, 20, 30), []int{20, 30})
+	for i := 0; i < 17; i++ {
+		u, _ := m.Update(keyMsg("up"))
+		m = u.(Model)
+	}
+	if v := m.diffLayer(); v.offset != 0 || v.curLine != 20 {
+		t.Fatalf("setup, 17×up: offset=%d curLine=%d, want 0/20", v.offset, v.curLine)
+	}
+	u, _ := m.Update(keyMsg("pgup"))
+	v := u.(Model).diffLayer()
+	if v.offset != 1 || v.curLine != 10 {
+		t.Fatalf("pgup from offscreen cursor: offset=%d curLine=%d, want 1/10", v.offset, v.curLine)
 	}
 }
 
@@ -842,7 +870,7 @@ func TestDiffWrapDisarmedByOtherKey(t *testing.T) {
 		t.Fatal("setup: expected a primed wrap at the last change")
 	}
 	// A scroll between the two n's must cancel the prime.
-	u, _ = u.(Model).Update(keyMsg("j"))
+	u, _ = u.(Model).Update(keyMsg("down"))
 	if u.(Model).diffLayer().wrapArm != wrapNone {
 		t.Fatal("scrolling must disarm the primed wrap")
 	}

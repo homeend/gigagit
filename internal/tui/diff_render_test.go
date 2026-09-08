@@ -52,6 +52,12 @@ func TestRenderDiffViewPanes(t *testing.T) {
 	v := &diffView{title: "f.txt", context: "HEAD → working tree", full: res.Rows, fullBlocks: res.Blocks}
 	v.rebuild()
 	m := renderModelWithDiff(v)
+	// Wide enough that the hint line's cursor-key groups (j/k/z/e, on top of
+	// the pre-existing scroll/change/part/mode/pan/hist/blame groups) don't
+	// truncate away "[esc] close" — the 100-col default already loses it
+	// below ~98 cols, so a wider terminal here isolates this test from that
+	// truncation rather than asserting a width budget nothing enforces.
+	m.width = 140
 	out := ansi.Strip(m.render())
 	lines := strings.Split(out, "\n")
 	for i, l := range lines {
@@ -171,8 +177,8 @@ func TestEmphasisActuallyChangesOutput(t *testing.T) {
 	// A cheap check that the emphasis style lands: the same hot cell rendered
 	// with a span differs from the same cell with no span (which takes the
 	// original, byte-identical path).
-	emph := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, []textdiff.Span{{Start: 0, End: 3}}, nil)
-	plain := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, nil, nil)
+	emph := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, []textdiff.Span{{Start: 0, End: 3}}, nil, noMark)
+	plain := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, nil, nil, noMark)
 	if emph == plain {
 		t.Fatal("an emphasized render must differ from the plain hot render")
 	}
@@ -197,7 +203,7 @@ func TestEnrichedRowRendersWithoutBreakingWidth(t *testing.T) {
 	// A row renders as left│right = 2*((w-1)/2)+1 columns wide. For w=41 that
 	// is 41 (paneW=20 each side + the separator).
 	const w = 41
-	lines := m.diffPaneLines(v, w, 1)
+	lines := m.diffPaneLines(v, w, 1, 0, 0, "off")
 	if len(lines) != 1 {
 		t.Fatalf("want 1 line, got %d", len(lines))
 	}
@@ -298,7 +304,7 @@ func TestDiffPaneLinesWrappedRowWidthAndCount(t *testing.T) {
 	const w = 41 // paneW=20 each → row width 41
 	v.relayout(w)
 	m := footerModel()
-	lines := m.diffPaneLines(v, w, len(v.disp))
+	lines := m.diffPaneLines(v, w, len(v.disp), 0, 0, "off")
 	if len(lines) < 2 {
 		t.Fatalf("the long row should render as ≥2 display rows, got %d", len(lines))
 	}
@@ -310,8 +316,8 @@ func TestDiffPaneLinesWrappedRowWidthAndCount(t *testing.T) {
 }
 
 func TestScrollCellFitsDelegatesToDiffCell(t *testing.T) {
-	got := scrollCell(3, "hello", nil, nil, 0, 3, 20, false, false, diffDelCell)
-	want := diffCell(3, "hello", 3, 20, false, false, diffDelCell, nil, nil)
+	got := scrollCell(3, "hello", nil, nil, 0, 3, 20, false, false, diffDelCell, noMark)
+	want := diffCell(3, "hello", 3, 20, false, false, diffDelCell, nil, nil, noMark)
 	if got != want {
 		t.Fatalf("fitting scrollCell must equal diffCell:\n got %q\nwant %q", got, want)
 	}
@@ -320,7 +326,7 @@ func TestScrollCellFitsDelegatesToDiffCell(t *testing.T) {
 func TestScrollCellWidthAlwaysExact(t *testing.T) {
 	long := strings.Repeat("abcdefghij ", 8) // ~88 cols
 	for _, hOff := range []int{0, 5, 40, 200} {
-		cell := scrollCell(1, long, nil, nil, hOff, 3, 20, false, false, diffDelCell)
+		cell := scrollCell(1, long, nil, nil, hOff, 3, 20, false, false, diffDelCell, noMark)
 		if w := lipgloss.Width(cell); w != 20 {
 			t.Fatalf("hOffset %d: cell width %d, want 20", hOff, w)
 		}
@@ -329,7 +335,7 @@ func TestScrollCellWidthAlwaysExact(t *testing.T) {
 
 func TestScrollCellRightMarkerWhenMore(t *testing.T) {
 	long := strings.Repeat("x", 100)
-	cell := ansi.Strip(scrollCell(1, long, nil, nil, 0, 3, 20, false, false, diffDelCell))
+	cell := ansi.Strip(scrollCell(1, long, nil, nil, 0, 3, 20, false, false, diffDelCell, noMark))
 	if !strings.Contains(cell, "›") {
 		t.Fatalf("a line past the window must show ›: %q", cell)
 	}
@@ -340,14 +346,14 @@ func TestScrollCellRightMarkerWhenMore(t *testing.T) {
 
 func TestScrollCellLeftMarkerWhenScrolled(t *testing.T) {
 	long := strings.Repeat("x", 100)
-	cell := ansi.Strip(scrollCell(1, long, nil, nil, 30, 3, 20, false, false, diffDelCell))
+	cell := ansi.Strip(scrollCell(1, long, nil, nil, 30, 3, 20, false, false, diffDelCell, noMark))
 	if !strings.Contains(cell, "‹") {
 		t.Fatalf("scrolled right, ‹ must show on the left: %q", cell)
 	}
 }
 
 func TestScrollCellGapFiller(t *testing.T) {
-	cell := ansi.Strip(scrollCell(0, "", nil, nil, 0, 3, 20, true, false, diffDelCell))
+	cell := ansi.Strip(scrollCell(0, "", nil, nil, 0, 3, 20, true, false, diffDelCell, noMark))
 	if strings.TrimRight(cell, "·") != "" {
 		t.Fatalf("gap side must be all · filler: %q", cell)
 	}
@@ -371,13 +377,13 @@ func TestScrollModeRenderShowsMarkers(t *testing.T) {
 	v.width = 60
 	v.rebuild()
 	m := footerModel()
-	line := ansi.Strip(m.diffPaneLines(v, 60, 1)[0])
+	line := ansi.Strip(m.diffPaneLines(v, 60, 1, 0, 0, "off")[0])
 	if !strings.Contains(line, "›") || strings.Contains(line, "‹") {
 		t.Fatalf("scroll@0 should show › and not ‹: %q", line)
 	}
 	v.hOffset = 40
 	v.clampHOffset()
-	line = ansi.Strip(m.diffPaneLines(v, 60, 1)[0])
+	line = ansi.Strip(m.diffPaneLines(v, 60, 1, 0, 0, "off")[0])
 	if !strings.Contains(line, "‹") {
 		t.Fatalf("scrolled right, ‹ must appear: %q", line)
 	}
@@ -433,7 +439,7 @@ func TestDiffPaneLinesUseTokensBySourceLine(t *testing.T) {
 	}
 	v.rebuild()
 	m := renderModelWithDiff(v)
-	lines := m.diffPaneLines(v, 100, 5)
+	lines := m.diffPaneLines(v, 100, 5, 0, 0, "off")
 	if len(lines) != 2 {
 		t.Fatalf("lines = %d", len(lines))
 	}
@@ -493,7 +499,7 @@ func TestScrollCellWindowKeepsClassesAligned(t *testing.T) {
 	toks := []syntax.Tok{{Start: 10, End: 17, Class: syntax.Keyword}}
 	// tw = 20-3-1 = 16; hOffset 12 with more text to the right leaves both
 	// markers, so the content window is runes [13,27): "word" + ten 'b'.
-	raw := scrollCell(1, text, nil, toks, 12, 3, 20, false, false, lipgloss.NewStyle())
+	raw := scrollCell(1, text, nil, toks, 12, 3, 20, false, false, lipgloss.NewStyle(), noMark)
 	if got, want := ansi.Strip(raw), "  1 ‹wordbbbbbbbbbb›"; got != want {
 		t.Fatalf("visible window = %q, want %q", got, want)
 	}
@@ -570,7 +576,7 @@ func BenchmarkDiffPaneLinesScrollHighlighted(b *testing.B) {
 		// delegates to diffCell for lines that fit, >0 takes the windowed
 		// slice.
 		v.hOffset = (i % 2) * 8
-		if got := m.diffPaneLines(v, 200, 50); len(got) != 50 {
+		if got := m.diffPaneLines(v, 200, 50, 0, 0, "off"); len(got) != 50 {
 			b.Fatalf("frame = %d lines, want 50", len(got))
 		}
 	}

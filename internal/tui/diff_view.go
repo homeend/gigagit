@@ -34,7 +34,9 @@ const (
 )
 
 // diffView is the open full-screen side-by-side viewer; nil = closed.
-// Pure scroll (offset) — there is no cursor row.
+// offset is the free-scroll viewport; curLine is the independent line
+// cursor (see diff_cursor.go) — arrows/wheel move only the former, j/k/pgup/
+// pgdown/home/end/n/p move the latter and scroll minimally to follow it.
 type diffView struct {
 	title      string         // file path, shown in the header
 	context    string         // "HEAD → working tree" or "@ <short-hash> <subject>"
@@ -61,9 +63,11 @@ type diffView struct {
 	tooLarge   bool
 	loading    bool
 	err        error
-	cur        int        // focused change-block index (the "X" in change X/N); set only by n/p/wrap/mode-toggle
-	wrapArm    wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
-	fileArm    fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
+	cur        int         // focused change-block index (the "X" in change X/N); set only by n/p/wrap/mode-toggle
+	curLine    int         // cursor: index into lines (never a display row; never a fold) — see diff_cursor.go
+	wrapArm    wrapDir     // boundary press primed a wrap-around (see wrapDir); cleared on any other key
+	fileArm    fileArmDir  // top/bottom press primed a step to the prev/next file; cleared on any other key
+	zCycle     cursorAlign // the alignment the NEXT z applies (center → top → bottom); reset by any other key
 }
 
 // wrapDir records that a change-navigation key hit a boundary and primed a
@@ -285,6 +289,9 @@ func (v *diffView) focusBlock(i, body int) {
 		i = len(v.dispBlocks) - 1
 	}
 	v.cur = i
+	if i < len(v.blocks) {
+		v.curLine = v.blocks[i] // blocks index v.lines; the block's first row
+	}
 	v.jumpTo(v.dispBlocks[i], body)
 }
 
@@ -494,7 +501,9 @@ func applyDiff(v *diffView, out domain.Diff, body int) {
 		v.truncated = out.Result.Truncated
 		v.rebuild()
 		if len(v.dispBlocks) > 0 {
-			v.focusBlock(0, body) // open on the first change (cur = 0)
+			v.focusBlock(0, body) // open on the first change (cur = 0, cursor on its first row)
+		} else {
+			v.setCursorLine(0, body)
 		}
 	}
 }
@@ -624,6 +633,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	fileArmed := v.fileArm
 	v.fileArm = fileArmNone
 	m.diffNotice = ""
+	zc := v.zCycle
+	v.zCycle = alignCenter
+	body := m.diffBodyRows()
 	switch msg.String() {
 	case ".":
 		return m.openActionMenu(), nil
@@ -649,20 +661,39 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		bv := newBlameView(ctx)
 		m = m.pushLayer(bv)
 		return m, m.loadBlameCmd(ctx, bv.tag)
-	case "up", "k":
-		v.scrollBy(-1, m.diffBodyRows())
-	case "down", "j":
-		v.scrollBy(1, m.diffBodyRows())
+	case "e":
+		if r, ok := m.diffEditRow(); ok {
+			nm, cmd := r.run(m)
+			return nm.(Model), cmd
+		}
+	case "up":
+		v.scrollBy(-1, body)
+	case "down":
+		v.scrollBy(1, body)
+	case "k", "alt+up":
+		v.moveCursor(-1, body)
+	case "j", "alt+down":
+		v.moveCursor(1, body)
 	case "pgup":
-		v.scrollBy(-m.diffBodyRows(), m.diffBodyRows())
+		v.scrollBy(-body, body)
+		v.pageCursor(-body, body)
 	case "pgdown":
-		v.scrollBy(m.diffBodyRows(), m.diffBodyRows())
+		v.scrollBy(body, body)
+		v.pageCursor(body, body)
+	case "z":
+		v.alignCursor(zc, body)
+		v.zCycle = (zc + 1) % 3
 	case "home":
 		// First press jumps to the top of this file. At the top, a press primes a
 		// step (bottom-left cue); the next home performs it (with an arrival
-		// notice). No previous file → a "no previous file" notice instead.
-		if v.offset > 0 {
-			v.scrollBy(-len(v.disp), m.diffBodyRows())
+		// notice). No previous file → a "no previous file" notice instead. The
+		// top/bottom check reads offset from BEFORE the cursor jump below —
+		// setCursorLine's own minimal scroll must not masquerade as "already
+		// there" and skip straight to arming on the very first press.
+		wasTop := v.offset <= 0
+		v.setCursorLine(0, body)
+		if !wasTop {
+			v.scrollBy(-len(v.disp), body)
 		} else if m.diffNav != diffNavNone {
 			switch {
 			case !m.peekDiffFile(-1):
@@ -675,8 +706,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "end":
 		// Mirror of home: first press jumps to the bottom, then prime, then step.
-		body := m.diffBodyRows()
-		if v.offset < len(v.disp)-body {
+		wasBottom := v.offset >= len(v.disp)-body
+		v.setCursorLine(len(v.lines)-1, body)
+		if !wasBottom {
 			v.scrollBy(len(v.disp), body)
 		} else if m.diffNav != diffNavNone {
 			switch {
@@ -689,17 +721,17 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "n", "ctrl+down":
-		if !v.nextBlock(m.diffBodyRows()) { // already on the last change
+		if !v.nextBlock(body) { // already on the last change
 			if armed == wrapToStart && len(v.dispBlocks) > 0 {
-				v.focusBlock(0, m.diffBodyRows()) // second press wraps to the first
+				v.focusBlock(0, body) // second press wraps to the first
 			} else {
 				v.wrapArm = wrapToStart // first press primes the wrap
 			}
 		}
 	case "p", "ctrl+up":
-		if !v.prevBlock(m.diffBodyRows()) { // already on the first change
+		if !v.prevBlock(body) { // already on the first change
 			if armed == wrapToEnd && len(v.dispBlocks) > 0 {
-				v.focusBlock(len(v.dispBlocks)-1, m.diffBodyRows()) // wraps to the last
+				v.focusBlock(len(v.dispBlocks)-1, body) // wraps to the last
 			} else {
 				v.wrapArm = wrapToEnd
 			}
@@ -732,25 +764,31 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "f":
 		ord := v.currentBlockOrdinal()
+		cr, hadRow := v.cursorRow()
+		wasVisible := v.cursorVisible(body)
 		v.partial = !v.partial
 		v.rebuild()
 		m.diffPartial = v.partial
 		if len(v.dispBlocks) > 0 {
-			v.focusBlock(ord, m.diffBodyRows()) // re-anchor the same change (count is mode-invariant)
+			v.focusBlock(ord, body) // re-anchor the same change (count is mode-invariant)
 		} else {
 			v.cur, v.offset = 0, 0
 		}
+		v.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
 	case "ctrl+w":
 		ord := v.currentBlockOrdinal()
+		cr, hadRow := v.cursorRow()
+		wasVisible := v.cursorVisible(body)
 		v.long = (v.long + 1) % 3
 		v.hOffset = 0
 		v.relayout(v.width)
 		m.diffLong = v.long
 		if len(v.dispBlocks) > 0 {
-			v.focusBlock(ord, m.diffBodyRows())
+			v.focusBlock(ord, body)
 		} else {
 			v.cur, v.offset = 0, 0
 		}
+		v.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
 	case "left":
 		if v.long == longScroll {
 			v.hOffset -= m.hscrollStep()

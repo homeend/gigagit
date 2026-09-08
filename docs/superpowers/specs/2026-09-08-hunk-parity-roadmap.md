@@ -256,6 +256,73 @@ Attention marks (`highlight add --start --end --tone`) are a cheap add once
 the inbox exists: a transient per-row span list rendered like emphasis
 spans, cleared on reload of that file.
 
+### 4.1 Phase 0 design: the diff-view line cursor (approved 2026-09-08)
+
+**Cursor model.** `diffView` gains `curLine int`, an index into the logical
+line stream `v.lines` — never a display row. Wrap continuation rows belong
+to the same line; `lineStart[curLine]` is its first display row; resize
+re-anchors for free. Fold entries (`Line.Fold > 0`) are skipped: the cursor
+only ever rests on a real row. After `f`/`ctrl+w` rebuild `v.lines`, the
+cursor re-anchors by its row's `(LeftNo, RightNo)` (first row whose numbers
+match, else clamped), independently of the focused change block `cur`; the
+view scrolls to the re-anchored cursor ONLY if the cursor was visible before
+the toggle (a free-scrolled view keeps its place, as arrows already allow).
+On open the cursor sits on the first row of the focused change, else line 0.
+
+**Phase 1 contract.** `func (v *diffView) cursorRow() (textdiff.Row, bool)`
+returns the row under the cursor (Kind, LeftNo, RightNo). Notes anchor on
+`RightNo` (new side), or `LeftNo` on a `Del` row.
+
+**Keys — one rule.** Arrows and the wheel move only the viewport; the cursor
+may scroll off-screen and the header keeps naming its line. `j`/`k` move the
+cursor one line and scroll minimally so it stays inside `[offset,
+offset+body)`. `pgup`/`pgdn`, `home`/`end` and `n`/`p` (and their wraps,
+`N`/`P` file steps) move the cursor as well: `focusBlock` sets it to the
+block's first row, page keys move it by one body of DISPLAY rows
+(`lineStart[curLine] ± body`, then the owning line — logical lines would
+overshoot in wrap mode), home/end put it on the
+first/last row. `scrollBy`'s `deriveOrdinal` resync stays as is (cursor and
+`cur` are independent). `z` cycles the cursor line's viewport position:
+center → top → bottom (Emacs recenter order; `z` is unbound inside the diff
+layer, and hunk ships align with no default key). A left click on a body row
+places the cursor on that row's line (wheel unchanged). The three alignments
+are also `.`-menu rows.
+
+**Marker.** `[ui] diff_cursor = "row" | "number" | "off"`, default `"row"`
+(zero/empty = unset in the overlay; a `settingDoc` + layers test like
+`diff_syntax`). `row` paints a background under both panes of the cursor's
+display rows — syntax colours survive because `syntaxStyle(base, c)`
+inherits the base; gap filler and fold separators are never marked. `number`
+highlights only the gutter numbers. `off` draws nothing; the cursor still
+works for `e` and notes. A `.`-menu row cycles the style for the session
+(`m.diffCursor`, the `m.diffPartial`/`m.diffLong` pattern). The header gains
+`line N` beside `change X/N`: the new-side number, or the old-side number on
+a `Del` row. `diffPaneLines` takes the cursor display-row range as a
+parameter; the history view's embedded pane passes none and gets no marker.
+
+**`e` opens the editor at the cursor line.** One line-aware argv builder,
+`editorCommandAt(editor, absPath, line)`, shared by both editor paths (the
+live `editFileCmd` and the read-only `openInEditorCmd`/`viewExternalCmd`,
+whose `editorViewMsg` carries the line). Program name = basename of the
+first field, `.exe`/`.cmd` stripped, lower-cased: `vim`/`nvim`/`vi`/`nano`/
+`emacs`/`micro`/`kak` → `+N path`; `code`/`code-insiders`/`codium`/`cursor`
+→ `--goto path:N`; `hx`/`subl`/`zed` → `path:N`; anything else → `path`
+(no line). `line <= 0` = plain path. Which file: `rev != ""` → read-only temp
+of `rev:path` at the line; `rev == ""` → live edit of the working-tree file.
+The staged diff (HEAD → index) also has `rev == ""`; its new side is the
+index, so the line is an approximation of the working file — stated in help.
+Line rule: the cursor row's `RightNo`; on a `Del` row the next row with
+`RightNo > 0`, else the last such row. `e` is absent on `compare` views (no
+single file). `.`-menu row "Open in editor at line N".
+
+**Not in this phase.** No web cursor (notes add one with note rows). No
+per-gap fold toggle. No line selection/copy (phase 5).
+
+**Convention tax.** Every new string in all four bundles; `diffHintFor`
+grows `[j/k] line  [z] align  [e] edit`; help.go Diff-view rows; new footer
+bindings get `actionMenuLabel` cases; `config` settingDoc + `TestUIDiffCursorLayers`;
+CHANGELOG + README (diff view paragraph + `## Configuration`).
+
 ## 5. How hunk highlights syntax, and what gg should do
 
 Hunk does not own a highlighter. `@pierre/diffs` wraps **Shiki** (TextMate

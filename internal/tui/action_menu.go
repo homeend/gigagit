@@ -92,6 +92,13 @@ func availableActions(m Model) []actionRow {
 		if r, ok := m.exportFilePatchRow(); ok {
 			rows = append(rows, r)
 		}
+		if r, ok := m.diffCursorStyleRow(); ok {
+			rows = append(rows, r)
+		}
+		if r, ok := m.diffEditRow(); ok {
+			rows = append(rows, r)
+		}
+		rows = append(rows, m.diffAlignRows()...)
 		if r, ok := m.shelfAddRow(); ok {
 			rows = append(rows, r)
 		}

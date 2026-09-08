@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Diff view line cursor.** The full-screen diff now has a current line:
+  `j`/`k` (or `alt+↑`/`alt+↓`) move it (the view scrolls only as needed), `↑`/`↓` and the wheel
+  keep scrolling the viewport without moving it, `pgup`/`pgdn`, `home`/`end`
+  and `n`/`p` move it too, and a left click places it. `z` cycles the line's
+  position in the view (center → top → bottom; also `.`-menu rows). `e`
+  opens the file in your editor at that line — live for a working-tree diff,
+  a read-only copy of the revision for a commit diff — with the right goto
+  syntax for vi-style editors, VS Code-style editors, helix, sublime and
+  zed. The marker is `[ui] diff_cursor = "row"` (background), `"number"`
+  (gutter only) or `"off"`; the `.` menu's **Cursor marker** row switches
+  it for the session. The header names the cursor line. This is the anchor
+  review notes will use.
+
 - **Diff views colour code by file type.** The TUI side-by-side diff and the
   `gg web` diff table now colour keywords, types, function names, strings,
   numbers, comments and operators, chosen by file name through chroma's

@@ -111,3 +111,38 @@ func TestEditorFinishedMsgRefreshes(t *testing.T) {
 		t.Fatal("want a refresh cmd on success")
 	}
 }
+
+func TestEditorCommandAtByProgram(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		editor string
+		want   []string
+	}{
+		{"vim", []string{"vim", "+12", "/wt/a.go"}},
+		{"nvim -u NONE", []string{"nvim", "-u", "NONE", "+12", "/wt/a.go"}},
+		{"nano", []string{"nano", "+12", "/wt/a.go"}},
+		{"emacs -nw", []string{"emacs", "-nw", "+12", "/wt/a.go"}},
+		{"micro", []string{"micro", "+12", "/wt/a.go"}},
+		{"kak", []string{"kak", "+12", "/wt/a.go"}},
+		{"code -w", []string{"code", "-w", "--goto", "/wt/a.go:12"}},
+		{"codium", []string{"codium", "--goto", "/wt/a.go:12"}},
+		{"cursor", []string{"cursor", "--goto", "/wt/a.go:12"}},
+		{"code-insiders", []string{"code-insiders", "--goto", "/wt/a.go:12"}},
+		{"hx", []string{"hx", "/wt/a.go:12"}},
+		{"subl -w", []string{"subl", "-w", "/wt/a.go:12"}},
+		{"zed", []string{"zed", "/wt/a.go:12"}},
+		{"/usr/local/bin/Vim.EXE", []string{"/usr/local/bin/Vim.EXE", "+12", "/wt/a.go"}},
+		{`C:\tools\code.cmd`, []string{`C:\tools\code.cmd`, "--goto", "/wt/a.go:12"}},
+		{"gedit", []string{"gedit", "/wt/a.go"}},
+	}
+	for _, c := range cases {
+		got := editorCommandAt(c.editor, "/wt/a.go", 12).Args
+		if !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%q: args = %v, want %v", c.editor, got, c.want)
+		}
+	}
+	// line <= 0 is the plain invocation for every program.
+	if got := editorCommandAt("code -w", "/wt/a.go", 0).Args; !reflect.DeepEqual(got, []string{"code", "-w", "/wt/a.go"}) {
+		t.Errorf("line 0: %v", got)
+	}
+}

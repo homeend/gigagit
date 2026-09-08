@@ -70,7 +70,7 @@ func (m Model) loadCompareTwoRefsCmd(left, right model.FileRef, title, subtitle,
 	svc := m.svc
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
-	v := &diffView{title: title, context: subtitle, partial: m.diffPartial, long: m.diffLong}
+	v := &diffView{title: title, context: subtitle, compare: true, partial: m.diffPartial, long: m.diffLong}
 	v.width, _ = m.overlayDims()
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, left) }
