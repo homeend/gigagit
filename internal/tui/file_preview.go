@@ -9,6 +9,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // filesViewSelectedLine returns the currently-selected content line in the
@@ -140,7 +141,7 @@ func (m Model) openPreviewSrc(tag, path string, load func(context.Context) ([]by
 	m.filesPreview = &contentPopup{title: path, lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesPreviewTag = tag
 	m.filesTreeFocused = false // land in the preview to scroll
-	return m, loadFileContentSrcCmd(tag, load)
+	return m, loadFileContentSrcCmd(tag, path, m.cfg.UI.SyntaxOn(), load)
 }
 
 // fileContentMsg carries a previewed file's content lines, tagged so a stale load
@@ -152,8 +153,11 @@ type fileContentMsg struct {
 }
 
 // loadFileContentSrcCmd resolves a preview's bytes via load and splits them
-// into content lines off the UI thread.
-func loadFileContentSrcCmd(tag string, load func(context.Context) ([]byte, error)) tea.Cmd {
+// into content lines off the UI thread — lexing them there too (chroma costs
+// ~1 s at domain.MaxSyntaxBytes, which must never land on the UI thread).
+// path picks the lexer; syntaxOn is the [ui] diff_syntax switch, read at
+// dispatch time so a config reload mid-load cannot flip it under the closure.
+func loadFileContentSrcCmd(tag, path string, syntaxOn bool, load func(context.Context) ([]byte, error)) tea.Cmd {
 	return func() tea.Msg {
 		data, err := load(context.Background())
 		if err != nil {
@@ -162,13 +166,39 @@ func loadFileContentSrcCmd(tag string, load func(context.Context) ([]byte, error
 		if len(data) > domain.MaxDiffBytes {
 			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(file too large to preview)")}}}
 		}
-		return fileContentMsg{tag: tag, lines: fileContentLines(data)}
+		return fileContentMsg{tag: tag, lines: fileContentLinesTok(data, lexPreview(path, data, syntaxOn))}
 	}
+}
+
+// lexPreview lexes a previewed file, or returns nil (plain rendering) when the
+// switch is off, the path has no lexer, the file is past domain.MaxSyntaxBytes,
+// or it holds a BARE \r — fileContentLines turns a lone \r into a line break
+// while syntax.Lex keeps it inside its line, so every line after it would
+// receive the previous line's runs. CRLF is safe: both sides count one line.
+func lexPreview(path string, data []byte, syntaxOn bool) [][]syntax.Tok {
+	if !syntaxOn || len(data) > domain.MaxSyntaxBytes || hasBareCR(data) {
+		return nil
+	}
+	lang := syntax.Detect(path)
+	if lang == "" {
+		return nil
+	}
+	return syntax.Lex(lang, data)
 }
 
 // fileContentLines splits raw file bytes into one contentLine per line, expanding
 // tabs so width math and alignment behave.
 func fileContentLines(data []byte) []contentLine {
+	return fileContentLinesTok(data, nil)
+}
+
+// fileContentLinesTok is fileContentLines with an optional class mask: tok is
+// syntax.Lex's output over the SAME bytes (index = source line−1), and each
+// line's mask is built by the very normalization that produces its text, so
+// the two can never drift. tok nil is the plain path, byte-identical to what
+// fileContentLines produced before the mask existed
+// (TestFileContentLinesPlainPathUnchanged pins it).
+func fileContentLinesTok(data []byte, tok [][]syntax.Tok) []contentLine {
 	s := strings.TrimRight(string(data), "\n")
 	if s == "" {
 		return []contentLine{{text: i18n.T("(empty file)")}}
@@ -185,6 +215,40 @@ func fileContentLines(data []byte) []contentLine {
 	out := make([]contentLine, len(parts))
 	for i, ln := range parts {
 		out[i] = contentLine{text: ln}
+	}
+	if tok == nil {
+		return out
+	}
+	// The mask is derived from the RAW line (pre-sanitize): token offsets are
+	// rune indices into it, and only the raw line knows which runes the sweep
+	// expanded (a tab) or dropped (a control).
+	raw := strings.Split(s, "\n")
+	for i := range out {
+		if i >= len(raw) {
+			break
+		}
+		out[i].cls = displayCls(raw[i], tokAt(tok, i+1))
+	}
+	return out
+}
+
+// displayCls is sanitizeForDisplay's per-rune map expressed as a class mask:
+// one entry per rune it KEEPS, four for a tab (its fixed 4-space expansion),
+// none for a dropped control. The result therefore has exactly one class per
+// display rune of sanitizeForDisplay(raw).
+func displayCls(raw string, toks []syntax.Tok) []syntax.Class {
+	runes := []rune(raw)
+	classes := classMask(len(runes), toks)
+	out := make([]syntax.Class, 0, len(runes))
+	for i, r := range runes {
+		switch {
+		case r == '\t':
+			out = append(out, classes[i], classes[i], classes[i], classes[i])
+		case r < 0x20 || r == 0x7f:
+			// dropped by sanitizeForDisplay: no display rune, no class
+		default:
+			out = append(out, classes[i])
+		}
 	}
 	return out
 }
@@ -257,7 +321,7 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	window := vis[start:end]
 	wr := make([]winRow, len(window))
 	for i, l := range window {
-		wr[i] = winRow{text: l.text}
+		wr[i] = winRow{text: l.text, cls: l.cls}
 	}
 
 	lines := make([]string, 0, contentH)

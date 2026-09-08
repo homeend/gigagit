@@ -703,6 +703,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			b.loading = false
 			b.err = msg.err
 			b.lines = msg.lines
+			b.tok = msg.tok
 			b.blocks = groupBlame(msg.lines)
 			b.sel = 0
 		}

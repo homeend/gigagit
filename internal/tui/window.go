@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // dispMode is how a window lays out rows that are wider than its box. It is
@@ -43,6 +45,16 @@ type winRow struct {
 	prefix   string
 	style    lipgloss.Style // zero value renders the text unchanged
 	decorate rowDecorator   // optional; applied post-slice, post-pad
+	// cls is an optional syntax class per DISPLAY RUNE of text (so
+	// len(cls) == len([]rune(text)); nil = the plain path every other caller
+	// takes). The window slices it alongside the text in all three modes, so a
+	// coloured run lands on the right columns after a cutoff, a horizontal
+	// scroll, or a wrap. cls WINS over decorate: a row that sets both is
+	// rendered coloured and decorate is never called (no caller combines them;
+	// TestRenderWindowClsWinsOverDecorate pins it). A row whose style reverses
+	// video (selectedRow) also ignores cls — reverse swaps foreground and
+	// background, so per-token colours would paint per-token BACKGROUNDS.
+	cls []syntax.Class
 }
 
 // winOpts is everything renderWindow needs besides the rows. anchor is the
@@ -53,6 +65,48 @@ type winOpts struct {
 	anchor  int
 	hscroll int // modeScroll horizontal offset (display columns)
 	prefixW int // width of the frozen winRow.prefix column (0 = none)
+}
+
+// windowRowBounds returns the half-open [lo, hi) slice of the n logical rows
+// that a window of height h anchored on row `anchor` can ever show, for the
+// given mode. It is the same bound renderWindow computes internally (see the
+// comment inside it) before building any per-row state, factored out so a
+// caller with expensive per-row construction — e.g. blame's per-line
+// lex-mapped winRow — can build only the rows that will actually be laid
+// out. renderWindow calls this too, so the two can never disagree. Callers
+// pass n == the FULL row count; when n <= h every row is visible (lo=0,
+// hi=n) and no windowing is needed.
+func windowRowBounds(n, h, anchor int, mode dispMode) (lo, hi int) {
+	if n <= h {
+		return 0, n
+	}
+	if mode != modeWrap {
+		// Single-line modes (cutoff/scroll): each row occupies exactly one
+		// display line, so the visible slice is deterministic.
+		lo = windowStart(n, h, anchor)
+		return lo, lo + h
+	}
+	// Wrap mode: a row spans a variable number of lines, but every row is at
+	// least ONE line, so the h-line window anchored on row a can only ever
+	// show rows within h of a. Rows further away contribute only to the line
+	// COUNTS windowStart sees, and its clamps bind only when the lines on
+	// that side of the anchor number fewer than h — which implies no rows on
+	// that side were dropped. Slicing to [a-h, a+h] before wrapping is
+	// therefore output-identical to the full layout
+	// (TestRenderWindowWrapMatchesFullLayout pins this for every anchor).
+	a := anchor
+	if a < 0 || a >= n {
+		a = 0 // mirrors renderWindow's anchor scan: no matching row → line 0
+	}
+	lo = a - h
+	if lo < 0 {
+		lo = 0
+	}
+	hi = a + h + 1
+	if hi > n {
+		hi = n
+	}
+	return lo, hi
 }
 
 // renderWindow lays rows out under o and returns exactly o.h display lines,
@@ -73,36 +127,9 @@ func renderWindow(rows []winRow, o winOpts) []string {
 	// huge untracked or commit set pegs the CPU (and, under any extra event
 	// traffic, freezes it).
 	if len(rows) > h {
-		if o.mode != modeWrap {
-			// Single-line modes (cutoff/scroll): each row occupies exactly one
-			// display line, so the visible slice is deterministic.
-			start := windowStart(len(rows), h, o.anchor)
-			rows = rows[start : start+h]
-			o.anchor -= start
-		} else {
-			// Wrap mode: a row spans a variable number of lines, but every row is
-			// at least ONE line, so the h-line window anchored on row a can only
-			// ever show rows within h of a. Rows further away contribute only to
-			// the line COUNTS windowStart sees, and its clamps bind only when the
-			// lines on that side of the anchor number fewer than h — which implies
-			// no rows on that side were dropped. Slicing to [a-h, a+h] before
-			// wrapping is therefore output-identical to the full layout
-			// (TestRenderWindowWrapMatchesFullLayout pins this for every anchor).
-			a := o.anchor
-			if a < 0 || a >= len(rows) {
-				a = 0 // mirrors the anchor scan below: no matching row → line 0
-			}
-			lo := a - h
-			if lo < 0 {
-				lo = 0
-			}
-			hi := a + h + 1
-			if hi > len(rows) {
-				hi = len(rows)
-			}
-			rows = rows[lo:hi]
-			o.anchor -= lo
-		}
+		lo, hi := windowRowBounds(len(rows), h, o.anchor, o.mode)
+		rows = rows[lo:hi]
+		o.anchor -= lo
 	}
 
 	// A frozen prefix column (o.prefixW>0) reserves the leftmost columns; the
@@ -124,32 +151,72 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		hs    int
 		si    int
 		row   int
+		// Coloured rows only (winRow.cls): the segment's own class mask and its
+		// frozen prefix, kept OUT of text so the body can be painted run by run
+		// while the gutter and the padding stay under style. nil cls = the plain
+		// path, where text already carries the prefix.
+		cls []syntax.Class
+		pre string
 	}
 	var dl []dline
 	for ri, r := range rows {
 		var segs []string
+		var segCls [][]syntax.Class // nil unless the row carries a class mask
 		hs := 0
+		// A row whose style reverses video would turn per-token foregrounds into
+		// per-token backgrounds, so it takes the plain path (see winRow.cls).
+		rcls := r.cls
+		if r.style.GetReverse() {
+			rcls = nil
+		}
 		switch o.mode {
 		case modeWrap:
-			segs = wrapHang(r.text, bodyW, wrapAlignIndent(r.text, bodyW), 1<<20) // huge cap => clean full wrap, no ellipsis
+			indent := wrapAlignIndent(r.text, bodyW)
+			segs = wrapHang(r.text, bodyW, indent, 1<<20) // huge cap => clean full wrap, no ellipsis
+			if rcls != nil {
+				segCls = wrapSegCls(r.text, rcls, segs, indent, bodyW)
+			}
 		case modeScroll:
 			segs = []string{hslice(r.text, o.hscroll, bodyW)}
 			hs = o.hscroll
+			if rcls != nil {
+				segCls = [][]syntax.Class{sliceCls(rcls, hscrollRuneOff(r.text, o.hscroll), len([]rune(segs[0])))}
+			}
 		default:
 			segs = []string{truncate(r.text, bodyW)}
+			if rcls != nil {
+				mask := sliceCls(rcls, 0, len([]rune(segs[0])))
+				// When r.text is wider than bodyW, truncate keeps a prefix and
+				// appends "…" after it — the ellipsis is a synthetic rune, not
+				// part of r.text. sliceCls doesn't know that: it just slices
+				// len(segs[0]) classes off the front of rcls, so the mask's
+				// last entry lands on the class of the first DROPPED rune
+				// (the one at index len(kept), i.e. right after the prefix
+				// truncate kept). Force that slot to Plain so the ellipsis
+				// never wears a colour it didn't earn.
+				if lipgloss.Width(r.text) > bodyW && len(mask) > 0 {
+					mask[len(mask)-1] = syntax.Plain
+				}
+				segCls = [][]syntax.Class{mask}
+			}
 		}
 		if len(segs) == 0 {
 			segs = []string{""}
+			segCls = nil
 		}
 		for si, s := range segs {
+			pre := ""
 			if pw > 0 {
-				pre := strings.Repeat(" ", pw) // blank gutter on continuations
+				pre = strings.Repeat(" ", pw) // blank gutter on continuations
 				if si == 0 {
 					pre = padRight(truncate(r.prefix, pw), pw)
 				}
-				s = pre + s
 			}
-			dl = append(dl, dline{text: s, style: r.style, deco: r.decorate, hs: hs, si: si, row: ri})
+			if segCls == nil {
+				dl = append(dl, dline{text: pre + s, style: r.style, deco: r.decorate, hs: hs, si: si, row: ri})
+				continue
+			}
+			dl = append(dl, dline{text: s, pre: pre, cls: segCls[si], style: r.style, hs: hs, si: si, row: ri})
 		}
 	}
 
@@ -169,6 +236,10 @@ func renderWindow(rows []winRow, o winOpts) []string {
 			out = append(out, padRight("", w))
 			continue
 		}
+		if dl[idx].cls != nil {
+			out = append(out, colouredLine(dl[idx].pre, dl[idx].text, dl[idx].cls, dl[idx].style, w))
+			continue
+		}
 		line := padRight(dl[idx].text, w)
 		if dl[idx].deco != nil {
 			line = dl[idx].deco(line, dl[idx].hs, dl[idx].si)
@@ -176,6 +247,104 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		out = append(out, dl[idx].style.Render(line))
 	}
 	return out
+}
+
+// colouredLine renders one display line of a class-masked row: the frozen
+// prefix and the trailing padding under style, the body painted run by run
+// (styledRuns, no word-diff emphasis). An all-Plain mask under the zero style
+// is byte-identical to the plain path — syntaxStyle leaves base alone for
+// Plain, and lipgloss renders an unstyled string unchanged.
+func colouredLine(pre, body string, cls []syntax.Class, style lipgloss.Style, w int) string {
+	disp := []rune(body)
+	cls = sliceCls(cls, 0, len(disp)) // defensive: exactly one class per rune
+	var b strings.Builder
+	if pre != "" {
+		b.WriteString(style.Render(pre))
+	}
+	b.WriteString(styledRuns(disp, make([]bool, len(disp)), cls, style))
+	if pad := w - lipgloss.Width(pre) - lipgloss.Width(body); pad > 0 {
+		b.WriteString(style.Render(strings.Repeat(" ", pad)))
+	}
+	return b.String()
+}
+
+// sliceCls returns n classes of cls starting at off, padding with Plain when
+// the mask runs out (a cutoff ellipsis, a clamped token end) and reading an
+// out-of-range window as all-Plain.
+func sliceCls(cls []syntax.Class, off, n int) []syntax.Class {
+	out := make([]syntax.Class, n)
+	if off < 0 {
+		off = 0
+	}
+	for i := 0; i < n && off+i < len(cls); i++ {
+		out[i] = cls[off+i]
+	}
+	return out
+}
+
+// hscrollRuneOff is how many leading runes of s the modeScroll slice drops at
+// horizontal offset off. Derived from ansi.TruncateLeft's own output rather
+// than re-walking widths, so a wide glyph straddling the cut is counted
+// exactly the way hslice cuts it.
+func hscrollRuneOff(s string, off int) int {
+	if off <= 0 {
+		return 0
+	}
+	return len([]rune(s)) - len([]rune(ansi.TruncateLeft(s, off, "")))
+}
+
+// wrapSegCls maps a class mask onto the segments wrapHang produced for text.
+// Every segment is a verbatim rune slice of text (wrapWidth slices runes and
+// never rewrites them), preceded on continuations by indent pad spaces, so the
+// mask is sliced at the running rune offset and the pad is Plain. The layout is
+// verified against text before it is trusted: if the segments do not
+// reconstruct text (a future wrapper that rewrote content), every segment is
+// reported all-Plain and the row renders uncoloured rather than mis-coloured.
+func wrapSegCls(text string, cls []syntax.Class, segs []string, indent, bodyW int) [][]syntax.Class {
+	if indent > bodyW-1 {
+		indent = bodyW - 1 // wrapHang's own clamp
+	}
+	try := func(pad int) [][]syntax.Class {
+		out := make([][]syntax.Class, len(segs))
+		var joined strings.Builder
+		off := 0
+		for i, s := range segs {
+			r := []rune(s)
+			p := 0
+			if i > 0 {
+				p = pad
+			}
+			if len(r) < p {
+				return nil
+			}
+			for _, c := range r[:p] {
+				if c != ' ' {
+					return nil
+				}
+			}
+			m := make([]syntax.Class, p)
+			out[i] = append(m, sliceCls(cls, off, len(r)-p)...)
+			joined.WriteString(string(r[p:]))
+			off += len(r) - p
+		}
+		if joined.String() != text {
+			return nil
+		}
+		return out
+	}
+	if indent > 0 {
+		if out := try(indent); out != nil {
+			return out
+		}
+	}
+	if out := try(0); out != nil {
+		return out
+	}
+	plain := make([][]syntax.Class, len(segs))
+	for i, s := range segs {
+		plain[i] = make([]syntax.Class, len([]rune(s)))
+	}
+	return plain
 }
 
 // hslice returns the display-column window [off, off+w) of raw text s. Width-

@@ -98,6 +98,16 @@ builds parallel emph/class masks over the tab-expanded runes; `styledRuns`
 groups by (emph, class) and emphasis wins. Web: `left_tok`/`right_tok`
 `[start,end,cls]` triples → `.tk-<cls>` spans via `renderCell`.
 
+The list/text surfaces reach the same colouring through **`winRow.cls`**, an
+optional class-per-display-rune mask `renderWindow` slices alongside the text
+in all three long-line modes (nil = the byte-identical plain path every other
+caller takes; `cls` wins over `decorate`, and a reverse-video row style —
+`selectedRow` — drops it, since reverse would turn per-token foregrounds into
+per-token backgrounds). Its callers lex off the UI thread: the blame view
+(`lexBlame` over the reassembled content lines) and the "View file" preview
+(`lexPreview` + `fileContentLinesTok`); both refuse a file holding a bare `\r`,
+which they turn into a line break and `syntax.Lex` does not.
+
 **Diff view line cursor.** The full-screen diff view (`internal/tui/diff_cursor.go`)
 keeps a current line, `curLine`, indexing `diffView.lines` (the logical
 stream: one entry per aligned row plus fold separators), never `disp` — a
