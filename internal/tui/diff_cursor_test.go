@@ -464,3 +464,57 @@ func TestHistoryPaneHasNoCursorMarker(t *testing.T) {
 		t.Fatalf("full-screen render differs from the unmarked pane on %d rows, want exactly 1 (the cursor)", diffRows)
 	}
 }
+
+func TestDiffEditLineRule(t *testing.T) {
+	t.Parallel()
+	rows := cursorRows(6)
+	rows[2] = textdiff.Row{Kind: textdiff.Del, Left: "gone", LeftNo: 3}
+	for i := 3; i < 6; i++ {
+		rows[i].RightNo-- // new side: 1,2,_,3,4,5
+	}
+	v := diffViewWith(rows, []int{2})
+	v.setCursorLine(1, 10)
+	if got := v.editLine(); got != 2 {
+		t.Fatalf("Same row: editLine=%d, want 2", got)
+	}
+	v.setCursorLine(2, 10) // the Del row: next row with a new-side number → 3
+	if got := v.editLine(); got != 3 {
+		t.Fatalf("Del row: editLine=%d, want 3", got)
+	}
+	rows2 := cursorRows(3)
+	rows2[2] = textdiff.Row{Kind: textdiff.Del, Left: "tail", LeftNo: 3}
+	v2 := diffViewWith(rows2, []int{2})
+	v2.setCursorLine(2, 10) // trailing deletion: no following new line → the last one (2)
+	if got := v2.editLine(); got != 2 {
+		t.Fatalf("trailing Del: editLine=%d, want 2", got)
+	}
+}
+
+func TestDiffEditRowGating(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(10), nil)
+	if _, ok := m.diffEditRow(); !ok {
+		t.Fatal("working-tree diff must offer the edit row")
+	}
+	m.diffLayer().compare = true
+	if _, ok := m.diffEditRow(); ok {
+		t.Fatal("a compare view has no single file: no edit row")
+	}
+	m.diffLayer().compare = false
+	m.diffLayer().rev = "abc123"
+	r, ok := m.diffEditRow()
+	if !ok || !strings.Contains(r.label, "line 1") {
+		t.Fatalf("commit diff row = %+v ok=%v, want an 'at line 1' row", r, ok)
+	}
+}
+
+func TestDiffEKeyWorkingTreeUsesLiveEditor(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(10), nil)
+	m.currentWorktree = "/wt"
+	m.diffLayer().setCursorLine(4, m.diffBodyRows())
+	_, cmd := m.Update(keyMsg("e"))
+	if cmd == nil {
+		t.Fatal("e on a working-tree diff must return an editor command")
+	}
+}

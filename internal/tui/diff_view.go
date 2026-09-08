@@ -661,6 +661,11 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		bv := newBlameView(ctx)
 		m = m.pushLayer(bv)
 		return m, m.loadBlameCmd(ctx, bv.tag)
+	case "e":
+		if r, ok := m.diffEditRow(); ok {
+			nm, cmd := r.run(m)
+			return nm.(Model), cmd
+		}
 	case "up":
 		v.scrollBy(-1, body)
 	case "down":

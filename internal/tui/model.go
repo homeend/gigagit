@@ -2590,7 +2590,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("view: %s", msg.err.Error())
 			return m, nil
 		}
-		return m, viewExternalCmd(msg.path, msg.name)
+		return m, viewExternalCmd(msg.path, msg.name, msg.line)
 
 	case editorViewFinishedMsg:
 		removeTempFile(msg.path)

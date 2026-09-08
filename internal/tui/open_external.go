@@ -20,6 +20,7 @@ import (
 type editorViewMsg struct {
 	path string // temp file to open (empty on err)
 	name string // the real file name (display + temp suffix)
+	line int    // 1-based line to open at; 0 = none
 	err  error
 }
 
@@ -36,6 +37,11 @@ type editorViewFinishedMsg struct {
 // highlighting), and yields an editorViewMsg. name is the real file name;
 // resolve fetches the bytes by source (commit / shelf / bookmark / …).
 func (m Model) openInEditorCmd(name string, resolve func(context.Context) ([]byte, error)) tea.Cmd {
+	return m.openInEditorAtCmd(name, 0, resolve)
+}
+
+// openInEditorAtCmd is openInEditorCmd positioned on line (0 = none).
+func (m Model) openInEditorAtCmd(name string, line int, resolve func(context.Context) ([]byte, error)) tea.Cmd {
 	return func() tea.Msg {
 		data, err := resolve(context.Background())
 		if err != nil {
@@ -45,7 +51,7 @@ func (m Model) openInEditorCmd(name string, resolve func(context.Context) ([]byt
 			return editorViewMsg{name: name, err: fmt.Errorf("%s", i18n.T("file too large to open (%d bytes)", len(data)))}
 		}
 		path, err := writeReadOnlyTempFile(name, data)
-		return editorViewMsg{path: path, name: name, err: err}
+		return editorViewMsg{path: path, name: name, line: line, err: err}
 	}
 }
 
@@ -76,11 +82,11 @@ func writeReadOnlyTempFile(name string, data []byte) (string, error) {
 	return path, nil
 }
 
-// viewExternalCmd launches the editor on a prepared temp file; the temp is
-// cleaned up when the editor exits. Returned by the editorViewMsg handler so
-// Bubble Tea suspends the TUI for the editor.
-func viewExternalCmd(path, name string) tea.Cmd {
-	cmd := editorCommand(resolveEditor(), path)
+// viewExternalCmd launches the editor on a prepared temp file (at line, when
+// > 0); the temp is cleaned up when the editor exits. Returned by the
+// editorViewMsg handler so Bubble Tea suspends the TUI for the editor.
+func viewExternalCmd(path, name string, line int) tea.Cmd {
+	cmd := editorCommandAt(resolveEditor(), path, line)
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return editorViewFinishedMsg{path: path, name: name, err: err}
 	})
