@@ -739,7 +739,6 @@ function notesArmed() {
   return !!state.diffCtx && state.diffCtx.notes !== false;
 }
 
-
 // noteQuery builds the /api/notes query for the open diff. Working-tree diffs
 // carry their section as `state`; a commit diff carries rev + state=commit.
 function noteQuery() {

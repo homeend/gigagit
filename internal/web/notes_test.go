@@ -1,7 +1,6 @@
 package web
 
 import (
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -206,8 +205,5 @@ func TestNotesUnknownIDIs404(t *testing.T) {
 		if code, b := postJSONRaw(t, ts, path, `{"id":"deadbeef","summary":"x"}`); code != http.StatusNotFound {
 			t.Fatalf("POST %s for an unknown id = %d (%v), want 404", path, code, b)
 		}
-	}
-	if !errors.Is(domain.ErrNoteNotFound, domain.ErrNoteNotFound) {
-		t.Fatal("the sentinel must match itself")
 	}
 }

@@ -1076,6 +1076,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.manual {
 				m.statusMsg = sourceErr(msg.source, msg.err)
 			}
+			// A failed badge-count read must not skip the open diff's own
+			// note re-resolve: a mutation just succeeded (its handler routes
+			// only through this source), so the rows still need refreshing.
+			if msg.source == srcNotes {
+				if cmd := m.loadNotesCmd(); cmd != nil {
+					return m, cmd
+				}
+			}
 			return m, nil
 		}
 		// Record the measured read cost as informational stats (shown in the

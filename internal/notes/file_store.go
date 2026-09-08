@@ -138,10 +138,12 @@ func lockToken() string {
 // releaseLock removes the lock only while WE still hold it. A lock file whose
 // content is someone else's token was taken over after our own was declared
 // stale, and removing it would strand that writer without a lock. A lock we
-// cannot read at all is already gone or unreadable; the Remove is then either a
-// no-op or fails harmlessly, and the staleness breaker is the backstop.
+// cannot read at all is left alone too: it is either already gone (nothing to
+// do) or unreadable, and the staleness breaker is the backstop either way —
+// removing blind would race a writer that re-took it between our two calls.
 func releaseLock(path, token string) {
-	if b, err := os.ReadFile(path); err == nil && string(b) != token {
+	b, err := os.ReadFile(path)
+	if err != nil || string(b) != token {
 		return
 	}
 	os.Remove(path)
