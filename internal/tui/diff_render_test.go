@@ -560,3 +560,69 @@ func TestScrollCellWindowKeepsClassesAligned(t *testing.T) {
 		t.Errorf("the keyword colour must open immediately before the visible `word`, not the plain 'b' run: kw@%d word@%d b@%d in %q", iKw, iWord, iB, raw)
 	}
 }
+
+// benchDiffView builds a diffView over a synthetic ~3000-line Go file with
+// real syntax runs and real intraline spans, so the benchmark below walks the
+// same enriched render path a highlighted file takes in the app.
+func benchDiffView(b *testing.B) *diffView {
+	b.Helper()
+	var oldSrc, newSrc strings.Builder
+	oldSrc.WriteString("package bench\n")
+	newSrc.WriteString("package bench\n")
+	for i := 0; i < 1000; i++ {
+		n := strconv.Itoa(i)
+		oldSrc.WriteString("// helper " + n + " keeps the file realistic\n")
+		newSrc.WriteString("// helper " + n + " keeps the file realistic\n")
+		oldSrc.WriteString("func helper" + n + "(a int, b string) (int, error) {\n")
+		newSrc.WriteString("func helper" + n + "(a int, b string) (int, error) {\n")
+		// Perturb every fifth line so a fifth of the rows are Changed and
+		// carry word-diff spans on top of the syntax runs.
+		if i%5 == 0 {
+			oldSrc.WriteString("\treturn a + " + n + ", nil\n}\n")
+			newSrc.WriteString("\treturn a - " + n + ", errors.New(b)\n}\n")
+		} else {
+			oldSrc.WriteString("\treturn a + " + n + ", nil\n}\n")
+			newSrc.WriteString("\treturn a + " + n + ", nil\n}\n")
+		}
+	}
+	oldB, newB := []byte(oldSrc.String()), []byte(newSrc.String())
+	res := textdiff.Compare(oldB, newB, textdiff.Options{Enhanced: true})
+	v := &diffView{title: "bench.go", full: res.Rows, fullBlocks: res.Blocks}
+	lang := syntax.Detect("bench.go")
+	v.oldTok = syntax.Lex(lang, oldB)
+	v.newTok = syntax.Lex(lang, newB)
+	if len(v.oldTok) == 0 || len(v.newTok) == 0 {
+		b.Fatal("the synthetic file must lex, else the benchmark measures the plain path")
+	}
+	v.rebuild()
+	return v
+}
+
+// BenchmarkDiffPaneLinesScrollHighlighted measures one rendered frame (50
+// visible rows) of a highlighted file in scroll mode — the mode that
+// re-sanitizes and re-styles every visible cell on every frame, unlike wrap
+// mode which precomputes segments in relayout.
+func BenchmarkDiffPaneLinesScrollHighlighted(b *testing.B) {
+	// Under `go test` there is no TTY, so lipgloss would fall back to the
+	// Ascii profile and Render would emit no escape sequences at all —
+	// undercounting the real per-frame cost.
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(prev)
+	v := benchDiffView(b)
+	v.long = longScroll
+	v.relayout(200)
+	m := footerModel()
+	m.width, m.height = 200, 60
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Alternate the pan so both scrollCell paths are measured: hOffset 0
+		// delegates to diffCell for lines that fit, >0 takes the windowed
+		// slice.
+		v.hOffset = (i % 2) * 8
+		if got := m.diffPaneLines(v, 200, 50); len(got) != 50 {
+			b.Fatalf("frame = %d lines, want 50", len(got))
+		}
+	}
+}
