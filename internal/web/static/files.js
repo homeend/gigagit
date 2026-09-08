@@ -534,17 +534,28 @@ async function stage(body) {
 }
 
 
-function markSpans(text, spans, side) {
-  if (!spans || !spans.length) return esc(text);
+// renderCell escapes one cell's text and wraps (a) word-diff spans in
+// <mark class="l|r"> and (b) syntax runs in <span class="tk-…">. Both are
+// rune ranges over the raw line; a mark wins over a syntax class inside it so
+// the emphasis stays legible, matching the TUI.
+function renderCell(text, spans, toks, side) {
+  if ((!spans || !spans.length) && (!toks || !toks.length)) return esc(text);
   const rs = runes(text);
+  const emph = new Array(rs.length).fill(false);
+  for (const [a, b] of spans || []) for (let i = a; i < b && i < rs.length; i++) emph[i] = true;
+  const cls = new Array(rs.length).fill("");
+  for (const [a, b, c] of toks || []) for (let i = a; i < b && i < rs.length; i++) cls[i] = c;
   let out = "";
-  let pos = 0;
-  for (const [a, b] of spans) {
-    out += esc(rs.slice(pos, a).join(""));
-    out += `<mark class="${side}">` + esc(rs.slice(a, b).join("")) + "</mark>";
-    pos = b;
+  for (let i = 0; i < rs.length; ) {
+    let j = i + 1;
+    while (j < rs.length && emph[j] === emph[i] && cls[j] === cls[i]) j++;
+    const seg = esc(rs.slice(i, j).join(""));
+    if (emph[i]) out += `<mark class="${side}">${seg}</mark>`;
+    else if (cls[i]) out += `<span class="tk-${cls[i]}">${seg}</span>`;
+    else out += seg;
+    i = j;
   }
-  return out + esc(rs.slice(pos).join(""));
+  return out;
 }
 
 
@@ -582,10 +593,11 @@ function diffHTML(d, paneWidth) {
       const no = pureAdd ? r.right_no : r.left_no;
       const text = pureAdd ? r.right : r.left;
       const spans = pureAdd ? r.right_spans : r.left_spans;
+      const toks = pureAdd ? r.right_tok : r.left_tok;
       html +=
         `<tr class="${r.kind}${hunkCls(r)}"${hunkAttr(r)}>` +
         `<td class="no ${side}">${no || ""}</td>` +
-        `<td class="side ${side}">${markSpans(text, spans, side)}</td></tr>`;
+        `<td class="side ${side}">${renderCell(text, spans, toks, side)}</td></tr>`;
     }
   } else if (paneWidth < 950) {
     // Unified: below ~950px each side-by-side half is too narrow to read
@@ -602,11 +614,11 @@ function diffHTML(d, paneWidth) {
         if (r.kind !== "add")
           html +=
             `<tr class="del${hunkCls(r)}"${hunkAttr(r)}><td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
-            `<td class="side l">${markSpans(r.left, r.left_spans, "l")}</td></tr>`;
+            `<td class="side l">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</td></tr>`;
         if (r.kind !== "del")
           html +=
             `<tr class="add${hunkCls(r)}"${hunkAttr(r)}><td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
-            `<td class="side r">${markSpans(r.right, r.right_spans, "r")}</td></tr>`;
+            `<td class="side r">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</td></tr>`;
       }
     }
   } else {
@@ -614,9 +626,9 @@ function diffHTML(d, paneWidth) {
       html +=
         `<tr class="${r.kind}${hunkCls(r)}"${hunkAttr(r)}>` +
         `<td class="no l">${r.left_no || ""}</td>` +
-        `<td class="side l">${markSpans(r.left, r.left_spans, "l")}</td>` +
+        `<td class="side l">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</td>` +
         `<td class="no r">${r.right_no || ""}</td>` +
-        `<td class="side r">${markSpans(r.right, r.right_spans, "r")}</td></tr>`;
+        `<td class="side r">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</td></tr>`;
     }
   }
   html += "</table>";
@@ -1387,4 +1399,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markSpans, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };
+export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };

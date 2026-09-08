@@ -329,7 +329,7 @@ func (s *Server) handleEntryDiff(w http.ResponseWriter, r *http.Request) {
 	if !left.live && !right.live {
 		key = left.tag + ".." + right.tag + ":" + path
 	}
-	d, derr := svc.Differ().Diff(ctx, domain.Request{Key: key, Old: oldSrc, New: newSrc})
+	d, derr := svc.Differ().Diff(ctx, domain.Request{Key: key, Path: path, Old: oldSrc, New: newSrc})
 	if derr != nil {
 		writeErr(w, http.StatusInternalServerError, derr)
 		return
