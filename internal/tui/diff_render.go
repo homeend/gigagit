@@ -22,8 +22,10 @@ var (
 	diffCursorRow = lipgloss.NewStyle().Background(lipgloss.Color("237")) // cursor line: subtle grey under both panes
 	diffCursorNo  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
 
-	diffNote      = lipgloss.NewStyle().Foreground(lipgloss.Color("110")) // review note rows
-	diffNoteStale = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // stale: the anchored text is gone
+	// Review note rows sit on a full-width band (a dark blue for a live note,
+	// a grey for a stale one) so they read as annotations, not as diff text.
+	diffNote      = lipgloss.NewStyle().Foreground(lipgloss.Color("110")).Background(lipgloss.Color("17"))
+	diffNoteStale = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Background(lipgloss.Color("236")) // stale: the anchored text is gone
 )
 
 // cellMark is the cursor marker for one rendered cell: when row is set, base
@@ -543,7 +545,8 @@ func noteRowText(nl noteLine, w int) string {
 	if nl.stale {
 		style = diffNoteStale
 	}
-	return style.Render(truncate(txt, w))
+	// Pad to the full width so the band spans the row, not just the text.
+	return style.Render(padRight(truncate(txt, w), w))
 }
 
 // diffCell renders one pane cell: gutter + text, or the dim gap filler. With
