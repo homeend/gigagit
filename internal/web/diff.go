@@ -123,16 +123,27 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, sha, path) }
 	}
 	d, err := svc.Differ().Diff(r.Context(), domain.Request{
-		Key:  sha + "^.." + sha + ":" + path,
-		Path: path,
-		Old:  oldSrc,
-		New:  newSrc,
+		Key:     sha + "^.." + sha + ":" + path,
+		Path:    path,
+		OldPath: oldPathFor(oldPath, path),
+		Old:     oldSrc,
+		New:     newSrc,
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeDiffJSON(w, d, nil)
+}
+
+// oldPathFor is the OLD side's path for a domain.Request: empty unless it
+// actually differs from path. The handlers default a missing `old` query
+// param to path, while Request.OldPath's contract is "empty = same as Path".
+func oldPathFor(oldPath, path string) string {
+	if oldPath == path {
+		return ""
+	}
+	return oldPath
 }
 
 func diffKindString(k textdiff.Kind) string {
@@ -189,10 +200,11 @@ func (s *Server) handleRevDiff(w http.ResponseWriter, r *http.Request) {
 		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, right, path) }
 	}
 	d, err := svc.Differ().Diff(r.Context(), domain.Request{
-		Key:  left + ".." + right + ":" + path,
-		Path: path,
-		Old:  oldSrc,
-		New:  newSrc,
+		Key:     left + ".." + right + ":" + path,
+		Path:    path,
+		OldPath: oldPathFor(oldPath, path),
+		Old:     oldSrc,
+		New:     newSrc,
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -241,7 +253,7 @@ func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt s
 		writeErr(w, http.StatusBadRequest, errors.New("wt must be unstaged or staged"))
 		return
 	}
-	d, err := svc.Differ().Diff(r.Context(), domain.Request{Key: "", Path: path, Old: oldSrc, New: newSrc})
+	d, err := svc.Differ().Diff(r.Context(), domain.Request{Key: "", Path: path, OldPath: oldPathFor(oldPath, path), Old: oldSrc, New: newSrc})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return

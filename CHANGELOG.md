@@ -14,7 +14,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   ~300 lexers. Each side is lexed whole (block comments and raw strings keep
   their state across lines) and the runs are cached with the diff, keyed by
   source line so the shared aligned rows stay untouched. Word-level emphasis
-  still wins inside a changed row. Sides over 1 MB or files with no known
+  still wins inside a changed row. A renamed file's old side is lexed with
+  its old name's grammar. Sides over 1 MB or files with no known
   lexer render plain. `[ui] diff_syntax = "off"` disables it. New pure
   package `internal/syntax`.
 - **Hunk picker: `enter` walks, `ctrl+s` applies.** In the conflict resolver

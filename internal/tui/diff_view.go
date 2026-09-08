@@ -427,7 +427,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 			newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, "", f.Path) }
 		}
 		return func() tea.Msg {
-			out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: f.Path, Old: oldSrc, New: newSrc})
+			out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: f.Path, OldPath: f.OrigPath, Old: oldSrc, New: newSrc})
 			if err != nil {
 				v.err = err
 				return diffMsg{tag: tag, view: v}
@@ -526,7 +526,7 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, hash, line.path) }
 	}
 	return func() tea.Msg {
-		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: line.path, Old: oldSrc, New: newSrc})
+		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: line.path, OldPath: line.oldPath, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
 			return diffMsg{tag: tag, view: v}
@@ -580,7 +580,7 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, ref) }
 	}
 	return func() tea.Msg {
-		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: line.path, Old: oldSrc, New: newSrc})
+		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: line.path, OldPath: line.oldPath, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
 			return diffMsg{tag: tag, view: v}

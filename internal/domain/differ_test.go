@@ -173,6 +173,59 @@ func TestPlainDifferLexesBothSidesByPath(t *testing.T) {
 	}
 }
 
+// TestPlainDifferLexesOldSideWithOldPath pins the rename case: the old side
+// must be lexed with ITS OWN name's grammar, not the new name's. The Go
+// keyword assertion is the discriminator — Python's lexer reads "package" as
+// a plain name, so a shared-lexer regression turns that run to Name.
+func TestPlainDifferLexesOldSideWithOldPath(t *testing.T) {
+	t.Parallel()
+	d := NewDiffer(DifferOptions{Enhanced: true, Syntax: on}, nil)
+	out, err := d.Diff(context.Background(), Request{
+		Path:    "a.py",
+		OldPath: "a.go",
+		Old:     src([]byte("package a\n// c\n")),
+		New:     src([]byte("import os\n# c\n")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.OldTok) != 2 || len(out.NewTok) != 2 {
+		t.Fatalf("OldTok=%d NewTok=%d, want 2 and 2 (one per source line)", len(out.OldTok), len(out.NewTok))
+	}
+	if len(out.OldTok[0]) == 0 || out.OldTok[0][0].Class != syntax.Keyword {
+		t.Errorf("old line 1 should start with a Keyword run (Go 'package'), got %+v", out.OldTok[0])
+	}
+	if len(out.OldTok[1]) == 0 || out.OldTok[1][0].Class != syntax.Comment {
+		t.Errorf("old line 2 should start with a Comment run (Go '//'), got %+v", out.OldTok[1])
+	}
+	if len(out.NewTok[1]) == 0 || out.NewTok[1][0].Class != syntax.Comment {
+		t.Errorf("new line 2 should start with a Comment run (Python '#'), got %+v", out.NewTok[1])
+	}
+}
+
+// TestPlainDifferOldPathWithoutLexerLeavesOldPlain pins the per-side gate: an
+// old name no lexer matches yields no old tokens while the new side still
+// colours.
+func TestPlainDifferOldPathWithoutLexerLeavesOldPlain(t *testing.T) {
+	t.Parallel()
+	d := NewDiffer(DifferOptions{Enhanced: true, Syntax: on}, nil)
+	out, err := d.Diff(context.Background(), Request{
+		Path:    "a.go",
+		OldPath: "a.zzz",
+		Old:     src([]byte("package a\n")),
+		New:     src([]byte("package a\n// c\n")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.OldTok != nil {
+		t.Errorf("old side has no lexer, want nil OldTok, got %+v", out.OldTok)
+	}
+	if len(out.NewTok) != 2 || len(out.NewTok[1]) == 0 || out.NewTok[1][0].Class != syntax.Comment {
+		t.Errorf("new side should still be lexed as Go, got %+v", out.NewTok)
+	}
+}
+
 func TestPlainDifferNoTokensWhenOffUnknownOrLarge(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

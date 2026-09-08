@@ -26,8 +26,14 @@ type ByteSource func(context.Context) ([]byte, error)
 // for this call (e.g. working-tree diffs). Path is the repo-relative path
 // used to select a syntax lexer; "" disables highlighting for this request.
 type Request struct {
-	Key      string
-	Path     string
+	Key  string
+	Path string
+	// OldPath is the path of the OLD side when it differs from Path — e.g. a
+	// rename, or a two-sided compare of different files; empty = same as
+	// Path. It only selects the old side's lexer, never the cache key: every
+	// key that caches a rename already pins the revision pair that determines
+	// the old name.
+	OldPath  string
 	Old, New ByteSource
 }
 
@@ -115,28 +121,35 @@ func (d plainDiffer) Diff(ctx context.Context, req Request) (Diff, error) {
 	}
 	out := Diff{Result: textdiff.Compare(old, newB, textdiff.Options{Enhanced: d.enhanced})}
 	if d.syntax != nil && d.syntax() && ctx.Err() == nil {
-		if lang := syntax.Detect(req.Path); lang != "" {
-			// Both sides can each cost ~1 s of chroma at MaxSyntaxBytes, and
-			// they are independent — lex them concurrently so the worst case
-			// is one side's time, not their sum. Each goroutine writes only
-			// its own field.
-			var wg sync.WaitGroup
-			if len(old) <= MaxSyntaxBytes {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					out.OldTok = syntax.Lex(lang, old)
-				}()
-			}
-			if len(newB) <= MaxSyntaxBytes {
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
-					out.NewTok = syntax.Lex(lang, newB)
-				}()
-			}
-			wg.Wait()
+		// Each side picks its OWN grammar: a rename (or a two-sided compare of
+		// different files) can put a .go old side opposite a .py new side, and
+		// lexing one with the other's grammar produces nonsense runs. A side
+		// whose language is unknown simply gets no tokens.
+		newLang := syntax.Detect(req.Path)
+		oldLang := newLang
+		if req.OldPath != "" {
+			oldLang = syntax.Detect(req.OldPath)
 		}
+		// Both sides can each cost ~1 s of chroma at MaxSyntaxBytes, and
+		// they are independent — lex them concurrently so the worst case
+		// is one side's time, not their sum. Each goroutine writes only
+		// its own field.
+		var wg sync.WaitGroup
+		if oldLang != "" && len(old) <= MaxSyntaxBytes {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				out.OldTok = syntax.Lex(oldLang, old)
+			}()
+		}
+		if newLang != "" && len(newB) <= MaxSyntaxBytes {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				out.NewTok = syntax.Lex(newLang, newB)
+			}()
+		}
+		wg.Wait()
 	}
 	return out, nil
 }
