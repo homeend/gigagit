@@ -420,3 +420,46 @@ func TestNotesDisabledWithoutAStore(t *testing.T) {
 		t.Fatalf("NoteCounts without a store = %v, want ErrNotesDisabled", err)
 	}
 }
+
+// TestNotesAtScopesToTheCheckout pins the stateless door: a caller that hands
+// NotesAt an address with NO Worktree (every HTTP handler — the wire must
+// never name a checkout) still gets the notes NoteAdd stamped with this
+// Service's own root, resolved and threaded.
+func TestNotesAtScopesToTheCheckout(t *testing.T) {
+	t.Parallel()
+	svc, f := notesSvc(t)
+	ctx := context.Background()
+	// Both sides of a staged note read through repo.ShowFileInDir.
+	f.SetResponse("git -C show", gitexec.Result{Stdout: "alpha\nbeta\n"})
+
+	root, err := svc.NoteAdd(ctx, model.Note{
+		Address: model.FileAddress{State: model.StateStaged, Path: "a.go"},
+		Side:    model.NoteSideNew,
+		Range:   [2]int{2, 2},
+		Summary: "tighten this",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if root.Address.Worktree != "/wt" {
+		t.Fatalf("NoteAdd stamped worktree %q, want /wt", root.Address.Worktree)
+	}
+	if _, err := svc.NoteReply(ctx, root.ID, model.Note{Summary: "agreed"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.NotesAt(ctx, model.FileAddress{State: model.StateStaged, Path: "a.go"})
+	if err != nil {
+		t.Fatalf("NotesAt: %v", err)
+	}
+	if len(got) != 1 || got[0].Note.ID != root.ID || len(got[0].Replies) != 1 {
+		t.Fatalf("NotesAt = %+v, want one root with one reply", got)
+	}
+	if got[0].Status != model.NoteActive || got[0].Range != [2]int{2, 2} {
+		t.Fatalf("resolved %v at %v, want active at {2,2}", got[0].Status, got[0].Range)
+	}
+	// A different path shares the store but not the target.
+	if other, err := svc.NotesAt(ctx, model.FileAddress{State: model.StateStaged, Path: "b.go"}); err != nil || len(other) != 0 {
+		t.Fatalf("NotesAt(b.go) = %+v, %v, want none", other, err)
+	}
+}

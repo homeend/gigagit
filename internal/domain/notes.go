@@ -200,6 +200,54 @@ func (s *Service) NotesFor(ctx context.Context, addr model.FileAddress, d Diff) 
 	return kept, nil
 }
 
+// NotesAt resolves the notes for addr WITHOUT a caller-supplied diff, reading
+// both sides itself (the noteSideLines table). It is the stateless callers'
+// door — the web handlers and, in phase 2, the CLI — while NotesFor stays the
+// zero-extra-read path for a frontend that already holds the diff.
+//
+// Like NotesFor it scopes a worktree-state query to THIS checkout: the store
+// is shared by every worktree of the repo, and a caller that reaches this
+// method has no business naming someone else's (the HTTP handlers must never
+// take a Worktree from the wire).
+func (s *Service) NotesAt(ctx context.Context, addr model.FileAddress) ([]ResolvedNote, error) {
+	st := s.notesStore(ctx)
+	if st == nil {
+		return nil, ErrNotesDisabled
+	}
+	all, err := st.Load()
+	if err != nil {
+		return nil, err
+	}
+	if worktreeScopedNote(addr) {
+		wt, werr := s.noteWorktree(ctx, addr)
+		if werr != nil {
+			return nil, werr
+		}
+		addr.Worktree = wt
+	}
+	mine := make([]model.Note, 0, len(all))
+	for _, n := range all {
+		if sameNoteTarget(n.Address, addr) {
+			mine = append(mine, n)
+		}
+	}
+	if len(mine) == 0 {
+		return nil, nil
+	}
+	// Only now are the two sides worth reading: the reads shell out to git,
+	// and an address with no notes at all must cost nothing.
+	oldLines, _ := s.noteSideLines(ctx, addr, model.NoteSideOld)
+	newLines, _ := s.noteSideLines(ctx, addr, model.NoteSideNew)
+	res := resolveNotes(mine, oldLines, newLines)
+	kept := res[:0]
+	for _, r := range res {
+		if r.Status != model.NoteOrphaned {
+			kept = append(kept, r)
+		}
+	}
+	return kept, nil
+}
+
 // NoteCounts returns the badge counts, cached until the next mutation. The
 // returned maps are the cache itself — callers must treat them as read-only.
 func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
