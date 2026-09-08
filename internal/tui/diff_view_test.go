@@ -392,6 +392,31 @@ func TestDiffViewKeysScrollAndJump(t *testing.T) {
 	}
 }
 
+// TestDiffPgUpFromOffscreenCursorPullsItPartlyIntoView: offset 0 with the
+// cursor still on line 20 IS reachable through real keys — 17× "up" from the
+// fresh open (offset 17, curLine 20) scrolls only the viewport, so the
+// cursor is left stranded above it. pgup from there scrolls a page (clamped
+// at 0, already at the top) and moves the cursor a page (20→10), then the
+// minimal-scroll follow-up (ensureCursorVisible) nudges the viewport just
+// enough to bring line 10's row into view — offset 1, not 0. This pins that
+// real interaction rather than asserting a clean clamp.
+func TestDiffPgUpFromOffscreenCursorPullsItPartlyIntoView(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, sameRowsTUI(40, 20, 30), []int{20, 30})
+	for i := 0; i < 17; i++ {
+		u, _ := m.Update(keyMsg("up"))
+		m = u.(Model)
+	}
+	if v := m.diffLayer(); v.offset != 0 || v.curLine != 20 {
+		t.Fatalf("setup, 17×up: offset=%d curLine=%d, want 0/20", v.offset, v.curLine)
+	}
+	u, _ := m.Update(keyMsg("pgup"))
+	v := u.(Model).diffLayer()
+	if v.offset != 1 || v.curLine != 10 {
+		t.Fatalf("pgup from offscreen cursor: offset=%d curLine=%d, want 1/10", v.offset, v.curLine)
+	}
+}
+
 func TestDiffViewEscClosesAndQInert(t *testing.T) {
 	t.Parallel()
 	m := diffModel()

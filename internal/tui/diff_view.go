@@ -689,7 +689,6 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.setCursorLine(0, body)
 		if !wasTop {
 			v.scrollBy(-len(v.disp), body)
-			v.setCursorLine(0, body)
 		} else if m.diffNav != diffNavNone {
 			switch {
 			case !m.peekDiffFile(-1):
