@@ -84,6 +84,23 @@ func TestFileContentLinesTokKeepsTextAndAlignsMask(t *testing.T) {
 	}
 }
 
+// displayCls mirrors sanitizeForDisplay's per-rune map by hand, so the two are
+// pinned together: one class per rune the sweep keeps, four for a tab, none for
+// a dropped control — over content that exercises all three.
+func TestFileContentLinesTokMaskLengthMatchesEveryLine(t *testing.T) {
+	t.Parallel()
+	data := []byte("\tif x {\x01}\r\nvar\ty\t= 1\n\n// tail\n")
+	tok := syntax.Lex("Go", data)
+	if tok == nil {
+		t.Fatal("fixture should lex")
+	}
+	for i, l := range fileContentLinesTok(data, tok) {
+		if len(l.cls) != len([]rune(l.text)) {
+			t.Errorf("line %d (%q): mask has %d entries for %d display runes", i, l.text, len(l.cls), len([]rune(l.text)))
+		}
+	}
+}
+
 // previewOf opens the "View file" preview on path with the given file content.
 func previewOf(t *testing.T, m Model, path, content string) Model {
 	t.Helper()
