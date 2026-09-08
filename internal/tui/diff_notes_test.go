@@ -31,7 +31,7 @@ func TestRelayoutAppendsNoteRowsUnderTheirLine(t *testing.T) {
 	t.Parallel()
 	n := rootNote("n1", 5, "off by one", "the loop runs one short", model.NoteSourceUser, model.NoteActive)
 	n.Replies = []domain.ResolvedNote{{
-		Note:   model.Note{ID: "r1", ParentID: "n1", Author: "bot", Summary: "agreed", Source: model.NoteSourceAgent},
+		Note:   model.Note{ID: "r1", ParentID: "n1", Author: "bot", Summary: "agreed", Source: model.NoteSourceUser},
 		Status: model.NoteActive, Range: [2]int{5, 5},
 	}}
 	v := notedView([]domain.ResolvedNote{n})
@@ -82,6 +82,81 @@ func TestNoteRowsHiddenWhenAgentLayerOff(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("user notes must stay visible with the agent layer off")
+	}
+}
+
+// reply hangs a reply off a resolved root note.
+func reply(root domain.ResolvedNote, id, author, summary string, src model.NoteSource) domain.ResolvedNote {
+	root.Replies = append(root.Replies, domain.ResolvedNote{
+		Note: model.Note{ID: id, ParentID: root.Note.ID, Author: author,
+			Summary: summary, Source: src},
+		Status: model.NoteActive, Range: root.Range,
+	})
+	return root
+}
+
+// noteRowsAt collects the note rows relayout appended under logical line li.
+func noteRowsAt(v *diffView, li int) []noteLine {
+	var rows []noteLine
+	for i := v.lineStart[li] + 1; i < len(v.disp) && v.disp[i].note != nil; i++ {
+		rows = append(rows, *v.disp[i].note)
+	}
+	return rows
+}
+
+func TestAgentLayerFiltersEachRowBySource(t *testing.T) {
+	t.Parallel()
+	// A user root with an agent reply, and an agent root with a user reply.
+	userRoot := reply(rootNote("u", 5, "mine", "", model.NoteSourceUser, model.NoteActive),
+		"ur", "bot", "bot's reply", model.NoteSourceAgent)
+	agentRoot := reply(rootNote("a", 6, "bot's root", "", model.NoteSourceAgent, model.NoteActive),
+		"ar", "ada", "my reply", model.NoteSourceUser)
+	v := notedView([]domain.ResolvedNote{userRoot, agentRoot})
+	v.hideAgent = true
+	v.relayout(0)
+
+	rows5 := noteRowsAt(v, 4) // the user root's line
+	if len(rows5) != 1 || !strings.Contains(rows5[0].text, "mine") {
+		t.Fatalf("line 5 rows = %+v, want the user root only", rows5)
+	}
+	rows6 := noteRowsAt(v, 5) // the agent root's line
+	if len(rows6) != 1 || !strings.Contains(rows6[0].text, "my reply") {
+		t.Fatalf("line 6 rows = %+v, want the user reply only", rows6)
+	}
+	if rows6[0].depth != 1 {
+		t.Fatalf("a surviving reply keeps its indentation, depth = %d", rows6[0].depth)
+	}
+	// With the layer back on, every row returns.
+	v.hideAgent = false
+	v.relayout(0)
+	if got := len(noteRowsAt(v, 4)) + len(noteRowsAt(v, 5)); got != 4 {
+		t.Fatalf("agent layer on: %d rows, want all 4", got)
+	}
+}
+
+func TestNoteRowsSanitizeControlCharactersAndSplitRationale(t *testing.T) {
+	t.Parallel()
+	n := rootNote("n1", 5, "sum\nmary", "one\ttab\nsecond\rline", model.NoteSourceUser, model.NoteActive)
+	v := notedView([]domain.ResolvedNote{n})
+	rows := noteRowsAt(v, 4)
+	if len(rows) != 3 { // summary + one row per rationale line
+		t.Fatalf("want 3 rows (summary + 2 rationale lines), got %d: %+v", len(rows), rows)
+	}
+	if !strings.Contains(rows[1].text, "one") || !strings.Contains(rows[2].text, "second") {
+		t.Fatalf("the rationale must split on newlines, got %+v", rows[1:])
+	}
+	// What relayout counted must be what the renderer draws: one physical row
+	// each, with no raw control character surviving into the frame.
+	physical := 0
+	for _, nl := range rows {
+		got := noteRowText(nl, 80)
+		physical += lipgloss.Height(got)
+		if strings.ContainsAny(got, "\n\t\r") {
+			t.Fatalf("raw control character survived into %q", got)
+		}
+	}
+	if physical != len(rows) {
+		t.Fatalf("%d note display rows rendered as %d physical rows", len(rows), physical)
 	}
 }
 

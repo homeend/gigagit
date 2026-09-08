@@ -530,11 +530,13 @@ func foldSeparator(n, w int, marked bool) string {
 }
 
 // noteRowText renders one note display row across the FULL width: two cells of
-// indent per depth level, then the assembled text, truncated to w. A stale row
-// is dimmed — the note still says something, it just no longer sits on the
-// text it was written about.
+// indent per depth level, then the assembled text — sanitized like any file
+// line (a note is free text an agent wrote, so a stray \n, \t or bare \r must
+// not draw a second physical row or break the width math) and truncated to w.
+// A stale row is dimmed — the note still says something, it just no longer sits
+// on the text it was written about.
 func noteRowText(nl noteLine, w int) string {
-	txt := strings.Repeat("  ", nl.depth) + nl.text
+	txt := sanitizeLine(strings.Repeat("  ", nl.depth) + nl.text)
 	style := diffNote
 	if nl.stale {
 		style = diffNoteStale

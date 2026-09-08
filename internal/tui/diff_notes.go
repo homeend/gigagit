@@ -1,18 +1,26 @@
 package tui
 
 import (
+	"strings"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
-// Review-note display rows. A resolved note becomes one to three synthetic
-// display rows appended AFTER its anchored line's content rows: the summary
-// (◆ author: summary), an optional rationale row, and one such pair per
+// Review-note display rows. A resolved note becomes synthetic display rows
+// appended AFTER its anchored line's content rows: the summary (◆ author:
+// summary), one row per line of the optional rationale, and the same again per
 // reply, indented. They live only in v.disp — v.lines, the change blocks and
 // the shared textdiff rows are untouched, so the cursor, n/p, wrap and the
 // fold machinery keep working on the same logical stream as before.
+//
+// Summaries and rationales are free text an agent may have written, so the row
+// count relayout computes must not depend on what is inside them: a rationale
+// is SPLIT on newlines here (one row each, so it reads naturally), and every
+// row is sanitizeLine'd at render time — a stray \n, \t or bare \r can then
+// never draw more physical rows than relayout accounted for.
 
 // noteLine is ONE display row of a note (not one note): the pointer on dRow
 // names the row, while id/rootID name the note it came from so E/R/Delete can
@@ -23,11 +31,15 @@ type noteLine struct {
 	depth  int    // 0 = root, 1 = reply (indent = 2*depth)
 	text   string // the whole row, already assembled
 	stale  bool   // the anchor text is gone: render dim
+	agent  bool   // this ROW's own note is agent-written (the `a` layer filter)
 }
 
 // noteRowIndex maps logical line index → its note rows, and fold line index →
-// "a note hides under this fold". Agent-sourced notes are skipped entirely
-// while the agent layer is off; user notes always render (hunk's policy).
+// "a note hides under this fold". While the agent layer is off, every ROW is
+// filtered by its own note's source: an agent reply under a user root goes,
+// a user reply under an agent root stays (keeping its indentation). User notes
+// always render (hunk's policy). A thread with nothing left to show marks no
+// fold either — a marker for something you cannot reveal is a lie.
 func (v *diffView) noteRowIndex() (map[int][]noteLine, map[int]bool) {
 	if len(v.notes) == 0 {
 		return nil, nil
@@ -35,7 +47,11 @@ func (v *diffView) noteRowIndex() (map[int][]noteLine, map[int]bool) {
 	byLine := map[int][]noteLine{}
 	foldMark := map[int]bool{}
 	for _, r := range v.notes {
-		if v.hideAgent && r.Note.Source == model.NoteSourceAgent {
+		rows := noteLinesOf(r)
+		if v.hideAgent {
+			rows = dropAgentRows(rows)
+		}
+		if len(rows) == 0 {
 			continue
 		}
 		li, visible := v.noteAnchorLine(r)
@@ -46,9 +62,21 @@ func (v *diffView) noteRowIndex() (map[int][]noteLine, map[int]bool) {
 			foldMark[li] = true // folded away: mark the fold rule instead
 			continue
 		}
-		byLine[li] = append(byLine[li], noteLinesOf(r)...)
+		byLine[li] = append(byLine[li], rows...)
 	}
 	return byLine, foldMark
+}
+
+// dropAgentRows keeps the rows the hidden agent layer still shows. It filters
+// per ROW, not per thread, so the two mixed-authorship cases both behave.
+func dropAgentRows(rows []noteLine) []noteLine {
+	out := rows[:0:0]
+	for _, nl := range rows {
+		if !nl.agent {
+			out = append(out, nl)
+		}
+	}
+	return out
 }
 
 // noteAnchorLine finds the logical line a note hangs off: the line carrying
@@ -103,9 +131,12 @@ func noteLinesOf(r domain.ResolvedNote) []noteLine {
 	return rows
 }
 
-// noteRowsFor is one note's own rows: the summary, then the rationale.
+// noteRowsFor is one note's own rows: the summary (always exactly one row —
+// any newline inside it is flattened by the renderer's sanitizeLine), then one
+// row per line of the rationale.
 func noteRowsFor(r domain.ResolvedNote, rootID string, depth int) []noteLine {
 	stale := r.Status == model.NoteStale
+	agent := r.Note.Source == model.NoteSourceAgent
 	head := "◆ "
 	if depth > 0 {
 		head = "↳ "
@@ -117,10 +148,12 @@ func noteRowsFor(r domain.ResolvedNote, rootID string, depth int) []noteLine {
 	if stale {
 		head += " " + i18n.T("(stale)")
 	}
-	rows := []noteLine{{id: r.Note.ID, rootID: rootID, depth: depth, text: head, stale: stale}}
+	rows := []noteLine{{id: r.Note.ID, rootID: rootID, depth: depth, text: head, stale: stale, agent: agent}}
 	if r.Note.Rationale != "" {
-		rows = append(rows, noteLine{id: r.Note.ID, rootID: rootID, depth: depth,
-			text: "  " + r.Note.Rationale, stale: stale})
+		for _, ln := range strings.Split(r.Note.Rationale, "\n") {
+			rows = append(rows, noteLine{id: r.Note.ID, rootID: rootID, depth: depth,
+				text: "  " + ln, stale: stale, agent: agent})
+		}
 	}
 	return rows
 }
