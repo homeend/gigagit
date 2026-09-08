@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -120,38 +121,99 @@ func (v *diffView) noteTargetIn(r domain.ResolvedNote) (noteTarget, bool) {
 	return noteTarget{}, false
 }
 
-// noteNearCursor is the note E/R/Delete act on: the one anchored on the
-// GREATEST logical line at or above the cursor, else the one on the smallest
-// line in the view. Comparison is by v.lines INDEX, never by line number:
-// NotesFor sorts new-side-first then by line, so an old-side note on line 3
-// otherwise beat a new-side note on line 20 purely by iteration order.
-func (m Model) noteNearCursor() (noteTarget, bool) {
+// notesAtCursor is the set of threads E/R/Delete may act on: the ones whose
+// note rows sit NEXT to the cursor row. A thread's rows render under its
+// anchor line, so that is every thread anchored on the cursor line itself
+// (rows directly below the cursor), or — when the cursor line carries none —
+// every thread anchored on the nearest real line above it (rows directly
+// above the cursor). Both sides adjacent means the cursor line's own threads
+// win. Anything further away is out of reach: the keys are inert and the .
+// menu offers no note rows. Order follows v.notes (resolution order), so a
+// chooser lists several threads on one line stably.
+func (m Model) notesAtCursor() []noteTarget {
 	v := m.diffLayer()
-	if v == nil || len(v.notes) == 0 {
-		return noteTarget{}, false
+	if v == nil || len(v.notes) == 0 || v.curLine < 0 || v.curLine >= len(v.lines) {
+		return nil
 	}
-	best, bestLi, found := noteTarget{}, 0, false
-	first, firstLi, hasFirst := noteTarget{}, 0, false
+	prev := -1
+	for li := v.curLine - 1; li >= 0; li-- {
+		if v.lines[li].Fold == 0 {
+			prev = li
+			break
+		}
+	}
+	var at, above []noteTarget
 	for _, r := range v.notes {
 		t, ok := v.noteTargetIn(r)
 		if !ok {
 			continue
 		}
 		li, _ := v.noteAnchorLine(r)
-		if li < 0 {
-			continue // the anchor is not in this view at all
-		}
-		if !hasFirst || li < firstLi {
-			first, firstLi, hasFirst = t, li, true
-		}
-		if li <= v.curLine && (!found || li > bestLi) {
-			best, bestLi, found = t, li, true
+		switch {
+		case li < 0:
+			// the anchor is not in this view at all
+		case li == v.curLine:
+			at = append(at, t)
+		case li == prev:
+			above = append(above, t)
 		}
 	}
-	if found {
-		return best, true
+	if len(at) > 0 {
+		return at
 	}
-	return first, hasFirst
+	return above
+}
+
+// noteNearCursor is the single note in reach (the first of notesAtCursor),
+// for callers that only need to know whether the note rows are offered.
+func (m Model) noteNearCursor() (noteTarget, bool) {
+	ts := m.notesAtCursor()
+	if len(ts) == 0 {
+		return noteTarget{}, false
+	}
+	return ts[0], true
+}
+
+// noteChoiceOptions labels the threads in reach for the chooser modal —
+// "1: summary" … plus the trailing Cancel that esc maps to. The labels are the
+// notes' own text, so they render as-is (untranslated by design).
+func noteChoiceOptions(ts []noteTarget) []string {
+	opts := make([]string, 0, len(ts)+1)
+	for i, t := range ts {
+		opts = append(opts, fmt.Sprintf("%d: %s", i+1, truncate(sanitizeLine(t.note.Summary), 48)))
+	}
+	return append(opts, "Cancel")
+}
+
+// withNoteTarget runs act on the note in reach. One thread: straight away.
+// Several threads on the same line (two notes on one line is common once an
+// agent has been through): a chooser modal lists them by summary and act runs
+// on the pick; esc / Cancel does nothing.
+func (m Model) withNoteTarget(act func(Model, noteTarget) (tea.Model, tea.Cmd)) (tea.Model, tea.Cmd) {
+	ts := m.notesAtCursor()
+	switch len(ts) {
+	case 0:
+		return m, nil
+	case 1:
+		return act(m, ts[0])
+	}
+	opts := noteChoiceOptions(ts)
+	m.modal = &decisionState{
+		req: engine.DecisionRequest{
+			ID:      "note-choose",
+			Prompt:  i18n.T("Which note?"),
+			Options: noteChoiceOptions(ts), // dynamic by nature: the notes' own summaries
+		},
+		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+			for i := range ts {
+				if opt == opts[i] {
+					return act(m, ts[i])
+				}
+			}
+			return m, nil
+		},
+	}
+	return m, nil
 }
 
 // nextNoteLine is the next (dir>0) / previous (dir<0) logical line that carries
@@ -292,36 +354,42 @@ func (m Model) noteDeleteRow() (actionRow, bool) {
 	if _, ok := m.topLayer().(*diffView); !ok {
 		return actionRow{}, false
 	}
-	t, ok := m.noteNearCursor()
-	if !ok {
+	if _, ok := m.noteNearCursor(); !ok {
 		return actionRow{}, false
 	}
-	id, replies := t.note.ID, t.replies
 	return actionRow{
 		id:    "note-delete",
 		label: i18n.T("Delete note"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			prompt := i18n.T("Delete this note?")
-			if replies > 0 {
-				prompt = i18n.T("Delete this note and its %d replies?", replies)
-			}
-			m.modal = &decisionState{
-				req: engine.DecisionRequest{
-					ID:      "note-remove",
-					Prompt:  prompt,
-					Options: []string{"Delete", "Cancel"},
-				},
-				sel: 1, // default highlight = Cancel
-				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
-					if opt == "Delete" {
-						return m, m.noteRemoveCmd(id)
-					}
-					return m, nil
-				},
+			return m.withNoteTarget(func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
+				return m.confirmNoteDelete(t)
+			})
+		},
+	}, true
+}
+
+// confirmNoteDelete raises the yes/no modal for one targeted note.
+func (m Model) confirmNoteDelete(t noteTarget) (tea.Model, tea.Cmd) {
+	id, replies := t.note.ID, t.replies
+	prompt := i18n.T("Delete this note?")
+	if replies > 0 {
+		prompt = i18n.T("Delete this note and its %d replies?", replies)
+	}
+	m.modal = &decisionState{
+		req: engine.DecisionRequest{
+			ID:      "note-remove",
+			Prompt:  prompt,
+			Options: []string{"Delete", "Cancel"},
+		},
+		sel: 1, // default highlight = Cancel
+		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+			if opt == "Delete" {
+				return m, m.noteRemoveCmd(id)
 			}
 			return m, nil
 		},
-	}, true
+	}
+	return m, nil
 }
 
 // noteRemoveCmd deletes a note (a root takes its replies) off the UI thread.

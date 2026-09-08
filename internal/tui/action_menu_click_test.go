@@ -15,6 +15,7 @@ func TestActionMenuClickSelectsTheRowUnderThePointer(t *testing.T) {
 	t.Parallel()
 	m := notedModel(t)
 	m.width, m.height = 100, 40
+	m.diffLayer().setCursorLine(24, m.diffBodyRows()) // next to n2, so the note rows are offered
 	m = m.openActionMenu()
 	if m.actionMenu == nil {
 		t.Fatal("no action menu")
@@ -54,6 +55,7 @@ func TestActionMenuClickSelectsTheRowUnderThePointer(t *testing.T) {
 	// never runs anything, even when doubled.
 	m2 := notedModel(t)
 	m2.width, m2.height = 100, 40
+	m2.diffLayer().setCursorLine(24, m2.diffBodyRows())
 	m2 = m2.openActionMenu()
 	m2.actionMenu.sel = del
 	hdr := tea.MouseMsg{X: 20, Y: top + 2, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}

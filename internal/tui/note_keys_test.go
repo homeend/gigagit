@@ -105,20 +105,102 @@ func TestCOpensTheNotePopupAnchoredAtTheCursor(t *testing.T) {
 	}
 }
 
-func TestERTargetTheNoteNearestAboveTheCursor(t *testing.T) {
+// E/R act only on a note NEXT to the cursor: anchored on the cursor line
+// (rows just below it) or, failing that, on the real line just above (rows
+// just above it). Further away the keys are inert.
+func TestERTargetOnlyAdjacentNotes(t *testing.T) {
 	t.Parallel()
 	m := notedModel(t)
-	m.diffLayer().setCursorLine(30, m.diffBodyRows()) // below both notes
+	body := m.diffBodyRows()
+	m.diffLayer().setCursorLine(24, body) // n2 is anchored on line 25 = logical 24
 	m, _ = m.diffLayer().update(m, synthKey("E"))
 	p, ok := m.topLayer().(*notePopup)
 	if !ok || p.mode != noteEdit || p.targetID != "n2" {
-		t.Fatalf("E must edit the nearest note above the cursor, got %#v (ok %v)", p, ok)
+		t.Fatalf("E on the anchored line must edit n2, got %#v (ok %v)", p, ok)
 	}
 	m = m.popLayer()
+	m.diffLayer().setCursorLine(25, body) // the line just below: n2's rows sit right above
 	m, _ = m.diffLayer().update(m, synthKey("R"))
 	p, _ = m.topLayer().(*notePopup)
 	if p == nil || p.mode != noteReply || p.targetID != "n2" {
-		t.Fatalf("R must reply to the same note, got %#v", p)
+		t.Fatalf("R one line below the note must reply to n2, got %#v", p)
+	}
+	m = m.popLayer()
+	m.diffLayer().setCursorLine(30, body) // out of reach
+	m, _ = m.diffLayer().update(m, synthKey("E"))
+	if _, ok := m.topLayer().(*notePopup); ok || m.modal != nil {
+		t.Fatal("E away from every note must be inert")
+	}
+	if rows := m.noteMenuRows(); rows != nil {
+		t.Fatalf("the . menu must offer no note rows away from every note, got %d", len(rows))
+	}
+}
+
+// Two threads on one line: E/R/Delete raise a chooser listing them by
+// summary; the pick runs the action, Cancel does nothing.
+func TestSeveralNotesOnOneLineRaiseAChooser(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	v := m.diffLayer()
+	v.notes = append(v.notes, rootNote("n3", 25, "third", "", model.NoteSourceUser, model.NoteActive))
+	v.relayout(0)
+	body := m.diffBodyRows()
+	v.setCursorLine(24, body)
+	if ts := m.notesAtCursor(); len(ts) != 2 || ts[0].note.ID != "n2" || ts[1].note.ID != "n3" {
+		t.Fatalf("notesAtCursor = %+v, want n2 then n3", ts)
+	}
+	m, _ = m.diffLayer().update(m, synthKey("E"))
+	if _, ok := m.topLayer().(*notePopup); ok || m.modal == nil || m.modal.req.ID != "note-choose" {
+		t.Fatalf("E with two notes in reach must raise the chooser, modal=%v", m.modal)
+	}
+	opts := m.modal.req.Options
+	if len(opts) != 3 || !strings.HasPrefix(opts[1], "2: third") || opts[2] != "Cancel" {
+		t.Fatalf("chooser options = %q", opts)
+	}
+	nm, _ := m.modal.onResolve(m, opts[1])
+	m = nm.(Model)
+	p, ok := m.topLayer().(*notePopup)
+	if !ok || p.targetID != "n3" {
+		t.Fatalf("picking 2 must edit n3, got %#v", p)
+	}
+	m = m.popLayer()
+	m.modal = nil
+	nm, _ = m.withNoteTarget(func(m Model, tg noteTarget) (tea.Model, tea.Cmd) { t.Fatal("Cancel must not act"); return m, nil })
+	m = nm.(Model)
+	nm, _ = m.modal.onResolve(m, "Cancel")
+	if _, ok := nm.(Model).topLayer().(*notePopup); ok {
+		t.Fatal("Cancel opened a popup")
+	}
+}
+
+// A note added on the bottom visible line must come into view: the loaded
+// notes relayout scrolls just enough to show the new rows under the cursor.
+func TestLoadedNotesUnderTheCursorAreRevealed(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(40), nil)
+	v := m.diffLayer()
+	v.title = "a/b.go"
+	v.noteAddr = model.FileAddress{State: model.StateUnstaged, Worktree: "/wt", Path: "a/b.go"}
+	m.diffTag = statusDiffTag("a/b.go", false)
+	body := m.diffBodyRows()
+	v.setCursorLine(body-1, body) // the last visible line, offset 0
+	if v.offset != 0 {
+		t.Fatalf("precondition: offset %d", v.offset)
+	}
+	nm, _ := m.Update(notesLoadedMsg{tag: m.diffTag, notes: []domain.ResolvedNote{
+		rootNote("n9", body, "on the last line", "why", model.NoteSourceUser, model.NoteActive),
+	}})
+	m = nm.(Model)
+	v = m.diffLayer()
+	start, end := v.lineStart[v.curLine], v.lineStart[v.curLine+1]
+	if end-start != 3 {
+		t.Fatalf("expected 3 display rows for the line (line + summary + rationale), got %d", end-start)
+	}
+	if end > v.offset+body {
+		t.Fatalf("note rows end at %d but the viewport shows [%d,%d)", end, v.offset, v.offset+body)
+	}
+	if start < v.offset {
+		t.Fatal("the cursor row scrolled out of view")
 	}
 }
 
@@ -157,9 +239,13 @@ func TestSrcNotesRegistered(t *testing.T) {
 func TestNoteDeleteRowOnlyWithANoteInReach(t *testing.T) {
 	t.Parallel()
 	m := notedModel(t)
-	m.diffLayer().setCursorLine(30, m.diffBodyRows())
+	m.diffLayer().setCursorLine(24, m.diffBodyRows())
 	if _, ok := m.noteDeleteRow(); !ok {
-		t.Fatal("the . menu must offer Delete note when a note sits above the cursor")
+		t.Fatal("the . menu must offer Delete note when a note sits next to the cursor")
+	}
+	m.diffLayer().setCursorLine(30, m.diffBodyRows())
+	if _, ok := m.noteDeleteRow(); ok {
+		t.Fatal("no Delete note row away from every note")
 	}
 	m2 := openedDiffModel(12, cursorRows(40), nil)
 	if _, ok := m2.noteDeleteRow(); ok {
@@ -237,7 +323,7 @@ func oldSideNote(id string, line int, summary string) domain.ResolvedNote {
 // TestNoteTargetIsTheNearestLineNotTheLastListed: with notes on BOTH sides the
 // list order (new-side first, then by line) puts the FARTHER note last, so
 // picking "the last qualifying note" targets the wrong one.
-func TestNoteTargetIsTheNearestLineNotTheLastListed(t *testing.T) {
+func TestNoteTargetFollowsAdjacencyNotListOrder(t *testing.T) {
 	t.Parallel()
 	m := notedModel(t)
 	v := m.diffLayer()
@@ -246,17 +332,22 @@ func TestNoteTargetIsTheNearestLineNotTheLastListed(t *testing.T) {
 		oldSideNote("old3", 3, "far"),
 	}
 	v.relayout(0)
-	v.setCursorLine(30, m.diffBodyRows())
-	tg, ok := m.noteNearCursor()
-	if !ok || tg.note.ID != "new20" {
-		t.Fatalf("target = %q (ok %v), want new20 — the greatest anchor line at/above the cursor", tg.note.ID, ok)
+	body := m.diffBodyRows()
+	v.setCursorLine(19, body) // new20's anchored line
+	if tg, ok := m.noteNearCursor(); !ok || tg.note.ID != "new20" {
+		t.Fatalf("target = %q (ok %v), want new20", tg.note.ID, ok)
 	}
-	// Above every note the fallback takes the SMALLEST anchor line, not the
-	// first listed one.
-	v.setCursorLine(0, m.diffBodyRows())
-	tg, ok = m.noteNearCursor()
-	if !ok || tg.note.ID != "old3" {
-		t.Fatalf("fallback target = %q (ok %v), want old3 (the lowest line)", tg.note.ID, ok)
+	v.setCursorLine(20, body) // one below: still adjacent (rows right above)
+	if tg, ok := m.noteNearCursor(); !ok || tg.note.ID != "new20" {
+		t.Fatalf("target one line below = %q (ok %v), want new20", tg.note.ID, ok)
+	}
+	v.setCursorLine(2, body) // old3's line (old side, list order last)
+	if tg, ok := m.noteNearCursor(); !ok || tg.note.ID != "old3" {
+		t.Fatalf("target on the old-side line = %q (ok %v), want old3", tg.note.ID, ok)
+	}
+	v.setCursorLine(30, body)
+	if _, ok := m.noteNearCursor(); ok {
+		t.Fatal("no note is adjacent to line 30")
 	}
 }
 
@@ -272,7 +363,7 @@ func TestAgentLayerTargetingMatchesRendering(t *testing.T) {
 	v.notes = []domain.ResolvedNote{root}
 	v.hideAgent = true
 	v.relayout(0)
-	v.setCursorLine(30, m.diffBodyRows())
+	v.setCursorLine(4, m.diffBodyRows()) // the root's anchored line
 
 	// The row is on screen…
 	shown := false
@@ -392,7 +483,7 @@ func TestDiffHintFitsItsBudget(t *testing.T) {
 func TestNoteMenuRowsOfferEditReplyDelete(t *testing.T) {
 	t.Parallel()
 	m := notedModel(t)
-	m.diffLayer().setCursorLine(30, m.diffBodyRows())
+	m.diffLayer().setCursorLine(24, m.diffBodyRows()) // next to n2
 	ids := map[string]actionRow{}
 	for _, r := range m.noteMenuRows() {
 		ids[r.id] = r
@@ -433,7 +524,7 @@ func TestNoteMenuRowsOfferEditReplyDelete(t *testing.T) {
 	v.notes = []domain.ResolvedNote{reply(rootNote("r", 5, "root", "", model.NoteSourceUser, model.NoteActive),
 		"c1", "ada", "reply", model.NoteSourceUser)}
 	v.relayout(0)
-	v.setCursorLine(30, m2.diffBodyRows())
+	v.setCursorLine(4, m2.diffBodyRows()) // the root's anchored line
 	row, _ := m2.noteDeleteRow()
 	nm, _ = row.run(m2)
 	if p := nm.(Model).modal.req.Prompt; !strings.Contains(p, "1") {

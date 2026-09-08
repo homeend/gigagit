@@ -400,6 +400,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		dv.notes = msg.notes
 		dv.relayout(dv.width)
 		dv.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
+		if wasVisible {
+			dv.revealCursorNotes(body)
+		}
 		return m, nil
 	case noteMutatedMsg:
 		if msg.err != nil {

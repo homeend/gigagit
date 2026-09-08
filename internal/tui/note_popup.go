@@ -57,21 +57,30 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 		p.side, p.line, p.hash = side, line, hash
 		p.summary, p.rationale = newTextField(""), newTextField("")
 	case noteEdit, noteReply:
-		t, rok := m.noteNearCursor()
-		if !rok {
-			return m, nil
-		}
-		p.side, p.line, p.hash = t.side, t.line, t.hash
-		if mode == noteEdit {
-			// Edit acts on the targeted ROW's own note (which may be a reply).
-			p.targetID = t.note.ID
-			p.summary, p.rationale = newTextField(t.note.Summary), newTextField(t.note.Rationale)
-		} else {
-			// Reply threads onto the ROOT — NoteReply flattens to it anyway,
-			// and inherits the root's address/side/range/fingerprint.
-			p.targetID = t.rootID
-			p.summary, p.rationale = newTextField(""), newTextField("")
-		}
+		return m.withNoteTarget(func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
+			return m.openNotePopupFor(mode, t)
+		})
+	}
+	return m.pushLayer(p), nil
+}
+
+// openNotePopupFor opens the edit/reply form on one targeted note.
+func (m Model) openNotePopupFor(mode noteFormMode, t noteTarget) (tea.Model, tea.Cmd) {
+	addr, ok := m.diffNoteAddress()
+	if !ok {
+		return m, nil
+	}
+	p := &notePopup{mode: mode, addr: addr, author: m.identity.EffectiveName}
+	p.side, p.line, p.hash = t.side, t.line, t.hash
+	if mode == noteEdit {
+		// Edit acts on the targeted ROW's own note (which may be a reply).
+		p.targetID = t.note.ID
+		p.summary, p.rationale = newTextField(t.note.Summary), newTextField(t.note.Rationale)
+	} else {
+		// Reply threads onto the ROOT — NoteReply flattens to it anyway,
+		// and inherits the root's address/side/range/fingerprint.
+		p.targetID = t.rootID
+		p.summary, p.rationale = newTextField(""), newTextField("")
 	}
 	return m.pushLayer(p), nil
 }
