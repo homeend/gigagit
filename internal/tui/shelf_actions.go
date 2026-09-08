@@ -117,6 +117,26 @@ func (m Model) shelfEntryByID(id string) (model.ShelfEntry, bool) {
 	return model.ShelfEntry{}, false
 }
 
+// newShelfCompareTwoView is the shelf ↔ shelf diff view, built the same way by
+// the opener (loading) and its loader. compare is set even when both entries
+// share an origin path: NEITHER side is the working tree, so there is no file
+// for `e` to open — without the flag diffEditRow's gate passes and, with
+// rev == "", the editor is pointed at <worktree>/<title>, which for a title
+// like "a.txt ↔ b.txt" creates a stray file.
+func (m Model) newShelfCompareTwoView(title, ctx string, loading bool) *diffView {
+	v := &diffView{
+		title:   title,
+		context: ctx,
+		rev:     "",
+		compare: true,
+		loading: loading,
+		partial: m.diffPartial,
+		long:    m.diffLong,
+	}
+	v.width, _ = m.overlayDims()
+	return v
+}
+
 // openShelfCompareTwoEntries diffs entries a (old) and b (new).
 func (m Model) openShelfCompareTwoEntries(a, b model.ShelfEntry) (Model, tea.Cmd) {
 	title := a.Origin.Path
@@ -124,8 +144,7 @@ func (m Model) openShelfCompareTwoEntries(a, b model.ShelfEntry) (Model, tea.Cmd
 		title = a.Origin.Path + " ↔ " + b.Origin.Path
 	}
 	ctx := i18n.T("shelf #%s", shortShelf(a)) + " → " + i18n.T("shelf #%s", shortShelf(b))
-	width, _ := m.overlayDims()
-	v := &diffView{title: title, context: ctx, rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, width: width}
+	v := m.newShelfCompareTwoView(title, ctx, true)
 	return m.openPickerDiff(v, "shelf2:"+a.ID+":"+b.ID, m.loadShelfCompareTwoCmd(a, b, title, ctx))
 }
 
@@ -134,8 +153,7 @@ func (m Model) loadShelfCompareTwoCmd(a, b model.ShelfEntry, title, ctx string) 
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
 	tag := "shelf2:" + a.ID + ":" + b.ID
-	v := &diffView{title: title, context: ctx, rev: "", partial: m.diffPartial, long: m.diffLong}
-	v.width, _ = m.overlayDims()
+	v := m.newShelfCompareTwoView(title, ctx, false)
 	aID, bID := a.ID, b.ID
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ShelfBlob(ctx, aID) }

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -354,6 +355,16 @@ func TestDiffLeftClickPlacesCursor(t *testing.T) {
 	if v := u.(Model).diffLayer(); v.curLine != 22 {
 		t.Fatalf("click on the header moved the cursor to %d", v.curLine)
 	}
+	// With the . menu open over the diff the click belongs to the menu — it
+	// must not move the cursor hidden behind it.
+	mm := u.(Model).openActionMenu()
+	if mm.actionMenu == nil {
+		t.Fatal("setup: . must open the action menu over the diff")
+	}
+	u2, _ := mm.Update(mouseMsg(10, 3, tea.MouseButtonLeft))
+	if v := u2.(Model).diffLayer(); v.curLine != 22 {
+		t.Fatalf("click while the . menu is open moved the cursor to %d, want 22", v.curLine)
+	}
 }
 
 // NOTE: no t.Parallel() here or in TestCursorMarkerSkipsFoldRow /
@@ -565,5 +576,127 @@ func TestDiffHintAdvertisesCursorKeys(t *testing.T) {
 		if !strings.Contains(h, k) {
 			t.Errorf("hint %q lacks %s", h, k)
 		}
+	}
+}
+
+// TestDiffPartialToggleKeepsFreeScrolledViewport: arrows move the viewport
+// only, so after a free scroll the cursor is left behind off-screen while cur
+// tracks the new offset. f must re-anchor the SAME change (what the user is
+// looking at) and must not drag the viewport back to the stale cursor line —
+// the cursor is re-found by its source numbers, but the view stays put.
+func TestDiffPartialToggleKeepsFreeScrolledViewport(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(40, 20, 30), []int{20, 30})
+	body := m.diffBodyRows() // 10
+	for i := 0; i < 13; i++ {
+		u, _ := m.Update(keyMsg("down"))
+		m = u.(Model)
+	}
+	if v := m.diffLayer(); v.offset != 30 || v.curLine != 20 || v.cur != 1 {
+		t.Fatalf("setup, 13×down: offset=%d curLine=%d cur=%d, want 30/20/1", v.offset, v.curLine, v.cur)
+	}
+	// Reference: where focusBlock(1) alone lands the viewport in partial mode,
+	// derived by the same code with no cursor logic in the way.
+	ref := diffViewWith(cursorRows(40, 20, 30), []int{20, 30})
+	ref.partial = true
+	ref.rebuild()
+	ref.focusBlock(1, body)
+
+	u, _ := m.Update(keyMsg("f"))
+	v := u.(Model).diffLayer()
+	if v.offset != ref.offset {
+		t.Fatalf("f after a free scroll: offset=%d, want %d (where focusBlock(1) puts it)", v.offset, ref.offset)
+	}
+	if v.cur != 1 {
+		t.Fatalf("f must keep the focused change: cur=%d, want 1", v.cur)
+	}
+	if r, ok := v.cursorRow(); !ok || r.RightNo != 21 {
+		t.Fatalf("f must re-anchor the cursor row: %+v %v, want RightNo 21", r, ok)
+	}
+}
+
+// Sibling: when the cursor WAS on screen before the toggle it must still be on
+// screen after (the minimal scroll still runs in that case).
+func TestDiffPartialToggleKeepsAVisibleCursorVisible(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(40, 20, 30), []int{20, 30})
+	body := m.diffBodyRows()
+	v0 := m.diffLayer()
+	if s, _ := v0.cursorDispRange(); s < v0.offset || s >= v0.offset+body {
+		t.Fatalf("setup: cursor row %d not visible in [%d,%d)", s, v0.offset, v0.offset+body)
+	}
+	u, _ := m.Update(keyMsg("f"))
+	v := u.(Model).diffLayer()
+	s, _ := v.cursorDispRange()
+	if s < v.offset || s >= v.offset+body {
+		t.Fatalf("f with a visible cursor: row %d fell out of [%d,%d)", s, v.offset, v.offset+body)
+	}
+	if r, ok := v.cursorRow(); !ok || r.RightNo != 21 {
+		t.Fatalf("cursorRow after f = %+v %v, want RightNo 21", r, ok)
+	}
+}
+
+// TestDiffPgDownMovesOneBodyOfDisplayRowsWhenWrapped: in wrap mode a logical
+// line owns several display rows, so a page key that stepped the cursor by
+// `body` LINES would drag the viewport a further page (ensureCursorVisible
+// follows the cursor) — a pgdown scrolling ~two screens. The page keys move
+// the cursor by one body of DISPLAY rows, matching the scroll they pair with.
+func TestDiffPgDownMovesOneBodyOfDisplayRowsWhenWrapped(t *testing.T) {
+	t.Parallel()
+	rows := cursorRows(30)
+	long := strings.Repeat("ab ", 8) // 24 cols: two display rows in a 16-col pane
+	for i := range rows {
+		rows[i].Left, rows[i].Right = long, long
+	}
+	m := openedDiffModel(12, rows, nil)
+	body := m.diffBodyRows() // 10
+	v0 := m.diffLayer()
+	v0.long = longWrap
+	v0.relayout(40)
+	if len(v0.disp) != 2*len(v0.lines) {
+		t.Fatalf("fixture: %d display rows for %d lines, want each line to wrap to exactly 2",
+			len(v0.disp), len(v0.lines))
+	}
+	if v0.offset != 0 || v0.curLine != 0 {
+		t.Fatalf("setup: offset=%d curLine=%d, want 0/0", v0.offset, v0.curLine)
+	}
+
+	u, _ := m.Update(keyMsg("pgdown"))
+	v := u.(Model).diffLayer()
+	if v.offset != body {
+		t.Fatalf("pgdown in wrap mode: offset=%d, want %d (exactly one body)", v.offset, body)
+	}
+	if start, _ := v.cursorDispRange(); start != body {
+		t.Fatalf("pgdown in wrap mode: cursor display row=%d, want %d (exactly one body)", start, body)
+	}
+}
+
+// TestShelfCompareTwoEntriesIsACompareView: a shelf ↔ shelf diff has NO
+// working-tree side, and its title is "a.txt ↔ b.txt" — if the view were not
+// marked compare, `e` would pass diffEditRow's gate and, with rev == "", ask
+// the editor to open <worktree>/a.txt ↔ b.txt, creating a stray file.
+func TestShelfCompareTwoEntriesIsACompareView(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.height = 12
+	a := model.ShelfEntry{ID: "sh-a", SHA: "aaaaaaaabbbb", Origin: model.FileAddress{Path: "a.txt"}}
+	b := model.ShelfEntry{ID: "sh-b", SHA: "ccccccccdddd", Origin: model.FileAddress{Path: "b.txt"}}
+	nm, _ := m.openShelfCompareTwoEntries(a, b)
+	v := nm.diffLayer()
+	if v == nil {
+		t.Fatal("openShelfCompareTwoEntries must push a diff layer")
+	}
+	if !v.compare {
+		t.Fatalf("shelf ↔ shelf view is two-sided: compare=%v, want true (title %q)", v.compare, v.title)
+	}
+	v.loading = false // the gate short-circuits on loading; isolate the compare check
+	if _, ok := nm.diffEditRow(); ok {
+		t.Fatal("a shelf ↔ shelf compare must not offer the edit row")
+	}
+	// The loader builds the same shape; diffMsg ORs the opener's flag back in,
+	// but the literal must be right on its own.
+	lv := m.newShelfCompareTwoView("a.txt ↔ b.txt", "ctx", false)
+	if !lv.compare || lv.rev != "" {
+		t.Fatalf("loader-side view = compare:%v rev:%q, want true/\"\"", lv.compare, lv.rev)
 	}
 }

@@ -676,10 +676,10 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.moveCursor(1, body)
 	case "pgup":
 		v.scrollBy(-body, body)
-		v.moveCursor(-body, body)
+		v.pageCursor(-body, body)
 	case "pgdown":
 		v.scrollBy(body, body)
-		v.moveCursor(body, body)
+		v.pageCursor(body, body)
 	case "z":
 		v.alignCursor(zc, body)
 		v.zCycle = (zc + 1) % 3
@@ -765,6 +765,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "f":
 		ord := v.currentBlockOrdinal()
 		cr, hadRow := v.cursorRow()
+		wasVisible := v.cursorVisible(body)
 		v.partial = !v.partial
 		v.rebuild()
 		m.diffPartial = v.partial
@@ -773,13 +774,11 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			v.cur, v.offset = 0, 0
 		}
-		if hadRow {
-			v.reanchorCursor(cr.LeftNo, cr.RightNo)
-			v.ensureCursorVisible(body)
-		}
+		v.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
 	case "ctrl+w":
 		ord := v.currentBlockOrdinal()
 		cr, hadRow := v.cursorRow()
+		wasVisible := v.cursorVisible(body)
 		v.long = (v.long + 1) % 3
 		v.hOffset = 0
 		v.relayout(v.width)
@@ -789,10 +788,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			v.cur, v.offset = 0, 0
 		}
-		if hadRow {
-			v.reanchorCursor(cr.LeftNo, cr.RightNo)
-			v.ensureCursorVisible(body)
-		}
+		v.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
 	case "left":
 		if v.long == longScroll {
 			v.hOffset -= m.hscrollStep()

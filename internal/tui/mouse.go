@@ -116,8 +116,10 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 				dv.scrollBy(wheel, m.diffBodyRows())
 			}
 			// Left click on a body row places the cursor there (y 0 is the
-			// header; the body starts at y 1). Fold rows are ignored.
-			if msg.Button == tea.MouseButtonLeft && msg.Y >= 1 && msg.Y <= m.diffBodyRows() {
+			// header; the body starts at y 1). Fold rows are ignored. Not while
+			// the . menu is open over the diff: that click belongs to the menu,
+			// and the cursor it would move is hidden behind it.
+			if msg.Button == tea.MouseButtonLeft && m.actionMenu == nil && msg.Y >= 1 && msg.Y <= m.diffBodyRows() {
 				dv.setCursorDisp(dv.offset+msg.Y-1, m.diffBodyRows())
 			}
 		}

@@ -123,6 +123,43 @@ func (v *diffView) setCursorDisp(row, body int) {
 	v.ensureCursorVisible(body)
 }
 
+// pageCursor is the page keys' cursor move: one body of DISPLAY rows, not of
+// logical lines. In wrap mode a line owns several display rows, so stepping
+// `body` LINES would run the cursor (and, through ensureCursorVisible, the
+// viewport) far past the one page scrollBy just made. The target display row
+// is clamped into the stream and mapped to its owning line; a fold row steps
+// to the nearest real row in the direction of travel, falling back to the
+// other direction, so the key is never a no-op.
+func (v *diffView) pageCursor(delta, body int) {
+	if len(v.disp) == 0 || v.curLine < 0 || v.curLine >= len(v.lineStart) {
+		return
+	}
+	row := v.lineStart[v.curLine] + delta
+	if row < 0 {
+		row = 0
+	}
+	if row > len(v.disp)-1 {
+		row = len(v.disp) - 1
+	}
+	step := 1
+	if delta < 0 {
+		step = -1
+	}
+	i := row
+	for i >= 0 && i < len(v.disp) && v.disp[i].fold > 0 {
+		i += step
+	}
+	if i < 0 || i >= len(v.disp) {
+		for i = row; i >= 0 && i < len(v.disp) && v.disp[i].fold > 0; i -= step {
+		}
+	}
+	if i < 0 || i >= len(v.disp) {
+		return // nothing but folds
+	}
+	v.curLine = v.disp[i].line
+	v.ensureCursorVisible(body)
+}
+
 // ensureCursorVisible scrolls the least amount that brings the cursor line's
 // first display row inside [offset, offset+body).
 func (v *diffView) ensureCursorVisible(body int) {
@@ -168,6 +205,35 @@ func (v *diffView) reanchorCursor(leftNo, rightNo int) {
 		v.curLine = j
 	} else {
 		v.curLine = 0
+	}
+}
+
+// cursorVisible reports whether the cursor line's first display row is inside
+// the body window. Read BEFORE a rebuild, it says whether the user could see
+// the cursor at all.
+func (v *diffView) cursorVisible(body int) bool {
+	if len(v.disp) == 0 {
+		return false
+	}
+	start, _ := v.cursorDispRange()
+	return start >= v.offset && start < v.offset+body
+}
+
+// reanchorAfterRebuild restores the cursor after f / ctrl+w rebuilt the
+// streams: the row is re-found by its source numbers (focusBlock has meanwhile
+// re-seeded curLine to the focused block's first row, which is not where the
+// user left the cursor). The viewport is only pulled back to the cursor when
+// the cursor was VISIBLE before the toggle — otherwise the user was looking
+// somewhere else entirely (arrows and the wheel scroll the viewport without
+// moving the cursor), and focusBlock has already put the view on the change
+// they were reading; dragging it back to a stale off-screen cursor loses it.
+func (v *diffView) reanchorAfterRebuild(cr textdiff.Row, hadRow, wasVisible bool, body int) {
+	if !hadRow {
+		return // no row to re-find: focusBlock's seeding stands
+	}
+	v.reanchorCursor(cr.LeftNo, cr.RightNo)
+	if wasVisible {
+		v.ensureCursorVisible(body)
 	}
 }
 
