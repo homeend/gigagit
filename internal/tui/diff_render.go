@@ -21,6 +21,9 @@ var (
 
 	diffCursorRow = lipgloss.NewStyle().Background(lipgloss.Color("237")) // cursor line: subtle grey under both panes
 	diffCursorNo  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
+
+	diffNote      = lipgloss.NewStyle().Foreground(lipgloss.Color("110")) // review note rows
+	diffNoteStale = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // stale: the anchored text is gone
 )
 
 // cellMark is the cursor marker for one rendered cell: when row is set, base
@@ -299,8 +302,8 @@ func gutterWidth(full []textdiff.Row) int {
 	return g
 }
 
-// diffPaneLines renders the visible window of display rows. A fold dRow is a
-// full-width separator. Otherwise: wrap off draws the row via diffCell (raw
+// diffPaneLines renders the visible window of display rows. A note dRow is a
+// full-width review-note row; a fold dRow is a full-width separator. Otherwise: wrap off draws the row via diffCell (raw
 // text, truncated — byte-identical to before); wrap on draws each side's
 // pre-wrapped segment via segCell. Display rows in [curStart, curEnd) carry
 // the cursor marker per style ("row" | "number" | "off"); curStart == curEnd
@@ -315,8 +318,12 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 	out := make([]string, 0, body)
 	for i := v.offset; i < v.offset+body && i < len(v.disp); i++ {
 		dr := v.disp[i]
+		if dr.note != nil {
+			out = append(out, noteRowText(*dr.note, w))
+			continue
+		}
 		if dr.fold > 0 {
-			out = append(out, foldSeparator(dr.fold, w))
+			out = append(out, foldSeparator(dr.fold, w, dr.noteMark))
 			continue
 		}
 		mk := noMark
@@ -503,11 +510,15 @@ func maxCellWidth(lines []textdiff.Line) int {
 }
 
 // foldSeparator renders a fold marker as a centered label on a dim rule
-// spanning the full width.
-func foldSeparator(n, w int) string {
+// spanning the full width. marked prefixes ◆: a review note anchors on a line
+// this fold hides (f, or }/{, brings it into view).
+func foldSeparator(n, w int, marked bool) string {
 	label := i18n.T(" ⤬ %d unchanged lines ", n)
 	if n == 1 {
 		label = i18n.T(" ⤬ 1 unchanged line ")
+	}
+	if marked {
+		label = "◆" + label
 	}
 	lw := lipgloss.Width(label)
 	if lw >= w {
@@ -516,6 +527,19 @@ func foldSeparator(n, w int) string {
 	left := (w - lw) / 2
 	right := w - lw - left
 	return diffFold.Render(strings.Repeat("─", left) + label + strings.Repeat("─", right))
+}
+
+// noteRowText renders one note display row across the FULL width: two cells of
+// indent per depth level, then the assembled text, truncated to w. A stale row
+// is dimmed — the note still says something, it just no longer sits on the
+// text it was written about.
+func noteRowText(nl noteLine, w int) string {
+	txt := strings.Repeat("  ", nl.depth) + nl.text
+	style := diffNote
+	if nl.stale {
+		style = diffNoteStale
+	}
+	return style.Render(truncate(txt, w))
 }
 
 // diffCell renders one pane cell: gutter + text, or the dim gap filler. With

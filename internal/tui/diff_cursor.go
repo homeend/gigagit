@@ -48,6 +48,14 @@ func (v *diffView) cursorDispRange() (start, end int) {
 	if v.curLine+1 < len(v.lineStart) {
 		end = v.lineStart[v.curLine+1]
 	}
+	// The cursor marks the CONTENT rows of its line only: the note rows that
+	// follow belong to the line but are not part of it.
+	for i := start; i < end && i < len(v.disp); i++ {
+		if v.disp[i].note != nil {
+			end = i
+			break
+		}
+	}
 	return start, end
 }
 

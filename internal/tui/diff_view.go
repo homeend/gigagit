@@ -68,6 +68,14 @@ type diffView struct {
 	wrapArm    wrapDir     // boundary press primed a wrap-around (see wrapDir); cleared on any other key
 	fileArm    fileArmDir  // top/bottom press primed a step to the prev/next file; cleared on any other key
 	zCycle     cursorAlign // the alignment the NEXT z applies (center → top → bottom); reset by any other key
+	// notes are the resolved review notes for this view's address, loaded
+	// asynchronously (notesLoadedMsg) and re-loaded after every mutation and
+	// srcNotes refresh. relayout turns them into synthetic display rows;
+	// nothing here ever touches the shared cached textdiff rows.
+	notes []domain.ResolvedNote
+	// hideAgent mirrors Model.notesAgentOff onto the view, because relayout
+	// (called by rebuild, ctrl+w and every resize) has no Model to ask.
+	hideAgent bool
 }
 
 // wrapDir records that a change-navigation key hit a boundary and primed a
@@ -104,6 +112,9 @@ type dRow struct {
 	left  cellSeg      // wrap-on: this display row's left slice (zero = blank)
 	right cellSeg      // wrap-on: right slice
 	first bool         // first display row of the source line (gutter shows here)
+
+	note     *noteLine // non-nil: a synthetic note row belonging to `line`
+	noteMark bool      // fold row: a note hides under this fold (◆ on the rule)
 }
 
 // rebuild recomputes the logical (mode) stream, then the display stream.
@@ -118,10 +129,12 @@ func (v *diffView) rebuild() {
 }
 
 // relayout builds the display-row stream (disp/dispBlocks) from the logical
-// lines for the current wrap mode and width. Wrap off (or width unset) is a
-// 1:1 mapping — disp mirrors lines, dispBlocks == blocks — so rendering and
-// navigation are byte-identical to the pre-wrap view. Wrap on expands each
-// aligned row to max(leftSegs, rightSegs) display rows.
+// lines for the current wrap mode and width. With no notes, wrap off (or width
+// unset) is a 1:1 mapping — disp mirrors lines, dispBlocks == blocks — so
+// rendering and navigation are byte-identical to the pre-wrap view. Wrap on
+// expands each aligned row to max(leftSegs, rightSegs) display rows. Review
+// notes append their synthetic rows after each line's content rows (and mark
+// the fold that hides their anchor), so a view carrying notes is no longer 1:1.
 func (v *diffView) relayout(width int) {
 	v.width = width
 	v.disp = v.disp[:0]
@@ -142,12 +155,14 @@ func (v *diffView) relayout(width int) {
 		tw = 1
 	}
 
+	byLine, foldMark := v.noteRowIndex()
+
 	for li := range v.lines {
 		v.lineStart[li] = len(v.disp)
 		ln := v.lines[li]
 		switch {
 		case ln.Fold > 0:
-			v.disp = append(v.disp, dRow{line: li, fold: ln.Fold, first: true})
+			v.disp = append(v.disp, dRow{line: li, fold: ln.Fold, noteMark: foldMark[li], first: true})
 		case v.long != longWrap || width <= 0:
 			v.disp = append(v.disp, dRow{line: li, row: ln.Row, first: true})
 		default:
@@ -164,6 +179,13 @@ func (v *diffView) relayout(width int) {
 				v.disp = append(v.disp, dRow{line: li, row: ln.Row, first: k == 0,
 					left: segAt(leftSegs, k), right: segAt(rightSegs, k)})
 			}
+		}
+		// The line's note rows close its block: the next logical line starts
+		// after them, so lineStart, the cursor range and the block jumps all
+		// keep pointing at content rows only.
+		for i := range byLine[li] {
+			nl := byLine[li][i]
+			v.disp = append(v.disp, dRow{line: li, row: ln.Row, note: &nl})
 		}
 	}
 
