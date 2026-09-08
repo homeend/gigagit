@@ -61,6 +61,12 @@ type Service struct {
 	// op-triggered status refreshes reading it on another goroutine.
 	showEOLOnly atomic.Bool
 
+	// syntaxOff, when false (the zero value, i.e. the default), keeps diff
+	// syntax colouring ON. Named so the zero value means "on": the Service is
+	// constructed before config loads, and the CLI/web frontends may never
+	// call SetSyntaxHighlighting at all, so they must still get colours.
+	syntaxOff atomic.Bool
+
 	// versionsPolicy stores the engine.VersionsPolicy injected into every
 	// Execute. nil (never set) resolves to the default: enabled, 90 days.
 	versionsPolicy atomic.Value
@@ -84,6 +90,18 @@ func (s *Service) SetShowEOLOnlyChanges(show bool) *Service {
 	s.showEOLOnly.Store(show)
 	return s
 }
+
+// SetSyntaxHighlighting turns diff syntax colouring on/off for every later
+// Differ call ([ui] diff_syntax). Default on; the differ reads it per call so
+// a settings change needs no rebuild. Cache entries are keyed by the flag.
+func (s *Service) SetSyntaxHighlighting(on bool) *Service {
+	s.syntaxOff.Store(!on)
+	return s
+}
+
+// syntaxOn reports the current diff-syntax-highlighting setting; the zero
+// value of syntaxOff means highlighting is ON.
+func (s *Service) syntaxOn() bool { return !s.syntaxOff.Load() }
 
 // SetVersionsPolicy overrides the branch-version snapshot policy injected
 // into operations (from [versions] config). Unset = enabled, 90 days.
@@ -151,7 +169,7 @@ func (s *Service) Differ() Differ {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.differ == nil {
-		s.differ = NewDiffer(DifferOptions{Enhanced: true, Cached: true}, s.factory.Cache("diff"))
+		s.differ = NewDiffer(DifferOptions{Enhanced: true, Cached: true, Syntax: s.syntaxOn}, s.factory.Cache("diff"))
 	}
 	return s.differ
 }

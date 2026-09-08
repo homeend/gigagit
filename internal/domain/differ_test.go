@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/cache"
+	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -146,5 +147,68 @@ func TestServiceDifferShareCache(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("the Service's Differ must share one cache; source called %d times, want 1", calls)
+	}
+}
+
+func on() bool  { return true }
+func off() bool { return false }
+
+func TestPlainDifferLexesBothSidesByPath(t *testing.T) {
+	t.Parallel()
+	d := NewDiffer(DifferOptions{Enhanced: true, Syntax: on}, nil)
+	out, err := d.Diff(context.Background(), Request{
+		Path: "a.go",
+		Old:  src([]byte("package a\n// c\n")),
+		New:  src([]byte("package a\n// d\nvar x = 1\n")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out.OldTok) != 2 || len(out.NewTok) != 3 {
+		t.Fatalf("OldTok=%d NewTok=%d, want 2 and 3 (one per source line)", len(out.OldTok), len(out.NewTok))
+	}
+	if len(out.NewTok[1]) == 0 || out.NewTok[1][0].Class != syntax.Comment {
+		t.Errorf("new line 2 should start with a Comment run, got %+v", out.NewTok[1])
+	}
+}
+
+func TestPlainDifferNoTokensWhenOffUnknownOrLarge(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		opts DifferOptions
+		req  Request
+	}{
+		{"syntax off", DifferOptions{Syntax: off}, Request{Path: "a.go", Old: src([]byte("a\n")), New: src([]byte("b\n"))}},
+		{"nil Syntax", DifferOptions{}, Request{Path: "a.go", Old: src([]byte("a\n")), New: src([]byte("b\n"))}},
+		{"no path", DifferOptions{Syntax: on}, Request{Old: src([]byte("a\n")), New: src([]byte("b\n"))}},
+		{"unknown ext", DifferOptions{Syntax: on}, Request{Path: "a.zzz", Old: src([]byte("a\n")), New: src([]byte("b\n"))}},
+		{"too big", DifferOptions{Syntax: on}, Request{Path: "a.go", Old: src(make([]byte, MaxSyntaxBytes+1)), New: src([]byte("b\n"))}},
+	}
+	for _, c := range cases {
+		out, err := NewDiffer(c.opts, nil).Diff(context.Background(), c.req)
+		if err != nil {
+			t.Fatal(c.name, err)
+		}
+		if out.OldTok != nil || out.NewTok != nil {
+			t.Errorf("%s: expected no tokens, got old=%v new=%v", c.name, out.OldTok, out.NewTok)
+		}
+	}
+}
+
+func TestCachedDifferSeparatesSyntaxOnOff(t *testing.T) {
+	t.Parallel()
+	c := cache.NewFactory(0, 0).Cache("diff")
+	flag := true
+	d := NewDiffer(DifferOptions{Enhanced: true, Cached: true, Syntax: func() bool { return flag }}, c)
+	req := Request{Key: "k", Path: "a.go", Old: src([]byte("package a\n")), New: src([]byte("package b\n"))}
+	withTok, _ := d.Diff(context.Background(), req)
+	flag = false
+	without, _ := d.Diff(context.Background(), req)
+	if withTok.NewTok == nil {
+		t.Fatal("first call with syntax on should carry tokens")
+	}
+	if without.NewTok != nil {
+		t.Fatal("turning syntax off must not serve the tokenised cache entry")
 	}
 }
