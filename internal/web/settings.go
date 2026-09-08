@@ -232,7 +232,7 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 	if req.VersionsEnabled != nil || req.VersionsMaxAgeDays != nil {
 		// Re-apply live so the NEXT op honors it (the TUI does the same);
 		// without this the long-lived server keeps its boot-time policy.
-		applyVersionsPolicy(r.Context(), svc, s.activeRepoConfigPathOr(r.Context(), svc))
+		applyUIPolicies(r.Context(), svc, s.activeRepoConfigPathOr(r.Context(), svc))
 	}
 	for src, secs := range req.Refresh {
 		if err := config.SetRefreshInterval(repoPath, src, secs); err != nil {
@@ -299,15 +299,16 @@ func (s *Server) activeRepoConfigPathOr(ctx context.Context, svc *domain.Service
 	return p
 }
 
-// applyVersionsPolicy loads the effective config and injects the branch-
-// version snapshot policy into the service — the cli.Run pattern. Called at
-// serve boot, after a re-root, and after a settings write, so the long-lived
-// server honors [versions] like the one-shot frontends do. Best-effort: a
-// load failure keeps the current policy.
-func applyVersionsPolicy(ctx context.Context, svc *domain.Service, activeRepoPath string) {
+// applyUIPolicies loads the effective config once and pushes the Service-side
+// policies it carries: branch-version snapshots and diff syntax colouring.
+// Called at serve boot, after a re-root, and after a settings write, so the
+// long-lived server honors [versions]/[ui] like the one-shot frontends do.
+// Best-effort: a load failure keeps the current policies.
+func applyUIPolicies(ctx context.Context, svc *domain.Service, activeRepoPath string) {
 	cfg, err := config.Load(config.DefaultGlobalPath(), activeRepoPath)
 	if err != nil {
 		return
 	}
 	svc.SetVersionsPolicy(engine.VersionsPolicy{Enabled: !cfg.Versions.Disabled, MaxAgeDays: cfg.Versions.MaxAgeDays})
+	svc.SetSyntaxHighlighting(cfg.UI.SyntaxOn())
 }

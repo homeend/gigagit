@@ -7,18 +7,51 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 type diffRow struct {
-	Kind       string   `json:"kind"`
-	Left       string   `json:"left"`
-	Right      string   `json:"right"`
-	LeftNo     int      `json:"left_no"`
-	RightNo    int      `json:"right_no"`
-	LeftSpans  [][2]int `json:"left_spans,omitempty"`
-	RightSpans [][2]int `json:"right_spans,omitempty"`
-	Hunk       *int     `json:"hunk,omitempty"`
+	Kind       string      `json:"kind"`
+	Left       string      `json:"left"`
+	Right      string      `json:"right"`
+	LeftNo     int         `json:"left_no"`
+	RightNo    int         `json:"right_no"`
+	LeftSpans  [][2]int    `json:"left_spans,omitempty"`
+	RightSpans [][2]int    `json:"right_spans,omitempty"`
+	LeftTok    []tokTriple `json:"left_tok,omitempty"`
+	RightTok   []tokTriple `json:"right_tok,omitempty"`
+	Hunk       *int        `json:"hunk,omitempty"`
+}
+
+// tokTriple is one syntax run on the wire: [start, end, class-suffix].
+type tokTriple [3]any
+
+// unstyledOnWire are classes style.css has no .tk-* rule for: sending them
+// would spend wire bytes (Name alone is roughly a third of a Go file's runs)
+// and split renderCell's runs for a span that paints nothing. The TUI palette
+// leaves the same classes blank.
+var unstyledOnWire = map[syntax.Class]bool{syntax.Name: true}
+
+// tokTriples returns the wire form of side's syntax runs for source line no
+// (1-based), or nil when there is no line, the line has no styled runs, or
+// highlighting was not computed for this diff.
+func tokTriples(side [][]syntax.Tok, no int) []tokTriple {
+	if no <= 0 || no > len(side) || len(side[no-1]) == 0 {
+		return nil
+	}
+	line := side[no-1]
+	out := make([]tokTriple, 0, len(line))
+	for _, tk := range line {
+		if unstyledOnWire[tk.Class] {
+			continue
+		}
+		out = append(out, tokTriple{tk.Start, tk.End, tk.Class.String()})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // diffHunksMeta tags an unstaged working-tree diff's rows with hunk
@@ -90,15 +123,27 @@ func (s *Server) handleDiff(w http.ResponseWriter, r *http.Request) {
 		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, sha, path) }
 	}
 	d, err := svc.Differ().Diff(r.Context(), domain.Request{
-		Key: sha + "^.." + sha + ":" + path,
-		Old: oldSrc,
-		New: newSrc,
+		Key:     sha + "^.." + sha + ":" + path,
+		Path:    path,
+		OldPath: oldPathFor(oldPath, path),
+		Old:     oldSrc,
+		New:     newSrc,
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
 	writeDiffJSON(w, d, nil)
+}
+
+// oldPathFor is the OLD side's path for a domain.Request: empty unless it
+// actually differs from path. The handlers default a missing `old` query
+// param to path, while Request.OldPath's contract is "empty = same as Path".
+func oldPathFor(oldPath, path string) string {
+	if oldPath == path {
+		return ""
+	}
+	return oldPath
 }
 
 func diffKindString(k textdiff.Kind) string {
@@ -155,9 +200,11 @@ func (s *Server) handleRevDiff(w http.ResponseWriter, r *http.Request) {
 		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, right, path) }
 	}
 	d, err := svc.Differ().Diff(r.Context(), domain.Request{
-		Key: left + ".." + right + ":" + path,
-		Old: oldSrc,
-		New: newSrc,
+		Key:     left + ".." + right + ":" + path,
+		Path:    path,
+		OldPath: oldPathFor(oldPath, path),
+		Old:     oldSrc,
+		New:     newSrc,
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
@@ -206,7 +253,7 @@ func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt s
 		writeErr(w, http.StatusBadRequest, errors.New("wt must be unstaged or staged"))
 		return
 	}
-	d, err := svc.Differ().Diff(r.Context(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
+	d, err := svc.Differ().Diff(r.Context(), domain.Request{Key: "", Path: path, OldPath: oldPathFor(oldPath, path), Old: oldSrc, New: newSrc})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -260,6 +307,8 @@ func writeDiffJSON(w http.ResponseWriter, d domain.Diff, hunks *diffHunksMeta) {
 			RightNo:    row.RightNo,
 			LeftSpans:  spanPairs(row.LeftSpans),
 			RightSpans: spanPairs(row.RightSpans),
+			LeftTok:    tokTriples(d.OldTok, row.LeftNo),
+			RightTok:   tokTriples(d.NewTok, row.RightNo),
 		}
 		if hunks != nil && hunks.rowTags[i] >= 0 {
 			tag := hunks.rowTags[i]

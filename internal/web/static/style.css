@@ -122,6 +122,16 @@ tr.add td.side.r, tr.add td.no.r { background: var(--add); }
 tr.del td.side.l, tr.del td.no.l { background: var(--del); }
 tr.change td.side.l { background: var(--del); }
 tr.change td.side.r { background: var(--add); }
+/* syntax classes (see internal/syntax Class.String); same hues as the TUI palette */
+table.diff .tk-kw  { color: #b48bff; }
+table.diff .tk-ty  { color: #5fd7af; }
+table.diff .tk-fn  { color: #ffd787; }
+table.diff .tk-str { color: #afd787; }
+table.diff .tk-num { color: #ffaf5f; }
+table.diff .tk-cmt { color: #8a8a8a; font-style: italic; }
+table.diff .tk-op  { color: #d0d0d0; }
+table.diff .tk-pn  { color: #bcbcbc; }
+table.diff .tk-at  { color: #d7af87; }
 mark.l { background: var(--span-del); color: inherit; }
 mark.r { background: var(--span-add); color: inherit; }
 .notice { padding: 12px; color: var(--dim); }

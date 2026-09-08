@@ -77,6 +77,7 @@ feature; keep THIS file's map to one line per package.
 | `config`     | TOML config (`.gg.toml`), field-level overlay (defaults→global→repo), `<seq>` counters, `[[tools.command]]` blocks, scoped line-edit writers. Repo config may live committed or machine-private (one active file). |
 | `template`   | Pure token resolver for branch/path templates and external-tool commands (per-token-kind quoting; validation makes bad templates inert); `FlattenForCmd` cmd.exe repair; shared conflict-context doc rendering. |
 | `textdiff`   | Pure line-alignment engine (Myers + guards) behind the side-by-side diff; optional word-level intraline spans. |
+| `syntax`     | Pure chroma wrapper: `Detect(path)` → lexer, `Lex(lang, src)` → per-source-line token runs (`Tok{Start,End,Class}`, rune offsets, coarse `Class` enum). DAG leaf; `domain.Differ` attaches runs to `Diff.OldTok/NewTok`. |
 | `commitgraph`| Pure single-line commit-graph lane engine; no git/TUI/lipgloss imports. |
 | `cache`      | Generic injected in-memory LRU cache factory (entry-count + byte budget); first consumer is the commit-diff cache. |
 | `fsprobe`    | Pure per-OS probe classifying paths on slow "foreign" filesystem mounts (9p/WSL drvfs, cifs/smb, nfs, fuse; UNC on Windows) behind the repo-switcher slow-fs warning; fail-open, callers probe off-thread. DAG leaf. |

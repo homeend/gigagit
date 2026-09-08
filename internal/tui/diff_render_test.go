@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
+	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -158,38 +159,6 @@ func TestRenderDiffViewPartialShowsFold(t *testing.T) {
 	}
 }
 
-func TestSanitizeSpansMapsThroughTabExpansion(t *testing.T) {
-	// "\tx" — a leading tab expands to 4 spaces; the span over 'x' (raw rune
-	// index 1) must land on display column 4, not column 1.
-	disp, emph := sanitizeSpans("\tx", []textdiff.Span{{Start: 1, End: 2}})
-	if string(disp) != "    x" {
-		t.Fatalf("disp = %q, want %q", string(disp), "    x")
-	}
-	want := []bool{false, false, false, false, true}
-	for i := range want {
-		if emph[i] != want[i] {
-			t.Fatalf("emph = %v, want %v", emph, want)
-		}
-	}
-}
-
-func TestSanitizeSpansControlCharBecomesDot(t *testing.T) {
-	disp, _ := sanitizeSpans("a\x01b", nil)
-	if string(disp) != "a·b" {
-		t.Fatalf("disp = %q, want %q", string(disp), "a·b")
-	}
-}
-
-func TestCoverMaskClampsEnds(t *testing.T) {
-	m := coverMask(3, []textdiff.Span{{Start: 1, End: 99}})
-	want := []bool{false, true, true}
-	for i := range want {
-		if m[i] != want[i] {
-			t.Fatalf("mask = %v, want %v", m, want)
-		}
-	}
-}
-
 func TestEmphasisActuallyChangesOutput(t *testing.T) {
 	// Force TrueColor so lipgloss emits ANSI escape codes in the non-TTY test
 	// environment. SetColorProfile is the API lipgloss itself documents for
@@ -202,8 +171,8 @@ func TestEmphasisActuallyChangesOutput(t *testing.T) {
 	// A cheap check that the emphasis style lands: the same hot cell rendered
 	// with a span differs from the same cell with no span (which takes the
 	// original, byte-identical path).
-	emph := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, []textdiff.Span{{Start: 0, End: 3}})
-	plain := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, nil)
+	emph := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, []textdiff.Span{{Start: 0, End: 3}}, nil)
+	plain := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, nil, nil)
 	if emph == plain {
 		t.Fatal("an emphasized render must differ from the plain hot render")
 	}
@@ -268,14 +237,14 @@ func reflectEqual(a, b []string) bool {
 
 func TestWrapCellsShortLineOneSegment(t *testing.T) {
 	d, e := runesEmph("hello", false)
-	segs := wrapCells(d, e, 20)
+	segs := wrapCells(d, e, nil, 20)
 	if got := segText(segs); len(got) != 1 || got[0] != "hello" {
 		t.Fatalf("segs = %q, want [\"hello\"]", got)
 	}
 }
 
 func TestWrapCellsEmptyIsOneEmptySegment(t *testing.T) {
-	segs := wrapCells(nil, nil, 10)
+	segs := wrapCells(nil, nil, nil, 10)
 	if len(segs) != 1 || len(segs[0].disp) != 0 {
 		t.Fatalf("empty input must yield one empty segment, got %q", segText(segs))
 	}
@@ -283,7 +252,7 @@ func TestWrapCellsEmptyIsOneEmptySegment(t *testing.T) {
 
 func TestWrapCellsBreaksAtWordBoundary(t *testing.T) {
 	d, e := runesEmph("foo bar baz", false)
-	segs := wrapCells(d, e, 5)
+	segs := wrapCells(d, e, nil, 5)
 	if got := segText(segs); !reflectEqual(got, []string{"foo ", "bar ", "baz"}) {
 		t.Fatalf("segs = %q, want [foo |bar |baz]", got)
 	}
@@ -291,7 +260,7 @@ func TestWrapCellsBreaksAtWordBoundary(t *testing.T) {
 
 func TestWrapCellsHardBreaksLongWord(t *testing.T) {
 	d, e := runesEmph("abcdefgh", false)
-	segs := wrapCells(d, e, 3)
+	segs := wrapCells(d, e, nil, 3)
 	if got := segText(segs); !reflectEqual(got, []string{"abc", "def", "gh"}) {
 		t.Fatalf("segs = %q, want [abc|def|gh]", got)
 	}
@@ -299,7 +268,7 @@ func TestWrapCellsHardBreaksLongWord(t *testing.T) {
 
 func TestWrapCellsSingleOverWideRuneTakenAlone(t *testing.T) {
 	d, e := runesEmph("ab", false)
-	segs := wrapCells(d, e, 1)
+	segs := wrapCells(d, e, nil, 1)
 	if got := segText(segs); !reflectEqual(got, []string{"a", "b"}) {
 		t.Fatalf("segs = %q, want [a|b]", got)
 	}
@@ -307,7 +276,7 @@ func TestWrapCellsSingleOverWideRuneTakenAlone(t *testing.T) {
 
 func TestWrapCellsCarriesEmphMask(t *testing.T) {
 	d, e := runesEmph("ab cd", true)
-	segs := wrapCells(d, e, 2)
+	segs := wrapCells(d, e, nil, 2)
 	for _, s := range segs {
 		if len(s.disp) != len(s.emph) {
 			t.Fatalf("seg disp/emph length mismatch: %d vs %d", len(s.disp), len(s.emph))
@@ -341,8 +310,8 @@ func TestDiffPaneLinesWrappedRowWidthAndCount(t *testing.T) {
 }
 
 func TestScrollCellFitsDelegatesToDiffCell(t *testing.T) {
-	got := scrollCell(3, "hello", nil, 0, 3, 20, false, false, diffDelCell)
-	want := diffCell(3, "hello", 3, 20, false, false, diffDelCell, nil)
+	got := scrollCell(3, "hello", nil, nil, 0, 3, 20, false, false, diffDelCell)
+	want := diffCell(3, "hello", 3, 20, false, false, diffDelCell, nil, nil)
 	if got != want {
 		t.Fatalf("fitting scrollCell must equal diffCell:\n got %q\nwant %q", got, want)
 	}
@@ -351,7 +320,7 @@ func TestScrollCellFitsDelegatesToDiffCell(t *testing.T) {
 func TestScrollCellWidthAlwaysExact(t *testing.T) {
 	long := strings.Repeat("abcdefghij ", 8) // ~88 cols
 	for _, hOff := range []int{0, 5, 40, 200} {
-		cell := scrollCell(1, long, nil, hOff, 3, 20, false, false, diffDelCell)
+		cell := scrollCell(1, long, nil, nil, hOff, 3, 20, false, false, diffDelCell)
 		if w := lipgloss.Width(cell); w != 20 {
 			t.Fatalf("hOffset %d: cell width %d, want 20", hOff, w)
 		}
@@ -360,7 +329,7 @@ func TestScrollCellWidthAlwaysExact(t *testing.T) {
 
 func TestScrollCellRightMarkerWhenMore(t *testing.T) {
 	long := strings.Repeat("x", 100)
-	cell := ansi.Strip(scrollCell(1, long, nil, 0, 3, 20, false, false, diffDelCell))
+	cell := ansi.Strip(scrollCell(1, long, nil, nil, 0, 3, 20, false, false, diffDelCell))
 	if !strings.Contains(cell, "›") {
 		t.Fatalf("a line past the window must show ›: %q", cell)
 	}
@@ -371,14 +340,14 @@ func TestScrollCellRightMarkerWhenMore(t *testing.T) {
 
 func TestScrollCellLeftMarkerWhenScrolled(t *testing.T) {
 	long := strings.Repeat("x", 100)
-	cell := ansi.Strip(scrollCell(1, long, nil, 30, 3, 20, false, false, diffDelCell))
+	cell := ansi.Strip(scrollCell(1, long, nil, nil, 30, 3, 20, false, false, diffDelCell))
 	if !strings.Contains(cell, "‹") {
 		t.Fatalf("scrolled right, ‹ must show on the left: %q", cell)
 	}
 }
 
 func TestScrollCellGapFiller(t *testing.T) {
-	cell := ansi.Strip(scrollCell(0, "", nil, 0, 3, 20, true, false, diffDelCell))
+	cell := ansi.Strip(scrollCell(0, "", nil, nil, 0, 3, 20, true, false, diffDelCell))
 	if strings.TrimRight(cell, "·") != "" {
 		t.Fatalf("gap side must be all · filler: %q", cell)
 	}
@@ -422,5 +391,187 @@ func TestDiffHeaderShowsChangeCount(t *testing.T) {
 	header := strings.Split(ansi.Strip(m.render()), "\n")[0]
 	if !strings.Contains(header, "change 1/1") {
 		t.Fatalf("diff header should show the change counter, got:\n%s", header)
+	}
+}
+
+// NOTE: no t.Parallel() here or in TestDiffPaneLinesUseTokensBySourceLine —
+// lipgloss.SetColorProfile is process-global, so a parallel sibling's deferred
+// reset would land mid-render and drop the ANSI codes these assert on.
+func TestStyledRunsColoursKeywordAndKeepsEmphasis(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(prev)
+	disp := []rune("if x")
+	cls := []syntax.Class{syntax.Keyword, syntax.Keyword, 0, 0}
+	// no emphasis: keyword run wears the keyword foreground
+	out := styledRuns(disp, []bool{false, false, false, false}, cls, lipgloss.NewStyle())
+	if !strings.Contains(out, "38;5;"+syntaxColor(syntax.Keyword)) {
+		t.Errorf("keyword run should carry its 256-colour foreground: %q", out)
+	}
+	// emphasis wins over syntax colour (bold + 231), so the diff stays legible
+	out = styledRuns(disp, []bool{true, true, false, false}, cls, lipgloss.NewStyle())
+	if !strings.Contains(out, "38;5;231") || strings.Contains(out, "38;5;"+syntaxColor(syntax.Keyword)) {
+		t.Errorf("emphasised run must use diffEmph, not the syntax colour: %q", out)
+	}
+	if ansi.Strip(out) != "if x" {
+		t.Errorf("text must be unchanged: %q", ansi.Strip(out))
+	}
+}
+
+func TestDiffPaneLinesUseTokensBySourceLine(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(prev)
+	v := &diffView{title: "a.go", full: []textdiff.Row{
+		{Kind: textdiff.Same, Left: "package a", Right: "package a", LeftNo: 1, RightNo: 1},
+		{Kind: textdiff.Add, Right: "var x = 1", RightNo: 2},
+	}}
+	v.oldTok = [][]syntax.Tok{{{Start: 0, End: 7, Class: syntax.Keyword}}}
+	v.newTok = [][]syntax.Tok{
+		{{Start: 0, End: 7, Class: syntax.Keyword}},
+		{{Start: 0, End: 3, Class: syntax.Keyword}, {Start: 8, End: 9, Class: syntax.Number}},
+	}
+	v.rebuild()
+	m := renderModelWithDiff(v)
+	lines := m.diffPaneLines(v, 100, 5)
+	if len(lines) != 2 {
+		t.Fatalf("lines = %d", len(lines))
+	}
+	if !strings.Contains(lines[1], "38;5;"+syntaxColor(syntax.Number)) {
+		t.Errorf("row 2 right cell (new line 2) should colour the number: %q", lines[1])
+	}
+	if strings.Contains(lines[1], "38;5;"+syntaxColor(syntax.Keyword)+"m"+"·") {
+		t.Errorf("the gap side must stay a plain filler: %q", lines[1])
+	}
+}
+
+// TestWrapCellsSlicesClassMaskAlongside pins the class mask to the display
+// runes across a wrap: a segment whose cls is shorter than its disp would
+// panic in styledRuns, and one sliced at a different offset would paint the
+// wrong runes. Concatenating the segments must reproduce the input mask.
+func TestWrapCellsSlicesClassMaskAlongside(t *testing.T) {
+	t.Parallel()
+	disp := []rune("if x { return y }")
+	emph := make([]bool, len(disp))
+	cls := make([]syntax.Class, len(disp))
+	for i := 0; i < 2; i++ { // "if"
+		cls[i] = syntax.Keyword
+	}
+	for i := 7; i < 13; i++ { // "return"
+		cls[i] = syntax.Keyword
+	}
+	segs := wrapCells(disp, emph, cls, 8)
+	if len(segs) < 2 {
+		t.Fatalf("a 17-rune line at width 8 must wrap, got %d segment(s)", len(segs))
+	}
+	var joined []syntax.Class
+	for i, s := range segs {
+		if len(s.cls) != len(s.disp) {
+			t.Fatalf("seg %d: cls len %d != disp len %d", i, len(s.cls), len(s.disp))
+		}
+		joined = append(joined, s.cls...)
+	}
+	if len(joined) != len(cls) {
+		t.Fatalf("segments cover %d runes, want %d", len(joined), len(cls))
+	}
+	for i := range cls {
+		if joined[i] != cls[i] {
+			t.Fatalf("class mask desynced at rune %d: %v, want %v (%v)", i, joined[i], cls[i], joined)
+		}
+	}
+}
+
+// TestScrollCellWindowKeepsClassesAligned pins the panned-window slice: the
+// window's wcls must follow the same runes as wdisp, so only the part of the
+// keyword still visible after the pan is coloured — never the plain run that
+// follows it. Serial: lipgloss.SetColorProfile is process-global.
+func TestScrollCellWindowKeepsClassesAligned(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(prev)
+	text := "aaaaaaaaaa" + "keyword" + strings.Repeat("b", 23)
+	toks := []syntax.Tok{{Start: 10, End: 17, Class: syntax.Keyword}}
+	// tw = 20-3-1 = 16; hOffset 12 with more text to the right leaves both
+	// markers, so the content window is runes [13,27): "word" + ten 'b'.
+	raw := scrollCell(1, text, nil, toks, 12, 3, 20, false, false, lipgloss.NewStyle())
+	if got, want := ansi.Strip(raw), "  1 ‹wordbbbbbbbbbb›"; got != want {
+		t.Fatalf("visible window = %q, want %q", got, want)
+	}
+	kw := "38;5;" + syntaxColor(syntax.Keyword)
+	if n := strings.Count(raw, kw); n != 1 {
+		t.Fatalf("keyword colour appears %d times, want exactly 1 (the `word` remnant): %q", n, raw)
+	}
+	iKw, iWord, iB := strings.Index(raw, kw), strings.Index(raw, "word"), strings.Index(raw, "bbbbbbbbbb")
+	if iKw < 0 || iWord < 0 || iB < 0 {
+		t.Fatalf("missing colour or text in %q", raw)
+	}
+	if !(iKw < iWord && iWord < iB) {
+		t.Errorf("the keyword colour must open immediately before the visible `word`, not the plain 'b' run: kw@%d word@%d b@%d in %q", iKw, iWord, iB, raw)
+	}
+}
+
+// benchDiffView builds a diffView over a synthetic ~3000-line Go file with
+// real syntax runs and real intraline spans, so the benchmark below walks the
+// same enriched render path a highlighted file takes in the app.
+func benchDiffView(b *testing.B) *diffView {
+	b.Helper()
+	var oldSrc, newSrc strings.Builder
+	oldSrc.WriteString("package bench\n")
+	newSrc.WriteString("package bench\n")
+	for i := 0; i < 1000; i++ {
+		n := strconv.Itoa(i)
+		oldSrc.WriteString("// helper " + n + " keeps the file realistic\n")
+		newSrc.WriteString("// helper " + n + " keeps the file realistic\n")
+		oldSrc.WriteString("func helper" + n + "(a int, b string) (int, error) {\n")
+		newSrc.WriteString("func helper" + n + "(a int, b string) (int, error) {\n")
+		// Perturb every fifth line so a fifth of the rows are Changed and
+		// carry word-diff spans on top of the syntax runs.
+		if i%5 == 0 {
+			oldSrc.WriteString("\treturn a + " + n + ", nil\n}\n")
+			newSrc.WriteString("\treturn a - " + n + ", errors.New(b)\n}\n")
+		} else {
+			oldSrc.WriteString("\treturn a + " + n + ", nil\n}\n")
+			newSrc.WriteString("\treturn a + " + n + ", nil\n}\n")
+		}
+	}
+	oldB, newB := []byte(oldSrc.String()), []byte(newSrc.String())
+	res := textdiff.Compare(oldB, newB, textdiff.Options{Enhanced: true})
+	v := &diffView{title: "bench.go", full: res.Rows, fullBlocks: res.Blocks}
+	lang := syntax.Detect("bench.go")
+	v.oldTok = syntax.Lex(lang, oldB)
+	v.newTok = syntax.Lex(lang, newB)
+	if len(v.oldTok) == 0 || len(v.newTok) == 0 {
+		b.Fatal("the synthetic file must lex, else the benchmark measures the plain path")
+	}
+	v.rebuild()
+	return v
+}
+
+// BenchmarkDiffPaneLinesScrollHighlighted measures one rendered frame (50
+// visible rows) of a highlighted file in scroll mode — the mode that
+// re-sanitizes and re-styles every visible cell on every frame, unlike wrap
+// mode which precomputes segments in relayout.
+func BenchmarkDiffPaneLinesScrollHighlighted(b *testing.B) {
+	// Under `go test` there is no TTY, so lipgloss would fall back to the
+	// Ascii profile and Render would emit no escape sequences at all —
+	// undercounting the real per-frame cost.
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(prev)
+	v := benchDiffView(b)
+	v.long = longScroll
+	v.relayout(200)
+	m := footerModel()
+	m.width, m.height = 200, 60
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Alternate the pan so both scrollCell paths are measured: hOffset 0
+		// delegates to diffCell for lines that fit, >0 takes the windowed
+		// slice.
+		v.hOffset = (i % 2) * 8
+		if got := m.diffPaneLines(v, 200, 50); len(got) != 50 {
+			b.Fatalf("frame = %d lines, want 50", len(got))
+		}
 	}
 }

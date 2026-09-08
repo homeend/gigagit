@@ -88,6 +88,16 @@ feature is a worktree-aware **SmartPull** decision tree.
 | `app`        | Wires layers into runnable surfaces (`inspect`, panic `DumpRepo`). |
 | `e2e` (top-level) | Declarative e2e harness: scenarios/*.toml → real repo (+ HTTP git server) → in-process CLI runs → semantic state assertions. `[[run]]` carries an optional `stdin` field (a TOML string fed to the command's stdin; "" preserves the prior empty-reader behavior) so a scenario can drive a command that reads stdin, e.g. `gg batch` (`s79_cli_batch.toml`). |
 
+**Diff syntax runs.** `domain.Request.Path` selects the lexer; `plainDiffer`
+lexes each side ≤ `MaxSyntaxBytes` (1 MB) when `DifferOptions.Syntax()` is
+true (Service: `SetSyntaxHighlighting`, default on, `[ui] diff_syntax`). Runs
+live on `Diff.OldTok/NewTok` indexed by source line-1 (never on
+`textdiff.Row`, whose cached instances are shared read-only); cache keys gain
+an `s:` segment so toggling never serves the wrong entry. TUI: `sanitizeCell`
+builds parallel emph/class masks over the tab-expanded runes; `styledRuns`
+groups by (emph, class) and emphasis wins. Web: `left_tok`/`right_tok`
+`[start,end,cls]` triples → `.tk-<cls>` spans via `renderCell`.
+
 Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands, else launches the TUI.
 
 ## Conventions

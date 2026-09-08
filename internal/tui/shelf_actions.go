@@ -140,7 +140,7 @@ func (m Model) loadShelfCompareTwoCmd(a, b model.ShelfEntry, title, ctx string) 
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.ShelfBlob(ctx, aID) }
 		newSrc := func(ctx context.Context) ([]byte, error) { return svc.ShelfBlob(ctx, bID) }
-		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
+		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: b.Origin.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
 			return diffMsg{tag: tag, view: v}
@@ -183,7 +183,7 @@ func (m Model) loadShelfCompareCmd(e model.ShelfEntry) tea.Cmd {
 			v.err = err
 			return diffMsg{tag: tag, view: v}
 		}
-		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
+		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: e.Origin.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
 			return diffMsg{tag: tag, view: v}

@@ -182,8 +182,8 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 	// The watcher points at the OLD .git; rebuild the live hub for the new
 	// root (streams close, tabs reconnect and re-hello).
 	s.restartLive(r.Context())
-	// The new root's [versions] policy (the serve-boot re-apply point).
-	applyVersionsPolicy(r.Context(), cand, s.activeRepoConfigPathOr(r.Context(), cand))
+	// The new root's [versions]/[ui] policies (the serve-boot re-apply point).
+	applyUIPolicies(r.Context(), cand, s.activeRepoConfigPathOr(r.Context(), cand))
 	// The new root becomes navigable-back-to forever (touchMRU on serve
 	// covers the original root).
 	touchMRU(r.Context(), cand, s.reposStatePath())

@@ -43,6 +43,7 @@ var settingDocs = []settingDoc{
 	{"ui", "commit_batch_size", 300, "commits loaded per later page (scroll to the end, or ctrl+l)"},
 	{"ui", "commit_search_max_pages", 50, "pages eager /-search scans before asking to search deeper"},
 	{"ui", "commit_sort", "date-order", "commit ordering for the Commits panel + graph: date-order (default; git --date-order, perfect graph lanes) or plain (fastest on huge repos, but the graph can mis-draw forks)"},
+	{"ui", "diff_syntax", "auto", "syntax colouring in diff views: auto (by file name) or off"},
 	{"ui", "show_graph", "on", "Commits panel render mode on startup: on (default; lane graph) or off (flat list, same as the . menu's Show as list); toggle live from the , Settings menu"},
 	{"ui", "language", nil, "TUI display language: en (default), ja, ko, zh, ru, or a custom code from $XDG_CONFIG_HOME/gg/lang/<code>.toml; pick from the , Settings menu (CLI output stays English)"},
 

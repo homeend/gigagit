@@ -58,6 +58,12 @@ type UIConfig struct {
 	// Persisted per-repo (.gg.toml) so a huge repo can opt down to "plain".
 	CommitSort string `toml:"commit_sort"`
 
+	// DiffSyntax selects syntax colouring in the diff views:
+	//   "auto" — colour by file name when a lexer is known. THE DEFAULT.
+	//   "off"  — plain text (only add/del backgrounds and word emphasis).
+	// Empty = unset (zero-is-unset overlay rule); resolved to the default.
+	DiffSyntax string `toml:"diff_syntax"`
+
 	// ShowGraph selects how the Commits panel renders on startup:
 	//   "on"  — the lane graph. THE DEFAULT (used when the key is missing).
 	//   "off" — the flat ●-gutter list (same as the . menu's "Show as list").
@@ -80,6 +86,11 @@ type UIConfig struct {
 	// only a true in a higher layer overlays (matching the zero-is-unset rule).
 	DisableSlowOpConfirm bool `toml:"disable_slow_op_confirm"`
 }
+
+// SyntaxOn reports whether diff syntax colouring is enabled: everything but
+// the literal "off" value (including the default "auto" and any unrecognized
+// value) is on.
+func (c UIConfig) SyntaxOn() bool { return c.DiffSyntax != "off" }
 
 // DebugConfig configures diagnostic logging. TOML keys are snake_case.
 type DebugConfig struct {
@@ -150,7 +161,7 @@ func Defaults() Config {
 			DefaultBranchTemplate: "<parent-branch>-<date:yyyy-MM-dd_HH-mm>",
 		},
 		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
-			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", ShowGraph: "on"},
+			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", DiffSyntax: "auto", ShowGraph: "on"},
 		Versions: VersionsConfig{MaxAgeDays: 90},
 	}
 }
@@ -277,6 +288,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.CommitSort != "" {
 		dst.CommitSort = src.CommitSort
+	}
+	if src.DiffSyntax != "" {
+		dst.DiffSyntax = src.DiffSyntax
 	}
 	if src.ShowGraph != "" {
 		dst.ShowGraph = src.ShowGraph

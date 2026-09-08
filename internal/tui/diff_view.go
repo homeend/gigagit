@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -35,12 +36,15 @@ const (
 // diffView is the open full-screen side-by-side viewer; nil = closed.
 // Pure scroll (offset) — there is no cursor row.
 type diffView struct {
-	title      string          // file path, shown in the header
-	context    string          // "HEAD → working tree" or "@ <short-hash> <subject>"
-	rev        string          // commit-ish the NEW side came from; "" = working tree (used by h→history)
-	compare    bool            // two-sided compare (title is "a ↔ b", not a path): no single focused file to bookmark/shelve
-	full       []textdiff.Row  // immutable aligned rows (the comparison result)
-	fullBlocks []int           // immutable change-block starts into full
+	title      string         // file path, shown in the header
+	context    string         // "HEAD → working tree" or "@ <short-hash> <subject>"
+	rev        string         // commit-ish the NEW side came from; "" = working tree (used by h→history)
+	compare    bool           // two-sided compare (title is "a ↔ b", not a path): no single focused file to bookmark/shelve
+	full       []textdiff.Row // immutable aligned rows (the comparison result)
+	fullBlocks []int          // immutable change-block starts into full
+	// oldTok/newTok alias the (shared, cached) domain.Diff runs — READ-ONLY.
+	oldTok     [][]syntax.Tok  // syntax runs per OLD source line (index = LeftNo-1); nil = plain
+	newTok     [][]syntax.Tok  // syntax runs per NEW source line (index = RightNo-1); nil = plain
 	partial    bool            // mode: collapse unchanged runs (false = full)
 	long       longMode        // mode: how lines wider than a pane are shown (default scroll)
 	hOffset    int             // scroll mode: horizontal pan column (0 = left edge)
@@ -143,8 +147,8 @@ func (v *diffView) relayout(width int) {
 		case v.long != longWrap || width <= 0:
 			v.disp = append(v.disp, dRow{line: li, row: ln.Row, first: true})
 		default:
-			leftSegs := wrapSide(ln.Row.Left, ln.Row.LeftSpans, ln.Row.Kind, false, tw)
-			rightSegs := wrapSide(ln.Row.Right, ln.Row.RightSpans, ln.Row.Kind, true, tw)
+			leftSegs := wrapSide(ln.Row.Left, ln.Row.LeftSpans, tokAt(v.oldTok, ln.Row.LeftNo), ln.Row.Kind, false, tw)
+			rightSegs := wrapSide(ln.Row.Right, ln.Row.RightSpans, tokAt(v.newTok, ln.Row.RightNo), ln.Row.Kind, true, tw)
 			h := len(leftSegs)
 			if len(rightSegs) > h {
 				h = len(rightSegs)
@@ -195,12 +199,12 @@ func (v *diffView) clampHOffset() {
 
 // wrapSide sanitizes+wraps one side of a row into ≤tw segments, or returns nil
 // for a gap side (the absent side of an Add/Del) so the renderer draws filler.
-func wrapSide(text string, spans []textdiff.Span, kind textdiff.Kind, right bool, tw int) []cellSeg {
+func wrapSide(text string, spans []textdiff.Span, toks []syntax.Tok, kind textdiff.Kind, right bool, tw int) []cellSeg {
 	if (!right && kind == textdiff.Add) || (right && kind == textdiff.Del) {
 		return nil
 	}
-	disp, emph := sanitizeSpans(text, spans)
-	return wrapCells(disp, emph, tw)
+	disp, emph, cls := sanitizeCell(text, spans, toks)
+	return wrapCells(disp, emph, cls, tw)
 }
 
 // segAt returns the kth segment or a blank cellSeg (a present-but-shorter side
@@ -423,7 +427,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 			newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, "", f.Path) }
 		}
 		return func() tea.Msg {
-			out, err := differ.Diff(context.Background(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
+			out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: f.Path, OldPath: f.OrigPath, Old: oldSrc, New: newSrc})
 			if err != nil {
 				v.err = err
 				return diffMsg{tag: tag, view: v}
@@ -465,7 +469,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 			return diffMsg{tag: tag, view: v}
 		}
 		// Working-tree diffs are never cached (Key: "").
-		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
+		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: f.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
 			return diffMsg{tag: tag, view: v}
@@ -486,6 +490,7 @@ func applyDiff(v *diffView, out domain.Diff, body int) {
 	default:
 		v.full = out.Result.Rows
 		v.fullBlocks = out.Result.Blocks
+		v.oldTok, v.newTok = out.OldTok, out.NewTok
 		v.truncated = out.Result.Truncated
 		v.rebuild()
 		if len(v.dispBlocks) > 0 {
@@ -521,7 +526,7 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, hash, line.path) }
 	}
 	return func() tea.Msg {
-		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Old: oldSrc, New: newSrc})
+		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: line.path, OldPath: line.oldPath, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
 			return diffMsg{tag: tag, view: v}
@@ -575,7 +580,7 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 		newSrc = func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, ref) }
 	}
 	return func() tea.Msg {
-		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Old: oldSrc, New: newSrc})
+		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: line.path, OldPath: line.oldPath, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
 			return diffMsg{tag: tag, view: v}
