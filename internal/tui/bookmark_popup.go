@@ -534,7 +534,7 @@ func (m Model) loadBookmarkCompareTwoCmd(a, b model.Bookmark) tea.Cmd {
 	return func() tea.Msg {
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.BookmarkBytes(ctx, a) }
 		newSrc := func(ctx context.Context) ([]byte, error) { return svc.BookmarkBytes(ctx, b) }
-		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
+		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: b.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
 			return diffMsg{tag: tag, view: v}
@@ -656,7 +656,7 @@ func (m Model) loadBookmarkCompareCmd(bm model.Bookmark) tea.Cmd {
 			v.err = err
 			return diffMsg{tag: tag, view: v}
 		}
-		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Old: oldSrc, New: newSrc})
+		out, err := differ.Diff(context.Background(), domain.Request{Key: "", Path: bm.Path, Old: oldSrc, New: newSrc})
 		if err != nil {
 			v.err = err
 			return diffMsg{tag: tag, view: v}

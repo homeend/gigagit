@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
+	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -161,7 +162,7 @@ func TestRenderDiffViewPartialShowsFold(t *testing.T) {
 func TestSanitizeSpansMapsThroughTabExpansion(t *testing.T) {
 	// "\tx" — a leading tab expands to 4 spaces; the span over 'x' (raw rune
 	// index 1) must land on display column 4, not column 1.
-	disp, emph := sanitizeSpans("\tx", []textdiff.Span{{Start: 1, End: 2}})
+	disp, emph, _ := sanitizeCell("\tx", []textdiff.Span{{Start: 1, End: 2}}, nil)
 	if string(disp) != "    x" {
 		t.Fatalf("disp = %q, want %q", string(disp), "    x")
 	}
@@ -174,7 +175,7 @@ func TestSanitizeSpansMapsThroughTabExpansion(t *testing.T) {
 }
 
 func TestSanitizeSpansControlCharBecomesDot(t *testing.T) {
-	disp, _ := sanitizeSpans("a\x01b", nil)
+	disp, _, _ := sanitizeCell("a\x01b", nil, nil)
 	if string(disp) != "a·b" {
 		t.Fatalf("disp = %q, want %q", string(disp), "a·b")
 	}
@@ -202,8 +203,8 @@ func TestEmphasisActuallyChangesOutput(t *testing.T) {
 	// A cheap check that the emphasis style lands: the same hot cell rendered
 	// with a span differs from the same cell with no span (which takes the
 	// original, byte-identical path).
-	emph := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, []textdiff.Span{{Start: 0, End: 3}})
-	plain := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, nil)
+	emph := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, []textdiff.Span{{Start: 0, End: 3}}, nil)
+	plain := diffCell(1, "foobar", 3, 20, false, true, diffDelCell, nil, nil)
 	if emph == plain {
 		t.Fatal("an emphasized render must differ from the plain hot render")
 	}
@@ -268,14 +269,14 @@ func reflectEqual(a, b []string) bool {
 
 func TestWrapCellsShortLineOneSegment(t *testing.T) {
 	d, e := runesEmph("hello", false)
-	segs := wrapCells(d, e, 20)
+	segs := wrapCells(d, e, nil, 20)
 	if got := segText(segs); len(got) != 1 || got[0] != "hello" {
 		t.Fatalf("segs = %q, want [\"hello\"]", got)
 	}
 }
 
 func TestWrapCellsEmptyIsOneEmptySegment(t *testing.T) {
-	segs := wrapCells(nil, nil, 10)
+	segs := wrapCells(nil, nil, nil, 10)
 	if len(segs) != 1 || len(segs[0].disp) != 0 {
 		t.Fatalf("empty input must yield one empty segment, got %q", segText(segs))
 	}
@@ -283,7 +284,7 @@ func TestWrapCellsEmptyIsOneEmptySegment(t *testing.T) {
 
 func TestWrapCellsBreaksAtWordBoundary(t *testing.T) {
 	d, e := runesEmph("foo bar baz", false)
-	segs := wrapCells(d, e, 5)
+	segs := wrapCells(d, e, nil, 5)
 	if got := segText(segs); !reflectEqual(got, []string{"foo ", "bar ", "baz"}) {
 		t.Fatalf("segs = %q, want [foo |bar |baz]", got)
 	}
@@ -291,7 +292,7 @@ func TestWrapCellsBreaksAtWordBoundary(t *testing.T) {
 
 func TestWrapCellsHardBreaksLongWord(t *testing.T) {
 	d, e := runesEmph("abcdefgh", false)
-	segs := wrapCells(d, e, 3)
+	segs := wrapCells(d, e, nil, 3)
 	if got := segText(segs); !reflectEqual(got, []string{"abc", "def", "gh"}) {
 		t.Fatalf("segs = %q, want [abc|def|gh]", got)
 	}
@@ -299,7 +300,7 @@ func TestWrapCellsHardBreaksLongWord(t *testing.T) {
 
 func TestWrapCellsSingleOverWideRuneTakenAlone(t *testing.T) {
 	d, e := runesEmph("ab", false)
-	segs := wrapCells(d, e, 1)
+	segs := wrapCells(d, e, nil, 1)
 	if got := segText(segs); !reflectEqual(got, []string{"a", "b"}) {
 		t.Fatalf("segs = %q, want [a|b]", got)
 	}
@@ -307,7 +308,7 @@ func TestWrapCellsSingleOverWideRuneTakenAlone(t *testing.T) {
 
 func TestWrapCellsCarriesEmphMask(t *testing.T) {
 	d, e := runesEmph("ab cd", true)
-	segs := wrapCells(d, e, 2)
+	segs := wrapCells(d, e, nil, 2)
 	for _, s := range segs {
 		if len(s.disp) != len(s.emph) {
 			t.Fatalf("seg disp/emph length mismatch: %d vs %d", len(s.disp), len(s.emph))
@@ -341,8 +342,8 @@ func TestDiffPaneLinesWrappedRowWidthAndCount(t *testing.T) {
 }
 
 func TestScrollCellFitsDelegatesToDiffCell(t *testing.T) {
-	got := scrollCell(3, "hello", nil, 0, 3, 20, false, false, diffDelCell)
-	want := diffCell(3, "hello", 3, 20, false, false, diffDelCell, nil)
+	got := scrollCell(3, "hello", nil, nil, 0, 3, 20, false, false, diffDelCell)
+	want := diffCell(3, "hello", 3, 20, false, false, diffDelCell, nil, nil)
 	if got != want {
 		t.Fatalf("fitting scrollCell must equal diffCell:\n got %q\nwant %q", got, want)
 	}
@@ -351,7 +352,7 @@ func TestScrollCellFitsDelegatesToDiffCell(t *testing.T) {
 func TestScrollCellWidthAlwaysExact(t *testing.T) {
 	long := strings.Repeat("abcdefghij ", 8) // ~88 cols
 	for _, hOff := range []int{0, 5, 40, 200} {
-		cell := scrollCell(1, long, nil, hOff, 3, 20, false, false, diffDelCell)
+		cell := scrollCell(1, long, nil, nil, hOff, 3, 20, false, false, diffDelCell)
 		if w := lipgloss.Width(cell); w != 20 {
 			t.Fatalf("hOffset %d: cell width %d, want 20", hOff, w)
 		}
@@ -360,7 +361,7 @@ func TestScrollCellWidthAlwaysExact(t *testing.T) {
 
 func TestScrollCellRightMarkerWhenMore(t *testing.T) {
 	long := strings.Repeat("x", 100)
-	cell := ansi.Strip(scrollCell(1, long, nil, 0, 3, 20, false, false, diffDelCell))
+	cell := ansi.Strip(scrollCell(1, long, nil, nil, 0, 3, 20, false, false, diffDelCell))
 	if !strings.Contains(cell, "›") {
 		t.Fatalf("a line past the window must show ›: %q", cell)
 	}
@@ -371,14 +372,14 @@ func TestScrollCellRightMarkerWhenMore(t *testing.T) {
 
 func TestScrollCellLeftMarkerWhenScrolled(t *testing.T) {
 	long := strings.Repeat("x", 100)
-	cell := ansi.Strip(scrollCell(1, long, nil, 30, 3, 20, false, false, diffDelCell))
+	cell := ansi.Strip(scrollCell(1, long, nil, nil, 30, 3, 20, false, false, diffDelCell))
 	if !strings.Contains(cell, "‹") {
 		t.Fatalf("scrolled right, ‹ must show on the left: %q", cell)
 	}
 }
 
 func TestScrollCellGapFiller(t *testing.T) {
-	cell := ansi.Strip(scrollCell(0, "", nil, 0, 3, 20, true, false, diffDelCell))
+	cell := ansi.Strip(scrollCell(0, "", nil, nil, 0, 3, 20, true, false, diffDelCell))
 	if strings.TrimRight(cell, "·") != "" {
 		t.Fatalf("gap side must be all · filler: %q", cell)
 	}
@@ -422,5 +423,75 @@ func TestDiffHeaderShowsChangeCount(t *testing.T) {
 	header := strings.Split(ansi.Strip(m.render()), "\n")[0]
 	if !strings.Contains(header, "change 1/1") {
 		t.Fatalf("diff header should show the change counter, got:\n%s", header)
+	}
+}
+
+func TestSanitizeCellCarriesClassesThroughTabs(t *testing.T) {
+	t.Parallel()
+	// "\tif x" — the keyword `if` sits at raw runes [1,3); the tab expands to 4 cols.
+	disp, emph, cls := sanitizeCell("\tif x", nil, []syntax.Tok{{Start: 1, End: 3, Class: syntax.Keyword}})
+	if string(disp) != "    if x" {
+		t.Fatalf("disp = %q", string(disp))
+	}
+	if len(cls) != len(disp) || len(emph) != len(disp) {
+		t.Fatalf("masks must parallel disp: cls=%d emph=%d disp=%d", len(cls), len(emph), len(disp))
+	}
+	want := []syntax.Class{0, 0, 0, 0, syntax.Keyword, syntax.Keyword, 0, 0}
+	for i := range want {
+		if cls[i] != want[i] {
+			t.Errorf("cls[%d] = %v, want %v (%v)", i, cls[i], want[i], cls)
+			break
+		}
+	}
+}
+
+// NOTE: no t.Parallel() here or in TestDiffPaneLinesUseTokensBySourceLine —
+// lipgloss.SetColorProfile is process-global, so a parallel sibling's deferred
+// reset would land mid-render and drop the ANSI codes these assert on.
+func TestStyledRunsColoursKeywordAndKeepsEmphasis(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(prev)
+	disp := []rune("if x")
+	cls := []syntax.Class{syntax.Keyword, syntax.Keyword, 0, 0}
+	// no emphasis: keyword run wears the keyword foreground
+	out := styledRuns(disp, []bool{false, false, false, false}, cls, lipgloss.NewStyle())
+	if !strings.Contains(out, "38;5;"+syntaxColor(syntax.Keyword)) {
+		t.Errorf("keyword run should carry its 256-colour foreground: %q", out)
+	}
+	// emphasis wins over syntax colour (bold + 231), so the diff stays legible
+	out = styledRuns(disp, []bool{true, true, false, false}, cls, lipgloss.NewStyle())
+	if !strings.Contains(out, "38;5;231") || strings.Contains(out, "38;5;"+syntaxColor(syntax.Keyword)) {
+		t.Errorf("emphasised run must use diffEmph, not the syntax colour: %q", out)
+	}
+	if ansi.Strip(out) != "if x" {
+		t.Errorf("text must be unchanged: %q", ansi.Strip(out))
+	}
+}
+
+func TestDiffPaneLinesUseTokensBySourceLine(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(prev)
+	v := &diffView{title: "a.go", full: []textdiff.Row{
+		{Kind: textdiff.Same, Left: "package a", Right: "package a", LeftNo: 1, RightNo: 1},
+		{Kind: textdiff.Add, Right: "var x = 1", RightNo: 2},
+	}}
+	v.oldTok = [][]syntax.Tok{{{Start: 0, End: 7, Class: syntax.Keyword}}}
+	v.newTok = [][]syntax.Tok{
+		{{Start: 0, End: 7, Class: syntax.Keyword}},
+		{{Start: 0, End: 3, Class: syntax.Keyword}, {Start: 8, End: 9, Class: syntax.Number}},
+	}
+	v.rebuild()
+	m := renderModelWithDiff(v)
+	lines := m.diffPaneLines(v, 100, 5)
+	if len(lines) != 2 {
+		t.Fatalf("lines = %d", len(lines))
+	}
+	if !strings.Contains(lines[1], "38;5;"+syntaxColor(syntax.Number)) {
+		t.Errorf("row 2 right cell (new line 2) should colour the number: %q", lines[1])
+	}
+	if strings.Contains(lines[1], "38;5;"+syntaxColor(syntax.Keyword)+"m"+"·") {
+		t.Errorf("the gap side must stay a plain filler: %q", lines[1])
 	}
 }
