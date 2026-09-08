@@ -197,6 +197,27 @@ func TestPlainDifferNoTokensWhenOffUnknownOrLarge(t *testing.T) {
 	}
 }
 
+// TestPlainDifferSkipsLexingOnCancelledContext pins the guard in front of the
+// concurrent lex: a caller that has already given up must not pay for two
+// chroma passes (the diff itself is already computed by then, so the rows are
+// still returned).
+func TestPlainDifferSkipsLexingOnCancelledContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	out, err := NewDiffer(DifferOptions{Syntax: on}, nil).Diff(ctx, Request{
+		Path: "a.go",
+		Old:  src([]byte("package a\n")),
+		New:  src([]byte("package b\n")),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.OldTok != nil || out.NewTok != nil {
+		t.Errorf("a cancelled context must skip lexing, got old=%v new=%v", out.OldTok, out.NewTok)
+	}
+}
+
 func TestPlainDifferPerSideMaxSyntaxBytesCap(t *testing.T) {
 	t.Parallel()
 	// Non-binary text just over MaxSyntaxBytes: unlike the all-zero "binary"

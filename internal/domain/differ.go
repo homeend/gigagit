@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"sync"
 
 	"github.com/homeend/gigagit/internal/cache"
 	"github.com/homeend/gigagit/internal/syntax"
@@ -113,14 +114,28 @@ func (d plainDiffer) Diff(ctx context.Context, req Request) (Diff, error) {
 		return Diff{Binary: true}, nil
 	}
 	out := Diff{Result: textdiff.Compare(old, newB, textdiff.Options{Enhanced: d.enhanced})}
-	if d.syntax != nil && d.syntax() {
+	if d.syntax != nil && d.syntax() && ctx.Err() == nil {
 		if lang := syntax.Detect(req.Path); lang != "" {
+			// Both sides can each cost ~1 s of chroma at MaxSyntaxBytes, and
+			// they are independent — lex them concurrently so the worst case
+			// is one side's time, not their sum. Each goroutine writes only
+			// its own field.
+			var wg sync.WaitGroup
 			if len(old) <= MaxSyntaxBytes {
-				out.OldTok = syntax.Lex(lang, old)
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					out.OldTok = syntax.Lex(lang, old)
+				}()
 			}
 			if len(newB) <= MaxSyntaxBytes {
-				out.NewTok = syntax.Lex(lang, newB)
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					out.NewTok = syntax.Lex(lang, newB)
+				}()
 			}
+			wg.Wait()
 		}
 	}
 	return out, nil
