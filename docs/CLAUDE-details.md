@@ -153,9 +153,18 @@ already holds (zero extra reads); `NotesAt` is the stateless door — reads
 both sides itself — for callers with no open diff (the web handlers, and
 phase-2 CLI). `NoteCounts` (`ByPath`/`ByCommit`/`ByCommitPath`, the last
 keyed `"<sha>:<path>"`) is cached on the Service and invalidated by every
-mutation; it counts unresolved THREADS only, so painters never touch the
-store or read file content, and `}`/`{`'s file-step reads `ByCommitPath` to
-find the next annotated file without a store round trip. Every note is
+mutation, by the startup sweep when it drops anything, and by the exported
+`InvalidateNoteCounts` — which the two EXPLICIT refresh paths call (the TUI's
+`srcNotes` read, which is never polled, and `GET /api/notes/counts`) so a
+badge cannot outlive its notes and a second `gg`'s write is visible; it
+counts unresolved THREADS only, so painters never touch the store or read
+file content, and `}`/`{`'s file-step reads `ByCommitPath` to find the next
+annotated file without a store round trip. `NoteAdd` REFUSES a note whose
+side it cannot read or that names an absent side rather than storing an empty
+`ContextHash` (which can never re-anchor, so the next sweep would silently
+delete it); `NoteEdit`/`NoteReply`/`NoteRemove` return `domain.ErrNoteNotFound`,
+a sentinel wrapping `notes.ErrNotFound` so a frontend can `errors.Is` it
+without importing `internal/notes`. Every note is
 worktree-scoped except commit and shelf notes (worktree-agnostic): the store
 is shared by every worktree of a repo, so `sameNoteTarget` and the sweep both
 match on the note's own `Address.Worktree`, never the calling Service's. The
@@ -166,7 +175,20 @@ policy (`internal/tui/load.go`, `internal/tui/source.go`'s
 has expired past `max_age_days` OR resolves as non-active, and a read that
 merely FAILED (a parked reservation, a timeout) never counts as "gone" —
 only a git/OS "not there" answer does, so a slow mount or a paused op can
-never wipe the store. In the TUI, `dRow.note *noteLine` is one synthetic
+never wipe the store. **Which diffs carry notes.** The address is stamped by the LOADER, on
+`diffView.noteAddr` (TUI) / `state.diffCtx.notes` (web), never derived from
+panel focus at key time: focus cannot tell a staged diff from an unstaged one,
+and `Address.State` is exactly the pair of texts the sweep re-reads, so a
+misfiled note resolves against the wrong side and is deleted. The addressable
+loaders are the Status panel (`StateUnstaged`, or `StateUntracked` for a file
+with no index entry), the Staged panel (`StateStaged`), a commit file diff and
+the file-history diffs (`StateCommitted`, `hash^` -> `hash`). Everything else
+leaves the address ZERO and notes are inert there — every two-sided
+comparison, the shelf-vs-working and bookmark-vs-working diffs, and the web's
+compare mode (no ◆ rows, no keys, no ◆N badges on the file list): their old
+side is the compared revision, which no stored address names.
+
+In the TUI, `dRow.note *noteLine` is one synthetic
 DISPLAY row `relayout` appends after its owning line's content rows (`◆
 author: summary`, one row per rationale line, indented `↳` replies, dimmed
 when stale, filtered per-row by the `a` agent-layer toggle); `cursorDispRange`

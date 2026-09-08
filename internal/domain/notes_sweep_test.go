@@ -525,6 +525,12 @@ func TestNoteCountsSurvivesAFailedTopLevel(t *testing.T) {
 // hand-typed strings. Every note below names a target real git (or the OS)
 // reports absent, and every one of them must be swept away.
 func TestSweepDropsOrphansOnlyRealGitCanReport(t *testing.T) {
+	// noteTargetGone matches git's own English "not there" wording, so this
+	// test only means anything against an English git. ExecRunner passes
+	// os.Environ() through to the subprocess, so pinning the locale here
+	// reaches git. (Serial by necessity: t.Setenv forbids t.Parallel — which
+	// this file has none of anyway, notes.Now being a package var.)
+	t.Setenv("LC_ALL", "C")
 	dir := sweepRepo(t)
 	svc := New(&git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))})
 	svc.SetNotesStore(notes.NewFileStore(t.TempDir()))

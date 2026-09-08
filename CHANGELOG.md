@@ -22,6 +22,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   moves; a background sweep at every gg start drops notes older than
   `[notes] max_age_days` (default 30, `-1` keeps forever) and notes whose
   anchor is gone, and `[notes] max_entries` (default 2000) caps the store.
+  A note belongs to the diff that created it — the unstaged, staged,
+  untracked or commit diff, whose two sides it is re-anchored against — so a
+  note taken on the **staged** diff follows the index and survives further
+  edits to the working file. A **two-sided comparison** (and any diff against
+  a stored copy: a shelf entry, a bookmark) carries no notes at all, in the
+  TUI and in `gg web` alike: its two sides belong to no single address, so a
+  note there could not be re-anchored later.
 - **Blame and file preview are syntax-coloured.** The blame view (`b`) and the
   files view's View file preview colour code by file type with the same lexers
   and `[ui] diff_syntax` switch as the diff views; the cursor line itself stays
