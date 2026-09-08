@@ -114,17 +114,19 @@ kept like bookmarks.
   gone after reconciliation) are dropped in the same pass; `gg note clear`
   remains for explicit cleanup.
 - Machine-private by design; notes do not travel with the branch.
-- **Growth** (OPEN, user to choose): records are short text (no blobs),
-  ~300 bytes each. Candidate guards: (1) the time expiry above; (2) a
-  `notes.max_entries` cap (default 2000, oldest dropped first), which alone
-  keeps the file near 1 MB; (3) an orphan sweep on load (anchor's file or
-  commit gone, or context unrecognisable); (4) sharding into one file per
-  anchor target (`notes/<commit>.toml`, `notes/worktree.toml`) so each file
-  stays small and a vanished commit is a file delete. Recommendation:
-  1 + 2 + 3 in a single `notes.toml`, adding 4 only if a file grows large
-  in practice, because the working-tree shard (where most review notes
-  land) needs 1–3 anyway. Writes are one atomic rewrite per `gg note`
-  command, so an `apply --stdin` batch costs one rewrite.
+- **Growth** (decided 2026-09-08): one `notes.toml` per repo; records are
+  short text (~300 bytes). Housekeeping runs as a **background goroutine on
+  every gg start** (TUI, `gg web`, and every `gg note …` CLI invocation): it
+  loads the file, drops notes past `notes.max_age_days` (default 30, `0` =
+  never) and orphaned notes (target file/commit gone, or the anchored lines'
+  fingerprint no longer found), and rewrites the file once, off the UI
+  thread. The entry cap (`notes.max_entries`, default 2000, oldest dropped
+  first) is enforced on every write, since a write is the only moment the
+  file can grow. Reads never rewrite. Writers use the shelf's atomic-rewrite
+  pattern under a short file lock and re-read before writing, so the
+  startup sweep and an agent's `gg note add` cannot clobber each other.
+  Sharding per anchor target stays the escape hatch if a single file ever
+  becomes a problem; the model does not change.
 
 **Note model** (`model.Note`, engine-free, mapped from hunk's record):
 
@@ -362,7 +364,5 @@ Decided 2026-09-08:
 4. ~~Skill~~ — separate `reviewing-with-gg` file.
 5. ~~Highlighting spike~~ — passed; result recorded in §5.
 
-Still open:
-
-6. `notes.toml` growth policy: expiry + cap + orphan sweep in one file, or
-   shard per anchor target from the start? See §3.2 "Growth".
+6. ~~`notes.toml` growth~~ — one file; startup-goroutine sweep (expiry +
+   orphans) + cap on write (§3.2 "Growth").
