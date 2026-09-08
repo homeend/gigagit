@@ -323,6 +323,56 @@ grows `[j/k] line  [z] align  [e] edit`; help.go Diff-view rows; new footer
 bindings get `actionMenuLabel` cases; `config` settingDoc + `TestUIDiffCursorLayers`;
 CHANGELOG + README (diff view paragraph + `## Configuration`).
 
+### 4.2 Conflict-resolver syntax colouring (phase 5 item; approved 2026-09-08)
+
+The hunk picker keeps its own per-side sanitized caches (`sanLit`/`sanCur`/
+`sanInc`) and renders through the two-column cell primitive (`winCell`), so
+phase 4 never reached it. **Lexing:** when the picker opens, build two
+full-file texts — the current-side file (literal context + every block's
+`Current` lines) and the incoming-side file (context + `Incoming`) — and lex
+each once with `syntax.Detect(path)`/`syntax.Lex`, under the same
+`[ui] diff_syntax` switch and `domain.MaxSyntaxBytes` cap as the diff; in the
+loader's goroutine where one exists, else synchronously (milliseconds for
+ordinary files). **Rendering:** the caches gain a per-line class mask
+produced by `sanitizeCell` (so tabs stay aligned); `winCell` gains `cls`
+and the two-column renderer paints runs after slicing with the same
+post-slice painter the window primitive uses (`styledRuns`, base = the
+cell's style). The output pane reuses the masks of the lines it was
+assembled from (no re-lex per pick). The cursor row stays plain
+reverse-video (the reverse-video ruling from the blame work).
+
+### 4.3 In-view text search (phase 6; approved 2026-09-08)
+
+**One helper, four hosts.** `internal/tui/textsearch.go`: a search state
+(query, typing, direction, matches `[]match{row, side, start, end}`, cur)
+plus pure functions — find matches over a host's lines (case-insensitive
+substring, like every other gg search), next/prev with wrap-around, a
+header badge (`/foo  3/12`, `@foo` for backward). Hosts: diff view, blame,
+View file preview, conflict resolver.
+
+**Keys (decided by the user):** `/` opens a forward search, `@` a backward
+search; both search incrementally from the cursor as you type; `enter`
+keeps the query, `esc` cancels. With a query active, `]`/`[` step to the
+next/previous hit (wrap-around); `n`/`p` keep their change/region meaning;
+`esc` clears the query first, then closes the view on the next press.
+History: one shared ring scope for the four readers, recalled with
+`alt+↑/↓` like every other search field.
+
+**What a hit does per host.** Diff view: both sides are searched; the line
+cursor moves to the hit, the view scrolls to it and, in scroll mode, pans
+to the hit's column. Blame and preview: code lines only (gutter excluded).
+Conflict resolver: current and incoming candidate lines in document order;
+the 2D cursor (block, side, line) jumps to the hit; the output pane is not
+searched.
+
+**Hit colouring.** Hits paint like word emphasis, the current hit brighter
+(distinct style). The diff pane takes them as extra spans; the window
+primitive (`winRow`) and the picker cells (`winCell`) get a small
+post-slice span painter — the same mechanism as the class mask, so the
+offsets are already known per mode.
+
+**Not included.** Regex, whole-word, the web UI (the browser has find).
+
 ## 5. How hunk highlights syntax, and what gg should do
 
 Hunk does not own a highlighter. `@pierre/diffs` wraps **Shiki** (TextMate
