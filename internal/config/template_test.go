@@ -32,6 +32,7 @@ func TestSettingDocsCoverAllFields(t *testing.T) {
 	check("debug", reflect.TypeOf(DebugConfig{}))
 	check("refresh", reflect.TypeOf(RefreshConfig{}))
 	check("versions", reflect.TypeOf(VersionsConfig{}))
+	check("notes", reflect.TypeOf(NotesConfig{}))
 	check("tools", reflect.TypeOf(ToolsConfig{}))
 }
 

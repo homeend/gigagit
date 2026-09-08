@@ -621,3 +621,41 @@ func TestUIDiffCursorLayers(t *testing.T) {
 		t.Error("unknown value must fall back to row")
 	}
 }
+
+func TestNotesLayers(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.toml")
+
+	cfg, err := Load(missing, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Notes.MaxAgeDays != 30 || cfg.Notes.MaxEntries != 2000 {
+		t.Errorf("defaults = %+v, want {30 2000}", cfg.Notes)
+	}
+
+	g := filepath.Join(dir, "global.toml")
+	writeFile(t, g, "[notes]\nmax_age_days = 7\nmax_entries = 50\n")
+	cfg, err = Load(g, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Notes.MaxAgeDays != 7 || cfg.Notes.MaxEntries != 50 {
+		t.Errorf("global layer = %+v, want {7 50}", cfg.Notes)
+	}
+
+	r := filepath.Join(dir, "repo.toml")
+	writeFile(t, r, "[notes]\nmax_age_days = -1\n")
+	cfg, err = Load(g, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// -1 is the ONLY way a layer can say "keep forever" under the
+	// zero-is-unset overlay (the versions.max_age_days precedent).
+	if cfg.Notes.MaxAgeDays != -1 {
+		t.Errorf("repo -1 must win over global 7, got %d", cfg.Notes.MaxAgeDays)
+	}
+	if cfg.Notes.MaxEntries != 50 {
+		t.Errorf("an unset repo key must not clear the global one, got %d", cfg.Notes.MaxEntries)
+	}
+}
