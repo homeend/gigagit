@@ -145,13 +145,16 @@ document.addEventListener("keydown", (e) => {
     // from the chips in their own headers.
     if (state.pane === "files" && state.filesMode === "status") cycleFilesSort();
   } else if (noteKey(e, "c")) {
+    e.preventDefault(); // the key must not land in the prompt input that opens
     // Review notes (the TUI's c/E/R/a/}/{). The web has no line cursor: `c`
     // anchors on the clicked diff row (tr.cur), else the first changed row,
     // and E/R act on the nearest note at or above it.
     addNotePrompt();
   } else if (noteKey(e, "E")) {
+    e.preventDefault(); // the key must not land in the prompt input that opens
     editNotePrompt();
   } else if (noteKey(e, "R")) {
+    e.preventDefault(); // the key must not land in the prompt input that opens
     replyNotePrompt();
   } else if (noteKey(e, "a")) {
     toggleNotesAgent();

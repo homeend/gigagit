@@ -1051,13 +1051,13 @@ $("diff-body").addEventListener("contextmenu", (e) => {
   e.preventDefault();
   showCtxMenu(
     [
-      { label: "Edit note", run: () => editNotePrompt(n) },
-      { label: "Reply…", run: () => replyNotePrompt(n) },
+      { label: "Edit note", act: () => editNotePrompt(n) },
+      { label: "Reply…", act: () => replyNotePrompt(n) },
       { sep: true },
       {
         label: n.parent_id ? "Remove reply" : "Remove note (and its replies)",
         danger: true,
-        run: () => removeNote(n.id),
+        act: () => removeNote(n.id),
       },
     ],
     e.clientX,
