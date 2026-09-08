@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -81,8 +80,12 @@ func (s *Service) BookmarkBytes(ctx context.Context, b model.Bookmark) ([]byte, 
 			return s.repo.ShowFileInDir(ctx, b.Worktree, "", b.Path)
 		})
 	case model.StateUnstaged, model.StateUntracked:
+		full, err := worktreeJoin(b.Worktree, b.Path)
+		if err != nil {
+			return nil, err
+		}
 		return query(ctx, s, "bookmarkfile:"+b.Worktree+":"+b.Path, func(ctx context.Context) ([]byte, error) {
-			return os.ReadFile(filepath.Join(b.Worktree, filepath.FromSlash(b.Path)))
+			return os.ReadFile(full)
 		})
 	default:
 		return nil, errors.New("bookmark: unknown state")

@@ -14,6 +14,31 @@ import (
 // location. cmd/gg leaves it ""; tests point it at a temp dir.
 var NotesStatePath string
 
+// NotesDisabled turns the notes surface off process-wide: lazy resolution
+// yields no store, so the startup sweep is a silent no-op and NotesFor /
+// NoteCounts report ErrNotesDisabled.
+//
+// It is the TEST seam for packages that cannot import internal/notes
+// (internal/tui and internal/web set it in TestMain). Without it every test in
+// those suites that drives loadCmd/applyUIPolicies would share ONE notes.toml
+// — and the first test to write a note would make every later parallel sweep
+// read it and probe that test's Runner off-thread. Set it before m.Run(); it
+// is a plain package var, never written once tests are running.
+//
+// An INJECTED store still wins: a test that actually exercises notes calls
+// UseNotesDir on its own Service.
+var NotesDisabled bool
+
+// UseNotesDir points one Service at its own note store under dir — the
+// per-test companion to NotesDisabled, for a test in a package that cannot
+// import internal/notes:
+//
+//	svc.UseNotesDir(t.TempDir())
+//
+// It overrides NotesDisabled for that Service only, so a suite can keep notes
+// globally off and still cover them where it means to.
+func (s *Service) UseNotesDir(dir string) { s.SetNotesStore(notes.NewFileStore(dir)) }
+
 // SetNotesStore injects a store (tests). A nil store re-arms lazy resolution.
 // The effective policy is pushed here, once, for the same reason notesStore
 // pushes it at resolution time: an injected store would otherwise run uncapped
@@ -23,7 +48,7 @@ func (s *Service) SetNotesStore(st notes.Store) {
 	s.notes = st
 	s.noteCounts = nil
 	s.notesGen++
-	max := notesEffective(s.notesMaxEntries, notesDefaultMaxEntries)
+	max := notesEffective(s.notesMaxEntries, notesDefaults.MaxEntries)
 	s.mu.Unlock()
 	if st != nil {
 		st.SetPolicy(notes.Policy{MaxEntries: max})
@@ -56,7 +81,10 @@ func (s *Service) notesStore(ctx context.Context) notes.Store {
 	st := s.notes
 	s.mu.Unlock()
 	if st != nil {
-		return st
+		return st // an injected store (UseNotesDir) outranks NotesDisabled
+	}
+	if NotesDisabled {
+		return nil
 	}
 
 	root := NotesStatePath
@@ -78,7 +106,7 @@ func (s *Service) notesStore(ctx context.Context) notes.Store {
 		s.notes = fs
 	}
 	st = s.notes
-	max := notesEffective(s.notesMaxEntries, notesDefaultMaxEntries)
+	max := notesEffective(s.notesMaxEntries, notesDefaults.MaxEntries)
 	s.mu.Unlock()
 	if fresh {
 		st.SetPolicy(notes.Policy{MaxEntries: max})

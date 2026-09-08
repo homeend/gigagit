@@ -2,9 +2,13 @@ package domain
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/observ"
@@ -15,14 +19,12 @@ import (
 // leave a goroutine reading forever behind a quit.
 const notesSweepTimeout = 30 * time.Second
 
-// The built-in [notes] budget, mirroring config.Defaults(). A Service whose
-// frontend never calls SetNotesPolicy (the CLI and MCP one-shots) still gets
-// these — an UNSET (zero) value means "the default", while an explicit
-// negative means forever / uncapped, exactly like versions.max_age_days.
-const (
-	notesDefaultMaxAgeDays = 30
-	notesDefaultMaxEntries = 2000
-)
+// notesDefaults is the built-in [notes] budget, taken from the config defaults
+// so the two can never drift. A Service whose frontend never calls
+// SetNotesPolicy (the CLI and MCP one-shots) still gets these — an UNSET
+// (zero) value means "the default", while an explicit negative means forever /
+// uncapped, exactly like versions.max_age_days.
+var notesDefaults = config.Defaults().Notes
 
 // notesEffective maps an unset (zero) policy value onto its built-in default;
 // any other value — including a negative "forever / uncapped" — passes through.
@@ -42,7 +44,7 @@ func (s *Service) SetNotesPolicy(maxAgeDays, maxEntries int) {
 	st := s.notes
 	s.mu.Unlock()
 	if st != nil {
-		st.SetPolicy(notes.Policy{MaxEntries: notesEffective(maxEntries, notesDefaultMaxEntries)})
+		st.SetPolicy(notes.Policy{MaxEntries: notesEffective(maxEntries, notesDefaults.MaxEntries)})
 	}
 }
 
@@ -60,7 +62,9 @@ func (s *Service) StartNotesSweep() {
 			s.notesSweepRuns.Add(1)
 			ctx, cancel := context.WithTimeout(context.Background(), notesSweepTimeout)
 			defer cancel()
-			if _, err := s.sweepNotes(ctx); err != nil {
+			// Notes being disabled (no state dir, or the test seam) is a
+			// legitimate configuration, not a failure worth a session error.
+			if _, err := s.sweepNotes(ctx); err != nil && !errors.Is(err, ErrNotesDisabled) {
 				observ.NoteFailure("notes sweep", err)
 			}
 		}()
@@ -72,9 +76,32 @@ func (s *Service) StartNotesSweep() {
 func (s *Service) waitNotesSweepForTest()     { s.notesSweepWG.Wait() }
 func (s *Service) notesSweepRunsForTest() int { return int(s.notesSweepRuns.Load()) }
 
+// noteSide is one cached side-text read: the lines the anchor is matched
+// against, plus whether the read succeeded at all. A readable side with nil
+// lines is legitimately ABSENT (the note is orphaned); an unreadable one says
+// nothing about the note, so the sweep keeps it.
+type noteSide struct {
+	lines    []string
+	readable bool
+}
+
 // sweepNotes is the housekeeping pass: keep a note only when it has not
-// expired AND still resolves as active. Side text is read once per (address,
-// side) pair, so a file with twenty notes costs one read per side.
+// expired AND still resolves as active.
+//
+// It runs in two phases on purpose. Phase 1 resolves every note against a
+// Load() SNAPSHOT while holding NO lock — resolution shells out to git once
+// per (address, side) pair, and doing that inside Sweep's predicate would hold
+// the store's mutex and its cross-process lock across every one of those
+// reads, parking a concurrent NoteAdd (in this process or another gg) for the
+// whole pass. Phase 2 hands Sweep a pure id-set predicate that defaults to
+// KEEP, so a note written between the snapshot and the rewrite survives.
+//
+// Deletion is deliberately timid: only a target git or the OS reports ABSENT
+// makes a note orphaned. A read that merely FAILED (a parked reservation, a
+// permission or disk error) keeps its note, and a cancelled or timed-out pass
+// aborts before Sweep is called at all — otherwise a startup pull holding a
+// TreeWrite, or the 30 s deadline, would fail every read and silently wipe the
+// whole store.
 func (s *Service) sweepNotes(ctx context.Context) (int, error) {
 	st := s.notesStore(ctx)
 	if st == nil {
@@ -88,41 +115,97 @@ func (s *Service) sweepNotes(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 	s.mu.Lock()
-	maxAge := notesEffective(s.notesMaxAgeDays, notesDefaultMaxAgeDays)
+	maxAge := notesEffective(s.notesMaxAgeDays, notesDefaults.MaxAgeDays)
 	s.mu.Unlock()
 	var cutoff time.Time
 	if maxAge > 0 {
 		cutoff = notes.Now().UTC().AddDate(0, 0, -maxAge)
 	}
 
-	cache := map[string][]string{}
-	sideOf := func(n model.Note) []string {
-		// State is part of the key: a staged and an unstaged note on the same
-		// path read DIFFERENT old sides (HEAD vs the index). So is Worktree:
-		// the same path in two worktrees of one repo is two different files.
-		key := string(n.Side) + "\x00" + strconv.Itoa(int(n.Address.State)) + "\x00" +
-			n.Address.Commit + "\x00" + n.Address.Worktree + "\x00" +
-			n.Address.Path + "\x00" + n.Address.ShelfID
-		if lines, ok := cache[key]; ok {
-			return lines
-		}
-		lines, lerr := s.noteSideLines(ctx, n.Address, n.Side)
-		if lerr != nil {
-			lines = nil // unreadable target = gone = orphaned
-		}
-		cache[key] = lines
-		return lines
-	}
-
-	keep := func(n model.Note) bool {
+	// Phase 1 — resolve against the snapshot, no lock held.
+	cache := map[string]noteSide{}
+	drop := map[string]bool{}
+	for _, n := range all {
 		if !cutoff.IsZero() && n.Created.Before(cutoff) {
-			return false
+			drop[n.ID] = true
+			continue
 		}
 		if n.IsReply() {
-			return true // a reply lives or dies with its root (dropOrphanReplies)
+			continue // a reply lives or dies with its root (dropOrphanReplies)
 		}
-		status, _ := resolveOne(n, sideOf(n))
-		return status == model.NoteActive
+		side, err := s.noteSideCached(ctx, cache, n)
+		if err != nil {
+			return 0, err // cancelled or timed out: change nothing
+		}
+		if !side.readable {
+			continue // the read says nothing about the note — keep it
+		}
+		if status, _ := resolveOne(n, side.lines); status != model.NoteActive {
+			drop[n.ID] = true
+		}
 	}
-	return st.Sweep(keep)
+	if len(drop) == 0 {
+		return 0, nil // nothing to do: never take the store's lock
+	}
+
+	// Phase 2 — apply under the store's lock with a PURE predicate.
+	return st.Sweep(func(n model.Note) bool { return !drop[n.ID] })
+}
+
+// noteSideCached reads the side text a note anchors on, once per (side, state,
+// commit, path, shelf) pair — a file with twenty notes costs one read per
+// side. A non-nil error means the pass was cancelled and must abort.
+func (s *Service) noteSideCached(ctx context.Context, cache map[string]noteSide, n model.Note) (noteSide, error) {
+	// State is part of the key: a staged and an unstaged note on the same
+	// path read DIFFERENT old sides (HEAD vs the index). So is Worktree —
+	// the store is shared by every worktree of the repo.
+	key := string(n.Side) + "\x00" + strconv.Itoa(int(n.Address.State)) + "\x00" +
+		n.Address.Worktree + "\x00" + n.Address.Commit + "\x00" +
+		n.Address.Path + "\x00" + n.Address.ShelfID
+	if side, ok := cache[key]; ok {
+		return side, nil
+	}
+	lines, err := s.noteSideLines(ctx, n.Address, n.Side)
+	side := noteSide{lines: lines, readable: true}
+	if err != nil {
+		if ctx.Err() != nil {
+			return noteSide{}, err
+		}
+		// An absent target orphans the note; anything else keeps it.
+		side = noteSide{readable: noteTargetGone(err)}
+	}
+	cache[key] = side
+	return side, nil
+}
+
+// noteTargetGone reports whether a failed side read proves the target is
+// ABSENT (its blob, rev, file or whole worktree is gone) rather than merely
+// unreadable. Only this classification may delete a note, so it matches on
+// git's own "not there" wording and the OS's not-exist errors, and defaults to
+// false for everything it does not recognise.
+func noteTargetGone(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if errors.Is(err, fs.ErrNotExist) { // the direct working-copy read
+		return true
+	}
+	// git errors reach here as text (gitexec wraps stderr, not a typed error).
+	msg := strings.ToLower(err.Error())
+	for _, gone := range []string{
+		"does not exist",             // path 'x' does not exist in 'HEAD' / …nor in the index
+		"exists on disk, but not in", // a path that is untracked at that rev
+		"invalid object name",        // the rev itself is gone
+		"unknown revision or path",   //  "
+		"bad object",                 //  "
+		"cannot change to",           // git -C into a worktree that was removed
+	} {
+		if strings.Contains(msg, gone) {
+			return true
+		}
+	}
+	return false
 }

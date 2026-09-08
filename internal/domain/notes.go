@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -221,10 +222,10 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 	}
 	// ByPath badges the CURRENT checkout's Files panel, so a worktree note
 	// belonging to a sibling worktree of the same repo must not appear in it.
-	cur, err := s.TopLevel(ctx)
-	if err != nil {
-		return NoteCounts{}, err
-	}
+	// A checkout that cannot be resolved (a bare repo, a stale cwd) must NOT
+	// fail the query: commit badges need no worktree at all, so an empty cur
+	// simply leaves ByPath empty.
+	cur, _ := s.TopLevel(ctx)
 	c := NoteCounts{ByPath: map[string]int{}, ByCommit: map[string]int{}, ByCommitPath: map[string]int{}}
 	for _, n := range all {
 		if n.IsReply() { // a badge counts THREADS
@@ -589,9 +590,27 @@ func (s *Service) showFileIn(ctx context.Context, wt, rev, path string) ([]byte,
 // worktreeFileIn reads the working copy of path inside worktree wt. Path is in
 // git slash form and is converted before it touches the filesystem.
 func (s *Service) worktreeFileIn(ctx context.Context, wt, path string) ([]byte, error) {
+	full, err := worktreeJoin(wt, path)
+	if err != nil {
+		return nil, err
+	}
 	return query(ctx, s, "note-file:"+wt+":"+path, func(ctx context.Context) ([]byte, error) {
-		return os.ReadFile(filepath.Join(wt, filepath.FromSlash(path)))
+		return os.ReadFile(full)
 	})
+}
+
+// worktreeJoin resolves a git-slash, repo-relative path inside a checkout
+// root, rejecting one that climbs out of it. internal/git applies this guard
+// to its own worktree I/O; domain reaches SIBLING worktrees directly (a note
+// or a bookmark names its own checkout), so it needs the same check here — a
+// stored record is data, and data must not be able to address /etc/shadow.
+func worktreeJoin(root, path string) (string, error) {
+	full := filepath.Join(root, filepath.FromSlash(path))
+	rel, err := filepath.Rel(root, full)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path %q escapes the working tree", path)
+	}
+	return full, nil
 }
 
 // splitLines is the shared byte→line projection for side text read from git
