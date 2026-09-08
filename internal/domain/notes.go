@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -62,6 +64,15 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 		n.Created = now
 	}
 	n.Updated = now
+	// Pin the checkout BEFORE the hash fill: noteSideLines reads the note's
+	// own worktree, and every later match is made against this value.
+	if worktreeScopedNote(n.Address) {
+		wt, werr := s.noteWorktree(ctx, n.Address)
+		if werr != nil {
+			return model.Note{}, werr
+		}
+		n.Address.Worktree = wt
+	}
 	if n.ContextHash == "" {
 		if lines, lerr := s.noteSideLines(ctx, n.Address, n.Side); lerr == nil && lines != nil {
 			n.ContextHash = model.NoteContextHash(anchorLines(lines, n.Range))
@@ -100,6 +111,11 @@ func (s *Service) NoteEdit(ctx context.Context, id, summary, rationale string) e
 
 // NoteReply stores a reply that inherits its parent's anchor (address, side,
 // range, fingerprint) so the thread re-anchors as one.
+//
+// Threads are FLAT: replying to a reply attaches to that reply's root. Nesting
+// is not merely unrendered — the store's orphan-reply prune builds its root set
+// from non-replies, so a note whose parent is itself a reply would be dropped
+// inside Put while this call reported success.
 func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) (model.Note, error) {
 	st := s.notesStore(ctx)
 	if st == nil {
@@ -109,15 +125,26 @@ func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) 
 	if err != nil {
 		return model.Note{}, err
 	}
+	byID := make(map[string]model.Note, len(all))
 	for _, p := range all {
-		if p.ID != parentID {
-			continue
-		}
-		n.ParentID = p.ID
-		n.Address, n.Side, n.Range, n.ContextHash = p.Address, p.Side, p.Range, p.ContextHash
-		return s.NoteAdd(ctx, n)
+		byID[p.ID] = p
 	}
-	return model.Note{}, notes.ErrNotFound
+	root, ok := byID[parentID]
+	if !ok {
+		return model.Note{}, notes.ErrNotFound
+	}
+	// Walk up to the root, bounded by the record count so corrupt data (a
+	// parent cycle) cannot spin here.
+	for i := 0; root.IsReply() && i < len(all); i++ {
+		p, found := byID[root.ParentID]
+		if !found {
+			break
+		}
+		root = p
+	}
+	n.ParentID = root.ID
+	n.Address, n.Side, n.Range, n.ContextHash = root.Address, root.Side, root.Range, root.ContextHash
+	return s.NoteAdd(ctx, n)
 }
 
 // NoteRemove deletes a note; a root takes its replies with it.
@@ -146,6 +173,15 @@ func (s *Service) NotesFor(ctx context.Context, addr model.FileAddress, d Diff) 
 	if err != nil {
 		return nil, err
 	}
+	// Scope the query to this checkout so a sibling worktree's notes on the
+	// same path never surface here.
+	if worktreeScopedNote(addr) {
+		wt, werr := s.noteWorktree(ctx, addr)
+		if werr != nil {
+			return nil, werr
+		}
+		addr.Worktree = wt
+	}
 	mine := make([]model.Note, 0, len(all))
 	for _, n := range all {
 		if sameNoteTarget(n.Address, addr) {
@@ -172,6 +208,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		s.mu.Unlock()
 		return c, nil
 	}
+	gen := s.notesGen
 	s.mu.Unlock()
 
 	st := s.notesStore(ctx)
@@ -179,6 +216,12 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		return NoteCounts{}, ErrNotesDisabled
 	}
 	all, err := st.Load()
+	if err != nil {
+		return NoteCounts{}, err
+	}
+	// ByPath badges the CURRENT checkout's Files panel, so a worktree note
+	// belonging to a sibling worktree of the same repo must not appear in it.
+	cur, err := s.TopLevel(ctx)
 	if err != nil {
 		return NoteCounts{}, err
 	}
@@ -194,12 +237,20 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 			}
 			continue
 		}
-		if n.Address.Path != "" {
-			c.ByPath[n.Address.Path]++
+		// A shelf note carries a Path but lives in no checkout: it must not
+		// badge the same path in the working tree.
+		if n.Address.ShelfID != "" || n.Address.Path == "" {
+			continue
 		}
+		if !sameWorktreePath(n.Address.Worktree, cur) {
+			continue
+		}
+		c.ByPath[n.Address.Path]++
 	}
 	s.mu.Lock()
-	s.noteCounts = &c
+	if s.notesGen == gen { // a mutation raced this computation: drop it
+		s.noteCounts = &c
+	}
 	s.mu.Unlock()
 	return c, nil
 }
@@ -207,16 +258,60 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 func (s *Service) invalidateNoteCounts() {
 	s.mu.Lock()
 	s.noteCounts = nil
+	s.notesGen++
 	s.mu.Unlock()
 }
 
 // sameNoteTarget decides whether a stored note belongs to the diff at addr.
-// Path + Commit are the identity: a working-tree note (Commit == "") shows on
-// the unstaged AND the staged diff of the same file — the stored State only
-// names the OLD-side base for the sweep, and re-anchoring absorbs the
-// line-number difference between index and working tree.
+// Path + Commit + ShelfID are the identity: a working-tree note (Commit == "")
+// shows on the unstaged AND the staged diff of the same file — the stored
+// State only names the OLD-side base for the sweep, and re-anchoring absorbs
+// the line-number difference between index and working tree.
+//
+// Worktree-state notes additionally match on the worktree. The store is keyed
+// by the git COMMON dir and therefore shared by every worktree of the repo,
+// but their content (index, HEAD, working file) is per-worktree: without this,
+// a note taken in worktree A would be listed — and, worse, resolved and swept
+// — against worktree B's copy of the same path.
 func sameNoteTarget(a, b model.FileAddress) bool {
-	return a.Path == b.Path && a.Commit == b.Commit && a.ShelfID == b.ShelfID
+	if a.Path != b.Path || a.Commit != b.Commit || a.ShelfID != b.ShelfID {
+		return false
+	}
+	if worktreeScopedNote(a) {
+		return sameWorktreePath(a.Worktree, b.Worktree)
+	}
+	return true // commit and shelf notes are worktree-agnostic
+}
+
+// worktreeScopedNote reports whether an address names live worktree content
+// (as opposed to a commit or a shelf entry, which every worktree shares).
+func worktreeScopedNote(a model.FileAddress) bool {
+	return a.Commit == "" && a.ShelfID == ""
+}
+
+// sameWorktreePath compares two checkout roots in native notation. Both sides
+// are stored cleaned (NoteAdd fills them from TopLevel), so this is a plain
+// comparison; Clean is re-applied because a caller-supplied query address may
+// carry a trailing separator.
+func sameWorktreePath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
+}
+
+// noteWorktree resolves the checkout a worktree-state note belongs to: the
+// address's own root when it has one, else this Service's. A note that cannot
+// be scoped is not storable, so callers propagate the error.
+func (s *Service) noteWorktree(ctx context.Context, addr model.FileAddress) (string, error) {
+	if addr.Worktree != "" {
+		return filepath.Clean(addr.Worktree), nil
+	}
+	top, err := s.TopLevel(ctx)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(top), nil
 }
 
 // diffSideLines projects a diff's aligned rows back into per-side line text,
@@ -401,6 +496,13 @@ func resolveNotes(ns []model.Note, oldLines, newLines []string) []ResolvedNote {
 // A nil result (with a nil error) means the side is legitimately absent; an
 // error means the target could not be read at all — the caller treats both as
 // "gone".
+//
+// The live rows read the NOTE'S worktree, not this Service's: the store is
+// shared by every worktree of the repo, so a sweep running in worktree B must
+// still read worktree A's index and working file for A's notes. A worktree
+// that no longer exists makes the read fail, i.e. the note is orphaned. This
+// is the BookmarkBytes routing (`git -C <wt> show` for tracked content, a
+// direct file read for the working copy).
 func (s *Service) noteSideLines(ctx context.Context, addr model.FileAddress, side model.NoteSide) ([]string, error) {
 	old := side == model.NoteSideOld
 	switch addr.State {
@@ -411,6 +513,16 @@ func (s *Service) noteSideLines(ctx context.Context, addr model.FileAddress, sid
 		}
 		b, err := s.ShowFile(ctx, rev, addr.Path)
 		if err != nil {
+			// A ROOT commit has no first parent, so its old side is
+			// legitimately EMPTY rather than unreadable — without this the
+			// note's fingerprint never fills and it is stale forever. A parent
+			// that exists but lacks the path (a file this commit added) stays
+			// an error: that side really is absent.
+			if old {
+				if _, found, lerr := s.CommitLookup(ctx, addr.Commit+"^"); lerr == nil && !found {
+					return []string{}, nil
+				}
+			}
 			return nil, err
 		}
 		return splitLines(b), nil
@@ -423,39 +535,63 @@ func (s *Service) noteSideLines(ctx context.Context, addr model.FileAddress, sid
 			return nil, err
 		}
 		return splitLines(b), nil
+	}
+
+	wt, err := s.noteWorktree(ctx, addr)
+	if err != nil {
+		return nil, err
+	}
+	switch addr.State {
 	case model.StateStaged:
-		rev := "" // "" = the index blob (git show :path)
+		rev := "" // "" = the index blob (git -C <wt> show :path)
 		if old {
 			rev = "HEAD"
 		}
-		b, err := s.ShowFile(ctx, rev, addr.Path)
-		if err != nil {
-			return nil, err
+		b, serr := s.showFileIn(ctx, wt, rev, addr.Path)
+		if serr != nil {
+			return nil, serr
 		}
 		return splitLines(b), nil
 	case model.StateUntracked:
 		if old {
 			return nil, nil
 		}
-		b, err := s.WorktreeFile(ctx, addr.Path)
-		if err != nil {
-			return nil, err
+		b, ferr := s.worktreeFileIn(ctx, wt, addr.Path)
+		if ferr != nil {
+			return nil, ferr
 		}
 		return splitLines(b), nil
 	default: // StateUnstaged
 		if old {
-			b, err := s.ShowFile(ctx, "", addr.Path)
-			if err != nil {
-				return nil, err
+			b, serr := s.showFileIn(ctx, wt, "", addr.Path)
+			if serr != nil {
+				return nil, serr
 			}
 			return splitLines(b), nil
 		}
-		b, err := s.WorktreeFile(ctx, addr.Path)
-		if err != nil {
-			return nil, err
+		b, ferr := s.worktreeFileIn(ctx, wt, addr.Path)
+		if ferr != nil {
+			return nil, ferr
 		}
 		return splitLines(b), nil
 	}
+}
+
+// showFileIn reads path at rev inside worktree wt (`git -C <wt> show
+// <rev>:<path>`), under a Read reservation — the BookmarkBytes precedent for
+// reaching a sibling worktree's index or HEAD.
+func (s *Service) showFileIn(ctx context.Context, wt, rev, path string) ([]byte, error) {
+	return query(ctx, s, "note-showindir:"+wt+":"+rev+":"+path, func(ctx context.Context) ([]byte, error) {
+		return s.repo.ShowFileInDir(ctx, wt, rev, path)
+	})
+}
+
+// worktreeFileIn reads the working copy of path inside worktree wt. Path is in
+// git slash form and is converted before it touches the filesystem.
+func (s *Service) worktreeFileIn(ctx context.Context, wt, path string) ([]byte, error) {
+	return query(ctx, s, "note-file:"+wt+":"+path, func(ctx context.Context) ([]byte, error) {
+		return os.ReadFile(filepath.Join(wt, filepath.FromSlash(path)))
+	})
 }
 
 // splitLines is the shared byte→line projection for side text read from git

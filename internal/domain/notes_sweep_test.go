@@ -29,9 +29,10 @@ func TestSweepDropsExpiredStaleAndOrphaned(t *testing.T) {
 	notes.Now = func() time.Time { return base }
 	defer func() { notes.Now = real }()
 
-	// The index blob the ACTIVE note anchors on. The span name is "git show"
-	// (repo.ShowFile); "git -C show" is ShowFileInDir, which this path never uses.
-	f.SetResponse("git show", gitexec.Result{Stdout: "alpha\nbeta\n"})
+	// The index blob the ACTIVE note anchors on. Worktree-state notes read
+	// THEIR OWN checkout, so the span is "git -C show" (repo.ShowFileInDir);
+	// plain "git show" is the commit-note path, which this test never takes.
+	f.SetResponse("git -C show", gitexec.Result{Stdout: "alpha\nbeta\n"})
 
 	keep, err := svc.NoteAdd(ctx, model.Note{
 		Address:     model.FileAddress{State: model.StateStaged, Worktree: "/wt", Path: "a.go"},
@@ -176,7 +177,7 @@ func TestSweepKeepsEverythingWhenAgeIsNonPositive(t *testing.T) {
 	svc.SetNotesStore(notes.NewFileStore(t.TempDir()))
 	svc.SetNotesPolicy(-1, 2000) // keep forever
 	ctx := context.Background()
-	f.SetResponse("git show", gitexec.Result{Stdout: "alpha\n"})
+	f.SetResponse("git -C show", gitexec.Result{Stdout: "alpha\n"})
 
 	real := notes.Now
 	notes.Now = func() time.Time { return time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC) }
@@ -205,7 +206,7 @@ func TestSweepZeroPolicyUsesTheBuiltInDefaults(t *testing.T) {
 	svc.SetNotesStore(notes.NewFileStore(t.TempDir()))
 	svc.SetNotesPolicy(0, 0)
 	ctx := context.Background()
-	f.SetResponse("git show", gitexec.Result{Stdout: "alpha\n"})
+	f.SetResponse("git -C show", gitexec.Result{Stdout: "alpha\n"})
 
 	real := notes.Now
 	base := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)

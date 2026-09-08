@@ -15,11 +15,19 @@ import (
 var NotesStatePath string
 
 // SetNotesStore injects a store (tests). A nil store re-arms lazy resolution.
+// The effective policy is pushed here, once, for the same reason notesStore
+// pushes it at resolution time: an injected store would otherwise run uncapped
+// until a frontend happened to call SetNotesPolicy.
 func (s *Service) SetNotesStore(st notes.Store) {
 	s.mu.Lock()
 	s.notes = st
 	s.noteCounts = nil
+	s.notesGen++
+	max := notesEffective(s.notesMaxEntries, notesDefaultMaxEntries)
 	s.mu.Unlock()
+	if st != nil {
+		st.SetPolicy(notes.Policy{MaxEntries: max})
+	}
 }
 
 // disableNotesForTest forces the "no state directory" branch so the disabled
@@ -32,18 +40,22 @@ func (s *Service) disableNotesForTest() {
 
 // notesStore resolves (once) the per-repo note store, keyed by git common dir
 // under the XDG state dir — the bookmarkStore shape. Returns nil (notes
-// disabled) when no state dir is resolvable. The write-time policy is pushed
-// on every call so a later SetNotesPolicy reaches an already-resolved store.
+// disabled) when no state dir is resolvable.
+//
+// The write-time policy is pushed exactly where the store is installed — here
+// on first resolution, in SetNotesStore, and in SetNotesPolicy — never per
+// call: FileStore.SetPolicy takes the same mutex its writer holds across the
+// lock spin, so pushing it on every read would park every reader behind a
+// contended write.
 func (s *Service) notesStore(ctx context.Context) notes.Store {
 	s.mu.Lock()
 	if s.notesOff {
 		s.mu.Unlock()
 		return nil
 	}
-	st, max := s.notes, notesEffective(s.notesMaxEntries, notesDefaultMaxEntries)
+	st := s.notes
 	s.mu.Unlock()
 	if st != nil {
-		st.SetPolicy(notes.Policy{MaxEntries: max})
 		return st
 	}
 
@@ -61,12 +73,16 @@ func (s *Service) notesStore(ctx context.Context) notes.Store {
 	}
 	fs := notes.NewFileStore(root)
 	s.mu.Lock()
-	if s.notes == nil {
+	fresh := s.notes == nil
+	if fresh {
 		s.notes = fs
 	}
-	st, max = s.notes, notesEffective(s.notesMaxEntries, notesDefaultMaxEntries)
+	st = s.notes
+	max := notesEffective(s.notesMaxEntries, notesDefaultMaxEntries)
 	s.mu.Unlock()
-	st.SetPolicy(notes.Policy{MaxEntries: max})
+	if fresh {
+		st.SetPolicy(notes.Policy{MaxEntries: max})
+	}
 	return st
 }
 

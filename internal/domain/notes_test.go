@@ -14,9 +14,37 @@ import (
 func notesSvc(t *testing.T) (*Service, *gitexec.FakeRunner) {
 	t.Helper()
 	f := gitexec.NewFakeRunner()
+	// Worktree-state notes are scoped to their worktree, so every path that
+	// stores or matches one resolves this Service's checkout.
+	f.SetResponse("git rev-parse (toplevel)", gitexec.Result{Stdout: "/wt\n"})
 	svc := New(&git.Repo{Runner: f})
 	svc.SetNotesStore(notes.NewFileStore(t.TempDir()))
 	return svc, f
+}
+
+// hookStore wraps a real store and fires onLoad on every Load — the seam that
+// makes "a mutation landed while NoteCounts was computing" deterministic.
+type hookStore struct {
+	notes.Store
+	onLoad func()
+}
+
+func (h *hookStore) Load() ([]model.Note, error) {
+	if h.onLoad != nil {
+		h.onLoad()
+	}
+	return h.Store.Load()
+}
+
+// countingStore records how often the write-time policy was pushed onto it.
+type countingStore struct {
+	notes.Store
+	policy int
+}
+
+func (c *countingStore) SetPolicy(p notes.Policy) {
+	c.policy++
+	c.Store.SetPolicy(p)
 }
 
 // wtAddr is the working-tree address every test note hangs off.
@@ -247,6 +275,140 @@ func TestNoteCountsCachedAndInvalidated(t *testing.T) {
 	}
 	if c, _ = svc.NoteCounts(ctx); c.ByPath["a/b.go"] != 0 {
 		t.Fatalf("count cache must be invalidated by a mutation: %+v", c)
+	}
+}
+
+// A reply to a REPLY must flatten onto the root: the store's orphan-reply
+// prune builds its root set from non-replies, so a nested reply would be
+// silently dropped inside Put while NoteReply reported success.
+func TestNoteReplyToAReplyFlattensToTheRoot(t *testing.T) {
+	t.Parallel()
+	svc, _ := notesSvc(t)
+	ctx := context.Background()
+	root, err := svc.NoteAdd(ctx, model.Note{
+		Address: wtAddr("a/b.go"), Side: model.NoteSideNew, Range: [2]int{1, 1},
+		Summary: "root", ContextHash: model.NoteContextHash([]string{"a"}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := svc.NoteReply(ctx, root.ID, model.Note{Summary: "first reply"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := svc.NoteReply(ctx, first.ID, model.Note{Summary: "reply to the reply"})
+	if err != nil {
+		t.Fatalf("NoteReply to a reply: %v", err)
+	}
+	if second.ParentID != root.ID {
+		t.Fatalf("a nested reply must re-point at the root: ParentID = %q, want %q", second.ParentID, root.ID)
+	}
+	res, err := svc.NotesFor(ctx, wtAddr("a/b.go"), sideDiff("a", "b"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 1 || len(res[0].Replies) != 2 {
+		t.Fatalf("both replies must survive under the root: %+v", res)
+	}
+}
+
+// The write-time policy must be pushed when the store is resolved (and from
+// SetNotesPolicy), never once per read: FileStore.SetPolicy takes the same
+// mutex the writer holds across its lock spin, so a per-read push would make
+// every read block behind a contended write.
+func TestNotesPolicyIsPushedOnceNotPerRead(t *testing.T) {
+	t.Parallel()
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git rev-parse (toplevel)", gitexec.Result{Stdout: "/wt\n"})
+	svc := New(&git.Repo{Runner: f})
+	cs := &countingStore{Store: notes.NewFileStore(t.TempDir())}
+	svc.SetNotesStore(cs)
+	ctx := context.Background()
+	if cs.policy != 1 {
+		t.Fatalf("injecting a store must push the effective policy once, got %d", cs.policy)
+	}
+
+	for i := 0; i < 3; i++ {
+		if _, err := svc.NotesFor(ctx, wtAddr("a/b.go"), sideDiff("a")); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.NoteCounts(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if cs.policy != 1 {
+		t.Fatalf("reads must not push the policy: %d pushes after 6 reads", cs.policy)
+	}
+	svc.SetNotesPolicy(30, 10)
+	if cs.policy != 2 {
+		t.Fatalf("SetNotesPolicy must push: %d", cs.policy)
+	}
+}
+
+// NoteCounts computes outside the lock, so a mutation that lands between the
+// read and the store must DISCARD the now-stale result — a nil-check cannot
+// see that, a generation counter can.
+func TestNoteCountsDiscardsAResultRacedByAMutation(t *testing.T) {
+	t.Parallel()
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git rev-parse (toplevel)", gitexec.Result{Stdout: "/wt\n"})
+	svc := New(&git.Repo{Runner: f})
+	inner := notes.NewFileStore(t.TempDir())
+	armed := false
+	hooked := &hookStore{Store: inner, onLoad: func() {
+		if armed {
+			armed = false
+			svc.invalidateNoteCounts() // a mutation lands mid-compute
+		}
+	}}
+	svc.SetNotesStore(hooked)
+	ctx := context.Background()
+	root, err := svc.NoteAdd(ctx, model.Note{
+		Address: wtAddr("a/b.go"), Side: model.NoteSideNew, Range: [2]int{1, 1},
+		Summary: "x", ContextHash: "h",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	armed = true
+	if c, err := svc.NoteCounts(ctx); err != nil || c.ByPath["a/b.go"] != 1 {
+		t.Fatalf("raced NoteCounts = %+v %v", c, err)
+	}
+	// Mutate BEHIND the Service (no invalidation of its own). If the raced
+	// result had been cached, the next call would still say 1.
+	if err := inner.Remove(root.ID); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := svc.NoteCounts(ctx); c.ByPath["a/b.go"] != 0 {
+		t.Fatalf("a result raced by a mutation must not be cached: %+v", c)
+	}
+}
+
+// A shelf note carries a Path but belongs to no worktree: it must not add a
+// Files-panel badge to the same path in the checkout.
+func TestNoteCountsByPathExcludesShelfNotes(t *testing.T) {
+	t.Parallel()
+	svc, _ := notesSvc(t)
+	ctx := context.Background()
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Address: wtAddr("a/b.go"), Side: model.NoteSideNew, Range: [2]int{1, 1},
+		Summary: "worktree", ContextHash: "h",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Address: model.FileAddress{State: model.StateShelf, ShelfID: "e1", Path: "a/b.go"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "shelved", ContextHash: "h",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := svc.NoteCounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ByPath["a/b.go"] != 1 {
+		t.Fatalf("a shelf note must not badge the worktree path: ByPath = %+v", c.ByPath)
 	}
 }
 

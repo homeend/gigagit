@@ -98,9 +98,11 @@ func (s *Service) sweepNotes(ctx context.Context) (int, error) {
 	cache := map[string][]string{}
 	sideOf := func(n model.Note) []string {
 		// State is part of the key: a staged and an unstaged note on the same
-		// path read DIFFERENT old sides (HEAD vs the index).
+		// path read DIFFERENT old sides (HEAD vs the index). So is Worktree:
+		// the same path in two worktrees of one repo is two different files.
 		key := string(n.Side) + "\x00" + strconv.Itoa(int(n.Address.State)) + "\x00" +
-			n.Address.Commit + "\x00" + n.Address.Path + "\x00" + n.Address.ShelfID
+			n.Address.Commit + "\x00" + n.Address.Worktree + "\x00" +
+			n.Address.Path + "\x00" + n.Address.ShelfID
 		if lines, ok := cache[key]; ok {
 			return lines
 		}

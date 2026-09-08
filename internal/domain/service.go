@@ -46,6 +46,11 @@ type Service struct {
 	notes      notes.Store // lazily resolved; nil disables notes
 	notesOff   bool        // hard "no store" (the disabled-path test)
 	noteCounts *NoteCounts // cached badge counts; nil = cold, invalidated by every mutation
+	// notesGen rises on every count invalidation. NoteCounts computes OUTSIDE
+	// the lock, so it stores its result only when the generation it started
+	// from is still current — a mutation landing mid-compute would otherwise
+	// have its invalidation overwritten by the stale result.
+	notesGen uint64
 
 	// notesMaxAgeDays / notesMaxEntries carry [notes] into the store and the
 	// sweep. Set by SetNotesPolicy before StartNotesSweep; 0 = the built-in
