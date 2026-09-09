@@ -400,15 +400,18 @@ func noteList(svc *domain.Service, args []string, stdout, stderr io.Writer) int 
 // noteClear deletes every note thread at one address (--file) or every
 // address this checkout can see (--all), and requires --yes either way.
 //
-// The default --type all path removes through domain.NotesClear: one store
-// write per address (roots and replies together). The printed count is the
-// removed THREAD count (a root takes its replies with it, so replies are
-// never counted on their own) — NotesClear itself reports dropped RECORDS
-// (roots + replies), so the root count is read via NotesAt first and
-// NotesClear performs the actual deletion. A non-"all" --type narrows to
-// matching ROOTS, which NotesClear cannot express (it takes a whole address
-// indiscriminately), so that case falls back to a per-note NoteRemove of the
-// matching roots only.
+// The printed count is what the write actually removed: RECORDS (roots and
+// replies), never a pre-read — the same thing the TUI's "Removed N notes"
+// notice counts. The default --type all path removes through
+// domain.NotesClear, one store write per address, and sums NotesClear's own
+// return values directly. A non-"all" --type narrows to matching ROOTS, which
+// NotesClear cannot express (it takes a whole address indiscriminately): that
+// case reads the roots via NotesAt, then removes each matching root with
+// NoteRemove (which takes its replies with it), counting 1+len(replies) per
+// root actually removed. Either way, an orphaned note (its anchor file gone,
+// so `list` never shows it) is still cleared and counted: the --type all path
+// never consults NotesAt at all, and NotesClear's sweep matches on the raw
+// stored address, not on resolved/orphan status.
 func noteClear(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("note clear", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -424,12 +427,12 @@ func noteClear(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 		fmt.Fprintln(stderr, "note clear: pass exactly one of --file <path> or --all")
 		return 2
 	}
-	if !*yes {
-		fmt.Fprintln(stderr, "note clear: refusing to delete without --yes")
-		return 2
-	}
 	if !noteTypeMatches(*typ, model.NoteSourceUser) && !noteTypeMatches(*typ, model.NoteSourceAgent) {
 		fmt.Fprintln(stderr, "note clear: --type must be user, agent or all")
+		return 2
+	}
+	if !*yes {
+		fmt.Fprintln(stderr, "note clear: refusing to delete without --yes")
 		return 2
 	}
 	ctx := context.Background()
@@ -440,29 +443,32 @@ func noteClear(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 	allTypes := strings.TrimSpace(*typ) == "" || *typ == "all"
 	removed := 0
 	for _, addr := range addrs {
-		res, err := svc.NotesAt(ctx, addr)
-		if err != nil {
-			fmt.Fprintln(stderr, "error:", err)
-			return 1
-		}
 		if allTypes {
-			// The root count IS the thread count; NotesClear does the write.
-			if _, err := svc.NotesClear(ctx, addr); err != nil {
+			dropped, err := svc.NotesClear(ctx, addr)
+			removed += dropped
+			if err != nil {
+				fmt.Fprintf(stdout, "removed %d notes\n", removed)
 				fmt.Fprintln(stderr, "error:", err)
 				return 1
 			}
-			removed += len(res)
 			continue
+		}
+		res, err := svc.NotesAt(ctx, addr)
+		if err != nil {
+			fmt.Fprintf(stdout, "removed %d notes\n", removed)
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
 		}
 		for _, r := range res {
 			if !noteTypeMatches(*typ, r.Note.Source) {
 				continue
 			}
 			if err := svc.NoteRemove(ctx, r.Note.ID); err != nil {
+				fmt.Fprintf(stdout, "removed %d notes\n", removed)
 				fmt.Fprintln(stderr, "error:", err)
 				return 1
 			}
-			removed++
+			removed += 1 + len(r.Replies)
 		}
 	}
 	fmt.Fprintf(stdout, "removed %d notes\n", removed)

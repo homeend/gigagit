@@ -310,15 +310,85 @@ func TestNoteClearGuardsAndCount(t *testing.T) {
 		}
 	}
 
+	// A bad --type must be reported even without --yes: the type guard runs
+	// before the --yes guard.
+	if code, _, errb := runCLI(t, dir, "note", "clear", "--all", "--type", "robot"); code != 2 || !strings.Contains(errb, "--type") {
+		t.Fatalf("clear --all --type robot: exit=%d stderr=%q, want exit 2 and a --type error", code, errb)
+	}
+
 	code, out, errb := runCLI(t, dir, "note", "clear", "--all", "--yes")
 	if code != 0 {
 		t.Fatalf("exit=%d stderr=%s", code, errb)
 	}
-	if !strings.Contains(out, "removed 2 notes") {
-		t.Fatalf("stdout = %q, want the removed THREAD count (a root takes its replies)", out)
+	if !strings.Contains(out, "removed 3 notes") {
+		t.Fatalf("stdout = %q, want the removed RECORD count (two roots + one reply)", out)
 	}
 	_, out, _ = runCLI(t, dir, "note", "list")
 	if strings.TrimSpace(out) != "" {
 		t.Fatalf("clear --all must empty the store: %q", out)
+	}
+}
+
+// A note whose anchor file no longer exists is orphaned (NotesAt — and so
+// `list` — would show nothing for it). `clear` must still find and count it:
+// the --type all path removes through NotesClear directly, never consulting
+// the orphan-hiding NotesAt read.
+//
+// This deliberately does NOT run `note list` in between: every `gg note`
+// subcommand's own withNotesHousekeeping starts a bounded startup sweep
+// AFTER it runs, and that general sweep also drops orphaned notes on its own.
+// Calling `list` first would race that sweep and could remove the note
+// before `clear` ever sees it, defeating the point of this test — which is
+// that `clear` itself, not a lucky sweep, is what counts an orphaned note
+// correctly.
+func TestNoteClearCountsOrphanedNotes(t *testing.T) {
+	dir := noteRepo(t)
+	runCLI(t, dir, "note", "add", "--file", "fresh.txt", "--new-line", "1", "--summary", "orphan me")
+	if err := os.Remove(filepath.Join(dir, "fresh.txt")); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errb := runCLI(t, dir, "note", "clear", "--file", "fresh.txt", "--yes")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "removed 1 notes") {
+		t.Fatalf("stdout = %q, want the orphaned note cleared and counted", out)
+	}
+}
+
+// --type user / --type agent on clear narrows to matching ROOTS only: a
+// matched root takes its own replies with it (they count too), and threads of
+// the other type are untouched.
+func TestNoteClearTypeNarrowing(t *testing.T) {
+	dir := noteRepo(t)
+	_, out, _ := runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "1", "--summary", "agent note")
+	agentRoot := strings.TrimSpace(out)
+	if code, _, errb := runCLI(t, dir, "note", "reply", agentRoot, "--summary", "agent reply"); code != 0 {
+		t.Fatalf("reply: exit=%d stderr=%s", code, errb)
+	}
+	runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "2", "--summary", "user note", "--source", "user")
+
+	code, out, errb := runCLI(t, dir, "note", "clear", "--all", "--type", "agent", "--yes")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "removed 2 notes") {
+		t.Fatalf("stdout = %q, want the agent root + its reply counted", out)
+	}
+	_, out, _ = runCLI(t, dir, "note", "list")
+	if strings.Contains(out, "agent note") || !strings.Contains(out, "user note") {
+		t.Fatalf("clear --type agent must remove only the agent thread, leaving the user thread listable:\n%s", out)
+	}
+
+	code, out, errb = runCLI(t, dir, "note", "clear", "--all", "--type", "user", "--yes")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "removed 1 notes") {
+		t.Fatalf("stdout = %q, want the user root counted (no replies)", out)
+	}
+	_, out, _ = runCLI(t, dir, "note", "list")
+	if strings.TrimSpace(out) != "" {
+		t.Fatalf("both threads should now be gone: %q", out)
 	}
 }
