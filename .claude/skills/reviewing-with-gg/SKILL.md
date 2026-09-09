@@ -60,6 +60,11 @@ gg show <commit> [--patch]
 gg note list [--file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]
 ```
 
+The positional commit does NOT mean the same thing everywhere: `gg diff
+--hunks <commit>` shows that commit's own change (like `--rev`), but plain
+`gg diff <commit>` compares the WORKING TREE against it — empty on a clean
+checkout. To read a commit's own change, use `gg show <commit> --patch`.
+
 `gg diff --hunks` numbers each file's git `@@` hunks 1-based:
 
 ```text
@@ -82,7 +87,8 @@ gg note clear (--file <path> | --all) [--type user|agent|all] --yes
 - `add` and `reply` print the new note id; `--json` prints the note object.
 - Line numbers are 1-based. `--new-line` is the line in the NEW version of the
   file, `--old-line` in the old one; `--hunk N` covers the hunk's whole span
-  (its new-side span, or its old-side span when the hunk only deletes).
+  (its new-side span, or its old-side span when the new side is empty — a
+  deleted file).
 - `rm` on a thread root takes its replies with it. `clear` prints
   `removed N notes`, counting records — roots AND their replies.
 - CLI notes default to `--source agent` and to `$GG_AGENT` as the author.
