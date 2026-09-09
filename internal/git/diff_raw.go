@@ -27,8 +27,17 @@ func (r *Repo) DiffNumstat(ctx context.Context, spec model.DiffSpec) (string, er
 }
 
 // DiffPatch returns the full patch for spec, exactly as git prints it.
+//
+// The invocation is pinned to git's default a/b prefixes and to no colour,
+// regardless of the user's diff.noprefix / diff.mnemonicPrefix / color.diff
+// config: ParseDiffHunks (internal/domain) assumes the default "a/"/"b/"
+// header prefixes and uncoloured output, so those user settings would
+// otherwise make hunk parsing silently find nothing.
 func (r *Repo) DiffPatch(ctx context.Context, spec model.DiffSpec) (string, error) {
 	b := gitcmd.New("diff").
+		Config("diff.noprefix=false").
+		Config("diff.mnemonicPrefix=false").
+		Arg("--no-color").
 		ArgIf(spec.Cached, "--cached").
 		ArgIf(spec.Rev != "", spec.Rev)
 	if len(spec.Paths) > 0 {
