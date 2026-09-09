@@ -207,6 +207,22 @@ the row in the single-column layouts; a `notes` SSE event (`emitNotes`)
 tells every open page to re-fetch after a mutation. `srcNotes` is a refresh source (badges only) — it is never polled
 by the background scheduler, only fired after a note mutation.
 
+Two TUI `.` rows are WHOLE-DIFF rather than cursor-scoped (`diffHasNotes`: a
+diff on top carrying ≥1 thread), so a file's notes are reachable without first
+hunting for an annotated line. `note-list` (`notes_list_popup.go`) lists one
+row per root in `v.notes` order — `◆ new:15  ada  summary  +2`, the ◆ painted
+by `rowDecorator` in the thread's frame colour (plain on the reverse-video
+selected row), only the summary trimmed so `+N` survives a narrow box —
+type-to-filter over summary+author, `enter` lands the cursor via `gotoNote`
+(the `}` fold-expand path, then `revealCursorNotes`), `esc` closes.
+`note-remove-all` (`note_remove_all_popup.go`) is a TYPED confirmation on the
+`remove all` token (trimmed, case-folded) behind `domain.NotesClear`, which
+drops every note matching `sameNoteTarget` — roots and the replies that
+inherit their address — in ONE `Store.Sweep` write, worktree-scoped like
+`NotesFor`. The popup quotes the SHOWN root count; the `notesClearedMsg`
+notice reports the store's actual number (orphaned notes the view filters out
+still go).
+
 Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands, else launches the TUI.
 
 ## Conventions
