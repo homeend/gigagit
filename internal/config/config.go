@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/theme"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -186,6 +187,13 @@ type Config struct {
 	Versions VersionsConfig `toml:"versions"`
 	Notes    NotesConfig    `toml:"notes"`
 	Tools    ToolsConfig    `toml:"tools"`
+
+	// Themes holds per-theme colour overrides, one [themes.<name>] table per
+	// built-in theme name (terminal/dark/light). Unknown names are kept and
+	// simply never match. Nil by default; the TUI overlays Themes[<active
+	// theme>] onto the built-in palette and reports invalid values in the
+	// status bar rather than failing to start.
+	Themes map[string]theme.Override `toml:"themes"`
 }
 
 // Defaults returns the built-in configuration used when no files set a field.
@@ -221,6 +229,7 @@ func Load(globalPath, repoPath string) (Config, error) {
 			overlayVersions(&cfg.Versions, layer.Versions)
 			overlayNotes(&cfg.Notes, layer.Notes)
 			overlayTools(&cfg.Tools, layer.Tools)
+			overlayThemes(&cfg.Themes, layer.Themes)
 		}
 	}
 	return cfg, nil
@@ -256,6 +265,22 @@ func decodeFile(path string) (Config, bool, error) {
 		return Config{}, false, fmt.Errorf("config: parsing %s: %w", path, err)
 	}
 	return c, true, nil
+}
+
+// overlayThemes layers each [themes.<name>] table of src onto dst per field
+// (theme.Merge: a set field in the higher layer wins, the rest survive), so a
+// repo file can retune one role without restating the whole table. Names src
+// introduces are added; names it omits are untouched.
+func overlayThemes(dst *map[string]theme.Override, src map[string]theme.Override) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]theme.Override, len(src))
+	}
+	for name, o := range src {
+		(*dst)[name] = theme.Merge((*dst)[name], o)
+	}
 }
 
 // overlayWorktree copies each non-empty field of src onto dst (field-level

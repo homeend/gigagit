@@ -228,6 +228,18 @@ func (th Theme) AsOverride() Override {
 	return o
 }
 
+// Value returns the scalar this Override holds for a RoleDocs key ("" when
+// unset, and for an unknown key or the two list keys). It lets a renderer walk
+// RoleDocs and pull each value without reflecting over the struct.
+func (o Override) Value(key string) string {
+	for _, f := range roleFields {
+		if f.key == key {
+			return *f.getO(&o)
+		}
+	}
+	return ""
+}
+
 // RoleDoc is one documented Override key.
 type RoleDoc struct{ Key, Doc string }
 

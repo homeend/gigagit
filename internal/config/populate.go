@@ -135,7 +135,71 @@ func populate(raw string) string {
 		lines = append(lines, body...)
 	}
 
+	lines = insertThemeBlocks(lines)
+
 	return strings.Join(lines, "\n") + "\n"
+}
+
+// themeTablePresent reports whether lines already carry a [themes.<name>]
+// header — active OR commented, so a generated example block is never added
+// twice and a table the user wrote (and possibly emptied) is left alone.
+func themeTablePresent(lines []string, name string) bool {
+	want := "[themes." + name + "]"
+	for _, ln := range lines {
+		bare := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(ln), "#"))
+		if bare == want || strings.HasPrefix(bare, want+" ") || strings.HasPrefix(bare, want+"\t") {
+			return true
+		}
+	}
+	return false
+}
+
+// uiSectionEnd returns the index the theme blocks belong at: the first section
+// header after [ui] (so the blocks close the [ui] block without swallowing the
+// sections that follow), or the end of the file when there is no [ui] header.
+func uiSectionEnd(lines []string) int {
+	start := -1
+	for i, ln := range lines {
+		t := strings.TrimSpace(ln)
+		if !strings.HasPrefix(t, "[") || !strings.HasSuffix(t, "]") {
+			continue
+		}
+		if start < 0 {
+			if t == "[ui]" {
+				start = i
+			}
+			continue
+		}
+		return i
+	}
+	return len(lines)
+}
+
+// insertThemeBlocks adds a commented [themes.<name>] example block for every
+// built-in theme not already present, right after the [ui] section. Idempotent
+// (themeTablePresent gates each block) and inert (every line is commented).
+func insertThemeBlocks(lines []string) []string {
+	var body []string
+	for _, block := range themeDocs() {
+		if themeTablePresent(lines, block.name) {
+			continue
+		}
+		if len(body) > 0 {
+			body = append(body, "")
+		}
+		body = append(body, block.lines...)
+	}
+	if len(body) == 0 {
+		return lines
+	}
+	at := uiSectionEnd(lines)
+	if at > 0 && strings.TrimSpace(lines[at-1]) != "" {
+		body = append([]string{""}, body...)
+	}
+	if at < len(lines) {
+		body = append(body, "")
+	}
+	return append(lines[:at], append(body, lines[at:]...)...)
 }
 
 // PopulateFile reads path (a missing file is treated as empty), adds every

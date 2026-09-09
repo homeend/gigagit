@@ -217,6 +217,25 @@ func TestRoleFieldsAccessorsAreDistinct(t *testing.T) {
 	}
 }
 
+func TestOverrideValueByKey(t *testing.T) {
+	t.Parallel()
+	o := Light.AsOverride()
+	if got := o.Value("bg"); got != Light.Bg {
+		t.Errorf("Value(bg) = %q, want %q", got, Light.Bg)
+	}
+	if got := o.Value("picker_label"); got != Light.PickerLabel {
+		t.Errorf("Value(picker_label) = %q, want %q", got, Light.PickerLabel)
+	}
+	for _, key := range []string{"lanes", "syntax", "nonesuch", ""} {
+		if got := o.Value(key); got != "" {
+			t.Errorf("Value(%q) = %q, want \"\" (list or unknown key)", key, got)
+		}
+	}
+	if got := (Terminal.AsOverride()).Value("bg"); got != "" {
+		t.Errorf("terminal Value(bg) = %q, want \"\"", got)
+	}
+}
+
 func TestRoleDocsOrderAndTail(t *testing.T) {
 	t.Parallel()
 	docs := RoleDocs()

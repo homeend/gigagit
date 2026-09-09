@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/homeend/gigagit/internal/theme"
 )
 
 // settingDoc documents one configuration setting for the generated template
@@ -47,7 +49,7 @@ var settingDocs = []settingDoc{
 	{"ui", "diff_cursor", "row", "diff-view current-line marker: row (background), number (gutter only) or off; the . menu's Cursor marker row switches it for the session"},
 	{"ui", "show_graph", "on", "Commits panel render mode on startup: on (default; lane graph) or off (flat list, same as the . menu's Show as list); toggle live from the , Settings menu"},
 	{"ui", "language", nil, "TUI display language: en (default), ja, ko, zh, ru, or a custom code from $XDG_CONFIG_HOME/gg/lang/<code>.toml; pick from the , Settings menu (CLI output stays English)"},
-	{"ui", "theme", "terminal", "TUI colours: terminal (default; inherit the terminal's own scheme), dark (Windows Terminal Campbell look, pinned everywhere), light (Everforest light soft); cycle from the , Settings menu"},
+	{"ui", "theme", "terminal", "TUI colours: terminal (default; inherit the terminal's own scheme), dark (Windows Terminal Campbell look, pinned everywhere), light (neutral light grey, charcoal text); cycle from the , Settings menu. Retune any theme's individual colours in the [themes.<name>] tables below"},
 
 	{"ui", "show_eol_only_changes", false, "show files whose only unstaged change is line endings (CRLF↔LF); default hides them as noise"},
 	{"ui", "disable_slow_op_confirm", false, "skip the yes/no confirmation shown before slow working-tree ops (switch, checkout, pull, merge, rebase, fast-forward, reset)"},
@@ -79,6 +81,74 @@ var settingDocs = []settingDoc{
 	{"notes", "max_entries", 2000, "cap on stored review notes, enforced on every write (oldest thread dropped first); -1 = uncapped"},
 
 	{"tools", "command", nil, "external-tool commands as [[tools.command]] blocks: category (conflict|commit_message|review|conflict_complete), name, mode (terminal|capture), per_file, when_op, command (multi-line '''…''' literal; tokens: <op> <source> <target> <conflicted-files> <repo> <file> <local> <base> <remote> <merged> <context-file> <user:LABEL>); global + repo lists CONCATENATE, repo wins a (category,name) collision; generate defaults via Settings → External tools; values substitute literally — prefer \"$GG_*\" env vars or <context-file> when values may contain shell metacharacters. A commit_message command normally uses mode=\"capture\" (runs headless, its stdout is captured and parsed into a commit subject+body for the commit popup's ctrl+g) and reads the staged diff via two env vars instead of a token: $GG_CONTEXT_FILE (a labeled summary — files changed, recent-commit style) and $GG_STAGED_DIFF (the full `git diff --cached`, truncated past a size cap)"},
+}
+
+// themeNote is the trailing comment on each generated [themes.<name>] header.
+func themeNote(name string) string {
+	if name == theme.NameTerminal {
+		return "every role empty = inherit the terminal's own scheme; anything set here paints over it (bg/fg paint the frame)"
+	}
+	return "colour overrides for the " + name + " theme — uncomment a table and only the roles you want to repaint"
+}
+
+// themeBlock renders one commented [themes.<name>] example block: the header,
+// then every role of RoleDocs with th's current value and its description.
+// Every line is commented, so the block is inert until a user uncomments it.
+func themeBlock(th theme.Theme) []string {
+	o := th.AsOverride()
+	docs := theme.RoleDocs()
+
+	assign := make([]string, len(docs))
+	width := 0
+	for i, d := range docs {
+		switch d.Key {
+		case "lanes":
+			assign[i] = d.Key + " = " + tomlStringList(o.Lanes)
+		case "syntax":
+			assign[i] = d.Key + " = " + tomlStringList(o.Syntax)
+		default:
+			assign[i] = d.Key + " = " + tomlScalar(o.Value(d.Key))
+			if n := len(assign[i]); n > width {
+				width = n // align the comment column over the scalars only
+			}
+		}
+	}
+
+	lines := []string{"# [themes." + th.Name + "]   # " + themeNote(th.Name) + " [populated]"}
+	for i, d := range docs {
+		pad := ""
+		if n := width - len(assign[i]); n > 0 {
+			pad = strings.Repeat(" ", n)
+		}
+		lines = append(lines, "# "+assign[i]+pad+"   # "+d.Doc)
+	}
+	return lines
+}
+
+// themeBlockDoc is one theme's generated block plus the name populate matches
+// against the file to decide whether it is already there.
+type themeBlockDoc struct {
+	name  string
+	lines []string
+}
+
+// themeDocs renders the example block for every built-in theme, light first
+// (the one users most often retune), then dark, then terminal.
+func themeDocs() []themeBlockDoc {
+	out := make([]themeBlockDoc, 0, 3)
+	for _, th := range []theme.Theme{theme.Light, theme.Dark, theme.Terminal} {
+		out = append(out, themeBlockDoc{name: th.Name, lines: themeBlock(th)})
+	}
+	return out
+}
+
+// tomlStringList renders a []string as a TOML inline array.
+func tomlStringList(v []string) string {
+	parts := make([]string, len(v))
+	for i, s := range v {
+		parts[i] = `"` + s + `"`
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 // tomlScalar renders a registry value as it appears in TOML.
