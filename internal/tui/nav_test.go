@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -12,7 +14,27 @@ func loadedModel(t *testing.T) Model {
 	t.Helper()
 	repo := newRepo(t)
 	m := New(domain.New(repo))
-	updated, _ := m.Update(m.loadCmd()())
+	updated, cmd := m.Update(m.loadCmd()())
+	return settleLoad(t, updated.(Model), cmd)
+}
+
+// settleLoad runs the one command the dataLoadedMsg success arm chains (the
+// previews read) and applies its result. The real runtime always runs it; a
+// test that skipped it would leave srcPreviews marked in-flight, which the r
+// handler's anySourceInflight guard reads as "a load is still running".
+func settleLoad(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	if cmd == nil {
+		return m
+	}
+	msg := cmd()
+	if msg == nil {
+		return m
+	}
+	if _, batched := msg.(tea.BatchMsg); batched {
+		return m // a batched arm (feed re-walk / active process) settles on its own
+	}
+	updated, _ := m.Update(msg)
 	return updated.(Model)
 }
 

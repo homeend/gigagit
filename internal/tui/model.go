@@ -1050,10 +1050,28 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			// A full snapshot just landed, so the model now describes THIS repo:
+			// chain the previews read from here, NOT from reRoot. Dispatched
+			// from reRoot it would win the race against the snapshot (a
+			// state-dir read plus a couple of rev-parse calls beat a full
+			// Snapshot), and a dataAvailableMsg arrival unconditionally sets
+			// m.ready = true and recomputes m.loading — that would drop
+			// reRoot's blank-screen gate and reopen the !m.loading action
+			// guards while the OLD repo's branches/status were still in the
+			// model. Chaining here gives every loadCmd user (reRoot, repo
+			// switch, post-op reload) the same deterministic ordering. The
+			// startup double-read (bootstrap's all-source fan-out plus this
+			// chain) is cheap — the domain caches summaries by tip hash — and
+			// the gen bump drops whichever read is older.
+			legacyLoading := m.loading // this arm owns the legacy flag; a silent read must not flip it
+			var previewsCmd tea.Cmd
+			m, previewsCmd = m.reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{})
+			m.loading = legacyLoading
 			// An active process advances from the freshly-reloaded state (e.g.
 			// the conflict process re-derives its file list after a resolve).
 			if m.proc != nil {
-				return m.proc.refreshed(m)
+				pm, pcmd := m.proc.refreshed(m)
+				return pm, tea.Batch(pcmd, previewsCmd)
 			}
 			m = m.maybeResumePrompt()
 			// The initial feed walk (loadCmd) ran in parallel with the snapshot,
@@ -1066,11 +1084,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.feedUpstreams()) > 0 && m.feedScopeApplied != m.feedScopeSig() {
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
-				return m, reload
+				return m, tea.Batch(reload, previewsCmd)
 			}
 			// Conflicts are surfaced as a non-blocking notice ("press [x] to
 			// resolve"); entering the resolution process is the user's choice (x),
 			// so a lingering conflict never traps the interface.
+			return m, previewsCmd
 		}
 	case dataAvailableMsg:
 		// Free the background lane the moment its active read's message arrives —
@@ -3556,14 +3575,12 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.refreshHealthAfterOp = false
 	m.previews = nil // the old repo's saved previews must not linger in the new one
 	m.loadGen++
-	// loadCmd comes from Snapshot, which does not carry previews — the tab
-	// rides on its own source read. Inlined (not behind a helper) so the
-	// per-source generation bump lands on the model we return.
-	var previewsCmd tea.Cmd
-	hardLoad := m.loading // reRoot's blank-screen gate, not a per-source spinner
-	m, previewsCmd = m.reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{})
-	m.loading = hardLoad // a silent (non-manual) read must not clear it
-	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), snapshotTargetCmd(m.svc), previewsCmd)
+	// No previews read is dispatched here on purpose: loadCmd's Snapshot does
+	// not carry previews, so the tab rides on its own source read — but one
+	// started HERE would land before the snapshot and its arrival would clear
+	// the blank-screen gate set above. The dataLoadedMsg success arm chains it
+	// instead, so it can only run once this repo's snapshot is in the model.
+	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), snapshotTargetCmd(m.svc))
 }
 
 // View implements tea.Model.

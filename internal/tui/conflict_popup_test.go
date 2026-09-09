@@ -228,16 +228,30 @@ func TestConflictProcessModifyDeleteKeys(t *testing.T) {
 // probes) until it quiesces, so a full conflict flow can be exercised through
 // real git — unlike driveOp it does not stop when the op finishes, because the
 // release path continues across several more messages.
+// A tea.Batch is fanned out rather than handed to Update, exactly as the real
+// runtime does — Model.Update has no BatchMsg arm, so feeding it one would
+// silently end the chain (that is how the post-load previews read, batched
+// into the reload arm's return, first broke this driver).
 func driveChain(t *testing.T, m Model, cmd tea.Cmd) Model {
 	t.Helper()
-	for i := 0; i < 200 && cmd != nil; i++ {
-		msg := cmd()
+	queue := []tea.Cmd{cmd}
+	for i := 0; i < 400 && len(queue) > 0; i++ {
+		c := queue[0]
+		queue = queue[1:]
+		if c == nil {
+			continue
+		}
+		msg := c()
 		if msg == nil {
-			break
+			continue
+		}
+		if b, ok := msg.(tea.BatchMsg); ok {
+			queue = append(queue, b...)
+			continue
 		}
 		u, next := m.Update(msg)
 		m = u.(Model)
-		cmd = next
+		queue = append(queue, next)
 	}
 	return m
 }
