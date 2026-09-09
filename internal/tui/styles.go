@@ -156,7 +156,7 @@ func buildStyles(th theme.Theme) *styles {
 
 	s.noticeHot = ns().Foreground(pick(th.NoticeHot, legacy.NoticeHot)).Bold(true)
 	s.noticeDim = ns().Foreground(pick(th.NoticeDim, legacy.NoticeDim))
-	s.saveBanner = ns().Bold(true).Foreground(pick(th.SaveBannerFg, legacy.SaveBannerFg)).Background(pick(th.SaveBannerBg, legacy.SaveBannerBg))
+	s.saveBanner = ns().Foreground(pick(th.SaveBannerFg, legacy.SaveBannerFg)).Background(pick(th.SaveBannerBg, legacy.SaveBannerBg))
 	s.tooltip = ns().Foreground(pick(th.TooltipFg, legacy.TooltipFg)).Background(pick(th.TooltipBg, legacy.TooltipBg))
 
 	for i := range s.lanes {

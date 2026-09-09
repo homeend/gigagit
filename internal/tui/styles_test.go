@@ -71,6 +71,56 @@ func TestBuildStylesTerminalPinsLegacyLiterals(t *testing.T) {
 	if bgc, fgc := s.frame(); bgc != "" || fgc != "" {
 		t.Errorf("terminal frame = (%q, %q), want empty (no paint)", bgc, fgc)
 	}
+
+	// Bold is an attribute the fg/bg-only checks above can't see: a role that
+	// silently gains or loses Bold(true) still passes every colour check.
+	// Pin every role the legacy call sites carried bold on — and, just as
+	// important, every role that must stay PLAIN (a caught regression:
+	// saveBanner briefly gained Bold(true) here, which the fg/bg checks above
+	// never noticed).
+	boldChecks := []struct {
+		name string
+		got  bool
+		want bool
+	}{
+		{"titleStyle bold", s.titleStyle.GetBold(), true},
+		{"statusErr bold", s.statusErr.GetBold(), true},
+		{"reviewHot bold", s.reviewHot.GetBold(), true},
+		{"pickerLabel bold", s.pickerLabel.GetBold(), true},
+		{"diffEmph bold", s.diffEmph.GetBold(), true},
+		{"diffCursorNo bold", s.diffCursorNo.GetBold(), true},
+		{"noteSummary bold", s.noteSummary.GetBold(), true},
+		{"noticeHot bold", s.noticeHot.GetBold(), true},
+		{"saveBanner bold", s.saveBanner.GetBold(), false},
+		{"dim bold", s.dim.GetBold(), false},
+		{"muted bold", s.muted.GetBold(), false},
+		{"noteBody bold", s.noteBody.GetBold(), false},
+		{"tooltip bold", s.tooltip.GetBold(), false},
+		{"errorText bold", s.errorText.GetBold(), false},
+		{"field bold", s.field.GetBold(), false},
+		{"fieldCursor bold", s.fieldCursor.GetBold(), false},
+		{"messageBlock bold", s.messageBlock.GetBold(), false},
+		{"diffAddCell bold", s.diffAddCell.GetBold(), false},
+		{"diffDelCell bold", s.diffDelCell.GetBold(), false},
+		{"diffCursorRow bold", s.diffCursorRow.GetBold(), false},
+	}
+	for _, c := range boldChecks {
+		if c.got != c.want {
+			t.Errorf("%s = %v, want %v", c.name, c.got, c.want)
+		}
+	}
+
+	// Border SHAPE (rounded vs double), not just colour: a role that swapped
+	// borders would still pass the border-colour checks above.
+	if got := s.focusedPanel.GetBorderStyle(); got != lipgloss.RoundedBorder() {
+		t.Errorf("focusedPanel border style = %+v, want RoundedBorder", got)
+	}
+	if got := s.bluredPanel.GetBorderStyle(); got != lipgloss.RoundedBorder() {
+		t.Errorf("bluredPanel border style = %+v, want RoundedBorder", got)
+	}
+	if got := s.modalStyle.GetBorderStyle(); got != lipgloss.DoubleBorder() {
+		t.Errorf("modalStyle border style = %+v, want DoubleBorder", got)
+	}
 }
 
 func TestBuildStylesDarkAppliesRoles(t *testing.T) {
