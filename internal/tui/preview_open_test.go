@@ -108,9 +108,10 @@ func TestOpenPreviewReArmsWhenSourceMoves(t *testing.T) {
 	m, dir, _ := mergePreviewModel(t)
 	m = openMergePreview(t, m)
 	oldTag := m.compareTag
-	// Add b.txt on feat/x from outside, then refresh branches → previews chain.
+	// 0b.txt sorts BEFORE a.txt, so the cursor only stays on a.txt if the
+	// re-arm carried its path across the reload (keepPath).
 	runGit(t, dir, "checkout", "-q", "feat/x")
-	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "0b.txt"), []byte("b\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	runGit(t, dir, "add", ".")
@@ -134,7 +135,10 @@ func TestOpenPreviewReArmsWhenSourceMoves(t *testing.T) {
 		}
 	}
 	if len(paths) != 2 || !strings.Contains(m.statusMsg, "feat/x") {
-		t.Fatalf("files = %v status = %q; want a.txt b.txt and a 'moved' notice", paths, m.statusMsg)
+		t.Fatalf("files = %v status = %q; want 0b.txt a.txt and a 'moved' notice", paths, m.statusMsg)
+	}
+	if got := m.previewSelectedPath(); got != "a.txt" {
+		t.Fatalf("cursor = %q after the re-arm, want the file it was on (a.txt)", got)
 	}
 }
 
