@@ -135,7 +135,9 @@ type Model struct {
 	noteCounts    domain.NoteCounts // badge counts (srcNotes); zero value = no badges
 	notesAgentOff bool              // `a`: hide agent-written notes for this session
 
-	previews []previewRow // saved merge previews + live summaries (srcPreviews)
+	previews    []previewRow      // saved merge previews + live summaries (srcPreviews)
+	previewOpen *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
+	previewGen  int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
 
 	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
@@ -659,7 +661,21 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesView.lines = commitFileLines(msg.files)
 		}
 		m.filesView.sel = 0
+		// A re-armed merge preview keeps the file the cursor was on when its
+		// tips moved (the path survives in the fresh list unless the commit
+		// dropped it); one-shot, so a later manual reload starts at the top.
+		if po := m.previewOpen; po != nil && po.keepPath != "" {
+			for i, l := range m.filesView.lines {
+				if l.path == po.keepPath {
+					m.filesView.sel = i
+					break
+				}
+			}
+			po.keepPath = ""
+		}
 		return m, nil
+	case previewOpenMsg:
+		return m.handlePreviewOpenMsg(msg)
 	case pairOpsMsg:
 		// Only the LATEST probe may open the popup: a re-pair while an older
 		// probe was in flight replaced pairProbe, so the older msg no longer
@@ -1141,6 +1157,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.startup {
 			m = m.recordDuration(refreshItem{source: msg.source}, msg.dur)
 		}
+		// previewsChain rides along with whatever the arm below returns: a
+		// branches/remotes read that landed new tips chains a previews read
+		// (see chainPreviewsRead). nil for every other source.
+		var previewsChain tea.Cmd
 		switch msg.source {
 		case srcStatus:
 			keyFiles := m.panelSelKey(panelFiles)
@@ -1168,6 +1188,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.restorePanelSel(panelBranches, key)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)
 			m = m.rebuildCommitGraph()
+			// New tips: refresh the saved pairs (and any open preview) with
+			// them. Skipped on the startup fan-out, which reads every source
+			// (previews included) already.
+			if !msg.startup {
+				m, previewsChain = m.chainPreviewsRead()
+			}
 			// Upstream re-walk latch. maybeFeedUpstreamRewalk is false while a
 			// srcFeed read is still in flight, so the initial LoadInitial and the
 			// scoped re-walk never write the feed concurrently — when branches
@@ -1175,18 +1201,23 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.maybeFeedUpstreamRewalk() {
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
-				return m, reload
+				return m, tea.Batch(reload, previewsChain)
 			}
 			// Branch tips moved while a scope is active: the merge-base fork
 			// points may have moved with them — re-query so territory colors
 			// track the live tips (the rewalk path above already batches this).
 			if cmd := m.loadScopeBoundariesCmd(); cmd != nil {
-				return m, cmd
+				return m, tea.Batch(cmd, previewsChain)
 			}
 		case srcRemotes:
 			key := m.panelSelKey(panelRemotes)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(msg.value.([]model.RemoteBranch), m.branches)
 			m = m.restorePanelSel(panelRemotes, key)
+			// New remote tips: a saved pair may name one (or an open preview
+			// may diff against it), so refresh the previews with them.
+			if !msg.startup {
+				m, previewsChain = m.chainPreviewsRead()
+			}
 			// feedUpstreams() is gated on m.remoteBranches (a configured upstream is
 			// dropped until it exists as a remote-tracking branch). If remotes is the
 			// LAST of {branches, remotes, feed} to land during the startup fan-out,
@@ -1196,7 +1227,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.maybeFeedUpstreamRewalk() {
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
-				return m, reload
+				return m, tea.Batch(reload, previewsChain)
 			}
 		case srcTags:
 			key := m.panelSelKey(panelTags)
@@ -1260,8 +1291,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			key := m.panelSelKey(panelPreviews)
 			m.previews = msg.value.(previewsPayload).rows
 			m = m.restorePanelSel(panelPreviews, key)
+			// An open preview follows its pair: moved tips re-open it, a
+			// vanished (or no-longer-previewable) pair closes it with a notice.
+			return m.afterPreviewsRefresh()
 		}
-		return m, nil
+		return m, previewsChain
 	case tea.KeyMsg:
 		// Normalize a lone space rune to KeySpace. On Windows, Bubble Tea's input
 		// driver delivers a space keypress as KeyRunes{' '} (see key_windows.go),
@@ -1861,6 +1895,19 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
 				wt, _ := m.selectedWorktree()
 				return m.guardedReRoot(wt.Path, true)
+			}
+			// Previews: enter opens the saved pair in the compare files view
+			// (target…source, the GitHub-PR diff). A pair that cannot be
+			// previewed right now says why instead of opening an empty view.
+			if m.focus == panelPreviews {
+				if r, ok := m.selectedPreview(); ok && m.opsIdle() {
+					if r.sum.State != domain.PreviewOK {
+						m.statusMsg = previewStateNotice(r.rec.Source, r.rec.Target, r.sum.State)
+						return m, nil
+					}
+					return m, m.openPreviewCmd(r.rec.ID, r.rec.Source, r.rec.Target, "")
+				}
+				return m, nil
 			}
 			// On the Commits panel, enter "drills in": it opens the files view AND
 			// lands focus on the tree (l opens the same view on the commit-list
@@ -3574,6 +3621,21 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingNoticeConfig = nil
 	m.refreshHealthAfterOp = false
 	m.previews = nil // the old repo's saved previews must not linger in the new one
+	// Drop every read still in flight for the OLD repo. Without the bump a
+	// read chained off repo B's snapshot lands after a switch to repo C and
+	// writes B's rows into C's model — and its arrival sets ready = true and
+	// recomputes loading, dropping the blank-screen gate set above. Bumping
+	// each generation makes the arrival handler's gen check discard them; the
+	// in-flight/loading maps start empty so nothing waits on a read that can
+	// no longer land.
+	if m.srcGen == nil { // defensive: a Model built as a test literal has no maps
+		m.srcGen = map[sourceKey]int{}
+	}
+	for s := sourceKey(0); s < srcCount; s++ {
+		m.srcGen[s]++
+	}
+	m.srcInflight = map[sourceKey]bool{}
+	m.srcLoading = map[sourceKey]bool{}
 	m.loadGen++
 	// No previews read is dispatched here on purpose: loadCmd's Snapshot does
 	// not carry previews, so the tab rides on its own source read — but one

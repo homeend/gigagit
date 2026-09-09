@@ -54,6 +54,12 @@ func (m Model) closeFilesView() Model {
 	m.filesReadInflight = false
 	m.filesPreview = nil
 	m.filesPreviewTag = ""
+	m.previewOpen = nil
+	// A merge preview resolve in flight was dispatched for the view that just
+	// closed: bump the generation so its result is dropped instead of
+	// re-opening the view behind the user (handlePreviewOpenMsg re-stamps the
+	// generation when it opens, so a fresh open is unaffected).
+	m.previewGen++
 	return m
 }
 

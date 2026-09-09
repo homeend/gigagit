@@ -162,15 +162,17 @@ func TestReRootPreviewsReadCannotDropLoadingGate(t *testing.T) {
 	wt := filepath.Join(filepath.Dir(dir), "wt-previews")
 	runGit(t, dir, "worktree", "add", "-q", "-b", "feat/wt", wt, "main")
 
-	genBefore := m.srcGen[srcPreviews]
 	updated, _ := m.reRoot(wt)
 	m = updated.(Model)
 	if !m.loading || m.ready {
 		t.Fatalf("reRoot must keep the blank-screen gate: loading=%v ready=%v", m.loading, m.ready)
 	}
-	if m.srcGen[srcPreviews] != genBefore || m.srcInflight[srcPreviews] {
-		t.Fatalf("reRoot started a previews read: gen %d -> %d, inflight=%v",
-			genBefore, m.srcGen[srcPreviews], m.srcInflight[srcPreviews])
+	// reRoot bumps every source generation to drop the OLD repo's in-flight
+	// reads (see TestReRootDropsInFlightReads), so the generation itself says
+	// nothing here; the in-flight flag does — a read STARTED by reRoot would
+	// have set it after the reset.
+	if m.srcInflight[srcPreviews] {
+		t.Fatal("reRoot started a previews read")
 	}
 	if len(m.previews) != 0 {
 		t.Fatalf("reRoot must drop the old repo's previews, got %d rows", len(m.previews))
