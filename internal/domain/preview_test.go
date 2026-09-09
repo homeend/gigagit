@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/gittest"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // previewRepo is a real repo: main has c1; feat/x branches off c1 and adds
@@ -88,6 +90,109 @@ func TestPreviewsDisabledSeamAndUsePreviewsDir(t *testing.T) {
 	_, on := previewRepo(t) // UsePreviewsDir outranks the global switch
 	if _, err := on.PreviewList(ctx); err != nil {
 		t.Fatalf("UsePreviewsDir must override PreviewsDisabled: %v", err)
+	}
+}
+
+func TestPreviewSummaryStates(t *testing.T) {
+	t.Parallel()
+	dir, svc := previewRepo(t)
+	ctx := context.Background()
+	sum, err := svc.PreviewSummary(ctx, "feat/x", "main")
+	if err != nil || sum.State != PreviewOK || sum.Files != 2 || sum.Ahead != 2 {
+		t.Fatalf("ok pair = %+v, %v; want 2 files, 2 ahead", sum, err)
+	}
+	if len(sum.SourceHash) != 40 || len(sum.TargetHash) != 40 {
+		t.Fatalf("hashes must be full shas: %+v", sum)
+	}
+	// Reverse: main brings m.txt into feat/x.
+	if rev, _ := svc.PreviewSummary(ctx, "main", "feat/x"); rev.Files != 1 || rev.Ahead != 1 {
+		t.Fatalf("reverse = %+v", rev)
+	}
+	if m, _ := svc.PreviewSummary(ctx, "nope", "main"); m.State != PreviewMissingSource {
+		t.Fatalf("missing source = %+v", m)
+	}
+	if m, _ := svc.PreviewSummary(ctx, "main", "nope"); m.State != PreviewMissingTarget {
+		t.Fatalf("missing target = %+v", m)
+	}
+	gittest.Run(t, dir, "merge", "-q", "--no-edit", "feat/x") // main now contains feat/x
+	if m, _ := svc.PreviewSummary(ctx, "feat/x", "main"); m.State != PreviewMerged || m.Ahead != 0 {
+		t.Fatalf("merged = %+v", m)
+	}
+	gittest.Run(t, dir, "checkout", "-q", "--orphan", "lonely")
+	gittest.Run(t, dir, "commit", "-q", "--allow-empty", "-m", "unrelated root")
+	if m, _ := svc.PreviewSummary(ctx, "lonely", "main"); m.State != PreviewNoBase {
+		t.Fatalf("no base = %+v", m)
+	}
+}
+
+// callCount counts f's recorded calls with the given span name (FakeRunner has
+// no counter method; Calls is the only record of invocations).
+func callCount(f *gitexec.FakeRunner, name string) int {
+	n := 0
+	for _, c := range f.Calls {
+		if c.Name == name {
+			n++
+		}
+	}
+	return n
+}
+
+func TestPreviewSummaryCachedByHashPair(t *testing.T) {
+	t.Parallel()
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git rev-parse verify commit (resolve)", gitexec.Result{Stdout: "1111111111111111111111111111111111111111\n"})
+	f.SetResponse("git merge-base", gitexec.Result{Stdout: "2222222222222222222222222222222222222222\n"})
+	f.SetResponse("git rev-list --left-right --count", gitexec.Result{Stdout: "1\t3\n"})
+	f.SetResponse("git diff --name-only (range)", gitexec.Result{Stdout: "a\x00b\x00"})
+	svc := New(&git.Repo{Runner: f})
+	ctx := context.Background()
+	first, err := svc.PreviewSummary(ctx, "feat", "main")
+	if err != nil || first.Ahead != 3 || first.Files != 2 {
+		t.Fatalf("first = %+v, %v", first, err)
+	}
+	n := callCount(f, "git rev-list --left-right --count")
+	nBase := callCount(f, "git merge-base")
+	if _, err := svc.PreviewSummary(ctx, "feat", "main"); err != nil {
+		t.Fatal(err)
+	}
+	if callCount(f, "git rev-list --left-right --count") != n {
+		t.Fatal("unchanged tips must be served from the cache (no rev-list call)")
+	}
+	if callCount(f, "git merge-base") != nBase {
+		t.Fatal("unchanged tips must be served from the cache (no merge-base call)")
+	}
+}
+
+// mergeBaseOf shells out to a real git merge-base (there is no gittest.Output
+// helper), mirroring headHash's pattern in compare_test.go.
+func mergeBaseOf(t *testing.T, dir, a, b string) string {
+	t.Helper()
+	cmd := exec.Command("git", "-C", dir, "merge-base", a, b)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out[:len(out)-1]) // strip newline
+}
+
+func TestPreviewOpenEndpoints(t *testing.T) {
+	t.Parallel()
+	dir, svc := previewRepo(t)
+	ctx := context.Background()
+	eps, err := svc.PreviewOpen(ctx, "feat/x", "main")
+	if err != nil || eps.Summary.State != PreviewOK {
+		t.Fatalf("open = %+v, %v", eps, err)
+	}
+	base := mergeBaseOf(t, dir, "main", "feat/x")
+	if eps.Left != (model.Endpoint{Kind: model.EndpointCommit, Hash: base}) || eps.Right.Hash != eps.Summary.SourceHash {
+		t.Fatalf("endpoints = %+v, want left=merge-base %s right=source tip", eps, base)
+	}
+	files, _ := svc.CompareFiles(ctx, eps.Left, eps.Right)
+	if len(files) != 2 || files[0].Path != "a.txt" {
+		t.Fatalf("compare over the endpoints = %+v, want a.txt b.txt only (never m.txt)", files)
+	}
+	if eps, _ := svc.PreviewOpen(ctx, "nope", "main"); eps.Summary.State != PreviewMissingSource || eps.Left != (model.Endpoint{}) {
+		t.Fatalf("missing side must yield zero endpoints: %+v", eps)
 	}
 }
 
