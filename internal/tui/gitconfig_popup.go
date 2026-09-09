@@ -531,10 +531,11 @@ func (p *gitConfigPopup) box(m Model) string {
 		bodyLines = []string{padRight("  "+i18n.T("(no match)"), textW)}
 	default:
 		wr := make([]winRow, len(vis))
+		s := st()
 		for i, r := range vis {
 			var st lipgloss.Style
 			if i == p.sel {
-				st = selectedRow
+				st = s.selectedRow
 			}
 			wr[i] = winRow{
 				text:  gitConfigRowText(r, keyW, localW, globalW, defaultW),
@@ -614,7 +615,7 @@ func (p *gitConfigPopup) editBox(inner, textW int) string {
 			}
 			row := "  " + label
 			if i == e.optSel {
-				row = selectedRow.Render("> " + label)
+				row = st().selectedRow.Render("> " + label)
 			}
 			parts = append(parts, row)
 		}
@@ -640,7 +641,7 @@ func gitConfigScopeDisplay(global bool) string {
 
 // configCell renders one scope cell's PLAIN text: the value, or "(unset)".
 // Deliberately unstyled — styling is applied post-slice by
-// configRowDecorator (see its doc comment). Baking unsetStyle.Render in here
+// configRowDecorator (see its doc comment). Baking st().dim.Render in here
 // used to embed a raw ANSI escape into winRow.text BEFORE renderWindow's
 // width-based slicing/wrapping; wrapWidth measures width rune-by-rune with no
 // escape-sequence awareness, so a wrap-mode line break could land mid-escape
@@ -653,8 +654,6 @@ func configCell(v string, set bool, width int) string {
 	return padRight(truncate(text, width), width)
 }
 
-var unsetStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
 // configRowDecorator dims a row's "(unset)" local/global cells AFTER
 // renderWindow has sliced/wrapped/scrolled the (plain) row text, using the
 // SAME column widths gitConfigRowText used to lay the cells out — so the
@@ -663,7 +662,7 @@ var unsetStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 // nil when neither scope is unset (nothing to decorate).
 //
 // Only the row's first visual line (visualLine == 0) is decorated, matching
-// dimIdentStyle's wrap handling in commit_ident.go: a wrapped continuation
+// the dim-style wrap handling in commit_ident.go: a wrapped continuation
 // segment restarts its rune index at 0, so the absolute column math below
 // would misalign against it. Cutoff and scroll modes never produce more than
 // one visual line per row, so this only actually skips anything in wrap mode
@@ -674,10 +673,10 @@ func configRowDecorator(row model.GitConfigRow, keyW, localW, globalW int) rowDe
 	globalStart := localStart + localW + 1
 	var spans []coloredSpan
 	if !row.LocalSet {
-		spans = append(spans, coloredSpan{Start: localStart, Length: localW, Style: unsetStyle})
+		spans = append(spans, coloredSpan{Start: localStart, Length: localW, Style: st().dim})
 	}
 	if !row.GlobalSet {
-		spans = append(spans, coloredSpan{Start: globalStart, Length: globalW, Style: unsetStyle})
+		spans = append(spans, coloredSpan{Start: globalStart, Length: globalW, Style: st().dim})
 	}
 	if len(spans) == 0 {
 		return nil

@@ -165,12 +165,13 @@ func (h *historyView) listRows(listW int) ([]winRow, int) {
 	const indent = "    "
 	var rows []winRow
 	anchor := 0
+	s := st()
 	for i, fc := range h.commits {
 		prefix := "  "
 		var st lipgloss.Style
 		if i == h.sel {
 			prefix = "> "
-			st = selectedRow
+			st = s.selectedRow
 			anchor = len(rows)
 		}
 		date := commitDateString(fc.Commit)

@@ -125,7 +125,7 @@ func TestBlameRenderColoursCodeAndKeepsCursor(t *testing.T) {
 		nil,
 	}
 	out := b.render(Model{width: 100, height: 30}, "")
-	if !strings.Contains(out, "38;5;"+syntaxColor(syntax.Keyword)) {
+	if !strings.Contains(out, "38;5;"+st().syntaxColor(syntax.Keyword)) {
 		t.Errorf("blame code should carry syntax colours:\n%q", out)
 	}
 	if !strings.Contains(out, "\x1b[7m") {

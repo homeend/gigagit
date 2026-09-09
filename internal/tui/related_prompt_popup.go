@@ -84,7 +84,7 @@ func (p *relatedPromptPopup) render(m Model, below string) string {
 		}
 		row := prefix + opt
 		if i == p.sel {
-			row = selectedRow.Render(row)
+			row = st().selectedRow.Render(row)
 		}
 		b.WriteString(row + "\n")
 	}
@@ -97,6 +97,6 @@ func (p *relatedPromptPopup) render(m Model, below string) string {
 			b.WriteString(seg + "\n")
 		}
 	}
-	box := modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
+	box := st().modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

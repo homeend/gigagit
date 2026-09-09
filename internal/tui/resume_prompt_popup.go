@@ -88,7 +88,7 @@ func (p *resumePromptPopup) render(m Model, below string) string {
 	var b strings.Builder
 	b.WriteString(i18n.T("⏸ %s paused — all conflicts resolved", opDisplayName(p.op)) + "\n")
 	if p.detail != "" {
-		b.WriteString(conflictSrcStyle.Render(p.detail) + "\n")
+		b.WriteString(st().dim.Render(p.detail) + "\n")
 	}
 	b.WriteString("\n")
 	for _, line := range wrapWidth(i18n.T("Continue the %s now, or abort it? You can come back any time with [x].", opDisplayName(p.op)), textW, 1<<20) {
@@ -102,11 +102,11 @@ func (p *resumePromptPopup) render(m Model, below string) string {
 		}
 		row := prefix + opt
 		if i == p.sel {
-			row = selectedRow.Render(row)
+			row = st().selectedRow.Render(row)
 		}
 		b.WriteString(row + "\n")
 	}
 	b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] choose  [c] continue  [a] abort  [esc] not now"))
-	box := modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
+	box := st().modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

@@ -9,7 +9,7 @@ import (
 )
 
 // tagColorStyle is the expected yellow style for ⊙tag labels in the deco
-// group. Must match tagDecoStyle in commit_ident.go.
+// group. Must match st().tagDeco in commit_ident.go.
 var tagColorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
 
 // tagDecoModel builds a Model in list mode with a tag-bearing commit at index
@@ -142,6 +142,6 @@ func TestCommitRowLineageStillDimmedNoWidthChange(t *testing.T) {
 	}
 	// The decorated string must contain the dim ANSI escape.
 	if !strings.Contains(decorated, "\x1b[") {
-		t.Error("lineage row must contain ANSI escapes (dimIdentStyle not applied)")
+		t.Error("lineage row must contain ANSI escapes (dim style not applied)")
 	}
 }

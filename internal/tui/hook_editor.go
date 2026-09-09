@@ -73,7 +73,7 @@ func (p *hookEditorPopup) box(m Model, w, h int) string {
 	// Size the scrollable script area so the WHOLE box fits within the terminal
 	// height — otherwise overlayCenter gets a negative top offset and clips the
 	// bottom help line off-screen. Chrome around the script: 5 content lines
-	// (title, env, a blank, a blank, help) + modalStyle's frame (double border 2
+	// (title, env, a blank, a blank, help) + the modal's frame (double border 2
 	// + vertical padding 2 = 4) = 9, plus a 2-line margin so the box never touches
 	// the screen edges.
 	const chrome = 5 + 4
@@ -103,5 +103,5 @@ func (p *hookEditorPopup) box(m Model, w, h int) string {
 	b.WriteString("\n\n" + i18n.T("[type] edit  [enter] newline  [ctrl+s] save  [esc] cancel"))
 	// No trailing newline: this box is sized to fill the height, so an extra
 	// blank line would push overlayCenter's line count past the terminal.
-	return modalStyle.Width(boxW).Render(b.String())
+	return st().modalStyle.Width(boxW).Render(b.String())
 }

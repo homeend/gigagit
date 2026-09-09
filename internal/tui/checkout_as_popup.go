@@ -54,7 +54,7 @@ func (p *checkoutAsPopup) render(m Model, below string) string {
 	b.WriteString(i18n.T("Check out %s as", p.remoteRef) + "\n\n")
 	b.WriteString(viewField(i18n.T("name: "), p.name, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString(i18n.T("[enter] %s   [esc] cancel", verb))
-	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	box := st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 

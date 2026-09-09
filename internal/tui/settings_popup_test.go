@@ -28,7 +28,7 @@ func lineWith(out, substr string) string {
 }
 
 // The , menu highlights the selected row with the same graphical style as the
-// . action menu (selectedRow): the selected row carries ANSI styling, others
+// . action menu (st().selectedRow): the selected row carries ANSI styling, others
 // do not.
 func TestSettingsMenuHighlightsSelectedRow(t *testing.T) {
 	// Force a color profile so the reverse-video highlight is actually emitted
@@ -42,7 +42,7 @@ func TestSettingsMenuHighlightsSelectedRow(t *testing.T) {
 	m = u.(Model)
 	out := m.View()
 
-	// selectedRow = Reverse(true), which renders the reverse-video SGR (\x1b[7m).
+	// st().selectedRow = Reverse(true), which renders the reverse-video SGR (\x1b[7m).
 	// The frame around the row uses color SGRs, not reverse, so checking for the
 	// reverse code specifically isolates the row highlight from frame styling.
 	const reverse = "\x1b[7m"

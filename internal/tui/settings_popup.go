@@ -745,11 +745,12 @@ func (p *settingsPopup) box(m Model) string {
 			b.WriteString("  " + i18n.T("no errors this session") + "\n")
 		} else {
 			wr := make([]winRow, len(fs))
+			s := st()
 			for i, e := range fs {
 				prefix := "  "
 				var st lipgloss.Style
 				if i == p.sel {
-					prefix, st = "> ", selectedRow
+					prefix, st = "> ", s.selectedRow
 				}
 				wr[i] = winRow{
 					text:  fmt.Sprintf("%s%s  %s — %s", prefix, e.Time.Format("15:04:05"), e.Source, e.Detail),
@@ -916,11 +917,12 @@ func (p *settingsPopup) box(m Model) string {
 			b.WriteString("  " + i18n.T("no known tools detected on this machine (looked for: claude, junie, meld)") + "\n")
 		} else {
 			wr := make([]winRow, len(p.toolRows))
+			s := st()
 			for i, row := range p.toolRows {
 				prefix := "  "
 				var st lipgloss.Style
 				if i == p.sel {
-					prefix, st = "> ", selectedRow
+					prefix, st = "> ", s.selectedRow
 				}
 				box := "[ ]"
 				if p.toolChecked[i] {
@@ -996,7 +998,7 @@ func (p *settingsPopup) box(m Model) string {
 					destLines = wrapWidth(i18n.T("writes to: %s", config.DefaultGlobalPath()), textW, 1<<20)
 				}
 				for _, seg := range destLines {
-					b.WriteString(dimRowStyle.Render(seg) + "\n")
+					b.WriteString(st().dim.Render(seg) + "\n")
 				}
 				for i := len(destLines); i < destH; i++ {
 					b.WriteString("\n")
@@ -1020,7 +1022,7 @@ func (p *settingsPopup) box(m Model) string {
 					cmdLines = append(append([]string{}, cmdLines[:keep]...), "…")
 				}
 				for _, seg := range cmdLines {
-					b.WriteString(dimRowStyle.Render(seg) + "\n")
+					b.WriteString(st().dim.Render(seg) + "\n")
 				}
 				for i := len(cmdLines); i < previewH; i++ {
 					b.WriteString("\n")
@@ -1031,11 +1033,12 @@ func (p *settingsPopup) box(m Model) string {
 	} else if !p.picker {
 		b.WriteString(i18n.T("Settings") + "\n\n")
 		wr := make([]winRow, len(settingsMenu))
+		s := st()
 		for i := range settingsMenu {
 			prefix := "  "
 			var st lipgloss.Style
 			if i == p.menuSel {
-				prefix, st = "> ", selectedRow
+				prefix, st = "> ", s.selectedRow
 			}
 			wr[i] = winRow{text: prefix + settingsMenuLabel(m, i), style: st}
 		}
@@ -1050,11 +1053,12 @@ func (p *settingsPopup) box(m Model) string {
 			b.WriteString("  " + i18n.T("no supported agents detected") + "\n")
 		} else {
 			wr := make([]winRow, len(p.dets))
+			s := st()
 			for i, d := range p.dets {
 				prefix := "  "
 				var st lipgloss.Style
 				if i == p.sel {
-					prefix, st = "> ", selectedRow
+					prefix, st = "> ", s.selectedRow
 				}
 				box := "[ ]"
 				if p.checked[i] {

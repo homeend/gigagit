@@ -4,14 +4,10 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/i18n"
 )
-
-// langHintStyle dims the repo-override warning under the picker title.
-var langHintStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 // languagePickerPopup selects the TUI display language: the embedded
 // bundles plus any custom $XDG_CONFIG_HOME/gg/lang/<code>.toml files.
@@ -78,7 +74,7 @@ func (p *languagePickerPopup) render(m Model, below string) string {
 	var b strings.Builder
 	b.WriteString(i18n.T("Language") + "\n")
 	if p.repoOverride {
-		b.WriteString(langHintStyle.Render(i18n.T("(repo config sets [ui] language — it overrides this choice)")) + "\n")
+		b.WriteString(st().dim.Render(i18n.T("(repo config sets [ui] language — it overrides this choice)")) + "\n")
 	}
 	b.WriteString("\n")
 	for i, l := range p.langs {
@@ -92,11 +88,11 @@ func (p *languagePickerPopup) render(m Model, below string) string {
 		}
 		row := prefix + mark + l.Name + " (" + l.Code + ")"
 		if i == p.sel {
-			row = selectedRow.Render(row)
+			row = st().selectedRow.Render(row)
 		}
 		b.WriteString(row + "\n")
 	}
 	b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] choose  [esc] cancel"))
-	box := modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
+	box := st().modalStyle.Width(inner).Render(strings.TrimRight(b.String(), "\n")) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

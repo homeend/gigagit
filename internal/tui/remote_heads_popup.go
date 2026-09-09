@@ -265,7 +265,7 @@ func (p *remoteHeadsPopup) box(m Model) string {
 		for i, vi := range rangeSlice(start, end) {
 			name := rows[p.visible[vi]]
 			if vi == p.sel {
-				wr[i] = winRow{text: padRight("> "+name, textW), style: selectedRow}
+				wr[i] = winRow{text: padRight("> "+name, textW), style: st().selectedRow}
 			} else {
 				wr[i] = winRow{text: padRight("  "+name, textW)}
 			}

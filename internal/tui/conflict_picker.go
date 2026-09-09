@@ -11,11 +11,9 @@ import (
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
-var (
-	pickerDim   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	pickerFocus = lipgloss.NewStyle().Bold(true)
-	pickerLabel = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("245"))
-)
+// pickerFocus has no themed colour (bold only), so it stays a literal — it is
+// not part of the theme role table.
+var pickerFocus = lipgloss.NewStyle().Bold(true)
 
 const pickerColSep = " ║ "
 
@@ -543,7 +541,7 @@ func pickerCell(blk *hunkpick.Block, san []string, side hunkpick.Side, r int, cu
 	}
 	c := &winCell{gutter: cur + tick, body: san[r]}
 	if cursor {
-		c.style = selectedRow
+		c.style = st().selectedRow
 	}
 	return c
 }
@@ -611,19 +609,20 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	}
 
 	e.ensureSan()
+	dim := st().dim
 	var rows []colRow
 	anchor := 0
 	blockNo := 0
 	for ii, it := range e.doc.Items {
 		if it.Block == nil {
 			for _, l := range e.sanLit[ii] {
-				rows = append(rows, colRow{full: &winCell{body: "  " + l, style: pickerDim}})
+				rows = append(rows, colRow{full: &winCell{body: "  " + l, style: dim}})
 			}
 			continue
 		}
 		blk := it.Block
 		focused := blockNo == e.bi
-		marker, hstyle := "  ", pickerDim
+		marker, hstyle := "  ", dim
 		if focused {
 			marker, hstyle = "▶ ", pickerFocus
 		}
@@ -678,10 +677,11 @@ func (e *hunkPicker) columnLabels(w int) string {
 	if colW < 1 {
 		colW = 1
 	}
+	sty := st()
 	cell := func(label string, s hunkpick.Side) string {
-		marker, style := "  ", pickerLabel
+		marker, style := "  ", sty.pickerLabel
 		if e.side == s {
-			marker, style = "▶ ", selectedRow
+			marker, style = "▶ ", sty.selectedRow
 		}
 		return styleCell(style, marker+tickFor(e.doc.SideStateAll(s))+" "+label, colW)
 	}
@@ -795,7 +795,7 @@ func (e *hunkPicker) renderOutput(w, h int) []string {
 // outputRule is the pane's titled separator line; the title carries the
 // focus marker while the pane owns the arrows.
 func (e *hunkPicker) outputRule(w int) string {
-	label, style := "── "+i18n.T("output")+" ", pickerDim
+	label, style := "── "+i18n.T("output")+" ", st().dim
 	if e.outFocused {
 		label, style = "── ▶ "+i18n.T("output")+" ", pickerFocus
 	}

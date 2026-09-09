@@ -71,12 +71,7 @@ type contentPopup struct {
 // foreground (the box can already be framed red; red-on-red would not read).
 // The gutter is the band's inner padding, and matches the indent the title and
 // the key hints take, so every line in the box starts in one column.
-const (
-	messageBlockColor  = "236"
-	messageBlockGutter = 2
-)
-
-var messageBlockStyle = lipgloss.NewStyle().Background(lipgloss.Color(messageBlockColor))
+const messageBlockGutter = 2
 
 func (p *contentPopup) noteSaved(path string) { p.saved = path }
 
@@ -308,9 +303,10 @@ func (p *contentPopup) render(m Model, below string) string {
 func (p *contentPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupResolveWidth(w, p.maximized, contentPopupWidth(w))
+	s := st()
 	// lipgloss wraps text at Width minus the horizontal padding; truncate to
 	// that true text width so a full-width row can never spill onto a wrap line.
-	textW := inner - modalStyle.GetHorizontalPadding()
+	textW := inner - s.modalStyle.GetHorizontalPadding()
 
 	// In block mode the indent sits OUTSIDE the window: rows are laid out at
 	// bodyW and the gutter is added to each finished line here. That keeps a
@@ -330,22 +326,22 @@ func (p *contentPopup) box(m Model) string {
 	for i, l := range vis {
 		switch {
 		case p.block:
-			wr[i] = winRow{text: l.text, cls: l.cls, style: messageBlockStyle}
+			wr[i] = winRow{text: l.text, cls: l.cls, style: s.messageBlock}
 			if l.heading {
-				wr[i].style = messageBlockStyle.Bold(true)
+				wr[i].style = s.messageBlock.Bold(true)
 			}
 		case p.noCursor:
 			wr[i] = winRow{text: "  " + l.text, cls: offsetCls(l.cls, 2)}
 			if l.heading {
-				wr[i].style = titleStyle
+				wr[i].style = s.titleStyle
 			}
 		case i == p.sel:
 			// Cursor highlight wins over heading style: the cursor must remain
 			// visible even when it rests on a heading row. (renderWindow drops
 			// the class mask under a reverse-video style — see winRow.cls.)
-			wr[i] = winRow{text: "> " + l.text, cls: offsetCls(l.cls, 2), style: selectedRow}
+			wr[i] = winRow{text: "> " + l.text, cls: offsetCls(l.cls, 2), style: s.selectedRow}
 		case l.heading:
-			wr[i] = winRow{text: l.text, style: titleStyle}
+			wr[i] = winRow{text: l.text, style: s.titleStyle}
 		default:
 			wr[i] = winRow{text: "  " + l.text, cls: offsetCls(l.cls, 2)}
 		}
@@ -425,7 +421,7 @@ func (p *contentPopup) box(m Model) string {
 		if p.block {
 			noteW, notePad = bodyW, pad
 		}
-		b.WriteString(notePad + savedNoteStyle.Width(noteW).Render(truncate(i18n.T("saved to %s", p.saved), noteW)) + "\n\n")
+		b.WriteString(notePad + st().saveBanner.Width(noteW).Render(truncate(i18n.T("saved to %s", p.saved), noteW)) + "\n\n")
 	}
 	hint := i18n.T("[/] search  [ctrl+w] mode  [s] save  [ctrl+t] full  [q] close")
 	if len(vis) > capRows {
@@ -441,7 +437,7 @@ func (p *contentPopup) box(m Model) string {
 // red-on-red block of wrapped stderr would not.
 func (p *contentPopup) boxStyle() lipgloss.Style {
 	if p.danger {
-		return modalStyle.BorderForeground(lipgloss.Color("9"))
+		return st().errModal
 	}
-	return modalStyle
+	return st().modalStyle
 }

@@ -187,7 +187,7 @@ func TestDotColumnAlignsOnScrolledRow(t *testing.T) {
 	// The decorator's input includes the 2-col selection prefix (as the renderer
 	// supplies). The node sits at lane 40, window starts at 36 → dotCol = 10.
 	out := decos[0]("  "+rows[0], 0, 0)
-	esc := lipgloss.NewStyle().Foreground(laneColor(40)).Render("●")
+	esc := lipgloss.NewStyle().Foreground(st().lane(40)).Render("●")
 	esc = esc[:strings.IndexRune(esc, '●')] // leading color escape for this lane
 	if esc == "" || !strings.Contains(out, esc+"●") {
 		t.Fatalf("lane-color escape must immediately precede the node ● (dot mis-aligned):\n%q", out)

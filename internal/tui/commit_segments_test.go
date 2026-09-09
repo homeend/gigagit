@@ -88,7 +88,7 @@ func TestRebuildCommitGraphComputesSegments(t *testing.T) {
 // escape lipgloss emits for it under the active profile.
 func dotEscape(t *testing.T, seg int) string {
 	t.Helper()
-	probe := lipgloss.NewStyle().Foreground(laneColor(seg)).Render("●")
+	probe := lipgloss.NewStyle().Foreground(st().lane(seg)).Render("●")
 	i := strings.IndexRune(probe, '●')
 	if i <= 0 {
 		t.Fatalf("no escape in probe %q", probe)

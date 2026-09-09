@@ -107,7 +107,7 @@ func TestRenderPanelDimsLineageName(t *testing.T) {
 	rows, idx := m.panelView(panelCommits)
 	decos := m.commitDecorators(rows, idx, -1)
 	out := m.renderPanel(panelCommits, "Commits", rows, decos, 40, 8)
-	probe := dimIdentStyle.Render("x")
+	probe := st().dim.Render("x")
 	esc := probe[:strings.IndexRune(probe, 'x')] // the leading dim escape
 	if esc == "" || !strings.Contains(out, esc) {
 		t.Fatalf("lineage branch name must be dimmed (escape %q):\n%s", esc, out)
@@ -120,7 +120,7 @@ func TestCommitLineDecoratorDimsIdentAndColorsDot(t *testing.T) {
 	forceColor(t)
 	// visible: "  ● main            subject" — prefix(2) + ●(col2) + space + ident
 	visible := "  ● " + padRight("main", commitIdentW) + " subject"
-	deco := commitLineDecorator(true, 2, laneColor(0), true, 4, commitIdentW, nil)
+	deco := commitLineDecorator(true, 2, st().lane(0), true, 4, commitIdentW, nil)
 	out := deco(visible, 0, 0)
 	if lipgloss.Width(out) != lipgloss.Width(visible) {
 		t.Fatalf("decorator changed width: %d → %d", lipgloss.Width(visible), lipgloss.Width(out))

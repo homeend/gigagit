@@ -29,8 +29,8 @@ func goFuncCls() []syntax.Class {
 	return cls
 }
 
-func kwSeq() string { return "38;5;" + syntaxColor(syntax.Keyword) }
-func fnSeq() string { return "38;5;" + syntaxColor(syntax.Func) }
+func kwSeq() string { return "38;5;" + st().syntaxColor(syntax.Keyword) }
+func fnSeq() string { return "38;5;" + st().syntaxColor(syntax.Func) }
 
 // An all-Plain mask under the zero style must render byte-identically to the
 // nil-cls path: every row whose file has no lexer (or whose line carries no
@@ -209,7 +209,7 @@ func TestRenderWindowClsWinsOverDecorate(t *testing.T) {
 	}
 }
 
-// selectedRow is Reverse(true), which swaps foreground and background: a
+// st().selectedRow is Reverse(true), which swaps foreground and background: a
 // per-token foreground would become a per-token BACKGROUND (a patchwork of
 // coloured blocks). Such a row keeps today's plain reverse-video render.
 func TestRenderWindowClsSkippedUnderReverseRowStyle(t *testing.T) {
@@ -218,8 +218,8 @@ func TestRenderWindowClsSkippedUnderReverseRowStyle(t *testing.T) {
 	defer lipgloss.SetColorProfile(prev)
 
 	o := winOpts{w: 20, h: 1, mode: modeCutoff, anchor: 0}
-	want := renderWindow([]winRow{{text: "func main() {", style: selectedRow}}, o)
-	got := renderWindow([]winRow{{text: "func main() {", style: selectedRow, cls: goFuncCls()}}, o)
+	want := renderWindow([]winRow{{text: "func main() {", style: st().selectedRow}}, o)
+	got := renderWindow([]winRow{{text: "func main() {", style: st().selectedRow, cls: goFuncCls()}}, o)
 	if got[0] != want[0] {
 		t.Errorf("a reverse-video row must render exactly as it does today\n got %q\nwant %q", got[0], want[0])
 	}
@@ -235,12 +235,12 @@ func TestRenderWindowClsKeepsBackgroundRowStyle(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.ANSI256)
 	defer lipgloss.SetColorProfile(prev)
 
-	out := renderWindow([]winRow{{text: "func main() {", style: messageBlockStyle, cls: goFuncCls()}},
+	out := renderWindow([]winRow{{text: "func main() {", style: st().messageBlock, cls: goFuncCls()}},
 		winOpts{w: 20, h: 1, mode: modeCutoff, anchor: 0})
 	if got := ansi.Strip(out[0]); got != "func main() {       " {
 		t.Fatalf("text changed: %q", got)
 	}
-	bg := "48;5;" + messageBlockColor
+	bg := "48;5;" + string(st().messageBlock.GetBackground().(lipgloss.Color))
 	if n := strings.Count(out[0], bg); n < 2 {
 		t.Errorf("the row background must survive across the coloured runs (%d occurrences): %q", n, out[0])
 	}

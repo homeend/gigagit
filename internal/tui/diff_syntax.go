@@ -9,35 +9,9 @@ import (
 	"bytes"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
-
 	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
-
-// syntaxPalette is the 256-colour foreground per syntax.Class (index = Class).
-// Chosen for gg's dark add/del backgrounds (22/52): mid-brightness hues that
-// stay readable over both. Plain (index 0) is "" = inherit. Name (index 4)
-// deliberately has no colour: identifiers are most of any line, and colouring
-// them makes the word-diff emphasis harder to see.
-var syntaxPalette = [...]string{"", "141", "79", "222", "", "150", "215", "245", "252", "250", "180"}
-
-// syntaxColor is the palette entry for c ("" for Plain / unknown).
-func syntaxColor(c syntax.Class) string {
-	if int(c) < len(syntaxPalette) {
-		return syntaxPalette[c]
-	}
-	return ""
-}
-
-// syntaxStyle returns base with c's foreground applied ("" leaves base alone,
-// so an uncoloured class renders byte-identically to the pre-syntax path).
-func syntaxStyle(base lipgloss.Style, c syntax.Class) lipgloss.Style {
-	if col := syntaxColor(c); col != "" {
-		return base.Foreground(lipgloss.Color(col))
-	}
-	return base
-}
 
 // tokAt returns the syntax runs of source line no (1-based) or nil for a gap
 // (no == 0) or a line the lexer did not cover. The returned slice aliases the

@@ -33,8 +33,8 @@ type rowDecorator func(visible string, hscroll, visualLine int) string
 
 // winRow is one logical row before layout: raw (unstyled) text plus an optional
 // style applied AFTER truncation/wrapping. Callers bake any cursor/mark prefix
-// into text and set style for the selected row (selectedRow) or headings
-// (titleStyle); the primitive never adds prefixes itself.
+// into text and set style for the selected row (st().selectedRow) or headings
+// (st().titleStyle); the primitive never adds prefixes itself.
 //
 // prefix is an optional frozen left column (e.g. a blame gutter): it is shown on
 // the row's first display line and blanked on wrap continuations, and the text
@@ -52,7 +52,7 @@ type winRow struct {
 	// scroll, or a wrap. cls WINS over decorate: a row that sets both is
 	// rendered coloured and decorate is never called (no caller combines them;
 	// TestRenderWindowClsWinsOverDecorate pins it). A row whose style reverses
-	// video (selectedRow) also ignores cls — reverse swaps foreground and
+	// video (st().selectedRow) also ignores cls — reverse swaps foreground and
 	// background, so per-token colours would paint per-token BACKGROUNDS.
 	cls []syntax.Class
 }

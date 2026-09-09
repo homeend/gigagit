@@ -91,10 +91,10 @@ func windowFixtureRows(n int) []colRow {
 	for i := 0; i < n; i++ {
 		switch i % 4 {
 		case 0:
-			rows = append(rows, colRow{full: &winCell{body: fmt.Sprintf("literal %d %s", i, strings.Repeat("x", i%97)), style: pickerDim}})
+			rows = append(rows, colRow{full: &winCell{body: fmt.Sprintf("literal %d %s", i, strings.Repeat("x", i%97)), style: st().dim}})
 		case 1:
 			rows = append(rows, colRow{
-				left:  &winCell{gutter: "> ", body: fmt.Sprintf("left %d %s", i, strings.Repeat("l", i%53)), style: selectedRow},
+				left:  &winCell{gutter: "> ", body: fmt.Sprintf("left %d %s", i, strings.Repeat("l", i%53)), style: st().selectedRow},
 				right: &winCell{gutter: "  ", body: fmt.Sprintf("right %d", i)},
 			})
 		case 2:

@@ -338,9 +338,9 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	hint := i18n.T("%d/%d  [↑/↓] scroll  [ctrl+w] view  [esc] close", start+1, len(vis))
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 
-	style := bluredPanel
+	style := st().bluredPanel
 	if !m.filesTreeFocused {
-		style = focusedPanel
+		style = st().focusedPanel
 	}
 	return style.Render(strings.Join(lines, "\n"))
 }

@@ -849,6 +849,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	}
 	window := vis[s0:s1]
 	wr := make([]winRow, len(window))
+	s := st()
 	for i, l := range window {
 		prefix := "  "
 		var st lipgloss.Style
@@ -857,10 +858,10 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 			// Cursor highlight wins over heading style so the cursor stays
 			// visible when it rests on a heading row.
 			prefix = "> "
-			st = selectedRow
+			st = s.selectedRow
 		case l.heading:
 			prefix = ""
-			st = titleStyle
+			st = s.titleStyle
 		}
 		text := l.text
 		// Directory headings carry the full path; a leaf dir (e.g. .../v3/ApiObject/)
@@ -903,9 +904,9 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	}
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 
-	style := bluredPanel
+	style := s.bluredPanel
 	if m.filesTreeFocused {
-		style = focusedPanel
+		style = s.focusedPanel
 	}
 	return style.Render(strings.Join(lines, "\n"))
 }

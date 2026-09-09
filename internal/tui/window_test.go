@@ -49,7 +49,7 @@ func TestRenderWindowWrap(t *testing.T) {
 func TestRenderWindowWrapStylesAllSegments(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
-	rows := []winRow{{text: "aaaaaabbbbbb", style: selectedRow}}
+	rows := []winRow{{text: "aaaaaabbbbbb", style: st().selectedRow}}
 	out := renderWindow(rows, winOpts{w: 6, h: 2, mode: modeWrap, anchor: 0})
 	for i, l := range out {
 		if !strings.Contains(l, "\x1b[") {

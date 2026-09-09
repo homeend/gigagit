@@ -93,7 +93,7 @@ func TestExplorerShowsCuratedDescription(t *testing.T) {
 }
 
 // TestExplorerWrapModeUnsetCellsNotCorrupted is a regression test for a bug
-// where configCell/gitConfigDefaultCell baked unsetStyle's ANSI escape into
+// where configCell/gitConfigDefaultCell baked st().dim's ANSI escape into
 // winRow.text BEFORE renderWindow's width-based slicing. wrapWidth measures
 // width rune-by-rune with no escape-sequence awareness, so in wrap mode
 // (`z` once from the default cutoff mode) a line break could land mid-escape,
@@ -102,7 +102,7 @@ func TestExplorerShowsCuratedDescription(t *testing.T) {
 // corruption (verified empirically against the pre-fix code: an "(unset)"
 // reappearing on a wrap-continuation line with no preceding color escape).
 // The fix decorates post-slice instead, so every "(unset)" in the rendered
-// view must always be immediately preceded by unsetStyle's full escape
+// view must always be immediately preceded by st().dim's full escape
 // prefix, never orphaned across a line break.
 func TestExplorerWrapModeUnsetCellsNotCorrupted(t *testing.T) {
 	forceColor(t)
@@ -122,19 +122,19 @@ func TestExplorerWrapModeUnsetCellsNotCorrupted(t *testing.T) {
 		t.Fatalf("wrap-mode view must still contain the literal (unset) text:\n%s", out)
 	}
 
-	// unsetStyle's rendered escape prefix, independent of the content it
+	// st().dim's rendered escape prefix, independent of the content it
 	// wraps (Render's opening SGR sequence depends only on the style).
-	probe := unsetStyle.Render("(unset)")
+	probe := st().dim.Render("(unset)")
 	openSeq := probe[:strings.Index(probe, "(")]
 	if openSeq == "" {
-		t.Fatal("unsetStyle produced no escape prefix; forceColor may not have taken effect")
+		t.Fatal("dim style produced no escape prefix; forceColor may not have taken effect")
 	}
 
 	// The SELECTED row deliberately carries no dim decorator (its inner reset
-	// would cancel selectedRow's reverse highlight mid-row — the commits
+	// would cancel st().selectedRow's reverse highlight mid-row — the commits
 	// panel does the same skip), so exclude reverse-video lines from the
 	// count: every "(unset)" on a NON-selected line must keep its prefix.
-	const reverse = "\x1b[7m" // selectedRow = Reverse(true)
+	const reverse = "\x1b[7m" // st().selectedRow = Reverse(true)
 	var total, prefixed int
 	for _, ln := range strings.Split(out, "\n") {
 		if strings.Contains(ln, reverse) {
@@ -202,7 +202,7 @@ func TestConfigRowDecoratorCJKUnsetSpanExact(t *testing.T) {
 	// runes that actually make up 8 display columns of CJK — swallowing the
 	// separator and the leading "ab" of "abcdef" into the SAME Render call,
 	// so this exact substring is absent under the old code.
-	want := unsetStyle.Render(unsetCJK)
+	want := st().dim.Render(unsetCJK)
 	if !strings.Contains(out, want) {
 		t.Fatalf("dimmed span does not cover exactly the local cell %q; got:\n%q", unsetCJK, out)
 	}

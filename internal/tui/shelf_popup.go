@@ -108,11 +108,12 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 		bodyLines = []string{padRight(i18n.T("  (none)"), textW)}
 	} else {
 		wr := make([]winRow, len(vis))
+		s := st()
 		for n, i := range vis {
 			prefix := "  "
 			var st lipgloss.Style
 			if n == p.sel {
-				prefix, st = "> ", selectedRow
+				prefix, st = "> ", s.selectedRow
 			}
 			mark := " "
 			if p.items[i].ID == p.markID {

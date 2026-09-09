@@ -16,7 +16,7 @@ func popupHeight(s string) int { return len(strings.Split(ansi.Strip(s), "\n")) 
 
 // assertSameHeight renders a popup with short vs long variable content (same row
 // count) and asserts equal height — a body row that wraps onto a continuation
-// line makes the long render taller. This catches the modalStyle-padding wrap
+// line makes the long render taller. This catches the st().modalStyle-padding wrap
 // bug without coupling to the exact chrome line count.
 func assertSameHeight(t *testing.T, what, short, long string) {
 	t.Helper()

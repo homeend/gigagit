@@ -76,7 +76,7 @@ func (p *moveWorktreePopup) render(m Model, below string) string {
 	b.WriteString(title + "\n\n")
 	b.WriteString(viewField(label, p.field, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString(verb)
-	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	box := st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 

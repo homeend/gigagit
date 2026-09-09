@@ -215,6 +215,6 @@ func toolConfiguredSuffixDecorator(baseW, suffixW int) rowDecorator {
 		if from == to {
 			return visible
 		}
-		return string(r[:from]) + dimRowStyle.Render(string(r[from:to])) + string(r[to:])
+		return string(r[:from]) + st().dim.Render(string(r[from:to])) + string(r[to:])
 	}
 }

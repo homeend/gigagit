@@ -255,6 +255,6 @@ func (p *shellCmdPopup) render(m Model, below string) string {
 	b.WriteString(i18n.T("Run a shell command in the worktree") + "\n\n")
 	b.WriteString(viewField("$ ", p.input, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString(i18n.T("[enter] run  [alt+↓] history  [esc] cancel"))
-	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	box := st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

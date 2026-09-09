@@ -104,11 +104,12 @@ func (p *commandPalette) box(m Model) string {
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 	parts := []string{i18n.T("Commands"), ""}
+	s := st()
 	for i, c := range p.cmds {
 		prefix := "  "
 		st := lipgloss.NewStyle()
 		if i == p.sel {
-			prefix, st = "> ", selectedRow
+			prefix, st = "> ", s.selectedRow
 		}
 		// "label … keyHint": pad the label out so the key hint sits at the right.
 		row := prefix + c.label

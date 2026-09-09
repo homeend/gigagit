@@ -826,11 +826,12 @@ func (m Model) renderActionMenu() string {
 		bodyLines = []string{padRight("  "+i18n.T("(no match)"), textW)}
 	} else {
 		wr := make([]winRow, len(vis))
+		s := st()
 		for i, r := range vis {
 			prefix := "  "
 			var st lipgloss.Style
 			if i == a.sel {
-				prefix, st = "> ", selectedRow
+				prefix, st = "> ", s.selectedRow
 			}
 			wr[i] = winRow{text: prefix + r.label, style: st}
 		}

@@ -111,8 +111,8 @@ func (p *gotoCommitPopup) box(m Model) string {
 	b.WriteString(i18n.T("Show commit") + "\n\n")
 	b.WriteString(viewField(i18n.T("commit: "), p.input, true, popupContentWidth(w)) + "\n")
 	if p.err != "" {
-		b.WriteString("\n" + errorStyle.Render(p.err) + "\n")
+		b.WriteString("\n" + st().errorText.Render(p.err) + "\n")
 	}
 	b.WriteString("\n" + i18n.T("[enter] show  [esc] cancel"))
-	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	return st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

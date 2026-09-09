@@ -232,7 +232,7 @@ func (p *commitPopup) chooseBox(m Model) string {
 		b.WriteString(fmt.Sprintf("[%d] %s\n", i+1, tc.Name))
 	}
 	b.WriteString("\n" + i18n.T("[1-9] choose  [enter] first  [esc] cancel"))
-	return modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
+	return st().modalStyle.Width(popupInnerWidth(w)).Render(b.String()) + "\n"
 }
 
 // --- Task 7 gate 2: first-run approval ---
@@ -274,7 +274,7 @@ func (p *commitPopup) approveAndProceed(m Model) (Model, tea.Cmd) {
 func (p *commitPopup) approveBox(m Model) string {
 	w, _ := m.overlayDims()
 	header := i18n.T("Run this command?  (%s)", p.genCmd.Name) + "\n\n"
-	return modalStyle.Width(popupInnerWidth(w)).Render(header+approvalBoxView(p.approving, w)) + "\n"
+	return st().modalStyle.Width(popupInnerWidth(w)).Render(header+approvalBoxView(p.approving, w)) + "\n"
 }
 
 // --- Task 7 gate 3: confirm-replace ---
@@ -309,5 +309,5 @@ func (p *commitPopup) confirmBox(m Model) string {
 	content := i18n.T("Replace current message?") + "\n\n" +
 		i18n.T("Generating will overwrite the title/description below.") + "\n\n" +
 		i18n.T("[y]es / [enter]  [esc] no")
-	return modalStyle.Width(popupInnerWidth(w)).Render(content) + "\n"
+	return st().modalStyle.Width(popupInnerWidth(w)).Render(content) + "\n"
 }

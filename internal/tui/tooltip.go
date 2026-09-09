@@ -6,10 +6,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// tooltipStyle highlights the inline full-text reveal drawn over a truncated
-// row. Distinct from selectedRow (reverse video): black on yellow reads as an
-// annotation layered over the UI.
-var tooltipStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("0")).Background(lipgloss.Color("11"))
+// st().tooltip highlights the inline full-text reveal drawn over a truncated
+// row. Distinct from st().selectedRow (reverse video): black on yellow reads
+// as an annotation layered over the UI.
 
 // tooltip returns the styled line and overlay position of the full-text reveal
 // for the focused panel's selected row, when that row is truncated in its
@@ -164,7 +163,7 @@ func revealLine(content string, contentEdge, innerW, screenW int) (line string, 
 	if x < 0 {
 		x = 0
 	}
-	return tooltipStyle.Render(padRight(body, revealW)), x
+	return st().tooltip.Render(padRight(body, revealW)), x
 }
 
 // filesTreeReveal builds the inline reveal for the commit files tree's selected

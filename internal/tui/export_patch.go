@@ -74,7 +74,7 @@ func (p *exportPatchPopup) render(m Model, below string) string {
 	b.WriteString(i18n.T("Export as patch") + "\n\n")
 	b.WriteString(viewField(i18n.T("path: "), p.dest, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString(i18n.T("[type] path  [enter] write  [esc] cancel"))
-	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	box := st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 

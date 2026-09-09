@@ -99,6 +99,7 @@ func (p *pairOpPopup) box(m Model) string {
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
 	wr := make([]winRow, len(p.ops))
+	s := st()
 	for i, op := range p.ops {
 		line := op.label(p.marked, p.selected)
 		if !op.enabled {
@@ -107,7 +108,7 @@ func (p *pairOpPopup) box(m Model) string {
 		prefix := "  "
 		var st lipgloss.Style
 		if i == p.sel {
-			prefix, st = "> ", selectedRow
+			prefix, st = "> ", s.selectedRow
 		}
 		wr[i] = winRow{text: prefix + line, style: st}
 	}

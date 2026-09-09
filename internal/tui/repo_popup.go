@@ -291,7 +291,7 @@ func (p *repoPopup) slowTooltip(m Model, box string, termW, termH int) (line str
 	// top-1 goes negative when the box touches the screen top; overlayAt clamps
 	// to row 0, so the strip then overwrites the top border — deliberate: in a
 	// cramped terminal the warning beats one border line.
-	return tooltipStyle.Render(text), x, top - 1, true
+	return st().tooltip.Render(text), x, top - 1, true
 }
 
 // box draws the picker box (modal box only).
@@ -317,6 +317,7 @@ func (p *repoPopup) box(m Model) string {
 	} else {
 		nameW, slowW, pathW := p.tableCols(textW)
 		wr := make([]winRow, len(vis))
+		s := st()
 		for i, e := range vis {
 			marker := "  "
 			if samePathTUI(e.Path, m.currentWorktree) {
@@ -326,7 +327,7 @@ func (p *repoPopup) box(m Model) string {
 			var st lipgloss.Style
 			if i == p.sel {
 				prefix = "> "
-				st = selectedRow
+				st = s.selectedRow
 			}
 			// Table layout: name, slow-fs, path, and age each start at one
 			// shared column. The slow-fs column sits between name and path

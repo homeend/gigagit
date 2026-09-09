@@ -403,6 +403,7 @@ func blameHugeFixture() *blameView {
 // values render's own call would.
 func blameRowsFull(b *blameView, gw int, now time.Time) []winRow {
 	wr := make([]winRow, len(b.lines))
+	s := st()
 	for i, ln := range b.lines {
 		gutter := padRight("", gw)
 		if i == 0 || b.lines[i-1].Hash != ln.Hash {
@@ -410,7 +411,7 @@ func blameRowsFull(b *blameView, gw int, now time.Time) []winRow {
 		}
 		var st lipgloss.Style
 		if i == b.sel {
-			st = selectedRow
+			st = s.selectedRow
 		}
 		if b.tok == nil {
 			wr[i] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), style: st}
