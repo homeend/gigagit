@@ -104,3 +104,55 @@ func TestModalDrawsOverTheOpenDiff(t *testing.T) {
 		t.Fatalf("the diff view header vanished behind the modal:\n%s", frame)
 	}
 }
+
+// ? inside the diff view opens the help with this window's keys first: the
+// packed footer hint in full (it truncates on narrow terminals), then the
+// Diff view section, then the rest of the general help.
+func TestQuestionMarkInDiffViewOpensContextHelp(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	nm, _ := m.diffLayer().update(m, synthKey("?"))
+	m = nm
+	cp, ok := m.topLayer().(*contentPopup)
+	if !ok {
+		t.Fatalf("? must open the help popup, top = %T", m.topLayer())
+	}
+	lines := cp.lines
+	if len(lines) < 3 || !lines[0].heading || !strings.Contains(lines[0].text, "footer") {
+		t.Fatalf("first heading must be the footer keys, got %+v", lines[:3])
+	}
+	// The chips: every [key] of the diff hint appears before the Diff view section.
+	diffSec := -1
+	for i, l := range lines {
+		if l.heading && l.text == "Diff view (enter)" {
+			diffSec = i
+			break
+		}
+	}
+	if diffSec < 0 {
+		t.Fatal("the Diff view section is missing")
+	}
+	seen := strings.Builder{}
+	for _, l := range lines[:diffSec] {
+		seen.WriteString(l.text + "\n")
+	}
+	for _, key := range []string{"[esc]", "[c/}{]", "[ctrl+w]", "[h/b]"} {
+		if !strings.Contains(seen.String(), key) {
+			t.Fatalf("footer key %s missing from the top section:\n%s", key, seen.String())
+		}
+	}
+	if lines[diffSec+1].heading || !strings.Contains(lines[diffSec+1].text, "scroll one line") {
+		t.Fatalf("the Diff view section must follow the footer keys, got %+v", lines[diffSec+1])
+	}
+	// The general help still follows in full (its first section is Global).
+	rest := lines[diffSec+1:]
+	found := false
+	for _, l := range rest {
+		if l.heading && l.text == "Global" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("the rest of the help must follow")
+	}
+}

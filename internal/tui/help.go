@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/homeend/gigagit/internal/i18n"
+import (
+	"strings"
+
+	"github.com/homeend/gigagit/internal/i18n"
+)
 
 // helpContent is the hand-maintained table behind the ? help window: every
 // key binding in the TUI, grouped by context. The key column is the first
@@ -260,6 +264,7 @@ func helpContent() []contentLine {
 		r("N/P", i18n.T("from the last / first change, press twice to step to the next / previous file in the list (a bottom-left cue advertises it; a notice names the new file)")),
 		r("home/end", i18n.T("jump to top / bottom of the file (the cursor lands on the first / last line); at the edge a bottom-left cue appears and pressing it again steps to the previous / next file in the list (a notice names the new file)")),
 		r("f", i18n.T("toggle full file ↔ changed lines only")),
+		r("?", i18n.T("this help, opened with the diff window's keys listed first (the footer truncates on a narrow terminal)")),
 		r("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 		r("← → 0", i18n.T("scroll mode: pan left / right / reset")),
 		r("h", i18n.T("history of this file at the shown revision")),
@@ -327,4 +332,55 @@ func helpWithHidden(hidden []footerBinding) []contentLine {
 		lines = append(lines, contentLine{text: padRight(b.key, 16) + b.label})
 	}
 	return append(lines, helpContent()...)
+}
+
+// helpFor is the help window opened from inside a full-screen reader: the
+// reader's own footer keys first (its footer is packed and truncates on a
+// narrow terminal, so the full list lives here), then its section from the
+// general help, then everything else in the usual order.
+func helpFor(section, footerHint string) []contentLine {
+	all := helpContent()
+	var lines []contentLine
+	if chips := hintChips(footerHint); len(chips) > 0 {
+		lines = append(lines, contentLine{text: i18n.T("Keys in this window (the footer, in full)"), heading: true})
+		for _, c := range chips {
+			lines = append(lines, contentLine{text: padRight(c[0], 16) + c[1]})
+		}
+	}
+	start := -1
+	for i, l := range all {
+		if l.heading && l.text == section {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return append(lines, all...)
+	}
+	end := len(all)
+	for i := start + 1; i < len(all); i++ {
+		if all[i].heading {
+			end = i
+			break
+		}
+	}
+	lines = append(lines, all[start:end]...)
+	lines = append(lines, all[:start]...)
+	return append(lines, all[end:]...)
+}
+
+// hintChips splits a packed footer hint ("[↑↓] scroll  [j/k] line …") into
+// (key, label) pairs; text before the first bracket is dropped.
+func hintChips(hint string) [][2]string {
+	var out [][2]string
+	for _, part := range strings.Split(hint, "  ") {
+		part = strings.TrimSpace(part)
+		if !strings.HasPrefix(part, "[") {
+			continue
+		}
+		if i := strings.Index(part, "] "); i > 0 {
+			out = append(out, [2]string{part[:i+1], part[i+2:]})
+		}
+	}
+	return out
 }

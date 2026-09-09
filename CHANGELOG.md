@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- `?` works inside the diff window and opens the help with that window's
+  footer keys listed in full first (the footer truncates on a narrow
+  terminal), then the Diff view section. The repo switcher (`R`) stays open
+  under its foreign-filesystem confirmation: answering No returns to the list
+  with its filter and selection intact instead of closing everything.
 - **Review notes (phase 1).** Anchor a note to a diff line and it persists —
   per repo, machine-local, outside git. In the diff view `c` adds one at the
   cursor line (summary + optional rationale; on a line that exists in both

@@ -710,6 +710,10 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		bv := newBlameView(ctx)
 		m = m.pushLayer(bv)
 		return m, m.loadBlameCmd(ctx, bv.tag)
+	case "?":
+		// The diff footer is packed and truncates on a narrow terminal: the
+		// help opens with this window's keys first, then the Diff view section.
+		return m.pushLayer(newContentPopup(i18n.T("Help — keys"), helpFor(i18n.T("Diff view (enter)"), diffHintFor(v.long)))), nil
 	case "e":
 		if r, ok := m.diffEditRow(); ok {
 			nm, cmd := r.run(m)
