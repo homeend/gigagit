@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/preview"
@@ -137,7 +136,9 @@ type PreviewSummary struct {
 // PreviewSummary resolves both names (missing → the matching Missing state)
 // then computes the base, ahead and files. `git merge-base` failing on two
 // resolvable tips means unrelated histories (rev-list --left-right would
-// happily report every commit on both sides), so the base is probed FIRST.
+// happily report every commit on both sides), so the base is probed FIRST —
+// but only a genuine refusal means PreviewNoBase; a context cancellation
+// propagates as an error (nothing is cached), mirroring ResolveRev.
 func (s *Service) PreviewSummary(ctx context.Context, source, target string) (PreviewSummary, error) {
 	srcHash, ok, err := s.ResolveRev(ctx, source)
 	if err != nil {
@@ -159,10 +160,13 @@ func (s *Service) PreviewSummary(ctx context.Context, source, target string) (Pr
 			sum := PreviewSummary{SourceHash: srcHash, TargetHash: tgtHash}
 			base, err := s.repo.MergeBase(ctx, tgtHash, srcHash)
 			if err != nil {
+				if ctx.Err() != nil {
+					return PreviewSummary{}, err // cancelled: cache nothing, let the caller retry
+				}
 				sum.State = PreviewNoBase
 				return sum, nil
 			}
-			sum.base = strings.TrimSpace(base)
+			sum.base = base
 			_, ahead, err := s.repo.CountLeftRight(ctx, tgtHash, srcHash)
 			if err != nil {
 				return PreviewSummary{}, err

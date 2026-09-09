@@ -152,6 +152,7 @@ func TestPreviewSummaryCachedByHashPair(t *testing.T) {
 	}
 	n := callCount(f, "git rev-list --left-right --count")
 	nBase := callCount(f, "git merge-base")
+	nDiff := callCount(f, "git diff --name-only (range)")
 	if _, err := svc.PreviewSummary(ctx, "feat", "main"); err != nil {
 		t.Fatal(err)
 	}
@@ -160,6 +161,41 @@ func TestPreviewSummaryCachedByHashPair(t *testing.T) {
 	}
 	if callCount(f, "git merge-base") != nBase {
 		t.Fatal("unchanged tips must be served from the cache (no merge-base call)")
+	}
+	if callCount(f, "git diff --name-only (range)") != nDiff {
+		t.Fatal("unchanged tips must be served from the cache (no diff --name-only call)")
+	}
+}
+
+// TestPreviewSummaryMergeBaseCancellationNotCached: a context cancellation
+// mid-merge-base must propagate as an error, NOT be classified as
+// PreviewNoBase and cached under the hash-pair key — a cancelled attempt must
+// never poison a pair that does have a common base.
+func TestPreviewSummaryMergeBaseCancellationNotCached(t *testing.T) {
+	t.Parallel()
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git rev-parse verify commit (resolve)", gitexec.Result{Stdout: "3333333333333333333333333333333333333333\n"})
+	ctx, cancel := context.WithCancel(context.Background())
+	first := true
+	f.SetHandler("git merge-base", func(c context.Context, argv []string) (gitexec.Result, error) {
+		if first {
+			first = false
+			cancel()
+			return gitexec.Result{}, errors.New("git merge-base cancelled: context canceled")
+		}
+		return gitexec.Result{Stdout: "4444444444444444444444444444444444444444\n"}, nil
+	})
+	svc := New(&git.Repo{Runner: f})
+	if _, err := svc.PreviewSummary(ctx, "feat", "main"); err == nil {
+		t.Fatal("a cancelled merge-base must propagate an error, not a PreviewNoBase result")
+	}
+	// A fresh, uncancelled attempt for the SAME pair must recompute (not read a
+	// poisoned cache entry) and reach PreviewOK.
+	f.SetResponse("git rev-list --left-right --count", gitexec.Result{Stdout: "0\t1\n"})
+	f.SetResponse("git diff --name-only (range)", gitexec.Result{Stdout: "a\x00"})
+	second, err := svc.PreviewSummary(context.Background(), "feat", "main")
+	if err != nil || second.State != PreviewOK {
+		t.Fatalf("second (uncancelled) attempt = %+v, %v; want PreviewOK (nothing cached by the cancelled attempt)", second, err)
 	}
 }
 
