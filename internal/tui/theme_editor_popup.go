@@ -70,6 +70,10 @@ type themeEditorPopup struct {
 
 	editing bool
 	field   textfield
+
+	// confirming is the D (whole-theme reset) question: y drops the theme's
+	// entire global table, any other key keeps it. Nothing is written until y.
+	confirming bool
 	// previewBase is the resolved theme as it stood when editing began: esc
 	// (and every invalid keystroke) puts the screen back to exactly it.
 	previewBase theme.Theme
@@ -202,6 +206,9 @@ func (p *themeEditorPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	if p.confirming {
+		return p.updateConfirming(m, msg)
+	}
 	if p.editing {
 		return p.updateEditing(m, msg)
 	}
@@ -275,6 +282,8 @@ func (p *themeEditorPopup) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 			p.move(-1)
 		case "d":
 			return p.resetRole(m)
+		case "D":
+			return p.askResetTheme(m)
 		case "t":
 			return p.cycleTheme(m)
 		}
@@ -532,6 +541,78 @@ func (p *themeEditorPopup) resetRole(m Model) (Model, tea.Cmd) {
 	return m, cmd
 }
 
+// askResetTheme is the `D` key: put the whole-theme reset question up, naming
+// the theme and how many roles it would take back. With nothing overridden in
+// the global layer there is nothing to ask about (and nothing to write).
+func (p *themeEditorPopup) askResetTheme(m Model) (Model, tea.Cmd) {
+	n := themeOverrideCount(p.global)
+	if n == 0 {
+		p.setStatus(false, i18n.T("[themes.%s] has no global overrides to reset", p.base.Name))
+		return m, nil
+	}
+	p.confirming = true
+	p.status, p.statusErr = "", false
+	return m, nil
+}
+
+// updateConfirming answers the reset question: y resets, anything else (n,
+// esc, a stray key) keeps everything and returns to browsing.
+func (p *themeEditorPopup) updateConfirming(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	p.confirming = false
+	if msg.Type == tea.KeyRunes && (msg.String() == "y" || msg.String() == "Y") {
+		return p.resetTheme(m)
+	}
+	return m, nil
+}
+
+// resetTheme drops the theme's whole global [themes.<name>] table and paints
+// the built-in palette again — under any roles the repo .gg.toml still pins,
+// which the status names so the colours that did NOT change are explained.
+func (p *themeEditorPopup) resetTheme(m Model) (Model, tea.Cmd) {
+	n := themeOverrideCount(p.global)
+	if err := config.RemoveThemeTable(p.globalPath, p.base.Name); err != nil {
+		p.setStatus(true, i18n.T("not saved: %s", err.Error()))
+		return m, nil
+	}
+	p.global = theme.Override{}
+	m, cmd := p.reapply(m)
+	if pinned := p.repoPinnedKeys(); len(pinned) > 0 {
+		p.setStatus(false, i18n.T("reset [themes.%s]: removed %d overrides — still set by the repo .gg.toml: %s", p.base.Name, n, strings.Join(pinned, ", ")))
+	} else {
+		p.setStatus(false, i18n.T("reset [themes.%s]: removed %d overrides", p.base.Name, n))
+	}
+	return m, cmd
+}
+
+// themeOverrideCount is how many editor rows o sets (a lane or a syntax slot
+// counts once each, like the rows that show the `*`).
+func themeOverrideCount(o theme.Override) int {
+	n := 0
+	for _, r := range theme.Roles() {
+		if r.OverrideGet(o) != "" {
+			n++
+		}
+	}
+	return n
+}
+
+// repoPinnedKeys lists the config keys the repo layer sets, each once ("lanes"
+// for any pinned lane), in row order.
+func (p *themeEditorPopup) repoPinnedKeys() []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, r := range p.roles {
+		if !p.repoShadows(r) {
+			continue
+		}
+		if k := themeConfigKey(r); !seen[k] {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
 // cycleTheme is the `t` key: hand off to the Settings cycle, then rebuild the
 // editor around the theme that is now active.
 func (p *themeEditorPopup) cycleTheme(m Model) (Model, tea.Cmd) {
@@ -670,7 +751,10 @@ func (p *themeEditorPopup) box(m Model) string {
 
 	parts = append(parts, "", s.dim.Render(truncate(
 		i18n.T("%d of %d rows · * = overridden here · (repo) = set by .gg.toml, read-only", len(vis), len(p.roles)), textW)))
-	if p.status != "" {
+	if p.confirming {
+		parts = append(parts, s.errorText.Render(truncate(i18n.T("Reset the %s theme? Removes %d overrides from [themes.%s] in the global config",
+			themeDisplayName(p.base.Name), themeOverrideCount(p.global), p.base.Name), textW)))
+	} else if p.status != "" {
 		style, mark := s.reviewDim, "✓ "
 		if p.statusErr {
 			style, mark = s.errorText, "✗ "
@@ -824,6 +908,12 @@ func (p *themeEditorPopup) editHelpLines(textW int) []string {
 // hints is the footer: the browse bindings, or the editor's save/revert pair.
 // The accepted colour syntax lives in editHelpLines, rendered just above.
 func (p *themeEditorPopup) hints(textW int) []string {
+	if p.confirming {
+		return wrapParts([]string{
+			i18n.T("[y] reset"),
+			i18n.T("[n/esc] keep"),
+		}, textW, "  ")
+	}
 	if p.editing {
 		return wrapParts([]string{
 			i18n.T("[enter] save"),
@@ -834,6 +924,7 @@ func (p *themeEditorPopup) hints(textW int) []string {
 		i18n.T("[↑/↓] select"),
 		i18n.T("[enter] edit"),
 		i18n.T("[d] default"),
+		i18n.T("[D] reset theme"),
 		i18n.T("[t] theme"),
 		i18n.T("[/] filter"),
 		i18n.T("[ctrl+t] fullscreen"),
