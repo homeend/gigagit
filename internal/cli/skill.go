@@ -5,6 +5,7 @@ package cli
 // without `gg init` ever having run in this repository.
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -19,8 +20,15 @@ import (
 // macOS and Windows, so an env var alone cannot isolate this cross-platform.
 var SkillCacheDir string
 
-// skillUsage is the one usage line every caller mistake prints.
-const skillUsage = "usage: gg skill path [review|using-gg]"
+// skillUsage is what every caller mistake — and -h/--help — prints. It names
+// the default and the cache's refresh rule, because both decide whether an
+// agent gets the skill this binary carries or a stale one.
+const skillUsage = `usage: gg skill path [review|using-gg]
+
+Writes the embedded skill under the user cache dir and prints its absolute
+path. The default is review (reviewing-with-gg); using-gg is the git CLI
+skill. A cached copy whose marker names a different version is rewritten to
+this binary's version, so the path always holds the current skill.`
 
 // cmdSkill implements `gg skill path [review|using-gg]`.
 func cmdSkill(args []string, stdout, stderr io.Writer) int {
@@ -29,8 +37,14 @@ func cmdSkill(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	fs := flag.NewFlagSet("skill path", flag.ContinueOnError)
-	fs.SetOutput(stderr)
+	fs.SetOutput(io.Discard) // -h prints skillUsage below, not an empty flag dump
 	if err := fs.Parse(args[1:]); err != nil {
+		// -h/--help arrives here as flag.ErrHelp: print the usage and exit 2,
+		// like every sibling verb's -h. A real bad flag names itself first.
+		if !errors.Is(err, flag.ErrHelp) {
+			fmt.Fprintln(stderr, "skill:", err)
+		}
+		fmt.Fprintln(stderr, skillUsage)
 		return 2
 	}
 	if fs.NArg() > 1 {
@@ -49,6 +63,7 @@ func cmdSkill(args []string, stdout, stderr io.Writer) int {
 		sk = agentskill.UsingGG
 	default:
 		fmt.Fprintf(stderr, "skill: unknown skill %q (use review or using-gg)\n", name)
+		fmt.Fprintln(stderr, skillUsage)
 		return 2
 	}
 	base := SkillCacheDir

@@ -54,8 +54,13 @@ var UsingGG = newSkill("using-gg",
 	Version, usingBody)
 
 // ReviewingWithGG teaches the review-notes lane (gg diff --hunks, gg note …).
+//
+// The description is rendered as a PLAIN (unquoted) YAML scalar, so it must
+// not contain ": " — that is a mapping indicator and would make the whole
+// frontmatter unparseable, which strict skill loaders treat as no skill at
+// all. TestRenderedFrontmatterIsPlainScalarSafe enforces it for every skill.
 var ReviewingWithGG = newSkill("reviewing-with-gg",
-	"Use when reviewing code changes in a repository where the gg CLI is available: inspect diffs and leave anchored review notes the user reads in gg.",
+	"Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.",
 	ReviewVersion, reviewBody)
 
 // All is the install set, in a stable order.

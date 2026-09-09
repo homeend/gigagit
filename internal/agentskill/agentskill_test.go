@@ -153,3 +153,48 @@ func TestDogfoodReviewSkillCopyInSync(t *testing.T) {
 		t.Error(".claude/skills/reviewing-with-gg/SKILL.md is out of sync — run `gg init --agents claude-project` and commit the result")
 	}
 }
+
+// TestRenderedFrontmatterIsPlainScalarSafe guards the one defect that makes a
+// SKILL.md unparseable rather than merely ugly: SkillFile renders `name:` and
+// `description:` as PLAIN (unquoted) YAML scalars. A plain scalar may not
+// contain ": " (a mapping indicator — PyYAML reports "mapping values are not
+// allowed here"), may not carry " #" (a comment indicator), and may not begin
+// with a YAML indicator character. A skill whose frontmatter does not parse is
+// dropped entirely by strict loaders (Claude Code, Junie, Kimi, Antigravity),
+// so this must hold for EVERY skill, not just today's two.
+func TestRenderedFrontmatterIsPlainScalarSafe(t *testing.T) {
+	const indicators = `-?:,[]{}#&*!|>'"%@` + "`"
+	for _, sk := range All() {
+		for _, f := range []struct{ label, value string }{
+			{"name", sk.Name},
+			{"description", sk.Description},
+		} {
+			v := f.value
+			switch {
+			case v == "":
+				t.Errorf("%s: %s is empty", sk.Name, f.label)
+				continue
+			case strings.ContainsRune(indicators, rune(v[0])):
+				t.Errorf("%s: %s starts with the YAML indicator %q: %q", sk.Name, f.label, v[0], v)
+			}
+			if strings.Contains(v, ": ") || strings.HasSuffix(v, ":") {
+				t.Errorf("%s: %s contains a YAML mapping indicator (\": \"): %q", sk.Name, f.label, v)
+			}
+			if strings.Contains(v, " #") {
+				t.Errorf("%s: %s contains a YAML comment indicator (\" #\"): %q", sk.Name, f.label, v)
+			}
+			if strings.ContainsAny(v, "\n\r") {
+				t.Errorf("%s: %s spans more than one line: %q", sk.Name, f.label, v)
+			}
+		}
+		// Structural: exactly the opening ---, two key lines, and the closing ---.
+		head := strings.SplitN(sk.SkillFile(), "---\n", 3)
+		if len(head) != 3 {
+			t.Fatalf("%s: SkillFile has no closed frontmatter block", sk.Name)
+		}
+		want := "name: " + sk.Name + "\ndescription: " + sk.Description + "\n"
+		if head[1] != want {
+			t.Errorf("%s: frontmatter body = %q, want %q", sk.Name, head[1], want)
+		}
+	}
+}

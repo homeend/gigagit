@@ -1,6 +1,6 @@
 ---
 name: reviewing-with-gg
-description: Use when reviewing code changes in a repository where the gg CLI is available: inspect diffs and leave anchored review notes the user reads in gg.
+description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
 <!-- gg:reviewing-with-gg:v1 -->
@@ -65,6 +65,10 @@ The positional commit does NOT mean the same thing everywhere: `gg diff
 `gg diff <commit>` compares the WORKING TREE against it — empty on a clean
 checkout. To read a commit's own change, use `gg show <commit> --patch`.
 
+`gg diff --hunks` also refuses `--cached` together with a single commit (exit
+2): staged hunks are HEAD→index, a commit's hunks are its own change, and one
+command cannot number both.
+
 `gg diff --hunks` numbers each file's git `@@` hunks 1-based:
 
 ```text
@@ -88,7 +92,7 @@ gg note clear (--file <path> | --all) [--type user|agent|all] --yes
 - Line numbers are 1-based. `--new-line` is the line in the NEW version of the
   file, `--old-line` in the old one; `--hunk N` covers the hunk's whole span
   (its new-side span, or its old-side span when the new side is empty — a
-  deleted file).
+  deleted file, or a file whose whole content was removed).
 - `rm` on a thread root takes its replies with it. `clear` prints
   `removed N notes`, counting records — roots AND their replies.
 - CLI notes default to `--source agent` and to `$GG_AGENT` as the author.

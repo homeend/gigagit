@@ -76,6 +76,68 @@ func TestSkillPathUsingGG(t *testing.T) {
 	}
 }
 
+// TestSkillPathRewritesADifferentMarkerVersion covers the direction a
+// "refresh when outdated" check would miss: a cache file stamped NEWER than
+// the binary (a v99 copy left by a newer gg) must still be replaced by what
+// THIS binary carries, or the agent reads a skill describing verbs this
+// binary does not have.
+func TestSkillPathRewritesADifferentMarkerVersion(t *testing.T) {
+	cache := t.TempDir()
+	old := SkillCacheDir
+	SkillCacheDir = cache
+	t.Cleanup(func() { SkillCacheDir = old })
+
+	path := filepath.Join(cache, "gg", "skills", "reviewing-with-gg", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seeded := "<!-- gg:reviewing-with-gg:v99 -->\n\nfrom a newer gg\n"
+	if err := os.WriteFile(path, []byte(seeded), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := newRepoDir(t)
+	code, out, errb := runCLI(t, dir, "skill", "path")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if strings.TrimSpace(out) != path {
+		t.Fatalf("path = %q, want %q", out, path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != agentskill.ReviewingWithGG.SkillFile() {
+		t.Error("a v99 cache copy must be rewritten to this binary's skill")
+	}
+	if got := agentskill.ReviewingWithGG.InstalledVersion(data); got != agentskill.ReviewVersion {
+		t.Errorf("marker version = %d, want %d", got, agentskill.ReviewVersion)
+	}
+}
+
+func TestSkillPathHelpPrintsUsage(t *testing.T) {
+	cache := t.TempDir()
+	old := SkillCacheDir
+	SkillCacheDir = cache
+	t.Cleanup(func() { SkillCacheDir = old })
+
+	dir := newRepoDir(t)
+	for _, flagArg := range []string{"-h", "--help"} {
+		code, out, errb := runCLI(t, dir, "skill", "path", flagArg)
+		if code != 2 { // every sibling verb's -h exits 2
+			t.Errorf("%s: exit=%d, want 2", flagArg, code)
+		}
+		if out != "" {
+			t.Errorf("%s: usage must not go to stdout, got %q", flagArg, out)
+		}
+		for _, want := range []string{"usage: gg skill path", "default is review", "rewritten"} {
+			if !strings.Contains(errb, want) {
+				t.Errorf("%s: usage missing %q, got:\n%s", flagArg, want, errb)
+			}
+		}
+	}
+}
+
 func TestSkillIsAKnownCommand(t *testing.T) {
 	t.Parallel()
 	if !IsCommand("skill") {
