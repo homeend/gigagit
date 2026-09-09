@@ -73,43 +73,47 @@ even if a future theme leaves a role unset.
 
 "unchanged" = keep today's 256-cube literal (already identical everywhere).
 
-| Role | Today | dark (Campbell) | light (Everforest light soft) |
+| Role | Today | dark (Campbell) | light (neutral grey) |
 |---|---|---|---|
-| Bg / Fg | none | `#0C0C0C` / `#CCCCCC` | `#F3EAD3` / `#5C6A72` |
-| Dim | `240` | `#585858` | `#A6B0A0` (grey0) |
-| Muted | `250` | `#BCBCBC` | `#829181` (grey2) |
-| Bright | `231` | `#FFFFFF` | `#3A4A52` |
-| FocusBorder | `12` | `#3B78FF` | `#3A94C5` |
-| ModalBorder | `11` | `#F9F1A5` | `#DFA000` |
-| TooltipFg / TooltipBg | `0` / `11` | `#0C0C0C` / `#F9F1A5` | `#3A4A52` / `#F1E4C5` |
-| ErrFg / ErrBg | `9` / `1` | `#E74856` / `#C50F1F` | `#F85552` / `#F1D1CF` |
-| StatusErrFg | `15` | `#F2F2F2` | `#3A4A52` |
-| TagDeco | `220` | unchanged | `#DFA000` |
-| DiffAddBg / DiffDelBg | `22` / `52` | unchanged | `#E1E4BD` / `#F4D9D4` |
-| DiffAddCursorBg / DiffDelCursorBg | `28` / `88` | unchanged | `#CFDAA8` / `#EBC3BD` |
-| CursorRowBg | `237` | unchanged | `#E5DFC5` |
-| FieldBg | `236` | unchanged | `#E5DFC5` |
-| FieldCursorFg / FieldCursorBg | `236` / `250` | unchanged | `#F3EAD3` / `#5C6A72` |
-| MessageBlockBg | `236` | unchanged | `#EAE4CA` |
-| SaveBannerFg / SaveBannerBg | `15` / `22` | `#F2F2F2` / unchanged | `#F3EAD3` / `#8DA101` |
-| NoticeHot / NoticeDim | `196` / `124` | unchanged | `#F85552` / `#B85450` |
-| ReviewHot / ReviewDim | `39` / `31` | unchanged | `#3A94C5` / `#35A77C` |
-| NoteUser / NoteAgent / NoteStale | `75` / `141` / `240` | unchanged | `#3A94C5` / `#DF69BA` / `#A6B0A0` |
-| PickerLabel | `245` | unchanged | `#829181` |
-| Lanes[7] | `33 208 40 201 51 220 129` | unchanged | `#3A94C5 #F57D26 #8DA101 #DF69BA #35A77C #DFA000 #F85552` |
-| Syntax[11] (Plain,Keyword,Type,Func,Name,String,Number,Comment,Operator,Punct,Attr) | `"" 141 79 222 "" 150 215 245 252 250 180` | unchanged | `"" #DF69BA #35A77C #DFA000 "" #8DA101 #F57D26 #939F91 #5C6A72 #829181 #B8860B` |
+| Bg / Fg | none | `#0C0C0C` / `#CCCCCC` | `#E9E9E5` / `#33393F` |
+| Dim | `240` | `#585858` | `#8A8F8A` |
+| Muted | `250` | `#BCBCBC` | `#5F6570` |
+| Bright | `231` | `#FFFFFF` | `#1F2428` |
+| FocusBorder | `12` | `#3B78FF` | `#2F6FB8` |
+| ModalBorder | `11` | `#F9F1A5` | `#B08000` |
+| TooltipFg / TooltipBg | `0` / `11` | `#0C0C0C` / `#F9F1A5` | `#33393F` / `#F1E7B5` |
+| ErrFg / ErrBg | `9` / `1` | `#E74856` / `#C50F1F` | `#C0392B` / `#F1D5D2` |
+| StatusErrFg | `15` | `#F2F2F2` | `#33393F` |
+| TagDeco | `220` | unchanged | `#B08000` |
+| DiffAddBg / DiffDelBg | `22` / `52` | unchanged | `#D8EAD0` / `#F1D5D2` |
+| DiffAddCursorBg / DiffDelCursorBg | `28` / `88` | unchanged | `#C5DDB9` / `#E6C2BE` |
+| CursorRowBg | `237` | unchanged | `#DADAD5` |
+| FieldBg | `236` | unchanged | `#DADAD5` |
+| FieldCursorFg / FieldCursorBg | `236` / `250` | unchanged | `#E9E9E5` / `#33393F` |
+| MessageBlockBg | `236` | unchanged | `#DFDFDA` |
+| SaveBannerFg / SaveBannerBg | `15` / `22` | `#F2F2F2` / unchanged | `#E9E9E5` / `#3E8E41` |
+| NoticeHot / NoticeDim | `196` / `124` | unchanged | `#C0392B` / `#A0564C` |
+| ReviewHot / ReviewDim | `39` / `31` | unchanged | `#2F6FB8` / `#2A8C8C` |
+| NoteUser / NoteAgent / NoteStale | `75` / `141` / `240` | unchanged | `#2F6FB8` / `#6B4FBB` / `#8A8F8A` |
+| PickerLabel | `245` | unchanged | `#5F6570` |
+| Lanes[7] | `33 208 40 201 51 220 129` | unchanged | `#2F6FB8 #C7641B #3E8E41 #6B4FBB #2A8C8C #B08000 #C0392B` |
+| Syntax[11] (Plain,Keyword,Type,Func,Name,String,Number,Comment,Operator,Punct,Attr) | `"" 141 79 222 "" 150 215 245 252 250 180` | unchanged | `"" #6B4FBB #2A8C8C #B08000 "" #3E8E41 #C7641B #8A8F8A #33393F #5F6570 #A0682A` |
 | Selection | `Reverse(true)` | Reverse | Reverse |
 
-Sources: Windows Terminal Campbell scheme (learn.microsoft.com), Everforest
-`palette.md` (light hard/medium/soft; soft chosen — medium `#FDF6E3` equals
-Solarized Light and was judged too bright). Light diff/err backgrounds are
-tints derived from Everforest's `bg_visual`/`bg_yellow`/red at ~15% over
-bg0; the implementer may nudge them by eye under tui-capture but must keep
-add ≠ del hue and cursor ≠ plain luminance.
+Sources: Windows Terminal Campbell scheme (learn.microsoft.com) for `dark`.
+`light` is a neutral light-grey scheme modelled on a charcoal-on-off-white
+nvim look: an off-white grey ground (`#E9E9E5`) with charcoal text
+(`#33393F`) and muted, desaturated accents. It replaced a first cut built on
+Everforest "light soft" (`#F3EAD3`), which the user rejected after seeing it
+— the cream ground read as too colourful and the `#5C6A72` text as too
+light. Light diff/err backgrounds are low-saturation tints over bg0 with the
+cursor tints one step darker; the implementer may nudge them by eye under
+tui-capture but must keep add ≠ del hue and cursor ≠ plain luminance.
 
 `StatusErrFg` was split off from `SaveBannerFg` after a final-review finding
 that reusing it for the error status bar gave a 1.19:1 contrast ratio under
-Light (`#F3EAD3` on `ErrBg` `#F1D1CF`), so the two roles now vary independently.
+the then-current Light palette (its frame bg on its `ErrBg`), so the two
+roles now vary independently.
 
 ## 4. TUI wiring
 

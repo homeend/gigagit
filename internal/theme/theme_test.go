@@ -27,11 +27,11 @@ func TestLookup(t *testing.T) {
 	if th, ok := Lookup("dark"); !ok || th.Name != NameDark || th.Bg != "#0C0C0C" {
 		t.Fatalf("Lookup(dark) = %+v, %v", th, ok)
 	}
-	if th, ok := Lookup("light"); !ok || th.Name != NameLight || th.Bg != "#F3EAD3" {
+	if th, ok := Lookup("light"); !ok || th.Name != NameLight || th.Bg != "#E9E9E5" {
 		t.Fatalf("Lookup(light) = %+v, %v", th, ok)
 	}
-	if Light.StatusErrFg != "#3A4A52" {
-		t.Fatalf("Light.StatusErrFg = %q, want #3A4A52", Light.StatusErrFg)
+	if Light.StatusErrFg != "#33393F" {
+		t.Fatalf("Light.StatusErrFg = %q, want #33393F", Light.StatusErrFg)
 	}
 	if _, ok := Lookup("solarized"); ok {
 		t.Fatal("unknown theme must not resolve")

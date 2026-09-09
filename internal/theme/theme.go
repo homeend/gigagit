@@ -83,22 +83,25 @@ var Dark = Theme{
 	Syntax: [11]string{"", "141", "79", "222", "", "150", "215", "245", "252", "250", "180"},
 }
 
-// Light is Everforest "light soft" (bg0 #F3EAD3), the warm not-white tier.
-// Source: github.com/sainnhe/everforest palette.md. Diff/err backgrounds are
-// ~15% tints over bg0.
+// Light is a neutral light-grey scheme: charcoal text on an off-white grey
+// ground (bg0 #E9E9E5), modelled on a plain charcoal-on-off-white nvim look.
+// It replaced an Everforest "light soft" first cut, which the user found too
+// colourful (cream ground) and too light (text contrast). Accents stay muted
+// and desaturated so the grey frame carries the look; diff/err backgrounds are
+// low-saturation tints over bg0, cursor tints one step darker.
 var Light = Theme{
 	Name: NameLight,
-	Bg:   "#F3EAD3", Fg: "#5C6A72",
-	Dim: "#A6B0A0", Muted: "#829181", Bright: "#3A4A52",
-	FocusBorder: "#3A94C5", ModalBorder: "#DFA000", TooltipFg: "#3A4A52", TooltipBg: "#F1E4C5",
-	ErrFg: "#F85552", ErrBg: "#F1D1CF", TagDeco: "#DFA000", StatusErrFg: "#3A4A52",
-	DiffAddBg: "#E1E4BD", DiffDelBg: "#F4D9D4", DiffAddCursorBg: "#CFDAA8", DiffDelCursorBg: "#EBC3BD",
-	CursorRowBg: "#E5DFC5", FieldBg: "#E5DFC5", FieldCursorFg: "#F3EAD3", FieldCursorBg: "#5C6A72",
-	MessageBlockBg: "#EAE4CA", SaveBannerFg: "#F3EAD3", SaveBannerBg: "#8DA101",
-	NoticeHot: "#F85552", NoticeDim: "#B85450", ReviewHot: "#3A94C5", ReviewDim: "#35A77C",
-	NoteUser: "#3A94C5", NoteAgent: "#DF69BA", NoteStale: "#A6B0A0", PickerLabel: "#829181",
-	Lanes:  [7]string{"#3A94C5", "#F57D26", "#8DA101", "#DF69BA", "#35A77C", "#DFA000", "#F85552"},
-	Syntax: [11]string{"", "#DF69BA", "#35A77C", "#DFA000", "", "#8DA101", "#F57D26", "#939F91", "#5C6A72", "#829181", "#B8860B"},
+	Bg:   "#E9E9E5", Fg: "#33393F",
+	Dim: "#8A8F8A", Muted: "#5F6570", Bright: "#1F2428",
+	FocusBorder: "#2F6FB8", ModalBorder: "#B08000", TooltipFg: "#33393F", TooltipBg: "#F1E7B5",
+	ErrFg: "#C0392B", ErrBg: "#F1D5D2", TagDeco: "#B08000", StatusErrFg: "#33393F",
+	DiffAddBg: "#D8EAD0", DiffDelBg: "#F1D5D2", DiffAddCursorBg: "#C5DDB9", DiffDelCursorBg: "#E6C2BE",
+	CursorRowBg: "#DADAD5", FieldBg: "#DADAD5", FieldCursorFg: "#E9E9E5", FieldCursorBg: "#33393F",
+	MessageBlockBg: "#DFDFDA", SaveBannerFg: "#E9E9E5", SaveBannerBg: "#3E8E41",
+	NoticeHot: "#C0392B", NoticeDim: "#A0564C", ReviewHot: "#2F6FB8", ReviewDim: "#2A8C8C",
+	NoteUser: "#2F6FB8", NoteAgent: "#6B4FBB", NoteStale: "#8A8F8A", PickerLabel: "#5F6570",
+	Lanes:  [7]string{"#2F6FB8", "#C7641B", "#3E8E41", "#6B4FBB", "#2A8C8C", "#B08000", "#C0392B"},
+	Syntax: [11]string{"", "#6B4FBB", "#2A8C8C", "#B08000", "", "#3E8E41", "#C7641B", "#8A8F8A", "#33393F", "#5F6570", "#A0682A"},
 }
 
 var builtins = []Theme{Terminal, Dark, Light}

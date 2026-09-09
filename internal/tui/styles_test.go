@@ -181,13 +181,13 @@ func TestBuildStylesDarkAppliesRoles(t *testing.T) {
 }
 
 // Light's statusErr must use the dedicated StatusErrFg role, not the frame's
-// SaveBannerFg (which under Light is #F3EAD3 on ErrBg #F1D1CF — 1.19:1
-// contrast, unreadable).
+// SaveBannerFg (which under Light is the near-white frame bg on a pale ErrBg —
+// unreadable).
 func TestBuildStylesLightStatusErrReadable(t *testing.T) {
 	t.Parallel()
 	s := buildStyles(theme.Light)
-	if got := string(s.statusErr.GetForeground().(lipgloss.Color)); got != "#3A4A52" {
-		t.Fatalf("light statusErr fg = %q, want #3A4A52 (StatusErrFg), not the frame bg", got)
+	if got := string(s.statusErr.GetForeground().(lipgloss.Color)); got != "#33393F" {
+		t.Fatalf("light statusErr fg = %q, want #33393F (StatusErrFg), not the frame bg", got)
 	}
 }
 
@@ -210,7 +210,7 @@ func TestSetThemeSwapsAndRestores(t *testing.T) {
 	if activeTheme().Name != theme.NameLight {
 		t.Fatalf("activeTheme = %q after setTheme(Light)", activeTheme().Name)
 	}
-	if got := string(st().dim.GetForeground().(lipgloss.Color)); got != "#A6B0A0" {
+	if got := string(st().dim.GetForeground().(lipgloss.Color)); got != "#8A8F8A" {
 		t.Fatalf("st().dim after Light = %q", got)
 	}
 	setTheme(theme.Terminal)
