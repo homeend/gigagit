@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,5 +124,102 @@ func TestDiffTwoPathsNoRev(t *testing.T) {
 	code, _, errb := runCLI(t, dir, "diff", "--", "README.md", "CHANGELOG.md")
 	if code != 0 {
 		t.Fatalf("two paths after -- must be accepted, exit=%d stderr=%s", code, errb)
+	}
+}
+
+func TestDiffHunksListsNumberedHunks(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	body := ""
+	for i := 0; i < 40; i++ {
+		body += "line\n"
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-m", "seed")
+	edited := strings.Replace(body, "line\n", "TOP\n", 1)
+	edited = edited[:len(edited)-len("line\n")] + "BOTTOM\n"
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	code, out, errb := runCLI(t, dir, "diff", "--hunks")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "a.txt\n") {
+		t.Fatalf("stdout must name the file:\n%s", out)
+	}
+	if !strings.Contains(out, "  1 @@ -") || !strings.Contains(out, "  2 @@ -") {
+		t.Fatalf("stdout must list two numbered hunks:\n%s", out)
+	}
+}
+
+func TestDiffHunksJSONShape(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-m", "seed")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\nTWO\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errb := runCLI(t, dir, "diff", "--hunks", "--json")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	var got []struct {
+		Path  string `json:"path"`
+		Hunks []struct {
+			N      int    `json:"n"`
+			Old    [2]int `json:"old"`
+			New    [2]int `json:"new"`
+			Header string `json:"header"`
+		} `json:"hunks"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("stdout is not the documented JSON array: %v\n%s", err, out)
+	}
+	if len(got) != 1 || got[0].Path != "a.txt" || len(got[0].Hunks) != 1 || got[0].Hunks[0].N != 1 {
+		t.Fatalf("json = %+v, want a.txt with hunk n=1", got)
+	}
+}
+
+// A single commit positional means THAT COMMIT'S OWN change (<c>^..<c>) — the
+// same patch a `gg note add --rev <c>` note anchors to — so the number an agent
+// reads is the number it can pass back.
+func TestDiffHunksSingleCommitIsItsOwnChange(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-m", "seed")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "commit", "-am", "grow")
+	sha := runGit(t, dir, "rev-parse", "HEAD")
+
+	code, out, errb := runCLI(t, dir, "diff", "--hunks", sha)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "a.txt") || !strings.Contains(out, "  1 @@") {
+		t.Fatalf("a clean checkout must still show the commit's own hunk:\n%s", out)
+	}
+}
+
+func TestDiffHunksRejectsStatCombination(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	code, _, errb := runCLI(t, dir, "diff", "--hunks", "--stat")
+	if code != 2 {
+		t.Fatalf("exit=%d stderr=%s, want 2 (usage error)", code, errb)
 	}
 }
