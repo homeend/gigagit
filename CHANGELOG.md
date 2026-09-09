@@ -8,7 +8,6 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
-<<<<<<< HEAD
 - **TUI themes.** `[ui] theme = "terminal" | "dark" | "light"` (default
   `terminal`, unchanged look). `dark` pins the Windows Terminal Campbell look
   everywhere; `light` is a neutral light grey — charcoal text on an off-white
@@ -37,7 +36,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   instead of appending a second table. Roles pinned by the repo `.gg.toml` are
   shown tagged `(repo)` and stay read-only, since the repo layer would shadow
   anything written here.
-=======
+
 ### Review notes — the agent lane (phase 2)
 
 - `gg diff --hunks [--json]` lists each file's numbered git `@@` hunks, over
@@ -72,7 +71,6 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg_note_add`/`gg_notes_apply` honour `$GG_AGENT` for their author default
   like the CLI already did (shared in `domain.NoteAuthorDefault`).
 
->>>>>>> feat/agent-notes
 - The diff view's `.` menu grows two WHOLE-FILE review-note rows, offered
   wherever the cursor sits (unlike Edit / Reply / Delete, which need a note
   next to it). **List notes…** is the file's inventory: one row per thread in
