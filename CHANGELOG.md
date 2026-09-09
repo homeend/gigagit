@@ -8,6 +8,31 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+### Review notes — the agent lane (phase 2)
+
+- `gg diff --hunks [--json]` lists each file's numbered git `@@` hunks, over
+  the same patch a note anchors to (a bare commit means that commit's own
+  change).
+- `gg note add | reply | list | rm | clear | apply --stdin` leave, thread, read
+  and remove anchored review notes without a TUI. A note targets one diff: no
+  flag = the unstaged working tree, `--cached` = the staged diff, `--rev
+  <commit>` = that commit's own change (a range is refused). Anchor with
+  `--hunk N`, `--new-line N` or `--old-line N`.
+- `gg note apply --stdin` imports hunk's `agent-context.json` v1 and its
+  `comment apply` batch shape; the whole batch is validated before the first
+  write, so one bad item stores nothing.
+- `gg review --notes` asks the configured review tool for anchored notes
+  (`$GG_NOTES_FILE`, agent-context v1) and imports them, falling back to a
+  report that is itself that JSON. The freeform report still prints and is
+  still saved.
+- MCP gains `gg_notes_list` (read-only) plus the gated `gg_note_add`,
+  `gg_notes_apply` and `gg_note_rm`.
+- A second embedded skill, `reviewing-with-gg`, teaches agents the lane;
+  `gg init` installs both skills per agent and `gg skill path [review|using-gg]`
+  prints a materialised copy. `agentskill.Version` → 62.
+- A commit note now stores the FULL sha, so a CLI note and a TUI note on the
+  same commit share one target.
+
 - The diff view's `.` menu grows two WHOLE-FILE review-note rows, offered
   wherever the cursor sits (unlike Edit / Reply / Delete, which need a note
   next to it). **List notes…** is the file's inventory: one row per thread in
