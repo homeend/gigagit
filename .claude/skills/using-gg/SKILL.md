@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v62 -->
+<!-- gg:using-gg:v63 -->
 
 # Using gg (gigagit)
 
