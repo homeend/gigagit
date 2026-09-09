@@ -12,10 +12,12 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// cmdDiff implements `gg diff [--stat|--name-only] [--cached] [<rev>] [-- <paths>]`.
+// cmdDiff implements `gg diff [--stat|--name-only|--hunks [--json]] [--cached] [<rev>] [-- <paths>]`.
 // Default prints the full patch; --stat prints terse "path +A -D" lines with
-// an "N files +A -D" trailer; --name-only prints bare paths. Paths must
-// follow a "--" separator so a rev is never ambiguous with a path.
+// an "N files +A -D" trailer; --name-only prints bare paths; --hunks lists
+// each file's numbered git @@ hunks (optionally as JSON via --json), the
+// same numbering `gg note add --hunk N` resolves against. Paths must follow
+// a "--" separator so a rev is never ambiguous with a path.
 func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	head, paths := splitDashDash(args)
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
@@ -47,6 +49,10 @@ func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	rev := ""
 	if fs.NArg() == 1 {
 		rev = fs.Arg(0)
+	}
+	if *hunks && *cached && rev != "" && !strings.Contains(rev, "..") {
+		fmt.Fprintln(stderr, "diff: --cached cannot be combined with a commit under --hunks (staged hunks are HEAD→index; a commit's hunks are its own change)")
+		return 2
 	}
 	if *hunks {
 		// --hunks numbers the patch a NOTE anchors to, so a bare commit means

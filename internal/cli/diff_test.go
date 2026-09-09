@@ -222,4 +222,30 @@ func TestDiffHunksRejectsStatCombination(t *testing.T) {
 	if code != 2 {
 		t.Fatalf("exit=%d stderr=%s, want 2 (usage error)", code, errb)
 	}
+	if !strings.Contains(errb, "mutually exclusive") {
+		t.Fatalf("stderr must name the conflict, got %q", errb)
+	}
+}
+
+// --cached with a single commit under --hunks is rejected: HunkDiffSpec's
+// single-commit branch always builds <c>^..<c> (that commit's own change)
+// regardless of --cached, so combining the two would silently drop --cached
+// rather than doing what it looks like it asks for.
+func TestDiffHunksCachedWithCommitRejected(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-m", "seed")
+	sha := runGit(t, dir, "rev-parse", "HEAD")
+
+	code, _, errb := runCLI(t, dir, "diff", "--hunks", "--cached", sha)
+	if code != 2 {
+		t.Fatalf("exit=%d stderr=%s, want 2 (usage error)", code, errb)
+	}
+	if !strings.Contains(errb, "--cached") {
+		t.Fatalf("stderr must name the conflict, got %q", errb)
+	}
 }
