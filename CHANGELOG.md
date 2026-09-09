@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- The diff view's `.` menu grows two WHOLE-FILE review-note rows, offered
+  wherever the cursor sits (unlike Edit / Reply / Delete, which need a note
+  next to it). **List notes…** is the file's inventory: one row per thread in
+  anchor order — `◆ new:15  ada  summary  +2`, the ◆ in the thread's own
+  colour and only the summary trimmed — with type-to-filter over summary and
+  author, `enter` to close and land the cursor on a thread's anchor (a folded
+  note expands the view, as `}` does) and `esc` to leave the cursor alone.
+  **Remove all notes…** deletes every note and reply stored at the open diff's
+  address — never the whole repository — behind a typed `remove all`
+  confirmation; anything else keeps the popup open and says what was expected.
+  New `domain.NotesClear(ctx, addr)` does the removal in a single store write
+  and reports the count the notice quotes.
+
 - `?` works inside the diff window and opens the help with that window's
   footer keys listed in full first (the footer truncates on a narrow
   terminal), then the Diff view section. The repo switcher (`R`) stays open

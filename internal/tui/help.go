@@ -259,6 +259,7 @@ func helpContent() []contentLine {
 		r("a", i18n.T("show or hide agent-written notes; your own notes always stay visible")),
 		r("}/{", i18n.T("jump to the next / previous annotated line (a folded note expands the view); at the last / first one, press again to step to the next / previous file that carries notes")),
 		r("", i18n.T("the . menu grows Edit note / Reply to note / Delete note rows while a note sits next to the cursor line")),
+		r("", i18n.T("the . menu also carries List notes… (every thread on this file, type to filter, enter goes to one) and Remove all notes… (type `remove all` to delete this file's notes and replies) wherever the cursor sits")),
 		r("pgup/pgdn", i18n.T("scroll one screen (the cursor moves by a screen too)")),
 		r("n/p", i18n.T("next / previous change (also ctrl+↓/↑; press again at the end/start to wrap around)")),
 		r("N/P", i18n.T("from the last / first change, press twice to step to the next / previous file in the list (a bottom-left cue advertises it; a notice names the new file)")),

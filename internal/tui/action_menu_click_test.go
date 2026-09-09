@@ -18,6 +18,14 @@ func TestActionMenuClickSelectsTheRowUnderThePointer(t *testing.T) {
 	m := notedModel(t)
 	m.width, m.height = 100, 40
 	m.diffLayer().setCursorLine(24, m.diffBodyRows()) // next to n2, so the note rows are offered
+	// Narrow the menu to the note rows via the menu_actions allowlist. The
+	// gesture under test is positional (double-click Reply while Delete is
+	// highlighted), and a menu longer than renderActionMenu's 14-row window
+	// brings in a second, unrelated effect: windowStart re-CENTRES on the
+	// selection, so the first click's highlight move scrolls the list under
+	// the pointer and the second click legitimately lands on another row.
+	// That re-centring predates this test and is not what it pins.
+	m.cfg.UI.MenuActions = []string{"note-edit", "note-reply", "note-delete"}
 	m = m.openActionMenu()
 	if m.actionMenu == nil {
 		t.Fatal("no action menu")
@@ -58,6 +66,7 @@ func TestActionMenuClickSelectsTheRowUnderThePointer(t *testing.T) {
 	m2 := notedModel(t)
 	m2.width, m2.height = 100, 40
 	m2.diffLayer().setCursorLine(24, m2.diffBodyRows())
+	m2.cfg.UI.MenuActions = m.cfg.UI.MenuActions // same rows, so `top` still holds
 	m2 = m2.openActionMenu()
 	m2.actionMenu.sel = del
 	hdr := tea.MouseMsg{X: 20, Y: top + 2, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}

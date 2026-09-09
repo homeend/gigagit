@@ -416,6 +416,27 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var counts tea.Cmd
 		m, counts = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
 		return m, counts
+	case notesClearedMsg:
+		// The clear is always run from the diff view, which owns the whole
+		// screen and draws no status line — statusMsg alone would never be
+		// seen. diffNotice is that surface's own transient notice (the
+		// bottom-left box the file-step cues use), so the outcome is posted to
+		// both: the box for the user looking at the diff, statusMsg for the
+		// panels underneath and the session snapshot.
+		if msg.err != nil {
+			m.statusMsg = i18n.T("note: %s", msg.err.Error())
+			m.diffNotice = "▸ " + m.statusMsg
+			return m, nil
+		}
+		// The count is the only thing a whole-address clear leaves to say:
+		// nothing of the file's notes remains to look at. The refresh is
+		// exactly noteMutatedMsg's — one srcNotes reload, which re-resolves the
+		// open diff and repaints the ◆N badges.
+		m.statusMsg = i18n.T("Removed %d notes", msg.n)
+		m.diffNotice = "▸ " + m.statusMsg
+		var cleared tea.Cmd
+		m, cleared = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
+		return m, cleared
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
 	case snapshotTargetMsg:
