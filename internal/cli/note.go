@@ -42,6 +42,10 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 			return noteReply(svc, rest, stdout, stderr)
 		case "rm":
 			return noteRemove(svc, rest, stdout, stderr)
+		case "list":
+			return noteList(svc, rest, stdout, stderr)
+		case "clear":
+			return noteClear(svc, rest, stdout, stderr)
 		default:
 			fmt.Fprintf(stderr, "note: unknown subcommand %q\n", sub)
 			return 2
@@ -272,5 +276,195 @@ func noteRemove(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
+	return 0
+}
+
+// noteTypeMatches applies --type. "all" (the default) keeps everything.
+func noteTypeMatches(want string, src model.NoteSource) bool {
+	switch want {
+	case "", "all":
+		return true
+	case "user":
+		return src == model.NoteSourceUser
+	case "agent":
+		return src == model.NoteSourceAgent
+	}
+	return false
+}
+
+// noteAddressesFor is the target-flag resolver shared by list and clear: one
+// address when --file is given, else every address this checkout can see
+// (NoteAddresses).
+func noteAddressesFor(ctx context.Context, svc *domain.Service, file string, cached bool, rev string) ([]model.FileAddress, error) {
+	if strings.TrimSpace(file) != "" {
+		addr, err := svc.NoteTarget(ctx, file, cached, rev)
+		if err != nil {
+			return nil, err
+		}
+		return []model.FileAddress{addr}, nil
+	}
+	return svc.NoteAddresses(ctx)
+}
+
+// resolvedNotesFor gathers the resolved threads a --file / bare invocation
+// covers: one address when --file is given, else every address this checkout
+// can see (NoteAddresses). Orphaned notes never appear — NotesAt drops them by
+// contract, the same rule the TUI and web rows follow.
+func resolvedNotesFor(ctx context.Context, svc *domain.Service, file string, cached bool, rev string) ([]domain.ResolvedNote, error) {
+	addrs, err := noteAddressesFor(ctx, svc, file, cached, rev)
+	if err != nil {
+		return nil, err
+	}
+	var out []domain.ResolvedNote
+	for _, a := range addrs {
+		got, err := svc.NotesAt(ctx, a)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, got...)
+	}
+	return out, nil
+}
+
+// renderNoteLine prints one thread row:
+//
+//	a1b2c3d4 [agent] src/search.ts new:15-23 active  Prefix matches now outrank …
+//	  e5f6a7b8 [user] reply  Addressed in the latest revision
+//
+// A reply carries no anchor of its own — it inherits the root's — so its line
+// says "reply" where the root names its file, side and range.
+func renderNoteLine(w io.Writer, r domain.ResolvedNote, indent bool) {
+	if indent {
+		fmt.Fprintf(w, "  %s [%s] reply  %s\n", r.Note.ID, r.Note.Source, r.Note.Summary)
+		return
+	}
+	fmt.Fprintf(w, "%s [%s] %s %s:%d-%d %s  %s\n",
+		r.Note.ID, r.Note.Source, noteTargetLabel(r.Note.Address),
+		r.Note.Side, r.Range[0], r.Range[1], r.Status, r.Note.Summary)
+}
+
+// noteTargetLabel names a note's target in one column: the path, prefixed with
+// the short commit for a commit note so two notes on the same path never look
+// identical.
+func noteTargetLabel(a model.FileAddress) string {
+	if a.State == model.StateCommitted && len(a.Commit) >= 7 {
+		return a.Commit[:7] + ":" + a.Path
+	}
+	return a.Path
+}
+
+func noteList(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("note list", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	tf := addTargetFlags(fs)
+	typ := fs.String("type", "all", "user, agent or all")
+	asJSON := fs.Bool("json", false, "emit the wire notes as a JSON array")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if !noteTypeMatches(*typ, model.NoteSourceUser) && !noteTypeMatches(*typ, model.NoteSourceAgent) {
+		fmt.Fprintln(stderr, "note list: --type must be user, agent or all")
+		return 2
+	}
+	ctx := context.Background()
+	res, err := resolvedNotesFor(ctx, svc, *tf.file, *tf.cached, *tf.rev)
+	if err != nil {
+		return noteExit(err, stderr)
+	}
+	kept := make([]domain.ResolvedNote, 0, len(res))
+	for _, r := range res {
+		if noteTypeMatches(*typ, r.Note.Source) {
+			kept = append(kept, r)
+		}
+	}
+	if *asJSON {
+		wires := make([]domain.WireNote, 0, len(kept))
+		for _, r := range kept {
+			wires = append(wires, domain.ToWireNote(r))
+		}
+		if err := json.NewEncoder(stdout).Encode(wires); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		return 0
+	}
+	for _, r := range kept {
+		renderNoteLine(stdout, r, false)
+		for _, rep := range r.Replies {
+			renderNoteLine(stdout, rep, true)
+		}
+	}
+	return 0
+}
+
+// noteClear deletes every note thread at one address (--file) or every
+// address this checkout can see (--all), and requires --yes either way.
+//
+// The default --type all path removes through domain.NotesClear: one store
+// write per address (roots and replies together). The printed count is the
+// removed THREAD count (a root takes its replies with it, so replies are
+// never counted on their own) — NotesClear itself reports dropped RECORDS
+// (roots + replies), so the root count is read via NotesAt first and
+// NotesClear performs the actual deletion. A non-"all" --type narrows to
+// matching ROOTS, which NotesClear cannot express (it takes a whole address
+// indiscriminately), so that case falls back to a per-note NoteRemove of the
+// matching roots only.
+func noteClear(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("note clear", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	tf := addTargetFlags(fs)
+	all := fs.Bool("all", false, "clear every note this checkout can see")
+	typ := fs.String("type", "all", "user, agent or all")
+	yes := fs.Bool("yes", false, "confirm the deletion (required)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	hasFile := strings.TrimSpace(*tf.file) != ""
+	if hasFile == *all {
+		fmt.Fprintln(stderr, "note clear: pass exactly one of --file <path> or --all")
+		return 2
+	}
+	if !*yes {
+		fmt.Fprintln(stderr, "note clear: refusing to delete without --yes")
+		return 2
+	}
+	if !noteTypeMatches(*typ, model.NoteSourceUser) && !noteTypeMatches(*typ, model.NoteSourceAgent) {
+		fmt.Fprintln(stderr, "note clear: --type must be user, agent or all")
+		return 2
+	}
+	ctx := context.Background()
+	addrs, err := noteAddressesFor(ctx, svc, *tf.file, *tf.cached, *tf.rev)
+	if err != nil {
+		return noteExit(err, stderr)
+	}
+	allTypes := strings.TrimSpace(*typ) == "" || *typ == "all"
+	removed := 0
+	for _, addr := range addrs {
+		res, err := svc.NotesAt(ctx, addr)
+		if err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		if allTypes {
+			// The root count IS the thread count; NotesClear does the write.
+			if _, err := svc.NotesClear(ctx, addr); err != nil {
+				fmt.Fprintln(stderr, "error:", err)
+				return 1
+			}
+			removed += len(res)
+			continue
+		}
+		for _, r := range res {
+			if !noteTypeMatches(*typ, r.Note.Source) {
+				continue
+			}
+			if err := svc.NoteRemove(ctx, r.Note.ID); err != nil {
+				fmt.Fprintln(stderr, "error:", err)
+				return 1
+			}
+			removed++
+		}
+	}
+	fmt.Fprintf(stdout, "removed %d notes\n", removed)
 	return 0
 }

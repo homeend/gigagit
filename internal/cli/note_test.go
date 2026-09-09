@@ -207,3 +207,118 @@ func TestNoteIsAKnownCommand(t *testing.T) {
 		t.Error(`"note" must be in the commands map (cmd/gg routing, help, gg batch)`)
 	}
 }
+
+func TestNoteListTextFormat(t *testing.T) {
+	dir := noteRepo(t)
+	_, out, _ := runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "2", "--summary", "shouty")
+	root := strings.TrimSpace(out)
+	if code, _, errb := runCLI(t, dir, "note", "reply", root, "--summary", "addressed", "--source", "user"); code != 0 {
+		t.Fatalf("reply: %s", errb)
+	}
+
+	code, out, errb := runCLI(t, dir, "note", "list", "--file", "a.txt")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want a root line and one indented reply:\n%s", out)
+	}
+	for _, want := range []string{root, "[agent]", "a.txt", "new:2-2", "active", "shouty"} {
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("root line %q missing %q", lines[0], want)
+		}
+	}
+	if !strings.HasPrefix(lines[1], "  ") || !strings.Contains(lines[1], "[user] reply") ||
+		!strings.Contains(lines[1], "addressed") {
+		t.Errorf("reply line = %q, want two-space indent + [user] reply + the text", lines[1])
+	}
+}
+
+func TestNoteListJSONAndTypeFilter(t *testing.T) {
+	dir := noteRepo(t)
+	runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "1", "--summary", "by agent")
+	runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "3", "--summary", "by human", "--source", "user")
+
+	code, out, errb := runCLI(t, dir, "note", "list", "--file", "a.txt", "--json")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	var all []struct {
+		Source  string `json:"source"`
+		Status  string `json:"status"`
+		Summary string `json:"summary"`
+	}
+	if err := json.Unmarshal([]byte(out), &all); err != nil {
+		t.Fatalf("--json must be an array of wire notes: %v\n%s", err, out)
+	}
+	if len(all) != 2 {
+		t.Fatalf("json = %+v, want both notes", all)
+	}
+	for _, n := range all {
+		if n.Status == "" {
+			t.Errorf("every wire note carries a resolution status: %+v", n)
+		}
+	}
+
+	_, out, _ = runCLI(t, dir, "note", "list", "--file", "a.txt", "--type", "user")
+	if strings.Contains(out, "by agent") || !strings.Contains(out, "by human") {
+		t.Fatalf("--type user must keep only user notes:\n%s", out)
+	}
+	_, out, _ = runCLI(t, dir, "note", "list", "--file", "a.txt", "--type", "agent")
+	if !strings.Contains(out, "by agent") || strings.Contains(out, "by human") {
+		t.Fatalf("--type agent must keep only agent notes:\n%s", out)
+	}
+	if code, _, errb := runCLI(t, dir, "note", "list", "--file", "a.txt", "--type", "robot"); code != 2 {
+		t.Fatalf("exit=%d stderr=%s, want 2 for a bad --type", code, errb)
+	}
+}
+
+// Without --file, list enumerates every address this checkout can see.
+func TestNoteListWithoutFileCoversEveryTarget(t *testing.T) {
+	dir := noteRepo(t)
+	sha := runGit(t, dir, "rev-parse", "HEAD")
+	runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "2", "--summary", "worktree note")
+	runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "1", "--rev", sha, "--summary", "commit note")
+
+	code, out, errb := runCLI(t, dir, "note", "list")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "worktree note") || !strings.Contains(out, "commit note") {
+		t.Fatalf("bare list must show worktree AND commit notes:\n%s", out)
+	}
+}
+
+func TestNoteClearGuardsAndCount(t *testing.T) {
+	dir := noteRepo(t)
+	runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "1", "--summary", "one")
+	_, out, _ := runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "2", "--summary", "two")
+	root := strings.TrimSpace(out)
+	runCLI(t, dir, "note", "reply", root, "--summary", "r")
+
+	for _, c := range []struct {
+		name string
+		args []string
+	}{
+		{"no --yes", []string{"note", "clear", "--all"}},
+		{"neither file nor all", []string{"note", "clear", "--yes"}},
+		{"both file and all", []string{"note", "clear", "--all", "--file", "a.txt", "--yes"}},
+	} {
+		if code, _, errb := runCLI(t, dir, c.args...); code != 2 {
+			t.Errorf("%s: exit=%d stderr=%s, want 2", c.name, code, errb)
+		}
+	}
+
+	code, out, errb := runCLI(t, dir, "note", "clear", "--all", "--yes")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "removed 2 notes") {
+		t.Fatalf("stdout = %q, want the removed THREAD count (a root takes its replies)", out)
+	}
+	_, out, _ = runCLI(t, dir, "note", "list")
+	if strings.TrimSpace(out) != "" {
+		t.Fatalf("clear --all must empty the store: %q", out)
+	}
+}
