@@ -1689,7 +1689,7 @@ Expected: `undefined: srcPreviews`.
       return m.afterPreviewsRefresh() // Task 7 (re-arm); until then: return m, nil
   ```
   and in the error branch of the handler, when `msg.source == srcPreviews && errors.Is(msg.err, domain.ErrPreviewsDisabled)`, treat it as empty (`m.previews = nil`) with no status line.
-  In `reRoot` (`model.go:3551`) add `m.previewsReloadCmd()` to the `tea.Batch` — define in preview_panel.go:
+  Chain the previews read off the `dataLoadedMsg` SUCCESS arm (after the snapshot fields and `m.loading`/`m.ready` are set): `m, previewsCmd = m.reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{})` batched with that arm's return. Do NOT put it in `reRoot`'s batch: a previews read beats the Snapshot and its arrival flips `m.ready`/`m.loading`, dropping the repo-switch blank gate (review finding, Task 6). The helper below is therefore unused for reRoot; keep it only if another caller needs it:
   ```go
   // previewsReloadCmd re-reads the previews source (a reRoot's loadCmd comes
   // from Snapshot, which does not carry previews).
