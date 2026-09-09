@@ -233,6 +233,12 @@ func (p *themeEditorPopup) updateFilter(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 func (p *themeEditorPopup) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
+		// Two-step, like every other filtering popup: a committed filter is
+		// state the user can see, so esc drops it before closing the window.
+		if p.filter.Value() != "" {
+			p.filter, p.sel = newTextField(""), 0
+			return m, nil
+		}
 		return m.popLayer(), nil
 	case tea.KeyUp:
 		p.move(-1)
@@ -378,18 +384,25 @@ func (p *themeEditorPopup) save(m Model) (Model, tea.Cmd) {
 
 // resetRole is the `d` key: drop this role's global override so the built-in
 // value paints again.
+//
+// On a repo-pinned row it still fires, because a GLOBAL override under a repo
+// value is dead weight the repo layer already shadows — refusing to clean it up
+// would leave the user with a line they cannot see the effect of and cannot
+// remove from here. The painted value simply does not change; the status says
+// so instead of claiming the default is back.
 func (p *themeEditorPopup) resetRole(m Model) (Model, tea.Cmd) {
 	r, ok := p.current()
 	if !ok {
 		return m, nil
 	}
-	if p.repoShadows(r) {
-		p.setStatus(true, i18n.T("set by the repo .gg.toml — edit it there"))
-		return m, nil
-	}
+	shadowed := p.repoShadows(r)
 	next, changed := themeClearRole(p.global, r)
 	if !changed {
-		p.setStatus(false, i18n.T("%s is already the built-in default", r.Key))
+		if shadowed {
+			p.setStatus(true, i18n.T("set by the repo .gg.toml — edit it there"))
+		} else {
+			p.setStatus(false, i18n.T("%s is already the built-in default", r.Key))
+		}
 		return m, nil
 	}
 	if err := config.SetThemeRole(p.globalPath, p.base.Name, themeConfigKey(r), themeWriteValues(next, r, "")...); err != nil {
@@ -398,6 +411,10 @@ func (p *themeEditorPopup) resetRole(m Model) (Model, tea.Cmd) {
 	}
 	p.global = next
 	m, cmd := p.reapply(m)
+	if shadowed {
+		p.setStatus(false, i18n.T("removed the global override for %s — the repo .gg.toml value still applies", r.Key))
+		return m, cmd
+	}
 	p.setStatus(false, i18n.T("%s restored to the built-in default", r.Key))
 	return m, cmd
 }

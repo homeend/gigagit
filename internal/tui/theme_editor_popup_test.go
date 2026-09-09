@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
@@ -476,5 +477,156 @@ func TestThemeEditorClearingListEntryDoesNotPinTheRest(t *testing.T) {
 	}
 	if string(st().lane(1)) != theme.Dark.Lanes[1] {
 		t.Fatalf("lane 1 = %q after d, want the built-in", st().lane(1))
+	}
+}
+
+// The repo layer comes off DISK: a [themes.<name>] table in the repo .gg.toml
+// makes its roles read-only here, because the repo layer wins the merge and
+// would shadow anything this editor wrote to the global file.
+func TestThemeEditorReadsRepoOverrideFromDisk(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	m, dir := settingsModel(t)
+	if m.repoConfigPath == "" {
+		t.Fatal("the model has no repo config path")
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"),
+		[]byte("[themes.light]\ndim = \"#123456\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m.cfg.UI.Theme = "light"
+	m, _ = m.applyTheme()
+	m, _ = m.openSettings()
+	sp := layerOf[*settingsPopup](m)
+	sp.menuSel = slices.Index(settingsMenu, settingsMenuThemeColours)
+	um, _ := m.Update(keyMsg("enter"))
+	m = um.(Model)
+	p := layerOf[*themeEditorPopup](m)
+	if p == nil {
+		t.Fatal("editor not open")
+	}
+
+	if p.repo.Dim != "#123456" {
+		t.Fatalf("themeOverrideIn did not read the repo file: %+v", p.repo)
+	}
+	p.sel = slices.IndexFunc(p.roles, func(r theme.RoleRef) bool { return r.Key == "dim" })
+	body := p.box(m)
+	if !strings.Contains(body, "(repo)") || !strings.Contains(body, "#123456") {
+		t.Fatalf("the dim row must show the repo value tagged (repo):\n%s", body)
+	}
+	um, _ = m.Update(keyMsg("enter"))
+	m = um.(Model)
+	if p.editing {
+		t.Fatal("a repo-pinned row must refuse the editor")
+	}
+	if !p.statusErr || !strings.Contains(p.status, ".gg.toml") {
+		t.Fatalf("status = %q (err=%v)", p.status, p.statusErr)
+	}
+}
+
+// A GLOBAL override under a repo-pinned role is stale — the repo value wins
+// either way — so `d` must still be able to remove it, saying the repo value
+// still applies rather than pretending nothing happened.
+func TestThemeEditorDefaultClearsStaleGlobalUnderRepo(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := themeEditorModel(t, "light")
+	p.sel = slices.IndexFunc(p.roles, func(r theme.RoleRef) bool { return r.Key == "dim" })
+
+	// Save a global override, then let the repo pin the same role.
+	um, _ := m.Update(keyMsg("enter"))
+	m = um.(Model)
+	p.field = newTextField("")
+	for _, r := range "#123456" {
+		um, _ = m.Update(keyMsg(string(r)))
+		m = um.(Model)
+	}
+	um, _ = m.Update(keyMsg("enter"))
+	m = um.(Model)
+	p.repo = theme.Override{Dim: "#0F0F0F"}
+
+	um, _ = m.Update(keyMsg("d"))
+	m = um.(Model)
+	if p.global.Dim != "" {
+		t.Fatalf("d must clear the stale global override, got %q", p.global.Dim)
+	}
+	raw, _ := os.ReadFile(config.DefaultGlobalPath())
+	if strings.Contains(string(raw), "#123456") {
+		t.Fatalf("the global line survived:\n%s", raw)
+	}
+	if p.statusErr || !strings.Contains(p.status, ".gg.toml") {
+		t.Fatalf("status = %q (err=%v), want a non-error note that the repo value still applies", p.status, p.statusErr)
+	}
+}
+
+// esc is two-step once a filter is committed, like every other filtering popup.
+func TestThemeEditorEscClearsFilterFirst(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := themeEditorModel(t, "light")
+	um, _ := m.Update(keyMsg("/"))
+	m = um.(Model)
+	for _, r := range "diff" {
+		um, _ = m.Update(keyMsg(string(r)))
+		m = um.(Model)
+	}
+	um, _ = m.Update(keyMsg("enter")) // commit the filter, leave input mode
+	m = um.(Model)
+
+	um, _ = m.Update(keyMsg("esc"))
+	m = um.(Model)
+	if layerOf[*themeEditorPopup](m) == nil {
+		t.Fatal("the first esc must clear the filter, not close the popup")
+	}
+	if p.filter.Value() != "" || len(p.visible()) != len(p.roles) {
+		t.Fatalf("the filter survived: %q (%d rows)", p.filter.Value(), len(p.visible()))
+	}
+	um, _ = m.Update(keyMsg("esc"))
+	m = um.(Model)
+	if layerOf[*themeEditorPopup](m) != nil {
+		t.Fatal("the second esc must close the popup")
+	}
+}
+
+// Mouse parity with the other list popups: the wheel scrolls, a double-click is
+// enter, a middle-click is esc — but never while the inline field is open, where
+// enter would SAVE a colour the user never confirmed.
+func TestThemeEditorMouse(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := themeEditorModel(t, "light")
+
+	um, _ := m.Update(wheelMsg(false))
+	m = um.(Model)
+	if p.sel == 0 {
+		t.Fatal("the wheel must scroll the list")
+	}
+	before := p.sel
+	um, _ = m.Update(wheelMsg(true))
+	m = um.(Model)
+	if p.sel >= before {
+		t.Fatalf("wheel up must move back, %d → %d", before, p.sel)
+	}
+
+	click := tea.MouseMsg{X: 40, Y: 10, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}
+	um, _ = m.Update(click)
+	m = um.(Model)
+	um, _ = m.Update(click)
+	m = um.(Model)
+	if !p.editing {
+		t.Fatal("a double-click must act as enter on a browse row")
+	}
+	if clickEnterLayer(p) {
+		// While the inline field is open enter SAVES; a stray double-click must
+		// never commit a colour the user did not confirm.
+		t.Fatal("clickEnterLayer must go inert while the inline field is open")
+	}
+	um, _ = m.Update(keyMsg("esc"))
+	m = um.(Model)
+	um, _ = m.Update(tea.MouseMsg{X: 40, Y: 10, Action: tea.MouseActionPress, Button: tea.MouseButtonMiddle})
+	m = um.(Model)
+	if layerOf[*themeEditorPopup](m) != nil {
+		t.Fatal("a middle-click must close the popup")
 	}
 }

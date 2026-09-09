@@ -52,9 +52,14 @@ func (m Model) registerClick(tgt clickTarget) (Model, bool) {
 // double-click must never submit a form. The decision modal is excluded for the
 // same reason — enter commits a decision option.
 func clickEnterLayer(l layer) bool {
-	switch l.(type) {
+	switch v := l.(type) {
 	case *repoPopup, *bookmarkPopup, *shelfPopup, *commandPalette, *pairOpPopup, *contentPopup:
 		return true
+	case *themeEditorPopup:
+		// A list while browsing (enter opens the row's editor), a text field once
+		// that editor is open (enter SAVES) — so it joins the safe set only in the
+		// first state, per the rule above.
+		return !v.editing
 	}
 	return false
 }
@@ -138,6 +143,9 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if l := m.topLayer(); l != nil {
 		if cp, ok := l.(*contentPopup); ok && wheel != 0 {
 			cp.move(wheel)
+		}
+		if te, ok := l.(*themeEditorPopup); ok && wheel != 0 && !te.editing {
+			te.move(wheel)
 		}
 		if dv, ok := l.(*diffView); ok {
 			if wheel != 0 {
