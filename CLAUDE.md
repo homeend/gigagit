@@ -66,12 +66,12 @@ feature; keep THIS file's map to one line per package.
 | `i18n`       | TUI translation layer: English-text-as-key TOML bundles (embedded ja/ko/zh/ru + user overlays). AST-gate tests in `internal/tui` enforce literal keys, full four-bundle coverage, and verb agreement. Engine/CLI prose and decision option VALUES stay English (agent-facing protocol); only rendering is localized. |
 | `model`      | Shared plain data types (`Status`, `Branch`, `Worktree`, `Commit`, `FileAddress`, `Endpoint`, `GitLock`, …). |
 | `tui`        | Bubble Tea Elm-style UI (value-receiver `Model`, panels, layer stack, modal Decider, async ops). Per-source refresh registry + background auto-refresh lane + file-watch; command palette; popups embed `popupMax` for ctrl+t maximize. New ops must be mapped in `opAffectedSources`. |
-| `cli`        | Scriptable frontend; `cliDecider` answers forks from flags or stdin. Agent-facing terse verbs (`log`/`diff`/`show`/`add`/…), `gg batch`, `gg review`, `gg apply`, `gg versions`, `gg unlock`, `gg compare`. |
+| `cli`        | Scriptable frontend; `cliDecider` answers forks from flags or stdin. Agent-facing terse verbs (`log`/`diff`/`show`/`add`/…), `gg batch`, `gg review`, `gg apply`, `gg versions`, `gg unlock`, `gg compare`, `gg note`, `gg skill path`. |
 | `mcp`        | MCP stdio frontend (`gg mcp`): read surface (UI state, bookmarks/shelves, compare, export) + gated mutations (cherry-pick, write-to-worktree). Domain-only frontend. |
 | `web`        | Loopback-only browser frontend (`gg web`): embedded SPA over domain queries + an op transport (SSE events, parking web Decider), AI review/conflict lanes. Domain-only frontend; loopback + Host/Origin guards, allowlist resolution for wire values. |
 | `worktree`   | Shared worktree template resolution used by the TUI popup and the CLI. |
 | `repos`      | Machine-local MRU registry of opened repositories (XDG state) behind the repo switcher. |
-| `agentskill` | Embedded "using-gg" skill (go:embed + version marker) that teaches AI agents the gg CLI. |
+| `agentskill` | Two embedded skills ("using-gg", "reviewing-with-gg") behind a Skill value type (go:embed + per-skill version marker) that teach AI agents the gg CLI and the review-notes lane. |
 | `agentinit`  | Hardcoded agent registry + detect/status/install behind `gg init` and the TUI Settings popup. |
 | `exttool`    | Catalog of external tools/AI agents gg can run per task category (`conflict`, `commit_message`, `review`, `conflict_complete`); template generation + detection; `$GG_MESSAGE_FILE`-wins-over-stdout capture contract. |
 | `config`     | TOML config (`.gg.toml`), field-level overlay (defaults→global→repo), `<seq>` counters, `[[tools.command]]` blocks, scoped line-edit writers. Repo config may live committed or machine-private (one active file). |
@@ -86,6 +86,7 @@ feature; keep THIS file's map to one line per package.
 | `shelf`      | Non-git per-file/per-commit content store (blobs + TOML index under XDG state); shelved commits keep a tar + best-effort format-patch snapshot. Owned by `domain`; frontends never import it. |
 | `bookmark`   | Persistent registry of richly-addressed file/commit references (records only, no blobs). Owned by `domain`. |
 | `notes`      | Machine-local review-note store (TOML + O_EXCL lock, write-time cap, `Sweep`); records only. Owned by `domain`; frontends never import it. |
+| `notebatch`  | Pure parser for the two agent JSON note-batch shapes (hunk agent-context v1, comment apply); shared by CLI, MCP and the review importer. DAG leaf. |
 | `profile`    | Named git-identity presets, global + per-repo scoped. Owned by `domain`. |
 | `promptstate`| Machine-local UX memory: suppressed prompts, dismissed notices, approved external-tool command hashes (`CommandHash` shared by TUI and web). |
 | `prefix`     | Templated branch-name prefix registry, global + per-repo scoped. Owned by `domain`. |

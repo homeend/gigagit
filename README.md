@@ -119,6 +119,18 @@ gg review [--tool <name>] [--working] [<rev>|<A..B>]
                                       # reviews the current branch's work; a single <rev> reviews just that commit's own
                                       # change; --working reviews uncommitted changes. Prints the report to stdout and
                                       # persists it under the gg state dir; --tool picks among configured review commands
+gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]
+                                      # also ask the tool for anchored notes (agent-context v1) and import them
+gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]
+                                      # numbered git @@ hunks per file, over the same patch a note anchors to
+gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>]
+              --summary "…" [--rationale "…"] [--author <name>] [--source user|agent] [--json]
+gg note reply <note-id> --summary "…" [--json]
+gg note apply --stdin [--cached | --rev <c>] [--author <name>] [--json]
+                                      # agent-context v1 or a comments batch; validated whole before the first write
+gg note list  [--file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]
+gg note rm    <note-id>
+gg note clear (--file <path> | --all) [--type user|agent|all] --yes
 gg add [-f] (-A | <path>...)  # stage paths (-f forces gitignored ones), or everything with -A
 gg unstage <path>...          # remove paths from the index, keeping working-tree content
 gg commit -m "msg"            # add -a to stage tracked changes; --amend rewrites the last commit
@@ -188,12 +200,25 @@ gg worktree prune                     # drop stale worktree administrative entri
 gg repo list
 gg repo switch <query>
 gg init [--all | --update | --agents <ids> | --list | --to <path>]
-                                      # --to: install the skill at a custom path for an
-                                      # unsupported agent (file → managed block; directory →
-                                      # <dir>/using-gg/SKILL.md); remembered, so --update refreshes it
+                                      # installs BOTH embedded skills (using-gg, reviewing-with-gg) per agent
+                                      # --to: install both at a custom path for an unsupported agent
+                                      # (file → managed block, one per skill; directory →
+                                      # <dir>/using-gg/SKILL.md + <dir>/reviewing-with-gg/SKILL.md);
+                                      # remembered, so --update refreshes it
+gg skill path [review|using-gg]      # materialise an embedded skill under the user cache dir and print its path
 gg inspect [--debug-dump <path>] [--trace]
 gg version                    # (also --version / -v) print build version + commit
 ```
+
+**Review notes.** `gg note add --file <path> --new-line 42 --summary "…"` pins a
+remark to a line; `gg note list`, `gg note reply`, `gg note rm` and
+`gg note clear` manage them, and `gg note apply --stdin` imports a whole batch
+of agent annotations at once. `gg diff --hunks` numbers each file's `@@` hunks
+so `--hunk N` can address one. Notes are machine-local and expire (see
+`[notes]` under Configuration); they render inline in the TUI diff view and in
+`gg web`. `gg review --notes` does not replace the text report — it still
+prints and saves that — but ALSO asks the tool for anchored notes and imports
+them.
 
 Forks are answered by flags (e.g. `--on-conflict`, `--with-branch`/`--force`);
 without a flag, an interactive terminal prompts, and a non-interactive run errors
@@ -234,6 +259,9 @@ agents already have the `gg` CLI for those — but the things only gg knows:
   including bookmarks and shelved-commit members).
 - **Export** — `gg_export` copies a bookmark or shelf entry into a local
   directory.
+- **Review notes** — `gg_notes_list` (read-only) plus the consent-gated
+  `gg_note_add` (leave one anchored note), `gg_notes_apply` (import a batch)
+  and `gg_note_rm` (remove one). The same store `gg note` writes on the CLI.
 - **Mutating tools (stage 2)** — `gg_cherry_pick` re-applies a shelved or
   bookmarked commit onto the current branch (falling back to the shelved
   commit's stored patch when the original was gc'd), and

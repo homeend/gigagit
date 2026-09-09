@@ -54,6 +54,11 @@ func newTestEnv(t *testing.T) *testEnv {
 	sha := gitRun(t, dir, "rev-parse", "HEAD")
 
 	svc := domain.Open(dir)
+	// Fix a concrete notes dir BEFORE New(svc): New starts the background
+	// sweep immediately, and that goroutine must never resolve the store
+	// lazily from XDG_STATE_HOME — which t.Setenv restores at test cleanup,
+	// racing a sweep that hasn't fired yet.
+	svc.UseNotesDir(t.TempDir())
 	srv := New(svc).sdkServer()
 	ct, st := sdk.NewInMemoryTransports()
 	ctx := context.Background()
@@ -108,6 +113,22 @@ func (e *testEnv) callErr(t *testing.T, name string, args map[string]any) string
 	return resultText(res)
 }
 
+// listTools returns each registered tool's annotations by name.
+func (e *testEnv) listTools(t *testing.T) map[string]sdk.ToolAnnotations {
+	t.Helper()
+	res, err := e.cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
+	}
+	out := map[string]sdk.ToolAnnotations{}
+	for _, tool := range res.Tools {
+		if tool.Annotations != nil {
+			out[tool.Name] = *tool.Annotations
+		}
+	}
+	return out
+}
+
 func TestServerToolRosterAndAnnotations(t *testing.T) {
 	e := newTestEnv(t)
 	res, err := e.cs.ListTools(context.Background(), &sdk.ListToolsParams{})
@@ -119,8 +140,10 @@ func TestServerToolRosterAndAnnotations(t *testing.T) {
 		"gg_bookmark_read": true, "gg_shelf_buckets": true, "gg_shelf_list": true,
 		"gg_shelf_commit_files": true, "gg_shelf_read": true,
 		"gg_compare_trees": true, "gg_compare_file": true,
+		"gg_notes_list": true,
 		// non-read-only:
 		"gg_export": false, "gg_cherry_pick": false, "gg_write_to_worktree": false,
+		"gg_note_add": false, "gg_notes_apply": false, "gg_note_rm": false,
 	}
 	got := map[string]*sdk.Tool{}
 	for _, tool := range res.Tools {

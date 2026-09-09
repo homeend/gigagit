@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	toml "github.com/pelletier/go-toml/v2"
+
+	"github.com/homeend/gigagit/internal/agentskill"
 )
 
 // CustomTarget is one remembered custom install location — the `gg init --to`
@@ -86,7 +88,9 @@ func AddCustomTarget(file string, ct CustomTarget) error {
 }
 
 // CustomDetections synthesizes Detection rows for remembered custom targets,
-// so they list, check, and refresh exactly like registry agents.
+// so they list, check, and refresh exactly like registry agents — both skills
+// included: a "skill" target gets a reviewing-with-gg sibling directory, a
+// "block" target a second marked block in the same file.
 func CustomDetections(ts []CustomTarget) []Detection {
 	var out []Detection
 	for _, ct := range ts {
@@ -94,10 +98,13 @@ func CustomDetections(ts []CustomTarget) []Detection {
 		if ct.Mode == "skill" {
 			mode = ModeSkillFile
 		}
+		ag := Agent{ID: "custom", Label: "Custom", Target: ct.Path, Mode: mode}
+		// ct.Path is already absolute, and resolve() joins a non-"~/" path onto
+		// an empty projDir unchanged, so TargetFor is safe with empty dirs.
+		review := ag.TargetFor(agentskill.ReviewingWithGG, "", "")
 		out = append(out, Detection{
-			Agent:  Agent{ID: "custom", Label: "Custom", Target: ct.Path, Mode: mode},
-			Target: ct.Path,
-			Status: status(ct.Path),
+			Agent: ag, Target: ct.Path, ReviewTarget: review,
+			Status: combinedStatus(ct.Path, review),
 		})
 	}
 	return out

@@ -1,14 +1,13 @@
 // Package agentinit detects installed AI coding agents and installs the
-// embedded using-gg skill into their instruction locations. The agent
-// registry is hardcoded — supporting a new agent is a code change (one
-// Builtins entry), never a runtime definition.
+// embedded gg skills (using-gg and reviewing-with-gg) into their instruction
+// locations. The agent registry is hardcoded — supporting a new agent is a
+// code change (one Builtins entry), never a runtime definition.
 package agentinit
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/agentskill"
@@ -31,6 +30,31 @@ type Agent struct {
 	Detect string
 	Target string
 	Mode   Mode
+}
+
+// TargetFor derives where skill sk lands for this agent from the registry's
+// using-gg target, so the registry keeps ONE path per agent:
+//
+//	ModeSkillFile  .claude/skills/using-gg/SKILL.md → .claude/skills/<name>/SKILL.md
+//	ModePlainFile  .cursor/rules/using-gg.mdc       → .cursor/rules/<name>.mdc
+//	ModeBlock      the same shared file, a second marked block
+//
+// Derivation is filepath-based (Dir/Base/Ext/Join), never a textual replace of
+// a path segment: on Windows the registry path's separators are not "/".
+func (a Agent) TargetFor(sk agentskill.Skill, projDir, homeDir string) string {
+	t := resolve(a.Target, projDir, homeDir)
+	if t == "" {
+		return ""
+	}
+	switch a.Mode {
+	case ModeSkillFile:
+		// <root>/<skill-name>/SKILL.md
+		return filepath.Join(filepath.Dir(filepath.Dir(t)), sk.Name, filepath.Base(t))
+	case ModePlainFile:
+		return filepath.Join(filepath.Dir(t), sk.Name+filepath.Ext(t))
+	default: // ModeBlock: one file, two blocks
+		return t
+	}
 }
 
 // Builtins is the hardcoded agent registry. Adding support for a new agent is
@@ -88,11 +112,14 @@ func (s Status) String() string {
 // installs are explicit opt-in.
 func (s Status) Checked() bool { return s != StatusNew }
 
-// Detection is one detected agent with its resolved target and status.
+// Detection is one detected agent with its resolved targets and status. gg
+// installs TWO skills per agent; Status is the worst of the two so the TUI
+// Settings popup, the web page and `gg init --list` keep one row per agent.
 type Detection struct {
-	Agent  Agent
-	Target string // absolute
-	Status Status
+	Agent        Agent
+	Target       string // absolute: using-gg
+	ReviewTarget string // absolute: reviewing-with-gg (== Target in block mode)
+	Status       Status
 }
 
 // resolve maps a registry path to an absolute path; "" means "not resolvable
@@ -121,53 +148,80 @@ func Detect(projDir, homeDir string) []Detection {
 			continue
 		}
 		target := resolve(a.Target, projDir, homeDir)
-		out = append(out, Detection{Agent: a, Target: target, Status: status(target)})
+		review := a.TargetFor(agentskill.ReviewingWithGG, projDir, homeDir)
+		out = append(out, Detection{Agent: a, Target: target, ReviewTarget: review, Status: combinedStatus(target, review)})
 	}
 	return out
 }
 
-// status reads the target and classifies it against the embedded version.
-func status(target string) Status {
+// skillStatus classifies one target file against one skill's embedded version.
+func skillStatus(sk agentskill.Skill, target string) Status {
 	data, err := os.ReadFile(target)
 	if err != nil {
 		return StatusNew
 	}
-	if !agentskill.HasMarker(data) {
-		return StatusNew // file exists but has no gg marker at all
+	if !sk.HasMarker(data) {
+		return StatusNew // file exists but has no marker for this skill
 	}
-	v := agentskill.InstalledVersion(data)
-	if v < agentskill.Version {
+	if sk.InstalledVersion(data) < sk.Version {
 		return StatusOutdated
 	}
 	return StatusUpToDate
 }
 
-// blockRe matches a previously installed managed block, any version.
-var blockRe = regexp.MustCompile(`(?s)<!-- gg:using-gg:v\d+:begin -->.*?<!-- gg:using-gg:end -->`)
+// combinedStatus folds the two skills into the single row the frontends show:
+// using-gg missing = new (this agent has never been set up); using-gg present
+// but the review skill missing or behind = outdated (a refresh adds it).
+func combinedStatus(usingTarget, reviewTarget string) Status {
+	u := skillStatus(agentskill.UsingGG, usingTarget)
+	if u == StatusNew {
+		return StatusNew
+	}
+	r := skillStatus(agentskill.ReviewingWithGG, reviewTarget)
+	if u == StatusOutdated || r != StatusUpToDate {
+		return StatusOutdated
+	}
+	return StatusUpToDate
+}
 
-// Install writes the embedded skill into d.Target according to the agent's
+// Install writes BOTH embedded skills into d's targets according to the agent's
 // mode, creating parent directories as needed. Shared files keep all
-// surrounding content byte-for-byte. Idempotent.
+// surrounding content — and each skill's own block — byte-for-byte. Idempotent.
 func Install(d Detection) error {
-	if err := os.MkdirAll(filepath.Dir(d.Target), 0o755); err != nil {
+	for _, sk := range agentskill.All() {
+		target := d.Target
+		if sk.Name == agentskill.ReviewingWithGG.Name && d.ReviewTarget != "" {
+			target = d.ReviewTarget
+		}
+		if err := installSkill(sk, target, d.Agent.Mode); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func installSkill(sk agentskill.Skill, target string, mode Mode) error {
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
-	switch d.Agent.Mode {
+	switch mode {
 	case ModeSkillFile:
-		return os.WriteFile(d.Target, []byte(agentskill.SkillFile()), 0o644)
+		return os.WriteFile(target, []byte(sk.SkillFile()), 0o644)
 	case ModePlainFile:
-		return os.WriteFile(d.Target, []byte(agentskill.PlainFile()), 0o644)
+		return os.WriteFile(target, []byte(sk.PlainFile()), 0o644)
 	case ModeBlock:
-		block := agentskill.Block()
-		existing, err := os.ReadFile(d.Target)
+		block := sk.Block()
+		existing, err := os.ReadFile(target)
 		if os.IsNotExist(err) {
-			return os.WriteFile(d.Target, []byte(block+"\n"), 0o644)
+			return os.WriteFile(target, []byte(block+"\n"), 0o644)
 		}
 		if err != nil {
 			return err
 		}
-		if blockRe.Match(existing) {
-			return os.WriteFile(d.Target, blockRe.ReplaceAllLiteral(existing, []byte(block)), 0o644)
+		// Only THIS skill's block is replaced — the sibling block in the same
+		// file must survive untouched.
+		if sk.BlockRe().Match(existing) {
+			return os.WriteFile(target, sk.BlockRe().ReplaceAllLiteral(existing, []byte(block)), 0o644)
 		}
 		sep := "\n\n"
 		if len(existing) == 0 || strings.HasSuffix(string(existing), "\n\n") {
@@ -175,7 +229,7 @@ func Install(d Detection) error {
 		} else if strings.HasSuffix(string(existing), "\n") {
 			sep = "\n"
 		}
-		return os.WriteFile(d.Target, []byte(string(existing)+sep+block+"\n"), 0o644)
+		return os.WriteFile(target, []byte(string(existing)+sep+block+"\n"), 0o644)
 	}
-	return fmt.Errorf("agentinit: unknown mode %d", d.Agent.Mode)
+	return fmt.Errorf("agentinit: unknown mode %d", mode)
 }

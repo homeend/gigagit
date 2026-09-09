@@ -72,6 +72,21 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 		n.Created = now
 	}
 	n.Updated = now
+	// A commit note's target is its FULL COMMIT sha, so a CLI note on "HEAD"
+	// and a TUI note on the same commit share one address (sameNoteTarget
+	// compares Commit verbatim) — and an annotated tag's own object id (which
+	// also happens to be 40 hex) must never be stored in its place. ResolveRev
+	// peels to ^{commit}, so a tag resolves to the commit it points at.
+	// Best-effort: a runner that cannot resolve (the FakeRunner suites, a
+	// detached store) keeps the value as given rather than failing a write —
+	// the CLI validates the rev up front in NoteTarget.
+	if n.Address.State == model.StateCommitted && n.Address.Commit != "" && !isFullSHA(n.Address.Commit) {
+		if full, found, ferr := s.ResolveRev(ctx, n.Address.Commit); ferr == nil && found {
+			if full = strings.TrimSpace(full); isFullSHA(full) {
+				n.Address.Commit = full
+			}
+		}
+	}
 	// Pin the checkout BEFORE the hash fill: noteSideLines reads the note's
 	// own worktree, and every later match is made against this value.
 	if worktreeScopedNote(n.Address) {
@@ -94,6 +109,9 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 		if lines == nil {
 			return model.Note{}, fmt.Errorf("notes: the %s side of %s does not exist", n.Side, n.Address.Path)
 		}
+		if err := checkNoteRange(n.Range, n.Side, n.Address.Path, lines); err != nil {
+			return model.Note{}, err
+		}
 		n.ContextHash = model.NoteContextHash(anchorLines(lines, n.Range))
 	}
 	if err := st.Put(n); err != nil {
@@ -101,6 +119,59 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 	}
 	s.invalidateNoteCounts()
 	return n, nil
+}
+
+// NoteRangeCheck validates rng against addr's side WITHOUT storing anything —
+// the same bounds NoteAdd enforces at write time (see the comment there).
+// It lets a batch importer (gg note apply --stdin, the review importer, the
+// MCP tool) reject every bad item in its VALIDATION pass, before the first
+// write, rather than discovering a bad item mid-batch after earlier items are
+// already stored.
+func (s *Service) NoteRangeCheck(ctx context.Context, addr model.FileAddress, side model.NoteSide, rng [2]int) error {
+	if worktreeScopedNote(addr) {
+		wt, err := s.noteWorktree(ctx, addr)
+		if err != nil {
+			return err
+		}
+		addr.Worktree = wt
+	}
+	lines, err := s.noteSideLines(ctx, addr, side)
+	if err != nil {
+		return fmt.Errorf("notes: cannot read the %s side of %s: %w", side, addr.Path, err)
+	}
+	if lines == nil {
+		return fmt.Errorf("notes: the %s side of %s does not exist", side, addr.Path)
+	}
+	return checkNoteRange(rng, side, addr.Path, lines)
+}
+
+// checkNoteRange is the ONE bound both NoteAdd (at write time) and
+// NoteRangeCheck (a batch importer's pre-write validation) enforce:
+//
+//   - a structurally bad range (start < 1, or start > end) is always refused.
+//   - against a side that HAS content, a range running past its end is
+//     refused — --new-line 100 on a 4-line file must not silently clamp.
+//   - against a side with NO content (len(lines) == 0 — a root commit's
+//     empty old side is the one legitimate case, see
+//     TestNoteAddOnARootCommitFillsAFingerprint), only the exact sentinel
+//     range {1,1} is accepted; any other range (including another
+//     out-of-range value like {500,500}) is refused. Without this narrower
+//     rule ANY range on an empty side would pass silently and the note would
+//     be dropped by the next sweep with no explanation.
+func checkNoteRange(rng [2]int, side model.NoteSide, path string, lines []string) error {
+	if rng[0] < 1 || rng[0] > rng[1] {
+		return fmt.Errorf("notes: invalid range %d-%d for the %s side of %s", rng[0], rng[1], side, path)
+	}
+	if len(lines) == 0 {
+		if rng == [2]int{1, 1} {
+			return nil
+		}
+		return fmt.Errorf("notes: line %d is past the end of the %s side of %s (0 lines)", rng[1], side, path)
+	}
+	if rng[1] > len(lines) {
+		return fmt.Errorf("notes: line %d is past the end of the %s side of %s (%d lines)", rng[1], side, path, len(lines))
+	}
+	return nil
 }
 
 // NoteEdit replaces one note's summary and rationale.
@@ -729,4 +800,85 @@ func splitLines(b []byte) []string {
 		return []string{}
 	}
 	return strings.Split(s, "\n")
+}
+
+// isFullSHA reports whether s is a 40-character lowercase hex object id — the
+// only form worth storing as a note's commit target.
+func isFullSHA(s string) bool {
+	if len(s) != 40 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// NoteGet returns one stored note by id, replies included. It is the batch
+// importer's parent check: `note apply` validates every replyTo BEFORE the
+// first write, so a bad batch stores nothing.
+func (s *Service) NoteGet(ctx context.Context, id string) (model.Note, error) {
+	st := s.notesStore(ctx)
+	if st == nil {
+		return model.Note{}, ErrNotesDisabled
+	}
+	all, err := st.Load()
+	if err != nil {
+		return model.Note{}, err
+	}
+	for _, n := range all {
+		if n.ID == id {
+			return n, nil
+		}
+	}
+	return model.Note{}, ErrNoteNotFound
+}
+
+// NoteAddresses lists the distinct addresses that carry at least one ROOT note
+// and are visible from this checkout: every commit and shelf note (those are
+// worktree-agnostic) plus the worktree-state notes taken in THIS checkout. It
+// is the enumeration door for `gg note list` and `gg note clear --all`, which
+// have no path to resolve.
+//
+// Addresses are deduplicated by the identity sameNoteTarget uses — worktree,
+// commit, shelf id and path, NOT State — so a path with both a staged and an
+// unstaged note yields ONE address (whose State is the first note's, i.e. the
+// side pair NotesAt will read). Sorted by path, then commit, for stable output.
+func (s *Service) NoteAddresses(ctx context.Context) ([]model.FileAddress, error) {
+	st := s.notesStore(ctx)
+	if st == nil {
+		return nil, ErrNotesDisabled
+	}
+	all, err := st.Load()
+	if err != nil {
+		return nil, err
+	}
+	cur, _ := s.TopLevel(ctx) // "" simply hides worktree notes, never fails the query
+	seen := map[string]bool{}
+	var out []model.FileAddress
+	for _, n := range all {
+		if n.IsReply() {
+			continue
+		}
+		a := n.Address
+		if worktreeScopedNote(a) && !sameWorktreePath(a.Worktree, cur) {
+			continue
+		}
+		key := a.Worktree + "\x00" + a.Commit + "\x00" + a.ShelfID + "\x00" + a.Path
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, a)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Path != out[j].Path {
+			return out[i].Path < out[j].Path
+		}
+		return out[i].Commit < out[j].Commit
+	})
+	return out, nil
 }

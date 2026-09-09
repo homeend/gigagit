@@ -1,0 +1,64 @@
+name = "notes CLI: hunks, add, list, batch apply, clear"
+
+[input]
+steps = [
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\ndelta\n" },
+  { commit = "seed" },
+  { write = "a.txt", content = "alpha\nBRAVO\ncharlie\nDELTA\n" },
+]
+
+# The agent's first look: numbered git @@ hunks per file.
+[[run]]
+cmd             = ["diff", "--hunks"]
+exit            = 0
+stdout_contains = ["a.txt", "1 @@ -"]
+
+[[run]]
+cmd             = ["note", "add", "--file", "a.txt", "--new-line", "2", "--summary", "shouty bravo"]
+exit            = 0
+
+[[run]]
+cmd             = ["note", "list", "--file", "a.txt"]
+exit            = 0
+stdout_contains = ["a.txt", "new:2-2", "active", "shouty bravo"]
+
+# A batch in hunk's agent-context v1 shape; the unanchored summary goes to
+# stderr as context, never into the store.
+[[run]]
+cmd             = ["note", "apply", "--stdin"]
+stdin           = '{"version":1,"summary":"overall fine","files":[{"path":"a.txt","annotations":[{"newRange":[4,4],"summary":"shouty delta","rationale":"same problem"}]}]}'
+exit            = 0
+
+[[run]]
+cmd             = ["note", "list", "--file", "a.txt"]
+exit            = 0
+stdout_contains = ["shouty bravo", "shouty delta", "new:4-4"]
+
+# A batch with one bad item stores nothing.
+[[run]]
+cmd            = ["note", "apply", "--stdin"]
+stdin          = '{"files":[{"path":"a.txt","annotations":[{"newRange":[1,1],"summary":"good"},{"newRange":[3,3]}]}]}'
+exit           = 1
+
+[[run]]
+cmd             = ["note", "list", "--file", "a.txt"]
+exit            = 0
+stdout_excludes = ["good"]
+
+# clear needs --yes and exactly one of --file/--all.
+[[run]]
+cmd  = ["note", "clear", "--all"]
+exit = 2
+
+[[run]]
+cmd             = ["note", "clear", "--all", "--yes"]
+exit            = 0
+stdout_contains = ["removed 2 notes"]
+
+[[run]]
+cmd             = ["note", "list"]
+exit            = 0
+stdout_excludes = ["shouty"]
+
+[expect]
+branch = "main"

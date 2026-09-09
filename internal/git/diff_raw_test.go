@@ -33,7 +33,28 @@ func TestDiffPatchArgvMinimal(t *testing.T) {
 	if err != nil || out != "PATCH" {
 		t.Fatalf("out=%q err=%v", out, err)
 	}
-	want := []string{"diff"}
+	// Pinned to default a/b prefixes and no colour (see DiffPatch doc) so
+	// hunk parsing is stable regardless of the user's diff.* / color.diff
+	// config.
+	want := []string{"-c", "diff.mnemonicPrefix=false", "-c", "diff.noprefix=false", "diff", "--no-color"}
+	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
+		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
+	}
+}
+
+func TestDiffPatchArgvFull(t *testing.T) {
+	t.Parallel()
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git diff", gitexec.Result{Stdout: "PATCH"})
+	r := &Repo{Runner: f}
+	spec := model.DiffSpec{Cached: true, Rev: "main..HEAD", Paths: []string{"a.go", "b.go"}}
+	if _, err := r.DiffPatch(context.Background(), spec); err != nil {
+		t.Fatalf("DiffPatch: %v", err)
+	}
+	want := []string{
+		"-c", "diff.mnemonicPrefix=false", "-c", "diff.noprefix=false",
+		"diff", "--no-color", "--cached", "main..HEAD", "--", "a.go", "b.go",
+	}
 	if !reflect.DeepEqual(f.Calls[0].Argv, want) {
 		t.Fatalf("argv = %v, want %v", f.Calls[0].Argv, want)
 	}

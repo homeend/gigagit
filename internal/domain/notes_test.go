@@ -2,10 +2,13 @@ package domain
 
 import (
 	"context"
+	"errors"
+	"sort"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/textdiff"
@@ -461,6 +464,124 @@ func TestNotesAtScopesToTheCheckout(t *testing.T) {
 	// A different path shares the store but not the target.
 	if other, err := svc.NotesAt(ctx, model.FileAddress{State: model.StateStaged, Path: "b.go"}); err != nil || len(other) != 0 {
 		t.Fatalf("NotesAt(b.go) = %+v, %v, want none", other, err)
+	}
+}
+
+func TestNoteAddNormalisesCommitToFullSHA(t *testing.T) {
+	t.Parallel()
+	dir := noteSideRepo(t)
+	svc := svcIn(t, dir)
+	svc.UseNotesDir(t.TempDir())
+	full := headSHA(t, dir)
+	got, err := svc.NoteAdd(context.Background(), model.Note{
+		Address: model.FileAddress{State: model.StateCommitted, Commit: full[:7], Path: "a.go"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "short sha in",
+	})
+	if err != nil {
+		t.Fatalf("NoteAdd: %v", err)
+	}
+	if got.Address.Commit != full {
+		t.Fatalf("stored commit = %q, want the full sha %q (a CLI note and a TUI note must share one target)", got.Address.Commit, full)
+	}
+}
+
+// An annotated tag's own object id is also 40 hex, so a naive "already full
+// sha" check would store it verbatim. NoteAdd must PEEL to the commit the tag
+// points at, or a CLI note on "v1" would never share a target with a TUI note
+// on the same commit.
+func TestNoteAddPeelsAnnotatedTagToCommit(t *testing.T) {
+	t.Parallel()
+	dir := noteSideRepo(t)
+	gittest.Run(t, dir, "tag", "-a", "v1", "-m", "v1")
+	svc := svcIn(t, dir)
+	svc.UseNotesDir(t.TempDir())
+	full := headSHA(t, dir)
+	got, err := svc.NoteAdd(context.Background(), model.Note{
+		Address: model.FileAddress{State: model.StateCommitted, Commit: "v1", Path: "a.go"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "tag in",
+	})
+	if err != nil {
+		t.Fatalf("NoteAdd: %v", err)
+	}
+	if got.Address.Commit != full {
+		t.Fatalf("stored commit = %q, want the peeled commit sha %q, not the tag's own object id", got.Address.Commit, full)
+	}
+}
+
+// A Service whose runner cannot rev-parse (the FakeRunner suites) must keep the
+// commit exactly as given: normalisation is best-effort, never a new failure.
+func TestNoteAddKeepsCommitWhenRevParseFails(t *testing.T) {
+	t.Parallel()
+	svc, _ := notesSvc(t)
+	got, err := svc.NoteAdd(context.Background(), model.Note{
+		Address:     model.FileAddress{State: model.StateCommitted, Commit: "deadbee", Path: "a.go"},
+		Side:        model.NoteSideNew,
+		Range:       [2]int{1, 1},
+		Summary:     "x",
+		ContextHash: "h",
+	})
+	if err != nil || got.Address.Commit != "deadbee" {
+		t.Fatalf("commit = %q err = %v, want the value as given", got.Address.Commit, err)
+	}
+}
+
+func TestNoteGetAndNoteAddresses(t *testing.T) {
+	t.Parallel()
+	svc, _ := notesSvc(t)
+	ctx := context.Background()
+	root, err := svc.NoteAdd(ctx, model.Note{
+		Address: wtAddr("a/b.go"), Side: model.NoteSideNew, Range: [2]int{1, 1},
+		Summary: "root", ContextHash: "h",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.NoteReply(ctx, root.ID, model.Note{Summary: "reply"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Address: model.FileAddress{State: model.StateCommitted, Commit: "c0ffee", Path: "z.go"},
+		Side:    model.NoteSideNew, Range: [2]int{2, 2}, Summary: "commit note", ContextHash: "h",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.NoteGet(ctx, root.ID)
+	if err != nil || got.Summary != "root" {
+		t.Fatalf("NoteGet = %+v %v", got, err)
+	}
+	if _, err := svc.NoteGet(ctx, "nope1234"); !errors.Is(err, ErrNoteNotFound) {
+		t.Fatalf("NoteGet(missing) = %v, want ErrNoteNotFound", err)
+	}
+
+	addrs, err := svc.NoteAddresses(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(addrs) != 2 {
+		t.Fatalf("addresses = %+v, want 2 (a reply shares its root's address)", addrs)
+	}
+	var paths []string
+	for _, a := range addrs {
+		paths = append(paths, a.Path)
+	}
+	sort.Strings(paths)
+	if paths[0] != "a/b.go" || paths[1] != "z.go" {
+		t.Fatalf("paths = %v, want [a/b.go z.go]", paths)
+	}
+}
+
+func TestWaitNotesSweepBounded(t *testing.T) {
+	t.Parallel()
+	svc, _ := notesSvc(t)
+	// No sweep started: the wait group is empty, so this returns immediately.
+	if !svc.WaitNotesSweep(context.Background()) {
+		t.Fatal("WaitNotesSweep with no sweep running must report done")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if svc.WaitNotesSweep(ctx) {
+		t.Fatal("a cancelled ctx must abandon the wait and report not-done")
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/git"
@@ -142,6 +143,79 @@ func TestNoteAddOnARootCommitFillsAFingerprint(t *testing.T) {
 	}
 	if got.ContextHash == "" {
 		t.Fatal("a root commit's old side must still produce a fingerprint")
+	}
+}
+
+// NoteAdd must refuse an anchor past the end of its side rather than silently
+// clamping it (anchorLines used to do exactly that): "the new side has 1
+// line" and Range{2,2} is a bad batch item, not a note on line 1.
+func TestNoteAddRejectsAnchorPastTheEndOfItsSide(t *testing.T) {
+	t.Parallel()
+	dir := noteSideRepo(t)
+	svc := svcIn(t, dir)
+	svc.SetNotesStore(notes.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	addr := model.FileAddress{State: model.StateUnstaged, Worktree: dir, Path: "a.go"} // 1 line on the new (working) side
+	_, err := svc.NoteAdd(ctx, model.Note{
+		Address: addr, Side: model.NoteSideNew, Range: [2]int{2, 2}, Summary: "past end",
+	})
+	if err == nil {
+		t.Fatal("an anchor past the end of the side must be refused")
+	}
+	if !strings.Contains(err.Error(), "line 2 is past the end of the new side of a.go (1 lines)") {
+		t.Fatalf("err = %q, want it to name the line, side, path and length", err)
+	}
+	if left, _ := svc.notesStore(ctx).Load(); len(left) != 0 {
+		t.Fatalf("a refused add must store nothing, got %+v", left)
+	}
+
+	// A structurally bad range (start > end) is refused too, with the
+	// invalid-range wording.
+	_, err = svc.NoteAdd(ctx, model.Note{
+		Address: addr, Side: model.NoteSideNew, Range: [2]int{2, 1}, Summary: "backwards",
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid range") {
+		t.Fatalf("err = %v, want an invalid-range error", err)
+	}
+}
+
+// An EMPTY side (0 lines — a root commit's old side, or here an empty
+// untracked file's new side) is the one case where NoteAdd cannot compare
+// against a real length. checkNoteRange narrows the exemption to the exact
+// sentinel {1,1}: any other range, including another out-of-range value like
+// {500,500}, must still be refused rather than passing silently and being
+// dropped by the next sweep with no explanation.
+func TestNoteAddOnAnEmptySideAcceptsOnlyTheSentinelRange(t *testing.T) {
+	t.Parallel()
+	dir := noteSideRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "empty.go"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := svcIn(t, dir)
+	svc.SetNotesStore(notes.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+	addr := model.FileAddress{State: model.StateUntracked, Worktree: dir, Path: "empty.go"}
+
+	// {500,500} on a 0-line side: refused, not silently accepted.
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Address: addr, Side: model.NoteSideNew, Range: [2]int{500, 500}, Summary: "bogus",
+	}); err == nil || !strings.Contains(err.Error(), "line 500 is past the end of the new side of empty.go (0 lines)") {
+		t.Fatalf("err = %v, want a past-the-end error naming 0 lines", err)
+	}
+	if left, _ := svc.notesStore(ctx).Load(); len(left) != 0 {
+		t.Fatalf("a refused add must store nothing, got %+v", left)
+	}
+
+	// {1,1}, the established sentinel for "the whole empty side", is accepted.
+	got, err := svc.NoteAdd(ctx, model.Note{
+		Address: addr, Side: model.NoteSideNew, Range: [2]int{1, 1}, Summary: "fine on empty",
+	})
+	if err != nil {
+		t.Fatalf("NoteAdd({1,1}) on an empty side: %v", err)
+	}
+	if got.ContextHash == "" {
+		t.Fatal("an accepted empty-side note must still get a fingerprint")
 	}
 }
 

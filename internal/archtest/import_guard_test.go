@@ -48,6 +48,7 @@ func TestLayeringDAG(t *testing.T) {
 		"exttool":     {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"gitexec":     {"gitcmd", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"model":       {"repogate", "gitcmd", "gitexec", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"notebatch":   {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"repogate":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"mcp":         {"tui", "cli", "app", "web"},
 		"domain":      {"tui", "cli", "mcp", "web", "app"},

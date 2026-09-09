@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v61 -->
+<!-- gg:using-gg:v63 -->
 
 # Using gg (gigagit)
 
@@ -60,6 +60,36 @@ guards against removing the worktree you are standing in.
   picks among configured `review` commands when more than one is set up.
   Exit 0 on a produced report, 1 on tool failure/empty report/no review tool
   configured, 2 on a usage error.
+
+### Review notes
+
+```bash
+gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]   # numbered git @@ hunks per file
+gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>] \
+              --summary "…" [--rationale "…"] [--author <name>] [--source user|agent] [--json]
+gg note reply <note-id> --summary "…" [--json]
+gg note apply --stdin [--cached | --rev <c>] [--author <name>] [--json]   # agent-context v1 or a comments batch
+gg note list  [--file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]
+gg note rm    <note-id>
+gg note clear (--file <path> | --all) [--type user|agent|all] --yes
+gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]     # also import the tool's anchored notes
+gg skill path [review|using-gg]                                  # print the bundled skill's path
+```
+
+Notes are machine-local review remarks anchored to a line range on one side of
+one file; the user reads them inline in `gg` and `gg web`. A note targets ONE
+diff: no flag = the unstaged working tree, `--cached` = the staged diff,
+`--rev <commit>` = that commit's own change (a range is refused). Line numbers
+are 1-based. Full guidance: `gg skill path` (the reviewing-with-gg skill).
+
+Three gotchas worth knowing up front (the reviewing-with-gg skill covers
+them in full): a path with BOTH a staged and an unstaged note needs
+`gg note list --file <path>` with `--cached` (or without) to resolve each
+against its own diff — a bare `note list` can show a misleading verdict; a
+batch error's `item N` is 0-based; `gg note clear --all` removes this
+checkout's own working-tree notes plus EVERY commit note in the store
+(commit notes are not worktree-scoped).
+
 - `gg add [-f] (-A | <path>...)` / `gg unstage <path>...` — stage paths (or
   everything incl. untracked with `-A`) / remove paths from the index
   keeping working-tree content. `gg add` + `gg commit` fully replaces
@@ -522,6 +552,13 @@ shelved/bookmarked commit; falls back to the shelf's stored patch when the
 original was gc'd) and `gg_write_to_worktree` (restore a stored file
 version as an unstaged change). The mutating tools are annotated
 destructive, so your MCP client prompts before running them.
+
+MCP also carries the review-notes surface — the same store `gg note` writes:
+
+- `gg_notes_list` — review notes, resolved (read-only)
+- `gg_note_add` — leave one anchored note (mutates)
+- `gg_notes_apply` — import a batch of notes (mutates)
+- `gg_note_rm` — remove one note (mutates)
 
 ## Shell following
 

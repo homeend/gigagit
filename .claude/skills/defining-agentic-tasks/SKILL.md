@@ -106,6 +106,22 @@ CLI verb/flag/exit code, or a changed MCP surface ⇒ update
    with the change (global agent copies refresh as a side effect).
 4. CHANGELOG entry.
 
+The SAME rule applies to `internal/agentskill/reviewing-with-gg.md` (the
+review-notes lane: `gg diff --hunks`, `gg note …`) — it is a second,
+independently versioned skill, not a variant of using-gg:
+
+1. Edit the body.
+2. Bump `agentskill.ReviewVersion` (same file), even when `Version` does not
+   move — the two counters are independent.
+3. `go build ./cmd/gg && go run ./cmd/gg init --agents claude-project` (or
+   `./gg init --update`) in your worktree — this refreshes the TRACKED
+   `.claude/skills/reviewing-with-gg/SKILL.md`; **commit it** with the
+   change. `TestDogfoodReviewSkillCopyInSync` fails the build otherwise.
+4. CHANGELOG entry.
+
+A change that touches both skills bumps both counters and regenerates both
+copies in the same commit.
+
 `adding-features` step 7b points here for its trigger.
 
 ## Adding a NEW task category (sketch)

@@ -143,14 +143,24 @@ func TestInstallBlockPreservesSurroundingContent(t *testing.T) {
 	}
 	data2, _ := os.ReadFile(target)
 	s2 := string(data2)
-	if !strings.HasPrefix(s2, "# My rules\n\nkeep me\n\n") || !strings.HasSuffix(s2, "\n\ntail stays\n") {
+	// The using-gg block is replaced WHERE IT STOOD, so every surrounding byte
+	// survives — including the tail. It is no longer the end of the file:
+	// Install appends the reviewing-with-gg block after the existing content.
+	if !strings.HasPrefix(s2, "# My rules\n\nkeep me\n\n") || !strings.Contains(s2, "\n\ntail stays\n") {
 		t.Errorf("surrounding bytes changed:\n%s", s2)
 	}
 	if strings.Contains(s2, "ancient") {
 		t.Error("old block content not replaced")
 	}
 	if strings.Count(s2, "gg:using-gg") != 2 { // one begin + one end marker
-		t.Errorf("expected exactly one block, got:\n%s", s2)
+		t.Errorf("expected exactly one using-gg block, got:\n%s", s2)
+	}
+	if strings.Count(s2, "gg:reviewing-with-gg") != 2 {
+		t.Errorf("expected exactly one reviewing-with-gg block, got:\n%s", s2)
+	}
+	// Order: the tail the user wrote comes before the freshly appended block.
+	if strings.Index(s2, "tail stays") > strings.Index(s2, "gg:reviewing-with-gg") {
+		t.Error("the appended review block must land after the existing content")
 	}
 }
 
@@ -321,5 +331,95 @@ func TestAntigravityNotDetectedFromBareGeminiDir(t *testing.T) {
 	proj, home := fixture(t, nil, []string{".gemini"})
 	if _, ok := byID(Detect(proj, home), "antigravity"); ok {
 		t.Error("bare ~/.gemini (gemini-cli leftover) must not detect antigravity")
+	}
+}
+
+func TestTargetForDerivesTheSecondSkillPath(t *testing.T) {
+	t.Parallel()
+	proj, home := fixture(t, []string{".claude", ".cursor", "AGENTS.md"}, nil)
+	dets := Detect(proj, home)
+	for _, c := range []struct {
+		id       string
+		wantTail string
+	}{
+		{"claude-project", filepath.Join(".claude", "skills", "reviewing-with-gg", "SKILL.md")},
+		{"cursor", filepath.Join(".cursor", "rules", "reviewing-with-gg.mdc")},
+		{"agents-md", "AGENTS.md"}, // block mode: the SAME file, a second block
+	} {
+		d, ok := byID(dets, c.id)
+		if !ok {
+			t.Errorf("%s not detected", c.id)
+			continue
+		}
+		if !strings.HasSuffix(d.ReviewTarget, c.wantTail) {
+			t.Errorf("%s ReviewTarget = %q, want it to end with %q", c.id, d.ReviewTarget, c.wantTail)
+		}
+	}
+}
+
+func TestInstallWritesBothSkillsInEveryMode(t *testing.T) {
+	t.Parallel()
+	proj, home := fixture(t, []string{".claude", ".cursor", "AGENTS.md"}, nil)
+	for _, id := range []string{"claude-project", "cursor", "agents-md"} {
+		d, ok := byID(Detect(proj, home), id)
+		if !ok {
+			t.Fatalf("%s not detected", id)
+		}
+		if err := Install(d); err != nil {
+			t.Fatalf("%s install: %v", id, err)
+		}
+		using, err := os.ReadFile(d.Target)
+		if err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+		if !agentskill.UsingGG.HasMarker(using) {
+			t.Errorf("%s: using-gg not installed at %s", id, d.Target)
+		}
+		review, err := os.ReadFile(d.ReviewTarget)
+		if err != nil {
+			t.Fatalf("%s: %v", id, err)
+		}
+		if !agentskill.ReviewingWithGG.HasMarker(review) {
+			t.Errorf("%s: reviewing-with-gg not installed at %s", id, d.ReviewTarget)
+		}
+		if id == "agents-md" {
+			// Both blocks live in one file and neither may eat the other.
+			if !agentskill.UsingGG.HasMarker(review) {
+				t.Errorf("block mode must keep BOTH blocks in %s", d.Target)
+			}
+			if !strings.Contains(string(review), "existing") {
+				t.Errorf("block mode must keep surrounding content in %s", d.Target)
+			}
+		}
+	}
+}
+
+func TestStatusIsTheWorstOfTheTwoSkills(t *testing.T) {
+	t.Parallel()
+	proj, home := fixture(t, []string{".claude"}, nil)
+	d, _ := byID(Detect(proj, home), "claude-project")
+	if d.Status != StatusNew {
+		t.Fatalf("fresh = %v, want StatusNew", d.Status)
+	}
+	if err := Install(d); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := byID(Detect(proj, home), "claude-project"); got.Status != StatusUpToDate {
+		t.Fatalf("after install = %v, want StatusUpToDate", got.Status)
+	}
+	// using-gg present but the review skill missing = outdated, not new: the
+	// agent HAS gg's skill, it is just an older shape.
+	if err := os.Remove(d.ReviewTarget); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := byID(Detect(proj, home), "claude-project"); got.Status != StatusOutdated {
+		t.Fatalf("review skill missing = %v, want StatusOutdated", got.Status)
+	}
+	// using-gg itself missing = new.
+	if err := os.Remove(d.Target); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := byID(Detect(proj, home), "claude-project"); got.Status != StatusNew {
+		t.Fatalf("using-gg missing = %v, want StatusNew", got.Status)
 	}
 }

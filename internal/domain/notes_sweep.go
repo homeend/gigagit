@@ -76,6 +76,31 @@ func (s *Service) StartNotesSweep() {
 func (s *Service) waitNotesSweepForTest()     { s.notesSweepWG.Wait() }
 func (s *Service) notesSweepRunsForTest() int { return int(s.notesSweepRuns.Load()) }
 
+// WaitNotesSweep blocks until the background sweep started by StartNotesSweep
+// has finished, or ctx expires — whichever comes first. It reports whether the
+// sweep actually finished.
+//
+// This is the SHORT-LIVED process's door (`gg note …`, one command then exit):
+// the verb does its own work first, then gives housekeeping a bounded budget.
+// Abandoning an unfinished sweep is safe and deliberate — it is idempotent and
+// lock-protected, so the next gg start simply retries it.
+func (s *Service) WaitNotesSweep(ctx context.Context) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	done := make(chan struct{})
+	go func() {
+		s.notesSweepWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 // noteSide is one cached side-text read: the lines the anchor is matched
 // against, plus whether the read succeeded at all. A readable side with nil
 // lines is legitimately ABSENT (the note is orphaned); an unreadable one says

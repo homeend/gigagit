@@ -83,10 +83,23 @@ type ReviewResult struct {
 	Label   string
 }
 
-// ReviewReport runs resolvedCommand over target via engine.ReviewChanges, then
-// persists the captured report under <state>/gg/reviews/<repoKey>/. now is
-// injected so the filename timestamp is testable.
+// ReviewReport runs resolvedCommand over target and persists the captured
+// report. The three-frontend entry point; ReviewReportNotes adds the optional
+// notes sidecar.
 func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, resolvedCommand string, env []string, now time.Time) (ReviewResult, error) {
+	return s.ReviewReportNotes(ctx, target, resolvedCommand, env, now, "")
+}
+
+// ReviewReportNotes is ReviewReport plus a caller-owned notes file: when
+// notesFile is non-empty the tool is told (via $GG_NOTES_FILE and one context
+// paragraph) that it may also write anchored notes as agent-context v1. The
+// FILE belongs to the caller — the op never creates or removes it — because the
+// caller reads it after the op returns.
+//
+// It runs resolvedCommand over target via engine.ReviewChanges, then persists
+// the captured report under <state>/gg/reviews/<repoKey>/. now is injected so
+// the filename timestamp is testable.
+func (s *Service) ReviewReportNotes(ctx context.Context, target ReviewTarget, resolvedCommand string, env []string, now time.Time, notesFile string) (ReviewResult, error) {
 	label := target.DisplayLabel()
 	op := engine.ReviewChanges{
 		Command:    resolvedCommand,
@@ -94,6 +107,7 @@ func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, resolve
 		Env:        env,
 		Diff:       target.Diff,
 		RangeLabel: label, // the agent's "# Range:" context header — display text, not executed
+		NotesFile:  notesFile,
 	}
 	res, err := s.Execute(ctx, op, nil, nil)
 	if err != nil {

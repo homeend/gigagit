@@ -14,8 +14,8 @@ import (
 )
 
 // cmdInit implements `gg init`: detect AI agents, ask which to set up, and
-// install/refresh the embedded using-gg skill. Pure file I/O — no git, no
-// engine, works outside a repository.
+// install/refresh the two embedded skills (using-gg, reviewing-with-gg).
+// Pure file I/O — no git, no engine, works outside a repository.
 func cmdInit(workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -23,7 +23,7 @@ func cmdInit(workdir string, args []string, stdin io.Reader, stdout, stderr io.W
 	update := fs.Bool("update", false, "refresh every already-installed target (the checked defaults)")
 	agents := fs.String("agents", "", "comma-separated agent IDs to install for")
 	list := fs.Bool("list", false, "print detected agents and exit")
-	to := fs.String("to", "", "install the skill at a custom path for an unsupported agent (file → managed block; directory → <dir>/using-gg/SKILL.md); remembered and refreshed by --update")
+	to := fs.String("to", "", "install both skills at a custom path for an unsupported agent (file → managed block, one per skill; directory → <dir>/using-gg/SKILL.md + <dir>/reviewing-with-gg/SKILL.md); remembered and refreshed by --update")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -102,9 +102,9 @@ func cmdInit(workdir string, args []string, stdin io.Reader, stdout, stderr io.W
 			return 1
 		}
 		if d.Status == agentinit.StatusNew {
-			fmt.Fprintf(stdout, "✓ installed %s → %s\n", d.Agent.Label, d.Target)
+			fmt.Fprintf(stdout, "✓ installed %s → %s%s\n", d.Agent.Label, d.Target, reviewTargetSuffix(d))
 		} else {
-			fmt.Fprintf(stdout, "✓ refreshed %s → %s\n", d.Agent.Label, d.Target)
+			fmt.Fprintf(stdout, "✓ refreshed %s → %s%s\n", d.Agent.Label, d.Target, reviewTargetSuffix(d))
 		}
 	}
 	return 0
@@ -134,7 +134,7 @@ func initCustom(workdir, raw string, stdout, stderr io.Writer) int {
 	if d.Status != agentinit.StatusNew {
 		verb = "refreshed"
 	}
-	fmt.Fprintf(stdout, "✓ %s Custom → %s\n", verb, d.Target)
+	fmt.Fprintf(stdout, "✓ %s Custom → %s%s\n", verb, d.Target, reviewTargetSuffix(d))
 	if p := initTargetsPath(); p != "" {
 		if err := agentinit.AddCustomTarget(p, ct); err != nil {
 			fmt.Fprintf(stderr, "init: could not remember %s (%v); --update will not refresh it\n", d.Target, err)
@@ -155,6 +155,16 @@ func initTargetsPath() string {
 		return filepath.Join(filepath.Dir(sp), "agent-targets.toml")
 	}
 	return ""
+}
+
+// reviewTargetSuffix names the reviewing-with-gg install alongside the
+// using-gg one printed on the success line — install writes BOTH skills, so
+// the user must not read the line as installing only one.
+func reviewTargetSuffix(d agentinit.Detection) string {
+	if d.ReviewTarget == "" || d.ReviewTarget == d.Target {
+		return " (+ reviewing-with-gg)"
+	}
+	return fmt.Sprintf(" (+ reviewing-with-gg → %s)", d.ReviewTarget)
 }
 
 // printList renders the numbered checkbox listing.
