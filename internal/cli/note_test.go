@@ -44,6 +44,24 @@ func TestNoteAddByNewLinePrintsID(t *testing.T) {
 	}
 }
 
+// A line past the end of the file is refused, not silently clamped:
+// domain.NoteAdd's bounds check (Task 7's controller ruling) must fire for
+// this CLI caller exactly as it does for the batch importer.
+func TestNoteAddNewLinePastEndOfFileFails(t *testing.T) {
+	dir := noteRepo(t)
+	code, _, errb := runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "100", "--summary", "too far")
+	if code != 1 {
+		t.Fatalf("exit=%d stderr=%s, want 1", code, errb)
+	}
+	if !strings.Contains(errb, "past the end") {
+		t.Fatalf("stderr = %q, want a message naming the out-of-range anchor", errb)
+	}
+	_, list, _ := runCLI(t, dir, "note", "list", "--file", "a.txt")
+	if strings.TrimSpace(list) != "" {
+		t.Fatalf("a refused add must store nothing, got:\n%s", list)
+	}
+}
+
 func TestNoteAddJSONCarriesWireShape(t *testing.T) {
 	dir := noteRepo(t)
 	code, out, errb := runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "2",

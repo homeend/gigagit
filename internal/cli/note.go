@@ -46,6 +46,8 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 			return noteList(svc, rest, stdout, stderr)
 		case "clear":
 			return noteClear(svc, rest, stdout, stderr)
+		case "apply":
+			return noteApply(svc, rest, stdin, stdout, stderr)
 		default:
 			fmt.Fprintf(stderr, "note: unknown subcommand %q\n", sub)
 			return 2
