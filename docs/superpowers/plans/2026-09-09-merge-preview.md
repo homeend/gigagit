@@ -825,8 +825,8 @@ var ErrPreviewsDisabled = errors.New("previews: no state directory available")
 // ErrPreviewNotFound / ErrPreviewExists WRAP the store's errors so frontends
 // (which cannot import internal/preview) can errors.Is them.
 var (
-	ErrPreviewNotFound = fmt.Errorf("preview: %w", preview.ErrNotFound)
-	ErrPreviewExists   = fmt.Errorf("preview: %w", preview.ErrExists)
+	ErrPreviewNotFound = fmt.Errorf("%w", preview.ErrNotFound) // message stays "preview: not found"
+	ErrPreviewExists   = fmt.Errorf("%w", preview.ErrExists)
 )
 
 // PreviewAdd validates both sides resolve to commits and that they differ,
@@ -1051,9 +1051,10 @@ func (st PreviewState) String() string {
 	return "ok"
 }
 
-// PreviewSummary is the row summary of one pair. Three git calls when the
-// tips changed (merge-base, rev-list --left-right --count, diff --name-only),
-// zero when they did not (cached by the hash pair).
+// PreviewSummary is the row summary of one pair. Two rev-parse calls resolve
+// the names every time (that is how tip movement is detected); the three
+// summary calls (merge-base, rev-list --left-right --count, diff --name-only)
+// run only when the hash pair is not in the cache.
 type PreviewSummary struct {
 	State      PreviewState
 	SourceHash string // "" when missing
@@ -1617,7 +1618,7 @@ func TestPreviewsTabRendersRowsWithSummary(t *testing.T) {
 	if !strings.Contains(out, "[Previews]") {
 		t.Fatalf("tab bar must show the active Previews tab:\n%s", out)
 	}
-	if !strings.Contains(out, "login") || !strings.Contains(out, "feat/x → main") || !strings.Contains(out, "1 files") || !strings.Contains(out, "↑1") {
+	if !strings.Contains(out, "login") || !strings.Contains(out, "feat/x → main") || !strings.Contains(out, "1 file  ↑1") {
 		t.Fatalf("row must show label, pair, files and ahead:\n%s", out)
 	}
 }
@@ -1712,7 +1713,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -1730,8 +1730,9 @@ type previewRow struct {
 // previewsPayload is srcPreviews' dataAvailableMsg value.
 type previewsPayload struct{ rows []previewRow }
 
-// readPreviews lists the records and summarises each; unchanged pairs hit
-// the domain cache and cost no git call.
+// readPreviews lists the records and summarises each. An unchanged pair
+// costs two rev-parse calls (name → hash is how movement is detected) and
+// no diff work; only a moved pair runs the three summary calls.
 func readPreviews(ctx context.Context, svc *domain.Service) (previewsPayload, error) {
 	ps, err := svc.PreviewList(ctx)
 	if err != nil {
@@ -1773,7 +1774,10 @@ func previewStateText(r previewRow) string {
 	case domain.PreviewNoBase:
 		return i18n.T("no common base")
 	}
-	return fmt.Sprintf(i18n.T("%d files  ↑%d"), r.sum.Files, r.sum.Ahead)
+	if r.sum.Files == 1 {
+		return i18n.T("1 file  ↑%d", r.sum.Ahead)
+	}
+	return i18n.T("%d files  ↑%d", r.sum.Files, r.sum.Ahead)
 }
 
 // previewRows renders "<label>  <source → target>  <state>" with the label
@@ -1801,9 +1805,9 @@ func (m Model) selectedPreview() (previewRow, bool) {
 	return m.previews[i], true
 }
 ```
-(Imports: `context`, `fmt`, `domain`, `i18n`, `model` only.)
+(Imports: `context`, `domain`, `i18n`, `model` only; `i18n.T` takes the format args directly — the verb-agreement gate reads them off the `T` call.)
 
-Bundle keys to add to all four TOML files (translate each): `"Previews"`, `"previews"`, `"merged"`, `"missing: %s"`, `"no common base"`, `"%d files  ↑%d"`, `"error: %s"` (check whether `"error: %s"` already exists; reuse if so).
+Bundle keys to add to all four TOML files (translate each): `"Previews"`, `"previews"`, `"merged"`, `"missing: %s"`, `"no common base"`, `"1 file  ↑%d"`, `"%d files  ↑%d"`, `"error: %s"` (check whether `"error: %s"` already exists; reuse if so).
 
 - [ ] **Step 5: Run the tests and gates**
 
@@ -1851,6 +1855,37 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+// drainMsgs feeds up to n command results (expanding tea.BatchMsg) into m.
+// Shared by the preview tests in Tasks 7–9.
+func drainMsgs(t *testing.T, m Model, cmd tea.Cmd, n int) Model {
+	t.Helper()
+	for i := 0; i < n && cmd != nil; i++ {
+		msg := cmd()
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			var rest []tea.Cmd
+			for _, c := range batch {
+				if c == nil {
+					continue
+				}
+				updated, next := m.Update(c())
+				m = updated.(Model)
+				if next != nil {
+					rest = append(rest, next)
+				}
+			}
+			cmd = nil
+			if len(rest) > 0 {
+				cmd = tea.Batch(rest...)
+			}
+			continue
+		}
+		updated, next := m.Update(msg)
+		m = updated.(Model)
+		cmd = next
+	}
+	return m
+}
 
 // openPreview presses enter on the first Previews row and drains the open.
 func openPreview(t *testing.T, m Model) Model {
@@ -1931,11 +1966,7 @@ func TestOpenPreviewReArmsWhenSourceMoves(t *testing.T) {
 		t.Fatal("a branches refresh must chain a previews read")
 	}
 	// Drain: previews msg → re-arm open cmd → previewOpenMsg → compareFilesMsg.
-	for i := 0; i < 4 && chain != nil; i++ {
-		msg := chain()
-		updated, chain = m.Update(msg)
-		m = updated.(Model)
-	}
+	m = drainMsgs(t, m, chain, 6)
 	if m.compareTag == oldTag {
 		t.Fatal("the open preview must re-open with the new tips")
 	}
@@ -1963,7 +1994,7 @@ func TestOpenPreviewClosesWhenSourceDeleted(t *testing.T) {
 	}
 }
 ```
-The chain in `TestOpenPreviewReArmsWhenSourceMoves`: `tea.Batch` results are `tea.BatchMsg` (a slice of cmds). If `chain()` yields a `tea.BatchMsg`, iterate its cmds and feed each result to `Update` in order; write a small `drain(t, m, cmd, n)` helper that handles both plain msgs and `tea.BatchMsg` and reuse it.
+`drainMsgs` above handles `tea.BatchMsg` (a slice of cmds) as well as plain messages; Tasks 8 and 9 reuse it.
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -2038,8 +2069,7 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 	if msg.eps.Summary.State != domain.PreviewOK {
 		m.statusMsg = previewStateNotice(msg.source, msg.target, msg.eps.Summary.State)
 		if m.previewOpen != nil && m.filesView != nil {
-			m = m.closeFilesView() // was open: the pair stopped being previewable
-			m.focus = panelPreviews
+			m = m.closePreviewView() // was open: the pair stopped being previewable
 		}
 		return m, nil
 	}
@@ -2076,8 +2106,7 @@ func (m Model) afterPreviewsRefresh() (Model, tea.Cmd) {
 			if r.rec.ID == po.id {
 				found = true
 				if r.sum.State != domain.PreviewOK {
-					m = m.closeFilesView()
-					m.focus = panelPreviews
+					m = m.closePreviewView()
 					m.statusMsg = previewStateNotice(po.source, po.target, r.sum.State)
 					return m, nil
 				}
@@ -2092,19 +2121,36 @@ func (m Model) afterPreviewsRefresh() (Model, tea.Cmd) {
 			}
 		}
 		if !found {
-			m = m.closeFilesView()
-			m.focus = panelPreviews
+			m = m.closePreviewView()
 			m.statusMsg = i18n.T("preview removed")
 			return m, nil
 		}
 	}
+	// A transient ("show once", id == "") preview has no row: re-resolve
+	// and let handlePreviewOpenMsg's same-tag check decide (unchanged tips
+	// build the same tag and are a no-op).
 	keep := ""
 	if l, ok := m.filesViewSelectedLine(); ok {
 		keep = l.path
 	}
 	return m, m.openPreviewCmd(po.id, po.source, po.target, keep)
 }
+
+// closePreviewView closes the compare view the way esc does: focus returns
+// to the panel that opened it (filesReturnFocus), falling back to the active
+// left tab when that panel is not visible (a "show once" opened from the
+// Branches tab must not strand focus on a hidden tab).
+func (m Model) closePreviewView() Model {
+	ret := m.filesReturnFocus
+	m = m.closeFilesView()
+	if m.layout().boxH[ret] <= 0 {
+		ret = m.activeLeftTab
+	}
+	m.focus = ret
+	return m
+}
 ```
+(Compare with the esc branch at `files_view.go:553-560`; if it does more bookkeeping than restoring focus — e.g. `lastLeftPanel` — mirror that here.)
 Wiring in `model.go`:
 - `Update`: `case previewOpenMsg: return m.handlePreviewOpenMsg(msg)`.
 - Enter on `panelPreviews` (in the enter handler's panel switch, alongside the Worktrees/Branches cases): 
@@ -2150,12 +2196,12 @@ cd /mnt/t/others/gigagit.worktrees/feat-merge-preview && git add internal/tui in
 
 **Files:**
 - Create: `internal/tui/preview_add_popup.go`, `internal/tui/preview_rename_popup.go`, `internal/tui/preview_actions.go`
-- Modify: `internal/tui/model.go` (keys `a`, `r`?? — NOTE `r` is the global reload key; use `e` for rename like Worktrees, `d` delete, `s` swap, `a` add on `panelPreviews`), `internal/tui/footer.go`, `internal/tui/avail.go`, `internal/tui/help.go`, `internal/tui/action_menu.go` (`actionMenuLabel` cases + rows registration), `internal/tui/i18n_display.go` (`optionDisplayName`), bundles.
+- Modify: `internal/tui/model.go` (keys on `panelPreviews`: `a` add, `e` rename (the Worktrees convention — `r` is the global reload key), `d` delete, `s` swap), `internal/tui/footer.go`, `internal/tui/avail.go`, `internal/tui/help.go`, `internal/tui/action_menu.go` (`actionMenuLabel` cases + rows registration), `internal/tui/i18n_display.go` (`optionDisplayName`), bundles.
 - Test: `internal/tui/preview_actions_test.go`
 
 **Interfaces:**
 - Consumes: `svc.PreviewAdd/Rename/Remove`, `fuzzy.Rank`, `newTextField`, `viewField`, `decisionState`.
-- Produces: `previewMutatedMsg{err error; focusID string; open bool; source, target string}`; `func (m Model) previewAddCmd(source, target, label string, open bool) tea.Cmd`; `func (m Model) branchNameCandidates() []string` (locals + remote-tracking); `canAddPreview/canEditPreview/canSwapPreview` predicates; `.`-menu rows `preview-add`, `preview-rename`, `preview-delete`, `preview-swap`, `preview-open`.
+- Produces: `previewMutatedMsg{err error; focusID string; open, fromTab bool; source, target string}`; `func (m Model) previewAddCmd(source, target, label string, open, fromTab bool) tea.Cmd`; `func (m Model) branchNameCandidates() []string` (locals + remote-tracking); `canAddPreview/canEditPreview/canSwapPreview` predicates; `.`-menu rows `preview-add`, `preview-rename`, `preview-delete`, `preview-swap`, `preview-open`.
 
 - [ ] **Step 1: Write the failing tests** (`internal/tui/preview_actions_test.go`)
 
@@ -2169,35 +2215,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// drainMsgs comes from preview_open_test.go (Task 7).
 func typeString(t *testing.T, m Model, s string) Model {
 	t.Helper()
 	for _, r := range s {
 		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 		m = updated.(Model)
-	}
-	return m
-}
-
-// drainMsgs feeds up to n command results (expanding tea.BatchMsg) into m.
-func drainMsgs(t *testing.T, m Model, cmd tea.Cmd, n int) Model {
-	t.Helper()
-	for i := 0; i < n && cmd != nil; i++ {
-		msg := cmd()
-		if batch, ok := msg.(tea.BatchMsg); ok {
-			var rest []tea.Cmd
-			for _, c := range batch {
-				if c == nil { continue }
-				updated, next := m.Update(c())
-				m = updated.(Model)
-				if next != nil { rest = append(rest, next) }
-			}
-			cmd = tea.Batch(rest...)
-			if len(rest) == 0 { cmd = nil }
-			continue
-		}
-		updated, next := m.Update(msg)
-		m = updated.(Model)
-		cmd = next
 	}
 	return m
 }
@@ -2397,7 +2420,7 @@ func (p *previewAddPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		m = m.popLayer()
-		return m, m.previewAddCmd(src, tgt, "", true)
+		return m, m.previewAddCmd(src, tgt, "", true, true)
 	case tea.KeySpace:
 		// branch names cannot contain spaces
 	default:
@@ -2466,25 +2489,40 @@ func (p *previewRenamePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 ```go
 // previewMutatedMsg is the result of any store mutation from the TUI: the
 // tab reloads; focusID selects a row after the reload; open then opens it.
+// fromTab is true for the tab's own keys (a/e/d/s) and false for the pair
+// dialog: only the former moves focus onto the Previews tab afterwards.
 type previewMutatedMsg struct {
 	err            error
 	focusID        string
 	open           bool
+	fromTab        bool
 	source, target string
 }
 
-func (m Model) previewAddCmd(source, target, label string, open bool) tea.Cmd {
+func (m Model) previewAddCmd(source, target, label string, open, fromTab bool) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		p, err := svc.PreviewAdd(context.Background(), source, target, label)
 		if errors.Is(err, domain.ErrPreviewExists) {
 			err = nil // focus the existing row instead
 		}
-		return previewMutatedMsg{err: err, focusID: p.ID, open: open, source: source, target: target}
+		return previewMutatedMsg{err: err, focusID: p.ID, open: open, fromTab: fromTab, source: source, target: target}
 	}
 }
-func (m Model) previewRenameCmd(id, label string) tea.Cmd { /* svc.PreviewRename → previewMutatedMsg{focusID: id} */ }
-func (m Model) previewRemoveCmd(id string) tea.Cmd       { /* svc.PreviewRemove → previewMutatedMsg{} */ }
+
+func (m Model) previewRenameCmd(id, label string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		return previewMutatedMsg{err: svc.PreviewRename(context.Background(), id, label), focusID: id, fromTab: true}
+	}
+}
+
+func (m Model) previewRemoveCmd(id string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		return previewMutatedMsg{err: svc.PreviewRemove(context.Background(), id), fromTab: true}
+	}
+}
 
 // handlePreviewMutatedMsg reports errors, else reloads the tab and remembers
 // what to focus/open once the fresh rows land.
@@ -2494,6 +2532,7 @@ func (m Model) handlePreviewMutatedMsg(msg previewMutatedMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.previewFocusID = msg.focusID
+	m.previewFocusTab = msg.fromTab
 	var open tea.Cmd
 	if msg.open {
 		open = m.openPreviewCmd(msg.focusID, msg.source, msg.target, "")
@@ -2503,14 +2542,14 @@ func (m Model) handlePreviewMutatedMsg(msg previewMutatedMsg) (Model, tea.Cmd) {
 	return m, tea.Batch(reload, open)
 }
 ```
-Add `previewFocusID string` to `Model`; in the `srcPreviews` arrival arm (Task 6) after `restorePanelSel`, if `m.previewFocusID != ""` select the row whose `rec.ID` matches and clear it; set `m.activeLeftTab, m.focus = panelPreviews, panelPreviews` only when the mutation came from the Previews tab itself (skip the focus change when `m.filesView != nil`, i.e. an open-after-save from the pair dialog).
+Add `previewFocusID string` and `previewFocusTab bool` to `Model`. In the `srcPreviews` arrival arm (Task 6), after `restorePanelSel`: if `m.previewFocusID != ""` select the row whose `rec.ID` matches; if `m.previewFocusTab` also set `m.activeLeftTab, m.focus, m.lastLeftPanel = panelPreviews, panelPreviews, panelPreviews`; then clear both fields. The pair dialog (Task 9) passes `fromTab=false`; the tab's keys pass `true`.
 
 Predicates (`avail.go` or this file):
 ```go
 func (m Model) canAddPreview() bool  { return m.focus == panelPreviews && m.opsIdle() }
 func (m Model) canEditPreview() bool { _, ok := m.selectedPreview(); return m.focus == panelPreviews && ok && m.opsIdle() }
 ```
-Keys in `model.go`'s key switch, gated on `m.focus == panelPreviews`: `a` → `m.pushLayer(&previewAddPopup{source: newTextField(""), target: newTextField("")})`; `e` → push `&previewRenamePopup{id: r.rec.ID, label: newTextField(r.rec.Label)}`; `s` → `m.previewAddCmd(r.rec.Target, r.rec.Source, "", false)`; `d` → 
+Keys in `model.go`'s key switch, gated on `m.focus == panelPreviews`: `a` → `m.pushLayer(&previewAddPopup{source: newTextField(""), target: newTextField("")})`; `e` → push `&previewRenamePopup{id: r.rec.ID, label: newTextField(r.rec.Label)}`; `s` → `m.previewAddCmd(r.rec.Target, r.rec.Source, "", false, true)`; `d` → 
 ```go
 m.modal = &decisionState{
 	req: engine.DecisionRequest{ID: "preview-remove", Prompt: i18n.T("Remove preview %s?", r.rec.Label), Options: []string{"Remove", "Cancel"}},
@@ -2660,7 +2699,7 @@ func (m Model) openPreviewPairDialog(source, target string) (Model, tea.Cmd) {
 			case "show once":
 				return m, m.openPreviewCmd("", source, target, "")
 			case "show and save":
-				return m, m.previewAddCmd(source, target, "", true)
+				return m, m.previewAddCmd(source, target, "", true, false)
 			case "swap direction":
 				return m.openPreviewPairDialog(target, source)
 			}
@@ -3031,7 +3070,7 @@ cd /mnt/t/others/gigagit.worktrees/feat-merge-preview && git add internal/web/pr
 
 **Files:**
 - Create: `internal/web/static/previews.js`
-- Modify: `internal/web/static/index.html` (section after shelf), `core.js:73` (`SECTIONS`), `sidebar.js` (`COLLAPSED_DEFAULT`, `fetchBranches` fetch + `renderPreviews()`, `applySection` header `+` control for `previews`), `menus.js` (`MENUS` + `"preview"`), `live.js` (`SIDEBAR` + `"previews"`; re-open hook), `app.js` (import), `files.js` (export a `setFilesTitle` or set title after `openCompare` resolves — see below)
+- Modify: `internal/web/static/index.html` (section after shelf), `core.js:73` (`SECTIONS`), `sidebar.js` (`COLLAPSED_DEFAULT`, `applySection` header `+` control for `previews` — NOT `fetchBranches`: `files.js` and `ops.js` already import `sidebar.js`, so sidebar → previews → files would be a cycle with top-level code on both ends), `menus.js` (`MENUS` + `"preview"`), `live.js` (`SIDEBAR` + `"previews"`; `fetchPreviews()` + re-open hook), `ops.js` (`manualRefresh` also calls `fetchPreviews()`), `app.js` (import + boot fetch)
 - Test: `internal/web/previewsjs_test.go` (source-pin test)
 
 **Interfaces:**
@@ -3063,8 +3102,10 @@ func TestPreviewsJSIsWiredEverywhere(t *testing.T) {
 	checks := []struct{ file, want, why string }{
 		{"core.js", `"previews"`, "SECTIONS must include previews (header click wiring)"},
 		{"sidebar.js", `"previews"]`, "COLLAPSED_DEFAULT must fold previews on a first run"},
-		{"sidebar.js", `getJSON("/api/preview")`, "fetchBranches must load previews"},
-		{"sidebar.js", `renderPreviews()`, "fetchBranches must render previews"},
+		{"previews.js", `getJSON("/api/preview")`, "previews.js owns its fetch"},
+		{"live.js", `fetchPreviews()`, "an SSE sidebar refresh must reload previews"},
+		{"ops.js", `fetchPreviews()`, "manual refresh must reload previews"},
+		{"app.js", `fetchPreviews()`, "boot must load previews"},
 		{"live.js", `"previews"`, "SIDEBAR must include previews so SSE re-fetches it"},
 		{"menus.js", `"preview"`, "MENUS must accept preview rows"},
 		{"app.js", `./previews.js`, "the module must be imported"},
@@ -3089,7 +3130,9 @@ func TestPreviewsJSIsWiredEverywhere(t *testing.T) {
     <div id="previews-header" class="side-header">previews</div>
     <ul id="previews-list"></ul>
 ```
-`core.js`: `SECTIONS = [..., "shelf", "previews"]`. `sidebar.js`: `COLLAPSED_DEFAULT = ["tags", "stashes", "reflog", "bookmarks", "shelf", "previews"]`; in `fetchBranches` add `getJSON("/api/preview").catch(() => ({ entries: [] }))` to the `Promise.all` (destructure as `pv`), `state.previews = pv.entries || []`, call `renderPreviews()`; import `{ renderPreviews }` from `./previews.js` (previews.js must NOT import sidebar.js — cycle; it imports from core.js/layers.js/ops.js/files.js/menus.js only, and calls `fetchBranches` through a callback registered at boot: sidebar.js does `setPreviewsRefresh(fetchBranches)` after import). In `applySection`, mirror the `locate` control: `const add = name === "previews" ? `<span class="locate" title="new merge preview (a in the TUI)">+</span>` : "";` and include it after the name; in the header click handler, when the click target has class `locate` inside `previews-header`, call `window.__ggAddPreview()` (set by previews.js) instead of folding. `menus.js`: add `"preview"` to `MENUS`. `live.js`: `SIDEBAR` add `"previews"`; after `await Promise.all(jobs)` in `refreshSources`, `if (want.has("previews") || sidebar) reopenPreviewIfMoved();` (imported from previews.js). `app.js`: `import "./previews.js";`.
+Before writing `previews.js`, confirm every imported name is exported: `grep -n '^export' internal/web/static/{core,layers,ops,files,menus}.js` (as of this plan: `$ esc getJSON postJSON state` from core.js; `openPrompt showCtxMenu` from layers.js; `opLine showLocalConfirm` from ops.js; `openCompare` from files.js; `extraRows registerHelp registerRows` from menus.js — a name that is not exported is a load-time SyntaxError for the WHOLE page, which no Go test catches). `previews.js` imports only those five modules and never `sidebar.js`; `ops.js`/`files.js` importing `previews.js` for a function called at run time is a safe cycle (no top-level use of the binding).
+
+`core.js`: `SECTIONS = [..., "shelf", "previews"]`. `sidebar.js`: `COLLAPSED_DEFAULT = ["tags", "stashes", "reflog", "bookmarks", "shelf", "previews"]`. In `applySection`, mirror the `locate` control: `const add = name === "previews" ? `<span class="locate" title="new merge preview (a in the TUI)">+</span>` : "";` and include it after the name; in the header click handler, when the click target has class `locate` inside `previews-header`, call `window.__ggAddPreview()` (set by previews.js) instead of folding. `menus.js`: add `"preview"` to `MENUS`. `live.js`: `SIDEBAR` add `"previews"`; in `refreshSources`, when `sidebar` is true push `fetchPreviews()` into `jobs`, and after `await Promise.all(jobs)` call `reopenPreviewIfMoved()` (both imported from previews.js). `ops.js` `manualRefresh`: call `fetchPreviews()` beside `fetchBranches()`. `app.js`: `import { fetchPreviews } from "./previews.js";` and call `fetchPreviews()` where `fetchBranches()` is first called at boot.
 
 `previews.js`:
 ```js
@@ -3103,8 +3146,15 @@ import { opLine, showLocalConfirm } from "./ops.js";
 import { openCompare } from "./files.js";
 import { extraRows, registerRows, registerHelp } from "./menus.js";
 
-let refresh = () => {};
-export function setPreviewsRefresh(fn) { refresh = fn; }
+// fetchPreviews loads the list and renders it. previews.js owns this (it
+// cannot ride fetchBranches: sidebar.js is imported by files.js/ops.js, and a
+// sidebar → previews → files edge would close an import cycle).
+export async function fetchPreviews() {
+  try { state.previews = (await getJSON("/api/preview")).entries || []; }
+  catch (e) { state.previews = []; }
+  renderPreviews();
+}
+const refresh = () => fetchPreviews();
 
 function stateText(e) {
   switch (e.state) {
@@ -3129,6 +3179,7 @@ async function openPreviewBody(body) {
   if (body.state !== "ok") { opLine("merge preview " + body.source + " → " + body.target + ": " + stateText(body), true); state.previewOpen = null; return; }
   await openCompare(body.left, body.right, { revs: 1, aLabel: "merge-base(" + body.target + ")", bLabel: body.source });
   $("files-title").textContent = "merge preview: " + body.source + " → " + body.target;
+  // The origin-filter buttons are meaningless over merge-base → tip ("a only" is always empty): hide them the way a missing merge base does. Check applyCompareFilter in files.js for the field it keys off (originsError) and set it here, then re-run applyCompareFilter().
   state.previewOpen = { id: body.id || "", source: body.source, target: body.target, sourceHash: body.source_hash, targetHash: body.target_hash };
 }
 
@@ -3310,6 +3361,6 @@ Build `./build.sh linux` in the worktree and send the resulting binary path to t
 
 **Spec coverage:** semantics (T2/T4), store (T1/T3), domain queries incl. five states + cache (T4), TUI tab + rows + states (T6), open + re-arm + f inert + title (T7), keys a/e/d/s + footer/menu/help (T8; the spec's `r` rename became `e` because `r` is the global reload key — stated in the plan), pair-picker dialog (T9), dynamic refresh chain (T7), CLI (T5), web API + client + live (T10/T11), i18n (every TUI task), error handling (duplicate → focus; unknown name → refused; disabled store → empty tab), docs (T12). Out-of-scope items untouched.
 
-**Type consistency:** `previewRow{rec, sum, err}` (T6) is what T7/T8 read; `previewOpenState`/`previewOpenMsg`/`openPreviewCmd(id, source, target, keepPath)` used identically in T7/T8/T9; `previewMutatedMsg`/`previewAddCmd(source, target, label, open)` in T8/T9; domain names `PreviewAdd/List/Get/Rename/Remove/Summary/Open`, `PreviewSummary{State, SourceHash, TargetHash, Files, Ahead}`, `PreviewEndpoints{Summary, Left, Right}`, `PreviewState.String()` values match across T4/T5/T10/T11.
+**Type consistency:** `previewRow{rec, sum, err}` (T6) is what T7/T8 read; `previewOpenState`/`previewOpenMsg`/`openPreviewCmd(id, source, target, keepPath)` used identically in T7/T8/T9; `previewMutatedMsg`/`previewAddCmd(source, target, label, open, fromTab)` in T8/T9; domain names `PreviewAdd/List/Get/Rename/Remove/Summary/Open`, `PreviewSummary{State, SourceHash, TargetHash, Files, Ahead}`, `PreviewEndpoints{Summary, Left, Right}`, `PreviewState.String()` values match across T4/T5/T10/T11.
 
 **Known judgment calls for the executor:** `fuzzy.Match` field name, `FakeRunner` call-count helper name, `gittest.Run/Output` helper names, `keyMsg` coverage of ctrl+arrows, the modal's esc→option mapping (`cancel` vs `abort`), `registerHelp`'s signature. Each is a one-grep check called out inline.

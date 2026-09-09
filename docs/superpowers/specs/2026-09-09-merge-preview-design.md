@@ -103,10 +103,9 @@ Windows: the store checks `XDG_STATE_HOME` first ([[windows-test-suite]]).
   right-side count = commits on source not in target. `behind` is reported
   but only `ahead` is shown in this stage.
 - `DiffNameOnlyRange(ctx, target, source) ([]string, error)` — NEW:
-  `git diff --name-only -z target...source`. Git computes the merge base
-  internally, so the row summary never needs a separate `merge-base` call.
-- `MergeBase(ctx, a, b)` — exists; used only when OPENING a preview, because
-  the compare pipeline takes two commit hashes.
+  `git diff --name-only -z target...source`.
+- `MergeBase(ctx, a, b)` — exists; run as part of the summary (see below)
+  and kept in the cached summary so opening a preview needs no extra call.
 
 All three summary/open verbs take HASHES, not names: the domain resolves names
 first so nothing mutable reaches a cache key or the diff cache (the rule from
@@ -152,11 +151,15 @@ Rules:
   for a missing branch); missing → the matching Missing state. Then
   `CountLeftRight`; a merge-base failure (no common ancestor) → `PreviewNoBase`.
   `Ahead == 0` → `PreviewMerged` (files not computed). Otherwise
-  `DiffNameOnlyRange` → `Files`, `PreviewOK`. Two git calls in the OK case,
-  under one Read reservation, single-flight-coalesced like the other queries
-  (key `preview-summary:<srcHash>:<tgtHash>`), and cached in a small
-  session-lived LRU (`internal/cache`) keyed by the hash pair so a refresh
-  that finds unchanged tips costs nothing.
+  `DiffNameOnlyRange` → `Files`, `PreviewOK`. The base is probed FIRST
+  (`MergeBase`; unrelated histories make rev-list report every commit on
+  both sides rather than fail), so the OK case is three git calls under one
+  Read reservation, single-flight-coalesced (key
+  `preview-summary:<srcHash>:<tgtHash>`) and cached in a session-lived LRU
+  (`internal/cache`) keyed by the hash pair. Resolving the two NAMES costs
+  two `rev-parse` calls on every refresh regardless — that is how tip
+  movement is detected — so an unchanged pair is two cheap calls, never
+  zero; only a moved pair pays the three summary calls.
 - `PreviewOpen`: `PreviewSummary` + `MergeBase(targetHash, sourceHash)` →
   `Left = {Commit, M}`, `Right = {Commit, sourceHash}`. From here the existing
   `CompareFiles(left, right)` / `Differ` path serves the view unchanged, and
@@ -188,7 +191,7 @@ Keys in the tab (all in the footer and the `.` action menu, each with an
 |-------|--------|
 | enter | open the preview (`PreviewOpen` off-thread → `openCompareFiles`) |
 | a     | add: a two-field form (Source, Target) with the fuzzy branch picker over local + remote-tracking names; `ctrl+s` swaps the fields; enter on the second field saves and opens; label defaults to `source → target` and can be renamed later |
-| r     | rename the label (single text field prefilled) |
+| e     | rename the label (single text field prefilled; `r` is the global reload key, `e` is the Worktrees-tab rename convention) |
 | d     | delete (typed-free confirm popup: "Remove preview `<label>`?") |
 | s     | swap direction: saves a NEW record `target → source` (the id is direction-sensitive) and focuses it; the original stays |
 
@@ -271,7 +274,7 @@ bumps; `gg init --update` after merge.
 - `POST /api/preview {source,target,label?}` → the record (409 on `ErrExists`
   with the existing id); `PATCH /api/preview/{id} {label}`;
   `DELETE /api/preview/{id}`.
-- `GET /api/preview/{id}/open` → `{state, left, right}` with hashes; the
+- `GET /api/preview/open?id=` → `{state, left, right, source, target, label, source_hash, target_hash}`; the
   client then opens the EXISTING compare page with those two hashes, exactly
   as the sidebar's compare rows do. No new diff surface.
 - `GET /api/preview/diff?source=&target=` → the one-off form for the pair
