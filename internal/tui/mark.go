@@ -65,6 +65,16 @@ func pairOpsFor(p panel) []pairOp {
 				return m.openBranchCompare(marked, selected)
 			},
 		},
+		{
+			// Last: the read-only "what would this merge bring in?" row, right
+			// after the other read-only one (Compare). The … says it asks first
+			// — show once, show and save, or swap the direction.
+			label:   func(marked, selected string) string { return i18n.T("Merge preview %s → %s…", marked, selected) },
+			enabled: true,
+			open: func(m Model, marked, selected string) (Model, tea.Cmd) {
+				return m.openPreviewPairDialog(marked, selected)
+			},
+		},
 	}
 }
 

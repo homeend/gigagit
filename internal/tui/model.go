@@ -1308,7 +1308,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// The tab's own keys keep the user where they were working;
 					// the pair dialog (which can fire from any tab) does not
 					// yank them across the interface.
-					m.activeLeftTab, m.focus, m.lastLeftPanel = panelPreviews, panelPreviews, panelPreviews
+					// activateTab, not three assignments: a maximized left
+					// column has to be re-pinned onto the newly shown tab.
+					m = m.activateTab(panelPreviews)
 				}
 			}
 			m.previewFocusID, m.previewFocusTab = "", false

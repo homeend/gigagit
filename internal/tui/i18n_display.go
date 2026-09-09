@@ -246,10 +246,16 @@ func optionDisplayName(value string) string {
 		return i18n.T("reset")
 	case "run":
 		return i18n.T("run")
+	case "show and save":
+		return i18n.T("show and save")
+	case "show once":
+		return i18n.T("show once")
 	case "skip":
 		return i18n.T("skip")
 	case "soft":
 		return i18n.T("soft")
+	case "swap direction":
+		return i18n.T("swap direction")
 	case "unlock-and-move":
 		return i18n.T("unlock-and-move")
 	case "unlock-and-remove":

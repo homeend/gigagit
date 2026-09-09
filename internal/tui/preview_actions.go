@@ -119,6 +119,40 @@ func (m Model) confirmPreviewRemove() Model {
 	return m
 }
 
+// openPreviewPairDialog is the once/save/swap dialog behind the Branches
+// pair-picker row. A preview is worth saving when you will come back to it and
+// worth showing once when you will not, and which of the two a pair is only
+// becomes clear with the pair in front of you — so the dialog asks instead of
+// the row guessing. Option VALUES are protocol (English); optionDisplayName
+// renders them. "abort" is offered last so esc (abortOption) cancels.
+func (m Model) openPreviewPairDialog(source, target string) (Model, tea.Cmd) {
+	m.modal = &decisionState{
+		req: engine.DecisionRequest{
+			ID:      "preview-pair",
+			Prompt:  i18n.T("Preview merging %s into %s", source, target),
+			Options: []string{"show once", "show and save", "swap direction", "abort"},
+		},
+		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+			switch opt {
+			case "show once":
+				// No id: the compare view opens transiently and the store is
+				// untouched (a re-arm still follows the tips while it is open).
+				return m, m.openPreviewCmd("", source, target, "")
+			case "show and save":
+				// fromTab=false: the dialog can fire from any tab, so saving
+				// must not yank the user onto Previews behind the opened view.
+				return m, m.previewAddCmd(source, target, "", true, false)
+			case "swap direction":
+				// Marked-vs-selected is easy to get backwards; re-ask reversed
+				// rather than making the user re-pair in the other order.
+				return m.openPreviewPairDialog(target, source)
+			}
+			return m, nil
+		},
+	}
+	return m, nil
+}
+
 // previewSwapCmd saves the reversed pair as a second preview (the record's id
 // is direction-sensitive, so this never collides with the row it came from).
 // It is saved, not opened: s is a bookkeeping key, not a viewing one.
