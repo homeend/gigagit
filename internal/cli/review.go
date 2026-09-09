@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -148,20 +147,8 @@ func selectReviewCommand(svc *domain.Service, name string, stderr io.Writer) (co
 }
 
 // loadConfigFor loads the effective config (global + active repo) for svc's
-// repo, mirroring cmdWorktreeAdd's resolution (internal/cli/worktree.go): the
-// committed <top>/.gg.toml, overridden by a machine-local private file keyed
-// on the MAIN worktree, if one exists. Reuses the caller's already-open
-// Service rather than opening a second one.
+// repo. The resolution itself lives in domain (Service.EffectiveConfig) so the
+// MCP frontend, which cannot import internal/cli, shares it.
 func loadConfigFor(svc *domain.Service) (config.Config, error) {
-	ctx := context.Background()
-	top, err := svc.TopLevel(ctx)
-	if err != nil {
-		return config.Config{}, err
-	}
-	privatePath := ""
-	if wts, werr := svc.Worktrees(ctx); werr == nil && len(wts) > 0 && wts[0].Path != "" {
-		privatePath = config.PrivateRepoPath(wts[0].Path)
-	}
-	active := config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), privatePath)
-	return config.Load(config.DefaultGlobalPath(), active)
+	return svc.EffectiveConfig(context.Background())
 }

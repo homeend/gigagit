@@ -80,33 +80,11 @@ func noteAddress(path, rev, state string) (model.FileAddress, error) {
 	return model.FileAddress{State: st, Commit: rev, Path: path}, nil
 }
 
-type wireNote struct {
-	ID        string     `json:"id"`
-	ParentID  string     `json:"parent_id,omitempty"`
-	Source    string     `json:"source"`
-	Author    string     `json:"author,omitempty"`
-	Side      string     `json:"side"`
-	Line      int        `json:"line"`
-	Summary   string     `json:"summary"`
-	Rationale string     `json:"rationale,omitempty"`
-	Status    string     `json:"status"`
-	Replies   []wireNote `json:"replies,omitempty"`
-}
+// wireNote is domain's shared JSON note shape (see domain.WireNote): the CLI
+// and MCP emit the same object, so a page and an agent read one format.
+type wireNote = domain.WireNote
 
-// toWireNote flattens one resolved thread. Line is the RESOLVED anchor (the
-// range's end), not the stored one: a note that moved must render where its
-// text is now.
-func toWireNote(r domain.ResolvedNote) wireNote {
-	w := wireNote{
-		ID: r.Note.ID, ParentID: r.Note.ParentID, Source: string(r.Note.Source),
-		Author: r.Note.Author, Side: string(r.Note.Side), Line: r.Range[1],
-		Summary: r.Note.Summary, Rationale: r.Note.Rationale, Status: string(r.Status),
-	}
-	for _, rep := range r.Replies {
-		w.Replies = append(w.Replies, toWireNote(rep))
-	}
-	return w
-}
+func toWireNote(r domain.ResolvedNote) wireNote { return domain.ToWireNote(r) }
 
 func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()

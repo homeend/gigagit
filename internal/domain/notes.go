@@ -72,6 +72,18 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 		n.Created = now
 	}
 	n.Updated = now
+	// A commit note's target is its FULL sha, so a CLI note on "HEAD" and a TUI
+	// note on the same commit share one address (sameNoteTarget compares Commit
+	// verbatim). Best-effort: a runner that cannot rev-parse (the FakeRunner
+	// suites, a detached store) keeps the value as given rather than failing a
+	// write — the CLI validates the rev up front in NoteTarget.
+	if n.Address.State == model.StateCommitted && n.Address.Commit != "" && !isFullSHA(n.Address.Commit) {
+		if full, ferr := s.RevParse(ctx, n.Address.Commit); ferr == nil {
+			if full = strings.TrimSpace(full); isFullSHA(full) {
+				n.Address.Commit = full
+			}
+		}
+	}
 	// Pin the checkout BEFORE the hash fill: noteSideLines reads the note's
 	// own worktree, and every later match is made against this value.
 	if worktreeScopedNote(n.Address) {
@@ -699,4 +711,85 @@ func splitLines(b []byte) []string {
 		return []string{}
 	}
 	return strings.Split(s, "\n")
+}
+
+// isFullSHA reports whether s is a 40-character lowercase hex object id — the
+// only form worth storing as a note's commit target.
+func isFullSHA(s string) bool {
+	if len(s) != 40 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+// NoteGet returns one stored note by id, replies included. It is the batch
+// importer's parent check: `note apply` validates every replyTo BEFORE the
+// first write, so a bad batch stores nothing.
+func (s *Service) NoteGet(ctx context.Context, id string) (model.Note, error) {
+	st := s.notesStore(ctx)
+	if st == nil {
+		return model.Note{}, ErrNotesDisabled
+	}
+	all, err := st.Load()
+	if err != nil {
+		return model.Note{}, err
+	}
+	for _, n := range all {
+		if n.ID == id {
+			return n, nil
+		}
+	}
+	return model.Note{}, ErrNoteNotFound
+}
+
+// NoteAddresses lists the distinct addresses that carry at least one ROOT note
+// and are visible from this checkout: every commit and shelf note (those are
+// worktree-agnostic) plus the worktree-state notes taken in THIS checkout. It
+// is the enumeration door for `gg note list` and `gg note clear --all`, which
+// have no path to resolve.
+//
+// Addresses are deduplicated by the identity sameNoteTarget uses — worktree,
+// commit, shelf id and path, NOT State — so a path with both a staged and an
+// unstaged note yields ONE address (whose State is the first note's, i.e. the
+// side pair NotesAt will read). Sorted by path, then commit, for stable output.
+func (s *Service) NoteAddresses(ctx context.Context) ([]model.FileAddress, error) {
+	st := s.notesStore(ctx)
+	if st == nil {
+		return nil, ErrNotesDisabled
+	}
+	all, err := st.Load()
+	if err != nil {
+		return nil, err
+	}
+	cur, _ := s.TopLevel(ctx) // "" simply hides worktree notes, never fails the query
+	seen := map[string]bool{}
+	var out []model.FileAddress
+	for _, n := range all {
+		if n.IsReply() {
+			continue
+		}
+		a := n.Address
+		if worktreeScopedNote(a) && !sameWorktreePath(a.Worktree, cur) {
+			continue
+		}
+		key := a.Worktree + "\x00" + a.Commit + "\x00" + a.ShelfID + "\x00" + a.Path
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, a)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Path != out[j].Path {
+			return out[i].Path < out[j].Path
+		}
+		return out[i].Commit < out[j].Commit
+	})
+	return out, nil
 }
