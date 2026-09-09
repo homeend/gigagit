@@ -2078,11 +2078,13 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 	}
 	tag := compareTagFor(msg.eps.Left, msg.eps.Right)
 	if m.previewOpen != nil && m.filesView != nil && m.compareTag == tag {
-		return m, nil // same tips already showing
+		// Same diff already showing (e.g. only the target moved, base and
+		// source tip unchanged): reconcile the hashes so the next refresh does
+		// not re-fire, and say nothing — nothing the user sees changed.
+		m.previewOpen.srcHash, m.previewOpen.tgtHash = msg.eps.Summary.SourceHash, msg.eps.Summary.TargetHash
+		return m, nil
 	}
-	if m.previewOpen != nil && m.filesView != nil {
-		m.compareTag = "" // defeat the same-tag guard: a re-arm must reload
-	}
+	m.compareTag = "" // never reuse a view that merely shares the tag (a branch compare whose base IS the tip)
 	var cmd tea.Cmd
 	m, cmd = m.openCompareFiles(msg.eps.Left, msg.eps.Right)
 	m.filesTitle = previewTitle(msg.source, msg.target)
