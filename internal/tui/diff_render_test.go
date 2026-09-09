@@ -52,11 +52,9 @@ func TestRenderDiffViewPanes(t *testing.T) {
 	v := &diffView{title: "f.txt", context: "HEAD → working tree", full: res.Rows, fullBlocks: res.Blocks}
 	v.rebuild()
 	m := renderModelWithDiff(v)
-	// Wide enough that the hint line's cursor-key groups (j/k/z/e, on top of
-	// the pre-existing scroll/change/part/mode/pan/hist/blame groups) don't
-	// truncate away "[esc] close" — the 100-col default already loses it
-	// below ~98 cols, so a wider terminal here isolates this test from that
-	// truncation rather than asserting a width budget nothing enforces.
+	// 140 is the diff hint's design budget: the widest (scroll) English
+	// variant measures 139 columns, so "[esc] close" survives here and the
+	// test fails the moment a new group pushes the line past it.
 	m.width = 140
 	out := ansi.Strip(m.render())
 	lines := strings.Split(out, "\n")
@@ -578,6 +576,46 @@ func BenchmarkDiffPaneLinesScrollHighlighted(b *testing.B) {
 		v.hOffset = (i % 2) * 8
 		if got := m.diffPaneLines(v, 200, 50, 0, 0, "off"); len(got) != 50 {
 			b.Fatalf("frame = %d lines, want 50", len(got))
+		}
+	}
+}
+
+// NOTE: serial (no t.Parallel) — lipgloss.SetColorProfile is process-global.
+// The "row" cursor mark must stay visible on EVERY row kind: a hot add/del
+// cell (whose own background used to win over the band, hiding the cursor on
+// exactly the rows a reviewer stops on), the dotted gap side, and a plain
+// cell. Each is compared against the same cell rendered without the mark.
+func TestCursorMarkVisibleOnHotAndGapCells(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	mk := cursorMark("row")
+	cases := []struct {
+		name       string
+		plain, cur string
+	}{
+		{"add cell", diffCell(41, "object CacheConfig {", 3, 30, false, true, diffAddCell, nil, nil, noMark),
+			diffCell(41, "object CacheConfig {", 3, 30, false, true, diffAddCell, nil, nil, mk)},
+		{"del cell", diffCell(27, "x = 3600", 3, 30, false, true, diffDelCell, nil, nil, noMark),
+			diffCell(27, "x = 3600", 3, 30, false, true, diffDelCell, nil, nil, mk)},
+		{"gap cell", diffCell(0, "", 3, 30, true, false, diffAddCell, nil, nil, noMark),
+			diffCell(0, "", 3, 30, true, false, diffAddCell, nil, nil, mk)},
+		{"wrapped add seg", segCell(41, cellSeg{disp: []rune("abc"), emph: make([]bool, 3), cls: make([]syntax.Class, 3)}, 3, 30, false, true, diffAddCell, noMark),
+			segCell(41, cellSeg{disp: []rune("abc"), emph: make([]bool, 3), cls: make([]syntax.Class, 3)}, 3, 30, false, true, diffAddCell, mk)},
+		{"wrapped gap seg", segCell(0, cellSeg{}, 3, 30, true, false, diffAddCell, noMark),
+			segCell(0, cellSeg{}, 3, 30, true, false, diffAddCell, mk)},
+		{"scroll add cell", scrollCell(41, "abc", nil, nil, 0, 3, 30, false, true, diffAddCell, noMark),
+			scrollCell(41, "abc", nil, nil, 0, 3, 30, false, true, diffAddCell, mk)},
+		{"scroll gap cell", scrollCell(0, "", nil, nil, 0, 3, 30, true, false, diffAddCell, noMark),
+			scrollCell(0, "", nil, nil, 0, 3, 30, true, false, diffAddCell, mk)},
+	}
+	for _, c := range cases {
+		if c.plain == c.cur {
+			t.Errorf("%s: cursor row renders byte-identical to the unmarked cell: %q", c.name, c.cur)
+		}
+		if lipgloss.Width(c.plain) != lipgloss.Width(c.cur) {
+			t.Errorf("%s: cursor mark changed the cell width %d → %d", c.name, lipgloss.Width(c.plain), lipgloss.Width(c.cur))
 		}
 	}
 }

@@ -40,7 +40,11 @@ const state = {
   sidebar: true,
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
-  diffCtx: null, // {path, rev} — the file the diff pane currently shows, else null
+  diffCtx: null, // {path, rev, state} — the file the diff pane currently shows, else null
+  notes: [],                 // resolved notes for the open diff (GET /api/notes)
+  noteCounts: { by_path: {}, by_commit: {}, by_commit_path: {} },
+  notesAgentOff: false,      // the TUI's `a`: hide agent-written notes
+  diffRow: null,             // {side, no} — the clicked diff row `c` anchors on
   diffBlockIdx: -1,
   detailGen: 0,
   dragBranch: null, // name of the branch being dragged, else null

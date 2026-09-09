@@ -109,15 +109,17 @@ kept like bookmarks.
   rejected: a ref must point at a git object, and most notes anchor to
   uncommitted working-tree lines that have none.
 - **Expiry**: the branch-versions rule, copied. A `notes.max_age_days`
-  config key (default 30; `0` keeps forever) with a `settingDoc`; the store
-  prunes on load the way versions prune on write. Orphaned notes (anchor
-  gone after reconciliation) are dropped in the same pass; `gg note clear`
-  remains for explicit cleanup.
+  config key (default 30; `-1` keeps forever — `0` is "unset" at the
+  config overlay and falls back to the default) with a `settingDoc`.
+  Pruning is NOT done on load: the "Growth" rule below (decided later the
+  same day) moves it to a startup goroutine, and reads never rewrite.
+  Orphaned notes (anchor gone after reconciliation) are dropped in the same
+  sweep; `gg note clear` remains for explicit cleanup.
 - Machine-private by design; notes do not travel with the branch.
 - **Growth** (decided 2026-09-08): one `notes.toml` per repo; records are
   short text (~300 bytes). Housekeeping runs as a **background goroutine on
   every gg start** (TUI, `gg web`, and every `gg note …` CLI invocation): it
-  loads the file, drops notes past `notes.max_age_days` (default 30, `0` =
+  loads the file, drops notes past `notes.max_age_days` (default 30, `-1` =
   never) and orphaned notes (target file/commit gone, or the anchored lines'
   fingerprint no longer found), and rewrites the file once, off the UI
   thread. The entry cap (`notes.max_entries`, default 2000, oldest dropped
@@ -372,6 +374,157 @@ post-slice span painter — the same mechanism as the class mask, so the
 offsets are already known per mode.
 
 **Not included.** Regex, whole-word, the web UI (the browser has find).
+
+### 4.4 Phase 1 design: notes core (approved 2026-09-08)
+
+The persisted note record, its store, the domain queries that resolve notes
+against an open diff, and the TUI/web rows. No CLI, MCP, `--hunk N`,
+`gg review --notes` or skill: those are phase 2 and consume this phase's
+domain surface unchanged.
+
+**Record** (`model.Note`, `internal/model`, engine-free):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `ID` | string | random 8-hex id, unique per repo store |
+| `ParentID` | string | thread parent (a reply); empty for a root note |
+| `Source` | `NoteSource` (`user` / `agent`) | who authored it; `a` toggles the agent layer |
+| `Author` | string | free label (git user.name for the TUI, the tool/model name for agents) |
+| `Address` | `model.FileAddress` | worktree state or commit + path; `Path` in git slash form |
+| `Side` | `NoteSide` (`old` / `new`) | which side of the diff the range indexes |
+| `Range` | `[2]int` | 1-based inclusive line range on that side |
+| `ContextHash` | string | fingerprint of the anchored lines (below) |
+| `Summary`, `Rationale` | string | the note; rationale optional |
+| `Tags` | []string | optional |
+| `Confidence` | float64 | 0 = unset; agents may fill it |
+| `Created`, `Updated` | time.Time | UTC |
+
+A reply inherits its parent's `Address`, `Side`, `Range` and `ContextHash`
+at creation time and is re-anchored with the parent. Resolution (below) is
+computed, never stored.
+
+**Old-side base.** `Address.State` names the pair of texts the note was
+made against, matching the diff view that created it: `StateUnstaged` =
+index → working file (the Files panel diffs index→worktree), `StateStaged`
+= HEAD → index, `StateUntracked` = nothing → working file, `StateCommitted`
+= first parent → commit, `StateShelf` = nothing → shelf blob. Within the
+working tree a note is shown for a path regardless of the stored state
+(fingerprint re-anchoring absorbs the line shift); the state matters to the
+sweep, which reads exactly that pair. A note on a Del row (no new-side line)
+anchors on the old side; everything else anchors on the new side, per
+`diffView.cursorRow()`'s contract (§4.1).
+
+**Fingerprint.** `ContextHash` = hex sha256 of the anchored lines, each
+trimmed of leading/trailing whitespace, joined with `"\n"`, no trailing
+newline. Fixed now so phase-2 hunk anchors (a range of several lines) reuse
+it unchanged.
+
+**Resolution** (`NoteStatus`: `active` / `stale` / `orphaned`), computed
+when a diff is opened or refreshed, against that diff's side texts:
+
+1. hash matches at the stored `Range` → `active`;
+2. the same trimmed line sequence is found elsewhere on that side (first
+   occurrence scanning from the stored start outward) → `active` at the
+   moved range; the move lives in the resolved view only, the store is
+   untouched (reads never rewrite);
+3. not found, but the file/commit still exists → `stale`: drawn greyed at
+   the stored range clamped into the side's line count;
+4. the target is gone (path absent on that side, commit unreachable) →
+   `orphaned`: hidden.
+
+The startup sweep drops expired, orphaned and stale notes (the decided
+rule). Consequence: editing the annotated line itself makes the note stale;
+it stays visible for the rest of the session and is dropped on the next gg
+start.
+
+**Store** (`internal/notes`, owned by `domain`, frontends never import it):
+
+- `Store` interface: `Load() ([]model.Note, error)`,
+  `Put(model.Note) error` (add or replace by ID), `Remove(id) error`,
+  `Sweep(keep func(model.Note) bool) (dropped int, err error)`; all
+  mutations take a `Policy{MaxEntries int}` set on the store.
+- `FileStore(root)`: one `notes.toml` under
+  `<state>/gg/notes/<repoKey>/` (`domain.notesBaseDir()` mirrors
+  `bookmarkBaseDir()`; `repoKey` reused). Temp-file + rename like the
+  bookmark store, PLUS — new to this codebase — a cross-process lock:
+  `notes.toml.lock` created O_EXCL, retried for up to ~2 s, a lock older
+  than 30 s is treated as stale and replaced; and a process-local mutex so
+  the sweep goroutine and a `c` keypress in the same process serialise.
+  Every write re-reads the file under the lock, applies the mutation, then
+  enforces `MaxEntries` oldest-`Created`-first (a dropped root takes its
+  replies with it), then rewrites. `Load` never writes.
+- Clock seam: `notes.Now` package var (like `snapshotNow`) so expiry tests
+  are deterministic.
+- Config: `[notes] max_age_days = 30` (`-1` keeps forever; in code any
+  `<= 0` means forever, but `0` never reaches the code — the overlay treats
+  it as unset) and `[notes] max_entries = 2000` (`-1` = uncapped, same rule); `NotesConfig` struct,
+  overlay, two `settingDoc` rows, `"notes"` added to the template section
+  loop, `TestNotesLayers`.
+
+**Sweep.** `domain.Service` starts `sweepNotes` in a goroutine when a
+frontend constructs the service (TUI, web; phase 2 adds the CLI verbs). It
+loads the store, resolves every note (file/commit existence + fingerprint
+search over the side text read via the git verbs), and calls `Sweep` with
+`keep = !expired && status == active`. It runs at most once per process and
+never blocks a read; failures are logged to the session error ring, not
+surfaced.
+
+**Domain surface** (`internal/domain/notes.go`):
+
+```go
+type ResolvedNote struct { Note model.Note; Status model.NoteStatus; Range [2]int; Replies []ResolvedNote }
+func (s *Service) NoteAdd(ctx, n model.Note) (model.Note, error)      // fills ID/Created/Updated/ContextHash from the diff
+func (s *Service) NoteEdit(ctx, id, summary, rationale string) error
+func (s *Service) NoteReply(ctx, parentID string, n model.Note) (model.Note, error)
+func (s *Service) NoteRemove(ctx, id string) error                     // a root takes its replies
+func (s *Service) NotesFor(ctx, addr model.FileAddress, d Diff) ([]ResolvedNote, error) // roots with threaded replies, sorted by side/line
+func (s *Service) NoteCounts(ctx) (NoteCounts, error)                  // {ByPath map[string]int (worktree notes), ByCommit map[string]int}
+```
+
+`NoteCounts` is cached and invalidated by any note mutation; the Files and
+Commits row painters read it and never touch the store. Note mutations are
+domain methods like bookmarks, not engine ops: the TUI registers a
+`srcNotes` refresh source (invalidating the open diff view, Files and
+Commits) and fires it after each mutation; `opAffectedSources` is not
+involved.
+
+**TUI** (diff view):
+
+- Note rows are synthetic full-width display rows appended after their
+  line in `relayout` (`dRow.note *ResolvedNote`, like the fold separator),
+  rendered `◆ <author>: <summary>` with the rationale on a second row when
+  present, replies indented two cells, stale rows greyed, agent-sourced
+  rows hidden while the agent layer is off (`a`; user notes always show).
+- The cursor never rests on a note row: `cursorDispRange` ends at the first
+  note row of the line, a click on a note row places the cursor on the
+  owning line, `pageCursor`/`cursorVisible` count display rows as before.
+- Under a fold in partial mode the `◆` marker goes on the fold separator;
+  `}`/`{` onto a folded note expands the view (as `f` does) and lands.
+- Keys: `c` add at cursor (popup: summary + rationale textfields, reusing
+  the commit popup's title/description pair; empty summary = cancel), `E`
+  edit the root note nearest above the cursor, `R` reply to it, `a` toggle
+  the agent layer (session-scoped), `}`/`{` next/previous annotated line
+  with the existing two-press `fileArm` step to the next/previous file
+  that carries notes. "Delete note" is a `.` action-menu row (no key).
+  Footer, help, four i18n bundles, `actionMenuLabel` cases, and
+  `advertise-features-in-help-and-footer`.
+- Files-panel rows and Commits-panel rows get a trailing `◆N` badge from
+  `NoteCounts` (worktree notes by path; commit notes by sha).
+
+**Web:** `GET /api/notes?path=&rev=` (resolved, threaded), `POST
+/api/notes/{add,edit,reply,remove}` with allowlisted wire values, a
+`notes` SSE event after each mutation, `<tr class="note">` rows in
+`diffHTML` (keys `c`/`E`/`R`/`a`/`}`/`{` mirrored), a `◆N` count in
+`renderFiles`. Per-id hidden rule (`#id.hidden`) respected. Heads-up for
+phase 2: the existing `/api/diff` `hunks` meta numbers textdiff blocks for
+the web hunk picker, not git `@@` hunks — `--hunk N` must not reuse it.
+
+**Testing:** store round-trip, cap and lock tests (`t.TempDir`, injected
+clock); resolution table tests (active / moved / stale / orphaned); domain
+tests on a real repo (`newTestRepo`); TUI tests for relayout note rows,
+cursor skipping, `}`/`{` with fold expansion and file stepping, the popup
+flow; web handler tests; an e2e scenario is deferred to phase 2 when the
+CLI exists.
 
 ## 5. How hunk highlights syntax, and what gg should do
 

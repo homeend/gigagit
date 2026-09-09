@@ -5,7 +5,7 @@ import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
-import { cycleFilesSort, drillOut, openFile, renderFiles, toggleMark } from "./files.js";
+import { addNotePrompt, cycleFilesSort, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleMark, toggleNotesAgent } from "./files.js";
 import { openPalette } from "./palette.js";
 
 // --- focus + keyboard ---
@@ -58,6 +58,17 @@ function moveCursor(delta) {
     state.fileCursor = Math.max(0, Math.min(list.length - 1, state.fileCursor + delta));
     renderFiles();
   }
+}
+
+
+// noteKey matches one of the review-note keys pressed BARE, in a diff that is
+// note-addressable (notesArmed: never a comparison — its old side belongs to
+// no storable address).
+// The modifier check is the load-bearing half: `c` and `a` are ctrl+c (copy a
+// selected diff line — the commonest thing anyone does in a diff viewer) and
+// ctrl+a (select all), and this handler sees those before the browser acts.
+function noteKey(e, key) {
+  return e.key === key && !e.ctrlKey && !e.metaKey && !e.altKey && notesArmed();
 }
 
 
@@ -133,6 +144,22 @@ document.addEventListener("keydown", (e) => {
     // file list is the one the keyboard can reach — the sidebar's lists cycle
     // from the chips in their own headers.
     if (state.pane === "files" && state.filesMode === "status") cycleFilesSort();
+  } else if (noteKey(e, "c")) {
+    e.preventDefault(); // the key must not land in the prompt input that opens
+    // Review notes (the TUI's c/E/R/a/}/{). The web has no line cursor: `c`
+    // anchors on the clicked diff row (tr.cur), else the first changed row,
+    // and E/R act on the nearest note at or above it.
+    addNotePrompt();
+  } else if (noteKey(e, "E")) {
+    e.preventDefault(); // the key must not land in the prompt input that opens
+    editNotePrompt();
+  } else if (noteKey(e, "R")) {
+    e.preventDefault(); // the key must not land in the prompt input that opens
+    replyNotePrompt();
+  } else if (noteKey(e, "a")) {
+    toggleNotesAgent();
+  } else if (noteKey(e, "}") || noteKey(e, "{")) {
+    stepNote(e.key === "}" ? 1 : -1);
   } else if (e.key === "/") {
     e.preventDefault(); // the browser's quick-find would grab it
     openCommitFilter();

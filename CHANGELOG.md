@@ -8,6 +8,37 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- `?` works inside the diff window and opens the help with that window's
+  footer keys listed in full first (the footer truncates on a narrow
+  terminal), then the Diff view section. The repo switcher (`R`) stays open
+  under its foreign-filesystem confirmation: answering No returns to the list
+  with its filter and selection intact instead of closing everything.
+- **Review notes (phase 1).** Anchor a note to a diff line and it persists —
+  per repo, machine-local, outside git. In the diff view `c` adds one at the
+  cursor line (summary + optional rationale; on a line that exists in both
+  versions the form's side field picks old or new, new by default — on the
+  web the half of the row you click decides), `E` edits and `R` replies to the
+  note next to the cursor (a chooser when several share the line), `a` hides or shows agent-written notes (your
+  own always stay visible), `}`/`{` jump between annotated lines — expanding a
+  fold when the note hides under one, and stepping to the next file that
+  carries notes on a second press — and the `.` menu deletes one. Notes render
+  as hunk-style boxes under their line, in the pane of the side they belong
+  to (blue frame for a person's note, purple for an agent's, grey once the
+  line they were written about has changed), the title in the top rule
+  ("agent note · ada · path R204"), the summary bold and the rationale
+  wrapped; the Files and Commits panels show a `◆N` badge. `gg web` mirrors
+  all of it over `/api/notes` with live updates. Notes re-anchor by a
+  fingerprint of the lines they were written on, so they follow the code as it
+  moves; a background sweep at every gg start drops notes older than
+  `[notes] max_age_days` (default 30, `-1` keeps forever) and notes whose
+  anchor is gone, and `[notes] max_entries` (default 2000) caps the store.
+  A note belongs to the diff that created it — the unstaged, staged,
+  untracked or commit diff, whose two sides it is re-anchored against — so a
+  note taken on the **staged** diff follows the index and survives further
+  edits to the working file. A **two-sided comparison** (and any diff against
+  a stored copy: a shelf entry, a bookmark) carries no notes at all, in the
+  TUI and in `gg web` alike: its two sides belong to no single address, so a
+  note there could not be re-anchored later.
 - **Blame and file preview are syntax-coloured.** The blame view (`b`) and the
   files view's View file preview colour code by file type with the same lexers
   and `[ui] diff_syntax` switch as the diff views; the cursor line itself stays

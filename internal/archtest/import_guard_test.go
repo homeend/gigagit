@@ -15,6 +15,7 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 		"github.com/homeend/gigagit/internal/git":        "frontends must reach git through internal/domain",
 		"github.com/homeend/gigagit/internal/shelf":      "frontends must reach the shelf store through internal/domain",
 		"github.com/homeend/gigagit/internal/bookmark":   "frontends must reach the bookmark store through internal/domain",
+		"github.com/homeend/gigagit/internal/notes":      "frontends must reach the note store through internal/domain",
 		"github.com/homeend/gigagit/internal/searchhist": "frontends must reach the search-history store through internal/domain",
 		"github.com/homeend/gigagit/internal/profile":    "frontends must reach the profile store through internal/domain",
 		"github.com/homeend/gigagit/internal/prefix":     "frontends must reach the prefix store through internal/domain",

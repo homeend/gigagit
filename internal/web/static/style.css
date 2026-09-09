@@ -725,3 +725,27 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
   border-radius: 4px; padding: 2px 12px; font: inherit; font-size: 12px; cursor: pointer;
 }
 #versions-hint button:hover, #vbranches-hint button:hover { border-color: var(--accent); }
+
+/* Review notes: ◆ rows inside the diff table, and the anchored (clicked) row.
+   The anchor is drawn as an inset left rule plus an accented line number, NOT
+   a row background — tr.add/tr.del paint their own cells at higher specificity
+   and tr.flash borrows the selection colour, so a background here would be
+   invisible on exactly the rows a reviewer marks. */
+table.diff tr.cur > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+table.diff tr.cur > td.no { color: var(--accent); }
+/* Review notes: hunk-style boxes. A rounded frame in the pane of the note's
+   side (blue for a person's note, purple for an agent's, grey when stale),
+   the title riding the top border, the summary bold, the rationale dim. The
+   other pane of the row stays blank so the note hangs off one version. */
+table.diff tr.note td { background: none; padding: 4px 6px 6px; cursor: context-menu; }
+table.diff tr.note td.note-gap { cursor: default; }
+.notebox { position: relative; border: 1px solid var(--accent); border-radius: 6px; padding: 12px 12px 8px; margin-top: 8px; color: var(--fg); white-space: pre-wrap; overflow-wrap: anywhere; }
+.notebox.agent { border-color: #b48bff; }
+.notebox.stale { border-color: var(--dim); color: var(--dim); }
+.notetitle { position: absolute; top: -0.75em; left: 10px; padding: 0 6px; background: var(--bg); color: var(--accent); font-size: .92em; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; }
+.notebox.agent .notetitle { color: #b48bff; }
+.notebox.stale .notetitle { color: var(--dim); }
+.notesum { font-weight: bold; }
+.notetext { opacity: .8; margin-top: 2px; }
+.notereply { margin-top: 8px; padding-left: 12px; }
+.notebadge { margin-left: 6px; color: var(--accent); opacity: .85; }

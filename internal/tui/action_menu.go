@@ -99,6 +99,7 @@ func availableActions(m Model) []actionRow {
 			rows = append(rows, r)
 		}
 		rows = append(rows, m.diffAlignRows()...)
+		rows = append(rows, m.noteMenuRows()...)
 		if r, ok := m.shelfAddRow(); ok {
 			rows = append(rows, r)
 		}
@@ -778,6 +779,42 @@ func (m Model) updateActionMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // renderActionMenu draws the overlay (composited by render via overlayCenter).
+// actionMenuBodyTop is the number of overlay lines above the first menu row:
+// the double border (1), the padding line (1), the "Actions" header (1) and
+// the blank under it (1) — see renderActionMenu, whose layout this mirrors.
+const actionMenuBodyTop = 4
+
+// actionMenuRowAt maps a terminal row to the index (into visible()) of the
+// menu row drawn there, using the same centred placement and window slice
+// renderActionMenu uses. Wrap mode is not positional (a row may span several
+// lines and the layout owns that mapping), so it reports no hit and the
+// click only counts as a plain click.
+func (m Model) actionMenuRowAt(y int) (int, bool) {
+	a := m.actionMenu
+	if a == nil || a.mode == modeWrap {
+		return 0, false
+	}
+	vis := a.visible()
+	if len(vis) == 0 {
+		return 0, false
+	}
+	_, h := m.overlayDims()
+	top := (h - len(strings.Split(m.renderActionMenu(), "\n"))) / 2
+	bodyH := len(vis)
+	if bodyH > 14 { // renderActionMenu's window height cap
+		bodyH = 14
+	}
+	k := y - (top + actionMenuBodyTop)
+	if k < 0 || k >= bodyH {
+		return 0, false
+	}
+	lo, _ := windowRowBounds(len(vis), bodyH, a.sel, a.mode)
+	if i := lo + k; i < len(vis) {
+		return i, true
+	}
+	return 0, false
+}
+
 func (m Model) renderActionMenu() string {
 	a := m.actionMenu
 	w, _ := m.overlayDims()

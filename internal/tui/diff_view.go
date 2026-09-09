@@ -68,6 +68,23 @@ type diffView struct {
 	wrapArm    wrapDir     // boundary press primed a wrap-around (see wrapDir); cleared on any other key
 	fileArm    fileArmDir  // top/bottom press primed a step to the prev/next file; cleared on any other key
 	zCycle     cursorAlign // the alignment the NEXT z applies (center → top → bottom); reset by any other key
+	// notes are the resolved review notes for this view's address, loaded
+	// asynchronously (notesLoadedMsg) and re-loaded after every mutation and
+	// srcNotes refresh. relayout turns them into synthetic display rows;
+	// nothing here ever touches the shared cached textdiff rows.
+	notes []domain.ResolvedNote
+	// hideAgent mirrors Model.notesAgentOff onto the view, because relayout
+	// (called by rebuild, ctrl+w and every resize) has no Model to ask.
+	hideAgent bool
+	// noteAddr is the address notes on THIS view hang off — the pair of texts
+	// domain.noteSideLines will re-read for the sweep. Stamped by the loader
+	// that knows which two sides it is comparing, never derived from Model
+	// state at key time: a staged diff and an unstaged diff of the same path
+	// look identical to the focus, yet name different old sides. A zero value
+	// (Path == "") means "no address": notes are inert on this view, which is
+	// what every two-sided compare loader leaves behind (a comparison's old
+	// side is the compared revision, which no stored address can name).
+	noteAddr model.FileAddress
 }
 
 // wrapDir records that a change-navigation key hit a boundary and primed a
@@ -104,6 +121,9 @@ type dRow struct {
 	left  cellSeg      // wrap-on: this display row's left slice (zero = blank)
 	right cellSeg      // wrap-on: right slice
 	first bool         // first display row of the source line (gutter shows here)
+
+	note     *noteLine // non-nil: a synthetic note row belonging to `line`
+	noteMark bool      // fold row: a note hides under this fold (◆ on the rule)
 }
 
 // rebuild recomputes the logical (mode) stream, then the display stream.
@@ -118,10 +138,12 @@ func (v *diffView) rebuild() {
 }
 
 // relayout builds the display-row stream (disp/dispBlocks) from the logical
-// lines for the current wrap mode and width. Wrap off (or width unset) is a
-// 1:1 mapping — disp mirrors lines, dispBlocks == blocks — so rendering and
-// navigation are byte-identical to the pre-wrap view. Wrap on expands each
-// aligned row to max(leftSegs, rightSegs) display rows.
+// lines for the current wrap mode and width. With no notes, wrap off (or width
+// unset) is a 1:1 mapping — disp mirrors lines, dispBlocks == blocks — so
+// rendering and navigation are byte-identical to the pre-wrap view. Wrap on
+// expands each aligned row to max(leftSegs, rightSegs) display rows. Review
+// notes append their synthetic rows after each line's content rows (and mark
+// the fold that hides their anchor), so a view carrying notes is no longer 1:1.
 func (v *diffView) relayout(width int) {
 	v.width = width
 	v.disp = v.disp[:0]
@@ -142,12 +164,14 @@ func (v *diffView) relayout(width int) {
 		tw = 1
 	}
 
+	byLine, foldMark := v.noteRowIndex()
+
 	for li := range v.lines {
 		v.lineStart[li] = len(v.disp)
 		ln := v.lines[li]
 		switch {
 		case ln.Fold > 0:
-			v.disp = append(v.disp, dRow{line: li, fold: ln.Fold, first: true})
+			v.disp = append(v.disp, dRow{line: li, fold: ln.Fold, noteMark: foldMark[li], first: true})
 		case v.long != longWrap || width <= 0:
 			v.disp = append(v.disp, dRow{line: li, row: ln.Row, first: true})
 		default:
@@ -164,6 +188,13 @@ func (v *diffView) relayout(width int) {
 				v.disp = append(v.disp, dRow{line: li, row: ln.Row, first: k == 0,
 					left: segAt(leftSegs, k), right: segAt(rightSegs, k)})
 			}
+		}
+		// The line's note rows close its block: the next logical line starts
+		// after them, so lineStart, the cursor range and the block jumps all
+		// keep pointing at content rows only.
+		for i := range byLine[li] {
+			nl := byLine[li][i]
+			v.disp = append(v.disp, dRow{line: li, row: ln.Row, note: &nl})
 		}
 	}
 
@@ -377,6 +408,22 @@ func statusDiffContext(staged bool) string {
 	return i18n.T("index → working tree")
 }
 
+// statusNoteAddress is the note address for a Status/Staged panel diff: the
+// state naming exactly the pair of texts this view shows, so the sweep re-reads
+// the same two sides later. The Staged panel is HEAD → index (StateStaged); the
+// Files panel is index → working file (StateUnstaged), or nothing → working
+// file for a file git has no index entry for (StateUntracked).
+func (m Model) statusNoteAddress(f model.FileStatus, staged bool) model.FileAddress {
+	st := model.StateUnstaged
+	switch {
+	case staged:
+		st = model.StateStaged
+	case f.Kind == model.KindUntracked:
+		st = model.StateUntracked
+	}
+	return model.FileAddress{State: st, Worktree: m.currentWorktree, Branch: m.status.Branch, Path: f.Path}
+}
+
 // openStatusDiff opens the full-screen diff for a Status (staged=false) or
 // Staged (staged=true) panel file and records diffNav so Home/End can step the
 // panel. Shared by the panel enter handler (after canShowFileDiff) and the
@@ -389,7 +436,7 @@ func (m Model) openStatusDiff(f model.FileStatus, staged bool) (tea.Model, tea.C
 	} else {
 		m.diffNav = diffNavStatus
 	}
-	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong}
+	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, noteAddr: m.statusNoteAddress(f, staged)}
 	if dv := m.diffLayer(); dv != nil {
 		*dv = *v // stepping: reuse the entry already on the stack
 	} else {
@@ -415,7 +462,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
 	tag := statusDiffTag(f.Path, staged)
-	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", partial: m.diffPartial, long: m.diffLong, width: width, noteAddr: m.statusNoteAddress(f, staged)}
 
 	// Staged (HEAD → index): old side is the HEAD blob, absent when the file
 	// isn't in HEAD (untracked, or staged-new 'A'); renames fetch the old name.
@@ -519,7 +566,9 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
 	tag := "commit:" + hash + ":" + line.path
-	v := &diffView{title: line.path, context: "@ " + m.filesContext, rev: hash, partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: line.path, context: "@ " + m.filesContext, rev: hash, partial: m.diffPartial, long: m.diffLong, width: width,
+		// hash^ → hash is exactly StateCommitted's pair (noteSideLines).
+		noteAddr: model.FileAddress{State: model.StateCommitted, Commit: hash, Path: line.path}}
 	// Immutable: parent(hash)→hash for a path always yields the same bytes.
 	key := hash + "^.." + hash + ":" + line.path
 
@@ -661,10 +710,53 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		bv := newBlameView(ctx)
 		m = m.pushLayer(bv)
 		return m, m.loadBlameCmd(ctx, bv.tag)
+	case "?":
+		// The diff footer is packed and truncates on a narrow terminal: the
+		// help opens with this window's keys first, then the Diff view section.
+		return m.pushLayer(newContentPopup(i18n.T("Help — keys"), helpFor(i18n.T("Diff view (enter)"), diffHintFor(v.long)))), nil
 	case "e":
 		if r, ok := m.diffEditRow(); ok {
 			nm, cmd := r.run(m)
 			return nm.(Model), cmd
+		}
+	case "c":
+		return m.openNotePopup(noteAdd)
+	case "E":
+		return m.openNotePopup(noteEdit)
+	case "R":
+		return m.openNotePopup(noteReply)
+	case "a":
+		// Session-scoped: the flag lives on the Model and is mirrored onto
+		// every view that relayouts (relayout has no Model to ask).
+		m.notesAgentOff = !m.notesAgentOff
+		v.hideAgent = m.notesAgentOff
+		cr, hadRow := v.cursorRow()
+		wasVisible := v.cursorVisible(body)
+		v.relayout(v.width)
+		v.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
+	case "}":
+		var moved bool
+		if m, moved = m.jumpNote(1); !moved {
+			switch {
+			case m.diffNav == diffNavNone || !m.peekNotedFile(1):
+				m.diffNotice = i18n.T("▸ no next file with notes")
+			case fileArmed == fileArmNextNote:
+				return m.stepNotedFile(1)
+			default:
+				v.fileArm = fileArmNextNote
+			}
+		}
+	case "{":
+		var moved bool
+		if m, moved = m.jumpNote(-1); !moved {
+			switch {
+			case m.diffNav == diffNavNone || !m.peekNotedFile(-1):
+				m.diffNotice = i18n.T("▸ no previous file with notes")
+			case fileArmed == fileArmPrevNote:
+				return m.stepNotedFile(-1)
+			default:
+				v.fileArm = fileArmPrevNote
+			}
 		}
 	case "up":
 		v.scrollBy(-1, body)

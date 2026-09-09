@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/repos"
@@ -98,5 +99,32 @@ func TestOpenRepoPopupFiresProbe(t *testing.T) {
 	}
 	if _, covered := fs.foreign[otherDir]; !covered {
 		t.Fatalf("probe result missing entry %s: %+v", otherDir, fs.foreign)
+	}
+}
+
+// Answering No to the foreign-filesystem confirm returns the user to the
+// switcher they were choosing from (filter and selection intact), not to a
+// screen with every popup gone; Yes closes it and switches.
+func TestRepoPopupSlowFSCancelKeepsTheSwitcherOpen(t *testing.T) {
+	t.Parallel()
+	m := newTestModel(t)
+	m.currentWorktree = "/here"
+	p := &repoPopup{entries: []repos.Entry{{Path: "/here"}, {Path: "/mnt/slow/repo"}}, now: time.Now(),
+		foreign: map[string]bool{"/mnt/slow/repo": true}}
+	p.sel = 1
+	m = m.pushLayer(p)
+	nm, _ := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	m = nm
+	if m.modal == nil || m.modal.req.ID != "confirm-slow-op" {
+		t.Fatalf("a foreign target must confirm, modal = %v", m.modal)
+	}
+	if _, ok := m.topLayer().(*repoPopup); !ok {
+		t.Fatalf("the switcher must stay open under the confirm, top = %T", m.topLayer())
+	}
+	rm, _ := m.modal.onResolve(m, "No")
+	m2 := rm.(Model)
+	top, ok := m2.topLayer().(*repoPopup)
+	if !ok || top.sel != 1 {
+		t.Fatalf("No must return to the switcher with its selection, top = %T sel %v", m2.topLayer(), ok && top.sel == 1)
 	}
 }

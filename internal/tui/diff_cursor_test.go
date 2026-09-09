@@ -539,12 +539,12 @@ func TestCursorMarkerSkipsFoldRow(t *testing.T) {
 	}
 }
 
-// TestCursorMarkerHotRowWinsOverCursorBackground: when the cursor lands on a
-// Changed row, the row's add/del backgrounds must win over the "row" cursor
-// marker's grey (diffCursorRow, bg 237) — diffCell/segCell apply hotStyle
-// instead of mk.base whenever hot is true. A Same neighbour row has no hot
-// background, so it must still carry 237.
-func TestCursorMarkerHotRowWinsOverCursorBackground(t *testing.T) {
+// TestCursorMarkerHotRowStepsBrighter: when the cursor lands on a Changed
+// row, the row's add/del cells keep their meaning but step one shade
+// brighter (52 → 88, 22 → 28) instead of taking the grey band (237), so the
+// cursor stays visible on exactly the rows a reviewer stops on. A Same
+// neighbour row still carries 237.
+func TestCursorMarkerHotRowStepsBrighter(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(prev)
@@ -556,22 +556,25 @@ func TestCursorMarkerHotRowWinsOverCursorBackground(t *testing.T) {
 	s, e := v.cursorDispRange()
 	hot := m.diffPaneLines(v, 80, 10, s, e, "row")
 	hotRow := hot[s-v.offset]
-	if !strings.Contains(hotRow, "48;5;52") {
-		t.Fatalf("hot cursor row must keep the del background (52): %q", hotRow)
+	if !strings.Contains(hotRow, "48;5;88") || strings.Contains(hotRow, "48;5;52") {
+		t.Fatalf("hot cursor row must wear the brighter del shade (88, not 52): %q", hotRow)
 	}
-	if !strings.Contains(hotRow, "48;5;22") {
-		t.Fatalf("hot cursor row must keep the add background (22): %q", hotRow)
+	if !strings.Contains(hotRow, "48;5;28") || strings.Contains(hotRow, "48;5;22") {
+		t.Fatalf("hot cursor row must wear the brighter add shade (28, not 22): %q", hotRow)
 	}
 	if strings.Contains(hotRow, "48;5;237") {
-		t.Fatalf("hot cursor row must not carry the cursor background (237): %q", hotRow)
+		t.Fatalf("hot cursor row must not carry the grey band (237): %q", hotRow)
 	}
-
-	v.setCursorLine(19, m.diffBodyRows()) // a Same neighbour row
+	off := m.diffPaneLines(v, 80, 10, 0, 0, "row")
+	offRow := off[s-v.offset]
+	if !strings.Contains(offRow, "48;5;52") || !strings.Contains(offRow, "48;5;22") {
+		t.Fatalf("the same row without the cursor must keep 52/22: %q", offRow)
+	}
+	v.setCursorLine(21, m.diffBodyRows()) // a Same neighbour
 	s, e = v.cursorDispRange()
 	same := m.diffPaneLines(v, 80, 10, s, e, "row")
-	sameRow := same[s-v.offset]
-	if !strings.Contains(sameRow, "48;5;237") {
-		t.Fatalf("a Same cursor row must carry the cursor background (237): %q", sameRow)
+	if !strings.Contains(same[s-v.offset], "48;5;237") {
+		t.Fatalf("Same cursor row must carry the grey band (237): %q", same[s-v.offset])
 	}
 }
 

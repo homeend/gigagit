@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
@@ -21,6 +22,22 @@ var (
 
 	diffCursorRow = lipgloss.NewStyle().Background(lipgloss.Color("237")) // cursor line: subtle grey under both panes
 	diffCursorNo  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
+	// On the cursor row a hot cell keeps its meaning but steps one shade
+	// brighter, and the gap side carries the grey band under its dots, so
+	// the cursor never disappears on exactly the rows a reviewer stops on.
+	diffAddCursor = lipgloss.NewStyle().Background(lipgloss.Color("28"))
+	diffDelCursor = lipgloss.NewStyle().Background(lipgloss.Color("88"))
+	diffGapCursor = diffGapCell.Background(lipgloss.Color("237"))
+
+	// Review notes draw as hunk-style boxes in their own pane: a rounded frame
+	// (blue for a user note, purple for an agent note, grey when stale) with
+	// the title in the top rule, the summary in bold and the rationale dim.
+	noteFrameUser  = lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
+	noteFrameAgent = lipgloss.NewStyle().Foreground(lipgloss.Color("141"))
+	noteFrameStale = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	noteSummary    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
+	noteBody       = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	noteDim        = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
 
 // cellMark is the cursor marker for one rendered cell: when row is set, base
@@ -39,20 +56,45 @@ var noMark = cellMark{gut: diffGutter}
 func cursorMark(style string) cellMark {
 	switch style {
 	case "row":
-		return cellMark{row: true, base: diffCursorRow, gut: diffGutter}
+		return cellMark{row: true, base: diffCursorRow, gut: diffCursorNo}
 	case "number":
 		return cellMark{gut: diffCursorNo}
 	}
 	return noMark
 }
 
-// diffHintFor builds the diff-view hint for the current long-line mode. With
-// the cursor-key groups (j/k/z/e) it runs to ~131 columns (scroll variant, in
-// English) — past the 100-col budget earlier revisions tried to hold, so it
-// now truncates from the right (dropping [esc] close first) below roughly
-// that width; TestRenderDiffViewPanes renders wide enough to see the whole
-// line rather than asserting a budget nothing enforces. The scroll variant
-// appends the pan keys.
+// hotFor is the background a hot (add/del) cell wears: its own shade, or the
+// one-step-brighter cursor variant when the row is the cursor row.
+func (mk cellMark) hotFor(hot lipgloss.Style) lipgloss.Style {
+	if !mk.row {
+		return hot
+	}
+	switch hot.GetBackground() {
+	case diffAddCell.GetBackground():
+		return diffAddCursor
+	case diffDelCell.GetBackground():
+		return diffDelCursor
+	}
+	return hot
+}
+
+// gapFor is the style of the dotted gap filler: banded on the cursor row.
+func (mk cellMark) gapFor() lipgloss.Style {
+	if mk.row {
+		return diffGapCursor
+	}
+	return diffGapCell
+}
+
+// diffHintFor builds the diff-view hint for the current long-line mode. Every
+// diff-view binding that is not help-only appears here, so the line is packed:
+// the widest (scroll) English variant measures 139 display columns and MUST
+// stay at or under 140, the width TestRenderDiffViewPanes renders at and the
+// narrowest common wide terminal — past that the truncation eats [esc] close
+// first, hiding the way out. That budget is why the labels are terse (chg,
+// hist/blame) and why the three note keys share one [c/}{] notes group
+// (E/R/a are help-and-menu-only). Shortening a label is the way to add a
+// group; growing the line is not. The scroll variant appends the pan keys.
 func diffHintFor(long longMode) string {
 	mode := i18n.T("scroll")
 	switch long {
@@ -65,7 +107,7 @@ func diffHintFor(long longMode) string {
 	if long == longScroll {
 		pan = i18n.T("  [←→/0] pan")
 	}
-	return i18n.T("[↑↓] scroll  [j/k] line  [z] align  [e] edit  [n/p] change  [f] part  [ctrl+w] %s", mode) + pan + i18n.T("  [h] hist  [b] blame  [esc] close")
+	return i18n.T("[↑↓] scroll  [j/k] line  [c/}{] notes  [z] align  [e] edit  [n/p] chg  [f] part  [ctrl+w] %s", mode) + pan + i18n.T("  [h/b] hist/blame  [esc] close")
 }
 
 // cellSeg is one pane's text for one display row: the sanitized display runes
@@ -299,8 +341,8 @@ func gutterWidth(full []textdiff.Row) int {
 	return g
 }
 
-// diffPaneLines renders the visible window of display rows. A fold dRow is a
-// full-width separator. Otherwise: wrap off draws the row via diffCell (raw
+// diffPaneLines renders the visible window of display rows. A note dRow is a
+// full-width review-note row; a fold dRow is a full-width separator. Otherwise: wrap off draws the row via diffCell (raw
 // text, truncated — byte-identical to before); wrap on draws each side's
 // pre-wrapped segment via segCell. Display rows in [curStart, curEnd) carry
 // the cursor marker per style ("row" | "number" | "off"); curStart == curEnd
@@ -315,8 +357,12 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 	out := make([]string, 0, body)
 	for i := v.offset; i < v.offset+body && i < len(v.disp); i++ {
 		dr := v.disp[i]
+		if dr.note != nil {
+			out = append(out, noteRowCells(*dr.note, paneW))
+			continue
+		}
 		if dr.fold > 0 {
-			out = append(out, foldSeparator(dr.fold, w))
+			out = append(out, foldSeparator(dr.fold, w, dr.noteMark))
 			continue
 		}
 		mk := noMark
@@ -370,7 +416,7 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 // emphasis rides in seg.emph.
 func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipgloss.Style, mk cellMark) string {
 	if gap {
-		return diffGapCell.Render(strings.Repeat("·", width))
+		return mk.gapFor().Render(strings.Repeat("·", width))
 	}
 	if gut > width-2 { // degenerate pane: keep the cell inside its width
 		gut = width - 2
@@ -391,7 +437,7 @@ func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipglo
 		base = mk.base
 	}
 	if hot {
-		base = hotStyle
+		base = mk.hotFor(hotStyle)
 	}
 	body := styledRuns(seg.disp, seg.emph, seg.cls, base)
 	if pad := tw - lipgloss.Width(string(seg.disp)); pad > 0 {
@@ -408,7 +454,7 @@ func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipglo
 // in the sanitized masks and are sliced with the window.
 func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, hOffset, gut, width int, gap, hot bool, hotStyle lipgloss.Style, mk cellMark) string {
 	if gap {
-		return diffGapCell.Render(strings.Repeat("·", width))
+		return mk.gapFor().Render(strings.Repeat("·", width))
 	}
 	if gut > width-2 { // degenerate pane: keep the cell inside its width
 		gut = width - 2
@@ -453,7 +499,7 @@ func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, h
 		base = mk.base
 	}
 	if hot {
-		base = hotStyle
+		base = mk.hotFor(hotStyle)
 	}
 	var b strings.Builder
 	if hasLeft {
@@ -503,11 +549,15 @@ func maxCellWidth(lines []textdiff.Line) int {
 }
 
 // foldSeparator renders a fold marker as a centered label on a dim rule
-// spanning the full width.
-func foldSeparator(n, w int) string {
+// spanning the full width. marked prefixes ◆: a review note anchors on a line
+// this fold hides (f, or }/{, brings it into view).
+func foldSeparator(n, w int, marked bool) string {
 	label := i18n.T(" ⤬ %d unchanged lines ", n)
 	if n == 1 {
 		label = i18n.T(" ⤬ 1 unchanged line ")
+	}
+	if marked {
+		label = "◆" + label
 	}
 	lw := lipgloss.Width(label)
 	if lw >= w {
@@ -518,6 +568,53 @@ func foldSeparator(n, w int) string {
 	return diffFold.Render(strings.Repeat("─", left) + label + strings.Repeat("─", right))
 }
 
+// noteRowCells paints one box row as a full diff row: the box in the pane the
+// note belongs to (old = left, new = right) and blank space in the other, so
+// the note visibly hangs off one version of the file. The text was wrapped to
+// the pane when the rows were laid out; truncate is only a guard against a
+// width the layout has not caught up with. Frame rows draw the rounded rule
+// (the title sits in the top one), summary rows bold, rationale rows dim, and
+// a stale box is grey throughout.
+func noteRowCells(nl noteLine, paneW int) string {
+	if paneW < 4 {
+		paneW = 4
+	}
+	frame := noteFrameUser
+	if nl.agent {
+		frame = noteFrameAgent
+	}
+	text := noteBody
+	if nl.kind == noteRowSummary {
+		text = noteSummary
+	}
+	if nl.stale {
+		frame, text = noteFrameStale, noteDim
+	}
+	inner := paneW - noteBoxFrame
+	var cell string
+	switch nl.kind {
+	case noteRowTop:
+		title := truncate(sanitizeLine(nl.text), paneW-6) // "╭─ " + title + " ─╮" at least
+		rule := paneW - 4 - lipgloss.Width(title)
+		if rule < 1 {
+			rule = 1
+		}
+		cell = frame.Render("╭─ " + title + " " + strings.Repeat("─", rule-1) + "╮")
+	case noteRowBottom:
+		cell = frame.Render("╰" + strings.Repeat("─", paneW-2) + "╯")
+	case noteRowBlank:
+		cell = frame.Render("│") + strings.Repeat(" ", paneW-2) + frame.Render("│")
+	default:
+		body := padRight(truncate(sanitizeLine(nl.text), inner), inner)
+		cell = frame.Render("│ ") + text.Render(body) + frame.Render(" │")
+	}
+	blank := strings.Repeat(" ", paneW)
+	if nl.side == model.NoteSideOld {
+		return cell + "│" + blank
+	}
+	return blank + "│" + cell
+}
+
 // diffCell renders one pane cell: gutter + text, or the dim gap filler. With
 // neither spans nor syntax runs (plain mode, non-Changed rows, unknown
 // language, or enrichment give-up) it is byte-identical to the pre-enrichment
@@ -525,7 +622,7 @@ func foldSeparator(n, w int) string {
 // (optional) hot cell background.
 func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgloss.Style, spans []textdiff.Span, toks []syntax.Tok, mk cellMark) string {
 	if gap {
-		return diffGapCell.Render(strings.Repeat("·", width))
+		return mk.gapFor().Render(strings.Repeat("·", width))
 	}
 	if gut > width-2 { // degenerate pane: keep the cell inside its width
 		gut = width - 2
@@ -545,14 +642,14 @@ func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgl
 			base = mk.base
 		}
 		if hot {
-			base = hotStyle
+			base = mk.hotFor(hotStyle)
 		}
 		bodyTxt = hotEmphBody(text, spans, toks, tw, base)
 	} else {
 		bodyTxt = padRight(truncate(sanitizeLine(text), tw), tw)
 		switch {
 		case hot:
-			bodyTxt = hotStyle.Render(bodyTxt)
+			bodyTxt = mk.hotFor(hotStyle).Render(bodyTxt)
 		case mk.row:
 			bodyTxt = mk.base.Render(bodyTxt)
 		}

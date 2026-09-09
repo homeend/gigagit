@@ -23,16 +23,23 @@ const (
 )
 
 // fileArmDir records that a file-step was primed: the next same-direction press
-// performs it. Two gestures share this arm — End/Home at the file's bottom/top,
-// and N/P on the last/first change — since both resolve to the same next/prev
-// file step. Cleared by any other key (reset at the top of updateDiffViewKey),
-// exactly like the n/p change-wrap arm (wrapArm). The cue shows bottom-left.
+// performs it. End/Home at the file's bottom/top and N/P on the last/first
+// change share the plain fileArmNext/fileArmPrev values, since both resolve to
+// the same next/prev file step. }/{ prime their OWN values instead: they step
+// to the next file that CARRIES NOTES, a different destination, so the cue
+// must name the right key and a second press of the other gesture must not
+// perform this one. A mismatched second key therefore falls through to the
+// default arm of its own case and simply re-primes. Cleared by any other key
+// (reset at the top of updateDiffViewKey), exactly like the n/p change-wrap
+// arm (wrapArm). The cue shows bottom-left.
 type fileArmDir int
 
 const (
-	fileArmNone fileArmDir = iota
-	fileArmNext            // primed: next End/N → next file
-	fileArmPrev            // primed: next Home/P → previous file
+	fileArmNone     fileArmDir = iota
+	fileArmNext                // primed: next End/N → next file
+	fileArmPrev                // primed: next Home/P → previous file
+	fileArmNextNote            // primed: next } → next file that carries notes
+	fileArmPrevNote            // primed: next { → previous file that carries notes
 )
 
 // fileArmCue is the bottom-left prompt shown while a file-step is primed.
@@ -42,6 +49,10 @@ func fileArmCue(d fileArmDir) string {
 		return i18n.T("▸ N/end again → next file")
 	case fileArmPrev:
 		return i18n.T("▸ P/home again → previous file")
+	case fileArmNextNote:
+		return i18n.T("▸ } again → next file with notes")
+	case fileArmPrevNote:
+		return i18n.T("▸ { again → previous file with notes")
 	}
 	return ""
 }
@@ -112,6 +123,45 @@ func (m Model) peekDiffFile(dir int) bool {
 		return ok
 	}
 	return false
+}
+
+// diffFileSequence lists the paths the open diff would step through in
+// direction dir, in step order, starting AFTER the current selection. It walks
+// the same three sources stepDiffFile dispatches on and applies the same
+// skips (heading/placeholder rows in the tree, conflicted rows in the two
+// status panels), so the Nth entry is exactly what N stepDiffFile calls land
+// on. Read-only: nothing here moves a selection or opens a diff. Backs the
+// }/{ "next file that carries notes" step.
+func (m Model) diffFileSequence(dir int) []string {
+	if dir == 0 {
+		return nil
+	}
+	var out []string
+	switch m.diffNav {
+	case diffNavTree:
+		if m.filesView == nil {
+			return nil
+		}
+		vis := m.filesView.visible()
+		for i := m.filesView.sel + dir; i >= 0 && i < len(vis); i += dir {
+			if vis[i].path != "" {
+				out = append(out, vis[i].path)
+			}
+		}
+	case diffNavStatus, diffNavStaged:
+		p := panelFiles
+		if m.diffNav == diffNavStaged {
+			p = panelStaged
+		}
+		idx := m.displayIndices(p)
+		for s := m.sel[p] + dir; s >= 0 && s < len(idx); s += dir {
+			f := m.status.Files[idx[s]]
+			if f.Kind != model.KindUnmerged {
+				out = append(out, f.Path)
+			}
+		}
+	}
+	return out
 }
 
 // stepDiffFile opens the previous (dir<0) or next (dir>0) file's diff in the

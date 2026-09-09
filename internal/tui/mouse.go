@@ -101,6 +101,34 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.proc != nil {
 		return m, nil
 	}
+	// The action menu is an overlay above the whole layer stack (view.go draws
+	// it over whatever is open), so it takes the mouse before any layer does.
+	if m.actionMenu != nil {
+		if wheel != 0 {
+			m.actionMenu.move(wheel)
+			return m, nil
+		}
+		if msg.Button == tea.MouseButtonLeft {
+			// A click is positional: it moves the highlight to the row under
+			// the pointer, and only a double-click ON THAT ROW runs it. The
+			// old "double-click runs whatever is highlighted" ran a Delete
+			// row after the user clicked Reply. A click off the rows (the
+			// header, the hint, the frame) leaves the highlight alone.
+			row := -1
+			if i, ok := m.actionMenuRowAt(msg.Y); ok {
+				m.actionMenu.sel = i
+				row = i
+			}
+			var double bool
+			if m, double = m.registerClick(clickTarget{zone: zoneActionMenu, row: row}); double && row >= 0 {
+				return m.updateActionMenuKey(synthKey("enter"))
+			}
+		}
+		if msg.Button == tea.MouseButtonMiddle {
+			return m.updateActionMenuKey(synthKey("esc"))
+		}
+		return m, nil
+	}
 	// The layer stack (surfaces + centered popups) is above any content window;
 	// surfaces (history/blame) are keyboard-only (v1) and popups swallow mouse
 	// rather than hit-test the hidden background — except the help / `?` cheat-sheet
@@ -140,22 +168,6 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if msg.Button == tea.MouseButtonMiddle && (clickEnterLayer(l) || rightClickMenuLayer(l)) {
 			nm, cmd := l.update(m, synthKey("esc"))
 			return nm, cmd
-		}
-		return m, nil
-	}
-	if m.actionMenu != nil {
-		if wheel != 0 {
-			m.actionMenu.move(wheel)
-			return m, nil
-		}
-		if msg.Button == tea.MouseButtonLeft {
-			var double bool
-			if m, double = m.registerClick(clickTarget{zone: zoneActionMenu}); double {
-				return m.updateActionMenuKey(synthKey("enter"))
-			}
-		}
-		if msg.Button == tea.MouseButtonMiddle {
-			return m.updateActionMenuKey(synthKey("esc"))
 		}
 		return m, nil
 	}

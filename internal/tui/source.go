@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"time"
 
@@ -29,6 +30,7 @@ const (
 	srcWorktrees
 	srcFeed
 	srcIdentity
+	srcNotes
 	srcCount
 )
 
@@ -43,6 +45,8 @@ var srcConsumers = map[sourceKey][]panel{
 	srcReflog:    {panelReflog},
 	srcWorktrees: {panelWorktrees, panelBranches},
 	srcFeed:      {panelCommits},
+	// Note badges are painted by the Files/Staged rows and the Commits feed.
+	srcNotes: {panelFiles, panelStaged, panelCommits},
 }
 
 // dataAvailableMsg is the single event every source read produces. value is
@@ -111,7 +115,7 @@ func (m Model) maybeFeedUpstreamRewalk() bool {
 var sourceNames = map[sourceKey]string{
 	srcStatus: "status", srcBranches: "branches", srcRemotes: "remotes",
 	srcTags: "tags", srcReflog: "reflog", srcWorktrees: "worktrees",
-	srcFeed: "commits", srcIdentity: "identity",
+	srcFeed: "commits", srcIdentity: "identity", srcNotes: "notes",
 }
 
 // sourceErr formats a per-source error for display on the status line.
@@ -201,6 +205,19 @@ func (m Model) readSourceCmd(ctx context.Context, s sourceKey, opts reloadOpts) 
 		case srcIdentity:
 			id, err := svc.Identity(ctx)
 			out.value, out.err = id, err
+		case srcNotes:
+			// srcNotes is never polled — it rides only on explicit refreshes
+			// (r, a repo reroot) and note mutations — so this read always goes
+			// to the store. That is what lets r pick up the startup sweep's
+			// rewrite, another gg process's note, or an agent's note add.
+			svc.InvalidateNoteCounts()
+			c, err := svc.NoteCounts(ctx)
+			if errors.Is(err, domain.ErrNotesDisabled) {
+				// No state dir (a read-only home, a locked-down box): notes are
+				// simply off. Not an error worth a status line every refresh.
+				c, err = domain.NoteCounts{}, nil
+			}
+			out.value, out.err = c, err
 		}
 		out.dur = time.Since(start)
 		return out
@@ -439,6 +456,8 @@ func (m Model) bootstrapCmd() tea.Cmd {
 		svc.SetShowEOLOnlyChanges(cfg.UI.ShowEOLOnlyChanges)
 		svc.SetSyntaxHighlighting(cfg.UI.SyntaxOn())
 		svc.SetVersionsPolicy(versionsPolicyFromConfig(cfg))
+		svc.SetNotesPolicy(cfg.Notes.MaxAgeDays, cfg.Notes.MaxEntries)
+		svc.StartNotesSweep()
 		return configReadyMsg{cfg: cfg, repoTOML: repoTOML, top: root}
 	}
 }

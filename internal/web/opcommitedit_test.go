@@ -56,8 +56,12 @@ var (
 )
 
 // TestMain removes the shared binary after the package's tests: it outlives
-// any single test's t.TempDir(), so it needs an owner of its own.
+// any single test's t.TempDir(), so it needs an owner of its own. It also
+// turns notes off package-wide, so the background sweep applyUIPolicies starts
+// can never reach the user's real state dir or a store shared with another
+// test; a test that means to exercise notes calls svc.UseNotesDir(t.TempDir()).
 func TestMain(m *testing.M) {
+	domain.NotesDisabled = true
 	code := m.Run()
 	if ggBinDir != "" {
 		_ = os.RemoveAll(ggBinDir)

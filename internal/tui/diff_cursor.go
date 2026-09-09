@@ -48,6 +48,14 @@ func (v *diffView) cursorDispRange() (start, end int) {
 	if v.curLine+1 < len(v.lineStart) {
 		end = v.lineStart[v.curLine+1]
 	}
+	// The cursor marks the CONTENT rows of its line only: the note rows that
+	// follow belong to the line but are not part of it.
+	for i := start; i < end && i < len(v.disp); i++ {
+		if v.disp[i].note != nil {
+			end = i
+			break
+		}
+	}
 	return start, end
 }
 
@@ -304,4 +312,26 @@ func (m Model) diffCursorStyleRow() (actionRow, bool) {
 			return m, nil
 		},
 	}, true
+}
+
+// revealCursorNotes scrolls just enough that the note rows under the cursor
+// line are inside the viewport: a note added on the bottom visible line
+// otherwise lands below the fold and the user never sees it appear. The
+// cursor row itself always stays visible, so a thread taller than the body
+// shows its first rows.
+func (v *diffView) revealCursorNotes(body int) {
+	if body <= 0 || v.curLine < 0 || v.curLine >= len(v.lineStart) {
+		return
+	}
+	start := v.lineStart[v.curLine]
+	end := len(v.disp)
+	if v.curLine+1 < len(v.lineStart) {
+		end = v.lineStart[v.curLine+1]
+	}
+	if end-start > body {
+		end = start + body
+	}
+	if end > v.offset+body {
+		v.offset = end - body
+	}
 }

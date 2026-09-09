@@ -131,6 +131,82 @@ binary/too-large state; `v.rev == ""` opens the live working-tree file
 (`editFileAtCmd`), a set `rev` opens a read-only temp copy of `rev:path`
 (`openInEditorAtCmd` + `ShowFile`, `viewExternalCmd`).
 
+**Review notes (phase 1).** A note (`model.Note`) is a machine-local record —
+address, side, a 1-based inclusive line range, and a fingerprint
+(`model.NoteContextHash`: each anchored line trimmed of whitespace, joined
+with `\n`, hex sha256) — never git content. `internal/notes.FileStore` keeps
+`notes.toml` under `<XDG state>/gg/notes/<repoKey>/`, rewritten atomically
+(temp+rename) under a cross-process `notes.toml.lock` (`O_CREATE|O_EXCL`, 2s
+retry budget, a lock older than 30s is a crashed writer's and gets broken);
+every mutation re-reads under the lock, applies, drops replies whose root is
+gone, caps the store oldest-root-first when `[notes] max_entries` is
+exceeded, and writes only when something actually changed; `Load` never
+writes, so a read-heavy session cannot race the sweep or another `gg`.
+`domain` owns resolution: `resolveOne` matches a note's stored range against
+its side's current text — active in place, active if `findAnchor`'s outward
+scan finds the same fingerprint elsewhere, else stale (clamped into the
+file) when the side exists but the anchor doesn't, else orphaned when the
+whole side is absent — and `noteSideLines` supplies that per-`FileState` old
+side (index for unstaged, HEAD for staged, absent for untracked/shelf,
+`<sha>^` for committed). `NotesFor` resolves against a diff a frontend
+already holds (zero extra reads); `NotesAt` is the stateless door — reads
+both sides itself — for callers with no open diff (the web handlers, and
+phase-2 CLI). `NoteCounts` (`ByPath`/`ByCommit`/`ByCommitPath`, the last
+keyed `"<sha>:<path>"`) is cached on the Service and invalidated by every
+mutation, by the startup sweep when it drops anything, and by the exported
+`InvalidateNoteCounts` — which the two EXPLICIT refresh paths call (the TUI's
+`srcNotes` read, which is never polled, and `GET /api/notes/counts`) so a
+badge cannot outlive its notes and a second `gg`'s write is visible; it
+counts unresolved THREADS only, so painters never touch the store or read
+file content, and `}`/`{`'s file-step reads `ByCommitPath` to find the next
+annotated file without a store round trip. `NoteAdd` REFUSES a note whose
+side it cannot read or that names an absent side rather than storing an empty
+`ContextHash` (which can never re-anchor, so the next sweep would silently
+delete it); `NoteEdit`/`NoteReply`/`NoteRemove` return `domain.ErrNoteNotFound`,
+a sentinel wrapping `notes.ErrNotFound` so a frontend can `errors.Is` it
+without importing `internal/notes`. Every note is
+worktree-scoped except commit and shelf notes (worktree-agnostic): the store
+is shared by every worktree of a repo, so `sameNoteTarget` and the sweep both
+match on the note's own `Address.Worktree`, never the calling Service's. The
+startup sweep (`StartNotesSweep`, a per-`Service` `sync.Once`) runs off-thread
+from the same three sites a frontend applies `[notes]`/`[versions]` config
+policy (`internal/tui/load.go`, `internal/tui/source.go`'s
+`applyUIPolicies`, `internal/web/settings.go`); it drops a note only when it
+has expired past `max_age_days` OR resolves as non-active, and a read that
+merely FAILED (a parked reservation, a timeout) never counts as "gone" —
+only a git/OS "not there" answer does, so a slow mount or a paused op can
+never wipe the store. **Which diffs carry notes.** The address is stamped by the LOADER, on
+`diffView.noteAddr` (TUI) / `state.diffCtx.notes` (web), never derived from
+panel focus at key time: focus cannot tell a staged diff from an unstaged one,
+and `Address.State` is exactly the pair of texts the sweep re-reads, so a
+misfiled note resolves against the wrong side and is deleted. The addressable
+loaders are the Status panel (`StateUnstaged`, or `StateUntracked` for a file
+with no index entry), the Staged panel (`StateStaged`), a commit file diff and
+the file-history diffs (`StateCommitted`, `hash^` -> `hash`). Everything else
+leaves the address ZERO and notes are inert there — every two-sided
+comparison, the shelf-vs-working and bookmark-vs-working diffs, and the web's
+compare mode (no ◆ rows, no keys, no ◆N badges on the file list): their old
+side is the compared revision, which no stored address names.
+
+In the TUI, `dRow.note *noteLine` is one synthetic
+DISPLAY row `relayout` appends after its owning line's content rows. A thread
+lays out as a hunk-style BOX (`noteBoxLines`: `noteRowTop` carrying the title
+"agent note · author · path R204", a blank, the summary rows in bold, the
+rationale rows, `↳ author:` reply blocks, a blank, `noteRowBottom`), drawn by
+`noteRowCells` in the pane of the note's side (old = left, new = right) with
+the other pane blank; text is word-wrapped to the pane at layout time
+(`noteInnerWidth`, so a pasted paragraph in the summary takes rows, never a
+cut), dimmed grey when stale, filtered per-row by the `a` agent-layer toggle
+(frame rows count as agent only when the whole thread is). `cursorDispRange`
+stops before the first note row so the cursor never rests on one, and a note
+hidden under a fold marks the fold separator (`dRow.noteMark`) instead. Web
+mirrors the same shape: one `<tr class="note">` per thread keyed `data-note`
+(reply blocks carry their own `data-note`), `noteBoxHTML` placing a
+`.notebox` in the side's pane (`td.note-gap` fills the other) and spanning
+the row in the single-column layouts; a `notes` SSE event (`emitNotes`)
+tells every open page to re-fetch after a mutation. `srcNotes` is a refresh source (badges only) — it is never polled
+by the background scheduler, only fired after a note mutation.
+
 Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands, else launches the TUI.
 
 ## Conventions

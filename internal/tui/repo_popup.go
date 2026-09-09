@@ -176,19 +176,20 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyEnter:
 		vis := p.visible()
-		m = m.popLayer()
 		if p.sel < 0 || p.sel >= len(vis) {
-			return m, nil
+			return m.popLayer(), nil
 		}
 		target := vis[p.sel].Path
 		if samePathTUI(target, m.currentWorktree) {
-			return m, nil // already here
+			return m.popLayer(), nil // already here
 		}
 		if p.foreign[target] && m.confirmSlowOps() {
 			// A foreign-fs switch can block the interface for a minute (the
 			// snapshot's whole-tree status walk), so it confirms like every
 			// other slow op — same [ui] disable_slow_op_confirm bypass,
-			// default No.
+			// default No. The switcher stays open underneath the question:
+			// No returns the user to the list they were choosing from, with
+			// its filter and selection intact, instead of closing everything.
 			m.modal = &decisionState{
 				req: engine.DecisionRequest{
 					ID:      "confirm-slow-op",
@@ -199,14 +200,14 @@ func (p *repoPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				confirm: true,
 				onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
 					if opt == "Yes" {
-						return m.guardedReRoot(target, false)
+						return m.popLayer().guardedReRoot(target, false)
 					}
 					return m, nil
 				},
 			}
 			return m, nil
 		}
-		tm, cmd := m.guardedReRoot(target, false)
+		tm, cmd := m.popLayer().guardedReRoot(target, false)
 		return tm.(Model), cmd
 	case tea.KeyCtrlD:
 		vis := p.visible()

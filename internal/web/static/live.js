@@ -9,7 +9,7 @@
 // after a dropped stream reloads everything, since events were missed.
 import { runOnce, state } from "./core.js";
 import { fetchStatus, wtCount } from "./status.js";
-import { reconcileStatusView } from "./files.js";
+import { fetchNotes, reconcileStatusView, refreshNoteCounts } from "./files.js";
 import { fetchBranches } from "./sidebar.js";
 import { loadCommits, renderCommits } from "./commits.js";
 import { loadRepo } from "./ops.js";
@@ -93,6 +93,9 @@ async function refreshSources(want) {
   const keep = at && at.hash;
   const jobs = [];
   if (want.has("status")) jobs.push(fetchStatus());
+  // "notes" is not a ticker source: only a note mutation emits it, and both
+  // halves (the open diff's rows, the ◆N badges) reload from it.
+  if (want.has("notes")) jobs.push(fetchNotes(), refreshNoteCounts());
   let sidebar = false;
   for (const s of want) if (SIDEBAR.has(s)) sidebar = true;
   if (sidebar) jobs.push(fetchBranches(), loadRepo());

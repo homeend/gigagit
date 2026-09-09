@@ -160,6 +160,14 @@ type VersionsConfig struct {
 	MaxAgeDays int  `toml:"max_age_days"`
 }
 
+// NotesConfig configures review-note housekeeping. TOML keys snake_case under
+// [notes]. Both use nonzero-is-set so -1 (keep forever / uncapped) can overlay
+// the default; 0 means unset (→ the default).
+type NotesConfig struct {
+	MaxAgeDays int `toml:"max_age_days"` // drop notes older than this in the startup sweep; <=0 = keep forever
+	MaxEntries int `toml:"max_entries"`  // cap enforced on every write, oldest root first; <=0 = uncapped
+}
+
 // Config is the merged gigagit configuration.
 type Config struct {
 	Worktree WorktreeConfig `toml:"worktree"`
@@ -167,6 +175,7 @@ type Config struct {
 	Debug    DebugConfig    `toml:"debug"`
 	Refresh  RefreshConfig  `toml:"refresh"`
 	Versions VersionsConfig `toml:"versions"`
+	Notes    NotesConfig    `toml:"notes"`
 	Tools    ToolsConfig    `toml:"tools"`
 }
 
@@ -180,6 +189,7 @@ func Defaults() Config {
 		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
 			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", DiffSyntax: "auto", DiffCursor: "row", ShowGraph: "on"},
 		Versions: VersionsConfig{MaxAgeDays: 90},
+		Notes:    NotesConfig{MaxAgeDays: 30, MaxEntries: 2000},
 	}
 }
 
@@ -200,6 +210,7 @@ func Load(globalPath, repoPath string) (Config, error) {
 			overlayDebug(&cfg.Debug, layer.Debug)
 			overlayRefresh(&cfg.Refresh, layer.Refresh)
 			overlayVersions(&cfg.Versions, layer.Versions)
+			overlayNotes(&cfg.Notes, layer.Notes)
 			overlayTools(&cfg.Tools, layer.Tools)
 		}
 	}
@@ -400,6 +411,17 @@ func overlayVersions(dst *VersionsConfig, src VersionsConfig) {
 	}
 	if src.MaxAgeDays != 0 {
 		dst.MaxAgeDays = src.MaxAgeDays
+	}
+}
+
+// overlayNotes copies each set field of src onto dst. Any nonzero value
+// (including -1 = forever/uncapped) overlays; 0 is "unset".
+func overlayNotes(dst *NotesConfig, src NotesConfig) {
+	if src.MaxAgeDays != 0 {
+		dst.MaxAgeDays = src.MaxAgeDays
+	}
+	if src.MaxEntries != 0 {
+		dst.MaxEntries = src.MaxEntries
 	}
 }
 

@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/homeend/gigagit/internal/i18n"
+import (
+	"strings"
+
+	"github.com/homeend/gigagit/internal/i18n"
+)
 
 // helpContent is the hand-maintained table behind the ? help window: every
 // key binding in the TUI, grouped by context. The key column is the first
@@ -250,11 +254,17 @@ func helpContent() []contentLine {
 		r("z", i18n.T("cycle the cursor line's position in the view: center → top → bottom (also three . menu rows)")),
 		r("e", i18n.T("open the file in your editor at the cursor line — the working-tree file for a working-tree diff (for the staged diff the index is the new side, so the line is approximate), a read-only copy of the shown revision for a commit diff; not offered on a two-sided compare")),
 		r("", i18n.T("the cursor marker style is [ui] diff_cursor = row | number | off; the . menu's Cursor marker row switches it for the session")),
+		r("c", i18n.T("add a review note at the cursor line (a summary, plus an optional rationale; an empty summary cancels)")),
+		r("E/R", i18n.T("edit / reply to the note next to the cursor line (several on one line: a chooser)")),
+		r("a", i18n.T("show or hide agent-written notes; your own notes always stay visible")),
+		r("}/{", i18n.T("jump to the next / previous annotated line (a folded note expands the view); at the last / first one, press again to step to the next / previous file that carries notes")),
+		r("", i18n.T("the . menu grows Edit note / Reply to note / Delete note rows while a note sits next to the cursor line")),
 		r("pgup/pgdn", i18n.T("scroll one screen (the cursor moves by a screen too)")),
 		r("n/p", i18n.T("next / previous change (also ctrl+↓/↑; press again at the end/start to wrap around)")),
 		r("N/P", i18n.T("from the last / first change, press twice to step to the next / previous file in the list (a bottom-left cue advertises it; a notice names the new file)")),
 		r("home/end", i18n.T("jump to top / bottom of the file (the cursor lands on the first / last line); at the edge a bottom-left cue appears and pressing it again steps to the previous / next file in the list (a notice names the new file)")),
 		r("f", i18n.T("toggle full file ↔ changed lines only")),
+		r("?", i18n.T("this help, opened with the diff window's keys listed first (the footer truncates on a narrow terminal)")),
 		r("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 		r("← → 0", i18n.T("scroll mode: pan left / right / reset")),
 		r("h", i18n.T("history of this file at the shown revision")),
@@ -322,4 +332,55 @@ func helpWithHidden(hidden []footerBinding) []contentLine {
 		lines = append(lines, contentLine{text: padRight(b.key, 16) + b.label})
 	}
 	return append(lines, helpContent()...)
+}
+
+// helpFor is the help window opened from inside a full-screen reader: the
+// reader's own footer keys first (its footer is packed and truncates on a
+// narrow terminal, so the full list lives here), then its section from the
+// general help, then everything else in the usual order.
+func helpFor(section, footerHint string) []contentLine {
+	all := helpContent()
+	var lines []contentLine
+	if chips := hintChips(footerHint); len(chips) > 0 {
+		lines = append(lines, contentLine{text: i18n.T("Keys in this window (the footer, in full)"), heading: true})
+		for _, c := range chips {
+			lines = append(lines, contentLine{text: padRight(c[0], 16) + c[1]})
+		}
+	}
+	start := -1
+	for i, l := range all {
+		if l.heading && l.text == section {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return append(lines, all...)
+	}
+	end := len(all)
+	for i := start + 1; i < len(all); i++ {
+		if all[i].heading {
+			end = i
+			break
+		}
+	}
+	lines = append(lines, all[start:end]...)
+	lines = append(lines, all[:start]...)
+	return append(lines, all[end:]...)
+}
+
+// hintChips splits a packed footer hint ("[↑↓] scroll  [j/k] line …") into
+// (key, label) pairs; text before the first bracket is dropped.
+func hintChips(hint string) [][2]string {
+	var out [][2]string
+	for _, part := range strings.Split(hint, "  ") {
+		part = strings.TrimSpace(part)
+		if !strings.HasPrefix(part, "[") {
+			continue
+		}
+		if i := strings.Index(part, "] "); i > 0 {
+			out = append(out, [2]string{part[:i+1], part[i+2:]})
+		}
+	}
+	return out
 }

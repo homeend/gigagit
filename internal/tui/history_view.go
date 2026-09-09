@@ -86,12 +86,21 @@ func (m Model) historyDiffSources(fc model.FileCommit) (key string, oldSrc, newS
 	return key, oldSrc, newSrc
 }
 
+// historyNoteAddress is the note address a file-history diff shows: the same
+// first-parent → commit pair loadCommitDiffCmd renders, so a note taken here
+// and one taken on the commit's own file diff address the same two texts.
+// Renames keep the address on fc.Path — the name the NEW side carries.
+func historyNoteAddress(fc model.FileCommit) model.FileAddress {
+	return model.FileAddress{State: model.StateCommitted, Commit: fc.Hash, Path: fc.Path}
+}
+
 // loadHistoryDiffCmd builds the right-pane diff for fc: the file at fc vs its
 // first parent, addressing the correct (possibly renamed) blob names.
 func (m Model) loadHistoryDiffCmd(fc model.FileCommit, tag string) tea.Cmd {
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
-	v := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, rev: fc.Hash, partial: m.diffPartial}
+	v := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, rev: fc.Hash, partial: m.diffPartial,
+		noteAddr: historyNoteAddress(fc)}
 	key, oldSrc, newSrc := m.historyDiffSources(fc)
 	return func() tea.Msg {
 		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: fc.Path, Old: oldSrc, New: newSrc})
@@ -111,7 +120,8 @@ func (m Model) loadHistoryDiffFullCmd(fc model.FileCommit, tag string) tea.Cmd {
 	differ := m.diffDiffer()
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
-	v := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, rev: fc.Hash, partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: fc.Path, context: "@ " + shortHash(fc.Hash) + " " + fc.Subject, rev: fc.Hash, partial: m.diffPartial, long: m.diffLong, width: width,
+		noteAddr: historyNoteAddress(fc)}
 	key, oldSrc, newSrc := m.historyDiffSources(fc)
 	return func() tea.Msg {
 		out, err := differ.Diff(context.Background(), domain.Request{Key: key, Path: fc.Path, Old: oldSrc, New: newSrc})

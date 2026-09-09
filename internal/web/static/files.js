@@ -1,9 +1,9 @@
 // files.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, esc, getJSON, postJSON, runes, state } from "./core.js";
-import { copyText, showCtxMenu } from "./layers.js";
+import { $, esc, getJSON, postJSON, runOnce, runes, state } from "./core.js";
+import { copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
-import { extraRows } from "./menus.js";
+import { extraRows, registerHelp } from "./menus.js";
 import { applyStatus, buildStatusEntries, fetchStatus } from "./status.js";
 import { nextSortMode, setSortMode, sortChipHTML } from "./sortlist.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
@@ -208,6 +208,7 @@ async function openEntryFileDiff({ left, right, path, leftLabel, rightLabel, sta
   }
   clearDiffHunks();
   state.diffCtx = null; // history/blame need a rev; a stored copy has none
+  state.diffRow = null; // …and the previous diff's marked row must not paint a row of this one
   $("diff-title").textContent = leftLabel + " ↔ " + rightLabel + " · " + path;
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
@@ -358,11 +359,20 @@ function renderFiles() {
     $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
     $("conflict-note").classList.add("hidden");
+    // A commit file's notes are keyed "<sha>:<path>" — the sha this row's diff
+    // would open. A COMPARISON gets no badge at all: its diff is not
+    // note-addressable (see openFile), so a ◆ would advertise notes that its
+    // rows cannot show and its keys cannot add.
+    const cmp = state.filesMode === "compare";
+    const badge = (f) =>
+      cmp ? "" : noteBadgeHTML(state.noteCounts.by_commit_path[(f.sha || state.fileSha) + ":" + f.path]);
     $("files-list").innerHTML = state.files
       .map(
         (f, i) =>
           `<li class="${i === state.fileCursor ? "sel" : ""}" data-i="${i}">` +
-          `<span class="st ${esc(f.status)}">${esc(f.status)}</span>${esc(f.path)}</li>`
+          `<span class="st ${esc(f.status)}">${esc(f.status)}</span>${esc(f.path)}` +
+          badge(f) +
+          `</li>`
       )
       .join("");
     return;
@@ -404,9 +414,19 @@ function renderFiles() {
           : `<button class="act" data-i="${i}">s</button>`;
     html +=
       `<li class="${i === state.fileCursor ? "sel" : ""} ${f.section}${state.marked.has(f.path) ? " marked" : ""}" data-i="${i}">` +
-      `<span class="st">${esc(badge)}</span>${esc(f.path)}${btn}</li>`;
+      `<span class="st">${esc(badge)}</span>${esc(f.path)}` +
+      noteBadgeHTML(state.noteCounts.by_path[f.path]) +
+      `${btn}</li>`;
   });
   $("files-list").innerHTML = html;
+}
+
+
+// noteBadgeHTML is the ◆N marker the TUI draws on a row with review notes
+// (threads, replies excluded). "" for none, so a repo without notes renders
+// byte-identically to before.
+function noteBadgeHTML(n) {
+  return n > 0 ? `<span class="notebadge">◆${n}</span>` : "";
 }
 
 
@@ -437,7 +457,22 @@ async function openFile(i) {
       rightLabel: state.compare.b,
     });
   }
-  state.diffCtx = { path: f.path, rev: state.filesMode === "compare" ? state.compare.bHash : f.sha || state.fileSha };
+  // A compare has two revisions and no single provenance. rev stays the
+  // RIGHT-hand hash — the history/blame buttons read diffCtx.rev — but notes
+  // are OFF here: this table's new side really is bHash, while its old side is
+  // aHash, and a stored commit note resolves its old side against bHash^. A
+  // note on a line the comparison removed would therefore be filed against a
+  // base it was never taken on and swept away. The TUI refuses notes on a
+  // compare view for exactly this reason.
+  const cmp = state.filesMode === "compare";
+  state.diffCtx = {
+    path: f.path,
+    rev: cmp ? state.compare.bHash : f.sha || state.fileSha,
+    state: "commit",
+    notes: !cmp,
+  };
+  state.diffRow = null;
+  state.notes = [];
   const q = new URLSearchParams({ path: f.path, status: f.status });
   if (state.filesMode === "compare") {
     q.set("left", state.compare.aHash);
@@ -450,7 +485,11 @@ async function openFile(i) {
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
-    renderDiff(await getJSON("/api/diff?" + q));
+    // The notes ride ALONGSIDE the diff fetch, not after it: the ◆ rows have
+    // to be in the first paint, and a second serial round-trip would show the
+    // diff without them first.
+    const [d] = await Promise.all([getJSON("/api/diff?" + q), fetchNotes(false)]);
+    renderDiff(d);
   } catch (e) {
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
@@ -461,7 +500,10 @@ async function openFile(i) {
 async function openStatusDiff(i) {
   clearDiffHunks();
   const f = state.statusEntries[i];
-  state.diffCtx = f.section === "conflicts" ? null : { path: f.path, rev: "" };
+  state.diffCtx =
+    f.section === "conflicts" ? null : { path: f.path, rev: "", state: sectionNoteState(f.section) };
+  state.diffRow = null;
+  state.notes = [];
   $("diff-title").textContent = f.path;
   if (f.section === "conflicts") return openConflictPicker(f);
   const q = new URLSearchParams({ wt: f.section === "staged" ? "staged" : "unstaged", path: f.path });
@@ -469,7 +511,7 @@ async function openStatusDiff(i) {
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
-    const d = await getJSON("/api/diff?" + q);
+    const [d] = await Promise.all([getJSON("/api/diff?" + q), fetchNotes(false)]);
     // server tags eligible unstaged diffs with hunk ordinals — arm inline
     // staging BEFORE the render so the rows pick up their hk classes
     if (d.hunks && hunkEligible(f)) {
@@ -584,10 +626,28 @@ function hunkAttr(r) {
 // main diff pane and the history overlay. paneWidth picks side-by-side vs
 // unified exactly as before. Hunk classes no-op when diffHunks is null, so
 // non-staging consumers get a plain read-only table.
-function diffHTML(d, paneWidth) {
+//
+// notesOn arms the review-note decoration: the per-row data-side/data-no
+// anchor, the clicked row's `cur` class, and the ◆ rows themselves. It is OFF
+// by default so the file-history overlay — a different file at a different
+// revision — stays a plain table rather than borrowing the open diff's notes.
+function diffHTML(d, paneWidth, notesOn = false) {
   if (d.binary) return `<div class="notice">binary file</div>`;
   if (d.too_large) return `<div class="notice">diff too large</div>`;
   const rows = d.rows || [];
+  // anchor/cur/after are no-ops when notesOn is false, so the two layouts
+  // below read the same either way.
+  const anchor = (side, no) => (notesOn && no ? ` data-side="${side}" data-no="${no}"` : "");
+  const curCls = (side, no) =>
+    notesOn && no && state.diffRow && state.diffRow.side === side && state.diffRow.no === no ? " cur" : "";
+  // A split row is "cur" when the mark sits on EITHER of its sides.
+  const curClsBoth = (r) => curCls("new", r.right_no) || curCls("old", r.left_no);
+  const after = (cols, ...pairs) => {
+    if (!notesOn) return "";
+    let out = "";
+    for (const [side, no] of pairs) out += noteRowsHTML(side, no, cols);
+    return out;
+  };
   // An all-new or all-deleted file renders single-column: a side-by-side
   // with one permanently empty side wastes half the pane and forces harsh
   // wrapping on the populated half.
@@ -596,15 +656,17 @@ function diffHTML(d, paneWidth) {
   let html = `<table class="diff">`;
   if (pureAdd || pureDel) {
     const side = pureAdd ? "r" : "l";
+    const nside = pureAdd ? "new" : "old";
     for (const r of rows) {
       const no = pureAdd ? r.right_no : r.left_no;
       const text = pureAdd ? r.right : r.left;
       const spans = pureAdd ? r.right_spans : r.left_spans;
       const toks = pureAdd ? r.right_tok : r.left_tok;
       html +=
-        `<tr class="${r.kind}${hunkCls(r)}"${hunkAttr(r)}>` +
+        `<tr class="${r.kind}${hunkCls(r)}${curCls(nside, no)}"${hunkAttr(r)}${anchor(nside, no)}>` +
         `<td class="no ${side}">${no || ""}</td>` +
-        `<td class="side ${side}">${renderCell(text, spans, toks, side)}</td></tr>`;
+        `<td class="side ${side}">${renderCell(text, spans, toks, side)}</td></tr>` +
+        after(2, [nside, no]);
     }
   } else if (paneWidth < 950) {
     // Unified: below ~950px each side-by-side half is too narrow to read
@@ -614,28 +676,44 @@ function diffHTML(d, paneWidth) {
     for (const r of rows) {
       if (r.kind === "same") {
         html +=
-          `<tr class="same"><td class="no l">${r.left_no || ""}</td>` +
+          `<tr class="same${curCls("new", r.right_no)}"${anchor("new", r.right_no)}>` +
+          `<td class="no l">${r.left_no || ""}</td>` +
           `<td class="no r">${r.right_no || ""}</td>` +
-          `<td class="side">${renderCell(r.right, null, r.right_tok, "r")}</td></tr>`;
+          `<td class="side">${renderCell(r.right, null, r.right_tok, "r")}</td></tr>` +
+          after(3, ["new", r.right_no], ["old", r.left_no]);
       } else {
         if (r.kind !== "add")
           html +=
-            `<tr class="del${hunkCls(r)}"${hunkAttr(r)}><td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
-            `<td class="side l">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</td></tr>`;
+            `<tr class="del${hunkCls(r)}${curCls("old", r.left_no)}"${hunkAttr(r)}${anchor("old", r.left_no)}>` +
+            `<td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
+            `<td class="side l">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</td></tr>` +
+            after(3, ["old", r.left_no]);
         if (r.kind !== "del")
           html +=
-            `<tr class="add${hunkCls(r)}"${hunkAttr(r)}><td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
-            `<td class="side r">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</td></tr>`;
+            `<tr class="add${hunkCls(r)}${curCls("new", r.right_no)}"${hunkAttr(r)}${anchor("new", r.right_no)}>` +
+            `<td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
+            `<td class="side r">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</td></tr>` +
+            after(3, ["new", r.right_no]);
       }
     }
   } else {
     for (const r of rows) {
+      // A side-by-side row anchors on its NEW side when it has one, else on
+      // the old side: every row must carry a usable (side, line) pair, or a
+      // pure-deletion row would answer `c` with line 0.
+      const aside = r.right_no ? "new" : "old";
+      const ano = r.right_no || r.left_no;
+      // Both sides' numbers ride on the row (data-lno / data-rno) so a click
+      // in the LEFT pane can anchor a note on the old side of a row whose
+      // default anchor is the new side.
+      const both = notesOn ? ` data-lno="${r.left_no || 0}" data-rno="${r.right_no || 0}"` : "";
       html +=
-        `<tr class="${r.kind}${hunkCls(r)}"${hunkAttr(r)}>` +
+        `<tr class="${r.kind}${hunkCls(r)}${curClsBoth(r)}"${hunkAttr(r)}${anchor(aside, ano)}${both}>` +
         `<td class="no l">${r.left_no || ""}</td>` +
         `<td class="side l">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</td>` +
         `<td class="no r">${r.right_no || ""}</td>` +
-        `<td class="side r">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</td></tr>`;
+        `<td class="side r">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</td></tr>` +
+        after(4, ["new", r.right_no], ["old", r.left_no]);
     }
   }
   html += "</table>";
@@ -647,9 +725,382 @@ function diffHTML(d, paneWidth) {
 function renderDiff(d) {
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   state.diffBlockIdx = -1;
-  $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth);
+  $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth, true);
   updateDiffNav();
 }
+
+
+// --- review notes -----------------------------------------------------------
+// Notes hang off (address, side, line). The browser never names a checkout —
+// the server stamps Address.Worktree — so the wire carries only path, rev and
+// the state allowlist. There is no line CURSOR here as there is in the TUI: a
+// clicked diff row is marked `tr.cur` and `c` anchors on it.
+
+// notesArmed reports whether the open diff is NOTE-ADDRESSABLE: a stored
+// address must name the same two texts the table shows. A comparison is not
+// (its old side is the compared revision, not bHash^), nor is an entry diff
+// against a frozen copy git cannot read; both leave `notes: false` (or no
+// diffCtx at all). Rows, keys and ◆ badges all gate on this one predicate.
+function notesArmed() {
+  return !!state.diffCtx && state.diffCtx.notes !== false;
+}
+
+// noteQuery builds the /api/notes query for the open diff. Working-tree diffs
+// carry their section as `state`; a commit diff carries rev + state=commit.
+function noteQuery() {
+  if (!notesArmed()) return null;
+  const q = new URLSearchParams({ path: state.diffCtx.path });
+  if (state.diffCtx.state === "commit") {
+    if (!state.diffCtx.rev) return null;
+    q.set("rev", state.diffCtx.rev);
+    q.set("state", "commit");
+  } else {
+    q.set("state", state.diffCtx.state || "unstaged");
+  }
+  return q;
+}
+
+
+// sectionNoteState maps a working-tree section to the stored State — the old-side
+// base the note re-anchors against. Getting this wrong points the resolver at
+// the wrong blob (an untracked file has no index entry at all).
+function sectionNoteState(section) {
+  if (section === "staged") return "staged";
+  if (section === "untracked") return "untracked";
+  return "unstaged";
+}
+
+
+async function fetchNotes(rerender = true) {
+  const q = noteQuery();
+  if (!q) {
+    state.notes = [];
+    return;
+  }
+  try {
+    const d = await getJSON("/api/notes?" + q);
+    state.notes = d.notes || [];
+  } catch {
+    // Notes are best-effort — never break the diff — but a transient failure
+    // must not make every visible ◆ row VANISH until the next notes event
+    // either: keep what we already have and re-render nothing new.
+    return;
+  }
+  if (rerender && state.lastDiff) {
+    // A notes event is not a new diff: renderDiff resets the ‹/› change
+    // stepper, so carry diffBlockIdx across. (The marked row is a class on a
+    // <tr>, re-derived from state.diffRow by curCls, so it survives already.)
+    const at = state.diffBlockIdx;
+    renderDiff(state.lastDiff);
+    state.diffBlockIdx = at;
+  }
+}
+
+
+async function refreshNoteCounts() {
+  try {
+    const c = await getJSON("/api/notes/counts");
+    state.noteCounts = {
+      by_path: c.by_path || {},
+      by_commit: c.by_commit || {},
+      by_commit_path: c.by_commit_path || {},
+    };
+  } catch {
+    // Counts are decoration, but a STALE badge is worse than none: a failed
+    // fetch means we no longer know, so draw no ◆ at all until the next one
+    // succeeds.
+    state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {} };
+  }
+  renderFiles();
+}
+
+
+// noteRowsHTML renders the <tr class="note"> rows anchored on (side, no).
+// Agent notes are skipped while the agent layer is off; user notes always
+// show — including a user reply under a hidden agent root (the TUI's rule:
+// the filter is per ROW, by that row's own source).
+function noteRowsHTML(side, no, cols) {
+  if (!no || !notesArmed() || !state.notes.length) return "";
+  let html = "";
+  for (const n of state.notes) {
+    if (n.side !== side || n.line !== no) continue;
+    html += noteBoxHTML(n, cols);
+  }
+  return html;
+}
+
+
+// noteBoxHTML is one thread as a hunk-style box: the title in the top border
+// ("agent note · author · path R204"), the summary in bold, the rationale,
+// then each reply as its own block. In the split layout (4 columns) the box
+// sits in the pane of the note's side and the other pane stays blank, so the
+// note visibly hangs off one version; the single-column layouts span the row.
+// With the agent layer off, agent-written parts drop out row by row; a thread
+// with nothing left renders nothing.
+function noteBoxHTML(n, cols) {
+  const off = state.notesAgentOff;
+  const rootOn = !(off && n.source === "agent");
+  const reps = (n.replies || []).filter((r) => !(off && r.source === "agent"));
+  if (!rootOn && !reps.length) return "";
+  const stale = n.status === "stale";
+  const agent = n.source === "agent";
+  const title = (agent ? "agent note" : "note") + (n.author ? " · " + n.author : "") +
+    " · " + state.diffCtx.path + " " + (n.side === "old" ? "L" : "R") + n.line + (stale ? " (stale)" : "");
+  const part = (m) => `<div class="notesum">${esc(m)}</div>`;
+  const text = (r) => (r.rationale ? `<div class="notetext">${esc(r.rationale)}</div>` : "");
+  let box = `<div class="notebox ${agent ? "agent" : "user"}${stale ? " stale" : ""}"><div class="notetitle">${esc(title)}</div>`;
+  if (rootOn) box += part(n.summary) + text(n);
+  for (const r of reps) {
+    box += `<div class="notereply" data-note="${esc(r.id)}">` + part("↳ " + (r.author ? r.author + ": " : "") + r.summary) + text(r) + `</div>`;
+  }
+  box += `</div>`;
+  const cell = (span) => `<td class="note" colspan="${span}">${box}</td>`;
+  const gap = `<td class="note-gap" colspan="2"></td>`;
+  const cells = cols === 4 ? (n.side === "old" ? cell(2) + gap : gap + cell(2)) : cell(cols);
+  return `<tr class="note${stale ? " stale" : ""}${agent ? " agent" : ""}" data-note="${esc(n.id)}">${cells}</tr>`;
+}
+
+
+// markDiffRow makes tr the anchor `c` writes against. It toggles ONE class
+// rather than re-rendering: a full renderDiff would reset diffBlockIdx (the
+// ‹/› change stepper) and jolt the scroll position.
+function markDiffRow(tr, side, no) {
+  side = side || tr.dataset.side;
+  no = no || Number(tr.dataset.no);
+  if (!no) return;
+  const prev = $("diff-body").querySelector("tr.cur");
+  if (prev) prev.classList.remove("cur");
+  tr.classList.add("cur");
+  state.diffRow = { side, no };
+  // Marking a row is an explicit "I am looking HERE", so it outranks a
+  // previous }/{ landing for nearestNote. stepNote re-claims the id right
+  // after its own call.
+  noteStepId = null;
+}
+
+
+// firstChangedRow is where `c` lands when nothing has been clicked: the first
+// changed row of the diff, which is what a reviewer means by "here".
+function firstChangedRow() {
+  for (const tr of diffChangeBlocks()) {
+    const no = Number(tr.dataset.no);
+    if (no) return { side: tr.dataset.side, no };
+  }
+  const any = $("diff-body").querySelector("tr[data-no]");
+  return any ? { side: any.dataset.side, no: Number(any.dataset.no) } : null;
+}
+
+
+function noteRowEls() {
+  return [...$("diff-body").querySelectorAll("tr.note[data-note]")];
+}
+
+
+// findNote resolves an id to its wire record, replies included.
+function findNote(id) {
+  for (const n of state.notes) {
+    if (n.id === id) return n;
+    for (const r of n.replies || []) if (r.id === id) return r;
+  }
+  return null;
+}
+
+
+// nearestNote is the note `E`/`R` act on: the last one at or above the marked
+// row (the web has no line cursor, so "the one you are looking at" is the one
+// the marked row has just scrolled past).
+function nearestNote() {
+  const els = noteRowEls();
+  if (!els.length) return null;
+  // }/{ move the marked row to the one the stepped-to note hangs off, and a
+  // note sits one row BELOW its anchor — so after a step the "last note at or
+  // above the marked row" rule can pick the note before it. While the stepped
+  // note is still on screen it IS the one the user is looking at.
+  const stepped = els.find((el) => el.dataset.note === noteStepId);
+  if (stepped) return findNote(stepped.dataset.note);
+  const all = [...$("diff-body").querySelectorAll("table.diff tr")];
+  const cur = $("diff-body").querySelector("tr.cur");
+  if (!cur) return findNote(els[0].dataset.note);
+  const at = all.indexOf(cur);
+  let best = null;
+  for (const el of els) if (all.indexOf(el) <= at + 1) best = el;
+  return findNote((best || els[0]).dataset.note);
+}
+
+
+// noteStepId is the note }/{ last landed on. Stepping is relative to IT, not
+// to the marked row: a note hangs one row BELOW its anchor, so a "next note
+// after the cursor" rule would keep re-finding the note the cursor is already
+// on and }/{ would never move. Held by id, so it survives a re-render and
+// simply stops matching once a different file is open.
+let noteStepId = null;
+
+// stepNote scrolls to the next/previous ◆ row and re-anchors on the diff row
+// it hangs off, so `E`/`R` follow the jump. Both directions wrap.
+function stepNote(dir) {
+  const els = noteRowEls();
+  if (!els.length) return;
+  const all = [...$("diff-body").querySelectorAll("table.diff tr")];
+  let target;
+  const at = els.findIndex((el) => el.dataset.note === noteStepId);
+  if (at >= 0) {
+    target = els[(at + dir + els.length) % els.length];
+  } else {
+    // First step of this session: enter the list from the marked row.
+    const cur = $("diff-body").querySelector("tr.cur");
+    const row = cur ? all.indexOf(cur) : -1;
+    if (dir > 0) {
+      target = els.find((el) => all.indexOf(el) > row) || els[0];
+    } else {
+      const before = els.filter((el) => all.indexOf(el) < row);
+      target = before.length ? before[before.length - 1] : els[els.length - 1];
+    }
+  }
+  target.scrollIntoView({ block: "center" });
+  target.classList.add("flash");
+  setTimeout(() => target.classList.remove("flash"), 600);
+  let p = target.previousElementSibling;
+  while (p && !p.dataset.no) p = p.previousElementSibling;
+  if (p) markDiffRow(p); // clears noteStepId…
+  noteStepId = target.dataset.note; // …which the step then claims for itself
+}
+
+
+// noteWrite runs one mutation through the single-flight gate and reloads both
+// the open diff's notes and the badge counts.
+function noteWrite(label, path, body) {
+  const run = runOnce("note-write", async () => {
+    await postJSON(path, body);
+    await Promise.all([fetchNotes(), refreshNoteCounts()]);
+  });
+  if (!run) {
+    opLine(label + ": a note write is already running", true);
+    return;
+  }
+  run.catch((e) => opLine(label + ": " + (e.message || e), true));
+}
+
+
+// addNotePrompt asks for a summary + optional rationale (the prompt's two-field
+// shape) and anchors the note on the clicked row, else the first changed row.
+function addNotePrompt() {
+  const q = noteQuery();
+  if (!q) return;
+  const at = state.diffRow || firstChangedRow();
+  if (!at) return;
+  openPrompt({
+    title: `Add note on ${at.side} line ${at.no}`,
+    placeholder: "summary",
+    body: { label: "rationale (optional)" },
+    onSubmit: (summary, rationale) =>
+      noteWrite("note", "/api/notes/add", {
+        path: q.get("path"),
+        rev: q.get("rev") || "",
+        state: q.get("state"),
+        side: at.side,
+        line: at.no,
+        summary,
+        rationale,
+      }),
+  });
+}
+
+
+// editNotePrompt/replyNotePrompt default to nearestNote() (the E/R keys) but
+// take an explicit note when the ◆ row's own menu names one.
+function editNotePrompt(note) {
+  const n = note || nearestNote();
+  if (!n) return;
+  openPrompt({
+    title: "Edit note",
+    value: n.summary,
+    body: { label: "rationale (optional)", value: n.rationale || "" },
+    onSubmit: (summary, rationale) =>
+      noteWrite("edit note", "/api/notes/edit", { id: n.id, summary, rationale }),
+  });
+}
+
+
+function replyNotePrompt(note) {
+  const n = note || nearestNote();
+  if (!n) return;
+  openPrompt({
+    title: "Reply to “" + n.summary + "”",
+    placeholder: "summary",
+    body: { label: "rationale (optional)" },
+    onSubmit: (summary, rationale) =>
+      noteWrite("reply", "/api/notes/reply", { id: n.id, summary, rationale }),
+  });
+}
+
+
+function removeNote(id) {
+  noteWrite("remove note", "/api/notes/remove", { id });
+}
+
+
+registerHelp({
+  key: "review notes",
+  html:
+    "in an open diff: click a line to anchor, then <b>c</b> to write a note on it (summary + optional rationale). " +
+    "<b>E</b> edits and <b>R</b> replies to the nearest ◆ above the anchored line, <b>}</b>/<b>{</b> step between " +
+    "notes, and <b>a</b> folds agent-written notes away. Right-click a ◆ row for the same actions plus " +
+    "<b>remove</b>. A file with notes carries a ◆N badge in the file list; notes are machine-local and never " +
+    "committed",
+});
+
+
+// toggleNotesAgent is the TUI's `a`: fold the agent layer away and back.
+function toggleNotesAgent() {
+  state.notesAgentOff = !state.notesAgentOff;
+  if (state.lastDiff) renderDiff(state.lastDiff);
+}
+
+
+// A click on a diff row marks it as the note anchor; a right-click on a ◆ row
+// opens that note's own menu. The anchor is a NOTE affordance, so it follows
+// notesArmed: on a comparison a marked row would promise a `c` that is inert.
+// (The ◆ menu needs no guard — a comparison renders no ◆ rows to right-click.)
+$("diff-body").addEventListener("click", (e) => {
+  if (!notesArmed()) return;
+  const tr = e.target.closest("tr[data-no]");
+  if (!tr || !getSelection().isCollapsed) return; // don't re-anchor mid-selection
+  // The pane you click is the side the note goes on: the left half anchors
+  // on the old side when the row has one, the right half on the new side.
+  const td = e.target.closest("td");
+  let side = tr.dataset.side, no = Number(tr.dataset.no);
+  if (td && tr.dataset.lno !== undefined) {
+    const wantOld = td.classList.contains("l");
+    const ln = Number(tr.dataset.lno), rn = Number(tr.dataset.rno);
+    if (wantOld && ln) { side = "old"; no = ln; } else if (!wantOld && rn) { side = "new"; no = rn; }
+  }
+  markDiffRow(tr, side, no);
+});
+
+
+$("diff-body").addEventListener("contextmenu", (e) => {
+  // A reply block carries its own id inside the thread's row, so the menu
+  // targets the exact note under the pointer (root or reply).
+  const tr = e.target.closest("[data-note]");
+  if (!tr || !tr.closest("tr.note")) return; // every other row keeps the browser's own menu
+  const n = findNote(tr.dataset.note);
+  if (!n) return;
+  e.preventDefault();
+  showCtxMenu(
+    [
+      { label: "Edit note", act: () => editNotePrompt(n) },
+      { label: "Reply…", act: () => replyNotePrompt(n) },
+      { sep: true },
+      {
+        label: n.parent_id ? "Remove reply" : "Remove note (and its replies)",
+        danger: true,
+        act: () => removeNote(n.id),
+      },
+    ],
+    e.clientX,
+    e.clientY
+  );
+});
 
 
 // --- diff-pane navigation (the diff-header toolbar) ---
@@ -691,7 +1142,10 @@ function stepFile(delta) {
 // renders del+add adjacent — still one run). Derived from the live DOM so
 // it survives any render mode (side-by-side, unified, single-column).
 function diffChangeBlocks() {
-  const rows = $("diff-body").querySelectorAll("table.diff tr");
+  // Note rows are not diff rows: they carry neither "same" nor a change kind,
+  // so without this filter every ◆ row would read as the start of a change
+  // block and the ‹/› stepper would walk the notes instead of the changes.
+  const rows = $("diff-body").querySelectorAll("table.diff tr:not(.note)");
   const blocks = [];
   let inBlock = false;
   rows.forEach((tr) => {
@@ -1406,4 +1860,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, enterFilesStage, exitStatusToList, hunkAttr, hunkCls, hunkEligible, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, renderResolveBar, reopenAfterHunkStage, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepToNextConflict, updateDiffNav };
+export { SECTION_LABELS, activeFileList, addNotePrompt, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };

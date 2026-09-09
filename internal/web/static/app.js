@@ -17,7 +17,7 @@ import "./filehist.js";
 import "./review.js";
 import { applyStoredWidths } from "./resize.js";
 import { applyGraphMode, loadCommits, renderCommits } from "./commits.js";
-import "./files.js";
+import { refreshNoteCounts } from "./files.js";
 import { focusPane } from "./keys.js";
 import { fetchHealth } from "./bigrepo.js";
 import "./settings.js";
@@ -70,6 +70,7 @@ async function boot() {
   // before the first commits render.
   fetchStatus().then(() => renderCommits()).catch(() => {});
   fetchBranches().catch(() => {});
+  refreshNoteCounts().catch(() => {}); // the ◆N badges, best-effort like the rest
   await fetchHealth(true);
   await loadCommits(false);
   focusPane();
