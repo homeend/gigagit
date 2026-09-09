@@ -89,6 +89,24 @@ function closePreviewView() {
 // only when the screen really changes: a target commit off the fork point
 // moves neither the merge base nor the source tip, so the diff is identical
 // and saying "updated" would be noise (TUI parity).
+// armPreview records the pair the compare screen is showing, so the next
+// refresh can tell whether its tips moved.
+function armPreview(body) {
+  state.previewOpen = {
+    id: body.id || "",
+    source: body.source,
+    target: body.target,
+    sourceHash: body.source_hash,
+    targetHash: body.target_hash,
+  };
+}
+
+
+function previewTitle(body) {
+  return "merge preview: " + body.source + " → " + body.target;
+}
+
+
 async function openPreviewBody(body, moved) {
   const po = state.previewOpen;
   if (body.state !== "ok") {
@@ -103,14 +121,11 @@ async function openPreviewBody(body, moved) {
   if (same) {
     // The endpoints did not change: keep the screen (and the file cursor) and
     // just reconcile the hashes, or every later refresh would announce the
-    // same movement again.
-    state.previewOpen = {
-      id: body.id || "",
-      source: body.source,
-      target: body.target,
-      sourceHash: body.source_hash,
-      targetHash: body.target_hash,
-    };
+    // same movement again. The title is still rewritten — two pairs can
+    // resolve to the same two commits (main and origin/main in step), and the
+    // header must name the one that is showing.
+    $("files-title").textContent = previewTitle(body);
+    armPreview(body);
     return;
   }
   await openCompare(body.left, body.right, {
@@ -121,19 +136,13 @@ async function openPreviewBody(body, moved) {
   // openCompare bails on a failed fetch or a superseded open, leaving
   // state.compare as it was — nothing below may claim that screen then.
   if (state.filesMode !== "compare" || !state.compare || state.compare.bHash !== body.right) return;
-  $("files-title").textContent = "merge preview: " + body.source + " → " + body.target;
+  $("files-title").textContent = previewTitle(body);
   // The per-side origin filter is meaningless over merge-base → tip ("only
   // merge-base(x)" is empty by construction), so it goes off the same way a
   // missing merge base turns it off — with the reason on the buttons.
   state.compare.originsError = "a merge preview is already merge-base → tip";
   applyCompareFilter();
-  state.previewOpen = {
-    id: body.id || "",
-    source: body.source,
-    target: body.target,
-    sourceHash: body.source_hash,
-    targetHash: body.target_hash,
-  };
+  armPreview(body);
   if (moved) opLine("preview updated: " + moved + " moved");
 }
 
@@ -178,7 +187,7 @@ async function savePreview(source, target, label, open) {
     }
   }
   refresh();
-  if (open) openPreviewEntry(entry);
+  if (open && entry && entry.id) openPreviewEntry(entry);
 }
 
 
