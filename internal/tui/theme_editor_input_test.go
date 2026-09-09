@@ -404,3 +404,112 @@ func TestThemeEditorEditingHeightMatchesBrowsingMaximized(t *testing.T) {
 		t.Fatalf("maximized: the footer must still be present, not clipped off:\n%s", editBody)
 	}
 }
+
+// --- Robustness against a Delete key / stray control runes that a terminal
+// may send in place of a proper tea.KeyBackspace event (the reported "field
+// shows 1111118, cursor at the end, last char not deletable" symptom: the
+// send_tokens-driven tests above always send a real BSpace, which is why
+// they never caught this). ---
+
+// tea.KeyDelete with the cursor at the end of the field has nothing ahead of
+// it to forward-delete — treat it as backspace instead of a silent no-op.
+func TestThemeEditorDeleteAtEndActsAsBackspace(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := startDimEditor(t, "dark", "1111118") // cursor defaults to the end
+
+	um, _ := m.Update(tea.KeyMsg{Type: tea.KeyDelete})
+	m = um.(Model)
+	if got := p.field.Value(); got != "111111" {
+		t.Fatalf("field = %q, want %q (Delete at the end must act as backspace)", got, "111111")
+	}
+}
+
+// tea.KeyDelete with the cursor NOT at the end must keep forward-deleting —
+// this is a regression guard so the new end-of-field special case doesn't
+// swallow ordinary forward-delete.
+func TestThemeEditorDeleteMidFieldStillForwardDeletes(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := startDimEditor(t, "dark", "")
+	p.field = textfield{runes: []rune("1111118"), cursor: 3}
+
+	um, _ := m.Update(tea.KeyMsg{Type: tea.KeyDelete})
+	m = um.(Model)
+	if got := p.field.Value(); got != "111118" {
+		t.Fatalf("field = %q, want %q (forward-delete of the rune at the cursor)", got, "111118")
+	}
+	if p.field.cursor != 3 {
+		t.Fatalf("cursor = %d, want 3 (forward-delete does not move the cursor)", p.field.cursor)
+	}
+}
+
+// A KeyRunes message made ENTIRELY of DEL (0x7f) or BS (0x08) bytes — what
+// some terminals send for backspace instead of a proper tea.KeyBackspace
+// event — is treated as that many backspaces. This must run BEFORE the
+// 7-rune cap, or a field already at the cap could never be backspaced this
+// way.
+func TestThemeEditorDelRuneActsAsBackspaceEvenAtCap(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := startDimEditor(t, "dark", "1111118") // 7 runes: exactly at the cap
+
+	um, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0x7f}})
+	m = um.(Model)
+	if got := p.field.Value(); got != "111111" {
+		t.Fatalf("field = %q, want %q", got, "111111")
+	}
+}
+
+// A DEL rune on an already-empty field changes nothing — and, critically,
+// must not repaint: this is exactly the "invalid keystroke after the first"
+// no-op case the whole preview-skip mechanism exists for.
+func TestThemeEditorDelRuneOnEmptyFieldIsNoOp(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := startDimEditor(t, "dark", "")
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0x7f}})
+	if p.field.Value() != "" || cmd != nil {
+		t.Fatalf("field = %q, cmd = %v — DEL on an empty field must change nothing and not repaint", p.field.Value(), cmd)
+	}
+}
+
+func TestThemeEditorTwoDelRunesActAsTwoBackspaces(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := startDimEditor(t, "dark", "1111118")
+
+	um, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0x7f, 0x7f}})
+	m = um.(Model)
+	if got := p.field.Value(); got != "11111" {
+		t.Fatalf("field = %q, want %q", got, "11111")
+	}
+}
+
+// BS (0x08) runes behave the same as DEL for this purpose.
+func TestThemeEditorBSRuneActsAsBackspace(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := startDimEditor(t, "dark", "1111118")
+
+	um, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{0x08}})
+	m = um.(Model)
+	if got := p.field.Value(); got != "111111" {
+		t.Fatalf("field = %q, want %q", got, "111111")
+	}
+}
+
+// A message that MIXES a printable rune with another control rune is not the
+// all-backspace shortcut; the control rune is simply dropped from the insert.
+func TestThemeEditorMixedRuneDropsControlKeepsPrintable(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := startDimEditor(t, "dark", "")
+
+	um, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a', 0x01}})
+	m = um.(Model)
+	if got := p.field.Value(); got != "a" {
+		t.Fatalf("field = %q, want %q (0x01 dropped, a inserted)", got, "a")
+	}
+}

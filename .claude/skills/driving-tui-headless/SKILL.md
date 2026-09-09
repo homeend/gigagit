@@ -47,19 +47,28 @@ terminating quit is not written. Hand that file straight to
 line by line (one keystroke per step; no `;`/`label:` splitting, so a
 recorded `:` or `;` keystroke round-trips as a literal) — pointing `--repo`
 at the header's repo, to replay it and capture a snapshot of every screen.
-Mouse clicks, alt-modified keys, and
-page/function keys are not recorded (they appear as `# unrecorded key:`
-comments); keep scenarios keyboard-driven with the vocabulary above.
+Mouse clicks and alt-modified keys are not recorded (they appear as
+`# unrecorded key:` comments); keep scenarios keyboard-driven with the
+vocabulary above. A key with no name in that vocabulary (a function key, or
+anything else `tui-capture.sh` has not grown a named case for) is still
+recorded — as a bracketed `<...>` line (e.g. `<f1>`) — rather than silently
+dropped, but `tui-capture.sh` treats that shape as diagnostic-only and skips
+it with a note on replay instead of mis-sending it as literal text; if a
+recording is mostly such tokens, drive that step with a real key instead of
+hand-editing the file.
 
 ## Keyscript
 
 Steps separated by `;` or newlines; each is `[label:] tokens`. Tokens sent
 after the previous screen settles:
 
-- **named keys:** `enter esc space tab up down left right bspace`
+- **named keys:** `enter esc space tab up down left right bspace
+  delete home end pgup pgdown`
 - **chords:** `C-g` (ctrl+g), `C-t`, `M-x` (meta)
 - **literals:** anything else is typed as-is — `.` (opens the action menu),
   `?` (help), digits, or a word like `foo` (typed into a filter field)
+- **diagnostic-only:** a `<...>` token (what a recording emits for a key
+  outside all of the above) is skipped, not replayed
 
 Example — open the action menu, close it, focus commits, drill in:
 ```bash

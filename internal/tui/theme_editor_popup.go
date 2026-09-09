@@ -315,12 +315,39 @@ func (p *themeEditorPopup) updateEditing(m Model, msg tea.KeyMsg) (Model, tea.Cm
 		return m, tea.ClearScreen
 	case tea.KeyEnter:
 		return p.save(m)
-	case tea.KeyRunes, tea.KeySpace:
-		rs := msg.Runes
-		if msg.Type == tea.KeySpace {
-			rs = []rune{' '}
+	case tea.KeyDelete:
+		// A terminal reporting Delete with nothing ahead of the cursor to
+		// forward-delete is, in effect, asking to erase the character
+		// behind it — this is the "field shows 1111118, cursor at the end,
+		// last char not deletable" report: some environment sends Delete
+		// (or the runes handled below) where gg's own driven tests, which
+		// always send a real BSpace, never exercised the gap.
+		if p.field.cursor >= len(p.field.runes) {
+			msg = tea.KeyMsg{Type: tea.KeyBackspace}
 		}
-		rs = capFieldInsert(len([]rune(p.field.Value())), stripSpaces(rs))
+	case tea.KeyRunes:
+		// Some terminals report backspace as a literal DEL (0x7f) or BS
+		// (0x08) byte inside a KeyRunes message instead of a proper
+		// tea.KeyBackspace event. A message made ENTIRELY of such bytes is
+		// read as that many backspaces — checked before the length cap
+		// below, so it still works on a field already at the 7-rune cap.
+		if allBackspaceRunes(msg.Runes) {
+			before := p.field.Value()
+			for range msg.Runes {
+				p.field.backspace()
+			}
+			if p.field.Value() == before {
+				return m, nil
+			}
+			return m, p.preview()
+		}
+		rs := capFieldInsert(len([]rune(p.field.Value())), stripSpaces(dropControlRunes(msg.Runes)))
+		if len(rs) == 0 {
+			return m, nil // nothing left to insert once controls/spaces are stripped, or the cap ate it all
+		}
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: rs}
+	case tea.KeySpace:
+		rs := capFieldInsert(len([]rune(p.field.Value())), stripSpaces([]rune{' '}))
 		if len(rs) == 0 {
 			return m, nil // no colour form ever contains a space; at the cap, the whole insert is dropped
 		}
@@ -334,6 +361,41 @@ func (p *themeEditorPopup) updateEditing(m Model, msg tea.KeyMsg) (Model, tea.Cm
 		return m, nil // a cursor move: nothing to re-resolve, nothing to repaint
 	}
 	return m, p.preview()
+}
+
+// isBackspaceRune reports whether r is DEL (0x7f) or BS (0x08) — the two
+// bytes a terminal may send as a literal rune inside a KeyRunes message
+// instead of a proper tea.KeyBackspace event.
+func isBackspaceRune(r rune) bool { return r == 0x7f || r == 0x08 }
+
+// allBackspaceRunes reports whether rs is non-empty and every rune in it is
+// backspace-like (see isBackspaceRune).
+func allBackspaceRunes(rs []rune) bool {
+	if len(rs) == 0 {
+		return false
+	}
+	for _, r := range rs {
+		if !isBackspaceRune(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// dropControlRunes removes ASCII control characters (0x00-0x1f and 0x7f)
+// from rs: no accepted colour form ever contains one, typing one in would
+// insert an invisible rune with no key that visibly removes it, and a
+// backspace-like byte mixed into an otherwise-printable insert (not caught
+// by allBackspaceRunes, which only fires when EVERY rune is backspace-like)
+// must not land in the field either.
+func dropControlRunes(rs []rune) []rune {
+	out := make([]rune, 0, len(rs))
+	for _, r := range rs {
+		if r >= 0x20 && r != 0x7f {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // capFieldInsert truncates rs so that inserting it never pushes a field
