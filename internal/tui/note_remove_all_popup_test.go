@@ -155,8 +155,18 @@ func TestNoteRemoveAllPopupClearsTheAddressOnConfirm(t *testing.T) {
 	// The Model reports it and re-reads the note sources (the ◆N badges).
 	tm, reload := m.Update(msg)
 	m = tm.(Model)
-	if want := i18n.T("Removed %d notes", 2); m.statusMsg != want {
+	want := i18n.T("Removed %d notes", 2)
+	if m.statusMsg != want {
 		t.Fatalf("statusMsg = %q, want %q", m.statusMsg, want)
+	}
+	// The diff view owns the whole screen and draws no status line, so the
+	// outcome has to reach its OWN bottom-left notice box or the user sees
+	// nothing but the boxes vanishing.
+	if !strings.Contains(m.diffNotice, want) {
+		t.Fatalf("diffNotice = %q, want it to carry %q", m.diffNotice, want)
+	}
+	if screen := m.withDiffFileNotice(m.renderDiffView()); !strings.Contains(screen, want) {
+		t.Fatalf("the diff view must draw the notice:\n%s", screen)
 	}
 	if reload == nil {
 		t.Fatal("a clear must refresh the note sources so the ◆N badges follow")

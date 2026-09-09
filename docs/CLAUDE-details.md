@@ -221,7 +221,9 @@ drops every note matching `sameNoteTarget` — roots and the replies that
 inherit their address — in ONE `Store.Sweep` write, worktree-scoped like
 `NotesFor`. The popup quotes the SHOWN root count; the `notesClearedMsg`
 notice reports the store's actual number (orphaned notes the view filters out
-still go).
+still go). That outcome goes to `m.diffNotice`, the diff surface's own
+bottom-left box, NOT just `statusMsg`: a full-screen layer draws no status
+line, so a message left there is never seen.
 
 Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands, else launches the TUI.
 
