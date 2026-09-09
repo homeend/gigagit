@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v1 -->
+<!-- gg:reviewing-with-gg:v2 -->
 
 # Reviewing with gg
 
