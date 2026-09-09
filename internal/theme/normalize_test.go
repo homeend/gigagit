@@ -32,7 +32,7 @@ func TestNormalizeColour(t *testing.T) {
 		{"a1b", "#aa11bb", true},
 		{"ABC", "#AABBCC", true},
 
-		// palette index 0..255, leading zeros allowed
+		// palette index: 1-4 decimal digits, leading zeros allowed
 		{"0", "0", true},
 		{"9", "9", true},
 		{"33", "33", true},
@@ -41,6 +41,12 @@ func TestNormalizeColour(t *testing.T) {
 		{"0208", "208", true},
 		{"0000", "0", true},
 		{"0255", "255", true},
+
+		// a bare 6-character string is ALWAYS read as hex, even when every
+		// character happens to also be a decimal digit — the index form is
+		// capped at 4 digits, so there is no ambiguity to resolve here.
+		{"000208", "#000208", true},
+		{"112233", "#112233", true},
 
 		// invalid
 		{"#GGGGGG", "", false},
@@ -54,6 +60,7 @@ func TestNormalizeColour(t *testing.T) {
 		{"gg", "", false},
 		{"1g2", "", false},
 		{"00000255", "", false}, // 8 chars: too long, even though it would parse to 255
+		{"00208", "", false},    // 5-digit all-numeric: neither a valid index (>4 digits) nor hex (wrong length)
 	}
 	for _, c := range cases {
 		got, ok := NormalizeColour(c.in)

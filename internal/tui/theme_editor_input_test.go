@@ -133,6 +133,29 @@ func TestThemeEditorCapsInputSingleMultiRuneMessage(t *testing.T) {
 	}
 }
 
+// An insert mid-field that is only PARTIALLY room-limited must still land at
+// the cursor (not get silently dropped or appended at the end), and the
+// cursor must advance by exactly the rune(s) that actually made it in.
+func TestThemeEditorCapMidFieldInsertAdvancesCursorByInserted(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := startDimEditor(t, "dark", "")
+	p.field = textfield{runes: []rune("#ff5f0"), cursor: 3} // "#ff" | "5f0", 6 runes, 1 rune of room left
+
+	um, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("zz")})
+	m = um.(Model)
+
+	if got, want := p.field.Value(), "#ffz5f0"; got != want {
+		t.Fatalf("field = %q, want %q (the 7th char landed at the cursor)", got, want)
+	}
+	if p.field.cursor != 4 {
+		t.Fatalf("cursor = %d, want 4 (advanced by the 1 rune actually inserted, not by 2)", p.field.cursor)
+	}
+	if n := len([]rune(p.field.Value())); n != 7 {
+		t.Fatalf("field length = %d, want 7 (nothing past the cap)", n)
+	}
+}
+
 func TestThemeEditorCapDropsSpaceAtLimit(t *testing.T) {
 	prev := activeTheme()
 	defer setTheme(prev)

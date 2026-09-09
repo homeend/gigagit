@@ -765,7 +765,7 @@ func (p *themeEditorPopup) editHelpLines(textW int) []string {
 	s := st()
 	return []string{
 		s.dim.Render(truncate(i18n.T("Colour forms: #rrggbb · rrggbb · #rgb · rgb (short hex, digits doubled)"), textW)),
-		s.dim.Render(truncate(i18n.T("or a palette index 0–255 (leading zeros ignored: 0208 = 208) · empty = built-in default"), textW)),
+		s.dim.Render(truncate(i18n.T("or a palette index 0–255 as 1–4 digits (0208 = 208) · empty = built-in default"), textW)),
 	}
 }
 
