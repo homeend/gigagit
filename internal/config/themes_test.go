@@ -130,6 +130,68 @@ func TestPopulateSkipsExistingThemeTable(t *testing.T) {
 	}
 }
 
+// The Settings theme cycle line-edits [ui] theme in a file that may now carry
+// an ACTIVE [themes.<name>] table right after [ui] — the layout populate steers
+// users toward. The table must come through byte-intact, and the key must land
+// inside [ui], not after the table.
+func TestSetGlobalUIThemeKeepsThemeTables(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	before := "[ui]\ntheme = \"light\"\n\n[themes.light]\nbg = \"#111111\"\nlanes = [\"1\", \"2\", \"3\", \"4\", \"5\", \"6\", \"7\"]\n"
+	if err := os.WriteFile(path, []byte(before), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetGlobalUITheme(path, "dark"); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(raw)
+	if !strings.Contains(got, "[themes.light]\nbg = \"#111111\"\nlanes = [\"1\", \"2\", \"3\", \"4\", \"5\", \"6\", \"7\"]") {
+		t.Fatalf("the theme table was not preserved verbatim:\n%s", got)
+	}
+	if !strings.HasPrefix(got, "[ui]\ntheme = \"dark\"\n") {
+		t.Fatalf("theme must be rewritten in place under [ui]:\n%s", got)
+	}
+	if strings.Count(got, "theme = ") != 1 {
+		t.Fatalf("theme assigned more than once:\n%s", got)
+	}
+	// And the result still decodes to what the user meant.
+	cfg, err := Load(path, filepath.Join(t.TempDir(), "none.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.Theme != "dark" || cfg.Themes["light"].Bg != "#111111" {
+		t.Fatalf("decoded = %q / %+v", cfg.UI.Theme, cfg.Themes["light"])
+	}
+}
+
+// A file with NO [ui] section yet, but a theme table: the new key must open a
+// [ui] section rather than land inside [themes.light].
+func TestSetGlobalUIThemeWithOnlyThemeTable(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[themes.light]\nbg = \"#111111\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetGlobalUITheme(path, "dark"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path, filepath.Join(t.TempDir(), "none.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.Theme != "dark" {
+		raw, _ := os.ReadFile(path)
+		t.Fatalf("theme = %q, want dark:\n%s", cfg.UI.Theme, raw)
+	}
+	if cfg.Themes["light"].Bg != "#111111" {
+		t.Fatalf("theme table lost: %+v", cfg.Themes["light"])
+	}
+}
+
 // The blocks are inert: populating an empty file and decoding it yields no
 // theme overrides at all.
 func TestPopulatedThemeBlocksDecodeToNothing(t *testing.T) {
