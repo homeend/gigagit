@@ -253,6 +253,26 @@ rows. The SGR is harvested from an actual lipgloss render (not hand-built),
 so the truecolor→256→16 profile downgrade applies to the painted background
 exactly like it does to every other style in the frame.
 
+**`roleFields` — add a role, add a row.** User overrides
+(`[themes.<name>]` in the config, decoded into `config.Config.Themes` as
+`map[string]theme.Override`) are applied by `theme.Overlay`, layered global→repo
+by `theme.Merge`, rendered into `gg config populate`'s commented example blocks
+by `theme.RoleDocs` + `Theme.AsOverride`, and read back per key by
+`Override.Value`. All five walk ONE ordered table, `roleFields` in
+`internal/theme/override.go` — key, description, and pointer accessors into a
+`Theme` and an `Override`. So a NEW colour role is: the `Theme` field, the
+`roles()` entry, the `Override` field with its snake_case `toml` tag, and a
+`roleFields` row. `TestRoleFieldsCoverEveryRole` reflects over the `Override`
+tags and fails if the row is missing (and a sibling test catches two rows
+pointing at the same field), which is the whole point of the table — nothing
+downstream hand-writes a per-role branch. `Overlay` never fails: an invalid
+value is skipped and reported as `key=value` for the status bar, an `""` entry
+inside `lanes`/`syntax` means "keep the theme's own" (so the generated
+`terminal` block, whose values are all empty, is inert), and a wrong-length
+list is rejected whole. `applyTheme` compares the RESOLVED theme (not its
+name) before returning `tea.ClearScreen`, because a repo switch can change
+colours under one theme name.
+
 **Serial-test rule.** Both `setTheme` (swaps the process-global `styles`
 pointer) and `lipgloss.SetColorProfile` (process-global) make any test that
 exercises a live theme swap or a color-profile downgrade **serial** — no
@@ -260,6 +280,11 @@ exercises a live theme swap or a color-profile downgrade **serial** — no
 `TestSetThemeSwapsAndRestores` in `internal/tui/styles_test.go` and the NOTE
 comment atop `internal/tui/paint_test.go`. Tests that only build/read styles
 for a fixed theme (no swap, no profile change) stay `t.Parallel()` as normal.
+The package's `TestMain` also points `XDG_CONFIG_HOME` at an empty dir: every
+model built through `loadCmd` reads `config.DefaultGlobalPath()`, so without
+it a developer whose own global config sets `[ui] theme = "light"` had that
+theme applied by the serial settings tests and left active for every later
+parallel test reading `st()`.
 
 **Colour-profile caveat.** `dark`/`light` use truecolor hex (`#rrggbb`) and a
 few 256-cube indexes; lipgloss's automatic profile detection downgrades hex

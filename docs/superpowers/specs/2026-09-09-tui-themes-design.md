@@ -191,6 +191,38 @@ Per the `adding-config-entries` skill:
 - Writer: scoped line edit of `[ui] theme` (global by default, repo when
   the Settings popup is in repo scope — same as language).
 
+### 5.1 Per-theme colour overrides (`[themes.<name>]`)
+
+A `[themes.<name>]` table retunes individual roles of a built-in theme —
+added after the first cut shipped, when "keep light but darken the text"
+turned out to be the obvious next ask:
+
+```toml
+[themes.light]
+bg = "#E9E9E5"
+fg = "#2A2F34"
+lanes = ["#2F6FB8", "#C7641B", "#3E8E41", "#6B4FBB", "#2A8C8C", "#B08000", "#C0392B"]
+```
+
+- `theme.Override` mirrors every `Theme` role as a snake_case TOML field,
+  plus the `lanes` (7) and `syntax` (11) arrays. Empty = not set.
+- `Config.Themes map[string]theme.Override` decodes the tables; global and
+  repo files layer per key via `theme.Merge`, like every other section.
+  Unknown names are kept and never match.
+- `theme.Overlay(base, o)` applies the set, VALID fields and returns what it
+  rejected (`bg=#12`, `lanes=[6 entries, want 7]`, `syntax[3]=zz`); an `""`
+  entry inside a list keeps the base value. A bad value is a status-bar
+  message (`theme light: ignored invalid bg=#12`), never a startup failure.
+- `[themes.terminal]` is legal and makes the inherit-everything theme
+  paintable role by role (set `bg`/`fg` and the frame paints).
+- `gg config populate` writes a commented block per built-in theme after the
+  `[ui]` section, generated from `theme.RoleDocs()` + `Theme.AsOverride()` so
+  it cannot drift from the palette; a `[themes.<name>]` header already in the
+  file (active or commented) suppresses its block.
+- Implementation rule: `Overlay`/`Merge`/`AsOverride`/`RoleDocs`/`Value` all
+  loop over ONE ordered accessor table (`roleFields`), and a reflect test over
+  the `Override` toml tags fails if a new role has no row.
+
 ## 6. i18n
 
 Settings row label and the three option values go through `i18n.T` with a
@@ -226,5 +258,6 @@ map gains one line for `theme`. No CLI surface change → no `using-gg` bump.
 
 - Web UI (own CSS, dark only) — separate item.
 - `--theme` CLI flag / env override.
-- User-defined themes in config (roles are exported; a later `[theme]` table
-  could override them without redesign).
+- Whole user-DEFINED themes (a new name, not carried by any built-in). Per-role
+  overrides of the built-ins shipped as §5.1; a named user theme would only
+  need `Lookup` to consult the config map.
