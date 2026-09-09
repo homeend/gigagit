@@ -49,8 +49,12 @@ func (r *recorder) writeLine(s string) {
 // final quit can be dropped at close. A KeyRunes carrying several runes (fast
 // typing coalesced into one message, or a paste) is expanded into one
 // single-rune token per rune, so replay types them verbatim and a coalesced
-// run like "up" can never be mis-sent as the Up key. An unsupported key
-// flushes any buffered token, then writes a replay-skipped `#` comment.
+// run like "up" can never be mis-sent as the Up key. keyToken's ok==false is
+// now Alt-modified keys only (see its doc); one of those flushes any
+// buffered token, then writes a replay-skipped `#` comment instead — every
+// other key, including one outside the named vocabulary, still lands a real
+// line (see keyToken's "<...>" fallback) so a recording never silently drops
+// a keystroke.
 func (r *recorder) note(msg tea.KeyMsg) {
 	if r == nil || r.broken {
 		return
@@ -95,16 +99,20 @@ func (r *recorder) close() {
 	_ = r.f.Close()
 }
 
-// keyToken maps a bubbletea key to a tui-capture token. ok is false for a key
-// outside send_tokens' vocabulary (page keys, home/end, function keys, …); the
-// caller records those as comments. Every ok==true token is one send_tokens
-// accepts: a named key, a C-/M- chord, or a literal rune.
+// keyToken maps a bubbletea key to a tui-capture token. ok is false only for
+// an Alt-modified key (meta+arrow/rune does not round-trip reliably through
+// tmux); the caller records those as comments. Every other key lands a real
+// token: the named send_tokens vocabulary, a C-/M- chord, a literal rune, or
+// — for a key type outside all of those (function keys, and anything this
+// vocabulary has not grown a name for yet) — a bracketed "<...>" fallback so
+// a recording never silently drops a keystroke. That fallback is diagnostic
+// only: tui-capture.sh's send_tokens recognizes it by shape and skips it
+// rather than mis-sending it as literal text (see its own comment).
 func keyToken(msg tea.KeyMsg) (string, bool) {
-	// Alt-modified keys are not in send_tokens' vocabulary (meta+arrow/rune
-	// does not round-trip reliably through tmux), and the type switch below
-	// would otherwise silently collapse alt+down to "down", alt+a to "a", etc.
-	// Mark them unsupported so the recorder emits an honest
-	// "# unrecorded key: alt+…" comment instead of a wrong token.
+	// Alt-modified keys are not in send_tokens' vocabulary, and the type
+	// switch below would otherwise silently collapse alt+down to "down",
+	// alt+a to "a", etc. Mark them unsupported so the recorder emits an
+	// honest "# unrecorded key: alt+…" comment instead of a wrong token.
 	if msg.Alt {
 		return "", false
 	}
@@ -129,10 +137,20 @@ func keyToken(msg tea.KeyMsg) (string, bool) {
 		return "right", true
 	case tea.KeyBackspace:
 		return "bspace", true
+	case tea.KeyDelete:
+		return "delete", true
+	case tea.KeyHome:
+		return "home", true
+	case tea.KeyEnd:
+		return "end", true
+	case tea.KeyPgUp:
+		return "pgup", true
+	case tea.KeyPgDown:
+		return "pgdown", true
 	}
 	s := msg.String()
 	if strings.HasPrefix(s, "ctrl+") {
 		return "C-" + strings.TrimPrefix(s, "ctrl+"), true
 	}
-	return "", false
+	return "<" + s + ">", true
 }

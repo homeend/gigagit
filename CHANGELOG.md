@@ -35,7 +35,29 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   uncommenting a `gg config populate` block's header and role line in place
   instead of appending a second table. Roles pinned by the repo `.gg.toml` are
   shown tagged `(repo)` and stay read-only, since the repo layer would shadow
-  anything written here.
+  anything written here. The inline field accepts `#rrggbb`, bare `rrggbb`,
+  the short forms `#rgb`/`rgb` (each digit doubled), or a `0`–`255` palette
+  index as 1–4 digits, leading zeros allowed (`0208` → `208`); typed input is
+  normalised before preview and save, the status line shows the normalised
+  form when it differs from what was typed, and a two-line dim help block
+  above the footer spells out the accepted forms while editing. The field is
+  capped to 7 runes (the length of `#rrggbb`) so a paste or a fast keystroke
+  burst can never over-type past what any valid colour needs, and an
+  unchanged preview (every invalid keystroke after the first, most notably)
+  no longer forces a full-screen repaint. Delete at the end of the field now
+  acts as backspace (some terminals report Delete instead of Backspace with
+  nothing ahead of the cursor), and a keystroke a terminal reports as a
+  literal DEL/BS byte inside the input stream — rather than a proper
+  Backspace event — is recognized and deletes too, instead of silently doing
+  nothing; any other control byte is dropped rather than typed into the
+  field.
+- `gg --record` and `tui-capture.sh` (dev tooling): a key with no name in
+  the keyscript vocabulary — previously dropped to a `# unrecorded key:`
+  comment for anything beyond mouse clicks and alt-modified keys — now
+  records as a bracketed diagnostic token (e.g. `<f1>`) instead, so a
+  recording never silently loses a keystroke; `Delete`/`Home`/`End`/`PageUp`/
+  `PageDown` gained real named tokens (`delete home end pgup pgdown`) in both
+  the recorder and `tui-capture.sh`'s replay.
 
 ### Review notes — the agent lane (phase 2)
 
