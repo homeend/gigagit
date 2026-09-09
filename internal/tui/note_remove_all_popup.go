@@ -133,7 +133,7 @@ func (p *noteRemoveAllPopup) box(m Model) string {
 	}
 	b.WriteString("\n" + viewField("> ", p.field, true, contentW) + "\n")
 	if p.refused {
-		b.WriteString(errorStyle.Render(truncate(i18n.T("type exactly: %s", noteRemoveAllToken), contentW)) + "\n")
+		b.WriteString(st().errorText.Render(truncate(i18n.T("type exactly: %s", noteRemoveAllToken), contentW)) + "\n")
 	}
 	b.WriteString("\n" + packHints([]string{
 		i18n.T("[enter] confirm"),

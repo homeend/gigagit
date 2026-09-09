@@ -233,11 +233,11 @@ func (p *notesListPopup) box(m Model) string {
 		rows := make([]winRow, len(vis))
 		for i, e := range vis {
 			prefix := "  "
-			var st lipgloss.Style
+			var rowStyle lipgloss.Style
 			if i == p.sel {
-				prefix, st = "> ", selectedRow
+				prefix, rowStyle = "> ", st().selectedRow
 			}
-			r := winRow{text: prefix + e.line(textW-len(prefix)), style: st}
+			r := winRow{text: prefix + e.line(textW-len(prefix)), style: rowStyle}
 			// The selected row is reverse-video: a foreground on the ◆ would
 			// paint a per-glyph BACKGROUND there, so it stays plain.
 			if i != p.sel {
@@ -278,19 +278,20 @@ func (p *notesListPopup) box(m Model) string {
 // user blue, dim when the anchor text is gone — leaving the row's width and the
 // rest of its text untouched.
 func noteListDotDecorator(e noteListEntry) rowDecorator {
-	st := noteFrameUser
+	s := st()
+	dot := s.noteFrameUser
 	switch {
 	case e.stale:
-		st = noteFrameStale
+		dot = s.noteFrameStale
 	case e.agent:
-		st = noteFrameAgent
+		dot = s.noteFrameAgent
 	}
 	return func(visible string, hscroll, visualLine int) string {
 		r := []rune(visible)
 		if len(r) <= noteListDot || r[noteListDot] != '◆' {
 			return visible
 		}
-		return string(r[:noteListDot]) + st.Render("◆") + string(r[noteListDot+1:])
+		return string(r[:noteListDot]) + dot.Render("◆") + string(r[noteListDot+1:])
 	}
 }
 
