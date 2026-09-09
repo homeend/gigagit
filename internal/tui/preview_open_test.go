@@ -85,6 +85,26 @@ func TestEnterOpensPreviewInCompareMode(t *testing.T) {
 	}
 }
 
+// TestPreviewEscClosesAndReturnsFocus pins the routing: the files view owns the
+// keyboard while it is open (updateFilesViewKey is not focus-gated), so esc
+// closes the preview and hands focus back to the Previews tab it was opened
+// from — the user is never left steering a panel hidden behind the view.
+func TestPreviewEscClosesAndReturnsFocus(t *testing.T) {
+	t.Parallel()
+	m, _, _ := mergePreviewModel(t)
+	m = openMergePreview(t, m)
+	if m.filesReturnFocus != panelPreviews || !m.filesTreeFocused {
+		t.Fatalf("open must remember Previews and land in the tree: return=%v tree=%v",
+			m.filesReturnFocus, m.filesTreeFocused)
+	}
+	updated, _ := m.Update(keyMsg("esc"))
+	m = updated.(Model)
+	if m.filesView != nil || m.previewOpen != nil || m.focus != panelPreviews {
+		t.Fatalf("esc must close the preview and return focus: view=%v open=%v focus=%v",
+			m.filesView != nil, m.previewOpen != nil, m.focus)
+	}
+}
+
 func TestEnterOnMergedRowShowsNotice(t *testing.T) {
 	t.Parallel()
 	m, dir, _ := mergePreviewModel(t)
