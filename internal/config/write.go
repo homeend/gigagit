@@ -104,6 +104,206 @@ func SetVersionsMaxAgeDays(path string, days int) error {
 	return setScalarLine(path, "versions", "max_age_days", strconv.Itoa(days))
 }
 
+// SetThemeRole persists one [themes.<theme>] colour role to the given config
+// file (callers pass DefaultGlobalPath() — a theme is per-human, like the
+// language), preserving every other line and comment. It backs the Settings
+// "Theme colours…" editor.
+//
+// values carries the new colour: one entry for a scalar role
+// (`key = "#rrggbb"`), the WHOLE list for a list role (`lanes = ["…", …]`, an
+// entry may be "" = inherit). No values at all — or the single empty value ""
+// — REMOVES the key, restoring the built-in default.
+//
+// The section is the dotted header `[themes.<theme>]`. A commented header (the
+// `# [themes.light]   # … [populated]` block `gg config populate` writes) is
+// uncommented IN PLACE rather than shadowed by a second table, and a commented
+// role line inside it is replaced in place by the active assignment — so
+// editing a populated file keeps its shape instead of growing a duplicate.
+// That substitution applies ONLY while the file has no active table of that
+// name; once one exists it wins, and the commented block stays an inert
+// comment (see hasActiveSection).
+func SetThemeRole(path, themeName, key string, values ...string) error {
+	section := "themes." + themeName
+	if len(values) == 0 || (len(values) == 1 && values[0] == "") {
+		return setLineInSection(path, section, key, "", true)
+	}
+	rendered := key + " = "
+	if len(values) == 1 {
+		rendered += tomlScalar(values[0])
+	} else {
+		rendered += tomlStringList(values)
+	}
+	return setLineInSection(path, section, key, rendered, false)
+}
+
+// sectionHeader reports the `[name]` (or `[[name]]`) table a trimmed line
+// declares, and whether that declaration is commented out. A COMMENTED header
+// still ends the preceding section: a populate-generated file is a run of
+// `# [themes.<name>]` blocks, and a writer that read straight through them
+// would drop a key for one theme inside another theme's commented block.
+//
+// The shape is deliberately strict — brackets around a bare dotted name, only
+// whitespace or a trailing `#` comment after them — so a shell line inside a
+// multi-line tool command (`[ -d x ] && …`) is never mistaken for a header.
+func sectionHeader(trimmed string) (name string, commented, ok bool) {
+	s := trimmed
+	if strings.HasPrefix(s, "#") {
+		commented = true
+		s = strings.TrimSpace(strings.TrimPrefix(s, "#"))
+	}
+	open, closer := "[", "]"
+	if strings.HasPrefix(s, "[[") {
+		open, closer = "[[", "]]"
+	}
+	if !strings.HasPrefix(s, open) {
+		return "", false, false
+	}
+	end := strings.Index(s[len(open):], closer)
+	if end < 1 {
+		return "", false, false
+	}
+	inner := s[len(open) : len(open)+end]
+	for _, r := range inner {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.', r == '_', r == '-':
+		default:
+			return "", false, false
+		}
+	}
+	rest := strings.TrimSpace(s[len(open)+end+len(closer):])
+	if rest != "" && !strings.HasPrefix(rest, "#") {
+		return "", false, false
+	}
+	return open + inner + closer, commented, true
+}
+
+// hasActiveSection reports whether lines already carry an UNCOMMENTED header for
+// section, skipping multi-line string interiors the way every writer here does.
+// It is the pre-scan that decides whether a commented header may stand in for
+// the section at all.
+func hasActiveSection(lines []string, header string) bool {
+	skipUntil := ""
+	for _, ln := range lines {
+		trimmed := strings.TrimSpace(ln)
+		if skipUntil != "" {
+			if strings.Contains(trimmed, skipUntil) {
+				skipUntil = ""
+			}
+			continue
+		}
+		if name, commented, ok := sectionHeader(trimmed); ok && !commented && name == header {
+			return true
+		}
+		if d, ok := opensMultiline(trimmed); ok {
+			skipUntil = d
+		}
+	}
+	return false
+}
+
+// setLineInSection sets (or removes) one whole `key = …` line under a possibly
+// DOTTED, possibly commented-out `[section]` header, via the same line-oriented
+// edit setScalarLine uses so unrelated lines and comments survive. rendered is
+// the complete replacement line; remove ignores it.
+//
+// Removal has two shapes: a line gg itself wrote (no trailing doc) is deleted,
+// while a hand-uncommented populate row — recognisable by the `[populated]`
+// marker it still carries — is RE-COMMENTED, so the example block keeps its
+// documented row instead of losing it.
+func setLineInSection(path, section, key, rendered string, remove bool) error {
+	if path == "" {
+		return fmt.Errorf("config: no config path; refusing to write")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	header := "[" + section + "]"
+
+	var lines []string
+	if len(raw) > 0 {
+		lines = strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	}
+
+	// A commented header only STANDS FOR the section while the file has no
+	// active one. Otherwise the two shapes below both corrupt the file: a
+	// commented populate block ahead of the real table would be uncommented into
+	// a SECOND [themes.x] ("table x already exists" — gg then refuses to start),
+	// and one after it would have its `# key = …` line activated where it sits,
+	// i.e. inside whatever active section precedes it, so the colour parses fine
+	// under the wrong table and is silently gone next start.
+	activeHeader := hasActiveSection(lines, header)
+
+	var (
+		headerAt        = -1
+		headerCommented bool
+		keyAt           = -1
+		keyCommented    bool
+		inSection       bool
+		skipUntil       string
+	)
+	for i, ln := range lines {
+		trimmed := strings.TrimSpace(ln)
+		if skipUntil != "" {
+			if strings.Contains(trimmed, skipUntil) {
+				skipUntil = ""
+			}
+			continue
+		}
+		// ANY bracketed line outside a multi-line string ends the section, even a
+		// shape this writer cannot name (a quoted table like [themes."my theme"]),
+		// so keys can never leak across one into the target table.
+		if name, commented, ok := sectionHeader(trimmed); ok || strings.HasPrefix(trimmed, "[") {
+			target := ok && name == header && (!commented || !activeHeader)
+			inSection = target
+			if target && headerAt < 0 {
+				headerAt, headerCommented = i, commented
+			}
+			continue
+		}
+		if inSection && keyAt < 0 && lineAssignsKey(trimmed, key) {
+			keyAt = i
+			keyCommented = strings.HasPrefix(trimmed, "#")
+		}
+		if d, ok := opensMultiline(trimmed); ok {
+			skipUntil = d
+		}
+	}
+
+	switch {
+	case remove:
+		if keyAt < 0 || keyCommented {
+			return nil // already absent (or already inert): nothing to write
+		}
+		if strings.Contains(lines[keyAt], "[populated]") {
+			lines[keyAt] = "# " + lines[keyAt]
+		} else {
+			lines = append(lines[:keyAt], lines[keyAt+1:]...)
+		}
+	case keyAt >= 0:
+		lines[keyAt] = rendered
+		if headerCommented {
+			lines[headerAt] = header
+		}
+	case headerAt >= 0:
+		if headerCommented {
+			lines[headerAt] = header
+		}
+		lines = append(lines[:headerAt+1], append([]string{rendered}, lines[headerAt+1:]...)...)
+	default:
+		if len(lines) > 0 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, header, rendered)
+	}
+
+	if len(lines) == 0 {
+		return atomicWriteFile(path, []byte(""))
+	}
+	return atomicWriteFile(path, []byte(strings.Join(lines, "\n")+"\n"))
+}
+
 // setScalarLine sets `key = value` under `[section]` in a TOML file via a
 // line-oriented edit so unrelated lines and comments survive. It updates an
 // existing assignment (uncommenting a commented one), inserts the key under an

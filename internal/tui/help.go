@@ -303,6 +303,7 @@ func helpContent() []contentLine {
 		r("enter", i18n.T("open the selected setting (external tools, identity, branch prefixes, refresh rates, commit sort, …). The agent-skills picker moved to the ctrl+p palette (Set up agent skills). In the add-prefix form, ctrl+d shows a token/date-format cheat sheet")),
 		r("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 		r("esc", i18n.T("back to the menu from a sub-screen, then close")),
+		r("colours", i18n.T("Theme colours… edits any colour role of the active theme: / filters, enter edits the value in place (the whole screen previews it live), d restores the built-in default, t cycles the theme, ctrl+t fullscreen. Saving writes one line to the global config's [themes.<name>]; roles pinned by the repo .gg.toml show (repo) and stay read-only")),
 		h(i18n.T("Decision modal")),
 		r("↑/k ↓/j", i18n.T("choose an option")),
 		r("enter", i18n.T("confirm the option")),

@@ -297,6 +297,49 @@ list is rejected whole. `applyTheme` compares the RESOLVED theme (not its
 name) before returning `tea.ClearScreen`, because a repo switch can change
 colours under one theme name.
 
+**The colour editor ↔ writer contract.** Settings → "Theme colours…"
+(`internal/tui/theme_editor_popup.go`) edits ONE role at a time, addressed by
+`theme.RoleRef` (`internal/theme/roles.go`): all 50 of them — the `roleFields`
+scalars, then `lanes[0..6]`, then `syntax[Plain..Attr]`. Because `theme` is a
+DAG leaf it MIRRORS the syntax class names; `TestThemeSyntaxRoleNamesMatch-
+SyntaxClasses` in `internal/tui` pins that mirror (and the `syntax.Class`
+order) against the real constants. The popup keeps the global and repo
+override layers APART — `m.cfg.Themes` only carries their merge — because it
+writes the global one and refuses a role the repo file pins (a `(repo)` row):
+a line written under a repo shadow would silently do nothing. Preview always
+goes through the same pipeline as save (`Overlay(base, Merge(global', repo))`,
+then `setTheme`), never through `RoleRef.Set` on the RESOLVED theme, where an
+empty value would mean "inherit the terminal legacy literal" instead of "the
+theme's own default".
+
+Writes go to `config.SetThemeRole` → `setLineInSection`
+(`internal/config/write.go`), `setScalarLine`'s sibling for a dotted,
+possibly COMMENTED header. Its rules, in order of how easy they are to get
+wrong: a commented header (`# [themes.light]   # … [populated]`) counts as the
+section and is uncommented IN PLACE — appending a second `[themes.light]` is a
+TOML parse error, i.e. a gg that will not start, which is why every writer test
+round-trips through `Load`. That substitution is gated on `hasActiveSection`:
+once an ACTIVE table of the name exists anywhere in the file it wins, and a
+commented same-name header is an ordinary boundary. Both orders corrupt the
+file otherwise — a commented block BEFORE the real table gets uncommented into
+a duplicate, and one AFTER it has its `# key = …` line activated where it sits,
+inside whatever active section precedes it (`[debug].bg`), which parses fine and
+loses the colour on the next start. Any bracketed line outside a multi-line
+string is a boundary too, including shapes this writer cannot name
+(`[themes."my theme"]`), so a key can never leak across one; a commented role line inside the block is replaced
+in place (its `[populated]` doc tail is dropped, so a later `d` DELETES that
+line rather than re-commenting it); removal re-comments only a line that still
+carries `[populated]`; `sectionHeader` treats a commented header as ending the
+previous section but rejects anything that is not a bare bracketed name, so a
+shell line inside a `[[tools.command]]` script is never mistaken for one. A
+list role writes its WHOLE array line, but only the edited entry carries a
+colour: `themeSetRole` expands a missing list from the ZERO theme, so the
+untouched slots stay `""` ("keep the base value"). Expanding from the real base
+— `RoleRef.OverrideSet`'s other mode — would pin six lanes to today's palette,
+mark them all overridden, and leave `d` unable to take the list back to unset.
+`d` (and an emptied field, which takes the same path) blanks the entry in place
+and drops the line once every entry is empty again.
+
 **Serial-test rule.** Both `setTheme` (swaps the process-global `styles`
 pointer) and `lipgloss.SetColorProfile` (process-global) make any test that
 exercises a live theme swap or a color-profile downgrade **serial** — no
