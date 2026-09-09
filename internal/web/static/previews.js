@@ -21,9 +21,14 @@ export async function fetchPreviews() {
     const body = await getJSON("/api/preview");
     state.previews = body.entries || [];
     state.previewsDisabled = !!body.disabled;
+    state.previewsStale = false;
   } catch (e) {
-    state.previews = [];
-    state.previewsDisabled = false;
+    // A failed request is NOT "the previews are gone". Blanking the list here
+    // would make reopenPreviewIfMoved read the open preview's missing row as a
+    // removal and close the screen on one transient error, so the rows stand
+    // and the pass is marked stale instead; the next good fetch clears it.
+    state.previewsStale = true;
+    return;
   }
   renderPreviews();
 }
@@ -40,11 +45,12 @@ function stateText(e) {
     case "no-base": return "no common base";
     case "error": return "error: " + (e.error || "");
   }
-  return e.files + " files ↑" + e.ahead;
+  // Singular for one file, as the TUI's previewStateText renders it.
+  return (e.files === 1 ? "1 file" : e.files + " files") + " ↑" + e.ahead;
 }
 
 
-export function renderPreviews() {
+function renderPreviews() {
   if (state.previewsDisabled) {
     $("previews-list").innerHTML = `<li class="none">previews are unavailable here</li>`;
     return;
@@ -209,8 +215,21 @@ export function openPreviewPair(source, target) {
 }
 
 
-// tipOf is the hash the sidebar last saw for a ref name; "" when this page
-// has no row for it (a deleted branch, or a remote list capped at 100).
+// The two hash forms this module has to reconcile: the sidebar's branch and
+// remote rows carry ABBREVIATED ids (for-each-ref's %(objectname:short)),
+// while a preview's source_hash/target_hash come from rev-parse and are the
+// full 40 characters. Comparing them with === is always false, so a
+// "show once" preview would re-resolve on every refresh and always claim its
+// source moved. sameHash compares the shorter one as a prefix instead.
+function sameHash(a, b) {
+  if (!a || !b) return false;
+  return a.length < b.length ? b.startsWith(a) : a.startsWith(b);
+}
+
+
+// tipOf is the hash the sidebar last saw for a ref name — SHORT, see
+// sameHash. "" when this page has no row for it (a deleted branch, or a
+// remote list capped at 100).
 function tipOf(name) {
   const b = (state.branches || []).find((x) => x.name === name);
   if (b) return b.hash || "";
@@ -362,6 +381,7 @@ registerRows("menu", () => [{ label: "new merge preview…", act: addPreviewFlow
 export async function reopenPreviewIfMoved() {
   const po = state.previewOpen;
   if (!po) return;
+  if (state.previewsStale) return; // the list this pass would reason from never arrived
   if (!previewShowing()) {
     state.previewOpen = null; // something else owns the screen now
     return;
@@ -387,19 +407,22 @@ export async function reopenPreviewIfMoved() {
       opLine("merge preview " + row.source + " → " + row.target + ": " + stateText(row), true);
       return;
     }
-    if (row.source_hash === po.sourceHash && row.target_hash === po.targetHash) return;
-    await openPreviewEntry(row, row.source_hash === po.sourceHash ? po.target : po.source);
+    // Both sides are rev-parse output here (the row comes from the server),
+    // so this is a plain comparison — sameHash only matters for tipOf.
+    if (sameHash(row.source_hash, po.sourceHash) && sameHash(row.target_hash, po.targetHash)) return;
+    await openPreviewEntry(row, sameHash(row.source_hash, po.sourceHash) ? po.target : po.source);
     return;
   }
   // A "show once" preview has no row: the tips come from the lists this
-  // refresh just reloaded. Unknown names (a deleted branch, a capped remotes
-  // list) fall through to the server, which answers with the real state.
+  // refresh just reloaded — abbreviated, hence sameHash. Unknown names (a
+  // deleted branch, a capped remotes list) fall through to the server, which
+  // answers with the real state.
   const s = tipOf(po.source);
   const t = tipOf(po.target);
-  if (s && t && s === po.sourceHash && t === po.targetHash) return;
+  if (s && t && sameHash(s, po.sourceHash) && sameHash(t, po.targetHash)) return;
   // Name the moved ref only when both tips are actually known here; otherwise
   // the re-open speaks for itself (and stays silent if nothing changed).
-  const moved = s && t ? (s === po.sourceHash ? po.target : po.source) : "";
+  const moved = s && t ? (sameHash(s, po.sourceHash) ? po.target : po.source) : "";
   await openOnce(po.source, po.target, moved);
 }
 

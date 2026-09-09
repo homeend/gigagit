@@ -39,6 +39,7 @@ const state = {
   shelf: [],     // gg's own store: frozen copies (a file's bytes, a commit's files)
   previews: [],  // saved merge previews: (source → target) pairs, recomputed from the live tips
   previewsDisabled: false, // the previews store is unavailable (no state dir)
+  previewsStale: false, // the last previews fetch failed: the rows stand, but nothing may be concluded from them
   // {id, source, target, sourceHash, targetHash} while a preview owns the
   // compare screen, so a refresh can tell whether its tips moved
   previewOpen: null,

@@ -24,7 +24,7 @@ func TestPreviewsJSIsWiredEverywhere(t *testing.T) {
 		{"live.js", `fetchPreviews()`, "an SSE sidebar refresh must reload previews"},
 		{"ops.js", `fetchPreviews()`, "manual refresh must reload previews"},
 		{"app.js", `fetchPreviews()`, "boot must load previews"},
-		{"live.js", `"previews"`, "SIDEBAR must include previews so SSE re-fetches it"},
+		{"live.js", `want.has("previews")`, "a bare previews event (a rename) must re-fetch the list"},
 		{"live.js", `reopenPreviewIfMoved()`, "a refresh must re-open a preview whose tips moved"},
 		{"menus.js", `"preview"`, "MENUS must accept preview rows"},
 		{"app.js", `./previews.js`, "the module must be imported"},
