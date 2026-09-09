@@ -27,6 +27,7 @@ type ReviewChanges struct {
 	Env        []string       // caller env additions (e.g. GG_TASK=review)
 	Diff       model.DiffSpec // the range/working diff to review
 	RangeLabel string         // human range label for the summary (e.g. "main..HEAD")
+	NotesFile  string         // when set: $GG_NOTES_FILE, and the context doc asks for agent-context v1
 }
 
 var _ Operation = ReviewChanges{}
@@ -69,6 +70,12 @@ func (op ReviewChanges) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		"GG_MESSAGE_FILE="+msgPath,
 		"GG_REPO="+op.Dir,
 	)
+	if op.NotesFile != "" {
+		// The CALLER owns this file: ReviewChanges removes only the temp files
+		// it created, and the caller must still be able to read the notes after
+		// the op returns.
+		env = append(env, "GG_NOTES_FILE="+op.NotesFile)
+	}
 	stdout, runErr := deps.captureRunner().Capture(ctx,
 		CaptureSpec{Dir: op.Dir, Env: env, Command: op.Command},
 		func(line string) { deps.emit(ctx, GitLine{Raw: line}) })
@@ -101,5 +108,21 @@ func (op ReviewChanges) reviewSummary(diffPath, stat string, truncated bool) str
 	} else {
 		b.WriteString(strings.TrimRight(stat, "\n") + "\n")
 	}
+	if op.NotesFile != "" {
+		b.WriteString(notesInstruction(op.NotesFile))
+	}
 	return b.String()
+}
+
+// notesInstruction is the paragraph appended to $GG_CONTEXT_FILE when the
+// caller asked for anchored notes (spec §4.5). The wording is fixed: agents
+// trained on hunk's sidecar already emit exactly this shape, and the default
+// [[tools.command]] prompt templates are deliberately NOT changed.
+func notesInstruction(notesFile string) string {
+	return "\n## Inline notes (optional)\n" +
+		"Also write anchored notes as hunk agent-context JSON (version 1) to the\n" +
+		"file at " + notesFile + ": {\"version\":1,\"files\":[{\"path\":\"…\",\"annotations\":\n" +
+		"[{\"newRange\":[a,b],\"summary\":\"…\",\"rationale\":\"…\"}]}]}. Line numbers are\n" +
+		"1-based in the NEW version of each file. Comment on what the reader would\n" +
+		"not spot; do not annotate every hunk.\n"
 }

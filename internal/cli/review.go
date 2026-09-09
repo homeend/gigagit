@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notebatch"
 	"github.com/homeend/gigagit/internal/template"
 )
 
@@ -31,6 +33,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 	fs.SetOutput(stderr)
 	toolName := fs.String("tool", "", "review tool name (from config); default: the only one")
 	working := fs.Bool("working", false, "review uncommitted working changes")
+	wantNotes := fs.Bool("notes", false, "also ask the tool for anchored notes (agent-context v1) and import them")
 	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
@@ -45,12 +48,14 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 	ctx := context.Background()
 
 	// Resolve the target.
+	arg := ""
 	var target domain.ReviewTarget
 	switch {
 	case *working:
 		target = domain.WorkingReviewTarget()
 	case fs.NArg() >= 1:
-		target = reviewTargetForArg(fs.Arg(0))
+		arg = fs.Arg(0)
+		target = reviewTargetForArg(arg)
 	default:
 		t, err := svc.BranchReviewTarget(ctx, "HEAD")
 		if err != nil {
@@ -71,7 +76,26 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 		return 1
 	}
 
-	res, err := svc.ReviewReport(ctx, target, resolved, []string{"GG_TASK=review"}, time.Now())
+	notesPath := ""
+	if *wantNotes {
+		// The CLI owns this file: the op only names it in the environment, and
+		// we must still be able to read it once the op returns.
+		f, terr := os.CreateTemp("", "gg-review-notes-*.json")
+		if terr != nil {
+			fmt.Fprintln(stderr, "error:", terr)
+			return 1
+		}
+		notesPath = f.Name()
+		f.Close()
+		defer os.Remove(notesPath)
+		// A note write must respect the configured entry cap even though this
+		// process is not a `gg note` verb.
+		if cfg, cerr := loadConfigFor(svc); cerr == nil {
+			svc.SetNotesPolicy(cfg.Notes.MaxAgeDays, cfg.Notes.MaxEntries)
+		}
+	}
+
+	res, err := svc.ReviewReportNotes(ctx, target, resolved, []string{"GG_TASK=review"}, time.Now(), notesPath)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -81,6 +105,90 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 		io.WriteString(stdout, "\n")
 	}
 	fmt.Fprintln(stderr, "report:", res.Path)
+	if !*wantNotes {
+		return 0
+	}
+	return importReviewNotes(ctx, svc, target, arg, notesPath, res.Content, cmd.Name, stderr)
+}
+
+// reviewImportTarget decides which diff a review's notes anchor to (§4.5):
+//
+//	gg review <sha>        → that commit; BOTH sides are addressable
+//	gg review A..B / branch→ the TIP commit; NEW side only
+//	gg review --working    → the unstaged working tree; NEW side only
+//
+// The two new-side-only cases exist because a review's base (the merge base, or
+// HEAD for --working) is not one of §4.4's note-addressable old sides.
+func reviewImportTarget(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, arg string) (cached bool, rev string, rule noteSideRule, err error) {
+	if target.Kind == domain.ReviewWorking {
+		return false, "", sideRuleNewOnly, nil
+	}
+	if arg != "" && !strings.Contains(arg, "..") {
+		return false, arg, sideRuleBoth, nil // a single commit: parent → commit
+	}
+	// A range: anchor to its TIP. "A..B" and "A...B" both end at the last
+	// non-empty segment.
+	parts := strings.Split(target.Range, "..")
+	tip := ""
+	for _, p := range parts {
+		if s := strings.TrimSpace(p); s != "" {
+			tip = s
+		}
+	}
+	if tip == "" {
+		return false, "", sideRuleNewOnly, fmt.Errorf("cannot find the tip commit of %q", target.Range)
+	}
+	full, rerr := svc.RevParse(ctx, tip)
+	if rerr != nil {
+		return false, "", sideRuleNewOnly, fmt.Errorf("unknown revision %q: %w", tip, rerr)
+	}
+	return false, strings.TrimSpace(full), sideRuleNewOnly, nil
+}
+
+// importReviewNotes reads the tool's notes: the sidecar file when it is
+// non-empty, else the captured report when THAT parses as agent-context v1
+// (some tools have only one output channel). Neither → exit 1.
+func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, arg, notesPath, report, toolName string, stderr io.Writer) int {
+	data, _ := os.ReadFile(notesPath)
+	if len(strings.TrimSpace(string(data))) == 0 {
+		if s := strings.TrimSpace(report); strings.HasPrefix(s, "{") {
+			data = []byte(s)
+		}
+	}
+	if len(strings.TrimSpace(string(data))) == 0 {
+		fmt.Fprintln(stderr, "error: review tool wrote no notes (expected agent-context v1 at $GG_NOTES_FILE)")
+		return 1
+	}
+	batch, err := notebatch.Parse(data)
+	if err != nil {
+		fmt.Fprintln(stderr, "error: review tool wrote no notes (expected agent-context v1 at $GG_NOTES_FILE):", err)
+		return 1
+	}
+	for _, c := range batch.Contexts {
+		fmt.Fprintln(stderr, "context:", c)
+	}
+	cached, rev, rule, err := reviewImportTarget(ctx, svc, target, arg)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	planned, skipped, err := planNoteBatch(ctx, svc, batch, cached, rev, noteAuthorDefault(toolName), rule)
+	if err != nil {
+		return noteExit(err, stderr)
+	}
+	if skipped > 0 {
+		fmt.Fprintf(stderr, "note: skipped %d old-side annotation(s) — this review's base is not a note-addressable side\n", skipped)
+	}
+	stored, err := applyNoteBatch(ctx, svc, planned)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	ids := make([]string, 0, len(stored))
+	for _, n := range stored {
+		ids = append(ids, n.ID)
+	}
+	fmt.Fprintln(stderr, "notes:", strings.Join(ids, " "))
 	return 0
 }
 

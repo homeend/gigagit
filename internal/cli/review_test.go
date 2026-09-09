@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -233,5 +234,121 @@ func TestReviewSingleCommitPositionalDiffsOwnChange(t *testing.T) {
 	want := "FAKE REVIEW of " + sha + "^.." + sha
 	if !strings.Contains(out, want) {
 		t.Fatalf("stdout = %q, want contains %q", out, want)
+	}
+}
+
+// A tool that writes $GG_NOTES_FILE has its notes imported and the ids listed
+// on stderr; the report itself still prints and is still persisted.
+func TestReviewNotesImportsSidecarFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-m", "seed")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\nTWO\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeReviewTool(t, dir, "Echo",
+		`printf 'THE REPORT\n'; printf '{"version":1,"files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"shouty"}]}]}' > "$GG_NOTES_FILE"`)
+
+	code, out, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working", "--notes")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "THE REPORT") {
+		t.Fatalf("the freeform report must still print: %q", out)
+	}
+	if !strings.Contains(errb, "notes:") {
+		t.Fatalf("stderr must list the imported ids: %q", errb)
+	}
+	_, list, _ := runCLI(t, dir, "note", "list", "--file", "a.txt")
+	if !strings.Contains(list, "shouty") || !strings.Contains(list, "new:2-2") {
+		t.Fatalf("the note must be stored against the working tree:\n%s", list)
+	}
+}
+
+// When the notes file stays empty but the REPORT itself is agent-context v1,
+// that is imported instead (the report body is still the JSON).
+func TestReviewNotesFallsBackToJSONReport(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-m", "seed")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\nTWO\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeReviewTool(t, dir, "Echo",
+		`printf '{"version":1,"files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"from the report"}]}]}\n'`)
+
+	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working", "--notes")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	_, list, _ := runCLI(t, dir, "note", "list", "--file", "a.txt")
+	if !strings.Contains(list, "from the report") {
+		t.Fatalf("a JSON report must be imported when the notes file is empty:\n%s", list)
+	}
+}
+
+// Neither channel carried notes: exit 1, naming the contract.
+func TestReviewNotesNoNotesIsExit1(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	runGit(t, dir, "commit", "--allow-empty", "-m", "second")
+	writeReviewTool(t, dir, "Echo", `printf 'just prose, no JSON\n'`)
+	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working", "--notes")
+	if code != 1 {
+		t.Fatalf("exit=%d stderr=%s, want 1", code, errb)
+	}
+	if !strings.Contains(errb, "review tool wrote no notes") || !strings.Contains(errb, "GG_NOTES_FILE") {
+		t.Fatalf("stderr = %q, want the documented message", errb)
+	}
+}
+
+// A RANGE review's base is not a note-addressable side: old-side annotations
+// are skipped with one warning, and the notes land on the tip commit.
+func TestReviewNotesRangeAnchorsTipNewSideOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-m", "seed")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\nTWO\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "commit", "-am", "shout")
+	sha := runGit(t, dir, "rev-parse", "HEAD")
+	writeReviewTool(t, dir, "Echo",
+		`printf 'R\n'; printf '{"version":1,"files":[{"path":"a.txt","annotations":[{"newRange":[2,2],"summary":"kept"},{"oldRange":[2,2],"summary":"dropped"}]}]}' > "$GG_NOTES_FILE"`)
+
+	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--notes", "HEAD~1..HEAD")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(errb, "old-side") {
+		t.Fatalf("stderr = %q, want one old-side warning", errb)
+	}
+	_, list, _ := runCLI(t, dir, "note", "list", "--rev", sha, "--file", "a.txt")
+	if !strings.Contains(list, "kept") || strings.Contains(list, "dropped") {
+		t.Fatalf("only the new-side note may land on the tip commit:\n%s", list)
 	}
 }
