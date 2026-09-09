@@ -3532,16 +3532,19 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 
 // View implements tea.Model.
 func (m Model) View() string {
+	s := st()
+	bg, fg := s.frame()
+	w, h := m.overlayDims()
 	if m.modal != nil {
-		return m.render()
+		return paintFrame(m.render(), w, h, bg, fg)
 	}
 	if m.loading && !m.ready {
-		return "gigagit (loading…)\n" // startup + repo-switch keep the blank screen
+		return paintFrame("gigagit (loading…)\n", w, h, bg, fg) // startup + repo-switch keep the blank screen
 	}
 	if m.err != nil {
-		return i18n.T("error: %s", m.err.Error()) + "\n"
+		return paintFrame(i18n.T("error: %s", m.err.Error())+"\n", w, h, bg, fg)
 	}
-	return m.render()
+	return paintFrame(m.render(), w, h, bg, fg)
 }
 
 var _ tea.Model = Model{}
