@@ -318,7 +318,15 @@ possibly COMMENTED header. Its rules, in order of how easy they are to get
 wrong: a commented header (`# [themes.light]   # … [populated]`) counts as the
 section and is uncommented IN PLACE — appending a second `[themes.light]` is a
 TOML parse error, i.e. a gg that will not start, which is why every writer test
-round-trips through `Load`; a commented role line inside the block is replaced
+round-trips through `Load`. That substitution is gated on `hasActiveSection`:
+once an ACTIVE table of the name exists anywhere in the file it wins, and a
+commented same-name header is an ordinary boundary. Both orders corrupt the
+file otherwise — a commented block BEFORE the real table gets uncommented into
+a duplicate, and one AFTER it has its `# key = …` line activated where it sits,
+inside whatever active section precedes it (`[debug].bg`), which parses fine and
+loses the colour on the next start. Any bracketed line outside a multi-line
+string is a boundary too, including shapes this writer cannot name
+(`[themes."my theme"]`), so a key can never leak across one; a commented role line inside the block is replaced
 in place (its `[populated]` doc tail is dropped, so a later `d` DELETES that
 line rather than re-commenting it); removal re-comments only a line that still
 carries `[populated]`; `sectionHeader` treats a commented header as ending the

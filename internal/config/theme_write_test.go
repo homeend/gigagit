@@ -310,3 +310,152 @@ command = '''
 		t.Fatalf("the tools block was damaged: %+v", cfg.Tools.Command)
 	}
 }
+
+// activeThemeHeaders counts the ACTIVE (uncommented) headers for a theme table.
+func activeThemeHeaders(t *testing.T, path, header string) int {
+	t.Helper()
+	n := 0
+	for _, ln := range readLines(t, path) {
+		if strings.TrimSpace(ln) == header {
+			n++
+		}
+	}
+	return n
+}
+
+// A commented populate block BEFORE the real table must not be mistaken for the
+// section: uncommenting it would leave two [themes.light] tables, which is a
+// TOML parse error — gg would refuse to start.
+func TestSetThemeRoleCommentedBlockBeforeActiveTable(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	os.WriteFile(path, []byte(`# [themes.light]   # colour overrides [populated]
+# bg = "#E9E9E5"   # frame background [populated]
+# fg = "#33393F"   # frame foreground [populated]
+
+[themes.light]
+fg = "#222222"
+`), 0o644)
+
+	if err := SetThemeRole(path, "light", "bg", "#ABCDEF"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	cfg, err := Load(path, "")
+	if err != nil {
+		t.Fatalf("the file no longer parses: %v\n%s", err, fileBody(t, path))
+	}
+	if cfg.Themes["light"].Bg != "#ABCDEF" || cfg.Themes["light"].Fg != "#222222" {
+		t.Fatalf("themes.light = %+v\n%s", cfg.Themes["light"], fileBody(t, path))
+	}
+	if n := activeThemeHeaders(t, path, "[themes.light]"); n != 1 {
+		t.Fatalf("want exactly one active [themes.light], got %d:\n%s", n, fileBody(t, path))
+	}
+	if !strings.Contains(fileBody(t, path), `# [themes.light]`) {
+		t.Fatalf("the commented example block must stay commented:\n%s", fileBody(t, path))
+	}
+}
+
+// The mirror image: the real table comes FIRST, another section follows, and the
+// commented block is last. Activating a `# bg = …` line under a commented header
+// would land it in the PRECEDING active section ([debug].bg), where Load parses
+// fine and the colour is silently gone on the next start.
+func TestSetThemeRoleCommentedBlockAfterActiveTable(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	os.WriteFile(path, []byte(`[themes.light]
+fg = "#222222"
+
+[debug]
+log_operations = false
+
+# [themes.light]   # colour overrides [populated]
+# bg = "#E9E9E5"   # frame background [populated]
+`), 0o644)
+
+	if err := SetThemeRole(path, "light", "bg", "#ABCDEF"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	cfg, err := Load(path, "")
+	if err != nil {
+		t.Fatalf("load: %v\n%s", err, fileBody(t, path))
+	}
+	if cfg.Themes["light"].Bg != "#ABCDEF" {
+		t.Fatalf("bg = %q — it did not reach the active table:\n%s", cfg.Themes["light"].Bg, fileBody(t, path))
+	}
+	if cfg.Debug.LogOperations {
+		t.Fatal("the [debug] section was disturbed")
+	}
+	if n := activeThemeHeaders(t, path, "[themes.light]"); n != 1 {
+		t.Fatalf("want exactly one active [themes.light], got %d:\n%s", n, fileBody(t, path))
+	}
+	lines := readLines(t, path)
+	for _, ln := range lines {
+		if strings.TrimSpace(ln) == `bg = "#E9E9E5"` {
+			t.Fatalf("the commented example line was activated:\n%s", fileBody(t, path))
+		}
+	}
+}
+
+// A near-miss name must not collect the key.
+func TestSetThemeRoleIgnoresNearMissSection(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	os.WriteFile(path, []byte("[themes.lightx]\nfg = \"#111111\"\n"), 0o644)
+
+	if err := SetThemeRole(path, "light", "bg", "#ABCDEF"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	cfg, err := Load(path, "")
+	if err != nil {
+		t.Fatalf("load: %v\n%s", err, fileBody(t, path))
+	}
+	if cfg.Themes["light"].Bg != "#ABCDEF" {
+		t.Fatalf("light bg = %q:\n%s", cfg.Themes["light"].Bg, fileBody(t, path))
+	}
+	if cfg.Themes["lightx"].Bg != "" || cfg.Themes["lightx"].Fg != "#111111" {
+		t.Fatalf("themes.lightx was disturbed: %+v", cfg.Themes["lightx"])
+	}
+}
+
+// A quoted-name table is not a shape this writer understands, but it MUST still
+// count as a boundary so keys never leak past it into the target table.
+func TestSetThemeRoleQuotedSectionIsABoundary(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	os.WriteFile(path, []byte("[themes.light]\nfg = \"#222222\"\n\n[themes.\"my theme\"]\nbg = \"#000000\"\n"), 0o644)
+
+	if err := SetThemeRole(path, "light", "bg", "#ABCDEF"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	cfg, err := Load(path, "")
+	if err != nil {
+		t.Fatalf("load: %v\n%s", err, fileBody(t, path))
+	}
+	if cfg.Themes["light"].Bg != "#ABCDEF" {
+		t.Fatalf("light bg = %q:\n%s", cfg.Themes["light"].Bg, fileBody(t, path))
+	}
+	if cfg.Themes["my theme"].Bg != "#000000" {
+		t.Fatalf("the quoted table's own bg was rewritten: %+v\n%s", cfg.Themes["my theme"], fileBody(t, path))
+	}
+}
+
+// The target section is last and the file has no trailing newline.
+func TestSetThemeRoleTargetSectionLastNoTrailingNewline(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	os.WriteFile(path, []byte("[ui]\ntheme = \"light\"\n\n[themes.light]\nfg = \"#222222\""), 0o644)
+
+	if err := SetThemeRole(path, "light", "bg", "#ABCDEF"); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	cfg, err := Load(path, "")
+	if err != nil {
+		t.Fatalf("load: %v\n%s", err, fileBody(t, path))
+	}
+	if cfg.Themes["light"].Bg != "#ABCDEF" || cfg.Themes["light"].Fg != "#222222" {
+		t.Fatalf("themes.light = %+v\n%s", cfg.Themes["light"], fileBody(t, path))
+	}
+	if n := activeThemeHeaders(t, path, "[themes.light]"); n != 1 {
+		t.Fatalf("headers = %d:\n%s", n, fileBody(t, path))
+	}
+}

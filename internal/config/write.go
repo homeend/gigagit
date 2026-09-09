@@ -119,6 +119,9 @@ func SetVersionsMaxAgeDays(path string, days int) error {
 // uncommented IN PLACE rather than shadowed by a second table, and a commented
 // role line inside it is replaced in place by the active assignment — so
 // editing a populated file keeps its shape instead of growing a duplicate.
+// That substitution applies ONLY while the file has no active table of that
+// name; once one exists it wins, and the commented block stays an inert
+// comment (see hasActiveSection).
 func SetThemeRole(path, themeName, key string, values ...string) error {
 	section := "themes." + themeName
 	if len(values) == 0 || (len(values) == 1 && values[0] == "") {
@@ -175,6 +178,30 @@ func sectionHeader(trimmed string) (name string, commented, ok bool) {
 	return open + inner + closer, commented, true
 }
 
+// hasActiveSection reports whether lines already carry an UNCOMMENTED header for
+// section, skipping multi-line string interiors the way every writer here does.
+// It is the pre-scan that decides whether a commented header may stand in for
+// the section at all.
+func hasActiveSection(lines []string, header string) bool {
+	skipUntil := ""
+	for _, ln := range lines {
+		trimmed := strings.TrimSpace(ln)
+		if skipUntil != "" {
+			if strings.Contains(trimmed, skipUntil) {
+				skipUntil = ""
+			}
+			continue
+		}
+		if name, commented, ok := sectionHeader(trimmed); ok && !commented && name == header {
+			return true
+		}
+		if d, ok := opensMultiline(trimmed); ok {
+			skipUntil = d
+		}
+	}
+	return false
+}
+
 // setLineInSection sets (or removes) one whole `key = …` line under a possibly
 // DOTTED, possibly commented-out `[section]` header, via the same line-oriented
 // edit setScalarLine uses so unrelated lines and comments survive. rendered is
@@ -199,6 +226,15 @@ func setLineInSection(path, section, key, rendered string, remove bool) error {
 		lines = strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
 	}
 
+	// A commented header only STANDS FOR the section while the file has no
+	// active one. Otherwise the two shapes below both corrupt the file: a
+	// commented populate block ahead of the real table would be uncommented into
+	// a SECOND [themes.x] ("table x already exists" — gg then refuses to start),
+	// and one after it would have its `# key = …` line activated where it sits,
+	// i.e. inside whatever active section precedes it, so the colour parses fine
+	// under the wrong table and is silently gone next start.
+	activeHeader := hasActiveSection(lines, header)
+
 	var (
 		headerAt        = -1
 		headerCommented bool
@@ -215,9 +251,13 @@ func setLineInSection(path, section, key, rendered string, remove bool) error {
 			}
 			continue
 		}
-		if name, commented, ok := sectionHeader(trimmed); ok {
-			inSection = name == header
-			if inSection && headerAt < 0 {
+		// ANY bracketed line outside a multi-line string ends the section, even a
+		// shape this writer cannot name (a quoted table like [themes."my theme"]),
+		// so keys can never leak across one into the target table.
+		if name, commented, ok := sectionHeader(trimmed); ok || strings.HasPrefix(trimmed, "[") {
+			target := ok && name == header && (!commented || !activeHeader)
+			inSection = target
+			if target && headerAt < 0 {
 				headerAt, headerCommented = i, commented
 			}
 			continue
