@@ -1089,6 +1089,9 @@ func (s *Service) PreviewSummary(ctx context.Context, source, target string) (Pr
 			sum := PreviewSummary{SourceHash: srcHash, TargetHash: tgtHash}
 			base, err := s.repo.MergeBase(ctx, tgtHash, srcHash)
 			if err != nil {
+				if ctx.Err() != nil {
+					return PreviewSummary{}, err // cancelled: cache nothing (the ResolveRev pattern)
+				}
 				sum.State = PreviewNoBase
 				return sum, nil
 			}
