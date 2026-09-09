@@ -14,28 +14,22 @@ import (
 
 // hasActionRow reports whether the . menu currently offers the row with id.
 func hasActionRow(m Model, id string) bool {
-	for _, r := range availableActions(m) {
-		if r.id == id {
-			return true
-		}
-	}
-	return false
+	_, ok := findRow(availableActions(m), id)
+	return ok
 }
 
 // runActionRow runs the . menu row with id, failing when it is not offered.
 func runActionRow(t *testing.T, m Model, id string) Model {
 	t.Helper()
-	for _, r := range availableActions(m) {
-		if r.id == id {
-			if r.run == nil {
-				t.Fatalf("the %s row must carry a direct run handler", id)
-			}
-			tm, _ := r.run(m)
-			return tm.(Model)
-		}
+	r, ok := findRow(availableActions(m), id)
+	if !ok {
+		t.Fatalf("the . menu offers no %q row", id)
 	}
-	t.Fatalf("the . menu offers no %q row", id)
-	return m
+	if r.run == nil {
+		t.Fatalf("the %s row must carry a direct run handler", id)
+	}
+	tm, _ := r.run(m)
+	return tm.(Model)
 }
 
 func TestNoteListRowIsOfferedAwayFromTheCursorAndOnlyWithNotes(t *testing.T) {
@@ -202,5 +196,83 @@ func TestNotesListPopupBoxIsNoTallerThanItsContent(t *testing.T) {
 	// would add ten blank rows.
 	if got := len(strings.Split(strings.TrimRight(p.box(m), "\n"), "\n")); got > 11 {
 		t.Fatalf("the box is %d lines tall for two notes:\n%s", got, p.box(m))
+	}
+}
+
+func TestNotesListPopupEnterOnAnEmptyFilterKeepsThePopup(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	m = runActionRow(t, m, "note-list")
+	p := layerOf[*notesListPopup](m)
+	p.setQuery("zzz")
+	before := m.diffLayer().curLine
+	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatal("enter with nothing selected must do nothing")
+	}
+	if layerOf[*notesListPopup](m) == nil {
+		t.Fatal("enter on an empty filter result must keep the popup open")
+	}
+	if got := m.diffLayer().curLine; got != before {
+		t.Fatalf("the cursor moved to %d, want it left at %d", got, before)
+	}
+}
+
+func TestNotesListPopupEnterOnAHiddenAgentNoteLiftsTheLayer(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t) // n2 (line 25) is agent-written
+	m.notesAgentOff = true
+	v := m.diffLayer()
+	v.hideAgent = true
+	v.relayout(v.width)
+	v.setCursorLine(0, m.diffBodyRows())
+	m = runActionRow(t, m, "note-list")
+	p := layerOf[*notesListPopup](m)
+	if len(p.entries) != 2 {
+		t.Fatalf("the list is an inventory: it must offer the hidden agent thread too, got %d", len(p.entries))
+	}
+	p.move(1) // the agent note
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	v = m.diffLayer()
+	if v.hideAgent || m.notesAgentOff {
+		t.Fatal("jumping to a hidden agent thread must lift the agent layer, session flag included")
+	}
+	if v.curLine != 24 {
+		t.Fatalf("cursor landed on line index %d, want 24", v.curLine)
+	}
+	// The box the jump was for is actually in the display stream now.
+	var shown bool
+	for _, dr := range v.disp {
+		if dr.note != nil && strings.Contains(dr.note.text, "second") {
+			shown = true
+		}
+	}
+	if !shown {
+		t.Fatal("the agent note must be visible after the jump — landing on a line with no box looks like a dead key")
+	}
+	// A USER thread must not disturb the layer.
+	m2 := notedModel(t)
+	m2.notesAgentOff = true
+	m2.diffLayer().hideAgent = true
+	m2.diffLayer().relayout(m2.diffLayer().width)
+	m2 = runActionRow(t, m2, "note-list")
+	p2 := layerOf[*notesListPopup](m2)
+	m2, _ = p2.update(m2, tea.KeyMsg{Type: tea.KeyEnter}) // entry 0 = the user note
+	if !m2.diffLayer().hideAgent || !m2.notesAgentOff {
+		t.Fatal("jumping to a visible user thread must leave the agent layer alone")
+	}
+}
+
+func TestNotesListPopupEnterOnAVanishedNoteSaysSo(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	m = runActionRow(t, m, "note-list")
+	p := layerOf[*notesListPopup](m)
+	// Another gg (or a `gg note` run) removed the thread under the open list.
+	m.diffLayer().notes = m.diffLayer().notes[:1]
+	p.move(1)
+	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
+	if want := i18n.T("Note is no longer in this diff"); !strings.Contains(m.diffNotice, want) {
+		t.Fatalf("diffNotice = %q, want it to carry %q instead of a silent no-op", m.diffNotice, want)
 	}
 }

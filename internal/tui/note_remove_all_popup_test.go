@@ -14,6 +14,20 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
+// boxHasSentence reports whether the popup box carries want, allowing for the
+// word-wrap the box applies. A whole-sentence strings.Contains breaks the
+// moment the prose or the fixture path grows past one line, which says nothing
+// about the popup being wrong.
+func boxHasSentence(box, want string, m Model) bool {
+	w, _ := m.overlayDims()
+	for _, ln := range wrapWords(want, popupTextWidth(popupInnerWidth(w))) {
+		if !strings.Contains(box, ln) {
+			return false
+		}
+	}
+	return true
+}
+
 // typeInto feeds s to the popup one key at a time, the way a user types it.
 func typeInto(t *testing.T, p *noteRemoveAllPopup, m Model, s string) Model {
 	t.Helper()
@@ -52,8 +66,13 @@ func TestNoteRemoveAllPopupCountsRepliesAndNamesThePath(t *testing.T) {
 		t.Fatal("Remove all notes must push a noteRemoveAllPopup")
 	}
 	box := p.box(m)
-	if !strings.Contains(box, i18n.T("This deletes %d notes and their replies from %s.", 2, "a/b.go")) {
-		t.Fatalf("the popup must quote the count, the replies and the path:\n%s", box)
+	// The number the popup quotes is roots + replies — the SAME number the
+	// notice reports afterwards ("Removed 3 notes"), not the two roots alone.
+	if !boxHasSentence(box, i18n.T("This deletes %d notes (%d replies included) from %s.", 3, 1, "a/b.go"), m) {
+		t.Fatalf("the popup must quote roots+replies, the reply count and the path:\n%s", box)
+	}
+	if strings.Contains(box, "2 notes") {
+		t.Fatalf("the popup must not quote the root count alone:\n%s", box)
 	}
 	if !strings.Contains(box, noteRemoveAllToken) {
 		t.Fatalf("the popup must name the confirmation token:\n%s", box)
@@ -62,7 +81,7 @@ func TestNoteRemoveAllPopupCountsRepliesAndNamesThePath(t *testing.T) {
 	// Without replies the prose must not claim any.
 	m2 := notedModel(t)
 	m2 = runActionRow(t, m2, "note-remove-all")
-	if box := layerOf[*noteRemoveAllPopup](m2).box(m2); !strings.Contains(box, i18n.T("This deletes %d notes from %s.", 2, "a/b.go")) {
+	if box := layerOf[*noteRemoveAllPopup](m2).box(m2); !boxHasSentence(box, i18n.T("This deletes %d notes from %s.", 2, "a/b.go"), m2) {
 		t.Fatalf("a reply-less file must not mention replies:\n%s", box)
 	}
 }

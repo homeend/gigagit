@@ -33,7 +33,7 @@ type noteRemoveAllPopup struct {
 	field   textfield
 	addr    model.FileAddress
 	path    string
-	roots   int  // threads the open diff shows (the number the prose quotes)
+	roots   int  // threads the open diff shows
 	replies int  // replies those threads carry
 	refused bool // the last enter did not match: show the hint
 }
@@ -115,9 +115,12 @@ func (p *noteRemoveAllPopup) box(m Model) string {
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	contentW := popupTextWidth(inner)
 
+	// Quote roots AND replies as ONE number — the same number the notice
+	// reports afterwards. Two different counts for one action ("2 notes" then
+	// "Removed 3 notes") reads like something extra was deleted.
 	lead := i18n.T("This deletes %d notes from %s.", p.roots, p.path)
 	if p.replies > 0 {
-		lead = i18n.T("This deletes %d notes and their replies from %s.", p.roots, p.path)
+		lead = i18n.T("This deletes %d notes (%d replies included) from %s.", p.roots+p.replies, p.replies, p.path)
 	}
 	var b strings.Builder
 	b.WriteString(i18n.T("Remove all notes…") + "\n\n")

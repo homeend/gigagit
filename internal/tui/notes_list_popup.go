@@ -54,7 +54,7 @@ func (e noteListEntry) line(w int) string {
 		// box's own clamp cut them.
 		return truncate(head+tail, w)
 	}
-	return head + truncate(sanitizeLine(e.summary), budget) + tail
+	return head + truncate(e.summary, budget) + tail
 }
 
 // noteListEntries projects the open diff's threads into list entries, in
@@ -191,7 +191,13 @@ func (p *notesListPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		id := vis[p.sel].rootID
 		m = m.popLayer()
-		m, _ = m.gotoNote(id)
+		var moved bool
+		if m, moved = m.gotoNote(id); !moved {
+			// The thread was in the list but its anchor is not in this view any
+			// more — another gg or a `gg note` run removed it under us. Say so
+			// in the diff's own notice box rather than looking like a dead key.
+			m.diffNotice = "▸ " + i18n.T("Note is no longer in this diff")
+		}
 		return m, nil
 	case tea.KeyBackspace, tea.KeyCtrlH:
 		if r := []rune(p.query); len(r) > 0 {
@@ -289,42 +295,48 @@ func noteListDotDecorator(e noteListEntry) rowDecorator {
 }
 
 // gotoNote lands the diff cursor on one thread's anchor line, expanding the
-// view when the anchor hides under a fold (exactly what } does). It reports
-// whether it moved, and reveals the thread's own rows so the note the user
-// picked is on screen, not just its line.
+// view when the anchor hides under a fold (exactly what } does) and lifting the
+// agent layer when the picked thread is one it hides. It reports whether it
+// moved, and reveals the thread's own rows so the note the user picked is on
+// screen, not just its line.
 func (m Model) gotoNote(rootID string) (Model, bool) {
 	v := m.diffLayer()
 	if v == nil {
 		return m, false
 	}
-	find := func() (int, bool) {
+	thread := func() (domain.ResolvedNote, bool) {
 		for _, r := range v.notes {
-			if r.Note.ID != rootID {
-				continue
+			if r.Note.ID == rootID {
+				return r, true
 			}
-			li, _ := v.noteAnchorLine(r)
-			return li, li >= 0
 		}
-		return 0, false
+		return domain.ResolvedNote{}, false
+	}
+	find := func() (int, bool) {
+		r, ok := thread()
+		if !ok {
+			return 0, false
+		}
+		li, _ := v.noteAnchorLine(r)
+		return li, li >= 0
+	}
+	// The list is an inventory: it offers agent threads even while `a` hides
+	// them. Jumping to one must therefore also SHOW it — landing the cursor on
+	// a line whose box is filtered away looks like the jump did nothing. Lift
+	// the layer (session flag included, or the next file step re-hides it)
+	// before any layout so the relayout below is the one that counts.
+	if r, ok := thread(); ok && v.hideAgent {
+		if _, shown := v.noteTargetIn(r); !shown {
+			v.hideAgent, m.notesAgentOff = false, false
+			v.relayout(v.width)
+		}
 	}
 	li, ok := find()
 	if !ok {
 		return m, false
 	}
-	if li < len(v.lines) && v.lines[li].Fold > 0 {
-		// The note hides under this fold: expand to the full file (the f
-		// toggle), then re-find the anchor in the REBUILT stream — the
-		// pre-rebuild index would be stale (see jumpNote).
-		cr, hadRow := v.cursorRow()
-		v.partial = false
-		v.rebuild()
-		m.diffPartial = false
-		if hadRow {
-			v.reanchorCursor(cr.LeftNo, cr.RightNo)
-		}
-		if li, ok = find(); !ok {
-			return m, false
-		}
+	if m, li, ok = m.expandFoldFor(v, li, find); !ok {
+		return m, false
 	}
 	body := m.diffBodyRows()
 	v.setCursorLine(li, body)
