@@ -186,7 +186,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case tea.KeyEnter:
 			p.filtering = false
 			return m.recordSearch(scopeShelf, p.filter)
-		case tea.KeyBackspace, tea.KeyCtrlH:
+		case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 			if r := []rune(p.filter); len(r) > 0 {
 				p.filter = string(r[:len(r)-1])
 				p.sel = 0

@@ -216,7 +216,17 @@ func (f *textfield) HandleEditKey(msg tea.KeyMsg) bool {
 	case tea.KeyBackspace, tea.KeyCtrlH:
 		f.backspace()
 	case tea.KeyDelete:
-		f.deleteFwd()
+		// At the END of the buffer a forward-delete has nothing to remove and
+		// used to be a silent no-op — the "cannot delete the last character"
+		// report from a keyboard whose erase key sends ^[[3~ (tea.KeyDelete)
+		// rather than Backspace. There it erases behind the cursor instead;
+		// anywhere else (including just before a '\n' in a multi-line
+		// buffer) it stays a forward-delete.
+		if f.cursor >= len(f.runes) {
+			f.backspace()
+		} else {
+			f.deleteFwd()
+		}
 	case tea.KeyLeft:
 		if msg.Alt {
 			f.wordLeft()

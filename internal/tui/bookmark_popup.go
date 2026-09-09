@@ -212,7 +212,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case tea.KeyEnter:
 			p.filtering = false // keep the filter, leave input mode
 			return m.recordSearch(scopeBookmark, p.filter)
-		case tea.KeyBackspace, tea.KeyCtrlH:
+		case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 			if r := []rune(p.filter); len(r) > 0 {
 				p.filter = string(r[:len(r)-1])
 				p.sel = 0

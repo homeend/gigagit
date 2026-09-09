@@ -158,7 +158,7 @@ func (m Model) updateStashViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			v.setQuery("")
 		case tea.KeyEnter:
 			v.typing = false
-		case tea.KeyBackspace, tea.KeyCtrlH:
+		case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 			if r := []rune(v.query); len(r) > 0 {
 				v.setQuery(string(r[:len(r)-1]))
 			}

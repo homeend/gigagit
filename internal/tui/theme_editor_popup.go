@@ -315,16 +315,6 @@ func (p *themeEditorPopup) updateEditing(m Model, msg tea.KeyMsg) (Model, tea.Cm
 		return m, tea.ClearScreen
 	case tea.KeyEnter:
 		return p.save(m)
-	case tea.KeyDelete:
-		// A terminal reporting Delete with nothing ahead of the cursor to
-		// forward-delete is, in effect, asking to erase the character
-		// behind it — this is the "field shows 1111118, cursor at the end,
-		// last char not deletable" report: some environment sends Delete
-		// (or the runes handled below) where gg's own driven tests, which
-		// always send a real BSpace, never exercised the gap.
-		if p.field.cursor >= len(p.field.runes) {
-			msg = tea.KeyMsg{Type: tea.KeyBackspace}
-		}
 	case tea.KeyRunes:
 		// Some terminals report backspace as a literal DEL (0x7f) or BS
 		// (0x08) byte inside a KeyRunes message instead of a proper
