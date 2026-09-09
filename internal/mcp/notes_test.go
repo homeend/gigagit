@@ -162,6 +162,24 @@ func TestNoteAddToolRejectsRangeRev(t *testing.T) {
 	}
 }
 
+// gg_notes_list's cached/rev flags only make sense against a single file
+// target; without file, silently falling back to "every address this
+// checkout can see" would answer a different question than the one asked
+// (mirrors the CLI's `note list --cached` guard).
+func TestNotesListCachedRevWithoutFileIsError(t *testing.T) {
+	e := newTestEnv(t)
+	seedNoteFile(t, e)
+	for _, args := range []map[string]any{
+		{"cached": true},
+		{"rev": "HEAD"},
+	} {
+		msg := e.callErr(t, "gg_notes_list", args)
+		if !strings.Contains(msg, "cached/rev need file") {
+			t.Fatalf("args=%v msg=%q, want the cached/rev-need-file error", args, msg)
+		}
+	}
+}
+
 func TestNoteToolAnnotations(t *testing.T) {
 	e := newTestEnv(t)
 	tools := e.listTools(t)

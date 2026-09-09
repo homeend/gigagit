@@ -153,6 +153,19 @@ func noteExit(err error, stderr io.Writer) int {
 	return 1
 }
 
+// noteTargetExit reports a noteAddressesFor/resolvedNotesFor error under a
+// specific subcommand name ("note list", "note clear"), so the
+// --cached/--rev-without---file usage message names the verb the user typed
+// rather than a generic "note:" prefix. Every other error falls through to
+// noteExit unchanged.
+func noteTargetExit(sub string, err error, stderr io.Writer) int {
+	if errors.Is(err, errCachedRevNeedFile) {
+		fmt.Fprintf(stderr, "%s: --cached/--rev need --file <path>\n", sub)
+		return 2
+	}
+	return noteExit(err, stderr)
+}
+
 // printNote prints a stored note: its id on one line, or the shared wire object
 // with --json. A freshly written note is active by construction, so its wire
 // status is "active" and its resolved range is the stored one.
@@ -294,9 +307,17 @@ func noteTypeMatches(want string, src model.NoteSource) bool {
 	return false
 }
 
+// errCachedRevNeedFile is returned by noteAddressesFor when --cached/--rev is
+// given without --file. It has no anchor to resolve against without a file,
+// so silently falling back to "every address this checkout can see" (as a
+// bare invocation does) would answer a different question than the one
+// asked; callers turn this into a subcommand-specific usage message.
+var errCachedRevNeedFile = errors.New("--cached/--rev need --file <path>")
+
 // noteAddressesFor is the target-flag resolver shared by list and clear: one
 // address when --file is given, else every address this checkout can see
-// (NoteAddresses).
+// (NoteAddresses). --cached/--rev only make sense against a single --file
+// target, so either without --file is rejected rather than silently ignored.
 func noteAddressesFor(ctx context.Context, svc *domain.Service, file string, cached bool, rev string) ([]model.FileAddress, error) {
 	if strings.TrimSpace(file) != "" {
 		addr, err := svc.NoteTarget(ctx, file, cached, rev)
@@ -304,6 +325,9 @@ func noteAddressesFor(ctx context.Context, svc *domain.Service, file string, cac
 			return nil, err
 		}
 		return []model.FileAddress{addr}, nil
+	}
+	if cached || strings.TrimSpace(rev) != "" {
+		return nil, errCachedRevNeedFile
 	}
 	return svc.NoteAddresses(ctx)
 }
@@ -371,7 +395,7 @@ func noteList(svc *domain.Service, args []string, stdout, stderr io.Writer) int 
 	ctx := context.Background()
 	res, err := resolvedNotesFor(ctx, svc, *tf.file, *tf.cached, *tf.rev)
 	if err != nil {
-		return noteExit(err, stderr)
+		return noteTargetExit("note list", err, stderr)
 	}
 	kept := make([]domain.ResolvedNote, 0, len(res))
 	for _, r := range res {
@@ -440,7 +464,7 @@ func noteClear(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 	ctx := context.Background()
 	addrs, err := noteAddressesFor(ctx, svc, *tf.file, *tf.cached, *tf.rev)
 	if err != nil {
-		return noteExit(err, stderr)
+		return noteTargetExit("note clear", err, stderr)
 	}
 	allTypes := strings.TrimSpace(*typ) == "" || *typ == "all"
 	removed := 0

@@ -219,7 +219,10 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 }
 
 // notesFor resolves the notes a list request covers: one address when file is
-// given, else every address this checkout can see.
+// given, else every address this checkout can see. cached/rev only make sense
+// against a single file target, so either without file is rejected rather
+// than silently falling back to "every address" (a different question than
+// the one asked).
 func (s *Server) notesFor(ctx context.Context, t noteTargetIn) ([]domain.ResolvedNote, error) {
 	if t.File != "" {
 		addr, err := s.svc.NoteTarget(ctx, t.File, t.Cached, t.Rev)
@@ -227,6 +230,9 @@ func (s *Server) notesFor(ctx context.Context, t noteTargetIn) ([]domain.Resolve
 			return nil, err
 		}
 		return s.svc.NotesAt(ctx, addr)
+	}
+	if t.Cached || t.Rev != "" {
+		return nil, fmt.Errorf("cached/rev need file")
 	}
 	addrs, err := s.svc.NoteAddresses(ctx)
 	if err != nil {

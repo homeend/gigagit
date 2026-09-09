@@ -308,6 +308,44 @@ func TestNoteListWithoutFileCoversEveryTarget(t *testing.T) {
 	}
 }
 
+// TestNoteListCachedRevWithoutFileIsUsage guards against --cached/--rev being
+// silently ignored when --file is absent: a bare `note list --cached` (or
+// --rev) has no single target to resolve them against, so it must fail
+// loudly rather than fall back to "every address" as a bare `note list`
+// would.
+func TestNoteListCachedRevWithoutFileIsUsage(t *testing.T) {
+	dir := noteRepo(t)
+	for _, args := range [][]string{
+		{"note", "list", "--cached"},
+		{"note", "list", "--rev", "HEAD"},
+	} {
+		code, _, errb := runCLI(t, dir, args...)
+		if code != 2 {
+			t.Fatalf("%v: exit=%d stderr=%s, want exit 2", args, code, errb)
+		}
+		if !strings.Contains(errb, "note list: --cached/--rev need --file <path>") {
+			t.Fatalf("%v: stderr=%q, want the --cached/--rev usage message", args, errb)
+		}
+	}
+}
+
+// TestNoteClearCachedRevWithoutFileIsUsage mirrors the list guard for clear.
+func TestNoteClearCachedRevWithoutFileIsUsage(t *testing.T) {
+	dir := noteRepo(t)
+	for _, args := range [][]string{
+		{"note", "clear", "--all", "--yes", "--cached"},
+		{"note", "clear", "--all", "--yes", "--rev", "HEAD"},
+	} {
+		code, _, errb := runCLI(t, dir, args...)
+		if code != 2 {
+			t.Fatalf("%v: exit=%d stderr=%s, want exit 2", args, code, errb)
+		}
+		if !strings.Contains(errb, "note clear: --cached/--rev need --file <path>") {
+			t.Fatalf("%v: stderr=%q, want the --cached/--rev usage message", args, errb)
+		}
+	}
+}
+
 func TestNoteClearGuardsAndCount(t *testing.T) {
 	dir := noteRepo(t)
 	runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "1", "--summary", "one")
