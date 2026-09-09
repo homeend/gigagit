@@ -526,6 +526,195 @@ cursor skipping, `}`/`{` with fold expansion and file stepping, the popup
 flow; web handler tests; an e2e scenario is deferred to phase 2 when the
 CLI exists.
 
+### 4.5 Phase 2 design: the agent lane (approved 2026-09-09)
+
+The CLI, MCP and skill surface over the phase 1 note store, so an agent can
+leave, list and remove notes without a TUI, and a human reads them in the
+TUI or web. Consumes the phase 1 domain surface (`NoteAdd`/`NoteReply`/
+`NoteRemove`/`NotesAt`/`NoteCounts`, `SetNotesPolicy`/`StartNotesSweep`)
+plus two small domain additions named below. No TUI or web change beyond
+what falls out of the domain.
+
+**Which diff a note belongs to** (rules shared by `gg note add`, `gg note
+apply`, `gg review --notes` and the MCP tools): a note anchors to ONE base
+and ONE result, exactly like the TUI's loaders stamp `diffView.noteAddr`:
+
+| Target flags | `Address.State` | old side | new side |
+|---|---|---|---|
+| none (default) | `StateUnstaged`, or `StateUntracked` when `gg status` lists the path as untracked | index | worktree file |
+| `--cached` | `StateStaged` | HEAD | index |
+| `--rev <commit>` | `StateCommitted`, `Commit` = the FULL sha | parent | commit |
+
+`--rev A..B` / `A...B` is refused (exit 2) with the hint "a note anchors to
+one commit; pass the tip commit". `--cached` and `--rev` together are refused.
+The CLI resolves `--rev` through the domain before storing, and `NoteAdd`
+itself normalises `Address.Commit` to the full sha for `StateCommitted`
+(fixing the web lane, which today stores the rev as typed), so a CLI note and
+a TUI note on the same commit always share a target. Worktree-state notes
+are scoped to the caller's checkout by `NoteAdd` as in phase 1.
+
+**Hunk numbering** (`gg diff --hunks`, `--hunk N`): hunks are numbered
+1-based per file in git's `@@` order over the SAME patch `gg diff` prints for
+that target (same `model.DiffSpec`, default context), so the number an agent
+reads is the number it passes back. Domain gains
+`DiffHunks(ctx, spec) ([]model.FileHunks, error)` = `DiffPatch` + a pure
+parser of `diff --git` / `@@ -a,b +c,d @@ header` lines
+(`model.FileHunks{Path, OldPath, Hunks []model.Hunk}`,
+`model.Hunk{N, Old, New [2]int, Header string}`; a zero-count side is
+`[0,0]`). The web's `d.hunks` (textdiff blocks) is NOT reused.
+
+```
+$ gg diff --hunks [--cached] [<commit>] [-- <paths>...]
+src/search.ts
+  1 @@ -15,7 +15,9 @@ export function score
+  2 @@ -40,3 +42,8 @@
+$ gg diff --hunks --json      # [{"path":"src/search.ts","hunks":[{"n":1,"old":[15,21],"new":[15,23],"header":"export function score"}]}]
+```
+
+`--hunk N` anchors a note to hunk N's whole new-side span (`New`), or to the
+old-side span when the hunk only deletes (`New == [0,0]`). An N past the
+file's hunk count is exit 1 with "file has K hunks".
+
+**CLI verbs** (`internal/cli/note.go`, `internal/cli/diff.go`, `internal/cli/skill.go`):
+
+```
+gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]
+gg note add    --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <commit>]
+               --summary "…" [--rationale "…"] [--author <name>] [--source user|agent] [--json]
+gg note reply  <note-id> --summary "…" [--rationale "…"] [--author <name>] [--json]
+gg note apply  --stdin [--cached | --rev <commit>] [--author <name>] [--json]
+gg note list   [--file <path>] [--type user|agent|all] [--cached | --rev <commit>] [--json]
+gg note rm     <note-id>
+gg note clear  (--file <path> | --all) [--type user|agent|all] --yes
+gg skill path  [review|using-gg]
+```
+
+- `add`/`reply` default `--source agent` and `--author` to `$GG_AGENT` when
+  set, else `agent`; a human scripting notes passes `--source user`. The TUI
+  and web keep `user` + git identity. `reply` inherits the parent's address,
+  side and range (phase 1's `NoteReply` flattens to the root).
+- `add`/`reply` print the new id on one line (`--json`: the wire note, same
+  shape as the web's `wireNote`). Exit 1 when the side cannot be read (the
+  phase 1 "does not exist" error), 2 on usage.
+- `list` prints one line per note, replies indented two spaces, resolution
+  computed by `NotesAt` (stale notes marked, orphaned hidden unless
+  `--json`, where they carry `"status":"orphaned"`):
+
+  ```
+  a1b2c3d4 [agent] src/search.ts new:15-23 active  Prefix matches now outrank substring hits
+    e5f6a7b8 [user] reply  Addressed in the latest revision
+  ```
+
+  Without `--file` it lists every note whose target matches the current
+  worktree scope (plus every commit note); `--type` defaults to `all`.
+- `rm` removes one note (a root takes its replies, as `NoteRemove` does
+  today). `clear` removes every matching root+replies; it requires `--yes`
+  and exactly one of `--file`/`--all`, and prints the count removed.
+- **Batch input** (`apply --stdin`) accepts two JSON shapes, detected by the
+  top-level key. The whole batch is validated before the first write (any
+  bad item = exit 1, nothing stored), then each item becomes one note;
+  stdout lists the ids (or `--json`: the wire notes).
+  1. hunk's `agent-context.json` v1, parsed exactly as hunk's
+     `sidecar.ts` does: `version` (number, default 1), `summary` (string,
+     optional), `files[]` with required non-empty `path`, optional
+     `summary`, `annotations[]` with required non-empty `summary`, optional
+     `oldRange`/`newRange` (`[a,b]`, 1-based inclusive; an annotation must
+     carry at least one; when both are present `newRange` wins),
+     `rationale`, `author`, `tags` (strings), `confidence`
+     (`low`|`medium`|`high`; anything else dropped), `markup` (ignored —
+     STML is out of scope, §7). Top-level and file `summary` values have no
+     anchor in gg: they are echoed to stderr as `context: …` lines and not
+     stored.
+  2. hunk's `comment apply` batch: `{"comments":[{"filePath","newLine"|
+     "oldLine"|"hunk"|"hunkNumber","summary","rationale?","author?",
+     "replyTo?"}]}` — `replyTo` alone makes a reply; otherwise `filePath`
+     plus exactly one target. `hunk`/`hunkNumber` use the `--hunk N` rule.
+  Every batch note is `Source: agent`; `--author` overrides a missing item
+  author. `--cached`/`--rev` choose the target diff for the whole batch.
+- **Housekeeping in a short-lived process**: every `gg note …` verb applies
+  `[notes]` from the effective config via `SetNotesPolicy`, runs its own
+  work FIRST, then calls a new bounded `WaitNotesSweep(ctx)` after
+  `StartNotesSweep()` with a 2 s budget; an unfinished sweep is abandoned
+  (the next gg start retries — the sweep is idempotent and lock-protected).
+  `gg diff --hunks` and `gg skill path` do not sweep. `gg batch` admits
+  `note`; the sweep still runs once per process (the `sync.Once`).
+
+**`gg review --notes`**: the `ReviewChanges` op gains `NotesFile string`;
+when set, the op adds `GG_NOTES_FILE=<path>` to the tool's environment and
+appends one paragraph to the context file (`$GG_CONTEXT_FILE`):
+
+```
+## Inline notes (optional)
+Also write anchored notes as hunk agent-context JSON (version 1) to the
+file at <GG_NOTES_FILE>: {"version":1,"files":[{"path":"…","annotations":
+[{"newRange":[a,b],"summary":"…","rationale":"…"}]}]}. Line numbers are
+1-based in the NEW version of each file. Comment on what the reader would
+not spot; do not annotate every hunk.
+```
+
+Default `[[tools.command]]` prompt templates are NOT changed (a new
+`<env:…>` token would ripple through `ValidateCommandTokens`). After the
+run the CLI imports the notes file when it is non-empty; otherwise, when the
+captured report itself parses as agent-context v1, that is imported and the
+report body is the JSON (still printed and saved as today); otherwise exit 1
+with "review tool wrote no notes (expected agent-context v1 at
+$GG_NOTES_FILE)". Import target: a single-commit review (`gg review <sha>`)
+imports both sides against that commit; a range (`A..B`, the default
+branch target) anchors to the TIP commit's new side only and a `--working`
+review to the unstaged worktree's new side only — old-side annotations in
+those two cases are skipped with one stderr warning each, because the
+review's base is not a note-addressable side (§4.4 old-side table). The
+report still prints to stdout and lands in the reviews dir; the imported
+ids are listed on stderr.
+
+**MCP tools** (`internal/mcp/notes.go`): `gg_notes_list` (read-only:
+`{file?, type?, cached?, rev?}` → wire notes with status),
+`gg_note_add` (`{file, hunk?|new_line?|old_line?, cached?, rev?, summary,
+rationale?, author?}`), `gg_notes_apply` (`{batch: <either JSON shape>,
+cached?, rev?, author?}` — the same validator as the CLI, all-or-nothing),
+`gg_note_rm` (`{id}`); the three mutators carry `mutatingAnnotations()`.
+`New` starts the sweep once (`gg mcp` is long-lived) after applying the
+config policy the way the CLI does.
+
+**Skill** (`internal/agentskill`): the package grows a `Skill` value type
+(`Name`, `Description`, `Version`, body) with `SkillFile`/`PlainFile`/
+`Block`/marker rendering per skill; `UsingGG` keeps today's marker text
+(`gg:using-gg:vN`) so installed copies stay recognised; `ReviewingWithGG`
+uses `gg:reviewing-with-gg:vN` and its own version counter starting at 1.
+`reviewing-with-gg.md` mirrors hunk's review skill for gg: never launch the
+TUI or web yourself; inspect first with `gg diff --stat`, `gg diff --hunks`,
+`gg diff -- <file>`, `gg note list --json`; batch with `gg note apply
+--stdin`; `gg note add` for a one-off; comment on intent, structure, risks
+and follow-ups, not every hunk; summarise when done; the two JSON shapes;
+the target-flag table above.
+
+`agentinit` installs BOTH skills per agent: skill-directory agents get a
+sibling `<dir>/reviewing-with-gg/SKILL.md` (Cursor: `reviewing-with-gg.mdc`),
+managed-block agents get a second block in the same file with the new
+markers. `Detection` keeps one row per agent for the TUI Settings popup, web
+and `gg init --list`; its `Status` is the worst of the two skills (any
+marker missing → `new` when using-gg is missing, else `outdated`; either
+outdated → `outdated`). `gg init --update` therefore refreshes both;
+`--to` custom targets follow the same rule. `agentskill.Version` bumps for
+the `using-gg.md` changes (the `note`/`diff --hunks`/`skill` verbs).
+
+`gg skill path [review|using-gg]` (default `review`) writes the embedded
+skill to `<user cache dir>/gg/skills/<name>/SKILL.md` when the file is
+missing or its marker version differs, and prints the absolute path — no
+dependency on `gg init` having run in this repo.
+
+**Testing:** pure parser tests for hunks (`@@` forms with/without counts,
+renames, binary, no-newline marker) and for both batch shapes (required
+fields, range forms, bad items reject the whole batch); CLI tests on a real
+repo with `XDG_STATE_HOME` isolated (`add` by hunk/new/old line, `--cached`,
+`--rev` full-sha normalisation, range refusal, `list` text + json, `rm`,
+`clear` guards, `apply` both shapes, the sweep wait bound); `review --notes`
+test with a fake tool script that writes `$GG_NOTES_FILE` (and one that
+writes JSON to the report); MCP handler tests; `agentinit` tests for the
+two-skill install/status matrix on every mode; an e2e scenario
+(`s..._notes_cli.toml`) driving `gg note add` → `list` → `apply --stdin`
+→ `rm` with stdout assertions.
+
 ## 5. How hunk highlights syntax, and what gg should do
 
 Hunk does not own a highlighter. `@pierre/diffs` wraps **Shiki** (TextMate
@@ -603,7 +792,7 @@ needs a `settingDoc`, CLI changes update `using-gg.md` + `agentskill.Version`
 |---|---|---|---|
 | 0 | Diff line cursor | `curLine`, `j`/`k`, marker style, align top/center/bottom, `e` open editor at line | – |
 | 1 | Notes core | `model.Note`, `internal/notes` store, domain queries + reconciliation, TUI rows + `c`/`E`/`R`/`a`/`}`/`{`, web rows, files/commits counts | 0 |
-| 2 | Agent lane | `gg note …` verbs (hunk v1 JSON), MCP note tools, `gg review --notes`, `reviewing-with-gg` skill + `gg skill path`, `gg init` installs it | 1 |
+| 2 | Agent lane | `gg note …` verbs (hunk v1 JSON), MCP note tools, `gg review --notes`, `reviewing-with-gg` skill + `gg skill path`, `gg init` installs it — design §4.5 | 1 |
 | 3 | Live steering | session inbox + `gg session navigate/reload/focus`, TUI watcher with poll fallback, web POST endpoint, attention marks | 1 (2 for the skill text) |
 | 4 | Syntax highlighting | chroma spike → `internal/syntax`, domain sidecars, TUI compositor, web classes, config keys | – (parallel with 1–3) |
 | 5 | Viewer parity extras | **conflict-resolver syntax colouring** (the hunk picker renders its own cells; give it the same `syntax` runs + `styledRuns` as the diff pane), TUI unified toggle, `v`/`y` line selection + copy (folds in the "text operations" backlog item), hunk-header + line-number toggles, tab width, watch-reload of an open diff, `gg pager` / `gg diff --view` / patch-from-stdin viewer, move detection | 0 |
