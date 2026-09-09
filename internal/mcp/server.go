@@ -39,6 +39,13 @@ func New(svc *domain.Service) *Server {
 	if top, err := svc.TopLevel(ctx); err == nil {
 		s.worktree = top
 	}
+	// gg mcp is long-lived, so it does the same note housekeeping a TUI does:
+	// apply the configured [notes] budget, then sweep once in the background.
+	// Best-effort — a config that will not load must never stop the server.
+	if cfg, cerr := svc.EffectiveConfig(ctx); cerr == nil {
+		svc.SetNotesPolicy(cfg.Notes.MaxAgeDays, cfg.Notes.MaxEntries)
+	}
+	svc.StartNotesSweep()
 	return s
 }
 
@@ -58,6 +65,7 @@ func (s *Server) sdkServer() *sdk.Server {
 	s.registerExportTool(srv)
 	s.registerCherryPickTool(srv)
 	s.registerWriteTool(srv)
+	s.registerNoteTools(srv)
 	return srv
 }
 
