@@ -37,6 +37,11 @@ const state = {
   stashes: [],
   bookmarks: [], // gg's own store: live references to a file or a commit
   shelf: [],     // gg's own store: frozen copies (a file's bytes, a commit's files)
+  previews: [],  // saved merge previews: (source → target) pairs, recomputed from the live tips
+  previewsDisabled: false, // the previews store is unavailable (no state dir)
+  // {id, source, target, sourceHash, targetHash} while a preview owns the
+  // compare screen, so a refresh can tell whether its tips moved
+  previewOpen: null,
   sidebar: true,
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
@@ -70,7 +75,7 @@ const DANGER_OPTIONS = new Set([
 ]);
 
 
-const SECTIONS = ["branches", "remotes", "worktrees", "tags", "stashes", "reflog", "bookmarks", "shelf"];
+const SECTIONS = ["branches", "remotes", "worktrees", "tags", "stashes", "reflog", "bookmarks", "shelf", "previews"];
 
 
 // localStorage can throw (private mode); persistence is best-effort.

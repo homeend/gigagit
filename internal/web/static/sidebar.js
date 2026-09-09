@@ -651,7 +651,7 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
 // lists you consult now and then, so the sidebar opens on what you steer with
 // (branches, remotes, worktrees) rather than a screenful of tags. It applies
 // only until something is saved - after that, your own layout is what returns.
-const COLLAPSED_DEFAULT = ["tags", "stashes", "reflog", "bookmarks", "shelf"];
+const COLLAPSED_DEFAULT = ["tags", "stashes", "reflog", "bookmarks", "shelf", "previews"];
 
 // Every header carries its state as a chevron - pointing down when open,
 // right when folded - so a folded section still reads as something you can
@@ -663,9 +663,17 @@ function applySection(name, collapsed) {
   // Branches also carries the ⌖ locate control (the TUI's f on the Branches
   // tab): the list has no keyboard cursor to jump, so a click scrolls the
   // checked-out row into view instead.
-  const locate = name === "branches" ? `<span class="locate" title="scroll to the current branch (f in the TUI)">\u2316</span>` : "";
+  // Previews carries a + in the same slot: the list is the only one you ADD
+  // to from the sidebar itself (the TUI's a on the Previews tab), and an
+  // empty folded section otherwise offers no way in.
+  const control =
+    name === "branches"
+      ? `<span class="locate" title="scroll to the current branch (f in the TUI)">\u2316</span>`
+      : name === "previews"
+        ? `<span class="locate" title="new merge preview (a in the TUI)">+</span>`
+        : "";
   $(name + "-header").innerHTML =
-    (collapsed ? "\u25b8 " : "\u25be ") + esc(name) + locate + sortChipHTML(name);
+    (collapsed ? "\u25b8 " : "\u25be ") + esc(name) + control + sortChipHTML(name);
 }
 
 
@@ -749,6 +757,14 @@ SECTIONS.forEach((n) => {
       return;
     }
     if (e.target.closest(".locate")) {
+      // The previews header's control ADDS instead of locating. previews.js
+      // cannot be imported here (files.js/ops.js import this module, so the
+      // edge would close a cycle), so it hands the flow over on the window.
+      if (n === "previews") {
+        if (isCollapsed(n)) toggleSection(n); // the new row must land in view
+        if (window.__ggAddPreview) window.__ggAddPreview();
+        return;
+      }
       locateCurrentBranch();
       return;
     }
