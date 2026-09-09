@@ -215,6 +215,29 @@ func TestDiffHunksSingleCommitIsItsOwnChange(t *testing.T) {
 	}
 }
 
+// A ROOT commit positional (no parent) must still show its own change as one
+// whole-file hunk, not error out and not come back empty — the regression
+// guarded at the domain layer by TestDiffHunksOnRootCommit, exercised here
+// through the actual `gg diff --hunks <root-sha>` CLI path.
+func TestDiffHunksRootCommitIsItsOwnChange(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\ntwo\nthree\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", "a.txt")
+	runGit(t, dir, "commit", "-m", "root")
+	root := runGit(t, dir, "rev-parse", "HEAD")
+
+	code, out, errb := runCLI(t, dir, "diff", "--hunks", root)
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "a.txt") || !strings.Contains(out, "  1 @@") {
+		t.Fatalf("a root commit must show its own whole-file hunk:\n%s", out)
+	}
+}
+
 func TestDiffHunksRejectsStatCombination(t *testing.T) {
 	t.Parallel()
 	dir := newRepoDir(t)

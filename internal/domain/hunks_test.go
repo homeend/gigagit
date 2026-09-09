@@ -110,6 +110,7 @@ func TestParseDiffHunksIgnoresBodyLinesThatLookLikeHeaders(t *testing.T) {
 // root, and never the bare <c> that `git diff` would read as
 // index/worktree-vs-<c>.
 func TestHunkDiffSpecTargets(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gittest.Run(t, dir, "init", "-b", "main")
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644); err != nil {

@@ -232,9 +232,18 @@ fold-expand step `jumpNote` and `gotoNote` share: re-find the anchor in the
 REBUILT stream, because a partial-mode index is stale afterwards.
 
 **Phase 2 — the agent lane.** `domain.DiffHunks`/`HunkRange` parse git's `@@`
-headers (`ParseDiffHunks`, pure) and `domain.HunkDiffSpec` is the ONE rule for
-which patch a hunk number refers to: a bare commit means `<c>^..<c>`, the pair
-of texts a commit note anchors to, NOT `git diff <c>`. `domain.NoteTarget` is
+headers (`ParseDiffHunks`, pure) and `(*Service).HunkDiffSpec` is the ONE rule
+for which patch a hunk number refers to: a bare commit means that commit's own
+change against its parent (`<c>^..<c>`), the pair of texts a commit note
+anchors to, NOT `git diff <c>`. It is a `*Service` method, not a pure
+function: a bare commit is probed for a parent via `ResolveRev(ctx, rev+"^")`
+first, because a ROOT commit has no `<c>^` to diff against — `<c>^..<c>` fails
+outright, and git's `<c>^!` shorthand (tried and rejected: verified against
+real git, it silently degrades to plain `<c>` — index/worktree vs `<c>` — the
+instant `<c>` has no parent, since `<c>^!` desugars to the plain rev with no
+parent to exclude) does NOT fix it either. A root commit instead diffs
+against `domain.EmptyTreeSHA1`, git's well-known empty-tree object id.
+`domain.NoteTarget` is
 the shared flags→`FileAddress` rule (`ErrNoteTargetUsage` = exit 2);
 `NoteAddresses` enumerates targets for a bare `gg note list`; `NoteGet` lets the
 batch importer validate every `replyTo` before the first write.
