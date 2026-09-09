@@ -27,6 +27,7 @@ type previewOpenState struct {
 type previewOpenMsg struct {
 	id, source, target string
 	keepPath           string
+	moved              string // ref whose tip moved; the "moved" notice, emitted only if the view really re-opens
 	gen                int
 	eps                domain.PreviewEndpoints
 	err                error
@@ -40,10 +41,23 @@ func previewTitle(source, target string) string {
 // previewOpenMsg through here: it stamps the current previewGen, and a
 // hand-built message would be dropped by the handler's gen check.
 func (m Model) openPreviewCmd(id, source, target, keepPath string) tea.Cmd {
+	return m.reopenPreviewCmd(id, source, target, keepPath, "")
+}
+
+// reopenPreviewCmd is openPreviewCmd carrying the name of the ref whose tip
+// moved. The notice rides on the message instead of being written when the
+// refresh notices the movement, because a moved tip does not always change
+// what the user sees: a target commit off the fork point leaves merge-base and
+// source tip — and so the whole target…source diff — untouched. Only the
+// re-open path (a changed compare tag) says anything.
+func (m Model) reopenPreviewCmd(id, source, target, keepPath, moved string) tea.Cmd {
 	svc, gen := m.svc, m.previewGen
 	return func() tea.Msg {
 		eps, err := svc.PreviewOpen(context.Background(), source, target)
-		return previewOpenMsg{id: id, source: source, target: target, keepPath: keepPath, gen: gen, eps: eps, err: err}
+		return previewOpenMsg{
+			id: id, source: source, target: target,
+			keepPath: keepPath, moved: moved, gen: gen, eps: eps, err: err,
+		}
 	}
 }
 
@@ -84,20 +98,33 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("error: %s", msg.err.Error())
 		return m, nil
 	}
+	// Is this message about the preview that is currently open? A resolve for
+	// a DIFFERENT pair (a "show once" while a saved preview is open, another
+	// row's enter) may report a notice, but must never close someone else's
+	// view.
+	po := m.previewOpen
+	isOpen := po != nil && m.filesView != nil &&
+		po.id == msg.id && po.source == msg.source && po.target == msg.target
 	if msg.eps.Summary.State != domain.PreviewOK {
 		m.statusMsg = previewStateNotice(msg.source, msg.target, msg.eps.Summary.State)
-		if m.previewOpen != nil && m.filesView != nil {
-			m = m.closePreviewView() // was open: the pair stopped being previewable
+		if isOpen {
+			m = m.closePreviewView() // the open pair stopped being previewable
 		}
 		return m, nil
 	}
 	tag := compareTagFor(msg.eps.Left, msg.eps.Right)
-	if m.previewOpen != nil && m.filesView != nil && m.compareTag == tag {
-		return m, nil // same tips already showing
+	if isOpen && m.compareTag == tag {
+		// The diff is unchanged, but a tip may still have moved (target commits
+		// off the fork point move neither merge-base nor source). Reconcile the
+		// hashes, silently: without this every later previews refresh would see
+		// them differ, announce "moved" and spend another resolve, forever.
+		po.srcHash, po.tgtHash = msg.eps.Summary.SourceHash, msg.eps.Summary.TargetHash
+		return m, nil
 	}
-	if m.previewOpen != nil && m.filesView != nil {
-		m.compareTag = "" // defeat the same-tag guard: a re-arm must reload
-	}
+	// Always defeat openCompareFiles' same-tag guard: the view showing this
+	// exact endpoint pair may be a branch compare (comparePair armed, its list
+	// origin-filtered), which a preview must never inherit.
+	m.compareTag = ""
 	var cmd tea.Cmd
 	m, cmd = m.openCompareFiles(msg.eps.Left, msg.eps.Right)
 	m.filesTitle = previewTitle(msg.source, msg.target)
@@ -111,6 +138,9 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 		id: msg.id, source: msg.source, target: msg.target,
 		srcHash: msg.eps.Summary.SourceHash, tgtHash: msg.eps.Summary.TargetHash,
 		tag: tag, keepPath: msg.keepPath,
+	}
+	if msg.moved != "" { // a re-open the user can see: say which tip moved
+		m.statusMsg = i18n.T("preview updated: %s moved", msg.moved)
 	}
 	return m, cmd
 }
@@ -138,6 +168,7 @@ func (m Model) afterPreviewsRefresh() (Model, tea.Cmd) {
 	if po == nil || m.filesView == nil {
 		return m, nil
 	}
+	moved := ""
 	if po.id != "" {
 		found := false
 		for _, r := range m.previews {
@@ -153,11 +184,10 @@ func (m Model) afterPreviewsRefresh() (Model, tea.Cmd) {
 			if r.sum.SourceHash == po.srcHash && r.sum.TargetHash == po.tgtHash {
 				return m, nil // unchanged
 			}
-			moved := po.source
+			moved = po.source
 			if r.sum.SourceHash == po.srcHash {
 				moved = po.target
 			}
-			m.statusMsg = i18n.T("preview updated: %s moved", moved)
 		}
 		if !found {
 			m = m.closePreviewView()
@@ -167,8 +197,8 @@ func (m Model) afterPreviewsRefresh() (Model, tea.Cmd) {
 	}
 	// A transient ("show once", id == "") preview has no row: re-resolve
 	// and let handlePreviewOpenMsg's same-tag check decide (unchanged tips
-	// build the same tag and are a no-op).
-	return m, m.openPreviewCmd(po.id, po.source, po.target, m.previewSelectedPath())
+	// build the same tag: it reconciles the hashes and says nothing).
+	return m, m.reopenPreviewCmd(po.id, po.source, po.target, m.previewSelectedPath(), moved)
 }
 
 // closePreviewView closes the compare view the way esc does: focus returns

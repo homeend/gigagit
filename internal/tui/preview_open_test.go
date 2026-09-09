@@ -2,6 +2,7 @@ package tui
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -159,6 +160,64 @@ func TestOpenPreviewReArmsWhenSourceMoves(t *testing.T) {
 	}
 	if got := m.previewSelectedPath(); got != "a.txt" {
 		t.Fatalf("cursor = %q after the re-arm, want the file it was on (a.txt)", got)
+	}
+}
+
+// TestOpenPreviewTargetOnlyMoveReconcilesSilently: commits on the target that
+// are off the fork point move neither merge-base nor the source tip, so the
+// target…source diff — everything the user sees — is unchanged. The open
+// state's hashes must still be reconciled and nothing announced; otherwise
+// every later previews refresh sees them differ, says "main moved" and spends
+// another PreviewOpen, forever.
+func TestOpenPreviewTargetOnlyMoveReconcilesSilently(t *testing.T) {
+	t.Parallel()
+	m, dir, _ := mergePreviewModel(t)
+	m = openMergePreview(t, m)
+	oldTag, oldTgt := m.compareTag, m.previewOpen.tgtHash
+	if err := os.WriteFile(filepath.Join(dir, "c.txt"), []byte("c\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-q", "-m", "unrelated work on main")
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "main").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	newTip := strings.TrimSpace(string(out))
+
+	m, cmd := m.reloadSourcesCmd([]sourceKey{srcBranches}, reloadOpts{})
+	updated, chain := m.Update(cmd())
+	m = updated.(Model)
+	if chain == nil {
+		t.Fatal("a branches refresh must chain a previews read")
+	}
+	m = drainMsgs(t, m, chain, 6)
+
+	var paths []string
+	for _, l := range m.filesView.lines {
+		if l.path != "" {
+			paths = append(paths, l.path)
+		}
+	}
+	if len(paths) != 1 || paths[0] != "a.txt" || m.compareTag != oldTag {
+		t.Fatalf("the diff must not change: files = %v, tag changed = %v", paths, m.compareTag != oldTag)
+	}
+	if m.statusMsg != "" {
+		t.Fatalf("nothing the user sees changed; status = %q", m.statusMsg)
+	}
+	if m.previewOpen.tgtHash == oldTgt || m.previewOpen.tgtHash != newTip {
+		t.Fatalf("target hash = %q, want the new main tip %q", m.previewOpen.tgtHash, newTip)
+	}
+
+	// The next refresh must be a no-op: no notice, no further resolve.
+	m, cmd = m.reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{})
+	updated, _ = m.Update(cmd())
+	m = updated.(Model)
+	if m.statusMsg != "" {
+		t.Fatalf("a reconciled preview must stay quiet; status = %q", m.statusMsg)
+	}
+	if _, again := m.afterPreviewsRefresh(); again != nil {
+		t.Fatal("a reconciled preview must not re-resolve on every refresh")
 	}
 }
 
