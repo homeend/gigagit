@@ -428,3 +428,53 @@ func TestThemeEditorSavesListRole(t *testing.T) {
 		t.Fatalf("lane 0 must keep the built-in value, got %q", st().lane(0))
 	}
 }
+
+// Emptying the field on a lane row is a REMOVAL, not a write of the whole
+// palette: the six lanes the user never touched must not be pinned to today's
+// built-in colours behind their back.
+func TestThemeEditorClearingListEntryDoesNotPinTheRest(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := themeEditorModel(t, "dark")
+	p.sel = slices.IndexFunc(p.roles, func(r theme.RoleRef) bool { return r.Key == "lanes[1]" })
+
+	um, _ := m.Update(keyMsg("enter"))
+	m = um.(Model)
+	p.field = newTextField("")
+	um, _ = m.Update(keyMsg("enter"))
+	m = um.(Model)
+
+	if p.global.Lanes != nil {
+		t.Fatalf("clearing an unset lane must leave the list unset, got %#v", p.global.Lanes)
+	}
+	if raw, err := os.ReadFile(config.DefaultGlobalPath()); err == nil && strings.Contains(string(raw), "lanes = [") {
+		t.Fatalf("no lanes line should have been written:\n%s", raw)
+	}
+	if string(st().lane(1)) != theme.Dark.Lanes[1] {
+		t.Fatalf("lane 1 = %q, want the built-in", st().lane(1))
+	}
+
+	// With one lane already overridden, clearing it drops the whole line again.
+	p.sel = slices.IndexFunc(p.roles, func(r theme.RoleRef) bool { return r.Key == "lanes[1]" })
+	um, _ = m.Update(keyMsg("enter"))
+	m = um.(Model)
+	p.field = newTextField("")
+	for _, r := range "#ff5f00" {
+		um, _ = m.Update(keyMsg(string(r)))
+		m = um.(Model)
+	}
+	um, _ = m.Update(keyMsg("enter"))
+	m = um.(Model)
+	if p.global.Lanes == nil {
+		t.Fatal("the save should have set the lanes list")
+	}
+	um, _ = m.Update(keyMsg("d"))
+	m = um.(Model)
+	raw, _ := os.ReadFile(config.DefaultGlobalPath())
+	if strings.Contains(string(raw), "lanes = [") {
+		t.Fatalf("d must drop the all-empty lanes line:\n%s", raw)
+	}
+	if string(st().lane(1)) != theme.Dark.Lanes[1] {
+		t.Fatalf("lane 1 = %q after d, want the built-in", st().lane(1))
+	}
+}

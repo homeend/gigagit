@@ -123,8 +123,20 @@ func (p *themeEditorPopup) shown() theme.Theme {
 
 // previewFor resolves the theme that setting r to v would produce.
 func (p *themeEditorPopup) previewFor(r theme.RoleRef, v string) theme.Theme {
-	th, _ := theme.Overlay(p.base, theme.Merge(r.OverrideSet(p.global, p.base, v), p.repo))
+	th, _ := theme.Overlay(p.base, theme.Merge(themeSetRole(p.global, r, v), p.repo))
 	return th
+}
+
+// themeSetRole sets r to v on o WITHOUT pinning a list's other entries: the
+// ZERO theme expands a missing lanes/syntax list to all-empty entries, which
+// Overlay reads as "keep the base value". Expanding from the real base instead
+// (RoleRef.OverrideSet's other mode, for a caller that wants a self-contained
+// array) would write today's built-in colours into the six lanes the user never
+// touched — they would all read as overridden, `d` could never take the list
+// back to unset, and a later retune of the built-in palette would never reach
+// those slots.
+func themeSetRole(o theme.Override, r theme.RoleRef, v string) theme.Override {
+	return r.OverrideSet(o, theme.Theme{}, v)
 }
 
 // repoShadows reports whether the repo config pins this role, making it
@@ -292,8 +304,12 @@ func (p *themeEditorPopup) updateEditing(m Model, msg tea.KeyMsg) (Model, tea.Cm
 	case tea.KeyEnter:
 		return p.save(m)
 	}
+	before := p.field.Value()
 	if !p.field.HandleEditKey(msg) {
 		return m, nil
+	}
+	if p.field.Value() == before {
+		return m, nil // a cursor move: nothing to re-resolve, nothing to repaint
 	}
 	return m, p.preview()
 }
@@ -331,7 +347,19 @@ func (p *themeEditorPopup) save(m Model) (Model, tea.Cmd) {
 		p.setStatus(true, i18n.T("not a colour (#rrggbb or 0–255)"))
 		return m, nil // stay in the editor: nothing is written, nothing is lost
 	}
-	next := r.OverrideSet(p.global, p.base, v)
+	// An emptied field is a REMOVAL, and it takes exactly the `d` path: a list
+	// entry is blanked in place, never expanded from the base — clearing one lane
+	// must not pin the other six to today's built-in palette.
+	next := themeSetRole(p.global, r, v)
+	if v == "" {
+		var changed bool
+		if next, changed = themeClearRole(p.global, r); !changed {
+			p.editing = false
+			setTheme(p.previewBase)
+			p.setStatus(false, i18n.T("%s is already the built-in default", r.Key))
+			return m, tea.ClearScreen
+		}
+	}
 	if err := config.SetThemeRole(p.globalPath, p.base.Name, themeConfigKey(r), themeWriteValues(next, r, v)...); err != nil {
 		setTheme(p.previewBase)
 		p.setStatus(true, i18n.T("not saved: %s", err.Error()))

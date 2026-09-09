@@ -324,9 +324,13 @@ line rather than re-commenting it); removal re-comments only a line that still
 carries `[populated]`; `sectionHeader` treats a commented header as ending the
 previous section but rejects anything that is not a bare bracketed name, so a
 shell line inside a `[[tools.command]]` script is never mistaken for one. A
-list role writes its WHOLE array line, and `d` on one entry blanks it in place
-(never expanding from the base, which would pin the other six) and drops the
-line once every entry is empty again.
+list role writes its WHOLE array line, but only the edited entry carries a
+colour: `themeSetRole` expands a missing list from the ZERO theme, so the
+untouched slots stay `""` ("keep the base value"). Expanding from the real base
+— `RoleRef.OverrideSet`'s other mode — would pin six lanes to today's palette,
+mark them all overridden, and leave `d` unable to take the list back to unset.
+`d` (and an emptied field, which takes the same path) blanks the entry in place
+and drops the line once every entry is empty again.
 
 **Serial-test rule.** Both `setTheme` (swaps the process-global `styles`
 pointer) and `lipgloss.SetColorProfile` (process-global) make any test that
