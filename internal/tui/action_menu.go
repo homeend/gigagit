@@ -435,6 +435,16 @@ func actionMenuLabel(id string) (string, bool) {
 		return i18n.T("Delete worktree…"), true
 	case "rename-worktree":
 		return i18n.T("Rename or move worktree…"), true
+	case "preview-open":
+		return i18n.T("Open merge preview"), true
+	case "preview-add":
+		return i18n.T("New merge preview…"), true
+	case "preview-rename":
+		return i18n.T("Rename preview…"), true
+	case "preview-delete":
+		return i18n.T("Remove preview…"), true
+	case "preview-swap":
+		return i18n.T("Save reversed preview"), true
 	case "checkout-remote":
 		return i18n.T("Check out remote branch"), true
 	case "switch-remote":

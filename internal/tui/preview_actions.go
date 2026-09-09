@@ -1,0 +1,131 @@
+package tui
+
+import (
+	"context"
+	"errors"
+
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/i18n"
+)
+
+// previewMutatedMsg is the result of any store mutation from the TUI: the tab
+// reloads; focusID selects a row once the fresh rows land; open then opens it.
+// fromTab is true for the tab's own keys (a/e/d/s) and false for the pair
+// dialog: only the former moves focus onto the Previews tab afterwards.
+type previewMutatedMsg struct {
+	err            error
+	focusID        string
+	open           bool
+	fromTab        bool
+	source, target string
+}
+
+// previewAddCmd saves a pair off the UI thread. A duplicate is NOT an error:
+// the store hands back the existing record, which the tab then focuses (and
+// opens, when asked) exactly as if it had just been created.
+func (m Model) previewAddCmd(source, target, label string, open, fromTab bool) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		p, err := svc.PreviewAdd(context.Background(), source, target, label)
+		if errors.Is(err, domain.ErrPreviewExists) {
+			err = nil // focus the existing row instead
+		}
+		return previewMutatedMsg{err: err, focusID: p.ID, open: open, fromTab: fromTab, source: source, target: target}
+	}
+}
+
+func (m Model) previewRenameCmd(id, label string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		return previewMutatedMsg{err: svc.PreviewRename(context.Background(), id, label), focusID: id, fromTab: true}
+	}
+}
+
+func (m Model) previewRemoveCmd(id string) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		return previewMutatedMsg{err: svc.PreviewRemove(context.Background(), id), fromTab: true}
+	}
+}
+
+// handlePreviewMutatedMsg reports errors, else reloads the tab and remembers
+// what to focus (and open) once the fresh rows land.
+func (m Model) handlePreviewMutatedMsg(msg previewMutatedMsg) (Model, tea.Cmd) {
+	if msg.err != nil {
+		m.statusMsg = i18n.T("error: %s", msg.err.Error())
+		return m, nil
+	}
+	m.previewFocusID = msg.focusID
+	m.previewFocusTab = msg.fromTab
+	var open tea.Cmd
+	if msg.open {
+		open = m.openPreviewCmd(msg.focusID, msg.source, msg.target, "")
+	}
+	var reload tea.Cmd
+	m, reload = m.reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{})
+	return m, tea.Batch(reload, open)
+}
+
+// canAddPreview gates a: the Previews tab is focused and nothing is running.
+// Adding needs no row — an empty tab is exactly where a is most useful.
+func (m Model) canAddPreview() bool { return m.focus == panelPreviews && m.opsIdle() }
+
+// canEditPreview gates enter/e/d/s: the same, plus a selected row.
+func (m Model) canEditPreview() bool {
+	_, ok := m.selectedPreview()
+	return m.focus == panelPreviews && ok && m.opsIdle()
+}
+
+// openPreviewAddPopup pushes the empty add form.
+func (m Model) openPreviewAddPopup() Model {
+	return m.pushLayer(&previewAddPopup{source: newTextField(""), target: newTextField("")})
+}
+
+// openPreviewRenamePopup pushes the rename form for the selected row.
+func (m Model) openPreviewRenamePopup() (Model, bool) {
+	r, ok := m.selectedPreview()
+	if !ok {
+		return m, false
+	}
+	return m.pushLayer(&previewRenamePopup{id: r.rec.ID, label: newTextField(r.rec.Label)}), true
+}
+
+// confirmPreviewRemove raises the remove confirm for the selected row. The
+// option VALUES stay English (agent-facing protocol); optionDisplayName
+// renders them. "Cancel" is last so esc resolves to it.
+func (m Model) confirmPreviewRemove() Model {
+	r, ok := m.selectedPreview()
+	if !ok {
+		return m
+	}
+	id := r.rec.ID
+	m.modal = &decisionState{
+		req: engine.DecisionRequest{
+			ID:      "preview-remove",
+			Prompt:  i18n.T("Remove preview %s?", r.rec.Label),
+			Options: []string{"Remove", "Cancel"},
+		},
+		sel: 1,
+		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+			if opt == "Remove" {
+				return m, m.previewRemoveCmd(id)
+			}
+			return m, nil
+		},
+	}
+	return m
+}
+
+// previewSwapCmd saves the reversed pair as a second preview (the record's id
+// is direction-sensitive, so this never collides with the row it came from).
+// It is saved, not opened: s is a bookkeeping key, not a viewing one.
+func (m Model) previewSwapCmd() tea.Cmd {
+	r, ok := m.selectedPreview()
+	if !ok {
+		return nil
+	}
+	return m.previewAddCmd(r.rec.Target, r.rec.Source, "", false, true)
+}

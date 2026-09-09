@@ -139,6 +139,12 @@ type Model struct {
 	previewOpen *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
 	previewGen  int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
 
+	// Where the cursor lands once a mutation's reload arrives. Set by
+	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
+	// arrival arm: the fresh rows are the first moment the new id exists.
+	previewFocusID  string // record id to select after the reload ("" = leave the cursor be)
+	previewFocusTab bool   // also make Previews the active/focused tab (the tab's own keys only)
+
 	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
 	svc                 *domain.Service                 // command layer; all git access goes through svc
@@ -676,6 +682,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case previewOpenMsg:
 		return m.handlePreviewOpenMsg(msg)
+	case previewMutatedMsg:
+		return m.handlePreviewMutatedMsg(msg)
 	case pairOpsMsg:
 		// Only the LATEST probe may open the popup: a re-pair while an older
 		// probe was in flight replaced pairProbe, so the older msg no longer
@@ -1291,6 +1299,19 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			key := m.panelSelKey(panelPreviews)
 			m.previews = msg.value.(previewsPayload).rows
 			m = m.restorePanelSel(panelPreviews, key)
+			// A mutation asked for a row that only exists now the fresh rows
+			// have landed (an add's brand-new id). restorePanelSel scans by
+			// rowKeyAt, which for this panel IS the record id.
+			if m.previewFocusID != "" {
+				m = m.restorePanelSel(panelPreviews, m.previewFocusID)
+				if m.previewFocusTab {
+					// The tab's own keys keep the user where they were working;
+					// the pair dialog (which can fire from any tab) does not
+					// yank them across the interface.
+					m.activeLeftTab, m.focus, m.lastLeftPanel = panelPreviews, panelPreviews, panelPreviews
+				}
+			}
+			m.previewFocusID, m.previewFocusTab = "", false
 			// An open preview follows its pair: moved tips re-open it, a
 			// vanished (or no-longer-previewable) pair closes it with a notice.
 			return m.afterPreviewsRefresh()
@@ -1650,6 +1671,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = i18n.T("nothing to stash")
 				return m, nil
 			}
+			// Previews: save the reversed pair (target → source) as its own
+			// row — the record id is direction-sensitive, so the two coexist.
+			if m.focus == panelPreviews {
+				if m.canEditPreview() {
+					return m, m.previewSwapCmd()
+				}
+				return m, nil
+			}
 			if m.canSwitchBranch() {
 				b, _ := m.selectedBranch()
 				if wt, ok := m.worktreeForBranch(b.Name); ok {
@@ -1809,13 +1838,27 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return mm, nil
 				}
 			}
+		case "a":
+			// Previews: a new (source, target) pair. r is the global reload
+			// key, so the tab follows the Worktrees convention — e renames.
+			if m.canAddPreview() {
+				return m.openPreviewAddPopup(), nil
+			}
 		case "e":
 			if m.focus == panelWorktrees && m.canMoveWorktree() {
 				wt, _ := m.selectedWorktree()
 				return m.openMoveWorktreePopup(wt, true), nil
 			}
+			if m.canEditPreview() {
+				mm, _ := m.openPreviewRenamePopup()
+				return mm, nil
+			}
 		case "d":
 			switch m.focus {
+			case panelPreviews:
+				if m.canEditPreview() {
+					return m.confirmPreviewRemove(), nil
+				}
 			case panelWorktrees:
 				if m.canDeleteWorktree() {
 					wt, _ := m.selectedWorktree()
