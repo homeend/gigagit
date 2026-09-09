@@ -234,11 +234,18 @@ func (m Model) cycleTheme() (Model, tea.Cmd) {
 		}
 	}
 	m.cfg.UI.Theme = next
+	before := m.statusMsg
 	m, cmd := m.applyTheme()
+	// applyTheme may have complained about the new theme's [themes.<name>]
+	// table; keep that in front of the cycle message instead of losing it.
+	lead := ""
+	if m.statusMsg != before && m.statusMsg != "" {
+		lead = m.statusMsg + "; "
+	}
 	if err := config.SetGlobalUITheme(config.DefaultGlobalPath(), next); err != nil {
-		m.statusMsg = i18n.T("theme → %s (not saved: %s)", themeDisplayName(next), err.Error())
+		m.statusMsg = lead + i18n.T("theme → %s (not saved: %s)", themeDisplayName(next), err.Error())
 	} else {
-		m.statusMsg = i18n.T("theme: %s", themeDisplayName(next))
+		m.statusMsg = lead + i18n.T("theme: %s", themeDisplayName(next))
 	}
 	return m, cmd
 }

@@ -204,6 +204,10 @@ func Merge(lo, hi Override) Override {
 	return out
 }
 
+// mergeList copies whichever layer set the list — hi whenever it is non-nil,
+// INCLUDING a written-but-empty `lanes = []`, which is set, not absent: the
+// copy stays non-nil so Overlay reports its length instead of silently falling
+// back to the lower layer.
 func mergeList(lo, hi []string) []string {
 	src := lo
 	if hi != nil {
@@ -212,7 +216,9 @@ func mergeList(lo, hi []string) []string {
 	if src == nil {
 		return nil
 	}
-	return append([]string(nil), src...)
+	out := make([]string, len(src))
+	copy(out, src)
+	return out
 }
 
 // AsOverride returns the Override that reproduces th's current values — the

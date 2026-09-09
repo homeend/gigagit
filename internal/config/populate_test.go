@@ -129,8 +129,10 @@ func TestPopulateFileMissingFileCreatesIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if added != len(settingDocs) {
-		t.Fatalf("fresh file should add all %d keys, added %d", len(settingDocs), added)
+	// Every settingDocs key plus one per generated [themes.<name>] block.
+	want := len(settingDocs) + len(themeDocs())
+	if added != want {
+		t.Fatalf("fresh file should add all %d keys + theme blocks, added %d", want, added)
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("file not created: %v", err)

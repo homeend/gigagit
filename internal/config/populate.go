@@ -253,5 +253,19 @@ func countAdded(raw string) int {
 			n++
 		}
 	}
+	return n + countMissingThemeBlocks(lines)
+}
+
+// countMissingThemeBlocks reports how many [themes.<name>] example blocks
+// populate would add — they are written like any other populated key, so
+// `gg config populate` must count them or it reports "already complete" while
+// rewriting the file.
+func countMissingThemeBlocks(lines []string) int {
+	n := 0
+	for _, block := range themeDocs() {
+		if !themeTablePresent(lines, block.name) {
+			n++
+		}
+	}
 	return n
 }

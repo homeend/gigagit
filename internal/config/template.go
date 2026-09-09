@@ -120,7 +120,7 @@ func themeBlock(th theme.Theme) []string {
 		if n := width - len(assign[i]); n > 0 {
 			pad = strings.Repeat(" ", n)
 		}
-		lines = append(lines, "# "+assign[i]+pad+"   # "+d.Doc)
+		lines = append(lines, "# "+assign[i]+pad+"   # "+d.Doc+" [populated]")
 	}
 	return lines
 }

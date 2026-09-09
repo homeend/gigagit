@@ -78,7 +78,7 @@ feature; keep THIS file's map to one line per package.
 | `template`   | Pure token resolver for branch/path templates and external-tool commands (per-token-kind quoting; validation makes bad templates inert); `FlattenForCmd` cmd.exe repair; shared conflict-context doc rendering. |
 | `textdiff`   | Pure line-alignment engine (Myers + guards) behind the side-by-side diff; optional word-level intraline spans. |
 | `syntax`     | Pure chroma wrapper: `Detect(path)` → lexer, `Lex(lang, src)` → per-source-line token runs (`Tok{Start,End,Class}`, rune offsets, coarse `Class` enum). DAG leaf; `domain.Differ` attaches runs to `Diff.OldTok/NewTok`. |
-| `theme`      | Pure colour-role catalogue (`Terminal` zero-value = inherit, `Dark` Campbell, `Light` Everforest soft) behind `[ui] theme`; the TUI builds lipgloss styles from it (`styles.go`) and paints the frame (`paint.go`). DAG leaf. |
+| `theme`      | Pure colour-role catalogue (`Terminal` zero-value = inherit, `Dark` Campbell, `Light` neutral grey/charcoal) behind `[ui] theme`, plus `Override`/`Overlay`/`Merge`/`RoleDocs` over one `roleFields` table for the config's `[themes.<name>]` per-role overrides; the TUI builds lipgloss styles from it (`styles.go`) and paints the frame (`paint.go`). DAG leaf. |
 | `commitgraph`| Pure single-line commit-graph lane engine; no git/TUI/lipgloss imports. |
 | `cache`      | Generic injected in-memory LRU cache factory (entry-count + byte budget); first consumer is the commit-diff cache. |
 | `fsprobe`    | Pure per-OS probe classifying paths on slow "foreign" filesystem mounts (9p/WSL drvfs, cifs/smb, nfs, fuse; UNC on Windows) behind the repo-switcher slow-fs warning; fail-open, callers probe off-thread. DAG leaf. |

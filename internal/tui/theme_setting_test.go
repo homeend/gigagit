@@ -133,9 +133,7 @@ func TestThemeOverrideMakesTerminalPaintable(t *testing.T) {
 	m.refreshLastRun = map[refreshItem]time.Time{}
 
 	cfg := themeCfgWith("terminal", "terminal", theme.Override{Bg: "#000000"})
-	if _, cmd := m.Update(configReadyMsg{cfg: cfg}); cmd == nil {
-		_ = cmd // the repaint cmd is asserted by TestThemeOverrideChangeClearsScreen
-	}
+	m.Update(configReadyMsg{cfg: cfg})
 	if bg, _ := st().frame(); string(bg) != "#000000" {
 		t.Fatalf("terminal frame bg = %q, want the overridden #000000", bg)
 	}
@@ -224,6 +222,28 @@ func TestCycleThemePersistsAndClears(t *testing.T) {
 	m, _ = m.cycleTheme()
 	if m.cfg.UI.Theme != "terminal" || activeTheme().Name != theme.NameTerminal {
 		t.Fatalf("light → terminal expected, got %q", m.cfg.UI.Theme)
+	}
+}
+
+// Cycling into a theme whose [themes.<name>] table has a bad value must not
+// swallow applyTheme's complaint: the status carries both.
+func TestCycleThemeKeepsOverrideComplaint(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	m, _ := settingsModel(t)
+	m.cfg.UI.Theme = "terminal"
+	m.cfg.Themes = map[string]theme.Override{"dark": {Dim: "nope"}}
+
+	m, _ = m.cycleTheme()
+	if m.cfg.UI.Theme != "dark" {
+		t.Fatalf("terminal → dark expected, got %q", m.cfg.UI.Theme)
+	}
+	if !strings.Contains(m.statusMsg, "ignored invalid dim=nope") {
+		t.Fatalf("the override complaint was overwritten: %q", m.statusMsg)
+	}
+	if !strings.Contains(m.statusMsg, "theme: ") {
+		t.Fatalf("the cycle message is missing: %q", m.statusMsg)
 	}
 }
 

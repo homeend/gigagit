@@ -192,6 +192,56 @@ func TestSetGlobalUIThemeWithOnlyThemeTable(t *testing.T) {
 	}
 }
 
+// A file that already carries every settingDocs key (what `gg config init`
+// writes) still GAINS the three theme blocks — and PopulateFile must count
+// them, or the CLI prints "already complete" while rewriting the file.
+func TestPopulateFileCountsThemeBlocks(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte(Template()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	added, err := PopulateFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if added != 3 {
+		t.Fatalf("added = %d, want 3 (one per [themes.<name>] block)", added)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"# [themes.light]", "# [themes.dark]", "# [themes.terminal]"} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("missing %q after populate:\n%s", want, raw)
+		}
+	}
+	added2, err := PopulateFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if added2 != 0 {
+		t.Fatalf("second populate added %d, want 0", added2)
+	}
+}
+
+// Every generated line carries the [populated] marker, like the scalar keys.
+func TestPopulateThemeBlockLinesMarked(t *testing.T) {
+	t.Parallel()
+	for _, ln := range strings.Split(populate(""), "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(ln), "#") {
+			continue
+		}
+		if !strings.Contains(ln, "[themes.") && !strings.Contains(ln, "frame background") && !strings.Contains(ln, "graph lane colours") {
+			continue
+		}
+		if !strings.HasSuffix(ln, "[populated]") {
+			t.Errorf("generated theme line is unmarked: %q", ln)
+		}
+	}
+}
+
 // The blocks are inert: populating an empty file and decoding it yields no
 // theme overrides at all.
 func TestPopulatedThemeBlocksDecodeToNothing(t *testing.T) {

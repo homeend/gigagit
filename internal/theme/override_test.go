@@ -146,6 +146,23 @@ func TestMergePrecedence(t *testing.T) {
 	}
 }
 
+// A written-but-EMPTY list in the higher layer (`lanes = []`) is set, not
+// absent: it must survive the merge as a non-nil empty slice so Overlay can
+// report it rather than silently falling back to the lower layer.
+func TestMergeKeepsEmptyList(t *testing.T) {
+	t.Parallel()
+	lo := Override{Lanes: []string{"1", "2", "3", "4", "5", "6", "7"}}
+	got := Merge(lo, Override{Lanes: []string{}})
+	if got.Lanes == nil || len(got.Lanes) != 0 {
+		t.Fatalf("merged lanes = %#v, want a non-nil empty slice", got.Lanes)
+	}
+	_, bad := Overlay(Light, got)
+	want := []string{"lanes=[0 entries, want 7]"}
+	if !reflect.DeepEqual(bad, want) {
+		t.Fatalf("bad = %q, want %q", bad, want)
+	}
+}
+
 func TestAsOverrideRoundTrips(t *testing.T) {
 	t.Parallel()
 	for _, th := range []Theme{Light, Dark} {
@@ -202,10 +219,9 @@ func TestRoleFieldsAccessorsAreDistinct(t *testing.T) {
 	t.Parallel()
 	var o Override
 	var th Theme
-	for i, f := range roleFields {
+	for _, f := range roleFields {
 		*f.getO(&o) = f.key
 		*f.get(&th) = f.key
-		_ = i
 	}
 	for _, f := range roleFields {
 		if got := *f.getO(&o); got != f.key {
