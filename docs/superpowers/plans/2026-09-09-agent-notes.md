@@ -2083,10 +2083,8 @@ func TestNoteUnknownSubcommandIsUsage(t *testing.T) {
 
 func TestNoteIsAKnownCommand(t *testing.T) {
 	t.Parallel()
-	for _, verb := range []string{"note", "skill"} {
-		if !IsCommand(verb) {
-			t.Errorf("%q must be in the commands map (cmd/gg routing, help, gg batch)", verb)
-		}
+	if !IsCommand("note") {
+		t.Error(`"note" must be in the commands map (cmd/gg routing, help, gg batch)`)
 	}
 }
 ```
@@ -2384,10 +2382,10 @@ and extend the `commands` map's last line to:
 
 ```go
 	"review": true, "apply": true, "versions": true, "unlock": true,
-	"note": true, "skill": true,
+	"note": true,
 ```
 
-(`skill` is added here so Task 10's verb is routed by `cmd/gg` the moment it exists; until then `runOne` returns "unknown command" for it, which no test asserts against.)
+(`"skill"` is NOT added here — Task 10 adds it together with its `runOne` case. The AST gate in `internal/cli/cli_test.go` (`TestEverySwitchCaseIsRegistered`) checks case → map, so a map key with no case would not fail, but a case with no key would; keep the two in one commit per verb.)
 
 Note: `gg batch` reaches `note` for free — `cmdBatch` calls the same `runOne`, and the sweep still runs at most once per process because `StartNotesSweep` is a `sync.Once`.
 
@@ -4714,17 +4712,44 @@ func installSkill(sk agentskill.Skill, target string, mode Mode) error {
 
 Remove the now-unused `"regexp"` import if `go build` reports it.
 
-In `/mnt/t/others/gigagit.worktrees/feat-agent-notes/internal/agentinit/custom.go`, make `CustomDetections` fill `ReviewTarget` and the combined status the same way. Read the file first; for each custom target build a synthetic `Agent` (it already does) and set:
+In `/mnt/t/others/gigagit.worktrees/feat-agent-notes/internal/agentinit/custom.go`, replace the body of `CustomDetections` with:
 
 ```go
-		review := ag.TargetFor(agentskill.ReviewingWithGG, "", "")
-		if review == "" {
-			review = ag.Target // an absolute custom target resolves to itself
+// CustomDetections synthesizes Detection rows for remembered custom targets,
+// so they list, check, and refresh exactly like registry agents — both skills
+// included: a "skill" target gets a reviewing-with-gg sibling directory, a
+// "block" target a second marked block in the same file.
+func CustomDetections(ts []CustomTarget) []Detection {
+	var out []Detection
+	for _, ct := range ts {
+		mode := ModeBlock
+		if ct.Mode == "skill" {
+			mode = ModeSkillFile
 		}
-		out = append(out, Detection{Agent: ag, Target: ag.Target, ReviewTarget: review, Status: combinedStatus(ag.Target, review)})
+		ag := Agent{ID: "custom", Label: "Custom", Target: ct.Path, Mode: mode}
+		// ct.Path is already absolute, and resolve() joins a non-"~/" path onto
+		// an empty projDir unchanged, so TargetFor is safe with empty dirs.
+		review := ag.TargetFor(agentskill.ReviewingWithGG, "", "")
+		out = append(out, Detection{
+			Agent: ag, Target: ct.Path, ReviewTarget: review,
+			Status: combinedStatus(ct.Path, review),
+		})
+	}
+	return out
+}
 ```
 
-If `resolve` returns "" for the custom (absolute) path shape, derive the sibling directly with the same `filepath.Dir`/`Base`/`Join` rule inline rather than through `TargetFor`.
+Add `"github.com/homeend/gigagit/internal/agentskill"` to `custom.go`'s import block.
+
+`ResolveCustom` is NOT changed: it still resolves a `--to` directory to
+`<dir>/using-gg/SKILL.md`, and the review sibling is derived from that.
+
+**Existing tests that must stay green without edits** (they install through
+`Install(d)`, which now writes both skills, so `combinedStatus` still reports
+up-to-date): `internal/agentinit/agentinit_test.go:TestStatusLifecycle` and
+`internal/agentinit/custom_test.go:TestCustomDetectionsStatusAndInstall`. If
+either turns red, the cause is `ReviewTarget` not being filled — fix that, not
+the test.
 
 - [ ] **Step 8: Write the failing `gg skill path` test**
 
@@ -4799,6 +4824,13 @@ func TestSkillPathUsingGG(t *testing.T) {
 	want := filepath.Join(cache, "gg", "skills", "using-gg", "SKILL.md")
 	if strings.TrimSpace(out) != want {
 		t.Fatalf("path = %q, want %q", out, want)
+	}
+}
+
+func TestSkillIsAKnownCommand(t *testing.T) {
+	t.Parallel()
+	if !IsCommand("skill") {
+		t.Error(`"skill" must be in the commands map (cmd/gg routes CLI vs TUI on IsCommand)`)
 	}
 }
 
@@ -4906,7 +4938,13 @@ In `/mnt/t/others/gigagit.worktrees/feat-agent-notes/internal/cli/cli.go`, add t
 		return cmdSkill(rest, stdout, stderr)
 ```
 
-(`"skill"` is already in the `commands` map from Task 5.)
+and extend the `commands` map's last line to:
+
+```go
+	"note": true, "skill": true,
+```
+
+`TestEverySwitchCaseIsRegistered` (`internal/cli/cli_test.go`) parses `runOne`'s switch and fails if a case string is missing from that map, so the two edits belong in one commit.
 
 - [ ] **Step 10: Generate the dogfood copy of the new skill**
 
