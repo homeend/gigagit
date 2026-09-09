@@ -465,7 +465,9 @@ func TestDiffViewSwallowsActionKeys(t *testing.T) {
 	m := diffModel()
 	m = m.pushLayer(&diffView{})
 	m.diffTag = "status:x"
-	for _, k := range []string{"p", "P", "s", "S", "u", "d", "w", "m", "l", "R", ",", "/", "?", "tab", "enter"} {
+	// ? is deliberately NOT swallowed any more: it opens the context help
+	// (TestQuestionMarkInDiffViewOpensContextHelp).
+	for _, k := range []string{"p", "P", "s", "S", "u", "d", "w", "m", "l", "R", ",", "/", "tab", "enter"} {
 		u, cmd := m.Update(keyMsg(k))
 		mm := u.(Model)
 		if cmd != nil || mm.running || layerOf[*worktreePopup](mm) != nil || layerOf[*contentPopup](mm) != nil || mm.filesView != nil || mm.filterTyping || mm.mark != nil {
