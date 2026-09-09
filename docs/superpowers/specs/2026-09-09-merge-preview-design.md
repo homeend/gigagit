@@ -121,8 +121,8 @@ func (s *Service) PreviewGet(ctx, idOrLabel string) (model.MergePreview, error)
 func (s *Service) PreviewRename(ctx, id, label string) error
 func (s *Service) PreviewRemove(ctx, id string) error
 
-// Live state of one pair; the row summary. Zero git calls when the pair's
-// tip hashes are unchanged since the last call (cache keyed by (srcHash, tgtHash)).
+// Live state of one pair; the row summary. Two rev-parse calls always (name →
+// hash is how movement is detected); the summary itself is cached by (srcHash, tgtHash).
 type PreviewState int // PreviewOK | PreviewMerged | PreviewMissingSource | PreviewMissingTarget | PreviewNoBase
 type PreviewSummary struct {
     State      PreviewState
@@ -269,11 +269,12 @@ bumps; `gg init --update` after merge.
 
 ### Web
 
-- `GET /api/preview` → `[{id,label,source,target,state,files,ahead,sourceHash,targetHash}]`
+- `GET /api/preview` → `{entries:[{id,label,source,target,state,files,ahead,source_hash,target_hash}]}`
   (summaries via `PreviewSummary`; the same cache serves all tabs).
 - `POST /api/preview {source,target,label?}` → the record (409 on `ErrExists`
-  with the existing id); `PATCH /api/preview/{id} {label}`;
-  `DELETE /api/preview/{id}`.
+  with the existing id); `POST /api/preview/rename {id,label}`;
+  `DELETE /api/preview?id=` (all three behind `writeGuard`, so the client
+  sends the JSON content type; the bookmark-endpoint shape, not REST paths).
 - `GET /api/preview/open?id=` → `{state, left, right, source, target, label, source_hash, target_hash}`; the
   client then opens the EXISTING compare page with those two hashes, exactly
   as the sidebar's compare rows do. No new diff surface.
