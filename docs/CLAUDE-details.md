@@ -207,6 +207,30 @@ the row in the single-column layouts; a `notes` SSE event (`emitNotes`)
 tells every open page to re-fetch after a mutation. `srcNotes` is a refresh source (badges only) — it is never polled
 by the background scheduler, only fired after a note mutation.
 
+Two TUI `.` rows are WHOLE-DIFF rather than cursor-scoped (`diffHasNotes`: a
+diff on top carrying ≥1 thread), so a file's notes are reachable without first
+hunting for an annotated line. `note-list` (`notes_list_popup.go`) lists one
+row per root in `v.notes` order — `◆ new:15  ada  summary  +2`, the ◆ painted
+by `rowDecorator` in the thread's frame colour (plain on the reverse-video
+selected row), only the summary trimmed so `+N` survives a narrow box —
+type-to-filter over summary+author, `enter` lands the cursor via `gotoNote`
+(the `}` fold-expand path, then `revealCursorNotes`), `esc` closes.
+`note-remove-all` (`note_remove_all_popup.go`) is a TYPED confirmation on the
+`remove all` token (trimmed, case-folded) behind `domain.NotesClear`, which
+drops every note matching `sameNoteTarget` — roots and the replies that
+inherit their address — in ONE `Store.Sweep` write, worktree-scoped like
+`NotesFor`. The popup quotes roots PLUS replies, so it names the
+same number the notice reports afterwards (they can still differ when the store
+holds orphaned notes at the address — `NotesFor` hides those, the clear takes
+them). That outcome goes to `m.diffNotice`, the diff surface's own bottom-left
+box, NOT just `statusMsg`: a full-screen layer draws no status line, so a
+message left there is never seen. Jumping to a thread the `a` layer hides lifts
+that layer (view flag AND session flag) before laying out — landing the cursor
+on a line whose box is filtered away reads as a dead key — and a jump whose
+anchor has vanished says so in the same notice box. `expandFoldFor` is the
+fold-expand step `jumpNote` and `gotoNote` share: re-find the anchor in the
+REBUILT stream, because a partial-mode index is stale afterwards.
+
 Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands, else launches the TUI.
 
 ## Conventions

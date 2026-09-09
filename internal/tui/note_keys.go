@@ -282,30 +282,38 @@ func (m Model) jumpNote(dir int) (Model, bool) {
 		return m, false
 	}
 	body := m.diffBodyRows()
-	li, ok := v.nextNoteLine(dir)
+	find := func() (int, bool) { return v.nextNoteLine(dir) }
+	li, ok := find()
 	if !ok {
 		return m, false
 	}
-	if li < len(v.lines) && v.lines[li].Fold > 0 {
-		// The note hides under this fold: expand to the full file (the f
-		// toggle), then re-find the anchor in the REBUILT stream. curLine is a
-		// partial-mode index and would be stale after the rebuild — always
-		// smaller than the same row's full-mode index — so a backward search
-		// would reject the very note we expanded for. Re-anchor first.
-		cr, hadRow := v.cursorRow()
-		v.partial = false
-		v.rebuild()
-		m.diffPartial = false
-		if hadRow {
-			v.reanchorCursor(cr.LeftNo, cr.RightNo)
-		}
-		li, ok = v.nextNoteLine(dir)
-		if !ok {
-			return m, false
-		}
+	m, li, ok = m.expandFoldFor(v, li, find)
+	if !ok {
+		return m, false
 	}
 	v.setCursorLine(li, body)
 	return m, true
+}
+
+// expandFoldFor reveals a note hidden under the fold at logical line li:
+// expand to the full file (what the f toggle does), then re-find the anchor
+// with find in the REBUILT stream. curLine is a partial-mode index and would be
+// stale after the rebuild — always smaller than the same row's full-mode index
+// — so a search against it would reject the very note we expanded for.
+// Re-anchor first. A li that is not a fold is returned unchanged, unexpanded.
+func (m Model) expandFoldFor(v *diffView, li int, find func() (int, bool)) (Model, int, bool) {
+	if li >= len(v.lines) || v.lines[li].Fold == 0 {
+		return m, li, true
+	}
+	cr, hadRow := v.cursorRow()
+	v.partial = false
+	v.rebuild()
+	m.diffPartial = false
+	if hadRow {
+		v.reanchorCursor(cr.LeftNo, cr.RightNo)
+	}
+	li, ok := find()
+	return m, li, ok
 }
 
 // peekNotedFile / stepNotedFile are the }/{ file step: the next file in the

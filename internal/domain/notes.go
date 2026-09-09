@@ -196,6 +196,36 @@ func (s *Service) NoteRemove(ctx context.Context, id string) error {
 	return nil
 }
 
+// NotesClear removes every note stored at addr — roots AND replies — and
+// reports how many records went. Nothing else is touched: the store is shared
+// by the whole repo, so the sameNoteTarget rule (path + commit + shelf, plus
+// the worktree for live content) is what bounds the write.
+//
+// It is one store write: Sweep's predicate is the bulk primitive, and since a
+// reply inherits its root's Address (NoteReply copies it) the one predicate
+// takes the whole thread. Nothing else matches, so an address with no notes
+// costs a single Load and never creates the file.
+func (s *Service) NotesClear(ctx context.Context, addr model.FileAddress) (int, error) {
+	st := s.notesStore(ctx)
+	if st == nil {
+		return 0, ErrNotesDisabled
+	}
+	// Scope to THIS checkout, exactly as NotesFor/NotesAt do — otherwise a
+	// clear in worktree A would take worktree B's notes on the same path.
+	if worktreeScopedNote(addr) {
+		wt, err := s.noteWorktree(ctx, addr)
+		if err != nil {
+			return 0, err
+		}
+		addr.Worktree = wt
+	}
+	dropped, err := st.Sweep(func(n model.Note) bool { return !sameNoteTarget(n.Address, addr) })
+	if dropped > 0 {
+		s.invalidateNoteCounts()
+	}
+	return dropped, err
+}
+
 // NotesFor returns the notes that apply to addr, resolved against the OPEN
 // diff d and threaded (roots carry their replies), sorted new-side-first then
 // by line. Orphaned notes are omitted — they are hidden until the startup
