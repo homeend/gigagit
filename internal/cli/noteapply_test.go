@@ -1,9 +1,14 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notebatch"
 )
 
 func TestNoteApplyAgentContextShape(t *testing.T) {
@@ -139,5 +144,88 @@ func TestNoteApplyRequiresStdinFlag(t *testing.T) {
 	code, _, errb := runCLIStdin(t, dir, `{"files":[]}`, "note", "apply")
 	if code != 2 || !strings.Contains(errb, "--stdin") {
 		t.Fatalf("exit=%d stderr=%q, want 2 + a --stdin hint", code, errb)
+	}
+}
+
+// A hunk number past the end of the file (unlike a missing summary) is only
+// discoverable by resolving the diff — notebatch itself has no idea how many
+// hunks a.txt has. Like the newRange case, this must fail the WHOLE batch
+// before anything is written, not just the offending item.
+func TestNoteApplyRejectsWholeBatchOnOutOfRangeHunk(t *testing.T) {
+	dir := noteRepo(t)
+	in := `{"comments":[{"filePath":"a.txt","newLine":1,"summary":"good, would store first"},
+	                    {"filePath":"a.txt","hunk":2,"summary":"a.txt has only 1 hunk"}]}`
+	code, _, errb := runCLIStdin(t, dir, in, "note", "apply", "--stdin")
+	if code != 1 {
+		t.Fatalf("exit=%d stderr=%s, want 1", code, errb)
+	}
+	if !strings.Contains(errb, "has 1 hunks") {
+		t.Fatalf("stderr = %q, want the file's hunk count named", errb)
+	}
+	_, list, _ := runCLI(t, dir, "note", "list", "--file", "a.txt")
+	if strings.TrimSpace(list) != "" {
+		t.Fatalf("the earlier, valid item must not have been stored either:\n%s", list)
+	}
+}
+
+// planNoteBatch with sideRuleNewOnly (a range/working review's rule, per
+// §4.4's old-side table): an old-side item is dropped and counted in
+// skipped, a new-side item is planned normally.
+func TestPlanNoteBatchSideRuleNewOnlySkipsOldSideItems(t *testing.T) {
+	dir := noteRepo(t)
+	svc := domain.Open(dir)
+	ctx := context.Background()
+
+	b := notebatch.Batch{Items: []notebatch.Item{
+		{Path: "a.txt", Target: notebatch.Target{OldLine: [2]int{1, 1}}, Summary: "old side, dropped"},
+		{Path: "a.txt", Target: notebatch.Target{NewLine: [2]int{1, 1}}, Summary: "new side, planned"},
+	}}
+	planned, skipped, err := planNoteBatch(ctx, svc, b, false, "", "agent", sideRuleNewOnly)
+	if err != nil {
+		t.Fatalf("planNoteBatch: %v", err)
+	}
+	if skipped != 1 {
+		t.Fatalf("skipped = %d, want 1", skipped)
+	}
+	if len(planned) != 1 || planned[0].Note.Side != model.NoteSideNew || planned[0].Note.Summary != "new side, planned" {
+		t.Fatalf("planned = %+v, want exactly the new-side item", planned)
+	}
+}
+
+// applyNoteBatch must roll back what it already stored when a LATER item's
+// write fails — here, a reply whose parent was removed after planNoteBatch
+// validated it but before applyNoteBatch got to it (another client racing the
+// same store). Nothing this batch stored may survive the failure.
+func TestApplyNoteBatchRollsBackOnMidBatchFailure(t *testing.T) {
+	dir := noteRepo(t)
+	svc := domain.Open(dir)
+	ctx := context.Background()
+
+	_, out, _ := runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "1", "--summary", "root")
+	root := strings.TrimSpace(out)
+
+	in := `{"comments":[{"filePath":"a.txt","newLine":2,"summary":"good, stored first"},
+	                    {"replyTo":"` + root + `","summary":"orphaned before apply"}]}`
+	batch, err := notebatch.Parse([]byte(in))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	planned, _, err := planNoteBatch(ctx, svc, batch, false, "", "agent", sideRuleBoth)
+	if err != nil {
+		t.Fatalf("planNoteBatch: %v", err)
+	}
+	// The parent disappears AFTER planning but BEFORE applying.
+	if err := svc.NoteRemove(ctx, root); err != nil {
+		t.Fatalf("NoteRemove(root): %v", err)
+	}
+
+	if _, err := applyNoteBatch(ctx, svc, planned); err == nil {
+		t.Fatal("applyNoteBatch must fail once the reply's parent is gone")
+	} else if !strings.Contains(err.Error(), "item 1") || !strings.Contains(err.Error(), "rolled back 1 notes") {
+		t.Fatalf("err = %q, want it to name the failing item and the rollback count", err)
+	}
+	_, list, _ := runCLI(t, dir, "note", "list", "--file", "a.txt")
+	if strings.TrimSpace(list) != "" {
+		t.Fatalf("a mid-batch failure must roll back everything this batch stored:\n%s", list)
 	}
 }

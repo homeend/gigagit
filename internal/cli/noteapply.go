@@ -113,6 +113,13 @@ func planAnchor(ctx context.Context, svc *domain.Service, addr model.FileAddress
 }
 
 // applyNoteBatch writes a planned batch in order and returns the stored notes.
+//
+// planNoteBatch validates up front, but a write can still fail mid-batch — the
+// classic case is a replyTo target removed by someone else between planning
+// and applying. On that failure applyNoteBatch rolls back everything IT
+// already stored (best-effort: an individual removal failure is counted, not
+// fatal) so the batch stays all-or-nothing even when the "nothing" only
+// becomes true after a brief moment where it wasn't.
 func applyNoteBatch(ctx context.Context, svc *domain.Service, planned []plannedNote) ([]model.Note, error) {
 	out := make([]model.Note, 0, len(planned))
 	for i, p := range planned {
@@ -126,11 +133,31 @@ func applyNoteBatch(ctx context.Context, svc *domain.Service, planned []plannedN
 			stored, err = svc.NoteAdd(ctx, p.Note)
 		}
 		if err != nil {
-			return out, fmt.Errorf("item %d: %w", i, err)
+			removed, failed := rollbackNoteBatch(ctx, svc, out)
+			if failed > 0 {
+				return nil, fmt.Errorf("item %d: %w (rollback incomplete: %d could not be removed)", i, err, failed)
+			}
+			return nil, fmt.Errorf("item %d: %w (rolled back %d notes)", i, err, removed)
 		}
 		out = append(out, stored)
 	}
 	return out, nil
+}
+
+// rollbackNoteBatch is applyNoteBatch's best-effort undo: it removes what THIS
+// call already stored, most-recent first (a reply before its root, so a root
+// is never asked to remove a batch reply that has already been removed
+// separately). An individual NoteRemove failure is counted, not fatal to the
+// rest of the rollback.
+func rollbackNoteBatch(ctx context.Context, svc *domain.Service, stored []model.Note) (removed, failed int) {
+	for i := len(stored) - 1; i >= 0; i-- {
+		if err := svc.NoteRemove(ctx, stored[i].ID); err != nil {
+			failed++
+			continue
+		}
+		removed++
+	}
+	return removed, failed
 }
 
 // printStoredNotes emits the ids (one per line) or the wire notes as JSON.

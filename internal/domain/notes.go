@@ -109,19 +109,8 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 		if lines == nil {
 			return model.Note{}, fmt.Errorf("notes: the %s side of %s does not exist", n.Side, n.Address.Path)
 		}
-		// A structurally bad range (start < 1, or start > end) is always
-		// refused. A range that runs past the end of the side is refused too
-		// — BUT only when the side actually has content: a root commit's old
-		// side is legitimately EMPTY (see TestNoteAddOnARootCommitFillsAFingerprint),
-		// and {1,1} against zero lines is the established way to anchor a note
-		// there. Without this bounds check an anchor like --new-line 100 on a
-		// 4-line file stored silently (anchorLines just clamped it), and the
-		// caller had no way to know their target line does not exist.
-		if n.Range[0] < 1 || n.Range[0] > n.Range[1] {
-			return model.Note{}, fmt.Errorf("notes: invalid range %d-%d for the %s side of %s", n.Range[0], n.Range[1], n.Side, n.Address.Path)
-		}
-		if len(lines) > 0 && n.Range[1] > len(lines) {
-			return model.Note{}, fmt.Errorf("notes: line %d is past the end of the %s side of %s (%d lines)", n.Range[1], n.Side, n.Address.Path, len(lines))
+		if err := checkNoteRange(n.Range, n.Side, n.Address.Path, lines); err != nil {
+			return model.Note{}, err
 		}
 		n.ContextHash = model.NoteContextHash(anchorLines(lines, n.Range))
 	}
@@ -153,11 +142,34 @@ func (s *Service) NoteRangeCheck(ctx context.Context, addr model.FileAddress, si
 	if lines == nil {
 		return fmt.Errorf("notes: the %s side of %s does not exist", side, addr.Path)
 	}
+	return checkNoteRange(rng, side, addr.Path, lines)
+}
+
+// checkNoteRange is the ONE bound both NoteAdd (at write time) and
+// NoteRangeCheck (a batch importer's pre-write validation) enforce:
+//
+//   - a structurally bad range (start < 1, or start > end) is always refused.
+//   - against a side that HAS content, a range running past its end is
+//     refused — --new-line 100 on a 4-line file must not silently clamp.
+//   - against a side with NO content (len(lines) == 0 — a root commit's
+//     empty old side is the one legitimate case, see
+//     TestNoteAddOnARootCommitFillsAFingerprint), only the exact sentinel
+//     range {1,1} is accepted; any other range (including another
+//     out-of-range value like {500,500}) is refused. Without this narrower
+//     rule ANY range on an empty side would pass silently and the note would
+//     be dropped by the next sweep with no explanation.
+func checkNoteRange(rng [2]int, side model.NoteSide, path string, lines []string) error {
 	if rng[0] < 1 || rng[0] > rng[1] {
-		return fmt.Errorf("notes: invalid range %d-%d for the %s side of %s", rng[0], rng[1], side, addr.Path)
+		return fmt.Errorf("notes: invalid range %d-%d for the %s side of %s", rng[0], rng[1], side, path)
 	}
-	if len(lines) > 0 && rng[1] > len(lines) {
-		return fmt.Errorf("notes: line %d is past the end of the %s side of %s (%d lines)", rng[1], side, addr.Path, len(lines))
+	if len(lines) == 0 {
+		if rng == [2]int{1, 1} {
+			return nil
+		}
+		return fmt.Errorf("notes: line %d is past the end of the %s side of %s (0 lines)", rng[1], side, path)
+	}
+	if rng[1] > len(lines) {
+		return fmt.Errorf("notes: line %d is past the end of the %s side of %s (%d lines)", rng[1], side, path, len(lines))
 	}
 	return nil
 }

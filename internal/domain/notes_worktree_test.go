@@ -180,6 +180,45 @@ func TestNoteAddRejectsAnchorPastTheEndOfItsSide(t *testing.T) {
 	}
 }
 
+// An EMPTY side (0 lines — a root commit's old side, or here an empty
+// untracked file's new side) is the one case where NoteAdd cannot compare
+// against a real length. checkNoteRange narrows the exemption to the exact
+// sentinel {1,1}: any other range, including another out-of-range value like
+// {500,500}, must still be refused rather than passing silently and being
+// dropped by the next sweep with no explanation.
+func TestNoteAddOnAnEmptySideAcceptsOnlyTheSentinelRange(t *testing.T) {
+	t.Parallel()
+	dir := noteSideRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "empty.go"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := svcIn(t, dir)
+	svc.SetNotesStore(notes.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+	addr := model.FileAddress{State: model.StateUntracked, Worktree: dir, Path: "empty.go"}
+
+	// {500,500} on a 0-line side: refused, not silently accepted.
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Address: addr, Side: model.NoteSideNew, Range: [2]int{500, 500}, Summary: "bogus",
+	}); err == nil || !strings.Contains(err.Error(), "line 500 is past the end of the new side of empty.go (0 lines)") {
+		t.Fatalf("err = %v, want a past-the-end error naming 0 lines", err)
+	}
+	if left, _ := svc.notesStore(ctx).Load(); len(left) != 0 {
+		t.Fatalf("a refused add must store nothing, got %+v", left)
+	}
+
+	// {1,1}, the established sentinel for "the whole empty side", is accepted.
+	got, err := svc.NoteAdd(ctx, model.Note{
+		Address: addr, Side: model.NoteSideNew, Range: [2]int{1, 1}, Summary: "fine on empty",
+	})
+	if err != nil {
+		t.Fatalf("NoteAdd({1,1}) on an empty side: %v", err)
+	}
+	if got.ContextHash == "" {
+		t.Fatal("an accepted empty-side note must still get a fingerprint")
+	}
+}
+
 // twoWorktrees returns a repo and a linked worktree of it, each with its OWN
 // body for the same path.
 func twoWorktrees(t *testing.T) (main, linked string) {
