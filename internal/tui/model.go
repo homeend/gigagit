@@ -416,6 +416,19 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var counts tea.Cmd
 		m, counts = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
 		return m, counts
+	case notesClearedMsg:
+		if msg.err != nil {
+			m.statusMsg = i18n.T("note: %s", msg.err.Error())
+			return m, nil
+		}
+		// The count is the only thing a whole-address clear leaves to say:
+		// nothing of the file's notes remains to look at. The refresh is
+		// exactly noteMutatedMsg's — one srcNotes reload, which re-resolves the
+		// open diff and repaints the ◆N badges.
+		m.statusMsg = i18n.T("Removed %d notes", msg.n)
+		var cleared tea.Cmd
+		m, cleared = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
+		return m, cleared
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
 	case snapshotTargetMsg:
