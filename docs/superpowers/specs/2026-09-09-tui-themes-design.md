@@ -83,6 +83,7 @@ even if a future theme leaves a role unset.
 | ModalBorder | `11` | `#F9F1A5` | `#DFA000` |
 | TooltipFg / TooltipBg | `0` / `11` | `#0C0C0C` / `#F9F1A5` | `#3A4A52` / `#F1E4C5` |
 | ErrFg / ErrBg | `9` / `1` | `#E74856` / `#C50F1F` | `#F85552` / `#F1D1CF` |
+| StatusErrFg | `15` | `#F2F2F2` | `#3A4A52` |
 | TagDeco | `220` | unchanged | `#DFA000` |
 | DiffAddBg / DiffDelBg | `22` / `52` | unchanged | `#E1E4BD` / `#F4D9D4` |
 | DiffAddCursorBg / DiffDelCursorBg | `28` / `88` | unchanged | `#CFDAA8` / `#EBC3BD` |
@@ -105,6 +106,10 @@ Solarized Light and was judged too bright). Light diff/err backgrounds are
 tints derived from Everforest's `bg_visual`/`bg_yellow`/red at ~15% over
 bg0; the implementer may nudge them by eye under tui-capture but must keep
 add ≠ del hue and cursor ≠ plain luminance.
+
+`StatusErrFg` was split off from `SaveBannerFg` after a final-review finding
+that reusing it for the error status bar gave a 1.19:1 contrast ratio under
+Light (`#F3EAD3` on `ErrBg` `#F1D1CF`), so the two roles now vary independently.
 
 ## 4. TUI wiring
 

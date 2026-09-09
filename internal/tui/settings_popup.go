@@ -218,7 +218,8 @@ func (m Model) toggleShowGraph() Model {
 
 // cycleTheme steps terminal → dark → light → terminal, persists the choice to
 // the GLOBAL config (a theme is per-human, like language), swaps the styles
-// and returns tea.ClearScreen so every row repaints under the new colours.
+// and returns applyTheme's cmd — always tea.ClearScreen here since a cycle
+// always changes the name — so every row repaints under the new colours.
 func (m Model) cycleTheme() (Model, tea.Cmd) {
 	names := theme.Names()
 	cur := m.cfg.UI.Theme
@@ -233,13 +234,13 @@ func (m Model) cycleTheme() (Model, tea.Cmd) {
 		}
 	}
 	m.cfg.UI.Theme = next
-	m = m.applyTheme()
+	m, cmd := m.applyTheme()
 	if err := config.SetGlobalUITheme(config.DefaultGlobalPath(), next); err != nil {
-		m.statusMsg = i18n.T("theme → %s (not saved: %s)", next, err.Error())
+		m.statusMsg = i18n.T("theme → %s (not saved: %s)", themeDisplayName(next), err.Error())
 	} else {
-		m.statusMsg = i18n.T("theme: %s", next)
+		m.statusMsg = i18n.T("theme: %s", themeDisplayName(next))
 	}
-	return m, tea.ClearScreen
+	return m, cmd
 }
 
 // commitSort returns the configured commit-sort mode, defaulting to "date-order"

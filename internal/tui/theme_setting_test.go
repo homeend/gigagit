@@ -51,6 +51,33 @@ func TestThemeUnknownFallsBackWithNotice(t *testing.T) {
 	}
 }
 
+// NOTE: serial (no t.Parallel) — swaps the process-global styles pointer.
+func TestThemeChangeOnConfigReadyClearsScreen(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	setTheme(theme.Terminal)
+
+	m := newTestModelForReload(t)
+	m.refreshLastRun = map[refreshItem]time.Time{}
+	m.cfg = themeCfg("dark")
+
+	nm, cmd := m.applyTheme()
+	if activeTheme().Name != theme.NameDark {
+		t.Fatalf("applyTheme(dark) must activate dark, got %q", activeTheme().Name)
+	}
+	_ = nm
+	if cmd == nil {
+		t.Fatal("a name change (terminal → dark) must return tea.ClearScreen, got nil cmd")
+	}
+
+	m.cfg = themeCfg("dark")
+	nm2, cmd2 := m.applyTheme()
+	_ = nm2
+	if cmd2 != nil {
+		t.Fatal("re-applying the SAME theme name must return a nil cmd, not another ClearScreen")
+	}
+}
+
 func TestCycleThemePersistsAndClears(t *testing.T) {
 	prev := activeTheme()
 	defer setTheme(prev)

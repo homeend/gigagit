@@ -93,7 +93,6 @@ func TestBuildStylesTerminalPinsLegacyLiterals(t *testing.T) {
 		{"noticeHot bold", s.noticeHot.GetBold(), true},
 		{"saveBanner bold", s.saveBanner.GetBold(), false},
 		{"dim bold", s.dim.GetBold(), false},
-		{"muted bold", s.muted.GetBold(), false},
 		{"noteBody bold", s.noteBody.GetBold(), false},
 		{"tooltip bold", s.tooltip.GetBold(), false},
 		{"errorText bold", s.errorText.GetBold(), false},
@@ -121,6 +120,43 @@ func TestBuildStylesTerminalPinsLegacyLiterals(t *testing.T) {
 	if got := s.modalStyle.GetBorderStyle(); got != lipgloss.DoubleBorder() {
 		t.Errorf("modalStyle border style = %+v, want DoubleBorder", got)
 	}
+
+	// Padding: pin Padding(0,1) on the panel frames and Padding(1,2) on the
+	// modal styles (both use asymmetric top/left values a single "want"
+	// number can't express, so check top and left separately).
+	if got := s.focusedPanel.GetPaddingTop(); got != 0 {
+		t.Errorf("focusedPanel padding top = %d, want 0", got)
+	}
+	if got := s.focusedPanel.GetPaddingLeft(); got != 1 {
+		t.Errorf("focusedPanel padding left = %d, want 1", got)
+	}
+	if got := s.bluredPanel.GetPaddingTop(); got != 0 {
+		t.Errorf("bluredPanel padding top = %d, want 0", got)
+	}
+	if got := s.bluredPanel.GetPaddingLeft(); got != 1 {
+		t.Errorf("bluredPanel padding left = %d, want 1", got)
+	}
+	if got := s.modalStyle.GetPaddingTop(); got != 1 {
+		t.Errorf("modalStyle padding top = %d, want 1", got)
+	}
+	if got := s.modalStyle.GetPaddingLeft(); got != 2 {
+		t.Errorf("modalStyle padding left = %d, want 2", got)
+	}
+
+	// errModal = modalStyle.BorderForeground(ErrFg): DoubleBorder + Padding(1,2)
+	// carry over from modalStyle, only the border colour changes.
+	if got := border(s.errModal); got != "9" {
+		t.Errorf("errModal border fg = %q, want 9", got)
+	}
+	if got := s.errModal.GetBorderStyle(); got != lipgloss.DoubleBorder() {
+		t.Errorf("errModal border style = %+v, want DoubleBorder", got)
+	}
+	if got := s.errModal.GetPaddingTop(); got != 1 {
+		t.Errorf("errModal padding top = %d, want 1", got)
+	}
+	if got := s.errModal.GetPaddingLeft(); got != 2 {
+		t.Errorf("errModal padding left = %d, want 2", got)
+	}
 }
 
 func TestBuildStylesDarkAppliesRoles(t *testing.T) {
@@ -138,6 +174,20 @@ func TestBuildStylesDarkAppliesRoles(t *testing.T) {
 	}
 	if bgc, fgc := s.frame(); bgc != "#0C0C0C" || fgc != "#CCCCCC" {
 		t.Fatalf("dark frame = (%q, %q)", bgc, fgc)
+	}
+	if got := string(s.statusErr.GetForeground().(lipgloss.Color)); got != "#F2F2F2" {
+		t.Fatalf("dark statusErr fg = %q, want #F2F2F2", got)
+	}
+}
+
+// Light's statusErr must use the dedicated StatusErrFg role, not the frame's
+// SaveBannerFg (which under Light is #F3EAD3 on ErrBg #F1D1CF — 1.19:1
+// contrast, unreadable).
+func TestBuildStylesLightStatusErrReadable(t *testing.T) {
+	t.Parallel()
+	s := buildStyles(theme.Light)
+	if got := string(s.statusErr.GetForeground().(lipgloss.Color)); got != "#3A4A52" {
+		t.Fatalf("light statusErr fg = %q, want #3A4A52 (StatusErrFg), not the frame bg", got)
 	}
 }
 

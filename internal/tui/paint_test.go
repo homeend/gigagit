@@ -32,6 +32,20 @@ func TestPaintFrameNoThemeIsIdentity(t *testing.T) {
 	}
 }
 
+// NOTE: serial (no t.Parallel) — lipgloss.SetColorProfile is process-global.
+func TestPaintFrameAsciiProfileIsIdentity(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.Ascii)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	// A no-colour profile harvests no SGR, so paintFrame must leave the
+	// frame byte-identical — no padding, no hardcoded "\x1b[0m" reset either
+	// (that literal was appended unconditionally, corrupting the ASCII path).
+	if got := paintFrame("ab\n", 4, 2, lipgloss.Color("#0C0C0C"), lipgloss.Color("#CCCCCC")); got != "ab\n" {
+		t.Fatalf("ascii profile must be identity, got %q", got)
+	}
+}
+
 func TestPaintFramePadsWidthAndHeight(t *testing.T) {
 	withTrueColor(t)
 	got := paintFrame("ab\ncd", 4, 3, lipgloss.Color("#0C0C0C"), lipgloss.Color("#CCCCCC"))

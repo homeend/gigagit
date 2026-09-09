@@ -34,6 +34,13 @@ func paintFrame(frame string, w, h int, bg, fg lipgloss.Color) string {
 	// this bg/fg; everything up to the space is the escape we re-assert.
 	probe := style.Render(" ")
 	sgr := probe[:strings.IndexByte(probe, ' ')]
+	if sgr == "" {
+		// A no-colour profile (termenv.Ascii) harvests no escape at all: bg/fg
+		// were requested but the terminal can't render them. Bail out before
+		// padding or appending the hardcoded "\x1b[0m" reset below — either
+		// would corrupt what must stay a byte-identical frame.
+		return frame
+	}
 	const reset = "\x1b[0m"
 	// The two reset forms never share a matching position (the third byte
 	// differs, '0' vs 'm'), so a single Replacer handles both without

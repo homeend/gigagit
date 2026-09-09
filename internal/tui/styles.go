@@ -30,10 +30,10 @@ type styles struct {
 	reviewHot    lipgloss.Style // was reviewHotStyle
 	reviewDim    lipgloss.Style // was reviewDimStyle
 
-	// shared dim/muted/bright tiers (were many "240"/"250"/"231" literals)
-	dim    lipgloss.Style // dimIdentStyle, dimRowStyle, pickerDim, conflictSrcStyle, diffGapCell, diffGutter, diffFold, noteFrameStale, noteDim, unsetStyle, langHintStyle
-	muted  lipgloss.Style // noteBody
-	bright lipgloss.Style // diffEmph (bold), diffCursorNo (bold), noteSummary (bold) — see the bold variants below
+	// shared dim tier (was many "240" literals). muted/bright have no style
+	// field of their own — buildStyles keeps them as local lipgloss.Colors
+	// feeding noteBody/diffEmph/diffCursorNo/noteSummary directly.
+	dim lipgloss.Style // dimIdentStyle, dimRowStyle, pickerDim, conflictSrcStyle, diffGapCell, diffGutter, diffFold, noteFrameStale, noteDim, unsetStyle, langHintStyle
 
 	// commit_ident.go
 	tagDeco lipgloss.Style
@@ -87,7 +87,7 @@ var legacy = theme.Theme{
 	Name: theme.NameTerminal,
 	Dim:  "240", Muted: "250", Bright: "231",
 	FocusBorder: "12", ModalBorder: "11", TooltipFg: "0", TooltipBg: "11",
-	ErrFg: "9", ErrBg: "1", TagDeco: "220",
+	ErrFg: "9", ErrBg: "1", TagDeco: "220", StatusErrFg: "15",
 	DiffAddBg: "22", DiffDelBg: "52", DiffAddCursorBg: "28", DiffDelCursorBg: "88",
 	CursorRowBg: "237", FieldBg: "236", FieldCursorFg: "236", FieldCursorBg: "250",
 	MessageBlockBg: "236", SaveBannerFg: "15", SaveBannerBg: "22",
@@ -119,14 +119,12 @@ func buildStyles(th theme.Theme) *styles {
 	s.bluredPanel = ns().Border(lipgloss.RoundedBorder()).BorderForeground(dim).Padding(0, 1)
 	s.selectedRow = ns().Reverse(true)
 	s.modalStyle = ns().Border(lipgloss.DoubleBorder()).BorderForeground(pick(th.ModalBorder, legacy.ModalBorder)).Padding(1, 2)
-	s.statusErr = ns().Bold(true).Foreground(pick(th.SaveBannerFg, legacy.SaveBannerFg)).Background(pick(th.ErrBg, legacy.ErrBg))
+	s.statusErr = ns().Bold(true).Foreground(pick(th.StatusErrFg, legacy.StatusErrFg)).Background(pick(th.ErrBg, legacy.ErrBg))
 	s.errorText = ns().Foreground(pick(th.ErrFg, legacy.ErrFg))
 	s.reviewHot = ns().Foreground(pick(th.ReviewHot, legacy.ReviewHot)).Bold(true)
 	s.reviewDim = ns().Foreground(pick(th.ReviewDim, legacy.ReviewDim))
 
 	s.dim = ns().Foreground(dim)
-	s.muted = ns().Foreground(muted)
-	s.bright = ns().Foreground(bright)
 
 	s.tagDeco = ns().Foreground(pick(th.TagDeco, legacy.TagDeco))
 	s.pickerLabel = ns().Bold(true).Foreground(pick(th.PickerLabel, legacy.PickerLabel))

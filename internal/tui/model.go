@@ -943,7 +943,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Apply [ui] language ([ui] show_graph precedent: both config-arrival
 		// paths, so a repo switch re-applies a repo override).
 		m = m.applyLanguage()
-		m = m.applyTheme()
+		var themeCmd tea.Cmd
+		m, themeCmd = m.applyTheme()
 		// Seed the header's repo path now, on the startup path (which fans out via
 		// the per-source registry and never sets currentWorktree the way the legacy
 		// loadCmd's Snapshot did). Without this the top-right path stays blank until
@@ -962,7 +963,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// nothing is loaded yet (a reconcile would degrade to the same walk).
 		m, cmd = m.reloadAllCmd(reloadOpts{manual: true, startup: true, hardFeed: true})
 		m.watchGen++
-		return m, tea.Batch(cmd, m.startWatchCmd(m.watchGen))
+		return m, tea.Batch(themeCmd, cmd, m.startWatchCmd(m.watchGen))
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -1012,7 +1013,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// legacy load path too (reRoot / repo switch).
 			m.commitListMode = !m.showGraphConfigured()
 			m = m.applyLanguage()
-			m = m.applyTheme()
+			var themeCmd tea.Cmd
+			m, themeCmd = m.applyTheme()
 			m.gitCommonDir = msg.gitCommonDir
 			m.headTimes = msg.headTimes
 			// reRoot/repo switch: drop the scan AND the retained ctrl+f query —
@@ -1032,7 +1034,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// An active process advances from the freshly-reloaded state (e.g.
 			// the conflict process re-derives its file list after a resolve).
 			if m.proc != nil {
-				return m.proc.refreshed(m)
+				nm, procCmd := m.proc.refreshed(m)
+				return nm, tea.Batch(themeCmd, procCmd)
 			}
 			m = m.maybeResumePrompt()
 			// The initial feed walk (loadCmd) ran in parallel with the snapshot,
@@ -1045,11 +1048,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.feedUpstreams()) > 0 && m.feedScopeApplied != m.feedScopeSig() {
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
-				return m, reload
+				return m, tea.Batch(themeCmd, reload)
 			}
 			// Conflicts are surfaced as a non-blocking notice ("press [x] to
 			// resolve"); entering the resolution process is the user's choice (x),
 			// so a lingering conflict never traps the interface.
+			return m, themeCmd
 		}
 	case dataAvailableMsg:
 		// Free the background lane the moment its active read's message arrives —
@@ -3016,14 +3020,20 @@ func (m Model) applyLanguage() Model {
 
 // applyTheme activates [ui] theme from m.cfg. Unknown names fall back to
 // terminal and say so in the status bar; the config value is left as written
-// so the user can see and fix it.
-func (m Model) applyTheme() Model {
+// so the user can see and fix it. Returns tea.ClearScreen only when the
+// resolved theme differs from the one already active — a config re-arrival
+// (e.g. a repo switch) that keeps the same theme must not flash the screen.
+func (m Model) applyTheme() (Model, tea.Cmd) {
+	prev := activeTheme().Name
 	th, ok := theme.Lookup(m.cfg.UI.Theme)
 	if !ok {
 		m.statusMsg = i18n.T("theme %q unknown — using terminal (terminal, dark, light)", m.cfg.UI.Theme)
 	}
 	setTheme(th)
-	return m
+	if th.Name != prev {
+		return m, tea.ClearScreen
+	}
+	return m, nil
 }
 
 // focusOrder is the top-to-bottom sequence of focusable panels: the active
