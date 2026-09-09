@@ -3018,19 +3018,34 @@ func (m Model) applyLanguage() Model {
 	return m
 }
 
-// applyTheme activates [ui] theme from m.cfg. Unknown names fall back to
-// terminal and say so in the status bar; the config value is left as written
-// so the user can see and fix it. Returns tea.ClearScreen only when the
-// resolved theme differs from the one already active — a config re-arrival
-// (e.g. a repo switch) that keeps the same theme must not flash the screen.
+// applyTheme activates [ui] theme from m.cfg, with the matching
+// [themes.<name>] table overlaid on top. Unknown names fall back to terminal
+// and say so in the status bar; the config value is left as written so the
+// user can see and fix it. Invalid override values are skipped and named the
+// same way — a typo repaints nothing rather than stopping the TUI — and the
+// unknown-name complaint keeps priority when both apply.
+//
+// Returns tea.ClearScreen only when the RESOLVED theme differs from the one
+// already active: a config re-arrival that changes nothing must not flash the
+// screen, but a repo switch that changes colours under the same theme name
+// (repo A carries [themes.dark], repo B doesn't) must repaint.
 func (m Model) applyTheme() (Model, tea.Cmd) {
-	prev := activeTheme().Name
+	prev := activeTheme()
 	th, ok := theme.Lookup(m.cfg.UI.Theme)
 	if !ok {
 		m.statusMsg = i18n.T("theme %q unknown — using terminal (terminal, dark, light)", m.cfg.UI.Theme)
 	}
+	th, bad := theme.Overlay(th, m.cfg.Themes[th.Name])
+	if len(bad) > 0 {
+		msg := i18n.T("theme %s: ignored invalid %s", th.Name, strings.Join(bad, ", "))
+		if ok {
+			m.statusMsg = msg
+		} else {
+			m.statusMsg += "; " + msg
+		}
+	}
 	setTheme(th)
-	if th.Name != prev {
+	if th != prev {
 		return m, tea.ClearScreen
 	}
 	return m, nil

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/theme"
 )
@@ -48,6 +49,119 @@ func TestThemeUnknownFallsBackWithNotice(t *testing.T) {
 	}
 	if !strings.Contains(nm.(Model).statusMsg, "solarized") {
 		t.Fatalf("status must name the unknown theme, got %q", nm.(Model).statusMsg)
+	}
+}
+
+// themeCfgWith is themeCfg plus one [themes.<name>] override table.
+func themeCfgWith(v, name string, o theme.Override) config.Config {
+	c := themeCfg(v)
+	c.Themes = map[string]theme.Override{name: o}
+	return c
+}
+
+// A [themes.dark] table repaints roles of the built-in dark theme.
+func TestThemeOverrideAppliesOnConfigReady(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m := newTestModelForReload(t)
+	m.refreshLastRun = map[refreshItem]time.Time{}
+
+	cfg := themeCfgWith("dark", "dark", theme.Override{Dim: "#123456"})
+	nm, _ := m.Update(configReadyMsg{cfg: cfg})
+	if got := string(st().dim.GetForeground().(lipgloss.Color)); got != "#123456" {
+		t.Fatalf("st().dim = %q, want the overridden #123456", got)
+	}
+	if activeTheme().Name != theme.NameDark {
+		t.Fatalf("an override must not change the theme name, got %q", activeTheme().Name)
+	}
+	if bg, _ := st().frame(); string(bg) != theme.Dark.Bg {
+		t.Fatalf("unset roles must keep the built-in value, frame bg = %q", bg)
+	}
+	if s := nm.(Model).statusMsg; strings.Contains(s, "invalid") {
+		t.Fatalf("a valid override must not complain: %q", s)
+	}
+}
+
+// An invalid value is skipped and NAMED in the status bar; its valid siblings
+// still apply.
+func TestThemeOverrideInvalidNamedInStatus(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m := newTestModelForReload(t)
+	m.refreshLastRun = map[refreshItem]time.Time{}
+
+	cfg := themeCfgWith("dark", "dark", theme.Override{Dim: "zz", Muted: "#654321"})
+	nm, _ := m.Update(configReadyMsg{cfg: cfg})
+	status := nm.(Model).statusMsg
+	if !strings.Contains(status, "dim=zz") {
+		t.Fatalf("status must name the rejected key=value, got %q", status)
+	}
+	if !strings.Contains(status, "dark") {
+		t.Fatalf("status must name the theme, got %q", status)
+	}
+	if got := string(st().dim.GetForeground().(lipgloss.Color)); got != theme.Dark.Dim {
+		t.Fatalf("rejected role must keep the built-in value, got %q", got)
+	}
+	if got := string(st().noteBody.GetForeground().(lipgloss.Color)); got != "#654321" {
+		t.Fatalf("valid sibling (muted) must still apply, got %q", got)
+	}
+}
+
+// Both complaints show, unknown-name first.
+func TestThemeUnknownNameAndInvalidOverride(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m := newTestModelForReload(t)
+	m.refreshLastRun = map[refreshItem]time.Time{}
+
+	cfg := themeCfgWith("solarized", "terminal", theme.Override{Bg: "#12"})
+	nm, _ := m.Update(configReadyMsg{cfg: cfg})
+	status := nm.(Model).statusMsg
+	if !strings.Contains(status, "solarized") || !strings.Contains(status, "bg=#12") {
+		t.Fatalf("status must carry both complaints, got %q", status)
+	}
+	if !strings.Contains(status, "; ") {
+		t.Fatalf("the two complaints must be joined with \"; \", got %q", status)
+	}
+}
+
+// [themes.terminal] makes the inherit-everything theme paintable.
+func TestThemeOverrideMakesTerminalPaintable(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m := newTestModelForReload(t)
+	m.refreshLastRun = map[refreshItem]time.Time{}
+
+	cfg := themeCfgWith("terminal", "terminal", theme.Override{Bg: "#000000"})
+	if _, cmd := m.Update(configReadyMsg{cfg: cfg}); cmd == nil {
+		_ = cmd // the repaint cmd is asserted by TestThemeOverrideChangeClearsScreen
+	}
+	if bg, _ := st().frame(); string(bg) != "#000000" {
+		t.Fatalf("terminal frame bg = %q, want the overridden #000000", bg)
+	}
+}
+
+// A repo switch can change COLOURS under the same theme name (repo A sets
+// [themes.dark], repo B doesn't), so the repaint gate compares the resolved
+// theme, not just its name.
+func TestThemeOverrideChangeClearsScreen(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	setTheme(theme.Terminal)
+
+	m := newTestModelForReload(t)
+	m.refreshLastRun = map[refreshItem]time.Time{}
+	m.cfg = themeCfg("dark")
+	m, _ = m.applyTheme()
+
+	m.cfg = themeCfgWith("dark", "dark", theme.Override{Dim: "#123456"})
+	m, cmd := m.applyTheme()
+	if cmd == nil {
+		t.Fatal("same name but different colours must still return tea.ClearScreen")
+	}
+	m.cfg = themeCfgWith("dark", "dark", theme.Override{Dim: "#123456"})
+	if _, cmd2 := m.applyTheme(); cmd2 != nil {
+		t.Fatal("re-applying the SAME resolved theme must return a nil cmd")
 	}
 }
 
