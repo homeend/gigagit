@@ -25,6 +25,7 @@ import (
 	"github.com/homeend/gigagit/internal/rebaseplan"
 	"github.com/homeend/gigagit/internal/repos"
 	"github.com/homeend/gigagit/internal/textdiff"
+	"github.com/homeend/gigagit/internal/theme"
 )
 
 // Model is the root Bubble Tea model.
@@ -942,6 +943,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Apply [ui] language ([ui] show_graph precedent: both config-arrival
 		// paths, so a repo switch re-applies a repo override).
 		m = m.applyLanguage()
+		m = m.applyTheme()
 		// Seed the header's repo path now, on the startup path (which fans out via
 		// the per-source registry and never sets currentWorktree the way the legacy
 		// loadCmd's Snapshot did). Without this the top-right path stays blank until
@@ -1010,6 +1012,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// legacy load path too (reRoot / repo switch).
 			m.commitListMode = !m.showGraphConfigured()
 			m = m.applyLanguage()
+			m = m.applyTheme()
 			m.gitCommonDir = msg.gitCommonDir
 			m.headTimes = msg.headTimes
 			// reRoot/repo switch: drop the scan AND the retained ctrl+f query —
@@ -3008,6 +3011,18 @@ func (m Model) applyLanguage() Model {
 		_ = i18n.SetLanguage("", "")
 		m.statusMsg = i18n.T("language %s unavailable — using English (%s)", strconv.Quote(m.cfg.UI.Language), err.Error())
 	}
+	return m
+}
+
+// applyTheme activates [ui] theme from m.cfg. Unknown names fall back to
+// terminal and say so in the status bar; the config value is left as written
+// so the user can see and fix it.
+func (m Model) applyTheme() Model {
+	th, ok := theme.Lookup(m.cfg.UI.Theme)
+	if !ok {
+		m.statusMsg = i18n.T("theme %q unknown — using terminal (terminal, dark, light)", m.cfg.UI.Theme)
+	}
+	setTheme(th)
 	return m
 }
 

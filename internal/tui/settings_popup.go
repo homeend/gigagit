@@ -14,6 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/observ"
+	"github.com/homeend/gigagit/internal/theme"
 )
 
 // settingsPopup is the generic Settings surface opened with `,`. The
@@ -59,12 +60,13 @@ const (
 	settingsMenuCommitSort  = "Commit sort"
 	settingsMenuShowGraph   = "Show graph"
 	settingsMenuLanguage    = "Language"
+	settingsMenuTheme       = "Theme"
 	settingsMenuRepoLoc     = "Repo settings location"
 	settingsMenuCommitGraph = "Commit-graph"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuOpsHist, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuRepoLoc, settingsMenuCommitGraph}
+var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuOpsHist, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuTheme, settingsMenuRepoLoc, settingsMenuCommitGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -103,6 +105,8 @@ func settingsMenuTitle(entry string) string {
 		return i18n.T("Show graph")
 	case settingsMenuLanguage:
 		return i18n.T("Language")
+	case settingsMenuTheme:
+		return i18n.T("Theme")
 	case settingsMenuRepoLoc:
 		return i18n.T("Repo settings location")
 	case settingsMenuCommitGraph:
@@ -160,6 +164,12 @@ func settingsMenuLabel(m Model, i int) string {
 		return title + ": " + onOff(m.showGraphConfigured())
 	case settingsMenuLanguage:
 		return title + ": " + i18n.ActiveName()
+	case settingsMenuTheme:
+		name := m.cfg.UI.Theme
+		if name == "" {
+			name = theme.NameTerminal
+		}
+		return title + ": " + themeDisplayName(name)
 	case settingsMenuCommitGraph:
 		if !m.repoHealthKnown {
 			return title + ": " + i18n.T("(checking…)")
@@ -204,6 +214,32 @@ func (m Model) toggleShowGraph() Model {
 		m.statusMsg = i18n.T("show graph: %s", next)
 	}
 	return m
+}
+
+// cycleTheme steps terminal → dark → light → terminal, persists the choice to
+// the GLOBAL config (a theme is per-human, like language), swaps the styles
+// and returns tea.ClearScreen so every row repaints under the new colours.
+func (m Model) cycleTheme() (Model, tea.Cmd) {
+	names := theme.Names()
+	cur := m.cfg.UI.Theme
+	if cur == "" {
+		cur = theme.NameTerminal
+	}
+	next := names[0]
+	for i, n := range names {
+		if n == cur {
+			next = names[(i+1)%len(names)]
+			break
+		}
+	}
+	m.cfg.UI.Theme = next
+	m = m.applyTheme()
+	if err := config.SetGlobalUITheme(config.DefaultGlobalPath(), next); err != nil {
+		m.statusMsg = i18n.T("theme → %s (not saved: %s)", next, err.Error())
+	} else {
+		m.statusMsg = i18n.T("theme: %s", next)
+	}
+	return m, tea.ClearScreen
 }
 
 // commitSort returns the configured commit-sort mode, defaulting to "date-order"
@@ -455,6 +491,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.maybeRelatedPrompt(settingShowGraph, m.cfg.UI.ShowGraph)
 			case settingsMenuLanguage:
 				return m.openLanguagePicker()
+			case settingsMenuTheme:
+				return m.cycleTheme() // stays open so the flip is visible
 			case settingsMenuRepoLoc:
 				return m.openRepoConfigLocation(), nil
 			case settingsMenuCommitGraph:

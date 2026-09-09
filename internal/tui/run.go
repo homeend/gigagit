@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/repos"
+	"github.com/homeend/gigagit/internal/theme"
 )
 
 // Run launches the TUI for svc, taking over the alternate screen until the
@@ -38,6 +39,11 @@ func Run(svc *domain.Service, recordPath string) (string, error) {
 		if err := m.opLog.enable(); err != nil {
 			m.statusMsg = i18n.T("operation log: %s", err.Error())
 		}
+	}
+	// Paint the very first frame in the configured theme; configReadyMsg
+	// re-applies it (and any repo override) once the registry loads.
+	if th, ok := theme.Lookup(cfg.UI.Theme); ok {
+		setTheme(th)
 	}
 	m = m.initSnapshotTarget()
 	if recordPath != "" {
