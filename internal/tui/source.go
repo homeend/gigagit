@@ -31,6 +31,7 @@ const (
 	srcFeed
 	srcIdentity
 	srcNotes
+	srcPreviews
 	srcCount
 )
 
@@ -46,7 +47,8 @@ var srcConsumers = map[sourceKey][]panel{
 	srcWorktrees: {panelWorktrees, panelBranches},
 	srcFeed:      {panelCommits},
 	// Note badges are painted by the Files/Staged rows and the Commits feed.
-	srcNotes: {panelFiles, panelStaged, panelCommits},
+	srcNotes:    {panelFiles, panelStaged, panelCommits},
+	srcPreviews: {panelPreviews},
 }
 
 // dataAvailableMsg is the single event every source read produces. value is
@@ -116,6 +118,7 @@ var sourceNames = map[sourceKey]string{
 	srcStatus: "status", srcBranches: "branches", srcRemotes: "remotes",
 	srcTags: "tags", srcReflog: "reflog", srcWorktrees: "worktrees",
 	srcFeed: "commits", srcIdentity: "identity", srcNotes: "notes",
+	srcPreviews: "previews",
 }
 
 // sourceErr formats a per-source error for display on the status line.
@@ -218,6 +221,17 @@ func (m Model) readSourceCmd(ctx context.Context, s sourceKey, opts reloadOpts) 
 				c, err = domain.NoteCounts{}, nil
 			}
 			out.value, out.err = c, err
+		case srcPreviews:
+			// Like srcNotes, previews are never interval-polled — the read
+			// rides only on explicit refreshes (r, a repo reroot) and preview
+			// mutations. A missing state dir (a read-only home, a locked-down
+			// box, the tui/web TestMain seam) simply means the surface is off:
+			// an empty tab, not a status line on every refresh.
+			pv, err := readPreviews(ctx, svc)
+			if errors.Is(err, domain.ErrPreviewsDisabled) {
+				pv, err = previewsPayload{}, nil
+			}
+			out.value, out.err = pv, err
 		}
 		out.dur = time.Since(start)
 		return out

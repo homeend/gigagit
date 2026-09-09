@@ -136,6 +136,16 @@ type Model struct {
 	noteCounts    domain.NoteCounts // badge counts (srcNotes); zero value = no badges
 	notesAgentOff bool              // `a`: hide agent-written notes for this session
 
+	previews    []previewRow      // saved merge previews + live summaries (srcPreviews)
+	previewOpen *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
+	previewGen  int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
+
+	// Where the cursor lands once a mutation's reload arrives. Set by
+	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
+	// arrival arm: the fresh rows are the first moment the new id exists.
+	previewFocusID  string // record id to select after the reload ("" = leave the cursor be)
+	previewFocusTab bool   // also make Previews the active/focused tab (the tab's own keys only)
+
 	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
 	svc                 *domain.Service                 // command layer; all git access goes through svc
@@ -268,12 +278,13 @@ const (
 	panelCommits
 	panelTags
 	panelReflog
+	panelPreviews
 	panelCount
 )
 
 // leftTabs is the display order of the shared left-slot tabs; the ctrl+←/→
 // cycle walks this list. Enum value order is unrelated to display order.
-var leftTabs = []panel{panelBranches, panelRemotes, panelWorktrees}
+var leftTabs = []panel{panelBranches, panelRemotes, panelWorktrees, panelPreviews}
 
 // filesTabs is the display/cycle order of the middle-slot tabs (the Files box).
 var filesTabs = []panel{panelFiles, panelTags}
@@ -657,7 +668,23 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesView.lines = commitFileLines(msg.files)
 		}
 		m.filesView.sel = 0
+		// A re-armed merge preview keeps the file the cursor was on when its
+		// tips moved (the path survives in the fresh list unless the commit
+		// dropped it); one-shot, so a later manual reload starts at the top.
+		if po := m.previewOpen; po != nil && po.keepPath != "" {
+			for i, l := range m.filesView.lines {
+				if l.path == po.keepPath {
+					m.filesView.sel = i
+					break
+				}
+			}
+			po.keepPath = ""
+		}
 		return m, nil
+	case previewOpenMsg:
+		return m.handlePreviewOpenMsg(msg)
+	case previewMutatedMsg:
+		return m.handlePreviewMutatedMsg(msg)
 	case pairOpsMsg:
 		// Only the LATEST probe may open the popup: a re-pair while an older
 		// probe was in flight replaced pairProbe, so the older msg no longer
@@ -1052,11 +1079,33 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+			// A full snapshot just landed, so the model now describes THIS repo:
+			// chain the previews read from here, NOT from reRoot. Dispatched
+			// from reRoot it would win the race against the snapshot (a
+			// state-dir read plus a couple of rev-parse calls beat a full
+			// Snapshot), and a dataAvailableMsg arrival unconditionally sets
+			// m.ready = true and recomputes m.loading — that would drop
+			// reRoot's blank-screen gate and reopen the !m.loading action
+			// guards while the OLD repo's branches/status were still in the
+			// model. Chaining here gives every loadCmd user (reRoot, repo
+			// switch, post-op reload) the same deterministic ordering. The
+			// startup double-read (bootstrap's all-source fan-out plus this
+			// chain) is cheap — the domain caches summaries by tip hash — and
+			// the gen bump drops whichever read is older.
+			// chainPreviewsRead, not a plain reloadSourcesCmd: this read supersedes
+			// any previews read still in flight, and superseding a MANUAL one with
+			// a silent read strands srcLoading[previews] forever (see its doc). At
+			// startup that race is the norm — bootstrap's manual all-source fan-out
+			// runs against this very snapshot.
+			legacyLoading := m.loading // this arm owns the legacy flag; a silent chain must not flip it
+			var previewsCmd tea.Cmd
+			m, previewsCmd = m.chainPreviewsRead()
+			m.loading = legacyLoading // an inherited manual flag is cleared by that read's own arrival
 			// An active process advances from the freshly-reloaded state (e.g.
 			// the conflict process re-derives its file list after a resolve).
 			if m.proc != nil {
 				nm, procCmd := m.proc.refreshed(m)
-				return nm, tea.Batch(themeCmd, procCmd)
+				return nm, tea.Batch(themeCmd, procCmd, previewsCmd)
 			}
 			m = m.maybeResumePrompt()
 			// The initial feed walk (loadCmd) ran in parallel with the snapshot,
@@ -1069,12 +1118,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.feedUpstreams()) > 0 && m.feedScopeApplied != m.feedScopeSig() {
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
-				return m, tea.Batch(themeCmd, reload)
+				return m, tea.Batch(themeCmd, reload, previewsCmd)
 			}
 			// Conflicts are surfaced as a non-blocking notice ("press [x] to
 			// resolve"); entering the resolution process is the user's choice (x),
 			// so a lingering conflict never traps the interface.
-			return m, themeCmd
+			return m, tea.Batch(themeCmd, previewsCmd)
 		}
 	case dataAvailableMsg:
 		// Free the background lane the moment its active read's message arrives —
@@ -1126,6 +1175,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.startup {
 			m = m.recordDuration(refreshItem{source: msg.source}, msg.dur)
 		}
+		// previewsChain rides along with whatever the arm below returns: a
+		// branches/remotes read that landed new tips chains a previews read
+		// (see chainPreviewsRead). nil for every other source.
+		var previewsChain tea.Cmd
 		switch msg.source {
 		case srcStatus:
 			keyFiles := m.panelSelKey(panelFiles)
@@ -1153,6 +1206,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.restorePanelSel(panelBranches, key)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)
 			m = m.rebuildCommitGraph()
+			// New tips: refresh the saved pairs (and any open preview) with
+			// them. Skipped on the startup fan-out, which reads every source
+			// (previews included) already.
+			if !msg.startup {
+				m, previewsChain = m.chainPreviewsRead()
+			}
 			// Upstream re-walk latch. maybeFeedUpstreamRewalk is false while a
 			// srcFeed read is still in flight, so the initial LoadInitial and the
 			// scoped re-walk never write the feed concurrently — when branches
@@ -1160,18 +1219,23 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.maybeFeedUpstreamRewalk() {
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
-				return m, reload
+				return m, tea.Batch(reload, previewsChain)
 			}
 			// Branch tips moved while a scope is active: the merge-base fork
 			// points may have moved with them — re-query so territory colors
 			// track the live tips (the rewalk path above already batches this).
 			if cmd := m.loadScopeBoundariesCmd(); cmd != nil {
-				return m, cmd
+				return m, tea.Batch(cmd, previewsChain)
 			}
 		case srcRemotes:
 			key := m.panelSelKey(panelRemotes)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(msg.value.([]model.RemoteBranch), m.branches)
 			m = m.restorePanelSel(panelRemotes, key)
+			// New remote tips: a saved pair may name one (or an open preview
+			// may diff against it), so refresh the previews with them.
+			if !msg.startup {
+				m, previewsChain = m.chainPreviewsRead()
+			}
 			// feedUpstreams() is gated on m.remoteBranches (a configured upstream is
 			// dropped until it exists as a remote-tracking branch). If remotes is the
 			// LAST of {branches, remotes, feed} to land during the startup fan-out,
@@ -1181,7 +1245,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.maybeFeedUpstreamRewalk() {
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
-				return m, reload
+				return m, tea.Batch(reload, previewsChain)
 			}
 		case srcTags:
 			key := m.panelSelKey(panelTags)
@@ -1241,8 +1305,30 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd := m.loadNotesCmd(); cmd != nil {
 				return m, cmd
 			}
+		case srcPreviews:
+			key := m.panelSelKey(panelPreviews)
+			m.previews = msg.value.(previewsPayload).rows
+			m = m.restorePanelSel(panelPreviews, key)
+			// A mutation asked for a row that only exists now the fresh rows
+			// have landed (an add's brand-new id). restorePanelSel scans by
+			// rowKeyAt, which for this panel IS the record id.
+			if m.previewFocusID != "" {
+				m = m.restorePanelSel(panelPreviews, m.previewFocusID)
+				if m.previewFocusTab {
+					// The tab's own keys keep the user where they were working;
+					// the pair dialog (which can fire from any tab) does not
+					// yank them across the interface.
+					// activateTab, not three assignments: a maximized left
+					// column has to be re-pinned onto the newly shown tab.
+					m = m.activateTab(panelPreviews)
+				}
+			}
+			m.previewFocusID, m.previewFocusTab = "", false
+			// An open preview follows its pair: moved tips re-open it, a
+			// vanished (or no-longer-previewable) pair closes it with a notice.
+			return m.afterPreviewsRefresh()
 		}
-		return m, nil
+		return m, previewsChain
 	case tea.KeyMsg:
 		// Normalize a lone space rune to KeySpace. On Windows, Bubble Tea's input
 		// driver delivers a space keypress as KeyRunes{' '} (see key_windows.go),
@@ -1597,6 +1683,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = i18n.T("nothing to stash")
 				return m, nil
 			}
+			// Previews: save the reversed pair (target → source) as its own
+			// row — the record id is direction-sensitive, so the two coexist.
+			if m.focus == panelPreviews {
+				if m.canEditPreview() {
+					return m, m.previewSwapCmd()
+				}
+				return m, nil
+			}
 			if m.canSwitchBranch() {
 				b, _ := m.selectedBranch()
 				if wt, ok := m.worktreeForBranch(b.Name); ok {
@@ -1756,13 +1850,27 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return mm, nil
 				}
 			}
+		case "a":
+			// Previews: a new (source, target) pair. r is the global reload
+			// key, so the tab follows the Worktrees convention — e renames.
+			if m.canAddPreview() {
+				return m.openPreviewAddPopup(), nil
+			}
 		case "e":
 			if m.focus == panelWorktrees && m.canMoveWorktree() {
 				wt, _ := m.selectedWorktree()
 				return m.openMoveWorktreePopup(wt, true), nil
 			}
+			if m.canEditPreview() {
+				mm, _ := m.openPreviewRenamePopup()
+				return mm, nil
+			}
 		case "d":
 			switch m.focus {
+			case panelPreviews:
+				if m.canEditPreview() {
+					return m.confirmPreviewRemove(), nil
+				}
 			case panelWorktrees:
 				if m.canDeleteWorktree() {
 					wt, _ := m.selectedWorktree()
@@ -1842,6 +1950,19 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
 				wt, _ := m.selectedWorktree()
 				return m.guardedReRoot(wt.Path, true)
+			}
+			// Previews: enter opens the saved pair in the compare files view
+			// (target…source, the GitHub-PR diff). A pair that cannot be
+			// previewed right now says why instead of opening an empty view.
+			if m.focus == panelPreviews {
+				if r, ok := m.selectedPreview(); ok && m.opsIdle() {
+					if r.sum.State != domain.PreviewOK {
+						m.statusMsg = previewStateNotice(r.rec.Source, r.rec.Target, r.sum.State)
+						return m, nil
+					}
+					return m, m.openPreviewCmd(r.rec.ID, r.rec.Source, r.rec.Target, "")
+				}
+				return m, nil
 			}
 			// On the Commits panel, enter "drills in": it opens the files view AND
 			// lands focus on the tree (l opens the same view on the commit-list
@@ -3090,7 +3211,7 @@ func (m Model) middleTab() panel {
 // ←-return target). A non-tab panel is left unchanged.
 func (m Model) activateTab(p panel) Model {
 	switch p {
-	case panelBranches, panelRemotes, panelWorktrees:
+	case panelBranches, panelRemotes, panelWorktrees, panelPreviews:
 		m.activeLeftTab = p
 		m.focus = p
 		m.lastLeftPanel = p
@@ -3256,8 +3377,8 @@ func nextInOrder(order []panel, cur panel, dir int) panel {
 }
 
 // leftReturnTarget is where ← lands: the remembered left panel, except a stale
-// pointer at the now-inactive Branches/Worktrees tab is redirected to the
-// active tab (the one actually visible).
+// pointer at a now-inactive top-slot tab is redirected to the active tab (the
+// one actually visible).
 func (m Model) leftReturnTarget() panel {
 	if m.fullMaxActive() && m.fullMax != panelCommits { // fullscreen: only left target
 		return m.fullMax
@@ -3266,7 +3387,7 @@ func (m Model) leftReturnTarget() panel {
 		return m.leftMax
 	}
 	p := m.lastLeftPanel
-	if (p == panelBranches || p == panelWorktrees) && p != m.activeLeftTab {
+	if (p == panelBranches || p == panelWorktrees || p == panelRemotes || p == panelPreviews) && p != m.activeLeftTab {
 		p = m.activeLeftTab
 	}
 	if m.layout().boxH[p] <= 0 { // hidden (inactive tab, or Staged on a short terminal)
@@ -3587,7 +3708,28 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.repoHealthKnown = false
 	m.pendingNoticeConfig = nil
 	m.refreshHealthAfterOp = false
+	m.previews = nil // the old repo's saved previews must not linger in the new one
+	// Drop every read still in flight for the OLD repo. Without the bump a
+	// read chained off repo B's snapshot lands after a switch to repo C and
+	// writes B's rows into C's model — and its arrival sets ready = true and
+	// recomputes loading, dropping the blank-screen gate set above. Bumping
+	// each generation makes the arrival handler's gen check discard them; the
+	// in-flight/loading maps start empty so nothing waits on a read that can
+	// no longer land.
+	if m.srcGen == nil { // defensive: a Model built as a test literal has no maps
+		m.srcGen = map[sourceKey]int{}
+	}
+	for s := sourceKey(0); s < srcCount; s++ {
+		m.srcGen[s]++
+	}
+	m.srcInflight = map[sourceKey]bool{}
+	m.srcLoading = map[sourceKey]bool{}
 	m.loadGen++
+	// No previews read is dispatched here on purpose: loadCmd's Snapshot does
+	// not carry previews, so the tab rides on its own source read — but one
+	// started HERE would land before the snapshot and its arrival would clear
+	// the blank-screen gate set above. The dataLoadedMsg success arm chains it
+	// instead, so it can only run once this repo's snapshot is in the model.
 	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), snapshotTargetCmd(m.svc))
 }
 

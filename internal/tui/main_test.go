@@ -27,8 +27,14 @@ import (
 // leak would let a user's language, wheel_step or footer_actions steer the
 // suite. Tests that need their own config dir still override the variable with
 // t.Setenv.
+//
+// Merge previews get the same treatment as notes for the same reason:
+// srcPreviews is part of the all-source fan-out, so without this every loading
+// test would resolve the USER's real state dir. A test that means to exercise
+// previews opts back in with svc.UsePreviewsDir(t.TempDir()).
 func TestMain(m *testing.M) {
 	domain.NotesDisabled = true
+	domain.PreviewsDisabled = true
 	dir, err := os.MkdirTemp("", "gg-tui-xdg")
 	if err != nil {
 		panic(err)

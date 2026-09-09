@@ -11,6 +11,7 @@ import { runOnce, state } from "./core.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { fetchNotes, reconcileStatusView, refreshNoteCounts } from "./files.js";
 import { fetchBranches } from "./sidebar.js";
+import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
 import { loadCommits, renderCommits } from "./commits.js";
 import { loadRepo } from "./ops.js";
 
@@ -21,6 +22,12 @@ const RETRY_MS = 500; // a refresh is already running → try again after it
 // over every list); the header (loadRepo) rides along for the branch name
 // and ahead/behind counts.
 const SIDEBAR = new Set(["branches", "remotes", "worktrees", "tags", "reflog"]);
+
+// "previews" is not a ticker source (only a preview mutation emits it), and
+// it reloads on its OWN — a rename must not drag the whole sidebar (tags
+// alone cost seconds on a big repo) behind it. A moved tip, on the other
+// hand, is a SIDEBAR event: the saved pairs are recomputed from the tips, so
+// every sidebar refresh reloads them too.
 
 const pending = new Set();
 let timer = null;
@@ -99,7 +106,11 @@ async function refreshSources(want) {
   let sidebar = false;
   for (const s of want) if (SIDEBAR.has(s)) sidebar = true;
   if (sidebar) jobs.push(fetchBranches(), loadRepo());
+  if (sidebar || want.has("previews")) jobs.push(fetchPreviews());
   await Promise.all(jobs);
+  // After the previews list lands: an open preview whose tips moved re-opens
+  // itself, one whose pair vanished closes with a notice.
+  await reopenPreviewIfMoved();
   if (want.has("status")) reconcileStatusView();
   if (want.has("feed")) {
     await loadCommits(false, false);

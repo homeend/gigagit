@@ -31,6 +31,8 @@ func (m Model) panelSelKey(p panel) string {
 //   - panelCommits   → Commit.Hash via commits[u-wipCount()]; WIP pseudo-rows
 //     have no stable hash so they return "" (restore degrades to index-clamp)
 //   - panelReflog    → ReflogEntry.Hash (full SHA; stable reflog identity)
+//   - panelPreviews  → MergePreview.ID (derived from the pair; survives a
+//     relabel and every refresh)
 func (m Model) rowKeyAt(p panel, i int) string {
 	idx := m.displayIndices(p)
 	if i < 0 || i >= len(idx) {
@@ -61,6 +63,8 @@ func (m Model) rowKeyAt(p panel, i int) string {
 		return m.commits[u-m.wipCount()].Hash
 	case panelReflog:
 		return m.reflog[u].Hash
+	case panelPreviews:
+		return m.previews[u].rec.ID
 	}
 	return ""
 }

@@ -122,6 +122,8 @@ func panelProtoName(p panel) string {
 		return "tags"
 	case panelReflog:
 		return "reflog"
+	case panelPreviews:
+		return "previews"
 	}
 	return ""
 }

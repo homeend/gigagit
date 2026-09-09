@@ -258,6 +258,72 @@ value type with two instances (`UsingGG`, `ReviewingWithGG`), each with its own
 `gg:<name>:vN` marker; `agentinit` installs both per agent and reports the WORST
 of the two statuses in its single `Detection` row.
 
+**Merge previews.** A saved preview (`model.MergePreview`, `internal/preview`'s
+TOML store under `<state>/gg/previews/<repo-key>/previews.toml`, atomic
+rewrite + lock, records only) stores the pair as branch **names** — never
+hashes — so it keeps working across rebases, resets and remote updates.
+Everything downstream resolves those names against the LIVE repo: `domain`'s
+`PreviewSummary(ctx, source, target)` does two `ResolveRev` calls first (a
+miss returns `PreviewMissingSource`/`PreviewMissingTarget` without touching
+the cache), then builds the cache key from the two resulting **hashes**
+(`"preview-summary:" + srcHash + ":" + tgtHash`) — names never reach a cache
+key, so a renamed-then-recreated branch or two differently-named branches
+sharing a tip can never collide or serve a stale entry. Only a genuine tip
+move (a different hash pair) costs the three summary git calls
+(`MergeBase`, `CountLeftRight`, `DiffNameOnlyRange`); an unchanged pair is
+two rev-parses and a cache hit. `PreviewOpen` wraps `PreviewSummary` into the
+two `model.Endpoint`s (`merge-base(target, source)` and the source tip) the
+compare pipeline actually diffs. The TUI's `srcPreviews` source (`readPreviews`
+in `preview_panel.go`) is, like `srcNotes`, **never interval-polled on its
+own** — but it is not merely manual either: `chainPreviewsRead` (`preview_open.go`)
+rides along every `srcBranches`/`srcRemotes` arrival (`model.go`'s `previewsChain`,
+set in the `dataAvailableMsg` switch and batched into whatever command that
+arm returns, skipped only on the startup fan-out, which already reads
+previews directly), because a saved pair or an open preview names branch
+tips that only those two refreshes can move — plus an explicit `r`, a repo
+reroot, and every preview mutation (add/rename/remove/save-reversed). Every
+CHAINED previews read goes through `chainPreviewsRead`, never a bare
+`reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{})`: the chain bumps
+`srcGen`, so if a MANUAL previews read is still in flight its message
+early-returns on the arrival handler's gen check BEFORE clearing
+`srcLoading[srcPreviews]` — and a silent chain never sets that flag, so
+nothing clears it again and `m.loading` (with every action guard and `r`
+itself) sticks true for the session. `chainPreviewsRead` inherits the
+in-flight read's manual flag so the superseding read clears it instead.
+The races are real, not theoretical: at startup bootstrap's manual
+all-source fan-out runs against the very snapshot whose arrival chains, and
+a mutation chain is one keystroke from `r` (add, save, `r`). Since
+branches/remotes ARE on the background auto-refresh lane, this chain is what
+lets an idle TUI notice a moved tip and re-open a preview without the user
+pressing anything. The legacy snapshot-load path additionally CHAINS a
+`srcPreviews` reload off the snapshot's own arrival rather than firing it
+from `reRoot` itself, because a state-dir read plus a couple of rev-parses
+would otherwise win the race against the full `Snapshot` load and flip
+`m.ready`/`m.loading` early, dropping `reRoot`'s blank-screen gate while the
+OLD repo's branches/status were still in the model. `reRoot` still bumps
+`srcGen` for every source, including `srcPreviews`, before any of this — so
+a chained read that lands after a second, faster repo switch (or a switch
+away and back) carries a stale generation and is dropped on arrival, the
+same guard every other source relies on. Two decisions: `preview-pair` (`internal/tui/preview_actions.go`,
+raised from the Branches pair picker) offers `["show once", "show and
+save", "swap direction", "abort"]` — "show once" opens the compare view
+transiently (empty id, nothing stored, though an open transient preview still
+re-arms on tip movement like a saved one), "show and save" saves without
+switching focus onto the Previews tab (so the dialog can fire from any tab),
+"swap direction" re-raises the same dialog with source/target reversed rather
+than making the user re-pair in the other order, and "abort" is last so
+`abortOption`/esc cancels; `preview-remove` (the Previews tab's `d`) offers
+`["Remove", "Cancel"]` with "Cancel" last for the same esc-safety reason. An
+open preview reacts to every `srcPreviews` landing (`afterPreviewsRefresh` in
+`preview_open.go`): it re-opens itself (and says which side moved) when a
+tip change altered the compare tag, silently reconciles — updating only the
+tracked `srcHash`/`tgtHash` on `previewOpenState`, nothing the user sees —
+when a tip moved (e.g. the target advanced off the fork point) without
+changing the merge-base..source diff, so a later refresh doesn't see them
+differ and re-announce the same non-event forever, and closes with a notice
+when the pair's state stopped being `PreviewOK` (merged, a side went
+missing, no common base) or the record itself was removed.
+
 Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands, else launches the TUI.
 
 ### Theme (`internal/theme`, `internal/tui/styles.go`, `internal/tui/paint.go`)

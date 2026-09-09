@@ -26,8 +26,8 @@ func TestPairOpsMsgAddsFastForwardRow(t *testing.T) {
 	if pp == nil {
 		t.Fatal("expected the pair-op popup")
 	}
-	if len(pp.ops) != 5 {
-		t.Fatalf("expected 5 ops with the fast-forward row, got %d", len(pp.ops))
+	if len(pp.ops) != 6 {
+		t.Fatalf("expected 6 ops with the fast-forward row, got %d", len(pp.ops))
 	}
 	ffRow := pp.ops[2]
 	if got := ffRow.label("feat/a", "main"); got != "Fast-forward feat/a to main" {
@@ -55,8 +55,8 @@ func TestPairOpsMsgWithoutFastForward(t *testing.T) {
 	if pp == nil {
 		t.Fatal("expected the pair-op popup")
 	}
-	if len(pp.ops) != 4 {
-		t.Fatalf("expected the 4 standard ops, got %d", len(pp.ops))
+	if len(pp.ops) != 5 {
+		t.Fatalf("expected the 5 standard ops, got %d", len(pp.ops))
 	}
 }
 
@@ -154,7 +154,7 @@ func TestMarkPairProbesFastForward(t *testing.T) {
 	if pp == nil {
 		t.Fatal("expected the pair-op popup after the probe")
 	}
-	if len(pp.ops) != 5 {
-		t.Fatalf("expected 5 ops with the fast-forward row, got %d", len(pp.ops))
+	if len(pp.ops) != 6 {
+		t.Fatalf("expected 6 ops with the fast-forward row, got %d", len(pp.ops))
 	}
 }

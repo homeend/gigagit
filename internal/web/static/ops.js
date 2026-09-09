@@ -9,6 +9,7 @@ import { fetchBranches } from "./sidebar.js";
 import { closeReviewLane, unparkReview } from "./review.js";
 import { closeCommitFilter, loadCommits, renderCommits } from "./commits.js";
 import { reconcileStatusView, stage } from "./files.js";
+import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
 import { fetchHealth } from "./bigrepo.js";
 
 // --- op transport client ---
@@ -461,7 +462,15 @@ async function refreshAfterOp(hardFeed) {
   // neighbouring commit.
   const at = state.rows[state.cursor - wtCount()];
   const keep = at && at.hash;
-  await Promise.all([loadRepo(), fetchBranches(), fetchStatus()]);
+  // Previews are recomputed from the tips an op just moved, so they reload
+  // beside the branches — this is also what the manual `r` reaches them
+  // through (manualRefresh runs this).
+  await Promise.all([loadRepo(), fetchBranches(), fetchStatus(), fetchPreviews()]);
+  // The op just moved the tips an open preview is computed from, and live.js
+  // DROPS the SSE events that arrived while the op ran (this refresh is what
+  // stands in for them) — so the preview is re-armed here too, or it would
+  // sit stale with nothing to correct it.
+  await reopenPreviewIfMoved();
   // an op can change the working tree while its status screen is open
   // (commit empties it) — reconcile instead of showing stale rows
   reconcileStatusView();

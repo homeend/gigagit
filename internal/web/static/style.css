@@ -177,9 +177,13 @@ mark.r { background: var(--span-add); color: inherit; }
    ellipsis, same hover, and the same leading marker column — so names line up
    from the top of the sidebar to the bottom. Remotes was the odd one out (no
    rule at all): its rows sat flush against the pane edge and wrapped mid-name. */
-#branches-list, #remotes-list, #bookmarks-list, #shelf-list { list-style: none; }
-#branches-list li, #remotes-list li, #bookmarks-list li, #shelf-list li { padding: 2px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#branches-list li:hover, #remotes-list li:hover, #bookmarks-list li:hover, #shelf-list li:hover { background: var(--bg-alt); }
+#branches-list, #remotes-list, #bookmarks-list, #shelf-list, #previews-list { list-style: none; }
+#branches-list li, #remotes-list li, #bookmarks-list li, #shelf-list li, #previews-list li { padding: 2px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#branches-list li:hover, #remotes-list li:hover, #bookmarks-list li:hover, #shelf-list li:hover, #previews-list li:hover { background: var(--bg-alt); }
+/* A preview row is "<label> <source → target> <state>": the two trailing
+   cells are secondary, like the tag/stash subtitles. */
+#previews-list li .psub { color: var(--dim); font-size: 11px; padding-left: 6px; }
+#previews-list li.none { color: var(--dim); cursor: default; }
 /* The marker column: one glyph wide plus its separator, reserved on EVERY row
    so an unmarked name starts at the same column as a marked one. */
 .mk { display: inline-block; width: 2ch; flex: none; color: var(--accent); }
@@ -350,7 +354,7 @@ mark.r { background: var(--span-add); color: inherit; }
    the chevron while the list stayed on screen — a toggle that looked broken. */
 #branches-list.collapsed, #remotes-list.collapsed, #worktrees-list.collapsed,
 #tags-list.collapsed, #stashes-list.collapsed, #reflog-list.collapsed,
-#bookmarks-list.collapsed, #shelf-list.collapsed { display: none; }
+#bookmarks-list.collapsed, #shelf-list.collapsed, #previews-list.collapsed { display: none; }
 #top #pull-btn, #top #push-btn {
   margin-left: 10px; background: var(--bg); color: var(--fg);
   border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px;

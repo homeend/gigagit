@@ -87,6 +87,7 @@ feature; keep THIS file's map to one line per package.
 | `bookmark`   | Persistent registry of richly-addressed file/commit references (records only, no blobs). Owned by `domain`. |
 | `notes`      | Machine-local review-note store (TOML + O_EXCL lock, write-time cap, `Sweep`); records only. Owned by `domain`; frontends never import it. |
 | `notebatch`  | Pure parser for the two agent JSON note-batch shapes (hunk agent-context v1, comment apply); shared by CLI, MCP and the review importer. DAG leaf. |
+| `preview`    | Machine-local registry of saved merge previews (`source → target` branch-name pairs; records only, TOML + lock under XDG state). Owned by `domain`; frontends never import it. |
 | `profile`    | Named git-identity presets, global + per-repo scoped. Owned by `domain`. |
 | `promptstate`| Machine-local UX memory: suppressed prompts, dismissed notices, approved external-tool command hashes (`CommandHash` shared by TUI and web). |
 | `prefix`     | Templated branch-name prefix registry, global + per-repo scoped. Owned by `domain`. |

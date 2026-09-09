@@ -22,6 +22,7 @@ import (
 	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/prefix"
+	"github.com/homeend/gigagit/internal/preview"
 	"github.com/homeend/gigagit/internal/profile"
 	"github.com/homeend/gigagit/internal/repogate"
 	"github.com/homeend/gigagit/internal/searchhist"
@@ -43,9 +44,10 @@ type Service struct {
 	bookmark   bookmark.Store   // lazily resolved; nil disables bookmarks
 	searchhist searchhist.Store // lazily resolved; nil disables search history
 
-	notes      notes.Store // lazily resolved; nil disables notes
-	notesOff   bool        // hard "no store" (the disabled-path test)
-	noteCounts *NoteCounts // cached badge counts; nil = cold, invalidated by every mutation
+	notes      notes.Store   // lazily resolved; nil disables notes
+	notesOff   bool          // hard "no store" (the disabled-path test)
+	preview    preview.Store // lazily resolved; nil disables previews
+	noteCounts *NoteCounts   // cached badge counts; nil = cold, invalidated by every mutation
 	// notesGen rises on every count invalidation. NoteCounts computes OUTSIDE
 	// the lock, so it stores its result only when the generation it started
 	// from is still current — a mutation landing mid-compute would otherwise

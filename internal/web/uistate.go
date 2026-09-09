@@ -16,7 +16,7 @@ import (
 
 // uiSections are the sidebar lists whose folded state is remembered. Wire
 // values are resolved against this allowlist, like every other web input.
-var uiSections = []string{"branches", "remotes", "worktrees", "tags", "stashes", "reflog", "bookmarks", "shelf"}
+var uiSections = []string{"branches", "remotes", "worktrees", "tags", "stashes", "reflog", "bookmarks", "shelf", "previews"}
 
 // uiSortLists are the lists whose display order is remembered — the ones the
 // client offers a sort control for. Wire keys are resolved against this

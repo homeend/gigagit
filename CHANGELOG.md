@@ -71,6 +71,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg_note_add`/`gg_notes_apply` honour `$GG_AGENT` for their author default
   like the CLI already did (shared in `domain.NoteAuthorDefault`).
 
+### Merge previews (GitHub-PR-style diff of `source → target`)
+
+- **What it is:** the diff `git diff target...source` — what merging `source`
+  into `target` would bring in — instead of the tip-to-tip compare. Saved
+  pairs store branch NAMES and recompute from the live tips.
+- **TUI:** a fourth left tab **Previews** (ctrl+←/→, click) with live rows
+  `label  source → target  N files ↑M` (or `merged` / `missing: x` / `no
+  common base`); `enter` opens it in the compare view, `a` adds (branch-name
+  completion, ctrl+s swaps), `e` renames, `d` removes, `s` saves the reversed
+  pair. The Branches pair picker (`m`+`m`) gained **Merge preview A → B…**
+  with show once / show and save / swap direction. An open preview re-opens
+  itself when either tip moves and closes with a notice when the pair is
+  merged or a side disappears.
+- **CLI:** `gg preview list|add|rm|rename|show [--patch]|diff [--patch]`;
+  `agentskill.Version` → 64.
+- **Web:** a **previews** sidebar group (`+` to add, right-click for
+  rename / reverse / remove), a **merge preview … → current** row on branch
+  rows, `/api/preview*`; the open page follows moved tips over SSE.
+
 - The diff view's `.` menu grows two WHOLE-FILE review-note rows, offered
   wherever the cursor sits (unlike Edit / Reply / Delete, which need a note
   next to it). **List notes…** is the file's inventory: one row per thread in

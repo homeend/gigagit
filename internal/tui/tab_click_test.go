@@ -13,9 +13,10 @@ import (
 func TestTabLabelsByteCompatible(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ got, want string }{
-		{tabBarLabel(panelBranches), "[Branches] R W"},
-		{tabBarLabel(panelRemotes), "B [Remotes] W"},
-		{tabBarLabel(panelWorktrees), "B R [Worktrees]"},
+		{tabBarLabel(panelBranches), "[Branches] R W P"},
+		{tabBarLabel(panelRemotes), "B [Remotes] W P"},
+		{tabBarLabel(panelWorktrees), "B R [Worktrees] P"},
+		{tabBarLabel(panelPreviews), "B R W [Previews]"},
 		{filesTabLabel(panelFiles, 3, 5), "[Files 3] Tags 5"},
 		{filesTabLabel(panelTags, 3, 5), "Files 3 [Tags 5]"},
 		{bottomTabLabel(panelStaged, 2, 4), "[Staged 2] Reflog 4"},
@@ -38,6 +39,7 @@ func TestTabSegSyncInvariant(t *testing.T) {
 		topTabSegs(panelBranches),
 		topTabSegs(panelRemotes),
 		topTabSegs(panelWorktrees),
+		topTabSegs(panelPreviews),
 		filesTabSegs(panelFiles, 3, 5),
 		filesTabSegs(panelTags, 3, 5),
 		bottomTabSegs(panelStaged, 2, 4),
@@ -82,7 +84,8 @@ func TestTabClickAtGeometry(t *testing.T) {
 	pos := m.layout().pos[panelBranches] // {0, 1}
 	labelY := pos.y + 1
 	base := pos.x + 2 // left border + Padding(0,1) left
-	// "[Branches] R W": [Branches]=cols 0-9, space 10, R=11, space 12, W=13.
+	// "[Branches] R W P": [Branches]=cols 0-9, space 10, R=11, space 12, W=13,
+	// space 14, P=15.
 	cases := []struct {
 		name string
 		x, y int
@@ -117,8 +120,8 @@ func TestTabClickAtGeometry(t *testing.T) {
 // the right-edge padding would switch to an invisible tab.
 func TestTabClickAtTruncated(t *testing.T) {
 	t.Parallel()
-	// width 48 -> leftW = 48/3 = 16 -> innerW = 12. "[Branches] R W" is 14 cells,
-	// so the trailing " W" (cols 12-13) is truncated away.
+	// width 48 -> leftW = 48/3 = 16 -> innerW = 12. "[Branches] R W P" is 16
+	// cells, so everything from col 12 on (" W P") is truncated away.
 	m := Model{width: 48, height: 30, activeLeftTab: panelBranches}
 	pos := m.layout().pos[panelBranches]
 	labelY := pos.y + 1

@@ -37,6 +37,7 @@ import "./agentsetup.js";
 import "./commitai.js";
 import "./search.js";
 import "./remoteheads.js";
+import { fetchPreviews } from "./previews.js";
 import { connectLive } from "./live.js";
 
 // applyStoredLayout puts back the layout gg remembered for this machine:
@@ -70,6 +71,7 @@ async function boot() {
   // before the first commits render.
   fetchStatus().then(() => renderCommits()).catch(() => {});
   fetchBranches().catch(() => {});
+  fetchPreviews().catch(() => {}); // its own fetch: previews.js cannot ride sidebar.js
   refreshNoteCounts().catch(() => {}); // the ◆N badges, best-effort like the rest
   await fetchHealth(true);
   await loadCommits(false);

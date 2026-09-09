@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -12,7 +14,27 @@ func loadedModel(t *testing.T) Model {
 	t.Helper()
 	repo := newRepo(t)
 	m := New(domain.New(repo))
-	updated, _ := m.Update(m.loadCmd()())
+	updated, cmd := m.Update(m.loadCmd()())
+	return settleLoad(t, updated.(Model), cmd)
+}
+
+// settleLoad runs the one command the dataLoadedMsg success arm chains (the
+// previews read) and applies its result. The real runtime always runs it; a
+// test that skipped it would leave srcPreviews marked in-flight, which the r
+// handler's anySourceInflight guard reads as "a load is still running".
+func settleLoad(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	if cmd == nil {
+		return m
+	}
+	msg := cmd()
+	if msg == nil {
+		return m
+	}
+	if _, batched := msg.(tea.BatchMsg); batched {
+		return m // a batched arm (feed re-walk / active process) settles on its own
+	}
+	updated, _ := m.Update(msg)
 	return updated.(Model)
 }
 
@@ -114,7 +136,7 @@ func TestCtrlArrowSwitchesAndFocusesTab(t *testing.T) {
 	}
 }
 
-func TestCtrlRightCyclesBranchesRemotesWorktrees(t *testing.T) {
+func TestCtrlRightCyclesLeftTabs(t *testing.T) {
 	t.Parallel()
 	m := New(nil)
 	m.width, m.height = 80, 24
@@ -124,7 +146,7 @@ func TestCtrlRightCyclesBranchesRemotesWorktrees(t *testing.T) {
 		u, _ := m.Update(keyMsg(k))
 		m = u.(Model)
 	}
-	// Forward: Branches -> Remotes -> Worktrees -> Branches (wrap).
+	// Forward: Branches -> Remotes -> Worktrees -> Previews -> Branches (wrap).
 	send("ctrl+right")
 	if m.activeLeftTab != panelRemotes || m.focus != panelRemotes {
 		t.Fatalf("1x ctrl+right: tab=%v focus=%v, want Remotes", m.activeLeftTab, m.focus)
@@ -134,13 +156,17 @@ func TestCtrlRightCyclesBranchesRemotesWorktrees(t *testing.T) {
 		t.Fatalf("2x ctrl+right: tab=%v, want Worktrees", m.activeLeftTab)
 	}
 	send("ctrl+right")
-	if m.activeLeftTab != panelBranches {
-		t.Fatalf("3x ctrl+right: tab=%v, want Branches (wrap)", m.activeLeftTab)
+	if m.activeLeftTab != panelPreviews {
+		t.Fatalf("3x ctrl+right: tab=%v, want Previews", m.activeLeftTab)
 	}
-	// Backward one step: Branches -> Worktrees (wrap).
+	send("ctrl+right")
+	if m.activeLeftTab != panelBranches {
+		t.Fatalf("4x ctrl+right: tab=%v, want Branches (wrap)", m.activeLeftTab)
+	}
+	// Backward one step: Branches -> Previews (wrap).
 	send("ctrl+left")
-	if m.activeLeftTab != panelWorktrees {
-		t.Fatalf("ctrl+left from Branches: tab=%v, want Worktrees", m.activeLeftTab)
+	if m.activeLeftTab != panelPreviews {
+		t.Fatalf("ctrl+left from Branches: tab=%v, want Previews", m.activeLeftTab)
 	}
 }
 
