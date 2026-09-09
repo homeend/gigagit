@@ -1,0 +1,78 @@
+package cli
+
+// `gg skill path [review|using-gg]` materialises an embedded skill in the user
+// cache dir and prints its absolute path — so an agent can read gg's skill
+// without `gg init` ever having run in this repository.
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/homeend/gigagit/internal/agentskill"
+)
+
+// SkillCacheDir overrides the base directory `gg skill path` writes into. ""
+// uses os.UserCacheDir(). Tests set it: UserCacheDir ignores XDG_CACHE_HOME on
+// macOS and Windows, so an env var alone cannot isolate this cross-platform.
+var SkillCacheDir string
+
+// skillUsage is the one usage line every caller mistake prints.
+const skillUsage = "usage: gg skill path [review|using-gg]"
+
+// cmdSkill implements `gg skill path [review|using-gg]`.
+func cmdSkill(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 0 || args[0] != "path" {
+		fmt.Fprintln(stderr, skillUsage)
+		return 2
+	}
+	fs := flag.NewFlagSet("skill path", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args[1:]); err != nil {
+		return 2
+	}
+	if fs.NArg() > 1 {
+		fmt.Fprintln(stderr, skillUsage)
+		return 2
+	}
+	name := "review"
+	if fs.NArg() == 1 {
+		name = fs.Arg(0)
+	}
+	var sk agentskill.Skill
+	switch name {
+	case "review", "reviewing-with-gg":
+		sk = agentskill.ReviewingWithGG
+	case "using-gg", "using":
+		sk = agentskill.UsingGG
+	default:
+		fmt.Fprintf(stderr, "skill: unknown skill %q (use review or using-gg)\n", name)
+		return 2
+	}
+	base := SkillCacheDir
+	if base == "" {
+		d, err := os.UserCacheDir()
+		if err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		base = d
+	}
+	path := filepath.Join(base, "gg", "skills", sk.Name, "SKILL.md")
+	// Rewrite only when the file is missing or its marker names another
+	// version: a materialised skill is a cache, not user-owned content.
+	if data, err := os.ReadFile(path); err != nil || sk.InstalledVersion(data) != sk.Version {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		if err := os.WriteFile(path, []byte(sk.SkillFile()), 0o644); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+	}
+	fmt.Fprintln(stdout, path)
+	return 0
+}
