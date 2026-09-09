@@ -463,3 +463,77 @@ func TestNotesAtScopesToTheCheckout(t *testing.T) {
 		t.Fatalf("NotesAt(b.go) = %+v, %v, want none", other, err)
 	}
 }
+
+// TestNotesClearRemovesOnlyThisAddress is phase 2's `gg note clear` primitive:
+// every note at ONE address goes — roots and replies — and every other
+// address's notes survive, with the badge counts refreshed.
+func TestNotesClearRemovesOnlyThisAddress(t *testing.T) {
+	t.Parallel()
+	svc, _ := notesSvc(t)
+	ctx := context.Background()
+	add := func(path, summary string) model.Note {
+		t.Helper()
+		n, err := svc.NoteAdd(ctx, model.Note{
+			Address: wtAddr(path), Side: model.NoteSideNew, Range: [2]int{1, 1},
+			Summary: summary, ContextHash: model.NoteContextHash([]string{"a"}),
+		})
+		if err != nil {
+			t.Fatalf("NoteAdd(%s): %v", path, err)
+		}
+		return n
+	}
+	root := add("a/b.go", "first")
+	add("a/b.go", "second")
+	if _, err := svc.NoteReply(ctx, root.ID, model.Note{Summary: "agreed"}); err != nil {
+		t.Fatalf("NoteReply: %v", err)
+	}
+	keep := add("c/d.go", "elsewhere")
+
+	// Warm the badge cache so the invalidation is observable.
+	if c, err := svc.NoteCounts(ctx); err != nil || c.ByPath["a/b.go"] != 2 {
+		t.Fatalf("NoteCounts before = %+v, %v, want a/b.go = 2", c, err)
+	}
+
+	got, err := svc.NotesClear(ctx, wtAddr("a/b.go"))
+	if err != nil {
+		t.Fatalf("NotesClear: %v", err)
+	}
+	if got != 3 {
+		t.Fatalf("NotesClear removed %d, want 3 (two roots + one reply)", got)
+	}
+	if left, err := svc.NotesFor(ctx, wtAddr("a/b.go"), sideDiff("a")); err != nil || len(left) != 0 {
+		t.Fatalf("NotesFor(a/b.go) after clear = %+v, %v, want none", left, err)
+	}
+	other, err := svc.NotesFor(ctx, wtAddr("c/d.go"), sideDiff("a"))
+	if err != nil || len(other) != 1 || other[0].Note.ID != keep.ID {
+		t.Fatalf("NotesFor(c/d.go) = %+v, %v, want the untouched note", other, err)
+	}
+	c, err := svc.NoteCounts(ctx)
+	if err != nil {
+		t.Fatalf("NoteCounts after: %v", err)
+	}
+	if c.ByPath["a/b.go"] != 0 || c.ByPath["c/d.go"] != 1 {
+		t.Fatalf("NoteCounts after = %+v, want a/b.go gone and c/d.go = 1", c.ByPath)
+	}
+}
+
+// TestNotesClearOfAnUnusedAddressIsANoOp keeps the popup's "nothing to do"
+// path honest: no error, nothing removed, nothing else touched.
+func TestNotesClearOfAnUnusedAddressIsANoOp(t *testing.T) {
+	t.Parallel()
+	svc, _ := notesSvc(t)
+	ctx := context.Background()
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Address: wtAddr("a/b.go"), Side: model.NoteSideNew, Range: [2]int{1, 1},
+		Summary: "keep me", ContextHash: model.NoteContextHash([]string{"a"}),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.NotesClear(ctx, wtAddr("nope.go"))
+	if err != nil || got != 0 {
+		t.Fatalf("NotesClear(nope.go) = %d, %v, want 0, nil", got, err)
+	}
+	if left, err := svc.NotesFor(ctx, wtAddr("a/b.go"), sideDiff("a")); err != nil || len(left) != 1 {
+		t.Fatalf("NotesFor(a/b.go) = %+v, %v, want the note untouched", left, err)
+	}
+}
