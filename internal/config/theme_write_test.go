@@ -459,3 +459,130 @@ func TestSetThemeRoleTargetSectionLastNoTrailingNewline(t *testing.T) {
 		t.Fatalf("headers = %d:\n%s", n, fileBody(t, path))
 	}
 }
+
+// --- RemoveThemeTable: the editor's whole-theme reset (D). ---
+
+func TestRemoveThemeTableDropsGgWrittenSection(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[ui]\ntheme = \"light\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetThemeRole(path, "light", "bg", "#101010"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetThemeRole(path, "light", "lanes", "1", "", "", "", "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetThemeRole(path, "dark", "fg", "#eeeeee"); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveThemeTable(path, "light"); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	want := "[ui]\ntheme = \"light\"\n\n[themes.dark]\nfg = \"#eeeeee\"\n"
+	if got := fileBody(t, path); got != want {
+		t.Fatalf("file after remove:\n%s\nwant:\n%s", got, want)
+	}
+	cfg, err := Load(path, "")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if _, ok := cfg.Themes["light"]; ok {
+		t.Fatal("light table must be gone")
+	}
+	if cfg.Themes["dark"].Fg != "#eeeeee" {
+		t.Fatal("dark table must survive")
+	}
+}
+
+func TestRemoveThemeTableAtEndOfFileClosesUp(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[ui]\ntheme = \"light\"\n\n[themes.light]\nbg = \"#101010\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveThemeTable(path, "light"); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if got, want := fileBody(t, path), "[ui]\ntheme = \"light\"\n"; got != want {
+		t.Fatalf("file after remove:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+// A populate-generated block that the editor uncommented in place goes back
+// to being an inert, fully commented example: rows still carrying the
+// [populated] marker are re-commented (a hand-uncommented row included), rows
+// gg rewrote (marker gone) are dropped like `d` drops them, and the header is
+// re-commented rather than deleted so the example block survives.
+func TestRemoveThemeTableRecommentsPopulatedBlock(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := strings.Join([]string{
+		"[ui]",
+		`theme = "light"`,
+		"",
+		`# [themes.light]   # neutral light grey [populated]`,
+		`# bg = "#E9E9E5"   # frame background [populated]`,
+		`fg = "#111111"     # frame foreground [populated]`, // hand-uncommented
+		`# dim = "#8A8F8A"   # dim text [populated]`,
+		`# [themes.dark]   # Campbell [populated]`,
+		`# bg = "#0C0C0C"   # frame background [populated]`,
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The hand-uncommented fg made the header… still commented. The editor's
+	// first write activates the header and replaces the bg row in place.
+	if err := SetThemeRole(path, "light", "bg", "#101010"); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveThemeTable(path, "light"); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	want := strings.Join([]string{
+		"[ui]",
+		`theme = "light"`,
+		"",
+		`# [themes.light]`,
+		`# fg = "#111111"     # frame foreground [populated]`,
+		`# dim = "#8A8F8A"   # dim text [populated]`,
+		`# [themes.dark]   # Campbell [populated]`,
+		`# bg = "#0C0C0C"   # frame background [populated]`,
+		"",
+	}, "\n")
+	if got := fileBody(t, path); got != want {
+		t.Fatalf("file after remove:\n%s\nwant:\n%s", got, want)
+	}
+	if _, err := Load(path, ""); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+}
+
+func TestRemoveThemeTableNoActiveTableIsNoop(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"commented": "[ui]\ntheme = \"light\"\n\n# [themes.light]   # x [populated]\n# bg = \"#E9E9E5\"   # frame background [populated]\n",
+		"absent":    "[ui]\ntheme = \"light\"\n",
+		"other":     "[themes.dark]\nbg = \"#000000\"\n",
+	} {
+		path := filepath.Join(dir, name+".toml")
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := RemoveThemeTable(path, "light"); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if got := fileBody(t, path); got != body {
+			t.Fatalf("%s: file must be byte-identical:\n%s", name, got)
+		}
+	}
+	if err := RemoveThemeTable(filepath.Join(dir, "missing.toml"), "light"); err != nil {
+		t.Fatalf("missing file must be a no-op, got %v", err)
+	}
+	if err := RemoveThemeTable("", "light"); err == nil {
+		t.Fatal("empty path must refuse")
+	}
+}
