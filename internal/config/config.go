@@ -85,6 +85,15 @@ type UIConfig struct {
 	// $XDG_CONFIG_HOME/gg/lang/<code>.toml. CLI output is always English.
 	Language string `toml:"language"`
 
+	// Theme pins the TUI's colours so gg looks the same in every truecolor
+	// terminal: "terminal" (default — inherit the terminal's own scheme,
+	// nothing painted), "dark" (Windows Terminal Campbell look), "light"
+	// (Everforest light soft). Empty = unset (zero-is-unset overlay rule);
+	// resolved to "terminal". Values are theme.Names(); the Settings row cycles
+	// them. Under a 256-colour profile hex roles snap to the nearest cube entry;
+	// under 16 colours the theme is effectively off.
+	Theme string `toml:"theme"`
+
 	ShowEOLOnlyChanges bool `toml:"show_eol_only_changes"` // surface files whose only unstaged change is line endings (CRLF↔LF); false (default) hides them as noise
 
 	// DisableSlowOpConfirm turns OFF the yes/no confirmation shown before slow
@@ -187,7 +196,7 @@ func Defaults() Config {
 			DefaultBranchTemplate: "<parent-branch>-<date:yyyy-MM-dd_HH-mm>",
 		},
 		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
-			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", DiffSyntax: "auto", DiffCursor: "row", ShowGraph: "on"},
+			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", DiffSyntax: "auto", DiffCursor: "row", ShowGraph: "on", Theme: "terminal"},
 		Versions: VersionsConfig{MaxAgeDays: 90},
 		Notes:    NotesConfig{MaxAgeDays: 30, MaxEntries: 2000},
 	}
@@ -328,6 +337,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.Language != "" {
 		dst.Language = src.Language
+	}
+	if src.Theme != "" {
+		dst.Theme = src.Theme
 	}
 	// Inverted polarity: the default (false) is the active feature (hide), so
 	// only a true in a higher layer overlays — matching the zero-is-unset rule.

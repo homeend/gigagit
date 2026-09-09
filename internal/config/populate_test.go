@@ -136,3 +136,11 @@ func TestPopulateFileMissingFileCreatesIt(t *testing.T) {
 		t.Fatalf("file not created: %v", err)
 	}
 }
+
+func TestPopulateEmitsTheme(t *testing.T) {
+	t.Parallel()
+	out := populate("")
+	if !strings.Contains(out, "# theme = \"terminal\"") {
+		t.Fatalf("populate must emit [ui] theme with its default:\n%s", out)
+	}
+}

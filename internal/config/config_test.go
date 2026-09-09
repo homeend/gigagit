@@ -659,3 +659,19 @@ func TestNotesLayers(t *testing.T) {
 		t.Errorf("an unset repo key must not clear the global one, got %d", cfg.Notes.MaxEntries)
 	}
 }
+
+func TestOverlayTheme(t *testing.T) {
+	t.Parallel()
+	if def := Defaults(); def.UI.Theme != "terminal" {
+		t.Fatalf("default theme = %q, want terminal", def.UI.Theme)
+	}
+	dst := UIConfig{Theme: "terminal"}
+	overlayUI(&dst, UIConfig{Theme: "dark"})
+	if dst.Theme != "dark" {
+		t.Fatalf("overlayUI did not propagate Theme, got %q", dst.Theme)
+	}
+	overlayUI(&dst, UIConfig{})
+	if dst.Theme != "dark" {
+		t.Fatalf("empty Theme must not clear an existing value, got %q", dst.Theme)
+	}
+}

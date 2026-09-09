@@ -47,6 +47,7 @@ var settingDocs = []settingDoc{
 	{"ui", "diff_cursor", "row", "diff-view current-line marker: row (background), number (gutter only) or off; the . menu's Cursor marker row switches it for the session"},
 	{"ui", "show_graph", "on", "Commits panel render mode on startup: on (default; lane graph) or off (flat list, same as the . menu's Show as list); toggle live from the , Settings menu"},
 	{"ui", "language", nil, "TUI display language: en (default), ja, ko, zh, ru, or a custom code from $XDG_CONFIG_HOME/gg/lang/<code>.toml; pick from the , Settings menu (CLI output stays English)"},
+	{"ui", "theme", "terminal", "TUI colours: terminal (default; inherit the terminal's own scheme), dark (Windows Terminal Campbell look, pinned everywhere), light (Everforest light soft); cycle from the , Settings menu"},
 
 	{"ui", "show_eol_only_changes", false, "show files whose only unstaged change is line endings (CRLF↔LF); default hides them as noise"},
 	{"ui", "disable_slow_op_confirm", false, "skip the yes/no confirmation shown before slow working-tree ops (switch, checkout, pull, merge, rebase, fast-forward, reset)"},

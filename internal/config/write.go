@@ -59,6 +59,14 @@ func SetGlobalUILanguage(path, code string) error {
 	return setScalarLine(path, "ui", "language", strconv.Quote(code))
 }
 
+// SetGlobalUITheme persists `[ui] theme = "<name>"` to the GLOBAL config
+// (callers pass DefaultGlobalPath() — a theme is per-human, like language),
+// preserving comments. The normal [ui] overlay still lets a repo .gg.toml
+// override it.
+func SetGlobalUITheme(path, name string) error {
+	return setScalarLine(path, "ui", "theme", strconv.Quote(name))
+}
+
 // SetRefreshInterval persists `[refresh] <source> = secs` to the given config
 // file (the repo .gg.toml), preserving the rest of the file. Backs the Settings
 // "Refresh rates" inline editor.
