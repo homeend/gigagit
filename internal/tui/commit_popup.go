@@ -176,7 +176,7 @@ func (p *commitPopup) box(m Model) string {
 	// Wider-than-standard default (commitNormalWidth); ctrl+t maximizes to
 	// popupFullInnerWidth via the shared popupMax mechanism (popupResolveWidth).
 	innerW := popupResolveWidth(w, p.maximized, commitNormalWidth(w))
-	contentW := innerW - modalStyle.GetHorizontalPadding()
+	contentW := innerW - st().modalStyle.GetHorizontalPadding()
 	if contentW < 1 {
 		contentW = 1
 	}
@@ -206,7 +206,7 @@ func (p *commitPopup) box(m Model) string {
 	b.WriteString("\n")
 	b.WriteString(footer)
 
-	return modalStyle.Width(innerW).Render(b.String()) + "\n"
+	return st().modalStyle.Width(innerW).Render(b.String()) + "\n"
 }
 
 // commitDescBudget is the description field's display-line budget: terminal

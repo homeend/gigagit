@@ -645,9 +645,6 @@ func conflictMsgBox(m Model, msg string) string {
 	return popupBox(popupInnerWidth(w), msg)
 }
 
-// conflictSrcStyle dims the "merging X into Y" subtitle in the file list.
-var conflictSrcStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
 // inProgressMsg carries the result of the merge/rebase-in-progress probe.
 type inProgressMsg struct{ op string }
 
@@ -679,18 +676,19 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 	var b strings.Builder
 	b.WriteString(i18n.T("Resolve conflicts") + "\n")
 	if s := describeConflict(src); s != "" {
-		b.WriteString(conflictSrcStyle.Render(s) + "\n")
+		b.WriteString(st().dim.Render(s) + "\n")
 	}
 	b.WriteString("\n")
 	if len(files) == 0 {
 		b.WriteString("  " + i18n.T("(all resolved)") + "\n")
 	} else {
 		wr := make([]winRow, len(files))
+		sty := st()
 		for i, f := range files {
 			prefix := "  "
 			var st lipgloss.Style
 			if i == sel {
-				prefix, st = "> ", selectedRow
+				prefix, st = "> ", sty.selectedRow
 			}
 			wr[i] = winRow{text: fmt.Sprintf("%s%s  — %s", prefix, f.Path, f.ConflictLabel()), style: st}
 		}
@@ -752,10 +750,11 @@ func conflictToolPickBox(m Model, choices []config.ToolCommand, sel int) string 
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	b.WriteString(i18n.T("Run external tool") + "\n\n")
+	sty := st()
 	for i, tc := range choices {
 		prefix, st := "  ", lipgloss.NewStyle()
 		if i == sel {
-			prefix, st = "> ", selectedRow
+			prefix, st = "> ", sty.selectedRow
 		}
 		label := tc.Name
 		if tc.PerFile {

@@ -189,11 +189,11 @@ func TestFilePreviewRenderColoursCode(t *testing.T) {
 
 	m := previewOf(t, Model{}, "x.go", "package main\n\nfunc main() {}\n")
 	out := m.renderFilePreview(60, 12)
-	if !strings.Contains(out, "38;5;"+syntaxColor(syntax.Keyword)) {
+	if !strings.Contains(out, "38;5;"+st().syntaxColor(syntax.Keyword)) {
 		t.Errorf("the preview should colour Go keywords:\n%q", out)
 	}
 	plain := previewOf(t, Model{}, "notes.txt", "package main\n").renderFilePreview(60, 12)
-	if strings.Contains(plain, "38;5;"+syntaxColor(syntax.Keyword)) {
+	if strings.Contains(plain, "38;5;"+st().syntaxColor(syntax.Keyword)) {
 		t.Errorf("a .txt preview must stay uncoloured:\n%q", plain)
 	}
 }
@@ -214,10 +214,10 @@ func TestContentPopupBoxOffsetsClassMask(t *testing.T) {
 		{text: "package main", cls: kw},
 	})
 	out := p.box(Model{width: 100, height: 30})
-	if !strings.Contains(out, "38;5;"+syntaxColor(syntax.Keyword)+"mpackage") {
+	if !strings.Contains(out, "38;5;"+st().syntaxColor(syntax.Keyword)+"mpackage") {
 		t.Errorf("the masked row should colour `package` past the two-column prefix:\n%q", out)
 	}
-	if !strings.Contains(out, "  \x1b["+"38;5;"+syntaxColor(syntax.Keyword)) {
+	if !strings.Contains(out, "  \x1b["+"38;5;"+st().syntaxColor(syntax.Keyword)) {
 		t.Errorf("the row prefix must stay plain before the coloured run:\n%q", out)
 	}
 }

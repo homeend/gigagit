@@ -12,37 +12,9 @@ import (
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
-var (
-	diffDelCell = lipgloss.NewStyle().Background(lipgloss.Color("52"))  // dark red
-	diffAddCell = lipgloss.NewStyle().Background(lipgloss.Color("22"))  // dark green
-	diffGapCell = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // dim · filler
-	diffGutter  = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	diffFold    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))            // dim fold rule
-	diffEmph    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231")) // bright fg over the hot cell bg
-
-	diffCursorRow = lipgloss.NewStyle().Background(lipgloss.Color("237")) // cursor line: subtle grey under both panes
-	diffCursorNo  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
-	// On the cursor row a hot cell keeps its meaning but steps one shade
-	// brighter, and the gap side carries the grey band under its dots, so
-	// the cursor never disappears on exactly the rows a reviewer stops on.
-	diffAddCursor = lipgloss.NewStyle().Background(lipgloss.Color("28"))
-	diffDelCursor = lipgloss.NewStyle().Background(lipgloss.Color("88"))
-	diffGapCursor = diffGapCell.Background(lipgloss.Color("237"))
-
-	// Review notes draw as hunk-style boxes in their own pane: a rounded frame
-	// (blue for a user note, purple for an agent note, grey when stale) with
-	// the title in the top rule, the summary in bold and the rationale dim.
-	noteFrameUser  = lipgloss.NewStyle().Foreground(lipgloss.Color("75"))
-	noteFrameAgent = lipgloss.NewStyle().Foreground(lipgloss.Color("141"))
-	noteFrameStale = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	noteSummary    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("231"))
-	noteBody       = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
-	noteDim        = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-)
-
 // cellMark is the cursor marker for one rendered cell: when row is set, base
 // is laid under every non-hot run and the padding (hot add/del backgrounds
-// win — they stay as they are); gut styles the gutter number. noMark is the
+// win — they stay as they are); gut styles the gutter number. noMark() is the
 // unmarked default.
 type cellMark struct {
 	row  bool
@@ -50,17 +22,21 @@ type cellMark struct {
 	gut  lipgloss.Style
 }
 
-var noMark = cellMark{gut: diffGutter}
+// noMark is a function, not a package var: it reads st(), and package-level
+// var initializers run before styles.go's init() stores the first *styles —
+// a package var here would race init order and read a nil pointer.
+func noMark() cellMark { return cellMark{gut: st().diffGutter} }
 
 // cursorMark is the cellMark for a cursor row under the given style.
 func cursorMark(style string) cellMark {
+	s := st()
 	switch style {
 	case "row":
-		return cellMark{row: true, base: diffCursorRow, gut: diffCursorNo}
+		return cellMark{row: true, base: s.diffCursorRow, gut: s.diffCursorNo}
 	case "number":
-		return cellMark{gut: diffCursorNo}
+		return cellMark{gut: s.diffCursorNo}
 	}
-	return noMark
+	return noMark()
 }
 
 // hotFor is the background a hot (add/del) cell wears: its own shade, or the
@@ -69,11 +45,12 @@ func (mk cellMark) hotFor(hot lipgloss.Style) lipgloss.Style {
 	if !mk.row {
 		return hot
 	}
+	s := st()
 	switch hot.GetBackground() {
-	case diffAddCell.GetBackground():
-		return diffAddCursor
-	case diffDelCell.GetBackground():
-		return diffDelCursor
+	case s.diffAddCell.GetBackground():
+		return s.diffAddCursor
+	case s.diffDelCell.GetBackground():
+		return s.diffDelCursor
 	}
 	return hot
 }
@@ -81,9 +58,9 @@ func (mk cellMark) hotFor(hot lipgloss.Style) lipgloss.Style {
 // gapFor is the style of the dotted gap filler: banded on the cursor row.
 func (mk cellMark) gapFor() lipgloss.Style {
 	if mk.row {
-		return diffGapCursor
+		return st().diffGapCursor
 	}
-	return diffGapCell
+	return st().diffGapCell
 }
 
 // diffHintFor builds the diff-view hint for the current long-line mode. Every
@@ -353,6 +330,7 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 		paneW = 4
 	}
 	gut := gutterWidth(v.full)
+	s := st()
 
 	out := make([]string, 0, body)
 	for i := v.offset; i < v.offset+body && i < len(v.disp); i++ {
@@ -365,7 +343,7 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 			out = append(out, foldSeparator(dr.fold, w, dr.noteMark))
 			continue
 		}
-		mk := noMark
+		mk := noMark()
 		if i >= curStart && i < curEnd {
 			mk = cursorMark(style)
 		}
@@ -385,25 +363,25 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 				rightNo = r.RightNo
 			}
 			left := segCell(leftNo, dr.left, gut, paneW, leftGap,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell, mk)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mk)
 			right := segCell(rightNo, dr.right, gut, paneW, rightGap,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell, mk)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mk)
 			out = append(out, left+"│"+right)
 		case longTruncate:
 			left := diffCell(r.LeftNo, r.Left, gut, paneW,
 				r.Kind == textdiff.Add,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell, r.LeftSpans, lt, mk)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, r.LeftSpans, lt, mk)
 			right := diffCell(r.RightNo, r.Right, gut, paneW,
 				r.Kind == textdiff.Del,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell, r.RightSpans, rt, mk)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, r.RightSpans, rt, mk)
 			out = append(out, left+"│"+right)
 		default: // longScroll
 			left := scrollCell(r.LeftNo, r.Left, r.LeftSpans, lt, v.hOffset, gut, paneW,
 				r.Kind == textdiff.Add,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, diffDelCell, mk)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mk)
 			right := scrollCell(r.RightNo, r.Right, r.RightSpans, rt, v.hOffset, gut, paneW,
 				r.Kind == textdiff.Del,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, diffAddCell, mk)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mk)
 			out = append(out, left+"│"+right)
 		}
 	}
@@ -505,7 +483,7 @@ func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, h
 	if hasLeft {
 		// The pan markers are body furniture, not gutter: "number" mode bolds
 		// the line number only, so they keep the plain gutter style.
-		b.WriteString(diffGutter.Render("‹"))
+		b.WriteString(st().diffGutter.Render("‹"))
 	}
 	b.WriteString(styledRuns(wdisp, wemph, wcls, base))
 	inner := tw
@@ -519,7 +497,7 @@ func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, h
 		b.WriteString(base.Render(strings.Repeat(" ", pad)))
 	}
 	if hasRight {
-		b.WriteString(diffGutter.Render("›"))
+		b.WriteString(st().diffGutter.Render("›"))
 	}
 	num := fmt.Sprintf("%*d ", gut, no)
 	return mk.gut.Render(truncate(num, gut+1)) + b.String()
@@ -561,11 +539,11 @@ func foldSeparator(n, w int, marked bool) string {
 	}
 	lw := lipgloss.Width(label)
 	if lw >= w {
-		return diffFold.Render(truncate(label, w))
+		return st().diffFold.Render(truncate(label, w))
 	}
 	left := (w - lw) / 2
 	right := w - lw - left
-	return diffFold.Render(strings.Repeat("─", left) + label + strings.Repeat("─", right))
+	return st().diffFold.Render(strings.Repeat("─", left) + label + strings.Repeat("─", right))
 }
 
 // noteRowCells paints one box row as a full diff row: the box in the pane the
@@ -579,16 +557,17 @@ func noteRowCells(nl noteLine, paneW int) string {
 	if paneW < 4 {
 		paneW = 4
 	}
-	frame := noteFrameUser
+	s := st()
+	frame := s.noteFrameUser
 	if nl.agent {
-		frame = noteFrameAgent
+		frame = s.noteFrameAgent
 	}
-	text := noteBody
+	text := s.noteBody
 	if nl.kind == noteRowSummary {
-		text = noteSummary
+		text = s.noteSummary
 	}
 	if nl.stale {
-		frame, text = noteFrameStale, noteDim
+		frame, text = s.noteFrameStale, s.noteDim
 	}
 	inner := paneW - noteBoxFrame
 	var cell string
@@ -660,7 +639,7 @@ func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgl
 // hotEmphBody renders an enriched cell's text into a tw-column body: sanitized
 // like sanitizeLine, the whole cell carrying base (the hot add/del background,
 // or a zero style on a context row), with the runes whose raw index falls in a
-// span additionally wearing diffEmph and the rest wearing their syntax class's
+// span additionally wearing st().diffEmph and the rest wearing their syntax class's
 // foreground. Truncation mirrors truncate()'s trailing ellipsis.
 func hotEmphBody(text string, spans []textdiff.Span, toks []syntax.Tok, tw int, base lipgloss.Style) string {
 	disp, emph, cls := sanitizeCell(text, spans, toks)
@@ -693,11 +672,12 @@ func hotEmphBody(text string, spans []textdiff.Span, toks []syntax.Tok, tw int, 
 }
 
 // styledRuns renders disp grouping consecutive runes by (emph, cls): emphasized
-// runs wear diffEmph inherited over base (so the cell background shows through),
+// runs wear st().diffEmph inherited over base (so the cell background shows through),
 // the rest wear base plus their syntax class's foreground. Emphasis WINS over
 // the syntax colour so the word-diff stays legible. An all-Plain cls with no
 // emphasis renders byte-identically to the pre-syntax renderer.
 func styledRuns(disp []rune, emph []bool, cls []syntax.Class, base lipgloss.Style) string {
+	s := st()
 	var b strings.Builder
 	for i := 0; i < len(disp); {
 		j := i + 1
@@ -707,9 +687,9 @@ func styledRuns(disp []rune, emph []bool, cls []syntax.Class, base lipgloss.Styl
 		seg := string(disp[i:j])
 		switch {
 		case emph[i]:
-			b.WriteString(base.Inherit(diffEmph).Render(seg))
+			b.WriteString(base.Inherit(s.diffEmph).Render(seg))
 		default:
-			b.WriteString(syntaxStyle(base, cls[i]).Render(seg))
+			b.WriteString(s.syntaxStyle(base, cls[i]).Render(seg))
 		}
 		i = j
 	}

@@ -144,11 +144,11 @@ func (p *stashPopup) box(m Model) string {
 		}
 		row := box + " " + f.path
 		if p.field == 1 && i == p.sel {
-			b.WriteString(selectedRow.Render("> "+row) + "\n")
+			b.WriteString(st().selectedRow.Render("> "+row) + "\n")
 		} else {
 			b.WriteString("  " + row + "\n")
 		}
 	}
 	b.WriteString("\n" + i18n.T("[space] toggle  [tab] name/files  [ctrl+s] stash  [esc] cancel"))
-	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	return st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

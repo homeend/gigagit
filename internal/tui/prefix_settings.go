@@ -212,7 +212,7 @@ func (v *prefixSettingsView) box(m Model) string {
 			scopeCursor + "scope: " + scopeVal,
 		}
 		if v.formErr != "" {
-			parts = append(parts, "", errorStyle.Render(v.formErr))
+			parts = append(parts, "", st().errorText.Render(v.formErr))
 		}
 		parts = append(parts,
 			"",
@@ -232,11 +232,12 @@ func (v *prefixSettingsView) box(m Model) string {
 		parts = append(parts, i18n.T("  (none yet — [n] to add)"))
 	} else {
 		wr := make([]winRow, len(v.items))
+		s := st()
 		for i, p := range v.items {
 			prefix := "  "
 			var st lipgloss.Style
 			if i == v.sel {
-				prefix, st = "> ", selectedRow
+				prefix, st = "> ", s.selectedRow
 			}
 			tag := i18n.T("[global]")
 			if p.Scope == model.ProfileScopeRepo {

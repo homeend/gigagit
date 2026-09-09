@@ -14,6 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/observ"
+	"github.com/homeend/gigagit/internal/theme"
 )
 
 // settingsPopup is the generic Settings surface opened with `,`. The
@@ -59,12 +60,13 @@ const (
 	settingsMenuCommitSort  = "Commit sort"
 	settingsMenuShowGraph   = "Show graph"
 	settingsMenuLanguage    = "Language"
+	settingsMenuTheme       = "Theme"
 	settingsMenuRepoLoc     = "Repo settings location"
 	settingsMenuCommitGraph = "Commit-graph"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuOpsHist, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuRepoLoc, settingsMenuCommitGraph}
+var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuOpsHist, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuTheme, settingsMenuRepoLoc, settingsMenuCommitGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -103,6 +105,8 @@ func settingsMenuTitle(entry string) string {
 		return i18n.T("Show graph")
 	case settingsMenuLanguage:
 		return i18n.T("Language")
+	case settingsMenuTheme:
+		return i18n.T("Theme")
 	case settingsMenuRepoLoc:
 		return i18n.T("Repo settings location")
 	case settingsMenuCommitGraph:
@@ -160,6 +164,12 @@ func settingsMenuLabel(m Model, i int) string {
 		return title + ": " + onOff(m.showGraphConfigured())
 	case settingsMenuLanguage:
 		return title + ": " + i18n.ActiveName()
+	case settingsMenuTheme:
+		name := m.cfg.UI.Theme
+		if name == "" {
+			name = theme.NameTerminal
+		}
+		return title + ": " + themeDisplayName(name)
 	case settingsMenuCommitGraph:
 		if !m.repoHealthKnown {
 			return title + ": " + i18n.T("(checking…)")
@@ -204,6 +214,40 @@ func (m Model) toggleShowGraph() Model {
 		m.statusMsg = i18n.T("show graph: %s", next)
 	}
 	return m
+}
+
+// cycleTheme steps terminal → dark → light → terminal, persists the choice to
+// the GLOBAL config (a theme is per-human, like language), swaps the styles
+// and returns applyTheme's cmd — always tea.ClearScreen here since a cycle
+// always changes the name — so every row repaints under the new colours.
+func (m Model) cycleTheme() (Model, tea.Cmd) {
+	names := theme.Names()
+	cur := m.cfg.UI.Theme
+	if cur == "" {
+		cur = theme.NameTerminal
+	}
+	next := names[0]
+	for i, n := range names {
+		if n == cur {
+			next = names[(i+1)%len(names)]
+			break
+		}
+	}
+	m.cfg.UI.Theme = next
+	before := m.statusMsg
+	m, cmd := m.applyTheme()
+	// applyTheme may have complained about the new theme's [themes.<name>]
+	// table; keep that in front of the cycle message instead of losing it.
+	lead := ""
+	if m.statusMsg != before && m.statusMsg != "" {
+		lead = m.statusMsg + "; "
+	}
+	if err := config.SetGlobalUITheme(config.DefaultGlobalPath(), next); err != nil {
+		m.statusMsg = lead + i18n.T("theme → %s (not saved: %s)", themeDisplayName(next), err.Error())
+	} else {
+		m.statusMsg = lead + i18n.T("theme: %s", themeDisplayName(next))
+	}
+	return m, cmd
 }
 
 // commitSort returns the configured commit-sort mode, defaulting to "date-order"
@@ -455,6 +499,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.maybeRelatedPrompt(settingShowGraph, m.cfg.UI.ShowGraph)
 			case settingsMenuLanguage:
 				return m.openLanguagePicker()
+			case settingsMenuTheme:
+				return m.cycleTheme() // stays open so the flip is visible
 			case settingsMenuRepoLoc:
 				return m.openRepoConfigLocation(), nil
 			case settingsMenuCommitGraph:
@@ -745,11 +791,12 @@ func (p *settingsPopup) box(m Model) string {
 			b.WriteString("  " + i18n.T("no errors this session") + "\n")
 		} else {
 			wr := make([]winRow, len(fs))
+			s := st()
 			for i, e := range fs {
 				prefix := "  "
 				var st lipgloss.Style
 				if i == p.sel {
-					prefix, st = "> ", selectedRow
+					prefix, st = "> ", s.selectedRow
 				}
 				wr[i] = winRow{
 					text:  fmt.Sprintf("%s%s  %s — %s", prefix, e.Time.Format("15:04:05"), e.Source, e.Detail),
@@ -916,11 +963,12 @@ func (p *settingsPopup) box(m Model) string {
 			b.WriteString("  " + i18n.T("no known tools detected on this machine (looked for: claude, junie, meld)") + "\n")
 		} else {
 			wr := make([]winRow, len(p.toolRows))
+			s := st()
 			for i, row := range p.toolRows {
 				prefix := "  "
 				var st lipgloss.Style
 				if i == p.sel {
-					prefix, st = "> ", selectedRow
+					prefix, st = "> ", s.selectedRow
 				}
 				box := "[ ]"
 				if p.toolChecked[i] {
@@ -996,7 +1044,7 @@ func (p *settingsPopup) box(m Model) string {
 					destLines = wrapWidth(i18n.T("writes to: %s", config.DefaultGlobalPath()), textW, 1<<20)
 				}
 				for _, seg := range destLines {
-					b.WriteString(dimRowStyle.Render(seg) + "\n")
+					b.WriteString(st().dim.Render(seg) + "\n")
 				}
 				for i := len(destLines); i < destH; i++ {
 					b.WriteString("\n")
@@ -1020,7 +1068,7 @@ func (p *settingsPopup) box(m Model) string {
 					cmdLines = append(append([]string{}, cmdLines[:keep]...), "…")
 				}
 				for _, seg := range cmdLines {
-					b.WriteString(dimRowStyle.Render(seg) + "\n")
+					b.WriteString(st().dim.Render(seg) + "\n")
 				}
 				for i := len(cmdLines); i < previewH; i++ {
 					b.WriteString("\n")
@@ -1031,11 +1079,12 @@ func (p *settingsPopup) box(m Model) string {
 	} else if !p.picker {
 		b.WriteString(i18n.T("Settings") + "\n\n")
 		wr := make([]winRow, len(settingsMenu))
+		s := st()
 		for i := range settingsMenu {
 			prefix := "  "
 			var st lipgloss.Style
 			if i == p.menuSel {
-				prefix, st = "> ", selectedRow
+				prefix, st = "> ", s.selectedRow
 			}
 			wr[i] = winRow{text: prefix + settingsMenuLabel(m, i), style: st}
 		}
@@ -1050,11 +1099,12 @@ func (p *settingsPopup) box(m Model) string {
 			b.WriteString("  " + i18n.T("no supported agents detected") + "\n")
 		} else {
 			wr := make([]winRow, len(p.dets))
+			s := st()
 			for i, d := range p.dets {
 				prefix := "  "
 				var st lipgloss.Style
 				if i == p.sel {
-					prefix, st = "> ", selectedRow
+					prefix, st = "> ", s.selectedRow
 				}
 				box := "[ ]"
 				if p.checked[i] {

@@ -220,7 +220,7 @@ func (p *filePathPopup) box(m Model) string {
 			}
 			for i := range rows {
 				if i == p.sel {
-					rows[i] = winRow{text: "> " + rows[i].text, style: selectedRow}
+					rows[i] = winRow{text: "> " + rows[i].text, style: st().selectedRow}
 				} else {
 					rows[i].text = "  " + rows[i].text
 				}
@@ -237,5 +237,5 @@ func (p *filePathPopup) box(m Model) string {
 	} else {
 		b.WriteString("\n" + i18n.T("[enter] show  [esc] cancel"))
 	}
-	return modalStyle.Width(inner).Render(b.String()) + "\n"
+	return st().modalStyle.Width(inner).Render(b.String()) + "\n"
 }

@@ -176,7 +176,7 @@ func (p *noticePopup) box(m Model) string {
 				prefix := "  "
 				row := prefix + act.label
 				if i == p.actSel {
-					row = selectedRow.Render("> " + act.label)
+					row = st().selectedRow.Render("> " + act.label)
 				}
 				b.WriteString(row + "\n")
 			}
@@ -188,11 +188,12 @@ func (p *noticePopup) box(m Model) string {
 			b.WriteString("  " + i18n.T("no notices for this repo") + "\n")
 		} else {
 			wr := make([]winRow, len(m.notices))
+			s := st()
 			for i, n := range m.notices {
 				prefix := "  "
 				var st lipgloss.Style
 				if i == p.sel {
-					prefix, st = "> ", selectedRow
+					prefix, st = "> ", s.selectedRow
 				}
 				wr[i] = winRow{text: fmt.Sprintf("%s%s", prefix, n.title), style: st}
 			}
@@ -208,7 +209,7 @@ func (p *noticePopup) box(m Model) string {
 		if p.saved != "" {
 			// Blank line above, then the styled band — see content_popup.go for
 			// the truncate-then-style ordering.
-			b.WriteString("\n\n" + savedNoteStyle.Width(textW).Render(truncate(i18n.T("saved to %s", p.saved), textW)))
+			b.WriteString("\n\n" + st().saveBanner.Width(textW).Render(truncate(i18n.T("saved to %s", p.saved), textW)))
 		}
 		b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] actions  [ctrl+w] mode  [s] save  [esc] close"))
 	}

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/domain"
@@ -64,12 +63,8 @@ const noticeStaleLock = "stale_git_lock"
 // commit-graph win doesn't matter enough to nag about.
 const bigRepoPackBytes = 100 << 20
 
-// Blink = style alternation between these two on a dedicated tick;
-// terminal-native blink escapes are unreliable.
-var (
-	noticeHotStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
-	noticeDimStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("124"))
-)
+// Blink = style alternation between st().noticeHot and st().noticeDim on a
+// dedicated tick; terminal-native blink escapes are unreliable.
 
 // repoHealthMsg carries one background health read; gen guards repo switches.
 // clipAvail rides along: it is an environment probe (not a git read), but it
@@ -450,7 +445,7 @@ func (m Model) noticeSegment() string {
 		return seg
 	}
 	if m.blinkOn {
-		return noticeHotStyle.Render(seg)
+		return st().noticeHot.Render(seg)
 	}
-	return noticeDimStyle.Render(seg)
+	return st().noticeDim.Render(seg)
 }

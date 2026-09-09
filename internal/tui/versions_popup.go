@@ -385,11 +385,12 @@ func (p *versionsPopup) branchBodyLines(termH, textW int) []string {
 		return []string{padRight("  "+i18n.T("no versions recorded"), textW)}
 	}
 	wr := make([]winRow, len(p.branchRows))
+	s := st()
 	for i, b := range p.branchRows {
 		prefix := "  "
 		var st lipgloss.Style
 		if i == p.sel {
-			prefix, st = "> ", selectedRow
+			prefix, st = "> ", s.selectedRow
 		}
 		wr[i] = winRow{text: prefix + branchVersionRowText(b), style: st}
 	}
@@ -408,11 +409,12 @@ func (p *versionsPopup) versionsBodyLines(termH, textW int) []string {
 		return []string{padRight("  "+i18n.T("no versions recorded"), textW)}
 	}
 	wr := make([]winRow, len(p.rows))
+	s := st()
 	for i, v := range p.rows {
 		prefix := "  "
 		var st lipgloss.Style
 		if i == p.sel {
-			prefix, st = "> ", selectedRow
+			prefix, st = "> ", s.selectedRow
 		}
 		wr[i] = winRow{text: prefix + versionRowText(v), style: st}
 	}
@@ -473,6 +475,6 @@ func (p *versionBranchNamePopup) render(m Model, below string) string {
 	b.WriteString(i18n.T("New branch at version") + "\n\n")
 	b.WriteString(viewField(i18n.T("name: "), p.name, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString(i18n.T("[enter] create  [esc] cancel"))
-	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	box := st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

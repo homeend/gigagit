@@ -324,6 +324,40 @@ whether to align "Commit sort" with it — `plain` when the graph goes off
 prompt permanently; those choices live in `<state>/gg/prompts.toml`, which
 the prompt names — remove the id from the array (or delete the file) to get
 prompts back.
+`[ui] theme` selects the TUI's colour scheme: `terminal` (the default;
+inherit the terminal's own scheme, unchanged from before this setting
+existed) or `dark` (the Windows Terminal "Campbell" look, pinned everywhere)
+or `light` (a neutral light grey: charcoal text on an off-white grey ground).
+Cycle it live from the `,` Settings menu
+("Theme"), which applies immediately and persists the choice to the
+**global** config (a theme is per-human, like `[ui] language`, not per-repo).
+Under a 256-colour terminal profile the theme's hex colours snap to the
+nearest colour-cube entry; with only 16 colours available they snap onto the
+terminal's own remapped basic slots — exactly what the theme exists to
+override — so it's effectively off.
+
+**Recolouring a theme** — a `[themes.<name>]` table overrides individual
+colour roles of any built-in theme, so you can keep `light` but darken its
+text, or paint the `terminal` theme's background without adopting a whole
+scheme:
+
+```toml
+[themes.light]
+bg = "#E9E9E5"   # frame background
+fg = "#2A2F34"   # frame foreground (default text)
+```
+
+Values are `"#rrggbb"` or a `"0"`–`"255"` colour-cube index. Every role is
+optional — an omitted key keeps the theme's own colour — and the table names
+a theme (`light`, `dark`, `terminal`), so it only applies while that theme is
+active. Run **`gg config populate`** to write the full commented list of
+roles (every key with the theme's current value and what it paints) into your
+config; the two list roles, `lanes` (7 graph-lane colours) and `syntax` (11
+syntax classes), take arrays, where an `""` entry keeps the built-in colour.
+The global and repo files layer per key, like every other setting, so a repo
+can retune one role. An invalid value is ignored — the rest of the table
+still applies and the status bar names what it dropped, e.g. `theme light:
+ignored invalid bg=#12`.
 `[ui] show_eol_only_changes` (default `false`) controls whether a file whose
 only unstaged change is its line endings (CRLF↔LF) is shown as modified — by
 default such files are hidden from the Files panel and its count badge as noise;

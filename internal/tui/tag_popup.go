@@ -64,5 +64,5 @@ func (p *tagPopup) box(m Model) string {
 	b.WriteString(viewField(msgMark+i18n.T("message: "), p.message, p.onMsg, cw) + "\n")
 	b.WriteString(strings.Repeat(" ", 11) + i18n.T("(empty message = lightweight tag)") + "\n\n")
 	b.WriteString(i18n.T("[tab] field  [enter] create  [esc] cancel"))
-	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	return st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

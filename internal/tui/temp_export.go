@@ -95,6 +95,6 @@ func (p *tempExportPopup) render(m Model, below string) string {
 	b.WriteString(i18n.T("Copy to temp dir") + "\n\n")
 	b.WriteString(viewField(i18n.T("dir: "), p.dest, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString(i18n.T("[type] dir  [enter] write  [esc] cancel"))
-	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	box := st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }

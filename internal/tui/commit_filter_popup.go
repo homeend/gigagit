@@ -122,7 +122,7 @@ func (p *commitFilterPopup) render(m Model, below string) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("\n" + i18n.T("[enter] apply  [tab] next  [ctrl+r] clear all  [esc] cancel"))
-	box := modalStyle.Width(inner).Render(b.String()) + "\n"
+	box := st().modalStyle.Width(inner).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 

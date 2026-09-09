@@ -233,6 +233,94 @@ REBUILT stream, because a partial-mode index is stale afterwards.
 
 Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands, else launches the TUI.
 
+### Theme (`internal/theme`, `internal/tui/styles.go`, `internal/tui/paint.go`)
+
+The role table (every field of `theme.Theme` plus what `Terminal`/`Dark`/`Light`
+pin each one to) lives in the spec, not duplicated here:
+`docs/superpowers/specs/2026-09-09-tui-themes-design.md` §3/§3.1. `theme` is a
+pure DAG leaf (no lipgloss/tui imports); `internal/tui/styles.go` builds a
+`styles` struct of lipgloss styles from a `theme.Theme` (`buildStyles`), and
+`internal/tui/paint.go`'s `paintFrame` lays the theme's `Bg`/`Fg` under every
+rendered cell as a post-process over `View()`'s output.
+
+**`st()` — never cache across a switch.** `st()` reads the active `*styles`
+through a package-level `atomic.Pointer[styles]`; `setTheme` swaps it wholesale
+(never mutates the struct in place), so a live theme switch races with
+nothing (see `internal/tui` NEVER assigning package-var styles directly — that
+was the pre-theme pattern and would be a data race under `./test.sh race`).
+The rule for call sites: call `st()` fresh every time a style is needed —
+**never** stash its result in a package var or a struct field that outlives
+one render — and hoist the `st()` call at most once per render *function*
+(not once per file/package): a local var caches the atomic load so a
+function with many style reads pays it once, and freshness comes entirely
+from never letting that cached value outlive the function call, not from
+any ordering guarantee against `setTheme` (Bubble Tea's `Update`/`View` run
+on one goroutine and `setTheme` fires from the Settings `Update` path, so a
+swap can't land mid-`View` anyway; the atomic pointer's real job is letting
+the TUI's own parallel tests build styles for different themes without a
+race, per the comment atop `styles.go`).
+
+**`paintFrame`'s contract.** `paintFrame(frame, w, h, bg, fg)` is a no-op
+(`return frame` unchanged) when both `bg` and `fg` are empty — this is what
+makes the `terminal` theme byte-identical to the pre-theme renderer. When
+either is set, it renders a probe space through a `lipgloss.Style` to harvest
+the profile-downgraded SGR prefix, then: (1) re-asserts that SGR after
+**every** reset lipgloss/cellbuf emits inside a line — both the full
+`"\x1b[0m"` form `lipgloss.Style.Render` uses and the bare `"\x1b[m"` form
+(`ansi.ResetStyle`) that `cellbuf.Wrap` injects when a `Width`-bearing style
+wraps already-styled input (missing the bare form was a real regression fixed
+separately — see `36cdba99`); (2) pads every line to `w` display cells using
+`ansi.StringWidth` (wide-glyph aware — a byte/rune count would under-pad a
+line with CJK or box-drawing content) — a line already `≥ w` is never
+truncated; (3) pads the whole frame to `h` lines with fully-painted blank
+rows. The SGR is harvested from an actual lipgloss render (not hand-built),
+so the truecolor→256→16 profile downgrade applies to the painted background
+exactly like it does to every other style in the frame.
+
+**`roleFields` — add a role, add a row.** User overrides
+(`[themes.<name>]` in the config, decoded into `config.Config.Themes` as
+`map[string]theme.Override`) are applied by `theme.Overlay`, layered global→repo
+by `theme.Merge`, rendered into `gg config populate`'s commented example blocks
+by `theme.RoleDocs` + `Theme.AsOverride`, and read back per key by
+`Override.Value`. All five walk ONE ordered table, `roleFields` in
+`internal/theme/override.go` — key, description, and pointer accessors into a
+`Theme` and an `Override`. So a NEW colour role is: the `Theme` field, the
+`roles()` entry, the `Override` field with its snake_case `toml` tag, and a
+`roleFields` row. `TestRoleFieldsCoverEveryRole` reflects over the `Override`
+tags and fails if the row is missing (and a sibling test catches two rows
+pointing at the same field), which is the whole point of the table — nothing
+downstream hand-writes a per-role branch. `Overlay` never fails: an invalid
+value is skipped and reported as `key=value` for the status bar, an `""` entry
+inside `lanes`/`syntax` means "keep the theme's own" (so the generated
+`terminal` block, whose values are all empty, is inert), and a wrong-length
+list is rejected whole. `applyTheme` compares the RESOLVED theme (not its
+name) before returning `tea.ClearScreen`, because a repo switch can change
+colours under one theme name.
+
+**Serial-test rule.** Both `setTheme` (swaps the process-global `styles`
+pointer) and `lipgloss.SetColorProfile` (process-global) make any test that
+exercises a live theme swap or a color-profile downgrade **serial** — no
+`t.Parallel()` — restoring the prior value via `defer`; see
+`TestSetThemeSwapsAndRestores` in `internal/tui/styles_test.go` and the NOTE
+comment atop `internal/tui/paint_test.go`. Tests that only build/read styles
+for a fixed theme (no swap, no profile change) stay `t.Parallel()` as normal.
+The package's `TestMain` also points `XDG_CONFIG_HOME` at an empty dir: every
+model built through `loadCmd` reads `config.DefaultGlobalPath()`, so without
+it a developer whose own global config sets `[ui] theme = "light"` had that
+theme applied by the serial settings tests and left active for every later
+parallel test reading `st()`.
+
+**Colour-profile caveat.** `dark`/`light` use truecolor hex (`#rrggbb`) and a
+few 256-cube indexes; lipgloss's automatic profile detection downgrades hex
+to the nearest 256-colour cube entry on a `TERM=xterm-256color`-class
+terminal (visually close, not identical) and to the nearest of 16 ANSI colours
+on a plain 16-colour terminal — at that point most of the theme's role
+palette collapses onto a handful of basic slots and the theme is, in
+practice, off. `COLORTERM=truecolor` (or a terminal that sets it) is what
+gets the intended truecolor rendering; headless capture tooling must export
+it explicitly since tmux hands new sessions the environment it was started
+with (see `driving-tui-headless`).
+
 ## Conventions
 
 - **A git verb is one invocation.** Build argv with `gitcmd`, run via `r.Runner.Run`/`.Stream`. Don't shell out directly.

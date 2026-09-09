@@ -8,6 +8,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI themes.** `[ui] theme = "terminal" | "dark" | "light"` (default
+  `terminal`, unchanged look). `dark` pins the Windows Terminal Campbell look
+  everywhere; `light` is a neutral light grey — charcoal text on an off-white
+  grey ground, with muted accents. The `,` Settings menu's new
+  **Theme** row cycles them live and saves to the global config. Under a
+  256-colour profile hex colours snap to the nearest cube entry; with only 16
+  colours the theme is effectively off. Any theme's individual colours can be
+  retuned from the config: a `[themes.<name>]` table overrides colour roles
+  one key at a time (`bg`, `fg`, `dim`, … plus the `lanes` and `syntax`
+  arrays), global and repo files layering per key like every other setting —
+  including `[themes.terminal]`, which paints roles over the terminal's own
+  scheme. `gg config populate` writes the full commented list of roles, each
+  with the theme's current value and what it paints; an invalid value is
+  ignored and named in the status bar instead of stopping anything.
 - The diff view's `.` menu grows two WHOLE-FILE review-note rows, offered
   wherever the cursor sits (unlike Edit / Reply / Delete, which need a note
   next to it). **List notes…** is the file's inventory: one row per thread in

@@ -86,14 +86,6 @@ func (id commitIdent) markerField() string {
 	}
 }
 
-// dimIdentStyle grays a lineage row's branch name (the commit belongs to that
-// branch but is not its tip). 240 is a mid-gray in the 256-color cube.
-var dimIdentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
-// tagDecoStyle colors a tag label (⊙name) in the commit-row decoration group
-// yellow. Must match the tagColorStyle probe used in commit_deco_color_test.go.
-var tagDecoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
-
 // coloredSpan marks a rune range (absolute content columns, pre-hscroll, like
 // identStart) to recolor via a specific lipgloss Style in the single-pass
 // commitLineDecorator. Spans must not overlap each other or the dim range.
@@ -102,15 +94,13 @@ type coloredSpan struct {
 	Style         lipgloss.Style
 }
 
-// dimRowStyle grays an entire commit row that does NOT match the active
-// @-highlight query, de-emphasizing it while keeping it visible.
-var dimRowStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
 // dimRowDecorator dims a whole visible line (all visual lines, including wrap
-// continuations). Width is preserved (a foreground style adds no cells).
+// continuations) gray, de-emphasizing a row that does NOT match the active
+// @-highlight query while keeping it visible. Width is preserved (a
+// foreground style adds no cells).
 func dimRowDecorator() rowDecorator {
 	return func(visible string, hscroll, visualLine int) string {
-		return dimRowStyle.Render(visible)
+		return st().dim.Render(visible)
 	}
 }
 
@@ -266,6 +256,7 @@ func commitDecoGroup(id commitIdent, budget int) (string, []decoSpan, bool) {
 // overlap the identity dim range or each other.
 func commitLineDecorator(hasDot bool, dotCol int, dotColor lipgloss.Color, dim bool, identStart, identLen int, colorSpans []coloredSpan) rowDecorator {
 	dotStyle := lipgloss.NewStyle().Foreground(dotColor)
+	dimStyle := st().dim
 	return func(visible string, hscroll, visualLine int) string {
 		if visualLine != 0 {
 			return visible // decorate only a row's first visual line
@@ -285,7 +276,7 @@ func commitLineDecorator(hasDot bool, dotCol int, dotColor lipgloss.Color, dim b
 					}
 					j++
 				}
-				b.WriteString(dimIdentStyle.Render(string(r[i:j])))
+				b.WriteString(dimStyle.Render(string(r[i:j])))
 				i = j
 				continue
 			}

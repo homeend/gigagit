@@ -241,11 +241,12 @@ func (p *repoConfigPopup) box(m Model) string {
 	}
 
 	wr := make([]winRow, len(p.actions))
+	s := st()
 	for i, a := range p.actions {
 		prefix := "  "
 		var st lipgloss.Style
 		if i == p.sel {
-			prefix, st = "> ", selectedRow
+			prefix, st = "> ", s.selectedRow
 		}
 		wr[i] = winRow{text: prefix + repoCfgActionLabel(a), style: st}
 	}

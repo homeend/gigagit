@@ -432,7 +432,7 @@ func (p *worktreePopup) box(m Model) string {
 	// Fixed, comfortably-wide content width so a long branch/path wraps (full name
 	// stays visible) instead of stretching the box past the terminal edge. Capped
 	// to leave a margin on each side for the centered overlay.
-	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	return st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }
 
 // keepModeCount is the number of engine.WorktreeKeep values the "m" key

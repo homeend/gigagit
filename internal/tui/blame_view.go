@@ -178,6 +178,7 @@ func (b *blameView) render(m Model, _ string) string {
 	// so the two can never disagree.
 	lo, hi := windowRowBounds(len(b.lines), body, b.sel, b.mode)
 	wr := make([]winRow, hi-lo)
+	s := st()
 	for i := lo; i < hi; i++ {
 		ln := b.lines[i]
 		gutter := padRight("", gw)
@@ -194,7 +195,7 @@ func (b *blameView) render(m Model, _ string) string {
 		// maps to display columns.
 		var st lipgloss.Style
 		if i == b.sel {
-			st = selectedRow
+			st = s.selectedRow
 		}
 		if b.tok == nil { // no lexer / colouring off: the plain (pre-syntax) path
 			wr[i-lo] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), style: st}

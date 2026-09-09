@@ -106,5 +106,5 @@ func (p *rewordPopup) box(m Model) string {
 	b.WriteString(i18n.T("Reword commit %s", shortHash(p.commit)) + "\n\n")
 	b.WriteString(renderCommitFields(&p.popup, contentW, budget))
 	b.WriteString("\n" + hint)
-	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	return st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

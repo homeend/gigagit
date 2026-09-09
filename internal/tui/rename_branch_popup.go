@@ -87,5 +87,5 @@ func (p *renameBranchPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	b.WriteString(viewField(i18n.T("name: "), p.name, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString(i18n.T("[type] name  [enter] rename  [esc] cancel"))
-	return modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	return st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

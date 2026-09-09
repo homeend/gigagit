@@ -195,10 +195,11 @@ func (p *eagerPrompt) box(m Model) string {
 		"",
 	}
 	opts := []string{i18n.T("Search %d more pages", m.commitSearchMaxPages()), i18n.T("Cancel")}
+	s := st()
 	for i, o := range opts {
 		prefix, st := "  ", lipgloss.NewStyle()
 		if i == p.sel {
-			prefix, st = "> ", selectedRow
+			prefix, st = "> ", s.selectedRow
 		}
 		parts = append(parts, st.Render(padRight(prefix+o, textW)))
 	}

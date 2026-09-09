@@ -128,11 +128,12 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 		bodyLines = []string{padRight(i18n.T("  (none)"), textW)}
 	} else {
 		wr := make([]winRow, len(vis))
+		s := st()
 		for n, i := range vis {
 			prefix := "  "
 			var st lipgloss.Style
 			if n == p.sel {
-				prefix, st = "> ", selectedRow
+				prefix, st = "> ", s.selectedRow
 			}
 			mark := " "
 			if p.items[i].ID == p.markID {
@@ -574,7 +575,7 @@ func (p *bookmarkPastePopup) render(m Model, below string) string {
 	b.WriteString(i18n.T("from: %s  (resolved now)", p.origin) + "\n")
 	b.WriteString(viewField(i18n.T("dest: "), p.dest, true, popupContentWidth(w)) + "\n\n")
 	b.WriteString(i18n.T("[type] path  [enter] paste  [esc] cancel"))
-	box := modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	box := st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 

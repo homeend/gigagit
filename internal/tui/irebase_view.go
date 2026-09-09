@@ -146,7 +146,7 @@ func (e *irebaseEditor) render(m Model, _ string) string {
 		}
 		line := cur + action + " " + shortHash(r.sha) + "  " + subj
 		if i == e.sel {
-			b.WriteString(selectedRow.Render(truncate(line, w)))
+			b.WriteString(st().selectedRow.Render(truncate(line, w)))
 		} else {
 			b.WriteString(truncate(line, w))
 		}

@@ -7,7 +7,21 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/theme"
 )
+
+// themeDisplayName localizes a theme name for the Settings row; the config
+// value itself stays the English protocol string.
+func themeDisplayName(name string) string {
+	switch name {
+	case theme.NameDark:
+		return i18n.T("dark")
+	case theme.NameLight:
+		return i18n.T("light")
+	default:
+		return i18n.T("terminal")
+	}
+}
 
 // padCell right-pads s to display width w using lipgloss.Width (rune-width
 // aware), not byte count. fmt's %-Ns pads by BYTE length, which misaligns a

@@ -68,7 +68,7 @@ func (m Model) recallBox(width int) string {
 	for i := start; i < end; i++ {
 		line := truncate(ring[i], width-2)
 		if i == m.recallIndex {
-			b.WriteString(selectedRow.Render("▸ "+line) + "\n")
+			b.WriteString(st().selectedRow.Render("▸ "+line) + "\n")
 		} else {
 			b.WriteString("  " + line + "\n")
 		}

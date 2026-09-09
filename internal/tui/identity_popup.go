@@ -369,11 +369,12 @@ func (v *identityView) browseLines(m Model, textW int) (body, footer []string) {
 		parts = append(parts, "  "+i18n.T("(none yet — [n] to create)"))
 	} else {
 		wr := make([]winRow, len(v.profiles))
+		s := st()
 		for i, p := range v.profiles {
 			prefix := "  "
 			var st lipgloss.Style
 			if i == v.sel {
-				prefix, st = "> ", selectedRow
+				prefix, st = "> ", s.selectedRow
 			}
 			row := fmt.Sprintf("%s%s — %s <%s>  %s", prefix, p.Name, p.GitName, p.GitEmail, profileScopeTag(p.Scope))
 			wr[i] = winRow{text: row, style: st}

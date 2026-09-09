@@ -11,7 +11,7 @@ import (
 
 // segAppend runs the shared segment walker (commitgraph.SegmentLayer) over
 // commits, translating the per-commit boundary predicate to the layer's
-// per-index one. Segment ids feed lanePalette so scoped-view ● dots show where
+// per-index one. Segment ids feed st().lanes so scoped-view ● dots show where
 // one branch's commits end and inherited history begins.
 func segAppend(l *commitgraph.SegmentLayer, commits []model.Commit, boundary func(model.Commit) bool) []int {
 	cs := make([]commitgraph.Commit, len(commits))

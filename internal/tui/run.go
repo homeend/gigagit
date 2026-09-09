@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/repos"
+	"github.com/homeend/gigagit/internal/theme"
 )
 
 // Run launches the TUI for svc, taking over the alternate screen until the
@@ -39,6 +40,14 @@ func Run(svc *domain.Service, recordPath string) (string, error) {
 			m.statusMsg = i18n.T("operation log: %s", err.Error())
 		}
 	}
+	// Paint the very first frame in the configured theme, with its
+	// [themes.<name>] overrides — mirroring applyTheme so startup and the
+	// configReadyMsg that follows never disagree for a frame. Complaints
+	// (unknown name, invalid override value) are applyTheme's job: it runs
+	// once the registry loads and has a status bar to put them in.
+	th, _ := theme.Lookup(cfg.UI.Theme)
+	th, _ = theme.Overlay(th, cfg.Themes[th.Name])
+	setTheme(th)
 	m = m.initSnapshotTarget()
 	if recordPath != "" {
 		repo := ""

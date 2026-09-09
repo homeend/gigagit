@@ -429,7 +429,7 @@ func (lane *reviewLane) render(m Model, below string) string {
 		}
 		b.WriteString("\n" + i18n.T("[1-9] choose  [enter] first  [esc] cancel"))
 	}
-	box := modalStyle.Width(popupResolveWidth(w, lane.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	box := st().modalStyle.Width(popupResolveWidth(w, lane.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 

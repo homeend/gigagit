@@ -17,7 +17,7 @@ import (
 // must see the plain text.
 func boxLines(t *testing.T, p *contentPopup, m Model) []string {
 	t.Helper()
-	pad := modalStyle.GetHorizontalPadding() / 2
+	pad := st().modalStyle.GetHorizontalPadding() / 2
 	var out []string
 	for _, l := range strings.Split(strings.TrimRight(p.box(m), "\n"), "\n") {
 		s := ansi.Strip(l)
@@ -142,7 +142,7 @@ func TestMessageViewerTintsOnlyTheMessage(t *testing.T) {
 	if msg == "" || title == "" || hint == "" {
 		t.Fatalf("box did not render the expected lines:\n%s", p.box(m))
 	}
-	bg := "48;5;" + messageBlockColor
+	bg := "48;5;" + string(st().messageBlock.GetBackground().(lipgloss.Color))
 	if !strings.Contains(msg, bg) {
 		t.Fatalf("the message line must carry the block background %q, got %q", bg, msg)
 	}
@@ -172,7 +172,7 @@ func TestMessageBlockTintsTheTextColumnsOnly(t *testing.T) {
 	}
 	// The tinted span is what lipgloss wrapped in the background SGR: measure
 	// what it covers, and where it begins, against the box's own text area.
-	span := regexp.MustCompile("\x1b\\[[0-9;]*48;5;" + messageBlockColor + "[0-9;]*m(.*?)\x1b\\[0m").FindStringSubmatch(short)
+	span := regexp.MustCompile("\x1b\\[[0-9;]*48;5;" + string(st().messageBlock.GetBackground().(lipgloss.Color)) + "[0-9;]*m(.*?)\x1b\\[0m").FindStringSubmatch(short)
 	if span == nil {
 		t.Fatalf("no tinted span on the message line: %q", short)
 	}
@@ -222,7 +222,7 @@ func TestOrdinaryContentPopupIsNotTinted(t *testing.T) {
 	forceColor(t)
 	m := sizedModel(t, 80, 30)
 	p := newContentPopup("Help", []contentLine{{text: "row one"}, {text: "row two"}})
-	if strings.Contains(p.box(m), "48;5;"+messageBlockColor) {
+	if strings.Contains(p.box(m), "48;5;"+string(st().messageBlock.GetBackground().(lipgloss.Color))) {
 		t.Fatalf("an ordinary content popup must not be tinted:\n%s", p.box(m))
 	}
 }

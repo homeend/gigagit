@@ -323,3 +323,28 @@ func TestScalarWriteSurvivesHookBlock(t *testing.T) {
 	}
 	_ = before
 }
+
+func TestSetGlobalUITheme(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[ui]\n# theme = \"terminal\"\nlanguage = \"en\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetGlobalUITheme(path, "light"); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	if !strings.Contains(string(raw), "theme = \"light\"") {
+		t.Fatalf("theme not written:\n%s", raw)
+	}
+	if !strings.Contains(string(raw), "language = \"en\"") {
+		t.Fatalf("sibling key clobbered:\n%s", raw)
+	}
+	if err := SetGlobalUITheme(path, "dark"); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = os.ReadFile(path)
+	if strings.Count(string(raw), "theme = ") != 1 || !strings.Contains(string(raw), "theme = \"dark\"") {
+		t.Fatalf("second write must replace, not append:\n%s", raw)
+	}
+}

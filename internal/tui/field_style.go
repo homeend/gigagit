@@ -7,15 +7,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Editable-field styling. Every editable popup field is drawn on a subtle
-// background so the user can see the editable slot (its extent and that it is
-// empty) without having to guess. The focus cursor is a light block that stays
-// visible against that background.
-var (
-	fieldBg          = lipgloss.Color("236")
-	fieldStyle       = lipgloss.NewStyle().Background(fieldBg)
-	fieldCursorStyle = lipgloss.NewStyle().Background(lipgloss.Color("250")).Foreground(lipgloss.Color("236"))
-)
+// Editable-field styling (st().field / st().fieldCursor). Every editable
+// popup field is drawn on a subtle background so the user can see the
+// editable slot (its extent and that it is empty) without having to guess.
+// The focus cursor is a light block that stays visible against that
+// background.
 
 // cursorLineCol locates the cursor as a (line, column) pair within the buffer
 // (lines split on '\n'). A cursor sitting just past a trailing '\n' lands at
@@ -56,6 +52,7 @@ func (f textfield) styledLinesCursor(focused bool, width int) ([]string, int) {
 	if width < 1 {
 		width = 1
 	}
+	s := st()
 	logical := strings.Split(string(f.runes), "\n")
 	curLine, curCol := -1, -1
 	if focused {
@@ -93,11 +90,11 @@ func (f textfield) styledLinesCursor(focused bool, width int) ([]string, int) {
 			if li == curLine && curCol >= start && curCol < start+width {
 				cc := curCol - start
 				cursorIdx = len(out)
-				out = append(out, fieldStyle.Render(string(chunk[:cc]))+
-					fieldCursorStyle.Render(string(chunk[cc:cc+1]))+
-					fieldStyle.Render(string(chunk[cc+1:])))
+				out = append(out, s.field.Render(string(chunk[:cc]))+
+					s.fieldCursor.Render(string(chunk[cc:cc+1]))+
+					s.field.Render(string(chunk[cc+1:])))
 			} else {
-				out = append(out, fieldStyle.Render(string(chunk)))
+				out = append(out, s.field.Render(string(chunk)))
 			}
 		}
 	}
@@ -154,7 +151,7 @@ func viewFieldWindow(prefix string, f textfield, focused bool, contentWidth, max
 	// Wordless marker (pure numbers) — nothing to translate, so it stays
 	// outside the i18n catalog on purpose.
 	marker := fmt.Sprintf("(%d-%d/%d)", s+1, s+view, total)
-	return out + "\n" + strings.Repeat(" ", indentW) + dimRowStyle.Render(marker)
+	return out + "\n" + strings.Repeat(" ", indentW) + st().dim.Render(marker)
 }
 
 // joinFieldLines lays field display lines out under a label prefix: the first
@@ -179,7 +176,7 @@ func joinFieldLines(prefix string, lines []string) string {
 // inner box width minus the modal's horizontal padding. Field fills target it
 // so the editable slot reaches the box's right edge.
 func popupContentWidth(w int) int {
-	cw := popupInnerWidth(w) - modalStyle.GetHorizontalPadding()
+	cw := popupInnerWidth(w) - st().modalStyle.GetHorizontalPadding()
 	if cw < 1 {
 		cw = 1
 	}

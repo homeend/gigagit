@@ -65,7 +65,7 @@ func TestRepoPopupSlowFSTooltipOverlay(t *testing.T) {
 	boxTop, tipLine := -1, -1
 	for i, l := range lines {
 		if boxTop == -1 && strings.Contains(l, "╔") {
-			boxTop = i // modalStyle's DoubleBorder top edge
+			boxTop = i // st().modalStyle's DoubleBorder top edge
 		}
 		if strings.Contains(l, "switching may be very slow") {
 			tipLine = i

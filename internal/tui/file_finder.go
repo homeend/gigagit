@@ -242,7 +242,7 @@ func (p *fileFinderPopup) box(m Model) string {
 		for i, idx := range rangeSlice(start, end) {
 			path := p.matches[idx].S
 			if idx == p.sel {
-				wr[i] = winRow{text: padRight("> "+path, textW), style: selectedRow}
+				wr[i] = winRow{text: padRight("> "+path, textW), style: st().selectedRow}
 			} else {
 				wr[i] = winRow{text: padRight("  "+path, textW)}
 			}

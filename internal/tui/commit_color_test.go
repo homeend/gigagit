@@ -18,10 +18,10 @@ func forceColor(t *testing.T) {
 }
 
 func TestLaneColorRecycles(t *testing.T) {
-	if laneColor(0) != lanePalette[0] {
+	if st().lane(0) != st().lanes[0] {
 		t.Fatalf("lane 0 color")
 	}
-	if laneColor(len(lanePalette)) != lanePalette[0] {
+	if st().lane(len(st().lanes)) != st().lanes[0] {
 		t.Fatalf("color should recycle modulo palette length")
 	}
 }
@@ -62,7 +62,7 @@ func TestRenderPanelEmitsLaneColor(t *testing.T) {
 	out := m.renderPanel(panelCommits, "Commits", rows, decos, 40, 8)
 	// Derive the exact escape lipgloss emits for this color under the active
 	// profile (256 vs truecolor differ), rather than guessing the SGR form.
-	probe := lipgloss.NewStyle().Foreground(laneColor(0)).Render("●")
+	probe := lipgloss.NewStyle().Foreground(st().lane(0)).Render("●")
 	esc := probe[:strings.IndexRune(probe, '●')] // the leading color escape
 	if esc == "" || !strings.Contains(out, esc) {
 		t.Fatalf("assembled panel should emit lane-0 color escape %q:\n%s", esc, out)

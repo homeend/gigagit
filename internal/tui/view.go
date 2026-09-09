@@ -74,20 +74,6 @@ func overlayCenter(bg, fg string, termW, termH int) string {
 	return overlayAt(bg, fg, (termW-fgW)/2, (termH-len(fgLines))/2, termW, termH)
 }
 
-var (
-	titleStyle   = lipgloss.NewStyle().Bold(true)
-	focusedPanel = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("12")).Padding(0, 1)
-	bluredPanel  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("240")).Padding(0, 1)
-	selectedRow  = lipgloss.NewStyle().Reverse(true)
-	modalStyle   = lipgloss.NewStyle().Border(lipgloss.DoubleBorder()).BorderForeground(lipgloss.Color("11")).Padding(1, 2)
-	// statusErrStyle makes a failure in the status bar stand out (white on red)
-	// instead of reading like an ordinary hint.
-	statusErrStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("1"))
-	// errorStyle is a plain red foreground for inline popup error lines (e.g. an
-	// unresolved commit-ish in the show-commit popup).
-	errorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-)
-
 // statusErrorPrefixes are the leading tokens the status-setting sites use when
 // the message reports a failure (built from an error). Render-time styling keys
 // off these so there is no severity flag to keep in sync across call sites; keep
@@ -379,11 +365,11 @@ func popupFullInnerWidth(w int) int {
 }
 
 // popupTextWidth is the usable text width inside a modal frame: inner minus
-// modalStyle's horizontal padding. lipgloss soft-wraps content at this width
+// the modal's horizontal padding. lipgloss soft-wraps content at this width
 // (not at inner), so popup body/header/hint lines must be laid out / truncated
 // to it — otherwise long lines spill onto ugly continuation lines.
 func popupTextWidth(inner int) int {
-	if tw := inner - modalStyle.GetHorizontalPadding(); tw > 1 {
+	if tw := inner - st().modalStyle.GetHorizontalPadding(); tw > 1 {
 		return tw
 	}
 	return 1
@@ -393,14 +379,14 @@ func popupTextWidth(inner int) int {
 // frame's text width so nothing wraps. Body lines built via renderWindow at
 // popupTextWidth already fit (truncate is width-aware, so it is a no-op on them
 // and never cuts their styling); plain header/hint/subtitle lines are clamped
-// here. Use this instead of modalStyle.Width(inner).Render for popups.
+// here. Use this instead of st().modalStyle.Width(inner).Render for popups.
 func popupBox(inner int, content string) string {
 	tw := popupTextWidth(inner)
 	lines := strings.Split(content, "\n")
 	for i, l := range lines {
 		lines[i] = truncate(l, tw)
 	}
-	return modalStyle.Width(inner).Render(strings.Join(lines, "\n")) + "\n"
+	return st().modalStyle.Width(inner).Render(strings.Join(lines, "\n")) + "\n"
 }
 
 // wrapParts greedily packs sep-joined parts into lines no wider than width, so a
@@ -516,7 +502,7 @@ func (m Model) renderInterface() string {
 	}
 	statusRow := truncate(full, g.w)
 	if errMode {
-		statusRow = statusErrStyle.Render(statusRow)
+		statusRow = st().statusErr.Render(statusRow)
 	}
 
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
@@ -587,7 +573,7 @@ func (m Model) headerLine(w int) string {
 	if name == "" {
 		name = "gigagit"
 	}
-	title := titleStyle.Render(name)
+	title := st().titleStyle.Render(name)
 	titleW := lipgloss.Width(title)
 	leftW := titleW + lipgloss.Width(rest)
 
@@ -736,6 +722,7 @@ func filesTabLabel(active panel, filesN, tagsN int) string {
 // around the selection and truncating each to fit. Border (2) + padding (2) are
 // accounted for so the rendered box matches the requested dimensions.
 func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDecorator, boxW, boxH int) string {
+	s := st()
 	contentH := boxH - 2 // top/bottom border
 	if contentH < 1 {
 		contentH = 1
@@ -817,7 +804,7 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 				prefix = "> "
 			}
 			if i == sel && isFocused {
-				st = selectedRow
+				st = s.selectedRow
 			}
 			var deco rowDecorator
 			if i != sel || !isFocused {
@@ -845,9 +832,9 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 		lines = append(lines, padRight("", innerW))
 	}
 
-	style := bluredPanel
+	style := s.bluredPanel
 	if m.panelFocused(p) {
-		style = focusedPanel
+		style = s.focusedPanel
 	}
 	return style.Render(strings.Join(lines, "\n"))
 }
@@ -855,6 +842,7 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 // renderListBox draws a bordered boxW×boxH list that is not backed by a panel
 // (used by the stash window). focused selects the border + highlight styles.
 func (m Model) renderListBox(label string, rows []string, sel, boxW, boxH int, focused bool, mode dispMode, hscroll int) string {
+	s := st()
 	contentH := boxH - 2
 	if contentH < 1 {
 		contentH = 1
@@ -875,7 +863,7 @@ func (m Model) renderListBox(label string, rows []string, sel, boxW, boxH int, f
 			var st lipgloss.Style
 			if i == sel && focused {
 				prefix = "> "
-				st = selectedRow
+				st = s.selectedRow
 			}
 			wr[i] = winRow{text: prefix + row, style: st}
 		}
@@ -885,9 +873,9 @@ func (m Model) renderListBox(label string, rows []string, sel, boxW, boxH int, f
 	for len(lines) < contentH {
 		lines = append(lines, padRight("", innerW))
 	}
-	style := bluredPanel
+	style := s.bluredPanel
 	if focused {
-		style = focusedPanel
+		style = s.focusedPanel
 	}
 	return style.Render(strings.Join(lines, "\n"))
 }
@@ -1197,11 +1185,6 @@ func fileGlyph(p panel, f model.FileStatus) byte {
 // reached from in the feed walk (model.Commit.Source, via `git log --source`/%S);
 // Blink = style alternation between these two on m.reviewBlink (the review runs
 // in the background, not an error — a neutral cyan, not the notice red).
-var (
-	reviewHotStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39")).Bold(true)
-	reviewDimStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("31"))
-)
-
 // reviewSegment renders the blinking "a review is running" status indicator
 // while a background review is in flight. Style alternation on m.reviewBlink
 // (the noticeSegment idiom), never terminal-native blink. "" when no review is
@@ -1212,9 +1195,9 @@ func (m Model) reviewSegment() string {
 	}
 	seg := i18n.T("⟳ reviewing %s…", m.reviewRunningLabel)
 	if m.reviewBlink {
-		return reviewHotStyle.Render(seg)
+		return st().reviewHot.Render(seg)
 	}
-	return reviewDimStyle.Render(seg)
+	return st().reviewDim.Render(seg)
 }
 
 // the short id lives here because the commit list rows show the branch column
@@ -1483,6 +1466,7 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int, budge
 	if len(rows) == 0 {
 		return nil
 	}
+	sty := st()
 	laneColorOn := len(m.commitGraphLanes) == m.commitsTotal() && (m.commitListMode || m.commitGraphOn())
 	segColored := m.segColorOn()
 	graphPrefix := !m.commitListMode && m.commitGraphOn() && len(m.commitGraphRows) == m.commitsTotal()
@@ -1540,7 +1524,7 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int, budge
 				colorSpans = append(colorSpans, coloredSpan{
 					Start:  groupBase + s.Offset,
 					Length: s.Length,
-					Style:  tagDecoStyle,
+					Style:  sty.tagDeco,
 				})
 			}
 		}
@@ -1560,7 +1544,7 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int, budge
 			}
 			if m.commitListMode {
 				dotCol = 2 // ● at content col 0 + 2 prefix
-				dotColor = laneColor(colorIdx)
+				dotColor = sty.lane(colorIdx)
 				hasDot = true
 			} else {
 				// Graph mode: the node is drawn only when its lane is inside the
@@ -1569,7 +1553,7 @@ func (m Model) commitDecoratorsRange(rows []string, idx []int, lo, hi int, budge
 				scroll := m.commitGraphScroll
 				if lane >= scroll && lane < scroll+cols && !(scroll > 0 && lane == scroll) {
 					dotCol = 2 + (lane-scroll)*2
-					dotColor = laneColor(colorIdx)
+					dotColor = sty.lane(colorIdx)
 					hasDot = true
 				}
 			}
@@ -1615,7 +1599,7 @@ func (m Model) commitHaystackAt(i int) string {
 func (m Model) renderModal() string {
 	// Bound content to the terminal so long dynamic text (a long branch name, an
 	// export path) wraps instead of overflowing the box and being clipped by
-	// overlayCenter. maxW leaves room for modalStyle's double border (2) and
+	// overlayCenter. maxW leaves room for the modal's double border (2) and
 	// horizontal padding (4) plus a 2-column margin off the screen edge; it is
 	// only a CAP — short prompts stay compact and the box sizes to its content.
 	w, _ := m.overlayDims()
@@ -1655,7 +1639,7 @@ func (m Model) renderModal() string {
 			}
 			row := marker + seg
 			if i == m.modal.sel {
-				row = selectedRow.Render(row)
+				row = st().selectedRow.Render(row)
 			}
 			b.WriteString(row)
 			b.WriteString("\n")
@@ -1669,5 +1653,5 @@ func (m Model) renderModal() string {
 	} else {
 		b.WriteString(footer)
 	}
-	return modalStyle.Render(b.String()) + "\n"
+	return st().modalStyle.Render(b.String()) + "\n"
 }

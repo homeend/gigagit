@@ -58,6 +58,7 @@ func TestLayeringDAG(t *testing.T) {
 		"textdiff":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"syntax":      {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"template":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"theme":       {"config", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "syntax", "i18n"},
 		"web":         {"tui", "cli", "mcp", "app"},
 	}
 	const root = "github.com/homeend/gigagit/internal/"
