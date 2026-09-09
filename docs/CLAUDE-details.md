@@ -209,6 +209,63 @@ by the background scheduler, only fired after a note mutation.
 
 Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands, else launches the TUI.
 
+### Theme (`internal/theme`, `internal/tui/styles.go`, `internal/tui/paint.go`)
+
+The role table (every field of `theme.Theme` plus what `Terminal`/`Dark`/`Light`
+pin each one to) lives in the spec, not duplicated here:
+`docs/superpowers/specs/2026-09-09-tui-themes-design.md` §3/§3.1. `theme` is a
+pure DAG leaf (no lipgloss/tui imports); `internal/tui/styles.go` builds a
+`styles` struct of lipgloss styles from a `theme.Theme` (`buildStyles`), and
+`internal/tui/paint.go`'s `paintFrame` lays the theme's `Bg`/`Fg` under every
+rendered cell as a post-process over `View()`'s output.
+
+**`st()` — never cache across a switch.** `st()` reads the active `*styles`
+through a package-level `atomic.Pointer[styles]`; `setTheme` swaps it wholesale
+(never mutates the struct in place), so a live theme switch races with
+nothing (see `internal/tui` NEVER assigning package-var styles directly — that
+was the pre-theme pattern and would be a data race under `./test.sh race`).
+The rule for call sites: call `st()` fresh every time a style is needed —
+**never** stash its result in a package var or a struct field that outlives
+one render, and hoist the `st()` call at most once per render *function*
+(not once per file/package) so a mid-render theme swap can't paint half a
+frame in the old theme and half in the new one.
+
+**`paintFrame`'s contract.** `paintFrame(frame, w, h, bg, fg)` is a no-op
+(`return frame` unchanged) when both `bg` and `fg` are empty — this is what
+makes the `terminal` theme byte-identical to the pre-theme renderer. When
+either is set, it renders a probe space through a `lipgloss.Style` to harvest
+the profile-downgraded SGR prefix, then: (1) re-asserts that SGR after
+**every** reset lipgloss/cellbuf emits inside a line — both the full
+`"\x1b[0m"` form `lipgloss.Style.Render` uses and the bare `"\x1b[m"` form
+(`ansi.ResetStyle`) that `cellbuf.Wrap` injects when a `Width`-bearing style
+wraps already-styled input (missing the bare form was a real regression fixed
+separately — see `36cdba99`); (2) pads every line to `w` display cells using
+`ansi.StringWidth` (wide-glyph aware — a byte/rune count would under-pad a
+line with CJK or box-drawing content) — a line already `≥ w` is never
+truncated; (3) pads the whole frame to `h` lines with fully-painted blank
+rows. The SGR is harvested from an actual lipgloss render (not hand-built),
+so the truecolor→256→16 profile downgrade applies to the painted background
+exactly like it does to every other style in the frame.
+
+**Serial-test rule.** Both `setTheme` (swaps the process-global `styles`
+pointer) and `lipgloss.SetColorProfile` (process-global) make any test that
+exercises a live theme swap or a color-profile downgrade **serial** — no
+`t.Parallel()` — restoring the prior value via `defer`; see
+`TestSetThemeSwapsAndRestores` in `internal/tui/styles_test.go` and the NOTE
+comment atop `internal/tui/paint_test.go`. Tests that only build/read styles
+for a fixed theme (no swap, no profile change) stay `t.Parallel()` as normal.
+
+**Colour-profile caveat.** `dark`/`light` use truecolor hex (`#rrggbb`) and a
+few 256-cube indexes; lipgloss's automatic profile detection downgrades hex
+to the nearest 256-colour cube entry on a `TERM=xterm-256color`-class
+terminal (visually close, not identical) and to the nearest of 16 ANSI colours
+on a plain 16-colour terminal — at that point most of the theme's role
+palette collapses onto a handful of basic slots and the theme is, in
+practice, off. `COLORTERM=truecolor` (or a terminal that sets it) is what
+gets the intended truecolor rendering; headless capture tooling must export
+it explicitly since tmux hands new sessions the environment it was started
+with (see `driving-tui-headless`).
+
 ## Conventions
 
 - **A git verb is one invocation.** Build argv with `gitcmd`, run via `r.Runner.Run`/`.Stream`. Don't shell out directly.

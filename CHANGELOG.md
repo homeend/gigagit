@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **TUI themes.** `[ui] theme = "terminal" | "dark" | "light"` (default
+  `terminal`, unchanged look). `dark` pins the Windows Terminal Campbell look
+  everywhere; `light` is Everforest light soft. The `,` Settings menu's new
+  **Theme** row cycles them live and saves to the global config. Under a
+  256-colour profile hex colours snap to the nearest cube entry; with only 16
+  colours the theme is effectively off.
 - `?` works inside the diff window and opens the help with that window's
   footer keys listed in full first (the footer truncates on a narrow
   terminal), then the Diff view section. The repo switcher (`R`) stays open
