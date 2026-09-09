@@ -17,6 +17,7 @@ import (
 // A test that means to exercise notes opts back in per Service:
 //
 //	svc.UseNotesDir(t.TempDir())
+//
 // It ALSO points XDG_CONFIG_HOME at an empty directory for the whole package.
 // Every model built through loadCmd reads config.DefaultGlobalPath(), so on a
 // machine whose real global config sets, say, [ui] theme = "light", the
