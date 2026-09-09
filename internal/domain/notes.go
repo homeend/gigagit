@@ -72,13 +72,16 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 		n.Created = now
 	}
 	n.Updated = now
-	// A commit note's target is its FULL sha, so a CLI note on "HEAD" and a TUI
-	// note on the same commit share one address (sameNoteTarget compares Commit
-	// verbatim). Best-effort: a runner that cannot rev-parse (the FakeRunner
-	// suites, a detached store) keeps the value as given rather than failing a
-	// write — the CLI validates the rev up front in NoteTarget.
+	// A commit note's target is its FULL COMMIT sha, so a CLI note on "HEAD"
+	// and a TUI note on the same commit share one address (sameNoteTarget
+	// compares Commit verbatim) — and an annotated tag's own object id (which
+	// also happens to be 40 hex) must never be stored in its place. ResolveRev
+	// peels to ^{commit}, so a tag resolves to the commit it points at.
+	// Best-effort: a runner that cannot resolve (the FakeRunner suites, a
+	// detached store) keeps the value as given rather than failing a write —
+	// the CLI validates the rev up front in NoteTarget.
 	if n.Address.State == model.StateCommitted && n.Address.Commit != "" && !isFullSHA(n.Address.Commit) {
-		if full, ferr := s.RevParse(ctx, n.Address.Commit); ferr == nil {
+		if full, found, ferr := s.ResolveRev(ctx, n.Address.Commit); ferr == nil && found {
 			if full = strings.TrimSpace(full); isFullSHA(full) {
 				n.Address.Commit = full
 			}

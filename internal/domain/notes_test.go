@@ -8,6 +8,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/textdiff"
@@ -481,6 +482,29 @@ func TestNoteAddNormalisesCommitToFullSHA(t *testing.T) {
 	}
 	if got.Address.Commit != full {
 		t.Fatalf("stored commit = %q, want the full sha %q (a CLI note and a TUI note must share one target)", got.Address.Commit, full)
+	}
+}
+
+// An annotated tag's own object id is also 40 hex, so a naive "already full
+// sha" check would store it verbatim. NoteAdd must PEEL to the commit the tag
+// points at, or a CLI note on "v1" would never share a target with a TUI note
+// on the same commit.
+func TestNoteAddPeelsAnnotatedTagToCommit(t *testing.T) {
+	t.Parallel()
+	dir := noteSideRepo(t)
+	gittest.Run(t, dir, "tag", "-a", "v1", "-m", "v1")
+	svc := svcIn(t, dir)
+	svc.UseNotesDir(t.TempDir())
+	full := headSHA(t, dir)
+	got, err := svc.NoteAdd(context.Background(), model.Note{
+		Address: model.FileAddress{State: model.StateCommitted, Commit: "v1", Path: "a.go"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "tag in",
+	})
+	if err != nil {
+		t.Fatalf("NoteAdd: %v", err)
+	}
+	if got.Address.Commit != full {
+		t.Fatalf("stored commit = %q, want the peeled commit sha %q, not the tag's own object id", got.Address.Commit, full)
 	}
 }
 

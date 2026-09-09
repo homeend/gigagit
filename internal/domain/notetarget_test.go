@@ -92,6 +92,32 @@ func TestNoteTargetUsageErrors(t *testing.T) {
 	}
 }
 
+// An annotated tag has its OWN object id, distinct from the commit it points
+// at — both are 40 hex, so a naive rev-parse would store the tag's id and a
+// CLI note on "v1" would never share a target with a TUI note on the same
+// commit. NoteTarget must peel to the commit.
+func TestNoteTargetPeelsAnnotatedTagAndRefusesNonCommit(t *testing.T) {
+	t.Parallel()
+	dir := targetRepo(t)
+	gittest.Run(t, dir, "tag", "-a", "v1", "-m", "v1")
+	svc := svcIn(t, dir)
+	ctx := context.Background()
+
+	want := headSHA(t, dir)
+	addr, err := svc.NoteTarget(ctx, "a.txt", false, "v1")
+	if err != nil {
+		t.Fatalf("--rev v1: %v", err)
+	}
+	if addr.Commit != want {
+		t.Fatalf("Commit = %q, want the PEELED commit sha %q, not the tag's own object id", addr.Commit, want)
+	}
+
+	// A blob is not a commit: a note must never anchor to one.
+	if _, err := svc.NoteTarget(ctx, "a.txt", false, "HEAD:a.txt"); err == nil {
+		t.Fatal("--rev HEAD:a.txt (a blob): want an error, got nil")
+	}
+}
+
 func TestNoteTargetNormalisesPathNotation(t *testing.T) {
 	t.Parallel()
 	dir := targetRepo(t)

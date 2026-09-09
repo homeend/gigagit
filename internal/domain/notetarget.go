@@ -46,9 +46,16 @@ func (s *Service) NoteTarget(ctx context.Context, path string, cached bool, rev 
 		if strings.Contains(rev, "..") {
 			return model.FileAddress{}, fmt.Errorf("%w: a note anchors to one commit; pass the tip commit", ErrNoteTargetUsage)
 		}
-		full, err := s.RevParse(ctx, rev)
+		// ResolveRev peels to ^{commit}: an annotated tag resolves to the
+		// commit it points at (never its own tag object id), and a non-commit
+		// object (a blob, a tree) is refused the same as an unknown rev — a
+		// note anchors to a commit, never to arbitrary git content.
+		full, found, err := s.ResolveRev(ctx, rev)
 		if err != nil {
 			return model.FileAddress{}, fmt.Errorf("unknown revision %q: %w", rev, err)
+		}
+		if !found {
+			return model.FileAddress{}, fmt.Errorf("unknown revision %q", rev)
 		}
 		return model.FileAddress{State: model.StateCommitted, Commit: strings.TrimSpace(full), Path: p}, nil
 	}

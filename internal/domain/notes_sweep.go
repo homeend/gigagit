@@ -85,6 +85,9 @@ func (s *Service) notesSweepRunsForTest() int { return int(s.notesSweepRuns.Load
 // Abandoning an unfinished sweep is safe and deliberate — it is idempotent and
 // lock-protected, so the next gg start simply retries it.
 func (s *Service) WaitNotesSweep(ctx context.Context) bool {
+	if ctx.Err() != nil {
+		return false
+	}
 	done := make(chan struct{})
 	go func() {
 		s.notesSweepWG.Wait()
