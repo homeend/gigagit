@@ -155,7 +155,9 @@ guards against removing the worktree you are standing in.
   the source tip — NOT the tip-to-tip diff `gg compare` prints). Names are
   stored, not hashes, so every later `show` reflects the current tips.
   `gg preview list` prints `<id>\t<label>\t<source>\t<target>\t<state>\t<files>\t<ahead>`
-  (state: `ok`, `merged`, `missing-source`, `missing-target`, `no-base`);
+  (state: `ok`, `merged`, `missing-source`, `missing-target`, `no-base`, or
+  `error` with zero counts for a row whose summary failed — the reason goes to
+  stderr and the other rows still print; exit 1 only if EVERY row failed);
   `gg preview show [--patch] <id|label>` prints the file list (or unified
   diff; a non-ok state goes to stderr with exit 1); `gg preview diff
   [--patch] <source> <target>` is the one-off form with no record;

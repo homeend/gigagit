@@ -328,3 +328,62 @@ func TestManualRefreshSurvivesChainedPreviewsRead(t *testing.T) {
 		t.Fatalf("the chained read must clear the manual loading flag: srcLoading = %v", m.srcLoading)
 	}
 }
+
+// TestStartupPreviewsChainSurvivesManualFanOut: the snapshot arm chains a
+// previews read too, and at startup it races the bootstrap's manual all-source
+// fan-out. Superseding that manual read with a silent one strands
+// srcLoading[previews] — the manual message early-returns on the gen check
+// before clearing it, nothing clears it afterwards, and m.loading (and r, its
+// own escape hatch) stays blocked for the rest of the session.
+func TestStartupPreviewsChainSurvivesManualFanOut(t *testing.T) {
+	t.Parallel()
+	m, _, _ := mergePreviewModel(t)
+	m, manual := m.reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{manual: true})
+	if !m.srcLoading[srcPreviews] {
+		t.Fatal("a manual read must mark the source loading")
+	}
+	// The snapshot lands while that read is still out: its arm chains a
+	// previews read, bumping the generation the manual read was issued under.
+	updated, chain := m.Update(m.loadCmd()())
+	m = updated.(Model)
+	if chain == nil {
+		t.Fatal("a full load must chain a previews read")
+	}
+	updated, _ = m.Update(manual()) // now stale: dropped on the gen check
+	m = updated.(Model)
+	m = drainMsgs(t, m, chain, 4)
+	if m.loading || m.srcLoading[srcPreviews] {
+		t.Fatalf("the chained read must clear the manual loading flag: loading = %v, srcLoading = %v",
+			m.loading, m.srcLoading)
+	}
+}
+
+// TestPreviewMutationChainSurvivesManualRead: the same stranding on the third
+// chain — a store mutation (a/e/d/s) reloads the tab. Press a, save, then r
+// immediately and the mutation's reload supersedes the manual one; a silent
+// chain would leave srcLoading[previews] set, and r — guarded on !m.loading —
+// is exactly the key that can no longer clear it.
+func TestPreviewMutationChainSurvivesManualRead(t *testing.T) {
+	t.Parallel()
+	m, _, _ := mergePreviewModel(t)
+	if len(m.previews) == 0 {
+		t.Fatal("want a saved preview to mutate")
+	}
+	id := m.previews[0].rec.ID
+	m, manual := m.reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{manual: true})
+	updated, chain := m.Update(previewMutatedMsg{focusID: id, fromTab: true})
+	m = updated.(Model)
+	if chain == nil {
+		t.Fatal("a mutation must reload the tab")
+	}
+	updated, _ = m.Update(manual()) // now stale: dropped on the gen check
+	m = updated.(Model)
+	m = drainMsgs(t, m, chain, 4)
+	if m.loading || m.srcLoading[srcPreviews] {
+		t.Fatalf("the chained read must clear the manual loading flag: loading = %v, srcLoading = %v",
+			m.loading, m.srcLoading)
+	}
+	if _, cmd := m.Update(keyMsg("r")); cmd == nil {
+		t.Fatal("r must still be able to refresh after the mutation's chained read")
+	}
+}

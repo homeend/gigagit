@@ -64,8 +64,11 @@ func (m Model) handlePreviewMutatedMsg(msg previewMutatedMsg) (Model, tea.Cmd) {
 	if msg.open {
 		open = m.openPreviewCmd(msg.focusID, msg.source, msg.target, "")
 	}
+	// chainPreviewsRead: a mutation reload can supersede a manual previews read
+	// still in flight (add, save, then r), and a silent supersession strands
+	// srcLoading[previews] — with r itself the key that could no longer clear it.
 	var reload tea.Cmd
-	m, reload = m.reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{})
+	m, reload = m.chainPreviewsRead()
 	return m, tea.Batch(reload, open)
 }
 

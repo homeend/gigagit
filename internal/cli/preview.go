@@ -56,13 +56,25 @@ func previewList(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
+	// One pair's transient git failure must not blank the whole listing (the
+	// web's /api/previews degrades the same way): print that row with state
+	// "error" and zero counts, say why on stderr, and keep going. Exit 0 while
+	// at least one row summarized normally; 1 only when every row failed, so a
+	// script piping the list still learns that it learned nothing.
+	ok, failed := 0, 0
 	for _, p := range ps {
 		sum, err := svc.PreviewSummary(ctx, p.Source, p.Target)
 		if err != nil {
-			fmt.Fprintln(stderr, "error:", err)
-			return 1
+			failed++
+			fmt.Fprintf(stderr, "preview list: %s: %v\n", p.ID, err)
+			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\terror\t0\t0\n", p.ID, p.Label, p.Source, p.Target)
+			continue
 		}
+		ok++
 		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%d\t%d\n", p.ID, p.Label, p.Source, p.Target, sum.State, sum.Files, sum.Ahead)
+	}
+	if ok == 0 && failed > 0 {
+		return 1
 	}
 	return 0
 }
@@ -92,12 +104,17 @@ func previewAdd(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 }
 
 func previewRemove(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
-	if len(args) != 1 {
+	fs := flag.NewFlagSet("preview rm", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
 		fmt.Fprintln(stderr, "usage: gg preview rm <id|label>")
 		return 2
 	}
 	ctx := context.Background()
-	p, err := svc.PreviewGet(ctx, args[0])
+	p, err := svc.PreviewGet(ctx, fs.Arg(0))
 	if err == nil {
 		err = svc.PreviewRemove(ctx, p.ID)
 	}
@@ -109,14 +126,19 @@ func previewRemove(svc *domain.Service, args []string, stdout, stderr io.Writer)
 }
 
 func previewRename(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
-	if len(args) != 2 {
+	fs := flag.NewFlagSet("preview rename", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 2 {
 		fmt.Fprintln(stderr, "usage: gg preview rename <id|label> <text>")
 		return 2
 	}
 	ctx := context.Background()
-	p, err := svc.PreviewGet(ctx, args[0])
+	p, err := svc.PreviewGet(ctx, fs.Arg(0))
 	if err == nil {
-		err = svc.PreviewRename(ctx, p.ID, args[1])
+		err = svc.PreviewRename(ctx, p.ID, fs.Arg(1))
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)

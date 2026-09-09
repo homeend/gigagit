@@ -61,15 +61,18 @@ func (m Model) reopenPreviewCmd(id, source, target, keepPath, moved string) tea.
 	}
 }
 
-// chainPreviewsRead is the branches/remotes → previews refresh chain: a tip
-// that moved changes every saved pair whose source or target it is (and may
-// have moved the open preview out from under the compare view), and previews
-// are never interval-polled, so the arrival of new tips is what refreshes them.
+// chainPreviewsRead is every chained previews refresh: the branches/remotes
+// arrival (a tip that moved changes every saved pair whose source or target it
+// is, and may have moved the open preview out from under the compare view), the
+// full-snapshot arm, and a store mutation. Previews are never interval-polled,
+// so these chains are what refreshes them.
 //
-// The read inherits the manual flag of a previews read already in flight:
+// Route ALL of them through here, never a plain reloadSourcesCmd: the read
+// inherits the manual flag of a previews read already in flight, and
 // superseding a manual read with a silent one would strand srcLoading[previews]
 // (the superseded message early-returns on the gen check BEFORE srcLoading is
-// cleared), leaving m.loading — and every action guard that reads it — stuck.
+// cleared), leaving m.loading — and every action guard that reads it, r
+// included — stuck for the rest of the session.
 func (m Model) chainPreviewsRead() (Model, tea.Cmd) {
 	return m.reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{manual: m.srcLoading[srcPreviews]})
 }

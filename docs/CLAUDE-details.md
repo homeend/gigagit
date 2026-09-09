@@ -254,8 +254,18 @@ set in the `dataAvailableMsg` switch and batched into whatever command that
 arm returns, skipped only on the startup fan-out, which already reads
 previews directly), because a saved pair or an open preview names branch
 tips that only those two refreshes can move — plus an explicit `r`, a repo
-reroot, and every preview mutation (add/rename/remove/save-reversed), each
-calling `reloadSourcesCmd([]sourceKey{srcPreviews}, …)` directly. Since
+reroot, and every preview mutation (add/rename/remove/save-reversed). Every
+CHAINED previews read goes through `chainPreviewsRead`, never a bare
+`reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{})`: the chain bumps
+`srcGen`, so if a MANUAL previews read is still in flight its message
+early-returns on the arrival handler's gen check BEFORE clearing
+`srcLoading[srcPreviews]` — and a silent chain never sets that flag, so
+nothing clears it again and `m.loading` (with every action guard and `r`
+itself) sticks true for the session. `chainPreviewsRead` inherits the
+in-flight read's manual flag so the superseding read clears it instead.
+The races are real, not theoretical: at startup bootstrap's manual
+all-source fan-out runs against the very snapshot whose arrival chains, and
+a mutation chain is one keystroke from `r` (add, save, `r`). Since
 branches/remotes ARE on the background auto-refresh lane, this chain is what
 lets an idle TUI notice a moved tip and re-open a preview without the user
 pressing anything. The legacy snapshot-load path additionally CHAINS a

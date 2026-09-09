@@ -1087,10 +1087,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// startup double-read (bootstrap's all-source fan-out plus this
 			// chain) is cheap — the domain caches summaries by tip hash — and
 			// the gen bump drops whichever read is older.
-			legacyLoading := m.loading // this arm owns the legacy flag; a silent read must not flip it
+			// chainPreviewsRead, not a plain reloadSourcesCmd: this read supersedes
+			// any previews read still in flight, and superseding a MANUAL one with
+			// a silent read strands srcLoading[previews] forever (see its doc). At
+			// startup that race is the norm — bootstrap's manual all-source fan-out
+			// runs against this very snapshot.
+			legacyLoading := m.loading // this arm owns the legacy flag; a silent chain must not flip it
 			var previewsCmd tea.Cmd
-			m, previewsCmd = m.reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{})
-			m.loading = legacyLoading
+			m, previewsCmd = m.chainPreviewsRead()
+			m.loading = legacyLoading // an inherited manual flag is cleared by that read's own arrival
 			// An active process advances from the freshly-reloaded state (e.g.
 			// the conflict process re-derives its file list after a resolve).
 			if m.proc != nil {

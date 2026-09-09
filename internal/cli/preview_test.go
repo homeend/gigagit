@@ -83,6 +83,14 @@ func TestPreviewUsageErrors(t *testing.T) {
 	if code, _, _ := runCLI(t, dir, "preview", "show", "missing"); code != 1 {
 		t.Fatal("unknown id → 1")
 	}
+	// rm/rename parse flags like every other sub-verb: a typo'd flag is a usage
+	// error, not a lookup for a preview literally named "--foo".
+	if code, _, errb := runCLI(t, dir, "preview", "rm", "--foo"); code != 2 || !strings.Contains(errb, "foo") {
+		t.Fatalf("rm unknown flag: %d %q", code, errb)
+	}
+	if code, _, errb := runCLI(t, dir, "preview", "rename", "--foo", "x"); code != 2 || !strings.Contains(errb, "foo") {
+		t.Fatalf("rename unknown flag: %d %q", code, errb)
+	}
 }
 
 func TestPreviewListUsageErrors(t *testing.T) {
