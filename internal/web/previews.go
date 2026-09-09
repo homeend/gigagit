@@ -34,14 +34,28 @@ type previewRow struct {
 	State      string `json:"state"`
 	Files      int    `json:"files"`
 	Ahead      int    `json:"ahead"`
-	SourceHash string `json:"source_hash,omitempty"`
-	TargetHash string `json:"target_hash,omitempty"`
+	SourceHash string `json:"source_hash"`
+	TargetHash string `json:"target_hash"`
+	// Error is set only on the degraded "error" state (a PreviewSummary
+	// failure — a transient git error, not a resolvable-name state). Never
+	// set alongside a real state, so omitempty keeps every other row clean.
+	Error string `json:"error,omitempty"`
 }
 
 func previewRowFrom(p model.MergePreview, sum domain.PreviewSummary) previewRow {
 	return previewRow{ID: p.ID, Label: p.Label, Source: p.Source, Target: p.Target,
 		State: sum.State.String(), Files: sum.Files, Ahead: sum.Ahead,
 		SourceHash: sum.SourceHash, TargetHash: sum.TargetHash}
+}
+
+// previewErrorRow is the degraded row for one pair whose PreviewSummary call
+// itself failed (a transient git error, distinct from a resolvable
+// missing-source/missing-target/no-base STATE). Files/Ahead/hashes stay zero
+// — nothing was actually computed — and the row still identifies the pair so
+// the client can show it as failed rather than dropping it silently.
+func previewErrorRow(p model.MergePreview, err error) previewRow {
+	return previewRow{ID: p.ID, Label: p.Label, Source: p.Source, Target: p.Target,
+		State: "error", Error: err.Error()}
 }
 
 func (s *Server) handlePreviews(w http.ResponseWriter, r *http.Request) {
@@ -60,8 +74,11 @@ func (s *Server) handlePreviews(w http.ResponseWriter, r *http.Request) {
 	for _, p := range ps {
 		sum, err := svc.PreviewSummary(ctx, p.Source, p.Target)
 		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err)
-			return
+			// One pair's transient git failure (e.g. a slow/failing
+			// merge-base) must not blank the whole list: degrade this row
+			// and keep going.
+			rows = append(rows, previewErrorRow(p, err))
+			continue
 		}
 		rows = append(rows, previewRowFrom(p, sum))
 	}
@@ -121,9 +138,28 @@ func (s *Server) handlePreviewAdd(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	sum, _ := svc.PreviewSummary(readCtx(r), p.Source, p.Target)
-	s.emitPreviews()
+	sum, sumErr := svc.PreviewSummary(readCtx(r), p.Source, p.Target)
+	s.emitPreviews() // the add itself succeeded regardless of the summary
+	if sumErr != nil {
+		writeJSON(w, map[string]any{"entry": previewErrorRow(p, sumErr)})
+		return
+	}
 	writeJSON(w, map[string]any{"entry": previewRowFrom(p, sum)})
+}
+
+// previewErrStatus separates "you named a preview that is not there" (a
+// stale page after another client's remove, or a bad id) from the previews
+// surface being off (a config/state-dir condition, not a client mistake)
+// from a real store failure — mirrors noteErrStatus (notes.go).
+func previewErrStatus(err error) int {
+	switch {
+	case errors.Is(err, domain.ErrPreviewNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, domain.ErrPreviewsDisabled):
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
 func (s *Server) handlePreviewRename(w http.ResponseWriter, r *http.Request) {
@@ -133,7 +169,7 @@ func (s *Server) handlePreviewRename(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.service().PreviewRename(readCtx(r), req.ID, req.Label); err != nil {
-		writeErr(w, http.StatusNotFound, err)
+		writeErr(w, previewErrStatus(err), err)
 		return
 	}
 	s.emitPreviews()
@@ -147,7 +183,7 @@ func (s *Server) handlePreviewRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.service().PreviewRemove(readCtx(r), id); err != nil {
-		writeErr(w, http.StatusNotFound, err)
+		writeErr(w, previewErrStatus(err), err)
 		return
 	}
 	s.emitPreviews()
@@ -172,7 +208,7 @@ func (s *Server) writePreviewOpen(w http.ResponseWriter, r *http.Request, label,
 func (s *Server) handlePreviewOpen(w http.ResponseWriter, r *http.Request) {
 	p, err := s.service().PreviewGet(r.Context(), r.URL.Query().Get("id"))
 	if err != nil {
-		writeErr(w, http.StatusNotFound, err)
+		writeErr(w, previewErrStatus(err), err)
 		return
 	}
 	s.writePreviewOpen(w, r, p.Label, p.Source, p.Target)
