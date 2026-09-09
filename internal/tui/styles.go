@@ -209,6 +209,18 @@ func init() { activeStyles.Store(buildStyles(theme.Terminal)) }
 // switch; read it per render.
 func st() *styles { return activeStyles.Load() }
 
+// swatchStyle paints a COLOUR SAMPLE for the Settings colour editor: a filled
+// cell for a background role, the glyph's own foreground otherwise. It lives
+// here because styles.go is the one file allowed to name a lipgloss colour —
+// every other file reads st(), and this is the single surface that must paint a
+// colour the active theme does not itself carry (the one being typed).
+func swatchStyle(colour string, bg bool) lipgloss.Style {
+	if bg {
+		return lipgloss.NewStyle().Background(lipgloss.Color(colour))
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(colour))
+}
+
 // setTheme swaps the active style set. Callers that own a screen must follow
 // it with tea.ClearScreen so unchanged rows are repainted.
 func setTheme(th theme.Theme) { activeStyles.Store(buildStyles(th)) }
