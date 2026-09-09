@@ -21,26 +21,52 @@ import (
 // never be mistaken for one — a patch of a patch is a real input.
 var hunkHeaderRe = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$`)
 
-// HunkDiffSpec is the patch `gg diff --hunks` numbers, and the patch
-// `--hunk N` resolves against. The three note target states map onto it
-// exactly:
+// EmptyTreeSHA1 is git's well-known hash of the empty tree object. It depends
+// only on the empty tree's content, so it is the same value in every SHA-1
+// git repository (a SHA-256 repository has a different one, not yet in play
+// here). It stands in for "nothing" on the old side of a root commit's own
+// diff, since `git diff` has no bare-rev syntax that means that: a lone
+// <rev> always means "index/worktree vs rev".
+const EmptyTreeSHA1 = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+// HunkDiffSpec resolves cached/rev/paths into the DiffSpec `gg diff --hunks`
+// numbers, and `--hunk N` resolves against. The three note target states map
+// onto it exactly:
 //
 //	rev == "", cached == false  → index → working tree   (StateUnstaged/Untracked)
 //	rev == "", cached == true   → HEAD  → index          (StateStaged)
 //	rev == "<commit>"           → parent → commit        (StateCommitted)
 //
-// A SINGLE commit therefore means that commit's OWN change (<c>^..<c>), the
-// pair of texts a commit note anchors to — not `git diff <c>` (working tree vs
-// commit), which would number a different patch than the note lands in. An
-// explicit A..B / A...B range passes through unchanged.
-func HunkDiffSpec(cached bool, rev string, paths []string) model.DiffSpec {
+// A SINGLE commit therefore means that commit's OWN change (parent → commit),
+// the pair of texts a commit note anchors to — not `git diff <c>` (working
+// tree vs commit), which would number a different patch than the note lands
+// in. There is no single-token `git diff` syntax for "a commit against its
+// own parent" that also survives a ROOT commit: `<c>^..<c>` fails outright
+// (no `<c>^` to resolve), and `<c>^!` — git's "this commit and none of its
+// parents" shorthand — silently degrades to plain `<c>` the instant `<c>` has
+// no parent (verified against real git: `git rev-parse <root>^!` prints only
+// one line, not "<root>" plus an excluded parent, so `git diff` treats it as
+// the ordinary bare-rev form and returns index/worktree-vs-<root>, not
+// <root>'s own change). So a bare commit is probed for a parent first: with
+// one, `<c>^..<c>`; without (a root), EmptyTreeSHA1 stands in for the old
+// side. An explicit A..B / A...B range passes through unchanged and is never
+// probed.
+func (s *Service) HunkDiffSpec(ctx context.Context, cached bool, rev string, paths []string) (model.DiffSpec, error) {
 	switch {
 	case rev == "":
-		return model.DiffSpec{Cached: cached, Paths: paths}
+		return model.DiffSpec{Cached: cached, Paths: paths}, nil
 	case strings.Contains(rev, ".."):
-		return model.DiffSpec{Rev: rev, Paths: paths}
+		return model.DiffSpec{Rev: rev, Paths: paths}, nil
 	default:
-		return model.DiffSpec{Rev: rev + "^.." + rev, Paths: paths}
+		base := rev + "^"
+		_, found, err := s.ResolveRev(ctx, base)
+		if err != nil {
+			return model.DiffSpec{}, err
+		}
+		if !found {
+			base = EmptyTreeSHA1
+		}
+		return model.DiffSpec{Rev: base + ".." + rev, Paths: paths}, nil
 	}
 }
 

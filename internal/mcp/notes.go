@@ -264,6 +264,10 @@ func (s *Server) noteAnchor(ctx context.Context, addr model.FileAddress, in note
 	case in.OldLine != 0:
 		return model.NoteSideOld, [2]int{in.OldLine, in.OldLine}, nil
 	default:
-		return s.svc.HunkRange(ctx, domain.HunkDiffSpec(in.Cached, in.Rev, []string{addr.Path}), addr.Path, in.Hunk)
+		spec, err := s.svc.HunkDiffSpec(ctx, in.Cached, in.Rev, []string{addr.Path})
+		if err != nil {
+			return "", [2]int{}, err
+		}
+		return s.svc.HunkRange(ctx, spec, addr.Path, in.Hunk)
 	}
 }

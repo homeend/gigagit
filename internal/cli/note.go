@@ -131,7 +131,10 @@ func noteAnchor(ctx context.Context, svc *domain.Service, addr model.FileAddress
 		if hunk < 1 {
 			return "", [2]int{}, fmt.Errorf("%w: --hunk must be a 1-based hunk number", domain.ErrNoteTargetUsage)
 		}
-		spec := domain.HunkDiffSpec(cached, rev, []string{addr.Path})
+		spec, err := svc.HunkDiffSpec(ctx, cached, rev, []string{addr.Path})
+		if err != nil {
+			return "", [2]int{}, err
+		}
 		return svc.HunkRange(ctx, spec, addr.Path, hunk)
 	}
 }

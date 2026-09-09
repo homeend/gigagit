@@ -105,7 +105,11 @@ func (s *Service) planNoteBatchAnchor(ctx context.Context, addr model.FileAddres
 	case t.OldLine != [2]int{0, 0}:
 		return model.NoteSideOld, t.OldLine, nil
 	case t.Hunk != 0:
-		return s.HunkRange(ctx, HunkDiffSpec(cached, rev, []string{addr.Path}), addr.Path, t.Hunk)
+		spec, err := s.HunkDiffSpec(ctx, cached, rev, []string{addr.Path})
+		if err != nil {
+			return "", [2]int{}, err
+		}
+		return s.HunkRange(ctx, spec, addr.Path, t.Hunk)
 	}
 	return "", [2]int{}, fmt.Errorf("no anchor")
 }

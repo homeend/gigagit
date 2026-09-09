@@ -56,9 +56,16 @@ func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	}
 	if *hunks {
 		// --hunks numbers the patch a NOTE anchors to, so a bare commit means
-		// that commit's own change (<c>^..<c>), not `git diff <c>`. HunkDiffSpec
-		// is the single source of that rule, shared with `gg note add --hunk N`.
-		files, err := svc.DiffHunks(context.Background(), domain.HunkDiffSpec(*cached, rev, paths))
+		// that commit's own change (parent → commit; a root commit diffs
+		// against the empty tree), not `git diff <c>`. HunkDiffSpec is the
+		// single source of that rule, shared with `gg note add --hunk N`.
+		ctx := context.Background()
+		spec, err := svc.HunkDiffSpec(ctx, *cached, rev, paths)
+		if err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		files, err := svc.DiffHunks(ctx, spec)
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1

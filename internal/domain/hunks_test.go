@@ -102,8 +102,30 @@ func TestParseDiffHunksIgnoresBodyLinesThatLookLikeHeaders(t *testing.T) {
 	}
 }
 
+// TestHunkDiffSpecTargets covers the branches that never touch git (rev ==
+// "" and an explicit A..B/A...B range) with any repo, plus the two shapes a
+// bare single commit resolves to: a non-root commit's own change
+// (<c>^..<c>), and — the fix this test guards — a ROOT commit's own change
+// (EmptyTreeSHA1..<c>), never the raw <c>^..<c> that fails outright on a
+// root, and never the bare <c> that `git diff` would read as
+// index/worktree-vs-<c>.
 func TestHunkDiffSpecTargets(t *testing.T) {
-	t.Parallel()
+	dir := t.TempDir()
+	gittest.Run(t, dir, "init", "-b", "main")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, dir, "add", "a.txt")
+	gittest.Run(t, dir, "commit", "-m", "root")
+	root := headSHA(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, dir, "commit", "-am", "second")
+	second := headSHA(t, dir)
+
+	svc := svcIn(t, dir)
+	ctx := context.Background()
 	cases := []struct {
 		name   string
 		cached bool
@@ -112,11 +134,15 @@ func TestHunkDiffSpecTargets(t *testing.T) {
 	}{
 		{"worktree", false, "", model.DiffSpec{Paths: []string{"a.go"}}},
 		{"cached", true, "", model.DiffSpec{Cached: true, Paths: []string{"a.go"}}},
-		{"single commit is its OWN change", false, "abc123", model.DiffSpec{Rev: "abc123^..abc123", Paths: []string{"a.go"}}},
+		{"non-root commit is its OWN change", false, second, model.DiffSpec{Rev: second + "^.." + second, Paths: []string{"a.go"}}},
+		{"root commit is its own change against the empty tree", false, root, model.DiffSpec{Rev: EmptyTreeSHA1 + ".." + root, Paths: []string{"a.go"}}},
 		{"explicit range passes through", false, "main..HEAD", model.DiffSpec{Rev: "main..HEAD", Paths: []string{"a.go"}}},
 	}
 	for _, c := range cases {
-		got := HunkDiffSpec(c.cached, c.rev, []string{"a.go"})
+		got, err := svc.HunkDiffSpec(ctx, c.cached, c.rev, []string{"a.go"})
+		if err != nil {
+			t.Fatalf("%s: HunkDiffSpec error: %v", c.name, err)
+		}
 		if got.Cached != c.want.Cached || got.Rev != c.want.Rev || len(got.Paths) != 1 || got.Paths[0] != "a.go" {
 			t.Errorf("%s: HunkDiffSpec = %+v, want %+v", c.name, got, c.want)
 		}
@@ -153,7 +179,11 @@ func TestDiffHunksAndHunkRangeOnRealRepo(t *testing.T) {
 	dir := hunkRepo(t)
 	svc := svcIn(t, dir)
 	ctx := context.Background()
-	files, err := svc.DiffHunks(ctx, HunkDiffSpec(false, "", nil))
+	spec, err := svc.HunkDiffSpec(ctx, false, "", nil)
+	if err != nil {
+		t.Fatalf("HunkDiffSpec: %v", err)
+	}
+	files, err := svc.DiffHunks(ctx, spec)
 	if err != nil {
 		t.Fatalf("DiffHunks: %v", err)
 	}
@@ -163,16 +193,58 @@ func TestDiffHunksAndHunkRangeOnRealRepo(t *testing.T) {
 	if files[0].Hunks[0].N != 1 || files[0].Hunks[1].N != 2 {
 		t.Fatalf("hunks must be numbered 1..N in @@ order: %+v", files[0].Hunks)
 	}
-	side, rng, err := svc.HunkRange(ctx, HunkDiffSpec(false, "", []string{"a.txt"}), "a.txt", 2)
+	pathSpec, err := svc.HunkDiffSpec(ctx, false, "", []string{"a.txt"})
+	if err != nil {
+		t.Fatalf("HunkDiffSpec: %v", err)
+	}
+	side, rng, err := svc.HunkRange(ctx, pathSpec, "a.txt", 2)
 	if err != nil {
 		t.Fatalf("HunkRange: %v", err)
 	}
 	if side != model.NoteSideNew || rng != files[0].Hunks[1].New {
 		t.Fatalf("HunkRange(2) = %s %v, want new %v", side, rng, files[0].Hunks[1].New)
 	}
-	if _, _, err := svc.HunkRange(ctx, HunkDiffSpec(false, "", []string{"a.txt"}), "a.txt", 9); err == nil {
+	if _, _, err := svc.HunkRange(ctx, pathSpec, "a.txt", 9); err == nil {
 		t.Fatal("an out-of-range hunk number must error")
 	} else if got := err.Error(); got != "a.txt has 2 hunks" {
 		t.Fatalf("error = %q, want %q", got, "a.txt has 2 hunks")
+	}
+}
+
+// TestDiffHunksOnRootCommit guards the fix: a root commit has no parent, so
+// `<c>^..<c>` fails outright, and `<c>^!` — tried and rejected, see
+// HunkDiffSpec's doc comment — silently degrades to plain `<c>` (index/
+// worktree vs the root, empty on a clean checkout: exactly the wrong,
+// SILENT failure this test would have caught, where the old `^..` form
+// failed LOUDLY instead). `gg diff --hunks <root-sha>` must list the root
+// commit's own hunks — the whole file as one addition — not error out and
+// not come back empty.
+func TestDiffHunksOnRootCommit(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	gittest.Run(t, dir, "init", "-b", "main")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\ntwo\nthree\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, dir, "add", "a.txt")
+	gittest.Run(t, dir, "commit", "-m", "root")
+	root := headSHA(t, dir)
+
+	svc := svcIn(t, dir)
+	ctx := context.Background()
+	spec, err := svc.HunkDiffSpec(ctx, false, root, nil)
+	if err != nil {
+		t.Fatalf("HunkDiffSpec on the root commit: %v", err)
+	}
+	files, err := svc.DiffHunks(ctx, spec)
+	if err != nil {
+		t.Fatalf("DiffHunks on the root commit: %v", err)
+	}
+	if len(files) != 1 || files[0].Path != "a.txt" || len(files[0].Hunks) != 1 {
+		t.Fatalf("files = %+v, want a.txt with 1 hunk (the whole new file)", files)
+	}
+	h := files[0].Hunks[0]
+	if h.Old != [2]int{0, 0} || h.New != [2]int{1, 3} {
+		t.Fatalf("hunk = %+v, want the whole 3-line file added (Old [0,0], New [1,3])", h)
 	}
 }
