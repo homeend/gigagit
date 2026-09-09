@@ -226,9 +226,15 @@ nothing (see `internal/tui` NEVER assigning package-var styles directly — that
 was the pre-theme pattern and would be a data race under `./test.sh race`).
 The rule for call sites: call `st()` fresh every time a style is needed —
 **never** stash its result in a package var or a struct field that outlives
-one render, and hoist the `st()` call at most once per render *function*
-(not once per file/package) so a mid-render theme swap can't paint half a
-frame in the old theme and half in the new one.
+one render — and hoist the `st()` call at most once per render *function*
+(not once per file/package): a local var caches the atomic load so a
+function with many style reads pays it once, and freshness comes entirely
+from never letting that cached value outlive the function call, not from
+any ordering guarantee against `setTheme` (Bubble Tea's `Update`/`View` run
+on one goroutine and `setTheme` fires from the Settings `Update` path, so a
+swap can't land mid-`View` anyway; the atomic pointer's real job is letting
+the TUI's own parallel tests build styles for different themes without a
+race, per the comment atop `styles.go`).
 
 **`paintFrame`'s contract.** `paintFrame(frame, w, h, bg, fg)` is a no-op
 (`return frame` unchanged) when both `bg` and `fg` are empty — this is what

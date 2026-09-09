@@ -324,14 +324,16 @@ whether to align "Commit sort" with it — `plain` when the graph goes off
 prompt permanently; those choices live in `<state>/gg/prompts.toml`, which
 the prompt names — remove the id from the array (or delete the file) to get
 prompts back.
-`[ui] theme` selects the TUI's colour scheme: `terminal` (the default; inherit
-the terminal's own scheme, today's look, byte-identical) or `dark` (the
-Windows Terminal "Campbell" look, pinned everywhere) or `light` (Everforest
-light soft). Cycle it live from the `,` Settings menu ("Theme"), which applies
-immediately and persists the choice to the **global** config (a theme is
-per-human, like `[ui] language`, not per-repo). Under a 256-colour terminal
-profile the theme's hex colours snap to the nearest colour-cube entry; with
-only 16 colours available the theme is effectively off (nothing to snap to).
+`[ui] theme` selects the TUI's colour scheme: `terminal` (the default;
+inherit the terminal's own scheme, unchanged from before this setting
+existed) or `dark` (the Windows Terminal "Campbell" look, pinned everywhere)
+or `light` (Everforest light soft). Cycle it live from the `,` Settings menu
+("Theme"), which applies immediately and persists the choice to the
+**global** config (a theme is per-human, like `[ui] language`, not per-repo).
+Under a 256-colour terminal profile the theme's hex colours snap to the
+nearest colour-cube entry; with only 16 colours available they snap onto the
+terminal's own remapped basic slots — exactly what the theme exists to
+override — so it's effectively off.
 `[ui] show_eol_only_changes` (default `false`) controls whether a file whose
 only unstaged change is its line endings (CRLF↔LF) is shown as modified — by
 default such files are hidden from the Files panel and its count badge as noise;
