@@ -247,20 +247,27 @@ move (a different hash pair) costs the three summary git calls
 two rev-parses and a cache hit. `PreviewOpen` wraps `PreviewSummary` into the
 two `model.Endpoint`s (`merge-base(target, source)` and the source tip) the
 compare pipeline actually diffs. The TUI's `srcPreviews` source (`readPreviews`
-in `preview_panel.go`) is, like `srcNotes`, **never interval-polled** — it
-rides only on an explicit refresh (`r`, a repo reroot) and on preview
-mutations (add/rename/remove/save-reversed), each of which calls
-`reloadSourcesCmd([]sourceKey{srcPreviews}, …)` directly; the legacy
-snapshot-load path additionally CHAINS a `srcPreviews` reload off the
-snapshot's own arrival rather than firing it from `reRoot` itself, because a
-state-dir read plus a couple of rev-parses would otherwise win the race
-against the full `Snapshot` load and flip `m.ready`/`m.loading` early,
-dropping `reRoot`'s blank-screen gate while the OLD repo's branches/status
-were still in the model. `reRoot` still bumps `srcGen` for every source,
-including `srcPreviews`, before any of this — so a chained read that
-lands after a second, faster repo switch (or a switch away and back) carries
-a stale generation and is dropped on arrival, the same guard every other
-source relies on. Two decisions: `preview-pair` (`internal/tui/preview_actions.go`,
+in `preview_panel.go`) is, like `srcNotes`, **never interval-polled on its
+own** — but it is not merely manual either: `chainPreviewsRead` (`preview_open.go`)
+rides along every `srcBranches`/`srcRemotes` arrival (`model.go`'s `previewsChain`,
+set in the `dataAvailableMsg` switch and batched into whatever command that
+arm returns, skipped only on the startup fan-out, which already reads
+previews directly), because a saved pair or an open preview names branch
+tips that only those two refreshes can move — plus an explicit `r`, a repo
+reroot, and every preview mutation (add/rename/remove/save-reversed), each
+calling `reloadSourcesCmd([]sourceKey{srcPreviews}, …)` directly. Since
+branches/remotes ARE on the background auto-refresh lane, this chain is what
+lets an idle TUI notice a moved tip and re-open a preview without the user
+pressing anything. The legacy snapshot-load path additionally CHAINS a
+`srcPreviews` reload off the snapshot's own arrival rather than firing it
+from `reRoot` itself, because a state-dir read plus a couple of rev-parses
+would otherwise win the race against the full `Snapshot` load and flip
+`m.ready`/`m.loading` early, dropping `reRoot`'s blank-screen gate while the
+OLD repo's branches/status were still in the model. `reRoot` still bumps
+`srcGen` for every source, including `srcPreviews`, before any of this — so
+a chained read that lands after a second, faster repo switch (or a switch
+away and back) carries a stale generation and is dropped on arrival, the
+same guard every other source relies on. Two decisions: `preview-pair` (`internal/tui/preview_actions.go`,
 raised from the Branches pair picker) offers `["show once", "show and
 save", "swap direction", "abort"]` — "show once" opens the compare view
 transiently (empty id, nothing stored, though an open transient preview still
@@ -271,11 +278,14 @@ than making the user re-pair in the other order, and "abort" is last so
 `abortOption`/esc cancels; `preview-remove` (the Previews tab's `d`) offers
 `["Remove", "Cancel"]` with "Cancel" last for the same esc-safety reason. An
 open preview reacts to every `srcPreviews` landing (`afterPreviewsRefresh` in
-`preview_open.go`): it re-opens itself when either side's tip changed the
-diff, silently reconciles (title only) when a tip moved without changing the
-diff, and closes with a notice when the pair's state stopped being
-`PreviewOK` (merged, a side went missing, no common base) or the record
-itself was removed.
+`preview_open.go`): it re-opens itself (and says which side moved) when a
+tip change altered the compare tag, silently reconciles — updating only the
+tracked `srcHash`/`tgtHash` on `previewOpenState`, nothing the user sees —
+when a tip moved (e.g. the target advanced off the fork point) without
+changing the merge-base..source diff, so a later refresh doesn't see them
+differ and re-announce the same non-event forever, and closes with a notice
+when the pair's state stopped being `PreviewOK` (merged, a side went
+missing, no common base) or the record itself was removed.
 
 Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands, else launches the TUI.
 
