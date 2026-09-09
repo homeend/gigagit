@@ -35,6 +35,11 @@ const (
 	// themeEditorRows is the unmaximized visible-row budget; ctrl+t (popupMax)
 	// trades it for the terminal-derived cap.
 	themeEditorRows = 14
+
+	// themeFieldMaxRunes bounds the inline colour field to the longest
+	// accepted shape ("#rrggbb"), so a paste or a fast keystroke burst can
+	// never over-type past what any valid colour needs.
+	themeFieldMaxRunes = 7
 )
 
 // themeUnsetMark is what an unset ("inherit") role shows in the value column.
@@ -296,10 +301,11 @@ func (p *themeEditorPopup) startEditing(m Model) Model {
 	return m
 }
 
-// updateEditing routes keys to the inline field. Every keystroke re-previews:
-// a valid (or empty) value repaints the screen through it, an invalid one puts
-// the screen straight back to previewBase so a typo never leaves the UI in a
-// half-applied state.
+// updateEditing routes keys to the inline field. Every keystroke that
+// actually changes the buffer re-previews: a valid (or empty) value repaints
+// the screen through it, an invalid one puts the screen back to previewBase —
+// but only when that is an actual change (see preview), so a run of invalid
+// keystrokes after the first costs no repaint.
 func (p *themeEditorPopup) updateEditing(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.Type {
 	case tea.KeyEsc:
@@ -309,6 +315,16 @@ func (p *themeEditorPopup) updateEditing(m Model, msg tea.KeyMsg) (Model, tea.Cm
 		return m, tea.ClearScreen
 	case tea.KeyEnter:
 		return p.save(m)
+	case tea.KeyRunes, tea.KeySpace:
+		rs := msg.Runes
+		if msg.Type == tea.KeySpace {
+			rs = []rune{' '}
+		}
+		rs = capFieldInsert(len([]rune(p.field.Value())), stripSpaces(rs))
+		if len(rs) == 0 {
+			return m, nil // no colour form ever contains a space; at the cap, the whole insert is dropped
+		}
+		msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: rs}
 	}
 	before := p.field.Value()
 	if !p.field.HandleEditKey(msg) {
@@ -320,24 +336,68 @@ func (p *themeEditorPopup) updateEditing(m Model, msg tea.KeyMsg) (Model, tea.Cm
 	return m, p.preview()
 }
 
-// preview installs the styles for the current field value and sets the status.
+// capFieldInsert truncates rs so that inserting it never pushes a field
+// already existing runes long past themeFieldMaxRunes — a multi-rune paste
+// like "#ff5f00zz" lands as "#ff5f00", and an insert attempted at the cap
+// truncates to nothing.
+func capFieldInsert(existing int, rs []rune) []rune {
+	room := themeFieldMaxRunes - existing
+	if room <= 0 {
+		return nil
+	}
+	if len(rs) > room {
+		return rs[:room]
+	}
+	return rs
+}
+
+// stripSpaces drops every space from rs: no accepted colour form (hex,
+// doubled-hex, or a palette index) ever contains one, so a space — typed
+// alone or embedded in a paste — is simply never inserted.
+func stripSpaces(rs []rune) []rune {
+	out := make([]rune, 0, len(rs))
+	for _, r := range rs {
+		if r != ' ' {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// preview resolves the theme the current field value would produce and, only
+// when that theme actually differs from what is already on screen, installs
+// it and returns tea.ClearScreen. Every invalid keystroke after the first (the
+// screen is already sitting at previewBase) and every no-op edit costs
+// nothing: the popup line still re-renders through the normal frame, just not
+// via a full truecolor repaint.
 func (p *themeEditorPopup) preview() tea.Cmd {
 	r, ok := p.current()
 	if !ok {
 		return nil
 	}
-	v := strings.TrimSpace(p.field.Value())
+	typed := strings.TrimSpace(p.field.Value())
+	target := p.previewBase
 	switch {
-	case v == "":
-		setTheme(p.previewFor(r, ""))
+	case typed == "":
+		target = p.previewFor(r, "")
 		p.setStatus(false, i18n.T("empty — previewing the built-in default; enter clears [themes.%s] %s", p.base.Name, themeConfigKey(r)))
-	case theme.ValidColour(v):
-		setTheme(p.previewFor(r, v))
-		p.setStatus(false, i18n.T("%s valid — previewing; enter saves to [themes.%s] %s, esc reverts", v, p.base.Name, themeConfigKey(r)))
 	default:
-		setTheme(p.previewBase)
-		p.setStatus(true, i18n.T("not a colour (#rrggbb or 0–255)"))
+		if v, ok := theme.NormalizeColour(typed); ok {
+			target = p.previewFor(r, v)
+			shown := v
+			if v != typed {
+				shown = typed + " → " + v
+			}
+			p.setStatus(false, i18n.T("%s valid — previewing; enter saves to [themes.%s] %s, esc reverts", shown, p.base.Name, themeConfigKey(r)))
+		} else {
+			p.setStatus(true, i18n.T("not a colour (#rrggbb, rrggbb, #rgb, or 0–255)"))
+			// target stays previewBase: an invalid value is never installed.
+		}
 	}
+	if target == activeTheme() {
+		return nil
+	}
+	setTheme(target)
 	return tea.ClearScreen
 }
 
@@ -348,9 +408,10 @@ func (p *themeEditorPopup) save(m Model) (Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	v := strings.TrimSpace(p.field.Value())
-	if v != "" && !theme.ValidColour(v) {
-		p.setStatus(true, i18n.T("not a colour (#rrggbb or 0–255)"))
+	typed := strings.TrimSpace(p.field.Value())
+	v, ok := theme.NormalizeColour(typed)
+	if !ok {
+		p.setStatus(true, i18n.T("not a colour (#rrggbb, rrggbb, #rgb, or 0–255)"))
 		return m, nil // stay in the editor: nothing is written, nothing is lost
 	}
 	// An emptied field is a REMOVAL, and it takes exactly the `d` path: a list
@@ -532,6 +593,16 @@ func (p *themeEditorPopup) box(m Model) string {
 	}
 	parts = append(parts, s.dim.Render(themeColumnHeader(textW)))
 
+	// Editing overlays the two-line accepted-forms help block (editHelpLines)
+	// above the footer; the syntax hint it replaces used to share the
+	// footer's one line for free, so those two rows are net new. The list
+	// window gives up the same two rows here rather than pushing the footer
+	// further off a short terminal.
+	rowBudget := themeEditorRows
+	if p.editing {
+		rowBudget -= 2
+	}
+
 	vis := p.visible()
 	if len(vis) == 0 {
 		parts = append(parts, padRight("  "+i18n.T("(no matching colours)"), textW))
@@ -539,7 +610,7 @@ func (p *themeEditorPopup) box(m Model) string {
 		rows := p.rows(vis, textW)
 		parts = append(parts, renderWindow(rows, winOpts{
 			w: textW, anchor: p.sel,
-			h: min(len(rows), popupResolveRowCap(p.maximized, termH, themeEditorRows)),
+			h: min(len(rows), popupResolveRowCap(p.maximized, termH, rowBudget)),
 		})...)
 	}
 
@@ -553,6 +624,9 @@ func (p *themeEditorPopup) box(m Model) string {
 		parts = append(parts, style.Render(truncate(mark+p.status, textW)))
 	}
 	parts = append(parts, "")
+	if p.editing {
+		parts = append(parts, p.editHelpLines(textW)...)
+	}
 	parts = append(parts, p.hints(textW)...)
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
@@ -682,14 +756,24 @@ func themeRowDecorator(rowStyle lipgloss.Style, spans []rowSpan) rowDecorator {
 	}
 }
 
-// hints is the footer: the browse bindings, or the editor's save/revert pair
-// plus the accepted colour syntax.
+// editHelpLines is the two-line dim block shown directly above the footer
+// while editing, spelling out every accepted colour form — the accepted
+// syntax is otherwise only discoverable by triggering the error status.
+func (p *themeEditorPopup) editHelpLines(textW int) []string {
+	s := st()
+	return []string{
+		s.dim.Render(truncate(i18n.T("Colour forms: #rrggbb · rrggbb · #rgb · rgb (short hex, digits doubled)"), textW)),
+		s.dim.Render(truncate(i18n.T("or a palette index 0–255 (leading zeros ignored: 0208 = 208) · empty = built-in default"), textW)),
+	}
+}
+
+// hints is the footer: the browse bindings, or the editor's save/revert pair.
+// The accepted colour syntax lives in editHelpLines, rendered just above.
 func (p *themeEditorPopup) hints(textW int) []string {
 	if p.editing {
 		return wrapParts([]string{
 			i18n.T("[enter] save"),
 			i18n.T("[esc] revert"),
-			i18n.T("#rrggbb or 0–255, empty = default"),
 		}, textW, "  ")
 	}
 	return wrapParts([]string{
