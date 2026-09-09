@@ -29,9 +29,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `gg_notes_apply` and `gg_note_rm`.
 - A second embedded skill, `reviewing-with-gg`, teaches agents the lane;
   `gg init` installs both skills per agent and `gg skill path [review|using-gg]`
-  prints a materialised copy. `agentskill.Version` → 62.
+  prints a materialised copy. `agentskill.Version` → 63, `ReviewVersion` → 2.
 - A commit note now stores the FULL sha, so a CLI note and a TUI note on the
   same commit share one target.
+- **Final-review fix wave.** `gg diff --hunks <root-commit>` (and
+  `gg note add --hunk N --rev <root-commit>`) now correctly reads that root
+  commit's own change against the empty tree, instead of erroring (or, in an
+  interim attempt, silently returning nothing — `<c>^!` looked identical to
+  `<c>^..<c>` for an ordinary commit but degrades to plain `<c>` on a root,
+  since it has no parent to exclude). `gg note list`/`gg note clear` and MCP
+  `gg_notes_list` now reject `--cached`/`--rev` without `--file` (exit 2)
+  instead of silently falling back to every address. MCP `gg_notes_list`
+  rejects an unknown `type` instead of returning an empty list, and
+  `gg_note_add`/`gg_notes_apply` honour `$GG_AGENT` for their author default
+  like the CLI already did (shared in `domain.NoteAuthorDefault`).
 
 - The diff view's `.` menu grows two WHOLE-FILE review-note rows, offered
   wherever the cursor sits (unlike Edit / Reply / Delete, which need a note

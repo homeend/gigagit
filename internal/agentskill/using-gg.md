@@ -75,6 +75,14 @@ diff: no flag = the unstaged working tree, `--cached` = the staged diff,
 `--rev <commit>` = that commit's own change (a range is refused). Line numbers
 are 1-based. Full guidance: `gg skill path` (the reviewing-with-gg skill).
 
+Three gotchas worth knowing up front (the reviewing-with-gg skill covers
+them in full): a path with BOTH a staged and an unstaged note needs
+`gg note list --file <path>` with `--cached` (or without) to resolve each
+against its own diff — a bare `note list` can show a misleading verdict; a
+batch error's `item N` is 0-based; `gg note clear --all` removes this
+checkout's own working-tree notes plus EVERY commit note in the store
+(commit notes are not worktree-scoped).
+
 - `gg add [-f] (-A | <path>...)` / `gg unstage <path>...` — stage paths (or
   everything incl. untracked with `-A`) / remove paths from the index
   keeping working-tree content. `gg add` + `gg commit` fully replaces

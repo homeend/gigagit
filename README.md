@@ -216,8 +216,9 @@ remark to a line; `gg note list`, `gg note reply`, `gg note rm` and
 of agent annotations at once. `gg diff --hunks` numbers each file's `@@` hunks
 so `--hunk N` can address one. Notes are machine-local and expire (see
 `[notes]` under Configuration); they render inline in the TUI diff view and in
-`gg web`. `gg review --notes` turns an AI review into anchored notes instead of
-a text report.
+`gg web`. `gg review --notes` does not replace the text report — it still
+prints and saves that — but ALSO asks the tool for anchored notes and imports
+them.
 
 Forks are answered by flags (e.g. `--on-conflict`, `--with-branch`/`--force`);
 without a flag, an interactive terminal prompts, and a non-interactive run errors

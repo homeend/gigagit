@@ -134,6 +134,22 @@ not stored.
 - Say what you found in your chat reply too — the notes are for the code, the
   reply is for the person.
 
+## Caveats
+
+- If the same path carries both a STAGED and an UNSTAGED note, a bare
+  `gg note list` (no `--file`) resolves both against their own diff and can
+  print a misleading active/stale verdict for either — pass
+  `gg note list --file <path>` with `--cached` (staged) or without (unstaged)
+  to resolve one note against the diff it actually anchors to.
+- In a batch error (`gg note apply --stdin`, `gg_notes_apply`), the item
+  index in `item N` is 0-based: `item 0` is the first entry in the batch's
+  array, not the first-numbered one.
+- `gg note clear --all` removes every note this CHECKOUT can see: this
+  worktree's own working-tree notes (unstaged/staged/untracked), PLUS every
+  commit note in the whole store — commit notes are not worktree-scoped,
+  since the commit's content is the same everywhere. A sibling worktree's
+  working-tree notes are untouched; its commit notes are gone too.
+
 ## Common errors
 
 - `a note anchors to one commit; pass the tip commit` — you passed a range to
