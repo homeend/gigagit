@@ -149,6 +149,17 @@ guards against removing the worktree you are standing in.
   compare; a gc'd shelved commit falls back to its frozen snapshot (noted on
   stderr, scoped to the files that commit changed). `--patch` prints unified
   diffs instead of the file list.
+- `gg preview add [--label <text>] <source> <target>` — save a MERGE PREVIEW:
+  "what would <source> bring into <target>", i.e. the GitHub pull-request
+  files-changed diff (`git diff target...source`, from their merge base to
+  the source tip — NOT the tip-to-tip diff `gg compare` prints). Names are
+  stored, not hashes, so every later `show` reflects the current tips.
+  `gg preview list` prints `<id>\t<label>\t<source>\t<target>\t<state>\t<files>\t<ahead>`
+  (state: `ok`, `merged`, `missing-source`, `missing-target`, `no-base`);
+  `gg preview show [--patch] <id|label>` prints the file list (or unified
+  diff; a non-ok state goes to stderr with exit 1); `gg preview diff
+  [--patch] <source> <target>` is the one-off form with no record;
+  `gg preview rename <id|label> <text>`; `gg preview rm <id|label>`.
 - `gg branch current` — just the branch name (HEAD's short sha when
   detached).
 - `gg branch ls` — local branches, `* ` marking HEAD, `↑a ↓b` when an

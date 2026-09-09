@@ -126,6 +126,8 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 		return cmdTag(svc, rest, stdin, stdout, stderr)
 	case "compare":
 		return cmdCompare(svc, rest, stdout, stderr)
+	case "preview":
+		return cmdPreview(svc, rest, stdout, stderr)
 	case "diff":
 		return cmdDiff(svc, rest, stdout, stderr)
 	case "show":
@@ -156,7 +158,7 @@ var commands = map[string]bool{
 	"switch": true, "checkout": true, "branch": true, "stash": true, "undo": true, "merge": true, "rebase": true, "worktree": true,
 	"cherry-pick": true, "revert": true, "reset": true, "fast-forward": true,
 	"discard": true, "add": true, "unstage": true, "shelf": true, "bookmark": true, "log": true, "prefix": true,
-	"remote": true, "tag": true, "compare": true, "diff": true, "show": true,
+	"remote": true, "tag": true, "compare": true, "preview": true, "diff": true, "show": true,
 	"inspect": true, "repo": true, "init": true, "config": true, "batch": true,
 	"review": true, "apply": true, "versions": true, "unlock": true,
 }

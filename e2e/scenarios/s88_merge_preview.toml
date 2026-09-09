@@ -1,0 +1,45 @@
+name = "preview: a saved merge preview lists what the source brings and turns merged after the merge"
+
+[input]
+steps = [
+  { write = "README.md", content = "hi\n" },
+  { commit = "initial" },
+  { branch = "feat/x" },
+  { switch = "feat/x" },
+  { write = "a.txt", content = "a\n" },
+  { commit = "add a" },
+  { switch = "main" },
+  { write = "m.txt", content = "m\n" },
+  { commit = "main moves" },
+]
+
+[[run]]
+cmd  = ["preview", "add", "--label", "login", "feat/x", "main"]
+exit = 0
+
+[[run]]
+cmd             = ["preview", "list"]
+exit            = 0
+stdout_contains = ["login\tfeat/x\tmain\tok\t1\t1"]
+
+[[run]]
+cmd             = ["preview", "show", "login"]
+exit            = 0
+stdout_contains = ["A\ta.txt"]
+stdout_excludes = ["m.txt"]
+
+[[run]]
+cmd  = ["merge", "feat/x"]
+exit = 0
+
+[[run]]
+cmd             = ["preview", "list"]
+exit            = 0
+stdout_contains = ["merged\t0\t0"]
+
+[[run]]
+cmd  = ["preview", "show", "login"]
+exit = 1
+
+[expect]
+branch = "main"

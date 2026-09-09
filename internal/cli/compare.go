@@ -110,13 +110,7 @@ func cmdCompare(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	for _, f := range files {
-		if f.OldPath != "" {
-			fmt.Fprintf(stdout, "%s\t%s -> %s\n", f.Status, f.OldPath, f.Path)
-			continue
-		}
-		fmt.Fprintf(stdout, "%s\t%s\n", f.Status, f.Path)
-	}
+	printCompareFiles(stdout, files)
 	return 0
 }
 
