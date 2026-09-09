@@ -6,7 +6,7 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-func st(files ...model.FileStatus) model.WorkingTreeStatus {
+func wipStatus(files ...model.FileStatus) model.WorkingTreeStatus {
 	return model.WorkingTreeStatus{Files: files}
 }
 
@@ -21,11 +21,11 @@ func TestDeriveWipRows(t *testing.T) {
 		in   model.WorkingTreeStatus
 		want []wipRow
 	}{
-		{"clean", st(), nil},
-		{"only unstaged", st(unstaged), []wipRow{{wipWorktree, 1}}},
-		{"only staged", st(staged), []wipRow{{wipStaged, 1}}},
-		{"both via one file", st(both), []wipRow{{wipWorktree, 1}, {wipStaged, 1}}},
-		{"both via two files", st(unstaged, staged), []wipRow{{wipWorktree, 1}, {wipStaged, 1}}},
+		{"clean", wipStatus(), nil},
+		{"only unstaged", wipStatus(unstaged), []wipRow{{wipWorktree, 1}}},
+		{"only staged", wipStatus(staged), []wipRow{{wipStaged, 1}}},
+		{"both via one file", wipStatus(both), []wipRow{{wipWorktree, 1}, {wipStaged, 1}}},
+		{"both via two files", wipStatus(unstaged, staged), []wipRow{{wipWorktree, 1}, {wipStaged, 1}}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
