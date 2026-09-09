@@ -98,6 +98,17 @@ type rawComment struct {
 // Parse reads either supported shape, chosen by the top-level key, and returns
 // the validated batch. Every error names the offending item's index.
 func Parse(data []byte) (Batch, error) {
+	// Distinguish "not JSON at all" from "valid JSON, but not the object shape
+	// we need" — the latter is a shape mismatch, not a syntax error, and
+	// deserves its own message rather than json.Unmarshal's Go-type-shaped
+	// complaint about failing to decode e.g. an array into rawTop.
+	var probe any
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return Batch{}, fmt.Errorf("invalid JSON batch: %v", err)
+	}
+	if _, ok := probe.(map[string]any); !ok {
+		return Batch{}, fmt.Errorf(`batch must be a JSON object with a "files" or "comments" key`)
+	}
 	var top rawTop
 	if err := json.Unmarshal(data, &top); err != nil {
 		return Batch{}, fmt.Errorf("invalid JSON batch: %v", err)
@@ -246,6 +257,13 @@ func parseComments(top rawTop) (Batch, error) {
 
 // parseRange validates a [start,end] tuple: two integers, both >= 1, ordered.
 // A missing tuple is [0,0] (unset), never an error.
+//
+// Known asymmetry: a range entry is decoded through encoding/json's default
+// float64 for "any", so an integral JSON number like 12.0 or 1e2 is accepted
+// here (f == float64(int(f))) — but newLine/oldLine/hunk/hunkNumber in the
+// comment-apply shape decode straight into *int, which encoding/json rejects
+// outright for the same 12.0 or 1e2. This is not a behaviour bug to fix here;
+// agents emitting either shape should just write plain integers.
 func parseRange(v []any, where string) ([2]int, error) {
 	if v == nil {
 		return [2]int{0, 0}, nil

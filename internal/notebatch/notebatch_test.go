@@ -93,10 +93,18 @@ func TestParseRejectsBadBatches(t *testing.T) {
 		{"annotation without range", `{"files":[{"path":"a.go","annotations":[{"summary":"s"}]}]}`, "oldRange or newRange"},
 		{"range not ordered", `{"files":[{"path":"a.go","annotations":[{"newRange":[9,2],"summary":"s"}]}]}`, "ordered"},
 		{"range not 1-based", `{"files":[{"path":"a.go","annotations":[{"newRange":[0,3],"summary":"s"}]}]}`, "1-based"},
+		{"range entry not an integer", `{"files":[{"path":"a.go","annotations":[{"newRange":[1.5,3],"summary":"s"}]}]}`, "integer tuples"},
 		{"comment with two targets", `{"comments":[{"filePath":"a.go","newLine":1,"oldLine":2,"summary":"s"}]}`, "exactly one of"},
 		{"comment with no target", `{"comments":[{"filePath":"a.go","summary":"s"}]}`, "exactly one of"},
 		{"comment with no summary", `{"comments":[{"filePath":"a.go","newLine":1}]}`, "summary"},
+		{"root comment with no filePath", `{"comments":[{"newLine":1,"summary":"s"}]}`, "filePath"},
+		{"replyTo combined with a filePath", `{"comments":[{"replyTo":"a1b2c3d4","filePath":"a.go","summary":"s"}]}`, "replyTo takes no filePath or target"},
+		{"replyTo combined with a target", `{"comments":[{"replyTo":"a1b2c3d4","newLine":1,"summary":"s"}]}`, "replyTo takes no filePath or target"},
+		{"hunk vs hunkNumber disagree", `{"comments":[{"filePath":"a.go","hunk":1,"hunkNumber":2,"summary":"s"}]}`, "disagree"},
 		{"unsupported version", `{"version":2,"files":[]}`, "version"},
+		{"array top level", `[1,2,3]`, `must be a JSON object`},
+		{"string top level", `"x"`, `must be a JSON object`},
+		{"number top level", `42`, `must be a JSON object`},
 	}
 	for _, c := range cases {
 		_, err := Parse([]byte(c.in))
