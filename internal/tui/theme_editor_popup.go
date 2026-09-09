@@ -597,10 +597,12 @@ func (p *themeEditorPopup) box(m Model) string {
 	// above the footer; the syntax hint it replaces used to share the
 	// footer's one line for free, so those two rows are net new. The list
 	// window gives up the same two rows here rather than pushing the footer
-	// further off a short terminal.
-	rowBudget := themeEditorRows
+	// further off the terminal — applied AFTER popupResolveRowCap so it
+	// still bites when maximized (that resolver's terminal-derived cap would
+	// otherwise swallow a budget cut made before it).
+	rowCap := popupResolveRowCap(p.maximized, termH, themeEditorRows)
 	if p.editing {
-		rowBudget -= 2
+		rowCap = max(rowCap-2, 1)
 	}
 
 	vis := p.visible()
@@ -610,7 +612,7 @@ func (p *themeEditorPopup) box(m Model) string {
 		rows := p.rows(vis, textW)
 		parts = append(parts, renderWindow(rows, winOpts{
 			w: textW, anchor: p.sel,
-			h: min(len(rows), popupResolveRowCap(p.maximized, termH, rowBudget)),
+			h: min(len(rows), rowCap),
 		})...)
 	}
 

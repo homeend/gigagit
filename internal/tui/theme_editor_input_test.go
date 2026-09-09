@@ -353,3 +353,31 @@ func TestThemeEditorEditingHeightMatchesBrowsing(t *testing.T) {
 		t.Fatalf("the footer must still be present, not clipped off:\n%s", editBody)
 	}
 }
+
+// Same parity check, MAXIMIZED: popupResolveRowCap's terminal-derived cap
+// (not the fixed themeEditorRows) governs the list window here, so the
+// two-row give-up must be applied AFTER that resolver runs, not folded into
+// the normal budget passed into it (which the resolver would ignore whenever
+// its own cap is larger — exactly the case on a big terminal).
+func TestThemeEditorEditingHeightMatchesBrowsingMaximized(t *testing.T) {
+	prev := activeTheme()
+	defer setTheme(prev)
+	m, p := themeEditorModel(t, "light")
+	m.width, m.height = 140, 42
+	p.toggleMaximize()
+	p.sel = slices.IndexFunc(p.roles, func(r theme.RoleRef) bool { return r.Key == "dim" })
+	p.status = "x" // pin the status-line count so it does not confound the comparison
+
+	browseH := lipgloss.Height(p.box(m))
+	um, _ := m.Update(keyMsg("enter"))
+	m = um.(Model)
+	p.status = "x"
+	editBody := p.box(m)
+	editH := lipgloss.Height(editBody)
+	if editH != browseH {
+		t.Fatalf("maximized: editing box height %d != browse box height %d — the footer may be pushed further off", editH, browseH)
+	}
+	if !strings.Contains(editBody, "[enter] save") || !strings.Contains(editBody, "[esc] revert") {
+		t.Fatalf("maximized: the footer must still be present, not clipped off:\n%s", editBody)
+	}
+}
