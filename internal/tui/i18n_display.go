@@ -136,6 +136,8 @@ func sourceDisplayName(s sourceKey) string {
 		return i18n.T("identity")
 	case srcNotes:
 		return i18n.T("notes")
+	case srcPreviews:
+		return i18n.T("previews")
 	}
 	return sourceNames[s]
 }

@@ -13,9 +13,10 @@ import (
 func TestTabLabelsByteCompatible(t *testing.T) {
 	t.Parallel()
 	cases := []struct{ got, want string }{
-		{tabBarLabel(panelBranches), "[Branches] R W"},
-		{tabBarLabel(panelRemotes), "B [Remotes] W"},
-		{tabBarLabel(panelWorktrees), "B R [Worktrees]"},
+		{tabBarLabel(panelBranches), "[Branches] R W P"},
+		{tabBarLabel(panelRemotes), "B [Remotes] W P"},
+		{tabBarLabel(panelWorktrees), "B R [Worktrees] P"},
+		{tabBarLabel(panelPreviews), "B R W [Previews]"},
 		{filesTabLabel(panelFiles, 3, 5), "[Files 3] Tags 5"},
 		{filesTabLabel(panelTags, 3, 5), "Files 3 [Tags 5]"},
 		{bottomTabLabel(panelStaged, 2, 4), "[Staged 2] Reflog 4"},
@@ -38,6 +39,7 @@ func TestTabSegSyncInvariant(t *testing.T) {
 		topTabSegs(panelBranches),
 		topTabSegs(panelRemotes),
 		topTabSegs(panelWorktrees),
+		topTabSegs(panelPreviews),
 		filesTabSegs(panelFiles, 3, 5),
 		filesTabSegs(panelTags, 3, 5),
 		bottomTabSegs(panelStaged, 2, 4),

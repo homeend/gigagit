@@ -135,6 +135,8 @@ type Model struct {
 	noteCounts    domain.NoteCounts // badge counts (srcNotes); zero value = no badges
 	notesAgentOff bool              // `a`: hide agent-written notes for this session
 
+	previews []previewRow // saved merge previews + live summaries (srcPreviews)
+
 	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
 	svc                 *domain.Service                 // command layer; all git access goes through svc
@@ -267,12 +269,13 @@ const (
 	panelCommits
 	panelTags
 	panelReflog
+	panelPreviews
 	panelCount
 )
 
 // leftTabs is the display order of the shared left-slot tabs; the ctrl+←/→
 // cycle walks this list. Enum value order is unrelated to display order.
-var leftTabs = []panel{panelBranches, panelRemotes, panelWorktrees}
+var leftTabs = []panel{panelBranches, panelRemotes, panelWorktrees, panelPreviews}
 
 // filesTabs is the display/cycle order of the middle-slot tabs (the Files box).
 var filesTabs = []panel{panelFiles, panelTags}
@@ -1234,6 +1237,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd := m.loadNotesCmd(); cmd != nil {
 				return m, cmd
 			}
+		case srcPreviews:
+			key := m.panelSelKey(panelPreviews)
+			m.previews = msg.value.(previewsPayload).rows
+			m = m.restorePanelSel(panelPreviews, key)
 		}
 		return m, nil
 	case tea.KeyMsg:
@@ -3050,7 +3057,7 @@ func (m Model) middleTab() panel {
 // ←-return target). A non-tab panel is left unchanged.
 func (m Model) activateTab(p panel) Model {
 	switch p {
-	case panelBranches, panelRemotes, panelWorktrees:
+	case panelBranches, panelRemotes, panelWorktrees, panelPreviews:
 		m.activeLeftTab = p
 		m.focus = p
 		m.lastLeftPanel = p
@@ -3216,8 +3223,8 @@ func nextInOrder(order []panel, cur panel, dir int) panel {
 }
 
 // leftReturnTarget is where ← lands: the remembered left panel, except a stale
-// pointer at the now-inactive Branches/Worktrees tab is redirected to the
-// active tab (the one actually visible).
+// pointer at a now-inactive top-slot tab is redirected to the active tab (the
+// one actually visible).
 func (m Model) leftReturnTarget() panel {
 	if m.fullMaxActive() && m.fullMax != panelCommits { // fullscreen: only left target
 		return m.fullMax
@@ -3226,7 +3233,7 @@ func (m Model) leftReturnTarget() panel {
 		return m.leftMax
 	}
 	p := m.lastLeftPanel
-	if (p == panelBranches || p == panelWorktrees) && p != m.activeLeftTab {
+	if (p == panelBranches || p == panelWorktrees || p == panelRemotes || p == panelPreviews) && p != m.activeLeftTab {
 		p = m.activeLeftTab
 	}
 	if m.layout().boxH[p] <= 0 { // hidden (inactive tab, or Staged on a short terminal)
@@ -3547,8 +3554,16 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.repoHealthKnown = false
 	m.pendingNoticeConfig = nil
 	m.refreshHealthAfterOp = false
+	m.previews = nil // the old repo's saved previews must not linger in the new one
 	m.loadGen++
-	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), snapshotTargetCmd(m.svc))
+	// loadCmd comes from Snapshot, which does not carry previews — the tab
+	// rides on its own source read. Inlined (not behind a helper) so the
+	// per-source generation bump lands on the model we return.
+	var previewsCmd tea.Cmd
+	hardLoad := m.loading // reRoot's blank-screen gate, not a per-source spinner
+	m, previewsCmd = m.reloadSourcesCmd([]sourceKey{srcPreviews}, reloadOpts{})
+	m.loading = hardLoad // a silent (non-manual) read must not clear it
+	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), snapshotTargetCmd(m.svc), previewsCmd)
 }
 
 // View implements tea.Model.

@@ -441,6 +441,8 @@ func (m Model) listFor(p panel) panelList {
 		return tagList{items: m.tags, rows: m.tagRows()}
 	case panelReflog:
 		return reflogList{items: m.reflog, rows: m.reflogRows()}
+	case panelPreviews:
+		return previewList{rows: m.previews, text: m.previewRows()}
 	case panelFiles, panelStaged:
 		// Both file panels back onto the FULL status slice; panelView's
 		// membership filter selects each panel's subset, so backingIndex keeps
@@ -734,7 +736,7 @@ func (m Model) panelAt(x, y int) (panel, bool) {
 // (active) panel of a slot.
 func (m Model) tabSegsFor(p panel) []tabSeg {
 	switch p {
-	case panelBranches, panelRemotes, panelWorktrees:
+	case panelBranches, panelRemotes, panelWorktrees, panelPreviews:
 		return topTabSegs(m.activeLeftTab)
 	case panelFiles, panelTags:
 		return filesTabSegs(m.middleTab(), m.panelLen(panelFiles), m.panelLen(panelTags))

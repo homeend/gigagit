@@ -62,6 +62,9 @@ var (
 // test; a test that means to exercise notes calls svc.UseNotesDir(t.TempDir()).
 func TestMain(m *testing.M) {
 	domain.NotesDisabled = true
+	// Merge previews are off package-wide for the same reason; a test that
+	// means to exercise them calls svc.UsePreviewsDir(t.TempDir()).
+	domain.PreviewsDisabled = true
 	code := m.Run()
 	if ggBinDir != "" {
 		_ = os.RemoveAll(ggBinDir)
