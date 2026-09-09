@@ -41,7 +41,13 @@ func cmdPreview(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 }
 
 func previewList(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
-	if err := flag.NewFlagSet("preview list", flag.ContinueOnError).Parse(args); err != nil {
+	fs := flag.NewFlagSet("preview list", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(stderr, "usage: gg preview list")
 		return 2
 	}
 	ctx := context.Background()

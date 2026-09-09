@@ -84,3 +84,13 @@ func TestPreviewUsageErrors(t *testing.T) {
 		t.Fatal("unknown id → 1")
 	}
 }
+
+func TestPreviewListUsageErrors(t *testing.T) {
+	dir := previewRepo(t)
+	if code, _, errb := runCLI(t, dir, "preview", "list", "--bogus"); code != 2 || !strings.Contains(errb, "bogus") {
+		t.Fatalf("unknown flag: %d %q", code, errb)
+	}
+	if code, _, _ := runCLI(t, dir, "preview", "list", "extra"); code != 2 {
+		t.Fatal("extra positional arg → 2")
+	}
+}
