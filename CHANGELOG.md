@@ -44,13 +44,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   capped to 7 runes (the length of `#rrggbb`) so a paste or a fast keystroke
   burst can never over-type past what any valid colour needs, and an
   unchanged preview (every invalid keystroke after the first, most notably)
-  no longer forces a full-screen repaint. Delete at the end of the field now
-  acts as backspace (some terminals report Delete instead of Backspace with
-  nothing ahead of the cursor), and a keystroke a terminal reports as a
-  literal DEL/BS byte inside the input stream — rather than a proper
+  no longer forces a full-screen repaint. A keystroke a terminal reports as
+  a literal DEL/BS byte inside the input stream — rather than a proper
   Backspace event — is recognized and deletes too, instead of silently doing
   nothing; any other control byte is dropped rather than typed into the
-  field.
+  field. `D` (shift+d) resets the WHOLE theme: after a yes/no question naming
+  the theme and how many roles it would take back, the global config's
+  entire `[themes.<name>]` table is removed and the built-in palette paints
+  again — roles the repo `.gg.toml` pins keep their value, and the status
+  names them. A table that was a `gg config populate` example block goes
+  back to being a fully commented example rather than vanishing.
+- **Delete erases at the end of every text field.** A keyboard whose erase
+  key sends Delete (`^[[3~`) rather than Backspace could not remove the last
+  character of a field: with nothing ahead of the cursor a forward-delete
+  was a silent no-op. Delete at the end of the buffer now acts as Backspace
+  in every gg text field — the commit title and description, every popup
+  form, and the type-to-filter queries (`/`, `.`, the switchers, the pickers,
+  the config explorer) — while anywhere else it still forward-deletes.
 - `gg --record` and `tui-capture.sh` (dev tooling): a key with no name in
   the keyscript vocabulary — previously dropped to a `# unrecorded key:`
   comment for anything beyond mouse clicks and alt-modified keys — now

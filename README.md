@@ -399,9 +399,11 @@ You don't have to hand-edit the file, though: the `,` Settings menu's
 the theme that is currently active. Each row shows a sample painted in the
 colour itself, the effective value, the built-in default, and what the role
 paints; `/` filters over the key and the description, `↑`/`↓` move, `enter`
-edits the value in place, `d` restores the built-in default, `t` cycles the
-theme, `ctrl+t` makes the popup fullscreen, and `esc` clears a committed filter
-before it closes the window. The wheel scrolls it, a double-click is `enter` and
+edits the value in place, `d` restores the built-in default, `D` resets the
+whole theme after a yes/no confirm (it removes the global `[themes.<name>]`
+table; the roles your repo's `.gg.toml` pins keep their value and are named in
+the status), `t` cycles the theme, `ctrl+t` makes the popup fullscreen, and
+`esc` clears a committed filter before it closes the window. The wheel scrolls it, a double-click is `enter` and
 a middle-click is `esc`, as in the other list popups. **While you type, the whole
 screen already renders in the new colour**, so you judge it in place — `esc`
 puts it back, `enter` saves. Saving writes exactly one line into the
@@ -411,7 +413,10 @@ your config alone — including the commented blocks `gg config populate`
 generated, whose lines it uncomments in place. A role your repo's `.gg.toml`
 pins is shown tagged `(repo)` and cannot be edited here — the repo file would
 shadow whatever the editor wrote — though `d` still removes a global override
-left underneath one, and says the repo value goes on applying.
+left underneath one, and says the repo value goes on applying. In this and
+every other gg text field, the Delete key erases the character behind the
+cursor once nothing is left ahead of it, so a keyboard that sends Delete for
+its erase key never gets stuck on the last character.
 `[ui] show_eol_only_changes` (default `false`) controls whether a file whose
 only unstaged change is its line endings (CRLF↔LF) is shown as modified — by
 default such files are hidden from the Files panel and its count badge as noise;

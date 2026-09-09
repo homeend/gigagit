@@ -430,6 +430,20 @@ colour: `themeSetRole` expands a missing list from the ZERO theme, so the
 untouched slots stay `""` ("keep the base value"). Expanding from the real base
 — `RoleRef.OverrideSet`'s other mode — would pin six lanes to today's palette,
 mark them all overridden, and leave `d` unable to take the list back to unset.
+The whole-theme reset (`D`, a `confirming` sub-mode of the popup: `y` fires,
+any other key keeps) goes through `config.RemoveThemeTable`, which deletes the
+ACTIVE `[themes.<name>]` table only: gg-written rows are dropped, rows still
+carrying `[populated]` are re-commented, and the header follows the body —
+re-commented when any remaining row carries the marker (the table was the
+populate example block, which must survive as an inert example), otherwise
+removed with its separator blank. The header cannot be judged on its own
+because `setLineInSection` rewrote it to a bare `[themes.<name>]` when it
+uncommented it, dropping the marker. The popup counts overrides with
+`themeOverrideCount` (rows whose `OverrideGet(global)` is set — the `*` rows)
+and refuses to ask when it is 0, so nothing is ever written for nothing.
+`textfield.HandleEditKey` maps Delete with the cursor at the END of the buffer
+to a backspace (the user's erase key sends `^[[3~`); the cursor-less string
+filters carry `tea.KeyDelete` in their Backspace cases for the same reason.
 `d` (and an emptied field, which takes the same path) blanks the entry in place
 and drops the line once every entry is empty again.
 
