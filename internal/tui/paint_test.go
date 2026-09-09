@@ -76,3 +76,68 @@ func TestPaintFrameNeverTruncates(t *testing.T) {
 		t.Fatalf("over-long line must be left intact: %q", got)
 	}
 }
+
+// bareReset is the bare SGR reset ("\x1b[m", no "0") that cellbuf.Wrap
+// injects (ansi.ResetStyle) when a Width-bearing style wraps already-styled
+// input — distinct from the "\x1b[0m" form lipgloss.Style.Render emits on
+// its own.
+const bareReset = "\x1b[m"
+
+func TestPaintFrameReassertsAfterBareReset(t *testing.T) {
+	withTrueColor(t)
+
+	t.Run("bare", func(t *testing.T) {
+		in := "\x1b[1mbold" + bareReset + "tail"
+		got := paintFrame(in, 8, 1, lipgloss.Color("#0C0C0C"), lipgloss.Color("#CCCCCC"))
+		want := sgr + "\x1b[1mbold" + bareReset + sgr + "tail" + reset
+		if got != want {
+			t.Fatalf("got  %q\nwant %q", got, want)
+		}
+	})
+
+	t.Run("mixed", func(t *testing.T) {
+		// One line, both reset forms: a full "\x1b[0m" reset followed later
+		// by a bare "\x1b[m" reset — both must re-assert the SGR.
+		in := "\x1b[1mA" + reset + "B" + bareReset + "C"
+		got := paintFrame(in, 3, 1, lipgloss.Color("#0C0C0C"), lipgloss.Color("#CCCCCC"))
+		want := sgr + "\x1b[1mA" + reset + sgr + "B" + bareReset + sgr + "C" + reset
+		if got != want {
+			t.Fatalf("got  %q\nwant %q", got, want)
+		}
+	})
+}
+
+func TestPaintFrameDegenerateSizes(t *testing.T) {
+	withTrueColor(t)
+	bg, fg := lipgloss.Color("#0C0C0C"), lipgloss.Color("#CCCCCC")
+
+	t.Run("empty frame padded to height", func(t *testing.T) {
+		got := paintFrame("", 4, 2, bg, fg)
+		lines := strings.Split(got, "\n")
+		if len(lines) != 2 {
+			t.Fatalf("want 2 lines, got %d: %q", len(lines), got)
+		}
+		want := sgr + "    " + reset
+		for i, l := range lines {
+			if l != want {
+				t.Fatalf("line%d = %q, want %q", i, l, want)
+			}
+		}
+	})
+
+	t.Run("zero w and h never panics or pads", func(t *testing.T) {
+		got := paintFrame("ab", 0, 0, bg, fg)
+		want := sgr + "ab" + reset
+		if got != want {
+			t.Fatalf("got  %q\nwant %q", got, want)
+		}
+	})
+
+	t.Run("h never truncates extra lines", func(t *testing.T) {
+		got := paintFrame("ab\ncd\nef", 3, 1, bg, fg)
+		lines := strings.Split(got, "\n")
+		if len(lines) != 3 {
+			t.Fatalf("want all 3 lines kept, got %d: %q", len(lines), got)
+		}
+	})
+}
