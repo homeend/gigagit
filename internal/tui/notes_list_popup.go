@@ -239,9 +239,12 @@ func (p *notesListPopup) box(m Model) string {
 			}
 			rows[i] = r
 		}
+		// renderWindow pads its body to exactly h rows, so the budget has to be
+		// the CONTENT height when the list is short — a two-note file otherwise
+		// draws a box with ten blank rows under it.
 		bodyLines = renderWindow(rows, winOpts{
 			w: textW, anchor: p.sel,
-			h: popupResolveRowCap(p.maximized, h, notesListRows),
+			h: min(len(rows), popupResolveRowCap(p.maximized, h, notesListRows)),
 		})
 	}
 

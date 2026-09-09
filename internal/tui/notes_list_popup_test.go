@@ -190,3 +190,17 @@ func TestNotesListPopupEnterExpandsAFoldedNote(t *testing.T) {
 		t.Fatalf("cursor landed on RightNo %d, want 21", v.lines[v.curLine].Row.RightNo)
 	}
 }
+
+func TestNotesListPopupBoxIsNoTallerThanItsContent(t *testing.T) {
+	t.Parallel()
+	m := notedModel(t)
+	m.width, m.height = 100, 40
+	m = runActionRow(t, m, "note-list")
+	p := layerOf[*notesListPopup](m)
+	// Two notes: header + blank + 2 rows + blank + one hint line, inside the
+	// double border and its vertical padding. A body padded to the row budget
+	// would add ten blank rows.
+	if got := len(strings.Split(strings.TrimRight(p.box(m), "\n"), "\n")); got > 11 {
+		t.Fatalf("the box is %d lines tall for two notes:\n%s", got, p.box(m))
+	}
+}
