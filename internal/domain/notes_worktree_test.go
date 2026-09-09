@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/git"
@@ -142,6 +143,40 @@ func TestNoteAddOnARootCommitFillsAFingerprint(t *testing.T) {
 	}
 	if got.ContextHash == "" {
 		t.Fatal("a root commit's old side must still produce a fingerprint")
+	}
+}
+
+// NoteAdd must refuse an anchor past the end of its side rather than silently
+// clamping it (anchorLines used to do exactly that): "the new side has 1
+// line" and Range{2,2} is a bad batch item, not a note on line 1.
+func TestNoteAddRejectsAnchorPastTheEndOfItsSide(t *testing.T) {
+	t.Parallel()
+	dir := noteSideRepo(t)
+	svc := svcIn(t, dir)
+	svc.SetNotesStore(notes.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	addr := model.FileAddress{State: model.StateUnstaged, Worktree: dir, Path: "a.go"} // 1 line on the new (working) side
+	_, err := svc.NoteAdd(ctx, model.Note{
+		Address: addr, Side: model.NoteSideNew, Range: [2]int{2, 2}, Summary: "past end",
+	})
+	if err == nil {
+		t.Fatal("an anchor past the end of the side must be refused")
+	}
+	if !strings.Contains(err.Error(), "line 2 is past the end of the new side of a.go (1 lines)") {
+		t.Fatalf("err = %q, want it to name the line, side, path and length", err)
+	}
+	if left, _ := svc.notesStore(ctx).Load(); len(left) != 0 {
+		t.Fatalf("a refused add must store nothing, got %+v", left)
+	}
+
+	// A structurally bad range (start > end) is refused too, with the
+	// invalid-range wording.
+	_, err = svc.NoteAdd(ctx, model.Note{
+		Address: addr, Side: model.NoteSideNew, Range: [2]int{2, 1}, Summary: "backwards",
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid range") {
+		t.Fatalf("err = %v, want an invalid-range error", err)
 	}
 }
 

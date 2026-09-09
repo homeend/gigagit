@@ -109,6 +109,20 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 		if lines == nil {
 			return model.Note{}, fmt.Errorf("notes: the %s side of %s does not exist", n.Side, n.Address.Path)
 		}
+		// A structurally bad range (start < 1, or start > end) is always
+		// refused. A range that runs past the end of the side is refused too
+		// — BUT only when the side actually has content: a root commit's old
+		// side is legitimately EMPTY (see TestNoteAddOnARootCommitFillsAFingerprint),
+		// and {1,1} against zero lines is the established way to anchor a note
+		// there. Without this bounds check an anchor like --new-line 100 on a
+		// 4-line file stored silently (anchorLines just clamped it), and the
+		// caller had no way to know their target line does not exist.
+		if n.Range[0] < 1 || n.Range[0] > n.Range[1] {
+			return model.Note{}, fmt.Errorf("notes: invalid range %d-%d for the %s side of %s", n.Range[0], n.Range[1], n.Side, n.Address.Path)
+		}
+		if len(lines) > 0 && n.Range[1] > len(lines) {
+			return model.Note{}, fmt.Errorf("notes: line %d is past the end of the %s side of %s (%d lines)", n.Range[1], n.Side, n.Address.Path, len(lines))
+		}
 		n.ContextHash = model.NoteContextHash(anchorLines(lines, n.Range))
 	}
 	if err := st.Put(n); err != nil {
@@ -116,6 +130,36 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 	}
 	s.invalidateNoteCounts()
 	return n, nil
+}
+
+// NoteRangeCheck validates rng against addr's side WITHOUT storing anything —
+// the same bounds NoteAdd enforces at write time (see the comment there).
+// It lets a batch importer (gg note apply --stdin, the review importer, the
+// MCP tool) reject every bad item in its VALIDATION pass, before the first
+// write, rather than discovering a bad item mid-batch after earlier items are
+// already stored.
+func (s *Service) NoteRangeCheck(ctx context.Context, addr model.FileAddress, side model.NoteSide, rng [2]int) error {
+	if worktreeScopedNote(addr) {
+		wt, err := s.noteWorktree(ctx, addr)
+		if err != nil {
+			return err
+		}
+		addr.Worktree = wt
+	}
+	lines, err := s.noteSideLines(ctx, addr, side)
+	if err != nil {
+		return fmt.Errorf("notes: cannot read the %s side of %s: %w", side, addr.Path, err)
+	}
+	if lines == nil {
+		return fmt.Errorf("notes: the %s side of %s does not exist", side, addr.Path)
+	}
+	if rng[0] < 1 || rng[0] > rng[1] {
+		return fmt.Errorf("notes: invalid range %d-%d for the %s side of %s", rng[0], rng[1], side, addr.Path)
+	}
+	if len(lines) > 0 && rng[1] > len(lines) {
+		return fmt.Errorf("notes: line %d is past the end of the %s side of %s (%d lines)", rng[1], side, addr.Path, len(lines))
+	}
+	return nil
 }
 
 // NoteEdit replaces one note's summary and rationale.
