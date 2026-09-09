@@ -17,7 +17,23 @@ import (
 // A test that means to exercise notes opts back in per Service:
 //
 //	svc.UseNotesDir(t.TempDir())
+// It ALSO points XDG_CONFIG_HOME at an empty directory for the whole package.
+// Every model built through loadCmd reads config.DefaultGlobalPath(), so on a
+// machine whose real global config sets, say, [ui] theme = "light", the
+// serial settings tests applied that theme to the process-global styles and
+// never restored it — every parallel test reading st() afterwards then saw the
+// developer's colours (window_syntax_test.go fails exactly that way). The same
+// leak would let a user's language, wheel_step or footer_actions steer the
+// suite. Tests that need their own config dir still override the variable with
+// t.Setenv.
 func TestMain(m *testing.M) {
 	domain.NotesDisabled = true
-	os.Exit(m.Run())
+	dir, err := os.MkdirTemp("", "gg-tui-xdg")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("XDG_CONFIG_HOME", dir)
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
 }
