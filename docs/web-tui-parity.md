@@ -34,7 +34,10 @@ reword · undo last commit · worktree from a commit · fast-forward to a commit
 reset to a commit · annotated tags from a commit · review one commit (AI) ·
 **bookmarks and the shelf** (list, add a file or commit, name, remove, open,
 restore to a path, restore one file from a shelved commit, cherry-pick a
-shelved commit — live or from its frozen patch).
+shelved commit — live or from its frozen patch) · **merge previews** (saved
+`source → target` branch-name pairs, previewed as the merge-base..source
+diff rather than a tip-to-tip compare: list, add, rename, remove, save the
+reversed pair, open, and live re-open when a tracked tip moves).
 
 ## Missing from the web
 
