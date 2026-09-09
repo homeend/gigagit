@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -99,11 +100,14 @@ func TestNotesListPopupListsEveryRootInAnchorOrder(t *testing.T) {
 func TestNotesListPopupTrimsALongSummary(t *testing.T) {
 	t.Parallel()
 	m := notedModel(t)
-	m.diffLayer().notes[0].Note.Summary = strings.Repeat("long ", 40)
+	// Double-width glyphs: a row that counted runes instead of display columns
+	// would overflow its box here (a CJK summary is exactly the case the note
+	// boxes already sanitize for).
+	m.diffLayer().notes[0].Note.Summary = strings.Repeat("実装が壊れている ", 10)
 	m = runActionRow(t, m, "note-list")
 	p := layerOf[*notesListPopup](m)
 	got := p.entries[0].line(40)
-	if w := len([]rune(got)); w > 40 {
+	if w := lipgloss.Width(got); w > 40 {
 		t.Fatalf("row %q is %d columns wide, want at most 40", got, w)
 	}
 	if !strings.Contains(got, "…") {

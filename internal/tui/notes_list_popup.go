@@ -91,6 +91,7 @@ func noteListEntries(ns []domain.ResolvedNote) []noteListEntry {
 // the note target machinery E/R/Delete go through.
 type notesListPopup struct {
 	popupMax
+	path    string // the diff's title, snapshotted: see box()
 	entries []noteListEntry
 	query   string
 	sel     int
@@ -128,7 +129,7 @@ func (m Model) openNotesList() (tea.Model, tea.Cmd) {
 	if v == nil || len(v.notes) == 0 {
 		return m, nil
 	}
-	return m.pushLayer(&notesListPopup{entries: noteListEntries(v.notes)}), nil
+	return m.pushLayer(&notesListPopup{path: v.title, entries: noteListEntries(v.notes)}), nil
 }
 
 // visible is the entries the current filter keeps: a case-insensitive substring
@@ -244,7 +245,10 @@ func (p *notesListPopup) box(m Model) string {
 		})
 	}
 
-	header := i18n.T("Notes on %s", m.diffLayer().title)
+	// The path is the popup's OWN copy: a resize can pull the diff out from
+	// under a popup (see removeLayer), and a header that reached for
+	// m.diffLayer() would take the whole render down with it.
+	header := i18n.T("Notes on %s", p.path)
 	if p.query != "" {
 		header += "  " + p.query + "█"
 	}
