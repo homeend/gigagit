@@ -74,6 +74,28 @@ func TestNotesApplyToolIsAllOrNothing(t *testing.T) {
 	}
 }
 
+// gg_notes_apply shares domain's PlanNoteBatch/ApplyNoteBatch with the CLI,
+// which validates every item's RANGE (via domain.NoteRangeCheck) up front —
+// not just its shape. A valid first item plus an out-of-range second item
+// must store nothing, the same as `gg note apply --stdin`.
+func TestNotesApplyToolRejectsOutOfRangeItem(t *testing.T) {
+	e := newTestEnv(t)
+	seedNoteFile(t, e) // a.txt is 2 lines on its new side
+	msg := e.callErr(t, "gg_notes_apply", map[string]any{
+		"batch": json.RawMessage(`{"files":[{"path":"a.txt","annotations":[
+			{"newRange":[1,1],"summary":"good, would store first"},
+			{"newRange":[100,100],"summary":"past the end of a 2-line file"}]}]}`),
+	})
+	if !strings.Contains(msg, "past the end") {
+		t.Fatalf("msg = %q, want the out-of-range anchor named", msg)
+	}
+	list := e.call(t, "gg_notes_list", map[string]any{"file": "a.txt"})
+	raw, _ := json.Marshal(list["notes"])
+	if strings.Contains(string(raw), "good, would store first") {
+		t.Fatalf("the earlier, valid item must not have been stored either: %s", raw)
+	}
+}
+
 func TestNoteAddToolRejectsRangeRev(t *testing.T) {
 	e := newTestEnv(t)
 	seedNoteFile(t, e)

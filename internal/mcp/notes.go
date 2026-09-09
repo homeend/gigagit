@@ -170,7 +170,17 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		if author == "" {
 			author = "agent"
 		}
-		stored, err := s.applyBatch(ctx, batch, in.noteTargetIn, author)
+		// gg_notes_apply is the MCP door onto the same import gg note apply
+		// --stdin uses: cached/rev pick one target for the whole batch, both
+		// of whose sides are real (unlike a review's range/working target,
+		// which is NoteSideNewOnly), so PlanNoteBatch/ApplyNoteBatch — the
+		// shared, all-or-nothing planner/applier domain now owns — run with
+		// NoteSideBoth.
+		planned, _, err := s.svc.PlanNoteBatch(ctx, batch, in.Cached, in.Rev, author, domain.NoteSideBoth)
+		if err != nil {
+			return nil, out, err
+		}
+		stored, err := s.svc.ApplyNoteBatch(ctx, planned)
 		if err != nil {
 			return nil, out, err
 		}
@@ -246,79 +256,3 @@ func (s *Server) noteAnchor(ctx context.Context, addr model.FileAddress, in note
 		return s.svc.HunkRange(ctx, domain.HunkDiffSpec(in.Cached, in.Rev, []string{addr.Path}), addr.Path, in.Hunk)
 	}
 }
-
-// applyBatch validates EVERY item (address, anchor, reply parent) before the
-// first write, then stores them in order — the CLI's all-or-nothing contract.
-func (s *Server) applyBatch(ctx context.Context, b notebatch.Batch, t noteTargetIn, author string) ([]model.Note, error) {
-	type plan struct {
-		note    model.Note
-		replyTo string
-	}
-	addrs := map[string]model.FileAddress{}
-	planned := make([]plan, 0, len(b.Items))
-	for i, it := range b.Items {
-		who := it.Author
-		if who == "" {
-			who = author
-		}
-		n := model.Note{
-			Source: model.NoteSourceAgent, Author: who,
-			Summary: it.Summary, Rationale: it.Rationale, Tags: it.Tags, Confidence: it.Confidence,
-		}
-		if it.ReplyTo != "" {
-			if _, err := s.svc.NoteGet(ctx, it.ReplyTo); err != nil {
-				return nil, fmt.Errorf("item %d: replyTo %s: %v", i, it.ReplyTo, err)
-			}
-			planned = append(planned, plan{note: n, replyTo: it.ReplyTo})
-			continue
-		}
-		addr, ok := addrs[it.Path]
-		if !ok {
-			var err error
-			addr, err = s.svc.NoteTarget(ctx, it.Path, t.Cached, t.Rev)
-			if err != nil {
-				return nil, fmt.Errorf("item %d: %v", i, err)
-			}
-			addrs[it.Path] = addr
-		}
-		side, rng, err := s.noteAnchor(ctx, addr, noteAddIn{
-			noteTargetIn: t,
-			Hunk:         it.Target.Hunk,
-			NewLine:      firstOfRange(it.Target.NewLine),
-			OldLine:      firstOfRange(it.Target.OldLine),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("item %d: %v", i, err)
-		}
-		// A multi-line range from the batch wins over the single-line anchor
-		// noteAnchor derived from its start.
-		if it.Target.NewLine != [2]int{0, 0} {
-			side, rng = model.NoteSideNew, it.Target.NewLine
-		} else if it.Target.OldLine != [2]int{0, 0} {
-			side, rng = model.NoteSideOld, it.Target.OldLine
-		}
-		n.Address, n.Side, n.Range = addr, side, rng
-		planned = append(planned, plan{note: n})
-	}
-	out := make([]model.Note, 0, len(planned))
-	for i, p := range planned {
-		var (
-			stored model.Note
-			err    error
-		)
-		if p.replyTo != "" {
-			stored, err = s.svc.NoteReply(ctx, p.replyTo, p.note)
-		} else {
-			stored, err = s.svc.NoteAdd(ctx, p.note)
-		}
-		if err != nil {
-			return out, fmt.Errorf("item %d: %v", i, err)
-		}
-		out = append(out, stored)
-	}
-	return out, nil
-}
-
-// firstOfRange projects a range onto the single line number noteAnchor's
-// "exactly one target" check counts; [0,0] stays 0 (unset).
-func firstOfRange(r [2]int) int { return r[0] }

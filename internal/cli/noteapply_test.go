@@ -1,14 +1,9 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
-
-	"github.com/homeend/gigagit/internal/domain"
-	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/notebatch"
 )
 
 func TestNoteApplyAgentContextShape(t *testing.T) {
@@ -168,64 +163,7 @@ func TestNoteApplyRejectsWholeBatchOnOutOfRangeHunk(t *testing.T) {
 	}
 }
 
-// planNoteBatch with sideRuleNewOnly (a range/working review's rule, per
-// §4.4's old-side table): an old-side item is dropped and counted in
-// skipped, a new-side item is planned normally.
-func TestPlanNoteBatchSideRuleNewOnlySkipsOldSideItems(t *testing.T) {
-	dir := noteRepo(t)
-	svc := domain.Open(dir)
-	ctx := context.Background()
-
-	b := notebatch.Batch{Items: []notebatch.Item{
-		{Path: "a.txt", Target: notebatch.Target{OldLine: [2]int{1, 1}}, Summary: "old side, dropped"},
-		{Path: "a.txt", Target: notebatch.Target{NewLine: [2]int{1, 1}}, Summary: "new side, planned"},
-	}}
-	planned, skipped, err := planNoteBatch(ctx, svc, b, false, "", "agent", sideRuleNewOnly)
-	if err != nil {
-		t.Fatalf("planNoteBatch: %v", err)
-	}
-	if skipped != 1 {
-		t.Fatalf("skipped = %d, want 1", skipped)
-	}
-	if len(planned) != 1 || planned[0].Note.Side != model.NoteSideNew || planned[0].Note.Summary != "new side, planned" {
-		t.Fatalf("planned = %+v, want exactly the new-side item", planned)
-	}
-}
-
-// applyNoteBatch must roll back what it already stored when a LATER item's
-// write fails — here, a reply whose parent was removed after planNoteBatch
-// validated it but before applyNoteBatch got to it (another client racing the
-// same store). Nothing this batch stored may survive the failure.
-func TestApplyNoteBatchRollsBackOnMidBatchFailure(t *testing.T) {
-	dir := noteRepo(t)
-	svc := domain.Open(dir)
-	ctx := context.Background()
-
-	_, out, _ := runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "1", "--summary", "root")
-	root := strings.TrimSpace(out)
-
-	in := `{"comments":[{"filePath":"a.txt","newLine":2,"summary":"good, stored first"},
-	                    {"replyTo":"` + root + `","summary":"orphaned before apply"}]}`
-	batch, err := notebatch.Parse([]byte(in))
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	planned, _, err := planNoteBatch(ctx, svc, batch, false, "", "agent", sideRuleBoth)
-	if err != nil {
-		t.Fatalf("planNoteBatch: %v", err)
-	}
-	// The parent disappears AFTER planning but BEFORE applying.
-	if err := svc.NoteRemove(ctx, root); err != nil {
-		t.Fatalf("NoteRemove(root): %v", err)
-	}
-
-	if _, err := applyNoteBatch(ctx, svc, planned); err == nil {
-		t.Fatal("applyNoteBatch must fail once the reply's parent is gone")
-	} else if !strings.Contains(err.Error(), "item 1") || !strings.Contains(err.Error(), "rolled back 1 notes") {
-		t.Fatalf("err = %q, want it to name the failing item and the rollback count", err)
-	}
-	_, list, _ := runCLI(t, dir, "note", "list", "--file", "a.txt")
-	if strings.TrimSpace(list) != "" {
-		t.Fatalf("a mid-batch failure must roll back everything this batch stored:\n%s", list)
-	}
-}
+// The planner/applier's own unit tests (side-rule skip, mid-batch rollback)
+// moved to internal/domain/notebatch_plan_test.go alongside
+// domain.PlanNoteBatch/domain.ApplyNoteBatch — the CLI only drives them
+// through `gg note apply --stdin`, exercised above.

@@ -119,12 +119,12 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 //
 // The two new-side-only cases exist because a review's base (the merge base, or
 // HEAD for --working) is not one of §4.4's note-addressable old sides.
-func reviewImportTarget(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, arg string) (cached bool, rev string, rule noteSideRule, err error) {
+func reviewImportTarget(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, arg string) (cached bool, rev string, rule domain.NoteSideRule, err error) {
 	if target.Kind == domain.ReviewWorking {
-		return false, "", sideRuleNewOnly, nil
+		return false, "", domain.NoteSideNewOnly, nil
 	}
 	if arg != "" && !strings.Contains(arg, "..") {
-		return false, arg, sideRuleBoth, nil // a single commit: parent → commit
+		return false, arg, domain.NoteSideBoth, nil // a single commit: parent → commit
 	}
 	// A range: anchor to its TIP. "A..B" and "A...B" both end at the last
 	// non-empty segment.
@@ -136,13 +136,13 @@ func reviewImportTarget(ctx context.Context, svc *domain.Service, target domain.
 		}
 	}
 	if tip == "" {
-		return false, "", sideRuleNewOnly, fmt.Errorf("cannot find the tip commit of %q", target.Range)
+		return false, "", domain.NoteSideNewOnly, fmt.Errorf("cannot find the tip commit of %q", target.Range)
 	}
 	full, rerr := svc.RevParse(ctx, tip)
 	if rerr != nil {
-		return false, "", sideRuleNewOnly, fmt.Errorf("unknown revision %q: %w", tip, rerr)
+		return false, "", domain.NoteSideNewOnly, fmt.Errorf("unknown revision %q: %w", tip, rerr)
 	}
-	return false, strings.TrimSpace(full), sideRuleNewOnly, nil
+	return false, strings.TrimSpace(full), domain.NoteSideNewOnly, nil
 }
 
 // importReviewNotes reads the tool's notes: the sidecar file when it is
@@ -172,14 +172,14 @@ func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.R
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	planned, skipped, err := planNoteBatch(ctx, svc, batch, cached, rev, noteAuthorDefault(toolName), rule)
+	planned, skipped, err := svc.PlanNoteBatch(ctx, batch, cached, rev, noteAuthorDefault(toolName), rule)
 	if err != nil {
 		return noteExit(err, stderr)
 	}
 	if skipped > 0 {
 		fmt.Fprintf(stderr, "note: skipped %d old-side annotation(s) — this review's base is not a note-addressable side\n", skipped)
 	}
-	stored, err := applyNoteBatch(ctx, svc, planned)
+	stored, err := svc.ApplyNoteBatch(ctx, planned)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
