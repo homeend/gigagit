@@ -43,6 +43,7 @@ func noteBatchSvc(t *testing.T) *Service {
 // §4.4's old-side table): an old-side item is dropped and counted in
 // skipped, a new-side item is planned normally.
 func TestPlanNoteBatchSideRuleNewOnlySkipsOldSideItems(t *testing.T) {
+	t.Parallel()
 	svc := noteBatchSvc(t)
 	ctx := context.Background()
 
@@ -67,6 +68,7 @@ func TestPlanNoteBatchSideRuleNewOnlySkipsOldSideItems(t *testing.T) {
 // validated it but before ApplyNoteBatch got to it (another client racing the
 // same store). Nothing this batch stored may survive the failure.
 func TestApplyNoteBatchRollsBackOnMidBatchFailure(t *testing.T) {
+	t.Parallel()
 	svc := noteBatchSvc(t)
 	ctx := context.Background()
 

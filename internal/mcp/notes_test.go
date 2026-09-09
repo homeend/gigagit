@@ -89,10 +89,65 @@ func TestNotesApplyToolRejectsOutOfRangeItem(t *testing.T) {
 	if !strings.Contains(msg, "past the end") {
 		t.Fatalf("msg = %q, want the out-of-range anchor named", msg)
 	}
+	if !strings.Contains(msg, "item 1") {
+		t.Fatalf("msg = %q, want the offending item's index named", msg)
+	}
 	list := e.call(t, "gg_notes_list", map[string]any{"file": "a.txt"})
 	raw, _ := json.Marshal(list["notes"])
 	if strings.Contains(string(raw), "good, would store first") {
 		t.Fatalf("the earlier, valid item must not have been stored either: %s", raw)
+	}
+}
+
+// A comment batch's replyTo threads onto the named root in one call, and
+// gg_notes_list resolves the thread with the reply nested under it — both
+// notes Source: agent, matching the CLI's `gg note apply --stdin`.
+func TestNotesApplyToolThreadsAReply(t *testing.T) {
+	e := newTestEnv(t)
+	seedNoteFile(t, e)
+	root := e.call(t, "gg_note_add", map[string]any{
+		"file": "a.txt", "new_line": 1, "summary": "root",
+	})
+	rootID, _ := root["note"].(map[string]any)["id"].(string)
+	if rootID == "" {
+		t.Fatalf("gg_note_add reply = %v", root)
+	}
+
+	e.call(t, "gg_notes_apply", map[string]any{
+		"batch": json.RawMessage(`{"comments":[{"replyTo":"` + rootID + `","summary":"addressed"}]}`),
+	})
+
+	list := e.call(t, "gg_notes_list", map[string]any{"file": "a.txt"})
+	notes, _ := list["notes"].([]any)
+	if len(notes) != 1 {
+		t.Fatalf("notes = %v, want exactly the one root thread", list["notes"])
+	}
+	rootWire, _ := notes[0].(map[string]any)
+	if rootWire["source"] != "agent" {
+		t.Fatalf("root = %v, want source agent", rootWire)
+	}
+	replies, _ := rootWire["replies"].([]any)
+	if len(replies) != 1 {
+		t.Fatalf("root replies = %v, want exactly one nested reply", rootWire["replies"])
+	}
+	reply, _ := replies[0].(map[string]any)
+	if reply["summary"] != "addressed" || reply["source"] != "agent" {
+		t.Fatalf("reply = %v, want summary addressed and source agent", reply)
+	}
+}
+
+// gg_notes_apply hands back a batch's unanchored prose (agent-context v1's
+// top-level/file summaries) as contexts — the same text the CLI echoes to
+// stderr as "context: …" — instead of dropping it.
+func TestNotesApplyToolReturnsContexts(t *testing.T) {
+	e := newTestEnv(t)
+	seedNoteFile(t, e)
+	out := e.call(t, "gg_notes_apply", map[string]any{
+		"batch": json.RawMessage(`{"version":1,"summary":"overall fine","files":[{"path":"a.txt","annotations":[{"newRange":[1,1],"summary":"ok"}]}]}`),
+	})
+	ctxs, ok := out["contexts"].([]any)
+	if !ok || len(ctxs) != 1 || ctxs[0] != "overall fine" {
+		t.Fatalf("contexts = %v, want [\"overall fine\"]", out["contexts"])
 	}
 }
 

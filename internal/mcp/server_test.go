@@ -54,6 +54,11 @@ func newTestEnv(t *testing.T) *testEnv {
 	sha := gitRun(t, dir, "rev-parse", "HEAD")
 
 	svc := domain.Open(dir)
+	// Fix a concrete notes dir BEFORE New(svc): New starts the background
+	// sweep immediately, and that goroutine must never resolve the store
+	// lazily from XDG_STATE_HOME — which t.Setenv restores at test cleanup,
+	// racing a sweep that hasn't fired yet.
+	svc.UseNotesDir(t.TempDir())
 	srv := New(svc).sdkServer()
 	ct, st := sdk.NewInMemoryTransports()
 	ctx := context.Background()

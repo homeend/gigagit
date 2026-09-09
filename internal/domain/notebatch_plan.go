@@ -78,7 +78,7 @@ func (s *Service) PlanNoteBatch(ctx context.Context, b notebatch.Batch, cached b
 			}
 			addrCache[it.Path] = addr
 		}
-		side, rng, aerr := planNoteBatchAnchor(ctx, s, addr, cached, rev, it.Target)
+		side, rng, aerr := s.planNoteBatchAnchor(ctx, addr, cached, rev, it.Target)
 		if aerr != nil {
 			return nil, 0, fmt.Errorf("item %d: %w", i, aerr)
 		}
@@ -98,7 +98,7 @@ func (s *Service) PlanNoteBatch(ctx context.Context, b notebatch.Batch, cached b
 // planNoteBatchAnchor turns one parsed target into a side and range: an
 // explicit range is used as-is, a hunk number resolves through the same
 // patch `gg diff --hunks` numbers for this target.
-func planNoteBatchAnchor(ctx context.Context, s *Service, addr model.FileAddress, cached bool, rev string, t notebatch.Target) (model.NoteSide, [2]int, error) {
+func (s *Service) planNoteBatchAnchor(ctx context.Context, addr model.FileAddress, cached bool, rev string, t notebatch.Target) (model.NoteSide, [2]int, error) {
 	switch {
 	case t.NewLine != [2]int{0, 0}:
 		return model.NoteSideNew, t.NewLine, nil
@@ -131,7 +131,7 @@ func (s *Service) ApplyNoteBatch(ctx context.Context, planned []PlannedNote) ([]
 			stored, err = s.NoteAdd(ctx, p.Note)
 		}
 		if err != nil {
-			removed, failed := rollbackNoteBatch(ctx, s, out)
+			removed, failed := s.rollbackNoteBatch(ctx, out)
 			if failed > 0 {
 				return nil, fmt.Errorf("item %d: %w (rollback incomplete: %d could not be removed)", i, err, failed)
 			}
@@ -147,7 +147,7 @@ func (s *Service) ApplyNoteBatch(ctx context.Context, planned []PlannedNote) ([]
 // is never asked to remove a batch reply that has already been removed
 // separately). An individual NoteRemove failure is counted, not fatal to the
 // rest of the rollback.
-func rollbackNoteBatch(ctx context.Context, s *Service, stored []model.Note) (removed, failed int) {
+func (s *Service) rollbackNoteBatch(ctx context.Context, stored []model.Note) (removed, failed int) {
 	for i := len(stored) - 1; i >= 0; i-- {
 		if err := s.NoteRemove(ctx, stored[i].ID); err != nil {
 			failed++

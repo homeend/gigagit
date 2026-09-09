@@ -94,10 +94,10 @@ func TestNoteApplyRejectsWholeBatchOnOneBadItem(t *testing.T) {
 }
 
 // A range past the end of the file (unlike a missing summary) parses fine —
-// notebatch has no idea how long the file is. planNoteBatch must catch it in
-// its OWN validation pass, before applyNoteBatch writes anything: the first
-// item here is perfectly valid and must NOT already be stored when the
-// second item's out-of-range anchor fails the batch.
+// notebatch has no idea how long the file is. domain.PlanNoteBatch must catch
+// it in its OWN validation pass, before domain.ApplyNoteBatch writes
+// anything: the first item here is perfectly valid and must NOT already be
+// stored when the second item's out-of-range anchor fails the batch.
 func TestNoteApplyRejectsWholeBatchOnOutOfRangeItem(t *testing.T) {
 	dir := noteRepo(t)
 	in := `{"files":[{"path":"a.txt","annotations":[

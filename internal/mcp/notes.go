@@ -44,6 +44,12 @@ type notesListIn struct {
 type notesOut struct {
 	Repo  RepoInfo          `json:"repo"`
 	Notes []domain.WireNote `json:"notes"`
+	// Contexts carries the batch's unanchored prose (agent-context v1's
+	// top-level and per-file summaries) — gg_notes_apply's only user; a
+	// gg_notes_list reply never sets it. The CLI has nowhere to hang this
+	// text either, so it just echoes it to stderr as "context: …" — the MCP
+	// reply hands it back structured instead.
+	Contexts []string `json:"contexts,omitempty"`
 }
 
 type noteAddIn struct {
@@ -150,7 +156,8 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		Description: "Import a batch of anchored notes in one call. batch is either hunk's " +
 			`agent-context v1 ({"version":1,"files":[{"path":…,"annotations":[{"newRange":[a,b],"summary":…}]}]}) ` +
 			`or a comment batch ({"comments":[{"filePath":…,"newLine":N,"summary":…}]}). ` +
-			"The whole batch is validated first: one bad item stores nothing. MUTATES gg's note store.",
+			"The whole batch is validated first: one bad item stores nothing. Unanchored top-level/file " +
+			"summaries come back as contexts. MUTATES gg's note store.",
 		Annotations:  mutatingAnnotations(),
 		OutputSchema: wireNoteOutputSchema,
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in notesApplyIn) (*sdk.CallToolResult, notesOut, error) {
@@ -166,6 +173,7 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		if err != nil {
 			return nil, out, err
 		}
+		out.Contexts = batch.Contexts
 		author := in.Author
 		if author == "" {
 			author = "agent"
