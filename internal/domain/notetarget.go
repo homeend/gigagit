@@ -15,11 +15,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
 )
+
+// NoteAuthorDefault picks the author label a note is stamped with when the
+// caller gave none: an explicit given value wins, else $GG_AGENT (the agent
+// harness's own name), else the literal "agent". The CLI (noteAuthorDefault)
+// and the MCP note tools (gg_note_add, gg_notes_apply) both call this so an
+// agent driving gg through either door gets the same default identity.
+func NoteAuthorDefault(given string) string {
+	if a := strings.TrimSpace(given); a != "" {
+		return a
+	}
+	if a := strings.TrimSpace(os.Getenv("GG_AGENT")); a != "" {
+		return a
+	}
+	return "agent"
+}
 
 // ErrNoteTargetUsage marks a caller MISTAKE in the target flags (a range where
 // a commit is required, --cached together with --rev, a missing or escaping

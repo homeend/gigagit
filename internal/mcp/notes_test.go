@@ -180,6 +180,44 @@ func TestNotesListCachedRevWithoutFileIsError(t *testing.T) {
 	}
 }
 
+// An unknown type must fail loudly rather than silently return an empty
+// list, which would look identical to "no notes here" to a caller that
+// mistyped the value.
+func TestNotesListUnknownTypeIsError(t *testing.T) {
+	e := newTestEnv(t)
+	seedNoteFile(t, e)
+	e.call(t, "gg_note_add", map[string]any{"file": "a.txt", "new_line": 2, "summary": "s"})
+	msg := e.callErr(t, "gg_notes_list", map[string]any{"file": "a.txt", "type": "bogus"})
+	if !strings.Contains(msg, "type must be user, agent or all") {
+		t.Fatalf("msg = %q, want the type usage message", msg)
+	}
+}
+
+// gg_note_add and gg_notes_apply must honour $GG_AGENT for their author
+// default, exactly like the CLI's `gg note add`/`gg note apply --stdin`
+// (domain.NoteAuthorDefault is the shared implementation).
+func TestNoteAddAndApplyHonourGGAgentAuthor(t *testing.T) {
+	e := newTestEnv(t)
+	seedNoteFile(t, e)
+	t.Setenv("GG_AGENT", "sonnet")
+
+	out := e.call(t, "gg_note_add", map[string]any{
+		"file": "a.txt", "new_line": 1, "summary": "s",
+	})
+	note, _ := out["note"].(map[string]any)
+	if note["author"] != "sonnet" {
+		t.Fatalf("gg_note_add author = %v, want $GG_AGENT default sonnet", note["author"])
+	}
+
+	applied := e.call(t, "gg_notes_apply", map[string]any{
+		"batch": json.RawMessage(`{"comments":[{"filePath":"a.txt","newLine":2,"summary":"batched"}]}`),
+	})
+	raw, _ := json.Marshal(applied["notes"])
+	if !strings.Contains(string(raw), `"author":"sonnet"`) {
+		t.Fatalf("gg_notes_apply notes = %s, want $GG_AGENT default sonnet", raw)
+	}
+}
+
 func TestNoteToolAnnotations(t *testing.T) {
 	e := newTestEnv(t)
 	tools := e.listTools(t)

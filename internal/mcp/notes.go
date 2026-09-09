@@ -100,6 +100,9 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		if err := s.repoCheck(); err != nil {
 			return nil, out, err
 		}
+		if in.Type != "" && in.Type != "all" && in.Type != "user" && in.Type != "agent" {
+			return nil, out, fmt.Errorf("type must be user, agent or all")
+		}
 		res, err := s.notesFor(ctx, in.noteTargetIn)
 		if err != nil {
 			return nil, out, err
@@ -136,10 +139,7 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		if err != nil {
 			return nil, out, err
 		}
-		author := in.Author
-		if author == "" {
-			author = "agent"
-		}
+		author := domain.NoteAuthorDefault(in.Author)
 		stored, err := s.svc.NoteAdd(ctx, model.Note{
 			Source: model.NoteSourceAgent, Author: author, Address: addr,
 			Side: side, Range: rng, Summary: in.Summary, Rationale: in.Rationale,
@@ -174,10 +174,7 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 			return nil, out, err
 		}
 		out.Contexts = batch.Contexts
-		author := in.Author
-		if author == "" {
-			author = "agent"
-		}
+		author := domain.NoteAuthorDefault(in.Author)
 		// gg_notes_apply is the MCP door onto the same import gg note apply
 		// --stdin uses: cached/rev pick one target for the whole batch, both
 		// of whose sides are real (unlike a review's range/working target,

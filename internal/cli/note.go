@@ -14,7 +14,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -86,15 +85,10 @@ func addTargetFlags(fs *flag.FlagSet) noteTargetFlags {
 }
 
 // noteAuthorDefault picks the author label: an explicit --author, else
-// $GG_AGENT (the agent harness's own name), else the literal "agent".
+// $GG_AGENT (the agent harness's own name), else the literal "agent". Thin
+// wrapper over domain.NoteAuthorDefault, which the MCP note tools share.
 func noteAuthorDefault(given string) string {
-	if a := strings.TrimSpace(given); a != "" {
-		return a
-	}
-	if a := strings.TrimSpace(os.Getenv("GG_AGENT")); a != "" {
-		return a
-	}
-	return "agent"
+	return domain.NoteAuthorDefault(given)
 }
 
 // noteSourceValue validates --source. The CLI defaults to agent (a human

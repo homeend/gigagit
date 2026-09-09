@@ -127,3 +127,24 @@ func TestNoteTargetNormalisesPathNotation(t *testing.T) {
 		t.Fatalf("Path = %q (%v), want the cleaned git slash form a.txt", addr.Path, err)
 	}
 }
+
+// TestNoteAuthorDefaultPrecedence: an explicit value wins over $GG_AGENT,
+// $GG_AGENT wins over the literal fallback, and both are trimmed of
+// whitespace-only noise. Not t.Parallel(): it mutates the process
+// environment via t.Setenv.
+func TestNoteAuthorDefaultPrecedence(t *testing.T) {
+	t.Setenv("GG_AGENT", "")
+	if got := NoteAuthorDefault(""); got != "agent" {
+		t.Fatalf("NoteAuthorDefault(\"\") with no $GG_AGENT = %q, want \"agent\"", got)
+	}
+	t.Setenv("GG_AGENT", "sonnet")
+	if got := NoteAuthorDefault(""); got != "sonnet" {
+		t.Fatalf("NoteAuthorDefault(\"\") with $GG_AGENT=sonnet = %q, want \"sonnet\"", got)
+	}
+	if got := NoteAuthorDefault("ada"); got != "ada" {
+		t.Fatalf("NoteAuthorDefault(\"ada\") = %q, want the explicit value to win over $GG_AGENT", got)
+	}
+	if got := NoteAuthorDefault("  "); got != "sonnet" {
+		t.Fatalf("NoteAuthorDefault(\"  \") = %q, want whitespace-only to fall through to $GG_AGENT", got)
+	}
+}
