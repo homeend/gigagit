@@ -740,6 +740,14 @@ steer/<EncodeRepoKey(worktree)>/   # ONE inbox per WORKTREE — see "Routing"
   reply-<id>.json                  # the consumer's answer, temp+rename, deleted by the CLI after reading
 ```
 
+**Liveness = a fresh mtime, not a pid probe.** Each session re-touches its
+presence file on its 1 s tick (the TUI heartbeat; a `gg web` ticker
+goroutine), and `steer.Live(dir, name)` reports a presence whose mtime is
+under 5 s old. One `os.Chtimes`/`os.Stat` per second, no per-OS process
+API, immune to pid reuse; `pid` stays in the file for display only. A stale
+presence (crash, SIGKILL) is removed by the next `Live` check that finds
+it old.
+
 **Routing.** The snapshot is keyed by the git common dir, so the main
 checkout and every worktree TUI share one `ui-state.json` (pre-existing,
 left alone). The inbox must not inherit that: `gg session navigate` run in
@@ -769,11 +777,19 @@ nobody in particular — `tui`, `cli` and `web` import it directly like
 Reply: `{"id":"…","ok":true,"detail":"opened src/x.go:18"}` or
 `{"id":"…","ok":false,"error":"src/x.go is not in the working-tree diff"}`.
 Unknown `cmd`, a missing `id`, or a file over 16 KiB is deleted and answered
-`ok:false` (or ignored when it cannot be parsed at all — no reply id). The
-`--hunk N` flag is resolved by the CLI, never the TUI: phase 2's
-`HunkDiffSpec` + `DiffHunks` turn it into `{side:new, no:<first new line>}`
-(old side when the hunk's new span is empty), so the consumer only ever sees
-file + target + side + line, and one landing path serves all three flags.
+`ok:false` (or ignored when it cannot be parsed at all — no reply id). A
+command with `wait:false` gets NO reply file (nothing would read it); the
+startup discard sweeps `reply-*.json` together with `cmd-*.json`, so a
+reply the CLI abandoned on timeout never outlives the session. `error` and
+`detail` are English protocol strings (agent-facing, like decision option
+values); every on-screen notice the consumer shows is an i18n key in all
+four bundles. The `--hunk N` flag is resolved by the CLI, never the TUI:
+phase 2's `HunkDiffSpec` + `DiffHunks` turn it into `{side:new, no:<first
+new line>}` (old side when the hunk's new span is empty), so the consumer
+only ever sees file + target + side + line, and one landing path serves all
+three flags. An UNTRACKED path has no git hunks (`git diff` does not list
+it), so `--hunk` on one is refused with "untracked files have no hunks; use
+--new-line".
 
 **Consumer (TUI).** `tui/steer.go`: at startup (and after `reRoot`) the
 model writes `tui.json`, DISCARDS every `cmd-*.json` already present (a
@@ -796,20 +812,32 @@ running (`!m.opsIdle()`), a decision modal is up, a text field has focus
 layer stack holds a picker, the conflict resolver, the rebase editor or the
 repo switcher. A plain content popup, a files view, a history view or a
 diff view is popped to reach the panels. `[ui] agent_steering = false`
-(new key, `settingDoc`, default `true`) disables the consumer entirely:
-no presence file, so the CLI reports "no gg TUI session".
+(new key, `settingDoc`, default `true`) disables steering entirely in BOTH
+frontends: the TUI writes no presence and drains nothing, `gg web` writes
+no `web.json` and its endpoint answers 404 — so the CLI reports "no gg
+session". Test seam: the steer dir is a model/server field
+(`m.steerDir`, `Server.steerDir`) resolved from `config` at startup and
+overridable by tests (`svc`-independent, like notes' `UseNotesDir`), since
+the tui suite runs `t.Parallel()` and `t.Setenv("XDG_STATE_HOME")` panics
+there.
 
 Navigate pipeline (a small `pendingSteer` state, drained by the same
 load-complete handlers `pendingGotoTip` uses, so async loads are never
 raced):
 
 1. `file` + `target.state` unstaged/untracked/staged → pop layers to the
-   panels, select the row by path in the Files or Staged list, open the
-   diff via `openStatusDiff` (conflicted rows refused: "open the conflict
-   editor yourself"). Target `commit` → `gotoCommitByHash` (deep-search
-   fallback included; a miss after the search replies `ok:false`), open
-   the commit's files view, select the path, open its diff via
-   `loadCommitDiffCmd`.
+   panels, clear an active `/` filter on that panel (go-to semantics, as
+   `gotoCommitByHash` does; `m.sel` is DISPLAY-index space), select the row
+   by path in the Files or Staged list, open the diff via `openStatusDiff`
+   (conflicted rows refused: "open the conflict editor yourself"). A path
+   missing from the list triggers ONE status reload and a retry (the agent
+   may have just written the file and drvfs has no file-watch) before
+   `ok:false "src/x.go is not in the working-tree diff"`. Target `commit`
+   → the loaded-rows half of `gotoCommitByHash` only: a commit that is not
+   loaded replies `ok:false "commit not loaded in the feed"` instead of
+   starting the eager search, which can raise a prompt (never raise a
+   decision on an agent's behalf). On a hit: open the commit's files view,
+   select the path, open its diff via `loadCommitDiffCmd`.
 2. On the diff's loaded message: land the cursor with the notes' own path —
    a synthetic `noteAnchorLine`-style lookup for `{side,no}`, then
    `expandFoldFor` when the line hides under a fold, `setCursorLine`,
@@ -839,9 +867,11 @@ file + target, each mark `{side, start, end, tone}`; the diff renderer
 tints the rows in range on that side (background band like the note band,
 no box; three new theme roles `attention.info` / `attention.warn` /
 `attention.error` in `theme.roleFields` + `RoleDocs`, dark/light/terminal
-values). Marks live until `highlight_clear`, until the file's diff is
-reloaded (`reload` or the auto-refresh rebuilding that diff), or session
-end. The web page keeps the same rule in `state.attention`.
+values). Marks live until `highlight_clear`, an explicit `reload` command,
+or session end — NOT the interval auto-refresh rebuilding a working-tree
+diff, which would wipe them without any agent action; a range that drifted
+after an edit is the agent's to re-post. The web page keeps the same rule
+in `state.attention`.
 
 **Focus** = `m.focus`/tab switch by the snapshot's protocol name
 (`panelProtoName` round-trips), after popping the layer stack to the
@@ -861,19 +891,24 @@ gg session highlight clear [--file <path>]
 ```
 
 Target flags follow `gg note`'s table exactly (§4.5; `NoteTarget` is
-reused, so ranges and `--cached`+`--rev` fail the same way). Presence:
-`steer.Live(dir)` reads `tui.json`, checks the pid is alive (`kill -0` on
-unix, `OpenProcess` on Windows) and removes a dead presence file. Without a
-live TUI the verb exits 1 with the message above; with `web.json` present
-as well, the CLI also POSTs the same JSON to `<url>/api/session/steer`
-(`Content-Type: application/json`, no Origin header — `writeGuard` accepts
-that from a non-browser client). With `--no-wait` the CLI prints the
-command id and exits 0 as soon as the file is written; otherwise it polls
-for `reply-<id>.json` every 25 ms up to 2 s, prints `detail` (exit 0) or
-`error` (exit 1), and on timeout prints `queued: no answer from the TUI
-within 2s` (exit 0 — the command is still in the inbox). The status line of
-`gg session status` prints the live sessions (tui pid / web url), the
-worktree, and the snapshot's open view.
+reused, so ranges and `--cached`+`--rev` fail the same way). Routing, by
+which presences `steer.Live` reports fresh for the caller's worktree:
+
+| live | what the verb does | exit |
+|---|---|---|
+| none | prints `no gg session for this worktree` | 1 |
+| TUI only | writes the inbox command; waits for the reply unless `--no-wait` | reply's |
+| web only | POSTs the command to `<url>/api/session/steer`; prints `web: sent` | 0 (HTTP error → 1) |
+| both | both; the TUI reply decides the exit, the web line is printed too | reply's |
+
+The POST sends `Content-Type: application/json` and no Origin header, which
+`writeGuard` accepts from a non-browser client. With `--no-wait` the CLI
+prints the command id and exits 0 as soon as the file is written; otherwise
+it polls for `reply-<id>.json` every 25 ms up to 2 s, prints `detail`
+(exit 0) or `error` (exit 1), and on timeout prints `queued: no answer from
+the TUI within 2s` (exit 0 — the command is still in the inbox). `gg
+session status` prints the same routing (tui pid / web url), the worktree,
+and the snapshot's open view; exit 1 when nothing is live.
 
 **Web.** `gg web` writes `web.json` (its URL) beside the TUI presence for
 its checkout and removes it on shutdown/`reRoot`. `POST /api/session/steer`
@@ -885,7 +920,11 @@ applies it: navigate = the sidebar/files openers already used by
 `markDiffRow` on the landed side/number; `reload` = `refreshSources`;
 `focus` = pane switch; highlight = `state.attention` + a `.attn-<tone>`
 row class in `diffHTML`. The endpoint answers 202 immediately (no page
-acknowledgement); the CLI prints `web: sent`.
+acknowledgement); the CLI prints `web: sent`. `liveHub.emit` drops
+messages while an op is in flight (`gate()`); a steer event must NOT be
+silently lost that way — the endpoint checks the gate first and answers
+409 `operation in flight` (the CLI prints it and exits 1), and the emit for
+a steer bypasses the gate.
 
 **Skill and docs.** `reviewing-with-gg.md` gains a "Steering the user's
 window" section (check `gg session status` first; when a TUI is live,
