@@ -297,6 +297,37 @@ list is rejected whole. `applyTheme` compares the RESOLVED theme (not its
 name) before returning `tea.ClearScreen`, because a repo switch can change
 colours under one theme name.
 
+**The colour editor ↔ writer contract.** Settings → "Theme colours…"
+(`internal/tui/theme_editor_popup.go`) edits ONE role at a time, addressed by
+`theme.RoleRef` (`internal/theme/roles.go`): all 50 of them — the `roleFields`
+scalars, then `lanes[0..6]`, then `syntax[Plain..Attr]`. Because `theme` is a
+DAG leaf it MIRRORS the syntax class names; `TestThemeSyntaxRoleNamesMatch-
+SyntaxClasses` in `internal/tui` pins that mirror (and the `syntax.Class`
+order) against the real constants. The popup keeps the global and repo
+override layers APART — `m.cfg.Themes` only carries their merge — because it
+writes the global one and refuses a role the repo file pins (a `(repo)` row):
+a line written under a repo shadow would silently do nothing. Preview always
+goes through the same pipeline as save (`Overlay(base, Merge(global', repo))`,
+then `setTheme`), never through `RoleRef.Set` on the RESOLVED theme, where an
+empty value would mean "inherit the terminal legacy literal" instead of "the
+theme's own default".
+
+Writes go to `config.SetThemeRole` → `setLineInSection`
+(`internal/config/write.go`), `setScalarLine`'s sibling for a dotted,
+possibly COMMENTED header. Its rules, in order of how easy they are to get
+wrong: a commented header (`# [themes.light]   # … [populated]`) counts as the
+section and is uncommented IN PLACE — appending a second `[themes.light]` is a
+TOML parse error, i.e. a gg that will not start, which is why every writer test
+round-trips through `Load`; a commented role line inside the block is replaced
+in place (its `[populated]` doc tail is dropped, so a later `d` DELETES that
+line rather than re-commenting it); removal re-comments only a line that still
+carries `[populated]`; `sectionHeader` treats a commented header as ending the
+previous section but rejects anything that is not a bare bracketed name, so a
+shell line inside a `[[tools.command]]` script is never mistaken for one. A
+list role writes its WHOLE array line, and `d` on one entry blanks it in place
+(never expanding from the base, which would pin the other six) and drops the
+line once every entry is empty again.
+
 **Serial-test rule.** Both `setTheme` (swaps the process-global `styles`
 pointer) and `lipgloss.SetColorProfile` (process-global) make any test that
 exercises a live theme swap or a color-profile downgrade **serial** — no

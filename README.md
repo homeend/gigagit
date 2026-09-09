@@ -358,6 +358,22 @@ The global and repo files layer per key, like every other setting, so a repo
 can retune one role. An invalid value is ignored — the rest of the table
 still applies and the status bar names what it dropped, e.g. `theme light:
 ignored invalid bg=#12`.
+
+You don't have to hand-edit the file, though: the `,` Settings menu's
+**Theme colours…** row (right under Theme) opens an editor for every role of
+the theme that is currently active. Each row shows a sample painted in the
+colour itself, the effective value, the built-in default, and what the role
+paints; `/` filters over the key and the description, `↑`/`↓` move, `enter`
+edits the value in place, `d` restores the built-in default, `t` cycles the
+theme, and `ctrl+t` makes the popup fullscreen. **While you type, the whole
+screen already renders in the new colour**, so you judge it in place — `esc`
+puts it back, `enter` saves. Saving writes exactly one line into the
+**global** config's `[themes.<name>]` (for a lane or a syntax class, the whole
+array line) and re-applies the theme, leaving every other line and comment of
+your config alone — including the commented blocks `gg config populate`
+generated, whose lines it uncomments in place. A role your repo's `.gg.toml`
+pins is shown tagged `(repo)` and is read-only here: the repo file would
+shadow whatever the editor wrote.
 `[ui] show_eol_only_changes` (default `false`) controls whether a file whose
 only unstaged change is its line endings (CRLF↔LF) is shown as modified — by
 default such files are hidden from the Files panel and its count badge as noise;

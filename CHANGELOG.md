@@ -22,6 +22,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   scheme. `gg config populate` writes the full commented list of roles, each
   with the theme's current value and what it paints; an invalid value is
   ignored and named in the status bar instead of stopping anything.
+- **Theme colour editor.** The `,` Settings menu's new **Theme colours…** row
+  (right under Theme) edits any of the active theme's 50 colour roles — the 32
+  scalars plus the 7 graph lanes and 11 syntax classes — without leaving gg.
+  Every row carries a sample painted in the colour itself, the effective value,
+  the built-in default and what the role paints; `/` filters, `enter` edits the
+  value in place, `d` restores the default, `t` cycles the theme, `ctrl+t` goes
+  fullscreen. Typing previews the colour across the WHOLE screen so it can be
+  judged in place; `esc` reverts, `enter` writes one line to the global config's
+  `[themes.<name>]` (the whole array line for a lane or a syntax class) and
+  re-applies the theme. The writer preserves every other line and comment,
+  uncommenting a `gg config populate` block's header and role line in place
+  instead of appending a second table. Roles pinned by the repo `.gg.toml` are
+  shown tagged `(repo)` and stay read-only, since the repo layer would shadow
+  anything written here.
 - The diff view's `.` menu grows two WHOLE-FILE review-note rows, offered
   wherever the cursor sits (unlike Edit / Reply / Delete, which need a note
   next to it). **List notes…** is the file's inventory: one row per thread in
