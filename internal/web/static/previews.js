@@ -65,10 +65,14 @@ export function renderPreviews() {
 // compare or a shelf comparison opened afterwards is also "compare" mode, and
 // a moved tip must never replace what the user is looking at now. The
 // preview's own compare has the SOURCE tip on the b side (openPreviewBody
-// opens merge-base → source).
+// opens merge-base → source). Nor is it enough that a comparison is LOADED:
+// drillOut (esc) returns to the commit list without clearing filesMode or
+// state.compare, and a tip that moves afterwards must not drag the user back
+// into a screen they closed — hence the layout check.
 function previewShowing() {
   const po = state.previewOpen;
-  return !!po && state.filesMode === "compare" && !!state.compare && state.compare.bHash === po.sourceHash;
+  if (!po || state.layout === "list") return false; // esc'd back to the commit list
+  return state.filesMode === "compare" && !!state.compare && state.compare.bHash === po.sourceHash;
 }
 
 
@@ -367,6 +371,15 @@ export async function reopenPreviewIfMoved() {
     if (!row) {
       closePreviewView();
       opLine("preview removed");
+      return;
+    }
+    // "error" is not a fact about the pair — it is one summary call that
+    // failed (a slow merge-base). The list degrades that row instead of
+    // blanking itself; the open screen does the same, by asking the server
+    // again rather than tearing the diff down (TUI parity: a summary error
+    // leaves the zero State, so its refresh re-resolves too).
+    if (row.state === "error") {
+      await openPreviewEntry(row, "");
       return;
     }
     if (row.state !== "ok") {
