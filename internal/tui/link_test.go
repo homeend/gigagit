@@ -239,3 +239,102 @@ func TestCommitFilesViewLinkRow(t *testing.T) {
 		t.Errorf("contextLinkRow = %+v ok=%v, want copyText %q", r, ok, want)
 	}
 }
+
+// Controller ruling P23: m.diffLayer()/diffNoteAddress() search the WHOLE
+// layer stack, not just the top, so contextLinkText must not consult them
+// while a stack surface (history/blame) owns the keyboard above the diff —
+// exactly the precedence contextCopyRows already documents ("the stack
+// surface out-ranks the diff view").
+func TestContextLinkTextHistoryOverDiffPrefersHistory(t *testing.T) {
+	t.Parallel()
+	const sha = "eb759989a1b2c3d4e5f60718293a4b5c6d7e8f90"
+	m := openedDiffModel(12, sameRowsTUI(40, 20, 30), []int{20, 30})
+	m.linkRepoName = "gigagit"
+	m.currentWorktree = "/repo"
+	dv := m.diffLayer()
+	dv.title = "diff-under.go"
+	dv.noteAddr = model.FileAddress{State: model.StateUnstaged, Path: "diff-under.go", Worktree: "/repo"}
+
+	hv := newHistoryView(navContext{path: "hist.go", rev: sha})
+	hv.commits = []model.FileCommit{{Commit: model.Commit{Hash: sha}, Path: "hist.go"}}
+	hv.sel = 0
+	m = m.pushLayer(hv)
+
+	want := "gg://gigagit/hist.go@" + sha
+	got, ok := m.contextLinkText()
+	if !ok {
+		t.Fatal("contextLinkText refused with history pushed over a diff")
+	}
+	if got != want {
+		t.Errorf("contextLinkText = %q, want %q (the history surface's commit, not the diff underneath)", got, want)
+	}
+}
+
+// Controller ruling P23: a two-sided compare view (diffView.compare, no note
+// address) sits on top; the Commits panel underneath must not leak through
+// as a fallback just because the compare view itself has no link to offer.
+func TestContextLinkTextCompareViewBlocksCommitsFallback(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.linkRepoName = "gigagit"
+	m.currentWorktree = "/repo"
+	m.focus = panelCommits
+	m.commits = []model.Commit{{Hash: "eb759989a1b2c3d4e5f60718293a4b5c6d7e8f90", Subject: "x"}}
+	m.sel[panelCommits] = 0
+	m = m.pushLayer(&diffView{title: "a ↔ b", compare: true})
+
+	if got, ok := m.contextLinkText(); ok {
+		t.Errorf("contextLinkText = %q, want a refusal — a compare view on top must block the Commits fallback underneath", got)
+	}
+	if r, ok := m.contextLinkRow(); ok {
+		t.Errorf("contextLinkRow = %+v, want no row (row absent) while the compare view is on top", r)
+	}
+}
+
+// Menu placement (minor fix): "Copy link" sits beside the other copy rows,
+// not appended after every row/window binding. On Files/Staged it lands
+// right after "copy-file-path"; on Commits — which has no file-path row —
+// right after "copy-commit-title" so the id/title pair stays together.
+func TestCopyLinkRowSitsBesideTheOtherCopyRows(t *testing.T) {
+	t.Parallel()
+
+	t.Run("files panel", func(t *testing.T) {
+		t.Parallel()
+		m := diffModel()
+		m.linkRepoName = "gigagit"
+		m.currentWorktree = "/repo"
+		rows := availableActions(m)
+		wantOrder(t, rows, "copy-file-path", "copy-link")
+	})
+
+	t.Run("commits panel", func(t *testing.T) {
+		t.Parallel()
+		m := footerModel()
+		m.linkRepoName = "gigagit"
+		m.loading = false
+		m.focus = panelCommits
+		m.commits = []model.Commit{{Hash: "eb759989a1b2c3d4e5f60718293a4b5c6d7e8f90", Subject: "x"}}
+		rows := availableActions(m)
+		wantOrder(t, rows, "copy-commit-title", "copy-link")
+	})
+}
+
+// wantOrder asserts b sits immediately after a in rows.
+func wantOrder(t *testing.T, rows []actionRow, a, b string) {
+	t.Helper()
+	ai, bi := -1, -1
+	for i, r := range rows {
+		if r.id == a {
+			ai = i
+		}
+		if r.id == b {
+			bi = i
+		}
+	}
+	if ai < 0 {
+		t.Fatalf("rows = %v, missing row %q", rows, a)
+	}
+	if bi != ai+1 {
+		t.Errorf("rows = %v, want %q immediately after %q (at %d), got %q at %d", rows, b, a, ai, b, bi)
+	}
+}
