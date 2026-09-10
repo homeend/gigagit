@@ -202,22 +202,32 @@ func (s *Server) initSteerPresence(ctx context.Context, url string) {
 	s.steerMu.Lock()
 	s.steerURL, s.steerDir, s.steerWorktree = url, dir, wt
 	s.steerMu.Unlock()
-	if dir == "" {
-		return
+	if dir != "" {
+		s.claimSteerPresence()
 	}
-	s.claimSteerPresence()
-	go func() {
-		t := time.NewTicker(steerPresenceTick)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				s.touchSteerPresence()
-			}
+	// The ticker starts even when steering resolved OFF here. A re-root can
+	// hand this server an inbox later (rehomeSteerPresence fills steerDir),
+	// and a presence nobody refreshes drops out of steer.LiveWindow five
+	// seconds after it is written — `gg session status` would stop seeing the
+	// page. An idle tick costs one mutex read: touchSteerPresence is a no-op
+	// while the dir is empty.
+	go s.steerPresenceLoop(ctx)
+}
+
+// steerPresenceLoop refreshes the presence every steerPresenceTick until ctx
+// ends. It reads the dir on EVERY tick rather than closing over the one the
+// server booted with, so a re-root is picked up without restarting anything.
+func (s *Server) steerPresenceLoop(ctx context.Context) {
+	t := time.NewTicker(steerPresenceTick)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.touchSteerPresence()
 		}
-	}()
+	}
 }
 
 // claimSteerPresence takes the inbox's web.json for THIS run. The remove is

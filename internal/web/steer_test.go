@@ -1,11 +1,13 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
@@ -123,6 +125,33 @@ func TestWebPresenceLifecycle(t *testing.T) {
 	if _, ok := steer.Live(s.steerDir, steer.WebPresence); ok {
 		t.Error("presence survived removeSteerPresence")
 	}
+}
+
+// A server that booted with steering OFF must still refresh a presence a
+// re-root handed it later: the ticker is the whole liveness protocol, and
+// without one web.json drops out of steer.LiveWindow five seconds after the
+// re-root wrote it — `gg session status` would stop seeing the page.
+func TestSteerPresenceTickerPicksUpAnInboxAcquiredAfterBoot(t *testing.T) {
+	t.Parallel()
+	s := New(domain.Open(newRepoDir(t, 1))) // steerDir "" — booted steering-off
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go s.steerPresenceLoop(ctx)
+	// The re-root arrives later and hands the server an inbox.
+	dir := t.TempDir()
+	s.steerMu.Lock()
+	s.steerDir, s.steerURL = dir, "http://127.0.0.1:9999"
+	s.steerMu.Unlock()
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
+		if p, ok := steer.Live(dir, steer.WebPresence); ok {
+			if p.URL != "http://127.0.0.1:9999" {
+				t.Fatalf("url = %q, want this server's address", p.URL)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("the presence ticker never wrote an inbox the server acquired after boot")
 }
 
 // A claim must DROP whatever web.json it finds: Touch preserves a stale
