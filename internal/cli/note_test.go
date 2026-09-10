@@ -601,8 +601,8 @@ func TestNoteLinkUsageErrors(t *testing.T) {
 		{"note", "add", link, "--file", "a.txt", "--summary", "s"},
 		{"note", "add", link, "--new-line", "3", "--summary", "s"},
 		{"note", "add", link, "--cached", "--summary", "s"},
-		{"note", "rm", link},    // a link is only for add and list
-		{"note", "clear", link}, //
+		{"note", "rm", link},    // rm takes a REPOSITORY link, not a file link
+		{"note", "clear", link}, // a file link is fine here, but --yes is missing
 	} {
 		if code, _, errb := runCLI(t, dir, args...); code != 2 {
 			t.Errorf("%v: exit = %d, want 2; stderr %q", args, code, errb)

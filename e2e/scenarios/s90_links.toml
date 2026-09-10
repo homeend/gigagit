@@ -38,6 +38,19 @@ cmd             = ["note", "list", "gg://{{cwd}}/a.txt"]
 exit            = 0
 stdout_contains = ["linked note"]
 
+# The other note verbs take a link too: clear via a FILE link stands in for
+# --file; rm takes only a REPOSITORY link (no file part), so a file link on it
+# is a usage error. (The cross-checkout repository-link runs live in
+# internal/cli/notelink_test.go — the harness has one cwd.)
+[[run]]
+cmd             = ["note", "clear", "gg://{{cwd}}/a.txt", "--yes"]
+exit            = 0
+stdout_contains = ["removed 1 notes"]
+
+[[run]]
+cmd  = ["note", "rm", "gg://{{cwd}}/a.txt", "deadbeef"]
+exit = 2
+
 # A repo this machine has never opened is exit 1, not a crash.
 [[run]]
 cmd  = ["link", "resolve", "gg://nobody-has-this-repo/a.txt"]

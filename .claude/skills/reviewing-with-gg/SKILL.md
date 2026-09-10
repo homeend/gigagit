@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v4 -->
+<!-- gg:reviewing-with-gg:v5 -->
 
 # Reviewing with gg
 
@@ -82,10 +82,10 @@ src/search.ts
 ```bash
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>] \
               --summary "…" [--rationale "…"] [--author <name>] [--source user|agent] [--json]
-gg note reply <note-id> --summary "…" [--rationale "…"] [--author <name>] [--json]
-gg note apply --stdin [--cached | --rev <c>] [--author <name>] [--json]
-gg note rm    <note-id>
-gg note clear (--file <path> | --all) [--type user|agent|all] --yes
+gg note reply [<repo-link>] <note-id> --summary "…" [--rationale "…"] [--author <name>] [--json]
+gg note apply [<repo-link>] --stdin [--cached | --rev <c>] [--author <name>] [--json]
+gg note rm    [<repo-link>] <note-id>
+gg note clear [<link>] (--file <path> | --all) [--type user|agent|all] --yes
 ```
 
 - `add` and `reply` print the new note id; `--json` prints the note object.
@@ -138,6 +138,11 @@ not stored.
   `--rev <sha>` to name the same target your note used). Paste it in the reply;
   `gg session navigate <link>` takes it straight back. Quote a link carrying
   `#<hunk>` — an unquoted `#` starts a shell comment.
+- **Note ids are per repository.** To reply to, remove or import notes from
+  a directory that is not that checkout, put the repository's link first —
+  `gg note reply gg://<repo> <note-id> --summary "…"` (a `gg link` printed
+  inside the repo, without its file part). A bare id the current repository
+  does not hold exits 1 and names the store it searched.
 
 ## Steering the user's window
 
@@ -202,7 +207,8 @@ gg session highlight clear --file src/search.ts
 - `notes: the new side of <path> does not exist` — the file is not in that
   target's new side (wrong `--cached`/`--rev`, or a deleted file — use
   `--old-line`).
-- `note: notes: not found` — the note id you passed is gone: removed, swept,
-  or mistyped; list again.
+- `note reply: no note <id> in the store of <checkout>` — note ids are per
+  repository: you are in the wrong checkout (put its repository link first),
+  or the note is gone — removed, swept, or mistyped; list again.
 - `review tool wrote no notes` — `gg review --notes` found neither a sidecar
   file nor a JSON report.

@@ -17,11 +17,19 @@ import (
 var ErrNotesDisabled = errors.New("notes: no state directory available")
 
 // ErrNoteNotFound means the named note is not in the store — a stale page after
-// a sweep, or another client's delete. It WRAPS the store's own
+// a sweep, another client's delete, or (the common CLI case) an id from a
+// DIFFERENT repository's store. It UNWRAPS to the store's own
 // notes.ErrNotFound, so code that already matches that keeps working, while a
 // frontend (which archtest forbids from importing internal/notes) can match
-// this one with errors.Is instead of grepping the message.
-var ErrNoteNotFound = fmt.Errorf("note: %w", notes.ErrNotFound)
+// this one with errors.Is instead of grepping the message. It is a value of
+// its own type rather than fmt.Errorf("note: %w", …) so the text reads
+// "note not found", not the doubled "note: notes: not found".
+var ErrNoteNotFound error = noteNotFoundError{}
+
+type noteNotFoundError struct{}
+
+func (noteNotFoundError) Error() string { return "note not found" }
+func (noteNotFoundError) Unwrap() error { return notes.ErrNotFound }
 
 // ResolvedNote is one note as it applies to an OPEN diff: the stored record,
 // its computed status, the range it actually occupies now (the stored range
