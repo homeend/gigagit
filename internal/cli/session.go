@@ -333,6 +333,14 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 			fmt.Fprintln(stderr, "session navigate: --next-comment and --prev-comment are mutually exclusive")
 			return 2
 		}
+		// A step moves the cursor inside whatever diff is ALREADY open, so a
+		// target names nothing it could land on. Stepping anyway and dropping
+		// the target would leave the caller believing it had reached a place it
+		// never asked about — the same silent discard the bare --rev arm made.
+		if *tf.file != "" || *tf.rev != "" || *tf.cached || *hunk != 0 || *newLine != 0 || *oldLine != 0 {
+			fmt.Fprintln(stderr, "session navigate: --next-comment/--prev-comment take no target (drop --file, --rev, --cached, --hunk, --new-line and --old-line)")
+			return 2
+		}
 		step := "next_note"
 		if *prev {
 			step = "prev_note"

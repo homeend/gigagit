@@ -729,6 +729,52 @@ func TestSessionHunkOutOfRangeReportsTheCount(t *testing.T) {
 	}
 }
 
+// A step moves the cursor inside whatever diff is ALREADY open, so a target
+// says nothing about where it lands. Honouring the step and dropping the target
+// would leave the caller believing it had asked for a place it never reached —
+// the same silent discard the bare --rev arm used to commit.
+func TestSessionNavigateStepRefusesTargetFlags(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{
+		{"navigate", "--next-comment", "--file", "a.txt", "--no-wait"},
+		{"navigate", "--next-comment", "--new-line", "5", "--no-wait"},
+		{"navigate", "--next-comment", "--old-line", "5", "--no-wait"},
+		{"navigate", "--next-comment", "--hunk", "1", "--no-wait"},
+		{"navigate", "--next-comment", "--cached", "--no-wait"},
+		{"navigate", "--next-comment", "--rev", "HEAD", "--no-wait"},
+		{"navigate", "--prev-comment", "--file", "a.txt", "--no-wait"},
+	} {
+		args := args
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			t.Parallel()
+			code, got, _, errb := postOne(t, newCLIRepo(t), args...)
+			if code != 2 {
+				t.Errorf("exit = %d, want 2 (usage error); stderr %q", code, errb)
+			}
+			if !strings.Contains(errb, "take no target") {
+				t.Errorf("stderr = %q, want it to say the step takes no target", errb)
+			}
+			if len(got) != 0 {
+				t.Errorf("a refused command must never be posted, got %+v", got)
+			}
+		})
+	}
+}
+
+func TestSessionNavigateBothStepFlagsAreRefused(t *testing.T) {
+	t.Parallel()
+	code, got, _, errb := postOne(t, newCLIRepo(t), "navigate", "--next-comment", "--prev-comment", "--no-wait")
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2 (usage error); stderr %q", code, errb)
+	}
+	if !strings.Contains(errb, "mutually exclusive") {
+		t.Errorf("stderr = %q, want it to say the two are mutually exclusive", errb)
+	}
+	if len(got) != 0 {
+		t.Errorf("a refused command must never be posted, got %+v", got)
+	}
+}
+
 func TestSessionStatusRefusesAStrayArgument(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
