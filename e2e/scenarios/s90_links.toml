@@ -38,8 +38,10 @@ cmd             = ["note", "list", "gg://{{cwd}}/a.txt"]
 exit            = 0
 stdout_contains = ["linked note"]
 
-# A REPOSITORY link (no file part) picks the checkout for the id-taking and
-# batch verbs; clear via a file link stands in for --file.
+# The other note verbs take a link too: clear via a FILE link stands in for
+# --file; rm takes only a REPOSITORY link (no file part), so a file link on it
+# is a usage error. (The cross-checkout repository-link runs live in
+# internal/cli/notelink_test.go — the harness has one cwd.)
 [[run]]
 cmd             = ["note", "clear", "gg://{{cwd}}/a.txt", "--yes"]
 exit            = 0

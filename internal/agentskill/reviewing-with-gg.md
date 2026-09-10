@@ -200,7 +200,8 @@ gg session highlight clear --file src/search.ts
 - `notes: the new side of <path> does not exist` — the file is not in that
   target's new side (wrong `--cached`/`--rev`, or a deleted file — use
   `--old-line`).
-- `note: notes: not found` — the note id you passed is gone: removed, swept,
-  or mistyped; list again.
+- `note reply: no note <id> in the store of <checkout>` — note ids are per
+  repository: you are in the wrong checkout (put its repository link first),
+  or the note is gone — removed, swept, or mistyped; list again.
 - `review tool wrote no notes` — `gg review --notes` found neither a sidecar
   file nor a JSON report.

@@ -80,8 +80,9 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 //   - add, list — a FILE link (the address is the point).
 //   - reply, rm — a REPOSITORY link only: the note id names the note, the link
 //     just picks the checkout whose store holds it (ids are per repository).
-//   - clear — either: a repository link picks the checkout and --file/--all
-//     apply as usual; a file link stands in for --file/--cached/--rev.
+//   - clear — either: a bare repository link picks the checkout and
+//     --file/--all apply as usual (a target on it is refused, nothing would
+//     use it); a file link stands in for --file/--cached/--rev.
 //   - apply — a repository or target link: `gg://<repo>`, `@staged` or `@<sha>`
 //     stand in for --cached/--rev; each batch item names its own path, so a
 //     path on the link is refused for the same reason --file is.
@@ -96,6 +97,13 @@ func noteLinkShape(sub string, res domain.Resolved) string {
 	case "reply", "rm":
 		if hasPath || hasTarget {
 			return "pass the repository's link (gg://<repo> or gg:///abs/path), not a file or commit: the note id names the note"
+		}
+	case "clear":
+		// A repository link only picks the checkout; a target on it would be
+		// dropped on the floor (the flags decide what is cleared), so refuse
+		// it rather than let `gg://repo@<sha> --all` look commit-scoped.
+		if !hasPath && hasTarget {
+			return "a repository link cannot carry @staged or @<sha> here: pass a file link (gg://<repo>/<path>[@<target>]) or the bare repository link with --file/--all"
 		}
 	case "apply":
 		if hasPath {

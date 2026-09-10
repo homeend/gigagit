@@ -125,6 +125,11 @@ func TestNoteClearTakesALink(t *testing.T) {
 	if code, _, errb := runCLI(t, repoA, "note", "clear", linkB+"/b.txt", "--all", "--yes"); code != 2 {
 		t.Errorf("file link + --all: exit %d stderr %q, want 2", code, errb)
 	}
+	// A path-less link with a target has nothing to apply that target to:
+	// refused, not silently treated as the bare repository link.
+	if code, _, errb := runCLI(t, repoA, "note", "clear", linkB+"@staged", "--all", "--yes"); code != 2 || !strings.Contains(errb, "repository link cannot carry") {
+		t.Errorf("repo link + @staged: exit %d stderr %q, want 2", code, errb)
+	}
 	code, out, errb := runCLI(t, repoA, "note", "clear", linkB+"/b.txt", "--yes")
 	if code != 0 || !strings.Contains(out, "removed 1 notes") {
 		t.Fatalf("clear via file link: exit %d out %q err %q", code, out, errb)
