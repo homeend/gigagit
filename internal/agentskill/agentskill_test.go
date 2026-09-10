@@ -34,6 +34,7 @@ func TestBodyCoversTheCLISurface(t *testing.T) {
 		"gg diff --hunks", "gg note add", "gg note apply", "gg note list",
 		"gg review --notes", "gg skill path", "gg_notes_list", "gg_note_add",
 		"gg session navigate", "gg session status",
+		"gg link", "gg link resolve", "gg://", "cursor.link",
 	} {
 		if !strings.Contains(b, want) {
 			t.Errorf("body missing %q", want)
@@ -129,6 +130,7 @@ func TestReviewSkillBodyCoversTheNoteSurface(t *testing.T) {
 		"gg note list", "gg note rm", "gg note clear",
 		"--cached", "--rev", "--hunk", "--new-line", "--old-line",
 		`"comments"`, `"newRange"`, "do NOT launch",
+		"gg link", "gg://",
 	} {
 		if !strings.Contains(b, want) {
 			t.Errorf("review skill body missing %q", want)

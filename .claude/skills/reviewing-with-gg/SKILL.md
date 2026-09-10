@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v3 -->
+<!-- gg:reviewing-with-gg:v4 -->
 
 # Reviewing with gg
 
@@ -133,6 +133,11 @@ not stored.
   diff.
 - Say what you found in your chat reply too — the notes are for the code, the
   reply is for the person.
+- **Quote a link for every finding** so the reader can jump to it:
+  `gg link src/search.ts:42` prints a `gg://` address (add `--cached` or
+  `--rev <sha>` to name the same target your note used). Paste it in the reply;
+  `gg session navigate <link>` takes it straight back. Quote a link carrying
+  `#<hunk>` — an unquoted `#` starts a shell comment.
 
 ## Steering the user's window
 
@@ -151,6 +156,7 @@ gg session navigate --file src/search.ts --hunk 2
 gg session navigate --file src/search.ts --new-line 42 --cached
 gg session navigate --rev <sha>                     # reveal a commit
 gg session navigate --next-comment                  # step the open diff
+gg session navigate gg://gigagit/src/search.ts@abc1234:42   # a pasted link works everywhere a flag pair does
 gg session reload notes                             # after writing notes
 gg session focus files
 gg session highlight add --file src/search.ts --start 40 --end 46 --tone warn

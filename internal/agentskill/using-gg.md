@@ -93,6 +93,40 @@ checkout's own working-tree notes plus EVERY commit note in the store
   `gg session highlight add|clear` — refresh, switch panel, or paint an
   attention band. See the `reviewing-with-gg` skill for when to use them.
 
+### gg links
+
+A `gg://` link names one place in one repository — a file, a line on one side
+of one diff, a hunk, or a commit — in a form a human can paste into a chat and
+you can hand straight back to gg:
+
+```text
+gg://<repo>/<path>[@<target>][:<line>]     <target> = a full/short sha, "staged", or absent = the working tree
+gg://<repo>/<path>[@<target>]#<hunk>       hunk numbers are `gg diff --hunks`'s
+gg://<repo>/<path>@<sha>:old:<n>           the old side of that diff
+gg://<repo>@<sha>                          a commit, no file
+gg:///abs/checkout/path/file.go:12         a repo with no remote: its absolute path
+```
+
+`<repo>` is the repository name of the repo's remote (`gigagit`), resolved
+through gg's machine-local repository history — so a link made on one checkout
+finds the right one here.
+
+- `gg link [<path>[:<line>]] [--cached | --rev <commit>]` — print the link for
+  a place in the current repo. `gg link resolve <link> [--json]` says which
+  checkout it names here; exit 1 when it is unknown or ambiguous.
+- **A link the user pastes is enough.** Pass it as the FIRST positional to
+  `gg diff <link>`, `gg show <link>`, `gg note add <link> --summary "…"`,
+  `gg note list <link>`, `gg session navigate <link>` and
+  `gg session highlight add <link>[-<end>]`. The link replaces `--file`,
+  `--cached`, `--rev`, `--hunk`, `--new-line` and `--old-line`; passing both is
+  a usage error (exit 2), never a silent override.
+- The verb runs against the checkout the link names even when your working
+  directory is somewhere else — including posting into that worktree's session.
+- **Quote a link that carries `#<hunk>`**: `#` starts a shell comment, so
+  `gg diff gg://r/a.go#3` silently loses the hunk. gg applies no heuristic.
+- Read `gg session status` (or `gg_ui_state`'s `cursor.link`) to see WHERE THE
+  USER IS LOOKING right now, as a link you can pass to any of the verbs above.
+
 - `gg add [-f] (-A | <path>...)` / `gg unstage <path>...` — stage paths (or
   everything incl. untracked with `-A`) / remove paths from the index
   keeping working-tree content. `gg add` + `gg commit` fully replaces
