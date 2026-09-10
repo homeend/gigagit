@@ -1,0 +1,83 @@
+name = "session CLI: no live session, and the usage errors"
+
+[input]
+steps = [
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\ndelta\n" },
+  { commit = "seed" },
+  { write = "a.txt", content = "alpha\nBRAVO\ncharlie\nDELTA\n" },
+]
+
+# Nothing is open: status exits 1 and prints nothing to stdout.
+[[run]]
+cmd             = ["session", "status"]
+exit            = 1
+stdout_excludes = ["tui:", "web:"]
+
+# Every steering verb reports the same thing rather than silently doing nothing.
+# With no session, --no-wait never reaches the "print the id" branch: no
+# "web: sent" line either, which is what distinguishes refused from posted.
+[[run]]
+cmd             = ["session", "navigate", "--file", "a.txt", "--new-line", "2", "--no-wait"]
+exit            = 1
+stdout_excludes = ["web: sent"]
+
+[[run]]
+cmd  = ["session", "navigate", "--rev", "HEAD", "--no-wait"]
+exit = 1
+
+[[run]]
+cmd  = ["session", "navigate", "--next-comment", "--no-wait"]
+exit = 1
+
+[[run]]
+cmd  = ["session", "reload", "notes", "--no-wait"]
+exit = 1
+
+[[run]]
+cmd  = ["session", "focus", "files", "--no-wait"]
+exit = 1
+
+[[run]]
+cmd  = ["session", "highlight", "add", "--file", "a.txt", "--start", "2", "--tone", "warn", "--no-wait"]
+exit = 1
+
+[[run]]
+cmd  = ["session", "highlight", "clear", "--no-wait"]
+exit = 1
+
+# Usage errors are exit 2 and are caught BEFORE the routing check, so a mistake
+# reports the mistake rather than "no gg session".
+[[run]]
+cmd  = ["session", "navigate", "--file", "a.txt"]
+exit = 2
+
+[[run]]
+cmd  = ["session", "navigate", "--file", "a.txt", "--new-line", "1", "--old-line", "2"]
+exit = 2
+
+[[run]]
+cmd  = ["session", "navigate", "--file", "a.txt", "--cached", "--rev", "HEAD", "--new-line", "1"]
+exit = 2
+
+[[run]]
+cmd  = ["session", "reload", "weather", "--no-wait"]
+exit = 2
+
+[[run]]
+cmd  = ["session", "focus"]
+exit = 2
+
+[[run]]
+cmd  = ["session", "highlight"]
+exit = 2
+
+[[run]]
+cmd  = ["session", "nonsense"]
+exit = 2
+
+# Steering never touches the repo.
+[expect]
+branch = "main"
+
+[expect.status]
+unstaged = ["a.txt"]
