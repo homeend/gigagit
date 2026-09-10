@@ -285,6 +285,20 @@ func (m Model) canShowFileDiff() bool {
 	return m.opsIdle() && f.Kind != model.KindUnmerged && !(m.width > 0 && m.width < 60)
 }
 
+// canBlameFile gates b on a file panel: blame needs a HEAD version of the
+// path. An untracked file makes git blame fail outright ("no such path in
+// HEAD"); a staged-new file (Staged 'A') would blame every line as "Not
+// Committed Yet". Both render the A attribute in the Files panel, so b is
+// inert on them; everything canShowFileDiff allows otherwise blames.
+func (m Model) canBlameFile() bool {
+	if !m.canShowFileDiff() {
+		return false
+	}
+	bi, _ := m.backingIndex(m.focus)
+	f := m.status.Files[bi]
+	return f.Kind != model.KindUntracked && f.Staged != 'A'
+}
+
 // canResolveConflictFile gates enter on a conflicted Files-panel row: the
 // region picker opens directly for a both-modified file (no x process in
 // between). Mirrors canShowFileDiff's exclusion of unmerged rows — the two
