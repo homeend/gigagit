@@ -190,7 +190,7 @@ func (p *contentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if m.filesView == p { // only the files-view tree search has history
 				return m.recordSearch(scopeFiletree, p.query)
 			}
-		case tea.KeyBackspace, tea.KeyCtrlH:
+		case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 			if r := []rune(p.query); len(r) > 0 {
 				p.query = string(r[:len(r)-1])
 			}

@@ -57,9 +57,10 @@ func clickEnterLayer(l layer) bool {
 		return true
 	case *themeEditorPopup:
 		// A list while browsing (enter opens the row's editor), a text field once
-		// that editor is open (enter SAVES) — so it joins the safe set only in the
-		// first state, per the rule above.
-		return !v.editing
+		// that editor is open (enter SAVES), a yes/no question while the reset
+		// confirm is up — so it joins the safe set only in the first state, per
+		// the rule above.
+		return !v.editing && !v.confirming
 	}
 	return false
 }
@@ -144,7 +145,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if cp, ok := l.(*contentPopup); ok && wheel != 0 {
 			cp.move(wheel)
 		}
-		if te, ok := l.(*themeEditorPopup); ok && wheel != 0 && !te.editing {
+		if te, ok := l.(*themeEditorPopup); ok && wheel != 0 && !te.editing && !te.confirming {
 			te.move(wheel)
 		}
 		if dv, ok := l.(*diffView); ok {

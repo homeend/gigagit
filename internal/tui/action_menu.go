@@ -775,7 +775,7 @@ func (m Model) updateActionMenuKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyEnter:
 		return m.runVisibleRow(a.sel)
-	case tea.KeyBackspace, tea.KeyCtrlH:
+	case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 		if r := []rune(a.query); len(r) > 0 {
 			a.query = string(r[:len(r)-1])
 		}

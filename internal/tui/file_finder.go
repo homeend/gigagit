@@ -125,7 +125,7 @@ func (p *fileFinderPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case tea.KeyEnter:
 			p.filtering = false // keep the filter, leave input mode
 			return m.recordSearch(scopeFiletree, p.query)
-		case tea.KeyBackspace, tea.KeyCtrlH:
+		case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 			if r := []rune(p.query); len(r) > 0 {
 				p.setQuery(string(r[:len(r)-1]))
 			}
