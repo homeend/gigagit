@@ -25,13 +25,16 @@ const linkUsage = "usage: gg link [<path>[:<line>]] [--cached | --rev <commit>]\
 	"quote links that carry #<hunk> — an unquoted # starts a shell comment"
 
 // cmdLink is `gg link`: print a portable gg:// address, or resolve one.
-func cmdLink(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
-	return runLink(RepoStatePath, svc, args, stdout, stderr)
+// workdir is the directory gg was asked to run in (threaded from runOne like
+// cmdApply's), not the process cwd — a relative <path> argument is resolved
+// against it, then rebased onto the checkout top level.
+func cmdLink(svc *domain.Service, workdir string, args []string, stdout, stderr io.Writer) int {
+	return runLink(RepoStatePath, svc, workdir, args, stdout, stderr)
 }
 
 // runLink is cmdLink with the repo registry as a parameter, so tests point it
 // at a t.TempDir() file and stay parallel (the runSession seam).
-func runLink(statePath string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func runLink(statePath string, svc *domain.Service, workdir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "resolve" {
 		return linkResolve(statePath, svc, args[1:], stdout, stderr)
 	}
@@ -55,7 +58,7 @@ func runLink(statePath string, svc *domain.Service, args []string, stdout, stder
 	if len(pos) == 1 {
 		arg = pos[0]
 	}
-	l, err := buildLink(context.Background(), svc, arg, *cached, *rev)
+	l, err := buildLink(context.Background(), svc, workdir, arg, *cached, *rev)
 	if err != nil {
 		if errors.Is(err, model.ErrLink) {
 			fmt.Fprintf(stderr, "link: %v\n%s\n", err, linkUsage)
@@ -69,12 +72,25 @@ func runLink(statePath string, svc *domain.Service, args []string, stdout, stder
 }
 
 // buildLink assembles the link for one place in THIS repository. pathArg is
-// the repo-relative path, optionally suffixed ":<line>", ":old:<line>" or
-// "#<hunk>" — parsed by ParseLink itself (against a throwaway repo segment)
-// so `gg link` can never disagree with the grammar it prints.
-func buildLink(ctx context.Context, svc *domain.Service, pathArg string, cached bool, rev string) (model.Link, error) {
+// the path as the user typed it — relative to workdir (the directory gg was
+// asked to run in, not the process cwd) unless already absolute — optionally
+// suffixed ":<line>", ":old:<line>" or "#<hunk>". The suffix is split off by
+// ParseLink itself (against a throwaway repo segment) so `gg link` can never
+// disagree with the grammar it prints; the bare path portion is then rebased
+// onto the checkout top level, since the link grammar's <path> is always
+// top-level-relative (spec), never cwd-relative.
+func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string, cached bool, rev string) (model.Link, error) {
 	var l model.Link
 	l.Side = model.NoteSideNew
+
+	// TopLevel is needed both to rebase a path argument and, when this repo
+	// has no remote, as the link's own local-form identity — fetch it once
+	// up front so both uses share the one git invocation.
+	top, err := svc.TopLevel(ctx)
+	if err != nil {
+		return model.Link{}, err
+	}
+
 	if s := strings.TrimSpace(pathArg); s != "" {
 		probe, err := model.ParseLink(model.LinkScheme + "x/" + strings.TrimPrefix(filepath.ToSlash(s), "./"))
 		if err != nil {
@@ -83,7 +99,11 @@ func buildLink(ctx context.Context, svc *domain.Service, pathArg string, cached 
 		if !model.LinkPathOK(probe.Path) {
 			return model.Link{}, fmt.Errorf("%w: path contains @, : or # — no gg link", model.ErrLink)
 		}
-		l.Path, l.Side, l.Line, l.Hunk = probe.Path, probe.Side, probe.Line, probe.Hunk
+		rel, err := rebaseLinkPath(top, workdir, probe.Path)
+		if err != nil {
+			return model.Link{}, err
+		}
+		l.Path, l.Side, l.Line, l.Hunk = rel, probe.Side, probe.Line, probe.Hunk
 	}
 
 	switch {
@@ -115,12 +135,37 @@ func buildLink(ctx context.Context, svc *domain.Service, pathArg string, cached 
 		l.Repo = model.LinkRepo{Name: name}
 		return l, nil
 	}
-	top, err := svc.TopLevel(ctx)
-	if err != nil {
-		return model.Link{}, err
-	}
 	l.Repo = model.LinkRepo{Abs: filepath.ToSlash(filepath.Clean(top))}
 	return l, nil
+}
+
+// rebaseLinkPath turns p — the raw path portion of a `gg link` argument,
+// relative to workdir (the directory gg was asked to run in) unless already
+// absolute — into the checkout-top-level-relative git slash path the link
+// grammar requires. "" (no path argument) passes through unchanged. Refuses
+// (wrapping model.ErrLink) a path that resolves outside top, so a link never
+// silently addresses the wrong file when gg runs from a subdirectory.
+func rebaseLinkPath(top, workdir, p string) (string, error) {
+	if p == "" {
+		return "", nil
+	}
+	native := filepath.FromSlash(p)
+	abs := native
+	if !filepath.IsAbs(native) {
+		abs = filepath.Join(workdir, native)
+	}
+	rel, err := filepath.Rel(top, abs)
+	if err != nil {
+		return "", err
+	}
+	rel = filepath.ToSlash(rel)
+	if rel == ".." || strings.HasPrefix(rel, "../") {
+		return "", fmt.Errorf("%w: path %q is outside the checkout", model.ErrLink, p)
+	}
+	if rel == "." {
+		return "", nil
+	}
+	return rel, nil
 }
 
 // wireResolvedLink is `gg link resolve --json`'s payload. English protocol

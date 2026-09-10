@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -19,10 +20,15 @@ func linkState(t *testing.T) string {
 	return filepath.Join(t.TempDir(), "repos.toml")
 }
 
-func runLinkCLI(t *testing.T, dir string, args ...string) (int, string, string) {
+// runLinkCLI runs `gg link`/`gg link resolve` as if invoked from workdir —
+// the directory the service is opened at AND the directory gg was asked to
+// run in, matching how cmd/gg wires Run/runOne in the real binary. Most
+// callers pass the checkout's top level (workdir == top); the rebase tests
+// below pass a subdirectory to exercise cwd-relative path arguments.
+func runLinkCLI(t *testing.T, workdir string, args ...string) (int, string, string) {
 	t.Helper()
 	var out, errb bytes.Buffer
-	code := runLink(linkState(t), domain.Open(dir), args, &out, &errb)
+	code := runLink(linkState(t), domain.Open(workdir), workdir, args, &out, &errb)
 	return code, out.String(), errb.String()
 }
 
@@ -89,6 +95,79 @@ func TestLinkTargetFlags(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestLinkPathIsRebasedToTheCheckoutTop covers ruling P20: the link
+// grammar's <path> is always top-level-relative, so `gg link` must rebase a
+// cwd-relative argument onto the checkout top rather than embed it verbatim.
+func TestLinkPathIsRebasedToTheCheckoutTop(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	sub := filepath.Join(dir, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "a.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	for _, args := range [][]string{{"add", "sub/a.txt"}, {"commit", "-m", "add sub/a.txt"}} {
+		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		c.Env = env
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	t.Run("from a subdirectory", func(t *testing.T) {
+		t.Parallel()
+		code, out, errb := runLinkCLI(t, sub, "a.txt:3")
+		if code != 0 {
+			t.Fatalf("exit = %d (stderr %q)", code, errb)
+		}
+		got := strings.TrimSpace(out)
+		if !strings.HasSuffix(got, "/sub/a.txt:3") {
+			t.Errorf("stdout = %q, want a link ending /sub/a.txt:3", got)
+		}
+		if _, err := model.ParseLink(got); err != nil {
+			t.Errorf("ParseLink(%q) = %v", got, err)
+		}
+	})
+
+	t.Run("from the top level", func(t *testing.T) {
+		t.Parallel()
+		code, out, errb := runLinkCLI(t, dir, "sub/a.txt:3")
+		if code != 0 {
+			t.Fatalf("exit = %d (stderr %q)", code, errb)
+		}
+		got := strings.TrimSpace(out)
+		if !strings.HasSuffix(got, "/sub/a.txt:3") {
+			t.Errorf("stdout = %q, want a link ending /sub/a.txt:3", got)
+		}
+	})
+
+	t.Run("escaping the checkout exits 2", func(t *testing.T) {
+		t.Parallel()
+		code, _, errb := runLinkCLI(t, dir, "../x")
+		if code != 2 {
+			t.Errorf("exit = %d, want 2; stderr %q", code, errb)
+		}
+	})
+
+	t.Run("absolute path inside the checkout", func(t *testing.T) {
+		t.Parallel()
+		abs := filepath.ToSlash(filepath.Join(sub, "a.txt")) + ":3"
+		code, out, errb := runLinkCLI(t, dir, abs)
+		if code != 0 {
+			t.Fatalf("exit = %d (stderr %q)", code, errb)
+		}
+		got := strings.TrimSpace(out)
+		if !strings.HasSuffix(got, "/sub/a.txt:3") {
+			t.Errorf("stdout = %q, want a link ending /sub/a.txt:3", got)
+		}
+	})
 }
 
 func TestLinkUsageErrors(t *testing.T) {

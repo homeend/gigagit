@@ -110,7 +110,7 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 	case "note":
 		return cmdNote(svc, rest, stdin, stdout, stderr)
 	case "link":
-		return cmdLink(svc, rest, stdout, stderr)
+		return cmdLink(svc, workdir, rest, stdout, stderr)
 	case "session":
 		return cmdSession(svc, rest, stdout, stderr)
 	case "log":
