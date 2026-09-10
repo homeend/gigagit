@@ -49,7 +49,26 @@ func (m Model) initSteerInbox() Model {
 		Worktree: m.snapshotWorktree,
 		Started:  time.Now().UTC().Format(time.RFC3339),
 	})
+	m.steerClaimed = true
 	return m
+}
+
+// reconcileSteer re-syncs the inbox with a config that just landed, in BOTH
+// directions. A repo switch resolves the new inbox (snapshotTargetMsg) before
+// the new repo's config arrives, so a switch INTO a steering-on repo reaches
+// this point with a resolved-but-unclaimed dir: without the second arm that
+// session would never sweep the new inbox (a crashed session's commands would
+// replay on the first heartbeat drain) and would run watcher-less for its whole
+// life. The returned cmd starts the watcher and must be batched by the caller.
+func (m Model) reconcileSteer() (Model, tea.Cmd) {
+	switch {
+	case !m.steerActive():
+		return m.closeSteerInbox(), nil // config says off: drop the presence at once
+	case !m.steerClaimed:
+		m = m.initSteerInbox()
+		return m, m.startSteerCmd(m.steerGen)
+	}
+	return m, nil
 }
 
 // closeSteerInbox ends this session's claim: the presence goes away at once
@@ -64,6 +83,7 @@ func (m Model) closeSteerInbox() Model {
 		m.steerWatch = nil
 	}
 	m.steerDir = ""
+	m.steerClaimed = false
 	return m
 }
 

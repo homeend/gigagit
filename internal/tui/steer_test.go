@@ -92,8 +92,8 @@ func TestCloseSteerInboxRemovesPresence(t *testing.T) {
 	if _, ok := steer.Live(dir, steer.TUIPresence); ok {
 		t.Error("presence survived closeSteerInbox — a dead session must not look live")
 	}
-	if m.steerDir != "" || m.steerWatch != nil {
-		t.Errorf("closeSteerInbox left steerDir=%q watch=%v", m.steerDir, m.steerWatch)
+	if m.steerDir != "" || m.steerWatch != nil || m.steerClaimed {
+		t.Errorf("closeSteerInbox left steerDir=%q watch=%v claimed=%v", m.steerDir, m.steerWatch, m.steerClaimed)
 	}
 }
 
@@ -102,31 +102,43 @@ func TestSteerRefusalRules(t *testing.T) {
 	base, _ := steerModel(t)
 	base.ready = true
 
+	// The reason string is protocol prose an agent reads, so every case pins the
+	// EXACT text — a refusal that silently changed wording would still be a
+	// refusal, and a non-empty check would never notice.
 	cases := []struct {
 		name string
 		mut  func(m Model) Model
+		want string
 	}{
-		{"op running", func(m Model) Model { m.running = true; return m }},
-		{"loading", func(m Model) Model { m.loading = true; return m }},
-		{"decision modal", func(m Model) Model { m.modal = &decisionState{}; return m }},
-		{"action menu", func(m Model) Model { m.actionMenu = &actionMenu{}; return m }},
-		{"panel / filter", func(m Model) Model { m.filterTyping = true; return m }},
-		{"panel @ highlight", func(m Model) Model { m.highlightTyping = true; return m }},
-		{"search-history dropdown", func(m Model) Model { m.recallOpen = true; return m }},
-		{"files-view filter", func(m Model) Model { m.filesView = &contentPopup{typing: true}; return m }},
-		{"stash-view filter", func(m Model) Model { m.stashView = &stashView{typing: true}; return m }},
-		{"hunk picker", func(m Model) Model { return m.pushLayer(&hunkPicker{}) }},
-		{"rebase editor", func(m Model) Model { return m.pushLayer(&irebaseEditor{}) }},
-		{"repo switcher", func(m Model) Model { return m.pushLayer(&repoPopup{}) }},
+		{"op running", func(m Model) Model { m.running = true; return m }, "an operation is running"},
+		{"loading", func(m Model) Model { m.loading = true; return m }, "an operation is running"},
+		{"decision modal", func(m Model) Model { m.modal = &decisionState{}; return m }, "a decision is waiting for the user"},
+		{"interactive process", func(m Model) Model { m.proc = &conflictProcess{st: confListing}; return m }, "an interactive process owns the screen"},
+		{"action menu", func(m Model) Model { m.actionMenu = &actionMenu{}; return m }, "the action menu is open"},
+		{"panel / filter", func(m Model) Model { m.filterTyping = true; return m }, "the user is typing"},
+		{"panel @ highlight", func(m Model) Model { m.highlightTyping = true; return m }, "the user is typing"},
+		{"search-history dropdown", func(m Model) Model { m.recallOpen = true; return m }, "the user is typing"},
+		{"files-view filter", func(m Model) Model { m.filesView = &contentPopup{typing: true}; return m }, "the user is typing"},
+		{"files-preview filter", func(m Model) Model { m.filesPreview = &contentPopup{typing: true}; return m }, "the user is typing"},
+		{"stash-view filter", func(m Model) Model { m.stashView = &stashView{typing: true}; return m }, "the user is typing"},
+		{"content popup filter", func(m Model) Model { return m.pushLayer(&contentPopup{typing: true}) }, "the user is typing"},
+		{"hunk picker", func(m Model) Model { return m.pushLayer(&hunkPicker{}) }, "a window is open that owns the keyboard"},
+		{"rebase editor", func(m Model) Model { return m.pushLayer(&irebaseEditor{}) }, "a window is open that owns the keyboard"},
+		{"repo switcher", func(m Model) Model { return m.pushLayer(&repoPopup{}) }, "a window is open that owns the keyboard"},
 	}
 	for _, c := range cases {
 		c := c
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			if got := c.mut(base).steerRefusal(); got == "" {
-				t.Errorf("%s must refuse a steering command", c.name)
+			if got := c.mut(base).steerRefusal(); got != c.want {
+				t.Errorf("%s refused with %q, want %q", c.name, got, c.want)
 			}
 		})
+	}
+
+	// A content popup with no filter focus is poppable, like a diff.
+	if got := base.pushLayer(&contentPopup{}).steerRefusal(); got != "" {
+		t.Errorf("an idle content popup must not refuse a command, got %q", got)
 	}
 
 	if got := base.steerRefusal(); got != "" {
@@ -173,10 +185,89 @@ func TestDrainRefusesWhileAnOpRuns(t *testing.T) {
 	if !ok {
 		t.Fatal("a refusal must still be answered — never leave the CLI hanging")
 	}
-	if r.OK {
-		t.Fatalf("reply = %+v, want ok:false while an op runs", r)
+	if r.OK || r.Error != "an operation is running" {
+		t.Fatalf("reply = %+v, want ok:false with %q", r, "an operation is running")
 	}
 	_ = m
+}
+
+// TestSteerReArmsWhenConfigTurnsItOn covers the repo switch from a
+// steering-OFF repo into a steering-ON one. snapshotTargetMsg resolves the new
+// inbox before the new repo's config lands, so initSteerInbox runs while m.cfg
+// still says "off" and is inert: no Discard, no presence, no watcher. The cfg
+// apply has to notice that and claim the inbox then. (The handler's own
+// SessionSteerDir resolution goes through the XDG state home, which a parallel
+// test cannot redirect without t.Setenv, so the test reproduces exactly the
+// state that handler leaves behind: a resolved dir that was never claimed.)
+func TestSteerReArmsWhenConfigTurnsItOn(t *testing.T) {
+	t.Parallel()
+	on := config.Defaults()
+	sites := []struct {
+		name string
+		msg  func(m Model) tea.Msg
+	}{
+		{"configReadyMsg", func(m Model) tea.Msg { return configReadyMsg{cfg: on} }},
+		{"dataLoadedMsg", func(m Model) tea.Msg { return dataLoadedMsg{gen: m.loadGen, cfg: on} }},
+	}
+	for _, s := range sites {
+		s := s
+		t.Run(s.name, func(t *testing.T) {
+			t.Parallel()
+			m, dir := steerModel(t)
+			m.cfg.UI.AgentSteering = "off"
+			// A crashed session's leftover, waiting in the NEW repo's inbox.
+			if _, err := steer.Post(dir, steer.Command{Cmd: "focus", Panel: "files"}); err != nil {
+				t.Fatal(err)
+			}
+			// snapshotTargetMsg's half: the dir is resolved, the claim is inert.
+			m = m.initSteerInbox()
+			if m.steerClaimed {
+				t.Fatal("steering was off — initSteerInbox must not claim the inbox")
+			}
+
+			tm, cmd := m.Update(s.msg(m))
+			nm, ok := tm.(Model)
+			if !ok {
+				t.Fatalf("Update returned %T", tm)
+			}
+			if !nm.steerClaimed {
+				t.Error("the config turning steering on must claim the inbox")
+			}
+			if cmd == nil {
+				t.Error("the re-arm must batch a watcher-start command")
+			}
+			if got := steer.Drain(dir); len(got) != 0 {
+				t.Errorf("the claim left %d leftover command(s) behind — they must be discarded, not replayed", len(got))
+			}
+			if _, live := steer.Live(dir, steer.TUIPresence); !live {
+				t.Error("no live presence after the config turned steering on")
+			}
+		})
+	}
+}
+
+// TestSteerCfgApplyDropsTheInboxWhenTurnedOff is the other direction: a repo
+// whose config says off must not keep a presence a previous repo claimed.
+func TestSteerCfgApplyDropsTheInboxWhenTurnedOff(t *testing.T) {
+	t.Parallel()
+	m, dir := steerModel(t)
+	m = m.initSteerInbox()
+	if !m.steerClaimed {
+		t.Fatal("initSteerInbox must claim the inbox when steering is on")
+	}
+	off := config.Defaults()
+	off.UI.AgentSteering = "off"
+	tm, _ := m.Update(configReadyMsg{cfg: off})
+	nm, ok := tm.(Model)
+	if !ok {
+		t.Fatalf("Update returned %T", tm)
+	}
+	if nm.steerDir != "" || nm.steerClaimed {
+		t.Errorf("steering off left steerDir=%q claimed=%v", nm.steerDir, nm.steerClaimed)
+	}
+	if _, live := steer.Live(dir, steer.TUIPresence); live {
+		t.Error("presence survived a config that turned steering off")
+	}
 }
 
 func TestDrainWritesNoReplyForANoWaitCommand(t *testing.T) {

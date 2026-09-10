@@ -221,9 +221,15 @@ type Model struct {
 	// or an unresolved repo). steerWatch is a POINTER so it survives the Model
 	// value copy, like modal and popup; steerGen makes a repo switch drop the
 	// old inbox's in-flight watcher messages.
-	steerDir   string
-	steerGen   int
-	steerWatch *steer.Watcher
+	// steerClaimed records that initSteerInbox actually claimed this dir
+	// (swept it and wrote the presence). It is NOT the same as steerWatch !=
+	// nil, which is also false in the window between startSteerCmd's dispatch
+	// and steerStartedMsg's arrival — discriminating on the watcher would
+	// double-arm and re-run Discard.
+	steerDir     string
+	steerGen     int
+	steerClaimed bool
+	steerWatch   *steer.Watcher
 
 	opName string // engine.OpName of the in-flight op; "" when idle
 
@@ -998,9 +1004,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case configReadyMsg:
 		m.cfg = msg.cfg
-		if !m.steerActive() {
-			m = m.closeSteerInbox() // config says off: drop the presence at once
-		}
+		// Both directions: off drops the presence, on claims an inbox that
+		// snapshotTargetMsg resolved before this config arrived.
+		var steerCmd tea.Cmd
+		m, steerCmd = m.reconcileSteer()
 		m.repoConfigPath = msg.repoTOML
 		// Apply the persisted Commits render mode ([ui] show_graph): "off" starts
 		// in the flat list, exactly like the . menu's "Show as list".
@@ -1028,7 +1035,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// nothing is loaded yet (a reconcile would degrade to the same walk).
 		m, cmd = m.reloadAllCmd(reloadOpts{manual: true, startup: true, hardFeed: true})
 		m.watchGen++
-		return m, tea.Batch(themeCmd, cmd, m.startWatchCmd(m.watchGen))
+		return m, tea.Batch(themeCmd, cmd, m.startWatchCmd(m.watchGen), steerCmd)
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -1069,9 +1076,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
 			m.cfg = msg.cfg
-			if !m.steerActive() {
-				m = m.closeSteerInbox() // config says off: drop the presence at once
-			}
+			// Both directions (see reconcileSteer): this is the repo-switch path,
+			// where snapshotTargetMsg resolved the new inbox before this config
+			// landed — an unclaimed dir must be claimed here or the new repo's
+			// leftovers replay and the session runs watcher-less.
+			var steerCmd tea.Cmd
+			m, steerCmd = m.reconcileSteer()
 			// Rebind the per-repo Settings write target on the legacy load path —
 			// configReadyMsg only covers app startup. Without this, every Settings
 			// write after a repo switch ("Show graph", "Commit sort", refresh
@@ -1125,7 +1135,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the conflict process re-derives its file list after a resolve).
 			if m.proc != nil {
 				nm, procCmd := m.proc.refreshed(m)
-				return nm, tea.Batch(themeCmd, procCmd, previewsCmd)
+				return nm, tea.Batch(themeCmd, procCmd, previewsCmd, steerCmd)
 			}
 			m = m.maybeResumePrompt()
 			// The initial feed walk (loadCmd) ran in parallel with the snapshot,
@@ -1138,12 +1148,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.feedUpstreams()) > 0 && m.feedScopeApplied != m.feedScopeSig() {
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
-				return m, tea.Batch(themeCmd, reload, previewsCmd)
+				return m, tea.Batch(themeCmd, reload, previewsCmd, steerCmd)
 			}
 			// Conflicts are surfaced as a non-blocking notice ("press [x] to
 			// resolve"); entering the resolution process is the user's choice (x),
 			// so a lingering conflict never traps the interface.
-			return m, tea.Batch(themeCmd, previewsCmd)
+			return m, tea.Batch(themeCmd, previewsCmd, steerCmd)
 		}
 	case dataAvailableMsg:
 		// Free the background lane the moment its active read's message arrives —
@@ -2447,6 +2457,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.gen != m.steerGen || !m.steerActive() {
 			msg.w.Close() // superseded by a repo switch, or steering went away
 			return m, nil
+		}
+		if m.steerWatch != nil {
+			m.steerWatch.Close() // never leak a watcher an earlier arm left behind
 		}
 		m.steerWatch = msg.w
 		return m, steerListenCmd(msg.w, msg.gen)
