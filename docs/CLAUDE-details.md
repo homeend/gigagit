@@ -695,8 +695,11 @@ gg://<repo>/<path>[@<target>]#<hunk>       <hunk> and <line> are exclusive
 gg://<repo>@<commit>                       a commit, no path
 gg://<repo>                                the repository
 <repo>   = <name>  remote-named    | /<absolute checkout path>  local
-<target> = <7..40 hex> | staged | (absent) = the working tree
+<target> = <7..64 hex> | staged | (absent) = the working tree
 ```
+
+(64, not 40: a sha-256 repository's commit ids are 64 hex characters and every
+producer writes the FULL sha.)
 
 **The local form has no delimiter** between the checkout and the file path, so
 `ParseLink` does not try to split it: `Repo.Abs` holds the whole absolute
@@ -726,17 +729,41 @@ caller (the TUI's load/config-ready cmds and `gg web`'s `touchMRU`; the
 one-shot CLI passes `""` rather than pay two git invocations per command, and
 an empty value never erases a stored one). `SetRemote` is the resolver's lazy
 backfill for entries an older gg wrote, and deliberately does NOT bump
-`LastOpened` — resolving a link is not opening a repository.
+`LastOpened` — resolving a link is not opening a repository. "This checkout
+has NO remote" is memoised as `repos.NoRemote` (`"-"`), so a remoteless entry
+costs one probe ever rather than two git invocations on every resolve;
+`linkNameEq` refuses the sentinel, and `Touch`'s empty-remote rule never
+erases it. The registry walk is skipped entirely when the cwd already answers
+a working-tree link (`ResolveLink` short-circuits on exactly that pair).
 
 **A CLI positional is a link iff it starts with `gg://`.** No heuristic: `gg
-show <commit>` and `gg diff <rev>` are untouched. A link replaces `--file`,
-`--cached`, `--rev`, `--hunk`, `--new-line` and `--old-line`; passing both is
-exit 2. `#` starts a shell comment, so `gg link`'s usage text and both skills
-tell the user to quote a link carrying `#<hunk>` — gg does not guess.
+show <commit>` and `gg diff <rev>` are untouched. A link replaces the flags
+that name the same thing — `--file`, `--cached`, `--rev`, `--hunk`,
+`--new-line`, `--old-line` for `note add`/`session navigate`; `--file`,
+`--cached`, `--rev`, `--start`, `--side` for `session highlight add`; the
+`<rev>` positional, `--cached` and `-- <paths>` for `diff`/`show` — and
+passing both is exit 2, never a silent override. TWO per-verb asymmetries are
+deliberate: **`gg diff <link>` uses only the link's file and target, ignoring
+its `:<line>` AND its `#<hunk>`** (the hunk numbering it would need is
+`--hunks`' own, so pass `--hunks` to see that hunk), and **`gg show` requires
+a link to a COMMIT** — a working-tree or staged link is exit 2, since there is
+no commit to show. `gg note list <link>` likewise ignores the line/hunk: it
+lists that FILE's threads. `#` starts a shell comment, so `gg link`'s usage
+text and both skills tell the user to quote a link carrying `#<hunk>` — gg
+does not guess.
 
 **Producers refuse rather than mis-render.** A path containing `@`, `:` or `#`
 cannot be expressed, so `model.LinkPathOK` gates every producer (`tui.linkFor`,
-web's `linkFor`, `gg link`). An UNTRACKED file uses the plain working-tree form
+web's `linkFor`, `gg link`), and `model.LinkAbsOK` gates the local form's
+CHECKOUT path in the same three places — laxer by design: a leading `X:` drive
+prefix is skipped and a `:` elsewhere is legal (only a NUMBER after the last
+`:` is a line), but `@` and `#` are fatal wherever they appear. `gg link`
+checks the path argument in one specific ORDER: `@`/a non-hunk `#` on the RAW
+argument (so the message is gg's own, not the parser's prose about a target
+the user never typed), then the suffix split, then the rebase onto the top
+level, then `LinkPathOK` on the REBASED path — which is what lets a Windows
+absolute argument (`C:\repo\a.txt`, all drive colon) through.
+An UNTRACKED file uses the plain working-tree form
 — the grammar has no `untracked` target, and index→file is the pair the
 resolver reads for it anyway. A shelf entry has no link at all.
 

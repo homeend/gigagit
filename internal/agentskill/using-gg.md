@@ -117,9 +117,23 @@ finds the right one here.
 - **A link the user pastes is enough.** Pass it as the FIRST positional to
   `gg diff <link>`, `gg show <link>`, `gg note add <link> --summary "…"`,
   `gg note list <link>`, `gg session navigate <link>` and
-  `gg session highlight add <link>[-<end>]`. The link replaces `--file`,
-  `--cached`, `--rev`, `--hunk`, `--new-line` and `--old-line`; passing both is
-  a usage error (exit 2), never a silent override.
+  `gg session highlight add <link>[-<end>]`. Each verb's link replaces the
+  flags that name the same thing, and passing both is a usage error (exit 2),
+  never a silent override:
+  - `gg diff <link>` / `gg show <link>` — replaces `--cached`, the `<rev>`
+    positional and `-- <paths>`. (`gg diff` uses the link's file and target
+    only: to see the hunk a `#<hunk>` link names, add `--hunks`. `gg show`
+    needs a link to a COMMIT and exits 2 otherwise.)
+  - `gg note add <link>` — replaces `--file`, `--cached`, `--rev`, `--hunk`,
+    `--new-line` and `--old-line`; the link must carry `:<line>` or `#<hunk>`.
+  - `gg note list <link>` — replaces `--file`, `--cached` and `--rev`; the
+    link's own line or hunk is ignored (it lists that FILE's threads).
+  - `gg session navigate <link>` — the same six, plus `--next-comment` and
+    `--prev-comment`.
+  - `gg session highlight add <link>[-<end>]` — replaces `--file`, `--cached`,
+    `--rev`, `--start` and `--side`; `--end` is still yours to pass (but not
+    together with the link's own `-<end>`, and never on a `#<hunk>` link,
+    which already names a range).
 - The verb runs against the checkout the link names even when your working
   directory is somewhere else — including posting into that worktree's session.
 - **Quote a link that carries `#<hunk>`**: `#` starts a shell comment, so

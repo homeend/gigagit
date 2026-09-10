@@ -269,8 +269,8 @@ repository history behind the `R` switcher — so a link made on one machine
 finds the matching checkout here. In the TUI, `L` in the diff view copies the
 cursor line's link and the `.` menu's **Copy link** works in the Files,
 Staged and Commits panels and a commit's files view; in `gg web`, right-click
-a diff line, a file row or a commit row. Quote a link
-that carries `#<hunk>` — an unquoted `#` starts a shell comment.
+a diff line, a file row or a commit row. Quote a link that carries `#<hunk>` —
+an unquoted `#` starts a shell comment.
 
 ### Shell integration (cd-on-switch)
 

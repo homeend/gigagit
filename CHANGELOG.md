@@ -23,8 +23,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   link resolve <link> [--json]`. **Hand one back** as the first positional to
   `gg diff`, `gg show`, `gg note add`, `gg note list`, `gg session navigate`
   and `gg session highlight add` — each runs against the checkout the link
-  names even from another directory, and posts steering into that worktree's
-  session. Mixing a link with the flags it replaces is a usage error rather
+  names even from another directory, and the three that steer (`gg note add`,
+  `gg session navigate`, `gg session highlight add`) post into THAT worktree's
+  session rather than the caller's. Mixing a link with the flags it replaces
+  is a usage error rather
   than a silent override, and a link that matches two checkouts of one repo is
   refused with both listed instead of guessed. The session snapshot (and `gg
   session status`, and MCP's `gg_ui_state`) gained `cursor.link` — the address
