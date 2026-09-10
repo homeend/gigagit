@@ -560,6 +560,64 @@ func TestRemoveThemeTableRecommentsPopulatedBlock(t *testing.T) {
 	}
 }
 
+// A comment of the user's own inside the table (no [populated] marker) must
+// not drift into the section above it once the header is gone: the header is
+// re-commented so the comment stays inside an inert `# [themes.light]` block.
+func TestRemoveThemeTableKeepsUserCommentInsideTheBlock(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "config.toml")
+	body := "[ui]\ntheme = \"light\"\n\n[themes.light]\n# bg = \"#101010\"   # my experiment\nfg = \"#222222\"\n\n[themes.dark]\nbg = \"#000000\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveThemeTable(path, "light"); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	want := "[ui]\ntheme = \"light\"\n\n# [themes.light]\n# bg = \"#101010\"   # my experiment\n\n[themes.dark]\nbg = \"#000000\"\n"
+	if got := fileBody(t, path); got != want {
+		t.Fatalf("file after remove:\n%s\nwant:\n%s", got, want)
+	}
+	cfg, err := Load(path, "")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if _, ok := cfg.Themes["light"]; ok {
+		t.Fatal("light table must be inert")
+	}
+}
+
+// The boundaries the scan must respect: a commented same-name header after the
+// active one, a [[tools.command]] block with a multi-line script right after
+// the table, and a file that is nothing but the table.
+func TestRemoveThemeTableBoundaries(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	cases := []struct{ name, body, want string }{
+		{"commented-header-after",
+			"[themes.light]\nbg = \"#101010\"\n# [themes.light]   # x [populated]\n# bg = \"#E9E9E5\"   # frame background [populated]\n",
+			"# [themes.light]   # x [populated]\n# bg = \"#E9E9E5\"   # frame background [populated]\n"},
+		{"tools-block-after",
+			"[themes.light]\nbg = \"#101010\"\n\n[[tools.command]]\ncategory = \"review\"\nname = \"x\"\nmode = \"capture\"\ncommand = '''\n[ -d x ] && echo hi\n# not a comment line of the table\n'''\n",
+			"[[tools.command]]\ncategory = \"review\"\nname = \"x\"\nmode = \"capture\"\ncommand = '''\n[ -d x ] && echo hi\n# not a comment line of the table\n'''\n"},
+		{"only-the-table", "[themes.light]\nbg = \"#101010\"\n", ""},
+	}
+	for _, c := range cases {
+		path := filepath.Join(dir, c.name+".toml")
+		if err := os.WriteFile(path, []byte(c.body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := RemoveThemeTable(path, "light"); err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if got := fileBody(t, path); got != c.want {
+			t.Fatalf("%s: file after remove:\n%q\nwant:\n%q", c.name, got, c.want)
+		}
+		if _, err := Load(path, ""); err != nil {
+			t.Fatalf("%s: load: %v", c.name, err)
+		}
+	}
+}
+
 func TestRemoveThemeTableNoActiveTableIsNoop(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

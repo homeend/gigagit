@@ -145,11 +145,13 @@ func SetThemeRole(path, themeName, key string, values ...string) error {
 // Inside the table, an active assignment gg itself wrote (no trailing doc) is
 // deleted, while a populate row the user hand-uncommented — still carrying its
 // `[populated]` marker — is RE-COMMENTED, mirroring SetThemeRole's removal
-// rule. The header follows the body: when any remaining row still carries the
-// marker, the table was the populate example block, so its header is
-// re-commented too and the block stays a documented, inert example; otherwise
-// the header goes along with the blank line that separated it from what
-// precedes it, so the file closes up as if the table had never been added.
+// rule. The header follows the body: when anything non-blank survives — a
+// populate row (the table was the example block, which stays a documented,
+// inert example) or a comment of the user's own — the header is re-commented
+// too, so the survivors stay inside a `# [themes.<name>]` block instead of
+// drifting into the section above them; otherwise the header goes along with
+// the blank line that separated it from what precedes it, so the file closes
+// up as if the table had never been added.
 // (A row SetThemeRole rewrote lost its marker at that point, so it is deleted
 // rather than re-commented — the same fate `d` gives it.)
 func RemoveThemeTable(path, themeName string) error {
@@ -196,24 +198,35 @@ func RemoveThemeTable(path, themeName string) error {
 	}
 
 	var keep []string
-	populated := false
+	survives := false // anything non-blank left inside the table
+	skipUntil = ""
 	for _, ln := range lines[start+1 : end] {
 		trimmed := strings.TrimSpace(ln)
+		if skipUntil != "" {
+			// The interior of an active multi-line value goes with its key.
+			if strings.Contains(trimmed, skipUntil) {
+				skipUntil = ""
+			}
+			continue
+		}
 		active := trimmed != "" && !strings.HasPrefix(trimmed, "#")
-		marked := strings.Contains(ln, "[populated]")
 		switch {
-		case active && marked:
+		case active && strings.Contains(ln, "[populated]"):
 			keep = append(keep, "# "+ln)
+			survives = true
 		case active:
 			// gg's own line: dropped.
+			if d, ok := opensMultiline(trimmed); ok {
+				skipUntil = d
+			}
 		default:
 			keep = append(keep, ln)
+			survives = survives || trimmed != ""
 		}
-		populated = populated || marked
 	}
 
 	out := append([]string(nil), lines[:start]...)
-	if populated {
+	if survives {
 		out = append(out, "# "+header)
 	} else {
 		for len(keep) > 0 && strings.TrimSpace(keep[len(keep)-1]) == "" {

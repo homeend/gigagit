@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/config"
@@ -65,7 +67,7 @@ func TestThemeEditorResetAsksThenKeeps(t *testing.T) {
 		t.Fatal("D must put the question up")
 	}
 	body := p.box(m)
-	for _, want := range []string{"light", "2", "[themes.light]", "[y] reset", "[n/esc] keep"} {
+	for _, want := range []string{"Reset the light theme?", "Removes 2 overrides from [themes.light]", "[y] reset", "[n/esc] keep"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("question must carry %q:\n%s", want, body)
 		}
@@ -110,8 +112,8 @@ func TestThemeEditorResetRemovesTheTable(t *testing.T) {
 	m = um.(Model)
 	um, cmd := m.Update(keyMsg("y"))
 	m = um.(Model)
-	if cmd == nil {
-		t.Fatal("a reset that changes the theme must repaint (ClearScreen)")
+	if !isClearScreen(cmd) {
+		t.Fatal("a reset must repaint through tea.ClearScreen")
 	}
 	if p.confirming {
 		t.Fatal("y must leave the question")
@@ -129,7 +131,7 @@ func TestThemeEditorResetRemovesTheTable(t *testing.T) {
 	if _, ok := m.cfg.Themes["light"]; ok && themeOverrideCount(m.cfg.Themes["light"]) != 0 {
 		t.Fatalf("model config still overrides: %+v", m.cfg.Themes["light"])
 	}
-	if p.statusErr || !strings.Contains(p.status, "2") || !strings.Contains(p.status, "[themes.light]") {
+	if p.statusErr || !strings.Contains(p.status, "removed 2 overrides") || !strings.Contains(p.status, "[themes.light]") {
 		t.Fatalf("status = %q (err=%v)", p.status, p.statusErr)
 	}
 	body := p.box(m)
@@ -190,4 +192,13 @@ func TestThemeEditorResetKeyTypesWhileFiltering(t *testing.T) {
 	if p.confirming || p.filter.Value() != "D" {
 		t.Fatalf("confirming=%v filter=%q", p.confirming, p.filter.Value())
 	}
+}
+
+// isClearScreen reports whether cmd is tea.ClearScreen (its message type is
+// unexported, so the check goes through the message's type name).
+func isClearScreen(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	return fmt.Sprintf("%T", cmd()) == fmt.Sprintf("%T", tea.ClearScreen())
 }

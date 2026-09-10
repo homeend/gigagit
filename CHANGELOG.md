@@ -53,7 +53,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   entire `[themes.<name>]` table is removed and the built-in palette paints
   again — roles the repo `.gg.toml` pins keep their value, and the status
   names them. A table that was a `gg config populate` example block goes
-  back to being a fully commented example rather than vanishing.
+  back to being a commented example (minus the rows you had edited) rather
+  than vanishing, and any comment of your own inside the table stays in it.
 - **Delete erases at the end of every text field.** A keyboard whose erase
   key sends Delete (`^[[3~`) rather than Backspace could not remove the last
   character of a field: with nothing ahead of the cursor a forward-delete

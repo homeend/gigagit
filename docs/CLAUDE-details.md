@@ -434,11 +434,13 @@ The whole-theme reset (`D`, a `confirming` sub-mode of the popup: `y` fires,
 any other key keeps) goes through `config.RemoveThemeTable`, which deletes the
 ACTIVE `[themes.<name>]` table only: gg-written rows are dropped, rows still
 carrying `[populated]` are re-commented, and the header follows the body —
-re-commented when any remaining row carries the marker (the table was the
-populate example block, which must survive as an inert example), otherwise
-removed with its separator blank. The header cannot be judged on its own
-because `setLineInSection` rewrote it to a bare `[themes.<name>]` when it
-uncommented it, dropping the marker. The popup counts overrides with
+re-commented when anything non-blank survives (a `[populated]` row — the table
+was the populate example block, which must survive as an inert example — or a
+comment of the user's own, which must not drift into the section above),
+otherwise removed, with the blank that would have been left doubled or at
+EOF. The header cannot be judged on its own because `setLineInSection`
+rewrote it to a bare `[themes.<name>]` when it uncommented it, dropping the
+marker. The popup counts overrides with
 `themeOverrideCount` (rows whose `OverrideGet(global)` is set — the `*` rows)
 and refuses to ask when it is 0, so nothing is ever written for nothing.
 `textfield.HandleEditKey` maps Delete with the cursor at the END of the buffer
