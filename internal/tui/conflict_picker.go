@@ -9,6 +9,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // pickerFocus has no themed colour (bold only), so it stays a literal — it is
@@ -28,6 +29,15 @@ type hunkPicker struct {
 	rightLabel string // "incoming" / "working"
 	requireAll bool   // gate enter on Pending==0 (conflicts) vs apply freely (staging)
 	apply      func(m Model, content []byte) (Model, tea.Cmd)
+
+	// path is the repo-relative file the document came from; it selects the
+	// syntax lexer (withSyntax) and nothing else.
+	path string
+	// curTok/incTok hold the syntax runs of the two assembled full-file sides,
+	// indexed by line number − 1 (the tokAt numbering). nil = render plain.
+	// The literal context lines are shared by both sides and take the CURRENT
+	// side's runs; each block's lines take their own side's.
+	curTok, incTok [][]syntax.Tok
 
 	doc    *hunkpick.Doc
 	blocks []*hunkpick.Block
@@ -84,7 +94,8 @@ func newConflictPicker(path string, doc *hunkpick.Doc) *hunkPicker {
 			m = m.popLayer()
 			return m.startOp(engine.ResolveConflictHunks{Path: path, Content: content})
 		},
-		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
+		path: path,
+		doc:  doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
 	}
 }
 
@@ -115,7 +126,8 @@ func newStagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
 			m = m.popLayer()
 			return m.startOp(engine.StageHunks{Path: path, Content: content})
 		},
-		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
+		path: path,
+		doc:  doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
 	}
 }
 
@@ -132,7 +144,8 @@ func newUnstagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
 			m = m.popLayer()
 			return m.startOp(engine.StageHunks{Path: path, Content: content})
 		},
-		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
+		path: path,
+		doc:  doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
 	}
 }
 
