@@ -535,3 +535,122 @@ shipped. Roadmap: workspace group sync (named repo groups + parallel
 background-pull; needs concurrent-op decision routing, shared with MCP), then
 the remaining MCP surface — heavy ops (staging, interactive rebase, conflict
 editor, diff, visual graph, sparse-checkout).
+
+### Live steering (`internal/steer`, phase 3)
+
+**Layout**, under the phase-0 session dir
+`<state>/gg/sessions/<EncodeRepoKey(commonDir)>/`:
+
+```text
+ui-state.json                      # the phase-0 snapshot, repo-level, untouched
+steer/<EncodeRepoKey(worktree)>/   # ONE inbox per WORKTREE
+  tui.json                         # {"pid","worktree","started"}; removed on exit and on reRoot
+  web.json                         # + {"url"}
+  cmd-<unixnano>-<pid>.json        # one command, temp+rename, unlinked by the consumer
+  reply-<id>.json                  # the answer, unlinked by the CLI that read it
+```
+
+The snapshot is keyed by the git COMMON dir and shared by every worktree; the
+inbox deliberately is not, so `gg session navigate` run in worktree A steers the
+window showing A. Both re-home on `reRoot` through the same
+`snapshotTargetMsg`.
+
+**Liveness is a fresh mtime**, never a pid probe: each session re-touches its
+presence on the 1 s tick (`heartbeatMsg` in the TUI, a ticker goroutine in
+`gg web`), and `steer.Live` reports a presence under 5 s old (`steer.LiveWindow`),
+sweeping an older one. One `os.Chtimes`/`os.Stat` per second, no per-OS process
+API, immune to pid reuse. `Presence.PID` is display-only.
+
+**Command ids** are `<unixnano>-<pid>` (`steer.NewID`), which sorts by post
+time — `Drain` returns commands in name order. A command over 16 KiB
+(`steer.MaxCommandBytes`), unparsable, or carrying no `id` is deleted and
+dropped: a reply file is named after the id, so an id-less command is
+unanswerable by construction. `wait:false` gets no reply. `Discard` sweeps
+`cmd-*` AND `reply-*` at startup, so a crashed session's commands never replay
+and a reply the CLI abandoned on timeout never outlives its session.
+
+**Two sessions on the same worktree both drain the same inbox**, and whichever
+unlinks a command file first applies it. This is rare (a second TUI on one
+worktree), deliberately not guarded, and recorded here rather than arbitrated:
+any lock would have to survive a SIGKILL, which is the exact problem mtime
+liveness exists to avoid.
+
+**Routing, the reply wait and every exit code live in `internal/cli/session.go`**
+(`sendSteer`/`routeFor`): no live session for the worktree is exit 1; when both
+a TUI and a page are live, one command id (`c.ID`, filled by `steer.NewID` if
+unset) goes to both — one HTTP POST to the page, one inbox file to the TUI —
+so a single reply can be correlated against a single request. `navigate`'s wait
+blocks up to `steerReplyWaitForTest` (a 2 s `var`, shortened only by a test;
+production never touches it); an unanswered wait prints `queued: no answer from
+the TUI within 2s` and exits 0 — the command is still in the inbox and may yet
+land, so a slow TUI is not reported as a failure. The `--next-comment`/
+`--prev-comment` arm and the bare `--rev` arm of `gg session navigate` each
+refuse every other target flag (`--file`, `--cached`, `--hunk`, `--new-line`,
+`--old-line`) at exit 2, so a target-shaped mistake reports usage instead of
+silently dropping half the command.
+
+**Refusal rules** (`Model.steerRefusal`, `internal/tui/steer.go`) — a command is
+answered `ok:false` with a reason and applied to nothing when: an op is running
+or a load is in flight (`!m.opsIdle()`), a decision modal is up (`m.modal`), a
+process owns the screen (`m.proc`, which is where the conflict resolver lives),
+the action menu is open, any typing surface has focus (`filterTyping`,
+`highlightTyping`, `recallOpen`, `filesView.typing`, `filesPreview.typing`,
+`stashView.typing`), or `topLayer()` is outside the poppable whitelist
+(`nil`, `*diffView`, `*historyView`, `*blameView`, `*contentPopup`) — which is
+how the hunk/stage picker, the rebase editor and the repo switcher are refused
+without enumerating every layer type.
+
+**The navigate pipeline** parks a `pendingSteer` and drains it in the very
+handler that owns the load it waits on — `dataAvailableMsg`/`srcStatus` for the
+one status retry, `commitFilesMsg` for a commit's file list, `diffMsg` for the
+landing. The landing must happen AFTER `*dv = *msg.view` in the `diffMsg` arm,
+which overwrites `curLine`/`offset` with the loader's values. Every failure
+branch routes through `failPending`, and a pending older than
+`steerPendingTTL` (5 s) is expired by the heartbeat — a leaked pending would
+land the cursor on the next unrelated diff.
+
+**Two deliberate refusals.** A commit that is not loaded in the feed is refused
+(`gotoLoadedCommit`, the half of `gotoCommitByHash` that never starts the eager
+deep search) rather than triggering a search that can raise a prompt: never
+raise a decision on an agent's behalf. A conflicted row is refused rather than
+opened: the conflict editor is the user's to open.
+
+**`--hunk N` is resolved by the CLI, never the TUI** — phase 2's `HunkDiffSpec`
++ `HunkRange` (which reads the same `DiffHunks` parse `gg diff --hunks` uses)
+turn it into the FIRST line of the hunk's new span (old side for a pure
+deletion), so the consumer only ever sees file + target + side + line and one
+landing path serves `--hunk`, `--new-line` and `--old-line`. An untracked path
+has no git hunks and is refused with "untracked files have no hunks; use
+--new-line".
+
+**Attention marks** live in `m.attention map[attentionKey][]steerMark`, keyed by
+path + target state + commit. They survive the interval auto-refresh on purpose:
+a rebuild nobody asked for must not wipe an agent's bands. They die on
+`highlight_clear`, an EXPLICIT `reload`, and `reRoot`. The cursor row outranks a
+band in `diffPaneLines`.
+
+**Web.** `gg web` writes `web.json` with its URL after `listen` and removes it on
+shutdown and `reRoot`. `POST /api/session/steer` validates through the same
+allowlists as the notes lane, checks the op gate itself (409
+`operation in flight` — the CLI prints it and, unless a TUI is also live to
+answer, exits 1) and emits on the live hub BYPASSING `liveHub.emit`'s gate,
+which would silently drop a one-off instruction. The endpoint answers 202;
+there is no page acknowledgement, and the CLI prints `web: sent`. A `reload`
+with `sources` containing `"all"` is expanded client-side into the TUI's hard
+reload — status, notes, branches (the whole sidebar) and the feed — since the
+browser's `refreshSources` only knows the individual names. A `navigate` onto a
+working-tree file the agent named opens the working-tree stage
+(`openWorkingTree(0)`) before it looks the file up in `state.statusEntries`; if
+the file turns out not to be there, the page still ends up parked on the
+working-tree file list rather than doing nothing.
+
+**Protocol prose stays English** — every `Reply.Detail`/`Error`, every command
+JSON value, every CLI line. Only the on-screen notices the TUI posts
+(`"▸ agent opened %s"`, `"▸ agent asked for a reload"`,
+`"▸ agent marked lines in %s"`, `"▸ agent cleared its marks"`,
+`"agent moved the focus"`) go through `i18n.T` and live in all four bundles.
+
+**Test seams:** the inbox dir is a field (`m.steerDir`, `Server.steerDir`,
+`mcp.Server.steerDir`) or a parameter (`cli.runSession(dir, …)`), never read from
+the environment in a test — the tui suite runs `t.Parallel()` and `t.Setenv`
+panics there.

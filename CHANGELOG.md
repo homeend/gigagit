@@ -37,6 +37,39 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   shown tagged `(repo)` and stay read-only, since the repo layer would shadow
   anything written here.
 
+### Live steering — an agent can put your window on the line it means
+
+`gg session` posts a small command to whatever gg session is showing the
+current worktree: a running TUI, an open `gg web` page, or both.
+
+```bash
+gg session status                                   # exit 1 when nothing is open
+gg session navigate --file src/x.go --hunk 2        # land the cursor there
+gg session navigate --rev <sha>                     # reveal a commit
+gg session navigate --next-comment                  # step the open diff's notes
+gg session reload [notes|status|all]
+gg session focus commits
+gg session highlight add --file src/x.go --start 40 --end 46 --tone warn
+gg session highlight clear [--file src/x.go]
+```
+
+- The channel is a file inbox beside the session snapshot, one per WORKTREE, so
+  a command run in worktree A reaches the window showing A. Liveness is a fresh
+  presence mtime, not a pid probe.
+- `navigate` waits up to 2s for the window's answer and prints it; `--no-wait`
+  prints the command id and exits at once.
+- The window refuses (exit 1, with a reason) rather than acting while an
+  operation is running, a decision is waiting, the user is typing, or a picker,
+  the conflict editor, the rebase editor or the repo switcher is open.
+- `highlight` paints an attention band over a line range, in three new theme
+  roles `attention_info_bg` / `attention_warn_bg` / `attention_error_bg`.
+- **Live notes for free:** `gg note add|reply|apply|rm|clear`, `gg review
+  --notes` and the mutating MCP note tools now post a `reload notes` on their
+  own, so a note an agent just wrote appears in your open window without a
+  manual refresh.
+- Off with `[ui] agent_steering = "off"`; the frontends then write no presence
+  and `gg session` reports no session.
+
 ### Review notes — the agent lane (phase 2)
 
 - `gg diff --hunks [--json]` lists each file's numbered git `@@` hunks, over

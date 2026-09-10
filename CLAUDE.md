@@ -169,4 +169,7 @@ MCP (read surface + gated mutations), and the web probe (`gg web`, grown
 through several waves). Roadmap: workspace group sync (named repo groups +
 parallel background-pull; needs concurrent-op decision routing, shared with
 MCP), then the remaining MCP surface — heavy ops (staging, interactive
-rebase, conflict editor, diff, visual graph, sparse-checkout).
+rebase, conflict editor, diff, visual graph, sparse-checkout). The
+hunk-parity roadmap (review notes, the agent lane, live steering via `gg
+session`, syntax highlighting) is shipped through phase 3; phases 5 and 6
+(viewer extras, in-view search) remain.

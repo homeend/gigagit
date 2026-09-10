@@ -227,6 +227,12 @@ so `--hunk N` can address one. Notes are machine-local and expire (see
 prints and saves that — but ALSO asks the tool for anchored notes and imports
 them.
 
+An agent can also steer the window you already have open: `gg session status`
+says whether one is running, and `gg session navigate --file <path> --hunk N`
+puts your cursor on the hunk it is about to annotate. Every `gg note` mutation
+posts a refresh on its own, so notes an agent writes appear without a manual
+`r`. Turn the whole channel off with `[ui] agent_steering = "off"`.
+
 Forks are answered by flags (e.g. `--on-conflict`, `--with-branch`/`--force`);
 without a flag, an interactive terminal prompts, and a non-interactive run errors
 asking for the flag.
