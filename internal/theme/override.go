@@ -49,9 +49,9 @@ type Override struct {
 	NoteStale   string `toml:"note_stale"`
 	PickerLabel string `toml:"picker_label"`
 
-	AttentionInfo  string `toml:"attention_info"`
-	AttentionWarn  string `toml:"attention_warn"`
-	AttentionError string `toml:"attention_error"`
+	AttentionInfo  string `toml:"attention_info_bg"`
+	AttentionWarn  string `toml:"attention_warn_bg"`
+	AttentionError string `toml:"attention_error_bg"`
 
 	Lanes  []string `toml:"lanes"`  // exactly 7 when set; "" entry = keep the base value
 	Syntax []string `toml:"syntax"` // exactly 11 when set; "" entry = keep the base value
@@ -111,9 +111,9 @@ var roleFields = []roleField{
 	{"note_stale", "review-note frame, notes whose anchor moved", func(t *Theme) *string { return &t.NoteStale }, func(o *Override) *string { return &o.NoteStale }},
 	{"picker_label", "hunk/conflict picker side labels", func(t *Theme) *string { return &t.PickerLabel }, func(o *Override) *string { return &o.PickerLabel }},
 
-	{"attention_info", "agent attention band, info tone (gg session highlight)", func(t *Theme) *string { return &t.AttentionInfo }, func(o *Override) *string { return &o.AttentionInfo }},
-	{"attention_warn", "agent attention band, warn tone", func(t *Theme) *string { return &t.AttentionWarn }, func(o *Override) *string { return &o.AttentionWarn }},
-	{"attention_error", "agent attention band, error tone", func(t *Theme) *string { return &t.AttentionError }, func(o *Override) *string { return &o.AttentionError }},
+	{"attention_info_bg", "agent attention band background, info tone (gg session highlight)", func(t *Theme) *string { return &t.AttentionInfo }, func(o *Override) *string { return &o.AttentionInfo }},
+	{"attention_warn_bg", "agent attention band background, warn tone", func(t *Theme) *string { return &t.AttentionWarn }, func(o *Override) *string { return &o.AttentionWarn }},
+	{"attention_error_bg", "agent attention band background, error tone", func(t *Theme) *string { return &t.AttentionError }, func(o *Override) *string { return &o.AttentionError }},
 }
 
 const (
