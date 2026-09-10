@@ -413,6 +413,37 @@ func TestResolveLinkLocalFormRefusesWhenTheOldLocationStillExists(t *testing.T) 
 	}
 }
 
+// The same refusal, with the file NESTED below the checkout top: the
+// surviving checkout is two directories above the link's own path, so
+// "does the deepest existing directory hold a .git?" is not enough on its own
+// — the fallback must also refuse an entry whose matched prefix still exists
+// as a checkout. Ruling P5a again.
+func TestResolveLinkLocalFormRefusesWhenANestedOldLocationStillExists(t *testing.T) {
+	t.Parallel()
+	unregistered := filepath.Join(t.TempDir(), "test-1")
+	if err := os.MkdirAll(filepath.Join(unregistered, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seedRepoAt(t, unregistered)
+
+	registered := filepath.Join(t.TempDir(), "test-1") // same base name, different repo
+	if err := os.MkdirAll(registered, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seedRepoAt(t, registered)
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	_ = repos.Touch(state, registered, "", time.Unix(1000, 0))
+
+	l, err := model.ParseLink("gg://" + filepath.ToSlash(unregistered) + "/sub/README.md:2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state})
+	if !errors.Is(err, ErrLinkUnknownRepo) {
+		t.Fatalf("err = %v, want ErrLinkUnknownRepo (not a guess at %s)", err, registered)
+	}
+}
+
 // A commit link whose ONLY candidate (the cwd itself) does not contain the
 // named sha is refused as unknown, not silently pointed at the wrong commit.
 func TestResolveLinkCommitNotInTheOnlyCandidateIsUnknown(t *testing.T) {

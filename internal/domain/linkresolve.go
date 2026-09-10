@@ -181,9 +181,21 @@ func linkCandidates(ctx context.Context, l model.Link, opts ResolveOpts) []linkC
 			// (last occurrence first, so a repo called "src" inside
 			// ".../src/src" resolves deepest).
 			for _, e := range entries {
-				if rel, ok := linkMovedSplit(l.Repo.Abs, filepath.Base(e.Path)); ok {
-					add(linkCandidate{checkout: e.Path, relPath: rel})
+				rel, prefix, ok := linkMovedSplit(l.Repo.Abs, filepath.Base(e.Path))
+				if !ok {
+					continue
 				}
+				// The guess is only safe while the OLD checkout is really
+				// gone. ancestorHasGit above answers that for the link's
+				// deepest surviving directory; this answers it for the
+				// candidate's own matched prefix, which for a file NESTED
+				// below the checkout top is a different directory entirely
+				// (".../test-1" vs ".../test-1/sub"). Ruling P5a: never guess
+				// at a different repository that merely shares a name.
+				if hasGitEntry(filepath.FromSlash(prefix)) {
+					continue
+				}
+				add(linkCandidate{checkout: e.Path, relPath: rel})
 			}
 		}
 		return out
@@ -251,8 +263,7 @@ func ancestorHasGit(abs string) bool {
 				dir = filepath.Dir(dir)
 				continue
 			}
-			_, err := os.Lstat(filepath.Join(dir, ".git"))
-			return err == nil
+			return hasGitEntry(dir)
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -260,6 +271,16 @@ func ancestorHasGit(abs string) bool {
 		}
 		dir = parent
 	}
+}
+
+// hasGitEntry reports whether dir holds a ".git" entry (a directory in a
+// normal checkout, a file in a worktree or a submodule).
+func hasGitEntry(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	_, err := os.Lstat(filepath.Join(dir, ".git"))
+	return err == nil
 }
 
 // containing keeps the candidates whose object database holds sha.
@@ -314,10 +335,10 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 
 // cleanLinkRelPath cleans a link's repo-relative path and refuses one that
 // would escape the checkout ("" — the repo root — always passes). A crafted
-// link can carry ".." segments straight through to here (the remote-named
-// form's Path is never validated by ParseLink, and linkMovedSplit performs no
-// cleaning of its own); a resolved link must never point outside the
-// checkout it names.
+// link can carry ".." segments straight through to here (ParseLink checks the
+// remote-named form's Path for the grammar's SEPARATORS, not for traversal,
+// and linkMovedSplit performs no cleaning of its own); a resolved link must
+// never point outside the checkout it names.
 func cleanLinkRelPath(rel string) (string, error) {
 	if rel == "" {
 		return "", nil
@@ -358,20 +379,31 @@ func linkSplit(abs, checkout string) (string, bool) {
 }
 
 // linkMovedSplit finds base as a directory segment of abs (the LAST match
-// wins) and returns everything after it. It is the moved-checkout fallback:
-// the recorded path is gone, so only the checkout's own directory name is
-// left to match on.
-func linkMovedSplit(abs, base string) (string, bool) {
-	segs := strings.Split(strings.Trim(filepath.ToSlash(abs), "/"), "/")
+// wins) and returns everything after it, plus the PREFIX up to and including
+// the matched segment — the absolute path the link believed the checkout was
+// at, which the caller checks is really gone. It is the moved-checkout
+// fallback: the recorded path is gone, so only the checkout's own directory
+// name is left to match on.
+func linkMovedSplit(abs, base string) (rel, prefix string, ok bool) {
+	slash := filepath.ToSlash(abs)
+	rooted := strings.HasPrefix(slash, "/")
+	segs := strings.Split(strings.Trim(slash, "/"), "/")
 	for i := len(segs) - 1; i >= 0; i-- {
-		if linkPathKey(segs[i]) == linkPathKey(base) {
-			if i == len(segs)-1 {
-				return "", true
-			}
-			return path.Join(segs[i+1:]...), true
+		if linkPathKey(segs[i]) != linkPathKey(base) {
+			continue
 		}
+		// A Windows path's first segment is the drive ("C:"), which takes no
+		// leading separator; a POSIX one keeps the root slash it came with.
+		prefix = strings.Join(segs[:i+1], "/")
+		if rooted {
+			prefix = "/" + prefix
+		}
+		if i == len(segs)-1 {
+			return "", prefix, true
+		}
+		return path.Join(segs[i+1:]...), prefix, true
 	}
-	return "", false
+	return "", "", false
 }
 
 // linkNameEq compares two repository names. Case matters everywhere except

@@ -26,13 +26,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   names even from another directory, and the three that steer (`gg note add`,
   `gg session navigate`, `gg session highlight add`) post into THAT worktree's
   session rather than the caller's. Mixing a link with the flags it replaces
-  is a usage error rather
-  than a silent override, and a link that matches two checkouts of one repo is
-  refused with both listed instead of guessed. The session snapshot (and `gg
-  session status`, and MCP's `gg_ui_state`) gained `cursor.link` — the address
-  of whatever the user is looking at, so an agent can see it without being
-  told. Quote a link carrying `#<hunk>`: an unquoted `#` starts a shell
-  comment.
+  is a usage error rather than a silent override, and a link that matches two
+  checkouts of one repo is refused with both listed instead of guessed. The
+  session snapshot (and `gg session status`, and MCP's `gg_ui_state`) gained
+  `cursor.link` — the address of whatever the user is looking at, so an agent
+  can see it without being told. Quote a link carrying `#<hunk>`: an unquoted
+  `#` starts a shell comment.
 - **TUI themes.** `[ui] theme = "terminal" | "dark" | "light"` (default
   `terminal`, unchanged look). `dark` pins the Windows Terminal Campbell look
   everywhere; `light` is a neutral light grey — charcoal text on an off-white
