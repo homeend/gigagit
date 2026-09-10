@@ -127,7 +127,11 @@ func (m Model) loadCmd() tea.Cmd {
 		// MRU touch + reflog re-read are not git-status reads; do them after the
 		// gated snapshot, keyed off the toplevel it reported.
 		if snap.CurrentWorktree != "" {
-			_ = repos.Touch(statePath, snap.CurrentWorktree, time.Now())
+			// The remote name is what a gg:// link names this repo by. This
+			// runs off the Update goroutine inside the load cmd, so the two
+			// extra git reads are free here — unlike the one-shot CLI.
+			name, _ := svc.RepoName(ctx)
+			_ = repos.Touch(statePath, snap.CurrentWorktree, name, time.Now())
 			if n := cfg.UI.ReflogLimit; n > 0 {
 				if rl, err := svc.Reflog(ctx, n); err == nil {
 					out.reflog = rl

@@ -55,9 +55,14 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 	// non-repo working directories are ignored). Skip for "repo" subcommands
 	// since they are registry management commands, not git operations, and may
 	// be run from arbitrary directories.
+	//
+	// The remote name is deliberately "": resolving it costs two extra git
+	// invocations, which every one-shot `gg status` would then pay. Touch keeps
+	// whatever a TUI/web session already recorded, and domain.ResolveLink
+	// backfills an entry that still has none.
 	if RepoStatePath != "" && cmd != "repo" {
 		if top, err := svc.TopLevel(context.Background()); err == nil {
-			_ = repos.Touch(RepoStatePath, top, time.Now())
+			_ = repos.Touch(RepoStatePath, top, "", time.Now())
 		}
 	}
 	if cmd == "batch" {

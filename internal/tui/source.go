@@ -461,8 +461,13 @@ func (m Model) bootstrapCmd() tea.Cmd {
 			if c, cerr := config.Load(config.DefaultGlobalPath(), repoTOML); cerr == nil {
 				cfg = c
 			}
+			// The remote name is what a gg:// link names this repo by.
+			// Computed regardless of statePath: the link identity is a
+			// property of the repo, not of MRU recording, and a later task
+			// threads it into configReadyMsg.
+			name, _ := svc.RepoName(ctx)
 			if statePath != "" {
-				_ = repos.Touch(statePath, top, time.Now())
+				_ = repos.Touch(statePath, top, name, time.Now())
 			}
 		}
 		feed.SetPageSizes(cfg.UI.CommitInitialCount, cfg.UI.CommitBatchSize)

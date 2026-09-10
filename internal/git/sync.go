@@ -51,6 +51,19 @@ func (r *Repo) RemoteNames(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
+// RemoteURL returns the fetch URL configured for remote name. An unknown
+// remote is an error (git exits non-zero), never an empty string.
+//
+//	git remote get-url <name>
+func (r *Repo) RemoteURL(ctx context.Context, name string) (string, error) {
+	argv := gitcmd.New("remote").Arg("get-url", name).ToArgv()
+	res, err := r.Runner.Run(ctx, "git remote get-url", argv)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(res.Stdout), nil
+}
+
 // PruneRemotes removes tracking refs for branches deleted on the named remotes,
 // in one invocation. Empty names is a no-op (no error).
 func (r *Repo) PruneRemotes(ctx context.Context, names ...string) error {

@@ -26,7 +26,7 @@ func seededModel(t *testing.T) (Model, string, string) {
 		t.Fatal(err)
 	}
 	state := filepath.Join(t.TempDir(), "repos.toml")
-	if err := repos.Touch(state, otherDir, time.Unix(1000, 0)); err != nil {
+	if err := repos.Touch(state, otherDir, "", time.Unix(1000, 0)); err != nil {
 		t.Fatal(err)
 	}
 	m := New(domain.New(repo))

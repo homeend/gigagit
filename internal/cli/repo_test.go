@@ -26,8 +26,8 @@ func withState(t *testing.T) string {
 func TestRepoListMRUFirst(t *testing.T) {
 	state := withState(t)
 	a, b := t.TempDir(), t.TempDir()
-	_ = repos.Touch(state, a, time.Unix(1000, 0))
-	_ = repos.Touch(state, b, time.Unix(2000, 0))
+	_ = repos.Touch(state, a, "", time.Unix(1000, 0))
+	_ = repos.Touch(state, b, "", time.Unix(2000, 0))
 
 	dir := newCLIRepo(t)
 	var out, errb bytes.Buffer
@@ -49,7 +49,7 @@ func TestRepoSwitchUniqueMatchWritesCwdFile(t *testing.T) {
 	if err := os.Mkdir(target, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_ = repos.Touch(state, target, time.Unix(1000, 0))
+	_ = repos.Touch(state, target, "", time.Unix(1000, 0))
 
 	dir := newCLIRepo(t)
 	cwdFile := filepath.Join(t.TempDir(), "cwd")
@@ -86,7 +86,7 @@ func TestRepoSwitchAmbiguousListsCandidates(t *testing.T) {
 		if err := os.Mkdir(p, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		_ = repos.Touch(state, p, time.Unix(1000, 0))
+		_ = repos.Touch(state, p, "", time.Unix(1000, 0))
 	}
 	dir := newCLIRepo(t)
 	var out, errb bytes.Buffer

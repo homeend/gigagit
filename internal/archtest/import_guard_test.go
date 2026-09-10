@@ -103,3 +103,21 @@ func TestSteerIsAStdlibLeaf(t *testing.T) {
 		}
 	}
 }
+
+// TestReposIsAStdlibLeaf pins internal/repos's dependency budget. The registry
+// is read by all four frontends AND (since gg links) by internal/domain, so
+// any gg package it pulled in would become a dependency of everything — and
+// the reason `Touch` takes the remote NAME rather than computing it is exactly
+// that this package must never learn what a remote is. go-toml is the one
+// exception (the on-disk format).
+func TestReposIsAStdlibLeaf(t *testing.T) {
+	t.Parallel()
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/repos") {
+		if imp == "github.com/pelletier/go-toml/v2" {
+			continue
+		}
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/repos imports %s — it must stay stdlib + go-toml only", imp)
+		}
+	}
+}

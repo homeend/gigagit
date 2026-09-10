@@ -55,7 +55,7 @@ func TestRerootToMRURepo(t *testing.T) {
 	other := newRepoDir(t, 1)
 	srv := New(domain.Open(dir))
 	srv.reposPath = filepath.Join(t.TempDir(), "repos.toml")
-	if err := repos.Touch(srv.reposPath, other, time.Now()); err != nil {
+	if err := repos.Touch(srv.reposPath, other, "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	ts := serve(t, srv)
@@ -165,7 +165,7 @@ func TestRerootBrokenTargetKeepsServing(t *testing.T) {
 	notARepo := t.TempDir() // exists (survives repos.Load pruning) but is no repository
 	srv := New(domain.Open(dir))
 	srv.reposPath = filepath.Join(t.TempDir(), "repos.toml")
-	if err := repos.Touch(srv.reposPath, notARepo, time.Now()); err != nil {
+	if err := repos.Touch(srv.reposPath, notARepo, "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	ts := serve(t, srv)
