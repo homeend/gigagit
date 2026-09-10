@@ -880,7 +880,7 @@ panels; unknown names reply `ok:false`.
 **CLI** (`internal/cli/session.go`, `gg batch` admits `session`):
 
 ```text
-gg session status [--json]                  # exit 1 "no gg TUI session for this worktree" when no live presence
+gg session status [--json]                  # exit 1 "no gg session for this worktree" when no live presence
 gg session navigate --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>] [--no-wait]
 gg session navigate --rev <c> [--no-wait]   # reveal the commit
 gg session navigate --next-comment | --prev-comment [--no-wait]

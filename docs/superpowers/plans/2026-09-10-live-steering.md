@@ -22,7 +22,7 @@
   - MCP: the `Server` field `s.steerDir string`.
   - `internal/steer` itself takes `dir string` in every exported function — it has no notion of a state home.
 
-  The ONE exception: a CLI test that must exercise the real `cli.Run` →
+  The exceptions: `internal/config` tests (that package already uses `t.Setenv` and runs serial) and a CLI test that must exercise the real `cli.Run` →
   `config.SessionSteerDir` path may call `t.Setenv("XDG_STATE_HOME", t.TempDir())`
   and must then NOT call `t.Parallel()`, mirroring the existing
   `internal/cli` note tests. Every other test injects.
@@ -1306,7 +1306,6 @@ nothing renders yet.
 **Files:**
 - Modify: `internal/theme/theme.go` (the `Theme` struct l.38-41, `roles()` l.53-62, `Dark` l.74-84, `Light` l.95-105)
 - Modify: `internal/theme/override.go` (the `Override` struct ~l.46-49, the `roleFields` table after the `note_stale` row at l.107)
-- Modify: `internal/theme/override_test.go` (extend the round-trip assertions)
 - Modify: `internal/tui/styles.go` (the `styles` struct l.19+, `legacy` l.95, `buildStyles` l.109+)
 - Create: `internal/tui/attention_style_test.go`
 
@@ -1533,7 +1532,7 @@ cd /mnt/t/others/gigagit.worktrees/feat-live-steering && gofmt -l internal/theme
 Expected: empty output.
 
 ```bash
-cd /mnt/t/others/gigagit.worktrees/feat-live-steering && git add internal/theme/theme.go internal/theme/override.go internal/theme/override_test.go internal/tui/styles.go internal/tui/attention_style_test.go && git commit -m "$(cat <<'EOF'
+cd /mnt/t/others/gigagit.worktrees/feat-live-steering && git add internal/theme/theme.go internal/theme/override.go internal/tui/styles.go internal/tui/attention_style_test.go && git commit -m "$(cat <<'EOF'
 feat(theme): attention_info / attention_warn / attention_error roles
 
 The band `gg session highlight` will paint over marked diff rows, with
@@ -1619,6 +1618,7 @@ func steerModel(t *testing.T) (Model, string) {
 	m := newTestModel(t)
 	dir := filepath.Join(t.TempDir(), "steer")
 	m.steerDir = dir
+	m.snapshotWorktree = t.TempDir() // run.go sets this via initSnapshotTarget; the presence file carries it
 	m.cfg = config.Defaults()
 	// New() sets loading:true (model.go:301) and opsIdle() is
 	// !running && !loading — without this every steering command would be
@@ -4775,9 +4775,13 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 			fmt.Fprintln(stderr, "session navigate: pass --file, --rev, or --next-comment/--prev-comment")
 			return 2
 		}
-		full, err := svc.RevParse(context.Background(), *tf.rev)
+		full, found, err := svc.ResolveRev(context.Background(), *tf.rev) // peels annotated tags to the commit
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		if !found {
+			fmt.Fprintf(stderr, "session navigate: %q did not resolve to a commit\n", *tf.rev)
 			return 1
 		}
 		if len(full) != 40 {
@@ -5693,7 +5697,8 @@ func TestSteerEmissionBypassesTheHubGate(t *testing.T) {
 	t.Parallel()
 	h := newLiveHub(config.RefreshConfig{}, false, func() bool { return true }) // gate always closed
 	defer h.close()
-	ch := h.subscribe()
+	ch, cancel := h.subscribe()
+	defer cancel()
 	h.emit(liveMsg{Changed: []string{"notes"}, Reason: "notes"})
 	select {
 	case got := <-ch:
@@ -6103,12 +6108,18 @@ three layout branches' `<tr class="…">`:
 
 ```js
 // attnKey/attnCls: the row classes a `gg session highlight` paints. A CLASS on
-// the tr, not an inline background: tr.add/tr.del paint their own cells at
-// higher specificity, so the CSS uses an inset box-shadow that layers over
-// whatever background the cell already has.
-function attnKey(ctx) {
+// the tr, not an inline background: tr.add/tr.del paint their own cells, so
+// the CSS paints the band as a per-cell `background` rule of HIGHER
+// specificity (`table.diff tr.attn-<tone> td.side`) that replaces the add/del
+// tint on marked rows. attnKey is the ONE key builder for attention marks: it
+// is defined and exported in core.js (where `state` lives) and imported by
+// files.js and live.js alike, so the key a steer command writes and the key
+// the renderer reads are the same bytes. `rev` is the FULL commit sha for a
+// commit diff (the wire carries one), so an opener filling state.diffCtx.rev
+// must store the feed's full hash, never a short one.
+export function attnKey(ctx) {
   if (!ctx || !ctx.path) return "";
-  return `${ctx.state || "unstaged"} ${ctx.rev || ""} ${ctx.path}`;
+  return `${ctx.state || "unstaged"} ${ctx.rev || ""} ${ctx.path}`;
 }
 function attnCls(side, no) {
   if (!no || !state.attention.size) return "";
@@ -6213,7 +6224,7 @@ function steerFocus(panel) {
 }
 
 function steerAttnKey(s) {
-  return `${s.state || "unstaged"} ${s.commit || ""} ${s.file}`;
+  return attnKey({ state: s.state, rev: s.commit, path: s.file }); // imported from core.js
 }
 
 function steerHighlight(s) {
@@ -6239,11 +6250,11 @@ async function steerNavigate(s) {
     return;
   }
   if (!s.file) {
-    if (s.commit) await openCommitByHash(s.commit);
+    if (s.commit) await openCommitByHash(s.commit, s.commit.slice(0, 8));
     return;
   }
   if (s.state === "commit") {
-    await openCommitByHash(s.commit);
+    await openCommitByHash(s.commit, s.commit.slice(0, 8));
     const i = state.files.findIndex((f) => f.path === s.file);
     if (i < 0) return;
     await openFile(i);
@@ -6346,8 +6357,8 @@ gate itself and answers 409 instead, which the CLI prints.
 
 The page applies a command through the very openers its own menu rows use, so
 a steered landing is indistinguishable from a clicked one. Attention bands are
-an inset box-shadow, not a background: tr.add/tr.del paint their cells at
-higher specificity, the same trap the note anchor already documents.
+a per-cell background rule of higher specificity than tr.add/tr.del's tint,
+the same trap the note anchor already documents.
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01NDk1DJtgLzZX7hMmxDs9nU
@@ -6422,10 +6433,11 @@ gg session highlight clear --file src/search.ts
   flags are `gg note`'s (`--cached`, `--rev <sha>`, neither = the working tree).
 - A command WAITS up to 2s for the window's answer and prints what happened.
   Use `--no-wait` for fire-and-forget; it prints the command id and exits 0.
-- Exit 1 means the window refused: an operation is running, a decision is
+- Exit 1 means either no session is live (`no gg session for this worktree`)
+  or the window refused: an operation is running, a decision is
   waiting for the user, they are typing, or a picker owns the screen. That is
   not an error to work around — say what you found and move on.
-- `gg note add|reply|apply|rm` already posts a reload on its own; you only need
+- `gg note add|reply|apply|rm|clear` already posts a reload on its own; you only need
   `gg session reload` after changing notes some other way.
 - NEVER launch the TUI or `gg web` yourself. Steering drives a window the human
   chose to open; if none is open, your notes are still waiting for them.
