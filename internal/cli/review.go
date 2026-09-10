@@ -185,7 +185,12 @@ func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.R
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	steer.NotifyReload(steerDirFor(svc), "notes")
+	// Only wake the window when there is something new to show: an import that
+	// stored nothing (a batch of contexts only, or one whose annotations were
+	// all skipped as old-side) would otherwise leave a stray wire command.
+	if len(stored) > 0 {
+		steer.NotifyReload(steerDirFor(svc), "notes")
+	}
 	ids := make([]string, 0, len(stored))
 	for _, n := range stored {
 		ids = append(ids, n.ID)

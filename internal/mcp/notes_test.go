@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // seedNoteFile makes a.txt differ from HEAD so the working tree has a diff to
@@ -232,5 +234,26 @@ func TestNoteToolAnnotations(t *testing.T) {
 		if ann.ReadOnlyHint != wantReadOnly {
 			t.Errorf("%s ReadOnlyHint = %v, want %v", name, ann.ReadOnlyHint, wantReadOnly)
 		}
+	}
+}
+
+// A gg_notes_apply that stored NOTHING (a batch carrying only contexts) must
+// not wake the window: the reload post exists to show new notes, and a stray
+// wire command with none to show is noise.
+func TestNotesApplyStoringNothingPostsNoReload(t *testing.T) {
+	e := newTestEnv(t)
+	seedNoteFile(t, e)
+	e.srv.steerDir = t.TempDir()
+	if err := steer.Touch(e.srv.steerDir, steer.TUIPresence, steer.Presence{PID: 1, Worktree: e.dir}); err != nil {
+		t.Fatal(err)
+	}
+	out := e.call(t, "gg_notes_apply", map[string]any{
+		"batch": json.RawMessage(`{"version":1,"summary":"nothing anchored","files":[]}`),
+	})
+	if notes, ok := out["notes"].([]any); ok && len(notes) != 0 {
+		t.Fatalf("setup: the batch must store nothing, got %v", notes)
+	}
+	if got := steer.Drain(e.srv.steerDir); len(got) != 0 {
+		t.Fatalf("posted %+v, want nothing — no note was stored", got)
 	}
 }

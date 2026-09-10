@@ -7,6 +7,9 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // isolateReviewEnv points XDG_CONFIG_HOME/XDG_STATE_HOME at fresh temp dirs so
@@ -350,5 +353,32 @@ func TestReviewNotesRangeAnchorsTipNewSideOnly(t *testing.T) {
 	_, list, _ := runCLI(t, dir, "note", "list", "--rev", sha, "--file", "a.txt")
 	if !strings.Contains(list, "kept") || strings.Contains(list, "dropped") {
 		t.Fatalf("only the new-side note may land on the tip commit:\n%s", list)
+	}
+}
+
+// A --notes run that imported NOTHING (the tool wrote a batch carrying only a
+// top-level context) must not wake the window: the reload post exists to show
+// new notes, and a stray wire command with none to show is noise.
+func TestReviewNotesStoringNothingPostsNoReload(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	runGit(t, dir, "commit", "--allow-empty", "-m", "second")
+	inbox := steerDirFor(domain.Open(dir))
+	if inbox == "" {
+		t.Fatal("setup: no inbox resolved for the test repo")
+	}
+	livePresence(t, inbox)
+	writeReviewTool(t, dir, "Echo",
+		`printf 'THE REPORT\n'; printf '{"version":1,"summary":"nothing anchored","files":[]}' > "$GG_NOTES_FILE"`)
+
+	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working", "--notes")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if got := steer.Drain(inbox); len(got) != 0 {
+		t.Fatalf("posted %+v, want nothing — no note was imported", got)
 	}
 }
