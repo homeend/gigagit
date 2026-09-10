@@ -148,6 +148,7 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 			return nil, out, err
 		}
 		out.Note = domain.ToWireNote(domain.ResolvedNote{Note: stored, Status: model.NoteActive, Range: stored.Range})
+		s.notifyNotesChanged()
 		return nil, out, nil
 	})
 
@@ -192,6 +193,7 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		for _, n := range stored {
 			out.Notes = append(out.Notes, domain.ToWireNote(domain.ResolvedNote{Note: n, Status: model.NoteActive, Range: n.Range}))
 		}
+		s.notifyNotesChanged()
 		return nil, out, nil
 	})
 
@@ -211,6 +213,7 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 			return nil, out, err
 		}
 		out.OK = true
+		s.notifyNotesChanged()
 		return nil, out, nil
 	})
 }

@@ -1,14 +1,12 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -22,14 +20,6 @@ import (
 // steerReplyWaitForTest bounds the wait for a TUI's answer. A variable rather
 // than a const so a test can shorten it; production never changes it.
 var steerReplyWaitForTest = 2 * time.Second
-
-// steerHTTPTimeout bounds the POST to an open gg web page. The endpoint answers
-// 202 immediately, so anything slower is a page that is gone.
-const steerHTTPTimeout = 2 * time.Second
-
-// steerErrorBodyMax caps how much of an error response is echoed back. The
-// endpoint's refusals are one short English line; anything longer is noise.
-const steerErrorBodyMax = 4 << 10
 
 // cmdSession is `gg session`: post a steering command to whatever gg session is
 // showing this worktree.
@@ -154,51 +144,18 @@ func sendSteer(dir string, c steer.Command, noWait bool, stdout, stderr io.Write
 	return 1
 }
 
-// postWebSteer hands the command to an open gg web page. Content-Type is JSON
-// and no Origin header is sent, which the server's writeGuard accepts from a
-// non-browser client. A 409 is the endpoint's "an operation is in flight"
-// refusal and its own English line is echoed verbatim.
-func postWebSteer(base string, c steer.Command) error {
-	if base == "" {
-		return errors.New("the gg web presence carries no URL")
-	}
-	body, err := json.Marshal(c)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(base, "/")+"/api/session/steer", bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: steerHTTPTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusConflict {
-		if msg := readSteerErrorBody(resp.Body); msg != "" {
-			return errors.New(msg)
-		}
-		return errors.New("operation in flight")
-	}
-	if resp.StatusCode/100 != 2 {
-		if msg := readSteerErrorBody(resp.Body); msg != "" {
-			return fmt.Errorf("gg web answered %s: %s", resp.Status, msg)
-		}
-		return fmt.Errorf("gg web answered %s", resp.Status)
-	}
-	return nil
-}
+// postWebSteer hands the command to an open gg web page.
+func postWebSteer(base string, c steer.Command) error { return steer.PostHTTP(base, c) }
 
-// readSteerErrorBody returns the endpoint's refusal line, capped and trimmed.
-func readSteerErrorBody(r io.Reader) string {
-	data, err := io.ReadAll(io.LimitReader(r, steerErrorBodyMax))
+// steerDirFor resolves this worktree's inbox for a caller that must never fail
+// because of it: any error is "" (no inbox), which every consumer treats as
+// "nothing is live".
+func steerDirFor(svc *domain.Service) string {
+	dir, err := sessionInboxDir(svc)
 	if err != nil {
 		return ""
 	}
-	return strings.TrimSpace(string(data))
+	return dir
 }
 
 // targetOf maps a resolved note address onto the wire target. It is the CLI's

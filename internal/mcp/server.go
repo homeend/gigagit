@@ -13,6 +13,7 @@ import (
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/homeend/gigagit/internal/buildinfo"
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 )
 
@@ -22,6 +23,12 @@ type Server struct {
 	commonDir string // absolute git common dir; "" when repo resolution failed
 	worktree  string // worktree top-level; "" when repo resolution failed
 	repoErr   error  // startup repo-resolution failure, surfaced per-tool
+
+	// steerDir is this worktree's live-steering inbox; a mutating note tool
+	// posts a best-effort `reload notes` into it so the human's open window
+	// updates. "" = no inbox (no state home, or repo resolution failed).
+	// Overridable by tests.
+	steerDir string
 }
 
 // New resolves the repo identity once. A failure is remembered, not fatal:
@@ -38,6 +45,7 @@ func New(svc *domain.Service) *Server {
 	s.commonDir = cd
 	if top, err := svc.TopLevel(ctx); err == nil {
 		s.worktree = top
+		s.steerDir = config.SessionSteerDir(cd, top)
 	}
 	// gg mcp is long-lived, so it does the same note housekeeping a TUI does:
 	// apply the configured [notes] budget, then sweep once in the background.

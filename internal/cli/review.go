@@ -14,6 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
+	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/template"
 )
 
@@ -184,6 +185,7 @@ func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.R
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
+	steer.NotifyReload(steerDirFor(svc), "notes")
 	ids := make([]string, 0, len(stored))
 	for _, n := range stored {
 		ids = append(ids, n.ID)
