@@ -3070,12 +3070,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return fail(reason)
 		}
 		if inProc {
-			cp.picker = newProcessConflictPicker(msg.path, doc)
+			cp.picker = newProcessConflictPicker(msg.path, doc).withSyntax(m.cfg.UI.SyntaxOn())
 			cp.pickPath = msg.path
 			cp.st = confPicking
 			return m, nil
 		}
-		m = m.pushLayer(newConflictPicker(msg.path, doc))
+		m = m.pushLayer(newConflictPicker(msg.path, doc).withSyntax(m.cfg.UI.SyntaxOn()))
 		return m, nil
 
 	case stageHunksLoadedMsg:
@@ -3093,7 +3093,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("stage hunks: nothing to stage")
 			return m, nil
 		}
-		m = m.pushLayer(newStagePicker(msg.path, doc))
+		m = m.pushLayer(newStagePicker(msg.path, doc).withSyntax(m.cfg.UI.SyntaxOn()))
 		return m, nil
 
 	case unstageHunksLoadedMsg:
@@ -3111,7 +3111,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("unstage hunks: nothing to unstage")
 			return m, nil
 		}
-		m = m.pushLayer(newUnstagePicker(msg.path, doc))
+		m = m.pushLayer(newUnstagePicker(msg.path, doc).withSyntax(m.cfg.UI.SyntaxOn()))
 		return m, nil
 
 	case clipboardCopiedMsg:

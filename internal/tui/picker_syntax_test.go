@@ -310,3 +310,79 @@ func TestRenderOutputColoursTheAssembledLines(t *testing.T) {
 		}
 	}
 }
+
+// goConflict is a conflicted Go file: one region, `var` on both sides.
+const goConflict = "package main\n<<<<<<< HEAD\nvar a int\n=======\nvar b int\n>>>>>>> x\n"
+
+// Opening a picker through the real message path must lex it — all four kinds.
+func TestConflictLoaderWiresSyntax(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 80, height: 24}
+	m.cfg.UI.DiffSyntax = "auto"
+	u, _ := m.Update(conflictFileLoadedMsg{path: "f.go", content: []byte(goConflict)})
+	e, ok := u.(Model).topLayer().(*hunkPicker)
+	if !ok {
+		t.Fatalf("conflict load should push the hunk picker, got %T", u.(Model).topLayer())
+	}
+	if e.curTok == nil || e.incTok == nil {
+		t.Errorf("the conflict picker was opened unlexed: cur=%v inc=%v", e.curTok, e.incTok)
+	}
+}
+
+func TestProcessConflictLoaderWiresSyntax(t *testing.T) {
+	t.Parallel()
+	m := conflictModel()
+	m, _ = startConflictProcess(m)
+	m.proc.(*conflictProcess).st = confWorking
+	m.cfg.UI.DiffSyntax = "auto"
+	u, _ := m.Update(conflictFileLoadedMsg{path: "uu.go", content: []byte(goConflict)})
+	cp := u.(Model).proc.(*conflictProcess)
+	if cp.picker == nil {
+		t.Fatalf("a loaded conflict file must show the process picker, got st=%d", cp.st)
+	}
+	if cp.picker.curTok == nil || cp.picker.incTok == nil {
+		t.Errorf("the process picker was opened unlexed: cur=%v inc=%v", cp.picker.curTok, cp.picker.incTok)
+	}
+}
+
+func TestStageLoaderWiresSyntax(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 80, height: 24}
+	m.cfg.UI.DiffSyntax = "auto"
+	u, _ := m.Update(stageHunksLoadedMsg{path: "f.go",
+		index: []byte("package main\nvar a int\n"), work: []byte("package main\nvar b int\n")})
+	e, ok := u.(Model).topLayer().(*hunkPicker)
+	if !ok {
+		t.Fatalf("stage load should push the hunk picker, got %T", u.(Model).topLayer())
+	}
+	if e.curTok == nil || e.incTok == nil {
+		t.Errorf("the stage picker was opened unlexed: cur=%v inc=%v", e.curTok, e.incTok)
+	}
+}
+
+func TestUnstageLoaderWiresSyntax(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 80, height: 24}
+	m.cfg.UI.DiffSyntax = "auto"
+	u, _ := m.Update(unstageHunksLoadedMsg{path: "f.go",
+		index: []byte("package main\nvar a int\n"), head: []byte("package main\nvar b int\n")})
+	e, ok := u.(Model).topLayer().(*hunkPicker)
+	if !ok {
+		t.Fatalf("unstage load should push the hunk picker, got %T", u.(Model).topLayer())
+	}
+	if e.curTok == nil || e.incTok == nil {
+		t.Errorf("the unstage picker was opened unlexed: cur=%v inc=%v", e.curTok, e.incTok)
+	}
+}
+
+// diff_syntax = "off" must leave every picker on the plain path.
+func TestLoaderHonoursSyntaxOff(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 80, height: 24}
+	m.cfg.UI.DiffSyntax = "off"
+	u, _ := m.Update(conflictFileLoadedMsg{path: "f.go", content: []byte(goConflict)})
+	e := u.(Model).topLayer().(*hunkPicker)
+	if e.curTok != nil || e.incTok != nil {
+		t.Errorf("diff_syntax=off must leave the picker unlexed: cur=%d inc=%d", len(e.curTok), len(e.incTok))
+	}
+}
