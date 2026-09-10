@@ -539,6 +539,206 @@ func TestSessionOpenViewReadsTheSnapshot(t *testing.T) {
 	}
 }
 
+// postOne runs one session command against a fresh inbox with a live TUI and
+// returns the exit code plus whatever reached the inbox.
+func postOne(t *testing.T, repo string, args ...string) (int, []steer.Command, string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	livePresence(t, dir)
+	var out, errb bytes.Buffer
+	code := runSession(dir, domain.Open(repo), args, &out, &errb)
+	return code, steer.Drain(dir), out.String(), errb.String()
+}
+
+func TestSessionNavigateOldLineLands(t *testing.T) {
+	t.Parallel()
+	code, got, _, errb := postOne(t, newCLIRepo(t), "navigate", "--file", "a.txt", "--old-line", "7", "--no-wait")
+	if code != 0 {
+		t.Fatalf("exit = %d (stderr %q), want 0", code, errb)
+	}
+	if len(got) != 1 || got[0].Line == nil {
+		t.Fatalf("posted %+v, want a command carrying a line", got)
+	}
+	if got[0].Line.Side != "old" || got[0].Line.No != 7 {
+		t.Errorf("line = %+v, want old:7", got[0].Line)
+	}
+}
+
+// The single-token --file=x form must reach the same place as --file x: Go's
+// flag package accepts both, and parseSteerFlags must not break either.
+func TestSessionNavigateSingleTokenFileFlag(t *testing.T) {
+	t.Parallel()
+	code, got, _, errb := postOne(t, newCLIRepo(t), "navigate", "--file=a.txt", "--new-line=3", "--no-wait")
+	if code != 0 {
+		t.Fatalf("exit = %d (stderr %q), want 0", code, errb)
+	}
+	if len(got) != 1 || got[0].File != "a.txt" {
+		t.Fatalf("posted %+v, want navigate on a.txt", got)
+	}
+	if got[0].Line == nil || got[0].Line.No != 3 {
+		t.Errorf("line = %+v, want new:3", got[0].Line)
+	}
+}
+
+func TestSessionHighlightClearWithAFilePostsTheTarget(t *testing.T) {
+	t.Parallel()
+	code, got, _, errb := postOne(t, newCLIRepo(t), "highlight", "clear", "--file", "a.txt", "--no-wait")
+	if code != 0 {
+		t.Fatalf("exit = %d (stderr %q), want 0", code, errb)
+	}
+	if len(got) != 1 {
+		t.Fatalf("inbox = %+v, want one command", got)
+	}
+	c := got[0]
+	if c.Cmd != "highlight_clear" || c.File != "a.txt" {
+		t.Fatalf("posted %+v, want a highlight_clear scoped to a.txt", c)
+	}
+	if c.Target == nil || c.Target.State != "unstaged" {
+		t.Errorf("target = %+v, want the unstaged working tree", c.Target)
+	}
+}
+
+// --hunk numbers the patch the TARGET flags select, so --cached and --rev must
+// change which hunks are counted and which target the command carries.
+func TestSessionHunkHonoursTheTargetFlags(t *testing.T) {
+	t.Parallel()
+	t.Run("cached", func(t *testing.T) {
+		t.Parallel()
+		repo := hunkCLIRepo(t)
+		gittest.Run(t, repo, "add", "a.txt")
+		code, got, _, errb := postOne(t, repo, "navigate", "--file", "a.txt", "--hunk", "2", "--cached", "--no-wait")
+		if code != 0 {
+			t.Fatalf("exit = %d (stderr %q), want 0", code, errb)
+		}
+		if len(got) != 1 || got[0].Target == nil {
+			t.Fatalf("posted %+v, want a targeted command", got)
+		}
+		if got[0].Target.State != "staged" {
+			t.Errorf("target = %+v, want staged", got[0].Target)
+		}
+		if got[0].Line == nil || got[0].Line.Side != "new" || got[0].Line.No != 27 {
+			t.Errorf("line = %+v, want new:27", got[0].Line)
+		}
+	})
+	t.Run("rev", func(t *testing.T) {
+		t.Parallel()
+		// HEAD is the commit that ADDED a.txt, so its own change is one pure-add
+		// hunk starting at new line 1.
+		code, got, _, errb := postOne(t, hunkCLIRepo(t), "navigate", "--file", "a.txt", "--hunk", "1", "--rev", "HEAD", "--no-wait")
+		if code != 0 {
+			t.Fatalf("exit = %d (stderr %q), want 0", code, errb)
+		}
+		if len(got) != 1 || got[0].Target == nil {
+			t.Fatalf("posted %+v, want a targeted command", got)
+		}
+		if got[0].Target.State != "commit" || len(got[0].Target.Commit) != 40 {
+			t.Errorf("target = %+v, want a commit target carrying a full sha", got[0].Target)
+		}
+		if got[0].Line == nil || got[0].Line.Side != "new" || got[0].Line.No != 1 {
+			t.Errorf("line = %+v, want new:1", got[0].Line)
+		}
+	})
+}
+
+// A forgotten --file used to be SILENT: navigate took the bare-rev arm and
+// revealed the commit, discarding the line flags the caller passed.
+func TestSessionNavigateBareRevRefusesFlagsThatNeedAFile(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{
+		{"navigate", "--rev", "HEAD", "--new-line", "5", "--no-wait"},
+		{"navigate", "--rev", "HEAD", "--old-line", "5", "--no-wait"},
+		{"navigate", "--rev", "HEAD", "--hunk", "1", "--no-wait"},
+		{"navigate", "--rev", "HEAD", "--cached", "--no-wait"},
+		{"navigate", "--cached", "--new-line", "5", "--no-wait"},
+	} {
+		args := args
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			t.Parallel()
+			code, got, _, errb := postOne(t, newCLIRepo(t), args...)
+			if code != 2 {
+				t.Errorf("exit = %d, want 2 (usage error); stderr %q", code, errb)
+			}
+			if !strings.Contains(errb, "--file") {
+				t.Errorf("stderr = %q, want it to name --file", errb)
+			}
+			if len(got) != 0 {
+				t.Errorf("a refused command must never be posted, got %+v", got)
+			}
+		})
+	}
+}
+
+func TestSessionNavigateBareRevRefusesARange(t *testing.T) {
+	t.Parallel()
+	for _, rev := range []string{"HEAD~1..HEAD", "HEAD~1...HEAD"} {
+		rev := rev
+		t.Run(rev, func(t *testing.T) {
+			t.Parallel()
+			code, got, _, errb := postOne(t, newCLIRepo(t), "navigate", "--rev", rev, "--no-wait")
+			if code != 2 {
+				t.Errorf("exit = %d, want 2 (usage error); stderr %q", code, errb)
+			}
+			if !strings.Contains(errb, "range") {
+				t.Errorf("stderr = %q, want it to say a range is not a landing place", errb)
+			}
+			if len(got) != 0 {
+				t.Errorf("a refused command must never be posted, got %+v", got)
+			}
+		})
+	}
+}
+
+// 1-based means 1-based: a zero is "unset" (caught by the exactly-one rule) and
+// a negative is a mistake, never an offset from the end.
+func TestSessionNavigateRefusesNonPositiveLineNumbers(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{
+		{"navigate", "--file", "a.txt", "--hunk", "0", "--no-wait"},
+		{"navigate", "--file", "a.txt", "--hunk", "-1", "--no-wait"},
+		{"navigate", "--file", "a.txt", "--new-line", "0", "--no-wait"},
+		{"navigate", "--file", "a.txt", "--new-line", "-3", "--no-wait"},
+		{"navigate", "--file", "a.txt", "--old-line", "-3", "--no-wait"},
+	} {
+		args := args
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			t.Parallel()
+			code, got, _, errb := postOne(t, newCLIRepo(t), args...)
+			if code != 2 {
+				t.Errorf("exit = %d, want 2 (usage error); stderr %q", code, errb)
+			}
+			if len(got) != 0 {
+				t.Errorf("a refused command must never be posted, got %+v", got)
+			}
+		})
+	}
+}
+
+// Out-of-range hunks come back through the DOMAIN's message, the same one
+// `gg note add --hunk` prints, so an agent learns the real count.
+func TestSessionHunkOutOfRangeReportsTheCount(t *testing.T) {
+	t.Parallel()
+	code, got, _, errb := postOne(t, hunkCLIRepo(t), "navigate", "--file", "a.txt", "--hunk", "9", "--no-wait")
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1; stderr %q", code, errb)
+	}
+	if !strings.Contains(errb, "has 2 hunks") {
+		t.Errorf("stderr = %q, want the domain's \"has 2 hunks\" count", errb)
+	}
+	if len(got) != 0 {
+		t.Errorf("a refused command must never be posted, got %+v", got)
+	}
+}
+
+func TestSessionStatusRefusesAStrayArgument(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	livePresence(t, dir)
+	var out, errb bytes.Buffer
+	if code := runSession(dir, domain.Open(newCLIRepo(t)), []string{"status", "nonsense"}, &out, &errb); code != 2 {
+		t.Errorf("exit = %d, want 2 (usage error); stderr %q", code, errb.String())
+	}
+}
+
 // hunkCLIRepo commits 60 numbered lines then edits two far-apart regions, so
 // `gg diff --hunks` reports exactly two hunks (git's default 3 lines of context
 // cannot bridge lines 5 and 30) and hunk 2's new span starts at line 30.

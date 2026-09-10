@@ -174,38 +174,25 @@ func targetOf(a model.FileAddress) *steer.Target {
 }
 
 // resolveHunkLine turns --hunk N into the {side,no} the consumer lands on: the
-// FIRST line of the hunk's new span, or its old span for a pure deletion. (A
-// NOTE anchors at a range END; a landing wants the top of the region.) Resolved
-// HERE and never in the TUI, so one landing path serves --hunk, --new-line and
-// --old-line alike.
+// FIRST line of the range HunkRange resolves — the hunk's new span, or its old
+// span for a pure deletion. (A NOTE anchors at a range END; a landing wants the
+// top of the region.) It is the SAME HunkRange `gg note add --hunk N` uses, so
+// a hunk number an agent read from `gg diff --hunks` addresses one region for
+// both verbs. Resolved HERE and never in the TUI, so one landing path serves
+// --hunk, --new-line and --old-line alike.
 func resolveHunkLine(ctx context.Context, svc *domain.Service, cached bool, rev, path string, n int) (steer.Line, error) {
 	spec, err := svc.HunkDiffSpec(ctx, cached, rev, []string{path})
 	if err != nil {
 		return steer.Line{}, err
 	}
-	files, err := svc.DiffHunks(ctx, spec)
+	side, rng, err := svc.HunkRange(ctx, spec, path, n)
 	if err != nil {
 		return steer.Line{}, err
 	}
-	for _, f := range files {
-		if f.Path != path && f.OldPath != path {
-			continue
-		}
-		for _, h := range f.Hunks {
-			if h.N != n {
-				continue
-			}
-			if h.New[0] > 0 {
-				return steer.Line{Side: "new", No: h.New[0]}, nil
-			}
-			if h.Old[0] > 0 {
-				return steer.Line{Side: "old", No: h.Old[0]}, nil
-			}
-			return steer.Line{}, fmt.Errorf("hunk %d of %s has no lines", n, path)
-		}
-		return steer.Line{}, fmt.Errorf("%s has %d hunks", path, len(f.Hunks))
+	if side == model.NoteSideOld {
+		return steer.Line{Side: "old", No: rng[0]}, nil
 	}
-	return steer.Line{}, fmt.Errorf("%s has no hunks in this diff", path)
+	return steer.Line{Side: "new", No: rng[0]}, nil
 }
 
 // sessionStatus prints the routing for this worktree.
@@ -213,7 +200,12 @@ func sessionStatus(dir string, svc *domain.Service, args []string, stdout, stder
 	fs := flag.NewFlagSet("session status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := fs.Bool("json", false, "print the routing as JSON")
-	if err := fs.Parse(args); err != nil {
+	pos, err := parseSteerFlags(fs, args)
+	if err != nil {
+		return 2
+	}
+	if len(pos) != 0 {
+		fmt.Fprintf(stderr, "session status: unexpected argument %q (status takes only --json)\n", pos[0])
 		return 2
 	}
 	r := routeFor(dir)
@@ -355,8 +347,24 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 	// such command would come back "commit not loaded in the feed". Resolve it
 	// to a full sha up front, and refuse anything that does not resolve.
 	if *tf.file == "" {
+		// Every other flag on this verb describes a place INSIDE a file. Without
+		// --file they cannot be honoured, and silently revealing the commit
+		// instead would drop the caller's real request on the floor: an agent
+		// that forgot --file would watch the window move somewhere it never
+		// asked for and have no way to tell.
+		if *tf.cached || *hunk != 0 || *newLine != 0 || *oldLine != 0 {
+			fmt.Fprintln(stderr, "session navigate: --cached, --hunk, --new-line and --old-line need a --file")
+			return 2
+		}
 		if *tf.rev == "" {
 			fmt.Fprintln(stderr, "session navigate: pass --file, --rev, or --next-comment/--prev-comment")
+			return 2
+		}
+		// A range is two commits; a landing is one place. Refused up front so
+		// the message names the mistake instead of the resolver reporting an
+		// unknown revision. (`gg note` refuses the same shape.)
+		if strings.Contains(*tf.rev, "..") {
+			fmt.Fprintln(stderr, "session navigate: --rev names where to land; pass one commit, not a range")
 			return 2
 		}
 		full, found, err := svc.ResolveRev(context.Background(), *tf.rev) // peels annotated tags to the commit
@@ -384,6 +392,20 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 	}
 	if set != 1 {
 		fmt.Fprintln(stderr, "session navigate: pass exactly one of --hunk, --new-line, --old-line")
+		return 2
+	}
+	// 1-based means 1-based. Zero is "unset" and the rule above already caught
+	// it; a negative is a mistake, never an offset from the end. Checked before
+	// any git work, and worded exactly as `gg note add` words it.
+	switch {
+	case *hunk < 0:
+		fmt.Fprintln(stderr, "session navigate: --hunk must be a 1-based hunk number")
+		return 2
+	case *newLine < 0:
+		fmt.Fprintln(stderr, "session navigate: --new-line must be a 1-based line number")
+		return 2
+	case *oldLine < 0:
+		fmt.Fprintln(stderr, "session navigate: --old-line must be a 1-based line number")
 		return 2
 	}
 
