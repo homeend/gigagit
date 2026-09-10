@@ -626,8 +626,16 @@ has no git hunks and is refused with "untracked files have no hunks; use
 **Attention marks** live in `m.attention map[attentionKey][]steerMark`, keyed by
 path + target state + commit. They survive the interval auto-refresh on purpose:
 a rebuild nobody asked for must not wipe an agent's bands. They die on
-`highlight_clear`, an EXPLICIT `reload`, and `reRoot`. The cursor row outranks a
-band in `diffPaneLines`.
+`highlight_clear`, a `reload` whose sources include `status` or `all`, and
+`reRoot`. A `notes`-only `reload` KEEPS them: every note mutation (`gg note
+add`, `gg review --notes`, the MCP note tools) auto-posts one, so clearing there
+would make the documented highlight-then-note flow erase the band it had just
+painted; `status`/`all` rebuild the diff geometry the ranges are anchored
+against, which is the one real drift reason. Both frontends implement exactly
+this rule (`steerReload` in `internal/tui/steer_attn.go` and in
+`internal/web/static/live.js`). The cursor row outranks a band in
+`diffPaneLines` — in `[ui] diff_cursor = "number"` mode the band still paints
+the row, since only the gutter carries the cursor there.
 
 **Web.** `gg web` writes `web.json` with its URL after `listen` and removes it on
 shutdown and `reRoot`. `POST /api/session/steer` validates through the same

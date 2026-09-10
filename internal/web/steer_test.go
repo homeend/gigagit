@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -230,5 +231,25 @@ func TestWebPresenceClaimDropsAStalePayload(t *testing.T) {
 	}
 	if p.URL != "http://127.0.0.1:2222" {
 		t.Errorf("url = %q, want this run's address — a claim must overwrite the previous run's file", p.URL)
+	}
+}
+
+// The page keeps the TUI's attention-mark lifetime rule: a `status`/`all`
+// reload rebuilds the diff geometry the bands are anchored against and drops
+// them; a `notes`-only reload — which every note mutation auto-posts — must
+// leave them exactly where the agent put them. The two halves live in
+// different languages, so this pins the JS side by source.
+func TestLiveJSDropsMarksOnlyForAStatusReload(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "live.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	if !strings.Contains(src, `if (want.has("status")) state.attention.clear();`) {
+		t.Error(`live.js must gate state.attention.clear() on want.has("status") — a notes-only reload keeps the bands`)
+	}
+	if strings.Contains(src, "\n  state.attention.clear();") {
+		t.Error("live.js still clears the attention marks unconditionally in steerReload")
 	}
 }

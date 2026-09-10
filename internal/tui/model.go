@@ -234,9 +234,10 @@ type Model struct {
 
 	// attention holds the bands `gg session highlight` painted, keyed by file
 	// address. A map, so it survives the Model value copy. Marks live until
-	// highlight_clear, an explicit reload command, or session end — NOT the
-	// interval auto-refresh rebuilding a working-tree diff, which would wipe
-	// them without any agent action.
+	// highlight_clear, a `status`/`all` reload command, or session end — NOT
+	// the interval auto-refresh rebuilding a working-tree diff, and NOT the
+	// `notes`-only reload every note mutation auto-posts, either of which
+	// would wipe them without any agent action.
 	attention map[attentionKey][]steerMark
 
 	opName string // engine.OpName of the in-flight op; "" when idle

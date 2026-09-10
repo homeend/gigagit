@@ -137,23 +137,51 @@ func TestSteerReloadSourcesAndMarkLifetime(t *testing.T) {
 	m, hc := m.applySteer(markCmd("r-0", "info", 1, 2))
 	runSteerCmd(t, hc)
 
+	v := &diffView{noteAddr: model.FileAddress{State: model.StateUnstaged, Path: "a.txt"}}
+
+	// A `notes` reload is what EVERY note mutation auto-posts (gg note add, gg
+	// review --notes, the MCP note tools), so it is NOT the agent saying "look
+	// again": it must leave the bands alone, or the documented
+	// highlight-then-note flow would wipe the band it just painted. Notes do
+	// not rebuild the diff geometry the ranges are anchored against.
 	m, cmd := m.applySteer(steer.Command{ID: "r-1", Cmd: "reload", Sources: []string{"notes"}, Wait: true})
 	runSteerCmd(t, cmd)
 	r, ok := steer.AwaitReply(dir, "r-1", time.Second)
 	if !ok || !r.OK {
 		t.Fatalf("reply = %+v ok=%v, want ok:true", r, ok)
 	}
-	v := &diffView{noteAddr: model.FileAddress{State: model.StateUnstaged, Path: "a.txt"}}
-	if _, got := m.attnMarkFor(v, textdiff.Row{RightNo: 1}); got {
-		t.Error("an EXPLICIT reload must drop the attention marks (the interval refresh must not)")
+	if _, got := m.attnMarkFor(v, textdiff.Row{RightNo: 1}); !got {
+		t.Error("a notes-only reload must KEEP the attention marks — every note mutation auto-posts one")
 	}
 
-	m2, bad := m.applySteer(steer.Command{ID: "r-2", Cmd: "reload", Sources: []string{"weather"}, Wait: true})
+	// `status` DOES rebuild the working-tree diff the ranges anchor against,
+	// so it drops them: a band whose range drifted under an edit is the
+	// agent's to re-post.
+	m, cmd = m.applySteer(steer.Command{ID: "r-1b", Cmd: "reload", Sources: []string{"status"}, Wait: true})
+	runSteerCmd(t, cmd)
+	if rr, ok := steer.AwaitReply(dir, "r-1b", time.Second); !ok || !rr.OK {
+		t.Fatalf("reply = %+v ok=%v, want ok:true", rr, ok)
+	}
+	if _, got := m.attnMarkFor(v, textdiff.Row{RightNo: 1}); got {
+		t.Error("a status reload must drop the attention marks")
+	}
+
+	// …and so does `all`, which contains status. The cmd is deliberately not
+	// run: reloadAllCmd fans out over every source, and the clear itself is
+	// synchronous on the returned Model.
+	m2, hc2 := m.applySteer(markCmd("r-0b", "info", 1, 2))
+	runSteerCmd(t, hc2)
+	m2, _ = m2.applySteer(steer.Command{ID: "r-1c", Cmd: "reload", Sources: []string{"all"}})
+	if _, got := m2.attnMarkFor(v, textdiff.Row{RightNo: 1}); got {
+		t.Error("a reload all must drop the attention marks")
+	}
+
+	m3, bad := m.applySteer(steer.Command{ID: "r-2", Cmd: "reload", Sources: []string{"weather"}, Wait: true})
 	runSteerCmd(t, bad)
 	if rr, _ := steer.AwaitReply(dir, "r-2", time.Second); rr.OK || !strings.Contains(rr.Error, "weather") {
 		t.Errorf("reply = %+v, want ok:false naming the unknown source", rr)
 	}
-	_ = m2
+	_ = m3
 }
 
 // The other half of the lifetime rule: the background lane's own refresh — a

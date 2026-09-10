@@ -167,10 +167,13 @@ async function applySteer(s) {
 // steerReload goes through the same single-flight gate manual `r` and the
 // watcher use: the server serialises reads under the per-repo gate, so
 // overlapping fans stack. A null return means one is already running, which is
-// a perfectly good answer to "reload". An explicit reload also DROPS the
-// attention marks (the TUI's steerReload does the same): the agent is saying
-// "look again", and a band whose range drifted under an edit is its own to
-// re-post. They go before the fetch so a notes re-render already reflects it.
+// a perfectly good answer to "reload". A `status`/`all` reload also DROPS the
+// attention marks (the TUI's steerReload does the same): those rebuild the diff
+// geometry the bands are anchored against, and a range that drifted under an
+// edit is the agent's to re-post. A `notes`-only reload KEEPS them — every note
+// mutation auto-posts one, so wiping there would erase a band the agent had
+// just painted. The clear goes before the fetch so a notes re-render already
+// reflects it.
 async function steerReload(s) {
   const want = new Set(s.sources); // the server fills the default ["notes"]
   if (want.has("all")) {
@@ -180,11 +183,11 @@ async function steerReload(s) {
     want.delete("all");
     for (const n of ["status", "notes", "branches", "feed"]) want.add(n);
   }
-  state.attention.clear();
+  if (want.has("status")) state.attention.clear();
   await runOnce("refresh", () => refreshSources(want));
-  // Only a notes reload re-renders the diff on its own; without one the
-  // cleared bands would still be painted in the DOM.
-  if (!want.has("notes") && state.lastDiff) renderDiff(state.lastDiff);
+  // A cleared band is still painted in the DOM until something re-renders; a
+  // notes reload does that on its own, anything else needs the nudge.
+  if (want.has("status") && !want.has("notes") && state.lastDiff) renderDiff(state.lastDiff);
 }
 
 // steerFocus maps the protocol panel names onto the web's two panes. The page

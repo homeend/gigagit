@@ -184,9 +184,12 @@ func (m Model) steerHighlightClear(c steer.Command) (Model, tea.Cmd) {
 }
 
 // steerReload re-reads the named sources, which re-resolves the open diff's
-// notes exactly as the .-menu mutations do. An explicit reload also drops the
-// attention marks: the agent is saying "look again", and a band whose range
-// drifted under an edit is its own to re-post.
+// notes exactly as the .-menu mutations do. A `status`/`all` reload ALSO drops
+// the attention marks: those rebuild the diff geometry the bands are anchored
+// against, and a range that drifted under an edit is the agent's to re-post.
+// A `notes`-only reload keeps them — every note mutation auto-posts one, so
+// wiping there would make the documented highlight-then-note flow erase the
+// band it had just painted, with no agent action at all.
 func (m Model) steerReload(c steer.Command) (Model, tea.Cmd) {
 	names := c.Sources
 	if len(names) == 0 {
@@ -194,19 +197,24 @@ func (m Model) steerReload(c steer.Command) (Model, tea.Cmd) {
 	}
 	var srcs []sourceKey
 	all := false
+	dropMarks := false
 	for _, n := range names {
 		switch n {
 		case "notes":
 			srcs = append(srcs, srcNotes)
 		case "status":
 			srcs = append(srcs, srcStatus)
+			dropMarks = true
 		case "all":
 			all = true
+			dropMarks = true
 		default:
 			return m, m.answerSteer(c, steerFail(c, "unknown reload source "+strconv.Quote(n)))
 		}
 	}
-	m.attention = map[attentionKey][]steerMark{}
+	if dropMarks {
+		m.attention = map[attentionKey][]steerMark{}
+	}
 	var cmd tea.Cmd
 	if all {
 		m, cmd = m.reloadAllCmd(reloadOpts{manual: true, hardFeed: true})

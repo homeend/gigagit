@@ -6996,6 +6996,24 @@ Recorded so an executor does not re-litigate them:
     the zero value until the first `dataLoadedMsg`, which would make the
     steering gate read an empty `AgentSteering` (= on) and write a presence for
     a user who turned steering off.
+20. **Attention marks die on a `status`/`all` reload, NOT on a `notes`-only
+    one.** §4.6 writes "an explicit `reload` command", but three paragraphs
+    later the same section specifies that every note mutation (`gg note add`,
+    `gg review --notes`, the MCP note tools) AUTO-POSTS `reload notes` for the
+    "live notes for free" lane. That auto-post is indistinguishable on the wire
+    from a hand-written `gg session reload`, so the spec's literal rule makes
+    the documented review flow — `gg session highlight add …` then `gg note add
+    …` — clear the band the agent painted milliseconds earlier, with no agent
+    action, rendering the two headline surfaces of this phase mutually
+    exclusive in the exact sequence the shipped `reviewing-with-gg` skill
+    teaches. The ruling: clear only when the reload's sources include `status`
+    or `all` — those rebuild the diff geometry the ranges are anchored against,
+    which is the only real drift reason; `notes` does not touch it. Applied
+    identically in both frontends (`steerReload` in
+    `internal/tui/steer_attn.go` and in `internal/web/static/live.js`), and the
+    spec sentence in §4.6 was reworded to match. The rejected alternative — an
+    `auto` flag on the wire — costs a protocol field and a web-endpoint change
+    for the same result.
 
 ## Self-review
 

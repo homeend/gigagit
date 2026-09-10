@@ -53,8 +53,9 @@ const state = {
   diffRow: null,             // {side, no} — the clicked diff row `c` anchors on
   // Attention bands an agent painted (gg session highlight), keyed by
   // attnKey below. Each value is a list of {side, start, end, tone}. Cleared
-  // by highlight_clear and by an EXPLICIT steer reload — never by the
-  // interval refresh, which no agent asked for.
+  // by highlight_clear and by a `status`/`all` steer reload — never by the
+  // interval refresh, which no agent asked for, and never by the
+  // `notes`-only reload every note mutation auto-posts.
   attention: new Map(),
   diffBlockIdx: -1,
   detailGen: 0,

@@ -867,11 +867,13 @@ file + target, each mark `{side, start, end, tone}`; the diff renderer
 tints the rows in range on that side (background band like the note band,
 no box; three new theme roles `attention_info_bg` / `attention_warn_bg` /
 `attention_error_bg` (backgrounds, per `roles.go`'s `_bg` contract) in `theme.roleFields` + `RoleDocs`, dark/light/terminal
-values). Marks live until `highlight_clear`, an explicit `reload` command,
-or session end — NOT the interval auto-refresh rebuilding a working-tree
-diff, which would wipe them without any agent action; a range that drifted
-after an edit is the agent's to re-post. The web page keeps the same rule
-in `state.attention`.
+values). Marks live until `highlight_clear`, a `reload` command whose
+sources include `status` or `all`, or session end — NOT the interval
+auto-refresh rebuilding a working-tree diff, nor a `notes`-only `reload`,
+which every note mutation auto-posts; either would wipe them without any
+agent action. Only `status`/`all` rebuild the diff geometry the ranges are
+anchored against, and a range that drifted after an edit is the agent's to
+re-post. The web page keeps the same rule in `state.attention`.
 
 **Focus** = `m.focus`/tab switch by the snapshot's protocol name
 (`panelProtoName` round-trips), after popping the layer stack to the
