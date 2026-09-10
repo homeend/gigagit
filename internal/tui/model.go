@@ -24,6 +24,7 @@ import (
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/rebaseplan"
 	"github.com/homeend/gigagit/internal/repos"
+	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/textdiff"
 	"github.com/homeend/gigagit/internal/theme"
 )
@@ -215,7 +216,16 @@ type Model struct {
 	snapshotCommonDir string
 	snapshotWorktree  string
 	lastSnapshot      []byte
-	opName            string // engine.OpName of the in-flight op; "" when idle
+
+	// Live steering (steer.go). steerDir is "" when steering is off (config,
+	// or an unresolved repo). steerWatch is a POINTER so it survives the Model
+	// value copy, like modal and popup; steerGen makes a repo switch drop the
+	// old inbox's in-flight watcher messages.
+	steerDir   string
+	steerGen   int
+	steerWatch *steer.Watcher
+
+	opName string // engine.OpName of the in-flight op; "" when idle
 
 	focus           panel
 	lastLeftPanel   panel // ←'s return target; zero value = panelBranches
@@ -319,7 +329,7 @@ func New(svc *domain.Service) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen))
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen))
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -459,7 +469,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.snapshotWorktree = msg.worktree
 		m.snapshotPath = config.SessionSnapshotPath(msg.commonDir)
 		m.lastSnapshot = nil
-		return m, nil
+		// The steer inbox is keyed by WORKTREE under the same session dir, so it
+		// re-homes on exactly the same beat.
+		m.steerDir = steerDirFor(msg.commonDir, msg.worktree)
+		m = m.initSteerInbox()
+		return m, m.startSteerCmd(m.steerGen)
 	case gitConfigRowsMsg:
 		if msg.gen != m.gitConfigGen {
 			return m, nil // stale: reopened or repo-switched since dispatch
@@ -984,6 +998,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case configReadyMsg:
 		m.cfg = msg.cfg
+		if !m.steerActive() {
+			m = m.closeSteerInbox() // config says off: drop the presence at once
+		}
 		m.repoConfigPath = msg.repoTOML
 		// Apply the persisted Commits render mode ([ui] show_graph): "off" starts
 		// in the flat list, exactly like the . menu's "Show as list".
@@ -1052,6 +1069,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
 			m.cfg = msg.cfg
+			if !m.steerActive() {
+				m = m.closeSteerInbox() // config says off: drop the presence at once
+			}
 			// Rebind the per-repo Settings write target on the legacy load path —
 			// configReadyMsg only covers app startup. Without this, every Settings
 			// write after a repo switch ("Show graph", "Commit sort", refresh
@@ -2410,11 +2430,34 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A single perpetual tick (started in Init): re-render so the busy line's
 		// elapsed time advances while an op runs. View only shows it when running,
 		// so an idle tick just repaints identical content (bubbletea diffs frames).
-		// Also drives the background auto-refresh scheduler.
+		// Also drives the background auto-refresh scheduler, the session snapshot,
+		// and live steering — the presence touch (liveness IS the mtime) plus an
+		// unconditional inbox poll. The poll is the safety net for a watcher that
+		// failed to start; it is NOT gated on gitwatch.Supported, which probes the
+		// REPO's filesystem while the inbox lives in the state dir.
 		var cmd tea.Cmd
 		m, cmd = m.refreshTick(time.Now())
 		m = m.maybeWriteSnapshot()
-		return m, tea.Batch(cmd, heartbeatCmd())
+		m.touchSteerPresence()
+		var scmd tea.Cmd
+		m, scmd = m.drainSteer()
+		return m, tea.Batch(cmd, scmd, heartbeatCmd())
+
+	case steerStartedMsg:
+		if msg.gen != m.steerGen || !m.steerActive() {
+			msg.w.Close() // superseded by a repo switch, or steering went away
+			return m, nil
+		}
+		m.steerWatch = msg.w
+		return m, steerListenCmd(msg.w, msg.gen)
+
+	case steerWakeMsg:
+		if msg.gen != m.steerGen {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m, cmd = m.drainSteer()
+		return m, tea.Batch(cmd, steerListenCmd(m.steerWatch, msg.gen))
 	case watchReadyMsg:
 		if msg.gen != m.watchGen {
 			if msg.watcher != nil {
@@ -3642,6 +3685,8 @@ func (m Model) commitPageEligible() bool {
 // panic dump still references the original repo (acceptable for a debug aid).
 func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	removeSnapshotFile(m.snapshotPath) // the old repo's session ends here
+	m = m.closeSteerInbox()            // …and so does its steering inbox
+	m.steerGen++                       // drop the old watcher's in-flight msgs
 	if m.watcher != nil {
 		_ = m.watcher.Close()
 		m.watcher = nil
