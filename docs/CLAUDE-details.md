@@ -120,8 +120,9 @@ block's own lines — and lexes them CONCURRENTLY under `domain.MaxSyntaxBytes`.
 It runs in a `tea.Cmd` (`hunkPicker.lexCmd`) returned from the four open sites
 in `model.go`, which push the picker unlexed: chroma costs ~1.8 s on a 1 MB Go
 file and the UI thread must not wait for it. The finished runs come back as a
-`pickerLexedMsg`, applied only if that picker is still live (the top layer, or
-the conflict process's own `cp.picker`) — `setSyntax` invalidates the sanitized
+`pickerLexedMsg`, applied only if that picker is still live — anywhere on the
+layer stack (`hasLayer`, so a popup opened mid-lex only covers it), or the
+conflict process's own `cp.picker` — `setSyntax` invalidates the sanitized
 caches and the repaint is layout-stable, since a mask never changes a line's
 text or width. `withSyntax` is the synchronous form, kept for tests. The two
 sides are numbered

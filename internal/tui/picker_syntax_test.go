@@ -518,8 +518,29 @@ func TestLoaderSkipsLexCmdForUnknownLanguage(t *testing.T) {
 	}
 }
 
-// A lex that lands after its picker is gone is dropped: the runs belong to that
-// picker's document, and nothing else may take them.
+// A popup opened while the lex was running must not cost the picker its
+// colour: covered is not closed, and the runs would never be recomputed.
+func TestPickerLexedMsgAppliesUnderACoveringLayer(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 80, height: 24}
+	m.cfg.UI.DiffSyntax = "auto"
+	u, cmd := m.Update(conflictFileLoadedMsg{path: "f.go", content: []byte(goConflict)})
+	covered := u.(Model)
+	e := covered.topLayer().(*hunkPicker)
+	covered = covered.pushLayer(&repoPopup{}) // a popup lands mid-lex
+
+	after, _ := covered.Update(cmd())
+	if e.curTok == nil || e.incTok == nil {
+		t.Errorf("a covered picker must still take its runs: cur=%v inc=%v", e.curTok, e.incTok)
+	}
+	if _, ok := after.(Model).topLayer().(*repoPopup); !ok {
+		t.Errorf("the covering layer must stay on top, got %T", after.(Model).topLayer())
+	}
+}
+
+// A lex that lands after its picker has LEFT the stack (not merely been
+// covered) is dropped: the runs belong to that picker's document, and nothing
+// else may take them.
 func TestPickerLexedMsgForADeadPickerIsIgnored(t *testing.T) {
 	t.Parallel()
 	m := Model{width: 80, height: 24}
