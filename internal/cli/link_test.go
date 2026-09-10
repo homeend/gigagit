@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -170,6 +171,152 @@ func TestLinkPathIsRebasedToTheCheckoutTop(t *testing.T) {
 	})
 }
 
+// A1 (P25): the real binary passes workdir "." to cli.Run, so `gg link
+// a.txt:2` used to die in filepath.Rel — an ABSOLUTE top level against a
+// RELATIVE join. The rebase makes the workdir absolute itself. No os.Chdir
+// here (the suite is parallel): the workdir is expressed relative to the
+// process cwd instead, which is the same shape "." has.
+func TestLinkAcceptsARelativeWorkdir(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel, err := filepath.Rel(cwd, dir)
+	if err != nil {
+		t.Skipf("no relative path from %q to %q: %v", cwd, dir, err)
+	}
+	if filepath.IsAbs(rel) {
+		t.Fatalf("Rel returned an absolute path %q", rel)
+	}
+	code, out, errb := runLinkCLI(t, rel, "README.md:2")
+	if code != 0 {
+		t.Fatalf("exit = %d (stderr %q)", code, errb)
+	}
+	got := strings.TrimSpace(out)
+	if !strings.HasSuffix(got, "/README.md:2") {
+		t.Errorf("stdout = %q, want a link ending /README.md:2", got)
+	}
+	if _, err := model.ParseLink(got); err != nil {
+		t.Errorf("ParseLink(%q) = %v", got, err)
+	}
+}
+
+// A6: LinkPathOK must run on the REBASED, top-level-relative path, never on
+// the raw argument — a Windows absolute argument ("C:\repo\a.txt") is all
+// drive colon, and so is a POSIX checkout that merely lives under a directory
+// with a ':' in its name. Both reduce to a clean relative path.
+func TestLinkAbsoluteArgumentWithAColonInTheCheckoutPath(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		// A ':' is not a legal Windows path character; the DRIVE colon covers
+		// the same code path there and is exercised by the absolute-argument
+		// subtest of TestLinkPathIsRebasedToTheCheckoutTop.
+		t.Skip("':' cannot appear in a Windows directory name")
+	}
+	top := filepath.Join(t.TempDir(), "odd:name", "repo")
+	if err := os.MkdirAll(top, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seedCLIRepoAt(t, top)
+	abs := filepath.ToSlash(filepath.Join(top, "README.md")) + ":2"
+	code, out, errb := runLinkCLI(t, top, abs)
+	if code != 0 {
+		t.Fatalf("exit = %d (stderr %q)", code, errb)
+	}
+	got := strings.TrimSpace(out)
+	if !strings.HasSuffix(got, "/README.md:2") {
+		t.Errorf("stdout = %q, want a link ending /README.md:2", got)
+	}
+	// The checkout path itself carries the colon; the link must still reparse.
+	if _, err := model.ParseLink(got); err != nil {
+		t.Errorf("ParseLink(%q) = %v", got, err)
+	}
+}
+
+// A6: an '@' (or a '#' that is not a hunk suffix) in the path gets the
+// INTENDED message — before, the probe parse ran first and complained about a
+// target or a hunk the user never wrote.
+func TestLinkPathSeparatorMessages(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	for _, tc := range []struct{ name, arg, want string }{
+		{"at in path", "we@ird.go", "path contains @, : or #"},
+		{"hash in path", "we#ird.go", "path contains @, : or #"},
+		{"hash then junk", "a.go#x", "path contains @, : or #"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			code, _, errb := runLinkCLI(t, dir, tc.arg)
+			if code != 2 {
+				t.Fatalf("exit = %d, want 2; stderr %q", code, errb)
+			}
+			if !strings.Contains(errb, tc.want) {
+				t.Errorf("stderr = %q, want it to mention %q", errb, tc.want)
+			}
+		})
+	}
+	// A real hunk suffix still works (it is part of the grammar `gg link`
+	// prints, and the '#' check must not swallow it).
+	code, out, errb := runLinkCLI(t, dir, "README.md#2")
+	if code != 0 {
+		t.Fatalf("hunk suffix: exit = %d (stderr %q)", code, errb)
+	}
+	if got := strings.TrimSpace(out); !strings.HasSuffix(got, "/README.md#2") {
+		t.Errorf("stdout = %q, want a link ending /README.md#2", got)
+	}
+}
+
+// A3: a remoteless checkout whose PATH holds an '@' cannot be expressed in
+// the local form — the first '@' is the grammar's target separator. `gg link`
+// refuses (exit 2) rather than print a link nothing can parse.
+func TestLinkRefusesACheckoutPathWithASeparator(t *testing.T) {
+	t.Parallel()
+	for _, seg := range []string{"user@corp", "backup#1"} {
+		seg := seg
+		t.Run(seg, func(t *testing.T) {
+			t.Parallel()
+			top := filepath.Join(t.TempDir(), seg, "repo")
+			if err := os.MkdirAll(top, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			seedCLIRepoAt(t, top) // no remote → the local form
+			code, out, errb := runLinkCLI(t, top, "README.md:2")
+			if code != 2 {
+				t.Fatalf("exit = %d, want 2; stdout %q stderr %q", code, out, errb)
+			}
+			if !strings.Contains(errb, "no gg link") {
+				t.Errorf("stderr = %q, want the refusal", errb)
+			}
+		})
+	}
+}
+
+// seedCLIRepoAt initialises a real repo with one commit at an EXISTING dir
+// (newCLIRepo chooses its own; these tests need a specific path).
+func seedCLIRepoAt(t *testing.T, dir string) {
+	t.Helper()
+	env := append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	run := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		c.Env = env
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-b", "main")
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("hi\nthere\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "README.md")
+	run("commit", "-m", "initial")
+}
+
 func TestLinkUsageErrors(t *testing.T) {
 	t.Parallel()
 	dir := newCLIRepo(t)
@@ -239,6 +386,25 @@ func TestLinkResolveUnknownRepoExitsOne(t *testing.T) {
 	}
 	if !strings.Contains(errb, "open it once in gg") {
 		t.Errorf("stderr = %q, want the fix-it hint", errb)
+	}
+}
+
+// A4: ResolveLink wraps model.ErrLink for a link the parser let through but
+// the resolver cannot honour (here: a path escaping the checkout). That is a
+// MALFORMED link — exit 2, the same as everywhere else — while a link that is
+// merely unresolvable here stays exit 1.
+func TestLinkResolveMalformedLinkExitsTwo(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	if out, err := exec.Command("git", "-C", dir, "remote", "add", "origin", "git@github.com:homeend/gigagit.git").CombinedOutput(); err != nil {
+		t.Fatalf("remote add: %v\n%s", err, out)
+	}
+	code, _, errb := runLinkCLI(t, dir, "resolve", "gg://gigagit/../secret")
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2; stderr %q", code, errb)
+	}
+	if !strings.Contains(errb, "escapes the checkout") {
+		t.Errorf("stderr = %q, want the escape refusal", errb)
 	}
 }
 

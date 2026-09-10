@@ -44,7 +44,7 @@ func cmdShow(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "show: that link names the working tree; gg show needs a link to a commit (gg://<repo>/<path>@<sha>)")
 			return 2
 		}
-		svc = domain.Open(res.Checkout)
+		svc = openLinkTarget(res)
 		rev = res.Addr.Commit
 		if res.Addr.Path != "" {
 			paths = []string{res.Addr.Path}

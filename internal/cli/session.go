@@ -369,7 +369,11 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 		if err != nil {
 			return linkExit("session navigate", err, stderr)
 		}
-		dir, target := linkSteerDir(ctx, dir, svc, res)
+		dir, target, err := linkSteerDir(ctx, dir, svc, res)
+		if err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
 		c := steer.Command{Cmd: "navigate"}
 		switch {
 		case res.Addr.Path == "":
@@ -383,10 +387,10 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 			c.File, c.Target = res.Addr.Path, targetOf(res.Addr)
 			line := steer.Line{Side: string(res.Side), No: res.Line}
 			if res.Hunk > 0 {
-				if res.Addr.State == model.StateUntracked {
-					fmt.Fprintln(stderr, "session navigate: untracked files have no hunks; use a :<line> link")
-					return 1
-				}
+				// No StateUntracked guard here: the grammar has no untracked
+				// target, so ParseLink (the only source of a Resolved) never
+				// produces one — an untracked file's link is the plain
+				// working-tree form, whose index→file diff has hunks.
 				line, err = resolveHunkLine(ctx, target, res.Addr.State == model.StateStaged, res.Addr.Commit, res.Addr.Path, res.Hunk)
 				if err != nil {
 					fmt.Fprintln(stderr, "error:", err)
@@ -664,7 +668,11 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 			fmt.Fprintln(stderr, "session highlight add: the link needs a file and a line or hunk (gg://<repo>/<path>[@<target>]:<line>[-<end>] or #<hunk>)")
 			return 2
 		}
-		dir, target := linkSteerDir(ctx, dir, svc, res)
+		dir, target, err := linkSteerDir(ctx, dir, svc, res)
+		if err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
 		sideVal, first, last := string(res.Side), res.Line, *end
 		switch {
 		case res.Hunk > 0:
@@ -675,7 +683,7 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 				fmt.Fprintln(stderr, "session highlight add: a #<hunk> link already names a range; drop -<end> and --end")
 				return 2
 			}
-			spec, err := target.HunkDiffSpec(ctx, res.Addr.State == model.StateStaged, res.Addr.Commit, []string{res.Addr.Path})
+			spec, err := linkDiffSpec(ctx, target, res)
 			if err != nil {
 				fmt.Fprintln(stderr, "error:", err)
 				return 1
@@ -789,15 +797,19 @@ func splitLinkRange(s string) (string, int) {
 // Otherwise the TARGET checkout's own inbox is computed, which is what lets
 // `gg session navigate gg://…` run from /tmp move a window in another
 // worktree. The returned service is the one the command's target belongs to.
-func linkSteerDir(ctx context.Context, fallback string, cwd *domain.Service, res domain.Resolved) (string, *domain.Service) {
+//
+// A failure to read the target's common dir is RETURNED, not swallowed into
+// an empty dir: an empty inbox path reads downstream as "no session there",
+// which would report a broken repository as a window nobody has open.
+func linkSteerDir(ctx context.Context, fallback string, cwd *domain.Service, res domain.Resolved) (string, *domain.Service, error) {
 	top, err := cwd.TopLevel(ctx)
 	if err == nil && domain.SamePath(top, res.Checkout) {
-		return fallback, cwd
+		return fallback, cwd, nil
 	}
-	target := domain.Open(res.Checkout)
+	target := openLinkTarget(res)
 	cd, err := target.GitCommonDir(ctx)
 	if err != nil {
-		return "", target
+		return "", target, err
 	}
-	return config.SessionSteerDir(cd, res.Checkout), target
+	return config.SessionSteerDir(cd, res.Checkout), target, nil
 }

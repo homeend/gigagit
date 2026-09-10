@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/config"
@@ -92,16 +93,30 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 	}
 
 	if s := strings.TrimSpace(pathArg); s != "" {
-		probe, err := model.ParseLink(model.LinkScheme + "x/" + strings.TrimPrefix(filepath.ToSlash(s), "./"))
-		if err != nil {
-			return model.Link{}, err
-		}
-		if !model.LinkPathOK(probe.Path) {
+		raw := strings.TrimPrefix(filepath.ToSlash(s), "./")
+		// A separator in the PATH is checked here, on the raw argument, so the
+		// user gets the intended message: run through ParseLink first and an
+		// '@' or a stray '#' surfaces as the grammar's "target must be…" /
+		// "hunk must be…" prose about a link the user never typed. ':' is NOT
+		// checked here — it is the line suffix, and on Windows it is also the
+		// drive colon of a perfectly good absolute argument; LinkPathOK gets
+		// the REBASED, top-level-relative path below, which has neither.
+		if strings.ContainsRune(raw, '@') || !linkHunkSuffixOK(raw) {
 			return model.Link{}, fmt.Errorf("%w: path contains @, : or # — no gg link", model.ErrLink)
 		}
-		rel, err := rebaseLinkPath(top, workdir, probe.Path)
+		probe, err := probeLinkArg(raw)
 		if err != nil {
 			return model.Link{}, err
+		}
+		rel, err := rebaseLinkPath(top, workdir, probe.Repo.Abs)
+		if err != nil {
+			return model.Link{}, err
+		}
+		if !model.LinkPathOK(rel) {
+			return model.Link{}, fmt.Errorf("%w: path contains @, : or # — no gg link", model.ErrLink)
+		}
+		if rel == "" && (probe.Line > 0 || probe.Hunk > 0) {
+			return model.Link{}, fmt.Errorf("%w: a line or a hunk needs a file path", model.ErrLink)
 		}
 		l.Path, l.Side, l.Line, l.Hunk = rel, probe.Side, probe.Line, probe.Hunk
 	}
@@ -135,8 +150,51 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 		l.Repo = model.LinkRepo{Name: name}
 		return l, nil
 	}
-	l.Repo = model.LinkRepo{Abs: filepath.ToSlash(filepath.Clean(top))}
+	abs := filepath.ToSlash(filepath.Clean(top))
+	// The local form carries the CHECKOUT path, which is no more expressible
+	// than a file path is: a checkout under /home/user@corp or /mnt/backup#1
+	// would emit a link ParseLink refuses (the first '@' is the target
+	// separator, the first '#' the hunk one). Refuse to print it instead.
+	if !model.LinkAbsOK(abs) {
+		return model.Link{}, fmt.Errorf("%w: this repository has no remote and its checkout path %q contains @ or # — no gg link", model.ErrLink, abs)
+	}
+	l.Repo = model.LinkRepo{Abs: abs}
 	return l, nil
+}
+
+// linkProbePrefix is the throwaway checkout segment probeLinkArg parses the
+// argument against. The LOCAL form is used deliberately: its repo half holds
+// the path undivided and is never LinkPathOK-checked, so a Windows absolute
+// argument's drive colon ("C:/repo/a.txt") survives the probe — the
+// remote-named form now refuses one (it cannot round-trip there).
+const linkProbePrefix = "/gg-link-probe/"
+
+// probeLinkArg splits a `gg link` path argument into its path and its
+// ":<line>" / ":old:<line>" / "#<hunk>" suffix using ParseLink itself, so
+// `gg link` can never disagree with the grammar it prints. The returned
+// Link's Repo.Abs holds the path portion (the local form's shape); nothing
+// else about the returned value is meaningful.
+func probeLinkArg(raw string) (model.Link, error) {
+	l, err := model.ParseLink(model.LinkScheme + linkProbePrefix + raw)
+	if err != nil {
+		return model.Link{}, err
+	}
+	l.Repo.Abs = strings.TrimPrefix(l.Repo.Abs, linkProbePrefix)
+	return l, nil
+}
+
+// linkHunkSuffixOK reports whether every '#' in a `gg link` argument is the
+// grammar's own hunk suffix — i.e. there is at most one and a positive number
+// follows it. A '#' inside a file NAME is not expressible in a link, and this
+// is what lets buildLink say so in its own words instead of letting the parser
+// complain about a hunk the user never wrote.
+func linkHunkSuffixOK(raw string) bool {
+	i := strings.IndexByte(raw, '#')
+	if i < 0 {
+		return true
+	}
+	n, err := strconv.Atoi(raw[i+1:])
+	return err == nil && n >= 1
 }
 
 // rebaseLinkPath turns p — the raw path portion of a `gg link` argument,
@@ -152,7 +210,15 @@ func rebaseLinkPath(top, workdir, p string) (string, error) {
 	native := filepath.FromSlash(p)
 	abs := native
 	if !filepath.IsAbs(native) {
-		abs = filepath.Join(workdir, native)
+		// workdir is what cmd/gg passed to cli.Run, which is "." for the real
+		// binary (every other verb is happy with that) — make it absolute here
+		// or filepath.Rel below fails outright against the ABSOLUTE top level,
+		// and `gg link a.txt` never works outside a test.
+		base := workdir
+		if a, err := filepath.Abs(base); err == nil {
+			base = a
+		}
+		abs = filepath.Join(base, native)
 	}
 	rel, err := filepath.Rel(top, abs)
 	if err != nil {
@@ -206,8 +272,10 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 	}
 	res, err := domain.ResolveLink(context.Background(), l, linkResolveOpts(statePath, svc))
 	if err != nil {
-		fmt.Fprintln(stderr, "link resolve:", err)
-		return 1
+		// ResolveLink wraps model.ErrLink for a MALFORMED link that got past
+		// the parser (the empty-commit guard, the path-escape refusal), and
+		// those are exit 2 in every other verb — linkExit is the shared rule.
+		return linkExit("link resolve", err, stderr)
 	}
 	if *asJSON {
 		w := wireResolvedLink{

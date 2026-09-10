@@ -53,7 +53,7 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 			return 2
 		}
 		link, rest = &res, rest[1:]
-		svc = domain.Open(res.Checkout)
+		svc = openLinkTarget(res)
 	}
 	return withNotesHousekeeping(svc, sub, func() int {
 		switch sub {
@@ -253,7 +253,10 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 		addr = link.Addr
 		switch {
 		case link.Hunk > 0:
-			spec, err := svc.HunkDiffSpec(ctx, addr.State == model.StateStaged, addr.Commit, []string{addr.Path})
+			// linkDiffSpec is the ONE place that maps a link's target onto a
+			// diff spec, so `gg note add <link>#N` cannot drift from
+			// `gg diff <link> --hunks`'s numbering.
+			spec, err := linkDiffSpec(ctx, svc, *link)
 			if err != nil {
 				return noteExit(err, stderr)
 			}

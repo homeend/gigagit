@@ -28,17 +28,13 @@ var InitHomeDir string
 // state dir. Tests set it to a temp file so they never touch real state.
 var InitTargetsPath string
 
-// Run dispatches a CLI subcommand against the repo at workdir, writing to
-// stdout/stderr, and returns a process exit code.
-func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
-	// stderr is shared between the main goroutine (progress, prompts, errors)
-	// and the operation goroutine (decider prompts) — serialize it once here.
-	stderr = &syncWriter{w: stderr}
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg <command> [args]")
-		return 2
-	}
-	svc := domain.Open(workdir)
+// setupCLIService applies the per-service setup EVERY CLI service needs — the
+// one the cwd's service gets in Run, and (since gg links) the one a
+// cross-checkout target service gets in openLinkTarget. A link consumer that
+// skipped it would render the SAME command's diff differently depending on
+// which checkout it ran against, which is exactly what a portable address
+// must not do.
+func setupCLIService(svc *domain.Service) {
 	// The scriptable CLI keeps `gg status` faithful to `git status`: the
 	// EOL-only filter is a TUI Files-panel convenience and the CLI has no config
 	// to disable it, so a script's output must not silently change.
@@ -50,6 +46,20 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 	if cfg, err := loadConfigFor(svc); err == nil {
 		svc.SetVersionsPolicy(engine.VersionsPolicy{Enabled: !cfg.Versions.Disabled, MaxAgeDays: cfg.Versions.MaxAgeDays})
 	}
+}
+
+// Run dispatches a CLI subcommand against the repo at workdir, writing to
+// stdout/stderr, and returns a process exit code.
+func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
+	// stderr is shared between the main goroutine (progress, prompts, errors)
+	// and the operation goroutine (decider prompts) — serialize it once here.
+	stderr = &syncWriter{w: stderr}
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: gg <command> [args]")
+		return 2
+	}
+	svc := domain.Open(workdir)
+	setupCLIService(svc)
 	cmd, rest := args[0], args[1:]
 	// Record this repo in the switcher registry (best-effort: errors and
 	// non-repo working directories are ignored). Skip for "repo" subcommands
