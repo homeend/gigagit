@@ -211,8 +211,12 @@ func sessionStatus(dir string, svc *domain.Service, args []string, stdout, stder
 	}
 	r := routeFor(dir)
 	view := sessionOpenView(svc)
+	link := ""
+	if cd, err := svc.GitCommonDir(context.Background()); err == nil {
+		link = snapshotCursorLink(config.SessionSnapshotPath(cd))
+	}
 	if *asJSON {
-		out := map[string]any{"worktree": r.worktree(), "view": view}
+		out := map[string]any{"worktree": r.worktree(), "view": view, "cursor_link": link}
 		if r.tuiOK {
 			out["tui"] = map[string]any{"pid": r.tui.PID, "started": r.tui.Started}
 		} else {
@@ -248,7 +252,33 @@ func sessionStatus(dir string, svc *domain.Service, args []string, stdout, stder
 	if view != "" {
 		fmt.Fprintln(stdout, "view:", view)
 	}
+	if link != "" {
+		fmt.Fprintln(stdout, "cursor:", link)
+	}
 	return 0
+}
+
+// snapshotCursorLink reads cursor.link out of a session snapshot file. Every
+// failure (no file, unreadable, not JSON, no link) is "" — `gg session status`
+// must report the ROUTING even when the snapshot is absent or from a gg that
+// did not write links.
+func snapshotCursorLink(path string) string {
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	var snap struct {
+		Cursor struct {
+			Link string `json:"link"`
+		} `json:"cursor"`
+	}
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return ""
+	}
+	return snap.Cursor.Link
 }
 
 // worktree is whichever live presence knows it (both record the same path).

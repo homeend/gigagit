@@ -229,3 +229,26 @@ func TestSnapshotTargetMsgStaleServiceDropped(t *testing.T) {
 		t.Fatal("current-svc snapshotTargetMsg must clear lastSnapshot")
 	}
 }
+
+func TestSnapshotCarriesTheCursorLink(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.linkRepoName = "gigagit"
+	m.currentWorktree = "/repo"
+	m.focus = panelCommits
+	m.commits = []model.Commit{{Hash: "eb759989a1b2c3d4e5f60718293a4b5c6d7e8f90", Subject: "x"}}
+	m.sel[panelCommits] = 0
+
+	snap := buildSessionSnapshot(m)
+	if snap.Cursor.Link == "" {
+		t.Fatal("cursor.link is empty")
+	}
+	if _, err := model.ParseLink(snap.Cursor.Link); err != nil {
+		t.Errorf("cursor.link %q does not parse: %v", snap.Cursor.Link, err)
+	}
+	// No repo identity at all (a bare test model) must not invent one.
+	bare := newTestModel(t)
+	if l := buildSessionSnapshot(bare).Cursor.Link; l != "" {
+		t.Errorf("cursor.link = %q on a model with nothing selected, want empty", l)
+	}
+}

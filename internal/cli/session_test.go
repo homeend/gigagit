@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/steer"
@@ -782,6 +784,75 @@ func TestSessionStatusRefusesAStrayArgument(t *testing.T) {
 	var out, errb bytes.Buffer
 	if code := runSession(dir, domain.Open(newCLIRepo(t)), []string{"status", "nonsense"}, &out, &errb); code != 2 {
 		t.Errorf("exit = %d, want 2 (usage error); stderr %q", code, errb.String())
+	}
+}
+
+func TestSnapshotCursorLink(t *testing.T) {
+	t.Parallel()
+	snapPath := filepath.Join(t.TempDir(), "ui-state.json")
+	body := `{"version":1,"cursor":{"link":"gg://gigagit/a.txt:4"}}`
+	if err := os.WriteFile(snapPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := snapshotCursorLink(snapPath); got != "gg://gigagit/a.txt:4" {
+		t.Errorf("snapshotCursorLink = %q", got)
+	}
+	if got := snapshotCursorLink(filepath.Join(t.TempDir(), "missing.json")); got != "" {
+		t.Errorf("snapshotCursorLink of a missing file = %q, want \"\"", got)
+	}
+}
+
+// TestSessionStatusPrintsTheCursorLink drives sessionStatus (via runSession)
+// end to end: it writes a snapshot at the REAL path sessionStatus resolves
+// through svc.GitCommonDir + config.SessionSnapshotPath (the same seam
+// sessionOpenView already uses — there is no injected-path parameter on this
+// verb), then asserts both the plain "cursor: <link>" line and the --json
+// "cursor_link" key.
+func TestSessionStatusPrintsTheCursorLink(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	livePresence(t, dir)
+	svc := domain.Open(newCLIRepo(t))
+	cd, err := svc.GitCommonDir(context.Background())
+	if err != nil {
+		t.Fatalf("GitCommonDir: %v", err)
+	}
+	snapPath := config.SessionSnapshotPath(cd)
+	if snapPath == "" {
+		t.Skip("no session snapshot path resolves in this environment")
+	}
+	if err := os.MkdirAll(filepath.Dir(snapPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"version":1,"cursor":{"link":"gg://gigagit/a.txt:4"}}`
+	if err := os.WriteFile(snapPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The path lives under the REAL state home (there is no injected-path seam
+	// on sessionStatus), keyed by this test's own fresh-tempdir commonDir — so
+	// removing the whole per-repo directory, not just the file, is safe: the
+	// key never recurs and nothing else writes under it.
+	t.Cleanup(func() { os.RemoveAll(filepath.Dir(snapPath)) })
+
+	var out, errb bytes.Buffer
+	if code := runSession(dir, svc, []string{"status"}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d (stderr %q), want 0", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "cursor: gg://gigagit/a.txt:4") {
+		t.Errorf("stdout = %q, want a \"cursor: gg://gigagit/a.txt:4\" line", out.String())
+	}
+
+	out.Reset()
+	errb.Reset()
+	if code := runSession(dir, svc, []string{"status", "--json"}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d (stderr %q), want 0", code, errb.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("--json is not valid JSON (%v): %s", err, out.String())
+	}
+	if got["cursor_link"] != "gg://gigagit/a.txt:4" {
+		t.Errorf("json cursor_link = %v, want \"gg://gigagit/a.txt:4\"", got["cursor_link"])
 	}
 }
 
