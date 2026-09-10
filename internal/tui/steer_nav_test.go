@@ -387,6 +387,47 @@ func TestSteerNavigateRefusesASecondNavigateWhileOneIsLoading(t *testing.T) {
 	}
 }
 
+// TestSteerNavigateOpensAFileInALoadedCommit walks the longest chain in the
+// verb: goto the feed row → openChangedFiles → commitFilesMsg →
+// drainPendingFiles → openDiffForFileLine → diffMsg → drainPendingDiff. Every
+// gate on that path (filesHash == ps.hash, the re-park under the NEW diffTag)
+// has to line up or the landing never happens.
+func TestSteerNavigateOpensAFileInALoadedCommit(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	dir := m.steerDir
+	hash := gitOut(t, m.currentWorktree, "rev-parse", "HEAD") // the seed commit, which ADDS a.txt
+	m.commits = []model.Commit{{Hash: hash, Subject: "seed"}}
+	m = m.rebuildCommitGraph()
+
+	m, cmd := m.applySteer(steer.Command{
+		ID: "n-11", Cmd: "navigate", File: "a.txt",
+		Target: &steer.Target{State: "commit", Commit: hash},
+		Line:   &steer.Line{Side: "new", No: 18},
+		Wait:   true,
+	})
+	if m.pendingSteer == nil || m.pendingSteer.stage != steerStageFiles {
+		t.Fatalf("pending = %+v, want a parked file-list stage", m.pendingSteer)
+	}
+	m = pumpAll(t, m, cmd)
+
+	v := m.diffLayer()
+	if v == nil {
+		t.Fatal("no diff view after navigating into a commit")
+	}
+	row, ok := v.cursorRow()
+	if !ok || row.RightNo != 18 {
+		t.Errorf("cursor row = %+v ok=%v, want new line 18", row, ok)
+	}
+	if m.pendingSteer != nil {
+		t.Errorf("pending = %+v, want it cleared once the landing happened", m.pendingSteer)
+	}
+	r, ok := steer.AwaitReply(dir, "n-11", 3*time.Second)
+	if !ok || !r.OK || !strings.Contains(r.Detail, "a.txt:18") {
+		t.Fatalf("reply = %+v ok=%v, want ok:true detailing a.txt:18", r, ok)
+	}
+}
+
 func TestExpirePendingSteerAnswersAndClears(t *testing.T) {
 	t.Parallel()
 	m, dir := steerModel(t)
