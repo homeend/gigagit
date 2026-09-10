@@ -28,21 +28,23 @@ func TestScenarios(t *testing.T) {
 			for i, run := range sc.Runs {
 				stdout.Reset()
 				stderr.Reset()
-				code := (CLIRunner{}).Run(sb.dir(run.Cwd), run.Cmd, run.Stdin, &stdout, &stderr)
+				wd := sb.dir(run.Cwd)
+				argv := ExpandArgs(run.Cmd, wd)
+				code := (CLIRunner{}).Run(wd, argv, run.Stdin, &stdout, &stderr)
 				if code != *run.Exit {
 					// State past a failed run is unpredictable: stop here.
 					t.Fatalf("run[%d] gg %s: exit %d, want %d\nstdout:\n%s\nstderr:\n%s",
-						i, strings.Join(run.Cmd, " "), code, *run.Exit, stdout.String(), stderr.String())
+						i, strings.Join(argv, " "), code, *run.Exit, stdout.String(), stderr.String())
 				}
 				if miss := run.MissingStdout(stdout.String()); len(miss) > 0 {
 					t.Fatalf("run[%d] gg %s: stdout missing %v\nstdout:\n%s",
-						i, strings.Join(run.Cmd, " "), miss, stdout.String())
+						i, strings.Join(argv, " "), miss, stdout.String())
 				}
 				if bad := run.PresentExcluded(stdout.String()); len(bad) > 0 {
 					t.Fatalf("run[%d] gg %s: stdout unexpectedly contains %v\nstdout:\n%s",
-						i, strings.Join(run.Cmd, " "), bad, stdout.String())
+						i, strings.Join(argv, " "), bad, stdout.String())
 				}
-				t.Logf("run[%d] gg %s → exit %d ✓", i, strings.Join(run.Cmd, " "), code)
+				t.Logf("run[%d] gg %s → exit %d ✓", i, strings.Join(argv, " "), code)
 			}
 			assertExpect(t, sb, &sc.Expect)
 		})
