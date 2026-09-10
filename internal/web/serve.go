@@ -47,6 +47,10 @@ func Serve(ctx context.Context, workdir, addr string, launch bool) error {
 	srv := New(svc)
 	srv.startLive(ctx) // watcher + interval ticker behind GET /api/events
 	defer srv.Close()
+	// The live-steering claim: web.json carries THIS run's URL, so a
+	// `gg session …` in any shell on this worktree can reach the page.
+	srv.initSteerPresence(ctx, url)
+	defer srv.removeSteerPresence()
 	httpSrv := &http.Server{Handler: srv.Handler()}
 	fmt.Fprintln(os.Stderr, "gg web: serving", url)
 	if launch {

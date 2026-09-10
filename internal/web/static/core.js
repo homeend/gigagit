@@ -51,6 +51,11 @@ const state = {
   noteCounts: { by_path: {}, by_commit: {}, by_commit_path: {} },
   notesAgentOff: false,      // the TUI's `a`: hide agent-written notes
   diffRow: null,             // {side, no} — the clicked diff row `c` anchors on
+  // Attention bands an agent painted (gg session highlight), keyed by
+  // attnKey below. Each value is a list of {side, start, end, tone}. Cleared
+  // by highlight_clear and by an EXPLICIT steer reload — never by the
+  // interval refresh, which no agent asked for.
+  attention: new Map(),
   diffBlockIdx: -1,
   detailGen: 0,
   dragBranch: null, // name of the branch being dragged, else null
@@ -64,6 +69,18 @@ const state = {
 
 
 const $ = (id) => document.getElementById(id);
+
+
+// attnKey is the ONE key builder for state.attention: the renderer (files.js)
+// and the steer commands that write the marks (live.js) both call it, so the
+// key a `gg session highlight` writes and the key diffHTML reads are the same
+// bytes. It lives here, with `state`, rather than in either caller. `rev` is
+// the FULL commit sha for a commit diff — state.diffCtx.rev holds the feed's
+// full hash, and the wire carries a full one too.
+function attnKey(ctx) {
+  if (!ctx || !ctx.path) return "";
+  return `${ctx.state || "unstaged"}\0${ctx.rev || ""}\0${ctx.path}`;
+}
 
 
 // Destructive decision options render red in the modal (the ctx-menu
@@ -328,4 +345,4 @@ function runOnce(type, fn, opts = {}) {
 // --- end single-flight task gate ---
 
 
-export { $, DANGER_OPTIONS, ROW_H, SECTIONS, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runOnce, runes, splitPathSegs, ssGet, ssSet, state };
+export { $, DANGER_OPTIONS, ROW_H, SECTIONS, attnKey, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runOnce, runes, splitPathSegs, ssGet, ssSet, state };

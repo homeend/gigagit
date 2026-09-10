@@ -1,6 +1,6 @@
 // files.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, esc, getJSON, postJSON, runOnce, runes, state } from "./core.js";
+import { $, attnKey, esc, getJSON, postJSON, runOnce, runes, state } from "./core.js";
 import { copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
 import { extraRows, registerHelp } from "./menus.js";
@@ -642,6 +642,24 @@ function diffHTML(d, paneWidth, notesOn = false) {
     notesOn && no && state.diffRow && state.diffRow.side === side && state.diffRow.no === no ? " cur" : "";
   // A split row is "cur" when the mark sits on EITHER of its sides.
   const curClsBoth = (r) => curCls("new", r.right_no) || curCls("old", r.left_no);
+  // attnCls: the row class a `gg session highlight` paints. A CLASS on the tr,
+  // not an inline background: tr.add/tr.del paint their own cells, so the CSS
+  // paints the band as a per-cell `background` rule of HIGHER specificity
+  // (`table.diff tr.attn-<tone> td.side`) that replaces the add/del tint on
+  // marked rows. It is derived HERE, inside diffHTML, never toggled after the
+  // render: renderDiff re-runs from state.lastDiff on a window resize and on
+  // every notes refresh, so a class added post-hoc the way markDiffRow adds
+  // `cur` would silently vanish.
+  const attnCls = (side, no) => {
+    if (!no || !state.attention.size) return "";
+    const marks = state.attention.get(attnKey(state.diffCtx));
+    if (!marks) return "";
+    for (const m of marks) {
+      if (m.side === side && no >= m.start && no <= m.end) return " attn-" + m.tone;
+    }
+    return "";
+  };
+  const attnClsBoth = (r) => attnCls("new", r.right_no) || attnCls("old", r.left_no);
   const after = (cols, ...pairs) => {
     if (!notesOn) return "";
     let out = "";
@@ -663,7 +681,7 @@ function diffHTML(d, paneWidth, notesOn = false) {
       const spans = pureAdd ? r.right_spans : r.left_spans;
       const toks = pureAdd ? r.right_tok : r.left_tok;
       html +=
-        `<tr class="${r.kind}${hunkCls(r)}${curCls(nside, no)}"${hunkAttr(r)}${anchor(nside, no)}>` +
+        `<tr class="${r.kind}${hunkCls(r)}${curCls(nside, no)}${attnCls(nside, no)}"${hunkAttr(r)}${anchor(nside, no)}>` +
         `<td class="no ${side}">${no || ""}</td>` +
         `<td class="side ${side}">${renderCell(text, spans, toks, side)}</td></tr>` +
         after(2, [nside, no]);
@@ -676,7 +694,7 @@ function diffHTML(d, paneWidth, notesOn = false) {
     for (const r of rows) {
       if (r.kind === "same") {
         html +=
-          `<tr class="same${curCls("new", r.right_no)}"${anchor("new", r.right_no)}>` +
+          `<tr class="same${curCls("new", r.right_no)}${attnClsBoth(r)}"${anchor("new", r.right_no)}>` +
           `<td class="no l">${r.left_no || ""}</td>` +
           `<td class="no r">${r.right_no || ""}</td>` +
           `<td class="side">${renderCell(r.right, null, r.right_tok, "r")}</td></tr>` +
@@ -684,13 +702,13 @@ function diffHTML(d, paneWidth, notesOn = false) {
       } else {
         if (r.kind !== "add")
           html +=
-            `<tr class="del${hunkCls(r)}${curCls("old", r.left_no)}"${hunkAttr(r)}${anchor("old", r.left_no)}>` +
+            `<tr class="del${hunkCls(r)}${curCls("old", r.left_no)}${attnCls("old", r.left_no)}"${hunkAttr(r)}${anchor("old", r.left_no)}>` +
             `<td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
             `<td class="side l">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</td></tr>` +
             after(3, ["old", r.left_no]);
         if (r.kind !== "del")
           html +=
-            `<tr class="add${hunkCls(r)}${curCls("new", r.right_no)}"${hunkAttr(r)}${anchor("new", r.right_no)}>` +
+            `<tr class="add${hunkCls(r)}${curCls("new", r.right_no)}${attnCls("new", r.right_no)}"${hunkAttr(r)}${anchor("new", r.right_no)}>` +
             `<td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
             `<td class="side r">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</td></tr>` +
             after(3, ["new", r.right_no]);
@@ -708,7 +726,7 @@ function diffHTML(d, paneWidth, notesOn = false) {
       // default anchor is the new side.
       const both = notesOn ? ` data-lno="${r.left_no || 0}" data-rno="${r.right_no || 0}"` : "";
       html +=
-        `<tr class="${r.kind}${hunkCls(r)}${curClsBoth(r)}"${hunkAttr(r)}${anchor(aside, ano)}${both}>` +
+        `<tr class="${r.kind}${hunkCls(r)}${curClsBoth(r)}${attnClsBoth(r)}"${hunkAttr(r)}${anchor(aside, ano)}${both}>` +
         `<td class="no l">${r.left_no || ""}</td>` +
         `<td class="side l">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</td>` +
         `<td class="no r">${r.right_no || ""}</td>` +
@@ -1860,4 +1878,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, addNotePrompt, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, addNotePrompt, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };
