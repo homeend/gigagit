@@ -684,3 +684,75 @@ JSON value, every CLI line. Only the on-screen notices the TUI posts
 `mcp.Server.steerDir`) or a parameter (`cli.runSession(dir, …)`), never read from
 the environment in a test — the tui suite runs `t.Parallel()` and `t.Setenv`
 panics there.
+
+### gg links (`gg://`, `internal/model/link.go` + `internal/domain/linkresolve.go`)
+
+**Grammar** (`model.ParseLink` / `Link.String()`, the only place it lives):
+
+```text
+gg://<repo>/<path>[@<target>][:<line>]     <line> = <n> | old:<n>
+gg://<repo>/<path>[@<target>]#<hunk>       <hunk> and <line> are exclusive
+gg://<repo>@<commit>                       a commit, no path
+gg://<repo>                                the repository
+<repo>   = <name>  remote-named    | /<absolute checkout path>  local
+<target> = <7..40 hex> | staged | (absent) = the working tree
+```
+
+**The local form has no delimiter** between the checkout and the file path, so
+`ParseLink` does not try to split it: `Repo.Abs` holds the whole absolute
+prefix and `Path` stays empty. A PRODUCER, which knows both halves, sets `Abs`
+to the checkout and `Path` to the file; both render to the same bytes, so the
+round-trip contract for a local link is `String(Parse(s)) == s`, not struct
+equality. `domain.ResolveLink` performs the split. The Windows form
+`gg:///C:/src/repo/f.go` strips ONE leading `/` when a drive letter follows,
+and the line suffix is recognised only when the text after the LAST `:` is a
+number — which is how the drive colon survives.
+
+**Resolution** (`domain.ResolveLink`, a package function, not a `Service`
+method — it may open a service for another checkout): the cwd's repo when its
+identity matches, then `internal/repos` entries in MRU order. Several matches
+narrow by containment of the target commit (`svc.ResolveRev`, which doubles as
+the short→full sha expansion; there is no second verb), then by a live gg
+session. A WORKING-TREE link that still has more than one candidate is refused
+(`ErrLinkAmbiguous`, both listed) — two checkouts hold different working files,
+so guessing would point at the wrong content; a COMMIT link takes the most
+recently opened container, whose content is identical by construction.
+Liveness arrives as an injected `ResolveOpts.LiveFn`: `domain` must not import
+`internal/steer`, and a parallel test must be able to say "this one is live".
+
+**`internal/repos` stays a DAG leaf.** It stores a `remote` name per entry but
+never computes one: `Touch(statePath, repoPath, remote, now)` takes it from the
+caller (the TUI's load/config-ready cmds and `gg web`'s `touchMRU`; the
+one-shot CLI passes `""` rather than pay two git invocations per command, and
+an empty value never erases a stored one). `SetRemote` is the resolver's lazy
+backfill for entries an older gg wrote, and deliberately does NOT bump
+`LastOpened` — resolving a link is not opening a repository.
+
+**A CLI positional is a link iff it starts with `gg://`.** No heuristic: `gg
+show <commit>` and `gg diff <rev>` are untouched. A link replaces `--file`,
+`--cached`, `--rev`, `--hunk`, `--new-line` and `--old-line`; passing both is
+exit 2. `#` starts a shell comment, so `gg link`'s usage text and both skills
+tell the user to quote a link carrying `#<hunk>` — gg does not guess.
+
+**Producers refuse rather than mis-render.** A path containing `@`, `:` or `#`
+cannot be expressed, so `model.LinkPathOK` gates every producer (`tui.linkFor`,
+web's `linkFor`, `gg link`). An UNTRACKED file uses the plain working-tree form
+— the grammar has no `untracked` target, and index→file is the pair the
+resolver reads for it anyway. A shelf entry has no link at all.
+
+**The TUI key is `L`, help-and-menu-only.** `diffHintFor`
+(`internal/tui/diff_render.go`) measures 139 of its 140 allowed columns, so `L`
+appears in `help.go`'s Diff view section and the `.` menu's "Copy link" row,
+never in the footer — the same treatment `E`, `R` and `a` get. `contextLinkText`
+is the single producer behind the key, the menu row and the snapshot's
+`cursor.link`, which rides the existing 1 s write-on-change heartbeat.
+
+**Web rows use `act`, never `run`.** `showCtxMenu`'s click handler
+(`internal/web/static/layers.js`) calls `menu._items[i].act()` with no guard;
+`run` belongs to the command palette's separate dispatcher. The diff-line row
+gates on `notesArmed()`, which is exactly where the rows carry
+`data-side`/`data-no`.
+
+**`{{cwd}}` in an e2e `[[run]] cmd`** expands to that run's working directory
+in slash form. It exists because a local-form link is an absolute path the
+sandbox only has at run time; it is the harness's ONLY substitution.

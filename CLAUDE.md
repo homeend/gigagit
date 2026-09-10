@@ -65,13 +65,13 @@ feature; keep THIS file's map to one line per package.
 | `steer`      | Live-steering protocol leaf: a per-worktree file inbox (presence with mtime liveness, temp+rename command/reply files, an fsnotify wake) that `gg session` uses to drive a running TUI or `gg web` page. stdlib + fsnotify only; `tui`/`cli`/`web`/`mcp` import it directly. |
 | `gitconfdocs`| Pure curated git-config catalog (~64 keys with defaults/kinds) behind the config explorer; staleness-tested against `git help -c`. DAG leaf. |
 | `i18n`       | TUI translation layer: English-text-as-key TOML bundles (embedded ja/ko/zh/ru + user overlays). AST-gate tests in `internal/tui` enforce literal keys, full four-bundle coverage, and verb agreement. Engine/CLI prose and decision option VALUES stay English (agent-facing protocol); only rendering is localized. |
-| `model`      | Shared plain data types (`Status`, `Branch`, `Worktree`, `Commit`, `FileAddress`, `Endpoint`, `GitLock`, …). |
+| `model`      | Shared plain data types (`Status`, `Branch`, `Worktree`, `Commit`, `FileAddress`, `Endpoint`, `GitLock`, …). Also the `gg://` `Link` grammar (`ParseLink`/`String`/`Address`). |
 | `tui`        | Bubble Tea Elm-style UI (value-receiver `Model`, panels, layer stack, modal Decider, async ops). Per-source refresh registry + background auto-refresh lane + file-watch; command palette; popups embed `popupMax` for ctrl+t maximize. New ops must be mapped in `opAffectedSources`. |
 | `cli`        | Scriptable frontend; `cliDecider` answers forks from flags or stdin. Agent-facing terse verbs (`log`/`diff`/`show`/`add`/…), `gg batch`, `gg review`, `gg apply`, `gg versions`, `gg unlock`, `gg compare`, `gg note`, `gg skill path`. |
 | `mcp`        | MCP stdio frontend (`gg mcp`): read surface (UI state, bookmarks/shelves, compare, export) + gated mutations (cherry-pick, write-to-worktree). Domain-only frontend. |
 | `web`        | Loopback-only browser frontend (`gg web`): embedded SPA over domain queries + an op transport (SSE events, parking web Decider), AI review/conflict lanes. Domain-only frontend; loopback + Host/Origin guards, allowlist resolution for wire values. |
 | `worktree`   | Shared worktree template resolution used by the TUI popup and the CLI. |
-| `repos`      | Machine-local MRU registry of opened repositories (XDG state) behind the repo switcher. |
+| `repos`      | Machine-local MRU registry of opened repositories (XDG state) behind the repo switcher. Entries carry the remote repository NAME (computed by the caller — this package stays a DAG leaf) so `domain.ResolveLink` can find a `gg://` link's checkout. |
 | `agentskill` | Two embedded skills ("using-gg", "reviewing-with-gg") behind a Skill value type (go:embed + per-skill version marker) that teach AI agents the gg CLI and the review-notes lane. |
 | `agentinit`  | Hardcoded agent registry + detect/status/install behind `gg init` and the TUI Settings popup. |
 | `exttool`    | Catalog of external tools/AI agents gg can run per task category (`conflict`, `commit_message`, `review`, `conflict_complete`); template generation + detection; `$GG_MESSAGE_FILE`-wins-over-stdout capture contract. |

@@ -8,6 +8,29 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **gg links.** A `gg://` address names one place in one repository — a file, a
+  line on one side of one diff, a hunk, or a commit — in a form you can copy
+  out of gg, paste into a chat on another machine, and hand straight back to
+  the CLI: `gg://gigagit/internal/tui/steer.go@eb759989:42`. The repo half is
+  the repository name of the repo's remote (a repo with no remote uses its
+  absolute checkout path, `gg:///mnt/t/others/test-1/…`), resolved through gg's
+  machine-local repository history, so a link made on one checkout finds the
+  right one here. **Copy one** with `L` in the diff view (the cursor line) or
+  the `.` menu's **Copy link** in the Files, Staged and Commits panels and a
+  commit's files view; in `gg web`, right-click a diff line, a file row or a
+  commit row. **Print one** with `gg link
+  [<path>[:<line>]] [--cached | --rev <c>]`, and ask where it points with `gg
+  link resolve <link> [--json]`. **Hand one back** as the first positional to
+  `gg diff`, `gg show`, `gg note add`, `gg note list`, `gg session navigate`
+  and `gg session highlight add` — each runs against the checkout the link
+  names even from another directory, and posts steering into that worktree's
+  session. Mixing a link with the flags it replaces is a usage error rather
+  than a silent override, and a link that matches two checkouts of one repo is
+  refused with both listed instead of guessed. The session snapshot (and `gg
+  session status`, and MCP's `gg_ui_state`) gained `cursor.link` — the address
+  of whatever the user is looking at, so an agent can see it without being
+  told. Quote a link carrying `#<hunk>`: an unquoted `#` starts a shell
+  comment.
 - **TUI themes.** `[ui] theme = "terminal" | "dark" | "light"` (default
   `terminal`, unchanged look). `dark` pins the Windows Terminal Campbell look
   everywhere; `light` is a neutral light grey — charcoal text on an off-white
