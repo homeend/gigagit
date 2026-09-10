@@ -598,7 +598,13 @@ the action menu is open, any typing surface has focus (`filterTyping`,
 `stashView.typing`), or `topLayer()` is outside the poppable whitelist
 (`nil`, `*diffView`, `*historyView`, `*blameView`, `*contentPopup`) — which is
 how the hunk/stage picker, the rebase editor and the repo switcher are refused
-without enumerating every layer type.
+without enumerating every layer type. A second pre-dispatch check
+(`steerEnumRefusal`, same file) mirrors the web endpoint's `toSteerWire`: an
+unrecognised `target.state` (`unstaged|staged|untracked|commit`, `""` = the
+unstaged default) or `line.side` (`new|old`, `""` = new) is refused with
+`unknown target state %q` / `unknown side %q` rather than silently defaulted —
+otherwise a bogus state keys a band no open diff can ever match while the agent
+is answered `ok:true`, and a bogus side quietly means "new".
 
 **The navigate pipeline** parks a `pendingSteer` and drains it in the very
 handler that owns the load it waits on — `dataAvailableMsg`/`srcStatus` for the
@@ -656,7 +662,7 @@ working-tree file list rather than doing nothing.
 JSON value, every CLI line. Only the on-screen notices the TUI posts
 (`"▸ agent opened %s"`, `"▸ agent asked for a reload"`,
 `"▸ agent marked lines in %s"`, `"▸ agent cleared its marks"`,
-`"agent moved the focus"`) go through `i18n.T` and live in all four bundles.
+`"▸ agent moved the focus"`) go through `i18n.T` and live in all four bundles.
 
 **Test seams:** the inbox dir is a field (`m.steerDir`, `Server.steerDir`,
 `mcp.Server.steerDir`) or a parameter (`cli.runSession(dir, …)`), never read from

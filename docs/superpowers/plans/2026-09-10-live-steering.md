@@ -7013,7 +7013,10 @@ Recorded so an executor does not re-litigate them:
     `internal/tui/steer_attn.go` and in `internal/web/static/live.js`), and the
     spec sentence in §4.6 was reworded to match. The rejected alternative — an
     `auto` flag on the wire — costs a protocol field and a web-endpoint change
-    for the same result.
+    for the same result. Task 12's quoted `docs/CLAUDE-details.md` block above
+    (the "Attention marks" and notice-key paragraphs) predates this ruling and
+    the `▸` prefix added to the focus notice; the shipped `CLAUDE-details.md` is
+    the authority, not that block.
 
 ## Self-review
 

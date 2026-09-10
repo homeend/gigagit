@@ -243,6 +243,9 @@ func TestNoteToolAnnotations(t *testing.T) {
 func TestNotesApplyStoringNothingPostsNoReload(t *testing.T) {
 	e := newTestEnv(t)
 	seedNoteFile(t, e)
+	// Safe to write after New(): the only goroutine New starts is the notes
+	// sweep, which never reads steerDir (ruling 16 — MCP keeps no presence
+	// ticker), and every tool handler runs on this goroutine.
 	e.srv.steerDir = t.TempDir()
 	if err := steer.Touch(e.srv.steerDir, steer.TUIPresence, steer.Presence{PID: 1, Worktree: e.dir}); err != nil {
 		t.Fatal(err)

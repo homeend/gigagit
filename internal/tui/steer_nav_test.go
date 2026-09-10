@@ -96,10 +96,6 @@ func TestSteerFocusSwitchesPanelsAndAnswers(t *testing.T) {
 // different kind of message.
 func TestSteerNoticesAllCarryTheAgentPrefix(t *testing.T) {
 	t.Parallel()
-	base, _ := steerModel(t)
-	base = base.initSteerInbox()
-	base.ready = true
-
 	for _, tc := range []struct {
 		name string
 		cmd  steer.Command
@@ -112,7 +108,14 @@ func TestSteerNoticesAllCarryTheAgentPrefix(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			m, cmd := base.applySteer(tc.cmd)
+			// Its OWN model, not a shared base: Model is a value, but the
+			// registry maps (srcGen/srcInflight/srcLoading) and `attention`
+			// are maps shared by every copy, and these verbs write them —
+			// parallel subtests over one base would be a data race.
+			m, _ := steerModel(t)
+			m = m.initSteerInbox()
+			m.ready = true
+			m, cmd := m.applySteer(tc.cmd)
 			runSteerCmd(t, cmd)
 			if !strings.HasPrefix(m.statusMsg, "▸ ") {
 				t.Errorf("%s notice = %q, want the ▸ agent prefix", tc.name, m.statusMsg)
