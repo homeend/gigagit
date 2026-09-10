@@ -159,12 +159,14 @@ func isWSL() bool {
 }
 
 // touchMRU records the served repo in the machine's MRU registry so a
-// later re-root can always navigate back. Best-effort: recording must
-// never block serving.
+// later re-root can always navigate back, and stores the remote repository
+// name a gg:// link names it by. Best-effort: recording must never block
+// serving.
 func touchMRU(ctx context.Context, svc *domain.Service, statePath string) {
 	top, err := svc.TopLevel(ctx)
 	if err != nil {
 		return
 	}
-	_ = repos.Touch(statePath, top, time.Now())
+	name, _ := svc.RepoName(ctx)
+	_ = repos.Touch(statePath, top, name, time.Now())
 }

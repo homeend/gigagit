@@ -41,6 +41,7 @@ type dataLoadedMsg struct {
 	tags            []model.Tag
 	reflog          []model.ReflogEntry
 	currentWorktree string
+	repoName        string // remote repository name for gg:// links; "" = no remote
 	cfg             config.Config
 	repoTOML        string // active per-repo write target (private user-dir file if present, else <repo-top>/.gg.toml); rebinds repoConfigPath so per-repo Settings writes follow a repo switch AND a relocation
 	gitCommonDir    string
@@ -127,7 +128,12 @@ func (m Model) loadCmd() tea.Cmd {
 		// MRU touch + reflog re-read are not git-status reads; do them after the
 		// gated snapshot, keyed off the toplevel it reported.
 		if snap.CurrentWorktree != "" {
-			_ = repos.Touch(statePath, snap.CurrentWorktree, time.Now())
+			// The remote name is what a gg:// link names this repo by. This
+			// runs off the Update goroutine inside the load cmd, so the two
+			// extra git reads are free here — unlike the one-shot CLI.
+			name, _ := svc.RepoName(ctx)
+			out.repoName = name
+			_ = repos.Touch(statePath, snap.CurrentWorktree, name, time.Now())
 			if n := cfg.UI.ReflogLimit; n > 0 {
 				if rl, err := svc.Reflog(ctx, n); err == nil {
 					out.reflog = rl

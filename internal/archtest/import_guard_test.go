@@ -52,7 +52,10 @@ func TestLayeringDAG(t *testing.T) {
 		"notebatch":   {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"repogate":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"mcp":         {"tui", "cli", "app", "web"},
-		"domain":      {"tui", "cli", "mcp", "web", "app"},
+		// "steer" is forbidden to domain on purpose: the link resolver's
+		// ResolveOpts.LiveFn seam exists precisely so domain can ask "is a gg
+		// session live here?" without taking that dependency.
+		"domain":      {"tui", "cli", "mcp", "web", "app", "steer"},
 		"gitwatch":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"i18n":        {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"commitgraph": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
@@ -100,6 +103,24 @@ func TestSteerIsAStdlibLeaf(t *testing.T) {
 		}
 		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
 			t.Errorf("internal/steer imports %s — it must stay stdlib + fsnotify only", imp)
+		}
+	}
+}
+
+// TestReposIsAStdlibLeaf pins internal/repos's dependency budget. The registry
+// is read by all four frontends AND (since gg links) by internal/domain, so
+// any gg package it pulled in would become a dependency of everything — and
+// the reason `Touch` takes the remote NAME rather than computing it is exactly
+// that this package must never learn what a remote is. go-toml is the one
+// exception (the on-disk format).
+func TestReposIsAStdlibLeaf(t *testing.T) {
+	t.Parallel()
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/repos") {
+		if imp == "github.com/pelletier/go-toml/v2" {
+			continue
+		}
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/repos imports %s — it must stay stdlib + go-toml only", imp)
 		}
 	}
 }

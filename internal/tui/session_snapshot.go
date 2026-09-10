@@ -65,6 +65,11 @@ type snapCursor struct {
 	Tag          string      `json:"tag,omitempty"`
 	Worktree     string      `json:"worktree,omitempty"`
 	File         string      `json:"file,omitempty"`
+	// Link is the gg:// address of whatever the cursor is on — the same string
+	// the . menu's Copy link would put on the clipboard. It is how an agent
+	// learns where the user is LOOKING without the user copying anything, and
+	// it is protocol data, never display text.
+	Link string `json:"link,omitempty"`
 }
 
 type snapEndpoint struct {
@@ -268,6 +273,11 @@ func buildSessionSnapshot(m Model) sessionSnapshot {
 	}
 	if m.running {
 		s.RunningOp = m.opName
+	}
+	// Rides the same write-on-change heartbeat as everything else here (no
+	// extra debounce): contextLinkText is pure Model reads.
+	if link, ok := m.contextLinkText(); ok {
+		s.Cursor.Link = link
 	}
 	return s
 }

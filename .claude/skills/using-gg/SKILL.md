@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v65 -->
+<!-- gg:using-gg:v67 -->
 
 # Using gg (gigagit)
 
@@ -99,6 +99,54 @@ checkout's own working-tree notes plus EVERY commit note in the store
 - `gg session reload [notes|status|all]`, `gg session focus <panel>`,
   `gg session highlight add|clear` — refresh, switch panel, or paint an
   attention band. See the `reviewing-with-gg` skill for when to use them.
+
+### gg links
+
+A `gg://` link names one place in one repository — a file, a line on one side
+of one diff, a hunk, or a commit — in a form a human can paste into a chat and
+you can hand straight back to gg:
+
+```text
+gg://<repo>/<path>[@<target>][:<line>]     <target> = a full/short sha, "staged", or absent = the working tree
+gg://<repo>/<path>[@<target>]#<hunk>       hunk numbers are `gg diff --hunks`'s
+gg://<repo>/<path>@<sha>:old:<n>           the old side of that diff
+gg://<repo>@<sha>                          a commit, no file
+gg:///abs/checkout/path/file.go:12         a repo with no remote: its absolute path
+```
+
+`<repo>` is the repository name of the repo's remote (`gigagit`), resolved
+through gg's machine-local repository history — so a link made on one checkout
+finds the right one here.
+
+- `gg link [<path>[:<line>]] [--cached | --rev <commit>]` — print the link for
+  a place in the current repo. `gg link resolve <link> [--json]` says which
+  checkout it names here; exit 1 when it is unknown or ambiguous.
+- **A link the user pastes is enough.** Pass it as the FIRST positional to
+  `gg diff <link>`, `gg show <link>`, `gg note add <link> --summary "…"`,
+  `gg note list <link>`, `gg session navigate <link>` and
+  `gg session highlight add <link>[-<end>]`. Each verb's link replaces the
+  flags that name the same thing, and passing both is a usage error (exit 2),
+  never a silent override:
+  - `gg diff <link>` / `gg show <link>` — replaces `--cached`, the `<rev>`
+    positional and `-- <paths>`. (`gg diff` uses the link's file and target
+    only: to see the hunk a `#<hunk>` link names, add `--hunks`. `gg show`
+    needs a link to a COMMIT and exits 2 otherwise.)
+  - `gg note add <link>` — replaces `--file`, `--cached`, `--rev`, `--hunk`,
+    `--new-line` and `--old-line`; the link must carry `:<line>` or `#<hunk>`.
+  - `gg note list <link>` — replaces `--file`, `--cached` and `--rev`; the
+    link's own line or hunk is ignored (it lists that FILE's threads).
+  - `gg session navigate <link>` — the same six, plus `--next-comment` and
+    `--prev-comment`.
+  - `gg session highlight add <link>[-<end>]` — replaces `--file`, `--cached`,
+    `--rev`, `--start` and `--side`; `--end` is still yours to pass (but not
+    together with the link's own `-<end>`, and never on a `#<hunk>` link,
+    which already names a range).
+- The verb runs against the checkout the link names even when your working
+  directory is somewhere else — including posting into that worktree's session.
+- **Quote a link that carries `#<hunk>`**: `#` starts a shell comment, so
+  `gg diff gg://r/a.go#3` silently loses the hunk. gg applies no heuristic.
+- Read `gg session status` (or `gg_ui_state`'s `cursor.link`) to see WHERE THE
+  USER IS LOOKING right now, as a link you can pass to any of the verbs above.
 
 - `gg add [-f] (-A | <path>...)` / `gg unstage <path>...` — stage paths (or
   everything incl. untracked with `-A`) / remove paths from the index

@@ -320,7 +320,7 @@ func TestMoveWorktreeRemovesOldPathFromMRU(t *testing.T) {
 	m.sel[panelWorktrees] = idx
 	oldPath := m.worktrees[idx].Path
 
-	if err := repos.Touch(statePath, oldPath, time.Now()); err != nil {
+	if err := repos.Touch(statePath, oldPath, "", time.Now()); err != nil {
 		t.Fatalf("seed registry: %v", err)
 	}
 
@@ -370,7 +370,7 @@ func TestMoveWorktreeFailureLeavesMRUUnchanged(t *testing.T) {
 	m.sel[panelWorktrees] = idx
 	oldPath := m.worktrees[idx].Path
 
-	if err := repos.Touch(statePath, oldPath, time.Now()); err != nil {
+	if err := repos.Touch(statePath, oldPath, "", time.Now()); err != nil {
 		t.Fatalf("seed registry: %v", err)
 	}
 

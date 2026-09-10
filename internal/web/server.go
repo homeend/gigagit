@@ -196,10 +196,17 @@ func writeRepoInfo(w http.ResponseWriter, r *http.Request, svc *domain.Service) 
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	// The gg:// link identity: "" means this repo has no remote, and the page
+	// falls back to the local (absolute-worktree-path) link form. A link is a
+	// convenience — RepoName already treats a misconfigured remote as "no
+	// usable remote" rather than a failure, so its error here is likewise
+	// swallowed instead of turning the whole /api/repo read into a 500.
+	linkRepo, _ := svc.RepoName(readCtx(r))
 	writeJSON(w, map[string]any{
-		"name":     filepath.Base(top),
-		"worktree": top,
-		"branch":   branch,
+		"name":      filepath.Base(top),
+		"worktree":  top,
+		"branch":    branch,
+		"link_repo": linkRepo,
 	})
 }
 

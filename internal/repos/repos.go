@@ -13,10 +13,25 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// NoRemote is Entry.Remote's "this checkout has no remote" sentinel. It is
+// deliberately a value no useful remote name would collide with in practice,
+// and it is stored (rather than left empty) so a remoteless repository is not
+// re-probed — two git invocations — on every single link resolution. Touch's
+// empty-remote rule keeps it: an empty value never overwrites a stored one.
+const NoRemote = "-"
+
 // Entry is one known repository.
 type Entry struct {
 	Path       string    `toml:"path"`        // absolute top-level path
 	LastOpened time.Time `toml:"last_opened"` // MRU sort key
+	// Remote is the repository name of the entry's default remote ("gigagit"),
+	// as computed BY THE CALLER — this package stays a DAG leaf and knows
+	// nothing about git. "" means unknown (an entry written by an older gg);
+	// the link resolver fills it in lazily via SetRemote. NoRemote ("-") is
+	// the memoised answer "this checkout HAS no remote", so the resolver
+	// probes such an entry once instead of on every resolve forever; it is a
+	// sentinel and never matches a link's repository name.
+	Remote string `toml:"remote"`
 }
 
 // Name is an Entry's display name.
@@ -96,11 +111,17 @@ func Load(statePath string) []Entry {
 	return reg.Repos
 }
 
-// Touch records repoPath with now as its LastOpened, deduplicating by cleaned
-// absolute path and pruning dead entries, then persists atomically. An empty
-// statePath disables recording (a silent no-op) — production entry points wire
-// the real path; tests and bare constructors stay hermetic.
-func Touch(statePath, repoPath string, now time.Time) error {
+// Touch records repoPath with now as its LastOpened and remote as its remote
+// repository name, deduplicating by cleaned absolute path and pruning dead
+// entries, then persists atomically. An empty statePath disables recording (a
+// silent no-op) — production entry points wire the real path; tests and bare
+// constructors stay hermetic.
+//
+// An EMPTY remote leaves any stored name in place. Computing the name costs
+// two git invocations, which the one-shot CLI must not pay on every command;
+// it passes "" and lets the longer-lived frontends (and the link resolver's
+// lazy backfill) supply the value.
+func Touch(statePath, repoPath, remote string, now time.Time) error {
 	if statePath == "" {
 		return nil
 	}
@@ -114,14 +135,43 @@ func Touch(statePath, repoPath string, now time.Time) error {
 	for i := range reg.Repos {
 		if reg.Repos[i].Path == repoPath {
 			reg.Repos[i].LastOpened = now
+			if remote != "" {
+				reg.Repos[i].Remote = remote
+			}
 			found = true
 			break
 		}
 	}
 	if !found {
-		reg.Repos = append(reg.Repos, Entry{Path: repoPath, LastOpened: now})
+		reg.Repos = append(reg.Repos, Entry{Path: repoPath, LastOpened: now, Remote: remote})
 	}
 	return write(statePath, reg)
+}
+
+// SetRemote records repoPath's remote repository name WITHOUT touching its
+// LastOpened — the link resolver's lazy backfill for entries an older gg
+// wrote. Resolving a link is not opening a repository, so it must not reorder
+// the switcher's MRU. An absent entry (or an empty statePath) is a no-op, not
+// an error.
+func SetRemote(statePath, repoPath, remote string) error {
+	if statePath == "" {
+		return nil
+	}
+	if abs, err := filepath.Abs(repoPath); err == nil {
+		repoPath = abs
+	}
+	repoPath = filepath.Clean(repoPath)
+	reg := read(statePath)
+	for i := range reg.Repos {
+		if reg.Repos[i].Path == repoPath {
+			if reg.Repos[i].Remote == remote {
+				return nil // nothing to write
+			}
+			reg.Repos[i].Remote = remote
+			return write(statePath, reg)
+		}
+	}
+	return nil
 }
 
 // Remove forgets repoPath. Removing an absent entry is not an error. The repo

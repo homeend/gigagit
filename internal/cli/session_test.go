@@ -785,6 +785,60 @@ func TestSessionStatusRefusesAStrayArgument(t *testing.T) {
 	}
 }
 
+func TestSnapshotCursorLink(t *testing.T) {
+	t.Parallel()
+	snapPath := filepath.Join(t.TempDir(), "ui-state.json")
+	body := `{"version":1,"cursor":{"link":"gg://gigagit/a.txt:4"}}`
+	if err := os.WriteFile(snapPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := snapshotCursorLink(snapPath); got != "gg://gigagit/a.txt:4" {
+		t.Errorf("snapshotCursorLink = %q", got)
+	}
+	if got := snapshotCursorLink(filepath.Join(t.TempDir(), "missing.json")); got != "" {
+		t.Errorf("snapshotCursorLink of a missing file = %q, want \"\"", got)
+	}
+}
+
+// TestSessionStatusPrintsTheCursorLink drives sessionStatusAt (sessionStatus's
+// explicit-path test seam — see sessionOpenViewAt's comment) end to end: real
+// flag parsing, the plain "cursor: <link>" line, and the --json "cursor_link"
+// key. The snapshot lives under t.TempDir(), never under the real state home
+// (controller ruling P24) — sessionStatusAt takes the resolved path directly,
+// so there is no svc.GitCommonDir/config.SessionSnapshotPath resolution here.
+func TestSessionStatusPrintsTheCursorLink(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	livePresence(t, dir)
+	svc := domain.Open(newCLIRepo(t))
+	snapPath := filepath.Join(t.TempDir(), "ui-state.json")
+	body := `{"version":1,"cursor":{"link":"gg://gigagit/a.txt:4"}}`
+	if err := os.WriteFile(snapPath, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errb bytes.Buffer
+	if code := sessionStatusAt(dir, svc, nil, &out, &errb, snapPath); code != 0 {
+		t.Fatalf("exit = %d (stderr %q), want 0", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "cursor: gg://gigagit/a.txt:4") {
+		t.Errorf("stdout = %q, want a \"cursor: gg://gigagit/a.txt:4\" line", out.String())
+	}
+
+	out.Reset()
+	errb.Reset()
+	if code := sessionStatusAt(dir, svc, []string{"--json"}, &out, &errb, snapPath); code != 0 {
+		t.Fatalf("exit = %d (stderr %q), want 0", code, errb.String())
+	}
+	var got map[string]any
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("--json is not valid JSON (%v): %s", err, out.String())
+	}
+	if got["cursor_link"] != "gg://gigagit/a.txt:4" {
+		t.Errorf("json cursor_link = %v, want \"gg://gigagit/a.txt:4\"", got["cursor_link"])
+	}
+}
+
 // hunkCLIRepo commits 60 numbered lines then edits two far-apart regions, so
 // `gg diff --hunks` reports exactly two hunks (git's default 3 lines of context
 // cannot bridge lines 5 and 30) and hunk 2's new span starts at line 30.

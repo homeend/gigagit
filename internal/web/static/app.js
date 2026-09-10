@@ -37,6 +37,7 @@ import "./agentsetup.js";
 import "./commitai.js";
 import "./search.js";
 import "./remoteheads.js";
+import "./links.js";
 import { fetchPreviews } from "./previews.js";
 import { connectLive } from "./live.js";
 

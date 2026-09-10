@@ -54,6 +54,9 @@ func availableActions(m Model) []actionRow {
 			return append(rows, m.stashActionRows()...)
 		}
 		rows := m.contextCopyRows()
+		if r, ok := m.contextLinkRow(); ok {
+			rows = insertCopyLinkRow(rows, r)
+		}
 		// A history/blame surface on top is a single file at a rev, not the files
 		// view underneath it. It owns the "Open in external editor" action
 		// (surfaceExternalRow); the files-view view/open rows and — below — the
@@ -157,6 +160,9 @@ func availableActions(m Model) []actionRow {
 		}
 	}
 	out := append(m.contextCopyRows(), row...)
+	if r, ok := m.contextLinkRow(); ok {
+		out = insertCopyLinkRow(out, r)
+	}
 	out = append(out, window...)
 	if r, ok := m.fileEditRow(); ok {
 		out = append(out, r)
@@ -496,6 +502,32 @@ func insertAfterID(rows []actionRow, id string, r actionRow) []actionRow {
 		}
 	}
 	return append(rows, r)
+}
+
+// insertCopyLinkRow places the . menu's "Copy link" row beside the other
+// copy rows, wherever they are: right after "Copy file path" (Files/Staged/
+// history/blame/diff/files-view), else right after "Copy commit title"
+// (Commits — keeps the id/title pair together, link last), else right after
+// "Copy commit id" (Branches/Remotes/Tags/a commit's files view, none of
+// which carry a commit-title row), else appended (nothing to anchor on, e.g.
+// Worktrees/Reflog have no copy-link row to begin with, so this never fires
+// for them).
+func insertCopyLinkRow(rows []actionRow, r actionRow) []actionRow {
+	for _, id := range []string{"copy-file-path", "copy-commit-title", "copy-commit-id"} {
+		if rowHasID(rows, id) {
+			return insertAfterID(rows, id, r)
+		}
+	}
+	return append(rows, r)
+}
+
+func rowHasID(rows []actionRow, id string) bool {
+	for _, row := range rows {
+		if row.id == id {
+			return true
+		}
+	}
+	return false
 }
 
 // inContentWindow reports whether a navigable content window owns the keyboard

@@ -28,17 +28,13 @@ var InitHomeDir string
 // state dir. Tests set it to a temp file so they never touch real state.
 var InitTargetsPath string
 
-// Run dispatches a CLI subcommand against the repo at workdir, writing to
-// stdout/stderr, and returns a process exit code.
-func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
-	// stderr is shared between the main goroutine (progress, prompts, errors)
-	// and the operation goroutine (decider prompts) — serialize it once here.
-	stderr = &syncWriter{w: stderr}
-	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg <command> [args]")
-		return 2
-	}
-	svc := domain.Open(workdir)
+// setupCLIService applies the per-service setup EVERY CLI service needs — the
+// one the cwd's service gets in Run, and (since gg links) the one a
+// cross-checkout target service gets in openLinkTarget. A link consumer that
+// skipped it would render the SAME command's diff differently depending on
+// which checkout it ran against, which is exactly what a portable address
+// must not do.
+func setupCLIService(svc *domain.Service) {
 	// The scriptable CLI keeps `gg status` faithful to `git status`: the
 	// EOL-only filter is a TUI Files-panel convenience and the CLI has no config
 	// to disable it, so a script's output must not silently change.
@@ -50,14 +46,33 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 	if cfg, err := loadConfigFor(svc); err == nil {
 		svc.SetVersionsPolicy(engine.VersionsPolicy{Enabled: !cfg.Versions.Disabled, MaxAgeDays: cfg.Versions.MaxAgeDays})
 	}
+}
+
+// Run dispatches a CLI subcommand against the repo at workdir, writing to
+// stdout/stderr, and returns a process exit code.
+func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
+	// stderr is shared between the main goroutine (progress, prompts, errors)
+	// and the operation goroutine (decider prompts) — serialize it once here.
+	stderr = &syncWriter{w: stderr}
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: gg <command> [args]")
+		return 2
+	}
+	svc := domain.Open(workdir)
+	setupCLIService(svc)
 	cmd, rest := args[0], args[1:]
 	// Record this repo in the switcher registry (best-effort: errors and
 	// non-repo working directories are ignored). Skip for "repo" subcommands
 	// since they are registry management commands, not git operations, and may
 	// be run from arbitrary directories.
+	//
+	// The remote name is deliberately "": resolving it costs two extra git
+	// invocations, which every one-shot `gg status` would then pay. Touch keeps
+	// whatever a TUI/web session already recorded, and domain.ResolveLink
+	// backfills an entry that still has none.
 	if RepoStatePath != "" && cmd != "repo" {
 		if top, err := svc.TopLevel(context.Background()); err == nil {
-			_ = repos.Touch(RepoStatePath, top, time.Now())
+			_ = repos.Touch(RepoStatePath, top, "", time.Now())
 		}
 	}
 	if cmd == "batch" {
@@ -104,6 +119,8 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 		return cmdBookmark(svc, rest, stdin, stdout, stderr)
 	case "note":
 		return cmdNote(svc, rest, stdin, stdout, stderr)
+	case "link":
+		return cmdLink(svc, workdir, rest, stdout, stderr)
 	case "session":
 		return cmdSession(svc, rest, stdout, stderr)
 	case "log":
@@ -167,7 +184,7 @@ var commands = map[string]bool{
 	"remote": true, "tag": true, "compare": true, "preview": true, "diff": true, "show": true,
 	"inspect": true, "repo": true, "init": true, "config": true, "batch": true,
 	"review": true, "apply": true, "versions": true, "unlock": true,
-	"note": true, "skill": true, "session": true,
+	"note": true, "skill": true, "session": true, "link": true,
 }
 
 // IsCommand reports whether tok is a gg CLI subcommand (used by cmd/gg to

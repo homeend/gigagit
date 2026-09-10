@@ -725,6 +725,22 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openNotePopup(noteEdit)
 	case "R":
 		return m.openNotePopup(noteReply)
+	case "L":
+		// A portable address for the cursor line — paste it in a chat and
+		// `gg diff` / `gg note add` / `gg session navigate` take it back.
+		// Help-and-menu-only: the footer already measures 139 of its 140
+		// columns (diffHintFor).
+		// Through contextLinkRow — the SAME row the `.` menu runs — so the key
+		// and the menu can never copy different text, and a test can read the
+		// exact payload off the row's copyText (there is no seam under
+		// copyToClipboardCmd itself).
+		r, ok := m.contextLinkRow()
+		if !ok {
+			m.diffNotice = i18n.T("▸ no gg link for this place")
+			return m, nil
+		}
+		nm, cmd := r.run(m)
+		return nm.(Model), cmd
 	case "a":
 		// Session-scoped: the flag lives on the Model and is mirrored onto
 		// every view that relayouts (relayout has no Model to ask).

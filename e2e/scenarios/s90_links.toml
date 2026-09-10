@@ -1,0 +1,65 @@
+name = "gg links: print one, resolve it, and hand it back to diff and note"
+
+[input]
+steps = [
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\n" },
+  { commit = "seed" },
+  { write = "a.txt", content = "alpha\nBRAVO\ncharlie\n" },
+]
+
+# The sandbox repo has no remote, so gg link prints the LOCAL form —
+# "gg://" followed by the absolute checkout path.
+[[run]]
+cmd             = ["link", "a.txt:2"]
+exit            = 0
+stdout_contains = ["gg:///", "/a.txt:2"]
+
+# resolve names the checkout and the address inside it.
+[[run]]
+cmd             = ["link", "resolve", "gg://{{cwd}}/a.txt:2"]
+exit            = 0
+stdout_contains = ["a.txt", "new:2"]
+
+# The same link drives a read verb, from the same directory.
+[[run]]
+cmd             = ["diff", "gg://{{cwd}}/a.txt"]
+exit            = 0
+stdout_contains = ["a.txt", "BRAVO"]
+
+# …and a write verb. note add prints the new note's id, not its summary
+# (see s88_notes_cli.toml's identical run) — the summary shows up below,
+# via note list.
+[[run]]
+cmd  = ["note", "add", "gg://{{cwd}}/a.txt:2", "--summary", "linked note"]
+exit = 0
+
+[[run]]
+cmd             = ["note", "list", "gg://{{cwd}}/a.txt"]
+exit            = 0
+stdout_contains = ["linked note"]
+
+# A repo this machine has never opened is exit 1, not a crash.
+[[run]]
+cmd  = ["link", "resolve", "gg://nobody-has-this-repo/a.txt"]
+exit = 1
+
+# Mixing a link with the flags it replaces is a usage error, caught before
+# any resolution happens.
+[[run]]
+cmd  = ["diff", "--cached", "gg://{{cwd}}/a.txt"]
+exit = 2
+
+[[run]]
+cmd  = ["note", "add", "gg://{{cwd}}/a.txt:2", "--file", "a.txt", "--summary", "x"]
+exit = 2
+
+[[run]]
+cmd  = ["link", "--cached", "--rev", "HEAD", "a.txt"]
+exit = 2
+
+# Printing and resolving links never touches the repo.
+[expect]
+branch = "main"
+
+[expect.status]
+unstaged = ["a.txt"]

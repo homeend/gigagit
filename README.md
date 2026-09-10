@@ -241,6 +241,37 @@ Every command (and the TUI) accepts a global `--time-track <file>` flag that
 appends one JSON span per process start, git subprocess, and operation —
 `jq . gg-perf.log` shows where the time went.
 
+#### gg links
+
+A `gg://` link is a portable address for one place in one repository:
+
+```text
+gg://<repo>/<path>[@<target>][:<line>]     # <target>: a sha, "staged", or absent = the working tree
+gg://<repo>/<path>[@<target>]#<hunk>       # hunk numbers are `gg diff --hunks`'s
+gg://<repo>/<path>@<sha>:old:<n>           # the old side of that diff
+gg://<repo>@<sha>                          # a commit
+gg:///abs/checkout/file.go:12              # a repo with no remote
+```
+
+```bash
+gg link internal/tui/steer.go:42        # print the link for a place here
+gg link --rev HEAD README.md            # …at a commit (always the full sha)
+gg link resolve gg://gigagit/a.go:3     # which checkout on this machine?
+
+gg diff  gg://gigagit/a.go@abc1234      # every verb takes a link as its first positional
+gg show  gg://gigagit@abc1234
+gg note add gg://gigagit/a.go:42 --summary "…"
+gg session navigate gg://gigagit/a.go:42
+```
+
+`<repo>` is the repository name of the repo's remote, resolved through the
+repository history behind the `R` switcher — so a link made on one machine
+finds the matching checkout here. In the TUI, `L` in the diff view copies the
+cursor line's link and the `.` menu's **Copy link** works in the Files,
+Staged and Commits panels and a commit's files view; in `gg web`, right-click
+a diff line, a file row or a commit row. Quote a link that carries `#<hunk>` —
+an unquoted `#` starts a shell comment.
+
 ### Shell integration (cd-on-switch)
 
 So switching/creating a worktree can move your shell into it:

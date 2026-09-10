@@ -17,10 +17,10 @@ func tmpState(t *testing.T) string {
 func TestTouchCreatesAndLoadIsMRUFirst(t *testing.T) {
 	state := tmpState(t)
 	a, b := t.TempDir(), t.TempDir()
-	if err := Touch(state, a, time.Unix(1000, 0)); err != nil {
+	if err := Touch(state, a, "", time.Unix(1000, 0)); err != nil {
 		t.Fatal(err)
 	}
-	if err := Touch(state, b, time.Unix(2000, 0)); err != nil {
+	if err := Touch(state, b, "", time.Unix(2000, 0)); err != nil {
 		t.Fatal(err)
 	}
 	got := Load(state)
@@ -32,9 +32,9 @@ func TestTouchCreatesAndLoadIsMRUFirst(t *testing.T) {
 func TestTouchDedupesAndBumps(t *testing.T) {
 	state := tmpState(t)
 	a, b := t.TempDir(), t.TempDir()
-	_ = Touch(state, a, time.Unix(1000, 0))
-	_ = Touch(state, b, time.Unix(2000, 0))
-	if err := Touch(state, a, time.Unix(3000, 0)); err != nil {
+	_ = Touch(state, a, "", time.Unix(1000, 0))
+	_ = Touch(state, b, "", time.Unix(2000, 0))
+	if err := Touch(state, a, "", time.Unix(3000, 0)); err != nil {
 		t.Fatal(err)
 	}
 	got := Load(state)
@@ -53,8 +53,8 @@ func TestLoadPrunesDeadPaths(t *testing.T) {
 	if err := os.Mkdir(dead, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_ = Touch(state, alive, time.Unix(1000, 0))
-	_ = Touch(state, dead, time.Unix(2000, 0))
+	_ = Touch(state, alive, "", time.Unix(1000, 0))
+	_ = Touch(state, dead, "", time.Unix(2000, 0))
 	if err := os.RemoveAll(dead); err != nil {
 		t.Fatal(err)
 	}
@@ -67,8 +67,8 @@ func TestLoadPrunesDeadPaths(t *testing.T) {
 func TestRemoveForgetsEntry(t *testing.T) {
 	state := tmpState(t)
 	a, b := t.TempDir(), t.TempDir()
-	_ = Touch(state, a, time.Unix(1000, 0))
-	_ = Touch(state, b, time.Unix(2000, 0))
+	_ = Touch(state, a, "", time.Unix(1000, 0))
+	_ = Touch(state, b, "", time.Unix(2000, 0))
 	if err := Remove(state, a); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +92,7 @@ func TestCorruptStateActsEmpty(t *testing.T) {
 	}
 	// And the next Touch rewrites it whole.
 	a := t.TempDir()
-	if err := Touch(state, a, time.Unix(1000, 0)); err != nil {
+	if err := Touch(state, a, "", time.Unix(1000, 0)); err != nil {
 		t.Fatal(err)
 	}
 	if got := Load(state); len(got) != 1 || got[0].Path != a {
@@ -101,7 +101,7 @@ func TestCorruptStateActsEmpty(t *testing.T) {
 }
 
 func TestEmptyStatePathDisablesRecording(t *testing.T) {
-	if err := Touch("", t.TempDir(), time.Now()); err != nil {
+	if err := Touch("", t.TempDir(), "", time.Now()); err != nil {
 		t.Fatalf("empty state path must be a silent no-op, got %v", err)
 	}
 	if got := Load(""); len(got) != 0 {
@@ -114,7 +114,7 @@ func TestEmptyStatePathDisablesRecording(t *testing.T) {
 
 func TestNoTempLitterAfterWrites(t *testing.T) {
 	state := tmpState(t)
-	_ = Touch(state, t.TempDir(), time.Unix(1000, 0))
+	_ = Touch(state, t.TempDir(), "", time.Unix(1000, 0))
 	entries, err := os.ReadDir(filepath.Dir(state))
 	if err != nil {
 		t.Fatal(err)
@@ -129,5 +129,61 @@ func TestNoTempLitterAfterWrites(t *testing.T) {
 func TestNameIsBase(t *testing.T) {
 	if got := Name(Entry{Path: "/a/b/mono"}); got != "mono" {
 		t.Fatalf("Name = %q, want mono", got)
+	}
+}
+
+func TestTouchStoresTheRemoteName(t *testing.T) {
+	state := tmpState(t)
+	a := t.TempDir()
+	if err := Touch(state, a, "gigagit", time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	got := Load(state)
+	if len(got) != 1 || got[0].Remote != "gigagit" {
+		t.Fatalf("entries = %+v, want one with Remote gigagit", got)
+	}
+}
+
+// A caller that does not know the remote (the one-shot CLI, which must not
+// pay two git invocations per command) passes "". That must not ERASE a name
+// a longer-lived frontend already recorded.
+func TestTouchWithAnEmptyRemoteKeepsTheStoredOne(t *testing.T) {
+	state := tmpState(t)
+	a := t.TempDir()
+	_ = Touch(state, a, "gigagit", time.Unix(1000, 0))
+	if err := Touch(state, a, "", time.Unix(2000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	got := Load(state)
+	if len(got) != 1 || got[0].Remote != "gigagit" {
+		t.Fatalf("entries = %+v, want Remote kept", got)
+	}
+	if !got[0].LastOpened.Equal(time.Unix(2000, 0)) {
+		t.Errorf("LastOpened = %v, want the bump to still happen", got[0].LastOpened)
+	}
+}
+
+// SetRemote is the resolver's lazy backfill for entries written by an older
+// gg. It must NOT bump LastOpened: resolving a link is not opening a repo,
+// and reordering the MRU behind the user's back would move the switcher's
+// rows every time an agent pasted a link.
+func TestSetRemoteFillsWithoutBumpingMRU(t *testing.T) {
+	state := tmpState(t)
+	a, b := t.TempDir(), t.TempDir()
+	_ = Touch(state, a, "", time.Unix(1000, 0))
+	_ = Touch(state, b, "", time.Unix(2000, 0))
+	if err := SetRemote(state, a, "gigagit"); err != nil {
+		t.Fatal(err)
+	}
+	got := Load(state)
+	if len(got) != 2 || got[0].Path != b || got[1].Path != a {
+		t.Fatalf("MRU order changed: %+v", got)
+	}
+	if got[1].Remote != "gigagit" {
+		t.Errorf("Remote = %q, want gigagit", got[1].Remote)
+	}
+	// Setting the remote of an unknown path is not an error.
+	if err := SetRemote(state, filepath.Join(t.TempDir(), "never"), "x"); err != nil {
+		t.Errorf("SetRemote of an absent entry = %v, want nil", err)
 	}
 }

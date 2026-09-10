@@ -1,0 +1,106 @@
+// links.js — gg:// links: the JS twin of internal/model's producer half.
+// The page never PARSES a link (the CLI does that); it only builds one for
+// whatever the user right-clicked, so a human can paste it into a chat.
+
+import { state } from "./core.js";
+import { copyText } from "./layers.js";
+import { registerRows } from "./menus.js";
+
+// --- link producer (pure; guarded against Go) ---
+
+// A path holding one of the grammar's separators cannot be expressed; the
+// producers refuse rather than emit something that reparses as another place
+// (internal/model.LinkPathOK).
+function linkPathOK(p) {
+  return !/[@:#]/.test(p);
+}
+
+// An absolute CHECKOUT path holding '@' or '#' cannot be expressed either:
+// those are the target and hunk separators, so the link would not reparse. A
+// ':' is fine — a leading drive prefix is skipped, and only a NUMBER after
+// the last ':' is read as a line (internal/model.LinkAbsOK).
+function linkAbsOK(abs) {
+  let s = abs;
+  if (/^[A-Za-z]:/.test(s)) s = s.slice(2);
+  else if (/^\/[A-Za-z]:/.test(s)) s = s.slice(3);
+  return !/[@#]/.test(s);
+}
+
+// repoSegment renders "gg://" + the repo half: the remote repository name, or
+// the local form "gg://" + the absolute worktree path (which already starts
+// with "/" on POSIX and needs the separator added for a Windows drive) —
+// internal/model.Link.String()'s Repo half. "" when the worktree path itself
+// cannot be expressed.
+function repoSegment(repo, worktree) {
+  const name = repo && repo.link_repo;
+  if (name) return "gg://" + name;
+  const abs = (worktree || "").replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!abs || !linkAbsOK(abs)) return "";
+  return abs.startsWith("/") ? "gg://" + abs : "gg:///" + abs;
+}
+
+// linkFor builds the address for one place. ctx is a diffCtx-shaped
+// {path, rev, state, compare}; side is "new"/"old" and no a 1-based line
+// (both optional). Returns "" when the place has no expressible link — no
+// usable repo identity, a path holding a grammar separator, a commit target
+// whose rev is not a full sha (ruling P9: >= 40 hex, never a hard === 40 — a
+// sha256 repo's commits are 64 hex characters), a line with no path, or
+// ctx.compare set (a two-revision comparison has no single-commit address:
+// `path@bHash` would read as bHash^ → bHash, not the aHash → bHash pair
+// actually on screen — the same refusal the TUI's contextLinkText makes for
+// a compare view).
+function linkFor(repo, worktree, ctx, side, no) {
+  if (ctx && ctx.compare) return "";
+  const head = repoSegment(repo, worktree);
+  if (!head) return "";
+  const path = (ctx && ctx.path) || "";
+  if (path && !linkPathOK(path)) return "";
+  let s = head + (path ? "/" + path : "");
+  const st = (ctx && ctx.state) || "unstaged";
+  if (st === "staged") {
+    s += "@staged";
+  } else if (st === "commit") {
+    const rev = (ctx && ctx.rev) || "";
+    if (rev.length < 40) return "";
+    s += "@" + rev;
+  }
+  // untracked has no target of its own: the plain working-tree form is the
+  // pair the resolver reads for it anyway (index → file).
+  if (no > 0) {
+    if (!path) return "";
+    s += ":" + (side === "old" ? "old:" : "") + no;
+  }
+  return s;
+}
+
+// --- end link producer ---
+
+// copyLinkRow is the shared row: an `act` field, never a `run` one (that
+// belongs to the command palette's own dispatcher) — showCtxMenu's click
+// handler (layers.js) calls .act() with no guard, so a palette-shaped row
+// would throw.
+function copyLinkRow(link) {
+  return { label: "copy gg link", act: () => copyText(link, "gg link") };
+}
+
+registerRows("file", (ctx) => {
+  const st =
+    ctx.section === "commit"
+      ? "commit"
+      : ctx.section === "staged"
+        ? "staged"
+        : ctx.section === "untracked"
+          ? "untracked"
+          : "unstaged"; // "changes", "conflicts", anything else: the working file
+  // ctx.compare rides straight through from the call site — this contributor
+  // never reads state.filesMode itself, so it stays pure over its input.
+  const link = linkFor(state.repo, state.worktree, { path: ctx.path, rev: ctx.sha, state: st, compare: ctx.compare });
+  return link ? [copyLinkRow(link)] : [];
+});
+
+registerRows("commit", (c) => {
+  const link = linkFor(state.repo, state.worktree, { path: "", rev: c.hash, state: "commit" });
+  return link ? [copyLinkRow(link)] : [];
+});
+
+export { linkFor };

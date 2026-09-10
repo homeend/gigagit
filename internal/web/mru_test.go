@@ -58,7 +58,7 @@ func TestReposEndpoint(t *testing.T) {
 	other := newRepoDir(t, 1)
 	srv := New(domain.Open(dir))
 	srv.reposPath = filepath.Join(t.TempDir(), "repos.toml")
-	if err := repos.Touch(srv.reposPath, other, time.Now()); err != nil {
+	if err := repos.Touch(srv.reposPath, other, "", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	ts := serve(t, srv)
@@ -83,7 +83,7 @@ func TestReposMarksServedRepoCurrent(t *testing.T) {
 	srv.reposPath = filepath.Join(t.TempDir(), "repos.toml")
 	now := time.Now()
 	for _, p := range []string{dir, other} {
-		if err := repos.Touch(srv.reposPath, p, now); err != nil {
+		if err := repos.Touch(srv.reposPath, p, "", now); err != nil {
 			t.Fatal(err)
 		}
 	}
