@@ -1,7 +1,12 @@
 package tui
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/syntax"
@@ -98,5 +103,131 @@ func TestPickerConstructorsRecordPath(t *testing.T) {
 		if e.path == "" {
 			t.Errorf("%s picker did not record its path", name)
 		}
+	}
+}
+
+// pickerLineWith returns the first line of a rendered picker whose visible
+// text contains needle, or "" when there is none.
+func pickerLineWith(render, needle string) string {
+	for _, l := range strings.Split(render, "\n") {
+		if strings.Contains(ansi.Strip(l), needle) {
+			return l
+		}
+	}
+	return ""
+}
+
+func TestEnsureSanBuildsMasksFromTheRightSide(t *testing.T) {
+	t.Parallel()
+	e := newConflictPicker("f.go", pickerSyntaxDoc()).withSyntax(true)
+	e.ensureSan()
+
+	// Literal context takes the CURRENT side's runs: `const` is a keyword.
+	lit := e.sanLit[2][0]
+	if lit.text != "const K = 1" {
+		t.Fatalf("literal text = %q", lit.text)
+	}
+	if lit.mask.empty() || lit.mask.cls[0] != syntax.Keyword {
+		t.Errorf("literal `const` should be a keyword: %v", lit.mask.cls)
+	}
+	// Block 2's incoming line is a comment; block 2's current line is a keyword.
+	if got := e.sanInc[1][0]; got.text != "// tail" || got.mask.empty() || got.mask.cls[0] != syntax.Comment {
+		t.Errorf("sanInc[1][0] = %q cls=%v, want `// tail` starting Comment", got.text, got.mask.cls)
+	}
+	if got := e.sanCur[1][0]; got.text != "var d int" || got.mask.empty() || got.mask.cls[0] != syntax.Keyword {
+		t.Errorf("sanCur[1][0] = %q cls=%v, want `var d int` starting Keyword", got.text, got.mask.cls)
+	}
+	// Every mask is exactly one entry per DISPLAY rune.
+	if n := len([]rune(lit.text)); len(lit.mask.cls) != n || len(lit.mask.emph) != n {
+		t.Errorf("mask must parallel the display runes: cls=%d emph=%d runes=%d", len(lit.mask.cls), len(lit.mask.emph), n)
+	}
+}
+
+// A tab expands to the 4-column stop and the mask follows it.
+func TestSanPickLineCarriesClassesThroughTabs(t *testing.T) {
+	t.Parallel()
+	got := sanPickLine("\tvar x", []syntax.Tok{{Start: 1, End: 4, Class: syntax.Keyword}})
+	if got.text != "    var x" {
+		t.Fatalf("text = %q, want %q", got.text, "    var x")
+	}
+	want := []syntax.Class{0, 0, 0, 0, syntax.Keyword, syntax.Keyword, syntax.Keyword, 0, 0}
+	for i := range want {
+		if got.mask.cls[i] != want[i] {
+			t.Fatalf("cls = %v, want %v", got.mask.cls, want)
+		}
+	}
+}
+
+func TestSanPickLineWithoutRunsIsPlain(t *testing.T) {
+	t.Parallel()
+	got := sanPickLine("\tvar x", nil)
+	if got.text != "    var x" {
+		t.Fatalf("text = %q", got.text)
+	}
+	if !got.mask.empty() {
+		t.Errorf("no runs must leave an empty mask: %v", got.mask)
+	}
+}
+
+func TestPickerGridColoursCodeAndKeepsCursorPlain(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(prev)
+
+	e := newConflictPicker("f.go", pickerSyntaxDoc()).withSyntax(true)
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 30}
+	out := e.render(m, "")
+
+	kw := "38;5;" + st().syntaxColor(syntax.Keyword)
+	// The cursor starts on block 0 / current / line 0 — "var a int". Only the
+	// CURSOR CELL is plain; the incoming cell sharing that row is still
+	// coloured, so scope the assertion to the left half. renderTwoCol appends
+	// pickerColSep raw between the two cells, so splitting on it is safe.
+	cur := pickerLineWith(out, "> [ ] var a int")
+	if cur == "" {
+		t.Fatalf("cursor row not found:\n%s", ansi.Strip(out))
+	}
+	halves := strings.SplitN(cur, pickerColSep, 2)
+	if len(halves) != 2 {
+		t.Fatalf("cursor row has no column separator: %q", cur)
+	}
+	if strings.Contains(halves[0], kw) {
+		t.Errorf("the cursor cell must stay plain reverse-video, no class runs: %q", halves[0])
+	}
+	if !strings.Contains(halves[1], kw+"mvar") {
+		t.Errorf("the non-cursor cell on the SAME row should still be coloured: %q", halves[1])
+	}
+	// A non-cursor candidate line IS coloured.
+	code := pickerLineWith(out, "[ ] var b int")
+	if code == "" {
+		t.Fatalf("candidate row `var b int` not found:\n%s", ansi.Strip(out))
+	}
+	if !strings.Contains(code, kw+"mvar") {
+		t.Errorf("`var` should wear the keyword colour: %q", code)
+	}
+	// The literal context row is coloured too.
+	lit := pickerLineWith(out, "const K = 1")
+	if lit == "" || !strings.Contains(lit, kw+"mconst") {
+		t.Errorf("literal context `const` should be coloured: %q", lit)
+	}
+}
+
+// Without withSyntax the render is byte-identical to today's.
+func TestPickerRenderUnwiredIsPlain(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(prev)
+
+	mk := func(on bool) string {
+		e := newConflictPicker("f.go", pickerSyntaxDoc()).withSyntax(on)
+		m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 30}
+		return e.render(m, "")
+	}
+	off, on := mk(false), mk(true)
+	if ansi.Strip(off) != ansi.Strip(on) {
+		t.Errorf("colouring must not change the visible text:\n off %q\n on %q", ansi.Strip(off), ansi.Strip(on))
+	}
+	if strings.Contains(off, "38;5;"+st().syntaxColor(syntax.Keyword)) {
+		t.Errorf("an unwired picker must render no class runs: %q", off)
 	}
 }

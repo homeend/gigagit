@@ -88,3 +88,23 @@ func (e *hunkPicker) withSyntax(on bool) *hunkPicker {
 	e.curTok, e.incTok = lexPickerDoc(e.path, e.doc, true)
 	return e
 }
+
+// sanLine is one sanitized display line of the picker's document plus its
+// paint mask. The mask is empty when the picker was opened without syntax runs
+// (or the line's own runs are empty), which is the byte-identical plain path.
+type sanLine struct {
+	text string
+	mask runMask
+}
+
+// sanPickLine sanitizes one document line for display and builds its paint
+// mask from that line's syntax runs. sanitizeCell does the mapping so a tab's
+// 4-column expansion carries the classes with it; with no runs the line takes
+// sanitizeLine and an empty mask.
+func sanPickLine(l string, toks []syntax.Tok) sanLine {
+	if len(toks) == 0 {
+		return sanLine{text: sanitizeLine(l)}
+	}
+	disp, emph, cls := sanitizeCell(l, nil, toks)
+	return sanLine{text: string(disp), mask: runMask{cls: cls, emph: emph}}
+}
