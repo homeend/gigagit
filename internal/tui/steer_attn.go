@@ -65,6 +65,32 @@ func steerAttnKey(c steer.Command) (attentionKey, bool) {
 	return k, true
 }
 
+// resolveAttnKey derives a mark key from a command and normalises a commit
+// target onto the FEED's own hash — the string a commit diff's noteAddr
+// carries. An agent may name a commit any way git does (a short hash, a ref),
+// and two spellings of one commit must not key two different bands. The lookup
+// is steerNavigateCommitFile's, and so is the refusal: a commit the feed does
+// not hold would key a band nothing could ever match, which is worse than
+// saying so. The reason is "" when the key is good.
+func (m Model) resolveAttnKey(c steer.Command) (attentionKey, string) {
+	k, ok := steerAttnKey(c)
+	if !ok {
+		return k, "highlight needs a file"
+	}
+	if k.state != "commit" {
+		return k, ""
+	}
+	if k.commit == "" {
+		return k, "target.state \"commit\" needs target.commit"
+	}
+	row, ok := m.steerCommitRow(k.commit)
+	if !ok {
+		return k, "commit not loaded in the feed"
+	}
+	k.commit = row.Hash
+	return k, ""
+}
+
 // attnMarkFor reports the band style row r wears in view v, if any. The first
 // matching mark wins: two overlapping bands from one agent are its own business,
 // and blending them would produce a colour it never asked for.
@@ -95,9 +121,9 @@ func (m Model) attnMarkFor(v *diffView, r textdiff.Row) (lipgloss.Style, bool) {
 // come from an agent, and an unrecognized tone must paint nothing rather than
 // default to a colour nobody asked for.
 func (m Model) steerHighlight(c steer.Command) (Model, tea.Cmd) {
-	k, ok := steerAttnKey(c)
-	if !ok {
-		return m, m.answerSteer(c, steerFail(c, "highlight needs a file"))
+	k, why := m.resolveAttnKey(c)
+	if why != "" {
+		return m, m.answerSteer(c, steerFail(c, why))
 	}
 	side := c.Side
 	if side == "" {
@@ -135,10 +161,20 @@ func (m Model) steerHighlightClear(c steer.Command) (Model, tea.Cmd) {
 		m = m.steerNotice(i18n.T("▸ agent cleared its marks"))
 		return m, m.answerSteer(c, steerOK(c, "cleared every mark"))
 	}
-	k, _ := steerAttnKey(c)
+	// A clear drops the resolved key AND the literal one, and never fails on a
+	// commit the feed has since dropped: a refusal here would strand marks the
+	// agent explicitly asked to take down, and the only way back would be the
+	// whole-session clear.
+	drop := map[attentionKey]bool{}
+	if k, ok := steerAttnKey(c); ok {
+		drop[k] = true
+	}
+	if k, why := m.resolveAttnKey(c); why == "" {
+		drop[k] = true
+	}
 	next := make(map[attentionKey][]steerMark, len(m.attention))
 	for key, marks := range m.attention {
-		if key != k {
+		if !drop[key] {
 			next[key] = marks
 		}
 	}

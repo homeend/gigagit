@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/textdiff"
@@ -209,6 +212,106 @@ func TestSteerPostsATransientNotice(t *testing.T) {
 	if withDiff.diffNotice == "" {
 		t.Error("with a diff open the notice belongs on the diff notice line")
 	}
+}
+
+// attnBandRows is cursorRows with one row turned into a pure Add (its left
+// side is a gap), so a band's dotted gap filler is covered alongside its hot
+// cells — the two the cursor's own helpers used to hijack.
+func attnBandRows(n, changed, add int) []textdiff.Row {
+	rows := cursorRows(n, changed)
+	rows[add] = textdiff.Row{Kind: textdiff.Add, Right: "y", RightNo: add + 1}
+	return rows
+}
+
+// TestAttentionBandPaintsChangedAndGapRows: an agent marks CHANGED lines, so
+// the band has to reach the add/del cells and the gap filler — the two places
+// cellMark.row means "cursor". The tone (warn = 94) must replace the hot
+// shades (52/22) there and must never be confused with the cursor's brighter
+// variants (88/28) or its grey band (237). The real cursor still outranks it.
+func TestAttentionBandPaintsChangedAndGapRows(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+	m := openedDiffModel(12, attnBandRows(40, 20, 22), []int{20})
+	m.width = 80
+	v := m.diffLayer()
+	v.noteAddr = model.FileAddress{State: model.StateUnstaged, Path: "a.txt"}
+	v.offset = 20 // rows 20..22 are the first three rendered lines
+	m.attention = map[attentionKey][]steerMark{
+		{path: "a.txt", state: "unstaged"}: {{side: "new", start: 21, end: 23, tone: "warn"}},
+	}
+
+	lines := m.diffPaneLines(v, 80, 10, 0, 0, "row") // no cursor in range
+	changed, gap := lines[0], lines[2]
+	if !strings.Contains(changed, "48;5;94") {
+		t.Errorf("a marked Changed row must wear the warn band (94): %q", changed)
+	}
+	for _, bad := range []struct{ code, what string }{
+		{"48;5;88", "the cursor del shade"},
+		{"48;5;28", "the cursor add shade"},
+		{"48;5;237", "the cursor grey band"},
+		{"48;5;52", "the plain del shade"},
+		{"48;5;22", "the plain add shade"},
+	} {
+		if strings.Contains(changed, bad.code) {
+			t.Errorf("a marked Changed row must not wear %s (%s): %q", bad.what, bad.code, changed)
+		}
+	}
+	if !strings.Contains(gap, "48;5;94") {
+		t.Errorf("a marked Add row's gap filler must wear the warn band (94): %q", gap)
+	}
+	if strings.Contains(gap, "48;5;237") {
+		t.Errorf("a marked Add row's gap must not wear the cursor gap background (237): %q", gap)
+	}
+	// An unmarked row in the same frame is untouched.
+	if plain := lines[4]; strings.Contains(plain, "48;5;94") {
+		t.Errorf("an unmarked row wore the band: %q", plain)
+	}
+	// The cursor outranks the band: the user must always see where they are.
+	onCursor := m.diffPaneLines(v, 80, 10, 20, 21, "row")[0]
+	if strings.Contains(onCursor, "48;5;94") {
+		t.Errorf("the cursor row must outrank the band: %q", onCursor)
+	}
+	if !strings.Contains(onCursor, "48;5;88") || !strings.Contains(onCursor, "48;5;28") {
+		t.Errorf("the cursor row on a marked Changed row must keep its 88/28 shades: %q", onCursor)
+	}
+}
+
+// TestSteerHighlightResolvesACommitTarget: the TUI must not depend on the
+// producer sending a full sha. A commit-target mark is keyed on the FEED's
+// hash — the string a commit diff's noteAddr carries — so a short hash lands
+// on the open diff; a commit the feed does not hold is refused rather than
+// stored under a key nothing can ever match.
+func TestSteerHighlightResolvesACommitTarget(t *testing.T) {
+	t.Parallel()
+	m, hash := navFeedModel(t)
+	dir := m.steerDir
+
+	m, cmd := m.applySteer(steer.Command{
+		ID: "hcm-1", Cmd: "highlight", File: "a.txt",
+		Target: &steer.Target{State: "commit", Commit: hash[:7]},
+		Side:   "new", Start: 3, End: 4, Tone: "info", Wait: true,
+	})
+	runSteerCmd(t, cmd)
+	if r, ok := steer.AwaitReply(dir, "hcm-1", time.Second); !ok || !r.OK {
+		t.Fatalf("reply = %+v ok=%v, want ok:true for a short-hash target", r, ok)
+	}
+	v := &diffView{noteAddr: model.FileAddress{State: model.StateCommitted, Commit: hash, Path: "a.txt"}}
+	if _, got := m.attnMarkFor(v, textdiff.Row{RightNo: 3}); !got {
+		t.Error("a short-hash mark must paint the diff whose address carries the full hash")
+	}
+
+	m2, bad := m.applySteer(steer.Command{
+		ID: "hcm-2", Cmd: "highlight", File: "a.txt",
+		Target: &steer.Target{State: "commit", Commit: "deadbee"},
+		Side:   "new", Start: 1, End: 1, Tone: "info", Wait: true,
+	})
+	runSteerCmd(t, bad)
+	r, _ := steer.AwaitReply(dir, "hcm-2", time.Second)
+	if r.OK || !strings.Contains(r.Error, "commit not loaded in the feed") {
+		t.Errorf("reply = %+v, want ok:false naming an unloaded commit", r)
+	}
+	_ = m2
 }
 
 func TestFileStateProtoCoversEveryTargetState(t *testing.T) {
