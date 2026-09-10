@@ -33,6 +33,7 @@ func TestBodyCoversTheCLISurface(t *testing.T) {
 		"--time-track",
 		"gg diff --hunks", "gg note add", "gg note apply", "gg note list",
 		"gg review --notes", "gg skill path", "gg_notes_list", "gg_note_add",
+		"gg session navigate", "gg session status",
 	} {
 		if !strings.Contains(b, want) {
 			t.Errorf("body missing %q", want)

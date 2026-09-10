@@ -127,6 +127,42 @@ not stored.
 - Say what you found in your chat reply too — the notes are for the code, the
   reply is for the person.
 
+## Steering the user's window
+
+If the human has gg open on this worktree, you can put their window on the
+line you are talking about. Check first:
+
+```bash
+gg session status          # exit 1 = nothing open; do nothing more
+```
+
+When a session is live, navigate to a hunk BEFORE you leave its note, and
+again after `gg note apply` so the reader lands on the first finding:
+
+```bash
+gg session navigate --file src/search.ts --hunk 2
+gg session navigate --file src/search.ts --new-line 42 --cached
+gg session navigate --rev <sha>                     # reveal a commit
+gg session navigate --next-comment                  # step the open diff
+gg session reload notes                             # after writing notes
+gg session focus files
+gg session highlight add --file src/search.ts --start 40 --end 46 --tone warn
+gg session highlight clear --file src/search.ts
+```
+
+- `--file` + one of `--hunk N` / `--new-line N` / `--old-line N`; the target
+  flags are `gg note`'s (`--cached`, `--rev <sha>`, neither = the working tree).
+- A command WAITS up to 2s for the window's answer and prints what happened.
+  Use `--no-wait` for fire-and-forget; it prints the command id and exits 0.
+- Exit 1 means either no session is live (`no gg session for this worktree`)
+  or the window refused: an operation is running, a decision is
+  waiting for the user, they are typing, or a picker owns the screen. That is
+  not an error to work around — say what you found and move on.
+- `gg note add|reply|apply|rm|clear` already posts a reload on its own; you only need
+  `gg session reload` after changing notes some other way.
+- NEVER launch the TUI or `gg web` yourself. Steering drives a window the human
+  chose to open; if none is open, your notes are still waiting for them.
+
 ## Caveats
 
 - If the same path carries both a STAGED and an UNSTAGED note, a bare
