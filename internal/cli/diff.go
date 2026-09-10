@@ -50,27 +50,61 @@ func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if fs.NArg() == 1 {
 		rev = fs.Arg(0)
 	}
+	// A positional starting with gg:// is a LINK, never a rev (the whole rule —
+	// no heuristic). It carries the path and the target, so combining it with
+	// the flags it replaces is a usage error rather than a silent override.
+	if isLinkArg(rev) {
+		if *cached || len(paths) > 0 {
+			fmt.Fprintln(stderr, "diff: a gg:// link already names the file and the target; drop --cached and the -- <paths>")
+			return 2
+		}
+		ctx := context.Background()
+		res, err := resolveLinkArg(ctx, svc, rev)
+		if err != nil {
+			return linkExit("diff", err, stderr)
+		}
+		// Run against the checkout the link named, wherever the cwd is.
+		svc = domain.Open(res.Checkout)
+		spec, err := linkDiffSpec(ctx, svc, res)
+		if err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		return renderDiffSpec(ctx, svc, spec, *hunks, *asJSON, *stat, *nameOnly, stdout, stderr)
+	}
 	if *hunks && *cached && rev != "" && !strings.Contains(rev, "..") {
 		fmt.Fprintln(stderr, "diff: --cached cannot be combined with a commit under --hunks (staged hunks are HEAD→index; a commit's hunks are its own change)")
 		return 2
 	}
+	ctx := context.Background()
+	var spec model.DiffSpec
 	if *hunks {
 		// --hunks numbers the patch a NOTE anchors to, so a bare commit means
 		// that commit's own change (parent → commit; a root commit diffs
 		// against the empty tree), not `git diff <c>`. HunkDiffSpec is the
 		// single source of that rule, shared with `gg note add --hunk N`.
-		ctx := context.Background()
-		spec, err := svc.HunkDiffSpec(ctx, *cached, rev, paths)
+		s, err := svc.HunkDiffSpec(ctx, *cached, rev, paths)
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
+		spec = s
+	} else {
+		spec = model.DiffSpec{Cached: *cached, Rev: rev, Paths: paths}
+	}
+	return renderDiffSpec(ctx, svc, spec, *hunks, *asJSON, *stat, *nameOnly, stdout, stderr)
+}
+
+// renderDiffSpec prints spec in whichever mode the flags chose. Shared by the
+// flag path and the gg:// link path so both render identically.
+func renderDiffSpec(ctx context.Context, svc *domain.Service, spec model.DiffSpec, hunks, asJSON, stat, nameOnly bool, stdout, stderr io.Writer) int {
+	if hunks {
 		files, err := svc.DiffHunks(ctx, spec)
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
-		if *asJSON {
+		if asJSON {
 			if err := hunksJSON(stdout, files); err != nil {
 				fmt.Fprintln(stderr, "error:", err)
 				return 1
@@ -80,14 +114,13 @@ func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		renderHunks(stdout, files)
 		return 0
 	}
-	spec := model.DiffSpec{Cached: *cached, Rev: rev, Paths: paths}
-	if *stat || *nameOnly {
-		stats, err := svc.DiffStat(context.Background(), spec)
+	if stat || nameOnly {
+		stats, err := svc.DiffStat(ctx, spec)
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
-		if *nameOnly {
+		if nameOnly {
 			for _, s := range stats {
 				fmt.Fprintln(stdout, s.Path)
 			}
@@ -96,7 +129,7 @@ func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		renderStat(stdout, stats)
 		return 0
 	}
-	patch, err := svc.DiffPatch(context.Background(), spec)
+	patch, err := svc.DiffPatch(ctx, spec)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1

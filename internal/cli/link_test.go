@@ -251,3 +251,6 @@ func gitOut(t *testing.T, dir string, args ...string) string {
 	}
 	return string(out)
 }
+
+// openCLI opens a service for a repo dir.
+func openCLI(dir string) *domain.Service { return domain.Open(dir) }

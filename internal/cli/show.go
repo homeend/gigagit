@@ -31,6 +31,25 @@ func cmdShow(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	rev := posArgs[0]
+	if isLinkArg(rev) {
+		if len(paths) > 0 {
+			fmt.Fprintln(stderr, "show: a gg:// link already names the file; drop the -- <paths>")
+			return 2
+		}
+		res, err := resolveLinkArg(context.Background(), svc, rev)
+		if err != nil {
+			return linkExit("show", err, stderr)
+		}
+		if res.Addr.Commit == "" {
+			fmt.Fprintln(stderr, "show: that link names the working tree; gg show needs a link to a commit (gg://<repo>/<path>@<sha>)")
+			return 2
+		}
+		svc = domain.Open(res.Checkout)
+		rev = res.Addr.Commit
+		if res.Addr.Path != "" {
+			paths = []string{res.Addr.Path}
+		}
+	}
 	ctx := context.Background()
 	if *patch {
 		line, text, err := svc.ShowPatch(ctx, rev, paths)
