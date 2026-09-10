@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Conflict resolver and hunk staging are syntax-coloured.** The region/line
+  picker (`x` → enter, `enter` on a conflicted Files row, and `H` on a Files or
+  Staged row for hunk staging / unstaging) now colours code by file type, the same
+  lexers and `[ui] diff_syntax` switch as the diff views. When a picker opens
+  it assembles the two versions of the file its regions describe — the shared
+  context plus each region's current-side lines, and the same context plus its
+  incoming-side lines — and lexes each once, off the UI thread, so a large
+  file never stalls the picker on the way in: it opens plain and the colour
+  arrives a moment later. Both columns are coloured by their own side's
+  grammar and the live output pane reuses the same runs. The
+  cursor row stays plain reverse-video, and a file with no known lexer, a side
+  past 1 MB, or `[ui] diff_syntax = "off"` renders exactly as before.
 - **TUI themes.** `[ui] theme = "terminal" | "dark" | "light"` (default
   `terminal`, unchanged look). `dark` pins the Windows Terminal Campbell look
   everywhere; `light` is a neutral light grey — charcoal text on an off-white

@@ -47,6 +47,22 @@ func (m Model) topLayer() layer {
 	return m.layers.entries[len(m.layers.entries)-1]
 }
 
+// hasLayer reports whether l is anywhere on the stack — on top or covered by
+// popups pushed over it. Async results addressed to a specific surface use
+// this rather than topLayer: a surface the user merely covered is still live
+// and must still receive them.
+func (m Model) hasLayer(l layer) bool {
+	if m.layers == nil || l == nil {
+		return false
+	}
+	for _, e := range m.layers.entries {
+		if e == l {
+			return true
+		}
+	}
+	return false
+}
+
 // pushLayer puts l on top. layers is a pointer field so the push persists across
 // Model value copies (same rationale as modal/proc).
 func (m Model) pushLayer(l layer) Model {

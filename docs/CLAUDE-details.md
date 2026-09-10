@@ -108,6 +108,31 @@ per-token backgrounds). Its callers lex off the UI thread: the blame view
 (`lexPreview` + `fileContentLinesTok`); both refuse a file holding a bare `\r`,
 which they turn into a line break and `syntax.Lex` does not.
 
+The **hunk picker** (conflict resolver + hunk staging/unstaging) reaches the
+same colouring through **`winCell.mask`** — a `runMask{cls, emph}` per display
+rune that `cellPieces` slices alongside the body in all three modes and
+`renderPiece` paints with `styledRuns` (empty mask = the byte-identical plain
+path; a reverse-video cell style drops it, which is what keeps the cursor row
+plain). `emph` is carried but unused today: phase 6's in-view search paints its
+hits through it. `lexPickerDoc` assembles the current-side and incoming-side
+full-file texts the `hunkpick.Doc` describes — shared literal context plus each
+block's own lines — and lexes them CONCURRENTLY under `domain.MaxSyntaxBytes`.
+It runs in a `tea.Cmd` (`hunkPicker.lexCmd`) returned from the four open sites
+in `model.go`, which push the picker unlexed: chroma costs ~1.8 s on a 1 MB Go
+file and the UI thread must not wait for it. The finished runs come back as a
+`pickerLexedMsg`, applied only if that picker is still live — anywhere on the
+layer stack (`hasLayer`, so a popup opened mid-lex only covers it), or the
+conflict process's own `cp.picker` — `setSyntax` invalidates the sanitized
+caches and the repaint is layout-stable, since a mask never changes a line's
+text or width. `withSyntax` is the synchronous form, kept for tests. The two
+sides are numbered INDEPENDENTLY, since a block contributes a different
+number of lines to each;
+`ensureSan` walks both cursors at once and stores `sanLine{text, mask}` per
+line, literal context taking the current side's runs. The output pane assembles
+from `Block.ResolvedPicks` provenance so it reuses those very `sanLine` values
+— no re-sanitize and no re-lex per pick. A side holding a bare `\r` is refused,
+as in `lexBlame`/`lexPreview`.
+
 **Diff view line cursor.** The full-screen diff view (`internal/tui/diff_cursor.go`)
 keeps a current line, `curLine`, indexing `diffView.lines` (the logical
 stream: one entry per aligned row plus fold separators), never `disp` — a
