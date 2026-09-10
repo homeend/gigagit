@@ -38,6 +38,17 @@ cmd             = ["note", "list", "gg://{{cwd}}/a.txt"]
 exit            = 0
 stdout_contains = ["linked note"]
 
+# A REPOSITORY link (no file part) picks the checkout for the id-taking and
+# batch verbs; clear via a file link stands in for --file.
+[[run]]
+cmd             = ["note", "clear", "gg://{{cwd}}/a.txt", "--yes"]
+exit            = 0
+stdout_contains = ["removed 1 notes"]
+
+[[run]]
+cmd  = ["note", "rm", "gg://{{cwd}}/a.txt", "deadbeef"]
+exit = 2
+
 # A repo this machine has never opened is exit 1, not a crash.
 [[run]]
 cmd  = ["link", "resolve", "gg://nobody-has-this-repo/a.txt"]

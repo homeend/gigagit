@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v67 -->
+<!-- gg:using-gg:v68 -->
 
 # Using gg (gigagit)
 
@@ -67,11 +67,11 @@ guards against removing the worktree you are standing in.
 gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]   # numbered git @@ hunks per file
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>] \
               --summary "…" [--rationale "…"] [--author <name>] [--source user|agent] [--json]
-gg note reply <note-id> --summary "…" [--json]
-gg note apply --stdin [--cached | --rev <c>] [--author <name>] [--json]   # agent-context v1 or a comments batch
-gg note list  [--file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]
-gg note rm    <note-id>
-gg note clear (--file <path> | --all) [--type user|agent|all] --yes
+gg note reply [<repo-link>] <note-id> --summary "…" [--json]
+gg note apply [<repo-link>] --stdin [--cached | --rev <c>] [--author <name>] [--json]   # agent-context v1 or a comments batch
+gg note list  [<link> | --file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]
+gg note rm    [<repo-link>] <note-id>
+gg note clear [<link>] (--file <path> | --all) [--type user|agent|all] --yes
 gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]     # also import the tool's anchored notes
 gg skill path [review|using-gg]                                  # print the bundled skill's path
 ```
@@ -122,8 +122,9 @@ finds the right one here.
   a place in the current repo. `gg link resolve <link> [--json]` says which
   checkout it names here; exit 1 when it is unknown or ambiguous.
 - **A link the user pastes is enough.** Pass it as the FIRST positional to
-  `gg diff <link>`, `gg show <link>`, `gg note add <link> --summary "…"`,
-  `gg note list <link>`, `gg session navigate <link>` and
+  `gg diff <link>`, `gg show <link>`, every `gg note` verb (`gg note add
+  <link> --summary "…"`, `gg note list <link>`, `gg note reply <repo-link>
+  <id> …`), `gg session navigate <link>` and
   `gg session highlight add <link>[-<end>]`. Each verb's link replaces the
   flags that name the same thing, and passing both is a usage error (exit 2),
   never a silent override:
@@ -135,6 +136,17 @@ finds the right one here.
     `--new-line` and `--old-line`; the link must carry `:<line>` or `#<hunk>`.
   - `gg note list <link>` — replaces `--file`, `--cached` and `--rev`; the
     link's own line or hunk is ignored (it lists that FILE's threads).
+  - `gg note reply <repo-link> <id> …` / `gg note rm <repo-link> <id>` — note
+    ids are per REPOSITORY, so from another directory put the repository's
+    link first (`gg://<repo>` or `gg:///abs/path`, no file or `@target`
+    part): it only picks the checkout whose store holds the id. A bare id the
+    current repository does not hold exits 1 and says which store it searched.
+  - `gg note clear <link>` — a file link replaces `--file`, `--cached` and
+    `--rev`; a repository link picks the checkout and `--file`/`--all` apply
+    as usual.
+  - `gg note apply <repo-link> --stdin` — the link's `@staged`/`@<sha>`
+    replaces `--cached`/`--rev`; a link carrying a file is refused, since each
+    batch item names its own path.
   - `gg session navigate <link>` — the same six, plus `--next-comment` and
     `--prev-comment`.
   - `gg session highlight add <link>[-<end>]` — replaces `--file`, `--cached`,

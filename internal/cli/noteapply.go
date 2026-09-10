@@ -37,7 +37,7 @@ func printStoredNotes(w io.Writer, notes []model.Note, asJSON bool) error {
 	return json.NewEncoder(w).Encode(wires)
 }
 
-func noteApply(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func noteApply(svc *domain.Service, link *domain.Resolved, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("note apply", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	tf := addTargetFlags(fs)
@@ -47,13 +47,28 @@ func noteApply(svc *domain.Service, args []string, stdin io.Reader, stdout, stde
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "note apply: unexpected argument %q; a gg:// link must be the first argument\n", fs.Arg(0))
+		return 2
+	}
 	if !*useStdin {
-		fmt.Fprintln(stderr, "usage: gg note apply --stdin [--cached | --rev <commit>] [--author <name>] [--json]")
+		fmt.Fprintln(stderr, "usage: gg note apply [<repo-link>] --stdin [--cached | --rev <commit>] [--author <name>] [--json]")
 		return 2
 	}
 	if strings.TrimSpace(*tf.file) != "" {
 		fmt.Fprintln(stderr, "note apply: --file is not used; each batch item names its own path")
 		return 2
+	}
+	// A link's target (`@staged`, `@<sha>`, or neither = the working tree)
+	// stands in for --cached/--rev; both at once is a usage error, not an
+	// override. cmdNote already refused a link carrying a path.
+	cached, rev := *tf.cached, *tf.rev
+	if link != nil {
+		if cached || rev != "" {
+			fmt.Fprintln(stderr, "note apply: a gg:// link already names the target (drop --cached and --rev)")
+			return 2
+		}
+		cached, rev = link.Addr.State == model.StateStaged, link.Addr.Commit
 	}
 	data, err := io.ReadAll(stdin)
 	if err != nil {
@@ -71,7 +86,7 @@ func noteApply(svc *domain.Service, args []string, stdin io.Reader, stdout, stde
 		fmt.Fprintln(stderr, "context:", c)
 	}
 	ctx := context.Background()
-	planned, _, err := svc.PlanNoteBatch(ctx, batch, *tf.cached, *tf.rev, noteAuthorDefault(*author), domain.NoteSideBoth)
+	planned, _, err := svc.PlanNoteBatch(ctx, batch, cached, rev, noteAuthorDefault(*author), domain.NoteSideBoth)
 	if err != nil {
 		return noteExit(err, stderr)
 	}

@@ -773,7 +773,16 @@ its `:<line>` AND its `#<hunk>`** (the hunk numbering it would need is
 `--hunks`' own, so pass `--hunks` to see that hunk), and **`gg show` requires
 a link to a COMMIT** — a working-tree or staged link is exit 2, since there is
 no commit to show. `gg note list <link>` likewise ignores the line/hunk: it
-lists that FILE's threads. `#` starts a shell comment, so `gg link`'s usage
+lists that FILE's threads. The other note verbs take a link too, shaped by
+what they can use (`noteLinkShape` in internal/cli/note.go): `reply`/`rm`
+take a REPOSITORY link only (no file or `@target` part — the id names the
+note, the link picks the checkout whose store holds it, since ids are per
+repository), `clear` takes a file link in place of `--file/--cached/--rev` or
+a repository link, `apply` a repository or `@staged`/`@<sha>` link in place
+of `--cached/--rev` but never one with a file. A bare id the current
+repository's store does not hold is `domain.ErrNoteNotFound` (its own type,
+text "note not found", unwrapping to notes.ErrNotFound); `noteIDExit` turns it
+into "no note <id> in the store of <top>" plus the two ways out. `#` starts a shell comment, so `gg link`'s usage
 text and both skills tell the user to quote a link carrying `#<hunk>` — gg
 does not guess.
 

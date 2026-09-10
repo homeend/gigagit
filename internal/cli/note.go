@@ -40,16 +40,12 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	// to that worktree, not the caller's.
 	var link *domain.Resolved
 	if len(rest) > 0 && isLinkArg(rest[0]) {
-		if sub != "add" && sub != "list" {
-			fmt.Fprintf(stderr, "note %s: a gg:// link is only accepted by `note add` and `note list`\n", sub)
-			return 2
-		}
 		res, err := resolveLinkArg(context.Background(), svc, rest[0])
 		if err != nil {
 			return linkExit("note "+sub, err, stderr)
 		}
-		if res.Addr.Path == "" {
-			fmt.Fprintf(stderr, "note %s: that link names a repository, not a file\n", sub)
+		if msg := noteLinkShape(sub, res); msg != "" {
+			fmt.Fprintf(stderr, "note %s: %s\n", sub, msg)
 			return 2
 		}
 		link, rest = &res, rest[1:]
@@ -66,14 +62,64 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 		case "list":
 			return noteList(svc, link, rest, stdout, stderr)
 		case "clear":
-			return noteClear(svc, rest, stdout, stderr)
+			return noteClear(svc, link, rest, stdout, stderr)
 		case "apply":
-			return noteApply(svc, rest, stdin, stdout, stderr)
+			return noteApply(svc, link, rest, stdin, stdout, stderr)
 		default:
 			fmt.Fprintf(stderr, "note: unknown subcommand %q\n", sub)
 			return 2
 		}
 	})
+}
+
+// noteLinkShape says whether a gg:// link fits the sub-command it leads, and
+// if not, why (an empty string means it fits). A link replaces the flags that
+// name the same thing; a part of it the verb cannot use is a usage error, never
+// something silently ignored:
+//
+//   - add, list — a FILE link (the address is the point).
+//   - reply, rm — a REPOSITORY link only: the note id names the note, the link
+//     just picks the checkout whose store holds it (ids are per repository).
+//   - clear — either: a repository link picks the checkout and --file/--all
+//     apply as usual; a file link stands in for --file/--cached/--rev.
+//   - apply — a repository or target link: `gg://<repo>`, `@staged` or `@<sha>`
+//     stand in for --cached/--rev; each batch item names its own path, so a
+//     path on the link is refused for the same reason --file is.
+func noteLinkShape(sub string, res domain.Resolved) string {
+	hasPath := res.Addr.Path != ""
+	hasTarget := res.Addr.State != model.StateUnstaged
+	switch sub {
+	case "add", "list":
+		if !hasPath {
+			return "that link names a repository, not a file"
+		}
+	case "reply", "rm":
+		if hasPath || hasTarget {
+			return "pass the repository's link (gg://<repo> or gg:///abs/path), not a file or commit: the note id names the note"
+		}
+	case "apply":
+		if hasPath {
+			return "pass a repository or target link (gg://<repo>, gg://<repo>@staged, gg://<repo>@<sha>): each batch item names its own path"
+		}
+	}
+	return ""
+}
+
+// noteIDExit reports a per-id failure (reply, rm). An unknown id is the one
+// error an agent hits from the WRONG checkout — note ids are per repository —
+// so instead of a bare "not found" it names the store that was searched and
+// the two ways to reach the right one.
+func noteIDExit(sub, id string, svc *domain.Service, err error, stderr io.Writer) int {
+	if errors.Is(err, domain.ErrNoteNotFound) {
+		where := "this repository's store"
+		if top, terr := svc.TopLevel(context.Background()); terr == nil && top != "" {
+			where = "the store of " + top
+		}
+		fmt.Fprintf(stderr, "%s: no note %s in %s (notes are per repository: run this inside the checkout that holds it, or put that repository's link first: gg %s gg://<repo> %s …)\n", sub, id, where, sub, id)
+		return 1
+	}
+	fmt.Fprintln(stderr, "error:", err)
+	return 1
 }
 
 // noteMutations are the sub-commands that CHANGE the store; only they are worth
@@ -318,7 +364,11 @@ func noteReply(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(stderr, "usage: gg note reply <note-id> --summary \"…\"")
+		if isLinkArg(fs.Arg(0)) {
+			fmt.Fprintf(stderr, "note reply: unexpected argument %q; a gg:// link must be the first argument\n", fs.Arg(0))
+			return 2
+		}
+		fmt.Fprintln(stderr, "usage: gg note reply [<repo-link>] <note-id> --summary \"…\"")
 		return 2
 	}
 	if strings.TrimSpace(*summary) == "" {
@@ -337,8 +387,7 @@ func noteReply(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 		Summary: strings.TrimSpace(*summary), Rationale: strings.TrimSpace(*rationale),
 	})
 	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return 1
+		return noteIDExit("note reply", id, svc, err, stderr)
 	}
 	if err := printNote(stdout, stored, *asJSON); err != nil {
 		fmt.Fprintln(stderr, "error:", err)
@@ -354,13 +403,18 @@ func noteRemove(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 		return 2
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "usage: gg note rm <note-id>")
+		for _, a := range fs.Args() {
+			if isLinkArg(a) {
+				fmt.Fprintf(stderr, "note rm: unexpected argument %q; a gg:// link must be the first argument\n", a)
+				return 2
+			}
+		}
+		fmt.Fprintln(stderr, "usage: gg note rm [<repo-link>] <note-id>")
 		return 2
 	}
 	// A root takes its replies with it (domain.NoteRemove).
 	if err := svc.NoteRemove(context.Background(), fs.Arg(0)); err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return 1
+		return noteIDExit("note rm", fs.Arg(0), svc, err, stderr)
 	}
 	return 0
 }
@@ -534,7 +588,7 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 // so `list` never shows it) is still cleared and counted: the --type all path
 // never consults NotesAt at all, and NotesClear's sweep matches on the raw
 // stored address, not on resolved/orphan status.
-func noteClear(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func noteClear(svc *domain.Service, link *domain.Resolved, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("note clear", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	tf := addTargetFlags(fs)
@@ -544,8 +598,25 @@ func noteClear(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "note clear: unexpected argument %q; a gg:// link must be the first argument\n", fs.Arg(0))
+		return 2
+	}
+	// A FILE link stands in for --file/--cached/--rev, as in `note list`; a
+	// repository link only picked the checkout (cmdNote opened it) and the
+	// --file/--all rule below applies unchanged.
+	fileLink := link != nil && link.Addr.Path != ""
 	hasFile := strings.TrimSpace(*tf.file) != ""
-	if hasFile == *all {
+	if fileLink {
+		if hasFile || *tf.rev != "" || *tf.cached {
+			fmt.Fprintln(stderr, "note clear: a gg:// link already names the target (drop --file, --rev and --cached)")
+			return 2
+		}
+		if *all {
+			fmt.Fprintln(stderr, "note clear: a file link and --all name different things; pass one")
+			return 2
+		}
+	} else if hasFile == *all {
 		fmt.Fprintln(stderr, "note clear: pass exactly one of --file <path> or --all")
 		return 2
 	}
@@ -558,9 +629,17 @@ func noteClear(svc *domain.Service, args []string, stdout, stderr io.Writer) int
 		return 2
 	}
 	ctx := context.Background()
-	addrs, err := noteAddressesFor(ctx, svc, *tf.file, *tf.cached, *tf.rev)
-	if err != nil {
-		return noteTargetExit("note clear", err, stderr)
+	var addrs []model.FileAddress
+	if fileLink {
+		// The link's line and hunk are ignored: `clear` is about a FILE's
+		// threads, exactly as --file is.
+		addrs = []model.FileAddress{link.Addr}
+	} else {
+		got, err := noteAddressesFor(ctx, svc, *tf.file, *tf.cached, *tf.rev)
+		if err != nil {
+			return noteTargetExit("note clear", err, stderr)
+		}
+		addrs = got
 	}
 	allTypes := strings.TrimSpace(*typ) == "" || *typ == "all"
 	removed := 0

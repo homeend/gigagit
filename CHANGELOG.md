@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Every `gg note` verb takes a `gg://` link.** `gg note reply`, `rm`,
+  `clear` and `apply` now accept a link as the first positional, as `add` and
+  `list` already did. `reply` and `rm` take the REPOSITORY's link
+  (`gg://<repo>`, no file part): a note id is per repository, so the link only
+  picks the checkout whose store holds it — `gg note reply gg://test-1
+  76038118 --summary "…"` works from any directory. `clear` takes a file link
+  in place of `--file`/`--cached`/`--rev` or a repository link; `apply` takes a
+  repository or `@staged`/`@<sha>` link in place of `--cached`/`--rev`, never
+  one with a file. A bare id the current repository does not hold now says
+  which store was searched and how to reach the right one, instead of
+  `error: note: notes: not found`. Skills: using-gg v68, reviewing-with-gg v5.
 - **gg links.** A `gg://` address names one place in one repository — a file, a
   line on one side of one diff, a hunk, or a commit — in a form you can copy
   out of gg, paste into a chat on another machine, and hand straight back to

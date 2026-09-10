@@ -132,12 +132,12 @@ gg diff --hunks [--json] [--cached] [<commit>] [-- <paths>...]
                                       # numbered git @@ hunks per file, over the same patch a note anchors to
 gg note add   --file <path> (--hunk N | --new-line N | --old-line N) [--cached | --rev <c>]
               --summary "…" [--rationale "…"] [--author <name>] [--source user|agent] [--json]
-gg note reply <note-id> --summary "…" [--json]
-gg note apply --stdin [--cached | --rev <c>] [--author <name>] [--json]
+gg note reply [<repo-link>] <note-id> --summary "…" [--json]
+gg note apply [<repo-link>] --stdin [--cached | --rev <c>] [--author <name>] [--json]
                                       # agent-context v1 or a comments batch; validated whole before the first write
-gg note list  [--file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]
-gg note rm    <note-id>
-gg note clear (--file <path> | --all) [--type user|agent|all] --yes
+gg note list  [<link> | --file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]
+gg note rm    [<repo-link>] <note-id>
+gg note clear [<link>] (--file <path> | --all) [--type user|agent|all] --yes
 gg add [-f] (-A | <path>...)  # stage paths (-f forces gitignored ones), or everything with -A
 gg unstage <path>...          # remove paths from the index, keeping working-tree content
 gg commit -m "msg"            # add -a to stage tracked changes; --amend rewrites the last commit
@@ -220,7 +220,10 @@ gg version                    # (also --version / -v) print build version + comm
 **Review notes.** `gg note add --file <path> --new-line 42 --summary "…"` pins a
 remark to a line; `gg note list`, `gg note reply`, `gg note rm` and
 `gg note clear` manage them, and `gg note apply --stdin` imports a whole batch
-of agent annotations at once. `gg diff --hunks` numbers each file's `@@` hunks
+of agent annotations at once. Every note verb takes a `gg://` link as its
+first argument: a file link for `add`/`list`/`clear`, the repository's link
+(`gg://<repo>`) for `reply`/`rm`/`apply`, since note ids are per repository
+and the link picks the checkout whose store holds them. `gg diff --hunks` numbers each file's `@@` hunks
 so `--hunk N` can address one. Notes are machine-local and expire (see
 `[notes]` under Configuration); they render inline in the TUI diff view and in
 `gg web`. `gg review --notes` does not replace the text report — it still
