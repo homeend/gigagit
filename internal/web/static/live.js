@@ -13,6 +13,7 @@ import { fetchNotes, markDiffRow, openFile, openWorkingTree, reconcileStatusView
 import { fetchBranches } from "./sidebar.js";
 import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
+import { focusPane } from "./keys.js";
 import { loadRepo } from "./ops.js";
 
 const COALESCE_MS = 150; // one burst of watcher events → one refresh
@@ -44,6 +45,14 @@ function connectLive() {
     }
     if (msg.reason === "hello") {
       state.live = { enabled: !!msg.live, watch: !!msg.watch };
+      // A hello means a NEW hub: the server replaces it wholesale on re-root
+      // (and on a refresh-settings write), which ends every stream and brings
+      // the tabs back here. Attention bands are addressed by (state, rev,
+      // path) against the repo they were painted on, so they must not outlive
+      // it — a sha from the old root would key marks onto a file of the new
+      // one. A plain reconnect drops them too, which is right: the agent's
+      // marks are a live conversation, not stored state.
+      state.attention.clear();
       if (connected) scheduleFull(); // reconnect: events were missed meanwhile
       connected = true;
       return;
@@ -163,7 +172,7 @@ async function applySteer(s) {
 // "look again", and a band whose range drifted under an edit is its own to
 // re-post. They go before the fetch so a notes re-render already reflects it.
 async function steerReload(s) {
-  const want = new Set(s.sources && s.sources.length ? s.sources : ["notes"]);
+  const want = new Set(s.sources); // the server fills the default ["notes"]
   if (want.has("all")) {
     // "all" is the TUI's hard full reload; refreshSources knows only the
     // individual names, so expand it here rather than have it fall through
@@ -180,17 +189,28 @@ async function steerReload(s) {
 
 // steerFocus maps the protocol panel names onto the web's two panes. The page
 // has `commits` and `files`, not the TUI's nine panels; a name it has no pane
-// for is a no-op (the endpoint already validated it, and the CLI is told
-// "web: sent", not what the page did with it).
+// for is a no-op (the endpoint validated it against the full protocol
+// vocabulary, and the CLI is told "web: sent", not what the page did with it).
+//
+// Focusing must SHOW the pane, not merely record it: each layout hides one of
+// the two, so a focus onto the hidden one steps the layout just far enough to
+// reveal it (never further — an open diff survives, unlike drillOut, which
+// clears it). focusPane then moves the `.focused` ring, exactly as every
+// keyboard entry point does.
 function steerFocus(panel) {
   if (panel === "commits") {
     state.pane = "commits";
-    setLayout("list");
-    return;
-  }
-  if (panel === "files" || panel === "staged") {
+    // The diff layout replaces the commit list; "files" is the nearest stage
+    // that shows it again.
+    if (state.layout === "diff") setLayout("files");
+  } else if (panel === "files" || panel === "staged") {
     state.pane = "files";
+    // The file column has no place in the full-width list layout.
+    if (state.layout === "list") setLayout("files");
+  } else {
+    return; // a panel this page has no pane for
   }
+  focusPane();
 }
 
 // steerAttnKey builds the state.attention key from a wire command — the same
@@ -202,7 +222,7 @@ function steerAttnKey(s) {
 function steerHighlight(s) {
   const k = steerAttnKey(s);
   const marks = state.attention.get(k) || [];
-  marks.push({ side: s.side || "new", start: s.start, end: s.end || s.start, tone: s.tone });
+  marks.push({ side: s.side, start: s.start, end: s.end, tone: s.tone }); // server fills side and end
   state.attention.set(k, marks);
   if (state.lastDiff) renderDiff(state.lastDiff);
 }
@@ -241,7 +261,7 @@ async function steerNavigate(s) {
     await openFile(i);
   }
   if (!s.line) return;
-  const side = s.side || "new";
+  const side = s.side; // the server fills it whenever a line is present
   // A side-by-side `change` row anchors on its NEW side, so an old-side
   // landing falls back to the row carrying that left number.
   const tr =

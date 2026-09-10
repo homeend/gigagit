@@ -650,11 +650,14 @@ function diffHTML(d, paneWidth, notesOn = false) {
   // render: renderDiff re-runs from state.lastDiff on a window resize and on
   // every notes refresh, so a class added post-hoc the way markDiffRow adds
   // `cur` would silently vanish.
+  // The lookup is done ONCE, not per row: the key is fixed for the whole
+  // table. Like curCls it is gated on notesOn, so the file-history overlay —
+  // a different file at a different revision, rendered through this same
+  // function — never borrows the open diff's bands.
+  const attnMarks = (notesOn && state.attention.size && state.attention.get(attnKey(state.diffCtx))) || null;
   const attnCls = (side, no) => {
-    if (!no || !state.attention.size) return "";
-    const marks = state.attention.get(attnKey(state.diffCtx));
-    if (!marks) return "";
-    for (const m of marks) {
+    if (!no || !attnMarks) return "";
+    for (const m of attnMarks) {
       if (m.side === side && no >= m.start && no <= m.end) return " attn-" + m.tone;
     }
     return "";

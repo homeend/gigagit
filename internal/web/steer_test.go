@@ -50,6 +50,14 @@ func TestSteerEndpointRejectsBadValues(t *testing.T) {
 		`{"id":"1-1","cmd":"navigate","commit":"-x"}`,
 		`{"id":"1-1","cmd":"highlight","file":"a.txt","start":1,"tone":"shout"}`,
 		`{"id":"1-1","cmd":"reload","sources":["weather"]}`,
+		// A panel gg does not have: the protocol's nine names are the whole
+		// vocabulary, and an agent that invents one should hear so rather than
+		// have the command silently do nothing.
+		`{"id":"1-1","cmd":"focus","panel":"weather"}`,
+		`{"id":"1-1","cmd":"focus","panel":"diff"}`,
+		// state "commit" with no sha names no commit at all — the page would
+		// fetch /api/commit/ and 404 on its own.
+		`{"id":"1-1","cmd":"navigate","file":"a.txt","target":{"state":"commit"}}`,
 		`not json`,
 	} {
 		body := body
@@ -59,6 +67,45 @@ func TestSteerEndpointRejectsBadValues(t *testing.T) {
 				t.Errorf("status = %d, want 400 for %s", code, body)
 			}
 		})
+	}
+}
+
+// The nine protocol panel names (internal/tui's panelProtoName) must ALL be
+// accepted: the page only has two panes, but the endpoint speaks the protocol,
+// not the page's subset — a name the page cannot act on is a no-op there, never
+// a refusal here.
+func TestSteerEndpointAcceptsEveryProtocolPanel(t *testing.T) {
+	t.Parallel()
+	for _, panel := range []string{"branches", "worktrees", "remotes", "files", "staged", "commits", "tags", "reflog", "previews"} {
+		panel := panel
+		t.Run(panel, func(t *testing.T) {
+			t.Parallel()
+			body := `{"id":"1-1","cmd":"focus","panel":"` + panel + `"}`
+			if code := steerPost(t, newSteerServer(t), body, "application/json"); code != http.StatusAccepted {
+				t.Errorf("status = %d, want 202 for panel %q", code, panel)
+			}
+		})
+	}
+}
+
+// Only `highlight` carries a band. A navigate that happened to arrive with
+// tone/start/end must not hand the page a band to paint — the page keys its
+// marks off exactly these fields.
+func TestSteerWireCarriesBandFieldsOnlyForHighlight(t *testing.T) {
+	t.Parallel()
+	w, err := toSteerWire(steer.Command{Cmd: "navigate", File: "a.txt", Start: 3, End: 9, Tone: "error"})
+	if err != nil {
+		t.Fatalf("toSteerWire: %v", err)
+	}
+	if w.Start != 0 || w.End != 0 || w.Tone != "" {
+		t.Errorf("navigate wire = {start:%d end:%d tone:%q}, want all zero — a band belongs to highlight alone", w.Start, w.End, w.Tone)
+	}
+	h, err := toSteerWire(steer.Command{Cmd: "highlight", File: "a.txt", Start: 3, Tone: "error"})
+	if err != nil {
+		t.Fatalf("toSteerWire(highlight): %v", err)
+	}
+	if h.Start != 3 || h.End != 3 || h.Tone != "error" {
+		t.Errorf("highlight wire = {start:%d end:%d tone:%q}, want {3 3 error}", h.Start, h.End, h.Tone)
 	}
 }
 
@@ -112,9 +159,14 @@ func TestSteerEmissionBypassesTheHubGate(t *testing.T) {
 func TestWebPresenceLifecycle(t *testing.T) {
 	t.Parallel()
 	s := newSteerServer(t)
+	// The dir is captured HERE: removeSteerPresence clears s.steerDir (so a
+	// late tick cannot resurrect the file), and re-reading the field after the
+	// remove would stat "web.json" in the process's own working directory —
+	// never ok, whether or not the remove did anything.
+	dir := s.steerDir
 	s.steerURL = "http://127.0.0.1:7777"
 	s.touchSteerPresence()
-	p, ok := steer.Live(s.steerDir, steer.WebPresence)
+	p, ok := steer.Live(dir, steer.WebPresence)
 	if !ok {
 		t.Fatal("no live web presence after a touch")
 	}
@@ -122,8 +174,11 @@ func TestWebPresenceLifecycle(t *testing.T) {
 		t.Errorf("url = %q, want the server's own address — the CLI POSTs to it", p.URL)
 	}
 	s.removeSteerPresence()
-	if _, ok := steer.Live(s.steerDir, steer.WebPresence); ok {
+	if _, ok := steer.Live(dir, steer.WebPresence); ok {
 		t.Error("presence survived removeSteerPresence")
+	}
+	if got := s.steerInbox(); got != "" {
+		t.Errorf("steerDir = %q after removeSteerPresence, want it cleared", got)
 	}
 }
 

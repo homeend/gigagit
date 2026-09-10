@@ -49,13 +49,25 @@ type steerWire struct {
 	Tone    string   `json:"tone,omitempty"`
 }
 
+// steerPanels is the protocol's panel vocabulary — internal/tui's
+// panelProtoName, which a session snapshot writes and `gg session focus`
+// carries. The page has only two panes and no-ops on the rest, but the
+// ENDPOINT speaks the whole protocol: a name gg does not have is refused here
+// so an agent hears about its typo instead of watching nothing happen.
+var steerPanels = map[string]bool{
+	"branches": true, "worktrees": true, "remotes": true, "files": true,
+	"staged": true, "commits": true, "tags": true, "reflog": true, "previews": true,
+}
+
 // toSteerWire validates one posted command. Untrusted values reach git argv
 // through the page's own fetches, so `file` and `commit` go through
 // isGitArgSafe and every enum through its allowlist — an unknown value is a
-// 400, never a silent default.
+// 400, never a silent default. Fields that belong to ONE command (the band's
+// start/end/tone) are copied only by that command's arm, so the page can never
+// be handed a band to paint by a navigate.
 func toSteerWire(c steer.Command) (steerWire, error) {
 	w := steerWire{Cmd: c.Cmd, File: c.File, Commit: c.Commit, Step: c.Step,
-		Sources: c.Sources, Panel: c.Panel, Start: c.Start, End: c.End, Tone: c.Tone}
+		Sources: c.Sources, Panel: c.Panel}
 	if c.File != "" && !isGitArgSafe(c.File) {
 		return w, errors.New("unsafe file")
 	}
@@ -99,6 +111,11 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 		if c.File == "" && c.Commit == "" && c.Step == "" {
 			return w, errors.New("navigate needs a file, a commit or a step")
 		}
+		// state "commit" with no sha names no commit at all: the page would
+		// open /api/commit/ and 404 on its own.
+		if w.State == "commit" && w.Commit == "" {
+			return w, errors.New("a commit target needs a commit")
+		}
 	case "reload":
 		if len(w.Sources) == 0 {
 			w.Sources = []string{"notes"}
@@ -114,6 +131,9 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 		if c.Panel == "" {
 			return w, errors.New("focus needs a panel")
 		}
+		if !steerPanels[c.Panel] {
+			return w, fmt.Errorf("unknown panel %q", c.Panel)
+		}
 	case "highlight":
 		if c.File == "" {
 			return w, errors.New("highlight needs a file")
@@ -121,6 +141,7 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 		if c.Start < 1 || (c.End != 0 && c.End < c.Start) {
 			return w, errors.New("highlight needs a 1-based start and an end at or after it")
 		}
+		w.Start, w.End, w.Tone = c.Start, c.End, c.Tone
 		if _, ok := noteSide(c.Side); !ok {
 			return w, fmt.Errorf("unknown side %q", c.Side)
 		}
