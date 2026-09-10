@@ -1204,6 +1204,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, cmd
 				}
 			}
+			// A steering navigate parked on THIS reload would otherwise wait out
+			// its five-second TTL — long after the CLI gave up at two. Answer now.
+			if ps := m.pendingSteer; msg.source == srcStatus && ps != nil && ps.stage == steerStageStatusRetry {
+				return m.failPending("status could not be re-read: " + msg.err.Error())
+			}
 			return m, nil
 		}
 		// Record the measured read cost as informational stats (shown in the

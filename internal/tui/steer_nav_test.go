@@ -394,12 +394,8 @@ func TestSteerNavigateRefusesASecondNavigateWhileOneIsLoading(t *testing.T) {
 // has to line up or the landing never happens.
 func TestSteerNavigateOpensAFileInALoadedCommit(t *testing.T) {
 	t.Parallel()
-	m := loadedNavModel(t)
+	m, hash := navFeedModel(t) // the seed commit ADDS a.txt, so new line 18 exists
 	dir := m.steerDir
-	hash := gitOut(t, m.currentWorktree, "rev-parse", "HEAD") // the seed commit, which ADDS a.txt
-	m.commits = []model.Commit{{Hash: hash, Subject: "seed"}}
-	m = m.rebuildCommitGraph()
-
 	m, cmd := m.applySteer(steer.Command{
 		ID: "n-11", Cmd: "navigate", File: "a.txt",
 		Target: &steer.Target{State: "commit", Commit: hash},
@@ -425,6 +421,159 @@ func TestSteerNavigateOpensAFileInALoadedCommit(t *testing.T) {
 	r, ok := steer.AwaitReply(dir, "n-11", 3*time.Second)
 	if !ok || !r.OK || !strings.Contains(r.Detail, "a.txt:18") {
 		t.Fatalf("reply = %+v ok=%v, want ok:true detailing a.txt:18", r, ok)
+	}
+}
+
+// TestSteerNavigateLandsOnTheOldSide is the other half of the {side,no} pair:
+// old line 18 is the pre-edit "line 18" the unstaged diff still carries.
+func TestSteerNavigateLandsOnTheOldSide(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	dir := m.steerDir
+	m, cmd := m.applySteer(steer.Command{
+		ID: "n-12", Cmd: "navigate", File: "a.txt",
+		Target: &steer.Target{State: "unstaged"},
+		Line:   &steer.Line{Side: "old", No: 18},
+		Wait:   true,
+	})
+	m = pumpDiff(t, m, cmd)
+	v := m.diffLayer()
+	if v == nil {
+		t.Fatal("no diff view after navigate")
+	}
+	row, ok := v.cursorRow()
+	if !ok || row.LeftNo != 18 {
+		t.Errorf("cursor row = %+v ok=%v, want OLD line 18", row, ok)
+	}
+	r, ok := steer.AwaitReply(dir, "n-12", 2*time.Second)
+	if !ok || !r.OK || !strings.Contains(r.Detail, "a.txt:18") {
+		t.Fatalf("reply = %+v ok=%v, want ok:true detailing a.txt:18", r, ok)
+	}
+}
+
+// navFeedModel is loadedNavModel with the seed commit in the feed, and returns
+// its sha: the fixture for every commit-addressed navigate.
+func navFeedModel(t *testing.T) (Model, string) {
+	t.Helper()
+	m := loadedNavModel(t)
+	hash := gitOut(t, m.currentWorktree, "rev-parse", "HEAD")
+	m.commits = []model.Commit{{Hash: hash, Subject: "seed"}}
+	return m.rebuildCommitGraph(), hash
+}
+
+// TestSteerNavigateClearsACommitsFilterToReachTheCommit pins §4.6's go-to
+// semantics for the Commits panel: a `/` filter that hides the target row must
+// be dropped, not reported as "commit not loaded in the feed".
+func TestSteerNavigateClearsACommitsFilterToReachTheCommit(t *testing.T) {
+	t.Parallel()
+	m, hash := navFeedModel(t)
+	dir := m.steerDir
+	m.filterPanel = panelCommits
+	m.filterQuery = "no-such-subject" // hides the only row
+	if len(m.displayIndices(panelCommits)) != 0 {
+		t.Fatal("the fixture's filter does not actually hide the commit")
+	}
+	// The `\` scope and `@` highlight must SURVIVE: only the / filter is a
+	// go-to obstacle.
+	m.highlightQuery = "seed"
+	m.commitFilter = commitFilterFields{Author: "t"}
+
+	m, cmd := m.applySteer(steer.Command{ID: "n-13", Cmd: "navigate", Commit: hash, Wait: true})
+	runSteerCmd(t, cmd)
+	r, ok := steer.AwaitReply(dir, "n-13", time.Second)
+	if !ok || !r.OK {
+		t.Fatalf("reply = %+v ok=%v, want ok:true — a filtered-away commit is still loaded", r, ok)
+	}
+	if m.filterQuery != "" {
+		t.Errorf("filterQuery = %q, want it cleared so the landing is visible", m.filterQuery)
+	}
+	if m.focus != panelCommits {
+		t.Errorf("focus = %v, want panelCommits", m.focus)
+	}
+	idx := m.displayIndices(panelCommits)
+	sel := m.sel[panelCommits]
+	if sel < 0 || sel >= len(idx) {
+		t.Fatalf("selection %d is outside the %d visible rows", sel, len(idx))
+	}
+	if c, ok := m.commitAtUnified(idx[sel]); !ok || c.Hash != hash {
+		t.Errorf("selected commit = %+v, want %s", c, hash)
+	}
+	if m.highlightQuery == "" || !m.commitFilter.filtered() {
+		t.Error("only the / filter may be dropped — the @ highlight and \\ scope must survive")
+	}
+}
+
+// TestSteerFocusSupersedesAParkedNavigate: focus pops the very diff a parked
+// navigate waits on, so the parked command must be answered rather than left to
+// the 5 s TTL — the CLI gives up after two.
+func TestSteerFocusSupersedesAParkedNavigate(t *testing.T) {
+	t.Parallel()
+	m, hash := navFeedModel(t)
+	dir := m.steerDir
+	m, _ = m.applySteer(steer.Command{
+		ID: "n-14", Cmd: "navigate", File: "a.txt",
+		Target: &steer.Target{State: "commit", Commit: hash},
+		Line:   &steer.Line{Side: "new", No: 18},
+		Wait:   true,
+	})
+	if m.pendingSteer == nil {
+		t.Fatal("the navigate must park")
+	}
+	m, cmd := m.applySteer(steer.Command{ID: "f-3", Cmd: "focus", Panel: "branches", Wait: true})
+	runSteerCmd(t, cmd)
+	if m.pendingSteer != nil {
+		t.Error("focus moved the view — the parked navigate must not survive it")
+	}
+	r, ok := steer.AwaitReply(dir, "n-14", 2*time.Second)
+	if !ok || r.OK || !strings.Contains(r.Error, "superseded") {
+		t.Fatalf("parked reply = %+v ok=%v, want ok:false \"superseded…\"", r, ok)
+	}
+	fr, ok := steer.AwaitReply(dir, "f-3", 2*time.Second)
+	if !ok || !fr.OK {
+		t.Fatalf("focus reply = %+v ok=%v, want ok:true", fr, ok)
+	}
+}
+
+// steerNotedModel is the note-jump fixture (a diff with notes on lines 5 and
+// 25) with a steering inbox injected.
+func steerNotedModel(t *testing.T) (Model, string) {
+	t.Helper()
+	m := notedModel(t)
+	m.cfg = config.Defaults()
+	m.ready = true
+	m.loading, m.running = false, false
+	m.steerDir = filepath.Join(t.TempDir(), "steer")
+	m = m.initSteerInbox()
+	return m, m.steerDir
+}
+
+func TestSteerStepMovesToTheNextNote(t *testing.T) {
+	t.Parallel()
+	m, dir := steerNotedModel(t)
+	m.diffLayer().setCursorLine(0, m.diffBodyRows())
+	m, cmd := m.applySteer(steer.Command{ID: "s-2", Cmd: "navigate", Step: "next_note", Wait: true})
+	runSteerCmd(t, cmd)
+	if got := m.diffLayer().curLine; got != 4 {
+		t.Errorf("cursor at line %d, want 4 (the note on line 5)", got)
+	}
+	r, ok := steer.AwaitReply(dir, "s-2", time.Second)
+	if !ok || !r.OK || !strings.Contains(r.Detail, "next") {
+		t.Fatalf("reply = %+v ok=%v, want ok:true naming the direction", r, ok)
+	}
+}
+
+func TestSteerStepPastTheLastNoteIsRefused(t *testing.T) {
+	t.Parallel()
+	m, dir := steerNotedModel(t)
+	m.diffLayer().setCursorLine(24, m.diffBodyRows()) // the LAST noted line
+	m, cmd := m.applySteer(steer.Command{ID: "s-3", Cmd: "navigate", Step: "next_note", Wait: true})
+	runSteerCmd(t, cmd)
+	if got := m.diffLayer().curLine; got != 24 {
+		t.Errorf("a refused step moved the cursor to %d; it must stay put", got)
+	}
+	r, ok := steer.AwaitReply(dir, "s-3", time.Second)
+	if !ok || r.OK || !strings.Contains(r.Error, "no next note") {
+		t.Fatalf("reply = %+v ok=%v, want ok:false \"no next note in this diff\"", r, ok)
 	}
 }
 

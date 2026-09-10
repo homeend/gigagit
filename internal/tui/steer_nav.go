@@ -62,13 +62,19 @@ func (m Model) steerFocus(c steer.Command) (Model, tea.Cmd) {
 	if !ok {
 		return m, m.answerSteer(c, steerFail(c, "unknown panel "+strconv.Quote(c.Panel)))
 	}
+	// focus MOVES the view: steerToPanels below pops the very diff a parked
+	// navigate is waiting on, whose diffMsg would then find no layer and return
+	// early. Supersede it explicitly — the CLI waits two seconds, the pending's
+	// TTL is five, so an expiry answer would reach nobody.
+	var superseded tea.Cmd
+	m, superseded = m.failPending("superseded by a later steering command")
 	m = m.steerToPanels()
 	if p == panelCommits {
 		m = m.focusCommitsPanel()
 	} else {
 		m = m.activateTab(p)
 	}
-	return m, m.answerSteer(c, steerOK(c, "focused "+c.Panel))
+	return m, tea.Batch(superseded, m.answerSteer(c, steerOK(c, "focused "+c.Panel)))
 }
 
 // steerStep moves the open diff's cursor to the next/previous note. It is
@@ -119,17 +125,43 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 		// Probe first: gotoLoadedCommit (and steerToPanels) MOVE the view, and
 		// a commit the feed has not paged in is a refusal, not a reason to
 		// close what the user was reading.
-		if _, _, ok := m.findLoadedCommit(c.Commit); !ok {
+		if _, ok := m.steerCommitRow(c.Commit); !ok {
 			return m, m.answerSteer(c, steerFail(c, "commit not loaded in the feed"))
 		}
-		m = m.steerToPanels()
-		m, _, ok := m.gotoLoadedCommit(c.Commit)
+		nm := m.steerToPanels().steerClearCommitsFilter()
+		nm, _, ok := nm.gotoLoadedCommit(c.Commit)
 		if !ok {
 			return m, m.answerSteer(c, steerFail(c, "commit not loaded in the feed"))
 		}
-		return m, m.answerSteer(c, steerOK(c, "revealed commit "+shortHash(c.Commit)))
+		return nm, nm.answerSteer(c, steerOK(c, "revealed commit "+shortHash(c.Commit)))
 	}
 	return m, m.answerSteer(c, steerFail(c, "navigate needs a file, a commit or a step"))
+}
+
+// steerCommitRow is the Commits panel's equivalent of steerStatusRow: it scans
+// the LOADED feed for hash with no regard for a /-filter, so a probe answers
+// "is this commit in the feed at all" rather than "is it visible right now".
+// The landing clears that filter (see steerClearCommitsFilter), and a probe
+// that honoured it would refuse a commit gg really does hold.
+func (m Model) steerCommitRow(hash string) (model.Commit, bool) {
+	for u := 0; u < m.commitsTotal(); u++ {
+		if c, ok := m.commitAtUnified(u); ok && commitIsHash(c, hash) {
+			return c, true
+		}
+	}
+	return model.Commit{}, false
+}
+
+// steerClearCommitsFilter drops a `/` filter bound to the Commits panel — and
+// nothing else. "Go to" semantics: a filter that hides the target row would
+// make the landing invisible. Deliberately NOT clearFilteringForFocus, which
+// also drops the `@` highlight and the `\` commit-scope filter and would force
+// a feed re-walk the agent never asked for.
+func (m Model) steerClearCommitsFilter() Model {
+	if m.filterPanel == panelCommits {
+		m.filterQuery = ""
+	}
+	return m
 }
 
 // steerStatusRow finds the backing index of path in file panel p by MEMBERSHIP
@@ -200,10 +232,10 @@ func (m Model) steerNavigateCommitFile(c steer.Command) (Model, tea.Cmd) {
 	if hash == "" {
 		return m, m.answerSteer(c, steerFail(c, "target.state \"commit\" needs target.commit"))
 	}
-	if _, _, ok := m.findLoadedCommit(hash); !ok { // probe before moving anything
+	if _, ok := m.steerCommitRow(hash); !ok { // probe before moving anything
 		return m, m.answerSteer(c, steerFail(c, "commit not loaded in the feed"))
 	}
-	m = m.steerToPanels()
+	m = m.steerToPanels().steerClearCommitsFilter()
 	m, commit, ok := m.gotoLoadedCommit(hash)
 	if !ok {
 		return m, m.answerSteer(c, steerFail(c, "commit not loaded in the feed"))
@@ -240,18 +272,29 @@ func (m Model) drainPendingFiles() (Model, tea.Cmd) {
 	if ps == nil || ps.stage != steerStageFiles || m.filesView == nil || m.filesHash != ps.hash {
 		return m, nil
 	}
+	// The file list loads late: the user may have opened something across that
+	// gap, and this drain is about to move the view. Re-check the whitelist
+	// rather than inherit the decision applySteer took before the load started.
+	if why := m.steerRefusal(); why != "" {
+		return m.failPending(why)
+	}
 	c := ps.cmd
 	for i, l := range m.filesView.lines {
 		if l.heading || l.path != c.File {
 			continue
 		}
+		// openDiffForFileLine refuses below 60 columns (and posts an i18n
+		// statusMsg for the user). Decide it here so the reply is English
+		// protocol prose and no diff stage is parked on a load that never comes
+		// — a reply must never carry a translated string.
+		if m.width > 0 && m.width < 60 {
+			return m.failPending("the terminal is too narrow for the diff view")
+		}
 		m.filesView.sel = i
 		tm, cmd := m.openDiffForFileLine(l)
 		m = tm.(Model)
 		if m.diffLayer() == nil {
-			// openDiffForFileLine refuses below 60 columns — answer now rather
-			// than park a diff stage whose load will never come.
-			return m.failPending("the diff could not be opened: " + m.statusMsg)
+			return m.failPending("the diff could not be opened")
 		}
 		if c.Line == nil {
 			m.pendingSteer = nil
@@ -260,6 +303,11 @@ func (m Model) drainPendingFiles() (Model, tea.Cmd) {
 		m.pendingSteer = &pendingSteer{cmd: c, stage: steerStageDiff, tag: m.diffTag, at: time.Now()}
 		return m, cmd
 	}
+	// A miss here is answered but NOT undone: the file list loads late, so by
+	// the time it arrives the feed row has been selected and the changed-file
+	// view is already open. There is nothing to restore to — the agent named a
+	// path this commit does not touch, and the view it opened is a truthful
+	// answer to the half of the command that WAS valid.
 	return m.failPending(c.File + " is not in commit " + shortHash(ps.hash))
 }
 
