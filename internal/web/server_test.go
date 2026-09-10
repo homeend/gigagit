@@ -80,6 +80,7 @@ func TestRepoEndpoint(t *testing.T) {
 		Name     string `json:"name"`
 		Worktree string `json:"worktree"`
 		Branch   string `json:"branch"`
+		LinkRepo string `json:"link_repo"`
 	}
 	if code := getJSON(t, ts, "/api/repo", &got); code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", code)
@@ -94,6 +95,19 @@ func TestRepoEndpoint(t *testing.T) {
 	}
 	if got.Name != filepath.Base(got.Worktree) {
 		t.Errorf("name = %q, want base of worktree %q", got.Name, got.Worktree)
+	}
+	// link_repo: the gg:// link identity (Task 9). newRepoDir configures no
+	// remote, so RepoName has nothing to report — "" is the local-link
+	// fallback signal, not an error.
+	var raw map[string]any
+	if code := getJSON(t, ts, "/api/repo", &raw); code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+	if _, ok := raw["link_repo"]; !ok {
+		t.Errorf("/api/repo payload lacks link_repo: %v", raw)
+	}
+	if got.LinkRepo != "" {
+		t.Errorf("link_repo = %q, want \"\" (no remote configured)", got.LinkRepo)
 	}
 }
 

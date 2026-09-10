@@ -4,6 +4,7 @@ import { $, attnKey, esc, getJSON, postJSON, runOnce, runes, state } from "./cor
 import { copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
 import { extraRows, registerHelp } from "./menus.js";
+import { linkFor } from "./links.js";
 import { applyStatus, buildStatusEntries, fetchStatus } from "./status.js";
 import { nextSortMode, setSortMode, sortChipHTML } from "./sortlist.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
@@ -1103,7 +1104,25 @@ $("diff-body").addEventListener("contextmenu", (e) => {
   // A reply block carries its own id inside the thread's row, so the menu
   // targets the exact note under the pointer (root or reply).
   const tr = e.target.closest("[data-note]");
-  if (!tr || !tr.closest("tr.note")) return; // every other row keeps the browser's own menu
+  if (!tr || !tr.closest("tr.note")) {
+    // Not a ◆ row: offer the line's gg:// link instead, on the same terms as
+    // the note anchors — outside notesArmed() the rows carry no data-side /
+    // data-no at all, and a compare has no addressable target.
+    const row = e.target.closest("tr[data-no]");
+    if (!row || !notesArmed()) return; // every other row keeps the browser's own menu
+    const td = e.target.closest("td");
+    let side = row.dataset.side, no = Number(row.dataset.no);
+    if (td && row.dataset.lno !== undefined) {
+      const wantOld = td.classList.contains("l");
+      const ln = Number(row.dataset.lno), rn = Number(row.dataset.rno);
+      if (wantOld && ln) { side = "old"; no = ln; } else if (!wantOld && rn) { side = "new"; no = rn; }
+    }
+    const link = linkFor(state.repo, state.worktree, state.diffCtx, side, no);
+    if (!link) return;
+    e.preventDefault();
+    showCtxMenu([{ label: "copy gg link to this line", act: () => copyText(link, "gg link") }], e.clientX, e.clientY);
+    return;
+  }
   const n = findNote(tr.dataset.note);
   if (!n) return;
   e.preventDefault();
