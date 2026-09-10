@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -503,5 +504,108 @@ func TestNoteListPostsNothing(t *testing.T) {
 	}
 	if got := steer.Drain(dir); len(got) != 0 {
 		t.Fatalf("a read posted %+v, want nothing", got)
+	}
+}
+
+// TestNoteAddWithALinkStoresTheSameNoteAsTheFlags is ruling P8: compare the
+// STORED note's fields (not just note-list's rendered text) between the link
+// form and the equivalent flags, ignoring id and timestamps.
+func TestNoteAddWithALinkStoresTheSameNoteAsTheFlags(t *testing.T) {
+	dir := noteRepo(t)
+	code, out, errb := runCLI(t, dir, "link", "a.txt:2")
+	if code != 0 {
+		t.Fatalf("gg link: exit %d (%s)", code, errb)
+	}
+	link := strings.TrimSpace(out)
+
+	code, viaLinkOut, errb := runCLI(t, dir, "note", "add", link, "--summary", "from a link", "--json")
+	if code != 0 {
+		t.Fatalf("note add (link): exit %d (%s)", code, errb)
+	}
+	code, viaFlagsOut, errb := runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "2", "--summary", "from a link", "--json")
+	if code != 0 {
+		t.Fatalf("note add (flags): exit %d (%s)", code, errb)
+	}
+
+	var viaLink, viaFlags domain.WireNote
+	if err := json.Unmarshal([]byte(viaLinkOut), &viaLink); err != nil {
+		t.Fatalf("decode link note: %v (%s)", err, viaLinkOut)
+	}
+	if err := json.Unmarshal([]byte(viaFlagsOut), &viaFlags); err != nil {
+		t.Fatalf("decode flag note: %v (%s)", err, viaFlagsOut)
+	}
+	if viaLink.ParentID != viaFlags.ParentID || viaLink.Source != viaFlags.Source ||
+		viaLink.Author != viaFlags.Author || viaLink.Path != viaFlags.Path ||
+		viaLink.Rev != viaFlags.Rev || viaLink.Side != viaFlags.Side ||
+		viaLink.Line != viaFlags.Line || viaLink.Range != viaFlags.Range ||
+		viaLink.Summary != viaFlags.Summary || viaLink.Rationale != viaFlags.Rationale ||
+		viaLink.Status != viaFlags.Status {
+		t.Errorf("note via link %+v differs from note via flags %+v", viaLink, viaFlags)
+	}
+
+	// WireNote drops Address.State and Address.Worktree, so the comparison
+	// above cannot see whether the link's resolved address (which sets
+	// Worktree = Checkout for the working-tree states) matches what
+	// svc.NoteTarget stores for the flag form. Compare the STORED
+	// model.Note.Address directly: both notes must resolve to the SAME
+	// address, or NotesAt would only ever find one of them.
+	svc := domain.Open(dir)
+	ctx := context.Background()
+	addr, err := svc.NoteTarget(ctx, "a.txt", false, "")
+	if err != nil {
+		t.Fatalf("NoteTarget: %v", err)
+	}
+	got, err := svc.NotesAt(ctx, addr)
+	if err != nil {
+		t.Fatalf("NotesAt: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("NotesAt(%+v) = %d notes, want 2 (both the link and flag notes resolving to the SAME address)", addr, len(got))
+	}
+	if got[0].Note.Address != got[1].Note.Address || got[0].Note.Side != got[1].Note.Side ||
+		got[0].Note.Range != got[1].Note.Range || got[0].Note.Summary != got[1].Note.Summary ||
+		got[0].Note.Source != got[1].Note.Source || got[0].Note.Author != got[1].Note.Author {
+		t.Errorf("stored notes differ: %+v vs %+v", got[0].Note, got[1].Note)
+	}
+
+	code, out, errb = runCLI(t, dir, "note", "list", "--file", "a.txt")
+	if code != 0 {
+		t.Fatalf("note list: exit %d (%s)", code, errb)
+	}
+	if !strings.Contains(out, "from a link") || !strings.Contains(out, "new:2-2") {
+		t.Errorf("note list = %q, want the link-anchored note on new:2-2", out)
+	}
+}
+
+func TestNoteListTakesALink(t *testing.T) {
+	dir := noteRepo(t)
+	_, out, _ := runCLI(t, dir, "link", "a.txt")
+	link := strings.TrimSpace(out)
+	if code, _, errb := runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "2", "--summary", "hello"); code != 0 {
+		t.Fatalf("seed: exit %d (%s)", code, errb)
+	}
+	code, out, errb := runCLI(t, dir, "note", "list", link)
+	if code != 0 {
+		t.Fatalf("exit %d (%s)", code, errb)
+	}
+	if !strings.Contains(out, "hello") {
+		t.Errorf("note list %s = %q", link, out)
+	}
+}
+
+func TestNoteLinkUsageErrors(t *testing.T) {
+	dir := noteRepo(t)
+	_, out, _ := runCLI(t, dir, "link", "a.txt:2")
+	link := strings.TrimSpace(out)
+	for _, args := range [][]string{
+		{"note", "add", link, "--file", "a.txt", "--summary", "s"},
+		{"note", "add", link, "--new-line", "3", "--summary", "s"},
+		{"note", "add", link, "--cached", "--summary", "s"},
+		{"note", "rm", link},    // a link is only for add and list
+		{"note", "clear", link}, //
+	} {
+		if code, _, errb := runCLI(t, dir, args...); code != 2 {
+			t.Errorf("%v: exit = %d, want 2; stderr %q", args, code, errb)
+		}
 	}
 }

@@ -34,16 +34,37 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 		return 2
 	}
 	sub, rest := args[0], args[1:]
+	// A gg:// link as the FIRST positional names the target — and the
+	// CHECKOUT. The note is stored where the link points, and the housekeeping
+	// below (including the `reload notes` post to a live session) then belongs
+	// to that worktree, not the caller's.
+	var link *domain.Resolved
+	if len(rest) > 0 && isLinkArg(rest[0]) {
+		if sub != "add" && sub != "list" {
+			fmt.Fprintf(stderr, "note %s: a gg:// link is only accepted by `note add` and `note list`\n", sub)
+			return 2
+		}
+		res, err := resolveLinkArg(context.Background(), svc, rest[0])
+		if err != nil {
+			return linkExit("note "+sub, err, stderr)
+		}
+		if res.Addr.Path == "" {
+			fmt.Fprintf(stderr, "note %s: that link names a repository, not a file\n", sub)
+			return 2
+		}
+		link, rest = &res, rest[1:]
+		svc = domain.Open(res.Checkout)
+	}
 	return withNotesHousekeeping(svc, sub, func() int {
 		switch sub {
 		case "add":
-			return noteAdd(svc, rest, stdout, stderr)
+			return noteAdd(svc, link, rest, stdout, stderr)
 		case "reply":
 			return noteReply(svc, rest, stdout, stderr)
 		case "rm":
 			return noteRemove(svc, rest, stdout, stderr)
 		case "list":
-			return noteList(svc, rest, stdout, stderr)
+			return noteList(svc, link, rest, stdout, stderr)
 		case "clear":
 			return noteClear(svc, rest, stdout, stderr)
 		case "apply":
@@ -186,7 +207,7 @@ func printNote(w io.Writer, n model.Note, asJSON bool) error {
 	return json.NewEncoder(w).Encode(wire)
 }
 
-func noteAdd(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("note add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	tf := addTargetFlags(fs)
@@ -211,13 +232,42 @@ func noteAdd(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	ctx := context.Background()
-	addr, err := svc.NoteTarget(ctx, *tf.file, *tf.cached, *tf.rev)
-	if err != nil {
-		return noteExit(err, stderr)
-	}
-	side, rng, err := noteAnchor(ctx, svc, addr, *tf.cached, *tf.rev, *hunk, *newLine, *oldLine)
-	if err != nil {
-		return noteExit(err, stderr)
+	var addr model.FileAddress
+	var side model.NoteSide
+	var rng [2]int
+	if link != nil {
+		if *tf.file != "" || *tf.rev != "" || *tf.cached || *hunk != 0 || *newLine != 0 || *oldLine != 0 {
+			fmt.Fprintln(stderr, "note add: a gg:// link already names the target and the anchor (drop --file, --rev, --cached, --hunk, --new-line and --old-line)")
+			return 2
+		}
+		addr = link.Addr
+		switch {
+		case link.Hunk > 0:
+			spec, err := svc.HunkDiffSpec(ctx, addr.State == model.StateStaged, addr.Commit, []string{addr.Path})
+			if err != nil {
+				return noteExit(err, stderr)
+			}
+			s, r, err := svc.HunkRange(ctx, spec, addr.Path, link.Hunk)
+			if err != nil {
+				return noteExit(err, stderr)
+			}
+			side, rng = s, r
+		case link.Line > 0:
+			side, rng = link.Side, [2]int{link.Line, link.Line}
+		default:
+			fmt.Fprintln(stderr, "note add: the link names a file but no anchor; add :<line> or #<hunk>")
+			return 2
+		}
+	} else {
+		a, err := svc.NoteTarget(ctx, *tf.file, *tf.cached, *tf.rev)
+		if err != nil {
+			return noteExit(err, stderr)
+		}
+		s, r, err := noteAnchor(ctx, svc, a, *tf.cached, *tf.rev, *hunk, *newLine, *oldLine)
+		if err != nil {
+			return noteExit(err, stderr)
+		}
+		addr, side, rng = a, s, r
 	}
 	stored, err := svc.NoteAdd(ctx, model.Note{
 		Source: src, Author: noteAuthorDefault(*author), Address: addr,
@@ -387,7 +437,7 @@ func noteTargetLabel(a model.FileAddress) string {
 	return a.Path
 }
 
-func noteList(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("note list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	tf := addTargetFlags(fs)
@@ -401,9 +451,25 @@ func noteList(svc *domain.Service, args []string, stdout, stderr io.Writer) int 
 		return 2
 	}
 	ctx := context.Background()
-	res, err := resolvedNotesFor(ctx, svc, *tf.file, *tf.cached, *tf.rev)
-	if err != nil {
-		return noteTargetExit("note list", err, stderr)
+	var res []domain.ResolvedNote
+	if link != nil {
+		if *tf.file != "" || *tf.rev != "" || *tf.cached {
+			fmt.Fprintln(stderr, "note list: a gg:// link already names the target (drop --file, --rev and --cached)")
+			return 2
+		}
+		// A link's line and hunk are ignored: `note list` is about a FILE's
+		// threads, exactly as `--file` is.
+		got, err := svc.NotesAt(ctx, link.Addr)
+		if err != nil {
+			return noteExit(err, stderr)
+		}
+		res = got
+	} else {
+		got, err := resolvedNotesFor(ctx, svc, *tf.file, *tf.cached, *tf.rev)
+		if err != nil {
+			return noteTargetExit("note list", err, stderr)
+		}
+		res = got
 	}
 	kept := make([]domain.ResolvedNote, 0, len(res))
 	for _, r := range res {

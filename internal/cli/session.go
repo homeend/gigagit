@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -323,8 +324,52 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 	if err != nil {
 		return 2
 	}
+	if len(pos) == 1 && isLinkArg(pos[0]) {
+		// The link carries file, target and line; the flags it replaces are a
+		// usage error rather than a silent override.
+		if *tf.file != "" || *tf.rev != "" || *tf.cached || *hunk != 0 || *newLine != 0 || *oldLine != 0 || *next || *prev {
+			fmt.Fprintln(stderr, "session navigate: a gg:// link already names the target (drop --file, --rev, --cached, --hunk, --new-line, --old-line and --next-comment/--prev-comment)")
+			return 2
+		}
+		ctx := context.Background()
+		res, err := resolveLinkArg(ctx, svc, pos[0])
+		if err != nil {
+			return linkExit("session navigate", err, stderr)
+		}
+		dir, target := linkSteerDir(ctx, dir, svc, res)
+		c := steer.Command{Cmd: "navigate"}
+		switch {
+		case res.Addr.Path == "":
+			// A link with no path reveals the commit (spec §1).
+			if res.Commit == "" {
+				fmt.Fprintln(stderr, "session navigate: that link names a repository, not a place in it")
+				return 2
+			}
+			c.Commit = res.Commit
+		default:
+			c.File, c.Target = res.Addr.Path, targetOf(res.Addr)
+			line := steer.Line{Side: string(res.Side), No: res.Line}
+			if res.Hunk > 0 {
+				if res.Addr.State == model.StateUntracked {
+					fmt.Fprintln(stderr, "session navigate: untracked files have no hunks; use a :<line> link")
+					return 1
+				}
+				line, err = resolveHunkLine(ctx, target, res.Addr.State == model.StateStaged, res.Addr.Commit, res.Addr.Path, res.Hunk)
+				if err != nil {
+					fmt.Fprintln(stderr, "error:", err)
+					return 1
+				}
+			}
+			if line.No < 1 {
+				fmt.Fprintln(stderr, "session navigate: that link names a file but no line; add :<line> or #<hunk>")
+				return 2
+			}
+			c.Line = &line
+		}
+		return sendSteer(dir, c, *noWait, stdout, stderr)
+	}
 	if len(pos) != 0 {
-		fmt.Fprintf(stderr, "session navigate: unexpected argument %q (navigate takes only flags)\n", pos[0])
+		fmt.Fprintf(stderr, "session navigate: unexpected argument %q (navigate takes a gg:// link or only flags)\n", pos[0])
 		return 2
 	}
 
@@ -544,14 +589,10 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 	if err != nil {
 		return 2
 	}
-	if len(pos) != 0 {
-		fmt.Fprintf(stderr, "session highlight add: unexpected argument %q\n", pos[0])
-		return 2
-	}
-	if *tf.file == "" || *start < 1 {
-		fmt.Fprintln(stderr, "session highlight add: --file and a 1-based --start are required")
-		return 2
-	}
+	// --side and --tone are validated BEFORE branching on a link (ruling
+	// P14): a bogus value is a usage error on either arm, even though the
+	// link arm below ignores --side (a link's old:/new prefix already
+	// carries the side).
 	switch *side {
 	case "new", "old":
 	default:
@@ -562,6 +603,47 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 	case "info", "warn", "error":
 	default:
 		fmt.Fprintf(stderr, "session highlight add: unknown tone %q (info, warn or error)\n", *tone)
+		return 2
+	}
+	if len(pos) == 1 && isLinkArg(pos[0]) {
+		if *tf.file != "" || *tf.rev != "" || *tf.cached || *start != 0 {
+			fmt.Fprintln(stderr, "session highlight add: a gg:// link already names the target and the first line (drop --file, --rev, --cached and --start)")
+			return 2
+		}
+		text, linkEnd := splitLinkRange(pos[0])
+		ctx := context.Background()
+		res, err := resolveLinkArg(ctx, svc, text)
+		if err != nil {
+			return linkExit("session highlight add", err, stderr)
+		}
+		if res.Addr.Path == "" || res.Line < 1 {
+			fmt.Fprintln(stderr, "session highlight add: the link needs a file and a line (gg://<repo>/<path>[@<target>]:<line>[-<end>])")
+			return 2
+		}
+		last := *end
+		if linkEnd > 0 {
+			if last != 0 {
+				fmt.Fprintln(stderr, "session highlight add: the link's -<end> and --end name the same thing; pass one")
+				return 2
+			}
+			last = linkEnd
+		}
+		if last != 0 && last < res.Line {
+			fmt.Fprintln(stderr, "session highlight add: the range ends before it starts")
+			return 2
+		}
+		dir, _ := linkSteerDir(ctx, dir, svc, res)
+		return sendSteer(dir, steer.Command{
+			Cmd: "highlight", File: res.Addr.Path, Target: targetOf(res.Addr),
+			Side: string(res.Side), Start: res.Line, End: last, Tone: *tone,
+		}, *noWait, stdout, stderr)
+	}
+	if len(pos) != 0 {
+		fmt.Fprintf(stderr, "session highlight add: unexpected argument %q\n", pos[0])
+		return 2
+	}
+	if *tf.file == "" || *start < 1 {
+		fmt.Fprintln(stderr, "session highlight add: --file and a 1-based --start are required")
 		return 2
 	}
 	if *end != 0 && *end < *start {
@@ -610,4 +692,48 @@ func sessionHighlightClear(dir string, svc *domain.Service, args []string, stdou
 		c.File, c.Target = addr.Path, targetOf(addr)
 	}
 	return sendSteer(dir, c, *noWait, stdout, stderr)
+}
+
+// splitLinkRange peels a "-<end>" suffix off a link for
+// `gg session highlight add <link>-<end>`. The suffix is recognised ONLY when
+// the text after the link's LAST ":" is "<digits>-<digits>" — a dash anywhere
+// else belongs to a path ("my-file.go") or a sha, and must not be eaten.
+func splitLinkRange(s string) (string, int) {
+	i := strings.LastIndexByte(s, ':')
+	if i < 0 {
+		return s, 0
+	}
+	seg := s[i+1:]
+	j := strings.IndexByte(seg, '-')
+	if j <= 0 {
+		return s, 0
+	}
+	start, end := seg[:j], seg[j+1:]
+	if _, err := strconv.Atoi(start); err != nil {
+		return s, 0
+	}
+	n, err := strconv.Atoi(end)
+	if err != nil || n < 1 {
+		return s, 0
+	}
+	return s[:i+1] + start, n
+}
+
+// linkSteerDir picks the inbox a link's command goes to. When the link
+// resolves to the checkout the caller is already in, the inbox passed to
+// runSession is kept — that is the injected test seam, and the common case.
+// Otherwise the TARGET checkout's own inbox is computed, which is what lets
+// `gg session navigate gg://…` run from /tmp move a window in another
+// worktree. The returned service is the one the command's target belongs to.
+func linkSteerDir(ctx context.Context, fallback string, cwd *domain.Service, res domain.Resolved) (string, *domain.Service) {
+	top, err := cwd.TopLevel(ctx)
+	if err == nil && domain.SamePath(top, res.Checkout) {
+		return fallback, cwd
+	}
+	target := domain.Open(res.Checkout)
+	cd, err := target.GitCommonDir(ctx)
+	if err != nil {
+		return "", target
+	}
+	return config.SessionSteerDir(cd, res.Checkout), target
 }
