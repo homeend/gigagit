@@ -458,7 +458,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.sel = 0
 		case tea.KeyEnter:
 			p.typing = false // commit: search stays active
-		case tea.KeyBackspace, tea.KeyCtrlH:
+		case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 			if r := []rune(p.query); len(r) > 0 {
 				p.query = string(r[:len(r)-1])
 			}

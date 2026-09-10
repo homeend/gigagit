@@ -136,6 +136,117 @@ func SetThemeRole(path, themeName, key string, values ...string) error {
 	return setLineInSection(path, section, key, rendered, false)
 }
 
+// RemoveThemeTable deletes the ACTIVE `[themes.<theme>]` table from the given
+// config file — the Settings colour editor's whole-theme reset (D). Every
+// other line and comment survives; a file without an active table of that
+// name (only the commented `gg config populate` block, or nothing) is left
+// byte-identical, and a missing file is a no-op.
+//
+// Inside the table, an active assignment gg itself wrote (no trailing doc) is
+// deleted, while a populate row the user hand-uncommented — still carrying its
+// `[populated]` marker — is RE-COMMENTED, mirroring SetThemeRole's removal
+// rule. The header follows the body: when anything non-blank survives — a
+// populate row (the table was the example block, which stays a documented,
+// inert example) or a comment of the user's own — the header is re-commented
+// too, so the survivors stay inside a `# [themes.<name>]` block instead of
+// drifting into the section above them; otherwise the header goes along with
+// the blank line that separated it from what precedes it, so the file closes
+// up as if the table had never been added.
+// (A row SetThemeRole rewrote lost its marker at that point, so it is deleted
+// rather than re-commented — the same fate `d` gives it.)
+func RemoveThemeTable(path, themeName string) error {
+	if path == "" {
+		return fmt.Errorf("config: no config path; refusing to write")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	header := "[themes." + themeName + "]"
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+
+	start, end := -1, len(lines) // header index; exclusive end of its body
+	skipUntil := ""
+	for i, ln := range lines {
+		trimmed := strings.TrimSpace(ln)
+		if skipUntil != "" {
+			if strings.Contains(trimmed, skipUntil) {
+				skipUntil = ""
+			}
+			continue
+		}
+		// Any bracketed line ends a section, as in setLineInSection.
+		if name, commented, ok := sectionHeader(trimmed); ok || strings.HasPrefix(trimmed, "[") {
+			if start >= 0 {
+				end = i
+				break
+			}
+			if ok && !commented && name == header {
+				start = i
+			}
+			continue
+		}
+		if d, ok := opensMultiline(trimmed); ok {
+			skipUntil = d
+		}
+	}
+	if start < 0 {
+		return nil
+	}
+
+	var keep []string
+	survives := false // anything non-blank left inside the table
+	skipUntil = ""
+	for _, ln := range lines[start+1 : end] {
+		trimmed := strings.TrimSpace(ln)
+		if skipUntil != "" {
+			// The interior of an active multi-line value goes with its key.
+			if strings.Contains(trimmed, skipUntil) {
+				skipUntil = ""
+			}
+			continue
+		}
+		active := trimmed != "" && !strings.HasPrefix(trimmed, "#")
+		switch {
+		case active && strings.Contains(ln, "[populated]"):
+			keep = append(keep, "# "+ln)
+			survives = true
+		case active:
+			// gg's own line: dropped.
+			if d, ok := opensMultiline(trimmed); ok {
+				skipUntil = d
+			}
+		default:
+			keep = append(keep, ln)
+			survives = survives || trimmed != ""
+		}
+	}
+
+	out := append([]string(nil), lines[:start]...)
+	if survives {
+		out = append(out, "# "+header)
+	} else {
+		for len(keep) > 0 && strings.TrimSpace(keep[len(keep)-1]) == "" {
+			keep = keep[:len(keep)-1]
+		}
+		if len(keep) == 0 && end >= len(lines) {
+			for len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "" {
+				out = out[:len(out)-1] // the separator blank would end the file
+			}
+		}
+	}
+	out = append(out, keep...)
+	out = append(out, lines[end:]...)
+
+	if len(out) == 0 {
+		return atomicWriteFile(path, []byte(""))
+	}
+	return atomicWriteFile(path, []byte(strings.Join(out, "\n")+"\n"))
+}
+
 // sectionHeader reports the `[name]` (or `[[name]]`) table a trimmed line
 // declares, and whether that declaration is commented out. A COMMENTED header
 // still ends the preceding section: a populate-generated file is a run of

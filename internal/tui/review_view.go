@@ -171,7 +171,7 @@ func (r *reviewView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case tea.KeyEnter:
 			r.typing = false
 			r.jumpToNextMatch(w)
-		case tea.KeyBackspace, tea.KeyCtrlH:
+		case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 			if rs := []rune(r.query); len(rs) > 0 {
 				r.query = string(rs[:len(rs)-1])
 			}

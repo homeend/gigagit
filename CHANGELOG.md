@@ -35,7 +35,40 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   uncommenting a `gg config populate` block's header and role line in place
   instead of appending a second table. Roles pinned by the repo `.gg.toml` are
   shown tagged `(repo)` and stay read-only, since the repo layer would shadow
-  anything written here.
+  anything written here. The inline field accepts `#rrggbb`, bare `rrggbb`,
+  the short forms `#rgb`/`rgb` (each digit doubled), or a `0`–`255` palette
+  index as 1–4 digits, leading zeros allowed (`0208` → `208`); typed input is
+  normalised before preview and save, the status line shows the normalised
+  form when it differs from what was typed, and a two-line dim help block
+  above the footer spells out the accepted forms while editing. The field is
+  capped to 7 runes (the length of `#rrggbb`) so a paste or a fast keystroke
+  burst can never over-type past what any valid colour needs, and an
+  unchanged preview (every invalid keystroke after the first, most notably)
+  no longer forces a full-screen repaint. A keystroke a terminal reports as
+  a literal DEL/BS byte inside the input stream — rather than a proper
+  Backspace event — is recognized and deletes too, instead of silently doing
+  nothing; any other control byte is dropped rather than typed into the
+  field. `D` (shift+d) resets the WHOLE theme: after a yes/no question naming
+  the theme and how many roles it would take back, the global config's
+  entire `[themes.<name>]` table is removed and the built-in palette paints
+  again — roles the repo `.gg.toml` pins keep their value, and the status
+  names them. A table that was a `gg config populate` example block goes
+  back to being a commented example (minus the rows you had edited) rather
+  than vanishing, and any comment of your own inside the table stays in it.
+- **Delete erases at the end of every text field.** A keyboard whose erase
+  key sends Delete (`^[[3~`) rather than Backspace could not remove the last
+  character of a field: with nothing ahead of the cursor a forward-delete
+  was a silent no-op. Delete at the end of the buffer now acts as Backspace
+  in every gg text field — the commit title and description, every popup
+  form, and the type-to-filter queries (`/`, `.`, the switchers, the pickers,
+  the config explorer) — while anywhere else it still forward-deletes.
+- `gg --record` and `tui-capture.sh` (dev tooling): a key with no name in
+  the keyscript vocabulary — previously dropped to a `# unrecorded key:`
+  comment for anything beyond mouse clicks and alt-modified keys — now
+  records as a bracketed diagnostic token (e.g. `<f1>`) instead, so a
+  recording never silently loses a keystroke; `Delete`/`Home`/`End`/`PageUp`/
+  `PageDown` gained real named tokens (`delete home end pgup pgdown`) in both
+  the recorder and `tui-capture.sh`'s replay.
 
 ### Live steering — an agent can put your window on the line it means
 

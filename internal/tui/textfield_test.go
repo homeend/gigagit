@@ -209,3 +209,52 @@ func TestTextFieldViewFocusedCursorAtEnd(t *testing.T) {
 		t.Fatalf("focused-at-end View = %q, want 'ab' + reverse block", got)
 	}
 }
+
+// --- Delete key: forward-delete mid-buffer, backspace at the end. ---
+//
+// Some keyboards (and some terminals' Backspace mappings) deliver ^[[3~,
+// i.e. tea.KeyDelete, for the key the user erases with. At the end of the
+// buffer a forward-delete has nothing to remove and was a silent no-op —
+// the "cannot delete the last character" report. The field turns that
+// case into a backspace so every gg text field erases on Delete too.
+
+func TestTextFieldDeleteAtEndActsAsBackspace(t *testing.T) {
+	f := newTextField("abc") // cursor at the end
+	if !f.HandleEditKey(tea.KeyMsg{Type: tea.KeyDelete}) {
+		t.Fatal("Delete must be consumed")
+	}
+	if f.Value() != "ab" || f.cursor != 2 {
+		t.Fatalf("Delete at end = %q/%d, want ab/2 (backspace)", f.Value(), f.cursor)
+	}
+	for range 5 {
+		f.HandleEditKey(tea.KeyMsg{Type: tea.KeyDelete})
+	}
+	if f.Value() != "" || f.cursor != 0 {
+		t.Fatalf("repeated Delete must empty the field, got %q/%d", f.Value(), f.cursor)
+	}
+}
+
+func TestTextFieldDeleteMidBufferForwardDeletes(t *testing.T) {
+	f := textfield{runes: []rune("abcd"), cursor: 1}
+	f.HandleEditKey(tea.KeyMsg{Type: tea.KeyDelete})
+	if f.Value() != "acd" || f.cursor != 1 {
+		t.Fatalf("Delete mid-buffer = %q/%d, want acd/1 (forward-delete, cursor stays)", f.Value(), f.cursor)
+	}
+	// The end of a LINE is not the end of the buffer: the newline ahead of
+	// the cursor is still forward-deleted (multi-line commit description).
+	f = textfield{runes: []rune("ab\ncd"), cursor: 2}
+	f.HandleEditKey(tea.KeyMsg{Type: tea.KeyDelete})
+	if f.Value() != "abcd" || f.cursor != 2 {
+		t.Fatalf("Delete before \\n = %q/%d, want abcd/2", f.Value(), f.cursor)
+	}
+}
+
+func TestTextFieldDeleteOnEmptyIsNoop(t *testing.T) {
+	var f textfield
+	if !f.HandleEditKey(tea.KeyMsg{Type: tea.KeyDelete}) {
+		t.Fatal("Delete must be consumed even on an empty field")
+	}
+	if f.Value() != "" || f.cursor != 0 {
+		t.Fatalf("got %q/%d", f.Value(), f.cursor)
+	}
+}

@@ -199,7 +199,7 @@ func (p *notesListPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.diffNotice = "▸ " + i18n.T("Note is no longer in this diff")
 		}
 		return m, nil
-	case tea.KeyBackspace, tea.KeyCtrlH:
+	case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 		if r := []rune(p.query); len(r) > 0 {
 			p.setQuery(string(r[:len(r)-1]))
 		}

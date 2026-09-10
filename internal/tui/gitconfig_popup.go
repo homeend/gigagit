@@ -129,7 +129,7 @@ func (p *gitConfigPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.filtering, p.query, p.sel = false, "", 0
 		case tea.KeyEnter:
 			p.filtering = false // commit: keep the filter, leave input mode
-		case tea.KeyBackspace, tea.KeyCtrlH:
+		case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 			if r := []rune(p.query); len(r) > 0 {
 				p.query = string(r[:len(r)-1])
 			}

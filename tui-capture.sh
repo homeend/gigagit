@@ -21,8 +21,15 @@ keyscript: steps separated by ';' or newlines. Each step is
   [label:] <tokens>
 where tokens are keys/text sent after the previous screen settles:
   named keys: enter esc space tab up down left right bspace
+              delete home end pgup pgdown
   chords:     C-g C-t (ctrl), M-x (meta)
   literals:   any other token is typed as-is (".", "?", digits, "foo")
+  diagnosis:  a "<...>" token (as gg --record emits for a key with no name
+              above, e.g. "<f1>") is skipped with a note, never sent as
+              literal text — it exists so a recording never silently drops a
+              keystroke, not to be replayed. Any literal token typed as
+              "<something>" is skipped the same way — a deliberate trade-off
+              of this dev tool, not a vocabulary token itself
 Example:  ./tui-capture.sh "menu: . ; nav: down down ; open: enter"
 EOF
 }
@@ -107,6 +114,9 @@ write_snap() { # idx label
   echo "wrote $OUT/snap-$n-$label.txt"
 }
 
+# Delete/Home/End/PageUp/PageDown as tmux key names verified against tmux
+# 3.7c; a much older tmux may want DC/PPage/NPage instead — dev tool, not
+# worth a version probe here.
 send_tokens() { # tokens (whitespace-separated); word-splitting is intentional
   local t
   for t in $1; do
@@ -120,7 +130,13 @@ send_tokens() { # tokens (whitespace-separated); word-splitting is intentional
       left|Left)        tmux send-keys -t "$SESSION" Left ;;
       right|Right)      tmux send-keys -t "$SESSION" Right ;;
       bspace|backspace) tmux send-keys -t "$SESSION" BSpace ;;
+      delete|Delete)    tmux send-keys -t "$SESSION" Delete ;;
+      home|Home)        tmux send-keys -t "$SESSION" Home ;;
+      end|End)          tmux send-keys -t "$SESSION" End ;;
+      pgup|PgUp)        tmux send-keys -t "$SESSION" PageUp ;;
+      pgdown|PgDown)    tmux send-keys -t "$SESSION" PageDown ;;
       C-*|M-*)          tmux send-keys -t "$SESSION" "$t" ;;   # ctrl/meta chords
+      \<*\>)            echo "tui-capture: skipping diagnostic-only token: $t" >&2 ;; # gg --record's keyToken fallback (e.g. "<f1>") — not in send_tokens' vocabulary; sending it as literal text would type the bracket text into the app instead of pressing the key
       *)                tmux send-keys -t "$SESSION" -l "$t" ;; # literal: ".", "?", digits, words
     esac
     sleep 0.05

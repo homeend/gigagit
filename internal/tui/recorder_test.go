@@ -31,7 +31,16 @@ func TestKeyToken(t *testing.T) {
 		{"letter", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}, "a", true},
 		{"question", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")}, "?", true},
 		{"ctrl-g", tea.KeyMsg{Type: tea.KeyCtrlG}, "C-g", true},
-		{"pgup-unsupported", tea.KeyMsg{Type: tea.KeyPgUp}, "", false},
+		{"delete", tea.KeyMsg{Type: tea.KeyDelete}, "delete", true},
+		{"home", tea.KeyMsg{Type: tea.KeyHome}, "home", true},
+		{"end", tea.KeyMsg{Type: tea.KeyEnd}, "end", true},
+		{"pgup", tea.KeyMsg{Type: tea.KeyPgUp}, "pgup", true},
+		{"pgdown", tea.KeyMsg{Type: tea.KeyPgDown}, "pgdown", true},
+		// Any other key type still lands a real (diagnosis-only, bracketed)
+		// token instead of being dropped to a "# unrecorded key:" comment —
+		// this is what let a Delete/odd key vanish from a bug report before
+		// this vocabulary grew explicit named support for it.
+		{"f1-fallback", tea.KeyMsg{Type: tea.KeyF1}, "<f1>", true},
 		{"alt-down", tea.KeyMsg{Type: tea.KeyDown, Alt: true}, "", false},
 		{"alt-left", tea.KeyMsg{Type: tea.KeyLeft, Alt: true}, "", false},
 		{"alt-rune", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a"), Alt: true}, "", false},
@@ -58,11 +67,14 @@ func TestKeyTokenNamedVocabulary(t *testing.T) {
 	captureNamed := map[string]bool{
 		"enter": true, "esc": true, "space": true, "tab": true,
 		"up": true, "down": true, "left": true, "right": true, "bspace": true,
+		"delete": true, "home": true, "end": true, "pgup": true, "pgdown": true,
 	}
 	named := []tea.KeyMsg{
 		{Type: tea.KeyEnter}, {Type: tea.KeyEsc}, {Type: tea.KeySpace},
 		{Type: tea.KeyTab}, {Type: tea.KeyUp}, {Type: tea.KeyDown},
 		{Type: tea.KeyLeft}, {Type: tea.KeyRight}, {Type: tea.KeyBackspace},
+		{Type: tea.KeyDelete}, {Type: tea.KeyHome}, {Type: tea.KeyEnd},
+		{Type: tea.KeyPgUp}, {Type: tea.KeyPgDown},
 	}
 	for _, m := range named {
 		tok, ok := keyToken(m)
@@ -114,12 +126,16 @@ func TestRecorderHeaderBodyAndDroppedQuit(t *testing.T) {
 	}
 }
 
+// An Alt-modified key is the one remaining case keyToken refuses outright
+// (alt+arrow/rune does not round-trip reliably through tmux) — everything
+// else now lands a real token (named or bracketed), so this is the only
+// example left that still produces a "# unrecorded key:" comment.
 func TestRecorderCommentsUnsupportedKey(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "scenario.keys")
 	r, _ := newRecorder(path, "repo")
 	r.note(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	r.note(tea.KeyMsg{Type: tea.KeyPgUp}) // unsupported -> comment
+	r.note(tea.KeyMsg{Type: tea.KeyDown, Alt: true}) // unsupported -> comment
 	r.note(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
 	r.note(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")}) // quit
 	r.close()
@@ -131,6 +147,30 @@ func TestRecorderCommentsUnsupportedKey(t *testing.T) {
 	}
 	if body := nonCommentLines(s); !reflect.DeepEqual(body, []string{"a", "b"}) {
 		t.Errorf("body = %v, want [a b]", body)
+	}
+}
+
+// A key type outside both send_tokens' named vocabulary and the explicit
+// Delete/Home/End/PgUp/PgDown mappings (an F-key, here) must still land as a
+// REAL line in the recording — bracketed, so a human (or tui-capture.sh, see
+// its own diagnostic-only handling) can tell it apart from a replayable
+// token — never silently dropped to a comment the way it used to be.
+func TestRecorderFallbackTokenForOtherKeyTypes(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "scenario.keys")
+	r, _ := newRecorder(path, "repo")
+	r.note(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	r.note(tea.KeyMsg{Type: tea.KeyF1})
+	r.note(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")}) // quit
+	r.close()
+
+	got, _ := os.ReadFile(path)
+	s := string(got)
+	if strings.Contains(s, "# unrecorded key:") {
+		t.Errorf("an F-key must no longer be dropped to a comment:\n%s", s)
+	}
+	if body := nonCommentLines(s); !reflect.DeepEqual(body, []string{"a", "<f1>"}) {
+		t.Errorf("body = %v, want [a <f1>]", body)
 	}
 }
 

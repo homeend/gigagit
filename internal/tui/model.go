@@ -1562,7 +1562,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if n := m.panelLen(m.filterPanel); m.sel[m.filterPanel] > n-1 {
 					m.sel[m.filterPanel] = n - 1
 				}
-			case tea.KeyBackspace, tea.KeyCtrlH: // some terminals send 0x08 for Backspace
+			case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete: // some terminals send 0x08 for Backspace
 				if r := []rune(m.filterQuery); len(r) > 0 {
 					m.filterQuery = string(r[:len(r)-1])
 				}
@@ -1627,7 +1627,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if i, ok := m.scanHighlightMatch(m.sel[panelCommits], +1, false); ok {
 					m.sel[panelCommits] = i
 				}
-			case tea.KeyBackspace, tea.KeyCtrlH:
+			case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 				if r := []rune(m.highlightQuery); len(r) > 0 {
 					m.highlightQuery = string(r[:len(r)-1])
 				}

@@ -110,7 +110,7 @@ func (p *prefixPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.filtering, p.filter, p.sel = false, "", 0
 		case tea.KeyEnter:
 			p.filtering = false
-		case tea.KeyBackspace, tea.KeyCtrlH:
+		case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 			if r := []rune(p.filter); len(r) > 0 {
 				p.filter, p.sel = string(r[:len(r)-1]), 0
 			}
