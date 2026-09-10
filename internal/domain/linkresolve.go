@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -73,6 +74,13 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 	if opts.OpenFn == nil {
 		opts.OpenFn = Open
 	}
+	// StateCommitted is FileState's ZERO value, so a Link built programmatically
+	// (not via ParseLink, which never leaves Commit empty for this state) could
+	// slip through with no sha. Refuse it here rather than reaching finishLink's
+	// ResolveRev with an empty ref.
+	if l.Target.State == model.StateCommitted && l.Target.Commit == "" {
+		return Resolved{}, fmt.Errorf("%w: gg link names a commit without a sha", model.ErrLink)
+	}
 	cands := linkCandidates(ctx, l, opts)
 	if len(cands) == 0 {
 		return Resolved{}, fmt.Errorf("%w: %s is not in this machine's gg history; open it once in gg", ErrLinkUnknownRepo, linkRepoLabel(l))
@@ -92,10 +100,8 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 	if len(cands) > 1 && opts.LiveFn != nil {
 		var live []linkCandidate
 		for _, c := range cands {
-			cd := ""
-			if s := opts.OpenFn(c.checkout); s != nil {
-				cd, _ = s.GitCommonDir(ctx)
-			}
+			// OpenFn is defaulted once at this function's entry and never nil.
+			cd, _ := opts.OpenFn(c.checkout).GitCommonDir(ctx)
 			if opts.LiveFn(cd, c.checkout) {
 				live = append(live, c)
 			}
@@ -131,40 +137,56 @@ func linkCandidates(ctx context.Context, l model.Link, opts ResolveOpts) []linkC
 		seen[key] = true
 		out = append(out, c)
 	}
-	if opts.Cwd != nil {
-		if top, err := opts.Cwd.TopLevel(ctx); err == nil && top != "" {
-			if l.IsLocal() {
-				if rel, ok := linkSplit(l.Repo.Abs, top); ok {
-					add(linkCandidate{checkout: top, relPath: rel, isCwd: true})
-				}
-			} else if name, err := opts.Cwd.RepoName(ctx); err == nil && linkNameEq(name, l.Repo.Name) {
-				add(linkCandidate{checkout: top, relPath: l.Path, isCwd: true})
-			}
-		}
-	}
 	entries := repos.Load(opts.RegistryPath)
 	if l.IsLocal() {
-		// Longest path-boundary prefix wins: a worktree nested inside another
-		// checkout must not be shadowed by its parent.
-		best, bestRel, bestLen := "", "", -1
-		for _, e := range entries {
-			if rel, ok := linkSplit(l.Repo.Abs, e.Path); ok && len(e.Path) > bestLen {
-				best, bestRel, bestLen = e.Path, rel, len(e.Path)
+		// Longest path-boundary prefix wins, contested across the cwd AND the
+		// registry TOGETHER: a worktree nested inside another checkout —
+		// including the cwd's OWN checkout — must not be shadowed by its
+		// parent. isCwd is set only when the cwd actually WINS the contest,
+		// so ResolveLink's cwd short-circuit below never picks a checkout
+		// that does not actually contain the link's path.
+		best, bestRel, bestLen, bestIsCwd := "", "", -1, false
+		consider := func(checkout string, isCwd bool) {
+			if rel, ok := linkSplit(l.Repo.Abs, checkout); ok && len(checkout) > bestLen {
+				best, bestRel, bestLen, bestIsCwd = checkout, rel, len(checkout), isCwd
 			}
 		}
+		if opts.Cwd != nil {
+			if top, err := opts.Cwd.TopLevel(ctx); err == nil && top != "" {
+				consider(top, true)
+			}
+		}
+		for _, e := range entries {
+			consider(e.Path, false)
+		}
 		if best != "" {
-			add(linkCandidate{checkout: best, relPath: bestRel})
+			add(linkCandidate{checkout: best, relPath: bestRel, isCwd: bestIsCwd})
 			return out
 		}
-		// Moved-checkout fallback: the recorded location is gone, so match by
-		// directory NAME against the link's own path segments (last occurrence
-		// first, so a repo called "src" inside ".../src/src" resolves deepest).
-		for _, e := range entries {
-			if rel, ok := linkMovedSplit(l.Repo.Abs, filepath.Base(e.Path)); ok {
-				add(linkCandidate{checkout: e.Path, relPath: rel})
+		// The link's old location may still exist as a REAL, unregistered
+		// checkout — an ancestor of it holds a .git. Guessing by base name in
+		// that case could silently point at a DIFFERENT repository that
+		// merely shares a directory name with the intended one, so refuse
+		// (ruling P5a) rather than fall back.
+		if !ancestorHasGit(l.Repo.Abs) {
+			// Moved-checkout fallback: the recorded location is gone, so
+			// match by directory NAME against the link's own path segments
+			// (last occurrence first, so a repo called "src" inside
+			// ".../src/src" resolves deepest).
+			for _, e := range entries {
+				if rel, ok := linkMovedSplit(l.Repo.Abs, filepath.Base(e.Path)); ok {
+					add(linkCandidate{checkout: e.Path, relPath: rel})
+				}
 			}
 		}
 		return out
+	}
+	if opts.Cwd != nil {
+		if top, err := opts.Cwd.TopLevel(ctx); err == nil && top != "" {
+			if name, err := opts.Cwd.RepoName(ctx); err == nil && linkNameEq(name, l.Repo.Name) {
+				add(linkCandidate{checkout: top, relPath: l.Path, isCwd: true})
+			}
+		}
 	}
 	for _, e := range entries {
 		name := e.Remote
@@ -173,12 +195,11 @@ func linkCandidates(ctx context.Context, l model.Link, opts ResolveOpts) []linkC
 			// bump LastOpened: resolving is not opening. Only a NON-EMPTY
 			// computed name is worth writing back — SetRemote has no empty
 			// guard of its own, and an empty write would just erase nothing
-			// useful while still touching the file.
-			if s := opts.OpenFn(e.Path); s != nil {
-				if n, err := s.RepoName(ctx); err == nil && n != "" {
-					name = n
-					_ = repos.SetRemote(opts.RegistryPath, e.Path, n)
-				}
+			// useful while still touching the file. OpenFn is defaulted once
+			// at ResolveLink's entry and never nil.
+			if n, err := opts.OpenFn(e.Path).RepoName(ctx); err == nil && n != "" {
+				name = n
+				_ = repos.SetRemote(opts.RegistryPath, e.Path, n)
 			}
 		}
 		if linkNameEq(name, l.Repo.Name) {
@@ -188,15 +209,32 @@ func linkCandidates(ctx context.Context, l model.Link, opts ResolveOpts) []linkC
 	return out
 }
 
+// ancestorHasGit reports whether abs, or one of its ancestor directories,
+// contains a ".git" entry (file or dir). It walks upward only as many steps
+// as abs's own path has components — bounded by the link's own text, never a
+// filesystem scan — to distinguish "the old location is genuinely gone" (safe
+// to guess by base name) from "something still lives there, just unregistered"
+// (never guess: ruling P5a).
+func ancestorHasGit(abs string) bool {
+	dir := filepath.Clean(abs)
+	for {
+		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
+			return true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false
+		}
+		dir = parent
+	}
+}
+
 // containing keeps the candidates whose object database holds sha.
 func containing(ctx context.Context, cands []linkCandidate, sha string, opts ResolveOpts) []linkCandidate {
 	var kept []linkCandidate
 	for _, c := range cands {
-		s := opts.OpenFn(c.checkout)
-		if s == nil {
-			continue
-		}
-		if _, found, err := s.ResolveRev(ctx, sha); err == nil && found {
+		// OpenFn is defaulted once at ResolveLink's entry and never nil.
+		if _, found, err := opts.OpenFn(c.checkout).ResolveRev(ctx, sha); err == nil && found {
 			kept = append(kept, c)
 		}
 	}
@@ -206,6 +244,10 @@ func containing(ctx context.Context, cands []linkCandidate, sha string, opts Res
 // finishLink builds the Resolved value for the chosen candidate: the address,
 // the worktree pin for the live states, and the FULL sha for a commit link.
 func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts ResolveOpts) (Resolved, error) {
+	rel, err := cleanLinkRelPath(c.relPath)
+	if err != nil {
+		return Resolved{}, err
+	}
 	r := Resolved{
 		Checkout: c.checkout,
 		Addr:     l.Address(),
@@ -216,11 +258,12 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 	if r.Side == "" {
 		r.Side = model.NoteSideNew
 	}
-	r.Addr.Path = c.relPath
+	r.Addr.Path = rel
 	switch l.Target.State {
 	case model.StateCommitted:
 		// ResolveRev peels to ^{commit} and is also the >=7-hex → full-sha
-		// expansion: no second verb exists for that.
+		// expansion: no second verb exists for that. OpenFn is defaulted once
+		// at ResolveLink's entry and never nil.
 		full, found, err := opts.OpenFn(c.checkout).ResolveRev(ctx, l.Target.Commit)
 		if err != nil {
 			return Resolved{}, err
@@ -234,6 +277,26 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 		r.Addr.Worktree = c.checkout
 	}
 	return r, nil
+}
+
+// cleanLinkRelPath cleans a link's repo-relative path and refuses one that
+// would escape the checkout ("" — the repo root — always passes). A crafted
+// link can carry ".." segments straight through to here (the remote-named
+// form's Path is never validated by ParseLink, and linkMovedSplit performs no
+// cleaning of its own); a resolved link must never point outside the
+// checkout it names.
+func cleanLinkRelPath(rel string) (string, error) {
+	if rel == "" {
+		return "", nil
+	}
+	clean := path.Clean(rel)
+	if clean == "." {
+		return "", nil
+	}
+	if clean == ".." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) {
+		return "", fmt.Errorf("%w: gg link path %q escapes the checkout", model.ErrLink, rel)
+	}
+	return clean, nil
 }
 
 // linkSplit reports whether abs is checkout itself or sits underneath it, and
