@@ -28,12 +28,17 @@ function repoSegment(repo, worktree) {
 }
 
 // linkFor builds the address for one place. ctx is a diffCtx-shaped
-// {path, rev, state}; side is "new"/"old" and no a 1-based line (both
-// optional). Returns "" when the place has no expressible link — no usable
-// repo identity, a path holding a grammar separator, a commit target whose
-// rev is not a full sha (ruling P9: >= 40 hex, never a hard === 40 — a
-// sha256 repo's commits are 64 hex characters), or a line with no path.
+// {path, rev, state, compare}; side is "new"/"old" and no a 1-based line
+// (both optional). Returns "" when the place has no expressible link — no
+// usable repo identity, a path holding a grammar separator, a commit target
+// whose rev is not a full sha (ruling P9: >= 40 hex, never a hard === 40 — a
+// sha256 repo's commits are 64 hex characters), a line with no path, or
+// ctx.compare set (a two-revision comparison has no single-commit address:
+// `path@bHash` would read as bHash^ → bHash, not the aHash → bHash pair
+// actually on screen — the same refusal the TUI's contextLinkText makes for
+// a compare view).
 function linkFor(repo, worktree, ctx, side, no) {
+  if (ctx && ctx.compare) return "";
   const head = repoSegment(repo, worktree);
   if (!head) return "";
   const path = (ctx && ctx.path) || "";
@@ -62,8 +67,8 @@ function linkFor(repo, worktree, ctx, side, no) {
 // belongs to the command palette's own dispatcher) — showCtxMenu's click
 // handler (layers.js) calls .act() with no guard, so a palette-shaped row
 // would throw.
-function copyLinkRow(link, label) {
-  return { label: label || "copy gg link", act: () => copyText(link, "gg link") };
+function copyLinkRow(link) {
+  return { label: "copy gg link", act: () => copyText(link, "gg link") };
 }
 
 registerRows("file", (ctx) => {
@@ -75,7 +80,9 @@ registerRows("file", (ctx) => {
         : ctx.section === "untracked"
           ? "untracked"
           : "unstaged"; // "changes", "conflicts", anything else: the working file
-  const link = linkFor(state.repo, state.worktree, { path: ctx.path, rev: ctx.sha, state: st });
+  // ctx.compare rides straight through from the call site — this contributor
+  // never reads state.filesMode itself, so it stays pure over its input.
+  const link = linkFor(state.repo, state.worktree, { path: ctx.path, rev: ctx.sha, state: st, compare: ctx.compare });
   return link ? [copyLinkRow(link)] : [];
 });
 

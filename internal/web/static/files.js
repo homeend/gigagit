@@ -1079,6 +1079,25 @@ function toggleNotesAgent() {
 }
 
 
+// rowSideAndLine reads which (side, line) a diff row's data attributes (and
+// the specific <td> under the pointer, for a side-by-side row) address. The
+// pane you're in is the side the place goes on: the left half reads the old
+// side when the row has one, the right half the new side; a row with no
+// data-lno/data-rno (the narrow unified layout) has only one address and
+// keeps the row's own data-side/data-no. Shared by the note-anchor click
+// handler and the diff-line copy-link menu — both read the exact same
+// row/pointer geometry.
+function rowSideAndLine(tr, td) {
+  let side = tr.dataset.side, no = Number(tr.dataset.no);
+  if (td && tr.dataset.lno !== undefined) {
+    const wantOld = td.classList.contains("l");
+    const ln = Number(tr.dataset.lno), rn = Number(tr.dataset.rno);
+    if (wantOld && ln) { side = "old"; no = ln; } else if (!wantOld && rn) { side = "new"; no = rn; }
+  }
+  return { side, no };
+}
+
+
 // A click on a diff row marks it as the note anchor; a right-click on a ◆ row
 // opens that note's own menu. The anchor is a NOTE affordance, so it follows
 // notesArmed: on a comparison a marked row would promise a `c` that is inert.
@@ -1087,15 +1106,8 @@ $("diff-body").addEventListener("click", (e) => {
   if (!notesArmed()) return;
   const tr = e.target.closest("tr[data-no]");
   if (!tr || !getSelection().isCollapsed) return; // don't re-anchor mid-selection
-  // The pane you click is the side the note goes on: the left half anchors
-  // on the old side when the row has one, the right half on the new side.
   const td = e.target.closest("td");
-  let side = tr.dataset.side, no = Number(tr.dataset.no);
-  if (td && tr.dataset.lno !== undefined) {
-    const wantOld = td.classList.contains("l");
-    const ln = Number(tr.dataset.lno), rn = Number(tr.dataset.rno);
-    if (wantOld && ln) { side = "old"; no = ln; } else if (!wantOld && rn) { side = "new"; no = rn; }
-  }
+  const { side, no } = rowSideAndLine(tr, td);
   markDiffRow(tr, side, no);
 });
 
@@ -1111,12 +1123,7 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     const row = e.target.closest("tr[data-no]");
     if (!row || !notesArmed()) return; // every other row keeps the browser's own menu
     const td = e.target.closest("td");
-    let side = row.dataset.side, no = Number(row.dataset.no);
-    if (td && row.dataset.lno !== undefined) {
-      const wantOld = td.classList.contains("l");
-      const ln = Number(row.dataset.lno), rn = Number(row.dataset.rno);
-      if (wantOld && ln) { side = "old"; no = ln; } else if (!wantOld && rn) { side = "new"; no = rn; }
-    }
+    const { side, no } = rowSideAndLine(row, td);
     const link = linkFor(state.repo, state.worktree, state.diffCtx, side, no);
     if (!link) return;
     e.preventDefault();
@@ -1763,7 +1770,10 @@ $("files-list").addEventListener("contextmenu", (e) => {
         { label: "bookmark this file", act: () => addFileEntry("bookmarks", f.path, "committed", rev) },
         { label: "add to shelf", act: () => addFileEntry("shelf", f.path, "committed", rev) },
         ...copyPathRows(f.path),
-        ...extraRows("file", { path: f.path, sha: rev, section: "commit" }),
+        // A compare row's rev is bHash, but the diff on screen is aHash →
+        // bHash, not bHash^ → bHash — a commit-state link would misdescribe
+        // the place, so the file contributor is told to refuse outright.
+        ...extraRows("file", { path: f.path, sha: rev, section: "commit", compare: state.filesMode === "compare" }),
       ],
       e.clientX,
       e.clientY

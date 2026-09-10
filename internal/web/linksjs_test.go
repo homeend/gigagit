@@ -37,6 +37,11 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 		// added — unlike notesArmed() (already present, unchanged, in the
 		// pre-feature file), it actually pins the new code (ruling P12).
 		{"files.js", "copy gg link to this line", "the diff-row copy-link row must be wired into the contextmenu handler"},
+		// Fix round 1: a compare-mode file row's rev is bHash, but the table on
+		// screen is aHash -> bHash, not bHash^ -> bHash — the file contributor
+		// must be told to refuse rather than emit a misdescribed link.
+		{"files.js", `compare: state.filesMode === "compare"`, "the compare-mode file-menu call site must signal the file contributor to refuse"},
+		{"links.js", "ctx.compare", "linkFor must refuse when the ctx it was given says compare"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(read(c.file), c.want) {
@@ -53,9 +58,18 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 		t.Error("links.js: no act: row found")
 	}
 	filesSrc := read("files.js")
-	if k := strings.Index(filesSrc, `$("diff-body").addEventListener("contextmenu"`); k < 0 {
-		t.Error(`files.js: the diff-body contextmenu handler is gone`)
-	} else if strings.Contains(filesSrc[k:], "run:") {
+	k := strings.Index(filesSrc, `$("diff-body").addEventListener("contextmenu"`)
+	if k < 0 {
+		t.Fatal(`files.js: the diff-body contextmenu handler is gone`)
+	}
+	// Bounded to the handler's own body (its first top-level "});" close),
+	// not the rest of the file — a distant, unrelated run: elsewhere in
+	// files.js must not fail this check.
+	end := strings.Index(filesSrc[k:], "\n});")
+	if end < 0 {
+		t.Fatal("files.js: could not find the end of the diff-body contextmenu handler")
+	}
+	if strings.Contains(filesSrc[k:k+end], "run:") {
 		t.Error("files.js: the diff-body contextmenu handler uses run: — showCtxMenu dispatches act()")
 	}
 }
@@ -64,7 +78,10 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 // itself as the formatter, so a mismatch here means the JS producer drifted
 // from the Go grammar's canonical renderer — not that two hand-written
 // stringifications happen to disagree.
-func wantLink(repoName, worktree, path, rev, st, side string, no int) string {
+func wantLink(repoName, worktree, path, rev, st, side string, no int, compare bool) string {
+	if compare {
+		return ""
+	}
 	if repoName == "" && worktree == "" {
 		return ""
 	}
@@ -131,6 +148,7 @@ func TestLinkForJSMatchesGo(t *testing.T) {
 		State    string `json:"state"`
 		Side     string `json:"side"`
 		No       int    `json:"no"`
+		Compare  bool   `json:"compare"`
 	}
 	cases := []tcase{
 		{Name: "remote unstaged file, no line", Repo: "gigagit", Path: "internal/web/files.js", State: "unstaged"},
@@ -156,11 +174,16 @@ func TestLinkForJSMatchesGo(t *testing.T) {
 		{Name: "local path with : refuses", Worktree: "/mnt/t/repo", Path: "a:b.go", State: "unstaged"},
 		{Name: "remote path with # refuses", Repo: "gigagit", Path: "a#b.go", State: "unstaged"},
 		{Name: "local path with # refuses", Worktree: "/mnt/t/repo", Path: "a#b.go", State: "unstaged"},
+		// Fix round 1 (controller ruling): a compare-mode ctx refuses outright,
+		// even though every other field looks like a perfectly good link —
+		// the compare flag alone must be decisive.
+		{Name: "compare ctx refuses even with a full sha", Repo: "gigagit", Path: "a/b.go", Rev: fullSha, State: "commit", Compare: true},
+		{Name: "local compare ctx refuses", Worktree: "/mnt/t/repo", Path: "a/b.go", State: "unstaged", Compare: true},
 	}
 
 	want := make([]string, len(cases))
 	for n, c := range cases {
-		want[n] = wantLink(c.Repo, c.Worktree, c.Path, c.Rev, c.State, c.Side, c.No)
+		want[n] = wantLink(c.Repo, c.Worktree, c.Path, c.Rev, c.State, c.Side, c.No, c.Compare)
 	}
 
 	dir := t.TempDir()
@@ -176,7 +199,7 @@ const cases = JSON.parse(readFileSync(process.argv[3], "utf8"));
 const linkFor = new Function(pure + "; return linkFor;")();
 const out = cases.map((c) => {
   const repo = c.repo ? { link_repo: c.repo } : null;
-  const ctx = { path: c.path, rev: c.rev, state: c.state };
+  const ctx = { path: c.path, rev: c.rev, state: c.state, compare: c.compare };
   return linkFor(repo, c.worktree, ctx, c.side, c.no);
 });
 console.log(JSON.stringify(out));
