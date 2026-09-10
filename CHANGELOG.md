@@ -8,6 +8,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Fix: `b` (blame) on a new file in the Files panel showed an error.** A
+  file with no HEAD version — untracked, or staged as new — has nothing to
+  blame (git fails with "no such path in HEAD", or would mark every line
+  "Not Committed Yet"). Both render the `A` attribute; `b` is now inert on
+  them, gated by `canBlameFile`.
 - **gg links.** A `gg://` address names one place in one repository — a file, a
   line on one side of one diff, a hunk, or a commit — in a form you can copy
   out of gg, paste into a chat on another machine, and hand straight back to
