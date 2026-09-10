@@ -344,10 +344,17 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 			continue
 		}
 		mk := noMark()
-		if i >= curStart && i < curEnd {
-			mk = cursorMark(style)
-		}
 		r := dr.row
+		switch {
+		case i >= curStart && i < curEnd:
+			// The cursor outranks an attention band: the user must always be
+			// able to see where they are.
+			mk = cursorMark(style)
+		default:
+			if bg, ok := m.attnMarkFor(v, r); ok {
+				mk = cellMark{row: true, base: bg, gut: s.diffGutter}
+			}
+		}
 		// Syntax runs for this row's source lines (nil on a gap side or an
 		// unlexed file); the wrap case already carries them in dr.left/right.
 		lt, rt := tokAt(v.oldTok, r.LeftNo), tokAt(v.newTok, r.RightNo)

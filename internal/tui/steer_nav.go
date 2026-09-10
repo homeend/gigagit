@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -74,6 +75,7 @@ func (m Model) steerFocus(c steer.Command) (Model, tea.Cmd) {
 	} else {
 		m = m.activateTab(p)
 	}
+	m = m.steerNotice(i18n.T("agent moved the focus"))
 	return m, tea.Batch(superseded, m.answerSteer(c, steerOK(c, "focused "+c.Panel)))
 }
 
@@ -377,6 +379,8 @@ func (m Model) landSteer(v *diffView, c steer.Command) (Model, tea.Cmd) {
 	body := m.diffBodyRows()
 	v.setCursorLine(li, body)
 	v.alignCursor(alignCenter, body)
+
+	m.diffNotice = i18n.T("▸ agent opened %s", c.File+":"+strconv.Itoa(no))
 
 	detail := "opened " + c.File + ":" + strconv.Itoa(no)
 	if clamped {

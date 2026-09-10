@@ -241,6 +241,12 @@ func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 		return m.steerNavigate(c)
 	case "focus":
 		return m.steerFocus(c)
+	case "reload":
+		return m.steerReload(c)
+	case "highlight":
+		return m.steerHighlight(c)
+	case "highlight_clear":
+		return m.steerHighlightClear(c)
 	default:
 		return m, m.answerSteer(c, steerFail(c, "unknown command "+strconv.Quote(c.Cmd)))
 	}

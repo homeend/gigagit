@@ -232,6 +232,13 @@ type Model struct {
 	steerClaimed bool
 	steerWatch   *steer.Watcher
 
+	// attention holds the bands `gg session highlight` painted, keyed by file
+	// address. A map, so it survives the Model value copy. Marks live until
+	// highlight_clear, an explicit reload command, or session end — NOT the
+	// interval auto-refresh rebuilding a working-tree diff, which would wipe
+	// them without any agent action.
+	attention map[attentionKey][]steerMark
+
 	opName string // engine.OpName of the in-flight op; "" when idle
 
 	focus           panel
@@ -330,6 +337,7 @@ func New(svc *domain.Service) Model {
 		promptStore:            defaultPromptStore(),
 		toolNoted:              map[string]bool{},
 		noticeSessionDismissed: map[string]bool{},
+		attention:              map[attentionKey][]steerMark{},
 		filterMemo:             &commitFilterMemo{},
 	}
 }
@@ -3760,11 +3768,12 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.entryCompareGen++    // drop any in-flight commit-entry compare resolve from the old repo
 	m = m.cleanupPickPatchTemp()
 	m.pendingPushTags = nil
-	m.pendingRepairSwitch = ""            // a repo switch must not fire a stale repair chain
-	m.pendingWorktreeMoveOld = ""         // a repo switch must not fire a stale move cleanup
-	m.pendingGotoTip = ""                 // a repo switch must not fire a stale tip jump
-	m.pendingSteer = nil                  // the repo it referred to is gone; its inbox went with it
-	m.pendingCheckout = pendingCheckout{} // a diverged checkout from the old repo must not prompt in the new one
+	m.pendingRepairSwitch = ""                   // a repo switch must not fire a stale repair chain
+	m.pendingWorktreeMoveOld = ""                // a repo switch must not fire a stale move cleanup
+	m.pendingGotoTip = ""                        // a repo switch must not fire a stale tip jump
+	m.pendingSteer = nil                         // the repo it referred to is gone; its inbox went with it
+	m.attention = map[attentionKey][]steerMark{} // the marks referred to the old repo's files
+	m.pendingCheckout = pendingCheckout{}        // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil
 	if m.genCancel != nil { // a stale generate run from the old repo must not fill the new repo's popup
 		m.genCancel()
