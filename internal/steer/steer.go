@@ -121,9 +121,11 @@ func Post(dir string, c Command) (string, error) {
 }
 
 // Drain returns every well-formed command in dir, in name (= post) order, and
-// unlinks every cmd-*.json it looked at. A file that is oversize, unparsable or
-// carries no id is deleted and dropped: a reply file is named after the id, so
-// an id-less command is unanswerable by construction.
+// unlinks every cmd-*.json it looked at. A file that is oversize, unparsable,
+// carries no id, or whose id is not a single path component (it would let
+// PostReply/AwaitReply write reply-<id>.json outside the inbox) is deleted and
+// dropped: a reply file is named after the id, so an id-less or path-crossing
+// command is unanswerable by construction.
 func Drain(dir string) []Command {
 	names := listPrefixed(dir, cmdPrefix)
 	out := make([]Command, 0, len(names))
@@ -140,7 +142,7 @@ func Drain(dir string) []Command {
 			continue
 		}
 		var c Command
-		if json.Unmarshal(data, &c) != nil || c.ID == "" {
+		if json.Unmarshal(data, &c) != nil || c.ID == "" || c.ID != filepath.Base(c.ID) {
 			continue
 		}
 		out = append(out, c)

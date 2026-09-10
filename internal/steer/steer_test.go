@@ -95,6 +95,24 @@ func TestDrainDropsOversizeUnparsableAndIDLess(t *testing.T) {
 	}
 }
 
+func TestDrainDropsPathTraversalIDs(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	// A crafted id containing a path separator must never survive Drain: it
+	// would let PostReply/AwaitReply write reply-<id>.json outside the inbox.
+	if err := os.WriteFile(filepath.Join(dir, "cmd-1-1.json"), []byte(`{"id":"../../x","cmd":"navigate","wait":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := Drain(dir)
+	if len(got) != 0 {
+		t.Fatalf("Drain = %+v, want none — a path-traversal id must be dropped", got)
+	}
+	left, _ := os.ReadDir(dir)
+	if len(left) != 0 {
+		t.Errorf("Drain left %d files behind for a path-traversal id", len(left))
+	}
+}
+
 func TestReplyRoundTripAndAwaitTimeout(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

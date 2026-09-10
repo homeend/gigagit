@@ -33,7 +33,9 @@ func Touch(dir, name string, p Presence) error {
 // Live reports the presence recorded in dir/name when its mtime is under
 // LiveWindow old. A presence older than that belonged to a session that
 // crashed or was SIGKILLed; Live removes it, so the next caller does not even
-// stat it.
+// stat it. An unparsable presence is removed the same way: leaving it behind
+// would only let Touch keep refreshing its mtime forever with content nothing
+// can ever read.
 func Live(dir, name string) (Presence, bool) {
 	path := filepath.Join(dir, name)
 	st, err := os.Stat(path)
@@ -50,6 +52,7 @@ func Live(dir, name string) (Presence, bool) {
 	}
 	var p Presence
 	if json.Unmarshal(data, &p) != nil {
+		os.Remove(path)
 		return Presence{}, false
 	}
 	return p, true

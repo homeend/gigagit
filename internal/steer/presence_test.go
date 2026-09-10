@@ -84,6 +84,25 @@ func TestLiveIsFalseAndSweepsAStalePresence(t *testing.T) {
 	}
 }
 
+func TestLiveSweepsAnUnparsablePresence(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, TUIPresence)
+	// A fresh mtime but garbage content — a wedged corrupt presence must not
+	// survive a Live check: otherwise Touch would only ever Chtimes it, and it
+	// would report live forever without ever parsing.
+	if err := os.WriteFile(p, []byte("{not json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := Live(dir, TUIPresence)
+	if ok {
+		t.Fatalf("Live = %+v true, want false for unparsable content", got)
+	}
+	if _, err := os.Stat(p); !os.IsNotExist(err) {
+		t.Errorf("an unparsable presence must be removed by Live (err = %v)", err)
+	}
+}
+
 func TestLiveOnAMissingDirAndRemove(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
