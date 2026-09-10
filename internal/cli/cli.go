@@ -104,6 +104,8 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 		return cmdBookmark(svc, rest, stdin, stdout, stderr)
 	case "note":
 		return cmdNote(svc, rest, stdin, stdout, stderr)
+	case "session":
+		return cmdSession(svc, rest, stdout, stderr)
 	case "log":
 		return cmdLog(svc, rest, stdout, stderr)
 	case "prefix":
@@ -165,7 +167,7 @@ var commands = map[string]bool{
 	"remote": true, "tag": true, "compare": true, "preview": true, "diff": true, "show": true,
 	"inspect": true, "repo": true, "init": true, "config": true, "batch": true,
 	"review": true, "apply": true, "versions": true, "unlock": true,
-	"note": true, "skill": true,
+	"note": true, "skill": true, "session": true,
 }
 
 // IsCommand reports whether tok is a gg CLI subcommand (used by cmd/gg to
