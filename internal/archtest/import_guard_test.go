@@ -59,6 +59,7 @@ func TestLayeringDAG(t *testing.T) {
 		"promptstate": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"textdiff":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"syntax":      {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"steer":       {"config", "model", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "gitwatch", "i18n", "theme"},
 		"template":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"theme":       {"config", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "syntax", "i18n"},
 		"web":         {"tui", "cli", "mcp", "app"},
@@ -85,4 +86,20 @@ func directImports(t *testing.T, pkg string) []string {
 		t.Fatalf("go list %s: %v", pkg, err)
 	}
 	return strings.Split(strings.TrimSpace(string(out)), "\n")
+}
+
+// TestSteerIsAStdlibLeaf pins internal/steer's dependency budget: the steering
+// protocol is imported by all four frontends AND by the CLI that talks to them,
+// so any gg package it pulled in would become a dependency of everything.
+// fsnotify is the one exception (the inbox wake).
+func TestSteerIsAStdlibLeaf(t *testing.T) {
+	t.Parallel()
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/steer") {
+		if imp == "github.com/fsnotify/fsnotify" {
+			continue
+		}
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/steer imports %s — it must stay stdlib + fsnotify only", imp)
+		}
+	}
 }

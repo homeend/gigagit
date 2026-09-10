@@ -62,6 +62,7 @@ feature; keep THIS file's map to one line per package.
 | `gitcmd`     | Fluent argv builder (`New("sub").Arg(...).ArgIf(cond, ...).ToArgv()`). |
 | `gitexec`    | `Runner` interface (`Run`/`Stream`), real `ExecRunner`, `FakeRunner` for tests. Cancellation sends SIGTERM (not SIGKILL) so git releases its lockfiles; `WaitDelay` bounds the grace; `LimitRunner` caps concurrent git subprocesses. |
 | `gitwatch`   | Pure fsnotify wrapper + `.git`-layout path→source map + debounced `Watcher`; backs event-driven auto-refresh. No git/TUI/domain imports. |
+| `steer`      | Live-steering protocol leaf: a per-worktree file inbox (presence with mtime liveness, temp+rename command/reply files, an fsnotify wake) that `gg session` uses to drive a running TUI or `gg web` page. stdlib + fsnotify only; `tui`/`cli`/`web`/`mcp` import it directly. |
 | `gitconfdocs`| Pure curated git-config catalog (~64 keys with defaults/kinds) behind the config explorer; staleness-tested against `git help -c`. DAG leaf. |
 | `i18n`       | TUI translation layer: English-text-as-key TOML bundles (embedded ja/ko/zh/ru + user overlays). AST-gate tests in `internal/tui` enforce literal keys, full four-bundle coverage, and verb agreement. Engine/CLI prose and decision option VALUES stay English (agent-facing protocol); only rendering is localized. |
 | `model`      | Shared plain data types (`Status`, `Branch`, `Worktree`, `Commit`, `FileAddress`, `Endpoint`, `GitLock`, …). |
