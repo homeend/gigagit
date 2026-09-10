@@ -64,6 +64,10 @@ type styles struct {
 	noteBody       lipgloss.Style
 	noteDim        lipgloss.Style
 
+	attnInfo  lipgloss.Style
+	attnWarn  lipgloss.Style
+	attnError lipgloss.Style
+
 	// field_style.go
 	field       lipgloss.Style // was fieldStyle
 	fieldCursor lipgloss.Style // was fieldCursorStyle
@@ -93,6 +97,7 @@ var legacy = theme.Theme{
 	MessageBlockBg: "236", SaveBannerFg: "15", SaveBannerBg: "22",
 	NoticeHot: "196", NoticeDim: "124", ReviewHot: "39", ReviewDim: "31",
 	NoteUser: "75", NoteAgent: "141", NoteStale: "240", PickerLabel: "245",
+	AttentionInfo: "24", AttentionWarn: "94", AttentionError: "89",
 	Lanes:  [7]string{"33", "208", "40", "201", "51", "220", "129"},
 	Syntax: [11]string{"", "141", "79", "222", "", "150", "215", "245", "252", "250", "180"},
 }
@@ -148,6 +153,10 @@ func buildStyles(th theme.Theme) *styles {
 	s.noteSummary = ns().Bold(true).Foreground(bright)
 	s.noteBody = ns().Foreground(muted)
 	s.noteDim = ns().Foreground(dim)
+
+	s.attnInfo = ns().Background(pick(th.AttentionInfo, legacy.AttentionInfo))
+	s.attnWarn = ns().Background(pick(th.AttentionWarn, legacy.AttentionWarn))
+	s.attnError = ns().Background(pick(th.AttentionError, legacy.AttentionError))
 
 	s.field = ns().Background(pick(th.FieldBg, legacy.FieldBg))
 	s.fieldCursor = ns().Background(pick(th.FieldCursorBg, legacy.FieldCursorBg)).Foreground(pick(th.FieldCursorFg, legacy.FieldCursorFg))
@@ -227,3 +236,20 @@ func setTheme(th theme.Theme) { activeStyles.Store(buildStyles(th)) }
 
 // activeTheme reports the theme st() was built from.
 func activeTheme() theme.Theme { return st().th }
+
+// attnStyle maps a steering command's tone onto the attention band style.
+// The tone is an agent-supplied protocol value, so the allowlist lives here:
+// anything outside it paints nothing rather than defaulting to a colour the
+// agent did not ask for.
+func attnStyle(tone string) (lipgloss.Style, bool) {
+	s := st()
+	switch tone {
+	case "info":
+		return s.attnInfo, true
+	case "warn":
+		return s.attnWarn, true
+	case "error":
+		return s.attnError, true
+	}
+	return lipgloss.Style{}, false
+}

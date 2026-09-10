@@ -56,6 +56,9 @@ type liveMsg struct {
 	Reason  string   `json:"reason"`
 	Live    *bool    `json:"live,omitempty"`
 	Watch   *bool    `json:"watch,omitempty"`
+	// Steer carries one validated `gg session` command (steer.go); it rides
+	// only on Reason "steer" and never alongside a Changed list.
+	Steer *steerWire `json:"steer,omitempty"`
 }
 
 type liveHub struct {
@@ -120,6 +123,18 @@ func (h *liveHub) emit(msg liveMsg) {
 	if h.gate != nil && h.gate() {
 		return
 	}
+	h.fanOut(msg)
+}
+
+// emitSteer fans a steering event out BYPASSING the gate. emit drops messages
+// while an op runs because a refresh would show a half-applied tree and the
+// post-op refresh covers it anyway; a steer is a one-off instruction from an
+// agent, and dropping it would simply lose it. The endpoint checks the gate
+// itself and answers 409 instead, so nothing reaches here mid-operation.
+func (h *liveHub) emitSteer(msg liveMsg) { h.fanOut(msg) }
+
+// fanOut is the delivery half both emitters share.
+func (h *liveHub) fanOut(msg liveMsg) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.stopped {

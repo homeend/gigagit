@@ -40,6 +40,11 @@ type Theme struct {
 	NoticeHot, NoticeDim, ReviewHot, ReviewDim  string
 	NoteUser, NoteAgent, NoteStale, PickerLabel string
 
+	// Attention bands: the background an agent's `gg session highlight` paints
+	// over the marked rows on one side of the diff (a band, like the note band
+	// — never a box).
+	AttentionInfo, AttentionWarn, AttentionError string
+
 	// Palettes: index = graph lane % 7, and index = syntax.Class
 	// (Plain, Keyword, Type, Func, Name, String, Number, Comment, Operator,
 	// Punct, Attr). Syntax[Plain] and Syntax[Name] stay "" by design.
@@ -59,6 +64,7 @@ func (t Theme) roles() []string {
 		t.MessageBlockBg, t.SaveBannerFg, t.SaveBannerBg,
 		t.NoticeHot, t.NoticeDim, t.ReviewHot, t.ReviewDim,
 		t.NoteUser, t.NoteAgent, t.NoteStale, t.PickerLabel,
+		t.AttentionInfo, t.AttentionWarn, t.AttentionError,
 	}
 }
 
@@ -79,6 +85,7 @@ var Dark = Theme{
 	MessageBlockBg: "236", SaveBannerFg: "#F2F2F2", SaveBannerBg: "22",
 	NoticeHot: "196", NoticeDim: "124", ReviewHot: "39", ReviewDim: "31",
 	NoteUser: "75", NoteAgent: "141", NoteStale: "240", PickerLabel: "245",
+	AttentionInfo: "24", AttentionWarn: "94", AttentionError: "89",
 	Lanes:  [7]string{"33", "208", "40", "201", "51", "220", "129"},
 	Syntax: [11]string{"", "141", "79", "222", "", "150", "215", "245", "252", "250", "180"},
 }
@@ -100,6 +107,7 @@ var Light = Theme{
 	MessageBlockBg: "#DFDFDA", SaveBannerFg: "#E9E9E5", SaveBannerBg: "#3E8E41",
 	NoticeHot: "#C0392B", NoticeDim: "#A0564C", ReviewHot: "#2F6FB8", ReviewDim: "#2A8C8C",
 	NoteUser: "#2F6FB8", NoteAgent: "#6B4FBB", NoteStale: "#8A8F8A", PickerLabel: "#5F6570",
+	AttentionInfo: "#D3E2F2", AttentionWarn: "#F2E8CC", AttentionError: "#EFD3DC",
 	Lanes:  [7]string{"#2F6FB8", "#C7641B", "#3E8E41", "#6B4FBB", "#2A8C8C", "#B08000", "#C0392B"},
 	Syntax: [11]string{"", "#6B4FBB", "#2A8C8C", "#B08000", "", "#3E8E41", "#C7641B", "#8A8F8A", "#33393F", "#5F6570", "#A0682A"},
 }

@@ -24,6 +24,7 @@ import (
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/rebaseplan"
 	"github.com/homeend/gigagit/internal/repos"
+	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/textdiff"
 	"github.com/homeend/gigagit/internal/theme"
 )
@@ -56,6 +57,7 @@ type Model struct {
 	pendingRepairSwitch    string              // translated worktree path to switch to after a successful RepairWorktree (chained in opFinishedMsg)
 	pendingWorktreeMoveOld string              // old path of a just-moved worktree; MRU registry cleanup in opFinishedMsg
 	pendingGotoTip         string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
+	pendingSteer           *pendingSteer       // parked navigate (steer_nav.go); drained by the load it waits on
 	pendingCheckout        pendingCheckout     // arms the diverged-checkout recovery modal; zero remoteRef = none
 	pendingScopeClear      bool                // armed by startOp for checkout-family ops; a Changed success drops the solo/scope (the reRoot precedent, but for a same-worktree switch)
 	pendingRemoteTagAdds   []string            // tags to optimistically add to remoteTagNames on PushTags success
@@ -215,7 +217,30 @@ type Model struct {
 	snapshotCommonDir string
 	snapshotWorktree  string
 	lastSnapshot      []byte
-	opName            string // engine.OpName of the in-flight op; "" when idle
+
+	// Live steering (steer.go). steerDir is "" when steering is off (config,
+	// or an unresolved repo). steerWatch is a POINTER so it survives the Model
+	// value copy, like modal and popup; steerGen makes a repo switch drop the
+	// old inbox's in-flight watcher messages.
+	// steerClaimed records that initSteerInbox actually claimed this dir
+	// (swept it and wrote the presence). It is NOT the same as steerWatch !=
+	// nil, which is also false in the window between startSteerCmd's dispatch
+	// and steerStartedMsg's arrival — discriminating on the watcher would
+	// double-arm and re-run Discard.
+	steerDir     string
+	steerGen     int
+	steerClaimed bool
+	steerWatch   *steer.Watcher
+
+	// attention holds the bands `gg session highlight` painted, keyed by file
+	// address. A map, so it survives the Model value copy. Marks live until
+	// highlight_clear, a `status`/`all` reload command, or session end — NOT
+	// the interval auto-refresh rebuilding a working-tree diff, and NOT the
+	// `notes`-only reload every note mutation auto-posts, either of which
+	// would wipe them without any agent action.
+	attention map[attentionKey][]steerMark
+
+	opName string // engine.OpName of the in-flight op; "" when idle
 
 	focus           panel
 	lastLeftPanel   panel // ←'s return target; zero value = panelBranches
@@ -313,13 +338,14 @@ func New(svc *domain.Service) Model {
 		promptStore:            defaultPromptStore(),
 		toolNoted:              map[string]bool{},
 		noticeSessionDismissed: map[string]bool{},
+		attention:              map[attentionKey][]steerMark{},
 		filterMemo:             &commitFilterMemo{},
 	}
 }
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen))
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen))
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -397,7 +423,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// session's agent-layer choice, then resolve this address's notes off
 		// the UI thread (tag-gated on arrival, like the diff itself).
 		dv.hideAgent = m.notesAgentOff
-		return m, m.loadNotesCmd()
+		// A parked navigate lands HERE, not at open time: *dv = *msg.view above
+		// has just overwritten curLine and offset with the loader's values.
+		var scmd tea.Cmd
+		m, scmd = m.drainPendingDiff(dv)
+		return m, tea.Batch(m.loadNotesCmd(), scmd)
 	case notesLoadedMsg:
 		dv := m.diffLayer()
 		if dv == nil || msg.tag != m.diffTag {
@@ -459,7 +489,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.snapshotWorktree = msg.worktree
 		m.snapshotPath = config.SessionSnapshotPath(msg.commonDir)
 		m.lastSnapshot = nil
-		return m, nil
+		// The steer inbox is keyed by WORKTREE under the same session dir, so it
+		// re-homes on exactly the same beat.
+		m.steerDir = steerDirFor(msg.commonDir, msg.worktree)
+		m = m.initSteerInbox()
+		return m, m.startSteerCmd(m.steerGen)
 	case gitConfigRowsMsg:
 		if msg.gen != m.gitConfigGen {
 			return m, nil // stale: reopened or repo-switched since dispatch
@@ -556,6 +590,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
 				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
+			// Only the pending waiting on THIS list is answered; one parked on
+			// a diff (or on another commit) is not this failure's business.
+			if ps := m.pendingSteer; ps != nil && ps.stage == steerStageFiles && ps.hash == msg.hash {
+				return m.failPending("the commit's file list failed to load: " + msg.err.Error())
+			}
 			return m, nil
 		}
 		// Only lines and cursor are replaced; the search query intentionally
@@ -565,7 +604,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesTitle = i18n.T("Files %s %s", shortHash(msg.hash), msg.subject)
 		m.filesContext = shortHash(msg.hash) + " " + msg.subject
 		m.filesCommit = msg.commit // authoritative: also the follow-live j/k repaint
-		return m, nil
+		return m.drainPendingFiles()
 	case shelfFilesMsg:
 		if m.filesView == nil || !m.inShelfFiles() || msg.id != m.filesShelfID {
 			return m, nil // view closed, or a stale result for another entry
@@ -984,6 +1023,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case configReadyMsg:
 		m.cfg = msg.cfg
+		// Both directions: off drops the presence, on claims an inbox that
+		// snapshotTargetMsg resolved before this config arrived.
+		var steerCmd tea.Cmd
+		m, steerCmd = m.reconcileSteer()
 		m.repoConfigPath = msg.repoTOML
 		// Apply the persisted Commits render mode ([ui] show_graph): "off" starts
 		// in the flat list, exactly like the . menu's "Show as list".
@@ -1011,7 +1054,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// nothing is loaded yet (a reconcile would degrade to the same walk).
 		m, cmd = m.reloadAllCmd(reloadOpts{manual: true, startup: true, hardFeed: true})
 		m.watchGen++
-		return m, tea.Batch(themeCmd, cmd, m.startWatchCmd(m.watchGen))
+		return m, tea.Batch(themeCmd, cmd, m.startWatchCmd(m.watchGen), steerCmd)
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -1052,6 +1095,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
 			m.cfg = msg.cfg
+			// Both directions (see reconcileSteer): this is the repo-switch path,
+			// where snapshotTargetMsg resolved the new inbox before this config
+			// landed — an unclaimed dir must be claimed here or the new repo's
+			// leftovers replay and the session runs watcher-less.
+			var steerCmd tea.Cmd
+			m, steerCmd = m.reconcileSteer()
 			// Rebind the per-repo Settings write target on the legacy load path —
 			// configReadyMsg only covers app startup. Without this, every Settings
 			// write after a repo switch ("Show graph", "Commit sort", refresh
@@ -1105,7 +1154,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// the conflict process re-derives its file list after a resolve).
 			if m.proc != nil {
 				nm, procCmd := m.proc.refreshed(m)
-				return nm, tea.Batch(themeCmd, procCmd, previewsCmd)
+				return nm, tea.Batch(themeCmd, procCmd, previewsCmd, steerCmd)
 			}
 			m = m.maybeResumePrompt()
 			// The initial feed walk (loadCmd) ran in parallel with the snapshot,
@@ -1118,12 +1167,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.feedUpstreams()) > 0 && m.feedScopeApplied != m.feedScopeSig() {
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
-				return m, tea.Batch(themeCmd, reload, previewsCmd)
+				return m, tea.Batch(themeCmd, reload, previewsCmd, steerCmd)
 			}
 			// Conflicts are surfaced as a non-blocking notice ("press [x] to
 			// resolve"); entering the resolution process is the user's choice (x),
 			// so a lingering conflict never traps the interface.
-			return m, tea.Batch(themeCmd, previewsCmd)
+			return m, tea.Batch(themeCmd, previewsCmd, steerCmd)
 		}
 	case dataAvailableMsg:
 		// Free the background lane the moment its active read's message arrives —
@@ -1164,6 +1213,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, cmd
 				}
 			}
+			// A steering navigate parked on THIS reload would otherwise wait out
+			// its five-second TTL — long after the CLI gave up at two. Answer now.
+			if ps := m.pendingSteer; msg.source == srcStatus && ps != nil && ps.stage == steerStageStatusRetry {
+				return m.failPending("status could not be re-read: " + msg.err.Error())
+			}
 			return m, nil
 		}
 		// Record the measured read cost as informational stats (shown in the
@@ -1199,6 +1253,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.proc.refreshed(m) // process re-derives from fresh status
 			}
 			m = m.maybeResumePrompt()
+			// The one status reload a steering navigate asked for has landed:
+			// retry the path lookup against the fresh list.
+			if m.pendingSteer != nil && m.pendingSteer.stage == steerStageStatusRetry {
+				var scmd tea.Cmd
+				m, scmd = m.drainPendingStatus()
+				return m, tea.Batch(previewsChain, scmd)
+			}
 		case srcBranches:
 			key := m.panelSelKey(panelBranches)
 			m.branches = msg.value.([]model.Branch)
@@ -2410,11 +2471,37 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A single perpetual tick (started in Init): re-render so the busy line's
 		// elapsed time advances while an op runs. View only shows it when running,
 		// so an idle tick just repaints identical content (bubbletea diffs frames).
-		// Also drives the background auto-refresh scheduler.
+		// Also drives the background auto-refresh scheduler, the session snapshot,
+		// and live steering — the presence touch (liveness IS the mtime) plus an
+		// unconditional inbox poll. The poll is the safety net for a watcher that
+		// failed to start; it is NOT gated on gitwatch.Supported, which probes the
+		// REPO's filesystem while the inbox lives in the state dir.
 		var cmd tea.Cmd
 		m, cmd = m.refreshTick(time.Now())
 		m = m.maybeWriteSnapshot()
-		return m, tea.Batch(cmd, heartbeatCmd())
+		m.touchSteerPresence()
+		var scmd tea.Cmd
+		m, scmd = m.drainSteer()
+		return m, tea.Batch(cmd, scmd, heartbeatCmd())
+
+	case steerStartedMsg:
+		if msg.gen != m.steerGen || !m.steerActive() {
+			msg.w.Close() // superseded by a repo switch, or steering went away
+			return m, nil
+		}
+		if m.steerWatch != nil {
+			m.steerWatch.Close() // never leak a watcher an earlier arm left behind
+		}
+		m.steerWatch = msg.w
+		return m, steerListenCmd(msg.w, msg.gen)
+
+	case steerWakeMsg:
+		if msg.gen != m.steerGen {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m, cmd = m.drainSteer()
+		return m, tea.Batch(cmd, steerListenCmd(m.steerWatch, msg.gen))
 	case watchReadyMsg:
 		if msg.gen != m.watchGen {
 			if msg.watcher != nil {
@@ -3642,6 +3729,8 @@ func (m Model) commitPageEligible() bool {
 // panic dump still references the original repo (acceptable for a debug aid).
 func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	removeSnapshotFile(m.snapshotPath) // the old repo's session ends here
+	m = m.closeSteerInbox()            // …and so does its steering inbox
+	m.steerGen++                       // drop the old watcher's in-flight msgs
 	if m.watcher != nil {
 		_ = m.watcher.Close()
 		m.watcher = nil
@@ -3680,10 +3769,12 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.entryCompareGen++    // drop any in-flight commit-entry compare resolve from the old repo
 	m = m.cleanupPickPatchTemp()
 	m.pendingPushTags = nil
-	m.pendingRepairSwitch = ""            // a repo switch must not fire a stale repair chain
-	m.pendingWorktreeMoveOld = ""         // a repo switch must not fire a stale move cleanup
-	m.pendingGotoTip = ""                 // a repo switch must not fire a stale tip jump
-	m.pendingCheckout = pendingCheckout{} // a diverged checkout from the old repo must not prompt in the new one
+	m.pendingRepairSwitch = ""                   // a repo switch must not fire a stale repair chain
+	m.pendingWorktreeMoveOld = ""                // a repo switch must not fire a stale move cleanup
+	m.pendingGotoTip = ""                        // a repo switch must not fire a stale tip jump
+	m.pendingSteer = nil                         // the repo it referred to is gone; its inbox went with it
+	m.attention = map[attentionKey][]steerMark{} // the marks referred to the old repo's files
+	m.pendingCheckout = pendingCheckout{}        // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil
 	if m.genCancel != nil { // a stale generate run from the old repo must not fill the new repo's popup
 		m.genCancel()

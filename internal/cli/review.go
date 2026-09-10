@@ -14,6 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notebatch"
+	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/template"
 )
 
@@ -183,6 +184,12 @@ func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.R
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
+	}
+	// Only wake the window when there is something new to show: an import that
+	// stored nothing (a batch of contexts only, or one whose annotations were
+	// all skipped as old-side) would otherwise leave a stray wire command.
+	if len(stored) > 0 {
+		steer.NotifyReload(steerDirFor(svc), "notes")
 	}
 	ids := make([]string, 0, len(stored))
 	for _, n := range stored {

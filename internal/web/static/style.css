@@ -2,6 +2,7 @@
   --bg: #14161a; --bg-alt: #1c1f26; --fg: #d8dee9; --dim: #7a828e;
   --accent: #6ea8fe; --sel: #2a3550; --border: #2a2e37;
   --add: #1f3d2b; --del: #46262a; --span-add: #2f6b41; --span-del: #8a3b42;
+  --attn-info: #1e3350; --attn-warn: #3d3520; --attn-error: #43242a;
   --lane0: #6ea8fe; --lane1: #f2a65a; --lane2: #7bd88f; --lane3: #e06c9f;
   --lane4: #b58ef2; --lane5: #5ad0c8; --lane6: #e0c06c; --lane7: #f27a6a;
   /* Pane widths — the drag handles rewrite --sb-w / --files-w on #panes. */
@@ -122,6 +123,15 @@ tr.add td.side.r, tr.add td.no.r { background: var(--add); }
 tr.del td.side.l, tr.del td.no.l { background: var(--del); }
 tr.change td.side.l { background: var(--del); }
 tr.change td.side.r { background: var(--add); }
+/* Attention bands an agent painted (gg session highlight). These must beat the
+   per-cell tr.add/tr.del/tr.change backgrounds just above, which are
+   three-class selectors — hence the table.diff prefix and td.side/td.no rather
+   than a bare td: (0,3,3) against their (0,3,2). tr.cur adds no background of
+   its own (it is an inset accent bar), so a marked row and the note anchor
+   compose. */
+table.diff tr.attn-info  td.side, table.diff tr.attn-info  td.no { background: var(--attn-info); }
+table.diff tr.attn-warn  td.side, table.diff tr.attn-warn  td.no { background: var(--attn-warn); }
+table.diff tr.attn-error td.side, table.diff tr.attn-error td.no { background: var(--attn-error); }
 /* syntax classes (see internal/syntax Class.String); same hues as the TUI palette */
 table.diff .tk-kw  { color: #b48bff; }
 table.diff .tk-ty  { color: #5fd7af; }

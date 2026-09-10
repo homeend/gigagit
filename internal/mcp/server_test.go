@@ -34,6 +34,7 @@ func gitRun(t *testing.T, dir string, args ...string) string {
 type testEnv struct {
 	dir string // repo worktree
 	svc *domain.Service
+	srv *Server // the concrete server behind cs (its steerDir is the live-steering seam)
 	cs  *sdk.ClientSession
 	sha string // seeded commit (full sha)
 }
@@ -59,7 +60,8 @@ func newTestEnv(t *testing.T) *testEnv {
 	// lazily from XDG_STATE_HOME — which t.Setenv restores at test cleanup,
 	// racing a sweep that hasn't fired yet.
 	svc.UseNotesDir(t.TempDir())
-	srv := New(svc).sdkServer()
+	server := New(svc)
+	srv := server.sdkServer()
 	ct, st := sdk.NewInMemoryTransports()
 	ctx := context.Background()
 	if _, err := srv.Connect(ctx, st, nil); err != nil {
@@ -71,7 +73,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		t.Fatalf("client connect: %v", err)
 	}
 	t.Cleanup(func() { _ = cs.Close() })
-	return &testEnv{dir: dir, svc: svc, cs: cs, sha: sha}
+	return &testEnv{dir: dir, svc: svc, srv: server, cs: cs, sha: sha}
 }
 
 func resultText(res *sdk.CallToolResult) string {

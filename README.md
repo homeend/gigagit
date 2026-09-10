@@ -227,6 +227,12 @@ so `--hunk N` can address one. Notes are machine-local and expire (see
 prints and saves that — but ALSO asks the tool for anchored notes and imports
 them.
 
+An agent can also steer the window you already have open: `gg session status`
+says whether one is running, and `gg session navigate --file <path> --hunk N`
+puts your cursor on the hunk it is about to annotate. Every `gg note` mutation
+posts a refresh on its own, so notes an agent writes appear without a manual
+`r`. Turn the whole channel off with `[ui] agent_steering = "off"`.
+
 Forks are answered by flags (e.g. `--on-conflict`, `--with-branch`/`--force`);
 without a flag, an interactive terminal prompts, and a non-interactive run errors
 asking for the flag.
@@ -417,6 +423,13 @@ left underneath one, and says the repo value goes on applying. In this and
 every other gg text field, the Delete key erases the character behind the
 cursor once nothing is left ahead of it, so a keyboard that sends Delete for
 its erase key never gets stuck on the last character.
+
+`[ui] agent_steering` (default `"on"`) controls whether the TUI and `gg web`
+accept live-steering commands from `gg session` — an AI agent putting your
+window on the line it just annotated. Set `"off"` to disable the inbox:
+neither frontend writes a session presence, and `gg session` reports there is
+no gg session for the worktree.
+
 `[ui] show_eol_only_changes` (default `false`) controls whether a file whose
 only unstaged change is its line endings (CRLF↔LF) is shown as modified — by
 default such files are hidden from the Files panel and its count badge as noise;

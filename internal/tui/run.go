@@ -48,7 +48,16 @@ func Run(svc *domain.Service, recordPath string) (string, error) {
 	th, _ := theme.Lookup(cfg.UI.Theme)
 	th, _ = theme.Overlay(th, cfg.Themes[th.Name])
 	setTheme(th)
+	// The startup path's config, on the model: the live-steering gate below
+	// reads it, and dataLoadedMsg overwrites it with the same value moments
+	// later. Every pre-load fallback helper (Model.wheelStep and friends)
+	// treats a defaults-filled cfg exactly as it treats the zero value.
+	m.cfg = cfg
 	m = m.initSnapshotTarget()
+	// The inbox is keyed by worktree under the session dir the snapshot just
+	// resolved; the watcher itself starts from Init().
+	m.steerDir = steerDirFor(m.snapshotCommonDir, m.snapshotWorktree)
+	m = m.initSteerInbox()
 	if recordPath != "" {
 		repo := ""
 		if top, err := svc.TopLevel(context.Background()); err == nil {
@@ -67,6 +76,7 @@ func Run(svc *domain.Service, recordPath string) (string, error) {
 			fm.opCancel()
 		}
 		removeSnapshotFile(fm.snapshotPath)
+		fm = fm.closeSteerInbox()
 		fm.recorder.close()
 	}
 	if err != nil {

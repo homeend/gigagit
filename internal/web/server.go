@@ -49,6 +49,18 @@ type Server struct {
 	// repos.DefaultStatePath().
 	reposPath string
 
+	// Live steering (steer.go): steerDir is this worktree's inbox and
+	// steerURL this server's own loopback address, written into web.json so
+	// `gg session` knows where to POST. steerDir "" = steering off: no
+	// presence is written and POST /api/session/steer answers 404, so the CLI
+	// reports no session. All three are test seams (set directly; nothing
+	// reads the environment). steerMu guards them: the 1 s presence ticker
+	// reads them off-thread while a re-root rewrites them.
+	steerMu       sync.Mutex
+	steerDir      string
+	steerURL      string
+	steerWorktree string // what `gg session status` prints for this session
+
 	// detectTools overrides the external-tools catalog probe (test seam);
 	// nil = exttool.Detect against the real machine.
 	detectTools func() []exttool.Detection

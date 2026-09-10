@@ -12,12 +12,20 @@ import (
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
-// cellMark is the cursor marker for one rendered cell: when row is set, base
-// is laid under every non-hot run and the padding (hot add/del backgrounds
-// win — they stay as they are); gut styles the gutter number. noMark() is the
-// unmarked default.
+// cellMark is the marker for one rendered cell: when row is set, base is laid
+// under every non-hot run and the padding; gut styles the gutter number.
+// noMark() is the unmarked default.
+//
+// attn distinguishes the two kinds of banded row. On a CURSOR row the hot
+// add/del backgrounds win (they only step one shade brighter, see hotFor) —
+// the row's meaning must survive the cursor passing over it. An AGENT
+// attention band is the opposite: agents mark changed lines, so a band that
+// let the hot shades win would be invisible on exactly the rows it exists for.
+// base therefore replaces them there, and the two never collide because the
+// cursor outranks a band in diffPaneLines.
 type cellMark struct {
 	row  bool
+	attn bool
 	base lipgloss.Style
 	gut  lipgloss.Style
 }
@@ -39,11 +47,15 @@ func cursorMark(style string) cellMark {
 	return noMark()
 }
 
-// hotFor is the background a hot (add/del) cell wears: its own shade, or the
-// one-step-brighter cursor variant when the row is the cursor row.
+// hotFor is the background a hot (add/del) cell wears: its own shade, the
+// one-step-brighter cursor variant when the row is the cursor row, or the
+// agent's tone when the row carries an attention band.
 func (mk cellMark) hotFor(hot lipgloss.Style) lipgloss.Style {
 	if !mk.row {
 		return hot
+	}
+	if mk.attn {
+		return mk.base
 	}
 	s := st()
 	switch hot.GetBackground() {
@@ -55,8 +67,14 @@ func (mk cellMark) hotFor(hot lipgloss.Style) lipgloss.Style {
 	return hot
 }
 
-// gapFor is the style of the dotted gap filler: banded on the cursor row.
+// gapFor is the style of the dotted gap filler: banded on the cursor row, or
+// in the agent's tone under an attention band. The attention case is built the
+// way diffGapCursor is — the filler keeps its dim dotted foreground and only
+// the background changes.
 func (mk cellMark) gapFor() lipgloss.Style {
+	if mk.attn {
+		return st().diffGapCell.Background(mk.base.GetBackground())
+	}
 	if mk.row {
 		return st().diffGapCursor
 	}
@@ -344,10 +362,26 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 			continue
 		}
 		mk := noMark()
-		if i >= curStart && i < curEnd {
-			mk = cursorMark(style)
-		}
 		r := dr.row
+		switch {
+		case i >= curStart && i < curEnd:
+			// The cursor outranks an attention band: the user must always be
+			// able to see where they are. In "number" mode, though, only the
+			// GUTTER carries the cursor (mk.row is false), so the row body is
+			// free — and the row under the cursor is precisely the one the user
+			// is most likely to be reading. Keep the cursor gutter, take the
+			// band for the body.
+			mk = cursorMark(style)
+			if !mk.row {
+				if bg, ok := m.attnMarkFor(v, r); ok {
+					mk = cellMark{row: true, attn: true, base: bg, gut: mk.gut}
+				}
+			}
+		default:
+			if bg, ok := m.attnMarkFor(v, r); ok {
+				mk = cellMark{row: true, attn: true, base: bg, gut: s.diffGutter}
+			}
+		}
 		// Syntax runs for this row's source lines (nil on a gap side or an
 		// unlexed file); the wrap case already carries them in dr.left/right.
 		lt, rt := tokAt(v.oldTok, r.LeftNo), tokAt(v.newTok, r.RightNo)

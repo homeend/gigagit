@@ -83,6 +83,16 @@ batch error's `item N` is 0-based; `gg note clear --all` removes this
 checkout's own working-tree notes plus EVERY commit note in the store
 (commit notes are not worktree-scoped).
 
+- `gg session status` — is a gg TUI or web page open on this worktree? Exit 1
+  when none is.
+- `gg session navigate --file <path> (--hunk N | --new-line N | --old-line N)
+  [--cached | --rev <sha>]` — put the open window on that line; `--rev <sha>`
+  alone reveals a commit, `--next-comment` / `--prev-comment` step the open
+  diff. Add `--no-wait` to skip the 2s wait for the window's answer.
+- `gg session reload [notes|status|all]`, `gg session focus <panel>`,
+  `gg session highlight add|clear` — refresh, switch panel, or paint an
+  attention band. See the `reviewing-with-gg` skill for when to use them.
+
 - `gg add [-f] (-A | <path>...)` / `gg unstage <path>...` — stage paths (or
   everything incl. untracked with `-A`) / remove paths from the index
   keeping working-tree content. `gg add` + `gg commit` fully replaces

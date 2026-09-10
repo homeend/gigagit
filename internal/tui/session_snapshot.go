@@ -128,6 +128,19 @@ func panelProtoName(p panel) string {
 	return ""
 }
 
+// panelFromProtoName is panelProtoName's inverse: it decodes the protocol name
+// a session snapshot writes and a `gg session focus` command carries. Unknown
+// names are refused rather than defaulted — an agent that named a panel gg does
+// not have should hear so.
+func panelFromProtoName(s string) (panel, bool) {
+	for _, p := range []panel{panelBranches, panelWorktrees, panelRemotes, panelFiles, panelStaged, panelCommits, panelTags, panelReflog, panelPreviews} {
+		if panelProtoName(p) == s {
+			return p, true
+		}
+	}
+	return 0, false
+}
+
 // filesModeProtoName maps a filesMode to its stable protocol name.
 func filesModeProtoName(fm filesMode) string {
 	switch fm {

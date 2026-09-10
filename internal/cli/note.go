@@ -19,6 +19,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // notesSweepBudget is how long a one-shot `gg note …` waits for housekeeping
@@ -33,7 +34,7 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 		return 2
 	}
 	sub, rest := args[0], args[1:]
-	return withNotesHousekeeping(svc, func() int {
+	return withNotesHousekeeping(svc, sub, func() int {
 		switch sub {
 		case "add":
 			return noteAdd(svc, rest, stdout, stderr)
@@ -54,14 +55,24 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	})
 }
 
+// noteMutations are the sub-commands that CHANGE the store; only they are worth
+// waking a live session for. `list` reads.
+var noteMutations = map[string]bool{"add": true, "reply": true, "rm": true, "clear": true, "apply": true}
+
 // withNotesHousekeeping applies [notes] from the effective config, runs fn, and
 // only THEN starts and briefly waits for the sweep — the caller's work must
-// never queue behind maintenance.
-func withNotesHousekeeping(svc *domain.Service, fn func() int) int {
+// never queue behind maintenance. A successful mutation also posts a
+// best-effort `reload notes` to any live gg session for this worktree, so a
+// note an agent just wrote appears in the human's open window without a manual
+// refresh (srcNotes is never polled).
+func withNotesHousekeeping(svc *domain.Service, sub string, fn func() int) int {
 	if cfg, err := svc.EffectiveConfig(context.Background()); err == nil {
 		svc.SetNotesPolicy(cfg.Notes.MaxAgeDays, cfg.Notes.MaxEntries)
 	}
 	code := fn()
+	if code == 0 && noteMutations[sub] {
+		steer.NotifyReload(steerDirFor(svc), "notes")
+	}
 	svc.StartNotesSweep()
 	ctx, cancel := context.WithTimeout(context.Background(), notesSweepBudget)
 	defer cancel()

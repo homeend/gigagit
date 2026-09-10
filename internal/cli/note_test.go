@@ -1,11 +1,15 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // noteRepo is a real repo with a committed file, a working-tree edit and an
@@ -446,5 +450,58 @@ func TestNoteClearTypeNarrowing(t *testing.T) {
 	_, out, _ = runCLI(t, dir, "note", "list")
 	if strings.TrimSpace(out) != "" {
 		t.Fatalf("both threads should now be gone: %q", out)
+	}
+}
+
+// TestNoteAddPostsAReloadToALiveSession proves the wiring end to end: a note
+// mutation run through cli.Run posts a `reload notes` into the inbox of a live
+// session for this worktree.
+func TestNoteAddPostsAReloadToALiveSession(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state) // no t.Parallel: t.Setenv panics in one
+	repo := newCLIRepo(t)
+	if err := os.WriteFile(filepath.Join(repo, "a.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := domain.Open(repo)
+	dir, err := sessionInboxDir(svc)
+	if err != nil || dir == "" {
+		t.Fatalf("sessionInboxDir = %q, %v", dir, err)
+	}
+	if err := steer.Touch(dir, steer.TUIPresence, steer.Presence{PID: 1, Worktree: repo}); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := Run(repo, []string{"note", "add", "--file", "a.txt", "--new-line", "1", "--summary", "hi"}, strings.NewReader(""), &out, &errb, ""); code != 0 {
+		t.Fatalf("note add exit = %d (stderr %q)", code, errb.String())
+	}
+	got := steer.Drain(dir)
+	if len(got) != 1 || got[0].Cmd != "reload" {
+		t.Fatalf("inbox = %+v, want one reload notes", got)
+	}
+	if got[0].Wait {
+		t.Error("the automatic reload must be wait:false")
+	}
+}
+
+// TestNoteListPostsNothing: a read must not wake anybody.
+func TestNoteListPostsNothing(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	repo := newCLIRepo(t)
+	svc := domain.Open(repo)
+	dir, err := sessionInboxDir(svc)
+	if err != nil || dir == "" {
+		t.Fatalf("sessionInboxDir = %q, %v", dir, err)
+	}
+	if err := steer.Touch(dir, steer.TUIPresence, steer.Presence{PID: 1, Worktree: repo}); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := Run(repo, []string{"note", "list"}, strings.NewReader(""), &out, &errb, ""); code != 0 {
+		t.Fatalf("note list exit = %d (stderr %q)", code, errb.String())
+	}
+	if got := steer.Drain(dir); len(got) != 0 {
+		t.Fatalf("a read posted %+v, want nothing", got)
 	}
 }

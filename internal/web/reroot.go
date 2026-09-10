@@ -187,5 +187,8 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 	// The new root becomes navigable-back-to forever (touchMRU on serve
 	// covers the original root).
 	touchMRU(r.Context(), cand, s.reposStatePath())
+	// The inbox is per WORKTREE: the old repo's web.json must not keep
+	// pointing at a page that is now showing something else.
+	s.rehomeSteerPresence(r.Context(), cand)
 	writeRepoInfo(w, r, cand)
 }
