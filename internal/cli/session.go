@@ -605,9 +605,20 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 		fmt.Fprintf(stderr, "session highlight add: unknown tone %q (info, warn or error)\n", *tone)
 		return 2
 	}
+	// ruling P21: --side is a REPLACED flag, not an orthogonal one — a link
+	// already carries its own side (its old:/new: prefix, or the hunk's
+	// resolved side). fs.Visit reports only flags actually PASSED, so this
+	// distinguishes "the user typed --side" from "*side just holds its
+	// default" (which --side new would be indistinguishable from otherwise).
+	sideSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "side" {
+			sideSet = true
+		}
+	})
 	if len(pos) == 1 && isLinkArg(pos[0]) {
-		if *tf.file != "" || *tf.rev != "" || *tf.cached || *start != 0 {
-			fmt.Fprintln(stderr, "session highlight add: a gg:// link already names the target and the first line (drop --file, --rev, --cached and --start)")
+		if *tf.file != "" || *tf.rev != "" || *tf.cached || *start != 0 || sideSet {
+			fmt.Fprintln(stderr, "session highlight add: a gg:// link already names the target, the first line and the side (drop --file, --rev, --cached, --start and --side)")
 			return 2
 		}
 		text, linkEnd := splitLinkRange(pos[0])
@@ -616,26 +627,46 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 		if err != nil {
 			return linkExit("session highlight add", err, stderr)
 		}
-		if res.Addr.Path == "" || res.Line < 1 {
-			fmt.Fprintln(stderr, "session highlight add: the link needs a file and a line (gg://<repo>/<path>[@<target>]:<line>[-<end>])")
+		if res.Addr.Path == "" || (res.Line < 1 && res.Hunk < 1) {
+			fmt.Fprintln(stderr, "session highlight add: the link needs a file and a line or hunk (gg://<repo>/<path>[@<target>]:<line>[-<end>] or #<hunk>)")
 			return 2
 		}
-		last := *end
-		if linkEnd > 0 {
+		dir, target := linkSteerDir(ctx, dir, svc, res)
+		sideVal, first, last := string(res.Side), res.Line, *end
+		switch {
+		case res.Hunk > 0:
+			// A hunk link already names a range (controller ruling P22): a
+			// -<end> suffix or --end alongside it is a usage error, the same
+			// as mixing --start with any link.
+			if linkEnd > 0 || *end != 0 {
+				fmt.Fprintln(stderr, "session highlight add: a #<hunk> link already names a range; drop -<end> and --end")
+				return 2
+			}
+			spec, err := target.HunkDiffSpec(ctx, res.Addr.State == model.StateStaged, res.Addr.Commit, []string{res.Addr.Path})
+			if err != nil {
+				fmt.Fprintln(stderr, "error:", err)
+				return 1
+			}
+			hs, rng, err := target.HunkRange(ctx, spec, res.Addr.Path, res.Hunk)
+			if err != nil {
+				fmt.Fprintln(stderr, "error:", err)
+				return 1
+			}
+			sideVal, first, last = string(hs), rng[0], rng[1]
+		case linkEnd > 0:
 			if last != 0 {
 				fmt.Fprintln(stderr, "session highlight add: the link's -<end> and --end name the same thing; pass one")
 				return 2
 			}
 			last = linkEnd
 		}
-		if last != 0 && last < res.Line {
+		if last != 0 && last < first {
 			fmt.Fprintln(stderr, "session highlight add: the range ends before it starts")
 			return 2
 		}
-		dir, _ := linkSteerDir(ctx, dir, svc, res)
 		return sendSteer(dir, steer.Command{
 			Cmd: "highlight", File: res.Addr.Path, Target: targetOf(res.Addr),
-			Side: string(res.Side), Start: res.Line, End: last, Tone: *tone,
+			Side: sideVal, Start: first, End: last, Tone: *tone,
 		}, *noWait, stdout, stderr)
 	}
 	if len(pos) != 0 {

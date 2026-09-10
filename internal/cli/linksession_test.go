@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -93,8 +94,6 @@ func TestSessionHighlightAddWithALinkPostsTheSameCommandAsTheFlags(t *testing.T)
 
 func TestSessionLinkRejectsTheFlagsItReplaces(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	livePresence(t, dir)
 	repo := newCLIRepo(t)
 	svc := domain.Open(repo)
 	var lout bytes.Buffer
@@ -108,6 +107,9 @@ func TestSessionLinkRejectsTheFlagsItReplaces(t *testing.T) {
 		{"navigate", link, "--rev", "HEAD"},
 		{"navigate", link, "--hunk", "1"},
 		{"highlight", "add", link, "--file", "README.md"},
+		// Ruling P21: --side is a REPLACED flag (the link already carries a
+		// side), not an orthogonal one.
+		{"highlight", "add", link, "--side", "old"},
 		// Ruling 12: a link's "-<end>" range suffix and --end name the same
 		// thing (mixed = exit 2), and an explicit range that ends before it
 		// starts is refused just like the flag form.
@@ -117,9 +119,17 @@ func TestSessionLinkRejectsTheFlagsItReplaces(t *testing.T) {
 		args := args
 		t.Run(strings.Join(args[:2], " ")+" "+args[len(args)-2], func(t *testing.T) {
 			t.Parallel()
+			// Each subtest gets its OWN inbox: the assertion below drains it,
+			// and a shared dir across parallel subtests would let one row's
+			// bug be caught (or missed) by a different row's drain.
+			dir := t.TempDir()
+			livePresence(t, dir)
 			var out, errb bytes.Buffer
 			if code := runSession(dir, svc, args, &out, &errb); code != 2 {
 				t.Errorf("exit = %d, want 2; stderr %q", code, errb.String())
+			}
+			if got := steer.Drain(dir); len(got) != 0 {
+				t.Errorf("inbox = %+v, want nothing posted", got)
 			}
 		})
 	}
@@ -146,6 +156,73 @@ func TestSessionHighlightAddTakesALinkRange(t *testing.T) {
 	c := got[0]
 	if c.Cmd != "highlight" || c.Start != 2 || c.End != 5 || c.Side != "new" || c.Tone != "warn" || c.File != "README.md" {
 		t.Errorf("posted %+v, want highlight README.md new:2-5 warn", c)
+	}
+}
+
+// TestSessionHighlightAddTakesALinkHunk is controller ruling P22: a #<hunk>
+// link is a range, not a bare line — `highlight add` must post the hunk's
+// WHOLE span (Start/End), the same span `svc.HunkRange` (the verb `note add
+// --hunk` and `gg diff --hunks` both key off) gives for that hunk number.
+func TestSessionHighlightAddTakesALinkHunk(t *testing.T) {
+	t.Parallel()
+	dir, _, sha2 := linkTwoCommitFixture(t)
+	inbox := t.TempDir()
+	livePresence(t, inbox)
+	svc := domain.Open(dir)
+	ctx := context.Background()
+
+	var lout bytes.Buffer
+	if code := runLink(linkState(t), svc, dir, []string{"--rev", sha2, "README.md#1"}, &lout, os.Stderr); code != 0 {
+		t.Fatalf("gg link: exit %d", code)
+	}
+	link := strings.TrimSpace(lout.String())
+
+	spec, err := svc.HunkDiffSpec(ctx, false, sha2, []string{"README.md"})
+	if err != nil {
+		t.Fatalf("HunkDiffSpec: %v", err)
+	}
+	wantSide, wantRng, err := svc.HunkRange(ctx, spec, "README.md", 1)
+	if err != nil {
+		t.Fatalf("HunkRange: %v", err)
+	}
+
+	var out, errb bytes.Buffer
+	if code := runSession(inbox, svc, []string{"highlight", "add", link, "--tone", "warn", "--no-wait"}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d (stderr %q)", code, errb.String())
+	}
+	got := steer.Drain(inbox)
+	if len(got) != 1 {
+		t.Fatalf("inbox = %+v, want one command", got)
+	}
+	c := got[0]
+	if c.Cmd != "highlight" || c.File != "README.md" || c.Side != string(wantSide) ||
+		c.Start != wantRng[0] || c.End != wantRng[1] || c.Tone != "warn" {
+		t.Errorf("posted %+v, want side=%s start=%d end=%d", c, wantSide, wantRng[0], wantRng[1])
+	}
+}
+
+// TestSessionHighlightAddHunkLinkRejectsEndFlag: a #<hunk> link already
+// names a range, so --end alongside it is a usage error (ruling P22),
+// exactly like mixing --start with any link.
+func TestSessionHighlightAddHunkLinkRejectsEndFlag(t *testing.T) {
+	t.Parallel()
+	dir, _, sha2 := linkTwoCommitFixture(t)
+	inbox := t.TempDir()
+	livePresence(t, inbox)
+	svc := domain.Open(dir)
+
+	var lout bytes.Buffer
+	if code := runLink(linkState(t), svc, dir, []string{"--rev", sha2, "README.md#1"}, &lout, os.Stderr); code != 0 {
+		t.Fatalf("gg link: exit %d", code)
+	}
+	link := strings.TrimSpace(lout.String())
+
+	var out, errb bytes.Buffer
+	if code := runSession(inbox, svc, []string{"highlight", "add", link, "--end", "5", "--no-wait"}, &out, &errb); code != 2 {
+		t.Fatalf("exit = %d, want 2; stderr %q", code, errb.String())
+	}
+	if got := steer.Drain(inbox); len(got) != 0 {
+		t.Errorf("inbox = %+v, want nothing posted", got)
 	}
 }
 

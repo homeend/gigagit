@@ -222,6 +222,16 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	// A gg:// link is only ever recognised as the FIRST argument after the
+	// subcommand (cmdNote's own rule) — so a link stuck after --flags
+	// (`note add --summary x gg://…`) is never picked up as one, and Go's
+	// flag package silently leaves it as a trailing positional here instead
+	// of erroring. Catch it explicitly, or it is dropped on the floor and
+	// the command silently keeps running against the wrong target.
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "note add: unexpected argument %q; a gg:// link must be the first argument\n", fs.Arg(0))
+		return 2
+	}
 	if strings.TrimSpace(*summary) == "" {
 		fmt.Fprintln(stderr, "note add: --summary is required")
 		return 2
@@ -444,6 +454,15 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 	typ := fs.String("type", "all", "user, agent or all")
 	asJSON := fs.Bool("json", false, "emit the wire notes as a JSON array")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	// See noteAdd's identical guard: a gg:// link is only recognised as the
+	// FIRST argument (cmdNote's rule), so one stuck after --flags
+	// (`note list --type agent gg://…`) is never picked up as a link — Go's
+	// flag package would otherwise leave it as a silently-ignored trailing
+	// positional, and the command would list EVERY note instead of erroring.
+	if fs.NArg() != 0 {
+		fmt.Fprintf(stderr, "note list: unexpected argument %q; a gg:// link must be the first argument\n", fs.Arg(0))
 		return 2
 	}
 	if !noteTypeMatches(*typ, model.NoteSourceUser) && !noteTypeMatches(*typ, model.NoteSourceAgent) {

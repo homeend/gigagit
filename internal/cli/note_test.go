@@ -609,3 +609,39 @@ func TestNoteLinkUsageErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestNoteListLinkMustBeFirstArgument: a link is recognised only as the
+// FIRST argument after the subcommand. One trailing behind --type is not
+// picked up as a link at all — before this fix, Go's flag.Parse simply left
+// it as an ignored positional and `note list` silently listed EVERY note
+// instead of erroring.
+func TestNoteListLinkMustBeFirstArgument(t *testing.T) {
+	dir := noteRepo(t)
+	_, out, _ := runCLI(t, dir, "link", "a.txt")
+	link := strings.TrimSpace(out)
+	if code, _, errb := runCLI(t, dir, "note", "add", "--file", "a.txt", "--new-line", "2", "--summary", "hello"); code != 0 {
+		t.Fatalf("seed: exit %d (%s)", code, errb)
+	}
+	code, out, errb := runCLI(t, dir, "note", "list", "--type", "agent", link)
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2; stdout %q stderr %q", code, out, errb)
+	}
+	if !strings.Contains(errb, "first argument") {
+		t.Errorf("stderr = %q, want it to say the link must be first", errb)
+	}
+}
+
+// TestNoteAddLinkMustBeFirstArgument keeps `note add` consistent with
+// `note list`'s rule above.
+func TestNoteAddLinkMustBeFirstArgument(t *testing.T) {
+	dir := noteRepo(t)
+	_, out, _ := runCLI(t, dir, "link", "a.txt:2")
+	link := strings.TrimSpace(out)
+	code, _, errb := runCLI(t, dir, "note", "add", "--summary", "s", link)
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2; stderr %q", code, errb)
+	}
+	if !strings.Contains(errb, "first argument") {
+		t.Errorf("stderr = %q, want it to say the link must be first", errb)
+	}
+}
