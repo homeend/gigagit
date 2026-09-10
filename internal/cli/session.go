@@ -198,6 +198,19 @@ func resolveHunkLine(ctx context.Context, svc *domain.Service, cached bool, rev,
 
 // sessionStatus prints the routing for this worktree.
 func sessionStatus(dir string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+	snapPath := ""
+	if cd, err := svc.GitCommonDir(context.Background()); err == nil {
+		snapPath = config.SessionSnapshotPath(cd)
+	}
+	return sessionStatusAt(dir, svc, args, stdout, stderr, snapPath)
+}
+
+// sessionStatusAt is sessionStatus against an explicit snapshot path — the
+// test seam, mirroring the sessionStatus/sessionOpenViewAt split (the real
+// path depends on the state home). Both the view line and the cursor line
+// read from this ONE resolved path, so a single svc.GitCommonDir call in
+// sessionStatus covers both instead of each resolving it separately.
+func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, stderr io.Writer, snapPath string) int {
 	fs := flag.NewFlagSet("session status", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	asJSON := fs.Bool("json", false, "print the routing as JSON")
@@ -210,11 +223,8 @@ func sessionStatus(dir string, svc *domain.Service, args []string, stdout, stder
 		return 2
 	}
 	r := routeFor(dir)
-	view := sessionOpenView(svc)
-	link := ""
-	if cd, err := svc.GitCommonDir(context.Background()); err == nil {
-		link = snapshotCursorLink(config.SessionSnapshotPath(cd))
-	}
+	view := sessionOpenViewAt(snapPath)
+	link := snapshotCursorLink(snapPath)
 	if *asJSON {
 		out := map[string]any{"worktree": r.worktree(), "view": view, "cursor_link": link}
 		if r.tuiOK {
@@ -289,20 +299,13 @@ func (r sessionRoute) worktree() string {
 	return r.web.Worktree
 }
 
-// sessionOpenView reads the phase-0 session snapshot for a one-line "what is on
-// screen" summary. Best-effort: no snapshot, or an unreadable one, is "".
-func sessionOpenView(svc *domain.Service) string {
-	cd, err := svc.GitCommonDir(context.Background())
-	if err != nil {
-		return ""
-	}
-	return sessionOpenViewAt(config.SessionSnapshotPath(cd))
-}
-
-// sessionOpenViewAt is sessionOpenView against an explicit snapshot path, which
-// is the test seam (the real path depends on the state home). The shape mirrors
-// the TUI's snapWriter: cursor.commit is an OBJECT carrying the hash, so
-// decoding it as a bare string would fail and blank every view line.
+// sessionOpenViewAt reads the phase-0 session snapshot at an explicit path for
+// a one-line "what is on screen" summary. Best-effort: no snapshot, or an
+// unreadable one, is "". The path is the test seam (the real path depends on
+// the state home — sessionStatus resolves it via svc.GitCommonDir +
+// config.SessionSnapshotPath and delegates to sessionStatusAt). The shape
+// mirrors the TUI's snapWriter: cursor.commit is an OBJECT carrying the hash,
+// so decoding it as a bare string would fail and blank every view line.
 func sessionOpenViewAt(path string) string {
 	if path == "" {
 		return ""
