@@ -6730,7 +6730,7 @@ gg session highlight clear [--file src/x.go]
   operation is running, a decision is waiting, the user is typing, or a picker,
   the conflict editor, the rebase editor or the repo switcher is open.
 - `highlight` paints an attention band over a line range, in three new theme
-  roles `attention_info` / `attention_warn` / `attention_error`.
+  roles `attention_info_bg` / `attention_warn_bg` / `attention_error_bg`.
 - **Live notes for free:** `gg note add|reply|apply|rm|clear`, `gg review
   --notes` and the mutating MCP note tools now post a `reload notes` on their
   own, so a note an agent just wrote appears in your open window without a
@@ -6923,8 +6923,8 @@ Recorded so an executor does not re-litigate them:
    `go-toml/v2` hard-errors decoding a TOML bool into a Go string field, so a
    user who typed the spec's literal could not start gg. Same reasoning, and
    the same shape, as the shipped `show_graph` (`internal/config/config.go:78-80`).
-2. **Theme role keys are `attention_info` / `attention_warn` /
-   `attention_error`.** §4.6 writes them dotted; `roleFields` keys are flat
+2. **Theme role keys are `attention_info_bg` / `attention_warn_bg` /
+   `attention_error_bg`.** (the `_bg` suffix follows `roles.go`'s isBgKey contract: they are backgrounds) §4.6 writes them dotted; `roleFields` keys are flat
    snake_case inside one `[themes.<name>]` table, where a dot would open a
    sub-table.
 3. **`agentskill.Version` goes 64 → 65**, not "to 64". The spec's number was

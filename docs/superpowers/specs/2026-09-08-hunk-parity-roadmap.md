@@ -865,8 +865,8 @@ anything.
 **Attention marks.** `m.attention map[attentionKey][]steerMark` keyed by
 file + target, each mark `{side, start, end, tone}`; the diff renderer
 tints the rows in range on that side (background band like the note band,
-no box; three new theme roles `attention.info` / `attention.warn` /
-`attention.error` in `theme.roleFields` + `RoleDocs`, dark/light/terminal
+no box; three new theme roles `attention_info_bg` / `attention_warn_bg` /
+`attention_error_bg` (backgrounds, per `roles.go`'s `_bg` contract) in `theme.roleFields` + `RoleDocs`, dark/light/terminal
 values). Marks live until `highlight_clear`, an explicit `reload` command,
 or session end — NOT the interval auto-refresh rebuilding a working-tree
 diff, which would wipe them without any agent action; a range that drifted
