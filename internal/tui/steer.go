@@ -139,6 +139,13 @@ func (m Model) drainSteer() (Model, tea.Cmd) {
 		return m, nil
 	}
 	cmds := make([]tea.Cmd, 0, 4)
+	// An expired pending is answered FIRST: a navigate that arrived in the same
+	// tick must find the slot free rather than be refused by a corpse.
+	var exp tea.Cmd
+	m, exp = m.expirePendingSteer(time.Now())
+	if exp != nil {
+		cmds = append(cmds, exp)
+	}
 	for _, c := range steer.Drain(m.steerDir) {
 		var cmd tea.Cmd
 		m, cmd = m.applySteer(c)
@@ -221,7 +228,19 @@ func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 	if why := m.steerRefusal(); why != "" {
 		return m, m.answerSteer(c, steerFail(c, why))
 	}
+	// Only navigate parks a pendingSteer, and only one can be in flight: a
+	// second would either overwrite the first (leaving its CLI to hang out its
+	// wait) or land on the other's diff. reload/focus/highlight park nothing —
+	// notably the automatic `reload notes` a concurrent `gg note add` posts must
+	// still apply while a navigate is loading.
+	if c.Cmd == "navigate" && m.pendingSteer != nil {
+		return m, m.answerSteer(c, steerFail(c, "a previous navigate is still loading"))
+	}
 	switch c.Cmd {
+	case "navigate":
+		return m.steerNavigate(c)
+	case "focus":
+		return m.steerFocus(c)
 	default:
 		return m, m.answerSteer(c, steerFail(c, "unknown command "+strconv.Quote(c.Cmd)))
 	}

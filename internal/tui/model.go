@@ -57,6 +57,7 @@ type Model struct {
 	pendingRepairSwitch    string              // translated worktree path to switch to after a successful RepairWorktree (chained in opFinishedMsg)
 	pendingWorktreeMoveOld string              // old path of a just-moved worktree; MRU registry cleanup in opFinishedMsg
 	pendingGotoTip         string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
+	pendingSteer           *pendingSteer       // parked navigate (steer_nav.go); drained by the load it waits on
 	pendingCheckout        pendingCheckout     // arms the diverged-checkout recovery modal; zero remoteRef = none
 	pendingScopeClear      bool                // armed by startOp for checkout-family ops; a Changed success drops the solo/scope (the reRoot precedent, but for a same-worktree switch)
 	pendingRemoteTagAdds   []string            // tags to optimistically add to remoteTagNames on PushTags success
@@ -413,7 +414,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// session's agent-layer choice, then resolve this address's notes off
 		// the UI thread (tag-gated on arrival, like the diff itself).
 		dv.hideAgent = m.notesAgentOff
-		return m, m.loadNotesCmd()
+		// A parked navigate lands HERE, not at open time: *dv = *msg.view above
+		// has just overwritten curLine and offset with the loader's values.
+		var scmd tea.Cmd
+		m, scmd = m.drainPendingDiff(dv)
+		return m, tea.Batch(m.loadNotesCmd(), scmd)
 	case notesLoadedMsg:
 		dv := m.diffLayer()
 		if dv == nil || msg.tag != m.diffTag {
@@ -576,6 +581,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
 				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
+			// Only the pending waiting on THIS list is answered; one parked on
+			// a diff (or on another commit) is not this failure's business.
+			if ps := m.pendingSteer; ps != nil && ps.stage == steerStageFiles && ps.hash == msg.hash {
+				return m.failPending("the commit's file list failed to load: " + msg.err.Error())
+			}
 			return m, nil
 		}
 		// Only lines and cursor are replaced; the search query intentionally
@@ -585,7 +595,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesTitle = i18n.T("Files %s %s", shortHash(msg.hash), msg.subject)
 		m.filesContext = shortHash(msg.hash) + " " + msg.subject
 		m.filesCommit = msg.commit // authoritative: also the follow-live j/k repaint
-		return m, nil
+		return m.drainPendingFiles()
 	case shelfFilesMsg:
 		if m.filesView == nil || !m.inShelfFiles() || msg.id != m.filesShelfID {
 			return m, nil // view closed, or a stale result for another entry
@@ -1229,6 +1239,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.proc.refreshed(m) // process re-derives from fresh status
 			}
 			m = m.maybeResumePrompt()
+			// The one status reload a steering navigate asked for has landed:
+			// retry the path lookup against the fresh list.
+			if m.pendingSteer != nil && m.pendingSteer.stage == steerStageStatusRetry {
+				var scmd tea.Cmd
+				m, scmd = m.drainPendingStatus()
+				return m, tea.Batch(previewsChain, scmd)
+			}
 		case srcBranches:
 			key := m.panelSelKey(panelBranches)
 			m.branches = msg.value.([]model.Branch)
@@ -3741,6 +3758,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingRepairSwitch = ""            // a repo switch must not fire a stale repair chain
 	m.pendingWorktreeMoveOld = ""         // a repo switch must not fire a stale move cleanup
 	m.pendingGotoTip = ""                 // a repo switch must not fire a stale tip jump
+	m.pendingSteer = nil                  // the repo it referred to is gone; its inbox went with it
 	m.pendingCheckout = pendingCheckout{} // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil
 	if m.genCancel != nil { // a stale generate run from the old repo must not fill the new repo's popup

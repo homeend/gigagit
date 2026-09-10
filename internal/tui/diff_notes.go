@@ -118,15 +118,20 @@ func dropAgentRows(rows []noteLine) []noteLine {
 
 // noteAnchorLine finds the logical line a note hangs off: the line carrying
 // the END of its range on its side (§4.4 phase-2 hunks anchor at the range
-// end). visible=false means the number exists in the file but is folded away,
-// and the returned index is the FOLD entry that hides it. (-1, false) means
-// the number is not in this view at all.
+// end). See lineAnchor for the return contract.
 func (v *diffView) noteAnchorLine(r domain.ResolvedNote) (int, bool) {
-	no := r.Range[1]
+	return v.lineAnchor(r.Range[1], r.Note.Side == model.NoteSideOld)
+}
+
+// lineAnchor finds the logical line carrying number no on the old (old=true) or
+// new side. visible=false means the number exists in the file but is folded
+// away, and the returned index is the FOLD entry that hides it. (-1, false)
+// means the number is not in this view at all. Shared by the note anchors and
+// by live steering's landing, which knows only a side and a number.
+func (v *diffView) lineAnchor(no int, old bool) (int, bool) {
 	if no <= 0 {
 		return -1, false
 	}
-	old := r.Note.Side == model.NoteSideOld
 	numOf := func(ln textdiff.Line) int {
 		if old {
 			return ln.Row.LeftNo
@@ -157,6 +162,26 @@ func (v *diffView) noteAnchorLine(r domain.ResolvedNote) (int, bool) {
 		}
 	}
 	return -1, false
+}
+
+// lastLineNo is the highest line number present on one side, or 0 when the side
+// has none (a pure addition has no old side). Live steering clamps a landing to
+// it rather than refusing an agent whose line number drifted past the end.
+func (v *diffView) lastLineNo(old bool) int {
+	last := 0
+	for _, ln := range v.lines {
+		if ln.Fold > 0 {
+			continue
+		}
+		n := ln.Row.RightNo
+		if old {
+			n = ln.Row.LeftNo
+		}
+		if n > last {
+			last = n
+		}
+	}
+	return last
 }
 
 // hasNoteContent reports whether any summary/text row survived filtering —

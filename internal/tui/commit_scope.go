@@ -326,26 +326,49 @@ func (m Model) commitGotoTipRow() (actionRow, bool) {
 	}, true
 }
 
-// gotoCommitByHash moves the Commits cursor to the loaded row matching hash
-// (display-index space; hash compare, not decoration parsing) and focuses the
-// Commits panel. A miss falls back to the ctrl+f eager deep-search — it clears
-// any /-filter ("go to" semantics), pages history under the search budget, and
-// prompts before scanning deeper. Shared by the goto-tip row (enter / .-menu)
-// and the ctrl+g pendingGotoTip drain in the commitsReloadedMsg handler.
-func (m Model) gotoCommitByHash(hash string) (Model, tea.Cmd) {
+// gotoLoadedCommit moves the Commits cursor to the LOADED row matching hash
+// (display-index space; hash compare, not decoration parsing), focuses the
+// Commits panel and returns the commit it landed on. It never starts the eager
+// deep search — a caller that must not raise a prompt (live steering: never
+// raise a decision on an agent's behalf) uses this half directly.
+func (m Model) gotoLoadedCommit(hash string) (Model, model.Commit, bool) {
 	// Landing in the feed is the point — close a covering stash list up front
-	// so BOTH branches (direct hit via focusCommitsPanel, and the eager-search
-	// fallback whose scan/prompt/miss paths never reach it) land visible.
+	// so BOTH branches (direct hit here, and gotoCommitByHash's eager-search
+	// fallback, whose scan/prompt/miss paths never reach it) land visible.
 	if m.stashView != nil {
 		m = m.closeStashView()
 	}
-	idx := m.displayIndices(panelCommits)
-	for di, bi := range idx {
+	di, c, ok := m.findLoadedCommit(hash)
+	if !ok {
+		return m, model.Commit{}, false
+	}
+	m.sel[panelCommits] = di
+	m = m.focusCommitsPanel()
+	return m, c, true
+}
+
+// findLoadedCommit is gotoLoadedCommit's READ half: the display index and the
+// commit for hash, or a miss, without moving anything. A caller that must
+// refuse without disturbing the user's view (live steering) probes with this
+// first.
+func (m Model) findLoadedCommit(hash string) (int, model.Commit, bool) {
+	for di, bi := range m.displayIndices(panelCommits) {
 		if c, ok := m.commitAtUnified(bi); ok && commitIsHash(c, hash) {
-			m.sel[panelCommits] = di
-			m = m.focusCommitsPanel()
-			return m, nil
+			return di, c, true
 		}
+	}
+	return 0, model.Commit{}, false
+}
+
+// gotoCommitByHash lands on a loaded row, falling back to the ctrl+f eager
+// deep-search — it clears any /-filter ("go to" semantics), pages history under
+// the search budget, and prompts before scanning deeper. Shared by the goto-tip
+// row (enter / .-menu) and the ctrl+g pendingGotoTip drain in the
+// commitsReloadedMsg handler.
+func (m Model) gotoCommitByHash(hash string) (Model, tea.Cmd) {
+	m, _, ok := m.gotoLoadedCommit(hash)
+	if ok {
+		return m, nil
 	}
 	return m.startEagerSearch(hash)
 }
