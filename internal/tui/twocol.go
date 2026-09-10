@@ -4,16 +4,80 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/homeend/gigagit/internal/syntax"
 )
+
+// runMask is a per-display-rune paint mask for a winCell body: a syntax class
+// per rune plus an emphasis flag per rune. The zero value — both nil — is the
+// plain path every uncoloured cell takes. It is deliberately generic rather
+// than syntax-specific: phase 6's in-view search paints its hits through the
+// same entry point by filling emph (spec §4.3).
+type runMask struct {
+	cls  []syntax.Class
+	emph []bool
+}
+
+// empty reports the plain path (no runs to paint).
+func (m runMask) empty() bool { return len(m.cls) == 0 && len(m.emph) == 0 }
+
+// slice returns n runes of the mask starting at off, padding with Plain/false
+// where a side runs out (a cutoff ellipsis, a clamped token end) and reading
+// an out-of-range window as fully plain. A masked cell always yields n entries
+// on BOTH sides so styledRuns can index either without a bounds check.
+//
+// It always ALLOCATES: a cell's mask is a shared cache value (the picker hands
+// the same sanLine to the grid and to the output pane), so the layout must
+// never write through to it — cellPieces' ellipsis fix relies on that.
+func (m runMask) slice(off, n int) runMask {
+	if m.empty() || n <= 0 {
+		return runMask{}
+	}
+	if off < 0 {
+		off = 0
+	}
+	out := runMask{cls: make([]syntax.Class, n), emph: make([]bool, n)}
+	for i := 0; i < n; i++ {
+		j := off + i
+		if j < len(m.cls) {
+			out.cls[i] = m.cls[j]
+		}
+		if j < len(m.emph) {
+			out.emph[i] = m.emph[j]
+		}
+	}
+	return out
+}
+
+// pad returns the mask with n leading plain runes — for a body that carries a
+// fixed indent the lexer's runs do not cover (the picker's literal rows).
+func (m runMask) pad(n int) runMask {
+	if m.empty() || n <= 0 {
+		return m
+	}
+	return runMask{
+		cls:  append(make([]syntax.Class, n), m.cls...),
+		emph: append(make([]bool, n), m.emph...),
+	}
+}
 
 // winCell is one cell of a two-column window: a fixed gutter (shown verbatim,
 // never transformed — the cursor marker + checkbox live here) and a body the
 // display mode transforms. style is applied to the whole padded cell after
 // slicing, so width math stays ANSI-safe. The zero value is a blank cell.
+//
+// mask is an optional paint mask over the body's DISPLAY runes (so
+// len(mask.cls) == len([]rune(body))). The layout slices it alongside the body
+// in all three modes, so a coloured run lands on the right columns after a
+// cutoff, a horizontal scroll or a wrap. An empty mask is the byte-identical
+// plain path, and a cell whose style REVERSES video drops the mask — reverse
+// swaps foreground and background, so per-token colours would paint per-token
+// backgrounds (the same ruling winRow.cls follows).
 type winCell struct {
 	gutter string
 	body   string
 	style  lipgloss.Style
+	mask   runMask
 }
 
 // colRow is one logical row: a full-width row (full != nil, spanning the whole
@@ -36,12 +100,23 @@ type twoColOpts struct {
 	vshift  int
 }
 
-// cellSegs lays a cell's body out at width under mode, returning the raw
-// (unstyled, unpadded) display segments with the gutter on the first segment
-// and a blank indent of the gutter's width on wrap continuations.
-func cellSegs(c *winCell, width int, mode dispMode, hscroll int) []string {
+// cellPiece is one laid-out display segment of a cell: the frozen gutter (or,
+// on a wrap continuation, its blank indent), the body slice itself, and that
+// slice's paint mask. Keeping the prefix out of the body is what lets the
+// masked path paint the body run by run while the gutter and the trailing
+// padding stay under the cell's style.
+type cellPiece struct {
+	pre  string
+	body string
+	mask runMask
+}
+
+// cellPieces lays a cell's body out at width under mode and returns one piece
+// per display segment. It is cellSegs split in two; cellSegs is now a wrapper
+// over it, so the two can never disagree about the layout.
+func cellPieces(c *winCell, width int, mode dispMode, hscroll int) []cellPiece {
 	if c == nil {
-		return []string{""}
+		return []cellPiece{{}}
 	}
 	gw := lipgloss.Width(c.gutter)
 	bodyW := width - gw
@@ -52,23 +127,115 @@ func cellSegs(c *winCell, width int, mode dispMode, hscroll int) []string {
 	case modeWrap:
 		ws := wrapWidth(c.body, bodyW, 1<<20)
 		if len(ws) == 0 {
-			return []string{c.gutter}
+			return []cellPiece{{pre: c.gutter}}
 		}
+		masks := wrapSegMasks(c.body, c.mask, ws)
 		indent := strings.Repeat(" ", gw)
-		out := make([]string, len(ws))
+		out := make([]cellPiece, len(ws))
 		for i, s := range ws {
+			pre := indent
 			if i == 0 {
-				out[i] = c.gutter + s
-			} else {
-				out[i] = indent + s
+				pre = c.gutter
 			}
+			out[i] = cellPiece{pre: pre, body: s, mask: masks[i]}
 		}
 		return out
 	case modeScroll:
-		return []string{c.gutter + hslice(c.body, hscroll, bodyW)}
+		body := hslice(c.body, hscroll, bodyW)
+		return []cellPiece{{
+			pre:  c.gutter,
+			body: body,
+			mask: c.mask.slice(hscrollRuneOff(c.body, hscroll), len([]rune(body))),
+		}}
 	default: // modeCutoff
-		return []string{c.gutter + truncate(c.body, bodyW)}
+		body := truncate(c.body, bodyW)
+		m := c.mask.slice(0, len([]rune(body)))
+		// truncate keeps a prefix and APPENDS "…" (it does not replace a kept
+		// rune), so the mask's last slot lands on the class of the first
+		// DROPPED rune. Force it plain so the ellipsis never wears a colour it
+		// did not earn — window.go does exactly this for winRow.cls.
+		if !m.empty() && lipgloss.Width(c.body) > bodyW {
+			m.cls[len(m.cls)-1] = syntax.Plain
+			m.emph[len(m.emph)-1] = false
+		}
+		return []cellPiece{{pre: c.gutter, body: body, mask: m}}
 	}
+}
+
+// wrapSegMasks maps a cell's paint mask onto the segments cellPieces produced
+// in wrap mode. wrapWidth (at the huge line cap cellPieces passes) slices runes
+// verbatim and never rewrites them, so each segment's mask is the slice of the
+// cell's mask at the running rune offset. The layout is VERIFIED against the
+// body before it is trusted: if the segments do not reconstruct it, every
+// segment is reported empty and the cell renders plain rather than mis-coloured.
+func wrapSegMasks(body string, m runMask, segs []string) []runMask {
+	out := make([]runMask, len(segs))
+	if m.empty() {
+		return out
+	}
+	// The common case is one segment (a line that fits): compare it to the body
+	// directly rather than copying it into a builder to compare the copy.
+	if len(segs) == 1 {
+		if segs[0] != body {
+			return make([]runMask, 1)
+		}
+		out[0] = m.slice(0, len([]rune(segs[0])))
+		return out
+	}
+	var joined strings.Builder
+	off := 0
+	for i, s := range segs {
+		n := len([]rune(s))
+		out[i] = m.slice(off, n)
+		joined.WriteString(s)
+		off += n
+	}
+	if joined.String() != body {
+		return make([]runMask, len(segs))
+	}
+	return out
+}
+
+// cellSegs lays a cell's body out at width under mode, returning the raw
+// (unstyled, unpadded) display segments with the gutter on the first segment
+// and a blank indent of the gutter's width on wrap continuations.
+func cellSegs(c *winCell, width int, mode dispMode, hscroll int) []string {
+	ps := cellPieces(c, width, mode, hscroll)
+	out := make([]string, len(ps))
+	for i, p := range ps {
+		out[i] = p.pre + p.body
+	}
+	return out
+}
+
+// pieceOrBlank returns the kth piece or a blank one when the cell ran out (the
+// blank-pad that keeps a wrapped pair registered).
+func pieceOrBlank(ps []cellPiece, k int) cellPiece {
+	if k < len(ps) {
+		return ps[k]
+	}
+	return cellPiece{}
+}
+
+// renderPiece renders one laid-out segment padded to w: pre+body under style —
+// byte-identical to styleCell(style, pre+body, w) — or, for a masked piece,
+// the body painted run by run (styledRuns) with the prefix and the trailing
+// padding under style. Mirrors renderWindow's colouredLine.
+func renderPiece(style lipgloss.Style, p cellPiece, w int) string {
+	if p.mask.empty() || style.GetReverse() {
+		return styleCell(style, p.pre+p.body, w)
+	}
+	disp := []rune(p.body)
+	m := p.mask.slice(0, len(disp)) // defensive: exactly one entry per rune
+	var b strings.Builder
+	if p.pre != "" {
+		b.WriteString(style.Render(p.pre))
+	}
+	b.WriteString(styledRuns(disp, m.emph, m.cls, style))
+	if pad := w - lipgloss.Width(p.pre) - lipgloss.Width(p.body); pad > 0 {
+		b.WriteString(style.Render(strings.Repeat(" ", pad)))
+	}
+	return b.String()
 }
 
 // segOrBlank returns the kth segment or "" when the cell ran out (the blank-pad that
@@ -129,11 +296,11 @@ func renderTwoCol(rows []colRow, o twoColOpts) ([]string, int) {
 			}
 			r := rows[idx]
 			if r.full != nil {
-				out = append(out, styleCell(r.full.style, cellSegs(r.full, w, o.mode, o.hscroll)[0], w))
+				out = append(out, renderPiece(r.full.style, cellPieces(r.full, w, o.mode, o.hscroll)[0], w))
 				continue
 			}
-			left := styleCell(cellStyle(r.left), cellSegs(r.left, colW, o.mode, o.hscroll)[0], colW)
-			right := styleCell(cellStyle(r.right), cellSegs(r.right, colW, o.mode, o.hscroll)[0], colW)
+			left := renderPiece(cellStyle(r.left), cellPieces(r.left, colW, o.mode, o.hscroll)[0], colW)
+			right := renderPiece(cellStyle(r.right), cellPieces(r.right, colW, o.mode, o.hscroll)[0], colW)
 			out = append(out, left+o.sep+right)
 		}
 		return out, eff
@@ -146,20 +313,20 @@ func renderTwoCol(rows []colRow, o twoColOpts) ([]string, int) {
 	var dl []dline
 	for ri, r := range rows {
 		if r.full != nil {
-			for _, s := range cellSegs(r.full, w, o.mode, o.hscroll) {
-				dl = append(dl, dline{text: styleCell(r.full.style, s, w), row: ri})
+			for _, p := range cellPieces(r.full, w, o.mode, o.hscroll) {
+				dl = append(dl, dline{text: renderPiece(r.full.style, p, w), row: ri})
 			}
 			continue
 		}
-		ls := cellSegs(r.left, colW, o.mode, o.hscroll)
-		rs := cellSegs(r.right, colW, o.mode, o.hscroll)
+		ls := cellPieces(r.left, colW, o.mode, o.hscroll)
+		rs := cellPieces(r.right, colW, o.mode, o.hscroll)
 		n := len(ls)
 		if len(rs) > n {
 			n = len(rs)
 		}
 		for k := 0; k < n; k++ {
-			left := styleCell(cellStyle(r.left), segOrBlank(ls, k), colW)
-			right := styleCell(cellStyle(r.right), segOrBlank(rs, k), colW)
+			left := renderPiece(cellStyle(r.left), pieceOrBlank(ls, k), colW)
+			right := renderPiece(cellStyle(r.right), pieceOrBlank(rs, k), colW)
 			dl = append(dl, dline{text: left + o.sep + right, row: ri})
 		}
 	}

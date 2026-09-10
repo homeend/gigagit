@@ -631,7 +631,12 @@ func TestConflictPickerOutputAnchorFollowsFocus(t *testing.T) {
 	e := newConflictPicker("f.txt", pickerDoc())
 	lines, anchor := e.outputLines()
 	if anchor != 1 { // "top" literal, then region 0's contribution
-		t.Fatalf("anchor = %d (lines %v), want 1", anchor, lines)
+		// lines are sanLine{text, mask}; print the text so the failure reads.
+		texts := make([]string, len(lines))
+		for i, l := range lines {
+			texts[i] = l.text
+		}
+		t.Fatalf("anchor = %d (lines %q), want 1", anchor, texts)
 	}
 	e.bi = 1
 	_, anchor = e.outputLines()

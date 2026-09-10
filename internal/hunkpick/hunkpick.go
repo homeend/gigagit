@@ -188,6 +188,32 @@ func (b *Block) ResolvedLines() ([]string, bool) {
 	return b.resolved(nil)
 }
 
+// ResolvedPicks is ResolvedLines with provenance: the (side, line) of every
+// line the block contributes, in the same order, with the legacy whole-side
+// modes reading as that side's full picks and out-of-range picks dropped
+// exactly as resolved() drops them. ok=false while Undecided; a skipped block
+// resolves to no picks at all. Callers that already hold a per-side view of
+// the lines (the TUI picker's sanitized display cache) use it to reuse each
+// line's prepared form instead of re-deriving it from the assembled strings.
+func (b *Block) ResolvedPicks() ([]Pick, bool) {
+	switch b.Mode {
+	case TakeCurrent:
+		return fullPicks(Current, len(b.Current)), true
+	case TakeIncoming:
+		return fullPicks(Incoming, len(b.Incoming)), true
+	case LineByLine:
+		var out []Pick
+		for _, p := range b.Picks {
+			if ls := b.lines(p.Side); p.Line >= 0 && p.Line < len(ls) {
+				out = append(out, p)
+			}
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
 // resolved appends this block's resolved lines to out, or reports ok=false when
 // the block is still Undecided.
 func (b *Block) resolved(out []string) ([]string, bool) {

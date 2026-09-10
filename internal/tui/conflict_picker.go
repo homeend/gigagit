@@ -9,6 +9,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // pickerFocus has no themed colour (bold only), so it stays a literal — it is
@@ -28,6 +29,15 @@ type hunkPicker struct {
 	rightLabel string // "incoming" / "working"
 	requireAll bool   // gate enter on Pending==0 (conflicts) vs apply freely (staging)
 	apply      func(m Model, content []byte) (Model, tea.Cmd)
+
+	// path is the repo-relative file the document came from; it selects the
+	// syntax lexer (lexCmd, or withSyntax in tests) and nothing else.
+	path string
+	// curTok/incTok hold the syntax runs of the two assembled full-file sides,
+	// indexed by line number − 1 (the tokAt numbering). nil = render plain.
+	// The literal context lines are shared by both sides and take the CURRENT
+	// side's runs; each block's lines take their own side's.
+	curTok, incTok [][]syntax.Tok
 
 	doc    *hunkpick.Doc
 	blocks []*hunkpick.Block
@@ -50,14 +60,14 @@ type hunkPicker struct {
 	// every mutating key) — cursor motion and scrolling re-render from the
 	// caches. Measured: the uncached render was O(document) per keystroke.
 	sanBuilt bool
-	sanLit   [][]string // per doc.Items index: sanitized literal lines (nil for blocks)
-	sanCur   [][]string // per block index: sanitized current-side lines
-	sanInc   [][]string // per block index: sanitized incoming-side lines
-	pickRev  int        // bumped on every pick mutation
+	sanLit   [][]sanLine // per doc.Items index: sanitized literal lines (nil for blocks)
+	sanCur   [][]sanLine // per block index: sanitized current-side lines
+	sanInc   [][]sanLine // per block index: sanitized incoming-side lines
+	pickRev  int         // bumped on every pick mutation
 	outBuilt bool
-	outRev   int      // pickRev the output cache was built at
-	outLines []string // sanitized assembled output
-	outStart []int    // per block index: first output line of the block's contribution
+	outRev   int       // pickRev the output cache was built at
+	outLines []sanLine // assembled output, reusing the grid's sanitized lines
+	outStart []int     // per block index: first output line of the block's contribution
 
 	lastGridH int // grid height at the last render — the pgup/pgdn page size
 	lastOutH  int // output-pane height at the last render — its page size
@@ -84,7 +94,8 @@ func newConflictPicker(path string, doc *hunkpick.Doc) *hunkPicker {
 			m = m.popLayer()
 			return m.startOp(engine.ResolveConflictHunks{Path: path, Content: content})
 		},
-		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
+		path: path,
+		doc:  doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
 	}
 }
 
@@ -115,7 +126,8 @@ func newStagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
 			m = m.popLayer()
 			return m.startOp(engine.StageHunks{Path: path, Content: content})
 		},
-		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
+		path: path,
+		doc:  doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
 	}
 }
 
@@ -132,7 +144,8 @@ func newUnstagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
 			m = m.popLayer()
 			return m.startOp(engine.StageHunks{Path: path, Content: content})
 		},
-		doc: doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
+		path: path,
+		doc:  doc, blocks: doc.Blocks(), side: hunkpick.Current, mode: modeScroll,
 	}
 }
 
@@ -269,41 +282,51 @@ func (e *hunkPicker) focusFirstUndecided() {
 	}
 }
 
-// ensureSan builds the once-per-picker sanitized copies of the doc's lines
-// (display only — resolution reads the doc's raw lines and keeps CRLF).
+// ensureSan builds the once-per-picker sanitized copies of the doc's lines and
+// their paint masks (display only — resolution reads the doc's raw lines and
+// keeps CRLF). The two assembled sides are numbered INDEPENDENTLY: they share
+// the literal context, but each block contributes a different number of lines
+// to each side, so curNo and incNo advance separately. Literal context takes
+// the CURRENT side's runs — it is byte-identical on both sides.
 func (e *hunkPicker) ensureSan() {
 	if e.sanBuilt {
 		return
 	}
 	e.sanBuilt = true
-	e.sanLit = make([][]string, len(e.doc.Items))
-	e.sanCur = make([][]string, len(e.blocks))
-	e.sanInc = make([][]string, len(e.blocks))
-	bi := 0
+	e.sanLit = make([][]sanLine, len(e.doc.Items))
+	e.sanCur = make([][]sanLine, len(e.blocks))
+	e.sanInc = make([][]sanLine, len(e.blocks))
+	bi, curNo, incNo := 0, 0, 0
 	for i, it := range e.doc.Items {
 		if it.Block == nil {
-			ls := make([]string, len(it.Literal))
+			ls := make([]sanLine, len(it.Literal))
 			for k, l := range it.Literal {
-				ls[k] = sanitizeLine(l)
+				ls[k] = sanPickLine(l, tokAt(e.curTok, curNo+k+1))
 			}
 			e.sanLit[i] = ls
+			curNo += len(it.Literal)
+			incNo += len(it.Literal)
 			continue
 		}
-		cur := make([]string, len(it.Block.Current))
+		cur := make([]sanLine, len(it.Block.Current))
 		for k, l := range it.Block.Current {
-			cur[k] = sanitizeLine(l)
+			cur[k] = sanPickLine(l, tokAt(e.curTok, curNo+k+1))
 		}
-		inc := make([]string, len(it.Block.Incoming))
+		inc := make([]sanLine, len(it.Block.Incoming))
 		for k, l := range it.Block.Incoming {
-			inc[k] = sanitizeLine(l)
+			inc[k] = sanPickLine(l, tokAt(e.incTok, incNo+k+1))
 		}
 		e.sanCur[bi], e.sanInc[bi] = cur, inc
+		curNo += len(it.Block.Current)
+		incNo += len(it.Block.Incoming)
 		bi++
 	}
 }
 
-// ensureOutput (re)assembles the sanitized output lines and each block's
-// start offset — only when the picks changed since the last build.
+// ensureOutput (re)assembles the output lines and each block's start offset —
+// only when the picks changed since the last build. Every line is the very
+// sanLine the grid already holds (looked up through the block's ResolvedPicks
+// provenance), so the pane never re-sanitizes and never re-lexes a pick.
 func (e *hunkPicker) ensureOutput() {
 	if e.outBuilt && e.outRev == e.pickRev {
 		return
@@ -321,12 +344,23 @@ func (e *hunkPicker) ensureOutput() {
 			continue
 		}
 		e.outStart[bi] = len(e.outLines)
-		if ls, ok := it.Block.ResolvedLines(); ok {
-			for _, l := range ls {
-				e.outLines = append(e.outLines, sanitizeLine(l))
+		if ps, ok := it.Block.ResolvedPicks(); ok {
+			for _, p := range ps {
+				side := e.sanCur[bi]
+				if p.Side == hunkpick.Incoming {
+					side = e.sanInc[bi]
+				}
+				// Belt and braces, never a rescue: ResolvedPicks already drops
+				// out-of-range picks, and sanCur/sanInc are sized from the very
+				// slices those picks index, so the lengths agree by
+				// construction. The guard only covers a sanBuilt cache left
+				// stale by some future edit.
+				if p.Line >= 0 && p.Line < len(side) {
+					e.outLines = append(e.outLines, side[p.Line])
+				}
 			}
 		} else {
-			e.outLines = append(e.outLines, i18n.T("‹region %d undecided›", bi+1))
+			e.outLines = append(e.outLines, sanLine{text: i18n.T("‹region %d undecided›", bi+1)})
 		}
 		bi++
 	}
@@ -526,8 +560,10 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 
 // pickerCell builds the winCell for one candidate line; r past the side's line
 // count yields a blank cell (the gap when sides differ in length). cursor adds
-// the "> " marker so the gutter width is constant (focused or not).
-func pickerCell(blk *hunkpick.Block, san []string, side hunkpick.Side, r int, cursor bool) *winCell {
+// the "> " marker so the gutter width is constant (focused or not) and puts the
+// cell under selectedRow — reverse video, which renderPiece takes as the signal
+// to drop the paint mask, so the cursor row stays plain.
+func pickerCell(blk *hunkpick.Block, san []sanLine, side hunkpick.Side, r int, cursor bool) *winCell {
 	if r >= len(san) {
 		return &winCell{}
 	}
@@ -539,7 +575,7 @@ func pickerCell(blk *hunkpick.Block, san []string, side hunkpick.Side, r int, cu
 	if blk.LinePicked(side, r) {
 		tick = "[x] "
 	}
-	c := &winCell{gutter: cur + tick, body: san[r]}
+	c := &winCell{gutter: cur + tick, body: san[r].text, mask: san[r].mask}
 	if cursor {
 		c.style = st().selectedRow
 	}
@@ -616,7 +652,9 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	for ii, it := range e.doc.Items {
 		if it.Block == nil {
 			for _, l := range e.sanLit[ii] {
-				rows = append(rows, colRow{full: &winCell{body: "  " + l, style: dim}})
+				// The two-space indent is part of the body (it scrolls with
+				// the text), so the mask gains two leading plain runes.
+				rows = append(rows, colRow{full: &winCell{body: "  " + l.text, style: dim, mask: l.mask.pad(2)}})
 			}
 			continue
 		}
@@ -692,7 +730,7 @@ func (e *hunkPicker) columnLabels(w int) string {
 // outputLines assembles the live result — literals verbatim, each region's
 // picked lines, a placeholder for an undecided region — and returns the index
 // of the focused region's first line so the pane can follow the cursor.
-func (e *hunkPicker) outputLines() ([]string, int) {
+func (e *hunkPicker) outputLines() ([]sanLine, int) {
 	e.ensureOutput()
 	anchor := 0
 	if e.bi >= 0 && e.bi < len(e.outStart) {
@@ -704,8 +742,9 @@ func (e *hunkPicker) outputLines() ([]string, int) {
 // renderOutput windows the assembled result to h display lines of width w,
 // keeping the focused region's first line in view; the picker's display mode
 // applies per line (wrap expands, scroll pans with the shared hscroll). The
-// lines arrive pre-sanitized from the output cache; outside wrap mode the
-// window is computed first and only the h visible lines are transformed.
+// lines arrive pre-sanitized (with their paint masks) from the output cache;
+// outside wrap mode the window is computed first and only the h visible lines
+// are laid out and painted.
 func (e *hunkPicker) renderOutput(w, h int) []string {
 	e.lastOutH = h
 	src, srcAnchor := e.outputLines()
@@ -738,29 +777,20 @@ func (e *hunkPicker) renderOutput(w, h int) []string {
 				out = append(out, padRight("", w))
 				continue
 			}
-			l := src[idx]
-			if e.mode == modeScroll {
-				l = hslice(l, e.hscroll, w)
-			} else {
-				l = truncate(l, w)
-			}
-			out = append(out, padRight(l, w))
+			p := cellPieces(&winCell{body: src[idx].text, mask: src[idx].mask}, w, e.mode, e.hscroll)[0]
+			out = append(out, renderPiece(lipgloss.Style{}, p, w))
 		}
 		return out
 	}
 	// Wrap expands lines unevenly, so the whole document is laid out before
 	// windowing (the sanitize cost is already cached away).
-	var dl []string
+	var dl []cellPiece
 	anchor := 0
 	for i, l := range src {
 		if i == srcAnchor {
 			anchor = len(dl)
 		}
-		ws := wrapWidth(l, w, 1<<20)
-		if len(ws) == 0 {
-			ws = []string{""}
-		}
-		dl = append(dl, ws...)
+		dl = append(dl, cellPieces(&winCell{body: l.text, mask: l.mask}, w, modeWrap, e.hscroll)...)
 	}
 	if srcAnchor >= len(src) {
 		anchor = len(dl)
@@ -784,7 +814,7 @@ func (e *hunkPicker) renderOutput(w, h int) []string {
 	out := make([]string, 0, h)
 	for i := 0; i < h; i++ {
 		if idx := start + i; idx < len(dl) {
-			out = append(out, padRight(dl[idx], w))
+			out = append(out, renderPiece(lipgloss.Style{}, dl[idx], w))
 		} else {
 			out = append(out, padRight("", w))
 		}
