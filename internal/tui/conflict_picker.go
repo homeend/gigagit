@@ -31,7 +31,7 @@ type hunkPicker struct {
 	apply      func(m Model, content []byte) (Model, tea.Cmd)
 
 	// path is the repo-relative file the document came from; it selects the
-	// syntax lexer (withSyntax) and nothing else.
+	// syntax lexer (lexCmd, or withSyntax in tests) and nothing else.
 	path string
 	// curTok/incTok hold the syntax runs of the two assembled full-file sides,
 	// indexed by line number − 1 (the tokAt numbering). nil = render plain.

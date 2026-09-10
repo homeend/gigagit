@@ -125,8 +125,8 @@ layer stack (`hasLayer`, so a popup opened mid-lex only covers it), or the
 conflict process's own `cp.picker` — `setSyntax` invalidates the sanitized
 caches and the repaint is layout-stable, since a mask never changes a line's
 text or width. `withSyntax` is the synchronous form, kept for tests. The two
-sides are numbered
-INDEPENDENTLY, since a block contributes a different number of lines to each;
+sides are numbered INDEPENDENTLY, since a block contributes a different
+number of lines to each;
 `ensureSan` walks both cursors at once and stores `sanLine{text, mask}` per
 line, literal context taking the current side's runs. The output pane assembles
 from `Block.ResolvedPicks` provenance so it reuses those very `sanLine` values
