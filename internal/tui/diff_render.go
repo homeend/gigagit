@@ -366,8 +366,17 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 		switch {
 		case i >= curStart && i < curEnd:
 			// The cursor outranks an attention band: the user must always be
-			// able to see where they are.
+			// able to see where they are. In "number" mode, though, only the
+			// GUTTER carries the cursor (mk.row is false), so the row body is
+			// free — and the row under the cursor is precisely the one the user
+			// is most likely to be reading. Keep the cursor gutter, take the
+			// band for the body.
 			mk = cursorMark(style)
+			if !mk.row {
+				if bg, ok := m.attnMarkFor(v, r); ok {
+					mk = cellMark{row: true, attn: true, base: bg, gut: mk.gut}
+				}
+			}
 		default:
 			if bg, ok := m.attnMarkFor(v, r); ok {
 				mk = cellMark{row: true, attn: true, base: bg, gut: s.diffGutter}

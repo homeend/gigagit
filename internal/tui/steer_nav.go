@@ -75,7 +75,7 @@ func (m Model) steerFocus(c steer.Command) (Model, tea.Cmd) {
 	} else {
 		m = m.activateTab(p)
 	}
-	m = m.steerNotice(i18n.T("agent moved the focus"))
+	m = m.steerNotice(i18n.T("▸ agent moved the focus"))
 	return m, tea.Batch(superseded, m.answerSteer(c, steerOK(c, "focused "+c.Panel)))
 }
 

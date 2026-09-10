@@ -97,6 +97,105 @@ func TestCloseSteerInboxRemovesPresence(t *testing.T) {
 	}
 }
 
+// A session that crashed or was SIGKILLed leaves its tui.json behind, and
+// Touch only Chtimes an existing file — so without an explicit Remove first,
+// the NEW session's presence would keep the DEAD one's pid and start time, and
+// `gg session status` would print them as this session's.
+func TestInitSteerInboxOverwritesACrashedSessionsPresence(t *testing.T) {
+	t.Parallel()
+	m, dir := steerModel(t)
+	if err := steer.Touch(dir, steer.TUIPresence, steer.Presence{
+		PID: 424242, Worktree: "/gone", Started: "2020-01-01T00:00:00Z",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	m = m.initSteerInbox()
+	p, ok := steer.Live(dir, steer.TUIPresence)
+	if !ok {
+		t.Fatal("no live presence after initSteerInbox")
+	}
+	if p.PID != os.Getpid() {
+		t.Errorf("presence pid = %d, want this process (%d) — a crashed session's pid survived the claim", p.PID, os.Getpid())
+	}
+	if p.Started == "2020-01-01T00:00:00Z" || p.Worktree == "/gone" {
+		t.Errorf("presence = %+v, want this session's own payload", p)
+	}
+}
+
+// closeSteerInbox must also drop a parked navigate. The config-turned-off path
+// (reconcileSteer) is the leak: after it, drainSteer is gated on steerActive()
+// and can no longer expire the pending, so a parked status retry would fire on
+// the next ORDINARY status refresh and move the user's view with no reply
+// possible.
+func TestCloseSteerInboxClearsAParkedPending(t *testing.T) {
+	t.Parallel()
+	m, _ := steerModel(t)
+	m = m.initSteerInbox()
+	m.pendingSteer = &pendingSteer{cmd: steer.Command{ID: "p-1", Cmd: "navigate", File: "a.txt"}, stage: steerStageStatusRetry, at: time.Now()}
+	m.cfg.UI.AgentSteering = "off"
+	m, _ = m.reconcileSteer()
+	if m.pendingSteer != nil {
+		t.Errorf("pending = %+v, want it dropped: nothing can expire it once steering is off", m.pendingSteer)
+	}
+}
+
+// The TUI must refuse the same two wire enums the web endpoint's toSteerWire
+// refuses, and refuse them ONCE, before dispatch — a silently defaulted
+// target.state keys a band no diff can ever match (and answers ok:true for it),
+// and a silently defaulted line.side makes an unknown side mean "new".
+func TestSteerRefusesUnknownTargetStateAndLineSide(t *testing.T) {
+	t.Parallel()
+	base, dir := steerModel(t)
+	base.ready = true
+
+	for _, tc := range []struct {
+		name string
+		cmd  steer.Command
+		want string
+	}{
+		{"highlight bad state", steer.Command{
+			ID: "v-1", Cmd: "highlight", File: "a.txt", Target: &steer.Target{State: "index"},
+			Side: "new", Start: 1, End: 2, Tone: "info", Wait: true,
+		}, `unknown target state "index"`},
+		{"navigate bad state", steer.Command{
+			ID: "v-2", Cmd: "navigate", File: "a.txt", Target: &steer.Target{State: "HEAD"}, Wait: true,
+		}, `unknown target state "HEAD"`},
+		{"highlight_clear bad state", steer.Command{
+			ID: "v-3", Cmd: "highlight_clear", File: "a.txt", Target: &steer.Target{State: "cached"}, Wait: true,
+		}, `unknown target state "cached"`},
+		{"navigate bad side", steer.Command{
+			ID: "v-4", Cmd: "navigate", File: "a.txt", Line: &steer.Line{Side: "middle", No: 3}, Wait: true,
+		}, `unknown side "middle"`},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			m, cmd := base.applySteer(tc.cmd)
+			runSteerCmd(t, cmd)
+			r, ok := steer.AwaitReply(dir, tc.cmd.ID, time.Second)
+			if !ok || r.OK || r.Error != tc.want {
+				t.Fatalf("reply = %+v ok=%v, want ok:false %q", r, ok, tc.want)
+			}
+			if len(m.attention) != 0 {
+				t.Error("a refused command must record no band")
+			}
+		})
+	}
+
+	// The empty string is the documented default on both fields and must stay
+	// accepted — the consumer already treats "" as unstaged / new.
+	// Its own map: Model is a value but `attention` is a map, so a highlight
+	// applied to `base` here would be visible to the parallel subtests above.
+	okBase := base
+	okBase.attention = map[attentionKey][]steerMark{}
+	ok1 := steer.Command{ID: "v-5", Cmd: "highlight", File: "a.txt", Target: &steer.Target{}, Start: 1, Tone: "info", Wait: true}
+	_, cmd := okBase.applySteer(ok1)
+	runSteerCmd(t, cmd)
+	if r, _ := steer.AwaitReply(dir, "v-5", time.Second); !r.OK {
+		t.Errorf("reply = %+v, want ok:true — an empty target.state is the default, not an unknown value", r)
+	}
+}
+
 func TestSteerRefusalRules(t *testing.T) {
 	t.Parallel()
 	base, _ := steerModel(t)

@@ -44,6 +44,11 @@ func (m Model) initSteerInbox() Model {
 		return m
 	}
 	steer.Discard(m.steerDir)
+	// The remove is not redundant: Touch only Chtimes a file that already
+	// exists, so a crashed or SIGKILLed session's tui.json would keep ITS pid
+	// and start time while this session refreshed the mtime — and
+	// `gg session status` would print the dead session's numbers as ours.
+	steer.Remove(m.steerDir, steer.TUIPresence)
 	_ = steer.Touch(m.steerDir, steer.TUIPresence, steer.Presence{
 		PID:      os.Getpid(),
 		Worktree: m.snapshotWorktree,
@@ -84,6 +89,12 @@ func (m Model) closeSteerInbox() Model {
 	}
 	m.steerDir = ""
 	m.steerClaimed = false
+	// A parked navigate must go with the claim. drainSteer — the only thing
+	// that expires one — is gated on steerActive(), so a pending left here (the
+	// config-turned-off path; reRoot clears its own) would sit forever and then
+	// fire on the next ORDINARY status refresh, moving the user's view with no
+	// reply possible and nobody to send one to.
+	m.pendingSteer = nil
 	return m
 }
 
@@ -222,10 +233,39 @@ func (m Model) answerSteer(c steer.Command, r steer.Reply) tea.Cmd {
 	}
 }
 
+// steerEnumRefusal validates the two wire enums that more than one verb reads,
+// mirroring the web endpoint's toSteerWire so the same command is answered the
+// same way whichever consumer picks it up. "" is the documented default on
+// both fields (unstaged / new) and stays accepted; anything else must be
+// refused rather than silently defaulted — an unrecognised target.state keys a
+// band no open diff can ever match (answered ok:true for a band that will never
+// paint) and reads as "not staged" in navigate, and an unrecognised side
+// silently means "new". The prose is English protocol, like every reply.
+func steerEnumRefusal(c steer.Command) string {
+	if c.Target != nil {
+		switch c.Target.State {
+		case "", "unstaged", "staged", "untracked", "commit":
+		default:
+			return "unknown target state " + strconv.Quote(c.Target.State)
+		}
+	}
+	if c.Line != nil {
+		switch c.Line.Side {
+		case "", "new", "old":
+		default:
+			return "unknown side " + strconv.Quote(c.Line.Side)
+		}
+	}
+	return ""
+}
+
 // applySteer runs one command. Refusals are checked once, before dispatch, so
 // every verb inherits them.
 func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 	if why := m.steerRefusal(); why != "" {
+		return m, m.answerSteer(c, steerFail(c, why))
+	}
+	if why := steerEnumRefusal(c); why != "" {
 		return m, m.answerSteer(c, steerFail(c, why))
 	}
 	// Only navigate parks a pendingSteer, and only one can be in flight: a

@@ -91,6 +91,36 @@ func TestSteerFocusSwitchesPanelsAndAnswers(t *testing.T) {
 	}
 }
 
+// Every "an agent did this" notice wears the ▸ prefix — they all land in the
+// same two fields through the same steerNotice, so one without it reads as a
+// different kind of message.
+func TestSteerNoticesAllCarryTheAgentPrefix(t *testing.T) {
+	t.Parallel()
+	base, _ := steerModel(t)
+	base = base.initSteerInbox()
+	base.ready = true
+
+	for _, tc := range []struct {
+		name string
+		cmd  steer.Command
+	}{
+		{"focus", steer.Command{ID: "px-1", Cmd: "focus", Panel: "branches"}},
+		{"reload", steer.Command{ID: "px-2", Cmd: "reload", Sources: []string{"notes"}}},
+		{"highlight", markCmd("px-3", "info", 1, 2)},
+		{"highlight_clear", steer.Command{ID: "px-4", Cmd: "highlight_clear"}},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			m, cmd := base.applySteer(tc.cmd)
+			runSteerCmd(t, cmd)
+			if !strings.HasPrefix(m.statusMsg, "▸ ") {
+				t.Errorf("%s notice = %q, want the ▸ agent prefix", tc.name, m.statusMsg)
+			}
+		})
+	}
+}
+
 func TestSteerFocusRefusesAnUnknownPanel(t *testing.T) {
 	t.Parallel()
 	m, dir := steerModel(t)

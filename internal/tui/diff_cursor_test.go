@@ -872,3 +872,39 @@ func TestShelfCompareTwoEntriesIsACompareView(t *testing.T) {
 		t.Fatalf("loader-side view = compare:%v rev:%q, want true/\"\"", lv.compare, lv.rev)
 	}
 }
+
+// With [ui] diff_cursor = "number" only the GUTTER carries the cursor, so the
+// row body is free to keep the agent's attention band — and the row the user is
+// sitting on is precisely the one they are most likely to be looking at. (No
+// t.Parallel(): asserts on rendered SGR codes, see the note above
+// TestCursorMarkerRowPaintsOnlyCursorRows.)
+func TestCursorNumberModeKeepsTheAttentionBand(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+	m := openedDiffModel(12, cursorRows(40), nil)
+	m.width = 80
+	v := m.diffLayer()
+	v.noteAddr = model.FileAddress{State: model.StateUnstaged, Path: "a.txt"}
+	v.setCursorLine(5, m.diffBodyRows())
+	s, e := v.cursorDispRange()
+	row := s - v.offset
+
+	plain := m.diffPaneLines(v, 80, 10, s, e, "number")
+	m.attention = map[attentionKey][]steerMark{
+		{path: "a.txt", state: "unstaged"}: {{side: "new", start: 1, end: 40, tone: "warn"}},
+	}
+	banded := m.diffPaneLines(v, 80, 10, s, e, "number")
+	if banded[row] == plain[row] {
+		t.Fatal("number-cursor mode dropped the attention band on the cursor row")
+	}
+	// Sanity: a non-cursor row in range was banded either way.
+	if other := row + 1; other < len(banded) && banded[other] == plain[other] {
+		t.Fatal("setup: a non-cursor row inside the band must render banded")
+	}
+	// …and the cursor gutter style must survive ON TOP of the band.
+	noCursor := m.diffPaneLines(v, 80, 10, 0, 0, "number")
+	if banded[row] == noCursor[row] {
+		t.Fatal("the number-cursor gutter style was lost when the band was applied")
+	}
+}
