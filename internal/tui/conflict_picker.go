@@ -66,7 +66,7 @@ type hunkPicker struct {
 	pickRev  int         // bumped on every pick mutation
 	outBuilt bool
 	outRev   int       // pickRev the output cache was built at
-	outLines []sanLine // sanitized assembled output
+	outLines []sanLine // assembled output, reusing the grid's sanitized lines
 	outStart []int     // per block index: first output line of the block's contribution
 
 	lastGridH int // grid height at the last render — the pgup/pgdn page size
@@ -323,8 +323,10 @@ func (e *hunkPicker) ensureSan() {
 	}
 }
 
-// ensureOutput (re)assembles the sanitized output lines and each block's
-// start offset — only when the picks changed since the last build.
+// ensureOutput (re)assembles the output lines and each block's start offset —
+// only when the picks changed since the last build. Every line is the very
+// sanLine the grid already holds (looked up through the block's ResolvedPicks
+// provenance), so the pane never re-sanitizes and never re-lexes a pick.
 func (e *hunkPicker) ensureOutput() {
 	if e.outBuilt && e.outRev == e.pickRev {
 		return
@@ -342,9 +344,15 @@ func (e *hunkPicker) ensureOutput() {
 			continue
 		}
 		e.outStart[bi] = len(e.outLines)
-		if ls, ok := it.Block.ResolvedLines(); ok {
-			for _, l := range ls {
-				e.outLines = append(e.outLines, sanLine{text: sanitizeLine(l)})
+		if ps, ok := it.Block.ResolvedPicks(); ok {
+			for _, p := range ps {
+				side := e.sanCur[bi]
+				if p.Side == hunkpick.Incoming {
+					side = e.sanInc[bi]
+				}
+				if p.Line >= 0 && p.Line < len(side) {
+					e.outLines = append(e.outLines, side[p.Line])
+				}
 			}
 		} else {
 			e.outLines = append(e.outLines, sanLine{text: i18n.T("‹region %d undecided›", bi+1)})
@@ -729,8 +737,9 @@ func (e *hunkPicker) outputLines() ([]sanLine, int) {
 // renderOutput windows the assembled result to h display lines of width w,
 // keeping the focused region's first line in view; the picker's display mode
 // applies per line (wrap expands, scroll pans with the shared hscroll). The
-// lines arrive pre-sanitized from the output cache; outside wrap mode the
-// window is computed first and only the h visible lines are transformed.
+// lines arrive pre-sanitized (with their paint masks) from the output cache;
+// outside wrap mode the window is computed first and only the h visible lines
+// are laid out and painted.
 func (e *hunkPicker) renderOutput(w, h int) []string {
 	e.lastOutH = h
 	src, srcAnchor := e.outputLines()
@@ -763,29 +772,20 @@ func (e *hunkPicker) renderOutput(w, h int) []string {
 				out = append(out, padRight("", w))
 				continue
 			}
-			l := src[idx].text
-			if e.mode == modeScroll {
-				l = hslice(l, e.hscroll, w)
-			} else {
-				l = truncate(l, w)
-			}
-			out = append(out, padRight(l, w))
+			p := cellPieces(&winCell{body: src[idx].text, mask: src[idx].mask}, w, e.mode, e.hscroll)[0]
+			out = append(out, renderPiece(lipgloss.Style{}, p, w))
 		}
 		return out
 	}
 	// Wrap expands lines unevenly, so the whole document is laid out before
 	// windowing (the sanitize cost is already cached away).
-	var dl []string
+	var dl []cellPiece
 	anchor := 0
 	for i, l := range src {
 		if i == srcAnchor {
 			anchor = len(dl)
 		}
-		ws := wrapWidth(l.text, w, 1<<20)
-		if len(ws) == 0 {
-			ws = []string{""}
-		}
-		dl = append(dl, ws...)
+		dl = append(dl, cellPieces(&winCell{body: l.text, mask: l.mask}, w, modeWrap, e.hscroll)...)
 	}
 	if srcAnchor >= len(src) {
 		anchor = len(dl)
@@ -809,7 +809,7 @@ func (e *hunkPicker) renderOutput(w, h int) []string {
 	out := make([]string, 0, h)
 	for i := 0; i < h; i++ {
 		if idx := start + i; idx < len(dl) {
-			out = append(out, padRight(dl[idx], w))
+			out = append(out, renderPiece(lipgloss.Style{}, dl[idx], w))
 		} else {
 			out = append(out, padRight("", w))
 		}

@@ -231,3 +231,82 @@ func TestPickerRenderUnwiredIsPlain(t *testing.T) {
 		t.Errorf("an unwired picker must render no class runs: %q", off)
 	}
 }
+
+// The output pane must reuse the grid's prepared lines, not rebuild them:
+// pointer identity of the mask backing array proves no re-sanitize/re-lex.
+func TestOutputPaneReusesTheGridsSanLines(t *testing.T) {
+	t.Parallel()
+	e := newConflictPicker("f.go", pickerSyntaxDoc()).withSyntax(true)
+	e.doc.SetAll(hunkpick.TakeCurrent)
+	e.ensureOutput()
+
+	// outLines[0] is the literal "package main"; [1..3] are block 0's current
+	// lines; [4] the second literal; [5] block 1's current line.
+	if len(e.outLines) != 6 {
+		t.Fatalf("outLines = %d entries, want 6: %v", len(e.outLines), e.outLines)
+	}
+	if e.outLines[1].text != "var a int" {
+		t.Fatalf("outLines[1] = %q, want %q", e.outLines[1].text, "var a int")
+	}
+	if e.outLines[1].mask.empty() || e.sanCur[0][0].mask.empty() {
+		t.Fatal("both the grid line and the output line must carry a mask")
+	}
+	if &e.outLines[1].mask.cls[0] != &e.sanCur[0][0].mask.cls[0] {
+		t.Error("the output pane must reuse the grid's mask, not rebuild one")
+	}
+	if &e.outLines[0].mask.cls[0] != &e.sanLit[0][0].mask.cls[0] {
+		t.Error("literal output lines must reuse the grid's literal mask")
+	}
+}
+
+// A re-pick rebuilds the assembly from the same cached lines (masks survive).
+func TestOutputPaneKeepsMasksAcrossPicks(t *testing.T) {
+	t.Parallel()
+	e := newConflictPicker("f.go", pickerSyntaxDoc()).withSyntax(true)
+	e.doc.SetAll(hunkpick.TakeCurrent)
+	e.ensureOutput()
+	e.blocks[0].ToggleSide(hunkpick.Incoming)
+	e.pickRev++
+	e.ensureOutput()
+	for i, l := range e.outLines {
+		if l.text != "" && l.mask.empty() {
+			t.Fatalf("outLines[%d] (%q) lost its mask after a re-pick", i, l.text)
+		}
+	}
+}
+
+// An undecided region's placeholder carries no mask and is never painted.
+func TestOutputPanePlaceholderIsPlain(t *testing.T) {
+	t.Parallel()
+	e := newConflictPicker("f.go", pickerSyntaxDoc()).withSyntax(true)
+	e.ensureOutput()
+	if !e.outLines[1].mask.empty() {
+		t.Errorf("the undecided placeholder must carry no mask: %v", e.outLines[1])
+	}
+}
+
+func TestRenderOutputColoursTheAssembledLines(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI256)
+	defer lipgloss.SetColorProfile(prev)
+
+	kw := "38;5;" + st().syntaxColor(syntax.Keyword)
+	for _, mode := range []dispMode{modeScroll, modeCutoff, modeWrap} {
+		e := newConflictPicker("f.go", pickerSyntaxDoc()).withSyntax(true)
+		e.mode = mode
+		e.doc.SetAll(hunkpick.TakeCurrent)
+		lines := e.renderOutput(60, 8)
+		joined := strings.Join(lines, "\n")
+		if !strings.Contains(joined, kw+"mvar") {
+			t.Errorf("mode %d: the output pane should colour `var`:\n%q", mode, joined)
+		}
+		if !strings.Contains(ansi.Strip(joined), "var a int") {
+			t.Errorf("mode %d: visible text lost:\n%q", mode, ansi.Strip(joined))
+		}
+		for _, l := range lines {
+			if w := ansi.StringWidth(l); w != 60 {
+				t.Fatalf("mode %d: line width = %d, want 60: %q", mode, w, l)
+			}
+		}
+	}
+}
