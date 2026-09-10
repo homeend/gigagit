@@ -725,6 +725,17 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openNotePopup(noteEdit)
 	case "R":
 		return m.openNotePopup(noteReply)
+	case "L":
+		// A portable address for the cursor line — paste it in a chat and
+		// `gg diff` / `gg note add` / `gg session navigate` take it back.
+		// Help-and-menu-only: the footer already measures 139 of its 140
+		// columns (diffHintFor).
+		text, ok := m.contextLinkText()
+		if !ok {
+			m.diffNotice = i18n.T("▸ no gg link for this place")
+			return m, nil
+		}
+		return m, m.copyToClipboardCmd(i18n.T("Copied link: %s", text), text)
 	case "a":
 		// Session-scoped: the flag lives on the Model and is mirrored onto
 		// every view that relayouts (relayout has no Model to ask).

@@ -90,6 +90,7 @@ type Model struct {
 
 	initHomeDir         string // home dir for agent detection; "" skips home-scoped agents (tests)
 	statePath           string // repo-registry location; "" disables recording (tests)
+	linkRepoName        string // remote repository name for gg:// links; "" = the local (absolute-path) form
 	pendingSeqBump      []string
 	pendingSwitch       bool
 	switchTarget        string
@@ -1043,6 +1044,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.top != "" {
 			m.currentWorktree = msg.top
 		}
+		m.linkRepoName = msg.repoName
 		// Seed refreshLastRun so the first heartbeat tick is one interval out
 		// rather than firing every enabled source immediately (enable-time burst).
 		now := time.Now()
@@ -1094,6 +1096,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.tags = msg.tags
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
+			m.linkRepoName = msg.repoName
 			m.cfg = msg.cfg
 			// Both directions (see reconcileSteer): this is the repo-switch path,
 			// where snapshotTargetMsg resolved the new inbox before this config

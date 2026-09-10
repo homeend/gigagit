@@ -433,6 +433,7 @@ type configReadyMsg struct {
 	cfg      config.Config
 	repoTOML string // active per-repo write target: private user-dir file if present, else <repo-top>/.gg.toml; "" if not in a repo
 	top      string // git working-tree root (== Snapshot.CurrentWorktree); "" if not in a repo
+	repoName string // remote repository name for gg:// links; "" = no remote
 }
 
 // bootstrapCmd loads config and applies the settings the first reads depend on
@@ -446,7 +447,7 @@ func (m Model) bootstrapCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		cfg := config.Defaults()
-		repoTOML, root := "", ""
+		repoTOML, root, linkRepoName := "", "", ""
 		if top, err := svc.TopLevel(ctx); err == nil && top != "" {
 			root = top
 			committed := filepath.Join(top, ".gg.toml")
@@ -466,6 +467,7 @@ func (m Model) bootstrapCmd() tea.Cmd {
 			// property of the repo, not of MRU recording, and a later task
 			// threads it into configReadyMsg.
 			name, _ := svc.RepoName(ctx)
+			linkRepoName = name
 			if statePath != "" {
 				_ = repos.Touch(statePath, top, name, time.Now())
 			}
@@ -477,6 +479,6 @@ func (m Model) bootstrapCmd() tea.Cmd {
 		svc.SetVersionsPolicy(versionsPolicyFromConfig(cfg))
 		svc.SetNotesPolicy(cfg.Notes.MaxAgeDays, cfg.Notes.MaxEntries)
 		svc.StartNotesSweep()
-		return configReadyMsg{cfg: cfg, repoTOML: repoTOML, top: root}
+		return configReadyMsg{cfg: cfg, repoTOML: repoTOML, top: root, repoName: linkRepoName}
 	}
 }

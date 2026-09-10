@@ -54,6 +54,9 @@ func availableActions(m Model) []actionRow {
 			return append(rows, m.stashActionRows()...)
 		}
 		rows := m.contextCopyRows()
+		if r, ok := m.contextLinkRow(); ok {
+			rows = append(rows, r)
+		}
 		// A history/blame surface on top is a single file at a rev, not the files
 		// view underneath it. It owns the "Open in external editor" action
 		// (surfaceExternalRow); the files-view view/open rows and — below — the
@@ -157,6 +160,9 @@ func availableActions(m Model) []actionRow {
 		}
 	}
 	out := append(m.contextCopyRows(), row...)
+	if r, ok := m.contextLinkRow(); ok {
+		out = insertAfterID(out, "copy-commit-id", r)
+	}
 	out = append(out, window...)
 	if r, ok := m.fileEditRow(); ok {
 		out = append(out, r)
