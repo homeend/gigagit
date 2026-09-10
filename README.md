@@ -412,6 +412,13 @@ generated, whose lines it uncomments in place. A role your repo's `.gg.toml`
 pins is shown tagged `(repo)` and cannot be edited here — the repo file would
 shadow whatever the editor wrote — though `d` still removes a global override
 left underneath one, and says the repo value goes on applying.
+
+`[ui] agent_steering` (default `"on"`) controls whether the TUI and `gg web`
+accept live-steering commands from `gg session` — an AI agent putting your
+window on the line it just annotated. Set `"off"` to disable the inbox:
+neither frontend writes a session presence, and `gg session` reports there is
+no gg session for the worktree.
+
 `[ui] show_eol_only_changes` (default `false`) controls whether a file whose
 only unstaged change is its line endings (CRLF↔LF) is shown as modified — by
 default such files are hidden from the Files panel and its count badge as noise;

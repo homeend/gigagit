@@ -675,3 +675,48 @@ func TestOverlayTheme(t *testing.T) {
 		t.Fatalf("empty Theme must not clear an existing value, got %q", dst.Theme)
 	}
 }
+
+func TestUIAgentSteeringLayers(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.toml")
+
+	cfg, err := Load(missing, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.AgentSteering != "on" || !cfg.UI.SteeringOn() {
+		t.Errorf("default agent_steering = %q, want on", cfg.UI.AgentSteering)
+	}
+
+	g := filepath.Join(dir, "global.toml")
+	writeFile(t, g, "[ui]\nagent_steering = \"off\"\n")
+	cfg, err = Load(g, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.SteeringOn() {
+		t.Error("a global off must turn steering off")
+	}
+
+	// A repo can turn it back ON over a global off — the whole reason the key
+	// is a string and not a bool.
+	r := filepath.Join(dir, "repo.toml")
+	writeFile(t, r, "[ui]\nagent_steering = \"on\"\n")
+	cfg, err = Load(g, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.UI.SteeringOn() {
+		t.Error("a repo on must beat a global off")
+	}
+
+	// An empty value is unset and cannot reset the global.
+	writeFile(t, r, "[ui]\nagent_steering = \"\"\n")
+	cfg, err = Load(g, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.SteeringOn() {
+		t.Error("an empty agent_steering must be ignored, leaving the global off")
+	}
+}

@@ -95,6 +95,18 @@ type UIConfig struct {
 	// under 16 colours the theme is effectively off.
 	Theme string `toml:"theme"`
 
+	// AgentSteering governs the live-steering inbox both interactive frontends
+	// expose to `gg session …`:
+	//   "on"  — the TUI writes its presence and drains commands; `gg web`
+	//           writes web.json and serves POST /api/session/steer. THE DEFAULT.
+	//   "off" — neither frontend writes a presence or accepts a command, so
+	//           `gg session` reports "no gg session for this worktree".
+	// A string (not a bool) on purpose, for the same reason as ShowGraph: under
+	// the zero-is-unset overlay rule a bool's `false` is indistinguishable from
+	// unset, so a repo could never turn steering back on over a global off.
+	// Empty = unset; resolved to "on".
+	AgentSteering string `toml:"agent_steering"`
+
 	ShowEOLOnlyChanges bool `toml:"show_eol_only_changes"` // surface files whose only unstaged change is line endings (CRLF↔LF); false (default) hides them as noise
 
 	// DisableSlowOpConfirm turns OFF the yes/no confirmation shown before slow
@@ -108,6 +120,12 @@ type UIConfig struct {
 // the literal "off" value (including the default "auto" and any unrecognized
 // value) is on.
 func (c UIConfig) SyntaxOn() bool { return c.DiffSyntax != "off" }
+
+// SteeringOn reports whether the live-steering inbox is enabled: everything but
+// the literal "off" (including the default "on" and any unrecognized value) is
+// on. Only the TUI and `gg web` consult it — with steering off they write no
+// presence, and `gg session` then finds nothing live.
+func (c UIConfig) SteeringOn() bool { return c.AgentSteering != "off" }
 
 // CursorStyle returns the diff-view cursor marker: "row", "number" or "off".
 // Anything else (including unset) is "row".
@@ -204,7 +222,7 @@ func Defaults() Config {
 			DefaultBranchTemplate: "<parent-branch>-<date:yyyy-MM-dd_HH-mm>",
 		},
 		UI: UIConfig{WheelStep: 3, HScrollStep: 8, CommitGraphLanes: 8, CommitGraphMinLanes: 2, CommitGraphStep: 4,
-			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", DiffSyntax: "auto", DiffCursor: "row", ShowGraph: "on", Theme: "terminal"},
+			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", DiffSyntax: "auto", DiffCursor: "row", ShowGraph: "on", Theme: "terminal", AgentSteering: "on"},
 		Versions: VersionsConfig{MaxAgeDays: 90},
 		Notes:    NotesConfig{MaxAgeDays: 30, MaxEntries: 2000},
 	}
@@ -365,6 +383,9 @@ func overlayUI(dst *UIConfig, src UIConfig) {
 	}
 	if src.Theme != "" {
 		dst.Theme = src.Theme
+	}
+	if src.AgentSteering != "" {
+		dst.AgentSteering = src.AgentSteering
 	}
 	// Inverted polarity: the default (false) is the active feature (hide), so
 	// only a true in a higher layer overlays — matching the zero-is-unset rule.
@@ -556,4 +577,23 @@ func SessionSnapshotPath(commonDir string) string {
 		return ""
 	}
 	return filepath.Join(root, "gg", "sessions", EncodeRepoKey(commonDir), "ui-state.json")
+}
+
+// SessionSteerDir is the live-steering inbox for ONE worktree of the repo whose
+// git common dir is commonDir:
+// <state>/gg/sessions/<EncodeRepoKey(commonDir)>/steer/<EncodeRepoKey(worktree)>.
+//
+// The snapshot one level up is keyed by common dir and shared by every worktree
+// of a repo; the inbox must NOT inherit that, because `gg session navigate` run
+// in worktree A has to reach the session showing A. "" (steering disabled) when
+// either path is empty or no state root exists.
+func SessionSteerDir(commonDir, worktree string) string {
+	if commonDir == "" || worktree == "" {
+		return ""
+	}
+	root := stateHome()
+	if root == "" {
+		return ""
+	}
+	return filepath.Join(root, "gg", "sessions", EncodeRepoKey(commonDir), "steer", EncodeRepoKey(worktree))
 }
