@@ -1900,7 +1900,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return mm, nil
 				}
 			}
-			if m.canShowFileDiff() {
+			if m.canBlameFile() {
 				bi, _ := m.backingIndex(m.focus)
 				f := m.status.Files[bi]
 				ctx := navContext{path: f.Path, rev: ""}

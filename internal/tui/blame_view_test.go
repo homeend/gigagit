@@ -480,3 +480,34 @@ func TestBlameRenderMatchesFullBuildRegardlessOfWindow(t *testing.T) {
 		}
 	}
 }
+
+// A file with no HEAD version has nothing to blame: an untracked file makes
+// git blame fail outright ("no such path in HEAD"), and a staged-new file
+// would blame every line as "Not Committed Yet". Both Files-panel rows render
+// the A attribute, so b is inert on them (and h likewise has no history).
+func TestStatusBIgnoresFilesNotInHEAD(t *testing.T) {
+	t.Parallel()
+	for name, f := range map[string]model.FileStatus{
+		"untracked":  {Path: "new.txt", Kind: model.KindUntracked},
+		"staged-new": {Path: "new.txt", Staged: 'A', Unstaged: '.'},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			m := Model{width: 100, height: 30, focus: panelFiles, sel: map[panel]int{}}
+			m.status = model.WorkingTreeStatus{Files: []model.FileStatus{f}}
+			if m.canBlameFile() {
+				t.Error("canBlameFile should be false for a file not in HEAD")
+			}
+			mm, _ := m.Update(keyMsg("b"))
+			if _, ok := mm.(Model).topLayer().(*blameView); ok {
+				t.Fatal("b on a file not in HEAD must not push a blameView")
+			}
+		})
+	}
+	// The gate does not lose the tracked case.
+	m := Model{width: 100, height: 30, focus: panelFiles, sel: map[panel]int{}}
+	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Unstaged: 'M'}}}
+	if !m.canBlameFile() {
+		t.Error("canBlameFile should be true for a tracked modified file")
+	}
+}
