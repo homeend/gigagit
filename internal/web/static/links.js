@@ -15,15 +15,27 @@ function linkPathOK(p) {
   return !/[@:#]/.test(p);
 }
 
+// An absolute CHECKOUT path holding '@' or '#' cannot be expressed either:
+// those are the target and hunk separators, so the link would not reparse. A
+// ':' is fine — a leading drive prefix is skipped, and only a NUMBER after
+// the last ':' is read as a line (internal/model.LinkAbsOK).
+function linkAbsOK(abs) {
+  let s = abs;
+  if (/^[A-Za-z]:/.test(s)) s = s.slice(2);
+  else if (/^\/[A-Za-z]:/.test(s)) s = s.slice(3);
+  return !/[@#]/.test(s);
+}
+
 // repoSegment renders "gg://" + the repo half: the remote repository name, or
 // the local form "gg://" + the absolute worktree path (which already starts
 // with "/" on POSIX and needs the separator added for a Windows drive) —
-// internal/model.Link.String()'s Repo half.
+// internal/model.Link.String()'s Repo half. "" when the worktree path itself
+// cannot be expressed.
 function repoSegment(repo, worktree) {
   const name = repo && repo.link_repo;
   if (name) return "gg://" + name;
   const abs = (worktree || "").replace(/\\/g, "/").replace(/\/+$/, "");
-  if (!abs) return "";
+  if (!abs || !linkAbsOK(abs)) return "";
   return abs.startsWith("/") ? "gg://" + abs : "gg:///" + abs;
 }
 

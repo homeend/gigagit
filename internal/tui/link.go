@@ -10,9 +10,11 @@ import (
 // linkFor builds the gg:// address for one place in this repository, or
 // refuses. It refuses when the grammar cannot hold the place: a path
 // containing '@', ':' or '#' (spec §1 — the producers refuse rather than emit
-// something that reparses as a different place), a shelf entry (there is no
-// shelf form), or a commit address with no full sha (a producer always knows
-// the full sha; anything shorter did not come from a real commit read).
+// something that reparses as a different place), a remoteless checkout whose
+// own PATH holds '@' or '#' (model.LinkAbsOK — same rule, other half of the
+// link), a shelf entry (there is no shelf form), or a commit address with no
+// full sha (a producer always knows the full sha; anything shorter did not
+// come from a real commit read).
 //
 // An UNTRACKED file uses the plain working-tree form: the grammar has no
 // "untracked" target, and index→file is what the resolver reads for it anyway.
@@ -36,7 +38,16 @@ func (m Model) linkFor(addr model.FileAddress, side model.NoteSide, line, hunk i
 		if wt == "" {
 			return "", false
 		}
-		l.Repo = model.LinkRepo{Abs: filepath.ToSlash(filepath.Clean(wt))}
+		abs := filepath.ToSlash(filepath.Clean(wt))
+		// The CHECKOUT path is no more expressible than a file path: the first
+		// '@' is the grammar's target separator and the first '#' its hunk
+		// one, so a checkout under /home/user@corp or /mnt/backup#1 would
+		// yield a link ParseLink refuses. Refuse here instead (the same rule
+		// the CLI and web producers apply).
+		if !model.LinkAbsOK(abs) {
+			return "", false
+		}
+		l.Repo = model.LinkRepo{Abs: abs}
 	}
 	l.Path = addr.Path
 	switch addr.State {

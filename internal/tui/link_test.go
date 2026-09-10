@@ -99,12 +99,50 @@ func TestDiffViewLKeyCopiesTheCursorLink(t *testing.T) {
 	if _, err := model.ParseLink(got); err != nil {
 		t.Fatalf("ParseLink(%q) = %v", got, err)
 	}
+	// What L actually COPIES: the key runs contextLinkRow's handler, so the
+	// row's copyText is the payload — the same seam the other producer tests
+	// assert (a non-nil cmd alone would pass even if the key copied the wrong
+	// text, or something else entirely).
+	row, ok := m.contextLinkRow()
+	if !ok {
+		t.Fatal("no copy-link row while the diff view is open")
+	}
+	if row.copyText != want {
+		t.Errorf("L would copy %q, want %q", row.copyText, want)
+	}
 	u, cmd := m.Update(keyMsg("L"))
 	if cmd == nil {
 		t.Fatal("L in the diff view produced no clipboard command")
 	}
 	if u.(Model).diffLayer() == nil {
 		t.Error("L must not close the diff view")
+	}
+}
+
+// A3: the local form's CHECKOUT path has the same expressibility rule as a
+// file path — '@' and '#' are the grammar's own separators.
+func TestLinkForRefusesACheckoutPathWithASeparator(t *testing.T) {
+	t.Parallel()
+	addr := model.FileAddress{State: model.StateUnstaged, Path: "a.txt"}
+	for _, wt := range []string{"/home/user@corp/repo", "/mnt/backup#1/repo"} {
+		m := diffModel()
+		m.linkRepoName = "" // no remote → the local form
+		m.currentWorktree = wt
+		if got, ok := m.linkFor(addr, model.NoteSideNew, 0, 0); ok {
+			t.Errorf("linkFor with worktree %q = %q, want a refusal", wt, got)
+		}
+	}
+	// A ':' in the checkout path is FINE (drive colons, and POSIX allows it):
+	// only a NUMBER after the last ':' is read as a line.
+	m := diffModel()
+	m.linkRepoName = ""
+	m.currentWorktree = "/mnt/odd:name/repo"
+	got, ok := m.linkFor(addr, model.NoteSideNew, 0, 0)
+	if !ok {
+		t.Fatal("a ':' in the checkout path must not refuse")
+	}
+	if _, err := model.ParseLink(got); err != nil {
+		t.Errorf("ParseLink(%q) = %v", got, err)
 	}
 }
 

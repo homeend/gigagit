@@ -42,6 +42,11 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 		// must be told to refuse rather than emit a misdescribed link.
 		{"files.js", `compare: state.filesMode === "compare"`, "the compare-mode file-menu call site must signal the file contributor to refuse"},
 		{"links.js", "ctx.compare", "linkFor must refuse when the ctx it was given says compare"},
+		// Final fix wave: the diff-LINE path reads state.diffCtx, which used
+		// to carry no compare field at all — so links.js's documented
+		// ctx.compare guard never fired there (B5).
+		{"files.js", "compare: cmp", "state.diffCtx must carry the compare flag the link producer documents"},
+		{"links.js", "linkAbsOK", "the checkout path needs the same expressibility rule as the file path (A3)"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(read(c.file), c.want) {
@@ -85,6 +90,9 @@ func wantLink(repoName, worktree, path, rev, st, side string, no int, compare bo
 	if repoName == "" && worktree == "" {
 		return ""
 	}
+	if repoName == "" && !model.LinkAbsOK(worktree) {
+		return ""
+	}
 	if path != "" && !model.LinkPathOK(path) {
 		return ""
 	}
@@ -123,6 +131,8 @@ func TestLinkForJSMatchesGo(t *testing.T) {
 	t.Parallel()
 	node, err := exec.LookPath("node")
 	if err != nil {
+		// Accepted (final review): a machine with no node loses this gate
+		// rather than the suite — TestLinksJSIsWiredEverywhere still runs.
 		t.Skip("node not installed; the JS port guard needs it")
 	}
 	src, err := os.ReadFile(filepath.Join("static", "links.js"))
@@ -179,6 +189,14 @@ func TestLinkForJSMatchesGo(t *testing.T) {
 		// the compare flag alone must be decisive.
 		{Name: "compare ctx refuses even with a full sha", Repo: "gigagit", Path: "a/b.go", Rev: fullSha, State: "commit", Compare: true},
 		{Name: "local compare ctx refuses", Worktree: "/mnt/t/repo", Path: "a/b.go", State: "unstaged", Compare: true},
+		// Final fix wave (A3): the CHECKOUT path has the same expressibility
+		// rule as the file path — '@' and '#' are the grammar's separators, a
+		// ':' is not (drive prefix, or a POSIX directory holding one).
+		{Name: "local worktree with @ refuses", Worktree: "/home/user@corp/repo", Path: "a/b.go", State: "unstaged"},
+		{Name: "local worktree with # refuses", Worktree: "/mnt/backup#1/repo", Path: "a/b.go", State: "unstaged"},
+		{Name: "local worktree with a colon is fine", Worktree: "/mnt/odd:name/repo", Path: "a/b.go", State: "unstaged"},
+		{Name: "windows drive worktree is fine", Worktree: "C:/src/repo", Path: "a/b.go", State: "unstaged"},
+		{Name: "windows drive worktree with @ refuses", Worktree: "C:/src@work/repo", Path: "a/b.go", State: "unstaged"},
 	}
 
 	want := make([]string, len(cases))

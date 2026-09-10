@@ -471,6 +471,10 @@ async function openFile(i) {
     rev: cmp ? state.compare.bHash : f.sha || state.fileSha,
     state: "commit",
     notes: !cmp,
+    // links.js documents ctx.compare as THE refusal for a two-revision view;
+    // carrying it here means the diff-LINE copy-link path uses that documented
+    // guard too, instead of relying on notesArmed() to happen to be off.
+    compare: cmp,
   };
   state.diffRow = null;
   state.notes = [];
