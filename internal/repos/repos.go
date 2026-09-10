@@ -13,15 +13,24 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// NoRemote is Entry.Remote's "this checkout has no remote" sentinel. It is
+// deliberately a value no useful remote name would collide with in practice,
+// and it is stored (rather than left empty) so a remoteless repository is not
+// re-probed — two git invocations — on every single link resolution. Touch's
+// empty-remote rule keeps it: an empty value never overwrites a stored one.
+const NoRemote = "-"
+
 // Entry is one known repository.
 type Entry struct {
 	Path       string    `toml:"path"`        // absolute top-level path
 	LastOpened time.Time `toml:"last_opened"` // MRU sort key
 	// Remote is the repository name of the entry's default remote ("gigagit"),
 	// as computed BY THE CALLER — this package stays a DAG leaf and knows
-	// nothing about git. "" means unknown (an entry written by an older gg, or
-	// a repo with no remote); the link resolver fills it in lazily via
-	// SetRemote.
+	// nothing about git. "" means unknown (an entry written by an older gg);
+	// the link resolver fills it in lazily via SetRemote. NoRemote ("-") is
+	// the memoised answer "this checkout HAS no remote", so the resolver
+	// probes such an entry once instead of on every resolve forever; it is a
+	// sentinel and never matches a link's repository name.
 	Remote string `toml:"remote"`
 }
 

@@ -8,6 +8,10 @@ import (
 
 const fullSHA = "eb759989a1b2c3d4e5f60718293a4b5c6d7e8f90"
 
+// sha256SHA is a sha-256 repository's commit id: 64 hex characters, which the
+// grammar must accept in full (producers always write the FULL sha).
+const sha256SHA = "eb759989a1b2c3d4e5f60718293a4b5c6d7e8f90eb759989a1b2c3d4e5f60718"
+
 // TestParseLinkRoundTrip is the grammar table: every row of the spec's
 // grammar parses to the stated value AND renders back to the same bytes.
 func TestParseLinkRoundTrip(t *testing.T) {
@@ -67,6 +71,17 @@ func TestParseLinkRoundTrip(t *testing.T) {
 		{"working-tree hunk", "gg://gigagit/internal/tui/steer.go#2", Link{
 			Repo: LinkRepo{Name: "gigagit"}, Path: "internal/tui/steer.go",
 			Side: NoteSideNew, Hunk: 2, Target: LinkTarget{State: StateUnstaged},
+		}},
+		// A sha-256 repository's commit id is 64 hex characters; the parser's
+		// cap must match what all three producers emit (final review, A2).
+		{"sha-256 commit, no path", "gg://gigagit@" + sha256SHA, Link{
+			Repo: LinkRepo{Name: "gigagit"}, Side: NoteSideNew,
+			Target: LinkTarget{State: StateCommitted, Commit: sha256SHA},
+		}},
+		{"sha-256 commit with line", "gg://gigagit/a/b.go@" + sha256SHA + ":42", Link{
+			Repo: LinkRepo{Name: "gigagit"}, Path: "a/b.go",
+			Side: NoteSideNew, Line: 42,
+			Target: LinkTarget{State: StateCommitted, Commit: sha256SHA},
 		}},
 		{"nested path", "gg://gigagit/a/b/c/d.go:1", Link{
 			Repo: LinkRepo{Name: "gigagit"}, Path: "a/b/c/d.go",
@@ -182,7 +197,8 @@ func TestParseLinkRefusals(t *testing.T) {
 		{"line and hunk", "gg://gigagit/a.go@" + fullSHA + ":4#3", "line or a hunk"},
 		{"bad target word", "gg://gigagit/a.go@zzzzzzz", "staged"},
 		{"sha too short", "gg://gigagit/a.go@abc123", "staged"},
-		{"sha too long", "gg://gigagit/a.go@" + fullSHA + "ff", "staged"},
+		// 65 hex: one past the sha-256 cap.
+		{"sha too long", "gg://gigagit/a.go@" + sha256SHA + "f", "7 to 64 hex characters"},
 		{"line without a path", "gg://gigagit@" + fullSHA + ":42", "needs a file path"},
 		{"hunk without a path", "gg://gigagit@" + fullSHA + "#2", "needs a file path"},
 		{"zero line", "gg://gigagit/a.go:0", "1-based"},
@@ -196,6 +212,11 @@ func TestParseLinkRefusals(t *testing.T) {
 		// target — and "ird.go@abc1234" is not one. The link is refused
 		// rather than silently meaning something else.
 		{"at in path", "gg://gigagit/we@ird.go@" + fullSHA + ":5", "staged"},
+		// B1: only the LAST ":<n>" is the line, so a remote-named path would
+		// otherwise keep the earlier colon ("a.go:42") and address a file
+		// nobody has. The remote-named branch validates its path.
+		{"colon in a remote-named path", "gg://gigagit/a.go:42:99", "not a git path"},
+		{"colon in a nested remote-named path", "gg://gigagit/a:b/c.go", "not a git path"},
 	}
 	for _, tc := range cases {
 		tc := tc
@@ -245,6 +266,38 @@ func TestLinkPathOK(t *testing.T) {
 		if LinkPathOK(p) {
 			t.Errorf("LinkPathOK(%q) = true, want false", p)
 		}
+	}
+}
+
+// A3: the checkout half of a local link has its own rule — '@' and '#' are
+// fatal wherever they appear, a ':' is not (drive prefix, or a POSIX
+// directory that simply contains one).
+func TestLinkAbsOK(t *testing.T) {
+	t.Parallel()
+	ok := []string{
+		"/mnt/t/others/test-1", "C:/src/repo", "/C:/src/repo",
+		"/mnt/backup:1/repo", "/home/user/repo", "c:/src/repo",
+	}
+	for _, p := range ok {
+		if !LinkAbsOK(p) {
+			t.Errorf("LinkAbsOK(%q) = false, want true", p)
+		}
+	}
+	bad := []string{
+		"/home/user@corp/repo", "/mnt/backup#1/repo", "C:/src@work/repo",
+		"/srv/repo@2", "/srv/#tmp/repo",
+	}
+	for _, p := range bad {
+		if LinkAbsOK(p) {
+			t.Errorf("LinkAbsOK(%q) = true, want false", p)
+		}
+	}
+	// The rule earns its keep only if a refused path really would not survive
+	// a round trip: a local link built from one is rejected by ParseLink.
+	l := Link{Repo: LinkRepo{Abs: "/home/user@corp/repo"}, Path: "a.go",
+		Side: NoteSideNew, Target: LinkTarget{State: StateUnstaged}}
+	if _, err := ParseLink(l.String()); err == nil {
+		t.Errorf("ParseLink(%q) = nil error; the producers' refusal would be pointless", l.String())
 	}
 }
 

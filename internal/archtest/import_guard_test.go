@@ -52,7 +52,10 @@ func TestLayeringDAG(t *testing.T) {
 		"notebatch":   {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"repogate":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"mcp":         {"tui", "cli", "app", "web"},
-		"domain":      {"tui", "cli", "mcp", "web", "app"},
+		// "steer" is forbidden to domain on purpose: the link resolver's
+		// ResolveOpts.LiveFn seam exists precisely so domain can ask "is a gg
+		// session live here?" without taking that dependency.
+		"domain":      {"tui", "cli", "mcp", "web", "app", "steer"},
 		"gitwatch":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"i18n":        {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"commitgraph": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},

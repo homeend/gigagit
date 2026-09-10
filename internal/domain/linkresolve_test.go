@@ -501,6 +501,158 @@ func TestResolveLinkRefusesACommittedTargetWithNoSHA(t *testing.T) {
 	}
 }
 
+// A5(b): a registry entry for a repo with NO remote is probed ONCE. The
+// answer is memoised as repos.NoRemote, so a second resolve never opens that
+// checkout again — previously every resolve re-ran RepoName (two git
+// invocations under the entry's own Read reservation) forever.
+func TestResolveLinkMemoisesARemotelessEntry(t *testing.T) {
+	t.Parallel()
+	remoteless, _ := newRealRepo(t) // no remote configured
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	_ = repos.Touch(state, remoteless, "", time.Unix(1000, 0))
+
+	var opened []string
+	opts := ResolveOpts{RegistryPath: state, OpenFn: func(dir string) *Service {
+		opened = append(opened, dir)
+		return Open(dir)
+	}}
+	l, _ := model.ParseLink("gg://gigagit/README.md")
+	if _, err := ResolveLink(context.Background(), l, opts); !errors.Is(err, ErrLinkUnknownRepo) {
+		t.Fatalf("err = %v, want ErrLinkUnknownRepo", err)
+	}
+	if len(opened) != 1 {
+		t.Fatalf("first resolve opened %v, want exactly one probe", opened)
+	}
+	got := repos.Load(state)
+	if len(got) != 1 || got[0].Remote != repos.NoRemote {
+		t.Fatalf("entries = %+v, want the %q sentinel memoised", got, repos.NoRemote)
+	}
+	if !got[0].LastOpened.Equal(time.Unix(1000, 0)) {
+		t.Errorf("LastOpened = %v, want it unchanged (resolving is not opening)", got[0].LastOpened)
+	}
+
+	opened = nil
+	if _, err := ResolveLink(context.Background(), l, opts); !errors.Is(err, ErrLinkUnknownRepo) {
+		t.Fatalf("second resolve err = %v, want ErrLinkUnknownRepo", err)
+	}
+	if len(opened) != 0 {
+		t.Errorf("second resolve opened %v, want no probe at all", opened)
+	}
+}
+
+// The sentinel is a sentinel, never a name: a link that literally says "-"
+// must not match the memoised entry.
+func TestResolveLinkSentinelNeverMatchesALink(t *testing.T) {
+	t.Parallel()
+	remoteless, _ := newRealRepo(t)
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	_ = repos.Touch(state, remoteless, repos.NoRemote, time.Unix(1000, 0))
+	l, _ := model.ParseLink("gg://" + repos.NoRemote + "/README.md")
+	if _, err := ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state}); !errors.Is(err, ErrLinkUnknownRepo) {
+		t.Fatalf("err = %v, want ErrLinkUnknownRepo", err)
+	}
+}
+
+// A5(a): when the cwd already answers a WORKING-TREE link, ResolveLink
+// short-circuits on it — so the registry walk (which would open every entry
+// with no stored remote) must not happen at all.
+func TestResolveLinkCwdMatchStopsBeforeTheRegistryWalk(t *testing.T) {
+	t.Parallel()
+	here := linkRepoWithRemote(t, "gigagit")
+	other, _ := newRealRepo(t) // no remote: probing it would cost git calls
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	_ = repos.Touch(state, other, "", time.Unix(9000, 0))
+
+	var opened []string
+	l, _ := model.ParseLink("gg://gigagit/README.md:3")
+	got, err := ResolveLink(context.Background(), l, ResolveOpts{
+		RegistryPath: state, Cwd: Open(here),
+		OpenFn: func(dir string) *Service {
+			opened = append(opened, dir)
+			return Open(dir)
+		},
+	})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if !samePathLink(got.Checkout, here) {
+		t.Errorf("Checkout = %q, want the cwd %q", got.Checkout, here)
+	}
+	if len(opened) != 0 {
+		t.Errorf("opened %v, want no other checkout opened once the cwd matched", opened)
+	}
+	if e := repos.Load(state); len(e) != 1 || e[0].Remote != "" {
+		t.Errorf("entries = %+v, want the untouched entry (no probe, no backfill)", e)
+	}
+}
+
+// B2: path.Clean knows nothing about '\', so a crafted link must be checked
+// on the backslash-normalised text too.
+func TestResolveLinkRefusesABackslashEscape(t *testing.T) {
+	t.Parallel()
+	target := linkRepoWithRemote(t, "gigagit")
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	_ = repos.Touch(state, target, "gigagit", time.Unix(1000, 0))
+	l := model.Link{
+		Repo: model.LinkRepo{Name: "gigagit"}, Path: `..\..\secret`,
+		Side: model.NoteSideNew, Target: model.LinkTarget{State: model.StateUnstaged},
+	}
+	_, err := ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state})
+	if !errors.Is(err, model.ErrLink) {
+		t.Fatalf("err = %v, want model.ErrLink", err)
+	}
+}
+
+// B9: a cancelled resolve reports cancellation, not "not in gg history".
+func TestResolveLinkReportsCancellation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	l, _ := model.ParseLink("gg://gigagit/README.md")
+	_, err := ResolveLink(ctx, l, ResolveOpts{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+}
+
+// B3: the moved-checkout fallback must survive a .git ABOVE the gone path's
+// deepest surviving ancestor — a dotfiles repo in $HOME used to disable it
+// for every link underneath.
+func TestResolveLinkMovedCheckoutIgnoresADotfilesRepoAbove(t *testing.T) {
+	t.Parallel()
+	home := t.TempDir()
+	// $HOME itself is a git repository (a dotfiles checkout).
+	seedRepoAt(t, home)
+	// …and the link's old location lived under an ordinary directory in it,
+	// which still exists but is NOT a checkout.
+	code := filepath.Join(home, "code")
+	if err := os.MkdirAll(code, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	moved := filepath.Join(t.TempDir(), "test-1")
+	if err := os.MkdirAll(moved, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	seedRepoAt(t, moved)
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	_ = repos.Touch(state, moved, "", time.Unix(1000, 0))
+
+	l, err := model.ParseLink("gg://" + filepath.ToSlash(filepath.Join(code, "gone", "test-1", "README.md")) + ":2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if !samePathLink(got.Checkout, moved) {
+		t.Errorf("Checkout = %q, want the moved checkout %q", got.Checkout, moved)
+	}
+	if got.Addr.Path != "README.md" {
+		t.Errorf("Addr.Path = %q, want README.md", got.Addr.Path)
+	}
+}
+
 // SamePath is exported for Task 6's CLI to reuse.
 func TestSamePath(t *testing.T) {
 	t.Parallel()

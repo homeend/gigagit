@@ -33,8 +33,11 @@ type LinkRepo struct {
 // LinkTarget is which pair of texts the link addresses: the working tree
 // (index → file), the index (HEAD → index), or a commit (parent → commit).
 type LinkTarget struct {
-	State  FileState // StateUnstaged (default), StateStaged or StateCommitted
-	Commit string    // set iff State == StateCommitted; 7..40 hex characters
+	State FileState // StateUnstaged (default), StateStaged or StateCommitted
+	// Commit is set iff State == StateCommitted; 7..64 hex characters — 64,
+	// not 40, because a sha-256 repository's commit ids are 64 hex characters
+	// and every producer writes the FULL sha.
+	Commit string
 }
 
 // Link is one place in one repository: a file, a line on one side of one
@@ -56,6 +59,29 @@ func (l Link) IsLocal() bool { return l.Repo.Abs != "" }
 // call this and refuse to copy rather than emit something that reparses as a
 // different place.
 func LinkPathOK(p string) bool { return !strings.ContainsAny(p, "@:#") }
+
+// LinkAbsOK reports whether an absolute CHECKOUT path can be expressed in the
+// local link form. It is the checkout-half twin of LinkPathOK, and it is
+// deliberately laxer: the grammar reads the first '@' as the target separator
+// and the first '#' as the hunk separator, so neither may appear anywhere in
+// the path — but a ':' is fine (a Windows drive colon is the whole reason
+// splitLinkLine only accepts a NUMBER after the last ':', and a POSIX
+// directory may legitimately contain one). A leading "X:" drive prefix is
+// skipped before the scan for exactly that reason.
+//
+// Every local-form producer (tui.linkFor, `gg link`, web's repoSegment) calls
+// it and refuses rather than emit a link ParseLink would reject or, worse,
+// reparse as a different place.
+func LinkAbsOK(abs string) bool {
+	s := abs
+	if len(s) >= 2 && isAlphaLink(s[0]) && s[1] == ':' {
+		s = s[2:]
+	} else if len(s) >= 3 && s[0] == '/' && isAlphaLink(s[1]) && s[2] == ':' {
+		// The "gg:///C:/src" spelling: one leading separator, then the drive.
+		s = s[3:]
+	}
+	return !strings.ContainsAny(s, "@#")
+}
 
 // Address builds the FileAddress the link points at. Worktree is filled by
 // the resolver, which is also the only thing that can fill Path for a PARSED
@@ -118,7 +144,8 @@ func (l Link) String() string {
 //	gg://<repo>                              the repository itself
 //
 // <repo> is a remote repository name, or "/" + an absolute checkout path.
-// <target> is "staged" or 7..40 hex; absent means the working tree. <line> is
+// <target> is "staged" or 7..64 hex (64 covers a sha-256 repository, whose
+// commit ids every producer writes in full); absent means the working tree. <line> is
 // "<n>" (new side) or "old:<n>". Errors are English and wrap ErrLink.
 func ParseLink(s string) (Link, error) {
 	s = strings.TrimSpace(s)
@@ -174,8 +201,8 @@ func ParseLink(s string) (Link, error) {
 	case tail == "staged":
 		l.Target = LinkTarget{State: StateStaged}
 	default:
-		if !isHexLink(tail) || len(tail) < 7 || len(tail) > 40 {
-			return linkErr("target must be \"staged\" or a commit sha of 7 to 40 hex characters, got %q", tail)
+		if !isHexLink(tail) || len(tail) < 7 || len(tail) > 64 {
+			return linkErr("target must be \"staged\" or a commit sha of 7 to 64 hex characters, got %q", tail)
 		}
 		l.Target = LinkTarget{State: StateCommitted, Commit: tail}
 	}
@@ -203,6 +230,15 @@ func ParseLink(s string) (Link, error) {
 	}
 	if strings.HasSuffix(path, "/") || strings.Contains(path, "//") {
 		return linkErr("%q is not a git path", path)
+	}
+	// A remote-named link's path is the grammar's own <path>: it may not hold a
+	// separator. (":" is the one that can still get this far — the target and
+	// hunk separators were consumed above — and "gg://x/a.go:42:99" would
+	// otherwise silently yield the path "a.go:42".) The LOCAL form is exempt:
+	// its Repo.Abs legitimately carries a drive colon, and the checkout/path
+	// split has not happened yet.
+	if !LinkPathOK(path) {
+		return linkErr("%q is not a git path: a path cannot contain @, : or #", path)
 	}
 	l.Repo.Name, l.Path = name, path
 	if l.Path == "" && (l.Line > 0 || l.Hunk > 0) {

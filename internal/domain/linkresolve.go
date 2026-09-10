@@ -71,6 +71,13 @@ type linkCandidate struct {
 // container — every container holds byte-identical content, so there is
 // nothing to get wrong.
 func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved, error) {
+	// A cancelled resolve must say so. Every candidate probe below swallows
+	// its own error (a dead entry is simply not a candidate), so without this
+	// a cancelled context would surface as "not in this machine's gg history"
+	// — a factual claim gg has not actually established.
+	if err := ctx.Err(); err != nil {
+		return Resolved{}, err
+	}
 	if opts.OpenFn == nil {
 		opts.OpenFn = Open
 	}
@@ -185,19 +192,32 @@ func linkCandidates(ctx context.Context, l model.Link, opts ResolveOpts) []linkC
 		if top, err := opts.Cwd.TopLevel(ctx); err == nil && top != "" {
 			if name, err := opts.Cwd.RepoName(ctx); err == nil && linkNameEq(name, l.Repo.Name) {
 				add(linkCandidate{checkout: top, relPath: l.Path, isCwd: true})
+				// ResolveLink short-circuits on exactly this pair (a cwd
+				// candidate + a non-commit target), so walking the registry
+				// afterwards is dead work — and not cheap dead work: every
+				// entry with no stored remote costs a repository open and two
+				// git invocations under that repo's own Read reservation.
+				if l.Target.State != model.StateCommitted {
+					return out
+				}
 			}
 		}
 	}
 	for _, e := range entries {
 		name := e.Remote
 		if name == "" {
-			// Lazy backfill for an entry an older gg wrote. SetRemote does not
-			// bump LastOpened: resolving is not opening. Only a NON-EMPTY
-			// computed name is worth writing back — SetRemote has no empty
-			// guard of its own, and an empty write would just erase nothing
-			// useful while still touching the file. OpenFn is defaulted once
-			// at ResolveLink's entry and never nil.
-			if n, err := opts.OpenFn(e.Path).RepoName(ctx); err == nil && n != "" {
+			// Lazy backfill for an entry an older gg wrote — or one that has
+			// no remote at all, which is memoised as repos.NoRemote ("-") so a
+			// remoteless checkout is probed ONCE instead of on every resolve
+			// forever. linkNameEq refuses the sentinel, so it can never match
+			// a link. SetRemote does not bump LastOpened: resolving is not
+			// opening. OpenFn is defaulted once at ResolveLink's entry and
+			// never nil.
+			n, err := opts.OpenFn(e.Path).RepoName(ctx)
+			if err == nil {
+				if n == "" {
+					n = repos.NoRemote
+				}
 				name = n
 				_ = repos.SetRemote(opts.RegistryPath, e.Path, n)
 			}
@@ -209,17 +229,30 @@ func linkCandidates(ctx context.Context, l model.Link, opts ResolveOpts) []linkC
 	return out
 }
 
-// ancestorHasGit reports whether abs, or one of its ancestor directories,
-// contains a ".git" entry (file or dir). It walks upward only as many steps
-// as abs's own path has components — bounded by the link's own text, never a
-// filesystem scan — to distinguish "the old location is genuinely gone" (safe
-// to guess by base name) from "something still lives there, just unregistered"
-// (never guess: ruling P5a).
+// ancestorHasGit reports whether the link's old location still lives inside a
+// checkout: it walks up from abs to the DEEPEST EXISTING directory and asks
+// only that one whether it holds a ".git" entry (file or dir). That
+// distinguishes "the old location is genuinely gone" (safe to guess by base
+// name) from "something still lives there, just unregistered" (never guess:
+// ruling P5a).
+//
+// Testing only the deepest existing directory — rather than every ancestor up
+// to the filesystem root — is what keeps a dotfiles repository in $HOME (or a
+// .git at "/") from disabling the moved-checkout fallback for every link
+// underneath it: what matters is whether the gone path's own surviving parent
+// is a checkout, not whether some distant ancestor is.
 func ancestorHasGit(abs string) bool {
 	dir := filepath.Clean(abs)
 	for {
-		if _, err := os.Lstat(filepath.Join(dir, ".git")); err == nil {
-			return true
+		if fi, err := os.Stat(dir); err == nil {
+			if !fi.IsDir() {
+				// abs itself still exists as a FILE: its directory is the
+				// deepest existing ancestor.
+				dir = filepath.Dir(dir)
+				continue
+			}
+			_, err := os.Lstat(filepath.Join(dir, ".git"))
+			return err == nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
@@ -289,11 +322,18 @@ func cleanLinkRelPath(rel string) (string, error) {
 	if rel == "" {
 		return "", nil
 	}
+	// The escape check runs on the BACKSLASH-NORMALISED text: path.Clean knows
+	// nothing about '\', so `..\..\x` would otherwise sail straight through it
+	// and out of the checkout on Windows. The returned value is still cleaned
+	// from the original, so a POSIX file whose name legitimately contains a
+	// backslash keeps its name.
+	guard := path.Clean(strings.ReplaceAll(rel, `\`, "/"))
 	clean := path.Clean(rel)
 	if clean == "." {
 		return "", nil
 	}
-	if clean == ".." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) {
+	if guard == ".." || strings.HasPrefix(guard, "../") || path.IsAbs(guard) ||
+		clean == ".." || strings.HasPrefix(clean, "../") || path.IsAbs(clean) {
 		return "", fmt.Errorf("%w: gg link path %q escapes the checkout", model.ErrLink, rel)
 	}
 	return clean, nil
@@ -336,8 +376,12 @@ func linkMovedSplit(abs, base string) (string, bool) {
 
 // linkNameEq compares two repository names. Case matters everywhere except
 // Windows, where the filesystem does not distinguish them (spec §1).
+// repos.NoRemote ("-", the memoised "this checkout has no remote") never
+// matches anything: it is a sentinel, not a name. A remote URL ending in
+// "/-.git" would be indistinguishable from it — accepted, since the cost is
+// one such repository resolving by its absolute path instead of its name.
 func linkNameEq(a, b string) bool {
-	if a == "" || b == "" {
+	if a == "" || b == "" || a == repos.NoRemote || b == repos.NoRemote {
 		return false
 	}
 	if runtime.GOOS == "windows" {
