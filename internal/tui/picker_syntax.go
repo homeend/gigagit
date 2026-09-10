@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/syntax"
@@ -53,8 +55,18 @@ func lexPickerDoc(path string, doc *hunkpick.Doc, on bool) (cur, inc [][]syntax.
 		if len(lines) == 0 {
 			return nil
 		}
+		// The cap is checked BEFORE the join: summing len(l)+1 is exactly the
+		// joined length, so an oversized side is refused without copying the
+		// whole document twice to find that out.
+		n := 0
+		for _, l := range lines {
+			n += len(l) + 1
+		}
+		if n > domain.MaxSyntaxBytes {
+			return nil
+		}
 		src := strings.Join(lines, "\n") + "\n"
-		if len(src) > domain.MaxSyntaxBytes || hasBareCR([]byte(src)) {
+		if hasBareCR([]byte(src)) {
 			return nil
 		}
 		return syntax.Lex(lang, []byte(src))
@@ -67,25 +79,62 @@ func lexPickerDoc(path string, doc *hunkpick.Doc, on bool) (cur, inc [][]syntax.
 	return cur, inc
 }
 
-// withSyntax lexes the picker's two sides and stores the runs, so every line
-// it renders can be painted from the mask its own side's lexer produced. It is
-// chained at the four open sites, where the [ui] diff_syntax switch is known;
-// on=false is a documented no-op leaving the byte-identical plain path (every
-// test constructor and any future caller takes it).
+// pickerLexedMsg carries one picker's finished syntax runs back to the UI
+// thread. picker identifies which picker asked: a lex started for a surface
+// the user has since closed must not paint anything, so the handler applies it
+// only while that very picker is still live.
+type pickerLexedMsg struct {
+	picker   *hunkPicker
+	cur, inc [][]syntax.Tok
+}
+
+// lexCmd is the ASYNCHRONOUS form: it hands the lex to the Bubble Tea runtime
+// so the UI thread never waits for chroma (measured: 1.8 s on a 1 MB Go file,
+// 390 ms on 200 KB — a hard freeze if done inline). The four open sites push
+// the picker unlexed and return this Cmd; the runs arrive later as a
+// pickerLexedMsg and the next repaint carries the colour.
 //
-// The lex is SYNCHRONOUS: the loaders that fetch a picker's bytes off the UI
-// thread hand back raw sides (or, for a conflict, marker text), and the
-// hunkpick.Doc that determines the two full-file texts is only assembled once
-// the message reaches Update — no loader goroutine holds it. Spec §4.2 rules
-// this acceptable ("else synchronously"); domain.MaxSyntaxBytes bounds it.
+// It returns nil — no goroutine at all — when the switch is off or the path
+// has no lexer, so the plain path costs nothing.
+func (e *hunkPicker) lexCmd(on bool) tea.Cmd {
+	if !on || syntax.Detect(e.path) == "" {
+		return nil
+	}
+	// The closure captures the immutable inputs rather than reading e from the
+	// worker: the document's text never changes while the picker is open (only
+	// its per-block Mode/Picks do, on the UI thread).
+	path, doc := e.path, e.doc
+	return func() tea.Msg {
+		cur, inc := lexPickerDoc(path, doc, true)
+		return pickerLexedMsg{picker: e, cur: cur, inc: inc}
+	}
+}
+
+// setSyntax stores finished runs on a picker that may already have rendered
+// plain, dropping the sanitized caches so the next render rebuilds them with
+// masks. Painting is layout-stable — a mask never changes a line's text or
+// width — so no scroll offset or cursor position needs adjusting.
+func (e *hunkPicker) setSyntax(cur, inc [][]syntax.Tok) {
+	e.curTok, e.incTok = cur, inc
+	e.sanBuilt, e.outBuilt = false, false
+}
+
+// withSyntax is the SYNCHRONOUS form of the same wiring: it lexes the picker's
+// two sides inline and stores the runs, so every line it renders can be
+// painted from the mask its own side's lexer produced. The four open sites use
+// lexCmd instead (chroma is far too slow to run on the UI thread); this stays
+// for tests and for any caller that already holds a worker goroutine.
+// on=false is a documented no-op leaving the byte-identical plain path.
 //
-// MUST be called before the first render: ensureSan builds the display masks
-// once, lazily, from these runs.
+// MUST be called before the first render — or, like setSyntax, it invalidates
+// the sanitized caches so a later call still takes effect: ensureSan builds
+// the display masks once, lazily, from these runs.
 func (e *hunkPicker) withSyntax(on bool) *hunkPicker {
 	if !on {
 		return e
 	}
-	e.curTok, e.incTok = lexPickerDoc(e.path, e.doc, true)
+	cur, inc := lexPickerDoc(e.path, e.doc, true)
+	e.setSyntax(cur, inc)
 	return e
 }
 

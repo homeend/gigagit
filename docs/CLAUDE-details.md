@@ -114,12 +114,17 @@ rune that `cellPieces` slices alongside the body in all three modes and
 `renderPiece` paints with `styledRuns` (empty mask = the byte-identical plain
 path; a reverse-video cell style drops it, which is what keeps the cursor row
 plain). `emph` is carried but unused today: phase 6's in-view search paints its
-hits through it. `withSyntax` (called at the four open sites in `model.go`)
-runs `lexPickerDoc`, which assembles the current-side and incoming-side
+hits through it. `lexPickerDoc` assembles the current-side and incoming-side
 full-file texts the `hunkpick.Doc` describes — shared literal context plus each
-block's own lines — and lexes them CONCURRENTLY under `domain.MaxSyntaxBytes`;
-synchronously, because no loader goroutine holds the Doc (the loaders hand back
-raw sides or marker text and Update parses them). The two sides are numbered
+block's own lines — and lexes them CONCURRENTLY under `domain.MaxSyntaxBytes`.
+It runs in a `tea.Cmd` (`hunkPicker.lexCmd`) returned from the four open sites
+in `model.go`, which push the picker unlexed: chroma costs ~1.8 s on a 1 MB Go
+file and the UI thread must not wait for it. The finished runs come back as a
+`pickerLexedMsg`, applied only if that picker is still live (the top layer, or
+the conflict process's own `cp.picker`) — `setSyntax` invalidates the sanitized
+caches and the repaint is layout-stable, since a mask never changes a line's
+text or width. `withSyntax` is the synchronous form, kept for tests. The two
+sides are numbered
 INDEPENDENTLY, since a block contributes a different number of lines to each;
 `ensureSan` walks both cursors at once and stores `sanLine{text, mask}` per
 line, literal context taking the current side's runs. The output pane assembles

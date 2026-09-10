@@ -4,10 +4,12 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/syntax"
 )
@@ -90,6 +92,26 @@ func TestPickerBareCRSideIsNotLexed(t *testing.T) {
 	}
 }
 
+// A side past domain.MaxSyntaxBytes is refused — and refused on the measured
+// size of its lines, before they are joined into one string.
+func TestPickerOversizedSideIsNotLexed(t *testing.T) {
+	t.Parallel()
+	doc := &hunkpick.Doc{Items: []hunkpick.Item{
+		{Literal: []string{"package main"}},
+		{Block: &hunkpick.Block{
+			Current:  []string{strings.Repeat("x", domain.MaxSyntaxBytes+1)},
+			Incoming: []string{"var b int"},
+		}},
+	}}
+	e := newConflictPicker("f.go", doc).withSyntax(true)
+	if e.curTok != nil {
+		t.Errorf("an oversized current side must not be lexed: %d lines", len(e.curTok))
+	}
+	if e.incTok == nil {
+		t.Errorf("the small incoming side should still be lexed")
+	}
+}
+
 // Every constructor records its path, so withSyntax needs no second argument.
 func TestPickerConstructorsRecordPath(t *testing.T) {
 	t.Parallel()
@@ -129,6 +151,12 @@ func TestEnsureSanBuildsMasksFromTheRightSide(t *testing.T) {
 	}
 	if lit.mask.empty() || lit.mask.cls[0] != syntax.Keyword {
 		t.Errorf("literal `const` should be a keyword: %v", lit.mask.cls)
+	}
+	// …and the mask runs the whole line, not just its first token: `const K = 1`
+	// is 11 runes and the number sits at the last one. A within-side off-by-one
+	// (a line's runs read from its neighbour) would move this.
+	if lit.mask.empty() || lit.mask.cls[10] != syntax.Number {
+		t.Errorf("literal `1` (rune 10) should be a number: %v", lit.mask.cls)
 	}
 	// Block 2's incoming line is a comment; block 2's current line is a keyword.
 	if got := e.sanInc[1][0]; got.text != "// tail" || got.mask.empty() || got.mask.cls[0] != syntax.Comment {
@@ -205,8 +233,10 @@ func TestPickerGridColoursCodeAndKeepsCursorPlain(t *testing.T) {
 	if !strings.Contains(code, kw+"mvar") {
 		t.Errorf("`var` should wear the keyword colour: %q", code)
 	}
-	// The literal context row is coloured too.
-	lit := pickerLineWith(out, "const K = 1")
+	// The literal context row is coloured too. The grid indents literal rows by
+	// the two-column gutter, so the needle carries it — otherwise the output
+	// pane's own copy of the same line could be the row that matched.
+	lit := pickerLineWith(out, "  const K = 1")
 	if lit == "" || !strings.Contains(lit, kw+"mconst") {
 		t.Errorf("literal context `const` should be coloured: %q", lit)
 	}
@@ -253,6 +283,9 @@ func TestOutputPaneReusesTheGridsSanLines(t *testing.T) {
 	}
 	if &e.outLines[1].mask.cls[0] != &e.sanCur[0][0].mask.cls[0] {
 		t.Error("the output pane must reuse the grid's mask, not rebuild one")
+	}
+	if e.outLines[0].mask.empty() || e.sanLit[0][0].mask.empty() {
+		t.Fatal("both the grid literal line and its output copy must carry a mask")
 	}
 	if &e.outLines[0].mask.cls[0] != &e.sanLit[0][0].mask.cls[0] {
 		t.Error("literal output lines must reuse the grid's literal mask")
@@ -309,23 +342,91 @@ func TestRenderOutputColoursTheAssembledLines(t *testing.T) {
 			}
 		}
 	}
+
+	// Scroll mode with an offset: the mask travels with the sliced body. `var`
+	// has scrolled off, so its keyword colour goes with it; `int`, still on
+	// screen, keeps the type colour it earned. A mask sliced at the wrong
+	// offset would paint the surviving runes in the departed tokens' classes.
+	e := newConflictPicker("f.go", pickerSyntaxDoc()).withSyntax(true)
+	e.mode = modeScroll
+	e.hscroll = 4
+	e.doc.SetAll(hunkpick.TakeCurrent)
+	joined := strings.Join(e.renderOutput(60, 8), "\n")
+	row := pickerLineWith(joined, "a int")
+	if row == "" {
+		t.Fatalf("scrolled `var a int` row not found:\n%s", ansi.Strip(joined))
+	}
+	if !strings.HasPrefix(ansi.Strip(row), "a int") {
+		t.Errorf("hscroll=4 should start the row at the 5th rune: %q", ansi.Strip(row))
+	}
+	if strings.Contains(row, kw+"mvar") {
+		t.Errorf("the scrolled-off `var` must not be painted: %q", row)
+	}
+	if ty := "38;5;" + st().syntaxColor(syntax.Type); !strings.Contains(row, ty+"mint") {
+		t.Errorf("the still-visible `int` should wear the type colour: %q", row)
+	}
+}
+
+// A pure deletion — a region whose incoming side is empty — renders with no
+// incoming lines at all, and the current side is still coloured.
+func TestPickerEmptySideBlockIsHandled(t *testing.T) {
+	t.Parallel()
+	doc := &hunkpick.Doc{FinalNewline: true, Items: []hunkpick.Item{
+		{Literal: []string{"package main"}},
+		{Block: &hunkpick.Block{Current: []string{"var a int"}, Incoming: nil}},
+	}}
+	e := newConflictPicker("f.go", doc).withSyntax(true)
+	e.ensureSan()
+	if len(e.sanInc[0]) != 0 {
+		t.Errorf("an empty incoming side must sanitize to no lines: %v", e.sanInc[0])
+	}
+	if len(e.sanCur[0]) != 1 || e.sanCur[0][0].mask.empty() || e.sanCur[0][0].mask.cls[0] != syntax.Keyword {
+		t.Errorf("the current side should still be coloured: %+v", e.sanCur[0])
+	}
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 100, height: 30}
+	if out := e.render(m, ""); out == "" {
+		t.Error("render produced nothing")
+	}
 }
 
 // goConflict is a conflicted Go file: one region, `var` on both sides.
 const goConflict = "package main\n<<<<<<< HEAD\nvar a int\n=======\nvar b int\n>>>>>>> x\n"
 
-// Opening a picker through the real message path must lex it — all four kinds.
+// runPickerLex runs the lex Cmd an open site returned and feeds its message
+// back through Update, returning the resulting Model — the whole round trip a
+// running gg makes between pushing an unlexed picker and painting a coloured
+// one.
+func runPickerLex(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("the open site returned no lex Cmd")
+	}
+	msg := cmd()
+	if _, ok := msg.(pickerLexedMsg); !ok {
+		t.Fatalf("lex Cmd produced %T, want pickerLexedMsg", msg)
+	}
+	u, _ := m.Update(msg)
+	return u.(Model)
+}
+
+// Opening a picker through the real message path pushes it UNLEXED and hands
+// back the Cmd that lexes it off the UI thread — all four kinds.
 func TestConflictLoaderWiresSyntax(t *testing.T) {
 	t.Parallel()
 	m := Model{width: 80, height: 24}
 	m.cfg.UI.DiffSyntax = "auto"
-	u, _ := m.Update(conflictFileLoadedMsg{path: "f.go", content: []byte(goConflict)})
+	u, cmd := m.Update(conflictFileLoadedMsg{path: "f.go", content: []byte(goConflict)})
 	e, ok := u.(Model).topLayer().(*hunkPicker)
 	if !ok {
 		t.Fatalf("conflict load should push the hunk picker, got %T", u.(Model).topLayer())
 	}
+	if e.curTok != nil || e.incTok != nil {
+		t.Errorf("the picker must be pushed unlexed (the lex runs in a Cmd): cur=%d inc=%d", len(e.curTok), len(e.incTok))
+	}
+	after := runPickerLex(t, u.(Model), cmd)
+	e = after.topLayer().(*hunkPicker)
 	if e.curTok == nil || e.incTok == nil {
-		t.Errorf("the conflict picker was opened unlexed: cur=%v inc=%v", e.curTok, e.incTok)
+		t.Errorf("the conflict picker stayed unlexed: cur=%v inc=%v", e.curTok, e.incTok)
 	}
 }
 
@@ -335,13 +436,18 @@ func TestProcessConflictLoaderWiresSyntax(t *testing.T) {
 	m, _ = startConflictProcess(m)
 	m.proc.(*conflictProcess).st = confWorking
 	m.cfg.UI.DiffSyntax = "auto"
-	u, _ := m.Update(conflictFileLoadedMsg{path: "uu.go", content: []byte(goConflict)})
+	u, cmd := m.Update(conflictFileLoadedMsg{path: "uu.go", content: []byte(goConflict)})
 	cp := u.(Model).proc.(*conflictProcess)
 	if cp.picker == nil {
 		t.Fatalf("a loaded conflict file must show the process picker, got st=%d", cp.st)
 	}
+	if cp.picker.curTok != nil || cp.picker.incTok != nil {
+		t.Errorf("the process picker must be assigned unlexed: cur=%d inc=%d", len(cp.picker.curTok), len(cp.picker.incTok))
+	}
+	after := runPickerLex(t, u.(Model), cmd)
+	cp = after.proc.(*conflictProcess)
 	if cp.picker.curTok == nil || cp.picker.incTok == nil {
-		t.Errorf("the process picker was opened unlexed: cur=%v inc=%v", cp.picker.curTok, cp.picker.incTok)
+		t.Errorf("the process picker stayed unlexed: cur=%v inc=%v", cp.picker.curTok, cp.picker.incTok)
 	}
 }
 
@@ -349,14 +455,19 @@ func TestStageLoaderWiresSyntax(t *testing.T) {
 	t.Parallel()
 	m := Model{width: 80, height: 24}
 	m.cfg.UI.DiffSyntax = "auto"
-	u, _ := m.Update(stageHunksLoadedMsg{path: "f.go",
+	u, cmd := m.Update(stageHunksLoadedMsg{path: "f.go",
 		index: []byte("package main\nvar a int\n"), work: []byte("package main\nvar b int\n")})
 	e, ok := u.(Model).topLayer().(*hunkPicker)
 	if !ok {
 		t.Fatalf("stage load should push the hunk picker, got %T", u.(Model).topLayer())
 	}
+	if e.curTok != nil || e.incTok != nil {
+		t.Errorf("the stage picker must be pushed unlexed: cur=%d inc=%d", len(e.curTok), len(e.incTok))
+	}
+	after := runPickerLex(t, u.(Model), cmd)
+	e = after.topLayer().(*hunkPicker)
 	if e.curTok == nil || e.incTok == nil {
-		t.Errorf("the stage picker was opened unlexed: cur=%v inc=%v", e.curTok, e.incTok)
+		t.Errorf("the stage picker stayed unlexed: cur=%v inc=%v", e.curTok, e.incTok)
 	}
 }
 
@@ -364,25 +475,69 @@ func TestUnstageLoaderWiresSyntax(t *testing.T) {
 	t.Parallel()
 	m := Model{width: 80, height: 24}
 	m.cfg.UI.DiffSyntax = "auto"
-	u, _ := m.Update(unstageHunksLoadedMsg{path: "f.go",
+	u, cmd := m.Update(unstageHunksLoadedMsg{path: "f.go",
 		index: []byte("package main\nvar a int\n"), head: []byte("package main\nvar b int\n")})
 	e, ok := u.(Model).topLayer().(*hunkPicker)
 	if !ok {
 		t.Fatalf("unstage load should push the hunk picker, got %T", u.(Model).topLayer())
 	}
+	if e.curTok != nil || e.incTok != nil {
+		t.Errorf("the unstage picker must be pushed unlexed: cur=%d inc=%d", len(e.curTok), len(e.incTok))
+	}
+	after := runPickerLex(t, u.(Model), cmd)
+	e = after.topLayer().(*hunkPicker)
 	if e.curTok == nil || e.incTok == nil {
-		t.Errorf("the unstage picker was opened unlexed: cur=%v inc=%v", e.curTok, e.incTok)
+		t.Errorf("the unstage picker stayed unlexed: cur=%v inc=%v", e.curTok, e.incTok)
 	}
 }
 
-// diff_syntax = "off" must leave every picker on the plain path.
+// diff_syntax = "off" must leave every picker on the plain path — and spawn no
+// lex goroutine at all.
 func TestLoaderHonoursSyntaxOff(t *testing.T) {
 	t.Parallel()
 	m := Model{width: 80, height: 24}
 	m.cfg.UI.DiffSyntax = "off"
-	u, _ := m.Update(conflictFileLoadedMsg{path: "f.go", content: []byte(goConflict)})
+	u, cmd := m.Update(conflictFileLoadedMsg{path: "f.go", content: []byte(goConflict)})
 	e := u.(Model).topLayer().(*hunkPicker)
 	if e.curTok != nil || e.incTok != nil {
 		t.Errorf("diff_syntax=off must leave the picker unlexed: cur=%d inc=%d", len(e.curTok), len(e.incTok))
+	}
+	if cmd != nil {
+		t.Errorf("diff_syntax=off must return no lex Cmd, got %v", cmd())
+	}
+}
+
+// A path with no lexer needs no goroutine either: lexCmd early-outs to nil.
+func TestLoaderSkipsLexCmdForUnknownLanguage(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 80, height: 24}
+	m.cfg.UI.DiffSyntax = "auto"
+	_, cmd := m.Update(conflictFileLoadedMsg{path: "f.unknownext", content: []byte(goConflict)})
+	if cmd != nil {
+		t.Errorf("an unlexable path must return no lex Cmd, got %v", cmd())
+	}
+}
+
+// A lex that lands after its picker is gone is dropped: the runs belong to that
+// picker's document, and nothing else may take them.
+func TestPickerLexedMsgForADeadPickerIsIgnored(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 80, height: 24}
+	m.cfg.UI.DiffSyntax = "auto"
+	u, _ := m.Update(conflictFileLoadedMsg{path: "f.go", content: []byte(goConflict)})
+	live := u.(Model).topLayer().(*hunkPicker)
+
+	dead := newConflictPicker("gone.go", pickerSyntaxDoc())
+	cur, inc := lexPickerDoc("gone.go", dead.doc, true)
+	after, _ := u.(Model).Update(pickerLexedMsg{picker: dead, cur: cur, inc: inc})
+
+	if dead.curTok != nil || dead.incTok != nil {
+		t.Errorf("a dead picker must not be lexed: cur=%d inc=%d", len(dead.curTok), len(dead.incTok))
+	}
+	if live.curTok != nil || live.incTok != nil {
+		t.Errorf("the live picker must not take another picker's runs: cur=%d inc=%d", len(live.curTok), len(live.incTok))
+	}
+	if after.(Model).topLayer() != live {
+		t.Errorf("the layer stack must be untouched, got %T", after.(Model).topLayer())
 	}
 }

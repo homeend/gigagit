@@ -14,8 +14,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   lexers and `[ui] diff_syntax` switch as the diff views. When a picker opens
   it assembles the two versions of the file its regions describe — the shared
   context plus each region's current-side lines, and the same context plus its
-  incoming-side lines — and lexes each once, so both columns are coloured by
-  their own side's grammar and the live output pane reuses the same runs. The
+  incoming-side lines — and lexes each once, off the UI thread, so a large
+  file never stalls the picker on the way in: it opens plain and the colour
+  arrives a moment later. Both columns are coloured by their own side's
+  grammar and the live output pane reuses the same runs. The
   cursor row stays plain reverse-video, and a file with no known lexer, a side
   past 1 MB, or `[ui] diff_syntax = "off"` renders exactly as before.
 - **TUI themes.** `[ui] theme = "terminal" | "dark" | "light"` (default

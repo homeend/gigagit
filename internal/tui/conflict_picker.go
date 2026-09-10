@@ -350,6 +350,11 @@ func (e *hunkPicker) ensureOutput() {
 				if p.Side == hunkpick.Incoming {
 					side = e.sanInc[bi]
 				}
+				// Belt and braces, never a rescue: ResolvedPicks already drops
+				// out-of-range picks, and sanCur/sanInc are sized from the very
+				// slices those picks index, so the lengths agree by
+				// construction. The guard only covers a sanBuilt cache left
+				// stale by some future edit.
 				if p.Line >= 0 && p.Line < len(side) {
 					e.outLines = append(e.outLines, side[p.Line])
 				}

@@ -442,10 +442,10 @@ type — keywords, types, strings, numbers and comments each get a colour, on
 top of the add/del backgrounds and the word-level emphasis. The language is
 picked from the file name (about 300 lexers, via chroma); a file with no
 known lexer, or a side larger than 1 MB, renders plain. The same switch and
-lexers colour the **hunk picker** — the conflict resolver's two candidate
-columns and its live output pane, and the hunk staging/unstaging pickers —
-where each column is lexed with its own side's version of the file; the
-cursor row there stays plain. Set `"off"` to disable everywhere (TUI and
+lexers colour the **hunk picker** (TUI) — the conflict resolver's two
+candidate columns and its live output pane, and the hunk staging/unstaging
+pickers — where each column is lexed with its own side's version of the file;
+the cursor row there stays plain. Set `"off"` to disable everywhere (TUI and
 `gg web`).
 
 `[ui] diff_cursor` (default `"row"`) picks the diff view's current-line

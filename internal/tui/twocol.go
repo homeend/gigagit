@@ -173,6 +173,15 @@ func wrapSegMasks(body string, m runMask, segs []string) []runMask {
 	if m.empty() {
 		return out
 	}
+	// The common case is one segment (a line that fits): compare it to the body
+	// directly rather than copying it into a builder to compare the copy.
+	if len(segs) == 1 {
+		if segs[0] != body {
+			return make([]runMask, 1)
+		}
+		out[0] = m.slice(0, len([]rune(segs[0])))
+		return out
+	}
 	var joined strings.Builder
 	off := 0
 	for i, s := range segs {

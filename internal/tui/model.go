@@ -3070,12 +3070,33 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return fail(reason)
 		}
 		if inProc {
-			cp.picker = newProcessConflictPicker(msg.path, doc).withSyntax(m.cfg.UI.SyntaxOn())
+			p := newProcessConflictPicker(msg.path, doc)
+			cp.picker = p
 			cp.pickPath = msg.path
 			cp.st = confPicking
+			return m, p.lexCmd(m.cfg.UI.SyntaxOn())
+		}
+		p := newConflictPicker(msg.path, doc)
+		m = m.pushLayer(p)
+		return m, p.lexCmd(m.cfg.UI.SyntaxOn())
+
+	case pickerLexedMsg:
+		// The lex ran off the UI thread, so its picker may already be gone
+		// (esc, an applied resolve, a different file loaded). Apply only while
+		// that very picker is still the surface on screen — the runs describe
+		// its document and no other. The repaint is layout-stable: a mask
+		// never changes a line's text or width, so no scroll offset or cursor
+		// position needs adjusting.
+		live := m.topLayer() == msg.picker
+		if !live {
+			if cp, ok := m.proc.(*conflictProcess); ok && cp.picker == msg.picker {
+				live = true
+			}
+		}
+		if !live {
 			return m, nil
 		}
-		m = m.pushLayer(newConflictPicker(msg.path, doc).withSyntax(m.cfg.UI.SyntaxOn()))
+		msg.picker.setSyntax(msg.cur, msg.inc)
 		return m, nil
 
 	case stageHunksLoadedMsg:
@@ -3093,8 +3114,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("stage hunks: nothing to stage")
 			return m, nil
 		}
-		m = m.pushLayer(newStagePicker(msg.path, doc).withSyntax(m.cfg.UI.SyntaxOn()))
-		return m, nil
+		p := newStagePicker(msg.path, doc)
+		m = m.pushLayer(p)
+		return m, p.lexCmd(m.cfg.UI.SyntaxOn())
 
 	case unstageHunksLoadedMsg:
 		if msg.err != nil {
@@ -3111,8 +3133,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("unstage hunks: nothing to unstage")
 			return m, nil
 		}
-		m = m.pushLayer(newUnstagePicker(msg.path, doc).withSyntax(m.cfg.UI.SyntaxOn()))
-		return m, nil
+		p := newUnstagePicker(msg.path, doc)
+		m = m.pushLayer(p)
+		return m, p.lexCmd(m.cfg.UI.SyntaxOn())
 
 	case clipboardCopiedMsg:
 		if msg.err != nil {
