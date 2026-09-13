@@ -2,6 +2,7 @@ package git
 
 import (
 	"context"
+	"os"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/gitcmd"
@@ -39,4 +40,30 @@ func (r *Repo) ForEachRef(ctx context.Context, prefix string) ([]model.RefInfo, 
 		out = append(out, model.RefInfo{Ref: ref, Hash: hash, Subject: subject})
 	}
 	return out, nil
+}
+
+// EmptyTree writes (idempotently) the empty tree object and returns its id. It
+// exists so marker refs have a target that pins nothing meaningful: the format
+// number lives in the REF NAME, and the object is only there because
+// update-ref requires one.
+//
+// The id is a constant per hash algorithm, but it is not hardcoded — a
+// sha256 repository has a different one. `hash-object` is given an empty
+// temporary FILE rather than /dev/null or --stdin: the Runner has no stdin,
+// and /dev/null is not portable to Windows.
+func (r *Repo) EmptyTree(ctx context.Context) (string, error) {
+	f, err := os.CreateTemp("", "gg-empty-tree")
+	if err != nil {
+		return "", err
+	}
+	name := f.Name()
+	_ = f.Close()
+	defer func() { _ = os.Remove(name) }()
+
+	argv := gitcmd.New("hash-object").Arg("-t", "tree", "-w", name).ToArgv()
+	res, err := r.Runner.Run(ctx, "git hash-object", argv)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(res.Stdout), nil
 }
