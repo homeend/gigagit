@@ -22,6 +22,7 @@ import (
 	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/prefix"
+	"github.com/homeend/gigagit/internal/preflight"
 	"github.com/homeend/gigagit/internal/preview"
 	"github.com/homeend/gigagit/internal/profile"
 	"github.com/homeend/gigagit/internal/repogate"
@@ -70,6 +71,12 @@ type Service struct {
 
 	prefixGlobal prefix.Store // lazily resolved; nil disables prefixes
 	prefixRepo   prefix.Store // lazily resolved; nil disables prefixes
+
+	// preflightMu guards the resolved verdicts. reRoot builds a FRESH Service,
+	// so a cached resolution can never outlive the repo it describes.
+	preflightMu   sync.Mutex
+	preflightDone bool
+	preflightOut  []preflight.Verdict
 
 	// gitDirMu guards gitDirPath — this worktree's git dir, resolved once on
 	// first use (a repo's git dir never moves during a session; reRoot builds
