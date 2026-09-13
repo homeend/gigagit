@@ -51,6 +51,11 @@ func snapshotBranchTip(ctx context.Context, deps OpDeps, branch, opToken string)
 		deps.emit(ctx, Progressf("recording branch version", "skipped: %s", err.Error()))
 		return
 	}
+	// The store's WRITER stamps the format marker — never startup. Keeps every
+	// `gg` invocation free of a ref write and removes the compare-and-swap race
+	// between concurrently starting processes. Best-effort like the snapshot
+	// itself: a stamp failure must not fail the real operation.
+	_ = deps.Repo.StampStoreFormat(ctx, "versions", 1)
 	pruneBranchVersions(ctx, deps, branch, infos)
 }
 

@@ -82,3 +82,20 @@ func TestSnapshotBranchTipPrunes(t *testing.T) {
 		}
 	}
 }
+
+func TestSnapshotBranchTipStampsTheStoreFormat(t *testing.T) {
+	t.Parallel()
+	_, repo := newRepo(t)
+	ctx := context.Background()
+	deps := OpDeps{Repo: repo, Versions: VersionsPolicy{Enabled: true, MaxAgeDays: 90}}
+
+	snapshotBranchTip(ctx, deps, "main", "rebase")
+
+	formats, err := deps.Repo.StoreFormats(ctx)
+	if err != nil {
+		t.Fatalf("StoreFormats: %v", err)
+	}
+	if formats["versions"] != 1 {
+		t.Errorf("StoreFormats = %v, want versions=1 — the writer must stamp the marker", formats)
+	}
+}

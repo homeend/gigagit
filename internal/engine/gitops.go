@@ -32,6 +32,12 @@ type GitOps interface {
 	WorktreeForBranch(ctx context.Context, branch string) (*model.Worktree, error)
 	LogRangeMessages(ctx context.Context, onto, branch string) ([]model.RangeCommit, error)
 
+	// StoreFormats/StampStoreFormat back the repo-preflight store-format
+	// markers: a store's writer stamps its format on write, and preflight
+	// reads every marker in one invocation before gating features.
+	StoreFormats(ctx context.Context) (map[string]int, error)
+	StampStoreFormat(ctx context.Context, store string, format int) error
+
 	Fetch(ctx context.Context, remote string) error
 	FetchAll(ctx context.Context) error
 	RemoteNames(ctx context.Context) ([]string, error)

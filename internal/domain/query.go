@@ -638,6 +638,9 @@ func (s *Service) ResolveRev(ctx context.Context, rev string) (string, bool, err
 // BranchVersions lists a branch's recorded pre-operation snapshots, newest
 // first, under a Read reservation.
 func (s *Service) BranchVersions(ctx context.Context, branch string) ([]model.BranchVersion, error) {
+	if err := s.FeatureDisabledError(ctx, FeatureVersions); err != nil {
+		return nil, err
+	}
 	return query(ctx, s, "branch-versions:"+branch, func(ctx context.Context) ([]model.BranchVersion, error) {
 		infos, err := s.repo.ForEachRef(ctx, strings.TrimSuffix(git.VersionRefPrefix, "/")+"/"+branch)
 		if err != nil {
@@ -664,6 +667,9 @@ func (s *Service) BranchVersions(ctx context.Context, branch string) ([]model.Br
 // AllVersionBranches groups every recorded version by branch, marking
 // branches that no longer exist (deleted-branch recovery entry point).
 func (s *Service) AllVersionBranches(ctx context.Context) ([]model.VersionedBranch, error) {
+	if err := s.FeatureDisabledError(ctx, FeatureVersions); err != nil {
+		return nil, err
+	}
 	return query(ctx, s, "version-branches", func(ctx context.Context) ([]model.VersionedBranch, error) {
 		infos, err := s.repo.ForEachRef(ctx, strings.TrimSuffix(git.VersionRefPrefix, "/"))
 		if err != nil {
