@@ -282,3 +282,81 @@ func TestEngineProseNoDynamic(t *testing.T) {
 		})
 	}
 }
+
+const preflightDir = "../preflight"
+
+// preflightProseKeys parses every non-test .go file in internal/preflight and
+// returns the set of localizable literals: the Format field of every
+// Text{Format: "...", ...} composite literal (the shape a Requirement's
+// Reason method returns). Mirrors engineProseKeys for internal/preflight,
+// and is a pure collector for the same reason: a non-literal Format can't be
+// a catalog key, but internal/preflight is a stdlib-only DAG leaf with a
+// closed, tiny set of Requirement implementations (DataFormat, GitVersion),
+// so there is no migration wave to gate incrementally — every Format here is
+// expected to already be a literal.
+func preflightProseKeys(t *testing.T) map[string]bool {
+	t.Helper()
+	keys := map[string]bool{}
+	fset := token.NewFileSet()
+	ents, err := os.ReadDir(preflightDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range ents {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, perr := parser.ParseFile(fset, filepath.Join(preflightDir, name), nil, 0)
+		if perr != nil {
+			t.Fatalf("parse %s: %v", name, perr)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			cl, ok := n.(*ast.CompositeLit)
+			if !ok {
+				return true
+			}
+			id, ok := cl.Type.(*ast.Ident)
+			if !ok || id.Name != "Text" {
+				return true
+			}
+			for _, el := range cl.Elts {
+				kv, ok := el.(*ast.KeyValueExpr)
+				if !ok {
+					continue
+				}
+				k, ok := kv.Key.(*ast.Ident)
+				if !ok || k.Name != "Format" {
+					continue
+				}
+				if s, ok := stringLit(kv.Value); ok {
+					keys[s] = true
+				} else {
+					t.Errorf("%s: Text.Format must be a string literal", fset.Position(kv.Pos()))
+				}
+			}
+			return true
+		})
+	}
+	return keys
+}
+
+func TestPreflightProseKeysInBundles(t *testing.T) {
+	t.Parallel()
+	keys := preflightProseKeys(t)
+	if len(keys) == 0 {
+		t.Fatal("collected 0 preflight-prose literals — the scan has gone blind (Text moved/renamed?)")
+	}
+	builtins := i18n.Builtins()
+	for _, code := range []string{"ja", "ko", "zh", "ru"} {
+		b, ok := builtins[code]
+		if !ok {
+			t.Fatalf("embedded bundle %s missing", code)
+		}
+		for k := range keys {
+			if _, has := b[k]; !has {
+				t.Errorf("%s.toml: missing preflight-prose key %q", code, k)
+			}
+		}
+	}
+}

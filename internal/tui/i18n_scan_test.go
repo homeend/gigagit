@@ -60,10 +60,13 @@ func tuiI18nCatalog(t *testing.T) map[string]bool {
 			if !ok || lit.Kind != token.STRING {
 				// Dynamic keys can't be extracted or translated — dynamic
 				// text must be a T *argument*, never part of the key. The
-				// ONE sanctioned exception: i18n_engine.go renders engine
+				// TWO sanctioned exceptions: i18n_engine.go renders engine
 				// (format, args) pairs whose formats are gate-checked
-				// against all four bundles by engine_prose_test.go instead.
-				if name == "i18n_engine.go" {
+				// against all four bundles by engine_prose_test.go, and
+				// i18n_preflight.go likewise renders a preflight.Verdict's
+				// Reason (format, args), gate-checked by
+				// preflightProseKeys in engine_prose_test.go.
+				if name == "i18n_engine.go" || name == "i18n_preflight.go" {
 					return true
 				}
 				t.Errorf("%s: i18n.T key must be a string literal", fset.Position(call.Pos()))
@@ -90,6 +93,9 @@ func TestI18nBundlesComplete(t *testing.T) {
 	t.Parallel()
 	catalog := tuiI18nCatalog(t)
 	for k := range engineProseKeys(t) { // engine formats are used keys too
+		catalog[k] = true
+	}
+	for k := range preflightProseKeys(t) { // preflight verdict reasons too
 		catalog[k] = true
 	}
 	builtins := i18n.Builtins()

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -198,7 +197,7 @@ func featureDisabledNotices(svc *domain.Service, repoKey string) []notice {
 		if v.State == preflight.Satisfied {
 			continue
 		}
-		reason := fmt.Sprintf(v.Reason.Format, v.Reason.Args...)
+		reason := renderVerdictReason(v)
 		detail := []string{reason}
 		if v.State == preflight.Repairable {
 			detail = append(detail, i18n.T("Run `gg migrate` to repair this, or answer the migration prompt at the next launch."))

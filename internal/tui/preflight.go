@@ -29,7 +29,7 @@ func Preflight(svc *domain.Service, stdin io.Reader, out io.Writer) (bool, error
 	}
 	for _, v := range verdicts {
 		if v.Feature.Criticality == preflight.Required && v.State == preflight.Unsatisfiable {
-			reason := fmt.Sprintf(v.Reason.Format, v.Reason.Args...)
+			reason := renderVerdictReason(v)
 			return false, fmt.Errorf(i18n.T("gg cannot start: %s"), reason)
 		}
 	}
