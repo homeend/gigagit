@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/preflight"
 )
 
 // The notification center: cheap health checks run on every repo load
@@ -165,8 +167,54 @@ func (m Model) rebuildNotices() Model {
 	if n := wslInteropNotice(m.clipAvail, m.repoHealth.GitCommonDir); n != nil && !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
 		next = append(next, *n)
 	}
+	for _, n := range featureDisabledNotices(m.svc, m.repoHealth.GitCommonDir) {
+		if !dismissed[n.id] && !m.noticeSessionDismissed[n.id] {
+			next = append(next, n)
+		}
+	}
 	m.notices = next
 	return m
+}
+
+// noticeFeatureDisabledPrefix identifies a disabled-feature notice's stable
+// id, suffixed with the feature's English protocol id — dismissal is scoped
+// per feature, so fixing one feature never silences another's notice.
+const noticeFeatureDisabledPrefix = "feature_disabled_"
+
+// featureDisabledNotices returns one standing notice per feature whose
+// preflight verdict is not Satisfied. A Required-Unsatisfiable feature never
+// reaches here — Preflight (internal/tui/preflight.go) refuses to launch the
+// UI at all in that case — so what shows up is an Optional feature gg quietly
+// ran without (Unsatisfiable), or one the user chose to Skip at the migration
+// prompt (Repairable). Preflight's verdicts are cached on svc for its
+// lifetime, so this call is cheap on every rebuild.
+func featureDisabledNotices(svc *domain.Service, repoKey string) []notice {
+	vs, err := svc.Preflight(context.Background())
+	if err != nil {
+		return nil // best-effort, like every other health-derived notice
+	}
+	var out []notice
+	for _, v := range vs {
+		if v.State == preflight.Satisfied {
+			continue
+		}
+		reason := fmt.Sprintf(v.Reason.Format, v.Reason.Args...)
+		detail := []string{reason}
+		if v.State == preflight.Repairable {
+			detail = append(detail, i18n.T("Run `gg migrate` to repair this, or answer the migration prompt at the next launch."))
+		}
+		out = append(out, notice{
+			id:      noticeFeatureDisabledPrefix + v.Feature.ID,
+			repoKey: repoKey,
+			title:   i18n.T("%s is unavailable in this repository", v.Feature.ID),
+			detail:  detail,
+			actions: []noticeAction{
+				{label: i18n.T("Not now (ask again next load)")},
+				{label: i18n.T("Never for this repo"), never: true},
+			},
+		})
+	}
+	return out
 }
 
 // commitGraphNotice fires when the repo is big (pack ≥ bigRepoPackBytes), has

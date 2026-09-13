@@ -126,6 +126,14 @@ func main() {
 		fmt.Fprintln(os.Stderr, friendlyGitError(err))
 		os.Exit(1)
 	}
+	proceed, err := tui.Preflight(svc, os.Stdin, os.Stderr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if !proceed {
+		os.Exit(0)
+	}
 	if ef, _, eerr := tui.OpenErrorLog(); eerr == nil && ef != nil {
 		observ.SetFailureSink(ef)
 		defer func() { observ.SetFailureSink(nil); _ = ef.Close() }()
