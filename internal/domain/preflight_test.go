@@ -98,3 +98,77 @@ func TestFeatureEnabledAndErrFeatureDisabled(t *testing.T) {
 		t.Error("ErrFeatureDisabled.Error() is empty")
 	}
 }
+
+func TestPendingMigrationsIsEmptyWhenNothingIsRepairable(t *testing.T) {
+	t.Parallel()
+	svc := svcAt(cleanDir(t))
+
+	got, err := svc.PendingMigrations(context.Background())
+	if err != nil {
+		t.Fatalf("PendingMigrations: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("PendingMigrations = %v, want none on a current repo", got)
+	}
+}
+
+func TestPendingMigrationsListsRepairableFeaturesWithTheirRefs(t *testing.T) {
+	t.Parallel()
+	svc := svcAt(cleanDir(t))
+	ctx := context.Background()
+
+	head, err := svc.Repo().RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatalf("RevParse: %v", err)
+	}
+	ref := "refs/gg/versions/main/1700000000-rebase"
+	if err := svc.Repo().UpdateRef(ctx, ref, head); err != nil {
+		t.Fatalf("UpdateRef: %v", err)
+	}
+
+	// Stand in for a future build: versions requires format 2 and can repair 1.
+	svc.preflightMu.Lock()
+	svc.preflightDone = true
+	svc.preflightOut = []preflight.Verdict{{
+		Feature: preflight.Feature{
+			ID:          FeatureVersions,
+			Criticality: preflight.Optional,
+			Migrate: &preflight.Migration{Store: StoreVersions, From: 1, To: 2,
+				Describe: func() preflight.Text {
+					return preflight.Text{Format: "discards every recorded branch version in %s", Args: []any{"this repository"}}
+				}},
+		},
+		State:  preflight.Repairable,
+		Reason: preflight.Text{Format: "the %s store is at format %d", Args: []any{StoreVersions, 1}},
+	}}
+	svc.preflightMu.Unlock()
+
+	got, err := svc.PendingMigrations(ctx)
+	if err != nil {
+		t.Fatalf("PendingMigrations: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("PendingMigrations returned %d entries, want 1", len(got))
+	}
+	m := got[0]
+	if m.Feature != FeatureVersions || m.From != 1 || m.To != 2 {
+		t.Errorf("migration = %+v, want versions 1→2", m)
+	}
+	if m.Consequence == "" {
+		t.Error("Consequence is empty; consent has nothing to show")
+	}
+	if len(m.Refs) != 1 || m.Refs[0] != ref {
+		t.Errorf("Refs = %v, want [%s]", m.Refs, ref)
+	}
+
+	if err := svc.RunMigration(ctx, m); err != nil {
+		t.Fatalf("RunMigration: %v", err)
+	}
+	left, err := svc.Repo().ForEachRef(ctx, "refs/gg/versions/")
+	if err != nil {
+		t.Fatalf("ForEachRef: %v", err)
+	}
+	if len(left) != 0 {
+		t.Errorf("%d version refs survived RunMigration, want 0", len(left))
+	}
+}
