@@ -5,6 +5,7 @@ import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, opLine, openCreateBranchPrompt, showLocalConfirm, startOp, startSwitch } from "./ops.js";
 import { openVersions } from "./versions.js";
+import { featureDisabled } from "./preflight.js";
 import { openRebaseEditor } from "./rebase.js";
 import { startReview } from "./review.js";
 import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./commits.js";
@@ -353,7 +354,11 @@ function showBranchMenu(b, x, y) {
   // on every menu open; the popup shows the empty state instead (the TUI's
   // branchVersionsRow rule).
   items.push({ sep: true });
-  items.push({ label: "previous versions…", act: () => openVersions(b.name) });
+  // A feature preflight turned off has nothing to open — the entry point is
+  // removed rather than left to fail on click.
+  if (!featureDisabled("versions")) {
+    items.push({ label: "previous versions…", act: () => openVersions(b.name) });
+  }
   items.push({ label: "review " + b.name + " (AI)…", act: () => startReview("branch", b.name) });
   items.push({ sep: true });
   if (state.solo === b.name) {

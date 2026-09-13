@@ -3,6 +3,7 @@
 // single-file order), then boots. The split is mechanical; each module
 // matches a section of the former monolith.
 import { $ } from "./core.js";
+import { preflightGate } from "./preflight.js";
 import "./layers.js";
 // The registries (op rows / help) must exist before any feature module runs.
 import "./menus.js";
@@ -59,6 +60,11 @@ async function applyStoredLayout() {
 
 
 async function boot() {
+  // The migration consent gate runs FIRST, before anything else touches the
+  // repo — mirroring internal/tui/preflight.go's Preflight, which runs
+  // before the TUI's own event loop starts. Quit stops initialization here;
+  // the panel itself explains that closing or reloading the tab is safe.
+  if (!(await preflightGate())) return;
   await applyStoredLayout();
   await loadRepo();
   // Neither status (a MINUTE of working-tree scan on a huge repo) nor the
