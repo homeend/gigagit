@@ -1,0 +1,50 @@
+name = "cli: migrate lists pending migrations without mutating"
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "feat.txt", content = "feat\n" },
+  { commit = "feat change" },
+  { switch = "main" },
+  { write = "main.txt", content = "main\n" },
+  { commit = "main change" },
+]
+
+# A merge records a branch-version snapshot (refs/gg/versions/...), so by the
+# time `gg migrate` runs there IS gg-owned state in the repo — this is not an
+# empty-repo case. Nothing is pending regardless: the versions feature has no
+# wired migration yet (Migrate is nil), so every path prints "nothing to
+# migrate" and changes nothing.
+[[run]]
+cmd  = ["merge", "feat"]
+exit = 0
+
+[[run]]
+cmd             = ["migrate"]
+exit            = 0
+stdout_contains = ["nothing to migrate"]
+stdout_excludes = ["migrated "]
+
+# --yes is the only consent path that would ever apply a migration, but with
+# nothing pending it stays a no-op too — same message, no mutation.
+[[run]]
+cmd             = ["migrate", "--yes"]
+exit            = 0
+stdout_contains = ["nothing to migrate"]
+stdout_excludes = ["migrated "]
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"feat.txt" = "feat\n"
+"main.txt" = "main\n"
+
+[[expect.log]]
+# Unchanged from right after the merge: two `gg migrate` runs (one bare, one
+# --yes) neither added, rewrote, nor discarded any commit or ref.
+subjects = [{ matches = "^Merge" }, "main change", "feat change", "base"]
