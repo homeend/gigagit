@@ -8,6 +8,36 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Repository preflight + `gg migrate`.** Features now declare what they
+  need — a data-format range for the store they own (`preflight.DataFormat`)
+  and/or a minimum git version (`preflight.GitVersion`) — plus a criticality
+  (`Required` gg cannot run without, `Optional` gg disables and moves on).
+  `preflight.Resolve` checks each feature's requirements against a probe of
+  the repository and reports `Satisfied`, `Repairable` (a migration exists
+  and can fix it), or `Unsatisfiable` (nothing to do but disable it),
+  taking the worst verdict across a feature's requirements. Store format is
+  recorded in git itself: a marker ref `refs/gg/meta/<store>/<N>` points at
+  the empty tree, so one `for-each-ref` reads every store's format in one
+  shot; a store with data but no marker predates the marker era and is
+  format 1 by definition, and a store with no data at all is trivially
+  satisfied. Each store's writer stamps its own marker on first write —
+  never at gg startup — so opening a repo costs no extra ref write and two
+  `gg` processes starting at once can't race a compare-and-swap. `gg
+  migrate` lists every pending migration and what it would discard, and
+  changes nothing until you pass `--yes`; the TUI asks the same question as
+  a pre-launch **Migrate / Skip / Quit** modal on every start (deliberately
+  never suppressed, since a feature silently left disabled is exactly the
+  failure this gate exists to catch), and `gg web` exposes the same consent
+  through `GET /api/preflight` / `POST /api/preflight/migrate`. `engine.
+  ApplyMigration` is the only write preflight ever performs, and only under
+  the `RefWrite` lock and only after that explicit consent. The v1 registry
+  has two features: `core` (Required — minimum git version) and `versions`
+  (Optional — data format 1, no migration defined yet; format 2 and gg's
+  first real migration are a follow-up). **Not yet wired: MCP.**
+  `internal/mcp` has no versions tool today, so there was nothing to gate;
+  when one is added it must call `domain.FeatureEnabled`/
+  `ErrFeatureDisabled` itself — this was a deliberate scope cut, not an
+  oversight, and must not be forgotten when that tool lands.
 - **Every `gg note` verb takes a `gg://` link.** `gg note reply`, `rm`,
   `clear` and `apply` now accept a link as the first positional, as `add` and
   `list` already did. `reply` and `rm` take the REPOSITORY's link

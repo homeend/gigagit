@@ -55,6 +55,7 @@ feature; keep THIS file's map to one line per package.
 | Package      | Responsibility |
 |--------------|----------------|
 | `engine`     | Operations + the `Event`/`Decider`/`Result` contract. Smart ops (`SmartPull`, `SmartSwitch`, `SmartMerge`, `SmartRebase`), `Commit`, `Push`, `Stash`, worktree/patch/export/config ops, AI capture ops (`GenerateMessage`, `ReviewChanges`, `CompleteConflict`), branch-version snapshots. Ops act on a `GitOps` interface; seams: `HookRunner`, `CaptureRunner`. English event prose + localizable `Msg{Format,Args}` channel via `msg.go` helpers only. |
+| `preflight`  | Pure feature-requirement registry + resolver: features declare data-format ranges, a minimum git version and a criticality; `Resolve` maps probe results to Satisfied/Repairable/Unsatisfiable. DAG leaf; `domain` runs the probes and owns the migration op. |
 | `domain`     | Frontend-facing command + query layer: `Execute` under the repo-gate reservation; singleflight-coalesced reads (`Snapshot`/`Status`/`CommitFeed`/…); the cached `Differ`; conflict/paused-op detection; review + conflict-complete report wrappers; branch-version and repo-health queries. |
 | `repogate`   | Per-repo reservation gate (Read/RefWrite/TreeWrite, writer-preferring FIFO, escalation), process-global registry keyed by git common dir. |
 | `git`        | Thin git verbs on `*git.Repo` — one verb ≈ one git invocation. Worktree file I/O rejects paths escaping the tree; stat-level probes (`PausedOpIn`, `LockFiles`) avoid git invocations; version-ref naming/parsing shared with engine/domain. |
