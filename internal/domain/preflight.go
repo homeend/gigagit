@@ -27,6 +27,20 @@ func (e *ErrFeatureDisabled) Error() string {
 	return fmt.Sprintf("the %s feature is unavailable in this repository: %s", e.ID, e.Reason)
 }
 
+// ErrRequiredFeatureUnsatisfiable is returned by PreflightRequired when a
+// Required feature cannot be satisfied. Frontends without a UI to render a
+// Verdict (CLI, MCP, web) print Error() to stderr and exit — the same
+// message the TUI's pre-launch gate composes from the same verdict, minus
+// i18n (CLI/MCP/web prose stays English by design).
+type ErrRequiredFeatureUnsatisfiable struct {
+	ID     string // English feature id
+	Reason string // rendered English prose naming what failed
+}
+
+func (e *ErrRequiredFeatureUnsatisfiable) Error() string {
+	return fmt.Sprintf("gg cannot start: %s", e.Reason)
+}
+
 // preflightProbes gathers everything the resolver may look at: one
 // for-each-ref for the markers, one existence probe per store, one git
 // version. All reads — preflight never writes.
@@ -110,6 +124,60 @@ func (s *Service) Preflight(ctx context.Context) ([]preflight.Verdict, error) {
 	s.preflightMarks = formats
 	s.preflightDone = true
 	return s.preflightOut, nil
+}
+
+// PreflightRequired resolves ONLY the Required features and reports whether
+// gg must refuse to start. It is deliberately cheaper than Preflight: when
+// none of the Required features have a requirement that needs store probes
+// (today's case — core needs only GitVersion, which never touches the
+// repository), it pays exactly one git invocation instead of the full
+// probe set's three. It is used by frontends with no pre-UI gate of their
+// own (CLI, MCP, web) — the TUI already gates via the full Preflight/
+// Preflight.go pre-launch flow and does not call this.
+//
+// This NEVER populates the cached preflightOut/preflightDone/preflightMarks
+// fields, even when it happens to resolve the full probe set: those fields
+// exist for FeatureEnabled/Preflight, and a partial-probe resolve cached
+// there would make a later FeatureEnabled("versions") answer from verdicts
+// computed with an empty Probes.Stores, where a store with data but no
+// marker reads as "no data" — Satisfied — silently opening a gate that
+// should have stayed shut. A single extra `git version` call is cheap enough
+// that caching this result is not worth that risk.
+//
+// Fails open on a probe error, exactly like FeatureEnabled: a transient git
+// failure must never keep gg from starting.
+func (s *Service) PreflightRequired(ctx context.Context) error {
+	required := preflight.RequiredFeatures(Features())
+	if len(required) == 0 {
+		return nil
+	}
+
+	var verdicts []preflight.Verdict
+	if preflight.NeedsStoreProbes(required) {
+		// A Required feature needs store data to resolve correctly — fall
+		// back to the full probe set rather than fabricate empty stores.
+		full, _, err := s.preflightProbes(ctx)
+		if err != nil {
+			return nil // fail open
+		}
+		verdicts = preflight.Resolve(required, full)
+	} else {
+		ver, err := s.repo.GitVersion(ctx)
+		if err != nil {
+			return nil // fail open
+		}
+		verdicts = preflight.Resolve(required, preflight.Probes{GitVersion: ver})
+	}
+
+	for _, v := range verdicts {
+		if v.State == preflight.Unsatisfiable {
+			return &ErrRequiredFeatureUnsatisfiable{
+				ID:     v.Feature.ID,
+				Reason: fmt.Sprintf(v.Reason.Format, v.Reason.Args...),
+			}
+		}
+	}
+	return nil
 }
 
 // FeatureEnabled reports whether id may be used. An unknown id is never

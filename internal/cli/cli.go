@@ -60,6 +60,10 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 	}
 	svc := domain.Open(workdir)
 	setupCLIService(svc)
+	if err := svc.PreflightRequired(context.Background()); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 	cmd, rest := args[0], args[1:]
 	// Record this repo in the switcher registry (best-effort: errors and
 	// non-repo working directories are ignored). Skip for "repo" subcommands

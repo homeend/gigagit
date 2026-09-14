@@ -79,6 +79,13 @@ type Requirement interface {
 	// RepairStore names the store a migration could repair, or "" when nothing
 	// can (a git version is never migratable).
 	RepairStore() string
+	// NeedsStoreProbes reports whether this requirement's Fit reads
+	// Probes.Stores at all. DataFormat is true; GitVersion is false. A
+	// Required-only resolve (domain.PreflightRequired) uses this to decide
+	// whether it can skip the for-each-ref store probes entirely — the leaf
+	// stays authoritative about what each requirement kind needs, rather than
+	// domain type-switching on Requirement implementations.
+	NeedsStoreProbes() bool
 }
 
 // DataFormat requires a store to sit within an inclusive format range. The
@@ -135,6 +142,8 @@ func (d DataFormat) Remedy(p Probes) Text {
 
 func (d DataFormat) RepairStore() string { return d.Store }
 
+func (d DataFormat) NeedsStoreProbes() bool { return true }
+
 // GitVersion requires a minimum git binary version. Never repairable.
 type GitVersion struct {
 	Min [3]int
@@ -162,6 +171,8 @@ func (g GitVersion) Remedy(p Probes) Text {
 }
 
 func (g GitVersion) RepairStore() string { return "" }
+
+func (g GitVersion) NeedsStoreProbes() bool { return false }
 
 func less(a, b [3]int) bool {
 	for i := range a {
@@ -199,6 +210,36 @@ type Verdict struct {
 	State   State
 	Reason  Text
 	Remedy  Text
+}
+
+// RequiredFeatures returns the subset of fs whose Criticality is Required.
+// gg must explain and exit rather than run with one of these disabled, so a
+// caller that only cares about that gate (domain.PreflightRequired) can
+// resolve against this narrower list instead of every declared feature.
+func RequiredFeatures(fs []Feature) []Feature {
+	out := make([]Feature, 0, len(fs))
+	for _, f := range fs {
+		if f.Criticality == Required {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// NeedsStoreProbes reports whether any requirement across fs needs
+// Probes.Stores populated to resolve correctly. When false, a caller may
+// pass a Probes with a nil/empty Stores map (only GitVersion is read) without
+// risking a DataFormat requirement silently reading "no data" from an
+// UNPROBED store rather than a genuinely empty one.
+func NeedsStoreProbes(fs []Feature) bool {
+	for _, f := range fs {
+		for _, r := range f.Requires {
+			if r.NeedsStoreProbes() {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Resolve evaluates every feature against the probes. A feature takes the

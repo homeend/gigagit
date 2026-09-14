@@ -126,3 +126,38 @@ func TestResolveRepairableRemedyIsUnsetOnVerdict(t *testing.T) {
 		t.Error("Remedy should still be set from the failing requirement, even though Repairable notices don't render it")
 	}
 }
+
+func TestRequiredFeaturesFiltersOutOptional(t *testing.T) {
+	t.Parallel()
+	core := Feature{ID: "core", Criticality: Required, Requires: []Requirement{GitVersion{Min: [3]int{2, 30, 0}}}}
+	opt := versionsFeature(nil)
+	got := RequiredFeatures([]Feature{opt, core})
+	if len(got) != 1 || got[0].ID != "core" {
+		t.Errorf("RequiredFeatures = %+v, want only [core]", got)
+	}
+}
+
+func TestNeedsStoreProbesTrueForDataFormatFalseForGitVersion(t *testing.T) {
+	t.Parallel()
+	core := Feature{ID: "core", Criticality: Required, Requires: []Requirement{GitVersion{Min: [3]int{2, 30, 0}}}}
+	if NeedsStoreProbes([]Feature{core}) {
+		t.Error("NeedsStoreProbes = true for a GitVersion-only feature set, want false")
+	}
+	withData := Feature{ID: "core2", Criticality: Required, Requires: []Requirement{
+		GitVersion{Min: [3]int{2, 30, 0}},
+		DataFormat{Store: "versions", Min: 1, Max: 1},
+	}}
+	if !NeedsStoreProbes([]Feature{core, withData}) {
+		t.Error("NeedsStoreProbes = false when a feature declares a DataFormat requirement, want true")
+	}
+}
+
+func TestGitVersionAndDataFormatDeclareNeedsStoreProbes(t *testing.T) {
+	t.Parallel()
+	if (GitVersion{}).NeedsStoreProbes() {
+		t.Error("GitVersion.NeedsStoreProbes() = true, want false")
+	}
+	if !(DataFormat{}).NeedsStoreProbes() {
+		t.Error("DataFormat.NeedsStoreProbes() = false, want true")
+	}
+}
