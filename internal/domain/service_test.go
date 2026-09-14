@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -255,4 +256,54 @@ func (b *syncBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+// TestExecuteResolvesPreflightBeforeAcquiringTheGate pins the lock ordering:
+// the preflight probes behind the versions policy must run BEFORE the repo-gate
+// reservation, never under it — Preflight shells out on every call (a marker
+// for-each-ref validates the cache), and no git subprocess may extend an
+// exclusive hold. The assertion is made INSIDE the marker probe: the gate queue
+// at that moment must hold only the test's own reservation, with Execute not
+// yet waiting on it. Serial: repogate.For is a global registry.
+func TestExecuteResolvesPreflightBeforeAcquiringTheGate(t *testing.T) {
+	const key = "/domain-test-preflight-order"
+	svc, fr := svcWithKey(key)
+	fr.SetResponse("git version", gitexec.Result{Stdout: "git version 2.44.0\n"})
+	probed := make(chan []repogate.Entry, 1)
+	fr.SetHandler("git for-each-ref (gg)", func(ctx context.Context, argv []string) (gitexec.Result, error) {
+		if slices.Contains(argv, git.MetaRefPrefix) {
+			select {
+			case probed <- repogate.For(filepath.Clean(key)).Queue():
+			default:
+			}
+		}
+		return gitexec.Result{}, nil
+	})
+
+	// Hold the gate so Execute must queue behind it. If the probe ran under
+	// the reservation it could not run at all until this is released.
+	hold := holdTreeWrite(t, svc)
+	done := make(chan error, 1)
+	go func() {
+		_, err := svc.Execute(context.Background(), fakeOp{body: func(ctx context.Context, deps engine.OpDeps) (engine.Result, error) {
+			return engine.Result{Summary: "ok"}, nil
+		}}, nil, nil)
+		done <- err
+	}()
+
+	var seen []repogate.Entry
+	select {
+	case seen = <-probed:
+	case <-time.After(5 * time.Second):
+		hold.Release()
+		<-done
+		t.Fatal("the preflight marker probe never ran while the gate was held — Execute resolves it under the reservation")
+	}
+	if len(seen) != 1 || seen[0].Waiting {
+		t.Errorf("gate queue during the preflight probe = %+v, want only the test's held reservation", seen)
+	}
+	hold.Release()
+	if err := <-done; err != nil {
+		t.Fatalf("execute: %v", err)
+	}
 }

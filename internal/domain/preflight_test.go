@@ -3,8 +3,12 @@ package domain
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/preflight"
 )
 
@@ -40,7 +44,7 @@ func TestPreflightTreatsUnmarkedVersionRefsAsLegacyFormatOne(t *testing.T) {
 		t.Fatalf("UpdateRef: %v", err)
 	}
 
-	p, err := svc.preflightProbes(ctx)
+	p, _, err := svc.preflightProbes(ctx)
 	if err != nil {
 		t.Fatalf("preflightProbes: %v", err)
 	}
@@ -56,15 +60,74 @@ func TestPreflightTreatsUnmarkedVersionRefsAsLegacyFormatOne(t *testing.T) {
 	}
 }
 
+// countingRunner counts git invocations by name so a test can prove which
+// probes a Preflight call actually paid for.
+type countingRunner struct {
+	inner gitexec.Runner
+	mu    sync.Mutex
+	calls map[string]int
+}
+
+func newCountingRunner(inner gitexec.Runner) *countingRunner {
+	return &countingRunner{inner: inner, calls: map[string]int{}}
+}
+
+func (c *countingRunner) note(name string) {
+	c.mu.Lock()
+	c.calls[name]++
+	c.mu.Unlock()
+}
+
+func (c *countingRunner) count(name string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls[name]
+}
+
+func (c *countingRunner) reset() {
+	c.mu.Lock()
+	c.calls = map[string]int{}
+	c.mu.Unlock()
+}
+
+func (c *countingRunner) Run(ctx context.Context, name string, argv []string) (gitexec.Result, error) {
+	c.note(name)
+	return c.inner.Run(ctx, name, argv)
+}
+
+func (c *countingRunner) RunEnv(ctx context.Context, name string, argv, env []string) (gitexec.Result, error) {
+	c.note(name)
+	return c.inner.RunEnv(ctx, name, argv, env)
+}
+
+func (c *countingRunner) Stream(ctx context.Context, name string, argv []string, onLine func(string)) (gitexec.Result, error) {
+	c.note(name)
+	return c.inner.Stream(ctx, name, argv, onLine)
+}
+
+// TestPreflightIsCached pins the steady state: a second call re-reads ONLY the
+// store markers (the cache validation) and re-runs neither the git-version nor
+// the version-ref probe. Counting the invocations keeps it from passing
+// vacuously now that a cache hit is no longer a no-op.
 func TestPreflightIsCached(t *testing.T) {
 	t.Parallel()
-	svc := svcAt(cleanDir(t))
+	dir := cleanDir(t)
+	cr := newCountingRunner(gitexec.NewExecRunner("git", dir, observ.NewRing(50)))
+	svc := New(&git.Repo{Runner: cr})
 	ctx := context.Background()
 
 	a, err := svc.Preflight(ctx)
 	if err != nil {
 		t.Fatalf("Preflight: %v", err)
 	}
+	if n := cr.count("git version"); n != 1 {
+		t.Errorf("first Preflight ran git version %d times, want 1", n)
+	}
+	if n := cr.count("git for-each-ref (gg)"); n != 2 {
+		t.Errorf("first Preflight ran for-each-ref %d times, want 2 (markers + version refs)", n)
+	}
+
+	cr.reset()
 	b, err := svc.Preflight(ctx)
 	if err != nil {
 		t.Fatalf("Preflight (second call): %v", err)
@@ -72,9 +135,108 @@ func TestPreflightIsCached(t *testing.T) {
 	if len(a) != len(b) {
 		t.Fatalf("cached verdicts differ: %d then %d", len(a), len(b))
 	}
+	if n := cr.count("git version"); n != 0 {
+		t.Errorf("cached Preflight re-ran git version %d times, want 0", n)
+	}
+	if n := cr.count("git for-each-ref (gg)"); n != 1 {
+		t.Errorf("cached Preflight ran for-each-ref %d times, want exactly 1 (the marker re-read)", n)
+	}
 	if !svc.preflightDone {
 		t.Error("preflightDone = false after Preflight; the result was not cached")
 	}
+}
+
+// TestPreflightReResolvesWhenAnotherProcessChangesAMarker is the out-of-process
+// case: several gg processes share one repo as peers, so a marker written by a
+// peer (here, a raw ref write) must invalidate this Service's cached verdicts.
+// A long-lived `gg mcp` server never re-roots, so the cache is the only thing
+// standing between it and a stale "feature unavailable".
+func TestPreflightReResolvesWhenAnotherProcessChangesAMarker(t *testing.T) {
+	t.Parallel()
+	dir := cleanDir(t)
+	svc := svcAt(dir)
+	ctx := context.Background()
+
+	vs, err := svc.Preflight(ctx)
+	if err != nil {
+		t.Fatalf("Preflight: %v", err)
+	}
+	if st := verdictState(t, vs, FeatureVersions); st != preflight.Satisfied {
+		t.Fatalf("versions verdict on a fresh repo = %v, want Satisfied", st)
+	}
+
+	// Another gg process migrates the versions store to a format this build
+	// cannot read. gitRunDir writes the ref exactly as a peer process would —
+	// nothing tells this Service about it.
+	head, err := svc.Repo().RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatalf("RevParse: %v", err)
+	}
+	gitRunDir(t, dir, "", "update-ref", git.MetaRef(StoreVersions, 99), head)
+
+	vs, err = svc.Preflight(ctx)
+	if err != nil {
+		t.Fatalf("Preflight (after the peer migration): %v", err)
+	}
+	if st := verdictState(t, vs, FeatureVersions); st == preflight.Satisfied {
+		t.Fatal("versions verdict still Satisfied after a peer wrote a format-99 marker — the cache was served stale")
+	}
+	if got := svc.preflightMarks[StoreVersions]; got != 99 {
+		t.Errorf("recorded marker = %d, want 99", got)
+	}
+	if svc.FeatureEnabled(ctx, FeatureVersions) {
+		t.Error("FeatureEnabled(versions) = true after the peer migration")
+	}
+}
+
+// TestPreflightMarkerReReadFailureServesTheCache pins the fail-open rule: a
+// transient git error on the validating read must never flip a feature off or
+// fail the query. The failure is injected by swapping the repo's runner for a
+// FakeRunner that errors on for-each-ref once the verdicts are resolved.
+func TestPreflightMarkerReReadFailureServesTheCache(t *testing.T) {
+	t.Parallel()
+	svc := svcAt(cleanDir(t))
+	ctx := context.Background()
+
+	want, err := svc.Preflight(ctx)
+	if err != nil {
+		t.Fatalf("Preflight: %v", err)
+	}
+
+	fr := gitexec.NewFakeRunner()
+	fr.SetError("git for-each-ref (gg)", errors.New("boom"))
+	svc.repo = &git.Repo{Runner: fr}
+
+	got, err := svc.Preflight(ctx)
+	if err != nil {
+		t.Fatalf("Preflight after a failing marker re-read = %v, want the cached verdicts", err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("verdicts after a failing re-read = %d, want the cached %d", len(got), len(want))
+	}
+	for i := range got {
+		if got[i].State != want[i].State {
+			t.Errorf("verdict %q = %v after a failing re-read, want the cached %v",
+				got[i].Feature.ID, got[i].State, want[i].State)
+		}
+	}
+	if !svc.preflightDone {
+		t.Error("a failing marker re-read dropped the cache; it must be kept")
+	}
+	if !svc.FeatureEnabled(ctx, FeatureVersions) {
+		t.Error("FeatureEnabled(versions) = false after a transient probe failure")
+	}
+}
+
+func verdictState(t *testing.T, vs []preflight.Verdict, id string) preflight.State {
+	t.Helper()
+	for _, v := range vs {
+		if v.Feature.ID == id {
+			return v.State
+		}
+	}
+	t.Fatalf("no verdict for feature %q", id)
+	return preflight.Satisfied
 }
 
 func TestFeatureEnabledAndErrFeatureDisabled(t *testing.T) {

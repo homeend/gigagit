@@ -77,6 +77,12 @@ type Service struct {
 	preflightMu   sync.Mutex
 	preflightDone bool
 	preflightOut  []preflight.Verdict
+	// preflightMarks is the store-format marker map preflightOut was resolved
+	// from. Every cached Preflight call re-reads the markers and compares:
+	// another gg process sharing this repo can migrate a store underneath a
+	// long-lived Service (a `gg mcp` server never re-roots), and the cache
+	// must not outlive the state it describes.
+	preflightMarks map[string]int
 
 	// gitDirMu guards gitDirPath — this worktree's git dir, resolved once on
 	// first use (a repo's git dir never moves during a session; reRoot builds
@@ -244,6 +250,23 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 		mode = lm.LockMode()
 	}
 	label := "op " + engine.OpName(op)
+	// The branch-version WRITER is gated on preflight as well as config: a
+	// user who chose Skip on a repairable versions store (or an older build
+	// opening a store a newer gg wrote) must not have the next operation
+	// write a version ref and stamp a marker over it. Computed locally — the
+	// STORED policy stays config-only, so a transient preflight probe failure
+	// never becomes a sticky "versions off".
+	//
+	// Resolved BEFORE the reservation is acquired, and it must stay that way:
+	// Preflight shells out (a marker for-each-ref on every call, plus the
+	// version/data probes when it re-resolves), and no git subprocess may
+	// extend an exclusive hold on the repo gate. The && also short-circuits,
+	// so a config-disabled policy probes nothing at all. Nothing inside
+	// op.Run calls Preflight, so the gate never sees a probe.
+	versions := s.currentVersionsPolicy()
+	versions.Enabled = versions.Enabled && s.FeatureEnabled(ctx, FeatureVersions)
+	versions.Format = VersionsFormat
+
 	res, err := s.gateFor(ctx).Acquire(ctx, mode, label)
 	if err != nil {
 		return engine.Result{}, err
@@ -262,16 +285,6 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 	// returns, which never happens for a stuck op (the case this log exists for).
 	// A started line with no matching completion is exactly the trace wanted.
 	observ.EmitSpan(observ.Span{Name: label + " started", Start: opStart})
-	// The branch-version WRITER is gated on preflight as well as config: a
-	// user who chose Skip on a repairable versions store (or an older build
-	// opening a store a newer gg wrote) must not have the next operation
-	// write a version ref and stamp a marker over it. Computed locally — the
-	// STORED policy stays config-only, so a transient preflight probe failure
-	// never becomes a sticky "versions off". No deadlock: Preflight's probes
-	// take no repo-gate reservation, and nothing inside op.Run calls it.
-	versions := s.currentVersionsPolicy()
-	versions.Enabled = versions.Enabled && s.FeatureEnabled(ctx, FeatureVersions)
-	versions.Format = VersionsFormat
 	out, opErr := op.Run(ctx, engine.OpDeps{
 		Repo:     s.repo,
 		Events:   events,

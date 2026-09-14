@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/git"
@@ -29,19 +30,26 @@ func (e *ErrFeatureDisabled) Error() string {
 // preflightProbes gathers everything the resolver may look at: one
 // for-each-ref for the markers, one existence probe per store, one git
 // version. All reads — preflight never writes.
-func (s *Service) preflightProbes(ctx context.Context) (preflight.Probes, error) {
+func (s *Service) preflightProbes(ctx context.Context) (preflight.Probes, map[string]int, error) {
 	formats, err := s.repo.StoreFormats(ctx)
 	if err != nil {
-		return preflight.Probes{}, err
+		return preflight.Probes{}, nil, err
 	}
+	return s.probesFrom(ctx, formats)
+}
+
+// probesFrom completes the probe set from a marker map the caller already
+// read, so the cached marker snapshot is EXACTLY the map Resolve saw — and a
+// marker-change re-resolve does not pay a second for-each-ref.
+func (s *Service) probesFrom(ctx context.Context, formats map[string]int) (preflight.Probes, map[string]int, error) {
 	ver, err := s.repo.GitVersion(ctx)
 	if err != nil {
-		return preflight.Probes{}, err
+		return preflight.Probes{}, nil, err
 	}
 
 	versionRefs, err := s.repo.ForEachRef(ctx, git.VersionRefPrefix)
 	if err != nil {
-		return preflight.Probes{}, err
+		return preflight.Probes{}, nil, err
 	}
 
 	return preflight.Probes{
@@ -49,23 +57,57 @@ func (s *Service) preflightProbes(ctx context.Context) (preflight.Probes, error)
 			StoreVersions: {Format: formats[StoreVersions], HasData: len(versionRefs) > 0},
 		},
 		GitVersion: ver,
-	}, nil
+	}, formats, nil
 }
 
-// Preflight resolves every declared feature against this repository. The
-// result is cached for the Service's lifetime; reRoot builds a fresh Service,
-// so switching repos re-resolves automatically.
+// Preflight resolves every declared feature against this repository.
+//
+// The verdicts are cached, but the cache is validated against the repository
+// on EVERY call: several gg processes (a TUI, gg web, an agent's gg mcp) share
+// one repo as peers, coordinated only by the process-local repogate, so a
+// migration run in one process must not leave the others answering from a
+// snapshot taken at their own startup. A long-lived `gg mcp` server never
+// re-roots, and the ruling that MCP simply reports a gated feature as
+// unavailable only holds if "unavailable" describes the CURRENT repo.
+//
+// Store formats are one cheap for-each-ref, so the validation is just that
+// read: markers unchanged → serve the cache; changed → re-resolve fully from
+// the markers just read. Deliberately synchronous and obvious — no TTL, no
+// watcher, no background refresher.
+//
+// Fail open, as everywhere else here: if the marker re-read ERRORS, the cached
+// verdicts are served unchanged. A transient git error must never flip a
+// feature off or fail a query.
 func (s *Service) Preflight(ctx context.Context) ([]preflight.Verdict, error) {
 	s.preflightMu.Lock()
 	defer s.preflightMu.Unlock()
+	var formats map[string]int
+	haveFormats := false
 	if s.preflightDone {
-		return s.preflightOut, nil
+		cur, err := s.repo.StoreFormats(ctx)
+		if err != nil {
+			return s.preflightOut, nil // fail open: keep the cache
+		}
+		if maps.Equal(cur, s.preflightMarks) {
+			return s.preflightOut, nil
+		}
+		// Another process changed a store marker underneath us. Re-resolve
+		// every probe against the markers we just read.
+		formats, haveFormats = cur, true
 	}
-	p, err := s.preflightProbes(ctx)
+	var p preflight.Probes
+	var err error
+	if haveFormats {
+		p, formats, err = s.probesFrom(ctx, formats)
+	} else {
+		p, formats, err = s.preflightProbes(ctx)
+	}
 	if err != nil {
+		s.preflightDone, s.preflightOut, s.preflightMarks = false, nil, nil
 		return nil, err
 	}
 	s.preflightOut = preflight.Resolve(Features(), p)
+	s.preflightMarks = formats
 	s.preflightDone = true
 	return s.preflightOut, nil
 }
@@ -184,7 +226,7 @@ func (s *Service) RunMigration(ctx context.Context, m PendingMigration) error {
 		return err
 	}
 	s.preflightMu.Lock()
-	s.preflightDone, s.preflightOut = false, nil
+	s.preflightDone, s.preflightOut, s.preflightMarks = false, nil, nil
 	s.preflightMu.Unlock()
 	return nil
 }
