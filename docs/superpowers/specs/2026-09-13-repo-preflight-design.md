@@ -145,6 +145,23 @@ Domain exposes:
 - `Service.FeatureEnabled(id) bool` — the single gate.
 - the migration `Operation`, applied through `Execute`.
 
+## Which surface a check belongs on (user ruling, 2026-09-14)
+
+The boot gate exists **only for decisions that must be made before the engine
+starts** — today that means consent for a destructive migration, because the
+data it rewrites is data the running app would otherwise read.
+
+Everything else belongs in the **ordinary notification panel**, after start.
+In particular, a condition the user cannot act on from inside gg — git is too
+old, or the store was written by a newer gg — is not a boot-time decision. It
+is information, and it surfaces like any other notice, with ordinary
+dismissal.
+
+A notice that only *diagnoses* is noise. Every non-`Satisfied` verdict states
+its remedy: `Repairable` names `gg migrate`; `Unsatisfiable` names the upgrade
+(`Requirement.Remedy`). If a check can offer neither a decision before start
+nor a remedy after it, it should not be a notice at all.
+
 ## The disabled gate
 
 `FeatureEnabled` is checked **inside the owning domain queries and ops**, which
