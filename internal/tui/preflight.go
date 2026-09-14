@@ -60,7 +60,7 @@ func Preflight(svc *domain.Service, stdin io.Reader, out io.Writer) (bool, error
 // pending migration for an end-to-end test to exercise.
 func askMigration(m domain.PendingMigration, r *bufio.Reader, out io.Writer, run func(domain.PendingMigration) error) (bool, error) {
 	fmt.Fprintf(out, i18n.T("%s needs a one-time migration")+"\n", m.Feature)
-	fmt.Fprintf(out, "  %s\n", m.Consequence)
+	fmt.Fprintf(out, "  %s\n", renderMigrationConsequence(m))
 	fmt.Fprintf(out, "  "+i18n.T("This discards %d entries and cannot be undone.")+"\n", len(m.Refs))
 	fmt.Fprintf(out, "  [m] %s  [s] %s  [q] %s: ",
 		i18n.T("Migrate"), i18n.T("Skip"), i18n.T("Quit"))

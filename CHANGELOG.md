@@ -37,7 +37,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `internal/mcp` has no versions tool today, so there was nothing to gate;
   when one is added it must call `domain.FeatureEnabled`/
   `ErrFeatureDisabled` itself — this was a deliberate scope cut, not an
-  oversight, and must not be forgotten when that tool lands.
+  oversight, and must not be forgotten when that tool lands. A disabled
+  feature is INERT rather than merely erroring: the branch-version WRITER is
+  gated on preflight as well as on config (so answering **Skip** really does
+  leave the old data alone — the next `gg pull` writes no version ref and
+  stamps no marker over it), a store-format marker is never DOWNGRADED (an
+  older gg stamping format 1 leaves a format-2 marker standing, matching the
+  "data written by a newer gg is never rewritten" contract), and the TUI
+  hides the versions menu row and palette entry instead of opening a popup
+  that can only fail. The migration-consent prose and any feature-disabled
+  message that reaches the TUI are translated like every other TUI string.
 - **Every `gg note` verb takes a `gg://` link.** `gg note reply`, `rm`,
   `clear` and `apply` now accept a link as the first positional, as `add` and
   `list` already did. `reply` and `rm` take the REPOSITORY's link

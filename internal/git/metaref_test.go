@@ -85,3 +85,47 @@ func TestStampStoreFormatReplacesTheOldMarker(t *testing.T) {
 		t.Errorf("got %d marker refs, want exactly 1 (the old one must be removed)", len(refs))
 	}
 }
+
+// TestStampStoreFormatKeepsAHigherMarker is the downgrade guard. An OLDER gg
+// (one that writes format 1) opening a repository a NEWER gg wrote (marker 2)
+// must never relabel that store: StampStoreFormat prunes only LOWER markers,
+// so the format-2 ref survives and StoreFormats still reports 2. The fixture
+// plants both markers directly rather than stamping 2 then 1, so the
+// assertion is about the prune rule itself and not about stamping order.
+func TestStampStoreFormatKeepsAHigherMarker(t *testing.T) {
+	t.Parallel()
+	_, runner := newTestRepo(t)
+	r := &Repo{Runner: runner}
+	ctx := context.Background()
+
+	empty, err := r.EmptyTree(ctx)
+	if err != nil {
+		t.Fatalf("EmptyTree: %v", err)
+	}
+	if err := r.UpdateRef(ctx, MetaRef("versions", 2), empty); err != nil {
+		t.Fatalf("plant marker 2: %v", err)
+	}
+
+	if err := r.StampStoreFormat(ctx, "versions", 1); err != nil {
+		t.Fatalf("StampStoreFormat(1): %v", err)
+	}
+
+	refs, err := r.ForEachRef(ctx, MetaRefPrefix+"versions/")
+	if err != nil {
+		t.Fatalf("ForEachRef: %v", err)
+	}
+	have := map[string]bool{}
+	for _, info := range refs {
+		have[info.Ref] = true
+	}
+	if !have[MetaRef("versions", 2)] {
+		t.Errorf("marker refs = %v, want the format-2 marker to SURVIVE a format-1 stamp", have)
+	}
+	got, err := r.StoreFormats(ctx)
+	if err != nil {
+		t.Fatalf("StoreFormats: %v", err)
+	}
+	if got["versions"] != 2 {
+		t.Errorf("StoreFormats = %v, want versions=2 — a newer format must never be downgraded", got)
+	}
+}

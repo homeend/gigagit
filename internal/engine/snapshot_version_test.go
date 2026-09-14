@@ -33,7 +33,7 @@ func TestSnapshotBranchTipRecordsAndSkips(t *testing.T) {
 		t.Fatalf("disabled policy wrote %v", got)
 	}
 
-	deps.Versions = VersionsPolicy{Enabled: true, MaxAgeDays: 90}
+	deps.Versions = VersionsPolicy{Enabled: true, MaxAgeDays: 90, Format: 1}
 	snapshotBranchTip(ctx, deps, "", "rebase") // detached HEAD: no branch
 	if got := versionRefs(t, repo); len(got) != 0 {
 		t.Fatalf("empty branch wrote %v", got)
@@ -69,13 +69,13 @@ func TestSnapshotBranchTipPrunes(t *testing.T) {
 	}
 
 	// MaxAgeDays -1 (forever): the old ref survives a new snapshot.
-	snapshotBranchTip(ctx, OpDeps{Repo: repo, Versions: VersionsPolicy{Enabled: true, MaxAgeDays: -1}}, "main", "rebase")
+	snapshotBranchTip(ctx, OpDeps{Repo: repo, Versions: VersionsPolicy{Enabled: true, MaxAgeDays: -1, Format: 1}}, "main", "rebase")
 	if got := versionRefs(t, repo); len(got) != 2 {
 		t.Fatalf("forever policy pruned: %v", got)
 	}
 
 	// 90 days: the 120-day-old ref is pruned on the next write.
-	snapshotBranchTip(ctx, OpDeps{Repo: repo, Versions: VersionsPolicy{Enabled: true, MaxAgeDays: 90}}, "main", "rebase")
+	snapshotBranchTip(ctx, OpDeps{Repo: repo, Versions: VersionsPolicy{Enabled: true, MaxAgeDays: 90, Format: 1}}, "main", "rebase")
 	for _, ref := range versionRefs(t, repo) {
 		if ref == oldRef {
 			t.Fatalf("expired ref survived: %v", versionRefs(t, repo))
@@ -87,7 +87,7 @@ func TestSnapshotBranchTipStampsTheStoreFormat(t *testing.T) {
 	t.Parallel()
 	_, repo := newRepo(t)
 	ctx := context.Background()
-	deps := OpDeps{Repo: repo, Versions: VersionsPolicy{Enabled: true, MaxAgeDays: 90}}
+	deps := OpDeps{Repo: repo, Versions: VersionsPolicy{Enabled: true, MaxAgeDays: 90, Format: 1}}
 
 	snapshotBranchTip(ctx, deps, "main", "rebase")
 

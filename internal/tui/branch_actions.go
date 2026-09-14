@@ -58,7 +58,7 @@ func (m Model) branchRebaseRow() (actionRow, bool) {
 // versions" — that would cost a git read every time the . menu opens; the
 // popup itself shows "no versions recorded" when the list is empty.
 func (m Model) branchVersionsRow() (actionRow, bool) {
-	if m.focus != panelBranches || !m.opsIdle() {
+	if m.focus != panelBranches || !m.opsIdle() || !m.versionsFeatureEnabled() {
 		return actionRow{}, false
 	}
 	bi, ok := m.backingIndex(panelBranches)

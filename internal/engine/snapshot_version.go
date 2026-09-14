@@ -15,6 +15,13 @@ import (
 type VersionsPolicy struct {
 	Enabled    bool
 	MaxAgeDays int
+	// Format is the store-format number the WRITER stamps (see
+	// StampStoreFormat below). It is INJECTED by domain (domain.VersionsFormat
+	// is the declared truth and internal/engine must not import
+	// internal/domain), so a later spec bumping the format cannot drift from
+	// the number the preflight resolver checks. Zero means "unknown": the
+	// snapshot is still recorded, but no marker is stamped.
+	Format int
 }
 
 // snapshotNow is a test seam for the snapshot timestamp.
@@ -55,7 +62,9 @@ func snapshotBranchTip(ctx context.Context, deps OpDeps, branch, opToken string)
 	// `gg` invocation free of a ref write and removes the compare-and-swap race
 	// between concurrently starting processes. Best-effort like the snapshot
 	// itself: a stamp failure must not fail the real operation.
-	_ = deps.Repo.StampStoreFormat(ctx, "versions", 1)
+	if deps.Versions.Format > 0 {
+		_ = deps.Repo.StampStoreFormat(ctx, "versions", deps.Versions.Format)
+	}
 	pruneBranchVersions(ctx, deps, branch, infos)
 }
 

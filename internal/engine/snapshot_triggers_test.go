@@ -12,7 +12,7 @@ import (
 )
 
 func enabledDeps(repo GitOps) OpDeps {
-	return OpDeps{Repo: repo, Versions: VersionsPolicy{Enabled: true, MaxAgeDays: 90}}
+	return OpDeps{Repo: repo, Versions: VersionsPolicy{Enabled: true, MaxAgeDays: 90, Format: 1}}
 }
 
 // staticTestDecider answers a mapped decision ID from answers, else the

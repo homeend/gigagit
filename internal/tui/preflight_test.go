@@ -167,3 +167,61 @@ func TestAskMigrationSkipLeavesRefsUntouchedMigrateRemovesThem(t *testing.T) {
 		}
 	})
 }
+
+// TestAskMigrationLocalizesTheConsequence is the prose guard the spec's Prose
+// section asks for on the consent screen. domain pre-renders an English
+// Consequence for the CLI and web (English there is by design); the TUI must
+// instead put the UNRENDERED (format, args) pair through i18n.T, so the one
+// screen that describes irreversible data loss reads in the user's language.
+//
+// The bundled "xx" language makes the difference observable: an untranslated
+// key falls back to English, so a Sprintf-based implementation and a
+// translated one would otherwise be indistinguishable.
+//
+// NOT parallel: withXXLanguage switches the process-global active language.
+func TestAskMigrationLocalizesTheConsequence(t *testing.T) {
+	withXXLanguage(t, map[string]string{
+		"this discards every recorded version of %s": "XX-discards %s",
+	})
+
+	m := domain.PendingMigration{
+		Feature:           "versions",
+		Store:             "versions",
+		From:              1,
+		To:                2,
+		Consequence:       "this discards every recorded version of main",
+		ConsequenceFormat: "this discards every recorded version of %s",
+		ConsequenceArgs:   []any{"main"},
+		Refs:              []string{"refs/gg/versions/a"},
+	}
+
+	var out strings.Builder
+	if _, err := askMigration(m, bufio.NewReader(strings.NewReader("s\n")), &out, func(domain.PendingMigration) error {
+		return nil
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "XX-discards main") {
+		t.Errorf("consent screen %q does not carry the LOCALIZED consequence", out.String())
+	}
+	if strings.Contains(out.String(), "this discards every recorded version of main") {
+		t.Errorf("consent screen %q still prints the pre-rendered English consequence", out.String())
+	}
+}
+
+// TestAskMigrationFallsBackToTheRenderedConsequence covers a Migrate whose
+// Describe is nil or whose prose domain could not decompose: the English
+// Consequence is still shown rather than an empty line.
+func TestAskMigrationFallsBackToTheRenderedConsequence(t *testing.T) {
+	t.Parallel()
+	m := domain.PendingMigration{Feature: "versions", Consequence: "plain english only"}
+	var out strings.Builder
+	if _, err := askMigration(m, bufio.NewReader(strings.NewReader("s\n")), &out, func(domain.PendingMigration) error {
+		return nil
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out.String(), "plain english only") {
+		t.Errorf("consent screen %q dropped the fallback consequence", out.String())
+	}
+}

@@ -60,8 +60,14 @@ func (r *Repo) StoreFormats(ctx context.Context) (map[string]int, error) {
 	return out, nil
 }
 
-// StampStoreFormat records store at format, removing any other marker for that
+// StampStoreFormat records store at format, removing any LOWER marker for that
 // store. Called by a store's WRITER on first write — never at startup.
+//
+// A HIGHER marker always survives: it means a newer gg wrote this store, and
+// the contract is that data written by a newer gg is never rewritten (nor its
+// marker downgraded) by an older build. This mirrors StoreFormats' higher-wins
+// reconciliation — an older build whose writes still land must not be able to
+// relabel format-2 data as format 1.
 func (r *Repo) StampStoreFormat(ctx context.Context, store string, format int) error {
 	sha, err := r.EmptyTree(ctx)
 	if err != nil {
@@ -76,7 +82,7 @@ func (r *Repo) StampStoreFormat(ctx context.Context, store string, format int) e
 	}
 	for _, info := range infos {
 		s, f, ok := ParseMetaRef(info.Ref)
-		if !ok || s != store || f == format {
+		if !ok || s != store || f >= format {
 			continue
 		}
 		_ = r.DeleteRef(ctx, info.Ref)

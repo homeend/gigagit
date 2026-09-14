@@ -538,7 +538,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if p := layerOf[*versionsPopup](m); p != nil {
 			p.loading = false
 			if msg.err != nil {
-				p.err = i18n.T("(load failed: %s)", msg.err.Error())
+				p.err = renderLoadError(msg.err)
 				p.rows = nil
 			} else {
 				p.err = ""
@@ -560,7 +560,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if p := layerOf[*versionsPopup](m); p != nil {
 			p.loading = false
 			if msg.err != nil {
-				p.err = i18n.T("(load failed: %s)", msg.err.Error())
+				p.err = renderLoadError(msg.err)
 				p.branchRows = nil
 			} else {
 				p.err = ""

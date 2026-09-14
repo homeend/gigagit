@@ -13,7 +13,13 @@ import (
 // turned off. Frontends render it; they never re-derive the decision.
 type ErrFeatureDisabled struct {
 	ID     string // English feature id
-	Reason string // rendered English prose
+	Reason string // rendered English prose (CLI/MCP/web: English by design)
+	// ReasonFormat/ReasonArgs are the SAME prose unrendered, so a localized
+	// frontend (the TUI) can put the format through i18n.T instead of
+	// printing Error()'s English. Error() itself stays English: it is the
+	// agent-facing protocol value.
+	ReasonFormat string
+	ReasonArgs   []any
 }
 
 func (e *ErrFeatureDisabled) Error() string {
@@ -86,15 +92,17 @@ func (s *Service) FeatureDisabledError(ctx context.Context, id string) error {
 	if s.FeatureEnabled(ctx, id) {
 		return nil
 	}
-	reason := ""
+	reason, format := "", ""
+	var args []any
 	if vs, err := s.Preflight(ctx); err == nil {
 		for _, v := range vs {
 			if v.Feature.ID == id && v.Reason.Format != "" {
 				reason = fmt.Sprintf(v.Reason.Format, v.Reason.Args...)
+				format, args = v.Reason.Format, v.Reason.Args
 			}
 		}
 	}
-	return &ErrFeatureDisabled{ID: id, Reason: reason}
+	return &ErrFeatureDisabled{ID: id, Reason: reason, ReasonFormat: format, ReasonArgs: args}
 }
 
 // PendingMigration is one repairable feature, already resolved to the refs it
@@ -103,8 +111,15 @@ type PendingMigration struct {
 	Feature     string
 	Store       string
 	From, To    int
-	Consequence string
-	Refs        []string
+	Consequence string // rendered English (CLI and web print this as-is)
+	// ConsequenceFormat/ConsequenceArgs are the same prose UNRENDERED. The
+	// consent screen is the one surface the spec's Prose section names, so the
+	// TUI must be able to translate it: it puts the format through i18n.T the
+	// way renderVerdictReason does for a Verdict's Reason. Pre-formatting it
+	// here would make that impossible.
+	ConsequenceFormat string
+	ConsequenceArgs   []any
+	Refs              []string
 }
 
 // storeRefs lists the refs a store owns, so a migration can report exactly
@@ -140,18 +155,22 @@ func (s *Service) PendingMigrations(ctx context.Context) ([]PendingMigration, er
 		if err != nil {
 			return nil, err
 		}
-		consequence := ""
+		consequence, format := "", ""
+		var args []any
 		if mig.Describe != nil {
 			t := mig.Describe()
 			consequence = fmt.Sprintf(t.Format, t.Args...)
+			format, args = t.Format, t.Args
 		}
 		out = append(out, PendingMigration{
-			Feature:     v.Feature.ID,
-			Store:       mig.Store,
-			From:        mig.From,
-			To:          mig.To,
-			Consequence: consequence,
-			Refs:        refs,
+			Feature:           v.Feature.ID,
+			Store:             mig.Store,
+			From:              mig.From,
+			To:                mig.To,
+			Consequence:       consequence,
+			ConsequenceFormat: format,
+			ConsequenceArgs:   args,
+			Refs:              refs,
 		})
 	}
 	return out, nil

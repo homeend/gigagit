@@ -262,12 +262,22 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 	// returns, which never happens for a stuck op (the case this log exists for).
 	// A started line with no matching completion is exactly the trace wanted.
 	observ.EmitSpan(observ.Span{Name: label + " started", Start: opStart})
+	// The branch-version WRITER is gated on preflight as well as config: a
+	// user who chose Skip on a repairable versions store (or an older build
+	// opening a store a newer gg wrote) must not have the next operation
+	// write a version ref and stamp a marker over it. Computed locally — the
+	// STORED policy stays config-only, so a transient preflight probe failure
+	// never becomes a sticky "versions off". No deadlock: Preflight's probes
+	// take no repo-gate reservation, and nothing inside op.Run calls it.
+	versions := s.currentVersionsPolicy()
+	versions.Enabled = versions.Enabled && s.FeatureEnabled(ctx, FeatureVersions)
+	versions.Format = VersionsFormat
 	out, opErr := op.Run(ctx, engine.OpDeps{
 		Repo:     s.repo,
 		Events:   events,
 		Decider:  dec,
 		Escalate: res.Escalate,
-		Versions: s.currentVersionsPolicy(),
+		Versions: versions,
 	})
 	span := observ.Span{Name: label, Start: opStart, Duration: time.Since(opStart)}
 	if opErr != nil {
