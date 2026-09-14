@@ -20,6 +20,14 @@ func renderVerdictReason(v preflight.Verdict) string {
 	return i18n.T(v.Reason.Format, v.Reason.Args...)
 }
 
+// renderVerdictRemedy localizes an Unsatisfiable verdict's remedy — what
+// fixes the feature from OUTSIDE gg (upgrade git, upgrade gg). Same catalog
+// rules as renderVerdictReason: the literal lives in internal/preflight and
+// is gate-checked by preflightProseKeys.
+func renderVerdictRemedy(v preflight.Verdict) string {
+	return i18n.T(v.Remedy.Format, v.Remedy.Args...)
+}
+
 // renderMigrationConsequence localizes a pending migration's consent prose.
 // The consent screen is the surface the spec's Prose section names by name:
 // it describes IRREVERSIBLE data loss, so it must read in the user's own

@@ -53,10 +53,12 @@ func (m Model) branchRebaseRow() (actionRow, bool) {
 }
 
 // branchVersionsRow offers "Previous versions…" on the Branches tab, opening
-// the versionsPopup straight into versions mode for the selected branch.
-// Deliberately NOT self-gated on "does this branch have any recorded
-// versions" — that would cost a git read every time the . menu opens; the
-// popup itself shows "no versions recorded" when the list is empty.
+// the versionsPopup straight into versions mode for the selected branch. It
+// IS gated on versionsFeatureEnabled, which now costs a git read every time
+// the . menu opens (svc.Preflight re-validates its cache with one
+// for-each-ref) — that's accepted as cheap. It is deliberately NOT
+// self-gated on "does this branch have any recorded versions": the popup
+// itself shows "no versions recorded" when the list is empty.
 func (m Model) branchVersionsRow() (actionRow, bool) {
 	if m.focus != panelBranches || !m.opsIdle() || !m.versionsFeatureEnabled() {
 		return actionRow{}, false

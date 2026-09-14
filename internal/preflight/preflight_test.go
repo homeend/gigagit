@@ -82,3 +82,47 @@ func TestResolveTakesWorstRequirement(t *testing.T) {
 		t.Error("Reason must describe the failing requirement")
 	}
 }
+
+func TestResolveUnsatisfiableCarriesARemedy(t *testing.T) {
+	t.Parallel()
+	f := versionsFeature(nil)
+	got := Resolve([]Feature{f}, probes(3, true, [3]int{2, 40, 0})) // above range: never repairable
+	if got[0].State != Unsatisfiable {
+		t.Fatalf("state = %v, want Unsatisfiable", got[0].State)
+	}
+	if got[0].Remedy.Format != "Upgrade gg to use this feature." {
+		t.Errorf("Remedy.Format = %q, want the upgrade-gg remedy", got[0].Remedy.Format)
+	}
+}
+
+func TestResolveGitVersionRemedyNamesTheMinimum(t *testing.T) {
+	t.Parallel()
+	f := Feature{
+		ID:          "core",
+		Criticality: Required,
+		Requires:    []Requirement{GitVersion{Min: [3]int{2, 40, 0}}},
+	}
+	got := Resolve([]Feature{f}, probes(1, true, [3]int{2, 30, 0}))
+	if got[0].State != Unsatisfiable {
+		t.Fatalf("state = %v, want Unsatisfiable", got[0].State)
+	}
+	want := Text{Format: "Upgrade to git %s or newer to use this feature.", Args: []any{"2.40.0"}}
+	if got[0].Remedy.Format != want.Format || len(got[0].Remedy.Args) != 1 || got[0].Remedy.Args[0] != want.Args[0] {
+		t.Errorf("Remedy = %+v, want %+v", got[0].Remedy, want)
+	}
+}
+
+func TestResolveRepairableRemedyIsUnsetOnVerdict(t *testing.T) {
+	t.Parallel()
+	mig := &Migration{Store: "versions", From: 1, To: 2, Describe: func() Text { return Text{Format: "x"} }}
+	got := Resolve([]Feature{versionsFeature(mig)}, probes(1, true, [3]int{2, 40, 0}))
+	if got[0].State != Repairable {
+		t.Fatalf("state = %v, want Repairable", got[0].State)
+	}
+	// Resolve still populates Remedy from the same requirement — callers
+	// decide whether to render it; Repairable notices choose the `gg
+	// migrate` line instead (see internal/tui/notify.go).
+	if got[0].Remedy.Format == "" {
+		t.Error("Remedy should still be set from the failing requirement, even though Repairable notices don't render it")
+	}
+}

@@ -185,8 +185,9 @@ const noticeFeatureDisabledPrefix = "feature_disabled_"
 // reaches here — Preflight (internal/tui/preflight.go) refuses to launch the
 // UI at all in that case — so what shows up is an Optional feature gg quietly
 // ran without (Unsatisfiable), or one the user chose to Skip at the migration
-// prompt (Repairable). Preflight's verdicts are cached on svc for its
-// lifetime, so this call is cheap on every rebuild.
+// prompt (Repairable). svc.Preflight re-validates its cache against the repo
+// on every call (one cheap for-each-ref for the store markers), so this call
+// shells out but stays cheap on every rebuild.
 func featureDisabledNotices(svc *domain.Service, repoKey string) []notice {
 	vs, err := svc.Preflight(context.Background())
 	if err != nil {
@@ -197,23 +198,34 @@ func featureDisabledNotices(svc *domain.Service, repoKey string) []notice {
 		if v.State == preflight.Satisfied {
 			continue
 		}
-		reason := renderVerdictReason(v)
-		detail := []string{reason}
-		if v.State == preflight.Repairable {
-			detail = append(detail, i18n.T("Run `gg migrate` to repair this, or answer the migration prompt at the next launch."))
-		}
-		out = append(out, notice{
-			id:      noticeFeatureDisabledPrefix + v.Feature.ID,
-			repoKey: repoKey,
-			title:   i18n.T("%s is unavailable in this repository", v.Feature.ID),
-			detail:  detail,
-			actions: []noticeAction{
-				{label: i18n.T("Not now (ask again next load)")},
-				{label: i18n.T("Never for this repo"), never: true},
-			},
-		})
+		out = append(out, noticeForVerdict(v, repoKey))
 	}
 	return out
+}
+
+// noticeForVerdict builds the standing notice for one non-Satisfied verdict.
+// Repairable gets the `gg migrate` line; Unsatisfiable gets the verdict's
+// remedy (what fixes it from outside gg — upgrade git, upgrade gg). Either
+// way "Never for this repo" stays available: this is an ordinary
+// notification, dismissed like any other.
+func noticeForVerdict(v preflight.Verdict, repoKey string) notice {
+	detail := []string{renderVerdictReason(v)}
+	switch v.State {
+	case preflight.Repairable:
+		detail = append(detail, i18n.T("Run `gg migrate` to repair this, or answer the migration prompt at the next launch."))
+	case preflight.Unsatisfiable:
+		detail = append(detail, renderVerdictRemedy(v))
+	}
+	return notice{
+		id:      noticeFeatureDisabledPrefix + v.Feature.ID,
+		repoKey: repoKey,
+		title:   i18n.T("%s is unavailable in this repository", v.Feature.ID),
+		detail:  detail,
+		actions: []noticeAction{
+			{label: i18n.T("Not now (ask again next load)")},
+			{label: i18n.T("Never for this repo"), never: true},
+		},
+	}
 }
 
 // commitGraphNotice fires when the repo is big (pack ≥ bigRepoPackBytes), has

@@ -72,6 +72,10 @@ type Probes struct {
 type Requirement interface {
 	Fit(p Probes) Fit
 	Reason(p Probes) Text
+	// Remedy names what would fix an Unsatisfiable verdict from OUTSIDE gg
+	// (upgrade git, upgrade gg) — never a `gg migrate` line, since that path
+	// only exists for Repairable verdicts.
+	Remedy(p Probes) Text
 	// RepairStore names the store a migration could repair, or "" when nothing
 	// can (a git version is never migratable).
 	RepairStore() string
@@ -119,6 +123,16 @@ func (d DataFormat) Reason(p Probes) Text {
 	}
 }
 
+// Remedy names the same "upgrade gg" fix regardless of direction, but in
+// practice only ever surfaces for the above-Max case (an old gg reading data
+// a newer gg wrote): a below-Min miss is Repairable — not Unsatisfiable — as
+// long as the feature declares a matching Migrate; Resolve only reaches this
+// method on a state that outranks Repairable, i.e. above-Max, or a below-Min
+// miss with no matching Migrate declared.
+func (d DataFormat) Remedy(p Probes) Text {
+	return Text{Format: "Upgrade gg to use this feature."}
+}
+
 func (d DataFormat) RepairStore() string { return d.Store }
 
 // GitVersion requires a minimum git binary version. Never repairable.
@@ -137,6 +151,13 @@ func (g GitVersion) Reason(p Probes) Text {
 	return Text{
 		Format: "git %s is installed; this build needs %s or newer",
 		Args:   []any{verString(p.GitVersion), verString(g.Min)},
+	}
+}
+
+func (g GitVersion) Remedy(p Probes) Text {
+	return Text{
+		Format: "Upgrade to git %s or newer to use this feature.",
+		Args:   []any{verString(g.Min)},
 	}
 }
 
@@ -169,11 +190,15 @@ type Feature struct {
 	Migrate     *Migration // nil when nothing is repairable
 }
 
-// Verdict is a feature's resolved state plus, when not Satisfied, why.
+// Verdict is a feature's resolved state plus, when not Satisfied, why and
+// (for Unsatisfiable) how to fix it. Reason and Remedy always come from the
+// SAME requirement — they are set together at the one site that assigns the
+// worst state, so they can never disagree.
 type Verdict struct {
 	Feature Feature
 	State   State
 	Reason  Text
+	Remedy  Text
 }
 
 // Resolve evaluates every feature against the probes. A feature takes the
@@ -195,7 +220,7 @@ func Resolve(fs []Feature, p Probes) []Verdict {
 				}
 			}
 			if st > v.State {
-				v.State, v.Reason = st, r.Reason(p)
+				v.State, v.Reason, v.Remedy = st, r.Reason(p), r.Remedy(p)
 			}
 		}
 		out = append(out, v)
