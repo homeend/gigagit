@@ -894,7 +894,7 @@ function showCommitMenu(c, i, x, y) {
     // the moment someone has to retype it — so the row reads it first and only
     // opens the (multiline) prompt once it has it.
     items.push({
-      label: "reword this commit…",
+      label: "edit commit message…",
       act: async () => {
         const got = await getJSON("/api/commit-message?rev=" + encodeURIComponent(c.hash)).catch(() => null);
         if (!got) {
@@ -902,7 +902,7 @@ function showCommitMenu(c, i, x, y) {
           return;
         }
         openPrompt({
-          title: "Reword " + short + ":",
+          title: "Edit the message of " + short + ":",
           value: got.message || "",
           multiline: true,
           onSubmit: (message) => startOp({ op: "reword", sha: c.hash, message }, "rewording " + short),

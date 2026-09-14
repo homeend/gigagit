@@ -42,7 +42,7 @@ func (m Model) openRewordPopup() (Model, bool) {
 	return m, true
 }
 
-// rewordRow offers Rename commit on the Commits panel (no dedicated key; opens
+// rewordRow offers Edit commit message on the Commits panel (no dedicated key; opens
 // the reword popup). Available only when a commit is selected and no op runs.
 func (m Model) rewordRow() (actionRow, bool) {
 	if m.focus != panelCommits || !m.opsIdle() {
@@ -53,7 +53,7 @@ func (m Model) rewordRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "reword-commit",
-		label: i18n.T("Rename commit"),
+		label: i18n.T("Edit commit message"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			m, _ = m.openRewordPopup()
 			return m, nil
