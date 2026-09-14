@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Commits `.` menu: "Rename commit" is now "Edit commit message."** The row
+  rewords the commit — subject and body, in a pre-filled popup — so the label
+  says so. Same action, same popup; the `.` help line and all four language
+  bundles follow. The web commit menu's "reword this commit…" row and its
+  prompt title match ("edit commit message…").
+
 - **Every `gg note` verb takes a `gg://` link.** `gg note reply`, `rm`,
   `clear` and `apply` now accept a link as the first positional, as `add` and
   `list` already did. `reply` and `rm` take the REPOSITORY's link
