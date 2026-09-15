@@ -215,6 +215,13 @@ finds the right one here.
   answers the `fetch_mapping.stale` fork by removing the stale mapping(s) (and
   their dangling tracking refs) and retrying. Without the flag a piped run
   fails with the original fetch error (config is never mutated unseen).
+  After a successful pull, if the branch's own recorded change set (against
+  what it pulled) shows a path the pull itself added or resurrected (a
+  status flip such as `M` → `A`), gg prints `! this operation changed
+  <branch>'s change set:` followed by one `<status> <path>` line per
+  finding; a path that only dropped out (absorbed upstream) is noted
+  quietly underneath as `(absorbed upstream: <status> <path>)`. Silent when
+  nothing changed, or when no version was recorded to compare against.
 - `gg push [--force | --force-with-lease] [--on-reject ...] [--map | --no-map] [<branch>]`
   — push a branch (sets upstream when missing). With no positional it pushes the
   current branch; with `<branch>` it pushes that local branch **by name without
@@ -311,6 +318,12 @@ finds the right one here.
 - `gg versions [<branch>]` — list a branch's recorded pre-operation
   snapshots (taken automatically before merges, rebases, resets, amends,
   and branch deletion), newest first: `<id> <short-sha> <time> <subject>`.
+- `gg versions show <branch> <id|latest>` — print the frozen change set a
+  two-branch version recorded (`<status>\t<path>` lines, its own
+  Base...Ours diff at operation time — never a live diff against whatever
+  the branch is at now). A one-branch record (amend, reset, undo-commit,
+  delete-branch, restore) prints `<id>: records no preview (a one-branch
+  operation)` instead (exit 0, not an error).
 - `gg versions restore [--discard] <branch> <id|latest>` — move the branch
   back to a recorded version (its own pre-restore state is snapshotted
   first). Restoring the current branch hard-resets; `--discard` answers the
@@ -329,13 +342,20 @@ finds the right one here.
   run just to check. With `--yes`, applies every listed migration. A feature
   gg can't satisfy and can't repair keeps running with that one capability
   disabled rather than failing the whole command; only a Required feature
-  (e.g. the git version floor) blocks gg from starting at all.
+  (e.g. the git version floor) blocks gg from starting at all. The
+  `versions` store's migration is a straight discard: a format-1 branch
+  version carries no merge-base, so it can never become a preview, only be
+  thrown away. A repo that still holds format-1 data **records no new
+  versions at all** until it runs — rebases/merges/pulls there proceed with
+  no safety net rather than mixing formats.
 - `gg merge [--into <target>] [--on-conflict=keep|abort] <source>` — merge one
   branch into another (default target: the current branch; worktree-aware —
   merges in the worktree that has the target checked out, autostashes when it
   must switch). `--on-conflict=keep` leaves conflicts in the tree (exit 1),
   `--on-conflict=abort` restores the tree (exit 0); with neither and no TTY, a
-  conflict exits 1 with the options on stderr.
+  conflict exits 1 with the options on stderr. A successful merge prints the
+  same change-set-drift summary as `gg pull` (see above) for the branch it
+  moved.
 - `gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>` — replay a
   branch's commits onto `<newbase>` (default branch: the current one; `--branch`
   rebases another branch, switching to it). Worktree-aware — rebases in place,
@@ -343,7 +363,8 @@ finds the right one here.
   and switches. A conflict pauses the rebase: `--on-conflict=keep` leaves it
   paused for `git rebase --continue` (exit 1), `--on-conflict=abort` runs
   `git rebase --abort` (exit 0); with neither and no TTY, a conflict exits 1
-  with the options on stderr.
+  with the options on stderr. A successful rebase prints the same
+  change-set-drift summary as `gg pull` (see above) for the branch it moved.
 - `gg rebase -i --plan <file> <newbase>` — **interactive** rebase from a plan
   file (a gg rebase-plan JSON: ordered `{sha, action: pick|reword|squash|drop,
   orig, new_msg}`); the TUI builds this plan interactively. Squash composes a

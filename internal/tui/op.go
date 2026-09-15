@@ -237,6 +237,15 @@ func (m Model) startOp(op engine.Operation) (Model, tea.Cmd) {
 	default:
 		m.pendingScopeClear = false
 	}
+	// Arm the post-op drift check (opFinishedMsg consumes it): the branch
+	// whose newest recorded version to compare, and whether this dispatch is
+	// resuming a merge/rebase that had paused for conflicts (the spec's other
+	// trigger, alongside drift itself — see notify.go's driftNotice).
+	// driftArmFor is pure (no I/O) precisely so this arming decision is
+	// testable without running the op; m.conflict still reflects the PAUSED
+	// state at this instant for a ContinueOp dispatch, since the resume runs
+	// before any status re-read.
+	m.pendingDriftBranch, m.pendingDriftPaused = driftArmFor(op, m.status.Branch, m.conflict)
 	_, m.opIsFetch = op.(engine.Fetch) // a foreground fetch records its duration into the fetch row
 	msgs := make(chan tea.Msg, 32)
 	events := make(chan engine.Event, 32)

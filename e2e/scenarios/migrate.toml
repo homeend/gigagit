@@ -15,9 +15,12 @@ steps = [
 
 # A merge records a branch-version snapshot (refs/gg/versions/...), so by the
 # time `gg migrate` runs there IS gg-owned state in the repo — this is not an
-# empty-repo case. Nothing is pending regardless: the versions feature has no
-# wired migration yet (Migrate is nil), so every path prints "nothing to
-# migrate" and changes nothing.
+# empty-repo case. Nothing is pending regardless: the merge itself writes
+# that snapshot at format 2 (this build's own format) and stamps the
+# format-2 marker in the same write, so the store is already Satisfied, not
+# Repairable — Migrate IS declared for the versions feature now, it just has
+# nothing to do here. Every path prints "nothing to migrate" and changes
+# nothing.
 [[run]]
 cmd  = ["merge", "feat"]
 exit = 0

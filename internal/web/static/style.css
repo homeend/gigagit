@@ -228,6 +228,19 @@ mark.r { background: var(--span-add); color: inherit; }
 #op-head { display: none; justify-content: space-between; color: var(--dim); font-size: 11px; margin-bottom: 2px; }
 #op-line.err #op-head { display: flex; }
 #op-line.err { color: #f27a6a; }
+/* The post-op drift summary: a branch's newest recorded version no longer
+   matches what it contributes now (see internal/changeset). Sits below
+   op-line, in the document flow like it — not a modal, so it never blocks
+   the rest of the page while it stands. */
+#drift-panel { flex: none; padding: 6px 12px; color: var(--fg); background: var(--bg-alt); border-top: 1px solid var(--border); max-height: 30vh; overflow-y: auto; }
+#drift-panel.hidden { display: none; }
+#drift-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; color: #f2b04a; font-weight: 600; }
+#drift-head button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 8px; font: inherit; cursor: pointer; }
+#drift-head button:hover { border-color: var(--accent); }
+#drift-list { margin: 4px 0 0; padding: 0; list-style: none; }
+#drift-list li { padding: 1px 0; white-space: pre-wrap; word-break: break-word; }
+#drift-list li.added { color: #f2b04a; }
+#drift-list li.removed { color: var(--dim); }
 /* Overlay stacking. Two of these are RAISED FROM the others, so they must
    sit above every panel overlay, not beside them:
      30  #modal    — a decision/confirm can be raised from a popup (a version

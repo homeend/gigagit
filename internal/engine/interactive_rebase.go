@@ -70,7 +70,7 @@ func (op InteractiveRebase) Run(ctx context.Context, deps OpDeps) (Result, error
 		return Result{}, fmt.Errorf("interactive rebase: %s..%s contains merge commits (not supported yet)", op.Onto, op.Branch)
 	}
 
-	snapshotBranchTip(ctx, deps, op.Branch, "interactive-rebase")
+	snapshotBranchTip(ctx, deps, op.Branch, "interactive-rebase", tipOf(ctx, deps, op.Branch), op.Onto)
 
 	planPath, err := writePlanFile(op.Plan)
 	if err != nil {

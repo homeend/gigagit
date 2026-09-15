@@ -68,6 +68,11 @@ type GitOps interface {
 	CommitLine(ctx context.Context, rev string) (model.LogLine, error)
 	LogLines(ctx context.Context, rev string, n int) ([]model.LogLine, error)
 	RevParse(ctx context.Context, rev string) (string, error)
+	// MergeBase backs branch-version snapshots: a two-branch op records
+	// merge-base(ours, other) up front because it cannot be recomputed after
+	// the op runs (post-merge, merge-base(target, source) returns the
+	// source's tip, not the fork point).
+	MergeBase(ctx context.Context, a, b string) (string, error)
 	ResetSoft(ctx context.Context, ref string) error
 
 	DiffPatch(ctx context.Context, spec model.DiffSpec) (string, error)
@@ -85,6 +90,11 @@ type GitOps interface {
 	UpdateRef(ctx context.Context, ref, sha string) error
 	DeleteRef(ctx context.Context, ref string) error
 	ForEachRef(ctx context.Context, prefix string) ([]model.RefInfo, error)
+	// WriteVersionSnapshot/VersionRefs back branch-version snapshots: the
+	// writer creates the synthetic commit a version ref points at, and the
+	// reader lists+unwraps them (see git.VersionMeta).
+	WriteVersionSnapshot(ctx context.Context, tip string, m git.VersionMeta, unix int64) (string, error)
+	VersionRefs(ctx context.Context, prefix string) ([]model.BranchVersion, error)
 	CreateTag(ctx context.Context, name, commit, message string, force bool) error
 	DeleteTag(ctx context.Context, name string) error
 	RenameBranch(ctx context.Context, oldName, newName string) error

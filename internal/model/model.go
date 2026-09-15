@@ -104,6 +104,13 @@ type BranchVersion struct {
 	Subject string // tip commit subject
 	Op      string // protocol op token: merge, rebase, restore, …
 	Unix    int64  // when the snapshot was recorded
+
+	// Endpoints recorded by the snapshot. Ours is the contribution frozen,
+	// Other the tip it was landing on/against, Base their merge base. Empty for
+	// a one-branch op (amend/reset/undo-commit/delete-branch/restore), which
+	// records no preview.
+	Ours, Other, Base string
+	Source, Target    string
 }
 
 // VersionedBranch summarizes one branch's recorded versions.

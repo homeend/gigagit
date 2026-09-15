@@ -49,9 +49,25 @@ func cmdPull(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 		return 2
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
+	// Resolved the same way the engine resolves an empty Branch (current
+	// branch) so printDrift checks the branch this pull actually moved, even
+	// when no branch was given on the command line.
+	branchName := branch
+	if branchName == "" {
+		branchName, _ = svc.CurrentBranch(context.Background())
+	}
 	res, err := runOperation(context.Background(), svc,
 		engine.SmartPull{Branch: branch, Intent: intent}, dec, stderr)
-	return finish(res, err, stdout, stderr)
+	code := finish(res, err, stdout, stderr)
+	// res.Changed, not just a zero exit: finish returns 0 whenever err == nil,
+	// and --on-conflict=abort returns Result{Changed:false}, nil. The pre-op
+	// snapshot was already written and the tip never moved, so an abort would
+	// report every path upstream added since the fork as deleted — an alarm
+	// after an operation that changed nothing. The TUI and web gate the same way.
+	if code == 0 && res.Changed {
+		printDrift(context.Background(), svc, branchName, stdout)
+	}
+	return code
 }
 
 // cmdPush implements `gg push [--force | --force-with-lease] [<branch>]`. With no

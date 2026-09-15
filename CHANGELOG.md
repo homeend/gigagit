@@ -27,6 +27,66 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   there positioned on the link (`--at`, consumed once every startup
   precondition has landed — snapshot, window size, ops idle, and for a
   preview link the previews read). Skills: using-gg v74, reviewing-with-gg v7.
+
+- **A background fast-forward pull now costs one fetch, not two.** `gg pull`
+  on a non-checked-out branch used to run a plain `git fetch <remote>` purely
+  so the pre-op version snapshot could read a fresh `refs/remotes/<remote>/<branch>`
+  as its "other" endpoint, and then `FastForwardRef` — itself a
+  `git fetch <remote> <branch>:<branch>` — to land the update. Two network
+  round-trips per branch, which on a ~100GB monorepo with background
+  auto-pull is the expensive half of the operation. The order now inverts:
+  the pre-op tip is captured locally (no network), the single fetch lands the
+  fast-forward, and the snapshot is written afterwards against the moved
+  branch — whose tip IS the upstream tip it landed on, so the remote-tracking
+  ref was never needed. A new test pins the fetch count at exactly one.
+
+- **Branch versions open as a frozen PR-style preview, and gg now tells you
+  when a rebase/merge/pull rewrote what a branch actually contributes.** A
+  version snapshot is a synthetic `commit-tree` object — its tree is the
+  snapshotted tip's own tree (so `git log --all -p` shows no diff for it),
+  its first parent is that tip, and, for a two-branch op, a second parent
+  records the tip it landed on/against. Every field a preview needs rides
+  one `Gg-Meta` trailer: **Ours** is the contribution frozen, **Other** is
+  the tip it landed on, **Base** is their merge-base — recorded now because
+  it can't be recomputed later (after a merge, `merge-base(target, source)`
+  returns the source tip, not the fork point). Opening a version (Branches
+  panel `.` → *Previous versions…*, `ctrl+p` → *Branch versions…*, `gg
+  versions show`, or `gg web`'s versions tab) shows that frozen Base...Ours
+  diff — the change set exactly as it stood at operation time — instead of
+  comparing against the branch's current (possibly since-moved) tip. A
+  one-branch op's record (amend, reset, undo-commit, delete-branch, restore)
+  carries no endpoints by design and still opens as the plain commit view.
+  After a successful rebase/merge/pull, gg diffs what the branch contributed
+  before the op (`Base..Ours`) against what it contributes now
+  (`Other..newTip`) and flags anything the op itself changed: a path that
+  newly appears, or one whose status flipped (`M` → `A` is a **resurrected**
+  file — the classic case is a modify/delete conflict resolved by keeping
+  the file after upstream deleted it). A path that only *disappeared* from
+  the branch's contribution is reported quietly underneath as absorbed
+  upstream (an identical fix, a cherry-pick) — never alarmed. The CLI prints
+  the summary after `gg rebase`/`gg merge`/`gg pull`; the TUI raises a
+  notice on drift, or when the operation completed after pausing for
+  conflicts; `gg web` gained `GET /api/version-preview` and `GET
+  /api/drift`, surfaced through a `#drift-panel`. MCP is untouched — it has
+  no versions surface today.
+  **The versions store moves to format 2 for this.** Upgrading
+  **discards every branch version recorded before this build**: a format-1
+  ref carries no merge base, so it can never be converted into a preview,
+  only thrown away — `gg migrate` (or the TUI's pre-launch Migrate/Skip/Quit
+  prompt, or `gg web`'s preflight panel) lists exactly what it would discard
+  before you consent, and changes nothing without `--yes`/an explicit
+  accept. **Skipping the migration means no new versions are recorded at
+  all** until it's run — the branch-version writer is gated on the same
+  format check, so a repo stuck on format 1 runs every rebase/merge/pull
+  with no safety net rather than silently mixing formats. **Every `gg pull`
+  now writes a version ref**, the fast-forward lane included: drift is
+  measured against a branch's NEWEST record, so a pull that recorded nothing
+  left the next check comparing against an older rebase/merge and reporting
+  the pull's own commits as drift. A fast-forward records `Base == Ours` and
+  stays silent. The second endpoint is stored as a resolved sha rather than
+  the ref name it was given, so a recorded `origin/<b>` (or a `gg rebase
+  HEAD~3`) cannot slide forward afterwards. Skills: using-gg v73.
+
 - **Notes inside merge previews.** A preview (`Previews` tab, `gg preview`)
   is now a review surface: its diff rows carry review notes, gathered along
   the whole branch (merge-base → source tip) rather than read off the tip

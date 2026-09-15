@@ -23,7 +23,7 @@ func (UndoLastCommit) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("undo: last operation was not a commit (%q); ref-only undo can only undo commits", subj)
 	}
 	if cur, cerr := deps.Repo.CurrentBranch(ctx); cerr == nil {
-		snapshotBranchTip(ctx, deps, cur, "undo-commit")
+		snapshotBranchTip(ctx, deps, cur, "undo-commit", "", "")
 	}
 	deps.emit(ctx, Progress{Step: "undoing last commit", Detail: subj})
 	if err := deps.Repo.ResetSoft(ctx, "HEAD@{1}"); err != nil {

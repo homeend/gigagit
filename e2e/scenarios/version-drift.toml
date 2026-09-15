@@ -1,0 +1,63 @@
+name = "rebase: change-set-drift summary is silent on a clean replay, and the version it recorded opens as a frozen preview"
+
+# What this scenario CANNOT cover, and why: the motivating "alarming" case
+# (a resurrected file, `M` -> `A`, printed under "! this operation changed
+# <branch>'s change set:") only arises when a modify/delete conflict is
+# resolved by KEEPING the file. Driving that through a real `gg rebase`/
+# `gg merge` is not possible from this harness: a kept conflict pauses the
+# op (detached HEAD, non-zero exit; see the `--on-conflict=keep` contract
+# row in the e2e skill) and the gg CLI has no `--continue` verb to finish
+# it — internal/cli/drift_test.go's own buildResurrectionFixture doc
+# comment and the task-10 report both confirm the grep for one comes up
+# empty (only flag.ContinueOnError and ordinary Go `continue` statements).
+# buildResurrectionFixture resolves this by crafting the post-conflict tip
+# with raw git outside gg entirely, which this TOML's `[input] steps` schema
+# has no primitive for (no commit-tree/update-ref/checkout --detach step —
+# see e2e/builder.go's Step switch). So instead of inventing a harness
+# feature, this scenario exercises the REAL, expressible production chain
+# end to end: a genuine `gg rebase` writes its own pre-op version snapshot,
+# the rebase replays cleanly (no conflict, nothing resurrected), the drift
+# check correctly stays silent, and `gg versions show` proves the snapshot
+# it wrote opens as the frozen Base...Ours preview — the piece
+# internal/cli's own tests only ever exercise against a FABRICATED record.
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { write = "main.txt", content = "m\n" },
+  { commit = "main change" },
+  { switch = "feat" },
+  { write = "feat.txt", content = "f\n" },
+  { commit = "feat change" },
+]
+
+[[run]]
+# No --on-conflict needed: main.txt and feat.txt are disjoint, so this
+# replays with no conflict — the ordinary, no-drift path.
+cmd             = ["rebase", "main"]
+exit            = 0
+stdout_excludes = ["change set"]
+
+[[run]]
+# The rebase's own pre-op snapshot recorded feat's contribution (Base =
+# the shared base commit, Ours = feat's pre-rebase tip) before replaying it.
+# That diff is exactly A feat.txt — main.txt never appears, since Base and
+# Ours both predate main's own commit.
+cmd             = ["versions", "show", "feat", "latest"]
+exit            = 0
+stdout_contains = ["A\tfeat.txt"]
+stdout_excludes = ["main.txt"]
+
+[expect]
+branch      = "feat"
+clean       = true
+in_progress = "none"
+
+[expect.files]
+"feat.txt" = "f\n"
+"main.txt" = "m\n"
+
+[[expect.log]]
+subjects = ["feat change", "main change", "base"]

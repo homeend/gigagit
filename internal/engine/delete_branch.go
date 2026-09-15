@@ -45,7 +45,7 @@ func (op DeleteBranch) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{Changed: false}.WithSummary("cancelled"), nil
 	}
 
-	snapshotBranchTip(ctx, deps, op.Name, "delete-branch")
+	snapshotBranchTip(ctx, deps, op.Name, "delete-branch", "", "")
 
 	deps.emit(ctx, Progress{Step: "deleting branch", Detail: op.Name})
 

@@ -11,9 +11,13 @@ const (
 	StoreVersions = "versions"
 )
 
-// VersionsFormat is the branch-version layout this build writes. Format 1 is
+// VersionsFormat is the branch-version layout this build writes. Format 1 was
 // "a ref pointing at the pre-operation tip" — the layout gg has always used.
-const VersionsFormat = 1
+// Format 2 adds the Ours/Other/Base/Source/Target preview fields recorded at
+// snapshot time (see snapshotBranchTipNamed); format-1 refs never carry a
+// base and so can never be converted, only discarded (see the Migrate
+// declaration below).
+const VersionsFormat = 2
 
 // MinGitVersion is the oldest git gg supports. 2.30 ships the for-each-ref and
 // worktree behaviour every frontend assumes.
@@ -34,8 +38,17 @@ func Features() []preflight.Feature {
 			Requires: []preflight.Requirement{
 				preflight.DataFormat{Store: StoreVersions, Min: VersionsFormat, Max: VersionsFormat},
 			},
-			// No Migrate: format 2 and its migration arrive in the follow-up
-			// spec. Repairable has only test consumers until then.
+			// Format-1 refs cannot be converted (no merge base to recover),
+			// so the migration is a straight discard: ApplyMigration deletes
+			// the listed refs and stamps the format-2 marker.
+			Migrate: &preflight.Migration{
+				Store: StoreVersions, From: 1, To: 2,
+				Describe: func() preflight.Text {
+					return preflight.Text{
+						Format: "Discards every branch version recorded before this build. They cannot be converted: the old format records no merge base, so they can never open as a preview. Until you migrate, NO new versions are recorded — rebases and merges run without a safety net.",
+					}
+				},
+			},
 		},
 	}
 }

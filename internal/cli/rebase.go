@@ -75,10 +75,35 @@ func cmdRebase(svc *domain.Service, args []string, stdin io.Reader, stdout, stde
 		}
 		res, err := runOperation(context.Background(), svc,
 			engine.InteractiveRebase{Branch: br, Onto: fs.Arg(0), Plan: plan, GGBin: ggBin}, dec, stderr)
-		return finish(res, err, stdout, stderr)
+		code := finish(res, err, stdout, stderr)
+		// res.Changed, not just a zero exit: finish returns 0 whenever err == nil,
+		// and an aborted conflict fork returns Result{Changed:false}, nil. The
+		// pre-op snapshot was already written and the tip never moved, so an abort
+		// would report every path upstream added since the fork as deleted — an
+		// alarm after an operation that changed nothing.
+		if code == 0 && res.Changed {
+			printDrift(context.Background(), svc, br, stdout)
+		}
+		return code
 	}
 
+	// Resolved the same way the engine resolves an empty Branch (current
+	// branch) so printDrift checks the branch this rebase actually moved,
+	// even when --branch was not given.
+	branchName := *branch
+	if branchName == "" {
+		branchName, _ = svc.CurrentBranch(context.Background())
+	}
 	res, err := runOperation(context.Background(), svc,
 		engine.SmartRebase{Branch: *branch, Onto: fs.Arg(0)}, dec, stderr)
-	return finish(res, err, stdout, stderr)
+	code := finish(res, err, stdout, stderr)
+	// res.Changed, not just a zero exit: finish returns 0 whenever err == nil,
+	// and an aborted conflict fork returns Result{Changed:false}, nil. The
+	// pre-op snapshot was already written and the tip never moved, so an abort
+	// would report every path upstream added since the fork as deleted — an
+	// alarm after an operation that changed nothing.
+	if code == 0 && res.Changed {
+		printDrift(context.Background(), svc, branchName, stdout)
+	}
+	return code
 }
