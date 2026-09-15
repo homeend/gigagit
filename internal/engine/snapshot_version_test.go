@@ -26,7 +26,7 @@ func versionRefs(t *testing.T, r *git.Repo) []string {
 
 func TestSnapshotBranchTipRecordsAndSkips(t *testing.T) {
 	t.Parallel()
-	_, repo := newRepo(t)
+	dir, repo := newRepo(t)
 	ctx := context.Background()
 	deps := OpDeps{Repo: repo} // zero policy: disabled
 
@@ -57,10 +57,85 @@ func TestSnapshotBranchTipRecordsAndSkips(t *testing.T) {
 		t.Fatalf("snapshot unwraps to %s, want %s", bvs[0].Hash, head)
 	}
 
-	// Second snapshot in the same second must not collide (ts bumps).
+	// Second snapshot in the same second must not collide (ts bumps). The tip
+	// has to MOVE first: an identical record is deduplicated (see
+	// TestSnapshotBranchTipSkipsAnIdenticalRecord), which would otherwise mask
+	// the collision path this asserts.
+	os.WriteFile(filepath.Join(dir, "c.txt"), []byte("c\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-qm", "moves the tip")
 	snapshotBranchTip(ctx, deps, "main", "rebase", "", "")
 	if got := versionRefs(t, repo); len(got) != 2 {
 		t.Fatalf("collision handling: %v", got)
+	}
+}
+
+// TestSnapshotBranchTipSkipsAnIdenticalRecord is the no-op guard: a snapshot
+// that would repeat, field for field, what the branch's newest record already
+// says writes nothing. Without it a repo under periodic background auto-pull
+// accumulated one ref per branch per poll carrying no information — every
+// already-up-to-date pull, every reset to where the branch already sat.
+//
+// Skipping is safe for drift detection BECAUSE the record is identical:
+// DriftAfter compares the tip against vs[0], and an identical vs[0] yields
+// the same comparison. The false-alarm class is a MOVED tip left with an
+// unmoved record, and a moved tip changes Hash/Ours, so it is never a
+// duplicate.
+func TestSnapshotBranchTipSkipsAnIdenticalRecord(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepo(t)
+	ctx := context.Background()
+	deps := enabledDeps(repo)
+
+	snapshotBranchTip(ctx, deps, "main", "pull", "", "")
+	first := versionRefs(t, repo)
+	if len(first) != 1 {
+		t.Fatalf("first snapshot: %v", first)
+	}
+
+	for i := 0; i < 3; i++ {
+		snapshotBranchTip(ctx, deps, "main", "pull", "", "")
+	}
+	if got := versionRefs(t, repo); len(got) != 1 {
+		t.Fatalf("refs = %v, want the identical repeats to write nothing", got)
+	}
+
+	// A DIFFERENT record still writes: the dedupe must not over-fire.
+	os.WriteFile(filepath.Join(dir, "n.txt"), []byte("n\n"), 0o644)
+	gitE(t, dir, "add", ".")
+	gitE(t, dir, "commit", "-qm", "the tip moves")
+	snapshotBranchTip(ctx, deps, "main", "pull", "", "")
+	if got := versionRefs(t, repo); len(got) != 2 {
+		t.Fatalf("refs = %v, want a moved tip to record", got)
+	}
+}
+
+// TestSnapshotBranchTipPrunesOnASkippedRecord pins the half that is easy to
+// lose: a branch that only ever sees no-op snapshots must keep expiring its
+// old versions, not stop pruning just because it stopped writing.
+func TestSnapshotBranchTipPrunesOnASkippedRecord(t *testing.T) {
+	t.Parallel()
+	_, repo := newRepo(t)
+	ctx := context.Background()
+	deps := OpDeps{Repo: repo, Versions: VersionsPolicy{Enabled: true, MaxAgeDays: 90, Format: 1}}
+
+	snapshotBranchTip(ctx, deps, "main", "pull", "", "")
+
+	head, _ := repo.RevParse(ctx, "HEAD")
+	stale := git.VersionRef("main", "merge", time.Now().AddDate(0, 0, -120).Unix())
+	if err := repo.UpdateRef(ctx, stale, head); err != nil {
+		t.Fatal(err)
+	}
+
+	// Identical to the first: nothing is written, but the expired ref goes.
+	snapshotBranchTip(ctx, deps, "main", "pull", "", "")
+	for _, r := range versionRefs(t, repo) {
+		if r == stale {
+			t.Fatalf("expired ref %s survived a skipped record", stale)
+		}
+	}
+	if got := versionRefs(t, repo); len(got) != 1 {
+		t.Fatalf("refs = %v, want only the original record", got)
 	}
 }
 
