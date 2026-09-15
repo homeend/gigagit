@@ -52,9 +52,18 @@ func TestDriftSinceReportsResurrectionAfterRebase(t *testing.T) {
 	// Rebase feat onto main; resolve the modify/delete conflict on f3.txt by
 	// KEEPING the file (git add, not git rm).
 	gitRunDir(t, dir, "", "checkout", "-q", "feat")
+	// tolerate="rebase" only compares args[0]; it can't distinguish the
+	// expected modify/delete conflict from some other rebase failure. The
+	// assertions below on newFeatTip's content and DriftSince's result would
+	// still catch a materially different outcome, so this is left as-is
+	// rather than reworking the shared gitRunDir helper.
 	gitRunDir(t, dir, "rebase", "rebase", "main") // tolerates the expected modify/delete conflict
 	gitRunDir(t, dir, "", "add", "f3.txt")        // resolve by KEEPING the file
-	gitRunDir(t, dir, "", "rebase", "--continue")
+	// -c core.editor=true pins the editor: `rebase --continue` after a
+	// modify/delete resolution commits the replayed change and launches
+	// $GIT_EDITOR to confirm the message, which would hang or fail on a
+	// machine without one (gitRunDir forwards os.Environ() unchanged).
+	gitRunDir(t, dir, "", "-c", "core.editor=true", "rebase", "--continue")
 	newFeatTip := gitOutDir(t, dir, "rev-parse", "feat")
 
 	got, err := svc.DriftSince(ctx, ref, newFeatTip)
@@ -64,9 +73,16 @@ func TestDriftSinceReportsResurrectionAfterRebase(t *testing.T) {
 	if !got.Checked {
 		t.Fatalf("Checked = false, want true: %+v", got)
 	}
-	want := []changeset.Entry{{Status: 'A', Path: "f3.txt"}}
-	if len(got.Report.Added) != 1 || got.Report.Added[0] != want[0] {
-		t.Fatalf("Added = %+v, want %+v", got.Report.Added, want)
+	wantAdded := []changeset.Entry{{Status: 'A', Path: "f3.txt"}}
+	if len(got.Report.Added) != 1 || got.Report.Added[0] != wantAdded[0] {
+		t.Fatalf("Added = %+v, want %+v", got.Report.Added, wantAdded)
+	}
+	// The old M f3.txt entry cancels out via the status-change path (M -> A
+	// counts as an Add, not an Add+Remove pair; see changeset.Compare), so
+	// Removed carries the superseded M f3.txt record.
+	wantRemoved := []changeset.Entry{{Status: 'M', Path: "f3.txt"}}
+	if len(got.Report.Removed) != 1 || got.Report.Removed[0] != wantRemoved[0] {
+		t.Fatalf("Removed = %+v, want %+v", got.Report.Removed, wantRemoved)
 	}
 	if !got.Report.Drifted() {
 		t.Fatalf("Drifted() = false, want true: %+v", got.Report)
@@ -144,8 +160,10 @@ func TestDriftSinceSkipsEmptyBeforeSet(t *testing.T) {
 
 	const unix = int64(1700003000)
 	// Base == Ours: the branch contributed nothing before the op (the
-	// fast-forward case). Other is set to a distinct, valid sha so the
-	// "nothing recorded" short-circuit doesn't mask the empty-before-set one.
+	// fast-forward case). Other is set to tip too — it just needs to be
+	// non-empty so the "nothing recorded" short-circuit doesn't mask the
+	// empty-before-set path under test; it is never dereferenced by git,
+	// since the empty-before-set return happens before the after-diff.
 	meta := git.VersionMeta{Op: "pull", Ours: tip, Other: tip, Base: tip, Source: "origin/main", Target: "main"}
 	syn, err := svc.Repo().WriteVersionSnapshot(ctx, tip, meta, unix)
 	if err != nil {
