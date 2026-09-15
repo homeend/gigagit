@@ -132,6 +132,17 @@ func (m Model) steerHighlight(c steer.Command) (Model, tea.Cmd) {
 	if side != "new" && side != "old" {
 		return m, m.answerSteer(c, steerFail(c, "unknown side "+strconv.Quote(c.Side)))
 	}
+	// A preview's old side is the merge base: not addressable, the same refusal
+	// the TUI's own `c` gives there. Scoped to the mark that would land on the
+	// open preview itself (same key as its note address) — a mark aimed at some
+	// other file or state is nobody's business but the view it will paint.
+	if side == "old" {
+		if v := m.diffLayer(); v != nil && v.previewSet != nil {
+			if vk, ok := attnKeyFor(v.noteAddr); ok && vk == k {
+				return m, m.answerSteer(c, steerFail(c, "notes in a preview anchor on the new side"))
+			}
+		}
+	}
 	if _, ok := attnStyle(c.Tone); !ok {
 		return m, m.answerSteer(c, steerFail(c, "unknown tone "+strconv.Quote(c.Tone)))
 	}

@@ -1,10 +1,14 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -208,5 +212,175 @@ func TestPreviewNotedFileStepUsesThePreviewCounts(t *testing.T) {
 	}
 	if m.notedFilePath("b.txt") {
 		t.Fatal("the preview counts must not leak into a plain commit diff")
+	}
+}
+
+// Ruling 4 / gate 8: steering may not mark the OLD side of a preview — the old
+// side is the merge base, which notes cannot anchor on, the same refusal the
+// TUI's own `c` gives there. The new side of the very same view must still
+// mark, or the guard would just be "previews refuse steering".
+func TestSteerHighlightRefusesTheOldSideOfAPreview(t *testing.T) {
+	t.Parallel()
+	const tip = "1111111111111111111111111111111111111111"
+	m := previewDiffModel(t, nil)
+	// resolveAttnKey normalises a commit target onto the FEED's hash, so the
+	// preview's tip has to be a loaded commit or every command below would be
+	// refused with "commit not loaded in the feed" and the test would pass
+	// without the guard.
+	m.commits = []model.Commit{{Hash: tip, Subject: "seed"}}
+	m = m.rebuildCommitGraph()
+	dir := filepath.Join(t.TempDir(), "steer")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m.steerDir = dir
+	cmdFor := func(id, side string) steer.Command {
+		return steer.Command{
+			ID: id, Cmd: "highlight", File: "a.txt",
+			Target: &steer.Target{State: "commit", Commit: tip},
+			Side:   side, Start: 1, Tone: "info", Wait: true,
+		}
+	}
+
+	mNew, okCmd := m.steerHighlight(cmdFor("ps-1", "new"))
+	runSteerCmd(t, okCmd)
+	if r, ok := steer.AwaitReply(dir, "ps-1", time.Second); !ok || !r.OK {
+		t.Fatalf("a new-side mark on a preview must still land, reply=%+v ok=%v", r, ok)
+	}
+	if len(mNew.attention) != 1 {
+		t.Fatalf("the new-side mark must be stored, got %+v", mNew.attention)
+	}
+
+	m2, badCmd := m.steerHighlight(cmdFor("ps-2", "old"))
+	runSteerCmd(t, badCmd)
+	r, ok := steer.AwaitReply(dir, "ps-2", time.Second)
+	if !ok || r.OK || r.Error != "notes in a preview anchor on the new side" {
+		t.Fatalf("want the old-side refusal with the protocol text, reply=%+v ok=%v", r, ok)
+	}
+	if len(m2.attention) != 0 {
+		t.Fatalf("an old-side mark must be refused on a preview view, got %+v", m2.attention)
+	}
+}
+
+// The Previews panel row carries the SAME ◆N badge every other note-bearing
+// row uses (never a new glyph).
+func TestPreviewRowCarriesANoteBadge(t *testing.T) {
+	t.Parallel()
+	m := Model{previews: []previewRow{{
+		rec:   model.MergePreview{ID: "p1", Label: "login", Source: "feat", Target: "main"},
+		sum:   domain.PreviewSummary{State: domain.PreviewOK, Files: 2, Ahead: 3},
+		notes: 4,
+	}}}
+	rows := m.previewRows()
+	if len(rows) != 1 || !contains(rows[0], noteBadge(4)) {
+		t.Fatalf("want the ◆4 badge on the preview row, got %q", rows)
+	}
+}
+
+// Ruling 6: a non-ok pair shows no badge at all.
+func TestPreviewRowWithoutNotesHasNoBadge(t *testing.T) {
+	t.Parallel()
+	m := Model{previews: []previewRow{{
+		rec: model.MergePreview{ID: "p1", Label: "merged", Source: "feat", Target: "main"},
+		sum: domain.PreviewSummary{State: domain.PreviewMerged},
+	}}}
+	if rows := m.previewRows(); contains(rows[0], "◆") {
+		t.Fatalf("a merged pair carries no note badge, got %q", rows[0])
+	}
+}
+
+// After a note write the pair's HASHES are unchanged, so afterPreviewsRefresh
+// takes its early-return branch — which must still take the fresh counts, or
+// the file-list badges and }/{ go stale in the only case that matters.
+func TestUnchangedPreviewRefreshStillMovesTheCounts(t *testing.T) {
+	t.Parallel()
+	m := previewDiffModel(t, nil)
+	m.filesView = &contentPopup{}
+	m.filesPreviewCounts = map[string]int{}
+	m.previewOpen = &previewOpenState{id: "p1", source: "feat", target: "main",
+		srcHash: "src", tgtHash: "tgt"}
+	m.previews = []previewRow{{
+		rec:    model.MergePreview{ID: "p1", Source: "feat", Target: "main"},
+		sum:    domain.PreviewSummary{State: domain.PreviewOK, SourceHash: "src", TargetHash: "tgt"},
+		notes:  1,
+		byPath: map[string]int{"a.txt": 1},
+	}}
+	m2, cmd := m.afterPreviewsRefresh()
+	if cmd != nil {
+		t.Fatal("an unchanged pair must not re-resolve or re-open anything")
+	}
+	if m2.filesPreviewCounts["a.txt"] != 1 {
+		t.Fatalf("an unchanged-hash refresh must still take the fresh counts, got %v", m2.filesPreviewCounts)
+	}
+}
+
+// Ruling 7 + 8: a notes arrival re-reads the previews (the badges count the
+// same store), but ONLY while a preview is on screen — and always through
+// chainPreviewsRead, never a plain reloadSourcesCmd.
+func TestNotesArrivalChainsThePreviewsRead(t *testing.T) {
+	t.Parallel()
+	arrive := func(m Model) Model {
+		m, _ = m.reloadSourcesCmd([]sourceKey{srcNotes}, reloadOpts{})
+		tm, _ := m.Update(dataAvailableMsg{source: srcNotes, gen: m.srcGen[srcNotes],
+			value: domain.NoteCounts{}})
+		return tm.(Model)
+	}
+
+	// A preview diff is open: the srcNotes arm returns loadNotesCmd early, so
+	// the chain has to be armed INSIDE it or the previews never refresh.
+	open := previewDiffModel(t, nil)
+	open.previewOpen = &previewOpenState{id: "p1", source: "feat", target: "main"}
+	if got := arrive(open); !got.srcInflight[srcPreviews] {
+		t.Fatal("a notes arrival with a preview open must chain a previews read")
+	}
+
+	// The Previews tab is showing, no preview open: still chained.
+	tab := Model{activeLeftTab: panelPreviews}
+	if got := arrive(tab); !got.srcInflight[srcPreviews] {
+		t.Fatal("a notes arrival while the Previews tab is active must chain a previews read")
+	}
+
+	// Neither: a note write in any repo must not spend a resolve per saved pair.
+	if got := arrive(Model{}); got.srcInflight[srcPreviews] {
+		t.Fatal("no preview on screen ⇒ no previews read")
+	}
+}
+
+// The open preview's file list carries the same ◆N badge, from the preview's
+// per-path counts. A plain compare (no preview set) is byte-identical to before.
+func TestPreviewFileListRowsCarryTheBadge(t *testing.T) {
+	t.Parallel()
+	const tip = "1111111111111111111111111111111111111111"
+	set := &domain.PreviewNoteSet{Source: "feat", Target: "main", Tip: tip}
+	m := Model{width: 100, height: 40}
+	m.filesMode = filesModeCompare
+	m.filesTitle = "Merge preview: feat → main"
+	m.filesView = &contentPopup{lines: []contentLine{
+		{text: "M  a.txt", path: "a.txt"},
+		{text: "M  b.txt", path: "b.txt"},
+		{text: "sub/", heading: true},
+	}}
+	m.filesPreviewSet = set
+	m.filesPreviewCounts = map[string]int{"a.txt": 2}
+
+	out := m.renderFilesView(60, 20)
+	if !contains(out, "a.txt"+noteBadge(2)) {
+		t.Fatalf("the preview file row wants the ◆2 badge:\n%s", out)
+	}
+	if contains(out, "b.txt"+noteBadge(0)+"◆") {
+		t.Fatalf("a file with no preview notes carries no badge:\n%s", out)
+	}
+	// The badge is DISPLAY only: the / filter still matches the bare row text,
+	// so typing a digit never selects a file by its note count.
+	m.filesView.query = "2"
+	if len(m.filesView.visible()) != 0 {
+		t.Fatal("the note count must not be part of the filter haystack")
+	}
+
+	// No preview: the rows are exactly what they were.
+	plain := m
+	plain.filesPreviewSet = nil
+	if contains(plain.renderFilesView(60, 20), "◆") {
+		t.Fatal("a plain compare file list carries no preview badges")
 	}
 }

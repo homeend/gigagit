@@ -47,6 +47,11 @@ func (m Model) closeFilesView() Model {
 	m.filesRight = model.Endpoint{}
 	m.compareTag = ""
 	m.comparePair = nil
+	// inCompareMode() is true for a plain branch/pair compare too, so a preview
+	// scope left behind here would stamp the NEXT compare as a preview and make
+	// its rows note-addressable at a stale tip. This is the single exit point.
+	m.filesPreviewSet = nil
+	m.filesPreviewCounts = nil
 	m.filesStashTag = ""
 	m.filesShelfID = ""
 	m.filesShelfLabel = ""
@@ -887,6 +892,13 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		// won't re-cut it.
 		if l.heading && p.mode == modeCutoff {
 			text = elidePath(l.text, innerW-lipgloss.Width(prefix))
+		}
+		// An open merge preview badges its file rows with the notes gathered
+		// along the branch. Painted here rather than baked into l.text so the
+		// badge tracks a counts refresh with no rebuild, and so the `/` filter
+		// (which matches l.text) never matches a file by its note count.
+		if m.filesPreviewSet != nil && l.path != "" {
+			text += noteBadge(m.filesPreviewCounts[l.path])
 		}
 		wr[i] = winRow{text: prefix + text, style: st}
 	}
