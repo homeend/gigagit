@@ -44,7 +44,7 @@ func TestDiffPreviewRefusesASecondTarget(t *testing.T) {
 	dir := previewRepo(t)
 	svc := domain.Open(dir)
 	var out, errb strings.Builder
-	code := cmdDiff(svc, []string{"--preview", "main...feat/x", "--cached"}, &out, &errb)
+	code := cmdDiff(svc, dir, []string{"--preview", "main...feat/x", "--cached"}, &out, &errb)
 	if code != 2 {
 		t.Fatalf("want exit 2, got %d", code)
 	}
@@ -57,7 +57,7 @@ func TestDiffPreviewHunksNumberThePreviewDiff(t *testing.T) {
 	dir := previewRepo(t)
 	svc := domain.Open(dir)
 	var out, errb strings.Builder
-	if code := cmdDiff(svc, []string{"--preview", "main...feat/x", "--hunks"}, &out, &errb); code != 0 {
+	if code := cmdDiff(svc, dir, []string{"--preview", "main...feat/x", "--hunks"}, &out, &errb); code != 0 {
 		t.Fatalf("exit %d: %s", code, errb.String())
 	}
 	if !strings.Contains(out.String(), "a.txt") || !strings.Contains(out.String(), "  1 @@") {
