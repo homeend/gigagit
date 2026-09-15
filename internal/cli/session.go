@@ -341,6 +341,86 @@ func sessionOpenViewAt(path string) string {
 	return strings.Join(parts, " / ")
 }
 
+// The two link-shape refusals a navigate can hit. They are CALLER mistakes
+// (exit 2), unlike a git failure (exit 1), and both `gg session navigate` and
+// `gg open` map them the same way.
+var (
+	errNavLinkRepoOnly = errors.New("that link names a repository, not a place in it")
+	errNavLinkNoLine   = errors.New("that link names a file but no line; add :<line> or #<hunk>")
+)
+
+// navigateCommandFor builds the navigate command a RESOLVED link names. It is
+// the single builder `gg session navigate <link>` and `gg open <link>` share,
+// so the two can never post different commands for the same link. svc must be
+// the service for the link's OWN checkout (openLinkTarget / linkSteerDir).
+func navigateCommandFor(ctx context.Context, svc *domain.Service, res domain.Resolved) (steer.Command, error) {
+	c := steer.Command{Cmd: "navigate"}
+	if res.Preview != nil {
+		// The PAIR rides the wire, never the tip: the consumer resolves the tip
+		// itself, so a tip that moved between post and apply is honoured.
+		c.Target = &steer.Target{State: "preview", Source: res.Preview.Source, Target: res.Preview.Target}
+		if res.Addr.Path == "" {
+			return c, nil // reveal the Previews entry
+		}
+		c.File = res.Addr.Path
+		line := steer.Line{Side: string(res.Side), No: res.Line}
+		if res.Hunk > 0 {
+			// PreviewHunkAnchor, never resolveHunkLine: the numbering is the
+			// PREVIEW's patch (merge-base → tip), and a delete-only hunk has no
+			// new side to land on.
+			side, rng, err := svc.PreviewHunkAnchor(ctx, *res.Preview, res.Addr.Path, res.Hunk)
+			if err != nil {
+				return steer.Command{}, err
+			}
+			line = steer.Line{Side: string(side), No: rng[0]}
+		}
+		if line.No < 1 {
+			return steer.Command{}, errNavLinkNoLine
+		}
+		c.Line = &line
+		return c, nil
+	}
+	if res.Addr.Path == "" {
+		// A link with no path reveals the commit (spec §1).
+		if res.Commit == "" {
+			return steer.Command{}, errNavLinkRepoOnly
+		}
+		c.Commit = res.Commit
+		return c, nil
+	}
+	c.File, c.Target = res.Addr.Path, targetOf(res.Addr)
+	line := steer.Line{Side: string(res.Side), No: res.Line}
+	if res.Hunk > 0 {
+		// No StateUntracked guard here: the grammar has no untracked target, so
+		// ParseLink (the only source of a Resolved) never produces one — an
+		// untracked file's link is the plain working-tree form, whose
+		// index→file diff has hunks.
+		l, err := resolveHunkLine(ctx, svc, res.Addr.State == model.StateStaged, res.Addr.Commit, res.Addr.Path, res.Hunk)
+		if err != nil {
+			return steer.Command{}, err
+		}
+		line = l
+	}
+	if line.No < 1 {
+		return steer.Command{}, errNavLinkNoLine
+	}
+	c.Line = &line
+	return c, nil
+}
+
+// navExit maps navigateCommandFor's error onto an exit code: 2 for the two
+// link-shape refusals and a preview anchor with no new side (a caller
+// mistake, same surface as `gg note add <preview link>#N`), 1 for everything
+// else (a git failure).
+func navExit(verb string, err error, stderr io.Writer) int {
+	if errors.Is(err, errNavLinkRepoOnly) || errors.Is(err, errNavLinkNoLine) || errors.Is(err, domain.ErrPreviewOldSide) {
+		fmt.Fprintf(stderr, "%s: %v\n", verb, err)
+		return 2
+	}
+	fmt.Fprintln(stderr, "error:", err)
+	return 1
+}
+
 // sessionNavigate is the navigate verb: a file + a line, a commit to reveal, or
 // a note step.
 func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
@@ -374,34 +454,9 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
-		c := steer.Command{Cmd: "navigate"}
-		switch {
-		case res.Addr.Path == "":
-			// A link with no path reveals the commit (spec §1).
-			if res.Commit == "" {
-				fmt.Fprintln(stderr, "session navigate: that link names a repository, not a place in it")
-				return 2
-			}
-			c.Commit = res.Commit
-		default:
-			c.File, c.Target = res.Addr.Path, targetOf(res.Addr)
-			line := steer.Line{Side: string(res.Side), No: res.Line}
-			if res.Hunk > 0 {
-				// No StateUntracked guard here: the grammar has no untracked
-				// target, so ParseLink (the only source of a Resolved) never
-				// produces one — an untracked file's link is the plain
-				// working-tree form, whose index→file diff has hunks.
-				line, err = resolveHunkLine(ctx, target, res.Addr.State == model.StateStaged, res.Addr.Commit, res.Addr.Path, res.Hunk)
-				if err != nil {
-					fmt.Fprintln(stderr, "error:", err)
-					return 1
-				}
-			}
-			if line.No < 1 {
-				fmt.Fprintln(stderr, "session navigate: that link names a file but no line; add :<line> or #<hunk>")
-				return 2
-			}
-			c.Line = &line
+		c, err := navigateCommandFor(ctx, target, res)
+		if err != nil {
+			return navExit("session navigate", err, stderr)
 		}
 		return sendSteer(dir, c, *noWait, stdout, stderr)
 	}
@@ -682,6 +737,23 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 			if linkEnd > 0 || *end != 0 {
 				fmt.Fprintln(stderr, "session highlight add: a #<hunk> link already names a range; drop -<end> and --end")
 				return 2
+			}
+			if res.Preview != nil {
+				// PreviewHunkAnchor, never a plain HunkRange over
+				// linkDiffSpec's patch: it is the ONE place the preview's
+				// old-side refusal lives, so a delete-only hunk cannot land a
+				// band on a side no stored address names.
+				hs, rng, herr := target.PreviewHunkAnchor(ctx, *res.Preview, res.Addr.Path, res.Hunk)
+				if errors.Is(herr, domain.ErrPreviewOldSide) {
+					fmt.Fprintln(stderr, "session highlight add:", herr)
+					return 2
+				}
+				if herr != nil {
+					fmt.Fprintln(stderr, "error:", herr)
+					return 1
+				}
+				sideVal, first, last = string(hs), rng[0], rng[1]
+				break
 			}
 			spec, err := linkDiffSpec(ctx, target, res)
 			if err != nil {

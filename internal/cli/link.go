@@ -21,7 +21,7 @@ import (
 // is load-bearing: '#' starts a comment in every POSIX shell, so an unquoted
 // hunk link silently loses its hunk. gg deliberately applies no heuristic —
 // it says so here instead.
-const linkUsage = "usage: gg link [<path>[:<line>]] [--cached | --rev <commit>]\n" +
+const linkUsage = "usage: gg link [<path>[:<line>]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>>]\n" +
 	"       gg link resolve <gg://…> [--json]\n" +
 	"quote links that carry #<hunk> — an unquoted # starts a shell comment"
 
@@ -43,6 +43,7 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	fs.SetOutput(stderr)
 	cached := fs.Bool("cached", false, "address the staged diff (HEAD → index)")
 	rev := fs.String("rev", "", "address a commit's own change (parent → commit)")
+	pf := addPreviewFlag(fs)
 	pos, err := parseSteerFlags(fs, args)
 	if err != nil {
 		return 2
@@ -55,11 +56,31 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 		fmt.Fprintf(stderr, "link: --cached and --rev are mutually exclusive\n%s\n", linkUsage)
 		return 2
 	}
+	if pf.set() && (*cached || *rev != "") {
+		return previewUsageErr("link", stderr)
+	}
 	arg := ""
 	if len(pos) == 1 {
 		arg = pos[0]
 	}
-	l, err := buildLink(context.Background(), svc, workdir, arg, *cached, *rev)
+	ctx := context.Background()
+	var prev *model.LinkPreview
+	if pf.set() {
+		// Resolve the argument (id | label | <target>...<source>) to the pair's
+		// NAMES, and refuse a pair that cannot be shown — a link nobody can open
+		// is worse than no link.
+		tgt, terr := resolvePreviewTarget(ctx, svc, *pf.spec)
+		if terr != nil {
+			fmt.Fprintln(stderr, "error:", terr)
+			return 1
+		}
+		if !model.LinkRefOK(tgt.Source) || !model.LinkRefOK(tgt.Target) {
+			fmt.Fprintf(stderr, "link: %s...%s cannot be expressed in a gg link (a branch name may not contain @, : or #)\n", tgt.Target, tgt.Source)
+			return 1
+		}
+		prev = &model.LinkPreview{Source: tgt.Source, Target: tgt.Target}
+	}
+	l, err := buildLink(ctx, svc, workdir, arg, *cached, *rev, prev)
 	if err != nil {
 		if errors.Is(err, model.ErrLink) {
 			fmt.Fprintf(stderr, "link: %v\n%s\n", err, linkUsage)
@@ -80,7 +101,7 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 // disagree with the grammar it prints; the bare path portion is then rebased
 // onto the checkout top level, since the link grammar's <path> is always
 // top-level-relative (spec), never cwd-relative.
-func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string, cached bool, rev string) (model.Link, error) {
+func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string, cached bool, rev string, prev *model.LinkPreview) (model.Link, error) {
 	var l model.Link
 	l.Side = model.NoteSideNew
 
@@ -122,6 +143,13 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 	}
 
 	switch {
+	case prev != nil:
+		// The preview's old side is the merge base, which no stored address
+		// names (spec §1.1): "old:" has nothing to point at.
+		if l.Side == model.NoteSideOld {
+			return model.Link{}, fmt.Errorf("%w: a merge preview addresses the new side only; drop \"old:\"", model.ErrLink)
+		}
+		l.Target = model.LinkTarget{State: model.StateCommitted, Preview: prev}
 	case cached:
 		l.Target = model.LinkTarget{State: model.StateStaged}
 	case rev != "":

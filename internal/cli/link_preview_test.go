@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // previewLinkFor builds the LOCAL-form preview link for dir. The local form is
@@ -264,5 +266,47 @@ func TestLinkResolvePrintsThePreviewPair(t *testing.T) {
 	}
 	if w.Commit == "" || w.Path != "a.txt" {
 		t.Errorf("json = %+v, want the tip sha and the path", w)
+	}
+}
+
+func TestLinkPreviewPrintsThePreviewForm(t *testing.T) {
+	dir := previewRepo(t)
+	_, out, errb := runCLI(t, dir, "link", "--preview", "main...feat/x")
+	if got := strings.TrimSpace(out); !strings.HasSuffix(got, "@main...feat/x") {
+		t.Fatalf("link --preview = %q (%s)", out, errb)
+	}
+	_, out, _ = runCLI(t, dir, "link", "--preview", "main...feat/x", "a.txt:4")
+	if got := strings.TrimSpace(out); !strings.HasSuffix(got, "/a.txt@main...feat/x:4") {
+		t.Fatalf("link --preview <path>:<line> = %q", out)
+	}
+	_, out, _ = runCLI(t, dir, "link", "--preview", "main...feat/x", "a.txt#2")
+	if got := strings.TrimSpace(out); !strings.HasSuffix(got, "/a.txt@main...feat/x#2") {
+		t.Fatalf("link --preview <path>#<hunk> = %q", out)
+	}
+	// Round-trip: what it prints must parse back to the same place.
+	_, out, _ = runCLI(t, dir, "link", "--preview", "main...feat/x", "a.txt:4")
+	if _, err := model.ParseLink(strings.TrimSpace(out)); err != nil {
+		t.Fatalf("ParseLink(%q) = %v", out, err)
+	}
+}
+
+func TestLinkPreviewRefusals(t *testing.T) {
+	dir := previewRepo(t)
+	// :old: has no meaning in a preview.
+	if code, _, _ := runCLI(t, dir, "link", "--preview", "main...feat/x", "a.txt:old:4"); code != 2 {
+		t.Error("link --preview with :old: must exit 2")
+	}
+	// One target only.
+	for _, args := range [][]string{
+		{"link", "--preview", "main...feat/x", "--cached"},
+		{"link", "--preview", "main...feat/x", "--rev", "HEAD"},
+	} {
+		if code, _, _ := runCLI(t, dir, args...); code != 2 {
+			t.Errorf("%v must exit 2", args)
+		}
+	}
+	// An unknown pair is a resolution failure, not a usage one.
+	if code, _, _ := runCLI(t, dir, "link", "--preview", "main...feat/nope"); code != 1 {
+		t.Error("link --preview with a missing branch must exit 1")
 	}
 }
