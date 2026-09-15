@@ -86,10 +86,12 @@ func (s *Service) PreviewNoteCounts(ctx, set PreviewNoteSet) (byPath map[string]
 - **Outdated** is the preview's name for stale: the note stays listed,
   greyed, with an explicit marker `⊘` in the note gutter and `outdated` in
   the note popup header, because in a preview it is the expected case
-  rather than an edge case. Orphaned (path gone from the preview, or the
-  note's commit no longer on the branch after a rebase) is hidden from the
-  diff but still counted in `PreviewNoteCounts.total` and shown in the
-  Previews panel row, like hunk's "retired file" count. `model.NoteStatus`
+  rather than an edge case. Orphaned (path gone from the preview) is hidden
+  from the diff but still counted in `PreviewNoteCounts.total` and shown in
+  the Previews panel row, like hunk's "retired file" count. A note whose
+  commit is no longer in `merge-base..source` (the branch was rebased) cannot
+  be attributed to the preview at all and is neither shown nor counted; it
+  stays reachable in that commit's own view (ruling 2026-09-15). `model.NoteStatus`
   gains no value: the TUI/web map `NoteStale` to the outdated rendering
   when the view is a preview.
 - Old-side notes on those commits (a note the user made on the old side of
