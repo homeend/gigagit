@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v70 -->
+<!-- gg:using-gg:v71 -->
 
 # Using gg (gigagit)
 
@@ -267,7 +267,9 @@ finds the right one here.
   stderr and the other rows still print; exit 1 only if EVERY row failed);
   `gg preview show [--patch] <id|label>` prints the file list (or unified
   diff; a non-ok state goes to stderr with exit 1); `gg preview diff
-  [--patch] <source> <target>` is the one-off form with no record;
+  [--patch] <source> <target>` is the one-off form with no record, and
+  `gg preview diff <id|label> --hunks [--json]` numbers a saved preview's
+  hunks (the same numbering as `gg diff --preview P --hunks`);
   `gg preview rename <id|label> <text>`; `gg preview rm <id|label>`.
   Notes live inside a preview: `gg diff --preview <id|label|<target>...<source>>
   [--hunks [--json]]` prints the preview's own patch and numbers its hunks,

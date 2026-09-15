@@ -13,16 +13,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   the whole branch (merge-base → source tip) rather than read off the tip
   alone, so a note survives the agent pushing more commits. A note whose
   lines a later commit changed stays listed and is marked **outdated** (`⊘`
-  in the TUI gutter, the `outdated` class in the web page); one whose commit
-  left the branch is hidden but still counted in the panel badge. A preview
-  note is an ordinary committed note on the source tip — the same note shows
-  on that commit's own view — and the old side (the merge base) is not
-  addressable: `c` and `gg note add --old-line` are refused there. New CLI
+  on the note box's title in the TUI, the `outdated` class in the web page);
+  a note whose file the tip no longer has is hidden but still counted in the
+  panel badge; one whose commit left the branch entirely (a rebase) is
+  neither shown nor counted — it stays reachable in that commit's own view. A
+  preview note is an ordinary committed note on the source tip — the same
+  note shows on that commit's own view — and the old side (the merge base) is
+  not addressable: `c` and `gg note add --old-line` are refused there. New CLI
   surface: `gg diff --preview`, `gg preview diff --hunks`, `gg note
   add|list|apply --preview`, `gg review --preview`; hunk numbers under
   `--preview` come from the preview's own patch. MCP's three note tools take
-  a `preview` argument, and the web preview stage shows, adds and replies to
-  notes through `GET /api/preview/notes`.
+  a `preview` argument, and the web preview stage shows notes through `GET
+  /api/preview/notes`; adds and replies post to the tip through the existing
+  `/api/notes` endpoints — `GET /api/preview/notes` only reads.
 
 - **Web: copy what's on screen, and stop cutting off file names.** Five
   changes to the browser UI:
