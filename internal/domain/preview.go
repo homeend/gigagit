@@ -18,6 +18,9 @@ var (
 	ErrPreviewExists   = fmt.Errorf("%w", preview.ErrExists)
 )
 
+// errPreviewPairShape is a three-dot --preview argument missing one side.
+var errPreviewPairShape = errors.New("preview: expected <target>...<source>")
+
 // PreviewAdd validates both sides resolve to commits and that they differ,
 // then stores the pair. A duplicate returns the EXISTING record with
 // ErrPreviewExists so frontends can focus it instead of failing.
@@ -132,6 +135,11 @@ type PreviewSummary struct {
 	Ahead      int    // commits on source not in target; 0 unless PreviewOK
 	base       string // merge-base(target, source); "" unless PreviewOK (PreviewOpen reuses it)
 }
+
+// Base is the merge base the summary computed ("" unless PreviewOK). It rides
+// the SAME cache entry as the rest of the summary, so a preview's note set
+// costs no extra git call while the tips are unchanged.
+func (s PreviewSummary) Base() string { return s.base }
 
 // PreviewSummary resolves both names (missing → the matching Missing state)
 // then computes the base, ahead and files. `git merge-base` failing on two
