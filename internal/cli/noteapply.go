@@ -41,6 +41,7 @@ func noteApply(svc *domain.Service, link *domain.Resolved, args []string, stdin 
 	fs := flag.NewFlagSet("note apply", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	tf := addTargetFlags(fs)
+	pf := addPreviewFlag(fs)
 	useStdin := fs.Bool("stdin", false, "read the JSON batch from stdin (required)")
 	author := fs.String("author", "", "author for items that carry none (default: $GG_AGENT, else agent)")
 	asJSON := fs.Bool("json", false, "print the stored notes as JSON")
@@ -64,6 +65,10 @@ func noteApply(svc *domain.Service, link *domain.Resolved, args []string, stdin 
 	// override. cmdNote already refused a link carrying a path.
 	cached, rev := *tf.cached, *tf.rev
 	if link != nil {
+		// Ruling 9: a link and a preview both name a target (see noteAdd).
+		if pf.set() {
+			return previewUsageErr("note apply", stderr)
+		}
 		if cached || rev != "" {
 			fmt.Fprintln(stderr, "note apply: a gg:// link already names the target (drop --cached and --rev)")
 			return 2
@@ -86,9 +91,29 @@ func noteApply(svc *domain.Service, link *domain.Resolved, args []string, stdin 
 		fmt.Fprintln(stderr, "context:", c)
 	}
 	ctx := context.Background()
-	planned, _, err := svc.PlanNoteBatch(ctx, batch, cached, rev, noteAuthorDefault(*author), domain.NoteSideBoth)
+	target := domain.NoteBatchTarget{Cached: cached, Rev: rev}
+	rule := domain.NoteSideBoth
+	if pf.set() {
+		if cached || rev != "" {
+			return previewUsageErr("note apply", stderr)
+		}
+		tgt, terr := resolvePreviewTarget(ctx, svc, *pf.spec)
+		if terr != nil {
+			fmt.Fprintln(stderr, "error:", terr)
+			return 1
+		}
+		spec := tgt.Spec
+		// Stored on the tip, numbered over the preview's own patch, new side
+		// only — old-side items are SKIPPED with one warning (the --working rule).
+		target = domain.NoteBatchTarget{Rev: tgt.Set.Tip, Hunks: &spec}
+		rule = domain.NoteSideNewOnly
+	}
+	planned, skipped, err := svc.PlanNoteBatchIn(ctx, batch, target, noteAuthorDefault(*author), rule)
 	if err != nil {
 		return noteExit(err, stderr)
+	}
+	if skipped > 0 {
+		fmt.Fprintf(stderr, "note: skipped %d old-side annotation(s) — notes in a preview anchor on the new side\n", skipped)
 	}
 	stored, err := svc.ApplyNoteBatch(ctx, planned)
 	if err != nil {

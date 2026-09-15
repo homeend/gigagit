@@ -35,6 +35,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 	toolName := fs.String("tool", "", "review tool name (from config); default: the only one")
 	working := fs.Bool("working", false, "review uncommitted working changes")
 	wantNotes := fs.Bool("notes", false, "also ask the tool for anchored notes (agent-context v1) and import them")
+	pf := addPreviewFlag(fs)
 	if err := fs.Parse(rest); err != nil {
 		return 2
 	}
@@ -51,7 +52,29 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 	// Resolve the target.
 	arg := ""
 	var target domain.ReviewTarget
+	// hunkSpec is the patch a `hunk` annotation is numbered against; only
+	// --preview has one of its own (nil = derive it from the target as before).
+	var hunkSpec *model.DiffSpec
 	switch {
+	case pf.set():
+		if *working || fs.NArg() >= 1 {
+			return previewUsageErr("review", stderr)
+		}
+		tgt, terr := resolvePreviewTarget(ctx, svc, *pf.spec)
+		if terr != nil {
+			fmt.Fprintln(stderr, "error:", terr)
+			return 1
+		}
+		// Ruling 9: the range review, over the pair the preview names. Range is
+		// the HASH pair (it is spliced unquoted into the tool command); Label is
+		// the human pair and is never executed. The existing range rule in
+		// reviewImportTarget then anchors notes on the tip, new side only —
+		// exactly what a preview needs.
+		arg = tgt.Spec.Rev
+		target = domain.ReviewTarget{Kind: domain.ReviewRange, Range: tgt.Spec.Rev,
+			Label: tgt.Target + " ... " + tgt.Source, Diff: tgt.Spec}
+		spec := tgt.Spec
+		hunkSpec = &spec
 	case *working:
 		target = domain.WorkingReviewTarget()
 	case fs.NArg() >= 1:
@@ -109,7 +132,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 	if !*wantNotes {
 		return 0
 	}
-	return importReviewNotes(ctx, svc, target, arg, notesPath, res.Content, cmd.Name, stderr)
+	return importReviewNotes(ctx, svc, target, arg, notesPath, res.Content, cmd.Name, hunkSpec, stderr)
 }
 
 // reviewImportTarget decides which diff a review's notes anchor to (§4.5):
@@ -149,7 +172,14 @@ func reviewImportTarget(ctx context.Context, svc *domain.Service, target domain.
 // importReviewNotes reads the tool's notes: the sidecar file when it is
 // non-empty, else the captured report when THAT parses as agent-context v1
 // (some tools have only one output channel). Neither → exit 1.
-func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, arg, notesPath, report, toolName string, stderr io.Writer) int {
+//
+// hunkSpec is the patch a `hunk` annotation is numbered against, or nil to
+// derive it from cached/rev as before. Only --preview passes one: its notes are
+// stored on the source tip but numbered over merge-base → tip, and nothing else
+// in review land splits those two apart. It is threaded EXPLICITLY rather than
+// sniffed from the range string, which would silently renumber today's
+// `gg review A...B --notes`.
+func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, arg, notesPath, report, toolName string, hunkSpec *model.DiffSpec, stderr io.Writer) int {
 	data, _ := os.ReadFile(notesPath)
 	if len(strings.TrimSpace(string(data))) == 0 {
 		if s := strings.TrimSpace(report); strings.HasPrefix(s, "{") {
@@ -173,7 +203,9 @@ func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.R
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	planned, skipped, err := svc.PlanNoteBatch(ctx, batch, cached, rev, noteAuthorDefault(toolName), rule)
+	planned, skipped, err := svc.PlanNoteBatchIn(ctx, batch,
+		domain.NoteBatchTarget{Cached: cached, Rev: rev, Hunks: hunkSpec},
+		noteAuthorDefault(toolName), rule)
 	if err != nil {
 		return noteExit(err, stderr)
 	}

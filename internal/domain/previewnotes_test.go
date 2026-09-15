@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"strings"
 	"testing"
@@ -342,4 +343,57 @@ func TestPreviewNotesOnAnEmptySetAreSilent(t *testing.T) {
 	if err != nil || total != 0 || len(byPath) != 0 {
 		t.Fatalf("want empty counts and no error, got (%v, %d, %v)", byPath, total, err)
 	}
+}
+
+// PreviewHunkAnchor numbers hunks over the PREVIEW's patch (merge-base → tip),
+// not over the tip commit's own parent→tip diff (ruling 1). The tip commit
+// (c3) only adds b.txt, so its own patch has NO hunk for a.txt at all: an
+// anchor that resolves for a.txt can only have come from the preview patch.
+func TestPreviewHunkAnchorUsesThePreviewPatch(t *testing.T) {
+	svc, _ := newPreviewRepo(t)
+	ctx := context.Background()
+	set, err := svc.PreviewNotes(ctx, "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	side, rng, err := svc.PreviewHunkAnchor(ctx, set, "a.txt", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if side != model.NoteSideNew {
+		t.Fatalf("a preview anchors on the new side, got %s", side)
+	}
+	if rng[1] < 4 {
+		t.Fatalf("the range must come from the preview patch (reaching ECHO on line 4), got %v", rng)
+	}
+}
+
+// A hunk that only deletes has no new side to anchor on: refused, not silently
+// stored as an old-side note the preview could never show.
+func TestPreviewHunkAnchorRefusesADeleteOnlyHunk(t *testing.T) {
+	svc, dir := newDeletedFilePreviewRepo(t)
+	ctx := context.Background()
+	set, err := svc.PreviewNotes(ctx, "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = dir
+	if _, _, err := svc.PreviewHunkAnchor(ctx, set, "c.txt", 1); !errors.Is(err, ErrPreviewOldSide) {
+		t.Fatalf("want ErrPreviewOldSide, got %v", err)
+	}
+}
+
+// newDeletedFilePreviewRepo builds main (c.txt) and a feat branch that DELETES
+// it — the one shape that yields a hunk with no new side at all (@@ -1,4 +0,0 @@).
+func newDeletedFilePreviewRepo(t *testing.T) (*Service, string) {
+	t.Helper()
+	dir, svc := newRealRepo(t)
+	writeFile(t, dir, "c.txt", "l1\nl2\nl3\nl4\n")
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-m", "seed c.txt")
+	gitRun(t, dir, "checkout", "-b", "feat")
+	gitRun(t, dir, "rm", "-q", "c.txt")
+	gitRun(t, dir, "commit", "-m", "feat drops c.txt")
+	gitRun(t, dir, "checkout", "main")
+	return svc, dir
 }

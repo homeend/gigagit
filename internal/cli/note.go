@@ -14,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -265,6 +266,7 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 	fs := flag.NewFlagSet("note add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	tf := addTargetFlags(fs)
+	pf := addPreviewFlag(fs)
 	hunk := fs.Int("hunk", 0, "anchor to git @@ hunk N of the file (see gg diff --hunks)")
 	newLine := fs.Int("new-line", 0, "anchor to a 1-based line on the NEW side")
 	oldLine := fs.Int("old-line", 0, "anchor to a 1-based line on the OLD side")
@@ -300,6 +302,13 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 	var side model.NoteSide
 	var rng [2]int
 	if link != nil {
+		// Ruling 9: a link and a preview are two ways of naming a target, so
+		// one overriding the other silently is never right — without this
+		// guard `gg note add gg://… --preview X` would drop --preview and
+		// write to the LINK's target.
+		if pf.set() {
+			return previewUsageErr("note add", stderr)
+		}
 		if *tf.file != "" || *tf.rev != "" || *tf.cached || *hunk != 0 || *newLine != 0 || *oldLine != 0 {
 			fmt.Fprintln(stderr, "note add: a gg:// link already names the target and the anchor (drop --file, --rev, --cached, --hunk, --new-line and --old-line)")
 			return 2
@@ -324,6 +333,53 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 		default:
 			fmt.Fprintln(stderr, "note add: the link names a file but no anchor; add :<line> or #<hunk>")
 			return 2
+		}
+	} else if pf.set() {
+		// A merge preview: the note is an ORDINARY committed note on the source
+		// tip (the preview's new side is byte for byte the file there), but its
+		// hunk numbers come from the preview's own patch.
+		if *tf.rev != "" || *tf.cached {
+			return previewUsageErr("note add", stderr)
+		}
+		if strings.TrimSpace(*tf.file) == "" {
+			fmt.Fprintln(stderr, "note add: --preview needs --file <path>")
+			return 2
+		}
+		if *oldLine != 0 {
+			// Spec §1.1: the preview's old side is the merge base, which no
+			// stored address names.
+			fmt.Fprintln(stderr, "note add: notes in a preview anchor on the new side (drop --old-line)")
+			return 2
+		}
+		if (*hunk != 0) == (*newLine != 0) {
+			fmt.Fprintln(stderr, "note add: pass exactly one of --hunk or --new-line")
+			return 2
+		}
+		tgt, terr := resolvePreviewTarget(ctx, svc, *pf.spec)
+		if terr != nil {
+			fmt.Fprintln(stderr, "error:", terr)
+			return 1
+		}
+		addr = model.FileAddress{State: model.StateCommitted, Commit: tgt.Set.Tip, Path: *tf.file}
+		if *newLine != 0 {
+			if *newLine < 1 {
+				fmt.Fprintln(stderr, "note add: --new-line must be a 1-based line number")
+				return 2
+			}
+			side, rng = model.NoteSideNew, [2]int{*newLine, *newLine}
+		} else {
+			// Ruling 1: the PREVIEW's patch, so this agrees with
+			// `gg diff --preview --hunks`. The refusal of a delete-only hunk
+			// lives in domain, shared with MCP.
+			s, r, herr := svc.PreviewHunkAnchor(ctx, tgt.Set, *tf.file, *hunk)
+			if errors.Is(herr, domain.ErrPreviewOldSide) {
+				fmt.Fprintln(stderr, "note add:", herr)
+				return 2
+			}
+			if herr != nil {
+				return noteExit(herr, stderr)
+			}
+			side, rng = s, r
 		}
 	} else {
 		a, err := svc.NoteTarget(ctx, *tf.file, *tf.cached, *tf.rev)
@@ -492,14 +548,26 @@ func resolvedNotesFor(ctx context.Context, svc *domain.Service, file string, cac
 //
 // A reply carries no anchor of its own — it inherits the root's — so its line
 // says "reply" where the root names its file, side and range.
-func renderNoteLine(w io.Writer, r domain.ResolvedNote, indent bool) {
+//
+// status is the word printed for r.Status: the raw one, or the preview's
+// ("outdated" for stale, spec §1.2 — the STORE is unchanged, only the word).
+func renderNoteLine(w io.Writer, r domain.ResolvedNote, indent bool, status string) {
 	if indent {
 		fmt.Fprintf(w, "  %s [%s] reply  %s\n", r.Note.ID, r.Note.Source, r.Note.Summary)
 		return
 	}
 	fmt.Fprintf(w, "%s [%s] %s %s:%d-%d %s  %s\n",
 		r.Note.ID, r.Note.Source, noteTargetLabel(r.Note.Address),
-		r.Note.Side, r.Range[0], r.Range[1], r.Status, r.Note.Summary)
+		r.Note.Side, r.Range[0], r.Range[1], status, r.Note.Summary)
+}
+
+// noteStatusWord is renderNoteLine's status argument: the preview's word when
+// the caller is rendering a merge preview, else the stored one.
+func noteStatusWord(r domain.ResolvedNote, preview bool) string {
+	if preview {
+		return domain.PreviewStatus(r.Status)
+	}
+	return string(r.Status)
 }
 
 // noteTargetLabel names a note's target in one column: the path, prefixed with
@@ -516,6 +584,7 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 	fs := flag.NewFlagSet("note list", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	tf := addTargetFlags(fs)
+	pf := addPreviewFlag(fs)
 	typ := fs.String("type", "all", "user, agent or all")
 	asJSON := fs.Bool("json", false, "emit the wire notes as a JSON array")
 	if err := fs.Parse(args); err != nil {
@@ -536,7 +605,13 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 	}
 	ctx := context.Background()
 	var res []domain.ResolvedNote
+	previewWords := false
 	if link != nil {
+		// Ruling 9: a link and a preview both name a target; combining them is
+		// a usage error, never a silent override (see noteAdd's guard).
+		if pf.set() {
+			return previewUsageErr("note list", stderr)
+		}
 		if *tf.file != "" || *tf.rev != "" || *tf.cached {
 			fmt.Fprintln(stderr, "note list: a gg:// link already names the target (drop --file, --rev and --cached)")
 			return 2
@@ -548,6 +623,21 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 			return noteExit(err, stderr)
 		}
 		res = got
+	} else if pf.set() {
+		if *tf.rev != "" || *tf.cached {
+			return previewUsageErr("note list", stderr)
+		}
+		tgt, terr := resolvePreviewTarget(ctx, svc, *pf.spec)
+		if terr != nil {
+			fmt.Fprintln(stderr, "error:", terr)
+			return 1
+		}
+		got, gerr := previewResolvedNotes(ctx, svc, tgt.Set, strings.TrimSpace(*tf.file))
+		if gerr != nil {
+			return noteExit(gerr, stderr)
+		}
+		res = got
+		previewWords = true
 	} else {
 		got, err := resolvedNotesFor(ctx, svc, *tf.file, *tf.cached, *tf.rev)
 		if err != nil {
@@ -564,7 +654,7 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 	if *asJSON {
 		wires := make([]domain.WireNote, 0, len(kept))
 		for _, r := range kept {
-			wires = append(wires, domain.ToWireNote(r))
+			wires = append(wires, domain.ToWireNotePreview(r, previewWords))
 		}
 		if err := json.NewEncoder(stdout).Encode(wires); err != nil {
 			fmt.Fprintln(stderr, "error:", err)
@@ -573,12 +663,41 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 		return 0
 	}
 	for _, r := range kept {
-		renderNoteLine(stdout, r, false)
+		renderNoteLine(stdout, r, false, noteStatusWord(r, previewWords))
 		for _, rep := range r.Replies {
-			renderNoteLine(stdout, rep, true)
+			renderNoteLine(stdout, rep, true, noteStatusWord(rep, previewWords))
 		}
 	}
 	return 0
+}
+
+// previewResolvedNotes gathers a preview's notes for one path, or — with no
+// --file — for every path the preview carries notes on. PreviewNotesAt needs a
+// path (it resolves against that file's content at the tip), so the no-path
+// case walks PreviewNoteCounts's own byPath keys in a stable order rather than
+// handing it an empty path, which would silently resolve nothing.
+func previewResolvedNotes(ctx context.Context, svc *domain.Service, set domain.PreviewNoteSet, file string) ([]domain.ResolvedNote, error) {
+	if file != "" {
+		return svc.PreviewNotesAt(ctx, set, file)
+	}
+	byPath, _, err := svc.PreviewNoteCounts(ctx, set)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0, len(byPath))
+	for p := range byPath {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	var out []domain.ResolvedNote
+	for _, p := range paths {
+		got, gerr := svc.PreviewNotesAt(ctx, set, p)
+		if gerr != nil {
+			return nil, gerr
+		}
+		out = append(out, got...)
+	}
+	return out, nil
 }
 
 // noteClear deletes every note thread at one address (--file) or every

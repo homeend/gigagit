@@ -39,9 +39,27 @@ type PlannedNote struct {
 	ReplyTo string     // non-empty makes it a reply
 }
 
-// PlanNoteBatch resolves every item to a storable note. cached/rev choose the
-// target diff for the WHOLE batch; author fills in for items that carry none.
-// Every batch note is Source: agent.
+// NoteBatchTarget separates the two things a batch needs from its target: the
+// ADDRESS every item is stored at, and the PATCH a `hunk` item is numbered
+// against. They coincide for every target that existed before merge previews
+// (a commit's address and its own parent→commit diff), but a preview stores on
+// the source tip while numbering merge-base → tip, so they must be expressible
+// apart.
+type NoteBatchTarget struct {
+	Cached bool
+	Rev    string          // the address target ("" = working tree)
+	Hunks  *model.DiffSpec // nil = derive from Cached/Rev through HunkDiffSpec
+}
+
+// PlanNoteBatch is PlanNoteBatchIn for the targets whose address and patch
+// coincide. Kept as-is so every existing caller is untouched.
+func (s *Service) PlanNoteBatch(ctx context.Context, b notebatch.Batch, cached bool, rev, author string, rule NoteSideRule) ([]PlannedNote, int, error) {
+	return s.PlanNoteBatchIn(ctx, b, NoteBatchTarget{Cached: cached, Rev: rev}, author, rule)
+}
+
+// PlanNoteBatchIn resolves every item to a storable note. t chooses the target
+// address and the target patch for the WHOLE batch; author fills in for items
+// that carry none. Every batch note is Source: agent.
 //
 // skipped counts old-side items dropped by NoteSideNewOnly — the caller warns
 // once rather than per item.
@@ -49,7 +67,7 @@ type PlannedNote struct {
 // Every item's range is validated against its side's real length (via
 // NoteRangeCheck) BEFORE it is appended to planned, so a bad range anywhere
 // in the batch fails here — before ApplyNoteBatch performs its first write.
-func (s *Service) PlanNoteBatch(ctx context.Context, b notebatch.Batch, cached bool, rev, author string, rule NoteSideRule) (planned []PlannedNote, skipped int, err error) {
+func (s *Service) PlanNoteBatchIn(ctx context.Context, b notebatch.Batch, bt NoteBatchTarget, author string, rule NoteSideRule) (planned []PlannedNote, skipped int, err error) {
 	addrCache := map[string]model.FileAddress{}
 	for i, it := range b.Items {
 		who := it.Author
@@ -72,13 +90,13 @@ func (s *Service) PlanNoteBatch(ctx context.Context, b notebatch.Batch, cached b
 		}
 		addr, ok := addrCache[it.Path]
 		if !ok {
-			addr, err = s.NoteTarget(ctx, it.Path, cached, rev)
+			addr, err = s.NoteTarget(ctx, it.Path, bt.Cached, bt.Rev)
 			if err != nil {
 				return nil, 0, fmt.Errorf("item %d: %w", i, err)
 			}
 			addrCache[it.Path] = addr
 		}
-		side, rng, aerr := s.planNoteBatchAnchor(ctx, addr, cached, rev, it.Target)
+		side, rng, aerr := s.planNoteBatchAnchor(ctx, addr, bt, it.Target)
 		if aerr != nil {
 			return nil, 0, fmt.Errorf("item %d: %w", i, aerr)
 		}
@@ -97,17 +115,25 @@ func (s *Service) PlanNoteBatch(ctx context.Context, b notebatch.Batch, cached b
 
 // planNoteBatchAnchor turns one parsed target into a side and range: an
 // explicit range is used as-is, a hunk number resolves through the same
-// patch `gg diff --hunks` numbers for this target.
-func (s *Service) planNoteBatchAnchor(ctx context.Context, addr model.FileAddress, cached bool, rev string, t notebatch.Target) (model.NoteSide, [2]int, error) {
+// patch `gg diff --hunks` numbers for this target — or through the explicit
+// one bt carries (a merge preview's merge-base → tip patch).
+func (s *Service) planNoteBatchAnchor(ctx context.Context, addr model.FileAddress, bt NoteBatchTarget, t notebatch.Target) (model.NoteSide, [2]int, error) {
 	switch {
 	case t.NewLine != [2]int{0, 0}:
 		return model.NoteSideNew, t.NewLine, nil
 	case t.OldLine != [2]int{0, 0}:
 		return model.NoteSideOld, t.OldLine, nil
 	case t.Hunk != 0:
-		spec, err := s.HunkDiffSpec(ctx, cached, rev, []string{addr.Path})
-		if err != nil {
-			return "", [2]int{}, err
+		spec := model.DiffSpec{}
+		if bt.Hunks != nil {
+			spec = *bt.Hunks
+			spec.Paths = []string{addr.Path}
+		} else {
+			var err error
+			spec, err = s.HunkDiffSpec(ctx, bt.Cached, bt.Rev, []string{addr.Path})
+			if err != nil {
+				return "", [2]int{}, err
+			}
 		}
 		return s.HunkRange(ctx, spec, addr.Path, t.Hunk)
 	}

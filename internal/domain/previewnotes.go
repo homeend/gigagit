@@ -134,6 +134,33 @@ func PreviewStatus(st model.NoteStatus) string {
 	return string(st)
 }
 
+// ErrPreviewOldSide is a preview anchor that would land on the old side: the
+// preview's old side is the merge base, which no stored address names, so
+// there is nothing to anchor to. The only way to reach it is a hunk that
+// ONLY deletes lines (no new side at all).
+var ErrPreviewOldSide = errors.New("notes in a preview anchor on the new side (that hunk only deletes lines)")
+
+// PreviewHunkAnchor resolves `--hunk N` inside a preview: the side and range a
+// note takes, numbered over the PREVIEW's patch (merge-base → tip, ruling 1),
+// never over the tip commit's own parent→tip diff. It is the ONE place that
+// rule and the old-side refusal live, shared by the CLI's `gg note add
+// --preview --hunk N` and the MCP note tools, so the two cannot drift.
+func (s *Service) PreviewHunkAnchor(ctx context.Context, set PreviewNoteSet, path string, n int) (model.NoteSide, [2]int, error) {
+	if !set.OK() {
+		return "", [2]int{}, ErrPreviewNotFound
+	}
+	spec := set.DiffSpec()
+	spec.Paths = []string{path}
+	side, rng, err := s.HunkRange(ctx, spec, path, n)
+	if err != nil {
+		return "", [2]int{}, err
+	}
+	if side == model.NoteSideOld {
+		return "", [2]int{}, ErrPreviewOldSide
+	}
+	return side, rng, nil
+}
+
 // loadPreviewNotes gathers every stored note the preview covers for one path:
 // a committed, NEW-side note whose commit is in the set. The store is iterated
 // ONCE against a membership map (ruling 3) — never one query per commit.
