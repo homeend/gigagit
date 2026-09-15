@@ -712,7 +712,7 @@ Append to `internal/git/refs.go`:
 // metaTrailerKey in versionrecord.go for why.
 func (r *Repo) VersionRefs(ctx context.Context, prefix string) ([]model.BranchVersion, error) {
 	const format = "%(refname)%00%(parent)%00%(subject)%00" +
-		"%(trailers:key=" + metaTrailerKey + ",valueonly,separator=%20)"
+		"%(trailers:key=" + metaTrailerKey + ",valueonly,separator=%x20)"
 	argv := gitcmd.New("for-each-ref").Arg("--format="+format, prefix).ToArgv()
 	res, err := r.Runner.Run(ctx, "git for-each-ref (gg)", argv)
 	if err != nil {
