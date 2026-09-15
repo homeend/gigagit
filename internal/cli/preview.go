@@ -197,7 +197,12 @@ func previewDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 		ctx := context.Background()
 		tgt, err := resolvePreviewTarget(ctx, svc, spec)
 		if err != nil {
-			fmt.Fprintln(stderr, "error:", err)
+			// Every resolvePreviewTarget error is already a "preview: …"
+			// message (ErrPreviewNotFound, the pair-shape error, the
+			// missing-source/target/state messages below) — print it plain,
+			// matching printPreview's shape for the same conditions, instead
+			// of double-prefixing with "error:".
+			fmt.Fprintln(stderr, err)
 			return 1
 		}
 		return renderDiffSpec(ctx, svc, tgt.Spec, true, *asJSON, false, false, stdout, stderr)

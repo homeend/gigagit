@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,6 +91,84 @@ func TestPreviewUsageErrors(t *testing.T) {
 	}
 	if code, _, errb := runCLI(t, dir, "preview", "rename", "--foo", "x"); code != 2 || !strings.Contains(errb, "foo") {
 		t.Fatalf("rename unknown flag: %d %q", code, errb)
+	}
+}
+
+// gg preview diff --hunks accepts an id, a label, or the raw <source>
+// <target> pair, and all three must number the exact same patch `gg diff
+// --preview <id> --hunks` prints (ruling 1: one construction of the patch).
+// previewRepo sets XDG_STATE_HOME/HOME via t.Setenv, so this stays serial.
+func TestPreviewDiffHunksAddressingForms(t *testing.T) {
+	dir := previewRepo(t)
+	code, id, errb := runCLI(t, dir, "preview", "add", "--label", "login", "feat/x", "main")
+	if code != 0 {
+		t.Fatalf("add: %d %s", code, errb)
+	}
+	id = strings.TrimSpace(id)
+
+	code, want, errb := runCLI(t, dir, "diff", "--preview", id, "--hunks")
+	if code != 0 {
+		t.Fatalf("gg diff --preview: exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(want, "a.txt") || !strings.Contains(want, "  1 @@") {
+		t.Fatalf("want numbered hunks over a.txt, got %q", want)
+	}
+
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"id", []string{"preview", "diff", "--hunks", id}},
+		{"label", []string{"preview", "diff", "--hunks", "login"}},
+		{"pair", []string{"preview", "diff", "--hunks", "feat/x", "main"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			code, out, errb := runCLI(t, dir, c.args...)
+			if code != 0 {
+				t.Fatalf("exit=%d stderr=%s", code, errb)
+			}
+			if out != want {
+				t.Fatalf("hunks diverged from `gg diff --preview --hunks`:\n%s\nvs\n%s", out, want)
+			}
+		})
+	}
+}
+
+func TestPreviewDiffHunksJSON(t *testing.T) {
+	dir := previewRepo(t)
+	code, out, errb := runCLI(t, dir, "preview", "diff", "--hunks", "--json", "feat/x", "main")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	var got []struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("stdout is not the documented JSON array: %v\n%s", err, out)
+	}
+	if len(got) != 1 || got[0].Path != "a.txt" {
+		t.Fatalf("json = %+v, want a.txt", got)
+	}
+}
+
+// The two refusals are pure flag validation ahead of any git/store access, so
+// a minimal, env-isolation-free repo is enough — these run in parallel.
+func TestPreviewDiffHunksJSONRequiresHunks(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	code, _, errb := runCLI(t, dir, "preview", "diff", "--json")
+	if code != 2 || !strings.Contains(errb, "requires") {
+		t.Fatalf("want exit 2 'requires', got %d %q", code, errb)
+	}
+}
+
+func TestPreviewDiffHunksPatchMutuallyExclusive(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	code, _, errb := runCLI(t, dir, "preview", "diff", "--hunks", "--patch")
+	if code != 2 || !strings.Contains(errb, "mutually exclusive") {
+		t.Fatalf("want exit 2 'mutually exclusive', got %d %q", code, errb)
 	}
 }
 
