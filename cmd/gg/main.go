@@ -27,16 +27,19 @@ func main() {
 	if home, err := os.UserHomeDir(); err == nil {
 		cli.InitHomeDir = home
 	}
+	cwdFile, args := extractCwdFile(os.Args[1:])
+	timeTrack, args := extractTimeTrack(args)
+	recordPath, args := extractRecord(args)
 	// `gg open <link>` with no live session in the link's checkout launches the
 	// TUI there. internal/cli must not import internal/tui, so the launcher is
 	// installed here — and it is the SAME launchTUI the no-subcommand path runs,
 	// so the two can never drift (preflight, the error log, the panic dump).
+	// recordPath/cwdFile are threaded through too, so a TUI started this way
+	// still records under `gg --record` and still cd's the shell on exit under
+	// the `gg shell-init` wrapper after a worktree switch.
 	cli.LaunchTUI = func(checkout string, at model.Link) int {
-		return launchTUI(checkout, at, "", "")
+		return launchTUI(checkout, at, recordPath, cwdFile)
 	}
-	cwdFile, args := extractCwdFile(os.Args[1:])
-	timeTrack, args := extractTimeTrack(args)
-	recordPath, args := extractRecord(args)
 	if timeTrack != "" {
 		if err := setupTimeTrack(timeTrack, args); err != nil {
 			fmt.Fprintln(os.Stderr, "gg: --time-track:", err)
