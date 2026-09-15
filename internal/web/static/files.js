@@ -1136,6 +1136,21 @@ function firstChangedRow() {
 }
 
 
+// firstNewSideRow is firstChangedRow restricted to rows a PREVIEW can anchor:
+// its old side is the merge base, so only a new-side row is addressable. Same
+// two tiers as firstChangedRow — the first changed row that has a new side,
+// else any new-side row of the file.
+function firstNewSideRow() {
+  for (const tr of diffChangeBlocks()) {
+    if (tr.dataset.side !== "new") continue;
+    const no = Number(tr.dataset.no);
+    if (no) return { side: "new", no };
+  }
+  const any = $("diff-body").querySelector(`tr[data-no][data-side="new"]`);
+  return any ? { side: "new", no: Number(any.dataset.no) } : null;
+}
+
+
 function noteRowEls() {
   return [...$("diff-body").querySelectorAll("tr.note[data-note]")];
 }
@@ -1231,15 +1246,24 @@ function noteWrite(label, path, body) {
 function addNotePrompt() {
   const q = noteQuery();
   if (!q) return;
-  const at = state.diffRow || firstChangedRow();
+  let at = state.diffRow || firstChangedRow();
   if (!at) return;
   // A preview's old side is the MERGE BASE, which no stored address names, so
   // there is nothing there to anchor to (domain.ErrPreviewOldSide). The refusal
   // is here rather than at the server so the prompt never opens on a line the
   // write would reject afterwards.
   if (state.diffCtx.preview && at.side === "old") {
-    opLine("notes in a preview anchor on the new side", true);
-    return;
+    // Nothing was CLICKED: the old side is just where firstChangedRow landed
+    // (a file whose first change is a pure deletion), not a line the user
+    // named. Fall forward to the file's first new-side row instead of
+    // refusing a file that has a perfectly addressable side. An explicit
+    // old-side click still gets the refusal — there the user meant that line.
+    const fwd = !state.diffRow && firstNewSideRow();
+    if (fwd) at = fwd;
+    if (at.side === "old") {
+      opLine("notes in a preview anchor on the new side", true);
+      return;
+    }
   }
   openPrompt({
     title: `Add note on ${at.side} line ${at.no}`,
@@ -2152,4 +2176,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, setCommitTitle, addNotePrompt, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, setCommitTitle, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };

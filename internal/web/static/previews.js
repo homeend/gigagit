@@ -10,7 +10,7 @@
 import { $, esc, getJSON, postJSON, state } from "./core.js";
 import { openPrompt, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
-import { applyCompareFilter, drillOut, openCompare, renderFiles } from "./files.js";
+import { applyCompareFilter, drillOut, noteBadgeHTML, openCompare, renderFiles } from "./files.js";
 import { extraRows, registerHelp, registerRows } from "./menus.js";
 
 // fetchPreviews loads the list and renders it. A failure leaves an EMPTY list
@@ -63,8 +63,10 @@ function renderPreviews() {
         `<span class="psub">${esc(stateText(e))}</span>` +
         // The pair's review-note total, the ◆N the TUI paints on the row. Its
         // own field, not part of stateText: the counts cell says what the
-        // preview IS, the badge what has been said about it.
-        (e.notes > 0 ? `<span class="notebadge">◆${e.notes}</span>` : "") +
+        // preview IS, the badge what has been said about it. The markup is
+        // files.js's noteBadgeHTML — one badge painter for every list, so a
+        // preview row can never drift from a file row.
+        noteBadgeHTML(e.notes) +
         `</li>`
     )
     .join("");

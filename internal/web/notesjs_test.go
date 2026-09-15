@@ -188,8 +188,12 @@ func TestNotesInertOnAComparisonJS(t *testing.T) {
 	if rerr != nil {
 		t.Fatal(rerr)
 	}
-	if !strings.Contains(string(src), "notes: !cmp") {
-		t.Fatal("openFile must mark a comparison's diffCtx inert for notes (notes: !cmp)")
+	// A PREVIEW is a comparison that IS note-addressable (its new side is the
+	// source tip), so the flag re-arms notes for it: `!cmp || !!prev`. Pinning
+	// the bare "notes: !cmp" would pass with the preview half dropped, which
+	// would silently make every preview inert.
+	if !strings.Contains(string(src), "notes: !cmp || !!prev") {
+		t.Fatal("openFile must mark a comparison inert but RE-ARM a preview (notes: !cmp || !!prev)")
 	}
 }
 
@@ -217,9 +221,46 @@ func TestPreviewDiffArmsNotesInJS(t *testing.T) {
 		"outdated", // the stale class/word a preview uses
 		"state.previewCounts",
 	} {
-		if !strings.Contains(src, want) {
-			t.Fatalf("files.js must contain %q", want)
+		if !hasCodeLineWith(src, want) {
+			t.Fatalf("files.js must contain %q in CODE", want)
 		}
+	}
+}
+
+// hasCodeLineWith reports whether some line of src carries tok OUTSIDE a
+// comment. files.js explains these very rules in prose, so every token below
+// also appears in a comment: a file-wide strings.Contains would still pass
+// with the code deleted. Same line-scoping TestNotesEventReloadsPreviews does,
+// generalised over a token list.
+func hasCodeLineWith(src, tok string) bool {
+	for _, line := range strings.Split(src, "\n") {
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = line[:i]
+		}
+		if strings.Contains(line, tok) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestPreviewAddNoteFallsForwardToTheNewSide: with nothing clicked, `c` in a
+// preview must not be refused just because firstChangedRow landed on a pure
+// DELETION row — the file still has an addressable new side. The fall-forward
+// is only for the unclicked case: an explicit old-side click is still refused,
+// because there the user named the line.
+func TestPreviewAddNoteFallsForwardToTheNewSide(t *testing.T) {
+	t.Parallel()
+	add := jsFunc(t, "files.js", "addNotePrompt")
+	if !strings.Contains(add, "!state.diffRow") {
+		t.Fatal("addNotePrompt must fall forward only when the row was NOT clicked (!state.diffRow)")
+	}
+	if !strings.Contains(add, "firstNewSideRow()") {
+		t.Fatal("addNotePrompt must fall forward to the first new-side row")
+	}
+	fwd := jsFunc(t, "files.js", "firstNewSideRow")
+	if !strings.Contains(fwd, `tr[data-no][data-side="new"]`) {
+		t.Fatal("firstNewSideRow must look for a new-side diff row")
 	}
 }
 
@@ -237,12 +278,23 @@ func TestPreviewRowShowsTheNoteBadgeInJS(t *testing.T) {
 }
 
 // TestOutdatedClassIsStyled: the preview's outdated note must be dimmed the
-// same way a stale one is, or the class is invisible.
+// same way a stale one is, or the class is invisible. Pinned on the RULE, not
+// on the bare class name: ".outdated" appears in the comment above it, and a
+// rule that dims with `opacity` would fade the whole box (border included)
+// instead of recolouring it the way .stale does.
 func TestOutdatedClassIsStyled(t *testing.T) {
 	t.Parallel()
 	css := readStaticSrc(t, "style.css")
-	if !strings.Contains(css, ".outdated") {
-		t.Fatal("style.css must style the outdated note class")
+	i := strings.Index(css, ".notebox.outdated {")
+	if i < 0 {
+		t.Fatal("style.css must carry a .notebox.outdated rule")
+	}
+	rule := css[i : i+strings.Index(css[i:], "}")]
+	if !strings.Contains(rule, "var(--dim)") {
+		t.Fatalf(".notebox.outdated must dim through var(--dim), got %q", rule)
+	}
+	if strings.Contains(rule, "opacity") {
+		t.Fatalf(".notebox.outdated must recolour, not fade the whole box, got %q", rule)
 	}
 }
 
