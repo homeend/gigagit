@@ -298,8 +298,10 @@ const domainDir = "../domain"
 // spellings are matched: the type is a bare Ident inside internal/preflight
 // and a SelectorExpr everywhere else. Split out of preflightProseKeys so the
 // matcher itself is directly testable against a synthetic source — otherwise
-// widening the scan is unfalsifiable while domain declares no Migrate yet
-// (see TestPreflightProseScanMatchesQualifiedText).
+// the widening would be unfalsifiable against real usage (see
+// TestPreflightProseScanMatchesQualifiedText, which proves the matcher
+// against the exact qualified shape domain.Features()'s versions Migrate
+// now uses).
 func collectPreflightProseKeys(t *testing.T, fset *token.FileSet, f *ast.File, keys map[string]bool) {
 	t.Helper()
 	ast.Inspect(f, func(n ast.Node) bool {
@@ -376,11 +378,11 @@ func preflightProseKeys(t *testing.T) map[string]bool {
 }
 
 // TestPreflightProseScanMatchesQualifiedText proves the widened matcher
-// actually sees a qualified preflight.Text{...} — the shape a real
-// domain.Features() Migrate.Describe will use. Without this, the widening is
-// unfalsifiable: today's domain declares no Migrate, so scanning ../domain
-// contributes zero keys and TestPreflightProseKeysInBundles would keep
-// passing even if the matcher never matched anything there.
+// actually sees a qualified preflight.Text{...} — the shape domain.
+// Features()'s versions feature's Migrate.Describe genuinely uses now. Kept
+// as a synthetic-source check (rather than relying on that real Describe
+// alone) so the matcher stays directly testable and the coverage doesn't
+// silently go blind if that call site's shape ever changes.
 func TestPreflightProseScanMatchesQualifiedText(t *testing.T) {
 	t.Parallel()
 	const src = `package domain

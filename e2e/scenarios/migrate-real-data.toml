@@ -1,0 +1,90 @@
+name = "migrate: a real, richly-recorded format-2 version survives both a bare and a --yes migrate untouched"
+
+# What this scenario CANNOT cover, and why: the SPEC's motivating migration
+# case is a FORMAT-1 repo — a branch-version ref with no Gg-Meta trailer,
+# written by a build that predates the Base/Ours/Other preview fields —
+# resolving as Repairable, `gg migrate` listing exactly what it would
+# discard, and `gg migrate --yes` discarding those refs and stamping the
+# format-2 marker. That state cannot be built from this harness:
+#   - `[input] steps` has no primitive that writes an arbitrary ref (no
+#     commit-tree/update-ref step — see e2e/builder.go's Step switch and the
+#     writing-e2e-scenarios skill's schema table), so a legacy-shaped
+#     refs/gg/versions/... ref can't be planted directly.
+#   - Every real op this harness CAN drive (`gg merge`/`gg rebase`/`gg
+#     pull`) runs on THIS build, which writes format 2 and stamps the
+#     refs/gg/meta/versions/2 marker in the SAME write
+#     (internal/engine/snapshot_version.go's snapshotBranchTip calls
+#     StampStoreFormat right after WriteVersionSnapshot) — so a version this
+#     harness produces is never Repairable, by construction.
+# internal/cli/migrate_test.go's TestMigrateOnARealLegacyRepoDiscardsAndStampsFormatTwo
+# covers the Repairable/discard path directly — a real repo, a raw-git
+# marker-less ref, and the REAL `gg migrate` CLI against the real
+# domain.Features() registry (added alongside this scenario, since no test
+# previously drove that path through the live registry: the two existing
+# domain-level tests either use a synthetic preflight.Probes value
+# (TestLegacyVersionsResolveAsRepairable) or inject the Repairable verdict
+# directly (TestPendingMigrationsListsRepairableFeaturesWithTheirRefs)).
+# There is no way to give that same coverage a second, independent exercise
+# through THIS TOML harness without inventing a step the design doesn't
+# have (see above).
+#
+# What IS real and worth proving end to end: `gg migrate` (bare or --yes)
+# must never touch a version that's already at the format this build
+# writes, even a RICHLY recorded one (real Base/Ours/Other from an actual
+# merge, not `migrate.toml`'s bare-ref-adjacent case) — `gg versions show`
+# reads back identically before and after both invocations.
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "feat.txt", content = "feat\n" },
+  { commit = "feat change" },
+  { switch = "main" },
+  { write = "main.txt", content = "main\n" },
+  { commit = "main change" },
+]
+
+[[run]]
+# main diverged from feat, so this is a true merge commit — the merge
+# records main's pre-op tip (Ours), feat's tip as Other, and their merge
+# base (Base), all real, non-fabricated endpoints.
+cmd  = ["merge", "feat"]
+exit = 0
+
+[[run]]
+cmd             = ["versions", "show", "main", "latest"]
+exit            = 0
+stdout_contains = ["A\tfeat.txt"]
+
+[[run]]
+cmd             = ["migrate"]
+exit            = 0
+stdout_contains = ["nothing to migrate"]
+stdout_excludes = ["migrated ", "discards"]
+
+[[run]]
+cmd             = ["migrate", "--yes"]
+exit            = 0
+stdout_contains = ["nothing to migrate"]
+stdout_excludes = ["migrated ", "discards"]
+
+[[run]]
+# Neither migrate call touched the store: the same version, addressed the
+# same way, reads back identically.
+cmd             = ["versions", "show", "main", "latest"]
+exit            = 0
+stdout_contains = ["A\tfeat.txt"]
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"feat.txt" = "feat\n"
+"main.txt" = "main\n"
+
+[[expect.log]]
+subjects = [{ matches = "^Merge" }, "main change", "feat change", "base"]
