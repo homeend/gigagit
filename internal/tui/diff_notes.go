@@ -239,6 +239,12 @@ func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
 	}
 	t += " · " + v.noteAddr.Path + " " + sideMark + strconv.Itoa(r.Range[1])
 	if r.Status == model.NoteStale {
+		if v.previewSet != nil {
+			// In a preview a note whose lines a later commit changed is the
+			// EXPECTED case, so it is named plainly and marked in the gutter
+			// rather than whispered as an edge condition.
+			return "⊘ " + t + " " + i18n.T("(outdated)")
+		}
 		t += " " + i18n.T("(stale)")
 	}
 	return t

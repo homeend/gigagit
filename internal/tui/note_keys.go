@@ -40,6 +40,17 @@ func (m Model) diffNoteAddress() (model.FileAddress, bool) {
 	return v.noteAddr, true
 }
 
+// previewNoteSet is the merge-preview scope of the diff on top, or nil. Like
+// diffNoteAddress it reads the field the LOADER stamped, never Model state at
+// key time.
+func (m Model) previewNoteSet() *domain.PreviewNoteSet {
+	v := m.diffLayer()
+	if v == nil {
+		return nil
+	}
+	return v.previewSet
+}
+
 // loadNotesCmd resolves this diff's notes off the UI thread. The rows are the
 // SHARED cached rows: they are read, wrapped in a domain.Diff value and never
 // mutated.
@@ -55,9 +66,16 @@ func (m Model) loadNotesCmd() tea.Cmd {
 		return nil
 	}
 	svc, tag, rows := m.svc, m.diffTag, v.full
+	// A preview gathers its notes along the branch and resolves them against
+	// the tip's content; every other view reads the address's own notes.
+	set := v.previewSet
 	return func() tea.Msg {
-		ns, err := svc.NotesFor(context.Background(), addr,
-			domain.Diff{Result: textdiff.Result{Rows: rows}})
+		d := domain.Diff{Result: textdiff.Result{Rows: rows}}
+		if set != nil {
+			ns, err := svc.PreviewNotesFor(context.Background(), *set, addr.Path, d)
+			return notesLoadedMsg{tag: tag, notes: ns, err: err}
+		}
+		ns, err := svc.NotesFor(context.Background(), addr, d)
 		return notesLoadedMsg{tag: tag, notes: ns, err: err}
 	}
 }
@@ -89,7 +107,10 @@ func (m Model) noteAnchorsAtCursor() []noteAnchor {
 	if r.RightNo > 0 {
 		out = append(out, noteAnchor{model.NoteSideNew, r.RightNo, model.NoteContextHash([]string{r.Right})})
 	}
-	if r.LeftNo > 0 {
+	// A preview's old side is the MERGE BASE, which no stored address names,
+	// so it offers no anchor at all — the same rule `gg review A..B` follows
+	// (reviewImportTarget: ranges anchor to the tip, new side only).
+	if r.LeftNo > 0 && v.previewSet == nil {
 		out = append(out, noteAnchor{model.NoteSideOld, r.LeftNo, model.NoteContextHash([]string{r.Left})})
 	}
 	return out
@@ -354,6 +375,13 @@ func (m Model) nextNotedFile(dir int) (int, bool) {
 // notedFilePath reports whether a path carries notes at the open diff's
 // provenance: by path for a working-tree diff, by "<sha>:<path>" for a commit.
 func (m Model) notedFilePath(path string) bool {
+	if m.filesPreviewSet != nil {
+		// A preview gathers notes from every commit on the branch, so the
+		// tip-keyed ByCommitPath map would miss most of them — and a note left
+		// on a commit the branch no longer contains is not this preview's at
+		// all, so the step passes its file by.
+		return m.filesPreviewCounts[path] > 0
+	}
 	if v := m.diffLayer(); v != nil && v.rev != "" {
 		return m.noteCounts.ByCommitPath[v.rev+":"+path] > 0
 	}

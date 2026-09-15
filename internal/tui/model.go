@@ -139,6 +139,12 @@ type Model struct {
 	noteCounts    domain.NoteCounts // badge counts (srcNotes); zero value = no badges
 	notesAgentOff bool              // `a`: hide agent-written notes for this session
 
+	// filesPreviewSet / filesPreviewCounts are the open preview's note scope
+	// and its per-path badge counts; nil/empty when the files view is not
+	// showing a preview. Stamped onto each diff the view opens.
+	filesPreviewSet    *domain.PreviewNoteSet
+	filesPreviewCounts map[string]int
+
 	previews    []previewRow      // saved merge previews + live summaries (srcPreviews)
 	previewOpen *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
 	previewGen  int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)

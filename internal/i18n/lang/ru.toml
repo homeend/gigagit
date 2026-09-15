@@ -1828,3 +1828,8 @@ name = "Русский"
 "the %s feature is unavailable in this repository: %s" = "функция %s недоступна в этом репозитории: %s"
 "Upgrade to git %s or newer to use this feature." = "Обновите git до версии %s или новее, чтобы использовать эту функцию."
 "Upgrade gg to use this feature." = "Обновите gg, чтобы использовать эту функцию."
+
+# Notes in merge previews
+"notes in a preview anchor on the new side" = "заметки в предпросмотре привязываются к новой стороне"
+"(outdated)" = "(устарело)"
+"Remove all notes on %s (%d of %d)." = "Удалить все заметки на %s (%d из %d)."

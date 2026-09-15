@@ -708,7 +708,16 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		return m, m.loadCompareDiffCmd(left, right, l)
 	}
 	if m.inCompareMode() {
-		m.diffLayer().context = m.filesContext
+		dv := m.diffLayer()
+		dv.context = m.filesContext
+		// A merge preview is a compare whose NEW side is the source tip, so
+		// its rows ARE note-addressable at that commit — unlike every other
+		// compare, whose old side no stored address names. Stamp the address
+		// and the set here, where the opener knows which compare this is.
+		if set := m.filesPreviewSet; set != nil {
+			dv.previewSet = set
+			dv.noteAddr = model.FileAddress{State: model.StateCommitted, Commit: set.Tip, Path: l.path}
+		}
 		m.diffTag = "cmp:" + m.filesLeft.CacheTag() + ":" + m.filesRight.CacheTag() + ":" + l.path
 		return m, m.loadCompareDiffCmd(m.filesLeft, m.filesRight, l)
 	}

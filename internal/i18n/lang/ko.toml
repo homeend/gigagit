@@ -1828,3 +1828,8 @@ name = "한국어"
 "the %s feature is unavailable in this repository: %s" = "%s 기능은 이 저장소에서 사용할 수 없습니다: %s"
 "Upgrade to git %s or newer to use this feature." = "이 기능을 사용하려면 git %s 이상으로 업그레이드하세요."
 "Upgrade gg to use this feature." = "이 기능을 사용하려면 gg를 업그레이드하세요."
+
+# Notes in merge previews
+"notes in a preview anchor on the new side" = "미리보기의 노트는 새 쪽에 고정됩니다"
+"(outdated)" = "(오래됨)"
+"Remove all notes on %s (%d of %d)." = "%s의 노트를 모두 삭제합니다 (%d / %d)."
