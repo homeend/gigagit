@@ -77,18 +77,33 @@ func (op SmartPull) Run(ctx context.Context, deps OpDeps) (Result, error) {
 			if err := deps.escalate(ctx); err != nil {
 				return Result{}, err
 			}
-			return op.checkoutPull(ctx, deps, remote, target, "", false)
+			return op.checkoutPull(ctx, deps, remote, target, "")
 		}
-		// FastForwardRef is `git fetch <remote> <branch>:<branch>` — an explicit
-		// refspec, so it updates refs/heads/<branch> and leaves the
-		// remote-tracking ref to chance. Snapshotting before it would freeze a
-		// STALE Other (the previous fetch's origin/<branch>), which is the one
-		// thing a frozen record must never do. Fetch first so Other is the tip
-		// this pull is actually about to land on; the snapshot is skipped
-		// entirely when that fetch fails rather than recorded against old data.
-		fetchThenSnapshotPull(ctx, deps, remote, target)
+		// ONE fetch on this path. FastForwardRef IS a fetch (`git fetch
+		// <remote> <branch>:<branch>`); the plain fetch that used to precede it
+		// existed only so the snapshot could read a fresh
+		// refs/remotes/<remote>/<branch> as Other. It never needed to: once
+		// FastForwardRef succeeds the branch tip IS the upstream tip this pull
+		// landed on, so Other is simply the post-fetch LOCAL tip and the
+		// remote-tracking ref — which an explicit refspec leaves to chance — is
+		// out of the picture entirely. On a ~100GB monorepo with background
+		// auto-pull, halving the round-trips per branch is the whole point.
+		// (git still updates refs/remotes/<remote>/<branch> opportunistically
+		// under a default refspec, so the usual ahead/behind markers stay
+		// honest; what is gone is the incidental refresh of every OTHER
+		// branch's tracking ref, which a one-branch pull never promised.)
+		//
+		// The order inverts accordingly: capture Ours BEFORE the fetch (no
+		// network), fetch, then record with the branch already moved — which is
+		// why this is the one snapshotBranchTipAt call site.
+		ours := tipOf(ctx, deps, target)
 		deps.emit(ctx, Progress{Step: "fast-forwarding ref", Detail: target})
 		if err := repo.FastForwardRef(ctx, remote, target); err == nil {
+			// Ours doubles as the snapshotted tip: this path records the state
+			// the fast-forward replaced. Target keeps the remote-tracking NAME
+			// for labelling even though Other is now read locally.
+			snapshotBranchTipAt(ctx, deps, target, "pull", ours, ours,
+				tipOf(ctx, deps, target), target, remote+"/"+target)
 			return Result{Changed: true}.WithSummary("fast-forwarded %s", target), nil
 		}
 		resp, derr := deps.decide(ctx, PromptReq("not-fast-forwardable", "Cannot fast-forward %s in the background", []string{"checkout-and-resolve", "abort"}, target))
@@ -102,15 +117,15 @@ func (op SmartPull) Run(ctx context.Context, deps OpDeps) (Result, error) {
 			if err := deps.escalate(ctx); err != nil {
 				return Result{}, err
 			}
-			// Already fetched + snapshotted above, so checkoutPull must not
-			// repeat either: a second record would be an identical duplicate
-			// (and cost another network round-trip).
-			return op.checkoutPull(ctx, deps, remote, target, cur, true)
+			// FastForwardRef failed, so the branch never moved and nothing was
+			// recorded above — checkoutPull does its own fetch + snapshot, as
+			// on every other path into it.
+			return op.checkoutPull(ctx, deps, remote, target, cur)
 		}
 		return Result{}.WithSummary("aborted: %s not fast-forwardable", target), nil
 	}
 
-	return op.checkoutPull(ctx, deps, remote, target, "", false)
+	return op.checkoutPull(ctx, deps, remote, target, "")
 }
 
 // fetchThenSnapshotPull records branch's pre-pull version with a FRESH Other.
@@ -120,6 +135,10 @@ func (op SmartPull) Run(ctx context.Context, deps OpDeps) (Result, error) {
 // after-side comparison then reports the commits this pull brought in as
 // drift. A failed fetch skips the snapshot rather than recording stale
 // endpoints — like everything else here, best-effort: it never fails the pull.
+//
+// Only checkoutPull uses this now. The background fast-forward records
+// through snapshotBranchTipAt instead, after its single fetch, since there
+// the fetch that lands the update is also the one that reveals Other.
 func fetchThenSnapshotPull(ctx context.Context, deps OpDeps, remote, branch string) {
 	deps.emit(ctx, Progress{Step: "fetching", Detail: remote})
 	if err := deps.Repo.Fetch(ctx, remote); err != nil {
@@ -181,10 +200,11 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 }
 
 // checkoutPull pulls target by checking it out (or pulling inside the
-// worktree that already has it). snapped says the caller has already fetched
-// and recorded target's pre-op version — only the background ff-ref path,
-// which fetches to get a fresh Other before trying FastForwardRef, passes true.
-func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, target, returnTo string, snapped bool) (Result, error) {
+// worktree that already has it). It always fetches and records target's
+// pre-op version itself: every caller reaches here with the branch still
+// unmoved (the background ff-ref path only falls through when its own fetch
+// FAILED), so there is never a record to reuse.
+func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, target, returnTo string) (Result, error) {
 	repo := deps.Repo
 
 	// Fetch + snapshot FIRST, above the worktree branch: both branches below
@@ -193,9 +213,7 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 	// fetchThenSnapshotPull). Fetching before the stash/switch is safe —
 	// a fetch touches no worktree — and the Pull below re-fetches anyway,
 	// so this is not an extra network round-trip in the failure case.
-	if !snapped {
-		fetchThenSnapshotPull(ctx, deps, remote, target)
-	}
+	fetchThenSnapshotPull(ctx, deps, remote, target)
 
 	wt, err := repo.WorktreeForBranch(ctx, target)
 	if err != nil {
