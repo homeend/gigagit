@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,6 +19,34 @@ func previewLinkFor(dir, path string) string {
 	return l + "@main...feat/x"
 }
 
+// advanceSourceBranch adds a SECOND commit to feat/x that touches a
+// DIFFERENT file (b.txt) than previewRepo's first commit (a.txt).
+//
+// Without this, previewRepo's source branch is a single commit, so the
+// preview's patch (merge-base..tip) and the tip's own commit diff
+// (parent..tip) are the IDENTICAL range by construction — a test comparing
+// the two would pass even if the preview-link code path were bypassed
+// entirely and fell back to the tip's own commit diff / a plain
+// NotesAt(tip) lookup. After this call:
+//   - a.txt's own change lives ONLY in the first commit, so it is present in
+//     the preview's patch (which spans both commits) but ABSENT from the
+//     tip's own commit diff (parent..tip is the second commit alone) — a
+//     hunk anchored on a.txt can only resolve through the preview's patch.
+//   - a note stored on a.txt while the tip was still the first commit lives
+//     on a commit that is no longer the tip, so it is visible only through
+//     the preview's along-the-branch note gather (PreviewNotesAt), never
+//     through a plain NotesAt(current-tip) lookup.
+func advanceSourceBranch(t *testing.T, dir string) {
+	t.Helper()
+	gitRun(t, dir, "checkout", "-q", "feat/x")
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-q", "-m", "add b")
+	gitRun(t, dir, "checkout", "-q", "main")
+}
+
 // A table over every §2.3 consumer: the preview link and --preview must
 // produce exactly the same bytes / the same stored note (ruling 5).
 func TestPreviewLinkMatchesThePreviewFlag(t *testing.T) {
@@ -25,17 +54,30 @@ func TestPreviewLinkMatchesThePreviewFlag(t *testing.T) {
 	fileLink := previewLinkFor(dir, "a.txt")
 	// T4a: previewRepo seeds no notes, so the "note list" row below would be
 	// a vacuous comparison (two empty lists always match). Seed one note via
-	// --preview first, so both sides must actually carry it.
+	// --preview FIRST — while the source tip is still the commit that adds
+	// a.txt, so the note lands on it — and only THEN advance the source
+	// branch (fix round 1: see advanceSourceBranch's doc comment). This
+	// makes every row below discriminating: a bypassed link would show a
+	// smaller diff (missing a.txt's own commit) and an empty note list
+	// (the note now lives on a non-tip commit), not merely an untested-but-
+	// coincidentally-equal one.
 	if code, _, errb := runCLI(t, dir, "note", "add", "--preview", "main...feat/x", "--file", "a.txt", "--new-line", "1", "--summary", "seeded preview note"); code != 0 {
 		t.Fatalf("seed note: %d %s", code, errb)
 	}
+	advanceSourceBranch(t, dir)
 	cases := []struct {
 		name     string
 		flagArgs []string
 		linkArgs []string
 	}{
-		{"diff", []string{"diff", "--preview", "main...feat/x"}, []string{"diff", fileLink}},
-		{"diff --hunks --json", []string{"diff", "--preview", "main...feat/x", "--hunks", "--json"}, []string{"diff", fileLink, "--hunks", "--json"}},
+		// -- a.txt scopes the flag path to the same single file the link
+		// path is already scoped to (fileLink carries /a.txt) — otherwise,
+		// after advanceSourceBranch, the flag's UNSCOPED preview diff would
+		// legitimately include b.txt while the link's diff would not, and
+		// the two would disagree for a reason that has nothing to do with
+		// the adapter.
+		{"diff", []string{"diff", "--preview", "main...feat/x", "--", "a.txt"}, []string{"diff", fileLink}},
+		{"diff --hunks --json", []string{"diff", "--preview", "main...feat/x", "--hunks", "--json", "--", "a.txt"}, []string{"diff", fileLink, "--hunks", "--json"}},
 		{"note list", []string{"note", "list", "--preview", "main...feat/x", "--file", "a.txt"}, []string{"note", "list", fileLink}},
 	}
 	for _, c := range cases {
@@ -63,6 +105,11 @@ func TestPreviewLinkMatchesThePreviewFlag(t *testing.T) {
 // PREVIEW's patch — exactly as --preview --hunk N does.
 func TestNoteAddThroughAPreviewLinkStoresOnTheTip(t *testing.T) {
 	dir := previewRepo(t)
+	// Fix round 1: advance the source branch so a.txt's hunk exists ONLY in
+	// the preview's patch, not in the tip's own commit diff (see
+	// advanceSourceBranch). Without this, #1 would resolve identically
+	// whether or not previewTargetFromLink's adapter ran.
+	advanceSourceBranch(t, dir)
 	if code, _, errb := runCLI(t, dir, "note", "add", previewLinkFor(dir, "a.txt")+"#1", "--summary", "linked preview note"); code != 0 {
 		t.Fatalf("note add: %d %s", code, errb)
 	}
@@ -103,9 +150,16 @@ func TestShowRefusesAPreviewLink(t *testing.T) {
 // note apply through a preview link imports onto the tip, new side only.
 func TestNoteApplyThroughAPreviewLinkImportsOntoTheTip(t *testing.T) {
 	dir := previewRepo(t)
-	// The agent-context v1 shape notebatch.Parse accepts (see
-	// internal/notebatch/notebatch.go's doc comment and noteapply_test.go).
-	batch := `{"files":[{"path":"a.txt","annotations":[{"newRange":[1,1],"summary":"batched"}]}]}`
+	// Fix round 1: advance the source branch (see advanceSourceBranch) and
+	// anchor the batch item by HUNK, not newRange. A newRange item never
+	// touches NoteBatchTarget.Hunks — the ONE field that distinguishes the
+	// preview's patch from the tip's own commit diff — so it could pass
+	// unchanged whether or not the preview arm in noteapply.go ran. The
+	// "comment apply" shape's hunk field (notebatch's rawComment) is what
+	// routes through planNoteBatchAnchor's t.Hunk != 0 case, which consults
+	// bt.Hunks.
+	advanceSourceBranch(t, dir)
+	batch := `{"comments":[{"filePath":"a.txt","hunk":1,"summary":"batched"}]}`
 	code, _, errb := runCLIStdin(t, dir, batch, "note", "apply", previewLinkFor(dir, ""), "--stdin")
 	if code != 0 {
 		t.Fatalf("note apply: %d %s", code, errb)
@@ -120,6 +174,13 @@ func TestNoteApplyThroughAPreviewLinkImportsOntoTheTip(t *testing.T) {
 // note clear with a preview FILE link clears the tip's notes for that path;
 // a BARE preview link is refused by noteLinkShape exactly as a bare commit
 // link is (a repository link cannot carry a target here).
+//
+// Fix round 1: this test does NOT need advanceSourceBranch / a hunk anchor.
+// noteClear never calls previewTargetFromLink — it clears by link.Addr (the
+// FileAddress {Committed, tip, path} Task 2/3 already resolve), exactly the
+// same address a plain commit link would carry. There is no adapter branch
+// here to bypass, so the single-commit previewRepo fixture is not vacuous
+// for what this test actually exercises (Addr resolving to the tip).
 func TestNoteClearWithPreviewLinks(t *testing.T) {
 	dir := previewRepo(t)
 	if code, _, errb := runCLI(t, dir, "note", "add", previewLinkFor(dir, "a.txt")+":1", "--summary", "to clear"); code != 0 {
