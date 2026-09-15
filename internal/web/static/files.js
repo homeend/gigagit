@@ -1137,18 +1137,31 @@ function firstChangedRow() {
 
 
 // firstNewSideRow is firstChangedRow restricted to rows a PREVIEW can anchor:
-// its old side is the merge base, so only a new-side row is addressable. Same
-// two tiers as firstChangedRow — a change BLOCK HEAD that has a new side
-// (diffChangeBlocks returns heads only, so a block whose head is a pure
-// deletion is skipped here and caught by tier two), else any new-side row of
-// the file. Tier two is a deliberate fallback, not a precise landing: a file
-// whose every change starts with a deletion anchors on its first new-side
-// row, which beats refusing `c` outright.
+// its old side is the merge base, so only a new-side row is addressable.
+//
+// It WALKS EACH BLOCK, it does not just test the head. diffChangeBlocks
+// returns the first row of each contiguous change run, and in the unified
+// layout a modified line renders as a del row then an add row — so every
+// modification block's head is `del`/old-side. Testing heads alone found
+// nothing on such a file and fell through to tier two, which landed on the
+// first new-side row of the WHOLE table: a context line ("Add note on new
+// line 1") instead of the modified line the reviewer is looking at. So each
+// head walks forward over its own run (note rows ride inside a block and are
+// skipped; a `same` row ends it) and the first new-side row of the first
+// block that has one wins.
+//
+// Tier two — any new-side row of the file — remains for a file whose every
+// change is a pure deletion; anchoring on a context line still beats refusing
+// `c` outright. A file with no new-side row at all returns null, and the
+// caller keeps the old-side refusal.
 function firstNewSideRow() {
-  for (const tr of diffChangeBlocks()) {
-    if (tr.dataset.side !== "new") continue;
-    const no = Number(tr.dataset.no);
-    if (no) return { side: "new", no };
+  for (const head of diffChangeBlocks()) {
+    for (let tr = head; tr; tr = tr.nextElementSibling) {
+      if (tr.classList.contains("note")) continue; // a ◆ box, not a diff row
+      if (tr.classList.contains("same")) break; // the run ended
+      const no = Number(tr.dataset.no);
+      if (tr.dataset.side === "new" && no) return { side: "new", no };
+    }
   }
   const any = $("diff-body").querySelector(`tr[data-no][data-side="new"]`);
   return any ? { side: "new", no: Number(any.dataset.no) } : null;

@@ -262,6 +262,93 @@ func TestPreviewAddNoteFallsForwardToTheNewSide(t *testing.T) {
 	if !strings.Contains(fwd, `tr[data-no][data-side="new"]`) {
 		t.Fatal("firstNewSideRow must look for a new-side diff row")
 	}
+	// It must WALK each change block, not just test its head: in the unified
+	// layout a modification block's head is the del/old row, so a head-only
+	// test finds nothing and falls through to the whole-table fallback — which
+	// lands on a context line. See TestPreviewFirstNewSideRowWalksTheBlockJS.
+	if !strings.Contains(fwd, "nextElementSibling") {
+		t.Fatal("firstNewSideRow must walk a block's rows, not just its head")
+	}
+}
+
+// TestPreviewFirstNewSideRowWalksTheBlockJS runs the SHIPPED firstNewSideRow
+// (and the real diffChangeBlocks it calls) under node over a stub table, so
+// the walk is exercised rather than merely grepped for.
+//
+// The regression this pins, seen in a browser probe: a modified file renders
+// same/same/same, then del(old 4), add(new 4) — the block's HEAD is the del
+// row, so testing heads alone found no new side and the whole-table fallback
+// answered "new line 1", a context line, instead of the modified line 4.
+func TestPreviewFirstNewSideRowWalksTheBlockJS(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	fns := jsFunc(t, "files.js", "firstNewSideRow") + "\n" + jsFunc(t, "files.js", "diffChangeBlocks")
+
+	// A minimal row/table stub: classList.contains, dataset and the sibling
+	// chain are the only DOM the two functions touch, and the two selectors
+	// they pass are honoured by meaning ("not a note row", "a new-side row").
+	stub := `
+let ROWS = [];
+const mkRow = (cls, side, no) => ({
+  classList: { contains: (c) => cls.split(" ").includes(c) },
+  dataset: side ? { side, no: String(no) } : {},
+  nextElementSibling: null,
+});
+const setTable = (specs) => {
+  ROWS = specs.map(([cls, side, no]) => mkRow(cls, side, no));
+  ROWS.forEach((r, i) => (r.nextElementSibling = ROWS[i + 1] || null));
+};
+const $ = () => ({
+  querySelectorAll: () => ROWS.filter((r) => !r.classList.contains("note")),
+  querySelector: () => ROWS.find((r) => r.dataset.side === "new" && Number(r.dataset.no)) || null,
+});
+`
+	script := stub + fns + `
+const at = (specs) => { setTable(specs); return firstNewSideRow(); };
+console.log(JSON.stringify({
+  // The probe's own file: the modification block's head is the del row.
+  unified: at([["same","new",1],["same","new",2],["same","new",3],
+               ["del","old",4],["add","new",4],["same","new",5]]),
+  // A ◆ note row rides inside the block and must not end the walk.
+  withNote: at([["same","new",1],["del","old",4],["note",null,0],["add","new",4]]),
+  // Deletion-only change, but the file has context: the fallback answers.
+  delOnly: at([["same","new",1],["del","old",2],["same","new",2]]),
+  // No new side anywhere: null, so the caller keeps the refusal.
+  noNewSide: at([["del","old",1],["del","old",2]]),
+  // Side-by-side layout: the changed row already carries its new side.
+  split: at([["same","new",1],["change","new",2],["same","new",3]]),
+}));
+`
+	out, err := exec.Command(node, "-e", script).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	type row struct {
+		Side string
+		No   int
+	}
+	var got struct{ Unified, WithNote, DelOnly, NoNewSide, Split *row }
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("decode %q: %v", out, err)
+	}
+	if got.Unified == nil || got.Unified.Side != "new" || got.Unified.No != 4 {
+		t.Fatalf("the unified del/add pair must anchor on new line 4, got %+v", got.Unified)
+	}
+	if got.WithNote == nil || got.WithNote.No != 4 {
+		t.Fatalf("a note row inside the block must not end the walk, got %+v", got.WithNote)
+	}
+	if got.DelOnly == nil || got.DelOnly.No != 1 {
+		t.Fatalf("a deletion-only change falls back to the file's first new-side row, got %+v", got.DelOnly)
+	}
+	if got.NoNewSide != nil {
+		t.Fatalf("a file with no new side must answer null (the caller refuses), got %+v", got.NoNewSide)
+	}
+	if got.Split == nil || got.Split.No != 2 {
+		t.Fatalf("a side-by-side changed row anchors on its own new side, got %+v", got.Split)
+	}
 }
 
 // TestPreviewRowShowsTheNoteBadgeInJS: the sidebar row carries the preview's

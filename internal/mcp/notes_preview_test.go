@@ -237,6 +237,75 @@ func TestPreviewSetNamesTheStateWord(t *testing.T) {
 	}
 }
 
+// hunk ALONE is a full anchor under preview: the number is resolved over the
+// preview's OWN patch (merge-base → tip, domain.PreviewHunkAnchor), never the
+// tip commit's parent→tip patch, and the stored note lands on that hunk's
+// new-side range. Read back through the read path a client would use.
+func TestNoteAddWithAPreviewAnchorsOnAHunk(t *testing.T) {
+	e := newTestEnv(t)
+	tip, _ := seedPreviewBranch(t, e)
+	ctx := context.Background()
+
+	out := e.call(t, "gg_note_add", map[string]any{
+		"preview": "main...feat", "file": "a.txt", "hunk": 1, "summary": "the whole hunk",
+	})
+	note, _ := out["note"].(map[string]any)
+	id, _ := note["id"].(string)
+	if id == "" {
+		t.Fatalf("gg_note_add --hunk reply = %v", out)
+	}
+
+	// The anchor the preview's own patch gives for hunk 1 — computed here so
+	// the test pins "the note used THIS patch", not a hard-coded pair.
+	set, err := e.svc.PreviewNotes(ctx, "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSide, wantRange, err := e.svc.PreviewHunkAnchor(ctx, set, "a.txt", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wantSide != model.NoteSideNew {
+		t.Fatalf("fixture broken: the preview's hunk 1 must anchor new-side, got %q", wantSide)
+	}
+	// A hunk anchor is the hunk's whole new-side SPAN (here [1 2]: the context
+	// line plus the rewritten one). Assert it really is a span, or a silent
+	// regression to "hunk means its first changed line" would still pass.
+	if wantRange[0] == wantRange[1] {
+		t.Fatalf("fixture broken: hunk 1 must span >1 line to differ from --new-line, got %v", wantRange)
+	}
+
+	stored, err := e.svc.NoteGet(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantAddr := model.FileAddress{State: model.StateCommitted, Commit: tip, Path: "a.txt"}
+	if stored.Address != wantAddr {
+		t.Fatalf("address = %+v, want the tip's %+v", stored.Address, wantAddr)
+	}
+	if stored.Side != model.NoteSideNew || stored.Range != wantRange {
+		t.Fatalf("anchor = %q %v, want new %v", stored.Side, stored.Range, wantRange)
+	}
+
+	// …and it comes back on the preview's read path, resolved against the tip.
+	got, err := e.svc.PreviewNotesAt(ctx, set, "a.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, r := range got {
+		if r.Note.ID == id {
+			found = true
+			if r.Range != wantRange {
+				t.Fatalf("resolved range = %v, want %v", r.Range, wantRange)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("the hunk-anchored note must show in the preview, got %+v", got)
+	}
+}
+
 // hunk and new_line are MUTUALLY EXCLUSIVE under preview too: the ordinary
 // arm (noteAnchor) and the CLI both refuse two anchors, so the preview arm
 // must not silently prefer one of them and store a note at a line the caller
