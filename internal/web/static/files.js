@@ -81,6 +81,8 @@ function enterFilesStage() {
   state.diffCtx = null;
   setFilesMeta(""); // every stage starts without a date; only a commit open sets one
   $("files-title").dataset.sha = ""; // …and without a commit id; see setCommitTitle
+  $("files-title").dataset.subject = "";
+  $("files-title").dataset.short = "";
 }
 
 
@@ -182,10 +184,14 @@ $("diff-header").addEventListener("contextmenu", (e) => {
 });
 
 
-function setFilesMeta(text) {
+function setFilesMeta(text, parts) {
   const el = $("files-meta");
   el.textContent = text || "";
   el.classList.toggle("hidden", !text);
+  // The pieces ride along on the element so the header's menu can copy the
+  // date and the author separately without re-parsing the rendered line.
+  el.dataset.date = (parts && parts.date) || "";
+  el.dataset.author = (parts && parts.author) || "";
 }
 
 
@@ -201,25 +207,54 @@ function setFilesMeta(text) {
 function setCommitTitle(hash, short, subject) {
   const el = $("files-title");
   el.dataset.sha = hash || "";
+  el.dataset.subject = subject || "";
+  el.dataset.short = short || ""; // copy what is SHOWN, not a second abbreviation
   el.innerHTML =
-    (short ? `<span class="csha" title="right-click to copy the commit id">${esc(short)}</span> ` : "") +
+    (short ? `<span class="csha" title="right-click the header to copy the commit id, title, date or author">${esc(short)}</span> ` : "") +
     esc(subject || "");
 }
 
 
+// The header's menu does not depend on WHICH part of it was clicked: an open
+// commit offers everything the header knows, in one list. Aiming at the sha
+// to get the sha and at the date to get the date is a rule you have to learn
+// and can get wrong; a single list is read at a glance.
+//
+// A SELECTION overrides it. Once text is highlighted — a date-and-author
+// drag, a span across the title and the sha — "copy" can only mean that text,
+// and offering five other copies next to it would be noise.
 $("files-header").addEventListener("contextmenu", (e) => {
-  const hash = $("files-title").dataset.sha;
+  const title = $("files-title");
+  const hash = title.dataset.sha;
   // The MODE decides, not just the stored sha: a stage that writes the title
   // through some other path would otherwise offer the previous commit's id.
-  if (!hash || state.filesMode !== "commit" || !e.target.closest("#files-title")) return;
+  if (state.filesMode !== "commit" || !hash) return; // no commit here: the browser's own menu
+  // Read now, into the closure: clicking a menu row moves focus and the
+  // selection is gone by the time act() runs.
+  const sel = window.getSelection();
+  const text = sel && !sel.isCollapsed && $("files-header").contains(sel.anchorNode) ? sel.toString() : "";
   e.preventDefault();
-  const short = hash.slice(0, 9);
-  const rows = e.target.closest(".csha")
-    ? [
-        { label: "copy short commit id", act: () => copyText(short, "commit id " + short) },
-        { label: "copy commit id", act: () => copyText(hash, "commit id " + short) },
-      ]
-    : [{ label: "copy commit id", act: () => copyText(hash, "commit id " + short) }];
+  if (text) {
+    showCtxMenu([{ label: "copy", act: () => copyText(text, "selection") }], e.clientX, e.clientY);
+    return;
+  }
+  // The short form the row SHOWS (git's own abbreviation, handed over with
+  // the feed row) — copying a different length than the one on screen reads
+  // as a different commit. A commit opened by hash has no row, so fall back.
+  const short = title.dataset.short || hash.slice(0, 9);
+  const meta = $("files-meta");
+  const rows = [
+    { label: "copy short commit id", act: () => copyText(short, "commit id " + short) },
+    { label: "copy commit id", act: () => copyText(hash, "commit id " + short) },
+  ];
+  // A commit opened by hash (a sidebar tag, a reflog entry) may have a title
+  // that is not a subject, and a date the server could not resolve — each row
+  // appears only when there is something behind it to copy.
+  if (title.dataset.subject) {
+    rows.push({ label: "copy commit title", act: () => copyText(title.dataset.subject, "commit title") });
+  }
+  if (meta.dataset.date) rows.push({ label: "copy date", act: () => copyText(meta.dataset.date, "date") });
+  if (meta.dataset.author) rows.push({ label: "copy author", act: () => copyText(meta.dataset.author, "author") });
   showCtxMenu(rows, e.clientX, e.clientY);
 });
 
@@ -233,11 +268,22 @@ $("files-header").addEventListener("contextmenu", (e) => {
 // function against the Go formatter; commitmetajs_test.go is what keeps it
 // true, so keep the section pure (no DOM) and the markers in place.
 function commitMetaLine(body) {
-  if (!body || !body.time) return "";
+  const { date, author } = commitMetaParts(body);
+  if (!date) return "";
+  return author ? `${date} · ${author}` : date;
+}
+
+
+// commitMetaParts is the same stamp before it is joined: the header's
+// right-click menu copies the date and the author on their own, and pulling
+// them back out of the rendered line would mean parsing around a " · " that
+// an author name may itself contain.
+function commitMetaParts(body) {
+  if (!body || !body.time) return { date: "", author: "" };
   const d = new Date(body.time * 1000);
   const p = (n) => String(n).padStart(2, "0");
-  const s = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-  return body.author ? `${s} · ${body.author}` : s;
+  const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return { date, author: body.author || "" };
 }
 // --- end commit meta line ---
 
@@ -2149,4 +2195,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, setCommitTitle, addNotePrompt, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, setCommitTitle, commitMetaParts, addNotePrompt, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };

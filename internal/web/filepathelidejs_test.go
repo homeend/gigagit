@@ -148,3 +148,56 @@ func TestRefreshButtonStyled(t *testing.T) {
 		}
 	}
 }
+
+// The file-list header's right-click menu is ONE list for the whole header —
+// clicking the sha versus the date must not change what is offered — and a
+// selection anywhere in it collapses the menu to a plain "copy". Both halves
+// are easy to lose to a well-meant "make the menu contextual" edit, and the
+// symptom is only ever a missing row.
+func TestCommitHeaderMenuRows(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "files.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, want := range []string{
+		`"copy short commit id"`,
+		`"copy commit id"`,
+		`"copy commit title"`,
+		`"copy date"`,
+		`"copy author"`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("files.js no longer offers %s in the commit header's menu", want)
+		}
+	}
+	// The date and the author are copied from the values the stamp was built
+	// from, never parsed back out of the rendered " · " line.
+	if !strings.Contains(src, "function commitMetaParts(body)") {
+		t.Error("commitMetaParts is gone — the date/author rows would have to re-parse the rendered line")
+	}
+	if !strings.Contains(src, "meta.dataset.date") || !strings.Contains(src, "meta.dataset.author") {
+		t.Error("the header menu no longer reads the date/author off the element")
+	}
+	// The handler must not gate on which part of the header was clicked.
+	if strings.Contains(src, `!e.target.closest("#files-title")`) {
+		t.Error("the header menu is gated on hitting the title again — right-clicking the date would offer nothing")
+	}
+	if !strings.Contains(src, `showCtxMenu([{ label: "copy", act: () => copyText(text, "selection") }], e.clientX, e.clientY)`) {
+		t.Error("a selection in the header no longer collapses the menu to a plain copy")
+	}
+}
+
+// The header reads as chrome, so it takes the default arrow rather than the
+// I-beam a bare run of text would get.
+func TestFilesHeaderCursor(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "style.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "#files-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: default; }") {
+		t.Error("style.css: #files-header lost `cursor: default` — it shows a text I-beam over chrome")
+	}
+}

@@ -287,9 +287,10 @@ parent dir* and *copy repo absolute path* (the checkout root alone, `\`-separate
 on Windows). Opening a file diff lands on its **first changed line** rather
 than the top of the file. Right-clicking **inside a diff** offers *copy* for
 the selected text, or *copy line* when nothing is selected (alongside *copy gg
-link to this line*). And the file list's header copies the open
-commit's id: right-click its **short sha** for *copy short commit id* /
-*copy commit id*, or its **subject** for the full id.
+link to this line*). And the file list's header copies
+everything it shows: right-click anywhere in it for *copy short commit id* /
+*copy commit id* / *copy commit title* / *copy date* / *copy author* — or, if
+text in the header is selected, a plain *copy* of the selection.
 
 ### Shell integration (cd-on-switch)
 

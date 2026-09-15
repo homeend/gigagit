@@ -95,7 +95,10 @@ body.resizing { cursor: col-resize; user-select: none; }
    keeps its place at the right edge. The commit's date claims a full basis, so
    it wraps onto its own second line inside the same sticky header — a long
    subject elides the title and must never take the date with it. */
-#files-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* The header is chrome, not a document: the default arrow, not the I-beam a
+   run of plain text would otherwise get. Text stays selectable — the cursor
+   says what the surface IS, and a selection here still copies. */
+#files-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: default; }
 #files-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The short sha is its own target inside the title: its right-click menu
    offers the short AND the full id, the rest of the title only the full one. */
