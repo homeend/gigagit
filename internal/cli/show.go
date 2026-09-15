@@ -41,6 +41,10 @@ func cmdShow(svc *domain.Service, dir string, args []string, stdout, stderr io.W
 		if err != nil {
 			return linkExit("show", err, stderr)
 		}
+		if res.Preview != nil {
+			fmt.Fprintln(stderr, "show: that link names a merge preview, not a commit; use gg diff <link>")
+			return 2
+		}
 		if res.Addr.Commit == "" {
 			fmt.Fprintln(stderr, "show: that link names the working tree; gg show needs a link to a commit (gg://<repo>/<path>@<sha>)")
 			return 2

@@ -220,9 +220,25 @@ func steerFail(c steer.Command, reason string) steer.Reply {
 	return steer.Reply{ID: c.ID, OK: false, Error: reason}
 }
 
+// startAtFailMsg carries a --at startup navigate's refusal back to the UI
+// thread. The startup command posts no reply file (nobody is waiting for
+// one), so without this the user would watch nothing happen and be told
+// nothing.
+type startAtFailMsg struct{ reason string }
+
 // answerSteer writes a reply off-thread. A command posted with wait:false gets
 // none — nothing would ever read it, and the file would only have to be swept.
 func (m Model) answerSteer(c steer.Command, r steer.Reply) tea.Cmd {
+	if c.ID == "" {
+		// Only the local `--at` startup navigate has no id: steer.Post fills one
+		// in, and Drain discards any command that arrived without one. Its
+		// refusals have no CLI to print them, so they go to the status bar.
+		if !r.OK {
+			reason := r.Error
+			return func() tea.Msg { return startAtFailMsg{reason: reason} }
+		}
+		return nil
+	}
 	if !c.Wait || m.steerDir == "" {
 		return nil
 	}
@@ -245,6 +261,18 @@ func steerEnumRefusal(c steer.Command) string {
 	if c.Target != nil {
 		switch c.Target.State {
 		case "", "unstaged", "staged", "untracked", "commit":
+		case "preview":
+			// A preview names a branch PAIR, and both halves are load-bearing: a
+			// half-filled target would silently degrade into "some preview".
+			if c.Target.Source == "" || c.Target.Target == "" {
+				return "a preview target needs source and target"
+			}
+			// A preview is not a commit: mirrors the web endpoint's
+			// toSteerWire so the same command is refused the same way
+			// whichever consumer picks it up.
+			if c.Commit != "" {
+				return "a preview target cannot also carry a commit"
+			}
 		default:
 			return "unknown target state " + strconv.Quote(c.Target.State)
 		}

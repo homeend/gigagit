@@ -47,10 +47,17 @@ const (
 )
 
 // Target names where a file lives: the working tree (unstaged/untracked), the
-// index (staged), or one commit. Values are protocol strings, always English.
+// index (staged), one commit, or one MERGE PREVIEW. Values are protocol
+// strings, always English.
 type Target struct {
-	State  string `json:"state,omitempty"`  // "unstaged" | "staged" | "untracked" | "commit"
+	State  string `json:"state,omitempty"`  // "unstaged" | "staged" | "untracked" | "commit" | "preview"
 	Commit string `json:"commit,omitempty"` // full 40-hex sha when State == "commit"
+	// Source and Target are the preview's branch NAMES, set iff State ==
+	// "preview" (git's <target>...<source> order). Commit stays EMPTY for a
+	// preview: which commit it shows is the CONSUMER's question — it resolves
+	// the tip itself, so a tip that moved between post and apply is honoured.
+	Source string `json:"source,omitempty"`
+	Target string `json:"target,omitempty"`
 }
 
 // Line is a landing point in a diff: a 1-based number on one of its two sides.

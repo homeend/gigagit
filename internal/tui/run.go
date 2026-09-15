@@ -11,16 +11,22 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/repos"
 	"github.com/homeend/gigagit/internal/theme"
 )
 
 // Run launches the TUI for svc, taking over the alternate screen until the
-// user quits. It returns the directory the shell should switch to (the worktree
-// the user switched into during the session, or "" if none) so a wrapper can
-// cd there on exit.
-func Run(svc *domain.Service, recordPath string) (string, error) {
+// user quits. at is the `gg open` landing link (the zero value = none): it is
+// converted into a navigate and applied once every startAtReady precondition
+// has landed. It returns the directory the shell should switch to (the
+// worktree the user switched into during the session, or "" if none) so a
+// wrapper can cd there on exit.
+func Run(svc *domain.Service, recordPath string, at model.Link) (string, error) {
 	m := New(svc)
+	if at.Repo.Name != "" || at.Repo.Abs != "" {
+		m.startAt, m.startAtPending = at, true
+	}
 	m.statePath = repos.DefaultStatePath()
 	if home, err := os.UserHomeDir(); err == nil {
 		m.initHomeDir = home

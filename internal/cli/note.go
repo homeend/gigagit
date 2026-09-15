@@ -77,7 +77,15 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 // name the same thing; a part of it the verb cannot use is a usage error, never
 // something silently ignored:
 //
-//   - add, list — a FILE link (the address is the point).
+//   - add — a FILE link (the address is the point): a note needs a file even
+//     when the link is a preview.
+//   - list — a FILE link, OR a bare PREVIEW link (no path): spec §2.3 treats
+//     a preview link exactly as --preview, and `gg note list --preview P`
+//     with no --file lists every path via PreviewNotesAll — so a bare
+//     preview link takes the same path-less route (noteList's
+//     previewTargetFromLink branch already passes link.Addr.Path, "" for a
+//     bare one, straight into previewResolvedNotes, which routes to
+//     PreviewNotesAll when file is "").
 //   - reply, rm — a REPOSITORY link only: the note id names the note, the link
 //     just picks the checkout whose store holds it (ids are per repository).
 //   - clear — either: a bare repository link picks the checkout and
@@ -90,8 +98,12 @@ func noteLinkShape(sub string, res domain.Resolved) string {
 	hasPath := res.Addr.Path != ""
 	hasTarget := res.Addr.State != model.StateUnstaged
 	switch sub {
-	case "add", "list":
+	case "add":
 		if !hasPath {
+			return "that link names a repository, not a file"
+		}
+	case "list":
+		if !hasPath && res.Preview == nil {
 			return "that link names a repository, not a file"
 		}
 	case "reply", "rm":
@@ -313,7 +325,20 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 			return 2
 		}
 		addr = link.Addr
+		pv, isPreview := previewTargetFromLink(*link)
 		switch {
+		case link.Hunk > 0 && isPreview:
+			// PreviewHunkAnchor is the ONE place the preview's hunk numbering
+			// and the old-side refusal live, shared with --preview and MCP.
+			s, r, herr := svc.PreviewHunkAnchor(ctx, pv.Set, addr.Path, link.Hunk)
+			if errors.Is(herr, domain.ErrPreviewOldSide) {
+				fmt.Fprintln(stderr, "note add:", herr)
+				return 2
+			}
+			if herr != nil {
+				return noteExit(herr, stderr)
+			}
+			side, rng = s, r
 		case link.Hunk > 0:
 			// linkDiffSpec is the ONE place that maps a link's target onto a
 			// diff spec, so `gg note add <link>#N` cannot drift from
@@ -627,11 +652,21 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 		}
 		// A link's line and hunk are ignored: `note list` is about a FILE's
 		// threads, exactly as `--file` is.
-		got, err := svc.NotesAt(ctx, link.Addr)
-		if err != nil {
-			return noteExit(err, stderr)
+		if pv, ok := previewTargetFromLink(*link); ok {
+			// A preview GATHERS notes along the branch and reports stale as
+			// "outdated" — the same rows --preview prints, not the tip's own.
+			got, gerr := previewResolvedNotes(ctx, svc, pv.Set, link.Addr.Path)
+			if gerr != nil {
+				return noteExit(gerr, stderr)
+			}
+			res, previewWords = got, true
+		} else {
+			got, err := svc.NotesAt(ctx, link.Addr)
+			if err != nil {
+				return noteExit(err, stderr)
+			}
+			res = got
 		}
-		res = got
 	} else if pf.set() {
 		if *tf.rev != "" || *tf.cached {
 			return previewUsageErr("note list", stderr)

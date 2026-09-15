@@ -110,6 +110,9 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 	}
 	if msg.err != nil {
 		m.statusMsg = i18n.T("error: %s", msg.err.Error())
+		if m.pendingPreviewFor(msg.source, msg.target) {
+			return m.failPending("the merge preview failed to open: " + msg.err.Error())
+		}
 		return m, nil
 	}
 	// Is this message about the preview that is currently open? A resolve for
@@ -123,6 +126,9 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 		m.statusMsg = previewStateNotice(msg.source, msg.target, msg.eps.Summary.State)
 		if isOpen {
 			m = m.closePreviewView() // the open pair stopped being previewable
+		}
+		if m.pendingPreviewFor(msg.source, msg.target) {
+			return m.failPending(previewStateReason(msg.source, msg.target, msg.eps.Summary.State))
 		}
 		return m, nil
 	}
@@ -169,6 +175,28 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("preview updated: %s moved", msg.moved)
 	}
 	return m, cmd
+}
+
+// previewStateReason is previewStateNotice's ENGLISH twin. A steer reply is
+// protocol prose an agent parses and must never carry a translated string.
+func previewStateReason(source, target string, st domain.PreviewState) string {
+	switch st {
+	case domain.PreviewMerged:
+		return source + " is already merged into " + target
+	case domain.PreviewMissingSource:
+		return "missing branch " + source
+	case domain.PreviewMissingTarget:
+		return "missing branch " + target
+	case domain.PreviewNoBase:
+		return source + " and " + target + " have no common base"
+	}
+	return "the pair is not previewable"
+}
+
+// pendingPreviewFor reports whether a navigate is parked on THIS pair's open.
+func (m Model) pendingPreviewFor(source, target string) bool {
+	ps := m.pendingSteer
+	return ps != nil && ps.stage == steerStagePreview && ps.source == source && ps.target == target
 }
 
 // previewSelectedPath is the file path under the tree cursor, or "" when the

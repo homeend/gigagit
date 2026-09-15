@@ -39,6 +39,8 @@ type steerWire struct {
 	File    string   `json:"file,omitempty"`
 	State   string   `json:"state,omitempty"`
 	Commit  string   `json:"commit,omitempty"`
+	Source  string   `json:"source,omitempty"`
+	Target  string   `json:"target,omitempty"`
 	Side    string   `json:"side,omitempty"`
 	Line    int      `json:"line,omitempty"`
 	Step    string   `json:"step,omitempty"`
@@ -75,18 +77,34 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 		return w, errors.New("unsafe commit")
 	}
 	if c.Target != nil {
-		if _, ok := noteState(c.Target.State); !ok {
-			return w, fmt.Errorf("unknown state %q", c.Target.State)
-		}
-		if c.Target.Commit != "" && !isGitArgSafe(c.Target.Commit) {
-			return w, errors.New("unsafe target commit")
-		}
-		w.State = c.Target.State
-		if w.State == "" {
-			w.State = "unstaged"
-		}
-		if c.Target.Commit != "" {
-			w.Commit = c.Target.Commit
+		if c.Target.State == "preview" {
+			// A preview target is NOT a note state: it names a branch pair, and
+			// the page resolves the tip itself. Handled before noteState, whose
+			// allowlist has no entry for it.
+			if c.Target.Source == "" || c.Target.Target == "" {
+				return w, errors.New("a preview target needs source and target")
+			}
+			if !isGitArgSafe(c.Target.Source) || !isGitArgSafe(c.Target.Target) {
+				return w, errors.New("unsafe preview branch")
+			}
+			if c.Commit != "" {
+				return w, errors.New("a preview target cannot also carry a commit")
+			}
+			w.State, w.Source, w.Target = "preview", c.Target.Source, c.Target.Target
+		} else {
+			if _, ok := noteState(c.Target.State); !ok {
+				return w, fmt.Errorf("unknown state %q", c.Target.State)
+			}
+			if c.Target.Commit != "" && !isGitArgSafe(c.Target.Commit) {
+				return w, errors.New("unsafe target commit")
+			}
+			w.State = c.Target.State
+			if w.State == "" {
+				w.State = "unstaged"
+			}
+			if c.Target.Commit != "" {
+				w.Commit = c.Target.Commit
+			}
 		}
 	}
 	if c.Line != nil {
@@ -108,7 +126,9 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 		default:
 			return w, fmt.Errorf("unknown step %q", c.Step)
 		}
-		if c.File == "" && c.Commit == "" && c.Step == "" {
+		// A preview with no file is a REVEAL of the Previews entry — the one
+		// navigate shape that names a place without naming a file or a commit.
+		if c.File == "" && c.Commit == "" && c.Step == "" && w.State != "preview" {
 			return w, errors.New("navigate needs a file, a commit or a step")
 		}
 		// state "commit" with no sha names no commit at all: the page would

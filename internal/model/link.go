@@ -30,14 +30,29 @@ type LinkRepo struct {
 	Abs string
 }
 
+// LinkPreview is the merge-preview half of a link target: git's three-dot
+// pair, spelled exactly as `git diff <target>...<source>` reads it. The NAMES
+// travel between machines; the machine-local preview id does not (spec §2.1).
+type LinkPreview struct {
+	Source, Target string
+}
+
 // LinkTarget is which pair of texts the link addresses: the working tree
-// (index → file), the index (HEAD → index), or a commit (parent → commit).
+// (index → file), the index (HEAD → index), a commit (parent → commit), or a
+// merge preview (merge-base → source tip).
 type LinkTarget struct {
 	State FileState // StateUnstaged (default), StateStaged or StateCommitted
-	// Commit is set iff State == StateCommitted; 7..64 hex characters — 64,
-	// not 40, because a sha-256 repository's commit ids are 64 hex characters
-	// and every producer writes the FULL sha.
+	// Commit is set iff State == StateCommitted AND Preview is nil; 7..64 hex
+	// characters — 64, not 40, because a sha-256 repository's commit ids are 64
+	// hex characters and every producer writes the FULL sha.
 	Commit string
+	// Preview is set iff the target text carried git's three-dot pair
+	// (<target>...<source>). State is StateCommitted and Commit is EMPTY: which
+	// commit the preview addresses (the source tip) is a per-machine question
+	// only domain.ResolveLink can answer. Link.Address() therefore yields a
+	// meaningless zero-sha address for a preview link — callers use
+	// domain.ResolveLink and read Resolved.Addr / Resolved.Preview instead.
+	Preview *LinkPreview
 }
 
 // Link is one place in one repository: a file, a line on one side of one
@@ -86,6 +101,10 @@ func LinkAbsOK(abs string) bool {
 // Address builds the FileAddress the link points at. Worktree is filled by
 // the resolver, which is also the only thing that can fill Path for a PARSED
 // local link (see LinkRepo.Abs).
+//
+// It is NOT meaningful for a PREVIEW link: the source tip is resolved per
+// machine, so the returned address carries an empty commit. domain.ResolveLink
+// (the only caller in the tree) branches on Target.Preview before reaching it.
 func (l Link) Address() FileAddress {
 	return FileAddress{Path: l.Path, State: l.Target.State, Commit: l.Target.Commit}
 }
@@ -115,6 +134,13 @@ func (l Link) String() string {
 	case StateStaged:
 		b.WriteString("@staged")
 	case StateCommitted:
+		if p := l.Target.Preview; p != nil {
+			b.WriteByte('@')
+			b.WriteString(p.Target)
+			b.WriteString("...")
+			b.WriteString(p.Source)
+			break
+		}
 		// StateCommitted is FileState's ZERO value, so a Link nobody filled in
 		// would otherwise render a bare "@". Only a real sha earns the target.
 		if l.Target.Commit != "" {
@@ -128,7 +154,12 @@ func (l Link) String() string {
 		b.WriteString(strconv.Itoa(l.Hunk))
 	case l.Line > 0:
 		b.WriteByte(':')
-		if l.Side == NoteSideOld {
+		// A preview has no old side (steerCommandForLink and ParseLink both
+		// treat it as new-only): a hand-built Link with Side == NoteSideOld
+		// here would render an "old:" ParseLink rejects for a preview
+		// target. Force the new side rather than emit a string this
+		// function's own inverse cannot read back.
+		if l.Side == NoteSideOld && l.Target.Preview == nil {
 			b.WriteString("old:")
 		}
 		b.WriteString(strconv.Itoa(l.Line))
@@ -141,6 +172,7 @@ func (l Link) String() string {
 //	gg://<repo>/<path>[@<target>][:<line>]   file / line
 //	gg://<repo>/<path>[@<target>]#<hunk>     hunk (git @@ order, 1-based)
 //	gg://<repo>@<commit>                     a commit, no path
+//	gg://<repo>[/<path>]@<target>...<source>[:<line>|#<hunk>]  a merge preview
 //	gg://<repo>                              the repository itself
 //
 // <repo> is a remote repository name, or "/" + an absolute checkout path.
@@ -201,8 +233,30 @@ func ParseLink(s string) (Link, error) {
 	case tail == "staged":
 		l.Target = LinkTarget{State: StateStaged}
 	default:
+		if i := strings.Index(tail, "..."); i >= 0 {
+			tgt, src := tail[:i], tail[i+3:]
+			if tgt == "" || src == "" {
+				return linkErr("a merge preview names <target>...<source>, got %q", tail)
+			}
+			// Both halves hex and sha-shaped means the caller pasted two commit
+			// ids. A preview is a pair of BRANCH names (spec §2.1): resolving a
+			// sha pair would silently address a different thing on every machine.
+			if isShaLink(tgt) && isShaLink(src) {
+				return linkErr("a merge preview names two branches, not two shas, got %q", tail)
+			}
+			if !LinkRefOK(tgt) || !LinkRefOK(src) {
+				return linkErr("%q is not a pair of branch names", tail)
+			}
+			// The preview's old side is the merge base, which no stored address
+			// names (spec §1.1) — there is nothing for "old:" to point at.
+			if l.Side == NoteSideOld {
+				return linkErr("a merge preview addresses the new side only; drop \"old:\"")
+			}
+			l.Target = LinkTarget{State: StateCommitted, Preview: &LinkPreview{Source: src, Target: tgt}}
+			break
+		}
 		if !isHexLink(tail) || len(tail) < 7 || len(tail) > 64 {
-			return linkErr("target must be \"staged\" or a commit sha of 7 to 64 hex characters, got %q", tail)
+			return linkErr("target must be \"staged\", a commit sha of 7 to 64 hex characters, or <target>...<source>, got %q", tail)
 		}
 		l.Target = LinkTarget{State: StateCommitted, Commit: tail}
 	}
@@ -302,6 +356,20 @@ func isHexLink(s string) bool {
 		}
 	}
 	return true
+}
+
+// isShaLink reports whether s has the shape ParseLink accepts as a commit id.
+func isShaLink(s string) bool { return isHexLink(s) && len(s) >= 7 && len(s) <= 64 }
+
+// LinkRefOK reports whether a branch name can ride a preview link. The
+// grammar's own separators ('@', ':', '#'), whitespace and a second "..." are
+// not expressible — every PRODUCER calls this and refuses to emit rather than
+// print something ParseLink would reject or reparse as a different place.
+func LinkRefOK(s string) bool {
+	if s == "" || strings.Contains(s, "...") {
+		return false
+	}
+	return !strings.ContainsAny(s, "@:# \t")
 }
 
 func isAlphaLink(c byte) bool {

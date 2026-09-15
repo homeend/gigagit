@@ -73,7 +73,17 @@ func cmdBatch(svc *domain.Service, workdir string, args []string, stdin io.Reade
 		// progress while the main goroutine writes errors.
 		var section bytes.Buffer
 		errW := &syncWriter{w: &prefixWriter{w: &section, prefix: "! "}}
-		code := runOne(svc, workdir, ln.argv[0], ln.argv[1:], strings.NewReader(""), &section, errW, cwdFile)
+		var code int
+		if ln.argv[0] == "open" {
+			// gg open falls back to LaunchTUI when no live session answers —
+			// taking over the terminal mid-batch, which no other batch line
+			// does. Refused the same way "batch" (nested) is: a line-level
+			// usage error, never dispatched to runOne.
+			fmt.Fprintln(errW, "open cannot run inside gg batch: it may launch the TUI")
+			code = 2
+		} else {
+			code = runOne(svc, workdir, ln.argv[0], ln.argv[1:], strings.NewReader(""), &section, errW, cwdFile)
+		}
 		if code == 0 {
 			ok++
 			fmt.Fprintf(stdout, "#%d ok %s\n", i+1, ln.echo)

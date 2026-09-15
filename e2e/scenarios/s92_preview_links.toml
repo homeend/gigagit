@@ -1,0 +1,78 @@
+name = "preview links: gg link --preview, a link that drives note add, and gg link resolve --json"
+
+[input]
+steps = [
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\n" },
+  { commit = "seed" },
+  { branch = "feat/x" },
+  { switch = "feat/x" },
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\nDELTA\n" },
+  { commit = "add DELTA" },
+]
+
+[[run]]
+cmd  = ["preview", "add", "--label", "login", "feat/x", "main"]
+exit = 0
+
+# The producer: the sandbox repo has no remote, so this is the LOCAL form.
+[[run]]
+cmd             = ["link", "--preview", "login"]
+exit            = 0
+stdout_contains = ["gg:///", "@main...feat/x"]
+
+[[run]]
+cmd             = ["link", "--preview", "login", "a.txt:4"]
+exit            = 0
+stdout_contains = ["/a.txt@main...feat/x:4"]
+
+# resolve names the checkout, the PAIR, and the tip it resolved to.
+[[run]]
+cmd             = ["link", "resolve", "gg://{{cwd}}/a.txt@main...feat/x:4"]
+exit            = 0
+stdout_contains = ["preview main...feat/x", "a.txt", "new:4"]
+
+[[run]]
+cmd             = ["link", "resolve", "--json", "gg://{{cwd}}/a.txt@main...feat/x:4"]
+exit            = 0
+stdout_contains = ["\"source\":\"feat/x\"", "\"target\":\"main\"", "\"path\":\"a.txt\""]
+
+# The link drives a write verb, and the note lands on the source tip — so
+# --preview sees it too.
+[[run]]
+cmd  = ["note", "add", "gg://{{cwd}}/a.txt@main...feat/x:4", "--summary", "linked preview note"]
+exit = 0
+
+[[run]]
+cmd             = ["note", "list", "--preview", "login", "--file", "a.txt"]
+exit            = 0
+stdout_contains = ["linked preview note", "active"]
+
+# …and a read verb: the preview's patch, not the tip commit's own change.
+[[run]]
+cmd             = ["diff", "gg://{{cwd}}/a.txt@main...feat/x", "--hunks"]
+exit            = 0
+stdout_contains = ["a.txt", "1 @@ -"]
+
+# gg show refuses a preview link and points at gg diff. (The harness asserts
+# STDOUT only — `Run` carries stdout_contains / stdout_excludes and nothing for
+# stderr, see e2e/scenario.go:110-119 — so the exit code is the assertion; the
+# prose is pinned by TestShowRefusesAPreviewLink in internal/cli.)
+[[run]]
+cmd  = ["show", "gg://{{cwd}}/a.txt@main...feat/x"]
+exit = 2
+
+# The old side is the merge base: not addressable, refused at PARSE time.
+[[run]]
+cmd  = ["link", "resolve", "gg://{{cwd}}/a.txt@main...feat/x:old:1"]
+exit = 2
+
+# gg open with no live session in this checkout exits 1 (the e2e harness runs
+# the CLI in-process, so cli.LaunchTUI is nil — no launcher is installed). The
+# message itself is pinned by TestOpenWithoutASessionOrALauncherExitsOne.
+[[run]]
+cmd  = ["open", "gg://{{cwd}}/a.txt@main...feat/x:4"]
+exit = 1
+
+[expect]
+branch = "feat/x"
+clean  = true

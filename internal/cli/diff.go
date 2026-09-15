@@ -20,6 +20,16 @@ import (
 // a "--" separator so a rev is never ambiguous with a path.
 func cmdDiff(svc *domain.Service, dir string, args []string, stdout, stderr io.Writer) int {
 	head, paths := splitDashDash(args)
+	// A positional starting with gg:// is a LINK, never a rev (the whole rule —
+	// no heuristic). Peel a LEADING one off before flag.Parse: flag.Parse stops
+	// at the first non-flag argument, so a link followed by flags (`gg diff
+	// <link> --hunks --json`) would otherwise strand those flags as extra
+	// positionals instead of being parsed (mirrors cmdNote's link-must-be-
+	// first-argument rule).
+	link := ""
+	if len(head) > 0 && isLinkArg(head[0]) {
+		link, head = head[0], head[1:]
+	}
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	stat := fs.Bool("stat", false, "terse per-file change counts")
@@ -43,14 +53,22 @@ func cmdDiff(svc *domain.Service, dir string, args []string, stdout, stderr io.W
 		fmt.Fprintln(stderr, "diff: --json requires --hunks")
 		return 2
 	}
-	if fs.NArg() > 1 {
+	posCount := fs.NArg()
+	if link != "" {
+		posCount++
+	}
+	if posCount > 1 {
 		fmt.Fprintln(stderr, "usage: gg diff [--stat|--name-only|--hunks [--json]] [--cached] [<rev>|<A..B>] [-- <paths>...]")
 		return 2
+	}
+	rev := link
+	if rev == "" && fs.NArg() == 1 {
+		rev = fs.Arg(0)
 	}
 	if pf.set() {
 		// Ruling 9: --preview is sugar over the existing A...B range path —
 		// resolve the pair, then run the code every other range runs.
-		if *cached || fs.NArg() > 0 {
+		if *cached || rev != "" {
 			return previewUsageErr("diff", stderr)
 		}
 		ctx := context.Background()
@@ -61,13 +79,8 @@ func cmdDiff(svc *domain.Service, dir string, args []string, stdout, stderr io.W
 		}
 		return renderDiffSpec(ctx, svc, tgt.withPaths(paths), *hunks, *asJSON, *stat, *nameOnly, stdout, stderr)
 	}
-	rev := ""
-	if fs.NArg() == 1 {
-		rev = fs.Arg(0)
-	}
-	// A positional starting with gg:// is a LINK, never a rev (the whole rule —
-	// no heuristic). It carries the path and the target, so combining it with
-	// the flags it replaces is a usage error rather than a silent override.
+	// It carries the path and the target, so combining it with the flags it
+	// replaces is a usage error rather than a silent override.
 	if isLinkArg(rev) {
 		if *cached || len(paths) > 0 {
 			fmt.Fprintln(stderr, "diff: a gg:// link already names the file and the target; drop --cached and the -- <paths>")

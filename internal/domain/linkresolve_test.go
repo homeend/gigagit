@@ -710,3 +710,125 @@ func seedRepoAt(t *testing.T, dir string) {
 	runGitIn(t, dir, "add", "README.md")
 	runGitIn(t, dir, "commit", "-m", "seed")
 }
+
+// linkRepoWithBranch makes a repo with a remote name, a second commit on
+// branch, and returns the checkout. The default branch really is "main":
+// linkRepoWithRemote → newRealRepo → gittest.BasicRepo runs
+// `git init -b main` (internal/gittest/template.go:88).
+func linkRepoWithBranch(t *testing.T, name, branch string) string {
+	t.Helper()
+	dir := linkRepoWithRemote(t, name)
+	runGitIn(t, dir, "checkout", "-q", "-b", branch)
+	if err := os.WriteFile(filepath.Join(dir, "feat.txt"), []byte("one\ntwo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitIn(t, dir, "add", ".")
+	runGitIn(t, dir, "commit", "-q", "-m", "feat work")
+	runGitIn(t, dir, "checkout", "-q", "main")
+	return dir
+}
+
+func TestResolveLinkPreviewResolvesOnTheCheckoutWithBothBranches(t *testing.T) {
+	t.Parallel()
+	with := linkRepoWithBranch(t, "gigagit", "feat/x")
+	without := linkRepoWithRemote(t, "gigagit") // main only
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	// `without` is the MORE recently opened entry: only the both-branch filter
+	// can keep the resolve off it.
+	if err := repos.Touch(state, with, "gigagit", time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.Touch(state, without, "gigagit", time.Unix(9000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	l, err := model.ParseLink("gg://gigagit/feat.txt@main...feat/x:2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if !samePathLink(got.Checkout, with) {
+		t.Fatalf("Checkout = %q, want the checkout holding both branches %q", got.Checkout, with)
+	}
+	if got.Preview == nil || !got.Preview.OK() {
+		t.Fatal("Resolved.Preview must carry the resolved note set")
+	}
+	if got.Preview.Source != "feat/x" || got.Preview.Target != "main" {
+		t.Errorf("Preview pair = %s...%s", got.Preview.Target, got.Preview.Source)
+	}
+	if got.Commit != got.Preview.Tip || got.Addr.Commit != got.Preview.Tip {
+		t.Errorf("Commit/Addr.Commit = %q/%q, want the tip %q", got.Commit, got.Addr.Commit, got.Preview.Tip)
+	}
+	if got.Addr.State != model.StateCommitted || got.Addr.Path != "feat.txt" {
+		t.Errorf("Addr = %+v", got.Addr)
+	}
+	if got.Line != 2 || got.Side != model.NoteSideNew {
+		t.Errorf("line/side = %d/%s", got.Line, got.Side)
+	}
+}
+
+// The cwd is NOT exempt from the both-branch filter for a preview link: a
+// working-tree link short-circuits on the cwd, but a preview that the cwd
+// cannot show must still resolve elsewhere.
+func TestResolveLinkPreviewCwdIsNotExemptFromTheBranchFilter(t *testing.T) {
+	t.Parallel()
+	here := linkRepoWithRemote(t, "gigagit") // main only: cannot show the pair
+	with := linkRepoWithBranch(t, "gigagit", "feat/x")
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	if err := repos.Touch(state, with, "gigagit", time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	l, _ := model.ParseLink("gg://gigagit@main...feat/x")
+	got, err := ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state, Cwd: Open(here)})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if !samePathLink(got.Checkout, with) {
+		t.Errorf("Checkout = %q, want %q — the cwd has no feat/x", got.Checkout, with)
+	}
+	if got.Addr.Path != "" {
+		t.Errorf("Addr.Path = %q, want empty (a repo-level preview link)", got.Addr.Path)
+	}
+}
+
+func TestResolveLinkPreviewCwdWinsTheTie(t *testing.T) {
+	t.Parallel()
+	here := linkRepoWithBranch(t, "gigagit", "feat/x")
+	other := linkRepoWithBranch(t, "gigagit", "feat/x")
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	_ = repos.Touch(state, other, "gigagit", time.Unix(9000, 0))
+	l, _ := model.ParseLink("gg://gigagit@main...feat/x")
+	got, err := ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state, Cwd: Open(here)})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if !samePathLink(got.Checkout, here) {
+		t.Errorf("Checkout = %q, want the cwd %q", got.Checkout, here)
+	}
+}
+
+func TestResolveLinkPreviewWithNoCandidateIsUnknown(t *testing.T) {
+	t.Parallel()
+	here := linkRepoWithRemote(t, "gigagit")
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	l, _ := model.ParseLink("gg://gigagit@main...feat/nope")
+	_, err := ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state, Cwd: Open(here)})
+	if !errors.Is(err, ErrLinkUnknownRepo) {
+		t.Fatalf("err = %v, want ErrLinkUnknownRepo", err)
+	}
+}
+
+// A programmatically built commit link with no sha is still refused; the guard
+// must not fire for a preview link, which legitimately has none.
+func TestResolveLinkStillRefusesACommitLinkWithNoSHA(t *testing.T) {
+	t.Parallel()
+	here := linkRepoWithRemote(t, "gigagit")
+	l := model.Link{Repo: model.LinkRepo{Name: "gigagit"}, Path: "a.go",
+		Target: model.LinkTarget{State: model.StateCommitted}}
+	_, err := ResolveLink(context.Background(), l, ResolveOpts{Cwd: Open(here)})
+	if !errors.Is(err, model.ErrLink) {
+		t.Fatalf("err = %v, want an ErrLink refusal", err)
+	}
+}

@@ -7,6 +7,28 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
+// linkRepoFor builds the link's repository half: the remote NAME when this
+// checkout has one, else the local absolute-path form. It refuses a checkout
+// path the grammar cannot hold (the first '@' is the target separator and the
+// first '#' the hunk one), exactly as the CLI and web producers do.
+func (m Model) linkRepoFor(worktree string) (model.LinkRepo, bool) {
+	if m.linkRepoName != "" {
+		return model.LinkRepo{Name: m.linkRepoName}, true
+	}
+	wt := worktree
+	if wt == "" {
+		wt = m.currentWorktree
+	}
+	if wt == "" {
+		return model.LinkRepo{}, false
+	}
+	abs := filepath.ToSlash(filepath.Clean(wt))
+	if !model.LinkAbsOK(abs) {
+		return model.LinkRepo{}, false
+	}
+	return model.LinkRepo{Abs: abs}, true
+}
+
 // linkFor builds the gg:// address for one place in this repository, or
 // refuses. It refuses when the grammar cannot hold the place: a path
 // containing '@', ':' or '#' (spec §1 — the producers refuse rather than emit
@@ -27,28 +49,12 @@ func (m Model) linkFor(addr model.FileAddress, side model.NoteSide, line, hunk i
 	if addr.Path != "" && !model.LinkPathOK(addr.Path) {
 		return "", false
 	}
-	var l model.Link
-	if m.linkRepoName != "" {
-		l.Repo = model.LinkRepo{Name: m.linkRepoName}
-	} else {
-		wt := addr.Worktree
-		if wt == "" {
-			wt = m.currentWorktree
-		}
-		if wt == "" {
-			return "", false
-		}
-		abs := filepath.ToSlash(filepath.Clean(wt))
-		// The CHECKOUT path is no more expressible than a file path: the first
-		// '@' is the grammar's target separator and the first '#' its hunk
-		// one, so a checkout under /home/user@corp or /mnt/backup#1 would
-		// yield a link ParseLink refuses. Refuse here instead (the same rule
-		// the CLI and web producers apply).
-		if !model.LinkAbsOK(abs) {
-			return "", false
-		}
-		l.Repo = model.LinkRepo{Abs: abs}
+	repo, ok := m.linkRepoFor(addr.Worktree)
+	if !ok {
+		return "", false
 	}
+	var l model.Link
+	l.Repo = repo
 	l.Path = addr.Path
 	switch addr.State {
 	case model.StateShelf:
@@ -76,6 +82,40 @@ func (m Model) linkFor(addr model.FileAddress, side model.NoteSide, line, hunk i
 	return l.String(), true
 }
 
+// previewLinkFor builds the gg:// address of a place in a MERGE PREVIEW:
+// the pair itself (path ""), one of its files, or a new-side line in one.
+// The preview's old side is the merge base, which no address names, so there
+// is no old-side form and no side parameter — every preview link is new-side.
+//
+// It refuses, rather than emitting something that reparses as a different
+// place, when a branch NAME or the path is not expressible in the grammar.
+func (m Model) previewLinkFor(source, target, path string, line int) (string, bool) {
+	if !model.LinkRefOK(source) || !model.LinkRefOK(target) {
+		return "", false
+	}
+	if path != "" && !model.LinkPathOK(path) {
+		return "", false
+	}
+	if path == "" && line > 0 {
+		return "", false
+	}
+	repo, ok := m.linkRepoFor("")
+	if !ok {
+		return "", false
+	}
+	l := model.Link{
+		Repo: repo,
+		Path: path,
+		Target: model.LinkTarget{
+			State:   model.StateCommitted,
+			Preview: &model.LinkPreview{Source: source, Target: target},
+		},
+		Side: model.NoteSideNew,
+		Line: line,
+	}
+	return l.String(), true
+}
+
 // contextLinkText is the link for whatever the user is looking at, mirroring
 // contextCopyRows' precedence exactly (controller ruling P23): a stack
 // surface (history/blame) on top of a diff out-ranks the diff underneath it
@@ -88,11 +128,21 @@ func (m Model) linkFor(addr model.FileAddress, side model.NoteSide, line, hunk i
 //     feature); a diff with no note address (a two-sided compare, or any
 //     other view the loader never stamped) refuses outright rather than
 //     falling through to a lower-precedence surface underneath it.
+//     2a. a preview's diff → the PREVIEW form with the cursor line: the diff's
+//     note address is a commit on the tip, but the place the user is looking
+//     at is the preview, and that is the address that travels.
 //  3. else the focused panel's row: focusedBookmark (files-view row,
 //     Files/Staged panel row) first, then the Commits panel's commit —
 //     gated on !inContentWindow() so a content window with nothing above it
 //     that focusedBookmark also declines (e.g. a stash file tree) does not
 //     fall through to the Commits panel focus underneath it.
+//     3a. a preview's FILE TREE (no diff on top) → the preview's file form. This
+//     must be tested BEFORE focusedBookmark, which would otherwise hand back
+//     the tip commit's file link for the same row. When the tree declines
+//     (unfocused, a heading row, or a deleted file) the row still belongs to
+//     the open preview, so this returns the PAIR's own link rather than
+//     falling through to a lower-precedence surface.
+//     3b. the Previews panel row → the pair's own link.
 func (m Model) contextLinkText() (string, bool) {
 	switch m.topLayer().(type) {
 	case *historyView, *blameView:
@@ -107,12 +157,36 @@ func (m Model) contextLinkText() (string, bool) {
 			if !has {
 				side, line = model.NoteSideNew, 0
 			}
+			// A preview diff's rows are note-addressable at the tip, but the
+			// PLACE is the preview. noteAnchorAtCursor already refuses the old
+			// side inside a preview, so `has == false` on a deletion row is
+			// exactly the "line 0, new side" the spec asks for.
+			if set := m.previewNoteSet(); set != nil {
+				return m.previewLinkFor(set.Source, set.Target, addr.Path, line)
+			}
 			return m.linkFor(addr, side, line, 0)
 		}
 		return "", false
 	}
+	// A preview's file list: the row is a file IN THE PREVIEW, not a file of
+	// the tip commit — checked before focusedBookmark, which answers with the
+	// tip's commit address for the very same row. When the preview is open but
+	// the row itself declines (tree unfocused, a directory heading, a deleted
+	// file), the pair's own link is returned rather than falling through to
+	// the branches below: every row here belongs to the open preview.
+	if set := m.filesPreviewSet; set != nil && m.filesView != nil {
+		if b, ok := m.focusedBookmark(); ok {
+			return m.previewLinkFor(set.Source, set.Target, b.Path, 0)
+		}
+		return m.previewLinkFor(set.Source, set.Target, "", 0)
+	}
 	if b, ok := m.focusedBookmark(); ok {
 		return m.linkFor(b.Address(), model.NoteSideNew, 0, 0)
+	}
+	if !m.inContentWindow() && m.focus == panelPreviews {
+		if r, ok := m.selectedPreview(); ok {
+			return m.previewLinkFor(r.rec.Source, r.rec.Target, "", 0)
+		}
 	}
 	if !m.inContentWindow() && m.focus == panelCommits {
 		if bi, ok := m.backingIndex(panelCommits); ok && bi < len(m.commits) {

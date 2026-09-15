@@ -14,6 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/cli"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/mcp"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/repos"
 	"github.com/homeend/gigagit/internal/shellinit"
@@ -29,6 +30,16 @@ func main() {
 	cwdFile, args := extractCwdFile(os.Args[1:])
 	timeTrack, args := extractTimeTrack(args)
 	recordPath, args := extractRecord(args)
+	// `gg open <link>` with no live session in the link's checkout launches the
+	// TUI there. internal/cli must not import internal/tui, so the launcher is
+	// installed here — and it is the SAME launchTUI the no-subcommand path runs,
+	// so the two can never drift (preflight, the error log, the panic dump).
+	// recordPath/cwdFile are threaded through too, so a TUI started this way
+	// still records under `gg --record` and still cd's the shell on exit under
+	// the `gg shell-init` wrapper after a worktree switch.
+	cli.LaunchTUI = func(checkout string, at model.Link) int {
+		return launchTUI(checkout, at, recordPath, cwdFile)
+	}
 	if timeTrack != "" {
 		if err := setupTimeTrack(timeTrack, args); err != nil {
 			fmt.Fprintln(os.Stderr, "gg: --time-track:", err)
@@ -101,13 +112,29 @@ func main() {
 		fmt.Fprintf(os.Stderr, "gg: unknown command %q\n", args[0])
 		// Kept in sync with cli.commands (plus the commands main routes itself:
 		// shell-init, inspect, mcp, web, version).
-		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch checkout branch stash undo merge rebase fast-forward cherry-pick revert reset discard add unstage log diff show compare preview shelf bookmark prefix worktree remote tag note session link versions migrate review apply unlock config repo init skill batch mcp web shell-init inspect version (run `gg` with no arguments for the TUI)")
+		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch checkout branch stash undo merge rebase fast-forward cherry-pick revert reset discard add unstage log diff show compare preview shelf bookmark prefix worktree remote tag note session link open versions migrate review apply unlock config repo init skill batch mcp web shell-init inspect version (run `gg` with no arguments for the TUI)")
 		os.Exit(2)
 	}
-	// No subcommand: launch the TUI. The runner stack (LimitRunner + ssh
-	// BatchMode) is built by domain — one construction site shared with the
-	// repo switcher's reRoot (domain.OpenTUI); only the span ring is kept here
-	// so the panic dump below can include the session's git spans.
+	// No subcommand: launch the TUI in the current directory.
+	os.Exit(launchTUI(".", model.Link{}, recordPath, cwdFile))
+}
+
+// launchTUI runs the whole TUI startup sequence for dir: the runner stack, the
+// panic dump, the friendly preflight, the always-on error log, and tui.Run
+// positioned at `at` (the zero Link = nowhere in particular). It is shared by
+// the no-subcommand path and by `gg open`'s launcher seam, so a checkout
+// reached either way gets the same startup.
+func launchTUI(dir string, at model.Link, recordPath, cwdFile string) int {
+	if dir != "" && dir != "." {
+		if err := os.Chdir(dir); err != nil {
+			fmt.Fprintln(os.Stderr, "gg:", err)
+			return 1
+		}
+	}
+	// The runner stack (LimitRunner + ssh BatchMode) is built by domain — one
+	// construction site shared with the repo switcher's reRoot (domain.OpenTUI);
+	// only the span ring is kept here so the panic dump below can include the
+	// session's git spans.
 	ring := observ.NewRing(200)
 	svc := domain.OpenTUIWithRing(".", ring)
 	repo := svc.Repo()
@@ -124,15 +151,15 @@ func main() {
 	// raw "git status failed (exit 128): fatal: …" dump.
 	if _, err := svc.TopLevel(context.Background()); err != nil {
 		fmt.Fprintln(os.Stderr, friendlyGitError(err))
-		os.Exit(1)
+		return 1
 	}
 	proceed, err := tui.Preflight(svc, os.Stdin, os.Stderr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return 1
 	}
 	if !proceed {
-		os.Exit(0)
+		return 0
 	}
 	if ef, _, eerr := tui.OpenErrorLog(); eerr == nil && ef != nil {
 		observ.SetFailureSink(ef)
@@ -141,19 +168,20 @@ func main() {
 	if recordPath != "" {
 		if err := checkRecordPath(recordPath); err != nil {
 			fmt.Fprintln(os.Stderr, "gg: --record:", err)
-			os.Exit(2)
+			return 2
 		}
 	}
-	cwd, err := tui.Run(svc, recordPath)
+	cwd, err := tui.Run(svc, recordPath, at)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, friendlyGitError(err))
-		os.Exit(1)
+		return 1
 	}
 	// Only write the cwd file when the user actually switched worktrees, so a
 	// gg-wrapped shell stays put otherwise.
 	if cwdFile != "" && cwd != "" {
 		_ = os.WriteFile(cwdFile, []byte(cwd), 0o644)
 	}
+	return 0
 }
 
 // extractCwdFile pulls a global --cwd-file flag (in either "--cwd-file path" or

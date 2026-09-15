@@ -109,6 +109,17 @@ func noteApply(svc *domain.Service, link *domain.Resolved, args []string, stdin 
 	ctx := context.Background()
 	target := domain.NoteBatchTarget{Cached: cached, Rev: rev}
 	rule := domain.NoteSideBoth
+	previewed := false
+	if link != nil {
+		if pv, ok := previewTargetFromLink(*link); ok {
+			// The same three facts --preview sets: stored on the tip, hunk
+			// numbers from the PREVIEW's patch, new side only.
+			spec := pv.Spec
+			target = domain.NoteBatchTarget{Rev: pv.Set.Tip, Hunks: &spec}
+			rule = domain.NoteSideNewOnly
+			previewed = true
+		}
+	}
 	if pf.set() {
 		if cached || rev != "" {
 			return previewUsageErr("note apply", stderr)
@@ -123,12 +134,13 @@ func noteApply(svc *domain.Service, link *domain.Resolved, args []string, stdin 
 		// only — old-side items are SKIPPED with one warning (the --working rule).
 		target = domain.NoteBatchTarget{Rev: tgt.Set.Tip, Hunks: &spec}
 		rule = domain.NoteSideNewOnly
+		previewed = true
 	}
 	planned, skipped, err := svc.PlanNoteBatchIn(ctx, batch, target, noteAuthorDefault(*author), rule)
 	if err != nil {
 		return noteExit(err, stderr)
 	}
-	warnSkippedOldSide(stderr, skipped, pf.set())
+	warnSkippedOldSide(stderr, skipped, previewed)
 	stored, err := svc.ApplyNoteBatch(ctx, planned)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)

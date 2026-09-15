@@ -33,6 +33,12 @@ type Resolved struct {
 	Side     model.NoteSide
 	Hunk     int
 	Commit   string // the FULL sha when the link named a commit
+	// Preview is the resolved merge-preview scope when the link named a pair
+	// (gg://<repo>@<target>...<source>). Addr and Commit then point at the
+	// preview's SOURCE TIP — the write target for a preview note (spec §1.1) —
+	// and every consumer that would otherwise read a --preview argument reads
+	// this instead. nil for every other link.
+	Preview *PreviewNoteSet
 }
 
 // ResolveOpts carries everything the resolver may not reach for itself, so a
@@ -85,12 +91,25 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 	// (not via ParseLink, which never leaves Commit empty for this state) could
 	// slip through with no sha. Refuse it here rather than reaching finishLink's
 	// ResolveRev with an empty ref.
-	if l.Target.State == model.StateCommitted && l.Target.Commit == "" {
+	if l.Target.State == model.StateCommitted && l.Target.Commit == "" && l.Target.Preview == nil {
 		return Resolved{}, fmt.Errorf("%w: gg link names a commit without a sha", model.ErrLink)
 	}
 	cands := linkCandidates(ctx, l, opts)
 	if len(cands) == 0 {
 		return Resolved{}, fmt.Errorf("%w: %s is not in this machine's gg history; open it once in gg", ErrLinkUnknownRepo, linkRepoLabel(l))
+	}
+	// A preview names two BRANCHES, so a checkout that lacks either cannot show
+	// it — drop those before anything else, including the cwd. (A commit link's
+	// containment filter below runs only when more than one candidate is left;
+	// this one runs ALWAYS, because "the cwd has the repo but not the branch" is
+	// the common case, not the tie-break case.) The cwd still sorts first, so it
+	// wins any tie the filter leaves.
+	if p := l.Target.Preview; p != nil {
+		kept := previewCandidates(ctx, cands, p, opts)
+		if len(kept) == 0 {
+			return Resolved{}, fmt.Errorf("%w: no checkout of %s holds both %s and %s", ErrLinkUnknownRepo, linkRepoLabel(l), p.Target, p.Source)
+		}
+		cands = kept
 	}
 	// The cwd is never ambiguous: the caller ran the command THERE, which is
 	// the strongest statement of intent available. A commit link still goes
@@ -99,7 +118,7 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 	if cands[0].isCwd && l.Target.State != model.StateCommitted {
 		return finishLink(ctx, l, cands[0], opts)
 	}
-	if len(cands) > 1 && l.Target.State == model.StateCommitted {
+	if len(cands) > 1 && l.Target.State == model.StateCommitted && l.Target.Preview == nil {
 		if kept := containing(ctx, cands, l.Target.Commit, opts); len(kept) > 0 {
 			cands = kept
 		}
@@ -295,6 +314,26 @@ func containing(ctx context.Context, cands []linkCandidate, sha string, opts Res
 	return kept
 }
 
+// previewCandidates keeps the checkouts that can actually SHOW the pair: both
+// branch names must resolve there. ResolveRev is the same probe containing()
+// uses for a commit link; a candidate whose probe errors is simply not a
+// candidate, exactly as there.
+func previewCandidates(ctx context.Context, cands []linkCandidate, p *model.LinkPreview, opts ResolveOpts) []linkCandidate {
+	var kept []linkCandidate
+	for _, c := range cands {
+		// OpenFn is defaulted once at ResolveLink's entry and never nil.
+		svc := opts.OpenFn(c.checkout)
+		if _, found, err := svc.ResolveRev(ctx, p.Source); err != nil || !found {
+			continue
+		}
+		if _, found, err := svc.ResolveRev(ctx, p.Target); err != nil || !found {
+			continue
+		}
+		kept = append(kept, c)
+	}
+	return kept
+}
+
 // finishLink builds the Resolved value for the chosen candidate: the address,
 // the worktree pin for the live states, and the FULL sha for a commit link.
 func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts ResolveOpts) (Resolved, error) {
@@ -315,6 +354,24 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 	r.Addr.Path = rel
 	switch l.Target.State {
 	case model.StateCommitted:
+		if p := l.Target.Preview; p != nil {
+			// The tip is resolved HERE, on the chosen checkout, so every
+			// consumer gets exactly the set `--preview <target>...<source>`
+			// would build (ruling 3). PreviewNotes returns a ZERO set with a nil
+			// error for a pair that is not previewable (merged, no common base):
+			// that is not an error there, but it is one here — the caller asked
+			// for this preview by name.
+			set, perr := opts.OpenFn(c.checkout).PreviewNotes(ctx, p.Source, p.Target)
+			if perr != nil {
+				return Resolved{}, perr
+			}
+			if !set.OK() {
+				return Resolved{}, fmt.Errorf("%w: %s does not show %s...%s (merged, or no common base)", ErrLinkUnknownRepo, c.checkout, p.Target, p.Source)
+			}
+			r.Preview = &set
+			r.Commit, r.Addr.Commit = set.Tip, set.Tip
+			return r, nil
+		}
 		// ResolveRev peels to ^{commit} and is also the >=7-hex → full-sha
 		// expansion: no second verb exists for that. OpenFn is defaulted once
 		// at ResolveLink's entry and never nil.

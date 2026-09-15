@@ -238,6 +238,24 @@ func TestDiffHunksRootCommitIsItsOwnChange(t *testing.T) {
 	}
 }
 
+// A gg:// link followed by a flag must parse the flag, not strand it as an
+// extra positional (flag.Parse alone stops at the first non-flag argument,
+// which the link is). This pins a bug independent of preview links: a plain
+// commit link plus a trailing --stat used to exit 2 with a usage error.
+func TestDiffCommitLinkAcceptsATrailingFlag(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	sha := runGit(t, dir, "rev-parse", "HEAD")
+	link := "gg://" + filepath.ToSlash(dir) + "@" + sha
+	code, out, errb := runCLI(t, dir, "diff", link, "--stat")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 (stderr %q)", code, errb)
+	}
+	if strings.TrimSpace(out) == "" {
+		t.Fatalf("--stat produced no output: %q", out)
+	}
+}
+
 func TestDiffHunksRejectsStatCombination(t *testing.T) {
 	t.Parallel()
 	dir := newRepoDir(t)

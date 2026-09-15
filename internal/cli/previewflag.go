@@ -79,3 +79,16 @@ func (t previewTarget) withPaths(paths []string) model.DiffSpec {
 	s.Paths = paths
 	return s
 }
+
+// previewTargetFromLink adapts a RESOLVED preview link onto the very value
+// --preview produces, so every consumer below runs ONE code path (ruling 5).
+// The set was already resolved by domain.ResolveLink on the link's own
+// checkout; re-resolving here would cost two more rev-parse calls and could
+// disagree with the address the resolver already handed out.
+func previewTargetFromLink(res domain.Resolved) (previewTarget, bool) {
+	if res.Preview == nil {
+		return previewTarget{}, false
+	}
+	set := *res.Preview
+	return previewTarget{Source: set.Source, Target: set.Target, Set: set, Spec: set.DiffSpec()}, true
+}

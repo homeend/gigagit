@@ -875,3 +875,26 @@ gates on `notesArmed()`, which is exactly where the rows carry
 **`{{cwd}}` in an e2e `[[run]] cmd`** expands to that run's working directory
 in slash form. It exists because a local-form link is an absolute path the
 sandbox only has at run time; it is the harness's ONLY substitution.
+
+### Preview links (feature B, 2026-09-15)
+
+`model.LinkTarget.Preview *LinkPreview{Source, Target}` is set iff the target
+text carries git's three-dot pair; `State` stays `StateCommitted` with an EMPTY
+`Commit`, because which commit a preview addresses is a per-machine question.
+`Link.Address()` is therefore meaningless for a preview link — the resolver
+(`finishLink`, the ONLY `.Address()` caller on a `model.Link` in the tree)
+branches first, calls `PreviewNotes` on a checkout that holds BOTH branches, and
+fills `Resolved.Preview` plus an `Addr` on the source tip. `internal/cli`'s
+`previewTargetFromLink` is the one adapter onto the `--preview` code path, so a
+link and the flag cannot diverge; `linkDiffSpec` returns the preview's own patch
+so hunk numbers agree. The steer wire's `target.state = "preview"` carries
+`source`/`target` and an EMPTY `commit`: the consumer resolves the tip itself,
+so a tip that moves between post and apply is honoured. The TUI parks a
+`steerStagePreview` pending drained by the `compareFilesMsg` handler
+(`openCompareFiles` does set `m.filesHash` to one of the two endpoints, the
+same field a plain single-commit view uses — but that hash cannot tell a
+preview's file list apart from an unrelated commit view that happens to share
+it, so the open `(source, target)` PAIR is what actually identifies a preview,
+and that is the gate). `gg open` reaches the TUI through the
+`cli.LaunchTUI` seam that `cmd/gg`'s `launchTUI` installs, keeping
+`internal/cli` free of an `internal/tui` import.
