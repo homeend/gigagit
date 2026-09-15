@@ -313,7 +313,20 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 			return 2
 		}
 		addr = link.Addr
+		pv, isPreview := previewTargetFromLink(*link)
 		switch {
+		case link.Hunk > 0 && isPreview:
+			// PreviewHunkAnchor is the ONE place the preview's hunk numbering
+			// and the old-side refusal live, shared with --preview and MCP.
+			s, r, herr := svc.PreviewHunkAnchor(ctx, pv.Set, addr.Path, link.Hunk)
+			if errors.Is(herr, domain.ErrPreviewOldSide) {
+				fmt.Fprintln(stderr, "note add:", herr)
+				return 2
+			}
+			if herr != nil {
+				return noteExit(herr, stderr)
+			}
+			side, rng = s, r
 		case link.Hunk > 0:
 			// linkDiffSpec is the ONE place that maps a link's target onto a
 			// diff spec, so `gg note add <link>#N` cannot drift from
@@ -627,11 +640,21 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 		}
 		// A link's line and hunk are ignored: `note list` is about a FILE's
 		// threads, exactly as `--file` is.
-		got, err := svc.NotesAt(ctx, link.Addr)
-		if err != nil {
-			return noteExit(err, stderr)
+		if pv, ok := previewTargetFromLink(*link); ok {
+			// A preview GATHERS notes along the branch and reports stale as
+			// "outdated" — the same rows --preview prints, not the tip's own.
+			got, gerr := previewResolvedNotes(ctx, svc, pv.Set, link.Addr.Path)
+			if gerr != nil {
+				return noteExit(gerr, stderr)
+			}
+			res, previewWords = got, true
+		} else {
+			got, err := svc.NotesAt(ctx, link.Addr)
+			if err != nil {
+				return noteExit(err, stderr)
+			}
+			res = got
 		}
-		res = got
 	} else if pf.set() {
 		if *tf.rev != "" || *tf.cached {
 			return previewUsageErr("note list", stderr)

@@ -241,6 +241,8 @@ type wireResolvedLink struct {
 	State    string `json:"state"`
 	Path     string `json:"path,omitempty"`
 	Commit   string `json:"commit,omitempty"`
+	Source   string `json:"source,omitempty"`
+	Target   string `json:"target,omitempty"`
 	Worktree string `json:"worktree,omitempty"`
 	Side     string `json:"side,omitempty"`
 	Line     int    `json:"line,omitempty"`
@@ -283,6 +285,9 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 			Commit: res.Addr.Commit, Worktree: res.Addr.Worktree,
 			Side: string(res.Side), Line: res.Line, Hunk: res.Hunk,
 		}
+		if res.Preview != nil {
+			w.Source, w.Target = res.Preview.Source, res.Preview.Target
+		}
 		if err := json.NewEncoder(stdout).Encode(w); err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
@@ -291,6 +296,11 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 	}
 	fmt.Fprintln(stdout, res.Checkout)
 	line := res.Addr.State.String()
+	if res.Preview != nil {
+		// A preview's state word alone ("committed") would say nothing about
+		// WHICH commit or why: name the pair, then the tip it resolved to.
+		line = "preview " + res.Preview.Target + "..." + res.Preview.Source
+	}
 	if res.Addr.Commit != "" {
 		line += " " + res.Addr.Commit
 	}

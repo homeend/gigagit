@@ -40,6 +40,13 @@ func linkDiffSpec(ctx context.Context, svc *domain.Service, res domain.Resolved)
 	if res.Addr.Path != "" {
 		paths = []string{res.Addr.Path}
 	}
+	// A PREVIEW link's patch is merge-base → source tip, never the tip commit's
+	// own parent→tip change: `gg diff <preview link> --hunks` and
+	// `gg note add <preview link>#N` must number the same hunks as
+	// `gg diff --preview … --hunks` (ruling 1 of feature A, ruling 5 here).
+	if tgt, ok := previewTargetFromLink(res); ok {
+		return tgt.withPaths(paths), nil
+	}
 	switch res.Addr.State {
 	case model.StateStaged:
 		return svc.HunkDiffSpec(ctx, true, "", paths)

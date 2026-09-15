@@ -1,0 +1,167 @@
+package cli
+
+import (
+	"encoding/json"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// previewLinkFor builds the LOCAL-form preview link for dir. The local form is
+// deliberate: resolveLinkArg reads the package global RepoStatePath, which is
+// "" in tests (an empty registry), so the cwd is the only candidate.
+func previewLinkFor(dir, path string) string {
+	l := "gg://" + filepath.ToSlash(dir)
+	if path != "" {
+		l += "/" + path
+	}
+	return l + "@main...feat/x"
+}
+
+// A table over every §2.3 consumer: the preview link and --preview must
+// produce exactly the same bytes / the same stored note (ruling 5).
+func TestPreviewLinkMatchesThePreviewFlag(t *testing.T) {
+	dir := previewRepo(t)
+	fileLink := previewLinkFor(dir, "a.txt")
+	// T4a: previewRepo seeds no notes, so the "note list" row below would be
+	// a vacuous comparison (two empty lists always match). Seed one note via
+	// --preview first, so both sides must actually carry it.
+	if code, _, errb := runCLI(t, dir, "note", "add", "--preview", "main...feat/x", "--file", "a.txt", "--new-line", "1", "--summary", "seeded preview note"); code != 0 {
+		t.Fatalf("seed note: %d %s", code, errb)
+	}
+	cases := []struct {
+		name     string
+		flagArgs []string
+		linkArgs []string
+	}{
+		{"diff", []string{"diff", "--preview", "main...feat/x"}, []string{"diff", fileLink}},
+		{"diff --hunks --json", []string{"diff", "--preview", "main...feat/x", "--hunks", "--json"}, []string{"diff", fileLink, "--hunks", "--json"}},
+		{"note list", []string{"note", "list", "--preview", "main...feat/x", "--file", "a.txt"}, []string{"note", "list", fileLink}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			codeF, outF, errF := runCLI(t, dir, c.flagArgs...)
+			codeL, outL, errL := runCLI(t, dir, c.linkArgs...)
+			if codeF != 0 || codeL != 0 {
+				t.Fatalf("exit codes = %d (flag: %s) / %d (link: %s)", codeF, errF, codeL, errL)
+			}
+			if outF != outL {
+				t.Errorf("--preview and the link disagree:\nflag: %q\nlink: %q", outF, outL)
+			}
+			if c.name == "note list" {
+				// T4a: both outputs must carry the seeded note (same status
+				// word, since the lines above already proved byte-identity).
+				if !strings.Contains(outF, "seeded preview note") || !strings.Contains(outL, "seeded preview note") {
+					t.Fatalf("seeded note missing:\nflag: %q\nlink: %q", outF, outL)
+				}
+			}
+		})
+	}
+}
+
+// note add through a preview link stores on the tip, numbered over the
+// PREVIEW's patch — exactly as --preview --hunk N does.
+func TestNoteAddThroughAPreviewLinkStoresOnTheTip(t *testing.T) {
+	dir := previewRepo(t)
+	if code, _, errb := runCLI(t, dir, "note", "add", previewLinkFor(dir, "a.txt")+"#1", "--summary", "linked preview note"); code != 0 {
+		t.Fatalf("note add: %d %s", code, errb)
+	}
+	// The same note must be visible on the source tip's own commit view.
+	tip := strings.TrimSpace(gitOut(t, dir, "rev-parse", "feat/x"))
+	_, out, _ := runCLI(t, dir, "note", "list", "--rev", tip, "--file", "a.txt")
+	if !strings.Contains(out, "linked preview note") {
+		t.Fatalf("the note is not on the tip %s: %q", tip, out)
+	}
+}
+
+// A preview link and --preview together is a usage error, never a silent
+// override (ruling 5).
+func TestPreviewLinkPlusPreviewFlagIsAUsageError(t *testing.T) {
+	dir := previewRepo(t)
+	for _, args := range [][]string{
+		{"note", "add", previewLinkFor(dir, "a.txt") + ":1", "--preview", "main...feat/x", "--summary", "no"},
+		{"note", "list", previewLinkFor(dir, "a.txt"), "--preview", "main...feat/x"},
+		{"diff", previewLinkFor(dir, "a.txt"), "--preview", "main...feat/x"},
+	} {
+		if code, _, errb := runCLI(t, dir, args...); code != 2 {
+			t.Errorf("%v: exit = %d, want 2 (%s)", args, code, errb)
+		}
+	}
+}
+
+func TestShowRefusesAPreviewLink(t *testing.T) {
+	dir := previewRepo(t)
+	code, _, errb := runCLI(t, dir, "show", previewLinkFor(dir, "a.txt"))
+	if code != 2 {
+		t.Fatalf("exit = %d, want 2", code)
+	}
+	if !strings.Contains(errb, "gg diff") {
+		t.Errorf("stderr = %q, want it to point at gg diff", errb)
+	}
+}
+
+// note apply through a preview link imports onto the tip, new side only.
+func TestNoteApplyThroughAPreviewLinkImportsOntoTheTip(t *testing.T) {
+	dir := previewRepo(t)
+	// The agent-context v1 shape notebatch.Parse accepts (see
+	// internal/notebatch/notebatch.go's doc comment and noteapply_test.go).
+	batch := `{"files":[{"path":"a.txt","annotations":[{"newRange":[1,1],"summary":"batched"}]}]}`
+	code, _, errb := runCLIStdin(t, dir, batch, "note", "apply", previewLinkFor(dir, ""), "--stdin")
+	if code != 0 {
+		t.Fatalf("note apply: %d %s", code, errb)
+	}
+	tip := strings.TrimSpace(gitOut(t, dir, "rev-parse", "feat/x"))
+	_, out, _ := runCLI(t, dir, "note", "list", "--rev", tip, "--file", "a.txt")
+	if !strings.Contains(out, "batched") {
+		t.Fatalf("the batch did not land on the tip: %q", out)
+	}
+}
+
+// note clear with a preview FILE link clears the tip's notes for that path;
+// a BARE preview link is refused by noteLinkShape exactly as a bare commit
+// link is (a repository link cannot carry a target here).
+func TestNoteClearWithPreviewLinks(t *testing.T) {
+	dir := previewRepo(t)
+	if code, _, errb := runCLI(t, dir, "note", "add", previewLinkFor(dir, "a.txt")+":1", "--summary", "to clear"); code != 0 {
+		t.Fatalf("note add: %d %s", code, errb)
+	}
+	// --yes is mandatory (note.go:753); a FILE link stands in for --file, and
+	// noteClear then clears link.Addr — the tip + path (note.go:734-762).
+	if code, _, errb := runCLI(t, dir, "note", "clear", previewLinkFor(dir, "a.txt"), "--yes"); code != 0 {
+		t.Fatalf("note clear: %d %s", code, errb)
+	}
+	tip := strings.TrimSpace(gitOut(t, dir, "rev-parse", "feat/x"))
+	_, out, _ := runCLI(t, dir, "note", "list", "--rev", tip, "--file", "a.txt")
+	if strings.Contains(out, "to clear") {
+		t.Fatalf("the note survived the clear: %q", out)
+	}
+	if code, _, _ := runCLI(t, dir, "note", "clear", previewLinkFor(dir, ""), "--all", "--yes"); code != 2 {
+		t.Error("a BARE preview link carries a target: note clear must refuse it (exit 2)")
+	}
+}
+
+// gg link resolve prints the pair for a preview link, in both forms.
+func TestLinkResolvePrintsThePreviewPair(t *testing.T) {
+	dir := previewRepo(t)
+	_, out, errb := runCLI(t, dir, "link", "resolve", previewLinkFor(dir, "a.txt")+":2")
+	if !strings.Contains(out, "preview main...feat/x") || !strings.Contains(out, "a.txt") {
+		t.Fatalf("resolve = %q (%s)", out, errb)
+	}
+	_, jsonOut, _ := runCLI(t, dir, "link", "resolve", "--json", previewLinkFor(dir, "a.txt")+":2")
+	var w struct {
+		State  string `json:"state"`
+		Source string `json:"source"`
+		Target string `json:"target"`
+		Commit string `json:"commit"`
+		Path   string `json:"path"`
+	}
+	if err := json.Unmarshal([]byte(jsonOut), &w); err != nil {
+		t.Fatalf("json: %v (%q)", err, jsonOut)
+	}
+	if w.Source != "feat/x" || w.Target != "main" {
+		t.Errorf("json pair = %s...%s", w.Target, w.Source)
+	}
+	if w.Commit == "" || w.Path != "a.txt" {
+		t.Errorf("json = %+v, want the tip sha and the path", w)
+	}
+}
