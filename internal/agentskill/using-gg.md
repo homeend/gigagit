@@ -115,12 +115,16 @@ machines, the machine-local preview id does not. Every verb that takes a link
 treats a preview link exactly as `--preview` — `gg diff`, `gg note
 add|list|apply|clear`, `gg session navigate`, `gg session highlight add`,
 `gg link resolve`. `gg show` refuses one (use `gg diff`), and the preview's old
-side is the merge base, so `:old:` is refused at parse time. Build one with
-`gg link --preview <id|label|<target>...<source>> [<path>[:<line>]]`.
+side is the merge base, so `:old:` is refused at parse time; a `#<hunk>`
+naming a delete-only hunk (no new side) is instead refused at RUN time, on
+`gg note add`, `gg session navigate` and `gg session highlight add`. Build one
+with `gg link --preview <id|label|<target>...<source>> [<path>[:<line>]]`.
 
 `gg open <link>` shows it to the user in their gg: it steers whatever gg
-session is live in the link's checkout, or starts the TUI there positioned on
-the link. Use it instead of launching `gg` yourself.
+session is live in the link's checkout (`--no-wait` skips waiting for that
+session's answer), or starts the TUI there positioned on the link. Refused
+inside `gg batch` (exit 2 — unlike every other batch line it might launch the
+TUI). Use it instead of launching `gg` yourself.
 
 `<repo>` is the repository name of the repo's remote (`gigagit`), resolved
 through gg's machine-local repository history — so a link made on one checkout
@@ -143,7 +147,9 @@ finds the right one here.
   - `gg note add <link>` — replaces `--file`, `--cached`, `--rev`, `--hunk`,
     `--new-line` and `--old-line`; the link must carry `:<line>` or `#<hunk>`.
   - `gg note list <link>` — replaces `--file`, `--cached` and `--rev`; the
-    link's own line or hunk is ignored (it lists that FILE's threads).
+    link's own line or hunk is ignored (it lists that FILE's threads). A BARE
+    preview link (no path) instead lists every path the preview covers — the
+    same as `--preview <P>` with no `--file`.
   - `gg note reply <repo-link> <id> …` / `gg note rm <repo-link> <id>` — note
     ids are per REPOSITORY, so from another directory put the repository's
     link first (`gg://<repo>` or `gg:///abs/path`, no file or `@target`

@@ -24,8 +24,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   when none is saved) through a new `target.state = "preview"` wire value that
   carries the pair, not a sha. And **`gg open <link>`** shows a link to the
   user: it steers a live gg session in the link's checkout, or launches the TUI
-  there positioned on the link (`--at`, consumed once the first snapshot has
-  loaded). Skills: using-gg v74, reviewing-with-gg v7.
+  there positioned on the link (`--at`, consumed once every startup
+  precondition has landed — snapshot, window size, ops idle, and for a
+  preview link the previews read). Skills: using-gg v74, reviewing-with-gg v7.
 - **Notes inside merge previews.** A preview (`Previews` tab, `gg preview`)
   is now a review surface: its diff rows carry review notes, gathered along
   the whole branch (merge-base → source tip) rather than read off the tip

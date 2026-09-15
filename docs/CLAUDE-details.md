@@ -890,8 +890,11 @@ link and the flag cannot diverge; `linkDiffSpec` returns the preview's own patch
 so hunk numbers agree. The steer wire's `target.state = "preview"` carries
 `source`/`target` and an EMPTY `commit`: the consumer resolves the tip itself,
 so a tip that moves between post and apply is honoured. The TUI parks a
-`steerStagePreview` pending drained by the `compareFilesMsg` handler (a
-preview's file list is a compare, not a commit file list, so there is no hash to
-gate on — the open pair is the gate). `gg open` reaches the TUI through the
+`steerStagePreview` pending drained by the `compareFilesMsg` handler
+(`openCompareFiles` does set `m.filesHash` to one of the two endpoints, the
+same field a plain single-commit view uses — but that hash cannot tell a
+preview's file list apart from an unrelated commit view that happens to share
+it, so the open `(source, target)` PAIR is what actually identifies a preview,
+and that is the gate). `gg open` reaches the TUI through the
 `cli.LaunchTUI` seam that `cmd/gg`'s `launchTUI` installs, keeping
 `internal/cli` free of an `internal/tui` import.
