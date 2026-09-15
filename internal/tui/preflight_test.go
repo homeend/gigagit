@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
@@ -223,5 +225,48 @@ func TestAskMigrationFallsBackToTheRenderedConsequence(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "plain english only") {
 		t.Errorf("consent screen %q dropped the fallback consequence", out.String())
+	}
+}
+
+// TestAskMigrationFramesTheMessage guards the consent screen's shape: every
+// prose line is framed by the same border and starts at one column, so the
+// long consequence paragraph cannot run ragged against the heading.
+func TestAskMigrationFramesTheMessage(t *testing.T) {
+	t.Parallel()
+
+	m := domain.PendingMigration{
+		Feature:     "versions",
+		Consequence: strings.Repeat("long consequence prose that must wrap ", 6),
+		Refs:        make([]string, 78),
+	}
+	var out strings.Builder
+	if _, err := askMigration(m, bufio.NewReader(strings.NewReader("s\n")), &out, func(domain.PendingMigration) error {
+		return nil
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	if len(lines) < 4 {
+		t.Fatalf("want a framed block, got %q", out.String())
+	}
+	top, bottom := lines[0], lines[len(lines)-2] // last line is the prompt
+	if !strings.HasPrefix(top, "┌") || !strings.HasSuffix(top, "┐") {
+		t.Errorf("want a top border, got %q", top)
+	}
+	if !strings.HasPrefix(bottom, "└") || !strings.HasSuffix(bottom, "┘") {
+		t.Errorf("want a bottom border, got %q", bottom)
+	}
+	wantW := lipgloss.Width(top)
+	for _, l := range lines[1 : len(lines)-2] {
+		if !strings.HasPrefix(l, "│ ") || !strings.HasSuffix(l, " │") {
+			t.Errorf("line %q is not framed", l)
+		}
+		if got := lipgloss.Width(l); got != wantW {
+			t.Errorf("line %q width %d, want %d", l, got, wantW)
+		}
+	}
+	if last := lines[len(lines)-1]; strings.HasPrefix(last, " ") || strings.HasPrefix(last, "│") {
+		t.Errorf("the prompt must sit outside the box, got %q", last)
 	}
 }
