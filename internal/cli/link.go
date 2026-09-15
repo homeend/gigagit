@@ -11,10 +11,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/linknav"
 	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/steer"
 )
 
 // linkUsage is printed for every usage error of `gg link`. The quoting note
@@ -359,23 +358,8 @@ func resolveLinkArg(ctx context.Context, svc *domain.Service, s string) (domain.
 	return domain.ResolveLink(ctx, l, linkResolveOpts(RepoStatePath, svc))
 }
 
-// linkResolveOpts wires the resolver to this process: the MRU registry, the
-// cwd's service, and the steer-presence probe. domain must not import
-// internal/steer, so liveness arrives as a function.
+// linkResolveOpts wires the resolver to this process (linknav.Opts): the MRU
+// registry, the cwd's service, and the steer-presence probe.
 func linkResolveOpts(statePath string, svc *domain.Service) domain.ResolveOpts {
-	return domain.ResolveOpts{
-		RegistryPath: statePath,
-		Cwd:          svc,
-		LiveFn: func(commonDir, checkout string) bool {
-			dir := config.SessionSteerDir(commonDir, checkout)
-			if dir == "" {
-				return false
-			}
-			if _, ok := steer.Live(dir, steer.TUIPresence); ok {
-				return true
-			}
-			_, ok := steer.Live(dir, steer.WebPresence)
-			return ok
-		},
-	}
+	return linknav.Opts(statePath, svc)
 }

@@ -63,9 +63,12 @@ func TestLayeringDAG(t *testing.T) {
 		"textdiff":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"syntax":      {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"steer":       {"config", "model", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "gitwatch", "i18n", "theme"},
-		"template":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
-		"theme":       {"config", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "syntax", "i18n"},
-		"web":         {"tui", "cli", "mcp", "app"},
+		// linknav sits between domain and the frontends: the one link→navigate
+		// builder cli AND tui share, so it may reach neither.
+		"linknav":  {"tui", "cli", "mcp", "web", "app"},
+		"template": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"theme":    {"config", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "syntax", "i18n"},
+		"web":      {"tui", "cli", "mcp", "app"},
 	}
 	const root = "github.com/homeend/gigagit/internal/"
 	for pkg, forbidden := range cases {

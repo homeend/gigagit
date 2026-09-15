@@ -14,6 +14,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/linknav"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -159,41 +160,15 @@ func steerDirFor(svc *domain.Service) string {
 	return dir
 }
 
-// targetOf maps a resolved note address onto the wire target. It is the CLI's
-// half of the same allowlist the web's noteState enforces.
-func targetOf(a model.FileAddress) *steer.Target {
-	t := &steer.Target{State: "unstaged"}
-	switch a.State {
-	case model.StateStaged:
-		t.State = "staged"
-	case model.StateUntracked:
-		t.State = "untracked"
-	case model.StateCommitted:
-		t.State, t.Commit = "commit", a.Commit
-	}
-	return t
-}
+// targetOf maps a resolved note address onto the wire target (linknav.TargetOf).
+func targetOf(a model.FileAddress) *steer.Target { return linknav.TargetOf(a) }
 
-// resolveHunkLine turns --hunk N into the {side,no} the consumer lands on: the
-// FIRST line of the range HunkRange resolves — the hunk's new span, or its old
-// span for a pure deletion. (A NOTE anchors at a range END; a landing wants the
-// top of the region.) It is the SAME HunkRange `gg note add --hunk N` uses, so
-// a hunk number an agent read from `gg diff --hunks` addresses one region for
-// both verbs. Resolved HERE and never in the TUI, so one landing path serves
-// --hunk, --new-line and --old-line alike.
+// resolveHunkLine turns --hunk N into the {side,no} the consumer lands on
+// (linknav.HunkLine): the FIRST line of the hunk's range, resolved HERE and
+// never in the TUI, so one landing path serves --hunk, --new-line and
+// --old-line alike.
 func resolveHunkLine(ctx context.Context, svc *domain.Service, cached bool, rev, path string, n int) (steer.Line, error) {
-	spec, err := svc.HunkDiffSpec(ctx, cached, rev, []string{path})
-	if err != nil {
-		return steer.Line{}, err
-	}
-	side, rng, err := svc.HunkRange(ctx, spec, path, n)
-	if err != nil {
-		return steer.Line{}, err
-	}
-	if side == model.NoteSideOld {
-		return steer.Line{Side: "old", No: rng[0]}, nil
-	}
-	return steer.Line{Side: "new", No: rng[0]}, nil
+	return linknav.HunkLine(ctx, svc, cached, rev, path, n)
 }
 
 // sessionStatus prints the routing for this worktree.
@@ -345,67 +320,17 @@ func sessionOpenViewAt(path string) string {
 // (exit 2), unlike a git failure (exit 1), and both `gg session navigate` and
 // `gg open` map them the same way.
 var (
-	errNavLinkRepoOnly = errors.New("that link names a repository, not a place in it")
-	errNavLinkNoLine   = errors.New("that link names a file but no line; add :<line> or #<hunk>")
+	errNavLinkRepoOnly = linknav.ErrRepoOnly
+	errNavLinkNoLine   = linknav.ErrNoLine
 )
 
-// navigateCommandFor builds the navigate command a RESOLVED link names. It is
-// the single builder `gg session navigate <link>` and `gg open <link>` share,
-// so the two can never post different commands for the same link. svc must be
-// the service for the link's OWN checkout (openLinkTarget / linkSteerDir).
+// navigateCommandFor builds the navigate command a RESOLVED link names
+// (linknav.Command): the single builder `gg session navigate <link>`,
+// `gg open <link>` and the TUI's paste field share, so no two surfaces can
+// post different commands for the same link. svc must be the service for the
+// link's OWN checkout (openLinkTarget / linkSteerDir).
 func navigateCommandFor(ctx context.Context, svc *domain.Service, res domain.Resolved) (steer.Command, error) {
-	c := steer.Command{Cmd: "navigate"}
-	if res.Preview != nil {
-		// The PAIR rides the wire, never the tip: the consumer resolves the tip
-		// itself, so a tip that moved between post and apply is honoured.
-		c.Target = &steer.Target{State: "preview", Source: res.Preview.Source, Target: res.Preview.Target}
-		if res.Addr.Path == "" {
-			return c, nil // reveal the Previews entry
-		}
-		c.File = res.Addr.Path
-		line := steer.Line{Side: string(res.Side), No: res.Line}
-		if res.Hunk > 0 {
-			// PreviewHunkAnchor, never resolveHunkLine: the numbering is the
-			// PREVIEW's patch (merge-base → tip), and a delete-only hunk has no
-			// new side to land on.
-			side, rng, err := svc.PreviewHunkAnchor(ctx, *res.Preview, res.Addr.Path, res.Hunk)
-			if err != nil {
-				return steer.Command{}, err
-			}
-			line = steer.Line{Side: string(side), No: rng[0]}
-		}
-		if line.No < 1 {
-			return steer.Command{}, errNavLinkNoLine
-		}
-		c.Line = &line
-		return c, nil
-	}
-	if res.Addr.Path == "" {
-		// A link with no path reveals the commit (spec §1).
-		if res.Commit == "" {
-			return steer.Command{}, errNavLinkRepoOnly
-		}
-		c.Commit = res.Commit
-		return c, nil
-	}
-	c.File, c.Target = res.Addr.Path, targetOf(res.Addr)
-	line := steer.Line{Side: string(res.Side), No: res.Line}
-	if res.Hunk > 0 {
-		// No StateUntracked guard here: the grammar has no untracked target, so
-		// ParseLink (the only source of a Resolved) never produces one — an
-		// untracked file's link is the plain working-tree form, whose
-		// index→file diff has hunks.
-		l, err := resolveHunkLine(ctx, svc, res.Addr.State == model.StateStaged, res.Addr.Commit, res.Addr.Path, res.Hunk)
-		if err != nil {
-			return steer.Command{}, err
-		}
-		line = l
-	}
-	if line.No < 1 {
-		return steer.Command{}, errNavLinkNoLine
-	}
-	c.Line = &line
-	return c, nil
+	return linknav.Command(ctx, svc, res)
 }
 
 // navExit maps navigateCommandFor's error onto an exit code: 2 for the two
