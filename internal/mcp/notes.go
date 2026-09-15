@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -56,6 +55,13 @@ type notesOut struct {
 	// text either, so it just echoes it to stderr as "context: …" — the MCP
 	// reply hands it back structured instead.
 	Contexts []string `json:"contexts,omitempty"`
+	// Skipped and Warning are gg_notes_apply's only: a preview target skips
+	// old-side items (its old side is the merge base, which no stored
+	// address names) rather than refusing the whole batch — parity with the
+	// CLI's `gg note apply --preview`, which warns to stderr and keeps
+	// going. MCP has no stderr, so the same warning rides the reply instead.
+	Skipped int    `json:"skipped,omitempty"`
+	Warning string `json:"warning,omitempty"`
 }
 
 type noteAddIn struct {
@@ -173,12 +179,21 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 			if in.OldLine != 0 {
 				return nil, out, fmt.Errorf("notes in a preview anchor on the new side (drop old_line)")
 			}
-			addr = model.FileAddress{State: model.StateCommitted, Commit: set.Tip, Path: in.File}
+			// The address is an ORDINARY committed one on the tip, so it is
+			// built by NoteTarget like every other target: that is what
+			// normalises the path ("./a.txt", a Windows "sub\a.txt") and
+			// refuses one escaping the repo — mirrors the CLI's `note add
+			// --preview` (internal/cli/note.go).
+			a, aerr := s.svc.NoteTarget(ctx, in.File, false, set.Tip)
+			if aerr != nil {
+				return nil, out, aerr
+			}
+			addr = a
 			switch {
 			case in.NewLine != 0:
 				side, rng = model.NoteSideNew, [2]int{in.NewLine, in.NewLine}
 			case in.Hunk != 0:
-				s2, r2, herr := s.svc.PreviewHunkAnchor(ctx, set, in.File, in.Hunk)
+				s2, r2, herr := s.svc.PreviewHunkAnchor(ctx, set, addr.Path, in.Hunk)
 				if herr != nil {
 					return nil, out, herr
 				}
@@ -243,12 +258,11 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		// which is NoteSideNewOnly), so PlanNoteBatch/ApplyNoteBatch — the
 		// shared, all-or-nothing planner/applier domain now owns — run with
 		// NoteSideBoth. A preview's old side is the merge base, which no
-		// stored address names, so it switches to NoteSideNewOnly and MCP
-		// (with no stderr warning channel, unlike the CLI's --preview arm)
-		// turns a nonzero skip count into a hard, all-or-nothing refusal
-		// with the domain's own old-side error — nothing is applied yet at
-		// that point, so the batch stores nothing rather than silently
-		// dropping the offending item.
+		// stored address names, so it switches to NoteSideNewOnly, which
+		// SKIPS old-side items rather than refusing the batch (spec §1.5,
+		// parity with the CLI's `gg note apply --preview`, which warns to
+		// stderr and keeps going). MCP has no stderr: the same warning text
+		// (warnSkippedOldSide's preview wording) rides the reply instead.
 		target := domain.NoteBatchTarget{Cached: in.Cached, Rev: in.Rev}
 		rule := domain.NoteSideBoth
 		if in.Preview != "" {
@@ -264,15 +278,16 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		if err != nil {
 			return nil, out, err
 		}
-		if skipped > 0 {
-			return nil, out, domain.ErrPreviewOldSide
-		}
 		stored, err := s.svc.ApplyNoteBatch(ctx, planned)
 		if err != nil {
 			return nil, out, err
 		}
 		for _, n := range stored {
 			out.Notes = append(out.Notes, domain.ToWireNote(domain.ResolvedNote{Note: n, Status: model.NoteActive, Range: n.Range}))
+		}
+		if skipped > 0 {
+			out.Skipped = skipped
+			out.Warning = fmt.Sprintf("skipped %d old-side annotation(s) — notes in a preview anchor on the new side", skipped)
 		}
 		// Only wake the window when there is something new to show: a batch
 		// that stored nothing (contexts only) would otherwise leave a stray
@@ -306,7 +321,10 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 
 // previewSet resolves a request's preview target. It is mutually exclusive
 // with cached/rev: two targets in one call is a caller error, never a silent
-// precedence rule.
+// precedence rule. A non-OK pair names its state word (missing source,
+// missing target, merged, no base) exactly as the CLI's resolvePreviewTarget
+// (internal/cli/previewflag.go) does, rather than one coarse "not
+// previewable" message.
 func (s *Server) previewSet(ctx context.Context, t noteTargetIn) (domain.PreviewNoteSet, error) {
 	if t.Cached || t.Rev != "" {
 		return domain.PreviewNoteSet{}, fmt.Errorf("one target only: preview cannot be combined with rev or cached")
@@ -314,6 +332,19 @@ func (s *Server) previewSet(ctx context.Context, t noteTargetIn) (domain.Preview
 	source, target, err := s.svc.PreviewResolve(ctx, t.Preview)
 	if err != nil {
 		return domain.PreviewNoteSet{}, err
+	}
+	sum, err := s.svc.PreviewSummary(ctx, source, target)
+	if err != nil {
+		return domain.PreviewNoteSet{}, err
+	}
+	switch sum.State {
+	case domain.PreviewOK:
+	case domain.PreviewMissingSource:
+		return domain.PreviewNoteSet{}, fmt.Errorf("preview: missing: %s", source)
+	case domain.PreviewMissingTarget:
+		return domain.PreviewNoteSet{}, fmt.Errorf("preview: missing: %s", target)
+	default:
+		return domain.PreviewNoteSet{}, fmt.Errorf("preview: %s → %s: %s", source, target, sum.State)
 	}
 	set, err := s.svc.PreviewNotes(ctx, source, target)
 	if err != nil {
@@ -326,32 +357,23 @@ func (s *Server) previewSet(ctx context.Context, t noteTargetIn) (domain.Preview
 }
 
 // previewNotesFor gathers a preview's notes for one path, or — with no path —
-// for every path the preview carries notes on. It mirrors the CLI's
-// previewResolvedNotes (internal/cli/note.go): PreviewNotesAt needs a path to
-// resolve against (it reads that file's content at the tip), so the no-path
-// case walks PreviewNoteCounts's own byPath keys in a stable order rather
-// than handing PreviewNotesAt an empty path, which would silently resolve
-// nothing.
+// for every path the preview carries notes on, in ONE store load
+// (domain.PreviewNotesAll) rather than one PreviewNotesAt call per path. It
+// mirrors the CLI's previewResolvedNotes (internal/cli/note.go): PreviewNotesAt
+// needs a path to resolve against (it reads that file's content at the tip),
+// so the no-path case walks PreviewNotesAll's map in PreviewNotePaths's
+// stable (sorted) order.
 func (s *Server) previewNotesFor(ctx context.Context, set domain.PreviewNoteSet, path string) ([]domain.ResolvedNote, error) {
 	if path != "" {
 		return s.svc.PreviewNotesAt(ctx, set, path)
 	}
-	byPath, _, err := s.svc.PreviewNoteCounts(ctx, set)
+	byPath, err := s.svc.PreviewNotesAll(ctx, set)
 	if err != nil {
 		return nil, err
 	}
-	paths := make([]string, 0, len(byPath))
-	for p := range byPath {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths)
 	var out []domain.ResolvedNote
-	for _, p := range paths {
-		got, gerr := s.svc.PreviewNotesAt(ctx, set, p)
-		if gerr != nil {
-			return nil, gerr
-		}
-		out = append(out, got...)
+	for _, p := range domain.PreviewNotePaths(byPath) {
+		out = append(out, byPath[p]...)
 	}
 	return out, nil
 }

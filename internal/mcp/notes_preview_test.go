@@ -107,29 +107,133 @@ func TestNotesListWithAPreviewReportsOutdated(t *testing.T) {
 	}
 }
 
-// gg_notes_apply with a preview target refuses a batch carrying an old-side
-// item: the preview's old side is the merge base, which no stored address
-// names, so old-side items are refused with domain.ErrPreviewOldSide rather
-// than silently skipped (unlike the CLI's --preview arm, which has stderr to
-// warn on and keeps going) — and, being refused before ApplyNoteBatch runs,
-// the batch stores NOTHING, including the otherwise-good new-side item.
-func TestNotesApplyWithAPreviewRefusesAnOldSideItem(t *testing.T) {
+// gg_notes_apply with a preview target SKIPS a batch's old-side item rather
+// than refusing the whole batch (spec §1.5, controller ruling: parity with
+// the CLI's `gg note apply --preview`, which warns to stderr and keeps
+// going): the new-side item is stored, skipped reports 1, warning carries
+// the CLI's warnSkippedOldSide preview wording, and the reload post fires
+// because something WAS stored.
+func TestNotesApplyWithAPreviewSkipsAnOldSideItem(t *testing.T) {
 	e := newTestEnv(t)
 	seedPreviewBranch(t, e)
 
-	msg := e.callErr(t, "gg_notes_apply", map[string]any{
+	e.srv.steerDir = t.TempDir()
+	if err := steer.Touch(e.srv.steerDir, steer.TUIPresence, steer.Presence{PID: 1, Worktree: e.dir}); err != nil {
+		t.Fatal(err)
+	}
+
+	out := e.call(t, "gg_notes_apply", map[string]any{
 		"preview": "main...feat",
 		"batch": json.RawMessage(`{"comments":[
-			{"filePath":"a.txt","newLine":1,"summary":"good, would store first"},
-			{"filePath":"a.txt","oldLine":1,"summary":"old side: refused"}]}`),
+			{"filePath":"a.txt","newLine":1,"summary":"good, stored"},
+			{"filePath":"a.txt","oldLine":1,"summary":"old side: skipped"}]}`),
 	})
-	if !strings.Contains(msg, "notes in a preview anchor on the new side") {
-		t.Fatalf("msg = %q, want the domain old-side error", msg)
+	notes, _ := out["notes"].([]any)
+	if len(notes) != 1 {
+		t.Fatalf("notes = %v, want exactly the one new-side item stored", out["notes"])
+	}
+	wire, _ := notes[0].(map[string]any)
+	if wire["summary"] != "good, stored" {
+		t.Fatalf("stored note = %v, want summary \"good, stored\"", wire)
+	}
+	if skipped, _ := out["skipped"].(float64); skipped != 1 {
+		t.Fatalf("skipped = %v, want 1", out["skipped"])
+	}
+	warning, _ := out["warning"].(string)
+	if !strings.Contains(warning, "notes in a preview anchor on the new side") {
+		t.Fatalf("warning = %q, want the preview old-side wording", warning)
+	}
+
+	if got := steer.Drain(e.srv.steerDir); len(got) == 0 {
+		t.Fatalf("a batch that stored something must still fire the notes-changed reload post")
 	}
 
 	list := e.call(t, "gg_notes_list", map[string]any{"preview": "main...feat", "file": "a.txt"})
-	if notes, _ := list["notes"].([]any); len(notes) != 0 {
-		t.Fatalf("a refused batch must store nothing, including the earlier good item: %v", notes)
+	if listed, _ := list["notes"].([]any); len(listed) != 1 {
+		t.Fatalf("gg_notes_list = %v, want the one stored new-side note", list["notes"])
+	}
+}
+
+// gg_notes_list with a preview target and no file gathers every path's notes
+// in one store load (domain.PreviewNotesAll), not one PreviewNotesAt call per
+// path — covered here functionally: notes on two different files both come
+// back from a single --file-less list call.
+func TestNotesListWithAPreviewAndNoFileGathersEveryPath(t *testing.T) {
+	e := newTestEnv(t)
+	seedPreviewBranch(t, e)
+	gitRun(t, e.dir, "checkout", "feat")
+	if err := os.WriteFile(filepath.Join(e.dir, "b.txt"), []byte("bee\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, e.dir, "add", "-A")
+	gitRun(t, e.dir, "commit", "-m", "feat: add b.txt")
+	gitRun(t, e.dir, "checkout", "main")
+
+	e.call(t, "gg_note_add", map[string]any{
+		"preview": "main...feat", "file": "a.txt", "new_line": 2, "summary": "about a",
+	})
+	e.call(t, "gg_note_add", map[string]any{
+		"preview": "main...feat", "file": "b.txt", "new_line": 1, "summary": "about b",
+	})
+
+	out := e.call(t, "gg_notes_list", map[string]any{"preview": "main...feat"})
+	notes, _ := out["notes"].([]any)
+	if len(notes) != 2 {
+		t.Fatalf("notes = %v, want both a.txt and b.txt notes", out["notes"])
+	}
+	var summaries []string
+	for _, n := range notes {
+		wire, _ := n.(map[string]any)
+		summaries = append(summaries, wire["summary"].(string))
+	}
+	if !strings.Contains(strings.Join(summaries, ","), "about a") || !strings.Contains(strings.Join(summaries, ","), "about b") {
+		t.Fatalf("summaries = %v, want both about a and about b", summaries)
+	}
+}
+
+// gg_note_add with a preview target normalises the file path through
+// NoteTarget, exactly like every other target: "./a.txt" is stored as
+// "a.txt", and a path escaping the repository ("../a.txt") is a usage error
+// — mirrors the CLI's `note add --preview` (internal/cli/note.go).
+func TestNoteAddWithAPreviewNormalisesThePath(t *testing.T) {
+	e := newTestEnv(t)
+	tip, _ := seedPreviewBranch(t, e)
+
+	out := e.call(t, "gg_note_add", map[string]any{
+		"preview": "main...feat", "file": "./a.txt", "new_line": 2, "summary": "dotted path",
+	})
+	note, _ := out["note"].(map[string]any)
+	id, _ := note["id"].(string)
+	if id == "" {
+		t.Fatalf("gg_note_add reply = %v", out)
+	}
+	stored, err := e.svc.NoteGet(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantAddr := model.FileAddress{State: model.StateCommitted, Commit: tip, Path: "a.txt"}
+	if stored.Address != wantAddr {
+		t.Fatalf("address = %+v, want %+v (./a.txt normalised)", stored.Address, wantAddr)
+	}
+
+	msg := e.callErr(t, "gg_note_add", map[string]any{
+		"preview": "main...feat", "file": "../a.txt", "new_line": 1, "summary": "escapes",
+	})
+	if !strings.Contains(msg, "escapes the repository") {
+		t.Fatalf("msg = %q, want the path-escape usage error", msg)
+	}
+}
+
+// A non-OK preview pair names its state word (missing source/target, merged,
+// no base) rather than one coarse "not previewable" message — mirrors the
+// CLI's resolvePreviewTarget (internal/cli/previewflag.go).
+func TestPreviewSetNamesTheStateWord(t *testing.T) {
+	e := newTestEnv(t)
+	seedPreviewBranch(t, e)
+
+	msg := e.callErr(t, "gg_notes_list", map[string]any{"preview": "main...no-such-branch"})
+	if !strings.Contains(msg, "missing: no-such-branch") {
+		t.Fatalf("msg = %q, want the missing-source state word", msg)
 	}
 }
 
