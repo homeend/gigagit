@@ -327,3 +327,76 @@ func TestRepoNameFromURL(t *testing.T) {
 		})
 	}
 }
+
+func TestParseLinkPreviewFormsRoundTrip(t *testing.T) {
+	t.Parallel()
+	for _, s := range []string{
+		"gg://gigagit@main...feat/login",
+		"gg://gigagit/internal/a.go@main...feat/login",
+		"gg://gigagit/internal/a.go@main...feat/login:42",
+		"gg://gigagit/internal/a.go@main...feat/login#3",
+		"gg://gigagit@origin/main...origin/feat/login",
+		"gg:///mnt/t/repo/a.go@main...feat/x:7",
+	} {
+		l, err := ParseLink(s)
+		if err != nil {
+			t.Fatalf("ParseLink(%q) = %v", s, err)
+		}
+		if l.Target.Preview == nil {
+			t.Fatalf("ParseLink(%q): Target.Preview is nil", s)
+		}
+		if l.Target.State != StateCommitted || l.Target.Commit != "" {
+			t.Errorf("ParseLink(%q): Target = %+v, want StateCommitted with no sha", s, l.Target)
+		}
+		if got := l.String(); got != s {
+			t.Errorf("String(Parse(%q)) = %q", s, got)
+		}
+	}
+}
+
+func TestParseLinkPreviewSplitsThePairInGitOrder(t *testing.T) {
+	t.Parallel()
+	l, err := ParseLink("gg://gigagit/a.go@origin/main...origin/feat/login:9")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Target.Preview.Target != "origin/main" || l.Target.Preview.Source != "origin/feat/login" {
+		t.Errorf("Preview = %+v, want Target=origin/main Source=origin/feat/login", *l.Target.Preview)
+	}
+	if l.Path != "a.go" || l.Line != 9 || l.Side != NoteSideNew {
+		t.Errorf("path/line/side = %q/%d/%s", l.Path, l.Line, l.Side)
+	}
+}
+
+func TestParseLinkPreviewRefusals(t *testing.T) {
+	t.Parallel()
+	for _, s := range []string{
+		"gg://gigagit/a.go@main...feat/x:old:3",                         // the old side is the merge base
+		"gg://gigagit/a.go@abc1234...def5678",                           // a sha-looking pair
+		"gg://gigagit/a.go@1234567890abcdef1234...abcdef1234567890abcd", // longer shas, same rule
+		"gg://gigagit/a.go@...feat/x",                                   // no target half
+		"gg://gigagit/a.go@main...",                                     // no source half
+		"gg://gigagit/a.go@main...feat@x",                               // '@' is not expressible in a ref here
+		"gg://gigagit/a.go@main...feat...x",                             // three dots twice
+	} {
+		if l, err := ParseLink(s); err == nil {
+			t.Errorf("ParseLink(%q) = %+v, want a refusal", s, l)
+		} else if !errors.Is(err, ErrLink) {
+			t.Errorf("ParseLink(%q) error %v does not wrap ErrLink", s, err)
+		}
+	}
+}
+
+func TestLinkRefOK(t *testing.T) {
+	t.Parallel()
+	for _, ok := range []string{"main", "feat/login", "origin/main", "release-1.2"} {
+		if !LinkRefOK(ok) {
+			t.Errorf("LinkRefOK(%q) = false, want true", ok)
+		}
+	}
+	for _, bad := range []string{"", "a@b", "a:b", "a#b", "a b", "a...b"} {
+		if LinkRefOK(bad) {
+			t.Errorf("LinkRefOK(%q) = true, want false", bad)
+		}
+	}
+}
