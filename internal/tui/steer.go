@@ -245,6 +245,12 @@ func steerEnumRefusal(c steer.Command) string {
 	if c.Target != nil {
 		switch c.Target.State {
 		case "", "unstaged", "staged", "untracked", "commit":
+		case "preview":
+			// A preview names a branch PAIR, and both halves are load-bearing: a
+			// half-filled target would silently degrade into "some preview".
+			if c.Target.Source == "" || c.Target.Target == "" {
+				return "a preview target needs source and target"
+			}
 		default:
 			return "unknown target state " + strconv.Quote(c.Target.State)
 		}

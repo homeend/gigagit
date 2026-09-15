@@ -705,6 +705,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.filesView.lines) == 1 && isLoadingPlaceholder(m.filesView.lines[0].text) {
 				m.filesView.lines = []contentLine{{text: i18n.T("(load failed)")}}
 			}
+			if po := m.previewOpen; po != nil && m.pendingPreviewFor(po.source, po.target) {
+				return m.failPending("the preview's file list failed to load: " + msg.err.Error())
+			}
 			return m, nil
 		}
 		if m.comparePair != nil {
@@ -726,7 +729,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			po.keepPath = ""
 		}
-		return m, nil
+		// A parked preview navigate waits on exactly this list.
+		return m.drainPendingPreview()
 	case previewOpenMsg:
 		return m.handlePreviewOpenMsg(msg)
 	case previewMutatedMsg:

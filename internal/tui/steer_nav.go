@@ -20,6 +20,7 @@ const (
 	steerStageStatusRetry steerStage = iota // one status reload, then retry the lookup
 	steerStageFiles                         // a commit's changed-file list
 	steerStageDiff                          // the diff itself; land the cursor
+	steerStagePreview                       // a merge preview's compare file list
 )
 
 // steerPendingTTL bounds a parked navigate. The user can close the view the
@@ -29,11 +30,13 @@ const steerPendingTTL = 5 * time.Second
 
 // pendingSteer is a navigate command parked until the load it needs arrives.
 type pendingSteer struct {
-	cmd   steer.Command
-	stage steerStage
-	tag   string // steerStageDiff: the m.diffTag this landing belongs to
-	hash  string // steerStageFiles: the commit whose file list is loading
-	at    time.Time
+	cmd    steer.Command
+	stage  steerStage
+	tag    string // steerStageDiff: the m.diffTag this landing belongs to
+	hash   string // steerStageFiles: the commit whose file list is loading
+	source string // steerStagePreview: the pair whose compare list is loading
+	target string
+	at     time.Time
 }
 
 // steerToPanels pops everything the refusal whitelist lets it pop, so the
@@ -119,6 +122,8 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 	switch {
 	case c.Step != "":
 		return m.steerStep(c)
+	case c.Target != nil && c.Target.State == "preview":
+		return m.steerNavigatePreview(c)
 	case c.File != "" && c.Target != nil && c.Target.State == "commit":
 		return m.steerNavigateCommitFile(c)
 	case c.File != "":
@@ -267,28 +272,24 @@ func (m Model) drainPendingStatus() (Model, tea.Cmd) {
 	return m.steerNavigateStatusFile(ps.cmd, true)
 }
 
-// drainPendingFiles selects the commanded path in the freshly loaded file list
-// and opens its diff, advancing the pending to the diff stage.
-func (m Model) drainPendingFiles() (Model, tea.Cmd) {
-	ps := m.pendingSteer
-	if ps == nil || ps.stage != steerStageFiles || m.filesView == nil || m.filesHash != ps.hash {
-		return m, nil
-	}
-	// The file list loads late: the user may have opened something across that
-	// gap, and this drain is about to move the view. Re-check the whitelist
-	// rather than inherit the decision applySteer took before the load started.
+// drainPendingLoad is drainPendingFiles' and drainPendingPreview's shared
+// body: the load that unblocks either stage is async, so the user may have
+// moved since the pending was parked — re-check the whitelist rather than
+// inherit the decision applySteer made before the load started. Then find the
+// commanded path in the freshly loaded list, refuse a narrow terminal before
+// opening a diff (openDiffForFileLine posts an i18n statusMsg instead, and a
+// reply must be English protocol prose), and either land it now (no
+// steer.Line) or advance the pending to the diff stage. opened and notFound
+// are the two replies, already carrying the load's identity ("commit <hash>"
+// / "preview <target>...<source>").
+func (m Model) drainPendingLoad(c steer.Command, lines []contentLine, opened, notFound string) (Model, tea.Cmd) {
 	if why := m.steerRefusal(); why != "" {
 		return m.failPending(why)
 	}
-	c := ps.cmd
-	for i, l := range m.filesView.lines {
+	for i, l := range lines {
 		if l.heading || l.path != c.File {
 			continue
 		}
-		// openDiffForFileLine refuses below 60 columns (and posts an i18n
-		// statusMsg for the user). Decide it here so the reply is English
-		// protocol prose and no diff stage is parked on a load that never comes
-		// — a reply must never carry a translated string.
 		if m.width > 0 && m.width < 60 {
 			return m.failPending("the terminal is too narrow for the diff view")
 		}
@@ -300,17 +301,30 @@ func (m Model) drainPendingFiles() (Model, tea.Cmd) {
 		}
 		if c.Line == nil {
 			m.pendingSteer = nil
-			return m, tea.Batch(cmd, m.answerSteer(c, steerOK(c, "opened "+c.File+" in "+shortHash(ps.hash))))
+			return m, tea.Batch(cmd, m.answerSteer(c, steerOK(c, opened)))
 		}
 		m.pendingSteer = &pendingSteer{cmd: c, stage: steerStageDiff, tag: m.diffTag, at: time.Now()}
 		return m, cmd
 	}
-	// A miss here is answered but NOT undone: the file list loads late, so by
-	// the time it arrives the feed row has been selected and the changed-file
-	// view is already open. There is nothing to restore to — the agent named a
-	// path this commit does not touch, and the view it opened is a truthful
-	// answer to the half of the command that WAS valid.
-	return m.failPending(c.File + " is not in commit " + shortHash(ps.hash))
+	// A miss here is answered but NOT undone: the list loads late, so by the
+	// time it arrives the view it belongs to is already open. There is nothing
+	// to restore to — the agent named a path this load does not carry, and the
+	// view that opened is a truthful answer to the half of the command that WAS
+	// valid.
+	return m.failPending(notFound)
+}
+
+// drainPendingFiles selects the commanded path in the freshly loaded file list
+// and opens its diff, advancing the pending to the diff stage.
+func (m Model) drainPendingFiles() (Model, tea.Cmd) {
+	ps := m.pendingSteer
+	if ps == nil || ps.stage != steerStageFiles || m.filesView == nil || m.filesHash != ps.hash {
+		return m, nil
+	}
+	c := ps.cmd
+	return m.drainPendingLoad(c, m.filesView.lines,
+		"opened "+c.File+" in "+shortHash(ps.hash),
+		c.File+" is not in commit "+shortHash(ps.hash))
 }
 
 // drainPendingDiff lands the cursor once the diff it was parked on has arrived.
@@ -409,4 +423,70 @@ func (m Model) expirePendingSteer(now time.Time) (Model, tea.Cmd) {
 		return m, nil
 	}
 	return m.failPending("the view did not load in time")
+}
+
+// steerNavigatePreview lands in a MERGE PREVIEW. With no file it only reveals
+// the Previews entry; with one it opens the preview (a saved row when the
+// pair has one, else a transient "show once" — the very open
+// openPreviewPairDialog's own "show once" option performs) and parks until
+// the compare file list arrives.
+func (m Model) steerNavigatePreview(c steer.Command) (Model, tea.Cmd) {
+	src, tgt := c.Target.Source, c.Target.Target
+	// Which saved row, if any, holds this pair. "" means a show-once open.
+	id, bi := "", -1
+	for i, r := range m.previews {
+		if r.rec.Source == src && r.rec.Target == tgt {
+			id, bi = r.rec.ID, i
+			break
+		}
+	}
+	if c.File == "" {
+		m = m.steerToPanels().activateTab(panelPreviews)
+		if bi >= 0 {
+			// "Go to" semantics, as everywhere else: a /-filter that hid the row
+			// would make the landing invisible.
+			m, _ = m.clearFilteringForFocus()
+			for di, b := range m.displayIndices(panelPreviews) {
+				if b == bi {
+					m.sel[panelPreviews] = di
+					break
+				}
+			}
+		}
+		m = m.steerNotice(i18n.T("▸ agent moved the focus"))
+		return m, m.answerSteer(c, steerOK(c, "revealed preview "+tgt+"..."+src))
+	}
+	// Decided before the view moves: openDiffForFileLine refuses below 60
+	// columns with an i18n status message, and a reply must be English prose.
+	if m.width > 0 && m.width < 60 {
+		return m, m.answerSteer(c, steerFail(c, "the terminal is too narrow for the diff view"))
+	}
+	// steerToPanels closes the files view, which clears previewOpen and bumps
+	// previewGen — so the open below always really loads, instead of hitting
+	// handlePreviewOpenMsg's same-tag reconcile arm (which issues no
+	// compareFilesMsg and would leave this pending to expire).
+	m = m.steerToPanels()
+	m.pendingSteer = &pendingSteer{cmd: c, stage: steerStagePreview, source: src, target: tgt, at: time.Now()}
+	return m, m.openPreviewCmd(id, src, tgt, "")
+}
+
+// drainPendingPreview selects the commanded path in the preview's freshly
+// loaded compare list and opens its diff, advancing to the diff stage. It is
+// drainPendingFiles' twin for the compare lane: openCompareFiles sets
+// m.filesHash to one of the two ENDPOINT hashes, the same field a plain
+// single-commit view uses, so a hash cannot tell a preview's list apart from
+// an unrelated commit view that happens to share it — the open (source,
+// target) PAIR is what actually identifies a preview, and that is the gate
+// here.
+func (m Model) drainPendingPreview() (Model, tea.Cmd) {
+	ps, po := m.pendingSteer, m.previewOpen
+	if ps == nil || ps.stage != steerStagePreview || m.filesView == nil || po == nil ||
+		po.source != ps.source || po.target != ps.target {
+		return m, nil
+	}
+	c := ps.cmd
+	pair := ps.target + "..." + ps.source
+	return m.drainPendingLoad(c, m.filesView.lines,
+		"opened "+c.File+" in preview "+pair,
+		c.File+" is not in preview "+pair)
 }
