@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v69 -->
+<!-- gg:using-gg:v70 -->
 
 # Using gg (gigagit)
 
@@ -494,6 +494,15 @@ gg never hangs waiting for input mid-operation. When an operation hits a fork
 
 Exit codes: 0 = success, 1 = operation failed or needs a decision,
 2 = usage error.
+
+**Paths.** Everything gg *prints* — `gg status`, `gg diff`, `gg log --files` —
+is relative to the **worktree root**, wherever you run it from. A pathspec you
+*type* is relative to **your cwd**, exactly as it is for git: in `src/`,
+`gg add .` stages `src/` and `gg add xxx.txt` stages `src/xxx.txt`. So a path
+copied out of `gg status` only feeds straight back in when you are at the
+root — the simplest habit is to run gg from the worktree root, where the two
+are the same thing. (`gg note --file` is the one exception: it is always
+repo-relative, because a `gg://` link can point it at another checkout.)
 
 ## Registering yourself as a gg tool
 

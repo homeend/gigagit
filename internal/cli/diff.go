@@ -18,7 +18,7 @@ import (
 // each file's numbered git @@ hunks (optionally as JSON via --json), the
 // same numbering `gg note add --hunk N` resolves against. Paths must follow
 // a "--" separator so a rev is never ambiguous with a path.
-func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func cmdDiff(svc *domain.Service, dir string, args []string, stdout, stderr io.Writer) int {
 	head, paths := splitDashDash(args)
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -90,7 +90,7 @@ func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		}
 		spec = s
 	} else {
-		spec = model.DiffSpec{Cached: *cached, Rev: rev, Paths: paths}
+		spec = model.DiffSpec{Cached: *cached, Rev: rev, Paths: repoPathspecs(svc, dir, paths)}
 	}
 	return renderDiffSpec(ctx, svc, spec, *hunks, *asJSON, *stat, *nameOnly, stdout, stderr)
 }

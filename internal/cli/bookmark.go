@@ -15,7 +15,7 @@ import (
 // cmdBookmark implements `gg bookmark <add|list|rm|paste> ...`: a persistent
 // registry of richly-addressed file references. add stores a pointer; paste
 // resolves its (live or frozen) bytes into the working tree as unstaged.
-func cmdBookmark(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func cmdBookmark(svc *domain.Service, dir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: gg bookmark <add|list|rm|paste> ...")
 		return 2
@@ -23,7 +23,7 @@ func cmdBookmark(svc *domain.Service, args []string, stdin io.Reader, stdout, st
 	sub, rest := args[0], args[1:]
 	switch sub {
 	case "add":
-		return bookmarkAdd(svc, rest, stdout, stderr)
+		return bookmarkAdd(svc, dir, rest, stdout, stderr)
 	case "list":
 		return bookmarkList(svc, rest, stdout, stderr)
 	case "rm":
@@ -36,7 +36,7 @@ func cmdBookmark(svc *domain.Service, args []string, stdin io.Reader, stdout, st
 	}
 }
 
-func bookmarkAdd(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func bookmarkAdd(svc *domain.Service, dir string, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("bookmark add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	rev := fs.String("rev", "", "bookmark a committed file at this commit/branch")
@@ -46,7 +46,7 @@ func bookmarkAdd(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	paths := fs.Args()
+	paths := repoPathspecs(svc, dir, fs.Args())
 	if len(paths) == 0 {
 		fmt.Fprintln(stderr, "usage: gg bookmark add [--rev <commit>] [--staged] [--worktree <path>] [--label <l>] <path>...")
 		return 2

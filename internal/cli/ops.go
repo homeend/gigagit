@@ -242,7 +242,7 @@ func cmdCheckout(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 
 // cmdStash dispatches the stash subcommands (list/apply/pop/drop); with no
 // subcommand it pushes a new stash (optionally scoped to paths).
-func cmdStash(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func cmdStash(svc *domain.Service, dir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 {
 		switch args[0] {
 		case "list":
@@ -263,7 +263,7 @@ func cmdStash(svc *domain.Service, args []string, stdout, stderr io.Writer) int 
 		return 2
 	}
 	res, err := runOperation(context.Background(), svc,
-		engine.Stash{Message: *msg, Paths: fs.Args(), IncludeUntracked: *untracked}, cliDecider{}, stderr)
+		engine.Stash{Message: *msg, Paths: repoPathspecs(svc, dir, fs.Args()), IncludeUntracked: *untracked}, cliDecider{}, stderr)
 	return finish(res, err, stdout, stderr)
 }
 
