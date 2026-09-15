@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: the open commit's header copies everything it shows.** Right-clicking
+  anywhere in the file-list header — the sha, the title, the date line —
+  offers one list: **copy short commit id** (the same abbreviation the header
+  displays), **copy commit id**, **copy commit title**, **copy date**, **copy
+  author**. One list rather than a different menu per region: aiming at the
+  date to get the date is a rule you can get wrong. Rows with nothing behind
+  them are left out (a commit opened by hash may have no subject, and a date
+  the server could not resolve draws no line). With text SELECTED in the
+  header the menu collapses to a plain **copy** of that text. The header also
+  takes the default arrow cursor instead of the text I-beam it showed over
+  what is chrome, not a document.
+
 - **Web: copy a line, land on the first change, absolute paths, and a refresh
   button that looks like a button.** Follow-ups to the copy/elide wave:
   - Right-clicking a diff line with **nothing selected** now offers **copy

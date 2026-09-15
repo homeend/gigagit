@@ -7,7 +7,7 @@ import { wtCount, wtExtra, wtRowHTML } from "./status.js";
 import { followOp, opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
 import { rev, startReview } from "./review.js";
 import { addCommitEntry } from "./sidebar.js";
-import { commitMetaLine, drillOut, enterFilesStage, openCompare, openWorkingTree, renderFiles, setCommitTitle, setFilesMeta } from "./files.js";
+import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openWorkingTree, renderFiles, setCommitTitle, setFilesMeta } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 import { extraRows } from "./menus.js";
 
@@ -516,7 +516,7 @@ async function openCommit(i) {
   state.filesMode = "commit";
   enterFilesStage();
   setCommitTitle(row.hash, row.short, row.subject);
-  setFilesMeta(commitMetaLine(body));
+  setFilesMeta(commitMetaLine(body), commitMetaParts(body));
   renderFiles();
   focusPane();
 }
@@ -534,7 +534,7 @@ async function openCommitByHash(hash, title) {
   state.filesMode = "commit";
   enterFilesStage();
   setCommitTitle(hash, "", title);
-  setFilesMeta(commitMetaLine(body));
+  setFilesMeta(commitMetaLine(body), commitMetaParts(body));
   renderFiles();
   focusPane();
 }
