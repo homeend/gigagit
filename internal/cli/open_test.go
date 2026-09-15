@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -87,5 +88,48 @@ func TestOpenRefusesAnUnresolvableLink(t *testing.T) {
 	}
 	if code := cmdOpen(svc, []string{"not-a-link"}, &out, &errb); code != 2 {
 		t.Errorf("a non-link argument must exit 2, got %d", code)
+	}
+}
+
+// A bare repository link (no path, no commit, no preview) names nowhere to
+// steer to: gg open launches the TUI in that checkout with no landing link —
+// even when a session is live there — and says so when it cannot.
+func TestOpenBareRepositoryLinkLaunchesTheTUIThere(t *testing.T) {
+	dir := previewRepo(t)
+	svc := openCLIService(t, dir)
+	inbox := steerDirFor(svc)
+	livePresence(t, inbox)
+	t.Cleanup(func() { steer.Discard(inbox) })
+	var gotCheckout string
+	var gotLink model.Link
+	calls := 0
+	LaunchTUI = func(checkout string, at model.Link) int {
+		calls++
+		gotCheckout, gotLink = checkout, at
+		return 0
+	}
+	t.Cleanup(func() { LaunchTUI = nil })
+	var out, errb strings.Builder
+	bare := "gg://" + filepath.ToSlash(dir)
+	if code := cmdOpen(svc, []string{bare}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d: %s", code, errb.String())
+	}
+	if calls != 1 || !domain.SamePath(gotCheckout, dir) {
+		t.Errorf("launcher calls = %d checkout = %q, want one call for %q", calls, gotCheckout, dir)
+	}
+	if gotLink != (model.Link{}) {
+		t.Errorf("a bare link must launch with NO landing link, got %+v", gotLink)
+	}
+	if got := steer.Drain(inbox); len(got) != 0 {
+		t.Errorf("a bare link must not steer the live session, posted %+v", got)
+	}
+	LaunchTUI = nil
+	out.Reset()
+	errb.Reset()
+	if code := cmdOpen(svc, []string{bare}, &out, &errb); code != 1 {
+		t.Errorf("without a launcher exit = %d, want 1", code)
+	}
+	if !strings.Contains(errb.String(), "names a repository, not a place in it") {
+		t.Errorf("stderr = %q", errb.String())
 	}
 }

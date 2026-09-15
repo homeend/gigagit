@@ -5,9 +5,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"path/filepath"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/linknav"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -24,7 +24,8 @@ const openUsage = "usage: gg open <gg://…> [--no-wait]\n" +
 
 // cmdOpen is `gg open <link>`: show the link to the USER. A live gg session in
 // the link's checkout (TUI or web page) is steered; otherwise the TUI is
-// launched there, positioned on the link.
+// launched there, positioned on the link. A bare repository link (no place in
+// it) always launches the TUI in that checkout.
 func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("open", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -45,6 +46,16 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	res, err := resolveLinkArg(ctx, svc, pos[0])
 	if err != nil {
 		return linkExit("open", err, stderr)
+	}
+	if linknav.RepoOnly(res) {
+		// A bare repository link names no place to steer a session to; showing
+		// it to the user means opening gg in that checkout. (`gg session
+		// navigate` keeps refusing it: a live session has nowhere to go.)
+		if LaunchTUI == nil {
+			fmt.Fprintf(stderr, "open: %s names a repository, not a place in it, and the TUI launcher is unavailable\n", res.Checkout)
+			return 1
+		}
+		return LaunchTUI(res.Checkout, model.Link{})
 	}
 	// linkSteerDir, not a fresh GitCommonDir/SessionSteerDir pair: the common
 	// checkout case (the link names wherever the caller already is) must reuse
@@ -78,32 +89,7 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	return LaunchTUI(res.Checkout, openAtLink(res, c))
 }
 
-// openAtLink is the link handed to the launcher: the same place, fully
-// resolved, with any #<hunk> ALREADY lowered to the line navigateCommandFor
-// computed. The TUI's converter (steerCommandForLink) is pure, so everything
-// needing a repository must be settled here.
-func openAtLink(res domain.Resolved, c steer.Command) model.Link {
-	l := model.Link{
-		Repo: model.LinkRepo{Abs: filepath.ToSlash(filepath.Clean(res.Checkout))},
-		Path: res.Addr.Path,
-		Side: model.NoteSideNew,
-	}
-	if res.Preview != nil {
-		l.Target = model.LinkTarget{
-			State:   model.StateCommitted,
-			Preview: &model.LinkPreview{Source: res.Preview.Source, Target: res.Preview.Target},
-		}
-		// C1: a preview link never carries Side old — navigateCommandFor already
-		// refused an old-side preview hunk (domain.ErrPreviewOldSide) before c
-		// reached here, so Side stays NoteSideNew unconditionally.
-	} else {
-		l.Target = model.LinkTarget{State: res.Addr.State, Commit: res.Addr.Commit}
-		if c.Line != nil && c.Line.Side == "old" {
-			l.Side = model.NoteSideOld
-		}
-	}
-	if c.Line != nil {
-		l.Line = c.Line.No
-	}
-	return l
-}
+// openAtLink is the link handed to the launcher (linknav.AtLink): the same
+// place, fully resolved, with any #<hunk> ALREADY lowered to the line
+// navigateCommandFor computed.
+func openAtLink(res domain.Resolved, c steer.Command) model.Link { return linknav.AtLink(res, c) }
