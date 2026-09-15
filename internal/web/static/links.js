@@ -44,7 +44,9 @@ function repoSegment(repo, worktree) {
 // of internal/model.LinkRefOK; the producer refuses rather than print
 // something ParseLink would reject or reparse as a different place.
 function linkRefOK(s) {
-  return !!s && !s.includes("...") && !/[@:#\s]/.test(s);
+  // " \t" literally, not \s: Go's rule stops there, and a name the TUI
+  // emits a link for must get one here too.
+  return !!s && !s.includes("...") && !/[@:# \t]/.test(s);
 }
 
 // linkFor builds the address for one place. ctx is a diffCtx-shaped
@@ -74,16 +76,18 @@ function linkFor(repo, worktree, ctx, side, no) {
   const path = (ctx && ctx.path) || "";
   if (path && !linkPathOK(path)) return "";
   let s = head + (path ? "/" + path : "");
-  const st = (ctx && ctx.state) || "unstaged";
   if (preview) {
     s += "@" + preview.target + "..." + preview.source;
     if (side === "old") no = 0;
-  } else if (st === "staged") {
-    s += "@staged";
-  } else if (st === "commit") {
-    const rev = (ctx && ctx.rev) || "";
-    if (rev.length < 40) return "";
-    s += "@" + rev;
+  } else {
+    const st = (ctx && ctx.state) || "unstaged";
+    if (st === "staged") {
+      s += "@staged";
+    } else if (st === "commit") {
+      const rev = (ctx && ctx.rev) || "";
+      if (rev.length < 40) return "";
+      s += "@" + rev;
+    }
   }
   // untracked has no target of its own: the plain working-tree form is the
   // pair the resolver reads for it anyway (index → file).

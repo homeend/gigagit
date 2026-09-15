@@ -249,6 +249,10 @@ func TestLinkForJSMatchesGo(t *testing.T) {
 		{Name: "preview target with # refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x", Target: "v#1"},
 		{Name: "preview target with : refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x", Target: "a:b"},
 		{Name: "preview path with @ refuses", Repo: "gigagit", Path: "a@b.go", State: "commit", Compare: true, Source: "feat/x", Target: "main"},
+		// Review F3: the JS rule is " \t" literally, as Go's — a \s would also
+		// refuse an NBSP-bearing name the TUI emits a link for.
+		{Name: "preview target with a tab refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x", Target: "ma\tin"},
+		{Name: "preview source with a no-break space is fine", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x y", Target: "main"},
 	}
 
 	want := make([]string, len(cases))
