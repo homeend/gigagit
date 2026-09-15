@@ -124,7 +124,16 @@ func TestTargetOf(t *testing.T) {
 	if got := TargetOf(model.FileAddress{State: model.StateCommitted, Commit: "abc"}); got.State != "commit" || got.Commit != "abc" {
 		t.Errorf("committed → %+v", got)
 	}
-	if got := TargetOf(model.FileAddress{}); got.State != "unstaged" {
-		t.Errorf("zero → %+v", got)
+	// FileState's ZERO value is StateCommitted (its sha then rides along, even
+	// empty); the working tree is StateUnstaged. Both are pinned here so a
+	// reordering of the enum cannot silently move the wire default.
+	if got := TargetOf(model.FileAddress{}); got.State != "commit" || got.Commit != "" {
+		t.Errorf("zero (committed) → %+v", got)
+	}
+	if got := TargetOf(model.FileAddress{State: model.StateUnstaged}); got.State != "unstaged" {
+		t.Errorf("unstaged → %+v", got)
+	}
+	if got := TargetOf(model.FileAddress{State: model.StateUntracked}); got.State != "untracked" {
+		t.Errorf("untracked → %+v", got)
 	}
 }

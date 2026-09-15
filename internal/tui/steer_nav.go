@@ -140,6 +140,12 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 		if !ok {
 			return m, m.answerSteer(c, steerFail(c, "commit not loaded in the feed"))
 		}
+		if startAtOrigin(c) {
+			// The user's own link (gg open, or pasted into #): a steered reveal
+			// answers its CLI, but nobody answers the user — and a commit that
+			// was already selected would otherwise look like nothing happened.
+			nm.statusMsg = i18n.T("▸ opened %s", shortHash(c.Commit))
+		}
 		return nm, nm.answerSteer(c, steerOK(c, "revealed commit "+shortHash(c.Commit)))
 	}
 	return m, m.answerSteer(c, steerFail(c, "navigate needs a file, a commit or a step"))

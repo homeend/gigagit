@@ -241,3 +241,40 @@ func TestGotoLinkFromThePaletteUnwindsThePalette(t *testing.T) {
 		t.Errorf("both the prompt and the palette must be gone, top = %T", m.topLayer())
 	}
 }
+
+// After the switch, the armed landing fires through the ordinary --at gate
+// once the new repo's load lands — here a commit link, which reveals the
+// commit and says "opened" (the user did this, not an agent).
+func TestGotoLinkOtherCheckoutLandsAfterTheReload(t *testing.T) {
+	t.Parallel()
+	m, _ := gotoLinkModel(t)
+	other := otherCheckout(t, m)
+	sha := headSHA(t, other)
+	m, cmd := pasteLink(t, m, linkTo(other, "@"+sha))
+	m, _ = send(m, cmd())
+	m, _ = send(m, keyType(tea.KeyEnter)) // confirm the switch
+	if !m.startAtPending || m.startAt.Target.Commit != sha {
+		t.Fatalf("startAt = %+v pending=%v", m.startAt, m.startAtPending)
+	}
+	// reRoot reloads through the legacy loadCmd path; its dataLoadedMsg is
+	// what flips ready/loading, and Update's central check must then consume
+	// the landing exactly once.
+	m, next := send(m, m.loadCmd()())
+	if m.startAtPending {
+		t.Fatal("the landing must be consumed once the reload has landed")
+	}
+	for _, msg := range flattenCmd(t, next) {
+		m, _ = send(m, msg)
+	}
+	idx := m.displayIndices(panelCommits)
+	sel := m.sel[panelCommits]
+	if sel < 0 || sel >= len(idx) {
+		t.Fatalf("selection %d is outside the %d visible rows", sel, len(idx))
+	}
+	if c, ok := m.commitAtUnified(idx[sel]); !ok || c.Hash != sha {
+		t.Errorf("selected commit = %+v, want the link's %s", c, sha)
+	}
+	if !strings.Contains(m.statusMsg, "opened") || strings.Contains(m.statusMsg, "agent") {
+		t.Errorf("status = %q, want an \"opened\" notice with no agent wording", m.statusMsg)
+	}
+}
