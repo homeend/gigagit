@@ -133,12 +133,31 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 		// a commit the feed has not paged in is a refusal, not a reason to
 		// close what the user was reading.
 		if _, ok := m.steerCommitRow(c.Commit); !ok {
+			if startAtOrigin(c) {
+				// The user's own link (gg open, a pasted link): a commit the
+				// feed has not paged in is still a commit gg can show — open
+				// its files by hash, exactly what `#` does for a typed sha.
+				// An agent's navigate keeps the refusal: it asked for a feed
+				// row, and moving the user into a files view is not that.
+				nm := m.steerToPanels()
+				nm, cmd := nm.openChangedFiles(model.Commit{Hash: c.Commit})
+				nm.focus = panelCommits
+				nm = nm.focusTree()
+				nm.statusMsg = i18n.T("▸ opened %s", shortHash(c.Commit))
+				return nm, cmd
+			}
 			return m, m.answerSteer(c, steerFail(c, "commit not loaded in the feed"))
 		}
 		nm := m.steerToPanels().steerClearCommitsFilter()
 		nm, _, ok := nm.gotoLoadedCommit(c.Commit)
 		if !ok {
 			return m, m.answerSteer(c, steerFail(c, "commit not loaded in the feed"))
+		}
+		if startAtOrigin(c) {
+			// The user's own link (gg open, or pasted into #): a steered reveal
+			// answers its CLI, but nobody answers the user — and a commit that
+			// was already selected would otherwise look like nothing happened.
+			nm.statusMsg = i18n.T("▸ opened %s", shortHash(c.Commit))
 		}
 		return nm, nm.answerSteer(c, steerOK(c, "revealed commit "+shortHash(c.Commit)))
 	}
@@ -558,9 +577,10 @@ func steerCommandForLink(l model.Link) (steer.Command, bool) {
 // Update goroutine, once every startAtReady precondition has landed.
 type startAtMsg struct{ cmd steer.Command }
 
-// startAtOrigin reports whether c is the navigate steerCommandForLink
-// synthesized for --at (a user-initiated `gg open`), rather than one a real
-// steer.Post client sent. sendSteer always assigns an id before Post (and
+// startAtOrigin reports whether c is a navigate the USER initiated — the one
+// steerCommandForLink synthesized for --at (`gg open`), or the one the #
+// prompt built for a pasted link — rather than one a real steer.Post client
+// sent. sendSteer always assigns an id before Post (and
 // carries the caller's --wait choice), so a real client's command never
 // arrives with both fields at their zero value; steerCommandForLink never
 // sets either. Distinguishing the two lets the landing notice say "opened",

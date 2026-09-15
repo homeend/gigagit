@@ -11,15 +11,17 @@ import (
 )
 
 // gotoCommitPopup takes a commit SHA (or any commit-ish ref) and opens that
-// commit's files in the files-view. Reachable directly via `#` and from the
-// command palette's "Show commit". The SHA is resolved via git rev-parse before
-// the files-view opens: a ref that does not resolve shows an inline error and
-// keeps the popup open (no half-opened files-view on a typo).
+// commit's files in the files-view — or a pasted gg:// link, and lands on it
+// (goto_link.go). Reachable directly via `#` and from the command palette's
+// "Show commit" / "Open gg:// link…". The text is resolved before anything
+// opens: a ref or link that does not resolve shows an inline error and keeps
+// the popup open (no half-opened files-view on a typo).
 type gotoCommitPopup struct {
 	popupMax
-	input     textfield // the SHA / ref to resolve (no spaces)
-	err       string    // inline error from the last failed resolve; "" = none
-	resolving bool      // a resolve cmd is in flight
+	input     textfield       // the SHA / ref / gg:// link to resolve (no spaces)
+	err       string          // inline error from the last failed resolve; "" = none
+	resolving bool            // a resolve cmd is in flight
+	pending   *gotoLinkSwitch // a link into another checkout, awaiting enter
 }
 
 // openGotoCommitPopup pushes a fresh show-commit input. The shared seam called
@@ -57,19 +59,26 @@ func (p *gotoCommitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeyEsc:
 		return m.popLayer(), nil
 	case tea.KeyEnter:
-		rev := strings.TrimSpace(p.input.Value())
-		if rev == "" { // nothing to resolve; keep the popup open
+		if p.pending != nil {
+			return m.switchToLink(p, *p.pending)
+		}
+		text := strings.TrimSpace(p.input.Value())
+		if text == "" { // nothing to resolve; keep the popup open
 			return m, nil
 		}
 		p.resolving = true
 		p.err = ""
-		return m, m.resolveCommitCmd(rev)
+		if isLinkText(text) {
+			return m, m.resolveLinkCmd(text)
+		}
+		return m, m.resolveCommitCmd(text)
 	case tea.KeySpace:
-		// a commit-ish has no spaces; swallow the key
+		// neither a commit-ish nor a link has spaces; swallow the key
 		return m, nil
 	default:
 		if p.input.HandleEditKey(msg) {
-			p.err = "" // editing clears the stale error
+			p.err = ""      // editing clears the stale error…
+			p.pending = nil // …and withdraws a switch the user did not confirm
 		}
 	}
 	return m, nil
@@ -83,13 +92,7 @@ func (m Model) resolvedGotoCommit(p *gotoCommitPopup, msg gotoCommitResolvedMsg)
 		p.err = i18n.T("no such commit: %s", msg.rev)
 		return m, nil
 	}
-	m = m.popLayer()
-	// If this popup was launched from the command palette, that palette sits
-	// directly beneath — unwind it too so the files view opens over the base, not
-	// over a stale palette. (Direct `#` opens leave no palette underneath.)
-	if _, ok := m.topLayer().(*commandPalette); ok {
-		m = m.popLayer()
-	}
+	m = m.popGotoPrompt()
 	m, cmd := m.openChangedFiles(model.Commit{Hash: msg.hash})
 	// Open on the TREE: the resolved commit may not be in the loaded feed, so the
 	// right column (the Commits feed) is unrelated — walk this commit's files.
@@ -108,11 +111,21 @@ func (p *gotoCommitPopup) render(m Model, below string) string {
 func (p *gotoCommitPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	var b strings.Builder
-	b.WriteString(i18n.T("Show commit") + "\n\n")
-	b.WriteString(viewField(i18n.T("commit: "), p.input, true, popupContentWidth(w)) + "\n")
+	b.WriteString(i18n.T("Go to commit or gg:// link") + "\n\n")
+	b.WriteString(viewField(i18n.T("commit or link: "), p.input, true, popupContentWidth(w)) + "\n")
 	if p.err != "" {
 		b.WriteString("\n" + st().errorText.Render(p.err) + "\n")
 	}
-	b.WriteString("\n" + i18n.T("[enter] show  [esc] cancel"))
+	if p.pending != nil {
+		b.WriteString("\n" + i18n.T("that link names another checkout: %s", p.pending.checkout) + "\n")
+		b.WriteString("\n" + i18n.T("[enter] switch there  [esc] stay"))
+	} else if p.resolving {
+		// A link into another repository can cost seconds (its service opens
+		// and lowers a hunk there); say so rather than look frozen.
+		b.WriteString("\n" + i18n.T("resolving…") + "\n")
+		b.WriteString("\n" + i18n.T("[enter] go  [esc] cancel"))
+	} else {
+		b.WriteString("\n" + i18n.T("[enter] go  [esc] cancel"))
+	}
 	return st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
 }

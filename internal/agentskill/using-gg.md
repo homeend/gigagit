@@ -122,9 +122,11 @@ with `gg link --preview <id|label|<target>...<source>> [<path>[:<line>]]`.
 
 `gg open <link>` shows it to the user in their gg: it steers whatever gg
 session is live in the link's checkout (`--no-wait` skips waiting for that
-session's answer), or starts the TUI there positioned on the link. Refused
+session's answer), or starts the TUI there positioned on the link; a bare
+repository link (`gg://<repo>`) just opens the TUI in that checkout. Refused
 inside `gg batch` (exit 2 — unlike every other batch line it might launch the
-TUI). Use it instead of launching `gg` yourself.
+TUI). Use it instead of launching `gg` yourself. (A human can also paste any
+link into the TUI's `#` prompt.)
 
 `<repo>` is the repository name of the repo's remote (`gigagit`), resolved
 through gg's machine-local repository history — so a link made on one checkout

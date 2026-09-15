@@ -230,9 +230,10 @@ type startAtFailMsg struct{ reason string }
 // none — nothing would ever read it, and the file would only have to be swept.
 func (m Model) answerSteer(c steer.Command, r steer.Reply) tea.Cmd {
 	if c.ID == "" {
-		// Only the local `--at` startup navigate has no id: steer.Post fills one
-		// in, and Drain discards any command that arrived without one. Its
-		// refusals have no CLI to print them, so they go to the status bar.
+		// Only a LOCAL navigate has no id — the `--at` startup landing and the
+		// # prompt's pasted link: steer.Post fills one in, and Drain discards
+		// any command that arrived without one. Their refusals have no CLI to
+		// print them, so they go to the status bar.
 		if !r.OK {
 			reason := r.Error
 			return func() tea.Msg { return startAtFailMsg{reason: reason} }
