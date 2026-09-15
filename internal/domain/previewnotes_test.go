@@ -76,6 +76,32 @@ func TestPreviewResolveRefusesAHalfPair(t *testing.T) {
 	}
 }
 
+// PreviewNotesAt resolves ONE file's notes against that file's content at the
+// tip, so an empty path is a caller bug, not the counts-only gather: with no
+// path loadPreviewNotes hands back every file's notes and they would all be
+// resolved against nothing. errPreviewNotesNeedPath is what the var comment
+// promises and what PreviewNotesFor already does; the no-path gather belongs
+// to PreviewNoteCounts alone.
+func TestPreviewNotesAtRefusesAnEmptyPath(t *testing.T) {
+	t.Parallel()
+	svc, _ := newPreviewRepo(t)
+	ctx := context.Background()
+	set, err := svc.PreviewNotes(ctx, "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !set.OK() {
+		t.Fatalf("fixture broken: want an ok set, got %+v", set)
+	}
+	got, err := svc.PreviewNotesAt(ctx, set, "")
+	if !errors.Is(err, errPreviewNotesNeedPath) {
+		t.Fatalf("err = %v, want errPreviewNotesNeedPath", err)
+	}
+	if got != nil {
+		t.Fatalf("a refused read must return no notes, got %+v", got)
+	}
+}
+
 func TestPreviewResolveAcceptsASavedIDAndLabel(t *testing.T) {
 	t.Parallel()
 	svc, _ := newPreviewRepo(t)

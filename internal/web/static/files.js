@@ -1138,8 +1138,12 @@ function firstChangedRow() {
 
 // firstNewSideRow is firstChangedRow restricted to rows a PREVIEW can anchor:
 // its old side is the merge base, so only a new-side row is addressable. Same
-// two tiers as firstChangedRow — the first changed row that has a new side,
-// else any new-side row of the file.
+// two tiers as firstChangedRow — a change BLOCK HEAD that has a new side
+// (diffChangeBlocks returns heads only, so a block whose head is a pure
+// deletion is skipped here and caught by tier two), else any new-side row of
+// the file. Tier two is a deliberate fallback, not a precise landing: a file
+// whose every change starts with a deletion anchors on its first new-side
+// row, which beats refusing `c` outright.
 function firstNewSideRow() {
   for (const tr of diffChangeBlocks()) {
     if (tr.dataset.side !== "new") continue;
