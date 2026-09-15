@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/homeend/gigagit/internal/changeset"
@@ -63,4 +64,29 @@ func (s *Service) DriftSince(ctx context.Context, ref, newTip string) (DriftRepo
 	}
 	out.Report, out.Checked = changeset.Compare(before, after), true
 	return out, nil
+}
+
+// DriftAfter compares the branch's newest recorded version against its tip now.
+// Frontends call this AFTER Execute has returned — never from inside it. The two
+// name-status diffs must not run under a repo-gate reservation: spec 1 shipped
+// exactly that bug (preflight probes under an exclusive TreeWrite hold) and
+// fixed it.
+func (s *Service) DriftAfter(ctx context.Context, branch string) (DriftReport, error) {
+	vs, err := s.BranchVersions(ctx, branch)
+	if err != nil {
+		var disabled *ErrFeatureDisabled
+		if errors.As(err, &disabled) {
+			return DriftReport{}, nil // feature off: nothing recorded, nothing to say
+		}
+		return DriftReport{}, err
+	}
+	if len(vs) == 0 {
+		return DriftReport{}, nil
+	}
+	tip, err := s.repo.RevParse(ctx, "refs/heads/"+branch)
+	if err != nil || tip == "" {
+		return DriftReport{}, nil
+	}
+	// BranchVersions is newest-first.
+	return s.DriftSince(ctx, vs[0].Ref, tip)
 }
