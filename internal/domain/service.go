@@ -182,7 +182,7 @@ func OpenTUIWithRing(workdir string, ring *observ.Ring) *Service {
 }
 
 func openWith(workdir string, sshBatch bool, ring *observ.Ring) *Service {
-	workdir = resolveRoot(workdir, sshBatch)
+	workdir = resolveRoot(workdir, sshBatch, ring)
 	er := gitexec.NewExecRunner("git", workdir, ring)
 	if sshBatch {
 		er = er.WithSSHBatchMode()
@@ -204,8 +204,8 @@ func openWith(workdir string, sshBatch bool, ring *observ.Ring) *Service {
 // It costs one rev-parse. Anything that is not a worktree subdirectory — a
 // plain directory, a bare repo, a deleted cwd — keeps the given workdir, so
 // the existing friendly startup errors fire unchanged.
-func resolveRoot(workdir string, sshBatch bool) string {
-	er := gitexec.NewExecRunner("git", workdir, nil)
+func resolveRoot(workdir string, sshBatch bool, rec observ.Recorder) string {
+	er := gitexec.NewExecRunner("git", workdir, rec)
 	if sshBatch {
 		er = er.WithSSHBatchMode()
 	}

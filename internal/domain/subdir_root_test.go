@@ -101,3 +101,23 @@ func samePath(t *testing.T, a, b string) bool {
 	}
 	return filepath.Clean(ra) == filepath.Clean(rb)
 }
+
+// A directory that is not inside a worktree keeps the workdir it was given,
+// so the friendly "not a repository" startup errors still fire. This pins the
+// fallback: resolveRoot must never invent a root.
+func TestOpenOutsideARepoKeepsWorkdir(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if got := Open(dir).Root(); got != dir {
+		t.Fatalf("Root() = %q outside a repo, want the given workdir %q", got, dir)
+	}
+}
+
+// A Service built by New has no workdir, and Root must say so ("") rather
+// than guessing — frontends pass a pathspec through untouched when it does.
+func TestNewServiceHasNoRoot(t *testing.T) {
+	t.Parallel()
+	if got := New(nil).Root(); got != "" {
+		t.Fatalf("Root() = %q for a New service, want \"\"", got)
+	}
+}

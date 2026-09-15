@@ -495,7 +495,7 @@ gg never hangs waiting for input mid-operation. When an operation hits a fork
 Exit codes: 0 = success, 1 = operation failed or needs a decision,
 2 = usage error.
 
-**Paths.** Everything gg *prints* — `gg status`, `gg diff`, `gg log --files` —
+**Paths.** Everything gg *prints* — `gg status`, `gg diff`, `gg show --patch` —
 is relative to the **worktree root**, wherever you run it from. A pathspec you
 *type* is relative to **your cwd**, exactly as it is for git: in `src/`,
 `gg add .` stages `src/` and `gg add xxx.txt` stages `src/xxx.txt`. So a path
