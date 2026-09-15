@@ -141,7 +141,7 @@ func TestPreviewRemoveAllIsScopedToTheTip(t *testing.T) {
 		return r
 	}
 
-	m := previewDiffModel(t, []domain.ResolvedNote{note("n1", tip, 1), note("n2", older, 2)})
+	m := previewDiffModel(t, []domain.ResolvedNote{note("n1", tip, 1), note("n2", older, 0)})
 	if _, ok := m.noteRemoveAllRow(); !ok {
 		t.Fatal("the row is offered while a tip note is visible")
 	}
@@ -153,13 +153,16 @@ func TestPreviewRemoveAllIsScopedToTheTip(t *testing.T) {
 	if p.roots != 1 || p.replies != 1 {
 		t.Fatalf("only the tip's thread is removable, got roots=%d replies=%d", p.roots, p.replies)
 	}
-	if p.total != 2 {
-		t.Fatalf("the total names every thread the preview shows, got %d", p.total)
+	// Both sides of "(N of M)" count NOTES, never notes against threads: the
+	// tip's root and its reply are removable, out of the 3 notes the preview
+	// shows (tip root + reply, plus the older commit's root).
+	if p.total != 3 {
+		t.Fatalf("the total counts every NOTE the preview shows, got %d", p.total)
 	}
 	if p.tip != shortHash(tip) {
 		t.Fatalf("the popup names the tip it is scoped to, got %q", p.tip)
 	}
-	if body := p.box(tm.(Model)); !contains(body, "(2 of 2)") {
+	if body := p.box(tm.(Model)); !contains(body, "(2 of 3)") {
 		t.Fatalf("the preview lead names the removable slice of the total, got %q", body)
 	}
 
@@ -185,34 +188,57 @@ func TestPreviewRemoveAllIsScopedToTheTip(t *testing.T) {
 }
 
 // Gate 3 (spec §1.6, the `}`/`{` step): in a preview the noted-file test reads
-// the preview's per-path counts. Those counts come from PreviewNoteCounts,
-// which only counts notes attributable to this preview — a note left behind on
-// a commit the branch no longer contains is hidden, so the step passes its file
-// by even though the tip-keyed map still knows about it.
+// the preview's per-path counts, not the tip-keyed map — a note written on an
+// older commit of the branch is the preview's, and ByCommitPath would miss it.
 func TestPreviewNotedFileStepUsesThePreviewCounts(t *testing.T) {
 	t.Parallel()
 	const tip = "1111111111111111111111111111111111111111"
 	m := previewDiffModel(t, nil)
 	m.filesPreviewCounts = map[string]int{"b.txt": 2}
 	m.noteCounts = domain.NoteCounts{
-		ByPath:       map[string]int{"orphan.txt": 1},
-		ByCommitPath: map[string]int{tip + ":orphan.txt": 1},
+		ByPath:       map[string]int{"tiponly.txt": 1},
+		ByCommitPath: map[string]int{tip + ":tiponly.txt": 1},
 		ByCommit:     map[string]int{},
 	}
 	if !m.notedFilePath("b.txt") {
 		t.Fatal("a path the preview counts carries notes")
 	}
-	if m.notedFilePath("orphan.txt") {
-		t.Fatal("a note hidden from this preview must not stop the }/{ step")
+	if m.notedFilePath("tiponly.txt") {
+		t.Fatal("the preview steps by ITS counts, never the tip-keyed map")
 	}
 
 	// Outside a preview the tip-keyed map still decides, exactly as before.
+	// The scope is the OPEN VIEW's stamp, so clearing the Model field alone
+	// must not change the answer.
 	m.filesPreviewSet = nil
-	if !m.notedFilePath("orphan.txt") {
+	if !m.notedFilePath("b.txt") {
+		t.Fatal("the open preview diff's own stamp is what scopes the step")
+	}
+	m.diffLayer().previewSet = nil
+	if !m.notedFilePath("tiponly.txt") {
 		t.Fatal("a plain commit diff still steps by the commit-keyed counts")
 	}
 	if m.notedFilePath("b.txt") {
 		t.Fatal("the preview counts must not leak into a plain commit diff")
+	}
+}
+
+// Ruling 2: a file DELETED at the tip still counts for the panel badge (spec
+// §1.2's retired file), but it has no new side, so its notes can never render.
+// `}`/`{` must not park the user on a diff that shows nothing.
+func TestPreviewNotedFileStepSkipsFilesDeletedAtTheTip(t *testing.T) {
+	t.Parallel()
+	m := previewDiffModel(t, nil)
+	m.filesPreviewCounts = map[string]int{"gone.txt": 1, "kept.txt": 1}
+	m.filesView = &contentPopup{lines: []contentLine{
+		{path: "gone.txt", status: "D"},
+		{path: "kept.txt", status: "M"},
+	}}
+	if m.notedFilePath("gone.txt") {
+		t.Fatal("a file deleted at the tip can show no new-side note: step past it")
+	}
+	if !m.notedFilePath("kept.txt") {
+		t.Fatal("a modified file with a preview note is still a step target")
 	}
 }
 

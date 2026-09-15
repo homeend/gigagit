@@ -51,6 +51,31 @@ func (m Model) previewNoteSet() *domain.PreviewNoteSet {
 	return v.previewSet
 }
 
+// previewNoteScope is the preview a file-list gesture acts in: the OPEN diff's
+// own stamp first (the rule everywhere else — the view's field, not Model state
+// at key time), falling back to the files view's set when no diff is open.
+func (m Model) previewNoteScope() *domain.PreviewNoteSet {
+	if v := m.diffLayer(); v != nil {
+		return v.previewSet
+	}
+	return m.filesPreviewSet
+}
+
+// previewPathGoneAtTip reports whether the compare file list marks path as
+// deleted — in a preview that means the source tip no longer has the file, so
+// nothing can anchor on its new side.
+func (m Model) previewPathGoneAtTip(path string) bool {
+	if m.filesView == nil {
+		return false
+	}
+	for _, l := range m.filesView.visible() {
+		if l.path == path {
+			return l.status == "D"
+		}
+	}
+	return false
+}
+
 // loadNotesCmd resolves this diff's notes off the UI thread. The rows are the
 // SHARED cached rows: they are read, wrapped in a domain.Diff value and never
 // mutated.
@@ -375,12 +400,17 @@ func (m Model) nextNotedFile(dir int) (int, bool) {
 // notedFilePath reports whether a path carries notes at the open diff's
 // provenance: by path for a working-tree diff, by "<sha>:<path>" for a commit.
 func (m Model) notedFilePath(path string) bool {
-	if m.filesPreviewSet != nil {
+	if m.previewNoteScope() != nil {
 		// A preview gathers notes from every commit on the branch, so the
-		// tip-keyed ByCommitPath map would miss most of them — and a note left
-		// on a commit the branch no longer contains is not this preview's at
-		// all, so the step passes its file by.
-		return m.filesPreviewCounts[path] > 0
+		// tip-keyed ByCommitPath map would miss most of them.
+		if m.filesPreviewCounts[path] == 0 {
+			return false
+		}
+		// A file DELETED at the tip still counts for the panel badge (spec
+		// §1.2, the "retired file" rule), but its new-side notes can never
+		// render — the file has no new side. Stepping onto it would land the
+		// user on a diff that shows no note at all, so `}`/`{` pass it by.
+		return !m.previewPathGoneAtTip(path)
 	}
 	if v := m.diffLayer(); v != nil && v.rev != "" {
 		return m.noteCounts.ByCommitPath[v.rev+":"+path] > 0

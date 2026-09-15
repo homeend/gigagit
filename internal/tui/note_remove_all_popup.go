@@ -35,7 +35,7 @@ type noteRemoveAllPopup struct {
 	path    string
 	roots   int    // threads the open diff shows
 	replies int    // replies those threads carry
-	total   int    // every root the preview shows, tip and older commits alike
+	total   int    // every NOTE the preview shows (roots + replies), tip and older commits alike
 	tip     string // "" = not a preview; else the short sha the clear is scoped to
 	refused bool   // the last enter did not match: show the hint
 }
@@ -88,7 +88,9 @@ func (m Model) openNoteRemoveAll() (tea.Model, tea.Cmd) {
 	}
 	p := &noteRemoveAllPopup{field: newTextField(""), addr: addr, path: addr.Path}
 	for _, r := range v.notes {
-		p.total++
+		// total counts NOTES, the same unit roots+replies does: "(2 of 3)"
+		// has to compare like with like or it reads as two different things.
+		p.total += 1 + len(r.Replies)
 		// NotesClear takes ONE address: on a preview that is the tip, so a
 		// note gathered from an older commit is not removed and must not be
 		// counted as if it were.
