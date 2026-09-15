@@ -301,3 +301,14 @@ func TestSteerWireRefusesABadPreviewTarget(t *testing.T) {
 		}
 	}
 }
+
+func TestSteerWireRefusesAPreviewTargetWithACommit(t *testing.T) {
+	t.Parallel()
+	if _, err := toSteerWire(steer.Command{
+		Cmd:    "navigate",
+		Commit: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+		Target: &steer.Target{State: "preview", Source: "feat/x", Target: "main"},
+	}); err == nil {
+		t.Error("toSteerWire = nil error, want a refusal for a preview target carrying a commit")
+	}
+}

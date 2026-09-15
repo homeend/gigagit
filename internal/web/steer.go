@@ -87,6 +87,9 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 			if !isGitArgSafe(c.Target.Source) || !isGitArgSafe(c.Target.Target) {
 				return w, errors.New("unsafe preview branch")
 			}
+			if c.Commit != "" {
+				return w, errors.New("a preview target cannot also carry a commit")
+			}
 			w.State, w.Source, w.Target = "preview", c.Target.Source, c.Target.Target
 		} else {
 			if _, ok := noteState(c.Target.State); !ok {
