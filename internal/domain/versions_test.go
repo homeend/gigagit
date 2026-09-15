@@ -248,3 +248,56 @@ func TestExecuteInjectsVersionsPolicy(t *testing.T) {
 		t.Fatalf("versions after disabled-policy amend = %d, want still 1 (no new ref): %+v", len(versionsAfter), versionsAfter)
 	}
 }
+
+// TestBranchVersionsUnwrapsTheSnapshotCommit writes a real version snapshot
+// (WriteVersionSnapshot + UpdateRef, the production path) and asserts
+// BranchVersions unwraps the synthetic commit: Hash is the snapshotted tip
+// (not the synthetic commit), the recorded endpoints come back on the
+// model.BranchVersion, and Subject is the TIP's own subject — not the
+// synthetic commit's "gg version snapshot (rebase)" subject, which is what
+// %(subject) alone would give every row.
+func TestBranchVersionsUnwrapsTheSnapshotCommit(t *testing.T) {
+	t.Parallel()
+	dir := cleanDir(t)
+	svc := svcAt(dir)
+	ctx := context.Background()
+
+	tip, err := svc.Repo().RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatalf("RevParse: %v", err)
+	}
+	meta := git.VersionMeta{Op: "rebase", Ours: tip, Other: tip, Base: tip, Source: "feat/x", Target: "main"}
+	syn, err := svc.Repo().WriteVersionSnapshot(ctx, tip, meta, 1700000000)
+	if err != nil {
+		t.Fatalf("WriteVersionSnapshot: %v", err)
+	}
+	if err := svc.Repo().UpdateRef(ctx, git.VersionRef("main", "rebase", 1700000000), syn); err != nil {
+		t.Fatalf("UpdateRef: %v", err)
+	}
+
+	vs, err := svc.BranchVersions(ctx, "main")
+	if err != nil {
+		t.Fatalf("BranchVersions: %v", err)
+	}
+	if len(vs) != 1 {
+		t.Fatalf("got %d versions, want 1", len(vs))
+	}
+	v := vs[0]
+	// Hash must be the snapshotted tip, NOT the synthetic commit — restore and
+	// every UI that shows the recorded commit depend on this.
+	if v.Hash != tip {
+		t.Errorf("Hash = %s, want the snapshotted tip %s (synthetic was %s)", v.Hash, tip, syn)
+	}
+	if v.Ours != tip || v.Base != tip || v.Source != "feat/x" || v.Target != "main" {
+		t.Errorf("endpoints = %+v, want the recorded meta", v)
+	}
+	if v.Op != "rebase" {
+		t.Errorf("Op = %q, want rebase", v.Op)
+	}
+	// Subject must be the snapshotted TIP's own subject ("base", from
+	// cleanDir), not the synthetic commit's "gg version snapshot (rebase)" —
+	// without subjectsOf wired in, every row would render identically.
+	if v.Subject != "base" {
+		t.Errorf("Subject = %q, want the tip's own subject %q (not the synthetic wrapper's)", v.Subject, "base")
+	}
+}

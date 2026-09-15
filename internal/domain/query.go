@@ -642,17 +642,17 @@ func (s *Service) BranchVersions(ctx context.Context, branch string) ([]model.Br
 		return nil, err
 	}
 	return query(ctx, s, "branch-versions:"+branch, func(ctx context.Context) ([]model.BranchVersion, error) {
-		infos, err := s.repo.ForEachRef(ctx, strings.TrimSuffix(git.VersionRefPrefix, "/")+"/"+branch)
+		versions, err := s.repo.VersionRefs(ctx, strings.TrimSuffix(git.VersionRefPrefix, "/")+"/"+branch)
 		if err != nil {
 			return nil, err
 		}
 		var out []model.BranchVersion
-		for _, info := range infos {
-			b, op, ts, ok := git.ParseVersionRef(info.Ref)
+		for _, v := range versions {
+			b, _, _, ok := git.ParseVersionRef(v.Ref)
 			if !ok || b != branch { // prefix match may over-catch nested names
 				continue
 			}
-			out = append(out, model.BranchVersion{Ref: info.Ref, Hash: info.Hash, Subject: info.Subject, Op: op, Unix: ts})
+			out = append(out, v)
 		}
 		sort.Slice(out, func(i, j int) bool {
 			if out[i].Unix != out[j].Unix {
@@ -671,13 +671,13 @@ func (s *Service) AllVersionBranches(ctx context.Context) ([]model.VersionedBran
 		return nil, err
 	}
 	return query(ctx, s, "version-branches", func(ctx context.Context) ([]model.VersionedBranch, error) {
-		infos, err := s.repo.ForEachRef(ctx, strings.TrimSuffix(git.VersionRefPrefix, "/"))
+		versions, err := s.repo.VersionRefs(ctx, strings.TrimSuffix(git.VersionRefPrefix, "/"))
 		if err != nil {
 			return nil, err
 		}
 		byBranch := map[string]*model.VersionedBranch{}
-		for _, info := range infos {
-			b, _, ts, ok := git.ParseVersionRef(info.Ref)
+		for _, v := range versions {
+			b, _, ts, ok := git.ParseVersionRef(v.Ref)
 			if !ok {
 				continue
 			}
