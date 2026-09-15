@@ -212,8 +212,13 @@ func (m Model) afterPreviewsRefresh() (Model, tea.Cmd) {
 				// was chained off srcNotes). Take the fresh counts without
 				// re-resolving or re-opening anything — without this the file
 				// list badges and the }/{ step go stale in exactly the case
-				// the chain exists for.
-				m.filesPreviewCounts = r.byPath
+				// the chain exists for. A nil byPath means the counts READ
+				// failed (every success path returns a non-nil map), so the
+				// badges keep their last known values instead of vanishing on
+				// a transient error.
+				if r.byPath != nil {
+					m.filesPreviewCounts = r.byPath
+				}
 				return m, nil
 			}
 			moved = po.source

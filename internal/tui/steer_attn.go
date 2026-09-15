@@ -133,14 +133,16 @@ func (m Model) steerHighlight(c steer.Command) (Model, tea.Cmd) {
 		return m, m.answerSteer(c, steerFail(c, "unknown side "+strconv.Quote(c.Side)))
 	}
 	// A preview's old side is the merge base: not addressable, the same refusal
-	// the TUI's own `c` gives there. Scoped to the mark that would land on the
-	// open preview itself (same key as its note address) — a mark aimed at some
-	// other file or state is nobody's business but the view it will paint.
-	if side == "old" {
-		if v := m.diffLayer(); v != nil && v.previewSet != nil {
-			if vk, ok := attnKeyFor(v.noteAddr); ok && vk == k {
-				return m, m.answerSteer(c, steerFail(c, "notes in a preview anchor on the new side"))
-			}
+	// the TUI's own `c` gives there. The scope is the TIP, not the open path —
+	// every file at that commit shares the one merge base, so a band left on
+	// another path would paint the moment the user stepped onto it, and with
+	// only the file list open there would be no diff layer to catch it.
+	// previewNoteScope reads the view stamp first, then filesPreviewSet.
+	// A mark on any OTHER commit (or on the working tree) is the business of
+	// the view that will paint it and still lands.
+	if side == "old" && k.state == "commit" {
+		if set := m.previewNoteScope(); set != nil && k.commit == set.Tip {
+			return m, m.answerSteer(c, steerFail(c, "notes in a preview anchor on the new side"))
 		}
 	}
 	if _, ok := attnStyle(c.Tone); !ok {

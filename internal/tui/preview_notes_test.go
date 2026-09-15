@@ -288,18 +288,48 @@ func TestSteerHighlightRefusesTheOldSideOfAPreview(t *testing.T) {
 		t.Fatalf("an old-side mark must be refused on a preview view, got %+v", m2.attention)
 	}
 
-	// The guard is scoped to THIS view's address, not to "a preview is on the
-	// layer stack": an old-side mark aimed at some other file/state is the
-	// business of the view that will paint it, and must still land.
-	other := cmdFor("ps-3", "old")
-	other.ID, other.File, other.Target = "ps-3", "b.txt", nil // b.txt, unstaged
-	m3, otherCmd := m.steerHighlight(other)
-	runSteerCmd(t, otherCmd)
-	if r, ok := steer.AwaitReply(dir, "ps-3", time.Second); !ok || !r.OK {
-		t.Fatalf("an old-side mark on ANOTHER file must not be refused, reply=%+v ok=%v", r, ok)
+	// The guard keys on the preview TIP, not on the open path: another file at
+	// the same commit is the same merge base, and its band would paint the
+	// moment the user steps onto it.
+	otherPath := cmdFor("ps-3", "old")
+	otherPath.File = "b.txt"
+	m3, pathCmd := m.steerHighlight(otherPath)
+	runSteerCmd(t, pathCmd)
+	r3, ok3 := steer.AwaitReply(dir, "ps-3", time.Second)
+	if !ok3 || r3.OK || r3.Error != "notes in a preview anchor on the new side" {
+		t.Fatalf("another file AT THE PREVIEW TIP must be refused too, reply=%+v ok=%v", r3, ok3)
 	}
-	if len(m3.attention) != 1 {
-		t.Fatalf("the other file's old-side mark must be stored, got %+v", m3.attention)
+	if len(m3.attention) != 0 {
+		t.Fatalf("the tip-scoped old-side mark must not be stored, got %+v", m3.attention)
+	}
+
+	// …and the refusal is not a property of the diff layer: with only the
+	// preview's FILE LIST open, filesPreviewSet is the scope.
+	listOnly := m
+	listOnly.layers = nil
+	listOnly.filesView = &contentPopup{}
+	m4, listCmd := listOnly.steerHighlight(cmdFor("ps-4", "old"))
+	runSteerCmd(t, listCmd)
+	r4, ok4 := steer.AwaitReply(dir, "ps-4", time.Second)
+	if !ok4 || r4.OK || r4.Error != "notes in a preview anchor on the new side" {
+		t.Fatalf("the guard must hold with only the file list open, reply=%+v ok=%v", r4, ok4)
+	}
+	if len(m4.attention) != 0 {
+		t.Fatalf("no mark may be stored with only the file list open, got %+v", m4.attention)
+	}
+
+	// Scope is the TIP, not "a preview is open": an old-side mark on a
+	// different commit — or on the working tree — is the business of the view
+	// that will paint it, and must still land.
+	other := cmdFor("ps-5", "old")
+	other.File, other.Target = "b.txt", nil // b.txt, unstaged
+	m5, otherCmd := m.steerHighlight(other)
+	runSteerCmd(t, otherCmd)
+	if r, ok := steer.AwaitReply(dir, "ps-5", time.Second); !ok || !r.OK {
+		t.Fatalf("an unstaged old-side mark must not be refused, reply=%+v ok=%v", r, ok)
+	}
+	if len(m5.attention) != 1 {
+		t.Fatalf("the unstaged old-side mark must be stored, got %+v", m5.attention)
 	}
 }
 
@@ -352,6 +382,15 @@ func TestUnchangedPreviewRefreshStillMovesTheCounts(t *testing.T) {
 	}
 	if m2.filesPreviewCounts["a.txt"] != 1 {
 		t.Fatalf("an unchanged-hash refresh must still take the fresh counts, got %v", m2.filesPreviewCounts)
+	}
+
+	// A nil byPath is the counts READ having failed, not "no notes": the badges
+	// keep what they had rather than blinking away on a transient error.
+	m3 := m2
+	m3.previews[0].byPath = nil
+	m4, _ := m3.afterPreviewsRefresh()
+	if m4.filesPreviewCounts["a.txt"] != 1 {
+		t.Fatalf("a failed counts read must leave the badges alone, got %v", m4.filesPreviewCounts)
 	}
 }
 

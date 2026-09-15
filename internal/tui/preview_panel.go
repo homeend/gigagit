@@ -22,9 +22,12 @@ type previewRow struct {
 // previewsPayload is srcPreviews' dataAvailableMsg value.
 type previewsPayload struct{ rows []previewRow }
 
-// readPreviews lists the records and summarises each. An unchanged pair
-// costs two rev-parse calls (name → hash is how movement is detected) and
-// no diff work; only a moved pair runs the three summary calls.
+// readPreviews lists the records, summarises each and counts its notes. An
+// unchanged pair costs two rev-parse calls for the summary (name → hash is how
+// movement is detected) and no diff work; only a moved pair runs the three
+// summary calls. A previewable pair then costs roughly two more, because
+// PreviewNotes resolves the pair again to gather the commit range — parked for
+// the final wave rather than threaded through here.
 func readPreviews(ctx context.Context, svc *domain.Service) (previewsPayload, error) {
 	ps, err := svc.PreviewList(ctx)
 	if err != nil {
