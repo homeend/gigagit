@@ -282,8 +282,12 @@ middle** the way the TUI does — whole directories drop out around a `…`, so
 the file name and the head of the path both survive a narrow pane (the row's
 tooltip carries the path in full). The **diff header's file path** copies on a
 click, and right-clicks into *copy full path* / *copy file name* / *copy parent
-dir*. Right-clicking **selected text inside a diff** offers *copy* (alongside
-*copy gg link to this line*). And the file list's header copies the open
+dir* — plus, below a separator, *copy absolute file path*, *copy absolute
+parent dir* and *copy repo absolute path* (the checkout root alone, `\`-separated
+on Windows). Opening a file diff lands on its **first changed line** rather
+than the top of the file. Right-clicking **inside a diff** offers *copy* for
+the selected text, or *copy line* when nothing is selected (alongside *copy gg
+link to this line*). And the file list's header copies the open
 commit's id: right-click its **short sha** for *copy short commit id* /
 *copy commit id*, or its **subject** for the full id.
 

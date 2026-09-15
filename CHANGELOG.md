@@ -8,6 +8,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: copy a line, land on the first change, absolute paths, and a refresh
+  button that looks like a button.** Follow-ups to the copy/elide wave:
+  - Right-clicking a diff line with **nothing selected** now offers **copy
+    line** — the text of the cell under the pointer, so a side-by-side row
+    gives you the side you clicked rather than both versions glued together
+    (with a selection, *copy* still copies the selection).
+  - **Opening a file diff parks the view on its first changed line** instead
+    of the top of the file — the context above the first hunk can run for
+    screens. `‹ change` / `change ›` continue from there. The jump happens
+    only when a diff is opened, never on a window resize or a notes refresh.
+  - The diff header's **path menu gained the absolute forms**, below a
+    separator: **copy absolute file path**, **copy absolute parent dir**, and
+    **copy repo absolute path** (the checkout root alone). A Windows checkout
+    gets `\`-separated paths, since git hands the browser `/` whatever the
+    platform.
+  - The **↻ refresh button is styled with pull and push** — it was missing
+    from their CSS rule and fell back to the browser's default button look.
+
 - **Web: copy what's on screen, and stop cutting off file names.** Five
   changes to the browser UI:
   - The **file list middle-elides long paths** the way the TUI does — whole
