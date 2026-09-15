@@ -38,7 +38,18 @@ func cmdMerge(svc *domain.Service, args []string, stdin io.Reader, stdout, stder
 		return 2
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
+	// Resolved the same way the engine resolves an empty Target (current
+	// branch) so printDrift checks the branch this merge actually moved,
+	// even when --into was not given.
+	target := *into
+	if target == "" {
+		target, _ = svc.CurrentBranch(context.Background())
+	}
 	res, err := runOperation(context.Background(), svc,
 		engine.SmartMerge{Source: fs.Arg(0), Target: *into}, dec, stderr)
-	return finish(res, err, stdout, stderr)
+	code := finish(res, err, stdout, stderr)
+	if code == 0 {
+		printDrift(context.Background(), svc, target, stdout)
+	}
+	return code
 }
