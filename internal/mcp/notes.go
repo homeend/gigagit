@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/google/jsonschema-go/jsonschema"
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -34,6 +35,11 @@ type noteTargetIn struct {
 	File   string `json:"file,omitempty"`
 	Cached bool   `json:"cached,omitempty"`
 	Rev    string `json:"rev,omitempty"`
+	// Preview addresses a MERGE PREVIEW instead of a commit:
+	// "<target>...<source>", or a saved preview's id or label. The note is
+	// stored on the source TIP and anchors on the new side only — the
+	// preview's old side is the merge base, which no stored address names.
+	Preview string `json:"preview,omitempty"`
 }
 
 type notesListIn struct {
@@ -92,7 +98,10 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		Name: "gg_notes_list",
 		Description: "List gg review notes, resolved against the current content. Omit file to list " +
 			"every note this checkout can see. Target: none = the unstaged working tree, cached=true " +
-			"= the staged diff, rev = one commit's own change. type filters user/agent/all.",
+			"= the staged diff, rev = one commit's own change. type filters user/agent/all. " +
+			`preview = "<target>...<source>" (or a saved preview's id/label) addresses a MERGE PREVIEW ` +
+			"instead: the note is stored on the source tip, new side only; status reports \"outdated\" " +
+			"for a note whose lines a later commit changed.",
 		Annotations:  readOnlyAnnotations(),
 		OutputSchema: wireNoteOutputSchema,
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in notesListIn) (*sdk.CallToolResult, notesOut, error) {
@@ -103,12 +112,29 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		if in.Type != "" && in.Type != "all" && in.Type != "user" && in.Type != "agent" {
 			return nil, out, fmt.Errorf("type must be user, agent or all")
 		}
+		if in.Preview != "" {
+			set, perr := s.previewSet(ctx, in.noteTargetIn)
+			if perr != nil {
+				return nil, out, perr
+			}
+			res, rerr := s.previewNotesFor(ctx, set, in.File)
+			if rerr != nil {
+				return nil, out, rerr
+			}
+			for _, r := range res {
+				if !noteTypeMatches(in.Type, r.Note.Source) {
+					continue
+				}
+				out.Notes = append(out.Notes, domain.ToWireNotePreview(r, true))
+			}
+			return nil, out, nil
+		}
 		res, err := s.notesFor(ctx, in.noteTargetIn)
 		if err != nil {
 			return nil, out, err
 		}
 		for _, r := range res {
-			if in.Type != "" && in.Type != "all" && string(r.Note.Source) != in.Type {
+			if !noteTypeMatches(in.Type, r.Note.Source) {
 				continue
 			}
 			out.Notes = append(out.Notes, domain.ToWireNote(r))
@@ -120,7 +146,9 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		Name: "gg_note_add",
 		Description: "Leave one anchored review note. Pass file plus exactly one of hunk (see " +
 			"gg diff --hunks), new_line or old_line (1-based). Target: none = the unstaged working " +
-			"tree, cached=true = the staged diff, rev = one commit (a range is refused). MUTATES gg's note store.",
+			"tree, cached=true = the staged diff, rev = one commit (a range is refused). " +
+			`preview = "<target>...<source>" (or a saved preview's id/label) addresses a MERGE PREVIEW ` +
+			"instead: the note is stored on the source tip, new side only. MUTATES gg's note store.",
 		Annotations:  mutatingAnnotations(),
 		OutputSchema: wireNoteOutputSchema,
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in noteAddIn) (*sdk.CallToolResult, noteOut, error) {
@@ -131,13 +159,43 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		if in.Summary == "" {
 			return nil, out, fmt.Errorf("summary is required")
 		}
-		addr, err := s.svc.NoteTarget(ctx, in.File, in.Cached, in.Rev)
-		if err != nil {
-			return nil, out, err
-		}
-		side, rng, err := s.noteAnchor(ctx, addr, in)
-		if err != nil {
-			return nil, out, err
+		var addr model.FileAddress
+		var side model.NoteSide
+		var rng [2]int
+		if in.Preview != "" {
+			set, perr := s.previewSet(ctx, in.noteTargetIn)
+			if perr != nil {
+				return nil, out, perr
+			}
+			if in.File == "" {
+				return nil, out, fmt.Errorf("preview needs file")
+			}
+			if in.OldLine != 0 {
+				return nil, out, fmt.Errorf("notes in a preview anchor on the new side (drop old_line)")
+			}
+			addr = model.FileAddress{State: model.StateCommitted, Commit: set.Tip, Path: in.File}
+			switch {
+			case in.NewLine != 0:
+				side, rng = model.NoteSideNew, [2]int{in.NewLine, in.NewLine}
+			case in.Hunk != 0:
+				s2, r2, herr := s.svc.PreviewHunkAnchor(ctx, set, in.File, in.Hunk)
+				if herr != nil {
+					return nil, out, herr
+				}
+				side, rng = s2, r2
+			default:
+				return nil, out, fmt.Errorf("pass exactly one of hunk or new_line")
+			}
+		} else {
+			a, aerr := s.svc.NoteTarget(ctx, in.File, in.Cached, in.Rev)
+			if aerr != nil {
+				return nil, out, aerr
+			}
+			sd, rg, nerr := s.noteAnchor(ctx, a, in)
+			if nerr != nil {
+				return nil, out, nerr
+			}
+			addr, side, rng = a, sd, rg
 		}
 		author := domain.NoteAuthorDefault(in.Author)
 		stored, err := s.svc.NoteAdd(ctx, model.Note{
@@ -158,7 +216,10 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 			`agent-context v1 ({"version":1,"files":[{"path":…,"annotations":[{"newRange":[a,b],"summary":…}]}]}) ` +
 			`or a comment batch ({"comments":[{"filePath":…,"newLine":N,"summary":…}]}). ` +
 			"The whole batch is validated first: one bad item stores nothing. Unanchored top-level/file " +
-			"summaries come back as contexts. MUTATES gg's note store.",
+			"summaries come back as contexts. " +
+			`preview = "<target>...<source>" (or a saved preview's id/label) addresses a MERGE PREVIEW ` +
+			"instead: the note is stored on the source tip, new side only; an old-side item is refused, " +
+			"not stored. MUTATES gg's note store.",
 		Annotations:  mutatingAnnotations(),
 		OutputSchema: wireNoteOutputSchema,
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in notesApplyIn) (*sdk.CallToolResult, notesOut, error) {
@@ -181,10 +242,30 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		// of whose sides are real (unlike a review's range/working target,
 		// which is NoteSideNewOnly), so PlanNoteBatch/ApplyNoteBatch — the
 		// shared, all-or-nothing planner/applier domain now owns — run with
-		// NoteSideBoth.
-		planned, _, err := s.svc.PlanNoteBatch(ctx, batch, in.Cached, in.Rev, author, domain.NoteSideBoth)
+		// NoteSideBoth. A preview's old side is the merge base, which no
+		// stored address names, so it switches to NoteSideNewOnly and MCP
+		// (with no stderr warning channel, unlike the CLI's --preview arm)
+		// turns a nonzero skip count into a hard, all-or-nothing refusal
+		// with the domain's own old-side error — nothing is applied yet at
+		// that point, so the batch stores nothing rather than silently
+		// dropping the offending item.
+		target := domain.NoteBatchTarget{Cached: in.Cached, Rev: in.Rev}
+		rule := domain.NoteSideBoth
+		if in.Preview != "" {
+			set, perr := s.previewSet(ctx, in.noteTargetIn)
+			if perr != nil {
+				return nil, out, perr
+			}
+			spec := set.DiffSpec()
+			target = domain.NoteBatchTarget{Rev: set.Tip, Hunks: &spec}
+			rule = domain.NoteSideNewOnly
+		}
+		planned, skipped, err := s.svc.PlanNoteBatchIn(ctx, batch, target, author, rule)
 		if err != nil {
 			return nil, out, err
+		}
+		if skipped > 0 {
+			return nil, out, domain.ErrPreviewOldSide
 		}
 		stored, err := s.svc.ApplyNoteBatch(ctx, planned)
 		if err != nil {
@@ -221,6 +302,75 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		s.notifyNotesChanged()
 		return nil, out, nil
 	})
+}
+
+// previewSet resolves a request's preview target. It is mutually exclusive
+// with cached/rev: two targets in one call is a caller error, never a silent
+// precedence rule.
+func (s *Server) previewSet(ctx context.Context, t noteTargetIn) (domain.PreviewNoteSet, error) {
+	if t.Cached || t.Rev != "" {
+		return domain.PreviewNoteSet{}, fmt.Errorf("one target only: preview cannot be combined with rev or cached")
+	}
+	source, target, err := s.svc.PreviewResolve(ctx, t.Preview)
+	if err != nil {
+		return domain.PreviewNoteSet{}, err
+	}
+	set, err := s.svc.PreviewNotes(ctx, source, target)
+	if err != nil {
+		return domain.PreviewNoteSet{}, err
+	}
+	if !set.OK() {
+		return domain.PreviewNoteSet{}, fmt.Errorf("preview %s → %s is not previewable", source, target)
+	}
+	return set, nil
+}
+
+// previewNotesFor gathers a preview's notes for one path, or — with no path —
+// for every path the preview carries notes on. It mirrors the CLI's
+// previewResolvedNotes (internal/cli/note.go): PreviewNotesAt needs a path to
+// resolve against (it reads that file's content at the tip), so the no-path
+// case walks PreviewNoteCounts's own byPath keys in a stable order rather
+// than handing PreviewNotesAt an empty path, which would silently resolve
+// nothing.
+func (s *Server) previewNotesFor(ctx context.Context, set domain.PreviewNoteSet, path string) ([]domain.ResolvedNote, error) {
+	if path != "" {
+		return s.svc.PreviewNotesAt(ctx, set, path)
+	}
+	byPath, _, err := s.svc.PreviewNoteCounts(ctx, set)
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]string, 0, len(byPath))
+	for p := range byPath {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	var out []domain.ResolvedNote
+	for _, p := range paths {
+		got, gerr := s.svc.PreviewNotesAt(ctx, set, p)
+		if gerr != nil {
+			return nil, gerr
+		}
+		out = append(out, got...)
+	}
+	return out, nil
+}
+
+// noteTypeMatches applies the type filter. "all" (the default) keeps
+// everything. A local copy of internal/cli's helper of the same name:
+// internal/mcp must reach git/domain state only through internal/domain
+// (archtest's layering DAG forbids mcp importing cli), and the check is four
+// lines — not worth a domain round-trip just to share it.
+func noteTypeMatches(want string, src model.NoteSource) bool {
+	switch want {
+	case "", "all":
+		return true
+	case "user":
+		return src == model.NoteSourceUser
+	case "agent":
+		return src == model.NoteSourceAgent
+	}
+	return false
 }
 
 // notesFor resolves the notes a list request covers: one address when file is
