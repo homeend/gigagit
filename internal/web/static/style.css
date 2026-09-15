@@ -230,9 +230,22 @@ mark.r { background: var(--span-add); color: inherit; }
      30  #modal    — a decision/confirm can be raised from a popup (a version
                      row's restore) or from the transport mid-op
      40  #ctx-menu — raised from the sidebar AND from inside popups
+     50  #preflight — the pre-boot migration consent gate; nothing else has
+                     rendered when it can be showing, so it must sit above
+                     everything else this sheet ever stacks, ctx-menu included
    Everything a menu or modal can be opened over stays below 30: help 11,
    palette 21, versions 21, vbranches 20 (below versions — the drill-in), prompt 22. Getting this wrong does not hide the
    surface — it paints it UNDERNEATH, which reads as a dead click. */
+#preflight { position: fixed; inset: 0; background: rgba(0,0,0,.7); display: flex; align-items: center; justify-content: center; z-index: 50; }
+#preflight.hidden { display: none; }
+#preflight-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 22px; max-width: 560px; }
+#preflight-title { font-weight: 600; margin-bottom: 10px; }
+#preflight-body { white-space: pre-line; margin-bottom: 14px; color: var(--dim); }
+#preflight-actions { display: flex; gap: 10px; justify-content: flex-end; }
+#preflight-actions button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 14px; font: inherit; cursor: pointer; }
+#preflight-actions button:hover { border-color: var(--accent); }
+#preflight-actions button.danger { color: #f27a6a; }
+#preflight-actions button.danger:hover { border-color: #f27a6a; }
 #modal { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 30; }
 #modal.hidden { display: none; }
 #modal-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 22px; max-width: 560px; }

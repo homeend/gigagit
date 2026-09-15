@@ -101,7 +101,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "gg: unknown command %q\n", args[0])
 		// Kept in sync with cli.commands (plus the commands main routes itself:
 		// shell-init, inspect, mcp, web, version).
-		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch checkout branch stash undo merge rebase fast-forward cherry-pick revert reset discard add unstage log diff show compare preview shelf bookmark prefix worktree remote tag note session link versions review apply unlock config repo init skill batch mcp web shell-init inspect version (run `gg` with no arguments for the TUI)")
+		fmt.Fprintln(os.Stderr, "commands: status commit pull push switch checkout branch stash undo merge rebase fast-forward cherry-pick revert reset discard add unstage log diff show compare preview shelf bookmark prefix worktree remote tag note session link versions migrate review apply unlock config repo init skill batch mcp web shell-init inspect version (run `gg` with no arguments for the TUI)")
 		os.Exit(2)
 	}
 	// No subcommand: launch the TUI. The runner stack (LimitRunner + ssh
@@ -125,6 +125,14 @@ func main() {
 	if _, err := svc.TopLevel(context.Background()); err != nil {
 		fmt.Fprintln(os.Stderr, friendlyGitError(err))
 		os.Exit(1)
+	}
+	proceed, err := tui.Preflight(svc, os.Stdin, os.Stderr)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if !proceed {
+		os.Exit(0)
 	}
 	if ef, _, eerr := tui.OpenErrorLog(); eerr == nil && ef != nil {
 		observ.SetFailureSink(ef)

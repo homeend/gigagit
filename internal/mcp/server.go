@@ -79,6 +79,18 @@ func (s *Server) sdkServer() *sdk.Server {
 
 // Serve runs the MCP server over stdio until ctx ends or the client closes.
 // workdir resolves the repo like the CLI does (the process cwd for gg mcp).
+//
+// A Required feature that cannot be satisfied refuses the server outright
+// rather than starting it: MCP never prompts and never decides mid-flight
+// (a standing ruling — see the Decider contract in internal/engine), so a
+// gated Required feature has no in-protocol way to ask for consent or even
+// explain itself per-tool the way ErrFeatureDisabled does for Optional ones.
+// Refusing to start, with the reason on stderr, is the correct MCP analogue
+// of the TUI's pre-launch gate.
 func Serve(ctx context.Context, workdir string) error {
-	return New(domain.Open(workdir)).sdkServer().Run(ctx, &sdk.StdioTransport{})
+	svc := domain.Open(workdir)
+	if err := svc.PreflightRequired(ctx); err != nil {
+		return err
+	}
+	return New(svc).sdkServer().Run(ctx, &sdk.StdioTransport{})
 }

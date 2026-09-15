@@ -29,6 +29,12 @@ func Serve(ctx context.Context, workdir, addr string, launch bool) error {
 	if err := preflight(ctx, svc, workdir); err != nil {
 		return err
 	}
+	// A Required feature that cannot be satisfied refuses to bind a port or
+	// open a browser, same as the repo-reachability check above — the CLI
+	// and MCP analogue of the TUI's pre-launch gate.
+	if err := svc.PreflightRequired(ctx); err != nil {
+		return err
+	}
 	touchMRU(ctx, svc, repos.DefaultStatePath())
 	// Honor [versions] like the one-shot frontends do (cli.Run applies it per
 	// invocation; this server lives long, so boot + re-root + settings writes

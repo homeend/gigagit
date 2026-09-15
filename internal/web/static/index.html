@@ -7,6 +7,17 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<div id="preflight" class="hidden">
+  <div id="preflight-box">
+    <div id="preflight-title">this repository needs a one-time migration</div>
+    <div id="preflight-body"></div>
+    <div id="preflight-actions">
+      <button id="preflight-migrate">Migrate</button>
+      <button id="preflight-skip">Skip</button>
+      <button id="preflight-quit" class="danger">Quit</button>
+    </div>
+  </div>
+</div>
 <header id="top">
   <button id="menu-btn" title="menu">☰</button>
   <span id="repo-name">…</span>
