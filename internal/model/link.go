@@ -154,7 +154,12 @@ func (l Link) String() string {
 		b.WriteString(strconv.Itoa(l.Hunk))
 	case l.Line > 0:
 		b.WriteByte(':')
-		if l.Side == NoteSideOld {
+		// A preview has no old side (steerCommandForLink and ParseLink both
+		// treat it as new-only): a hand-built Link with Side == NoteSideOld
+		// here would render an "old:" ParseLink rejects for a preview
+		// target. Force the new side rather than emit a string this
+		// function's own inverse cannot read back.
+		if l.Side == NoteSideOld && l.Target.Preview == nil {
 			b.WriteString("old:")
 		}
 		b.WriteString(strconv.Itoa(l.Line))

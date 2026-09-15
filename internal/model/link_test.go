@@ -354,6 +354,36 @@ func TestParseLinkPreviewFormsRoundTrip(t *testing.T) {
 	}
 }
 
+// A hand-built Link can carry Side == NoteSideOld on a preview target (no
+// constructor stops it) even though a preview has no old side — String must
+// still render something its own inverse, ParseLink, accepts, rather than an
+// "old:" ParseLink refuses outright (see the "the old side is the merge
+// base" refusal below).
+func TestLinkStringForcesTheNewSideOnAPreviewTarget(t *testing.T) {
+	t.Parallel()
+	x := Link{
+		Repo:   LinkRepo{Name: "gigagit"},
+		Path:   "a.go",
+		Target: LinkTarget{State: StateCommitted, Preview: &LinkPreview{Source: "feat/x", Target: "main"}},
+		Line:   3,
+		Side:   NoteSideOld,
+	}
+	s := x.String()
+	if strings.Contains(s, "old:") {
+		t.Fatalf("String(%+v) = %q, must not render an old side for a preview", x, s)
+	}
+	parsed, err := ParseLink(s)
+	if err != nil {
+		t.Fatalf("ParseLink(%q) = %v, want String's own output accepted", s, err)
+	}
+	if parsed.Side != NoteSideNew {
+		t.Errorf("ParseLink(%q).Side = %v, want NoteSideNew", s, parsed.Side)
+	}
+	if got := parsed.String(); got != s {
+		t.Errorf("String(Parse(String(x))) = %q, want %q", got, s)
+	}
+}
+
 func TestParseLinkPreviewSplitsThePairInGitOrder(t *testing.T) {
 	t.Parallel()
 	l, err := ParseLink("gg://gigagit/a.go@origin/main...origin/feat/login:9")
