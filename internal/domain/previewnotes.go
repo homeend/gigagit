@@ -2,10 +2,17 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
 )
+
+// errPreviewNotesNeedPath guards PreviewNotesFor/PreviewNotesAt: the
+// counts-only, no-path gather lives in loadPreviewNotes(ctx, set, ""), called
+// only from PreviewNoteCounts. A caller resolving notes for display always
+// has a path in hand (a file view), so an empty one here is a caller bug.
+var errPreviewNotesNeedPath = errors.New("preview notes: path is required")
 
 // Notes in merge previews (spec §1).
 //
@@ -164,13 +171,22 @@ func (s *Service) loadPreviewNotes(ctx context.Context, set PreviewNoteSet, path
 // caller already holds (the TUI's open compare view). Only the NEW side is
 // used: the preview's old side is the merge base, which no stored address
 // names, so nothing can anchor there.
+//
+// path == "" is refused: the counts-only, every-path gather lives in
+// loadPreviewNotes(ctx, set, "") behind PreviewNoteCounts, not here.
 func (s *Service) PreviewNotesFor(ctx context.Context, set PreviewNoteSet, path string, d Diff) ([]ResolvedNote, error) {
 	if !set.OK() {
 		return nil, nil
 	}
+	if path == "" {
+		return nil, errPreviewNotesNeedPath
+	}
 	mine, err := s.loadPreviewNotes(ctx, set, path)
 	if err != nil {
 		return nil, err
+	}
+	if len(mine) == 0 {
+		return nil, nil
 	}
 	_, newLines := diffSideLines(d)
 	return keepResolved(resolveNotes(mine, nil, newLines)), nil
@@ -229,6 +245,7 @@ func (s *Service) PreviewNoteCounts(ctx context.Context, set PreviewNoteSet) (ma
 		s.mu.Unlock()
 		return e.byPath, e.total, nil
 	}
+	gen := s.notesGen
 	s.mu.Unlock()
 
 	mine, err := s.loadPreviewNotes(ctx, set, "")
@@ -246,10 +263,12 @@ func (s *Service) PreviewNoteCounts(ctx context.Context, set PreviewNoteSet) (ma
 		}
 	}
 	s.mu.Lock()
-	if s.previewCounts == nil {
-		s.previewCounts = map[string]previewCountEntry{}
+	if s.notesGen == gen { // a mutation raced this computation: drop it
+		if s.previewCounts == nil {
+			s.previewCounts = map[string]previewCountEntry{}
+		}
+		s.previewCounts[key] = e
 	}
-	s.previewCounts[key] = e
 	s.mu.Unlock()
 	return e.byPath, e.total, nil
 }

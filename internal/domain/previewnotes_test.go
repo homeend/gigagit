@@ -231,11 +231,12 @@ func TestPreviewNoteCountsIncludeHiddenNotes(t *testing.T) {
 	// A note on a commit that is NOT on feat at all (main's seed commit) —
 	// rebased away / never on the branch — must not be attributed.
 	seed := revParse(t, dir, "main")
-	if _, err := svc.NoteAdd(ctx, model.Note{
+	offBranch, err := svc.NoteAdd(ctx, model.Note{
 		Source: model.NoteSourceAgent, Author: "ada",
 		Address: model.FileAddress{State: model.StateCommitted, Commit: seed, Path: "a.txt"},
 		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "off the branch",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -249,6 +250,56 @@ func TestPreviewNoteCountsIncludeHiddenNotes(t *testing.T) {
 	}
 	if total != 1 || byPath["b.txt"] != 1 {
 		t.Fatalf("the path-gone note counts, the off-branch note does not: total=%d byPath=%v", total, byPath)
+	}
+
+	// The counted half is only half the rule: the path-gone note must also be
+	// HIDDEN from the listing (its file is gone from the tip, so nothing can
+	// anchor it), and the rebased-away note must never appear at all — on
+	// ANY path, since it is not even gathered.
+	gone, err := svc.PreviewNotesAt(ctx, set, "b.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(gone) != 0 {
+		t.Fatalf("a path-gone note must be hidden from the listing, got %d: %+v", len(gone), gone)
+	}
+	onA, err := svc.PreviewNotesAt(ctx, set, "a.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range onA {
+		if r.Note.ID == offBranch.ID {
+			t.Fatalf("a rebased-away commit's note must never be listed, got %+v", r)
+		}
+	}
+}
+
+// SetNotesStore points a Service at a different store (the brief predicted
+// this): a preview count cached against the OLD store must not survive.
+func TestSetNotesStoreClearsPreviewCounts(t *testing.T) {
+	svc, dir := newPreviewRepo(t)
+	ctx := context.Background()
+	set, err := svc.PreviewNotes(ctx, "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, total, err := svc.PreviewNoteCounts(ctx, set); err != nil || total != 0 {
+		t.Fatalf("cold counts: total=%d err=%v", total, err)
+	}
+	svc.UseNotesDir(t.TempDir())
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Source: model.NoteSourceAgent, Author: "ada",
+		Address: model.FileAddress{State: model.StateCommitted, Commit: revParse(t, dir, "feat"), Path: "b.txt"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "in the new store",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, total, err := svc.PreviewNoteCounts(ctx, set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 {
+		t.Fatalf("SetNotesStore must drop the cached preview counts, got total=%d", total)
 	}
 }
 
