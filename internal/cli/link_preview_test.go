@@ -128,11 +128,51 @@ func TestPreviewLinkPlusPreviewFlagIsAUsageError(t *testing.T) {
 	for _, args := range [][]string{
 		{"note", "add", previewLinkFor(dir, "a.txt") + ":1", "--preview", "main...feat/x", "--summary", "no"},
 		{"note", "list", previewLinkFor(dir, "a.txt"), "--preview", "main...feat/x"},
+		// A bare preview link is a valid apply target (noteLinkShape's
+		// "apply" case refuses a PATH, not a bare link) — --preview on top
+		// of it is still the usual link-plus-flag conflict.
+		{"note", "apply", previewLinkFor(dir, ""), "--preview", "main...feat/x", "--stdin"},
 		{"diff", previewLinkFor(dir, "a.txt"), "--preview", "main...feat/x"},
 	} {
 		if code, _, errb := runCLI(t, dir, args...); code != 2 {
 			t.Errorf("%v: exit = %d, want 2 (%s)", args, code, errb)
 		}
+	}
+}
+
+// Fix round 2: spec §2.3 treats a preview link exactly as --preview,
+// including WITHOUT a path. `gg note list --preview P` with no --file lists
+// every path via PreviewNotesAll, so a BARE preview link (no path) must be
+// accepted by `note list` and take the same path-less route, byte for byte
+// with the flag — in both the text and --json forms. `note add` still
+// refuses a bare link: a note needs a file even when the link is a preview.
+func TestNoteListAcceptsABarePreviewLink(t *testing.T) {
+	dir := previewRepo(t)
+	bareLink := previewLinkFor(dir, "")
+	if code, _, errb := runCLI(t, dir, "note", "add", "--preview", "main...feat/x", "--file", "a.txt", "--new-line", "1", "--summary", "seeded preview note"); code != 0 {
+		t.Fatalf("seed note: %d %s", code, errb)
+	}
+	for _, withJSON := range []bool{false, true} {
+		flagArgs := []string{"note", "list", "--preview", "main...feat/x"}
+		linkArgs := []string{"note", "list", bareLink}
+		if withJSON {
+			flagArgs = append(flagArgs, "--json")
+			linkArgs = append(linkArgs, "--json")
+		}
+		codeF, outF, errF := runCLI(t, dir, flagArgs...)
+		codeL, outL, errL := runCLI(t, dir, linkArgs...)
+		if codeF != 0 || codeL != 0 {
+			t.Fatalf("json=%v exit codes = %d (flag: %s) / %d (link: %s)", withJSON, codeF, errF, codeL, errL)
+		}
+		if outF != outL {
+			t.Errorf("json=%v --preview and the bare link disagree:\nflag: %q\nlink: %q", withJSON, outF, outL)
+		}
+		if !strings.Contains(outF, "seeded preview note") {
+			t.Fatalf("json=%v seeded note missing: %q", withJSON, outF)
+		}
+	}
+	if code, _, errb := runCLI(t, dir, "note", "add", bareLink, "--summary", "no file"); code != 2 {
+		t.Fatalf("note add <bare preview link>: exit = %d, want 2 (%s)", code, errb)
 	}
 }
 
