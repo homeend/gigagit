@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/changeset"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/git"
@@ -287,11 +288,105 @@ func TestDriftNoticePausedWithoutDriftStillRaised(t *testing.T) {
 	if len(m.notices) != 1 {
 		t.Fatalf("notices = %+v, want exactly one (paused alone is grounds to raise)", m.notices)
 	}
-	if !strings.Contains(m.notices[0].title, "feat") {
-		t.Fatalf("notice title = %q, want it to name the branch", m.notices[0].title)
+	n := m.notices[0]
+	if !strings.Contains(n.title, "feat") {
+		t.Fatalf("notice title = %q, want it to name the branch", n.title)
+	}
+	// report.Checked == true: a comparison genuinely ran and found no drift,
+	// so it is accurate to say the change set still matches.
+	if !containsAny(n.detail, "still matches the recorded version") {
+		t.Fatalf("detail = %v, want the Checked wording (a comparison really ran)", n.detail)
+	}
+	if containsAny(n.detail, "Nothing was recorded to compare") {
+		t.Fatalf("detail = %v, must not claim nothing was recorded when Checked is true", n.detail)
 	}
 	if cmd == nil {
 		t.Fatal("a newly raised notice must arm the blink tick")
+	}
+}
+
+// TestDriftNoticePausedUncheckedUsesUncheckedWording covers the fix-round
+// finding: report.Checked == false means DriftAfter never actually compared
+// anything (nothing recorded, or the feature is off) — the paused-only
+// detail text must not then claim "its change set still matches the
+// recorded version", since no comparison ran to support that claim.
+func TestDriftNoticePausedUncheckedUsesUncheckedWording(t *testing.T) {
+	t.Parallel()
+	m := Model{}
+	report := domain.DriftReport{Checked: false} // nothing recorded to compare against
+	m, cmd := m.applyDriftReport("feat", report, true /* paused */)
+
+	if len(m.notices) != 1 {
+		t.Fatalf("notices = %+v, want exactly one (paused alone is grounds to raise, even unchecked)", m.notices)
+	}
+	n := m.notices[0]
+	if !containsAny(n.detail, "Nothing was recorded to compare") {
+		t.Fatalf("detail = %v, want the Unchecked wording", n.detail)
+	}
+	if containsAny(n.detail, "still matches the recorded version") {
+		t.Fatalf("detail = %v, must not claim a match when Checked is false — no comparison ran", n.detail)
+	}
+	if cmd == nil {
+		t.Fatal("a newly raised notice must arm the blink tick")
+	}
+}
+
+// containsAny reports whether any line in lines contains substr.
+func containsAny(lines []string, substr string) bool {
+	for _, l := range lines {
+		if strings.Contains(l, substr) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestDriftNoticeDedupesByVersionRef is the fix-round regression guard: two
+// applyDriftReport calls sharing the same branch+Ref (a paused rebase raises
+// on ref V, then a later fast-forward pull on the same branch arms, records
+// no new version, and DriftAfter re-reports V) must produce exactly ONE
+// notice/source, not two sharing an id — which removeNotice (matching by id)
+// would then drop together on a single Dismiss.
+func TestDriftNoticeDedupesByVersionRef(t *testing.T) {
+	t.Parallel()
+	m := Model{}
+	ref := "refs/gg/versions/feat/1700000000-rebase"
+
+	// First: paused, not drifted.
+	m, _ = m.applyDriftReport("feat", domain.DriftReport{Ref: ref, Checked: true}, true)
+	if len(m.notices) != 1 || len(m.driftNotices) != 1 {
+		t.Fatalf("after first report: notices=%d driftNotices=%d, want 1/1", len(m.notices), len(m.driftNotices))
+	}
+	firstID := m.notices[0].id
+
+	// Second: same ref, this time genuinely drifted (a later re-check of the
+	// SAME version could plausibly report differently) — must REPLACE, not add.
+	report2 := domain.DriftReport{
+		Ref: ref, Checked: true,
+		Report: changeset.Report{Added: []changeset.Entry{{Status: 'A', Path: "resurrected.txt"}}},
+	}
+	m, _ = m.applyDriftReport("feat", report2, false)
+
+	if len(m.notices) != 1 {
+		t.Fatalf("notices = %+v, want exactly one (same ref must replace, not duplicate)", m.notices)
+	}
+	if len(m.driftNotices) != 1 {
+		t.Fatalf("driftNotices = %+v, want exactly one", m.driftNotices)
+	}
+	if m.notices[0].id != firstID {
+		t.Fatalf("id = %q, want the same stable id %q (keyed on the version ref)", m.notices[0].id, firstID)
+	}
+	if !containsAny(m.notices[0].detail, "resurrected.txt") {
+		t.Fatalf("detail = %v, want the SECOND (replacing) report's content", m.notices[0].detail)
+	}
+
+	// A single Dismiss (removeNotice) must clear both the rendered notice
+	// and its source — not leave a hidden duplicate source that resurrects
+	// the notice on the next rebuildNotices (a health re-read, a language
+	// switch).
+	m = m.removeNotice(firstID)
+	if len(m.notices) != 0 || len(m.driftNotices) != 0 {
+		t.Fatalf("after removeNotice: notices=%d driftNotices=%d, want 0/0", len(m.notices), len(m.driftNotices))
 	}
 }
 

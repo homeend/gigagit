@@ -583,7 +583,15 @@ func driftNotice(branch string, report domain.DriftReport, paused bool, repoKey 
 	} else {
 		title = i18n.T("%s paused for conflicts before completing", branch)
 		detail = append(detail, i18n.T("%s paused for conflicts before this operation completed.", branch))
-		detail = append(detail, i18n.T("Its change set still matches the recorded version, but the resolution is worth a look."))
+		if report.Checked {
+			// Only true when a comparison actually ran (report.Checked): a
+			// fast-forward pull, or a branch with nothing recorded to compare
+			// against, never reached the diff at all — saying it "still
+			// matches" would claim a comparison that never happened.
+			detail = append(detail, i18n.T("Its change set still matches the recorded version, but the resolution is worth a look."))
+		} else {
+			detail = append(detail, i18n.T("Nothing was recorded to compare it against, but the resolution is worth a look."))
+		}
 	}
 	detail = append(detail, i18n.T("Open Branch versions to compare it against what gg recorded before this operation."))
 	return &notice{
@@ -673,11 +681,26 @@ func (m Model) driftCheckCmd(branch string, paused bool, gen int) tea.Cmd {
 // returned non-nil) — records its source and re-blinks, the same "genuinely
 // new" gate applyRepoHealth uses (simplified: an appended driftNoticeSource
 // is always new this session, so no prev/next id diff is needed here).
+//
+// Deduped by driftNoticeID (branch + version ref) before appending: two
+// findings sharing one ref — e.g. a paused rebase raises on ref V, and a
+// later fast-forward pull on the same branch records no new version, so
+// DriftAfter re-reports V — must REPLACE the existing source, never add a
+// second. Left unchecked, m.notices would carry two rows with the same id,
+// and removeNotice (which matches by id) would drop both at once on a
+// single Dismiss.
 func (m Model) applyDriftReport(branch string, report domain.DriftReport, paused bool) (Model, tea.Cmd) {
 	if driftNotice(branch, report, paused, m.repoHealth.GitCommonDir) == nil {
 		return m, nil // no drift, and the op didn't pause for conflicts: nothing to say
 	}
-	m.driftNotices = append(m.driftNotices, driftNoticeSource{branch: branch, report: report, paused: paused})
+	id := driftNoticeID(branch, report)
+	next := make([]driftNoticeSource, 0, len(m.driftNotices)+1)
+	for _, d := range m.driftNotices {
+		if driftNoticeID(d.branch, d.report) != id {
+			next = append(next, d)
+		}
+	}
+	m.driftNotices = append(next, driftNoticeSource{branch: branch, report: report, paused: paused})
 	m = m.rebuildNotices()
 	var cmd tea.Cmd
 	if !m.noticesUnread {

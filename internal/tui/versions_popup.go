@@ -25,7 +25,7 @@ type versionsPopup struct {
 	mode       int
 	fromList   bool // versions mode entered by drilling from branch mode: esc goes back
 	branch     string
-	deleted    bool
+	deleted    bool // write-only since onEnter stopped gating on it (Task 11: neither a frozen preview nor a fieldless commit view needs a live tip); kept for the "(deleted)" suffix a future title/restore-gate render may want, and so TestVersionsPopupDeletedBranch* can still prove onEnter genuinely ignores it
 	branchRows []model.VersionedBranch
 	rows       []model.BranchVersion
 	sel        int
@@ -226,11 +226,15 @@ func (p *versionsPopup) onEnter(m Model) (Model, tea.Cmd) {
 		v := p.rows[p.sel]
 		m = m.clearLayers()
 		// v.Base/v.Ours are exactly the endpoints domain.VersionPreview
-		// resolves for this same ref: it re-reads BranchVersions and applies
-		// the identical "Base == '' || Ours == ''" ErrNoPreview test. The
-		// popup already holds them from its own BranchVersions load (the
-		// versions list gate already ran), so this is that same lookup, not
-		// a second round-trip through the service.
+		// (internal/domain/version_preview.go) resolves for this same ref:
+		// it re-reads BranchVersions and applies the identical
+		// "Base == '' || Ours == ''" ErrNoPreview test. The popup already
+		// holds them from its own BranchVersions load (the versions list
+		// gate already ran), so this is that same lookup, not a second
+		// round-trip through the service — but it means a future check
+		// ADDED INSIDE VersionPreview (the CLI's own entry point, see
+		// internal/cli/versions.go's gg versions show) is silently skipped
+		// here unless this test is kept in lockstep with it.
 		//
 		// Neither branch below needs the branch's LIVE tip, or even that the
 		// branch still exists: a frozen preview is anchored at the recorded
