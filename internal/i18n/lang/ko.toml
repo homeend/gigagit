@@ -1839,3 +1839,8 @@ name = "한국어"
 "Nothing was recorded to compare it against, but the resolution is worth a look." = "비교할 대상으로 기록된 내용이 없지만, 해결 내용을 확인해 볼 가치가 있습니다."
 "Open Branch versions to compare it against what gg recorded before this operation." = "이 작업 전에 gg가 기록한 내용과 비교하려면 \"브랜치 버전\"을 여세요."
 "Dismiss" = "닫기"
+
+# Notes in merge previews
+"notes in a preview anchor on the new side" = "미리보기의 노트는 새 쪽에 고정됩니다"
+"(outdated)" = "(오래됨)"
+"Remove all notes on %s (%d of %d)." = "%s의 노트를 모두 삭제합니다 (%d / %d)."

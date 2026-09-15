@@ -106,21 +106,21 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 	case "branch":
 		return cmdBranch(svc, rest, stdin, stdout, stderr)
 	case "stash":
-		return cmdStash(svc, rest, stdout, stderr)
+		return cmdStash(svc, workdir, rest, stdout, stderr)
 	case "undo":
 		return cmdUndo(svc, rest, stdout, stderr)
 	case "discard":
-		return cmdDiscard(svc, rest, stdin, stdout, stderr)
+		return cmdDiscard(svc, workdir, rest, stdin, stdout, stderr)
 	case "add":
-		return cmdAdd(svc, rest, stdin, stdout, stderr)
+		return cmdAdd(svc, workdir, rest, stdin, stdout, stderr)
 	case "unstage":
-		return cmdUnstage(svc, rest, stdout, stderr)
+		return cmdUnstage(svc, workdir, rest, stdout, stderr)
 	case "apply":
 		return cmdApply(svc, workdir, rest, stdout, stderr)
 	case "shelf":
-		return cmdShelf(svc, rest, stdin, stdout, stderr)
+		return cmdShelf(svc, workdir, rest, stdin, stdout, stderr)
 	case "bookmark":
-		return cmdBookmark(svc, rest, stdin, stdout, stderr)
+		return cmdBookmark(svc, workdir, rest, stdin, stdout, stderr)
 	case "note":
 		return cmdNote(svc, rest, stdin, stdout, stderr)
 	case "link":
@@ -154,9 +154,9 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 	case "preview":
 		return cmdPreview(svc, rest, stdout, stderr)
 	case "diff":
-		return cmdDiff(svc, rest, stdout, stderr)
+		return cmdDiff(svc, workdir, rest, stdout, stderr)
 	case "show":
-		return cmdShow(svc, rest, stdout, stderr)
+		return cmdShow(svc, workdir, rest, stdout, stderr)
 	case "review":
 		return cmdReview(svc, workdir, rest, stdout, stderr)
 	case "versions":

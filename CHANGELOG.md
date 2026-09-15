@@ -47,7 +47,72 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   all** until it's run — the branch-version writer is gated on the same
   format check, so a repo stuck on format 1 runs every rebase/merge/pull
   with no safety net rather than silently mixing formats. Skills: using-gg
-  v70.
+  v73.
+
+- **Notes inside merge previews.** A preview (`Previews` tab, `gg preview`)
+  is now a review surface: its diff rows carry review notes, gathered along
+  the whole branch (merge-base → source tip) rather than read off the tip
+  alone, so a note survives the agent pushing more commits. A note whose
+  lines a later commit changed stays listed and is marked **outdated** (`⊘`
+  on the note box's title in the TUI, the `outdated` class in the web page);
+  a note whose file the tip no longer has is hidden but still counted in the
+  panel badge; one whose commit left the branch entirely (a rebase) is
+  neither shown nor counted — it stays reachable in that commit's own view. A
+  preview note is an ordinary committed note on the source tip — the same
+  note shows on that commit's own view — and the old side (the merge base) is
+  not addressable: `c` and `gg note add --old-line` are refused there. New CLI
+  surface: `gg diff --preview`, `gg preview diff --hunks`, `gg note
+  add|list|apply --preview`, `gg review --preview`; hunk numbers under
+  `--preview` come from the preview's own patch. MCP's three note tools take
+  a `preview` argument, and the web preview stage shows notes through `GET
+  /api/preview/notes`; adds and replies post to the tip through the existing
+  `/api/notes` endpoints — `GET /api/preview/notes` only reads.
+- **Fixed: gg started from a subdirectory broke every file operation.** Open
+  `gg` (TUI, `gg web`, `gg mcp`) anywhere below the worktree root and staging,
+  discarding or diffing a file failed with `pathspec 'src/xxx.txt' did not
+  match any files` — often with a puzzling `could not open directory
+  'src/src/'`. Every gg surface reports **worktree-root-relative** paths
+  (that is what `git status --porcelain` prints, whatever the cwd), but gg ran
+  its git commands in the directory it was launched from, so the path gg had
+  just printed was resolved against the wrong base and doubled. gg now
+  resolves the worktree top level once at startup and runs every git
+  invocation there, which also fixes the cwd-scoped verbs (`ls-files`,
+  `grep`, `blame`) and the directory external tools are launched in. A
+  directory that is not inside a worktree keeps its existing startup error.
+  **CLI pathspecs are unchanged**: a path you type in a shell stays relative
+  to *your* cwd, exactly as it is for git, so `gg add .` in `src/` still
+  stages only `src/`. (`gg note --file` remains repo-relative as documented —
+  a `gg://` link can retarget it to another checkout entirely.)
+
+- **Web: the open commit's header copies everything it shows.** Right-clicking
+  anywhere in the file-list header — the sha, the title, the date line —
+  offers one list: **copy short commit id** (the same abbreviation the header
+  displays), **copy commit id**, **copy commit title**, **copy date**, **copy
+  author**. One list rather than a different menu per region: aiming at the
+  date to get the date is a rule you can get wrong. Rows with nothing behind
+  them are left out (a commit opened by hash may have no subject, and a date
+  the server could not resolve draws no line). With text SELECTED in the
+  header the menu collapses to a plain **copy** of that text. The header also
+  takes the default arrow cursor instead of the text I-beam it showed over
+  what is chrome, not a document.
+
+- **Web: copy a line, land on the first change, absolute paths, and a refresh
+  button that looks like a button.** Follow-ups to the copy/elide wave:
+  - Right-clicking a diff line with **nothing selected** now offers **copy
+    line** — the text of the cell under the pointer, so a side-by-side row
+    gives you the side you clicked rather than both versions glued together
+    (with a selection, *copy* still copies the selection).
+  - **Opening a file diff parks the view on its first changed line** instead
+    of the top of the file — the context above the first hunk can run for
+    screens. `‹ change` / `change ›` continue from there. The jump happens
+    only when a diff is opened, never on a window resize or a notes refresh.
+  - The diff header's **path menu gained the absolute forms**, below a
+    separator: **copy absolute file path**, **copy absolute parent dir**, and
+    **copy repo absolute path** (the checkout root alone). A Windows checkout
+    gets `\`-separated paths, since git hands the browser `/` whatever the
+    platform.
+  - The **↻ refresh button is styled with pull and push** — it was missing
+    from their CSS rule and fell back to the browser's default button look.
 
 - **Web: copy what's on screen, and stop cutting off file names.** Five
   changes to the browser UI:

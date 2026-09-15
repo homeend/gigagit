@@ -40,9 +40,14 @@ const state = {
   previews: [],  // saved merge previews: (source → target) pairs, recomputed from the live tips
   previewsDisabled: false, // the previews store is unavailable (no state dir)
   previewsStale: false, // the last previews fetch failed: the rows stand, but nothing may be concluded from them
-  // {id, source, target, sourceHash, targetHash} while a preview owns the
-  // compare screen, so a refresh can tell whether its tips moved
+  // {id, source, target, sourceHash, targetHash, tip} while a preview owns the
+  // compare screen, so a refresh can tell whether its tips moved. tip is the
+  // source hash under the name the NOTE lane uses: a preview note is an
+  // ordinary commit note written against it.
   previewOpen: null,
+  // path → root-note count for the open preview's gathered set (the file
+  // list's ◆N badges). null means "not known yet" — draw no badge at all.
+  previewCounts: null,
   sidebar: true,
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,

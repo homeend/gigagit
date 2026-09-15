@@ -19,7 +19,7 @@ import (
 // file entry back to the working tree as an unstaged change; export writes any
 // entry's files to a directory outside the working tree; list/rm manage
 // entries.
-func cmdShelf(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func cmdShelf(svc *domain.Service, dir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, "usage: gg shelf <add|commit|cherry-pick|restore|export|list|rm> ...")
 		return 2
@@ -27,7 +27,7 @@ func cmdShelf(svc *domain.Service, args []string, stdin io.Reader, stdout, stder
 	sub, rest := args[0], args[1:]
 	switch sub {
 	case "add":
-		return shelfAdd(svc, rest, stdout, stderr)
+		return shelfAdd(svc, dir, rest, stdout, stderr)
 	case "commit":
 		return shelfCommit(svc, rest, stdout, stderr)
 	case "cherry-pick":
@@ -46,7 +46,7 @@ func cmdShelf(svc *domain.Service, args []string, stdin io.Reader, stdout, stder
 	}
 }
 
-func shelfAdd(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func shelfAdd(svc *domain.Service, dir string, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("shelf add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	staged := fs.Bool("staged", false, "shelve the index (staged) version")
@@ -55,7 +55,7 @@ func shelfAdd(svc *domain.Service, args []string, stdout, stderr io.Writer) int 
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	paths := fs.Args()
+	paths := repoPathspecs(svc, dir, fs.Args())
 	if len(paths) == 0 {
 		fmt.Fprintln(stderr, "usage: gg shelf add [--staged|--rev <commit>] [--bucket <name>] <path>...")
 		return 2

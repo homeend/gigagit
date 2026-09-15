@@ -92,3 +92,63 @@ func cases2json(cases []struct {
 	}
 	return out
 }
+
+// absPath joins a repo-relative path onto the checkout root the server
+// reported. The row exists to be pasted into something else on that machine,
+// so a Windows root must come back fully "\\"-separated — git hands the
+// browser "/" no matter the platform, and a half-converted path is no use.
+func TestAbsPathJS(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	src, err := os.ReadFile(filepath.Join("static", "files.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := strings.Index(string(src), pathPartsStart)
+	j := strings.Index(string(src), pathPartsEnd)
+	if i < 0 || j < i {
+		t.Fatalf("files.js: the guarded section markers are gone (%q / %q)", pathPartsStart, pathPartsEnd)
+	}
+	pure := string(src)[i:j]
+
+	cases := []struct {
+		Root string `json:"root"`
+		Path string `json:"path"`
+		Want string `json:"want"`
+	}{
+		{"/home/u/repo", "internal/web/files.go", "/home/u/repo/internal/web/files.go"},
+		{"/home/u/repo/", "a.txt", "/home/u/repo/a.txt"}, // a trailing separator is not doubled
+		{`T:\others\gigagit`, "ej-app/src/X.kt", `T:\others\gigagit\ej-app\src\X.kt`},
+		{`T:\others\gigagit\`, "a.txt", `T:\others\gigagit\a.txt`},
+		{`\\server\share\repo`, "a/b.txt", `\\server\share\repo\a\b.txt`}, // a UNC root is still Windows
+		{"", "a.txt", ""},   // no root reported: the caller drops the row
+		{"/home/u", "", ""}, // nothing open: never copy a bare root
+	}
+	in, err := json.Marshal(cases)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := pure + `
+const cases = JSON.parse(process.argv[1]);
+console.log(JSON.stringify(cases.map((c) => absPath(c.root, c.path))));
+`
+	out, err := exec.Command(node, "-e", script, string(in)).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	var got []string
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("node output %q: %v", out, err)
+	}
+	if len(got) != len(cases) {
+		t.Fatalf("got %d results, want %d", len(got), len(cases))
+	}
+	for n, c := range cases {
+		if got[n] != c.Want {
+			t.Errorf("absPath(%q, %q) = %q, want %q", c.Root, c.Path, got[n], c.Want)
+		}
+	}
+}

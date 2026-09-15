@@ -170,8 +170,42 @@ func previewDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 	fs := flag.NewFlagSet("preview diff", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	patch := fs.Bool("patch", false, "print unified diffs instead of the changed-file list")
+	hunks := fs.Bool("hunks", false, "list each file's numbered git @@ hunks")
+	asJSON := fs.Bool("json", false, "with --hunks: emit the hunk list as JSON")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	if *asJSON && !*hunks {
+		fmt.Fprintln(stderr, "preview diff: --json requires --hunks")
+		return 2
+	}
+	if *hunks && *patch {
+		fmt.Fprintln(stderr, "preview diff: --hunks and --patch are mutually exclusive")
+		return 2
+	}
+	if *hunks {
+		// One id/label, or the pair, numbered over the SAME patch
+		// `gg diff --preview --hunks` prints.
+		if fs.NArg() < 1 || fs.NArg() > 2 {
+			fmt.Fprintln(stderr, "usage: gg preview diff --hunks [--json] <id|label>|<source> <target>")
+			return 2
+		}
+		spec := fs.Arg(0)
+		if fs.NArg() == 2 {
+			spec = fs.Arg(1) + "..." + fs.Arg(0) // <target>...<source>
+		}
+		ctx := context.Background()
+		tgt, err := resolvePreviewTarget(ctx, svc, spec)
+		if err != nil {
+			// Every resolvePreviewTarget error is already a "preview: …"
+			// message (ErrPreviewNotFound, the pair-shape error, the
+			// missing-source/target/state messages below) — print it plain,
+			// matching printPreview's shape for the same conditions, instead
+			// of double-prefixing with "error:".
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		return renderDiffSpec(ctx, svc, tgt.Spec, true, *asJSON, false, false, stdout, stderr)
 	}
 	if fs.NArg() != 2 {
 		fmt.Fprintln(stderr, "usage: gg preview diff [--patch] <source> <target>")

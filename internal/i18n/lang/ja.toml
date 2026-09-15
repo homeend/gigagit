@@ -1839,3 +1839,8 @@ name = "日本語"
 "Nothing was recorded to compare it against, but the resolution is worth a look." = "比較対象として記録されたものはありませんが、解決内容を確認する価値があります。"
 "Open Branch versions to compare it against what gg recorded before this operation." = "「ブランチのバージョン」を開き、この操作の前に gg が記録した内容と比較してください。"
 "Dismiss" = "閉じる"
+
+# Notes in merge previews
+"notes in a preview anchor on the new side" = "プレビューのノートは新しい側にアンカーされます"
+"(outdated)" = "(古い)"
+"Remove all notes on %s (%d of %d)." = "%s のノートをすべて削除します (%d / %d)。"

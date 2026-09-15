@@ -1,0 +1,59 @@
+name = "preview notes: stored on the tip, gathered along the branch, outdated when a later commit moved the lines"
+
+[input]
+steps = [
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\n" },
+  { commit = "seed" },
+  { branch = "feat/x" },
+  { switch = "feat/x" },
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\nDELTA\n" },
+  { commit = "add DELTA" },
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\nECHO\n" },
+  { commit = "rewrite DELTA as ECHO" },
+]
+
+[[run]]
+cmd  = ["preview", "add", "--label", "login", "feat/x", "main"]
+exit = 0
+
+# The preview's own numbered hunks — what --hunk N resolves against.
+[[run]]
+cmd             = ["diff", "--preview", "login", "--hunks"]
+exit            = 0
+stdout_contains = ["a.txt", "1 @@ -"]
+
+# A note addressed to the PREVIEW: stored on the source tip, active there.
+[[run]]
+cmd             = ["note", "add", "--preview", "login", "--file", "a.txt", "--new-line", "4", "--summary", "why ECHO"]
+exit            = 0
+
+# A note on the EARLIER commit, on the line that commit added and the next one
+# rewrote. It is not on the tip at all, yet the preview gathers it.
+[[run]]
+cmd             = ["note", "add", "--rev", "HEAD~1", "--file", "a.txt", "--new-line", "4", "--summary", "why DELTA"]
+exit            = 0
+
+[[run]]
+cmd             = ["note", "list", "--preview", "login", "--file", "a.txt"]
+exit            = 0
+stdout_contains = ["why ECHO", "active", "why DELTA", "outdated"]
+
+# The old side is the merge base: not addressable.
+[[run]]
+cmd  = ["note", "add", "--preview", "login", "--file", "a.txt", "--old-line", "1", "--summary", "no"]
+exit = 2
+
+# One target only.
+[[run]]
+cmd  = ["note", "add", "--preview", "login", "--rev", "HEAD", "--file", "a.txt", "--new-line", "1", "--summary", "no"]
+exit = 2
+
+# The three-dot form needs no saved record.
+[[run]]
+cmd             = ["note", "list", "--preview", "main...feat/x", "--file", "a.txt"]
+exit            = 0
+stdout_contains = ["why ECHO", "why DELTA"]
+
+[expect]
+branch = "feat/x"
+clean  = true

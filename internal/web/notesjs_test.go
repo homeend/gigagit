@@ -188,7 +188,214 @@ func TestNotesInertOnAComparisonJS(t *testing.T) {
 	if rerr != nil {
 		t.Fatal(rerr)
 	}
-	if !strings.Contains(string(src), "notes: !cmp") {
-		t.Fatal("openFile must mark a comparison's diffCtx inert for notes (notes: !cmp)")
+	// A PREVIEW is a comparison that IS note-addressable (its new side is the
+	// source tip), so the flag re-arms notes for it: `!cmp || !!prev`. Pinning
+	// the bare "notes: !cmp" would pass with the preview half dropped, which
+	// would silently make every preview inert.
+	if !strings.Contains(string(src), "notes: !cmp || !!prev") {
+		t.Fatal("openFile must mark a comparison inert but RE-ARM a preview (notes: !cmp || !!prev)")
+	}
+}
+
+// readStaticSrc reads one shipped static file for a source assertion.
+func readStaticSrc(t *testing.T, file string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("static", file))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// TestPreviewDiffArmsNotesInJS pins the preview lane in files.js: a preview's
+// compare IS note-addressable (its new side is the source tip), it queries the
+// gathered set through /api/preview/notes, it refuses an old-side anchor, and
+// it paints a stale note under the preview's own word for it.
+func TestPreviewDiffArmsNotesInJS(t *testing.T) {
+	t.Parallel()
+	src := readStaticSrc(t, "files.js")
+	for _, want := range []string{
+		"/api/preview/notes", // the preview note query exists
+		"state.diffCtx.preview",
+		"notes in a preview anchor on the new side", // the old-side refusal
+		"outdated", // the stale class/word a preview uses
+		"state.previewCounts",
+	} {
+		if !hasCodeLineWith(src, want) {
+			t.Fatalf("files.js must contain %q in CODE", want)
+		}
+	}
+}
+
+// hasCodeLineWith reports whether some line of src carries tok OUTSIDE a
+// comment. files.js explains these very rules in prose, so every token below
+// also appears in a comment: a file-wide strings.Contains would still pass
+// with the code deleted. Same line-scoping TestNotesEventReloadsPreviews does,
+// generalised over a token list.
+func hasCodeLineWith(src, tok string) bool {
+	for _, line := range strings.Split(src, "\n") {
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = line[:i]
+		}
+		if strings.Contains(line, tok) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestPreviewAddNoteFallsForwardToTheNewSide: with nothing clicked, `c` in a
+// preview must not be refused just because firstChangedRow landed on a pure
+// DELETION row — the file still has an addressable new side. The fall-forward
+// is only for the unclicked case: an explicit old-side click is still refused,
+// because there the user named the line.
+func TestPreviewAddNoteFallsForwardToTheNewSide(t *testing.T) {
+	t.Parallel()
+	add := jsFunc(t, "files.js", "addNotePrompt")
+	if !strings.Contains(add, "!state.diffRow") {
+		t.Fatal("addNotePrompt must fall forward only when the row was NOT clicked (!state.diffRow)")
+	}
+	if !strings.Contains(add, "firstNewSideRow()") {
+		t.Fatal("addNotePrompt must fall forward to the first new-side row")
+	}
+	fwd := jsFunc(t, "files.js", "firstNewSideRow")
+	if !strings.Contains(fwd, `tr[data-no][data-side="new"]`) {
+		t.Fatal("firstNewSideRow must look for a new-side diff row")
+	}
+	// It must WALK each change block, not just test its head: in the unified
+	// layout a modification block's head is the del/old row, so a head-only
+	// test finds nothing and falls through to the whole-table fallback — which
+	// lands on a context line. See TestPreviewFirstNewSideRowWalksTheBlockJS.
+	if !strings.Contains(fwd, "nextElementSibling") {
+		t.Fatal("firstNewSideRow must walk a block's rows, not just its head")
+	}
+}
+
+// TestPreviewFirstNewSideRowWalksTheBlockJS runs the SHIPPED firstNewSideRow
+// (and the real diffChangeBlocks it calls) under node over a stub table, so
+// the walk is exercised rather than merely grepped for.
+//
+// The regression this pins, seen in a browser probe: a modified file renders
+// same/same/same, then del(old 4), add(new 4) — the block's HEAD is the del
+// row, so testing heads alone found no new side and the whole-table fallback
+// answered "new line 1", a context line, instead of the modified line 4.
+func TestPreviewFirstNewSideRowWalksTheBlockJS(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	fns := jsFunc(t, "files.js", "firstNewSideRow") + "\n" + jsFunc(t, "files.js", "diffChangeBlocks")
+
+	// A minimal row/table stub: classList.contains, dataset and the sibling
+	// chain are the only DOM the two functions touch, and the two selectors
+	// they pass are honoured by meaning ("not a note row", "a new-side row").
+	stub := `
+let ROWS = [];
+const mkRow = (cls, side, no) => ({
+  classList: { contains: (c) => cls.split(" ").includes(c) },
+  dataset: side ? { side, no: String(no) } : {},
+  nextElementSibling: null,
+});
+const setTable = (specs) => {
+  ROWS = specs.map(([cls, side, no]) => mkRow(cls, side, no));
+  ROWS.forEach((r, i) => (r.nextElementSibling = ROWS[i + 1] || null));
+};
+const $ = () => ({
+  querySelectorAll: () => ROWS.filter((r) => !r.classList.contains("note")),
+  querySelector: () => ROWS.find((r) => r.dataset.side === "new" && Number(r.dataset.no)) || null,
+});
+`
+	script := stub + fns + `
+const at = (specs) => { setTable(specs); return firstNewSideRow(); };
+console.log(JSON.stringify({
+  // The probe's own file: the modification block's head is the del row.
+  unified: at([["same","new",1],["same","new",2],["same","new",3],
+               ["del","old",4],["add","new",4],["same","new",5]]),
+  // A ◆ note row rides inside the block and must not end the walk.
+  withNote: at([["same","new",1],["del","old",4],["note",null,0],["add","new",4]]),
+  // Deletion-only change, but the file has context: the fallback answers.
+  delOnly: at([["same","new",1],["del","old",2],["same","new",2]]),
+  // No new side anywhere: null, so the caller keeps the refusal.
+  noNewSide: at([["del","old",1],["del","old",2]]),
+  // Side-by-side layout: the changed row already carries its new side.
+  split: at([["same","new",1],["change","new",2],["same","new",3]]),
+}));
+`
+	out, err := exec.Command(node, "-e", script).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	type row struct {
+		Side string
+		No   int
+	}
+	var got struct{ Unified, WithNote, DelOnly, NoNewSide, Split *row }
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("decode %q: %v", out, err)
+	}
+	if got.Unified == nil || got.Unified.Side != "new" || got.Unified.No != 4 {
+		t.Fatalf("the unified del/add pair must anchor on new line 4, got %+v", got.Unified)
+	}
+	if got.WithNote == nil || got.WithNote.No != 4 {
+		t.Fatalf("a note row inside the block must not end the walk, got %+v", got.WithNote)
+	}
+	if got.DelOnly == nil || got.DelOnly.No != 1 {
+		t.Fatalf("a deletion-only change falls back to the file's first new-side row, got %+v", got.DelOnly)
+	}
+	if got.NoNewSide != nil {
+		t.Fatalf("a file with no new side must answer null (the caller refuses), got %+v", got.NoNewSide)
+	}
+	if got.Split == nil || got.Split.No != 2 {
+		t.Fatalf("a side-by-side changed row anchors on its own new side, got %+v", got.Split)
+	}
+}
+
+// TestPreviewRowShowsTheNoteBadgeInJS: the sidebar row carries the preview's
+// note total, the way a file row carries its ◆N.
+func TestPreviewRowShowsTheNoteBadgeInJS(t *testing.T) {
+	t.Parallel()
+	src := readStaticSrc(t, "previews.js")
+	if !strings.Contains(src, "e.notes") {
+		t.Fatal("previews.js must paint the row's note total")
+	}
+	if !strings.Contains(src, "tip:") {
+		t.Fatal("armPreview must record the source tip a preview note is written against")
+	}
+}
+
+// TestOutdatedClassIsStyled: the preview's outdated note must be dimmed the
+// same way a stale one is, or the class is invisible. Pinned on the RULE, not
+// on the bare class name: ".outdated" appears in the comment above it, and a
+// rule that dims with `opacity` would fade the whole box (border included)
+// instead of recolouring it the way .stale does.
+func TestOutdatedClassIsStyled(t *testing.T) {
+	t.Parallel()
+	css := readStaticSrc(t, "style.css")
+	i := strings.Index(css, ".notebox.outdated {")
+	if i < 0 {
+		t.Fatal("style.css must carry a .notebox.outdated rule")
+	}
+	rule := css[i : i+strings.Index(css[i:], "}")]
+	if !strings.Contains(rule, "var(--dim)") {
+		t.Fatalf(".notebox.outdated must dim through var(--dim), got %q", rule)
+	}
+	if strings.Contains(rule, "opacity") {
+		t.Fatalf(".notebox.outdated must recolour, not fade the whole box, got %q", rule)
+	}
+}
+
+// TestNotesEventReloadsPreviews: a note write changes a preview row's total,
+// so the notes SSE source has to pull the previews list too.
+func TestNotesEventReloadsPreviews(t *testing.T) {
+	t.Parallel()
+	src := readStaticSrc(t, "live.js")
+	i := strings.Index(src, "fetchPreviews()")
+	if i < 0 {
+		t.Fatal("live.js must fetch previews")
+	}
+	line := src[strings.LastIndex(src[:i], "\n")+1 : i]
+	if !strings.Contains(line, `want.has("notes")`) {
+		t.Fatalf("the previews refetch must also fire on the notes source, got %q", line)
 	}
 }

@@ -295,6 +295,20 @@ func (s *Service) NotesClear(ctx context.Context, addr model.FileAddress) (int, 
 // by line. Orphaned notes are omitted — they are hidden until the startup
 // sweep drops them. Reads never rewrite the store.
 func (s *Service) NotesFor(ctx context.Context, addr model.FileAddress, d Diff) ([]ResolvedNote, error) {
+	mine, err := s.loadNotesAt(ctx, addr)
+	if err != nil {
+		return nil, err
+	}
+	oldLines, newLines := diffSideLines(d)
+	return keepResolved(resolveNotes(mine, oldLines, newLines)), nil
+}
+
+// loadNotesAt is the STORE half of a note read, shared by NotesFor and
+// NotesAt: load once, scope a worktree-state query to this checkout, keep
+// what sameNoteTarget claims. Splitting it out is what keeps ONE resolver in
+// the codebase — every caller below this line hands its notes to
+// resolveNotes and nothing else.
+func (s *Service) loadNotesAt(ctx context.Context, addr model.FileAddress) ([]model.Note, error) {
 	st := s.notesStore(ctx)
 	if st == nil {
 		return nil, ErrNotesDisabled
@@ -318,15 +332,18 @@ func (s *Service) NotesFor(ctx context.Context, addr model.FileAddress, d Diff) 
 			mine = append(mine, n)
 		}
 	}
-	oldLines, newLines := diffSideLines(d)
-	res := resolveNotes(mine, oldLines, newLines)
+	return mine, nil
+}
+
+// keepResolved drops the orphans every note read hides (§4.4).
+func keepResolved(res []ResolvedNote) []ResolvedNote {
 	kept := res[:0]
 	for _, r := range res {
 		if r.Status != model.NoteOrphaned {
 			kept = append(kept, r)
 		}
 	}
-	return kept, nil
+	return kept
 }
 
 // NotesAt resolves the notes for addr WITHOUT a caller-supplied diff, reading
@@ -339,26 +356,9 @@ func (s *Service) NotesFor(ctx context.Context, addr model.FileAddress, d Diff) 
 // method has no business naming someone else's (the HTTP handlers must never
 // take a Worktree from the wire).
 func (s *Service) NotesAt(ctx context.Context, addr model.FileAddress) ([]ResolvedNote, error) {
-	st := s.notesStore(ctx)
-	if st == nil {
-		return nil, ErrNotesDisabled
-	}
-	all, err := st.Load()
+	mine, err := s.loadNotesAt(ctx, addr)
 	if err != nil {
 		return nil, err
-	}
-	if worktreeScopedNote(addr) {
-		wt, werr := s.noteWorktree(ctx, addr)
-		if werr != nil {
-			return nil, werr
-		}
-		addr.Worktree = wt
-	}
-	mine := make([]model.Note, 0, len(all))
-	for _, n := range all {
-		if sameNoteTarget(n.Address, addr) {
-			mine = append(mine, n)
-		}
 	}
 	if len(mine) == 0 {
 		return nil, nil
@@ -367,14 +367,7 @@ func (s *Service) NotesAt(ctx context.Context, addr model.FileAddress) ([]Resolv
 	// and an address with no notes at all must cost nothing.
 	oldLines, _ := s.noteSideLines(ctx, addr, model.NoteSideOld)
 	newLines, _ := s.noteSideLines(ctx, addr, model.NoteSideNew)
-	res := resolveNotes(mine, oldLines, newLines)
-	kept := res[:0]
-	for _, r := range res {
-		if r.Status != model.NoteOrphaned {
-			kept = append(kept, r)
-		}
-	}
-	return kept, nil
+	return keepResolved(resolveNotes(mine, oldLines, newLines)), nil
 }
 
 // NoteCounts returns the badge counts, cached until the next mutation. The
@@ -444,6 +437,7 @@ func (s *Service) InvalidateNoteCounts() { s.invalidateNoteCounts() }
 func (s *Service) invalidateNoteCounts() {
 	s.mu.Lock()
 	s.noteCounts = nil
+	s.previewCounts = nil // preview badges count the same store
 	s.notesGen++
 	s.mu.Unlock()
 }

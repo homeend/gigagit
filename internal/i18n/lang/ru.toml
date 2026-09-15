@@ -1839,3 +1839,8 @@ name = "Русский"
 "Nothing was recorded to compare it against, but the resolution is worth a look." = "Не найдено ничего записанного для сравнения, но результат разрешения конфликтов стоит проверить."
 "Open Branch versions to compare it against what gg recorded before this operation." = "Откройте «Версии ветки», чтобы сравнить с тем, что gg записал перед этой операцией."
 "Dismiss" = "Скрыть"
+
+# Notes in merge previews
+"notes in a preview anchor on the new side" = "заметки в предпросмотре привязываются к новой стороне"
+"(outdated)" = "(устарело)"
+"Remove all notes on %s (%d of %d)." = "Удалить все заметки на %s (%d из %d)."

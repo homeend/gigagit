@@ -30,6 +30,8 @@ type previewOpenMsg struct {
 	moved              string // ref whose tip moved; the "moved" notice, emitted only if the view really re-opens
 	gen                int
 	eps                domain.PreviewEndpoints
+	set                domain.PreviewNoteSet // the note scope; zero when the pair is not ok
+	counts             map[string]int        // per-path root-note counts for the file list
 	err                error
 }
 
@@ -54,10 +56,19 @@ func (m Model) reopenPreviewCmd(id, source, target, keepPath, moved string) tea.
 	svc, gen := m.svc, m.previewGen
 	return func() tea.Msg {
 		eps, err := svc.PreviewOpen(context.Background(), source, target)
-		return previewOpenMsg{
+		msg := previewOpenMsg{
 			id: id, source: source, target: target,
 			keepPath: keepPath, moved: moved, gen: gen, eps: eps, err: err,
 		}
+		// The note scope rides the SAME resolve, so the file list paints its
+		// badges in the first frame rather than after a second round trip.
+		if err == nil && eps.Summary.State == domain.PreviewOK {
+			if set, serr := svc.PreviewNotes(context.Background(), source, target); serr == nil {
+				msg.set = set
+				msg.counts, _, _ = svc.PreviewNoteCounts(context.Background(), set)
+			}
+		}
+		return msg
 	}
 }
 
@@ -122,6 +133,12 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 		// hashes, silently: without this every later previews refresh would see
 		// them differ, announce "moved" and spend another resolve, forever.
 		po.srcHash, po.tgtHash = msg.eps.Summary.SourceHash, msg.eps.Summary.TargetHash
+		// The notes may still have moved even when the diff did not; take the
+		// fresh scope without reopening anything.
+		if msg.set.OK() {
+			set := msg.set
+			m.filesPreviewSet, m.filesPreviewCounts = &set, msg.counts
+		}
 		return m, nil
 	}
 	// Always defeat openCompareFiles' same-tag guard: the view showing this
@@ -137,6 +154,12 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 	// restored to the one this resolve carried, so a second open dispatched in
 	// the same window (a quick enter on another row) is still honoured.
 	m.previewGen = msg.gen
+	// Armed AFTER openCompareFiles: it ran closeFilesView, which clears both.
+	if msg.set.OK() {
+		set := msg.set
+		m.filesPreviewSet = &set
+		m.filesPreviewCounts = msg.counts
+	}
 	m.previewOpen = &previewOpenState{
 		id: msg.id, source: msg.source, target: msg.target,
 		srcHash: msg.eps.Summary.SourceHash, tgtHash: msg.eps.Summary.TargetHash,
@@ -185,7 +208,18 @@ func (m Model) afterPreviewsRefresh() (Model, tea.Cmd) {
 				return m, nil
 			}
 			if r.sum.SourceHash == po.srcHash && r.sum.TargetHash == po.tgtHash {
-				return m, nil // unchanged
+				// The pair did not move, but its NOTES may have (this refresh
+				// was chained off srcNotes). Take the fresh counts without
+				// re-resolving or re-opening anything — without this the file
+				// list badges and the }/{ step go stale in exactly the case
+				// the chain exists for. A nil byPath means the counts READ
+				// failed (every success path returns a non-nil map), so the
+				// badges keep their last known values instead of vanishing on
+				// a transient error.
+				if r.byPath != nil {
+					m.filesPreviewCounts = r.byPath
+				}
+				return m, nil
 			}
 			moved = po.source
 			if r.sum.SourceHash == po.srcHash {

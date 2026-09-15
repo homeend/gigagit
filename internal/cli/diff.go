@@ -18,7 +18,7 @@ import (
 // each file's numbered git @@ hunks (optionally as JSON via --json), the
 // same numbering `gg note add --hunk N` resolves against. Paths must follow
 // a "--" separator so a rev is never ambiguous with a path.
-func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func cmdDiff(svc *domain.Service, dir string, args []string, stdout, stderr io.Writer) int {
 	head, paths := splitDashDash(args)
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -27,6 +27,7 @@ func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	cached := fs.Bool("cached", false, "diff the index against HEAD")
 	hunks := fs.Bool("hunks", false, "list each file's numbered git @@ hunks instead of the patch")
 	asJSON := fs.Bool("json", false, "with --hunks: emit the hunk list as JSON")
+	pf := addPreviewFlag(fs)
 	if err := fs.Parse(head); err != nil {
 		return 2
 	}
@@ -45,6 +46,20 @@ func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if fs.NArg() > 1 {
 		fmt.Fprintln(stderr, "usage: gg diff [--stat|--name-only|--hunks [--json]] [--cached] [<rev>|<A..B>] [-- <paths>...]")
 		return 2
+	}
+	if pf.set() {
+		// Ruling 9: --preview is sugar over the existing A...B range path —
+		// resolve the pair, then run the code every other range runs.
+		if *cached || fs.NArg() > 0 {
+			return previewUsageErr("diff", stderr)
+		}
+		ctx := context.Background()
+		tgt, err := resolvePreviewTarget(ctx, svc, *pf.spec)
+		if err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		return renderDiffSpec(ctx, svc, tgt.withPaths(paths), *hunks, *asJSON, *stat, *nameOnly, stdout, stderr)
 	}
 	rev := ""
 	if fs.NArg() == 1 {
@@ -83,14 +98,14 @@ func cmdDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		// that commit's own change (parent → commit; a root commit diffs
 		// against the empty tree), not `git diff <c>`. HunkDiffSpec is the
 		// single source of that rule, shared with `gg note add --hunk N`.
-		s, err := svc.HunkDiffSpec(ctx, *cached, rev, paths)
+		s, err := svc.HunkDiffSpec(ctx, *cached, rev, repoPathspecs(svc, dir, paths))
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
 		spec = s
 	} else {
-		spec = model.DiffSpec{Cached: *cached, Rev: rev, Paths: paths}
+		spec = model.DiffSpec{Cached: *cached, Rev: rev, Paths: repoPathspecs(svc, dir, paths)}
 	}
 	return renderDiffSpec(ctx, svc, spec, *hunks, *asJSON, *stat, *nameOnly, stdout, stderr)
 }

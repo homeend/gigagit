@@ -95,7 +95,10 @@ body.resizing { cursor: col-resize; user-select: none; }
    keeps its place at the right edge. The commit's date claims a full basis, so
    it wraps onto its own second line inside the same sticky header — a long
    subject elides the title and must never take the date with it. */
-#files-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* The header is chrome, not a document: the default arrow, not the I-beam a
+   run of plain text would otherwise get. Text stays selectable — the cursor
+   says what the surface IS, and a selection here still copies. */
+#files-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: default; }
 #files-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The short sha is its own target inside the title: its right-click menu
    offers the short AND the full id, the rest of the title only the full one. */
@@ -398,12 +401,12 @@ mark.r { background: var(--span-add); color: inherit; }
 #branches-list.collapsed, #remotes-list.collapsed, #worktrees-list.collapsed,
 #tags-list.collapsed, #stashes-list.collapsed, #reflog-list.collapsed,
 #bookmarks-list.collapsed, #shelf-list.collapsed, #previews-list.collapsed { display: none; }
-#top #pull-btn, #top #push-btn {
+#top #pull-btn, #top #push-btn, #top #refresh-btn {
   margin-left: 10px; background: var(--bg); color: var(--fg);
   border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px;
   font: inherit; cursor: pointer;
 }
-#top #pull-btn:hover:not(:disabled), #top #push-btn:hover:not(:disabled) { border-color: var(--accent); }
+#top #pull-btn:hover:not(:disabled), #top #push-btn:hover:not(:disabled), #top #refresh-btn:hover:not(:disabled) { border-color: var(--accent); }
 /* The solo chip IS the way out of solo mode, so it is styled to be noticed:
    accent-filled, unlike the outline buttons beside it. */
 #top #solo-chip {
@@ -431,7 +434,7 @@ mark.r { background: var(--span-add); color: inherit; }
 #top #task-chip.blink { animation: taskblink .8s steps(1, end) 6; }
 @keyframes taskblink { 50% { background: none; color: var(--fg); } }
 @media (prefers-reduced-motion: reduce) { #top #task-chip.blink { animation: none; } }
-#top #pull-btn:disabled, #top #push-btn:disabled { opacity: .45; cursor: default; }
+#top #pull-btn:disabled, #top #push-btn:disabled, #top #refresh-btn:disabled { opacity: .45; cursor: default; }
 /* Paused-sequencer-op banner: sits between the header and the panes, a
    BLOCKER (not an advisory) so it stays visible until continue/abort
    resolves the paused op. */
@@ -792,6 +795,10 @@ table.diff tr.note td.note-gap { cursor: default; }
 .notetitle { position: absolute; top: -0.75em; left: 10px; padding: 0 6px; background: var(--bg); color: var(--accent); font-size: .92em; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis; }
 .notebox.agent .notetitle { color: #b48bff; }
 .notebox.stale .notetitle { color: var(--dim); }
+/* A merge preview's OUTDATED note: the same dimming as a stale one, under the
+   name a preview uses for it (domain.PreviewStatus). */
+.notebox.outdated { border-color: var(--dim); color: var(--dim); }
+.notebox.outdated .notetitle { color: var(--dim); }
 .notesum { font-weight: bold; }
 .notetext { opacity: .8; margin-top: 2px; }
 .notereply { margin-top: 8px; padding-left: 12px; }

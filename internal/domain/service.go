@@ -8,6 +8,7 @@ package domain
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -49,6 +50,11 @@ type Service struct {
 	notesOff   bool          // hard "no store" (the disabled-path test)
 	preview    preview.Store // lazily resolved; nil disables previews
 	noteCounts *NoteCounts   // cached badge counts; nil = cold, invalidated by every mutation
+	// previewCounts caches PreviewNoteCounts per (tip, base) pair. It follows
+	// BOTH clocks: a new tip is a new key, and every note mutation drops the
+	// whole map through invalidateNoteCounts (ruling 7) — counts read the
+	// notes store, which the summary cache knows nothing about.
+	previewCounts map[string]previewCountEntry
 	// notesGen rises on every count invalidation. NoteCounts computes OUTSIDE
 	// the lock, so it stores its result only when the generation it started
 	// from is still current — a mutation landing mid-compute would otherwise
@@ -157,8 +163,9 @@ func (s *Service) currentVersionsPolicy() engine.VersionsPolicy {
 }
 
 // Open builds a Service rooted at workdir with the standard runner — the
-// one place frontends construct the repo stack. It runs no git command. The
-// scriptable CLI uses this: a real terminal can service an ssh/credential prompt.
+// one place frontends construct the repo stack. It runs exactly one git
+// command (rev-parse --show-toplevel, see openWith). The scriptable CLI uses
+// this: a real terminal can service an ssh/credential prompt.
 func Open(workdir string) *Service {
 	return openWith(workdir, false, observ.NewRing(200))
 }
@@ -180,6 +187,7 @@ func OpenTUIWithRing(workdir string, ring *observ.Ring) *Service {
 }
 
 func openWith(workdir string, sshBatch bool, ring *observ.Ring) *Service {
+	workdir = resolveRoot(workdir, sshBatch, ring)
 	er := gitexec.NewExecRunner("git", workdir, ring)
 	if sshBatch {
 		er = er.WithSSHBatchMode()
@@ -189,10 +197,44 @@ func openWith(workdir string, sshBatch bool, ring *observ.Ring) *Service {
 	return s
 }
 
+// resolveRoot re-roots a workdir that is a SUBDIRECTORY of a worktree onto
+// that worktree's top level. Every gg surface speaks worktree-root-relative
+// paths (git status --porcelain reports them that way regardless of cwd), so
+// a git command run with the subdirectory as its cwd resolves the path gg
+// just printed against the wrong base — "src/xxx.txt" staged from src/
+// became "src/src/xxx.txt" and failed. Running every invocation at the top
+// level makes the paths gg prints the paths gg accepts, and likewise fixes
+// the cwd-scoped verbs (ls-files, grep, blame) and the external-tool Dir.
+//
+// It costs one rev-parse. Anything that is not a worktree subdirectory — a
+// plain directory, a bare repo, a deleted cwd — keeps the given workdir, so
+// the existing friendly startup errors fire unchanged.
+func resolveRoot(workdir string, sshBatch bool, rec observ.Recorder) string {
+	er := gitexec.NewExecRunner("git", workdir, rec)
+	if sshBatch {
+		er = er.WithSSHBatchMode()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	top, err := (&git.Repo{Runner: er}).TopLevel(ctx)
+	if err != nil || top == "" {
+		return workdir
+	}
+	return filepath.FromSlash(top)
+}
+
 // New wraps an existing repo (tests, callers with their own runner wiring).
 func New(repo *git.Repo) *Service {
 	return &Service{repo: repo, factory: cache.NewFactory(0, 0)}
 }
+
+// Root is the directory every git invocation of this Service runs in: the
+// worktree top level for a Service built by Open/OpenTUI (see resolveRoot),
+// the given workdir when that could not be resolved, and "" for a Service
+// built by New. Frontends use it to turn a user's cwd-relative pathspec into
+// the worktree-root-relative form gg speaks everywhere else; a "" Root means
+// "unknown", and the caller must pass the pathspec through untouched.
+func (s *Service) Root() string { return s.workdir }
 
 // Repo exposes the underlying repo to the composition root (cmd/gg's
 // panic-dump defer) and tests. Not for frontends: reads go through domain

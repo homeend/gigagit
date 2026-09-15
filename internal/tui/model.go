@@ -142,6 +142,12 @@ type Model struct {
 	noteCounts    domain.NoteCounts // badge counts (srcNotes); zero value = no badges
 	notesAgentOff bool              // `a`: hide agent-written notes for this session
 
+	// filesPreviewSet / filesPreviewCounts are the open preview's note scope
+	// and its per-path badge counts; nil/empty when the files view is not
+	// showing a preview. Stamped onto each diff the view opens.
+	filesPreviewSet    *domain.PreviewNoteSet
+	filesPreviewCounts map[string]int
+
 	previews    []previewRow      // saved merge previews + live summaries (srcPreviews)
 	previewOpen *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
 	previewGen  int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
@@ -1373,12 +1379,25 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.identity = msg.value.(model.Identity)
 		case srcNotes:
 			m.noteCounts = msg.value.(domain.NoteCounts)
+			// Preview badges count the SAME store, so a note write moves them
+			// too. Armed only while a preview is actually on screen — otherwise
+			// every note write in every repo would spend a git resolve per
+			// saved pair — and always through chainPreviewsRead, never a plain
+			// reloadSourcesCmd (a silent read superseding a manual one would
+			// strand srcLoading[srcPreviews]). It is armed HERE, inside the
+			// arm, because the loadNotesCmd return below is taken in exactly
+			// the case that matters: a preview diff is open.
+			// !startup for the same reason the branches arm has it: the app-start
+			// fan-out reads previews already.
+			if !msg.startup && (m.previewOpen != nil || m.activeLeftTab == panelPreviews) {
+				m, previewsChain = m.chainPreviewsRead()
+			}
 			// The badge counts just changed, so an open diff's own notes may
 			// have too (a sweep, an agent write, a manual r). Re-resolve them;
 			// the command is nil unless a note-addressable diff is open, and
 			// its result is tag-gated.
 			if cmd := m.loadNotesCmd(); cmd != nil {
-				return m, cmd
+				return m, tea.Batch(cmd, previewsChain)
 			}
 		case srcPreviews:
 			key := m.panelSelKey(panelPreviews)

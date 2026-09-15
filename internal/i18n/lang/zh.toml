@@ -1839,3 +1839,8 @@ name = "中文"
 "Nothing was recorded to compare it against, but the resolution is worth a look." = "没有可比较的已记录内容，但解决结果值得留意。"
 "Open Branch versions to compare it against what gg recorded before this operation." = "打开“分支版本”，将其与 gg 在此操作前记录的内容进行比较。"
 "Dismiss" = "关闭"
+
+# Notes in merge previews
+"notes in a preview anchor on the new side" = "预览中的笔记锚定在新的一侧"
+"(outdated)" = "(已过时)"
+"Remove all notes on %s (%d of %d)." = "删除 %s 上的所有笔记（%d / %d）。"

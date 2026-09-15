@@ -47,6 +47,11 @@ func (m Model) closeFilesView() Model {
 	m.filesRight = model.Endpoint{}
 	m.compareTag = ""
 	m.comparePair = nil
+	// inCompareMode() is true for a plain branch/pair compare too, so a preview
+	// scope left behind here would stamp the NEXT compare as a preview and make
+	// its rows note-addressable at a stale tip. This is the single exit point.
+	m.filesPreviewSet = nil
+	m.filesPreviewCounts = nil
 	m.filesStashTag = ""
 	m.filesShelfID = ""
 	m.filesShelfLabel = ""
@@ -708,7 +713,16 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		return m, m.loadCompareDiffCmd(left, right, l)
 	}
 	if m.inCompareMode() {
-		m.diffLayer().context = m.filesContext
+		dv := m.diffLayer()
+		dv.context = m.filesContext
+		// A merge preview is a compare whose NEW side is the source tip, so
+		// its rows ARE note-addressable at that commit — unlike every other
+		// compare, whose old side no stored address names. Stamp the address
+		// and the set here, where the opener knows which compare this is.
+		if set := m.filesPreviewSet; set != nil {
+			dv.previewSet = set
+			dv.noteAddr = model.FileAddress{State: model.StateCommitted, Commit: set.Tip, Path: l.path}
+		}
 		m.diffTag = "cmp:" + m.filesLeft.CacheTag() + ":" + m.filesRight.CacheTag() + ":" + l.path
 		return m, m.loadCompareDiffCmd(m.filesLeft, m.filesRight, l)
 	}
@@ -878,6 +892,13 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		// won't re-cut it.
 		if l.heading && p.mode == modeCutoff {
 			text = elidePath(l.text, innerW-lipgloss.Width(prefix))
+		}
+		// An open merge preview badges its file rows with the notes gathered
+		// along the branch. Painted here rather than baked into l.text so the
+		// badge tracks a counts refresh with no rebuild, and so the `/` filter
+		// (which matches l.text) never matches a file by its note count.
+		if m.filesPreviewSet != nil && l.path != "" {
+			text += noteBadge(m.filesPreviewCounts[l.path])
 		}
 		wr[i] = winRow{text: prefix + text, style: st}
 	}

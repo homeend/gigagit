@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v70 -->
+<!-- gg:using-gg:v73 -->
 
 # Using gg (gigagit)
 
@@ -274,8 +274,21 @@ finds the right one here.
   stderr and the other rows still print; exit 1 only if EVERY row failed);
   `gg preview show [--patch] <id|label>` prints the file list (or unified
   diff; a non-ok state goes to stderr with exit 1); `gg preview diff
-  [--patch] <source> <target>` is the one-off form with no record;
+  [--patch] <source> <target>` is the one-off form with no record, and
+  `gg preview diff <id|label> --hunks [--json]` numbers a saved preview's
+  hunks (the same numbering as `gg diff --preview P --hunks`);
   `gg preview rename <id|label> <text>`; `gg preview rm <id|label>`.
+  Notes live inside a preview: `gg diff --preview <id|label|<target>...<source>>
+  [--hunks [--json]]` prints the preview's own patch and numbers its hunks,
+  and `gg note add --preview P --file F (--new-line N | --hunk H) --summary …`
+  anchors a note on it. A preview note is stored on the SOURCE TIP and shows
+  on that commit's own view too; the old side (the merge base) is not
+  addressable, so `--old-line` is refused. `gg note list --preview P [--file F]
+  [--json]` lists the notes gathered along the whole branch — a note written
+  against an earlier commit whose lines a later commit changed is reported
+  `outdated` rather than dropped. `gg note apply --preview P --stdin` imports
+  a batch onto the tip (old-side items skipped), and `gg review --preview P
+  [--notes]` reviews the pair.
 - `gg branch current` — just the branch name (HEAD's short sha when
   detached).
 - `gg branch ls` — local branches, `* ` marking HEAD, `↑a ↓b` when an
@@ -515,6 +528,15 @@ gg never hangs waiting for input mid-operation. When an operation hits a fork
 
 Exit codes: 0 = success, 1 = operation failed or needs a decision,
 2 = usage error.
+
+**Paths.** Everything gg *prints* — `gg status`, `gg diff`, `gg show --patch` —
+is relative to the **worktree root**, wherever you run it from. A pathspec you
+*type* is relative to **your cwd**, exactly as it is for git: in `src/`,
+`gg add .` stages `src/` and `gg add xxx.txt` stages `src/xxx.txt`. So a path
+copied out of `gg status` only feeds straight back in when you are at the
+root — the simplest habit is to run gg from the worktree root, where the two
+are the same thing. (`gg note --file` is the one exception: it is always
+repo-relative, because a `gg://` link can point it at another checkout.)
 
 ## Registering yourself as a gg tool
 

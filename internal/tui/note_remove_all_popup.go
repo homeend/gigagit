@@ -33,9 +33,11 @@ type noteRemoveAllPopup struct {
 	field   textfield
 	addr    model.FileAddress
 	path    string
-	roots   int  // threads the open diff shows
-	replies int  // replies those threads carry
-	refused bool // the last enter did not match: show the hint
+	roots   int    // threads the open diff shows
+	replies int    // replies those threads carry
+	total   int    // every NOTE the preview shows (roots + replies), tip and older commits alike
+	tip     string // "" = not a preview; else the short sha the clear is scoped to
+	refused bool   // the last enter did not match: show the hint
 }
 
 // noteRemoveAllRow is the . menu's "Remove all notes…", offered under the same
@@ -45,7 +47,14 @@ func (m Model) noteRemoveAllRow() (actionRow, bool) {
 	if !m.diffHasNotes() {
 		return actionRow{}, false
 	}
-	if _, ok := m.diffNoteAddress(); !ok {
+	addr, ok := m.diffNoteAddress()
+	if !ok {
+		return actionRow{}, false
+	}
+	// On a preview the visible notes may ALL come from older commits, which
+	// NotesClear(addr) — one address, the tip — cannot touch. Offering the
+	// row there would be a gesture that does nothing.
+	if v := m.diffLayer(); v != nil && v.previewSet != nil && !diffHasTipNotes(v, addr.Commit) {
 		return actionRow{}, false
 	}
 	return actionRow{
@@ -55,6 +64,16 @@ func (m Model) noteRemoveAllRow() (actionRow, bool) {
 			return m.openNoteRemoveAll()
 		},
 	}, true
+}
+
+// diffHasTipNotes reports whether any visible thread is anchored on commit.
+func diffHasTipNotes(v *diffView, commit string) bool {
+	for _, r := range v.notes {
+		if r.Note.Address.Commit == commit {
+			return true
+		}
+	}
+	return false
 }
 
 // openNoteRemoveAll pushes the confirmation over the diff.
@@ -67,9 +86,21 @@ func (m Model) openNoteRemoveAll() (tea.Model, tea.Cmd) {
 	if v == nil || len(v.notes) == 0 {
 		return m, nil
 	}
-	p := &noteRemoveAllPopup{field: newTextField(""), addr: addr, path: addr.Path, roots: len(v.notes)}
+	p := &noteRemoveAllPopup{field: newTextField(""), addr: addr, path: addr.Path}
 	for _, r := range v.notes {
-		p.replies += len(r.Replies)
+		// total counts NOTES, the same unit roots+replies does: "(2 of 3)"
+		// has to compare like with like or it reads as two different things.
+		p.total += 1 + len(r.Replies)
+		// NotesClear takes ONE address: on a preview that is the tip, so a
+		// note gathered from an older commit is not removed and must not be
+		// counted as if it were.
+		if v.previewSet == nil || r.Note.Address.Commit == addr.Commit {
+			p.roots++
+			p.replies += len(r.Replies)
+		}
+	}
+	if v.previewSet != nil {
+		p.tip = shortHash(addr.Commit)
 	}
 	return m.pushLayer(p), nil
 }
@@ -121,6 +152,11 @@ func (p *noteRemoveAllPopup) box(m Model) string {
 	lead := i18n.T("This deletes %d notes from %s.", p.roots, p.path)
 	if p.replies > 0 {
 		lead = i18n.T("This deletes %d notes (%d replies included) from %s.", p.roots+p.replies, p.replies, p.path)
+	}
+	if p.tip != "" {
+		// A preview gathers notes along the branch but clears only the tip's,
+		// so the question says which slice of the total is about to go.
+		lead = i18n.T("Remove all notes on %s (%d of %d).", p.tip, p.roots+p.replies, p.total)
 	}
 	var b strings.Builder
 	b.WriteString(i18n.T("Remove all notes…") + "\n\n")
