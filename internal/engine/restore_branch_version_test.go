@@ -190,3 +190,45 @@ func TestRestoreBranchVersionUnwrapsSyntheticCommit(t *testing.T) {
 		t.Fatalf("restored HEAD = %s, the synthetic commit's OWN sha — restore must unwrap to p1, not land on the wrapper", head)
 	}
 }
+
+// TestRestoreBranchVersionLegacyPlainTipRef is the fix-round companion to
+// TestRestoreBranchVersionUnwrapsSyntheticCommit: a LEGACY version ref (raw
+// update-ref straight at the tip, predating the synthetic-wrapper format —
+// no Gg-Meta trailer, so VersionRefs takes Hash from %(objectname) rather
+// than unwrapping a first parent) must restore to that same tip — the ref
+// itself, not one commit further back. Restore resolves its target through
+// deps.Repo.VersionRefs, the one place that already tells the two ref
+// shapes apart; a second, independent "what does this ref mean" rule (e.g.
+// blindly resolving ref^1) would disagree with the reader on exactly this
+// shape and land on the wrong commit.
+func TestRestoreBranchVersionLegacyPlainTipRef(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepo(t)
+	ctx := context.Background()
+	originalTip, err := repo.RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := git.VersionRef("main", "merge", 1753100000)
+	if err := repo.UpdateRef(ctx, ref, originalTip); err != nil {
+		t.Fatal(err)
+	}
+
+	// Move the branch forward.
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("v2\n"), 0o644)
+	if _, err := (Commit{Message: "second", All: true}).Run(ctx, OpDeps{Repo: repo}); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := RestoreBranchVersion{Branch: "main", Ref: ref}.Run(ctx, enabledDeps(repo))
+	if err != nil || !res.Changed {
+		t.Fatalf("restore: %v %+v", err, res)
+	}
+	head, err := repo.RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if head != originalTip {
+		t.Fatalf("restored HEAD = %s, want the legacy ref's own tip %s", head, originalTip)
+	}
+}

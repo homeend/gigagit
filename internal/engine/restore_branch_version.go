@@ -28,11 +28,28 @@ func (op RestoreBranchVersion) Run(ctx context.Context, deps OpDeps) (Result, er
 	if !ok || refBranch != op.Branch {
 		return Result{}, fmt.Errorf("restore version: %s is not a version of branch %s", op.Ref, op.Branch)
 	}
-	// The ref points at the synthetic snapshot commit; the tip it recorded is
-	// its first parent. Every reader of a version ref unwraps p1.
-	sha, err := deps.Repo.RevParse(ctx, op.Ref+"^1")
+	// A version ref may be a synthetic wrapper commit (Hash = its first
+	// parent) or a legacy plain-tip ref predating that format (Hash = the
+	// ref's own target) — VersionRefs is the ONE place that tells the two
+	// apart, by the Gg-Meta trailer's presence, not by parse success. Restore
+	// must go through that same discriminator rather than re-deriving its own
+	// "what does this ref mean" rule (e.g. blindly resolving ref^1), which
+	// would disagree with the reader on a legacy ref and land on the wrong
+	// commit.
+	bvs, err := deps.Repo.VersionRefs(ctx, git.VersionRefPrefix+op.Branch)
 	if err != nil {
 		return Result{}, fmt.Errorf("restore version: %w", err)
+	}
+	var sha string
+	found := false
+	for _, bv := range bvs {
+		if bv.Ref == op.Ref {
+			sha, found = bv.Hash, true
+			break
+		}
+	}
+	if !found || sha == "" {
+		return Result{}, fmt.Errorf("restore version: %s not found", op.Ref)
 	}
 	cur, err := deps.Repo.CurrentBranch(ctx)
 	if err != nil {
