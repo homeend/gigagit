@@ -45,14 +45,23 @@ func (s *Server) handlePreviewNotes(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, out)
 		return
 	}
-	res, err := s.service().PreviewNotesAt(ctx, set, path)
-	if err != nil && !errors.Is(err, domain.ErrNotesDisabled) {
-		writeErr(w, http.StatusInternalServerError, err)
-		return
-	}
-	notes := make([]wireNote, 0, len(res))
-	for _, n := range res {
-		notes = append(notes, domain.ToWireNotePreview(n, true))
+	// path == "" is the counts-only form — the preview-open badge fetch
+	// (previews.js) and the file list's own refresh both call it with no
+	// path to learn counts/total alone. PreviewNotesAt has no empty-path
+	// guard of its own and would otherwise hand back every file's resolved
+	// notes, which is not this endpoint's "one file" contract; skip it here
+	// instead of teaching PreviewNotesAt a caller-specific special case.
+	notes := []wireNote{}
+	if path != "" {
+		res, err := s.service().PreviewNotesAt(ctx, set, path)
+		if err != nil && !errors.Is(err, domain.ErrNotesDisabled) {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		notes = make([]wireNote, 0, len(res))
+		for _, n := range res {
+			notes = append(notes, domain.ToWireNotePreview(n, true))
+		}
 	}
 	counts, total, cerr := s.service().PreviewNoteCounts(ctx, set)
 	if cerr != nil && !errors.Is(cerr, domain.ErrNotesDisabled) {

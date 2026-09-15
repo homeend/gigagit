@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,9 +18,13 @@ import (
 // line 4), c2 rewrites that line to ECHO, c3 adds b.txt — with one note on
 // feat~2 (c1), on the line c2 rewrites, so the preview reports it
 // "outdated". The pair is also saved as a record so /api/preview lists it.
+//
+// No isolateState/XDG_STATE_HOME here: both stores this fixture touches are
+// injected directly (UsePreviewsDir/UseNotesDir), the same posture
+// notesServer (notes_test.go) documents as "parallel-safe" — so the tests
+// built on this fixture call t.Parallel().
 func newPreviewServer(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
-	isolateState(t)
 	dir := newRepoDir(t, 1)
 	gitRun(t, dir, "checkout", "-q", "-b", "feat")
 	write := func(s string) {
@@ -59,6 +64,7 @@ func newPreviewServer(t *testing.T) (*httptest.Server, string) {
 }
 
 func TestPreviewNotesEndpointReturnsTheGatheredSet(t *testing.T) {
+	t.Parallel()
 	ts, dir := newPreviewServer(t)
 	_ = dir
 	var body struct {
@@ -84,15 +90,56 @@ func TestPreviewNotesEndpointReturnsTheGatheredSet(t *testing.T) {
 	}
 }
 
+// path="" is the counts-only form (the preview-open badge fetch): the
+// response must still carry counts/total/tip, but `notes` must be an empty
+// ARRAY, not null — PreviewNotesAt is never called, so a client that always
+// does `for (const n of d.notes)` never sees a null crash it.
+func TestPreviewNotesWithoutAPathIsCountsOnly(t *testing.T) {
+	t.Parallel()
+	ts, _ := newPreviewServer(t)
+	var raw struct {
+		Notes  json.RawMessage `json:"notes"`
+		Tip    string          `json:"tip"`
+		Counts map[string]int  `json:"counts"`
+		Total  int             `json:"total"`
+	}
+	if code := getJSON(t, ts, "/api/preview/notes?source=feat&target=main", &raw); code != http.StatusOK {
+		t.Fatalf("status %d", code)
+	}
+	if string(raw.Notes) != "[]" {
+		t.Fatalf("notes must be an empty array (not null) on the counts-only form, got %s", raw.Notes)
+	}
+	if raw.Counts["a.txt"] != 1 || raw.Total != 1 {
+		t.Fatalf("counts/total must still be filled, got counts=%v total=%d", raw.Counts, raw.Total)
+	}
+	if len(raw.Tip) != 40 {
+		t.Fatalf("tip must still name the write target, got %q", raw.Tip)
+	}
+}
+
 // An unknown branch is a 404, not an empty preview (the /api/compare posture).
 func TestPreviewNotesRefusesAnUnknownBranch(t *testing.T) {
+	t.Parallel()
 	ts, _ := newPreviewServer(t)
 	if code := getJSON(t, ts, "/api/preview/notes?source=nope&target=main&path=a.txt", nil); code != http.StatusNotFound {
 		t.Fatalf("want 404, got %d", code)
 	}
 }
 
+// A leading-dash name is git-argv-unsafe: reject it as a 400 before it ever
+// reaches knownRefName's branch lookup. (The unknown-branch 404 above is also
+// satisfied by a plain missing route, so this is the check that actually
+// discriminates the validation branch.)
+func TestPreviewNotesRejectsALeadingDashSource(t *testing.T) {
+	t.Parallel()
+	ts, _ := newPreviewServer(t)
+	if code := getJSON(t, ts, "/api/preview/notes?source=-x&target=main&path=a.txt", nil); code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", code)
+	}
+}
+
 func TestPreviewRowsCarryTheNoteTotal(t *testing.T) {
+	t.Parallel()
 	ts, _ := newPreviewServer(t) // the fixture also saves the pair as a record
 	var body struct {
 		Entries []struct {
