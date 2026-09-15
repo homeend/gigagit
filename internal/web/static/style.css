@@ -97,6 +97,13 @@ body.resizing { cursor: col-resize; user-select: none; }
    subject elides the title and must never take the date with it. */
 #files-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 #files-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The short sha is its own target inside the title: its right-click menu
+   offers the short AND the full id, the rest of the title only the full one. */
+.csha { color: var(--accent); }
+/* The diff header's file path is click-to-copy (right-click for more), so it
+   says so the way every other clickable label here does. */
+#diff-path { cursor: pointer; }
+#diff-path:hover { text-decoration: underline; }
 #files-sort { flex: 0 0 auto; }
 #files-sort.hidden { display: none; }
 #files-meta {
