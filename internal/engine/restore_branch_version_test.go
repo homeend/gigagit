@@ -13,8 +13,9 @@ import (
 // writeVersionRef fabricates a version ref in the real (synthetic-commit)
 // production shape: a wrapper commit whose first parent is tip, no preview
 // endpoints (matching the one-branch ops these tests restore). Raw
-// update-ref-straight-at-tip would leave op.Ref with no parent to unwrap and
-// break RestoreBranchVersion's op.Ref+"^1" resolution.
+// update-ref-straight-at-tip would instead produce the LEGACY shape, which
+// VersionRefs reads differently (Hash = the ref's own target); that shape
+// has its own test below.
 func writeVersionRef(t *testing.T, repo *git.Repo, branch, opToken string, unix int64, tip string) string {
 	t.Helper()
 	ctx := context.Background()
@@ -141,10 +142,10 @@ func TestDeleteBranchVersion(t *testing.T) {
 
 // TestRestoreBranchVersionUnwrapsSyntheticCommit is Task 5's Step 5b
 // regression test: a version ref now points at a synthetic wrapper commit
-// (Step 4), so restore must resolve op.Ref^1 — its first parent, the
-// snapshotted tip — not op.Ref itself. Before the fix, restoring landed the
-// branch ON the wrapper commit rather than the tip it recorded: silently
-// wrong history.
+// (Step 4), so restore must land the branch on the SNAPSHOTTED TIP the
+// wrapper records — VersionRefs.Hash — not on the wrapper commit itself.
+// Before the fix, restoring landed the branch ON the wrapper: silently wrong
+// history.
 func TestRestoreBranchVersionUnwrapsSyntheticCommit(t *testing.T) {
 	t.Parallel()
 	dir, repo := newRepo(t)

@@ -764,11 +764,20 @@ an opt-in feature: it runs for every branch automatically. What triggers
 a snapshot: merging **into** a branch, rebasing it (including an
 interactive rebase's squash/move/drop), `--amend`ing the last commit,
 undoing the last commit, resetting a branch to its remote tip, deleting a
-branch, and `gg pull`'s rebase/merge/reset-to-remote lanes. A plain commit,
-a fast-forward pull, cherry-pick, push, stash, and switching branches are
-**not** triggers — the old tip stays reachable as an ordinary ancestor, so
-nothing needs recording. A snapshot failure never blocks the real
-operation (best-effort by design).
+branch, and **every** `gg pull` — the fast-forward lane included. A plain
+commit, cherry-pick, push, stash, and switching branches are **not**
+triggers — the old tip stays reachable as an ordinary ancestor, so nothing
+needs recording. A snapshot failure never blocks the real operation
+(best-effort by design).
+
+A fast-forward pull records nothing *interesting* — the branch contributed
+nothing on top of the tip it fast-forwarded to, so the record carries
+`Base == Ours` and the drift check stays silent — but it does record. It
+has to: drift is always measured against the branch's **newest** version,
+so a pull that wrote no record would leave the next check comparing against
+some older rebase or merge and reporting the commits the pull just brought
+down as drift. Every `gg pull` therefore writes a version ref; the 90-day
+prune policy below keeps the volume in hand.
 
 A version records more than a tip: for a two-branch op it also carries the
 tip it landed on/against and their merge-base, so it can open later as a

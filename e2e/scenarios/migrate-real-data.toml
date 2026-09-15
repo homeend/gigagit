@@ -49,8 +49,9 @@ steps = [
 
 [[run]]
 # main diverged from feat, so this is a true merge commit — the merge
-# records main's pre-op tip (Ours), feat's tip as Other, and their merge
-# base (Base), all real, non-fabricated endpoints.
+# records feat's tip as Ours (the contribution being frozen), main's own
+# pre-merge tip as Other (the side it lands against), and their merge base
+# (Base), all real, non-fabricated endpoints.
 cmd  = ["merge", "feat"]
 exit = 0
 

@@ -496,7 +496,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // stale: a repo switch superseded this branch's drift check
 		}
 		if msg.err != nil {
-			return m, nil // best-effort, like every other health-derived notice
+			// Best-effort, like every other health-derived notice — but the
+			// PAUSED half of the notice needs no store read to be valid: the
+			// op paused for conflicts and a human resolved them, which is
+			// worth saying whether or not DriftAfter could reach the version
+			// store. Dropping the whole message here swallowed that. An empty
+			// report makes driftNotice take its "nothing was recorded to
+			// compare it against" branch, which is exactly true.
+			if !msg.paused {
+				return m, nil
+			}
+			return m.applyDriftReport(msg.branch, domain.DriftReport{}, true)
 		}
 		return m.applyDriftReport(msg.branch, msg.report, msg.paused)
 	case snapshotTargetMsg:

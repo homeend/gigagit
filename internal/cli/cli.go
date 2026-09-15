@@ -275,8 +275,13 @@ func finish(res engine.Result, err error, stdout, stderr io.Writer) int {
 }
 
 // printDrift reports domain.DriftAfter's findings for branch, following a
-// SUCCESSFUL rebase/merge/pull (callers check finish's exit code first — an
-// op that errored or left a conflict paused never reaches here). Per the
+// rebase/merge/pull that SUCCEEDED AND CHANGED SOMETHING. Callers gate on
+// `code == 0 && res.Changed`, not the exit code alone: finish returns 0
+// whenever err == nil, and an answered --on-conflict=abort returns
+// Result{Changed:false}, nil — the pre-op snapshot is already written and the
+// tip never moved, so an abort would report every path the other side
+// contributed as D. An op that errored or left a conflict paused never
+// reaches here either. Per the
 // spec, a frontend that could resume a paused op into completion would also
 // report drift on that path; the CLI has no resume verb (a conflicted `gg
 // rebase`/`gg merge`/`gg pull` returns with the conflict still unresolved,

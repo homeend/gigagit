@@ -280,6 +280,17 @@ func TestVersionsJSIsWiredForFrozenPreviewAndDrift(t *testing.T) {
 		{"versions.js", `/api/drift`, "the post-op drift check must call the drift endpoint"},
 		{"ops.js", `driftArmFor`, "startOp must decide which branch to drift-check"},
 		{"ops.js", `checkDrift`, "a successful drift-eligible op must run the check"},
+		// I4: ev.changed alone also matches the engine's deliberate
+		// success-with-conflicts shape (changed && !ok), where the branch ref
+		// never moved — firing there floods the panel with a D for every path
+		// the other side contributed.
+		{"ops.js", `ev.ok && ev.changed && op.driftBranch`, "the drift check must gate on ok AND changed, not changed alone"},
+		// I5: the spec's second trigger — a resume of an op that paused for
+		// conflicts is worth reporting even when nothing drifted. The web CAN
+		// resume (op "continue"), so unlike the CLI it must plumb the flag.
+		{"ops.js", `driftPaused`, "a resume of a paused op must arm the paused trigger"},
+		{"versions.js", `paused for conflicts before completing`, "the paused-only panel needs its own wording"},
+		{"versions.js", `but the resolution is worth a look`, "the paused-only panel must say why it is worth a look"},
 	}
 	for _, c := range checks {
 		if got := readPreflightStatic(t, c.file); !strings.Contains(got, c.want) {

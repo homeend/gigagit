@@ -241,3 +241,95 @@ func TestCmdVersionsShowFieldlessRecordSaysNoPreview(t *testing.T) {
 		t.Fatalf("versions show (fieldless) output = %q, want a no-preview statement", out)
 	}
 }
+
+// buildAbortFixture leaves dir on "main" with a branch "feat" that conflicts
+// with it (both edited s.txt off a common base), plus a fabricated NEWEST
+// version for main in the shape a REBASE records — Ours is main's own tip
+// (the contribution frozen), Other is the side it lands against (feat), Base
+// their fork point. That is the shape that makes an abort observable: a
+// merge's record has Other == the target's own pre-op tip, so an abort leaves
+// the after-side diff empty and only the benign Removed direction fires.
+// Both cmdRebase and cmdMerge gate on the same res.Changed, so one fixture
+// exercises both sites.
+//
+// Why an aborted op alarms without the res.Changed gate: DriftSince computes
+// after = Other..newTip, and an abort leaves newTip at main's pre-op tip — so
+// the after-side diff walks from FEAT's tip back to main and reports every
+// path feat contributed (c.txt) as D. None of those D entries are in the
+// before-set, so they land in Report.Added, which is the alarming direction.
+// Nothing moved; the alarm is pure noise.
+func buildAbortFixture(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "s.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "base: s.txt")
+	base := runGit(t, dir, "rev-parse", "HEAD")
+
+	runGit(t, dir, "checkout", "-b", "feat")
+	if err := os.WriteFile(filepath.Join(dir, "s.txt"), []byte("feat\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "c.txt"), []byte("c\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "feat: s.txt + c.txt")
+	featTip := runGit(t, dir, "rev-parse", "HEAD")
+
+	runGit(t, dir, "checkout", "main")
+	if err := os.WriteFile(filepath.Join(dir, "s.txt"), []byte("main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, dir, "add", ".")
+	runGit(t, dir, "commit", "-m", "main: s.txt")
+	mainTip := runGit(t, dir, "rev-parse", "HEAD")
+
+	fabricateVersion(t, dir, "main", "merge", 9999999999, base, mainTip, featTip)
+	stampVersionsFormat(t, dir)
+}
+
+// TestCmdMergeAbortPrintsNoDrift is the I3 guard for `gg merge`. finish
+// returns exit 0 whenever err == nil, and --on-conflict=abort returns
+// Result{Changed:false}, nil — so a gate on the exit code alone let an
+// ABORTED merge print a drift summary. Nothing moved; there is nothing to
+// report, and reporting it is exactly the false alarm this feature must not
+// produce.
+func TestCmdMergeAbortPrintsNoDrift(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	buildAbortFixture(t, dir)
+	tip := runGit(t, dir, "rev-parse", "main")
+
+	code, out, errb := runCLI(t, dir, "merge", "--on-conflict=abort", "feat")
+	if code != 0 {
+		t.Fatalf("merge --on-conflict=abort exit %d: %s", code, errb)
+	}
+	if runGit(t, dir, "rev-parse", "main") != tip {
+		t.Fatal("fixture bug: the abort moved main, so this proves nothing")
+	}
+	if strings.Contains(out, "change set") || strings.Contains(out, "absorbed upstream") {
+		t.Fatalf("aborted merge printed a drift summary — nothing changed:\n%s", out)
+	}
+}
+
+// TestCmdRebaseAbortPrintsNoDrift is the same guard for `gg rebase`, whose
+// two exit-code gates (plain and -i) had the identical defect.
+func TestCmdRebaseAbortPrintsNoDrift(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t)
+	buildAbortFixture(t, dir)
+	tip := runGit(t, dir, "rev-parse", "main")
+
+	code, out, errb := runCLI(t, dir, "rebase", "--on-conflict=abort", "feat")
+	if code != 0 {
+		t.Fatalf("rebase --on-conflict=abort exit %d: %s", code, errb)
+	}
+	if runGit(t, dir, "rev-parse", "main") != tip {
+		t.Fatal("fixture bug: the abort moved main, so this proves nothing")
+	}
+	if strings.Contains(out, "change set") || strings.Contains(out, "absorbed upstream") {
+		t.Fatalf("aborted rebase printed a drift summary — nothing changed:\n%s", out)
+	}
+}

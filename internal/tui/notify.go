@@ -683,10 +683,12 @@ func (m Model) driftCheckCmd(branch string, paused bool, gen int) tea.Cmd {
 // is always new this session, so no prev/next id diff is needed here).
 //
 // Deduped by driftNoticeID (branch + version ref) before appending: two
-// findings sharing one ref — e.g. a paused rebase raises on ref V, and a
-// later fast-forward pull on the same branch records no new version, so
-// DriftAfter re-reports V — must REPLACE the existing source, never add a
-// second. Left unchecked, m.notices would carry two rows with the same id,
+// findings sharing one ref — e.g. a paused rebase raises on ref V, the
+// resume raises on V again, and re-checking the same branch before any
+// further recording op still reports V — must REPLACE the existing source,
+// never add a second. (Every pull now records its own version, so a later
+// pull is NOT an example of this; it moves the branch to a fresh ref.)
+// Left unchecked, m.notices would carry two rows with the same id,
 // and removeNotice (which matches by id) would drop both at once on a
 // single Dismiss.
 func (m Model) applyDriftReport(branch string, report domain.DriftReport, paused bool) (Model, tea.Cmd) {

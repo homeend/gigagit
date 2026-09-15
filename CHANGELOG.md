@@ -46,8 +46,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   accept. **Skipping the migration means no new versions are recorded at
   all** until it's run — the branch-version writer is gated on the same
   format check, so a repo stuck on format 1 runs every rebase/merge/pull
-  with no safety net rather than silently mixing formats. Skills: using-gg
-  v73.
+  with no safety net rather than silently mixing formats. **Every `gg pull`
+  now writes a version ref**, the fast-forward lane included: drift is
+  measured against a branch's NEWEST record, so a pull that recorded nothing
+  left the next check comparing against an older rebase/merge and reporting
+  the pull's own commits as drift. A fast-forward records `Base == Ours` and
+  stays silent. The second endpoint is stored as a resolved sha rather than
+  the ref name it was given, so a recorded `origin/<b>` (or a `gg rebase
+  HEAD~3`) cannot slide forward afterwards. Skills: using-gg v73.
 
 - **Notes inside merge previews.** A preview (`Previews` tab, `gg preview`)
   is now a review surface: its diff rows carry review notes, gathered along

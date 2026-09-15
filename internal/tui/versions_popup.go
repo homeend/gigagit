@@ -412,7 +412,11 @@ func (p *versionsPopup) box(m Model) string {
 
 	hint := i18n.T("[enter] versions")
 	if p.mode == versionsModeVersions {
-		hint = i18n.T("[enter] compare  [r] restore  [d] delete  [y] copy sha")
+		// "preview", not "compare": enter opens the version's FROZEN preview
+		// (the recorded base..ours) — or, for a fieldless one-branch record,
+		// that commit's own file view. Neither is the two-endpoint compare
+		// the old label promised.
+		hint = i18n.T("[enter] preview  [r] restore  [d] delete  [y] copy sha")
 	}
 
 	parts := []string{title, ""}

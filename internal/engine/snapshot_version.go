@@ -86,16 +86,30 @@ func snapshotBranchTipNamed(ctx context.Context, deps OpDeps, branch, opToken, o
 
 	meta := git.VersionMeta{Op: opToken}
 	if ours != "" && other != "" {
+		// Other is RESOLVED to a sha here, not stored as the name the call
+		// site passed. Callers hand us whatever names the second endpoint —
+		// `op.Onto` for rebase (which can be a revision like HEAD~3),
+		// "<remote>/<branch>" for pull — and a NAME re-resolves at diff time,
+		// long after the op moved it: `gg rebase HEAD~3` would later compare
+		// against the POST-rebase HEAD, a wholly unrelated commit, and a
+		// recorded origin/<b> would slide forward on the next fetch. A frozen
+		// record must freeze both of its endpoints. One extra rev-parse is the
+		// price; Target keeps the name exactly as given, for labelling.
+		//
 		// Base cannot be recomputed after the op: once the branches have
 		// merged, merge-base(target, source) returns the source tip rather
 		// than the fork point. Record it now or lose it. Source/Target ride
 		// along with Ours/Other/Base as one unit — git.ParseVersionMeta only
 		// accepts a record at exactly 1 or 6 fields, so a merge-base failure
-		// (or either endpoint missing) must leave EVERY endpoint field empty,
-		// never a partial 5-field record that silently loses its preview.
-		if base, berr := deps.Repo.MergeBase(ctx, ours, other); berr == nil && base != "" {
-			meta.Ours, meta.Other, meta.Base = ours, other, base
-			meta.Source, meta.Target = source, target
+		// (or either endpoint missing, or Other unresolvable) must leave EVERY
+		// endpoint field empty, never a partial 5-field record that silently
+		// loses its preview.
+		otherSha, oerr := deps.Repo.RevParse(ctx, other)
+		if oerr == nil && otherSha != "" {
+			if base, berr := deps.Repo.MergeBase(ctx, ours, otherSha); berr == nil && base != "" {
+				meta.Ours, meta.Other, meta.Base = ours, otherSha, base
+				meta.Source, meta.Target = source, target
+			}
 		}
 	}
 

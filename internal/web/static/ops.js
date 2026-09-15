@@ -134,30 +134,38 @@ function opBusy() {
 // Anything else arms nothing. Cherry-pick/revert never record a two-branch
 // version, so a continue resuming one of those (state.conflict.op is
 // neither "merge" nor "rebase") arms nothing either.
+//
+// Returns {branch, paused}. paused is the spec's SECOND trigger: the summary
+// is due when the change set drifted OR when the operation paused for
+// conflicts before completing, and a resume (op "continue") is by definition
+// the tail of an op that paused. The TUI carries the same flag as
+// m.pendingDriftPaused; the CLI has no resume verb and so can only ever
+// report the drifted case.
 function driftArmFor(body) {
   const cur = (state.repo && state.repo.branch) || "";
+  const arm = (branch, paused) => ({ branch: branch || "", paused: !!paused });
   switch (body.op) {
     case "merge":
-      return body.onto || cur;
+      return arm(body.onto || cur, false);
     case "rebase":
     case "pull":
-      return body.branch || cur;
+      return arm(body.branch || cur, false);
     case "interactive-rebase":
-      return body.branch || "";
+      return arm(body.branch, false);
     case "continue":
-      if (!state.conflict) return "";
-      if (state.conflict.op === "merge") return state.conflict.target || "";
-      if (state.conflict.op === "rebase") return state.conflict.source || "";
-      return "";
+      if (!state.conflict) return arm("", false);
+      if (state.conflict.op === "merge") return arm(state.conflict.target, true);
+      if (state.conflict.op === "rebase") return arm(state.conflict.source, true);
+      return arm("", false);
     default:
-      return "";
+      return arm("", false);
   }
 }
 
 
 async function startOp(body, label) {
   if (opBusy()) return; // one live op; the server would 409 anyway
-  const driftBranch = driftArmFor(body);
+  const driftArm = driftArmFor(body);
   let resp;
   try {
     resp = await postJSON("/api/op", body);
@@ -165,7 +173,7 @@ async function startOp(body, label) {
     opLine("error: " + (e.message || e), true);
     return;
   }
-  followOp(resp.op_id, label, body.op, null, driftBranch);
+  followOp(resp.op_id, label, body.op, null, driftArm);
 }
 
 
@@ -173,13 +181,18 @@ async function startOp(body, label) {
 // startOp because the review lane starts its run at a different endpoint but
 // wants the identical stream handling — including the lost-connection rules.
 // onDone, when given, REPLACES the generic done handling for that run.
-// driftBranch, when given, arms the post-op drift check (see driftArmFor);
-// every call site but startOp's own leaves it unset, since none of those
-// kinds (commit-squash, set-git-config, move-worktree, …) can drift.
-function followOp(opID, label, kind, onDone, driftBranch) {
+// driftArm, when given, arms the post-op drift check (see driftArmFor) —
+// {branch, paused}; every call site but startOp's own leaves it unset, since
+// none of those kinds (commit-squash, set-git-config, move-worktree, …) can
+// drift or pause.
+function followOp(opID, label, kind, onDone, driftArm) {
   opLine("⟳ " + label + "…");
   const es = new EventSource("/api/op/" + opID + "/events");
-  state.op = { id: opID, es, kind, onDone: onDone || null, driftBranch: driftBranch || "" };
+  state.op = {
+    id: opID, es, kind, onDone: onDone || null,
+    driftBranch: (driftArm && driftArm.branch) || "",
+    driftPaused: !!(driftArm && driftArm.paused),
+  };
   $("pull-btn").disabled = true;
   $("push-btn").disabled = true;
   $("refresh-btn").disabled = true;
@@ -456,10 +469,15 @@ function handleOpEvent(ev) {
     else opLine("error: " + (ev.error || "operation failed"), true);
     if (kind === "commit-graph") fetchHealth(); // retires the banner group
     // Post-op drift summary: only for the drift-eligible kinds driftArmFor
-    // armed (op.driftBranch), and only when something actually landed
-    // (ev.changed) — an aborted pull/rebase/merge has no "after" side to
-    // compare. Any other op result clears a stale panel from an earlier one.
-    if (op && ev.changed && op.driftBranch) checkDrift(op.driftBranch);
+    // armed (op.driftBranch), and only when the op actually COMPLETED —
+    // ev.ok AND ev.changed. ev.changed alone is not enough: changed && !ok is
+    // the engine's deliberate success-with-conflicts shape (see the comment
+    // above), and a paused rebase leaves refs/heads/<branch> at the old tip
+    // with HEAD detached, so the after-side diff would report every path the
+    // other side contributed as D — the same false flood an aborted op used
+    // to produce. An aborted op has no "after" side to compare either. Any
+    // other op result clears a stale panel from an earlier one.
+    if (op && ev.ok && ev.changed && op.driftBranch) checkDrift(op.driftBranch, op.driftPaused);
     else hideDrift();
     if (ev.changed) refreshAfterOp();
     else fetchStatus().then(renderCommits); // a failed switch may still have moved HEAD/stash state

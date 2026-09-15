@@ -267,25 +267,52 @@ function hideDrift() {
 }
 
 
-async function checkDrift(branch) {
+// checkDrift renders the post-op summary for branch. paused says the op that
+// just finished was a RESUME of one that had paused for conflicts — the
+// spec's second trigger, and the reason this can raise the panel even when
+// nothing drifted: a hand-resolved conflict is worth a look whether or not it
+// changed which paths the branch contributes. The gate mirrors the TUI's
+// driftNotice (internal/tui/notify.go) exactly — raise on drifted || paused,
+// and in the paused-only case say "still matches" ONLY when a comparison
+// actually ran (body.checked); with nothing recorded there was no comparison
+// to claim. The CLI legitimately implements only the drifted half: it has no
+// resume verb, so the invocation that would report the paused case never
+// happens.
+async function checkDrift(branch, paused) {
   let body;
   try {
     body = await getJSON("/api/drift?branch=" + encodeURIComponent(branch));
   } catch (e) {
-    return; // best-effort: a failed drift check must never blot out the op's own result
+    // Best-effort: a failed drift check must never blot out the op's own
+    // result — but a resume that paused for conflicts is worth saying out
+    // loud without reading the store at all, so that half still renders.
+    body = paused ? { checked: false, drifted: false } : null;
+    if (!body) return;
   }
-  if (!body.checked || !body.drifted) {
+  const drifted = !!(body.checked && body.drifted);
+  if (!drifted && !paused) {
     hideDrift();
     return;
   }
-  $("drift-title").textContent = branch + "'s change set may have drifted from its recorded version:";
-  const added = (body.added || [])
-    .map((e) => `<li class="added">${esc(e.status)} ${esc(e.path)}</li>`)
-    .join("");
-  const removed = (body.removed || [])
-    .map((e) => `<li class="removed">(absorbed upstream: ${esc(e.status)} ${esc(e.path)})</li>`)
-    .join("");
-  $("drift-list").innerHTML = added + removed;
+  if (drifted) {
+    $("drift-title").textContent = branch + "'s change set may have drifted from its recorded version:";
+    const added = (body.added || [])
+      .map((e) => `<li class="added">${esc(e.status)} ${esc(e.path)}</li>`)
+      .join("");
+    const removed = (body.removed || [])
+      .map((e) => `<li class="removed">(absorbed upstream: ${esc(e.status)} ${esc(e.path)})</li>`)
+      .join("");
+    const also = paused
+      ? `<li class="removed">The operation also paused for conflicts before completing.</li>`
+      : "";
+    $("drift-list").innerHTML = added + removed + also;
+  } else {
+    $("drift-title").textContent = branch + " paused for conflicts before completing:";
+    const tail = body.checked
+      ? "Its change set still matches the recorded version, but the resolution is worth a look."
+      : "Nothing was recorded to compare it against, but the resolution is worth a look.";
+    $("drift-list").innerHTML = `<li class="removed">${esc(tail)}</li>`;
+  }
   $("drift-panel").classList.remove("hidden");
 }
 
