@@ -114,3 +114,142 @@ func (s *Service) PreviewResolve(ctx context.Context, spec string) (source, targ
 	}
 	return p.Source, p.Target, nil
 }
+
+// PreviewStatus is the word a preview uses for a resolved note's status.
+// "Outdated" is the preview's name for stale (spec §1.2): in a preview a note
+// whose lines a later commit changed is the EXPECTED case, not an edge case,
+// so the surfaces say so. model.NoteStatus gains no value — this maps at
+// render/wire time only, so the store and the resolver stay untouched.
+func PreviewStatus(st model.NoteStatus) string {
+	if st == model.NoteStale {
+		return "outdated"
+	}
+	return string(st)
+}
+
+// loadPreviewNotes gathers every stored note the preview covers for one path:
+// a committed, NEW-side note whose commit is in the set. The store is iterated
+// ONCE against a membership map (ruling 3) — never one query per commit.
+//
+// Old-side notes on those commits are ignored on purpose (spec §1.2): they
+// belong to that commit's own parent→commit picture, not to the
+// merge-base → tip one the preview draws. Replies inherit their root's side,
+// so this one test covers them too.
+func (s *Service) loadPreviewNotes(ctx context.Context, set PreviewNoteSet, path string) ([]model.Note, error) {
+	st := s.notesStore(ctx)
+	if st == nil {
+		return nil, ErrNotesDisabled
+	}
+	all, err := st.Load()
+	if err != nil {
+		return nil, err
+	}
+	in := set.commitSet()
+	mine := make([]model.Note, 0, 8)
+	for _, n := range all {
+		if n.Address.State != model.StateCommitted || n.Side != model.NoteSideNew {
+			continue
+		}
+		if path != "" && n.Address.Path != path {
+			continue
+		}
+		if in[n.Address.Commit] {
+			mine = append(mine, n)
+		}
+	}
+	return mine, nil
+}
+
+// PreviewNotesFor resolves the preview's notes for one path against a diff the
+// caller already holds (the TUI's open compare view). Only the NEW side is
+// used: the preview's old side is the merge base, which no stored address
+// names, so nothing can anchor there.
+func (s *Service) PreviewNotesFor(ctx context.Context, set PreviewNoteSet, path string, d Diff) ([]ResolvedNote, error) {
+	if !set.OK() {
+		return nil, nil
+	}
+	mine, err := s.loadPreviewNotes(ctx, set, path)
+	if err != nil {
+		return nil, err
+	}
+	_, newLines := diffSideLines(d)
+	return keepResolved(resolveNotes(mine, nil, newLines)), nil
+}
+
+// PreviewNotesAt is PreviewNotesFor for a caller with no diff in hand (the web
+// handler, the CLI, MCP). The preview's new side is byte for byte the file at
+// the tip, so the tip's own content is the resolution text — the same bytes
+// noteSideLines would read for a committed address.
+func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path string) ([]ResolvedNote, error) {
+	if !set.OK() {
+		return nil, nil
+	}
+	mine, err := s.loadPreviewNotes(ctx, set, path)
+	if err != nil {
+		return nil, err
+	}
+	if len(mine) == 0 {
+		return nil, nil
+	}
+	var newLines []string
+	if b, ferr := s.ShowFile(ctx, set.Tip, path); ferr == nil {
+		newLines = splitLines(b)
+	}
+	// newLines stays nil when the path is gone from the tip: resolveOne then
+	// reports orphaned, and keepResolved hides those — exactly the rule the
+	// ordinary note path follows for a deleted file.
+	return keepResolved(resolveNotes(mine, nil, newLines)), nil
+}
+
+// previewCountEntry is one cached count result.
+type previewCountEntry struct {
+	byPath map[string]int
+	total  int
+}
+
+// PreviewNoteCounts are the preview's badges: root notes per path and in
+// total, counted from the STORE without resolving anything. A path-gone
+// orphan — its commit stays on the branch, but a later commit removed the
+// path from the tip — never draws a row, yet still counts (spec §1.2, the
+// "retired file" rule): the Previews panel still says it is there.
+//
+// A note whose commit is no longer in base..tip at all (the branch was
+// rebased) is a different case: it cannot be attributed to this preview, so
+// loadPreviewNotes's commitSet membership test excludes it before it ever
+// reaches this count (controller ruling; spec amended).
+//
+// The maps are the cached instance, shared by every caller: READ-ONLY.
+func (s *Service) PreviewNoteCounts(ctx context.Context, set PreviewNoteSet) (map[string]int, int, error) {
+	if !set.OK() {
+		return map[string]int{}, 0, nil
+	}
+	key := set.Tip + ":" + set.Base
+	s.mu.Lock()
+	if e, ok := s.previewCounts[key]; ok {
+		s.mu.Unlock()
+		return e.byPath, e.total, nil
+	}
+	s.mu.Unlock()
+
+	mine, err := s.loadPreviewNotes(ctx, set, "")
+	if err != nil {
+		return map[string]int{}, 0, err
+	}
+	e := previewCountEntry{byPath: map[string]int{}}
+	for _, n := range mine {
+		if n.IsReply() { // a badge counts THREADS
+			continue
+		}
+		e.total++
+		if n.Address.Path != "" {
+			e.byPath[n.Address.Path]++
+		}
+	}
+	s.mu.Lock()
+	if s.previewCounts == nil {
+		s.previewCounts = map[string]previewCountEntry{}
+	}
+	s.previewCounts[key] = e
+	s.mu.Unlock()
+	return e.byPath, e.total, nil
+}

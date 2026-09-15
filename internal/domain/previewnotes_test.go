@@ -2,7 +2,11 @@ package domain
 
 import (
 	"context"
+	"os/exec"
+	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // TestPreviewNotesGathersTheBranch: main + feat (three commits). The set's tip
@@ -134,4 +138,157 @@ func newPreviewRepo(t *testing.T) (*Service, string) {
 	run("commit", "-m", "c3 adds b.txt")
 	run("checkout", "main")
 	return svc, dir
+}
+
+// revParse is the test's own rev resolver: full sha for a rev in dir.
+func revParse(t *testing.T, dir, rev string) string {
+	t.Helper()
+	cmd := exec.Command("git", "rev-parse", rev)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("rev-parse %s: %v", rev, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// A note on the FIRST feat commit, on a line the SECOND commit rewrote, must
+// still be listed on the preview — as stale (rendered "outdated"). A note on
+// a line that survived is active.
+func TestPreviewNotesForGathersOlderCommitsAndMarksThemStale(t *testing.T) {
+	svc, dir := newPreviewRepo(t)
+	ctx := context.Background()
+	c1 := revParse(t, dir, "feat~2") // "c1 adds DELTA"
+
+	// On c1, line 4 is "DELTA"; c2 rewrote it to "ECHO" → stale on the tip.
+	stale, err := svc.NoteAdd(ctx, model.Note{
+		Source: model.NoteSourceAgent, Author: "ada",
+		Address: model.FileAddress{State: model.StateCommitted, Commit: c1, Path: "a.txt"},
+		Side:    model.NoteSideNew, Range: [2]int{4, 4}, Summary: "why DELTA",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// On c1, line 1 is "alpha" and still is on the tip → active.
+	live, err := svc.NoteAdd(ctx, model.Note{
+		Source: model.NoteSourceAgent, Author: "ada",
+		Address: model.FileAddress{State: model.StateCommitted, Commit: c1, Path: "a.txt"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "alpha stands",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	set, err := svc.PreviewNotes(ctx, "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.PreviewNotesAt(ctx, set, "a.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]ResolvedNote{}
+	for _, r := range got {
+		byID[r.Note.ID] = r
+	}
+	if len(byID) != 2 {
+		t.Fatalf("want both notes gathered from the older commit, got %d", len(byID))
+	}
+	if s := byID[stale.ID].Status; s != model.NoteStale {
+		t.Fatalf("a note on a rewritten line must be stale, got %q", s)
+	}
+	if s := byID[live.ID].Status; s != model.NoteActive {
+		t.Fatalf("a note on a surviving line must be active, got %q", s)
+	}
+	if w := PreviewStatus(model.NoteStale); w != "outdated" {
+		t.Fatalf("the preview word for stale is outdated, got %q", w)
+	}
+}
+
+// Controller ruling (spec amended): a note whose commit is no longer in
+// base..tip (branch rebased) CANNOT be attributed to this preview and is NOT
+// counted. Only a path-gone note — its commit stays on the branch, but a
+// later commit removed the path from the tip — is hidden from the listing
+// yet still counted (spec §1.2, the "retired file" rule).
+func TestPreviewNoteCountsIncludeHiddenNotes(t *testing.T) {
+	svc, dir := newPreviewRepo(t)
+	ctx := context.Background()
+	c3 := revParse(t, dir, "feat") // "c3 adds b.txt", tip before the removal
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Source: model.NoteSourceAgent, Author: "ada",
+		Address: model.FileAddress{State: model.StateCommitted, Commit: c3, Path: "b.txt"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "on a file the tip drops",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A later commit on feat removes b.txt: the note's commit STAYS on the
+	// branch, but the tip no longer has the path.
+	gitRun(t, dir, "checkout", "feat")
+	gitRun(t, dir, "rm", "b.txt")
+	gitRun(t, dir, "commit", "-m", "c4 removes b.txt")
+	gitRun(t, dir, "checkout", "main")
+
+	// A note on a commit that is NOT on feat at all (main's seed commit) —
+	// rebased away / never on the branch — must not be attributed.
+	seed := revParse(t, dir, "main")
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Source: model.NoteSourceAgent, Author: "ada",
+		Address: model.FileAddress{State: model.StateCommitted, Commit: seed, Path: "a.txt"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "off the branch",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	set, err := svc.PreviewNotes(ctx, "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath, total, err := svc.PreviewNoteCounts(ctx, set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || byPath["b.txt"] != 1 {
+		t.Fatalf("the path-gone note counts, the off-branch note does not: total=%d byPath=%v", total, byPath)
+	}
+}
+
+// Ruling 7: the counts follow the notes store, not only the summary cache.
+func TestPreviewNoteCountsInvalidateOnAMutation(t *testing.T) {
+	svc, dir := newPreviewRepo(t)
+	ctx := context.Background()
+	set, err := svc.PreviewNotes(ctx, "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, total, err := svc.PreviewNoteCounts(ctx, set); err != nil || total != 0 {
+		t.Fatalf("cold counts: total=%d err=%v", total, err)
+	}
+	if _, err := svc.NoteAdd(ctx, model.Note{
+		Source: model.NoteSourceAgent, Author: "ada",
+		Address: model.FileAddress{State: model.StateCommitted, Commit: revParse(t, dir, "feat"), Path: "b.txt"},
+		Side:    model.NoteSideNew, Range: [2]int{1, 1}, Summary: "fresh",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, total, err := svc.PreviewNoteCounts(ctx, set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 {
+		t.Fatalf("a note mutation must drop the cached preview counts, got total=%d", total)
+	}
+}
+
+// Ruling 6: a non-ok set answers empty, silently.
+func TestPreviewNotesOnAnEmptySetAreSilent(t *testing.T) {
+	svc, _ := newPreviewRepo(t)
+	ctx := context.Background()
+	got, err := svc.PreviewNotesAt(ctx, PreviewNoteSet{}, "a.txt")
+	if err != nil || got != nil {
+		t.Fatalf("want (nil, nil), got (%v, %v)", got, err)
+	}
+	byPath, total, err := svc.PreviewNoteCounts(ctx, PreviewNoteSet{})
+	if err != nil || total != 0 || len(byPath) != 0 {
+		t.Fatalf("want empty counts and no error, got (%v, %d, %v)", byPath, total, err)
+	}
 }

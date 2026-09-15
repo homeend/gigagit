@@ -47,6 +47,7 @@ func (s *Service) SetNotesStore(st notes.Store) {
 	s.mu.Lock()
 	s.notes = st
 	s.noteCounts = nil
+	s.previewCounts = nil // same store, same invalidation
 	s.notesGen++
 	max := notesEffective(s.notesMaxEntries, notesDefaults.MaxEntries)
 	s.mu.Unlock()
