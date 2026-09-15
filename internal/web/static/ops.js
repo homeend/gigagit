@@ -11,6 +11,7 @@ import { closeCommitFilter, loadCommits, renderCommits } from "./commits.js";
 import { reconcileStatusView, stage } from "./files.js";
 import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
 import { fetchHealth } from "./bigrepo.js";
+import { checkDrift, hideDrift } from "./versions.js";
 
 // --- op transport client ---
 
@@ -120,8 +121,43 @@ function opBusy() {
 }
 
 
+// driftArmFor decides which branch, if any, a successful op should be
+// checked for post-op drift (domain.DriftAfter) once it finishes — the same
+// rule the TUI's driftArmFor (internal/tui/notify.go) applies: merge/
+// rebase/pull default to the currently checked-out branch when the request
+// left it implicit, interactive-rebase is always explicit (its op refuses
+// an empty Branch), and resuming a paused merge/rebase (continue) attributes
+// the branch the same way domain.conflictState does — merge snapshots the
+// branch merged INTO (target), rebase snapshots the rebased branch itself
+// (source). state.conflict must still reflect the PAUSED state at this
+// instant (read before the dispatch, not after) since the resume clears it.
+// Anything else arms nothing. Cherry-pick/revert never record a two-branch
+// version, so a continue resuming one of those (state.conflict.op is
+// neither "merge" nor "rebase") arms nothing either.
+function driftArmFor(body) {
+  const cur = (state.repo && state.repo.branch) || "";
+  switch (body.op) {
+    case "merge":
+      return body.onto || cur;
+    case "rebase":
+    case "pull":
+      return body.branch || cur;
+    case "interactive-rebase":
+      return body.branch || "";
+    case "continue":
+      if (!state.conflict) return "";
+      if (state.conflict.op === "merge") return state.conflict.target || "";
+      if (state.conflict.op === "rebase") return state.conflict.source || "";
+      return "";
+    default:
+      return "";
+  }
+}
+
+
 async function startOp(body, label) {
   if (opBusy()) return; // one live op; the server would 409 anyway
+  const driftBranch = driftArmFor(body);
   let resp;
   try {
     resp = await postJSON("/api/op", body);
@@ -129,7 +165,7 @@ async function startOp(body, label) {
     opLine("error: " + (e.message || e), true);
     return;
   }
-  followOp(resp.op_id, label, body.op, null);
+  followOp(resp.op_id, label, body.op, null, driftBranch);
 }
 
 
@@ -137,10 +173,13 @@ async function startOp(body, label) {
 // startOp because the review lane starts its run at a different endpoint but
 // wants the identical stream handling — including the lost-connection rules.
 // onDone, when given, REPLACES the generic done handling for that run.
-function followOp(opID, label, kind, onDone) {
+// driftBranch, when given, arms the post-op drift check (see driftArmFor);
+// every call site but startOp's own leaves it unset, since none of those
+// kinds (commit-squash, set-git-config, move-worktree, …) can drift.
+function followOp(opID, label, kind, onDone, driftBranch) {
   opLine("⟳ " + label + "…");
   const es = new EventSource("/api/op/" + opID + "/events");
-  state.op = { id: opID, es, kind, onDone: onDone || null };
+  state.op = { id: opID, es, kind, onDone: onDone || null, driftBranch: driftBranch || "" };
   $("pull-btn").disabled = true;
   $("push-btn").disabled = true;
   $("refresh-btn").disabled = true;
@@ -416,6 +455,12 @@ function handleOpEvent(ev) {
     else if (ev.changed) opLine(ev.summary || "left conflicts in the working tree — resolve them, then commit");
     else opLine("error: " + (ev.error || "operation failed"), true);
     if (kind === "commit-graph") fetchHealth(); // retires the banner group
+    // Post-op drift summary: only for the drift-eligible kinds driftArmFor
+    // armed (op.driftBranch), and only when something actually landed
+    // (ev.changed) — an aborted pull/rebase/merge has no "after" side to
+    // compare. Any other op result clears a stale panel from an earlier one.
+    if (op && ev.changed && op.driftBranch) checkDrift(op.driftBranch);
+    else hideDrift();
     if (ev.changed) refreshAfterOp();
     else fetchStatus().then(renderCommits); // a failed switch may still have moved HEAD/stash state
   }
