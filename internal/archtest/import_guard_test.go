@@ -137,3 +137,15 @@ func TestPreflightIsAStdlibLeaf(t *testing.T) {
 		}
 	}
 }
+
+// TestChangesetIsAStdlibLeaf pins internal/changeset's dependency budget: it
+// compares two base-relative change sets and must never grow a dependency on
+// git or any gg package so it stays trivially testable with plain values.
+func TestChangesetIsAStdlibLeaf(t *testing.T) {
+	t.Parallel()
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/changeset") {
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/changeset imports %s — it must stay stdlib only", imp)
+		}
+	}
+}
