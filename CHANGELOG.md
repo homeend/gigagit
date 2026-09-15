@@ -8,6 +8,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Preview links, steering into a preview, and `gg open`.** The `gg://`
+  grammar gains a merge-preview form spelled as git's three-dot pair —
+  `gg://<repo>@<target>...<source>`, plus the file, line and `#hunk` forms
+  inside it. Branch NAMES, never shas: they travel between machines, the
+  machine-local preview id does not. Every link-taking verb treats a preview
+  link exactly as `--preview` (`gg diff`, `gg note add|list|apply|clear`,
+  `gg session navigate`, `gg session highlight add`, `gg link resolve`);
+  `gg show` refuses one and points at `gg diff`, and `:old:` is refused at
+  parse time because a preview's old side is the merge base. Producers:
+  `gg link --preview P [<path>[:<line>]]`, the TUI's `L` / `.`-menu "Copy link"
+  on the Previews panel and inside a preview's file list and diff, and the
+  session snapshot's `cursor.link`. `gg session navigate <preview link>` steers
+  a running TUI or `gg web` page INTO the preview (opening a show-once preview
+  when none is saved) through a new `target.state = "preview"` wire value that
+  carries the pair, not a sha. And **`gg open <link>`** shows a link to the
+  user: it steers a live gg session in the link's checkout, or launches the TUI
+  there positioned on the link (`--at`, consumed once the first snapshot has
+  loaded). Skills: using-gg v74, reviewing-with-gg v7.
 - **Notes inside merge previews.** A preview (`Previews` tab, `gg preview`)
   is now a review surface: its diff rows carry review notes, gathered along
   the whole branch (merge-base → source tip) rather than read off the tip

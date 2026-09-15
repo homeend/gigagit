@@ -19,7 +19,7 @@ anchored lines are gone.
 5. gg note list --json                        # what has already been said
 6. gg note apply --stdin                      # leave several notes in one call
    (or gg note add … for a single remark)
-7. summarise your findings in the chat reply
+7. print `gg link --preview <P>` and hand that link back
 ```
 
 Inspect before you annotate. Read the whole change first, then comment on
@@ -30,8 +30,11 @@ merge preview onto its target (`gg preview add <source> <target>`), then
 annotate every change you made with `gg note add --preview <id|label> --file
 <path> --new-line <n> --summary "…" --rationale "…"`. The notes are stored on
 the source tip and travel with it; when you push further commits the preview
-keeps showing them, marking the ones whose lines moved `outdated`. Report the
-preview's name back to the user so they can open it in their gg.
+keeps showing them, marking the ones whose lines moved `outdated`. When you are
+done, print `gg link --preview <id|label>` and hand THAT link back to the user
+— they open it with `gg open <link>`, which steers their running gg straight
+into the preview. A bare preview name only works on your machine; the link
+works everywhere.
 
 ## Choosing the target
 

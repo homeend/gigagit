@@ -258,6 +258,8 @@ gg://<repo>/<path>[@<target>][:<line>]     # <target>: a sha, "staged", or absen
 gg://<repo>/<path>[@<target>]#<hunk>       # hunk numbers are `gg diff --hunks`'s
 gg://<repo>/<path>@<sha>:old:<n>           # the old side of that diff
 gg://<repo>@<sha>                          # a commit
+gg://<repo>@<target>...<source>            # a merge preview (branch names, never shas)
+gg://<repo>/<path>@<target>...<source>:<n> # a file / new-side line in it
 gg:///abs/checkout/file.go:12              # a repo with no remote
 ```
 
@@ -270,6 +272,9 @@ gg diff  gg://gigagit/a.go@abc1234      # every verb takes a link as its first p
 gg show  gg://gigagit@abc1234
 gg note add gg://gigagit/a.go:42 --summary "…"
 gg session navigate gg://gigagit/a.go:42
+
+gg link --preview login a.go:12         # a link to a place in a merge preview
+gg open  gg://gigagit/a.go@main...feat/login:12   # show it in the user's gg
 ```
 
 `<repo>` is the repository name of the repo's remote, resolved through the

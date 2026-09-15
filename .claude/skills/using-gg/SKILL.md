@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v72 -->
+<!-- gg:using-gg:v74 -->
 
 # Using gg (gigagit)
 
@@ -111,8 +111,23 @@ gg://<repo>/<path>[@<target>][:<line>]     <target> = a full/short sha, "staged"
 gg://<repo>/<path>[@<target>]#<hunk>       hunk numbers are `gg diff --hunks`'s
 gg://<repo>/<path>@<sha>:old:<n>           the old side of that diff
 gg://<repo>@<sha>                          a commit, no file
+gg://<repo>@<target>...<source>            a merge preview: the Previews tab entry
+gg://<repo>/<path>@<target>...<source>[:<line>]   a file (or new-side line) in that preview
+gg://<repo>/<path>@<target>...<source>#<hunk>     a hunk of that preview's patch
 gg:///abs/checkout/path/file.go:12         a repo with no remote: its absolute path
 ```
+
+A preview link spells the branch PAIR, never a sha: the names travel between
+machines, the machine-local preview id does not. Every verb that takes a link
+treats a preview link exactly as `--preview` — `gg diff`, `gg note
+add|list|apply|clear`, `gg session navigate`, `gg session highlight add`,
+`gg link resolve`. `gg show` refuses one (use `gg diff`), and the preview's old
+side is the merge base, so `:old:` is refused at parse time. Build one with
+`gg link --preview <id|label|<target>...<source>> [<path>[:<line>]]`.
+
+`gg open <link>` shows it to the user in their gg: it steers whatever gg
+session is live in the link's checkout, or starts the TUI there positioned on
+the link. Use it instead of launching `gg` yourself.
 
 `<repo>` is the repository name of the repo's remote (`gigagit`), resolved
 through gg's machine-local repository history — so a link made on one checkout
