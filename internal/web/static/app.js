@@ -40,7 +40,7 @@ import "./search.js";
 import "./remoteheads.js";
 import "./links.js";
 import { fetchPreviews } from "./previews.js";
-import { connectLive } from "./live.js";
+import { applyStartAt, connectLive } from "./live.js";
 
 // applyStoredLayout puts back the layout gg remembered for this machine:
 // folded sections, pane widths, the sidebar toggle, the graph mode. It runs
@@ -76,14 +76,23 @@ async function boot() {
   // status-driven and the pane has usually rendered by then. Only health
   // stays awaited: it is cheap and the [ui] show_graph default must land
   // before the first commits render.
-  fetchStatus().then(() => renderCommits()).catch(() => {});
-  fetchBranches().catch(() => {});
-  fetchPreviews().catch(() => {}); // its own fetch: previews.js cannot ride sidebar.js
-  refreshNoteCounts().catch(() => {}); // the ◆N badges, best-effort like the rest
+  const firstLoad = [
+    fetchStatus().then(() => renderCommits()),
+    fetchBranches(),
+    fetchPreviews(), // its own fetch: previews.js cannot ride sidebar.js
+    refreshNoteCounts(), // the ◆N badges, best-effort like the rest
+  ];
+  for (const p of firstLoad) p.catch(() => {});
   await fetchHealth(true);
   await loadCommits(false);
   focusPane();
   connectLive(); // after the first full load: pushes only name what to RE-fetch
+  // `gg open --web <link>`: land where the server was started. Only once
+  // EVERY first-load fetch has settled — a working-tree landing reads
+  // statusEntries, a preview landing its saved row — the web twin of the
+  // TUI's startAtReady gate. Nothing above waits on this.
+  await Promise.allSettled(firstLoad);
+  applyStartAt().catch(() => {});
 }
 
 boot().catch((e) => {

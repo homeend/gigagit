@@ -61,6 +61,11 @@ type Server struct {
 	steerURL      string
 	steerWorktree string // what `gg session status` prints for this session
 
+	// startAt (steer.go) is the ONE command `gg open --web` hands the first
+	// page to boot — the web twin of the TUI's --at; nil once handed out.
+	startAtMu sync.Mutex
+	startAt   *steerWire
+
 	// detectTools overrides the external-tools catalog probe (test seam);
 	// nil = exttool.Detect against the real machine.
 	detectTools func() []exttool.Detection

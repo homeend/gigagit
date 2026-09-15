@@ -24,7 +24,41 @@ import (
 func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
 		mux.HandleFunc("POST /api/session/steer", writeGuard(s.handleSteer))
+		mux.HandleFunc("GET /api/session/start-at", s.handleStartAt)
 	})
+}
+
+// startAtBody is GET /api/session/start-at's answer: the pending command, or
+// nothing. Always a JSON object — the page's getJSON decodes every answer.
+type startAtBody struct {
+	Steer *steerWire `json:"steer,omitempty"`
+}
+
+// setStartAt records the command `gg open --web` started this server with. It
+// goes through toSteerWire like a posted steer — the link was resolved by the
+// CLI, but the page must never be handed a value the allowlists would refuse
+// — so a bad command is a startup error, not a silent no-op in the browser.
+func (s *Server) setStartAt(c steer.Command) error {
+	w, err := toSteerWire(c)
+	if err != nil {
+		return err
+	}
+	s.startAtMu.Lock()
+	s.startAt = &w
+	s.startAtMu.Unlock()
+	return nil
+}
+
+// handleStartAt hands the start-at to the page ONCE. The first tab to finish
+// its full load lands on it; a reload or a second tab gets {} and stays where
+// it is (the TUI's --at fires once too). It needs no inbox: this is the
+// server's own command, not an agent's.
+func (s *Server) handleStartAt(w http.ResponseWriter, r *http.Request) {
+	s.startAtMu.Lock()
+	at := s.startAt
+	s.startAt = nil
+	s.startAtMu.Unlock()
+	writeJSON(w, startAtBody{Steer: at})
 }
 
 // steerPresenceTick is how often the page's presence mtime is refreshed.
