@@ -1376,7 +1376,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// strand srcLoading[srcPreviews]). It is armed HERE, inside the
 			// arm, because the loadNotesCmd return below is taken in exactly
 			// the case that matters: a preview diff is open.
-			if m.previewOpen != nil || m.activeLeftTab == panelPreviews {
+			// !startup for the same reason the branches arm has it: the app-start
+			// fan-out reads previews already.
+			if !msg.startup && (m.previewOpen != nil || m.activeLeftTab == panelPreviews) {
 				m, previewsChain = m.chainPreviewsRead()
 			}
 			// The badge counts just changed, so an open diff's own notes may

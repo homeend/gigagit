@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -260,6 +261,20 @@ func TestSteerHighlightRefusesTheOldSideOfAPreview(t *testing.T) {
 	if len(m2.attention) != 0 {
 		t.Fatalf("an old-side mark must be refused on a preview view, got %+v", m2.attention)
 	}
+
+	// The guard is scoped to THIS view's address, not to "a preview is on the
+	// layer stack": an old-side mark aimed at some other file/state is the
+	// business of the view that will paint it, and must still land.
+	other := cmdFor("ps-3", "old")
+	other.ID, other.File, other.Target = "ps-3", "b.txt", nil // b.txt, unstaged
+	m3, otherCmd := m.steerHighlight(other)
+	runSteerCmd(t, otherCmd)
+	if r, ok := steer.AwaitReply(dir, "ps-3", time.Second); !ok || !r.OK {
+		t.Fatalf("an old-side mark on ANOTHER file must not be refused, reply=%+v ok=%v", r, ok)
+	}
+	if len(m3.attention) != 1 {
+		t.Fatalf("the other file's old-side mark must be stored, got %+v", m3.attention)
+	}
 }
 
 // The Previews panel row carries the SAME ◆N badge every other note-bearing
@@ -367,8 +382,9 @@ func TestPreviewFileListRowsCarryTheBadge(t *testing.T) {
 	if !contains(out, "a.txt"+noteBadge(2)) {
 		t.Fatalf("the preview file row wants the ◆2 badge:\n%s", out)
 	}
-	if contains(out, "b.txt"+noteBadge(0)+"◆") {
-		t.Fatalf("a file with no preview notes carries no badge:\n%s", out)
+	// A file the preview counts at 0 carries NO badge: exactly one ◆ on screen.
+	if n := strings.Count(out, "◆"); n != 1 {
+		t.Fatalf("want exactly one badge (a.txt's), got %d:\n%s", n, out)
 	}
 	// The badge is DISPLAY only: the / filter still matches the bare row text,
 	// so typing a digit never selects a file by its note count.
