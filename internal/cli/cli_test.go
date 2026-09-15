@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/domain"
 )
 
 func runCLI(t *testing.T, workdir string, args ...string) (int, string, string) {
@@ -16,6 +18,14 @@ func runCLI(t *testing.T, workdir string, args ...string) (int, string, string) 
 	var out, errb bytes.Buffer
 	code := Run(workdir, args, strings.NewReader(""), &out, &errb, "")
 	return code, out.String(), errb.String()
+}
+
+// openCLIService opens dir with the setup Run gives the cwd's service.
+func openCLIService(t *testing.T, dir string) *domain.Service {
+	t.Helper()
+	svc := domain.Open(dir)
+	setupCLIService(svc)
+	return svc
 }
 
 func TestStatusCommand(t *testing.T) {

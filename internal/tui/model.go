@@ -58,6 +58,9 @@ type Model struct {
 	pendingWorktreeMoveOld string              // old path of a just-moved worktree; MRU registry cleanup in opFinishedMsg
 	pendingGotoTip         string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
 	pendingSteer           *pendingSteer       // parked navigate (steer_nav.go); drained by the load it waits on
+	startAt                model.Link          // --at: where to land once the preconditions below have landed
+	startAtPending         bool                // consumed exactly once, by startAtReady's last precondition
+	startAtPreviewsSeen    bool                // the srcPreviews read has landed at least once since startup
 	pendingCheckout        pendingCheckout     // arms the diverged-checkout recovery modal; zero remoteRef = none
 	pendingScopeClear      bool                // armed by startOp for checkout-family ops; a Changed success drops the solo/scope (the reRoot precedent, but for a same-worktree switch)
 	pendingRemoteTagAdds   []string            // tags to optimistically add to remoteTagNames on PushTags success
@@ -371,11 +374,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// would silently skip the capture instead of failing loud — lastError
 	// would quietly go stale and [E] would show an older failure, with no
 	// test catching it.
-	if next, ok := nm.(Model); ok && next.statusMsg != before && statusNeedsFull(next.statusMsg, next.width) {
-		next.lastError = next.statusMsg
-		return next, cmd
+	next, ok := nm.(Model)
+	if !ok {
+		return nm, cmd
 	}
-	return nm, cmd
+	// --at fires the moment EVERY startAtReady precondition has landed —
+	// checked centrally HERE, after every dispatch, rather than at each
+	// precondition's own handler: applySteer refuses any navigate while
+	// m.loading is true (steerRefusal's opsIdle gate), and the startup
+	// bootstrap fan-out keeps it true until every source (branches, notes,
+	// identity, …) has landed, not just the snapshot/size/previews trio. A
+	// per-handler check would fire while a sibling source was still loading,
+	// landing --at in an unretried "an operation is running" refusal. A
+	// central post-dispatch check re-evaluates on every message, so whichever
+	// one finally clears m.loading fires it.
+	if next.startAtReady() {
+		var atCmd tea.Cmd
+		next, atCmd = next.consumeStartAt()
+		cmd = tea.Batch(cmd, atCmd)
+	}
+	if next.statusMsg != before && statusNeedsFull(next.statusMsg, next.width) {
+		next.lastError = next.statusMsg
+	}
+	return next, cmd
 }
 
 // dispatch implements tea.Model's Update logic (see the Update wrapper above
@@ -417,6 +438,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				v.scroll(0, m.diffBodyRows())
 			}
 		}
+		return m, nil
 	case diffMsg:
 		dv := m.diffLayer()
 		if dv == nil || msg.tag != m.diffTag {
@@ -1210,6 +1232,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// loading, so those guards keep working unchanged. (Phase B: auto reads set
 		// no srcLoading, so they correctly never block actions.)
 		m.loading = m.anySourceLoading()
+		if msg.source == srcPreviews {
+			// Independent of success or failure: a --at preview link's
+			// startAtReady precondition is "the read has landed", not "it
+			// succeeded" — a failed read still lets steerNavigatePreview fall
+			// back to a show-once open against an empty m.previews, rather than
+			// waiting forever for a read that keeps failing.
+			m.startAtPreviewsSeen = true
+		}
 		if msg.err != nil {
 			// Best-effort sources must not blank the UI on a transient error;
 			// surface it on the status line only for manual reads. Silent
@@ -3167,6 +3197,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.pushLayer(p)
 		return m, p.lexCmd(m.cfg.UI.SyntaxOn())
 
+	case startAtMsg:
+		// applySteer, not steerNavigate: the startup landing must obey the SAME
+		// refusals a steered one does — maybeResumePrompt can raise a decision
+		// modal in this very tick, and only applySteer runs steerRefusal and
+		// steerEnumRefusal. A refusal reaches the status bar through the
+		// ID == "" arm of answerSteer.
+		return m.applySteer(msg.cmd)
+	case startAtFailMsg:
+		m.statusMsg = i18n.T("error: %s", msg.reason)
+		return m, nil
 	case clipboardCopiedMsg:
 		if msg.err != nil {
 			m.statusMsg = i18n.T("copy failed: %s", msg.err.Error())

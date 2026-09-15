@@ -220,9 +220,25 @@ func steerFail(c steer.Command, reason string) steer.Reply {
 	return steer.Reply{ID: c.ID, OK: false, Error: reason}
 }
 
+// startAtFailMsg carries a --at startup navigate's refusal back to the UI
+// thread. The startup command posts no reply file (nobody is waiting for
+// one), so without this the user would watch nothing happen and be told
+// nothing.
+type startAtFailMsg struct{ reason string }
+
 // answerSteer writes a reply off-thread. A command posted with wait:false gets
 // none — nothing would ever read it, and the file would only have to be swept.
 func (m Model) answerSteer(c steer.Command, r steer.Reply) tea.Cmd {
+	if c.ID == "" {
+		// Only the local `--at` startup navigate has no id: steer.Post fills one
+		// in, and Drain discards any command that arrived without one. Its
+		// refusals have no CLI to print them, so they go to the status bar.
+		if !r.OK {
+			reason := r.Error
+			return func() tea.Msg { return startAtFailMsg{reason: reason} }
+		}
+		return nil
+	}
 	if !c.Wait || m.steerDir == "" {
 		return nil
 	}

@@ -490,3 +490,107 @@ func (m Model) drainPendingPreview() (Model, tea.Cmd) {
 		"opened "+c.File+" in preview "+pair,
 		c.File+" is not in preview "+pair)
 }
+
+// steerCommandForLink turns a FULLY RESOLVED link into the navigate command
+// the CLI would have posted for it — the `--at` startup path's only step.
+//
+// It is pure: no git, no service. That is why a #<hunk> link is a REFUSAL
+// rather than something silently dropped — `gg open` lowers a hunk to a line
+// (through PreviewHunkAnchor / HunkRange, on the target checkout) before it
+// ever reaches the launcher, so a hunk arriving here means the caller skipped
+// that step.
+func steerCommandForLink(l model.Link) (steer.Command, bool) {
+	if l.Hunk > 0 {
+		return steer.Command{}, false
+	}
+	c := steer.Command{Cmd: "navigate"}
+	if p := l.Target.Preview; p != nil {
+		c.Target = &steer.Target{State: "preview", Source: p.Source, Target: p.Target}
+		if l.Path == "" {
+			return c, true
+		}
+		if l.Line < 1 {
+			return steer.Command{}, false
+		}
+		c.File = l.Path
+		c.Line = &steer.Line{Side: "new", No: l.Line} // a preview has no old side
+		return c, true
+	}
+	if l.Path == "" {
+		// A commit reveal needs the FULL sha: the consumer compares hashes.
+		if l.Target.State != model.StateCommitted || len(l.Target.Commit) < 40 {
+			return steer.Command{}, false
+		}
+		c.Commit = l.Target.Commit
+		return c, true
+	}
+	t := &steer.Target{State: "unstaged"}
+	switch l.Target.State {
+	case model.StateStaged:
+		t.State = "staged"
+	case model.StateCommitted:
+		if len(l.Target.Commit) < 40 {
+			return steer.Command{}, false
+		}
+		t.State, t.Commit = "commit", l.Target.Commit
+	}
+	if l.Line < 1 {
+		return steer.Command{}, false
+	}
+	side := "new"
+	if l.Side == model.NoteSideOld {
+		side = "old"
+	}
+	c.File, c.Target = l.Path, t
+	c.Line = &steer.Line{Side: side, No: l.Line}
+	return c, true
+}
+
+// startAtMsg feeds the --at startup link into the steering pipeline on the
+// Update goroutine, once every startAtReady precondition has landed.
+type startAtMsg struct{ cmd steer.Command }
+
+// startAtReady reports whether every precondition for consuming --at has
+// landed: SOME data has arrived (m.ready — guards the window before the
+// startup fan-out has even begun; set by both the modern per-source
+// dataAvailableMsg arrival and the legacy dataLoadedMsg), a window size
+// (m.width — the diff-open path and steerNavigatePreview's width guard both
+// need it), no reload/operation still in flight (m.loading —
+// applySteer's steerRefusal refuses ANY navigate while it is true, and the
+// real startup path (bootstrapCmd → configReadyMsg → reloadAllCmd) holds it
+// true until every one of the ~10 fanned-out sources has landed, not merely
+// the first), plus — for a PREVIEW link only — the previews read:
+// steerNavigatePreview resolves saved rows from m.previews, which a
+// dedicated (possibly LATER, out-of-band) srcPreviews read fills in. A
+// non-preview link never needs that read, so it is not awaited on its
+// own — though in practice, at real startup, previews rides the same
+// fan-out as everything else m.loading already waits for.
+//
+// Checked centrally in Update, after every dispatch (not at each
+// precondition's own handler): m.loading flips false only on whichever
+// source happens to land LAST, so a per-handler check would fire while a
+// sibling source was still loading and land in an unretried refusal.
+func (m Model) startAtReady() bool {
+	if !m.startAtPending || !m.ready || m.loading || m.width == 0 {
+		return false
+	}
+	if m.startAt.Target.Preview != nil {
+		return m.startAtPreviewsSeen
+	}
+	return true
+}
+
+// consumeStartAt turns the --at link into the same navigate steerNavigate
+// would run for a steered command — startAtMsg carries it back through
+// Update so it takes the EXACT path a CLI-posted navigate does — or, if the
+// link names no place gg can open, a status message. Either way
+// startAtPending is cleared, so this fires exactly once.
+func (m Model) consumeStartAt() (Model, tea.Cmd) {
+	m.startAtPending = false
+	c, ok := steerCommandForLink(m.startAt)
+	if !ok {
+		m.statusMsg = i18n.T("that gg link names no place gg can open")
+		return m, nil
+	}
+	return m, func() tea.Msg { return startAtMsg{cmd: c} }
+}
