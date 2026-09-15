@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`gg web` copies merge-preview links.** Inside an open merge preview the
+  browser's right-click menus now offer the preview link forms the TUI and
+  `gg link --preview` already produce: a diff line copies
+  `gg://<repo>/<path>@<target>...<source>:<line>` (new side only — a
+  deletion row copies the file form; in the wide side-by-side layout a
+  row's left cell copies its right half's new-side number, in the narrow
+  layout every old-side row is a deletion), a file row copies the file form, and a
+  Previews row copies the pair's own link `gg://<repo>@<target>...<source>`.
+  The plain two-commit compare stays without a link (it has no address in
+  the grammar). `links.js`'s producer is guarded against `model.Link.String()`
+  under node, including the pair rule and `LinkRefOK`'s name refusals.
 - **Paste a `gg://` link into the TUI.** The `#` prompt ("Go to commit or
   gg:// link", also the palette's **Open gg:// link…**) now takes a pasted
   link — commit, file:line, `#hunk` or merge-preview form — and lands on it

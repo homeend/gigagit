@@ -872,6 +872,21 @@ is the single producer behind the key, the menu row and the snapshot's
 gates on `notesArmed()`, which is exactly where the rows carry
 `data-side`/`data-no`.
 
+**Web preview links lift `ctx.compare` for ONE case.** `links.js`'s `linkFor`
+refuses any compare ctx unless it also carries `ctx.preview = {source,
+target}` — an open merge preview is the one compare with an address (git's
+three-dot pair). `state.diffCtx` already carries `preview` (files.js's
+`openFile`), so the diff-line row needs no new ctx; the compare file-row
+menu and the Previews group contributor (`registerRows("preview", …)`) pass
+the pair explicitly. A preview has no old side: `linkFor` drops an old-side
+line to the file form, and the diff-line handler first swaps a row's LEFT
+cell for its `data-rno` (the wide layout only — the narrow layout carries
+no `data-lno`/`data-rno`, so there every old-side row is a deletion; user
+ruling 2026-09-16). Branch names go through `linkRefOK`, the JS twin of
+`model.LinkRefOK`; `linksjs_test.go` pins the rules against
+`model.Link.String()` under node, applying the old-side drop on the Go side
+by hand (String() would force the side and still render `:N`).
+
 **`{{cwd}}` in an e2e `[[run]] cmd`** expands to that run's working directory
 in slash form. It exists because a local-form link is an absolute path the
 sandbox only has at run time; it is the harness's ONLY substitution.

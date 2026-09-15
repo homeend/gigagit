@@ -1511,7 +1511,16 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     const row = e.target.closest("tr[data-no]");
     if (row && notesArmed()) {
       const td = e.target.closest("td");
-      const { side, no } = rowSideAndLine(row, td);
+      let { side, no } = rowSideAndLine(row, td);
+      // A preview has no old side. A context row's LEFT cell still names a
+      // line that exists on the new side (data-rno), so that number travels;
+      // a deletion row has none, and linkFor degrades the link to the file
+      // form (the user's ruling, 2026-09-16 — the TUI's cursor on a deletion
+      // row copies the same file link).
+      if (side === "old" && state.diffCtx.preview) {
+        const rn = Number(row.dataset.rno || 0);
+        if (rn) { side = "new"; no = rn; }
+      }
       const link = linkFor(state.repo, state.worktree, state.diffCtx, side, no);
       if (link) rows.push({ label: "copy gg link to this line", act: () => copyText(link, "gg link") });
     }
@@ -2151,6 +2160,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
     state.fileCursor = Number(li.dataset.i);
     renderFiles();
     const rev = state.filesMode === "compare" ? state.compare.bHash : f.sha || state.fileSha;
+    const po = openPreviewCtx();
     showCtxMenu(
       [
         { label: "file history", act: () => openFileHistory(f.path, rev) },
@@ -2163,7 +2173,16 @@ $("files-list").addEventListener("contextmenu", (e) => {
         // A compare row's rev is bHash, but the diff on screen is aHash →
         // bHash, not bHash^ → bHash — a commit-state link would misdescribe
         // the place, so the file contributor is told to refuse outright.
-        ...extraRows("file", { path: f.path, sha: rev, section: "commit", compare: state.filesMode === "compare" }),
+        // The exception is an open merge preview: its rows are files IN THE
+        // PREVIEW, and the pair (source, target) is their address — the same
+        // file form the TUI's preview file tree copies.
+        ...extraRows("file", {
+          path: f.path,
+          sha: rev,
+          section: "commit",
+          compare: state.filesMode === "compare",
+          preview: po ? { source: po.source, target: po.target } : null,
+        }),
       ],
       e.clientX,
       e.clientY
