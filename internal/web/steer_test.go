@@ -253,3 +253,51 @@ func TestLiveJSDropsMarksOnlyForAStatusReload(t *testing.T) {
 		t.Error("live.js still clears the attention marks unconditionally in steerReload")
 	}
 }
+
+func TestSteerWireAcceptsThePreviewTarget(t *testing.T) {
+	t.Parallel()
+	w, err := toSteerWire(steer.Command{
+		Cmd:    "navigate",
+		File:   "a.txt",
+		Target: &steer.Target{State: "preview", Source: "feat/x", Target: "main"},
+		Line:   &steer.Line{Side: "new", No: 4},
+	})
+	if err != nil {
+		t.Fatalf("toSteerWire: %v", err)
+	}
+	if w.State != "preview" || w.Source != "feat/x" || w.Target != "main" {
+		t.Errorf("wire = {state:%q source:%q target:%q}, want the preview triple", w.State, w.Source, w.Target)
+	}
+	if w.Commit != "" {
+		t.Errorf("wire.commit = %q, want empty — the consumer resolves the tip itself", w.Commit)
+	}
+	if w.Side != "new" || w.Line != 4 {
+		t.Errorf("wire line = %s:%d", w.Side, w.Line)
+	}
+}
+
+// A preview navigate with NO file reveals the Previews entry; the "navigate
+// needs a file, a commit or a step" rule must not reject it.
+func TestSteerWireAcceptsAPreviewRevealWithNoFile(t *testing.T) {
+	t.Parallel()
+	if _, err := toSteerWire(steer.Command{
+		Cmd:    "navigate",
+		Target: &steer.Target{State: "preview", Source: "feat/x", Target: "main"},
+	}); err != nil {
+		t.Fatalf("toSteerWire: %v", err)
+	}
+}
+
+func TestSteerWireRefusesABadPreviewTarget(t *testing.T) {
+	t.Parallel()
+	for _, tg := range []*steer.Target{
+		{State: "preview", Source: "feat/x"},                          // no target half
+		{State: "preview", Target: "main"},                            // no source half
+		{State: "preview", Source: "--upload-pack=x", Target: "main"}, // argv injection
+		{State: "preview", Source: "feat/x", Target: "--evil"},
+	} {
+		if _, err := toSteerWire(steer.Command{Cmd: "navigate", File: "a.txt", Target: tg}); err == nil {
+			t.Errorf("toSteerWire(%+v) = nil error, want a refusal", *tg)
+		}
+	}
+}
