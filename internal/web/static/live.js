@@ -11,7 +11,7 @@ import { attnKey, runOnce, state } from "./core.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { fetchNotes, markDiffRow, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, setLayout, stepNote } from "./files.js";
 import { fetchBranches } from "./sidebar.js";
-import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
+import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved } from "./previews.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { loadRepo } from "./ops.js";
@@ -248,11 +248,18 @@ async function steerNavigate(s) {
     stepNote(s.step === "next_note" ? 1 : -1);
     return;
   }
-  if (!s.file) {
+  if (s.state === "preview") {
+    // The pair, never a sha: the tip is resolved here, so a tip that moved
+    // between post and apply is honoured (the TUI consumer does the same).
+    await openPreviewForPair(s.source, s.target);
+    if (!s.file) return; // a file-less preview navigate only reveals the stage
+    const i = state.files.findIndex((f) => f.path === s.file);
+    if (i < 0) return;
+    await openFile(i);
+  } else if (!s.file) {
     if (s.commit) await openCommitByHash(s.commit, s.commit.slice(0, 8));
     return;
-  }
-  if (s.state === "commit") {
+  } else if (s.state === "commit") {
     await openCommitByHash(s.commit, s.commit.slice(0, 8));
     const i = state.files.findIndex((f) => f.path === s.file);
     if (i < 0) return;

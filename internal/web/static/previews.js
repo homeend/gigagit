@@ -205,6 +205,21 @@ export async function openPreviewEntry(e, moved) {
 }
 
 
+// openPreviewForPair opens the preview a steering command named. A saved row
+// for the pair takes the record path (so the page shows the label and the row
+// stays selected); an unsaved pair opens transiently, exactly as the sidebar's
+// "show once" does. Nothing here is saved — a steer must not write to the
+// user's preview list.
+export async function openPreviewForPair(source, target) {
+  const e = (state.previews || []).find((p) => p.source === source && p.target === target);
+  if (e) {
+    await openPreviewEntry(e, "");
+    return;
+  }
+  await openOnce(source, target, "");
+}
+
+
 // openOnce is the transient preview: no record, resolved by NAME every time.
 async function openOnce(source, target, moved) {
   try {
