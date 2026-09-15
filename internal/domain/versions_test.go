@@ -8,6 +8,20 @@ import (
 	"github.com/homeend/gigagit/internal/git"
 )
 
+// emptyTreeSHA is git's well-known empty-tree object, always present in any
+// repo without a write. stampVersionsFormat points the format-2 marker ref at
+// it directly — the fixtures below fabricate version refs with raw
+// update-ref (or a raw WriteVersionSnapshot+UpdateRef, bypassing
+// snapshotBranchTipNamed entirely), so nothing ever calls the real writer
+// that stamps the marker. Without it, BranchVersions/AllVersionBranches see
+// an unmarked (format-1) store and the versions feature gates the read.
+const emptyTreeSHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+func stampVersionsFormat(t *testing.T, dir string) {
+	t.Helper()
+	gitRunDir(t, dir, "", "update-ref", git.MetaRef(StoreVersions, VersionsFormat), emptyTreeSHA)
+}
+
 // TestBranchVersionsListsNewestFirstAndFiltersBranch fabricates version refs
 // directly (raw update-ref) for "main" and "feat/x", then asserts
 // BranchVersions returns each branch's own rows, newest first, with Op parsed
@@ -34,6 +48,7 @@ func TestBranchVersionsListsNewestFirstAndFiltersBranch(t *testing.T) {
 	gitRunDir(t, dir, "", "update-ref", refMain1, mainSha)
 	gitRunDir(t, dir, "", "update-ref", refMain2, mainSha)
 	gitRunDir(t, dir, "", "update-ref", refFeat, featSha)
+	stampVersionsFormat(t, dir)
 
 	svc := svcAt(dir)
 	ctx := context.Background()
@@ -96,6 +111,7 @@ func TestAllVersionBranchesMarksDeleted(t *testing.T) {
 
 	gitRunDir(t, dir, "", "update-ref", refMain, mainSha)
 	gitRunDir(t, dir, "", "update-ref", refGone, mainSha)
+	stampVersionsFormat(t, dir)
 
 	svc := svcAt(dir)
 	rows, err := svc.AllVersionBranches(context.Background())
@@ -140,6 +156,7 @@ func TestBranchVersionsSameUnixTieBreaksByRefDescending(t *testing.T) {
 
 	gitRunDir(t, dir, "", "update-ref", refMerge, mainSha)
 	gitRunDir(t, dir, "", "update-ref", refRestore, mainSha)
+	stampVersionsFormat(t, dir)
 
 	svc := svcAt(dir)
 	ctx := context.Background()
@@ -177,6 +194,7 @@ func TestAllVersionBranchesSameUnixTieBreaksByBranchAscending(t *testing.T) {
 
 	gitRunDir(t, dir, "", "update-ref", refAlpha, mainSha)
 	gitRunDir(t, dir, "", "update-ref", refZulu, mainSha)
+	stampVersionsFormat(t, dir)
 
 	svc := svcAt(dir)
 	ctx := context.Background()
@@ -274,6 +292,7 @@ func TestBranchVersionsUnwrapsTheSnapshotCommit(t *testing.T) {
 	if err := svc.Repo().UpdateRef(ctx, git.VersionRef("main", "rebase", 1700000000), syn); err != nil {
 		t.Fatalf("UpdateRef: %v", err)
 	}
+	stampVersionsFormat(t, dir)
 
 	vs, err := svc.BranchVersions(ctx, "main")
 	if err != nil {
