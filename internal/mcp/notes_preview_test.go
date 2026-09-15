@@ -237,6 +237,27 @@ func TestPreviewSetNamesTheStateWord(t *testing.T) {
 	}
 }
 
+// hunk and new_line are MUTUALLY EXCLUSIVE under preview too: the ordinary
+// arm (noteAnchor) and the CLI both refuse two anchors, so the preview arm
+// must not silently prefer one of them and store a note at a line the caller
+// did not mean. Nothing may be stored on the way out.
+func TestNoteAddPreviewRefusesTwoAnchors(t *testing.T) {
+	e := newTestEnv(t)
+	seedPreviewBranch(t, e)
+
+	msg := e.callErr(t, "gg_note_add", map[string]any{
+		"preview": "main...feat", "file": "a.txt", "new_line": 2, "hunk": 1, "summary": "ambiguous",
+	})
+	if !strings.Contains(msg, "exactly one of hunk or new_line") {
+		t.Fatalf("msg = %q, want the exactly-one usage error", msg)
+	}
+
+	out := e.call(t, "gg_notes_list", map[string]any{"preview": "main...feat"})
+	if notes, _ := out["notes"].([]any); len(notes) != 0 {
+		t.Fatalf("a refused add must store nothing, got %v", out["notes"])
+	}
+}
+
 // preview combined with rev (or cached) is a caller error, never a silent
 // precedence rule — checked once here across gg_note_add; gg_notes_list and
 // gg_notes_apply share the same previewSet helper.

@@ -179,6 +179,19 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 			if in.OldLine != 0 {
 				return nil, out, fmt.Errorf("notes in a preview anchor on the new side (drop old_line)")
 			}
+			// Exactly one anchor, counted BEFORE anything resolves: the
+			// ordinary arm (noteAnchor) and the CLI both refuse two, so the
+			// preview arm must not silently prefer new_line over hunk and
+			// store a note at a line the caller did not mean.
+			anchors := 0
+			for _, v := range []int{in.Hunk, in.NewLine} {
+				if v != 0 {
+					anchors++
+				}
+			}
+			if anchors != 1 {
+				return nil, out, fmt.Errorf("pass exactly one of hunk or new_line")
+			}
 			// The address is an ORDINARY committed one on the tip, so it is
 			// built by NoteTarget like every other target: that is what
 			// normalises the path ("./a.txt", a Windows "sub\a.txt") and
@@ -233,8 +246,8 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 			"The whole batch is validated first: one bad item stores nothing. Unanchored top-level/file " +
 			"summaries come back as contexts. " +
 			`preview = "<target>...<source>" (or a saved preview's id/label) addresses a MERGE PREVIEW ` +
-			"instead: the note is stored on the source tip, new side only; an old-side item is refused, " +
-			"not stored. MUTATES gg's note store.",
+			"instead: the note is stored on the source tip, new side only; an old-side item is skipped " +
+			"(reported in `skipped`/`warning`), not stored. MUTATES gg's note store.",
 		Annotations:  mutatingAnnotations(),
 		OutputSchema: wireNoteOutputSchema,
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in notesApplyIn) (*sdk.CallToolResult, notesOut, error) {
