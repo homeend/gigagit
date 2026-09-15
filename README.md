@@ -276,12 +276,15 @@ gg session navigate gg://gigagit/a.go:42
 
 gg link --preview login a.go:12         # a link to a place in a merge preview
 gg open  gg://gigagit/a.go@main...feat/login:12   # show it in the user's gg
+gg open  gg://gigagit                             # just open gg in that checkout
 ```
 
 `<repo>` is the repository name of the repo's remote, resolved through the
 repository history behind the `R` switcher — so a link made on one machine
-finds the matching checkout here. In the TUI, `L` in the diff view copies the
-cursor line's link and the `.` menu's **Copy link** works in the Files,
+finds the matching checkout here. In the TUI, `#` (or the palette's
+**Open gg:// link…**) takes a pasted link and lands on it — a link into
+another checkout asks first, then switches the repo and lands there; `L` in
+the diff view copies the cursor line's link and the `.` menu's **Copy link** works in the Files,
 Staged and Commits panels and a commit's files view; in `gg web`, right-click
 a diff line, a file row or a commit row. Quote a link that carries `#<hunk>` —
 an unquoted `#` starts a shell comment.

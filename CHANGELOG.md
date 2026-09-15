@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Paste a `gg://` link into the TUI.** The `#` prompt ("Go to commit or
+  gg:// link", also the palette's **Open gg:// link…**) now takes a pasted
+  link — commit, file:line, `#hunk` or merge-preview form — and lands on it
+  through the same resolve + navigate pipeline `gg open` uses, without
+  leaving the TUI. A link into ANOTHER checkout asks first (`[enter] switch
+  there  [esc] stay`), then switches the repo and lands once it has loaded;
+  a bare repository link switches (or notices that it names this checkout).
+  `gg open <bare repository link>` now opens the TUI in that checkout instead
+  of exiting 2 (`gg session navigate` still refuses it). The link→navigate
+  builder moved to `internal/linknav`, shared by the CLI and the TUI. Skill
+  using-gg v75.
 - **Preview links, steering into a preview, and `gg open`.** The `gg://`
   grammar gains a merge-preview form spelled as git's three-dot pair —
   `gg://<repo>@<target>...<source>`, plus the file, line and `#hunk` forms

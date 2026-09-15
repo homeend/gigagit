@@ -897,4 +897,12 @@ preview's file list apart from an unrelated commit view that happens to share
 it, so the open `(source, target)` PAIR is what actually identifies a preview,
 and that is the gate). `gg open` reaches the TUI through the
 `cli.LaunchTUI` seam that `cmd/gg`'s `launchTUI` installs, keeping
-`internal/cli` free of an `internal/tui` import.
+`internal/cli` free of an `internal/tui` import. The link→navigate builder
+itself (`Command`, `HunkLine`, `AtLink`, `RepoOnly`, `Opts`/`Resolve`) lives in
+`internal/linknav`, shared by the CLI wrappers and the TUI's `#` prompt
+(`goto_link.go`): a pasted link is resolved off-thread, a same-checkout place
+goes through `applySteer` id-less (refusals → status bar, notice "opened"),
+another checkout turns the prompt into a confirm whose enter calls `reRoot`
+and arms `startAt`/`startAtPending` (resetting `startAtPreviewsSeen`) so the
+landing rides the `--at` gate; a bare repository link only switches (or
+notices "this checkout"), and `gg open <bare link>` launches the TUI there.
