@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **A background fast-forward pull now costs one fetch, not two.** `gg pull`
+  on a non-checked-out branch used to run a plain `git fetch <remote>` purely
+  so the pre-op version snapshot could read a fresh `refs/remotes/<remote>/<branch>`
+  as its "other" endpoint, and then `FastForwardRef` — itself a
+  `git fetch <remote> <branch>:<branch>` — to land the update. Two network
+  round-trips per branch, which on a ~100GB monorepo with background
+  auto-pull is the expensive half of the operation. The order now inverts:
+  the pre-op tip is captured locally (no network), the single fetch lands the
+  fast-forward, and the snapshot is written afterwards against the moved
+  branch — whose tip IS the upstream tip it landed on, so the remote-tracking
+  ref was never needed. A new test pins the fetch count at exactly one.
+
 - **Branch versions open as a frozen PR-style preview, and gg now tells you
   when a rebase/merge/pull rewrote what a branch actually contributes.** A
   version snapshot is a synthetic `commit-tree` object — its tree is the

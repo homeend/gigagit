@@ -69,6 +69,25 @@ func snapshotBranchTipNamed(ctx context.Context, deps OpDeps, branch, opToken, o
 	if err != nil || sha == "" {
 		return // unborn or unknown branch: nothing to record
 	}
+	snapshotBranchTipAt(ctx, deps, branch, opToken, sha, ours, other, source, target)
+}
+
+// snapshotBranchTipAt is snapshotBranchTipNamed with the snapshotted tip
+// supplied by the caller instead of re-resolved from refs/heads/<branch>. It
+// exists for the one path that can only record AFTER the branch has already
+// moved: the background fast-forward, where the single `git fetch
+// <remote> <branch>:<branch>` both lands the update and reveals what it
+// landed on. Re-resolving there would freeze the POST-op tip and the record
+// would describe the result rather than the state it replaced.
+//
+// An empty tip is not "resolve it for me" — it is a caller that could not
+// determine the pre-op tip, and recording the post-op one in its place is
+// exactly the corruption this parameter exists to prevent. Bail instead.
+func snapshotBranchTipAt(ctx context.Context, deps OpDeps, branch, opToken, tip, ours, other, source, target string) {
+	if !deps.Versions.Enabled || branch == "" || tip == "" {
+		return
+	}
+	sha := tip
 	ts := snapshotNow().Unix()
 	ref := git.VersionRef(branch, opToken, ts)
 	// Same-second, same-op collision: bump the timestamp until free.

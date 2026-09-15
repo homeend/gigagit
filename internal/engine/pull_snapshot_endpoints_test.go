@@ -5,7 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/gitexec"
 )
 
 // rev is revAt without the trailing newline, for comparing against the shas
@@ -120,10 +123,12 @@ func TestSmartPullDivergedRebaseRecordsForkPointBase(t *testing.T) {
 }
 
 // TestSmartPullBackgroundFastForwardRecordsPostFetchOther is the third armed
-// pull path: PullInBackground's FastForwardRef, which is a `git fetch
-// <remote> <branch>:<branch>` with an explicit refspec and so cannot be
-// relied on to refresh refs/remotes/<remote>/<branch>. Snapshotting before an
-// explicit fetch would freeze a stale Other.
+// pull path: PullInBackground's FastForwardRef. The record is written AFTER
+// the branch has moved, so this pins both halves of that inversion — Ours and
+// the snapshotted tip are the state the fast-forward replaced, and Other is
+// the tip it landed on, read from the moved branch itself rather than from
+// refs/remotes/<remote>/<branch>, which an explicit refspec updates only
+// opportunistically.
 func TestSmartPullBackgroundFastForwardRecordsPostFetchOther(t *testing.T) {
 	t.Parallel()
 	clone, repo := cloneOnMainBehindOrigin(t)
@@ -207,5 +212,84 @@ func TestSnapshotResolvesOtherSoARenamedRefCannotMoveIt(t *testing.T) {
 	}
 	if bv.Target != "main" {
 		t.Errorf("Target = %q, want the name main — only Other is resolved", bv.Target)
+	}
+}
+
+// countingRunner delegates to a real Runner while tallying how many git
+// invocations were fetches. The pull fixtures drive real git, so the only way
+// to count round-trips is to watch the argv going past.
+type countingRunner struct {
+	gitexec.Runner
+	mu      sync.Mutex
+	fetches int
+}
+
+func (c *countingRunner) count(argv []string) {
+	for _, a := range argv {
+		if a == "fetch" {
+			c.mu.Lock()
+			c.fetches++
+			c.mu.Unlock()
+			return
+		}
+		// Only the subcommand slot counts; a later "fetch" is a ref name.
+		if !strings.HasPrefix(a, "-") {
+			return
+		}
+	}
+}
+
+func (c *countingRunner) Run(ctx context.Context, name string, argv []string) (gitexec.Result, error) {
+	c.count(argv)
+	return c.Runner.Run(ctx, name, argv)
+}
+
+func (c *countingRunner) RunEnv(ctx context.Context, name string, argv, env []string) (gitexec.Result, error) {
+	c.count(argv)
+	return c.Runner.RunEnv(ctx, name, argv, env)
+}
+
+func (c *countingRunner) Stream(ctx context.Context, name string, argv []string, onLine func(string)) (gitexec.Result, error) {
+	c.count(argv)
+	return c.Runner.Stream(ctx, name, argv, onLine)
+}
+
+func (c *countingRunner) total() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.fetches
+}
+
+// TestSmartPullBackgroundFastForwardFetchesOnce pins the round-trip budget of
+// the background fast-forward. FastForwardRef IS a fetch, so the plain fetch
+// that used to precede it — added only to refresh the remote-tracking ref the
+// snapshot read as Other — doubled the network cost of every background pull.
+// On the repos gg targets that is the expensive half of the operation, so the
+// count is a guarded invariant, not an incidental property.
+func TestSmartPullBackgroundFastForwardFetchesOnce(t *testing.T) {
+	t.Parallel()
+	clone, repo := cloneOnMainBehindOrigin(t)
+	root := filepath.Dir(clone)
+	seed := filepath.Join(root, "seed")
+
+	gitAt(t, seed, "checkout", "-b", "dev")
+	gitAt(t, seed, "push", "-u", "origin", "dev")
+	gitAt(t, clone, "fetch", "origin")
+	gitAt(t, clone, "branch", "dev", "origin/dev")
+
+	os.WriteFile(filepath.Join(seed, "d.txt"), []byte("d\n"), 0o644)
+	gitAt(t, seed, "add", ".")
+	gitAt(t, seed, "commit", "-m", "dev work")
+	gitAt(t, seed, "push", "origin", "dev")
+
+	counter := &countingRunner{Runner: repo.Runner}
+	repo.Runner = counter
+
+	if _, err := (SmartPull{Branch: "dev", Intent: PullInBackground}).Run(context.Background(),
+		pullDeps(repo, MapDecider{})); err != nil {
+		t.Fatalf("background pull: %v", err)
+	}
+	if got := counter.total(); got != 1 {
+		t.Errorf("fetch invocations = %d, want exactly 1 (FastForwardRef is itself the fetch)", got)
 	}
 }
