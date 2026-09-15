@@ -26,6 +26,35 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   a `preview` argument, and the web preview stage shows notes through `GET
   /api/preview/notes`; adds and replies post to the tip through the existing
   `/api/notes` endpoints — `GET /api/preview/notes` only reads.
+- **Web: the open commit's header copies everything it shows.** Right-clicking
+  anywhere in the file-list header — the sha, the title, the date line —
+  offers one list: **copy short commit id** (the same abbreviation the header
+  displays), **copy commit id**, **copy commit title**, **copy date**, **copy
+  author**. One list rather than a different menu per region: aiming at the
+  date to get the date is a rule you can get wrong. Rows with nothing behind
+  them are left out (a commit opened by hash may have no subject, and a date
+  the server could not resolve draws no line). With text SELECTED in the
+  header the menu collapses to a plain **copy** of that text. The header also
+  takes the default arrow cursor instead of the text I-beam it showed over
+  what is chrome, not a document.
+
+- **Web: copy a line, land on the first change, absolute paths, and a refresh
+  button that looks like a button.** Follow-ups to the copy/elide wave:
+  - Right-clicking a diff line with **nothing selected** now offers **copy
+    line** — the text of the cell under the pointer, so a side-by-side row
+    gives you the side you clicked rather than both versions glued together
+    (with a selection, *copy* still copies the selection).
+  - **Opening a file diff parks the view on its first changed line** instead
+    of the top of the file — the context above the first hunk can run for
+    screens. `‹ change` / `change ›` continue from there. The jump happens
+    only when a diff is opened, never on a window resize or a notes refresh.
+  - The diff header's **path menu gained the absolute forms**, below a
+    separator: **copy absolute file path**, **copy absolute parent dir**, and
+    **copy repo absolute path** (the checkout root alone). A Windows checkout
+    gets `\`-separated paths, since git hands the browser `/` whatever the
+    platform.
+  - The **↻ refresh button is styled with pull and push** — it was missing
+    from their CSS rule and fell back to the browser's default button look.
 
 - **Web: copy what's on screen, and stop cutting off file names.** Five
   changes to the browser UI:

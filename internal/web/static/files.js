@@ -81,6 +81,8 @@ function enterFilesStage() {
   state.diffCtx = null;
   setFilesMeta(""); // every stage starts without a date; only a commit open sets one
   $("files-title").dataset.sha = ""; // …and without a commit id; see setCommitTitle
+  $("files-title").dataset.subject = "";
+  $("files-title").dataset.short = "";
 }
 
 
@@ -123,18 +125,47 @@ function pathParts(path) {
   const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   return { name: path.slice(cut + 1), dir: cut > 0 ? path.slice(0, cut) : "" };
 }
+
+
+// absPath joins a repo-relative path onto the checkout root the server
+// reported. git always speaks "/", so on a Windows root the separators are
+// rewritten to "\" — the point of copying an absolute path is pasting it
+// into something else on that machine, and a half-"/" path is no use there.
+// The root is taken as given (never normalized): it is the checkout gg is
+// actually serving. "" for either side means there is nothing to join, and
+// the caller drops the row rather than copying a bare root.
+function absPath(root, path) {
+  if (!root || !path) return "";
+  const win = root.includes("\\") && !root.includes("/");
+  const sep = win ? "\\" : "/";
+  const base = root.replace(/[/\\]+$/, "");
+  const rel = win ? path.replace(/\//g, "\\") : path;
+  return base + sep + rel;
+}
 // --- end path parts ---
 
 
 // diffPathRows is the path menu, shared by the header (right-click) and
 // anything else that wants to offer a path.
+// The repo-relative rows come first (what git, a review note or a gg:// link
+// speaks), then the machine-local absolute ones below a separator. At the
+// repo root both "parent dir" rows drop: the parent IS the checkout, and the
+// last row already offers it.
 function diffPathRows(path) {
   const { name, dir } = pathParts(path);
+  const root = (state.repo && state.repo.worktree) || "";
   const rows = [
     { label: "copy full path", act: () => copyText(path, "path") },
     { label: "copy file name", act: () => copyText(name, "file name") },
   ];
   if (dir) rows.push({ label: "copy parent dir", act: () => copyText(dir, "parent dir") });
+  if (!root) return rows;
+  rows.push({ sep: true });
+  rows.push({ label: "copy absolute file path", act: () => copyText(absPath(root, path), "absolute path") });
+  if (dir) {
+    rows.push({ label: "copy absolute parent dir", act: () => copyText(absPath(root, dir), "absolute parent dir") });
+  }
+  rows.push({ label: "copy repo absolute path", act: () => copyText(root, "repo path") });
   return rows;
 }
 
@@ -153,10 +184,14 @@ $("diff-header").addEventListener("contextmenu", (e) => {
 });
 
 
-function setFilesMeta(text) {
+function setFilesMeta(text, parts) {
   const el = $("files-meta");
   el.textContent = text || "";
   el.classList.toggle("hidden", !text);
+  // The pieces ride along on the element so the header's menu can copy the
+  // date and the author separately without re-parsing the rendered line.
+  el.dataset.date = (parts && parts.date) || "";
+  el.dataset.author = (parts && parts.author) || "";
 }
 
 
@@ -172,25 +207,54 @@ function setFilesMeta(text) {
 function setCommitTitle(hash, short, subject) {
   const el = $("files-title");
   el.dataset.sha = hash || "";
+  el.dataset.subject = subject || "";
+  el.dataset.short = short || ""; // copy what is SHOWN, not a second abbreviation
   el.innerHTML =
-    (short ? `<span class="csha" title="right-click to copy the commit id">${esc(short)}</span> ` : "") +
+    (short ? `<span class="csha" title="right-click the header to copy the commit id, title, date or author">${esc(short)}</span> ` : "") +
     esc(subject || "");
 }
 
 
+// The header's menu does not depend on WHICH part of it was clicked: an open
+// commit offers everything the header knows, in one list. Aiming at the sha
+// to get the sha and at the date to get the date is a rule you have to learn
+// and can get wrong; a single list is read at a glance.
+//
+// A SELECTION overrides it. Once text is highlighted — a date-and-author
+// drag, a span across the title and the sha — "copy" can only mean that text,
+// and offering five other copies next to it would be noise.
 $("files-header").addEventListener("contextmenu", (e) => {
-  const hash = $("files-title").dataset.sha;
+  const title = $("files-title");
+  const hash = title.dataset.sha;
   // The MODE decides, not just the stored sha: a stage that writes the title
   // through some other path would otherwise offer the previous commit's id.
-  if (!hash || state.filesMode !== "commit" || !e.target.closest("#files-title")) return;
+  if (state.filesMode !== "commit" || !hash) return; // no commit here: the browser's own menu
+  // Read now, into the closure: clicking a menu row moves focus and the
+  // selection is gone by the time act() runs.
+  const sel = window.getSelection();
+  const text = sel && !sel.isCollapsed && $("files-header").contains(sel.anchorNode) ? sel.toString() : "";
   e.preventDefault();
-  const short = hash.slice(0, 9);
-  const rows = e.target.closest(".csha")
-    ? [
-        { label: "copy short commit id", act: () => copyText(short, "commit id " + short) },
-        { label: "copy commit id", act: () => copyText(hash, "commit id " + short) },
-      ]
-    : [{ label: "copy commit id", act: () => copyText(hash, "commit id " + short) }];
+  if (text) {
+    showCtxMenu([{ label: "copy", act: () => copyText(text, "selection") }], e.clientX, e.clientY);
+    return;
+  }
+  // The short form the row SHOWS (git's own abbreviation, handed over with
+  // the feed row) — copying a different length than the one on screen reads
+  // as a different commit. A commit opened by hash has no row, so fall back.
+  const short = title.dataset.short || hash.slice(0, 9);
+  const meta = $("files-meta");
+  const rows = [
+    { label: "copy short commit id", act: () => copyText(short, "commit id " + short) },
+    { label: "copy commit id", act: () => copyText(hash, "commit id " + short) },
+  ];
+  // A commit opened by hash (a sidebar tag, a reflog entry) may have a title
+  // that is not a subject, and a date the server could not resolve — each row
+  // appears only when there is something behind it to copy.
+  if (title.dataset.subject) {
+    rows.push({ label: "copy commit title", act: () => copyText(title.dataset.subject, "commit title") });
+  }
+  if (meta.dataset.date) rows.push({ label: "copy date", act: () => copyText(meta.dataset.date, "date") });
+  if (meta.dataset.author) rows.push({ label: "copy author", act: () => copyText(meta.dataset.author, "author") });
   showCtxMenu(rows, e.clientX, e.clientY);
 });
 
@@ -204,11 +268,22 @@ $("files-header").addEventListener("contextmenu", (e) => {
 // function against the Go formatter; commitmetajs_test.go is what keeps it
 // true, so keep the section pure (no DOM) and the markers in place.
 function commitMetaLine(body) {
-  if (!body || !body.time) return "";
+  const { date, author } = commitMetaParts(body);
+  if (!date) return "";
+  return author ? `${date} · ${author}` : date;
+}
+
+
+// commitMetaParts is the same stamp before it is joined: the header's
+// right-click menu copies the date and the author on their own, and pulling
+// them back out of the rendered line would mean parsing around a " · " that
+// an author name may itself contain.
+function commitMetaParts(body) {
+  if (!body || !body.time) return { date: "", author: "" };
   const d = new Date(body.time * 1000);
   const p = (n) => String(n).padStart(2, "0");
-  const s = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-  return body.author ? `${s} · ${body.author}` : s;
+  const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return { date, author: body.author || "" };
 }
 // --- end commit meta line ---
 
@@ -318,6 +393,7 @@ async function openEntryFileDiff({ left, right, path, leftLabel, rightLabel, sta
     const d = await getJSON("/api/entry-diff?" + q);
     if (gen !== state.detailGen) return; // superseded by a newer open or esc
     renderDiff(d);
+    jumpToFirstChange();
   } catch (e) {
     if (gen !== state.detailGen) return;
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
@@ -689,6 +765,7 @@ async function openFile(i) {
     // diff without them first.
     const [d] = await Promise.all([getJSON("/api/diff?" + q), fetchNotes(false)]);
     renderDiff(d);
+    jumpToFirstChange();
   } catch (e) {
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
@@ -718,6 +795,7 @@ async function openStatusDiff(i) {
     }
     renderDiff(d);
     renderHunkBar();
+    jumpToFirstChange();
   } catch (e) {
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
@@ -947,6 +1025,24 @@ function renderDiff(d) {
   state.diffBlockIdx = -1;
   $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth, true);
   updateDiffNav();
+}
+
+
+// jumpToFirstChange parks a freshly OPENED diff on its first changed line
+// rather than at the top of the file — the context above the first hunk can
+// run for screens, and scrolling past it was the first thing anyone did.
+// state.diffBlockIdx moves with it, so `change ›` continues from there
+// instead of walking back over what is already on screen.
+//
+// Called by the three open paths only, never from renderDiff: that also runs
+// on a window resize and on every notes refresh, and jumping there would pull
+// the view out from under a reader mid-file. A diff with no changes at all
+// (an open with only context, a mode-only change) leaves the view alone.
+function jumpToFirstChange() {
+  const blocks = diffChangeBlocks();
+  if (!blocks.length) return;
+  state.diffBlockIdx = 0;
+  blocks[0].scrollIntoView({ block: "center" });
 }
 
 
@@ -1400,7 +1496,18 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     // what comes back is the code, not code interleaved with line numbers.
     const sel = window.getSelection();
     const text = sel && !sel.isCollapsed && $("diff-body").contains(sel.anchorNode) ? sel.toString() : "";
-    if (text) rows.push({ label: "copy", act: () => copyText(text, "selection") });
+    if (text) {
+      rows.push({ label: "copy", act: () => copyText(text, "selection") });
+    } else {
+      // Nothing selected: offer the line the pointer is on. The cell under
+      // the pointer, not the whole <tr> — a side-by-side row holds BOTH
+      // versions of the line, and copying the pair glued together is never
+      // what was meant. Its `td.no` sibling is not read, so no line number
+      // rides along.
+      const cell = e.target.closest("td.side");
+      const line = cell ? cell.textContent : "";
+      if (line) rows.push({ label: "copy line", act: () => copyText(line, "line") });
+    }
     const row = e.target.closest("tr[data-no]");
     if (row && notesArmed()) {
       const td = e.target.closest("td");
@@ -2193,4 +2300,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, setCommitTitle, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, setCommitTitle, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };
