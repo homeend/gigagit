@@ -558,9 +558,10 @@ func steerCommandForLink(l model.Link) (steer.Command, bool) {
 // Update goroutine, once every startAtReady precondition has landed.
 type startAtMsg struct{ cmd steer.Command }
 
-// startAtOrigin reports whether c is the navigate steerCommandForLink
-// synthesized for --at (a user-initiated `gg open`), rather than one a real
-// steer.Post client sent. sendSteer always assigns an id before Post (and
+// startAtOrigin reports whether c is a navigate the USER initiated — the one
+// steerCommandForLink synthesized for --at (`gg open`), or the one the #
+// prompt built for a pasted link — rather than one a real steer.Post client
+// sent. sendSteer always assigns an id before Post (and
 // carries the caller's --wait choice), so a real client's command never
 // arrives with both fields at their zero value; steerCommandForLink never
 // sets either. Distinguishing the two lets the landing notice say "opened",

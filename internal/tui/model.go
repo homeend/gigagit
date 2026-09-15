@@ -729,6 +729,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.resolvedGotoCommit(p, msg)
+	case gotoLinkResolvedMsg:
+		p := layerOf[*gotoCommitPopup](m)
+		// Same tag-gate as gotoCommitResolvedMsg: the submitted text.
+		if p == nil || p != m.topLayer() || strings.TrimSpace(p.input.Value()) != msg.text {
+			return m, nil
+		}
+		return m.resolvedGotoLink(p, msg)
 	case repoResolvedMsg:
 		p := layerOf[*repoPathPopup](m)
 		// Tag-gate by the submitted text: only act if this popup is still on top

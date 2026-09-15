@@ -178,7 +178,7 @@ func TestGotoCommitRendersWithError(t *testing.T) {
 	m, cmd := send(m, keyType(tea.KeyEnter))
 	m, _ = send(m, cmd())
 	out := m.View()
-	for _, want := range []string{"Show commit", "no such commit: bogus"} {
+	for _, want := range []string{"Go to commit or gg:// link", "no such commit: bogus"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("goto-commit render missing %q", want)
 		}
