@@ -368,6 +368,10 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 			}
 			side, rng = model.NoteSideNew, [2]int{*newLine, *newLine}
 		} else {
+			if *hunk < 1 {
+				fmt.Fprintln(stderr, "note add: --hunk must be a 1-based hunk number")
+				return 2
+			}
 			// Ruling 1: the PREVIEW's patch, so this agrees with
 			// `gg diff --preview --hunks`. The refusal of a delete-only hunk
 			// lives in domain, shared with MCP.

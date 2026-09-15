@@ -5,6 +5,7 @@ package cli
 // numbered over the preview's own patch.
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -138,6 +139,42 @@ func TestNoteListPreviewReportsOutdated(t *testing.T) {
 	}
 	if !strings.Contains(all, "why DELTA") {
 		t.Fatalf("a --file-less preview list must still gather the note, got %q", all)
+	}
+	// A reply inherits its root's anchor, so the whole thread must report ONE
+	// status word on the wire — never "outdated" root + "stale" reply.
+	id := strings.Fields(strings.Split(strings.TrimSpace(out), "\n")[0])[0]
+	if code, _, errb := runCLI(t, dir, "note", "reply", id, "--summary", "still asking"); code != 0 {
+		t.Fatalf("reply exit %d: %s", code, errb)
+	}
+	code, js, errb := runCLI(t, dir, "note", "list", "--preview", "main...feat", "--file", "a.txt", "--json")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errb)
+	}
+	var wires []struct {
+		Status  string `json:"status"`
+		Replies []struct {
+			Status string `json:"status"`
+		} `json:"replies"`
+	}
+	if err := json.Unmarshal([]byte(js), &wires); err != nil {
+		t.Fatalf("stdout is not a JSON array: %v\n%s", err, js)
+	}
+	if len(wires) != 1 || len(wires[0].Replies) != 1 {
+		t.Fatalf("want one thread with one reply, got %+v", wires)
+	}
+	if wires[0].Status != "outdated" || wires[0].Replies[0].Status != "outdated" {
+		t.Fatalf("the whole thread must read outdated, got %+v", wires)
+	}
+}
+
+// A malformed --hunk is a USAGE error under --preview too (exit 2), exactly as
+// it is on the ordinary path.
+func TestNoteAddPreviewRefusesANonPositiveHunk(t *testing.T) {
+	dir := newCLIPreviewRepo(t)
+	code, _, errb := runCLI(t, dir, "note", "add", "--preview", "main...feat", "--file", "a.txt",
+		"--hunk", "-1", "--summary", "no")
+	if code != 2 || !strings.Contains(errb, "1-based") {
+		t.Fatalf("want exit 2 naming the 1-based rule, got %d %q", code, errb)
 	}
 }
 
