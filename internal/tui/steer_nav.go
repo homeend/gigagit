@@ -394,7 +394,11 @@ func (m Model) landSteer(v *diffView, c steer.Command) (Model, tea.Cmd) {
 	v.setCursorLine(li, body)
 	v.alignCursor(alignCenter, body)
 
-	m.diffNotice = i18n.T("▸ agent opened %s", c.File+":"+strconv.Itoa(no))
+	if startAtOrigin(c) {
+		m.diffNotice = i18n.T("▸ opened %s", c.File+":"+strconv.Itoa(no))
+	} else {
+		m.diffNotice = i18n.T("▸ agent opened %s", c.File+":"+strconv.Itoa(no))
+	}
 
 	detail := "opened " + c.File + ":" + strconv.Itoa(no)
 	if clamped {
@@ -453,7 +457,11 @@ func (m Model) steerNavigatePreview(c steer.Command) (Model, tea.Cmd) {
 				}
 			}
 		}
-		m = m.steerNotice(i18n.T("▸ agent moved the focus"))
+		if startAtOrigin(c) {
+			m = m.steerNotice(i18n.T("▸ opened preview %s", tgt+"..."+src))
+		} else {
+			m = m.steerNotice(i18n.T("▸ agent moved the focus"))
+		}
 		return m, m.answerSteer(c, steerOK(c, "revealed preview "+tgt+"..."+src))
 	}
 	// Decided before the view moves: openDiffForFileLine refuses below 60
@@ -549,6 +557,17 @@ func steerCommandForLink(l model.Link) (steer.Command, bool) {
 // startAtMsg feeds the --at startup link into the steering pipeline on the
 // Update goroutine, once every startAtReady precondition has landed.
 type startAtMsg struct{ cmd steer.Command }
+
+// startAtOrigin reports whether c is the navigate steerCommandForLink
+// synthesized for --at (a user-initiated `gg open`), rather than one a real
+// steer.Post client sent. sendSteer always assigns an id before Post (and
+// carries the caller's --wait choice), so a real client's command never
+// arrives with both fields at their zero value; steerCommandForLink never
+// sets either. Distinguishing the two lets the landing notice say "opened",
+// not "agent opened" — an agent didn't drive this.
+func startAtOrigin(c steer.Command) bool {
+	return c.ID == "" && !c.Wait
+}
 
 // startAtReady reports whether every precondition for consuming --at has
 // landed: SOME data has arrived (m.ready — guards the window before the

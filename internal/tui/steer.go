@@ -267,6 +267,12 @@ func steerEnumRefusal(c steer.Command) string {
 			if c.Target.Source == "" || c.Target.Target == "" {
 				return "a preview target needs source and target"
 			}
+			// A preview is not a commit: mirrors the web endpoint's
+			// toSteerWire so the same command is refused the same way
+			// whichever consumer picks it up.
+			if c.Commit != "" {
+				return "a preview target cannot also carry a commit"
+			}
 		default:
 			return "unknown target state " + strconv.Quote(c.Target.State)
 		}

@@ -368,7 +368,9 @@ func (m Model) Init() tea.Cmd {
 // ~110 statusMsg call sites, so this is the only place that can know a
 // message changed. Recursive m.Update(synthKey(…)) self-calls pass through
 // here too, which is correct: a synthesized key that reports a failure
-// deserves to be recorded like any other.
+// deserves to be recorded like any other. It also consumes a pending --at
+// start link the moment startAtReady() holds (see the inline rationale
+// below).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	before := m.statusMsg
 	nm, cmd := m.dispatch(msg)

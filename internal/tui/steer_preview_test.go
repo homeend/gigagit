@@ -149,6 +149,26 @@ func TestSteerPreviewTargetNeedsBothNames(t *testing.T) {
 	}
 }
 
+// A preview target riding a top-level commit is refused: a preview names a
+// branch pair, not a single commit — the same wording the web endpoint uses.
+func TestSteerPreviewTargetRefusesACommit(t *testing.T) {
+	t.Parallel()
+	m, dir := previewSteerModel(t)
+	c := steer.Command{ID: "p-5b", Cmd: "navigate", File: "a.txt", Commit: "deadbeef",
+		Target: &steer.Target{State: "preview", Source: "feat/x", Target: "main"}, Wait: true}
+	m, cmd := m.applySteer(c)
+	if cmd != nil {
+		cmd()
+	}
+	if m.pendingSteer != nil {
+		t.Error("a malformed target must park nothing")
+	}
+	rep := readOneReply(t, dir, "p-5b")
+	if rep.OK || !strings.Contains(rep.Error, "a preview target cannot also carry a commit") {
+		t.Errorf("reply = %+v", rep)
+	}
+}
+
 // A path the preview does not carry is answered, not left parked.
 func TestSteerNavigatePreviewUnknownPathIsAnswered(t *testing.T) {
 	t.Parallel()

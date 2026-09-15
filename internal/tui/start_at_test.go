@@ -12,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 func TestSteerCommandForLink(t *testing.T) {
@@ -215,10 +216,13 @@ func TestStartAtWaitsForTheRealStartupFanOutToFinish(t *testing.T) {
 
 	// Apply just enough real messages to land AT LEAST ONE source (so
 	// m.ready flips true) while leaving the other ~9 pending (m.loading
-	// stays true) — the genuine mid-fan-out state. 4 clears the two levels
-	// of batch-unwrapping (the top tea.Batch, then reloadAllCmd's own
-	// ~10-item one) plus enough real reads that at least one has landed,
-	// asserted below rather than assumed.
+	// stays true) — the genuine mid-fan-out state. The startup batch is
+	// tea.Batch(themeCmd, reloadAllCmd's own ~10-item batch, startWatchCmd,
+	// steerCmd), applied breadth-first with batches unwrapped for free (not
+	// counted): 4 real (non-batch) hops is themeCmd, startWatchCmd,
+	// steerCmd, then the FIRST of reloadAllCmd's ~10 per-source reads — one
+	// source landed, the rest still queued. Asserted below rather than
+	// assumed.
 	var rest tea.Cmd
 	m, rest = drainDeep(t, m, fanOut, 4)
 	if !m.ready {
@@ -291,7 +295,10 @@ func TestStartAtForANonPreviewLinkAlsoWaitsForTheFanOut(t *testing.T) {
 	// A non-preview link needs no startAtPreviewsSeen, so a mid-fan-out
 	// checkpoint here isolates !m.loading specifically (unlike the preview
 	// tests above, where startAtPreviewsSeen would ALSO still be blocking it
-	// at this point, masking a missing loading check).
+	// at this point, masking a missing loading check). Same 4-hop count as
+	// TestStartAtWaitsForTheRealStartupFanOutToFinish above: themeCmd,
+	// startWatchCmd, steerCmd, then the first of reloadAllCmd's per-source
+	// reads.
 	var rest tea.Cmd
 	m, rest = drainDeep(t, m, fanOut, 4)
 	if !m.ready {
@@ -332,6 +339,56 @@ func TestStartAtFailureShowsAStatusMessage(t *testing.T) {
 	m = drainMsgs(t, m, cmd, 6)
 	if m.statusMsg == "" || !strings.Contains(m.statusMsg, "missing branch feat/nope") {
 		t.Errorf("statusMsg = %q, want the refusal", m.statusMsg)
+	}
+}
+
+// A --at-originated navigate (steerCommandForLink's own zero-id, no-wait
+// command) lands a NEUTRAL notice — the user drove this with `gg open`, not
+// an agent — while the exact same navigate posted by a real steer client
+// (an id assigned, as sendSteer always does) keeps the "agent" wording.
+func TestStartAtNoticeSaysOpenedNotAgent(t *testing.T) {
+	t.Parallel()
+	m, _ := previewSteerModel(t)
+
+	// Reveal-only (no file): steerNavigatePreview's own notice. No diff view
+	// is open, so steerNotice lands it on the status bar, not diffNotice.
+	startAtReveal := steer.Command{Cmd: "navigate",
+		Target: &steer.Target{State: "preview", Source: "feat/x", Target: "main"}}
+	mm, cmd := m.applySteer(startAtReveal)
+	if cmd != nil {
+		cmd()
+	}
+	if !strings.Contains(mm.statusMsg, "opened preview") || strings.Contains(mm.statusMsg, "agent") {
+		t.Errorf("start-at reveal notice = %q, want a neutral \"opened preview\", no \"agent\"", mm.statusMsg)
+	}
+
+	steeredReveal := steer.Command{ID: "s-1", Cmd: "navigate",
+		Target: &steer.Target{State: "preview", Source: "feat/x", Target: "main"}, Wait: true}
+	mm, cmd = m.applySteer(steeredReveal)
+	if cmd != nil {
+		cmd()
+	}
+	if !strings.Contains(mm.statusMsg, "agent moved the focus") {
+		t.Errorf("steered reveal notice = %q, want the \"agent\" wording kept", mm.statusMsg)
+	}
+
+	// File+line landing: landSteer's own notice.
+	startAtLand := steer.Command{Cmd: "navigate", File: "a.txt",
+		Target: &steer.Target{State: "preview", Source: "feat/x", Target: "main"},
+		Line:   &steer.Line{Side: "new", No: 1}}
+	mm, cmd = m.applySteer(startAtLand)
+	mm = drainMsgs(t, mm, cmd, 6)
+	if !strings.Contains(mm.diffNotice, "opened a.txt:1") || strings.Contains(mm.diffNotice, "agent") {
+		t.Errorf("start-at land notice = %q, want a neutral \"opened a.txt:1\", no \"agent\"", mm.diffNotice)
+	}
+
+	steeredLand := steer.Command{ID: "s-2", Cmd: "navigate", File: "a.txt",
+		Target: &steer.Target{State: "preview", Source: "feat/x", Target: "main"},
+		Line:   &steer.Line{Side: "new", No: 1}, Wait: true}
+	mm, cmd = m.applySteer(steeredLand)
+	mm = drainMsgs(t, mm, cmd, 6)
+	if !strings.Contains(mm.diffNotice, "agent opened a.txt:1") {
+		t.Errorf("steered land notice = %q, want the \"agent\" wording kept", mm.diffNotice)
 	}
 }
 

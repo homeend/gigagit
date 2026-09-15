@@ -128,7 +128,7 @@ func (m Model) previewLinkFor(source, target, path string, line int) (string, bo
 //     feature); a diff with no note address (a two-sided compare, or any
 //     other view the loader never stamped) refuses outright rather than
 //     falling through to a lower-precedence surface underneath it.
-//     2b. a preview's diff → the PREVIEW form with the cursor line: the diff's
+//     2a. a preview's diff → the PREVIEW form with the cursor line: the diff's
 //     note address is a commit on the tip, but the place the user is looking
 //     at is the preview, and that is the address that travels.
 //  3. else the focused panel's row: focusedBookmark (files-view row,
@@ -142,7 +142,7 @@ func (m Model) previewLinkFor(source, target, path string, line int) (string, bo
 //     (unfocused, a heading row, or a deleted file) the row still belongs to
 //     the open preview, so this returns the PAIR's own link rather than
 //     falling through to a lower-precedence surface.
-//     3c. the Previews panel row → the pair's own link.
+//     3b. the Previews panel row → the pair's own link.
 func (m Model) contextLinkText() (string, bool) {
 	switch m.topLayer().(type) {
 	case *historyView, *blameView:

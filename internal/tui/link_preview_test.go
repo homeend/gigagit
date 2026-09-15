@@ -35,6 +35,28 @@ func TestPreviewLinkForBuildsTheThreeDotForm(t *testing.T) {
 	}
 }
 
+// previewLinkFor through the absolute-local repo form: no remote name, so
+// linkRepoFor falls back to m.currentWorktree.
+func TestPreviewLinkForThroughTheAbsoluteLocalRepoForm(t *testing.T) {
+	t.Parallel()
+	m := newTestModel(t)
+	m.currentWorktree = "/tmp/x"
+	got, ok := m.previewLinkFor("feat/x", "main", "a.go", 3)
+	if !ok || got != "gg:///tmp/x/a.go@main...feat/x:3" {
+		t.Fatalf("previewLinkFor(local repo) = %q,%v", got, ok)
+	}
+	if _, err := model.ParseLink(got); err != nil {
+		t.Fatalf("ParseLink(%q) = %v", got, err)
+	}
+	// A checkout path the grammar cannot hold (an '@' — the target
+	// separator) is refused, never emitted as something that reparses as a
+	// different place.
+	m.currentWorktree = "/home/u@corp"
+	if bad, ok := m.previewLinkFor("feat/x", "main", "a.go", 3); ok {
+		t.Errorf("previewLinkFor with an inexpressible checkout = %q, want a refusal", bad)
+	}
+}
+
 // The Previews panel row's . menu copies the PREVIEW link.
 func TestPreviewsPanelRowCopiesThePreviewLink(t *testing.T) {
 	t.Parallel()
