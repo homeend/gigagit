@@ -198,12 +198,9 @@ absorbed the change (an identical fix, a cherry-pick), which is correct.
 `versions` moves to `DataFormat{Store: "versions", Min: 2, Max: 2}` and gains
 the first real `preflight.Migration{Store: "versions", From: 1, To: 2}`.
 
-**Open question — the one thing not yet decided (see below).**
-
-The consent prose must state a consequence spec 1 created: because the versions
-*writer* is gated on `FeatureEnabled`, **skipping the migration means no new
-versions are recorded at all** until it is run. The user would then be running
-rebases with no safety net — the opposite of this feature's purpose.
+Existing format-1 records are discarded — see "Migration: discard" below. No
+new migration code is needed: spec 1's `ApplyMigration` already does exactly
+this.
 
 ## Frontends
 
@@ -246,25 +243,41 @@ gains the drift summary and `agentskill.Version` is bumped.
   asserting no false alarm (the wrong formula's regression test); a rebase
   fixture where a modify/delete conflict is resolved the wrong way, asserting
   exactly one `A` finding.
-- **Migration:** a format-1 repo upgrading, per the decision below.
+- **Migration:** a format-1 repo resolving as `Repairable`, `gg migrate` listing
+  the records it would discard without touching them, and `--yes` discarding them
+  and stamping format 2 — the end-to-end apply path spec 1 could not cover.
 - **e2e:** a scenario driving a rebase that resurrects a file and asserting the
   CLI reports it.
 
-## Open question
+## Migration: discard (decided 2026-09-15)
 
-**Migration: wrap or discard the existing format-1 records?**
+Existing format-1 records are **discarded**, not converted. A format-1 ref is a
+plain tip whose `Base` cannot be reconstructed, so it can never become a frozen
+preview; and the user — the only person with such records — reports having made
+little use of them precisely because the feature lacked what this spec adds.
 
-A format-1 ref is a plain tip — a working recovery point. Its `Base` cannot be
-reconstructed, so it can never become a frozen preview. Two options:
+**This requires no new migration code.** Spec 1's `engine.ApplyMigration` is
+already a delete-the-listed-refs-and-stamp-the-marker executor, and
+`domain.PendingMigrations` already computes the ref list via `storeRefs`. The
+whole migration is therefore a declaration in `domain.Features()`:
 
-- **Wrap** (recommended): re-point each ref at a synthetic commit with `p1` = the
-  existing tip and no `Ours`/`Other`/`Base`. Costs one `commit-tree` per ref,
-  keeps every existing recovery point, and they open as today's commit view.
-  Needs `ApplyMigration` — today a dumb delete-and-stamp executor — to grow a
-  wrap action.
-- **Discard**: delete them and stamp format 2. Simpler, and the user has
-  permitted discarding in principle — but it deletes the user's existing safety
-  net during the upgrade to a feature whose entire purpose is that safety net.
+```go
+Migrate: &preflight.Migration{
+    Store: StoreVersions, From: 1, To: 2,
+    Describe: func() preflight.Text { … },
+},
+```
+
+plus moving `DataFormat` to `{Min: 2, Max: 2}`. Everything downstream — the
+consent gate, `gg migrate`, the web panel, the CLI refusal — already works and
+gains its first real exercise. This also closes the coverage gap spec 1 shipped
+with: `Repairable` had only test consumers, and the `--yes` apply loop was
+untested end-to-end at CLI and web level.
+
+The consent prose must state the consequence: because the versions *writer* is
+gated on `FeatureEnabled`, **skipping the migration means no new versions are
+recorded at all** until it is run — the user would be running rebases with no
+safety net, the opposite of this feature's purpose.
 
 ## Rulings already made — do not re-ask
 
@@ -277,3 +290,5 @@ reconstructed, so it can never become a frozen preview. Two options:
 - Detection is automatic, immediately after the op; it never blocks or pauses.
 - The summary also appears whenever the op paused for conflicts.
 - All frontends except MCP.
+- Existing format-1 records are DISCARDED on migration, through spec 1's
+  existing `ApplyMigration` — no wrap, no new migration op.
