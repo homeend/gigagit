@@ -121,7 +121,10 @@ async function refreshSources(want) {
   let sidebar = false;
   for (const s of want) if (SIDEBAR.has(s)) sidebar = true;
   if (sidebar) jobs.push(fetchBranches(), loadRepo());
-  if (sidebar || want.has("previews")) jobs.push(fetchPreviews());
+  // "notes" pulls the previews too: a preview row carries the pair's note
+  // total, so a note write changes the LIST as well as the open diff (the same
+  // reason the TUI chains its previews read off the notes source).
+  if (sidebar || want.has("previews") || want.has("notes")) jobs.push(fetchPreviews());
   await Promise.all(jobs);
   // After the previews list lands: an open preview whose tips moved re-opens
   // itself, one whose pair vanished closes with a notice.

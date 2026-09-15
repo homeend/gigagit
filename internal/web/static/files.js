@@ -522,8 +522,17 @@ function renderFiles() {
     // note-addressable (see openFile), so a ◆ would advertise notes that its
     // rows cannot show and its keys cannot add.
     const cmp = state.filesMode === "compare";
+    // …except a MERGE PREVIEW, whose compare is note-addressable: its per-file
+    // totals come from the gathered set (state.previewCounts), not from the
+    // per-commit index, because a note on an older commit of the branch counts
+    // for the file too.
+    const prev = openPreviewCtx();
     const badge = (f) =>
-      cmp ? "" : noteBadgeHTML(state.noteCounts.by_commit_path[(f.sha || state.fileSha) + ":" + f.path]);
+      prev && state.previewCounts
+        ? noteBadgeHTML(state.previewCounts[f.path])
+        : cmp
+        ? ""
+        : noteBadgeHTML(state.noteCounts.by_commit_path[(f.sha || state.fileSha) + ":" + f.path]);
     const anyBadge = state.files.some((f) => badge(f) !== "");
     const cols = fileCols(anyBadge ? NOTE_BADGE_COLS : 0);
     $("files-list").innerHTML = state.files
@@ -594,6 +603,20 @@ function noteBadgeHTML(n) {
 }
 
 
+// openPreviewCtx is the open merge preview WHEN the compare on screen is still
+// the one it opened — the single predicate the preview's note lane gates on.
+// state.previewOpen alone is not enough: it is only cleared on the next
+// refresh, so a branch↔branch compare opened in between would otherwise
+// inherit the preview's tip and its badges (previews.js's previewShowing makes
+// the same check for the same reason). It reads state only, so files.js does
+// NOT import previews.js — previews.js imports THIS module.
+function openPreviewCtx() {
+  const po = state.previewOpen;
+  if (state.filesMode !== "compare" || !po || !po.tip) return null;
+  return state.compare && state.compare.bHash === po.tip ? po : null;
+}
+
+
 async function openFile(i) {
   clearDiffHunks();
   // The layout switch sits in the SYNC prefix: an esc during a slow diff
@@ -628,12 +651,20 @@ async function openFile(i) {
   // note on a line the comparison removed would therefore be filed against a
   // base it was never taken on and swept away. The TUI refuses notes on a
   // compare view for exactly this reason.
+  // A merge preview is the ONE compare whose new side is a real commit's
+  // content (the source tip), so its rows ARE note-addressable — at the tip,
+  // new side only. Every other compare stays notes:false.
   const cmp = state.filesMode === "compare";
+  const prev = openPreviewCtx();
   state.diffCtx = {
     path: f.path,
-    rev: cmp ? state.compare.bHash : f.sha || state.fileSha,
+    rev: prev ? prev.tip : cmp ? state.compare.bHash : f.sha || state.fileSha,
     state: "commit",
-    notes: !cmp,
+    notes: !cmp || !!prev,
+    // The pair the gathered note set is read by: a preview note may have been
+    // written against an OLDER commit on the branch, so the query is the pair,
+    // never this one tip.
+    preview: prev ? { source: prev.source, target: prev.target } : null,
     // links.js documents ctx.compare as THE refusal for a two-revision view;
     // carrying it here means the diff-LINE copy-link path uses that documented
     // guard too, instead of relying on notesArmed() to happen to be off.
@@ -939,6 +970,18 @@ function notesArmed() {
 function noteQuery() {
   if (!notesArmed()) return null;
   const q = new URLSearchParams({ path: state.diffCtx.path });
+  if (state.diffCtx.preview) {
+    // The preview gathers notes along the branch, so the READ is keyed on the
+    // PAIR: a note written against an older commit still belongs here. rev and
+    // state ride along unchanged because they are what the WRITE needs — a
+    // preview note is an ordinary commit note on the source tip, and
+    // addNotePrompt builds its post out of this same query.
+    q.set("source", state.diffCtx.preview.source);
+    q.set("target", state.diffCtx.preview.target);
+    q.set("rev", state.diffCtx.rev);
+    q.set("state", "commit");
+    return q;
+  }
   if (state.diffCtx.state === "commit") {
     if (!state.diffCtx.rev) return null;
     q.set("rev", state.diffCtx.rev);
@@ -966,9 +1009,16 @@ async function fetchNotes(rerender = true) {
     state.notes = [];
     return;
   }
+  const prev = !!state.diffCtx.preview;
   try {
-    const d = await getJSON("/api/notes?" + q);
+    const d = await getJSON((prev ? "/api/preview/notes?" : "/api/notes?") + q);
     state.notes = d.notes || [];
+    if (prev) {
+      // The preview's read hands back every file's total in the same call, so
+      // the file list's ◆N badges follow a write without a second round-trip.
+      state.previewCounts = d.counts || {};
+      renderFiles();
+    }
   } catch {
     // Notes are best-effort — never break the diff — but a transient failure
     // must not make every visible ◆ row VANISH until the next notes event
@@ -1031,13 +1081,19 @@ function noteBoxHTML(n, cols) {
   const rootOn = !(off && n.source === "agent");
   const reps = (n.replies || []).filter((r) => !(off && r.source === "agent"));
   if (!rootOn && !reps.length) return "";
-  const stale = n.status === "stale";
+  // A preview names it "outdated": there, a note whose lines a later commit
+  // changed is the expected case, not an edge one — so the server sends that
+  // word and the row wears a class of its own.
+  const stale = n.status === "stale" || n.status === "outdated";
+  const prev = !!(state.diffCtx && state.diffCtx.preview);
+  const word = prev ? " (outdated)" : " (stale)";
+  const cls = prev ? "outdated" : "stale";
   const agent = n.source === "agent";
   const title = (agent ? "agent note" : "note") + (n.author ? " · " + n.author : "") +
-    " · " + state.diffCtx.path + " " + (n.side === "old" ? "L" : "R") + n.line + (stale ? " (stale)" : "");
+    " · " + state.diffCtx.path + " " + (n.side === "old" ? "L" : "R") + n.line + (stale ? word : "");
   const part = (m) => `<div class="notesum">${esc(m)}</div>`;
   const text = (r) => (r.rationale ? `<div class="notetext">${esc(r.rationale)}</div>` : "");
-  let box = `<div class="notebox ${agent ? "agent" : "user"}${stale ? " stale" : ""}"><div class="notetitle">${esc(title)}</div>`;
+  let box = `<div class="notebox ${agent ? "agent" : "user"}${stale ? " " + cls : ""}"><div class="notetitle">${esc(title)}</div>`;
   if (rootOn) box += part(n.summary) + text(n);
   for (const r of reps) {
     box += `<div class="notereply" data-note="${esc(r.id)}">` + part("↳ " + (r.author ? r.author + ": " : "") + r.summary) + text(r) + `</div>`;
@@ -1046,7 +1102,7 @@ function noteBoxHTML(n, cols) {
   const cell = (span) => `<td class="note" colspan="${span}">${box}</td>`;
   const gap = `<td class="note-gap" colspan="2"></td>`;
   const cells = cols === 4 ? (n.side === "old" ? cell(2) + gap : gap + cell(2)) : cell(cols);
-  return `<tr class="note${stale ? " stale" : ""}${agent ? " agent" : ""}" data-note="${esc(n.id)}">${cells}</tr>`;
+  return `<tr class="note${stale ? " " + cls : ""}${agent ? " agent" : ""}" data-note="${esc(n.id)}">${cells}</tr>`;
 }
 
 
@@ -1177,6 +1233,14 @@ function addNotePrompt() {
   if (!q) return;
   const at = state.diffRow || firstChangedRow();
   if (!at) return;
+  // A preview's old side is the MERGE BASE, which no stored address names, so
+  // there is nothing there to anchor to (domain.ErrPreviewOldSide). The refusal
+  // is here rather than at the server so the prompt never opens on a line the
+  // write would reject afterwards.
+  if (state.diffCtx.preview && at.side === "old") {
+    opLine("notes in a preview anchor on the new side", true);
+    return;
+  }
   openPrompt({
     title: `Add note on ${at.side} line ${at.no}`,
     placeholder: "summary",

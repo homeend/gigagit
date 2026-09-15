@@ -192,3 +192,71 @@ func TestNotesInertOnAComparisonJS(t *testing.T) {
 		t.Fatal("openFile must mark a comparison's diffCtx inert for notes (notes: !cmp)")
 	}
 }
+
+// readStaticSrc reads one shipped static file for a source assertion.
+func readStaticSrc(t *testing.T, file string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("static", file))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// TestPreviewDiffArmsNotesInJS pins the preview lane in files.js: a preview's
+// compare IS note-addressable (its new side is the source tip), it queries the
+// gathered set through /api/preview/notes, it refuses an old-side anchor, and
+// it paints a stale note under the preview's own word for it.
+func TestPreviewDiffArmsNotesInJS(t *testing.T) {
+	t.Parallel()
+	src := readStaticSrc(t, "files.js")
+	for _, want := range []string{
+		"/api/preview/notes", // the preview note query exists
+		"state.diffCtx.preview",
+		"notes in a preview anchor on the new side", // the old-side refusal
+		"outdated", // the stale class/word a preview uses
+		"state.previewCounts",
+	} {
+		if !strings.Contains(src, want) {
+			t.Fatalf("files.js must contain %q", want)
+		}
+	}
+}
+
+// TestPreviewRowShowsTheNoteBadgeInJS: the sidebar row carries the preview's
+// note total, the way a file row carries its ◆N.
+func TestPreviewRowShowsTheNoteBadgeInJS(t *testing.T) {
+	t.Parallel()
+	src := readStaticSrc(t, "previews.js")
+	if !strings.Contains(src, "e.notes") {
+		t.Fatal("previews.js must paint the row's note total")
+	}
+	if !strings.Contains(src, "tip:") {
+		t.Fatal("armPreview must record the source tip a preview note is written against")
+	}
+}
+
+// TestOutdatedClassIsStyled: the preview's outdated note must be dimmed the
+// same way a stale one is, or the class is invisible.
+func TestOutdatedClassIsStyled(t *testing.T) {
+	t.Parallel()
+	css := readStaticSrc(t, "style.css")
+	if !strings.Contains(css, ".outdated") {
+		t.Fatal("style.css must style the outdated note class")
+	}
+}
+
+// TestNotesEventReloadsPreviews: a note write changes a preview row's total,
+// so the notes SSE source has to pull the previews list too.
+func TestNotesEventReloadsPreviews(t *testing.T) {
+	t.Parallel()
+	src := readStaticSrc(t, "live.js")
+	i := strings.Index(src, "fetchPreviews()")
+	if i < 0 {
+		t.Fatal("live.js must fetch previews")
+	}
+	line := src[strings.LastIndex(src[:i], "\n")+1 : i]
+	if !strings.Contains(line, `want.has("notes")`) {
+		t.Fatalf("the previews refetch must also fire on the notes source, got %q", line)
+	}
+}
