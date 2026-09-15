@@ -8,6 +8,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Fixed: gg started from a subdirectory broke every file operation.** Open
+  `gg` (TUI, `gg web`, `gg mcp`) anywhere below the worktree root and staging,
+  discarding or diffing a file failed with `pathspec 'src/xxx.txt' did not
+  match any files` — often with a puzzling `could not open directory
+  'src/src/'`. Every gg surface reports **worktree-root-relative** paths
+  (that is what `git status --porcelain` prints, whatever the cwd), but gg ran
+  its git commands in the directory it was launched from, so the path gg had
+  just printed was resolved against the wrong base and doubled. gg now
+  resolves the worktree top level once at startup and runs every git
+  invocation there, which also fixes the cwd-scoped verbs (`ls-files`,
+  `grep`, `blame`) and the directory external tools are launched in. A
+  directory that is not inside a worktree keeps its existing startup error.
+  **CLI pathspecs are unchanged**: a path you type in a shell stays relative
+  to *your* cwd, exactly as it is for git, so `gg add .` in `src/` still
+  stages only `src/`. (`gg note --file` remains repo-relative as documented —
+  a `gg://` link can retarget it to another checkout entirely.)
+
 - **Web: the open commit's header copies everything it shows.** Right-clicking
   anywhere in the file-list header — the sha, the title, the date line —
   offers one list: **copy short commit id** (the same abbreviation the header
