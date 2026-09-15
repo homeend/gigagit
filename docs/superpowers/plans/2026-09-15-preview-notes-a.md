@@ -75,6 +75,7 @@ Claude-Session: https://claude.ai/code/session_01NDk1DJtgLzZX7hMmxDs9nU
   - `func (set PreviewNoteSet) OK() bool`
   - `func (s *domain.Service) PreviewNotes(ctx context.Context, source, target string) (PreviewNoteSet, error)`
   - `func (s *domain.Service) PreviewResolve(ctx context.Context, spec string) (source, target string, err error)` — accepts an id, a label, or `<target>...<source>`.
+  - `func (set PreviewNoteSet) DiffSpec() model.DiffSpec` — the ONE construction of the preview's patch (`<base>..<tip>`); every hunk-numbering caller uses it (ruling 1).
   - `domain.PreviewSummary.Base() string` (the previously unexported `base`).
 
 - [ ] **Step 1: Write the failing git-verb test**
@@ -315,7 +316,7 @@ Expected: FAIL — `svc.PreviewNotes undefined`, `svc.PreviewResolve undefined`.
 In `internal/domain/preview.go`, directly after the `PreviewSummary` struct (which ends at line 134), add:
 
 ```go
-// Base is the merge base the summary computed (""" unless PreviewOK). It rides
+// Base is the merge base the summary computed ("" unless PreviewOK). It rides
 // the SAME cache entry as the rest of the summary, so a preview's note set
 // costs no extra git call while the tips are unchanged.
 func (s PreviewSummary) Base() string { return s.base }
@@ -331,6 +332,8 @@ package domain
 import (
 	"context"
 	"strings"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // Notes in merge previews (spec §1).
@@ -363,6 +366,19 @@ type PreviewNoteSet struct {
 
 // OK reports whether the pair resolved to a previewable range.
 func (set PreviewNoteSet) OK() bool { return set.Tip != "" }
+
+// DiffSpec is THE preview's patch: merge-base → source tip. Every surface that
+// numbers hunks under --preview (the CLI's `gg diff --preview --hunks`, the
+// note verbs' --hunk N, the batch planner, MCP) builds it from here and
+// nowhere else, so they cannot drift apart (ruling 1). `<base>..<tip>` and
+// `<targetHash>...<sourceHash>` are the same patch by construction; the base
+// is already resolved here, so the two-dot form is the cheaper spelling.
+func (set PreviewNoteSet) DiffSpec() model.DiffSpec {
+	if !set.OK() {
+		return model.DiffSpec{}
+	}
+	return model.DiffSpec{Rev: set.Base + ".." + set.Tip}
+}
 
 // has reports whether a commit belongs to this preview. The membership map is
 // built ONCE per query (ruling 3): the store is iterated a single time and
@@ -734,6 +750,15 @@ func (s *Service) invalidateNoteCounts() {
 }
 ```
 
+`SetNotesStore` (`internal/domain/notesstore.go:45-54`) clears `noteCounts` inline instead of calling that helper, so it needs the same line or a test that injects a store reads stale preview counts:
+
+```go
+	s.notes = st
+	s.noteCounts = nil
+	s.previewCounts = nil // same store, same invalidation
+	s.notesGen++
+```
+
 - [ ] **Step 6: Append the queries to `previewnotes.go`**
 
 ```go
@@ -903,6 +928,7 @@ Claude-Session: https://claude.ai/code/session_01NDk1DJtgLzZX7hMmxDs9nU"
   - `diffView.previewSet *domain.PreviewNoteSet` — non-nil ⇒ this diff is a preview's.
   - `Model.filesPreviewSet *domain.PreviewNoteSet` and `Model.filesPreviewCounts map[string]int` — the files view's copy, consumed by Task 4's badges.
   - `func (m Model) previewNoteSet() *domain.PreviewNoteSet` — the set of the diff on top, or nil.
+  - `func (v *diffView) inheritIdentity(from *diffView)` — the loader's identity copy (context, rev, noteAddr, previewSet).
 
 #### The `note_keys.go` / note-surface gate table (ruling 5)
 
@@ -957,7 +983,7 @@ func previewDiffModel(t *testing.T, notes []domain.ResolvedNote) Model {
 	v.rebuild()
 	m := Model{width: 100, height: 40}
 	m.filesPreviewSet = set
-	m = m.pushLayer(v).(Model)
+	m = m.pushLayer(v) // pushLayer returns Model, not tea.Model — no assertion
 	return m
 }
 
@@ -1024,18 +1050,26 @@ func TestPreviewDiffTitleSaysOutdated(t *testing.T) {
 	}
 }
 
-// The loader must not lose the stamp: diffMsg replaces the whole view.
-func TestPreviewStampSurvivesADiffMsg(t *testing.T) {
+// The compare loader builds a FRESH diffView and diffMsg then does
+// `*dv = *msg.view` — so anything the opener stamped is lost unless the loader
+// inherits it. This is the one trap in the whole task, so it is tested on the
+// inheritance step itself, not on a view the test already filled in.
+func TestCompareLoaderInheritsThePreviewStamp(t *testing.T) {
 	t.Parallel()
-	m := previewDiffModel(t, nil)
-	m.diffTag = "cmp:x"
-	loaded := &diffView{title: "a.txt", context: "ctx", rev: m.diffLayer().rev,
-		noteAddr: m.diffLayer().noteAddr, previewSet: m.diffLayer().previewSet}
-	tm, _ := m.Update(diffMsg{tag: "cmp:x", view: loaded})
-	v := tm.(Model).diffLayer()
-	if v.previewSet == nil || v.noteAddr.Path == "" {
-		t.Fatal("the preview stamp must survive the diff landing")
+	opener := previewDiffModel(t, nil).diffLayer()
+	fresh := &diffView{title: "a.txt"} // what loadCompareDiffCmd starts from
+	fresh.inheritIdentity(opener)
+	if fresh.previewSet != opener.previewSet {
+		t.Fatal("the loader must carry the preview set across the rebuild")
 	}
+	if fresh.noteAddr != opener.noteAddr {
+		t.Fatalf("the loader must carry the note address, got %+v", fresh.noteAddr)
+	}
+	if fresh.rev != opener.rev || fresh.context != opener.context {
+		t.Fatal("the loader must keep carrying rev and context, as it did before")
+	}
+	// A nil opener (a fresh open, no layer yet) must be a no-op, not a panic.
+	(&diffView{}).inheritIdentity(nil)
 }
 
 func contains(s, sub string) bool { return len(s) >= len(sub) && (len(sub) == 0 || indexOf(s, sub) >= 0) }
@@ -1054,8 +1088,8 @@ If `internal/tui` already has a `contains`/`indexOf` helper (check with `grep -r
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `cd /mnt/t/others/gigagit.worktrees/feat-preview-notes && go test ./internal/tui/ -run TestPreview -v`
-Expected: FAIL — `previewSet` and `filesPreviewSet` undefined.
+Run: `cd /mnt/t/others/gigagit.worktrees/feat-preview-notes && go test ./internal/tui/ -run "TestPreviewDiff|TestCompareLoaderInherits" -v`
+Expected: FAIL — `previewSet`, `filesPreviewSet` and `inheritIdentity` undefined.
 
 - [ ] **Step 3: Add the fields and the accessor**
 
@@ -1130,15 +1164,28 @@ with:
 	}
 ```
 
-`internal/tui/diff_view.go:622-624` — the compare loader builds a FRESH view and copies only `context, rev` from the layer, and `model.go:414-422` then does `*dv = *msg.view`. Without this the stamp is wiped the moment the diff lands:
+`internal/tui/diff_view.go:622-624` — the compare loader builds a FRESH view and copies only `context, rev` from the layer, and `model.go:414-422` then does `*dv = *msg.view`. Without this the stamp is wiped the moment the diff lands. Extract the copy so it is testable on its own; add beside `loadCompareDiffCmd`:
 
 ```go
-	if dv := m.diffLayer(); dv != nil {
-		// Carry the opener's identity across the rebuild: the loader has no
-		// Model to ask, and diffMsg replaces the whole view.
-		v.context, v.rev = dv.context, dv.rev
-		v.noteAddr, v.previewSet = dv.noteAddr, dv.previewSet
+// inheritIdentity carries the OPENER's identity onto a freshly built view.
+// The loaders construct their view with no Model to ask, and diffMsg replaces
+// the whole value (`*dv = *msg.view`), so anything the opener stamped — the
+// context line, the provenance rev, the note address, the merge-preview set —
+// has to travel here or it is silently lost the moment the diff lands.
+// A nil source is a fresh open with no layer yet: a no-op.
+func (v *diffView) inheritIdentity(from *diffView) {
+	if from == nil {
+		return
 	}
+	v.context, v.rev = from.context, from.rev
+	v.noteAddr, v.previewSet = from.noteAddr, from.previewSet
+}
+```
+
+and replace lines 622-624 with:
+
+```go
+	v.inheritIdentity(m.diffLayer())
 ```
 
 - [ ] **Step 5: Route the note load through the preview resolver (gate 2)**
@@ -1236,9 +1283,43 @@ In `openNoteRemoveAll` (line 70), replace the counting block:
 	if v.previewSet != nil {
 		p.tip = shortHash(addr.Commit)
 	}
-	if p.roots == 0 {
-		return m, nil
+```
+
+The row itself must disappear when nothing it can remove is on the tip — offering it and then doing nothing is exactly the silent no-op this file's own comments forbid. Add the tip-scoped test to `noteRemoveAllRow` (line 44):
+
+```go
+func (m Model) noteRemoveAllRow() (actionRow, bool) {
+	if !m.diffHasNotes() {
+		return actionRow{}, false
 	}
+	addr, ok := m.diffNoteAddress()
+	if !ok {
+		return actionRow{}, false
+	}
+	// On a preview the visible notes may ALL come from older commits, which
+	// NotesClear(addr) — one address, the tip — cannot touch. Offering the
+	// row there would be a gesture that does nothing.
+	if v := m.diffLayer(); v != nil && v.previewSet != nil && !diffHasTipNotes(v, addr.Commit) {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "note-remove-all",
+		label: i18n.T("Remove all notes…"),
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openNoteRemoveAll()
+		},
+	}, true
+}
+
+// diffHasTipNotes reports whether any visible thread is anchored on commit.
+func diffHasTipNotes(v *diffView, commit string) bool {
+	for _, r := range v.notes {
+		if r.Note.Address.Commit == commit {
+			return true
+		}
+	}
+	return false
+}
 ```
 
 In `box` (line 122), before the existing `lead` assignment:
@@ -1372,6 +1453,28 @@ func TestNotedFilePathUsesThePreviewCounts(t *testing.T) {
 	}
 }
 
+// After a note write the pair's HASHES are unchanged, so afterPreviewsRefresh
+// takes its early-return branch — which must still take the fresh counts, or
+// the file-list badges and }/{ go stale in the only case that matters.
+func TestUnchangedPreviewRefreshStillMovesTheCounts(t *testing.T) {
+	t.Parallel()
+	m := previewDiffModel(t, nil)
+	m.filesView = &contentPopup{}
+	m.filesPreviewCounts = map[string]int{}
+	m.previewOpen = &previewOpenState{id: "p1", source: "feat", target: "main",
+		srcHash: "src", tgtHash: "tgt"}
+	m.previews = []previewRow{{
+		rec:    model.MergePreview{ID: "p1", Source: "feat", Target: "main"},
+		sum:    domain.PreviewSummary{State: domain.PreviewOK, SourceHash: "src", TargetHash: "tgt"},
+		notes:  1,
+		byPath: map[string]int{"a.txt": 1},
+	}}
+	m2, _ := m.afterPreviewsRefresh()
+	if m2.filesPreviewCounts["a.txt"] != 1 {
+		t.Fatalf("an unchanged-hash refresh must still take the fresh counts, got %v", m2.filesPreviewCounts)
+	}
+}
+
 // Ruling 4: steering may not mark the old side of a preview.
 func TestSteerHighlightRefusesTheOldSideOfAPreview(t *testing.T) {
 	t.Parallel()
@@ -1388,8 +1491,8 @@ Add the `steer` import. Check the real `steer.Command` field names with `grep -n
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `cd /mnt/t/others/gigagit.worktrees/feat-preview-notes && go test ./internal/tui/ -run "TestPreviewRow|TestNotedFilePath|TestSteerHighlightRefuses" -v`
-Expected: FAIL — `previewRow.notes` undefined, `filesPreviewCounts` unread.
+Run: `cd /mnt/t/others/gigagit.worktrees/feat-preview-notes && go test ./internal/tui/ -run "TestPreviewRow|TestNotedFilePath|TestSteerHighlightRefuses|TestUnchangedPreviewRefresh" -v`
+Expected: FAIL — `previewRow.notes`/`previewRow.byPath` undefined, `filesPreviewCounts` unread.
 
 - [ ] **Step 3: Count notes with the summary (Previews panel)**
 
@@ -1399,12 +1502,13 @@ Expected: FAIL — `previewRow.notes` undefined, `filesPreviewCounts` unread.
 type previewRow struct {
 	rec   model.MergePreview
 	sum   domain.PreviewSummary
-	notes int // root notes gathered along the branch, hidden ones included
+	notes int            // root notes gathered along the branch, hidden ones included
+	byPath map[string]int // the same counts per path; feeds the open preview's file list
 	err   error
 }
 ```
 
-and fill it in `readPreviews` (lines 30-35):
+and fill both in `readPreviews` (lines 30-35):
 
 ```go
 	rows := make([]previewRow, 0, len(ps))
@@ -1415,8 +1519,8 @@ and fill it in `readPreviews` (lines 30-35):
 		// so it gets no badge and costs no store read.
 		if err == nil && sum.State == domain.PreviewOK {
 			if set, serr := svc.PreviewNotes(ctx, p.Source, p.Target); serr == nil {
-				if _, total, cerr := svc.PreviewNoteCounts(ctx, set); cerr == nil {
-					row.notes = total
+				if byPath, total, cerr := svc.PreviewNoteCounts(ctx, set); cerr == nil {
+					row.notes, row.byPath = total, byPath
 				}
 			}
 		}
@@ -1521,29 +1625,28 @@ func (m Model) notedFilePath(path string) bool {
 
 - [ ] **Step 6: Refresh the badges on every note mutation (ruling 7 + 8)**
 
-`internal/tui/model.go`, in the `srcNotes` arrival case (lines 1363-1371), after the existing `loadNotesCmd()` dispatch, chain a previews read so the panel badge and the file list follow a write:
+`internal/tui/model.go`'s `dataAvailableMsg` handler already ends with `return m, previewsChain` (line 1395) — there IS an existing chain variable for the branches/remotes arrival. Find it (`grep -n "previewsChain" internal/tui/model.go`) and add `srcNotes` to what arms it, rather than building a parallel `tea.Batch`. Preview badges count the SAME store, so a note write moves them; always through `chainPreviewsRead()`, never a plain `reloadSourcesCmd` (ruling 8: a silent read superseding a manual one strands `srcLoading[srcPreviews]`). Arm it only when a preview is actually on screen — otherwise every note write in every repo spends a git resolve per saved pair:
 
 ```go
-		case srcNotes:
-			m.noteCounts = msg.value.(domain.NoteCounts)
-			var cmds []tea.Cmd
-			if cmd := m.loadNotesCmd(); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			// Preview badges count the SAME store, so a note mutation moves
-			// them too. Always via chainPreviewsRead: a plain reloadSourcesCmd
-			// would supersede an in-flight manual read and strand srcLoading.
-			if m.previewOpen != nil || m.activeLeftTab == panelPreviews {
-				var pcmd tea.Cmd
-				m, pcmd = m.chainPreviewsRead()
-				cmds = append(cmds, pcmd)
-			}
-			if len(cmds) > 0 {
-				return m, tea.Batch(cmds...)
-			}
+	// where previewsChain is armed, alongside the existing branches/remotes arm:
+	if msg.source == srcNotes && (m.previewOpen != nil || m.activeLeftTab == panelPreviews) {
+		m, previewsChain = m.chainPreviewsRead()
+	}
 ```
 
-(Never dispatch this from `reRoot`'s batch — ruling 8.)
+Never dispatch this from `reRoot`'s batch (ruling 8).
+
+Then make the arrival actually move the OPEN preview's counts. `afterPreviewsRefresh` (`internal/tui/preview_open.go:187-189`) currently early-returns for a saved pair whose hashes are unchanged — which is exactly the case after a note write, so without this the file-list badges and the `}`/`{` step go stale. Replace that branch:
+
+```go
+				if r.sum.SourceHash == po.srcHash && r.sum.TargetHash == po.tgtHash {
+					// The pair did not move, but its NOTES may have (this
+					// refresh was chained off srcNotes). Take the fresh counts
+					// without re-resolving or re-opening anything.
+					m.filesPreviewCounts = r.byPath
+					return m, nil
+				}
+```
 
 - [ ] **Step 7: The steering guard (gate 8, ruling 4)**
 
@@ -1606,8 +1709,9 @@ import (
 )
 
 // The three-dot form needs no saved record, and the resolved DiffSpec is the
-// PREVIEW's range (target...source), in HASHES — so hunk numbers under
-// --preview match `gg diff --preview --hunks` and never the tip's own diff.
+// PREVIEW's patch, built by the one constructor (set.DiffSpec()) — so hunk
+// numbers under --preview match `gg diff --preview --hunks` and are never the
+// tip commit's own parent→tip numbering.
 func TestResolvePreviewTargetThreeDotForm(t *testing.T) {
 	svc, dir := newCLIPreviewRepo(t) // helper below
 	tgt, err := resolvePreviewTarget(context.Background(), svc, "main...feat")
@@ -1617,14 +1721,15 @@ func TestResolvePreviewTargetThreeDotForm(t *testing.T) {
 	if tgt.Source != "feat" || tgt.Target != "main" {
 		t.Fatalf("got %s/%s", tgt.Source, tgt.Target)
 	}
-	if !strings.Contains(tgt.Spec.Rev, "...") {
-		t.Fatalf("the preview diff is a three-dot range, got %q", tgt.Spec.Rev)
-	}
-	if !strings.HasPrefix(tgt.Spec.Rev, revParseCLI(t, dir, "main")) {
-		t.Fatalf("the range must be hash-resolved target first, got %q", tgt.Spec.Rev)
-	}
 	if !tgt.Set.OK() || tgt.Set.Tip != revParseCLI(t, dir, "feat") {
 		t.Fatalf("the set's tip must be feat's tip, got %+v", tgt.Set)
+	}
+	if tgt.Spec.Rev != tgt.Set.DiffSpec().Rev {
+		t.Fatalf("the CLI must not build its own range: %q vs %q", tgt.Spec.Rev, tgt.Set.DiffSpec().Rev)
+	}
+	// The preview's patch runs merge-base → tip, NOT parent(tip) → tip.
+	if !strings.HasPrefix(tgt.Spec.Rev, revParseCLI(t, dir, "main")) {
+		t.Fatalf("the range must start at the merge base, got %q", tgt.Spec.Rev)
 	}
 }
 
@@ -1685,11 +1790,12 @@ import (
 type previewTarget struct {
 	Source, Target string
 	Set            domain.PreviewNoteSet
-	// Spec is the PREVIEW's diff: `<targetHash>...<sourceHash>`. Hunk numbers
-	// come from THIS patch, never from the tip commit's own parent→tip diff,
-	// so `gg diff --preview --hunks` and `gg note add --preview --hunk N`
-	// address the same hunk. Hashes, not names: the value is spliced into a
-	// git argv and rides the diff cache key.
+	// Spec is the PREVIEW's diff, straight from Set.DiffSpec() — the single
+	// construction of that patch (ruling 1). Hunk numbers come from it, never
+	// from the tip commit's own parent→tip diff, so `gg diff --preview
+	// --hunks` and `gg note add --preview --hunk N` address the same hunk.
+	// Hashes, not names: the value is spliced into a git argv and rides the
+	// diff cache key.
 	Spec model.DiffSpec
 }
 
@@ -1735,10 +1841,7 @@ func resolvePreviewTarget(ctx context.Context, svc *domain.Service, spec string)
 	if err != nil {
 		return previewTarget{}, err
 	}
-	return previewTarget{
-		Source: source, Target: target, Set: set,
-		Spec: model.DiffSpec{Rev: sum.TargetHash + "..." + sum.SourceHash},
-	}, nil
+	return previewTarget{Source: source, Target: target, Set: set, Spec: set.DiffSpec()}, nil
 }
 
 // withPaths copies the spec with -- <paths> applied.
@@ -1940,8 +2043,11 @@ func TestPlanNoteBatchInUsesTheGivenHunkSpec(t *testing.T) {
 	svc, dir := newPreviewRepo(t)
 	ctx := context.Background()
 	tip := revParse(t, dir, "feat")
-	base := revParse(t, dir, "main")
-	spec := model.DiffSpec{Rev: base + "..." + tip}
+	set, err := svc.PreviewNotes(ctx, "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := set.DiffSpec()
 	b, err := notebatch.Parse([]byte(`{"files":[{"path":"a.txt","annotations":[{"hunk":1,"summary":"first preview hunk"}]}]}`))
 	if err != nil {
 		t.Fatal(err)
@@ -2025,7 +2131,19 @@ and change `planNoteBatchAnchor` (line 101) to take `t NoteBatchTarget`, with it
 
 - [ ] **Step 4: `gg note add --preview`**
 
-`internal/cli/note.go`, in `noteAdd` (line 267) add `pf := addPreviewFlag(fs)`, and inside the `else` branch that resolves the target (line 328), branch first:
+`internal/cli/note.go`, in `noteAdd` (line 267) add `pf := addPreviewFlag(fs)`.
+
+First extend the LINK branch's own guard (line 303) — without this, `gg note add gg://… --preview X` silently drops `--preview` and writes to the link's target instead (ruling 9 makes that exit 2):
+
+```go
+	if link != nil {
+		if pf.set() {
+			return previewUsageErr("note add", stderr)
+		}
+		if *tf.file != "" || *tf.rev != "" || *tf.cached || *hunk != 0 || *newLine != 0 || *oldLine != 0 {
+```
+
+Then, inside the `else` branch that resolves the target (line 328), branch first:
 
 ```go
 	} else if pf.set() {
@@ -2204,29 +2322,28 @@ Adapt the variable names to what `noteapply.go` actually uses — read the funct
 	case *working:
 ```
 
-`reviewImportTarget` (line 122) already takes the last non-empty segment of an `A...B` range as the tip and returns `NoteSideNewOnly`, so it needs no change. But `importReviewNotes` must number hunks over the preview patch, so change its `PlanNoteBatch` call (line 178) to:
+`reviewImportTarget` (line 122) already takes the last non-empty segment of an `A...B` range as the tip and returns `NoteSideNewOnly`, so it needs no change. But `importReviewNotes` must number hunks over the preview patch. Thread an EXPLICIT spec through rather than sniffing the range string: gating on `strings.Contains(Rev, "...")` would silently change today's `gg review A...B --notes` (its hunks would start being numbered over the range while `A..B` stayed tip-numbered) — a behaviour change this feature did not ask for.
+
+Give `importReviewNotes` one more parameter, `hunkSpec *model.DiffSpec`, and pass it through:
+
+```go
+// importReviewNotes reads the tool's notes … hunkSpec is the patch a `hunk`
+// annotation is numbered against, or nil to derive it from cached/rev as
+// before. Only --preview passes one: its notes are stored on the source tip
+// but numbered over merge-base → tip, and nothing else in review land splits
+// those two apart.
+func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.ReviewTarget, arg, notesPath, report, toolName string, hunkSpec *model.DiffSpec, stderr io.Writer) int {
+```
+
+and at line 178:
 
 ```go
 	planned, skipped, err := svc.PlanNoteBatchIn(ctx, batch,
-		domain.NoteBatchTarget{Cached: cached, Rev: rev, Hunks: reviewHunkSpec(target)},
+		domain.NoteBatchTarget{Cached: cached, Rev: rev, Hunks: hunkSpec},
 		noteAuthorDefault(toolName), rule)
 ```
 
-with, beside `reviewImportTarget`:
-
-```go
-// reviewHunkSpec is the patch a review's `hunk` annotations are numbered
-// against: for a RANGE target (which `--preview` produces) that is the range
-// itself, so `gg diff --preview --hunks` and the imported notes agree. Every
-// other target derives its patch from cached/rev as before (nil).
-func reviewHunkSpec(t domain.ReviewTarget) *model.DiffSpec {
-	if t.Kind == domain.ReviewRange && strings.Contains(t.Diff.Rev, "...") {
-		spec := t.Diff
-		return &spec
-	}
-	return nil
-}
-```
+In `cmdReview`, keep a `var hunkSpec *model.DiffSpec` beside `arg`, set it in the `pf.set()` case (`spec := tgt.Spec; hunkSpec = &spec`), and pass it at the two `importReviewNotes` call sites (line 112 is the only one; check with `grep -n importReviewNotes internal/cli/*.go`).
 
 - [ ] **Step 8: Run the tests**
 
@@ -2318,15 +2435,9 @@ func (s *Server) previewSet(ctx context.Context, t noteTargetIn) (domain.Preview
 	}
 	return set, nil
 }
-
-// previewHunkSpec is the patch a preview's hunk numbers refer to: the
-// preview's own target...source diff, never the tip's parent→tip diff.
-func previewHunkSpec(set domain.PreviewNoteSet) model.DiffSpec {
-	return model.DiffSpec{Rev: set.Base + "..." + set.Tip}
-}
 ```
 
-**Note the spec:** `set.Base + ".." + set.Tip` and `target...source` describe the same commit range; use the two-dot base form here because the base is already resolved — `HunkRange` cares only that the patch matches what `gg diff --preview --hunks` prints, and `<base>..<tip>` and `<targetHash>...<sourceHash>` are byte-identical patches by construction. Write `model.DiffSpec{Rev: set.Base + ".." + set.Tip}`.
+MCP does **not** build its own range: every hunk spec below comes from `set.DiffSpec()` (Task 1), the one construction of the preview's patch (ruling 1).
 
 - [ ] **Step 4: Branch the three tools**
 
@@ -2374,7 +2485,7 @@ func previewHunkSpec(set domain.PreviewNoteSet) model.DiffSpec {
 			case in.NewLine != 0:
 				side, rng = model.NoteSideNew, [2]int{in.NewLine, in.NewLine}
 			case in.Hunk != 0:
-				spec := previewHunkSpec(set)
+				spec := set.DiffSpec()
 				spec.Paths = []string{in.File}
 				s2, r2, herr := s.svc.HunkRange(ctx, spec, in.File, in.Hunk)
 				if herr != nil {
@@ -2410,7 +2521,7 @@ func previewHunkSpec(set domain.PreviewNoteSet) model.DiffSpec {
 			if perr != nil {
 				return nil, out, perr
 			}
-			spec := previewHunkSpec(set)
+			spec := set.DiffSpec()
 			target = domain.NoteBatchTarget{Rev: set.Tip, Hunks: &spec}
 			rule = domain.NoteSideNewOnly
 		}
@@ -2874,8 +2985,10 @@ Claude-Session: https://claude.ai/code/session_01NDk1DJtgLzZX7hMmxDs9nU"
 
 Create `e2e/scenarios/s91_preview_notes.toml`:
 
+The schema (`.claude/skills/writing-e2e-scenarios/SKILL.md`) has exactly ONE `[input]` block and no run-step that writes a file, so the "a later commit moved the lines" case is built in `[input] steps` up front and the older commit is addressed with an ordinary rev-ish (`HEAD~1`) — `NoteAdd` resolves it to a full sha, which is precisely what makes the note a preview note on an older commit.
+
 ```toml
-name = "preview notes: add on the preview, stored on the tip, outdated after a further commit"
+name = "preview notes: stored on the tip, gathered along the branch, outdated when a later commit moved the lines"
 
 [input]
 steps = [
@@ -2885,6 +2998,8 @@ steps = [
   { switch = "feat/x" },
   { write = "a.txt", content = "alpha\nbravo\ncharlie\nDELTA\n" },
   { commit = "add DELTA" },
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\nECHO\n" },
+  { commit = "rewrite DELTA as ECHO" },
 ]
 
 [[run]]
@@ -2897,15 +3012,21 @@ cmd             = ["diff", "--preview", "login", "--hunks"]
 exit            = 0
 stdout_contains = ["a.txt", "1 @@ -"]
 
-# The note is addressed to the PREVIEW and stored on the source tip.
+# A note addressed to the PREVIEW: stored on the source tip, active there.
 [[run]]
-cmd             = ["note", "add", "--preview", "login", "--file", "a.txt", "--new-line", "4", "--summary", "why DELTA"]
+cmd             = ["note", "add", "--preview", "login", "--file", "a.txt", "--new-line", "4", "--summary", "why ECHO"]
+exit            = 0
+
+# A note on the EARLIER commit, on the line that commit added and the next one
+# rewrote. It is not on the tip at all, yet the preview gathers it.
+[[run]]
+cmd             = ["note", "add", "--rev", "HEAD~1", "--file", "a.txt", "--new-line", "4", "--summary", "why DELTA"]
 exit            = 0
 
 [[run]]
 cmd             = ["note", "list", "--preview", "login", "--file", "a.txt"]
 exit            = 0
-stdout_contains = ["why DELTA", "new:4-4", "active"]
+stdout_contains = ["why ECHO", "active", "why DELTA", "outdated"]
 
 # The old side is the merge base: not addressable.
 [[run]]
@@ -2917,34 +3038,18 @@ exit = 2
 cmd  = ["note", "add", "--preview", "login", "--rev", "HEAD", "--file", "a.txt", "--new-line", "1", "--summary", "no"]
 exit = 2
 
-# A further commit rewrites the annotated line: the note is still listed, now
-# outdated — it is gathered from the older commit, not read off the tip.
-[[run]]
-cmd  = ["add", "--all"]
-exit = 0
-
-[input.more]
-steps = [
-  { write = "a.txt", content = "alpha\nbravo\ncharlie\nECHO\n" },
-  { commit = "rewrite DELTA" },
-]
-
-[[run]]
-cmd             = ["note", "list", "--preview", "login", "--file", "a.txt"]
-exit            = 0
-stdout_contains = ["why DELTA", "outdated"]
-
 # The three-dot form needs no saved record.
 [[run]]
 cmd             = ["note", "list", "--preview", "main...feat/x", "--file", "a.txt"]
 exit            = 0
-stdout_contains = ["why DELTA"]
+stdout_contains = ["why ECHO", "why DELTA"]
 
 [expect]
 branch = "feat/x"
+clean  = true
 ```
 
-**Before writing this file, read `.claude/skills/writing-e2e-scenarios/SKILL.md` and one existing scenario** — the harness may not support a mid-scenario `[input.more]` block. If it does not, express the second commit through the operations the schema DOES offer (e.g. a `[[run]]` using `gg add`/`gg commit`, the way `s78_cli_add_commit.toml` does), and delete `[input.more]`. Do not invent schema.
+Checklist from the skill, applied: flags before positionals in every `cmd`; no origin, so the required commit step lives in `input.steps`; no decision is reachable, so no flag answers one; exit codes are success 0 / usage 2, as the verbs define them.
 
 - [ ] **Step 2: Run the scenario**
 
@@ -3063,7 +3168,13 @@ Things the spec left open, decided here. Each is implemented at the anchor named
 13. **The steering refusal message is English, not `i18n.T`.** `answerSteer`/`steerFail` is agent-facing protocol; only the TUI's own notice is translated. (Task 4, ruling 4's TUI half.)
 14. **`srcNotes` chains a previews read only when a preview is open or the Previews tab is active.** Chaining it unconditionally would spend a git resolve per saved pair on every note write in every repo. (Task 4.)
 15. **The web page learns the tip from `state.previewOpen.tip`** (set in `armPreview` from `source_hash`), and gates the preview diff context on `state.compare.bHash === po.tip`, matching `previewShowing()`'s own test. Sidebar branch hashes are SHORT (ruling 8) — but `source_hash` from `/api/preview` is full, and both sides of this comparison come from that payload, so no prefix comparison is needed here.
-16. **The web note-ADD path needs no new endpoint**: `state.diffCtx.rev` is already the tip with `state: "commit"`, so the existing `/api/notes/*` posts carry the right target (spec §1.4).
+16. **One construction of the preview's patch: `PreviewNoteSet.DiffSpec()`** (`<base>..<tip>`). The CLI, the batch planner, MCP and the tests all call it; nobody assembles a range string themselves. Ruling 1 says the numbering must agree — this is the mechanism that makes disagreement impossible. (Task 1.)
+17. **The loader's identity copy is an extracted method, `(*diffView).inheritIdentity`**, not four inline assignments — so the one trap in Task 3 (a fresh view + `*dv = *msg.view` silently dropping the stamp) has a test that actually exercises it. (Task 3.)
+18. **`gg review A..B` / `A...B` hunk numbering is UNCHANGED by this feature.** `importReviewNotes` takes an explicit `hunkSpec *model.DiffSpec` that only `--preview` fills; sniffing the range string would have quietly changed today's `gg review A...B --notes`. The latent inconsistency (`A...B` notes numbered over the tip's own diff) is noted here, not fixed. (Task 6.)
+19. **`afterPreviewsRefresh`'s unchanged-hash branch takes the fresh per-path counts.** A note write does not move the tips, so that branch is the one every preview-badge refresh goes through; without it the file-list `◆N` and the `}`/`{` step go stale in exactly the case the feature is for. `previewRow` therefore carries `byPath` as well as `notes`. (Task 4.)
+20. **"Remove all notes…" disappears when nothing on the TIP is removable.** `NotesClear` takes one address; on a preview whose visible notes all come from older commits the row would be a gesture that does nothing, which that file's own comments forbid. (Task 3.)
+21. **The e2e scenario builds the "lines moved" case in `[input]` and addresses the older commit as `HEAD~1`.** The harness has one `[input]` block and no file-writing run step, so a mid-scenario commit is not expressible; `NoteAdd` resolves `HEAD~1` to a full sha, which is all the older-commit case needs. (Task 10.)
+22. **The web note-ADD path needs no new endpoint**: `state.diffCtx.rev` is already the tip with `state: "commit"`, so the existing `/api/notes/*` posts carry the right target (spec §1.4).
 
 ## Self-review
 
@@ -3090,6 +3201,8 @@ Things the spec left open, decided here. Each is implemented at the anchor named
 
 No §1 requirement is unassigned. §2 (Feature B) appears nowhere, as instructed.
 
-**2. Placeholder scan.** No "TBD", no "add error handling", no "similar to Task N". Four places tell the implementer to *read an existing file first and adapt names* (the `internal/git` and `internal/domain` test helpers, `textdiff.Row`'s constants, `steer.Command`'s fields, `noteapply.go`'s locals, the e2e `[input.more]` schema question, `WireNote`'s status field). Those are deliberate: inventing a helper name that does not exist is worse than an explicit "check this, then adapt", and each one names the exact grep to run.
+**2. Placeholder scan.** No "TBD", no "add error handling", no "similar to Task N". A few places tell the implementer to *read an existing file first and adapt names* (the `internal/git` and `internal/domain` test helpers, `textdiff.Row`'s constants, `steer.Command`'s fields, `noteapply.go`'s locals, `WireNote`'s status field, the `previewsChain` arm site). Those are deliberate: inventing a helper name that does not exist is worse than an explicit "check this, then adapt", and each one names the exact grep to run. The e2e schema question is now CLOSED — the scenario is written against the schema in `.claude/skills/writing-e2e-scenarios/SKILL.md`, which has one `[input]` block and no file-writing run step (ruling 21).
+
+**4. Post-review fixes (second pass).** Five things in the first draft would have broken or false-passed an implementer and are fixed above: the stamp test that passed either way (now `inheritIdentity`, ruling 17); `m.pushLayer(v).(Model)`, which does not compile (`pushLayer` returns `Model`); stale preview counts after a note write, because `afterPreviewsRefresh` early-returns on unchanged hashes (ruling 19); `gg note add <gg://link> --preview X` silently dropping `--preview` (the link branch's guard now tests `pf.set()`); and the invented `[input.more]` e2e block (ruling 21). Three smaller ones too: one construction of the preview patch instead of two spellings (ruling 16), an explicit `hunkSpec` instead of range-string sniffing (ruling 18), `SetNotesStore` clearing `previewCounts`, and the remove-all row hiding rather than no-opping (ruling 20).
 
 **3. Type consistency.** Checked across tasks: `PreviewNoteSet{Source,Target,Tip,Base,Commits}` + `OK()` (T1) is used verbatim in T2/T3/T4/T5/T7/T8. `PreviewNotesFor(ctx, set, path, d)` / `PreviewNotesAt(ctx, set, path)` / `PreviewNoteCounts(ctx, set) (map[string]int, int, error)` match every call site. `PreviewStatus(model.NoteStatus) string` and `ToWireNotePreview(ResolvedNote, bool)` are used identically in T6/T7/T8. `NoteBatchTarget{Cached,Rev,Hunks}` + `PlanNoteBatchIn(ctx, b, t, author, rule)` match T6's CLI and T7's MCP. `previewTarget{Source,Target,Set,Spec}` + `withPaths` match T5 and T6. `diffView.previewSet` / `Model.filesPreviewSet` / `Model.filesPreviewCounts` / `Model.previewNoteSet()` match T3 and T4.
