@@ -7,6 +7,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/preflight"
@@ -59,10 +61,14 @@ func Preflight(svc *domain.Service, stdin io.Reader, out io.Writer) (bool, error
 // Migrate (see domain.Features), so no real repository ever produces a
 // pending migration for an end-to-end test to exercise.
 func askMigration(m domain.PendingMigration, r *bufio.Reader, out io.Writer, run func(domain.PendingMigration) error) (bool, error) {
-	fmt.Fprintf(out, i18n.T("%s needs a one-time migration")+"\n", m.Feature)
-	fmt.Fprintf(out, "  %s\n", renderMigrationConsequence(m))
-	fmt.Fprintf(out, "  "+i18n.T("This discards %d entries and cannot be undone.")+"\n", len(m.Refs))
-	fmt.Fprintf(out, "  [m] %s  [s] %s  [q] %s: ",
+	fmt.Fprint(out, migrationBox([]string{
+		fmt.Sprintf(i18n.T("%s needs a one-time migration"), m.Feature),
+		"",
+		renderMigrationConsequence(m),
+		"",
+		fmt.Sprintf(i18n.T("This discards %d entries and cannot be undone."), len(m.Refs)),
+	}))
+	fmt.Fprintf(out, "[m] %s  [s] %s  [q] %s: ",
 		i18n.T("Migrate"), i18n.T("Skip"), i18n.T("Quit"))
 
 	line, rerr := r.ReadString('\n')
@@ -79,4 +85,36 @@ func askMigration(m domain.PendingMigration, r *bufio.Reader, out io.Writer, run
 	default: // skip: proceed with the feature disabled
 	}
 	return true, nil
+}
+
+// migrationBoxWidth is the fixed inner text width of the consent box. The
+// gate runs before the UI (and before any terminal-size query), so the box
+// is sized for the narrowest terminal worth supporting rather than measured.
+const migrationBoxWidth = 68
+
+// migrationBox frames paragraphs in a plain box-drawing border, word-wrapping
+// each to migrationBoxWidth so every line — heading, consequence prose and
+// the irreversibility warning alike — starts at the same column. An empty
+// paragraph renders as one blank spacer line.
+func migrationBox(paras []string) string {
+	var body []string
+	for _, p := range paras {
+		if strings.TrimSpace(p) == "" {
+			body = append(body, "")
+			continue
+		}
+		body = append(body, wrapWords(p, migrationBoxWidth)...)
+	}
+	var b strings.Builder
+	bar := strings.Repeat("\u2500", migrationBoxWidth+2)
+	b.WriteString("\u250c" + bar + "\u2510\n")
+	for _, line := range body {
+		pad := migrationBoxWidth - lipgloss.Width(line)
+		if pad < 0 {
+			pad = 0
+		}
+		b.WriteString("\u2502 " + line + strings.Repeat(" ", pad) + " \u2502\n")
+	}
+	b.WriteString("\u2514" + bar + "\u2518\n")
+	return b.String()
 }
