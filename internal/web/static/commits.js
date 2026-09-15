@@ -7,7 +7,7 @@ import { wtCount, wtExtra, wtRowHTML } from "./status.js";
 import { followOp, opBusy, opLine, openCreateBranchPrompt, showLocalConfirm, startOp } from "./ops.js";
 import { rev, startReview } from "./review.js";
 import { addCommitEntry } from "./sidebar.js";
-import { commitMetaLine, drillOut, enterFilesStage, openCompare, openWorkingTree, renderFiles, setFilesMeta } from "./files.js";
+import { commitMetaLine, drillOut, enterFilesStage, openCompare, openWorkingTree, renderFiles, setCommitTitle, setFilesMeta } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 import { extraRows } from "./menus.js";
 
@@ -515,7 +515,7 @@ async function openCommit(i) {
   state.fileSha = row.hash;
   state.filesMode = "commit";
   enterFilesStage();
-  $("files-title").textContent = row.short + " " + row.subject;
+  setCommitTitle(row.hash, row.short, row.subject);
   setFilesMeta(commitMetaLine(body));
   renderFiles();
   focusPane();
@@ -533,7 +533,7 @@ async function openCommitByHash(hash, title) {
   state.fileSha = hash;
   state.filesMode = "commit";
   enterFilesStage();
-  $("files-title").textContent = title;
+  setCommitTitle(hash, "", title);
   setFilesMeta(commitMetaLine(body));
   renderFiles();
   focusPane();
@@ -894,7 +894,7 @@ function showCommitMenu(c, i, x, y) {
     // the moment someone has to retype it — so the row reads it first and only
     // opens the (multiline) prompt once it has it.
     items.push({
-      label: "reword this commit…",
+      label: "edit commit message…",
       act: async () => {
         const got = await getJSON("/api/commit-message?rev=" + encodeURIComponent(c.hash)).catch(() => null);
         if (!got) {
@@ -902,7 +902,7 @@ function showCommitMenu(c, i, x, y) {
           return;
         }
         openPrompt({
-          title: "Reword " + short + ":",
+          title: "Edit the message of " + short + ":",
           value: got.message || "",
           multiline: true,
           onSubmit: (message) => startOp({ op: "reword", sha: c.hash, message }, "rewording " + short),

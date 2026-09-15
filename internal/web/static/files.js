@@ -1,6 +1,6 @@
 // files.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, attnKey, esc, getJSON, postJSON, runOnce, runes, state } from "./core.js";
+import { $, attnKey, charWidth, elidePath, esc, getJSON, postJSON, runOnce, runes, state } from "./core.js";
 import { copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
 import { extraRows, registerHelp } from "./menus.js";
@@ -75,11 +75,12 @@ function setLayout(mode) {
 function enterFilesStage() {
   state.pane = "files";
   setLayout("files");
-  $("diff-title").textContent = "";
+  setDiffTitle("");
   $("diff-body").innerHTML = "";
   state.lastDiff = null;
   state.diffCtx = null;
   setFilesMeta(""); // every stage starts without a date; only a commit open sets one
+  $("files-title").dataset.sha = ""; // …and without a commit id; see setCommitTitle
 }
 
 
@@ -89,11 +90,109 @@ function enterFilesStage() {
 // behind it — a comparison, the working tree, a stash — never shows one by
 // simply not setting it. The element carries its own #files-meta.hidden rule;
 // a bare class="hidden" with no id rule would stay visible.
+// --- the diff header's file path ---
+//
+// The header is the only place the open file's full path is written out, so
+// it is also the natural place to copy it from. That makes the path a
+// SEPARATE element rather than a slice of the header's text: three of the
+// callers decorate it ("a ↔ b · path", "path — resolve"), and a copy that
+// parsed the rendered text back would hand out those decorations too.
+// setDiffTitle keeps the raw path on the element; nothing reads textContent.
+function setDiffTitle(path, prefix, suffix) {
+  const el = $("diff-title");
+  if (!path) {
+    el.textContent = "";
+    return;
+  }
+  el.innerHTML =
+    esc(prefix || "") +
+    `<span id="diff-path" title="${esc(path)} — click to copy · right-click for more">${esc(path)}</span>` +
+    esc(suffix || "");
+  $("diff-path").dataset.path = path;
+}
+
+
+// --- path parts (pure; guarded against Go) ---
+// pathParts splits what the copy menu offers: the file's own name and the
+// directory holding it. git speaks "/" but a Windows path can arrive from a
+// worktree address, so both separators count. dir is "" for a file at the
+// repo root — there is no parent to name, and the menu drops that row rather
+// than offering an empty copy. A trailing separator belongs to the name's
+// side (nothing addresses a directory here), so it is left alone.
+function pathParts(path) {
+  const cut = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return { name: path.slice(cut + 1), dir: cut > 0 ? path.slice(0, cut) : "" };
+}
+// --- end path parts ---
+
+
+// diffPathRows is the path menu, shared by the header (right-click) and
+// anything else that wants to offer a path.
+function diffPathRows(path) {
+  const { name, dir } = pathParts(path);
+  const rows = [
+    { label: "copy full path", act: () => copyText(path, "path") },
+    { label: "copy file name", act: () => copyText(name, "file name") },
+  ];
+  if (dir) rows.push({ label: "copy parent dir", act: () => copyText(dir, "parent dir") });
+  return rows;
+}
+
+
+$("diff-header").addEventListener("click", (e) => {
+  const p = e.target.closest("#diff-path");
+  if (p) copyText(p.dataset.path, "path");
+});
+
+
+$("diff-header").addEventListener("contextmenu", (e) => {
+  const p = e.target.closest("#diff-path");
+  if (!p) return; // the rest of the toolbar keeps the browser's own menu
+  e.preventDefault();
+  showCtxMenu(diffPathRows(p.dataset.path), e.clientX, e.clientY);
+});
+
+
 function setFilesMeta(text) {
   const el = $("files-meta");
   el.textContent = text || "";
   el.classList.toggle("hidden", !text);
 }
+
+
+// --- the file-list header's commit id ---
+//
+// The header of an open commit is the one place its id is on screen, so it is
+// where the id gets copied from. The full sha lives on the element (the row
+// only ever SHOWS the short form), and the short form gets its own span so
+// the two can offer different menus: short + full over the sha, full over the
+// subject. Stages with no single commit behind them (the working tree, a
+// comparison, a preview) keep writing plain text through files-title and
+// enterFilesStage clears the sha, so their header offers nothing.
+function setCommitTitle(hash, short, subject) {
+  const el = $("files-title");
+  el.dataset.sha = hash || "";
+  el.innerHTML =
+    (short ? `<span class="csha" title="right-click to copy the commit id">${esc(short)}</span> ` : "") +
+    esc(subject || "");
+}
+
+
+$("files-header").addEventListener("contextmenu", (e) => {
+  const hash = $("files-title").dataset.sha;
+  // The MODE decides, not just the stored sha: a stage that writes the title
+  // through some other path would otherwise offer the previous commit's id.
+  if (!hash || state.filesMode !== "commit" || !e.target.closest("#files-title")) return;
+  e.preventDefault();
+  const short = hash.slice(0, 9);
+  const rows = e.target.closest(".csha")
+    ? [
+        { label: "copy short commit id", act: () => copyText(short, "commit id " + short) },
+        { label: "copy commit id", act: () => copyText(hash, "commit id " + short) },
+      ]
+    : [{ label: "copy commit id", act: () => copyText(hash, "commit id " + short) }];
+  showCtxMenu(rows, e.clientX, e.clientY);
+});
 
 
 // --- commit meta line (pure; guarded against Go) ---
@@ -210,7 +309,7 @@ async function openEntryFileDiff({ left, right, path, leftLabel, rightLabel, sta
   clearDiffHunks();
   state.diffCtx = null; // history/blame need a rev; a stored copy has none
   state.diffRow = null; // …and the previous diff's marked row must not paint a row of this one
-  $("diff-title").textContent = leftLabel + " ↔ " + rightLabel + " · " + path;
+  setDiffTitle(path, leftLabel + " ↔ " + rightLabel + " · ");
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   const q = new URLSearchParams({ left, right, path });
@@ -351,6 +450,64 @@ $("files-sort").addEventListener("click", (e) => {
 });
 
 
+// The path budget is in COLUMNS of the list, so every width change — the
+// rs-detail drag, the sidebar toggle, a window resize — has to re-render the
+// rows or a widened pane keeps showing yesterday's elision. One observer on
+// the list covers all three. rAF-coalesced: a drag fires this per pixel.
+let filesPending = false;
+new ResizeObserver(() => {
+  if (filesPending) return;
+  filesPending = true;
+  requestAnimationFrame(() => {
+    filesPending = false;
+    // A hidden list (the commit-list layout, a pane collapsed to nothing)
+    // reports 0 and has nothing to re-elide — and renderFiles is not a pure
+    // read: it also decides whether the commit box and the staging buttons
+    // are on screen. A resize to nothing must not put them back.
+    if (!$("files-list").clientWidth) return;
+    renderFiles();
+  });
+}).observe($("files-list"));
+
+
+// --- file-row path elision ---
+//
+// A row used to be cut by CSS `text-overflow: ellipsis`, which drops the TAIL
+// — exactly the half that says which file this is. The TUI cuts the same paths
+// through elidePath (internal/tui/elide.go, ported to core.js and guarded by
+// elide_jsport_test.go): whole segments go from the MIDDLE, so the file name
+// and the head of the path both survive. The browser now does the same.
+//
+// The budget is measured, not guessed: the list's pixel width over one
+// monospace column, less the row padding and whatever else sits on the row.
+// The CSS ellipsis stays as a backstop for the cases this cannot predict (a
+// proportional fallback font, a note badge wider than its estimate), so a
+// column is left spare rather than filled to the edge.
+const FILE_ROW_PAD = 16; // #files-list li padding: 2px 8px
+const FILE_ST_COLS = 2; // .st — width: 1.5em, plus its gap
+const FILE_BTN_COLS = 3; // the s/u button on a working-tree row
+const NOTE_BADGE_COLS = 4; // "◆N" plus its margin, charged to every row in a list that has one
+
+// fileCols is the path budget in columns, or 0 when the list has no usable
+// width — renderFiles also runs while the detail pane is hidden (clientWidth
+// 0) and while the browser has yet to lay it out, and elidePath(p, 0) is "".
+// Callers treat 0 as "render the path whole".
+function fileCols(extra) {
+  const el = $("files-list");
+  const px = el ? el.clientWidth : 0;
+  if (px <= 0) return 0;
+  const cols = Math.floor((px - FILE_ROW_PAD) / charWidth()) - FILE_ST_COLS - extra - 1;
+  return cols >= 4 ? cols : 0; // below "…/x" there is nothing useful to show
+}
+
+
+// filePathHTML renders one row's path, middle-elided to the budget, carrying
+// the full path as the row's tooltip so nothing is actually lost.
+function filePathHTML(path, cols) {
+  return `<span class="fpath" title="${esc(path)}">${esc(cols ? elidePath(path, cols) : path)}</span>`;
+}
+
+
 function renderFiles() {
   // Driven off filesMode, not off state.compare, so the bar cannot linger
   // into the next commit's detail screen.
@@ -367,11 +524,14 @@ function renderFiles() {
     const cmp = state.filesMode === "compare";
     const badge = (f) =>
       cmp ? "" : noteBadgeHTML(state.noteCounts.by_commit_path[(f.sha || state.fileSha) + ":" + f.path]);
+    const anyBadge = state.files.some((f) => badge(f) !== "");
+    const cols = fileCols(anyBadge ? NOTE_BADGE_COLS : 0);
     $("files-list").innerHTML = state.files
       .map(
         (f, i) =>
           `<li class="${i === state.fileCursor ? "sel" : ""}" data-i="${i}">` +
-          `<span class="st ${esc(f.status)}">${esc(f.status)}</span>${esc(f.path)}` +
+          `<span class="st ${esc(f.status)}">${esc(f.status)}</span>` +
+          filePathHTML(f.path, cols) +
           badge(f) +
           `</li>`
       )
@@ -401,6 +561,8 @@ function renderFiles() {
   }
   let html = "";
   let lastSection = "";
+  const anyBadge = state.statusEntries.some((f) => state.noteCounts.by_path[f.path] > 0);
+  const cols = fileCols(FILE_BTN_COLS + (anyBadge ? NOTE_BADGE_COLS : 0));
   state.statusEntries.forEach((f, i) => {
     if (f.section !== lastSection) {
       html += `<li class="sect">${SECTION_LABELS[f.section]}</li>`;
@@ -415,7 +577,8 @@ function renderFiles() {
           : `<button class="act" data-i="${i}">s</button>`;
     html +=
       `<li class="${i === state.fileCursor ? "sel" : ""} ${f.section}${state.marked.has(f.path) ? " marked" : ""}" data-i="${i}">` +
-      `<span class="st">${esc(badge)}</span>${esc(f.path)}` +
+      `<span class="st">${esc(badge)}</span>` +
+      filePathHTML(f.path, cols) +
       noteBadgeHTML(state.noteCounts.by_path[f.path]) +
       `${btn}</li>`;
   });
@@ -486,7 +649,7 @@ async function openFile(i) {
     q.set("sha", f.sha || state.fileSha);
   }
   if (f.old_path) q.set("old", f.old_path);
-  $("diff-title").textContent = f.path;
+  setDiffTitle(f.path);
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
@@ -509,7 +672,7 @@ async function openStatusDiff(i) {
     f.section === "conflicts" ? null : { path: f.path, rev: "", state: sectionNoteState(f.section) };
   state.diffRow = null;
   state.notes = [];
-  $("diff-title").textContent = f.path;
+  setDiffTitle(f.path);
   if (f.section === "conflicts") return openConflictPicker(f);
   const q = new URLSearchParams({ wt: f.section === "staged" ? "staged" : "unstaged", path: f.path });
   if (f.orig_path) q.set("old", f.orig_path);
@@ -555,7 +718,7 @@ function exitStatusToList() {
   $("commit-box").classList.add("hidden");
   $("conflict-note").classList.add("hidden");
   $("files-title").textContent = "";
-  $("diff-title").textContent = "";
+  setDiffTitle("");
   $("diff-body").innerHTML = "";
   state.lastDiff = null; // a resize must not resurrect the cleared diff
   state.diffCtx = null;
@@ -1121,17 +1284,28 @@ $("diff-body").addEventListener("contextmenu", (e) => {
   // targets the exact note under the pointer (root or reply).
   const tr = e.target.closest("[data-note]");
   if (!tr || !tr.closest("tr.note")) {
-    // Not a ◆ row: offer the line's gg:// link instead, on the same terms as
-    // the note anchors — outside notesArmed() the rows carry no data-side /
-    // data-no at all, and a compare has no addressable target.
+    // Not a ◆ row. Two things can be offered here, independently: the text
+    // the pointer sits in (when something is selected) and the line's gg://
+    // link (only under notesArmed() — outside it the rows carry no data-side
+    // / data-no at all, and a compare has no addressable target).
+    const rows = [];
+    // The selection is read NOW, into the closure: clicking the menu row
+    // moves focus, and by the time act() runs getSelection() may be empty.
+    // The line-number gutter is `user-select: none` (style.css td.no), so
+    // what comes back is the code, not code interleaved with line numbers.
+    const sel = window.getSelection();
+    const text = sel && !sel.isCollapsed && $("diff-body").contains(sel.anchorNode) ? sel.toString() : "";
+    if (text) rows.push({ label: "copy", act: () => copyText(text, "selection") });
     const row = e.target.closest("tr[data-no]");
-    if (!row || !notesArmed()) return; // every other row keeps the browser's own menu
-    const td = e.target.closest("td");
-    const { side, no } = rowSideAndLine(row, td);
-    const link = linkFor(state.repo, state.worktree, state.diffCtx, side, no);
-    if (!link) return;
+    if (row && notesArmed()) {
+      const td = e.target.closest("td");
+      const { side, no } = rowSideAndLine(row, td);
+      const link = linkFor(state.repo, state.worktree, state.diffCtx, side, no);
+      if (link) rows.push({ label: "copy gg link to this line", act: () => copyText(link, "gg link") });
+    }
+    if (!rows.length) return; // nothing of our own to say: keep the browser's menu
     e.preventDefault();
-    showCtxMenu([{ label: "copy gg link to this line", act: () => copyText(link, "gg link") }], e.clientX, e.clientY);
+    showCtxMenu(rows, e.clientX, e.clientY);
     return;
   }
   const n = findNote(tr.dataset.note);
@@ -1327,7 +1501,7 @@ function reopenAfterHunkStage(path) {
   if (state.filesMode === "status" && f) {
     openStatusDiff(state.fileCursor);
   } else {
-    $("diff-title").textContent = "";
+    setDiffTitle("");
     $("diff-body").innerHTML = "";
     updateDiffNav();
   }
@@ -1466,7 +1640,7 @@ function assembleOutput(v) {
 
 async function openConflictPicker(f) {
   clearDiffHunks(); // also nulls conflictPick — order matters, set it after
-  $("diff-title").textContent = f.path + " — resolve";
+  setDiffTitle(f.path, "", " — resolve");
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   let d;
@@ -1672,7 +1846,7 @@ function stepToNextConflict(path) {
   if (i >= 0) { state.fileCursor = i; renderFiles(); openStatusDiff(i); return; }
   const f = state.statusEntries[state.fileCursor];
   if (state.filesMode === "status" && f) openStatusDiff(state.fileCursor);
-  else { $("diff-title").textContent = ""; $("diff-body").innerHTML = ""; updateDiffNav(); }
+  else { setDiffTitle(""); $("diff-body").innerHTML = ""; updateDiffNav(); }
 }
 
 
@@ -1914,4 +2088,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, addNotePrompt, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, setCommitTitle, addNotePrompt, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };

@@ -8,6 +8,35 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: copy what's on screen, and stop cutting off file names.** Five
+  changes to the browser UI:
+  - The **file list middle-elides long paths** the way the TUI does — whole
+    directory segments drop out around a `…` (the same `elidePath` the
+    terminal uses, already ported to `core.js` and guarded against the Go
+    original), so the file name and the head of the path survive a narrow
+    pane instead of the name being cut off the end by the CSS ellipsis. The
+    budget is measured from the list's real width, so dragging the pane
+    divider or toggling the sidebar re-elides; every row's tooltip carries
+    the path in full.
+  - The **diff header's file path** is a copy target: click it to copy the
+    path, right-click for *copy full path* / *copy file name* / *copy parent
+    dir* (the last only when there is a parent).
+  - **Right-clicking selected text in a diff** offers *copy* — previously the
+    menu only ever offered *copy gg link to this line*, and it suppressed the
+    browser's own menu, so there was no way to copy the selection.
+  - The **file list's header copies the open commit's id**: right-click the
+    short sha for *copy short commit id* / *copy commit id*, or the subject
+    for the full id.
+  - A **↻ refresh button** sits next to pull/push in the top bar, running the
+    same reload as `r` and the ☰ menu (and disabled while an operation owns
+    the repo).
+
+- **Commits `.` menu: "Rename commit" is now "Edit commit message."** The row
+  rewords the commit — subject and body, in a pre-filled popup — so the label
+  says so. Same action, same popup; the `.` help line and all four language
+  bundles follow. The web commit menu's "reword this commit…" row and its
+  prompt title match ("edit commit message…").
+
 - **Every `gg note` verb takes a `gg://` link.** `gg note reply`, `rm`,
   `clear` and `apply` now accept a link as the first positional, as `add` and
   `list` already did. `reply` and `rm` take the REPOSITORY's link
