@@ -39,25 +39,46 @@ function repoSegment(repo, worktree) {
   return abs.startsWith("/") ? "gg://" + abs : "gg:///" + abs;
 }
 
+// A branch name rides a preview link only when it holds none of the grammar's
+// separators ('@', ':', '#'), no whitespace and no second "..." — the JS twin
+// of internal/model.LinkRefOK; the producer refuses rather than print
+// something ParseLink would reject or reparse as a different place.
+function linkRefOK(s) {
+  return !!s && !s.includes("...") && !/[@:#\s]/.test(s);
+}
+
 // linkFor builds the address for one place. ctx is a diffCtx-shaped
-// {path, rev, state, compare}; side is "new"/"old" and no a 1-based line
-// (both optional). Returns "" when the place has no expressible link — no
-// usable repo identity, a path holding a grammar separator, a commit target
-// whose rev is not a full sha (ruling P9: >= 40 hex, never a hard === 40 — a
-// sha256 repo's commits are 64 hex characters), a line with no path, or
-// ctx.compare set (a two-revision comparison has no single-commit address:
-// `path@bHash` would read as bHash^ → bHash, not the aHash → bHash pair
-// actually on screen — the same refusal the TUI's contextLinkText makes for
-// a compare view).
+// {path, rev, state, compare, preview}; side is "new"/"old" and no a 1-based
+// line (both optional). Returns "" when the place has no expressible link —
+// no usable repo identity, a path holding a grammar separator, a commit
+// target whose rev is not a full sha (ruling P9: >= 40 hex, never a hard ===
+// 40 — a sha256 repo's commits are 64 hex characters), a line with no path,
+// or ctx.compare set without a preview (a two-revision comparison has no
+// single-commit address: `path@bHash` would read as bHash^ → bHash, not the
+// aHash → bHash pair actually on screen — the same refusal the TUI's
+// contextLinkText makes for a compare view).
+//
+// ctx.preview = {source, target} names an open merge preview: the ONE compare
+// that has an address of its own, git's three-dot pair
+// (`@<target>...<source>`, internal/model.LinkPreview). The pair is the whole
+// target — ctx.rev/ctx.state are not consulted — and a preview has no old
+// side (ParseLink refuses `:old:` for it), so an old-side line degrades to the
+// file form rather than misdescribing the place. Both names must pass
+// linkRefOK or the place is inexpressible.
 function linkFor(repo, worktree, ctx, side, no) {
-  if (ctx && ctx.compare) return "";
+  const preview = (ctx && ctx.preview) || null;
+  if (ctx && ctx.compare && !preview) return "";
+  if (preview && !(linkRefOK(preview.source) && linkRefOK(preview.target))) return "";
   const head = repoSegment(repo, worktree);
   if (!head) return "";
   const path = (ctx && ctx.path) || "";
   if (path && !linkPathOK(path)) return "";
   let s = head + (path ? "/" + path : "");
   const st = (ctx && ctx.state) || "unstaged";
-  if (st === "staged") {
+  if (preview) {
+    s += "@" + preview.target + "..." + preview.source;
+    if (side === "old") no = 0;
+  } else if (st === "staged") {
     s += "@staged";
   } else if (st === "commit") {
     const rev = (ctx && ctx.rev) || "";
@@ -92,14 +113,35 @@ registerRows("file", (ctx) => {
         : ctx.section === "untracked"
           ? "untracked"
           : "unstaged"; // "changes", "conflicts", anything else: the working file
-  // ctx.compare rides straight through from the call site — this contributor
-  // never reads state.filesMode itself, so it stays pure over its input.
-  const link = linkFor(state.repo, state.worktree, { path: ctx.path, rev: ctx.sha, state: st, compare: ctx.compare });
+  // ctx.compare and ctx.preview ride straight through from the call site —
+  // this contributor never reads state.filesMode or state.previewOpen itself,
+  // so it stays pure over its input.
+  const link = linkFor(state.repo, state.worktree, {
+    path: ctx.path,
+    rev: ctx.sha,
+    state: st,
+    compare: ctx.compare,
+    preview: ctx.preview || null,
+  });
   return link ? [copyLinkRow(link)] : [];
 });
 
 registerRows("commit", (c) => {
   const link = linkFor(state.repo, state.worktree, { path: "", rev: c.hash, state: "commit" });
+  return link ? [copyLinkRow(link)] : [];
+});
+
+// A Previews group row copies the pair's own link, `gg://<repo>@<target>...
+// <source>` — no path, no line: the address of the preview itself, the form
+// an agent hands back after annotating its branch (the TUI's Previews-panel
+// "Copy link"). e is the registry entry: its NAMES, never the tips.
+registerRows("preview", (e) => {
+  const link = linkFor(state.repo, state.worktree, {
+    path: "",
+    state: "commit",
+    compare: true,
+    preview: { source: e.source, target: e.target },
+  });
   return link ? [copyLinkRow(link)] : [];
 });
 

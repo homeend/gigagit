@@ -47,6 +47,14 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 		// ctx.compare guard never fired there (B5).
 		{"files.js", "compare: cmp", "state.diffCtx must carry the compare flag the link producer documents"},
 		{"links.js", "linkAbsOK", "the checkout path needs the same expressibility rule as the file path (A3)"},
+		// Web preview links (2026-09-16): a merge preview is the one compare
+		// with an address, so the refusal must be lifted for it alone.
+		{"links.js", "ctx.preview", "linkFor must render the pair when the ctx names an open preview"},
+		{"links.js", "linkRefOK", "branch names need model.LinkRefOK's expressibility rule"},
+		{"links.js", `registerRows("preview"`, "the Previews group row must contribute the pair's own link"},
+		{"links.js", "preview: ctx.preview", "the file contributor must forward the pair it was given"},
+		{"files.js", "preview: po ?", "the file-row call site must hand the open preview's pair to the file contributor"},
+		{"files.js", "row.dataset.rno", "the diff-line path must prefer a context row's new-side number over dropping the line"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(read(c.file), c.want) {
@@ -84,7 +92,20 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 // from the Go grammar's canonical renderer — not that two hand-written
 // stringifications happen to disagree.
 func wantLink(repoName, worktree, path, rev, st, side string, no int, compare bool) string {
-	if compare {
+	return wantLinkPreview(repoName, worktree, path, rev, st, side, no, compare, "", "")
+}
+
+// wantLinkPreview is wantLink with the merge-preview pair: a compare ctx
+// refuses UNLESS it is a preview's (the one compare whose new side is a real
+// commit's content), the pair rides as @<target>...<source> and — the user's
+// ruling (2026-09-16) — an old-side line degrades to the file form, because a
+// preview has no old side. That drop is applied HERE, explicitly: String()
+// would force the side and still render ":N", which is not the ruling.
+func wantLinkPreview(repoName, worktree, path, rev, st, side string, no int, compare bool, source, target string) string {
+	if compare && source == "" {
+		return ""
+	}
+	if source != "" && (!model.LinkRefOK(source) || !model.LinkRefOK(target)) {
 		return ""
 	}
 	if repoName == "" && worktree == "" {
@@ -103,6 +124,17 @@ func wantLink(repoName, worktree, path, rev, st, side string, no int, compare bo
 		l.Repo = model.LinkRepo{Abs: worktree}
 	}
 	l.Path = path
+	if source != "" {
+		l.Target = model.LinkTarget{State: model.StateCommitted, Preview: &model.LinkPreview{Source: source, Target: target}}
+		l.Side = model.NoteSideNew
+		if no > 0 && side != "old" {
+			if path == "" {
+				return ""
+			}
+			l.Line = no
+		}
+		return l.String()
+	}
 	switch st {
 	case "staged":
 		l.Target = model.LinkTarget{State: model.StateStaged}
@@ -159,6 +191,8 @@ func TestLinkForJSMatchesGo(t *testing.T) {
 		Side     string `json:"side"`
 		No       int    `json:"no"`
 		Compare  bool   `json:"compare"`
+		Source   string `json:"source"` // both set = a merge preview's pair (ctx.preview)
+		Target   string `json:"target"`
 	}
 	cases := []tcase{
 		{Name: "remote unstaged file, no line", Repo: "gigagit", Path: "internal/web/files.js", State: "unstaged"},
@@ -197,11 +231,46 @@ func TestLinkForJSMatchesGo(t *testing.T) {
 		{Name: "local worktree with a colon is fine", Worktree: "/mnt/odd:name/repo", Path: "a/b.go", State: "unstaged"},
 		{Name: "windows drive worktree is fine", Worktree: "C:/src/repo", Path: "a/b.go", State: "unstaged"},
 		{Name: "windows drive worktree with @ refuses", Worktree: "C:/src@work/repo", Path: "a/b.go", State: "unstaged"},
+		// Web preview links (2026-09-16): a merge preview is the ONE compare
+		// that has an address — the branch pair, git's three-dot spelling.
+		// Every preview ctx below also carries compare:true, exactly as
+		// state.diffCtx and the file-row call site hand it over.
+		{Name: "preview pair, no path (Previews row)", Repo: "gigagit", State: "commit", Rev: fullSha, Compare: true, Source: "feat/x", Target: "main"},
+		{Name: "local preview pair, no path", Worktree: "/mnt/t/repo", State: "commit", Rev: fullSha, Compare: true, Source: "feat/x", Target: "main"},
+		{Name: "preview file (file row)", Repo: "gigagit", Path: "a/b.go", State: "commit", Rev: fullSha, Compare: true, Source: "feat/x", Target: "main"},
+		{Name: "preview line, new side", Repo: "gigagit", Path: "a/b.go", State: "commit", Rev: fullSha, Compare: true, Source: "feat/x", Target: "main", Side: "new", No: 42},
+		{Name: "preview line, old side degrades to the file form", Repo: "gigagit", Path: "a/b.go", State: "commit", Rev: fullSha, Compare: true, Source: "feat/x", Target: "main", Side: "old", No: 17},
+		{Name: "preview line with no path refuses", Repo: "gigagit", State: "commit", Rev: fullSha, Compare: true, Source: "feat/x", Target: "main", Side: "new", No: 5},
+		{Name: "preview ignores a short rev (the pair is the address)", Repo: "gigagit", Path: "a/b.go", State: "commit", Rev: shortSha, Compare: true, Source: "feat/x", Target: "main"},
+		{Name: "preview without the compare flag still renders the pair", Repo: "gigagit", Path: "a/b.go", State: "commit", Rev: fullSha, Source: "feat/x", Target: "main"},
+		{Name: "preview source with ... refuses", Repo: "gigagit", Path: "a/b.go", State: "commit", Compare: true, Source: "a...b", Target: "main"},
+		{Name: "preview target with a space refuses", Repo: "gigagit", Path: "a/b.go", State: "commit", Compare: true, Source: "feat/x", Target: "ma in"},
+		{Name: "preview source with @ refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "feat@x", Target: "main"},
+		{Name: "preview target with # refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x", Target: "v#1"},
+		{Name: "preview target with : refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x", Target: "a:b"},
+		{Name: "preview path with @ refuses", Repo: "gigagit", Path: "a@b.go", State: "commit", Compare: true, Source: "feat/x", Target: "main"},
 	}
 
 	want := make([]string, len(cases))
 	for n, c := range cases {
-		want[n] = wantLink(c.Repo, c.Worktree, c.Path, c.Rev, c.State, c.Side, c.No, c.Compare)
+		want[n] = wantLinkPreview(c.Repo, c.Worktree, c.Path, c.Rev, c.State, c.Side, c.No, c.Compare, c.Source, c.Target)
+	}
+
+	// Both halves of this test implement the preview rules by hand, so pin
+	// the literal strings the user approved for the two rows that matter —
+	// otherwise a shared mistake (say, rendering the old side) would agree
+	// with itself and pass.
+	pinned := map[string]string{
+		"preview pair, no path (Previews row)":                    "gg://gigagit@main...feat/x",
+		"preview line, new side":                                  "gg://gigagit/a/b.go@main...feat/x:42",
+		"preview line, old side degrades to the file form":        "gg://gigagit/a/b.go@main...feat/x",
+		"compare ctx refuses even with a full sha":                "",
+		"preview without the compare flag still renders the pair": "gg://gigagit/a/b.go@main...feat/x",
+	}
+	for n, c := range cases {
+		if p, ok := pinned[c.Name]; ok && want[n] != p {
+			t.Errorf("case %q: wantLinkPreview = %q, pinned %q", c.Name, want[n], p)
+		}
 	}
 
 	dir := t.TempDir()
@@ -217,7 +286,7 @@ const cases = JSON.parse(readFileSync(process.argv[3], "utf8"));
 const linkFor = new Function(pure + "; return linkFor;")();
 const out = cases.map((c) => {
   const repo = c.repo ? { link_repo: c.repo } : null;
-  const ctx = { path: c.path, rev: c.rev, state: c.state, compare: c.compare };
+  const ctx = { path: c.path, rev: c.rev, state: c.state, compare: c.compare, preview: c.source ? { source: c.source, target: c.target } : null };
   return linkFor(repo, c.worktree, ctx, c.side, c.no);
 });
 console.log(JSON.stringify(out));
