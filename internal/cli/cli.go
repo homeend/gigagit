@@ -60,6 +60,10 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 	}
 	svc := domain.Open(workdir)
 	setupCLIService(svc)
+	if err := svc.PreflightRequired(context.Background()); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
 	cmd, rest := args[0], args[1:]
 	// Record this repo in the switcher registry (best-effort: errors and
 	// non-repo working directories are ignored). Skip for "repo" subcommands
@@ -157,6 +161,8 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 		return cmdReview(svc, workdir, rest, stdout, stderr)
 	case "versions":
 		return cmdVersions(svc, rest, stdin, stdout, stderr)
+	case "migrate":
+		return cmdMigrate(svc, rest, stdout, stderr)
 	case "unlock":
 		return cmdUnlock(svc, rest, stdout, stderr)
 	case "repo":
@@ -183,7 +189,7 @@ var commands = map[string]bool{
 	"discard": true, "add": true, "unstage": true, "shelf": true, "bookmark": true, "log": true, "prefix": true,
 	"remote": true, "tag": true, "compare": true, "preview": true, "diff": true, "show": true,
 	"inspect": true, "repo": true, "init": true, "config": true, "batch": true,
-	"review": true, "apply": true, "versions": true, "unlock": true,
+	"review": true, "apply": true, "versions": true, "unlock": true, "migrate": true,
 	"note": true, "skill": true, "session": true, "link": true,
 }
 

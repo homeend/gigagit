@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -47,6 +48,12 @@ func cmdVersions(svc *domain.Service, args []string, stdin io.Reader, stdout, st
 	}
 	rows, err := svc.BranchVersions(ctx, branch)
 	if err != nil {
+		var disabled *domain.ErrFeatureDisabled
+		if errors.As(err, &disabled) {
+			fmt.Fprintf(stderr, "gg versions: %s\n", disabled.Error())
+			fmt.Fprintln(stderr, "run `gg migrate` to see what can be repaired")
+			return 1
+		}
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}

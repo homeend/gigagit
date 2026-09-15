@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -36,6 +37,23 @@ const (
 	versionsModeBranches = iota
 	versionsModeVersions
 )
+
+// versionsFeatureEnabled reports whether the branch-version store is usable in
+// this repository. The spec's frontend table says a disabled feature's keys
+// are INERT — a menu row that opens a popup only to print ErrFeatureDisabled
+// is not inert — so every versions entry point consults this, mirroring what
+// the web frontend already does in sidebar.js/palette.js. Fails OPEN on a nil
+// service (bare test Models) and on a probe failure (domain.FeatureEnabled's
+// own contract), so a transient git error never hides the feature.
+//
+// Cheap after the first call: domain caches the verdicts for the Service's
+// lifetime, so this costs at most one preflight probe per repo root.
+func (m Model) versionsFeatureEnabled() bool {
+	if m.svc == nil {
+		return true
+	}
+	return m.svc.FeatureEnabled(context.Background(), domain.FeatureVersions)
+}
 
 // versionsLoadedMsg carries a branch's recorded versions (both the initial
 // load and the post-delete re-read).
@@ -77,6 +95,9 @@ func (m Model) loadVersionBranchesCmd(gen int) tea.Cmd {
 // (the Branches-panel . row: the branch is already known, no need to browse
 // the full list first).
 func (m Model) openBranchVersions(branch string, deleted, fromList bool) (Model, tea.Cmd) {
+	if !m.versionsFeatureEnabled() {
+		return m, nil // preflight disabled the store: the entry points are inert
+	}
 	m.versionsGen++
 	p := &versionsPopup{mode: versionsModeVersions, branch: branch, deleted: deleted, fromList: fromList, loading: true}
 	m = m.pushLayer(p)
@@ -87,6 +108,9 @@ func (m Model) openBranchVersions(branch string, deleted, fromList bool) (Model,
 // entry: browse every branch that has recorded versions, including deleted
 // ones, then drill into one).
 func (m Model) openVersionBranchList() (Model, tea.Cmd) {
+	if !m.versionsFeatureEnabled() {
+		return m, nil // preflight disabled the store: the entry points are inert
+	}
 	m.versionsGen++
 	p := &versionsPopup{mode: versionsModeBranches, loading: true}
 	m = m.pushLayer(p)

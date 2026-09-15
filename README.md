@@ -168,6 +168,7 @@ gg branch delete [--force] <name>
 gg versions [<branch>]                 # list a branch's recorded pre-operation snapshots, newest first (default: current branch)
 gg versions restore [--discard] <branch> <id|latest>  # restore a branch to a recorded version; --discard answers the dirty-tree prompt
 gg unlock [--yes]                      # list (or with --yes remove) stranded .git/*.lock files; exit 1 while locks are present
+gg migrate [--yes]                     # list pending store migrations and what they'd discard; changes nothing without --yes
 gg merge [--into <target>] [--on-conflict=keep|abort] <source>
 gg fast-forward <commit>               # advance the current branch to a descendant commit (no merge commit)
 gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>
@@ -705,6 +706,33 @@ script (choose run or skip); `h` in the create popup is a pre-skip that
 suppresses even the prompt. On the CLI: pass `--hook` to approve without
 prompting, `--no-hook` to skip, or omit both to be asked interactively (`gg`
 skips automatically when stdin is not a terminal).
+
+### Repository preflight (`gg migrate`)
+
+gg features declare what they need from a repository — a git version floor,
+or a data-format range for the store they own — and a criticality: **core**
+git-version support is Required (gg refuses to start without it), while
+things like branch versions are Optional. On every launch gg resolves each
+feature's requirements against the repository and gets back one of three
+verdicts: satisfied, repairable (a migration would fix it), or unsatisfiable.
+**A disabled feature means gg keeps running normally, just without that one
+capability** — the affected commands report `ErrFeatureDisabled` instead of
+doing anything partial or corrupting state, and a standing notice in the
+notification center (`!`) names which feature is off and why. A Required
+feature that's unsatisfiable is the only case that stops gg from starting at
+all, and it explains exactly what's missing when it does.
+
+When a migration exists and would help, the TUI asks about it as a
+pre-launch **Migrate / Skip / Quit** prompt on *every* start — deliberately
+never suppressed, because a feature silently left disabled is the exact
+failure this gate exists to prevent — and `gg web` offers the same choice
+through a consent panel. Scriptable: `gg migrate` lists every pending
+migration and what applying it would discard, changing nothing; `gg migrate
+--yes` applies them. Store formats live in the repository itself as marker
+refs (`refs/gg/meta/<store>/<N>`, pointing at the empty tree), stamped by
+each store's own writer the first time it writes — never by gg just opening
+the repo — so switching repositories or checking one out fresh never costs
+an extra write and two `gg` processes starting at once never race.
 
 ### Branch versions (operations history)
 

@@ -282,3 +282,178 @@ func TestEngineProseNoDynamic(t *testing.T) {
 		})
 	}
 }
+
+const preflightDir = "../preflight"
+
+// domainDir is scanned alongside preflightDir because a Feature's Migrate
+// lives in internal/domain (features.go): its Describe returns a
+// preflight.Text built there, so the consent prose the spec's Prose section
+// names is a SelectorExpr composite literal in this directory, not a bare
+// Ident one in internal/preflight. Scanning only internal/preflight would
+// leave the gate blind to exactly the string it exists to check.
+const domainDir = "../domain"
+
+// collectPreflightProseKeys walks one parsed file and adds the Format field of
+// every Text{...} / preflight.Text{...} composite literal to keys. Both
+// spellings are matched: the type is a bare Ident inside internal/preflight
+// and a SelectorExpr everywhere else. Split out of preflightProseKeys so the
+// matcher itself is directly testable against a synthetic source — otherwise
+// widening the scan is unfalsifiable while domain declares no Migrate yet
+// (see TestPreflightProseScanMatchesQualifiedText).
+func collectPreflightProseKeys(t *testing.T, fset *token.FileSet, f *ast.File, keys map[string]bool) {
+	t.Helper()
+	ast.Inspect(f, func(n ast.Node) bool {
+		cl, ok := n.(*ast.CompositeLit)
+		if !ok {
+			return true
+		}
+		if !isPreflightTextType(cl.Type) {
+			return true
+		}
+		for _, el := range cl.Elts {
+			kv, ok := el.(*ast.KeyValueExpr)
+			if !ok {
+				continue
+			}
+			k, ok := kv.Key.(*ast.Ident)
+			if !ok || k.Name != "Format" {
+				continue
+			}
+			if s, ok := stringLit(kv.Value); ok {
+				keys[s] = true
+			} else {
+				t.Errorf("%s: Text.Format must be a string literal", fset.Position(kv.Pos()))
+			}
+		}
+		return true
+	})
+}
+
+// isPreflightTextType reports whether a composite literal's type names
+// preflight.Text — either unqualified (inside internal/preflight) or through
+// a package selector (everywhere else).
+func isPreflightTextType(e ast.Expr) bool {
+	switch t := e.(type) {
+	case *ast.Ident:
+		return t.Name == "Text"
+	case *ast.SelectorExpr:
+		pkg, ok := t.X.(*ast.Ident)
+		return ok && pkg.Name == "preflight" && t.Sel.Name == "Text"
+	}
+	return false
+}
+
+// preflightProseKeys parses every non-test .go file in internal/preflight AND
+// internal/domain and returns the set of localizable literals: the Format
+// field of every Text{Format: "...", ...} composite literal (the shape a
+// Requirement's Reason method and a Migrate's Describe return). Mirrors
+// engineProseKeys, and is a pure collector for the same reason: a non-literal
+// Format can't be a catalog key, and both scanned packages have a closed set
+// of prose sites, so there is no migration wave to gate incrementally — every
+// Format here is expected to already be a literal.
+func preflightProseKeys(t *testing.T) map[string]bool {
+	t.Helper()
+	keys := map[string]bool{}
+	fset := token.NewFileSet()
+	for _, dir := range []string{preflightDir, domainDir} {
+		ents, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range ents {
+			name := e.Name()
+			if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			f, perr := parser.ParseFile(fset, filepath.Join(dir, name), nil, 0)
+			if perr != nil {
+				t.Fatalf("parse %s: %v", name, perr)
+			}
+			collectPreflightProseKeys(t, fset, f, keys)
+		}
+	}
+	return keys
+}
+
+// TestPreflightProseScanMatchesQualifiedText proves the widened matcher
+// actually sees a qualified preflight.Text{...} — the shape a real
+// domain.Features() Migrate.Describe will use. Without this, the widening is
+// unfalsifiable: today's domain declares no Migrate, so scanning ../domain
+// contributes zero keys and TestPreflightProseKeysInBundles would keep
+// passing even if the matcher never matched anything there.
+func TestPreflightProseScanMatchesQualifiedText(t *testing.T) {
+	t.Parallel()
+	const src = `package domain
+
+import "github.com/homeend/gigagit/internal/preflight"
+
+var m = preflight.Migrate{
+	Describe: func() preflight.Text {
+		return preflight.Text{Format: "this discards every recorded version of %s", Args: []any{"main"}}
+	},
+}
+
+var bare = Text{Format: "unqualified still matches"}
+
+var other = pkg.Text{Format: "a different package's Text must NOT match"}
+`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "synthetic.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := map[string]bool{}
+	collectPreflightProseKeys(t, fset, f, keys)
+
+	if !keys["this discards every recorded version of %s"] {
+		t.Errorf("qualified preflight.Text{...} was not collected: %v", keys)
+	}
+	if !keys["unqualified still matches"] {
+		t.Errorf("bare Text{...} was not collected: %v", keys)
+	}
+	if keys["a different package's Text must NOT match"] {
+		t.Errorf("a Text from another package must not be collected: %v", keys)
+	}
+}
+
+// TestPreflightProseScanRejectsNonLiteralFormat proves the collector still
+// FAILS a Format that cannot be a catalog key, rather than silently skipping
+// it. Run against a throwaway *testing.T so the expected failure is observed
+// instead of failing this test.
+func TestPreflightProseScanRejectsNonLiteralFormat(t *testing.T) {
+	t.Parallel()
+	const src = `package domain
+
+var v = preflight.Text{Format: someVar}
+`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "synthetic.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := &testing.T{}
+	collectPreflightProseKeys(sub, fset, f, map[string]bool{})
+	if !sub.Failed() {
+		t.Error("a non-literal Text.Format must be reported, not skipped")
+	}
+}
+
+func TestPreflightProseKeysInBundles(t *testing.T) {
+	t.Parallel()
+	keys := preflightProseKeys(t)
+	if len(keys) == 0 {
+		t.Fatal("collected 0 preflight-prose literals — the scan has gone blind (Text moved/renamed?)")
+	}
+	builtins := i18n.Builtins()
+	for _, code := range []string{"ja", "ko", "zh", "ru"} {
+		b, ok := builtins[code]
+		if !ok {
+			t.Fatalf("embedded bundle %s missing", code)
+		}
+		for k := range keys {
+			if _, has := b[k]; !has {
+				t.Errorf("%s.toml: missing preflight-prose key %q", code, k)
+			}
+		}
+	}
+}

@@ -124,3 +124,16 @@ func TestReposIsAStdlibLeaf(t *testing.T) {
 		}
 	}
 }
+
+// TestPreflightIsAStdlibLeaf pins internal/preflight's dependency budget: it
+// resolves feature requirements against probe results handed to it by
+// callers, and must never grow a dependency on git or any gg package so it
+// stays trivially testable with plain values.
+func TestPreflightIsAStdlibLeaf(t *testing.T) {
+	t.Parallel()
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/preflight") {
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/preflight imports %s — it must stay stdlib only", imp)
+		}
+	}
+}

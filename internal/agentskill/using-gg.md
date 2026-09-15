@@ -289,6 +289,13 @@ finds the right one here.
   clean, **exit 1 when locks are present** (so it works as a precondition
   check), 2 usage. Pass `--yes` to remove them — but only once you are sure no
   other git is running, since deleting a live git's lock corrupts its write.
+- `gg migrate [--yes]` — list pending store migrations (a feature whose data
+  format is behind what this build writes, but repairable) and what applying
+  each would discard. Without `--yes` this changes NOTHING — it is safe to
+  run just to check. With `--yes`, applies every listed migration. A feature
+  gg can't satisfy and can't repair keeps running with that one capability
+  disabled rather than failing the whole command; only a Required feature
+  (e.g. the git version floor) blocks gg from starting at all.
 - `gg merge [--into <target>] [--on-conflict=keep|abort] <source>` — merge one
   branch into another (default target: the current branch; worktree-aware —
   merges in the worktree that has the target checked out, autostashes when it

@@ -10,6 +10,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/preflight"
 	"github.com/homeend/gigagit/internal/promptstate"
 )
 
@@ -433,5 +434,66 @@ func TestReRootResetsNoticeStateAndDropsStaleHealth(t *testing.T) {
 	nm2, _ := got.Update(repoHealthMsg{gen: oldGen, health: bigRepoHealth()})
 	if stale := nm2.(Model).notices; stale != nil {
 		t.Fatalf("stale-gen health after reRoot must be dropped, got %+v", stale)
+	}
+}
+
+// TestUnsatisfiableNoticeCarriesARemedy proves featureDisabledNotices tells
+// the user how to fix an unavailable feature it cannot repair itself, not
+// just that it is unavailable.
+func TestUnsatisfiableNoticeCarriesARemedy(t *testing.T) {
+	t.Parallel()
+	f := preflight.Feature{
+		ID:          "widgets",
+		Criticality: preflight.Optional,
+		Requires:    []preflight.Requirement{preflight.GitVersion{Min: [3]int{9, 0, 0}}},
+	}
+	vs := preflight.Resolve([]preflight.Feature{f}, preflight.Probes{GitVersion: [3]int{2, 40, 0}})
+	if vs[0].State != preflight.Unsatisfiable {
+		t.Fatalf("state = %v, want Unsatisfiable", vs[0].State)
+	}
+	n := noticeForVerdict(vs[0], "/fake/common/dir")
+	if len(n.detail) != 2 {
+		t.Fatalf("detail = %+v, want [reason, remedy]", n.detail)
+	}
+	wantRemedy := i18n.T("Upgrade to git %s or newer to use this feature.", "9.0.0")
+	if n.detail[1] != wantRemedy {
+		t.Errorf("remedy line = %q, want %q", n.detail[1], wantRemedy)
+	}
+	// Ordinary dismissal still applies.
+	foundNever := false
+	for _, a := range n.actions {
+		if a.never {
+			foundNever = true
+		}
+	}
+	if !foundNever {
+		t.Error("Unsatisfiable notice must still offer \"Never for this repo\"")
+	}
+}
+
+// TestRepairableNoticeKeepsMigrateLineNotARemedy proves a Repairable notice
+// still carries the `gg migrate` line, and does NOT also render the
+// (unrendered-for-this-path) remedy — that would be a duplicate/confusing
+// instruction alongside the migrate line.
+func TestRepairableNoticeKeepsMigrateLineNotARemedy(t *testing.T) {
+	t.Parallel()
+	mig := &preflight.Migration{Store: "versions", From: 1, To: 2,
+		Describe: func() preflight.Text { return preflight.Text{Format: "discards old versions"} }}
+	f := preflight.Feature{
+		ID:          "versions",
+		Criticality: preflight.Optional,
+		Requires:    []preflight.Requirement{preflight.DataFormat{Store: "versions", Min: 2, Max: 2}},
+		Migrate:     mig,
+	}
+	vs := preflight.Resolve([]preflight.Feature{f}, preflight.Probes{
+		Stores: map[string]preflight.StoreProbe{"versions": {Format: 1, HasData: true}},
+	})
+	if vs[0].State != preflight.Repairable {
+		t.Fatalf("state = %v, want Repairable", vs[0].State)
+	}
+	n := noticeForVerdict(vs[0], "/fake/common/dir")
+	wantMigrate := i18n.T("Run `gg migrate` to repair this, or answer the migration prompt at the next launch.")
+	if len(n.detail) != 2 || n.detail[1] != wantMigrate {
+		t.Errorf("detail = %+v, want [reason, %q]", n.detail, wantMigrate)
 	}
 }

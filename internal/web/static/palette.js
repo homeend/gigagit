@@ -22,6 +22,7 @@ import { openAgentSetup } from "./agentsetup.js";
 import { openFeedFilter, openFinder } from "./search.js";
 import { openRemoteHeads } from "./remoteheads.js";
 import { locateCurrentBranch } from "./sidebar.js";
+import { featureDisabled } from "./preflight.js";
 
 // ---- command palette + global ☰ menu (wave 3) ----------------------------
 // The palette is a layer with an input INSIDE it: onKey consumes nav keys
@@ -35,7 +36,7 @@ let pal = null; // {mode: "cmd"|"repo", fromCmd, rows, filtered, sel}
 
 
 function paletteCommands() {
-  return [
+  const rows = [
     { label: "pull", detail: "p", run: () => doPull() },
     { label: "push", detail: "P", run: () => doPush() },
     { label: "fetch all remotes", detail: "", run: () => doFetch() },
@@ -67,6 +68,9 @@ function paletteCommands() {
     { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
     { label: "help", detail: "?", run: () => openHelp() },
   ];
+  // A feature preflight turned off has nothing to open — the entry point is
+  // removed rather than left to fail on click.
+  return featureDisabled("versions") ? rows.filter((r) => r.label !== "branch versions…") : rows;
 }
 
 
@@ -224,7 +228,9 @@ function openGlobalMenu() {
     ...((state.rows || []).length ? [{ label: "amend the last commit…", act: () => startAmend() }] : []),
     { header: "Branches" },
     { label: "branch prefixes…", act: () => openPrefixesView() },
-    { label: "branch versions…", act: () => openVersionBranches() },
+    // A feature preflight turned off has nothing to open — the entry point
+    // is removed rather than left to fail on click.
+    ...(featureDisabled("versions") ? [] : [{ label: "branch versions…", act: () => openVersionBranches() }]),
     { label: "create branch…", act: () => openCreateBranchPrompt() },
     { label: "go to current branch", act: () => locateCurrentBranch() },
     { label: "fetch all remotes", act: () => doFetch() },

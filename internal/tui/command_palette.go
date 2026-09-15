@@ -5,6 +5,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
@@ -15,6 +16,11 @@ type paletteCommand struct {
 	label   string
 	keyHint string
 	run     func(Model) (Model, tea.Cmd)
+	// feature, when set, is the preflight feature id this entry needs. The
+	// entry is filtered out of an open palette when that feature is disabled
+	// in this repository — the registry itself stays static so it can be
+	// enumerated without a Service.
+	feature string
 }
 
 // commandPalette is the generic command launcher (ctrl+p). It holds the palette
@@ -30,7 +36,7 @@ func paletteCommands() []paletteCommand {
 	// Entries are listed alphabetically by label.
 	return []paletteCommand{
 		{label: i18n.T("Apply patch…"), run: Model.openApplyPatchPopup},
-		{label: i18n.T("Branch versions…"), run: Model.openVersionBranchList},
+		{label: i18n.T("Branch versions…"), run: Model.openVersionBranchList, feature: domain.FeatureVersions},
 		{label: i18n.T("Browse remote branches"), run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openRemoteHeadsBrowser() }},
 		{label: i18n.T("File blame"), run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathBlame) }},
 		{label: i18n.T("File history"), run: func(m Model) (Model, tea.Cmd) { return m.openFilePathPopup(filePathHistory) }},
@@ -54,7 +60,7 @@ func paletteCommands() []paletteCommand {
 
 // openCommandPalette pushes the palette onto the layer stack.
 func (m Model) openCommandPalette() (Model, tea.Cmd) {
-	return m.pushLayer(&commandPalette{cmds: paletteCommands()}), nil
+	return m.pushLayer(&commandPalette{cmds: m.availablePaletteCommands()}), nil
 }
 
 func (p *commandPalette) move(d int) {
@@ -124,4 +130,19 @@ func (p *commandPalette) box(m Model) string {
 	}
 	parts = append(parts, "", i18n.T("[enter] run  [esc] close"))
 	return popupBox(inner, strings.Join(parts, "\n"))
+}
+
+// availablePaletteCommands is paletteCommands() minus every entry whose
+// preflight feature is disabled in this repository. Filtering here (rather
+// than in the registry) keeps paletteCommands() a pure, Service-free list.
+func (m Model) availablePaletteCommands() []paletteCommand {
+	all := paletteCommands()
+	out := make([]paletteCommand, 0, len(all))
+	for _, c := range all {
+		if c.feature == domain.FeatureVersions && !m.versionsFeatureEnabled() {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
 }

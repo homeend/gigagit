@@ -1,0 +1,27 @@
+name = "cli: migrate on a repo with no gg state"
+
+[input]
+steps = [
+  { write = "a.txt", content = "A\n" },
+  { commit = "base" },
+]
+
+# No merge/rebase/pull — nothing that would ever record a branch-version
+# snapshot or a store-format marker. This is the common first-run path: every
+# existing user repo the day gg is upgraded to a build that knows about
+# migrations.
+[[run]]
+cmd             = ["migrate"]
+exit            = 0
+stdout_contains = ["nothing to migrate"]
+stdout_excludes = ["migrated "]
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"a.txt" = "A\n"
+
+[[expect.log]]
+subjects = ["base"]
