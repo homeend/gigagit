@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/rebaseplan"
 )
 
@@ -29,26 +30,51 @@ func (d staticTestDecider) Decide(_ context.Context, req DecisionRequest) (Decis
 
 // findVersionRef locates the single version ref recorded for branch/opToken
 // (refs/gg/versions/<branch>/<ts>-<opToken>) and returns its ref name + the
-// hash it points at, failing the test if there isn't exactly one.
+// snapshotted tip (VersionRefs unwraps the synthetic wrapper commit to its
+// first parent), failing the test if there isn't exactly one.
 func findVersionRef(t *testing.T, repo *git.Repo, branch, opToken string) (ref, hash string) {
 	t.Helper()
 	ctx := context.Background()
-	infos, err := repo.ForEachRef(ctx, "refs/gg/versions/"+branch)
+	bvs, err := repo.VersionRefs(ctx, "refs/gg/versions/"+branch)
 	if err != nil {
 		t.Fatal(err)
 	}
 	suffix := "-" + opToken
 	var matches []string
-	for _, i := range infos {
-		if strings.HasSuffix(i.Ref, suffix) {
-			matches = append(matches, i.Ref)
-			ref, hash = i.Ref, i.Hash
+	for _, bv := range bvs {
+		if strings.HasSuffix(bv.Ref, suffix) {
+			matches = append(matches, bv.Ref)
+			ref, hash = bv.Ref, bv.Hash
 		}
 	}
 	if len(matches) != 1 {
 		t.Fatalf("version refs for branch %s op %s = %v, want exactly 1", branch, opToken, matches)
 	}
 	return ref, hash
+}
+
+// findVersionBV is findVersionRef's full-record counterpart: it returns the
+// whole unwrapped model.BranchVersion (Source/Target/Ours/Other/Base
+// included), for tests that check the recorded preview endpoints and not
+// just the snapshotted tip.
+func findVersionBV(t *testing.T, repo *git.Repo, branch, opToken string) model.BranchVersion {
+	t.Helper()
+	ctx := context.Background()
+	bvs, err := repo.VersionRefs(ctx, "refs/gg/versions/"+branch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	suffix := "-" + opToken
+	var matches []model.BranchVersion
+	for _, bv := range bvs {
+		if strings.HasSuffix(bv.Ref, suffix) {
+			matches = append(matches, bv)
+		}
+	}
+	if len(matches) != 1 {
+		t.Fatalf("version refs for branch %s op %s = %v, want exactly 1", branch, opToken, matches)
+	}
+	return matches[0]
 }
 
 func TestAmendSnapshotsAndPlainCommitDoesNot(t *testing.T) {
@@ -105,6 +131,10 @@ func TestSmartMergeSnapshotsTarget(t *testing.T) {
 	if _, err := (Commit{Message: "feat change"}).Run(ctx, OpDeps{Repo: repo}); err != nil {
 		t.Fatal(err)
 	}
+	preMergeSourceTip, err := repo.RevParse(ctx, "feat")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := repo.Switch(ctx, "main"); err != nil {
 		t.Fatal(err)
 	}
@@ -115,9 +145,34 @@ func TestSmartMergeSnapshotsTarget(t *testing.T) {
 		t.Fatalf("merge: %v", err)
 	}
 
-	_, hash := findVersionRef(t, repo, "main", "merge")
+	ref, hash := findVersionRef(t, repo, "main", "merge")
 	if hash != preMergeTip {
 		t.Fatalf("snapshot hash = %s, want main's pre-merge tip %s", hash, preMergeTip)
+	}
+	// WriteVersionSnapshot adds Ours as a second parent only when it differs
+	// from the tip — the merge case, where Ours (feat's pre-merge tip) is a
+	// branch someone may later delete and the snapshot is what pins it
+	// against gc. ref is the ref NAME (the synthetic wrapper commit itself,
+	// unlike hash above which findVersionRef already unwrapped to p1).
+	secondParent, err := repo.RevParse(ctx, ref+"^2")
+	if err != nil {
+		t.Fatalf("snapshot %s has no second parent: %v", ref, err)
+	}
+	if secondParent != preMergeSourceTip {
+		t.Fatalf("snapshot ^2 = %s, want feat's pre-merge tip %s", secondParent, preMergeSourceTip)
+	}
+
+	// Source/Target are the branch NAMES for the PR-style preview label ("feat
+	// → main"), not the target's own name twice: the snapshotted branch
+	// (main, the merge TARGET) is the receiving side, so it must not leak into
+	// Source. Ours/Other/Base must all be non-empty too — proof this wrote a
+	// full 6-field record, never a partial 5-field one that loses its preview.
+	bv := findVersionBV(t, repo, "main", "merge")
+	if bv.Source != "feat" || bv.Target != "main" {
+		t.Fatalf("Source/Target = %q/%q, want feat/main", bv.Source, bv.Target)
+	}
+	if bv.Ours == "" || bv.Other == "" || bv.Base == "" {
+		t.Fatalf("endpoints = %+v, want Ours/Other/Base all non-empty", bv)
 	}
 }
 
@@ -146,6 +201,16 @@ func TestSmartRebaseSnapshotsBranch(t *testing.T) {
 	_, hash := findVersionRef(t, repo, "feat", "rebase")
 	if hash != preRebaseTip {
 		t.Fatalf("snapshot hash = %s, want feat's pre-rebase tip %s", hash, preRebaseTip)
+	}
+
+	// Rebase's Source is the rebased branch itself (the snapshotted ref);
+	// Target is Onto as given ("main" here — a branch name).
+	bv := findVersionBV(t, repo, "feat", "rebase")
+	if bv.Source != "feat" || bv.Target != "main" {
+		t.Fatalf("Source/Target = %q/%q, want feat/main", bv.Source, bv.Target)
+	}
+	if bv.Ours == "" || bv.Other == "" || bv.Base == "" {
+		t.Fatalf("endpoints = %+v, want Ours/Other/Base all non-empty", bv)
 	}
 }
 

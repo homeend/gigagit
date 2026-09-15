@@ -27,11 +27,41 @@ type VersionsPolicy struct {
 // snapshotNow is a test seam for the snapshot timestamp.
 var snapshotNow = time.Now
 
+// tipOf resolves branch's current local tip for a version snapshot's
+// Ours/Other endpoint. Best-effort: an error (unborn/unknown branch) comes
+// back as "", which snapshotBranchTip's ours/other guard turns into "record
+// no endpoints" rather than a failure.
+func tipOf(ctx context.Context, deps OpDeps, branch string) string {
+	sha, _ := deps.Repo.RevParse(ctx, "refs/heads/"+branch)
+	return sha
+}
+
 // snapshotBranchTip records branch's current tip as a hidden version ref
 // (refs/gg/versions/<branch>/<ts>-<opToken>) and prunes expired versions of
-// that branch. BEST-EFFORT by contract: any failure emits a progress note and
-// returns — recording must never block or fail the real operation.
-func snapshotBranchTip(ctx context.Context, deps OpDeps, branch, opToken string) {
+// that branch. ours/other are the two-branch endpoints a preview needs later
+// (the contribution and what it lands on/against) — both empty for a
+// one-branch op (amend, reset, undo-commit, delete-branch, restore), which
+// records no preview.
+//
+// This is the short form for the common case where the snapshotted branch
+// IS the Source side and other IS the Target name/ref as given (every
+// two-branch call site except merge — see snapshotBranchTipNamed). BEST-
+// EFFORT by contract: any failure emits a progress note and returns —
+// recording must never block or fail the real operation.
+func snapshotBranchTip(ctx context.Context, deps OpDeps, branch, opToken, ours, other string) {
+	snapshotBranchTipNamed(ctx, deps, branch, opToken, ours, other, branch, other)
+}
+
+// snapshotBranchTipNamed is snapshotBranchTip with explicit Source/Target
+// names. It exists because branch (the ref actually being snapshotted) and
+// other (the second merge-base endpoint) don't always line up with the
+// Source/Target a PR-style preview wants to label: for merge, the
+// snapshotted branch is the merge TARGET (main), but Ours/Source is the
+// merge SOURCE (feat) — a name that never otherwise reaches this function,
+// since ours only carries feat's resolved tip sha, not its name. Every
+// other two-branch op's Source/Target already coincide with (branch, other)
+// and goes through the snapshotBranchTip short form above.
+func snapshotBranchTipNamed(ctx context.Context, deps OpDeps, branch, opToken, ours, other, source, target string) {
 	if !deps.Versions.Enabled || branch == "" {
 		return
 	}
@@ -53,8 +83,29 @@ func snapshotBranchTip(ctx context.Context, deps OpDeps, branch, opToken string)
 		ts++
 		ref = git.VersionRef(branch, opToken, ts)
 	}
+
+	meta := git.VersionMeta{Op: opToken}
+	if ours != "" && other != "" {
+		// Base cannot be recomputed after the op: once the branches have
+		// merged, merge-base(target, source) returns the source tip rather
+		// than the fork point. Record it now or lose it. Source/Target ride
+		// along with Ours/Other/Base as one unit — git.ParseVersionMeta only
+		// accepts a record at exactly 1 or 6 fields, so a merge-base failure
+		// (or either endpoint missing) must leave EVERY endpoint field empty,
+		// never a partial 5-field record that silently loses its preview.
+		if base, berr := deps.Repo.MergeBase(ctx, ours, other); berr == nil && base != "" {
+			meta.Ours, meta.Other, meta.Base = ours, other, base
+			meta.Source, meta.Target = source, target
+		}
+	}
+
 	deps.emit(ctx, Progress{Step: "recording branch version", Detail: branch})
-	if err := deps.Repo.UpdateRef(ctx, ref, sha); err != nil {
+	syn, err := deps.Repo.WriteVersionSnapshot(ctx, sha, meta, ts)
+	if err != nil {
+		deps.emit(ctx, Progressf("recording branch version", "skipped: %s", err.Error()))
+		return
+	}
+	if err := deps.Repo.UpdateRef(ctx, ref, syn); err != nil {
 		deps.emit(ctx, Progressf("recording branch version", "skipped: %s", err.Error()))
 		return
 	}

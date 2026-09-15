@@ -121,13 +121,13 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 	}
 	switch resp.Option {
 	case "rebase":
-		snapshotBranchTip(ctx, deps, branch, "pull")
+		snapshotBranchTip(ctx, deps, branch, "pull", tipOf(ctx, deps, branch), remote+"/"+branch)
 		if err := deps.Repo.Pull(ctx, remote, branch, git.PullRebase); err != nil {
 			return Result{}, err
 		}
 		return Result{Changed: true}.WithSummary("pulled (rebased) %s", branch), nil
 	case "merge":
-		snapshotBranchTip(ctx, deps, branch, "pull")
+		snapshotBranchTip(ctx, deps, branch, "pull", tipOf(ctx, deps, branch), remote+"/"+branch)
 		if err := deps.Repo.Pull(ctx, remote, branch, git.PullMerge); err != nil {
 			return Result{}, err
 		}
@@ -137,7 +137,7 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 		// is the --ff-only guarantee), so there is no in-progress state to abort:
 		// reset --hard alone snaps the branch to the fetched remote tip and
 		// discards local commits + uncommitted changes, as the user asked.
-		snapshotBranchTip(ctx, deps, branch, "pull")
+		snapshotBranchTip(ctx, deps, branch, "pull", tipOf(ctx, deps, branch), remote+"/"+branch)
 		remoteTip := remote + "/" + branch
 		deps.emit(ctx, Progress{Step: "resetting (hard)", Detail: remoteTip})
 		if err := deps.Repo.Reset(ctx, "hard", remoteTip); err != nil {

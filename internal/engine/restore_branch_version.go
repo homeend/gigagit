@@ -28,7 +28,9 @@ func (op RestoreBranchVersion) Run(ctx context.Context, deps OpDeps) (Result, er
 	if !ok || refBranch != op.Branch {
 		return Result{}, fmt.Errorf("restore version: %s is not a version of branch %s", op.Ref, op.Branch)
 	}
-	sha, err := deps.Repo.RevParse(ctx, op.Ref)
+	// The ref points at the synthetic snapshot commit; the tip it recorded is
+	// its first parent. Every reader of a version ref unwraps p1.
+	sha, err := deps.Repo.RevParse(ctx, op.Ref+"^1")
 	if err != nil {
 		return Result{}, fmt.Errorf("restore version: %w", err)
 	}
@@ -57,7 +59,7 @@ func (op RestoreBranchVersion) Run(ctx context.Context, deps OpDeps) (Result, er
 				return Result{Changed: false}.WithSummary("cancelled"), nil
 			}
 		}
-		snapshotBranchTip(ctx, deps, op.Branch, "restore")
+		snapshotBranchTip(ctx, deps, op.Branch, "restore", "", "")
 		deps.emit(ctx, Progressf("restoring branch version", "%s → %s", op.Branch, short))
 		if err := deps.Repo.Reset(ctx, "hard", sha); err != nil {
 			return Result{}, fmt.Errorf("restore version: %w", err)
@@ -70,7 +72,7 @@ func (op RestoreBranchVersion) Run(ctx context.Context, deps OpDeps) (Result, er
 		if wt != nil {
 			return Result{}, fmt.Errorf("restore version: %s is checked out in worktree %s — restore it there", op.Branch, wt.Path)
 		}
-		snapshotBranchTip(ctx, deps, op.Branch, "restore")
+		snapshotBranchTip(ctx, deps, op.Branch, "restore", "", "")
 		deps.emit(ctx, Progressf("restoring branch version", "%s → %s", op.Branch, short))
 		if err := deps.Repo.UpdateRef(ctx, "refs/heads/"+op.Branch, sha); err != nil {
 			return Result{}, fmt.Errorf("restore version: %w", err)
