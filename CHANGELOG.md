@@ -8,6 +8,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Notes inside merge previews.** A preview (`Previews` tab, `gg preview`)
+  is now a review surface: its diff rows carry review notes, gathered along
+  the whole branch (merge-base → source tip) rather than read off the tip
+  alone, so a note survives the agent pushing more commits. A note whose
+  lines a later commit changed stays listed and is marked **outdated** (`⊘`
+  in the TUI gutter, the `outdated` class in the web page); one whose commit
+  left the branch is hidden but still counted in the panel badge. A preview
+  note is an ordinary committed note on the source tip — the same note shows
+  on that commit's own view — and the old side (the merge base) is not
+  addressable: `c` and `gg note add --old-line` are refused there. New CLI
+  surface: `gg diff --preview`, `gg preview diff --hunks`, `gg note
+  add|list|apply --preview`, `gg review --preview`; hunk numbers under
+  `--preview` come from the preview's own patch. MCP's three note tools take
+  a `preview` argument, and the web preview stage shows, adds and replies to
+  notes through `GET /api/preview/notes`.
+
 - **Web: copy what's on screen, and stop cutting off file names.** Five
   changes to the browser UI:
   - The **file list middle-elides long paths** the way the TUI does — whole

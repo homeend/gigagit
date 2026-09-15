@@ -25,6 +25,14 @@ anchored lines are gone.
 Inspect before you annotate. Read the whole change first, then comment on
 intent, structure, risk and follow-ups — not on every hunk.
 
+When you changed code on a branch, review it the way the user will: open a
+merge preview onto its target (`gg preview add <source> <target>`), then
+annotate every change you made with `gg note add --preview <id|label> --file
+<path> --new-line <n> --summary "…" --rationale "…"`. The notes are stored on
+the source tip and travel with it; when you push further commits the preview
+keeps showing them, marking the ones whose lines moved `outdated`. Report the
+preview's name back to the user so they can open it in their gg.
+
 ## Choosing the target
 
 A note anchors to ONE base and ONE result. The flags pick which:

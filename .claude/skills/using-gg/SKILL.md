@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v69 -->
+<!-- gg:using-gg:v70 -->
 
 # Using gg (gigagit)
 
@@ -269,6 +269,17 @@ finds the right one here.
   diff; a non-ok state goes to stderr with exit 1); `gg preview diff
   [--patch] <source> <target>` is the one-off form with no record;
   `gg preview rename <id|label> <text>`; `gg preview rm <id|label>`.
+  Notes live inside a preview: `gg diff --preview <id|label|<target>...<source>>
+  [--hunks [--json]]` prints the preview's own patch and numbers its hunks,
+  and `gg note add --preview P --file F (--new-line N | --hunk H) --summary …`
+  anchors a note on it. A preview note is stored on the SOURCE TIP and shows
+  on that commit's own view too; the old side (the merge base) is not
+  addressable, so `--old-line` is refused. `gg note list --preview P [--file F]
+  [--json]` lists the notes gathered along the whole branch — a note written
+  against an earlier commit whose lines a later commit changed is reported
+  `outdated` rather than dropped. `gg note apply --preview P --stdin` imports
+  a batch onto the tip (old-side items skipped), and `gg review --preview P
+  [--notes]` reviews the pair.
 - `gg branch current` — just the branch name (HEAD's short sha when
   detached).
 - `gg branch ls` — local branches, `* ` marking HEAD, `↑a ↓b` when an

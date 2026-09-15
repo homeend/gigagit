@@ -256,6 +256,49 @@ anchor has vanished says so in the same notice box. `expandFoldFor` is the
 fold-expand step `jumpNote` and `gotoNote` share: re-find the anchor in the
 REBUILT stream, because a partial-mode index is stale afterwards.
 
+**Notes in merge previews.** A preview note is an ordinary committed note on
+the source tip (`FileAddress{StateCommitted, <tip>, Path}`, `Side` new) —
+nothing new is stored; what's new is the READ. `domain.PreviewNoteSet`
+(`internal/domain/previewnotes.go`) is a preview's note scope: `Source`/
+`Target` (the pair's saved NAMES), `Tip` (full sha of the source tip — the
+write target), `Base` (merge-base(target, source)) and `Commits`
+(merge-base..source, newest first, via `RevListRange`, cached alongside
+`PreviewSummary`'s hash pair under `preview-revlist:<srcHash>:<tgtHash>`); the
+zero value (`OK() == false`) means "not previewable" and is NOT an error —
+callers just show no notes and no badge (spec ruling 6). `DiffSpec()` builds
+the ONE patch (`<base>..<tip>`) every --preview surface numbers hunks
+against, so hunk numbers can never drift between `gg diff --preview --hunks`
+and `gg note add --preview --hunk N`. The gather-and-resolve rule:
+`loadPreviewNotes` walks the note store ONCE against `set.commitSet()` (a
+membership map, not one store query per commit) and keeps only committed,
+NEW-side notes whose commit is IN the set — old-side notes on those commits
+are ignored (they belong to that commit's own parent→commit picture, not the
+preview's merge-base→tip one) — then `PreviewNotesFor` (caller holds a
+`Diff`, the TUI) / `PreviewNotesAt` (no diff — web/CLI/MCP, reads the tip's
+file content via `ShowFile`) resolve those notes against the tip's CURRENT
+text through the same `resolveNotes` the ordinary note path uses.
+`PreviewStatus(model.NoteStatus) string` maps `NoteStale` → `"outdated"` at
+render/wire time ONLY (`renderNoteLinePreview`, `ToWireNotePreview`, the MCP
+tools, `GET /api/preview/notes`, both `noteBoxTitle`s) — `model.NoteStatus`
+itself gains no value, so the store and resolver stay untouched. A note whose
+path is gone from the tip resolves orphaned and is hidden by `keepResolved`
+but still counted: `PreviewNoteCounts` counts from the STORE, unresolved,
+cached on `Service` in a plain `map[string]previewCountEntry` keyed
+`tip+":"+base` (NOT `factory.Cache("preview")`, which is keyed only on
+hashes and would survive a note write), dropped whole by
+`invalidateNoteCounts`. A note whose commit left the branch entirely (a
+rebase) is excluded earlier, by the `commitSet` membership test itself, so it
+is neither shown nor counted. In the TUI, `diffView.previewSet
+*domain.PreviewNoteSet` is the stamp a preview diff view carries (set by the
+loader in `files_view.go`, copied across a fresh view by `inheritIdentity` —
+ruling 17's extracted method, the one trap where `*dv = *msg.view` would
+silently drop it); `note_keys.go` reads it to route note reads through the
+preview path and to refuse an old-side anchor with `ErrPreviewOldSide`
+("notes in a preview anchor on the new side"), and
+`note_remove_all_popup.go` scopes "Remove all notes…" to the tip's own
+notes, hiding the row entirely when nothing on the tip is removable (ruling
+20).
+
 **Phase 2 — the agent lane.** `domain.DiffHunks`/`HunkRange` parse git's `@@`
 headers (`ParseDiffHunks`, pure) and `(*Service).HunkDiffSpec` is the ONE rule
 for which patch a hunk number refers to: a bare commit means that commit's own
