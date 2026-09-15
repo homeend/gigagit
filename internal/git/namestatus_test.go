@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/changeset"
+	"github.com/homeend/gigagit/internal/gitexec"
 )
 
 func TestDiffNameStatusReportsStatusesAndIgnoresRenames(t *testing.T) {
@@ -49,25 +50,26 @@ func TestDiffNameStatusReportsStatusesAndIgnoresRenames(t *testing.T) {
 	}
 }
 
-func TestParseNameStatusEntriesSkipsRenameTripleWithoutShifting(t *testing.T) {
+// DiffNameStatus adapts ParseNameStatus's []model.CommitFile output into
+// []changeset.Entry, and that adapter step — not the token-walk itself, which
+// is ParseNameStatus's own pre-existing, separately-tested logic — is what's
+// new here: an R/C entry must be dropped rather than mapped, since
+// changeset.Entry has no OldPath field to carry a rename/copy. --no-renames
+// makes git itself emit this shape only in theory, so drive it through a
+// FakeRunner to prove the filter regardless.
+func TestDiffNameStatusDropsRenameEntriesFromParser(t *testing.T) {
 	t.Parallel()
-	// R100/old/new is the rename shape --no-renames should make unreachable in
-	// practice; the parser still must consume all three fields as one unit
-	// (not emit an R entry, and not let the M/k.txt pair that follows shift
-	// out of alignment).
-	got := parseNameStatusEntries("R100\x00old.txt\x00new.txt\x00M\x00k.txt\x00")
-	want := []changeset.Entry{{Status: 'M', Path: "k.txt"}}
-	if len(got) != 1 || got[0] != want[0] {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-}
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git diff --name-status", gitexec.Result{
+		Stdout: "R100\x00old.txt\x00new.txt\x00M\x00k.txt\x00",
+	})
+	r := &Repo{Runner: f}
 
-func TestParseNameStatusEntriesStopsOnTruncatedTail(t *testing.T) {
-	t.Parallel()
-	// A trailing status with no path (or an R/C with a missing new-path field)
-	// must be dropped, not panic on an out-of-range index.
-	got := parseNameStatusEntries("M\x00a.txt\x00D\x00")
-	want := []changeset.Entry{{Status: 'M', Path: "a.txt"}}
+	got, err := r.DiffNameStatus(context.Background(), "a", "b")
+	if err != nil {
+		t.Fatalf("DiffNameStatus: %v", err)
+	}
+	want := []changeset.Entry{{Status: 'M', Path: "k.txt"}}
 	if len(got) != 1 || got[0] != want[0] {
 		t.Fatalf("got %v, want %v", got, want)
 	}

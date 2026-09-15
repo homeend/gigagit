@@ -2,7 +2,6 @@ package git
 
 import (
 	"context"
-	"strings"
 
 	"github.com/homeend/gigagit/internal/changeset"
 	"github.com/homeend/gigagit/internal/gitcmd"
@@ -22,37 +21,16 @@ func (r *Repo) DiffNameStatus(ctx context.Context, a, b string) ([]changeset.Ent
 	if err != nil {
 		return nil, err
 	}
-	return parseNameStatusEntries(res.Stdout), nil
-}
-
-// parseNameStatusEntries walks -z name-status output. With --no-renames a
-// rename/copy pair (status, old path, new path) cannot occur, but the parser
-// still recognizes the R/C shape defensively: it consumes all three fields as
-// one unit and skips the entry (changeset.Entry's status contract is A/M/D/T,
-// not R/C) rather than either shifting the pairing of every entry that
-// follows it (a misparse) or panicking on a short tail.
-func parseNameStatusEntries(stdout string) []changeset.Entry {
-	toks := strings.Split(strings.TrimRight(stdout, "\x00"), "\x00")
-	var out []changeset.Entry
-	for i := 0; i < len(toks); {
-		status := toks[i]
-		i++
-		if status == "" {
+	files := ParseNameStatus([]byte(res.Stdout))
+	out := make([]changeset.Entry, 0, len(files))
+	for _, f := range files {
+		// --no-renames means git never emits R/C here in practice; skip any
+		// that somehow arrived rather than mis-mapping them, since
+		// changeset.Entry has no OldPath field to carry a rename/copy.
+		if f.Status == "R" || f.Status == "C" {
 			continue
 		}
-		letter := status[0]
-		if letter == 'R' || letter == 'C' {
-			if i+1 >= len(toks) { // need old + new path; malformed tail → stop
-				break
-			}
-			i += 2 // consume the pair whole; skip, don't emit an R/C entry
-			continue
-		}
-		if i >= len(toks) { // need a path; malformed tail → stop
-			break
-		}
-		out = append(out, changeset.Entry{Status: letter, Path: toks[i]})
-		i++
+		out = append(out, changeset.Entry{Status: f.Status[0], Path: f.Path})
 	}
-	return out
+	return out, nil
 }
