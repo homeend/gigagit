@@ -90,14 +90,18 @@ func snapshotBranchTipAt(ctx context.Context, deps OpDeps, branch, opToken, tip,
 	sha := tip
 	ts := snapshotNow().Unix()
 	ref := git.VersionRef(branch, opToken, ts)
-	// Same-second, same-op collision: bump the timestamp until free.
+	// ONE read of this branch's existing records, fully unwrapped, serving
+	// three purposes: the same-second collision map, the prune list, and the
+	// duplicate check below. VersionRefs rather than ForEachRef because the
+	// duplicate check needs the endpoints, which live in the synthetic
+	// commit's trailer; it costs one extra `git log --no-walk` (subject
+	// batching) on a path that has already run a fetch.
+	prior, _ := deps.Repo.VersionRefs(ctx, git.VersionRefPrefix+branch)
 	existing := map[string]bool{}
-	infos, err := deps.Repo.ForEachRef(ctx, "refs/gg/versions/"+branch)
-	if err == nil {
-		for _, i := range infos {
-			existing[i.Ref] = true
-		}
+	for _, bv := range prior {
+		existing[bv.Ref] = true
 	}
+	// Same-second, same-op collision: bump the timestamp until free.
 	for existing[ref] {
 		ts++
 		ref = git.VersionRef(branch, opToken, ts)
@@ -132,6 +136,29 @@ func snapshotBranchTipAt(ctx context.Context, deps OpDeps, branch, opToken, tip,
 		}
 	}
 
+	// Nothing happened: this record would repeat, byte for byte, what the
+	// branch's newest one already says. A pull that was already up to date, a
+	// reset to where the branch already sat, a background auto-pull polling a
+	// quiet branch — each used to leave a fresh ref behind, so a repo under
+	// periodic background pull accumulated one ref per branch per poll for no
+	// information at all.
+	//
+	// Skipping is safe for drift detection precisely BECAUSE the record is
+	// identical: DriftAfter compares the branch's tip against vs[0], and an
+	// identical record has the same Ours/Other/Base, so the comparison it
+	// yields is the same one. The false-alarm class the ledger warns about is
+	// a MOVED tip left with an unmoved record; a duplicate record cannot
+	// produce it, since a moved tip changes Hash/Ours and so is not a
+	// duplicate. It also preserves a dismissed drift notice, which a fresh
+	// silent record used to paper over by resetting the baseline.
+	//
+	// Pruning still runs: a branch that only ever sees no-op pulls must not
+	// stop expiring its old versions just because it stopped writing new ones.
+	if newest, ok := newestVersion(prior); ok && duplicateVersion(newest, sha, meta) {
+		pruneBranchVersions(ctx, deps, branch, prior)
+		return
+	}
+
 	deps.emit(ctx, Progress{Step: "recording branch version", Detail: branch})
 	syn, err := deps.Repo.WriteVersionSnapshot(ctx, sha, meta, ts)
 	if err != nil {
@@ -149,22 +176,55 @@ func snapshotBranchTipAt(ctx context.Context, deps OpDeps, branch, opToken, tip,
 	if deps.Versions.Format > 0 {
 		_ = deps.Repo.StampStoreFormat(ctx, "versions", deps.Versions.Format)
 	}
-	pruneBranchVersions(ctx, deps, branch, infos)
+	pruneBranchVersions(ctx, deps, branch, prior)
+}
+
+// newestVersion returns the most recent of a branch's existing records.
+// for-each-ref sorts by refname, which is NOT the same as by timestamp (the
+// unix seconds in a ref name are variable-length decimal, so lexicographic
+// order breaks across a digit boundary), so the newest is picked by the
+// parsed Unix field rather than by position.
+func newestVersion(prior []model.BranchVersion) (model.BranchVersion, bool) {
+	var newest model.BranchVersion
+	found := false
+	for _, bv := range prior {
+		if !found || bv.Unix > newest.Unix {
+			newest, found = bv, true
+		}
+	}
+	return newest, found
+}
+
+// duplicateVersion reports whether bv records exactly what a new snapshot of
+// sha carrying meta would record. Every field a reader can act on is
+// compared: the snapshotted tip, the op token, the three frozen endpoints,
+// and the Source/Target labels the preview is titled with. A one-branch op
+// (amend, reset, delete-branch, restore) records no endpoints, so for those
+// this reduces to "same op, same tip" — which is the whole content of such a
+// record.
+func duplicateVersion(bv model.BranchVersion, sha string, meta git.VersionMeta) bool {
+	return bv.Hash == sha &&
+		bv.Op == meta.Op &&
+		bv.Ours == meta.Ours &&
+		bv.Other == meta.Other &&
+		bv.Base == meta.Base &&
+		bv.Source == meta.Source &&
+		bv.Target == meta.Target
 }
 
 // pruneBranchVersions deletes this branch's version refs older than the
-// policy age. infos is the pre-snapshot listing (the fresh ref is never
+// policy age. prior is the pre-snapshot listing (the fresh ref is never
 // expired). Best-effort: delete errors are ignored.
-func pruneBranchVersions(ctx context.Context, deps OpDeps, branch string, infos []model.RefInfo) {
+func pruneBranchVersions(ctx context.Context, deps OpDeps, branch string, prior []model.BranchVersion) {
 	if deps.Versions.MaxAgeDays <= 0 {
 		return
 	}
 	cutoff := snapshotNow().AddDate(0, 0, -deps.Versions.MaxAgeDays).Unix()
-	for _, info := range infos {
-		b, _, ts, ok := git.ParseVersionRef(info.Ref)
+	for _, bv := range prior {
+		b, _, ts, ok := git.ParseVersionRef(bv.Ref)
 		if !ok || b != branch || ts >= cutoff {
 			continue
 		}
-		_ = deps.Repo.DeleteRef(ctx, info.Ref)
+		_ = deps.Repo.DeleteRef(ctx, bv.Ref)
 	}
 }
