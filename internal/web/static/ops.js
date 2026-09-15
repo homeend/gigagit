@@ -143,6 +143,7 @@ function followOp(opID, label, kind, onDone) {
   state.op = { id: opID, es, kind, onDone: onDone || null };
   $("pull-btn").disabled = true;
   $("push-btn").disabled = true;
+  $("refresh-btn").disabled = true;
   es.onmessage = (m) => handleOpEvent(JSON.parse(m.data));
   // EventSource auto-retries transient drops (readyState CONNECTING) and
   // the server replays full history on reconnect. A permanent failure
@@ -159,6 +160,7 @@ function followOp(opID, label, kind, onDone) {
       state.op = null;
       $("pull-btn").disabled = false;
       $("push-btn").disabled = false;
+      $("refresh-btn").disabled = false;
       hideModal();
       closeReviewLane(); // a review's own overlay would otherwise spin forever
       opLine("error: lost connection to operation — repo state refreshed", true);
@@ -392,6 +394,7 @@ function handleOpEvent(ev) {
     state.op = null;
     $("pull-btn").disabled = false;
     $("push-btn").disabled = false;
+    $("refresh-btn").disabled = false;
     hideModal();
     // A run with its own done handler (the review lane) owns the outcome
     // entirely — it changes nothing in the repo, so none of the refreshing
@@ -598,6 +601,10 @@ $("commit-btn").addEventListener("click", doCommit);
 $("pull-btn").addEventListener("click", doPull);
 
 $("push-btn").addEventListener("click", doPush);
+
+// The same reload as the footer button and r — an op owns the data while it
+// runs, so the button follows pull/push into the disabled state.
+$("refresh-btn").addEventListener("click", () => void manualRefresh());
 
 $("stash-btn").addEventListener("click", doStash);
 

@@ -275,6 +275,17 @@ Staged and Commits panels and a commit's files view; in `gg web`, right-click
 a diff line, a file row or a commit row. Quote a link that carries `#<hunk>` —
 an unquoted `#` starts a shell comment.
 
+The browser UI copies the same things the TUI's `.` menu does, from where they
+are on screen. In an open commit, the **file list cuts long paths from the
+middle** the way the TUI does — whole directories drop out around a `…`, so
+the file name and the head of the path both survive a narrow pane (the row's
+tooltip carries the path in full). The **diff header's file path** copies on a
+click, and right-clicks into *copy full path* / *copy file name* / *copy parent
+dir*. Right-clicking **selected text inside a diff** offers *copy* (alongside
+*copy gg link to this line*). And the file list's header copies the open
+commit's id: right-click its **short sha** for *copy short commit id* /
+*copy commit id*, or its **subject** for the full id.
+
 ### Shell integration (cd-on-switch)
 
 So switching/creating a worktree can move your shell into it:
@@ -545,7 +556,9 @@ completes (a fresh commit simply appears on top). When the new page can't be
 aligned with the loaded list — history was rewritten, or more commits arrived
 than one page holds — the list falls back to a clean walk from the top. Manual
 `r`, a commit-sort or page-size change, and returning from the shell escape
-(`ctrl+o`) always start clean. The browser UI (`gg web`) reloads the same way:
+(`ctrl+o`) always start clean. The browser UI (`gg web`) has the same reload on
+`r`, on a **↻ refresh** button next to pull/push, and under its ☰ menu, and it
+reloads the same way:
 finishing an operation keeps the rows you scrolled in, leaves the scroll where
 it was, and re-anchors the cursor to the same commit instead of jumping to the
 top; a solo-scope change, a commit-sort change and a re-root still start clean.
