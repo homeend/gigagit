@@ -251,3 +251,67 @@ func TestReviewPreviewRefusesWorking(t *testing.T) {
 		t.Fatalf("want exit 2 + one-target message, got %d %q", code, errb)
 	}
 }
+
+// A path is normalised through domain.NoteTarget like every other note target:
+// `./a.txt` stores under "a.txt" (so the preview can find it again), and a path
+// escaping the repository is a usage error, not something handed to git.
+func TestNoteAddPreviewNormalisesItsPath(t *testing.T) {
+	dir := newCLIPreviewRepo(t)
+	code, _, errb := runCLI(t, dir, "note", "add", "--preview", "main...feat", "--file", "./a.txt",
+		"--new-line", "1", "--summary", "dotted path")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errb)
+	}
+	_, out, _ := runCLI(t, dir, "note", "list", "--preview", "main...feat", "--file", "a.txt")
+	if !strings.Contains(out, "dotted path") {
+		t.Fatalf("./a.txt must store under a.txt, got %q", out)
+	}
+}
+
+func TestNoteAddPreviewRefusesAnEscapingPath(t *testing.T) {
+	dir := newCLIPreviewRepo(t)
+	code, _, errb := runCLI(t, dir, "note", "add", "--preview", "main...feat", "--file", "../a.txt",
+		"--new-line", "1", "--summary", "no")
+	if code != 2 || !strings.Contains(errb, "escapes the repository") {
+		t.Fatalf("want exit 2 + the escape message, got %d %q", code, errb)
+	}
+}
+
+// Ruling 9: a gg:// link and --preview are two ways of naming a target, so
+// every verb that takes both refuses the combination (exit 2) rather than
+// letting one silently win.
+func TestNoteVerbsRefuseALinkWithPreview(t *testing.T) {
+	dir := newCLIPreviewRepo(t)
+	code, out, errb := runCLI(t, dir, "link")
+	if code != 0 {
+		t.Fatalf("gg link: exit %d (%s)", code, errb)
+	}
+	repoLink := strings.TrimSpace(out)
+	fileLink := repoLink + "/a.txt:1"
+
+	cases := [][]string{
+		{"note", "add", fileLink, "--preview", "main...feat", "--summary", "no"},
+		{"note", "list", fileLink, "--preview", "main...feat"},
+	}
+	for _, args := range cases {
+		code, _, errb := runCLI(t, dir, args...)
+		if code != 2 || !strings.Contains(errb, "one target only") {
+			t.Fatalf("%v: want exit 2 + one-target message, got %d %q", args, code, errb)
+		}
+	}
+	code, _, errb = runCLIStdin(t, dir, `{"comments":[]}`,
+		"note", "apply", repoLink, "--stdin", "--preview", "main...feat")
+	if code != 2 || !strings.Contains(errb, "one target only") {
+		t.Fatalf("note apply link+preview: want exit 2 + one-target message, got %d %q", code, errb)
+	}
+}
+
+func TestNoteApplyPreviewRefusesRev(t *testing.T) {
+	dir := newCLIPreviewRepo(t)
+	tip := runGit(t, dir, "rev-parse", "feat")
+	code, _, errb := runCLIStdin(t, dir, `{"comments":[]}`,
+		"note", "apply", "--stdin", "--preview", "main...feat", "--rev", tip)
+	if code != 2 || !strings.Contains(errb, "one target only") {
+		t.Fatalf("want exit 2 + one-target message, got %d %q", code, errb)
+	}
+}

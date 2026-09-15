@@ -14,7 +14,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"sort"
 	"strings"
 	"time"
 
@@ -360,7 +359,14 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 			fmt.Fprintln(stderr, "error:", terr)
 			return 1
 		}
-		addr = model.FileAddress{State: model.StateCommitted, Commit: tgt.Set.Tip, Path: *tf.file}
+		// The address is an ORDINARY committed one on the tip, so it is built
+		// by NoteTarget like every other: that is what normalises the path
+		// (`./a.txt`, a Windows `sub\a.txt`) and refuses one escaping the repo.
+		a, aerr := svc.NoteTarget(ctx, *tf.file, false, tgt.Set.Tip)
+		if aerr != nil {
+			return noteExit(aerr, stderr)
+		}
+		addr = a
 		if *newLine != 0 {
 			if *newLine < 1 {
 				fmt.Fprintln(stderr, "note add: --new-line must be a 1-based line number")
@@ -368,18 +374,17 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 			}
 			side, rng = model.NoteSideNew, [2]int{*newLine, *newLine}
 		} else {
-			if *hunk < 1 {
-				fmt.Fprintln(stderr, "note add: --hunk must be a 1-based hunk number")
-				return 2
-			}
 			// Ruling 1: the PREVIEW's patch, so this agrees with
-			// `gg diff --preview --hunks`. The refusal of a delete-only hunk
-			// lives in domain, shared with MCP.
-			s, r, herr := svc.PreviewHunkAnchor(ctx, tgt.Set, *tf.file, *hunk)
+			// `gg diff --preview --hunks`. Both refusals — a hunk number that
+			// is not 1-based, and a delete-only hunk — live in domain, shared
+			// with MCP; only the exit-code mapping is the CLI's.
+			s, r, herr := svc.PreviewHunkAnchor(ctx, tgt.Set, addr.Path, *hunk)
 			if errors.Is(herr, domain.ErrPreviewOldSide) {
 				fmt.Fprintln(stderr, "note add:", herr)
 				return 2
 			}
+			// A non-1-based hunk comes back as ErrNoteTargetUsage, which
+			// noteExit already reports as the usage error it is (exit 2).
 			if herr != nil {
 				return noteExit(herr, stderr)
 			}
@@ -676,30 +681,20 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 }
 
 // previewResolvedNotes gathers a preview's notes for one path, or — with no
-// --file — for every path the preview carries notes on. PreviewNotesAt needs a
-// path (it resolves against that file's content at the tip), so the no-path
-// case walks PreviewNoteCounts's own byPath keys in a stable order rather than
-// handing it an empty path, which would silently resolve nothing.
+// --file — for every path it covers, in one store load (domain.PreviewNotesAll;
+// PreviewNotesAt needs a path, because it resolves against that file's content
+// at the tip).
 func previewResolvedNotes(ctx context.Context, svc *domain.Service, set domain.PreviewNoteSet, file string) ([]domain.ResolvedNote, error) {
 	if file != "" {
 		return svc.PreviewNotesAt(ctx, set, file)
 	}
-	byPath, _, err := svc.PreviewNoteCounts(ctx, set)
+	byPath, err := svc.PreviewNotesAll(ctx, set)
 	if err != nil {
 		return nil, err
 	}
-	paths := make([]string, 0, len(byPath))
-	for p := range byPath {
-		paths = append(paths, p)
-	}
-	sort.Strings(paths)
 	var out []domain.ResolvedNote
-	for _, p := range paths {
-		got, gerr := svc.PreviewNotesAt(ctx, set, p)
-		if gerr != nil {
-			return nil, gerr
-		}
-		out = append(out, got...)
+	for _, p := range domain.PreviewNotePaths(byPath) {
+		out = append(out, byPath[p]...)
 	}
 	return out, nil
 }

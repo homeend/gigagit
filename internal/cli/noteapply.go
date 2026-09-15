@@ -37,6 +37,22 @@ func printStoredNotes(w io.Writer, notes []model.Note, asJSON bool) error {
 	return json.NewEncoder(w).Encode(wires)
 }
 
+// warnSkippedOldSide prints the ONE warning for the old-side items a batch
+// import dropped, naming the reason the target that dropped them has: a merge
+// preview's old side is the merge base, a review's is its own base. Shared by
+// `gg note apply` and `gg review --notes` so the same condition never gets two
+// different explanations.
+func warnSkippedOldSide(stderr io.Writer, skipped int, preview bool) {
+	if skipped <= 0 {
+		return
+	}
+	why := "this review's base is not a note-addressable side"
+	if preview {
+		why = "notes in a preview anchor on the new side"
+	}
+	fmt.Fprintf(stderr, "note: skipped %d old-side annotation(s) — %s\n", skipped, why)
+}
+
 func noteApply(svc *domain.Service, link *domain.Resolved, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("note apply", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -112,9 +128,7 @@ func noteApply(svc *domain.Service, link *domain.Resolved, args []string, stdin 
 	if err != nil {
 		return noteExit(err, stderr)
 	}
-	if skipped > 0 {
-		fmt.Fprintf(stderr, "note: skipped %d old-side annotation(s) — notes in a preview anchor on the new side\n", skipped)
-	}
+	warnSkippedOldSide(stderr, skipped, pf.set())
 	stored, err := svc.ApplyNoteBatch(ctx, planned)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)

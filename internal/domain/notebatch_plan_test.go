@@ -116,6 +116,7 @@ func TestApplyNoteBatchRollsBackOnMidBatchFailure(t *testing.T) {
 // Ruling 1: a batch's `hunk` items number the PREVIEW's patch, while the
 // address stays the tip.
 func TestPlanNoteBatchInUsesTheGivenHunkSpec(t *testing.T) {
+	t.Parallel()
 	svc, dir := newPreviewRepo(t)
 	svc.UseNotesDir(t.TempDir())
 	ctx := context.Background()

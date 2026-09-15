@@ -371,13 +371,12 @@ func TestPreviewHunkAnchorUsesThePreviewPatch(t *testing.T) {
 // A hunk that only deletes has no new side to anchor on: refused, not silently
 // stored as an old-side note the preview could never show.
 func TestPreviewHunkAnchorRefusesADeleteOnlyHunk(t *testing.T) {
-	svc, dir := newDeletedFilePreviewRepo(t)
+	svc, _ := newDeletedFilePreviewRepo(t)
 	ctx := context.Background()
 	set, err := svc.PreviewNotes(ctx, "feat", "main")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = dir
 	if _, _, err := svc.PreviewHunkAnchor(ctx, set, "c.txt", 1); !errors.Is(err, ErrPreviewOldSide) {
 		t.Fatalf("want ErrPreviewOldSide, got %v", err)
 	}
@@ -396,4 +395,72 @@ func newDeletedFilePreviewRepo(t *testing.T) (*Service, string) {
 	gitRun(t, dir, "commit", "-m", "feat drops c.txt")
 	gitRun(t, dir, "checkout", "main")
 	return svc, dir
+}
+
+// PreviewNotesAll gathers EVERY path the preview covers in one store load, and
+// hides a path-gone orphan exactly as PreviewNotesAt does for a single path.
+func TestPreviewNotesAllGathersEveryPathAndHidesOrphans(t *testing.T) {
+	svc, dir := newPreviewRepo(t)
+	svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	// Two more commits on feat: one adds gone.txt (so a note can anchor on it
+	// there), the next removes it — the path-gone orphan case.
+	gitRun(t, dir, "checkout", "feat")
+	writeFile(t, dir, "gone.txt", "temporary\n")
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-m", "c4 adds gone.txt")
+	had := revParse(t, dir, "feat")
+	gitRun(t, dir, "rm", "-q", "gone.txt")
+	gitRun(t, dir, "commit", "-m", "c5 removes gone.txt")
+	gitRun(t, dir, "checkout", "main")
+	tip := revParse(t, dir, "feat")
+
+	add := func(commit, path string, line int, summary string) {
+		t.Helper()
+		if _, err := svc.NoteAdd(ctx, model.Note{
+			Source: model.NoteSourceAgent, Author: "ada",
+			Address: model.FileAddress{State: model.StateCommitted, Commit: commit, Path: path},
+			Side:    model.NoteSideNew, Range: [2]int{line, line}, Summary: summary,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add(tip, "a.txt", 1, "on a.txt")
+	add(tip, "b.txt", 1, "on b.txt")
+	// gone.txt is gone from the TIP: an orphan, hidden like any other.
+	add(had, "gone.txt", 1, "orphan")
+
+	set, err := svc.PreviewNotes(ctx, "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byPath, err := svc.PreviewNotesAll(ctx, set)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(byPath) != 2 || len(byPath["a.txt"]) != 1 || len(byPath["b.txt"]) != 1 {
+		t.Fatalf("want a.txt and b.txt only, got %v", byPath)
+	}
+	if _, ok := byPath["gone.txt"]; ok {
+		t.Fatalf("a path-gone orphan must stay hidden, got %v", byPath)
+	}
+	if got := PreviewNotePaths(byPath); len(got) != 2 || got[0] != "a.txt" || got[1] != "b.txt" {
+		t.Fatalf("paths must come back sorted, got %v", got)
+	}
+}
+
+// A hunk number is 1-based: 0 or negative is a caller usage error in domain,
+// so every frontend refuses it the same way.
+func TestPreviewHunkAnchorRefusesANonPositiveHunk(t *testing.T) {
+	svc, _ := newPreviewRepo(t)
+	ctx := context.Background()
+	set, err := svc.PreviewNotes(ctx, "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []int{0, -1} {
+		if _, _, err := svc.PreviewHunkAnchor(ctx, set, "a.txt", n); !errors.Is(err, ErrNoteTargetUsage) {
+			t.Fatalf("hunk %d: want ErrNoteTargetUsage, got %v", n, err)
+		}
+	}
 }

@@ -209,9 +209,8 @@ func importReviewNotes(ctx context.Context, svc *domain.Service, target domain.R
 	if err != nil {
 		return noteExit(err, stderr)
 	}
-	if skipped > 0 {
-		fmt.Fprintf(stderr, "note: skipped %d old-side annotation(s) — this review's base is not a note-addressable side\n", skipped)
-	}
+	// hunkSpec != nil is exactly the --preview case, which has its own reason.
+	warnSkippedOldSide(stderr, skipped, hunkSpec != nil)
 	stored, err := svc.ApplyNoteBatch(ctx, planned)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)

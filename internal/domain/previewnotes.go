@@ -3,6 +3,8 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -149,6 +151,11 @@ func (s *Service) PreviewHunkAnchor(ctx context.Context, set PreviewNoteSet, pat
 	if !set.OK() {
 		return "", [2]int{}, ErrPreviewNotFound
 	}
+	// The 1-based check lives HERE, not in each frontend: a 0 or negative hunk
+	// is a caller usage error, never "that hunk does not exist in the patch".
+	if n < 1 {
+		return "", [2]int{}, fmt.Errorf("%w: a hunk number is 1-based", ErrNoteTargetUsage)
+	}
 	spec := set.DiffSpec()
 	spec.Paths = []string{path}
 	side, rng, err := s.HunkRange(ctx, spec, path, n)
@@ -242,6 +249,59 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 	// reports orphaned, and keepResolved hides those — exactly the rule the
 	// ordinary note path follows for a deleted file.
 	return keepResolved(resolveNotes(mine, nil, newLines)), nil
+}
+
+// PreviewNotesAll is PreviewNotesAt for EVERY path the preview carries notes
+// on: `gg note list --preview P` with no --file, and the MCP read of a whole
+// preview. It loads the store ONCE (ruling 3) and groups by path, rather than
+// asking PreviewNotesAt per path — that would re-read and re-scan the whole
+// store for each file.
+//
+// Each path is resolved against its own content at the tip, exactly as
+// PreviewNotesAt does, so orphans (the path is gone from the tip) stay hidden.
+// A path whose notes all resolve away is left OUT of the map, so a caller can
+// range over it without testing for empties.
+func (s *Service) PreviewNotesAll(ctx context.Context, set PreviewNoteSet) (map[string][]ResolvedNote, error) {
+	if !set.OK() {
+		return map[string][]ResolvedNote{}, nil
+	}
+	mine, err := s.loadPreviewNotes(ctx, set, "")
+	if err != nil {
+		return nil, err
+	}
+	byPath := map[string][]model.Note{}
+	for _, n := range mine {
+		byPath[n.Address.Path] = append(byPath[n.Address.Path], n)
+	}
+	paths := make([]string, 0, len(byPath))
+	for p := range byPath {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths) // stable output order for the CLI's rows
+	out := make(map[string][]ResolvedNote, len(paths))
+	for _, p := range paths {
+		var newLines []string
+		if b, ferr := s.ShowFile(ctx, set.Tip, p); ferr == nil {
+			newLines = splitLines(b)
+		}
+		// newLines nil (the path is gone from the tip) → resolveOne reports
+		// orphaned and keepResolved drops it, the ordinary note-path rule.
+		if got := keepResolved(resolveNotes(byPath[p], nil, newLines)); len(got) > 0 {
+			out[p] = got
+		}
+	}
+	return out, nil
+}
+
+// PreviewNotePaths are PreviewNotesAll's keys in the order it resolved them —
+// sorted, so a caller rendering rows has one stable order to follow.
+func PreviewNotePaths(byPath map[string][]ResolvedNote) []string {
+	paths := make([]string, 0, len(byPath))
+	for p := range byPath {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 // previewCountEntry is one cached count result.
