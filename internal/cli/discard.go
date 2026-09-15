@@ -18,7 +18,7 @@ import (
 // unstaged changes: tracked edits are restored from the index (staged hunks
 // kept), untracked files deleted. Destructive, so it requires --yes — or, on an
 // interactive terminal, a y/N confirmation.
-func cmdDiscard(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+func cmdDiscard(svc *domain.Service, dir string, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("discard", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	all := fs.Bool("all", false, "discard ALL unstaged changes")
@@ -27,7 +27,7 @@ func cmdDiscard(svc *domain.Service, args []string, stdin io.Reader, stdout, std
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	paths := fs.Args()
+	paths := repoPathspecs(svc, dir, fs.Args())
 
 	if *all && len(paths) > 0 {
 		fmt.Fprintln(stderr, "discard: --all takes no paths")

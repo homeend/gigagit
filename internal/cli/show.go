@@ -12,8 +12,9 @@ import (
 // cmdShow implements `gg show <commit> [--patch] [-- <file>...]` — a
 // "<short-sha> <subject>" header followed by the terse stat block
 // (default) or the full patch (--patch).
-func cmdShow(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
+func cmdShow(svc *domain.Service, dir string, args []string, stdout, stderr io.Writer) int {
 	head, paths := splitDashDash(args) // BEFORE fs.Parse — flag.Parse eats a leading "--"
+	paths = repoPathspecs(svc, dir, paths)
 	// flag.Parse stops at the first non-flag argument, but the usage string
 	// (and docs) teach `gg show <commit> --patch` — flag AFTER the positional.
 	// Partition head into flag-ish args ("-" prefixed) and positionals before
