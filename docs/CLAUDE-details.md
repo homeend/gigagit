@@ -278,9 +278,14 @@ preview's merge-base→tip one) — then `PreviewNotesFor` (caller holds a
 file content via `ShowFile`) resolve those notes against the tip's CURRENT
 text through the same `resolveNotes` the ordinary note path uses.
 `PreviewStatus(model.NoteStatus) string` maps `NoteStale` → `"outdated"` at
-render/wire time ONLY (`renderNoteLinePreview`, `ToWireNotePreview`, the MCP
-tools, `GET /api/preview/notes`, both `noteBoxTitle`s) — `model.NoteStatus`
-itself gains no value, so the store and resolver stay untouched. A note whose
+render/wire time ONLY — the CLI's `noteStatusWord` feeds it into
+`renderNoteLine` (`internal/cli/note.go`), `notewire.ToWireNotePreview`
+feeds MCP/`GET /api/preview/notes`, the TUI's `noteBoxTitle`
+(`internal/tui/diff_notes.go`) checks `v.previewSet != nil` to say
+"outdated" instead of "stale", and the web's `noteBoxHTML`
+(`internal/web/static/files.js`) does the same off `state.diffCtx.preview`
+— `model.NoteStatus` itself gains no value, so the store and resolver stay
+untouched. A note whose
 path is gone from the tip resolves orphaned and is hidden by `keepResolved`
 but still counted: `PreviewNoteCounts` counts from the STORE, unresolved,
 cached on `Service` in a plain `map[string]previewCountEntry` keyed
@@ -292,12 +297,22 @@ is neither shown nor counted. In the TUI, `diffView.previewSet
 *domain.PreviewNoteSet` is the stamp a preview diff view carries (set by the
 loader in `files_view.go`, copied across a fresh view by `inheritIdentity` —
 ruling 17's extracted method, the one trap where `*dv = *msg.view` would
-silently drop it); `note_keys.go` reads it to route note reads through the
-preview path and to refuse an old-side anchor with `ErrPreviewOldSide`
-("notes in a preview anchor on the new side"), and
-`note_remove_all_popup.go` scopes "Remove all notes…" to the tip's own
-notes, hiding the row entirely when nothing on the tip is removable (ruling
-20).
+silently drop it); `note_keys.go`'s `previewNoteSet`/`previewNoteScope`
+read it (never Model state at key time) to route note reads through the
+preview path. The old-side refusal is three separate sites sharing only
+the wording "notes in a preview anchor on the new side", never code:
+`openNotePopup` (`note_popup.go`) checks `m.previewNoteSet() != nil` when
+`noteAnchorsAtCursor()` comes back empty and sets `m.statusMsg` via
+`i18n.T` (a cursor on the merge-base-only side has no anchor to offer);
+`steer_attn.go` refuses a steering `highlight add` the same way, scoped to
+the TIP commit via `previewNoteScope()` (an English literal, not
+`i18n.T` — ruling 13, agent-facing protocol); and
+`domain.ErrPreviewOldSide` (`internal/domain/previewnotes.go`) is the
+separate, narrower case inside `PreviewHunkAnchor` — a `--hunk N` that
+resolves to the OLD side (a delete-only hunk) — shared by the CLI's
+`gg note add --preview --hunk N` and the MCP note tools. `note_remove_all_popup.go` scopes "Remove
+all notes…" to the tip's own notes, hiding the row entirely when nothing
+on the tip is removable (ruling 20).
 
 **Phase 2 — the agent lane.** `domain.DiffHunks`/`HunkRange` parse git's `@@`
 headers (`ParseDiffHunks`, pure) and `(*Service).HunkDiffSpec` is the ONE rule
