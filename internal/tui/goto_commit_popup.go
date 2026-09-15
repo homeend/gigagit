@@ -60,7 +60,7 @@ func (p *gotoCommitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.popLayer(), nil
 	case tea.KeyEnter:
 		if p.pending != nil {
-			return m.switchToLink(*p.pending)
+			return m.switchToLink(p, *p.pending)
 		}
 		text := strings.TrimSpace(p.input.Value())
 		if text == "" { // nothing to resolve; keep the popup open
@@ -119,6 +119,11 @@ func (p *gotoCommitPopup) box(m Model) string {
 	if p.pending != nil {
 		b.WriteString("\n" + i18n.T("that link names another checkout: %s", p.pending.checkout) + "\n")
 		b.WriteString("\n" + i18n.T("[enter] switch there  [esc] stay"))
+	} else if p.resolving {
+		// A link into another repository can cost seconds (its service opens
+		// and lowers a hunk there); say so rather than look frozen.
+		b.WriteString("\n" + i18n.T("resolving…") + "\n")
+		b.WriteString("\n" + i18n.T("[enter] go  [esc] cancel"))
 	} else {
 		b.WriteString("\n" + i18n.T("[enter] go  [esc] cancel"))
 	}

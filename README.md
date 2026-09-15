@@ -284,8 +284,9 @@ repository history behind the `R` switcher — so a link made on one machine
 finds the matching checkout here. In the TUI, `#` (or the palette's
 **Open gg:// link…**) takes a pasted link and lands on it — a link into
 another checkout asks first, then switches the repo and lands there; `L` in
-the diff view copies the cursor line's link and the `.` menu's **Copy link** works in the Files,
-Staged and Commits panels and a commit's files view; in `gg web`, right-click
+the diff view copies the cursor line's link and the `.` menu's **Copy link**
+works in the Files, Staged and Commits panels and a commit's files view; in
+`gg web`, right-click
 a diff line, a file row or a commit row. Quote a link that carries `#<hunk>` —
 an unquoted `#` starts a shell comment.
 

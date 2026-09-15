@@ -133,6 +133,19 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 		// a commit the feed has not paged in is a refusal, not a reason to
 		// close what the user was reading.
 		if _, ok := m.steerCommitRow(c.Commit); !ok {
+			if startAtOrigin(c) {
+				// The user's own link (gg open, a pasted link): a commit the
+				// feed has not paged in is still a commit gg can show — open
+				// its files by hash, exactly what `#` does for a typed sha.
+				// An agent's navigate keeps the refusal: it asked for a feed
+				// row, and moving the user into a files view is not that.
+				nm := m.steerToPanels()
+				nm, cmd := nm.openChangedFiles(model.Commit{Hash: c.Commit})
+				nm.focus = panelCommits
+				nm = nm.focusTree()
+				nm.statusMsg = i18n.T("▸ opened %s", shortHash(c.Commit))
+				return nm, cmd
+			}
 			return m, m.answerSteer(c, steerFail(c, "commit not loaded in the feed"))
 		}
 		nm := m.steerToPanels().steerClearCommitsFilter()

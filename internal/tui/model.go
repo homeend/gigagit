@@ -726,13 +726,22 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Tag-gate by the submitted text: only act if this popup is still on top
 		// and its input is unchanged (a since-edited field discards a stale resolve).
 		if p == nil || p != m.topLayer() || strings.TrimSpace(p.input.Value()) != msg.rev {
+			if p != nil {
+				p.resolving = false // the dropped resolve is no longer in flight
+			}
 			return m, nil
 		}
 		return m.resolvedGotoCommit(p, msg)
 	case gotoLinkResolvedMsg:
 		p := layerOf[*gotoCommitPopup](m)
-		// Same tag-gate as gotoCommitResolvedMsg: the submitted text.
-		if p == nil || p != m.topLayer() || strings.TrimSpace(p.input.Value()) != msg.text {
+		// Same tag-gate as gotoCommitResolvedMsg (the submitted text) PLUS the
+		// service: msg.same was judged against the repo the session was in at
+		// dispatch, and a repo switch since (reRoot replaces m.svc) would let
+		// a resolve for the OLD repo land a navigate in the new one.
+		if p == nil || p != m.topLayer() || strings.TrimSpace(p.input.Value()) != msg.text || msg.svc != m.svc {
+			if p != nil {
+				p.resolving = false
+			}
 			return m, nil
 		}
 		return m.resolvedGotoLink(p, msg)

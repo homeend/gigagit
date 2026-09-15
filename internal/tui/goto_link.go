@@ -30,11 +30,12 @@ func isLinkText(s string) bool { return strings.HasPrefix(s, model.LinkScheme) }
 // the exact submitted text (the tag-gate key).
 type gotoLinkResolvedMsg struct {
 	text     string
-	checkout string        // the link's checkout: its absolute top level
-	same     bool          // it is THIS session's checkout
-	bare     bool          // a repository link: nothing in it to land on
-	cmd      steer.Command // the navigate to apply (same && !bare)
-	at       model.Link    // the landing link for a repo switch (!same && !bare)
+	svc      *domain.Service // the session's service at dispatch: a repo switch replaces it, which retires this resolve
+	checkout string          // the link's checkout: its absolute top level
+	same     bool            // it is THIS session's checkout
+	bare     bool            // a repository link: nothing in it to land on
+	cmd      steer.Command   // the navigate to apply (same && !bare; also built, unused, for a switch)
+	at       model.Link      // the landing link for a repo switch (!same && !bare)
 	err      error
 }
 
@@ -56,9 +57,12 @@ func (m Model) resolveLinkCmd(text string) tea.Cmd {
 		ctx := context.Background()
 		res, err := linknav.Resolve(ctx, statePath, svc, text)
 		if err != nil {
-			return gotoLinkResolvedMsg{text: text, err: err}
+			return gotoLinkResolvedMsg{text: text, svc: svc, err: err}
 		}
-		msg := gotoLinkResolvedMsg{text: text, checkout: res.Checkout}
+		msg := gotoLinkResolvedMsg{text: text, svc: svc, checkout: res.Checkout}
+		// A TopLevel failure (the checkout vanished mid-session) reads as
+		// "another checkout": the confirm then names this very path, and the
+		// switch re-opens it — the honest recovery, not a silent no-op.
 		top, err := svc.TopLevel(ctx)
 		msg.same = err == nil && domain.SamePath(top, res.Checkout)
 		if linknav.RepoOnly(res) {
@@ -123,8 +127,18 @@ func (m Model) popGotoPrompt() Model {
 // checkout (the repo switcher's own path) and, unless the link was bare, arm
 // the --at gate with the resolved landing so the navigate fires once the new
 // repo has loaded — never earlier, and for a preview link not before its
-// previews have been read.
-func (m Model) switchToLink(sw gotoLinkSwitch) (Model, tea.Cmd) {
+// previews have been read. The switch target is checked FIRST, exactly as
+// guardedReRoot does for every other switch site: the resolver matches a
+// local link's checkout by path prefix against the registry, so a checkout
+// recorded under the other environment's notation resolves fine and would
+// otherwise tear the session down (and poison --cwd-file). Such a link is
+// refused in place; no repair is offered from here.
+func (m Model) switchToLink(p *gotoCommitPopup, sw gotoLinkSwitch) (Model, tea.Cmd) {
+	if verdict, _ := checkSwitchTarget(guardStat, guardGOOS, sw.checkout); verdict != switchOK {
+		p.pending = nil
+		p.err = i18n.T("cannot switch: %s is not reachable from here", sw.checkout)
+		return m, nil
+	}
 	m = m.popGotoPrompt()
 	nm, cmd := m.reRoot(sw.checkout)
 	m = nm.(Model)

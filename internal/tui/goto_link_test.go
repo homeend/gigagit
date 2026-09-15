@@ -278,3 +278,76 @@ func TestGotoLinkOtherCheckoutLandsAfterTheReload(t *testing.T) {
 		t.Errorf("status = %q, want an \"opened\" notice with no agent wording", m.statusMsg)
 	}
 }
+
+// A resolve dispatched in repo A must not land after the session switched to
+// repo B — even with the same text in a freshly opened prompt: msg.same was
+// judged against A, and acting on it would navigate B to A's place.
+func TestGotoLinkStaleResolveAfterASwitchIsDropped(t *testing.T) {
+	t.Parallel()
+	m, top := gotoLinkModel(t)
+	other := otherCheckout(t, m)
+	text := linkTo(top, "/a.txt:18")
+	m, cmd := pasteLink(t, m, text)
+	stale := cmd() // resolved against A, delivered later
+	m, _ = send(m, keyType(tea.KeyEsc))
+	nm, _ := m.reRoot(other)
+	m = nm.(Model)
+	m.ready, m.loading = true, false
+	m, _ = send(m, key("#"))
+	m, _ = send(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(text)})
+	p := layerOf[*gotoCommitPopup](m)
+	p.resolving = true
+	m, _ = send(m, stale)
+	if layerOf[*gotoCommitPopup](m) != p || m.pendingSteer != nil || m.diffLayer() != nil {
+		t.Fatal("a resolve from the previous repo must be dropped, not applied")
+	}
+	if p.resolving {
+		t.Error("a dropped resolve is no longer in flight")
+	}
+}
+
+// A commit link whose commit the feed has not paged in still opens: the
+// user's own navigate falls back to the commit's files by hash (what `#`
+// does for a typed sha) instead of the agent-facing "not loaded" refusal.
+func TestGotoLinkCommitNotInTheFeedOpensItsFiles(t *testing.T) {
+	t.Parallel()
+	m, top := gotoLinkModel(t)
+	sha := headSHA(t, top)
+	m.commits = nil // nothing paged in
+	m, cmd := pasteLink(t, m, linkTo(top, "@"+sha))
+	m, cmd = send(m, cmd())
+	for _, msg := range flattenCmd(t, cmd) {
+		m, _ = send(m, msg)
+	}
+	if m.filesView == nil || m.filesHash != sha {
+		t.Fatalf("filesView=%v hash=%q, want the commit's files opened for %s", m.filesView != nil, m.filesHash, sha)
+	}
+	if !strings.Contains(m.statusMsg, "opened") {
+		t.Errorf("status = %q, want an \"opened\" notice", m.statusMsg)
+	}
+}
+
+// The confirm's enter runs the same reachability check every other switch
+// site does: an unreachable checkout is refused in place, the session stays
+// in its repo and no landing is armed. Serial: it swaps the guard seams.
+func TestGotoLinkSwitchRefusesAnUnreachableCheckout(t *testing.T) {
+	m, top := gotoLinkModel(t)
+	other := otherCheckout(t, m)
+	m, cmd := pasteLink(t, m, linkTo(other, "/a.txt:18"))
+	m, _ = send(m, cmd())
+	p := layerOf[*gotoCommitPopup](m)
+	if p == nil || p.pending == nil {
+		t.Fatal("expected the confirm")
+	}
+	setGuardSeams(t, "linux") // nothing exists any more
+	m, _ = send(m, keyType(tea.KeyEnter))
+	if layerOf[*gotoCommitPopup](m) != p || p.pending != nil {
+		t.Fatal("the refusal must keep the prompt open with the confirm withdrawn")
+	}
+	if !strings.Contains(p.err, "not reachable from here") || !strings.Contains(p.err, filepath.Base(other)) {
+		t.Errorf("err = %q, want the cannot-switch refusal naming %s", p.err, other)
+	}
+	if !domain.SamePath(m.svc.Root(), top) || m.startAtPending || m.loading {
+		t.Errorf("a refused switch must leave the session in place: root=%q pending=%v loading=%v", m.svc.Root(), m.startAtPending, m.loading)
+	}
+}
