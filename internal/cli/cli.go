@@ -273,3 +273,37 @@ func finish(res engine.Result, err error, stdout, stderr io.Writer) int {
 	}
 	return 0
 }
+
+// printDrift reports domain.DriftAfter's findings for branch, following a
+// rebase/merge/pull that SUCCEEDED AND CHANGED SOMETHING. Callers gate on
+// `code == 0 && res.Changed`, not the exit code alone: finish returns 0
+// whenever err == nil, and an answered --on-conflict=abort returns
+// Result{Changed:false}, nil — the pre-op snapshot is already written and the
+// tip never moved, so an abort would report every path the other side
+// contributed as D. An op that errored or left a conflict paused never
+// reaches here either. Per the
+// spec, a frontend that could resume a paused op into completion would also
+// report drift on that path; the CLI has no resume verb (a conflicted `gg
+// rebase`/`gg merge`/`gg pull` returns with the conflict still unresolved,
+// so the invocation that would print a summary never happens), so only the
+// drift rule applies here: print when the operation itself changed the
+// branch's change set (Report.Drifted(), i.e. Report.Added is non-empty).
+// Report.Removed is never alarming (upstream absorbed it) and prints
+// quietly underneath. DriftAfter returning Checked == false (nothing
+// recorded to compare, or the versions feature is off) prints nothing.
+func printDrift(ctx context.Context, svc *domain.Service, branch string, stdout io.Writer) {
+	if branch == "" {
+		return
+	}
+	drift, err := svc.DriftAfter(ctx, branch)
+	if err != nil || !drift.Checked || !drift.Report.Drifted() {
+		return
+	}
+	fmt.Fprintf(stdout, "! this operation changed %s's change set:\n", branch)
+	for _, e := range drift.Report.Added {
+		fmt.Fprintf(stdout, "  %c %s\n", e.Status, e.Path)
+	}
+	for _, e := range drift.Report.Removed {
+		fmt.Fprintf(stdout, "  (absorbed upstream: %c %s)\n", e.Status, e.Path)
+	}
+}

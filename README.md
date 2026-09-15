@@ -166,6 +166,7 @@ gg branch create <name> [<start-point>]
 gg branch rename <old> <new>
 gg branch delete [--force] <name>
 gg versions [<branch>]                 # list a branch's recorded pre-operation snapshots, newest first (default: current branch)
+gg versions show <branch> <id|latest>  # print the frozen change set a two-branch version recorded (Base...Ours)
 gg versions restore [--discard] <branch> <id|latest>  # restore a branch to a recorded version; --discard answers the dirty-tree prompt
 gg unlock [--yes]                      # list (or with --yes remove) stranded .git/*.lock files; exit 1 while locks are present
 gg migrate [--yes]                     # list pending store migrations and what they'd discard; changes nothing without --yes
@@ -743,6 +744,15 @@ each store's own writer the first time it writes — never by gg just opening
 the repo — so switching repositories or checking one out fresh never costs
 an extra write and two `gg` processes starting at once never race.
 
+The `versions` store's own migration (format 1 → 2, format 2 adding the
+frozen-preview fields — see **Branch versions** below) is a straight
+**discard**: a format-1 record carries no merge-base, so it can never be
+converted into a preview, only thrown away. **A repo that still holds
+format-1 data records no new versions at all until you migrate** — the
+branch-version writer is gated on the same format check, so a
+rebase/merge/pull there runs with no safety net rather than
+silently mixing formats.
+
 ### Branch versions (operations history)
 
 Before any operation that rewrites, replaces, or deletes a branch's
@@ -754,26 +764,59 @@ an opt-in feature: it runs for every branch automatically. What triggers
 a snapshot: merging **into** a branch, rebasing it (including an
 interactive rebase's squash/move/drop), `--amend`ing the last commit,
 undoing the last commit, resetting a branch to its remote tip, deleting a
-branch, and `gg pull`'s rebase/merge/reset-to-remote lanes. A plain commit,
-a fast-forward pull, cherry-pick, push, stash, and switching branches are
-**not** triggers — the old tip stays reachable as an ordinary ancestor, so
-nothing needs recording. A snapshot failure never blocks the real
-operation (best-effort by design).
+branch, and **every** `gg pull` — the fast-forward lane included. A plain
+commit, cherry-pick, push, stash, and switching branches are **not**
+triggers — the old tip stays reachable as an ordinary ancestor, so nothing
+needs recording. A snapshot failure never blocks the real operation
+(best-effort by design).
+
+A fast-forward pull records nothing *interesting* — the branch contributed
+nothing on top of the tip it fast-forwarded to, so the record carries
+`Base == Ours` and the drift check stays silent — but it does record. It
+has to: drift is always measured against the branch's **newest** version,
+so a pull that wrote no record would leave the next check comparing against
+some older rebase or merge and reporting the commits the pull just brought
+down as drift. Every `gg pull` therefore writes a version ref; the 90-day
+prune policy below keeps the volume in hand.
+
+A version records more than a tip: for a two-branch op it also carries the
+tip it landed on/against and their merge-base, so it can open later as a
+**frozen PR-style preview** — the change set exactly as it stood at
+operation time, not a live diff against wherever the branch has moved to
+since. A one-branch op's record (amend, reset, undo-commit, delete-branch,
+restore) carries no such endpoints and opens as the plain commit view
+instead.
 
 Browse a branch's versions from the Branches panel's `.` menu → **"Previous
 versions…"**. From the command palette (`ctrl+p`) → **"Branch versions…"**
 picks any branch that has recorded versions — including a **deleted** one
 — which is how you recover a deleted branch's history. In the popup:
-`enter` whole-tree-compares a version against the branch's current tip,
-`r` restores it (reset the branch in place, or start a new branch at that
-version instead — a non-destructive alternative), `d` deletes just that
-snapshot, `y` copies its sha. Settings (`,`) → **"Operations history"**
+`enter` opens that frozen preview (or the commit view for a one-branch
+record), `r` restores it (reset the branch in place, or start a new branch
+at that version instead — a non-destructive alternative), `d` deletes just
+that snapshot, `y` copies its sha. Settings (`,`) → **"Operations history"**
 shows and edits the retention window and toggles recording on/off.
 
+After a rebase, merge, or pull completes, gg compares what the branch
+contributed going in against what it contributes coming out, against the
+same other side, and flags anything the operation itself changed — a path
+that's newly there, or one whose status flipped (`M` → `A` is a
+**resurrected** file: the classic case is a modify/delete conflict resolved
+by keeping a file upstream had deleted). A path that only *disappeared*
+from the branch's contribution is noted quietly as absorbed upstream (an
+identical fix, a cherry-pick landed it already) — never alarmed, and silent
+when nothing changed. The CLI prints this summary right after `gg
+rebase`/`gg merge`/`gg pull`; the TUI raises a notice on drift (or when an
+operation completed after pausing for conflicts); `gg web` shows it in a
+drift panel.
+
 Scriptable: `gg versions [<branch>]` lists a branch's recorded versions,
-newest first (default: current branch); `gg versions restore [--discard]
-<branch> <id|latest>` restores one (`--discard` answers the "the working
-tree has uncommitted changes" prompt for a current-branch restore).
+newest first (default: current branch); `gg versions show <branch>
+<id|latest>` prints the frozen change set a version recorded (or says so
+plainly for a one-branch record with no preview); `gg versions restore
+[--discard] <branch> <id|latest>` restores one (`--discard` answers the
+"the working tree has uncommitted changes" prompt for a current-branch
+restore).
 
 `[versions] disabled` (default `false`) is a kill-switch — set `true` to
 stop recording entirely. `[versions] max_age_days` (default `90`) prunes

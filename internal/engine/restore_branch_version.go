@@ -28,9 +28,28 @@ func (op RestoreBranchVersion) Run(ctx context.Context, deps OpDeps) (Result, er
 	if !ok || refBranch != op.Branch {
 		return Result{}, fmt.Errorf("restore version: %s is not a version of branch %s", op.Ref, op.Branch)
 	}
-	sha, err := deps.Repo.RevParse(ctx, op.Ref)
+	// A version ref may be a synthetic wrapper commit (Hash = its first
+	// parent) or a legacy plain-tip ref predating that format (Hash = the
+	// ref's own target) — VersionRefs is the ONE place that tells the two
+	// apart, by the Gg-Meta trailer's presence, not by parse success. Restore
+	// must go through that same discriminator rather than re-deriving its own
+	// "what does this ref mean" rule (e.g. blindly resolving ref^1), which
+	// would disagree with the reader on a legacy ref and land on the wrong
+	// commit.
+	bvs, err := deps.Repo.VersionRefs(ctx, git.VersionRefPrefix+op.Branch)
 	if err != nil {
 		return Result{}, fmt.Errorf("restore version: %w", err)
+	}
+	var sha string
+	found := false
+	for _, bv := range bvs {
+		if bv.Ref == op.Ref {
+			sha, found = bv.Hash, true
+			break
+		}
+	}
+	if !found || sha == "" {
+		return Result{}, fmt.Errorf("restore version: %s not found", op.Ref)
 	}
 	cur, err := deps.Repo.CurrentBranch(ctx)
 	if err != nil {
@@ -57,7 +76,7 @@ func (op RestoreBranchVersion) Run(ctx context.Context, deps OpDeps) (Result, er
 				return Result{Changed: false}.WithSummary("cancelled"), nil
 			}
 		}
-		snapshotBranchTip(ctx, deps, op.Branch, "restore")
+		snapshotBranchTip(ctx, deps, op.Branch, "restore", "", "")
 		deps.emit(ctx, Progressf("restoring branch version", "%s → %s", op.Branch, short))
 		if err := deps.Repo.Reset(ctx, "hard", sha); err != nil {
 			return Result{}, fmt.Errorf("restore version: %w", err)
@@ -70,7 +89,7 @@ func (op RestoreBranchVersion) Run(ctx context.Context, deps OpDeps) (Result, er
 		if wt != nil {
 			return Result{}, fmt.Errorf("restore version: %s is checked out in worktree %s — restore it there", op.Branch, wt.Path)
 		}
-		snapshotBranchTip(ctx, deps, op.Branch, "restore")
+		snapshotBranchTip(ctx, deps, op.Branch, "restore", "", "")
 		deps.emit(ctx, Progressf("restoring branch version", "%s → %s", op.Branch, short))
 		if err := deps.Repo.UpdateRef(ctx, "refs/heads/"+op.Branch, sha); err != nil {
 			return Result{}, fmt.Errorf("restore version: %w", err)

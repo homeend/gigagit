@@ -8,6 +8,20 @@ import (
 	"github.com/homeend/gigagit/internal/git"
 )
 
+// emptyTreeSHA is git's well-known empty-tree object, always present in any
+// repo without a write. stampVersionsFormat points the format-2 marker ref at
+// it directly — the fixtures below fabricate version refs with raw
+// update-ref (or a raw WriteVersionSnapshot+UpdateRef, bypassing
+// snapshotBranchTipNamed entirely), so nothing ever calls the real writer
+// that stamps the marker. Without it, BranchVersions/AllVersionBranches see
+// an unmarked (format-1) store and the versions feature gates the read.
+const emptyTreeSHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+func stampVersionsFormat(t *testing.T, dir string) {
+	t.Helper()
+	gitRunDir(t, dir, "", "update-ref", git.MetaRef(StoreVersions, VersionsFormat), emptyTreeSHA)
+}
+
 // TestBranchVersionsListsNewestFirstAndFiltersBranch fabricates version refs
 // directly (raw update-ref) for "main" and "feat/x", then asserts
 // BranchVersions returns each branch's own rows, newest first, with Op parsed
@@ -34,6 +48,7 @@ func TestBranchVersionsListsNewestFirstAndFiltersBranch(t *testing.T) {
 	gitRunDir(t, dir, "", "update-ref", refMain1, mainSha)
 	gitRunDir(t, dir, "", "update-ref", refMain2, mainSha)
 	gitRunDir(t, dir, "", "update-ref", refFeat, featSha)
+	stampVersionsFormat(t, dir)
 
 	svc := svcAt(dir)
 	ctx := context.Background()
@@ -96,6 +111,7 @@ func TestAllVersionBranchesMarksDeleted(t *testing.T) {
 
 	gitRunDir(t, dir, "", "update-ref", refMain, mainSha)
 	gitRunDir(t, dir, "", "update-ref", refGone, mainSha)
+	stampVersionsFormat(t, dir)
 
 	svc := svcAt(dir)
 	rows, err := svc.AllVersionBranches(context.Background())
@@ -140,6 +156,7 @@ func TestBranchVersionsSameUnixTieBreaksByRefDescending(t *testing.T) {
 
 	gitRunDir(t, dir, "", "update-ref", refMerge, mainSha)
 	gitRunDir(t, dir, "", "update-ref", refRestore, mainSha)
+	stampVersionsFormat(t, dir)
 
 	svc := svcAt(dir)
 	ctx := context.Background()
@@ -177,6 +194,7 @@ func TestAllVersionBranchesSameUnixTieBreaksByBranchAscending(t *testing.T) {
 
 	gitRunDir(t, dir, "", "update-ref", refAlpha, mainSha)
 	gitRunDir(t, dir, "", "update-ref", refZulu, mainSha)
+	stampVersionsFormat(t, dir)
 
 	svc := svcAt(dir)
 	ctx := context.Background()
@@ -246,5 +264,59 @@ func TestExecuteInjectsVersionsPolicy(t *testing.T) {
 	}
 	if len(versionsAfter) != 1 {
 		t.Fatalf("versions after disabled-policy amend = %d, want still 1 (no new ref): %+v", len(versionsAfter), versionsAfter)
+	}
+}
+
+// TestBranchVersionsUnwrapsTheSnapshotCommit writes a real version snapshot
+// (WriteVersionSnapshot + UpdateRef, the production path) and asserts
+// BranchVersions unwraps the synthetic commit: Hash is the snapshotted tip
+// (not the synthetic commit), the recorded endpoints come back on the
+// model.BranchVersion, and Subject is the TIP's own subject — not the
+// synthetic commit's "gg version snapshot (rebase)" subject, which is what
+// %(subject) alone would give every row.
+func TestBranchVersionsUnwrapsTheSnapshotCommit(t *testing.T) {
+	t.Parallel()
+	dir := cleanDir(t)
+	svc := svcAt(dir)
+	ctx := context.Background()
+
+	tip, err := svc.Repo().RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatalf("RevParse: %v", err)
+	}
+	meta := git.VersionMeta{Op: "rebase", Ours: tip, Other: tip, Base: tip, Source: "feat/x", Target: "main"}
+	syn, err := svc.Repo().WriteVersionSnapshot(ctx, tip, meta, 1700000000)
+	if err != nil {
+		t.Fatalf("WriteVersionSnapshot: %v", err)
+	}
+	if err := svc.Repo().UpdateRef(ctx, git.VersionRef("main", "rebase", 1700000000), syn); err != nil {
+		t.Fatalf("UpdateRef: %v", err)
+	}
+	stampVersionsFormat(t, dir)
+
+	vs, err := svc.BranchVersions(ctx, "main")
+	if err != nil {
+		t.Fatalf("BranchVersions: %v", err)
+	}
+	if len(vs) != 1 {
+		t.Fatalf("got %d versions, want 1", len(vs))
+	}
+	v := vs[0]
+	// Hash must be the snapshotted tip, NOT the synthetic commit — restore and
+	// every UI that shows the recorded commit depend on this.
+	if v.Hash != tip {
+		t.Errorf("Hash = %s, want the snapshotted tip %s (synthetic was %s)", v.Hash, tip, syn)
+	}
+	if v.Ours != tip || v.Base != tip || v.Source != "feat/x" || v.Target != "main" {
+		t.Errorf("endpoints = %+v, want the recorded meta", v)
+	}
+	if v.Op != "rebase" {
+		t.Errorf("Op = %q, want rebase", v.Op)
+	}
+	// Subject must be the snapshotted TIP's own subject ("base", from
+	// cleanDir), not the synthetic commit's "gg version snapshot (rebase)" —
+	// without subjectsOf wired in, every row would render identically.
+	if v.Subject != "base" {
+		t.Errorf("Subject = %q, want the tip's own subject %q (not the synthetic wrapper's)", v.Subject, "base")
 	}
 }

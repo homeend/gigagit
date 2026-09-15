@@ -69,7 +69,7 @@ func (op Reset) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	}
 
 	if cur, cerr := deps.Repo.CurrentBranch(ctx); cerr == nil {
-		snapshotBranchTip(ctx, deps, cur, "reset")
+		snapshotBranchTip(ctx, deps, cur, "reset", "", "")
 	}
 	deps.emit(ctx, Progress{Step: "resetting", Detail: mode + " → " + op.Commit})
 	if err := deps.Repo.Reset(ctx, mode, op.Commit); err != nil {

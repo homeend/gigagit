@@ -1,11 +1,27 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/domain"
 )
+
+// stampVersionsFormat writes the format-2 marker ref directly at git's
+// well-known empty-tree object. Both fixtures below fabricate a version ref
+// with raw update-ref rather than going through the real writer (which
+// stamps the marker itself on first write), so the versions feature would
+// otherwise resolve the store as unmarked format 1 and gate `gg versions`
+// off entirely (internal/cli cannot import internal/git — archtest — so this
+// builds the ref path from the domain constants instead of git.MetaRef).
+func stampVersionsFormat(t *testing.T, dir string) {
+	t.Helper()
+	ref := fmt.Sprintf("refs/gg/meta/%s/%d", domain.StoreVersions, domain.VersionsFormat)
+	gitRun(t, dir, "update-ref", ref, "4b825dc642cb6eb9a060e54bf8d69288fbee4904")
+}
 
 // TestCmdVersionsListAndRestore fabricates a version ref directly (raw
 // update-ref, the shelf_test.go/versions_test.go convention) pointing main's
@@ -26,6 +42,7 @@ func TestCmdVersionsListAndRestore(t *testing.T) {
 	gitRun(t, dir, "commit", "-m", "second")
 
 	gitRun(t, dir, "update-ref", "refs/gg/versions/main/1753100000-merge", firstSha)
+	stampVersionsFormat(t, dir)
 
 	// gg versions
 	code, out, errb := runCLI(t, dir, "versions")
@@ -88,6 +105,7 @@ func TestCmdVersionsRestoreDirtyRequiresDiscard(t *testing.T) {
 	secondSha := runGit(t, dir, "rev-parse", "HEAD")
 
 	gitRun(t, dir, "update-ref", "refs/gg/versions/main/1753100000-merge", firstSha)
+	stampVersionsFormat(t, dir)
 
 	// Dirty the tree with an uncommitted tracked-file change.
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirty\n"), 0o644); err != nil {

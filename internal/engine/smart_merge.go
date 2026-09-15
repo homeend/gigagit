@@ -57,7 +57,15 @@ func (op SmartMerge) Run(ctx context.Context, deps OpDeps) (Result, error) {
 		return Result{}, fmt.Errorf("smart merge: no such commit: %s", op.Source)
 	}
 
-	snapshotBranchTip(ctx, deps, target, "merge")
+	// Ours is the SOURCE here (the contribution being frozen), Other is the
+	// target's own pre-merge tip — the writer's p1. Resolved via RevParse
+	// rather than tipOf: op.Source may be a tag or other non-branch commit-ish
+	// (mirrors the CommitExists check above), so it can't assume refs/heads/.
+	// The snapshotted branch (target) is the RECEIVING side, not Ours/Source,
+	// so this goes through the Named form with op.Source as given for the
+	// Source label (mirrors rebase/pull's Target-as-given rule).
+	sourceTip, _ := deps.Repo.RevParse(ctx, op.Source)
+	snapshotBranchTipNamed(ctx, deps, target, "merge", sourceTip, tipOf(ctx, deps, target), op.Source, target)
 
 	// Rung 1: Target is checked out right here.
 	if target == cur {

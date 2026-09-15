@@ -4,6 +4,7 @@ import { $, esc, getJSON, state } from "./core.js";
 import { closeLayer, copyText, pushLayer, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openCompare } from "./files.js";
+import { openCommitByHash } from "./commits.js";
 
 // --- branch versions (the operations history) ---
 //
@@ -76,10 +77,51 @@ function branchTipHash(name) {
 }
 
 
+// openVersionPreview opens what this version actually RECORDED: a
+// two-branch op's frozen PR-style endpoints (base = the merge base at
+// snapshot time, contribution = the branch's own side), via
+// /api/version-preview. A one-branch op (amend, reset, undo-commit,
+// delete-branch, restore) records none — no_preview is a SHAPE, not a
+// failure — so it falls back to the commit view of the snapshot itself.
+//
+// Deliberately NOT the live-preview open/reconcile path (previews.js): that
+// recomputes against TODAY's branch tips, which for a frozen snapshot would
+// render the version against the wrong commits — exactly the drift this
+// feature exists to surface. showVersionMenu's "compare against current
+// tip" below is the live-tip lens; this is the recorded one.
+async function openVersionPreview(branch, v) {
+  closeVersions();
+  closeVersionBranches(); // reached via the picker: its rows are now stale
+  let body;
+  try {
+    body = await getJSON("/api/version-preview?ref=" + encodeURIComponent(v.ref));
+  } catch (e) {
+    opLine("preview failed: " + (e.message || e), true);
+    return;
+  }
+  if (body.no_preview) {
+    openCommitByHash(v.hash, branch + " " + v.op + " " + v.short + " — " + v.subject);
+    return;
+  }
+  // v.hash/v.short name the SNAPSHOTTED branch's own old tip, not either
+  // side VersionPreview returns (left = merge-base, right = the source's
+  // contribution) — labelling by that hash would show the wrong sha next
+  // to the diff. Label by branch name instead, mirroring how the live
+  // preview labels its two sides (previews.js).
+  openCompare(body.left, body.right, {
+    revs: true,
+    aLabel: "merge-base(" + v.target + ")",
+    bLabel: v.source,
+  });
+}
+
+
 // Per-row actions go through the shared ctx-menu rather than inline buttons:
 // same interaction language as the sidebar, and the row stays readable.
 function showVersionMenu(branch, v, x, y) {
-  const items = [];
+  const items = [
+    { label: "open recorded preview", act: () => openVersionPreview(branch, v) },
+  ];
   const tip = branchTipHash(branch);
   if (tip) {
     items.push({
@@ -208,7 +250,77 @@ $("vbranches").addEventListener("click", (e) => {
   if (e.target.id === "vbranches") closeVersionBranches(); // backdrop
 });
 
-export { branchTipHash, closeVersionBranches, closeVersions, openVersionBranches, openVersions, showVersionMenu, versionRowMenu, versionWhen };
+// --- post-op drift summary (the op result panel) ---
+//
+// A rebase/merge/pull (or resuming one paused for conflicts) can leave a
+// branch's change set no longer matching what its newest recorded version
+// captured — domain.DriftAfter. ops.js decides WHICH branch to check
+// (driftArmFor, run once a drift-eligible op finishes with ev.changed) and
+// calls checkDrift; this owns the panel that reports it. Not a modal — it
+// sits in the document flow (see #drift-panel in style.css) so it never
+// blocks the rest of the page while it stands, and a later op or an
+// explicit dismiss clears it.
+
+function hideDrift() {
+  $("drift-panel").classList.add("hidden");
+  $("drift-list").innerHTML = "";
+}
+
+
+// checkDrift renders the post-op summary for branch. paused says the op that
+// just finished was a RESUME of one that had paused for conflicts — the
+// spec's second trigger, and the reason this can raise the panel even when
+// nothing drifted: a hand-resolved conflict is worth a look whether or not it
+// changed which paths the branch contributes. The gate mirrors the TUI's
+// driftNotice (internal/tui/notify.go) exactly — raise on drifted || paused,
+// and in the paused-only case say "still matches" ONLY when a comparison
+// actually ran (body.checked); with nothing recorded there was no comparison
+// to claim. The CLI legitimately implements only the drifted half: it has no
+// resume verb, so the invocation that would report the paused case never
+// happens.
+async function checkDrift(branch, paused) {
+  let body;
+  try {
+    body = await getJSON("/api/drift?branch=" + encodeURIComponent(branch));
+  } catch (e) {
+    // Best-effort: a failed drift check must never blot out the op's own
+    // result — but a resume that paused for conflicts is worth saying out
+    // loud without reading the store at all, so that half still renders.
+    body = paused ? { checked: false, drifted: false } : null;
+    if (!body) return;
+  }
+  const drifted = !!(body.checked && body.drifted);
+  if (!drifted && !paused) {
+    hideDrift();
+    return;
+  }
+  if (drifted) {
+    $("drift-title").textContent = branch + "'s change set may have drifted from its recorded version:";
+    const added = (body.added || [])
+      .map((e) => `<li class="added">${esc(e.status)} ${esc(e.path)}</li>`)
+      .join("");
+    const removed = (body.removed || [])
+      .map((e) => `<li class="removed">(absorbed upstream: ${esc(e.status)} ${esc(e.path)})</li>`)
+      .join("");
+    const also = paused
+      ? `<li class="removed">The operation also paused for conflicts before completing.</li>`
+      : "";
+    $("drift-list").innerHTML = added + removed + also;
+  } else {
+    $("drift-title").textContent = branch + " paused for conflicts before completing:";
+    const tail = body.checked
+      ? "Its change set still matches the recorded version, but the resolution is worth a look."
+      : "Nothing was recorded to compare it against, but the resolution is worth a look.";
+    $("drift-list").innerHTML = `<li class="removed">${esc(tail)}</li>`;
+  }
+  $("drift-panel").classList.remove("hidden");
+}
+
+
+$("drift-dismiss").addEventListener("click", hideDrift);
+
+
+export { branchTipHash, checkDrift, closeVersionBranches, closeVersions, hideDrift, openVersionBranches, openVersionPreview, openVersions, showVersionMenu, versionRowMenu, versionWhen };
 
 // Mouse-first close buttons (testing feedback): a pointer-only user must
 // never need a key to leave an overlay.
