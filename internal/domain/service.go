@@ -50,6 +50,11 @@ type Service struct {
 	notesOff   bool          // hard "no store" (the disabled-path test)
 	preview    preview.Store // lazily resolved; nil disables previews
 	noteCounts *NoteCounts   // cached badge counts; nil = cold, invalidated by every mutation
+	// previewCounts caches PreviewNoteCounts per (tip, base) pair. It follows
+	// BOTH clocks: a new tip is a new key, and every note mutation drops the
+	// whole map through invalidateNoteCounts (ruling 7) — counts read the
+	// notes store, which the summary cache knows nothing about.
+	previewCounts map[string]previewCountEntry
 	// notesGen rises on every count invalidation. NoteCounts computes OUTSIDE
 	// the lock, so it stores its result only when the generation it started
 	// from is still current — a mutation landing mid-compute would otherwise

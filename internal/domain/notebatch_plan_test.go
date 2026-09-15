@@ -112,3 +112,44 @@ func TestApplyNoteBatchRollsBackOnMidBatchFailure(t *testing.T) {
 		t.Fatalf("a mid-batch failure must roll back everything this batch stored: %+v", list)
 	}
 }
+
+// Ruling 1: a batch's `hunk` items number the PREVIEW's patch, while the
+// address stays the tip.
+func TestPlanNoteBatchInUsesTheGivenHunkSpec(t *testing.T) {
+	t.Parallel()
+	svc, dir := newPreviewRepo(t)
+	svc.UseNotesDir(t.TempDir())
+	ctx := context.Background()
+	tip := revParse(t, dir, "feat")
+	set, err := svc.PreviewNotes(ctx, "feat", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := set.DiffSpec()
+	// `hunk` lives in the comment-apply shape (the agent-context v1 annotation
+	// shape carries ranges only).
+	b, err := notebatch.Parse([]byte(`{"comments":[{"filePath":"a.txt","hunk":1,"summary":"first preview hunk"}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	planned, skipped, err := svc.PlanNoteBatchIn(ctx, b,
+		NoteBatchTarget{Rev: tip, Hunks: &spec}, "ada", NoteSideNewOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skipped != 0 || len(planned) != 1 {
+		t.Fatalf("planned=%d skipped=%d", len(planned), skipped)
+	}
+	got := planned[0].Note
+	if got.Address.Commit != tip {
+		t.Fatalf("the address is the tip, got %s", got.Address.Commit)
+	}
+	if got.Side != model.NoteSideNew {
+		t.Fatalf("new side only, got %s", got.Side)
+	}
+	// The preview's first hunk covers the merge-base..tip change, which reaches
+	// line 4 (DELTA → ECHO) — the tip's OWN first hunk would not.
+	if got.Range[1] < 4 {
+		t.Fatalf("the range must come from the preview patch, got %v", got.Range)
+	}
+}

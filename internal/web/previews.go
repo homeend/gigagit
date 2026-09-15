@@ -36,6 +36,9 @@ type previewRow struct {
 	Ahead      int    `json:"ahead"`
 	SourceHash string `json:"source_hash"`
 	TargetHash string `json:"target_hash"`
+	// Notes is the preview's root-note total, hidden ones included (the TUI's
+	// ◆N badge). Zero for a pair that is not previewable.
+	Notes int `json:"notes"`
 	// Error is set only on the degraded "error" state (a PreviewSummary
 	// failure — a transient git error, not a resolvable-name state). Never
 	// set alongside a real state, so omitempty keeps every other row clean.
@@ -80,7 +83,15 @@ func (s *Server) handlePreviews(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, previewErrorRow(p, err))
 			continue
 		}
-		rows = append(rows, previewRowFrom(p, sum))
+		row := previewRowFrom(p, sum)
+		if sum.State == domain.PreviewOK {
+			if set, serr := svc.PreviewNotes(ctx, p.Source, p.Target); serr == nil && set.OK() {
+				if _, total, cerr := svc.PreviewNoteCounts(ctx, set); cerr == nil {
+					row.Notes = total
+				}
+			}
+		}
+		rows = append(rows, row)
 	}
 	writeJSON(w, map[string]any{"entries": rows})
 }

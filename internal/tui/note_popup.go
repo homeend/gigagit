@@ -58,6 +58,11 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 	case noteAdd:
 		p.anchors = m.noteAnchorsAtCursor()
 		if len(p.anchors) == 0 {
+			// On a preview the cause is knowable and worth saying: the cursor
+			// is on a line that exists only on the merge-base side.
+			if m.previewNoteSet() != nil {
+				m.statusMsg = i18n.T("notes in a preview anchor on the new side")
+			}
 			return m, nil
 		}
 		p.setPick(0)

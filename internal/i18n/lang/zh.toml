@@ -1828,3 +1828,8 @@ name = "中文"
 "the %s feature is unavailable in this repository: %s" = "%s 功能在此仓库中不可用:%s"
 "Upgrade to git %s or newer to use this feature." = "升级到 git %s 或更高版本以使用此功能。"
 "Upgrade gg to use this feature." = "升级 gg 以使用此功能。"
+
+# Notes in merge previews
+"notes in a preview anchor on the new side" = "预览中的笔记锚定在新的一侧"
+"(outdated)" = "(已过时)"
+"Remove all notes on %s (%d of %d)." = "删除 %s 上的所有笔记（%d / %d）。"

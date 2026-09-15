@@ -85,6 +85,14 @@ type diffView struct {
 	// what every two-sided compare loader leaves behind (a comparison's old
 	// side is the compared revision, which no stored address can name).
 	noteAddr model.FileAddress
+	// previewSet is non-nil when this diff is one file of a MERGE PREVIEW
+	// (target...source). It changes three things and nothing else: notes are
+	// gathered along the branch (PreviewNotesFor) rather than read off the
+	// tip alone, the old side is not addressable (the merge base is nobody's
+	// stored old side), and a stale note renders as "outdated" — in a preview
+	// that is the expected state, not an edge case. noteAddr still names the
+	// TIP, so every other note surface works unchanged.
+	previewSet *domain.PreviewNoteSet
 }
 
 // wrapDir records that a change-navigation key hit a boundary and primed a
@@ -604,6 +612,20 @@ func compareDiffKey(left, right model.Endpoint, path string) string {
 	return left.CacheTag() + ".." + right.CacheTag() + ":" + path
 }
 
+// inheritIdentity carries the OPENER's identity onto a freshly built view.
+// The loaders construct their view with no Model to ask, and diffMsg replaces
+// the whole value (`*dv = *msg.view`), so anything the opener stamped — the
+// context line, the provenance rev, the note address, the merge-preview set —
+// has to travel here or it is silently lost the moment the diff lands.
+// A nil source is a fresh open with no layer yet: a no-op.
+func (v *diffView) inheritIdentity(from *diffView) {
+	if from == nil {
+		return
+	}
+	v.context, v.rev = from.context, from.rev
+	v.noteAddr, v.previewSet = from.noteAddr, from.previewSet
+}
+
 // loadCompareDiffCmd computes one file's diff between two endpoints. Each side
 // resolves through ResolveBytes (commit / staged / unstaged); an "A" status has
 // no old side, a "D" status no new side. The result fills a PRIVATE view (the
@@ -619,9 +641,7 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 	width, _ := m.overlayDims()
 	tag := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + line.path
 	v := &diffView{title: line.path, partial: m.diffPartial, long: m.diffLong, width: width}
-	if dv := m.diffLayer(); dv != nil {
-		v.context, v.rev = dv.context, dv.rev
-	}
+	v.inheritIdentity(m.diffLayer())
 	key := compareDiffKey(left, right, line.path)
 
 	oldP := line.path

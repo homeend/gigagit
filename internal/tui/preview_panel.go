@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -11,17 +12,22 @@ import (
 // previewRow is one saved merge preview with its live summary. A row whose
 // summary read failed keeps err (rendered as the state text).
 type previewRow struct {
-	rec model.MergePreview
-	sum domain.PreviewSummary
-	err error
+	rec    model.MergePreview
+	sum    domain.PreviewSummary
+	notes  int            // root notes gathered along the branch, hidden ones included
+	byPath map[string]int // the same counts per path; feeds the open preview's file list
+	err    error
 }
 
 // previewsPayload is srcPreviews' dataAvailableMsg value.
 type previewsPayload struct{ rows []previewRow }
 
-// readPreviews lists the records and summarises each. An unchanged pair
-// costs two rev-parse calls (name → hash is how movement is detected) and
-// no diff work; only a moved pair runs the three summary calls.
+// readPreviews lists the records, summarises each and counts its notes. An
+// unchanged pair costs two rev-parse calls for the summary (name → hash is how
+// movement is detected) and no diff work; only a moved pair runs the three
+// summary calls. A previewable pair then costs roughly two more, because
+// PreviewNotes resolves the pair again to gather the commit range — parked for
+// the final wave rather than threaded through here.
 func readPreviews(ctx context.Context, svc *domain.Service) (previewsPayload, error) {
 	ps, err := svc.PreviewList(ctx)
 	if err != nil {
@@ -30,7 +36,17 @@ func readPreviews(ctx context.Context, svc *domain.Service) (previewsPayload, er
 	rows := make([]previewRow, 0, len(ps))
 	for _, p := range ps {
 		sum, err := svc.PreviewSummary(ctx, p.Source, p.Target)
-		rows = append(rows, previewRow{rec: p, sum: sum, err: err})
+		row := previewRow{rec: p, sum: sum, err: err}
+		// Ruling 6: a pair that is not previewable has no note scope at all,
+		// so it gets no badge and costs no store read.
+		if err == nil && sum.State == domain.PreviewOK {
+			if set, serr := svc.PreviewNotes(ctx, p.Source, p.Target); serr == nil {
+				if byPath, total, cerr := svc.PreviewNoteCounts(ctx, set); cerr == nil {
+					row.notes, row.byPath = total, byPath
+				}
+			}
+		}
+		rows = append(rows, row)
 	}
 	return previewsPayload{rows: rows}, nil
 }
@@ -42,8 +58,16 @@ type previewList struct {
 	text []string
 }
 
-func (l previewList) Len() int          { return len(l.rows) }
-func (l previewList) Row(i int) string  { return l.text[i] }
+func (l previewList) Len() int         { return len(l.rows) }
+func (l previewList) Row(i int) string { return l.text[i] }
+
+// Haystack is the filter-match text: the row WITHOUT its ◆N note badge (the
+// statusList contract), so typing a digit never matches a pair because of how
+// many notes it carries.
+func (l previewList) Haystack(i int) string {
+	return strings.TrimSuffix(l.text[i], noteBadge(l.rows[i].notes))
+}
+
 func (l previewList) Name(i int) string { return l.rows[i].rec.Label }
 func (l previewList) Date(i int) int64  { return l.rows[i].rec.Created.Unix() }
 func (l previewList) Key(i int) string  { return l.rows[i].rec.ID }
@@ -80,7 +104,9 @@ func (m Model) previewRows() []string {
 	out := make([]string, 0, len(m.previews))
 	for _, r := range m.previews {
 		pair := r.rec.Source + " → " + r.rec.Target
-		out = append(out, padCell(r.rec.Label, w)+"  "+pair+"  "+previewStateText(r))
+		// The SAME ◆N badge every other note-bearing row wears (it brings its
+		// own leading gap), never a glyph of this panel's own.
+		out = append(out, padCell(r.rec.Label, w)+"  "+pair+"  "+previewStateText(r)+noteBadge(r.notes))
 	}
 	return out
 }

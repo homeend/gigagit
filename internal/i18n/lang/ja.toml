@@ -1828,3 +1828,8 @@ name = "日本語"
 "the %s feature is unavailable in this repository: %s" = "%s 機能はこのリポジトリでは利用できません: %s"
 "Upgrade to git %s or newer to use this feature." = "この機能を使用するには git %s 以降にアップグレードしてください。"
 "Upgrade gg to use this feature." = "この機能を使用するには gg をアップグレードしてください。"
+
+# Notes in merge previews
+"notes in a preview anchor on the new side" = "プレビューのノートは新しい側にアンカーされます"
+"(outdated)" = "(古い)"
+"Remove all notes on %s (%d of %d)." = "%s のノートをすべて削除します (%d / %d)。"

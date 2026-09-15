@@ -40,6 +40,46 @@ func (m Model) diffNoteAddress() (model.FileAddress, bool) {
 	return v.noteAddr, true
 }
 
+// previewNoteSet is the merge-preview scope of the diff on top, or nil. Like
+// diffNoteAddress it reads the field the LOADER stamped, never Model state at
+// key time.
+func (m Model) previewNoteSet() *domain.PreviewNoteSet {
+	v := m.diffLayer()
+	if v == nil {
+		return nil
+	}
+	return v.previewSet
+}
+
+// previewNoteScope is the preview a file-list gesture acts in: the OPEN diff's
+// own stamp first (the rule everywhere else — the view's field, not Model state
+// at key time), falling back to the files view's set when no diff is open.
+// The top view's stamp wins even when it is NIL, on purpose: a commit diff
+// pushed over a preview's file list is an ordinary two-sided diff with a
+// perfectly addressable old side, so falling back to filesPreviewSet there
+// would refuse a valid `c` — or a valid steer — on the view actually on screen.
+func (m Model) previewNoteScope() *domain.PreviewNoteSet {
+	if v := m.diffLayer(); v != nil {
+		return v.previewSet
+	}
+	return m.filesPreviewSet
+}
+
+// previewPathGoneAtTip reports whether the compare file list marks path as
+// deleted — in a preview that means the source tip no longer has the file, so
+// nothing can anchor on its new side.
+func (m Model) previewPathGoneAtTip(path string) bool {
+	if m.filesView == nil {
+		return false
+	}
+	for _, l := range m.filesView.visible() {
+		if l.path == path {
+			return l.status == "D"
+		}
+	}
+	return false
+}
+
 // loadNotesCmd resolves this diff's notes off the UI thread. The rows are the
 // SHARED cached rows: they are read, wrapped in a domain.Diff value and never
 // mutated.
@@ -55,9 +95,16 @@ func (m Model) loadNotesCmd() tea.Cmd {
 		return nil
 	}
 	svc, tag, rows := m.svc, m.diffTag, v.full
+	// A preview gathers its notes along the branch and resolves them against
+	// the tip's content; every other view reads the address's own notes.
+	set := v.previewSet
 	return func() tea.Msg {
-		ns, err := svc.NotesFor(context.Background(), addr,
-			domain.Diff{Result: textdiff.Result{Rows: rows}})
+		d := domain.Diff{Result: textdiff.Result{Rows: rows}}
+		if set != nil {
+			ns, err := svc.PreviewNotesFor(context.Background(), *set, addr.Path, d)
+			return notesLoadedMsg{tag: tag, notes: ns, err: err}
+		}
+		ns, err := svc.NotesFor(context.Background(), addr, d)
 		return notesLoadedMsg{tag: tag, notes: ns, err: err}
 	}
 }
@@ -89,7 +136,10 @@ func (m Model) noteAnchorsAtCursor() []noteAnchor {
 	if r.RightNo > 0 {
 		out = append(out, noteAnchor{model.NoteSideNew, r.RightNo, model.NoteContextHash([]string{r.Right})})
 	}
-	if r.LeftNo > 0 {
+	// A preview's old side is the MERGE BASE, which no stored address names,
+	// so it offers no anchor at all — the same rule `gg review A..B` follows
+	// (reviewImportTarget: ranges anchor to the tip, new side only).
+	if r.LeftNo > 0 && v.previewSet == nil {
 		out = append(out, noteAnchor{model.NoteSideOld, r.LeftNo, model.NoteContextHash([]string{r.Left})})
 	}
 	return out
@@ -354,6 +404,18 @@ func (m Model) nextNotedFile(dir int) (int, bool) {
 // notedFilePath reports whether a path carries notes at the open diff's
 // provenance: by path for a working-tree diff, by "<sha>:<path>" for a commit.
 func (m Model) notedFilePath(path string) bool {
+	if m.previewNoteScope() != nil {
+		// A preview gathers notes from every commit on the branch, so the
+		// tip-keyed ByCommitPath map would miss most of them.
+		if m.filesPreviewCounts[path] == 0 {
+			return false
+		}
+		// A file DELETED at the tip still counts for the panel badge (spec
+		// §1.2, the "retired file" rule), but its new-side notes can never
+		// render — the file has no new side. Stepping onto it would land the
+		// user on a diff that shows no note at all, so `}`/`{` pass it by.
+		return !m.previewPathGoneAtTip(path)
+	}
 	if v := m.diffLayer(); v != nil && v.rev != "" {
 		return m.noteCounts.ByCommitPath[v.rev+":"+path] > 0
 	}

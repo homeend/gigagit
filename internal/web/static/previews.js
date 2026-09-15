@@ -10,7 +10,7 @@
 import { $, esc, getJSON, postJSON, state } from "./core.js";
 import { openPrompt, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
-import { applyCompareFilter, drillOut, openCompare } from "./files.js";
+import { applyCompareFilter, drillOut, noteBadgeHTML, openCompare, renderFiles } from "./files.js";
 import { extraRows, registerHelp, registerRows } from "./menus.js";
 
 // fetchPreviews loads the list and renders it. A failure leaves an EMPTY list
@@ -60,7 +60,14 @@ function renderPreviews() {
       (e) =>
         `<li data-id="${esc(e.id)}" title="${esc(e.source + " → " + e.target)}"><span class="mk"></span>` +
         `${esc(e.label)}<span class="psub">${esc(e.source + " → " + e.target)}</span>` +
-        `<span class="psub">${esc(stateText(e))}</span></li>`
+        `<span class="psub">${esc(stateText(e))}</span>` +
+        // The pair's review-note total, the ◆N the TUI paints on the row. Its
+        // own field, not part of stateText: the counts cell says what the
+        // preview IS, the badge what has been said about it. The markup is
+        // files.js's noteBadgeHTML — one badge painter for every list, so a
+        // preview row can never drift from a file row.
+        noteBadgeHTML(e.notes) +
+        `</li>`
     )
     .join("");
 }
@@ -102,13 +109,43 @@ function closePreviewView() {
 // armPreview records the pair the compare screen is showing, so the next
 // refresh can tell whether its tips moved.
 function armPreview(body) {
+  const was = state.previewOpen;
+  const samePair = !!was && was.source === body.source && was.target === body.target;
   state.previewOpen = {
     id: body.id || "",
     source: body.source,
     target: body.target,
     sourceHash: body.source_hash,
     targetHash: body.target_hash,
+    // The source tip IS the note write target: a preview note is an ordinary
+    // committed note on it (spec §1.1). The page never computes this itself.
+    tip: body.source_hash,
   };
+  // The previous PAIR's per-file numbers must not survive onto this one's file
+  // list; loadPreviewCounts fills them in again a moment later. Re-arming the
+  // same pair (a tip that moved) keeps the numbers standing meanwhile, so the
+  // badges do not blink off on every refresh.
+  if (!samePair) state.previewCounts = null;
+  loadPreviewCounts(body.source, body.target);
+}
+
+
+// loadPreviewCounts fetches the pair's per-file note totals with NO path, so
+// the file list carries its ◆N badges from the first paint rather than only
+// after a file has been opened (openFile's own fetch refreshes them).
+async function loadPreviewCounts(source, target) {
+  let d;
+  try {
+    d = await getJSON(
+      "/api/preview/notes?source=" + encodeURIComponent(source) + "&target=" + encodeURIComponent(target)
+    );
+  } catch {
+    return; // decoration: no badge beats a wrong badge
+  }
+  const po = state.previewOpen;
+  if (!po || po.source !== source || po.target !== target) return; // superseded
+  state.previewCounts = d.counts || {};
+  renderFiles();
 }
 
 

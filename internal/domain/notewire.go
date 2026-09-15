@@ -36,3 +36,21 @@ func ToWireNote(r ResolvedNote) WireNote {
 	}
 	return w
 }
+
+// ToWireNotePreview is ToWireNote with the preview's status word. The wire
+// shape is unchanged: only the `status` string differs, and only when the
+// caller is rendering a merge preview (spec §1.2 — a preview calls stale
+// "outdated", because there it is the expected case).
+// It recurses into the replies: a reply inherits its root's anchor, so one
+// thread must never report two words for the same state.
+func ToWireNotePreview(r ResolvedNote, preview bool) WireNote {
+	w := ToWireNote(r)
+	if !preview {
+		return w
+	}
+	w.Status = PreviewStatus(r.Status)
+	for i, rep := range r.Replies {
+		w.Replies[i] = ToWireNotePreview(rep, true)
+	}
+	return w
+}
