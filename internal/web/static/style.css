@@ -385,12 +385,12 @@ mark.r { background: var(--span-add); color: inherit; }
 #branches-list.collapsed, #remotes-list.collapsed, #worktrees-list.collapsed,
 #tags-list.collapsed, #stashes-list.collapsed, #reflog-list.collapsed,
 #bookmarks-list.collapsed, #shelf-list.collapsed, #previews-list.collapsed { display: none; }
-#top #pull-btn, #top #push-btn {
+#top #pull-btn, #top #push-btn, #top #refresh-btn {
   margin-left: 10px; background: var(--bg); color: var(--fg);
   border: 1px solid var(--border); border-radius: 3px; padding: 1px 10px;
   font: inherit; cursor: pointer;
 }
-#top #pull-btn:hover:not(:disabled), #top #push-btn:hover:not(:disabled) { border-color: var(--accent); }
+#top #pull-btn:hover:not(:disabled), #top #push-btn:hover:not(:disabled), #top #refresh-btn:hover:not(:disabled) { border-color: var(--accent); }
 /* The solo chip IS the way out of solo mode, so it is styled to be noticed:
    accent-filled, unlike the outline buttons beside it. */
 #top #solo-chip {
@@ -418,7 +418,7 @@ mark.r { background: var(--span-add); color: inherit; }
 #top #task-chip.blink { animation: taskblink .8s steps(1, end) 6; }
 @keyframes taskblink { 50% { background: none; color: var(--fg); } }
 @media (prefers-reduced-motion: reduce) { #top #task-chip.blink { animation: none; } }
-#top #pull-btn:disabled, #top #push-btn:disabled { opacity: .45; cursor: default; }
+#top #pull-btn:disabled, #top #push-btn:disabled, #top #refresh-btn:disabled { opacity: .45; cursor: default; }
 /* Paused-sequencer-op banner: sits between the header and the panes, a
    BLOCKER (not an advisory) so it stays visible until continue/abort
    resolves the paused op. */

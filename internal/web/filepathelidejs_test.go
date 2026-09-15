@@ -55,6 +55,8 @@ func TestHeaderCopyMenusWired(t *testing.T) {
 		`$("files-header").addEventListener("contextmenu"`,
 		`id="diff-path"`,
 		`"copy short commit id"`,
+		`"copy absolute file path"`,
+		`"copy repo absolute path"`,
 	} {
 		if !strings.Contains(src, want) {
 			t.Errorf("files.js no longer contains %q — a header copy affordance is gone", want)
@@ -80,6 +82,14 @@ func TestDiffSelectionCopyRow(t *testing.T) {
 	if !strings.Contains(src, "const text = sel && !sel.isCollapsed") {
 		t.Error("the selection is no longer captured when the menu opens")
 	}
+	// With nothing selected the row under the pointer is offered instead —
+	// the CELL, since a side-by-side row holds both versions of the line.
+	if !strings.Contains(src, `{ label: "copy line", act: () => copyText(line, "line") }`) {
+		t.Error("the diff's right-click menu no longer offers the line under the pointer")
+	}
+	if !strings.Contains(src, `e.target.closest("td.side")`) {
+		t.Error("`copy line` no longer reads the cell under the pointer — it would copy both sides of a split row")
+	}
 	// The line-number gutter stays unselectable, or the copied text comes
 	// back interleaved with line numbers.
 	css, err := os.ReadFile(filepath.Join("static", "style.css"))
@@ -88,5 +98,53 @@ func TestDiffSelectionCopyRow(t *testing.T) {
 	}
 	if !strings.Contains(string(css), "td.no") || !strings.Contains(string(css), "user-select: none") {
 		t.Error("style.css: td.no lost `user-select: none` — copying a selection would include line numbers")
+	}
+}
+
+// Opening a file parks the view on its first changed line: the context above
+// the first hunk can run for screens. It must happen at the three OPEN sites
+// and nowhere else — renderDiff also runs on a window resize and on every
+// notes refresh, where a jump would yank the view out from under a reader.
+func TestJumpToFirstChangeOnOpenOnly(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "files.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	if !strings.Contains(src, "function jumpToFirstChange()") {
+		t.Fatal("files.js: jumpToFirstChange is gone — an opened diff starts at the top of the file again")
+	}
+	if n := strings.Count(src, "jumpToFirstChange();"); n != 3 {
+		t.Errorf("jumpToFirstChange is called %d times, want 3 (commit file, working-tree file, entry/compare diff)", n)
+	}
+	// The body of renderDiff must not call it.
+	i := strings.Index(src, "function renderDiff(d) {")
+	j := strings.Index(src[i:], "\n}\n")
+	if i < 0 || j < 0 {
+		t.Fatal("files.js: renderDiff is no longer recognizable")
+	}
+	if strings.Contains(src[i:i+j], "jumpToFirstChange") {
+		t.Error("renderDiff jumps to the first change — a window resize or a notes refresh would move the reader's view")
+	}
+}
+
+// The top bar's refresh button is styled with pull and push, not left on the
+// browser's default button look.
+func TestRefreshButtonStyled(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "style.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := string(b)
+	for _, want := range []string{
+		"#top #pull-btn, #top #push-btn, #top #refresh-btn {",
+		"#top #refresh-btn:hover:not(:disabled)",
+		"#top #refresh-btn:disabled",
+	} {
+		if !strings.Contains(css, want) {
+			t.Errorf("style.css is missing %q — the refresh button does not match pull/push", want)
+		}
 	}
 }
