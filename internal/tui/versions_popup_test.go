@@ -37,19 +37,22 @@ func TestVersionsPopupRendersRows(t *testing.T) {
 	}
 }
 
-// TestVersionsPopupEnterOpensCompare: fixture with m.branches containing the
-// branch tip; enter on a row must set filesMode compare with both endpoints
-// resolved to HASHES (assert m.filesLeft/filesRight Endpoint hashes — never
-// a branch name).
+// TestVersionsPopupEnterOpensCompare: a version row with recorded endpoints
+// (Base/Ours) must open the files view in compare mode anchored at the
+// FROZEN preview — Base/Ours, exactly what domain.VersionPreview would
+// resolve for this ref — never the branch's live tip.
 func TestVersionsPopupEnterOpensCompare(t *testing.T) {
 	t.Parallel()
 	m := Model{width: 120, height: 40}
-	m.branches = []model.Branch{{Name: "main", Hash: "tiphash0000000000"}}
 	p := &versionsPopup{
 		mode:   versionsModeVersions,
 		branch: "main",
 		rows: []model.BranchVersion{
-			{Ref: "refs/gg/versions/main/1753100000-rebase", Hash: "verhash0000000000", Subject: "did a rebase", Op: "rebase", Unix: 1753100000},
+			{
+				Ref: "refs/gg/versions/main/1753100000-rebase", Hash: "tiphash0000000000",
+				Subject: "did a rebase", Op: "rebase", Unix: 1753100000,
+				Base: "basehash0000000000", Ours: "ourshash0000000000",
+			},
 		},
 	}
 	m = m.pushLayer(p)
@@ -58,13 +61,13 @@ func TestVersionsPopupEnterOpensCompare(t *testing.T) {
 	m = mm.(Model)
 
 	if m.filesView == nil || !m.inCompareMode() {
-		t.Fatal("enter on a version row should open the files view in compare mode")
+		t.Fatal("enter on a version row with recorded endpoints should open the files view in compare mode")
 	}
-	if m.filesLeft.Hash != "verhash0000000000" {
-		t.Fatalf("left endpoint = %q, want the version's hash (never a branch name)", m.filesLeft.Hash)
+	if m.filesLeft.Hash != "basehash0000000000" {
+		t.Fatalf("left endpoint = %q, want the recorded Base (the frozen preview) — never the live tip", m.filesLeft.Hash)
 	}
-	if m.filesRight.Hash != "tiphash0000000000" {
-		t.Fatalf("right endpoint = %q, want the branch tip's hash (never a branch name)", m.filesRight.Hash)
+	if m.filesRight.Hash != "ourshash0000000000" {
+		t.Fatalf("right endpoint = %q, want the recorded Ours", m.filesRight.Hash)
 	}
 	if layerOf[*versionsPopup](m) != nil {
 		t.Fatal("the versions popup should close (clearLayers) once the compare opens")
@@ -123,9 +126,13 @@ func TestVersionsPopupRestoreOpensModal(t *testing.T) {
 	}
 }
 
-// TestVersionsPopupDeletedBranchDisablesCompare: a modeVersions popup whose
-// branch is deleted (no tip): enter sets a statusMsg instead of a compare.
-func TestVersionsPopupDeletedBranchDisablesCompare(t *testing.T) {
+// TestVersionsPopupDeletedBranchFieldlessOpensCommitView: a modeVersions
+// popup whose branch is deleted, entering on a fieldless row (a one-branch
+// op: no Base/Ours) must still open today's commit view — a frozen snapshot
+// (and a fieldless record's own commit) stays reachable via the version ref
+// regardless of whether the branch itself still exists, so this no longer
+// refuses the way the old live-tip compare had to.
+func TestVersionsPopupDeletedBranchFieldlessOpensCommitView(t *testing.T) {
 	t.Parallel()
 	m := Model{width: 120, height: 40}
 	p := &versionsPopup{
@@ -141,34 +148,34 @@ func TestVersionsPopupDeletedBranchDisablesCompare(t *testing.T) {
 	mm, _ := m.Update(keyMsg("enter"))
 	m = mm.(Model)
 
-	if m.filesView != nil {
-		t.Fatal("a deleted branch has no tip to compare against — the files view must not open")
+	if m.filesView == nil || m.inCompareMode() {
+		t.Fatal("a fieldless row should open today's commit view, deleted branch or not")
 	}
-	want := i18n.T("branch no longer exists — restore it to compare")
-	if m.statusMsg != want {
-		t.Fatalf("statusMsg = %q, want %q", m.statusMsg, want)
+	if m.filesHash != "verhash0000000000" {
+		t.Fatalf("filesHash = %q, want the version's own commit hash", m.filesHash)
 	}
-	if layerOf[*versionsPopup](m) == nil {
-		t.Fatal("the popup should stay open on a refused compare")
+	if layerOf[*versionsPopup](m) != nil {
+		t.Fatal("the versions popup should close once the commit view opens")
 	}
 }
 
-// TestVersionsPopupMissingFromBranchesDisablesCompare: branch is NOT marked
-// deleted (p.deleted == false, e.g. a stale/incomplete m.branches load), but
-// it is absent from m.branches — branchTipHash's documented fallback returns
-// the branch NAME itself in that case (branch_compare.go). onEnter must
-// detect that fallback (resolved tip == the branch name, not a hash) and
-// refuse the compare exactly like the deleted case, rather than letting a
-// name slip into Endpoint.Hash and poison the immutable diff cache.
-func TestVersionsPopupMissingFromBranchesDisablesCompare(t *testing.T) {
+// TestVersionsPopupDeletedBranchWithEndpointsOpensFrozenPreview: same as
+// above, but the row HAS recorded endpoints (a two-branch op, e.g. a rebase
+// snapshot) — the frozen preview opens exactly as it would for a live
+// branch, since Base/Ours never depended on refs/heads/<branch> existing.
+func TestVersionsPopupDeletedBranchWithEndpointsOpensFrozenPreview(t *testing.T) {
 	t.Parallel()
 	m := Model{width: 120, height: 40}
-	m.branches = []model.Branch{{Name: "other", Hash: "otherhash00000000"}} // "main" absent
 	p := &versionsPopup{
-		mode:   versionsModeVersions,
-		branch: "main",
+		mode:    versionsModeVersions,
+		branch:  "gone",
+		deleted: true,
 		rows: []model.BranchVersion{
-			{Ref: "refs/gg/versions/main/1753100000-rebase", Hash: "verhash0000000000", Subject: "did a rebase", Op: "rebase", Unix: 1753100000},
+			{
+				Ref: "refs/gg/versions/gone/1753100000-rebase", Hash: "tiphash0000000000",
+				Subject: "did a rebase", Op: "rebase", Unix: 1753100000,
+				Base: "basehash0000000000", Ours: "ourshash0000000000",
+			},
 		},
 	}
 	m = m.pushLayer(p)
@@ -176,14 +183,10 @@ func TestVersionsPopupMissingFromBranchesDisablesCompare(t *testing.T) {
 	mm, _ := m.Update(keyMsg("enter"))
 	m = mm.(Model)
 
-	if m.filesView != nil {
-		t.Fatal("branch missing from m.branches has no resolvable tip — the files view must not open")
+	if m.filesView == nil || !m.inCompareMode() {
+		t.Fatal("a deleted branch's frozen preview should still open — it needs no live tip")
 	}
-	want := i18n.T("branch no longer exists — restore it to compare")
-	if m.statusMsg != want {
-		t.Fatalf("statusMsg = %q, want %q", m.statusMsg, want)
-	}
-	if layerOf[*versionsPopup](m) == nil {
-		t.Fatal("the popup should stay open on a refused compare")
+	if m.filesLeft.Hash != "basehash0000000000" || m.filesRight.Hash != "ourshash0000000000" {
+		t.Fatalf("endpoints = %+v/%+v, want the recorded Base/Ours", m.filesLeft, m.filesRight)
 	}
 }

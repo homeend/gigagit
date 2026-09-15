@@ -223,29 +223,43 @@ func (p *versionsPopup) onEnter(m Model) (Model, tea.Cmd) {
 		if p.sel < 0 || p.sel >= len(p.rows) {
 			return m, nil
 		}
-		if p.deleted {
-			m.statusMsg = i18n.T("branch no longer exists — restore it to compare")
-			return m, nil
-		}
 		v := p.rows[p.sel]
-		// Both endpoints must be HASHES, never the branch name — a name in
-		// Endpoint.Hash would poison the session-lived diff cache, which
-		// treats commit↔commit endpoints as immutable (branch_compare.go's
-		// openBranchCompare doc comment has the full rationale). branchTipHash
-		// falls back to the branch NAME itself when the branch is absent from
-		// m.branches (see branch_compare.go's doc comment) — indistinguishable
-		// here from "deleted" (no live tip to compare against), so treat it
-		// the same way rather than letting a name slip into Endpoint.Hash.
-		tip := m.branchTipHash(p.branch)
-		if tip == p.branch {
-			m.statusMsg = i18n.T("branch no longer exists — restore it to compare")
-			return m, nil
-		}
 		m = m.clearLayers()
-		return m.openCompareFiles(
-			model.Endpoint{Kind: model.EndpointCommit, Hash: v.Hash},
-			model.Endpoint{Kind: model.EndpointCommit, Hash: tip},
-		)
+		// v.Base/v.Ours are exactly the endpoints domain.VersionPreview
+		// resolves for this same ref: it re-reads BranchVersions and applies
+		// the identical "Base == '' || Ours == ''" ErrNoPreview test. The
+		// popup already holds them from its own BranchVersions load (the
+		// versions list gate already ran), so this is that same lookup, not
+		// a second round-trip through the service.
+		//
+		// Neither branch below needs the branch's LIVE tip, or even that the
+		// branch still exists: a frozen preview is anchored at the recorded
+		// Base/Ours, and a fieldless record's Hash is its own snapshot
+		// commit — both stay reachable via the version ref regardless of
+		// whether refs/heads/<branch> is still there. That is why this no
+		// longer gates on p.deleted or a resolvable branchTipHash the way
+		// the pre-frozen-preview compare (version hash vs the live tip) did.
+		if v.Base != "" && v.Ours != "" {
+			// The frozen PR-style preview this version froze — left = the
+			// recorded merge base, right = the contribution. CRITICAL: opened
+			// DIRECTLY with these two hashes, never through openPreviewCmd/
+			// handlePreviewOpenMsg's live-preview reconcile path. That path
+			// reads PreviewEndpoints.Summary to detect a moved tip and
+			// re-resolve against it — exactly wrong for a frozen snapshot,
+			// which has no live tip to reconcile against; doing so would
+			// render today's branch instead of what gg recorded, which is
+			// the very drift this feature exists to surface.
+			return m.openCompareFiles(
+				model.Endpoint{Kind: model.EndpointCommit, Hash: v.Base},
+				model.Endpoint{Kind: model.EndpointCommit, Hash: v.Ours},
+			)
+		}
+		// Fieldless record (amend/reset/undo-commit/delete-branch/restore):
+		// domain.VersionPreview would return ErrNoPreview here — not a
+		// user-facing error, just "there is nothing to preview" — so this
+		// opens today's commit view instead, exactly as enter on an ordinary
+		// commit row does.
+		return m.openChangedFiles(model.Commit{Hash: v.Hash, Subject: v.Subject})
 	}
 	return m, nil
 }

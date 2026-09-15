@@ -56,6 +56,8 @@ type Model struct {
 	pendingPushTags        []string            // tip tags to push after a successful branch Push (chained as PushTags op)
 	pendingRepairSwitch    string              // translated worktree path to switch to after a successful RepairWorktree (chained in opFinishedMsg)
 	pendingWorktreeMoveOld string              // old path of a just-moved worktree; MRU registry cleanup in opFinishedMsg
+	pendingDriftBranch     string              // branch to DriftAfter-check once this op finishes (armed by startOp for rebase/merge/pull/ContinueOp)
+	pendingDriftPaused     bool                // true when the armed op is resuming a merge/rebase paused for conflicts (see notify.go's driftNotice)
 	pendingGotoTip         string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
 	pendingSteer           *pendingSteer       // parked navigate (steer_nav.go); drained by the load it waits on
 	pendingCheckout        pendingCheckout     // arms the diverged-checkout recovery modal; zero remoteRef = none
@@ -69,6 +71,7 @@ type Model struct {
 	currentWorktree        string
 
 	notices                []notice               // session notice list (see notify.go)
+	driftNotices           []driftNoticeSource    // post-op drift/paused-resume findings; rebuildNotices re-renders these too
 	noticesUnread          bool                   // blink while true; opening the ! dialog clears it
 	blinkOn                bool                   // current blink phase (style alternation)
 	noticeGen              int                    // stale-drop guard for repoHealthMsg across repo switches
@@ -482,6 +485,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cleared
 	case repoHealthMsg:
 		return m.applyRepoHealth(msg)
+	case driftCheckMsg:
+		if msg.gen != m.noticeGen {
+			return m, nil // stale: a repo switch superseded this branch's drift check
+		}
+		if msg.err != nil {
+			return m, nil // best-effort, like every other health-derived notice
+		}
+		return m.applyDriftReport(msg.branch, msg.report, msg.paused)
 	case snapshotTargetMsg:
 		if msg.svc != m.svc {
 			return m, nil // stale: a later repo switch superseded this resolve
@@ -2686,6 +2697,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pendingScopeClear = false           // unconditional; only a fresh checkout-family dispatch re-arms it
 		srcs := m.pendingSources              // nil = all (safe default for any unmapped op)
 		m.pendingSources = nil
+		driftBranch, driftPaused := m.pendingDriftBranch, m.pendingDriftPaused
+		m.pendingDriftBranch = "" // unconditional; only a fresh rebase/merge/pull/ContinueOp dispatch re-arms it
+		m.pendingDriftPaused = false
+		var driftCmd tea.Cmd
+		if msg.err == nil && msg.res.Changed && driftBranch != "" {
+			// Detection runs AFTER Execute has released the gate (this handler
+			// fires once svc.Execute has already returned), never inside it —
+			// the spec's own lock-ordering rule. Changed==false skips an
+			// aborted pull/rebase/merge (nothing landed, so no "after" side).
+			driftCmd = m.driftCheckCmd(driftBranch, driftPaused, m.noticeGen)
+		}
 		if switchTo != "" {
 			return m.guardedReRoot(switchTo, false)
 		}
@@ -2720,13 +2742,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.stashView.loading = true
 			var cmd tea.Cmd
 			m, cmd = m.reloadSourcesCmd([]sourceKey{srcStatus}, reloadOpts{manual: true})
-			return m, tea.Batch(healthCmd, cmd, m.loadStashListCmd(m.stashView.tag))
+			return m, tea.Batch(healthCmd, cmd, m.loadStashListCmd(m.stashView.tag), driftCmd)
 		}
 		// A job an active process started just returned: let the process advance
-		// its state machine (it typically triggers a reload itself).
+		// its state machine (it typically triggers a reload itself). This is the
+		// path a ContinueOp dispatched from the conflict process (conflict_
+		// process.go's "c") takes — m.proc is still set — so driftCmd rides
+		// along here too, or a resume completed through the picker would never
+		// check.
 		if m.proc != nil {
 			pm, pcmd := m.proc.finished(m, msg.res, msg.err)
-			return pm, tea.Batch(healthCmd, pcmd)
+			return pm, tea.Batch(healthCmd, pcmd, driftCmd)
 		}
 		// Route op completion through the per-source registry: refresh only the
 		// sources the op dirtied (nil pendingSources = all sources, safe default).
@@ -2734,7 +2760,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// No hardFeed: an op that adds commits (commit, merge, cherry-pick) should
 		// prepend them, not collapse the list back to page 0.
 		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), reloadOpts{manual: true})
-		return m, tea.Batch(healthCmd, cmd)
+		return m, tea.Batch(healthCmd, cmd, driftCmd)
 
 	case prefixDataMsg:
 		if v := layerOf[*prefixSettingsView](m); v != nil {
@@ -3821,6 +3847,9 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// mirroring genCancel's cancel-and-clear above).
 	m.resumePromptShown = false // the new repo's paused state (if any) prompts fresh
 	m.notices = nil
+	m.driftNotices = nil // the old repo's drift findings are not this repo's business
+	m.pendingDriftBranch = ""
+	m.pendingDriftPaused = false
 	m.noticesUnread = false
 	m.noticeGen++    // drop any in-flight health read from the old repo
 	m.gitConfigGen++ // drop any in-flight git-config explorer read from the old repo

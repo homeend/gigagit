@@ -60,6 +60,12 @@ const noticeWSLInterop = "wsl_interop_broken"
 // than only on repo load.
 const noticeStaleLock = "stale_git_lock"
 
+// noticeBranchDriftPrefix identifies a post-op drift/paused-resume notice's
+// id. Unlike the standing health notices above (one constant id, re-derived
+// from repoHealth on every rebuild), each of these is a one-shot EVENT tied
+// to the version ref DriftAfter compared against — see driftNoticeID.
+const noticeBranchDriftPrefix = "branch_drift_"
+
 // bigRepoPackBytes is the pack-size floor for "big repo": below it the
 // commit-graph win doesn't matter enough to nag about.
 const bigRepoPackBytes = 100 << 20
@@ -136,14 +142,36 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	return m, cmd
 }
 
-// rebuildNotices re-derives m.notices from the cached health snapshot.
-// Notice titles/details/action labels bake i18n.T output at build time, so a
+// rebuildNotices re-derives m.notices from the cached health snapshot, plus
+// any post-op drift findings (m.driftNotices — see driftNotice). Notice
+// titles/details/action labels bake i18n.T output at build time, so a
 // language switch must rebuild them; ids are stable, so dismissals hold and
-// no blink logic runs here (applyRepoHealth owns blinking).
+// no blink logic runs here (applyRepoHealth/applyDriftReport own blinking).
 func (m Model) rebuildNotices() Model {
-	if !m.repoHealthKnown {
-		return m // nothing cached yet: the first health read builds in the new language
+	var next []notice
+	if m.repoHealthKnown {
+		next = m.rebuildHealthNotices()
 	}
+	// Drift findings are re-rendered here too (not appended once and left as
+	// a raw notice): a health re-read or a language switch reassigns
+	// m.notices wholesale above, and re-deriving is the only way a switch
+	// re-translates them and a health refresh doesn't silently drop them.
+	// They never offer "Never for this repo" (a one-shot event has nothing
+	// to persist), so only the session dismissal map applies.
+	for _, d := range m.driftNotices {
+		if n := driftNotice(d.branch, d.report, d.paused, m.repoHealth.GitCommonDir); n != nil && !m.noticeSessionDismissed[n.id] {
+			next = append(next, *n)
+		}
+	}
+	m.notices = next
+	return m
+}
+
+// rebuildHealthNotices is rebuildNotices' health-derived half, split out so
+// the drift-notice loop above can run even before the first health read
+// lands (repoHealthKnown false) without duplicating that loop inside this
+// one's early return.
+func (m Model) rebuildHealthNotices() []notice {
 	var dismissed map[string]bool
 	if m.promptStore != nil {
 		dismissed = m.promptStore.DismissedNotices(m.repoHealth.GitCommonDir)
@@ -171,8 +199,7 @@ func (m Model) rebuildNotices() Model {
 			next = append(next, n)
 		}
 	}
-	m.notices = next
-	return m
+	return next
 }
 
 // noticeFeatureDisabledPrefix identifies a disabled-feature notice's stable
@@ -476,7 +503,10 @@ func clipboardInstallLines(pkg string) []string {
 	}
 }
 
-// removeNotice drops one notice from the session list.
+// removeNotice drops one notice from the session list. A drift notice's
+// source is dropped too (matched by id, cheap — driftNoticeID needs no
+// translation), or the next rebuildNotices (a health re-read, a language
+// switch) would re-derive and resurrect the one just acted on/dismissed.
 func (m Model) removeNotice(id string) Model {
 	var next []notice
 	for _, n := range m.notices {
@@ -485,7 +515,178 @@ func (m Model) removeNotice(id string) Model {
 		}
 	}
 	m.notices = next
+	var nextDrift []driftNoticeSource
+	for _, d := range m.driftNotices {
+		if driftNoticeID(d.branch, d.report) != id {
+			nextDrift = append(nextDrift, d)
+		}
+	}
+	m.driftNotices = nextDrift
 	return m
+}
+
+// driftNoticeSource is one post-op drift/paused-resume finding kept across
+// notice rebuilds (a repoHealth re-read, a language switch): rebuildNotices
+// re-renders these every time, exactly like it re-derives every
+// repoHealth-based notice, rather than a rendered notice having to survive
+// m.notices being wholesale reassigned by every other rebuild trigger.
+type driftNoticeSource struct {
+	branch string
+	report domain.DriftReport
+	paused bool
+}
+
+// driftNoticeID is driftNotice's id, factored out so removeNotice can match
+// a drift notice's source without re-rendering (and thus without needing the
+// active language) — the id is built from the version ref alone, which is
+// language-independent.
+func driftNoticeID(branch string, report domain.DriftReport) string {
+	if report.Ref != "" {
+		return noticeBranchDriftPrefix + report.Ref
+	}
+	// No ref to key on (Checked was false; only paused forced this to be
+	// rendered at all) — fall back to the branch name. Rare: ContinueOp only
+	// arms the drift check when a paused merge/rebase was in progress, which
+	// implies the pre-op SmartRebase/SmartMerge/SmartPull already recorded a
+	// version for this branch, so DriftAfter should normally find one.
+	return noticeBranchDriftPrefix + branch
+}
+
+// driftNotice renders the post-op notice for one finding: branch's newest
+// recorded version no longer matches what it contributes now (a file
+// upstream deleted came back — see internal/changeset's doc comment), or the
+// operation that produced it paused for conflicts before completing (the
+// TUI's own resume path via engine.ContinueOp — the CLI has no such lane and
+// so can only ever report the drifted case). Either is grounds to raise
+// this; nil when neither applies. A pure function of already-fetched data
+// (the commitGraphNotice/staleLockNotice precedent) so rebuildNotices can
+// re-derive it on every rebuild instead of a raw notice having to survive
+// m.notices being reassigned wholesale.
+func driftNotice(branch string, report domain.DriftReport, paused bool, repoKey string) *notice {
+	drifted := report.Checked && report.Report.Drifted()
+	if !drifted && !paused {
+		return nil
+	}
+	var title string
+	var detail []string
+	if drifted {
+		title = i18n.T("%s's change set may have drifted from its recorded version", branch)
+		detail = append(detail, i18n.T("%s now introduces changes its recorded version did not:", branch))
+		for _, e := range report.Report.Added {
+			// Raw path/status data, like staleLockNotice's per-lock lines
+			// above — not translatable prose, so no i18n.T call here.
+			detail = append(detail, "  "+string(rune(e.Status))+" "+e.Path)
+		}
+		if paused {
+			detail = append(detail, i18n.T("The operation also paused for conflicts before completing."))
+		}
+	} else {
+		title = i18n.T("%s paused for conflicts before completing", branch)
+		detail = append(detail, i18n.T("%s paused for conflicts before this operation completed.", branch))
+		detail = append(detail, i18n.T("Its change set still matches the recorded version, but the resolution is worth a look."))
+	}
+	detail = append(detail, i18n.T("Open Branch versions to compare it against what gg recorded before this operation."))
+	return &notice{
+		id:      driftNoticeID(branch, report),
+		repoKey: repoKey,
+		title:   title,
+		detail:  detail,
+		actions: []noticeAction{
+			{label: i18n.T("Dismiss")},
+		},
+	}
+}
+
+// driftArmFor decides the post-op DriftAfter check startOp should arm for
+// op, if any: which branch to check, and whether this dispatch resumes a
+// merge/rebase that had paused for conflicts (the spec's other trigger,
+// alongside drift itself). currentBranch is m.status.Branch at dispatch
+// time (the "" default for a rung-1 rebase/merge/pull, which act on the
+// branch checked out here); conflict is m.conflict, still reflecting the
+// PAUSED state at this instant for a ContinueOp dispatch — the resume runs
+// before any status re-read. A pure function of the dispatch, with no I/O,
+// so it is testable without running the op through a real service.
+//
+// Cherry-pick/revert never record a two-branch version (snapshot_version.go
+// only calls snapshotBranchTip[Named] from the merge/rebase/pull/interactive-
+// rebase paths), so a ContinueOp resuming one of those arms nothing.
+func driftArmFor(op engine.Operation, currentBranch string, conflict domain.ConflictState) (branch string, paused bool) {
+	switch v := op.(type) {
+	case engine.SmartRebase:
+		branch = v.Branch
+		if branch == "" {
+			branch = currentBranch // rung 1: rebase in place, branch defaults to current
+		}
+	case engine.SmartMerge:
+		branch = v.Target
+		if branch == "" {
+			branch = currentBranch // merge target defaults to current
+		}
+	case engine.SmartPull:
+		branch = v.Branch
+		if branch == "" {
+			branch = currentBranch
+		}
+	case engine.InteractiveRebase:
+		branch = v.Branch // always explicit: Run refuses an empty Branch
+	case engine.ContinueOp:
+		// Attribute the branch the same way domain.conflictState does:
+		// rebase snapshots the rebased branch itself (Source), merge
+		// snapshots the branch merged INTO (Target).
+		switch conflict.Op {
+		case "merge":
+			branch, paused = conflict.Target, true
+		case "rebase":
+			branch, paused = conflict.Source, true
+		}
+	}
+	return branch, paused
+}
+
+// driftCheckMsg carries a post-op DriftAfter comparison for one branch. gen
+// guards a repo switch (reRoot bumps noticeGen the same way it does for
+// repoHealthMsg): a check dispatched for the OLD repo must never surface as
+// a notice for the NEW one.
+type driftCheckMsg struct {
+	gen    int
+	branch string
+	paused bool
+	report domain.DriftReport
+	err    error
+}
+
+// driftCheckCmd runs DriftAfter off the UI thread for branch. Dispatched
+// from opFinishedMsg once a rebase/merge/pull (or its resume via
+// engine.ContinueOp) finishes successfully — armed earlier by startOp's type
+// switch (m.pendingDriftBranch/m.pendingDriftPaused), per the spec's rule:
+// detection runs AFTER Execute releases the gate, never inside it.
+func (m Model) driftCheckCmd(branch string, paused bool, gen int) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		rep, err := svc.DriftAfter(context.Background(), branch)
+		return driftCheckMsg{gen: gen, branch: branch, paused: paused, report: rep, err: err}
+	}
+}
+
+// applyDriftReport is the driftCheckMsg success handler: renders the
+// finding, and — only if it is actually worth saying anything (driftNotice
+// returned non-nil) — records its source and re-blinks, the same "genuinely
+// new" gate applyRepoHealth uses (simplified: an appended driftNoticeSource
+// is always new this session, so no prev/next id diff is needed here).
+func (m Model) applyDriftReport(branch string, report domain.DriftReport, paused bool) (Model, tea.Cmd) {
+	if driftNotice(branch, report, paused, m.repoHealth.GitCommonDir) == nil {
+		return m, nil // no drift, and the op didn't pause for conflicts: nothing to say
+	}
+	m.driftNotices = append(m.driftNotices, driftNoticeSource{branch: branch, report: report, paused: paused})
+	m = m.rebuildNotices()
+	var cmd tea.Cmd
+	if !m.noticesUnread {
+		m.blinkGen++
+		cmd = noticeBlinkCmd(m.blinkGen)
+	}
+	m.noticesUnread = true
+	m.blinkOn = true
+	return m, cmd
 }
 
 // noticeSegment renders the status-bar segment: red + phase-alternating while
