@@ -555,23 +555,24 @@ type startAtMsg struct{ cmd steer.Command }
 // startup fan-out has even begun; set by both the modern per-source
 // dataAvailableMsg arrival and the legacy dataLoadedMsg), a window size
 // (m.width — the diff-open path and steerNavigatePreview's width guard both
-// need it), no reload/operation still in flight (m.loading —
-// applySteer's steerRefusal refuses ANY navigate while it is true, and the
-// real startup path (bootstrapCmd → configReadyMsg → reloadAllCmd) holds it
-// true until every one of the ~10 fanned-out sources has landed, not merely
-// the first), plus — for a PREVIEW link only — the previews read:
-// steerNavigatePreview resolves saved rows from m.previews, which a
-// dedicated (possibly LATER, out-of-band) srcPreviews read fills in. A
-// non-preview link never needs that read, so it is not awaited on its
-// own — though in practice, at real startup, previews rides the same
-// fan-out as everything else m.loading already waits for.
+// need it), and ops idle (!m.opsIdle() mirrors applySteer's own
+// steerRefusal gate exactly: !m.running && !m.loading — a navigate is
+// refused while EITHER is true, and the real startup path (bootstrapCmd →
+// configReadyMsg → reloadAllCmd) holds m.loading true until every one of
+// the ~10 fanned-out sources has landed, not merely the first), plus — for
+// a PREVIEW link only — the previews read: steerNavigatePreview resolves
+// saved rows from m.previews, which a dedicated (possibly LATER,
+// out-of-band) srcPreviews read fills in. A non-preview link never needs
+// that read, so it is not awaited on its own — though in practice, at real
+// startup, previews rides the same fan-out as everything else opsIdle
+// already waits for.
 //
 // Checked centrally in Update, after every dispatch (not at each
-// precondition's own handler): m.loading flips false only on whichever
-// source happens to land LAST, so a per-handler check would fire while a
-// sibling source was still loading and land in an unretried refusal.
+// precondition's own handler): opsIdle flips true only once whichever
+// source/op happens to finish LAST, so a per-handler check would fire while
+// a sibling source was still loading and land in an unretried refusal.
 func (m Model) startAtReady() bool {
-	if !m.startAtPending || !m.ready || m.loading || m.width == 0 {
+	if !m.startAtPending || !m.ready || !m.opsIdle() || m.width == 0 {
 		return false
 	}
 	if m.startAt.Target.Preview != nil {

@@ -60,10 +60,11 @@ func TestSteerCommandForLink(t *testing.T) {
 
 // TestStartAtReadyPredicate exercises startAtReady() directly, field by
 // field: it must require startAtPending, m.ready (some data has arrived —
-// guards the window before the startup fan-out has even begun), !m.loading
-// (no manual source still in flight — applySteer's steerRefusal refuses ANY
-// navigate while it is true) and a window size; a PREVIEW link additionally
-// requires startAtPreviewsSeen, which a non-preview link does not.
+// guards the window before the startup fan-out has even begun), opsIdle
+// (neither m.loading nor m.running — applySteer's steerRefusal refuses ANY
+// navigate while either is true) and a window size; a PREVIEW link
+// additionally requires startAtPreviewsSeen, which a non-preview link does
+// not.
 func TestStartAtReadyPredicate(t *testing.T) {
 	t.Parallel()
 	base := Model{startAtPending: true, ready: true, width: 100}
@@ -77,6 +78,7 @@ func TestStartAtReadyPredicate(t *testing.T) {
 		{"not pending", func(m Model) Model { m.startAtPending = false; return m }},
 		{"nothing has loaded yet", func(m Model) Model { m.ready = false; return m }},
 		{"a source is still loading", func(m Model) Model { m.loading = true; return m }},
+		{"an operation is running", func(m Model) Model { m.running = true; return m }},
 		{"no window size yet", func(m Model) Model { m.width = 0; return m }},
 	}
 	for _, c := range cases {

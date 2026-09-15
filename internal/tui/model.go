@@ -438,7 +438,6 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				v.scroll(0, m.diffBodyRows())
 			}
 		}
-		return m, nil
 	case diffMsg:
 		dv := m.diffLayer()
 		if dv == nil || msg.tag != m.diffTag {

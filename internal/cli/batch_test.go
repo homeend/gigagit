@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // runCLIStdin is runCLI with a caller-supplied stdin script.
@@ -129,6 +131,35 @@ func TestBatchNestedRejected(t *testing.T) {
 	}
 	if !strings.Contains(out, "#1 !2 batch\n") || !strings.Contains(out, "! batch: nested batch is not allowed") {
 		t.Fatalf("nested batch not rejected properly:\n%s", out)
+	}
+}
+
+// gg open falls back to launching the TUI when no live session answers —
+// taking over the terminal mid-batch. A batch line naming it must be
+// refused outright, never reach cmdOpen/LaunchTUI at all.
+func TestBatchRefusesOpen(t *testing.T) {
+	dir := newRepoDir(t)
+	called := false
+	LaunchTUI = func(checkout string, at model.Link) int {
+		called = true
+		return 0
+	}
+	t.Cleanup(func() { LaunchTUI = nil })
+	code, out, _ := runCLIStdin(t, dir, "open gg://r/a.txt:1\nstatus\n", "batch")
+	if code != 1 {
+		t.Fatalf("exit=%d, want 1", code)
+	}
+	if !strings.Contains(out, "#1 !2 open gg://r/a.txt:1\n") {
+		t.Fatalf("open line header wrong:\n%s", out)
+	}
+	if !strings.Contains(out, "! open cannot run inside gg batch") {
+		t.Fatalf("refusal text missing:\n%s", out)
+	}
+	if strings.Contains(out, "#2") {
+		t.Fatalf("second line ran despite stop-on-error:\n%s", out)
+	}
+	if called {
+		t.Error("LaunchTUI must not be called for a batch line")
 	}
 }
 
