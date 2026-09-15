@@ -128,23 +128,31 @@ func (op SmartPull) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	return op.checkoutPull(ctx, deps, remote, target, "")
 }
 
-// fetchThenSnapshotPull records branch's pre-pull version with a FRESH Other.
-// The fetch has to come FIRST: Other is "<remote>/<branch>", and
-// snapshotBranchTipNamed resolves it to a sha at record time, so a snapshot
-// taken before the fetch freezes the tip of the PREVIOUS fetch and the
-// after-side comparison then reports the commits this pull brought in as
-// drift. A failed fetch skips the snapshot rather than recording stale
-// endpoints — like everything else here, best-effort: it never fails the pull.
-//
-// Only checkoutPull uses this now. The background fast-forward records
-// through snapshotBranchTipAt instead, after its single fetch, since there
-// the fetch that lands the update is also the one that reveals Other.
-func fetchThenSnapshotPull(ctx context.Context, deps OpDeps, remote, branch string) {
-	deps.emit(ctx, Progress{Step: "fetching", Detail: remote})
-	if err := deps.Repo.Fetch(ctx, remote); err != nil {
-		return
-	}
-	snapshotBranchTip(ctx, deps, branch, "pull", tipOf(ctx, deps, branch), remote+"/"+branch)
+// pullEndpoints captures the two endpoints a pull's version record needs, at
+// the one moment both are true: after the fetch (so Other is the tip this
+// pull is about to land on, not the previous fetch's) and before anything has
+// moved the branch. They are held as plain shas so the record can be written
+// LATER — after the branch has moved — which is what lets each pull path
+// record only when it actually did something.
+type pullEndpoints struct {
+	ours  string // the branch tip before the pull
+	other string // "<remote>/<branch>" as a NAME; resolved at record time
+}
+
+// capturePullEndpoints reads the pre-pull tip. Best-effort like everything on
+// this path: an empty ours makes every snapshotBranchTipAt below a no-op,
+// which is the right answer for a branch whose tip could not be read.
+func capturePullEndpoints(ctx context.Context, deps OpDeps, remote, branch string) pullEndpoints {
+	return pullEndpoints{ours: tipOf(ctx, deps, branch), other: remote + "/" + branch}
+}
+
+// record writes branch's pre-pull version. Called at each point where the
+// pull actually did something, never before knowing that — an aborted pull
+// moved nothing, so there is nothing to record, and all three frontends gate
+// their drift check on Result.Changed, which an abort leaves false, so an
+// unrecorded abort can never leave a stale comparison armed.
+func (e pullEndpoints) record(ctx context.Context, deps OpDeps, branch string) {
+	snapshotBranchTipAt(ctx, deps, branch, "pull", e.ours, e.ours, e.other, branch, e.other)
 }
 
 func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch string) (Result, error) {
@@ -156,16 +164,18 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 			return Result{}, err
 		}
 	}
-	// ONE snapshot, here: after the fetch (so Other is the tip this pull is
-	// about to land on, not the previous fetch's) and before the first thing
-	// that can move the branch. Every armed path below then has a record —
-	// including the fast-forward, which used to leave DriftAfter comparing the
-	// branch against some OLDER version and reporting the ff's own commits as
-	// drift. A ff records Base == Ours (nothing was contributed on top of the
-	// upstream tip), and DriftSince's empty-before-set skip makes that silent.
-	snapshotBranchTip(ctx, deps, branch, "pull", tipOf(ctx, deps, branch), remote+"/"+branch)
+	// Endpoints captured here, records written below — one per path that
+	// actually moves the branch, none for the abort. The fast-forward records
+	// AFTER its pull (the tip has moved by then, hence the captured ours);
+	// the three fork answers record BEFORE theirs, because a rebase or merge
+	// that pauses for conflicts must already have its record for the later
+	// ContinueOp drift check to compare against. A ff records Base == Ours
+	// (nothing was contributed on top of the upstream tip), and DriftSince's
+	// empty-before-set skip makes that silent.
+	ep := capturePullEndpoints(ctx, deps, remote, branch)
 	deps.emit(ctx, Progress{Step: "pulling (ff-only)", Detail: branch})
 	if err := deps.Repo.Pull(ctx, remote, branch, git.PullFF); err == nil {
+		ep.record(ctx, deps, branch)
 		return Result{Changed: true}.WithSummary("pulled %s", branch), nil
 	}
 	resp, derr := deps.decide(ctx, PromptReq("non-fast-forward", "%s has diverged from %s (reset discards local commits and changes)", []string{"rebase", "merge", "reset", "abort"}, branch, remote))
@@ -174,11 +184,13 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 	}
 	switch resp.Option {
 	case "rebase":
+		ep.record(ctx, deps, branch)
 		if err := deps.Repo.Pull(ctx, remote, branch, git.PullRebase); err != nil {
 			return Result{}, err
 		}
 		return Result{Changed: true}.WithSummary("pulled (rebased) %s", branch), nil
 	case "merge":
+		ep.record(ctx, deps, branch)
 		if err := deps.Repo.Pull(ctx, remote, branch, git.PullMerge); err != nil {
 			return Result{}, err
 		}
@@ -189,6 +201,7 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 		// reset --hard alone snaps the branch to the fetched remote tip and
 		// discards local commits + uncommitted changes, as the user asked.
 		remoteTip := remote + "/" + branch
+		ep.record(ctx, deps, branch)
 		deps.emit(ctx, Progress{Step: "resetting (hard)", Detail: remoteTip})
 		if err := deps.Repo.Reset(ctx, "hard", remoteTip); err != nil {
 			return Result{}, err
@@ -207,13 +220,23 @@ func (op SmartPull) pullCurrent(ctx context.Context, deps OpDeps, remote, branch
 func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, target, returnTo string) (Result, error) {
 	repo := deps.Repo
 
-	// Fetch + snapshot FIRST, above the worktree branch: both branches below
-	// pull, so both need a recorded pre-op version, and the fetch has to
-	// precede the record so Other is the tip being landed on (see
-	// fetchThenSnapshotPull). Fetching before the stash/switch is safe —
-	// a fetch touches no worktree — and the Pull below re-fetches anyway,
-	// so this is not an extra network round-trip in the failure case.
-	fetchThenSnapshotPull(ctx, deps, remote, target)
+	// Fetch FIRST, above the worktree branch: both branches below pull, so
+	// both need a recorded pre-op version, and the fetch has to precede the
+	// CAPTURE so Other is the tip being landed on rather than the previous
+	// fetch's. Fetching before the stash/switch is safe — a fetch touches no
+	// worktree — and the Pull below re-fetches anyway, so this is not an extra
+	// network round-trip in the failure case. A failed fetch leaves ours empty
+	// via the zero pullEndpoints, which makes every record below a no-op:
+	// stale endpoints are worse than none.
+	//
+	// The record itself is written by each branch below, once its pull has
+	// SUCCEEDED. A pull that failed moved nothing, and a record of a move that
+	// did not happen is the thing a frozen version must never contain.
+	deps.emit(ctx, Progress{Step: "fetching", Detail: remote})
+	var ep pullEndpoints
+	if err := repo.Fetch(ctx, remote); err == nil {
+		ep = capturePullEndpoints(ctx, deps, remote, target)
+	}
 
 	wt, err := repo.WorktreeForBranch(ctx, target)
 	if err != nil {
@@ -225,6 +248,7 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 			deps.emit(ctx, DecisionNeeded{Request: PromptReq("worktree-pull-failed", "Pull in worktree %s failed", []string{"abort"}, wt.Path)})
 			return Result{}, fmt.Errorf("smart pull: worktree %s: %w", wt.Path, err)
 		}
+		ep.record(ctx, deps, target)
 		return Result{Changed: true}.WithSummary("pulled %s in worktree %s", target, wt.Path), nil
 	}
 
@@ -252,6 +276,12 @@ func (op SmartPull) checkoutPull(ctx context.Context, deps OpDeps, remote, targe
 	deps.emit(ctx, Progress{Step: "pulling (ff-only)", Detail: target})
 	pullErr := repo.Pull(ctx, remote, target, git.PullFF)
 	res := Result{Changed: true}.WithSummary("pulled %s", target)
+	if pullErr == nil {
+		// Recorded here rather than at the end: the switch-back and stash-pop
+		// below have early returns of their own, and the pull they follow has
+		// already landed — its version belongs in the store either way.
+		ep.record(ctx, deps, target)
+	}
 
 	if returnTo != "" && returnTo != target {
 		deps.emit(ctx, Progress{Step: "switching back", Detail: returnTo})

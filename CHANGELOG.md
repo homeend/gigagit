@@ -28,6 +28,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   precondition has landed — snapshot, window size, ops idle, and for a
   preview link the previews read). Skills: using-gg v74, reviewing-with-gg v7.
 
+- **A pull that did nothing no longer leaves a version ref behind.** Two
+  fixes to the same complaint. An aborted pull now records nothing at all:
+  the pre-op snapshot used to be written immediately after the fetch, before
+  the diverged fork was even offered, so declining still left a ref. Each
+  pull path now captures its endpoints after the fetch and writes the record
+  only once it has actually moved the branch. And any snapshot that would
+  repeat, field for field, what the branch's newest record already says is
+  skipped — so a repo under periodic background auto-pull stops accumulating
+  one ref per branch per poll. Expiry still runs on the skip path. Drift
+  detection is unaffected: an identical record yields an identical
+  comparison, and the false-alarm class it guards against is a *moved* tip
+  left with an unmoved record, which by definition is not a duplicate.
+
 - **A background fast-forward pull now costs one fetch, not two.** `gg pull`
   on a non-checked-out branch used to run a plain `git fetch <remote>` purely
   so the pre-op version snapshot could read a fresh `refs/remotes/<remote>/<branch>`

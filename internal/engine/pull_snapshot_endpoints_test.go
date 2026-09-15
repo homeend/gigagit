@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 )
 
@@ -291,5 +292,113 @@ func TestSmartPullBackgroundFastForwardFetchesOnce(t *testing.T) {
 	}
 	if got := counter.total(); got != 1 {
 		t.Errorf("fetch invocations = %d, want exactly 1 (FastForwardRef is itself the fetch)", got)
+	}
+}
+
+// pullVersionRefs lists branch's recorded pull versions.
+func pullVersionRefs(t *testing.T, repo *git.Repo, branch string) []string {
+	t.Helper()
+	infos, err := repo.ForEachRef(context.Background(), git.VersionRefPrefix+branch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, i := range infos {
+		if _, op, _, ok := git.ParseVersionRef(i.Ref); ok && op == "pull" {
+			out = append(out, i.Ref)
+		}
+	}
+	return out
+}
+
+// TestSmartPullAbortRecordsNothing is the first half of the no-op guard: a
+// pull the user aborts at the diverged fork moved nothing, so there is
+// nothing to record. The snapshot used to be written unconditionally right
+// after the fetch, before the fork was even offered, so declining still left
+// a version ref behind.
+//
+// Safe because all three frontends gate their drift check on Result.Changed,
+// which an abort leaves false — an unrecorded abort can never leave a stale
+// comparison armed.
+func TestSmartPullAbortRecordsNothing(t *testing.T) {
+	t.Parallel()
+	clone, repo := cloneOnMainBehindOrigin(t)
+	os.WriteFile(filepath.Join(clone, "local.txt"), []byte("local\n"), 0o644)
+	gitAt(t, clone, "add", ".")
+	gitAt(t, clone, "commit", "-m", "local")
+	preOpTip := rev(t, clone, "main")
+
+	res, err := SmartPull{Intent: PullAndStay}.Run(context.Background(),
+		pullDeps(repo, MapDecider{"non-fast-forward": "abort"}))
+	if err != nil {
+		t.Fatalf("smart pull (abort): %v", err)
+	}
+	if res.Changed {
+		t.Fatalf("result = %+v, want Changed false for an abort", res)
+	}
+	if rev(t, clone, "main") != preOpTip {
+		t.Fatal("fixture moved the branch: the abort path was not exercised")
+	}
+	if got := pullVersionRefs(t, repo, "main"); len(got) != 0 {
+		t.Errorf("aborted pull recorded %v, want nothing", got)
+	}
+}
+
+// TestSmartPullAlreadyUpToDateRecordsOnce is the second half: repeated pulls
+// of a branch that is already current record ONE version between them, not
+// one each. The first is a genuine record (the branch had none); every repeat
+// after it is byte-identical and is deduplicated. Under the background
+// auto-pull lane this is the difference between one ref and one ref per poll.
+func TestSmartPullAlreadyUpToDateRecordsOnce(t *testing.T) {
+	t.Parallel()
+	clone, repo := cloneOnMainBehindOrigin(t)
+	deps := pullDeps(repo, MapDecider{})
+
+	// First pull lands the two commits the fixture is behind by.
+	if _, err := (SmartPull{Intent: PullAndStay}).Run(context.Background(), deps); err != nil {
+		t.Fatalf("first pull: %v", err)
+	}
+	afterFirst := pullVersionRefs(t, repo, "main")
+	if len(afterFirst) != 1 {
+		t.Fatalf("after the real pull: %v, want 1", afterFirst)
+	}
+	tip := rev(t, clone, "main")
+
+	// Three more pulls with nothing to fetch: all no-ops.
+	for i := 0; i < 3; i++ {
+		if _, err := (SmartPull{Intent: PullAndStay}).Run(context.Background(), deps); err != nil {
+			t.Fatalf("no-op pull %d: %v", i, err)
+		}
+	}
+	if rev(t, clone, "main") != tip {
+		t.Fatal("a no-op pull moved the branch: fixture is wrong")
+	}
+	got := pullVersionRefs(t, repo, "main")
+	if len(got) != 2 {
+		t.Errorf("refs = %v, want 2 (the real pull, plus ONE for the first no-op) — repeats must dedupe", got)
+	}
+}
+
+// TestSmartPullBackgroundNoOpRecordsOnce is the same guard on the background
+// fast-forward path, the one the auto-pull lane actually drives.
+func TestSmartPullBackgroundNoOpRecordsOnce(t *testing.T) {
+	t.Parallel()
+	clone, repo := cloneOnMainBehindOrigin(t)
+	root := filepath.Dir(clone)
+	seed := filepath.Join(root, "seed")
+
+	gitAt(t, seed, "checkout", "-b", "dev")
+	gitAt(t, seed, "push", "-u", "origin", "dev")
+	gitAt(t, clone, "fetch", "origin")
+	gitAt(t, clone, "branch", "dev", "origin/dev")
+
+	deps := pullDeps(repo, MapDecider{})
+	for i := 0; i < 4; i++ {
+		if _, err := (SmartPull{Branch: "dev", Intent: PullInBackground}).Run(context.Background(), deps); err != nil {
+			t.Fatalf("background pull %d: %v", i, err)
+		}
+	}
+	if got := pullVersionRefs(t, repo, "dev"); len(got) != 1 {
+		t.Errorf("refs = %v, want 1 — four polls of a quiet branch must not leave four refs", got)
 	}
 }
