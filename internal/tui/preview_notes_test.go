@@ -333,6 +333,92 @@ func TestSteerHighlightRefusesTheOldSideOfAPreview(t *testing.T) {
 	}
 }
 
+// previewOpenMsgFixture is an OK resolve for feat → main over two commit
+// endpoints, carrying the note scope and per-path counts the handler must arm.
+func previewOpenMsgFixture(gen int) previewOpenMsg {
+	const src, tgt = "1111111111111111111111111111111111111111", "2222222222222222222222222222222222222222"
+	return previewOpenMsg{
+		id: "p1", source: "feat", target: "main", gen: gen,
+		eps: domain.PreviewEndpoints{
+			Summary: domain.PreviewSummary{State: domain.PreviewOK, SourceHash: src, TargetHash: tgt},
+			Left:    model.Endpoint{Kind: model.EndpointCommit, Hash: tgt},
+			Right:   model.Endpoint{Kind: model.EndpointCommit, Hash: src},
+		},
+		set:    domain.PreviewNoteSet{Source: "feat", Target: "main", Tip: src, Commits: []string{src}},
+		counts: map[string]int{"a.txt": 2},
+	}
+}
+
+// handlePreviewOpenMsg on its FRESH-OPEN branch: openCompareFiles runs
+// closeFilesView, which CLEARS filesPreviewSet/filesPreviewCounts — so the arm
+// has to happen after it. Pre-seeded sentinels prove both halves: the stale
+// values are gone AND the message's own set and counts landed. (The cmd
+// openCompareFiles returns is never run: it would need a live svc.)
+func TestPreviewOpenArmsTheNoteScopeAfterTheCompareOpens(t *testing.T) {
+	t.Parallel()
+	msg := previewOpenMsgFixture(7)
+	m := Model{width: 100, height: 40, previewGen: 7}
+	stale := &domain.PreviewNoteSet{Source: "old", Target: "old", Tip: "dead"}
+	m.filesPreviewSet, m.filesPreviewCounts = stale, map[string]int{"stale.txt": 9}
+
+	m2, cmd := m.handlePreviewOpenMsg(msg)
+	if cmd == nil {
+		t.Fatal("a fresh open must start the compare files load")
+	}
+	if m2.filesPreviewSet == nil {
+		t.Fatal("the note scope must be armed AFTER openCompareFiles cleared it, not before")
+	}
+	if m2.filesPreviewSet.Tip != msg.set.Tip || m2.filesPreviewSet == stale {
+		t.Fatalf("the fresh set must replace the stale one, got %+v", m2.filesPreviewSet)
+	}
+	if m2.filesPreviewCounts["a.txt"] != 2 || m2.filesPreviewCounts["stale.txt"] != 0 {
+		t.Fatalf("the fresh counts must land whole, got %v", m2.filesPreviewCounts)
+	}
+	if m2.previewOpen == nil || m2.previewOpen.id != "p1" {
+		t.Fatalf("the open pair must be recorded, got %+v", m2.previewOpen)
+	}
+	if m2.previewGen != msg.gen {
+		t.Fatalf("closeFilesView bumps previewGen; the resolve's own gen must be restored, got %d", m2.previewGen)
+	}
+}
+
+// …and on the UNCHANGED-HASH refresh branch (same compareTag): nothing
+// re-opens, but the notes may still have moved, so the counts are replaced
+// while the view — and its set — stay exactly where they are.
+func TestPreviewOpenRefreshReplacesCountsAndKeepsTheView(t *testing.T) {
+	t.Parallel()
+	msg := previewOpenMsgFixture(7)
+	m := Model{width: 100, height: 40, previewGen: 7}
+	m.filesView = &contentPopup{}
+	m.compareTag = compareTagFor(msg.eps.Left, msg.eps.Right)
+	m.previewOpen = &previewOpenState{id: "p1", source: "feat", target: "main",
+		srcHash: "stale-src", tgtHash: "stale-tgt", tag: m.compareTag}
+	kept := m.filesView
+	m.filesPreviewCounts = map[string]int{"gone.txt": 5}
+
+	m2, cmd := m.handlePreviewOpenMsg(msg)
+	if cmd != nil {
+		t.Fatal("an unchanged pair must not re-open anything")
+	}
+	if m2.filesView != kept {
+		t.Fatal("the open view must survive an unchanged-hash refresh")
+	}
+	if m2.filesPreviewSet == nil || m2.filesPreviewSet.Tip != msg.set.Tip {
+		t.Fatalf("the refresh must take the fresh note scope, got %+v", m2.filesPreviewSet)
+	}
+	if m2.filesPreviewCounts["a.txt"] != 2 || m2.filesPreviewCounts["gone.txt"] != 0 {
+		t.Fatalf("the counts must be REPLACED, not merged, got %v", m2.filesPreviewCounts)
+	}
+	// The hashes are reconciled silently, or every later refresh would
+	// announce "moved" and spend another resolve, forever.
+	if m2.previewOpen.srcHash != msg.eps.Summary.SourceHash || m2.previewOpen.tgtHash != msg.eps.Summary.TargetHash {
+		t.Fatalf("the refresh must reconcile the hashes, got %+v", m2.previewOpen)
+	}
+	if m2.statusMsg != "" {
+		t.Fatalf("an unchanged refresh is silent, got %q", m2.statusMsg)
+	}
+}
+
 // The Previews panel row carries the SAME ◆N badge every other note-bearing
 // row uses (never a new glyph).
 func TestPreviewRowCarriesANoteBadge(t *testing.T) {

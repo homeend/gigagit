@@ -234,6 +234,13 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 	if !set.OK() {
 		return nil, nil
 	}
+	// The same guard PreviewNotesFor has, and the one errPreviewNotesNeedPath
+	// promises: with no path loadPreviewNotes gathers EVERY file's notes and
+	// resolves them against one file's content, which is nobody's contract.
+	// The counts-only gather is PreviewNoteCounts' own call.
+	if path == "" {
+		return nil, errPreviewNotesNeedPath
+	}
 	mine, err := s.loadPreviewNotes(ctx, set, path)
 	if err != nil {
 		return nil, err

@@ -13,6 +13,7 @@ import (
 // TestPreviewNotesGathersTheBranch: main + feat (three commits). The set's tip
 // is feat's tip and Commits is exactly the three commits merge-base..feat.
 func TestPreviewNotesGathersTheBranch(t *testing.T) {
+	t.Parallel()
 	svc, repoDir := newPreviewRepo(t) // helper at the bottom of this file
 	ctx := context.Background()
 	_ = repoDir
@@ -37,6 +38,7 @@ func TestPreviewNotesGathersTheBranch(t *testing.T) {
 
 // Ruling 6: a non-ok state yields an EMPTY set and NO error.
 func TestPreviewNotesOnANonOKPairIsEmptyAndSilent(t *testing.T) {
+	t.Parallel()
 	svc, _ := newPreviewRepo(t)
 	ctx := context.Background()
 
@@ -50,6 +52,7 @@ func TestPreviewNotesOnANonOKPairIsEmptyAndSilent(t *testing.T) {
 }
 
 func TestPreviewResolveAcceptsTheThreeDotForm(t *testing.T) {
+	t.Parallel()
 	svc, _ := newPreviewRepo(t)
 	src, tgt, err := svc.PreviewResolve(context.Background(), "main...feat")
 	if err != nil {
@@ -60,7 +63,21 @@ func TestPreviewResolveAcceptsTheThreeDotForm(t *testing.T) {
 	}
 }
 
+// A three-dot argument missing one side is a SHAPE error, never a lookup: it
+// must not fall through to PreviewGet and come back "no such preview", which
+// would send the caller looking for a record instead of fixing the argument.
+func TestPreviewResolveRefusesAHalfPair(t *testing.T) {
+	t.Parallel()
+	svc, _ := newPreviewRepo(t)
+	for _, spec := range []string{"...feat", "main..."} {
+		if _, _, err := svc.PreviewResolve(context.Background(), spec); !errors.Is(err, errPreviewPairShape) {
+			t.Fatalf("%q: err = %v, want errPreviewPairShape", spec, err)
+		}
+	}
+}
+
 func TestPreviewResolveAcceptsASavedIDAndLabel(t *testing.T) {
+	t.Parallel()
 	svc, _ := newPreviewRepo(t)
 	ctx := context.Background()
 	p, err := svc.PreviewAdd(ctx, "feat", "main", "login")
@@ -82,6 +99,7 @@ func TestPreviewResolveAcceptsASavedIDAndLabel(t *testing.T) {
 // keyed on the same (srcHash, tgtHash) pair as PreviewSummary, so a new commit
 // on source (a new hash pair) is a new cache key — never a stale hit.
 func TestPreviewNotesCacheFollowsSummaryCache(t *testing.T) {
+	t.Parallel()
 	svc, dir := newPreviewRepo(t)
 	ctx := context.Background()
 
@@ -157,6 +175,7 @@ func revParse(t *testing.T, dir, rev string) string {
 // still be listed on the preview — as stale (rendered "outdated"). A note on
 // a line that survived is active.
 func TestPreviewNotesForGathersOlderCommitsAndMarksThemStale(t *testing.T) {
+	t.Parallel()
 	svc, dir := newPreviewRepo(t)
 	ctx := context.Background()
 	c1 := revParse(t, dir, "feat~2") // "c1 adds DELTA"
@@ -212,6 +231,7 @@ func TestPreviewNotesForGathersOlderCommitsAndMarksThemStale(t *testing.T) {
 // later commit removed the path from the tip — is hidden from the listing
 // yet still counted (spec §1.2, the "retired file" rule).
 func TestPreviewNoteCountsIncludeHiddenNotes(t *testing.T) {
+	t.Parallel()
 	svc, dir := newPreviewRepo(t)
 	ctx := context.Background()
 	c3 := revParse(t, dir, "feat") // "c3 adds b.txt", tip before the removal
@@ -278,6 +298,7 @@ func TestPreviewNoteCountsIncludeHiddenNotes(t *testing.T) {
 // SetNotesStore points a Service at a different store (the brief predicted
 // this): a preview count cached against the OLD store must not survive.
 func TestSetNotesStoreClearsPreviewCounts(t *testing.T) {
+	t.Parallel()
 	svc, dir := newPreviewRepo(t)
 	ctx := context.Background()
 	set, err := svc.PreviewNotes(ctx, "feat", "main")
@@ -306,6 +327,7 @@ func TestSetNotesStoreClearsPreviewCounts(t *testing.T) {
 
 // Ruling 7: the counts follow the notes store, not only the summary cache.
 func TestPreviewNoteCountsInvalidateOnAMutation(t *testing.T) {
+	t.Parallel()
 	svc, dir := newPreviewRepo(t)
 	ctx := context.Background()
 	set, err := svc.PreviewNotes(ctx, "feat", "main")
@@ -333,6 +355,7 @@ func TestPreviewNoteCountsInvalidateOnAMutation(t *testing.T) {
 
 // Ruling 6: a non-ok set answers empty, silently.
 func TestPreviewNotesOnAnEmptySetAreSilent(t *testing.T) {
+	t.Parallel()
 	svc, _ := newPreviewRepo(t)
 	ctx := context.Background()
 	got, err := svc.PreviewNotesAt(ctx, PreviewNoteSet{}, "a.txt")
@@ -350,6 +373,7 @@ func TestPreviewNotesOnAnEmptySetAreSilent(t *testing.T) {
 // (c3) only adds b.txt, so its own patch has NO hunk for a.txt at all: an
 // anchor that resolves for a.txt can only have come from the preview patch.
 func TestPreviewHunkAnchorUsesThePreviewPatch(t *testing.T) {
+	t.Parallel()
 	svc, _ := newPreviewRepo(t)
 	ctx := context.Background()
 	set, err := svc.PreviewNotes(ctx, "feat", "main")
@@ -371,6 +395,7 @@ func TestPreviewHunkAnchorUsesThePreviewPatch(t *testing.T) {
 // A hunk that only deletes has no new side to anchor on: refused, not silently
 // stored as an old-side note the preview could never show.
 func TestPreviewHunkAnchorRefusesADeleteOnlyHunk(t *testing.T) {
+	t.Parallel()
 	svc, _ := newDeletedFilePreviewRepo(t)
 	ctx := context.Background()
 	set, err := svc.PreviewNotes(ctx, "feat", "main")
@@ -400,6 +425,7 @@ func newDeletedFilePreviewRepo(t *testing.T) (*Service, string) {
 // PreviewNotesAll gathers EVERY path the preview covers in one store load, and
 // hides a path-gone orphan exactly as PreviewNotesAt does for a single path.
 func TestPreviewNotesAllGathersEveryPathAndHidesOrphans(t *testing.T) {
+	t.Parallel()
 	svc, dir := newPreviewRepo(t)
 	svc.UseNotesDir(t.TempDir())
 	ctx := context.Background()
@@ -452,6 +478,7 @@ func TestPreviewNotesAllGathersEveryPathAndHidesOrphans(t *testing.T) {
 // A hunk number is 1-based: 0 or negative is a caller usage error in domain,
 // so every frontend refuses it the same way.
 func TestPreviewHunkAnchorRefusesANonPositiveHunk(t *testing.T) {
+	t.Parallel()
 	svc, _ := newPreviewRepo(t)
 	ctx := context.Background()
 	set, err := svc.PreviewNotes(ctx, "feat", "main")

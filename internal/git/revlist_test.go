@@ -6,6 +6,7 @@ import (
 )
 
 func TestRevListRangeListsCommitsNewestFirst(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 	ctx := context.Background()
@@ -42,6 +43,7 @@ func TestRevListRangeListsCommitsNewestFirst(t *testing.T) {
 }
 
 func TestRevListRangeEmptyWhenTipIsBase(t *testing.T) {
+	t.Parallel()
 	dir, runner := newTestRepo(t)
 	r := &Repo{Runner: runner}
 	ctx := context.Background()

@@ -54,6 +54,10 @@ func (m Model) previewNoteSet() *domain.PreviewNoteSet {
 // previewNoteScope is the preview a file-list gesture acts in: the OPEN diff's
 // own stamp first (the rule everywhere else — the view's field, not Model state
 // at key time), falling back to the files view's set when no diff is open.
+// The top view's stamp wins even when it is NIL, on purpose: a commit diff
+// pushed over a preview's file list is an ordinary two-sided diff with a
+// perfectly addressable old side, so falling back to filesPreviewSet there
+// would refuse a valid `c` — or a valid steer — on the view actually on screen.
 func (m Model) previewNoteScope() *domain.PreviewNoteSet {
 	if v := m.diffLayer(); v != nil {
 		return v.previewSet
