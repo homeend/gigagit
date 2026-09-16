@@ -1112,3 +1112,40 @@ func TestPickerPageKeyConsumedBySnapback(t *testing.T) {
 		t.Fatalf("the snapping page key must be consumed, cursor moved to bi=%d line=%d", e.bi, e.line)
 	}
 }
+
+// Regression: with regions A, B (lines on both sides) and C (nothing on the
+// current side), C then ctrl+s must apply — region C has nothing to offer, so
+// the master toggle marks it skipped instead of leaving it undecided (which
+// blocked apply with "1 region(s) left to resolve").
+func TestConflictPickerMasterToggleSkipsEmptySideThenApplies(t *testing.T) {
+	t.Parallel()
+	d, _ := hunkpick.ParseConflict([]byte(
+		"top\n<<<<<<< HEAD\na\n=======\nx\n>>>>>>> r\nmid\n<<<<<<< HEAD\nb\n=======\ny\n>>>>>>> r\n" +
+			"<<<<<<< HEAD\n=======\nz\n>>>>>>> r\nend\n"))
+	e := newConflictPicker("f.txt", d)
+	var applied []byte
+	e.apply = func(m Model, content []byte) (Model, tea.Cmd) {
+		applied = content
+		return m, nil
+	}
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m, _ = e.update(m, key("C"))
+	if e.doc.Pending() != 0 {
+		t.Fatalf("Pending = %d after C, want 0", e.doc.Pending())
+	}
+	if !e.doc.Blocks()[2].Skipped() {
+		t.Fatal("empty-current region must read as skipped")
+	}
+	if m.statusMsg != i18n.T("all regions resolved — [ctrl+s] apply") {
+		t.Fatalf("status = %q, want the all-resolved hint", m.statusMsg)
+	}
+	m, _ = e.update(m, key("ctrl+s"))
+	if string(applied) != "top\na\nmid\nb\nend\n" {
+		t.Fatalf("ctrl+s must apply; applied = %q status = %q", applied, m.statusMsg)
+	}
+	// Second C clears current everywhere and resets the auto-skipped region.
+	m, _ = e.update(m, key("C"))
+	if e.doc.Blocks()[2].Mode != hunkpick.Undecided {
+		t.Fatal("clearing pass must reset the empty-side region to Undecided")
+	}
+}
