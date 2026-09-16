@@ -185,7 +185,9 @@ func TestPreviewSearchStartedDuringLoadRefindsOnContentArrival(t *testing.T) {
 // and 4 both rejected for that reason) to prove the search actually colours
 // the hit row: per BODY row (skipping the title, which carries the badge,
 // and the hint), a non-hit row's raw render is byte-identical to plain and
-// the hit row carries the search-emphasis colour at EXACTLY the hit's own
+// the hit row carries its search styling — st().diffEmph's colour for an
+// ordinary hit, st().currentHitStyle's reverse-video FLIP for the current one
+// (assertCurrentHitPaint) — at EXACTLY the hit's own
 // display columns — nowhere else on the row. Same idiom as
 // TestBlameSearchPaintsTheHit.
 func TestFilePreviewSearchPaintsTheHit(t *testing.T) {
@@ -261,7 +263,13 @@ func TestFilePreviewSearchPaintsTheHit(t *testing.T) {
 		if got := ansi.Strip(hitSlice); got != wantText {
 			t.Errorf("row %d: columns [%d,%d) hold %q, want the hit text %q", i, cs, ce, got, wantText)
 		}
-		if !strings.Contains(hitSlice, marker) {
+		ctx := fmt.Sprintf("row %d: columns [%d,%d)", i, cs, ce)
+		if h == p.search.hits[p.search.cur] {
+			// The CURRENT hit flips reverse video against its row — the
+			// preview's rows are never reversed, so reverse goes ON — and
+			// wears no foreground marker of its own.
+			assertCurrentHitPaint(t, ctx, hitSlice, wantText, marker, false)
+		} else if !strings.Contains(hitSlice, marker) {
 			t.Errorf("row %d: no search styling at the hit's own columns [%d,%d):\nslice: %q\nfull:  %q", i, cs, ce, hitSlice, wl)
 		}
 		if got := ansi.Cut(pl, cs, ce); strings.Contains(got, marker) {

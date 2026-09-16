@@ -92,6 +92,12 @@ func (mk cellMark) gapFor() lipgloss.Style {
 // (E/R/a are help-and-menu-only). Shortening a label is the way to add a
 // group; growing the line is not. TestDiffHintFitsTheBudget pins the number.
 // The scroll variant appends the pan keys.
+//
+// ORDER IS THE SECOND HALF OF THAT BUDGET: a terminal narrower than 140
+// truncates the line's TAIL (view.go cuts it to the width), so whatever sits
+// last is what a narrow terminal loses. [/] find rides near the front for
+// exactly that reason — it was last when it shipped, and the user reported the
+// footer "missing search hints".
 func diffHintFor(long longMode) string {
 	mode := i18n.T("scroll")
 	switch long {
@@ -104,7 +110,7 @@ func diffHintFor(long longMode) string {
 	if long == longScroll {
 		pan = i18n.T("  [←→0] pan")
 	}
-	return i18n.T("[↑↓/jk] scroll/line  [c/}{] notes  [z] align  [e] edit  [n/p] chg  [f] part  [/] find  [^w] %s", mode) + pan + i18n.T("  [h/b] hist/blame  [esc] close")
+	return i18n.T("[↑↓/jk] scroll/line  [/] find  [n/p] chg  [c/}{] notes  [z] align  [e] edit  [f] part  [^w] %s", mode) + pan + i18n.T("  [h/b] hist/blame  [esc] close")
 }
 
 // cellSeg is one pane's text for one display row: the sanitized display runes
@@ -408,6 +414,14 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 		var lh, rh []hitSpan
 		if v.search.active() {
 			lh, rh = v.search.hitsOn(dr.line, 0), v.search.hitsOn(dr.line, 1)
+			// An UNCHANGED row is SEARCHED on the right only, so that ] never
+			// stops twice on one piece of text (searchLines) — but both cells
+			// show that very text, so both must PAINT it: the sides are
+			// identical, hence so are the display offsets, and the current-hit
+			// flag rides along so the current hit lights up on both.
+			if r.Kind == textdiff.Same && len(lh) == 0 {
+				lh = rh
+			}
 		}
 		switch v.long {
 		case longWrap:
@@ -738,9 +752,11 @@ func hotEmphBody(text string, spans []textdiff.Span, toks []syntax.Tok, tw int, 
 }
 
 // styledRuns renders disp grouping consecutive runes by (emph, cls): the
-// current search hit wears st().searchCur, an ordinary hit and a word-diff
-// span st().diffEmph (both inherited over base, so the cell background shows
-// through), the rest wear base plus their syntax class's foreground. Emphasis
+// current search hit is painted by st().currentHitStyle over base (a flip of
+// reverse video, or the theme's search_current_bg patch), an ordinary hit and
+// a word-diff span wear st().diffEmph (inherited over base, so the cell
+// background shows through), the rest wear base plus their syntax class's
+// foreground. Emphasis
 // WINS over the syntax colour so the word-diff stays legible. An all-Plain cls
 // with no emphasis renders byte-identically to the pre-syntax renderer.
 func styledRuns(disp []rune, emph []emphLevel, cls []syntax.Class, base lipgloss.Style) string {
@@ -754,7 +770,7 @@ func styledRuns(disp []rune, emph []emphLevel, cls []syntax.Class, base lipgloss
 		seg := string(disp[i:j])
 		switch emph[i] {
 		case emphCur:
-			b.WriteString(base.Inherit(s.searchCur).Render(seg))
+			b.WriteString(s.currentHitStyle(base).Render(seg))
 		case emphHit, emphWord:
 			b.WriteString(base.Inherit(s.diffEmph).Render(seg))
 		default:

@@ -85,8 +85,10 @@ func (m runMask) pad(n int) runMask {
 // plain path, and a cell whose style REVERSES video drops the CLASS half of
 // the mask — reverse swaps foreground and background, so per-token colours
 // would paint per-token backgrounds (the same ruling winRow.cls follows) —
-// while the emphasis half survives, because bold/underline read either way
-// and the in-view search's current hit sits on the cursor cell.
+// while the emphasis half survives, because bold reads either way and the
+// in-view search's current hit, which sits on the cursor cell, paints itself
+// RELATIVE to that cell (styles.currentHitStyle: a hole in the reverse video,
+// or the theme's own background).
 type winCell struct {
 	gutter string
 	body   string
@@ -238,10 +240,11 @@ func pieceOrBlank(ps []cellPiece, k int) cellPiece {
 func renderPiece(style lipgloss.Style, p cellPiece, w int) string {
 	if style.GetReverse() {
 		// Reverse swaps foreground and background, so per-token colours would
-		// paint per-token BACKGROUNDS: the class mask drops. Emphasis is bold /
-		// underline, which reads either way — and the search's current hit
-		// lands on exactly this cell, the cursor row (spec §4.3). A mask with
-		// nothing emphasized keeps the byte-identical plain path.
+		// paint per-token BACKGROUNDS: the class mask drops. Emphasis is bold,
+		// which reads either way — and the search's current hit lands on
+		// exactly this cell, the cursor row, where it paints as a hole
+		// (styles.currentHitStyle). A mask with nothing emphasized keeps the
+		// byte-identical plain path.
 		if !p.mask.hasEmph() {
 			return styleCell(style, p.pre+p.body, w)
 		}

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -213,9 +214,10 @@ func TestDiffSearchBadgeIsOnTheHeader(t *testing.T) {
 // six hits arguments in diffPaneLines were all nil) and asserts, per row:
 // the TEXT is unchanged (ansi.Strip equal — a hit must never move a
 // character), a non-hit row's raw (styled) output is BYTE-IDENTICAL to plain,
-// and a hit row carries the search-emphasis colour (shared by st().diffEmph
-// and st().searchCur, which only adds underline) at EXACTLY the hit's own
-// display-column range — checked with ansi.Cut, which slices a styled string
+// and a hit row carries its search styling — st().diffEmph's colour for an
+// ordinary hit, st().currentHitStyle's reverse-video FLIP for the current one
+// (assertCurrentHitPaint), and on an UNCHANGED row the mirrored left cell
+// too — at EXACTLY the hit's own display-column range — checked with ansi.Cut, which slices a styled string
 // by column without disturbing its escape codes — and nowhere earlier on the
 // same row. curStart == curEnd (0, 0) removes the cursor marker so it cannot
 // confound the diff.
@@ -309,11 +311,46 @@ func TestDiffSearchPaintsTheHit(t *testing.T) {
 			if got := ansi.Strip(hitSlice); got != wantText {
 				t.Errorf("mode %d row %d: columns [%d,%d) hold %q, want the hit text %q", lm, i, cs, ce, got, wantText)
 			}
-			if !strings.Contains(hitSlice, marker) {
+			ctx := fmt.Sprintf("mode %d row %d: columns [%d,%d)", lm, i, cs, ce)
+			if h == v.search.hits[v.search.cur] {
+				// The CURRENT hit (the changed row's left "alpha") flips
+				// reverse video against its row — a diff row is never
+				// reversed, so reverse goes ON — and wears no foreground
+				// marker of its own.
+				assertCurrentHitPaint(t, ctx, hitSlice, wantText, marker, false)
+			} else if !strings.Contains(hitSlice, marker) {
 				t.Errorf("mode %d row %d: no search styling at the hit's own columns [%d,%d):\nslice: %q\nfull:  %q", lm, i, cs, ce, hitSlice, painted[i])
 			}
 			if got := ansi.Cut(plain[i], cs, ce); strings.Contains(got, marker) {
 				t.Errorf("mode %d row %d: fixture is unsound — the PLAIN render already carries the marker at [%d,%d)", lm, i, cs, ce)
+			}
+			// An UNCHANGED row (identical sides) is searched on the right
+			// only — one hit per row for stepping — but it must PAINT on
+			// both: the two cells hold the very same text, so the mirrored
+			// left cell takes the same display offsets. A CHANGED row must
+			// not mirror: its sides differ.
+			//
+			// The fixture's Same-row hit must stay an ORDINARY hit: the marker
+			// below is st().diffEmph's foreground, while the current hit paints
+			// through styles.currentHitStyle — if search.cur ever moves onto
+			// this row, assert it with assertCurrentHitPaint instead.
+			mcs, mce := hitCol(v.lines[i].Row, searchHit{row: h.row, side: 1 - h.side, start: h.start, end: h.end})
+			mirror := ansi.Cut(painted[i], mcs, mce)
+			if v.lines[i].Row.Kind == textdiff.Same {
+				if got := ansi.Strip(mirror); got != wantText {
+					t.Errorf("mode %d row %d: mirrored columns [%d,%d) hold %q, want the hit text %q", lm, i, mcs, mce, got, wantText)
+				}
+				// The sequence that actually paints the mirrored text, not
+				// merely one present somewhere in the cut (see sgrSeqBefore).
+				if got := sgrSeqBefore(mirror, wantText); !strings.Contains(got, marker) {
+					t.Errorf("mode %d row %d: an unchanged row must paint the hit on BOTH sides; columns [%d,%d) are painted by %q:\nslice: %q\nfull:  %q", lm, i, mcs, mce, got, mirror, painted[i])
+				}
+			} else {
+				mt := ansi.Strip(mirror)
+				seq := sgrSeqBefore(mirror, mt)
+				if strings.Contains(seq, marker) || sgrParams(seq)["7"] {
+					t.Errorf("mode %d row %d: a CHANGED row must paint only the side that matched, but the mirrored columns [%d,%d) holding %q are painted by %q", lm, i, mcs, mce, mt, seq)
+				}
 			}
 		}
 	}
@@ -412,8 +449,19 @@ func TestDiffHintFitsTheBudget(t *testing.T) {
 		if w := lipgloss.Width(diffHintFor(lm)); w > 140 {
 			t.Errorf("mode %d hint is %d columns, the budget is 140: %q", lm, w, diffHintFor(lm))
 		}
-		if !strings.Contains(diffHintFor(lm), "[/] find") {
-			t.Errorf("mode %d hint must advertise the search: %q", lm, diffHintFor(lm))
+		hint := diffHintFor(lm)
+		find := strings.Index(hint, "[/] find")
+		if find < 0 {
+			t.Errorf("mode %d hint must advertise the search: %q", lm, hint)
+			continue
+		}
+		// POSITION, not just presence: view.go truncates the footer's TAIL to
+		// the terminal width, so whatever sits late is what a narrow terminal
+		// loses. [/] find shipped LAST and vanished below 140 columns (the
+		// user's "bottom bar ... missing search hints"); it now rides near the
+		// front, ahead of the change keys, and must stay there.
+		if chg := strings.Index(hint, "[n/p]"); find <= 0 || chg < 0 || find > chg {
+			t.Errorf("mode %d: [/] find is at %d, [n/p] at %d — the search hint must come early (after the scroll keys, before the change keys): %q", lm, find, chg, hint)
 		}
 	}
 	// The widest variant is at the cap: any new group must shorten a label

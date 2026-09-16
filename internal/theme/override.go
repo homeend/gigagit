@@ -39,6 +39,8 @@ type Override struct {
 	SaveBannerFg   string `toml:"save_banner_fg"`
 	SaveBannerBg   string `toml:"save_banner_bg"`
 
+	SearchCurrent string `toml:"search_current_bg"`
+
 	NoticeHot string `toml:"notice_hot"`
 	NoticeDim string `toml:"notice_dim"`
 	ReviewHot string `toml:"review_hot"`
@@ -100,6 +102,8 @@ var roleFields = []roleField{
 	{"message_block_bg", "commit-message block background in popups", func(t *Theme) *string { return &t.MessageBlockBg }, func(o *Override) *string { return &o.MessageBlockBg }},
 	{"save_banner_fg", "save-to-file banner text", func(t *Theme) *string { return &t.SaveBannerFg }, func(o *Override) *string { return &o.SaveBannerFg }},
 	{"save_banner_bg", "save-to-file banner background", func(t *Theme) *string { return &t.SaveBannerBg }, func(o *Override) *string { return &o.SaveBannerBg }},
+
+	{"search_current_bg", "background of the CURRENT in-view search hit (empty = invert the hit against its row)", func(t *Theme) *string { return &t.SearchCurrent }, func(o *Override) *string { return &o.SearchCurrent }},
 
 	{"notice_hot", "notification-center badge while it blinks", func(t *Theme) *string { return &t.NoticeHot }, func(o *Override) *string { return &o.NoticeHot }},
 	{"notice_dim", "notification-center badge at rest", func(t *Theme) *string { return &t.NoticeDim }, func(o *Override) *string { return &o.NoticeDim }},

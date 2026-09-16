@@ -52,7 +52,7 @@ type styles struct {
 	diffGutter     lipgloss.Style
 	diffFold       lipgloss.Style
 	diffEmph       lipgloss.Style
-	searchCur      lipgloss.Style
+	searchCurBg    string // theme role search_current_bg; "" = flip (see currentHitStyle)
 	diffCursorRow  lipgloss.Style
 	diffCursorNo   lipgloss.Style
 	diffAddCursor  lipgloss.Style
@@ -143,12 +143,10 @@ func buildStyles(th theme.Theme) *styles {
 	s.diffGutter = ns().Foreground(dim)
 	s.diffFold = ns().Foreground(dim)
 	s.diffEmph = ns().Bold(true).Foreground(bright)
-	// The in-view search's CURRENT hit: word emphasis plus an underline. No new
-	// theme role (spec §4.3 asks for "word emphasis, the current hit
-	// brighter"): underline is the one attribute that reads under the Terminal
-	// theme, where bright is empty and diffEmph is bold-only, AND on the
-	// reverse-video cursor row the current hit always lands on.
-	s.searchCur = s.diffEmph.Underline(true)
+	// The in-view search's CURRENT hit is painted by currentHitStyle, not by a
+	// ready-made style: it is relative to the row it lands on. The theme role
+	// is kept raw here (legacy leaves it "", so the Terminal theme flips).
+	s.searchCurBg = th.SearchCurrent
 	s.diffCursorRow = ns().Background(pick(th.CursorRowBg, legacy.CursorRowBg))
 	s.diffCursorNo = ns().Bold(true).Foreground(bright)
 	s.diffAddCursor = ns().Background(pick(th.DiffAddCursorBg, legacy.DiffAddCursorBg))
@@ -209,6 +207,25 @@ func (s *styles) syntaxStyle(base lipgloss.Style, c syntax.Class) lipgloss.Style
 		return base.Foreground(lipgloss.Color(col))
 	}
 	return base
+}
+
+// currentHitStyle paints the in-view search's CURRENT hit over base — the
+// style the row underneath already wears (a diff cell background, the diff
+// cursor-row band, the reverse-video cursor row of blame and the picker).
+//
+// The hit is defined RELATIVE to its row, because an absolute colour drowns in
+// syntax highlighting (the user's report: "it is hard to notice the found
+// line, as the view is coloured"). With the theme role search_current_bg set,
+// the hit is an explicit background patch that also clears reverse, so it
+// overrides the cursor-row band and reads the same in every host. With the role
+// unset (the Terminal theme) the hit FLIPS reverse video: inverted against an
+// ordinary row, un-inverted — a hole — on a reversed one. Bold marks it as a
+// hit either way; underline, what it wore before, is gone.
+func (s *styles) currentHitStyle(base lipgloss.Style) lipgloss.Style {
+	if s.searchCurBg != "" {
+		return base.Reverse(false).Background(lipgloss.Color(s.searchCurBg)).Bold(true)
+	}
+	return base.Reverse(!base.GetReverse()).Bold(true)
 }
 
 // frame returns the colours paintFrame lays under the whole screen; both ""

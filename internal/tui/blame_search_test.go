@@ -227,8 +227,9 @@ func TestBlameSearchBadgeAndHint(t *testing.T) {
 // which alone could make painted != plain even with emph nil throughout):
 // every row's TEXT is unchanged (ansi.Strip equal — a hit must never move a
 // character), a non-hit row's raw (styled) output is BYTE-IDENTICAL to
-// plain, and a hit row carries the search-emphasis colour (shared by
-// st().diffEmph and st().searchCur, which only adds underline) at EXACTLY
+// plain, and a hit row carries its search styling — st().diffEmph's colour
+// for an ordinary hit, st().currentHitStyle's reverse-video FLIP for the
+// current one (assertCurrentHitPaint) — at EXACTLY
 // the hit's own display-column range — checked with ansi.Cut, which slices a
 // styled string by column without disturbing its escape codes — and nowhere
 // else on the same row. Two selRow cases run: 0 puts the cursor ON hit row 0,
@@ -306,7 +307,13 @@ func TestBlameSearchPaintsTheHit(t *testing.T) {
 			if got := ansi.Strip(hitSlice); got != wantText {
 				t.Errorf("selRow %d row %d: columns [%d,%d) hold %q, want the hit text %q", selRow, i, cs, ce, got, wantText)
 			}
-			if !strings.Contains(hitSlice, marker) {
+			ctx := fmt.Sprintf("selRow %d row %d: columns [%d,%d)", selRow, i, cs, ce)
+			if h == b.search.hits[b.search.cur] {
+				// The CURRENT hit flips reverse video against its row, so it
+				// carries no foreground marker at all — on selRow 0 the hit
+				// row IS the reversed cursor row, where the flip is a hole.
+				assertCurrentHitPaint(t, ctx, hitSlice, wantText, marker, selRow == i)
+			} else if !strings.Contains(hitSlice, marker) {
 				t.Errorf("selRow %d row %d: no search styling at the hit's own columns [%d,%d):\nslice: %q\nfull:  %q", selRow, i, cs, ce, hitSlice, w)
 			}
 			if got := ansi.Cut(p, cs, ce); strings.Contains(got, marker) {
