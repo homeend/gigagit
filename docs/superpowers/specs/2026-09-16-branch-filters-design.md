@@ -45,8 +45,13 @@ Array-of-tables in `.gg.toml`, global (`~/.config/gg/config.toml`) or repo
 (committed `.gg.toml` or the machine-private repo file, whichever "Repo
 settings location" selects):
 
+The blocks live under a `[branches]` section because `gg config populate`
+documents each section with a plain `[section]` header and a bare
+`[branch_filters]` table would collide with array-of-table blocks of the
+same name.
+
 ```toml
-[[branch_filters]]
+[[branches.filter]]
 slot = 2                 # 1..5, required, the alt+N key
 name = "stale"           # label shown in the panel header / list chip; default "slot N"
 mode = "hide"            # "hide" (default) | "show"  — show = show ONLY matching branches
@@ -84,11 +89,11 @@ Overlay (`overlayBranchFilters`): keyed by slot number. A repo file's slot N
 **replaces** global slot N whole; slots the repo omits fall through from
 global. This is the second deliberate exception to the field-level overlay
 (the first is `[[tools.command]]`) and is documented in `settingDocs`.
-Within one file, a duplicate slot makes the LATER block inert (the first
-wins), so hand-editing never silently flips a rule.
+A duplicate or out-of-range block is skipped and listed as a warning in
+Settings (first wins), so hand-editing never silently flips a rule.
 
 `populate.go` / `template.go`: the template gains a commented
-`[[branch_filters]]` example block (array blocks are inserted the way theme
+`[[branches.filter]]` example block (array blocks are inserted the way theme
 blocks are); `PopulateFile` counts a missing example as added.
 
 ## The `branchfilter` package (DAG leaf)
@@ -102,8 +107,8 @@ type Slot struct {
     Slot        int
     Name        string
     Mode        Mode
-    OlderThan   time.Duration // 0 = unset
-    YoungerThan time.Duration
+    OlderThan   string // raw text, parsed by Compile; "" = unset
+    YoungerThan string // raw text, parsed by Compile
     Prefix, Suffix, Contains string
     Regex       string
 }
@@ -153,14 +158,17 @@ dir), so alt+2 in the TUI is what the web shows on its next fetch. A stored
 slot that no longer exists, is inert, or is empty loads as **none** (the
 list shows everything, the header says nothing); it is not rewritten.
 
+The frontends read and write this record themselves (as they do for
+dismissed notices); domain has no state-dir handle.
+
 ## Domain
 
 ```go
-func (s *Service) BranchFilters(ctx) ([5]branchfilter.Compiled, error)      // from EffectiveConfig, compiled once per config load
-func (s *Service) ActiveBranchFilter(list string) int                         // "branches" | "remotes"; 0 = none
-func (s *Service) SetActiveBranchFilter(list string, slot int) error          // validates 0..5, persists
-func (s *Service) FilterBranches(ctx, bs []model.Branch, ws []model.Worktree) (verdicts []branchfilter.Verdict, hidden int, active *branchfilter.Compiled, err error)
-func (s *Service) FilterRemoteBranches(ctx, rbs []model.RemoteBranch, head model.Branch) (…same…)
+func (s *Service) BranchFilters(ctx context.Context) ([branchfilter.MaxSlots]branchfilter.Compiled, []string, error) // from EffectiveConfig; warnings = CompileAll's
+func ExemptBranches(bs []model.Branch, wts []model.Worktree) []bool        // HEAD or checked out in any worktree
+func ExemptRemoteBranches(rbs []model.RemoteBranch, bs []model.Branch) []bool // HEAD's upstream
+func BranchRows(bs []model.Branch) []branchfilter.Row                       // Name, UnixTime
+func RemoteBranchRows(rbs []model.RemoteBranch) []branchfilter.Row          // Branch (the part after the remote), UnixTime
 ```
 
 The two `Filter*` queries compute exemptions (HEAD + worktree branches;
@@ -198,7 +206,7 @@ state-file write, not a git write, and takes no reservation.
   `i18n.T` with all four bundles.
 - **Writer:** `config.SetBranchFilter(path string, s branchfilter.Slot) error`
   and `config.RemoveBranchFilter(path string, slot int) error` — scoped
-  line-edit writers that replace or remove the ONE `[[branch_filters]]` block
+  line-edit writers that replace or remove the ONE `[[branches.filter]]` block
   whose `slot = N`, preserving everything else (precedent: the theme-role and
   tools writers). No block for N ⇒ append.
 - **Verification before wiring:** confirm with `tui-capture.sh` that `alt+1`

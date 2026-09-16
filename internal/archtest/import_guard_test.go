@@ -152,3 +152,16 @@ func TestChangesetIsAStdlibLeaf(t *testing.T) {
 		}
 	}
 }
+
+// TestBranchfilterIsStdlibOnly pins internal/branchfilter's dependency
+// budget: it is the one evaluator behind the branch-filter slots, shared by
+// config, domain, the TUI, and the web server, so it must never grow a
+// dependency on git or any gg package.
+func TestBranchfilterIsStdlibOnly(t *testing.T) {
+	t.Parallel()
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/branchfilter") {
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/branchfilter imports %s — it must stay stdlib only", imp)
+		}
+	}
+}
