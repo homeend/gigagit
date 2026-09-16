@@ -8,13 +8,26 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **The current search hit is visible on coloured code.** The in-view search's
+  current hit no longer relies on a brighter foreground with an underline,
+  which drowned in syntax colour: it now INVERTS against the row it sits on —
+  reverse video over an ordinary row, and a hole (reverse off) over the
+  reverse-video cursor row of blame and the hunk picker. The new theme role
+  `search_current_bg` (dark `#6B5F11`, light `#FFE680`, unset for `terminal`)
+  replaces the inversion with a background of its own, which also overrides
+  the diff's cursor-row band. A hit on an UNCHANGED diff line now paints in
+  BOTH columns — the two sides hold the same text, so both light up, while
+  `]`/`[` still stop once per line. The diff footer also lists `[/] find`
+  right after the scroll keys, so a terminal narrower than 140 columns keeps
+  the search hint instead of truncating it away.
+
 - **In-view text search in the four readers.** The diff view, blame, the
   View-file preview and the hunk picker share one search: `/` searches
   forward, `@` backward, both incrementally from the cursor as you type;
   `enter` keeps the query, `esc` cancels it (and a second `esc` closes the
   view); `]`/`[` step to the next/previous hit, wrapping around; `n`/`p` keep
   their change/region meaning. Hits paint like word differences with the
-  current one underlined, the header shows `/foo  3/12`, the cursor moves onto
+  current one inverted against its row, the header shows `/foo  3/12`, the cursor moves onto
   the hit and scroll mode pans to its column. One shared history ring for all
   four, recalled with `alt+↑`/`alt+↓` like every other gg search field.
   Case-insensitive substring only — no regex, no whole-word; the browser UI

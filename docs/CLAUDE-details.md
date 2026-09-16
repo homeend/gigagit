@@ -475,7 +475,7 @@ colours under one theme name.
 
 **The colour editor ↔ writer contract.** Settings → "Theme colours…"
 (`internal/tui/theme_editor_popup.go`) edits ONE role at a time, addressed by
-`theme.RoleRef` (`internal/theme/roles.go`): all 50 of them — the `roleFields`
+`theme.RoleRef` (`internal/theme/roles.go`): all 54 of them — the `roleFields`
 scalars, then `lanes[0..6]`, then `syntax[Plain..Attr]`. Because `theme` is a
 DAG leaf it MIRRORS the syntax class names; `TestThemeSyntaxRoleNamesMatch-
 SyntaxClasses` in `internal/tui` pins that mirror (and the `syntax.Class`
@@ -965,10 +965,31 @@ render instead of re-laying-out on every keystroke.
 
 **Reverse video keeps emphasis.** `window.go` and `twocol.go` drop only the
 CLASS mask on a reversed row/cell (reverse would turn per-token foregrounds
-into per-token backgrounds); bold and underline read either way, and the
-current hit is by definition on the cursor row. `st().searchCur` is
-`diffEmph.Underline(true)` — no new theme role, and underline survives the
-Terminal theme, where `bright` is empty and `diffEmph` is bold-only.
+into per-token backgrounds); bold reads either way, and the current hit is by
+definition on the cursor row.
+
+**The CURRENT hit is defined relative to its row** (`styles.currentHitStyle`,
+the one style every host paints through in `styledRuns`). It first shipped as
+`diffEmph.Underline(true)`, an absolute brighter foreground, and the user
+reported it drowned in syntax colour ("it is hard to notice the found line, as
+the view is coloured"). Now: with the theme role `search_current_bg` set (dark
+`#6B5F11`, light `#FFE680`) the hit is an explicit BACKGROUND patch that also
+clears reverse, so it overrides the diff's cursor-row band and the reversed
+cursor rows of blame/picker alike; with the role unset — the Terminal theme,
+and `legacy`, which never carries it — the hit FLIPS reverse video against its
+base: inverted over an ordinary row, un-inverted (a hole) over a reversed one.
+Bold stays, underline is gone. The flip works only because every host composes
+a row PER SEGMENT (`colouredLine`/`renderPiece` render the row style around
+each run, never once around the whole line): a segment rendered with
+`Reverse(false)` emits no `7`, which on a clean, just-reset terminal state is
+exactly a hole.
+
+**Both cells of an unchanged row paint.** `diffPaneLines` mirrors
+`lh = rh` when the row is `Same` and the left side has no hits of its own: the
+sides hold identical text, so the display offsets (and the `cur` flag) carry
+over unchanged. Searching stays one-sided — this is a PAINT-time mirror, so
+`]`/`[` still stop once per unchanged line (the user's report was "I see
+highlighting only on the right").
 
 **Stepping is relative to the cursor, not to `cur`.** `]` is the first hit
 strictly after the cursor position, `[` the last strictly before; both wrap.
@@ -981,7 +1002,7 @@ on the line the user just walked to.
 **Per-host addressing.** Diff: `row` = index into `v.lines` (folded rows are
 not searched — it is an IN-VIEW search), `side` 0/1, and a row whose sides are
 identical is searched on the right only so `]` never stops twice on one piece
-of text. Blame and preview: one column, `side` 0, the gutter is the window's
+of text (both of its cells still PAINT the hit — see above). Blame and preview: one column, `side` 0, the gutter is the window's
 frozen prefix and so is never searchable. Picker: a FLAT candidate row (per
 block, every `Current` line then every `Incoming` line) plus `searchBase` to map
 a 2D cursor forward and `searchRows` to map a hit back; literals and the output
