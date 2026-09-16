@@ -92,6 +92,32 @@ func TestCompareBranches(t *testing.T) {
 	}
 }
 
+// A branch ↔ branch compare must survive core.abbrev below Endpoint's 7-char
+// floor. model.Branch.Hash is read as `%(objectname:short)`
+// (internal/git/repo.go), whose width honours core.abbrev — git's legal
+// minimum is 4 — so handing a tip straight to a must* constructor panicked the
+// handler and the request died with no response at all (net/http's
+// per-connection recover keeps the process up, so the symptom is a dropped
+// connection, not a crash). The names are resolved to FULL shas instead.
+func TestCompareBranchesShortAbbrev(t *testing.T) {
+	t.Parallel()
+	dir := compareRepo(t)
+	gitRun(t, dir, "config", "core.abbrev", "4")
+	ts := serve(t, New(domain.Open(dir)))
+
+	var body compareResp
+	if code := getJSON(t, ts, "/api/compare?a=main&b=side", &body); code != http.StatusOK {
+		t.Fatalf("code = %d", code)
+	}
+	wantA, wantB := gitRun(t, dir, "rev-parse", "main"), gitRun(t, dir, "rev-parse", "side")
+	if body.AHash != wantA || body.BHash != wantB {
+		t.Fatalf("hashes = %q / %q, want the full tips %q / %q", body.AHash, body.BHash, wantA, wantB)
+	}
+	if len(body.Files) == 0 {
+		t.Fatal("no files: the compare itself did not run")
+	}
+}
+
 // The per-file diff of a compare row must read the two BRANCH TIPS, not a
 // commit and its parent — the tips the compare response just handed back.
 func TestCompareRevDiff(t *testing.T) {

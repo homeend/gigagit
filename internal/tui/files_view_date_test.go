@@ -175,8 +175,8 @@ func TestFilesViewCompareModeHasNoDateLine(t *testing.T) {
 	m := openFilesView(t, datedFilesModel())
 	commitRows := m.filesPageRows()
 
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: "1111111aaaa"}
-	right := model.Endpoint{Kind: model.EndpointWorkTree}
+	left := mustCommitEndpoint("1111111aaaa")
+	right := model.WorkTreeEndpoint()
 	m2, _ := m.openCompareFiles(left, right)
 	if got := m2.filesMetaLineFor(); got != "" {
 		t.Fatalf("date line = %q in compare mode, want none", got)

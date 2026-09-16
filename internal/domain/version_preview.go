@@ -51,9 +51,17 @@ func (s *Service) VersionPreview(ctx context.Context, ref string) (PreviewEndpoi
 		if v.Base == "" || v.Ours == "" {
 			return PreviewEndpoints{}, ErrNoPreview
 		}
+		left, err := model.CommitEndpoint(v.Base)
+		if err != nil {
+			return PreviewEndpoints{}, err
+		}
+		right, err := model.CommitEndpoint(v.Ours)
+		if err != nil {
+			return PreviewEndpoints{}, err
+		}
 		return PreviewEndpoints{
-			Left:  model.Endpoint{Kind: model.EndpointCommit, Hash: v.Base},
-			Right: model.Endpoint{Kind: model.EndpointCommit, Hash: v.Ours},
+			Left:  left,
+			Right: right,
 		}, nil
 	}
 	return PreviewEndpoints{}, fmt.Errorf("version preview: no such version: %s", ref)

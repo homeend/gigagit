@@ -19,6 +19,27 @@ type wipRow struct {
 	count int
 }
 
+// mustCommitEndpoint and mustShelfEndpoint build an Endpoint from a hash/id
+// that came from git (a feed row, a rev-parse) or a gg store (a shelf
+// entry) — several TUI call sites cannot return an error, so a validation
+// failure there is a bug in the caller, not bad user input, and panics
+// loudly instead of building a silently wrong endpoint.
+func mustCommitEndpoint(hash string) model.Endpoint {
+	e, err := model.CommitEndpoint(hash)
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
+
+func mustShelfEndpoint(id string) model.Endpoint {
+	e, err := model.ShelfEndpoint(id)
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
+
 func (r wipRow) label() string {
 	if r.kind == wipStaged {
 		return "Staged"
@@ -148,11 +169,11 @@ func (m Model) selectedKey(p panel) (string, bool) {
 func (m Model) compareKeyEndpoint(key string) model.Endpoint {
 	switch key {
 	case wipKey(wipRow{kind: wipWorktree}):
-		return model.Endpoint{Kind: model.EndpointWorkTree}
+		return model.WorkTreeEndpoint()
 	case wipKey(wipRow{kind: wipStaged}):
-		return model.Endpoint{Kind: model.EndpointIndex}
+		return model.IndexEndpoint()
 	default:
-		return model.Endpoint{Kind: model.EndpointCommit, Hash: key}
+		return mustCommitEndpoint(key)
 	}
 }
 
@@ -193,13 +214,21 @@ func (m Model) compareKeyLabel(key string) string {
 //   - Working tree → index ↔ working tree    (the unstaged diff), or HEAD ↔
 //     working tree when nothing is staged (no Staged row to parent to — same
 //     files either way).
-func (m Model) wipEndpoints(r wipRow) (left, right model.Endpoint) {
-	head := model.Endpoint{Kind: model.EndpointCommit}
-	if len(m.commits) > 0 {
-		head.Hash = m.commits[0].Hash
+//
+// ok is false exactly when the pair would need HEAD and there is no commit
+// yet (a virgin repo with only staged/unstaged changes): there is no HEAD to
+// name, so there is no meaningful WIP-vs-HEAD compare to open. Both callers
+// (model.go's enter and l handlers) MUST check ok before calling
+// openCompareFiles — an invalid left endpoint panics there (CacheTag/Display
+// are called synchronously, before any git call), not merely fails a compare.
+func (m Model) wipEndpoints(r wipRow) (left, right model.Endpoint, ok bool) {
+	haveHead := len(m.commits) > 0
+	var head model.Endpoint
+	if haveHead {
+		head = mustCommitEndpoint(m.commits[0].Hash)
 	}
 	if r.kind == wipStaged {
-		return head, model.Endpoint{Kind: model.EndpointIndex}
+		return head, model.IndexEndpoint(), haveHead
 	}
 	hasStaged := false
 	for _, w := range m.wipRows {
@@ -208,7 +237,9 @@ func (m Model) wipEndpoints(r wipRow) (left, right model.Endpoint) {
 		}
 	}
 	if hasStaged {
-		return model.Endpoint{Kind: model.EndpointIndex}, model.Endpoint{Kind: model.EndpointWorkTree}
+		// index ↔ working tree never touches HEAD, so this pair is always
+		// valid even with zero commits.
+		return model.IndexEndpoint(), model.WorkTreeEndpoint(), true
 	}
-	return head, model.Endpoint{Kind: model.EndpointWorkTree}
+	return head, model.WorkTreeEndpoint(), haveHead
 }

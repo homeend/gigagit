@@ -405,10 +405,10 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 	m.filesRight = right
 	// h/b (history/blame) context: prefer a commit side; "" means working tree.
 	switch {
-	case right.Kind == model.EndpointCommit:
-		m.filesHash = right.Hash
-	case left.Kind == model.EndpointCommit:
-		m.filesHash = left.Hash
+	case right.Kind() == model.EndpointCommit:
+		m.filesHash = right.Hash()
+	case left.Kind() == model.EndpointCommit:
+		m.filesHash = left.Hash()
 	default:
 		m.filesHash = ""
 	}
@@ -787,8 +787,8 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 		// Full-tree mode: the file may be unchanged in this commit, so a
 		// parent-diff would be empty. Diff the commit's version against the
 		// working tree instead — useful for any file in the tree.
-		left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.filesHash}
-		right := model.Endpoint{Kind: model.EndpointWorkTree}
+		left := mustCommitEndpoint(m.filesHash)
+		right := model.WorkTreeEndpoint()
 		m.diffLayer().context = i18n.T("%s ↔ working tree", shortHash(m.filesHash))
 		m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
 		return m, m.loadCompareDiffCmd(left, right, l)

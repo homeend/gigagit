@@ -341,8 +341,8 @@ func previewOpenMsgFixture(gen int) previewOpenMsg {
 		id: "p1", source: "feat", target: "main", gen: gen,
 		eps: domain.PreviewEndpoints{
 			Summary: domain.PreviewSummary{State: domain.PreviewOK, SourceHash: src, TargetHash: tgt},
-			Left:    model.Endpoint{Kind: model.EndpointCommit, Hash: tgt},
-			Right:   model.Endpoint{Kind: model.EndpointCommit, Hash: src},
+			Left:    mustCommitEndpoint(tgt),
+			Right:   mustCommitEndpoint(src),
 		},
 		set:    domain.PreviewNoteSet{Source: "feat", Target: "main", Tip: src, Commits: []string{src}},
 		counts: map[string]int{"a.txt": 2},

@@ -598,8 +598,8 @@ func (m Model) compareCommitBookmark(b model.Bookmark) (Model, tea.Cmd) {
 	// under it); esc/l on the compare returns to it.
 	return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) {
 		return m.openCompareFiles(
-			model.Endpoint{Kind: model.EndpointCommit, Hash: b.Commit}, // base
-			model.Endpoint{Kind: model.EndpointCommit, Hash: subject})  // subject
+			mustCommitEndpoint(b.Commit), // base
+			mustCommitEndpoint(subject))  // subject
 	})
 }
 

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -69,9 +70,13 @@ func TestFileFinderHistoryActionOpensHistoryLayer(t *testing.T) {
 
 func TestFileFinderDiffActionOpensDiffLayer(t *testing.T) {
 	t.Parallel()
-	const path = "a/b.go"
+	// file0.txt is a real tracked file in loadedModelLinearCommits's fixture
+	// (finderSetup(t, path) only injects the lsFilesMsg — it does not make
+	// path exist in the repo — and the diff action now does a real HEAD
+	// resolve + git show, which needs a real path).
+	const path = "file0.txt"
 	m, rows := finderSetup(t, path)
-	nm, _ := finderRow(t, rows, "ff-diff")(m)
+	nm, cmd := finderRow(t, rows, "ff-diff")(m)
 	m = nm.(Model)
 
 	if layerOf[*diffView](m) == nil {
@@ -81,17 +86,46 @@ func TestFileFinderDiffActionOpensDiffLayer(t *testing.T) {
 		t.Fatal("the finder must be popped when the diff action runs")
 	}
 
-	// Guard the tag coupling: ff-diff inlines the tag; loadCompareDiffCmd also
-	// builds it from the same formula. Assert they byte-match so a future drift
-	// in either side fails this test rather than causing a silent hang.
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"}
-	right := model.Endpoint{Kind: model.EndpointWorkTree}
-	wantTag := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + path
+	// THE PIN for site 2: ff-diff must resolve HEAD to a sha before it
+	// builds the left Endpoint, so m.diffTag — which is built from
+	// left.CacheTag(), i.e. Endpoint.Hash verbatim — must carry that sha and
+	// NOT the rev-spec "HEAD". The expected sha is taken from m.commits[0],
+	// which the commit feed loaded through a DIFFERENT git call (git log
+	// --format=%H), so this oracle is independent of the resolver under
+	// test. Reverting file_finder.go to a raw
+	// model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"} literal makes
+	// the tag "cmp:HEAD:…" and fails here.
+	if len(m.commits) == 0 {
+		t.Fatal("fixture must have commits to name the expected HEAD sha")
+	}
+	head := m.commits[0].Hash
+	right := model.WorkTreeEndpoint()
+	wantTag := "cmp:" + head + ":" + right.CacheTag() + ":" + path
 	if m.diffTag == "" {
 		t.Fatal("ff-diff should set m.diffTag")
 	}
+	if strings.Contains(m.diffTag, "HEAD") {
+		t.Fatalf("diffTag must carry the RESOLVED sha, not the rev-spec \"HEAD\": %q", m.diffTag)
+	}
 	if m.diffTag != wantTag {
 		t.Fatalf("diffTag mismatch\n got:  %q\nwant: %q", m.diffTag, wantTag)
+	}
+
+	// Drive the async resolve+load: the returned diffMsg must carry the SAME
+	// tag (or it would be dropped as stale by the handler's gate) and a real
+	// resolved-HEAD diff, not an error.
+	if cmd == nil {
+		t.Fatal("ff-diff should return a load command")
+	}
+	dmsg, ok := cmd().(diffMsg)
+	if !ok {
+		t.Fatalf("expected a diffMsg, got %T", cmd())
+	}
+	if dmsg.tag != m.diffTag {
+		t.Fatalf("diffMsg.tag = %q, want %q (the pending gate value)", dmsg.tag, m.diffTag)
+	}
+	if dmsg.view.err != nil {
+		t.Fatalf("HEAD resolve/diff load failed: %v", dmsg.view.err)
 	}
 }
 

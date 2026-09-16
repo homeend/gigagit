@@ -34,24 +34,41 @@ type compareTreesOut struct {
 // endpointFor resolves one compare side. A commit rev resolves to its sha
 // BEFORE the compare (the resolve-to-tip-hash rule: never key a diff on a
 // mutable name).
+//
+// The sha comes from ResolveRev, not CommitLookup: CommitLookup's hash is `%h`
+// (model.LogLine.Hash), whose width honours core.abbrev — git's legal minimum
+// is 4, below model.CommitEndpoint's 7..64 floor — so keying the endpoint on it
+// made a legal repo config a hard failure. CommitLookup stays what it is
+// documented as, the display-facing read. This is the CLI's pattern
+// (internal/cli/compare.go).
 func (s *Server) endpointFor(ctx context.Context, side treeSideIn) (model.Endpoint, string, error) {
 	switch side.Kind {
 	case "worktree":
-		return model.Endpoint{Kind: model.EndpointWorkTree}, "worktree", nil
+		return model.WorkTreeEndpoint(), "worktree", nil
 	case "index":
-		return model.Endpoint{Kind: model.EndpointIndex}, "index", nil
+		return model.IndexEndpoint(), "index", nil
 	case "commit":
 		if side.Rev == "" {
 			return model.Endpoint{}, "", fmt.Errorf("rev is required for kind \"commit\"")
 		}
-		line, ok, err := s.svc.CommitLookup(ctx, side.Rev)
+		sha, ok, err := s.svc.ResolveRev(ctx, side.Rev)
 		if err != nil {
 			return model.Endpoint{}, "", fmt.Errorf("resolving %q: %v", side.Rev, err)
 		}
 		if !ok {
 			return model.Endpoint{}, "", fmt.Errorf("unknown revision: %s", side.Rev)
 		}
-		return model.Endpoint{Kind: model.EndpointCommit, Hash: line.Hash}, line.Hash + " " + line.Subject, nil
+		ep, err := model.CommitEndpoint(sha)
+		if err != nil {
+			return model.Endpoint{}, "", fmt.Errorf("resolving %q: %v", side.Rev, err)
+		}
+		// The label is cosmetic: the rev already resolved, so a lookup miss
+		// here only costs the subject, never the compare.
+		display := sha
+		if line, ok, _ := s.svc.CommitLookup(ctx, sha); ok {
+			display = line.Hash + " " + line.Subject
+		}
+		return ep, display, nil
 	default:
 		return model.Endpoint{}, "", fmt.Errorf(`kind must be "worktree", "index", or "commit" (got %q)`, side.Kind)
 	}

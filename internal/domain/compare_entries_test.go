@@ -30,6 +30,27 @@ func writeAndCommit(t *testing.T, dir, msg string, files map[string]string) stri
 	return headHash(t, dir)
 }
 
+// mustCommitEndpoint and mustShelfEndpoint build a valid Endpoint fixture,
+// failing the test immediately if the constructor refuses the value (which
+// would mean the fixture itself is wrong, not the code under test).
+func mustCommitEndpoint(t *testing.T, hash string) model.Endpoint {
+	t.Helper()
+	e, err := model.CommitEndpoint(hash)
+	if err != nil {
+		t.Fatalf("CommitEndpoint(%q): %v", hash, err)
+	}
+	return e
+}
+
+func mustShelfEndpoint(t *testing.T, id string) model.Endpoint {
+	t.Helper()
+	e, err := model.ShelfEndpoint(id)
+	if err != nil {
+		t.Fatalf("ShelfEndpoint(%q): %v", id, err)
+	}
+	return e
+}
+
 func TestResolveCommitEntryEndpoint(t *testing.T) {
 	t.Parallel()
 	dir, svc := newRealRepo(t)
@@ -42,7 +63,7 @@ func TestResolveCommitEntryEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("live resolve: %v", err)
 	}
-	if ep.Kind != model.EndpointCommit || ep.Hash != sha {
+	if ep.Kind() != model.EndpointCommit || ep.Hash() != sha {
 		t.Fatalf("live resolve = %+v, want EndpointCommit with full sha %s", ep, sha)
 	}
 
@@ -52,7 +73,7 @@ func TestResolveCommitEntryEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("frozen resolve: %v", err)
 	}
-	if ep.Kind != model.EndpointShelf || ep.ShelfID != "entry-1" {
+	if ep.Kind() != model.EndpointShelf || ep.ShelfID() != "entry-1" {
 		t.Fatalf("frozen resolve = %+v, want EndpointShelf entry-1", ep)
 	}
 
@@ -97,8 +118,8 @@ func TestCompareFilesShelfShelf(t *testing.T) {
 	}
 
 	files, err := svc.CompareFiles(ctx,
-		model.Endpoint{Kind: model.EndpointShelf, ShelfID: ea.ID},
-		model.Endpoint{Kind: model.EndpointShelf, ShelfID: eb.ID})
+		mustShelfEndpoint(t, ea.ID),
+		mustShelfEndpoint(t, eb.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,8 +171,8 @@ func TestCompareFilesShelfVsCommit(t *testing.T) {
 
 	// shelf (left/older) vs commit (right/newer): scoped to the shelf members.
 	files, err := svc.CompareFiles(ctx,
-		model.Endpoint{Kind: model.EndpointShelf, ShelfID: ea.ID},
-		model.Endpoint{Kind: model.EndpointCommit, Hash: shaB})
+		mustShelfEndpoint(t, ea.ID),
+		mustCommitEndpoint(t, shaB))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,8 +189,8 @@ func TestCompareFilesShelfVsCommit(t *testing.T) {
 
 	// Reversed order (commit older, shelf newer): the vanished member reads as added.
 	files, err = svc.CompareFiles(ctx,
-		model.Endpoint{Kind: model.EndpointCommit, Hash: shaB},
-		model.Endpoint{Kind: model.EndpointShelf, ShelfID: ea.ID})
+		mustCommitEndpoint(t, shaB),
+		mustShelfEndpoint(t, ea.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,8 +244,8 @@ func TestCompareFilesShelfShelfIdenticalOmitted(t *testing.T) {
 	}
 
 	files, err := svc.CompareFiles(ctx,
-		model.Endpoint{Kind: model.EndpointShelf, ShelfID: ea.ID},
-		model.Endpoint{Kind: model.EndpointShelf, ShelfID: eb.ID})
+		mustShelfEndpoint(t, ea.ID),
+		mustShelfEndpoint(t, eb.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,8 +284,8 @@ func TestComparePatchFrozen(t *testing.T) {
 	shaB := writeAndCommit(t, dir, "B", map[string]string{"f.txt": "new\n"})
 
 	patch, err := svc.ComparePatch(ctx,
-		model.Endpoint{Kind: model.EndpointShelf, ShelfID: ea.ID},
-		model.Endpoint{Kind: model.EndpointCommit, Hash: shaB})
+		mustShelfEndpoint(t, ea.ID),
+		mustCommitEndpoint(t, shaB))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -298,8 +319,8 @@ func TestComparePatchFrozenBinary(t *testing.T) {
 	shaB := writeAndCommit(t, dir, "B", map[string]string{"f.bin": "\x00new"})
 
 	patch, err := svc.ComparePatch(ctx,
-		model.Endpoint{Kind: model.EndpointShelf, ShelfID: ea.ID},
-		model.Endpoint{Kind: model.EndpointCommit, Hash: shaB})
+		mustShelfEndpoint(t, ea.ID),
+		mustCommitEndpoint(t, shaB))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -319,8 +340,8 @@ func TestComparePatchLiveCommits(t *testing.T) {
 	shaB := writeAndCommit(t, dir, "B", map[string]string{"f.txt": "new\n"})
 
 	patch, err := svc.ComparePatch(ctx,
-		model.Endpoint{Kind: model.EndpointCommit, Hash: shaA},
-		model.Endpoint{Kind: model.EndpointCommit, Hash: shaB})
+		mustCommitEndpoint(t, shaA),
+		mustCommitEndpoint(t, shaB))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,8 +402,8 @@ func TestComparePatchResolveErrorPropagates(t *testing.T) {
 	svc.SetShelfStore(fs)
 
 	_, err = svc.ComparePatch(ctx,
-		model.Endpoint{Kind: model.EndpointShelf, ShelfID: ea.ID},
-		model.Endpoint{Kind: model.EndpointCommit, Hash: shaB})
+		mustShelfEndpoint(t, ea.ID),
+		mustCommitEndpoint(t, shaB))
 	if !errors.Is(err, errBlobGone) {
 		t.Fatalf("ComparePatch error = %v, want errBlobGone propagated (got no error or a different one)", err)
 	}

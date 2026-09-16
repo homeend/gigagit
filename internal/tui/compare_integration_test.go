@@ -32,8 +32,8 @@ func headHashTUI(t *testing.T, dir string) string {
 func openCompareDiffOnFile(t *testing.T, repoDir string, repo *domain.Service, head, path string) *diffView {
 	t.Helper()
 	m := New(repo)
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: head}
-	right := model.Endpoint{Kind: model.EndpointWorkTree}
+	left := mustCommitEndpoint(head)
+	right := model.WorkTreeEndpoint()
 
 	m, cmd := m.openCompareFiles(left, right)
 	if cmd == nil {
@@ -115,8 +115,8 @@ func TestCompareCommitVsWorktreeRealDiff(t *testing.T) {
 	// The changed-file list must name README.md as modified.
 	m := New(domain.New(repo))
 	m2, cmd := m.openCompareFiles(
-		model.Endpoint{Kind: model.EndpointCommit, Hash: head},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		mustCommitEndpoint(head),
+		model.WorkTreeEndpoint())
 	cm := cmd().(compareFilesMsg)
 	if cm.err != nil {
 		t.Fatal(cm.err)
@@ -160,8 +160,8 @@ func TestCompareDiffRendersContentNotLoading(t *testing.T) {
 	m.loading = false // past the full-screen startup snapshot overlay
 
 	m, lcmd := m.openCompareFiles(
-		model.Endpoint{Kind: model.EndpointCommit, Hash: head},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		mustCommitEndpoint(head),
+		model.WorkTreeEndpoint())
 	if lcmd == nil {
 		t.Fatal("openCompareFiles returned no load command")
 	}

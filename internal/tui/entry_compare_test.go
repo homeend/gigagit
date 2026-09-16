@@ -54,7 +54,7 @@ func TestEntryCompareGenGuard(t *testing.T) {
 	t.Parallel()
 	m := newTestModel(t)
 	m.entryCompareGen = 5
-	upd, _ := m.Update(entryCompareMsg{gen: 4, left: model.Endpoint{Kind: model.EndpointCommit, Hash: "a"}, right: model.Endpoint{Kind: model.EndpointCommit, Hash: "b"}})
+	upd, _ := m.Update(entryCompareMsg{gen: 4, left: mustCommitEndpoint("aaaaaaa"), right: mustCommitEndpoint("bbbbbbb")})
 	mm := upd.(Model)
 	if mm.filesView != nil {
 		t.Fatal("a stale resolve must not open the compare view")

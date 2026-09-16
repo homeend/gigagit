@@ -21,9 +21,9 @@ func versionsPopupOverMain() (Model, *versionsPopup) {
 			{Branch: "main"}, {Branch: "topic"},
 		},
 		rows: []model.BranchVersion{
-			{Ref: "refs/gg/versions/main/1753100000-rebase", Hash: "snaphash0000000000", Subject: "did a rebase", Op: "rebase", Unix: 1753100000, Base: "basehash0000000000", Ours: "ourshash0000000000"},
-			{Ref: "refs/gg/versions/main/1753100001-rebase", Hash: "snaphash1111111111", Subject: "did another", Op: "rebase", Unix: 1753100001, Base: "basehash1111111111", Ours: "ourshash1111111111"},
-			{Ref: "refs/gg/versions/main/1753100002-amend", Hash: "amendhash00000000", Subject: "amended", Op: "amend", Unix: 1753100002},
+			{Ref: "refs/gg/versions/main/1753100000-rebase", Hash: "5aac0000000000", Subject: "did a rebase", Op: "rebase", Unix: 1753100000, Base: "babe0000000000", Ours: "0ded0000000000"},
+			{Ref: "refs/gg/versions/main/1753100001-rebase", Hash: "5aac1111111111", Subject: "did another", Op: "rebase", Unix: 1753100001, Base: "babe1111111111", Ours: "0ded1111111111"},
+			{Ref: "refs/gg/versions/main/1753100002-amend", Hash: "a3ed00000000", Subject: "amended", Op: "amend", Unix: 1753100002},
 		},
 		sel: 1,
 	}
@@ -111,8 +111,8 @@ func TestEntryCompareReturnsToBookmarkSwitcher(t *testing.T) {
 	m = m.pushLayer(bp)
 	mm, _ := m.Update(entryCompareMsg{
 		gen:   m.entryCompareGen,
-		left:  model.Endpoint{Kind: model.EndpointCommit, Hash: "aaaaaaaaaaaaaaaaaaaa"},
-		right: model.Endpoint{Kind: model.EndpointCommit, Hash: "bbbbbbbbbbbbbbbbbbbb"},
+		left:  mustCommitEndpoint("aaaaaaaaaaaaaaaaaaaa"),
+		right: mustCommitEndpoint("bbbbbbbbbbbbbbbbbbbb"),
 	})
 	m = mm.(Model)
 	if m.filesView == nil || !m.inCompareMode() {
@@ -135,7 +135,7 @@ func TestReopenInsideLiveViewKeepsParkedPopup(t *testing.T) {
 	m, p := versionsPopupOverMain()
 	p.sel = 2 // commit view
 	m = pressKey(t, m, "enter")
-	mm, _ := m.openChangedFiles(model.Commit{Hash: "amendhash00000000", Subject: "amended"})
+	mm, _ := m.openChangedFiles(model.Commit{Hash: "a3ed00000000", Subject: "amended"})
 	m = mm
 	if m.filesView == nil {
 		t.Fatal("re-open should keep a files view open")

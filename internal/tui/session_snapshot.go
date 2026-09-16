@@ -162,15 +162,15 @@ func filesModeProtoName(fm filesMode) string {
 }
 
 func endpointProto(e model.Endpoint) *snapEndpoint {
-	switch e.Kind {
+	switch e.Kind() {
 	case model.EndpointWorkTree:
 		return &snapEndpoint{Kind: "worktree"}
 	case model.EndpointIndex:
 		return &snapEndpoint{Kind: "index"}
 	case model.EndpointShelf:
-		return &snapEndpoint{Kind: "shelf", ShelfID: e.ShelfID}
+		return &snapEndpoint{Kind: "shelf", ShelfID: e.ShelfID()}
 	default:
-		return &snapEndpoint{Kind: "commit", Hash: e.Hash}
+		return &snapEndpoint{Kind: "commit", Hash: e.Hash()}
 	}
 }
 

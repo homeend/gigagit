@@ -259,8 +259,8 @@ func (p *versionsPopup) onEnter(m Model) (Model, tea.Cmd) {
 			// the very drift this feature exists to surface.
 			return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) {
 				return m.openCompareFiles(
-					model.Endpoint{Kind: model.EndpointCommit, Hash: v.Base},
-					model.Endpoint{Kind: model.EndpointCommit, Hash: v.Ours},
+					mustCommitEndpoint(v.Base),
+					mustCommitEndpoint(v.Ours),
 				)
 			})
 		}

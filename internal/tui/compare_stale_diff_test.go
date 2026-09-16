@@ -50,8 +50,8 @@ func loadedModelTwoFileCompare(t *testing.T) (Model, model.Endpoint, model.Endpo
 	if len(mm.commits) < 3 {
 		t.Fatalf("expected 3 commits, got %d", len(mm.commits))
 	}
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: mm.commits[2].Hash}  // root
-	right := model.Endpoint{Kind: model.EndpointCommit, Hash: mm.commits[0].Hash} // tip
+	left := mustCommitEndpoint(mm.commits[2].Hash)  // root
+	right := mustCommitEndpoint(mm.commits[0].Hash) // tip
 	return mm, left, right
 }
 

@@ -211,7 +211,7 @@ func (s *Server) writePreviewOpen(w http.ResponseWriter, r *http.Request, label,
 	writeJSON(w, map[string]any{
 		"state": eps.Summary.State.String(), "label": label,
 		"source": source, "target": target,
-		"left": eps.Left.Hash, "right": eps.Right.Hash,
+		"left": eps.Left.Hash(), "right": eps.Right.Hash(),
 		"source_hash": eps.Summary.SourceHash, "target_hash": eps.Summary.TargetHash,
 	})
 }

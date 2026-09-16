@@ -433,8 +433,8 @@ func (m Model) commitCompareWorktreeRow() (actionRow, bool) {
 		label: i18n.T("Compare against working tree"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openCompareFiles(
-				model.Endpoint{Kind: model.EndpointCommit, Hash: hash},
-				model.Endpoint{Kind: model.EndpointWorkTree})
+				mustCommitEndpoint(hash),
+				model.WorkTreeEndpoint())
 		},
 	}, true
 }
@@ -453,8 +453,8 @@ func (m Model) commitCompareStagedRow() (actionRow, bool) {
 		label: i18n.T("Compare against staged"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openCompareFiles(
-				model.Endpoint{Kind: model.EndpointCommit, Hash: hash},
-				model.Endpoint{Kind: model.EndpointIndex})
+				mustCommitEndpoint(hash),
+				model.IndexEndpoint())
 		},
 	}, true
 }
@@ -621,12 +621,26 @@ func (m Model) compareSelectionEndpoints() (left, right model.Endpoint, note str
 	if hasWip {
 		return left, right, i18n.T("range compare (3+) is commits-only; remove the working tree / staged row"), false
 	}
-	// 3+ commits: squash from oldest^. Refuse if the oldest is a root commit.
-	if oi := oldest.rank; oi >= 0 && oi < len(m.commits) && len(m.commits[oi].Parents) == 0 {
+	// 3+ commits: squash from oldest's parent. Refuse if the oldest is a root
+	// commit. compareKeyValid already guarantees oi is a real m.commits index
+	// whenever hasWip is false (the only way sel holds this key), but the
+	// bounds check stays defensive since it also protects the Parents index
+	// below.
+	oi := oldest.rank
+	if oi < 0 || oi >= len(m.commits) || len(m.commits[oi].Parents) == 0 {
 		return left, right, i18n.T("can't squash a range from the root commit"), false
 	}
-	return model.Endpoint{Kind: model.EndpointCommit, Hash: oldest.key + "^"},
-		model.Endpoint{Kind: model.EndpointCommit, Hash: newest.key}, "", true
+	// The parent sha is read directly from the already-loaded commit log
+	// (m.commits[oi].Parents[0]) rather than built as the "oldest.key^"
+	// REV-SPEC: a rev-spec in Endpoint.Hash is not 7..64 hex (CommitEndpoint
+	// would refuse it), and — more importantly — Endpoint.CacheTag() returns
+	// Hash verbatim and is the session diff-cache key, so a rev-spec there
+	// would key the cache on something defined only relative to a moving
+	// oldest.key, not a resolved sha (see the task-3b report). m.commits'
+	// Parents is always populated (git log's %P), so this is already a real,
+	// resolved parent sha — no extra git round-trip needed.
+	return mustCommitEndpoint(m.commits[oi].Parents[0]),
+		mustCommitEndpoint(newest.key), "", true
 }
 
 // commitCompareSelectionRow offers "Compare selection" when 2+ commits are in

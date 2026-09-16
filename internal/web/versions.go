@@ -44,7 +44,7 @@ func (s *Server) handleVersionPreview(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, map[string]any{"left": eps.Left.Hash, "right": eps.Right.Hash})
+	writeJSON(w, map[string]any{"left": eps.Left.Hash(), "right": eps.Right.Hash()})
 }
 
 // driftEntryRow is one changed path in a drift comparison.

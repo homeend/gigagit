@@ -56,8 +56,8 @@ func TestCompareFilesIncludesUntracked(t *testing.T) {
 
 	// commit → working tree
 	files, err := svc.CompareFiles(ctx,
-		model.Endpoint{Kind: model.EndpointCommit, Hash: head},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		mustCommitEndpoint(t, head),
+		model.WorkTreeEndpoint())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,8 +74,8 @@ func TestCompareFilesIncludesUntracked(t *testing.T) {
 
 	// index → working tree (the unstaged diff) must include it too.
 	files, err = svc.CompareFiles(ctx,
-		model.Endpoint{Kind: model.EndpointIndex},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		model.IndexEndpoint(),
+		model.WorkTreeEndpoint())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,8 +91,8 @@ func TestCompareFilesIncludesUntracked(t *testing.T) {
 
 	// commit → index (staged compare) must NOT include the untracked file.
 	files, err = svc.CompareFiles(ctx,
-		model.Endpoint{Kind: model.EndpointCommit, Hash: head},
-		model.Endpoint{Kind: model.EndpointIndex})
+		mustCommitEndpoint(t, head),
+		model.IndexEndpoint())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,8 +111,8 @@ func TestCompareFilesGatedQuery(t *testing.T) {
 	svc := New(&git.Repo{Runner: f})
 
 	files, err := svc.CompareFiles(context.Background(),
-		model.Endpoint{Kind: model.EndpointCommit, Hash: "abc123"},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		mustCommitEndpoint(t, "abc1234"),
+		model.WorkTreeEndpoint())
 	if err != nil {
 		t.Fatalf("CompareFiles err: %v", err)
 	}

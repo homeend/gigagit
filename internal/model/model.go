@@ -2,6 +2,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -259,72 +260,189 @@ type FileRef struct {
 type EndpointKind int
 
 const (
-	EndpointWorkTree EndpointKind = iota // the working tree (unstaged)
-	EndpointIndex                        // the index (staged)
-	EndpointCommit                       // a commit, by Hash
-	EndpointShelf                        // a shelved commit's frozen changed-file set, by ShelfID
+	// EndpointInvalid is the ZERO VALUE, and it is deliberately not a usable
+	// endpoint: an Endpoint{} is an unset variable or an error return, never
+	// "the working tree". Every method panics on it rather than guessing.
+	EndpointInvalid  EndpointKind = iota
+	EndpointWorkTree              // the working tree (unstaged)
+	EndpointIndex                 // the index (staged)
+	EndpointCommit                // a commit, by Hash
+	EndpointShelf                 // a shelved commit's frozen changed-file set, by ShelfID
+
+	// endpointKindCount must stay LAST. It is the exhaustiveness bound:
+	// endpoint_exhaustive_test.go walks EndpointInvalid+1 .. endpointKindCount
+	// and fails for any kind with no table row, so adding a kind above this
+	// line without adding a row breaks the build.
+	endpointKindCount
 )
 
 // Endpoint names one side of a whole-tree comparison.
+//
+// Its fields are unexported on purpose: the only way to make one is a
+// constructor (WorkTreeEndpoint, IndexEndpoint, CommitEndpoint,
+// ShelfEndpoint), each of which validates. Holding an Endpoint therefore
+// PROVES it is consistent, and no consumer re-checks. The zero value is
+// EndpointInvalid -- an unset variable or an error return, never a usable
+// endpoint.
 type Endpoint struct {
-	Kind    EndpointKind
-	Hash    string // commit hash when Kind == EndpointCommit; "" otherwise
-	ShelfID string // shelf entry id when Kind == EndpointShelf; "" otherwise
+	kind    EndpointKind
+	hash    string // commit hash when kind == EndpointCommit; "" otherwise
+	shelfID string // shelf entry id when kind == EndpointShelf; "" otherwise
 }
+
+// Kind is the endpoint's kind. EndpointInvalid means unset.
+func (e Endpoint) Kind() EndpointKind { return e.kind }
+
+// Valid reports whether the endpoint came from a constructor.
+func (e Endpoint) Valid() bool { return e.kind != EndpointInvalid }
+
+// Hash is the commit id, or "" for any other kind.
+func (e Endpoint) Hash() string { return e.hash }
+
+// ShelfID is the shelf entry id, or "" for any other kind.
+func (e Endpoint) ShelfID() string { return e.shelfID }
 
 // Display is the human label for an endpoint.
 func (e Endpoint) Display() string {
-	switch e.Kind {
+	switch e.kind {
 	case EndpointWorkTree:
 		return "Working Tree"
 	case EndpointIndex:
 		return "Staged"
 	case EndpointShelf:
-		id := e.ShelfID
+		id := e.shelfID
 		if len(id) > 9 {
 			id = id[:9]
 		}
 		return "shelf #" + id + " (frozen)"
-	default:
-		if len(e.Hash) > 7 {
-			return e.Hash[:7]
+	case EndpointCommit:
+		if len(e.hash) > 7 {
+			return e.hash[:7]
 		}
-		return e.Hash
+		return e.hash
+	default:
+		panic(endpointKindBug("Display", e.kind))
 	}
 }
 
 // FileRef maps the endpoint to a resolvable file reference for path.
 func (e Endpoint) FileRef(path string) FileRef {
-	switch e.Kind {
+	switch e.kind {
 	case EndpointWorkTree:
 		return FileRef{Source: SourceUnstaged, Path: path}
 	case EndpointIndex:
 		return FileRef{Source: SourceStaged, Path: path}
 	case EndpointShelf:
-		return FileRef{Source: SourceShelf, Locator: e.ShelfID, Path: path}
+		return FileRef{Source: SourceShelf, Locator: e.shelfID, Path: path}
+	case EndpointCommit:
+		return FileRef{Source: SourceCommit, Locator: e.hash, Path: path}
 	default:
-		return FileRef{Source: SourceCommit, Locator: e.Hash, Path: path}
+		panic(endpointKindBug("FileRef", e.kind))
 	}
 }
 
 // IsLive reports whether the endpoint's content can change on disk (working
 // tree or index) and therefore must never be cached.
 func (e Endpoint) IsLive() bool {
-	return e.Kind == EndpointWorkTree || e.Kind == EndpointIndex
+	switch e.kind {
+	case EndpointWorkTree, EndpointIndex:
+		return true
+	case EndpointCommit, EndpointShelf:
+		return false
+	default:
+		panic(endpointKindBug("IsLive", e.kind))
+	}
 }
 
 // CacheTag is a stable cache-key fragment for the endpoint (only meaningful
 // when !IsLive()).
 func (e Endpoint) CacheTag() string {
-	switch e.Kind {
+	switch e.kind {
 	case EndpointWorkTree:
 		return "worktree"
 	case EndpointIndex:
 		return "index"
 	case EndpointShelf:
-		return "shelf:" + e.ShelfID
+		return "shelf:" + e.shelfID
+	case EndpointCommit:
+		return e.hash
 	default:
-		return e.Hash
+		panic(endpointKindBug("CacheTag", e.kind))
+	}
+}
+
+// endpointKindBug is the one panic message shape. An invalid kind is always a
+// programming error -- an unset variable reaching a method, or a kind added to
+// the iota block without teaching the methods about it -- so it names both the
+// method and the kind.
+func endpointKindBug(method string, k EndpointKind) string {
+	if k == EndpointInvalid {
+		return "model.Endpoint." + method + ": endpoint is unset (EndpointInvalid); it was never given a kind"
+	}
+	return fmt.Sprintf("model.Endpoint.%s: unknown EndpointKind %d; add a case arm and a row in endpoint_exhaustive_test.go", method, k)
+}
+
+// ErrEndpoint wraps every constructor refusal, so a caller can tell a
+// malformed endpoint from a git failure without matching on prose.
+var ErrEndpoint = errors.New("bad endpoint")
+
+// WorkTreeEndpoint names the working tree. It cannot fail: there is nothing
+// to validate.
+func WorkTreeEndpoint() Endpoint { return Endpoint{kind: EndpointWorkTree} }
+
+// IndexEndpoint names the index. It cannot fail.
+func IndexEndpoint() Endpoint { return Endpoint{kind: EndpointIndex} }
+
+// CommitEndpoint names the tree at a commit. hash must be 7..64 hex
+// characters -- 64, not 40, because a sha-256 repository's commit ids are 64
+// hex characters. The bound matches model.ParseLink's, so a link and an
+// endpoint never disagree about what a commit id looks like.
+func CommitEndpoint(hash string) (Endpoint, error) {
+	if len(hash) < 7 || len(hash) > 64 {
+		return Endpoint{}, fmt.Errorf("%w: commit hash must be 7..64 characters, got %d", ErrEndpoint, len(hash))
+	}
+	for i := 0; i < len(hash); i++ {
+		if !isHexDigit(hash[i]) {
+			return Endpoint{}, fmt.Errorf("%w: commit hash must be hex, got %q", ErrEndpoint, hash)
+		}
+	}
+	return Endpoint{kind: EndpointCommit, hash: hash}, nil
+}
+
+// ShelfEndpoint names a shelved commit's frozen changed-file set.
+func ShelfEndpoint(id string) (Endpoint, error) {
+	if id == "" {
+		return Endpoint{}, fmt.Errorf("%w: shelf id is required", ErrEndpoint)
+	}
+	return Endpoint{kind: EndpointShelf, shelfID: id}, nil
+}
+
+func isHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+}
+
+// Bounded reports whether the endpoint evaluates to a FINITE, enumerated set
+// of paths rather than every file in the repository (spec section 3.1). A
+// shelf entry carries its own member list; a tree, a tip and the index do not.
+//
+// DELIBERATE DEVIATION FROM THE SPEC. Section 4.0 sketches a stored `bounded
+// bool` field, "computed ONCE at construction, never re-derived". A switch on
+// the kind is used instead, because boundedness is a total function of the
+// kind alone -- for every kind in this plan AND for the two 1b adds
+// (EndpointRef is unbounded, EndpointPair is bounded). A stored field would
+// duplicate the kind and introduce a second thing that can disagree with it.
+// The spec's actual requirement -- that the rule live in exactly one place and
+// no consumer re-derive it -- is met by this one switch, pinned by
+// TestBoundedMatchesTheSpecRule. If 1b finds a kind whose boundedness is NOT
+// determined by the kind, revisit this.
+func (e Endpoint) Bounded() bool {
+	switch e.kind {
+	case EndpointShelf:
+		return true
+	case EndpointWorkTree, EndpointIndex, EndpointCommit:
+		return false
+	default:
+		panic(endpointKindBug("Bounded", e.kind))
 	}
 }
 

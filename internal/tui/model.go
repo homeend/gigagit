@@ -2179,7 +2179,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				if r, ok := m.wipRowAt(m.commitSelUnified()); ok {
-					left, right := m.wipEndpoints(r)
+					left, right, epOK := m.wipEndpoints(r)
+					if !epOK {
+						m.statusMsg = i18n.T("no commit selected to compare against")
+						return m, nil
+					}
 					mm, cmd := m.openCompareFiles(left, right)
 					return mm.focusTree(), cmd
 				}
@@ -2447,7 +2451,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// files (it is not a real commit).
 				if u := m.commitSelUnified(); m.isWipRow(u) {
 					if r, ok := m.wipRowAt(u); ok {
-						left, right := m.wipEndpoints(r)
+						left, right, epOK := m.wipEndpoints(r)
+						if !epOK {
+							m.statusMsg = i18n.T("no commit selected to compare against")
+							return m, nil
+						}
 						return m.openCompareFiles(left, right)
 					}
 				}

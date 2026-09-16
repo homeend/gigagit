@@ -10,6 +10,18 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
+// mustCommitEndpoint builds a valid commit Endpoint fixture, failing the
+// test immediately if the constructor refuses the value (meaning the
+// fixture, not the code under test, is wrong).
+func mustCommitEndpoint(t *testing.T, hash string) model.Endpoint {
+	t.Helper()
+	e, err := model.CommitEndpoint(hash)
+	if err != nil {
+		t.Fatalf("CommitEndpoint(%q): %v", hash, err)
+	}
+	return e
+}
+
 func gitRun(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
@@ -60,9 +72,9 @@ func TestDiffTreeFilesAllForwardForms(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	commit := func(h string) model.Endpoint { return model.Endpoint{Kind: model.EndpointCommit, Hash: h} }
-	index := model.Endpoint{Kind: model.EndpointIndex}
-	work := model.Endpoint{Kind: model.EndpointWorkTree}
+	commit := func(h string) model.Endpoint { return mustCommitEndpoint(t, h) }
+	index := model.IndexEndpoint()
+	work := model.WorkTreeEndpoint()
 
 	// commit A → commit B: README modified, b.txt added
 	got, err := repo.DiffTreeFiles(ctx, commit(a), commit(b))
@@ -123,7 +135,7 @@ func TestDiffTreeFilesNonASCIIPath(t *testing.T) {
 	gitRun(t, dir, "commit", "-m", "B")
 	b := revParse(t, dir, "HEAD")
 
-	commit := func(h string) model.Endpoint { return model.Endpoint{Kind: model.EndpointCommit, Hash: h} }
+	commit := func(h string) model.Endpoint { return mustCommitEndpoint(t, h) }
 	got, err := repo.DiffTreeFiles(ctx, commit(a), commit(b))
 	if err != nil {
 		t.Fatal(err)
@@ -170,8 +182,8 @@ func TestDiffTreeFilesRejectsReversePair(t *testing.T) {
 	_, runner := newTestRepo(t)
 	repo := &Repo{Runner: runner}
 	_, err := repo.DiffTreeFiles(context.Background(),
-		model.Endpoint{Kind: model.EndpointWorkTree},
-		model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"})
+		model.WorkTreeEndpoint(),
+		mustCommitEndpoint(t, "abc1234"))
 	if err == nil {
 		t.Fatal("worktree→commit (reverse) must error")
 	}

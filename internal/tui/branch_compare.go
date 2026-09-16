@@ -58,17 +58,20 @@ func branchCompareTitle(left, right string, scope compareScope) string {
 	return t
 }
 
-// branchTipHash resolves a local branch's tip hash from the loaded branches
-// list; falls back to the name itself when the list doesn't know it (the
-// name is still a valid commit-ish — only the diff-cache immutability
-// guarantee is lost).
-func (m Model) branchTipHash(name string) string {
+// branchTipHash returns the tip sha for a branch name, and ok=false when the
+// name is not among the loaded branches. It never falls back to returning the
+// NAME: that value used to reach Endpoint.Hash, and Endpoint.CacheTag()
+// returns Hash verbatim as the session diff-cache key — a name there
+// silently keyed the cache on something that moves (see the task-3b
+// report). Callers must handle ok==false rather than opening a compare with
+// an unresolved endpoint.
+func (m Model) branchTipHash(name string) (string, bool) {
 	for _, b := range m.branches {
 		if b.Name == name {
-			return b.Hash
+			return b.Hash, true
 		}
 	}
-	return name
+	return "", false
 }
 
 // compareTagFor is the compare-view identity tag for an endpoint pair; both
@@ -89,11 +92,42 @@ func compareTagFor(left, right model.Endpoint) string {
 // same compare). The branch NAMES are kept for comparePairState.left/right,
 // the title, and the origin-set load — all display-facing or valid
 // commit-ish, never cache keys.
+//
+// Declines (returns m unchanged, with a status note) when either name is not
+// among the loaded branches — branchTipHash reports that as ok==false rather
+// than falling back to the name itself, which used to be able to reach
+// Endpoint.Hash (see branchTipHash's doc comment). The only production
+// caller (mark.go) guards this via markAlive first, so a decline here is not
+// expected to be user-visible in practice; the test suite calls
+// openBranchCompare directly with an empty m.branches, which is exactly the
+// miss this guards.
+//
+// It declines the SAME way when model.CommitEndpoint refuses a tip hash.
+// mustCommitEndpoint must never sit on this value: branch tips are read as
+// `%(objectname:short)` (internal/git/repo.go), whose width honours
+// core.abbrev, and git's legal minimum is 4 — below CommitEndpoint's 7..64
+// floor. A must* there turned a repo-config setting into a whole-app panic.
 func (m Model) openBranchCompare(marked, selected string) (Model, tea.Cmd) {
-	markedHash := m.branchTipHash(marked)
-	selectedHash := m.branchTipHash(selected)
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: markedHash}
-	right := model.Endpoint{Kind: model.EndpointCommit, Hash: selectedHash}
+	declined := func(m Model) (Model, tea.Cmd) {
+		m.statusMsg = i18n.T("no commit selected to compare against")
+		return m, nil
+	}
+	markedHash, ok := m.branchTipHash(marked)
+	if !ok {
+		return declined(m)
+	}
+	selectedHash, ok := m.branchTipHash(selected)
+	if !ok {
+		return declined(m)
+	}
+	left, err := model.CommitEndpoint(markedHash)
+	if err != nil {
+		return declined(m)
+	}
+	right, err := model.CommitEndpoint(selectedHash)
+	if err != nil {
+		return declined(m)
+	}
 	tag := compareTagFor(left, right)
 	// Same pair already showing: keep it (the openCompareFiles same-tag
 	// convention), and keep its state — re-arming would drop loaded origins.

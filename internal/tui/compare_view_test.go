@@ -12,8 +12,8 @@ func TestOpenCompareFilesPopulatesView(t *testing.T) {
 	if len(m.commits) == 0 {
 		t.Skip("no commits loaded")
 	}
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[0].Hash}
-	right := model.Endpoint{Kind: model.EndpointWorkTree}
+	left := mustCommitEndpoint(m.commits[0].Hash)
+	right := model.WorkTreeEndpoint()
 
 	m2, cmd := m.openCompareFiles(left, right)
 	if !m2.inCompareMode() || m2.filesView == nil {
@@ -44,8 +44,8 @@ func TestOpenCompareFilesPopulatesView(t *testing.T) {
 func TestCompareFilesMsgStaleDropped(t *testing.T) {
 	t.Parallel()
 	m := loadedModel(t)
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: "abc"}
-	m2, _ := m.openCompareFiles(left, model.Endpoint{Kind: model.EndpointWorkTree})
+	left := mustCommitEndpoint("abc1234")
+	m2, _ := m.openCompareFiles(left, model.WorkTreeEndpoint())
 	before := len(m2.filesView.lines)
 	m3, _ := m2.Update(compareFilesMsg{tag: "stale", files: nil})
 	if got := len(m3.(Model).filesView.lines); got != before {

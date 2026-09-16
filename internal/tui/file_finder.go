@@ -315,8 +315,33 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 			label: i18n.T("Diff (HEAD ↔ working tree)"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
-				left := model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"}
-				right := model.Endpoint{Kind: model.EndpointWorkTree}
+				// HEAD is resolved to a full sha HERE, on the Update
+				// thread, before it becomes an Endpoint: CacheTag()
+				// returns Hash verbatim and is the session diff-cache
+				// key, so the literal "HEAD" there would key the cache on
+				// a name that moves (see resolveHeadEndpoint). Resolving
+				// synchronously — one `git rev-parse`, the same shape as
+				// remote_actions.go's svc.RevParse in an action row — is
+				// what lets m.diffTag carry the RESOLVED sha and lets
+				// loadCompareDiffCmd's prologue (which reads the live
+				// layer via inheritIdentity) run on this thread instead
+				// of inside the tea.Cmd goroutine.
+				left, err := m.resolveHeadEndpoint()
+				if err != nil {
+					// Zero-commit repo or a failed resolve: open the view
+					// on its error rather than comparing against nothing.
+					// Title/context are kept so the header still says
+					// which file and which pair was attempted.
+					m = m.pushLayer(&diffView{
+						title:   path,
+						context: i18n.T("HEAD ↔ working tree"),
+						err:     err,
+					})
+					m.diffNav = diffNavNone
+					m.diffTag = ""
+					return m, nil
+				}
+				right := model.WorkTreeEndpoint()
 				v := &diffView{
 					title:   path,
 					context: i18n.T("HEAD ↔ working tree"),
@@ -326,6 +351,9 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 				}
 				m = m.pushLayer(v)
 				m.diffNav = diffNavNone
+				// Byte-identical to the tag loadCompareDiffCmd computes
+				// internally (the openDiffForFileLine convention), or the
+				// diffMsg would be dropped as stale by the handler's gate.
 				m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + path
 				return m, m.loadCompareDiffCmd(left, right, contentLine{path: path})
 			},

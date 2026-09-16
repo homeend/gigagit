@@ -133,11 +133,11 @@ func TestCommitBookmarkEnterComparesVsSelected(t *testing.T) {
 	if !m.inCompareMode() || m.filesView == nil {
 		t.Fatal("enter on a commit bookmark should open the compare files view")
 	}
-	if m.filesLeft.Hash != base {
-		t.Fatalf("left/base must be the bookmark commit, got %q want %q", m.filesLeft.Hash, base)
+	if m.filesLeft.Hash() != base {
+		t.Fatalf("left/base must be the bookmark commit, got %q want %q", m.filesLeft.Hash(), base)
 	}
-	if m.filesRight.Hash != m.commits[0].Hash {
-		t.Fatalf("right/subject must be the selected commit, got %q", m.filesRight.Hash)
+	if m.filesRight.Hash() != m.commits[0].Hash {
+		t.Fatalf("right/subject must be the selected commit, got %q", m.filesRight.Hash())
 	}
 	if cmd == nil {
 		t.Fatal("expected a load command for the compare")

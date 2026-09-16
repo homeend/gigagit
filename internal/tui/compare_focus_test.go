@@ -13,8 +13,8 @@ func TestCompareOpensTreeFocused(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	mm, _ := m.openCompareFiles(
-		model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		mustCommitEndpoint(m.commits[1].Hash),
+		model.WorkTreeEndpoint())
 	if !mm.filesTreeFocused {
 		t.Fatal("compare files view must open with the tree focused")
 	}
@@ -27,8 +27,8 @@ func TestCompareModeMoveKeepsComparison(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m, _ = m.openCompareFiles(
-		model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		mustCommitEndpoint(m.commits[1].Hash),
+		model.WorkTreeEndpoint())
 	m.filesView.lines = []contentLine{
 		{text: "M a.go", path: "a.go", status: "M"},
 		{text: "M b.go", path: "b.go", status: "M"},
@@ -60,8 +60,8 @@ func TestCompareModeMouseScrollKeepsComparison(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m, _ = m.openCompareFiles(
-		model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		mustCommitEndpoint(m.commits[1].Hash),
+		model.WorkTreeEndpoint())
 	tagBefore, hashBefore, selBefore := m.compareTag, m.filesHash, m.sel[panelCommits]
 
 	u, _ := m.moveCommitUnderFilesView(1) // the mouse path
@@ -106,8 +106,8 @@ func TestMarkTwoCommitsSelectThenCompare(t *testing.T) {
 		t.Fatal("Compare selection must open the compare files view")
 	}
 	// older (commits[1]) → newer (commits[0]).
-	if mm.filesLeft.Hash != m.commits[1].Hash || mm.filesRight.Hash != m.commits[0].Hash {
-		t.Fatalf("endpoints = %s↔%s, want older↔newer", mm.filesLeft.Hash, mm.filesRight.Hash)
+	if mm.filesLeft.Hash() != m.commits[1].Hash || mm.filesRight.Hash() != m.commits[0].Hash {
+		t.Fatalf("endpoints = %s↔%s, want older↔newer", mm.filesLeft.Hash(), mm.filesRight.Hash())
 	}
 }
 
@@ -141,7 +141,7 @@ func TestSelectCommitThenWorktreeCompares(t *testing.T) {
 		t.Fatal("Compare selection must open a compare")
 	}
 	// commit (older) → working tree (newer).
-	if mm.filesLeft.Kind != model.EndpointCommit || mm.filesRight.Kind != model.EndpointWorkTree {
-		t.Fatalf("endpoints = %v↔%v, want Commit↔WorkTree", mm.filesLeft.Kind, mm.filesRight.Kind)
+	if mm.filesLeft.Kind() != model.EndpointCommit || mm.filesRight.Kind() != model.EndpointWorkTree {
+		t.Fatalf("endpoints = %v↔%v, want Commit↔WorkTree", mm.filesLeft.Kind(), mm.filesRight.Kind())
 	}
 }

@@ -3,7 +3,7 @@ package model
 import "testing"
 
 func TestEndpointShelf(t *testing.T) {
-	e := Endpoint{Kind: EndpointShelf, ShelfID: "commit-1a2b3c4-deadbeef"}
+	e := mustShelf("commit-1a2b3c4-deadbeef")
 
 	if e.IsLive() {
 		t.Error("a frozen shelf endpoint must not be live (it is immutable and cacheable)")
@@ -19,7 +19,7 @@ func TestEndpointShelf(t *testing.T) {
 		t.Errorf("Display = %q, want %q", got, want)
 	}
 	// A short id is not truncated.
-	short := Endpoint{Kind: EndpointShelf, ShelfID: "ab"}
+	short := mustShelf("ab")
 	if got, want := short.Display(), "shelf #ab (frozen)"; got != want {
 		t.Errorf("Display = %q, want %q", got, want)
 	}
