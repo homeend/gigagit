@@ -156,6 +156,33 @@ func TestOpenBranchCompareUnknownBranchDeclines(t *testing.T) {
 	}
 }
 
+// TestOpenBranchCompareShortTipHashDeclines pins the core.abbrev regression:
+// branch tips arrive as %(objectname:short), whose width honours core.abbrev,
+// and git's legal minimum is 4 — below model.CommitEndpoint's 7..64 floor.
+// openBranchCompare used to hand those straight to mustCommitEndpoint, which
+// PANICS, so `core.abbrev = 4` in a user's git config crashed the whole TUI.
+// It must decline the compare instead, exactly as it does for a branchTipHash
+// miss.
+func TestOpenBranchCompareShortTipHashDeclines(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 120, height: 40, branches: []model.Branch{
+		{Name: "feat/x", Hash: "aaaa"}, // core.abbrev = 4
+		{Name: "main", Hash: "bbbb"},
+	}}
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("a short (core.abbrev) tip hash must not panic: %v", r)
+		}
+	}()
+	m, _ = m.openBranchCompare("feat/x", "main")
+	if m.filesView != nil || m.inCompareMode() {
+		t.Fatalf("an unbuildable endpoint must not open the compare view: filesView=%v comparePair=%v", m.filesView, m.comparePair)
+	}
+	if m.statusMsg == "" {
+		t.Fatal("declining must leave a status note, not fail silently")
+	}
+}
+
 // f must refuse to cycle before the raw file list has arrived — cycling
 // against a nil list would render a transient "(no files)" via
 // filterCompareFiles(nil, set) even once origins are loaded.

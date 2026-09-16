@@ -773,42 +773,32 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 	}
 }
 
-// resolveHeadEndpoint resolves HEAD to a sha through the domain service and
-// builds the resulting Endpoint. HEAD must be resolved to a sha before it
-// reaches model.CommitEndpoint: Endpoint.CacheTag() returns Hash verbatim
-// and is the session diff-cache key, so the literal "HEAD" there would key
-// the cache on a name that moves — `gg compare HEAD @worktree`, reopened
-// after a commit, could then serve the previous diff (see the task-3b
-// report). Used by loadHeadFileDiffCmd (off the UI thread) and pinned
+// resolveHeadEndpoint resolves HEAD to a FULL sha through the domain service
+// and builds the resulting Endpoint. HEAD must be resolved before it reaches
+// model.CommitEndpoint: Endpoint.CacheTag() returns Hash verbatim and is the
+// session diff-cache key, so the literal "HEAD" there would key the cache on
+// a name that moves — a commit↔commit compare re-opened after HEAD advanced
+// could then be served the PREVIOUS diff (a live side bypasses the cache
+// entirely, see compareDiffKey; commit↔commit is the pair that caches).
+//
+// It resolves via svc.ResolveRev, NOT svc.CommitLookup: CommitLookup reads
+// `git log --format=%h`, whose width honours core.abbrev — legal down to 4 —
+// and model.CommitEndpoint requires 7..64, so a repo with core.abbrev < 7
+// would turn every resolve here into a hard failure. ResolveRev is
+// `git rev-parse --verify`, always a full 40/64-hex sha, and follows the same
+// "missing is not an error" convention.
+//
+// Called on the UPDATE thread (file_finder.go's "ff-diff" action) and pinned
 // directly by TestCompareTagDoesNotKeyOnAMovingRev.
 func (m Model) resolveHeadEndpoint() (model.Endpoint, error) {
-	line, ok, err := m.svc.CommitLookup(context.Background(), "HEAD")
+	sha, ok, err := m.svc.ResolveRev(context.Background(), "HEAD")
 	if err != nil {
 		return model.Endpoint{}, err
 	}
 	if !ok {
 		return model.Endpoint{}, errors.New("no commit yet")
 	}
-	return model.CommitEndpoint(line.Hash)
-}
-
-// loadHeadFileDiffCmd resolves HEAD off the UI thread (resolveHeadEndpoint),
-// then loads the HEAD ↔ working tree diff for path via loadCompareDiffCmd.
-// tag is the value the caller (file_finder.go's "ff-diff" action) already
-// set m.diffTag to synchronously, before the resolve completes; the
-// returned diffMsg is forced to carry that SAME tag so it is not dropped as
-// stale by the diffMsg handler's tag gate (model.go), which compares against
-// m.diffTag as it stood when the action ran.
-func (m Model) loadHeadFileDiffCmd(path string, right model.Endpoint, tag string) tea.Cmd {
-	return func() tea.Msg {
-		left, err := m.resolveHeadEndpoint()
-		if err != nil {
-			return diffMsg{tag: tag, view: &diffView{err: err}}
-		}
-		msg := m.loadCompareDiffCmd(left, right, contentLine{path: path})().(diffMsg)
-		msg.tag = tag
-		return msg
-	}
+	return model.CommitEndpoint(sha)
 }
 
 // update lets a diffView live on the layer stack: it delegates to the existing

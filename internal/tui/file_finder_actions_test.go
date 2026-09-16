@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -85,15 +86,26 @@ func TestFileFinderDiffActionOpensDiffLayer(t *testing.T) {
 		t.Fatal("the finder must be popped when the diff action runs")
 	}
 
-	// Guard the tag coupling: ff-diff sets m.diffTag to a placeholder built
-	// with the "HEAD" literal (a transient UI dispatch-gating value, never an
-	// Endpoint.Hash — see file_finder.go and loadHeadFileDiffCmd in
-	// diff_view.go). Assert the two byte-match so a future drift in either
-	// side fails this test rather than causing a silent hang.
+	// THE PIN for site 2: ff-diff must resolve HEAD to a sha before it
+	// builds the left Endpoint, so m.diffTag — which is built from
+	// left.CacheTag(), i.e. Endpoint.Hash verbatim — must carry that sha and
+	// NOT the rev-spec "HEAD". The expected sha is taken from m.commits[0],
+	// which the commit feed loaded through a DIFFERENT git call (git log
+	// --format=%H), so this oracle is independent of the resolver under
+	// test. Reverting file_finder.go to a raw
+	// model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"} literal makes
+	// the tag "cmp:HEAD:…" and fails here.
+	if len(m.commits) == 0 {
+		t.Fatal("fixture must have commits to name the expected HEAD sha")
+	}
+	head := m.commits[0].Hash
 	right := model.WorkTreeEndpoint()
-	wantTag := "cmp:HEAD:" + right.CacheTag() + ":" + path
+	wantTag := "cmp:" + head + ":" + right.CacheTag() + ":" + path
 	if m.diffTag == "" {
 		t.Fatal("ff-diff should set m.diffTag")
+	}
+	if strings.Contains(m.diffTag, "HEAD") {
+		t.Fatalf("diffTag must carry the RESOLVED sha, not the rev-spec \"HEAD\": %q", m.diffTag)
 	}
 	if m.diffTag != wantTag {
 		t.Fatalf("diffTag mismatch\n got:  %q\nwant: %q", m.diffTag, wantTag)

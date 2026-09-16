@@ -101,19 +101,33 @@ func compareTagFor(left, right model.Endpoint) string {
 // expected to be user-visible in practice; the test suite calls
 // openBranchCompare directly with an empty m.branches, which is exactly the
 // miss this guards.
+//
+// It declines the SAME way when model.CommitEndpoint refuses a tip hash.
+// mustCommitEndpoint must never sit on this value: branch tips are read as
+// `%(objectname:short)` (internal/git/repo.go), whose width honours
+// core.abbrev, and git's legal minimum is 4 — below CommitEndpoint's 7..64
+// floor. A must* there turned a repo-config setting into a whole-app panic.
 func (m Model) openBranchCompare(marked, selected string) (Model, tea.Cmd) {
-	markedHash, ok := m.branchTipHash(marked)
-	if !ok {
+	declined := func(m Model) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("no commit selected to compare against")
 		return m, nil
+	}
+	markedHash, ok := m.branchTipHash(marked)
+	if !ok {
+		return declined(m)
 	}
 	selectedHash, ok := m.branchTipHash(selected)
 	if !ok {
-		m.statusMsg = i18n.T("no commit selected to compare against")
-		return m, nil
+		return declined(m)
 	}
-	left := mustCommitEndpoint(markedHash)
-	right := mustCommitEndpoint(selectedHash)
+	left, err := model.CommitEndpoint(markedHash)
+	if err != nil {
+		return declined(m)
+	}
+	right, err := model.CommitEndpoint(selectedHash)
+	if err != nil {
+		return declined(m)
+	}
 	tag := compareTagFor(left, right)
 	// Same pair already showing: keep it (the openCompareFiles same-tag
 	// convention), and keep its state — re-arming would drop loaded origins.

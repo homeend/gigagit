@@ -108,6 +108,76 @@ func TestCompareCommitRange(t *testing.T) {
 	}
 }
 
+// TestCompareShortCoreAbbrev pins the core.abbrev regression. The commit-ish
+// resolver used to read svc.CommitLookup, i.e. `git log --format=%h`, whose
+// width honours core.abbrev — git's legal minimum is 4, while
+// model.CommitEndpoint requires 7..64. On `core.abbrev = 4` every commit-ish
+// token therefore failed with "commit hash must be 7..64 characters, got 4"
+// and exit 2, on a path that used to work. Both pairs are covered: the live
+// pair (never cached) and the commit↔commit pair (the one that caches).
+func TestCompareShortCoreAbbrev(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t) // one commit: README.md, on main
+	gitRun(t, dir, "config", "core.abbrev", "4")
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644)
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-q", "-m", "c2")
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirtied\n"), 0o644)
+
+	code, out, errb := runCLI(t, dir, "compare", "HEAD", "@worktree")
+	if code != 0 {
+		t.Fatalf("compare HEAD @worktree under core.abbrev=4: exit = %d, stderr: %s", code, errb)
+	}
+	if !strings.Contains(out, "README.md") {
+		t.Fatalf("compare HEAD @worktree must list README.md:\n%s", out)
+	}
+
+	code, out, errb = runCLI(t, dir, "compare", "HEAD~1", "HEAD")
+	if code != 0 {
+		t.Fatalf("compare HEAD~1 HEAD under core.abbrev=4: exit = %d, stderr: %s", code, errb)
+	}
+	if !strings.Contains(out, "b.txt") {
+		t.Fatalf("compare HEAD~1 HEAD must list b.txt:\n%s", out)
+	}
+}
+
+// TestCompareUnknownRevExitsUsage: an unresolvable rev is bad INPUT, so it
+// exits 2 (usage). A resolve that fails for another reason exits 1 — see
+// resolveCompareSpec's errUnknownRev split and its KNOWN GAP note.
+func TestCompareUnknownRevExitsUsage(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	code, _, errb := runCLI(t, dir, "compare", "no-such-rev", "@worktree")
+	if code != 2 {
+		t.Fatalf("unresolvable rev must exit 2 (usage), got %d; stderr: %s", code, errb)
+	}
+	if !strings.Contains(errb, "unknown revision") {
+		t.Fatalf("stderr should name the unknown revision:\n%s", errb)
+	}
+}
+
+// TestResolveCompareSpecFailedResolveExitsOne pins the other half of the
+// split: parseEndpoint's error for a FAILED resolve does not wrap
+// errUnknownRev, so resolveCompareSpec must not classify it as usage.
+func TestResolveCompareSpecFailedResolveExitsOne(t *testing.T) {
+	t.Parallel()
+	_, err := parseEndpoint("HEAD", func(string) (string, bool, error) {
+		return "", false, errors.New("repo is locked")
+	})
+	if err == nil {
+		t.Fatal("a failed resolve must produce an error")
+	}
+	if errors.Is(err, errUnknownRev) {
+		t.Fatalf("a failed resolve must NOT be classified as a usage error: %v", err)
+	}
+	_, err = parseEndpoint("no-such-rev", func(string) (string, bool, error) {
+		return "", false, nil
+	})
+	if !errors.Is(err, errUnknownRev) {
+		t.Fatalf("an unresolvable rev must wrap errUnknownRev, got %v", err)
+	}
+}
+
 func TestCompareDefaultsToWorktree(t *testing.T) {
 	t.Parallel()
 	dir := newCLIRepo(t)
