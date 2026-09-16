@@ -9,6 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
+
+	"github.com/homeend/gigagit/internal/i18n"
 )
 
 // NOTE: TestFilePreviewSearchPaintsTheHit calls lipgloss.SetColorProfile
@@ -122,6 +124,59 @@ func TestPreviewSearchStepsAndBadges(t *testing.T) {
 	}
 	if !strings.Contains(out, "[/] find") {
 		t.Fatalf("the hint must advertise the search:\n%s", out)
+	}
+}
+
+// TestPreviewSearchStartedDuringLoadRefindsOnContentArrival covers the case a
+// search is opened while the preview still shows the "(loading…)"
+// placeholder: its hits (and cur) were computed against that single line, so
+// when the real content lands in fileContentMsg they are stale until the
+// fix re-runs refindFrom/snapHit in that handler. Row/sel are asserted via
+// the same previewClamp/snapHit arithmetic the production code uses, not a
+// magic number, so the test tracks the real geometry regardless of terminal
+// size.
+func TestPreviewSearchStartedDuringLoadRefindsOnContentArrival(t *testing.T) {
+	t.Parallel()
+	m := fullTreeTreeSideOf(t, previewModelN("ignored\n"))
+	for _, r := range availableActions(m) {
+		if r.id == "view-file" {
+			updated, _ := r.run(m) // open the preview but do NOT deliver the load cmd yet
+			m = updated.(Model)
+		}
+	}
+	if m.filesPreview == nil || m.filesPreview.lines[0].text != i18n.T("(loading…)") {
+		t.Fatalf("expected the preview to still show the placeholder, got %+v", m.filesPreview)
+	}
+	tag := m.filesPreviewTag
+	rows := m.filePreviewRowsCap()
+
+	// Start a search for a needle that is not in the placeholder text.
+	m = feedPreview(m, "/", "n", "e", "e", "d", "l", "e")
+	if len(m.filesPreview.search.hits) != 0 {
+		t.Fatalf("the placeholder must not match: hits = %v", m.filesPreview.search.hits)
+	}
+
+	// The needle lands well past the bottom of the window (rows+10), so a
+	// stale sel=0 would leave it off-screen — proving snapHit actually ran.
+	var lines []contentLine
+	for i := 0; i < rows+10; i++ {
+		lines = append(lines, contentLine{text: fmt.Sprintf("line%03d", i)})
+	}
+	needleRow := len(lines)
+	lines = append(lines, contentLine{text: "here is the needle"})
+	u, _ := m.Update(fileContentMsg{tag: tag, lines: lines})
+	m = u.(Model)
+
+	p := m.filesPreview
+	if len(p.search.hits) != 1 || p.search.hits[0].row != needleRow {
+		t.Fatalf("hits = %v, want one hit on row %d", p.search.hits, needleRow)
+	}
+	if p.search.cur != 0 {
+		t.Fatalf("cur = %d, want 0", p.search.cur)
+	}
+	want := previewClamp(needleRow-rows+1, len(lines), rows, p.mode)
+	if p.sel != want {
+		t.Fatalf("sel = %d, want %d (the hit row must scroll into view once the content lands)", p.sel, want)
 	}
 }
 

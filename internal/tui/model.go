@@ -696,8 +696,19 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesPreview.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
 			return m, nil
 		}
-		m.filesPreview.lines = msg.lines
-		m.filesPreview.sel = 0
+		p := m.filesPreview
+		p.lines = msg.lines
+		// A search started while the placeholder ("(loading…)") was still
+		// showing computed its hits against that single line; once the real
+		// content lands those hits (and any cur/badge derived from them) are
+		// stale. Re-run it over the loaded lines and re-snap the scroll — only
+		// the no-search path still resets to the top.
+		if p.search.active() {
+			p.search.refindFrom(previewSearchLines(p), p.searchPos())
+			p.snapHit(m.filePreviewRowsCap(), m.filePreviewInnerW())
+		} else {
+			p.sel = 0
+		}
 		return m, nil
 	case fileContentLayerMsg:
 		cp := layerOf[*contentPopup](m)
