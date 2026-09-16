@@ -14,7 +14,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   message minus its subject, git's own split) under the `date · author` line;
   when the three-line clamp hides more, a header-wide **show full message…**
   button opens the whole message in the reword prompt's window, read-only (no
-  ok, `close`/esc only, ctrl+enter does nothing). An elided title shows itself
+  ok, `close`/esc only, ctrl+enter does nothing); its **edit…** swaps the
+  viewer for "edit commit message…" over the same text, under the commit
+  menu's gate (single-parent commits with a feed row). Right-clicking the
+  button opens no menu. An elided title shows itself
   in full as a tooltip on hover — only when it actually had to be elided. The
   multi-line prompt (the viewer AND "edit commit message…") now takes the shape
   of its text: as wide as the longest line (560px…90vw) and as tall as its

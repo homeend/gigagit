@@ -903,12 +903,7 @@ function showCommitMenu(c, i, x, y) {
           opLine("could not read the commit message", true);
           return;
         }
-        openPrompt({
-          title: "Edit the message of " + short + ":",
-          value: got.message || "",
-          multiline: true,
-          onSubmit: (message) => startOp({ op: "reword", sha: c.hash, message }, "rewording " + short),
-        });
+        rewordPrompt(c.hash, short, got.message || "");
       },
     });
   }
@@ -983,6 +978,20 @@ function showCommitMenu(c, i, x, y) {
 }
 
 
+// rewordPrompt opens the "edit commit message…" window prefilled with the
+// commit's CURRENT message and rewords on confirm. The menu row reaches it
+// with a message it fetched; the file-list header's read-only viewer reaches
+// it with the message it is already showing (its edit… button).
+function rewordPrompt(hash, short, message) {
+  openPrompt({
+    title: "Edit the message of " + short + ":",
+    value: message,
+    multiline: true,
+    onSubmit: (m) => startOp({ op: "reword", sha: hash, message: m }, "rewording " + short),
+  });
+}
+
+
 // commitEdit rewrites the checked-out branch so that one commit is dropped or
 // swapped with its neighbour. The server builds the rebase plan itself from
 // the commit id and this verb — nothing plan-shaped goes on the wire — and
@@ -993,4 +1002,4 @@ function commitEdit(c, edit) {
   const what = edit === "drop" ? "dropping " : edit === "move-up" ? "moving up " : "moving down ";
   startOp({ op: "commit-edit", sha: c.hash, edit }, what + short);
 }
-export { applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };
+export { applyGraphMode, BOT_TOUCH, CELL_W, EAGER_PAGES, GLYPH_PATHS, HALF, MID, TOP_TOUCH, applyCommitFilter, closeCommitFilter, commitEdit, commitMatches, compareMarked, feedQuery, firstFeedMatch, flatDotSVG, gotoBranchTip, gotoCommit, gotoCommitPrompt, graphHTML, graphSVG, landOnFeedIdx, laneColor, laneColors, loadCommits, markedInFeedOrder, maybeLoadMore, openCommit, openCommitByHash, openCommitFilter, openStashDetail, refilterFeed, renderCommits, renderFilteredCommits, revealCommit, rewordPrompt, rowHTML, searchDeeper, setSolo, setSoloChip, showCommitMenu, soloLabel, squashMarked, toggleCommitMark, toggleGraphMode };

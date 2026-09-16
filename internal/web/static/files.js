@@ -1,7 +1,7 @@
 // files.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, attnKey, charWidth, elidePath, esc, getJSON, postJSON, runOnce, runes, state } from "./core.js";
-import { copyText, openPrompt, showCtxMenu } from "./layers.js";
+import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
 import { extraRows, registerHelp } from "./menus.js";
 import { linkFor } from "./links.js";
@@ -10,7 +10,7 @@ import { nextSortMode, setSortMode, sortChipHTML } from "./sortlist.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { rev } from "./review.js";
-import { renderCommits } from "./commits.js";
+import { renderCommits, rewordPrompt } from "./commits.js";
 import { focusPane, moveCursor } from "./keys.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
@@ -227,13 +227,28 @@ new ResizeObserver(updateFilesDescMore).observe($("files-desc"));
 
 // The full message opens in the reword prompt's window, read-only: the same
 // box, the same wrapping, sized to the text — "same as edit, without the
-// edit". Nothing to submit, so esc (or close) is the only way out.
+// edit". Nothing to submit, so esc (or close) is the way out — or edit…,
+// which swaps the viewer for the reword prompt over the same text, offered
+// under the commit menu's own gate (one parent: the engine refuses to reword
+// a merge, and the root is not on a rewritable range). A commit with no feed
+// row (opened by hash) has no parent count to check, so no edit… either.
 $("files-desc-more").addEventListener("click", () => {
   const message = $("files-desc").dataset.message;
   if (!message) return;
   const title = $("files-title");
-  const short = title.dataset.short || (title.dataset.sha || "").slice(0, 9);
-  openPrompt({ title: "Message of " + short + ":", value: message, multiline: true, readonly: true });
+  const hash = title.dataset.sha;
+  const short = title.dataset.short || (hash || "").slice(0, 9);
+  const row = (state.rows || []).find((r) => r.hash === hash);
+  const extra = row && row.parents === 1
+    ? { label: "edit…", run: () => { closePrompt(); rewordPrompt(hash, short, message); } }
+    : undefined;
+  openPrompt({ title: "Message of " + short + ":", value: message, multiline: true, readonly: true, extra });
+});
+// The button is one action, not a place: right-clicking it offers neither the
+// header's copy menu (it sits inside the header) nor the browser's own.
+$("files-desc-more").addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
 });
 
 
@@ -242,7 +257,8 @@ registerHelp({
   html:
     "an open commit's header shows its id and title (hover an elided title to read it whole), the " +
     "<b>date · author</b> line, and the first three lines of its description; <b>show full message…</b> " +
-    "under them opens the whole message read-only (esc closes). Right-click the header to copy the id, " +
+    "under them opens the whole message read-only (esc closes; <b>edit…</b> there swaps it for the reword " +
+    "prompt). Right-click the header to copy the id, " +
     "title, date or author",
 });
 
