@@ -1,0 +1,724 @@
+<title>Bounded and Unbounded</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+  :root {
+    --paper:   #f3f4f7;
+    --surface: #ffffff;
+    --sunk:    #eceef2;
+    --ink:     #1a1c21;
+    --muted:   #5c6270;
+    --faint:   #868d9c;
+    --rule:    #d7dae1;
+    --accent:  #8f5a06;
+    --accent-soft: #f6ecda;
+    --bnd:     #1f6b4e;
+    --bnd-soft:#e0f0e8;
+    --unb:     #8d4436;
+    --unb-soft:#f8e6e1;
+    --shadow:  0 1px 2px rgba(20,24,35,.06), 0 8px 24px -16px rgba(20,24,35,.24);
+
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:   #121419;
+      --surface: #1a1d23;
+      --sunk:    #0e1014;
+      --ink:     #e4e7ec;
+      --muted:   #a0a7b4;
+      --faint:   #6f7784;
+      --rule:    #2b2f38;
+      --accent:  #dfa74f;
+      --accent-soft: #2a2317;
+      --bnd:     #67c79b;
+      --bnd-soft:#16271f;
+      --unb:     #e09884;
+      --unb-soft:#2a1b17;
+      --shadow:  0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:   #121419;
+    --surface: #1a1d23;
+    --sunk:    #0e1014;
+    --ink:     #e4e7ec;
+    --muted:   #a0a7b4;
+    --faint:   #6f7784;
+    --rule:    #2b2f38;
+    --accent:  #dfa74f;
+    --accent-soft: #2a2317;
+    --bnd:     #67c79b;
+    --bnd-soft:#16271f;
+    --unb:     #e09884;
+    --unb-soft:#2a1b17;
+    --shadow:  0 1px 2px rgba(0,0,0,.4), 0 8px 24px -16px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 16px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 780px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 0 96px;
+  }
+
+  /* ---- masthead ---- */
+  header.masthead {
+    border-bottom: 1px solid var(--rule);
+    padding-block: 56px 28px;
+    margin-bottom: 40px;
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 18px;
+  }
+  h1 {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: clamp(30px, 6.4vw, 46px);
+    line-height: 1.08;
+    letter-spacing: -.024em;
+    text-wrap: balance;
+    margin: 0 0 14px;
+  }
+  .dek {
+    font-size: 18px;
+    color: var(--muted);
+    margin: 0 0 26px;
+    max-width: 60ch;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .meta span {
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 3px 9px;
+    color: var(--muted);
+    background: var(--surface);
+  }
+  .meta span b { color: var(--ink); font-weight: 500; }
+
+  /* ---- sections ---- */
+  section { margin-bottom: 52px; scroll-margin-top: 20px; }
+  h2 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 23px;
+    letter-spacing: -.016em;
+    line-height: 1.22;
+    text-wrap: balance;
+    margin: 0 0 6px;
+    display: flex;
+    gap: 12px;
+    align-items: baseline;
+  }
+  h2 .num {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: .06em;
+    flex: none;
+    padding-top: 2px;
+  }
+  h3 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 15.5px;
+    letter-spacing: -.005em;
+    margin: 34px 0 8px;
+  }
+  h2 + p, h3 + p { margin-top: 10px; }
+  p { margin: 0 0 15px; max-width: 68ch; }
+  ul, ol { margin: 0 0 15px; padding-left: 22px; max-width: 68ch; }
+  li { margin-bottom: 7px; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  code {
+    font-family: var(--mono);
+    font-size: .875em;
+    background: var(--sunk);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: .5px 4px;
+    word-break: break-word;
+  }
+
+  /* ---- the rule ---- */
+  .thesis {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    box-shadow: var(--shadow);
+    padding: 26px 26px 22px;
+    margin: 0 0 22px;
+  }
+  .thesis p.rule-line {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: clamp(19px, 4.2vw, 25px);
+    line-height: 1.28;
+    letter-spacing: -.018em;
+    margin: 0 0 12px;
+    max-width: none;
+  }
+  .thesis p.rule-line .b { color: var(--bnd); }
+  .thesis p.rule-line .u { color: var(--unb); }
+  .thesis p:last-child { margin-bottom: 0; color: var(--muted); font-size: 15px; }
+
+  /* ---- kind chips ---- */
+  .chip {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+    display: inline-block;
+  }
+  .chip.b { background: var(--bnd-soft); color: var(--bnd); }
+  .chip.u { background: var(--unb-soft); color: var(--unb); }
+  .chip.n { background: var(--accent-soft); color: var(--accent); }
+
+  .kinds {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 14px;
+    margin: 0 0 24px;
+  }
+  .kind {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 16px 18px;
+  }
+  .kind h4 {
+    margin: 0 0 8px;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .kind p { font-size: 14.5px; margin: 0 0 10px; color: var(--muted); }
+  .kind ul {
+    margin: 0; padding: 0; list-style: none;
+    font-family: var(--mono); font-size: 12.5px; color: var(--ink);
+  }
+  .kind li { margin: 0 0 3px; }
+
+  /* ---- tables ---- */
+  .scroller { overflow-x: auto; margin: 0 0 22px; -webkit-overflow-scrolling: touch; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 460px;
+    font-family: var(--sans);
+    font-size: 14px;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+  }
+  th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--faint);
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  td {
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    color: var(--muted);
+  }
+  tr:last-child td { border-bottom: 0; }
+  td:first-child { color: var(--ink); }
+  td code { background: none; border: 0; padding: 0; font-size: 13px; color: var(--ink); }
+  td.c { text-align: center; }
+  .yes { color: var(--unb); font-weight: 600; }
+  .no  { color: var(--bnd); font-weight: 600; }
+
+  /* ---- code blocks ---- */
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.66;
+    background: var(--sunk);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    margin: 0 0 22px;
+    color: var(--ink);
+  }
+  pre .cm { color: var(--faint); }
+  pre .ac { color: var(--accent); }
+  pre .bn { color: var(--bnd); font-weight: 500; }
+  pre .un { color: var(--unb); font-weight: 500; }
+
+  /* ---- callout ---- */
+  .note {
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--rule);
+    background: var(--surface);
+    border-radius: 4px;
+    padding: 15px 18px;
+    margin: 0 0 22px;
+    font-size: 14.5px;
+    color: var(--muted);
+  }
+  .note.warn { border-left-color: var(--accent); }
+  .note strong { color: var(--ink); }
+  .note p { margin: 0; max-width: none; }
+  .note p + p { margin-top: 9px; }
+
+  .lede { font-size: 17px; color: var(--muted); }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 22px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--faint);
+  }
+  footer p { max-width: none; margin: 0 0 5px; }
+
+  @media (max-width: 480px) {
+    body { font-size: 15.5px; }
+    header.masthead { padding-block: 34px 22px; }
+    h2 { font-size: 20px; }
+  }
+</style>
+
+<div class="wrap">
+
+<header class="masthead">
+  <p class="kicker">gigagit · design spec · 2026-09-16</p>
+  <h1>Bounded and Unbounded</h1>
+  <p class="dek">One <code>gg://</code> link spelling for everything gg can show, and one rule for comparing any two of them.</p>
+  <div class="meta">
+    <span>branch <b>feat/unified-links</b></span>
+    <span>commit <b>c4f04a6c</b></span>
+    <span>status <b>agreed</b></span>
+    <span>4 plans</span>
+  </div>
+</header>
+
+<section>
+  <h2><span class="num">01</span> The problem</h2>
+  <p class="lede">Links address a file, a line, a hunk, a commit or a merge preview. Three things a user looks at cannot be linked at all — <strong>bookmarks</strong>, <strong>shelf entries</strong> and <strong>branches</strong> — and no link can be compared against another.</p>
+  <p>Comparison lives in per-surface menus instead. <code>gg compare</code> accepts a second, ad-hoc spelling (<code>bookmark:&lt;id&gt;</code>, <code>shelf:&lt;id&gt;</code>, <code>@staged</code>, <code>@worktree</code>), and the pair-compare flows are menu-driven selections that only work within one entry kind.</p>
+  <ul>
+    <li>An agent cannot be handed “this shelf entry” or “this branch” by reference — the CLI and MCP have no spelling for them.</li>
+    <li>Comparing across kinds needs a new menu per pair, so most pairs simply do not exist.</li>
+    <li>The pairing rules live in <code>internal/cli/compare.go:93-95</code>, so the TUI, web and MCP each answer the same question differently, or not at all.</li>
+  </ul>
+</section>
+
+<section>
+  <h2><span class="num">02</span> The model</h2>
+
+  <div class="thesis">
+    <p class="rule-line">A pair is <span class="b">bounded</span>. A point is <span class="u">unbounded</span>.</p>
+    <p>Every link, once resolved, evaluates to a file set of one of two kinds. Which kind it is follows from the link’s shape alone — nothing is guessed, and nothing depends on the other side of a comparison.</p>
+  </div>
+
+  <div class="kinds">
+    <div class="kind">
+      <h4><span class="chip u">unbounded</span></h4>
+      <p>Every file in the repository at some state.</p>
+      <ul>
+        <li>a commit tree</li>
+        <li>a branch or tag tip</li>
+        <li>the working tree</li>
+        <li>the index</li>
+      </ul>
+    </div>
+    <div class="kind">
+      <h4><span class="chip b">bounded</span></h4>
+      <p>A finite, enumerated set of paths.</p>
+      <ul>
+        <li>a merge preview’s files</li>
+        <li>a shelf entry’s members</li>
+        <li>a single file</li>
+        <li>a bookmark</li>
+      </ul>
+    </div>
+  </div>
+
+  <p>A commit is a <em>point</em>, so <code>gg://repo@abc123</code> is the <strong>tree at that commit</strong>. To address what a commit <em>changed</em>, spell the pair.</p>
+
+  <h3>Grammar</h3>
+  <pre>gg://&lt;repo&gt;[/&lt;path&gt;][@&lt;target&gt;][:&lt;line&gt;|#&lt;hunk&gt;][?&lt;hint&gt;]</pre>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>target</th><th>kind</th><th>status</th></tr></thead>
+      <tbody>
+        <tr><td><code>(absent)</code> — working tree</td><td><span class="chip u">unbounded</span></td><td>shipped</td></tr>
+        <tr><td><code>staged</code></td><td><span class="chip u">unbounded</span></td><td>shipped</td></tr>
+        <tr><td><code>&lt;sha&gt;</code> — 7..64 hex</td><td><span class="chip u">unbounded</span></td><td>shipped</td></tr>
+        <tr><td><code>ref:&lt;name&gt;</code> — a branch or tag tip</td><td><span class="chip u">unbounded</span></td><td><span class="chip n">new</span></td></tr>
+        <tr><td><code>&lt;a&gt;...&lt;b&gt;</code> — merge preview</td><td><span class="chip b">bounded</span></td><td>shipped</td></tr>
+        <tr><td><code>&lt;a&gt;..&lt;b&gt;</code> — two-dot change-set</td><td><span class="chip b">bounded</span></td><td><span class="chip n">new</span></td></tr>
+        <tr><td>any of the above with a <code>/&lt;path&gt;</code></td><td><span class="chip b">bounded</span>, one element</td><td>shipped</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Separator safety</h3>
+  <p>Every new separator was checked against <code>git check-ref-format</code>, because a branch name rides inside the preview pair and the <code>ref:</code> form:</p>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>char</th><th class="c">legal in a refname?</th><th>consequence</th></tr></thead>
+      <tbody>
+        <tr><td><code>:</code></td><td class="c"><span class="no">no</span></td><td><code>ref:&lt;name&gt;</code> and the <code>:&lt;line&gt;</code> suffix are both unambiguous</td></tr>
+        <tr><td><code>^</code> <code>~</code></td><td class="c"><span class="no">no</span></td><td>free for future revision operators</td></tr>
+        <tr><td><code>?</code></td><td class="c"><span class="no">no</span></td><td>safe as the hint separator — a refname can never reach it</td></tr>
+        <tr><td><code>@</code> <code>#</code> <code>=</code></td><td class="c"><span class="yes">yes</span></td><td>already rejected by the shipped <code>model.LinkRefOK</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <p><strong>No shorthand for “this commit’s change.”</strong> A producer copying from a commit diff view resolves the first parent at copy time and emits the explicit pair <code>@abc122..abc123</code>.</p>
+    <p>That keeps the link portable and self-describing, and adds exactly one grammar form rather than a <code>^!</code>-style operator that would fight zsh history expansion on the CLI. For a merge commit the producer takes the first parent — recorded in the link, so the choice is visible rather than implicit.</p>
+  </div>
+
+  <h3>The hint — <code>?&lt;hint&gt;</code></h3>
+  <p><code>?bookmark=&lt;id&gt;</code> and <code>?shelf=&lt;id&gt;</code> record <em>which surface the link was copied from</em>. The address is the identity; the hint is where to open it — an HTML anchor, not a different address.</p>
+  <ol>
+    <li><strong>Compare ignores the hint.</strong> A bookmarked commit and the same commit picked off the log are one endpoint. No bookmark×shelf×commit matrix.</li>
+    <li><strong>Navigate honours it.</strong> Same address, different landing: reveal the bookmark row, the shelf row, or the commit in the log.</li>
+    <li><strong>It degrades; it never fails.</strong> On another machine the address still resolves and the hint is dropped with a notice.</li>
+  </ol>
+
+  <p>One exception, and it is the only machine-local link in the system — <strong>the hint carries content when there is no address</strong>:</p>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>shelf entry</th><th>link</th><th>content comes from</th></tr></thead>
+      <tbody>
+        <tr><td>shelved <b>commit</b></td><td><code>gg://repo@abc123?shelf=&lt;id&gt;</code></td><td>the commit while it resolves; the frozen tar once it is gc’d</td></tr>
+        <tr><td>shelved <b>file</b></td><td><code>gg://repo?shelf=&lt;id&gt;</code></td><td>the hint — those bytes were never in git</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The first row is exactly the hybrid semantics <code>domain.ResolveCommitEntryEndpoint</code> already implements. Bookmarks need no such form: a <code>model.Bookmark</code> <em>is</em> a stored <code>FileAddress</code>, so its link is the address it points at. Merge previews keep their shipped spelling, carrying the branch-name pair deliberately so it travels.</p>
+
+  <h3>Stashes</h3>
+  <p>A stash <strong>is a commit</strong>, so it needs no new grammar. <code>internal/git/stash.go</code> already says so — <code>StashCommit</code> “resolves a stash ref to its commit SHA <em>so the file tree / diff can read it as an ordinary commit</em>.”</p>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>link</th><th>kind</th><th>meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>@&lt;stash-sha&gt;</code></td><td><span class="chip u">unbounded</span></td><td>the tree the stash captured</td></tr>
+        <tr><td><code>@&lt;stash-sha&gt;^..&lt;stash-sha&gt;</code></td><td><span class="chip b">bounded</span></td><td>what the stash changes</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>The first-parent rule above is already correct here by construction: a stash’s first parent is the HEAD it was made on, which is exactly what <code>git stash show</code> diffs against. Two rules are specific to stashes:</p>
+  <ol>
+    <li><strong><code>stash@{N}</code> must never appear in a link.</strong> It is positional — pushing, popping or dropping any stash shifts every N, so the same link text would silently name a different stash. The producer resolves to the sha at copy time. <code>?stash=&lt;n&gt;</code> survives only as a landing hint, and it is the most fragile hint in the system: N changes while the thing it names does not.</li>
+    <li><strong>A stash link can dangle, with no fallback.</strong> A stash commit is reachable only through <code>refs/stash</code> and its reflog. Unlike a shelved commit there is no frozen tar, so a popped or dropped stash is a plain <code>CommitGoneError</code> — and the message should point at shelving as the way to keep it.</li>
+  </ol>
+
+  <div class="note warn">
+    <p><strong>Untracked files are included.</strong> <code>StashPush</code> takes <code>includeUntracked</code>, so gg can create three-parent stashes — <code>[HEAD, index, untracked-tree]</code> — whose untracked files live in the <em>third parent</em>, not in the stash’s own tree. A plain <code>^..</code> would silently omit them.</p>
+    <p>The bounded set is therefore tracked changes <strong>plus</strong> parent 3’s files, entering as additions. This is deliberately <em>not</em> <code>git stash show</code> — it is “what I stashed”, which is the user’s mental model, and gg already knows which it is because <code>StashPush</code> recorded the flag.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">03</span> The algebra</h2>
+
+<pre><span class="un">unbounded</span> × <span class="un">unbounded</span>  →  <span class="bn">BOUNDED</span>   <span class="cm">git diff A B: the differing paths</span>
+<span class="bn">bounded</span>   × <span class="bn">bounded</span>    →  <span class="bn">BOUNDED</span>   <span class="cm">symmetric over the union of member paths;</span>
+                                 <span class="cm">present in one only ⇒ A / D</span>
+<span class="un">unbounded</span> × <span class="bn">bounded</span>    →  <span class="bn">BOUNDED</span>   <span class="cm">project the tree onto the bounded side's</span>
+                                 <span class="cm">paths; a key absent from the tree ⇒ A / D</span></pre>
+
+  <div class="note warn">
+    <p><strong>The asymmetry is load-bearing: you can only ever scale down.</strong> Growing the bounded side to the tree’s size would mean comparing one file against every file in the repository. So the bounded side always supplies the key set.</p>
+  </div>
+
+  <p><strong>Compare is closed</strong> — every comparison yields a bounded set. That makes a compare result the same kind as a merge preview, so it is saveable, linkable, and usable as an endpoint of the next comparison. This is what makes “compare everything with everything” terminate.</p>
+
+  <p><code>domain.shelfCommitCompare</code> is already the third row, with a <code>shelfIsRight</code> direction flag. The work is generalizing that one function — not inventing a lane.</p>
+
+  <h3>Worked examples</h3>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>left</th><th>right</th><th>lane</th><th>result</th></tr></thead>
+      <tbody>
+        <tr><td><code>@abc123</code></td><td><code>@def456</code></td><td><span class="chip u">u</span> × <span class="chip u">u</span></td><td><code>git diff abc123 def456</code></td></tr>
+        <tr><td><code>@main...feat/x</code></td><td><code>@main...fix/y</code></td><td><span class="chip b">b</span> × <span class="chip b">b</span></td><td>which paths each branch touched, and how they differ</td></tr>
+        <tr><td><code>/parser.go@abc123</code></td><td><code>@def456</code></td><td><span class="chip b">b</span> × <span class="chip u">u</span></td><td><code>parser.go</code> at each; absent in <code>def456</code> ⇒ <code>D</code></td></tr>
+        <tr><td><code>?shelf=&lt;id&gt;</code></td><td><code>@abc123</code></td><td><span class="chip b">b</span> × <span class="chip u">u</span></td><td>the shelf’s members, projected onto the tree</td></tr>
+        <tr><td><code>@ref:mine</code></td><td><code>@ref:theirs</code></td><td><span class="chip u">u</span> × <span class="chip u">u</span></td><td>the two tips</td></tr>
+        <tr><td><code>@abc122..abc123</code></td><td><code>?shelf=&lt;id&gt;</code></td><td><span class="chip b">b</span> × <span class="chip b">b</span></td><td>did the shelf hold the same change as the commit?</td></tr>
+        <tr><td><code>@&lt;stash&gt;^..&lt;stash&gt;</code></td><td><code>@ref:feat/x</code></td><td><span class="chip b">b</span> × <span class="chip u">u</span></td><td>is my stash already on the branch?</td></tr>
+        <tr><td><code>@B...A</code></td><td><code>@E...D</code></td><td><span class="chip b">b</span> × <span class="chip b">b</span></td><td>two branches, each bounded against its own base — did they change the same files, the same way?</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">04</span> Architecture</h2>
+
+  <h3>Validity is a property of the type, not a checklist</h3>
+  <p><strong>Parse, don’t validate.</strong> There are exactly two funnels in this design, and after each one the value in hand carries its own guarantee. Nothing downstream re-checks, because nothing downstream <em>can</em> hold an invalid value.</p>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>funnel</th><th>produces</th><th>guarantees</th></tr></thead>
+      <tbody>
+        <tr><td><code>model.ParseLink(s)</code></td><td>a <code>Link</code></td><td>the grammar above, including <code>LinkRefOK</code> / <code>LinkPathOK</code></td></tr>
+        <tr><td>a <code>model.*Endpoint(…)</code> constructor</td><td>an <code>Endpoint</code></td><td>the kind’s field invariants, and its boundedness</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Three traps in the shipped type make this mandatory rather than stylistic. All three were verified against the tree before this section was written:</p>
+  <ol>
+    <li><strong>54 raw <code>model.Endpoint{…}</code> literals</strong> exist outside tests. Three new kinds means 54 sites that might have to care.</li>
+    <li><strong>The zero value is silently valid.</strong> <code>EndpointWorkTree = iota</code> is <code>0</code>, so <code>model.Endpoint{}</code> <em>is</em> a working-tree endpoint — and <code>internal/cli/compare.go</code> returns exactly that on its error paths.</li>
+    <li><strong><code>default:</code> already means “commit”.</strong> In <code>FileRef</code>, <code>Display</code> and <code>CacheTag</code> the switch falls through to the commit case, so adding <code>EndpointRef</code> with no other change would silently yield <code>FileRef{Source: SourceCommit, Locator: ""}</code> — a wrong answer, no error, in three methods.</li>
+  </ol>
+
+  <p>Endpoint is <strong>never serialized</strong> — <code>session_snapshot.go</code> converts through its own <code>snapEndpoint</code> wire type — so unexported fields cost nothing.</p>
+
+<pre>type Endpoint struct {
+    kind     EndpointKind <span class="cm">// unexported: the only way in is a constructor</span>
+    hash, ref, shelfID string
+    a, b     string
+    threeDot bool
+    bounded  bool <span class="ac">// computed ONCE at construction, never re-derived</span>
+}
+
+func WorkTreeEndpoint() Endpoint
+func CommitEndpoint(hash string) (Endpoint, error)  <span class="cm">// 7..64 hex</span>
+func RefEndpoint(name string) (Endpoint, error)     <span class="cm">// LinkRefOK</span>
+func ShelfEndpoint(id string) (Endpoint, error)
+func PairEndpoint(a, b string, threeDot bool) (Endpoint, error)
+
+func (e Endpoint) Bounded() bool <span class="cm">// reads the field; nobody re-derives</span></pre>
+
+  <p>Four rules follow, and they are the whole of the enforcement:</p>
+  <ul>
+    <li><strong><code>EndpointInvalid = iota</code> comes first</strong>, shifting <code>EndpointWorkTree</code> to 1. <code>Endpoint{}</code> becomes unusable and every error return is obviously wrong instead of plausibly right.</li>
+    <li><strong>Every switch gets a panicking <code>default:</code></strong> naming the kind, replacing the three silent commit fall-throughs.</li>
+    <li><strong>Boundedness is stored, not computed by callers</strong> — the rule is applied exactly once, in the constructors.</li>
+    <li><strong>One table test enumerates every kind</strong>, asserting a constructor, <code>Bounded()</code>, <code>FileRef</code>, <code>CacheTag</code> and <code>Display</code>. A kind added without a row fails the build. That is the single place the rules are checked.</li>
+  </ul>
+
+  <div class="note">
+    <p><strong>Rejected alternative:</strong> a closed interface with real variant types (<code>CommitEnd</code>, <code>PairEnd</code>, …). A stronger guarantee — but Go does not exhaustiveness-check type switches, so it still needs the same table test, while reshaping all 54 sites plus <code>Differ</code>, <code>CompareFiles</code>, MCP and the TUI rather than respelling them.</p>
+  </div>
+
+  <h3>No new address type</h3>
+  <p>gg already has five address-ish types — <code>model.Link</code>, <code>FileAddress</code>, <code>FileRef</code>, <code>Endpoint</code>, <code>Bookmark</code>. This design adds <strong>none</strong>. <code>Endpoint</code> is already “one side of a whole-tree comparison”; it gains two kinds — <code>EndpointRef</code> (a branch/tag tip, unbounded) and <code>EndpointPair</code> (<code>A..B</code> or <code>A...B</code>, bounded) — behind the constructors above.</p>
+
+  <p>The one pipeline becomes <code>Link → Resolved → Endpoint → FileSet → CompareSets</code>, driven by two new domain functions:</p>
+
+<pre>func (s *Service) EvalEndpoint(ctx, e model.Endpoint) (FileSet, error)
+func (s *Service) CompareSets(ctx, left, right FileSet) ([]model.CommitFile, error)</pre>
+
+  <p><code>domain/compare_entries.go</code> shrinks to thin adapters, and the ad-hoc pairing rules in <code>internal/cli/compare.go</code> <strong>move into domain</strong> — so all four frontends share one answer.</p>
+
+  <h3>Two new packages</h3>
+  <p>Both are DAG leaves owned by <code>domain</code>; frontends never import them, per the <code>notes</code> / <code>shelf</code> / <code>preview</code> convention.</p>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>package</th><th>contents</th><th>precedent</th></tr></thead>
+      <tbody>
+        <tr><td><code>internal/linkhist</code></td><td>the 20-entry MRU of created links: <code>{Link, Desc, Created}</code>, TOML + <code>O_EXCL</code> lock under XDG state</td><td><code>internal/notes</code></td></tr>
+        <tr><td><code>internal/savedcompare</code></td><td><code>{Left, Right *Link, Label}</code> — absorbs merge previews</td><td><code>internal/preview</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Not named <code>clipboard</code> — that package already exists (the OS clipboard writer). Every “copy gg link” action on any surface appends to <code>linkhist</code>; re-copying an identical link moves it to the top. <code>Desc</code> is stored at creation, because the describing context is gone by read time:</p>
+
+<pre><span class="ac">branch:</span>   feat/x            gg://gigagit@ref:feat/x
+<span class="ac">bookmark:</span> auth fix          gg://gigagit@abc123?bookmark=auth-fix
+<span class="ac">shelf:</span>    WIP parser        gg://gigagit@abc123?shelf=commit-x-9f3a1
+<span class="ac">preview:</span>  main...feat/x     gg://gigagit@main...feat/x
+<span class="ac">commit:</span>   abc123 fix auth   gg://gigagit@abc123
+<span class="ac">stash:</span>    WIP on main       gg://gigagit@9c1f2a3^..9c1f2a3?stash=0</pre>
+
+  <p>The stash row shows why <code>Desc</code> must be captured at creation: <code>stash@{0}</code> is gone from the link by design, and the subject is the only thing that makes the row recognizable in the list.</p>
+
+  <h3>Merge previews fold in — and the data is discarded</h3>
+  <p>A saved comparison and a merge preview are the same kind, but not the same shape: <code>MergePreview{Source,Target}</code> is one <em>side</em>, and preview notes anchor on its source tip. So the store holds both shapes explicitly:</p>
+
+<pre>type Entry struct {
+    Left  model.Link
+    Right *model.Link <span class="cm">// nil ⇒ a saved SET (a merge preview), not a pair</span>
+    Label string
+}</pre>
+
+  <div class="note warn">
+    <p><strong>Framework gap to build.</strong> <code>preflight.StoreProbe</code> → verdict → consent prose → <code>engine.ApplyMigration</code> is exactly the right machinery, and <code>StoreVersions</code> 1→2 is the precedent.</p>
+    <p>But <code>ApplyMigration</code> today only deletes <em>git refs</em> and stamps via <code>Repo.StampStoreFormat</code> — the only registered store is ref-backed. <code>previews.toml</code> is a machine-local XDG <em>file</em> store, so the op needs a file-backed discard action alongside <code>Refs</code>. Small and clean, but new work, not free reuse.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">05</span> Surfaces</h2>
+  <p>One rule makes the compare dialog useful: <strong>every “copy gg link” click, on any surface, appends to the history.</strong></p>
+
+  <h3>Bounding a side in the compare dialog</h3>
+  <p>Shared by the TUI and web dialogs. A branch link is unbounded because no base can be guessed — but the <em>dialog</em> can ask, which puts the choice in front of the user instead of in the resolver.</p>
+
+<pre>┌─ link comparison ──────────────────────────────────────────┐
+│                                                            │
+│  [ link 1 — branch A / file / commit / whatever         ]  │
+│      [ base — branch B ]   <span class="cm">shown only when link 1 is a</span>      │
+│                            <span class="cm">branch; the set becomes every</span>    │
+│                            <span class="cm">file a merge preview of A into</span>   │
+│                            <span class="cm">B would change</span>                   │
+│                                                            │
+│  [ link 2 — branch D / file / commit / whatever         ]  │
+│      [ base — branch E ]   <span class="cm">likewise for link 2</span>              │
+│                                                            │
+└────────────────────────────────────────────────────────────┘</pre>
+
+  <p>Each side carries its <strong>own, independent</strong> base row — and that independence is the point. Bounding both sides turns branch↔branch from “compare two tips” into “did these two branches change the same files, the same way”: a <span class="chip b">bounded</span> × <span class="chip b">bounded</span> comparison the bare branch link could not express, reached without any grammar change.</p>
+
+  <div class="note">
+    <p><strong>Direction.</strong> In gg’s preview vocabulary <code>PreviewAdd(source, target)</code> renders <code>merge-base(target, source)..source</code>, spelled <code>@target...source</code>. So the selected link is the <em>source</em> and the base is the <em>target</em>: choosing base <code>B</code> for branch <code>A</code> rewrites the field to <code>@B...A</code>.</p>
+  </div>
+
+  <div class="note warn">
+    <p><strong>Bounding is a link rewrite in the field, not dialog-only state.</strong> Choosing base <code>main</code> for <code>@ref:feat/x</code> rewrites that field to <code>@main...feat/x</code>.</p>
+    <p>The field always holds a real link, so a saved comparison, its CLI equivalent and the history entry are byte-identical. There is no hidden dialog mode that a <code>gg compare</code> invocation could not express.</p>
+  </div>
+
+  <p><strong>Three-dot</strong>, matching previews exactly — <code>internal/cli/preview.go</code> documents the semantics as <code>merge-base(target, source)..source</code>, and <code>PreviewSummary</code> already exposes the base it used. So a branch bounded in the dialog and a saved preview of the same pair are the same set.</p>
+
+  <p>Bounding generalizes to any <em>point</em>. It is just “pick a second point to make a pair”:</p>
+
+  <div class="scroller">
+    <table>
+      <thead><tr><th>unbounded side</th><th>the picker offers</th><th>rewritten to</th></tr></thead>
+      <tbody>
+        <tr><td>branch / tag tip</td><td>its upstream, else the trunk — preselected, visible, changeable</td><td><code>@base...branch</code></td></tr>
+        <tr><td>commit</td><td>its first parent</td><td><code>@parent..sha</code></td></tr>
+        <tr><td>working tree / index</td><td>nothing — no base exists</td><td>no affordance shown</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p><strong>Offered, never required.</strong> Leaving both sides unbounded compares the two tips, which is the agreed meaning of branch↔branch. The affordance never blocks the dialog and never rewrites a field the user did not touch.</p>
+
+  <div class="note">
+    <p><strong>New machinery, flagged honestly.</strong> gg has no default-base notion today — <code>PreviewAdd(ctx, source, target, label)</code> always takes both names, and nothing infers one. The suggestion order is therefore new, and it is a preselected suggestion <em>in a picker</em>, never a silent default: the “never guess” rule holds because the user sees and confirms the base before the rewrite. The CLI stays explicit — no <code>--base</code> inference; an agent spells the pair.</p>
+  </div>
+
+  <h3>TUI</h3>
+  <ul>
+    <li>Copy-link rows via the existing <code>.</code> type-to-filter menu, on branch / commit / bookmark / shelf / preview / <strong>stash</strong> rows. A commit <em>row</em> copies the tree; a commit <em>diff view</em> copies the pair. A stash row copies the <em>pair</em> — what the stash changes — and always the resolved sha, never <code>stash@{N}</code>.</li>
+    <li>The <code>#</code> paste prompt gains a history picker alongside free paste.</li>
+    <li>New palette command <strong>“Compare with link…”</strong> — two fields, each filled by paste or from the 20-row history, then the compare view, then <em>Save comparison</em>.</li>
+    <li>Bookmark↔shelf compare moves from menu-selection to links; bookmark↔bookmark and shelf↔shelf keep their existing menus.</li>
+  </ul>
+
+  <h3>CLI — the agent surface</h3>
+<pre>gg link &lt;what&gt;               <span class="cm">emit a link for a branch/commit/bookmark/shelf/preview</span>
+gg links                     <span class="cm">the 20-row history, terse</span>
+gg compare &lt;left&gt; [&lt;right&gt;]  <span class="cm">links are the primary spelling; today's</span>
+                             <span class="cm">bookmark:&lt;id&gt; / shelf:&lt;id&gt; / @staged / @worktree</span>
+                             <span class="cm">keep working, mapped onto links</span>
+gg compare --save &lt;label&gt;    <span class="cm">store the bounded result</span>
+gg open &lt;link&gt;               <span class="cm">navigate (grows ref: and ?hint)</span></pre>
+
+  <h3>MCP &amp; web</h3>
+  <p>MCP gains <code>gg_link_resolve</code>, <code>gg_link_list</code> and <code>gg_compare_links</code>; <code>gg_compare_file</code> grows link arguments. Then an <code>agentskill.Version</code> bump and <code>gg init --update</code>.</p>
+  <div class="note">
+    <p>Web carries the same copy rows and dialog, but the history <strong>must</strong> be served over <code>/api/linkhist</code>, never browser storage — <code>gg web</code> binds a random port each run, which empties <code>localStorage</code>.</p>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">06</span> Testing</h2>
+  <ul>
+    <li><strong>Endpoint exhaustiveness</strong> — one row per kind, asserting a constructor, <code>Bounded()</code>, <code>FileRef</code>, <code>CacheTag</code> and <code>Display</code>; a kind added without a row fails the build. Plus every constructor rejecting its bad inputs, and <code>Endpoint{}</code> being invalid.</li>
+    <li><strong>model</strong> — table-driven <code>String(ParseLink(s)) == s</code> over every new form; reject cases for refnames containing <code>@</code>/<code>#</code> and paths containing <code>?</code>.</li>
+    <li><strong>domain</strong> — the algebra as an explicit <strong>kind×kind matrix</strong> against a real git repo in <code>t.TempDir()</code>. This is the test that earns the design: every cell asserted, including projection direction — whether a missing key reads <code>A</code> or <code>D</code> depends on which side is bounded.</li>
+    <li><strong>stashes</strong> — a three-parent stash (<code>gg stash -u</code>) whose bounded set must include the untracked file from parent 3; and a popped stash whose link yields <code>CommitGoneError</code> rather than a wrong answer.</li>
+    <li><strong>e2e</strong> — <code>gg link</code> → <code>gg compare</code> → <code>gg compare --save</code> round-trips as TOML scenarios.</li>
+    <li><strong>web</strong> — <code>links.js</code> pinned against the Go grammar, as the JS date port is pinned by <code>model.CommitDateLayout</code>.</li>
+    <li><strong>i18n</strong> — the four AST gates.</li>
+    <li><strong>migration</strong> — format 1→2 discards <code>previews.toml</code> and stamps, only after consent.</li>
+  </ul>
+</section>
+
+<section>
+  <h2><span class="num">07</span> Phasing</h2>
+  <p>Three plans. Each is a sound stopping point — the order is a real dependency chain, not a convenience.</p>
+  <div class="scroller">
+    <table>
+      <thead><tr><th>plan</th><th>contents</th><th>why it stands alone</th></tr></thead>
+      <tbody>
+        <tr><td><b>1a</b></td><td><code>Endpoint</code> hardening alone: unexported fields + constructors, <code>EndpointInvalid</code> first, panicking defaults, the exhaustiveness table, 54 literals respelled</td><td>a pure refactor with no new kinds — it must go green <em>before</em> any new kind exists, or one diff both fixes three traps and adds to them</td></tr>
+        <tr><td><b>1b</b></td><td>grammar (<code>ref:</code>, <code>..</code>, <code>?hint</code>) · the new <code>Endpoint</code> kinds · <code>EvalEndpoint</code>/<code>CompareSets</code> · CLI <code>compare</code>/<code>link</code></td><td>the whole algebra, fully tested; agents can use it the day it lands, no UI needed</td></tr>
+        <tr><td><b>2</b></td><td><code>linkhist</code> · MCP tools · navigation hints (<code>linknav</code>, <code>steer</code>, both consumers) · agentskill bump</td><td>links become referenceable and navigable everywhere</td></tr>
+        <tr><td><b>3</b></td><td>TUI copy rows + compare palette · web surfaces · <code>savedcompare</code> + the file-backed migration · the shared base picker</td><td>the UI layer, on a settled core</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">08</span> Out of scope</h2>
+  <h3>GitHub PR read/write via <code>gh</code></h3>
+  <p>Agreed as a <strong>separate project</strong>. It shares no machinery with this spine: a new external binary, a remote read/write lane, a review-state model, and a capability detector closer to <code>exttool</code>/<code>agentinit</code> than to <code>preflight</code>. It gets its own brainstorm once this ships.</p>
+
+  <h3>Cross-repository comparison</h3>
+  <p>Nothing in the algebra stops <code>gg compare gg://repoA@abc gg://repoB@def</code> — both sides evaluate to file sets, and the sets do not care which repository produced them.</p>
+  <p>What stops it is reservation: every read goes through one <code>domain.Service</code> under one <code>repogate</code> reservation, so a cross-repo compare needs two services and two reservations acquired in a fixed order to avoid deadlock. Refused in phase 1 with an explicit message, and revisited once workspace groups land — that roadmap item already needs multi-repo reservation ordering for parallel background-pull. Same problem, solved once.</p>
+</section>
+
+<footer>
+  <p>docs/superpowers/specs/2026-09-16-unified-links-design.md</p>
+  <p>feat/unified-links · c4f04a6c</p>
+</footer>
+
+</div>
