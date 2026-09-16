@@ -18,46 +18,57 @@ function focusPane() {
 
 function moveCursor(delta) {
   if (state.pane === "commits") {
-    if (state.cfilter) {
-      // Filtered mode: the spacer/window are sized to matches.length + 1
-      // (the hint row), not the full feed, so navigation and scroll math
-      // must operate on POSITION WITHIN THE MATCH LIST rather than the
-      // full-feed display index state.cursor otherwise holds.
-      const m = state.cfilter.matches;
-      if (!m.length) return;
-      let pos = m.findIndex((idx) => idx + wtCount() === state.cursor);
-      if (pos === -1) {
-        // Cursor isn't on a match (filter just narrowed, or a fresh open):
-        // snap to the nearest match at or after it, else the last match.
-        pos = m.findIndex((idx) => idx + wtCount() >= state.cursor);
-        if (pos === -1) pos = m.length - 1;
-      }
-      pos = Math.max(0, Math.min(m.length - 1, pos + delta));
-      state.cursor = m[pos] + wtCount();
-      const scroll = $("commits-scroll");
-      const top = pos * ROW_H;
-      if (top < scroll.scrollTop) scroll.scrollTop = top;
-      else if (top + ROW_H > scroll.scrollTop + scroll.clientHeight)
-        scroll.scrollTop = top + ROW_H - scroll.clientHeight;
-      renderCommits();
-      return;
-    }
-    const total = state.rows.length + wtCount();
-    if (!total) return;
-    state.cursor = Math.max(0, Math.min(total - 1, state.cursor + delta));
-    const scroll = $("commits-scroll");
-    const top = state.cursor * ROW_H + (state.cursor > 0 ? wtExtra() : 0);
-    const h = state.cursor === 0 && state.wt ? WT_H : ROW_H;
-    if (top < scroll.scrollTop) scroll.scrollTop = top;
-    else if (top + h > scroll.scrollTop + scroll.clientHeight)
-      scroll.scrollTop = top + h - scroll.clientHeight;
-    renderCommits();
+    stepCommitCursor(delta);
   } else {
     const list = state.filesMode === "status" ? state.statusEntries : state.files;
     if (!list.length) return;
     state.fileCursor = Math.max(0, Math.min(list.length - 1, state.fileCursor + delta));
     renderFiles();
   }
+}
+
+
+// stepCommitCursor moves the commit cursor by delta, scrolls it into view
+// and re-renders the virtual window. delta 0 is the "bring the list back"
+// call: the commits pane is display:none behind a diff, which drops its
+// scroll position AND makes any render there (a live refresh, r, a notes
+// count) size the window for a zero-height pane — ten rows. Returning from
+// the diff stage must redo both, whichever pane holds the keyboard.
+function stepCommitCursor(delta) {
+  if (state.cfilter) {
+    // Filtered mode: the spacer/window are sized to matches.length + 1
+    // (the hint row), not the full feed, so navigation and scroll math
+    // must operate on POSITION WITHIN THE MATCH LIST rather than the
+    // full-feed display index state.cursor otherwise holds.
+    const m = state.cfilter.matches;
+    if (!m.length) return;
+    let pos = m.findIndex((idx) => idx + wtCount() === state.cursor);
+    if (pos === -1) {
+      // Cursor isn't on a match (filter just narrowed, or a fresh open):
+      // snap to the nearest match at or after it, else the last match.
+      pos = m.findIndex((idx) => idx + wtCount() >= state.cursor);
+      if (pos === -1) pos = m.length - 1;
+    }
+    pos = Math.max(0, Math.min(m.length - 1, pos + delta));
+    state.cursor = m[pos] + wtCount();
+    const scroll = $("commits-scroll");
+    const top = pos * ROW_H;
+    if (top < scroll.scrollTop) scroll.scrollTop = top;
+    else if (top + ROW_H > scroll.scrollTop + scroll.clientHeight)
+      scroll.scrollTop = top + ROW_H - scroll.clientHeight;
+    renderCommits();
+    return;
+  }
+  const total = state.rows.length + wtCount();
+  if (!total) return;
+  state.cursor = Math.max(0, Math.min(total - 1, state.cursor + delta));
+  const scroll = $("commits-scroll");
+  const top = state.cursor * ROW_H + (state.cursor > 0 ? wtExtra() : 0);
+  const h = state.cursor === 0 && state.wt ? WT_H : ROW_H;
+  if (top < scroll.scrollTop) scroll.scrollTop = top;
+  else if (top + h > scroll.scrollTop + scroll.clientHeight)
+    scroll.scrollTop = top + h - scroll.clientHeight;
+  renderCommits();
 }
 
 
@@ -192,4 +203,4 @@ $("foot").addEventListener("click", (e) => {
   }
 });
 
-export { focusPane, moveCursor };
+export { focusPane, moveCursor, stepCommitCursor };

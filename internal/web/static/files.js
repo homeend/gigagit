@@ -11,7 +11,7 @@ import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { rev } from "./review.js";
 import { renderCommits, rewordPrompt } from "./commits.js";
-import { focusPane, moveCursor } from "./keys.js";
+import { focusPane, moveCursor, stepCommitCursor } from "./keys.js";
 import { saveUI } from "./uistate.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
@@ -60,12 +60,18 @@ $("back-btn").addEventListener("click", drillOut);
 // the diff replaces the commits area, file list stays right. esc steps one
 // stage back (drillOut).
 function setLayout(mode) {
+  const was = state.layout;
   state.layout = mode;
   const p = $("panes");
   p.classList.toggle("solo", mode === "list");
   p.classList.toggle("files", mode === "files");
   p.classList.toggle("detail", mode === "diff");
-  if (mode === "list") moveCursor(0); // re-render + rescroll: display:none dropped the scroll position
+  // The commits pane is display:none in the diff stage: that drops its
+  // scroll position, and any render while hidden (a live refresh, r, a notes
+  // count) sizes the virtual window for a zero-height pane — ten rows, which
+  // is all the list showed after esc until the user scrolled. Coming back
+  // into either stage that shows the pane re-renders and rescrolls it.
+  if (mode === "list" || (mode === "files" && was === "diff")) stepCommitCursor(0);
 }
 
 

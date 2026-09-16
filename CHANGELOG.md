@@ -8,6 +8,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Fixed: the browser's commit list showed only ten rows after leaving a
+  diff.** The commits pane is hidden (`display: none`) while a diff is open,
+  and any redraw in that time — a live refresh, `r`, a review-note count —
+  sized the virtual list for a zero-height pane. Stepping back with esc
+  never redrew it, so the list stayed at ten rows until the first scroll.
+  Returning from the diff stage now re-renders and rescrolls the list, the
+  same way returning to the full-width list already did.
+
 - **The browser's diff has the TUI's `f`: changed lines only ↔ full file.**
   `gg web` always drew the whole file in the diff pane; a one-line change
   deep in a long file meant scrolling past screens of context (the pane
