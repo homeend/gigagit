@@ -1071,10 +1071,13 @@ by `renderFilePreview` and the preview key paths — the same struct backs the
 help window and the files tree, which never look at it) moved by `alt+↑/↓`
 through `movePreviewCursor` + `ensureCursorVisible`, painted with
 `st().diffCursorRow` under `[ui] diff_cursor` (`number` falls back to the band:
-there is no gutter to number). `searchPos()` now derives from `cur` and
-`snapHit` lands it, which retires the deferred "preview `searchPos` ignores
-`p.sel` after a free scroll" item; `previewOrigin` carries `cur` so esc restores
-it with the pager.
+there is no gutter to number). `searchPos()` now anchors on `cur` while it
+sits inside the visible window `[sel, sel+rowsCap)`, and on the top visible
+line otherwise — a cursor paged far off-screen must not search from there —
+which retires the deferred "preview `searchPos` ignores `p.sel` after a free
+scroll" item; `snapHit` lands `cur` on the hit so `]`/`[` and the next search
+step measure from it; `previewOrigin` carries `cur` so esc restores it with
+the pager.
 
 Invalidation: the diff clears on `rebuild()` (the `f` toggle), on `ctrl+w`
 (which relayouts and re-anchors rather than rebuilding) and on a `diffMsg`
