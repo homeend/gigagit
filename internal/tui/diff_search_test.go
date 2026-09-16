@@ -329,6 +329,11 @@ func TestDiffSearchPaintsTheHit(t *testing.T) {
 			// both: the two cells hold the very same text, so the mirrored
 			// left cell takes the same display offsets. A CHANGED row must
 			// not mirror: its sides differ.
+			//
+			// The fixture's Same-row hit must stay an ORDINARY hit: the marker
+			// below is st().diffEmph's foreground, while the current hit paints
+			// through styles.currentHitStyle — if search.cur ever moves onto
+			// this row, assert it with assertCurrentHitPaint instead.
 			mcs, mce := hitCol(v.lines[i].Row, searchHit{row: h.row, side: 1 - h.side, start: h.start, end: h.end})
 			mirror := ansi.Cut(painted[i], mcs, mce)
 			if v.lines[i].Row.Kind == textdiff.Same {
@@ -444,8 +449,19 @@ func TestDiffHintFitsTheBudget(t *testing.T) {
 		if w := lipgloss.Width(diffHintFor(lm)); w > 140 {
 			t.Errorf("mode %d hint is %d columns, the budget is 140: %q", lm, w, diffHintFor(lm))
 		}
-		if !strings.Contains(diffHintFor(lm), "[/] find") {
-			t.Errorf("mode %d hint must advertise the search: %q", lm, diffHintFor(lm))
+		hint := diffHintFor(lm)
+		find := strings.Index(hint, "[/] find")
+		if find < 0 {
+			t.Errorf("mode %d hint must advertise the search: %q", lm, hint)
+			continue
+		}
+		// POSITION, not just presence: view.go truncates the footer's TAIL to
+		// the terminal width, so whatever sits late is what a narrow terminal
+		// loses. [/] find shipped LAST and vanished below 140 columns (the
+		// user's "bottom bar ... missing search hints"); it now rides near the
+		// front, ahead of the change keys, and must stay there.
+		if chg := strings.Index(hint, "[n/p]"); find <= 0 || chg < 0 || find > chg {
+			t.Errorf("mode %d: [/] find is at %d, [n/p] at %d — the search hint must come early (after the scroll keys, before the change keys): %q", lm, find, chg, hint)
 		}
 	}
 	// The widest variant is at the cap: any new group must shorten a label
