@@ -237,7 +237,7 @@ func helpContent() []contentLine {
 		r("/", i18n.T("search the focused side: file paths (tree) or the commit list (commits side); enter keeps it, esc cancels")),
 		r("enter", i18n.T("tree side: diff of the selected file (changed-files mode vs parent; all-files mode vs the working tree). Commit-list side: drill in — move focus to the file tree")),
 		r("a", i18n.T("toggle all files: every file in the commit's tree (as if checked out) vs only the files it changed")),
-		r(".", i18n.T("tree side: View file — show the file's content at this commit (no diff) in the right pane ([↑/↓] scroll, [ctrl+w] view mode, [esc] close, [←] back to the tree); Open in external editor — open that content in $VISUAL/$EDITOR, read-only")),
+		r(".", i18n.T("tree side: View file — show the file's content at this commit (no diff) in the right pane ([↑/↓] scroll, [ctrl+w] view mode, / or @ find text forward / backward and ] [ step the hits, [esc] clears the search then closes, [←] back to the tree); Open in external editor — open that content in $VISUAL/$EDITOR, read-only")),
 		r("i", i18n.T("view the underlying commit's full message in a popup over the tree (esc returns; commit views only, not stash/compare)")),
 		r("h", i18n.T("history of the selected file (tree side)")),
 		r("b", i18n.T("blame of the selected file (tree side)")),

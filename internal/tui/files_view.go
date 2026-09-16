@@ -450,6 +450,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	// The focused preview's in-view search comes first: it owns / @ ] [ and,
+	// while a query is live, esc — otherwise esc still closes the preview below.
+	if nm, cmd, handled := m.previewSearchKey(msg); handled {
+		return nm, cmd
+	}
 	if p.typing { // /-input mode captures every key (same as the help window)
 		// Arrows/pages move the tree selection live while typing (no cursor reset),
 		// like the commit filter; j/k stay query text.
@@ -571,9 +576,8 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.focus = ret
 		return m, nil
 	case "/":
-		if m.filesPreview != nil { // no commit filter while the preview owns the right column
-			return m, nil
-		}
+		// A FOCUSED preview already took / above (its in-view text search); the
+		// tree side keeps its own filter even while a preview is open.
 		// Focus decides the search target. The commit-list side routes to the
 		// base commit filter (which the right column already renders); the tree
 		// side, and the stash list (which has no base filter), filter the tree.
@@ -675,6 +679,54 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.moveListUnderFilesView(m.pageStep())
 	}
 	return m, nil
+}
+
+// previewSearchKey gives the file preview's in-view search first refusal on a
+// key. It runs BEFORE the tree's own /-filter typing branch, so a query typed
+// into the preview can never land in the tree's filter, and only while the
+// preview owns the right column (the tree side keeps its own / entirely).
+func (m Model) previewSearchKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
+	p := m.filesPreview
+	if p == nil || m.filesTreeFocused {
+		return m, nil, false
+	}
+	rows, inner := m.filePreviewRowsCap(), m.filePreviewInnerW()
+	if p.search.typing {
+		nm, cmd, ev := m.searchTypingKey(&p.search, msg)
+		m = nm
+		switch ev {
+		case searchChanged, searchCommitted:
+			p.search.refindFrom(previewSearchLines(p), p.search.origin)
+			if p.search.cur >= 0 {
+				p.snapHit(rows, inner)
+			} else {
+				p.sel, p.hscroll = p.searchOrig.sel, p.searchOrig.hscroll
+			}
+		case searchCancelled:
+			p.sel, p.hscroll = p.searchOrig.sel, p.searchOrig.hscroll
+		}
+		return m, cmd, true
+	}
+	switch searchCommandKey(&p.search, msg) {
+	case searchOpenFwd, searchOpenBack:
+		p.searchOrig = previewOrigin{sel: p.sel, hscroll: p.hscroll}
+		p.search.open(msg.String() == "@", p.searchPos())
+		return m.recallReset(), nil, true
+	case searchNext:
+		p.search.cur = stepHit(p.search.hits, p.searchPos(), 1)
+		p.snapHit(rows, inner)
+		return m, nil, true
+	case searchPrev:
+		p.search.cur = stepHit(p.search.hits, p.searchPos(), -1)
+		p.snapHit(rows, inner)
+		return m, nil, true
+	case searchCleared:
+		p.search.clear()
+		return m, nil, true
+	case searchIgnored:
+		return m, nil, true
+	}
+	return m, nil, false
 }
 
 // openDiffForFileLine opens the full-screen diff for one files-view tree row,

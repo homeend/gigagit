@@ -62,7 +62,15 @@ type contentPopup struct {
 	// a tall popup covers the status bar, so reporting the path only there
 	// hides it behind the box's own border (save_content.go).
 	saved string
+	// search is the FILE PREVIEW's in-view text search (spec §4.3). Only the
+	// right-column preview uses it — the help window and the files tree filter
+	// with query/typing above; the zero value is inert everywhere else.
+	search     textSearch
+	searchOrig previewOrigin
 }
+
+// previewOrigin is the pager state a live preview search restores on esc.
+type previewOrigin struct{ sel, hscroll int }
 
 // The message a block-mode viewer shows is quoted text — git's stderr, a
 // notice's fix instructions — not the popup's own words. A faint band behind
