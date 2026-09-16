@@ -361,3 +361,72 @@ func TestPreviewHintVariants(t *testing.T) {
 		t.Fatalf("the status bar must switch to the selection variant: %q", f)
 	}
 }
+
+// A cursor scrolled OUT of the window re-enters it at the nearest edge on the
+// next alt+↑/↓ instead of dragging the viewport back to wherever it was: the
+// user scrolled away on purpose. The pager top (sel) must not move on a snap.
+func TestPreviewAltDownSnapsToTheTopWhenTheCursorIsAbove(t *testing.T) {
+	t.Parallel()
+	m := previewTabModel(t)
+	p := m.filesPreview
+	m = feedPreview(m, "down", "down", "down", "down", "down") // cursor 0 is now above the window
+	if p.sel != 5 || p.cur != 0 {
+		t.Fatalf("setup: sel=%d cur=%d, want 5/0", p.sel, p.cur)
+	}
+	m = feedPreview(m, "alt+down")
+	if p.cur != 5 {
+		t.Fatalf("alt+down with the cursor above the window must land on the TOP visible row, cur = %d want 5", p.cur)
+	}
+	if p.sel != 5 {
+		t.Fatalf("a snap must not scroll, sel = %d want 5", p.sel)
+	}
+	m = feedPreview(m, "alt+up") // above again? no: the cursor is visible now, so it steps and scrolls minimally
+	if p.cur != 4 || p.sel != 4 {
+		t.Fatalf("a visible cursor steps normally: cur=%d sel=%d, want 4/4", p.cur, p.sel)
+	}
+}
+
+func TestPreviewAltUpSnapsToTheBottomWhenTheCursorIsBelow(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	m := previewTabModel(t)
+	p := m.filesPreview
+	rows := m.filePreviewRowsCap()
+	for i := 0; i < rows+5; i++ {
+		m = feedPreview(m, "alt+down")
+	}
+	for i := 0; i < 8; i++ {
+		m = feedPreview(m, "up")
+	}
+	if p.sel != 0 || p.cur != rows+5 {
+		t.Fatalf("setup: sel=%d cur=%d, want 0/%d", p.sel, p.cur, rows+5)
+	}
+	m = feedPreview(m, "alt+up")
+	if p.cur != rows-1 {
+		t.Fatalf("alt+up with the cursor below the window must land on the BOTTOM visible row, cur = %d want %d", p.cur, rows-1)
+	}
+	if p.sel != 0 {
+		t.Fatalf("a snap must not scroll, sel = %d want 0", p.sel)
+	}
+	// The band sits on the last body row of the rendered box, which pins that
+	// filePreviewRowsCap agrees with renderFilePreview's own row budget.
+	boxW, boxH := m.layout().rightW, m.layout().boxH[panelCommits]
+	out := m.renderFilePreview(boxW, boxH)
+	band := sgrBefore(st().diffCursorRow.Render("x"), "x")
+	needle := p.lines[rows-1].text
+	row := previewRowWith(t, out, needle)
+	if got := sgrBefore(row, needle); !subsetOf(band, got) {
+		t.Errorf("the bottom visible row must wear the band, params %v: %q", got, row)
+	}
+	lines := strings.Split(out, "\n")
+	// title, rows..., hint, then the bottom border: the band row is the last body row.
+	if want := lines[len(lines)-3]; want != row {
+		t.Errorf("the snapped cursor is not on the last body row:\nlast body: %q\ncursor:    %q", want, row)
+	}
+	m = feedPreview(m, "alt+down") // the cursor is visible: it steps and the pager follows by one
+	if p.cur != rows || p.sel != 1 {
+		t.Fatalf("a visible cursor at the bottom steps and scrolls by one: cur=%d sel=%d, want %d/1", p.cur, p.sel, rows)
+	}
+}
