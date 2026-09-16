@@ -773,6 +773,44 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 	}
 }
 
+// resolveHeadEndpoint resolves HEAD to a sha through the domain service and
+// builds the resulting Endpoint. HEAD must be resolved to a sha before it
+// reaches model.CommitEndpoint: Endpoint.CacheTag() returns Hash verbatim
+// and is the session diff-cache key, so the literal "HEAD" there would key
+// the cache on a name that moves — `gg compare HEAD @worktree`, reopened
+// after a commit, could then serve the previous diff (see the task-3b
+// report). Used by loadHeadFileDiffCmd (off the UI thread) and pinned
+// directly by TestCompareTagDoesNotKeyOnAMovingRev.
+func (m Model) resolveHeadEndpoint() (model.Endpoint, error) {
+	line, ok, err := m.svc.CommitLookup(context.Background(), "HEAD")
+	if err != nil {
+		return model.Endpoint{}, err
+	}
+	if !ok {
+		return model.Endpoint{}, errors.New("no commit yet")
+	}
+	return model.CommitEndpoint(line.Hash)
+}
+
+// loadHeadFileDiffCmd resolves HEAD off the UI thread (resolveHeadEndpoint),
+// then loads the HEAD ↔ working tree diff for path via loadCompareDiffCmd.
+// tag is the value the caller (file_finder.go's "ff-diff" action) already
+// set m.diffTag to synchronously, before the resolve completes; the
+// returned diffMsg is forced to carry that SAME tag so it is not dropped as
+// stale by the diffMsg handler's tag gate (model.go), which compares against
+// m.diffTag as it stood when the action ran.
+func (m Model) loadHeadFileDiffCmd(path string, right model.Endpoint, tag string) tea.Cmd {
+	return func() tea.Msg {
+		left, err := m.resolveHeadEndpoint()
+		if err != nil {
+			return diffMsg{tag: tag, view: &diffView{err: err}}
+		}
+		msg := m.loadCompareDiffCmd(left, right, contentLine{path: path})().(diffMsg)
+		msg.tag = tag
+		return msg
+	}
+}
+
 // update lets a diffView live on the layer stack: it delegates to the existing
 // Model-side key handler (which finds this diff via m.diffLayer()) and adapts the
 // tea.Model return to the layer interface's Model.

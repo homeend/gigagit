@@ -315,12 +315,17 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 			label: i18n.T("Diff (HEAD ↔ working tree)"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
-				// left is NOT migrated to model.CommitEndpoint: "HEAD" is a git
-				// rev-spec, not a hex hash (CommitEndpoint would refuse it). Same
-				// bucket as internal/cli/compare.go's parseEndpoint default case
-				// and the oldest.key+"^" range compare in commit_scope.go — see
-				// the task-3 report.
-				left := model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"}
+				// HEAD is resolved to a sha off the UI thread by
+				// loadHeadFileDiffCmd (diff_view.go) before it becomes an
+				// Endpoint: CacheTag() returns Hash verbatim and is the
+				// session diff-cache key, so the literal "HEAD" there would
+				// key the cache on a name that moves (see the task-3b
+				// report). m.diffTag is set here to a placeholder built the
+				// same way the OLD unresolved code built its (only) tag —
+				// it is a transient UI dispatch-gating value, never an
+				// Endpoint.Hash, so reusing the "HEAD" literal in it is safe;
+				// loadHeadFileDiffCmd returns this exact same tag so the
+				// eventual diffMsg is not dropped as stale.
 				right := model.WorkTreeEndpoint()
 				v := &diffView{
 					title:   path,
@@ -331,8 +336,8 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 				}
 				m = m.pushLayer(v)
 				m.diffNav = diffNavNone
-				m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + path
-				return m, m.loadCompareDiffCmd(left, right, contentLine{path: path})
+				m.diffTag = "cmp:HEAD:" + right.CacheTag() + ":" + path
+				return m, m.loadHeadFileDiffCmd(path, right, m.diffTag)
 			},
 		},
 		{

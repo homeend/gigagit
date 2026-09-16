@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,15 @@ import (
 
 	"github.com/homeend/gigagit/internal/model"
 )
+
+// noResolve fails the test if parseEndpoint calls it — used for the
+// @worktree/@staged/@index cases, which must never touch the resolver.
+func noResolve(t *testing.T) func(string) (string, bool, error) {
+	return func(rev string) (string, bool, error) {
+		t.Fatalf("resolve(%q) called; @worktree/@staged/@index must not resolve", rev)
+		return "", false, nil
+	}
+}
 
 func TestParseEndpoint(t *testing.T) {
 	t.Parallel()
@@ -18,18 +28,66 @@ func TestParseEndpoint(t *testing.T) {
 		{"@worktree", model.WorkTreeEndpoint()},
 		{"@staged", model.IndexEndpoint()},
 		{"@index", model.IndexEndpoint()},
-		// These two are NOT migrated to model.CommitEndpoint: they pin
-		// parseEndpoint's pass-through of an arbitrary git commit-ish
-		// (neither "HEAD~2" nor "abc123" is 7..64 hex, so CommitEndpoint
-		// would refuse both) — see the comment on parseEndpoint's default
-		// case and the task-3 report.
-		{"HEAD~2", model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD~2"}},
-		{"abc123", model.Endpoint{Kind: model.EndpointCommit, Hash: "abc123"}},
 	}
 	for _, c := range cases {
-		if got := parseEndpoint(c.in); got != c.want {
+		got, err := parseEndpoint(c.in, noResolve(t))
+		if err != nil {
+			t.Fatalf("parseEndpoint(%q): %v", c.in, err)
+		}
+		if got != c.want {
 			t.Errorf("parseEndpoint(%q) = %+v, want %+v", c.in, got, c.want)
 		}
+	}
+}
+
+// TestParseEndpointResolvesCommitish pins the fix for the shipped cache bug:
+// a default-case token (HEAD, a branch name, "HEAD~2", an abbreviated sha)
+// must be resolved to a sha through resolve before model.CommitEndpoint
+// builds the Endpoint — CacheTag() returns Hash verbatim and is the session
+// diff-cache key, so a rev-spec there would key the cache on a name that
+// moves.
+func TestParseEndpointResolvesCommitish(t *testing.T) {
+	t.Parallel()
+	resolve := func(rev string) (string, bool, error) {
+		if rev != "HEAD~2" {
+			t.Fatalf("resolve called with unexpected rev %q", rev)
+		}
+		return "abc1234", true, nil
+	}
+	got, err := parseEndpoint("HEAD~2", resolve)
+	if err != nil {
+		t.Fatalf("parseEndpoint: %v", err)
+	}
+	want, werr := model.CommitEndpoint("abc1234")
+	if werr != nil {
+		t.Fatalf("model.CommitEndpoint: %v", werr)
+	}
+	if got != want {
+		t.Fatalf("parseEndpoint(%q) = %+v, want %+v", "HEAD~2", got, want)
+	}
+}
+
+// TestParseEndpointUnresolvableRevErrors covers a typo or a gc'd sha: resolve
+// reports ok=false (CommitLookup's "missing is not an error" convention),
+// and parseEndpoint must turn that into a non-nil error rather than handing
+// back a zero Endpoint silently.
+func TestParseEndpointUnresolvableRevErrors(t *testing.T) {
+	t.Parallel()
+	resolve := func(rev string) (string, bool, error) { return "", false, nil }
+	if _, err := parseEndpoint("no-such-rev", resolve); err == nil {
+		t.Fatal("parseEndpoint should error on an unresolvable rev")
+	}
+}
+
+// TestParseEndpointResolveErrorPropagates covers resolve itself failing
+// (e.g. context cancellation) — the error must not be discarded.
+func TestParseEndpointResolveErrorPropagates(t *testing.T) {
+	t.Parallel()
+	wantErr := errors.New("boom")
+	resolve := func(rev string) (string, bool, error) { return "", false, wantErr }
+	_, err := parseEndpoint("HEAD", resolve)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("parseEndpoint error = %v, want wrapping %v", err, wantErr)
 	}
 }
 

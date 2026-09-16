@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -47,6 +48,45 @@ func TestDiffMsgClearsLoading(t *testing.T) {
 	}
 	if mm.diffLayer().loading {
 		t.Error("a completed diffMsg must clear loading; body would stay on \"(loading…)\"")
+	}
+}
+
+// TestCompareTagDoesNotKeyOnAMovingRev pins the bug that plan 1a's Task 3
+// surfaced: CacheTag() returns Hash verbatim, so an endpoint holding "HEAD"
+// keyed the session diff cache on a name that moves. Committing and
+// re-opening the same compare could then serve the PREVIOUS diff.
+//
+// This builds the endpoint the way the production path now does (resolve
+// HEAD through the domain service, THEN build the Endpoint — see
+// loadHeadFileDiffCmd in diff_view.go, the fix for file_finder.go's "HEAD ↔
+// working tree" action), at two different HEADs in a real repo, and requires
+// the tags to differ. Before that fix, file_finder.go built its endpoint
+// directly from the unresolved "HEAD" rev-spec — a moving name, not a
+// resolved sha — and this test failed with both tags equal to the literal
+// "HEAD" (see the task-3b report for the failing run).
+func TestCompareTagDoesNotKeyOnAMovingRev(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "hi\n")
+	m := loadedModelAt(t, dir)
+
+	resolveHeadTag := func(m Model) string {
+		t.Helper()
+		ep, err := m.resolveHeadEndpoint()
+		if err != nil {
+			t.Fatalf("resolveHeadEndpoint: %v", err)
+		}
+		return ep.CacheTag()
+	}
+
+	tag1 := resolveHeadTag(m)
+
+	gittest.Run(t, dir, "commit", "--allow-empty", "-m", "second")
+	m = loadedModelAt(t, dir) // re-read: a fresh Model, same as reopening the compare
+
+	tag2 := resolveHeadTag(m)
+
+	if tag1 == tag2 {
+		t.Fatalf("CacheTag() must differ across commits when HEAD is resolved to a sha first, got %q for both", tag1)
 	}
 }
 

@@ -12,6 +12,20 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
+// compareBranches seeds m.branches with resolvable tip hashes for "feat/x"
+// and "main" — branchTipHash now declines (ok=false) a name it can't find,
+// so every test that calls openBranchCompare("feat/x", "main") needs this
+// (the hashes are fake but valid 7-char hex, satisfying CommitEndpoint; most
+// of these tests never touch real git, since they inject
+// compareFilesMsg/compareOriginsMsg synthetically rather than driving the
+// returned cmd).
+func compareBranches() []model.Branch {
+	return []model.Branch{
+		{Name: "feat/x", Hash: "aaaa111"},
+		{Name: "main", Hash: "bbbb222"},
+	}
+}
+
 // The Branches pair-op popup offers Compare as its 4th row, spelling out both
 // names in ↔ form.
 func TestPairOpsIncludeCompare(t *testing.T) {
@@ -35,7 +49,12 @@ func TestPairOpsIncludeCompare(t *testing.T) {
 func TestCompareRowOpensBranchCompare(t *testing.T) {
 	t.Parallel()
 	const marked, selected = "feature/long-branch-name", "main"
+	const markedHash, selectedHash = "cccc333", "bbbb222"
 	m := Model{width: 120, height: 40}
+	m.branches = []model.Branch{
+		{Name: marked, Hash: markedHash},
+		{Name: selected, Hash: selectedHash},
+	}
 	m.mark = &markState{panel: panelBranches, key: marked, display: marked}
 	m = m.pushLayer(newPairOpPopup(m.width, marked, selected, pairOpsFor(panelBranches)))
 
@@ -50,8 +69,11 @@ func TestCompareRowOpensBranchCompare(t *testing.T) {
 	if m.filesView == nil || !m.inCompareMode() {
 		t.Fatal("compare row should open the files view in compare mode")
 	}
-	if m.filesLeft.Hash != marked || m.filesRight.Hash != selected {
-		t.Fatalf("endpoints = %q / %q, want %q / %q", m.filesLeft.Hash, m.filesRight.Hash, marked, selected)
+	// The endpoints carry each branch's TIP HASH, not its name (see
+	// openBranchCompare's doc comment) — the diff cache keys on
+	// Endpoint.CacheTag(), which returns Hash verbatim.
+	if m.filesLeft.Hash != markedHash || m.filesRight.Hash != selectedHash {
+		t.Fatalf("endpoints = %q / %q, want tip hashes %q / %q", m.filesLeft.Hash, m.filesRight.Hash, markedHash, selectedHash)
 	}
 	if !strings.Contains(m.filesTitle, marked+" ↔ "+selected) {
 		t.Fatalf("title %q must carry the FULL branch names", m.filesTitle)
@@ -74,7 +96,7 @@ func TestCompareRowOpensBranchCompare(t *testing.T) {
 // (view closed or a different compare opened) is dropped.
 func TestCompareOriginsMsgTagGate(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 120, height: 40}
+	m := Model{width: 120, height: 40, branches: compareBranches()}
 	m, _ = m.openBranchCompare("feat/x", "main")
 
 	origins := model.CompareOrigins{APaths: map[string]bool{"a.txt": true}, BPaths: map[string]bool{}}
@@ -117,15 +139,20 @@ func TestOpenBranchCompareResolvesTipHashes(t *testing.T) {
 	}
 }
 
-// When the branches list doesn't know a name (e.g. not yet loaded), the
-// endpoint falls back to the name itself — still a valid commit-ish, just
-// without the diff-cache immutability guarantee.
-func TestOpenBranchCompareUnknownBranchFallsBack(t *testing.T) {
+// When the branches list doesn't know a name (e.g. not yet loaded),
+// openBranchCompare declines rather than opening a compare with an
+// unresolved endpoint — branchTipHash used to fall back to returning the
+// name itself, which could reach Endpoint.Hash and poison the diff cache
+// (CacheTag() returns Hash verbatim); see the task-3b report.
+func TestOpenBranchCompareUnknownBranchDeclines(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 120, height: 40}
+	m := Model{width: 120, height: 40} // no m.branches: neither name resolves
 	m, _ = m.openBranchCompare("feat/x", "main")
-	if m.filesLeft.Hash != "feat/x" || m.filesRight.Hash != "main" {
-		t.Fatalf("endpoints = %q / %q, want name fallback", m.filesLeft.Hash, m.filesRight.Hash)
+	if m.filesView != nil || m.inCompareMode() {
+		t.Fatalf("an unresolvable branch pair must not open the compare view: filesView=%v comparePair=%v", m.filesView, m.comparePair)
+	}
+	if m.statusMsg == "" {
+		t.Fatal("declining must leave a status note, not fail silently")
 	}
 }
 
@@ -134,7 +161,7 @@ func TestOpenBranchCompareUnknownBranchFallsBack(t *testing.T) {
 // filterCompareFiles(nil, set) even once origins are loaded.
 func TestFKeyRefusedBeforeFilesArrive(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 120, height: 40}
+	m := Model{width: 120, height: 40, branches: compareBranches()}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	origins := model.CompareOrigins{
 		APaths: map[string]bool{"a.txt": true},
@@ -159,7 +186,7 @@ func TestFKeyRefusedBeforeFilesArrive(t *testing.T) {
 // blindly overwrite filesView.lines with the raw list.
 func TestLateCompareFilesRespectsActiveScope(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 120, height: 40}
+	m := Model{width: 120, height: 40, branches: compareBranches()}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	files := []model.CommitFile{
 		{Status: "M", Path: "a.txt"},
@@ -202,7 +229,7 @@ func TestLateCompareFilesRespectsActiveScope(t *testing.T) {
 // from it when the scope changes); non-branch compares keep the old behavior.
 func TestCompareFilesMsgRetainsRawListForBranchPair(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 120, height: 40}
+	m := Model{width: 120, height: 40, branches: compareBranches()}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	files := []model.CommitFile{{Status: "M", Path: "a.txt"}}
 	mm, _ := m.Update(compareFilesMsg{tag: m.compareTag, files: files})
@@ -215,7 +242,7 @@ func TestCompareFilesMsgRetainsRawListForBranchPair(t *testing.T) {
 // closeFilesView must drop the pair state (it is compare-view-scoped).
 func TestCloseFilesViewClearsComparePair(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 120, height: 40}
+	m := Model{width: 120, height: 40, branches: compareBranches()}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	m = m.closeFilesView()
 	if m.comparePair != nil {
@@ -227,7 +254,7 @@ func TestCloseFilesViewClearsComparePair(t *testing.T) {
 // openCompareFiles same-tag convention) and does not re-arm state.
 func TestOpenBranchCompareSamePairKeepsView(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 120, height: 40}
+	m := Model{width: 120, height: 40, branches: compareBranches()}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	m.comparePair.originsLoaded = true // pretend origins landed
 	m, _ = m.openBranchCompare("feat/x", "main")
@@ -258,7 +285,7 @@ func TestFilterCompareFiles(t *testing.T) {
 // f cycles all -> left-only -> right-only -> all, rebuilding rows and title.
 func TestFKeyCyclesScope(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 120, height: 40}
+	m := Model{width: 120, height: 40, branches: compareBranches()}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	files := []model.CommitFile{
 		{Status: "M", Path: "a.txt"},
@@ -310,7 +337,7 @@ func TestFKeyCyclesScope(t *testing.T) {
 // f before the origin sets land: status note, scope unchanged.
 func TestFKeyBeforeOriginsLoaded(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 120, height: 40}
+	m := Model{width: 120, height: 40, branches: compareBranches()}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	mm, _ := m.Update(keyMsg("f"))
 	m = mm.(Model)
@@ -325,7 +352,7 @@ func TestFKeyBeforeOriginsLoaded(t *testing.T) {
 // No merge base: the typed sentinel maps to the unavailable note.
 func TestFKeyNoMergeBase(t *testing.T) {
 	t.Parallel()
-	m := Model{width: 120, height: 40}
+	m := Model{width: 120, height: 40, branches: compareBranches()}
 	m, _ = m.openBranchCompare("feat/x", "main")
 	mm, _ := m.Update(compareOriginsMsg{tag: m.compareTag, err: fmt.Errorf("%w: exit 1", domain.ErrNoMergeBase)})
 	m = mm.(Model)
@@ -360,6 +387,7 @@ func TestBranchCompareRendersWithFilter(t *testing.T) {
 	m := loadedModel(t) // real repo + svc (nav_test.go); cmds are not invoked
 	mm0, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
 	m = mm0.(Model)
+	m.branches = compareBranches() // "feat/x" isn't a real branch in the fixture repo; openBranchCompare needs it to resolve
 	m, _ = m.openBranchCompare("feat/x", "main")
 	files := []model.CommitFile{{Status: "M", Path: "a.txt"}, {Status: "M", Path: "b.txt"}}
 	mm, _ := m.Update(compareFilesMsg{tag: m.compareTag, files: files})

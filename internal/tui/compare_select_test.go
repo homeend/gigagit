@@ -117,8 +117,16 @@ func TestCompareSelectionThreeCommitsSquash(t *testing.T) {
 	if !ok {
 		t.Fatalf("three non-root commits must squash: %q", note)
 	}
-	if left.Hash != m.commits[2].Hash+"^" {
-		t.Fatalf("squash base = %q, want %q", left.Hash, m.commits[2].Hash+"^")
+	// The squash base is the oldest SELECTED commit's PARENT (c1's parent,
+	// c0) — a resolved sha read from m.commits[2].Parents, not the
+	// "oldest.key^" rev-spec (Endpoint.CacheTag() is the diff-cache key and
+	// must never hold a rev-spec — see the task-3b report).
+	if len(m.commits[2].Parents) == 0 {
+		t.Fatalf("c1 (m.commits[2]) must have a parent in a 4-commit chain")
+	}
+	wantParent := m.commits[2].Parents[0]
+	if left.Hash != wantParent {
+		t.Fatalf("squash base = %q, want %q (oldest selected commit's parent)", left.Hash, wantParent)
 	}
 	if right.Hash != m.commits[0].Hash {
 		t.Fatalf("squash tip = %q, want %q", right.Hash, m.commits[0].Hash)

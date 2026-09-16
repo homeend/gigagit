@@ -69,9 +69,13 @@ func TestFileFinderHistoryActionOpensHistoryLayer(t *testing.T) {
 
 func TestFileFinderDiffActionOpensDiffLayer(t *testing.T) {
 	t.Parallel()
-	const path = "a/b.go"
+	// file0.txt is a real tracked file in loadedModelLinearCommits's fixture
+	// (finderSetup(t, path) only injects the lsFilesMsg — it does not make
+	// path exist in the repo — and the diff action now does a real HEAD
+	// resolve + git show, which needs a real path).
+	const path = "file0.txt"
 	m, rows := finderSetup(t, path)
-	nm, _ := finderRow(t, rows, "ff-diff")(m)
+	nm, cmd := finderRow(t, rows, "ff-diff")(m)
 	m = nm.(Model)
 
 	if layerOf[*diffView](m) == nil {
@@ -81,20 +85,35 @@ func TestFileFinderDiffActionOpensDiffLayer(t *testing.T) {
 		t.Fatal("the finder must be popped when the diff action runs")
 	}
 
-	// Guard the tag coupling: ff-diff inlines the tag; loadCompareDiffCmd also
-	// builds it from the same formula. Assert they byte-match so a future drift
-	// in either side fails this test rather than causing a silent hang.
-	// left mirrors file_finder.go's ff-diff action exactly (including the
-	// "HEAD" rev-spec, not a hex hash — see the task-3 report's rev-spec
-	// bucket), since this test pins that the tag formulas byte-match.
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"}
+	// Guard the tag coupling: ff-diff sets m.diffTag to a placeholder built
+	// with the "HEAD" literal (a transient UI dispatch-gating value, never an
+	// Endpoint.Hash — see file_finder.go and loadHeadFileDiffCmd in
+	// diff_view.go). Assert the two byte-match so a future drift in either
+	// side fails this test rather than causing a silent hang.
 	right := model.WorkTreeEndpoint()
-	wantTag := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + path
+	wantTag := "cmp:HEAD:" + right.CacheTag() + ":" + path
 	if m.diffTag == "" {
 		t.Fatal("ff-diff should set m.diffTag")
 	}
 	if m.diffTag != wantTag {
 		t.Fatalf("diffTag mismatch\n got:  %q\nwant: %q", m.diffTag, wantTag)
+	}
+
+	// Drive the async resolve+load: the returned diffMsg must carry the SAME
+	// tag (or it would be dropped as stale by the handler's gate) and a real
+	// resolved-HEAD diff, not an error.
+	if cmd == nil {
+		t.Fatal("ff-diff should return a load command")
+	}
+	dmsg, ok := cmd().(diffMsg)
+	if !ok {
+		t.Fatalf("expected a diffMsg, got %T", cmd())
+	}
+	if dmsg.tag != m.diffTag {
+		t.Fatalf("diffMsg.tag = %q, want %q (the pending gate value)", dmsg.tag, m.diffTag)
+	}
+	if dmsg.view.err != nil {
+		t.Fatalf("HEAD resolve/diff load failed: %v", dmsg.view.err)
 	}
 }
 

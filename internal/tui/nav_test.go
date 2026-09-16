@@ -7,12 +7,27 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 func loadedModel(t *testing.T) Model {
 	t.Helper()
 	repo := newRepo(t)
+	m := New(domain.New(repo))
+	updated, cmd := m.Update(m.loadCmd()())
+	return settleLoad(t, updated.(Model), cmd)
+}
+
+// loadedModelAt is loadedModel for a caller-supplied repo directory — used
+// where the test drives more commits into the repo directly (e.g. via
+// gittest.Run) and needs a fresh Model reflecting the new HEAD, mirroring a
+// real reopen of the app.
+func loadedModelAt(t *testing.T, dir string) Model {
+	t.Helper()
+	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))}
 	m := New(domain.New(repo))
 	updated, cmd := m.Update(m.loadCmd()())
 	return settleLoad(t, updated.(Model), cmd)

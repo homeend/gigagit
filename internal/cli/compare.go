@@ -13,22 +13,31 @@ import (
 
 // parseEndpoint maps a CLI token to a comparison endpoint: "@worktree" (the
 // working tree), "@staged"/"@index" (the index), or any other token as a
-// commit-ish (git resolves HEAD, branch names, abc123, HEAD~2, …).
-func parseEndpoint(s string) model.Endpoint {
+// commit-ish (HEAD, a branch name, abc123, HEAD~2, …) resolved to a full
+// sha through resolve before it reaches model.CommitEndpoint.
+//
+// The commit-ish MUST be resolved to a sha before it reaches CommitEndpoint:
+// Endpoint.CacheTag() returns Hash verbatim and is the session diff-cache
+// key, so a git rev-spec there would key the cache on a name that moves —
+// `gg compare HEAD @worktree`, reopened after a commit, could then serve the
+// previous diff (see the task-3b report). The caller passes a resolver bound
+// to its own domain.Service (this function has no service access of its
+// own), mirroring internal/mcp/compare.go's endpointFor.
+func parseEndpoint(s string, resolve func(rev string) (hash string, ok bool, err error)) (model.Endpoint, error) {
 	switch s {
 	case "@worktree":
-		return model.WorkTreeEndpoint()
+		return model.WorkTreeEndpoint(), nil
 	case "@staged", "@index":
-		return model.IndexEndpoint()
+		return model.IndexEndpoint(), nil
 	default:
-		// NOT migrated to model.CommitEndpoint: s is an arbitrary git
-		// commit-ish (HEAD, a branch name, "HEAD~2", an abbreviated sha —
-		// see the doc comment above), which git itself resolves once this
-		// endpoint's Hash reaches argv (internal/git/compare.go).
-		// CommitEndpoint requires 7..64 hex characters, so most real CLI
-		// input ("main", "HEAD~2") would fail it. See the task-3 report's
-		// rev-spec bucket for the full reasoning and the open question.
-		return model.Endpoint{Kind: model.EndpointCommit, Hash: s}
+		hash, ok, err := resolve(s)
+		if err != nil {
+			return model.Endpoint{}, fmt.Errorf("resolving %q: %w", s, err)
+		}
+		if !ok {
+			return model.Endpoint{}, fmt.Errorf("unknown revision: %s", s)
+		}
+		return model.CommitEndpoint(hash)
 	}
 }
 
@@ -125,8 +134,10 @@ func cmdCompare(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 // shelf:<id> address a stored commit entry and resolve hybrid (live sha while
 // it exists, frozen tar for a gc'd shelved commit — noted on stderr so stdout
 // stays parseable); anything else is the existing vocabulary
-// (@worktree/@staged/commit-ish). The int is an exit code: 0 = resolved,
-// 1 = failure (gone bookmark), 2 = usage (unknown id / not a commit entry).
+// (@worktree/@staged/commit-ish — a commit-ish is resolved to a sha via
+// svc.CommitLookup before parseEndpoint builds the Endpoint). The int is an
+// exit code: 0 = resolved, 1 = failure (gone bookmark), 2 = usage (unknown
+// id / not a commit entry / unresolvable commit-ish).
 func resolveCompareSpec(svc *domain.Service, tok string, stderr io.Writer) (model.Endpoint, int) {
 	ctx := context.Background()
 	switch {
@@ -172,6 +183,15 @@ func resolveCompareSpec(svc *domain.Service, tok string, stderr io.Writer) (mode
 		}
 		return ep, 0
 	default:
-		return parseEndpoint(tok), 0
+		resolve := func(rev string) (string, bool, error) {
+			line, ok, err := svc.CommitLookup(ctx, rev)
+			return line.Hash, ok, err
+		}
+		ep, err := parseEndpoint(tok, resolve)
+		if err != nil {
+			fmt.Fprintln(stderr, "compare:", err)
+			return model.Endpoint{}, 2
+		}
+		return ep, 0
 	}
 }

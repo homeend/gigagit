@@ -58,17 +58,20 @@ func branchCompareTitle(left, right string, scope compareScope) string {
 	return t
 }
 
-// branchTipHash resolves a local branch's tip hash from the loaded branches
-// list; falls back to the name itself when the list doesn't know it (the
-// name is still a valid commit-ish — only the diff-cache immutability
-// guarantee is lost).
-func (m Model) branchTipHash(name string) string {
+// branchTipHash returns the tip sha for a branch name, and ok=false when the
+// name is not among the loaded branches. It never falls back to returning the
+// NAME: that value used to reach Endpoint.Hash, and Endpoint.CacheTag()
+// returns Hash verbatim as the session diff-cache key — a name there
+// silently keyed the cache on something that moves (see the task-3b
+// report). Callers must handle ok==false rather than opening a compare with
+// an unresolved endpoint.
+func (m Model) branchTipHash(name string) (string, bool) {
 	for _, b := range m.branches {
 		if b.Name == name {
-			return b.Hash
+			return b.Hash, true
 		}
 	}
-	return name
+	return "", false
 }
 
 // compareTagFor is the compare-view identity tag for an endpoint pair; both
@@ -89,20 +92,28 @@ func compareTagFor(left, right model.Endpoint) string {
 // same compare). The branch NAMES are kept for comparePairState.left/right,
 // the title, and the origin-set load — all display-facing or valid
 // commit-ish, never cache keys.
+//
+// Declines (returns m unchanged, with a status note) when either name is not
+// among the loaded branches — branchTipHash reports that as ok==false rather
+// than falling back to the name itself, which used to be able to reach
+// Endpoint.Hash (see branchTipHash's doc comment). The only production
+// caller (mark.go) guards this via markAlive first, so a decline here is not
+// expected to be user-visible in practice; the test suite calls
+// openBranchCompare directly with an empty m.branches, which is exactly the
+// miss this guards.
 func (m Model) openBranchCompare(marked, selected string) (Model, tea.Cmd) {
-	markedHash := m.branchTipHash(marked)
-	selectedHash := m.branchTipHash(selected)
-	// NOT migrated to model.CommitEndpoint: branchTipHash falls back to
-	// returning the branch NAME unchanged when it finds no matching entry in
-	// m.branches. The only production caller (mark.go) guards this via
-	// markAlive first, but the test suite calls openBranchCompare directly
-	// with an empty m.branches, so markedHash/selectedHash are not
-	// guaranteed to be a resolved hash by this function's own contract.
-	// Same rev-spec bucket as cli/compare.go's parseEndpoint,
-	// file_finder.go's "HEAD", and commit_scope.go's oldest.key+"^" — see
-	// the task-3 report.
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: markedHash}
-	right := model.Endpoint{Kind: model.EndpointCommit, Hash: selectedHash}
+	markedHash, ok := m.branchTipHash(marked)
+	if !ok {
+		m.statusMsg = i18n.T("no commit selected to compare against")
+		return m, nil
+	}
+	selectedHash, ok := m.branchTipHash(selected)
+	if !ok {
+		m.statusMsg = i18n.T("no commit selected to compare against")
+		return m, nil
+	}
+	left := mustCommitEndpoint(markedHash)
+	right := mustCommitEndpoint(selectedHash)
 	tag := compareTagFor(left, right)
 	// Same pair already showing: keep it (the openCompareFiles same-tag
 	// convention), and keep its state — re-arming would drop loaded origins.
