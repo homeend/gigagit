@@ -114,7 +114,7 @@ Three rules, in priority order:
 
 1. **Compare ignores the hint.** A bookmarked commit and the same commit
    picked off the log are one endpoint. No bookmark×shelf×commit matrix — the
-   matrix stays the 2×2 of §3.4.
+   matrix stays the 2×2 of §3.5.
 2. **Navigate honours the hint.** Same address, different landing: reveal the
    bookmark row, the shelf row, or the commit in the log.
 3. **The hint degrades; it never fails.** On another machine the address still
@@ -139,7 +139,54 @@ for the landing. Losing the hint loses nothing but the sidebar landing.
 **Merge previews keep their shipped spelling** — `LinkPreview{Source,Target}`
 carries the *branch-name pair*, deliberately, so it travels. No hint.
 
-### 3.4 The compare algebra
+### 3.4 Stashes
+
+A stash **is a commit**, so it needs no new grammar. `internal/git/stash.go`
+already says so: `StashCommit` "resolves a stash ref (e.g. stash@{0}) to its
+commit SHA so the file tree / diff can read it as an ordinary commit."
+
+| link | kind | meaning |
+|---|---|---|
+| `gg://repo@<stash-sha>` | unbounded | the tree the stash captured |
+| `gg://repo@<stash-sha>^..<stash-sha>` | bounded | what the stash changes |
+
+The first-parent rule of §3.2 is already correct here by construction: a
+stash's first parent is the HEAD it was made on, which is exactly what
+`git stash show` diffs against.
+
+Two rules specific to stashes:
+
+1. **`stash@{N}` must never appear in a link.** It is positional — pushing,
+   popping or dropping any stash shifts every N, so the same link text would
+   silently name a different stash. The producer resolves to the sha at copy
+   time, exactly as it already does for a commit's parent. `?stash=<n>`
+   survives only as a landing hint, and it is the most fragile hint in the
+   system: N changes while the thing it names does not.
+2. **A stash link can dangle, with no fallback.** A stash commit is reachable
+   only through `refs/stash` and its reflog; pop or drop it and the sha
+   becomes gc-able. Unlike a shelved commit there is no frozen tar, so this is
+   a plain `CommitGoneError`. The message should point at shelving as the way
+   to keep it.
+
+**Untracked files are included.** `StashPush` takes `includeUntracked`, so gg
+can create three-parent stashes — `[HEAD, index, untracked-tree]` — whose
+untracked files live in the *third parent*, not in the stash's own tree. A
+plain `<sha>^..<sha>` would silently omit them. The bounded set is therefore
+tracked changes **plus** the third parent's files, entering as additions:
+
+```
+M  internal/tui/diff.go       (tracked)
+M  internal/domain/query.go   (tracked)
+A  scratch/notes.txt          (untracked, from parent 3)
+```
+
+This is deliberately *not* `git stash show` — it is "what I stashed", which is
+the user's mental model, and gg already knows which it is because
+`StashPush` recorded the flag. Comparing such a stash against a commit then
+reports the untracked file as A/D, which is what §3.5 already does for any key
+absent from the other side. Cost: one extra tree read.
+
+### 3.5 The compare algebra
 
 ```
 unbounded × unbounded  →  BOUNDED   git diff A B: the differing paths
@@ -161,7 +208,7 @@ linkable, and usable as an endpoint of the next comparison. This is what makes
 `domain.shelfCommitCompare` is already the third row with a `shelfIsRight`
 direction flag. The work is generalizing that one function.
 
-### 3.5 Worked examples
+### 3.6 Worked examples
 
 | left | right | lane | result |
 |---|---|---|---|
@@ -171,6 +218,7 @@ direction flag. The work is generalizing that one function.
 | `?shelf=<id>` | `@abc123` | bnd × unb | the shelf's members, projected onto `abc123`'s tree |
 | `@ref:mine` | `@ref:theirs` | unb × unb | the two tips |
 | `@abc122..abc123` | `?shelf=<id>` | bnd × bnd | did the shelf hold the same change as the commit? |
+| `@<stash>^..<stash>` | `@ref:feat/x` | bnd × unb | the stash's files, projected onto the branch tip — "is my stash already on the branch?" |
 
 ---
 
@@ -246,7 +294,12 @@ bookmark: auth fix              gg://gigagit@abc123?bookmark=auth-fix
 shelf:    WIP parser            gg://gigagit@abc123?shelf=commit-x-9f3a1
 preview:  main...feat/x         gg://gigagit@main...feat/x
 commit:   abc123 fix auth       gg://gigagit@abc123
+stash:    WIP on main           gg://gigagit@9c1f2a3^..9c1f2a3?stash=0
 ```
+
+The stash row shows why `Desc` must be captured at creation: `stash@{0}` is
+gone from the link by design, and the subject ("WIP on main") is the only
+thing that makes the row recognizable in the list.
 
 ### 4.4 Changed packages
 
@@ -307,8 +360,10 @@ click, on any surface, appends to the history.**
 ### 5.1 TUI
 
 - Copy-link rows via the existing `.` type-to-filter action menu, on branch /
-  commit / bookmark / shelf / preview rows. A commit **row** copies the tree;
-  a commit **diff view** copies the pair `@parent..sha`.
+  commit / bookmark / shelf / preview / **stash** rows. A commit **row** copies
+  the tree; a commit **diff view** copies the pair `@parent..sha`. A stash row
+  copies the **pair** (what the stash changes), which is what a stash is for —
+  and always the resolved sha, never `stash@{N}`.
 - The `#` paste prompt gains a history picker alongside free paste.
 - New palette command **"Compare with link…"**: two fields, each filled by
   paste *or* from the 20-row history → the compare view → *Save comparison*.
@@ -360,6 +415,7 @@ binds a random port each run, which empties `localStorage`.
 | hint absent **and it was the content source** | hard error — nothing can supply the bytes |
 | shelved commit gc'd, frozen tar present | use the tar (shipped `ResolveCommitEntryEndpoint` semantics) |
 | commit gone, no fallback | `CommitGoneError` (shipped) |
+| stash popped or dropped, sha gc'd | `CommitGoneError` — there is no frozen fallback; the message points at shelving |
 | bounded × bounded, disjoint sets | empty result, **not** an error |
 | `ref:` does not resolve | error |
 | two links naming different repos | refused in phase 1 — §9 |
@@ -376,6 +432,9 @@ binds a random port each run, which empties `localStorage`.
   every cell asserted, including projection direction (the generalization of
   `shelfIsRight` — whether a missing key reads `A` or `D` depends on which
   side is bounded).
+- **stashes** — a three-parent stash (`gg stash -u`) whose bounded set must
+  include the untracked file from parent 3; and a popped stash whose link
+  yields `CommitGoneError` rather than a wrong answer. Both need a real repo.
 - **`e2e`** — `gg link` → `gg compare` → `gg compare --save` round-trips as
   TOML scenarios under `e2e/scenarios/`.
 - **`web`** — `links.js` pinned against the Go grammar. Precedent: the JS date
