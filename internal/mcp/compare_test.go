@@ -30,6 +30,31 @@ func TestCompareTreesWorktreeVsCommit(t *testing.T) {
 	}
 }
 
+// A commit side must survive core.abbrev below Endpoint's 7-char floor.
+// svc.CommitLookup hands back model.LogLine.Hash — `%h`, whose width honours
+// core.abbrev (git's legal minimum is 4) — so building the Endpoint from it
+// made a legal repo config a hard failure: `resolving "HEAD": bad endpoint:
+// commit hash must be 7..64 characters, got 4`. The rev is resolved to its
+// FULL sha instead.
+func TestCompareTreesShortAbbrev(t *testing.T) {
+	e := newTestEnv(t)
+	gitRun(t, e.dir, "config", "core.abbrev", "4")
+	if err := os.WriteFile(filepath.Join(e.dir, "a.txt"), []byte("hello\nchanged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := e.call(t, "gg_compare_trees", map[string]any{
+		"left":  map[string]any{"kind": "commit", "rev": "HEAD"},
+		"right": map[string]any{"kind": "worktree"},
+	})
+	files := out["files"].([]any)
+	if len(files) != 1 {
+		t.Fatalf("files = %v", files)
+	}
+	if !strings.Contains(out["left_display"].(string), "seed: a.txt") {
+		t.Fatalf("left_display = %q, want the commit subject", out["left_display"])
+	}
+}
+
 func TestCompareTreesBadRev(t *testing.T) {
 	e := newTestEnv(t)
 	msg := e.callErr(t, "gg_compare_trees", map[string]any{

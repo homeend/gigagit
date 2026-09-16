@@ -42,6 +42,14 @@ type compareFile struct {
 // this package has already validated (isHexSha, or an id read back from a gg
 // store) — a constructor refusal here would mean the guard and the
 // constructor disagree, which is a programming error, not bad request input.
+//
+// A value whose WIDTH depends on repo config must never reach mustCommitEndpoint:
+// git's short-hash formats (`%(objectname:short)` behind model.Branch.Hash,
+// `%h` behind model.LogLine.Hash) honour core.abbrev, whose legal minimum is 4
+// — below CommitEndpoint's 7..64 floor. A must* there turns a repo setting
+// into a panicking handler (see branchTipEndpoint, and the TUI's
+// openBranchCompare). isHexSha already enforces 7..64, which is why the hex
+// lanes below may use it.
 func mustCommitEndpoint(hash string) model.Endpoint {
 	e, err := model.CommitEndpoint(hash)
 	if err != nil {
@@ -59,6 +67,8 @@ func mustShelfEndpoint(id string) model.Endpoint {
 }
 
 // branchTip returns name's tip hash, or "" when no such local branch exists.
+// The hash is `%(objectname:short)` — a PRESENCE test's worth of value, not
+// something to build an Endpoint from (see branchTipEndpoint).
 func branchTip(bs []model.Branch, name string) string {
 	for _, b := range bs {
 		if b.Name == name {
@@ -66,6 +76,36 @@ func branchTip(bs []model.Branch, name string) string {
 		}
 	}
 	return ""
+}
+
+// branchTipEndpoint resolves an already-allowlisted local branch name to its
+// FULL tip sha and that sha's commit endpoint. It returns the HTTP status for
+// the error case.
+//
+// ResolveRev, not model.Branch.Hash: internal/git/repo.go reads a branch tip as
+// `%(objectname:short)`, whose width honours core.abbrev (legal down to 4),
+// below model.CommitEndpoint's 7..64 floor — so the tip made a legal repo
+// config a dead request. This is the CLI's pattern (internal/cli/compare.go).
+// The full sha is also the better cache key: Endpoint.CacheTag() is the
+// session diff-cache key, and the response hands these hashes to the client
+// for its per-file diffs.
+//
+// The name is resolved as `refs/heads/<name>` rather than bare: a tag of the
+// same name outranks a branch in git's rev-parse disambiguation, the same
+// collision internal/git/repo.go's Branches comment guards against.
+func branchTipEndpoint(ctx context.Context, svc *domain.Service, name string) (model.Endpoint, string, int, error) {
+	sha, ok, err := svc.ResolveRev(ctx, "refs/heads/"+name)
+	if err != nil {
+		return model.Endpoint{}, "", http.StatusInternalServerError, err
+	}
+	if !ok {
+		return model.Endpoint{}, "", http.StatusNotFound, errors.New("unknown branch")
+	}
+	ep, err := model.CommitEndpoint(sha)
+	if err != nil {
+		return model.Endpoint{}, "", http.StatusInternalServerError, err
+	}
+	return ep, sha, 0, nil
 }
 
 // pathOrigin classifies a changed path against the two origin sets. A rename
@@ -95,6 +135,7 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var aHash, bHash string
+	var aEP, bEP model.Endpoint
 	if q.Get("revs") == "1" {
 		// The rev form: both sides are plain hex object ids (the commit-edit
 		// isHexSha guard), used directly — the version ↔ tip compare's
@@ -108,6 +149,7 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		aHash, bHash = a, b
+		aEP, bEP = mustCommitEndpoint(aHash), mustCommitEndpoint(bHash) // isHexSha: 7..64 hex
 	} else {
 		if !isGitArgSafe(a) || !isGitArgSafe(b) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
@@ -118,15 +160,23 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}
-		aHash, bHash = branchTip(branches, a), branchTip(branches, b)
-		if aHash == "" || bHash == "" {
+		// The tips are the allowlist check only; the endpoints are built
+		// from the names' FULL shas (branchTipEndpoint).
+		if branchTip(branches, a) == "" || branchTip(branches, b) == "" {
 			writeErr(w, http.StatusNotFound, errors.New("unknown branch"))
 			return
 		}
+		var code int
+		if aEP, aHash, code, err = branchTipEndpoint(r.Context(), svc, a); err != nil {
+			writeErr(w, code, err)
+			return
+		}
+		if bEP, bHash, code, err = branchTipEndpoint(r.Context(), svc, b); err != nil {
+			writeErr(w, code, err)
+			return
+		}
 	}
-	files, err := svc.CompareFiles(r.Context(),
-		mustCommitEndpoint(aHash),
-		mustCommitEndpoint(bHash))
+	files, err := svc.CompareFiles(r.Context(), aEP, bEP)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
