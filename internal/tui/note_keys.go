@@ -119,10 +119,12 @@ type noteAnchor struct {
 	hash string
 }
 
-// noteAnchorsAtCursor lists the anchors the cursor row offers: the new side
-// first (the default), then the old side — both when the row exists in both
-// versions (a Same or Changed row), one on an Add or Del row. The user picks
-// between them in the popup; nothing when the view has no cursor row.
+// noteAnchorsAtCursor lists the anchors the cursor row offers — both when the
+// row exists in both versions (a Same or Changed row), one on an Add or Del
+// row. The CURSOR SIDE comes first (spec §4.7), so the popup's default pick,
+// noteAnchorAtCursor and everything built on it (L, the . menu's Copy link)
+// follow the side the user is reading; the picker still lists both. Nothing
+// when the view has no cursor row.
 func (m Model) noteAnchorsAtCursor() []noteAnchor {
 	v := m.diffLayer()
 	if v == nil {
@@ -132,15 +134,32 @@ func (m Model) noteAnchorsAtCursor() []noteAnchor {
 	if !ok {
 		return nil
 	}
-	var out []noteAnchor
-	if r.RightNo > 0 {
-		out = append(out, noteAnchor{model.NoteSideNew, r.RightNo, model.NoteContextHash([]string{r.Right})})
+	newSide := func() (noteAnchor, bool) {
+		if r.RightNo <= 0 {
+			return noteAnchor{}, false
+		}
+		return noteAnchor{model.NoteSideNew, r.RightNo, model.NoteContextHash([]string{r.Right})}, true
 	}
 	// A preview's old side is the MERGE BASE, which no stored address names,
 	// so it offers no anchor at all — the same rule `gg review A..B` follows
-	// (reviewImportTarget: ranges anchor to the tip, new side only).
-	if r.LeftNo > 0 && v.previewSet == nil {
-		out = append(out, noteAnchor{model.NoteSideOld, r.LeftNo, model.NoteContextHash([]string{r.Left})})
+	// (reviewImportTarget: ranges anchor to the tip, new side only). That holds
+	// whichever side the cursor is on.
+	oldSide := func() (noteAnchor, bool) {
+		if r.LeftNo <= 0 || v.previewSet != nil {
+			return noteAnchor{}, false
+		}
+		return noteAnchor{model.NoteSideOld, r.LeftNo, model.NoteContextHash([]string{r.Left})}, true
+	}
+	first, second := newSide, oldSide
+	if v.onOld {
+		first, second = oldSide, newSide
+	}
+	var out []noteAnchor
+	if a, ok := first(); ok {
+		out = append(out, a)
+	}
+	if a, ok := second(); ok {
+		out = append(out, a)
 	}
 	return out
 }

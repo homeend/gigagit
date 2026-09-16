@@ -266,8 +266,17 @@ func (m Model) renderDiffView() string {
 		right = i18n.T("change %d/%d", v.currentBlockOrdinal()+1, len(v.blocks))
 	}
 	if r, ok := v.cursorRow(); ok {
+		// The cursor sits on ONE side: name that side first, and fall back to
+		// the other side's number WITH ITS OWN LABEL on a gap cell — the same
+		// fallback the single-sided version performed, mirrored.
 		ln := ""
-		if r.RightNo > 0 {
+		if v.onOld {
+			if r.LeftNo > 0 {
+				ln = i18n.T("old line %d", r.LeftNo)
+			} else if r.RightNo > 0 {
+				ln = i18n.T("line %d", r.RightNo)
+			}
+		} else if r.RightNo > 0 {
 			ln = i18n.T("line %d", r.RightNo)
 		} else if r.LeftNo > 0 {
 			ln = i18n.T("old line %d", r.LeftNo)
@@ -364,6 +373,12 @@ func gutterWidth(full []textdiff.Row) int {
 // pre-wrapped segment via segCell. Display rows in [curStart, curEnd) carry
 // the cursor marker per style ("row" | "number" | "off"); curStart == curEnd
 // (the history pane) draws no marker. A fold row is never marked.
+//
+// The marker lands on ONE cell: the cursor sits on v.onOld's side (spec §4.7),
+// so each row builds two marks and the non-cursor cell renders as if this were
+// not the cursor row — its attention band, if any, wins there. The history
+// pane's embedded diffView has onOld false and an empty cursor range, so it is
+// unaffected.
 func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, style string) []string {
 	paneW := (w - 1) / 2
 	if paneW < 4 {
@@ -383,25 +398,33 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 			out = append(out, foldSeparator(dr.fold, w, dr.noteMark))
 			continue
 		}
-		mk := noMark()
 		r := dr.row
-		switch {
-		case i >= curStart && i < curEnd:
+		// TWO marks, one per pane: the cursor sits on ONE side (v.onOld), and
+		// the other cell must render as if this were not the cursor row — its
+		// own attention band, if any, wins there. Start both from the band (or
+		// nothing), then overwrite the cursor side.
+		mkL, mkR := noMark(), noMark()
+		if bg, ok := m.attnMarkFor(v, r); ok {
+			band := cellMark{row: true, attn: true, base: bg, gut: s.diffGutter}
+			mkL, mkR = band, band
+		}
+		if i >= curStart && i < curEnd {
 			// The cursor outranks an attention band: the user must always be
 			// able to see where they are. In "number" mode, though, only the
-			// GUTTER carries the cursor (mk.row is false), so the row body is
+			// GUTTER carries the cursor (cm.row is false), so the row body is
 			// free — and the row under the cursor is precisely the one the user
 			// is most likely to be reading. Keep the cursor gutter, take the
-			// band for the body.
-			mk = cursorMark(style)
-			if !mk.row {
+			// band for the body. "off" lands here too, and keeps the band.
+			cm := cursorMark(style)
+			if !cm.row {
 				if bg, ok := m.attnMarkFor(v, r); ok {
-					mk = cellMark{row: true, attn: true, base: bg, gut: mk.gut}
+					cm = cellMark{row: true, attn: true, base: bg, gut: cm.gut}
 				}
 			}
-		default:
-			if bg, ok := m.attnMarkFor(v, r); ok {
-				mk = cellMark{row: true, attn: true, base: bg, gut: s.diffGutter}
+			if v.onOld {
+				mkL = cm
+			} else {
+				mkR = cm
 			}
 		}
 		// Syntax runs for this row's source lines (nil on a gap side or an
@@ -435,25 +458,25 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 				rightNo = r.RightNo
 			}
 			left := segCell(leftNo, dr.left, gut, paneW, leftGap,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mk, lh)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mkL, lh)
 			right := segCell(rightNo, dr.right, gut, paneW, rightGap,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mk, rh)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mkR, rh)
 			out = append(out, left+"│"+right)
 		case longTruncate:
 			left := diffCell(r.LeftNo, r.Left, gut, paneW,
 				r.Kind == textdiff.Add,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, r.LeftSpans, lt, mk, lh)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, r.LeftSpans, lt, mkL, lh)
 			right := diffCell(r.RightNo, r.Right, gut, paneW,
 				r.Kind == textdiff.Del,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, r.RightSpans, rt, mk, rh)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, r.RightSpans, rt, mkR, rh)
 			out = append(out, left+"│"+right)
 		default: // longScroll
 			left := scrollCell(r.LeftNo, r.Left, r.LeftSpans, lt, v.hOffset, gut, paneW,
 				r.Kind == textdiff.Add,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mk, lh)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mkL, lh)
 			right := scrollCell(r.RightNo, r.Right, r.RightSpans, rt, v.hOffset, gut, paneW,
 				r.Kind == textdiff.Del,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mk, rh)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mkR, rh)
 			out = append(out, left+"│"+right)
 		}
 	}

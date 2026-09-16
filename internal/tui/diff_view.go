@@ -63,11 +63,22 @@ type diffView struct {
 	tooLarge   bool
 	loading    bool
 	err        error
-	cur        int         // focused change-block index (the "X" in change X/N); set only by n/p/wrap/mode-toggle
-	curLine    int         // cursor: index into lines (never a display row; never a fold) — see diff_cursor.go
-	wrapArm    wrapDir     // boundary press primed a wrap-around (see wrapDir); cleared on any other key
-	fileArm    fileArmDir  // top/bottom press primed a step to the prev/next file; cleared on any other key
-	zCycle     cursorAlign // the alignment the NEXT z applies (center → top → bottom); reset by any other key
+	cur        int // focused change-block index (the "X" in change X/N); set only by n/p/wrap/mode-toggle
+	curLine    int // cursor: index into lines (never a display row; never a fold) — see diff_cursor.go
+	// onOld is the SIDE the line cursor sits on: false = the new (right) pane,
+	// which is where a view opens. alt+←/→ flip it (spec §4.7). It decides
+	// which cell wears the marker, which text Copy line / a selection copies,
+	// which number the header names, and which review-note anchor comes first.
+	// false as the zero value is deliberate: every constructor and the
+	// diffViewWith test fixture get the right default with no edit.
+	onOld bool
+	// lsel is the line selection over v.lines (space/space/enter). Cleared by
+	// rebuild(), by ctrl+w's relayout and by a diffMsg reload — anything that
+	// changes what a line index MEANS — but never by a resize or a search key.
+	lsel    lineSel
+	wrapArm wrapDir     // boundary press primed a wrap-around (see wrapDir); cleared on any other key
+	fileArm fileArmDir  // top/bottom press primed a step to the prev/next file; cleared on any other key
+	zCycle  cursorAlign // the alignment the NEXT z applies (center → top → bottom); reset by any other key
 	// notes are the resolved review notes for this view's address, loaded
 	// asynchronously (notesLoadedMsg) and re-loaded after every mutation and
 	// srcNotes refresh. relayout turns them into synthetic display rows;
@@ -153,6 +164,7 @@ type dRow struct {
 // rebuild recomputes the logical (mode) stream, then the display stream.
 func (v *diffView) rebuild() {
 	v.sanLeft, v.sanRight = nil, nil // the line stream is about to change
+	v.lsel.clear()                   // …and so do the line indexes it holds
 	if v.partial {
 		v.lines, v.blocks = textdiff.Collapse(v.full, v.fullBlocks, diffContext)
 	} else {
@@ -902,6 +914,17 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				v.fileArm = fileArmPrevNote
 			}
 		}
+	case "alt+left", "alt+right":
+		// The cursor sits on one pane; these move it across the SAME aligned
+		// row. Plain ←/→ keep panning in scroll mode.
+		if v.lsel.on {
+			// A selection is locked to the side it started on (the user's
+			// ruling): a range that mixed the two sides' text would copy
+			// nonsense. Say so instead of silently doing nothing.
+			m.diffNotice = lockedSideNotice(v.onOld)
+			return m, nil
+		}
+		v.onOld = msg.String() == "alt+left"
 	case "up":
 		v.scrollBy(-1, body)
 	case "down":
@@ -1019,6 +1042,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		// pre-toggle line.
 		v.refindAfterRebuild()
 	case "ctrl+w":
+		v.lsel.clear() // relayout + reanchor moves what a line index means
 		ord := v.currentBlockOrdinal()
 		cr, hadRow := v.cursorRow()
 		wasVisible := v.cursorVisible(body)

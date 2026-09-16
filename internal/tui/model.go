@@ -454,10 +454,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// it across the overwrite and re-find so it survives the load arrival,
 		// mirroring blameMsg/fileContentMsg above.
 		search, searchOrig := dv.search, dv.searchOrig
+		// The SIDE is the user's choice, not the loader's: a reload of the same
+		// file must not throw them back to the right pane. The SELECTION is the
+		// opposite — the line stream is brand new, so the indexes it holds mean
+		// nothing any more.
+		onOld := dv.onOld
 		*dv = *msg.view
 		dv.loading = false
 		dv.compare = dv.compare || compare
 		dv.search, dv.searchOrig = search, searchOrig
+		dv.onOld = onOld
+		dv.lsel.clear()
 		if dv.search.active() {
 			dv.refindAfterRebuild()
 			if dv.search.cur >= 0 {

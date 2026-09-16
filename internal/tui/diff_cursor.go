@@ -335,3 +335,29 @@ func (v *diffView) revealCursorNotes(body int) {
 		v.offset = end - body
 	}
 }
+
+// sidePresent reports whether the given side of an aligned row actually has a
+// line there. An Add row has no old line and a Del row has no new one; those
+// cells render as the dotted gap filler, carry no line number, are hidden from
+// the copy rows and are skipped by a selection.
+func sidePresent(r textdiff.Row, onOld bool) bool {
+	if onOld {
+		return r.Kind != textdiff.Add
+	}
+	return r.Kind != textdiff.Del
+}
+
+// cursorCell is the SOURCE text under the cursor on the cursor's side, plus
+// that side's 1-based line number. ok is false when the view has no cursor row
+// (empty stream, or the cursor is on a fold) or when the cursor side is absent
+// on that row — the gap-cell case, where there is nothing to copy.
+func (v *diffView) cursorCell() (text string, no int, ok bool) {
+	r, has := v.cursorRow()
+	if !has || !sidePresent(r, v.onOld) {
+		return "", 0, false
+	}
+	if v.onOld {
+		return r.Left, r.LeftNo, true
+	}
+	return r.Right, r.RightNo, true
+}
