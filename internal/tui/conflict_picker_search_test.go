@@ -12,6 +12,9 @@ import (
 	"github.com/homeend/gigagit/internal/hunkpick"
 )
 
+// NOTE: TestPickerSearchPaintsTheHit calls lipgloss.SetColorProfile
+// (process-global) and therefore does NOT call t.Parallel().
+
 // pickerDoc (conflict_picker_test.go) is: literal "top"; block 0 current
 // ["foo"] / incoming ["bar"]; literal "mid"; block 1 current ["A","B"] /
 // incoming ["C"]. The flat search rows are therefore
@@ -46,6 +49,46 @@ func TestPickerSearchJumpsTheTwoDimensionalCursor(t *testing.T) {
 	_ = typePicker(m, e, "]") // wrap
 	if e.bi != 0 || e.side != hunkpick.Incoming {
 		t.Fatalf("] must wrap to the first hit, got %d/%v", e.bi, e.side)
+	}
+}
+
+// emptyCurrentSideDoc has two blocks: block 0's Current side is EMPTY (a
+// pure-add hunk, as the stage/unstage pickers can show) with Incoming
+// ["needle"]; block 1 has Current ["x"] and Incoming ["needle"] too, so a
+// search for "needle" finds two hits and a bug that ignores side on the
+// stepping-position check can walk from the first straight past it to the
+// second.
+func emptyCurrentSideDoc() *hunkpick.Doc {
+	d, _ := hunkpick.ParseConflict([]byte(
+		"top\n<<<<<<< HEAD\n=======\nneedle\n>>>>>>> x\nmid\n<<<<<<< HEAD\nx\n=======\nneedle\n>>>>>>> x\n"))
+	return d
+}
+
+// TestPickerSearchStepHonorsSideOnEmptySide guards searchPos: a hit's row can
+// coincide with the flat row of the CURSOR's own (empty) side on the SAME
+// block when that side contributes zero lines to the flat row space (an empty
+// Current side starts at the very row its Incoming side's first line takes).
+// Without also comparing side, searchPos would report the cursor as already
+// sitting ON that Incoming hit while it is actually on the empty Current
+// side, and "]" (strictly after the position) would skip over it.
+func TestPickerSearchStepHonorsSideOnEmptySide(t *testing.T) {
+	t.Parallel()
+	e := newConflictPicker("f.txt", emptyCurrentSideDoc())
+	m := Model{layers: &layerStack{entries: []layer{e}}, width: 80, height: 24}
+	m = typePicker(m, e, "/", "needle", "enter")
+	if len(e.search.hits) != 2 {
+		t.Fatalf("hits = %v, want 2", e.search.hits)
+	}
+	if e.bi != 0 || e.side != hunkpick.Incoming || e.line != 0 {
+		t.Fatalf("cursor = %d/%v/%d, want block 0 incoming line 0", e.bi, e.side, e.line)
+	}
+	m = typePicker(m, e, "left") // block 0's Current side is empty
+	if e.side != hunkpick.Current {
+		t.Fatalf("← should focus the (empty) current side, got %v", e.side)
+	}
+	_ = typePicker(m, e, "]")
+	if e.bi != 0 || e.side != hunkpick.Incoming || e.line != 0 {
+		t.Fatalf("] must land back on block 0's incoming hit, got %d/%v/%d", e.bi, e.side, e.line)
 	}
 }
 
@@ -142,6 +185,49 @@ func TestProcessPickerEscClearsTheSearchFirst(t *testing.T) {
 	m, _ = p.update(m, keyMsg("esc"))
 	if p.picker != nil || p.st != confListing {
 		t.Fatal("the second esc must leave the editor")
+	}
+	_ = m
+}
+
+// TestProcessPickerEscZoomedTypingSearchWinsFirst guards the esc order in the
+// process-owned picker when BOTH a zoom and a live search are in play: the
+// search must win first in both hosts (controller ruling) — esc while typing
+// cancels the search and leaves the zoom untouched; only once no search is
+// left does esc fall through to un-zoom, and only then to leaving the editor.
+func TestProcessPickerEscZoomedTypingSearchWinsFirst(t *testing.T) {
+	t.Parallel()
+	e := newProcessConflictPicker("f.txt", pickerDoc())
+	e.zoomed = true
+	p := &conflictProcess{st: confPicking, picker: e, pickPath: "f.txt"}
+	m := Model{width: 80, height: 24, proc: p}
+	m, _ = p.update(m, keyMsg("/"))
+	m, _ = p.update(m, keyMsg("b")) // still typing — not committed
+	if !e.search.typing {
+		t.Fatalf("expected the search to still be typing: %+v", e.search)
+	}
+
+	m, _ = p.update(m, keyMsg("esc"))
+	if p.picker == nil || p.st != confPicking {
+		t.Fatal("the first esc must stay in the editor")
+	}
+	if e.search.active() {
+		t.Fatalf("the first esc must cancel the typing search: %+v", e.search)
+	}
+	if !e.zoomed {
+		t.Fatal("the first esc must leave the zoom untouched")
+	}
+
+	m, _ = p.update(m, keyMsg("esc"))
+	if p.picker == nil || p.st != confPicking {
+		t.Fatal("the second esc must still stay in the editor")
+	}
+	if e.zoomed {
+		t.Fatal("the second esc must un-zoom, now that no search is live")
+	}
+
+	m, _ = p.update(m, keyMsg("esc"))
+	if p.picker != nil || p.st != confListing {
+		t.Fatal("the third esc must leave the editor")
 	}
 	_ = m
 }

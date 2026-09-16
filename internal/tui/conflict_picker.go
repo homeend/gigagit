@@ -455,7 +455,7 @@ func (e *hunkPicker) searchPos() searchPos {
 		side = 1
 	}
 	if e.search.cur >= 0 && e.search.cur < len(e.search.hits) {
-		if h := e.search.hits[e.search.cur]; h.row == row {
+		if h := e.search.hits[e.search.cur]; h.row == row && h.side == side {
 			return searchPos{row: h.row, side: h.side, col: h.start}
 		}
 	}
