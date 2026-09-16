@@ -86,6 +86,7 @@ function openPalette(mode, fromCmd) {
   $("palette-box").style.width = "";
   $("palette-box").style.maxWidth = "";
   $("palette-list").style.removeProperty("--repo-cols");
+  $("palette-list").classList.remove("repo");
   if (mode === "cmd") {
     pal.rows = paletteCommands();
     filterPalette();
@@ -158,7 +159,10 @@ function layoutRepoTable() {
     path: Math.max(1, ...rows.map((r) => w(r.path))),
     age: Math.max(1, ...rows.map((r) => w(`(${r.age})`))),
   };
-  const GAP = 2, GAPS = 4, PAD = 28, BORDER = 2;
+  // PAD: the row's 14px side padding twice, plus the list's always-reserved
+  // scrollbar gutter (scrollbar-gutter: stable in repo mode) so a long
+  // registry's scrollbar never eats the age column.
+  const GAP = 2, GAPS = 4, PAD = 28 + 16, BORDER = 2;
   const cw = charWidth();
   const fixed = cols.branch + cols.name + cols.slow + cols.age + GAP * GAPS;
   const maxPx = Math.floor(window.innerWidth * 0.95);
@@ -176,11 +180,8 @@ function layoutRepoTable() {
     px = maxPx;
   }
   pal.cols = cols;
-  for (const r of rows) {
-    r.pathText = elidePath(r.path, cols.path);
-    r.branchText = elidePath(r.branch, cols.branch);
-    r.nameText = elidePath(r.label, cols.name);
-  }
+  for (const r of rows) elideRepoRow(r);
+  $("palette-list").classList.add("repo");
   $("palette-box").style.width = Math.max(minPx, px) + "px";
   $("palette-box").style.maxWidth = "none"; // the stylesheet caps the cmd list at 560px
   $("palette-list").style.setProperty(
@@ -190,9 +191,21 @@ function layoutRepoTable() {
 }
 
 
+// elideRepoRow cuts one row's cells to the current column widths.
+function elideRepoRow(r) {
+  const cols = pal.cols;
+  r.pathText = elidePath(r.path, cols.path);
+  r.branchText = elidePath(r.branch, cols.branch);
+  r.nameText = elidePath(r.label, cols.name);
+}
+
+
 // pollRepoDetails fetches the verdicts and re-polls with backoff while any
 // row is still pending (capped: a mount that never answers leaves its cells
-// blank rather than polling forever).
+// blank rather than polling forever). The table is laid out again ONCE, when
+// the first verdicts land (the branch column has its width then); a
+// straggler from a later poll is cut to that width rather than moving the
+// columns under the user's cursor a second time.
 function pollRepoDetails(gen, n) {
   if (!pal || pal.mode !== "repo" || pal.gen !== gen) return;
   getJSON("/api/repos/details")
@@ -207,7 +220,8 @@ function pollRepoDetails(gen, n) {
         if (!r.pending) { r.branch = d.branch || ""; r.slow = !!d.slow; }
         pending ||= r.pending;
       }
-      layoutRepoTable();
+      if (n === 0) layoutRepoTable();
+      else for (const r of pal.rows) elideRepoRow(r);
       refilterKeepingCursor();
       if (pending && n < 8) setTimeout(() => pollRepoDetails(gen, n + 1), Math.min(3000, 300 * 1.6 ** n));
     })

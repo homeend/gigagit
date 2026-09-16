@@ -542,6 +542,7 @@ mark.r { background: var(--span-add); color: inherit; }
    column widths palette.js sets in ch on --repo-cols. Cells never ellipsize:
    a too-long path is already middle-cut in JS (elidePath), so a CSS tail cut
    here would chop the leaf the whole layout exists to show. */
+#palette-list.repo { scrollbar-gutter: stable; }
 #palette-list li.repo { display: grid; grid-template-columns: var(--repo-cols); gap: 0 2ch; justify-content: start; white-space: pre; }
 #palette-list li.repo > span { overflow: hidden; }
 #palette-list li.repo .rbranch { color: var(--lane2); }
