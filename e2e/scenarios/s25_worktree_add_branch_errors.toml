@@ -1,4 +1,4 @@
-name = "worktree add --branch: missing branch, held branch, start-point misuse"
+name = "worktree add --branch: missing branch, held branch, two positionals"
 
 [input]
 steps = [
@@ -16,8 +16,8 @@ cmd  = ["worktree", "add", "--branch", "main"]         # checked out in the main
 exit = 1                                               # worktree -> guard
 
 [[run]]
-cmd  = ["worktree", "add", "--branch", "feat", "main"] # --branch + start-point
-exit = 2                                               # is a usage error
+cmd  = ["worktree", "add", "--branch", "feat", "a", "b"] # one positional is the
+exit = 2                                                 # path; two is a usage error
 
 [expect]
 branch    = "main"

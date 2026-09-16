@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v76 -->
+<!-- gg:using-gg:v77 -->
 
 # Using gg (gigagit)
 
@@ -476,11 +476,14 @@ finds the right one here.
   `<user:…>` labels, and append the rest of the name.
 - `gg undo` — undo the last commit, keeping its changes (ref-only soft reset).
 - `gg worktree list` / `gg worktree add [<start-point>]` /
-  `gg worktree add --branch <name>` /
+  `gg worktree add --branch <name> [<path>]` /
   `gg worktree remove [--with-branch] [--force] <path>` — linked worktrees;
   `add` resolves branch/path templates from `.gg.toml` and may prompt on stdin
   for `<user:...>` fields; `add --branch` checks out the EXISTING branch in
   the new worktree (no new branch; refuses a branch already checked out).
+  With `--branch` an optional `<path>` is the destination (relative to the
+  current directory, like `git worktree add`), bypassing the path template —
+  e.g. `gg worktree add --branch feat/x .claude/worktrees/feat-x`.
   `remove` refuses a dirty or **locked** worktree (an interrupted `add` can
   leave one locked); `--force` removes a dirty tree and unlocks a locked one.
 - `gg worktree add --from <commit> [--keep staged|unstaged] [<branch-name>]`

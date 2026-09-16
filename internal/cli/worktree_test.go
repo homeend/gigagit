@@ -383,12 +383,69 @@ func TestWorktreeAddBranchUsesExistingBranch(t *testing.T) {
 	}
 }
 
-func TestWorktreeAddBranchRejectsStartPoint(t *testing.T) {
+// TestWorktreeAddBranchAcceptsPath: with --branch the positional is the
+// destination path (as with `git worktree add <path> <branch>`), and the
+// configured path template is bypassed — no <user:…> prompt, no template path.
+func TestWorktreeAddBranchAcceptsPath(t *testing.T) {
+	dir := newRepoDir(t)
+	gitRun(t, dir, "branch", "feature/have")
+	cfgPath := filepath.Join(dir, ".gg.toml")
+	if err := os.WriteFile(cfgPath, []byte("[worktree]\npath_template = \"../wt-tmpl-<user:LABEL>\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "add", "--branch", "feature/have", ".claude/worktrees/have"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	wt := filepath.Join(dir, ".claude", "worktrees", "have")
+	if got := wtHeadCli(t, wt); got != "feature/have" {
+		t.Fatalf("worktree HEAD = %q, want feature/have", got)
+	}
+	if strings.Contains(errb.String(), "LABEL:") {
+		t.Fatalf("the path template must not be prompted for when a path is given; stderr: %q", errb.String())
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(dir), "wt-tmpl-")); err == nil {
+		t.Fatal("the template path was created alongside the explicit one")
+	}
+	if !strings.Contains(out.String(), "created worktree feature/have at "+wt) {
+		t.Fatalf("stdout: %q", out.String())
+	}
+}
+
+// TestWorktreeAddBranchPathIsCwdRelative: a relative path resolves against
+// the CLI's workdir (where the user typed it), not the main worktree root the
+// engine uses for template paths.
+func TestWorktreeAddBranchPathIsCwdRelative(t *testing.T) {
+	dir := newRepoDir(t)
+	gitRun(t, dir, "branch", "feature/sub")
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	code := Run(sub, []string{"worktree", "add", "--branch", "feature/sub", "wt-here"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit %d, stderr: %s", code, errb.String())
+	}
+	if got := wtHeadCli(t, filepath.Join(sub, "wt-here")); got != "feature/sub" {
+		t.Fatalf("worktree HEAD = %q, want feature/sub (resolved under the workdir)", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "wt-here")); err == nil {
+		t.Fatal("path resolved against the main worktree root, not the workdir")
+	}
+}
+
+func TestWorktreeAddBranchRejectsTwoPositionals(t *testing.T) {
 	dir := newRepoDir(t)
 	gitRun(t, dir, "branch", "x")
 	var out, errb bytes.Buffer
-	if code := Run(dir, []string{"worktree", "add", "--branch", "x", "main"}, strings.NewReader(""), &out, &errb, ""); code != 2 {
-		t.Fatalf("exit = %d, want 2 (start-point is meaningless with --branch)", code)
+	if code := Run(dir, []string{"worktree", "add", "--branch", "x", "a", "b"}, strings.NewReader(""), &out, &errb, ""); code != 2 {
+		t.Fatalf("exit = %d, want 2 (only one path after --branch)", code)
+	}
+	if !strings.Contains(errb.String(), "one path") {
+		t.Fatalf("stderr: %q", errb.String())
 	}
 }
 
