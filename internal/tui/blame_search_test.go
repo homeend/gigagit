@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -161,6 +162,47 @@ func TestBlameSearchPansTheHitIntoView(t *testing.T) {
 	want := panFor(0, tw, cs, ce)
 	if b.hscroll != want {
 		t.Fatalf("hscroll = %d, want %d (panFor(tw=%d, cs=%d, ce=%d))", b.hscroll, want, tw, cs, ce)
+	}
+}
+
+// TestBlameSearchStartedDuringLoadRefindsOnArrival covers the case a search
+// is opened while blame is still loading (b.lines is empty, b.loading is
+// true): blameView.update routes / to blameSearchKey before any loading
+// guard, so the query commits with 0/0 hits against the empty content. When
+// the real lines land in blameMsg those hits are stale until the fix
+// re-runs refindFrom/goToHit in that handler, mirroring
+// TestPreviewSearchStartedDuringLoadRefindsOnContentArrival.
+func TestBlameSearchStartedDuringLoadRefindsOnArrival(t *testing.T) {
+	t.Parallel()
+	b := newBlameView(navContext{path: "a.go", rev: ""})
+	m := Model{width: 100, height: 30}
+	m = m.pushLayer(b)
+	tag := b.tag
+
+	// Start a search for a needle that cannot match the (empty) loading state.
+	m = typeBlame(m, b, "/", "n", "e", "e", "d", "l", "e")
+	if len(b.search.hits) != 0 {
+		t.Fatalf("the empty loading state must not match: hits = %v", b.search.hits)
+	}
+
+	var lines []model.BlameLine
+	for i := 0; i < 5; i++ {
+		lines = append(lines, model.BlameLine{Hash: "aaaaaaa", Author: "Ada", Time: 1, LineNo: i + 1, Content: fmt.Sprintf("line%03d", i)})
+	}
+	needleRow := len(lines)
+	lines = append(lines, model.BlameLine{Hash: "aaaaaaa", Author: "Ada", Time: 1, LineNo: needleRow + 1, Content: "here is the needle"})
+
+	u, _ := m.Update(blameMsg{tag: tag, lines: lines})
+	m = u.(Model)
+
+	if len(b.search.hits) != 1 || b.search.hits[0].row != needleRow {
+		t.Fatalf("hits = %v, want one hit on row %d", b.search.hits, needleRow)
+	}
+	if b.search.cur != 0 {
+		t.Fatalf("cur = %d, want 0", b.search.cur)
+	}
+	if b.sel != needleRow {
+		t.Fatalf("sel = %d, want %d (the cursor must land on the hit once content arrives)", b.sel, needleRow)
 	}
 }
 

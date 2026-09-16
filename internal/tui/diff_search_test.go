@@ -148,6 +148,53 @@ func TestDiffSearchBracketsAreInertWithoutAQuery(t *testing.T) {
 	}
 }
 
+// TestDiffSearchSurvivesTheLoadArrival covers the case a search is opened
+// while the diff is still loading (pushed with loading: true, no content
+// yet): the diff view routes / to diffSearchKey before any loading guard, so
+// the query commits with a live search on dv. The old diffMsg handler
+// overwrote the whole view (*dv = *msg.view), wiping search and searchOrig
+// when the real content landed. The fix saves and restores them across the
+// overwrite and re-finds, mirroring blameMsg/fileContentMsg.
+func TestDiffSearchSurvivesTheLoadArrival(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.width, m.height = 100, 20
+	m = m.pushLayer(&diffView{loading: true})
+	m.diffTag = "status:x"
+
+	// Start a search for a needle that cannot match the (empty) loading view.
+	m = typeKeys(m, "/", "n", "e", "e", "d", "l", "e")
+	if len(m.diffLayer().search.hits) != 0 {
+		t.Fatalf("the empty loading view must not match: hits = %v", m.diffLayer().search.hits)
+	}
+
+	rows := []textdiff.Row{
+		{Kind: textdiff.Same, Left: "package main", Right: "package main", LeftNo: 1, RightNo: 1},
+		{Kind: textdiff.Same, Left: "here is the needle", Right: "here is the needle", LeftNo: 2, RightNo: 2},
+	}
+	loaded := diffViewWith(rows, nil)
+	loaded.relayout(m.width)
+	u, _ := m.Update(diffMsg{tag: "status:x", view: loaded})
+	m = u.(Model)
+	v := m.diffLayer()
+
+	if v.loading {
+		t.Fatal("the load must clear loading")
+	}
+	if v.search.query != "needle" {
+		t.Fatalf("the query must survive the load: %+v", v.search)
+	}
+	if len(v.search.hits) != 1 || v.search.hits[0].row != 1 {
+		t.Fatalf("hits = %v, want one hit on row 1", v.search.hits)
+	}
+	if v.search.cur != 0 {
+		t.Fatalf("cur = %d, want 0", v.search.cur)
+	}
+	if v.curLine != 1 {
+		t.Fatalf("curLine = %d, want 1 (the cursor must land on the hit once content arrives)", v.curLine)
+	}
+}
+
 func TestDiffSearchBadgeIsOnTheHeader(t *testing.T) {
 	t.Parallel()
 	m := searchDiffModel()
@@ -161,15 +208,6 @@ func TestDiffSearchBadgeIsOnTheHeader(t *testing.T) {
 	}
 }
 
-// TestDiffSearchPaintsTheHit calls diffPaneLines directly (not the full
-// renderDiffView, whose header alone would make painted != plain even if the
-// six hits arguments in diffPaneLines were all nil) and asserts, per row:
-// every row's TEXT is unchanged (ansi.Strip equal — a hit must never move a
-// character), a non-hit row's raw (styled) output is BYTE-IDENTICAL to plain,
-// and a hit row's raw output additionally contains the exact escape sequence
-// st().searchCur produces for that hit's own substring — proving the style
-// landed on the right run, not merely that "something" changed. curStart ==
-// curEnd (0, 0) removes the cursor marker so it cannot confound the diff.
 // TestDiffSearchPaintsTheHit calls diffPaneLines directly (not the full
 // renderDiffView, whose header alone would make painted != plain even if the
 // six hits arguments in diffPaneLines were all nil) and asserts, per row:

@@ -449,9 +449,21 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil // closed, or a stale result
 		}
 		compare := dv.compare // the opener's identity, not the loader's content (shared loaders don't know)
+		// A query started while this file was still loading lives on dv, not
+		// msg.view (the loader built that with no Model to search from): save
+		// it across the overwrite and re-find so it survives the load arrival,
+		// mirroring blameMsg/fileContentMsg above.
+		search, searchOrig := dv.search, dv.searchOrig
 		*dv = *msg.view
 		dv.loading = false
 		dv.compare = dv.compare || compare
+		dv.search, dv.searchOrig = search, searchOrig
+		if dv.search.active() {
+			dv.refindAfterRebuild()
+			if dv.search.cur >= 0 {
+				dv.goToHit(dv.search.cur, m.diffBodyRows())
+			}
+		}
 		// The loader built this view with no Model to ask, so re-apply the
 		// session's agent-layer choice, then resolve this address's notes off
 		// the UI thread (tag-gated on arrival, like the diff itself).
@@ -914,6 +926,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			b.blocks = groupBlame(msg.lines)
 			b.san = nil // the search's display-text cache belongs to the old lines
 			b.sel = 0
+			// A search started while blame was still loading computed its hits
+			// against the empty/placeholder lines; once the real content lands
+			// those hits are stale. Re-run it over the loaded lines and re-snap
+			// the cursor onto the current hit (mirrors fileContentMsg above).
+			if b.search.active() {
+				b.search.refindFrom(b.searchLines(), b.searchPos())
+				if b.search.cur >= 0 {
+					b.goToHit(m, b.search.cur)
+				}
+			}
 		}
 		return m, nil
 	case entryCompareMsg:

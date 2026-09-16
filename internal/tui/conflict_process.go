@@ -92,11 +92,14 @@ func (p *conflictProcess) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.String() == "esc" { // leave the editor without applying → back to the list
-			// A live in-view search owns esc first (cancel while typing, clear a
-			// committed query) — even zoomed, matching the standalone picker,
-			// whose own typing branch runs before its zoom check. The picker's
-			// own update then handles typing → cancel, then zoom, then query
-			// clear, in that order.
+			// While TYPING, the search owns esc outright (cancel) regardless of
+			// zoom — delegating here matches the standalone picker, whose own
+			// typing branch runs before its zoom check. A COMMITTED query is
+			// different: delegating still routes here, but the picker's own
+			// update restores a zoomed split first; only a LATER esc (no
+			// longer zoomed) reaches the query-clear path. Both hosts behave
+			// the same because both simply hand the key to the same
+			// picker.update in either case.
 			if p.picker.search.typing || p.picker.search.query != "" {
 				return p.picker.update(m, msg)
 			}

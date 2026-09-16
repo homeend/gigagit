@@ -64,6 +64,18 @@ func emptyCurrentSideDoc() *hunkpick.Doc {
 	return d
 }
 
+// emptyIncomingSideDoc is the symmetric fixture: block 0's INCOMING side is
+// empty (Current ["x"], Incoming []), immediately followed by block 1, whose
+// Current side ["needle"] carries a hit, and block 2, whose Incoming side
+// ["needle"] carries a second, farther hit — needed so a wrong skip lands on
+// a DIFFERENT hit instead of coincidentally wrapping back to the only one.
+func emptyIncomingSideDoc() *hunkpick.Doc {
+	d, _ := hunkpick.ParseConflict([]byte(
+		"top\n<<<<<<< HEAD\nx\n=======\n>>>>>>> x\nmid\n<<<<<<< HEAD\nneedle\n=======\ny\n>>>>>>> x\n" +
+			"end\n<<<<<<< HEAD\nz\n=======\nneedle\n>>>>>>> x\n"))
+	return d
+}
+
 // TestPickerSearchStepHonorsSideOnEmptySide guards searchPos: a hit's row can
 // coincide with the flat row of the CURSOR's own (empty) side on the SAME
 // block when that side contributes zero lines to the flat row space (an empty
@@ -90,9 +102,31 @@ func TestPickerSearchStepHonorsSideOnEmptySide(t *testing.T) {
 	if e.bi != 0 || e.side != hunkpick.Incoming || e.line != 0 {
 		t.Fatalf("] must land back on block 0's incoming hit, got %d/%v/%d", e.bi, e.side, e.line)
 	}
+
+	// Symmetric case: block 0's INCOMING side is empty. searchRow(0,
+	// Incoming, 0) then aliases onto block 1's first CURRENT row (the next
+	// block's first row in flat search-row space), while the position still
+	// carries the cursor's own side (Incoming = 1). A hit on that aliased row
+	// carries side 0, so it sorts BEFORE the buggy position and "]" (which
+	// wants the first hit STRICTLY after) skips straight past it to the next
+	// hit two blocks away.
+	e2 := newConflictPicker("f.txt", emptyIncomingSideDoc())
+	m2 := Model{layers: &layerStack{entries: []layer{e2}}, width: 80, height: 24}
+	m2 = typePicker(m2, e2, "/", "needle", "enter")
+	if len(e2.search.hits) != 2 {
+		t.Fatalf("hits = %v, want 2", e2.search.hits)
+	}
+	if e2.bi != 1 || e2.side != hunkpick.Current || e2.line != 0 {
+		t.Fatalf("cursor = %d/%v/%d, want block 1 current line 0 (\"needle\")", e2.bi, e2.side, e2.line)
+	}
+	e2.bi, e2.side, e2.line = 0, hunkpick.Incoming, 0 // block 0's Incoming side is empty
+	_ = typePicker(m2, e2, "]")
+	if e2.bi != 1 || e2.side != hunkpick.Current || e2.line != 0 {
+		t.Fatalf("] must land on block 1's current hit (the aliased row), got %d/%v/%d", e2.bi, e2.side, e2.line)
+	}
 }
 
-func TestPickerSearchSkipsLiteralsAndTheOutputPane(t *testing.T) {
+func TestPickerSearchSkipsLiterals(t *testing.T) {
 	t.Parallel()
 	m, e := pickerSearchModel()
 	_ = typePicker(m, e, "/", "t", "o", "p")

@@ -454,6 +454,15 @@ func (e *hunkPicker) searchPos() searchPos {
 	if e.side == hunkpick.Incoming {
 		side = 1
 	}
+	// The cursor's side has no text (block whose Incoming — or Current — side
+	// is empty): searchRow already aliased row to the NEXT block's first row
+	// on the other side, so a real side of 0/1 here would sort a hit at that
+	// aliased row on the wrong side of the fallback and let ] skip it. -1
+	// sorts before both real sides at the same row, so the fallback always
+	// finds the alias row's own hits first.
+	if e.sideLen() == 0 {
+		side = -1
+	}
 	if e.search.cur >= 0 && e.search.cur < len(e.search.hits) {
 		if h := e.search.hits[e.search.cur]; h.row == row && h.side == side {
 			return searchPos{row: h.row, side: h.side, col: h.start}

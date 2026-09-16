@@ -386,8 +386,8 @@ func helpFor(section, footerHint string) []contentLine {
 	return append(lines, all[end:]...)
 }
 
-// hintChips splits a packed footer hint ("[↑↓] scroll  [j/k] line …") into
-// (key, label) pairs; text before the first bracket is dropped.
+// hintChips splits a packed footer hint ("[↑↓] line  [pgup/pgdn] page  [/]
+// find …") into (key, label) pairs; text before the first bracket is dropped.
 func hintChips(hint string) [][2]string {
 	var out [][2]string
 	for _, part := range strings.Split(hint, "  ") {
