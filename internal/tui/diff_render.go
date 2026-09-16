@@ -83,13 +83,15 @@ func (mk cellMark) gapFor() lipgloss.Style {
 
 // diffHintFor builds the diff-view hint for the current long-line mode. Every
 // diff-view binding that is not help-only appears here, so the line is packed:
-// the widest (scroll) English variant measures 139 display columns and MUST
+// the widest (scroll) English variant measures 140 display columns and MUST
 // stay at or under 140, the width TestRenderDiffViewPanes renders at and the
 // narrowest common wide terminal — past that the truncation eats [esc] close
-// first, hiding the way out. That budget is why the labels are terse (chg,
+// first, hiding the way out. There is NO headroom left: that budget is why the
+// labels are terse (scroll/line on one key group, chg, ^w for ctrl+w,
 // hist/blame) and why the three note keys share one [c/}{] notes group
 // (E/R/a are help-and-menu-only). Shortening a label is the way to add a
-// group; growing the line is not. The scroll variant appends the pan keys.
+// group; growing the line is not. TestDiffHintFitsTheBudget pins the number.
+// The scroll variant appends the pan keys.
 func diffHintFor(long longMode) string {
 	mode := i18n.T("scroll")
 	switch long {
@@ -100,9 +102,9 @@ func diffHintFor(long longMode) string {
 	}
 	pan := ""
 	if long == longScroll {
-		pan = i18n.T("  [←→/0] pan")
+		pan = i18n.T("  [←→0] pan")
 	}
-	return i18n.T("[↑↓] scroll  [j/k] line  [c/}{] notes  [z] align  [e] edit  [n/p] chg  [f] part  [ctrl+w] %s", mode) + pan + i18n.T("  [h/b] hist/blame  [esc] close")
+	return i18n.T("[↑↓/jk] scroll/line  [c/}{] notes  [z] align  [e] edit  [n/p] chg  [f] part  [/] find  [^w] %s", mode) + pan + i18n.T("  [h/b] hist/blame  [esc] close")
 }
 
 // cellSeg is one pane's text for one display row: the sanitized display runes
@@ -284,6 +286,15 @@ func (m Model) renderDiffView() string {
 			right = rangeStr
 		}
 	}
+	// In-view search badge: "/foo  3/12" (spec §4.3), right-aligned status like
+	// everything else here, so the avail math absorbs it.
+	if bd := v.search.badge(); bd != "" {
+		if right != "" {
+			right = bd + "  " + right
+		} else {
+			right = bd
+		}
+	}
 	// Primed wrap-around cue: only when armed, so the unarmed header stays
 	// byte-identical. Leads the status so a narrow terminal keeps the prompt.
 	if cue := wrapCue(v.wrapArm); cue != "" {
@@ -390,6 +401,14 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 		// Syntax runs for this row's source lines (nil on a gap side or an
 		// unlexed file); the wrap case already carries them in dr.left/right.
 		lt, rt := tokAt(v.oldTok, r.LeftNo), tokAt(v.newTok, r.RightNo)
+		// In-view search hits for this logical line, per side. Nil for every
+		// row when no search is active (and for the history pane, whose
+		// diffView never routes search keys), so the no-search render is
+		// untouched.
+		var lh, rh []hitSpan
+		if v.search.active() {
+			lh, rh = v.search.hitsOn(dr.line, 0), v.search.hitsOn(dr.line, 1)
+		}
 		switch v.long {
 		case longWrap:
 			leftGap := r.Kind == textdiff.Add
@@ -402,25 +421,25 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 				rightNo = r.RightNo
 			}
 			left := segCell(leftNo, dr.left, gut, paneW, leftGap,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mk, nil)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mk, lh)
 			right := segCell(rightNo, dr.right, gut, paneW, rightGap,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mk, nil)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mk, rh)
 			out = append(out, left+"│"+right)
 		case longTruncate:
 			left := diffCell(r.LeftNo, r.Left, gut, paneW,
 				r.Kind == textdiff.Add,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, r.LeftSpans, lt, mk, nil)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, r.LeftSpans, lt, mk, lh)
 			right := diffCell(r.RightNo, r.Right, gut, paneW,
 				r.Kind == textdiff.Del,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, r.RightSpans, rt, mk, nil)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, r.RightSpans, rt, mk, rh)
 			out = append(out, left+"│"+right)
 		default: // longScroll
 			left := scrollCell(r.LeftNo, r.Left, r.LeftSpans, lt, v.hOffset, gut, paneW,
 				r.Kind == textdiff.Add,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mk, nil)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mk, lh)
 			right := scrollCell(r.RightNo, r.Right, r.RightSpans, rt, v.hOffset, gut, paneW,
 				r.Kind == textdiff.Del,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mk, nil)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mk, rh)
 			out = append(out, left+"│"+right)
 		}
 	}
