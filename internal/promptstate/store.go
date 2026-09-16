@@ -2,10 +2,11 @@
 // prompts: which related-option follow-up prompts the user never wants to see
 // again (global — a prompt you never want is never wanted in any repo),
 // which health notices they dismissed per repo (consumed by the notification
-// center), and which external-tool commands they approved per repo. It is
-// pure UX state with no git semantics: the TUI owns it directly (like the
-// operation log), it is NOT config (no .gg.toml / settingDocs plumbing), and
-// it lives in one TOML file under the gg state dir.
+// center), which external-tool commands they approved per repo, and the
+// active branch-filter slot per repo and list. It is pure UX state with no
+// git semantics: the TUI owns it directly (like the operation log), it is
+// NOT config (no .gg.toml / settingDocs plumbing), and it lives in one TOML
+// file under the gg state dir.
 package promptstate
 
 // Store persists prompt suppressions and notice dismissals. Safe for
@@ -26,4 +27,9 @@ type Store interface {
 	ApprovedToolCommands(repoKey string) map[string]bool
 	// ApproveToolCommand records a per-repo command approval (idempotent) and persists.
 	ApproveToolCommand(repoKey, hash string) error
+	// BranchFilterSlot returns repoKey's active branch-filter slot for list
+	// ("branches" | "remotes"); 0 = none.
+	BranchFilterSlot(repoKey, list string) int
+	// SetBranchFilterSlot persists it (0 clears).
+	SetBranchFilterSlot(repoKey, list string, slot int) error
 }
