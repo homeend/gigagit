@@ -88,6 +88,7 @@ func (m Model) applyToolsWizard(rows []toolWizardRow, checked []bool, globalPath
 	}
 	if cfg, err := config.Load(globalPath, m.repoConfigPath); err == nil {
 		m.cfg = cfg
+		m = m.applyBranchFilterConfig()
 	}
 	return m, len(blocks), nil
 }

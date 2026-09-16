@@ -160,6 +160,9 @@ func globalBindings() []footerBinding {
 		{"last-error", "E", i18n.T("[E] full message"), func(m Model) bool { return m.lastError != "" }, scopeGlobal},
 		{"find", "F", i18n.T("[F] find file"), Model.opsIdle, scopeGlobal},
 		{"order", "o", i18n.T("[o]rder"), Model.opsIdle, scopeGlobal},
+		{"branch-filter", "alt+1…5", i18n.T("[alt+1-5] filter"), func(m Model) bool {
+			return (m.focus == panelBranches || m.focus == panelRemotes) && m.opsIdle()
+		}, scopeGlobal},
 		{"view", "ctrl+w", i18n.T("[ctrl+w] view"), Model.opsIdle, scopeGlobal},
 		{"load-batch", "ctrl+l", i18n.T("[ctrl+l] more"), Model.opsIdle, scopeGlobal},
 		{"eager-find", "ctrl+f", i18n.T("[ctrl+f] find deeper"), Model.opsIdle, scopeGlobal},

@@ -544,10 +544,19 @@ func (m Model) displayIndices(p panel) (idx []int) {
 	if m.filterActive(p) {
 		q = strings.ToLower(m.filterQuery)
 	}
+	// Branch filters (alt+1…5) drop rows BEFORE the / text check, so a typed
+	// query narrows what the slot left visible rather than fighting it. nil
+	// unless the panel is Branches/Remotes with a usable slot active; the
+	// verdicts are memoised (branch_filter.go) because this runs many times
+	// per keystroke.
+	bfHidden, _, _ := m.branchFilterHidden(p)
 	idx = make([]int, 0, l.Len())
 	for i := 0; i < l.Len(); i++ {
 		if !m.memberOf(p, i) {
 			continue // Files/Staged split: each panel shows only its subset
+		}
+		if bfHidden != nil && i < len(bfHidden) && bfHidden[i] {
+			continue
 		}
 		if q != "" {
 			// Prefer the cheap haystack; only fall back to Row(i) for panels that
@@ -692,6 +701,7 @@ func (m Model) panelLabel(p panel, base string) string {
 	if s := m.sortModes[p].String(); s != "" {
 		base += " ·" + s
 	}
+	base += m.branchFilterDecoration(p)
 	if m.filterTyping && p == m.filterPanel {
 		base += " /" + m.filterQuery + "█"
 	} else if m.filterActive(p) {

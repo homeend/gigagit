@@ -12,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/commitgraph"
 	"github.com/homeend/gigagit/internal/config"
@@ -270,9 +271,18 @@ type Model struct {
 	shelfEntries   []model.ShelfEntry   // default bucket; shown by the Shelf tab
 	sel            map[panel]int
 	sortModes      map[panel]sortMode // per-panel display order (zero value = default)
-	dispModes      map[panel]dispMode // per-panel text display mode (zero value = modeCutoff); z cycles
-	hscroll        map[panel]int      // per-panel horizontal scroll (modeScroll); shift+←/→
-	headTimes      map[string]int64   // worktree HEAD sha -> committer time (date sort)
+
+	// Branch filters (alt+1…5; see branch_filter.go). The compiled slots come
+	// from m.cfg; the ACTIVE slot is per panel (radio) and remembered per repo.
+	branchFilters        [branchfilter.MaxSlots]branchfilter.Compiled // compiled from m.cfg; zero = all empty
+	branchFilterWarnings []string                                     // CompileAll's warnings, shown in the Settings popup
+	branchFilterSlot     map[panel]int                                // panelBranches / panelRemotes → active slot, 0 = none
+	bfSlotsLoaded        bool                                         // loadBranchFilterSlots ran with a resolved repo key
+	bfMemo               *branchFilterMemos                           // shared pointer, like filterMemo; invalidate() on every list/worktree write
+
+	dispModes map[panel]dispMode // per-panel text display mode (zero value = modeCutoff); z cycles
+	hscroll   map[panel]int      // per-panel horizontal scroll (modeScroll); shift+←/→
+	headTimes map[string]int64   // worktree HEAD sha -> committer time (date sort)
 
 	filterPanel  panel  // panel the filter is bound to (meaningful only when filterQuery != "" or filterTyping)
 	filterQuery  string // case-insensitive substring; "" = no filter
@@ -354,6 +364,8 @@ func New(svc *domain.Service) Model {
 		noticeSessionDismissed: map[string]bool{},
 		attention:              map[attentionKey][]steerMark{},
 		filterMemo:             &commitFilterMemo{},
+		branchFilterSlot:       map[panel]int{},
+		bfMemo:                 &branchFilterMemos{},
 	}
 }
 
@@ -1145,6 +1157,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case configReadyMsg:
 		m.cfg = msg.cfg
+		m = m.applyBranchFilterConfig()
 		// Both directions: off drops the presence, on claims an inbox that
 		// snapshotTargetMsg resolved before this config arrived.
 		var steerCmd tea.Cmd
@@ -1201,12 +1214,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.withStatus(msg.status)
 			m.conflict = msg.conflict
 			m.branches = msg.branches
+			m.bfMemo.invalidate() // branch-filter verdicts key on the list; a fresh list re-evaluates
 			m.identWValid = false // tracked upstreams feed the ident width; rescan below
 			// Float remote branches that have a local counterpart to the top of
 			// the Remotes tab. Sort the slice itself (not just the rows) so the
 			// positional consumers — remoteRows, remoteBranchList, selectedRemote
 			// — all stay consistent.
 			m.remoteBranches = sortRemoteBranchesLocalFirst(msg.remoteBranches, msg.branches)
+			m.bfMemo.invalidate()
 			m.commits = msg.commits
 			m.commitsExhausted = msg.commitsExhausted
 			m = m.graphLayerReset().rebuildCommitGraph()
@@ -1214,11 +1229,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.statusMsg = i18n.T("commits: %s", msg.commitErr.Error())
 			}
 			m.worktrees = msg.worktrees
+			m.bfMemo.invalidate() // worktree checkouts are exemptions and never move the branch slice
 			m.tags = msg.tags
 			m.reflog = msg.reflog
 			m.currentWorktree = msg.currentWorktree
 			m.linkRepoName = msg.repoName
 			m.cfg = msg.cfg
+			m = m.applyBranchFilterConfig()
 			// Both directions (see reconcileSteer): this is the repo-switch path,
 			// where snapshotTargetMsg resolved the new inbox before this config
 			// landed — an unclaimed dir must be claimed here or the new repo's
@@ -1395,9 +1412,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case srcBranches:
 			key := m.panelSelKey(panelBranches)
 			m.branches = msg.value.([]model.Branch)
+			m.bfMemo.invalidate()
 			m.identWValid = false // tracked upstreams feed the ident width; rescan in rebuild
 			m = m.restorePanelSel(panelBranches, key)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(m.remoteBranches, m.branches)
+			m.bfMemo.invalidate()
 			m = m.rebuildCommitGraph()
 			// New tips: refresh the saved pairs (and any open preview) with
 			// them. Skipped on the startup fan-out, which reads every source
@@ -1423,6 +1442,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case srcRemotes:
 			key := m.panelSelKey(panelRemotes)
 			m.remoteBranches = sortRemoteBranchesLocalFirst(msg.value.([]model.RemoteBranch), m.branches)
+			m.bfMemo.invalidate()
 			m = m.restorePanelSel(panelRemotes, key)
 			// New remote tips: a saved pair may name one (or an open preview
 			// may diff against it), so refresh the previews with them.
@@ -1460,6 +1480,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			keyBr := m.panelSelKey(panelBranches)
 			p := msg.value.(worktreesPayload)
 			m.worktrees = p.worktrees
+			m.bfMemo.invalidate() // worktree checkouts are exemptions (see the dataLoadedMsg site)
 			m.headTimes = p.headTimes
 			m = m.restorePanelSel(panelWorktrees, keyWT)
 			m = m.restorePanelSel(panelBranches, keyBr)
@@ -1716,6 +1737,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.filterQuery += " "
 				m = m.snapFilterSel(m.filterPanel, anchor)
 			case tea.KeyRunes:
+				// alt+<rune> is a chord (alt+1…5 are the branch-filter slots),
+				// never text: swallow it so it neither types a digit into the
+				// query nor falls through to the panel dispatch below.
+				if msg.Alt {
+					break
+				}
 				m.filterQuery += string(msg.Runes)
 				m = m.snapFilterSel(m.filterPanel, anchor)
 			}
@@ -2322,6 +2349,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sel[m.focus] = n - 1
 				}
 			}
+		case "alt+1", "alt+2", "alt+3", "alt+4", "alt+5":
+			// Branch-filter slots on the Branches/Remotes panels (see
+			// branch_filter.go). Same idle gate as o.
+			if !m.running && !m.loading {
+				n, _ := strconv.Atoi(msg.String()[4:])
+				m = m.toggleBranchFilter(n)
+			}
+			return m, nil
 		case ">":
 			if m.focus == panelCommits && m.graphActive() {
 				m.commitGraphCols = m.clampCols(m.graphCols() + m.graphStep())
@@ -3953,6 +3988,9 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.commitFilter = commitFilterFields{} // same staleness: the filter is part of the feed scope the new feed doesn't carry
 	m.feedScopeApplied = ""               // back to the startup state so the upstream rewalk re-fires for the new repo
 	m.filterMemo = &commitFilterMemo{}    // fresh pointer: an in-flight copy from the old repo must not repopulate the new repo's memo
+	m.bfMemo = &branchFilterMemos{}       // same, for the branch-filter verdicts
+	m.branchFilterSlot = map[panel]int{}  // the active slot is per repo; the new repo's is read back by loadBranchFilterSlots
+	m.bfSlotsLoaded = false               // …which re-arms once the new repo's health probe resolves its common dir
 	m.stashView = nil                     // the new repo has its own stashes
 	m = m.closeFilesView()                // the new repo has a different commit list
 	m = m.reconcileFullscreenFocus()      // a resuming pin must not inherit focus from a surface that just closed

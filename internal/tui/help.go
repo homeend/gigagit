@@ -40,6 +40,7 @@ func helpContent() []contentLine {
 		r("", i18n.T("Browse remote branches (ctrl+p palette or the Remotes .-menu): lists branches that exist on the remote but are not fetched locally (a narrowed fetch refspec hides them); enter checks one out — stay or switch — adding a per-branch fetch mapping first")),
 		r("", i18n.T("Compare against working dir / Copy to working dir (.-menu): on any focused stash/commit/staged file, diffs that version against the same path in the working tree (Compare) or writes it into the working tree at its own path (Copy)")),
 		r("o", i18n.T("cycle the focused panel's sort order")),
+		r("alt+1…5", i18n.T("branch filter slots on the Branches/Remotes panel: activate slot N (hide, or show only, by tip age / prefix / suffix / substring / regex — defined in Settings , → Branch filters… or [[branches.filter]] in .gg.toml); the same key again clears; one slot per panel; remembered per repo. HEAD, checked-out and upstream rows are never hidden (∗ marks one the rule would hide)")),
 		r("ctrl+w", i18n.T("cycle the focused window's text display (cutoff / wrap / scroll)")),
 		r("t", i18n.T("maximize the focused left-column panel to fill the whole left column (t again restores); while maximized, ctrl+←/→ still cycles that slot's tabs")),
 		r("ctrl+t", i18n.T("fullscreen whatever is focused — any panel OR any open popup — to a near-fullscreen box (ctrl+t or esc restores; on a panel, t drops back to the left column)")),
