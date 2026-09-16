@@ -101,6 +101,19 @@ is for. `IsLive()` is `true` (a tip moves) and `FileRef()` is well-defined
 (`git show <ref>:<path>` is correct), so only `CacheTag` refuses.
 Task 3 extends the exhaustiveness table with a `cacheTagPanics` column for this.
 
+**R6 — a bounded set records PRESENCE, not just paths.** A `FileSet` carries,
+for every enumerated member, whether that member has BYTES at the set's own
+endpoint. A change-set's deleted members do not: `@a..b` enumerates a path that
+`git show b:<path>` cannot read. Without this the comparison reads a file that
+is not there and hard-errors instead of reporting `A`/`D`. The shipped
+`shelfCommitCompare` never met the case — a tar member always has bytes — so
+this is new with `EndpointPair`, and Task 5's fixture deletes a file to pin it.
+
+**R7 — `PairEndpoint(x, x)` is LEGAL and evaluates to the empty bounded set.**
+A fully-merged branch has `merge-base(target, source) == source`, so a
+three-dot preview link of one legitimately produces a pair of identical shas.
+Spec §6 says an empty bounded set is a result, not an error.
+
 **R4 — `gg compare --save` is NOT in 1b.** It needs `internal/savedcompare`,
 which the spec puts in plan 3 (§8). 1b prints the comparison; it does not store
 it.
@@ -318,7 +331,18 @@ In `LinkAbsOK`, change `strings.ContainsAny(s, "@#")` to
 colon).
 
 In `LinkRefOK`, change `strings.ContainsAny(s, "@:# \t")` to
-`strings.ContainsAny(s, "@:#? \t")`.
+`strings.ContainsAny(s, "@:#? \t")`, AND tighten its existing `".."` guard:
+the function rejects `"..."` today, but git forbids `".."` anywhere in a
+refname (`git check-ref-format`), and leaving two dots legal means
+`@ref:main..feat` parses as a ref literally named `main..feat` instead of
+failing. Change `strings.Contains(s, "...")` to `strings.Contains(s, "..")` —
+the three-dot case is subsumed. Add to `TestQuestionMarkIsNotExpressible`:
+
+```go
+	if LinkRefOK("main..feat") {
+		t.Error("LinkRefOK must reject a refname containing .. (git forbids it, and it collides with the change-set form)")
+	}
+```
 
 4. In `String()`, render the hint LAST, after the line/hunk switch and before
    `return b.String()`:
@@ -619,11 +643,9 @@ type LinkPair struct{ A, B string }
 				return linkErr("a change-set names <a>..<b>, got %q", tail)
 			}
 			// Each half is a sha or a refname. LinkRefOK already rejects the
-			// grammar's separators; a THIRD dot pair is rejected because it
-			// would reparse as a different pair.
-			okHalf := func(s string) bool {
-				return isShaLink(s) || (LinkRefOK(s) && !strings.Contains(s, ".."))
-			}
+			// grammar's separators AND ".." (Task 1 tightened it), so a half
+			// that would reparse as a different pair cannot get through.
+			okHalf := func(s string) bool { return isShaLink(s) || LinkRefOK(s) }
 			if !okHalf(a) || !okHalf(bb) {
 				return linkErr("%q is not a pair of commits or branch names", tail)
 			}
@@ -805,6 +827,14 @@ Extend `TestEndpointMethodsMatchTheTable` with the two new assertions:
 Add the constructor-reject table:
 
 ```go
+// A pair of one commit is legal and means "nothing changed" (ruling R7).
+func TestPairEndpointAcceptsIdenticalHalves(t *testing.T) {
+	t.Parallel()
+	if _, err := PairEndpoint("abc1234def5678", "abc1234def5678"); err != nil {
+		t.Fatalf("PairEndpoint(x, x) must be legal: %v", err)
+	}
+}
+
 func TestNewEndpointConstructorsReject(t *testing.T) {
 	t.Parallel()
 	if _, err := RefEndpoint(""); err == nil {
@@ -818,7 +848,9 @@ func TestNewEndpointConstructorsReject(t *testing.T) {
 		{"abc1234def5678", ""},
 		{"abc1", "abc1234def5678"},              // too short
 		{"zzzz123def5678", "abc1234def5678"},    // not hex
-		{"abc1234def5678", "abc1234def5678"},    // a pair of the same commit is empty by definition
+		// NOTE: PairEndpoint(x, x) is NOT rejected -- ruling R7. A fully
+		// merged branch's three-dot pair legitimately has base == source,
+		// and an empty bounded set is a result, not an error (spec section 6).
 	} {
 		if _, err := PairEndpoint(tc[0], tc[1]); err == nil {
 			t.Errorf("PairEndpoint(%q, %q) must fail", tc[0], tc[1])
@@ -895,15 +927,16 @@ func RefEndpoint(name string) (Endpoint, error) {
 // PairEndpoint names a CHANGE-SET: the files that differ between two resolved
 // commits, a → b, older → newer. Both halves must already be full object ids —
 // see the field comment on Endpoint.a for why names are refused here.
+//
+// a == b is LEGAL and means the empty change-set (ruling R7): a fully merged
+// branch's three-dot pair has merge-base(target, source) == source, and an
+// empty bounded set is a result, not an error (spec §6).
 func PairEndpoint(a, b string) (Endpoint, error) {
 	if !commitHashOK(a) {
 		return Endpoint{}, fmt.Errorf("%w: pair's older side %q is not a commit id", ErrEndpoint, a)
 	}
 	if !commitHashOK(b) {
 		return Endpoint{}, fmt.Errorf("%w: pair's newer side %q is not a commit id", ErrEndpoint, b)
-	}
-	if a == b {
-		return Endpoint{}, fmt.Errorf("%w: a pair of one commit (%s) has no change-set", ErrEndpoint, a)
 	}
 	return Endpoint{kind: EndpointPair, a: a, b: b}, nil
 }
@@ -1203,17 +1236,21 @@ import (
 	"github.com/homeend/gigagit/internal/gitcmd"
 )
 
-// ListFiles returns the repository's tracked paths, relative to the working
-// tree root. cached=true lists the INDEX's entries (`git ls-files --cached`),
-// which is what the index endpoint's member set is; cached=false lists the
-// working tree's tracked files, which is the same list — git has no "files on
-// disk" mode — so the working-tree caller must union this with
-// UntrackedFiles to get the real set.
+// ListFiles returns tracked paths relative to the working-tree root.
+//
+// deleted=false is the INDEX's entries (plain `git ls-files`, which is
+// `--cached` — they are the same list). That IS the index endpoint's member
+// set, and it is the tracked half of the working tree's.
+//
+// deleted=true is `git ls-files --deleted`: entries the index still holds but
+// which are gone from disk. The working-tree member set must SUBTRACT these —
+// git has no "files on disk" listing, and calling a `rm`'d file present sends
+// a later byte read after a file that is not there.
 //
 // -z so paths with spaces or non-ASCII bytes (which git otherwise quotes)
 // come through raw, matching UntrackedFiles and DiffTreeFiles.
-func (r *Repo) ListFiles(ctx context.Context, cached bool) ([]string, error) {
-	b := gitcmd.New("ls-files").Arg("-z").ArgIf(cached, "--cached")
+func (r *Repo) ListFiles(ctx context.Context, deleted bool) ([]string, error) {
+	b := gitcmd.New("ls-files").Arg("-z").ArgIf(deleted, "--deleted")
 	res, err := r.Runner.Run(ctx, "git ls-files (member set)", b.ToArgv())
 	if err != nil {
 		return nil, err
@@ -1228,9 +1265,11 @@ func (r *Repo) ListFiles(ctx context.Context, cached bool) ([]string, error) {
 }
 ```
 
-Test it in `internal/git/lsfiles_test.go` with a real repo: two tracked files
-and one untracked, asserting the untracked one is absent and both tracked ones
-are present. Follow the `newTestRepo` pattern the package's other tests use
+Test it in `internal/git/lsfiles_test.go` with a real repo: two tracked files,
+one untracked and one tracked-then-`rm`'d. Assert that `ListFiles(ctx, false)`
+holds both tracked names (including the `rm`'d one — it is still in the index)
+and not the untracked one, and that `ListFiles(ctx, true)` holds exactly the
+`rm`'d one. Follow the `newTestRepo` pattern the package's other tests use
 (`grep -n "func newTestRepo" internal/git/*_test.go`).
 
 Add `ListFiles` to the `GitOps`-style interface the `Service` holds **only if
@@ -1275,6 +1314,13 @@ type FileSet struct {
 	ep      model.Endpoint
 	paths   []string
 	bounded bool // explicit, NOT len(paths) > 0: an empty bounded set is legal
+	// has answers "does this member have BYTES at ep" for every enumerated
+	// path. It is NOT redundant with paths (ruling R6): a change-set
+	// enumerates the files it DELETED, and `git show <b>:<deleted>` cannot
+	// read them. Without this the comparison asks for a file that is not
+	// there and hard-errors instead of reporting A/D. nil ⇒ every member has
+	// bytes, which is the shelf and whole-tree case.
+	has map[string]bool
 }
 
 // Bounded reports whether the set enumerates its paths.
@@ -1286,14 +1332,24 @@ func (f FileSet) Paths() []string { return f.paths }
 // Endpoint is the resolved byte source for a path in this set.
 func (f FileSet) Endpoint() model.Endpoint { return f.ep }
 
-// boundedSet and unboundedSet are the only two constructors, so the invariant
-// "bounded ⇒ paths is sorted and non-nil" holds by construction.
-func boundedSet(ep model.Endpoint, paths []string) FileSet {
+// Has reports whether path has readable bytes at this set's endpoint. Only
+// meaningful for a bounded set; the unbounded lane asks endpointPaths instead.
+func (f FileSet) Has(path string) bool {
+	if f.has == nil {
+		return true
+	}
+	return f.has[path]
+}
+
+// boundedSetWith and unboundedSet are the only two constructors, so the
+// invariant "bounded ⇒ paths is sorted and non-nil" holds by construction.
+// A nil has means "every member has bytes".
+func boundedSetWith(ep model.Endpoint, paths []string, has map[string]bool) FileSet {
 	if paths == nil {
 		paths = []string{}
 	}
 	sort.Strings(paths)
-	return FileSet{ep: ep, paths: paths, bounded: true}
+	return FileSet{ep: ep, paths: paths, bounded: true, has: has}
 }
 
 func unboundedSet(ep model.Endpoint) FileSet { return FileSet{ep: ep} }
@@ -1339,26 +1395,34 @@ func (s *Service) EvalEndpoint(ctx context.Context, e model.Endpoint) (FileSet, 
 		if err != nil {
 			return FileSet{}, err
 		}
+		// The set's byte source is the pair's NEW side: a member's content
+		// means "as it is at b". A member the pair DELETED has NO bytes at b,
+		// so it is enumerated with has[path] = false and CompareSets reports
+		// it through A/D instead of trying to read it (ruling R6).
+		//
+		// KNOWN GAP (1b): DiffTreeFiles passes -M, so a rename arrives as one
+		// "R" row carrying the NEW path only; the old path is not enumerated.
+		// A renamed file therefore compares as an addition on this side. That
+		// matches what `git diff --name-status` reports and is left as-is.
 		paths := make([]string, 0, len(files))
+		has := make(map[string]bool, len(files))
 		for _, f := range files {
 			paths = append(paths, f.Path)
+			has[f.Path] = f.Status != "D"
 		}
-		// The set's byte source is the pair's NEW side: a member's content
-		// means "as it is at b". A member the pair DELETED has no bytes at b,
-		// and CompareSets reads that through the A/D status, never by asking
-		// for the file.
-		return boundedSet(b, paths), nil
+		return boundedSetWith(b, paths, has), nil
 
 	case model.EndpointShelf:
 		members, err := s.ShelfCommitFiles(ctx, e.ShelfID())
 		if err != nil {
 			return FileSet{}, err
 		}
+		// Every tar member has bytes, so has stays nil.
 		paths := make([]string, 0, len(members))
 		for _, f := range members {
 			paths = append(paths, f.Path)
 		}
-		return boundedSet(e, paths), nil
+		return boundedSetWith(e, paths, nil), nil
 
 	default:
 		return FileSet{}, fmt.Errorf("EvalEndpoint: unusable endpoint kind %d", e.Kind())
@@ -1385,10 +1449,14 @@ func (s *Service) endpointPaths(ctx context.Context, e model.Endpoint) (map[stri
 		}
 	case model.EndpointIndex:
 		var err error
-		if list, err = s.ListFiles(ctx, true); err != nil {
+		if list, err = s.ListFiles(ctx, false); err != nil {
 			return nil, err
 		}
 	case model.EndpointWorkTree:
+		// tracked ∪ untracked − deleted. The subtraction matters: ls-files
+		// lists the INDEX, so a tracked file the user `rm`'d still appears
+		// there, and calling it "present" would send ResolveBytes after a
+		// file that is not on disk.
 		tracked, err := s.ListFiles(ctx, false)
 		if err != nil {
 			return nil, err
@@ -1397,7 +1465,19 @@ func (s *Service) endpointPaths(ctx context.Context, e model.Endpoint) (map[stri
 		if err != nil {
 			return nil, err
 		}
-		list = append(tracked, untracked...)
+		gone, err := s.ListFiles(ctx, true)
+		if err != nil {
+			return nil, err
+		}
+		removed := make(map[string]bool, len(gone))
+		for _, p := range gone {
+			removed[p] = true
+		}
+		for _, p := range append(tracked, untracked...) {
+			if !removed[p] {
+				list = append(list, p)
+			}
+		}
 	default:
 		// A bounded endpoint never reaches here: CompareSets asks for the
 		// member set only of the side its own Bounded() said is unbounded.
@@ -1472,8 +1552,13 @@ import (
 // compareFixture is a repo with three commits:
 //
 //	c1: a.txt = "one"
-//	c2: a.txt = "two",  b.txt = "bee"     (so c1..c2 changes a.txt and adds b.txt)
-//	c3: a.txt = "three"                   (so c2..c3 changes a.txt only)
+//	c2: a.txt = "two",  b.txt = "bee"   (c1..c2 changes a.txt and ADDS b.txt)
+//	c3: a.txt = "three", b.txt DELETED  (c2..c3 changes a.txt and DELETES b.txt)
+//
+// The deletion is load-bearing, not decoration: the pair c2..c3 ENUMERATES
+// b.txt while having no bytes for it at c3, which is the case ruling R6
+// exists for. A fixture with no deletions lets a comparison that blindly
+// reads every member pass.
 type compareFixture struct {
 	dir            string
 	svc            *Service
@@ -1495,6 +1580,7 @@ func newCompareFixture(t *testing.T) compareFixture {
 	gittest.Run(t, dir, "commit", "-m", "c2")
 	c2, _, _ := svc.ResolveRev(ctx, "HEAD")
 	gittest.Write(t, dir, "a.txt", "three\n")
+	gittest.Run(t, dir, "rm", "-f", "b.txt")
 	gittest.Run(t, dir, "add", "a.txt")
 	gittest.Run(t, dir, "commit", "-m", "c3")
 	c3, _, _ := svc.ResolveRev(ctx, "HEAD")
@@ -1546,25 +1632,31 @@ func TestCompareSetsMatrix(t *testing.T) {
 			t.Fatal(err)
 		}
 		st := statuses(got)
-		if st["a.txt"] != "M" || st["b.txt"] != "A" || len(st) != 2 {
-			t.Fatalf("c1 vs c3 = %v, want a.txt M and b.txt A", st)
+		// b.txt was added at c2 and deleted at c3, so it is absent from BOTH
+		// trees and never appears.
+		if st["a.txt"] != "M" || len(st) != 1 {
+			t.Fatalf("c1 vs c3 = %v, want exactly a.txt M", st)
 		}
 	})
 
 	t.Run("bounded x bounded: symmetric over the union", func(t *testing.T) {
-		// c1..c2 touches {a.txt, b.txt}; c2..c3 touches {a.txt}.
+		// c1..c2 enumerates {a.txt (M), b.txt (A)}; c2..c3 enumerates
+		// {a.txt (M), b.txt (D)}. BOTH sets contain b.txt — but the right set
+		// has no BYTES for it (it is the file c3 deleted), which is exactly
+		// ruling R6. A comparison that read every member would hard-error
+		// here on `git show <c3>:b.txt`.
 		got, err := f.svc.CompareSets(ctx, f.eval(t, mustPair(f.c1, f.c2)), f.eval(t, mustPair(f.c2, f.c3)))
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("a deleted member must not be read: %v", err)
 		}
 		st := statuses(got)
-		// a.txt is in both sets but holds different bytes at c2 and c3 → M.
+		// a.txt is in both sets with bytes on both, differing → M.
 		if st["a.txt"] != "M" {
 			t.Fatalf("a.txt = %q, want M; full result %v", st["a.txt"], st)
 		}
-		// b.txt is in the LEFT set only → present in one ⇒ D.
+		// b.txt: bytes on the left (it exists at c2), none on the right ⇒ D.
 		if st["b.txt"] != "D" {
-			t.Fatalf("b.txt = %q, want D (left-only); full result %v", st["b.txt"], st)
+			t.Fatalf("b.txt = %q, want D (no bytes on the right); full result %v", st["b.txt"], st)
 		}
 	})
 
@@ -1604,21 +1696,35 @@ func TestCompareSetsMatrix(t *testing.T) {
 	})
 }
 
-// Disjoint bounded sets are an EMPTY result, never an error (spec §6).
-func TestCompareSetsDisjointBoundedIsEmptyNotAnError(t *testing.T) {
+// DISJOINT bounded sets are a result, never an error (spec §6). Disjoint does
+// NOT mean empty: every member of one side is absent from the other, so the
+// result is all A and D. (Two EMPTY sets are the separate, degenerate case,
+// and they do compare to nothing.)
+func TestCompareSetsDisjointBoundedIsAResultNotAnError(t *testing.T) {
 	t.Parallel()
 	f := newCompareFixture(t)
 	ctx := context.Background()
-	// An empty bounded set on one side: nothing in common, nothing to say
-	// about the other side's members either — every left member is D.
-	left := boundedSet(mustTestCommit(t, f.c1), []string{})
-	right := boundedSet(mustTestCommit(t, f.c1), []string{})
+	c1 := mustTestCommit(t, f.c1)
+	c2 := mustTestCommit(t, f.c2)
+	left := boundedSetWith(c1, []string{"a.txt"}, map[string]bool{"a.txt": true})
+	right := boundedSetWith(c2, []string{"b.txt"}, map[string]bool{"b.txt": true})
+
 	got, err := f.svc.CompareSets(ctx, left, right)
 	if err != nil {
 		t.Fatalf("disjoint sets must not error: %v", err)
 	}
-	if len(got) != 0 {
-		t.Fatalf("two empty sets compare to nothing, got %v", got)
+	st := statuses(got)
+	if st["a.txt"] != "D" || st["b.txt"] != "A" || len(st) != 2 {
+		t.Fatalf("disjoint sets compare to all A/D, got %v", st)
+	}
+
+	empty, err := f.svc.CompareSets(ctx,
+		boundedSetWith(c1, nil, nil), boundedSetWith(c1, nil, nil))
+	if err != nil {
+		t.Fatalf("two empty sets must not error: %v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("two empty sets compare to nothing, got %v", empty)
 	}
 }
 
@@ -1650,7 +1756,7 @@ func TestCompareSetsResultIsBounded(t *testing.T) {
 	for _, cf := range got {
 		paths = append(paths, cf.Path)
 	}
-	again := boundedSet(mustTestCommit(t, f.c3), paths)
+	again := boundedSetWith(mustTestCommit(t, f.c3), paths, nil)
 	if !again.Bounded() {
 		t.Fatal("a comparison result must be re-usable as a bounded set")
 	}
@@ -1715,12 +1821,12 @@ func (s *Service) CompareSets(ctx context.Context, left, right FileSet) ([]model
 	case right.Bounded():
 		// unbounded × bounded: the RIGHT side supplies the keys, so a key the
 		// left (unbounded) side lacks reads as ADDED.
-		return s.compareProjected(ctx, left, right, right, "A")
+		return s.compareProjected(ctx, left, right, right)
 
 	default:
 		// bounded × unbounded: the LEFT side supplies the keys, so a key the
 		// right (unbounded) side lacks reads as DELETED.
-		return s.compareProjected(ctx, left, right, left, "D")
+		return s.compareProjected(ctx, left, right, left)
 	}
 }
 
@@ -1736,20 +1842,20 @@ func (s *Service) compareBoundedPair(ctx context.Context, left, right FileSet) (
 	var out []model.CommitFile
 	for _, p := range left.Paths() {
 		inLeft[p] = true
-		if !inRight[p] {
-			out = append(out, model.CommitFile{Status: "D", Path: p})
-			continue
-		}
-		same, err := s.sameBytes(ctx, left.Endpoint(), right.Endpoint(), p)
+		// Membership is not presence (ruling R6): a change-set ENUMERATES the
+		// files it deleted, and those have no bytes at its endpoint. Decide
+		// A/D/M from presence on both sides, and only read bytes when both
+		// sides actually have some.
+		row, err := s.compareOne(ctx, left, right, p, left.Has(p), inRight[p] && right.Has(p))
 		if err != nil {
 			return nil, err
 		}
-		if !same {
-			out = append(out, model.CommitFile{Status: "M", Path: p})
+		if row.Status != "" {
+			out = append(out, row)
 		}
 	}
 	for _, p := range right.Paths() {
-		if !inLeft[p] {
+		if !inLeft[p] && right.Has(p) {
 			out = append(out, model.CommitFile{Status: "A", Path: p})
 		}
 	}
@@ -1758,11 +1864,13 @@ func (s *Service) compareBoundedPair(ctx context.Context, left, right FileSet) (
 }
 
 // compareProjected is the unbounded × bounded lane. keys is whichever of
-// left/right is the bounded one; missing is the status a key absent from the
-// UNBOUNDED side earns — "A" when the bounded side is the right/newer one,
-// "D" when it is the left/older one. That single parameter is the
-// generalization of shelfCommitCompare's shelfIsRight flag.
-func (s *Service) compareProjected(ctx context.Context, left, right, keys FileSet, missing string) ([]model.CommitFile, error) {
+// left/right is the bounded one — it supplies the key set, always, because
+// §3.5 says you may only ever scale DOWN.
+//
+// The old shelfCommitCompare took a shelfIsRight flag to decide whether a
+// missing key read A or D. That flag is gone: compareOne derives it from WHICH
+// SIDE holds the path, which is the same answer and cannot be passed wrong.
+func (s *Service) compareProjected(ctx context.Context, left, right, keys FileSet) ([]model.CommitFile, error) {
 	unbounded := left
 	if !right.Bounded() {
 		unbounded = right
@@ -1771,22 +1879,51 @@ func (s *Service) compareProjected(ctx context.Context, left, right, keys FileSe
 	if err != nil {
 		return nil, err
 	}
+	// Each side answers presence its own way: the unbounded side from the
+	// listing, the bounded side from its own has map.
 	var out []model.CommitFile
 	for _, p := range keys.Paths() {
-		if !present[p] {
-			out = append(out, model.CommitFile{Status: missing, Path: p})
-			continue
-		}
-		same, err := s.sameBytes(ctx, left.Endpoint(), right.Endpoint(), p)
+		onLeft := left.Bounded() && left.Has(p) || !left.Bounded() && present[p]
+		onRight := right.Bounded() && right.Has(p) || !right.Bounded() && present[p]
+		row, err := s.compareOne(ctx, left, right, p, onLeft, onRight)
 		if err != nil {
 			return nil, err
 		}
-		if !same {
-			out = append(out, model.CommitFile{Status: "M", Path: p})
+		if row.Status != "" {
+			out = append(out, row)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, nil
+}
+
+// compareOne is the single A/D/M decision, given whether path has bytes on
+// each side. It is the ONLY place that decides a status, so the two lanes
+// above cannot drift apart:
+//
+//	left only   → D      right only  → A
+//	neither     → omitted (nothing to say: it is in the key set because the
+//	             bounded side enumerates it, but nobody holds bytes)
+//	both        → read both and compare; identical ⇒ omitted
+//
+// A zero CommitFile (Status == "") means "omit this path".
+func (s *Service) compareOne(ctx context.Context, left, right FileSet, path string, onLeft, onRight bool) (model.CommitFile, error) {
+	switch {
+	case onLeft && !onRight:
+		return model.CommitFile{Status: "D", Path: path}, nil
+	case !onLeft && onRight:
+		return model.CommitFile{Status: "A", Path: path}, nil
+	case !onLeft && !onRight:
+		return model.CommitFile{}, nil
+	}
+	same, err := s.sameBytes(ctx, left.Endpoint(), right.Endpoint(), path)
+	if err != nil {
+		return model.CommitFile{}, err
+	}
+	if same {
+		return model.CommitFile{}, nil
+	}
+	return model.CommitFile{Status: "M", Path: path}, nil
 }
 
 // sameBytes reads one path from both endpoints and compares. Both sides are
@@ -1826,7 +1963,8 @@ behaviour byte-identical:
 // a BOUNDED set (its members) and everything else to an unbounded one, so the
 // two shelf lanes are just two rows of the general algebra — shelf↔shelf is
 // bounded × bounded, shelf↔commit is bounded × unbounded, and the
-// shelfIsRight direction flag is CompareSets's "which side is bounded".
+// shelfIsRight direction flag is gone: compareOne derives the same answer
+// from which side actually holds the path.
 //
 // Deliberately NOT wrapped in one query(): each underlying read takes its own
 // Read reservation, and nesting a gated read inside a held reservation can
@@ -1940,6 +2078,39 @@ func TestEvalLinkWithAPathIsBoundedToOne(t *testing.T) {
 	}
 	if !fs.Bounded() || len(fs.Paths()) != 1 || fs.Paths()[0] != "a.txt" {
 		t.Fatalf("a path link must bound the set to that one path, got bounded=%v paths=%v", fs.Bounded(), fs.Paths())
+	}
+}
+
+// A /<path> naming a file that does not EXIST at the target is still a legal
+// bounded set — it is bounded to one member with no bytes — and comparing it
+// reports A or D rather than failing to read the file (ruling R6).
+func TestEvalLinkWithAnAbsentPath(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+	// b.txt exists at c2 and was deleted at c3.
+	gone, err := model.ParseLink("gg://x/b.txt@" + f.c3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	there, err := model.ParseLink("gg://x/b.txt@" + f.c2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ls, err := f.svc.EvalLink(ctx, there)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs, err := f.svc.EvalLink(ctx, gone)
+	if err != nil {
+		t.Fatalf("a link to an absent path must evaluate, not error: %v", err)
+	}
+	got, err := f.svc.CompareSets(ctx, ls, rs)
+	if err != nil {
+		t.Fatalf("comparing against an absent path must not error: %v", err)
+	}
+	if len(got) != 1 || got[0].Path != "b.txt" || got[0].Status != "D" {
+		t.Fatalf("got %v, want exactly b.txt D", got)
 	}
 }
 
@@ -2109,9 +2280,30 @@ func (s *Service) EvalLink(ctx context.Context, l model.Link) (FileSet, error) {
 		return FileSet{}, err
 	}
 	if l.Path != "" {
-		return boundedSet(fs.Endpoint(), []string{l.Path}), nil
+		return s.narrowTo(ctx, fs, l.Path)
 	}
 	return fs, nil
+}
+
+// narrowTo bounds a set to ONE path — the spec's last grammar row, a link
+// with a /<path>.
+//
+// The narrowed set still has to answer "does that path have bytes here"
+// (ruling R6), or a link naming a file that does not exist at its target
+// would send a byte read after nothing instead of reporting A/D. A set that
+// is already bounded knows; an unbounded one is asked once, through the same
+// listing CompareSets would use.
+func (s *Service) narrowTo(ctx context.Context, fs FileSet, path string) (FileSet, error) {
+	if fs.Bounded() {
+		return boundedSetWith(fs.Endpoint(), []string{path},
+			map[string]bool{path: fs.Has(path)}), nil
+	}
+	present, err := s.endpointPaths(ctx, fs.Endpoint())
+	if err != nil {
+		return FileSet{}, err
+	}
+	return boundedSetWith(fs.Endpoint(), []string{path},
+		map[string]bool{path: present[path]}), nil
 }
 ```
 
@@ -2504,3 +2696,9 @@ git commit -m "docs(links): e2e round trip, CHANGELOG, agent skill and the packa
 | §6 error handling | Tasks 6, 7 |
 | §7 testing | every task; the kind×kind matrix is Task 5 |
 | §9 cross-repo refusal | Task 7 |
+
+**Rulings pinned by a test:** R1/R3 by `endpoint_exhaustive_test.go`'s
+`cacheTagPanics` row and `TestEvalEndpointResolvesARefToACommit`; R5 by
+`TestAllDigitBranchNameIsRefused`; R6 by the fixture's deletion in
+`TestCompareSetsMatrix` and by `TestEvalLinkWithAnAbsentPath`; R7 by
+`TestPairEndpointAcceptsIdenticalHalves`.
