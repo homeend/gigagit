@@ -769,7 +769,7 @@ func TestDiffAlignMenuRowFeedsZCycle(t *testing.T) {
 func TestDiffHintAdvertisesCursorKeys(t *testing.T) {
 	t.Parallel()
 	h := diffHintFor(longScroll)
-	for _, k := range []string{"[↑↓/jk]", "[z]", "[e]"} {
+	for _, k := range []string{"[↑↓/jk]", "[spc]", "[alt↔]", "[e]"} {
 		if !strings.Contains(h, k) {
 			t.Errorf("hint %q lacks %s", h, k)
 		}

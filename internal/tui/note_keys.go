@@ -109,10 +109,11 @@ func (m Model) loadNotesCmd() tea.Cmd {
 	}
 }
 
-// noteAnchorAtCursor is where `c` puts a new note: the cursor row's new-side
-// line, or the old-side line on a Del row (§4.1's cursorRow contract). The
-// noteAnchor is one side a new note can hang off: the side, its line number
-// and the fingerprint of that line's text.
+// noteAnchorAtCursor is where `c` puts a new note: the cursor side's anchor
+// (new side by default), or the other side's line when the cursor side is a
+// gap (§4.1's cursorRow contract, sided by §4.7). The noteAnchor is one side a
+// new note can hang off: the side, its line number and the fingerprint of that
+// line's text.
 type noteAnchor struct {
 	side model.NoteSide
 	line int
@@ -164,8 +165,9 @@ func (m Model) noteAnchorsAtCursor() []noteAnchor {
 	return out
 }
 
-// noteAnchorAtCursor is the default anchor (the new side when the row has
-// one) for callers that do not offer a choice.
+// noteAnchorAtCursor is the default anchor — the cursor side's anchor (new
+// side by default) when the row has one — for callers that do not offer a
+// choice.
 func (m Model) noteAnchorAtCursor() (model.NoteSide, int, string, bool) {
 	as := m.noteAnchorsAtCursor()
 	if len(as) == 0 {

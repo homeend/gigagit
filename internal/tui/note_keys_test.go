@@ -472,7 +472,7 @@ func TestDiffHintFitsItsBudget(t *testing.T) {
 		if w := lipgloss.Width(h); w > 140 {
 			t.Errorf("hint (mode %d) is %d columns, budget is 140: %q", mode, w, h)
 		}
-		for _, k := range []string{"[c/}{]", "[z]", "[e]", "[n/p]", "[f]", "[h/b]", "[esc] close"} {
+		for _, k := range []string{"[c}{]", "[spc]", "[e]", "[n/p]", "[f]", "[h/b]", "[esc] back"} {
 			if !strings.Contains(h, k) {
 				t.Errorf("hint (mode %d) lost %s: %q", mode, k, h)
 			}

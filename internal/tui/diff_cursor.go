@@ -361,3 +361,35 @@ func (v *diffView) cursorCell() (text string, no int, ok bool) {
 	}
 	return r.Right, r.RightNo, true
 }
+
+// selectedLines is the cursor side's SOURCE text for every logical line the
+// selection covers, in stream order. Two entries are skipped, both by the
+// user's ruling: a FOLD (a collapsed run is a separator, not a line — "a range
+// across a fold copies only the visible lines") and a row where the cursor side
+// is ABSENT (an Add row has no old line, a Del row no new one). The result may
+// legitimately be empty; the caller decides what to say about that.
+func (v *diffView) selectedLines() []string {
+	lo, hi, ok := v.lsel.bounds(v.curLine)
+	if !ok {
+		return nil
+	}
+	if lo < 0 {
+		lo = 0
+	}
+	if hi > len(v.lines)-1 {
+		hi = len(v.lines) - 1
+	}
+	var out []string
+	for i := lo; i <= hi; i++ {
+		ln := v.lines[i]
+		if ln.Fold > 0 || !sidePresent(ln.Row, v.onOld) {
+			continue
+		}
+		if v.onOld {
+			out = append(out, ln.Row.Left)
+		} else {
+			out = append(out, ln.Row.Right)
+		}
+	}
+	return out
+}

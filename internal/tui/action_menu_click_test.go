@@ -145,7 +145,7 @@ func TestQuestionMarkInDiffViewOpensContextHelp(t *testing.T) {
 	for _, l := range lines[:diffSec] {
 		seen.WriteString(l.text + "\n")
 	}
-	for _, key := range []string{"[esc]", "[c/}{]", "[^w]", "[h/b]"} {
+	for _, key := range []string{"[esc]", "[c}{]", "[^w]", "[h/b]"} {
 		if !strings.Contains(seen.String(), key) {
 			t.Fatalf("footer key %s missing from the top section:\n%s", key, seen.String())
 		}

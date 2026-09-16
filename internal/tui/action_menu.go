@@ -530,6 +530,18 @@ func rowHasID(rows []actionRow, id string) bool {
 	return false
 }
 
+// rowByID returns the row with the given id. It is how a KEY runs the very row
+// the . menu offers (the contextLinkRow pattern): the key and the menu can then
+// never copy different text, and a test can read the payload off row.copyText.
+func rowByID(rows []actionRow, id string) (actionRow, bool) {
+	for _, row := range rows {
+		if row.id == id {
+			return row, true
+		}
+	}
+	return actionRow{}, false
+}
+
 // inContentWindow reports whether a navigable content window owns the keyboard
 // (file tree, stash list, diff, history, blame), so the . menu should offer
 // only that window's copy actions. Transient stack editors (interactive-rebase
@@ -567,7 +579,10 @@ func (m Model) contextCopyRows() []actionRow {
 		return m.fileCopyRows(s.ctx.path, s.ctx.rev)
 	}
 	if v := m.diffLayer(); v != nil {
-		return m.fileCopyRows(v.title, v.rev) // title = path; rev = commit ("" = working tree)
+		// The LINE rows lead (spec §4.7): what the user is looking at is a
+		// line, and the file's path/name/commit rows stay right behind them —
+		// which also keeps copy-file-path as insertCopyLinkRow's anchor.
+		return append(m.diffCopyLineRows(), m.fileCopyRows(v.title, v.rev)...) // title = path; rev = commit ("" = working tree)
 	}
 	if v := m.filesView; v != nil {
 		var rows []actionRow

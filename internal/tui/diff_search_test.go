@@ -469,4 +469,9 @@ func TestDiffHintFitsTheBudget(t *testing.T) {
 	if w := lipgloss.Width(diffHintFor(longScroll)); w != 140 {
 		t.Fatalf("the scroll variant measures %d columns; the doc comment says 140", w)
 	}
+	// The selection variant replaces the whole line in every mode, so it has to
+	// fit the same budget — a truncated one would hide [esc] unmark, the way out.
+	if w := lipgloss.Width(diffSelectHint()); w > 140 {
+		t.Fatalf("the selection hint is %d columns, the budget is 140: %q", w, diffSelectHint())
+	}
 }

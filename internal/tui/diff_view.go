@@ -822,6 +822,13 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	zc := v.zCycle
 	v.zCycle = alignCenter
 	body := m.diffBodyRows()
+	// Order (spec §4.7): a search being TYPED owns every key, then the line
+	// selection, then a committed query, then the view's own esc. diffSearchKey
+	// handles the first and third in one call, so the selection hook runs first
+	// and declines while the search is typing.
+	if nm, cmd, handled := m.diffSelectKey(v, msg); handled {
+		return nm, cmd
+	}
 	if nm, cmd, handled := m.diffSearchKey(v, msg, body); handled {
 		return nm, cmd
 	}
