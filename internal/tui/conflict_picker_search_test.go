@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -270,8 +271,9 @@ func TestProcessPickerEscZoomedTypingSearchWinsFirst(t *testing.T) {
 // coverage (reviews of Tasks 3 and 4 rejected a paint test the header badge
 // alone could satisfy): it renders the GRID with and without a live search,
 // asserts every row's TEXT is unchanged, every row with no hit at all is
-// byte-identical, and each hit row carries the search-emphasis colour (shared
-// by st().diffEmph/st().searchCur) at EXACTLY its own hit's column range
+// byte-identical, and each hit row carries its search styling (st().diffEmph's
+// colour for an ordinary hit, st().currentHitStyle's reverse-video FLIP for
+// the current one) at EXACTLY its own hit's column range
 // while its sibling column reports no hits at all (checked at the hitsOn data
 // level, not by slicing composed ANSI bytes — see the inline note below) —
 // once with the hit ("bar", right column) sitting under the reversed cursor
@@ -384,7 +386,14 @@ func TestPickerSearchPaintsTheHit(t *testing.T) {
 				if got := ansi.Strip(hitSlice); !strings.EqualFold(got, ha.text) {
 					t.Errorf("row %d: columns [%d,%d) hold %q, want the hit's own text %q", i, ha.col, ha.col+1, got, ha.text)
 				}
-				if !strings.Contains(hitSlice, marker) {
+				ctx := fmt.Sprintf("row %d: columns [%d,%d)", i, ha.col, ha.col+1)
+				if i == 2 {
+					// "bar" is the CURRENT hit (search.cur = 0): it flips
+					// reverse video against its row instead of wearing the
+					// ordinary hit's foreground — a hole in the first case,
+					// where the cursor sits on that very cell.
+					assertCurrentHitPaint(t, ctx, hitSlice, ansi.Strip(hitSlice), marker, cc.bi == 0)
+				} else if !strings.Contains(hitSlice, marker) {
 					t.Errorf("row %d: no search styling at the hit's own columns [%d,%d):\nslice: %q\nfull:  %q", i, ha.col, ha.col+1, hitSlice, w)
 				}
 				if got := ansi.Cut(p, ha.col, ha.col+1); strings.Contains(got, marker) {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/homeend/gigagit/internal/syntax"
+	"github.com/homeend/gigagit/internal/theme"
 )
 
 // NOTE: the render tests in this file do NOT call t.Parallel() —
@@ -61,6 +63,166 @@ func TestOverlayHitsShiftsAndClipsToTheWindow(t *testing.T) {
 	}
 }
 
+// sgrParams returns every numeric parameter of every SGR escape in s, so a
+// test can ask "is the reverse attribute set here" without pinning lipgloss's
+// exact byte order (it packs attributes into one `ESC[a;b;cm` sequence).
+func sgrParams(s string) map[string]bool {
+	out := map[string]bool{}
+	for _, m := range sgrRe.FindAllStringSubmatch(s, -1) {
+		for _, p := range strings.Split(m[1], ";") {
+			if p != "" {
+				out[p] = true
+			}
+		}
+	}
+	return out
+}
+
+var sgrRe = regexp.MustCompile("\x1b\\[([0-9;]*)m")
+
+// hasSGR reports whether s carries the SGR attribute param (7 = reverse video,
+// 1 = bold, 4 = underline).
+func hasSGR(s, param string) bool { return sgrParams(s)[param] }
+
+// sgrSeqBefore returns the raw SGR escape that immediately precedes text in s
+// — the one that actually paints it — or "" when text is absent (and "\x1b[0m"
+// when nothing but a reset precedes it).
+//
+// Slicing a styled row with ansi.Cut is NOT enough on its own: it re-emits the
+// surrounding state around the slice and, empirically, drags housekeeping
+// sequences that belong to a LATER run into an earlier slice (the hazard
+// conflict_picker_search_test.go's inline note records), so asking whether the
+// WHOLE slice contains an attribute can read styling the cut columns do not
+// wear.
+func sgrSeqBefore(s, text string) string {
+	i := strings.Index(s, text)
+	if i < 0 {
+		return ""
+	}
+	seqs := sgrRe.FindAllString(s[:i], -1)
+	if len(seqs) == 0 {
+		return ""
+	}
+	return seqs[len(seqs)-1]
+}
+
+// sgrBefore is sgrSeqBefore's parameters as a set; nil when text is absent.
+func sgrBefore(s, text string) map[string]bool {
+	if strings.Index(s, text) < 0 {
+		return nil
+	}
+	return sgrParams(sgrSeqBefore(s, text))
+}
+
+// assertCurrentHitPaint checks the painted slice of the CURRENT hit's own
+// columns in a host render: the hit flips reverse video against its row
+// (reverse ON over an ordinary row, OFF — a hole — over a reversed one), stays
+// bold, and never wears the ordinary hit's foreground marker.
+func assertCurrentHitPaint(t *testing.T, ctx, slice, text, marker string, rowReversed bool) {
+	t.Helper()
+	if strings.Contains(slice, marker) {
+		t.Errorf("%s: the current hit must not wear the ordinary hit's foreground: %q", ctx, slice)
+	}
+	p := sgrBefore(slice, text)
+	if p == nil {
+		t.Errorf("%s: the hit text %q is not in the slice %q", ctx, text, slice)
+		return
+	}
+	if !p["1"] {
+		t.Errorf("%s: the current hit must be bold, sequence params %v in %q", ctx, p, slice)
+	}
+	if p["4"] {
+		t.Errorf("%s: the current hit must not underline any more: %q", ctx, slice)
+	}
+	if rowReversed && p["7"] {
+		t.Errorf("%s: over a reverse-video row the current hit must be a HOLE (no reverse): %q", ctx, slice)
+	}
+	if !rowReversed && !p["7"] {
+		t.Errorf("%s: over an ordinary row the current hit must turn reverse ON: %q", ctx, slice)
+	}
+}
+
+// The CURRENT search hit must read on a syntax-coloured view, so it FLIPS
+// reverse video relative to the row it lands on: reverse ON over an ordinary
+// row, reverse OFF (a "hole") over the reverse-video cursor row of blame and
+// the picker. Underline — what it wore before — drowned in the colour.
+func TestCurrentHitFlipsReverseAgainstItsRow(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	s := buildStyles(theme.Terminal) // the role is unset: flip, not a colour
+	plain := s.currentHitStyle(lipgloss.NewStyle())
+	if !plain.GetReverse() {
+		t.Fatal("over an ordinary row the current hit must turn reverse ON")
+	}
+	if plain.GetUnderline() {
+		t.Fatal("the current hit must not underline any more")
+	}
+	if got := plain.Render("x"); !hasSGR(got, "7") {
+		t.Fatalf("no reverse SGR in %q", got)
+	}
+
+	rev := s.currentHitStyle(s.selectedRow)
+	if rev.GetReverse() {
+		t.Fatal("over the reverse-video cursor row the current hit must turn reverse OFF")
+	}
+	if got := rev.Render("x"); hasSGR(got, "7") {
+		t.Fatalf("the hole must carry no reverse SGR: %q", got)
+	}
+	if got := rev.Render("x"); !hasSGR(got, "1") {
+		t.Fatalf("the hole must still be bold, so it reads as a hit: %q", got)
+	}
+}
+
+// With the theme role set, the current hit is an explicit BACKGROUND patch: it
+// overrides the diff cursor-row band and un-reverses a reversed row, so the hit
+// looks the same in every host.
+func TestCurrentHitUsesTheThemeBackgroundWhenSet(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	s := buildStyles(theme.Theme{Name: "t", SearchCurrent: "#5F5F00"})
+	for _, base := range []lipgloss.Style{lipgloss.NewStyle(), s.selectedRow, s.diffCursorRow} {
+		cur := s.currentHitStyle(base)
+		if cur.GetReverse() {
+			t.Fatalf("the background patch must clear reverse, base reverse=%v", base.GetReverse())
+		}
+		if got := cur.GetBackground(); got != lipgloss.Color("#5F5F00") {
+			t.Fatalf("background = %v, want the theme's search_current_bg", got)
+		}
+		got := cur.Render("x")
+		if hasSGR(got, "7") {
+			t.Fatalf("the patched hit must carry no reverse SGR: %q", got)
+		}
+		if !strings.Contains(got, "48;2;95;95;0") {
+			t.Fatalf("no true-colour background escape in %q", got)
+		}
+		if ansi.Strip(got) != "x" {
+			t.Fatalf("the patch changed the text: %q", ansi.Strip(got))
+		}
+	}
+}
+
+// styledRuns is the one place every host paints through: an emphCur run must
+// render exactly what currentHitStyle produces over that row's base.
+func TestStyledRunsPaintsTheCurrentHitThroughCurrentHitStyle(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	disp := []rune("abcd")
+	cls := make([]syntax.Class, 4)
+	for _, base := range []lipgloss.Style{lipgloss.NewStyle(), st().selectedRow} {
+		got := styledRuns(disp, []emphLevel{emphCur, emphCur, emphNone, emphNone}, cls, base)
+		want := st().currentHitStyle(base).Render("ab") + st().syntaxStyle(base, syntax.Plain).Render("cd")
+		if got != want {
+			t.Fatalf("styledRuns (base reverse=%v):\n got %q\nwant %q", base.GetReverse(), got, want)
+		}
+	}
+}
+
 func TestStyledRunsPaintsThreeLevels(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -90,7 +252,8 @@ func TestStyledRunsPaintsThreeLevels(t *testing.T) {
 
 // The cursor row is reverse video, and that is exactly where the current hit
 // lands: per-token COLOURS must drop (reverse would turn them into per-token
-// backgrounds) but bold/underline emphasis must survive.
+// backgrounds) but emphasis must survive — bold either way, and the current
+// hit as a HOLE in the reverse video (styles.currentHitStyle).
 func TestRenderPieceReverseKeepsEmphasisDropsClasses(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.ANSI256)
@@ -121,8 +284,8 @@ func TestRenderPieceReverseKeepsEmphasisDropsClasses(t *testing.T) {
 	}
 }
 
-// The same ruling for the window primitive: a reversed winRow keeps emph and
-// drops cls.
+// The same ruling for the window primitive: a reversed winRow keeps emph
+// (here the current hit, which un-reverses itself) and drops cls.
 func TestRenderWindowReversedRowKeepsEmphasis(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.ANSI256)

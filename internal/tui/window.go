@@ -58,9 +58,9 @@ type winRow struct {
 	// emph is an optional emphasis level per DISPLAY RUNE of text, filled by
 	// the in-view search with its hits (spec §4.3); nil = no emphasis, the path
 	// every non-searching caller takes. It is sliced with the text exactly like
-	// cls, and — unlike cls — it SURVIVES a reverse-video style: bold and
-	// underline still read after the swap, and the current hit is precisely the
-	// row the cursor sits on.
+	// cls, and — unlike cls — it SURVIVES a reverse-video style: bold still
+	// reads after the swap, and the current hit — precisely the row the cursor
+	// sits on — paints relative to it (styles.currentHitStyle).
 	emph []emphLevel
 }
 
@@ -176,8 +176,9 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		hs := 0
 		// A row whose style reverses video would turn per-token foregrounds into
 		// per-token backgrounds, so the CLASS mask drops (see winRow.cls). The
-		// emphasis mask does not: bold/underline survive the swap, which is how
-		// a search hit stays visible on the selected row (winRow.emph).
+		// emphasis mask does not: bold survives the swap, and the current hit
+		// flips the reverse video back off, which is how a search hit stays
+		// visible on the selected row (winRow.emph, styles.currentHitStyle).
 		rcls := r.cls
 		if r.style.GetReverse() {
 			rcls = nil
