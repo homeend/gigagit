@@ -71,6 +71,33 @@ type hunkPicker struct {
 
 	lastGridH int // grid height at the last render — the pgup/pgdn page size
 	lastOutH  int // output-pane height at the last render — its page size
+
+	// search is the in-view text search (spec §4.3). Its rows are the FLAT
+	// candidate list — per block, every Current line then every Incoming
+	// line — so one hit names one (block, side, line) cursor position;
+	// searchRows maps a row back, searchBase maps a cursor forward. Literal
+	// context rows and the output pane are not in it and are therefore never
+	// searched.
+	search     textSearch
+	searchOrig pickerOrigin
+	searchRows []pickerAddr
+	searchBase [][2]int // per block: the flat row each side's lines start at
+}
+
+// pickerAddr is where a flat search row lives in the 2D cursor.
+type pickerAddr struct {
+	bi   int
+	side hunkpick.Side
+	line int
+}
+
+// pickerOrigin is the cursor and viewport a live search restores on esc.
+type pickerOrigin struct {
+	bi      int
+	side    hunkpick.Side
+	line    int
+	vshift  int
+	hscroll int
 }
 
 const pickerHScrollStep = 8
@@ -366,9 +393,143 @@ func (e *hunkPicker) ensureOutput() {
 	}
 }
 
+// ensureSearchRows flattens the candidate lines into the search's row space:
+// for each block in order, every Current line, then every Incoming line. The
+// shape depends only on the document, which is immutable while the picker is
+// open, so it is built once — the async lexer rebuilds the masks but never the
+// line texts, so hits stay valid across it.
+func (e *hunkPicker) ensureSearchRows() {
+	e.ensureSan()
+	if e.searchBase != nil {
+		return
+	}
+	e.searchBase = make([][2]int, len(e.blocks))
+	e.searchRows = e.searchRows[:0]
+	for bi := range e.blocks {
+		e.searchBase[bi][0] = len(e.searchRows)
+		for r := range e.sanCur[bi] {
+			e.searchRows = append(e.searchRows, pickerAddr{bi: bi, side: hunkpick.Current, line: r})
+		}
+		e.searchBase[bi][1] = len(e.searchRows)
+		for r := range e.sanInc[bi] {
+			e.searchRows = append(e.searchRows, pickerAddr{bi: bi, side: hunkpick.Incoming, line: r})
+		}
+	}
+}
+
+// searchLines is the searchable text: every candidate line as the display
+// string the grid paints.
+func (e *hunkPicker) searchLines() []searchLine {
+	e.ensureSearchRows()
+	out := make([]searchLine, len(e.searchRows))
+	for i, a := range e.searchRows {
+		san, side := e.sanCur[a.bi], 0
+		if a.side == hunkpick.Incoming {
+			san, side = e.sanInc[a.bi], 1
+		}
+		out[i] = searchLine{row: i, side: side, text: san[a.line].text}
+	}
+	return out
+}
+
+// searchRow is the flat search row of a 2D cursor position, or -1 when there
+// is none (no blocks).
+func (e *hunkPicker) searchRow(bi int, side hunkpick.Side, line int) int {
+	e.ensureSearchRows()
+	if bi < 0 || bi >= len(e.searchBase) {
+		return -1
+	}
+	k := 0
+	if side == hunkpick.Incoming {
+		k = 1
+	}
+	return e.searchBase[bi][k] + line
+}
+
+// searchPos is where ] and [ measure from — the current hit while the cursor is
+// still on it, else the head of the cursor's own candidate line.
+func (e *hunkPicker) searchPos() searchPos {
+	row := e.searchRow(e.bi, e.side, e.line)
+	side := 0
+	if e.side == hunkpick.Incoming {
+		side = 1
+	}
+	if e.search.cur >= 0 && e.search.cur < len(e.search.hits) {
+		if h := e.search.hits[e.search.cur]; h.row == row {
+			return searchPos{row: h.row, side: h.side, col: h.start}
+		}
+	}
+	return searchPos{row: row, side: side, col: -1}
+}
+
+// textWidth is one candidate column's text width: the two-column split minus
+// the fixed "  [ ] " gutter (cursor marker + checkbox).
+func (e *hunkPicker) textWidth(w int) int {
+	colW := (w - lipgloss.Width(pickerColSep)) / 2
+	tw := colW - 6
+	if tw < 1 {
+		tw = 1
+	}
+	return tw
+}
+
+// goToHit selects hits[i]: the 2D cursor jumps to it (the render anchors its
+// window on the cursor, so the scroll follows), the free view-scroll is
+// released, focus returns to the grid, and scroll mode pans to its column.
+func (e *hunkPicker) goToHit(m Model, i int) {
+	if i < 0 || i >= len(e.search.hits) {
+		return
+	}
+	h := e.search.hits[i]
+	if h.row < 0 || h.row >= len(e.searchRows) {
+		return
+	}
+	a := e.searchRows[h.row]
+	e.search.cur = i
+	e.bi, e.side, e.line = a.bi, a.side, a.line
+	e.vshift = 0
+	e.outFocused = false
+	if e.mode != modeScroll {
+		return
+	}
+	san := e.sanCur[a.bi]
+	if a.side == hunkpick.Incoming {
+		san = e.sanInc[a.bi]
+	}
+	w, _ := m.overlayDims()
+	cs, ce := hitCols(san[a.line].text, h)
+	e.hscroll = panFor(e.hscroll, e.textWidth(w), cs, ce)
+}
+
+// restoreSearchOrigin puts the cursor and viewport back where / or @ found them.
+func (e *hunkPicker) restoreSearchOrigin() {
+	o := e.searchOrig
+	e.bi, e.side, e.line, e.vshift, e.hscroll = o.bi, o.side, o.line, o.vshift, o.hscroll
+	e.clampLine()
+}
+
 func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
+	}
+	// While the search is capturing text it owns EVERY key: tab, ctrl+t and the
+	// picks all wait. History recall runs inside searchTypingKey, which is why
+	// alt+↑/↓ can still mean "scroll the view" below.
+	if e.search.typing {
+		nm, cmd, ev := m.searchTypingKey(&e.search, msg)
+		m = nm
+		switch ev {
+		case searchChanged, searchCommitted:
+			e.search.refindFrom(e.searchLines(), e.search.origin)
+			if e.search.cur >= 0 {
+				e.goToHit(m, e.search.cur)
+			} else {
+				e.restoreSearchOrigin()
+			}
+		case searchCancelled:
+			e.restoreSearchOrigin()
+		}
+		return m, cmd
 	}
 	if msg.String() == "tab" {
 		switch {
@@ -412,7 +573,9 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			e.outCollapsed, e.outFocused, e.oshift = true, false, 0
 			e.zoomed = false
 			return m, nil
-		case "esc", "enter", "ctrl+s", "ctrl+w", "shift+left", "shift+right", "alt+up", "alt+down":
+		// / and @ are allowed through and move focus back to the grid: the
+		// output pane is never searched, but a / pressed here must not look dead.
+		case "esc", "enter", "ctrl+s", "ctrl+w", "shift+left", "shift+right", "alt+up", "alt+down", "/", "@", "[", "]":
 		default:
 			return m, nil
 		}
@@ -434,6 +597,25 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 	}
+	switch searchCommandKey(&e.search, msg) {
+	case searchOpenFwd, searchOpenBack:
+		e.outFocused = false // the search always lives in the grid
+		e.searchOrig = pickerOrigin{bi: e.bi, side: e.side, line: e.line, vshift: e.vshift, hscroll: e.hscroll}
+		e.search.open(msg.String() == "@", e.searchPos())
+		return m.recallReset(), nil
+	case searchNext:
+		e.goToHit(m, stepHit(e.search.hits, e.searchPos(), 1))
+		return m, nil
+	case searchPrev:
+		e.goToHit(m, stepHit(e.search.hits, e.searchPos(), -1))
+		return m, nil
+	case searchCleared:
+		e.search.clear()
+		return m, nil
+	case searchIgnored:
+		return m, nil
+	}
+
 	b := e.cur()
 	switch msg.String() {
 	case "esc":
@@ -562,8 +744,10 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // count yields a blank cell (the gap when sides differ in length). cursor adds
 // the "> " marker so the gutter width is constant (focused or not) and puts the
 // cell under selectedRow — reverse video, which renderPiece takes as the signal
-// to drop the paint mask, so the cursor row stays plain.
-func pickerCell(blk *hunkpick.Block, san []sanLine, side hunkpick.Side, r int, cursor bool) *winCell {
+// to drop the CLASS half of the paint mask; search hits survive it, because the
+// current hit is always on the cursor row. hits are the in-view search's spans
+// for this line, already display-rune offsets into san[r].text.
+func pickerCell(blk *hunkpick.Block, san []sanLine, side hunkpick.Side, r int, cursor bool, hits []hitSpan) *winCell {
 	if r >= len(san) {
 		return &winCell{}
 	}
@@ -576,6 +760,14 @@ func pickerCell(blk *hunkpick.Block, san []sanLine, side hunkpick.Side, r int, c
 		tick = "[x] "
 	}
 	c := &winCell{gutter: cur + tick, body: san[r].text, mask: san[r].mask}
+	if len(hits) > 0 {
+		// NEVER write into the cached mask: ensureOutput hands the very same
+		// sanLine to the output pane. overlayHits paints a copy.
+		c.mask = runMask{
+			cls:  san[r].mask.cls,
+			emph: overlayHits(san[r].mask.emph, 0, len([]rune(san[r].text)), hits),
+		}
+	}
 	if cursor {
 		c.style = st().selectedRow
 	}
@@ -589,6 +781,9 @@ func (e *hunkPicker) render(m Model, _ string) string {
 	if e.requireAll {
 		header = e.title + "    " + i18n.T("%d regions · %d left", len(e.blocks), e.doc.Pending())
 	}
+	if bd := e.search.badge(); bd != "" { // the in-view search, after the counts
+		header += "    " + bd
+	}
 
 	// Column header: which physical column is left/right, with the active side
 	// (the one the cursor edits) marked and highlighted.
@@ -601,7 +796,7 @@ func (e *hunkPicker) render(m Model, _ string) string {
 		enterHint = i18n.T("[enter] next unresolved")
 	}
 	hintParts := []string{
-		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[ctrl+w] mode"), i18n.T("[↑/↓] line"), i18n.T("[pgup/pgdn] page"), i18n.T("[alt+↑/↓] view"), i18n.T("[space] pick"),
+		i18n.T("[←/→] side"), i18n.T("[shift+←/→] scroll"), i18n.T("[ctrl+w] mode"), i18n.T("[↑/↓] line"), i18n.T("[/] find"), i18n.T("[pgup/pgdn] page"), i18n.T("[alt+↑/↓] view"), i18n.T("[space] pick"),
 		"[c] " + e.leftLabel, "[i] " + e.rightLabel, i18n.T("[C/I] all"), i18n.T("[s] skip"), i18n.T("[n] next hunk"), i18n.T("[p] prev hunk"), i18n.T("[o] output"), i18n.T("[tab] output"),
 		i18n.T("[ctrl+t] full"), enterHint, i18n.T("[ctrl+s] apply"), i18n.T("[esc] cancel"),
 	}
@@ -682,9 +877,14 @@ func (e *hunkPicker) render(m Model, _ string) string {
 			if lCur || rCur {
 				anchor = len(rows)
 			}
+			var lh, rh []hitSpan
+			if e.search.active() {
+				lh = e.search.hitsOn(e.searchRow(blockNo, hunkpick.Current, r), 0)
+				rh = e.search.hitsOn(e.searchRow(blockNo, hunkpick.Incoming, r), 1)
+			}
 			rows = append(rows, colRow{
-				left:  pickerCell(blk, e.sanCur[blockNo], hunkpick.Current, r, lCur),
-				right: pickerCell(blk, e.sanInc[blockNo], hunkpick.Incoming, r, rCur),
+				left:  pickerCell(blk, e.sanCur[blockNo], hunkpick.Current, r, lCur, lh),
+				right: pickerCell(blk, e.sanInc[blockNo], hunkpick.Incoming, r, rCur, rh),
 			})
 		}
 		blockNo++

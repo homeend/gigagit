@@ -96,6 +96,12 @@ func (p *conflictProcess) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				p.picker.zoomed = false
 				return m, nil
 			}
+			// A live in-view search owns esc first (cancel while typing, clear a
+			// committed query) and stays in the editor — otherwise the query
+			// could only be dismissed by leaving.
+			if p.picker.search.typing || p.picker.search.query != "" {
+				return p.picker.update(m, msg)
+			}
 			p.picker = nil
 			p.st = confListing
 			return m, nil
