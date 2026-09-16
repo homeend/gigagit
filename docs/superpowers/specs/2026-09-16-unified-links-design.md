@@ -225,6 +225,80 @@ direction flag. The work is generalizing that one function.
 
 ## 4. Architecture
 
+### 4.0 Validity is a property of the type, not a checklist
+
+**Parse, don't validate.** There are exactly two funnels in this design, and
+after each one the value in hand carries its own guarantee. Nothing downstream
+re-checks, because nothing downstream *can* hold an invalid value.
+
+| funnel | produces | guarantees |
+|---|---|---|
+| `model.ParseLink(s)` | a `Link` | the grammar of §3.2, including `LinkRefOK`/`LinkPathOK` |
+| a `model.*Endpoint(...)` constructor | an `Endpoint` | the kind's own field invariants, and its boundedness |
+
+Three traps in the shipped type make this mandatory rather than stylistic.
+All three were verified against the tree before this section was written:
+
+1. **54 raw `model.Endpoint{...}` literals** exist outside tests. Three new
+   kinds means 54 sites that might have to care.
+2. **The zero value is silently valid.** `EndpointWorkTree = iota` is `0`, so
+   `model.Endpoint{}` *is* a working-tree endpoint — and
+   `internal/cli/compare.go` returns exactly that on its error paths
+   (`return model.Endpoint{}, 2`). The exit code saves it today; the shape is
+   a bug waiting for a caller that reads the value first.
+3. **`default:` already means "commit".** In `Endpoint.FileRef`, `Display` and
+   `CacheTag` the switch falls through to the commit case. Adding
+   `EndpointRef` with no other change would silently yield
+   `FileRef{Source: SourceCommit, Locator: ""}` — a wrong answer, no error, in
+   three methods.
+
+Endpoint is **never serialized** — `internal/tui/session_snapshot.go` converts
+through its own `snapEndpoint` wire type via `endpointProto` — so unexported
+fields cost nothing.
+
+```go
+type Endpoint struct {
+    kind     EndpointKind // unexported: the only way in is a constructor
+    hash     string
+    ref      string
+    shelfID  string
+    a, b     string
+    threeDot bool
+    bounded  bool // computed ONCE at construction, never re-derived
+}
+
+func WorkTreeEndpoint() Endpoint
+func IndexEndpoint() Endpoint
+func CommitEndpoint(hash string) (Endpoint, error)          // 7..64 hex
+func RefEndpoint(name string) (Endpoint, error)             // LinkRefOK
+func ShelfEndpoint(id string) (Endpoint, error)
+func PairEndpoint(a, b string, threeDot bool) (Endpoint, error)
+
+func (e Endpoint) Kind() EndpointKind
+func (e Endpoint) Bounded() bool // reads the field; nobody re-derives the rule
+```
+
+Four rules follow, and they are the whole of the enforcement:
+
+- **`EndpointInvalid EndpointKind = iota` comes first**, shifting
+  `EndpointWorkTree` to 1. `Endpoint{}` is then unusable, and every error
+  return is obviously wrong instead of plausibly right. This is a behaviour
+  change to existing code and must be done as its own step.
+- **Every switch over a kind gets a panicking `default:`** naming the kind,
+  replacing the three silent commit fall-throughs.
+- **Boundedness is stored, not computed by callers.** §3.1's rule is applied
+  exactly once, in the constructors.
+- **One table test enumerates every kind**, asserting each has a constructor,
+  a `Bounded()` answer, a `FileRef`, a `CacheTag` and a `Display`. A kind
+  added without a row fails the build. That is the single place the rules are
+  checked — not thousands of lines across dozens of files.
+
+The rejected alternative was a closed interface with real variant types
+(`CommitEnd`, `PairEnd`, …). It is a stronger guarantee, but Go does not
+exhaustiveness-check type switches, so it still needs the same table test —
+while reshaping all 54 sites plus `Differ`, `CompareFiles`, MCP and the TUI,
+rather than respelling them.
+
 ### 4.1 No new address type
 
 gg already has five address-ish types — `model.Link`, `FileAddress`,
@@ -234,18 +308,9 @@ gg already has five address-ish types — `model.Link`, `FileAddress`,
 `FileRef(path)`, `IsLive()` and `CacheTag()`. It gains the new kinds and the
 ability to state its own boundedness:
 
-```go
-type Endpoint struct {
-    Kind     EndpointKind
-    Hash     string // EndpointCommit
-    ShelfID  string // EndpointShelf
-    Ref      string // NEW: EndpointRef   — a branch/tag tip (unbounded)
-    A, B     string // NEW: EndpointPair  — A..B or A...B   (bounded)
-    ThreeDot bool   // NEW: which of the two
-}
-
-func (e Endpoint) Bounded() bool
-```
+It gains two kinds — `EndpointRef` (a branch/tag tip, unbounded) and
+`EndpointPair` (`A..B` or `A...B`, bounded) — behind the constructors of §4.0,
+which is also where the field layout lives.
 
 The one pipeline becomes:
 
@@ -492,6 +557,10 @@ binds a random port each run, which empties `localStorage`.
 
 ## 7. Testing
 
+- **`model.Endpoint` exhaustiveness** — the §4.0 table: one row per kind,
+  asserting a constructor, `Bounded()`, `FileRef`, `CacheTag` and `Display`.
+  A kind added without a row fails the build. Plus: every constructor rejects
+  its bad inputs, and `Endpoint{}` is invalid.
 - **`model`** — table-driven `String(ParseLink(s)) == s` over every new form;
   reject cases for refnames containing `@`/`#` (`LinkRefOK`) and paths
   containing `?`.
@@ -520,7 +589,8 @@ Three plans, each a sound stopping point.
 
 | plan | contents | why it stands alone |
 |---|---|---|
-| **1** | grammar (`ref:`, `..`, `?hint`) · `Endpoint` kinds · `EvalEndpoint`/`CompareSets` · CLI `compare`/`link` | the whole algebra, fully tested; agents can use it the day it lands, no UI needed |
+| **1a** | `Endpoint` hardening (§4.0) alone: unexported fields + constructors, `EndpointInvalid` first, panicking defaults, the exhaustiveness table, 54 literals respelled | a pure refactor with no new kinds — it must land and go green *before* any new kind exists, or it is fixing three traps and adding to them in one diff |
+| **1b** | grammar (`ref:`, `..`, `?hint`) · the new `Endpoint` kinds · `EvalEndpoint`/`CompareSets` · CLI `compare`/`link` | the whole algebra, fully tested; agents can use it the day it lands, no UI needed |
 | **2** | `linkhist` · MCP tools · navigation hints (`linknav`, `steer`, both consumers) · agentskill bump | links become referenceable and navigable everywhere |
 | **3** | TUI copy rows + compare palette · the shared base picker (§5.1) · web surfaces · `savedcompare` store + the file-backed migration | the UI layer, on a settled core |
 
