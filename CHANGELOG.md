@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Closing a window opened from a popup returns to that popup.** *Previous
+  versions… → enter* opened the version's file tree and threw the versions
+  list away, so esc on the tree landed on the panels; the same happened to the
+  bookmark switcher's compare, the entry-pair compare and the shelf switcher's
+  shelved-commit files. The popup is now hidden while the window is open and
+  comes back on esc/`l` with its own state (same branch, same row; a further
+  esc still backs out to the branch list). A repo switch, a steer navigation
+  or a too-narrow terminal still close everything. Popups that hand off to an
+  operation (Reset branch, cherry-pick, identity apply) keep landing in the
+  panels, since the op changes what they listed.
 - **A scrambled screen after paging through a file is gone.** Terminals and
   gg do not always agree on a glyph's width (`☰` is one column to gg and two
   to tmux and every utf8proc-based terminal); a padded row carrying one

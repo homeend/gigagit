@@ -130,6 +130,7 @@ type Model struct {
 	filesShelfID      string            // shelf mode: the shelved-commit entry id (gates shelf-file loads, keys member refs)
 	filesShelfLabel   string            // shelf mode: "shelf #<short>" display label for diff contexts
 	filesReturnFocus  panel             // panel that opened the files view; esc/l restore focus here (the view itself runs on panelCommits)
+	filesReturnLayers []layer           // layer stack parked by a popup that handed off to the files view (handOffToFilesView); esc/l restore it, every other teardown drops it (closeFilesView zeroes it)
 	filesTreeFocused  bool              // true = the tree side owns vertical movement (←/→/tab)
 	filesReadInflight bool              // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
 	filesPreview      *contentPopup     // full-tree mode: read-only file content shown in the right column (nil = none)
@@ -959,8 +960,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("compare: %s", msg.err.Error())
 			return m, nil
 		}
-		m = m.clearLayers() // the files view is not a layer; the switchers must not draw over it
-		return m.openCompareFiles(msg.left, msg.right)
+		// The files view is not a layer; the switcher must not draw over it —
+		// but it comes back when the compare closes (handOffToFilesView).
+		return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) {
+			return m.openCompareFiles(msg.left, msg.right)
+		})
 	case shelfLoadedMsg:
 		// A disabled shelf (no state dir) reports its reason but is not fatal.
 		if msg.err != nil {

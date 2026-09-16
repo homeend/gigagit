@@ -224,7 +224,11 @@ func (p *versionsPopup) onEnter(m Model) (Model, tea.Cmd) {
 			return m, nil
 		}
 		v := p.rows[p.sel]
-		m = m.clearLayers()
+		// Both branches below open a files view FROM this popup, so they go
+		// through handOffToFilesView: the popup is parked, not cleared, and
+		// esc/l on the tree lands back here (same branch, same row; a further
+		// esc still backs out to branch mode when fromList is set).
+		//
 		// v.Base/v.Ours are exactly the endpoints domain.VersionPreview
 		// (internal/domain/version_preview.go) resolves for this same ref:
 		// it re-reads BranchVersions and applies the identical
@@ -253,17 +257,21 @@ func (p *versionsPopup) onEnter(m Model) (Model, tea.Cmd) {
 			// which has no live tip to reconcile against; doing so would
 			// render today's branch instead of what gg recorded, which is
 			// the very drift this feature exists to surface.
-			return m.openCompareFiles(
-				model.Endpoint{Kind: model.EndpointCommit, Hash: v.Base},
-				model.Endpoint{Kind: model.EndpointCommit, Hash: v.Ours},
-			)
+			return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) {
+				return m.openCompareFiles(
+					model.Endpoint{Kind: model.EndpointCommit, Hash: v.Base},
+					model.Endpoint{Kind: model.EndpointCommit, Hash: v.Ours},
+				)
+			})
 		}
 		// Fieldless record (amend/reset/undo-commit/delete-branch/restore):
 		// domain.VersionPreview would return ErrNoPreview here — not a
 		// user-facing error, just "there is nothing to preview" — so this
 		// opens today's commit view instead, exactly as enter on an ordinary
 		// commit row does.
-		return m.openChangedFiles(model.Commit{Hash: v.Hash, Subject: v.Subject})
+		return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) {
+			return m.openChangedFiles(model.Commit{Hash: v.Hash, Subject: v.Subject})
+		})
 	}
 	return m, nil
 }

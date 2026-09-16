@@ -42,7 +42,11 @@ type layer interface {
   `m.topLayer()` — **one** check, not three per-window edits. Push with
   `m.pushLayer(l)`, close with `m.popLayer()` (reveals the layer beneath, whose
   state was never torn down — that's how esc on a cheat sheet returns to the
-  switcher under it), wipe all with `m.clearLayers()`.
+  switcher under it). **A window opened from a popup returns to that popup
+  when closed** (CLAUDE.md convention): a popup handing off to the files view
+  (not a layer) wraps the opener in `m.handOffToFilesView(func(m Model) …)`,
+  which parks the stack for the view's esc/`l` to restore. `m.clearLayers()`
+  wipes the stack for good — only for a popup handing off to an *operation*.
 - **A popup composites** its centered box over `below`:
   `overlayCenter(clipToHeight(below, h), box, w, h)`.
 - **A full-screen surface ignores `below`** (signature `render(m, _ string)`) —
@@ -73,7 +77,7 @@ stack composites over — `layerBase()`). Dispatch/render precedence is
 | 3 | `render(m, below string)`: composite the centered box — `overlayCenter(clipToHeight(below, h), box, w, h)`. Style a single-line / fixed input or confirm box with `modalStyle.Width(popupInnerWidth(w))` so long content wraps. (Scrollable lists use `renderWindow` — see below.) |
 | 4 | Confirm → `m = m.popLayer()` then `return m.startOp(op)`. A popup that stays visible during its own async op (paste/restore) must guard `update` with `if m.running { return m, nil }` so a keypress can't launch a second op. |
 | 5 | If the popup previews template/random/time values, freeze `seed`/`now` at open so recomputes are deterministic (see `tctx()` in `worktree_popup.go`). |
-| 6 | Hand off to the full-screen diff? Call `m.openPickerDiff(v, tag, load)` — it `clearLayers()`es (the picker *and* any surface beneath) so the diff owns the screen. |
+| 6 | Hand off to the full-screen diff? Call `m.openPickerDiff(v, tag, load)` — it PUSHES the diff over the picker, so esc on the diff returns to the picker (the popup-returns rule for free). Hand off to the files view instead? Wrap the opener in `m.handOffToFilesView`. |
 
 ### List popups (scrollable rows) — use `renderWindow`, not `modalStyle.Width`
 
@@ -133,7 +137,11 @@ state + filtering, write a `render<X>View(boxW, boxH)` that pads every line to
 stays on the surviving panel), branch in `renderInterface` where the column is
 built, and add a routing branch in `Update` BEFORE `filterTyping` that splits
 keys between the surviving panel and the view. Tag async per-row loads (commit
-hash) for stale-drop. Clear the view in `reRoot`.
+hash) for stale-drop. Clear the view in `reRoot`. Start every opener with
+`m.beginFilesView()` (the clean slate that remembers the source panel and, on
+a re-open inside a live view, carries the parked popup across); when a popup
+opens the view, the caller wraps the opener in `m.handOffToFilesView` so esc/`l`
+return to it. Never `clearLayers()` inside an opener.
 
 ## Pair-op popup (two-row operations)
 

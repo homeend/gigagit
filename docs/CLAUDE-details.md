@@ -577,6 +577,30 @@ with (see `driving-tui-headless`).
   verb calls.
 - **Decisions are option-lists only** (no free text mid-flight). Frontends map them: TUI modal, CLI policy/stdin, MCP `MapDecider`.
 - **TUI `Model` is a value receiver** with pointer fields (`modal`, `popup`) for state that must persist across the value copy.
+- **A window opened from a popup returns to that popup when closed** (ruled
+  2026-09-16 after *Previous versions… → enter → esc* dropped the user onto the
+  panels instead of the versions list). The popup is hidden while the window
+  is open, never destroyed, so it comes back with its own state (branch, row,
+  drilled-from-list flag). Layer-stack windows get this for free from
+  `pushLayer`/`popLayer`. The files view is NOT a layer, so a popup handing
+  off to it goes through `Model.handOffToFilesView(open)`
+  (`internal/tui/layer_stack.go`): it takes the stack off the model, runs the
+  opener, then parks the taken stack in `Model.filesReturnLayers` — armed
+  AFTER the opener because every opener's clean slate (`beginFilesView` →
+  `closeFilesView`) zeroes the field. The view's esc/`l` handlers read the
+  field before `closeFilesView` and `restoreParkedLayers` it; every other
+  teardown (repo switch, steer navigation, narrow terminal, *Commits touching
+  this*, `closePreviewView`) drops it because `closeFilesView` zeroes it. A
+  re-open inside a live view (enter on the commit list to drill into the tree,
+  a switcher pushed over the view) carries the park across (`beginFilesView`);
+  a popup opened over an already-open view replaces the park — latest opener
+  wins. Hand-off sites: `versionsPopup.onEnter` (both branches),
+  `compareCommitBookmark`, the `entryCompareMsg` handler, the shelf switcher's
+  shelved-commit enter (`openShelfCommitFiles` no longer touches the stack).
+  `clearLayers` remains only for a popup handing off to an *operation*
+  (identity apply, Reset branch, New branch at version, cherry-pick, apply
+  patch): the op changes what the popup listed, so it lands in the panels.
+  Tests: `internal/tui/files_return_layers_test.go`.
 - **`internal/tui` and `internal/cli` never import `internal/git`** — they reach git through `internal/domain` (guarded by `internal/archtest`). `cmd/gg` and `internal/app` are the composition root and may construct concrete git types.
 - **Tests use a real `git`** in a `t.TempDir()` (see `newRepo`/`newTestRepo` helpers) or the `FakeRunner` for argv assertions. Follow TDD.
 - **`main` is the trunk** (not `master`, which is stale). Branch features off `main`; the human merges them.

@@ -60,6 +60,12 @@ func (m Model) closeFilesView() Model {
 	m.filesPreview = nil
 	m.filesPreviewTag = ""
 	m.previewOpen = nil
+	// The popup that handed off to this view is dropped with it: only the
+	// view's own esc/l close (which reads the field BEFORE calling this)
+	// returns to it. A repo switch, a steer navigation, a narrow terminal or
+	// a fresh open from the panels all tear the view down for a reason that
+	// makes the parked popup meaningless. See handOffToFilesView.
+	m.filesReturnLayers = nil
 	// A merge preview resolve in flight was dispatched for the view that just
 	// closed: bump the generation so its result is dropped instead of
 	// re-opening the view behind the user (handlePreviewOpenMsg re-stamps the
@@ -68,14 +74,27 @@ func (m Model) closeFilesView() Model {
 	return m
 }
 
+// beginFilesView is every opener's clean slate. A fresh open remembers the
+// source panel for esc/l to restore. A re-open inside a live view (enter on
+// the commit list to drill into the tree, a switcher opened over the view)
+// keeps the panel AND the popup parked by handOffToFilesView: the window is
+// still the one that popup opened, so closing it must still return there.
+func (m Model) beginFilesView() Model {
+	if m.filesView == nil {
+		m.filesReturnFocus = m.focus
+		return m.closeFilesView()
+	}
+	parked := m.filesReturnLayers
+	m = m.closeFilesView()
+	m.filesReturnLayers = parked
+	return m
+}
+
 // openChangedFiles opens a commit's changed-file list (mode=Changed), setting the
 // complete consistent set from a clean slate (clears any prior compare/stash/
 // fullTree/preview state). Opens on the commit-list side (treeFocused=false).
 func (m Model) openChangedFiles(c model.Commit) (Model, tea.Cmd) {
-	if m.filesView == nil { // fresh open: remember the source panel for esc/l to restore
-		m.filesReturnFocus = m.focus
-	}
-	m = m.closeFilesView()
+	m = m.beginFilesView()
 	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesTitle = i18n.T("Files %s %s", shortHash(c.Hash), c.Subject)
 	m.filesContext = shortHash(c.Hash) + " " + c.Subject
@@ -115,10 +134,7 @@ func (m Model) filesMetaLineFor() string {
 // openStashFiles opens a stash's files (mode=Stash) from a clean slate. Opens on
 // the stash-list side (treeFocused=false), like the commit files view.
 func (m Model) openStashFiles(ref, subject string) (Model, tea.Cmd) {
-	if m.filesView == nil { // fresh open: remember the source panel for esc/l to restore
-		m.filesReturnFocus = m.focus
-	}
-	m = m.closeFilesView()
+	m = m.beginFilesView()
 	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesTitle = i18n.T("Files %s %s", ref, subject)
 	m.filesContext = ref + " " + subject
@@ -130,15 +146,12 @@ func (m Model) openStashFiles(ref, subject string) (Model, tea.Cmd) {
 // openShelfCommitFiles opens a shelved commit's frozen files (mode=Shelf) from
 // a clean slate: the tar's members in the tree, each carrying the standard
 // focused-file actions (diff vs working tree, Copy to working dir, …) through
-// the shelf-member FileRef. Invoked from the G switcher, so the layer stack is
-// cleared first (the compareCommitBookmark precedent — the files view is not a
-// layer and must not draw under the popup).
+// the shelf-member FileRef. Invoked from the G switcher through
+// handOffToFilesView (the files view is not a layer and must not draw under
+// the popup; the switcher is parked and comes back on esc/l), so this opener
+// never touches the layer stack itself.
 func (m Model) openShelfCommitFiles(e model.ShelfEntry) (Model, tea.Cmd) {
-	if m.filesView == nil { // fresh open: remember the source panel for esc/l to restore
-		m.filesReturnFocus = m.focus
-	}
-	m = m.clearLayers()
-	m = m.closeFilesView()
+	m = m.beginFilesView()
 	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesTitle = i18n.T("Files %s", shelfEntryDisplay(e))
 	m.filesContext = shelfEntryDisplay(e)
@@ -383,10 +396,7 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 	if m.filesView != nil && m.inCompareMode() && m.compareTag == tag {
 		return m, nil
 	}
-	if m.filesView == nil { // fresh open: remember the source panel for esc/l to restore
-		m.filesReturnFocus = m.focus
-	}
-	m = m.closeFilesView() // clean slate: clears any prior changed/stash/fullTree/preview state
+	m = m.beginFilesView() // clean slate: clears any prior changed/stash/fullTree/preview state
 	m.filesView = &contentPopup{lines: []contentLine{{text: i18n.T("(loading…)")}}}
 	m.filesTitle = left.Display() + " ↔ " + right.Display()
 	m.filesContext = m.filesTitle
@@ -573,15 +583,15 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.sel = 0
 			return m, nil
 		}
-		ret := m.filesReturnFocus
+		ret, parked := m.filesReturnFocus, m.filesReturnLayers
 		m = m.closeFilesView()
-		m.focus = ret // return to the panel that opened the view (Tags/Reflog/Commits/…)
-		return m, nil
+		m.focus = ret                             // return to the panel that opened the view (Tags/Reflog/Commits/…)
+		return m.restoreParkedLayers(parked), nil // …and to the popup that opened it, when one did
 	case "l":
-		ret := m.filesReturnFocus
+		ret, parked := m.filesReturnFocus, m.filesReturnLayers
 		m = m.closeFilesView()
 		m.focus = ret
-		return m, nil
+		return m.restoreParkedLayers(parked), nil
 	case "/":
 		// A FOCUSED preview already took / above (its in-view text search); the
 		// tree side keeps its own filter even while a preview is open.

@@ -243,8 +243,12 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		if e.IsCommit() {
 			// Browse the shelved commit's frozen files in the files view; each
-			// row diffs/copies against the working tree from there.
-			return m.openShelfCommitFiles(e)
+			// row diffs/copies against the working tree from there. The files
+			// view is not a layer, so the switcher is parked (not cleared)
+			// and esc/l on the tree returns to it.
+			return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) {
+				return m.openShelfCommitFiles(e)
+			})
 		}
 		return m.openShelfCompareEntry(e)
 	case tea.KeyUp:
