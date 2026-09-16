@@ -105,8 +105,8 @@ func (mk cellMark) bodyFor(base lipgloss.Style) lipgloss.Style {
 // stay at or under 140, the width TestRenderDiffViewPanes renders at and the
 // narrowest common wide terminal — past that the truncation eats [esc] close
 // first, hiding the way out. There is NO headroom left: that budget is why the
-// labels are terse (scroll/line on one key group, chg, ^w for ctrl+w,
-// hist/blame) and why the three note keys share one [c/}{] notes group
+// labels are terse (scroll on one key group, chg, ^w for ctrl+w,
+// hist) and why the three note keys share one [c}{] notes group
 // (E/R/a are help-and-menu-only). Shortening a label is the way to add a
 // group; growing the line is not. TestDiffHintFitsTheBudget pins the number.
 // The scroll variant appends the pan keys.

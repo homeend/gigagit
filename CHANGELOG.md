@@ -8,6 +8,43 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Select lines and copy them, in all three readers.** The diff view, blame
+  and the **View file** preview take tmux's copy-mode keys: `space` starts a
+  line selection at the cursor, a second `space` freezes its end (the cursor
+  is free afterwards; a third starts a new range), `enter` copies the range
+  and clears it, `esc` just clears it. What lands on the clipboard is the
+  file's own text — tabs intact, no gutter, no line numbers — joined with
+  newlines and with no trailing one. The `.` menu of each reader carries the
+  same actions (**Copy line** and **Copy selected lines (N)**), and `enter`
+  runs that very row, so the key and the menu can never copy different things.
+  Selected lines are painted with the new `selection_bg` theme role (dark
+  `#264F78`, light `#ADD6FF`; `terminal` leaves it unset and inverts the line
+  against its row instead) — on the text only, so the blame gutter and the
+  diff's line numbers keep marking the extent.
+
+- **The diff's line cursor sits on ONE side.** `alt+←`/`alt+→` move it between
+  the two panes of the same row. Only that side's cell wears the marker —
+  including a `·` gap cell, so the cursor is visible even where the side has
+  no line — while the other cell renders as it would without a cursor. The
+  header names the side (`old line N` on the left), a left click picks the
+  pane it landed in, and the copy, the review note `c` adds, and the `gg://`
+  link `L` copies all follow the side. A selection is locked to the side it
+  started on: `alt+←/→` are refused with a bottom-left notice while one is
+  live.
+
+- **The View file preview has a line cursor.** It was a pager: `alt+↑`/`alt+↓`
+  now move a cursor and scroll only as much as they must, while `↑`/`↓`, the
+  wheel and the page keys keep scrolling the viewport alone. A search hit
+  lands the cursor, so `]`/`[` step from where you are looking. The marker
+  follows `[ui] diff_cursor`, which now governs the preview too (`number`
+  falls back to the band — the preview has no gutter).
+
+- The diff footer makes room for `[spc] mark` and `[alt↔] side` by shortening
+  several labels and dropping `[z] align`, which has three `.` menu rows
+  (**Align cursor line: top / center / bottom**) and a help row of its own.
+  While a selection is live the whole footer switches to the selection keys in
+  each of the three readers, so the way out is always on screen.
+
 - **`gg web`: the sidebar's **previews** section moved up, to right after
   **worktrees**.** A merge preview is something you steer with, like branches,
   remotes and worktrees — not a reference list to scroll past tags, stashes,

@@ -287,7 +287,7 @@ func helpContent() []contentLine {
 		r("h", i18n.T("history of this file at the shown revision")),
 		r("b", i18n.T("blame of this file at the shown revision")),
 		r(".", i18n.T("export this file's diff as patch; also Copy line / Copy selected lines, Cursor marker, Open in editor at line and the three Align cursor line rows")),
-		r("esc", i18n.T("clear the search, then the line selection, then close")),
+		r("esc", i18n.T("clear the line selection, then the search, then close")),
 		r("ctrl+c", i18n.T("quit")),
 		h(i18n.T("History view (h)")),
 		r("↑/k ↓/j", i18n.T("move between commits (the diff updates on the right)")),
