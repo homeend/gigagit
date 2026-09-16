@@ -214,17 +214,21 @@ func (m Model) compareKeyLabel(key string) string {
 //   - Working tree → index ↔ working tree    (the unstaged diff), or HEAD ↔
 //     working tree when nothing is staged (no Staged row to parent to — same
 //     files either way).
-func (m Model) wipEndpoints(r wipRow) (left, right model.Endpoint) {
-	// head stays the zero Endpoint (EndpointInvalid) when there is no commit
-	// yet (a virgin repo with only staged/unstaged changes) — there is no
-	// commit to name, so "unset" is the honest value rather than an
-	// EndpointCommit with an empty hash.
-	head := model.Endpoint{}
-	if len(m.commits) > 0 {
+//
+// ok is false exactly when the pair would need HEAD and there is no commit
+// yet (a virgin repo with only staged/unstaged changes): there is no HEAD to
+// name, so there is no meaningful WIP-vs-HEAD compare to open. Both callers
+// (model.go's enter and l handlers) MUST check ok before calling
+// openCompareFiles — an invalid left endpoint panics there (CacheTag/Display
+// are called synchronously, before any git call), not merely fails a compare.
+func (m Model) wipEndpoints(r wipRow) (left, right model.Endpoint, ok bool) {
+	haveHead := len(m.commits) > 0
+	var head model.Endpoint
+	if haveHead {
 		head = mustCommitEndpoint(m.commits[0].Hash)
 	}
 	if r.kind == wipStaged {
-		return head, model.IndexEndpoint()
+		return head, model.IndexEndpoint(), haveHead
 	}
 	hasStaged := false
 	for _, w := range m.wipRows {
@@ -233,7 +237,9 @@ func (m Model) wipEndpoints(r wipRow) (left, right model.Endpoint) {
 		}
 	}
 	if hasStaged {
-		return model.IndexEndpoint(), model.WorkTreeEndpoint()
+		// index ↔ working tree never touches HEAD, so this pair is always
+		// valid even with zero commits.
+		return model.IndexEndpoint(), model.WorkTreeEndpoint(), true
 	}
-	return head, model.WorkTreeEndpoint()
+	return head, model.WorkTreeEndpoint(), haveHead
 }
