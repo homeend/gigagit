@@ -22,10 +22,14 @@ func legacyFileContentLines(data []byte) []contentLine {
 		return []contentLine{{text: i18n.T("(empty file)")}}
 	}
 	s = normalizeLineBreaks(s)
+	raw := strings.Split(s, "\n")
 	parts := strings.Split(sanitizeForDisplay(s), "\n")
 	out := make([]contentLine, len(parts))
 	for i, ln := range parts {
-		out[i] = contentLine{text: ln}
+		out[i] = contentLine{text: ln, src: true}
+		if i < len(raw) {
+			out[i].raw = raw[i]
+		}
 	}
 	return out
 }

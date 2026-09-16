@@ -23,6 +23,17 @@ import (
 // consumers that don't need them (the help window).
 type contentLine struct {
 	text string
+	// raw is the line's SOURCE text — line breaks normalized, but NOT display-
+	// sanitized: tabs are still tabs, and there is no gutter or line number.
+	// It is what Copy line and a line selection put on the clipboard (spec
+	// §4.7). src says the line came from the file at all: a PLACEHOLDER
+	// ("(loading…)", "(empty file)", "(file too large to preview)",
+	// "(load failed: …)") has src false, while a genuinely EMPTY source line
+	// has src true and raw "" — an empty line IS a line, and is copyable.
+	// Only the file preview fills these in; every other consumer leaves them
+	// zero, which reads as "nothing to copy here".
+	raw string
+	src bool
 	// cls is an optional syntax class per DISPLAY RUNE of text (nil = plain),
 	// handed to winRow.cls by the renderers. Only the file preview fills it in;
 	// heading lines never carry one.
@@ -39,15 +50,23 @@ type contentLine struct {
 // help window is its first consumer.
 type contentPopup struct {
 	popupMax
-	title   string
-	lines   []contentLine // full, unfiltered content
-	query   string        // case-insensitive substring over non-heading lines
-	typing  bool          // true while /-input mode is capturing keys
-	sel     int           // cursor index into the FILTERED view
-	mode    dispMode      // text display mode; z cycles
-	hscroll int           // modeScroll horizontal offset
-	footer  string        // optional line above the hint (e.g. commit author · date); "" = none
-	danger  bool          // frame the box in red — a failure, not information (error_popup.go)
+	title  string
+	lines  []contentLine // full, unfiltered content
+	query  string        // case-insensitive substring over non-heading lines
+	typing bool          // true while /-input mode is capturing keys
+	sel    int           // cursor index into the FILTERED view — and, in the FILE PREVIEW, the TOP visible line (it is a pager)
+	// cur is the FILE PREVIEW's line cursor: an index into lines (spec §4.7).
+	// It is read ONLY by renderFilePreview and the preview key paths — the help
+	// window, the files tree and the error popup share this struct and never
+	// look at it, so the zero value is inert for them. ↑/↓ and the wheel still
+	// scroll sel alone; alt+↑/↓ move cur and scroll minimally.
+	cur int
+	// lsel is the preview's line selection over lines (space/space/enter).
+	lsel    lineSel
+	mode    dispMode // text display mode; z cycles
+	hscroll int      // modeScroll horizontal offset
+	footer  string   // optional line above the hint (e.g. commit author · date); "" = none
+	danger  bool     // frame the box in red — a failure, not information (error_popup.go)
 	// noCursor drops the row cursor: no "> " marker and no reverse-video
 	// highlight. A viewer showing one prose message has nothing to select or
 	// act on, so the cursor is noise — the rows are text, not choices.
@@ -69,8 +88,10 @@ type contentPopup struct {
 	searchOrig previewOrigin
 }
 
-// previewOrigin is the pager state a live preview search restores on esc.
-type previewOrigin struct{ sel, hscroll int }
+// previewOrigin is the view state a live preview search restores on esc: the
+// pager top, the line cursor (a snapped hit moves it, so esc must put it back)
+// and the horizontal pan.
+type previewOrigin struct{ sel, cur, hscroll int }
 
 // The message a block-mode viewer shows is quoted text — git's stderr, a
 // notice's fix instructions — not the popup's own words. A faint band behind

@@ -196,7 +196,10 @@ func (m Model) footerOverride() (string, bool) {
 	// Commits panel (. menu + graph keys); the tree side is file-scoped.
 	if m.filesView != nil {
 		if m.filesPreview != nil && !m.filesTreeFocused {
-			return i18n.T("file: [↑/↓] scroll  [ctrl+w] view  [←/tab] back to tree  [esc] close preview"), true
+			if m.filesPreview.lsel.on {
+				return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
+			}
+			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [ctrl+w] view  [←/tab] back to tree  [esc] close preview"), true
 		}
 		// i shows the displayed commit's message — only when canShowFilesViewMessage
 		// holds (same gate as the handler, so the footer never advertises a dead i).

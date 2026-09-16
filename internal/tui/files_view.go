@@ -450,7 +450,14 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	// The focused preview's in-view search comes first: it owns / @ ] [ and,
+	// Order (spec §4.7): a search being TYPED owns every key, then the line
+	// selection, then a committed query, then the preview's own esc.
+	// previewSearchKey covers the first and third in one call, so the selection
+	// hook runs first and declines while the search is typing.
+	if nm, cmd, handled := m.previewSelectKey(msg); handled {
+		return nm, cmd
+	}
+	// The focused preview's in-view search comes next: it owns / @ ] [ and,
 	// while a query is live, esc — otherwise esc still closes the preview below.
 	if nm, cmd, handled := m.previewSearchKey(msg); handled {
 		return nm, cmd
@@ -649,6 +656,18 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m = m.focusTree()
 			}
 		}
+	case "alt+up", "alt+down":
+		// The LINE CURSOR of a focused preview; ↑/↓ keep scrolling the viewport
+		// only. Inert on the tree side and with no preview open, where alt+↑/↓
+		// belong to the search-recall dropdown (handled above while typing).
+		if m.filesPreview != nil && !m.filesTreeFocused {
+			delta := 1
+			if msg.String() == "alt+up" {
+				delta = -1
+			}
+			m.movePreviewCursor(delta)
+		}
+		return m, nil
 	case "up", "k":
 		if m.filesTreeFocused {
 			p.move(-1)
@@ -700,16 +719,16 @@ func (m Model) previewSearchKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 			if p.search.cur >= 0 {
 				p.snapHit(rows, inner)
 			} else {
-				p.sel, p.hscroll = p.searchOrig.sel, p.searchOrig.hscroll
+				p.sel, p.cur, p.hscroll = p.searchOrig.sel, p.searchOrig.cur, p.searchOrig.hscroll
 			}
 		case searchCancelled:
-			p.sel, p.hscroll = p.searchOrig.sel, p.searchOrig.hscroll
+			p.sel, p.cur, p.hscroll = p.searchOrig.sel, p.searchOrig.cur, p.searchOrig.hscroll
 		}
 		return m, cmd, true
 	}
 	switch searchCommandKey(&p.search, msg) {
 	case searchOpenFwd, searchOpenBack:
-		p.searchOrig = previewOrigin{sel: p.sel, hscroll: p.hscroll}
+		p.searchOrig = previewOrigin{sel: p.sel, cur: p.cur, hscroll: p.hscroll}
 		p.search.open(msg.String() == "@", p.searchPos())
 		return m.recallReset(), nil, true
 	case searchNext:

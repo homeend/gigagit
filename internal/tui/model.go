@@ -713,10 +713,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.filesPreview.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
+			m.filesPreview.cur, m.filesPreview.sel = 0, 0
+			m.filesPreview.lsel.clear()
 			return m, nil
 		}
 		p := m.filesPreview
 		p.lines = msg.lines
+		// The lines the cursor and the selection indexed are gone.
+		p.cur = 0
+		p.lsel.clear()
 		// A search started while the placeholder ("(loading…)") was still
 		// showing computed its hits against that single line; once the real
 		// content lands those hits (and any cur/badge derived from them) are

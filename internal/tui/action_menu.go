@@ -39,8 +39,12 @@ func availableActions(m Model) []actionRow {
 		// Apply / Pop / Drop. A history/blame/diff surface on top out-ranks it
 		// (a single file is in view then), and the tree side keeps the
 		// file-context menu below.
+		// …and not while a PREVIEW owns the right column: a preview opened from
+		// a stash file tree leaves the tree unfocused, which would otherwise
+		// route the menu to Apply/Pop/Drop and never reach the preview's own
+		// line rows.
 		onStashList := m.stashView != nil && m.focus == panelCommits &&
-			!m.filesTreeFocused && m.diffLayer() == nil
+			!m.filesTreeFocused && m.diffLayer() == nil && m.filesPreview == nil
 		switch m.topLayer().(type) {
 		case *historyView, *blameView:
 			onStashList = false
@@ -585,6 +589,13 @@ func (m Model) contextCopyRows() []actionRow {
 		// line, and the file's path/name/commit rows stay right behind them —
 		// which also keeps copy-file-path as insertCopyLinkRow's anchor.
 		return append(m.diffCopyLineRows(), m.fileCopyRows(v.title, v.rev)...) // title = path; rev = commit ("" = working tree)
+	}
+	if p := m.filesPreview; p != nil && !m.filesTreeFocused {
+		// A FOCUSED preview owns the right column, so the . menu is about the
+		// line under its cursor. The tree's own path/name/commit rows stay
+		// reachable underneath (and keep copy-file-path as the anchor
+		// insertCopyLinkRow looks for).
+		return append(m.previewCopyLineRows(), m.fileCopyRows(p.title, m.filesHash)...)
 	}
 	if v := m.filesView; v != nil {
 		var rows []actionRow

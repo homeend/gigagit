@@ -212,18 +212,22 @@ func fileContentLinesTok(data []byte, tok [][]syntax.Tok) []contentLine {
 	// to column 0 and overwrites the popup's own border (invisible to width
 	// math — the error_popup.go story).
 	s = normalizeLineBreaks(s)
+	// The RAW line (post-normalize, PRE-sanitize) is what Copy puts on the
+	// clipboard and what the class mask is derived from — token offsets are
+	// rune indices into it, and only it knows which runes the sweep expanded
+	// (a tab) or dropped (a control). Split it once and zip.
+	raw := strings.Split(s, "\n")
 	parts := strings.Split(sanitizeForDisplay(s), "\n")
 	out := make([]contentLine, len(parts))
 	for i, ln := range parts {
-		out[i] = contentLine{text: ln}
+		out[i] = contentLine{text: ln, src: true}
+		if i < len(raw) {
+			out[i].raw = raw[i]
+		}
 	}
 	if tok == nil {
 		return out
 	}
-	// The mask is derived from the RAW line (pre-sanitize): token offsets are
-	// rune indices into it, and only the raw line knows which runes the sweep
-	// expanded (a tab) or dropped (a control).
-	raw := strings.Split(s, "\n")
 	for i := range out {
 		if i >= len(raw) {
 			break
@@ -312,26 +316,30 @@ func previewSearchLines(p *contentPopup) []searchLine {
 	return out
 }
 
-// searchPos is where ] and [ measure from. The preview has no cursor, so before
-// there is a current hit it is the top visible line — the first ] then finds the
-// first hit on screen rather than jumping back to the top of the file.
+// searchPos is where ] and [ measure from: the current hit's exact column when
+// there is one, otherwise the head of the LINE CURSOR's row. (It used to be the
+// top visible line, because the preview had no cursor — the deferred "searchPos
+// ignores p.sel after a free scroll" item; a cursor retires it.)
 func (p *contentPopup) searchPos() searchPos {
 	if p.search.cur >= 0 && p.search.cur < len(p.search.hits) {
 		h := p.search.hits[p.search.cur]
 		return searchPos{row: h.row, side: h.side, col: h.start}
 	}
-	return searchPos{row: p.sel, side: 0, col: -1}
+	return searchPos{row: p.cur, side: 0, col: -1}
 }
 
 // snapHit scrolls the pager so the current hit is visible, moving as little as
 // possible: a hit above the window becomes the top line, one below it becomes
-// the last. There is no cursor to place — the current hit's own colouring is
-// the marker. In scroll mode the columns are panned to as well.
+// the last. The cursor lands on the hit row too, so ]/[ step from there. In
+// scroll mode the columns are panned to as well.
 func (p *contentPopup) snapHit(rowsCap, innerW int) {
 	if p.search.cur < 0 || p.search.cur >= len(p.search.hits) {
 		return
 	}
 	h := p.search.hits[p.search.cur]
+	// The hit LANDS the cursor (spec §4.7), so ]/[ and the next search step
+	// measure from where the user is actually looking.
+	p.cur = h.row
 	switch {
 	case h.row < p.sel:
 		p.sel = h.row
@@ -364,9 +372,11 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	}
 
 	// The preview is a pager: p.sel is the TOP visible line, not a cursor, so every
-	// ↑/↓ scrolls the viewport by one (there is no on-screen cursor to walk to an
-	// edge first). Top-anchor the window (anchor 0) so renderWindow can't re-center
-	// the slice and re-introduce the dead zone.
+	// ↑/↓ scrolls the viewport by one. The line cursor (p.cur) is a SEPARATE index
+	// that alt+↑/↓ walks — it never anchors the window; movePreviewCursor scrolls
+	// p.sel itself when the cursor would leave it. Top-anchor the window
+	// (anchor 0) so renderWindow can't re-center the slice and re-introduce the
+	// dead zone.
 	vis := p.lines
 	start := previewClamp(p.sel, len(vis), rowsCap, p.mode)
 	end := start + rowsCap
@@ -375,10 +385,32 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	}
 	window := vis[start:end]
 	wr := make([]winRow, len(window))
+	cursorOff := m.cursorStyle() == "off"
 	for i, l := range window {
 		wr[i] = winRow{text: l.text, cls: l.cls}
+		// The preview rows carry no prefix, so winRow.style IS the body style —
+		// no winRow.body needed here, and reverse video correctly drops the
+		// class mask on a stripe that inverts (per-token foregrounds would
+		// become per-token backgrounds).
+		//
+		// [ui] diff_cursor governs the preview cursor too; "number" falls back
+		// to the band, because there is no gutter to carry a number.
+		row := start + i
+		var rowStyle lipgloss.Style
+		marked := false
+		if row == p.cur && !cursorOff {
+			rowStyle, marked = st().diffCursorRow, true
+		}
+		if p.lsel.contains(row, p.cur) {
+			// The stripe REPLACES the band on the cursor row — the stripe is
+			// the row (spec §4.7).
+			rowStyle, marked = st().selectionStyle(rowStyle), true
+		}
+		if marked {
+			wr[i].style = rowStyle
+		}
 		if p.search.active() {
-			if hs := p.search.hitsOn(start+i, 0); len(hs) > 0 {
+			if hs := p.search.hitsOn(row, 0); len(hs) > 0 {
 				wr[i].emph = overlayHits(nil, 0, len([]rune(l.text)), hs)
 			}
 		}
@@ -403,7 +435,10 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := i18n.T("%d/%d  [↑/↓] scroll  [ctrl+w] view  [/] find  [esc] close", start+1, len(vis))
+	hint := i18n.T("%d/%d  [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [ctrl+w] view  [/] find  [esc] close", start+1, len(vis))
+	if p.lsel.on {
+		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))
+	}
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 
 	style := st().bluredPanel
