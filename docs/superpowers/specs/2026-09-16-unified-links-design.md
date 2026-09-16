@@ -585,7 +585,7 @@ binds a random port each run, which empties `localStorage`.
 
 ## 8. Phasing
 
-Three plans, each a sound stopping point.
+Four plans, each a sound stopping point.
 
 | plan | contents | why it stands alone |
 |---|---|---|
