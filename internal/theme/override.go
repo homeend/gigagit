@@ -40,6 +40,7 @@ type Override struct {
 	SaveBannerBg   string `toml:"save_banner_bg"`
 
 	SearchCurrent string `toml:"search_current_bg"`
+	Selection     string `toml:"selection_bg"`
 
 	NoticeHot string `toml:"notice_hot"`
 	NoticeDim string `toml:"notice_dim"`
@@ -104,6 +105,7 @@ var roleFields = []roleField{
 	{"save_banner_bg", "save-to-file banner background", func(t *Theme) *string { return &t.SaveBannerBg }, func(o *Override) *string { return &o.SaveBannerBg }},
 
 	{"search_current_bg", "background of the CURRENT in-view search hit (empty = invert the hit against its row)", func(t *Theme) *string { return &t.SearchCurrent }, func(o *Override) *string { return &o.SearchCurrent }},
+	{"selection_bg", "background of a selected line's text in the diff, blame and the file preview (empty = invert the line against its row)", func(t *Theme) *string { return &t.Selection }, func(o *Override) *string { return &o.Selection }},
 
 	{"notice_hot", "notification-center badge while it blinks", func(t *Theme) *string { return &t.NoticeHot }, func(o *Override) *string { return &o.NoticeHot }},
 	{"notice_dim", "notification-center badge at rest", func(t *Theme) *string { return &t.NoticeDim }, func(o *Override) *string { return &o.NoticeDim }},
