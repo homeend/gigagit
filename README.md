@@ -192,7 +192,7 @@ gg prefix rm [--global] <value>           # remove a branch prefix
 gg undo
 gg worktree list
 gg worktree add [<start-point>]
-gg worktree add --branch <name>
+gg worktree add --branch <name> [<path>]  # existing branch; <path> (cwd-relative) overrides the path template
 gg worktree add --from <commit> [--keep staged|unstaged] [<branch-name>]
                                       # new branch at <commit> (default name <current-branch>_<short-sha>,
                                       # a trailing positional overrides it); --keep staged|unstaged instead

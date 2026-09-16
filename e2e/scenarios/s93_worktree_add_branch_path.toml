@@ -1,0 +1,21 @@
+name = "worktree add --branch <name> <path>: the positional is the destination, template bypassed"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { branch = "feat" },
+]
+
+[[run]]
+cmd  = ["worktree", "add", "--branch", "feat", ".claude/worktrees/feat"]
+exit = 0                             # relative to the repo gg runs in, not
+                                     # the `../wt/<branch>` path template
+
+[expect]
+branch    = "main"                   # you stay where you were
+branches  = ["feat", "main"]         # NO new branch
+worktrees = ["local/.claude/worktrees/feat"]
+
+[expect.worktree."local/.claude/worktrees/feat".files]
+"README.md" = "hello\n"

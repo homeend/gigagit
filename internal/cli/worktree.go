@@ -30,7 +30,7 @@ func cmdWorktree(svc *domain.Service, workdir string, args []string, stdin io.Re
 	case "list":
 		return cmdWorktreeList(svc, stdout, stderr)
 	case "add":
-		return cmdWorktreeAdd(svc, args[1:], stdin, stdout, stderr, cwdFile)
+		return cmdWorktreeAdd(svc, workdir, args[1:], stdin, stdout, stderr, cwdFile)
 	case "remove":
 		return cmdWorktreeRemove(svc, args[1:], stdin, stdout, stderr)
 	case "move":
@@ -62,10 +62,10 @@ func cmdWorktreeList(svc *domain.Service, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
+func cmdWorktreeAdd(svc *domain.Service, workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	fs := flag.NewFlagSet("worktree add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	forBranch := fs.String("branch", "", "create the worktree for this existing branch (no new branch)")
+	forBranch := fs.String("branch", "", "create the worktree for this existing branch (no new branch); an optional positional is the destination path")
 	noHook := fs.Bool("no-hook", false, "skip the configured [worktree] post_create_hook")
 	runHookFlag := fs.Bool("hook", false, "run the configured [worktree] post_create_hook without prompting")
 	fromRev := fs.String("from", "", "create the worktree from this commit (new branch named <current-branch>_<short-sha> unless a name is given)")
@@ -82,9 +82,24 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 		return 2
 	}
 
-	if *forBranch != "" && *fromRev == "" && len(args) > 0 {
-		fmt.Fprintln(stderr, "worktree add: --branch and a start-point are mutually exclusive (the branch is the source)")
-		return 2
+	// With --branch the branch is the source, so the positional (if any) is
+	// the destination path — `git worktree add <path> <branch>` order aside.
+	// It is typed where the user stands, so a relative path resolves against
+	// workdir (the CLI's notion of "here", see cmdWorktreeMove), not the main
+	// worktree root the engine uses for template-resolved paths.
+	explicitPath := ""
+	if *forBranch != "" && *fromRev == "" {
+		if len(args) > 1 {
+			fmt.Fprintln(stderr, "worktree add: at most one path after --branch <name>")
+			return 2
+		}
+		if len(args) == 1 {
+			explicitPath = args[0]
+			if !filepath.IsAbs(explicitPath) {
+				explicitPath, _ = filepath.Abs(filepath.Join(workdir, explicitPath))
+			}
+			explicitPath = filepath.Clean(explicitPath)
+		}
 	}
 
 	if *keepFlag != "" && *keepFlag != "staged" && *keepFlag != "unstaged" {
@@ -182,6 +197,9 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 	if *forBranch != "" || fromBranch != "" {
 		tm = worktree.Templates{Path: cfg.Worktree.PathTemplate} // branch template bypassed
 	}
+	if explicitPath != "" {
+		tm = worktree.Templates{} // both bypassed: nothing to prompt for or count
+	}
 
 	// Prompt stdin for each <user:LABEL>. Prompts go to stderr so stdout stays
 	// clean for scripting.
@@ -218,6 +236,9 @@ func cmdWorktreeAdd(svc *domain.Service, args []string, stdin io.Reader, stdout,
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
+	}
+	if explicitPath != "" {
+		path = explicitPath
 	}
 
 	hook := cfg.Worktree.PostCreateHook

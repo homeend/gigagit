@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`gg worktree add --branch <name>` takes a destination path.** The
+  positional after `--branch` used to be refused as a start-point (the
+  branch is the source), so checking an existing branch out somewhere the
+  path template does not point — `.claude/worktrees/<name>`, say — still
+  needed raw `git worktree add`. Now `gg worktree add --branch feat/x
+  .claude/worktrees/feat-x` puts the worktree there: the path is taken
+  relative to the current directory (as `git worktree add` and `gg worktree
+  move` do), the path template is bypassed (no `<user:…>` prompt, no
+  `<seq>` bump), and a second positional is a usage error (exit 2).
+
 - **Fixed: the browser's commit list showed only ten rows after leaving a
   diff.** The commits pane is hidden (`display: none`) while a diff is open,
   and any redraw in that time — a live refresh, `r`, a review-note count —
