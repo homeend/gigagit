@@ -104,9 +104,14 @@ in all three long-line modes (nil = the byte-identical plain path every other
 caller takes; `cls` wins over `decorate`, and a reverse-video row style —
 `selectedRow` — drops it, since reverse would turn per-token foregrounds into
 per-token backgrounds). Its callers lex off the UI thread: the blame view
-(`lexBlame` over the reassembled content lines) and the "View file" preview
-(`lexPreview` + `fileContentLinesTok`); both refuse a file holding a bare `\r`,
-which they turn into a line break and `syntax.Lex` does not.
+(`lexBlame`, a thin gate over `domain.LexBlameLines`, which reassembles the
+content lines and which the web blame overlay shares — `/api/blame` sends
+`tok` in `/api/diff`'s `[start, end, class]` shape, painted by `renderCell`,
+and the `.tk-*` colour rules are selector-scoped to `table.diff, #blame-body`,
+so a new coloured web surface must join that list or its spans paint nothing)
+and the "View file" preview (`lexPreview` + `fileContentLinesTok`); both refuse
+a file holding a bare `\r` (`domain.HasBareCR`), which they turn into a line
+break and `syntax.Lex` does not.
 
 The **hunk picker** (conflict resolver + hunk staging/unstaging) reaches the
 same colouring through **`winCell.mask`** — a `runMask{cls, emph}` per display
