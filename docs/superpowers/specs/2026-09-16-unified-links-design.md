@@ -219,6 +219,7 @@ direction flag. The work is generalizing that one function.
 | `@ref:mine` | `@ref:theirs` | unb × unb | the two tips |
 | `@abc122..abc123` | `?shelf=<id>` | bnd × bnd | did the shelf hold the same change as the commit? |
 | `@<stash>^..<stash>` | `@ref:feat/x` | bnd × unb | the stash's files, projected onto the branch tip — "is my stash already on the branch?" |
+| `@B...A` | `@E...D` | bnd × bnd | two branches each bounded against their own base (§5.1) — "did these two branches change the same files, the same way?" |
 
 ---
 
@@ -362,6 +363,34 @@ click, on any surface, appends to the history.**
 Shared by the TUI and web dialogs. A branch link is unbounded (§3.1) because
 no base can be guessed — but the *dialog* can ask, which puts the choice in
 front of the user instead of in the resolver.
+
+The layout, both dialogs:
+
+```
+┌─ link comparison ──────────────────────────────────────────┐
+│                                                            │
+│  [ link 1 — branch A / file / commit / whatever         ]  │
+│      [ base — branch B ]   shown only when link 1 is a     │
+│                            branch; the set becomes every   │
+│                            file a merge preview of A into  │
+│                            B would change                  │
+│                                                            │
+│  [ link 2 — branch D / file / commit / whatever         ]  │
+│      [ base — branch E ]   likewise for link 2             │
+│                                                            │
+└────────────────────────────────────────────────────────────┘
+```
+
+Each side carries its **own, independent** base row, and that independence is
+the point: bounding both sides turns branch↔branch from "compare two tips"
+into "did these two branches change the same files, the same way" — a
+bounded × bounded comparison. It is the case §3.1 could not express from a
+bare branch link, and the dialog reaches it without any grammar change.
+
+**Direction.** In gg's preview vocabulary `PreviewAdd(source, target)` renders
+`merge-base(target, source)..source`, spelled `@target...source`. So the
+selected link is the **source** and the base is the **target**: choosing base
+`B` for branch `A` rewrites the field to `@B...A`.
 
 **Bounding is a link rewrite in the field, not dialog-only state.** Choosing
 base `main` for `@ref:feat/x` rewrites that field to `@main...feat/x`. The
