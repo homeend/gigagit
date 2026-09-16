@@ -88,9 +88,10 @@ async function boot() {
   focusPane();
   connectLive(); // after the first full load: pushes only name what to RE-fetch
   // `gg open --web <link>`: land where the server was started. Only once
-  // EVERY first-load fetch has settled — a working-tree landing reads
-  // statusEntries, a preview landing its saved row — the web twin of the
-  // TUI's startAtReady gate. Nothing above waits on this.
+  // EVERY first-load fetch has settled: a preview landing must find its
+  // SAVED row in state.previews (openPreviewForPair falls back to a
+  // show-once preview otherwise), the same previews-seen clause the TUI's
+  // startAtReady gate has. Nothing above waits on this.
   await Promise.allSettled(firstLoad);
   applyStartAt().catch(() => {});
 }

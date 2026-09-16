@@ -79,7 +79,7 @@ func cmdBatch(svc *domain.Service, workdir string, args []string, stdin io.Reade
 			// taking over the terminal mid-batch, which no other batch line
 			// does. Refused the same way "batch" (nested) is: a line-level
 			// usage error, never dispatched to runOne.
-			fmt.Fprintln(errW, "open cannot run inside gg batch: it may launch the TUI")
+			fmt.Fprintln(errW, "open cannot run inside gg batch: it may launch the TUI or a gg web server")
 			code = 2
 		} else {
 			code = runOne(svc, workdir, ln.argv[0], ln.argv[1:], strings.NewReader(""), &section, errW, cwdFile)

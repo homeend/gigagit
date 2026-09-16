@@ -109,6 +109,42 @@ func TestOpenWebBareLinkServesThePage(t *testing.T) {
 	}
 }
 
+// A presence whose server is GONE (its web.json is still within the liveness
+// window) is a transport failure: a fresh server is started instead. A page
+// that ANSWERS with an error is alive, and --web does not start a second one.
+func TestOpenWebFallsBackToALaunchWhenThePageIsGone(t *testing.T) {
+	dir := previewRepo(t)
+	svc := openCLIService(t, dir)
+	inbox := steerDirFor(svc)
+	_, srv := newSteerServer(t, http.StatusAccepted, "")
+	dead := srv.URL
+	srv.Close()
+	liveWebPresence(t, inbox, dead)
+	t.Cleanup(func() { steer.Discard(inbox) })
+	calls := 0
+	LaunchWeb = func(string, steer.Command) int { calls++; return 0 }
+	t.Cleanup(func() { LaunchWeb = nil })
+	var out, errb strings.Builder
+	if code := cmdOpen(svc, []string{"--web", previewLinkFor(dir, "a.txt") + ":1"}, &out, &errb); code != 0 {
+		t.Fatalf("exit = %d: %s", code, errb.String())
+	}
+	if calls != 1 || !strings.Contains(errb.String(), "starting one") {
+		t.Errorf("calls = %d stderr = %q, want one launch after the dead presence", calls, errb.String())
+	}
+	// Alive but refusing (an operation in flight): exit 1, no launch. (Touch
+	// only refreshes an existing presence's mtime, so the dead one goes first.)
+	_, busy := newSteerServer(t, http.StatusConflict, "")
+	steer.Remove(inbox, steer.WebPresence)
+	liveWebPresence(t, inbox, busy.URL)
+	errb.Reset()
+	if code := cmdOpen(svc, []string{"--web", previewLinkFor(dir, "a.txt") + ":1"}, &out, &errb); code != 1 {
+		t.Errorf("busy page: exit = %d, want 1", code)
+	}
+	if calls != 1 || !strings.Contains(errb.String(), "operation in flight") {
+		t.Errorf("busy page: calls = %d stderr = %q, want no launch and the page's answer", calls, errb.String())
+	}
+}
+
 // Without the launcher seam (every test's default) --web says so.
 func TestOpenWebWithoutALauncherExitsOne(t *testing.T) {
 	dir := previewRepo(t)

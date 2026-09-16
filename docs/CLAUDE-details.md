@@ -929,6 +929,10 @@ through `toSteerWire` before the port is bound and handed to the page ONCE by
 `GET /api/session/start-at`. The page's gate is `boot()`'s
 `Promise.allSettled(firstLoad)` after `connectLive()`: every first-load fetch
 (status, branches, previews, note counts) has settled before `applyStartAt`
-runs, the web twin of `startAtReady` (a working-tree landing needs
-`statusEntries`, a preview landing its saved row). `openBrowser` honours
-`$BROWSER` first (`BROWSER=true` for headless checks).
+runs, the web twin of `startAtReady` (a preview landing must find its saved
+row, or `openPreviewForPair` opens a show-once twin). A stale presence
+(server gone, web.json inside the liveness window) is a `*url.Error` from the
+POST and falls back to the launch; a page that ANSWERS (400/409) is alive and
+exits 1 instead. `openBrowser` honours `$BROWSER` first (a command plus
+arguments, URL appended; `BROWSER=true` for headless checks). `gg open --web`
+runs the server in the foreground until it is stopped.

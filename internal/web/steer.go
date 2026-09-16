@@ -58,6 +58,10 @@ func (s *Server) handleStartAt(w http.ResponseWriter, r *http.Request) {
 	at := s.startAt
 	s.startAt = nil
 	s.startAtMu.Unlock()
+	// A GET that consumes state must never be served from a cache: a
+	// back/forward restore replaying the first answer would land the page
+	// twice.
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, startAtBody{Steer: at})
 }
 

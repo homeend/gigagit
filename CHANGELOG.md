@@ -16,8 +16,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   twin of the TUI's `--at`: the server hands the command out once over
   `GET /api/session/start-at`, so a reload or a second tab stays put. A
   bare repository link just serves the page there (or prints the live
-  page's URL). `$BROWSER`, when set, is the browser command (`BROWSER=true`
-  keeps it shut for scripted checks).
+  page's URL). A started server runs in the foreground until stopped, like
+  a launched TUI; a presence whose server is gone falls back to a launch,
+  a page that answers with an error does not. `$BROWSER`, when set, is the
+  browser command plus arguments (`BROWSER=true` keeps it shut for scripted
+  checks).
 - **`gg web` copies merge-preview links.** Inside an open merge preview the
   browser's right-click menus now offer the preview link forms the TUI and
   `gg link --preview` already produce: a diff line copies

@@ -2,9 +2,11 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/linknav"
@@ -119,13 +121,23 @@ func openWeb(dir string, res domain.Resolved, c steer.Command, stdout, stderr io
 		if c.ID == "" {
 			c.ID = steer.NewID()
 		}
-		if err := postWebSteer(r.web.URL, c); err != nil {
+		err := postWebSteer(r.web.URL, c)
+		if err == nil {
+			fmt.Fprintln(stdout, "web: sent")
+			fmt.Fprintln(stdout, "steered: "+res.Checkout)
+			return 0
+		}
+		// A presence stays "live" for up to steer.LiveWindow after its server
+		// died; only a TRANSPORT failure means nobody is listening, and then a
+		// fresh server is the right answer. A page that answered (400, 409
+		// "operation in flight") is alive — starting a second one beside it
+		// would be worse than the error.
+		var ue *url.Error
+		if !errors.As(err, &ue) || LaunchWeb == nil {
 			fmt.Fprintln(stderr, "web:", err)
 			return 1
 		}
-		fmt.Fprintln(stdout, "web: sent")
-		fmt.Fprintln(stdout, "steered: "+res.Checkout)
-		return 0
+		fmt.Fprintln(stderr, "web: the recorded page is gone ("+err.Error()+"); starting one")
 	}
 	if LaunchWeb == nil {
 		fmt.Fprintf(stderr, "open: no live gg web page in %s and the web launcher is unavailable\n", res.Checkout)

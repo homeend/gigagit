@@ -94,9 +94,8 @@ func TestStartAtCarriesAPreviewPair(t *testing.T) {
 
 // The page applies the start-at only after its FIRST FULL LOAD — status,
 // branches and previews included, the fetches boot() otherwise lets run in
-// the background — because a working-tree landing needs statusEntries and a
-// preview landing needs the previews list (the TUI's startAtReady has the
-// same previews-seen clause).
+// the background — because a preview landing must find its SAVED row in the
+// previews list (the TUI's startAtReady has the same previews-seen clause).
 func TestStartAtPageWiring(t *testing.T) {
 	t.Parallel()
 	read := func(name string) string {
@@ -110,7 +109,8 @@ func TestStartAtPageWiring(t *testing.T) {
 		{"live.js", `"/api/session/start-at"`, "live.js fetches the start-at hand-out"},
 		{"live.js", "export { applyStartAt,", "applyStartAt must be exported for boot()"},
 		{"app.js", "applyStartAt", "boot() must apply the start-at"},
-		{"app.js", "Promise.allSettled", "the start-at waits for the first full load, not just commits"},
+		{"app.js", "await Promise.allSettled(firstLoad)", "the start-at waits for the SAME first-load promises boot() fires, not just commits"},
+		{"app.js", "fetchPreviews(), //", "fetchPreviews must be one of the collected first-load promises"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(read(c.file), c.want) {

@@ -126,9 +126,12 @@ session's answer), or starts the TUI there positioned on the link; a bare
 repository link (`gg://<repo>`) just opens the TUI in that checkout. `--web`
 names the browser instead: a live `gg web` page is steered (only the page),
 otherwise `gg web` is started in that checkout with the browser opened,
-landing on the link. Refused inside `gg batch` (exit 2 — unlike every other
-batch line it might launch the TUI or a server). Use it instead of launching
-`gg` yourself. (A human can also paste any link into the TUI's `#` prompt.)
+landing on the link — and like the TUI launch it then RUNS IN THE FOREGROUND
+until the user stops it, so do not wait on its exit (steer a page the user
+already has open, or start it detached). Refused inside `gg batch` (exit 2 —
+unlike every other batch line it might launch the TUI or a server). Use it
+instead of launching `gg` yourself. (A human can also paste any link into the
+TUI's `#` prompt.)
 
 `<repo>` is the repository name of the repo's remote (`gigagit`), resolved
 through gg's machine-local repository history — so a link made on one checkout

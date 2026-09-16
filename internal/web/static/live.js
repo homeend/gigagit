@@ -288,10 +288,10 @@ async function steerNavigate(s) {
 // applyStartAt lands the page where `gg open --web <link>` started this server
 // — the web twin of the TUI's --at. The server hands the command out ONCE, so
 // a reload or a second tab gets nothing and stays put. boot() calls this only
-// after its first FULL load (status, branches, previews included): a
-// working-tree landing reads statusEntries and a preview landing finds its
-// saved row in state.previews, the same readiness the TUI's startAtReady
-// waits for. Failures are silent, as for any applied steer.
+// after its first FULL load (status, branches, previews included), so a
+// preview landing finds its saved row in state.previews instead of opening a
+// show-once twin — the same readiness the TUI's startAtReady waits for.
+// Failures are silent, as for any applied steer.
 async function applyStartAt() {
   let body;
   try {
