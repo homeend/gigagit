@@ -357,7 +357,46 @@ but it is new work, not free reuse.
 The single rule that makes the compare dialog useful: **every "copy gg link"
 click, on any surface, appends to the history.**
 
-### 5.1 TUI
+### 5.1 Bounding a side in the compare dialog
+
+Shared by the TUI and web dialogs. A branch link is unbounded (§3.1) because
+no base can be guessed — but the *dialog* can ask, which puts the choice in
+front of the user instead of in the resolver.
+
+**Bounding is a link rewrite in the field, not dialog-only state.** Choosing
+base `main` for `@ref:feat/x` rewrites that field to `@main...feat/x`. The
+field always holds a real link, so a saved comparison, its CLI equivalent and
+the link in the history are byte-identical and reproducible. There is no
+hidden dialog mode a `gg compare` invocation could not express.
+
+**Three-dot**, matching previews exactly: `internal/cli/preview.go` documents
+the semantics as `merge-base(target, source)..source`, and `PreviewSummary`
+already exposes the base it used. The dialog reuses that, so a branch bounded
+in the dialog and a saved preview of the same pair are the same set.
+
+Bounding generalizes to any *point* — it is just "pick a second point to make
+a pair":
+
+| unbounded side | the picker offers | rewritten to |
+|---|---|---|
+| branch / tag tip | its upstream, else the trunk — **preselected, visible and changeable** | `@base...branch` (three-dot) |
+| commit | its first parent | `@parent..sha` (two-dot; identical to three-dot for a single parent) |
+| working tree / index | nothing — no base exists | no affordance shown |
+
+**Offered, never required.** Leaving both sides unbounded compares the two
+tips, which is the agreed meaning of branch↔branch. The affordance never
+blocks the dialog and never rewrites a field the user did not touch.
+
+**New machinery.** gg has no default-base notion today — `PreviewAdd(ctx,
+source, target, label)` always takes both names explicitly, and nothing infers
+one. The suggestion order (upstream, else trunk) is therefore new, and it is
+a *suggestion in a picker*, never a silent default: the §3.1 "never guess"
+rule holds because the user sees and confirms the base before the rewrite.
+
+**The CLI stays explicit.** No `--base` inference; an agent spells the pair.
+The dialog is the convenience layer.
+
+### 5.2 TUI
 
 - Copy-link rows via the existing `.` type-to-filter action menu, on branch /
   commit / bookmark / shelf / preview / **stash** rows. A commit **row** copies
@@ -372,7 +411,7 @@ click, on any surface, appends to the history.**
 - Every new string routed through `i18n.T` with a literal key in all four
   bundles.
 
-### 5.2 CLI
+### 5.3 CLI
 
 This is the LLM surface — goal 3.
 
@@ -386,7 +425,7 @@ gg compare --save <label>    store the bounded result
 gg open <link>               navigate (grows ref: and ?hint)
 ```
 
-### 5.3 MCP
+### 5.4 MCP
 
 - `gg_link_resolve` — link → structured place
 - `gg_link_list` — the history
@@ -395,7 +434,7 @@ gg open <link>               navigate (grows ref: and ?hint)
 
 Then `agentskill.Version` bump and `gg init --update`.
 
-### 5.4 Web
+### 5.5 Web
 
 Same copy rows; `/api/linkhist`; the same two-field dialog; the Previews tab
 listing saved comparisons.
@@ -454,7 +493,7 @@ Three plans, each a sound stopping point.
 |---|---|---|
 | **1** | grammar (`ref:`, `..`, `?hint`) · `Endpoint` kinds · `EvalEndpoint`/`CompareSets` · CLI `compare`/`link` | the whole algebra, fully tested; agents can use it the day it lands, no UI needed |
 | **2** | `linkhist` · MCP tools · navigation hints (`linknav`, `steer`, both consumers) · agentskill bump | links become referenceable and navigable everywhere |
-| **3** | TUI copy rows + compare palette · web surfaces · `savedcompare` store + the file-backed migration | the UI layer, on a settled core |
+| **3** | TUI copy rows + compare palette · the shared base picker (§5.1) · web surfaces · `savedcompare` store + the file-backed migration | the UI layer, on a settled core |
 
 ---
 
