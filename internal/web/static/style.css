@@ -114,6 +114,22 @@ body.resizing { cursor: col-resize; user-select: none; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 #files-meta.hidden { display: none; }
+/* The description under the date: a full-basis block like the meta line, the
+   commit's own line breaks kept, clamped to three lines. What the clamp hides
+   is behind the button under it — a header is a header, not the whole message. */
+#files-desc {
+  flex: 1 0 100%; font-size: 11px; opacity: .8; white-space: pre-wrap; word-break: break-word;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+#files-desc.hidden { display: none; }
+/* The button spans the header — the whole width is the target, the way the
+   sidebar's section buttons are — and reads as chrome, not as a fourth line. */
+#files-desc-more {
+  flex: 1 0 100%; margin: 2px 0 2px; padding: 2px 8px; font: inherit; font-size: 11px; cursor: pointer;
+  background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border); border-radius: 3px;
+}
+#files-desc-more:hover { border-color: var(--accent); }
+#files-desc-more.hidden { display: none; }
 #diff-header { display: flex; align-items: center; gap: 8px; }
 #diff-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #diff-nav { flex: 0 0 auto; display: flex; gap: 4px; }
@@ -513,6 +529,7 @@ mark.r { background: var(--span-add); color: inherit; }
 #prompt-ok, #prompt-cancel, #prompt-extra { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 14px; font: inherit; cursor: pointer; }
 #prompt-ok:hover, #prompt-cancel:hover, #prompt-extra:hover { border-color: var(--accent); }
 #prompt-extra.hidden { display: none; }
+#prompt-ok.hidden { display: none; }
 #palette { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-start; justify-content: center; z-index: 21; }
 #palette.hidden { display: none; }
 #palette-box { margin-top: 18vh; background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 90vw; max-width: 560px; display: flex; flex-direction: column; }
