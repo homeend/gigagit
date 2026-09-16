@@ -576,7 +576,9 @@ func (m Model) contextCopyRows() []actionRow {
 		}
 		return m.fileCopyRows(s.ctx.path, s.ctx.rev)
 	case *blameView:
-		return m.fileCopyRows(s.ctx.path, s.ctx.rev)
+		// The LINE rows lead; the file's path/name/commit rows stay behind them
+		// (and keep copy-file-path as insertCopyLinkRow's anchor).
+		return append(m.blameCopyLineRows(s), m.fileCopyRows(s.ctx.path, s.ctx.rev)...)
 	}
 	if v := m.diffLayer(); v != nil {
 		// The LINE rows lead (spec §4.7): what the user is looking at is a

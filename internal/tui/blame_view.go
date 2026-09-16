@@ -19,13 +19,16 @@ import (
 // per-line gutter naming the commit that last touched it. It reuses navContext
 // (defined in history_view.go); rev "" blames HEAD's working content.
 type blameView struct {
-	ctx     navContext
-	lines   []model.BlameLine
-	tok     [][]syntax.Tok // syntax runs per line (index = line−1); nil = plain
-	blocks  []blameBlock   // grouped runs, recomputed after each load
-	sel     int            // line cursor (index into lines)
-	mode    dispMode       // text display mode; z cycles (applies to the whole gutter│code row)
-	hscroll int            // modeScroll horizontal offset
+	ctx    navContext
+	lines  []model.BlameLine
+	tok    [][]syntax.Tok // syntax runs per line (index = line−1); nil = plain
+	blocks []blameBlock   // grouped runs, recomputed after each load
+	sel    int            // line cursor (index into lines)
+	// lsel is the line selection over lines (space/space/enter, spec §4.7).
+	// Cleared by blameMsg: a reload replaces the very lines it indexes.
+	lsel    lineSel
+	mode    dispMode // text display mode; z cycles (applies to the whole gutter│code row)
+	hscroll int      // modeScroll horizontal offset
 	loading bool
 	err     error
 	tag     string // gates stale loads
@@ -283,7 +286,12 @@ func (b *blameView) render(m Model, _ string) string {
 		}
 		header = truncate(padRight(truncate(title, avail), avail)+"  "+bd, w)
 	}
-	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [/] find  [enter] history  [e] editor  [esc/b] back"), w)
+	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [enter] history  [e] editor  [esc/b] back"), w)
+	if b.lsel.on {
+		// The selection variant replaces the lot, so the way out (esc) is
+		// always on screen.
+		hint = truncate(i18n.T("[space] mark end  [enter] copy  [esc] unmark  [↑↓] extend"), w)
+	}
 
 	gw := blameGutterW
 	if gw > w-10 {
@@ -320,6 +328,16 @@ func (b *blameView) render(m Model, _ string) string {
 		if i == b.sel {
 			st = s.selectedRow
 		}
+		// The stripe paints the CODE only: the commit gutter is winRow.prefix
+		// and keeps the row style, so the eye reads the range's extent against
+		// an unchanged gutter. On the cursor row the stripe sits over the
+		// reverse-video base, which with selection_bg unset un-reverses it — the
+		// "hole" the theme contract describes.
+		var bodySt *lipgloss.Style
+		if b.lsel.contains(i, b.sel) {
+			sel := s.selectionStyle(st)
+			bodySt = &sel
+		}
 		// Search hits ride on winRow.emph — a separate mask from cls, so an
 		// unlexed file still paints them, and they survive the selected row's
 		// reverse video (which is exactly where the current hit lands).
@@ -330,14 +348,14 @@ func (b *blameView) render(m Model, _ string) string {
 			}
 		}
 		if b.tok == nil { // no lexer / colouring off: the plain (pre-syntax) path
-			wr[i-lo] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), emph: emph, style: st}
+			wr[i-lo] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), emph: emph, style: st, body: bodySt}
 			continue
 		}
 		// sanitizeCell expands exactly like sanitizeLine but also returns the
 		// per-display-rune class mask, so tabs and control glyphs keep the
 		// colours aligned with the columns they land on.
 		disp, _, cls := sanitizeCell(ln.Content, nil, tokAt(b.tok, i+1))
-		wr[i-lo] = winRow{prefix: gutter + "│", text: string(disp), cls: cls, emph: emph, style: st}
+		wr[i-lo] = winRow{prefix: gutter + "│", text: string(disp), cls: cls, emph: emph, style: st, body: bodySt}
 	}
 
 	win := renderWindow(wr, winOpts{w: w, h: body, mode: b.mode, anchor: b.sel - lo, hscroll: b.hscroll, prefixW: gw + 1})
@@ -375,8 +393,14 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	// The search owns / @ ] [ and — only while a query is live — esc. b is NOT
-	// two-stage: it always leaves (never trap the user behind a search).
+	// Order (spec §4.7): a search being TYPED owns every key, then the line
+	// selection, then a committed query, then the view's own esc. blameSearchKey
+	// covers the first and third in one call, so the selection hook runs first
+	// and declines while the search is typing. b is NOT two-stage at all: it
+	// always leaves (never trap the user behind a search or a selection).
+	if nm, cmd, handled := m.blameSelectKey(b, msg); handled {
+		return nm, cmd
+	}
 	if nm, cmd, handled := m.blameSearchKey(b, msg); handled {
 		return nm, cmd
 	}

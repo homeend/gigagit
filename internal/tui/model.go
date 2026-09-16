@@ -933,6 +933,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			b.blocks = groupBlame(msg.lines)
 			b.san = nil // the search's display-text cache belongs to the old lines
 			b.sel = 0
+			b.lsel.clear() // …and so does everything the selection's indexes meant
 			// A search started while blame was still loading computed its hits
 			// against the empty/placeholder lines; once the real content lands
 			// those hits are stale. Re-run it over the loaded lines and re-snap
