@@ -8,6 +8,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **The browser's diff has the TUI's `f`: changed lines only ↔ full file.**
+  `gg web` always drew the whole file in the diff pane; a one-line change
+  deep in a long file meant scrolling past screens of context (the pane
+  parked on the first change, but that was all). Now `f`, the diff
+  toolbar's **changes only** button (a pressed accent chip while on) and the
+  footer's `f changes only` chip fold the diff to each change plus three
+  lines of context, every other equal run standing in as a `⋯ N unchanged
+  lines` row — click one to unfold that run. The ‹/› change stepper keeps
+  its place across the flip (the block count is the same in both modes),
+  the file-history overlay follows the same setting (`f` works there too),
+  and a row carrying a review note or a `gg session highlight` band never
+  folds away. The choice is remembered per machine (`diff_view` in
+  `/api/uistate`, the same store as the sidebar layout — the random port
+  makes localStorage useless), defaulting to the full file like the TUI. A
+  mode- or whitespace-only change says so instead of showing an empty table.
+  The fold rule is a pure JS section pinned against `textdiff.Collapse` by a
+  node-driven Go test.
+
 - **The browser's switch-repo picker is a table again, and the path shows.**
   `gg web`'s *switch repo* (☰ → repositories, or the palette) listed each
   known repo as its name plus its path in a 560px box, and the path was cut

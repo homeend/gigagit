@@ -1,5 +1,6 @@
 // uistate.js — part of gg's web client. The layout this page remembers
-// (folded sidebar sections, pane widths, sidebar hidden, graph mode) is kept
+// (folded sidebar sections, pane widths, sidebar hidden, graph mode, diff
+// view mode) is kept
 // SERVER-SIDE, in gg's machine-local state file, because `gg web` binds a
 // random loopback port: every run is a different origin, so anything stored in
 // localStorage is unreachable the next time gg starts.
@@ -50,6 +51,7 @@ function saveUI(patch) {
     files_width: 0,
     graph: "svg",
     sorts: {},
+    diff_view: "full",
   };
   loaded = { ...base, ...patch, saved: true };
   state.ui = loaded;

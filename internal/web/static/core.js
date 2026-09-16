@@ -51,6 +51,8 @@ const state = {
   sidebar: true,
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
+  diffPartial: false,      // the f toggle: true = changed lines only (a stored preference, /api/uistate)
+  diffFolds: new Set(),    // fold start indexes the reader unfolded in the open diff (reset per diff)
   diffCtx: null, // {path, rev, state} — the file the diff pane currently shows, else null
   notes: [],                 // resolved notes for the open diff (GET /api/notes)
   noteCounts: { by_path: {}, by_commit: {}, by_commit_path: {} },

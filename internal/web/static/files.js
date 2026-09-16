@@ -12,6 +12,7 @@ import { openFileBlame, openFileHistory } from "./filehist.js";
 import { rev } from "./review.js";
 import { renderCommits, rewordPrompt } from "./commits.js";
 import { focusPane, moveCursor } from "./keys.js";
+import { saveUI } from "./uistate.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -994,6 +995,63 @@ function hunkAttr(r) {
 }
 
 
+// --- diff collapse (pure; guarded against Go) ---
+// The "changed lines only" view — the TUI's f toggle. DIFF_CONTEXT is the
+// TUI's diffContext: the equal rows kept on each side of a change.
+const DIFF_CONTEXT = 3;
+
+// collapseDiffRows folds an aligned row list the way textdiff.Collapse does:
+// every non-"same" row plus DIFF_CONTEXT equal rows on each side is kept, and
+// each remaining run of equal rows becomes ONE item {fold: n, start: i} — n
+// rows hidden, i the index of the first. A fold whose start is in `open` is
+// emitted expanded (its rows kept), so a reader can unfold one run without
+// leaving the mode. keep(row, i) forces a row visible regardless — a row that
+// carries a review note or an attention band must never vanish under a fold.
+// No change rows at all → null (the caller shows a notice: a mode-only or
+// whitespace-only change has nothing to fold around).
+function collapseDiffRows(rows, open, keep) {
+  const n = rows.length;
+  const mark = new Array(n).fill(false);
+  let any = false;
+  for (let i = 0; i < n; i++) {
+    if (rows[i].kind === "same") continue;
+    any = true;
+    const hi = Math.min(n - 1, i + DIFF_CONTEXT);
+    for (let j = Math.max(0, i - DIFF_CONTEXT); j <= hi; j++) mark[j] = true;
+  }
+  if (!any) return null;
+  const shown = (i) => mark[i] || (keep ? keep(rows[i], i) : false);
+  const out = [];
+  for (let i = 0; i < n; ) {
+    if (shown(i)) {
+      out.push(rows[i]);
+      i++;
+      continue;
+    }
+    const start = i;
+    while (i < n && !shown(i)) i++;
+    if (open && open.has(start)) for (let j = start; j < i; j++) out.push(rows[j]);
+    else out.push({ fold: i - start, start });
+  }
+  return out;
+}
+// --- end diff collapse ---
+
+
+// foldRowHTML is the separator standing in for a folded run: a full-width
+// row (cols = the layout's column count) that reads "N unchanged lines" and
+// unfolds on click (data-fold = the run's start index, the key `open` uses).
+// It carries the `same` class so diffChangeBlocks never counts it as a change
+// start, and no data-no / data-hunk, so the note and hunk click paths ignore
+// it.
+function foldRowHTML(it, cols) {
+  return (
+    `<tr class="same fold" data-fold="${it.start}" title="click to show these lines">` +
+    `<td colspan="${cols}">⋯ ${it.fold} unchanged line${it.fold === 1 ? "" : "s"}</td></tr>`
+  );
+}
+
+
 // diffHTML builds the diff table for a /api/diff response — shared by the
 // main diff pane and the history overlay. paneWidth picks side-by-side vs
 // unified exactly as before. Hunk classes no-op when diffHunks is null, so
@@ -1003,7 +1061,7 @@ function hunkAttr(r) {
 // anchor, the clicked row's `cur` class, and the ◆ rows themselves. It is OFF
 // by default so the file-history overlay — a different file at a different
 // revision — stays a plain table rather than borrowing the open diff's notes.
-function diffHTML(d, paneWidth, notesOn = false) {
+function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
   if (d.binary) return `<div class="notice">binary file</div>`;
   if (d.too_large) return `<div class="notice">diff too large</div>`;
   const rows = d.rows || [];
@@ -1046,11 +1104,31 @@ function diffHTML(d, paneWidth, notesOn = false) {
   // wrapping on the populated half.
   const pureAdd = rows.length > 0 && rows.every((r) => !r.left_no);
   const pureDel = rows.length > 0 && rows.every((r) => !r.right_no);
+  // "Changed lines only" (the TUI's f): fold the equal runs, keeping every
+  // row a note or an attention band sits on — folded away, a ◆ row would
+  // vanish and }/{ could not reach it. Layout is decided on the FULL rows
+  // above (a fold row has no line numbers to vote with).
+  let items = rows;
+  if (state.diffPartial) {
+    const noted = (side, no) => !!no && state.notes.some((n) => n.side === side && n.line === no);
+    const pinned = (r) => noted("new", r.right_no) || noted("old", r.left_no) || !!attnClsBoth(r);
+    items = collapseDiffRows(rows, open, notesOn ? pinned : null);
+    if (items === null) {
+      return (
+        `<div class="notice">no changed lines — a mode or whitespace-only change; ` +
+        `<b>f</b> shows the full file</div>`
+      );
+    }
+  }
   let html = `<table class="diff">`;
   if (pureAdd || pureDel) {
     const side = pureAdd ? "r" : "l";
     const nside = pureAdd ? "new" : "old";
-    for (const r of rows) {
+    for (const r of items) {
+      if (r.fold) {
+        html += foldRowHTML(r, 2);
+        continue;
+      }
       const no = pureAdd ? r.right_no : r.left_no;
       const text = pureAdd ? r.right : r.left;
       const spans = pureAdd ? r.right_spans : r.left_spans;
@@ -1066,7 +1144,11 @@ function diffHTML(d, paneWidth, notesOn = false) {
     // (heavy wrapping, context text duplicated on both sides). One
     // full-width column; a changed pair becomes a del row then an add row,
     // keeping the intraline marks of each side.
-    for (const r of rows) {
+    for (const r of items) {
+      if (r.fold) {
+        html += foldRowHTML(r, 3);
+        continue;
+      }
       if (r.kind === "same") {
         html +=
           `<tr class="same${curCls("new", r.right_no)}${attnClsBoth(r)}"${anchor("new", r.right_no)}>` +
@@ -1090,7 +1172,11 @@ function diffHTML(d, paneWidth, notesOn = false) {
       }
     }
   } else {
-    for (const r of rows) {
+    for (const r of items) {
+      if (r.fold) {
+        html += foldRowHTML(r, 4);
+        continue;
+      }
       // A side-by-side row anchors on its NEW side when it has one, else on
       // the old side: every row must carry a usable (side, line) pair, or a
       // pure-deletion row would answer `c` with line 0.
@@ -1116,11 +1202,77 @@ function diffHTML(d, paneWidth, notesOn = false) {
 
 
 function renderDiff(d) {
+  // A NEW diff starts with every run folded; a re-render of the same one (a
+  // resize, a notes refresh, the f toggle) keeps the folds the reader opened.
+  if (d !== state.lastDiff) state.diffFolds = new Set();
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   state.diffBlockIdx = -1;
   $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth, true);
   updateDiffNav();
 }
+
+
+// rerenderDiffKeepingPlace re-runs renderDiff for the SAME diff and puts the
+// ‹/› change stepper back where it was: the change-block count is the same in
+// both view modes (folds only ever replace equal rows), so the index carries
+// straight across, and the block it names is scrolled back into view.
+function rerenderDiffKeepingPlace() {
+  if (!state.lastDiff) return;
+  const at = state.diffBlockIdx;
+  renderDiff(state.lastDiff);
+  state.diffBlockIdx = at;
+  if (at >= 0) {
+    const blocks = diffChangeBlocks();
+    if (blocks[at]) blocks[at].scrollIntoView({ block: "center" });
+  }
+}
+
+
+// applyDiffView sets the diff view mode from a stored preference ("changed"
+// = changed lines only, anything else = full file) and paints the toolbar
+// button's pressed state. Boot calls it before any diff is open, so nothing
+// re-renders here; toggleDiffView is the user-facing flip.
+function applyDiffView(mode) {
+  state.diffPartial = mode === "changed";
+  const btn = $("diff-view");
+  btn.classList.toggle("on", state.diffPartial);
+  btn.setAttribute("aria-pressed", state.diffPartial ? "true" : "false");
+}
+
+
+// toggleDiffView is the TUI's f: changed lines only ↔ the full file. The
+// choice is a per-machine preference (/api/uistate — the random port makes
+// localStorage useless), and applies to every diff opened from now on, the
+// file-history overlay included.
+function toggleDiffView() {
+  applyDiffView(state.diffPartial ? "full" : "changed");
+  saveUI({ diff_view: state.diffPartial ? "changed" : "full" });
+  rerenderDiffKeepingPlace();
+}
+
+
+$("diff-view").addEventListener("click", toggleDiffView);
+
+
+// A click on a fold row unfolds that run (and only that run) until the next
+// diff opens. The stepper's place survives: an unfold adds equal rows only.
+$("diff-body").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr.fold[data-fold]");
+  if (!tr || !state.lastDiff) return;
+  state.diffFolds.add(Number(tr.dataset.fold));
+  rerenderDiffKeepingPlace();
+});
+
+
+registerHelp({
+  key: "f · changes only",
+  html:
+    "toggle the diff between the <b>full file</b> and <b>changed lines only</b> — each change with three " +
+    "lines of context, every other run folded to a <i>⋯ N unchanged lines</i> row (click it to unfold " +
+    "that run). The <b>changes only</b> button in the diff toolbar is the same switch; the choice is " +
+    "remembered per machine and the file-history overlay follows it. Rows carrying a review note or an " +
+    "attention band never fold away",
+});
 
 
 // jumpToFirstChange parks a freshly OPENED diff on its first changed line
@@ -2428,4 +2580,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, toggleNotesAgent, updateDiffNav };

@@ -139,6 +139,13 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 #diff-nav button:hover:not(:disabled) { border-color: var(--accent); }
 #diff-nav button:disabled { opacity: .45; cursor: default; }
+/* The changes-only toggle shows its pressed state (aria-pressed) as a filled
+   accent chip — the toolbar's other buttons are one-shot actions. */
+#diff-nav button.on { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+/* A fold row stands in for a run of equal lines the changes-only view hides:
+   a dim, centered rule label that unfolds on click. */
+table.diff tr.fold td { text-align: center; color: var(--dim); background: var(--bg-alt); border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); cursor: pointer; user-select: none; }
+table.diff tr.fold:hover td { color: var(--fg); }
 table.diff tr.flash td { background: var(--sel); }
 table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
 /* Wrap at whitespace; break inside a token only when it alone overflows
