@@ -152,6 +152,7 @@ table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
    (break-all shattered code mid-word, e.g. import paths). */
 table.diff td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 6px; }
 td.no { width: 3.5em; text-align: right; color: var(--dim); user-select: none; }
+table.diff col.no { width: 3.5em; } /* the colgroup twin: fixed layout reads widths from here when a fold row comes first */
 tr.add td.side.r, tr.add td.no.r { background: var(--add); }
 tr.del td.side.l, tr.del td.no.l { background: var(--del); }
 tr.change td.side.l { background: var(--del); }

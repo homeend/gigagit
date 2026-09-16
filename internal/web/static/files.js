@@ -1120,7 +1120,15 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
       );
     }
   }
-  let html = `<table class="diff">`;
+  // The table is `table-layout: fixed`, which sizes its columns from the
+  // FIRST row's cells — and in the changes-only view that row is often a
+  // colspan fold, which would hand every column an equal share and balloon
+  // the line-number gutter to a quarter of the pane. A colgroup fixes the
+  // gutter widths up front, whatever row comes first.
+  const cols = pureAdd || pureDel ? 2 : paneWidth < 950 ? 3 : 4;
+  const colgroup =
+    cols === 2 ? `<col class="no"><col>` : cols === 3 ? `<col class="no"><col class="no"><col>` : `<col class="no"><col><col class="no"><col>`;
+  let html = `<table class="diff"><colgroup>${colgroup}</colgroup>`;
   if (pureAdd || pureDel) {
     const side = pureAdd ? "r" : "l";
     const nside = pureAdd ? "new" : "old";
