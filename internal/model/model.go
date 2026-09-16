@@ -259,10 +259,20 @@ type FileRef struct {
 type EndpointKind int
 
 const (
-	EndpointWorkTree EndpointKind = iota // the working tree (unstaged)
-	EndpointIndex                        // the index (staged)
-	EndpointCommit                       // a commit, by Hash
-	EndpointShelf                        // a shelved commit's frozen changed-file set, by ShelfID
+	// EndpointInvalid is the ZERO VALUE, and it is deliberately not a usable
+	// endpoint: an Endpoint{} is an unset variable or an error return, never
+	// "the working tree". Every method panics on it rather than guessing.
+	EndpointInvalid  EndpointKind = iota
+	EndpointWorkTree              // the working tree (unstaged)
+	EndpointIndex                 // the index (staged)
+	EndpointCommit                // a commit, by Hash
+	EndpointShelf                 // a shelved commit's frozen changed-file set, by ShelfID
+
+	// endpointKindCount must stay LAST. It is the exhaustiveness bound:
+	// endpoint_exhaustive_test.go walks EndpointInvalid+1 .. endpointKindCount
+	// and fails for any kind with no table row, so adding a kind above this
+	// line without adding a row breaks the build.
+	endpointKindCount
 )
 
 // Endpoint names one side of a whole-tree comparison.
@@ -285,11 +295,13 @@ func (e Endpoint) Display() string {
 			id = id[:9]
 		}
 		return "shelf #" + id + " (frozen)"
-	default:
+	case EndpointCommit:
 		if len(e.Hash) > 7 {
 			return e.Hash[:7]
 		}
 		return e.Hash
+	default:
+		panic(endpointKindBug("Display", e.Kind))
 	}
 }
 
@@ -302,15 +314,24 @@ func (e Endpoint) FileRef(path string) FileRef {
 		return FileRef{Source: SourceStaged, Path: path}
 	case EndpointShelf:
 		return FileRef{Source: SourceShelf, Locator: e.ShelfID, Path: path}
-	default:
+	case EndpointCommit:
 		return FileRef{Source: SourceCommit, Locator: e.Hash, Path: path}
+	default:
+		panic(endpointKindBug("FileRef", e.Kind))
 	}
 }
 
 // IsLive reports whether the endpoint's content can change on disk (working
 // tree or index) and therefore must never be cached.
 func (e Endpoint) IsLive() bool {
-	return e.Kind == EndpointWorkTree || e.Kind == EndpointIndex
+	switch e.Kind {
+	case EndpointWorkTree, EndpointIndex:
+		return true
+	case EndpointCommit, EndpointShelf:
+		return false
+	default:
+		panic(endpointKindBug("IsLive", e.Kind))
+	}
 }
 
 // CacheTag is a stable cache-key fragment for the endpoint (only meaningful
@@ -323,9 +344,22 @@ func (e Endpoint) CacheTag() string {
 		return "index"
 	case EndpointShelf:
 		return "shelf:" + e.ShelfID
-	default:
+	case EndpointCommit:
 		return e.Hash
+	default:
+		panic(endpointKindBug("CacheTag", e.Kind))
 	}
+}
+
+// endpointKindBug is the one panic message shape. An invalid kind is always a
+// programming error -- an unset variable reaching a method, or a kind added to
+// the iota block without teaching the methods about it -- so it names both the
+// method and the kind.
+func endpointKindBug(method string, k EndpointKind) string {
+	if k == EndpointInvalid {
+		return "model.Endpoint." + method + ": endpoint is unset (EndpointInvalid); it was never given a kind"
+	}
+	return fmt.Sprintf("model.Endpoint.%s: unknown EndpointKind %d; add a case arm and a row in endpoint_exhaustive_test.go", method, k)
 }
 
 // ShelfKind distinguishes a shelf entry's blob payload. A file entry's blob is
