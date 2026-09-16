@@ -703,12 +703,19 @@ func (e *hunkPicker) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			b.ToggleSide(hunkpick.Incoming)
 			e.pickRev++
 		}
-	case "C":
-		e.doc.ToggleSideAll(hunkpick.Current)
+	case "C", "I":
+		// Master toggle: regions with nothing on that side are marked skipped
+		// (or reset when clearing), so a completing pass can decide the whole
+		// document — say so, as s does when it decides the last region.
+		side := hunkpick.Current
+		if msg.String() == "I" {
+			side = hunkpick.Incoming
+		}
+		e.doc.ToggleSideAll(side)
 		e.pickRev++
-	case "I":
-		e.doc.ToggleSideAll(hunkpick.Incoming)
-		e.pickRev++
+		if e.requireAll && e.doc.Pending() == 0 {
+			m.statusMsg = i18n.T("all regions resolved — [ctrl+s] apply")
+		}
 	case " ":
 		if b != nil && e.sideLen() > 0 {
 			b.EnsurePicks()

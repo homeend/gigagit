@@ -288,8 +288,14 @@ func (d *Doc) SetAll(m Mode) {
 
 // ToggleSideAll is ToggleSide across the document: if every block that has
 // s-lines is fully picked on s, it clears s from those blocks; otherwise it
-// completes s on every block that has s-lines. Blocks without s-lines are
-// left alone.
+// completes s on every block that has s-lines.
+//
+// A block WITHOUT s-lines has nothing to offer "take s": the completing pass
+// marks it skipped if it is still Undecided (so the document reads as fully
+// decided and can be applied), and the clearing pass returns a skipped one to
+// Undecided — the master toggle resets everything it touched. Such a block
+// the user already decided (picks, or a skip when clearing does not apply)
+// is never overwritten on the completing pass.
 func (d *Doc) ToggleSideAll(s Side) {
 	allFull, seen := true, false
 	for _, b := range d.Blocks() {
@@ -306,6 +312,11 @@ func (d *Doc) ToggleSideAll(s Side) {
 	}
 	for _, b := range d.Blocks() {
 		if len(b.lines(s)) == 0 {
+			if allFull {
+				b.Unskip()
+			} else if b.Mode == Undecided {
+				b.Skip()
+			}
 			continue
 		}
 		full, _ := b.SideState(s)

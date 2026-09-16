@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Fixed: `C`/`I` in the conflict hunk picker left a one-sided region undecided,
+  so `ctrl+s` refused to apply.** A region with nothing on the chosen side
+  (all of its lines came from the other branch) has nothing to offer "take
+  current"/"take incoming"; the master toggle used to leave it untouched, and
+  with regions A, B decided and C still *undecided*, `ctrl+s` answered
+  "1 region(s) left to resolve". The completing pass now marks such regions
+  *skipped* (exactly what `s` would do), reports "all regions resolved" when
+  nothing is left, and the second press — the clearing pass — resets them to
+  *undecided* along with everything else it unpicks. Regions already decided
+  by hand are never overwritten; per-region `c`/`i` on an empty side stays a
+  no-op (use `s`).
 - **Closing a window opened from a popup returns to that popup.** *Previous
   versions… → enter* opened the version's file tree and threw the versions
   list away, so esc on the tree landed on the panels; the same happened to the
