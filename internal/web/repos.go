@@ -19,9 +19,10 @@ func (s *Server) handleRepos(w http.ResponseWriter, r *http.Request) {
 	rows := make([]map[string]any, 0, len(entries))
 	for _, e := range entries {
 		rows = append(rows, map[string]any{
-			"path":    e.Path,
-			"name":    repos.Name(e),
-			"current": served != "" && sameRepoPath(e.Path, served),
+			"path":        e.Path,
+			"name":        repos.Name(e),
+			"current":     served != "" && sameRepoPath(e.Path, served),
+			"last_opened": e.LastOpened,
 		})
 	}
 	writeJSON(w, map[string]any{"repos": rows})
