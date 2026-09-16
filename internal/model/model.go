@@ -2,6 +2,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -360,6 +361,70 @@ func endpointKindBug(method string, k EndpointKind) string {
 		return "model.Endpoint." + method + ": endpoint is unset (EndpointInvalid); it was never given a kind"
 	}
 	return fmt.Sprintf("model.Endpoint.%s: unknown EndpointKind %d; add a case arm and a row in endpoint_exhaustive_test.go", method, k)
+}
+
+// ErrEndpoint wraps every constructor refusal, so a caller can tell a
+// malformed endpoint from a git failure without matching on prose.
+var ErrEndpoint = errors.New("bad endpoint")
+
+// WorkTreeEndpoint names the working tree. It cannot fail: there is nothing
+// to validate.
+func WorkTreeEndpoint() Endpoint { return Endpoint{Kind: EndpointWorkTree} }
+
+// IndexEndpoint names the index. It cannot fail.
+func IndexEndpoint() Endpoint { return Endpoint{Kind: EndpointIndex} }
+
+// CommitEndpoint names the tree at a commit. hash must be 7..64 hex
+// characters -- 64, not 40, because a sha-256 repository's commit ids are 64
+// hex characters. The bound matches model.ParseLink's, so a link and an
+// endpoint never disagree about what a commit id looks like.
+func CommitEndpoint(hash string) (Endpoint, error) {
+	if len(hash) < 7 || len(hash) > 64 {
+		return Endpoint{}, fmt.Errorf("%w: commit hash must be 7..64 characters, got %d", ErrEndpoint, len(hash))
+	}
+	for i := 0; i < len(hash); i++ {
+		if !isHexDigit(hash[i]) {
+			return Endpoint{}, fmt.Errorf("%w: commit hash must be hex, got %q", ErrEndpoint, hash)
+		}
+	}
+	return Endpoint{Kind: EndpointCommit, Hash: hash}, nil
+}
+
+// ShelfEndpoint names a shelved commit's frozen changed-file set.
+func ShelfEndpoint(id string) (Endpoint, error) {
+	if id == "" {
+		return Endpoint{}, fmt.Errorf("%w: shelf id is required", ErrEndpoint)
+	}
+	return Endpoint{Kind: EndpointShelf, ShelfID: id}, nil
+}
+
+func isHexDigit(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
+}
+
+// Bounded reports whether the endpoint evaluates to a FINITE, enumerated set
+// of paths rather than every file in the repository (spec section 3.1). A
+// shelf entry carries its own member list; a tree, a tip and the index do not.
+//
+// DELIBERATE DEVIATION FROM THE SPEC. Section 4.0 sketches a stored `bounded
+// bool` field, "computed ONCE at construction, never re-derived". A switch on
+// the kind is used instead, because boundedness is a total function of the
+// kind alone -- for every kind in this plan AND for the two 1b adds
+// (EndpointRef is unbounded, EndpointPair is bounded). A stored field would
+// duplicate the kind and introduce a second thing that can disagree with it.
+// The spec's actual requirement -- that the rule live in exactly one place and
+// no consumer re-derive it -- is met by this one switch, pinned by
+// TestBoundedMatchesTheSpecRule. If 1b finds a kind whose boundedness is NOT
+// determined by the kind, revisit this.
+func (e Endpoint) Bounded() bool {
+	switch e.Kind {
+	case EndpointShelf:
+		return true
+	case EndpointWorkTree, EndpointIndex, EndpointCommit:
+		return false
+	default:
+		panic(endpointKindBug("Bounded", e.Kind))
+	}
 }
 
 // ShelfKind distinguishes a shelf entry's blob payload. A file entry's blob is
