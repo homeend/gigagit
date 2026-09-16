@@ -8,6 +8,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`gg web`: the open commit's DESCRIPTION under its date, the full message
+  behind a button, and a message window sized to its text.** The file-list
+  header now draws the first three lines of the commit's description (the
+  message minus its subject, git's own split) under the `date · author` line;
+  when the three-line clamp hides more, a header-wide **show full message…**
+  button opens the whole message in the reword prompt's window, read-only (no
+  ok, `close`/esc only, ctrl+enter does nothing); its **edit…** swaps the
+  viewer for "edit commit message…" over the same text, under the commit
+  menu's gate (single-parent commits with a feed row). Right-clicking the
+  button opens no menu. An elided title shows itself
+  in full as a tooltip on hover — only when it actually had to be elided. The
+  multi-line prompt (the viewer AND "edit commit message…") now takes the shape
+  of its text: as wide as the longest line (560px…90vw) and as tall as its
+  lines, wrapping counted, within what the viewport leaves; the one-line
+  prompts keep their defaults. `/api/commit/{sha}` carries `message`, the same
+  text `/api/commit-message` serves, so opening a commit stays one round trip.
+
 - **`gg web`: the sidebar's **previews** section moved up, to right after
   **worktrees**.** A merge preview is something you steer with, like branches,
   remotes and worktrees — not a reference list to scroll past tags, stashes,

@@ -2,6 +2,9 @@ package web
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -74,5 +77,40 @@ func TestCommitFilesEndpointStillServesFilesWithoutADate(t *testing.T) {
 	}
 	if len(got.Files) != 1 || got.Files[0].Path != "f.txt" {
 		t.Fatalf("files = %+v, want [{f.txt}] — the date must not displace the payload", got.Files)
+	}
+}
+
+// The file-list header draws the first lines of the commit's DESCRIPTION under
+// the date, and its "show full message…" button opens the whole message — so
+// the endpoint that opens a commit carries the message itself. One source for
+// the feed-row open and the by-hash open, and the same text the reword prompt
+// prefills with: /api/commit-message is the reference, both must agree.
+func TestCommitFilesEndpointCarriesTheFullMessage(t *testing.T) {
+	t.Parallel()
+	dir := newRepoDir(t, 1)
+	if err := os.WriteFile(filepath.Join(dir, "g.txt"), []byte("g\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "subject line", "-m", "first body paragraph\n\nsecond body paragraph")
+	sha := gitRun(t, dir, "rev-parse", "HEAD")
+	ts := serve(t, New(domain.Open(dir)))
+	var got struct {
+		Message string `json:"message"`
+	}
+	if code := getJSON(t, ts, "/api/commit/"+sha, &got); code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", code)
+	}
+	var ref struct {
+		Message string `json:"message"`
+	}
+	if code := getJSON(t, ts, "/api/commit-message?rev="+sha, &ref); code != http.StatusOK {
+		t.Fatalf("/api/commit-message status = %d, want 200", code)
+	}
+	if ref.Message == "" || !strings.Contains(ref.Message, "second body paragraph") {
+		t.Fatalf("/api/commit-message = %q, want the full message", ref.Message)
+	}
+	if got.Message != ref.Message {
+		t.Errorf("commit endpoint message = %q, /api/commit-message = %q; they must agree", got.Message, ref.Message)
 	}
 }

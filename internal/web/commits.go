@@ -294,6 +294,13 @@ func (s *Server) handleCommitFiles(w http.ResponseWriter, r *http.Request) {
 		body["time"] = meta.UnixTime
 		body["author"] = meta.Author
 	}
+	// The header also draws the first lines of the commit's description and
+	// offers the whole message behind a button — the same text the reword
+	// prompt prefills with (/api/commit-message), served here so opening a
+	// commit is one round trip. Best-effort like the date.
+	if msg, merr := svc.CommitMessage(r.Context(), sha); merr == nil {
+		body["message"] = msg
+	}
 	writeJSON(w, body)
 }
 
