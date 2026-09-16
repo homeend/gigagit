@@ -177,6 +177,12 @@ let promptExtraCb = null;
 //   body  — the input PLUS the textarea under it (create tag: name + message)
 let promptMode = "line";
 
+// promptReadonly marks a prompt that only SHOWS a text (the full commit
+// message behind the file-list header's button): the textarea is read-only,
+// there is no ok, and the confirm keys do nothing — a read-only prompt that
+// still submitted on ctrl+enter would call an onSubmit nobody passed.
+let promptReadonly = false;
+
 // promptField is the control the prompt's own value comes from: the textarea
 // only when it is the whole prompt.
 function promptField() {
@@ -195,9 +201,15 @@ function promptField() {
 // empty. A dialog whose optional half only appears after you commit to the
 // first is a surprise, not a flow — this is the shape for "one thing, plus
 // something optional about it".
-function openPrompt({ title, value, placeholder, onSubmit, extra, multiline, body }) {
+// readonly: with multiline, show the text without editing it (the commit
+// message VIEWER): no ok button, cancel reads "close", esc is the way out.
+function openPrompt({ title, value, placeholder, onSubmit, extra, multiline, body, readonly }) {
   promptCb = onSubmit;
   promptExtraCb = extra ? extra.run : null;
+  promptReadonly = !!(multiline && readonly);
+  $("prompt-text").readOnly = promptReadonly;
+  $("prompt-ok").classList.toggle("hidden", promptReadonly);
+  $("prompt-cancel").textContent = promptReadonly ? "close" : "cancel";
   const xb = $("prompt-extra");
   xb.classList.toggle("hidden", !extra);
   if (extra) xb.textContent = extra.label;
@@ -211,7 +223,9 @@ function openPrompt({ title, value, placeholder, onSubmit, extra, multiline, bod
   if (body) lbl.textContent = body.label || "";
   // In a multiline prompt enter is a NEWLINE, so the confirm key has to be
   // spelled out — and it is ctrl+enter/ctrl+s, the TUI commit popup's key.
-  $("prompt-hint").textContent = multiline
+  $("prompt-hint").textContent = promptReadonly
+    ? "esc to close"
+    : multiline
     ? "ctrl+enter (or ctrl+s) to confirm · esc to cancel"
     : body
       ? "enter to confirm · tab for the field below · esc to cancel"
@@ -228,10 +242,59 @@ function openPrompt({ title, value, placeholder, onSubmit, extra, multiline, bod
   const field = promptField();
   field.value = value || "";
   field.placeholder = placeholder || "";
+  if (multiline) sizePromptToText(field.value);
+  else resetPromptSize();
   pushLayer("prompt", $("prompt"), { onKey: promptKey });
   field.focus();
-  if (multiline) field.setSelectionRange(field.value.length, field.value.length);
+  if (multiline) field.setSelectionRange(promptReadonly ? 0 : field.value.length, promptReadonly ? 0 : field.value.length);
   else field.select();
+}
+
+
+// --- sizing the message box to its text ---
+// A whole commit message is edited (or read) in the textarea, and a fixed
+// eight rows at 560px means scrolling a body that would fit the screen twice
+// over, or a wall of empty box under a two-line message. So the box takes the
+// shape of the text: as wide as its longest line and as tall as its lines,
+// wrapped lines counted, within what the viewport leaves once the box's own
+// chrome and its 20vh top margin are paid for. The one-line prompt keeps the
+// defaults — a name is a name.
+const PROMPT_MIN_ROWS = 8;
+const PROMPT_BASE_WIDTH = 560;
+
+function sizePromptToText(text) {
+  const ta = $("prompt-text");
+  const box = $("prompt-box");
+  const cs = getComputedStyle(ta);
+  const font = cs.font || `${cs.fontSize} ${cs.fontFamily}`;
+  const lineH = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2 || 16;
+  const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + 2; // + the border
+  const ctx = document.createElement("canvas").getContext("2d");
+  ctx.font = font;
+  const lines = String(text || "").split("\n");
+  let longest = 0;
+  for (const l of lines) longest = Math.max(longest, ctx.measureText(l).width);
+  // Width: the longest line plus the textarea's padding and the box's 14px
+  // side margins — never narrower than the default, never past 90vw.
+  const margins = 2 * 14;
+  const maxW = Math.floor(window.innerWidth * 0.9);
+  const wantW = Math.ceil(longest + padX + margins + 8); // + a little air past the last glyph
+  const boxW = Math.max(PROMPT_BASE_WIDTH, Math.min(maxW, wantW));
+  box.style.maxWidth = boxW + "px";
+  // Height: every line, plus what wrapping at the chosen width adds, plus one
+  // spare row to type into — within the room under the 20vh margin once the
+  // title and the action row (~100px together) are taken.
+  const innerW = Math.max(1, boxW - margins - padX);
+  let rows = 0;
+  for (const l of lines) rows += Math.max(1, Math.ceil(ctx.measureText(l).width / innerW));
+  rows += promptReadonly ? 0 : 1;
+  const maxRows = Math.max(PROMPT_MIN_ROWS, Math.floor((window.innerHeight * 0.76 - 100) / lineH));
+  ta.rows = Math.max(PROMPT_MIN_ROWS, Math.min(maxRows, rows));
+}
+
+function resetPromptSize() {
+  $("prompt-text").rows = PROMPT_MIN_ROWS;
+  $("prompt-box").style.maxWidth = "";
 }
 
 
@@ -246,6 +309,11 @@ function closePrompt() {
   $("prompt-text").blur();
   // back to the one-line default, so the next prompt starts from a known shape
   promptMode = "line";
+  promptReadonly = false;
+  $("prompt-text").readOnly = false;
+  $("prompt-ok").classList.remove("hidden");
+  $("prompt-cancel").textContent = "cancel";
+  resetPromptSize();
   $("prompt-text").classList.add("hidden");
   $("prompt-body-label").classList.add("hidden");
   $("prompt-input").classList.remove("hidden");
@@ -254,6 +322,7 @@ function closePrompt() {
 
 
 function submitPrompt() {
+  if (promptReadonly) return; // nothing to submit from a viewer
   const v = promptField().value.trim();
   if (!v) return; // nothing to submit; leave the prompt open
   // The body is optional BY DESIGN: empty is a meaningful answer (no

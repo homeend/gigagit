@@ -1,7 +1,7 @@
 // files.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, attnKey, charWidth, elidePath, esc, getJSON, postJSON, runOnce, runes, state } from "./core.js";
-import { copyText, openPrompt, showCtxMenu } from "./layers.js";
+import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
 import { extraRows, registerHelp } from "./menus.js";
 import { linkFor } from "./links.js";
@@ -10,7 +10,7 @@ import { nextSortMode, setSortMode, sortChipHTML } from "./sortlist.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { rev } from "./review.js";
-import { renderCommits } from "./commits.js";
+import { renderCommits, rewordPrompt } from "./commits.js";
 import { focusPane, moveCursor } from "./keys.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
@@ -80,6 +80,7 @@ function enterFilesStage() {
   state.lastDiff = null;
   state.diffCtx = null;
   setFilesMeta(""); // every stage starts without a date; only a commit open sets one
+  setFilesDesc(""); // …and without a description
   $("files-title").dataset.sha = ""; // …and without a commit id; see setCommitTitle
   $("files-title").dataset.subject = "";
   $("files-title").dataset.short = "";
@@ -195,6 +196,83 @@ function setFilesMeta(text, parts) {
 }
 
 
+// setFilesDesc draws (or hides) the header's third block: the first lines of
+// the commit's description, under the date, clamped to three lines by CSS. The
+// open commit's full message rides on the element so the button under it can
+// show the whole thing — the TUI's commit-message popup — without a second
+// round trip. Called with "" by enterFilesStage, so a stage with no commit (or
+// a commit with no description) draws no block, and no button either.
+function setFilesDesc(message) {
+  const el = $("files-desc");
+  const desc = commitBody(message);
+  el.textContent = desc;
+  el.dataset.message = desc ? message : "";
+  el.classList.toggle("hidden", !desc);
+  updateFilesDescMore();
+}
+
+
+// The "show full message…" button exists only while the clamp is actually
+// hiding something: a three-line description is on screen in full, and a
+// button that opens a window showing exactly what is already there is noise.
+// Whether the clamp bites depends on the pane's width (a narrow files column
+// wraps more), so the check re-runs whenever the block's size changes.
+function updateFilesDescMore() {
+  const el = $("files-desc");
+  const clipped = !!el.dataset.message && el.scrollHeight > el.clientHeight + 1;
+  $("files-desc-more").classList.toggle("hidden", !clipped);
+}
+new ResizeObserver(updateFilesDescMore).observe($("files-desc"));
+
+
+// The full message opens in the reword prompt's window, read-only: the same
+// box, the same wrapping, sized to the text — "same as edit, without the
+// edit". Nothing to submit, so esc (or close) is the way out — or edit…,
+// which swaps the viewer for the reword prompt over the same text, offered
+// under the commit menu's own gate (one parent: the engine refuses to reword
+// a merge, and the root is not on a rewritable range). A commit with no feed
+// row (opened by hash) has no parent count to check, so no edit… either.
+$("files-desc-more").addEventListener("click", () => {
+  const message = $("files-desc").dataset.message;
+  if (!message) return;
+  const title = $("files-title");
+  const hash = title.dataset.sha;
+  const short = title.dataset.short || (hash || "").slice(0, 9);
+  const row = (state.rows || []).find((r) => r.hash === hash);
+  const extra = row && row.parents === 1
+    ? { label: "edit…", run: () => { closePrompt(); rewordPrompt(hash, short, message); } }
+    : undefined;
+  openPrompt({ title: "Message of " + short + ":", value: message, multiline: true, readonly: true, extra });
+});
+// The button is one action, not a place: right-clicking it offers neither the
+// header's copy menu (it sits inside the header) nor the browser's own.
+$("files-desc-more").addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+});
+
+
+registerHelp({
+  key: "commit header",
+  html:
+    "an open commit's header shows its id and title (hover an elided title to read it whole), the " +
+    "<b>date · author</b> line, and the first three lines of its description; <b>show full message…</b> " +
+    "under them opens the whole message read-only (esc closes; <b>edit…</b> there swaps it for the reword " +
+    "prompt). Right-click the header to copy the id, " +
+    "title, date or author",
+});
+
+
+// A title the header had to elide is readable in full on hover — but only
+// then: a tooltip that repeats a title already on screen in full is noise.
+// Checked at hover time rather than at render time, because whether the title
+// fits changes with every pane resize.
+$("files-title").addEventListener("mouseenter", (e) => {
+  const el = e.currentTarget;
+  el.title = el.dataset.subject && el.scrollWidth > el.clientWidth ? el.dataset.subject : "";
+});
+
+
 // --- the file-list header's commit id ---
 //
 // The header of an open commit is the one place its id is on screen, so it is
@@ -284,6 +362,23 @@ function commitMetaParts(body) {
   const p = (n) => String(n).padStart(2, "0");
   const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   return { date, author: body.author || "" };
+}
+
+
+// commitBody is the commit's DESCRIPTION: the full message minus its subject,
+// split by git's own rule — the subject runs to the first blank line, the
+// description is everything after it. "" when there is none. Trailing blank
+// lines go (git leaves one after the message); inner ones stay, they are the
+// paragraph breaks. Pure, and pinned by commitbodyjs_test.go: a wrong split
+// shows the subject twice or eats the first paragraph.
+function commitBody(message) {
+  const lines = String(message || "").replace(/\r\n?/g, "\n").split("\n");
+  let i = lines.findIndex((l) => l.trim() === "");
+  if (i < 0) return "";
+  while (i < lines.length && lines[i].trim() === "") i++;
+  let j = lines.length;
+  while (j > i && lines[j - 1].trim() === "") j--;
+  return lines.slice(i, j).join("\n");
 }
 // --- end commit meta line ---
 
@@ -2333,4 +2428,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, setCommitTitle, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleNotesAgent, updateDiffNav };
