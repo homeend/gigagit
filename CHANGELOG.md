@@ -8,6 +8,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **In-view text search in the four readers.** The diff view, blame, the
+  View-file preview and the hunk picker share one search: `/` searches
+  forward, `@` backward, both incrementally from the cursor as you type;
+  `enter` keeps the query, `esc` cancels it (and a second `esc` closes the
+  view); `]`/`[` step to the next/previous hit, wrapping around; `n`/`p` keep
+  their change/region meaning. Hits paint like word differences with the
+  current one underlined, the header shows `/foo  3/12`, the cursor moves onto
+  the hit and scroll mode pans to its column. One shared history ring for all
+  four, recalled with `alt+↑`/`alt+↓` like every other gg search field.
+  Case-insensitive substring only — no regex, no whole-word; the browser UI
+  keeps its own find.
+
 - **`gg open --web <link>` shows a link in the browser.** A live `gg web`
   page in the link's checkout is steered (the page alone — a TUI live beside
   it is left where it is, unlike plain `gg open`, which reaches both);

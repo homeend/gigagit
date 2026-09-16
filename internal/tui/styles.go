@@ -52,6 +52,7 @@ type styles struct {
 	diffGutter     lipgloss.Style
 	diffFold       lipgloss.Style
 	diffEmph       lipgloss.Style
+	searchCur      lipgloss.Style
 	diffCursorRow  lipgloss.Style
 	diffCursorNo   lipgloss.Style
 	diffAddCursor  lipgloss.Style
@@ -142,6 +143,12 @@ func buildStyles(th theme.Theme) *styles {
 	s.diffGutter = ns().Foreground(dim)
 	s.diffFold = ns().Foreground(dim)
 	s.diffEmph = ns().Bold(true).Foreground(bright)
+	// The in-view search's CURRENT hit: word emphasis plus an underline. No new
+	// theme role (spec §4.3 asks for "word emphasis, the current hit
+	// brighter"): underline is the one attribute that reads under the Terminal
+	// theme, where bright is empty and diffEmph is bold-only, AND on the
+	// reverse-video cursor row the current hit always lands on.
+	s.searchCur = s.diffEmph.Underline(true)
 	s.diffCursorRow = ns().Background(pick(th.CursorRowBg, legacy.CursorRowBg))
 	s.diffCursorNo = ns().Bold(true).Foreground(bright)
 	s.diffAddCursor = ns().Background(pick(th.DiffAddCursorBg, legacy.DiffAddCursorBg))

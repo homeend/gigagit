@@ -14,7 +14,7 @@ func TestSanitizeSpansMapsThroughTabExpansion(t *testing.T) {
 	if string(disp) != "    x" {
 		t.Fatalf("disp = %q, want %q", string(disp), "    x")
 	}
-	want := []bool{false, false, false, false, true}
+	want := []emphLevel{emphNone, emphNone, emphNone, emphNone, emphWord}
 	for i := range want {
 		if emph[i] != want[i] {
 			t.Fatalf("emph = %v, want %v", emph, want)

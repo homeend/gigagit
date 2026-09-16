@@ -29,7 +29,16 @@ type blameView struct {
 	loading bool
 	err     error
 	tag     string // gates stale loads
+	// search is the in-view text search (spec §4.3); san caches every line's
+	// display text (what the window paints) so a keystroke does not
+	// re-sanitize a 40k-line file, and searchOrig is what esc restores.
+	search     textSearch
+	searchOrig blameOrigin
+	san        []string
 }
+
+// blameOrigin is the view state a live search restores when esc cancels it.
+type blameOrigin struct{ sel, hscroll int }
 
 // blameBlock is a maximal run of consecutive lines sharing a commit. hash ""
 // means the run is uncommitted.
@@ -65,6 +74,112 @@ func blockAt(blocks []blameBlock, line int) (blameBlock, bool) {
 		}
 	}
 	return blameBlock{}, false
+}
+
+// ensureSan builds the per-line display strings the search matches. They are
+// exactly what the window shows: sanitizeCell's disp for a lexed file is the
+// same expansion sanitizeLine performs, so one cache serves both paths.
+func (b *blameView) ensureSan() {
+	if len(b.san) == len(b.lines) {
+		return
+	}
+	b.san = make([]string, len(b.lines))
+	for i, ln := range b.lines {
+		b.san[i] = sanitizeLine(ln.Content)
+	}
+}
+
+func (b *blameView) searchText(i int) string {
+	b.ensureSan()
+	if i < 0 || i >= len(b.san) {
+		return ""
+	}
+	return b.san[i]
+}
+
+// searchLines is the code, and only the code: the commit gutter lives in
+// winRow.prefix, never in text, so "code lines only" (spec §4.3) is automatic.
+func (b *blameView) searchLines() []searchLine {
+	b.ensureSan()
+	out := make([]searchLine, len(b.san))
+	for i, t := range b.san {
+		out[i] = searchLine{row: i, side: 0, text: t}
+	}
+	return out
+}
+
+// searchPos is where ] and [ measure from — the current hit while the cursor is
+// still on its line, else the head of the cursor line.
+func (b *blameView) searchPos() searchPos {
+	if b.search.cur >= 0 && b.search.cur < len(b.search.hits) {
+		if h := b.search.hits[b.search.cur]; h.row == b.sel {
+			return searchPos{row: h.row, side: h.side, col: h.start}
+		}
+	}
+	return searchPos{row: b.sel, side: 0, col: -1}
+}
+
+// goToHit selects hits[i]: the line cursor moves onto it (the render anchors
+// its window on sel, so the scroll follows) and scroll mode pans to its column.
+func (b *blameView) goToHit(m Model, i int) {
+	if i < 0 || i >= len(b.search.hits) {
+		return
+	}
+	h := b.search.hits[i]
+	b.search.cur = i
+	b.sel = h.row
+	if b.mode != modeScroll {
+		return
+	}
+	w, _ := m.overlayDims()
+	gw := blameGutterW
+	if gw > w-10 {
+		gw = w - 10
+	}
+	if gw < 0 {
+		gw = 0
+	}
+	cs, ce := hitCols(b.searchText(h.row), h)
+	b.hscroll = panFor(b.hscroll, w-(gw+1), cs, ce) // prefixW = gw+1
+}
+
+// blameSearchKey gives the in-view search first refusal on a key (see
+// diffSearchKey; the shape is deliberately identical across the four hosts).
+func (m Model) blameSearchKey(b *blameView, msg tea.KeyMsg) (Model, tea.Cmd, bool) {
+	if b.search.typing {
+		nm, cmd, ev := m.searchTypingKey(&b.search, msg)
+		m = nm
+		switch ev {
+		case searchChanged, searchCommitted:
+			b.search.refindFrom(b.searchLines(), b.search.origin)
+			if b.search.cur >= 0 {
+				b.goToHit(m, b.search.cur)
+			} else {
+				b.sel, b.hscroll = b.searchOrig.sel, b.searchOrig.hscroll
+			}
+		case searchCancelled:
+			b.sel, b.hscroll = b.searchOrig.sel, b.searchOrig.hscroll
+		}
+		return m, cmd, true
+	}
+	switch searchCommandKey(&b.search, msg) {
+	case searchOpenFwd, searchOpenBack:
+		b.searchOrig = blameOrigin{sel: b.sel, hscroll: b.hscroll}
+		b.search.open(msg.String() == "@", b.searchPos())
+		return m.recallReset(), nil, true
+	case searchNext:
+		b.goToHit(m, stepHit(b.search.hits, b.searchPos(), 1))
+		return m, nil, true
+	case searchPrev:
+		b.goToHit(m, stepHit(b.search.hits, b.searchPos(), -1))
+		return m, nil, true
+	case searchCleared:
+		b.search.clear()
+		return m, nil, true
+	case searchIgnored:
+		return m, nil, true
+	}
+	return m, nil, false
 }
 
 // blameAge is a compact relative age (now/5m/3h/2d/3mo/2y) for the gutter.
@@ -159,8 +274,16 @@ func (b *blameView) render(m Model, _ string) string {
 	w, scrH := m.overlayDims()
 	body := m.blameBodyRows()
 
-	header := truncate(i18n.T("blame: %s", b.ctx.path+revSuffix(b.ctx.rev)), w)
-	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [enter] history  [e] editor  [esc/b] back"), w)
+	title := i18n.T("blame: %s", b.ctx.path+revSuffix(b.ctx.rev))
+	header := truncate(title, w)
+	if bd := b.search.badge(); bd != "" { // right-aligned, like the diff's
+		avail := w - lipgloss.Width(bd) - 2
+		if avail < 1 {
+			avail = 1
+		}
+		header = truncate(padRight(truncate(title, avail), avail)+"  "+bd, w)
+	}
+	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [/] find  [enter] history  [e] editor  [esc/b] back"), w)
 
 	gw := blameGutterW
 	if gw > w-10 {
@@ -197,15 +320,24 @@ func (b *blameView) render(m Model, _ string) string {
 		if i == b.sel {
 			st = s.selectedRow
 		}
+		// Search hits ride on winRow.emph — a separate mask from cls, so an
+		// unlexed file still paints them, and they survive the selected row's
+		// reverse video (which is exactly where the current hit lands).
+		var emph []emphLevel
+		if b.search.active() {
+			if hs := b.search.hitsOn(i, 0); len(hs) > 0 {
+				emph = overlayHits(nil, 0, len([]rune(b.searchText(i))), hs)
+			}
+		}
 		if b.tok == nil { // no lexer / colouring off: the plain (pre-syntax) path
-			wr[i-lo] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), style: st}
+			wr[i-lo] = winRow{prefix: gutter + "│", text: sanitizeLine(ln.Content), emph: emph, style: st}
 			continue
 		}
 		// sanitizeCell expands exactly like sanitizeLine but also returns the
 		// per-display-rune class mask, so tabs and control glyphs keep the
 		// colours aligned with the columns they land on.
 		disp, _, cls := sanitizeCell(ln.Content, nil, tokAt(b.tok, i+1))
-		wr[i-lo] = winRow{prefix: gutter + "│", text: string(disp), cls: cls, style: st}
+		wr[i-lo] = winRow{prefix: gutter + "│", text: string(disp), cls: cls, emph: emph, style: st}
 	}
 
 	win := renderWindow(wr, winOpts{w: w, h: body, mode: b.mode, anchor: b.sel - lo, hscroll: b.hscroll, prefixW: gw + 1})
@@ -242,6 +374,11 @@ func blameGutterText(ln model.BlameLine, now time.Time) string {
 func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
+	}
+	// The search owns / @ ] [ and — only while a query is live — esc. b is NOT
+	// two-stage: it always leaves (never trap the user behind a search).
+	if nm, cmd, handled := m.blameSearchKey(b, msg); handled {
+		return nm, cmd
 	}
 	switch msg.String() {
 	case ".":

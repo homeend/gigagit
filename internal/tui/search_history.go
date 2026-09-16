@@ -14,13 +14,16 @@ import (
 // recallVisibleRows caps how many history entries the dropdown shows at once.
 const recallVisibleRows = 10
 
-// Search-history ring scopes. The panel filter and @ highlight share scopePanel.
+// Search-history ring scopes. The panel filter and @ highlight share scopePanel;
+// the four in-view readers (diff, blame, file preview, hunk picker) share
+// scopeInView, so a phrase typed in one is recallable in the next (spec §4.3).
 const (
 	scopePanel    = "panel"
 	scopeFiletree = "filetree"
 	scopeBookmark = "bookmark"
 	scopeShelf    = "shelf"
 	scopeShellCmd = "shellcmd"
+	scopeInView   = "inview"
 )
 
 // searchHistLoadedMsg carries the rings read once at startup.

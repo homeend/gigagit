@@ -47,7 +47,7 @@ func helpContent() []contentLine {
 		r("shift+←/→", i18n.T("scroll display mode: pan the focused window horizontally")),
 		r("/", i18n.T("filter the focused panel")),
 		r("ctrl+r", i18n.T("clear the focused window's filtering — its / filter, or on the Commits panel the @ highlight and the \\ commit filter (other windows' filters are left untouched)")),
-		r("alt+↑/↓", i18n.T("recall previous searches (history dropdown) while typing in the / filter, @ highlight, or the bookmark/shelf/files-tree search")),
+		r("alt+↑/↓", i18n.T("recall previous searches (history dropdown) while typing in the / filter, @ highlight, the bookmark/shelf/files-tree search, or the in-view search (/ @) of the diff, blame, file preview and hunk picker")),
 		r("tab/shift+tab", i18n.T("cycle panel focus forward / backward")),
 		r("←/→", i18n.T("focus the left column / the Commits panel")),
 		r("ctrl+←/→", i18n.T("cycle the focused tab slot: top (Branches / Remotes / Worktrees), middle (Files / Tags), or bottom (Staged / Reflog)")),
@@ -159,9 +159,11 @@ func helpContent() []contentLine {
 		r("", i18n.T("while the output pane is focused: ↑/↓ scroll the result end to end; selection keys wait until Tab returns focus to the grid; esc/ctrl+s keep cancel/apply")),
 		r("ctrl+t", i18n.T("zoom the focused half (grid or output) to the whole body — Tab swaps which half is zoomed, ctrl+t or esc restores the split")),
 		r("n / p", i18n.T("jump to the next / previous region (wraps around)")),
+		r("/ @", i18n.T("find text forward / backward (enter keeps it, esc cancels)")),
+		r("] [", i18n.T("next / previous hit (wraps around)")),
 		r("enter", i18n.T("jump to the next region still undecided (wraps around); in the stage/unstage pickers, the next hunk")),
 		r("ctrl+s", i18n.T("apply when every region is resolved")),
-		r("esc", i18n.T("cancel (close without resolving)")),
+		r("esc", i18n.T("clear the search, then cancel (close without resolving)")),
 		h(i18n.T("Commits panel")),
 		r("", i18n.T("shows commits from ALL local branches by default, in date order, with a single-line commit graph (natural order only; hidden while filtering/sorting); header shows the mode — Commits (all) / Commits (solo: <branch>)")),
 		r("", i18n.T("the left column is the branch the commit is on: BRIGHT *current/branch on that branch's tip, grayed otherwise; long names trim with … (select to reveal the full name); the commit id shows in the status bar. Filtering still matches the full id and full branch name")),
@@ -237,7 +239,7 @@ func helpContent() []contentLine {
 		r("/", i18n.T("search the focused side: file paths (tree) or the commit list (commits side); enter keeps it, esc cancels")),
 		r("enter", i18n.T("tree side: diff of the selected file (changed-files mode vs parent; all-files mode vs the working tree). Commit-list side: drill in — move focus to the file tree")),
 		r("a", i18n.T("toggle all files: every file in the commit's tree (as if checked out) vs only the files it changed")),
-		r(".", i18n.T("tree side: View file — show the file's content at this commit (no diff) in the right pane ([↑/↓] scroll, [ctrl+w] view mode, [esc] close, [←] back to the tree); Open in external editor — open that content in $VISUAL/$EDITOR, read-only")),
+		r(".", i18n.T("tree side: View file — show the file's content at this commit (no diff) in the right pane ([↑/↓] scroll, [ctrl+w] view mode, / or @ find text forward / backward and ] [ step the hits, [esc] clears the search then closes, [←] back to the tree); Open in external editor — open that content in $VISUAL/$EDITOR, read-only")),
 		r("i", i18n.T("view the underlying commit's full message in a popup over the tree (esc returns; commit views only, not stash/compare)")),
 		r("h", i18n.T("history of the selected file (tree side)")),
 		r("b", i18n.T("blame of the selected file (tree side)")),
@@ -274,13 +276,15 @@ func helpContent() []contentLine {
 		r("N/P", i18n.T("from the last / first change, press twice to step to the next / previous file in the list (a bottom-left cue advertises it; a notice names the new file)")),
 		r("home/end", i18n.T("jump to top / bottom of the file (the cursor lands on the first / last line); at the edge a bottom-left cue appears and pressing it again steps to the previous / next file in the list (a notice names the new file)")),
 		r("f", i18n.T("toggle full file ↔ changed lines only")),
+		r("/ @", i18n.T("find text forward / backward (enter keeps it, esc cancels)")),
+		r("] [", i18n.T("next / previous hit (wraps around)")),
 		r("?", i18n.T("this help, opened with the diff window's keys listed first (the footer truncates on a narrow terminal)")),
 		r("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 		r("← → 0", i18n.T("scroll mode: pan left / right / reset")),
 		r("h", i18n.T("history of this file at the shown revision")),
 		r("b", i18n.T("blame of this file at the shown revision")),
 		r(".", i18n.T("export this file's diff as patch; also Cursor marker, Open in editor at line and the three Align cursor line rows")),
-		r("esc", i18n.T("close")),
+		r("esc", i18n.T("clear the search, then close")),
 		r("ctrl+c", i18n.T("quit")),
 		h(i18n.T("History view (h)")),
 		r("↑/k ↓/j", i18n.T("move between commits (the diff updates on the right)")),
@@ -294,7 +298,9 @@ func helpContent() []contentLine {
 		r("pgup/pgdn", i18n.T("move the cursor one screen")),
 		r("enter", i18n.T("file history at the commit under the cursor")),
 		r("e", i18n.T("open the blamed file (at this revision) in your external editor (read-only)")),
-		r("esc/b", i18n.T("back")),
+		r("/ @", i18n.T("find text forward / backward (enter keeps it, esc cancels)")),
+		r("] [", i18n.T("next / previous hit (wraps around)")),
+		r("esc/b", i18n.T("esc clears the search first, then goes back; b always goes back")),
 		r("ctrl+c", i18n.T("quit")),
 		h(i18n.T("Repo switcher (R)")),
 		r("enter", i18n.T("switch to the selected repository")),
@@ -380,8 +386,8 @@ func helpFor(section, footerHint string) []contentLine {
 	return append(lines, all[end:]...)
 }
 
-// hintChips splits a packed footer hint ("[↑↓] scroll  [j/k] line …") into
-// (key, label) pairs; text before the first bracket is dropped.
+// hintChips splits a packed footer hint ("[↑↓] line  [pgup/pgdn] page  [/]
+// find …") into (key, label) pairs; text before the first bracket is dropped.
 func hintChips(hint string) [][2]string {
 	var out [][2]string
 	for _, part := range strings.Split(hint, "  ") {

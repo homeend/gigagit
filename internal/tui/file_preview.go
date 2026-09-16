@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -290,6 +291,60 @@ func previewClamp(top, n, rowsCap int, mode dispMode) int {
 	return top
 }
 
+// filePreviewInnerW mirrors renderFilePreview's innerW (border 2 + horizontal
+// padding 2), so the search's horizontal pan agrees with what is rendered.
+func (m Model) filePreviewInnerW() int {
+	n := m.layout().rightW - 4
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// previewSearchLines is every preview line's display text. contentLine.text is
+// already sanitized (fileContentLines drops control runes and expands tabs), so
+// a hit's rune offsets index the class mask and the window slices directly.
+func previewSearchLines(p *contentPopup) []searchLine {
+	out := make([]searchLine, len(p.lines))
+	for i, l := range p.lines {
+		out[i] = searchLine{row: i, side: 0, text: l.text}
+	}
+	return out
+}
+
+// searchPos is where ] and [ measure from. The preview has no cursor, so before
+// there is a current hit it is the top visible line — the first ] then finds the
+// first hit on screen rather than jumping back to the top of the file.
+func (p *contentPopup) searchPos() searchPos {
+	if p.search.cur >= 0 && p.search.cur < len(p.search.hits) {
+		h := p.search.hits[p.search.cur]
+		return searchPos{row: h.row, side: h.side, col: h.start}
+	}
+	return searchPos{row: p.sel, side: 0, col: -1}
+}
+
+// snapHit scrolls the pager so the current hit is visible, moving as little as
+// possible: a hit above the window becomes the top line, one below it becomes
+// the last. There is no cursor to place — the current hit's own colouring is
+// the marker. In scroll mode the columns are panned to as well.
+func (p *contentPopup) snapHit(rowsCap, innerW int) {
+	if p.search.cur < 0 || p.search.cur >= len(p.search.hits) {
+		return
+	}
+	h := p.search.hits[p.search.cur]
+	switch {
+	case h.row < p.sel:
+		p.sel = h.row
+	case h.row >= p.sel+rowsCap:
+		p.sel = h.row - rowsCap + 1
+	}
+	p.sel = previewClamp(p.sel, len(p.lines), rowsCap, p.mode)
+	if p.mode == modeScroll && h.row < len(p.lines) {
+		cs, ce := hitCols(p.lines[h.row].text, h)
+		p.hscroll = panFor(p.hscroll, innerW, cs, ce)
+	}
+}
+
 // renderFilePreview draws the file content as the right column (replacing the
 // Commits panel) while a preview is open. Window-then-build (a file can be large);
 // the border follows focus.
@@ -322,10 +377,23 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	wr := make([]winRow, len(window))
 	for i, l := range window {
 		wr[i] = winRow{text: l.text, cls: l.cls}
+		if p.search.active() {
+			if hs := p.search.hitsOn(start+i, 0); len(hs) > 0 {
+				wr[i].emph = overlayHits(nil, 0, len([]rune(l.text)), hs)
+			}
+		}
 	}
 
+	title := i18n.T("View %s", p.title)
+	if bd := p.search.badge(); bd != "" { // right-aligned on the title line
+		avail := innerW - lipgloss.Width(bd) - 2
+		if avail < 1 {
+			avail = 1
+		}
+		title = padRight(truncate(title, avail), avail) + "  " + bd
+	}
 	lines := make([]string, 0, contentH)
-	lines = append(lines, padRight(truncate(i18n.T("View %s", p.title), innerW), innerW))
+	lines = append(lines, padRight(truncate(title, innerW), innerW))
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate(i18n.T("  (empty)"), innerW), innerW))
 	} else {
@@ -335,7 +403,7 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := i18n.T("%d/%d  [↑/↓] scroll  [ctrl+w] view  [esc] close", start+1, len(vis))
+	hint := i18n.T("%d/%d  [↑/↓] scroll  [ctrl+w] view  [/] find  [esc] close", start+1, len(vis))
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 
 	style := st().bluredPanel

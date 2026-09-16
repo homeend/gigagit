@@ -15,13 +15,25 @@ import (
 // same entry point by filling emph (spec §4.3).
 type runMask struct {
 	cls  []syntax.Class
-	emph []bool
+	emph []emphLevel
 }
 
 // empty reports the plain path (no runs to paint).
 func (m runMask) empty() bool { return len(m.cls) == 0 && len(m.emph) == 0 }
 
-// slice returns n runes of the mask starting at off, padding with Plain/false
+// hasEmph reports whether any rune actually carries emphasis. A mask of all
+// emphNone is indistinguishable from none at all, and the reverse-video path
+// uses that to keep an un-searched cursor row byte-identical to the plain one.
+func (m runMask) hasEmph() bool {
+	for _, e := range m.emph {
+		if e != emphNone {
+			return true
+		}
+	}
+	return false
+}
+
+// slice returns n runes of the mask starting at off, padding with Plain/emphNone
 // where a side runs out (a cutoff ellipsis, a clamped token end) and reading
 // an out-of-range window as fully plain. A masked cell always yields n entries
 // on BOTH sides so styledRuns can index either without a bounds check.
@@ -36,7 +48,7 @@ func (m runMask) slice(off, n int) runMask {
 	if off < 0 {
 		off = 0
 	}
-	out := runMask{cls: make([]syntax.Class, n), emph: make([]bool, n)}
+	out := runMask{cls: make([]syntax.Class, n), emph: make([]emphLevel, n)}
 	for i := 0; i < n; i++ {
 		j := off + i
 		if j < len(m.cls) {
@@ -57,7 +69,7 @@ func (m runMask) pad(n int) runMask {
 	}
 	return runMask{
 		cls:  append(make([]syntax.Class, n), m.cls...),
-		emph: append(make([]bool, n), m.emph...),
+		emph: append(make([]emphLevel, n), m.emph...),
 	}
 }
 
@@ -70,9 +82,11 @@ func (m runMask) pad(n int) runMask {
 // len(mask.cls) == len([]rune(body))). The layout slices it alongside the body
 // in all three modes, so a coloured run lands on the right columns after a
 // cutoff, a horizontal scroll or a wrap. An empty mask is the byte-identical
-// plain path, and a cell whose style REVERSES video drops the mask — reverse
-// swaps foreground and background, so per-token colours would paint per-token
-// backgrounds (the same ruling winRow.cls follows).
+// plain path, and a cell whose style REVERSES video drops the CLASS half of
+// the mask — reverse swaps foreground and background, so per-token colours
+// would paint per-token backgrounds (the same ruling winRow.cls follows) —
+// while the emphasis half survives, because bold/underline read either way
+// and the in-view search's current hit sits on the cursor cell.
 type winCell struct {
 	gutter string
 	body   string
@@ -156,7 +170,7 @@ func cellPieces(c *winCell, width int, mode dispMode, hscroll int) []cellPiece {
 		// did not earn — window.go does exactly this for winRow.cls.
 		if !m.empty() && lipgloss.Width(c.body) > bodyW {
 			m.cls[len(m.cls)-1] = syntax.Plain
-			m.emph[len(m.emph)-1] = false
+			m.emph[len(m.emph)-1] = emphNone
 		}
 		return []cellPiece{{pre: c.gutter, body: body, mask: m}}
 	}
@@ -222,7 +236,18 @@ func pieceOrBlank(ps []cellPiece, k int) cellPiece {
 // the body painted run by run (styledRuns) with the prefix and the trailing
 // padding under style. Mirrors renderWindow's colouredLine.
 func renderPiece(style lipgloss.Style, p cellPiece, w int) string {
-	if p.mask.empty() || style.GetReverse() {
+	if style.GetReverse() {
+		// Reverse swaps foreground and background, so per-token colours would
+		// paint per-token BACKGROUNDS: the class mask drops. Emphasis is bold /
+		// underline, which reads either way — and the search's current hit
+		// lands on exactly this cell, the cursor row (spec §4.3). A mask with
+		// nothing emphasized keeps the byte-identical plain path.
+		if !p.mask.hasEmph() {
+			return styleCell(style, p.pre+p.body, w)
+		}
+		p.mask = runMask{emph: p.mask.emph}
+	}
+	if p.mask.empty() {
 		return styleCell(style, p.pre+p.body, w)
 	}
 	disp := []rune(p.body)

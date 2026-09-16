@@ -55,6 +55,13 @@ type winRow struct {
 	// video (st().selectedRow) also ignores cls — reverse swaps foreground and
 	// background, so per-token colours would paint per-token BACKGROUNDS.
 	cls []syntax.Class
+	// emph is an optional emphasis level per DISPLAY RUNE of text, filled by
+	// the in-view search with its hits (spec §4.3); nil = no emphasis, the path
+	// every non-searching caller takes. It is sliced with the text exactly like
+	// cls, and — unlike cls — it SURVIVES a reverse-video style: bold and
+	// underline still read after the swap, and the current hit is precisely the
+	// row the cursor sits on.
+	emph []emphLevel
 }
 
 // winOpts is everything renderWindow needs besides the rows. anchor is the
@@ -156,39 +163,62 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		// while the gutter and the padding stay under style. nil cls = the plain
 		// path, where text already carries the prefix.
 		cls []syntax.Class
-		pre string
+		// emph rides alongside cls; either one being non-nil takes the painted
+		// path (a blame row with syntax off carries emphasis and no classes).
+		emph []emphLevel
+		pre  string
 	}
 	var dl []dline
 	for ri, r := range rows {
 		var segs []string
 		var segCls [][]syntax.Class // nil unless the row carries a class mask
+		var segEmph [][]emphLevel   // nil unless the row carries emphasis
 		hs := 0
 		// A row whose style reverses video would turn per-token foregrounds into
-		// per-token backgrounds, so it takes the plain path (see winRow.cls).
+		// per-token backgrounds, so the CLASS mask drops (see winRow.cls). The
+		// emphasis mask does not: bold/underline survive the swap, which is how
+		// a search hit stays visible on the selected row (winRow.emph).
 		rcls := r.cls
 		if r.style.GetReverse() {
 			rcls = nil
 		}
+		remph := r.emph
 		switch o.mode {
 		case modeWrap:
 			indent := wrapAlignIndent(r.text, bodyW)
 			segs = wrapHang(r.text, bodyW, indent, 1<<20) // huge cap => clean full wrap, no ellipsis
 			if rcls != nil {
-				segCls = wrapSegCls(r.text, rcls, segs, indent, bodyW)
+				segCls = wrapSegMask(r.text, rcls, segs, indent, bodyW)
+			}
+			if remph != nil {
+				segEmph = wrapSegMask(r.text, remph, segs, indent, bodyW)
 			}
 		case modeScroll:
 			segs = []string{hslice(r.text, o.hscroll, bodyW)}
 			hs = o.hscroll
 			if rcls != nil {
-				segCls = [][]syntax.Class{sliceCls(rcls, hscrollRuneOff(r.text, o.hscroll), len([]rune(segs[0])))}
+				segCls = [][]syntax.Class{sliceMask(rcls, hscrollRuneOff(r.text, o.hscroll), len([]rune(segs[0])))}
+			}
+			if remph != nil {
+				segEmph = [][]emphLevel{sliceMask(remph, hscrollRuneOff(r.text, o.hscroll), len([]rune(segs[0])))}
 			}
 		default:
 			segs = []string{truncate(r.text, bodyW)}
+			if remph != nil {
+				em := sliceMask(remph, 0, len([]rune(segs[0])))
+				// Same ellipsis fix as the class mask below: the last slot
+				// lands on the first DROPPED rune, so a hit that starts right
+				// past the cut would emphasize the synthetic "…".
+				if lipgloss.Width(r.text) > bodyW && len(em) > 0 {
+					em[len(em)-1] = emphNone
+				}
+				segEmph = [][]emphLevel{em}
+			}
 			if rcls != nil {
-				mask := sliceCls(rcls, 0, len([]rune(segs[0])))
+				mask := sliceMask(rcls, 0, len([]rune(segs[0])))
 				// When r.text is wider than bodyW, truncate keeps a prefix and
 				// appends "…" after it — the ellipsis is a synthetic rune, not
-				// part of r.text. sliceCls doesn't know that: it just slices
+				// part of r.text. sliceMask doesn't know that: it just slices
 				// len(segs[0]) classes off the front of rcls, so the mask's
 				// last entry lands on the class of the first DROPPED rune
 				// (the one at index len(kept), i.e. right after the prefix
@@ -202,7 +232,7 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		}
 		if len(segs) == 0 {
 			segs = []string{""}
-			segCls = nil
+			segCls, segEmph = nil, nil
 		}
 		for si, s := range segs {
 			pre := ""
@@ -212,11 +242,11 @@ func renderWindow(rows []winRow, o winOpts) []string {
 					pre = padRight(truncate(r.prefix, pw), pw)
 				}
 			}
-			if segCls == nil {
+			if segCls == nil && segEmph == nil {
 				dl = append(dl, dline{text: pre + s, style: r.style, deco: r.decorate, hs: hs, si: si, row: ri})
 				continue
 			}
-			dl = append(dl, dline{text: s, pre: pre, cls: segCls[si], style: r.style, hs: hs, si: si, row: ri})
+			dl = append(dl, dline{text: s, pre: pre, cls: maskAt(segCls, si), emph: maskAt(segEmph, si), style: r.style, hs: hs, si: si, row: ri})
 		}
 	}
 
@@ -236,8 +266,8 @@ func renderWindow(rows []winRow, o winOpts) []string {
 			out = append(out, padRight("", w))
 			continue
 		}
-		if dl[idx].cls != nil {
-			out = append(out, colouredLine(dl[idx].pre, dl[idx].text, dl[idx].cls, dl[idx].style, w))
+		if dl[idx].cls != nil || dl[idx].emph != nil {
+			out = append(out, colouredLine(dl[idx].pre, dl[idx].text, dl[idx].cls, dl[idx].emph, dl[idx].style, w))
 			continue
 		}
 		line := padRight(dl[idx].text, w)
@@ -251,35 +281,49 @@ func renderWindow(rows []winRow, o winOpts) []string {
 
 // colouredLine renders one display line of a class-masked row: the frozen
 // prefix and the trailing padding under style, the body painted run by run
-// (styledRuns, no word-diff emphasis). An all-Plain mask under the zero style
-// is byte-identical to the plain path — syntaxStyle leaves base alone for
-// Plain, and lipgloss renders an unstyled string unchanged.
-func colouredLine(pre, body string, cls []syntax.Class, style lipgloss.Style, w int) string {
+// (styledRuns, with the search's emphasis mask when it carries one). An
+// all-Plain mask under the zero style is byte-identical to the plain path —
+// syntaxStyle leaves base alone for Plain, and lipgloss renders an unstyled
+// string unchanged.
+func colouredLine(pre, body string, cls []syntax.Class, emph []emphLevel, style lipgloss.Style, w int) string {
 	disp := []rune(body)
-	cls = sliceCls(cls, 0, len(disp)) // defensive: exactly one class per rune
+	// Defensive: exactly one entry per rune on both masks (either may be nil).
+	cls = sliceMask(cls, 0, len(disp))
+	emph = sliceMask(emph, 0, len(disp))
 	var b strings.Builder
 	if pre != "" {
 		b.WriteString(style.Render(pre))
 	}
-	b.WriteString(styledRuns(disp, make([]bool, len(disp)), cls, style))
+	b.WriteString(styledRuns(disp, emph, cls, style))
 	if pad := w - lipgloss.Width(pre) - lipgloss.Width(body); pad > 0 {
 		b.WriteString(style.Render(strings.Repeat(" ", pad)))
 	}
 	return b.String()
 }
 
-// sliceCls returns n classes of cls starting at off, padding with Plain when
-// the mask runs out (a cutoff ellipsis, a clamped token end) and reading an
-// out-of-range window as all-Plain.
-func sliceCls(cls []syntax.Class, off, n int) []syntax.Class {
-	out := make([]syntax.Class, n)
+// sliceMask returns n entries of a per-display-rune mask starting at off,
+// padding with the zero value when the mask runs out (a cutoff ellipsis, a
+// clamped token end) and reading an out-of-range window as all-zero. One helper
+// for both masks the window carries: syntax classes (zero = syntax.Plain) and
+// emphasis levels (zero = emphNone). A nil mask yields n zero entries, which is
+// exactly "plain".
+func sliceMask[T any](m []T, off, n int) []T {
+	out := make([]T, n)
 	if off < 0 {
 		off = 0
 	}
-	for i := 0; i < n && off+i < len(cls); i++ {
-		out[i] = cls[off+i]
+	for i := 0; i < n && off+i < len(m); i++ {
+		out[i] = m[off+i]
 	}
 	return out
+}
+
+// maskAt returns the ith per-segment mask, or nil when the row carries none.
+func maskAt[T any](m [][]T, i int) []T {
+	if i < len(m) {
+		return m[i]
+	}
+	return nil
 }
 
 // hscrollRuneOff is how many leading runes of s the modeScroll slice drops at
@@ -293,19 +337,20 @@ func hscrollRuneOff(s string, off int) int {
 	return len([]rune(s)) - len([]rune(ansi.TruncateLeft(s, off, "")))
 }
 
-// wrapSegCls maps a class mask onto the segments wrapHang produced for text.
-// Every segment is a verbatim rune slice of text (wrapWidth slices runes and
-// never rewrites them), preceded on continuations by indent pad spaces, so the
-// mask is sliced at the running rune offset and the pad is Plain. The layout is
-// verified against text before it is trusted: if the segments do not
-// reconstruct text (a future wrapper that rewrote content), every segment is
-// reported all-Plain and the row renders uncoloured rather than mis-coloured.
-func wrapSegCls(text string, cls []syntax.Class, segs []string, indent, bodyW int) [][]syntax.Class {
+// wrapSegMask maps a per-display-rune mask (syntax classes or emphasis levels)
+// onto the segments wrapHang produced for text. Every segment is a verbatim
+// rune slice of text (wrapWidth slices runes and never rewrites them),
+// preceded on continuations by indent pad spaces, so the mask is sliced at the
+// running rune offset and the pad is the zero value. The layout is verified
+// against text before it is trusted: if the segments do not reconstruct text
+// (a future wrapper that rewrote content), every segment is reported all-zero
+// and the row renders unpainted rather than mis-painted.
+func wrapSegMask[T any](text string, m []T, segs []string, indent, bodyW int) [][]T {
 	if indent > bodyW-1 {
 		indent = bodyW - 1 // wrapHang's own clamp
 	}
-	try := func(pad int) [][]syntax.Class {
-		out := make([][]syntax.Class, len(segs))
+	try := func(pad int) [][]T {
+		out := make([][]T, len(segs))
 		var joined strings.Builder
 		off := 0
 		for i, s := range segs {
@@ -322,8 +367,8 @@ func wrapSegCls(text string, cls []syntax.Class, segs []string, indent, bodyW in
 					return nil
 				}
 			}
-			m := make([]syntax.Class, p)
-			out[i] = append(m, sliceCls(cls, off, len(r)-p)...)
+			pre := make([]T, p)
+			out[i] = append(pre, sliceMask(m, off, len(r)-p)...)
 			joined.WriteString(string(r[p:]))
 			off += len(r) - p
 		}
@@ -340,9 +385,9 @@ func wrapSegCls(text string, cls []syntax.Class, segs []string, indent, bodyW in
 	if out := try(0); out != nil {
 		return out
 	}
-	plain := make([][]syntax.Class, len(segs))
+	plain := make([][]T, len(segs))
 	for i, s := range segs {
-		plain[i] = make([]syntax.Class, len([]rune(s)))
+		plain[i] = make([]T, len([]rune(s)))
 	}
 	return plain
 }

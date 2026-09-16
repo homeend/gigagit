@@ -936,3 +936,54 @@ POST and falls back to the launch; a page that ANSWERS (400/409) is alive and
 exits 1 instead. `openBrowser` honours `$BROWSER` first (a command plus
 arguments, URL appended; `BROWSER=true` for headless checks). `gg open --web`
 runs the server in the foreground until it is stopped.
+
+
+### In-view text search (phase 6, spec §4.3)
+
+`internal/tui/textsearch.go` is the whole leaf: `textSearch` (query, typing,
+direction, `hits`, `cur`, `origin`), a rune-walking case-insensitive matcher,
+at/after (`nearestHit`) and strictly-after (`stepHit`) stepping with wrap, the
+`badge()`, the minimal `panFor`, and the two key handlers every host routes
+through — `searchTypingKey` (history recall FIRST, then esc/enter/backspace/
+space/runes; everything else swallowed) and `searchCommandKey` (`/ @ ] [`, and
+`esc` only while a query is live).
+
+**One index space: display runes.** Every host searches the DISPLAY string it
+paints (`sanitizeLine`/`sanitizeCell`'s disp, `contentLine.text`,
+`sanLine.text`), so a hit's `[start, end)` are already the painter's offsets —
+no raw→display mapping, and `hitCols` converts to display COLUMNS (wide glyphs)
+only for the pan.
+
+**Painting is an overlay, never a mutation.** The per-display-rune `emph` mask
+widened from `[]bool` to `[]emphLevel` (`none | word | hit | current`);
+`overlayHits(emph, off, n, hits)` returns its input untouched when nothing
+intersects (so the no-search render allocates nothing and is byte-identical)
+and otherwise paints a COPY — `textdiff.Row` spans and the picker's `sanLine`
+masks are shared cache values that the output pane and other views read.
+`cellSeg.off` records where a wrapped segment starts, so wrap mode overlays at
+render instead of re-laying-out on every keystroke.
+
+**Reverse video keeps emphasis.** `window.go` and `twocol.go` drop only the
+CLASS mask on a reversed row/cell (reverse would turn per-token foregrounds
+into per-token backgrounds); bold and underline read either way, and the
+current hit is by definition on the cursor row. `st().searchCur` is
+`diffEmph.Underline(true)` — no new theme role, and underline survives the
+Terminal theme, where `bright` is empty and `diffEmph` is bold-only.
+
+**Stepping is relative to the cursor, not to `cur`.** `]` is the first hit
+strictly after the cursor position, `[` the last strictly before; both wrap.
+Direction (`/` vs `@`) only picks which hit the incremental search snaps to and
+which glyph the badge leads with. Each host's `searchPos()` returns the current
+hit while the cursor still sits on it and the head of the cursor line
+(`col: -1`) otherwise, which is what makes a `j`-then-`]` sequence find the hit
+on the line the user just walked to.
+
+**Per-host addressing.** Diff: `row` = index into `v.lines` (folded rows are
+not searched — it is an IN-VIEW search), `side` 0/1, and a row whose sides are
+identical is searched on the right only so `]` never stops twice on one piece
+of text. Blame and preview: one column, `side` 0, the gutter is the window's
+frozen prefix and so is never searchable. Picker: a FLAT candidate row (per
+block, every `Current` line then every `Incoming` line) plus `searchBase` to map
+a 2D cursor forward and `searchRows` to map a hit back; literals and the output
+pane are outside that space. Search state is per VIEW: stepping to another file
+replaces the `diffView`, so the query does not follow.

@@ -93,7 +93,23 @@ type diffView struct {
 	// that is the expected state, not an edge case. noteAddr still names the
 	// TIP, so every other note surface works unchanged.
 	previewSet *domain.PreviewNoteSet
+	// search is the in-view text search (spec §4.3). It is per VIEW, not per
+	// file: stepping to another file (N/P, home/end) replaces the whole
+	// diffView, so the query does not follow — the new file is a new search.
+	search textSearch
+	// searchOrig is the view state a live search will restore if esc cancels it.
+	searchOrig diffOrigin
+	// sanLeft/sanRight are the per-logical-line DISPLAY strings the search
+	// matches against (sanitizeLine of the raw side; identical to what the
+	// panes paint). Built lazily on the first search and dropped by rebuild,
+	// which is the only thing that changes v.lines.
+	sanLeft  []string
+	sanRight []string
 }
+
+// diffOrigin is where a live search started: the cursor line, the vertical
+// scroll and the horizontal pan, restored verbatim when esc cancels.
+type diffOrigin struct{ curLine, offset, hOffset int }
 
 // wrapDir records that a change-navigation key hit a boundary and primed a
 // wrap-around: the next same-direction press jumps to the far end. Cleared by
@@ -136,6 +152,7 @@ type dRow struct {
 
 // rebuild recomputes the logical (mode) stream, then the display stream.
 func (v *diffView) rebuild() {
+	v.sanLeft, v.sanRight = nil, nil // the line stream is about to change
 	if v.partial {
 		v.lines, v.blocks = textdiff.Collapse(v.full, v.fullBlocks, diffContext)
 	} else {
@@ -143,6 +160,7 @@ func (v *diffView) rebuild() {
 		v.blocks = v.fullBlocks
 	}
 	v.relayout(v.width)
+	v.refindAfterRebuild()
 }
 
 // relayout builds the display-row stream (disp/dispBlocks) from the logical
@@ -220,15 +238,7 @@ func (v *diffView) relayout(width int) {
 
 // clampHOffset keeps the horizontal pan within [0, maxCell - tw].
 func (v *diffView) clampHOffset() {
-	paneW := (v.width - 1) / 2
-	if paneW < 4 {
-		paneW = 4
-	}
-	tw := paneW - gutterWidth(v.full) - 1
-	if tw < 1 {
-		tw = 1
-	}
-	max := v.maxCell - tw
+	max := v.maxCell - v.textWidth()
 	if max < 0 {
 		max = 0
 	}
@@ -257,6 +267,101 @@ func segAt(segs []cellSeg, k int) cellSeg {
 		return segs[k]
 	}
 	return cellSeg{}
+}
+
+// textWidth is one pane's text column count — the pane minus the gutter and
+// its separating space. relayout and clampHOffset do this same arithmetic;
+// this is the shared copy the search's pan uses.
+func (v *diffView) textWidth() int {
+	paneW := (v.width - 1) / 2
+	if paneW < 4 {
+		paneW = 4
+	}
+	tw := paneW - gutterWidth(v.full) - 1
+	if tw < 1 {
+		tw = 1
+	}
+	return tw
+}
+
+// searchLines is what the in-view search matches: the VISIBLE logical lines as
+// the display strings the panes paint, so a hit's offsets are already the
+// painter's offsets. Partial mode's folded rows are not in v.lines and are
+// therefore not searched — this is an in-view search (spec §4.3).
+//
+// A row whose two sides carry the same text (Same) is searched on the RIGHT
+// only: searching both would make ] stop twice on one piece of text.
+func (v *diffView) searchLines() []searchLine {
+	if v.sanLeft == nil {
+		v.sanLeft = make([]string, len(v.lines))
+		v.sanRight = make([]string, len(v.lines))
+		for i, ln := range v.lines {
+			if ln.Fold > 0 {
+				continue
+			}
+			v.sanLeft[i] = sanitizeLine(ln.Row.Left)
+			v.sanRight[i] = sanitizeLine(ln.Row.Right)
+		}
+	}
+	out := make([]searchLine, 0, len(v.lines))
+	for i, ln := range v.lines {
+		if ln.Fold > 0 {
+			continue
+		}
+		switch ln.Row.Kind {
+		case textdiff.Del:
+			out = append(out, searchLine{row: i, side: 0, text: v.sanLeft[i]})
+		case textdiff.Add:
+			out = append(out, searchLine{row: i, side: 1, text: v.sanRight[i]})
+		case textdiff.Changed:
+			out = append(out, searchLine{row: i, side: 0, text: v.sanLeft[i]})
+			out = append(out, searchLine{row: i, side: 1, text: v.sanRight[i]})
+		default: // Same
+			out = append(out, searchLine{row: i, side: 1, text: v.sanRight[i]})
+		}
+	}
+	return out
+}
+
+// searchPos is where ] and [ measure from: the current hit while the cursor
+// still sits on its row (so ] steps OFF it), else the head of the cursor line
+// (so ] finds the first hit on the line the user just walked to).
+func (v *diffView) searchPos() searchPos {
+	if v.search.cur >= 0 && v.search.cur < len(v.search.hits) {
+		if h := v.search.hits[v.search.cur]; h.row == v.curLine {
+			return searchPos{row: h.row, side: h.side, col: h.start}
+		}
+	}
+	return searchPos{row: v.curLine, side: 0, col: -1}
+}
+
+// goToHit selects hits[i]: the cursor moves to its line, the view scrolls
+// minimally to show it, and in scroll mode the pane pans so the hit's columns
+// are on screen (a hit hidden past the right edge is no hit at all).
+func (v *diffView) goToHit(i, body int) {
+	if i < 0 || i >= len(v.search.hits) {
+		return
+	}
+	h := v.search.hits[i]
+	v.search.cur = i
+	v.setCursorLine(h.row, body)
+	if v.long != longScroll || h.row >= len(v.sanRight) {
+		return
+	}
+	text := v.sanRight[h.row]
+	if h.side == 0 {
+		text = v.sanLeft[h.row]
+	}
+	cs, ce := hitCols(text, h)
+	v.hOffset = panFor(v.hOffset, v.textWidth(), cs, ce)
+	v.clampHOffset()
+}
+
+// restoreSearchOrigin puts the view back exactly where / or @ found it.
+func (v *diffView) restoreSearchOrigin(body int) {
+	v.curLine, v.offset, v.hOffset = v.searchOrig.curLine, v.searchOrig.offset, v.searchOrig.hOffset
+	v.clampHOffset()
+	v.scroll(0, body)
 }
 
 // scroll moves the viewport by delta, clamped to [0, len(disp)-body].
@@ -705,6 +810,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	zc := v.zCycle
 	v.zCycle = alignCenter
 	body := m.diffBodyRows()
+	if nm, cmd, handled := m.diffSearchKey(v, msg, body); handled {
+		return nm, cmd
+	}
 	switch msg.String() {
 	case ".":
 		return m.openActionMenu(), nil
@@ -903,6 +1011,13 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			v.cur, v.offset = 0, 0
 		}
 		v.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
+		// rebuild() already re-found the hits against the new line stream, but
+		// focusBlock/reanchorAfterRebuild above may have moved the cursor AFTER
+		// that re-find (they re-anchor the SAME change, not the search) — re-snap
+		// cur from the cursor's new position so the badge and the current-hit
+		// highlight track where the cursor actually landed, not the stale
+		// pre-toggle line.
+		v.refindAfterRebuild()
 	case "ctrl+w":
 		ord := v.currentBlockOrdinal()
 		cr, hadRow := v.cursorRow()
@@ -910,6 +1025,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.long = (v.long + 1) % 3
 		v.hOffset = 0
 		v.relayout(v.width)
+		v.refindAfterRebuild()
 		m.diffLong = v.long
 		if len(v.dispBlocks) > 0 {
 			v.focusBlock(ord, body)
@@ -933,4 +1049,56 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// diffSearchKey gives the in-view search first refusal on a key. It reports
+// handled == true when the key was the search's, in which case the caller must
+// return immediately: while typing, every key belongs to the query.
+func (m Model) diffSearchKey(v *diffView, msg tea.KeyMsg, body int) (Model, tea.Cmd, bool) {
+	if v.search.typing {
+		nm, cmd, ev := m.searchTypingKey(&v.search, msg)
+		m = nm
+		switch ev {
+		case searchChanged, searchCommitted:
+			// searchCommitted re-finds too: recall's enter can commit a phrase
+			// the user never typed.
+			v.search.refindFrom(v.searchLines(), v.search.origin)
+			if v.search.cur >= 0 {
+				v.goToHit(v.search.cur, body)
+			} else {
+				v.restoreSearchOrigin(body)
+			}
+		case searchCancelled:
+			v.restoreSearchOrigin(body)
+		}
+		return m, cmd, true
+	}
+	switch searchCommandKey(&v.search, msg) {
+	case searchOpenFwd, searchOpenBack:
+		v.searchOrig = diffOrigin{curLine: v.curLine, offset: v.offset, hOffset: v.hOffset}
+		v.search.open(msg.String() == "@", v.searchPos())
+		return m.recallReset(), nil, true
+	case searchNext:
+		v.goToHit(stepHit(v.search.hits, v.searchPos(), 1), body)
+		return m, nil, true
+	case searchPrev:
+		v.goToHit(stepHit(v.search.hits, v.searchPos(), -1), body)
+		return m, nil, true
+	case searchCleared:
+		v.search.clear()
+		return m, nil, true
+	case searchIgnored:
+		return m, nil, true
+	}
+	return m, nil, false
+}
+
+// refindAfterRebuild re-runs a committed search over the new line stream and
+// re-snaps to the hit nearest the cursor. Partial mode hides rows, so the hits
+// (and their row indices) genuinely change.
+func (v *diffView) refindAfterRebuild() {
+	if v.search.query == "" {
+		return
+	}
+	v.search.refindFrom(v.searchLines(), v.searchPos())
 }

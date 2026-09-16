@@ -175,8 +175,8 @@ func TestEmphasisActuallyChangesOutput(t *testing.T) {
 	// A cheap check that the emphasis style lands: the same hot cell rendered
 	// with a span differs from the same cell with no span (which takes the
 	// original, byte-identical path).
-	emph := diffCell(1, "foobar", 3, 20, false, true, st().diffDelCell, []textdiff.Span{{Start: 0, End: 3}}, nil, noMark())
-	plain := diffCell(1, "foobar", 3, 20, false, true, st().diffDelCell, nil, nil, noMark())
+	emph := diffCell(1, "foobar", 3, 20, false, true, st().diffDelCell, []textdiff.Span{{Start: 0, End: 3}}, nil, noMark(), nil)
+	plain := diffCell(1, "foobar", 3, 20, false, true, st().diffDelCell, nil, nil, noMark(), nil)
 	if emph == plain {
 		t.Fatal("an emphasized render must differ from the plain hot render")
 	}
@@ -218,11 +218,13 @@ func segText(segs []cellSeg) []string {
 	return out
 }
 
-func runesEmph(s string, on bool) (disp []rune, emph []bool) {
+func runesEmph(s string, on bool) (disp []rune, emph []emphLevel) {
 	disp = []rune(s)
-	emph = make([]bool, len(disp))
+	emph = make([]emphLevel, len(disp))
 	for i := range emph {
-		emph[i] = on
+		if on {
+			emph[i] = emphWord
+		}
 	}
 	return disp, emph
 }
@@ -286,7 +288,7 @@ func TestWrapCellsCarriesEmphMask(t *testing.T) {
 			t.Fatalf("seg disp/emph length mismatch: %d vs %d", len(s.disp), len(s.emph))
 		}
 		for _, on := range s.emph {
-			if !on {
+			if on == emphNone {
 				t.Fatal("emphasis mask must carry across the split")
 			}
 		}
@@ -314,8 +316,8 @@ func TestDiffPaneLinesWrappedRowWidthAndCount(t *testing.T) {
 }
 
 func TestScrollCellFitsDelegatesToDiffCell(t *testing.T) {
-	got := scrollCell(3, "hello", nil, nil, 0, 3, 20, false, false, st().diffDelCell, noMark())
-	want := diffCell(3, "hello", 3, 20, false, false, st().diffDelCell, nil, nil, noMark())
+	got := scrollCell(3, "hello", nil, nil, 0, 3, 20, false, false, st().diffDelCell, noMark(), nil)
+	want := diffCell(3, "hello", 3, 20, false, false, st().diffDelCell, nil, nil, noMark(), nil)
 	if got != want {
 		t.Fatalf("fitting scrollCell must equal diffCell:\n got %q\nwant %q", got, want)
 	}
@@ -324,7 +326,7 @@ func TestScrollCellFitsDelegatesToDiffCell(t *testing.T) {
 func TestScrollCellWidthAlwaysExact(t *testing.T) {
 	long := strings.Repeat("abcdefghij ", 8) // ~88 cols
 	for _, hOff := range []int{0, 5, 40, 200} {
-		cell := scrollCell(1, long, nil, nil, hOff, 3, 20, false, false, st().diffDelCell, noMark())
+		cell := scrollCell(1, long, nil, nil, hOff, 3, 20, false, false, st().diffDelCell, noMark(), nil)
 		if w := lipgloss.Width(cell); w != 20 {
 			t.Fatalf("hOffset %d: cell width %d, want 20", hOff, w)
 		}
@@ -333,7 +335,7 @@ func TestScrollCellWidthAlwaysExact(t *testing.T) {
 
 func TestScrollCellRightMarkerWhenMore(t *testing.T) {
 	long := strings.Repeat("x", 100)
-	cell := ansi.Strip(scrollCell(1, long, nil, nil, 0, 3, 20, false, false, st().diffDelCell, noMark()))
+	cell := ansi.Strip(scrollCell(1, long, nil, nil, 0, 3, 20, false, false, st().diffDelCell, noMark(), nil))
 	if !strings.Contains(cell, "›") {
 		t.Fatalf("a line past the window must show ›: %q", cell)
 	}
@@ -344,14 +346,14 @@ func TestScrollCellRightMarkerWhenMore(t *testing.T) {
 
 func TestScrollCellLeftMarkerWhenScrolled(t *testing.T) {
 	long := strings.Repeat("x", 100)
-	cell := ansi.Strip(scrollCell(1, long, nil, nil, 30, 3, 20, false, false, st().diffDelCell, noMark()))
+	cell := ansi.Strip(scrollCell(1, long, nil, nil, 30, 3, 20, false, false, st().diffDelCell, noMark(), nil))
 	if !strings.Contains(cell, "‹") {
 		t.Fatalf("scrolled right, ‹ must show on the left: %q", cell)
 	}
 }
 
 func TestScrollCellGapFiller(t *testing.T) {
-	cell := ansi.Strip(scrollCell(0, "", nil, nil, 0, 3, 20, true, false, st().diffDelCell, noMark()))
+	cell := ansi.Strip(scrollCell(0, "", nil, nil, 0, 3, 20, true, false, st().diffDelCell, noMark(), nil))
 	if strings.TrimRight(cell, "·") != "" {
 		t.Fatalf("gap side must be all · filler: %q", cell)
 	}
@@ -408,12 +410,12 @@ func TestStyledRunsColoursKeywordAndKeepsEmphasis(t *testing.T) {
 	disp := []rune("if x")
 	cls := []syntax.Class{syntax.Keyword, syntax.Keyword, 0, 0}
 	// no emphasis: keyword run wears the keyword foreground
-	out := styledRuns(disp, []bool{false, false, false, false}, cls, lipgloss.NewStyle())
+	out := styledRuns(disp, []emphLevel{emphNone, emphNone, emphNone, emphNone}, cls, lipgloss.NewStyle())
 	if !strings.Contains(out, "38;5;"+st().syntaxColor(syntax.Keyword)) {
 		t.Errorf("keyword run should carry its 256-colour foreground: %q", out)
 	}
 	// emphasis wins over syntax colour (bold + 231), so the diff stays legible
-	out = styledRuns(disp, []bool{true, true, false, false}, cls, lipgloss.NewStyle())
+	out = styledRuns(disp, []emphLevel{emphWord, emphWord, emphNone, emphNone}, cls, lipgloss.NewStyle())
 	if !strings.Contains(out, "38;5;231") || strings.Contains(out, "38;5;"+st().syntaxColor(syntax.Keyword)) {
 		t.Errorf("emphasised run must use diffEmph, not the syntax colour: %q", out)
 	}
@@ -456,7 +458,7 @@ func TestDiffPaneLinesUseTokensBySourceLine(t *testing.T) {
 func TestWrapCellsSlicesClassMaskAlongside(t *testing.T) {
 	t.Parallel()
 	disp := []rune("if x { return y }")
-	emph := make([]bool, len(disp))
+	emph := make([]emphLevel, len(disp))
 	cls := make([]syntax.Class, len(disp))
 	for i := 0; i < 2; i++ { // "if"
 		cls[i] = syntax.Keyword
@@ -497,7 +499,7 @@ func TestScrollCellWindowKeepsClassesAligned(t *testing.T) {
 	toks := []syntax.Tok{{Start: 10, End: 17, Class: syntax.Keyword}}
 	// tw = 20-3-1 = 16; hOffset 12 with more text to the right leaves both
 	// markers, so the content window is runes [13,27): "word" + ten 'b'.
-	raw := scrollCell(1, text, nil, toks, 12, 3, 20, false, false, lipgloss.NewStyle(), noMark())
+	raw := scrollCell(1, text, nil, toks, 12, 3, 20, false, false, lipgloss.NewStyle(), noMark(), nil)
 	if got, want := ansi.Strip(raw), "  1 ‹wordbbbbbbbbbb›"; got != want {
 		t.Fatalf("visible window = %q, want %q", got, want)
 	}
@@ -595,20 +597,20 @@ func TestCursorMarkVisibleOnHotAndGapCells(t *testing.T) {
 		name       string
 		plain, cur string
 	}{
-		{"add cell", diffCell(41, "object CacheConfig {", 3, 30, false, true, st().diffAddCell, nil, nil, noMark()),
-			diffCell(41, "object CacheConfig {", 3, 30, false, true, st().diffAddCell, nil, nil, mk)},
-		{"del cell", diffCell(27, "x = 3600", 3, 30, false, true, st().diffDelCell, nil, nil, noMark()),
-			diffCell(27, "x = 3600", 3, 30, false, true, st().diffDelCell, nil, nil, mk)},
-		{"gap cell", diffCell(0, "", 3, 30, true, false, st().diffAddCell, nil, nil, noMark()),
-			diffCell(0, "", 3, 30, true, false, st().diffAddCell, nil, nil, mk)},
-		{"wrapped add seg", segCell(41, cellSeg{disp: []rune("abc"), emph: make([]bool, 3), cls: make([]syntax.Class, 3)}, 3, 30, false, true, st().diffAddCell, noMark()),
-			segCell(41, cellSeg{disp: []rune("abc"), emph: make([]bool, 3), cls: make([]syntax.Class, 3)}, 3, 30, false, true, st().diffAddCell, mk)},
-		{"wrapped gap seg", segCell(0, cellSeg{}, 3, 30, true, false, st().diffAddCell, noMark()),
-			segCell(0, cellSeg{}, 3, 30, true, false, st().diffAddCell, mk)},
-		{"scroll add cell", scrollCell(41, "abc", nil, nil, 0, 3, 30, false, true, st().diffAddCell, noMark()),
-			scrollCell(41, "abc", nil, nil, 0, 3, 30, false, true, st().diffAddCell, mk)},
-		{"scroll gap cell", scrollCell(0, "", nil, nil, 0, 3, 30, true, false, st().diffAddCell, noMark()),
-			scrollCell(0, "", nil, nil, 0, 3, 30, true, false, st().diffAddCell, mk)},
+		{"add cell", diffCell(41, "object CacheConfig {", 3, 30, false, true, st().diffAddCell, nil, nil, noMark(), nil),
+			diffCell(41, "object CacheConfig {", 3, 30, false, true, st().diffAddCell, nil, nil, mk, nil)},
+		{"del cell", diffCell(27, "x = 3600", 3, 30, false, true, st().diffDelCell, nil, nil, noMark(), nil),
+			diffCell(27, "x = 3600", 3, 30, false, true, st().diffDelCell, nil, nil, mk, nil)},
+		{"gap cell", diffCell(0, "", 3, 30, true, false, st().diffAddCell, nil, nil, noMark(), nil),
+			diffCell(0, "", 3, 30, true, false, st().diffAddCell, nil, nil, mk, nil)},
+		{"wrapped add seg", segCell(41, cellSeg{disp: []rune("abc"), emph: make([]emphLevel, 3), cls: make([]syntax.Class, 3)}, 3, 30, false, true, st().diffAddCell, noMark(), nil),
+			segCell(41, cellSeg{disp: []rune("abc"), emph: make([]emphLevel, 3), cls: make([]syntax.Class, 3)}, 3, 30, false, true, st().diffAddCell, mk, nil)},
+		{"wrapped gap seg", segCell(0, cellSeg{}, 3, 30, true, false, st().diffAddCell, noMark(), nil),
+			segCell(0, cellSeg{}, 3, 30, true, false, st().diffAddCell, mk, nil)},
+		{"scroll add cell", scrollCell(41, "abc", nil, nil, 0, 3, 30, false, true, st().diffAddCell, noMark(), nil),
+			scrollCell(41, "abc", nil, nil, 0, 3, 30, false, true, st().diffAddCell, mk, nil)},
+		{"scroll gap cell", scrollCell(0, "", nil, nil, 0, 3, 30, true, false, st().diffAddCell, noMark(), nil),
+			scrollCell(0, "", nil, nil, 0, 3, 30, true, false, st().diffAddCell, mk, nil)},
 	}
 	for _, c := range cases {
 		if c.plain == c.cur {
