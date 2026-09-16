@@ -499,6 +499,10 @@ func TestLinkPairRoundTrip(t *testing.T) {
 		"gg://gigagit@abc1234def..abc9999fff",
 		"gg://gigagit@main..feat/x",
 		"gg://gigagit@abc1234def..feat/x",
+		// Both halves short and hex: at the GRAMMAR layer these are refnames,
+		// not shas, and domain resolves them. A length rule here would forbid
+		// a branch literally named "abc".
+		"gg://gigagit@abc..def",
 		"gg://gigagit/internal/a.go@abc1234def..abc9999fff",
 		"gg://gigagit@abc1234def..abc9999fff?stash=0",
 	} {
@@ -539,7 +543,6 @@ func TestLinkRefAndPairRejects(t *testing.T) {
 		"pair missing a half":  "gg://gigagit@abc1234def..",
 		"pair missing b half":  "gg://gigagit@..abc1234def",
 		"pair with three dots": "gg://gigagit@a..b..c",
-		"short hex half":       "gg://gigagit@abc..def",
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -655,13 +658,10 @@ type LinkPair struct{ A, B string }
 ```
 
 Note `LinkRefOK` accepts a short hex string like `"abc"`, so `@abc..def`
-passes `okHalf` as a pair of *refnames*. That is correct at the grammar layer —
-`domain` resolves each half and reports "unknown revision" if neither a ref nor
-a commit exists. The `"short hex half"` reject case in the test above is
-therefore **wrong as written**: remove it from the test table and add this
-positive case instead, in `TestLinkPairRoundTrip`'s list:
-`"gg://gigagit@abc..def"`. (Keeping a grammar-layer length rule would forbid a
-branch literally named `abc`.)
+passes `okHalf` as a pair of *refnames*, which is why it sits in the
+round-trip table rather than the reject table. That is correct at the grammar
+layer: `domain` resolves each half and reports "unknown revision" if neither a
+ref nor a commit exists there.
 
 5. Update `ParseLink`'s doc comment: add the `@ref:<name>` and `@<a>..<b>`
    lines to the grammar block, and note the hint.
