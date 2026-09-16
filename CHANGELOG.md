@@ -21,6 +21,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   right after the scroll keys, so a terminal narrower than 140 columns keeps
   the search hint instead of truncating it away.
 
+- **`gg web`: right-clicking a review note copies its gg link.** The ◆ note
+  menu in the diff now carries **copy gg link to this note** beside Edit and
+  Reply. A note has no address of its own — `gg://` names places, and a note
+  id is machine-local — so the row copies the note's ANCHOR: the exact link
+  the diff line under it yields (`gg://<repo>/<path>[@<rev>][:old:]<line>`, or
+  the `@<target>...<source>` pair inside an open merge preview). A reply
+  copies its thread's inherited anchor. The link is built from the open diff's
+  own context, so the note menu and the line menu never disagree about the
+  same row.
+
 - **In-view text search in the four readers.** The diff view, blame, the
   View-file preview and the hunk picker share one search: `/` searches
   forward, `@` backward, both incrementally from the cursor as you type;

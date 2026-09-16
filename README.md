@@ -288,7 +288,10 @@ another checkout asks first, then switches the repo and lands there; `L` in
 the diff view copies the cursor line's link and the `.` menu's **Copy link**
 works in the Files, Staged and Commits panels and a commit's files view; in
 `gg web`, right-click
-a diff line, a file row or a commit row — inside an open merge preview the
+a diff line, a review note, a file row or a commit row — a note has no address
+of its own (its id is machine-local), so **copy gg link to this note** hands
+back the note's ANCHOR line, the same link the line under it copies, and a
+reply copies its thread's anchor — inside an open merge preview the
 diff line and the file row copy the preview forms
 (`…@<target>...<source>[:<line>]`, new side only; a deletion row copies the
 file), and a Previews row copies the pair's own link. Quote a link that carries `#<hunk>` — an unquoted `#` starts a shell
