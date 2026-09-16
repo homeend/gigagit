@@ -8,7 +8,7 @@ import "testing"
 type endpointCase struct {
 	kind     EndpointKind
 	name     string
-	build    func() Endpoint
+	build    func(*testing.T) Endpoint
 	display  string
 	live     bool
 	cacheTag string
@@ -21,7 +21,7 @@ func endpointCases() []endpointCase {
 		{
 			kind:     EndpointWorkTree,
 			name:     "worktree",
-			build:    func() Endpoint { return WorkTreeEndpoint() },
+			build:    func(*testing.T) Endpoint { return WorkTreeEndpoint() },
 			display:  "Working Tree",
 			live:     true,
 			cacheTag: "worktree",
@@ -31,7 +31,7 @@ func endpointCases() []endpointCase {
 		{
 			kind:     EndpointIndex,
 			name:     "index",
-			build:    func() Endpoint { return IndexEndpoint() },
+			build:    func(*testing.T) Endpoint { return IndexEndpoint() },
 			display:  "Staged",
 			live:     true,
 			cacheTag: "index",
@@ -39,9 +39,16 @@ func endpointCases() []endpointCase {
 			locator:  "",
 		},
 		{
-			kind:     EndpointCommit,
-			name:     "commit",
-			build:    func() Endpoint { return mustCommit("abc1234def5678") },
+			kind: EndpointCommit,
+			name: "commit",
+			build: func(t *testing.T) Endpoint {
+				t.Helper()
+				e, err := CommitEndpoint("abc1234def5678")
+				if err != nil {
+					t.Fatalf("CommitEndpoint: %v", err)
+				}
+				return e
+			},
 			display:  "abc1234",
 			live:     false,
 			cacheTag: "abc1234def5678",
@@ -49,9 +56,16 @@ func endpointCases() []endpointCase {
 			locator:  "abc1234def5678",
 		},
 		{
-			kind:     EndpointShelf,
-			name:     "shelf",
-			build:    func() Endpoint { return mustShelf("wt-parser-9f3a1") },
+			kind: EndpointShelf,
+			name: "shelf",
+			build: func(t *testing.T) Endpoint {
+				t.Helper()
+				e, err := ShelfEndpoint("wt-parser-9f3a1")
+				if err != nil {
+					t.Fatalf("ShelfEndpoint: %v", err)
+				}
+				return e
+			},
 			display:  "shelf #wt-parser (frozen)",
 			live:     false,
 			cacheTag: "shelf:wt-parser-9f3a1",
@@ -90,7 +104,7 @@ func TestEndpointMethodsMatchTheTable(t *testing.T) {
 	for _, c := range endpointCases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			e := c.build()
+			e := c.build(t)
 			if got := e.Display(); got != c.display {
 				t.Errorf("Display() = %q, want %q", got, c.display)
 			}

@@ -12,14 +12,14 @@ func TestCompareKeyResolvers(t *testing.T) {
 	wt := wipKey(wipRow{kind: wipWorktree})
 	stg := wipKey(wipRow{kind: wipStaged})
 
-	if e := m.compareKeyEndpoint(wt); e.Kind != model.EndpointWorkTree {
-		t.Fatalf("worktree key → %v", e.Kind)
+	if e := m.compareKeyEndpoint(wt); e.Kind() != model.EndpointWorkTree {
+		t.Fatalf("worktree key → %v", e.Kind())
 	}
-	if e := m.compareKeyEndpoint(stg); e.Kind != model.EndpointIndex {
-		t.Fatalf("staged key → %v", e.Kind)
+	if e := m.compareKeyEndpoint(stg); e.Kind() != model.EndpointIndex {
+		t.Fatalf("staged key → %v", e.Kind())
 	}
 	h := m.commits[1].Hash
-	if e := m.compareKeyEndpoint(h); e.Kind != model.EndpointCommit || e.Hash != h {
+	if e := m.compareKeyEndpoint(h); e.Kind() != model.EndpointCommit || e.Hash() != h {
 		t.Fatalf("commit key → %+v", e)
 	}
 	// rank: working tree newest (-2) < staged (-1) < tip commit (0) < older (1)
@@ -104,8 +104,8 @@ func TestCompareSelectionWipVsCommit(t *testing.T) {
 		t.Fatal("compare must open the files view")
 	}
 	// Older (commit) → newer (working tree): left=commit, right=working tree.
-	if mm.filesLeft.Kind != model.EndpointCommit || mm.filesRight.Kind != model.EndpointWorkTree {
-		t.Fatalf("endpoints = %v↔%v, want Commit↔WorkTree", mm.filesLeft.Kind, mm.filesRight.Kind)
+	if mm.filesLeft.Kind() != model.EndpointCommit || mm.filesRight.Kind() != model.EndpointWorkTree {
+		t.Fatalf("endpoints = %v↔%v, want Commit↔WorkTree", mm.filesLeft.Kind(), mm.filesRight.Kind())
 	}
 }
 
@@ -124,8 +124,8 @@ func TestCompareSelectionWithWipTwo(t *testing.T) {
 	if !ok {
 		t.Fatalf("two wip rows must compare: %s", note)
 	}
-	if left.Kind != model.EndpointIndex || right.Kind != model.EndpointWorkTree {
-		t.Fatalf("endpoints = %v↔%v, want Index↔WorkTree", left.Kind, right.Kind)
+	if left.Kind() != model.EndpointIndex || right.Kind() != model.EndpointWorkTree {
+		t.Fatalf("endpoints = %v↔%v, want Index↔WorkTree", left.Kind(), right.Kind())
 	}
 }
 
@@ -164,7 +164,7 @@ func TestCompareSelectionSurvivesFilter(t *testing.T) {
 	if !ok {
 		t.Fatalf("selection must survive an active filter: %s", note)
 	}
-	if left.Hash != m.commits[3].Hash || right.Hash != m.commits[0].Hash {
-		t.Fatalf("endpoints = %s↔%s, want root↔tip", left.Hash, right.Hash)
+	if left.Hash() != m.commits[3].Hash || right.Hash() != m.commits[0].Hash {
+		t.Fatalf("endpoints = %s↔%s, want root↔tip", left.Hash(), right.Hash())
 	}
 }

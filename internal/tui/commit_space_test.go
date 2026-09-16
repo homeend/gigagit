@@ -36,9 +36,9 @@ func TestSecondSpaceOpensCompareAndKeepsMarks(t *testing.T) {
 	if m.filesView == nil || !m.inCompareMode() {
 		t.Fatal("second space-mark must open the compare files view")
 	}
-	if m.filesLeft.Hash != m.commits[1].Hash || m.filesRight.Hash != m.commits[0].Hash {
+	if m.filesLeft.Hash() != m.commits[1].Hash || m.filesRight.Hash() != m.commits[0].Hash {
 		t.Fatalf("endpoints %s ↔ %s, want older %s ↔ newer %s",
-			m.filesLeft.Hash, m.filesRight.Hash, m.commits[1].Hash, m.commits[0].Hash)
+			m.filesLeft.Hash(), m.filesRight.Hash(), m.commits[1].Hash, m.commits[0].Hash)
 	}
 	if !m.commitCompareSet[m.commits[0].Hash] || !m.commitCompareSet[m.commits[1].Hash] {
 		t.Fatalf("marks must persist after the compare opens, set=%v", m.commitCompareSet)

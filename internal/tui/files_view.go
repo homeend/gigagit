@@ -395,10 +395,10 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 	m.filesRight = right
 	// h/b (history/blame) context: prefer a commit side; "" means working tree.
 	switch {
-	case right.Kind == model.EndpointCommit:
-		m.filesHash = right.Hash
-	case left.Kind == model.EndpointCommit:
-		m.filesHash = left.Hash
+	case right.Kind() == model.EndpointCommit:
+		m.filesHash = right.Hash()
+	case left.Kind() == model.EndpointCommit:
+		m.filesHash = left.Hash()
 	default:
 		m.filesHash = ""
 	}

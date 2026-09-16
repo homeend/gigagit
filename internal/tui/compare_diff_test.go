@@ -109,8 +109,8 @@ func TestResolveHeadEndpointSurvivesShortCoreAbbrev(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolveHeadEndpoint under core.abbrev=4: %v", err)
 	}
-	if len(ep.Hash) < 40 {
-		t.Fatalf("resolveHeadEndpoint must yield a FULL sha that core.abbrev cannot narrow, got %q", ep.Hash)
+	if len(ep.Hash()) < 40 {
+		t.Fatalf("resolveHeadEndpoint must yield a FULL sha that core.abbrev cannot narrow, got %q", ep.Hash())
 	}
 }
 

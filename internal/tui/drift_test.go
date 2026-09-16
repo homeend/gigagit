@@ -144,7 +144,7 @@ func TestVersionsPopupEnterWithEndpointsOpensFrozenPreview(t *testing.T) {
 	if m.filesView == nil || !m.inCompareMode() {
 		t.Fatal("a version row with recorded endpoints should open the frozen preview in compare mode")
 	}
-	if m.filesLeft.Hash != "1111111111111111" || m.filesRight.Hash != "2222222222222222" {
+	if m.filesLeft.Hash() != "1111111111111111" || m.filesRight.Hash() != "2222222222222222" {
 		t.Fatalf("endpoints = %+v/%+v, want the recorded Base/Ours — never the live tip (livetiphash000000)", m.filesLeft, m.filesRight)
 	}
 }

@@ -58,13 +58,13 @@ func (s *Service) ResolveCommitEntryEndpoint(ctx context.Context, sha, shelfID s
 // nesting a gated read inside a held reservation can deadlock behind a
 // queued writer.
 func (s *Service) shelfCompareFiles(ctx context.Context, left, right model.Endpoint) ([]model.CommitFile, error) {
-	if left.Kind == model.EndpointShelf && right.Kind == model.EndpointShelf {
-		return s.shelfShelfCompare(ctx, left.ShelfID, right.ShelfID)
+	if left.Kind() == model.EndpointShelf && right.Kind() == model.EndpointShelf {
+		return s.shelfShelfCompare(ctx, left.ShelfID(), right.ShelfID())
 	}
-	if left.Kind == model.EndpointShelf {
-		return s.shelfCommitCompare(ctx, left.ShelfID, right.Hash, false)
+	if left.Kind() == model.EndpointShelf {
+		return s.shelfCommitCompare(ctx, left.ShelfID(), right.Hash(), false)
 	}
-	return s.shelfCommitCompare(ctx, right.ShelfID, left.Hash, true)
+	return s.shelfCommitCompare(ctx, right.ShelfID(), left.Hash(), true)
 }
 
 func (s *Service) shelfShelfCompare(ctx context.Context, leftID, rightID string) ([]model.CommitFile, error) {
@@ -163,7 +163,7 @@ func (s *Service) shelfCommitCompare(ctx context.Context, shelfID, commitHash st
 // only the side an "A"/"D" status says is genuinely missing is left
 // unresolved (empty bytes, no read attempted).
 func (s *Service) ComparePatch(ctx context.Context, left, right model.Endpoint) (string, error) {
-	if left.Kind != model.EndpointShelf && right.Kind != model.EndpointShelf {
+	if left.Kind() != model.EndpointShelf && right.Kind() != model.EndpointShelf {
 		return s.DiffPatch(ctx, livePairSpec(left, right))
 	}
 	files, err := s.shelfCompareFiles(ctx, left, right)
@@ -228,12 +228,12 @@ func isBinaryContent(data []byte) bool {
 // accepts (commit↔commit, commit→index, commit→worktree, index→worktree).
 func livePairSpec(left, right model.Endpoint) model.DiffSpec {
 	switch {
-	case left.Kind == model.EndpointCommit && right.Kind == model.EndpointCommit:
-		return model.DiffSpec{Rev: left.Hash + ".." + right.Hash}
-	case left.Kind == model.EndpointCommit && right.Kind == model.EndpointIndex:
-		return model.DiffSpec{Cached: true, Rev: left.Hash}
-	case left.Kind == model.EndpointCommit: // → worktree
-		return model.DiffSpec{Rev: left.Hash}
+	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointCommit:
+		return model.DiffSpec{Rev: left.Hash() + ".." + right.Hash()}
+	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointIndex:
+		return model.DiffSpec{Cached: true, Rev: left.Hash()}
+	case left.Kind() == model.EndpointCommit: // → worktree
+		return model.DiffSpec{Rev: left.Hash()}
 	default: // index → worktree
 		return model.DiffSpec{}
 	}

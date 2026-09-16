@@ -220,7 +220,7 @@ func TestPreviewOpenEndpoints(t *testing.T) {
 		t.Fatalf("open = %+v, %v", eps, err)
 	}
 	base := mergeBaseOf(t, dir, "main", "feat/x")
-	if eps.Left != mustCommitEndpoint(t, base) || eps.Right.Hash != eps.Summary.SourceHash {
+	if eps.Left != mustCommitEndpoint(t, base) || eps.Right.Hash() != eps.Summary.SourceHash {
 		t.Fatalf("endpoints = %+v, want left=merge-base %s right=source tip", eps, base)
 	}
 	files, _ := svc.CompareFiles(ctx, eps.Left, eps.Right)

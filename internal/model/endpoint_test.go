@@ -37,7 +37,7 @@ func TestEndpointDisplay(t *testing.T) {
 		// "abc" is shorter than CommitEndpoint's 7-char minimum: this probes
 		// Display's truncation on a hash the constructor would refuse, so it
 		// stays a raw struct literal deliberately.
-		{Endpoint{Kind: EndpointCommit, Hash: "abc"}, "abc"},
+		{Endpoint{kind: EndpointCommit, hash: "abc"}, "abc"},
 	}
 	for _, c := range cases {
 		if got := c.e.Display(); got != c.want {
@@ -65,10 +65,10 @@ func TestEndpointIsLiveAndCacheTag(t *testing.T) {
 	// "x" is shorter than CommitEndpoint's 7-char minimum: these two probe
 	// IsLive/CacheTag on a hash the constructor would refuse, so they stay
 	// raw struct literals deliberately.
-	if (Endpoint{Kind: EndpointCommit, Hash: "x"}).IsLive() {
+	if (Endpoint{kind: EndpointCommit, hash: "x"}).IsLive() {
 		t.Error("commit must not be live")
 	}
-	if got := (Endpoint{Kind: EndpointCommit, Hash: "x"}).CacheTag(); got != "x" {
+	if got := (Endpoint{kind: EndpointCommit, hash: "x"}).CacheTag(); got != "x" {
 		t.Errorf("commit CacheTag = %q", got)
 	}
 	if got := (WorkTreeEndpoint()).CacheTag(); got != "worktree" {
@@ -109,11 +109,11 @@ func TestCommitEndpointAcceptsValidHashes(t *testing.T) {
 		if err != nil {
 			t.Fatalf("CommitEndpoint(%q): %v", h, err)
 		}
-		if e.Kind != EndpointCommit {
-			t.Errorf("CommitEndpoint(%q).Kind = %v, want EndpointCommit", h, e.Kind)
+		if e.Kind() != EndpointCommit {
+			t.Errorf("CommitEndpoint(%q).Kind = %v, want EndpointCommit", h, e.Kind())
 		}
-		if e.Hash != h {
-			t.Errorf("CommitEndpoint(%q).Hash = %q, want %q", h, e.Hash, h)
+		if e.Hash() != h {
+			t.Errorf("CommitEndpoint(%q).Hash = %q, want %q", h, e.Hash(), h)
 		}
 	}
 }
@@ -131,18 +131,18 @@ func TestShelfEndpointAcceptsAnID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ShelfEndpoint: %v", err)
 	}
-	if e.Kind != EndpointShelf || e.ShelfID != "wt-parser-9f3a1" {
+	if e.Kind() != EndpointShelf || e.ShelfID() != "wt-parser-9f3a1" {
 		t.Errorf("ShelfEndpoint = %+v, want kind shelf and the id", e)
 	}
 }
 
 func TestLiveEndpointConstructors(t *testing.T) {
 	t.Parallel()
-	if got := WorkTreeEndpoint(); got.Kind != EndpointWorkTree {
-		t.Errorf("WorkTreeEndpoint().Kind = %v, want EndpointWorkTree", got.Kind)
+	if got := WorkTreeEndpoint(); got.Kind() != EndpointWorkTree {
+		t.Errorf("WorkTreeEndpoint().Kind = %v, want EndpointWorkTree", got.Kind())
 	}
-	if got := IndexEndpoint(); got.Kind != EndpointIndex {
-		t.Errorf("IndexEndpoint().Kind = %v, want EndpointIndex", got.Kind)
+	if got := IndexEndpoint(); got.Kind() != EndpointIndex {
+		t.Errorf("IndexEndpoint().Kind = %v, want EndpointIndex", got.Kind())
 	}
 }
 
@@ -152,7 +152,7 @@ func TestBoundedMatchesTheSpecRule(t *testing.T) {
 	t.Parallel()
 	for _, c := range endpointCases() {
 		want := c.kind == EndpointShelf
-		if got := c.build().Bounded(); got != want {
+		if got := c.build(t).Bounded(); got != want {
 			t.Errorf("%s: Bounded() = %v, want %v", c.name, got, want)
 		}
 	}

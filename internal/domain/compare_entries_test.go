@@ -63,7 +63,7 @@ func TestResolveCommitEntryEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("live resolve: %v", err)
 	}
-	if ep.Kind != model.EndpointCommit || ep.Hash != sha {
+	if ep.Kind() != model.EndpointCommit || ep.Hash() != sha {
 		t.Fatalf("live resolve = %+v, want EndpointCommit with full sha %s", ep, sha)
 	}
 
@@ -73,7 +73,7 @@ func TestResolveCommitEntryEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("frozen resolve: %v", err)
 	}
-	if ep.Kind != model.EndpointShelf || ep.ShelfID != "entry-1" {
+	if ep.Kind() != model.EndpointShelf || ep.ShelfID() != "entry-1" {
 		t.Fatalf("frozen resolve = %+v, want EndpointShelf entry-1", ep)
 	}
 

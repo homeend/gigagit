@@ -236,9 +236,9 @@ func parseEntrySide(ctx context.Context, svc *domain.Service, spec string) (entr
 // endpoint's own FileRef mapping, so the shelf lane cannot drift from the one
 // domain uses for the file list.
 func commitEntrySide(svc *domain.Service, ep model.Endpoint, label string) entrySide {
-	spec := "commit:" + ep.Hash
-	if ep.Kind == model.EndpointShelf {
-		spec = "shelf:" + ep.ShelfID
+	spec := "commit:" + ep.Hash()
+	if ep.Kind() == model.EndpointShelf {
+		spec = "shelf:" + ep.ShelfID()
 	}
 	return entrySide{spec: spec, label: label, tag: ep.CacheTag(),
 		bytes: func(ctx context.Context, path string) ([]byte, error) {
@@ -381,11 +381,11 @@ type entryCompareSide struct {
 // per SIDE because both of them can fall back independently, and "one of
 // these is a snapshot" is not the same warning as "both are".
 func compareSideWire(ep model.Endpoint, spec commitEntrySpec) (entryCompareSide, string) {
-	if ep.Kind == model.EndpointShelf {
-		return entryCompareSide{Spec: "shelf:" + ep.ShelfID, Label: spec.label, Frozen: true},
+	if ep.Kind() == model.EndpointShelf {
+		return entryCompareSide{Spec: "shelf:" + ep.ShelfID(), Label: spec.label, Frozen: true},
 			"frozen copy — commit " + shortSha(spec.sha) + " no longer exists"
 	}
-	return entryCompareSide{Spec: "commit:" + ep.Hash, Label: spec.label, Hash: ep.Hash}, ""
+	return entryCompareSide{Spec: "commit:" + ep.Hash(), Label: spec.label, Hash: ep.Hash()}, ""
 }
 
 // commitEntrySpec is one requested side of the whole-tree lane: a stored

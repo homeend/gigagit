@@ -51,16 +51,16 @@ func TestVersionPreviewReturnsEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("VersionPreview: %v", err)
 	}
-	if eps.Left.Kind != model.EndpointCommit || eps.Left.Hash != baseSha {
+	if eps.Left.Kind() != model.EndpointCommit || eps.Left.Hash() != baseSha {
 		t.Errorf("Left = %+v, want commit %s (Base)", eps.Left, baseSha)
 	}
-	if eps.Right.Kind != model.EndpointCommit || eps.Right.Hash != oursSha {
+	if eps.Right.Kind() != model.EndpointCommit || eps.Right.Hash() != oursSha {
 		t.Errorf("Right = %+v, want commit %s (Ours)", eps.Right, oursSha)
 	}
-	if eps.Left.Hash == eps.Right.Hash {
-		t.Fatalf("Left and Right must differ: both %s", eps.Left.Hash)
+	if eps.Left.Hash() == eps.Right.Hash() {
+		t.Fatalf("Left and Right must differ: both %s", eps.Left.Hash())
 	}
-	if eps.Left.Hash == otherSha || eps.Right.Hash == otherSha {
+	if eps.Left.Hash() == otherSha || eps.Right.Hash() == otherSha {
 		t.Errorf("endpoints leaked Other (%s): %+v", otherSha, eps)
 	}
 }

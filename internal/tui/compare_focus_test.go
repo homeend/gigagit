@@ -106,8 +106,8 @@ func TestMarkTwoCommitsSelectThenCompare(t *testing.T) {
 		t.Fatal("Compare selection must open the compare files view")
 	}
 	// older (commits[1]) → newer (commits[0]).
-	if mm.filesLeft.Hash != m.commits[1].Hash || mm.filesRight.Hash != m.commits[0].Hash {
-		t.Fatalf("endpoints = %s↔%s, want older↔newer", mm.filesLeft.Hash, mm.filesRight.Hash)
+	if mm.filesLeft.Hash() != m.commits[1].Hash || mm.filesRight.Hash() != m.commits[0].Hash {
+		t.Fatalf("endpoints = %s↔%s, want older↔newer", mm.filesLeft.Hash(), mm.filesRight.Hash())
 	}
 }
 
@@ -141,7 +141,7 @@ func TestSelectCommitThenWorktreeCompares(t *testing.T) {
 		t.Fatal("Compare selection must open a compare")
 	}
 	// commit (older) → working tree (newer).
-	if mm.filesLeft.Kind != model.EndpointCommit || mm.filesRight.Kind != model.EndpointWorkTree {
-		t.Fatalf("endpoints = %v↔%v, want Commit↔WorkTree", mm.filesLeft.Kind, mm.filesRight.Kind)
+	if mm.filesLeft.Kind() != model.EndpointCommit || mm.filesRight.Kind() != model.EndpointWorkTree {
+		t.Fatalf("endpoints = %v↔%v, want Commit↔WorkTree", mm.filesLeft.Kind(), mm.filesRight.Kind())
 	}
 }

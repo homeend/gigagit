@@ -72,8 +72,8 @@ func TestCompareRowOpensBranchCompare(t *testing.T) {
 	// The endpoints carry each branch's TIP HASH, not its name (see
 	// openBranchCompare's doc comment) — the diff cache keys on
 	// Endpoint.CacheTag(), which returns Hash verbatim.
-	if m.filesLeft.Hash != markedHash || m.filesRight.Hash != selectedHash {
-		t.Fatalf("endpoints = %q / %q, want tip hashes %q / %q", m.filesLeft.Hash, m.filesRight.Hash, markedHash, selectedHash)
+	if m.filesLeft.Hash() != markedHash || m.filesRight.Hash() != selectedHash {
+		t.Fatalf("endpoints = %q / %q, want tip hashes %q / %q", m.filesLeft.Hash(), m.filesRight.Hash(), markedHash, selectedHash)
 	}
 	if !strings.Contains(m.filesTitle, marked+" ↔ "+selected) {
 		t.Fatalf("title %q must carry the FULL branch names", m.filesTitle)
@@ -128,8 +128,8 @@ func TestOpenBranchCompareResolvesTipHashes(t *testing.T) {
 	}
 	m, _ = m.openBranchCompare("feat/x", "main")
 
-	if m.filesLeft.Hash != "aaaa111" || m.filesRight.Hash != "bbbb222" {
-		t.Fatalf("endpoints = %q / %q, want tip hashes aaaa111 / bbbb222", m.filesLeft.Hash, m.filesRight.Hash)
+	if m.filesLeft.Hash() != "aaaa111" || m.filesRight.Hash() != "bbbb222" {
+		t.Fatalf("endpoints = %q / %q, want tip hashes aaaa111 / bbbb222", m.filesLeft.Hash(), m.filesRight.Hash())
 	}
 	if !strings.Contains(m.filesTitle, "feat/x ↔ main") {
 		t.Fatalf("title %q must still carry the branch names", m.filesTitle)

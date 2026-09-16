@@ -444,7 +444,7 @@ func (s *Service) TreeFiles(ctx context.Context, hash string) ([]model.CommitFil
 // its doc comment for why that dispatch must not nest inside a held
 // reservation.
 func (s *Service) CompareFiles(ctx context.Context, left, right model.Endpoint) ([]model.CommitFile, error) {
-	if left.Kind == model.EndpointShelf || right.Kind == model.EndpointShelf {
+	if left.Kind() == model.EndpointShelf || right.Kind() == model.EndpointShelf {
 		return s.shelfCompareFiles(ctx, left, right)
 	}
 	return query(ctx, s, "compare-files:"+left.CacheTag()+":"+right.CacheTag(), func(ctx context.Context) ([]model.CommitFile, error) {
@@ -455,7 +455,7 @@ func (s *Service) CompareFiles(ctx context.Context, left, right model.Endpoint) 
 		// `git diff` omits untracked files, so a comparison whose newer side is the
 		// working tree would miss brand-new files. Add them as added ("A") entries
 		// (an untracked file is new relative to both a commit and the index).
-		if right.Kind == model.EndpointWorkTree {
+		if right.Kind() == model.EndpointWorkTree {
 			untracked, err := s.repo.UntrackedFiles(ctx)
 			if err != nil {
 				return nil, err

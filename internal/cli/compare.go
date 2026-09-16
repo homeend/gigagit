@@ -60,15 +60,15 @@ func validComparePair(left, right model.Endpoint) bool {
 	// A frozen shelf side pairs with a commit or another shelf endpoint only:
 	// the tar snapshots a commit's changes, so diffing it against the live
 	// index/worktree would mix a frozen past with a moving target.
-	if left.Kind == model.EndpointShelf || right.Kind == model.EndpointShelf {
+	if left.Kind() == model.EndpointShelf || right.Kind() == model.EndpointShelf {
 		pairable := func(e model.Endpoint) bool {
-			return e.Kind == model.EndpointCommit || e.Kind == model.EndpointShelf
+			return e.Kind() == model.EndpointCommit || e.Kind() == model.EndpointShelf
 		}
 		return pairable(left) && pairable(right)
 	}
 
 	rank := func(e model.Endpoint) int {
-		switch e.Kind {
+		switch e.Kind() {
 		case model.EndpointCommit:
 			return 0
 		case model.EndpointIndex:
@@ -77,7 +77,7 @@ func validComparePair(left, right model.Endpoint) bool {
 			return 2
 		}
 	}
-	if left.Kind == model.EndpointCommit && right.Kind == model.EndpointCommit {
+	if left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointCommit {
 		return true
 	}
 	return rank(left) < rank(right)
@@ -116,7 +116,7 @@ func cmdCompare(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 		}
 	}
 	if !validComparePair(left, right) {
-		if left.Kind == model.EndpointShelf || right.Kind == model.EndpointShelf {
+		if left.Kind() == model.EndpointShelf || right.Kind() == model.EndpointShelf {
 			fmt.Fprintln(stderr, "compare: a frozen shelf entry pairs only with a commit or another shelf entry (never @staged/@worktree)")
 		} else {
 			fmt.Fprintln(stderr, "compare: order endpoints oldest→newest (a commit, then @staged, then @worktree); e.g. `gg compare main @worktree`, not the reverse")
@@ -191,7 +191,7 @@ func resolveCompareSpec(svc *domain.Service, tok string, stderr io.Writer) (mode
 			fmt.Fprintln(stderr, "compare:", err)
 			return model.Endpoint{}, 1
 		}
-		if ep.Kind == model.EndpointShelf {
+		if ep.Kind() == model.EndpointShelf {
 			sha := e.Origin.Commit
 			if len(sha) > 7 {
 				sha = sha[:7]

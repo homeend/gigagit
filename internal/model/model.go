@@ -277,78 +277,97 @@ const (
 )
 
 // Endpoint names one side of a whole-tree comparison.
+//
+// Its fields are unexported on purpose: the only way to make one is a
+// constructor (WorkTreeEndpoint, IndexEndpoint, CommitEndpoint,
+// ShelfEndpoint), each of which validates. Holding an Endpoint therefore
+// PROVES it is consistent, and no consumer re-checks. The zero value is
+// EndpointInvalid -- an unset variable or an error return, never a usable
+// endpoint.
 type Endpoint struct {
-	Kind    EndpointKind
-	Hash    string // commit hash when Kind == EndpointCommit; "" otherwise
-	ShelfID string // shelf entry id when Kind == EndpointShelf; "" otherwise
+	kind    EndpointKind
+	hash    string // commit hash when kind == EndpointCommit; "" otherwise
+	shelfID string // shelf entry id when kind == EndpointShelf; "" otherwise
 }
+
+// Kind is the endpoint's kind. EndpointInvalid means unset.
+func (e Endpoint) Kind() EndpointKind { return e.kind }
+
+// Valid reports whether the endpoint came from a constructor.
+func (e Endpoint) Valid() bool { return e.kind != EndpointInvalid }
+
+// Hash is the commit id, or "" for any other kind.
+func (e Endpoint) Hash() string { return e.hash }
+
+// ShelfID is the shelf entry id, or "" for any other kind.
+func (e Endpoint) ShelfID() string { return e.shelfID }
 
 // Display is the human label for an endpoint.
 func (e Endpoint) Display() string {
-	switch e.Kind {
+	switch e.kind {
 	case EndpointWorkTree:
 		return "Working Tree"
 	case EndpointIndex:
 		return "Staged"
 	case EndpointShelf:
-		id := e.ShelfID
+		id := e.shelfID
 		if len(id) > 9 {
 			id = id[:9]
 		}
 		return "shelf #" + id + " (frozen)"
 	case EndpointCommit:
-		if len(e.Hash) > 7 {
-			return e.Hash[:7]
+		if len(e.hash) > 7 {
+			return e.hash[:7]
 		}
-		return e.Hash
+		return e.hash
 	default:
-		panic(endpointKindBug("Display", e.Kind))
+		panic(endpointKindBug("Display", e.kind))
 	}
 }
 
 // FileRef maps the endpoint to a resolvable file reference for path.
 func (e Endpoint) FileRef(path string) FileRef {
-	switch e.Kind {
+	switch e.kind {
 	case EndpointWorkTree:
 		return FileRef{Source: SourceUnstaged, Path: path}
 	case EndpointIndex:
 		return FileRef{Source: SourceStaged, Path: path}
 	case EndpointShelf:
-		return FileRef{Source: SourceShelf, Locator: e.ShelfID, Path: path}
+		return FileRef{Source: SourceShelf, Locator: e.shelfID, Path: path}
 	case EndpointCommit:
-		return FileRef{Source: SourceCommit, Locator: e.Hash, Path: path}
+		return FileRef{Source: SourceCommit, Locator: e.hash, Path: path}
 	default:
-		panic(endpointKindBug("FileRef", e.Kind))
+		panic(endpointKindBug("FileRef", e.kind))
 	}
 }
 
 // IsLive reports whether the endpoint's content can change on disk (working
 // tree or index) and therefore must never be cached.
 func (e Endpoint) IsLive() bool {
-	switch e.Kind {
+	switch e.kind {
 	case EndpointWorkTree, EndpointIndex:
 		return true
 	case EndpointCommit, EndpointShelf:
 		return false
 	default:
-		panic(endpointKindBug("IsLive", e.Kind))
+		panic(endpointKindBug("IsLive", e.kind))
 	}
 }
 
 // CacheTag is a stable cache-key fragment for the endpoint (only meaningful
 // when !IsLive()).
 func (e Endpoint) CacheTag() string {
-	switch e.Kind {
+	switch e.kind {
 	case EndpointWorkTree:
 		return "worktree"
 	case EndpointIndex:
 		return "index"
 	case EndpointShelf:
-		return "shelf:" + e.ShelfID
+		return "shelf:" + e.shelfID
 	case EndpointCommit:
-		return e.Hash
+		return e.hash
 	default:
-		panic(endpointKindBug("CacheTag", e.Kind))
+		panic(endpointKindBug("CacheTag", e.kind))
 	}
 }
 
@@ -369,10 +388,10 @@ var ErrEndpoint = errors.New("bad endpoint")
 
 // WorkTreeEndpoint names the working tree. It cannot fail: there is nothing
 // to validate.
-func WorkTreeEndpoint() Endpoint { return Endpoint{Kind: EndpointWorkTree} }
+func WorkTreeEndpoint() Endpoint { return Endpoint{kind: EndpointWorkTree} }
 
 // IndexEndpoint names the index. It cannot fail.
-func IndexEndpoint() Endpoint { return Endpoint{Kind: EndpointIndex} }
+func IndexEndpoint() Endpoint { return Endpoint{kind: EndpointIndex} }
 
 // CommitEndpoint names the tree at a commit. hash must be 7..64 hex
 // characters -- 64, not 40, because a sha-256 repository's commit ids are 64
@@ -387,7 +406,7 @@ func CommitEndpoint(hash string) (Endpoint, error) {
 			return Endpoint{}, fmt.Errorf("%w: commit hash must be hex, got %q", ErrEndpoint, hash)
 		}
 	}
-	return Endpoint{Kind: EndpointCommit, Hash: hash}, nil
+	return Endpoint{kind: EndpointCommit, hash: hash}, nil
 }
 
 // ShelfEndpoint names a shelved commit's frozen changed-file set.
@@ -395,7 +414,7 @@ func ShelfEndpoint(id string) (Endpoint, error) {
 	if id == "" {
 		return Endpoint{}, fmt.Errorf("%w: shelf id is required", ErrEndpoint)
 	}
-	return Endpoint{Kind: EndpointShelf, ShelfID: id}, nil
+	return Endpoint{kind: EndpointShelf, shelfID: id}, nil
 }
 
 func isHexDigit(b byte) bool {
@@ -417,13 +436,13 @@ func isHexDigit(b byte) bool {
 // TestBoundedMatchesTheSpecRule. If 1b finds a kind whose boundedness is NOT
 // determined by the kind, revisit this.
 func (e Endpoint) Bounded() bool {
-	switch e.Kind {
+	switch e.kind {
 	case EndpointShelf:
 		return true
 	case EndpointWorkTree, EndpointIndex, EndpointCommit:
 		return false
 	default:
-		panic(endpointKindBug("Bounded", e.Kind))
+		panic(endpointKindBug("Bounded", e.kind))
 	}
 }
 

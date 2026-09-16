@@ -171,10 +171,10 @@ func (m Model) markedRangeReviewRow() (actionRow, bool) {
 		return actionRow{}, false
 	}
 	left, right, _, ok := m.compareSelectionEndpoints()
-	if !ok || left.Kind != model.EndpointCommit || right.Kind != model.EndpointCommit {
+	if !ok || left.Kind() != model.EndpointCommit || right.Kind() != model.EndpointCommit {
 		return actionRow{}, false
 	}
-	rng := left.Hash + ".." + right.Hash
+	rng := left.Hash() + ".." + right.Hash()
 	target := domain.ReviewTarget{
 		Kind:  domain.ReviewRange,
 		Range: rng,

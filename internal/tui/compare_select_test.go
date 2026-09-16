@@ -99,8 +99,8 @@ func TestCompareSelectionTwoCommits(t *testing.T) {
 		t.Fatalf("two commits must be comparable: %q", note)
 	}
 	// 2 commits → tree-diff older↔newer, no ^.
-	if left.Hash != m.commits[1].Hash || right.Hash != m.commits[0].Hash {
-		t.Fatalf("endpoints = %s ↔ %s, want %s ↔ %s", left.Hash, right.Hash, m.commits[1].Hash, m.commits[0].Hash)
+	if left.Hash() != m.commits[1].Hash || right.Hash() != m.commits[0].Hash {
+		t.Fatalf("endpoints = %s ↔ %s, want %s ↔ %s", left.Hash(), right.Hash(), m.commits[1].Hash, m.commits[0].Hash)
 	}
 }
 
@@ -125,11 +125,11 @@ func TestCompareSelectionThreeCommitsSquash(t *testing.T) {
 		t.Fatalf("c1 (m.commits[2]) must have a parent in a 4-commit chain")
 	}
 	wantParent := m.commits[2].Parents[0]
-	if left.Hash != wantParent {
-		t.Fatalf("squash base = %q, want %q (oldest selected commit's parent)", left.Hash, wantParent)
+	if left.Hash() != wantParent {
+		t.Fatalf("squash base = %q, want %q (oldest selected commit's parent)", left.Hash(), wantParent)
 	}
-	if right.Hash != m.commits[0].Hash {
-		t.Fatalf("squash tip = %q, want %q", right.Hash, m.commits[0].Hash)
+	if right.Hash() != m.commits[0].Hash {
+		t.Fatalf("squash tip = %q, want %q", right.Hash(), m.commits[0].Hash)
 	}
 }
 
