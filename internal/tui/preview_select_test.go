@@ -185,16 +185,17 @@ func TestPreviewSearchHitLandsCursor(t *testing.T) {
 	if p.cur != hit.row {
 		t.Fatalf("the cursor must land on the hit row: cur = %d, hit = %d", p.cur, hit.row)
 	}
-	if got := p.searchPos().row; got != hit.row {
+	rows := m.filePreviewRowsCap()
+	if got := p.searchPos(rows).row; got != hit.row {
 		t.Fatalf("searchPos must report the current hit's own row, got %d want %d", got, hit.row)
 	}
 	// The FALLBACK branch is the one that retires the old behaviour: with no
-	// current hit, searchPos must read the CURSOR, not the pager's top line.
-	// Put the two deliberately out of step and check which one it follows.
+	// current hit, searchPos must read the CURSOR — as long as the cursor is on
+	// screen. Put it and the pager top deliberately out of step.
 	savedCur := p.search.cur
 	p.search.cur = -1
 	p.cur, p.sel = 7, 0
-	if got := p.searchPos().row; got != 7 {
+	if got := p.searchPos(rows).row; got != 7 {
 		t.Fatalf("with no current hit searchPos must follow the cursor, row = %d want 7 (top line is 0)", got)
 	}
 	p.search.cur, p.cur = savedCur, hit.row
@@ -203,6 +204,57 @@ func TestPreviewSearchHitLandsCursor(t *testing.T) {
 	m = feedPreview(m, "esc")
 	if m.filesPreview.cur != 0 {
 		t.Fatalf("esc must restore the cursor to where the search started, cur = %d", m.filesPreview.cur)
+	}
+}
+
+// ↑/↓ scroll the pager WITHOUT moving the cursor, so a search opened after a
+// free scroll must start from what is on SCREEN — not from the cursor, which is
+// still parked at row 0 far above the window.
+func TestPreviewSearchAfterFreeScrollStartsFromTheWindow(t *testing.T) {
+	t.Parallel()
+	m := previewSearchModel(t) // 60 "line%03d alpha" rows + a "tail beta" row
+	const scrolled = 30
+	for i := 0; i < scrolled; i++ {
+		m = feedPreview(m, "down")
+	}
+	p := m.filesPreview
+	if p.sel != scrolled || p.cur != 0 {
+		t.Fatalf("↓ must scroll the pager alone: sel = %d (want %d), cur = %d (want 0)", p.sel, scrolled, p.cur)
+	}
+	m = feedPreview(m, "/", "a", "l", "p", "h", "a")
+	if p.search.cur < 0 {
+		t.Fatalf("the search must have found a hit")
+	}
+	if row := p.search.hits[p.search.cur].row; row < scrolled {
+		t.Fatalf("the search must start from the visible top, not the off-screen cursor: hit row = %d, want >= %d", row, scrolled)
+	}
+	// …and the view must not have been yanked back to the top of the file.
+	if p.sel < scrolled {
+		t.Fatalf("a hit already on screen must not scroll the pager: sel = %d, want >= %d", p.sel, scrolled)
+	}
+}
+
+// After a COMMITTED search, moving the line cursor re-anchors ]: it steps from
+// the cursor, not from the stale current hit (the diff and blame rule).
+func TestPreviewStepHitFollowsTheCursor(t *testing.T) {
+	t.Parallel()
+	m := previewSearchModel(t)
+	m = feedPreview(m, "/", "a", "l", "p", "h", "a", "enter")
+	p := m.filesPreview
+	if p.search.hits[p.search.cur].row != 0 {
+		t.Fatalf("the committed search must sit on the first hit, row = %d", p.search.hits[p.search.cur].row)
+	}
+	const walked = 5
+	for i := 0; i < walked; i++ {
+		m = feedPreview(m, "alt+down")
+	}
+	if p.cur != walked {
+		t.Fatalf("alt+down must walk the cursor, cur = %d want %d", p.cur, walked)
+	}
+	m = feedPreview(m, "]")
+	if row := p.search.hits[p.search.cur].row; row != walked {
+		// The old unconditional hit branch stepped from hits[0] and landed on 1.
+		t.Fatalf("] must step from the CURSOR's row, landed on %d want %d", row, walked)
 	}
 }
 
@@ -278,13 +330,15 @@ func previewRowWith(t *testing.T, out, needle string) string {
 func TestPreviewHintVariants(t *testing.T) {
 	t.Parallel()
 	m := previewTabModel(t)
-	// Render WIDE: renderFilePreview truncates the hint to innerW, and both
-	// variants are longer than the right column at the fixture's 100 columns.
-	m.width = 220
+	// Rendered at the fixture's own 100 columns: renderFilePreview truncates
+	// the hint to innerW (63 there), so the ORDER is the whole point — the new
+	// keys and both exits have to survive the cut on an ordinary terminal.
 	boxW, boxH := m.layout().rightW, m.layout().boxH[panelCommits]
 	out := m.renderFilePreview(boxW, boxH)
-	if !strings.Contains(out, "[alt+↑↓] line") || !strings.Contains(out, "[spc] mark") {
-		t.Fatalf("the preview hint must advertise the cursor and mark keys:\n%s", out)
+	for _, want := range []string{"[alt+↑↓] line", "[spc] mark", "[/] find", "[esc] close"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("the preview hint must still carry %q at 100 columns:\n%s", want, out)
+		}
 	}
 	if f, _ := m.footerOverride(); !strings.Contains(f, "[spc] mark") {
 		t.Fatalf("the status bar must advertise the mark key: %q", f)

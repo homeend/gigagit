@@ -316,16 +316,31 @@ func previewSearchLines(p *contentPopup) []searchLine {
 	return out
 }
 
-// searchPos is where ] and [ measure from: the current hit's exact column when
-// there is one, otherwise the head of the LINE CURSOR's row. (It used to be the
-// top visible line, because the preview had no cursor — the deferred "searchPos
-// ignores p.sel after a free scroll" item; a cursor retires it.)
-func (p *contentPopup) searchPos() searchPos {
+// searchPos is where ] and [ measure from, in the shape diffView.searchPos and
+// blameView.searchPos already use: the current hit while the LINE CURSOR still
+// sits on its row (so a second ] steps OFF it), else the head of a row.
+//
+// Which row is the preview's own wrinkle, because it is BOTH a pager and a
+// cursor: ↑/↓, the wheel and the page keys scroll p.sel without moving p.cur,
+// so anchoring on the cursor unconditionally would search from far off screen
+// — page to line 500, press /, and the first hit would be back at the top.
+// The anchor is therefore the cursor while it is inside the window
+// [sel, sel+rowsCap), and the top visible line otherwise: either way, the
+// search starts from what the user is looking at.
+func (p *contentPopup) searchPos(rowsCap int) searchPos {
 	if p.search.cur >= 0 && p.search.cur < len(p.search.hits) {
-		h := p.search.hits[p.search.cur]
-		return searchPos{row: h.row, side: h.side, col: h.start}
+		if h := p.search.hits[p.search.cur]; h.row == p.cur {
+			return searchPos{row: h.row, side: h.side, col: h.start}
+		}
 	}
-	return searchPos{row: p.cur, side: 0, col: -1}
+	if rowsCap < 1 {
+		rowsCap = 1
+	}
+	row := p.sel
+	if p.cur >= p.sel && p.cur < p.sel+rowsCap {
+		row = p.cur
+	}
+	return searchPos{row: row, side: 0, col: -1}
 }
 
 // snapHit scrolls the pager so the current hit is visible, moving as little as
@@ -435,7 +450,11 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := i18n.T("%d/%d  [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [ctrl+w] view  [/] find  [esc] close", start+1, len(vis))
+	// The new keys and the two EXITS lead: the hint is truncated to innerW, and
+	// at a 100-column terminal (innerW 63) only the first ~57 columns survive —
+	// so [/] find and [esc] close have to come before the scroll/view keys the
+	// arrow keys already teach by doing.
+	hint := i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] close  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
 	if p.lsel.on {
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))
 	}

@@ -728,7 +728,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// stale. Re-run it over the loaded lines and re-snap the scroll — only
 		// the no-search path still resets to the top.
 		if p.search.active() {
-			p.search.refindFrom(previewSearchLines(p), p.searchPos())
+			p.search.refindFrom(previewSearchLines(p), p.searchPos(m.filePreviewRowsCap()))
 			p.snapHit(m.filePreviewRowsCap(), m.filePreviewInnerW())
 		} else {
 			p.sel = 0

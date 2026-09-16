@@ -729,14 +729,14 @@ func (m Model) previewSearchKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 	switch searchCommandKey(&p.search, msg) {
 	case searchOpenFwd, searchOpenBack:
 		p.searchOrig = previewOrigin{sel: p.sel, cur: p.cur, hscroll: p.hscroll}
-		p.search.open(msg.String() == "@", p.searchPos())
+		p.search.open(msg.String() == "@", p.searchPos(rows))
 		return m.recallReset(), nil, true
 	case searchNext:
-		p.search.cur = stepHit(p.search.hits, p.searchPos(), 1)
+		p.search.cur = stepHit(p.search.hits, p.searchPos(rows), 1)
 		p.snapHit(rows, inner)
 		return m, nil, true
 	case searchPrev:
-		p.search.cur = stepHit(p.search.hits, p.searchPos(), -1)
+		p.search.cur = stepHit(p.search.hits, p.searchPos(rows), -1)
 		p.snapHit(rows, inner)
 		return m, nil, true
 	case searchCleared:

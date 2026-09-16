@@ -118,11 +118,6 @@ func TestPreviewSearchStepsAndBadges(t *testing.T) {
 	if m.filesPreview.search.cur != first+1 {
 		t.Fatalf("] = %d, want %d", m.filesPreview.search.cur, first+1)
 	}
-	// Render WIDE: the hint outgrew the fixture's right column once the line
-	// cursor and the mark key joined it, and renderFilePreview truncates to
-	// innerW. Width affects the render alone — the hits and the step above are
-	// already computed.
-	m.width = 220
 	out := m.renderFilePreview(m.layout().rightW, m.layout().boxH[panelCommits])
 	if !strings.Contains(out, "/alpha  2/60") {
 		t.Fatalf("the title line must carry the badge:\n%s", strings.Split(out, "\n")[1])
