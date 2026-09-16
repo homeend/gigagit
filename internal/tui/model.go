@@ -901,6 +901,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			b.lines = msg.lines
 			b.tok = msg.tok
 			b.blocks = groupBlame(msg.lines)
+			b.san = nil // the search's display-text cache belongs to the old lines
 			b.sel = 0
 		}
 		return m, nil
