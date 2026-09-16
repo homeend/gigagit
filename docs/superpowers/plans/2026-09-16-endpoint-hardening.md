@@ -820,9 +820,18 @@ requires 7..64 hex.
 
 **This is a real, shipped bug, not a migration snag.** `Endpoint.CacheTag()`
 returns `Hash` verbatim and is the session diff-cache key. Keying the cache on
-a moving name means `gg compare HEAD @worktree`, re-opened after a commit, can
+a moving name means the same compare, re-opened after the name moves, can
 serve a **stale diff** — precisely the "wrong diff later" class this refactor
 exists to close.
+
+> **Correction, made during execution.** This section originally led with
+> `gg compare HEAD @worktree` as the motivating example. That example is
+> **wrong**: `compareDiffKey` (`internal/tui/diff_view.go:713`) returns `""`
+> whenever either side is live, so a pair involving the working tree or the
+> index was never cached at all. The bug is real, but the exposed pair is
+> **commit↔commit** — the `commit_scope.go` and `branch_compare.go` sites.
+> Task 3b's own commit message carries the same wrong example; the code and
+> its tests target the right pair.
 
 **Ruling (controller, during execution):** fix it here, before Task 4. Task 4
 unexports the fields, which turns each of these literals into a compile error,
