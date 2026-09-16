@@ -82,15 +82,55 @@ func (m Model) popLayer() Model {
 	return m
 }
 
-// clearLayers removes every layer. Used when a flow hands off to a surface that
-// must own the screen with no return stack behind it — the identity apply-op
-// (settings → identity) and the bookmark→compare-files view. (The full-screen
-// diff no longer uses this: it is a stack layer and is pushed/popped like any
-// other, preserving the surface it was opened over.)
+// clearLayers removes every layer FOR GOOD. Used when a popup hands off to an
+// operation (the identity apply-op, Reset branch, cherry-pick, apply patch):
+// the op changes what the popup listed, so there is nothing to return to and
+// the op must land in the main panels. A popup handing off to a WINDOW never
+// uses this — see handOffToFilesView. (The full-screen diff is a stack layer
+// and is pushed/popped like any other, preserving the surface it was opened
+// over.)
 func (m Model) clearLayers() Model {
 	if m.layers != nil {
 		m.layers.entries = nil
 	}
+	return m
+}
+
+// handOffToFilesView opens a files view (tree / compare / shelf files) FROM a
+// popup: the convention is that a window opened from a popup returns to that
+// popup when closed, so the layer stack is parked rather than cleared. The
+// files view is not a layer, so the stack must be empty while it is open (a
+// popup left on the stack would draw over the tree and keep the keyboard);
+// the view's esc/l close restores the parked stack (restoreParkedLayers) and
+// every other teardown drops it (closeFilesView zeroes filesReturnLayers).
+//
+// The park is armed AFTER open runs: every opener starts with closeFilesView
+// as its clean slate, which would zero a park armed before it. A popup
+// opened OVER an already-open files view replaces whatever that view had
+// parked — the latest opener wins.
+func (m Model) handOffToFilesView(open func(Model) (Model, tea.Cmd)) (Model, tea.Cmd) {
+	var parked []layer
+	if m.layers != nil {
+		parked = m.layers.entries
+		m.layers.entries = nil
+	}
+	m, cmd := open(m)
+	m.filesReturnLayers = parked
+	return m, cmd
+}
+
+// restoreParkedLayers puts the stack a hand-off parked back as the live
+// stack. Called only from the files view's own close paths, which read the
+// field before closeFilesView zeroes it; the stack is empty at that point
+// (the view only receives keys when nothing sits above it).
+func (m Model) restoreParkedLayers(parked []layer) Model {
+	if len(parked) == 0 {
+		return m
+	}
+	if m.layers == nil {
+		m.layers = &layerStack{}
+	}
+	m.layers.entries = append(m.layers.entries, parked...)
 	return m
 }
 

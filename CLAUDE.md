@@ -117,6 +117,12 @@ Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands,
   Include an explicit `abort` option when cancel must be expressible (the TUI
   maps esc to it).
 - **TUI `Model` is a value receiver** with pointer fields (`modal`, `popup`) for state that must persist across the value copy.
+- **A window opened from a popup returns to that popup when closed.** The
+  popup is hidden while the window is open, never destroyed. Layer-stack
+  windows get this from `pushLayer`/`popLayer`; a popup handing off to the
+  files view (not a layer) goes through `handOffToFilesView`, which parks the
+  stack for the view's esc/`l` to restore. `clearLayers` is only for a popup
+  handing off to an *operation* (details: `docs/CLAUDE-details.md`).
 - **`internal/tui` and `internal/cli` never import `internal/git`** — they reach git through `internal/domain` (guarded by `internal/archtest`; `mcp` and `web` are domain-only too). `cmd/gg` and `internal/app` are the composition root and may construct concrete git types.
 - **Every user-visible TUI string is translated**: route it through `i18n.T`
   with a literal key present in all four bundles — AST-gate tests
