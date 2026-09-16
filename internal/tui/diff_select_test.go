@@ -1,17 +1,21 @@
 package tui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
+	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
+	"github.com/homeend/gigagit/internal/theme"
 )
 
-// NOTE: TestDiffSelectionPaintsOnlyTheCursorSide and
-// TestDiffSelectionOnAChangedRowStillPaints call lipgloss.SetColorProfile
+// NOTE: TestDiffSelectionPaintsOnlyTheCursorSide,
+// TestDiffSelectionOnAChangedRowStillPaints and
+// TestDiffSelectionUnderReverseDropsSyntaxColours call lipgloss.SetColorProfile
 // (process-global) and therefore do NOT call t.Parallel().
 
 // selRow finds an action row by id in the . menu's context copy rows.
@@ -294,6 +298,134 @@ func TestDiffSelectionOnAChangedRowStillPaints(t *testing.T) {
 	right := row[strings.Index(row, "│"):]
 	if sgrBefore(right, "new-text") == nil {
 		t.Fatalf("the changed row's new cell is unpainted: %q", right)
+	}
+	// …and painted with the STRIPE, not merely with the hot shade: without this
+	// the test would pass on a renderer that never laid the selection down.
+	stripe := sgrBefore(st().selectionStyle(lipgloss.NewStyle()).Render("x"), "x")
+	if got := sgrBefore(right, "new-text"); !subsetOf(stripe, got) {
+		t.Errorf("the changed row's new cell must wear the stripe, params %v: %q", got, right)
+	}
+}
+
+// revSelectModel opens a two-row diff whose SELECTED row (row 1, the cursor is
+// on row 0) carries a syntax token on the new side — the setup the reversed-base
+// class-mask drop is about. Left and right texts differ so the needle
+// ("package") is unique to the cursor side's cell.
+func revSelectModel(long longMode) Model {
+	m := diffModel()
+	m.width, m.height = 100, 8
+	v := diffViewWith([]textdiff.Row{
+		{Kind: textdiff.Same, Left: "x := 1", Right: "x := 1", LeftNo: 1, RightNo: 1},
+		{Kind: textdiff.Same, Left: "import y", Right: "package main", LeftNo: 2, RightNo: 2},
+	}, []int{1})
+	v.title = "a.go"
+	v.newTok = [][]syntax.Tok{
+		nil,
+		{{Start: 0, End: 7, Class: syntax.Keyword}},
+	}
+	v.long = long
+	v.relayout(m.width)
+	v.curLine = 0
+	v.lsel.start(1)
+	v.lsel.mark(1)
+	m = m.pushLayer(v)
+	m.diffTag = "status:x"
+	return m
+}
+
+// The . menu's Copy selected lines row clears the range, exactly as enter does
+// (enter runs this very row): lineSel.clear's contract lists "a copy" among the
+// clearing events, and a row that copied without clearing would leave the
+// stripe painted over text already on the clipboard.
+func TestDiffCopySelectedLinesRowClearsTheSelection(t *testing.T) {
+	t.Parallel()
+	m := openedDiffModel(12, cursorRows(40), nil)
+	m.diffLayer().setCursorLine(5, m.diffBodyRows())
+	m = feedDiff(m, "space", "j", "space")
+	if !m.diffLayer().lsel.on {
+		t.Fatal("the fixture must have a live selection")
+	}
+	row := selRow(t, m, "copy-selected-lines")
+	nm, cmd := row.run(m)
+	if cmd == nil {
+		t.Fatal("the row must still issue the clipboard command")
+	}
+	if nm.(Model).diffLayer().lsel.on {
+		t.Error("running the Copy selected lines row must clear the selection")
+	}
+	// The plain Copy line row is NOT a range copy and leaves the cursor's own
+	// state alone.
+	m = feedDiff(m, "space")
+	if _, cmd := selRow(t, m, "copy-line").run(m); cmd == nil {
+		t.Fatal("Copy line must still copy")
+	}
+	if !m.diffLayer().lsel.on {
+		t.Error("Copy line must not clear the selection")
+	}
+}
+
+// A view with nothing to select — loading, errored, binary or too large — has
+// no line under the cursor and no copy rows (diffCopyLineRows declines the same
+// four states), so space must not start a range. The key is CONSUMED with no
+// state change, the way blame does on an empty file and the preview does on a
+// placeholder line, so it never falls through to some other binding.
+func TestDiffSpaceDeclinedWithNothingToSelect(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		set  func(*diffView)
+	}{
+		{"loading", func(v *diffView) { v.loading = true }},
+		{"err", func(v *diffView) { v.err = errors.New("boom") }},
+		{"binary", func(v *diffView) { v.binary = true }},
+		{"tooLarge", func(v *diffView) { v.tooLarge = true }},
+	} {
+		m := openedDiffModel(12, cursorRows(40), nil)
+		m.width = 160
+		tc.set(m.diffLayer())
+		m = feedDiff(m, "space")
+		if m.diffLayer() == nil {
+			t.Fatalf("%s: space must not close the view", tc.name)
+		}
+		if m.diffLayer().lsel.on {
+			t.Errorf("%s: space must not start a selection on a view with nothing to select", tc.name)
+		}
+		if got := lastLine(m.renderDiffView()); strings.Contains(got, "[esc] unmark") {
+			t.Errorf("%s: the footer must stay the base variant: %q", tc.name, got)
+		}
+	}
+}
+
+// The diff twin of TestBlameSelectionUnderReverseDropsSyntaxColours: with
+// selection_bg unset the stripe FLIPS reverse video, and a reversed base turns
+// every per-token syntax FOREGROUND into a per-token BACKGROUND — each token in
+// the selected line getting its own coloured block. styledRuns must therefore
+// drop the class mask on a reversed base, in all three long-line modes (each
+// has its own cell renderer: diffCell / scrollCell / segCell).
+func TestDiffSelectionUnderReverseDropsSyntaxColours(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+	prevTheme := activeTheme()
+	defer setTheme(prevTheme)
+	setTheme(theme.Terminal) // selection_bg unset => the stripe flips reverse
+
+	for _, lm := range []longMode{longScroll, longWrap, longTruncate} {
+		m := revSelectModel(lm)
+		row := diffBodyRow(t, m, 1)
+		seq := sgrSeqBefore(row, "package")
+		if seq == "" {
+			t.Fatalf("mode %d: the selected cell is missing: %q", lm, row)
+		}
+		if !hasSGR(seq, "7") {
+			t.Errorf("mode %d: the selected cell must reverse video: %q", lm, seq)
+		}
+		for _, fg := range []string{"38;5;", "38;2;", "38;"} {
+			if strings.Contains(seq, fg) {
+				t.Errorf("mode %d: a reversed base must drop the class mask; the token carries a foreground: %q (row %q)", lm, seq, row)
+				break
+			}
+		}
 	}
 }
 

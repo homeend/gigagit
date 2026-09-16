@@ -304,13 +304,19 @@ func TestPreviewCursorPaint(t *testing.T) {
 		t.Errorf("a selected cursor row must wear the stripe, params %v: %q", got, row)
 	}
 
-	// cursor_style off: no band at all, but the stripe still paints.
+	// cursor_style off: no band at all, but the stripe still paints. The
+	// selection is deliberately left ON (an esc here would clear it and the
+	// second assertion would be checking an empty row), so the stripe lands
+	// over a BARE base instead of over the band.
 	m.diffCursor = "off"
-	m = feedPreview(m, "esc")
 	out = m.renderFilePreview(boxW, boxH)
+	bare := sgrBefore(st().selectionStyle(lipgloss.NewStyle()).Render("x"), "x")
 	row = previewRowWith(t, out, "line000")
 	if got := sgrBefore(row, "line000"); subsetOf(band, got) {
 		t.Errorf("with diff_cursor off the preview must paint no band: %q", row)
+	}
+	if got := sgrBefore(row, "line000"); !subsetOf(bare, got) {
+		t.Errorf("with diff_cursor off the stripe must still paint, params %v: %q", got, row)
 	}
 }
 

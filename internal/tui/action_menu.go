@@ -526,12 +526,8 @@ func insertCopyLinkRow(rows []actionRow, r actionRow) []actionRow {
 }
 
 func rowHasID(rows []actionRow, id string) bool {
-	for _, row := range rows {
-		if row.id == id {
-			return true
-		}
-	}
-	return false
+	_, ok := rowByID(rows, id)
+	return ok
 }
 
 // rowByID returns the row with the given id. It is how a KEY runs the very row
@@ -703,6 +699,23 @@ func (m Model) copyRow(id, label, okMsg, text string) actionRow {
 			return m, m.copyToClipboardCmd(okMsg, text)
 		},
 	}
+}
+
+// clearingCopyRow wraps a line-RANGE copy row so that running it also clears
+// the host's selection — lineSel.clear's contract lists "a copy" among the
+// clearing events, and enter (which runs this very row) clears too, so the
+// menu and the key must not disagree. The host is resolved from the Model at
+// RUN time, never captured at menu-BUILD time: the menu is built once when it
+// opens and the row can run against a Model whose layers have moved on.
+func clearingCopyRow(row actionRow, sel func(Model) *lineSel) actionRow {
+	inner := row.run
+	row.run = func(m Model) (tea.Model, tea.Cmd) {
+		if s := sel(m); s != nil {
+			s.clear()
+		}
+		return inner(m)
+	}
+	return row
 }
 
 // synthKey reproduces the keypress that runs an action's key, for replay

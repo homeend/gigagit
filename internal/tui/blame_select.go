@@ -42,10 +42,15 @@ func (m Model) blameCopyLineRows(b *blameView) []actionRow {
 		m.copyRow("copy-line", i18n.T("Copy line"), i18n.T("Copied line %d", ln.LineNo), ln.Content),
 	}
 	if sel := b.selectedLines(); len(sel) > 0 {
-		rows = append(rows, m.copyRow("copy-selected-lines",
+		rows = append(rows, clearingCopyRow(m.copyRow("copy-selected-lines",
 			i18n.T("Copy selected lines (%d)", len(sel)),
 			i18n.T("Copied %d lines", len(sel)),
-			strings.Join(sel, "\n")))
+			strings.Join(sel, "\n")), func(m Model) *lineSel {
+			if bv, ok := m.topLayer().(*blameView); ok {
+				return &bv.lsel
+			}
+			return nil
+		}))
 	}
 	return rows
 }

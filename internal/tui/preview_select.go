@@ -82,10 +82,15 @@ func (m Model) previewCopyLineRows() []actionRow {
 			i18n.T("Copied line %d", p.cur+1), p.lines[p.cur].raw))
 	}
 	if sel := p.selectedLines(); len(sel) > 0 {
-		rows = append(rows, m.copyRow("copy-selected-lines",
+		rows = append(rows, clearingCopyRow(m.copyRow("copy-selected-lines",
 			i18n.T("Copy selected lines (%d)", len(sel)),
 			i18n.T("Copied %d lines", len(sel)),
-			strings.Join(sel, "\n")))
+			strings.Join(sel, "\n")), func(m Model) *lineSel {
+			if pp := m.filesPreview; pp != nil {
+				return &pp.lsel
+			}
+			return nil
+		}))
 	}
 	return rows
 }

@@ -836,8 +836,19 @@ func hotEmphBody(text string, spans []textdiff.Span, toks []syntax.Tok, tw int, 
 // foreground. Emphasis
 // WINS over the syntax colour so the word-diff stays legible. An all-Plain cls
 // with no emphasis renders byte-identically to the pre-syntax renderer.
+//
+// A REVERSED base (the line-selection stripe with the theme role selection_bg
+// unset, styles.selectionStyle) swaps foreground and background at the
+// terminal, so per-token foregrounds would paint per-token BACKGROUNDS — every
+// syntax token in a selected line becoming its own coloured block. The class
+// mask therefore DROPS on a reversed base, exactly as renderWindow drops
+// winRow.cls for blame and the preview. The emphasis mask survives, minus its
+// foreground: an ordinary hit / word-diff span keeps bold (diffEmph's 231
+// foreground would become a white block), and the CURRENT hit is untouched
+// because currentHitStyle flips the reverse back off by design.
 func styledRuns(disp []rune, emph []emphLevel, cls []syntax.Class, base lipgloss.Style) string {
 	s := st()
+	rev := base.GetReverse()
 	var b strings.Builder
 	for i := 0; i < len(disp); {
 		j := i + 1
@@ -849,9 +860,17 @@ func styledRuns(disp []rune, emph []emphLevel, cls []syntax.Class, base lipgloss
 		case emphCur:
 			b.WriteString(s.currentHitStyle(base).Render(seg))
 		case emphHit, emphWord:
-			b.WriteString(base.Inherit(s.diffEmph).Render(seg))
+			if rev {
+				b.WriteString(base.Bold(true).Render(seg))
+			} else {
+				b.WriteString(base.Inherit(s.diffEmph).Render(seg))
+			}
 		default:
-			b.WriteString(s.syntaxStyle(base, cls[i]).Render(seg))
+			if rev {
+				b.WriteString(base.Render(seg))
+			} else {
+				b.WriteString(s.syntaxStyle(base, cls[i]).Render(seg))
+			}
 		}
 		i = j
 	}

@@ -41,10 +41,15 @@ func (m Model) diffCopyLineRows() []actionRow {
 		rows = append(rows, m.copyRow("copy-line", label, i18n.T("Copied line %d", no), text))
 	}
 	if sel := v.selectedLines(); len(sel) > 0 {
-		rows = append(rows, m.copyRow("copy-selected-lines",
+		rows = append(rows, clearingCopyRow(m.copyRow("copy-selected-lines",
 			i18n.T("Copy selected lines (%d)", len(sel)),
 			i18n.T("Copied %d lines", len(sel)),
-			strings.Join(sel, "\n")))
+			strings.Join(sel, "\n")), func(m Model) *lineSel {
+			if d := m.diffLayer(); d != nil {
+				return &d.lsel
+			}
+			return nil
+		}))
 	}
 	return rows
 }
@@ -63,6 +68,15 @@ func (m Model) diffSelectKey(v *diffView, msg tea.KeyMsg) (Model, tea.Cmd, bool)
 	}
 	switch msg.String() {
 	case " ":
+		// The diff view owns the keyboard, so the key is consumed either way —
+		// but a view with nothing to select cannot start a range. The gate is
+		// diffCopyLineRows': a loading, errored, binary or too-large view has
+		// no lines and offers no copy rows, so a range there would show the
+		// selection footer and copy nothing. Consuming without a state change
+		// is what blame does on an empty file and the preview on a placeholder.
+		if v.loading || v.err != nil || v.binary || v.tooLarge {
+			return m, nil, true
+		}
 		v.lsel.press(v.curLine)
 		return m, nil, true
 	case "enter":

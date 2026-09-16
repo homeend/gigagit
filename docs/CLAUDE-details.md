@@ -1065,6 +1065,11 @@ while the prefix keeps `style` — a pointer, since `lipgloss.Style` holds
 interface fields and has no safe zero comparison, and a reversed body drops the
 class mask exactly as a reversed style does; the preview's rows carry no prefix
 at all, so its `winRow.style` IS the body style and nothing new was needed.
+The rule any new painter must keep: **a REVERSED base drops the syntax class
+mask** — in `renderWindow` for blame and the preview, and in `styledRuns` for
+the diff cells — because a reversed base with per-token FOREGROUNDS paints
+per-token BACKGROUNDS, giving every syntax token in a selected line its own
+coloured block.
 
 The preview also gained the cursor it never had: `contentPopup.cur` (read only
 by `renderFilePreview` and the preview key paths — the same struct backs the
