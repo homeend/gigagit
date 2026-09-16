@@ -132,7 +132,7 @@ func TestVersionsPopupEnterWithEndpointsOpensFrozenPreview(t *testing.T) {
 			{
 				Ref: "refs/gg/versions/main/1753100000-rebase", Hash: "snaphash0000000000",
 				Subject: "did a rebase", Op: "rebase", Unix: 1753100000,
-				Base: "basehash0000000000", Ours: "ourshash0000000000",
+				Base: "1111111111111111", Ours: "2222222222222222",
 			},
 		},
 	}
@@ -144,7 +144,7 @@ func TestVersionsPopupEnterWithEndpointsOpensFrozenPreview(t *testing.T) {
 	if m.filesView == nil || !m.inCompareMode() {
 		t.Fatal("a version row with recorded endpoints should open the frozen preview in compare mode")
 	}
-	if m.filesLeft.Hash != "basehash0000000000" || m.filesRight.Hash != "ourshash0000000000" {
+	if m.filesLeft.Hash != "1111111111111111" || m.filesRight.Hash != "2222222222222222" {
 		t.Fatalf("endpoints = %+v/%+v, want the recorded Base/Ours — never the live tip (livetiphash000000)", m.filesLeft, m.filesRight)
 	}
 }

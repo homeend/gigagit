@@ -21,7 +21,7 @@ func endpointCases() []endpointCase {
 		{
 			kind:     EndpointWorkTree,
 			name:     "worktree",
-			build:    func() Endpoint { return Endpoint{Kind: EndpointWorkTree} },
+			build:    func() Endpoint { return WorkTreeEndpoint() },
 			display:  "Working Tree",
 			live:     true,
 			cacheTag: "worktree",
@@ -31,7 +31,7 @@ func endpointCases() []endpointCase {
 		{
 			kind:     EndpointIndex,
 			name:     "index",
-			build:    func() Endpoint { return Endpoint{Kind: EndpointIndex} },
+			build:    func() Endpoint { return IndexEndpoint() },
 			display:  "Staged",
 			live:     true,
 			cacheTag: "index",
@@ -41,7 +41,7 @@ func endpointCases() []endpointCase {
 		{
 			kind:     EndpointCommit,
 			name:     "commit",
-			build:    func() Endpoint { return Endpoint{Kind: EndpointCommit, Hash: "abc1234def5678"} },
+			build:    func() Endpoint { return mustCommit("abc1234def5678") },
 			display:  "abc1234",
 			live:     false,
 			cacheTag: "abc1234def5678",
@@ -51,7 +51,7 @@ func endpointCases() []endpointCase {
 		{
 			kind:     EndpointShelf,
 			name:     "shelf",
-			build:    func() Endpoint { return Endpoint{Kind: EndpointShelf, ShelfID: "wt-parser-9f3a1"} },
+			build:    func() Endpoint { return mustShelf("wt-parser-9f3a1") },
 			display:  "shelf #wt-parser (frozen)",
 			live:     false,
 			cacheTag: "shelf:wt-parser-9f3a1",

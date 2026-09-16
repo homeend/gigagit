@@ -596,8 +596,8 @@ func (m Model) compareCommitBookmark(b model.Bookmark) (Model, tea.Cmd) {
 	}
 	m = m.clearLayers() // close the switcher so the files view is not drawn under it
 	return m.openCompareFiles(
-		model.Endpoint{Kind: model.EndpointCommit, Hash: b.Commit}, // base
-		model.Endpoint{Kind: model.EndpointCommit, Hash: subject})  // subject
+		mustCommitEndpoint(b.Commit), // base
+		mustCommitEndpoint(subject))  // subject
 }
 
 // commitBookmarkNotice sets a "not for a commit bookmark" status and reports

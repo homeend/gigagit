@@ -84,8 +84,11 @@ func TestFileFinderDiffActionOpensDiffLayer(t *testing.T) {
 	// Guard the tag coupling: ff-diff inlines the tag; loadCompareDiffCmd also
 	// builds it from the same formula. Assert they byte-match so a future drift
 	// in either side fails this test rather than causing a silent hang.
+	// left mirrors file_finder.go's ff-diff action exactly (including the
+	// "HEAD" rev-spec, not a hex hash — see the task-3 report's rev-spec
+	// bucket), since this test pins that the tag formulas byte-match.
 	left := model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"}
-	right := model.Endpoint{Kind: model.EndpointWorkTree}
+	right := model.WorkTreeEndpoint()
 	wantTag := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + path
 	if m.diffTag == "" {
 		t.Fatal("ff-diff should set m.diffTag")

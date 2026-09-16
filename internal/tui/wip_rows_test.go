@@ -69,7 +69,7 @@ func TestWipAccessors(t *testing.T) {
 // endpoint pair" error, which is the l/enter-on-WIP-row bug.
 func TestWipEndpointsOrder(t *testing.T) {
 	t.Parallel()
-	head := model.Endpoint{Kind: model.EndpointCommit, Hash: "h0"}
+	head := mustCommitEndpoint("1234567")
 
 	cases := []struct {
 		name    string
@@ -83,26 +83,26 @@ func TestWipEndpointsOrder(t *testing.T) {
 			wipRows: []wipRow{{wipStaged, 1}},
 			row:     wipRow{wipStaged, 1},
 			left:    head,
-			right:   model.Endpoint{Kind: model.EndpointIndex},
+			right:   model.IndexEndpoint(),
 		},
 		{
 			name:    "worktree row with staged present compares index to worktree",
 			wipRows: []wipRow{{wipWorktree, 1}, {wipStaged, 1}},
 			row:     wipRow{wipWorktree, 1},
-			left:    model.Endpoint{Kind: model.EndpointIndex},
-			right:   model.Endpoint{Kind: model.EndpointWorkTree},
+			left:    model.IndexEndpoint(),
+			right:   model.WorkTreeEndpoint(),
 		},
 		{
 			name:    "worktree row with nothing staged compares HEAD to worktree",
 			wipRows: []wipRow{{wipWorktree, 1}},
 			row:     wipRow{wipWorktree, 1},
 			left:    head,
-			right:   model.Endpoint{Kind: model.EndpointWorkTree},
+			right:   model.WorkTreeEndpoint(),
 		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			m := Model{wipRows: c.wipRows, commits: []model.Commit{{Hash: "h0"}}}
+			m := Model{wipRows: c.wipRows, commits: []model.Commit{{Hash: "1234567"}}}
 			left, right := m.wipEndpoints(c.row)
 			if left != c.left || right != c.right {
 				t.Fatalf("wipEndpoints(%v) = (%v, %v), want (%v, %v)", c.row, left, right, c.left, c.right)

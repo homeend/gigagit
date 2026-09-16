@@ -51,7 +51,7 @@ func TestVersionsPopupEnterOpensCompare(t *testing.T) {
 			{
 				Ref: "refs/gg/versions/main/1753100000-rebase", Hash: "tiphash0000000000",
 				Subject: "did a rebase", Op: "rebase", Unix: 1753100000,
-				Base: "basehash0000000000", Ours: "ourshash0000000000",
+				Base: "1111111111111111", Ours: "2222222222222222",
 			},
 		},
 	}
@@ -63,10 +63,10 @@ func TestVersionsPopupEnterOpensCompare(t *testing.T) {
 	if m.filesView == nil || !m.inCompareMode() {
 		t.Fatal("enter on a version row with recorded endpoints should open the files view in compare mode")
 	}
-	if m.filesLeft.Hash != "basehash0000000000" {
+	if m.filesLeft.Hash != "1111111111111111" {
 		t.Fatalf("left endpoint = %q, want the recorded Base (the frozen preview) — never the live tip", m.filesLeft.Hash)
 	}
-	if m.filesRight.Hash != "ourshash0000000000" {
+	if m.filesRight.Hash != "2222222222222222" {
 		t.Fatalf("right endpoint = %q, want the recorded Ours", m.filesRight.Hash)
 	}
 	if layerOf[*versionsPopup](m) != nil {
@@ -174,7 +174,7 @@ func TestVersionsPopupDeletedBranchWithEndpointsOpensFrozenPreview(t *testing.T)
 			{
 				Ref: "refs/gg/versions/gone/1753100000-rebase", Hash: "tiphash0000000000",
 				Subject: "did a rebase", Op: "rebase", Unix: 1753100000,
-				Base: "basehash0000000000", Ours: "ourshash0000000000",
+				Base: "1111111111111111", Ours: "2222222222222222",
 			},
 		},
 	}
@@ -186,7 +186,7 @@ func TestVersionsPopupDeletedBranchWithEndpointsOpensFrozenPreview(t *testing.T)
 	if m.filesView == nil || !m.inCompareMode() {
 		t.Fatal("a deleted branch's frozen preview should still open — it needs no live tip")
 	}
-	if m.filesLeft.Hash != "basehash0000000000" || m.filesRight.Hash != "ourshash0000000000" {
+	if m.filesLeft.Hash != "1111111111111111" || m.filesRight.Hash != "2222222222222222" {
 		t.Fatalf("endpoints = %+v/%+v, want the recorded Base/Ours", m.filesLeft, m.filesRight)
 	}
 }

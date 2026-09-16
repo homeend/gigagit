@@ -211,9 +211,17 @@ func (s *Service) PreviewOpen(ctx context.Context, source, target string) (Previ
 	if err != nil || sum.State != PreviewOK {
 		return PreviewEndpoints{Summary: sum}, err
 	}
+	left, err := model.CommitEndpoint(sum.base)
+	if err != nil {
+		return PreviewEndpoints{Summary: sum}, err
+	}
+	right, err := model.CommitEndpoint(sum.SourceHash)
+	if err != nil {
+		return PreviewEndpoints{Summary: sum}, err
+	}
 	return PreviewEndpoints{
 		Summary: sum,
-		Left:    model.Endpoint{Kind: model.EndpointCommit, Hash: sum.base},
-		Right:   model.Endpoint{Kind: model.EndpointCommit, Hash: sum.SourceHash},
+		Left:    left,
+		Right:   right,
 	}, nil
 }

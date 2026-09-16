@@ -15,8 +15,8 @@ func TestCloseFilesViewZeroesEverything(t *testing.T) {
 	m.filesTitle = "x"
 	m.filesContext = "stale"
 	m.filesHash = "abc"
-	m.filesLeft = model.Endpoint{Kind: model.EndpointCommit, Hash: "a"}
-	m.filesRight = model.Endpoint{Kind: model.EndpointWorkTree}
+	m.filesLeft = mustCommitEndpoint("aaaaaaa")
+	m.filesRight = model.WorkTreeEndpoint()
 	m.compareTag = "cmp:x"
 	m.filesStashTag = "stash@{0}"
 	m.filesTreeFocused = true
@@ -46,8 +46,8 @@ func TestOpenCompareDropsPreviewAndFullTree(t *testing.T) {
 	m.filesPreviewTag = "p@h"
 
 	m, _ = m.openCompareFiles(
-		model.Endpoint{Kind: model.EndpointCommit, Hash: "a"},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		mustCommitEndpoint("aaaaaaa"),
+		model.WorkTreeEndpoint())
 
 	if m.filesPreview != nil || m.filesPreviewTag != "" || m.inFullTree() ||
 		!m.inCompareMode() {

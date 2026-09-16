@@ -40,10 +40,10 @@ func (s *Service) ResolveCommitEntryEndpoint(ctx context.Context, sha, shelfID s
 		return model.Endpoint{}, err
 	}
 	if found {
-		return model.Endpoint{Kind: model.EndpointCommit, Hash: sha}, nil
+		return model.CommitEndpoint(sha)
 	}
 	if shelfID != "" {
-		return model.Endpoint{Kind: model.EndpointShelf, ShelfID: shelfID}, nil
+		return model.ShelfEndpoint(shelfID)
 	}
 	return model.Endpoint{}, &CommitGoneError{SHA: sha}
 }

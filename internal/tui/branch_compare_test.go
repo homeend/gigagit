@@ -344,8 +344,8 @@ func TestFKeyInertInNonBranchCompare(t *testing.T) {
 	t.Parallel()
 	m := Model{width: 120, height: 40}
 	m, _ = m.openCompareFiles(
-		model.Endpoint{Kind: model.EndpointCommit, Hash: "abc1234"},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		mustCommitEndpoint("abc1234"),
+		model.WorkTreeEndpoint())
 	mm, _ := m.Update(keyMsg("f"))
 	m = mm.(Model)
 	if m.statusMsg != "" {

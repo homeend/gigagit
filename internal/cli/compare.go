@@ -17,10 +17,17 @@ import (
 func parseEndpoint(s string) model.Endpoint {
 	switch s {
 	case "@worktree":
-		return model.Endpoint{Kind: model.EndpointWorkTree}
+		return model.WorkTreeEndpoint()
 	case "@staged", "@index":
-		return model.Endpoint{Kind: model.EndpointIndex}
+		return model.IndexEndpoint()
 	default:
+		// NOT migrated to model.CommitEndpoint: s is an arbitrary git
+		// commit-ish (HEAD, a branch name, "HEAD~2", an abbreviated sha —
+		// see the doc comment above), which git itself resolves once this
+		// endpoint's Hash reaches argv (internal/git/compare.go).
+		// CommitEndpoint requires 7..64 hex characters, so most real CLI
+		// input ("main", "HEAD~2") would fail it. See the task-3 report's
+		// rev-spec bucket for the full reasoning and the open question.
 		return model.Endpoint{Kind: model.EndpointCommit, Hash: s}
 	}
 }
@@ -82,7 +89,7 @@ func cmdCompare(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 	if code != 0 {
 		return code
 	}
-	right := model.Endpoint{Kind: model.EndpointWorkTree}
+	right := model.WorkTreeEndpoint()
 	if len(args) > 1 {
 		if right, code = resolveCompareSpec(svc, args[1], stderr); code != 0 {
 			return code

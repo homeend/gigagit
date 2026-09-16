@@ -37,9 +37,9 @@ type compareTreesOut struct {
 func (s *Server) endpointFor(ctx context.Context, side treeSideIn) (model.Endpoint, string, error) {
 	switch side.Kind {
 	case "worktree":
-		return model.Endpoint{Kind: model.EndpointWorkTree}, "worktree", nil
+		return model.WorkTreeEndpoint(), "worktree", nil
 	case "index":
-		return model.Endpoint{Kind: model.EndpointIndex}, "index", nil
+		return model.IndexEndpoint(), "index", nil
 	case "commit":
 		if side.Rev == "" {
 			return model.Endpoint{}, "", fmt.Errorf("rev is required for kind \"commit\"")
@@ -51,7 +51,11 @@ func (s *Server) endpointFor(ctx context.Context, side treeSideIn) (model.Endpoi
 		if !ok {
 			return model.Endpoint{}, "", fmt.Errorf("unknown revision: %s", side.Rev)
 		}
-		return model.Endpoint{Kind: model.EndpointCommit, Hash: line.Hash}, line.Hash + " " + line.Subject, nil
+		ep, err := model.CommitEndpoint(line.Hash)
+		if err != nil {
+			return model.Endpoint{}, "", fmt.Errorf("resolving %q: %v", side.Rev, err)
+		}
+		return ep, line.Hash + " " + line.Subject, nil
 	default:
 		return model.Endpoint{}, "", fmt.Errorf(`kind must be "worktree", "index", or "commit" (got %q)`, side.Kind)
 	}

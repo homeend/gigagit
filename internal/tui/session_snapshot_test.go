@@ -84,7 +84,7 @@ func TestBuildSessionSnapshotFilterAndScope(t *testing.T) {
 // empty hash (protocol misinformation for gg mcp's gg_ui_state).
 func TestEndpointProtoShelf(t *testing.T) {
 	t.Parallel()
-	e := model.Endpoint{Kind: model.EndpointShelf, ShelfID: "commit-abc1234-deadbeef"}
+	e := mustShelfEndpoint("commit-abc1234-deadbeef")
 	got := endpointProto(e)
 	if got == nil || got.Kind != "shelf" || got.ShelfID != "commit-abc1234-deadbeef" {
 		t.Fatalf("endpointProto(shelf) = %+v, want kind=shelf shelf_id=commit-abc1234-deadbeef", got)
@@ -103,8 +103,8 @@ func TestBuildSessionSnapshotCompareShelfEndpoint(t *testing.T) {
 	m := newTestModel(t)
 	m.filesView = &contentPopup{}
 	m.filesMode = filesModeCompare
-	m.filesLeft = model.Endpoint{Kind: model.EndpointCommit, Hash: "aaa111"}
-	m.filesRight = model.Endpoint{Kind: model.EndpointShelf, ShelfID: "commit-abc1234-deadbeef"}
+	m.filesLeft = mustCommitEndpoint("aaa1111")
+	m.filesRight = mustShelfEndpoint("commit-abc1234-deadbeef")
 
 	s := buildSessionSnapshot(m)
 	if s.FilesView == nil || s.FilesView.Right == nil {

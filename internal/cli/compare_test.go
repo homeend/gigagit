@@ -15,9 +15,14 @@ func TestParseEndpoint(t *testing.T) {
 		in   string
 		want model.Endpoint
 	}{
-		{"@worktree", model.Endpoint{Kind: model.EndpointWorkTree}},
-		{"@staged", model.Endpoint{Kind: model.EndpointIndex}},
-		{"@index", model.Endpoint{Kind: model.EndpointIndex}},
+		{"@worktree", model.WorkTreeEndpoint()},
+		{"@staged", model.IndexEndpoint()},
+		{"@index", model.IndexEndpoint()},
+		// These two are NOT migrated to model.CommitEndpoint: they pin
+		// parseEndpoint's pass-through of an arbitrary git commit-ish
+		// (neither "HEAD~2" nor "abc123" is 7..64 hex, so CommitEndpoint
+		// would refuse both) — see the comment on parseEndpoint's default
+		// case and the task-3 report.
 		{"HEAD~2", model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD~2"}},
 		{"abc123", model.Endpoint{Kind: model.EndpointCommit, Hash: "abc123"}},
 	}

@@ -254,8 +254,8 @@ func (p *versionsPopup) onEnter(m Model) (Model, tea.Cmd) {
 			// render today's branch instead of what gg recorded, which is
 			// the very drift this feature exists to surface.
 			return m.openCompareFiles(
-				model.Endpoint{Kind: model.EndpointCommit, Hash: v.Base},
-				model.Endpoint{Kind: model.EndpointCommit, Hash: v.Ours},
+				mustCommitEndpoint(v.Base),
+				mustCommitEndpoint(v.Ours),
 			)
 		}
 		// Fieldless record (amend/reset/undo-commit/delete-branch/restore):

@@ -38,6 +38,26 @@ type compareFile struct {
 	Origin string `json:"origin,omitempty"`
 }
 
+// mustCommitEndpoint and mustShelfEndpoint build an Endpoint from a hash/id
+// this package has already validated (isHexSha, or an id read back from a gg
+// store) — a constructor refusal here would mean the guard and the
+// constructor disagree, which is a programming error, not bad request input.
+func mustCommitEndpoint(hash string) model.Endpoint {
+	e, err := model.CommitEndpoint(hash)
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
+
+func mustShelfEndpoint(id string) model.Endpoint {
+	e, err := model.ShelfEndpoint(id)
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
+
 // branchTip returns name's tip hash, or "" when no such local branch exists.
 func branchTip(bs []model.Branch, name string) string {
 	for _, b := range bs {
@@ -105,8 +125,8 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	files, err := svc.CompareFiles(r.Context(),
-		model.Endpoint{Kind: model.EndpointCommit, Hash: aHash},
-		model.Endpoint{Kind: model.EndpointCommit, Hash: bHash})
+		mustCommitEndpoint(aHash),
+		mustCommitEndpoint(bHash))
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -203,7 +223,7 @@ func parseEntrySide(ctx context.Context, svc *domain.Service, spec string) (entr
 		if !isHexSha(hash) {
 			return entrySide{}, http.StatusBadRequest, errors.New("commit: must be a hex commit id")
 		}
-		return commitEntrySide(svc, model.Endpoint{Kind: model.EndpointCommit, Hash: hash}, shortSha(hash)), 0, nil
+		return commitEntrySide(svc, mustCommitEndpoint(hash), shortSha(hash)), 0, nil
 	case strings.HasPrefix(spec, "bookmark:"):
 		return bookmarkEntrySide(ctx, svc, strings.TrimPrefix(spec, "bookmark:"))
 	case strings.HasPrefix(spec, "shelf:"):
@@ -270,7 +290,7 @@ func shelfEntrySide(ctx context.Context, svc *domain.Service, id string) (entryS
 		label = e.Origin.Display()
 	}
 	if e.IsCommit() {
-		return commitEntrySide(svc, model.Endpoint{Kind: model.EndpointShelf, ShelfID: e.ID}, label), 0, nil
+		return commitEntrySide(svc, mustShelfEndpoint(e.ID), label), 0, nil
 	}
 	return entrySide{spec: "shelf:" + e.ID, label: label, tag: "shelf:" + e.ID,
 		bytes: func(ctx context.Context, _ string) ([]byte, error) {

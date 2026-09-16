@@ -3,16 +3,14 @@ package tui
 import (
 	"errors"
 	"testing"
-
-	"github.com/homeend/gigagit/internal/model"
 )
 
 func TestReopenSamePairIsNoop(t *testing.T) {
 	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash}
-	right := model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[0].Hash}
+	left := mustCommitEndpoint(m.commits[1].Hash)
+	right := mustCommitEndpoint(m.commits[0].Hash)
 	m, cmd := m.openCompareFiles(left, right)
 	if cmd == nil {
 		t.Fatal("first open must start a load")
@@ -31,11 +29,11 @@ func TestReopenDifferentPairReloads(t *testing.T) {
 	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash}
-	right := model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[0].Hash}
+	left := mustCommitEndpoint(m.commits[1].Hash)
+	right := mustCommitEndpoint(m.commits[0].Hash)
 	m, _ = m.openCompareFiles(left, right)
 	firstTag := m.compareTag
-	other := model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[2].Hash}
+	other := mustCommitEndpoint(m.commits[2].Hash)
 	m2, cmd := m.openCompareFiles(other, right)
 	if cmd == nil {
 		t.Fatal("a different pair must reload")
@@ -49,8 +47,8 @@ func TestFailedCompareLoadIsRetryable(t *testing.T) {
 	t.Parallel()
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash}
-	right := model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[0].Hash}
+	left := mustCommitEndpoint(m.commits[1].Hash)
+	right := mustCommitEndpoint(m.commits[0].Hash)
 	m, _ = m.openCompareFiles(left, right)
 	u, _ := m.Update(compareFilesMsg{tag: m.compareTag, err: errors.New("boom")})
 	m = u.(Model)

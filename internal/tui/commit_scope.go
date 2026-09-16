@@ -433,8 +433,8 @@ func (m Model) commitCompareWorktreeRow() (actionRow, bool) {
 		label: i18n.T("Compare against working tree"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openCompareFiles(
-				model.Endpoint{Kind: model.EndpointCommit, Hash: hash},
-				model.Endpoint{Kind: model.EndpointWorkTree})
+				mustCommitEndpoint(hash),
+				model.WorkTreeEndpoint())
 		},
 	}, true
 }
@@ -453,8 +453,8 @@ func (m Model) commitCompareStagedRow() (actionRow, bool) {
 		label: i18n.T("Compare against staged"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m.openCompareFiles(
-				model.Endpoint{Kind: model.EndpointCommit, Hash: hash},
-				model.Endpoint{Kind: model.EndpointIndex})
+				mustCommitEndpoint(hash),
+				model.IndexEndpoint())
 		},
 	}, true
 }
@@ -625,8 +625,13 @@ func (m Model) compareSelectionEndpoints() (left, right model.Endpoint, note str
 	if oi := oldest.rank; oi >= 0 && oi < len(m.commits) && len(m.commits[oi].Parents) == 0 {
 		return left, right, i18n.T("can't squash a range from the root commit"), false
 	}
+	// oldest.key + "^" is NOT migrated to model.CommitEndpoint: "^" is git's
+	// "parent of" rev-spec suffix, not a hex digit, so it fails
+	// CommitEndpoint's hex-only check. Same bucket as parseEndpoint's default
+	// case (internal/cli/compare.go) and the "HEAD" literal in
+	// internal/tui/file_finder.go — see the task-3 report.
 	return model.Endpoint{Kind: model.EndpointCommit, Hash: oldest.key + "^"},
-		model.Endpoint{Kind: model.EndpointCommit, Hash: newest.key}, "", true
+		mustCommitEndpoint(newest.key), "", true
 }
 
 // commitCompareSelectionRow offers "Compare selection" when 2+ commits are in

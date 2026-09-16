@@ -9,9 +9,9 @@ import (
 
 func TestCompareDiffCacheKeyRule(t *testing.T) {
 	t.Parallel()
-	commit := model.Endpoint{Kind: model.EndpointCommit, Hash: "aaa"}
-	commit2 := model.Endpoint{Kind: model.EndpointCommit, Hash: "bbb"}
-	work := model.Endpoint{Kind: model.EndpointWorkTree}
+	commit := mustCommitEndpoint("aaa1111")
+	commit2 := mustCommitEndpoint("bbb2222")
+	work := model.WorkTreeEndpoint()
 
 	// commit↔commit → cached (non-empty key)
 	if k := compareDiffKey(commit, commit2, "a.go"); k == "" {
@@ -56,8 +56,8 @@ func TestCompareEnterOpensDiff(t *testing.T) {
 	if len(m.commits) == 0 {
 		t.Skip("no commits")
 	}
-	left := model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[0].Hash}
-	m, _ = m.openCompareFiles(left, model.Endpoint{Kind: model.EndpointWorkTree})
+	left := mustCommitEndpoint(m.commits[0].Hash)
+	m, _ = m.openCompareFiles(left, model.WorkTreeEndpoint())
 	// apply the file list synchronously
 	m.filesView.lines = []contentLine{{text: "M README.md", path: "README.md", status: "M"}}
 	m.filesView.sel = 0

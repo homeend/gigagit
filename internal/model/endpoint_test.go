@@ -6,14 +6,37 @@ import (
 	"testing"
 )
 
+// mustCommit and mustShelf build a valid Endpoint for fixtures that have no
+// *testing.T in scope (endpointCases in endpoint_exhaustive_test.go builds
+// its table before any t.Run). A validation failure here is a fixture bug,
+// so they panic rather than silently returning the zero Endpoint.
+func mustCommit(hash string) Endpoint {
+	e, err := CommitEndpoint(hash)
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
+
+func mustShelf(id string) Endpoint {
+	e, err := ShelfEndpoint(id)
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
+
 func TestEndpointDisplay(t *testing.T) {
 	cases := []struct {
 		e    Endpoint
 		want string
 	}{
-		{Endpoint{Kind: EndpointWorkTree}, "Working Tree"},
-		{Endpoint{Kind: EndpointIndex}, "Staged"},
-		{Endpoint{Kind: EndpointCommit, Hash: "0123456789abcdef"}, "0123456"},
+		{WorkTreeEndpoint(), "Working Tree"},
+		{IndexEndpoint(), "Staged"},
+		{mustCommit("0123456789abcdef"), "0123456"},
+		// "abc" is shorter than CommitEndpoint's 7-char minimum: this probes
+		// Display's truncation on a hash the constructor would refuse, so it
+		// stays a raw struct literal deliberately.
 		{Endpoint{Kind: EndpointCommit, Hash: "abc"}, "abc"},
 	}
 	for _, c := range cases {
@@ -24,28 +47,31 @@ func TestEndpointDisplay(t *testing.T) {
 }
 
 func TestEndpointFileRef(t *testing.T) {
-	if got := (Endpoint{Kind: EndpointWorkTree}).FileRef("a.go"); got != (FileRef{Source: SourceUnstaged, Path: "a.go"}) {
+	if got := (WorkTreeEndpoint()).FileRef("a.go"); got != (FileRef{Source: SourceUnstaged, Path: "a.go"}) {
 		t.Errorf("worktree FileRef = %+v", got)
 	}
-	if got := (Endpoint{Kind: EndpointIndex}).FileRef("a.go"); got != (FileRef{Source: SourceStaged, Path: "a.go"}) {
+	if got := (IndexEndpoint()).FileRef("a.go"); got != (FileRef{Source: SourceStaged, Path: "a.go"}) {
 		t.Errorf("index FileRef = %+v", got)
 	}
-	if got := (Endpoint{Kind: EndpointCommit, Hash: "deadbeef"}).FileRef("a.go"); got != (FileRef{Source: SourceCommit, Locator: "deadbeef", Path: "a.go"}) {
+	if got := (mustCommit("deadbeef")).FileRef("a.go"); got != (FileRef{Source: SourceCommit, Locator: "deadbeef", Path: "a.go"}) {
 		t.Errorf("commit FileRef = %+v", got)
 	}
 }
 
 func TestEndpointIsLiveAndCacheTag(t *testing.T) {
-	if !(Endpoint{Kind: EndpointWorkTree}).IsLive() || !(Endpoint{Kind: EndpointIndex}).IsLive() {
+	if !(WorkTreeEndpoint()).IsLive() || !(IndexEndpoint()).IsLive() {
 		t.Error("worktree/index must be live")
 	}
+	// "x" is shorter than CommitEndpoint's 7-char minimum: these two probe
+	// IsLive/CacheTag on a hash the constructor would refuse, so they stay
+	// raw struct literals deliberately.
 	if (Endpoint{Kind: EndpointCommit, Hash: "x"}).IsLive() {
 		t.Error("commit must not be live")
 	}
 	if got := (Endpoint{Kind: EndpointCommit, Hash: "x"}).CacheTag(); got != "x" {
 		t.Errorf("commit CacheTag = %q", got)
 	}
-	if got := (Endpoint{Kind: EndpointWorkTree}).CacheTag(); got != "worktree" {
+	if got := (WorkTreeEndpoint()).CacheTag(); got != "worktree" {
 		t.Errorf("worktree CacheTag = %q", got)
 	}
 }

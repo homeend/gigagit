@@ -92,6 +92,15 @@ func compareTagFor(left, right model.Endpoint) string {
 func (m Model) openBranchCompare(marked, selected string) (Model, tea.Cmd) {
 	markedHash := m.branchTipHash(marked)
 	selectedHash := m.branchTipHash(selected)
+	// NOT migrated to model.CommitEndpoint: branchTipHash falls back to
+	// returning the branch NAME unchanged when it finds no matching entry in
+	// m.branches. The only production caller (mark.go) guards this via
+	// markAlive first, but the test suite calls openBranchCompare directly
+	// with an empty m.branches, so markedHash/selectedHash are not
+	// guaranteed to be a resolved hash by this function's own contract.
+	// Same rev-spec bucket as cli/compare.go's parseEndpoint,
+	// file_finder.go's "HEAD", and commit_scope.go's oldest.key+"^" — see
+	// the task-3 report.
 	left := model.Endpoint{Kind: model.EndpointCommit, Hash: markedHash}
 	right := model.Endpoint{Kind: model.EndpointCommit, Hash: selectedHash}
 	tag := compareTagFor(left, right)

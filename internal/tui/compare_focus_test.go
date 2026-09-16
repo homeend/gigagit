@@ -13,8 +13,8 @@ func TestCompareOpensTreeFocused(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	mm, _ := m.openCompareFiles(
-		model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		mustCommitEndpoint(m.commits[1].Hash),
+		model.WorkTreeEndpoint())
 	if !mm.filesTreeFocused {
 		t.Fatal("compare files view must open with the tree focused")
 	}
@@ -27,8 +27,8 @@ func TestCompareModeMoveKeepsComparison(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m, _ = m.openCompareFiles(
-		model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		mustCommitEndpoint(m.commits[1].Hash),
+		model.WorkTreeEndpoint())
 	m.filesView.lines = []contentLine{
 		{text: "M a.go", path: "a.go", status: "M"},
 		{text: "M b.go", path: "b.go", status: "M"},
@@ -60,8 +60,8 @@ func TestCompareModeMouseScrollKeepsComparison(t *testing.T) {
 	m := loadedModelLinearCommits(t, 3)
 	m.focus = panelCommits
 	m, _ = m.openCompareFiles(
-		model.Endpoint{Kind: model.EndpointCommit, Hash: m.commits[1].Hash},
-		model.Endpoint{Kind: model.EndpointWorkTree})
+		mustCommitEndpoint(m.commits[1].Hash),
+		model.WorkTreeEndpoint())
 	tagBefore, hashBefore, selBefore := m.compareTag, m.filesHash, m.sel[panelCommits]
 
 	u, _ := m.moveCommitUnderFilesView(1) // the mouse path

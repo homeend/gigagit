@@ -315,8 +315,13 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 			label: i18n.T("Diff (HEAD ↔ working tree)"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
 				m = m.popLayer()
+				// left is NOT migrated to model.CommitEndpoint: "HEAD" is a git
+				// rev-spec, not a hex hash (CommitEndpoint would refuse it). Same
+				// bucket as internal/cli/compare.go's parseEndpoint default case
+				// and the oldest.key+"^" range compare in commit_scope.go — see
+				// the task-3 report.
 				left := model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"}
-				right := model.Endpoint{Kind: model.EndpointWorkTree}
+				right := model.WorkTreeEndpoint()
 				v := &diffView{
 					title:   path,
 					context: i18n.T("HEAD ↔ working tree"),
