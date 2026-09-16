@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -160,29 +161,122 @@ func TestDiffSearchBadgeIsOnTheHeader(t *testing.T) {
 	}
 }
 
+// TestDiffSearchPaintsTheHit calls diffPaneLines directly (not the full
+// renderDiffView, whose header alone would make painted != plain even if the
+// six hits arguments in diffPaneLines were all nil) and asserts, per row:
+// every row's TEXT is unchanged (ansi.Strip equal — a hit must never move a
+// character), a non-hit row's raw (styled) output is BYTE-IDENTICAL to plain,
+// and a hit row's raw output additionally contains the exact escape sequence
+// st().searchCur produces for that hit's own substring — proving the style
+// landed on the right run, not merely that "something" changed. curStart ==
+// curEnd (0, 0) removes the cursor marker so it cannot confound the diff.
+// TestDiffSearchPaintsTheHit calls diffPaneLines directly (not the full
+// renderDiffView, whose header alone would make painted != plain even if the
+// six hits arguments in diffPaneLines were all nil) and asserts, per row:
+// the TEXT is unchanged (ansi.Strip equal — a hit must never move a
+// character), a non-hit row's raw (styled) output is BYTE-IDENTICAL to plain,
+// and a hit row carries the search-emphasis colour (shared by st().diffEmph
+// and st().searchCur, which only adds underline) at EXACTLY the hit's own
+// display-column range — checked with ansi.Cut, which slices a styled string
+// by column without disturbing its escape codes — and nowhere earlier on the
+// same row. curStart == curEnd (0, 0) removes the cursor marker so it cannot
+// confound the diff.
 func TestDiffSearchPaintsTheHit(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(prev)
 
-	plain := searchDiffModel().renderDiffView()
-	m := typeKeys(searchDiffModel(), "/", "a", "l", "p", "h", "a", "enter")
-	painted := m.renderDiffView()
-	if painted == plain {
-		t.Fatal("an active search must change the rendered body")
+	m := diffModel()
+	m.width, m.height = 100, 20
+	const w, body = 100, 10
+
+	// The foreground colour every search hit wears, current or not — derived
+	// at runtime (never hardcoded) and absent everywhere else in this
+	// fixture's plain render (no syntax highlighting, no other styling that
+	// sets a foreground colour).
+	fgRe := regexp.MustCompile(`38;5;\d+`)
+	marker := fgRe.FindString(lipgloss.NewStyle().Inherit(st().diffEmph).Render("x"))
+	if marker == "" {
+		t.Fatal("could not derive the search-emphasis colour marker from st().diffEmph")
 	}
-	if ansi.Strip(strings.Split(painted, "\n")[3]) == "" {
-		t.Fatal("the body must still render")
-	}
-	// Every mode paints; wrap must not need a relayout to do it.
-	for _, lm := range []longMode{longWrap, longTruncate, longScroll} {
-		mm := searchDiffModel()
-		mm.diffLayer().long = lm
-		mm.diffLayer().relayout(mm.width)
-		before := mm.renderDiffView()
-		mm = typeKeys(mm, "/", "a", "l", "p", "h", "a", "enter")
-		if mm.renderDiffView() == before {
-			t.Errorf("mode %d did not paint the hit", lm)
+
+	for _, lm := range []longMode{longScroll, longWrap, longTruncate} {
+		v := diffViewWith(searchDiffRows(), []int{2})
+		v.long = lm
+		v.relayout(w)
+
+		plain := m.diffPaneLines(v, w, body, 0, 0, "row")
+
+		v.search.query = "alpha"
+		v.search.hits = findHits(v.searchLines(), "alpha")
+		v.search.cur = 0
+		if len(v.search.hits) != 2 {
+			t.Fatalf("mode %d: hits = %v, want 2", lm, v.search.hits)
+		}
+		painted := m.diffPaneLines(v, w, body, 0, 0, "row")
+
+		if len(painted) != len(plain) {
+			t.Fatalf("mode %d: row count changed, plain %d painted %d", lm, len(plain), len(painted))
+		}
+
+		gut := gutterWidth(v.full)
+		paneW := (w - 1) / 2
+		// hitCol resolves a hit's absolute display-column range in the composed
+		// "gutter+left│gutter+right" row string diffPaneLines returns — the
+		// same gutter/pane arithmetic diffPaneLines and its cell painters use.
+		sideText := func(row textdiff.Row, side int) string {
+			if side == 1 {
+				return row.Right
+			}
+			return row.Left
+		}
+		hitCol := func(row textdiff.Row, h searchHit) (int, int) {
+			cs, ce := hitCols(sanitizeLine(sideText(row, h.side)), h)
+			off := gut + 1
+			if h.side == 1 {
+				off += paneW + 1
+			}
+			return off + cs, off + ce
+		}
+
+		hitsByRow := map[int]searchHit{}
+		for _, h := range v.search.hits {
+			hitsByRow[h.row] = h
+		}
+
+		for i := range plain {
+			if ansi.Strip(painted[i]) != ansi.Strip(plain[i]) {
+				t.Errorf("mode %d row %d: a hit changed the TEXT, not just the styling:\nplain:   %q\npainted: %q",
+					lm, i, ansi.Strip(plain[i]), ansi.Strip(painted[i]))
+			}
+			h, isHit := hitsByRow[i]
+			if !isHit {
+				if painted[i] != plain[i] {
+					t.Errorf("mode %d row %d: a non-hit row's styling changed:\nplain:   %q\npainted: %q", lm, i, plain[i], painted[i])
+				}
+				continue
+			}
+			if painted[i] == plain[i] {
+				t.Errorf("mode %d row %d: the hit did not change the render", lm, i)
+			}
+			cs, ce := hitCol(v.lines[i].Row, h)
+			wantText := string([]rune(sanitizeLine(sideText(v.lines[i].Row, h.side)))[h.start:h.end])
+			hitSlice := ansi.Cut(painted[i], cs, ce)
+			// The STRIPPED content of exactly [cs,ce) must be the hit's own
+			// text — not "func " (short by the prefix), not "alph" or "lpha"
+			// (off by one), not "alpha()" (too wide). A wrong column would
+			// show up here as wrong or truncated text, which is what "the
+			// styled run starts after exactly the display prefix width" means
+			// in practice: cut at the wrong column and you cut mid-word.
+			if got := ansi.Strip(hitSlice); got != wantText {
+				t.Errorf("mode %d row %d: columns [%d,%d) hold %q, want the hit text %q", lm, i, cs, ce, got, wantText)
+			}
+			if !strings.Contains(hitSlice, marker) {
+				t.Errorf("mode %d row %d: no search styling at the hit's own columns [%d,%d):\nslice: %q\nfull:  %q", lm, i, cs, ce, hitSlice, painted[i])
+			}
+			if got := ansi.Cut(plain[i], cs, ce); strings.Contains(got, marker) {
+				t.Errorf("mode %d row %d: fixture is unsound — the PLAIN render already carries the marker at [%d,%d)", lm, i, cs, ce)
+			}
 		}
 	}
 }
@@ -200,6 +294,77 @@ func TestDiffSearchRefindsAfterAModeToggle(t *testing.T) {
 		if h.row >= len(v.lines) {
 			t.Fatalf("hit row %d is outside the rebuilt %d lines", h.row, len(v.lines))
 		}
+	}
+}
+
+// TestDiffSearchRefindsOnAnyRebuild: a re-find must happen after ANY rebuild
+// while a query is active — not only the f key's own path. expandFoldFor
+// (note_keys.go) rebuilds straight from partial to full mode (v.partial =
+// false; v.rebuild()) without going through updateDiffViewKey's "f" case, so
+// the re-find has to live in rebuild() itself. The fold renumbers logical
+// lines: a hit index that was valid against partial-mode v.lines names a
+// DIFFERENT line once the view expands to full mode, unless the search is
+// re-run against the new line stream.
+func TestDiffSearchRefindsOnAnyRebuild(t *testing.T) {
+	t.Parallel()
+	rows := []textdiff.Row{
+		{Kind: textdiff.Same, Left: "s0", Right: "s0", LeftNo: 1, RightNo: 1},
+		{Kind: textdiff.Same, Left: "s1", Right: "s1", LeftNo: 2, RightNo: 2},
+		{Kind: textdiff.Same, Left: "s2", Right: "s2", LeftNo: 3, RightNo: 3},
+		{Kind: textdiff.Same, Left: "s3", Right: "s3", LeftNo: 4, RightNo: 4},
+		{Kind: textdiff.Same, Left: "s4", Right: "s4", LeftNo: 5, RightNo: 5},
+		{Kind: textdiff.Same, Left: "needle line", Right: "needle line", LeftNo: 6, RightNo: 6},
+		{Kind: textdiff.Changed, Left: "old", Right: "new", LeftNo: 7, RightNo: 7},
+		{Kind: textdiff.Same, Left: "a7", Right: "a7", LeftNo: 8, RightNo: 8},
+		{Kind: textdiff.Same, Left: "a8", Right: "a8", LeftNo: 9, RightNo: 9},
+		{Kind: textdiff.Same, Left: "a9", Right: "a9", LeftNo: 10, RightNo: 10},
+		{Kind: textdiff.Same, Left: "a10", Right: "a10", LeftNo: 11, RightNo: 11},
+		{Kind: textdiff.Same, Left: "a11", Right: "a11", LeftNo: 12, RightNo: 12},
+		{Kind: textdiff.Same, Left: "a12", Right: "a12", LeftNo: 13, RightNo: 13},
+	}
+	// diffContext (3) keeps rows 3..9 around the row-6 change; rows 0-2 and
+	// 10-12 fold away, so "needle line" (original row 5) sits at a SMALLER
+	// index in the partial-mode v.lines than its own row number.
+	v := diffViewWith(rows, []int{6})
+	v.partial = true
+	v.rebuild()
+
+	v.search.query = "needle"
+	v.search.hits = findHits(v.searchLines(), v.search.query)
+	v.search.cur = 0
+	if len(v.search.hits) != 1 {
+		t.Fatalf("partial-mode hits = %v, want 1", v.search.hits)
+	}
+	partialRow := v.search.hits[0].row
+	if got := v.lines[partialRow].Row.Left; got != "needle line" {
+		t.Fatalf("fixture sanity: partial hit row %d is %q, want the needle line", partialRow, got)
+	}
+	if partialRow == 5 {
+		t.Fatal("fixture sanity: the fold produced no index shift — broaden it")
+	}
+
+	// Mirror expandFoldFor: rebuild straight to full mode, NOT through the f
+	// key handler (which is covered by TestDiffSearchRefindsAfterAModeToggle).
+	v.partial = false
+	v.rebuild()
+
+	if len(v.search.hits) != 1 {
+		t.Fatalf("hits after a non-f rebuild = %v, want 1", v.search.hits)
+	}
+	// Find the needle's real row by scanning the REBUILT full-mode v.lines —
+	// asserting against a hardcoded index would just re-encode the bug.
+	want := -1
+	for i, ln := range v.lines {
+		if ln.Row.Left == "needle line" {
+			want = i
+			break
+		}
+	}
+	if want < 0 {
+		t.Fatal("fixture sanity: the needle line is missing from the full-mode lines")
+	}
+	if got := v.search.hits[0].row; got != want {
+		t.Fatalf("after a non-f rebuild, hit row = %d, want %d (the needle's real full-mode row)", got, want)
 	}
 }
 

@@ -160,6 +160,7 @@ func (v *diffView) rebuild() {
 		v.blocks = v.fullBlocks
 	}
 	v.relayout(v.width)
+	v.refindAfterRebuild()
 }
 
 // relayout builds the display-row stream (disp/dispBlocks) from the logical
@@ -1003,7 +1004,6 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		wasVisible := v.cursorVisible(body)
 		v.partial = !v.partial
 		v.rebuild()
-		v.refindAfterRebuild()
 		m.diffPartial = v.partial
 		if len(v.dispBlocks) > 0 {
 			v.focusBlock(ord, body) // re-anchor the same change (count is mode-invariant)
@@ -1011,6 +1011,13 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			v.cur, v.offset = 0, 0
 		}
 		v.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
+		// rebuild() already re-found the hits against the new line stream, but
+		// focusBlock/reanchorAfterRebuild above may have moved the cursor AFTER
+		// that re-find (they re-anchor the SAME change, not the search) — re-snap
+		// cur from the cursor's new position so the badge and the current-hit
+		// highlight track where the cursor actually landed, not the stale
+		// pre-toggle line.
+		v.refindAfterRebuild()
 	case "ctrl+w":
 		ord := v.currentBlockOrdinal()
 		cr, hadRow := v.cursorRow()
