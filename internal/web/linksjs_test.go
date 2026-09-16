@@ -55,6 +55,11 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 		{"links.js", "preview: ctx.preview", "the file contributor must forward the pair it was given"},
 		{"files.js", "preview: po ?", "the file-row call site must hand the open preview's pair to the file contributor"},
 		{"files.js", "row.dataset.rno", "the diff-line path must prefer a context row's new-side number over dropping the line"},
+		// The ◆ note menu (2026-09-16): a note has no address of its own, so
+		// the row copies its ANCHOR's link — the same string the line under it
+		// yields. This substring exists only after that branch was added.
+		{"files.js", "copy gg link to this note", "the ◆ note menu must offer the anchor's link"},
+		{"files.js", "state.diffCtx, n.side, n.line", "the note link must be built from the OPEN diff's ctx, not the note's own rev/path"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(read(c.file), c.want) {

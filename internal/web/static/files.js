@@ -1532,10 +1532,24 @@ $("diff-body").addEventListener("contextmenu", (e) => {
   const n = findNote(tr.dataset.note);
   if (!n) return;
   e.preventDefault();
+  // A note has no address of its OWN: `gg://` names places, and a note id is
+  // machine-local (internal/notes is a per-machine store), so it would mean
+  // nothing on the machine the link is pasted into. What travels is the note's
+  // ANCHOR — the line it hangs off — so "copy gg link to this note" yields the
+  // same string the line under it would. It is built from state.diffCtx, never
+  // from n.rev/n.path: inside a merge preview a note's rev is an older source
+  // commit while the PLACE on screen is the pair, and the two menus must not
+  // disagree about the same row. A reply carries its root's inherited
+  // side/line on the wire (domain.ToWireNote), so it needs no special case.
+  const noteRows = [
+    { label: "Edit note", act: () => editNotePrompt(n) },
+    { label: "Reply…", act: () => replyNotePrompt(n) },
+  ];
+  const nlink = linkFor(state.repo, state.worktree, state.diffCtx, n.side, n.line);
+  if (nlink) noteRows.push({ label: "copy gg link to this note", act: () => copyText(nlink, "gg link") });
   showCtxMenu(
     [
-      { label: "Edit note", act: () => editNotePrompt(n) },
-      { label: "Reply…", act: () => replyNotePrompt(n) },
+      ...noteRows,
       { sep: true },
       {
         label: n.parent_id ? "Remove reply" : "Remove note (and its replies)",
