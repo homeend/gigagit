@@ -1046,7 +1046,7 @@ function collapseDiffRows(rows, open, keep) {
 // it.
 function foldRowHTML(it, cols) {
   return (
-    `<tr class="same fold" data-fold="${it.start}" title="click to show these lines">` +
+    `<tr class="same fold" data-fold="${it.start}" data-fold-n="${it.fold}" title="click to show these lines">` +
     `<td colspan="${cols}">⋯ ${it.fold} unchanged line${it.fold === 1 ? "" : "s"}</td></tr>`
   );
 }
@@ -1212,19 +1212,74 @@ function renderDiff(d) {
 }
 
 
+// visibleChangeBlock is the ordinal of the change block the reader is looking
+// at: the first one inside the pane's viewport, else the nearest one above it
+// (the reader scrolled past it and is reading its trailing context), else -1
+// (nothing on screen yet, or no change above the fold).
+function visibleChangeBlock() {
+  const pane = $("diff-pane").getBoundingClientRect();
+  const blocks = diffChangeBlocks();
+  let above = -1;
+  for (let i = 0; i < blocks.length; i++) {
+    const r = blocks[i].getBoundingClientRect();
+    if (r.bottom >= pane.top && r.top <= pane.bottom) return i;
+    if (r.bottom < pane.top) above = i;
+  }
+  return above;
+}
+
+
 // rerenderDiffKeepingPlace re-runs renderDiff for the SAME diff and puts the
-// ‹/› change stepper back where it was: the change-block count is the same in
-// both view modes (folds only ever replace equal rows), so the index carries
-// straight across, and the block it names is scrolled back into view.
-function rerenderDiffKeepingPlace() {
-  if (!state.lastDiff) return;
-  const at = state.diffBlockIdx;
+// reader back where they were. The TUI re-anchors on the change block under
+// its cursor; the web has no cursor, so the viewport stands in: the block on
+// screen (else the last one above it, else the one the ‹/› stepper named)
+// is scrolled back to the same place. The count is the same in both view
+// modes — folds only ever replace equal rows — so the ordinal carries across.
+// keepScroll: restore the pane's scrollTop instead (an unfold inserts rows at
+// the fold's own position, so everything above it stays put — the reader
+// must not be thrown to the block they last stepped to).
+// A conflict picker owns #diff-body while open: never draw the diff over it.
+function rerenderDiffKeepingPlace(keepScroll = false) {
+  if (!state.lastDiff || conflictPick) return;
+  const pane = $("diff-pane");
+  const top = pane.scrollTop;
+  const stepped = state.diffBlockIdx;
+  const seen = visibleChangeBlock();
+  const at = seen >= 0 ? seen : stepped;
   renderDiff(state.lastDiff);
   state.diffBlockIdx = at;
-  if (at >= 0) {
-    const blocks = diffChangeBlocks();
-    if (blocks[at]) blocks[at].scrollIntoView({ block: "center" });
+  if (keepScroll) {
+    pane.scrollTop = top;
+    return;
   }
+  const blocks = diffChangeBlocks();
+  if (at >= 0 && blocks[at]) blocks[at].scrollIntoView({ block: "center" });
+}
+
+
+// revealDiffRow returns the rendered row for (side, line), unfolding the run
+// that hides it first when the changes-only view folded it away — an agent
+// steering the page to a line (gg session navigate) must land on it, never
+// on a silent miss. null when the diff has no such line at all.
+function revealDiffRow(side, line) {
+  const find = () =>
+    document.querySelector(`#diff-body tr[data-side="${side}"][data-no="${line}"]`) ||
+    (side === "old" ? document.querySelector(`#diff-body tr[data-lno="${line}"]`) : null);
+  let tr = find();
+  if (tr || !state.diffPartial || !state.lastDiff) return tr;
+  const rows = state.lastDiff.rows || [];
+  const i = rows.findIndex((r) => (side === "new" ? r.right_no : r.left_no) === line);
+  if (i < 0) return null;
+  for (const f of document.querySelectorAll("#diff-body tr.fold[data-fold]")) {
+    const start = Number(f.dataset.fold);
+    if (i >= start && i < start + Number(f.dataset.foldN)) {
+      state.diffFolds.add(start);
+      rerenderDiffKeepingPlace(true);
+      tr = find();
+      break;
+    }
+  }
+  return tr;
 }
 
 
@@ -1260,7 +1315,7 @@ $("diff-body").addEventListener("click", (e) => {
   const tr = e.target.closest("tr.fold[data-fold]");
   if (!tr || !state.lastDiff) return;
   state.diffFolds.add(Number(tr.dataset.fold));
-  rerenderDiffKeepingPlace();
+  rerenderDiffKeepingPlace(true);
 });
 
 
@@ -2580,4 +2635,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
