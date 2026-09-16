@@ -4,6 +4,9 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // Commit-feed parity reads: resolve a rev to its full sha (goto-sha), one
@@ -89,6 +92,10 @@ type blameRow struct {
 	Summary string `json:"summary"`
 	Line    int    `json:"line"`
 	Text    string `json:"text"`
+	// Tok is the line's syntax runs in /api/diff's left_tok/right_tok shape
+	// ([start, end, class]); absent when the line has no styled runs, the
+	// file has no lexer, or [ui] diff_syntax is off. renderCell paints it.
+	Tok []tokTriple `json:"tok,omitempty"`
 }
 
 func (s *Server) handleBlame(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +110,12 @@ func (s *Server) handleBlame(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
+	// Lexed per request (the blame LRU caches lines, not runs); chroma costs
+	// ~1 s at domain.MaxSyntaxBytes, which is the same budget the diff pays.
+	var tok [][]syntax.Tok
+	if s.service().SyntaxHighlighting() {
+		tok = domain.LexBlameLines(path, lines)
+	}
 	rows := make([]blameRow, 0, len(lines))
 	for _, l := range lines {
 		short := l.Hash
@@ -112,6 +125,7 @@ func (s *Server) handleBlame(w http.ResponseWriter, r *http.Request) {
 		rows = append(rows, blameRow{
 			Hash: l.Hash, Short: short, Author: l.Author,
 			Time: l.Time, Summary: l.Summary, Line: l.LineNo, Text: l.Content,
+			Tok: tokTriples(tok, l.LineNo),
 		})
 	}
 	writeJSON(w, map[string]any{"lines": rows})

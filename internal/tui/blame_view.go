@@ -230,34 +230,19 @@ func (m Model) loadBlameCmd(ctx navContext, tag string) tea.Cmd {
 	}
 }
 
-// lexBlame lexes the blamed file's content, reassembled from its lines. nil
+// lexBlame is domain.LexBlameLines behind the [ui] diff_syntax switch: nil
 // (plain rendering) when the switch is off, the path has no lexer, the file is
 // past domain.MaxSyntaxBytes, or a line holds a BARE \r. That last case is not
 // a desync here — blame lines are already split, and sanitizeCell maps an
 // interior \r to one '·' exactly as the lexer counts it — but such content is
-// pathological enough that both self-lexing surfaces refuse it alike (the file
-// preview, which turns a lone \r into a line break, genuinely must).
+// pathological enough that every self-lexing surface refuses it alike (the
+// file preview, which turns a lone \r into a line break, genuinely must). The
+// web blame overlay shares the same domain helper.
 func lexBlame(path string, lines []model.BlameLine, on bool) [][]syntax.Tok {
-	if !on || len(lines) == 0 {
+	if !on {
 		return nil
 	}
-	lang := syntax.Detect(path)
-	if lang == "" {
-		return nil
-	}
-	parts := make([]string, len(lines))
-	for i, ln := range lines {
-		parts[i] = ln.Content
-	}
-	// Trailing "\n": blame hands back content lines without their terminator,
-	// and a CRLF file's last line would otherwise end in a \r that reads as
-	// bare. syntax.Lex adds no line for a trailing newline, so the token slice
-	// still has exactly one entry per blame line.
-	src := strings.Join(parts, "\n") + "\n"
-	if len(src) > domain.MaxSyntaxBytes || hasBareCR([]byte(src)) {
-		return nil
-	}
-	return syntax.Lex(lang, []byte(src))
+	return domain.LexBlameLines(path, lines)
 }
 
 // blameGutterW is the fixed gutter width: shortHash(7) + space + author(12) +
