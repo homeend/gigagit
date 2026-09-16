@@ -7,7 +7,7 @@
 // everything); never two refreshes at once (the runOnce("refresh") gate
 // manualRefresh uses too — an `r` press and a push coalesce); a reconnect
 // after a dropped stream reloads everything, since events were missed.
-import { attnKey, runOnce, state } from "./core.js";
+import { attnKey, getJSON, runOnce, state } from "./core.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { fetchNotes, markDiffRow, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, setLayout, stepNote } from "./files.js";
 import { fetchBranches } from "./sidebar.js";
@@ -285,4 +285,21 @@ async function steerNavigate(s) {
   tr.scrollIntoView({ block: "center" });
 }
 
-export { connectLive, refreshSources };
+// applyStartAt lands the page where `gg open --web <link>` started this server
+// — the web twin of the TUI's --at. The server hands the command out ONCE, so
+// a reload or a second tab gets nothing and stays put. boot() calls this only
+// after its first FULL load (status, branches, previews included), so a
+// preview landing finds its saved row in state.previews instead of opening a
+// show-once twin — the same readiness the TUI's startAtReady waits for.
+// Failures are silent, as for any applied steer.
+async function applyStartAt() {
+  let body;
+  try {
+    body = await getJSON("/api/session/start-at");
+  } catch {
+    return;
+  }
+  if (body && body.steer) await applySteer(body.steer);
+}
+
+export { applyStartAt, connectLive, refreshSources };

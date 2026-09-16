@@ -16,12 +16,15 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/repos"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // Serve runs the probe server on a loopback address until ctx is cancelled
 // or the process is interrupted. launch opens the system browser at the
-// served URL (best-effort).
-func Serve(ctx context.Context, workdir, addr string, launch bool) error {
+// served URL (best-effort). startAt, when non-nil, is the command the first
+// page to boot lands on (`gg open --web <link>`): validated here, before a
+// port is bound, so a command the page would refuse fails loud at startup.
+func Serve(ctx context.Context, workdir, addr string, launch bool, startAt *steer.Command) error {
 	svc := domain.Open(workdir)
 	// Pre-flight before binding a port or opening a browser: a server whose
 	// every request 500s (not a repo; a worktree linked from another
@@ -46,11 +49,18 @@ func Serve(ctx context.Context, workdir, addr string, launch bool) error {
 		}
 		applyUIPolicies(ctx, svc, config.ActiveRepoConfigPath(filepath.Join(top, ".gg.toml"), private))
 	}
+	srv := New(svc)
+	// Before the port is bound: a start-at the page would refuse fails the
+	// launch outright, with no listener to leak and no browser opened on it.
+	if startAt != nil {
+		if err := srv.setStartAt(*startAt); err != nil {
+			return fmt.Errorf("start-at: %w", err)
+		}
+	}
 	ln, url, err := listen(addr)
 	if err != nil {
 		return err
 	}
-	srv := New(svc)
 	srv.startLive(ctx) // watcher + interval ticker behind GET /api/events
 	defer srv.Close()
 	// The live-steering claim: web.json carries THIS run's URL, so a
@@ -137,6 +147,14 @@ func isLoopbackHost(host string) bool {
 func openBrowser(url string) {
 	var cmd *exec.Cmd
 	switch {
+	// $BROWSER first, xdg-open's own convention — a command with optional
+	// arguments ("firefox --new-tab"), the URL appended — and the only way a
+	// headless check of `gg open --web` can keep the user's real browser shut
+	// (BROWSER=true). Best-effort like every other arm: the URL is on stderr
+	// either way.
+	case len(strings.Fields(os.Getenv("BROWSER"))) > 0:
+		argv := strings.Fields(os.Getenv("BROWSER"))
+		cmd = exec.Command(argv[0], append(argv[1:], url)...)
 	case runtime.GOOS == "darwin":
 		cmd = exec.Command("open", url)
 	case runtime.GOOS == "windows":

@@ -921,3 +921,18 @@ another checkout turns the prompt into a confirm whose enter calls `reRoot`
 and arms `startAt`/`startAtPending` (resetting `startAtPreviewsSeen`) so the
 landing rides the `--at` gate; a bare repository link only switches (or
 notices "this checkout"), and `gg open <bare link>` launches the TUI there.
+`gg open --web` is the browser arm: a live page is steered over HTTP alone
+(never the TUI inbox, so a TUI live beside it stays put), else the
+`cli.LaunchWeb` seam (`cmd/gg`'s `runWeb`, shared with the `web` subcommand)
+starts `gg web` in the link's checkout with `web.Serve`'s `startAt` — validated
+through `toSteerWire` before the port is bound and handed to the page ONCE by
+`GET /api/session/start-at`. The page's gate is `boot()`'s
+`Promise.allSettled(firstLoad)` after `connectLive()`: every first-load fetch
+(status, branches, previews, note counts) has settled before `applyStartAt`
+runs, the web twin of `startAtReady` (a preview landing must find its saved
+row, or `openPreviewForPair` opens a show-once twin). A stale presence
+(server gone, web.json inside the liveness window) is a `*url.Error` from the
+POST and falls back to the launch; a page that ANSWERS (400/409) is alive and
+exits 1 instead. `openBrowser` honours `$BROWSER` first (a command plus
+arguments, URL appended; `BROWSER=true` for headless checks). `gg open --web`
+runs the server in the foreground until it is stopped.

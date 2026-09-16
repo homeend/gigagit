@@ -277,6 +277,7 @@ gg session navigate gg://gigagit/a.go:42
 gg link --preview login a.go:12         # a link to a place in a merge preview
 gg open  gg://gigagit/a.go@main...feat/login:12   # show it in the user's gg
 gg open  gg://gigagit                             # just open gg in that checkout
+gg open --web gg://gigagit/a.go@main...feat/login:12   # …in the browser: steer a live gg web page or start one (foreground)
 ```
 
 `<repo>` is the repository name of the repo's remote, resolved through the

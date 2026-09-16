@@ -53,7 +53,7 @@ func TestListenDefaultLoopback(t *testing.T) {
 
 func TestServePreflightNonRepo(t *testing.T) {
 	t.Parallel()
-	err := Serve(context.Background(), t.TempDir(), "127.0.0.1:0", false)
+	err := Serve(context.Background(), t.TempDir(), "127.0.0.1:0", false, nil)
 	if err == nil {
 		t.Fatal("Serve on a non-repo dir returned nil")
 	}
@@ -70,7 +70,7 @@ func TestServePreflightForeignWorktreeLink(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: /nonexistent/repo/.git/worktrees/x\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := Serve(context.Background(), dir, "127.0.0.1:0", false)
+	err := Serve(context.Background(), dir, "127.0.0.1:0", false, nil)
 	if err == nil {
 		t.Fatal("Serve on a broken worktree link returned nil")
 	}

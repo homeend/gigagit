@@ -18,6 +18,7 @@ import (
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/repos"
 	"github.com/homeend/gigagit/internal/shellinit"
+	"github.com/homeend/gigagit/internal/steer"
 	"github.com/homeend/gigagit/internal/tui"
 	"github.com/homeend/gigagit/internal/web"
 )
@@ -39,6 +40,16 @@ func main() {
 	// the `gg shell-init` wrapper after a worktree switch.
 	cli.LaunchTUI = func(checkout string, at model.Link) int {
 		return launchTUI(checkout, at, recordPath, cwdFile)
+	}
+	// `gg open --web <link>` with no live page in the link's checkout starts
+	// gg web there — the same runWeb the `web` subcommand runs, browser opened,
+	// the resolved command as the page's start-at (zero = a bare link).
+	cli.LaunchWeb = func(checkout string, at steer.Command) int {
+		var startAt *steer.Command
+		if at.Cmd != "" {
+			startAt = &at
+		}
+		return runWeb(checkout, "", true, startAt)
 	}
 	if timeTrack != "" {
 		if err := setupTimeTrack(timeTrack, args); err != nil {
@@ -76,19 +87,7 @@ func main() {
 		addr := fs.String("addr", "", "listen address (loopback only; default 127.0.0.1:0)")
 		open := fs.Bool("open", false, "open the system browser at the served URL")
 		_ = fs.Parse(args[1:])
-		// The always-on error log the TUI keeps (errors.log beside
-		// operations.log): the web server's genuine failures were previously
-		// ring-only — /api/session-errors shows the ring either way, but the
-		// durable file should not depend on which frontend ran.
-		if ef, _, eerr := tui.OpenErrorLog(); eerr == nil && ef != nil {
-			observ.SetFailureSink(ef)
-			defer func() { observ.SetFailureSink(nil); _ = ef.Close() }()
-		}
-		if err := web.Serve(context.Background(), ".", *addr, *open); err != nil {
-			fmt.Fprintln(os.Stderr, "gg web:", err)
-			os.Exit(1)
-		}
-		return
+		os.Exit(runWeb(".", *addr, *open, nil))
 	}
 	if len(args) > 0 && args[0] == "__rebase-seq" {
 		if err := runRebaseSeq(args[1:]); err != nil {
@@ -117,6 +116,34 @@ func main() {
 	}
 	// No subcommand: launch the TUI in the current directory.
 	os.Exit(launchTUI(".", model.Link{}, recordPath, cwdFile))
+}
+
+// runWeb runs `gg web` for dir: the always-on error log, then web.Serve on
+// addr, optionally opening the browser, positioned at startAt. Shared by the
+// `web` subcommand and by `gg open --web`'s launcher seam, so a checkout
+// served either way gets the same startup. dir is entered first (like
+// launchTUI), so nothing under internal/web has to reason about a cwd that
+// is not the served checkout.
+func runWeb(dir, addr string, open bool, startAt *steer.Command) int {
+	if dir != "" && dir != "." {
+		if err := os.Chdir(dir); err != nil {
+			fmt.Fprintln(os.Stderr, "gg web:", err)
+			return 1
+		}
+	}
+	// The always-on error log the TUI keeps (errors.log beside
+	// operations.log): the web server's genuine failures were previously
+	// ring-only — /api/session-errors shows the ring either way, but the
+	// durable file should not depend on which frontend ran.
+	if ef, _, eerr := tui.OpenErrorLog(); eerr == nil && ef != nil {
+		observ.SetFailureSink(ef)
+		defer func() { observ.SetFailureSink(nil); _ = ef.Close() }()
+	}
+	if err := web.Serve(context.Background(), ".", addr, open, startAt); err != nil {
+		fmt.Fprintln(os.Stderr, "gg web:", err)
+		return 1
+	}
+	return 0
 }
 
 // launchTUI runs the whole TUI startup sequence for dir: the runner stack, the
