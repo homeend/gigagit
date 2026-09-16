@@ -48,6 +48,12 @@ type Server struct {
 	// reposPath overrides the MRU registry location (test seam); empty =
 	// repos.DefaultStatePath().
 	reposPath string
+	// probes memoises the per-checkout disk probes behind /api/repos/details
+	// (repodetails.go); probeRepo and probeDeadline are its test seams
+	// (nil/zero = probeRepoDisk and defaultProbeDeadline).
+	probes        repoProbes
+	probeRepo     func(path string) (branch string, slow bool)
+	probeDeadline time.Duration
 
 	// Live steering (steer.go): steerDir is this worktree's inbox and
 	// steerURL this server's own loopback address, written into web.json so
@@ -161,6 +167,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/reroot", writeGuard(s.handleReroot))
 	mux.HandleFunc("POST /api/ui-config", writeGuard(s.handleUIConfig))
 	mux.HandleFunc("GET /api/repos", s.handleRepos)
+	mux.HandleFunc("GET /api/repos/details", s.handleRepoDetails)
 	// Endpoints a feature declared in its own file (routereg.go). Added last,
 	// so the built-in table above is the one that wins a naming clash — and
 	// net/http panics on a duplicate pattern, which is the right time to hear
