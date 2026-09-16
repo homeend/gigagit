@@ -22,6 +22,9 @@ type WebUI struct {
 	// twin of the TUI's per-panel `o` cycle. Lists left in their default
 	// order are absent rather than stored as "default".
 	Sorts map[string]string `toml:"sorts,omitempty"`
+	// DiffView is the diff pane's view mode — the TUI's f toggle: "changed"
+	// shows changed lines only (folded context), "" / "full" the whole file.
+	DiffView string `toml:"diff_view,omitempty"`
 }
 
 // WebUIState returns the stored layout and whether anything was ever stored.

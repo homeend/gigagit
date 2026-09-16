@@ -26,7 +26,7 @@ mapping) · prune · delete remote branch · worktree create + remove · tags
 (create, annotate, push, delete, delete from remote) · stash create/apply/pop/
 drop · commit · staging incl. the region/line hunk picker · discard ·
 `.gitignore` rows · reset (incl. reset-to-remote-tip) · conflict resolution
-through the hunk picker · AI conflict-complete · diff · file history · blame ·
+through the hunk picker · AI conflict-complete · diff (incl. the `f` changed-lines-only fold) · file history · blame ·
 compare two branches · solo scope · branch versions · AI review · identity &
 profiles · branch prefixes · external tools · session errors · repo switcher ·
 refresh settings · live refresh (file watch + intervals) · commit graph · command palette · cherry-pick · revert ·

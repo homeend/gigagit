@@ -100,6 +100,7 @@
         <button id="next-file" title="next file">file ›</button>
         <button id="prev-change" title="previous change">‹ change</button>
         <button id="next-change" title="next change">change ›</button>
+        <button id="diff-view" title="changed lines only ↔ full file (f)" aria-pressed="false">changes only</button>
         <button id="hist-btn" title="this file's history">history</button>
         <button id="blame-btn" title="blame this file">blame</button>
       </span>
@@ -112,7 +113,7 @@
   <div id="drift-head"><span id="drift-title"></span><button id="drift-dismiss">dismiss</button></div>
   <ul id="drift-list"></ul>
 </div>
-<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">t toggle sidebar</button><button data-act="graph">g graph</button><button data-act="filter">/ filter</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="sort">o sort</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
+<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">t toggle sidebar</button><button data-act="graph">g graph</button><button data-act="filter">/ filter</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="sort">o sort</button><button data-act="diffview">f changes only</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
 <div id="ctx-menu" class="hidden"></div>
 <div id="modal" class="hidden">
   <div id="modal-box">

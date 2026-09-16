@@ -5,7 +5,7 @@ import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
-import { addNotePrompt, cycleFilesSort, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleMark, toggleNotesAgent } from "./files.js";
+import { addNotePrompt, cycleFilesSort, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNotesAgent } from "./files.js";
 import { openPalette } from "./palette.js";
 
 // --- focus + keyboard ---
@@ -18,46 +18,57 @@ function focusPane() {
 
 function moveCursor(delta) {
   if (state.pane === "commits") {
-    if (state.cfilter) {
-      // Filtered mode: the spacer/window are sized to matches.length + 1
-      // (the hint row), not the full feed, so navigation and scroll math
-      // must operate on POSITION WITHIN THE MATCH LIST rather than the
-      // full-feed display index state.cursor otherwise holds.
-      const m = state.cfilter.matches;
-      if (!m.length) return;
-      let pos = m.findIndex((idx) => idx + wtCount() === state.cursor);
-      if (pos === -1) {
-        // Cursor isn't on a match (filter just narrowed, or a fresh open):
-        // snap to the nearest match at or after it, else the last match.
-        pos = m.findIndex((idx) => idx + wtCount() >= state.cursor);
-        if (pos === -1) pos = m.length - 1;
-      }
-      pos = Math.max(0, Math.min(m.length - 1, pos + delta));
-      state.cursor = m[pos] + wtCount();
-      const scroll = $("commits-scroll");
-      const top = pos * ROW_H;
-      if (top < scroll.scrollTop) scroll.scrollTop = top;
-      else if (top + ROW_H > scroll.scrollTop + scroll.clientHeight)
-        scroll.scrollTop = top + ROW_H - scroll.clientHeight;
-      renderCommits();
-      return;
-    }
-    const total = state.rows.length + wtCount();
-    if (!total) return;
-    state.cursor = Math.max(0, Math.min(total - 1, state.cursor + delta));
-    const scroll = $("commits-scroll");
-    const top = state.cursor * ROW_H + (state.cursor > 0 ? wtExtra() : 0);
-    const h = state.cursor === 0 && state.wt ? WT_H : ROW_H;
-    if (top < scroll.scrollTop) scroll.scrollTop = top;
-    else if (top + h > scroll.scrollTop + scroll.clientHeight)
-      scroll.scrollTop = top + h - scroll.clientHeight;
-    renderCommits();
+    stepCommitCursor(delta);
   } else {
     const list = state.filesMode === "status" ? state.statusEntries : state.files;
     if (!list.length) return;
     state.fileCursor = Math.max(0, Math.min(list.length - 1, state.fileCursor + delta));
     renderFiles();
   }
+}
+
+
+// stepCommitCursor moves the commit cursor by delta, scrolls it into view
+// and re-renders the virtual window. delta 0 is the "bring the list back"
+// call: the commits pane is display:none behind a diff, which drops its
+// scroll position AND makes any render there (a live refresh, r, a notes
+// count) size the window for a zero-height pane — ten rows. Returning from
+// the diff stage must redo both, whichever pane holds the keyboard.
+function stepCommitCursor(delta) {
+  if (state.cfilter) {
+    // Filtered mode: the spacer/window are sized to matches.length + 1
+    // (the hint row), not the full feed, so navigation and scroll math
+    // must operate on POSITION WITHIN THE MATCH LIST rather than the
+    // full-feed display index state.cursor otherwise holds.
+    const m = state.cfilter.matches;
+    if (!m.length) return;
+    let pos = m.findIndex((idx) => idx + wtCount() === state.cursor);
+    if (pos === -1) {
+      // Cursor isn't on a match (filter just narrowed, or a fresh open):
+      // snap to the nearest match at or after it, else the last match.
+      pos = m.findIndex((idx) => idx + wtCount() >= state.cursor);
+      if (pos === -1) pos = m.length - 1;
+    }
+    pos = Math.max(0, Math.min(m.length - 1, pos + delta));
+    state.cursor = m[pos] + wtCount();
+    const scroll = $("commits-scroll");
+    const top = pos * ROW_H;
+    if (top < scroll.scrollTop) scroll.scrollTop = top;
+    else if (top + ROW_H > scroll.scrollTop + scroll.clientHeight)
+      scroll.scrollTop = top + ROW_H - scroll.clientHeight;
+    renderCommits();
+    return;
+  }
+  const total = state.rows.length + wtCount();
+  if (!total) return;
+  state.cursor = Math.max(0, Math.min(total - 1, state.cursor + delta));
+  const scroll = $("commits-scroll");
+  const top = state.cursor * ROW_H + (state.cursor > 0 ? wtExtra() : 0);
+  const h = state.cursor === 0 && state.wt ? WT_H : ROW_H;
+  if (top < scroll.scrollTop) scroll.scrollTop = top;
+  else if (top + h > scroll.scrollTop + scroll.clientHeight)
+    scroll.scrollTop = top + h - scroll.clientHeight;
+  renderCommits();
 }
 
 
@@ -139,6 +150,8 @@ document.addEventListener("keydown", (e) => {
       const f = state.statusEntries[state.fileCursor];
       if (f) { toggleMark(f.path); moveCursor(1); }
     }
+  } else if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    toggleDiffView(); // the TUI's f: changed lines only ↔ full file
   } else if (e.key === "o") {
     // the TUI's o: cycle the focused list's display order. The working-tree
     // file list is the one the keyboard can reach — the sidebar's lists cycle
@@ -181,6 +194,7 @@ $("foot").addEventListener("click", (e) => {
     case "stage": stageFocused(false); break;
     case "unstage": stageFocused(true); break;
     case "sort": if (state.pane === "files" && state.filesMode === "status") cycleFilesSort(); break;
+    case "diffview": toggleDiffView(); break;
     case "pull": doPull(); break;
     case "push": doPush(); break;
     case "refresh": manualRefresh(); break;
@@ -189,4 +203,4 @@ $("foot").addEventListener("click", (e) => {
   }
 });
 
-export { focusPane, moveCursor };
+export { focusPane, moveCursor, stepCommitCursor };

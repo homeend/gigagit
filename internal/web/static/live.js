@@ -9,7 +9,7 @@
 // after a dropped stream reloads everything, since events were missed.
 import { attnKey, getJSON, runOnce, state } from "./core.js";
 import { fetchStatus, wtCount } from "./status.js";
-import { fetchNotes, markDiffRow, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, setLayout, stepNote } from "./files.js";
+import { fetchNotes, markDiffRow, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
 import { fetchBranches } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved } from "./previews.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
@@ -276,10 +276,9 @@ async function steerNavigate(s) {
   if (!s.line) return;
   const side = s.side; // the server fills it whenever a line is present
   // A side-by-side `change` row anchors on its NEW side, so an old-side
-  // landing falls back to the row carrying that left number.
-  const tr =
-    document.querySelector(`#diff-body tr[data-side="${side}"][data-no="${s.line}"]`) ||
-    (side === "old" ? document.querySelector(`#diff-body tr[data-lno="${s.line}"]`) : null);
+  // landing falls back to the row carrying that left number; a line the
+  // changes-only view folded away is unfolded first.
+  const tr = revealDiffRow(side, s.line);
   if (!tr) return;
   markDiffRow(tr, side, s.line);
   tr.scrollIntoView({ block: "center" });

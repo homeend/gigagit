@@ -139,12 +139,20 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 #diff-nav button:hover:not(:disabled) { border-color: var(--accent); }
 #diff-nav button:disabled { opacity: .45; cursor: default; }
+/* The changes-only toggle shows its pressed state (aria-pressed) as a filled
+   accent chip — the toolbar's other buttons are one-shot actions. */
+#diff-nav button.on { border-color: var(--accent); background: var(--accent); color: var(--bg); }
+/* A fold row stands in for a run of equal lines the changes-only view hides:
+   a dim, centered rule label that unfolds on click. */
+table.diff tr.fold td { text-align: center; color: var(--dim); background: var(--bg-alt); border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); cursor: pointer; user-select: none; }
+table.diff tr.fold:hover td { color: var(--fg); }
 table.diff tr.flash td { background: var(--sel); }
 table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
 /* Wrap at whitespace; break inside a token only when it alone overflows
    (break-all shattered code mid-word, e.g. import paths). */
 table.diff td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 6px; }
 td.no { width: 3.5em; text-align: right; color: var(--dim); user-select: none; }
+table.diff col.no { width: 3.5em; } /* the colgroup twin: fixed layout reads widths from here when a fold row comes first */
 tr.add td.side.r, tr.add td.no.r { background: var(--add); }
 tr.del td.side.l, tr.del td.no.l { background: var(--del); }
 tr.change td.side.l { background: var(--del); }

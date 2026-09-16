@@ -69,7 +69,7 @@ func TestUIStateStartsUnsaved(t *testing.T) {
 
 func TestUIStateRoundTrips(t *testing.T) {
 	ts := serve(t, uiServer(t))
-	body := `{"sections":["tags","reflog"],"sidebar_hidden":true,"sidebar_width":310,"files_width":420,"graph":"off"}`
+	body := `{"sections":["tags","reflog"],"sidebar_hidden":true,"sidebar_width":310,"files_width":420,"graph":"off","diff_view":"changed"}`
 	var put uiStateWire
 	if code := putJSON(t, ts, "/api/uistate", body, "", &put); code != http.StatusOK {
 		t.Fatalf("PUT code = %d", code)
@@ -78,7 +78,7 @@ func TestUIStateRoundTrips(t *testing.T) {
 		t.Fatal("PUT response must report saved=true")
 	}
 	st := getUIState(t, ts)
-	if !st.Saved || st.SidebarWidth != 310 || st.FilesWidth != 420 || !st.SidebarHidden || st.Graph != "off" {
+	if !st.Saved || st.SidebarWidth != 310 || st.FilesWidth != 420 || !st.SidebarHidden || st.Graph != "off" || st.DiffView != "changed" {
 		t.Fatalf("round trip = %+v", st)
 	}
 	if len(st.Sections) != 2 || st.Sections[0] != "tags" || st.Sections[1] != "reflog" {
@@ -114,7 +114,7 @@ func TestUIStateSurvivesAServerRestart(t *testing.T) {
 // fall back, and widths are bounded.
 func TestUIStateSanitizesInput(t *testing.T) {
 	ts := serve(t, uiServer(t))
-	body := `{"sections":["reflog","bogus","tags","tags"],"sidebar_width":-40,"files_width":99999,"graph":"; rm -rf /"}`
+	body := `{"sections":["reflog","bogus","tags","tags"],"sidebar_width":-40,"files_width":99999,"graph":"; rm -rf /","diff_view":"partial"}`
 	var put uiStateWire
 	if code := putJSON(t, ts, "/api/uistate", body, "", &put); code != http.StatusOK {
 		t.Fatalf("PUT code = %d", code)
@@ -130,6 +130,9 @@ func TestUIStateSanitizesInput(t *testing.T) {
 	}
 	if put.Graph != "svg" {
 		t.Fatalf("graph = %q, want the svg fallback", put.Graph)
+	}
+	if put.DiffView != "full" {
+		t.Fatalf("diff_view = %q, want the full-file fallback", put.DiffView)
 	}
 }
 

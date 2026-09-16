@@ -37,6 +37,9 @@ type uiStateWire struct {
 	SidebarWidth  int      `json:"sidebar_width"`
 	FilesWidth    int      `json:"files_width"`
 	Graph         string   `json:"graph"`
+	// DiffView is the diff pane's view mode: "changed" (changed lines only,
+	// the TUI's f) or "full" (the default).
+	DiffView string `json:"diff_view"`
 	// Sorts is the per-list display order (list name -> sort mode). Always
 	// emitted (never null) so the client can index it without a guard.
 	Sorts map[string]string `json:"sorts"`
@@ -56,7 +59,7 @@ func (s *Server) webUIStore() *promptstate.FileStore {
 func (s *Server) handleUIStateGet(w http.ResponseWriter, r *http.Request) {
 	store := s.webUIStore()
 	if store == nil {
-		writeJSON(w, uiStateWire{Sections: []string{}, Sorts: map[string]string{}})
+		writeJSON(w, uiStateWire{Sections: []string{}, Sorts: map[string]string{}, DiffView: "full"})
 		return
 	}
 	st, saved := store.WebUIState()
@@ -68,6 +71,7 @@ func (s *Server) handleUIStateGet(w http.ResponseWriter, r *http.Request) {
 		FilesWidth:    st.FilesWidth,
 		Graph:         st.Graph,
 		Sorts:         allowedSorts(st.Sorts), // re-resolved: the file is editable by hand
+		DiffView:      allowedDiffView(st.DiffView),
 	})
 }
 
@@ -89,6 +93,7 @@ func (s *Server) handleUIStateSet(w http.ResponseWriter, r *http.Request) {
 		FilesWidth:    clampPaneWidth(in.FilesWidth),
 		Graph:         allowedGraph(in.Graph),
 		Sorts:         allowedSorts(in.Sorts),
+		DiffView:      allowedDiffView(in.DiffView),
 	}); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -133,6 +138,15 @@ func allowedGraph(mode string) string {
 		return "off"
 	}
 	return "svg" // the default render mode; anything unrecognized falls back to it
+}
+
+// allowedDiffView resolves the wire value against the two view modes; anything
+// unrecognized is the full file, the default.
+func allowedDiffView(mode string) string {
+	if mode == "changed" {
+		return "changed"
+	}
+	return "full"
 }
 
 func clampPaneWidth(px int) int {

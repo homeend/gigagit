@@ -8,6 +8,32 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Fixed: the browser's commit list showed only ten rows after leaving a
+  diff.** The commits pane is hidden (`display: none`) while a diff is open,
+  and any redraw in that time — a live refresh, `r`, a review-note count —
+  sized the virtual list for a zero-height pane. Stepping back with esc
+  never redrew it, so the list stayed at ten rows until the first scroll.
+  Returning from the diff stage now re-renders and rescrolls the list, the
+  same way returning to the full-width list already did.
+
+- **The browser's diff has the TUI's `f`: changed lines only ↔ full file.**
+  `gg web` always drew the whole file in the diff pane; a one-line change
+  deep in a long file meant scrolling past screens of context (the pane
+  parked on the first change, but that was all). Now `f`, the diff
+  toolbar's **changes only** button (a pressed accent chip while on) and the
+  footer's `f changes only` chip fold the diff to each change plus three
+  lines of context, every other equal run standing in as a `⋯ N unchanged
+  lines` row — click one to unfold that run. The ‹/› change stepper keeps
+  its place across the flip (the block count is the same in both modes),
+  the file-history overlay follows the same setting (`f` works there too),
+  and a row carrying a review note or a `gg session highlight` band never
+  folds away. The choice is remembered per machine (`diff_view` in
+  `/api/uistate`, the same store as the sidebar layout — the random port
+  makes localStorage useless), defaulting to the full file like the TUI. A
+  mode- or whitespace-only change says so instead of showing an empty table.
+  The fold rule is a pure JS section pinned against `textdiff.Collapse` by a
+  node-driven Go test.
+
 - **Fixed: `C`/`I` in the conflict hunk picker left a one-sided region undecided,
   so `ctrl+s` refused to apply.** A region with nothing on the chosen side
   (all of its lines came from the other branch) has nothing to offer "take

@@ -6,7 +6,7 @@ import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { rev } from "./review.js";
 import { openCommitByHash } from "./commits.js";
-import { diffHTML } from "./files.js";
+import { diffHTML, toggleDiffView } from "./files.js";
 
 // --- file history overlay ----------------------------------------------------
 // A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
@@ -63,6 +63,11 @@ function historyKey(e) {
     e.preventDefault();
     return true;
   }
+  if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    toggleDiffView(); // the shared preference flips; this overlay redraws itself
+    renderHistoryDiff();
+    return true;
+  }
   return true; // the overlay owns the keyboard entirely while open
 }
 
@@ -100,12 +105,31 @@ async function openHistoryDiff(i) {
     // clobber a newer diff already on screen — same overlay (gen) AND the
     // selection still sitting on the row this response is for (i).
     if (!hist || hist.gen !== gen || hist.sel !== i) return;
-    $("history-diff").innerHTML = diffHTML(d, $("history-diff").clientWidth);
+    hist.diff = d;
+    hist.folds = new Set(); // a new revision starts fully folded (when the mode is on)
+    renderHistoryDiff();
   } catch (e) {
     if (hist && hist.gen === gen && hist.sel === i)
       $("history-diff").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
   }
 }
+
+
+// renderHistoryDiff draws (or redraws) the selected revision's diff. The
+// overlay follows the main pane's view mode (state.diffPartial) with its own
+// fold set, so unfolding here never touches the diff behind it.
+function renderHistoryDiff() {
+  if (!hist || !hist.diff) return;
+  $("history-diff").innerHTML = diffHTML(hist.diff, $("history-diff").clientWidth, false, hist.folds);
+}
+
+
+$("history-diff").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr.fold[data-fold]");
+  if (!tr || !hist || !hist.diff) return;
+  hist.folds.add(Number(tr.dataset.fold));
+  renderHistoryDiff();
+});
 
 
 $("history-list").addEventListener("click", (e) => {
