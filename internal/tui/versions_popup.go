@@ -267,10 +267,18 @@ func (p *versionsPopup) onEnter(m Model) (Model, tea.Cmd) {
 		// Fieldless record (amend/reset/undo-commit/delete-branch/restore):
 		// domain.VersionPreview would return ErrNoPreview here — not a
 		// user-facing error, just "there is nothing to preview" — so this
-		// opens today's commit view instead, exactly as enter on an ordinary
-		// commit row does.
+		// opens today's commit view instead — but on the TREE side, not
+		// openChangedFiles' default commit-list side: the version's commit is
+		// not a feed row, so the right column is unrelated, and ↓ there would
+		// walk the feed and silently swap the tree for the feed commit's files.
+		// focus lands on the Commits panel (the files-view commit-list side)
+		// so the Branches row's reveal cannot paint over the tree — the same
+		// by-hash open the reflog / tag / goto-commit paths do.
 		return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) {
-			return m.openChangedFiles(model.Commit{Hash: v.Hash, Subject: v.Subject})
+			m, cmd := m.openChangedFiles(model.Commit{Hash: v.Hash, Subject: v.Subject})
+			m.focus = panelCommits
+			m = m.focusTree()
+			return m, cmd
 		})
 	}
 	return m, nil

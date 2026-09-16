@@ -190,3 +190,46 @@ func TestVersionsPopupDeletedBranchWithEndpointsOpensFrozenPreview(t *testing.T)
 		t.Fatalf("endpoints = %+v/%+v, want the recorded Base/Ours", m.filesLeft, m.filesRight)
 	}
 }
+
+// TestVersionsPopupFieldlessOpensOnTree: entering a fieldless row (amend /
+// reset / undo-commit / delete-branch / restore — no Base/Ours) must land on
+// the TREE side with the Commits panel as the focused panel, exactly like the
+// reflog / tag / goto-commit by-hash openers. The version's commit is not a
+// feed row, so opening on the commit-list side (openChangedFiles' default)
+// made ↓ walk the feed — silently swapping the tree for the feed commit's
+// files — and left m.focus on Branches, whose row reveal then painted over
+// the tree.
+func TestVersionsPopupFieldlessOpensOnTree(t *testing.T) {
+	t.Parallel()
+	m := Model{width: 120, height: 40, focus: panelBranches}
+	p := &versionsPopup{
+		mode:   versionsModeVersions,
+		branch: "topic",
+		rows: []model.BranchVersion{
+			{
+				Ref: "refs/gg/versions/topic/1753100100-merge", Hash: "cccccccccccccccc",
+				Subject: "topic one amended", Op: "merge", Unix: 1753100100,
+				Base: "1111111111111111", Ours: "2222222222222222",
+			},
+			{Ref: "refs/gg/versions/topic/1753100000-amend", Hash: "bbbbbbbbbbbbbbbb", Subject: "topic one", Op: "amend", Unix: 1753100000},
+		},
+	}
+	m = m.pushLayer(p)
+
+	mm, _ := m.Update(keyMsg("down"))
+	mm, _ = mm.(Model).Update(keyMsg("enter"))
+	m = mm.(Model)
+
+	if m.filesView == nil || m.inCompareMode() {
+		t.Fatal("a fieldless row should open the commit files view")
+	}
+	if m.filesHash != "bbbbbbbbbbbbbbbb" {
+		t.Fatalf("filesHash = %q, want the version's own commit", m.filesHash)
+	}
+	if !m.filesTreeFocused {
+		t.Fatal("the files view must open on the TREE side: the version's commit is not a feed row, so ↓ must walk its files, not the feed")
+	}
+	if m.focus != panelCommits {
+		t.Fatalf("focus = %v, want panelCommits (the files-view commit-list side) so no other panel's row reveal paints over the tree", m.focus)
+	}
+}
