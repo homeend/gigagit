@@ -25,17 +25,23 @@ func tokAt(side [][]syntax.Tok, no int) []syntax.Tok {
 
 // sanitizeCell expands text exactly as sanitizeLine and returns the display
 // runes with two parallel masks: emph marks runes whose source raw rune is
-// covered by a word-diff span, cls carries each rune's syntax class. Raw
-// indices are counted over the \r-trimmed text (matching sanitizeLine); span
-// and token ends are clamped to that length.
-func sanitizeCell(s string, spans []textdiff.Span, toks []syntax.Tok) (disp []rune, emph []bool, cls []syntax.Class) {
+// covered by a word-diff span (emphWord; search hits are overlaid later), cls
+// carries each rune's syntax class. Raw indices are counted over the
+// \r-trimmed text (matching sanitizeLine); span and token ends are clamped to
+// that length.
+func sanitizeCell(s string, spans []textdiff.Span, toks []syntax.Tok) (disp []rune, emph []emphLevel, cls []syntax.Class) {
 	s = strings.TrimSuffix(s, "\r")
 	runes := []rune(s)
 	cover := coverMask(len(runes), spans)
 	classes := classMask(len(runes), toks)
 	col := 0
 	for raw, r := range runes {
-		on, c := cover[raw], classes[raw]
+		// sanitizeCell only ever marks emphWord: search hits are overlaid on
+		// top of its mask afterwards (overlayHits), never mixed in here.
+		on, c := emphNone, classes[raw]
+		if cover[raw] {
+			on = emphWord
+		}
 		switch {
 		case r == '\t':
 			n := 4 - col%4

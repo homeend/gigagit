@@ -20,7 +20,7 @@ import (
 // class run for "func main() {" with no emphasis.
 func goFuncMask() runMask {
 	cls := goFuncCls()
-	return runMask{cls: cls, emph: make([]bool, len(cls))}
+	return runMask{cls: cls, emph: make([]emphLevel, len(cls))}
 }
 
 // An all-Plain mask must render byte-identically to no mask at all. (A file
@@ -34,7 +34,7 @@ func TestTwoColPlainMaskIsByteIdenticalToNoMask(t *testing.T) {
 
 	const text = "    return foo(bar) and a good deal more text besides"
 	n := len([]rune(text))
-	pm := runMask{cls: make([]syntax.Class, n), emph: make([]bool, n)}
+	pm := runMask{cls: make([]syntax.Class, n), emph: make([]emphLevel, n)}
 	for _, mode := range []dispMode{modeCutoff, modeWrap, modeScroll} {
 		o := twoColOpts{w: 40, h: 4, sep: " ║ ", mode: mode, hscroll: 3}
 		want, _ := renderTwoCol([]colRow{{
