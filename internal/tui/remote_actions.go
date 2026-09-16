@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"context"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -14,20 +14,35 @@ import (
 // time — so opening the menu costs no git call. A nil service or a resolve
 // error falls back to fallbackShort (the short hash the row already carries),
 // so the copy always yields a usable value.
+//
+// The resolve is DEADLINED (updateThreadGitTimeout): it runs on the Update
+// thread, where an undeadlined domain read can wedge the whole UI behind a
+// queued tree-write. A busy repo therefore copies the short hash instead of
+// freezing — the same fallback the resolve-error case already took, so this
+// needs no new outcome for the user to understand.
 func (m Model) copyShaRow(ref, fallbackShort string) actionRow {
 	return actionRow{
 		id:    "copy-commit-sha",
 		label: i18n.T("Copy commit sha"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			full := fallbackShort
-			if m.svc != nil {
-				if s, err := m.svc.RevParse(context.Background(), ref); err == nil && s != "" {
-					full = s
-				}
-			}
+			full := m.resolveShaWithin(ref, fallbackShort, updateThreadGitTimeout)
 			return m, m.copyToClipboardCmd(i18n.T("Copied commit sha %s", shortHash(full)), full)
 		},
 	}
+}
+
+// resolveShaWithin is copyShaRow's resolve with the deadline exposed, so a
+// test can drive the expiry path without racing a real reservation.
+func (m Model) resolveShaWithin(ref, fallbackShort string, d time.Duration) string {
+	if m.svc == nil {
+		return fallbackShort
+	}
+	ctx, cancel := updateThreadCtx(d)
+	defer cancel()
+	if s, err := m.svc.RevParse(ctx, ref); err == nil && s != "" {
+		return s
+	}
+	return fallbackShort
 }
 
 // canFetchRemotes gates f (fetch) and the Prune . menu action on the Remotes tab.
