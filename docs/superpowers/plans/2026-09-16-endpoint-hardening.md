@@ -811,6 +811,176 @@ Claude-Session: https://claude.ai/code/session_01GiF4qfVtboFEjZAFP1bJ27"
 
 ---
 
+## Task 3b: Resolve commit-ish input to a sha before building an Endpoint
+
+**Added during execution.** Task 3 could not convert five production sites
+because they store a git **rev-spec** — `"HEAD"`, a branch name, `"HEAD~2"`,
+`<sha>^` — in `Endpoint.Hash` rather than a resolved sha, and `CommitEndpoint`
+requires 7..64 hex.
+
+**This is a real, shipped bug, not a migration snag.** `Endpoint.CacheTag()`
+returns `Hash` verbatim and is the session diff-cache key. Keying the cache on
+a moving name means `gg compare HEAD @worktree`, re-opened after a commit, can
+serve a **stale diff** — precisely the "wrong diff later" class this refactor
+exists to close.
+
+**Ruling (controller, during execution):** fix it here, before Task 4. Task 4
+unexports the fields, which turns each of these literals into a compile error,
+so "leave them" is not an available option. **The plan's "no behaviour change"
+constraint is amended for this task only**: resolving adds a git round-trip and
+an error path for an unresolvable rev. That cost is accepted because the
+alternative — an unvalidated `RevEndpoint` escape hatch — would make
+`CommitEndpoint`'s validation meaningless on exactly the paths users hit most,
+and would leave the cache bug shipped.
+
+**The reference implementations already exist in-tree.** Follow them rather
+than inventing a pattern:
+- `internal/mcp/compare.go`'s `endpointFor` resolves via
+  `s.svc.CommitLookup(ctx, side.Rev)` and builds the endpoint from the
+  resolved `line.Hash`.
+- `internal/web/compare.go`'s `parseEntrySide` validates with `isHexSha`
+  before touching `Hash`.
+
+**Files:**
+- Modify: `internal/cli/compare.go:37` — `parseEndpoint`'s default arm
+- Modify: `internal/tui/file_finder.go:323` — the `"HEAD"` diff action
+- Modify: `internal/tui/commit_scope.go:633` — `oldest.key + "^"`
+- Modify: `internal/tui/branch_compare.go:103-104` — `openBranchCompare`'s
+  `left`/`right`, built from `branchTipHash`
+- Modify: `internal/cli/compare_test.go:26-27`, `internal/tui/file_finder_actions_test.go:90`
+
+**Interfaces:**
+- Consumes: `model.CommitEndpoint` and `ErrEndpoint` (Task 2);
+  `domain.Service.CommitLookup(ctx, rev)`.
+- Produces: `parseEndpoint` gains an error return and a resolver parameter (see
+  Step 2) — Task 4 must not re-break this.
+
+### The four sites are not one problem
+
+Read each before editing; they need different fixes.
+
+1. **`cli/compare.go`'s `parseEndpoint`** is a **pure function with no service
+   access**, so it cannot resolve. This is the structural one: either it gains
+   a resolver parameter and an error return, or its caller resolves first and
+   passes a sha. Prefer giving it the resolver and an error — the caller
+   already has the service and already handles exit codes.
+2. **`tui/file_finder.go:323`** hard-codes `"HEAD"`. The TUI reaches git
+   through `internal/domain`; resolve HEAD through the service.
+3. **`tui/commit_scope.go:633`** builds `oldest.key + "^"` — the *parent of* a
+   commit. Resolving needs a git round-trip for the parent sha.
+4. **`tui/branch_compare.go:103-104`** is a different bug wearing the same
+   clothes: `branchTipHash(name)` **falls back to the raw branch name** when
+   the name is not in `m.branches`. The fix is to make that fallback
+   impossible (return `(hash, ok)` and handle the miss) rather than to resolve
+   a name that should never have been a hash. The task-3 report notes the
+   fallback is reachable from the test suite itself.
+
+- [ ] **Step 1: Write the failing test that pins the cache bug**
+
+This is the test that justifies the task. In `internal/tui/compare_diff_test.go`
+(or the nearest existing compare-cache test file), assert that two endpoints
+built from the same *moving* rev at different commits do not share a cache tag:
+
+```go
+// TestCompareTagDoesNotKeyOnAMovingRev pins the bug that plan 1a's Task 3
+// surfaced: CacheTag() returns Hash verbatim, so an endpoint holding "HEAD"
+// keyed the session diff cache on a name that moves. Committing and
+// re-opening the same compare could then serve the PREVIOUS diff.
+func TestCompareTagDoesNotKeyOnAMovingRev(t *testing.T) {
+	t.Parallel()
+	// Build the endpoint the way the production path now does, at two
+	// different HEADs in a real repo, and require the tags to differ.
+}
+```
+
+Fill the body using this package's existing repo-fixture helper (`newRepo` /
+`newTestRepo` — grep the package for which one it uses): make a commit,
+resolve HEAD to an endpoint, record `CacheTag()`; make a second commit,
+resolve again, record `CacheTag()`; assert the two differ.
+
+- [ ] **Step 2: Run it and watch it fail**
+
+```bash
+cd /mnt/t/others/gigagit.worktrees/feat-unified-links
+go test ./internal/tui/ -run TestCompareTagDoesNotKeyOnAMovingRev -v
+```
+
+Expected: FAIL — both tags are the literal `"HEAD"`.
+
+- [ ] **Step 3: Fix the four sites**
+
+Per the analysis above. Each site's rev must be resolved to a full sha before
+`model.CommitEndpoint` is called, and every constructor error must be
+propagated or surfaced — **no site may discard it**.
+
+For `branchTipHash`, change the signature so a miss is representable:
+
+```go
+// branchTipHash returns the tip sha for a branch name, and ok=false when the
+// name is not among the loaded branches. It never falls back to returning the
+// NAME: that value reached Endpoint.Hash, which CacheTag() uses as the diff
+// cache key, so a name there silently keyed the cache on something that moves.
+func branchTipHash(name string) (string, bool)
+```
+
+Update its callers to handle `ok == false` — for `openBranchCompare` that
+means declining to open the compare rather than opening a wrong one.
+
+- [ ] **Step 4: Run the new test and the affected packages**
+
+```bash
+go test ./internal/tui/ -run TestCompareTagDoesNotKeyOnAMovingRev -v
+go test ./internal/cli/ ./internal/tui/
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Confirm the rev-spec bucket is empty**
+
+```bash
+grep -rn 'model\.Endpoint{[^}]' internal/ cmd/
+grep -rn 'Endpoint{Kind:' internal/ cmd/
+```
+
+Expected: the first prints nothing. The second prints only
+`internal/model/model.go` (the constructors' own bodies),
+`internal/model/endpoint_test.go` (in-package probes), and
+`internal/tui/session_snapshot.go` (which is `snapEndpoint`, an unrelated
+package-local wire struct — a grep false positive, not a site).
+
+- [ ] **Step 6: Full unit suite**
+
+```bash
+./test.sh unit
+```
+
+Expected: PASS. Run it in the FOREGROUND.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add -A
+git commit -m "fix: resolve a commit-ish to a sha before it becomes an Endpoint
+
+Endpoint.CacheTag() returns Hash verbatim and is the session diff-cache key,
+but four call sites put a git REV-SPEC there -- \"HEAD\", a branch name,
+\"HEAD~2\", <sha>^. Keying the cache on a name that moves meant \`gg compare
+HEAD @worktree\`, re-opened after a commit, could serve the previous diff.
+
+parseEndpoint gains a resolver and an error return; the TUI sites resolve
+through the domain service; and branchTipHash now reports a miss instead of
+falling back to returning the branch NAME, which is how a name reached Hash in
+the first place.
+
+Found by plan 1a's Task 3: CommitEndpoint's 7..64 hex check refused these
+values, which is the validation doing its job.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GiF4qfVtboFEjZAFP1bJ27"
+```
+
+---
+
 ## Task 4: Unexport the fields, add accessors
 
 The atomic step, and the one that delivers the guarantee: after it, a
