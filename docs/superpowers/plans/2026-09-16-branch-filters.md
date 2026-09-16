@@ -69,16 +69,16 @@
   type Mode string
   const ( ModeHide Mode = "hide"; ModeShow Mode = "show" )
   const MaxSlots = 5
-  type Slot struct {
-      Slot        int    `toml:"slot"`
-      Name        string `toml:"name"`
-      Mode        Mode   `toml:"mode"`
-      OlderThan   string `toml:"older_than"`
-      YoungerThan string `toml:"younger_than"`
-      Prefix      string `toml:"prefix"`
-      Suffix      string `toml:"suffix"`
-      Contains    string `toml:"contains"`
-      Regex       string `toml:"regex"`
+  type Slot struct {                       // toml AND json tags: config decodes it, the web settings POST decodes it
+      Slot        int    `toml:"slot" json:"slot"`
+      Name        string `toml:"name" json:"name"`
+      Mode        Mode   `toml:"mode" json:"mode"`
+      OlderThan   string `toml:"older_than" json:"older_than"`
+      YoungerThan string `toml:"younger_than" json:"younger_than"`
+      Prefix      string `toml:"prefix" json:"prefix"`
+      Suffix      string `toml:"suffix" json:"suffix"`
+      Contains    string `toml:"contains" json:"contains"`
+      Regex       string `toml:"regex" json:"regex"`
   }
   type Compiled struct { Slot; Err error; Empty bool; older, younger time.Duration; re *regexp.Regexp }
   func (c Compiled) Usable() bool           // Err == nil && !Empty
@@ -87,7 +87,7 @@
   func ParseAge(s string) (time.Duration, error)
   func FormatAge(d time.Duration) string    // inverse for Summary: 90d, 12w, 6m, 1y (largest exact unit)
   func Compile(s Slot) Compiled
-  func CompileAll(slots []Slot) [MaxSlots]Compiled   // index = slot-1; duplicates: later inert; missing: zero Compiled with Empty=true
+  func CompileAll(slots []Slot) (all [MaxSlots]Compiled, warnings []string) // index = slot-1; a duplicate or out-of-range block is skipped AND reported in warnings; unfilled slots are Empty
   func (c Compiled) Matches(name string, unixTime int64, now time.Time) bool
   type Row struct { Name string; UnixTime int64 }
   type Verdict struct { Hidden, Exempt bool }
@@ -157,6 +157,8 @@ func TestCompileInertReasons(t *testing.T) {
 		{"bad age", Slot{Slot: 1, OlderThan: "soon"}, "older_than"},
 		{"bad younger", Slot{Slot: 1, YoungerThan: "3h"}, "younger_than"},
 		{"bad regex", Slot{Slot: 1, Regex: "("}, "regex"},
+		{"control char", Slot{Slot: 1, Prefix: "a\x01b"}, "control"},
+		{"control char in name", Slot{Slot: 1, Name: "x\ty", Prefix: "a"}, "control"},
 	}
 	for _, c := range cases {
 		got := Compile(c.s)
@@ -254,12 +256,18 @@ func TestApplyModesAndExempt(t *testing.T) {
 
 func TestCompileAll(t *testing.T) {
 	t.Parallel()
-	all := CompileAll([]Slot{
+	all, warnings := CompileAll([]Slot{
 		{Slot: 2, Name: "a", Prefix: "a/"},
-		{Slot: 2, Name: "b", Prefix: "b/"}, // duplicate: later inert
-		{Slot: 7, Prefix: "x"},            // out of range: dropped (nowhere to put it)
+		{Slot: 2, Name: "b", Prefix: "b/"}, // duplicate: skipped + warned
+		{Slot: 7, Prefix: "x"},            // out of range: skipped + warned
 		{Slot: 5, Name: "e", Suffix: "e"},
 	})
+	if len(warnings) != 2 || !contains(warnings[0], "duplicate block for slot 2") || !contains(warnings[1], "slot 7") {
+		t.Errorf("warnings = %q", warnings)
+	}
+	if _, w := CompileAll(nil); len(w) != 0 {
+		t.Errorf("no blocks → warnings %q", w)
+	}
 	if all[1].Name != "a" || !all[1].Usable() {
 		t.Errorf("slot 2 = %+v; want the first block", all[1].Slot)
 	}
@@ -341,15 +349,15 @@ const MaxSlots = 5
 // user's text ("90d") so config decodes straight into this type; Compile
 // parses them. Every set clause must hold (AND) for a branch to match.
 type Slot struct {
-	Slot        int    `toml:"slot"`
-	Name        string `toml:"name"`
-	Mode        Mode   `toml:"mode"`
-	OlderThan   string `toml:"older_than"`
-	YoungerThan string `toml:"younger_than"`
-	Prefix      string `toml:"prefix"`
-	Suffix      string `toml:"suffix"`
-	Contains    string `toml:"contains"`
-	Regex       string `toml:"regex"`
+	Slot        int    `toml:"slot" json:"slot"`
+	Name        string `toml:"name" json:"name"`
+	Mode        Mode   `toml:"mode" json:"mode"`
+	OlderThan   string `toml:"older_than" json:"older_than"`
+	YoungerThan string `toml:"younger_than" json:"younger_than"`
+	Prefix      string `toml:"prefix" json:"prefix"`
+	Suffix      string `toml:"suffix" json:"suffix"`
+	Contains    string `toml:"contains" json:"contains"`
+	Regex       string `toml:"regex" json:"regex"`
 }
 
 // Compiled is a Slot ready to evaluate. Err != nil means the block is inert
@@ -484,31 +492,44 @@ func Compile(s Slot) Compiled {
 			return c
 		}
 	}
+	// TOML basic strings cannot carry raw control characters and Go's %q
+	// would escape them as \xNN, which TOML rejects: refuse them here so
+	// neither writer ever produces an unparseable file.
+	for _, f := range []string{s.Name, s.Prefix, s.Suffix, s.Contains, s.Regex} {
+		for _, r := range f {
+			if r < 0x20 || r == 0x7f {
+				c.Err = errors.New("fields must not contain control characters")
+				return c
+			}
+		}
+	}
 	c.Empty = c.older == 0 && c.younger == 0 && s.Prefix == "" && s.Suffix == "" && s.Contains == "" && s.Regex == ""
 	return c
 }
 
 // CompileAll places blocks by slot number (index slot-1). A later block for
-// an already-filled slot is inert ("duplicate of slot N") and the first
-// wins, so a hand-edit never silently flips a rule; a block whose slot is out
-// of range has no index to land on and is dropped. Unfilled slots are Empty.
-func CompileAll(slots []Slot) [MaxSlots]Compiled {
-	var out [MaxSlots]Compiled
+// an already-filled slot is skipped (the first wins, so a hand-edit never
+// silently flips a rule) and a block whose slot is out of range has no index
+// to land on; both are reported in warnings so Settings can show them.
+// Unfilled slots are Empty.
+func CompileAll(slots []Slot) (out [MaxSlots]Compiled, warnings []string) {
 	var filled [MaxSlots]bool
 	for i := range out {
 		out[i] = Compiled{Slot: Slot{Slot: i + 1, Mode: ModeHide}, Empty: true}
 	}
 	for _, s := range slots {
 		if s.Slot < 1 || s.Slot > MaxSlots {
+			warnings = append(warnings, fmt.Sprintf("block with slot %d ignored: slot must be 1..%d", s.Slot, MaxSlots))
 			continue
 		}
 		if filled[s.Slot-1] {
-			continue // first wins; the duplicate is reported by config-level validation
+			warnings = append(warnings, fmt.Sprintf("duplicate block for slot %d ignored (first wins)", s.Slot))
+			continue
 		}
 		out[s.Slot-1] = Compile(s)
 		filled[s.Slot-1] = true
 	}
-	return out
+	return out, warnings
 }
 
 // Matches reports whether a branch named name (the branch PART for a remote
@@ -594,7 +615,7 @@ In `internal/archtest/import_guard_test.go`, find the `changeset` stdlib-only bl
 
 - [ ] **Step 6: Write the three refinements into the spec**
 
-Edit `docs/superpowers/specs/2026-09-16-branch-filters-design.md`: replace every `[[branch_filters]]` with `[[branches.filter]]` and add a sentence under "Config: the slot definition": "The blocks live under a `[branches]` section because `gg config populate` documents each section with a plain `[section]` header and a bare `[branch_filters]` table would collide with array-of-table blocks of the same name." In "Domain", delete `ActiveBranchFilter`/`SetActiveBranchFilter`/`FilterBranches`/`FilterRemoteBranches` and replace with the Task 4 signatures; in "Active slot" add "The frontends read and write this record themselves (as they do for dismissed notices); domain has no state-dir handle." In the `branchfilter` package block change `OlderThan   time.Duration` / `YoungerThan time.Duration` to `string` with the note "raw text, parsed by Compile".
+Edit `docs/superpowers/specs/2026-09-16-branch-filters-design.md`: replace every `[[branch_filters]]` with `[[branches.filter]]` and add a sentence under "Config: the slot definition": "The blocks live under a `[branches]` section because `gg config populate` documents each section with a plain `[section]` header and a bare `[branch_filters]` table would collide with array-of-table blocks of the same name." Change "a duplicate slot makes the LATER block inert" to "a duplicate or out-of-range block is skipped and listed as a warning in Settings (first wins)". In "Domain", delete `ActiveBranchFilter`/`SetActiveBranchFilter`/`FilterBranches`/`FilterRemoteBranches` and replace with the Task 4 signatures; in "Active slot" add "The frontends read and write this record themselves (as they do for dismissed notices); domain has no state-dir handle." In the `branchfilter` package block change `OlderThan   time.Duration` / `YoungerThan time.Duration` to `string` with the note "raw text, parsed by Compile".
 
 - [ ] **Step 7: Commit**
 
@@ -620,8 +641,9 @@ cd /mnt/t/others/gigagit/.claude/worktrees/branch-filters && gofmt -l internal/b
   type BranchesConfig struct { Filter []branchfilter.Slot `toml:"filter"` }
   // Config.Branches BranchesConfig `toml:"branches"`
   func overlayBranchFilters(dst *BranchesConfig, src BranchesConfig)
-  func SetBranchFilter(path string, s branchfilter.Slot) error      // replace the block with slot == s.Slot, else append
+  func SetBranchFilter(path string, s branchfilter.Slot) error      // replace the block with slot == s.Slot, else append; refuses an uncompilable slot
   func RemoveBranchFilter(path string, slot int) error              // delete that block; missing file/block = no-op
+  func BranchFilterScopes(globalPath, repoPath string, slot int) (inGlobal, inRepo bool) // which files define slot (decoded separately, not overlaid)
   ```
 
 - [ ] **Step 1: Write the failing tests**
@@ -674,7 +696,7 @@ prefix = "feature/"
 	if err != nil {
 		t.Fatal(err)
 	}
-	all := branchfilter.CompileAll(cfg.Branches.Filter)
+	all, _ := branchfilter.CompileAll(cfg.Branches.Filter)
 	if all[0].Name != "stale" || all[0].OlderThan != "90d" {
 		t.Errorf("slot 1 should fall through from global: %+v", all[0].Slot)
 	}
@@ -731,7 +753,7 @@ func TestSetBranchFilterAppendsThenReplacesInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("written file must decode: %v\n%s", err, got)
 	}
-	all := branchfilter.CompileAll(cfg.Branches.Filter)
+	all, _ := branchfilter.CompileAll(cfg.Branches.Filter)
 	if all[1].Prefix != "feature/" || all[1].Suffix != "-x" || all[1].Mode != branchfilter.ModeHide {
 		t.Errorf("slot 2 = %+v", all[1].Slot)
 	}
@@ -749,8 +771,33 @@ func TestSetBranchFilterRefusesEmptyPathAndBadSlot(t *testing.T) {
 	if err := SetBranchFilter(p, branchfilter.Slot{Slot: 9, Prefix: "x"}); err == nil {
 		t.Error("slot 9 accepted")
 	}
+	if err := SetBranchFilter(p, branchfilter.Slot{Slot: 1, Regex: "("}); err == nil {
+		t.Error("bad regex accepted by the writer")
+	}
+	if err := SetBranchFilter(p, branchfilter.Slot{Slot: 1, Prefix: "a\x01"}); err == nil {
+		t.Error("control character accepted by the writer")
+	}
 	if _, err := os.Stat(p); err == nil {
 		t.Error("a refused write created the file")
+	}
+}
+
+func TestBranchFilterScopes(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	g := writeCfg(t, dir, "g.toml", "[[branches.filter]]\nslot = 1\nprefix = \"a\"\n\n[[branches.filter]]\nslot = 2\nprefix = \"b\"\n")
+	r := writeCfg(t, dir, "r.toml", "[[branches.filter]]\nslot = 2\nprefix = \"c\"\n")
+	if ig, ir := BranchFilterScopes(g, r, 1); !ig || ir {
+		t.Errorf("slot 1: global=%v repo=%v", ig, ir)
+	}
+	if ig, ir := BranchFilterScopes(g, r, 2); !ig || !ir {
+		t.Errorf("slot 2: global=%v repo=%v", ig, ir)
+	}
+	if ig, ir := BranchFilterScopes(g, r, 3); ig || ir {
+		t.Errorf("slot 3: global=%v repo=%v", ig, ir)
+	}
+	if ig, ir := BranchFilterScopes(g, "", 1); !ig || ir {
+		t.Errorf("empty repo path: global=%v repo=%v", ig, ir)
 	}
 }
 
@@ -914,6 +961,9 @@ func SetBranchFilter(path string, s branchfilter.Slot) error {
 	if s.Slot < 1 || s.Slot > branchfilter.MaxSlots {
 		return fmt.Errorf("config: branch filter slot must be 1..%d", branchfilter.MaxSlots)
 	}
+	if c := branchfilter.Compile(s); c.Err != nil {
+		return fmt.Errorf("config: branch filter slot %d: %w", s.Slot, c.Err)
+	}
 	raw, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -945,6 +995,28 @@ func SetBranchFilter(path string, s branchfilter.Slot) error {
 	}
 	out = append(out, block...)
 	return atomicWriteFile(path, []byte(strings.Join(out, "\n")+"\n"))
+}
+
+// BranchFilterScopes reports which of the two files defines slot, decoding
+// each on its own (no overlay) — the Settings "remove" needs provenance, not
+// the effective value. An empty or unreadable path counts as not defining it.
+func BranchFilterScopes(globalPath, repoPath string, slot int) (inGlobal, inRepo bool) {
+	has := func(path string) bool {
+		if path == "" {
+			return false
+		}
+		c, ok, err := decodeFile(path)
+		if err != nil || !ok {
+			return false
+		}
+		for _, s := range c.Branches.Filter {
+			if s.Slot == slot {
+				return true
+			}
+		}
+		return false
+	}
+	return has(globalPath), has(repoPath)
 }
 
 // RemoveBranchFilter deletes the ACTIVE block for slot from the file at
@@ -996,7 +1068,7 @@ In `internal/config/template.go` `settingDocs`, after the `notes` rows add:
 	{"branches", "filter", nil, "branch filters as [[branches.filter]] blocks (alt+1…5 in the Branches/Remotes lists): slot (1..5), name, mode (hide | show = show only matching), older_than / younger_than (tip age: 90d 12w 6m 1y), prefix, suffix, contains, regex (Go RE2); set clauses AND together; a repo block REPLACES the global block for the same slot; invalid blocks are inert with a reason; edit from Settings → Branch filters… (TUI) or the web settings view"},
 ```
 
-Check `sectionOrder()` in `populate.go` derives sections from `settingDocs` (it does), so `[branches]` appears in the template and in `gg config populate` output automatically. If `populate_test.go` has a golden list of sections, add `branches` after `notes`.
+`sectionHeader` (write.go ~259) returns `[[branches.filter]]` WITH double brackets for an array header — `branchFilterHeader` above relies on that; confirm before wiring. Check `sectionOrder()` in `populate.go` derives sections from `settingDocs` (it does), so `[branches]` appears in the template and in `gg config populate` output automatically. If `populate_test.go` has a golden list of sections, add `branches` after `notes`.
 
 - [ ] **Step 4: Run the config tests**
 
@@ -1194,7 +1266,7 @@ cd /mnt/t/others/gigagit/.claude/worktrees/branch-filters && gofmt -l internal/p
 **Interfaces:**
 - Produces:
   ```go
-  func (s *Service) BranchFilters(ctx context.Context) ([branchfilter.MaxSlots]branchfilter.Compiled, error) // from EffectiveConfig
+  func (s *Service) BranchFilters(ctx context.Context) ([branchfilter.MaxSlots]branchfilter.Compiled, []string, error) // from EffectiveConfig; warnings = CompileAll's
   func ExemptBranches(bs []model.Branch, wts []model.Worktree) []bool        // HEAD or checked out in any worktree
   func ExemptRemoteBranches(rbs []model.RemoteBranch, bs []model.Branch) []bool // HEAD's upstream
   func BranchRows(bs []model.Branch) []branchfilter.Row                       // Name, UnixTime
@@ -1260,15 +1332,39 @@ func TestBranchFiltersFromEffectiveConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc := Open(dir)
-	all, err := svc.BranchFilters(context.Background())
+	all, warnings, err := svc.BranchFilters(context.Background())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %q", warnings)
 	}
 	if all[2].Name != "wip" || !all[2].Usable() || all[2].Mode != branchfilter.ModeHide {
 		t.Errorf("slot 3 = %+v err=%v", all[2].Slot, all[2].Err)
 	}
 	if !all[0].Empty {
 		t.Errorf("slot 1 should be empty")
+	}
+}
+```
+
+Also add, in the same file, the key-consistency guard the two frontends rely on (the TUI scopes the stored slot by `RepoHealth.GitCommonDir`, the web by `GitCommonDir`; both come from `git rev-parse --git-common-dir`, but the guard keeps them from drifting):
+
+```go
+func TestRepoHealthCommonDirMatchesGitCommonDir(t *testing.T) {
+	dir := newRepoDir(t)
+	svc := Open(dir)
+	ctx := context.Background()
+	h, err := svc.RepoHealth(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cd, err := svc.GitCommonDir(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h.GitCommonDir == "" || h.GitCommonDir != cd {
+		t.Errorf("RepoHealth.GitCommonDir = %q, GitCommonDir = %q — the branch-filter slot record is keyed by both", h.GitCommonDir, cd)
 	}
 }
 ```
@@ -1303,12 +1399,13 @@ import (
 // BranchFilters returns the five compiled slots (index = slot-1) for this
 // repo's effective config. An invalid block is inert inside its Compiled
 // (Err set), never an error here.
-func (s *Service) BranchFilters(ctx context.Context) ([branchfilter.MaxSlots]branchfilter.Compiled, error) {
+func (s *Service) BranchFilters(ctx context.Context) ([branchfilter.MaxSlots]branchfilter.Compiled, []string, error) {
 	cfg, err := s.EffectiveConfig(ctx)
 	if err != nil {
-		return [branchfilter.MaxSlots]branchfilter.Compiled{}, err
+		return [branchfilter.MaxSlots]branchfilter.Compiled{}, nil, err
 	}
-	return branchfilter.CompileAll(cfg.Branches.Filter), nil
+	all, warnings := branchfilter.CompileAll(cfg.Branches.Filter)
+	return all, warnings, nil
 }
 
 // ExemptBranches marks the rows a filter may never hide: HEAD, and any
@@ -1399,14 +1496,18 @@ cd /mnt/t/others/gigagit/.claude/worktrees/branch-filters && gofmt -l internal/d
 - Produces (model state):
   ```go
   // Model fields
-  branchFilters     [branchfilter.MaxSlots]branchfilter.Compiled // compiled from m.cfg; zero = all empty
-  branchFilterSlot  map[panel]int                                // panelBranches / panelRemotes → active slot, 0 = none
-  bfMemo            *branchFilterMemos                           // shared pointer, like filterMemo
+  branchFilters        [branchfilter.MaxSlots]branchfilter.Compiled // compiled from m.cfg; zero = all empty
+  branchFilterWarnings []string                                     // CompileAll's warnings, shown in the Settings popup
+  branchFilterSlot     map[panel]int                                // panelBranches / panelRemotes → active slot, 0 = none
+  bfSlotsLoaded        bool                                         // loadBranchFilterSlots ran with a resolved repo key
+  bfMemo               *branchFilterMemos                           // shared pointer, like filterMemo; invalidate() on every list/worktree write
   // helpers in branch_filter.go
   func (m Model) branchFilterHidden(p panel) (hidden []bool, exempt []bool, count int)  // memoised verdicts for p; nil when no active usable slot
   func (m Model) toggleBranchFilter(slot int) Model                                      // alt+N on the focused panel
   func (m Model) branchFilterDecoration(p panel) string                                  // " ▽2 stale · 12 hidden" or ""
-  func (m Model) loadBranchFilterSlots() Model                                           // read promptstate into branchFilterSlot (startup/reroot)
+  func (m Model) loadBranchFilterSlots() Model                                           // read promptstate into branchFilterSlot once the repo key is known
+  func (m Model) bfRepoKey() string                                                      // m.repoHealth.GitCommonDir, "" until the health probe resolved it — NEVER the worktree-path fallback
+  func bfSummary(c branchfilter.Compiled) string                                         // translated twin of Compiled.Summary for TUI rows/status
   func branchFilterListName(p panel) string                                              // "branches" | "remotes" | ""
   ```
 
@@ -1449,7 +1550,8 @@ func bfModel(t *testing.T) Model {
 		{Name: "origin/feat/a", Remote: "origin", Branch: "feat/a", UnixTime: now},
 	}
 	m.branches[0].Upstream = "origin/main"
-	m.branchFilters = branchfilter.CompileAll([]branchfilter.Slot{
+	m.repoHealth.GitCommonDir = "/r/.git" // the promptstate key; tests that want "not resolved" blank it
+	m.branchFilters, _ = branchfilter.CompileAll([]branchfilter.Slot{
 		{Slot: 1, Name: "feat", Prefix: "feat/"},
 		{Slot: 2, Name: "stale", OlderThan: "90d"},
 		{Slot: 3, Name: "only-fix", Mode: branchfilter.ModeShow, Prefix: "fix/"},
@@ -1591,6 +1693,44 @@ func TestBranchFilterMemoTracksListChanges(t *testing.T) {
 	if got := strings.Join(names(m, panelBranches), ","); !strings.Contains(got, "zzz/renamed") {
 		t.Errorf("after replacement: %s", got)
 	}
+	// Exemptions depend on OTHER inputs (worktrees; HEAD's upstream for
+	// remotes) that never change the list pointer: the refresh paths call
+	// invalidate() — prove the memo honours it.
+	m.worktrees = []model.Worktree{{Path: "/r", Branch: "main"}} // feat/wt no longer checked out
+	m.bfMemo.invalidate()
+	if got := strings.Join(names(m, panelBranches), ","); strings.Contains(got, "feat/wt") {
+		t.Errorf("after worktree removal + invalidate, feat/wt should hide: %s", got)
+	}
+}
+
+func TestAltDigitWhileTypingSlashFilterIsIgnored(t *testing.T) {
+	t.Parallel()
+	m := bfModel(t)
+	m.filterTyping = true
+	m.filterPanel = panelBranches
+	m.filterQuery = "fe"
+	mm, _ := m.Update(altKey('1'))
+	m = mm.(Model)
+	if m.filterQuery != "fe" {
+		t.Errorf("alt+1 leaked into the / query: %q", m.filterQuery)
+	}
+	if m.branchFilterSlot[panelBranches] != 0 {
+		t.Errorf("alt+1 toggled a slot while typing")
+	}
+}
+
+func TestToggleWithoutRepoKeyAppliesButIsNotRemembered(t *testing.T) {
+	t.Parallel()
+	m := bfModel(t)
+	m.repoHealth.GitCommonDir = "" // health probe not resolved yet
+	mm, _ := m.Update(altKey('1'))
+	m = mm.(Model)
+	if m.branchFilterSlot[panelBranches] != 1 {
+		t.Errorf("slot should apply for the session")
+	}
+	if !strings.Contains(m.statusMsg, "not remembered") {
+		t.Errorf("status = %q", m.statusMsg)
+	}
 }
 
 func TestFooterAdvertisesBranchFilterKey(t *testing.T) {
@@ -1620,6 +1760,7 @@ package tui
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/homeend/gigagit/internal/branchfilter"
@@ -1646,6 +1787,21 @@ type branchFilterMemo struct {
 	head           any // *model.Branch or *model.RemoteBranch of element 0
 	hidden, exempt []bool
 	count          int
+}
+
+// branchFilterMemos holds one memo per filtered panel behind one pointer.
+type branchFilterMemos struct{ branches, remotes branchFilterMemo }
+
+// invalidate drops both memos through the shared pointer. Called wherever
+// m.branches, m.remoteBranches or m.worktrees are assigned: the key above
+// catches a replaced LIST, but exemptions also read the worktree list (the
+// Branches panel) and HEAD's upstream (the Remotes panel), neither of which
+// moves the filtered list's pointer. nil-safe for zero-value test Models.
+func (c *branchFilterMemos) invalidate() {
+	if c != nil {
+		c.branches = branchFilterMemo{}
+		c.remotes = branchFilterMemo{}
+	}
 }
 
 // branchFilterListName maps a panel to its promptstate list name.
@@ -1734,9 +1890,6 @@ func (m Model) bfMemoFor(p panel) *branchFilterMemo {
 	return nil
 }
 
-// branchFilterMemos holds one memo per filtered panel behind one pointer.
-type branchFilterMemos struct{ branches, remotes branchFilterMemo }
-
 // toggleBranchFilter is alt+N: on Branches/Remotes it activates slot N, or
 // clears it when N is already active (radio). Elsewhere it explains itself.
 // An inert or empty slot is refused with its reason and the active slot is
@@ -1755,7 +1908,7 @@ func (m Model) toggleBranchFilter(slot int) Model {
 	} else {
 		c := m.branchFilters[slot-1]
 		if !c.Usable() {
-			m.statusMsg = i18n.T("slot %d: %s", slot, c.Summary())
+			m.statusMsg = i18n.T("slot %d: %s", slot, bfSummary(c))
 			return m
 		}
 	}
@@ -1771,24 +1924,36 @@ func (m Model) toggleBranchFilter(slot int) Model {
 	} else {
 		m.statusMsg = i18n.T("branch filter %d: %s", next, m.branchFilters[next-1].Label())
 	}
-	if m.promptStore != nil {
-		if err := m.promptStore.SetBranchFilterSlot(m.toolRepoKey(), list, next); err != nil {
+	switch key := m.bfRepoKey(); {
+	case m.promptStore == nil:
+		m.statusMsg += " " + i18n.T("(not remembered: no state dir)")
+	case key == "":
+		m.statusMsg += " " + i18n.T("(not remembered: repo not resolved yet)")
+	default:
+		if err := m.promptStore.SetBranchFilterSlot(key, list, next); err != nil {
 			m.statusMsg += " " + i18n.T("(not remembered: %s)", err.Error())
 		}
 	}
 	return m
 }
 
-// loadBranchFilterSlots reads the remembered slots for this repo. A slot
-// that no longer exists or is unusable loads as none (nothing is rewritten).
+// bfRepoKey is the promptstate scope for this feature: the git common dir
+// the health probe resolved, and ONLY that — the web keys the same record by
+// svc.GitCommonDir, so the worktree-path fallback toolRepoKey uses would
+// split the two frontends' memory. "" until the probe has run.
+func (m Model) bfRepoKey() string { return m.repoHealth.GitCommonDir }
+
+// loadBranchFilterSlots reads the remembered slots for this repo once the
+// repo key is known. A slot that no longer exists or is unusable loads as
+// none (nothing is rewritten). Idempotent per key resolution (bfSlotsLoaded).
 func (m Model) loadBranchFilterSlots() Model {
 	if m.branchFilterSlot == nil {
 		m.branchFilterSlot = map[panel]int{}
 	}
-	if m.promptStore == nil {
+	key := m.bfRepoKey()
+	if m.promptStore == nil || key == "" || m.bfSlotsLoaded {
 		return m
 	}
-	key := m.toolRepoKey()
 	for _, p := range []panel{panelBranches, panelRemotes} {
 		s := m.promptStore.BranchFilterSlot(key, branchFilterListName(p))
 		if s < 1 || s > branchfilter.MaxSlots || !m.branchFilters[s-1].Usable() {
@@ -1796,7 +1961,45 @@ func (m Model) loadBranchFilterSlots() Model {
 		}
 		m.branchFilterSlot[p] = s
 	}
+	m.bfSlotsLoaded = true
 	return m
+}
+
+// bfSummary is Compiled.Summary rebuilt from translated pieces: the leaf's
+// English is for the web and logs; every string a TUI row shows goes
+// through i18n.T. Regex/age parse errors keep their technical detail
+// (the same way git's stderr is shown verbatim on the status line).
+func bfSummary(c branchfilter.Compiled) string {
+	if c.Err != nil {
+		return i18n.T("invalid — %s", c.Err.Error())
+	}
+	if c.Empty {
+		return i18n.T("empty (no clause set)")
+	}
+	var parts []string
+	if c.OlderThan != "" {
+		parts = append(parts, i18n.T("older than %s", strings.TrimSpace(c.OlderThan)))
+	}
+	if c.YoungerThan != "" {
+		parts = append(parts, i18n.T("younger than %s", strings.TrimSpace(c.YoungerThan)))
+	}
+	if c.Prefix != "" {
+		parts = append(parts, i18n.T("prefix %s", c.Prefix))
+	}
+	if c.Suffix != "" {
+		parts = append(parts, i18n.T("suffix %s", c.Suffix))
+	}
+	if c.Contains != "" {
+		parts = append(parts, i18n.T("contains %s", c.Contains))
+	}
+	if c.Regex != "" {
+		parts = append(parts, i18n.T("regex %s", c.Regex))
+	}
+	mode := i18n.T("hide")
+	if c.Mode == branchfilter.ModeShow {
+		mode = i18n.T("show only")
+	}
+	return mode + " · " + strings.Join(parts, ", ")
 }
 
 // branchFilterDecoration is the panel-header suffix: " ▽2 stale · 12 hidden",
@@ -1821,8 +2024,10 @@ const branchFilterExemptMark = " ∗"
 
 Wiring:
 
-1. `model.go` fields (next to `sortModes`): `branchFilters [branchfilter.MaxSlots]branchfilter.Compiled`, `branchFilterSlot map[panel]int`, `bfMemo *branchFilterMemos`. In the constructor (where `filterMemo: &commitFilterMemo{}` is set) add `branchFilterSlot: map[panel]int{}, bfMemo: &branchFilterMemos{}`. At the reroot reset (~3955, `m.filterMemo = &commitFilterMemo{}`) add `m.bfMemo = &branchFilterMemos{}` and `m.branchFilterSlot = map[panel]int{}`.
-2. Both `m.cfg = msg.cfg` sites (~1147 startup, ~1221 reroot): immediately after, `m.branchFilters = branchfilter.CompileAll(m.cfg.Branches.Filter)` then `m = m.loadBranchFilterSlots()`. Search `grep -n 'm.cfg = ' internal/tui/*.go` and do the same at every other assignment (`settings_tools.go:90` included). Note `toolRepoKey()` needs `m.repoHealth.GitCommonDir`, which the health probe fills; if it is still empty at the startup site, `loadBranchFilterSlots` also runs where `m.repoHealth` is assigned (grep `m.repoHealth =`), guarded so it only runs when `branchFilterSlot` is empty.
+1. `model.go` fields (next to `sortModes`): `branchFilters`, `branchFilterWarnings`, `branchFilterSlot`, `bfSlotsLoaded`, `bfMemo` as in the Interfaces block. In the constructor (where `filterMemo: &commitFilterMemo{}` is set) add `branchFilterSlot: map[panel]int{}, bfMemo: &branchFilterMemos{}`. At the reroot reset (~3955, `m.filterMemo = &commitFilterMemo{}`) add `m.bfMemo = &branchFilterMemos{}`, `m.branchFilterSlot = map[panel]int{}`, `m.bfSlotsLoaded = false`.
+2. Both `m.cfg = msg.cfg` sites (~1147 startup, ~1221 reroot): immediately after, `m.branchFilters, m.branchFilterWarnings = branchfilter.CompileAll(m.cfg.Branches.Filter)` then `m = m.loadBranchFilterSlots()` (a no-op until the repo key is known). Search `grep -n 'm.cfg = ' internal/tui/*.go` and do the same at every other assignment (`settings_tools.go:90` included). Where the health probe lands (`notify.go:121`, `m.repoHealth = msg.health`) add `m = m.loadBranchFilterSlots()` right after — that is the load that normally sticks, because the common dir is known there; `bfSlotsLoaded` keeps later probes from re-reading.
+2b. Memo invalidation: `grep -n 'm.branches = \|m.remoteBranches = \|m.worktrees = ' internal/tui/*.go | grep -v _test` lists the assignment sites (7 as of writing, in `model.go` and `source.go`); after EACH add `m.bfMemo.invalidate()`. A `withWorktrees`-style helper, if one exists, is the right single place for the worktree writes.
+2c. `/` typing: in the `if m.filterTyping {` branch (~model.go:1640) the rune-append case must skip a key with `msg.Alt` set (`if msg.Type == tea.KeyRunes && msg.Alt { return m, nil }` before the append), so alt+1 while typing neither inserts "1" nor toggles a slot — see `TestAltDigitWhileTypingSlashFilterIsIgnored`.
 3. Key dispatch: in the same `switch msg.String()` that has `case "o":`, add
    ```go
    case "alt+1", "alt+2", "alt+3", "alt+4", "alt+5":
@@ -1836,9 +2041,9 @@ Wiring:
 4. `viewstate.go` `displayIndices`: after `q := ""…` and before the loop, `hidden, _, _ := m.branchFilterHidden(p)`; inside the loop, right after the `memberOf` check: `if hidden != nil && i < len(hidden) && hidden[i] { continue }`. Keep the fast paths above it untouched (they only cover file panels).
 5. `viewstate.go` `panelLabel` (~line 696): after the sort-mode suffix add `base += m.branchFilterDecoration(p)`.
 6. Exempt marker: in `branchRows()` / `remoteRows()` (grep `func (m Model) branchRows`), append `branchFilterExemptMark` to a row whose exempt verdict is set: `_, exempt, _ := m.branchFilterHidden(panelBranches)` once before the loop. Render it with the dim style the rows already use for secondary text.
-7. `footer.go`: next to `{"order", "o", …}` add `{"branch-filter", "alt+1", i18n.T("[alt+1-5] filter"), func(m Model) bool { return (m.focus == panelBranches || m.focus == panelRemotes) && m.opsIdle() }, scopeGlobal}`. If `TestHelpFooterCoverage` wants each footer key in help, the help row below satisfies it (key text `"alt+1…5"` → check what the drift guard compares and match it).
+7. `footer.go`: next to `{"order", "o", …}` add `{"branch-filter", "alt+1…5", i18n.T("[alt+1-5] filter"), func(m Model) bool { return (m.focus == panelBranches || m.focus == panelRemotes) && m.opsIdle() }, scopeGlobal}`. `TestHelpFooterCoverage` (help_test.go:48) requires the binding's `key` to be the FIRST whitespace-separated field of some help row — the help row below starts with exactly `alt+1…5`, so the two strings must stay identical.
 8. `help.go`: after the `o` row: `r("alt+1…5", i18n.T("branch filter slots on the Branches/Remotes panel: activate slot N (hide, or show only, by tip age / prefix / suffix / substring / regex — defined in Settings , → Branch filters… or [[branches.filter]] in .gg.toml); the same key again clears; one slot per panel; remembered per repo. HEAD, checked-out and upstream rows are never hidden (∗ marks one the rule would hide)")),`.
-9. Every new `i18n.T` literal → all four bundles.
+9. Every new `i18n.T` literal → all four bundles (including the `bfSummary` pieces: "hide", "show only", "older than %s", "younger than %s", "prefix %s", "suffix %s", "contains %s", "regex %s", "invalid — %s", "empty (no clause set)").
 
 - [ ] **Step 4: Run the TUI tests**
 
@@ -1887,7 +2092,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/branchfilter"
+	"github.com/homeend/gigagit/internal/config"
 )
+
+// These tests call t.Setenv, so they must NOT call t.Parallel (newTestModel
+// itself does not — verified in source_test.go:18).
 
 func key(s string) tea.KeyMsg {
 	switch s {
@@ -1994,28 +2203,49 @@ func TestBranchFilterPopupRefusesBadRegexInline(t *testing.T) {
 	}
 }
 
-func TestBranchFilterPopupDeleteRemovesBlockAndClearsActive(t *testing.T) {
+func TestBranchFilterPopupDeletePeelsRepoThenGlobal(t *testing.T) {
 	m, v, repoPath := bfPopupModel(t)
-	if err := os.WriteFile(repoPath, []byte("[[branches.filter]]\nslot = 1\nname = \"feat\"\nprefix = \"feat/\"\n"), 0o644); err != nil {
+	globalPath := config.DefaultGlobalPath() // under the test's XDG_CONFIG_HOME
+	if err := os.MkdirAll(filepath.Dir(globalPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(globalPath, []byte("[[branches.filter]]\nslot = 1\nname = \"g\"\nprefix = \"g/\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(repoPath, []byte("[[branches.filter]]\nslot = 1\nname = \"r\"\nprefix = \"r/\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	m = m.reloadConfigAfterBranchFilterWrite()
 	m.branchFilterSlot[panelBranches] = 1
+	if !strings.Contains(v.box(m), "[this repo, overrides global]") {
+		t.Errorf("provenance tag missing:\n%s", v.box(m))
+	}
+	// First d: only the repo definition goes; global still applies.
 	m, _ = v.update(m, key("d"))
-	raw, _ := os.ReadFile(repoPath)
-	if strings.Contains(string(raw), "slot = 1") {
-		t.Errorf("block not removed:\n%s", raw)
+	if raw, _ := os.ReadFile(repoPath); strings.Contains(string(raw), "slot = 1") {
+		t.Errorf("repo block not removed:\n%s", raw)
 	}
-	if m.branchFilterSlot[panelBranches] != 0 {
-		t.Error("active slot should clear when its definition is gone")
+	if raw, _ := os.ReadFile(globalPath); !strings.Contains(string(raw), "slot = 1") {
+		t.Errorf("global block must survive the first d:\n%s", raw)
 	}
-	if !m.branchFilters[0].Empty {
-		t.Errorf("slot 1 still compiled: %+v", m.branchFilters[0].Slot)
+	if m.branchFilters[0].Name != "g" || m.branchFilterSlot[panelBranches] != 1 {
+		t.Errorf("global rule should now be the effective one and stay active: %+v slot=%d", m.branchFilters[0].Slot, m.branchFilterSlot[panelBranches])
+	}
+	if !strings.Contains(m.statusMsg, "global") {
+		t.Errorf("status = %q", m.statusMsg)
+	}
+	// Second d: the global definition goes; the active slot clears.
+	m, _ = v.update(m, key("d"))
+	if raw, _ := os.ReadFile(globalPath); strings.Contains(string(raw), "slot = 1") {
+		t.Errorf("global block not removed on second d:\n%s", raw)
+	}
+	if m.branchFilterSlot[panelBranches] != 0 || !m.branchFilters[0].Empty {
+		t.Errorf("after both removals: slot=%d compiled=%+v", m.branchFilterSlot[panelBranches], m.branchFilters[0].Slot)
 	}
 }
 ```
 
-Adjust `m.topLayer()` to whatever accessor the layer stack exposes (grep `func (m Model) topLayer\|layers\[len` in `internal/tui`).
+Adjust `m.topLayer()` to whatever accessor the layer stack exposes (grep `func (m Model) topLayer\|layers\[len` in `internal/tui`). The `bfModel` helper from Task 5 sets `m.repoHealth.GitCommonDir = "/r/.git"` so the popup's persistence path has a key; add that line to `bfModel` if Task 5 did not.
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -2228,23 +2458,34 @@ func (v *branchFilterView) updateBrowse(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 			v.sel--
 		}
 	case "d":
-		// Remove from BOTH files: a slot deleted in the repo file would
-		// otherwise resurface from global, which reads as "delete did nothing".
+		// Peel the EFFECTIVE layer only: the repo definition when there is
+		// one, else the global one. A global rule is never removed from a
+		// repo's Settings as a side effect — pressing d again removes it
+		// explicitly, and the status line says so.
 		n := v.sel + 1
-		var errs []string
-		for _, p := range []string{m.repoConfigPath, config.DefaultGlobalPath()} {
-			if p == "" {
-				continue
-			}
-			if err := config.RemoveBranchFilter(p, n); err != nil {
-				errs = append(errs, err.Error())
-			}
+		inGlobal, inRepo := config.BranchFilterScopes(config.DefaultGlobalPath(), m.repoConfigPath, n)
+		var path string
+		switch {
+		case inRepo:
+			path = m.repoConfigPath
+		case inGlobal:
+			path = config.DefaultGlobalPath()
+		default:
+			m.statusMsg = i18n.T("slot %d is not defined in this repo's or the global config", n)
+			return m, nil
+		}
+		if err := config.RemoveBranchFilter(path, n); err != nil {
+			m.statusMsg = i18n.T("branch filter %d not removed: %s", n, err.Error())
+			return m, nil
 		}
 		m = m.reloadConfigAfterBranchFilterWrite()
-		if len(errs) > 0 {
-			m.statusMsg = i18n.T("branch filter %d not removed: %s", n, strings.Join(errs, "; "))
-		} else {
-			m.statusMsg = i18n.T("branch filter %d removed", n)
+		switch {
+		case inRepo && inGlobal:
+			m.statusMsg = i18n.T("branch filter %d: repo definition removed — the global one now applies (d again removes it too)", n)
+		case inRepo:
+			m.statusMsg = i18n.T("branch filter %d removed from this repo's config", n)
+		default:
+			m.statusMsg = i18n.T("branch filter %d removed from the global config", n)
 		}
 	}
 	return m, nil
@@ -2375,18 +2616,30 @@ func (v *branchFilterView) box(m Model) string {
 			prefix, style = "> ", s.selectedRow
 		}
 		text := prefix + strconv.Itoa(i+1) + "  "
+		inGlobal, inRepo := config.BranchFilterScopes(config.DefaultGlobalPath(), m.repoConfigPath, i+1)
 		switch {
 		case c.Err != nil:
-			text += i18n.T("invalid — %s", c.Err.Error())
+			text += bfSummary(c)
 		case c.Empty:
 			text += "—"
 		default:
-			text += padRight(c.Label(), 14) + c.Summary()
+			text += padRight(c.Label(), 14) + bfSummary(c)
+		}
+		switch {
+		case inRepo && inGlobal:
+			text += "  " + i18n.T("[this repo, overrides global]")
+		case inRepo:
+			text += "  " + i18n.T("[this repo]")
+		case inGlobal:
+			text += "  " + i18n.T("[global]")
 		}
 		wr[i] = winRow{text: text, style: style}
 	}
 	parts = append(parts, renderWindow(wr, winOpts{w: textW, h: branchfilter.MaxSlots, anchor: v.sel})...)
-	parts = append(parts, "", i18n.T("[enter] edit  [d] remove (repo + global)  [esc] back"))
+	for _, w := range m.branchFilterWarnings {
+		parts = append(parts, s.errorText.Render(i18n.T("config: %s", w)))
+	}
+	parts = append(parts, "", i18n.T("[enter] edit  [d] remove (repo definition first, then global)  [esc] back"))
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 ```
@@ -2402,13 +2655,13 @@ func (m Model) reloadConfigAfterBranchFilterWrite() Model {
 	if cfg, err := config.Load(config.DefaultGlobalPath(), m.repoConfigPath); err == nil {
 		m.cfg = cfg
 	}
-	m.branchFilters = branchfilter.CompileAll(m.cfg.Branches.Filter)
-	m.bfMemo = &branchFilterMemos{}
+	m.branchFilters, m.branchFilterWarnings = branchfilter.CompileAll(m.cfg.Branches.Filter)
+	m.bfMemo.invalidate()
 	for _, p := range []panel{panelBranches, panelRemotes} {
 		if s := m.branchFilterSlot[p]; s > 0 && !m.branchFilters[s-1].Usable() {
 			m.branchFilterSlot[p] = 0
-			if m.promptStore != nil {
-				_ = m.promptStore.SetBranchFilterSlot(m.toolRepoKey(), branchFilterListName(p), 0)
+			if key := m.bfRepoKey(); m.promptStore != nil && key != "" {
+				_ = m.promptStore.SetBranchFilterSlot(key, branchFilterListName(p), 0)
 			}
 		}
 	}
@@ -2454,8 +2707,11 @@ cd /mnt/t/others/gigagit/.claude/worktrees/branch-filters && gofmt -l internal/t
   - `filterWire = {"slot":int,"name":string,"mode":"hide"|"show","hidden":int}`
   ```go
   type filterWire struct { Slot int `json:"slot"`; Name string `json:"name"`; Mode string `json:"mode"`; Hidden int `json:"hidden"` }
-  func (s *Server) activeBranchFilter(ctx, svc, list string) (c *branchfilter.Compiled, slot int)  // nil when none/unusable
+  type slotWire struct { Slot int; Name, Mode, Summary string; Usable bool; Error string; Scope string /* "global"|"repo"|"both"|"" */; OlderThan, YoungerThan, Prefix, Suffix, Contains, Regex string } // json snake_case tags
+  func slotWires(all [branchfilter.MaxSlots]branchfilter.Compiled, globalPath, repoPath string) []slotWire
+  func (s *Server) activeBranchFilter(ctx, svc, list string) *branchfilter.Compiled  // nil when none/unusable
   func (s *Server) branchFilterRepoKey(ctx, svc) string
+  // GET /api/branch-filters also carries "warnings": []string (CompileAll's).
   ```
 
 - [ ] **Step 1: Write the failing tests**
@@ -2589,12 +2845,22 @@ func TestRemotesFilterBeforeCap(t *testing.T) {
 	}
 	putJSON(t, ts, "/api/branch-filter", `{"list":"remotes","slot":1}`, "", nil)
 	getJSON(t, ts, "/api/remotes", &out)
-	// 65 feat/* remote branches hidden, 65 plain ones remain: under the cap, not truncated.
-	if len(out.Remotes) != 65 || out.Truncated {
-		t.Errorf("filtered: %d rows truncated=%v (filter must run BEFORE the cap)", len(out.Remotes), out.Truncated)
+	// The fixture adds 65 feat/* and 65 plain remote branches; count what the
+	// repo actually has (newRepoDir may add remotes of its own) rather than
+	// hardcoding: hidden = number of origin/feat/* refs, visible = the rest.
+	wantHidden, wantVisible := 0, 0
+	for _, r := range allRemotes(t, ts) { // helper: page /api/remotes with sort=name-asc is capped, so list refs via git in bfRepo's dir instead
+		if strings.HasPrefix(r, "origin/feat/") {
+			wantHidden++
+		} else {
+			wantVisible++
+		}
 	}
-	if out.Filter == nil || out.Filter.Hidden != 65 {
-		t.Errorf("filter = %+v", out.Filter)
+	if len(out.Remotes) != wantVisible || out.Truncated != (wantVisible > 100) {
+		t.Errorf("filtered: %d rows truncated=%v; want %d (filter must run BEFORE the cap)", len(out.Remotes), out.Truncated, wantVisible)
+	}
+	if out.Filter == nil || out.Filter.Hidden != wantHidden {
+		t.Errorf("filter = %+v; want hidden=%d", out.Filter, wantHidden)
 	}
 	for _, r := range out.Remotes {
 		if len(r.Name) > 12 && r.Name[:12] == "origin/feat/" {
@@ -2642,7 +2908,7 @@ func TestBranchFilterSlotsListing(t *testing.T) {
 }
 ```
 
-Add the missing imports (`fmt`, `domain`) as the compiler asks; if `newRepoDir`'s signature differs, adapt to `uistate_test.go`'s usage.
+Add the missing imports (`fmt`, `strings`, `domain`) as the compiler asks; if `newRepoDir`'s signature differs, adapt to `uistate_test.go`'s usage. `allRemotes` is a small test helper that runs `git for-each-ref --format=%(refname:short) refs/remotes` in the fixture dir (have `bfServer` return the dir alongside the server, or keep it in a package-level var set by `bfRepo`).
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -2661,9 +2927,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/homeend/gigagit/internal/branchfilter"
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/promptstate"
 )
@@ -2680,12 +2948,19 @@ type filterWire struct {
 }
 
 type slotWire struct {
-	Slot    int    `json:"slot"`
-	Name    string `json:"name"`
-	Mode    string `json:"mode"`
-	Summary string `json:"summary"`
-	Usable  bool   `json:"usable"`
-	Error   string `json:"error,omitempty"`
+	Slot        int    `json:"slot"`
+	Name        string `json:"name"`
+	Mode        string `json:"mode"`
+	Summary     string `json:"summary"`
+	Usable      bool   `json:"usable"`
+	Error       string `json:"error,omitempty"`
+	Scope       string `json:"scope,omitempty"` // "global" | "repo" | "both" | "" (unset)
+	OlderThan   string `json:"older_than"`
+	YoungerThan string `json:"younger_than"`
+	Prefix      string `json:"prefix"`
+	Suffix      string `json:"suffix"`
+	Contains    string `json:"contains"`
+	Regex       string `json:"regex"`
 }
 
 // branchFilterRepoKey is the promptstate scope: the git common dir.
@@ -2707,7 +2982,7 @@ func (s *Server) activeBranchFilter(ctx context.Context, svc *domain.Service, li
 	if slot < 1 || slot > branchfilter.MaxSlots {
 		return nil
 	}
-	all, err := svc.BranchFilters(ctx)
+	all, _, err := svc.BranchFilters(ctx)
 	if err != nil || !all[slot-1].Usable() {
 		return nil
 	}
@@ -2752,7 +3027,7 @@ func (s *Server) handleBranchFilterSet(w http.ResponseWriter, r *http.Request) {
 	}
 	var active *branchfilter.Compiled
 	if *req.Slot > 0 {
-		all, err := svc.BranchFilters(r.Context())
+		all, _, err := svc.BranchFilters(r.Context())
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
@@ -2776,28 +3051,49 @@ func (s *Server) handleBranchFilterSet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"filter": wireFor(active, 0)})
 }
 
+// slotWires renders the five slots for the chip menu and the settings view,
+// with provenance (which file defines each) so "remove" can peel the
+// effective layer exactly as the TUI's d does.
+func slotWires(all [branchfilter.MaxSlots]branchfilter.Compiled, globalPath, repoPath string) []slotWire {
+	slots := make([]slotWire, 0, branchfilter.MaxSlots)
+	for _, c := range all {
+		sw := slotWire{Slot: c.Slot.Slot, Name: c.Label(), Mode: string(c.Mode), Summary: c.Summary(), Usable: c.Usable(),
+			OlderThan: c.OlderThan, YoungerThan: c.YoungerThan, Prefix: c.Prefix, Suffix: c.Suffix, Contains: c.Contains, Regex: c.Regex}
+		if c.Err != nil {
+			sw.Error = c.Err.Error()
+		}
+		switch inGlobal, inRepo := config.BranchFilterScopes(globalPath, repoPath, c.Slot.Slot); {
+		case inGlobal && inRepo:
+			sw.Scope = "both"
+		case inRepo:
+			sw.Scope = "repo"
+		case inGlobal:
+			sw.Scope = "global"
+		}
+		slots = append(slots, sw)
+	}
+	return slots
+}
+
 func (s *Server) handleBranchFilters(w http.ResponseWriter, r *http.Request) {
-	all, err := s.service().BranchFilters(readCtx(r))
+	svc := s.service()
+	ctx := readCtx(r)
+	all, warnings, err := svc.BranchFilters(ctx)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	slots := make([]slotWire, 0, branchfilter.MaxSlots)
-	for _, c := range all {
-		sw := slotWire{Slot: c.Slot.Slot, Name: c.Label(), Mode: string(c.Mode), Summary: c.Summary(), Usable: c.Usable()}
-		if c.Err != nil {
-			sw.Error = c.Err.Error()
-		}
-		slots = append(slots, sw)
+	repoPath, _ := s.activeRepoConfigPath(ctx, svc) // "" on error: provenance degrades to global-only
+	if warnings == nil {
+		warnings = []string{}
 	}
-	writeJSON(w, map[string]any{"slots": slots})
+	writeJSON(w, map[string]any{"slots": slotWires(all, config.DefaultGlobalPath(), repoPath), "warnings": warnings})
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
 ```
-(add `strconv` to imports; drop `itoa` and use `strconv.Itoa` directly if preferred.)
 
-`branches.go`: add `Hidden bool \`json:"hidden"\`` and `Exempt bool \`json:"exempt"\`` to `branchRow`; in `handleBranches`, after fetching `bs`, fetch worktrees (`svc.Worktrees(ctx)`; on error treat as none), then:
+`branches.go`: add `Hidden bool \`json:"hidden"\`` and `Exempt bool \`json:"exempt"\`` to `branchRow`; in `handleBranches`, after fetching `bs`, resolve `active` FIRST and fetch worktrees (`svc.Worktrees(ctx)`; on error treat as none) ONLY when `active != nil` — `/api/branches` is hit by every live refresh and must not grow a git call when no filter is set:
 
 ```go
 	active := s.activeBranchFilter(ctx, svc, promptstate.BranchFilterListBranches)
@@ -2806,7 +3102,7 @@ func itoa(n int) string { return strconv.Itoa(n) }
 	writeJSON(w, map[string]any{"branches": rows, "filter": wireFor(active, hidden)})
 ```
 
-`remotes.go` `handleRemotes`: after `sortedRows(...)` and BEFORE the cap, fetch `bs, _ := svc.Branches(ctx)` (for the upstream exemption), compute `verdicts, hidden := applyFilter(active, domain.RemoteBranchRows(rbs), domain.ExemptRemoteBranches(rbs, bs))`, and drop rows whose verdict is Hidden (build a new slice), then apply the cap to the survivors. Emit `"filter": wireFor(active, hidden)` alongside `remotes`/`truncated`. Update the comment above the sort to say "sort → filter → cap".
+`remotes.go` `handleRemotes`: after `sortedRows(...)` and BEFORE the cap, resolve `active`; only when it is non-nil fetch `bs, _ := svc.Branches(ctx)` (for the upstream exemption) and compute `verdicts, hidden := applyFilter(active, domain.RemoteBranchRows(rbs), domain.ExemptRemoteBranches(rbs, bs))`, and drop rows whose verdict is Hidden (build a new slice), then apply the cap to the survivors. Emit `"filter": wireFor(active, hidden)` alongside `remotes`/`truncated`. Update the comment above the sort to say "sort → filter → cap".
 
 `server.go` routes, after `/api/remotes`:
 
@@ -2994,7 +3290,7 @@ li.exempt .exempt-mark { opacity: 0.5; margin-left: 0.3em; }
 
 - [ ] **Step 5: Playwright probe (evidence, not a unit test)**
 
-Follow the `playwright-web-verification` memory: build `/tmp/claude-1000/gg-bf` from the worktree, run `gg web` on an isolated `XDG_STATE_HOME`/`XDG_CONFIG_HOME` against the `bfRepo` layout (script it with the same git commands as Task 7's fixture), and assert with Playwright: (a) the branches header contains `▽`; (b) after `page.keyboard.press("Alt+Digit1")` the row `feat/a` is NOT visible and `main` is; (c) `Alt+Digit1` again restores it; (d) `Alt+Shift+Digit1` hides `origin/feat/r000` in remotes and leaves branches untouched; (e) clicking the chip lists five entries with slot 4 disabled; (f) restart `gg web` on a different port → the branches filter is still active (server-side state). Run the same script against the main-checkout binary first and confirm (b) FAILS there. Save the script to the scratchpad, not the repo; paste the pass/fail lines into the commit message.
+Follow the `playwright-web-verification` memory (run the check against the UNFIXED main-checkout binary first, and run the whole script TWICE against the worktree build): build `/tmp/claude-1000/gg-bf` from the worktree, run `gg web` on an isolated `XDG_STATE_HOME`/`XDG_CONFIG_HOME` against the `bfRepo` layout (script it with the same git commands as Task 7's fixture), and assert with Playwright: (a) the branches header contains `▽`; (b) after `page.keyboard.press("Alt+Digit1")` the row `feat/a` is NOT visible and `main` is; (c) `Alt+Digit1` again restores it; (d) `Alt+Shift+Digit1` hides `origin/feat/r000` in remotes and leaves branches untouched; (e) clicking the chip lists five entries with slot 4 disabled; (f) restart `gg web` on a different port → the branches filter is still active (server-side state). Run the same script against the main-checkout binary first and confirm (b) FAILS there. Save the script to the scratchpad, not the repo; paste the pass/fail lines into the commit message.
 
 - [ ] **Step 6: Commit**
 
@@ -3013,7 +3309,7 @@ cd /mnt/t/others/gigagit/.claude/worktrees/branch-filters && go test ./internal/
 - Read first: `internal/web/settings.go` (the "validate everything first" rule), `internal/web/static/settings.js` (`setOpt`, `toggleBtn`, `.sact` click wiring).
 
 **Interfaces:**
-- GET adds `"branch_filters": slotWire[]` (Task 7's `slotWire` plus the raw fields so the form can prefill: add `OlderThan, YoungerThan, Prefix, Suffix, Contains, Regex string` with `json:"older_than"` etc. to `slotWire`).
+- GET adds `"branch_filters": slotWire[]` (Task 7's `slotWires(...)`, which already carries the raw fields for prefill and `scope` for provenance) and `"branch_filter_warnings": []string`.
 - POST accepts `"branch_filters": [{ "slot": 1..5, "scope": "global"|"repo", "remove": bool, "name","mode","older_than","younger_than","prefix","suffix","contains","regex" }]`. Every item is validated with `branchfilter.Compile` (and refused when `Empty` unless `remove`) BEFORE any write; `remove` deletes from the named scope's file.
 
 - [ ] **Step 1: Write the failing tests**
@@ -3027,10 +3323,11 @@ func TestSettingsBranchFilterWriteAndRemove(t *testing.T) {
 			Name   string `json:"name"`
 			Usable bool   `json:"usable"`
 			Prefix string `json:"prefix"`
+			Scope  string `json:"scope"`
 		} `json:"branch_filters"`
 	}
 	getJSON(t, ts, "/api/settings", &got)
-	if len(got.BranchFilters) != 5 || got.BranchFilters[0].Prefix != "feat/" {
+	if len(got.BranchFilters) != 5 || got.BranchFilters[0].Prefix != "feat/" || got.BranchFilters[0].Scope != "repo" {
 		t.Fatalf("GET: %+v", got.BranchFilters)
 	}
 	body := `{"branch_filters":[{"slot":5,"scope":"repo","name":"wip","mode":"show","suffix":"-wip"}]}`
@@ -3061,6 +3358,17 @@ func TestSettingsBranchFilterWriteAndRemove(t *testing.T) {
 	if got.BranchFilters[4].Usable {
 		t.Errorf("slot 5 still usable after remove")
 	}
+	// Removing in the repo scope never touches a global definition.
+	if code := postJSON(t, ts, "/api/settings", `{"branch_filters":[{"slot":3,"scope":"global","prefix":"g/"}]}`, nil); code != 200 {
+		t.Fatalf("global write → %d", code)
+	}
+	if code := postJSON(t, ts, "/api/settings", `{"branch_filters":[{"slot":3,"scope":"repo","remove":true}]}`, nil); code != 200 {
+		t.Fatalf("repo remove of an absent block must be a 200 no-op, got %d", code)
+	}
+	getJSON(t, ts, "/api/settings", &got)
+	if !got.BranchFilters[2].Usable || got.BranchFilters[2].Prefix != "g/" {
+		t.Errorf("global slot 3 was removed by a repo-scope remove: %+v", got.BranchFilters[2])
+	}
 	if code := postJSON(t, ts, "/api/settings", `{"branch_filters":[{"slot":1,"scope":"elsewhere","prefix":"x"}]}`, nil); code != 400 {
 		t.Errorf("bad scope → %d", code)
 	}
@@ -3077,20 +3385,27 @@ Expected: FAIL (no `branch_filters` in GET).
 - [ ] **Step 3: Implement server**
 
 In `settings.go`:
-- `settingsPayload` gains `BranchFilters []slotWire \`json:"branch_filters"\``; in `handleSettingsGet` fill it from `branchfilter.CompileAll(cfg.Branches.Filter)` (map each Compiled to `slotWire` — factor Task 7's loop into `func slotWires(all [branchfilter.MaxSlots]branchfilter.Compiled) []slotWire` in `branchfilter.go` and use it in both handlers; extend `slotWire` with the raw fields).
-- `settingsWriteRequest` gains:
-  ```go
-  BranchFilters []branchFilterEdit `json:"branch_filters"`
-  ```
+- `settingsPayload` gains `BranchFilters []slotWire \`json:"branch_filters"\`` and `BranchFilterWarnings []string \`json:"branch_filter_warnings"\``; in `handleSettingsGet`: `all, warnings := branchfilter.CompileAll(cfg.Branches.Filter)`; `p.BranchFilters = slotWires(all, config.DefaultGlobalPath(), active)`; `p.BranchFilterWarnings = warnings` (never nil: `[]string{}`).
+- `settingsWriteRequest` gains `BranchFilters []branchFilterEdit \`json:"branch_filters"\`` with EXPLICIT fields (no embedding — two `slot` keys would collide):
   ```go
   type branchFilterEdit struct {
-      Slot   int    `json:"slot"`
-      Scope  string `json:"scope"` // "global" | "repo"
-      Remove bool   `json:"remove"`
-      branchfilter.Slot // embedded: name, mode, older_than, …; its Slot field is shadowed by the outer one — copy outer Slot into it before Compile
+      Slot        int    `json:"slot"`
+      Scope       string `json:"scope"` // "global" | "repo"
+      Remove      bool   `json:"remove"`
+      Name        string `json:"name"`
+      Mode        string `json:"mode"`
+      OlderThan   string `json:"older_than"`
+      YoungerThan string `json:"younger_than"`
+      Prefix      string `json:"prefix"`
+      Suffix      string `json:"suffix"`
+      Contains    string `json:"contains"`
+      Regex       string `json:"regex"`
+  }
+  func (e branchFilterEdit) slot() branchfilter.Slot {
+      return branchfilter.Slot{Slot: e.Slot, Name: e.Name, Mode: branchfilter.Mode(e.Mode), OlderThan: e.OlderThan,
+          YoungerThan: e.YoungerThan, Prefix: e.Prefix, Suffix: e.Suffix, Contains: e.Contains, Regex: e.Regex}
   }
   ```
-  If embedding confuses the JSON decoder (two `slot` keys), declare the eight fields explicitly instead and build a `branchfilter.Slot` in code.
 - Validation block (before the "nothing to set" check): for each edit, scope must be `global`/`repo`, slot 1..5; unless `Remove`, `c := branchfilter.Compile(s)`; `c.Err != nil` → 400 `slot N: <err>`; `c.Empty` → 400 `slot N: set at least one clause`. Include `len(req.BranchFilters) > 0` in the "nothing to set" condition and in `needRepo` when any edit has scope repo.
 - Write block (after the hook write, before the global section): for each edit pick `path := repoPath` or `config.DefaultGlobalPath()` by scope; `Remove` → `config.RemoveBranchFilter(path, slot)` else `config.SetBranchFilter(path, s)`; any error → `fail(err)`.
 
@@ -3108,7 +3423,7 @@ In `settings.js` `renderSettings`, add before `<h3>repo</h3>`:
 
 Add two handlers next to the existing `.sact` click wiring:
 - `bf-edit`: render into `#bf-form` a small form prefilled from `d.branch_filters[slot-1]`: inputs `name`, select `mode` (hide/show), inputs `older_than`, `younger_than`, `prefix`, `suffix`, `contains`, `regex`, select `scope` (global/repo, default repo when `d.repo_config_path` is set), buttons **save** / **cancel**. Save → `postJSON("/api/settings", { branch_filters: [{ slot, scope, name, mode, older_than, younger_than, prefix, suffix, contains, regex }] })`; on error show it in the form's `.serr`; on success `state.settings = await getJSON("/api/settings")` and `renderSettings({ fresh: true })`.
-- `bf-remove`: `postJSON` with `[{ slot, scope: "repo", remove: true }, { slot, scope: "global", remove: true }]` (both scopes, like the TUI's `d`), then refresh.
+- `bf-remove`: peel the EFFECTIVE layer only, like the TUI's `d`: `const sc = s.scope === "global" ? "global" : "repo"` (a `"both"` slot removes the repo definition first) → `postJSON("/api/settings", { branch_filters: [{ slot, scope: sc, remove: true }] })`, then refresh; when `s.scope === "both"` the button reads `remove (repo)` and, after the refresh, `remove (global)`. A global rule is never removed as a side effect of a repo's settings page.
 
 Also after any successful save/remove, refetch the sidebar lists (`window.__ggRefetchList("branches")` and `("remotes")`) so an active slot whose rule changed re-evaluates.
 
@@ -3153,7 +3468,7 @@ cd /mnt/t/others/gigagit/.claude/worktrees/branch-filters && gofmt -l internal/w
 
 `| \`branchfilter\` | Pure five-slot branch-filter model: \`Slot\` (TOML shape), \`Compile\` (RE2 + age parse, inert-with-reason), \`Apply\` (hide / show-only + exempt rows) — the ONE matcher the TUI and web share. DAG leaf. |`
 
-- [ ] **Step 3: CLAUDE-details section** — record: `[[branches.filter]]` lives under `[branches]` because a bare array-of-tables name collides with populate's `[section]` header; overlay by slot (second exception after tools); memo key = (slot, len, first/last name+time); exemptions; remotes sort→filter→cap; active slot per repo per list in promptstate keyed by git common dir; web keys on `e.code`; the ctrl+digit terminal/browser facts; rulings from the spec's last section.
+- [ ] **Step 3: CLAUDE-details section** — record: `[[branches.filter]]` lives under `[branches]` because a bare array-of-tables name collides with populate's `[section]` header; overlay by slot (second exception after tools); memo key = (slot, len, head pointer) + explicit invalidate() at every branches/remotes/worktrees write; the repo key is the git common dir ONLY (never the worktree-path fallback); d / remove peel the repo definition before the global one; exemptions; remotes sort→filter→cap; active slot per repo per list in promptstate keyed by git common dir; web keys on `e.code`; the ctrl+digit terminal/browser facts; rulings from the spec's last section.
 
 - [ ] **Step 4: Full gate**
 
