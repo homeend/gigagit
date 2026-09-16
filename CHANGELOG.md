@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Fixed: enter on a fieldless row of the Previous versions popup opened a
+  files view that ↓ could not walk.** A version recorded by a one-branch op
+  (amend, reset, undo-commit, delete-branch, restore — no frozen preview)
+  opened its commit's files on the commit-list side, the default for a feed
+  row. The version's commit is not a feed row, so ↓ walked the Commits feed
+  instead and silently swapped the tree for the feed commit's files, while
+  the Branches row's reveal painted over the tree. The view now opens on
+  the tree, the same by-hash open the reflog, tag and goto-commit paths
+  use; esc still returns to the popup on the same row. Frozen-preview rows
+  (merge, rebase, pull) were unaffected.
+
 - **Fixed: the browser's commit list showed only ten rows after leaving a
   diff.** The commits pane is hidden (`display: none`) while a diff is open,
   and any redraw in that time — a live refresh, `r`, a review-note count —
