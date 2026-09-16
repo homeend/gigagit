@@ -8,6 +8,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`model.Endpoint` is now always valid — the zero value is `EndpointInvalid` and every kind switch is exhaustive.** Endpoint's fields are unexported; the only way to construct one is through a validating constructor (`WorkTreeEndpoint`, `IndexEndpoint`, `CommitEndpoint`, `ShelfEndpoint`), so holding an Endpoint proves it is consistent. The zero value used to silently default to a valid working tree, which hid initialization errors; it is now `EndpointInvalid` and panics if you try to use it. Every switch on `EndpointKind` now has an explicit arm per kind plus a panicking default — previously `Display`, `FileRef` and `CacheTag` fell through to the commit case when they had been taught about a new kind, making a kind added without updating all callers become a commit with an empty hash. A table test enumerates every kind, so a kind added without a row fails the build.
+
+- **A commit-ish is resolved to a full sha before it becomes an Endpoint, so the diff cache never serves a stale diff.** Endpoint.CacheTag() returns the sha verbatim, so it is the session diff-cache key; four call sites used to store a git rev-spec there instead — a branch name, `HEAD`, `HEAD~2`, or `<sha>^` — so a commit↔commit compare could serve a stale diff after the name moved. `branchTipHash` no longer falls back to returning the branch *name* when the name is unknown; it reports the miss and the compare is declined instead. `gg compare` with an unresolvable revision now exits 2 (a usage error) rather than letting it reach git, unless the failure is something other than an unknown name (corrupt or locked repo still exits 1).
+
+- **Two user-visible crashes fixed.** Opening a WIP-vs-HEAD compare in a repo with no commits yet (`git init`, stage a file, select the Staged row, press enter) crashed the whole process; it now declines the compare with a notice. A repository with `core.abbrev` set below 7 (git's minimum is 4) made compares fail silently and crashed the TUI outright on the branch-compare path, because git's short-hash output was rejected by Endpoint validation; resolution now uses full shas.
+
 - **`gg web`: the open commit's DESCRIPTION under its date, the full message
   behind a button, and a message window sized to its text.** The file-list
   header now draws the first three lines of the commit's description (the
