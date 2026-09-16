@@ -27,11 +27,32 @@ func (p *contentPopup) ensureCursorVisible(rowsCap int) {
 }
 
 // movePreviewCursor steps the focused preview's line cursor by delta, clamps it
-// to the file and scrolls minimally to keep it on screen. The Model is a value
-// but filesPreview is a pointer, so the mutation is visible to the caller.
+// to the file and scrolls minimally to keep it on screen. A cursor the user
+// scrolled OUT of the window (↑/↓, the wheel and the page keys move only the
+// pager) does not drag the viewport back to wherever it was: the first alt+↑/↓
+// re-enters it at the nearest edge of the window — the top row when it was
+// above, the bottom row when it was below — and the pager top stays put. The
+// Model is a value but filesPreview is a pointer, so the mutation is visible
+// to the caller.
 func (m Model) movePreviewCursor(delta int) {
 	p := m.filesPreview
 	if p == nil || len(p.lines) == 0 {
+		return
+	}
+	rowsCap := m.filePreviewRowsCap()
+	if p.cur < p.sel {
+		p.cur = p.sel
+		return
+	}
+	if p.cur >= p.sel+rowsCap {
+		p.cur = p.sel + rowsCap - 1
+		if p.cur > len(p.lines)-1 {
+			p.cur = len(p.lines) - 1
+		}
+		// Wrap mode shows fewer than rowsCap rows when lines wrap, so the
+		// "bottom row" may sit one row low there — the same approximation
+		// ensureCursorVisible makes; it keeps the top legal either way.
+		p.ensureCursorVisible(rowsCap)
 		return
 	}
 	p.cur += delta
@@ -41,7 +62,7 @@ func (m Model) movePreviewCursor(delta int) {
 	if p.cur > len(p.lines)-1 {
 		p.cur = len(p.lines) - 1
 	}
-	p.ensureCursorVisible(m.filePreviewRowsCap())
+	p.ensureCursorVisible(rowsCap)
 }
 
 // selectedLines is the SOURCE text of every preview line the selection covers.

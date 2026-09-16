@@ -76,7 +76,15 @@ func Run(svc *domain.Service, recordPath string, at model.Link) (string, error) 
 		m.recorder = rec
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
-	final, err := p.Run()
+	// Wrap off for the TUI's lifetime (see autowrapOff): a glyph the terminal
+	// draws wider than gg measured must clip at the right edge, never wrap
+	// and scramble the frame. Stdout is the program's output.
+	var final tea.Model
+	err := autowrapOff(os.Stdout, func() error {
+		var rerr error
+		final, rerr = p.Run()
+		return rerr
+	})
 	if fm, ok := final.(Model); ok {
 		if fm.opCancel != nil {
 			fm.opCancel()

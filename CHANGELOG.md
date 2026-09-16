@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **A scrambled screen after paging through a file is gone.** Terminals and
+  gg do not always agree on a glyph's width (`☰` is one column to gg and two
+  to tmux and every utf8proc-based terminal); a padded row carrying one
+  overflowed by a cell, the terminal wrapped it, and Bubble Tea's line-diff
+  renderer repainted the wrong rows from then on — the *View file* preview of
+  a long CHANGELOG showed it after a few page-downs. The TUI now runs with the
+  terminal's automatic wrap switched off (restored on exit, panics included),
+  so such a row is clipped at the right edge instead. In the *View file*
+  preview, `alt+↑`/`alt+↓` on a cursor that was scrolled out of the window
+  re-enter it at the nearest edge — the top row when it was above, the bottom
+  row when it was below — instead of dragging the viewport back to where the
+  cursor was; a 5k-line file no longer needs 5k presses to reach its end.
+
 - **Select lines and copy them, in all three readers.** The diff view, blame
   and the **View file** preview take tmux's copy-mode keys: `space` starts a
   line selection at the cursor, a second `space` freezes its end (the cursor
