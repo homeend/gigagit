@@ -55,6 +55,37 @@ type LinkTarget struct {
 	Preview *LinkPreview
 }
 
+// LinkHint is the HTML-anchor half of a link: WHICH UI surface it was copied
+// from (spec §3.3). Three rules, in priority order:
+//
+//  1. Compare IGNORES the hint. A bookmarked commit and the same commit
+//     picked off the log are one endpoint — there is no
+//     bookmark × shelf × commit matrix, only the 2×2 of §3.5.
+//  2. Navigate HONOURS it: same address, different landing.
+//  3. It DEGRADES, never fails: on another machine the address still
+//     resolves and the hint is dropped with a notice.
+//
+// The one exception is a shelved WORKING-TREE file, whose bytes were never in
+// git: there the hint is the only content source, and the link has no address
+// at all. That link cannot travel between machines, by construction.
+type LinkHint struct {
+	Kind string // "bookmark", "shelf" or "stash"; "" = no hint
+	ID   string // the machine-local id; never empty when Kind is set
+}
+
+// String renders "kind=id", or "" for the zero value.
+func (h LinkHint) String() string {
+	if h.Kind == "" {
+		return ""
+	}
+	return h.Kind + "=" + h.ID
+}
+
+// linkHintKinds is the closed set. A hint whose kind is not here is refused
+// rather than carried: an unknown landing is a link this build cannot honour,
+// and silently dropping it would make the link mean something else.
+var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true}
+
 // Link is one place in one repository: a file, a line on one side of one
 // diff, a hunk, or a commit.
 type Link struct {
@@ -64,25 +95,27 @@ type Link struct {
 	Side   NoteSide // NoteSideNew unless the link said "old:"
 	Line   int      // 1-based; 0 = none
 	Hunk   int      // 1-based; 0 = none
+	Hint   LinkHint // "" Kind = no hint; the UI surface a link was copied from
 }
 
 // IsLocal reports whether the link names its repository by absolute path.
 func (l Link) IsLocal() bool { return l.Repo.Abs != "" }
 
 // LinkPathOK reports whether p can be expressed inside a link. A path holding
-// '@', ':' or '#' cannot: those are the grammar's own separators. Producers
-// call this and refuse to copy rather than emit something that reparses as a
-// different place.
-func LinkPathOK(p string) bool { return !strings.ContainsAny(p, "@:#") }
+// '@', ':', '#' or '?' cannot: those are the grammar's own separators.
+// Producers call this and refuse to copy rather than emit something that
+// reparses as a different place.
+func LinkPathOK(p string) bool { return !strings.ContainsAny(p, "@:#?") }
 
 // LinkAbsOK reports whether an absolute CHECKOUT path can be expressed in the
 // local link form. It is the checkout-half twin of LinkPathOK, and it is
-// deliberately laxer: the grammar reads the first '@' as the target separator
-// and the first '#' as the hunk separator, so neither may appear anywhere in
-// the path — but a ':' is fine (a Windows drive colon is the whole reason
-// splitLinkLine only accepts a NUMBER after the last ':', and a POSIX
-// directory may legitimately contain one). A leading "X:" drive prefix is
-// skipped before the scan for exactly that reason.
+// deliberately laxer: the grammar reads the first '@' as the target separator,
+// the first '#' as the hunk separator and the first '?' as the hint
+// separator, so none of the three may appear anywhere in the path — but a ':'
+// is fine (a Windows drive colon is the whole reason splitLinkLine only
+// accepts a NUMBER after the last ':', and a POSIX directory may legitimately
+// contain one). A leading "X:" drive prefix is skipped before the scan for
+// exactly that reason.
 //
 // Every local-form producer (tui.linkFor, `gg link`, web's repoSegment) calls
 // it and refuses rather than emit a link ParseLink would reject or, worse,
@@ -95,7 +128,7 @@ func LinkAbsOK(abs string) bool {
 		// The "gg:///C:/src" spelling: one leading separator, then the drive.
 		s = s[3:]
 	}
-	return !strings.ContainsAny(s, "@#")
+	return !strings.ContainsAny(s, "@#?")
 }
 
 // Address builds the FileAddress the link points at. Worktree is filled by
@@ -164,6 +197,10 @@ func (l Link) String() string {
 		}
 		b.WriteString(strconv.Itoa(l.Line))
 	}
+	if h := l.Hint.String(); h != "" {
+		b.WriteByte('?')
+		b.WriteString(h)
+	}
 	return b.String()
 }
 
@@ -186,6 +223,19 @@ func ParseLink(s string) (Link, error) {
 	}
 	body := s[len(LinkScheme):]
 	l := Link{Side: NoteSideNew}
+
+	// ?<hint> is the LAST element of the grammar, so it is stripped FIRST:
+	// everything before it is an ordinary link, and nothing else in the
+	// grammar may contain '?' (LinkPathOK / LinkAbsOK / LinkRefOK all reject
+	// it), which is what makes the FIRST '?' unambiguously the separator.
+	if i := strings.IndexByte(body, '?'); i >= 0 {
+		h, err := parseLinkHint(body[i+1:])
+		if err != nil {
+			return Link{}, err
+		}
+		l.Hint = h
+		body = body[:i]
+	}
 
 	// #<hunk> first: a path may not contain '#', so the first one is ours.
 	if i := strings.IndexByte(body, '#'); i >= 0 {
@@ -362,14 +412,40 @@ func isHexLink(s string) bool {
 func isShaLink(s string) bool { return isHexLink(s) && len(s) >= 7 && len(s) <= 64 }
 
 // LinkRefOK reports whether a branch name can ride a preview link. The
-// grammar's own separators ('@', ':', '#'), whitespace and a second "..." are
-// not expressible — every PRODUCER calls this and refuses to emit rather than
-// print something ParseLink would reject or reparse as a different place.
+// grammar's own separators ('@', ':', '#', '?'), whitespace and two
+// consecutive dots are not expressible — every PRODUCER calls this and
+// refuses to emit rather than print something ParseLink would reject or
+// reparse as a different place. Two dots are refused (not just three)
+// because git itself forbids ".." anywhere in a refname (git
+// check-ref-format), and leaving it legal would let "main..feat" parse as a
+// literal refname instead of failing.
 func LinkRefOK(s string) bool {
-	if s == "" || strings.Contains(s, "...") {
+	if s == "" || strings.Contains(s, "..") {
 		return false
 	}
-	return !strings.ContainsAny(s, "@:# \t")
+	return !strings.ContainsAny(s, "@:#? \t")
+}
+
+// parseLinkHint reads "<kind>=<id>". Both halves are mandatory, the kind must
+// be one linkHintKinds knows, and the id may not contain a grammar separator
+// — a hint that cannot round-trip is refused at parse time rather than
+// silently reshaped.
+func parseLinkHint(s string) (LinkHint, error) {
+	i := strings.IndexByte(s, '=')
+	if i < 0 {
+		return LinkHint{}, fmt.Errorf("%w: a hint reads <kind>=<id>, got %q", ErrLink, s)
+	}
+	kind, id := s[:i], s[i+1:]
+	if !linkHintKinds[kind] {
+		return LinkHint{}, fmt.Errorf("%w: unknown hint kind %q (want bookmark, shelf or stash)", ErrLink, kind)
+	}
+	if id == "" {
+		return LinkHint{}, fmt.Errorf("%w: hint %q has no id", ErrLink, kind)
+	}
+	if strings.ContainsAny(id, "@:#?/ \t") {
+		return LinkHint{}, fmt.Errorf("%w: %q is not a hint id", ErrLink, id)
+	}
+	return LinkHint{Kind: kind, ID: id}, nil
 }
 
 func isAlphaLink(c byte) bool {
