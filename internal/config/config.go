@@ -65,10 +65,13 @@ type UIConfig struct {
 	// Empty = unset (zero-is-unset overlay rule); resolved to the default.
 	DiffSyntax string `toml:"diff_syntax"`
 
-	// DiffCursor selects how the diff view marks its current line:
-	//   "row"    — a background under the cursor row on both panes. THE DEFAULT.
-	//   "number" — only the gutter line numbers are highlighted.
-	//   "off"    — no marker (the cursor still drives e / notes).
+	// DiffCursor selects how the diff view — and the View file preview —
+	// mark their current line:
+	//   "row"    — a background under the cursor row, on the CURSOR'S SIDE
+	//              only in the diff (alt+←/→ move it). THE DEFAULT.
+	//   "number" — only that side's gutter line number is highlighted; the
+	//              preview has no gutter, so it falls back to the background.
+	//   "off"    — no marker (the cursor still drives e / notes / selection).
 	// Empty = unset (zero-is-unset overlay rule); resolved to the default.
 	DiffCursor string `toml:"diff_cursor"`
 

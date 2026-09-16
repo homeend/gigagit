@@ -46,7 +46,7 @@ var settingDocs = []settingDoc{
 	{"ui", "commit_search_max_pages", 50, "pages eager /-search scans before asking to search deeper"},
 	{"ui", "commit_sort", "date-order", "commit ordering for the Commits panel + graph: date-order (default; git --date-order, perfect graph lanes) or plain (fastest on huge repos, but the graph can mis-draw forks)"},
 	{"ui", "diff_syntax", "auto", "syntax colouring in diff views: auto (by file name) or off"},
-	{"ui", "diff_cursor", "row", "diff-view current-line marker: row (background), number (gutter only) or off; the . menu's Cursor marker row switches it for the session"},
+	{"ui", "diff_cursor", "row", "current-line marker in the diff view (on the cursor's side only) and the View file preview: row (background), number (gutter only) or off (the diff view's . menu Cursor marker row switches it for the session; the View file preview follows the same setting, number falling back to the band — it has no gutter to carry a number)"},
 	{"ui", "show_graph", "on", "Commits panel render mode on startup: on (default; lane graph) or off (flat list, same as the . menu's Show as list); toggle live from the , Settings menu"},
 	{"ui", "language", nil, "TUI display language: en (default), ja, ko, zh, ru, or a custom code from $XDG_CONFIG_HOME/gg/lang/<code>.toml; pick from the , Settings menu (CLI output stays English)"},
 	{"ui", "theme", "terminal", "TUI colours: terminal (default; inherit the terminal's own scheme), dark (Windows Terminal Campbell look, pinned everywhere), light (neutral light grey, charcoal text); cycle from the , Settings menu. To retune a theme's individual colours, run `gg config populate` — it writes a commented [themes.<name>] override table per theme"},

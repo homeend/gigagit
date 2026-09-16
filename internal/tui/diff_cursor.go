@@ -335,3 +335,61 @@ func (v *diffView) revealCursorNotes(body int) {
 		v.offset = end - body
 	}
 }
+
+// sidePresent reports whether the given side of an aligned row actually has a
+// line there. An Add row has no old line and a Del row has no new one; those
+// cells render as the dotted gap filler, carry no line number, are hidden from
+// the copy rows and are skipped by a selection.
+func sidePresent(r textdiff.Row, onOld bool) bool {
+	if onOld {
+		return r.Kind != textdiff.Add
+	}
+	return r.Kind != textdiff.Del
+}
+
+// cursorCell is the SOURCE text under the cursor on the cursor's side, plus
+// that side's 1-based line number. ok is false when the view has no cursor row
+// (empty stream, or the cursor is on a fold) or when the cursor side is absent
+// on that row — the gap-cell case, where there is nothing to copy.
+func (v *diffView) cursorCell() (text string, no int, ok bool) {
+	r, has := v.cursorRow()
+	if !has || !sidePresent(r, v.onOld) {
+		return "", 0, false
+	}
+	if v.onOld {
+		return r.Left, r.LeftNo, true
+	}
+	return r.Right, r.RightNo, true
+}
+
+// selectedLines is the cursor side's SOURCE text for every logical line the
+// selection covers, in stream order. Two entries are skipped, both by the
+// user's ruling: a FOLD (a collapsed run is a separator, not a line — "a range
+// across a fold copies only the visible lines") and a row where the cursor side
+// is ABSENT (an Add row has no old line, a Del row no new one). The result may
+// legitimately be empty; the caller decides what to say about that.
+func (v *diffView) selectedLines() []string {
+	lo, hi, ok := v.lsel.bounds(v.curLine)
+	if !ok {
+		return nil
+	}
+	if lo < 0 {
+		lo = 0
+	}
+	if hi > len(v.lines)-1 {
+		hi = len(v.lines) - 1
+	}
+	var out []string
+	for i := lo; i <= hi; i++ {
+		ln := v.lines[i]
+		if ln.Fold > 0 || !sidePresent(ln.Row, v.onOld) {
+			continue
+		}
+		if v.onOld {
+			out = append(out, ln.Row.Left)
+		} else {
+			out = append(out, ln.Row.Right)
+		}
+	}
+	return out
+}

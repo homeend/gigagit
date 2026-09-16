@@ -954,6 +954,199 @@ navigate (per the notes-core probe recipe). e2e: `s89_session_cli.toml`
 driving `gg session status` (exit 1) and `navigate --no-wait` against a
 fake presence file.
 
+### 4.7 Phase 5 item: line cursor everywhere, a one-sided diff cursor, and line selection + copy (approved 2026-09-16)
+
+User request (2026-09-16), replacing the roadmap's `v`/`y` keys with tmux
+copy-mode keys: a cursor in the View file preview, "Copy line" in the `.`
+menu of the preview, blame and diff, a space/space/enter line selection in
+all three readers, and a diff cursor that sits on ONE side so that the copy
+takes that side's text. Rulings from the user (do not re-ask): after the
+second space the range FREEZES and the cursor is free (a third space starts a
+new range at the cursor); a diff selection is LOCKED to the side it started
+on; a range that crosses a collapsed fold copies only the visible lines; the
+review-note default anchor (`c`, and therefore `L`/Copy link) follows the
+cursor's side. Out of scope: the hunk picker, mouse drag selection,
+character-level selection, copy-whole-hunk, the web UI, the CLI and the
+skills.
+
+**Hosts and their cursors.** Three readers: the diff view (`diffView.curLine`,
+phase 0), blame (`blameView.sel`) and the View file preview
+(`contentPopup` as `m.filesPreview`, today a pure pager whose `sel` is the TOP
+line). The preview gains a line cursor `cur` (an index into `lines`), painted
+by `renderFilePreview` with the diff cursor-row band (`s.diffCursorRow`)
+under `[ui] diff_cursor = row | number` and nothing under `off` (the preview
+has no gutter to carry a number-only marker, so `number` falls back to the
+band). `↑`/`↓`, the wheel and pgup/pgdn keep scrolling the viewport only;
+`alt+↑`/`alt+↓` move the cursor one line and scroll minimally so it stays
+inside the window (the diff's `j`/`k` rule; the preview's `j`/`k` stay
+unbound because the preview is inside the files view, where `j`/`k` are the
+tree's). Search `]`/`[`/`enter` place the cursor on the hit line and
+`searchPos` derives from the cursor (this also retires the deferred "preview
+searchPos ignores p.sel after a free scroll" item). On open the cursor is line
+0; a load arrival (`fileContentMsg`) clamps it. Blame's cursor is unchanged.
+
+**Raw text.** Copy ships the SOURCE line: tabs intact, no display expansion,
+no gutter, no line number, CR stripped. Blame has it (`model.BlameLine.Content`)
+and the diff has it (`textdiff.Row.Left/Right`); the preview keeps only
+display-sanitized text today, so `contentLine` gains `raw string` (filled by
+`fileContentLinesTok` from the normalized-but-unsanitized line; heading and
+placeholder lines carry `raw == ""` and are not copyable). An empty source
+line IS copyable (it is a line); a placeholder line such as "(loading…)" or
+"(file too large to preview)" is not.
+
+**The diff cursor sits on one side.** `diffView` gains `curSide` (0 = old/left,
+1 = new/right), right on open. `alt+←`/`alt+→` switch the side on the same
+aligned row (`alt+←`/`→` are unbound in the diff today; plain `←`/`→` keep
+panning in scroll mode). A left click on a body row places the cursor on that
+row AND on the pane the click landed in (`x < paneW` → left). The cursor
+marker paints only the cursor side's cell: `row` → the band on that cell
+only, including a GAP cell (the user must see where they are even when the
+side has no line; this relaxes the phase 0 "gap filler is never marked"
+rule for the cursor band only — attention bands still skip gaps); `number` →
+that side's gutter number only; `off` → nothing. The other cell renders as if
+it were not the cursor row (its attention band, if any, wins there). An
+unchanged (`Same`) row shows identical text on both sides; the cursor may sit
+on either and copies that side (the same text). The header's `line N` names
+the cursor side first: `line N` on the right, `old line N` on the left; on a
+gap cell it falls back to the other side's number with that side's label (as
+today). `e` (open in editor) is unchanged: it always edits the new side
+(`editLine`).
+
+*Absent cell.* The cursor side is ABSENT on a row when that side has no line
+there: `Kind == Add` on the left, `Kind == Del` on the right. Copy rows
+(below) are hidden on an absent cell; a range skips absent cells.
+
+*Notes and links follow the side.* `noteAnchorsAtCursor` lists the cursor
+side's anchor FIRST when the row has one (so the note popup's default pick
+and `noteAnchorAtCursor` — hence `L`/Copy link, which builds on it — take
+the cursor side); the picker still lists both sides. A preview diff keeps
+its new-only rule (the old side is the merge base). On an absent cell the
+list falls back to the other side exactly as today.
+
+**Selection (all three hosts).** One shared value type in a new file
+`internal/tui/lineselect.go`:
+
+```go
+// lineSel is a tmux-style whole-line selection over a host's logical line
+// indexes. Zero value = no selection.
+type lineSel struct {
+	on     bool // a selection exists (anchor is valid)
+	anchor int  // the line the first space marked
+	end    int  // the line the second space marked; meaningful when fixed
+	fixed  bool // the second space landed: the range no longer follows the cursor
+}
+
+func (s *lineSel) start(cur int)             // first space: on=true, anchor=cur, fixed=false
+func (s *lineSel) mark(cur int)              // second space: end=cur, fixed=true
+func (s *lineSel) clear()                    // esc / copy done / rebuild
+func (s lineSel) bounds(cur int) (lo, hi int, ok bool) // inclusive; !fixed → anchor..cur (either order)
+func (s lineSel) contains(i, cur int) bool
+```
+
+Keys, identical in the three hosts: `space` with no selection → `start(cur)`;
+`space` while `on && !fixed` → `mark(cur)` (the range freezes, the cursor is
+free); `space` while `fixed` → `start(cur)` (a new range). `enter` while `on`
+→ copy `bounds(cur)` (a one-space selection copies anchor..cursor, as tmux
+does) and `clear()`; `enter` with no selection keeps its host meaning (blame:
+history at the cursor commit; diff and preview: inert). `esc` while `on` →
+`clear()` and nothing else; the esc order is search typing → selection →
+committed search query → close view. Moving the cursor (any cursor key,
+page keys, home/end, `n`/`p`, search hits, a click) extends a live (`!fixed`)
+range and leaves a fixed one alone. `alt+←`/`→` in the diff are IGNORED while
+a selection is on (the range is locked to its side); a bottom-left notice
+says `▸ selection locked to the <old|new> side — esc clears it`.
+
+*What copy produces.* The selected lines' raw text joined with `\n`, no
+trailing newline (tmux); a diff range takes the cursor side's text of every
+row in `[lo, hi]` whose cell is present, skipping absent cells and folded
+(`Fold > 0`) entries; a preview/blame range takes every line in the range.
+Confirmation via the existing `copyToClipboardCmd`: `Copied line N` for one
+line, `Copied N lines` for more (N = lines actually copied; a range with
+nothing copyable — all absent — is a no-op with the notice `▸ nothing to
+copy on this side`). The single-line "Copy line" row copies the cursor line
+with no newline.
+
+*Painting.* Selected lines are painted through `styles.selectionStyle(base)`
+with the same two-mode contract as the search's current hit: theme role
+`selection_bg` set → `base.Reverse(false).Background(role)`; unset →
+`base.Reverse(!base.GetReverse())` (an inverted stripe on a normal row, a
+"hole" on blame's reverse-video cursor row). Dark and Light builtins set it
+(Dark `#264F78`, Light `#ADD6FF`, the editor-selection blues), Terminal
+leaves it unset. Roles go 54 → 55 (`isBgKey` convention; `roles_test.go`
+pins bump; `Override` field + `roleFields` row; the theme editor popup test).
+Only the TEXT cell is painted (not the blame gutter, not the diff line-number
+gutter), so the eye reads the extent; in the diff only the cursor side's
+present cells of the range are painted, and fold separators / note rows never
+are. The cursor row inside the range keeps its cursor marker on top
+(gutter number in `number` mode; in `row` mode the selection stripe replaces
+the band for that cell — the stripe IS the row).
+
+*Invalidation.* A rebuild of the line stream clears the selection: the diff's
+`rebuild()` (`f`, `ctrl+w`), a diff/blame/preview reload arrival (`diffMsg`,
+`blameMsg`, `fileContentMsg`), and closing the view. Search keys do not
+clear it.
+
+**`.` menu rows** (in `contextCopyRows`, before the file copy rows):
+- diff view (top layer, not `loading`/`err`/`binary`/`tooLarge`): `Copy line`
+  when the cursor cell is present; `Copy selected lines (N)` when a selection
+  is on and N > 0. Labels name the side when it matters: `Copy line (old side)`
+  on the left, `Copy line` on the right.
+- blame: `Copy line` always (every blame row is a line); `Copy selected lines (N)`
+  while a selection is on.
+- preview (the `m.filesPreview != nil && !m.filesTreeFocused` case, new; it
+  precedes the `m.filesView` case and ALSO returns `fileCopyRows(p.title,
+  m.filesHash)` so the path/name/commit rows the tree offers stay reachable
+  while the preview is focused): `Copy line` when the cursor line has `raw`;
+  `Copy selected lines (N)` while a selection is on.
+The `enter` key and the menu row share one code path per host (the
+`contextLinkRow` pattern: the key runs the row), so a test can read the
+payload off the row.
+
+**Footer and help.** Every host advertises the new keys:
+- Diff footer stays EXACTLY ≤ 140 columns in the three mode variants
+  (`TestDiffHintFitsTheBudget`), `[/] find` stays second. Add `[spc] mark`
+  and `[alt←→] side`, paying with shortenings (e.g. `[h/b] hist/blame` →
+  `[h/b] hist`, `[c/}{] notes` → `[c}{] notes`, `[←→0] pan` → `[←→] pan`) —
+  the planner fixes the exact strings; the test pins them. While a selection
+  is on, the footer becomes the selection variant
+  `[space] mark end  [enter] copy  [esc] unmark  [alt+↑↓/jk] extend  [alt←→] side (locked)`
+  (all three modes, ≤ 140), so the user is never trapped.
+- Blame footer: `[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [enter] history  [e] editor  [esc/b] back`;
+  selection variant `[space] mark end  [enter] copy  [esc] unmark  [↑↓] extend`.
+- Preview hint line: `%d/%d  [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [ctrl+w] view  [/] find  [esc] close`;
+  selection variant `%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend`.
+  The files-view tree footer's `[.] view file/copy` is unchanged.
+- help.go: Diff view rows for `alt+←/→`, `space`, `enter`, the `.` menu's
+  Copy line / Copy selected lines; Blame view rows for `space`/`enter`/`esc`;
+  the files-view "tree side: View file" row grows the cursor and mark keys.
+  Every new string in all four bundles (changed literals = delete old key +
+  add new).
+
+**Config and docs.** No new config key (`diff_cursor` governs the preview
+cursor too — its `settingDoc` text mentions the preview). README: the diff
+view paragraph (one-sided cursor, `alt+←/→`, space/enter selection), the
+blame and View file paragraphs, the theme roles list (`selection_bg`).
+CHANGELOG. `docs/CLAUDE-details.md`: a "Line selection + copy" paragraph
+next to the in-view search one, and the phase 0 cursor paragraph's marker
+sentence (one side). The phase 5 row in §6 replaces `v`/`y` with
+space/enter and points here.
+
+**Tests (the review gate).** Unit tests on `lineSel`. Per host: the key
+sequence space → move → space → move → enter copies exactly the frozen range
+(read the payload off the action row); a one-space selection copies
+anchor..cursor; esc clears before closing; a rebuild clears. Diff: the copy
+of a range across an `Add`/`Del` mix takes only present cells of the cursor
+side, a fold in the range is skipped, `alt+←/→` is ignored while on (notice
+asserted), the cursor band paints ONLY the cursor side's cell (compare body
+rows, assert the band SGR at the cell and its absence on the other cell, in
+all three modes), the header says `old line N` on the left, the note popup's
+default pick and the `L` link follow the side. Preview: `alt+↓` moves the
+cursor and scrolls only when it would leave the window, `↓` scrolls without
+moving it, the band paints the cursor row and the selection stripe paints the
+range, raw text with a tab is what gets copied. Painting tests compare body
+rows and assert the runtime-derived SGR at the painted cell (the phase 6
+lesson). `t.Parallel()` except tests calling `lipgloss.SetColorProfile`.
+
 ## 5. How hunk highlights syntax, and what gg should do
 
 Hunk does not own a highlighter. `@pierre/diffs` wraps **Shiki** (TextMate
@@ -1034,7 +1227,7 @@ needs a `settingDoc`, CLI changes update `using-gg.md` + `agentskill.Version`
 | 2 | Agent lane | `gg note …` verbs (hunk v1 JSON), MCP note tools, `gg review --notes`, `reviewing-with-gg` skill + `gg skill path`, `gg init` installs it — design §4.5 | 1 |
 | 3 | Live steering | per-worktree session inbox (`internal/steer`) + `gg session status/navigate/reload/focus/highlight`, TUI fsnotify + heartbeat drain, auto-reload after note mutations, web presence + `POST /api/session/steer`, attention marks — design §4.6 | 1 (2 for the skill text) |
 | 4 | Syntax highlighting | chroma spike → `internal/syntax`, domain sidecars, TUI compositor, web classes, config keys | – (parallel with 1–3) |
-| 5 | Viewer parity extras | **conflict-resolver syntax colouring** (the hunk picker renders its own cells; give it the same `syntax` runs + `styledRuns` as the diff pane), TUI unified toggle, `v`/`y` line selection + copy (folds in the "text operations" backlog item), hunk-header + line-number toggles, tab width, watch-reload of an open diff, `gg pager` / `gg diff --view` / patch-from-stdin viewer, move detection | 0 |
+| 5 | Viewer parity extras | **conflict-resolver syntax colouring** (the hunk picker renders its own cells; give it the same `syntax` runs + `styledRuns` as the diff pane), TUI unified toggle, line cursor in the View file preview + one-sided diff cursor + space/enter line selection + copy (design §4.7, approved 2026-09-16; replaces the old `v`/`y` idea and the "text operations" backlog item), hunk-header + line-number toggles, tab width, watch-reload of an open diff, `gg pager` / `gg diff --view` / patch-from-stdin viewer, move detection | 0 |
 | 6 | In-view text search | `/` incremental search inside the full-screen readers: diff view (both sides, jumps the line cursor), blame, the View file preview, and the conflict resolver; shared search-state helper (query, match list, next/prev with wrap, match count in the header, matches emphasised like word spans); keys DECIDED 2026-09-08 (user): `/` opens a forward search, `@` a backward search (both incremental from the cursor; `enter` keeps the query, `esc` cancels), `]`/`[` step to the next/previous hit with wrap-around — `n`/`p` keep their change/region meaning; `esc` with an active query clears it first; the conflict resolver's output pane is not searched; reuses the search-history dropdown (`alt+↑/↓`) | 0 (cursor) |
 
 Phase 6 (in-view search) and the conflict-resolver colouring in phase 5 were added on the user's request on 2026-09-08 after phase 0 shipped. Phases 0–2 are the shortest path to "an agent can leave notes in gg and a

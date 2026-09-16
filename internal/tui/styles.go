@@ -53,6 +53,7 @@ type styles struct {
 	diffFold       lipgloss.Style
 	diffEmph       lipgloss.Style
 	searchCurBg    string // theme role search_current_bg; "" = flip (see currentHitStyle)
+	selectionBg    string // theme role selection_bg; "" = flip (see selectionStyle)
 	diffCursorRow  lipgloss.Style
 	diffCursorNo   lipgloss.Style
 	diffAddCursor  lipgloss.Style
@@ -147,6 +148,10 @@ func buildStyles(th theme.Theme) *styles {
 	// ready-made style: it is relative to the row it lands on. The theme role
 	// is kept raw here (legacy leaves it "", so the Terminal theme flips).
 	s.searchCurBg = th.SearchCurrent
+	// Same "kept raw, resolved per row" treatment: the selection stripe is
+	// relative to the row it lands on (legacy carries no selection colour, so
+	// the Terminal theme flips).
+	s.selectionBg = th.Selection
 	s.diffCursorRow = ns().Background(pick(th.CursorRowBg, legacy.CursorRowBg))
 	s.diffCursorNo = ns().Bold(true).Foreground(bright)
 	s.diffAddCursor = ns().Background(pick(th.DiffAddCursorBg, legacy.DiffAddCursorBg))
@@ -226,6 +231,24 @@ func (s *styles) currentHitStyle(base lipgloss.Style) lipgloss.Style {
 		return base.Reverse(false).Background(lipgloss.Color(s.searchCurBg)).Bold(true)
 	}
 	return base.Reverse(!base.GetReverse()).Bold(true)
+}
+
+// selectionStyle paints a line-SELECTION stripe over base — the style the row
+// underneath already wears (a diff cell background, the cursor-row band,
+// blame's reverse-video cursor row, nothing at all in the preview).
+//
+// The contract is currentHitStyle's, minus the bold: with the theme role
+// selection_bg set the stripe is an explicit background patch that also clears
+// reverse, so it overrides the cursor band and reads identically in all three
+// readers; with the role unset (the Terminal theme) it FLIPS reverse video —
+// inverted over an ordinary row, un-inverted (a hole) over a reversed one.
+// No bold: a stripe marks the EXTENT of a range, and bolding every line of it
+// is noise, where a single search hit earns the emphasis.
+func (s *styles) selectionStyle(base lipgloss.Style) lipgloss.Style {
+	if s.selectionBg != "" {
+		return base.Reverse(false).Background(lipgloss.Color(s.selectionBg))
+	}
+	return base.Reverse(!base.GetReverse())
 }
 
 // frame returns the colours paintFrame lays under the whole screen; both ""

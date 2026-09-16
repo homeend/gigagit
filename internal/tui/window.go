@@ -51,8 +51,9 @@ type winRow struct {
 	// coloured run lands on the right columns after a cutoff, a horizontal
 	// scroll, or a wrap. cls WINS over decorate: a row that sets both is
 	// rendered coloured and decorate is never called (no caller combines them;
-	// TestRenderWindowClsWinsOverDecorate pins it). A row whose style reverses
-	// video (st().selectedRow) also ignores cls — reverse swaps foreground and
+	// TestRenderWindowClsWinsOverDecorate pins it). A row whose style — or whose
+	// body (see below) — reverses video (st().selectedRow, the selection stripe
+	// over an unset selection_bg) also ignores cls: reverse swaps foreground and
 	// background, so per-token colours would paint per-token BACKGROUNDS.
 	cls []syntax.Class
 	// emph is an optional emphasis level per DISPLAY RUNE of text, filled by
@@ -62,6 +63,15 @@ type winRow struct {
 	// reads after the swap, and the current hit — precisely the row the cursor
 	// sits on — paints relative to it (styles.currentHitStyle).
 	emph []emphLevel
+	// body, when non-nil, styles the row's TEXT and its trailing padding while
+	// the PREFIX keeps style. It exists for the line selection's stripe, which
+	// paints the code and never blame's commit gutter (spec §4.7). nil = the
+	// whole row wears style — the path every other caller takes, and the one
+	// that renders byte-identically to before this field existed.
+	//
+	// A POINTER, not a value: lipgloss.Style holds TerminalColor interface
+	// fields, so there is no safe "is it the zero value" comparison.
+	body *lipgloss.Style
 }
 
 // winOpts is everything renderWindow needs besides the rows. anchor is the
@@ -158,15 +168,18 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		hs    int
 		si    int
 		row   int
-		// Coloured rows only (winRow.cls): the segment's own class mask and its
-		// frozen prefix, kept OUT of text so the body can be painted run by run
-		// while the gutter and the padding stay under style. nil cls = the plain
-		// path, where text already carries the prefix.
+		// Painted rows only (winRow.cls / emph / body): the segment's own class
+		// mask and its frozen prefix, kept OUT of text so the body can be painted
+		// run by run while the gutter stays under style. All three nil = the
+		// plain path, where text already carries the prefix.
 		cls []syntax.Class
 		// emph rides alongside cls; either one being non-nil takes the painted
 		// path (a blame row with syntax off carries emphasis and no classes).
 		emph []emphLevel
 		pre  string
+		// body is winRow.body carried through: non-nil also forces the painted
+		// path, because splitting prefix from text is the whole point of it.
+		body *lipgloss.Style
 	}
 	var dl []dline
 	for ri, r := range rows {
@@ -180,7 +193,10 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		// flips the reverse video back off, which is how a search hit stays
 		// visible on the selected row (winRow.emph, styles.currentHitStyle).
 		rcls := r.cls
-		if r.style.GetReverse() {
+		// The BODY's style decides this as much as the row's: a stripe that
+		// flips reverse video (the unset selection_bg case) would turn per-token
+		// foregrounds into per-token backgrounds just the same.
+		if r.style.GetReverse() || (r.body != nil && r.body.GetReverse()) {
 			rcls = nil
 		}
 		remph := r.emph
@@ -243,11 +259,11 @@ func renderWindow(rows []winRow, o winOpts) []string {
 					pre = padRight(truncate(r.prefix, pw), pw)
 				}
 			}
-			if segCls == nil && segEmph == nil {
+			if segCls == nil && segEmph == nil && r.body == nil {
 				dl = append(dl, dline{text: pre + s, style: r.style, deco: r.decorate, hs: hs, si: si, row: ri})
 				continue
 			}
-			dl = append(dl, dline{text: s, pre: pre, cls: maskAt(segCls, si), emph: maskAt(segEmph, si), style: r.style, hs: hs, si: si, row: ri})
+			dl = append(dl, dline{text: s, pre: pre, cls: maskAt(segCls, si), emph: maskAt(segEmph, si), style: r.style, body: r.body, hs: hs, si: si, row: ri})
 		}
 	}
 
@@ -267,8 +283,8 @@ func renderWindow(rows []winRow, o winOpts) []string {
 			out = append(out, padRight("", w))
 			continue
 		}
-		if dl[idx].cls != nil || dl[idx].emph != nil {
-			out = append(out, colouredLine(dl[idx].pre, dl[idx].text, dl[idx].cls, dl[idx].emph, dl[idx].style, w))
+		if dl[idx].cls != nil || dl[idx].emph != nil || dl[idx].body != nil {
+			out = append(out, colouredLine(dl[idx].pre, dl[idx].text, dl[idx].cls, dl[idx].emph, dl[idx].style, dl[idx].body, w))
 			continue
 		}
 		line := padRight(dl[idx].text, w)
@@ -281,23 +297,31 @@ func renderWindow(rows []winRow, o winOpts) []string {
 }
 
 // colouredLine renders one display line of a class-masked row: the frozen
-// prefix and the trailing padding under style, the body painted run by run
-// (styledRuns, with the search's emphasis mask when it carries one). An
-// all-Plain mask under the zero style is byte-identical to the plain path —
-// syntaxStyle leaves base alone for Plain, and lipgloss renders an unstyled
-// string unchanged.
-func colouredLine(pre, body string, cls []syntax.Class, emph []emphLevel, style lipgloss.Style, w int) string {
-	disp := []rune(body)
+// prefix under style, the body and the trailing padding under bodySt (or under
+// style when bodySt is nil), the body painted run by run (styledRuns, with the
+// search's emphasis mask when it carries one). An all-Plain mask under the zero
+// style is byte-identical to the plain path — syntaxStyle leaves base alone for
+// Plain, and lipgloss renders an unstyled string unchanged.
+func colouredLine(pre, text string, cls []syntax.Class, emph []emphLevel, style lipgloss.Style, bodySt *lipgloss.Style, w int) string {
+	disp := []rune(text)
 	// Defensive: exactly one entry per rune on both masks (either may be nil).
 	cls = sliceMask(cls, 0, len(disp))
 	emph = sliceMask(emph, 0, len(disp))
+	// The frozen prefix always wears the ROW's style; the body and the trailing
+	// padding wear bodySt when the caller set one (the line-selection stripe,
+	// which must not reach blame's commit gutter). bodySt nil = base == style,
+	// byte-identical to before the field existed.
+	base := style
+	if bodySt != nil {
+		base = *bodySt
+	}
 	var b strings.Builder
 	if pre != "" {
 		b.WriteString(style.Render(pre))
 	}
-	b.WriteString(styledRuns(disp, emph, cls, style))
-	if pad := w - lipgloss.Width(pre) - lipgloss.Width(body); pad > 0 {
-		b.WriteString(style.Render(strings.Repeat(" ", pad)))
+	b.WriteString(styledRuns(disp, emph, cls, base))
+	if pad := w - lipgloss.Width(pre) - lipgloss.Width(text); pad > 0 {
+		b.WriteString(base.Render(strings.Repeat(" ", pad)))
 	}
 	return b.String()
 }

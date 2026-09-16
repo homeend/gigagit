@@ -295,14 +295,39 @@ func TestAttentionBandPaintsChangedAndGapRows(t *testing.T) {
 	if plain := lines[4]; strings.Contains(plain, "48;5;94") {
 		t.Errorf("an unmarked row wore the band: %q", plain)
 	}
-	// The cursor outranks the band: the user must always see where they are.
-	onCursor := m.diffPaneLines(v, 80, 10, 20, 21, "row")[0]
-	if strings.Contains(onCursor, "48;5;94") {
-		t.Errorf("the cursor row must outrank the band: %q", onCursor)
+	// The cursor outranks the band ON ITS OWN CELL: the user must always see
+	// where they are. The cursor sits on ONE side (spec §4.7), so the other
+	// cell keeps the band — asserted for both sides by flipping onOld.
+	panes := func(onOld bool) []string {
+		v.onOld = onOld
+		row := m.diffPaneLines(v, 80, 10, 20, 21, "row")[0]
+		p := strings.SplitN(row, "│", 2)
+		if len(p) != 2 {
+			t.Fatalf("the cursor row must have exactly one pane separator: %q", row)
+		}
+		return p
 	}
-	if !strings.Contains(onCursor, "48;5;88") || !strings.Contains(onCursor, "48;5;28") {
-		t.Errorf("the cursor row on a marked Changed row must keep its 88/28 shades: %q", onCursor)
+	p := panes(false) // the default: the cursor is on the new (right) side
+	if strings.Contains(p[1], "48;5;94") {
+		t.Errorf("the cursor's own cell must outrank the band: %q", p[1])
 	}
+	if !strings.Contains(p[1], "48;5;28") {
+		t.Errorf("the cursor cell on a marked Changed row must keep its 28 shade: %q", p[1])
+	}
+	if !strings.Contains(p[0], "48;5;94") {
+		t.Errorf("the cell the cursor is not on must keep the band (94): %q", p[0])
+	}
+	p = panes(true) // mirrored on the old (left) side
+	if strings.Contains(p[0], "48;5;94") {
+		t.Errorf("the cursor's own cell must outrank the band: %q", p[0])
+	}
+	if !strings.Contains(p[0], "48;5;88") {
+		t.Errorf("the cursor cell on a marked Changed row must keep its 88 shade: %q", p[0])
+	}
+	if !strings.Contains(p[1], "48;5;94") {
+		t.Errorf("the cell the cursor is not on must keep the band (94): %q", p[1])
+	}
+	v.onOld = false
 }
 
 // TestSteerHighlightResolvesACommitTarget: the TUI must not depend on the

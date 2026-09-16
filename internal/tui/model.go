@@ -454,10 +454,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// it across the overwrite and re-find so it survives the load arrival,
 		// mirroring blameMsg/fileContentMsg above.
 		search, searchOrig := dv.search, dv.searchOrig
+		// The SIDE is the user's choice, not the loader's: a reload of the same
+		// file must not throw them back to the right pane. The SELECTION is the
+		// opposite — the line stream is brand new, so the indexes it holds mean
+		// nothing any more.
+		onOld := dv.onOld
 		*dv = *msg.view
 		dv.loading = false
 		dv.compare = dv.compare || compare
 		dv.search, dv.searchOrig = search, searchOrig
+		dv.onOld = onOld
+		dv.lsel.clear()
 		if dv.search.active() {
 			dv.refindAfterRebuild()
 			if dv.search.cur >= 0 {
@@ -706,17 +713,22 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil {
 			m.filesPreview.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
+			m.filesPreview.cur, m.filesPreview.sel = 0, 0
+			m.filesPreview.lsel.clear()
 			return m, nil
 		}
 		p := m.filesPreview
 		p.lines = msg.lines
+		// The lines the cursor and the selection indexed are gone.
+		p.cur = 0
+		p.lsel.clear()
 		// A search started while the placeholder ("(loading…)") was still
 		// showing computed its hits against that single line; once the real
 		// content lands those hits (and any cur/badge derived from them) are
 		// stale. Re-run it over the loaded lines and re-snap the scroll — only
 		// the no-search path still resets to the top.
 		if p.search.active() {
-			p.search.refindFrom(previewSearchLines(p), p.searchPos())
+			p.search.refindFrom(previewSearchLines(p), p.searchPos(m.filePreviewRowsCap()))
 			p.snapHit(m.filePreviewRowsCap(), m.filePreviewInnerW())
 		} else {
 			p.sel = 0
@@ -926,6 +938,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			b.blocks = groupBlame(msg.lines)
 			b.san = nil // the search's display-text cache belongs to the old lines
 			b.sel = 0
+			b.lsel.clear() // …and so does everything the selection's indexes meant
 			// A search started while blame was still loading computed its hits
 			// against the empty/placeholder lines; once the real content lands
 			// those hits are stale. Re-run it over the loaded lines and re-snap

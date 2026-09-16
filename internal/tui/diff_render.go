@@ -26,6 +26,12 @@ import (
 type cellMark struct {
 	row  bool
 	attn bool
+	// sel marks a cell inside the line SELECTION: its BODY (never its gutter —
+	// the line number keeps its own style, so the eye reads the range against
+	// it) is painted through styles.selectionStyle over whatever base the cell
+	// would otherwise wear. Only the CURSOR side's mark ever carries it, and
+	// never on a gap cell: an absent cell is not selected.
+	sel  bool
 	base lipgloss.Style
 	gut  lipgloss.Style
 }
@@ -81,14 +87,26 @@ func (mk cellMark) gapFor() lipgloss.Style {
 	return st().diffGapCell
 }
 
+// bodyFor is the base style a cell's text and trailing padding wear: the style
+// the caller already resolved (the cursor band, an attention band, the hot
+// add/del shade, or nothing), with the selection stripe laid OVER it when this
+// cell is inside the range. In "row" cursor mode the stripe therefore replaces
+// the band on the cursor row — the stripe IS the row (spec §4.7).
+func (mk cellMark) bodyFor(base lipgloss.Style) lipgloss.Style {
+	if !mk.sel {
+		return base
+	}
+	return st().selectionStyle(base)
+}
+
 // diffHintFor builds the diff-view hint for the current long-line mode. Every
 // diff-view binding that is not help-only appears here, so the line is packed:
 // the widest (scroll) English variant measures 140 display columns and MUST
 // stay at or under 140, the width TestRenderDiffViewPanes renders at and the
 // narrowest common wide terminal — past that the truncation eats [esc] close
 // first, hiding the way out. There is NO headroom left: that budget is why the
-// labels are terse (scroll/line on one key group, chg, ^w for ctrl+w,
-// hist/blame) and why the three note keys share one [c/}{] notes group
+// labels are terse (scroll on one key group, chg, ^w for ctrl+w,
+// hist) and why the three note keys share one [c}{] notes group
 // (E/R/a are help-and-menu-only). Shortening a label is the way to add a
 // group; growing the line is not. TestDiffHintFitsTheBudget pins the number.
 // The scroll variant appends the pan keys.
@@ -98,6 +116,16 @@ func (mk cellMark) gapFor() lipgloss.Style {
 // last is what a narrow terminal loses. [/] find rides near the front for
 // exactly that reason — it was last when it shipped, and the user reported the
 // footer "missing search hints".
+//
+// The selection keys (spec §4.7) cost 26 columns — [spc] mark and [alt↔] side
+// with their separators — and the line was already AT 140. The shortenings
+// available without losing a group ("scroll/line" → "scroll", [c/}{] → [c}{],
+// [←→0] → [←→], hist/blame → hist, close → back) come to 14, so one group had
+// to go: [z] align, the only one with THREE dedicated . menu rows (Align cursor
+// line: top / center / bottom) plus a help row, so nothing becomes
+// undiscoverable. [alt↔] rather than [alt←→] pays the last column; ↔ is already
+// gg's own glyph for "both directions" (a compare title reads "a ↔ b"). While a
+// selection is live the whole line is replaced by diffSelectHint.
 func diffHintFor(long longMode) string {
 	mode := i18n.T("scroll")
 	switch long {
@@ -108,9 +136,9 @@ func diffHintFor(long longMode) string {
 	}
 	pan := ""
 	if long == longScroll {
-		pan = i18n.T("  [←→0] pan")
+		pan = i18n.T("  [←→] pan")
 	}
-	return i18n.T("[↑↓/jk] scroll/line  [/] find  [n/p] chg  [c/}{] notes  [z] align  [e] edit  [f] part  [^w] %s", mode) + pan + i18n.T("  [h/b] hist/blame  [esc] close")
+	return i18n.T("[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] notes  [e] edit  [f] part  [^w] %s", mode) + pan + i18n.T("  [h/b] hist  [esc] back")
 }
 
 // cellSeg is one pane's text for one display row: the sanitized display runes
@@ -266,8 +294,17 @@ func (m Model) renderDiffView() string {
 		right = i18n.T("change %d/%d", v.currentBlockOrdinal()+1, len(v.blocks))
 	}
 	if r, ok := v.cursorRow(); ok {
+		// The cursor sits on ONE side: name that side first, and fall back to
+		// the other side's number WITH ITS OWN LABEL on a gap cell — the same
+		// fallback the single-sided version performed, mirrored.
 		ln := ""
-		if r.RightNo > 0 {
+		if v.onOld {
+			if r.LeftNo > 0 {
+				ln = i18n.T("old line %d", r.LeftNo)
+			} else if r.RightNo > 0 {
+				ln = i18n.T("line %d", r.RightNo)
+			}
+		} else if r.RightNo > 0 {
 			ln = i18n.T("line %d", r.RightNo)
 		} else if r.LeftNo > 0 {
 			ln = i18n.T("old line %d", r.LeftNo)
@@ -335,7 +372,11 @@ func (m Model) renderDiffView() string {
 	for len(lines) < h-1 {
 		lines = append(lines, "")
 	}
-	lines = append(lines, truncate(diffHintFor(v.long), w))
+	hint := diffHintFor(v.long)
+	if v.lsel.on {
+		hint = diffSelectHint()
+	}
+	lines = append(lines, truncate(hint, w))
 	return strings.Join(lines, "\n")
 }
 
@@ -364,6 +405,12 @@ func gutterWidth(full []textdiff.Row) int {
 // pre-wrapped segment via segCell. Display rows in [curStart, curEnd) carry
 // the cursor marker per style ("row" | "number" | "off"); curStart == curEnd
 // (the history pane) draws no marker. A fold row is never marked.
+//
+// The marker lands on ONE cell: the cursor sits on v.onOld's side (spec §4.7),
+// so each row builds two marks and the non-cursor cell renders as if this were
+// not the cursor row — its attention band, if any, wins there. The history
+// pane's embedded diffView has onOld false and an empty cursor range, so it is
+// unaffected.
 func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, style string) []string {
 	paneW := (w - 1) / 2
 	if paneW < 4 {
@@ -383,25 +430,43 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 			out = append(out, foldSeparator(dr.fold, w, dr.noteMark))
 			continue
 		}
-		mk := noMark()
 		r := dr.row
-		switch {
-		case i >= curStart && i < curEnd:
+		// TWO marks, one per pane: the cursor sits on ONE side (v.onOld), and
+		// the other cell must render as if this were not the cursor row — its
+		// own attention band, if any, wins there. Start both from the band (or
+		// nothing), then overwrite the cursor side.
+		mkL, mkR := noMark(), noMark()
+		if bg, ok := m.attnMarkFor(v, r); ok {
+			band := cellMark{row: true, attn: true, base: bg, gut: s.diffGutter}
+			mkL, mkR = band, band
+		}
+		if i >= curStart && i < curEnd {
 			// The cursor outranks an attention band: the user must always be
 			// able to see where they are. In "number" mode, though, only the
-			// GUTTER carries the cursor (mk.row is false), so the row body is
+			// GUTTER carries the cursor (cm.row is false), so the row body is
 			// free — and the row under the cursor is precisely the one the user
 			// is most likely to be reading. Keep the cursor gutter, take the
-			// band for the body.
-			mk = cursorMark(style)
-			if !mk.row {
+			// band for the body. "off" lands here too, and keeps the band.
+			cm := cursorMark(style)
+			if !cm.row {
 				if bg, ok := m.attnMarkFor(v, r); ok {
-					mk = cellMark{row: true, attn: true, base: bg, gut: mk.gut}
+					cm = cellMark{row: true, attn: true, base: bg, gut: cm.gut}
 				}
 			}
-		default:
-			if bg, ok := m.attnMarkFor(v, r); ok {
-				mk = cellMark{row: true, attn: true, base: bg, gut: s.diffGutter}
+			if v.onOld {
+				mkL = cm
+			} else {
+				mkR = cm
+			}
+		}
+		// The stripe rides on the CURSOR side only, and only where that side
+		// actually has a line — an absent cell is not selected, and the range
+		// skips it when copying, so painting it would lie.
+		if v.lsel.contains(dr.line, v.curLine) && sidePresent(r, v.onOld) {
+			if v.onOld {
+				mkL.sel = true
+			} else {
+				mkR.sel = true
 			}
 		}
 		// Syntax runs for this row's source lines (nil on a gap side or an
@@ -435,25 +500,25 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 				rightNo = r.RightNo
 			}
 			left := segCell(leftNo, dr.left, gut, paneW, leftGap,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mk, lh)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mkL, lh)
 			right := segCell(rightNo, dr.right, gut, paneW, rightGap,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mk, rh)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mkR, rh)
 			out = append(out, left+"│"+right)
 		case longTruncate:
 			left := diffCell(r.LeftNo, r.Left, gut, paneW,
 				r.Kind == textdiff.Add,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, r.LeftSpans, lt, mk, lh)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, r.LeftSpans, lt, mkL, lh)
 			right := diffCell(r.RightNo, r.Right, gut, paneW,
 				r.Kind == textdiff.Del,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, r.RightSpans, rt, mk, rh)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, r.RightSpans, rt, mkR, rh)
 			out = append(out, left+"│"+right)
 		default: // longScroll
 			left := scrollCell(r.LeftNo, r.Left, r.LeftSpans, lt, v.hOffset, gut, paneW,
 				r.Kind == textdiff.Add,
-				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mk, lh)
+				r.Kind == textdiff.Del || r.Kind == textdiff.Changed, s.diffDelCell, mkL, lh)
 			right := scrollCell(r.RightNo, r.Right, r.RightSpans, rt, v.hOffset, gut, paneW,
 				r.Kind == textdiff.Del,
-				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mk, rh)
+				r.Kind == textdiff.Add || r.Kind == textdiff.Changed, s.diffAddCell, mkR, rh)
 			out = append(out, left+"│"+right)
 		}
 	}
@@ -489,6 +554,7 @@ func segCell(no int, seg cellSeg, gut, width int, gap, hot bool, hotStyle lipglo
 	if hot {
 		base = mk.hotFor(hotStyle)
 	}
+	base = mk.bodyFor(base)
 	// The hits are offsets in the whole sanitized line; seg.off says where this
 	// segment starts in it, so they land on the right continuation with no
 	// relayout.
@@ -556,6 +622,7 @@ func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, h
 	if hot {
 		base = mk.hotFor(hotStyle)
 	}
+	base = mk.bodyFor(base)
 	var b strings.Builder
 	if hasLeft {
 		// The pan markers are body furniture, not gutter: "number" mode bolds
@@ -702,14 +769,24 @@ func diffCell(no int, text string, gut, width int, gap, hot bool, hotStyle lipgl
 		if hot {
 			base = mk.hotFor(hotStyle)
 		}
-		bodyTxt = hotEmphBody(text, spans, toks, tw, base, hits)
+		bodyTxt = hotEmphBody(text, spans, toks, tw, mk.bodyFor(base), hits)
 	} else {
 		bodyTxt = padRight(truncate(sanitizeLine(text), tw), tw)
+		base := lipgloss.NewStyle()
+		painted := false
 		switch {
 		case hot:
-			bodyTxt = mk.hotFor(hotStyle).Render(bodyTxt)
+			base, painted = mk.hotFor(hotStyle), true
 		case mk.row:
-			bodyTxt = mk.base.Render(bodyTxt)
+			base, painted = mk.base, true
+		}
+		// An unmarked, unselected cell is rendered by nobody, so the plain path
+		// stays byte-identical to the pre-selection renderer.
+		switch {
+		case mk.sel:
+			bodyTxt = mk.bodyFor(base).Render(bodyTxt)
+		case painted:
+			bodyTxt = base.Render(bodyTxt)
 		}
 	}
 	return mk.gut.Render(truncate(num, gut+1)) + bodyTxt
@@ -759,8 +836,19 @@ func hotEmphBody(text string, spans []textdiff.Span, toks []syntax.Tok, tw int, 
 // foreground. Emphasis
 // WINS over the syntax colour so the word-diff stays legible. An all-Plain cls
 // with no emphasis renders byte-identically to the pre-syntax renderer.
+//
+// A REVERSED base (the line-selection stripe with the theme role selection_bg
+// unset, styles.selectionStyle) swaps foreground and background at the
+// terminal, so per-token foregrounds would paint per-token BACKGROUNDS — every
+// syntax token in a selected line becoming its own coloured block. The class
+// mask therefore DROPS on a reversed base, exactly as renderWindow drops
+// winRow.cls for blame and the preview. The emphasis mask survives, minus its
+// foreground: an ordinary hit / word-diff span keeps bold (diffEmph's 231
+// foreground would become a white block), and the CURRENT hit is untouched
+// because currentHitStyle flips the reverse back off by design.
 func styledRuns(disp []rune, emph []emphLevel, cls []syntax.Class, base lipgloss.Style) string {
 	s := st()
+	rev := base.GetReverse()
 	var b strings.Builder
 	for i := 0; i < len(disp); {
 		j := i + 1
@@ -772,9 +860,17 @@ func styledRuns(disp []rune, emph []emphLevel, cls []syntax.Class, base lipgloss
 		case emphCur:
 			b.WriteString(s.currentHitStyle(base).Render(seg))
 		case emphHit, emphWord:
-			b.WriteString(base.Inherit(s.diffEmph).Render(seg))
+			if rev {
+				b.WriteString(base.Bold(true).Render(seg))
+			} else {
+				b.WriteString(base.Inherit(s.diffEmph).Render(seg))
+			}
 		default:
-			b.WriteString(s.syntaxStyle(base, cls[i]).Render(seg))
+			if rev {
+				b.WriteString(base.Render(seg))
+			} else {
+				b.WriteString(s.syntaxStyle(base, cls[i]).Render(seg))
+			}
 		}
 		i = j
 	}

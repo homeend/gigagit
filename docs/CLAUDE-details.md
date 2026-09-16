@@ -145,7 +145,15 @@ on a Del row. `alignCursor(mode cursorAlign, body int)` places the cursor
 line's first display row at the top/centre/bottom (`alignTop`/`alignCenter`/
 `alignBottom`, the `z`-key cycle order); `diffPaneLines(v, w, body, curStart,
 curEnd, style)` paints the marked range — the history pane calls it with
-`0, 0, "off"` so its rows are never marked. `e` resolves the editor's goto
+`0, 0, "off"` so its rows are never marked. Since §4.7 the cursor also has a
+SIDE (`diffView.onOld`, false = the new/right pane): `diffPaneLines` builds two
+`cellMark`s per row and gives the cursor mark to that side's cell only, so the
+other cell renders as if this were not the cursor row (its attention band wins
+there). `cursorRow()` still hands back the whole aligned row; `cursorCell()` is
+the side-aware reader — the source text plus that side's line number, refusing
+a cell the side has not got (`sidePresent`). The marker DOES paint a gap cell
+on the cursor side in `row` mode, which is the one relaxation of the phase-0
+"a gap filler is never marked" rule; attention bands still skip them. `e` resolves the editor's goto
 syntax via `editorCommandAt(editor, absPath, line)`, keyed off the editor
 program name: `vim`/`nvim`/`vi`/`nano`/`emacs`/`micro`/`kak` get `+line
 path`, `code`/`code-insiders`/`codium`/`cursor` get `--goto path:line`,
@@ -1008,3 +1016,77 @@ block, every `Current` line then every `Incoming` line) plus `searchBase` to map
 a 2D cursor forward and `searchRows` to map a hit back; literals and the output
 pane are outside that space. Search state is per VIEW: stepping to another file
 replaces the `diffView`, so the query does not follow.
+
+**Line selection + copy (phase 5, spec §4.7).** One pure type in
+`internal/tui/lineselect.go` — `lineSel{on, anchor, end, fixed}` with
+`start`/`mark`/`press`/`clear`/`bounds`/`contains` — serves the diff view,
+blame and the View-file preview. `press` is the whole space key: start a range
+at the cursor, freeze its end, start a new one. `bounds(cur)` follows the LIVE
+cursor while the range is loose and the frozen `end` once it is fixed, which is
+why moving the cursor extends a one-space selection and leaves a two-space one
+alone — no host does any bookkeeping for that.
+
+Each host embeds it as `lsel` over its own LOGICAL line indexes (`v.lines`,
+`b.lines`, `p.lines` — never a display row) and owns one key hook,
+`<host>SelectKey`, placed BEFORE its search hook and declining while
+`search.typing`. That placement is the only way to get the spec's esc order —
+search typing → selection → committed query → close — because each host's
+search hook handles the typing case and the committed-query case in the same
+call.
+
+Copy goes through ACTION ROWS, never a bare clipboard call: each host has one
+`…CopyLineRows` function returning `Copy line` (`copy-line`) and
+`Copy selected lines (N)` (`copy-selected-lines`) built with `m.copyRow`, the
+`.` menu splices them ahead of the file path/name/commit rows, and the `enter`
+key looks the second row up with `rowByID` and runs it. So the key and the menu
+can never copy different text, and a test reads the exact payload off
+`row.copyText` — the same seam `contextLinkRow` established for `L`.
+
+What is copied is SOURCE text: `textdiff.Row.Left/Right` in the diff,
+`model.BlameLine.Content` in blame, and — new — `contentLine.raw` in the
+preview, which `fileContentLinesTok` fills from the normalized-but-unsanitized
+line so a tab stays a tab. `contentLine.src` distinguishes a genuinely empty
+source line (`src` true, `raw` "" — copyable, it is a line) from a placeholder
+such as `(loading…)` (`src` false — not a line of the file, no Copy line row,
+and `space` is inert on it). A diff range skips a fold entry and a cell the
+cursor side has not got, which is the user's "a range across a collapsed fold
+copies only the visible lines" ruling.
+
+Painting is a base-style SWAP, not a new emphasis level: `styles.selectionStyle`
+follows `currentHitStyle`'s two-mode contract (the `selection_bg` role as a
+background patch that clears reverse, or a flip of reverse video when unset)
+minus the bold — a stripe marks extent, not one hit. The three hosts reach it
+differently, because of what their rows are made of: the diff carries a new
+`cellMark.sel` bit whose `bodyFor` wraps each cell's resolved base (only the
+cursor side's mark ever sets it, and never on a gap); blame needs a BODY-ONLY
+style, because its commit gutter is `winRow.prefix` and `winRow.style` covers
+the prefix too, so `winRow.body *lipgloss.Style` styles the text and the padding
+while the prefix keeps `style` — a pointer, since `lipgloss.Style` holds
+interface fields and has no safe zero comparison, and a reversed body drops the
+class mask exactly as a reversed style does; the preview's rows carry no prefix
+at all, so its `winRow.style` IS the body style and nothing new was needed.
+The rule any new painter must keep: **a REVERSED base drops the syntax class
+mask** — in `renderWindow` for blame and the preview, and in `styledRuns` for
+the diff cells — because a reversed base with per-token FOREGROUNDS paints
+per-token BACKGROUNDS, giving every syntax token in a selected line its own
+coloured block.
+
+The preview also gained the cursor it never had: `contentPopup.cur` (read only
+by `renderFilePreview` and the preview key paths — the same struct backs the
+help window and the files tree, which never look at it) moved by `alt+↑/↓`
+through `movePreviewCursor` + `ensureCursorVisible`, painted with
+`st().diffCursorRow` under `[ui] diff_cursor` (`number` falls back to the band:
+there is no gutter to number). `searchPos()` now anchors on `cur` while it
+sits inside the visible window `[sel, sel+rowsCap)`, and on the top visible
+line otherwise — a cursor paged far off-screen must not search from there —
+which retires the deferred "preview `searchPos` ignores `p.sel` after a free
+scroll" item; `snapHit` lands `cur` on the hit so `]`/`[` and the next search
+step measure from it; `previewOrigin` carries `cur` so esc restores it with
+the pager.
+
+Invalidation: the diff clears on `rebuild()` (the `f` toggle), on `ctrl+w`
+(which relayouts and re-anchors rather than rebuilding) and on a `diffMsg`
+arrival — but NOT on a resize, which changes no line index; blame on `blameMsg`;
+the preview on `fileContentMsg` and with the struct itself on close. Search keys
+never clear it. The diff's `onOld`, by contrast, is CARRIED across `diffMsg`
+(it is the user's choice, not the loader's) and is not inherited by a new file.

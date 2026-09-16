@@ -158,6 +158,25 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			// and the cursor it would move is hidden behind it.
 			if msg.Button == tea.MouseButtonLeft && m.actionMenu == nil && msg.Y >= 1 && msg.Y <= m.diffBodyRows() {
 				dv.setCursorDisp(dv.offset+msg.Y-1, m.diffBodyRows())
+				// …and on the PANE the click landed in. renderDiffView pads
+				// every line to overlayDims' full width and the layer draws it
+				// at 0,0, so msg.X is the pane column directly; paneW mirrors
+				// diffPaneLines exactly. A click on the │ separator leaves the
+				// side alone, and a live selection is locked to its side, so
+				// only the row moves then.
+				if !dv.lsel.on {
+					w, _ := m.overlayDims()
+					paneW := (w - 1) / 2
+					if paneW < 4 {
+						paneW = 4
+					}
+					switch {
+					case msg.X < paneW:
+						dv.onOld = true
+					case msg.X > paneW:
+						dv.onOld = false
+					}
+				}
 			}
 		}
 		if msg.Button == tea.MouseButtonLeft && clickEnterLayer(l) {

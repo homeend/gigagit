@@ -497,7 +497,20 @@ func TestCursorMarkerRowPaintsOnlyCursorRows(t *testing.T) {
 	if len(numPanes) != 2 || len(plainPanes) != 2 {
 		t.Fatalf("cursor row must have exactly one pane separator: %q", num[row])
 	}
+	// The cursor sits on ONE pane (spec §4.7; the default is the new/right
+	// one), so only that pane's gutter is recoloured — the other must be
+	// byte-identical to the plain render.
+	curPane := 1
+	if v.onOld {
+		curPane = 0
+	}
 	for i := range numPanes {
+		if i != curPane {
+			if numPanes[i] != plainPanes[i] {
+				t.Fatalf("pane %d does not hold the cursor: it must render exactly like plain\n got  %q\n want %q", i, numPanes[i], plainPanes[i])
+			}
+			continue
+		}
 		numGut, plainGut := ansi.Truncate(numPanes[i], gut+1, ""), ansi.Truncate(plainPanes[i], gut+1, "")
 		if numGut == plainGut {
 			t.Fatalf("pane %d: number style gutter unchanged from plain: %q", i, numGut)
@@ -554,17 +567,29 @@ func TestCursorMarkerHotRowStepsBrighter(t *testing.T) {
 
 	v.setCursorLine(20, m.diffBodyRows()) // the Changed row
 	s, e := v.cursorDispRange()
+	// The cursor sits on ONE side (spec §4.7), so only that cell steps
+	// brighter; the other keeps its own plain shade. Both halves of the rule
+	// are asserted by flipping the side below.
 	hot := m.diffPaneLines(v, 80, 10, s, e, "row")
 	hotRow := hot[s-v.offset]
-	if !strings.Contains(hotRow, "48;5;88") || strings.Contains(hotRow, "48;5;52") {
-		t.Fatalf("hot cursor row must wear the brighter del shade (88, not 52): %q", hotRow)
-	}
 	if !strings.Contains(hotRow, "48;5;28") || strings.Contains(hotRow, "48;5;22") {
-		t.Fatalf("hot cursor row must wear the brighter add shade (28, not 22): %q", hotRow)
+		t.Fatalf("the new-side cursor cell must wear the brighter add shade (28, not 22): %q", hotRow)
+	}
+	if !strings.Contains(hotRow, "48;5;52") || strings.Contains(hotRow, "48;5;88") {
+		t.Fatalf("the old-side cell is not the cursor's: it must keep the plain del shade (52, not 88): %q", hotRow)
 	}
 	if strings.Contains(hotRow, "48;5;237") {
 		t.Fatalf("hot cursor row must not carry the grey band (237): %q", hotRow)
 	}
+	v.onOld = true
+	oldRow := m.diffPaneLines(v, 80, 10, s, e, "row")[s-v.offset]
+	if !strings.Contains(oldRow, "48;5;88") || strings.Contains(oldRow, "48;5;52") {
+		t.Fatalf("the old-side cursor cell must wear the brighter del shade (88, not 52): %q", oldRow)
+	}
+	if !strings.Contains(oldRow, "48;5;22") || strings.Contains(oldRow, "48;5;28") {
+		t.Fatalf("the new-side cell is not the cursor's: it must keep the plain add shade (22, not 28): %q", oldRow)
+	}
+	v.onOld = false
 	off := m.diffPaneLines(v, 80, 10, 0, 0, "row")
 	offRow := off[s-v.offset]
 	if !strings.Contains(offRow, "48;5;52") || !strings.Contains(offRow, "48;5;22") {
@@ -744,7 +769,7 @@ func TestDiffAlignMenuRowFeedsZCycle(t *testing.T) {
 func TestDiffHintAdvertisesCursorKeys(t *testing.T) {
 	t.Parallel()
 	h := diffHintFor(longScroll)
-	for _, k := range []string{"[↑↓/jk]", "[z]", "[e]"} {
+	for _, k := range []string{"[↑↓/jk]", "[spc]", "[alt↔]", "[e]"} {
 		if !strings.Contains(h, k) {
 			t.Errorf("hint %q lacks %s", h, k)
 		}

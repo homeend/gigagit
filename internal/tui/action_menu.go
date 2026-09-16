@@ -39,8 +39,12 @@ func availableActions(m Model) []actionRow {
 		// Apply / Pop / Drop. A history/blame/diff surface on top out-ranks it
 		// (a single file is in view then), and the tree side keeps the
 		// file-context menu below.
+		// …and not while a PREVIEW owns the right column: a preview opened from
+		// a stash file tree leaves the tree unfocused, which would otherwise
+		// route the menu to Apply/Pop/Drop and never reach the preview's own
+		// line rows.
 		onStashList := m.stashView != nil && m.focus == panelCommits &&
-			!m.filesTreeFocused && m.diffLayer() == nil
+			!m.filesTreeFocused && m.diffLayer() == nil && m.filesPreview == nil
 		switch m.topLayer().(type) {
 		case *historyView, *blameView:
 			onStashList = false
@@ -522,12 +526,20 @@ func insertCopyLinkRow(rows []actionRow, r actionRow) []actionRow {
 }
 
 func rowHasID(rows []actionRow, id string) bool {
+	_, ok := rowByID(rows, id)
+	return ok
+}
+
+// rowByID returns the row with the given id. It is how a KEY runs the very row
+// the . menu offers (the contextLinkRow pattern): the key and the menu can then
+// never copy different text, and a test can read the payload off row.copyText.
+func rowByID(rows []actionRow, id string) (actionRow, bool) {
 	for _, row := range rows {
 		if row.id == id {
-			return true
+			return row, true
 		}
 	}
-	return false
+	return actionRow{}, false
 }
 
 // inContentWindow reports whether a navigable content window owns the keyboard
@@ -564,10 +576,22 @@ func (m Model) contextCopyRows() []actionRow {
 		}
 		return m.fileCopyRows(s.ctx.path, s.ctx.rev)
 	case *blameView:
-		return m.fileCopyRows(s.ctx.path, s.ctx.rev)
+		// The LINE rows lead; the file's path/name/commit rows stay behind them
+		// (and keep copy-file-path as insertCopyLinkRow's anchor).
+		return append(m.blameCopyLineRows(s), m.fileCopyRows(s.ctx.path, s.ctx.rev)...)
 	}
 	if v := m.diffLayer(); v != nil {
-		return m.fileCopyRows(v.title, v.rev) // title = path; rev = commit ("" = working tree)
+		// The LINE rows lead (spec §4.7): what the user is looking at is a
+		// line, and the file's path/name/commit rows stay right behind them —
+		// which also keeps copy-file-path as insertCopyLinkRow's anchor.
+		return append(m.diffCopyLineRows(), m.fileCopyRows(v.title, v.rev)...) // title = path; rev = commit ("" = working tree)
+	}
+	if p := m.filesPreview; p != nil && !m.filesTreeFocused {
+		// A FOCUSED preview owns the right column, so the . menu is about the
+		// line under its cursor. The tree's own path/name/commit rows stay
+		// reachable underneath (and keep copy-file-path as the anchor
+		// insertCopyLinkRow looks for).
+		return append(m.previewCopyLineRows(), m.fileCopyRows(p.title, m.filesHash)...)
 	}
 	if v := m.filesView; v != nil {
 		var rows []actionRow
@@ -675,6 +699,23 @@ func (m Model) copyRow(id, label, okMsg, text string) actionRow {
 			return m, m.copyToClipboardCmd(okMsg, text)
 		},
 	}
+}
+
+// clearingCopyRow wraps a line-RANGE copy row so that running it also clears
+// the host's selection — lineSel.clear's contract lists "a copy" among the
+// clearing events, and enter (which runs this very row) clears too, so the
+// menu and the key must not disagree. The host is resolved from the Model at
+// RUN time, never captured at menu-BUILD time: the menu is built once when it
+// opens and the row can run against a Model whose layers have moved on.
+func clearingCopyRow(row actionRow, sel func(Model) *lineSel) actionRow {
+	inner := row.run
+	row.run = func(m Model) (tea.Model, tea.Cmd) {
+		if s := sel(m); s != nil {
+			s.clear()
+		}
+		return inner(m)
+	}
+	return row
 }
 
 // synthKey reproduces the keypress that runs an action's key, for replay

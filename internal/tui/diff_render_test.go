@@ -53,8 +53,8 @@ func TestRenderDiffViewPanes(t *testing.T) {
 	v.rebuild()
 	m := renderModelWithDiff(v)
 	// 140 is the diff hint's design budget: the widest (scroll) English
-	// variant measures 139 columns, so "[esc] close" survives here and the
-	// test fails the moment a new group pushes the line past it.
+	// variant measures exactly 140 columns, so "[esc] back" survives here and
+	// the test fails the moment a new group pushes the line past it.
 	m.width = 140
 	out := ansi.Strip(m.render())
 	lines := strings.Split(out, "\n")
@@ -81,7 +81,7 @@ func TestRenderDiffViewPanes(t *testing.T) {
 	if !strings.Contains(out, "f.txt") || !strings.Contains(out, "HEAD → working tree") {
 		t.Fatalf("header incomplete:\n%s", lines[0])
 	}
-	if !strings.Contains(out, "[esc] close") {
+	if !strings.Contains(out, "[esc] back") {
 		t.Fatalf("hint line missing:\n%s", out)
 	}
 }

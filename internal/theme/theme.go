@@ -41,6 +41,12 @@ type Theme struct {
 	// the hit inverts against whatever its row already wears.
 	SearchCurrent string
 
+	// Selection is the background a line SELECTION's stripe is painted with
+	// (spec §4.7). "" (the Terminal theme) means "no colour of its own": the
+	// stripe inverts against whatever its row already wears — which punches a
+	// hole in blame's reverse-video cursor row, exactly as the search hit does.
+	Selection string
+
 	// Signals.
 	NoticeHot, NoticeDim, ReviewHot, ReviewDim  string
 	NoteUser, NoteAgent, NoteStale, PickerLabel string
@@ -67,7 +73,7 @@ func (t Theme) roles() []string {
 		t.DiffAddBg, t.DiffDelBg, t.DiffAddCursorBg, t.DiffDelCursorBg,
 		t.CursorRowBg, t.FieldBg, t.FieldCursorFg, t.FieldCursorBg,
 		t.MessageBlockBg, t.SaveBannerFg, t.SaveBannerBg,
-		t.SearchCurrent,
+		t.SearchCurrent, t.Selection,
 		t.NoticeHot, t.NoticeDim, t.ReviewHot, t.ReviewDim,
 		t.NoteUser, t.NoteAgent, t.NoteStale, t.PickerLabel,
 		t.AttentionInfo, t.AttentionWarn, t.AttentionError,
@@ -89,6 +95,7 @@ var Dark = Theme{
 	DiffAddBg: "22", DiffDelBg: "52", DiffAddCursorBg: "28", DiffDelCursorBg: "88",
 	CursorRowBg: "237", FieldBg: "236", FieldCursorFg: "236", FieldCursorBg: "250",
 	MessageBlockBg: "236", SaveBannerFg: "#F2F2F2", SaveBannerBg: "22", SearchCurrent: "#6B5F11",
+	Selection: "#264F78",
 	NoticeHot: "196", NoticeDim: "124", ReviewHot: "39", ReviewDim: "31",
 	NoteUser: "75", NoteAgent: "141", NoteStale: "240", PickerLabel: "245",
 	AttentionInfo: "24", AttentionWarn: "94", AttentionError: "89",
@@ -111,6 +118,7 @@ var Light = Theme{
 	DiffAddBg: "#D8EAD0", DiffDelBg: "#F1D5D2", DiffAddCursorBg: "#C5DDB9", DiffDelCursorBg: "#E6C2BE",
 	CursorRowBg: "#DADAD5", FieldBg: "#DADAD5", FieldCursorFg: "#E9E9E5", FieldCursorBg: "#33393F",
 	MessageBlockBg: "#DFDFDA", SaveBannerFg: "#E9E9E5", SaveBannerBg: "#3E8E41", SearchCurrent: "#FFE680",
+	Selection: "#ADD6FF",
 	NoticeHot: "#C0392B", NoticeDim: "#A0564C", ReviewHot: "#2F6FB8", ReviewDim: "#2A8C8C",
 	NoteUser: "#2F6FB8", NoteAgent: "#6B4FBB", NoteStale: "#8A8F8A", PickerLabel: "#5F6570",
 	AttentionInfo: "#D3E2F2", AttentionWarn: "#F2E8CC", AttentionError: "#EFD3DC",
