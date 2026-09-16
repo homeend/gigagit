@@ -19,7 +19,7 @@ func TestPreviewsJSIsWiredEverywhere(t *testing.T) {
 	}
 	checks := []struct{ file, want, why string }{
 		{"core.js", `"previews"`, "SECTIONS must include previews (header click wiring)"},
-		{"sidebar.js", `"previews"]`, "COLLAPSED_DEFAULT must fold previews on a first run"},
+		{"sidebar.js", `COLLAPSED_DEFAULT = ["previews"`, "COLLAPSED_DEFAULT must fold previews on a first run"},
 		{"previews.js", `getJSON("/api/preview")`, "previews.js owns its fetch"},
 		{"live.js", `fetchPreviews()`, "an SSE sidebar refresh must reload previews"},
 		{"ops.js", `fetchPreviews()`, "manual refresh must reload previews"},
@@ -39,5 +39,43 @@ func TestPreviewsJSIsWiredEverywhere(t *testing.T) {
 		if !strings.Contains(read(c.file), c.want) {
 			t.Errorf("%s: missing %q — %s", c.file, c.want, c.why)
 		}
+	}
+}
+
+// The sidebar draws its sections in source order, and previews sits with the
+// things you STEER with (branches/remotes/worktrees) rather than at the bottom
+// past the reference lists — a merge preview is a working surface, and the
+// user asked for it right after worktrees. Nothing reads SECTIONS' order, so
+// only the markup can be asserted; SECTIONS is kept in step for readers.
+func TestPreviewsSectionSitsAfterWorktrees(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(b)
+	at := func(id string) int {
+		i := strings.Index(html, `id="`+id+`"`)
+		if i < 0 {
+			t.Fatalf("index.html: no element with id %q", id)
+		}
+		return i
+	}
+	if !(at("worktrees-list") < at("previews-header") && at("previews-list") < at("tags-header")) {
+		t.Errorf("index.html: the previews section must sit between the worktrees and tags sections")
+	}
+	// Exactly one of each: a stale copy left behind by the move would render
+	// a second, permanently empty section.
+	for _, id := range []string{"previews-header", "previews-list"} {
+		if n := strings.Count(html, `id="`+id+`"`); n != 1 {
+			t.Errorf("index.html: %d elements with id %q, want exactly 1", n, id)
+		}
+	}
+	core, err := os.ReadFile(filepath.Join("static", "core.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(core), `"worktrees", "previews", "tags"`) {
+		t.Errorf("core.js: SECTIONS must list previews between worktrees and tags, matching the markup")
 	}
 }

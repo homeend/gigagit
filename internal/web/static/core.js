@@ -99,7 +99,10 @@ const DANGER_OPTIONS = new Set([
 ]);
 
 
-const SECTIONS = ["branches", "remotes", "worktrees", "tags", "stashes", "reflog", "bookmarks", "shelf", "previews"];
+// Listed in the order the sidebar draws them (index.html) — nothing reads the
+// order (every use is a filter/forEach over the whole set), but a list that
+// disagrees with the screen is a trap for the next reader.
+const SECTIONS = ["branches", "remotes", "worktrees", "previews", "tags", "stashes", "reflog", "bookmarks", "shelf"];
 
 
 // localStorage can throw (private mode); persistence is best-effort.

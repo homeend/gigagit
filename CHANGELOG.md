@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`gg web`: the sidebar's **previews** section moved up, to right after
+  **worktrees**.** A merge preview is something you steer with, like branches,
+  remotes and worktrees — not a reference list to scroll past tags, stashes,
+  the reflog, bookmarks and the shelf to reach. It still starts folded on a
+  first run, and your own saved fold layout is untouched (the state is keyed by
+  section name, not position).
+
 - **The current search hit is visible on coloured code.** The in-view search's
   current hit no longer relies on a brighter foreground with an underline,
   which drowned in syntax colour: it now INVERTS against the row it sits on —

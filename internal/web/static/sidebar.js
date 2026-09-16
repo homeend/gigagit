@@ -656,7 +656,7 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
 // lists you consult now and then, so the sidebar opens on what you steer with
 // (branches, remotes, worktrees) rather than a screenful of tags. It applies
 // only until something is saved - after that, your own layout is what returns.
-const COLLAPSED_DEFAULT = ["tags", "stashes", "reflog", "bookmarks", "shelf", "previews"];
+const COLLAPSED_DEFAULT = ["previews", "tags", "stashes", "reflog", "bookmarks", "shelf"];
 
 // Every header carries its state as a chevron - pointing down when open,
 // right when folded - so a folded section still reads as something you can
