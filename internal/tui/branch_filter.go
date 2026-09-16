@@ -199,7 +199,19 @@ func (m Model) applyBranchFilterConfig() Model {
 // the health probe resolved, and ONLY that — the web keys the same record by
 // svc.GitCommonDir, so the worktree-path fallback toolRepoKey uses would
 // split the two frontends' memory. "" until the probe has run.
-func (m Model) bfRepoKey() string { return m.repoHealth.GitCommonDir }
+//
+// The repoHealthKnown gate is load-bearing, not belt-and-braces: reRoot does
+// NOT clear m.repoHealth (only the flag), so between a repo switch and the
+// new probe the struct still holds the OLD repo's common dir. Without the
+// gate, the switch's own configReadyMsg/dataLoadedMsg would load repo A's
+// remembered slots into repo B, latch bfSlotsLoaded, and make B's real probe
+// a no-op — and an alt+N pressed in that window would write into A's record.
+func (m Model) bfRepoKey() string {
+	if !m.repoHealthKnown {
+		return ""
+	}
+	return m.repoHealth.GitCommonDir
+}
 
 // loadBranchFilterSlots reads the remembered slots for this repo once the
 // repo key is known. A slot that no longer exists or is unusable loads as

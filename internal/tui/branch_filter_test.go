@@ -44,7 +44,10 @@ func bfModel(t *testing.T) Model {
 		{Name: "origin/feat/a", Remote: "origin", Branch: "feat/a", UnixTime: now},
 	}
 	m.branches[0].Upstream = "origin/main"
-	m.repoHealth.GitCommonDir = "/r/.git" // the promptstate key; tests that want "not resolved" blank it
+	// The promptstate key, and the flag that says the probe resolved it; tests
+	// that want "not resolved" blank one of them.
+	m.repoHealth.GitCommonDir = "/r/.git"
+	m.repoHealthKnown = true
 	m.branchFilters, _ = branchfilter.CompileAll([]branchfilter.Slot{
 		{Slot: 1, Name: "feat", Prefix: "feat/"},
 		{Slot: 2, Name: "stale", OlderThan: "90d"},
@@ -229,6 +232,30 @@ func TestToggleWithoutRepoKeyAppliesButIsNotRemembered(t *testing.T) {
 	}
 	if !strings.Contains(m.statusMsg, "not remembered") {
 		t.Errorf("status = %q", m.statusMsg)
+	}
+}
+
+func TestRepoSwitchDropsTheRememberedSlotsUntilTheNewProbeLands(t *testing.T) {
+	t.Parallel()
+	m := bfModel(t)
+	m.branchFilterSlot[panelBranches] = 1
+	m.bfSlotsLoaded = true
+	nm, _ := m.reRoot(t.TempDir())
+	m = nm.(Model)
+	// reRoot leaves the OLD repo's snapshot in m.repoHealth and only clears
+	// repoHealthKnown, so the key must read as unresolved — otherwise the
+	// switch's own config arrival loads the old repo's slots into the new one.
+	if m.bfRepoKey() != "" {
+		t.Errorf("bfRepoKey after a repo switch = %q, want \"\" until the new probe lands", m.bfRepoKey())
+	}
+	if m.branchFilterSlot[panelBranches] != 0 || m.bfSlotsLoaded {
+		t.Errorf("slots survived the switch: slot=%d loaded=%v", m.branchFilterSlot[panelBranches], m.bfSlotsLoaded)
+	}
+	// The config arrival that follows a switch must NOT latch a load off the
+	// stale key: the real probe (applyRepoHealth) is what resolves it.
+	m = m.applyBranchFilterConfig()
+	if m.bfSlotsLoaded {
+		t.Error("loadBranchFilterSlots latched on an unresolved repo key")
 	}
 }
 
