@@ -8,6 +8,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **The browser's switch-repo picker is a table again, and the path shows.**
+  `gg web`'s *switch repo* (☰ → repositories, or the palette) listed each
+  known repo as its name plus its path in a 560px box, and the path was cut
+  from the **right** by CSS — losing the leaf that the name column had just
+  shown, so both columns said the same thing and neither said where the
+  checkout was. It is now the TUI `R` switcher's table with a branch column
+  in front — **branch · name · slow-fs · path · last opened**, each in its own
+  aligned column — and the box grows to fit the longest path (up to 95% of the
+  viewport). When even that is too narrow, the path is cut from the **middle**
+  by the elision the rest of gg uses (the leaf, its parent and the root
+  survive, one `…` marks the dropped run; hover shows the full path), and the
+  branch and name columns cede width first. The branch and slow-fs verdicts
+  come from a second request (`GET /api/repos/details`) that reads each
+  checkout's `HEAD` from disk without a git process and answers within a
+  short deadline with the rest marked pending — a checkout on a hung network
+  mount leaves its own cells blank instead of holding the list; re-polls join
+  the running probe rather than starting another. Typing filters on branch,
+  name and path. `GET /api/repos` now carries each entry's `last_opened`.
+
 - **A scrambled screen after paging through a file is gone.** Terminals and
   gg do not always agree on a glyph's width (`☰` is one column to gg and two
   to tmux and every utf8proc-based terminal); a padded row carrying one

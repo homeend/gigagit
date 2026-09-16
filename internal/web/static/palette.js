@@ -1,6 +1,6 @@
 // palette.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, esc, getJSON, state } from "./core.js";
+import { $, charWidth, elidePath, esc, getJSON, runes, state } from "./core.js";
 import { closeLayer, hideCtxMenu, openPrompt, pushLayer, showCtxMenu, topLayer } from "./layers.js";
 import { doFetch, doPull, doPush, doReroot, manualRefresh, opLine, openCreateBranchPrompt, openHelp, showLocalConfirm, startOp, toggleSidebar } from "./ops.js";
 import { openVersionBranches } from "./versions.js";
@@ -76,10 +76,16 @@ function paletteCommands() {
 
 function openPalette(mode, fromCmd) {
   const already = !!pal;
-  pal = { mode, fromCmd: !!fromCmd, rows: [], filtered: [], sel: 0 };
+  pal = { mode, fromCmd: !!fromCmd, rows: [], filtered: [], sel: 0, gen: ++palGen };
   if (!already) pushLayer("palette", $("palette"), { onKey: paletteKey });
   $("palette-input").value = "";
-  $("palette-input").placeholder = mode === "repo" ? "type a repo name…" : "type a command…";
+  $("palette-input").placeholder = mode === "repo" ? "type a repo, branch or path…" : "type a command…";
+  // Repo mode sizes the box to its table; command mode is the fixed-width
+  // list. Reset on every open — Escape from repo mode re-enters cmd mode
+  // through here, and the inline width would otherwise stick.
+  $("palette-box").style.width = "";
+  $("palette-box").style.maxWidth = "";
+  $("palette-list").style.removeProperty("--repo-cols");
   if (mode === "cmd") {
     pal.rows = paletteCommands();
     filterPalette();
@@ -95,8 +101,10 @@ function openPalette(mode, fromCmd) {
         // the list — picking it re-rooted onto the repo already open.
         pal.rows = (j.repos || [])
           .filter((r) => !r.current)
-          .map((r) => ({ label: r.name, detail: r.path, path: r.path }));
+          .map((r) => ({ label: r.name, path: r.path, branch: "", slow: false, pending: true, age: ageString(r.last_opened) }));
+        layoutRepoTable();
         filterPalette();
+        pollRepoDetails(pal.gen, 0);
       })
       .catch((e) => {
         closePalette();
@@ -104,6 +112,133 @@ function openPalette(mode, fromCmd) {
       });
   }
   $("palette-input").focus();
+}
+
+
+// ---- repo mode: the switcher table ---------------------------------------
+// Five columns — branch · name · slow-fs · path · age — each starting at one
+// shared column, the TUI's R switcher laid out with the room a browser has.
+// The list paints from /api/repos alone; branch and slow-fs verdicts land
+// later from /api/repos/details (a checkout on a hung mount would otherwise
+// hold the whole list) and patch rows in place, cursor kept.
+
+let palGen = 0; // bumps per open, so a poll from a previous open is dropped
+const SLOW_FS = "(slow fs)";
+const BRANCH_MAX = 32;
+
+// ageString is the TUI's ageString: a coarse relative age for the row.
+function ageString(iso) {
+  const t = Date.parse(iso);
+  if (!iso || Number.isNaN(t)) return "";
+  const d = Math.max(0, Date.now() - t);
+  const m = Math.floor(d / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+
+// layoutRepoTable computes the column widths over ALL rows (not the filtered
+// view, so the table holds still while a filter narrows it) and sizes the
+// box: as wide as the table needs, floored at the command palette's width
+// and capped near the viewport edge. When the cap bites, the PATH column
+// gives — each path is cut from the middle by elidePath (leaf, its parent
+// and the root survive; one "…" marks the dropped run), never from the
+// right by CSS. The slow-fs column is always reserved so verdicts landing
+// later never shift the paths.
+function layoutRepoTable() {
+  const rows = pal.rows;
+  const w = (s) => runes(s || "").length;
+  const cols = {
+    branch: Math.min(BRANCH_MAX, Math.max(w("…"), ...rows.map((r) => w(r.branch)))),
+    name: Math.max(1, ...rows.map((r) => w(r.label))),
+    slow: w(SLOW_FS),
+    path: Math.max(1, ...rows.map((r) => w(r.path))),
+    age: Math.max(1, ...rows.map((r) => w(`(${r.age})`))),
+  };
+  const GAP = 2, GAPS = 4, PAD = 28, BORDER = 2;
+  const cw = charWidth();
+  const fixed = cols.branch + cols.name + cols.slow + cols.age + GAP * GAPS;
+  const maxPx = Math.floor(window.innerWidth * 0.95);
+  const minPx = Math.min(560, maxPx);
+  let px = Math.ceil((fixed + cols.path) * cw) + PAD + BORDER;
+  if (px > maxPx) {
+    // The path is the column this table exists for: it keeps at least half
+    // of what the slow-fs and age columns leave, and branch + name share
+    // the rest (each cut by the same elision), rather than starving it.
+    const avail = Math.floor((maxPx - PAD - BORDER) / cw) - GAP * GAPS - cols.slow - cols.age;
+    cols.path = Math.max(1, avail - cols.branch - cols.name, Math.floor(avail / 2));
+    const share = Math.max(2, avail - cols.path);
+    cols.branch = Math.min(cols.branch, Math.floor(share / 2));
+    cols.name = Math.max(1, Math.min(cols.name, share - cols.branch));
+    px = maxPx;
+  }
+  pal.cols = cols;
+  for (const r of rows) {
+    r.pathText = elidePath(r.path, cols.path);
+    r.branchText = elidePath(r.branch, cols.branch);
+    r.nameText = elidePath(r.label, cols.name);
+  }
+  $("palette-box").style.width = Math.max(minPx, px) + "px";
+  $("palette-box").style.maxWidth = "none"; // the stylesheet caps the cmd list at 560px
+  $("palette-list").style.setProperty(
+    "--repo-cols",
+    `${cols.branch}ch ${cols.name}ch ${cols.slow}ch ${cols.path}ch ${cols.age}ch`
+  );
+}
+
+
+// pollRepoDetails fetches the verdicts and re-polls with backoff while any
+// row is still pending (capped: a mount that never answers leaves its cells
+// blank rather than polling forever).
+function pollRepoDetails(gen, n) {
+  if (!pal || pal.mode !== "repo" || pal.gen !== gen) return;
+  getJSON("/api/repos/details")
+    .then((j) => {
+      if (!pal || pal.mode !== "repo" || pal.gen !== gen) return;
+      const byPath = new Map((j.repos || []).map((d) => [d.path, d]));
+      let pending = false;
+      for (const r of pal.rows) {
+        const d = byPath.get(r.path);
+        if (!d) { r.pending = false; continue; }
+        r.pending = !!d.pending;
+        if (!r.pending) { r.branch = d.branch || ""; r.slow = !!d.slow; }
+        pending ||= r.pending;
+      }
+      layoutRepoTable();
+      refilterKeepingCursor();
+      if (pending && n < 8) setTimeout(() => pollRepoDetails(gen, n + 1), Math.min(3000, 300 * 1.6 ** n));
+    })
+    .catch(() => {}); // the list is already usable without the verdicts
+}
+
+
+// refilterKeepingCursor re-applies the query after a patch, keeping the
+// cursor on the same ROW (filterPalette resets it to the top, which would
+// jump the cursor every time a verdict lands).
+function refilterKeepingCursor() {
+  const cur = pal.filtered[pal.sel];
+  filterPalette();
+  if (cur) {
+    const i = pal.filtered.indexOf(cur);
+    if (i >= 0) pal.sel = i;
+  }
+  renderPalette(pal.filtered.length ? pal.filtered : [{ label: pal.mode === "repo" ? "no other repos" : "no match", empty: true }]);
+}
+
+
+function repoRowHTML(r, i) {
+  const sel = i === pal.sel ? " sel" : "";
+  const branch = r.pending ? "…" : r.branchText || "";
+  const title = r.pathText !== r.path ? ` title="${esc(r.path)}"` : "";
+  return `<li class="repo${sel}" data-i="${i}">` +
+    `<span class="rbranch${r.pending ? " dim" : ""}">${esc(branch)}</span>` +
+    `<span class="rname">${esc(r.nameText || r.label)}</span>` +
+    `<span class="rslow">${r.slow ? SLOW_FS : ""}</span>` +
+    `<span class="rpath"${title}>${esc(r.pathText || r.path)}</span>` +
+    `<span class="rage">(${esc(r.age)})</span></li>`;
 }
 
 
@@ -118,7 +253,8 @@ function filterPalette() {
   if (!pal) return;
   const q = $("palette-input").value.trim().toLowerCase();
   pal.filtered = pal.rows.filter(
-    (r) => !q || r.label.toLowerCase().includes(q) || (r.detail || "").toLowerCase().includes(q)
+    (r) => !q || r.label.toLowerCase().includes(q) || (r.detail || "").toLowerCase().includes(q) ||
+      (r.path || "").toLowerCase().includes(q) || (r.branch || "").toLowerCase().includes(q)
   );
   pal.sel = 0;
   renderPalette(pal.filtered.length ? pal.filtered : [{ label: pal.mode === "repo" ? "no other repos" : "no match", empty: true }]);
@@ -130,7 +266,9 @@ function renderPalette(rows) {
     .map((r, i) =>
       r.empty
         ? `<li class="empty">${esc(r.label)}</li>`
-        : `<li data-i="${i}"${i === pal.sel ? ' class="sel"' : ""}><span>${esc(r.label)}</span><span class="detail">${esc(r.detail || "")}</span></li>`
+        : r.path
+          ? repoRowHTML(r, i)
+          : `<li data-i="${i}"${i === pal.sel ? ' class="sel"' : ""}><span>${esc(r.label)}</span><span class="detail">${esc(r.detail || "")}</span></li>`
     )
     .join("");
 }

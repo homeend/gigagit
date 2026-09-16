@@ -538,6 +538,16 @@ mark.r { background: var(--span-add); color: inherit; }
 #palette-list li { display: flex; justify-content: space-between; gap: 14px; padding: 5px 14px; cursor: pointer; }
 #palette-list li.sel { background: var(--sel); }
 #palette-list li .detail { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+/* repo mode: a five-column table (branch · name · slow-fs · path · age) whose
+   column widths palette.js sets in ch on --repo-cols. Cells never ellipsize:
+   a too-long path is already middle-cut in JS (elidePath), so a CSS tail cut
+   here would chop the leaf the whole layout exists to show. */
+#palette-list li.repo { display: grid; grid-template-columns: var(--repo-cols); gap: 0 2ch; justify-content: start; white-space: pre; }
+#palette-list li.repo > span { overflow: hidden; }
+#palette-list li.repo .rbranch { color: var(--lane2); }
+#palette-list li.repo .rbranch.dim { color: var(--dim); }
+#palette-list li.repo .rslow { color: var(--lane1); }
+#palette-list li.repo .rpath, #palette-list li.repo .rage { color: var(--dim); }
 #palette-list li.empty { color: var(--dim); cursor: default; }
 #menu-btn { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--fg); font: inherit; padding: 1px 8px; margin-right: 10px; cursor: pointer; }
 #menu-btn:hover { border-color: var(--accent); }
