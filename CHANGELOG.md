@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Fixed: the web blame overlay showed the file uncoloured.** The TUI's
+  blame overlay has had syntax colouring since the blame/preview wave, but
+  `gg web`'s `/api/blame` never lexed the lines and the overlay painted
+  plain text. Each blame line now carries a `tok` array in the same
+  `[start, end, class]` shape as `/api/diff`'s `left_tok`/`right_tok`, the
+  overlay paints it through the diff's `renderCell`, and the `.tk-*` colour
+  rules (previously scoped to the diff table alone) apply inside the blame
+  body too. The same `[ui] diff_syntax` switch governs it; a file with no
+  lexer, one past the 1 MiB lexing cap, or one holding a bare `\r` stays
+  plain, exactly as in the TUI. The lexing helper moved from the TUI into
+  `domain.LexBlameLines` (with `domain.HasBareCR`) so both frontends share
+  one rule.
+
 - **Fixed: enter on a fieldless row of the Previous versions popup opened a
   files view that ↓ could not walk.** A version recorded by a one-branch op
   (amend, reset, undo-commit, delete-branch, restore — no frozen preview)

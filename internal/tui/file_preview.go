@@ -177,7 +177,7 @@ func loadFileContentSrcCmd(tag, path string, syntaxOn bool, load func(context.Co
 // while syntax.Lex keeps it inside its line, so every line after it would
 // receive the previous line's runs. CRLF is safe: both sides count one line.
 func lexPreview(path string, data []byte, syntaxOn bool) [][]syntax.Tok {
-	if !syntaxOn || len(data) > domain.MaxSyntaxBytes || hasBareCR(data) {
+	if !syntaxOn || len(data) > domain.MaxSyntaxBytes || domain.HasBareCR(data) {
 		return nil
 	}
 	lang := syntax.Detect(path)

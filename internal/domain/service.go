@@ -145,6 +145,11 @@ func (s *Service) SetSyntaxHighlighting(on bool) *Service {
 // value of syntaxOff means highlighting is ON.
 func (s *Service) syntaxOn() bool { return !s.syntaxOff.Load() }
 
+// SyntaxHighlighting reports the current [ui] diff_syntax setting for the
+// frontends that lex content themselves (blame): they gate on the same
+// switch as the Differ so one setting governs every coloured surface.
+func (s *Service) SyntaxHighlighting() bool { return s.syntaxOn() }
+
 // SetVersionsPolicy overrides the branch-version snapshot policy injected
 // into operations (from [versions] config). Unset = enabled, 90 days.
 func (s *Service) SetVersionsPolicy(p engine.VersionsPolicy) *Service {

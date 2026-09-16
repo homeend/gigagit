@@ -66,7 +66,7 @@ func lexPickerDoc(path string, doc *hunkpick.Doc, on bool) (cur, inc [][]syntax.
 			return nil
 		}
 		src := strings.Join(lines, "\n") + "\n"
-		if hasBareCR([]byte(src)) {
+		if domain.HasBareCR([]byte(src)) {
 			return nil
 		}
 		return syntax.Lex(lang, []byte(src))

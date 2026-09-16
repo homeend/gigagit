@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -154,5 +155,91 @@ func TestBlameEndpoint(t *testing.T) {
 	}
 	if code := getJSON(t, ts, "/api/blame?path=--foo", nil); code != http.StatusBadRequest {
 		t.Fatalf("option-shaped path: code %d, want 400", code)
+	}
+}
+
+// TestBlameJSONCarriesSyntaxRuns checks that /api/blame's lines carry a tok
+// array of [start, end, class] for a file with a known lexer (the same wire
+// shape as /api/diff's left_tok/right_tok, painted by the same renderCell),
+// that a file with no lexer omits tok, and that the [ui] diff_syntax switch
+// turns the runs off.
+func TestBlameJSONCarriesSyntaxRuns(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-b", "main")
+	write(t, dir, "a.go", "package a\n\nvar x = 1\n")
+	write(t, dir, "a.txt", "package a\n")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "add a.go")
+	svc := domain.Open(dir)
+	ts := serve(t, New(svc))
+
+	var rr map[string]any
+	if code := getJSON(t, ts, "/api/blame?path=a.go", &rr); code != 200 {
+		t.Fatalf("code = %d", code)
+	}
+	lines := rr["lines"].([]any)
+	if len(lines) != 3 {
+		t.Fatalf("lines = %d, want 3: %v", len(lines), lines)
+	}
+	first := lines[0].(map[string]any)
+	toks, ok := first["tok"].([]any)
+	if !ok || len(toks) == 0 {
+		t.Fatalf("line 1 should carry tok, got %v", first)
+	}
+	run := toks[0].([]any)
+	if run[2] != "kw" || run[0].(float64) != 0 || run[1].(float64) != 7 {
+		t.Errorf("first run should be [0,7,\"kw\"] for `package`, got %v", run)
+	}
+	if _, has := lines[1].(map[string]any)["tok"]; has {
+		t.Errorf("a blank line has no runs, so no tok: %v", lines[1])
+	}
+	// Line 3 follows the blank line: numbering must not drift.
+	third := lines[2].(map[string]any)
+	if toks, ok := third["tok"].([]any); !ok || len(toks) == 0 || toks[0].([]any)[2] != "kw" {
+		t.Errorf("line 3 (`var x = 1`) should start with a kw run, got %v", third)
+	}
+
+	// No lexer for .txt → plain rows.
+	var txt map[string]any
+	if code := getJSON(t, ts, "/api/blame?path=a.txt", &txt); code != 200 {
+		t.Fatalf("code = %d", code)
+	}
+	if _, has := txt["lines"].([]any)[0].(map[string]any)["tok"]; has {
+		t.Errorf("a .txt line must not carry tok: %v", txt)
+	}
+
+	// Switch off → plain rows, even for a.go.
+	svc.SetSyntaxHighlighting(false)
+	var off map[string]any
+	if code := getJSON(t, ts, "/api/blame?path=a.go", &off); code != 200 {
+		t.Fatalf("code = %d", code)
+	}
+	if _, has := off["lines"].([]any)[0].(map[string]any)["tok"]; has {
+		t.Errorf("diff_syntax=off must drop tok: %v", off)
+	}
+}
+
+// TestFileHistJSRoutesBlameTextThroughRenderCell guards the blame overlay's
+// code cell against reverting to a bare esc(...) call, which is what once
+// left the web blame uncoloured while the TUI's was.
+func TestFileHistJSRoutesBlameTextThroughRenderCell(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile("static/filehist.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(src), `renderCell(l.text, null, l.tok`) {
+		t.Errorf("filehist.js must paint the blame text cell through renderCell(l.text, null, l.tok, …)")
+	}
+	css, err := os.ReadFile("static/style.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The .tk-* rules are scoped; a span with no matching rule paints nothing.
+	for _, cls := range []string{"kw", "ty", "fn", "str", "num", "cmt", "op", "pn", "at"} {
+		if !strings.Contains(string(css), "#blame-body .tk-"+cls) {
+			t.Errorf("style.css has no #blame-body .tk-%s rule", cls)
+		}
 	}
 }

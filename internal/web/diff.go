@@ -27,7 +27,9 @@ type diffRow struct {
 // tokTriple is one syntax run on the wire: [start, end, class-suffix].
 type tokTriple [3]any
 
-// unstyledOnWire are classes style.css has no .tk-* rule for: sending them
+// unstyledOnWire are classes style.css has no .tk-* rule for (the rules are
+// scoped to table.diff and #blame-body — a new coloured surface must join
+// that selector list or its spans paint nothing): sending them
 // would spend wire bytes (Name alone is roughly a third of a Go file's runs)
 // and split renderCell's runs for a span that paints nothing. The TUI palette
 // leaves the same classes blank.
