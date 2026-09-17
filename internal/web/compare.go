@@ -273,7 +273,7 @@ func parseEntrySide(ctx context.Context, svc *domain.Service, spec string) (entr
 		if !isHexSha(hash) {
 			return entrySide{}, http.StatusBadRequest, errors.New("commit: must be a hex commit id")
 		}
-		return commitEntrySide(svc, mustCommitEndpoint(hash), shortSha(hash)), 0, nil
+		return commitEntrySide(svc, mustCommitEndpoint(hash), shortSha(hash))
 	case strings.HasPrefix(spec, "bookmark:"):
 		return bookmarkEntrySide(ctx, svc, strings.TrimPrefix(spec, "bookmark:"))
 	case strings.HasPrefix(spec, "shelf:"):
@@ -285,15 +285,34 @@ func parseEntrySide(ctx context.Context, svc *domain.Service, spec string) (entr
 // commitEntrySide serves a commit or a frozen shelf endpoint through the
 // endpoint's own FileRef mapping, so the shelf lane cannot drift from the one
 // domain uses for the file list.
-func commitEntrySide(svc *domain.Service, ep model.Endpoint, label string) entrySide {
-	spec := "commit:" + ep.Hash()
-	if ep.Kind() == model.EndpointShelf {
+// The wire spec is decided per KIND, with no default arm: this used to read
+// "shelf when the kind is shelf, otherwise commit:" + ep.Hash(), which wired a
+// ref or a pair endpoint to the browser as `commit:` with an EMPTY hash — a
+// side the client then asks about and gets nothing for, with no error anywhere.
+// The endpoint comes from domain, never from the request, so a kind this wire
+// cannot spell is a SERVER bug and reports as one (500).
+func commitEntrySide(svc *domain.Service, ep model.Endpoint, label string) (entrySide, int, error) {
+	var spec string
+	switch ep.Kind() {
+	case model.EndpointShelf:
 		spec = "shelf:" + ep.ShelfID()
+	case model.EndpointCommit:
+		spec = "commit:" + ep.Hash()
+	case model.EndpointWorkTree, model.EndpointIndex, model.EndpointRef, model.EndpointPair, model.EndpointInvalid:
+		// The live states have their own specs ("worktree"/"staged") built in
+		// parseEntrySide, and a ref or a pair has no spec in this lane's
+		// vocabulary at all — the whole-tree entry compare is defined over
+		// stored commit entries.
+		return entrySide{}, http.StatusInternalServerError,
+			fmt.Errorf("compare side: endpoint %s cannot be addressed as a stored commit entry", ep.Display())
+	default:
+		return entrySide{}, http.StatusInternalServerError,
+			fmt.Errorf("compare side: unknown endpoint kind %d", ep.Kind())
 	}
 	return entrySide{spec: spec, label: label, tag: ep.CacheTag(),
 		bytes: func(ctx context.Context, path string) ([]byte, error) {
 			return svc.ResolveBytes(ctx, ep.FileRef(path))
-		}}
+		}}, 0, nil
 }
 
 // bookmarkEntrySide resolves a bookmark. A COMMIT bookmark is its commit —
@@ -317,7 +336,7 @@ func bookmarkEntrySide(ctx context.Context, svc *domain.Service, id string) (ent
 		if rerr != nil {
 			return entrySide{}, http.StatusUnprocessableEntity, rerr
 		}
-		return commitEntrySide(svc, ep, label), 0, nil
+		return commitEntrySide(svc, ep, label)
 	}
 	frozen := b.SHA != "" || b.State == model.StateShelf
 	return entrySide{spec: "bookmark:" + b.ID, label: label, live: !frozen, tag: "bookmark:" + b.ID,
@@ -340,7 +359,7 @@ func shelfEntrySide(ctx context.Context, svc *domain.Service, id string) (entryS
 		label = e.Origin.Display()
 	}
 	if e.IsCommit() {
-		return commitEntrySide(svc, mustShelfEndpoint(e.ID), label), 0, nil
+		return commitEntrySide(svc, mustShelfEndpoint(e.ID), label)
 	}
 	return entrySide{spec: "shelf:" + e.ID, label: label, tag: "shelf:" + e.ID,
 		bytes: func(ctx context.Context, _ string) ([]byte, error) {
@@ -430,12 +449,27 @@ type entryCompareSide struct {
 // naming the fallback when that side is standing on frozen bytes. The note is
 // per SIDE because both of them can fall back independently, and "one of
 // these is a snapshot" is not the same warning as "both are".
-func compareSideWire(ep model.Endpoint, spec commitEntrySpec) (entryCompareSide, string) {
-	if ep.Kind() == model.EndpointShelf {
+//
+// Per KIND, with no default arm, for the same reason commitEntrySide is: the
+// old "shelf, else commit:" + ep.Hash()" shape sent a ref or pair endpoint to
+// the browser as a commit with an EMPTY hash, and the client's per-file diff
+// requests would then quietly describe nothing. The endpoint is domain's, not
+// the request's, so an inexpressible kind is a server bug (500).
+func compareSideWire(ep model.Endpoint, spec commitEntrySpec) (entryCompareSide, string, error) {
+	switch ep.Kind() {
+	case model.EndpointShelf:
 		return entryCompareSide{Spec: "shelf:" + ep.ShelfID(), Label: spec.label, Frozen: true},
-			"frozen copy — commit " + shortSha(spec.sha) + " no longer exists"
+			"frozen copy — commit " + shortSha(spec.sha) + " no longer exists", nil
+	case model.EndpointCommit:
+		return entryCompareSide{Spec: "commit:" + ep.Hash(), Label: spec.label, Hash: ep.Hash()}, "", nil
+	case model.EndpointWorkTree, model.EndpointIndex, model.EndpointRef, model.EndpointPair, model.EndpointInvalid:
+		// This lane compares two STORED COMMIT ENTRIES, so only a commit or its
+		// frozen shelf stand-in can appear. A live state, a moving tip or a
+		// change-set has no spelling here.
+		return entryCompareSide{}, "", fmt.Errorf("compare side: endpoint %s cannot be addressed as a stored commit entry", ep.Display())
+	default:
+		return entryCompareSide{}, "", fmt.Errorf("compare side: unknown endpoint kind %d", ep.Kind())
 	}
-	return entryCompareSide{Spec: "commit:" + ep.Hash(), Label: spec.label, Hash: ep.Hash()}, ""
 }
 
 // commitEntrySpec is one requested side of the whole-tree lane: a stored
@@ -533,8 +567,16 @@ func (s *Server) handleCompareEntry(w http.ResponseWriter, r *http.Request) {
 	for i, f := range files {
 		out[i] = compareFile{Path: f.Path, Status: f.Status, OldPath: f.OldPath}
 	}
-	leftSide, leftNote := compareSideWire(left, l)
-	rightSide, rightNote := compareSideWire(right, rr)
+	leftSide, leftNote, err := compareSideWire(left, l)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	rightSide, rightNote, err := compareSideWire(right, rr)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
 	frozen := leftSide.Frozen || rightSide.Frozen
 	payload := map[string]any{
 		"left":   leftSide,

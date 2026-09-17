@@ -356,3 +356,145 @@ func TestComparePatchRefusesAnUnsupportedPair(t *testing.T) {
 		t.Fatalf("ComparePatch error = %v, want livePairSpec's \"unsupported endpoint pair\" refusal", err)
 	}
 }
+
+// A REVERSED live pair is a comparison, not a usage error. git's own diff only
+// walks forward (a commit, then the index, then the working tree), and the CLI
+// used to turn that limitation into a refusal — "order endpoints
+// oldest→newest". CompareSets asks the pair forward and inverts the answer, so
+// the algebra is total over two unbounded points and `gg compare @worktree
+// main` means something.
+func TestCompareSetsInvertsAReversedLivePair(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+
+	// c2..c3 forward: a.txt modified, b.txt deleted.
+	forward, err := f.svc.CompareSets(ctx, f.eval(t, mustTestCommit(t, f.c2)), f.eval(t, mustTestCommit(t, f.c3)))
+	if err != nil {
+		t.Fatalf("CompareSets(c2, c3): %v", err)
+	}
+	if got := statuses(forward); got["a.txt"] != "M" || got["b.txt"] != "D" {
+		t.Fatalf("forward c2→c3 = %v, want a.txt M and b.txt D", got)
+	}
+
+	// Reversed: the same two texts, asked the other way round. b.txt is absent
+	// from the LEFT side now, so it reads ADDED.
+	back, err := f.svc.CompareSets(ctx, f.eval(t, mustTestCommit(t, f.c3)), f.eval(t, mustTestCommit(t, f.c2)))
+	if err != nil {
+		t.Fatalf("CompareSets(c3, c2): %v", err)
+	}
+	got := statuses(back)
+	if got["a.txt"] != "M" {
+		t.Errorf("a.txt = %q, want M (a modification is symmetric); full result %v", got["a.txt"], got)
+	}
+	if got["b.txt"] != "A" {
+		t.Errorf("b.txt = %q, want A (deleted forward ⇒ added backward); full result %v", got["b.txt"], got)
+	}
+}
+
+// The reversed lane also covers the two LIVE sides, which is the pair the old
+// CLI refusal was written about: `gg compare @worktree main`. A file only on
+// disk reads DELETED, because the comparison ENDS at the commit.
+func TestCompareSetsReversedWorktreeAgainstACommit(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+	if err := os.WriteFile(filepath.Join(f.dir, "a.txt"), []byte("dirtied\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.dir, "fresh.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.svc.CompareSets(ctx, f.eval(t, model.WorkTreeEndpoint()), f.eval(t, mustTestCommit(t, f.c3)))
+	if err != nil {
+		t.Fatalf("CompareSets(@worktree, c3): %v", err)
+	}
+	st := statuses(got)
+	if st["a.txt"] != "M" {
+		t.Errorf("a.txt = %q, want M; full result %v", st["a.txt"], st)
+	}
+	if st["fresh.txt"] != "D" {
+		t.Errorf("fresh.txt = %q, want D (untracked on disk, absent at the commit); full result %v", st["fresh.txt"], st)
+	}
+}
+
+// A RENAME inverts by swapping its two paths: what was renamed away one way is
+// renamed back the other. Nothing else in the algebra carries two paths, which
+// is why this has its own fixture.
+func TestCompareSetsInvertsARename(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	ctx := context.Background()
+	if err := os.WriteFile(filepath.Join(dir, "old.txt"), []byte("body\nbody\nbody\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, dir, "add", "old.txt")
+	gittest.Run(t, dir, "commit", "-m", "before")
+	before, _, err := svc.ResolveRev(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, dir, "mv", "old.txt", "new.txt")
+	gittest.Run(t, dir, "commit", "-m", "after")
+	after, _, err := svc.ResolveRev(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	evalAt := func(sha string) FileSet {
+		t.Helper()
+		fs, err := svc.EvalEndpoint(ctx, mustTestCommit(t, sha))
+		if err != nil {
+			t.Fatalf("EvalEndpoint(%s): %v", sha, err)
+		}
+		return fs
+	}
+	forward, err := svc.CompareSets(ctx, evalAt(before), evalAt(after))
+	if err != nil {
+		t.Fatalf("CompareSets(before, after): %v", err)
+	}
+	var fwd model.CommitFile
+	for _, f := range forward {
+		if f.Status == "R" {
+			fwd = f
+		}
+	}
+	if fwd.Path != "new.txt" || fwd.OldPath != "old.txt" {
+		t.Fatalf("forward rename row = %+v, want new.txt ← old.txt (git did not detect the rename?)", fwd)
+	}
+
+	back, err := svc.CompareSets(ctx, evalAt(after), evalAt(before))
+	if err != nil {
+		t.Fatalf("CompareSets(after, before): %v", err)
+	}
+	var rev model.CommitFile
+	for _, f := range back {
+		if f.Status == "R" {
+			rev = f
+		}
+	}
+	if rev.Path != "old.txt" || rev.OldPath != "new.txt" {
+		t.Errorf("reversed rename row = %+v, want the paths swapped (old.txt ← new.txt)", rev)
+	}
+}
+
+// The same unbounded point on both sides has no git argv (`git diff @worktree
+// @worktree` does not exist) and nothing to ask: a text differs from itself
+// nowhere. It must be an empty RESULT, never the verb's "unsupported pair".
+func TestCompareSetsIdenticalLiveSidesIsEmpty(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+	if err := os.WriteFile(filepath.Join(f.dir, "a.txt"), []byte("dirtied\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, ep := range []model.Endpoint{model.WorkTreeEndpoint(), model.IndexEndpoint()} {
+		got, err := f.svc.CompareSets(ctx, f.eval(t, ep), f.eval(t, ep))
+		if err != nil {
+			t.Fatalf("CompareSets(%s, itself): %v", ep.Display(), err)
+		}
+		if len(got) != 0 {
+			t.Errorf("CompareSets(%s, itself) = %v, want no rows", ep.Display(), got)
+		}
+	}
+}

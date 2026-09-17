@@ -159,24 +159,29 @@ func TestCompareSpecErrors(t *testing.T) {
 	}
 }
 
-// TestCompareInvalidPairMessages pins the two distinct invalid-pair error
-// messages: an ordinary reversed live pair keeps the original actionable
-// example, while a frozen shelf side paired with @staged/@worktree gets the
-// shelf-specific explanation instead of that (irrelevant) example.
-func TestCompareInvalidPairMessages(t *testing.T) {
+// TestNoInvalidComparePairRemains is what TestCompareInvalidPairMessages
+// became. It used to pin the two distinct invalid-pair refusals — "order
+// endpoints oldest→newest…" for a reversed live pair and "a frozen shelf entry
+// pairs only with a commit or another shelf entry" for a frozen side against
+// @staged/@worktree. Both are GONE: validComparePair has been deleted and
+// domain.CompareSets is total over the bounded/unbounded 2×2, so the two
+// comparisons it screened out now ANSWER. This test keeps the same two
+// fixtures and asserts the opposite, so the removal cannot be quietly undone.
+func TestNoInvalidComparePairRemains(t *testing.T) {
 	dir := newRepoDir(t)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	// Plain reverse pair: no shelf/bookmark side → the original example text.
-	code, _, errb := runCompare(t, dir, "compare", "@worktree", "HEAD")
-	if code != 2 {
-		t.Fatalf("reverse pair: exit %d, want 2", code)
+	// Plain reverse pair: a comparison now, with no ordering lecture. The
+	// working tree is clean here, so the answer is simply no rows.
+	code, out, errb := runCompare(t, dir, "compare", "@worktree", "HEAD")
+	if code != 0 {
+		t.Fatalf("reverse pair: exit %d, want 0; stderr %q", code, errb)
 	}
-	if !strings.Contains(errb, "gg compare main @worktree") || !strings.Contains(errb, "not the reverse") {
-		t.Errorf("reverse pair: stderr = %q, want the original example text", errb)
+	if out != "" {
+		t.Errorf("reverse pair on a clean tree: stdout = %q, want no rows", out)
 	}
-	if strings.Contains(errb, "shelf entry") {
-		t.Errorf("reverse pair: stderr = %q, must not mention shelf entries", errb)
+	if strings.Contains(errb, "not the reverse") || strings.Contains(errb, "oldest") {
+		t.Errorf("reverse pair: the deleted ordering refusal is still printed: %q", errb)
 	}
 
 	// Shelf side paired with @staged: the shelf-specific explanation. The
@@ -198,14 +203,24 @@ func TestCompareInvalidPairMessages(t *testing.T) {
 	gitc(t, dir, "reflog", "expire", "--expire=now", "--all")
 	gitc(t, dir, "gc", "--prune=now")
 
-	code, _, errb = runCompare(t, dir, "compare", "shelf:"+id, "@staged")
-	if code != 2 {
-		t.Fatalf("shelf vs @staged: exit %d, want 2", code)
+	// The frozen shelf side against the INDEX is the comparison the old
+	// refusal blocked, and it answers a real question: the shelf froze
+	// f.txt = "doomed\n" while the index (reset to baseSha) holds "base\n",
+	// so the projection of the shelf's one member onto the index is a
+	// modification.
+	code, out, errb = runCompare(t, dir, "compare", "shelf:"+id, "@staged")
+	if code != 0 {
+		t.Fatalf("shelf vs @staged: exit %d, want 0; stderr %q", code, errb)
 	}
-	if !strings.Contains(errb, "a frozen shelf entry pairs only with a commit or another shelf entry") {
-		t.Errorf("shelf vs @staged: stderr = %q, want the shelf-specific message", errb)
+	if out != "M\tf.txt\n" {
+		t.Errorf("shelf vs @staged: stdout = %q, want exactly \"M\\tf.txt\\n\"", out)
 	}
-	if strings.Contains(errb, "gg compare main @worktree") {
-		t.Errorf("shelf vs @staged: stderr = %q, must not show the live-pair example", errb)
+	if strings.Contains(errb, "pairs only with") {
+		t.Errorf("shelf vs @staged: the deleted shelf refusal is still printed: %q", errb)
+	}
+	// The frozen-fallback notice still goes to stderr, so stdout stays
+	// parseable — that part of the contract is untouched.
+	if !strings.Contains(errb, "frozen compare") {
+		t.Errorf("shelf vs @staged: stderr should still carry the frozen notice: %q", errb)
 	}
 }

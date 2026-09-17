@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/repos"
 )
 
 // noResolve fails the test if parseEndpoint calls it — used for the
@@ -192,18 +195,36 @@ func TestCompareDefaultsToWorktree(t *testing.T) {
 	}
 }
 
-func TestCompareReversePairFriendlyError(t *testing.T) {
+// TestCompareReversedPairNowCompares replaces the old
+// TestCompareReversePairFriendlyError. `gg compare @worktree HEAD` used to be
+// a usage error: validComparePair screened for the four forward forms git's
+// own diff can walk and refused everything else with "order endpoints
+// oldest→newest". That predicate is GONE — domain.CompareSets asks a reversed
+// pair forward and inverts the answer — so the reverse order is now a
+// comparison, and the statuses read from the LEFT side towards the right.
+func TestCompareReversedPairNowCompares(t *testing.T) {
 	t.Parallel()
 	dir := newCLIRepo(t)
-	code, _, errb := runCLI(t, dir, "compare", "@worktree", "HEAD") // reverse order
-	if code != 2 {
-		t.Fatalf("exit = %d, want 2", code)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirtied\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "fresh.txt"), []byte("new\n"), 0o644) // untracked
+
+	code, out, errb := runCLI(t, dir, "compare", "@worktree", "HEAD") // reverse order
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 (the algebra is total); stderr: %s", code, errb)
+	}
+	if !strings.Contains(out, "M\tREADME.md") {
+		t.Errorf("stdout must carry M\\tREADME.md:\n%s", out)
+	}
+	// Forward this is an addition; reversed the comparison ENDS at the commit,
+	// where the untracked file does not exist — so it reads deleted.
+	if !strings.Contains(out, "D\tfresh.txt") {
+		t.Errorf("stdout must carry D\\tfresh.txt (untracked on disk, absent at HEAD):\n%s", out)
+	}
+	if strings.Contains(errb, "oldest") || strings.Contains(errb, "not the reverse") {
+		t.Errorf("the deleted ordering refusal is still being printed:\n%s", errb)
 	}
 	if strings.Contains(errb, "DiffTreeFiles") || strings.Contains(errb, "endpoint pair") {
-		t.Fatalf("error leaks internals: %s", errb)
-	}
-	if !strings.Contains(errb, "oldest") {
-		t.Fatalf("expected an ordering hint:\n%s", errb)
+		t.Errorf("error leaks internals: %s", errb)
 	}
 }
 
@@ -216,5 +237,340 @@ func TestCompareNoArgsUsage(t *testing.T) {
 	}
 	if !strings.Contains(errb, "usage") {
 		t.Fatalf("missing usage on stderr:\n%s", errb)
+	}
+}
+
+// linkCompareRepo builds the fixture every link-compare test below shares:
+//
+//	c1  README.md = "hi\nthere\n"            (newCLIRepo's initial commit)
+//	c2  + b.txt = "b\n"
+//	c3  b.txt = "bb\n", README.md = "changed\n"
+//
+// Two files that move at different times is the point: a link that addresses
+// ONE of them must produce exactly one row, which is what proves the link's
+// path survived.
+func linkCompareRepo(t *testing.T) (dir, c1, c2, c3 string) {
+	t.Helper()
+	dir = newCLIRepo(t)
+	c1 = strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644)
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-q", "-m", "c2")
+	c2 = strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("bb\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("changed\n"), 0o644)
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-q", "-m", "c3")
+	c3 = strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	return dir, c1, c2, c3
+}
+
+// mustLink runs `gg link` with a scratch registry and returns the link it
+// printed, so a compare test addresses exactly what a user would paste.
+func mustLink(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	code, out, errb := runLinkCLI(t, dir, args...)
+	if code != 0 {
+		t.Fatalf("gg link %v: exit %d (stderr %q)", args, code, errb)
+	}
+	return strings.TrimSpace(out)
+}
+
+// runCompareAt runs `gg compare` against an explicit repo registry, the way
+// runLinkCLI runs `gg link`. The registry is a parameter rather than the
+// process-global RepoStatePath so a cross-repo test can register a second
+// checkout and still run t.Parallel(). args are the verb's own arguments — the
+// "compare" token is not one of them, since cmdCompare is entered past it.
+func runCompareAt(t *testing.T, statePath, dir string, args ...string) (int, string, string) {
+	t.Helper()
+	var out, errb bytes.Buffer
+	code := cmdCompare(statePath, openCLIService(t, dir), args, &out, &errb)
+	return code, out.String(), errb.String()
+}
+
+// TestCompareAcceptsLinks: a gg:// link works on EITHER side, and mixes with
+// the old vocabulary — links are the primary spelling of an endpoint, not a
+// mode you switch the verb into.
+func TestCompareAcceptsLinks(t *testing.T) {
+	t.Parallel()
+	dir, c1, c2, c3 := linkCompareRepo(t)
+
+	// A CHANGE-SET link is bounded: c1..c2 enumerates b.txt and nothing else.
+	// Against HEAD (=c3, where b.txt reads "bb\n") that is one modification —
+	// README.md also differs between c2 and c3, and must NOT appear, because
+	// the bounded side supplies the key set.
+	pair := mustLink(t, dir, "--pair", c1+".."+c2)
+	code, out, errb := runCLI(t, dir, "compare", pair, "HEAD")
+	if code != 0 {
+		t.Fatalf("compare <pair-link> HEAD: exit %d (stderr %q)", code, errb)
+	}
+	if out != "M\tb.txt\n" {
+		t.Errorf("compare <pair-link> HEAD = %q, want exactly \"M\\tb.txt\\n\" (the change-set's one member)", out)
+	}
+
+	// A link on the RIGHT, old vocabulary on the left. A ref link is a POINT —
+	// the whole tree at main's tip — so c1 → main's tip is the plain tree diff.
+	ref := mustLink(t, dir, "--ref", "main")
+	code, out, errb = runCLI(t, dir, "compare", c1, ref)
+	if code != 0 {
+		t.Fatalf("compare c1 <ref-link>: exit %d (stderr %q)", code, errb)
+	}
+	if !strings.Contains(out, "A\tb.txt") || !strings.Contains(out, "M\tREADME.md") {
+		t.Errorf("compare c1 <ref-link> = %q, want b.txt added and README.md modified", out)
+	}
+
+	// Links on BOTH sides.
+	commit := mustLink(t, dir, "--rev", c3)
+	code, out, errb = runCLI(t, dir, "compare", pair, commit)
+	if code != 0 {
+		t.Fatalf("compare <pair-link> <commit-link>: exit %d (stderr %q)", code, errb)
+	}
+	if out != "M\tb.txt\n" {
+		t.Errorf("compare <pair-link> <commit-link> = %q, want exactly \"M\\tb.txt\\n\"", out)
+	}
+}
+
+// TestCompareFileLinkIsSplitBeforeItIsEvaluated is the regression test for the
+// one silent-wrong-answer this feature could ship. A PARSED local-form link
+// carries the checkout AND the file path undivided in Repo.Abs with Path == ""
+// — the grammar puts no delimiter between them. Evaluate it without splitting
+// and the FILE link reads as a WHOLE-TREE link: the comparison would answer
+// about every file in the repository and report no error at all.
+//
+// The fixture makes that failure visible: c1 → c3 changes TWO files, and a
+// link addressing one of them must produce exactly one row.
+func TestCompareFileLinkIsSplitBeforeItIsEvaluated(t *testing.T) {
+	t.Parallel()
+	dir, c1, _, c3 := linkCompareRepo(t)
+	fileLink := mustLink(t, dir, "--rev", c3, "README.md")
+	if !strings.HasSuffix(fileLink, "/README.md@"+c3) {
+		t.Fatalf("gg link printed %q, want a local-form link ending /README.md@%s", fileLink, c3)
+	}
+	code, out, errb := runCompareAt(t, linkState(t), dir, fileLink, c1)
+	if code != 0 {
+		t.Fatalf("compare <file-link> c1: exit %d (stderr %q)", code, errb)
+	}
+	if out != "M\tREADME.md\n" {
+		t.Fatalf("compare <file-link> c1 = %q, want exactly \"M\\tREADME.md\\n\" — "+
+			"b.txt in the output means the link's path was dropped and the whole tree compared", out)
+	}
+}
+
+// TestCompareBackCompatVocabulary: every old spelling keeps working, with the
+// same exit codes. Nothing about links is a mode.
+func TestCompareBackCompatVocabulary(t *testing.T) {
+	t.Parallel()
+	dir, c1, _, c3 := linkCompareRepo(t)
+
+	// commit ↔ commit
+	code, out, errb := runCLI(t, dir, "compare", c1, c3)
+	if code != 0 {
+		t.Fatalf("compare c1 c3: exit %d (stderr %q)", code, errb)
+	}
+	if !strings.Contains(out, "A\tb.txt") || !strings.Contains(out, "M\tREADME.md") {
+		t.Errorf("compare c1 c3 = %q, want b.txt added and README.md modified", out)
+	}
+
+	// <right> still defaults to @worktree.
+	os.WriteFile(filepath.Join(dir, "b.txt"), []byte("dirtied\n"), 0o644)
+	code, out, errb = runCLI(t, dir, "compare", "HEAD")
+	if code != 0 {
+		t.Fatalf("compare HEAD: exit %d (stderr %q)", code, errb)
+	}
+	if out != "M\tb.txt\n" {
+		t.Errorf("compare HEAD = %q, want exactly \"M\\tb.txt\\n\"", out)
+	}
+
+	// commit → @staged
+	gitRun(t, dir, "add", "b.txt")
+	code, out, errb = runCLI(t, dir, "compare", "HEAD", "@staged")
+	if code != 0 {
+		t.Fatalf("compare HEAD @staged: exit %d (stderr %q)", code, errb)
+	}
+	if out != "M\tb.txt\n" {
+		t.Errorf("compare HEAD @staged = %q, want exactly \"M\\tb.txt\\n\"", out)
+	}
+
+	// An unresolvable rev is still bad INPUT: exit 2.
+	code, _, errb = runCLI(t, dir, "compare", "no-such-rev")
+	if code != 2 {
+		t.Fatalf("compare no-such-rev: exit %d, want 2 (usage)", code)
+	}
+	if !strings.Contains(errb, "unknown revision") {
+		t.Errorf("stderr should name the unknown revision:\n%s", errb)
+	}
+
+	// No arguments is still the usage error, now naming links.
+	code, _, errb = runCLI(t, dir, "compare")
+	if code != 2 {
+		t.Fatalf("compare (no args): exit %d, want 2", code)
+	}
+	if !strings.Contains(errb, "usage: gg compare") || !strings.Contains(errb, "gg:// link") {
+		t.Errorf("usage must mention the gg:// link form:\n%s", errb)
+	}
+}
+
+// TestCompareLinkExitCodes pins the shipped convention (spec §6): a link the
+// GRAMMAR refuses is bad input (exit 2), a link that cannot be RESOLVED on
+// this machine is a failure (exit 1).
+func TestCompareLinkExitCodes(t *testing.T) {
+	t.Parallel()
+	dir, _, _, _ := linkCompareRepo(t)
+
+	// Unparseable: "nothex" is not a target the grammar knows.
+	code, out, errb := runCLI(t, dir, "compare", "gg://somerepo@nothex", "HEAD")
+	if code != 2 {
+		t.Fatalf("malformed link: exit %d, want 2 (usage); stderr %q", code, errb)
+	}
+	if !strings.Contains(errb, "compare: bad gg link") {
+		t.Errorf("stderr must be the grammar's own refusal, prefixed by the verb:\n%s", errb)
+	}
+	if out != "" {
+		t.Errorf("stdout must stay empty on a usage error, got %q", out)
+	}
+
+	// Well-formed, but no checkout on this machine answers to it.
+	code, out, errb = runCLI(t, dir, "compare", "gg://nowhere-on-this-machine@ref:main", "HEAD")
+	if code != 1 {
+		t.Fatalf("unknown repository: exit %d, want 1 (a failure, not usage); stderr %q", code, errb)
+	}
+	if !strings.Contains(errb, "is not in this machine's gg history") {
+		t.Errorf("stderr must say the repository is unknown:\n%s", errb)
+	}
+	if out != "" {
+		t.Errorf("stdout must stay empty on a failure, got %q", out)
+	}
+
+	// A link whose path escapes the checkout it names is malformed, not
+	// unresolvable: exit 2. The REMOTE-named form is used because only there is
+	// the path half divided from the repository half at parse time — the local
+	// form's ".." lands inside Repo.Abs and simply matches no checkout.
+	gitRun(t, dir, "remote", "add", "origin", "git@github.com:homeend/gigagit.git")
+	code, _, errb = runCLI(t, dir, "compare", "gg://gigagit/../outside.txt", "HEAD")
+	if code != 2 {
+		t.Fatalf("escaping path: exit %d, want 2; stderr %q", code, errb)
+	}
+	if !strings.Contains(errb, "escapes the checkout") {
+		t.Errorf("stderr must name the escape:\n%s", errb)
+	}
+}
+
+// TestCompareRefusesACrossRepoLink: a link naming a DIFFERENT repository is
+// refused with an explicit message, not silently compared against this one.
+// Cross-repository compare is deferred (spec §9) because both reads would have
+// to happen under two repogate reservations taken in a fixed global order.
+func TestCompareRefusesACrossRepoLink(t *testing.T) {
+	t.Parallel()
+	here, _, _, _ := linkCompareRepo(t)
+	other := newCLIRepo(t)
+	state := linkState(t)
+	if err := repos.Touch(state, other, "", time.Unix(9000, 0)); err != nil {
+		t.Fatalf("repos.Touch: %v", err)
+	}
+	otherLink := "gg://" + filepath.ToSlash(other) + "/README.md"
+
+	code, out, errb := runCompareAt(t, state, here, otherLink, "HEAD")
+	if code != 2 {
+		t.Fatalf("cross-repo link: exit %d, want 2 (usage); stderr %q", code, errb)
+	}
+	if !strings.Contains(errb, "names a different repository") ||
+		!strings.Contains(errb, "cross-repository compare is not supported yet") {
+		t.Errorf("stderr must refuse explicitly:\n%s", errb)
+	}
+	if !strings.Contains(errb, other) {
+		t.Errorf("stderr must name the checkout it located (%s):\n%s", other, errb)
+	}
+	if out != "" {
+		t.Errorf("stdout must stay empty, got %q", out)
+	}
+
+	// The same refusal on the RIGHT side: neither position is a loophole.
+	code, out, errb = runCompareAt(t, state, here, "HEAD", otherLink)
+	if code != 2 {
+		t.Fatalf("cross-repo link on the right: exit %d, want 2; stderr %q", code, errb)
+	}
+	if !strings.Contains(errb, "names a different repository") {
+		t.Errorf("stderr must refuse the right side too:\n%s", errb)
+	}
+	if out != "" {
+		t.Errorf("stdout must stay empty, got %q", out)
+	}
+}
+
+// The shelf ↔ live refusal is gone too, and that removal answers a real
+// question: "is my shelved work already in my working tree?" projects the
+// frozen member list onto the live tree. It used to print "a frozen shelf
+// entry pairs only with a commit or another shelf entry".
+func TestCompareShelfAgainstTheWorkingTree(t *testing.T) {
+	dir := newCLIRepo(t)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	writeFile(t, dir, "f.txt", "shelved\n")
+	gitc(t, dir, "add", ".")
+	gitc(t, dir, "commit", "-m", "doomed")
+	doomed := headSha(t, dir)
+	id := shelfCommitID(t, dir, doomed)
+
+	code, out, errb := runCompare(t, dir, "compare", "shelf:"+id, "@worktree")
+	if code != 0 {
+		t.Fatalf("compare shelf:<id> @worktree: exit %d, want 0; stderr %q", code, errb)
+	}
+	// The shelf's one member is byte-identical to the file on disk, so the
+	// projection finds no difference — a RESULT, where the old CLI refused to
+	// look at all.
+	if out != "" {
+		t.Errorf("stdout = %q, want no rows (the shelved bytes are already on disk)", out)
+	}
+	if strings.Contains(errb, "pairs only with") {
+		t.Errorf("the deleted shelf refusal is still being printed:\n%s", errb)
+	}
+}
+
+// TestComparePatchOfABoundedSideIsTheEndpointsDiff pins the KNOWN GAP the
+// --patch arm's TODO(plan 3) names, so it is a documented shape rather than a
+// surprise: ComparePatch still takes two ENDPOINTS, not two file sets, so
+// --patch of a bounded side renders the endpoints' whole diff instead of the
+// projection the default listing shows.
+func TestComparePatchOfABoundedSideIsTheEndpointsDiff(t *testing.T) {
+	t.Parallel()
+	dir, c1, c2, _ := linkCompareRepo(t)
+	pair := mustLink(t, dir, "--pair", c1+".."+c2)
+
+	// The LISTING is the projection: the change-set's one member.
+	code, out, errb := runCLI(t, dir, "compare", pair, "HEAD")
+	if code != 0 {
+		t.Fatalf("compare <pair-link> HEAD: exit %d (stderr %q)", code, errb)
+	}
+	if out != "M\tb.txt\n" {
+		t.Fatalf("listing = %q, want exactly the projection \"M\\tb.txt\\n\"", out)
+	}
+
+	// The PATCH is c2 → c3, the endpoints' own diff, so README.md is in it.
+	code, out, errb = runCLI(t, dir, "compare", "--patch", pair, "HEAD")
+	if code != 0 {
+		t.Fatalf("compare --patch <pair-link> HEAD: exit %d (stderr %q)", code, errb)
+	}
+	if !strings.Contains(out, "b.txt") {
+		t.Errorf("patch should carry b.txt:\n%s", out)
+	}
+	if !strings.Contains(out, "README.md") {
+		t.Errorf("KNOWN GAP changed: --patch now respects the projection. "+
+			"Update the TODO(plan 3) in cmdCompare and this test.\n%s", out)
+	}
+}
+
+// And the other half of that gap: --patch of a REVERSED live pair is still
+// refused, because livePairSpec maps endpoints and only walks forward. The
+// default listing inverts it (TestCompareReversedPairNowCompares); --patch
+// does not. Exit 1, not 2: nothing about the arguments was wrong.
+func TestComparePatchOfAReversedPairIsStillRefused(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirtied\n"), 0o644)
+	code, out, errb := runCLI(t, dir, "compare", "--patch", "@worktree", "HEAD")
+	if code != 1 {
+		t.Fatalf("compare --patch @worktree HEAD: exit %d, want 1; stdout %q stderr %q", code, out, errb)
+	}
+	if !strings.Contains(errb, "unsupported endpoint pair") {
+		t.Errorf("stderr = %q, want livePairSpec's refusal", errb)
 	}
 }

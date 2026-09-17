@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // compareEntryResp is the /api/compare-entry contract these tests assert on.
@@ -391,5 +392,89 @@ func TestEntryDiffRejectsUnknownSides(t *testing.T) {
 	}
 	if code := getJSON(t, ts, entryDiffURL("shelf:nope", "worktree", "f.txt", ""), nil); code != http.StatusNotFound {
 		t.Errorf("unknown shelf id: status = %d, want 404", code)
+	}
+}
+
+// TestCompareSideRefusesAKindTheWireCannotSpell is the guard on the two sites
+// that used to read "shelf when the kind is shelf, otherwise commit: + Hash()".
+// A REF or PAIR endpoint took that else branch and was wired to the browser as
+// a commit with an EMPTY hash — the client would then ask for per-file diffs of
+// nothing, with no error anywhere in the stack. Both sites now decide per kind,
+// and a kind this lane cannot spell is a server bug: the endpoint comes from
+// domain, never from the request, so it is a 500 and not a 400.
+func TestCompareSideRefusesAKindTheWireCannotSpell(t *testing.T) {
+	t.Parallel()
+	must := func(e model.Endpoint, err error) model.Endpoint {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	const shaA = "1111111111111111111111111111111111111111"
+	const shaB = "2222222222222222222222222222222222222222"
+	for _, tc := range []struct {
+		name string
+		ep   model.Endpoint
+	}{
+		{"ref", must(model.RefEndpoint("main"))},
+		{"pair", must(model.PairEndpoint(shaA, shaB))},
+		{"worktree", model.WorkTreeEndpoint()},
+		{"index", model.IndexEndpoint()},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			side, code, err := commitEntrySide(nil, tc.ep, "label")
+			if err == nil {
+				t.Fatalf("commitEntrySide(%s) = %+v, want a refusal", tc.name, side)
+			}
+			if code != http.StatusInternalServerError {
+				t.Errorf("commitEntrySide(%s) status = %d, want 500", tc.name, code)
+			}
+			if side.spec != "" {
+				t.Errorf("commitEntrySide(%s) handed back a spec anyway: %q", tc.name, side.spec)
+			}
+			wire, note, werr := compareSideWire(tc.ep, commitEntrySpec{label: "label"})
+			if werr == nil {
+				t.Fatalf("compareSideWire(%s) = %+v, want a refusal", tc.name, wire)
+			}
+			if wire.Spec != "" || wire.Hash != "" || note != "" {
+				t.Errorf("compareSideWire(%s) handed back %+v / note %q", tc.name, wire, note)
+			}
+		})
+	}
+}
+
+// The two expressible kinds still come through unchanged, so the hardening
+// above did not narrow the lane it guards.
+func TestCompareSideSpellsCommitAndShelf(t *testing.T) {
+	t.Parallel()
+	const sha = "1111111111111111111111111111111111111111"
+	commit, err := model.CommitEndpoint(sha)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shelved, err := model.ShelfEndpoint("commit-abc1234-deadbeef")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	side, code, err := commitEntrySide(nil, commit, "short")
+	if err != nil || code != 0 || side.spec != "commit:"+sha {
+		t.Fatalf("commitEntrySide(commit) = %+v code=%d err=%v", side, code, err)
+	}
+	side, code, err = commitEntrySide(nil, shelved, "frozen")
+	if err != nil || code != 0 || side.spec != "shelf:commit-abc1234-deadbeef" {
+		t.Fatalf("commitEntrySide(shelf) = %+v code=%d err=%v", side, code, err)
+	}
+
+	wire, note, err := compareSideWire(commit, commitEntrySpec{sha: sha, label: "short"})
+	if err != nil || wire.Spec != "commit:"+sha || wire.Hash != sha || wire.Frozen || note != "" {
+		t.Fatalf("compareSideWire(commit) = %+v note=%q err=%v", wire, note, err)
+	}
+	wire, note, err = compareSideWire(shelved, commitEntrySpec{sha: sha, label: "frozen"})
+	if err != nil || wire.Spec != "shelf:commit-abc1234-deadbeef" || !wire.Frozen || !strings.Contains(note, "no longer exists") {
+		t.Fatalf("compareSideWire(shelf) = %+v note=%q err=%v", wire, note, err)
 	}
 }

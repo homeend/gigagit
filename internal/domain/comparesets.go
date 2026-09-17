@@ -43,7 +43,27 @@ func (s *Service) CompareSets(ctx context.Context, left, right FileSet) ([]model
 		// Both points: git already answers this in one invocation, INCLUDING
 		// the untracked-file handling a working-tree side needs. Reuse it
 		// rather than re-deriving it here.
-		return s.CompareFiles(ctx, left.Endpoint(), right.Endpoint())
+		if left.Endpoint() == right.Endpoint() {
+			// The same point on both sides. git has no argv for `diff
+			// @worktree @worktree`, and there is nothing to ask: a text differs
+			// from itself nowhere.
+			return nil, nil
+		}
+		if forwardLivePair(left.Endpoint(), right.Endpoint()) {
+			return s.CompareFiles(ctx, left.Endpoint(), right.Endpoint())
+		}
+		// git's own diff only walks FORWARD (a commit, then the index, then the
+		// working tree — DiffTreeFiles' four supported pairs), so the reverse of
+		// one of those is asked forward and the answer turned round. THIS is
+		// what makes the algebra total, and it is why `gg compare @worktree main`
+		// is a comparison and no longer a usage error: the ordering rule that
+		// used to live in internal/cli (validComparePair) was git's limitation
+		// showing through, not a statement about what the user may ask.
+		files, err := s.CompareFiles(ctx, right.Endpoint(), left.Endpoint())
+		if err != nil {
+			return nil, err
+		}
+		return invertCompareRows(files), nil
 
 	case left.Bounded() && right.Bounded():
 		return s.compareBoundedPair(ctx, left, right)
@@ -58,6 +78,57 @@ func (s *Service) CompareSets(ctx context.Context, left, right FileSet) ([]model
 		// right (unbounded) side lacks reads as DELETED.
 		return s.compareProjected(ctx, left, right, left)
 	}
+}
+
+// forwardLivePair reports whether (left, right) is one of the four pairs
+// git's own diff can walk — the set DiffTreeFiles and livePairSpec enumerate:
+// commit↔commit, commit→index, commit→worktree, index→worktree. Anything else
+// over two unbounded points is that set's mirror image, which CompareSets asks
+// forward and inverts.
+func forwardLivePair(left, right model.Endpoint) bool {
+	switch {
+	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointCommit:
+		return true
+	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointIndex:
+		return true
+	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointWorkTree:
+		return true
+	case left.Kind() == model.EndpointIndex && right.Kind() == model.EndpointWorkTree:
+		return true
+	}
+	return false
+}
+
+// invertCompareRows turns a forward diff listing round, so a reversed pair
+// reads as the comparison the caller actually asked for.
+//
+//	A ⇄ D   the path exists on one side only, and which side just swapped
+//	M, T    a modification and a type change are symmetric
+//	R       a rename's two paths swap: what was renamed away is renamed back
+//
+// "C" (copy) cannot appear: DiffTreeFiles passes -M, never -C, so git never
+// reports a copy. An unknown status is passed through untouched rather than
+// guessed at — no status this codebase produces reaches that branch, and a
+// silent remap would be a wrong answer where a verbatim one is merely unhelpful.
+//
+// The untracked-file add-on CompareFiles performs for a working-tree RIGHT
+// side inverts correctly: those arrive "A" (on disk, absent from the older
+// side) and come out "D", which is what a comparison ending at a commit means.
+func invertCompareRows(files []model.CommitFile) []model.CommitFile {
+	out := make([]model.CommitFile, 0, len(files))
+	for _, f := range files {
+		switch f.Status {
+		case "A":
+			f.Status = "D"
+		case "D":
+			f.Status = "A"
+		case "R":
+			f.Path, f.OldPath = f.OldPath, f.Path
+		}
+		out = append(out, f)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
 }
 
 // compareBoundedPair walks the UNION of two enumerated sets. A path in only

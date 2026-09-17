@@ -420,3 +420,209 @@ func gitOut(t *testing.T, dir string, args ...string) string {
 
 // openCLI opens a service for a repo dir.
 func openCLI(dir string) *domain.Service { return domain.Open(dir) }
+
+// TestLinkRefAndPairFlags: --ref emits a branch-tip link (a POINT — the whole
+// tree there, and it MOVES, which is why the NAME is kept), --pair emits a
+// change-set link (BOUNDED — what it changed, with both halves resolved to
+// full shas so the link is portable and self-describing).
+func TestLinkRefAndPairFlags(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	c1 := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-q", "-m", "c2")
+	c2 := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+
+	t.Run("ref keeps the name", func(t *testing.T) {
+		t.Parallel()
+		code, out, errb := runLinkCLI(t, dir, "--ref", "main")
+		if code != 0 {
+			t.Fatalf("exit = %d (stderr %q)", code, errb)
+		}
+		got := strings.TrimSpace(out)
+		if !strings.HasSuffix(got, "@ref:main") {
+			t.Errorf("stdout = %q, want a link ending @ref:main", got)
+		}
+		l, err := model.ParseLink(got)
+		if err != nil {
+			t.Fatalf("ParseLink(%q) = %v", got, err)
+		}
+		if l.Target.Ref != "main" || l.Target.State != model.StateCommitted || l.Target.Commit != "" {
+			t.Errorf("target = %+v, want Ref=main, StateCommitted, no commit", l.Target)
+		}
+	})
+
+	t.Run("ref with a path", func(t *testing.T) {
+		t.Parallel()
+		code, out, errb := runLinkCLI(t, dir, "--ref", "main", "README.md")
+		if code != 0 {
+			t.Fatalf("exit = %d (stderr %q)", code, errb)
+		}
+		got := strings.TrimSpace(out)
+		if !strings.HasSuffix(got, "/README.md@ref:main") {
+			t.Errorf("stdout = %q, want .../README.md@ref:main", got)
+		}
+	})
+
+	t.Run("pair resolves both halves to full shas", func(t *testing.T) {
+		t.Parallel()
+		// Abbreviated input on one side, a name on the other: both must come
+		// out as the FULL sha (`gg link` is a producer).
+		code, out, errb := runLinkCLI(t, dir, "--pair", c1[:8]+"..main")
+		if code != 0 {
+			t.Fatalf("exit = %d (stderr %q)", code, errb)
+		}
+		got := strings.TrimSpace(out)
+		if !strings.HasSuffix(got, "@"+c1+".."+c2) {
+			t.Errorf("stdout = %q, want a link ending @%s..%s", got, c1, c2)
+		}
+		l, err := model.ParseLink(got)
+		if err != nil {
+			t.Fatalf("ParseLink(%q) = %v", got, err)
+		}
+		if l.Target.Pair == nil || l.Target.Pair.A != c1 || l.Target.Pair.B != c2 {
+			t.Errorf("target = %+v, want Pair{%s, %s}", l.Target, c1, c2)
+		}
+	})
+
+	t.Run("refusals", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name, want string
+			args       []string
+		}{
+			{"three dots go to --preview", "use --preview", []string{"--pair", c1 + "..." + c2}},
+			{"no dots at all", "--pair takes <a>..<b>", []string{"--pair", c1}},
+			{"a missing half", "needs both halves", []string{"--pair", c1 + ".."}},
+			{"an unknown half", "unknown revision", []string{"--pair", c1 + "..no-such-rev"}},
+			{"an unknown ref", "unknown revision", []string{"--ref", "no-such-branch"}},
+			{"an inexpressible ref name", "cannot be expressed in a gg link", []string{"--ref", "we:ird"}},
+		} {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				code, out, errb := runLinkCLI(t, dir, tc.args...)
+				if code == 0 {
+					t.Fatalf("gg link %v: exit 0, want a refusal (stdout %q)", tc.args, out)
+				}
+				if !strings.Contains(errb, tc.want) {
+					t.Errorf("gg link %v: stderr = %q, want it to contain %q", tc.args, errb, tc.want)
+				}
+				if strings.TrimSpace(out) != "" {
+					t.Errorf("gg link %v printed a link anyway: %q", tc.args, out)
+				}
+			})
+		}
+	})
+}
+
+// TestLinkHintFlags: --bookmark / --shelf attach the ?<kind>=<id> landing
+// hint. The hint says WHICH SURFACE the link was copied from; it never changes
+// what the link addresses, so it composes with any target.
+func TestLinkHintFlags(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string // suffix of the printed link
+	}{
+		{"bookmark on a file link", []string{"--bookmark", "b1", "README.md"}, "/README.md?bookmark=b1"},
+		{"shelf on a file link", []string{"--shelf", "commit-123-abcdef01", "README.md"}, "/README.md?shelf=commit-123-abcdef01"},
+		{"bookmark on a ref link", []string{"--ref", "main", "--bookmark", "b1"}, "@ref:main?bookmark=b1"},
+		{"bookmark on a commit link", []string{"--rev", head, "--bookmark", "b1"}, "@" + head + "?bookmark=b1"},
+		{"bookmark with a line", []string{"--bookmark", "b1", "README.md:2"}, "/README.md:2?bookmark=b1"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			code, out, errb := runLinkCLI(t, dir, tc.args...)
+			if code != 0 {
+				t.Fatalf("exit = %d (stderr %q)", code, errb)
+			}
+			got := strings.TrimSpace(out)
+			if !strings.HasSuffix(got, tc.want) {
+				t.Errorf("stdout = %q, want a link ending %q", got, tc.want)
+			}
+			l, err := model.ParseLink(got)
+			if err != nil {
+				t.Fatalf("ParseLink(%q) = %v", got, err)
+			}
+			if l.Hint.Kind == "" || l.Hint.ID == "" {
+				t.Errorf("hint = %+v, want both halves set", l.Hint)
+			}
+		})
+	}
+
+	t.Run("two hints is a usage error", func(t *testing.T) {
+		t.Parallel()
+		code, out, errb := runLinkCLI(t, dir, "--bookmark", "b1", "--shelf", "s1")
+		if code != 2 {
+			t.Fatalf("exit = %d, want 2 (stdout %q)", code, out)
+		}
+		if !strings.Contains(errb, "--bookmark and --shelf are mutually exclusive") {
+			t.Errorf("stderr = %q, want the exclusion message", errb)
+		}
+	})
+
+	// An id holding a grammar separator cannot round-trip: parseLinkHint
+	// refuses it, so the PRODUCER must refuse it too rather than print a link
+	// its own parser rejects.
+	t.Run("an id with a separator is refused", func(t *testing.T) {
+		t.Parallel()
+		code, out, errb := runLinkCLI(t, dir, "--bookmark", "b?1", "README.md")
+		if code != 2 {
+			t.Fatalf("exit = %d, want 2 (stdout %q, stderr %q)", code, out, errb)
+		}
+		if !strings.Contains(errb, "not a readable gg link") {
+			t.Errorf("stderr = %q, want the round-trip refusal", errb)
+		}
+		if strings.TrimSpace(out) != "" {
+			t.Errorf("printed a link anyway: %q", out)
+		}
+	})
+}
+
+// TestLinkTargetFlagsAreExclusive: --cached, --rev, --preview, --ref and
+// --pair all name the TARGET, so at most one may be set — the rule --cached
+// and --rev already had, now counted rather than checked pairwise.
+func TestLinkTargetFlagsAreExclusive(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"cached+rev", []string{"--cached", "--rev", head}, "name the target; use one"},
+		{"cached+ref", []string{"--cached", "--ref", "main"}, "name the target; use one"},
+		{"rev+ref", []string{"--rev", head, "--ref", "main"}, "name the target; use one"},
+		{"ref+pair", []string{"--ref", "main", "--pair", head + ".." + head}, "name the target; use one"},
+		{"cached+pair", []string{"--cached", "--pair", head + ".." + head}, "name the target; use one"},
+		// --preview keeps its own shared message, the one `gg diff` prints.
+		{"preview+ref", []string{"--preview", "a...b", "--ref", "main"}, "one target only"},
+		{"preview+pair", []string{"--preview", "a...b", "--pair", head + ".." + head}, "one target only"},
+		{"preview+cached", []string{"--preview", "a...b", "--cached"}, "one target only"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			code, out, errb := runLinkCLI(t, dir, tc.args...)
+			if code != 2 {
+				t.Fatalf("gg link %v: exit = %d, want 2 (stdout %q, stderr %q)", tc.args, code, out, errb)
+			}
+			if !strings.Contains(errb, tc.want) {
+				t.Errorf("gg link %v: stderr = %q, want it to contain %q", tc.args, errb, tc.want)
+			}
+			if strings.TrimSpace(out) != "" {
+				t.Errorf("gg link %v printed a link anyway: %q", tc.args, out)
+			}
+		})
+	}
+}

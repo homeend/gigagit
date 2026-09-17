@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -73,9 +74,15 @@ type snapCursor struct {
 }
 
 type snapEndpoint struct {
-	Kind    string `json:"kind"` // worktree|index|commit|shelf
+	Kind    string `json:"kind"` // worktree|index|commit|shelf|ref|pair
 	Hash    string `json:"hash,omitempty"`
 	ShelfID string `json:"shelf_id,omitempty"`
+	// Ref is the branch/tag NAME of a tip endpoint — deliberately the name and
+	// not a sha, because a tip is what it addresses and it moves.
+	Ref string `json:"ref,omitempty"`
+	// PairA and PairB are a change-set endpoint's two resolved shas.
+	PairA string `json:"pair_a,omitempty"`
+	PairB string `json:"pair_b,omitempty"`
 }
 
 type snapFilesView struct {
@@ -161,6 +168,21 @@ func filesModeProtoName(fm filesMode) string {
 	return "changed"
 }
 
+// endpointProto maps a comparison endpoint to its stable protocol form.
+//
+// ONE ARM PER KIND, no default. The default arm this replaces read "anything
+// else is a commit", so a ref or pair endpoint serialized as
+// {"kind":"commit","hash":""} — an agent reading the snapshot would be told the
+// compare stands on a commit and handed no commit to look at. A kind an agent
+// does not recognise is strictly better than a kind that is a lie, so both new
+// kinds get a spelling of their own rather than a refusal.
+//
+// EndpointInvalid panics, in model.Endpoint's own idiom: the zero Endpoint is
+// an unset variable, never "the working tree". It is unreachable — this is
+// called only in filesModeCompare, whose entry point (files_view.go's compare
+// gesture) already calls left.Display() on the same value, and Display panics
+// on Invalid — so the arm exists to keep an impossible state loud rather than
+// let it become an empty JSON object nobody can explain.
 func endpointProto(e model.Endpoint) *snapEndpoint {
 	switch e.Kind() {
 	case model.EndpointWorkTree:
@@ -169,8 +191,14 @@ func endpointProto(e model.Endpoint) *snapEndpoint {
 		return &snapEndpoint{Kind: "index"}
 	case model.EndpointShelf:
 		return &snapEndpoint{Kind: "shelf", ShelfID: e.ShelfID()}
-	default:
+	case model.EndpointCommit:
 		return &snapEndpoint{Kind: "commit", Hash: e.Hash()}
+	case model.EndpointRef:
+		return &snapEndpoint{Kind: "ref", Ref: e.Ref()}
+	case model.EndpointPair:
+		return &snapEndpoint{Kind: "pair", PairA: e.PairA(), PairB: e.PairB()}
+	default:
+		panic(fmt.Sprintf("tui.endpointProto: unusable EndpointKind %d; add a case arm", e.Kind()))
 	}
 }
 

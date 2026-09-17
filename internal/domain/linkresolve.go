@@ -94,9 +94,59 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 	if l.Target.State == model.StateCommitted && l.Target.Commit == "" && l.Target.Preview == nil {
 		return Resolved{}, fmt.Errorf("%w: gg link names a commit without a sha", model.ErrLink)
 	}
+	c, err := locateLink(ctx, l, opts)
+	if err != nil {
+		return Resolved{}, err
+	}
+	return finishLink(ctx, l, c, opts)
+}
+
+// LocateLink answers the FIRST half of ResolveLink's question and only that
+// half: which checkout on this machine the link names, and the link's path
+// inside it.
+//
+// It exists because the second half — turning the target into an ADDRESS —
+// cannot express every link. A `@ref:<name>` tip and a `@<a>..<b>` change-set
+// have no single commit (and a pair is BOUNDED, which model.FileAddress has no
+// field for), so ResolveLink refuses them rather than flatten a change-set into
+// its newer commit. The SPLIT, though, is exactly as necessary for those links
+// as for any other: a parsed LOCAL-form link carries the checkout and the file
+// path undivided in Repo.Abs with Link.Path empty (see model.LinkRepo), and
+// only this machine's registry can divide them.
+//
+// So a consumer that evaluates a link's own target itself — domain.EvalLink's
+// callers — locates with this, takes relPath as the link's Path, and keeps the
+// target it parsed. A consumer that wants an address keeps calling ResolveLink.
+//
+// The returned path is repo-relative, cleaned, and never escapes the checkout.
+func LocateLink(ctx context.Context, l model.Link, opts ResolveOpts) (checkout, relPath string, err error) {
+	if err := ctx.Err(); err != nil {
+		return "", "", err
+	}
+	if opts.OpenFn == nil {
+		opts.OpenFn = Open
+	}
+	c, err := locateLink(ctx, l, opts)
+	if err != nil {
+		return "", "", err
+	}
+	rel, err := cleanLinkRelPath(c.relPath)
+	if err != nil {
+		return "", "", err
+	}
+	return c.checkout, rel, nil
+}
+
+// locateLink is the candidate pipeline both entry points share: identity
+// match, then the narrowing filters, then the ambiguity refusal. It performs no
+// address resolution, so a ref or pair link locates here even though
+// ResolveLink will not finish one.
+//
+// opts.OpenFn is already defaulted by the caller.
+func locateLink(ctx context.Context, l model.Link, opts ResolveOpts) (linkCandidate, error) {
 	cands := linkCandidates(ctx, l, opts)
 	if len(cands) == 0 {
-		return Resolved{}, fmt.Errorf("%w: %s is not in this machine's gg history; open it once in gg", ErrLinkUnknownRepo, linkRepoLabel(l))
+		return linkCandidate{}, fmt.Errorf("%w: %s is not in this machine's gg history; open it once in gg", ErrLinkUnknownRepo, linkRepoLabel(l))
 	}
 	// A preview names two BRANCHES, so a checkout that lacks either cannot show
 	// it — drop those before anything else, including the cwd. (A commit link's
@@ -107,7 +157,7 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 	if p := l.Target.Preview; p != nil {
 		kept := previewCandidates(ctx, cands, p, opts)
 		if len(kept) == 0 {
-			return Resolved{}, fmt.Errorf("%w: no checkout of %s holds both %s and %s", ErrLinkUnknownRepo, linkRepoLabel(l), p.Target, p.Source)
+			return linkCandidate{}, fmt.Errorf("%w: no checkout of %s holds both %s and %s", ErrLinkUnknownRepo, linkRepoLabel(l), p.Target, p.Source)
 		}
 		cands = kept
 	}
@@ -116,9 +166,12 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 	// through containment below — the cwd may not hold that commit — and the
 	// cwd sorts first, so it wins any tie the filters leave.
 	if cands[0].isCwd && l.Target.State != model.StateCommitted {
-		return finishLink(ctx, l, cands[0], opts)
+		return cands[0], nil
 	}
-	if len(cands) > 1 && l.Target.State == model.StateCommitted && l.Target.Preview == nil {
+	// Commit != "" is load-bearing since LocateLink arrived: a ref or pair link
+	// is StateCommitted with an EMPTY Commit, and probing containment of ""
+	// would spend one git invocation per candidate to learn nothing.
+	if len(cands) > 1 && l.Target.State == model.StateCommitted && l.Target.Preview == nil && l.Target.Commit != "" {
 		if kept := containing(ctx, cands, l.Target.Commit, opts); len(kept) > 0 {
 			cands = kept
 		}
@@ -145,9 +198,9 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 		for _, c := range cands {
 			paths = append(paths, c.checkout)
 		}
-		return Resolved{}, fmt.Errorf("%w: %s matches %s; run the command inside the one you mean", ErrLinkAmbiguous, linkRepoLabel(l), strings.Join(paths, ", "))
+		return linkCandidate{}, fmt.Errorf("%w: %s matches %s; run the command inside the one you mean", ErrLinkAmbiguous, linkRepoLabel(l), strings.Join(paths, ", "))
 	}
-	return finishLink(ctx, l, cands[0], opts)
+	return cands[0], nil
 }
 
 // linkCandidates lists every checkout whose identity matches the link, cwd
@@ -493,6 +546,14 @@ func linkPathKey(p string) string {
 func samePathLink(a, b string) bool {
 	return linkPathKey(filepath.Clean(a)) == linkPathKey(filepath.Clean(b))
 }
+
+// SameCheckout reports whether two absolute checkout paths name the same
+// place, by the SAME rule the link resolver uses to deduplicate candidates
+// (slash-normalised, case-folded where the filesystem is). A frontend
+// comparing LocateLink's answer against its own TopLevel must not invent a
+// second rule: a byte compare would call a Windows link naming "C:/Src" a
+// different repository from the checkout at "c:/src".
+func SameCheckout(a, b string) bool { return samePathLink(a, b) }
 
 // SamePath reports whether two absolute paths name the same place on this
 // machine (filepath.Clean + slash-form + case-folded where the filesystem is

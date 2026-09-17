@@ -154,19 +154,26 @@ func isBinaryContent(data []byte) bool {
 }
 
 // livePairSpec maps a non-shelf endpoint pair onto the DiffSpec vocabulary:
-// the four forward forms DiffTreeFiles supports and internal/cli's
-// validComparePair screens for (commit↔commit, commit→index, commit→worktree,
-// index→worktree).
+// the four forward forms DiffTreeFiles supports (commit↔commit, commit→index,
+// commit→worktree, index→worktree), which forwardLivePair also enumerates.
 //
-// That screen is a CLI-layer courtesy, not this function's guarantee: it turns
-// an unsupported pair into a friendly message before the verb is reached, and
-// it only covers the `gg compare` door. It used to be the only thing standing
-// between a stray pair and a `default:` arm here that returned an empty
-// DiffSpec — which git reads as "index → working tree". A link now hands
-// ComparePatch whatever endpoint it produced, through doors that never see
-// validComparePair, so a PAIR or a REF arriving here would have rendered a
-// diff of something else entirely with no error at all. An unhandled pair is
-// a refusal now, in the same wording DiffTreeFiles uses for its own.
+// NOTHING SCREENS THIS PAIR BEFORE IT ARRIVES. internal/cli used to hold a
+// validComparePair predicate that turned an unsupported pair into a friendly
+// message before the verb was reached, but it only ever covered the `gg
+// compare` door and it has been deleted outright — CompareSets is total over
+// the bounded/unbounded 2×2, so there is no invalid pair to screen for any
+// more. It used to be the only thing standing between a stray pair and a
+// `default:` arm here that returned an empty DiffSpec — which git reads as
+// "index → working tree". A link now hands ComparePatch whatever endpoint it
+// produced, so a PAIR or a REF arriving here would have rendered a diff of
+// something else entirely with no error at all. An unhandled pair is a refusal
+// now, in the same wording DiffTreeFiles uses for its own.
+//
+// ComparePatch is therefore NOT total the way CompareSets is: it still takes
+// two endpoints, so a reversed live pair is refused here rather than asked
+// forward and inverted (see CompareSets' unbounded × unbounded arm), and a
+// bounded × bounded pair renders the endpoints' whole diff rather than the
+// projection. `gg compare --patch` carries a TODO(plan 3) naming that gap.
 func livePairSpec(left, right model.Endpoint) (model.DiffSpec, error) {
 	switch {
 	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointCommit:
