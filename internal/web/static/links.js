@@ -10,20 +10,22 @@ import { registerRows } from "./menus.js";
 
 // A path holding one of the grammar's separators cannot be expressed; the
 // producers refuse rather than emit something that reparses as another place
-// (internal/model.LinkPathOK).
+// (internal/model.LinkPathOK). '?' is one of them: it opens the ?<kind>=<id>
+// hint, and a path carrying one is legal on Linux/macOS, so without it a
+// browser-copied link would not paste back into the CLI.
 function linkPathOK(p) {
-  return !/[@:#]/.test(p);
+  return !/[@:#?]/.test(p);
 }
 
-// An absolute CHECKOUT path holding '@' or '#' cannot be expressed either:
-// those are the target and hunk separators, so the link would not reparse. A
-// ':' is fine — a leading drive prefix is skipped, and only a NUMBER after
-// the last ':' is read as a line (internal/model.LinkAbsOK).
+// An absolute CHECKOUT path holding '@', '#' or '?' cannot be expressed
+// either: those are the target, hunk and hint separators, so the link would
+// not reparse. A ':' is fine — a leading drive prefix is skipped, and only a
+// NUMBER after the last ':' is read as a line (internal/model.LinkAbsOK).
 function linkAbsOK(abs) {
   let s = abs;
   if (/^[A-Za-z]:/.test(s)) s = s.slice(2);
   else if (/^\/[A-Za-z]:/.test(s)) s = s.slice(3);
-  return !/[@#]/.test(s);
+  return !/[@#?]/.test(s);
 }
 
 // repoSegment renders "gg://" + the repo half: the remote repository name, or
@@ -40,13 +42,16 @@ function repoSegment(repo, worktree) {
 }
 
 // A branch name rides a preview link only when it holds none of the grammar's
-// separators ('@', ':', '#'), no whitespace and no second "..." — the JS twin
-// of internal/model.LinkRefOK; the producer refuses rather than print
-// something ParseLink would reject or reparse as a different place.
+// separators ('@', ':', '#', '?'), no whitespace and no ".." — the JS twin of
+// internal/model.LinkRefOK; the producer refuses rather than print something
+// ParseLink would reject or reparse as a different place.
 function linkRefOK(s) {
+  // TWO dots, not three: git itself forbids ".." anywhere in a refname, and
+  // leaving it legal would let "main..feat" parse as a change-set rather than
+  // as the literal name it was meant to be.
   // " \t" literally, not \s: Go's rule stops there, and a name the TUI
   // emits a link for must get one here too.
-  return !!s && !s.includes("...") && !/[@:# \t]/.test(s);
+  return !!s && !s.includes("..") && !/[@:#? \t]/.test(s);
 }
 
 // linkFor builds the address for one place. ctx is a diffCtx-shaped
@@ -55,10 +60,13 @@ function linkRefOK(s) {
 // no usable repo identity, a path holding a grammar separator, a commit
 // target whose rev is not a full sha (ruling P9: >= 40 hex, never a hard ===
 // 40 — a sha256 repo's commits are 64 hex characters), a line with no path,
-// or ctx.compare set without a preview (a two-revision comparison has no
-// single-commit address: `path@bHash` would read as bHash^ → bHash, not the
-// aHash → bHash pair actually on screen — the same refusal the TUI's
-// contextLinkText makes for a compare view).
+// or ctx.compare set without a preview. That last refusal is a PRODUCER gap,
+// not a grammar one: the grammar now has `@<a>..<b>` for exactly this pair
+// (internal/model.LinkPair), so a compare view is addressable — emitting one
+// from the browser is deferred UI scope. What must not happen meanwhile is
+// falling back to `path@bHash`, which reads as bHash^ → bHash, not the
+// aHash → bHash pair actually on screen; the TUI's contextLinkText carries
+// the same note.
 //
 // ctx.preview = {source, target} names an open merge preview: the ONE compare
 // that has an address of its own, git's three-dot pair
@@ -85,6 +93,10 @@ function linkFor(repo, worktree, ctx, side, no) {
       s += "@staged";
     } else if (st === "commit") {
       const rev = (ctx && ctx.rev) || "";
+      // Go's grammar accepts 7..64 hex (internal/model.isShaLink); this is
+      // deliberately STRICTER — a producer always knows the full sha, and
+      // being strict here can only REFUSE, never mis-emit an abbreviation
+      // that grows ambiguous as history does. Left as is on purpose.
       if (rev.length < 40) return "";
       s += "@" + rev;
     }

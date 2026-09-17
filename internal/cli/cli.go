@@ -152,7 +152,7 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 	case "tag":
 		return cmdTag(svc, rest, stdin, stdout, stderr)
 	case "compare":
-		return cmdCompare(svc, rest, stdout, stderr)
+		return cmdCompare(RepoStatePath, svc, rest, stdout, stderr)
 	case "preview":
 		return cmdPreview(svc, rest, stdout, stderr)
 	case "diff":

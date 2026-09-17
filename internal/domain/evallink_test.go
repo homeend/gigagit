@@ -1,0 +1,651 @@
+package domain
+
+import (
+	"context"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/homeend/gigagit/internal/gittest"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/shelf"
+)
+
+// gitOut runs one git command in dir and returns its trimmed stdout.
+// gittest.Run returns nothing (it only asserts the exit status), and the
+// three-dot test below has to compare against what `git merge-base` actually
+// says — the whole point of that assertion is that the base is git's answer,
+// not one this package computed twice.
+func gitOut(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// EvalLink is where the spec's §3.3 rule 1 lives: COMPARE IGNORES THE HINT.
+// A bookmarked commit and the same commit picked off the log are ONE endpoint
+// — that is what keeps the matrix a 2×2 instead of a bookmark × shelf ×
+// commit grid.
+func TestEvalLinkIgnoresTheHint(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+
+	plain, err := model.ParseLink("gg://x@" + f.c2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hinted, err := model.ParseLink("gg://x@" + f.c2 + "?bookmark=whatever")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := f.svc.EvalLink(ctx, plain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := f.svc.EvalLink(ctx, hinted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a.Endpoint() != b.Endpoint() || a.Bounded() != b.Bounded() {
+		t.Fatalf("the hint changed the endpoint: %+v vs %+v", a.Endpoint(), b.Endpoint())
+	}
+}
+
+// The ONE exception to rule 1: a shelf hint on a link with NO address. The
+// shelved bytes were never in git, so there the hint is the only CONTENT
+// source and the endpoint is the shelf, not the working tree. Asserted on the
+// endpoint alone — EvalEndpoint would need a shelf store, which this fixture
+// has no reason to stand up.
+func TestEndpointForLinkShelfHintIsTheOnlyContentSource(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+
+	shelved, err := model.ParseLink("gg://x/a.txt?shelf=entry7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep, err := f.svc.EndpointForLink(ctx, shelved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ep.Kind() != model.EndpointShelf || ep.ShelfID() != "entry7" {
+		t.Fatalf("an address-less shelf link must be a shelf endpoint, got kind=%d id=%q", ep.Kind(), ep.ShelfID())
+	}
+
+	// The same link with a bookmark hint keeps the working tree: a bookmark
+	// is a landing, never a content source.
+	marked, err := model.ParseLink("gg://x/a.txt?bookmark=entry7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep, err = f.svc.EndpointForLink(ctx, marked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ep.Kind() != model.EndpointWorkTree {
+		t.Fatalf("a bookmark hint must not move the endpoint, got kind=%d", ep.Kind())
+	}
+
+	// And a shelf hint on a link that DOES address a LIVE commit stays the
+	// commit: the hint is a fallback byte source, not a second identity, so
+	// it only speaks once the sha stops resolving
+	// (TestEvalLinkShelfHintFallsBackToTheFrozenTar).
+	addressed, err := model.ParseLink("gg://x@" + f.c2 + "?shelf=entry7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep, err = f.svc.EndpointForLink(ctx, addressed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ep.Kind() != model.EndpointCommit || ep.Hash() != f.c2 {
+		t.Fatalf("a shelf hint on a link addressing a LIVE commit must be ignored, got kind=%d hash=%q", ep.Kind(), ep.Hash())
+	}
+}
+
+// A /<path> makes ANY link bounded to exactly one member (spec §3.2's last
+// grammar row). This is the row that makes "compare one file against a
+// commit" work without a special case.
+func TestEvalLinkWithAPathIsBoundedToOne(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	l, err := model.ParseLink("gg://x/a.txt@" + f.c2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, err := f.svc.EvalLink(context.Background(), l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fs.Bounded() || len(fs.Paths()) != 1 || fs.Paths()[0] != "a.txt" {
+		t.Fatalf("a path link must bound the set to that one path, got bounded=%v paths=%v", fs.Bounded(), fs.Paths())
+	}
+}
+
+// A /<path> naming a file that does not EXIST at the target is still a legal
+// bounded set — it is bounded to one member with no bytes — and comparing it
+// reports A or D rather than failing to read the file (ruling R6).
+func TestEvalLinkWithAnAbsentPath(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+	// b.txt exists at c2 and was deleted at c3.
+	gone, err := model.ParseLink("gg://x/b.txt@" + f.c3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	there, err := model.ParseLink("gg://x/b.txt@" + f.c2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ls, err := f.svc.EvalLink(ctx, there)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs, err := f.svc.EvalLink(ctx, gone)
+	if err != nil {
+		t.Fatalf("a link to an absent path must evaluate, not error: %v", err)
+	}
+	got, err := f.svc.CompareSets(ctx, ls, rs)
+	if err != nil {
+		t.Fatalf("comparing against an absent path must not error: %v", err)
+	}
+	if len(got) != 1 || got[0].Path != "b.txt" || got[0].Status != "D" {
+		t.Fatalf("got %v, want exactly b.txt D", got)
+	}
+}
+
+// Narrowing a link that addresses a LIVE point: the working tree is unbounded,
+// so the one member's presence is a stat, and a path that is not on disk is
+// bounded-with-no-bytes rather than an error.
+func TestEvalLinkNarrowsALivePoint(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+
+	// a.txt is on disk (c3 left it there); b.txt is not (c3 deleted it).
+	here, err := model.ParseLink("gg://x/a.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, err := f.svc.EvalLink(ctx, here)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fs.Bounded() || fs.Endpoint().Kind() != model.EndpointWorkTree || !fs.Has("a.txt") {
+		t.Fatalf("a.txt is on disk: bounded=%v kind=%d has=%v", fs.Bounded(), fs.Endpoint().Kind(), fs.Has("a.txt"))
+	}
+	absent, err := model.ParseLink("gg://x/b.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, err = f.svc.EvalLink(ctx, absent)
+	if err != nil {
+		t.Fatalf("a path that is not on disk must still evaluate: %v", err)
+	}
+	if !fs.Bounded() || fs.Has("b.txt") {
+		t.Fatalf("b.txt was deleted at c3: bounded=%v has=%v", fs.Bounded(), fs.Has("b.txt"))
+	}
+}
+
+// narrowTo's BOUNDED arm: a /<path> on a link whose target is already a
+// bounded set (a pair, a shelf). The set never grows — §3.5 only ever scales
+// DOWN — so the answer is "one member, and does it have bytes here".
+//
+// A path that is not a MEMBER of the bounded set has no bytes there. For a
+// PAIR that already falls out of its has map (a non-member misses to false);
+// for a SHELF it does NOT, because a shelf's has map is nil, meaning "every
+// member has bytes" — so Has() answers true for ANY path, member or not, and
+// without narrowTo's membership check the later byte read would be sent after
+// a file the tar does not hold. compareBoundedPair guards the identical trap.
+func TestEvalLinkNarrowsABoundedSet(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a pair, narrowed", func(t *testing.T) {
+		t.Parallel()
+		f := newCompareFixture(t)
+		ctx := context.Background()
+
+		// The c1..c3 change-set is {a.txt} alone: b.txt was added at c2 and
+		// deleted at c3, so it never enters the set.
+		member, err := model.ParseLink("gg://x/a.txt@" + f.c1 + ".." + f.c3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs, err := f.svc.EvalLink(ctx, member)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !fs.Bounded() || len(fs.Paths()) != 1 || fs.Paths()[0] != "a.txt" || !fs.Has("a.txt") {
+			t.Fatalf("a.txt is a member with bytes at c3: bounded=%v paths=%v has=%v",
+				fs.Bounded(), fs.Paths(), fs.Has("a.txt"))
+		}
+
+		outsider, err := model.ParseLink("gg://x/b.txt@" + f.c1 + ".." + f.c3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs, err = f.svc.EvalLink(ctx, outsider)
+		if err != nil {
+			t.Fatalf("narrowing to a non-member must evaluate, not error (ruling R6): %v", err)
+		}
+		if !fs.Bounded() || len(fs.Paths()) != 1 || fs.Paths()[0] != "b.txt" {
+			t.Fatalf("the set must be bounded to b.txt alone, got bounded=%v paths=%v", fs.Bounded(), fs.Paths())
+		}
+		if fs.Has("b.txt") {
+			t.Fatal("b.txt is not in the c1..c3 change-set, so it has no bytes there; Has said true")
+		}
+	})
+
+	t.Run("a shelf, narrowed", func(t *testing.T) {
+		t.Parallel()
+		// newLiveArmFixture's shelf entry holds exactly {x.txt, dropped.txt}.
+		// README.md is in the repo and on disk but is NOT a member — the case
+		// the nil has map would answer true for.
+		f := newLiveArmFixture(t)
+		ctx := context.Background()
+		id := f.ep.ShelfID()
+
+		member, err := model.ParseLink("gg://x/x.txt?shelf=" + id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs, err := f.svc.EvalLink(ctx, member)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !fs.Bounded() || len(fs.Paths()) != 1 || fs.Paths()[0] != "x.txt" || !fs.Has("x.txt") {
+			t.Fatalf("x.txt is a shelf member: bounded=%v paths=%v has=%v",
+				fs.Bounded(), fs.Paths(), fs.Has("x.txt"))
+		}
+
+		outsider, err := model.ParseLink("gg://x/README.md?shelf=" + id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs, err = f.svc.EvalLink(ctx, outsider)
+		if err != nil {
+			t.Fatalf("narrowing a shelf to a non-member must evaluate, not error: %v", err)
+		}
+		if !fs.Bounded() || len(fs.Paths()) != 1 || fs.Paths()[0] != "README.md" {
+			t.Fatalf("the set must be bounded to README.md alone, got bounded=%v paths=%v", fs.Bounded(), fs.Paths())
+		}
+		if fs.Has("README.md") {
+			t.Fatal("README.md is not a shelf member, so the tar holds no bytes for it; Has said true " +
+				"(a nil has map answers true for any path — narrowTo must check MEMBERSHIP)")
+		}
+
+		// End to end: the narrowed non-member compared against the live
+		// working tree, where README.md DOES exist. Without the membership
+		// check this is not merely a wrong flag — sameBytes asks the shelf tar
+		// for a file it never held and the whole comparison hard-errors.
+		live, err := f.svc.EvalEndpoint(ctx, model.WorkTreeEndpoint())
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := f.svc.CompareSets(ctx, fs, live)
+		if err != nil {
+			t.Fatalf("comparing a non-member against the working tree must report A, not fail the read: %v", err)
+		}
+		if len(got) != 1 || got[0].Path != "README.md" || got[0].Status != "A" {
+			t.Fatalf("got %v, want exactly README.md A", got)
+		}
+	})
+}
+
+// A ref link is a POINT — the whole tree at that tip — and EvalEndpoint is the
+// only place the moving name may die: the set's endpoint is a COMMIT, never
+// an EndpointRef (plan 1b ruling R2).
+func TestEvalLinkRefResolvesToACommit(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	l, err := model.ParseLink("gg://x@ref:main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, err := f.svc.EvalLink(context.Background(), l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fs.Bounded() {
+		t.Fatalf("a ref is a point, so its set is UNBOUNDED; got paths=%v", fs.Paths())
+	}
+	if fs.Endpoint().Kind() != model.EndpointCommit || fs.Endpoint().Hash() != f.c3 {
+		t.Fatalf("a ref must resolve to its tip commit, got kind=%d hash=%q want %s",
+			fs.Endpoint().Kind(), fs.Endpoint().Hash(), f.c3)
+	}
+}
+
+// A two-dot pair link is BOUNDED to the change-set, and its halves may be
+// refnames — which EndpointForLink resolves to FULL shas, because
+// model.PairEndpoint refuses anything else.
+func TestEvalLinkPairIsBoundedToTheChangeSet(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+	l, err := model.ParseLink("gg://x@" + f.c1 + "..main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep, err := f.svc.EndpointForLink(ctx, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ep.Kind() != model.EndpointPair || ep.PairA() != f.c1 || ep.PairB() != f.c3 {
+		t.Fatalf("pair = kind %d %q..%q, want a pair %s..%s", ep.Kind(), ep.PairA(), ep.PairB(), f.c1, f.c3)
+	}
+	fs, err := f.svc.EvalLink(ctx, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// c1..c3 touches a.txt (M) and b.txt (added at c2, deleted at c3 — so it
+	// is NOT in the c1..c3 change-set at all).
+	if !fs.Bounded() || len(fs.Paths()) != 1 || fs.Paths()[0] != "a.txt" {
+		t.Fatalf("c1..main = bounded=%v paths=%v, want exactly [a.txt]", fs.Bounded(), fs.Paths())
+	}
+}
+
+// A three-dot preview link resolves to the merge base, exactly as the shipped
+// preview vocabulary does: merge-base(target, source)..source. The endpoint is
+// a PAIR of resolved shas — never two branch names (plan 1b ruling R1).
+func TestEvalLinkThreeDotResolvesToTheMergeBase(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+
+	// main is at c3. Branch "topic" off c1 and put one commit on top, so
+	// merge-base(main, topic) is c1 and neither tip is an ancestor of the
+	// other.
+	gittest.Run(t, f.dir, "checkout", "-b", "topic", f.c1)
+	if err := os.WriteFile(filepath.Join(f.dir, "t.txt"), []byte("topic\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, f.dir, "add", "t.txt")
+	gittest.Run(t, f.dir, "commit", "-m", "topic tip")
+	topic := gitOut(t, f.dir, "rev-parse", "HEAD")
+	gittest.Run(t, f.dir, "checkout", "main")
+
+	l, err := model.ParseLink("gg://x@main...topic")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep, err := f.svc.EndpointForLink(ctx, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ep.Kind() != model.EndpointPair {
+		t.Fatalf("a preview link is a PAIR endpoint, got kind %d", ep.Kind())
+	}
+	// Two independent sources for the same answer: the fixture knows the base
+	// is c1, and git is asked for it directly. Agreeing with only one of them
+	// would let a resolver that returns, say, the target tip pass.
+	base := gitOut(t, f.dir, "merge-base", "main", "topic")
+	if ep.PairA() != base {
+		t.Fatalf("PairA = %q, want `git merge-base main topic` = %q", ep.PairA(), base)
+	}
+	if ep.PairA() != f.c1 {
+		t.Fatalf("PairA = %q, want the fixture's c1 = %q", ep.PairA(), f.c1)
+	}
+	if ep.PairB() != topic {
+		t.Fatalf("PairB = %q, want topic's tip %q", ep.PairB(), topic)
+	}
+
+	// The set is the preview's change-set: t.txt alone (a.txt differs between
+	// the two TIPS, but not between the base and topic).
+	fs, err := f.svc.EvalLink(ctx, l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !fs.Bounded() || len(fs.Paths()) != 1 || fs.Paths()[0] != "t.txt" {
+		t.Fatalf("preview set = bounded=%v paths=%v, want exactly [t.txt]", fs.Bounded(), fs.Paths())
+	}
+
+	// A preview whose source is already MERGED has merge-base == source, and
+	// model.PairEndpoint calls a == b legal (ruling R7): the link still
+	// evaluates, to the EMPTY change-set, rather than erroring.
+	gittest.Run(t, f.dir, "branch", "merged", "main")
+	ml, err := model.ParseLink("gg://x@main...merged")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mep, err := f.svc.EndpointForLink(ctx, ml)
+	if err != nil {
+		t.Fatalf("a fully merged preview must still evaluate: %v", err)
+	}
+	if mep.PairA() != mep.PairB() || mep.PairA() != f.c3 {
+		t.Fatalf("a merged preview = %q..%q, want %s..%s", mep.PairA(), mep.PairB(), f.c3, f.c3)
+	}
+	mfs, err := f.svc.EvalLink(ctx, ml)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !mfs.Bounded() || len(mfs.Paths()) != 0 {
+		t.Fatalf("a merged preview is the EMPTY bounded set, got bounded=%v paths=%v", mfs.Bounded(), mfs.Paths())
+	}
+}
+
+// Unrelated histories have no merge base, and a preview link over them
+// surfaces domain's existing ErrNoMergeBase rather than a new sentinel: the
+// question ("what is merge-base(a, b)") is the same one CompareOrigins asks,
+// so callers keep one errors.Is target.
+func TestEvalLinkThreeDotWithoutACommonAncestor(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+
+	// An orphan branch shares no history with main.
+	gittest.Run(t, f.dir, "checkout", "--orphan", "alien")
+	gittest.Run(t, f.dir, "rm", "-rf", ".")
+	if err := os.WriteFile(filepath.Join(f.dir, "alien.txt"), []byte("alien\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, f.dir, "add", "alien.txt")
+	gittest.Run(t, f.dir, "commit", "-m", "alien")
+	gittest.Run(t, f.dir, "checkout", "main")
+
+	l, err := model.ParseLink("gg://x@main...alien")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.EndpointForLink(context.Background(), l); err == nil {
+		t.Fatal("two unrelated histories have no preview; want an error")
+	} else if !errors.Is(err, ErrNoMergeBase) {
+		t.Fatalf("want ErrNoMergeBase, got %v", err)
+	}
+}
+
+// A link that addresses nothing comparable is refused, not silently read as
+// some default endpoint.
+func TestEndpointForLinkRefusesAnUnknownRevision(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	l, err := model.ParseLink("gg://x@nosuchbranch..main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.EndpointForLink(context.Background(), l); err == nil {
+		t.Fatal("an unresolvable pair half must be an error")
+	}
+}
+
+// The worked examples of spec §3.6, end to end: a link on each side, the lane
+// they land in, and the result.
+func TestCompareTwoLinks(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+	left, err := model.ParseLink("gg://x/a.txt@" + f.c1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	right, err := model.ParseLink("gg://x@" + f.c3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ls, err := f.svc.EvalLink(ctx, left)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs, err := f.svc.EvalLink(ctx, right)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.svc.CompareSets(ctx, ls, rs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// bounded (one file) × unbounded (a tree): the result is keyed on a.txt
+	// alone, and a.txt's bytes differ between c1 and c3.
+	if len(got) != 1 || got[0].Path != "a.txt" || got[0].Status != "M" {
+		t.Fatalf("got %v, want exactly a.txt M", got)
+	}
+}
+
+// A shelf hint on a link that DOES address a commit is the spec's §3.3 table
+// row 1 and §6's "shelved commit gc'd, frozen tar present → use the tar": the
+// hint is a FALLBACK byte source, so once the sha stops resolving the link
+// must land on the frozen tar rather than sending a read after a dead object.
+// `gg compare shelf:<id> …` (ResolveCommitEntryEndpoint) already did this;
+// the link spelling of the same entry did not, so the two spellings answered
+// differently — one with rows, the other with git's "fatal: bad object".
+func TestEvalLinkShelfHintFallsBackToTheFrozenTar(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	initial := writeAndCommit(t, dir, "initial", map[string]string{"keep.txt": "keep\n"})
+	sha := writeAndCommit(t, dir, "doomed", map[string]string{"g.txt": "g\n"})
+	entry, err := svc.ShelfAddCommit(ctx, sha, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Make sha genuinely unreachable, the way export_test.go's durability
+	// check does: rewind main below it, expire every reflog, then prune.
+	gitRun(t, dir, "update-ref", "refs/heads/main", initial)
+	gitRun(t, dir, "checkout", "-f", "main")
+	gitRun(t, dir, "reflog", "expire", "--expire=all", "--all")
+	gitRun(t, dir, "gc", "--prune=now")
+	probe := exec.Command("git", "cat-file", "-e", sha)
+	probe.Dir = dir
+	if out, err := probe.CombinedOutput(); err == nil {
+		t.Fatalf("commit %s was not pruned (out=%s) — the fallback is not exercised", sha, out)
+	}
+
+	l, err := model.ParseLink("gg://x@" + sha + "?shelf=" + entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, err := svc.EvalLink(ctx, l)
+	if err != nil {
+		t.Fatalf("EvalLink of a gc'd shelf-hinted commit link: %v", err)
+	}
+	if fs.Endpoint().Kind() != model.EndpointShelf || fs.Endpoint().ShelfID() != entry.ID {
+		t.Fatalf("endpoint = kind %d id %q, want the frozen shelf entry %q",
+			fs.Endpoint().Kind(), fs.Endpoint().ShelfID(), entry.ID)
+	}
+	if !fs.Bounded() {
+		t.Fatalf("a frozen shelf entry is a BOUNDED set; got unbounded")
+	}
+	if got := fs.Paths(); len(got) != 1 || got[0] != "g.txt" {
+		t.Fatalf("paths = %v, want [g.txt] (the tar's one member)", got)
+	}
+
+	// And the comparison answers rather than leaking git's "bad object":
+	// g.txt is not on disk any more, so it reads as deleted.
+	wt, err := svc.EvalEndpoint(ctx, model.WorkTreeEndpoint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := svc.CompareSets(ctx, fs, wt)
+	if err != nil {
+		t.Fatalf("CompareSets(frozen, @worktree): %v", err)
+	}
+	if len(rows) != 1 || rows[0].Status != "D" || rows[0].Path != "g.txt" {
+		t.Fatalf("rows = %+v, want exactly D g.txt", rows)
+	}
+}
+
+// The address-less shelf link is spec §3.3's named exception — a shelved
+// WORKING-TREE file, whose bytes were never in git, so the hint is the only
+// content source and the link has no address at all. EndpointForLink has had
+// an arm for it all along, but EvalEndpoint routed every shelf endpoint
+// through ShelfCommitFiles, which refuses a file entry outright — so the one
+// link in the system with no address could be BUILT and never EVALUATED.
+//
+// Through EvalLink, deliberately: stopping at EndpointForLink is what hid
+// this.
+func TestEvalLinkAddressLessShelfFileIsOneBoundedMember(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	writeAndCommit(t, dir, "seed", map[string]string{"e.txt": "shelved\n"})
+	entry, err := svc.ShelfAdd(ctx, model.FileAddress{
+		State: model.StateUnstaged, Worktree: dir, Path: "e.txt",
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.IsCommit() {
+		t.Fatalf("fixture is wrong: %s is a shelved COMMIT, not a file", entry.ID)
+	}
+
+	l, err := model.ParseLink("gg://x?shelf=" + entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, err := svc.EvalLink(ctx, l)
+	if err != nil {
+		t.Fatalf("EvalLink of the address-less shelf link: %v", err)
+	}
+	if fs.Endpoint().Kind() != model.EndpointShelf || fs.Endpoint().ShelfID() != entry.ID {
+		t.Fatalf("endpoint = kind %d id %q, want the shelf entry", fs.Endpoint().Kind(), fs.Endpoint().ShelfID())
+	}
+	if !fs.Bounded() {
+		t.Fatal("a shelved file is ONE member, so the set is bounded")
+	}
+	if got := fs.Paths(); len(got) != 1 || got[0] != "e.txt" {
+		t.Fatalf("paths = %v, want [e.txt] (the entry's origin path)", got)
+	}
+	if !fs.Has("e.txt") {
+		t.Fatal("the one member has bytes — the blob IS the entry")
+	}
+
+	// It compares, which is the whole point. The file on disk still holds the
+	// shelved bytes, so there is nothing to report.
+	wt, err := svc.EvalEndpoint(ctx, model.WorkTreeEndpoint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := svc.CompareSets(ctx, fs, wt)
+	if err != nil {
+		t.Fatalf("CompareSets(shelved file, @worktree): %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("rows = %+v, want none (the shelved bytes are already on disk)", rows)
+	}
+
+	// Change the file and the projection reports exactly that one path.
+	if err := os.WriteFile(filepath.Join(dir, "e.txt"), []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = svc.CompareSets(ctx, fs, wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Status != "M" || rows[0].Path != "e.txt" {
+		t.Fatalf("rows = %+v, want exactly M e.txt", rows)
+	}
+}

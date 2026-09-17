@@ -832,3 +832,125 @@ func TestResolveLinkStillRefusesACommitLinkWithNoSHA(t *testing.T) {
 		t.Fatalf("err = %v, want an ErrLink refusal", err)
 	}
 }
+
+// LocateLink answers only "which checkout, and what path inside it" — and it
+// must answer for the two link kinds ResolveLink deliberately refuses. The
+// local form is the case that matters: its checkout and its file path arrive
+// UNDIVIDED in Repo.Abs, and only the registry can split them, so a consumer
+// that evaluates a link's own target (domain.EvalLink) has no other way to
+// learn the path.
+func TestLocateLinkSplitsALocalLinkForEveryTarget(t *testing.T) {
+	t.Parallel()
+	here, svc := newRealRepo(t)
+	head := headOf(t, here)
+	abs := filepath.ToSlash(here)
+	for _, tc := range []struct{ name, link, wantPath string }{
+		{"working tree", "gg://" + abs + "/README.md", "README.md"},
+		{"staged", "gg://" + abs + "/README.md@staged", "README.md"},
+		{"commit", "gg://" + abs + "/README.md@" + head, "README.md"},
+		{"ref tip", "gg://" + abs + "/README.md@ref:main", "README.md"},
+		{"change-set", "gg://" + abs + "/README.md@" + head + ".." + head, "README.md"},
+		{"repo only", "gg://" + abs, ""},
+		{"ref, no path", "gg://" + abs + "@ref:main", ""},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			l, err := model.ParseLink(tc.link)
+			if err != nil {
+				t.Fatalf("ParseLink(%q): %v", tc.link, err)
+			}
+			checkout, rel, err := LocateLink(context.Background(), l, ResolveOpts{Cwd: svc})
+			if err != nil {
+				t.Fatalf("LocateLink(%q): %v", tc.link, err)
+			}
+			if !samePathLink(checkout, here) {
+				t.Errorf("checkout = %q, want %q", checkout, here)
+			}
+			if rel != tc.wantPath {
+				t.Errorf("relPath = %q, want %q", rel, tc.wantPath)
+			}
+		})
+	}
+}
+
+// ResolveLink still refuses a ref or pair link, and that is the reason
+// LocateLink exists rather than a reason to stop using ResolveLink: model
+// .FileAddress has no field for a moving tip, and none for a BOUNDED
+// change-set, so finishing one would mean flattening `@a..b` into commit b —
+// the silent wrong answer this feature is built to avoid.
+func TestResolveLinkStillRefusesARefOrPairLink(t *testing.T) {
+	t.Parallel()
+	here, svc := newRealRepo(t)
+	head := headOf(t, here)
+	abs := filepath.ToSlash(here)
+	for _, link := range []string{
+		"gg://" + abs + "@ref:main",
+		"gg://" + abs + "@" + head + ".." + head,
+	} {
+		l, err := model.ParseLink(link)
+		if err != nil {
+			t.Fatalf("ParseLink(%q): %v", link, err)
+		}
+		if _, err := ResolveLink(context.Background(), l, ResolveOpts{Cwd: svc}); !errors.Is(err, model.ErrLink) {
+			t.Errorf("ResolveLink(%q) err = %v, want a model.ErrLink refusal", link, err)
+		}
+	}
+}
+
+// A link naming a repository this machine has never opened is located nowhere,
+// and says so with ErrLinkUnknownRepo — the same sentinel ResolveLink uses, so
+// a consumer keeps ONE errors.Is target.
+func TestLocateLinkUnknownRepositoryIsErrLinkUnknownRepo(t *testing.T) {
+	t.Parallel()
+	_, svc := newRealRepo(t)
+	l, err := model.ParseLink("gg://nowhere-on-this-machine@ref:main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = LocateLink(context.Background(), l, ResolveOpts{Cwd: svc})
+	if !errors.Is(err, ErrLinkUnknownRepo) {
+		t.Fatalf("err = %v, want ErrLinkUnknownRepo", err)
+	}
+}
+
+// A registered OTHER checkout is located as itself, which is what lets a
+// frontend compare the answer against its own top level and refuse a
+// cross-repository request instead of silently answering about the wrong tree.
+func TestLocateLinkFindsAnotherRegisteredCheckout(t *testing.T) {
+	t.Parallel()
+	here, svc := newRealRepo(t)
+	other, _ := newRealRepo(t)
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	if err := repos.Touch(state, other, "", time.Unix(9000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	l, err := model.ParseLink("gg://" + filepath.ToSlash(other) + "/README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkout, rel, err := LocateLink(context.Background(), l, ResolveOpts{RegistryPath: state, Cwd: svc})
+	if err != nil {
+		t.Fatalf("LocateLink: %v", err)
+	}
+	if !samePathLink(checkout, other) {
+		t.Errorf("checkout = %q, want the OTHER checkout %q (cwd is %q)", checkout, other, here)
+	}
+	if rel != "README.md" {
+		t.Errorf("relPath = %q, want README.md", rel)
+	}
+}
+
+// The escape refusal is LocateLink's too: a crafted link carrying ".." must
+// not hand a consumer a path outside the checkout it named.
+func TestLocateLinkRefusesAPathEscapingTheCheckout(t *testing.T) {
+	t.Parallel()
+	here := linkRepoWithRemote(t, "gigagit")
+	l, err := model.ParseLink("gg://gigagit/../outside.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := LocateLink(context.Background(), l, ResolveOpts{Cwd: Open(here)}); !errors.Is(err, model.ErrLink) {
+		t.Fatalf("err = %v, want a model.ErrLink escape refusal", err)
+	}
+}

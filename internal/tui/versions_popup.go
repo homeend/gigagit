@@ -247,7 +247,19 @@ func (p *versionsPopup) onEnter(m Model) (Model, tea.Cmd) {
 		// whether refs/heads/<branch> is still there. That is why this no
 		// longer gates on p.deleted or a resolvable branchTipHash the way
 		// the pre-frozen-preview compare (version hash vs the live tip) did.
+		// Base/Ours are parsed out of the version ref's trailer by
+		// git.ParseVersionMeta, which splits on whitespace and never checks
+		// that a field IS a sha — a record written by an older gg, or a ref
+		// someone crafted, can carry anything. mustCommitEndpoint on that was
+		// a whole-app panic, the same shape as the core.abbrev regression, so
+		// the record is validated here and an unusable one declines.
 		if v.Base != "" && v.Ours != "" {
+			base, berr := model.CommitEndpoint(v.Base)
+			ours, oerr := model.CommitEndpoint(v.Ours)
+			if berr != nil || oerr != nil {
+				m.statusMsg = i18n.T("the recorded commit is not usable")
+				return m, nil
+			}
 			// The frozen PR-style preview this version froze — left = the
 			// recorded merge base, right = the contribution. CRITICAL: opened
 			// DIRECTLY with these two hashes, never through openPreviewCmd/
@@ -258,10 +270,7 @@ func (p *versionsPopup) onEnter(m Model) (Model, tea.Cmd) {
 			// render today's branch instead of what gg recorded, which is
 			// the very drift this feature exists to surface.
 			return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) {
-				return m.openCompareFiles(
-					mustCommitEndpoint(v.Base),
-					mustCommitEndpoint(v.Ours),
-				)
+				return m.openCompareFiles(base, ours)
 			})
 		}
 		// Fieldless record (amend/reset/undo-commit/delete-branch/restore):

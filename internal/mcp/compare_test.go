@@ -34,8 +34,8 @@ func TestCompareTreesWorktreeVsCommit(t *testing.T) {
 // svc.CommitLookup hands back model.LogLine.Hash — `%h`, whose width honours
 // core.abbrev (git's legal minimum is 4) — so building the Endpoint from it
 // made a legal repo config a hard failure: `resolving "HEAD": bad endpoint:
-// commit hash must be 7..64 characters, got 4`. The rev is resolved to its
-// FULL sha instead.
+// "dead" is not a commit id (want 7 to 64 hex characters)`. The rev is
+// resolved to its FULL sha instead.
 func TestCompareTreesShortAbbrev(t *testing.T) {
 	e := newTestEnv(t)
 	gitRun(t, e.dir, "config", "core.abbrev", "4")
@@ -162,5 +162,62 @@ func TestCompareFileBodyLinesResemblingHeadersSurvive(t *testing.T) {
 	}
 	if got := strings.Count(diff, "--- "+out["left_display"].(string)); got != 1 {
 		t.Fatalf("expected exactly 1 relabelled header, got %d: %s", got, diff)
+	}
+}
+
+// gg_compare_trees puts whatever kind the client names into whatever slot it
+// named, with no ordering constraint — so the reversed pair is reachable by an
+// agent on its first try. It used to answer
+// "comparing: DiffTreeFiles: unsupported endpoint pair 1 → 3" while
+// `gg compare @worktree main` compared: one compare frontend disagreeing with
+// another about what a user may ask. The tool routes through the algebra now,
+// so the pair answers, with the statuses read from the LEFT side towards the
+// right.
+func TestCompareTreesReversedPairCompares(t *testing.T) {
+	e := newTestEnv(t)
+	if err := os.WriteFile(filepath.Join(e.dir, "a.txt"), []byte("hello\nchanged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(e.dir, "fresh.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := e.call(t, "gg_compare_trees", map[string]any{
+		"left":  map[string]any{"kind": "worktree"},
+		"right": map[string]any{"kind": "commit", "rev": "HEAD"},
+	})
+	got := map[string]string{}
+	for _, f := range out["files"].([]any) {
+		row := f.(map[string]any)
+		got[row["path"].(string)] = row["status"].(string)
+	}
+	if got["a.txt"] != "M" {
+		t.Errorf("a.txt = %q, want M; full result %v", got["a.txt"], got)
+	}
+	// Forward this is an addition; reversed the comparison ENDS at the commit,
+	// where the untracked file does not exist.
+	if got["fresh.txt"] != "D" {
+		t.Errorf("fresh.txt = %q, want D (untracked on disk, absent at HEAD); full result %v", got["fresh.txt"], got)
+	}
+}
+
+// index → commit is the other reversed live form, and the one an agent reaches
+// for when it wants "what is staged, relative to HEAD" the wrong way round.
+func TestCompareTreesReversedIndexAgainstCommit(t *testing.T) {
+	e := newTestEnv(t)
+	if err := os.WriteFile(filepath.Join(e.dir, "a.txt"), []byte("hello\nstaged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, e.dir, "add", "a.txt")
+	out := e.call(t, "gg_compare_trees", map[string]any{
+		"left":  map[string]any{"kind": "index"},
+		"right": map[string]any{"kind": "commit", "rev": "HEAD"},
+	})
+	files := out["files"].([]any)
+	if len(files) != 1 {
+		t.Fatalf("files = %v, want exactly a.txt", files)
+	}
+	f := files[0].(map[string]any)
+	if f["path"] != "a.txt" || f["status"] != "M" {
+		t.Fatalf("file = %v, want a.txt M", f)
 	}
 }

@@ -111,9 +111,11 @@ gg diff [--stat|--name-only] [--cached] [<rev>|<A..B>] [-- <paths>...]
                                       # full patch by default; --stat = terse per-file +A -D; --name-only = bare paths
 gg show <commit> [--patch] [-- <file>...]   # "<short-sha> <subject>" header + terse stat (default) or full patch
 gg compare [--patch] <left> [<right>]   # changed-file list (or --patch: unified diffs) between two endpoints
-                                      # endpoints: a commit-ish, @staged, @worktree, bookmark:<id>, shelf:<id> (a stored
-                                      # commit entry — hybrid: live sha while it exists, frozen tar once gc'd, noted on
-                                      # stderr); <right> defaults to @worktree
+                                      # endpoints: a gg:// link, a commit-ish, @staged, @worktree, bookmark:<id>,
+                                      # shelf:<id> (a stored commit entry — hybrid: live sha while it exists, frozen
+                                      # tar once gc'd, noted on stderr); <right> defaults to @worktree
+                                      # order is free (@worktree first just inverts the statuses); rows sorted by path
+                                      # a link with a /<path>, or an @<a>..<b> target, scopes the answer to those files
 gg preview list                       # id  label  source  target  state  files  ahead, one row per saved pair
 gg preview add [--label <text>] <source> <target>   # save a pair; state/counts recompute from the live tips on every read
 gg preview rm <id|label>              # remove a saved pair
@@ -259,15 +261,29 @@ gg://<repo>/<path>[@<target>][:<line>]     # <target>: a sha, "staged", or absen
 gg://<repo>/<path>[@<target>]#<hunk>       # hunk numbers are `gg diff --hunks`'s
 gg://<repo>/<path>@<sha>:old:<n>           # the old side of that diff
 gg://<repo>@<sha>                          # a commit
+gg://<repo>@ref:<branch|tag>               # a branch/tag TIP: the whole tree there (a NAME, not today's sha)
+gg://<repo>@<a>..<b>                       # a CHANGE-SET: only the files that differ between a and b
 gg://<repo>@<target>...<source>            # a merge preview (branch names, never shas)
 gg://<repo>/<path>@<target>...<source>:<n> # a file / new-side line in it
 gg:///abs/checkout/file.go:12              # a repo with no remote
+gg://<repo>@<sha>?bookmark=<id>            # a trailing ?<kind>=<id> hint: where the link was copied from
 ```
+
+A `?` is the hint separator now, so it cannot appear in a path, in a checkout
+path or in a ref name carried by a link. `gg link`, the TUI and `gg web`'s
+copy-link buttons all refuse to print such a link rather than emit one that
+reparses as something else.
 
 ```bash
 gg link internal/tui/steer.go:42        # print the link for a place here
 gg link --rev HEAD README.md            # …at a commit (always the full sha)
+gg link --ref main                      # …the branch tip, kept as a name
+gg link --pair HEAD~3..HEAD             # …the last 3 commits' change-set (both halves = full shas)
+gg link --ref main --bookmark b1        # …with a landing hint appended
 gg link resolve gg://gigagit/a.go:3     # which checkout on this machine?
+
+gg compare gg://gigagit@ref:main gg://gigagit@ref:v1.2         # links on either side of a compare
+gg compare gg://gigagit/internal/tui/model.go@ref:main main    # one file, one row
 
 gg diff  gg://gigagit/a.go@abc1234      # every verb takes a link as its first positional
 gg show  gg://gigagit@abc1234

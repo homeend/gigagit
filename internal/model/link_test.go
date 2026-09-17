@@ -430,3 +430,197 @@ func TestLinkRefOK(t *testing.T) {
 		}
 	}
 }
+
+// The hint names WHICH UI surface a link was copied from (spec §3.3). It is
+// the last thing in the grammar, it never changes what the link ADDRESSES,
+// and it round-trips.
+func TestLinkHintRoundTrip(t *testing.T) {
+	t.Parallel()
+	for _, s := range []string{
+		"gg://gigagit@abc1234def?bookmark=auth-fix",
+		"gg://gigagit@abc1234def?shelf=commit-x-9f3a1",
+		"gg://gigagit?shelf=wt-parser-9f3a1",
+		"gg://gigagit/internal/a.go@abc1234def:42?bookmark=b1",
+		"gg://gigagit/internal/a.go@abc1234def#3?shelf=s1",
+		"gg://gigagit@9c1f2a3456?stash=0",
+	} {
+		t.Run(s, func(t *testing.T) {
+			t.Parallel()
+			l, err := ParseLink(s)
+			if err != nil {
+				t.Fatalf("ParseLink(%q): %v", s, err)
+			}
+			if got := l.String(); got != s {
+				t.Errorf("String(ParseLink(%q)) = %q", s, got)
+			}
+		})
+	}
+}
+
+// The hint parses into its two halves, and the rest of the link is untouched
+// by its presence: same address with and without.
+func TestLinkHintSplitsAndDoesNotChangeTheAddress(t *testing.T) {
+	t.Parallel()
+	withHint, err := ParseLink("gg://gigagit/a.go@abc1234def:7?bookmark=auth-fix")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if withHint.Hint.Kind != "bookmark" || withHint.Hint.ID != "auth-fix" {
+		t.Fatalf("hint = %+v, want {bookmark auth-fix}", withHint.Hint)
+	}
+	plain, err := ParseLink("gg://gigagit/a.go@abc1234def:7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	withHint.Hint = LinkHint{}
+	if withHint != plain {
+		t.Errorf("the hint changed the address:\n with = %+v\n without = %+v", withHint, plain)
+	}
+}
+
+func TestLinkHintRejects(t *testing.T) {
+	t.Parallel()
+	for _, s := range []string{
+		"gg://gigagit@abc1234def?",            // empty hint
+		"gg://gigagit@abc1234def?bookmark",    // no "="
+		"gg://gigagit@abc1234def?bookmark=",   // no id
+		"gg://gigagit@abc1234def?=auth-fix",   // no kind
+		"gg://gigagit@abc1234def?branch=main", // unknown kind
+		"gg://gigagit@abc1234def?shelf=a?b",   // a second "?"
+		"gg://gigagit/a?.go@abc1234def",       // "?" inside a path
+	} {
+		t.Run(s, func(t *testing.T) {
+			t.Parallel()
+			if _, err := ParseLink(s); err == nil {
+				t.Fatalf("ParseLink(%q) should have failed", s)
+			} else if !errors.Is(err, ErrLink) {
+				t.Fatalf("error should wrap ErrLink, got %v", err)
+			}
+		})
+	}
+}
+
+// The reject sets gain "?" so no producer can emit a link that reparses as a
+// different place.
+func TestQuestionMarkIsNotExpressible(t *testing.T) {
+	t.Parallel()
+	if LinkPathOK("a?.go") {
+		t.Error("LinkPathOK must reject a path containing ?")
+	}
+	if LinkAbsOK("/home/u/re?po") {
+		t.Error("LinkAbsOK must reject a checkout path containing ?")
+	}
+	if LinkRefOK("feat/a?b") {
+		t.Error("LinkRefOK must reject a refname containing ?")
+	}
+	if LinkRefOK("main..feat") {
+		t.Error("LinkRefOK must reject a refname containing .. (git forbids it, and it collides with the change-set form)")
+	}
+}
+
+// @ref:<name> addresses a branch or tag TIP — unbounded, a point (spec §3.2).
+func TestLinkRefRoundTrip(t *testing.T) {
+	t.Parallel()
+	for _, s := range []string{
+		"gg://gigagit@ref:main",
+		"gg://gigagit@ref:feat/unified-links",
+		"gg://gigagit/internal/a.go@ref:main",
+		"gg://gigagit/internal/a.go@ref:main:42",
+		"gg://gigagit/internal/a.go@ref:main#3",
+		"gg://gigagit@ref:main?bookmark=b1",
+	} {
+		t.Run(s, func(t *testing.T) {
+			t.Parallel()
+			l, err := ParseLink(s)
+			if err != nil {
+				t.Fatalf("ParseLink(%q): %v", s, err)
+			}
+			if l.Target.State != StateCommitted || l.Target.Ref == "" {
+				t.Fatalf("target = %+v, want a committed ref target", l.Target)
+			}
+			if l.Target.Commit != "" || l.Target.Preview != nil || l.Target.Pair != nil {
+				t.Fatalf("a ref target must set ONLY Ref, got %+v", l.Target)
+			}
+			if got := l.String(); got != s {
+				t.Errorf("String(ParseLink(%q)) = %q", s, got)
+			}
+		})
+	}
+}
+
+// @<a>..<b> is the two-dot CHANGE-SET — bounded, a pair (spec §3.2). Each half
+// is a sha or a refname; mixing is allowed, because the common producer emits
+// a resolved parent sha and a user may reasonably type a branch name.
+func TestLinkPairRoundTrip(t *testing.T) {
+	t.Parallel()
+	for _, s := range []string{
+		"gg://gigagit@abc1234def..abc9999fff",
+		"gg://gigagit@main..feat/x",
+		"gg://gigagit@abc1234def..feat/x",
+		// Both halves short and hex: at the GRAMMAR layer these are refnames,
+		// not shas, and domain resolves them. A length rule here would forbid
+		// a branch literally named "abc".
+		"gg://gigagit@abc..def",
+		"gg://gigagit/internal/a.go@abc1234def..abc9999fff",
+		"gg://gigagit@abc1234def..abc9999fff?stash=0",
+	} {
+		t.Run(s, func(t *testing.T) {
+			t.Parallel()
+			l, err := ParseLink(s)
+			if err != nil {
+				t.Fatalf("ParseLink(%q): %v", s, err)
+			}
+			if l.Target.Pair == nil {
+				t.Fatalf("target = %+v, want a pair", l.Target)
+			}
+			if got := l.String(); got != s {
+				t.Errorf("String(ParseLink(%q)) = %q", s, got)
+			}
+		})
+	}
+}
+
+// Three dots keep their SHIPPED meaning (a merge preview of two BRANCH names)
+// and must not be swallowed by the new two-dot form.
+func TestThreeDotStillParsesAsAPreview(t *testing.T) {
+	t.Parallel()
+	l, err := ParseLink("gg://gigagit@main...feat/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Target.Preview == nil || l.Target.Pair != nil {
+		t.Fatalf("target = %+v, want a preview and no pair", l.Target)
+	}
+}
+
+func TestLinkRefAndPairRejects(t *testing.T) {
+	t.Parallel()
+	for name, s := range map[string]string{
+		"empty ref":            "gg://gigagit@ref:",
+		"ref with @":           "gg://gigagit@ref:fe@at",
+		"pair missing a half":  "gg://gigagit@abc1234def..",
+		"pair missing b half":  "gg://gigagit@..abc1234def",
+		"pair with three dots": "gg://gigagit@a..b..c",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := ParseLink(s); err == nil {
+				t.Fatalf("ParseLink(%q) should have failed", s)
+			} else if !errors.Is(err, ErrLink) {
+				t.Fatalf("error should wrap ErrLink, got %v", err)
+			}
+		})
+	}
+}
+
+// An ALL-DIGIT branch name cannot ride a ref link: the ":<line>" suffix wins,
+// by the shipped splitLinkLine rule, so "@ref:123" reads as target "ref" plus
+// line 123 and then fails target validation. That is a deliberate refusal, not
+// a wrong answer — the line suffix is far commoner than a numeric branch — and
+// this test exists so nobody "fixes" it into ambiguity. (Plan 1b ruling R5.)
+func TestAllDigitBranchNameIsRefused(t *testing.T) {
+	t.Parallel()
+	if _, err := ParseLink("gg://gigagit@ref:123"); err == nil {
+		t.Fatal("an all-digit ref name must be refused, not silently reparsed")
+	}
+}

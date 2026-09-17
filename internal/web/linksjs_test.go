@@ -258,6 +258,22 @@ func TestLinkForJSMatchesGo(t *testing.T) {
 		// refuse an NBSP-bearing name the TUI emits a link for.
 		{Name: "preview target with a tab refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x", Target: "ma\tin"},
 		{Name: "preview source with a no-break space is fine", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x y", Target: "main"},
+		// Whole-branch review, MINOR 8: none of the three JS predicates was
+		// updated when Task 1 tightened the Go ones, and this table fed no
+		// case that could tell — which is why it stayed green. A '?' is legal
+		// in a POSIX filename and in a checkout path, so a browser-copied link
+		// that JS accepted could not be pasted back into the CLI.
+		{Name: "remote path with ? refuses", Repo: "gigagit", Path: "a?b.go", State: "unstaged"},
+		{Name: "local path with ? refuses", Worktree: "/mnt/t/repo", Path: "a?b.go", State: "unstaged"},
+		{Name: "path with a hint-shaped ? refuses", Repo: "gigagit", Path: "a?bookmark=x.go", State: "unstaged"},
+		{Name: "local worktree with ? refuses", Worktree: "/mnt/q?x/repo", Path: "a/b.go", State: "unstaged"},
+		{Name: "preview source with ? refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "feat?x", Target: "main"},
+		{Name: "preview target with ? refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x", Target: "ma?in"},
+		// And the OTHER drift, independent of '?': Go refuses TWO dots in a
+		// refname (git check-ref-format forbids them anywhere), while the JS
+		// twin only refused three.
+		{Name: "preview source with .. refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "a..b", Target: "main"},
+		{Name: "preview target with .. refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x", Target: "ma..in"},
 	}
 
 	want := make([]string, len(cases))

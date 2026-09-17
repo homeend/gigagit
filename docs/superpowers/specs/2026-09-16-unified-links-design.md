@@ -549,7 +549,7 @@ binds a random port each run, which empties `localStorage`.
 | shelved commit gc'd, frozen tar present | use the tar (shipped `ResolveCommitEntryEndpoint` semantics) |
 | commit gone, no fallback | `CommitGoneError` (shipped) |
 | stash popped or dropped, sha gc'd | `CommitGoneError` — there is no frozen fallback; the message points at shelving |
-| bounded × bounded, disjoint sets | empty result, **not** an error |
+| bounded × bounded, disjoint sets | a result of all A/D, **not** an error (disjoint does not mean empty: every member of one side is absent from the other, which §3.5 already spells as A/D. Only two EMPTY sets compare to nothing.) |
 | `ref:` does not resolve | error |
 | two links naming different repos | refused in phase 1 — §9 |
 

@@ -20,7 +20,7 @@ import (
 // is load-bearing: '#' starts a comment in every POSIX shell, so an unquoted
 // hunk link silently loses its hunk. gg deliberately applies no heuristic —
 // it says so here instead.
-const linkUsage = "usage: gg link [<path>[:<line>]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>>]\n" +
+const linkUsage = "usage: gg link [<path>[:<line>]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>> | --ref <branch|tag> | --pair <a>..<b>] [--bookmark <id> | --shelf <id>]\n" +
 	"       gg link resolve <gg://…> [--json]\n" +
 	"quote links that carry #<hunk> — an unquoted # starts a shell comment"
 
@@ -42,6 +42,10 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	fs.SetOutput(stderr)
 	cached := fs.Bool("cached", false, "address the staged diff (HEAD → index)")
 	rev := fs.String("rev", "", "address a commit's own change (parent → commit)")
+	ref := fs.String("ref", "", "address a branch or tag TIP (unbounded: the whole tree there)")
+	pair := fs.String("pair", "", "address a CHANGE-SET, <a>..<b> (bounded: what it changed)")
+	bookmark := fs.String("bookmark", "", "attach a ?bookmark=<id> landing hint")
+	shelf := fs.String("shelf", "", "attach a ?shelf=<id> landing hint")
 	pf := addPreviewFlag(fs)
 	pos, err := parseSteerFlags(fs, args)
 	if err != nil {
@@ -51,12 +55,35 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 		fmt.Fprintf(stderr, "link: unexpected argument %q\n%s\n", pos[1], linkUsage)
 		return 2
 	}
-	if *cached && *rev != "" {
-		fmt.Fprintf(stderr, "link: --cached and --rev are mutually exclusive\n%s\n", linkUsage)
+	// --cached, --rev, --preview, --ref and --pair all name the TARGET, so at
+	// most one may be set. A count, not a web of pairwise checks: the pairwise
+	// form was already two checks for two flags, and five flags would be ten.
+	set := 0
+	for _, on := range []bool{*cached, *rev != "", pf.set(), *ref != "", *pair != ""} {
+		if on {
+			set++
+		}
+	}
+	if set > 1 {
+		// --preview keeps its own shared message when it is one of the two, so
+		// `gg link --preview x --rev y` reads the same as `gg diff` does.
+		if pf.set() {
+			return previewUsageErr("link", stderr)
+		}
+		fmt.Fprintf(stderr, "link: --cached, --rev, --preview, --ref and --pair name the target; use one\n%s\n", linkUsage)
 		return 2
 	}
-	if pf.set() && (*cached || *rev != "") {
-		return previewUsageErr("link", stderr)
+	// The two hints are a LANDING, and a link lands in one place.
+	if *bookmark != "" && *shelf != "" {
+		fmt.Fprintf(stderr, "link: --bookmark and --shelf are mutually exclusive\n%s\n", linkUsage)
+		return 2
+	}
+	hint := model.LinkHint{}
+	switch {
+	case *bookmark != "":
+		hint = model.LinkHint{Kind: "bookmark", ID: *bookmark}
+	case *shelf != "":
+		hint = model.LinkHint{Kind: "shelf", ID: *shelf}
 	}
 	arg := ""
 	if len(pos) == 1 {
@@ -74,12 +101,14 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 			return 1
 		}
 		if !model.LinkRefOK(tgt.Source) || !model.LinkRefOK(tgt.Target) {
-			fmt.Fprintf(stderr, "link: %s...%s cannot be expressed in a gg link (a branch name may not contain @, : or #)\n", tgt.Target, tgt.Source)
+			fmt.Fprintf(stderr, "link: %s...%s cannot be expressed in a gg link (a branch or tag name may not contain @, :, #, ? or whitespace)\n", tgt.Target, tgt.Source)
 			return 1
 		}
 		prev = &model.LinkPreview{Source: tgt.Source, Target: tgt.Target}
 	}
-	l, err := buildLink(ctx, svc, workdir, arg, *cached, *rev, prev)
+	l, err := buildLink(ctx, svc, workdir, arg, linkOpts{
+		Cached: *cached, Rev: *rev, Ref: *ref, Pair: *pair, Preview: prev, Hint: hint,
+	})
 	if err != nil {
 		if errors.Is(err, model.ErrLink) {
 			fmt.Fprintf(stderr, "link: %v\n%s\n", err, linkUsage)
@@ -100,9 +129,21 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 // disagree with the grammar it prints; the bare path portion is then rebased
 // onto the checkout top level, since the link grammar's <path> is always
 // top-level-relative (spec), never cwd-relative.
-func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string, cached bool, rev string, prev *model.LinkPreview) (model.Link, error) {
+// linkOpts is what `gg link` was asked to address. At most one target field
+// is set (none means the working tree); the hint composes with any of them.
+type linkOpts struct {
+	Cached  bool
+	Rev     string
+	Ref     string
+	Pair    string
+	Preview *model.LinkPreview
+	Hint    model.LinkHint
+}
+
+func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string, o linkOpts) (model.Link, error) {
 	var l model.Link
 	l.Side = model.NoteSideNew
+	l.Hint = o.Hint
 
 	// TopLevel is needed both to rebase a path argument and, when this repo
 	// has no remote, as the link's own local-form identity — fetch it once
@@ -121,8 +162,19 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 		// checked here — it is the line suffix, and on Windows it is also the
 		// drive colon of a perfectly good absolute argument; LinkPathOK gets
 		// the REBASED, top-level-relative path below, which has neither.
-		if strings.ContainsRune(raw, '@') || !linkHunkSuffixOK(raw) {
-			return model.Link{}, fmt.Errorf("%w: path contains @, : or # — no gg link", model.ErrLink)
+		//
+		// '?' is checked for a STRONGER reason than the other two: ParseLink
+		// does not fail on it. It reads everything from the first '?' as the
+		// hint and hands back a TRUNCATED path, so without this guard
+		// `gg link 'a?bookmark=x.txt'` printed, with exit 0, a link to the
+		// unrelated file "a" — LinkPathOK below is only ever asked about the
+		// already-shortened path and can never see the '?'. A '?' in the
+		// argument is therefore refused outright rather than read as a hint:
+		// `gg link`'s hint channel is --bookmark/--shelf, and a filename is
+		// not a second spelling of it. (Consequently probe.Hint is always
+		// empty here; there is no hint to carry or to drop.)
+		if strings.ContainsAny(raw, "@?") || !linkHunkSuffixOK(raw) {
+			return model.Link{}, fmt.Errorf("%w: path contains @, :, # or ? — no gg link", model.ErrLink)
 		}
 		probe, err := probeLinkArg(raw)
 		if err != nil {
@@ -133,7 +185,7 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 			return model.Link{}, err
 		}
 		if !model.LinkPathOK(rel) {
-			return model.Link{}, fmt.Errorf("%w: path contains @, : or # — no gg link", model.ErrLink)
+			return model.Link{}, fmt.Errorf("%w: path contains @, :, # or ? — no gg link", model.ErrLink)
 		}
 		if rel == "" && (probe.Line > 0 || probe.Hunk > 0) {
 			return model.Link{}, fmt.Errorf("%w: a line or a hunk needs a file path", model.ErrLink)
@@ -142,29 +194,66 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 	}
 
 	switch {
-	case prev != nil:
+	case o.Preview != nil:
 		// The preview's old side is the merge base, which no stored address
 		// names (spec §1.1): "old:" has nothing to point at.
 		if l.Side == model.NoteSideOld {
 			return model.Link{}, fmt.Errorf("%w: a merge preview addresses the new side only; drop \"old:\"", model.ErrLink)
 		}
-		l.Target = model.LinkTarget{State: model.StateCommitted, Preview: prev}
-	case cached:
+		l.Target = model.LinkTarget{State: model.StateCommitted, Preview: o.Preview}
+	case o.Cached:
 		l.Target = model.LinkTarget{State: model.StateStaged}
-	case rev != "":
-		if strings.Contains(rev, "..") {
+	case o.Rev != "":
+		if strings.Contains(o.Rev, "..") {
 			return model.Link{}, fmt.Errorf("%w: --rev names one commit, not a range", model.ErrLink)
 		}
-		full, found, err := svc.ResolveRev(ctx, rev)
+		full, found, err := svc.ResolveRev(ctx, o.Rev)
 		if err != nil {
 			return model.Link{}, err
 		}
 		if !found {
-			return model.Link{}, fmt.Errorf("unknown revision %q", rev)
+			return model.Link{}, fmt.Errorf("unknown revision %q", o.Rev)
 		}
 		// A producer always writes the FULL sha, so the link cannot become
 		// ambiguous as history grows (spec §1).
 		l.Target = model.LinkTarget{State: model.StateCommitted, Commit: strings.TrimSpace(full)}
+	case o.Ref != "":
+		// A ref target keeps the NAME, deliberately: "@ref:main" addresses the
+		// branch, not whichever commit it sits on today. The name is the user's
+		// own input, so a name the grammar cannot carry is a usage error (exit
+		// 2 through ErrLink) rather than the preview arm's exit 1 — nothing was
+		// looked up and failed, the argument was simply not expressible.
+		if !model.LinkRefOK(o.Ref) {
+			return model.Link{}, fmt.Errorf("%w: %q cannot be expressed in a gg link (a branch or tag name may not contain @, :, #, ? or whitespace)", model.ErrLink, o.Ref)
+		}
+		// Refuse a name git does not have: a link nobody can open is worse
+		// than no link, which is the rule the --preview arm already follows.
+		// This costs one rev-parse and catches the common typo at the producer
+		// instead of on whichever machine opens the link.
+		if _, found, err := svc.ResolveRev(ctx, o.Ref); err != nil {
+			return model.Link{}, err
+		} else if !found {
+			return model.Link{}, fmt.Errorf("unknown revision %q", o.Ref)
+		}
+		l.Target = model.LinkTarget{State: model.StateCommitted, Ref: o.Ref}
+	case o.Pair != "":
+		a, b, err := splitLinkPair(o.Pair)
+		if err != nil {
+			return model.Link{}, err
+		}
+		// BOTH halves become full shas, so the link is portable and
+		// self-describing (spec §3.2): a change-set spelled with branch names
+		// would mean something different on another machine, and something
+		// different HERE tomorrow.
+		fullA, err := resolveLinkPairHalf(ctx, svc, a)
+		if err != nil {
+			return model.Link{}, err
+		}
+		fullB, err := resolveLinkPairHalf(ctx, svc, b)
+		if err != nil {
+			return model.Link{}, err
+		}
+		l.Target = model.LinkTarget{State: model.StateCommitted, Pair: &model.LinkPair{A: fullA, B: fullB}}
 	default:
 		l.Target = model.LinkTarget{State: model.StateUnstaged}
 	}
@@ -175,7 +264,7 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 	}
 	if name != "" {
 		l.Repo = model.LinkRepo{Name: name}
-		return l, nil
+		return l, linkRoundTrips(l)
 	}
 	abs := filepath.ToSlash(filepath.Clean(top))
 	// The local form carries the CHECKOUT path, which is no more expressible
@@ -183,10 +272,60 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 	// would emit a link ParseLink refuses (the first '@' is the target
 	// separator, the first '#' the hunk one). Refuse to print it instead.
 	if !model.LinkAbsOK(abs) {
-		return model.Link{}, fmt.Errorf("%w: this repository has no remote and its checkout path %q contains @ or # — no gg link", model.ErrLink, abs)
+		return model.Link{}, fmt.Errorf("%w: this repository has no remote and its checkout path %q contains @, # or ? — no gg link", model.ErrLink, abs)
 	}
 	l.Repo = model.LinkRepo{Abs: abs}
-	return l, nil
+	return l, linkRoundTrips(l)
+}
+
+// linkRoundTrips refuses a link `gg link` would print but ParseLink could not
+// read back. Every OTHER field is already screened against the grammar by a
+// purpose-built check (LinkPathOK, LinkAbsOK, LinkRefOK), but a HINT id is the
+// user's own free-form argument and parseLinkHint rejects a separator in it, so
+// this is the cheapest way to hold `gg link`'s standing promise: everything it
+// prints parses. Wrapping ErrLink makes it a usage error, which is what a bad
+// argument is.
+func linkRoundTrips(l model.Link) error {
+	s := l.String()
+	if _, err := model.ParseLink(s); err != nil {
+		return fmt.Errorf("%w: %s is not a readable gg link (%v)", model.ErrLink, s, err)
+	}
+	return nil
+}
+
+// splitLinkPair splits a --pair argument on the grammar's own two-dot form.
+// Three dots are git's OTHER range vocabulary — merge-base(a, b)..b — and gg
+// spells that a merge preview, so `a...b` is redirected rather than silently
+// read as a two-dot pair with a stray dot in a refname.
+func splitLinkPair(spec string) (a, b string, err error) {
+	if strings.Contains(spec, "...") {
+		return "", "", fmt.Errorf("%w: --pair takes <a>..<b>; use --preview for a merge preview (<target>...<source>)", model.ErrLink)
+	}
+	i := strings.Index(spec, "..")
+	if i < 0 {
+		return "", "", fmt.Errorf("%w: --pair takes <a>..<b>, got %q", model.ErrLink, spec)
+	}
+	a, b = spec[:i], spec[i+2:]
+	if a == "" || b == "" {
+		return "", "", fmt.Errorf("%w: --pair needs both halves, got %q", model.ErrLink, spec)
+	}
+	return a, b, nil
+}
+
+// resolveLinkPairHalf resolves one half of a --pair to a FULL sha. Full, never
+// `%h`: a short sha honours core.abbrev (legal down to 4) while the grammar
+// requires 7..64 hex, so an abbreviating resolver would turn a legal repo
+// config into a hard failure — this feature's predecessor shipped exactly that
+// bug.
+func resolveLinkPairHalf(ctx context.Context, svc *domain.Service, rev string) (string, error) {
+	full, found, err := svc.ResolveRev(ctx, rev)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", fmt.Errorf("unknown revision %q", rev)
+	}
+	return strings.TrimSpace(full), nil
 }
 
 // linkProbePrefix is the throwaway checkout segment probeLinkArg parses the

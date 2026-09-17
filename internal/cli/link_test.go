@@ -242,9 +242,15 @@ func TestLinkPathSeparatorMessages(t *testing.T) {
 	t.Parallel()
 	dir := newCLIRepo(t)
 	for _, tc := range []struct{ name, arg, want string }{
-		{"at in path", "we@ird.go", "path contains @, : or #"},
-		{"hash in path", "we#ird.go", "path contains @, : or #"},
-		{"hash then junk", "a.go#x", "path contains @, : or #"},
+		{"at in path", "we@ird.go", "path contains @, :, # or ?"},
+		{"hash in path", "we#ird.go", "path contains @, :, # or ?"},
+		{"hash then junk", "a.go#x", "path contains @, :, # or ?"},
+		// '?' became the hint separator (Task 1), so it is as inexpressible
+		// as '@' — and MORE dangerous, because ParseLink does not fail on it:
+		// it silently eats the tail as a hint and leaves a link to a
+		// DIFFERENT, possibly existing, file.
+		{"question in path", "a?bookmark=x.txt", "path contains @, :, # or ?"},
+		{"question then junk", "a?b.txt", "path contains @, :, # or ?"},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -266,6 +272,38 @@ func TestLinkPathSeparatorMessages(t *testing.T) {
 	}
 	if got := strings.TrimSpace(out); !strings.HasSuffix(got, "/README.md#2") {
 		t.Errorf("stdout = %q, want a link ending /README.md#2", got)
+	}
+}
+
+// A '?' in the path argument used to be the ONE separator that did not fail
+// loudly: ParseLink eats everything from the first '?' as the hint, so the
+// probe handed back the TRUNCATED path and `gg link` printed, with exit 0, a
+// link to a different file that happens to exist. Two real files make that
+// visible — the refusal is the only correct answer, since the grammar cannot
+// hold either name.
+func TestLinkRefusesAPathWithAQuestionMark(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	for _, name := range []string{"a", "a?bookmark=x.txt", "a?b.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(name+"\n"), 0o644); err != nil {
+			t.Skipf("this filesystem cannot hold %q: %v", name, err)
+		}
+	}
+	for _, arg := range []string{"a?bookmark=x.txt", "a?b.txt"} {
+		arg := arg
+		t.Run(arg, func(t *testing.T) {
+			t.Parallel()
+			code, out, errb := runLinkCLI(t, dir, arg)
+			if code != 2 {
+				t.Fatalf("exit = %d, want 2; stdout %q stderr %q", code, out, errb)
+			}
+			if strings.TrimSpace(out) != "" {
+				t.Errorf("stdout = %q, want nothing printed", out)
+			}
+			if !strings.Contains(errb, "path contains @, :, # or ?") {
+				t.Errorf("stderr = %q, want the path-separator refusal naming '?'", errb)
+			}
+		})
 	}
 }
 
@@ -420,3 +458,255 @@ func gitOut(t *testing.T, dir string, args ...string) string {
 
 // openCLI opens a service for a repo dir.
 func openCLI(dir string) *domain.Service { return domain.Open(dir) }
+
+// TestLinkRefAndPairFlags: --ref emits a branch-tip link (a POINT — the whole
+// tree there, and it MOVES, which is why the NAME is kept), --pair emits a
+// change-set link (BOUNDED — what it changed, with both halves resolved to
+// full shas so the link is portable and self-describing).
+func TestLinkRefAndPairFlags(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	c1 := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-q", "-m", "c2")
+	c2 := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+
+	t.Run("ref keeps the name", func(t *testing.T) {
+		t.Parallel()
+		code, out, errb := runLinkCLI(t, dir, "--ref", "main")
+		if code != 0 {
+			t.Fatalf("exit = %d (stderr %q)", code, errb)
+		}
+		got := strings.TrimSpace(out)
+		if !strings.HasSuffix(got, "@ref:main") {
+			t.Errorf("stdout = %q, want a link ending @ref:main", got)
+		}
+		l, err := model.ParseLink(got)
+		if err != nil {
+			t.Fatalf("ParseLink(%q) = %v", got, err)
+		}
+		if l.Target.Ref != "main" || l.Target.State != model.StateCommitted || l.Target.Commit != "" {
+			t.Errorf("target = %+v, want Ref=main, StateCommitted, no commit", l.Target)
+		}
+	})
+
+	t.Run("ref with a path", func(t *testing.T) {
+		t.Parallel()
+		code, out, errb := runLinkCLI(t, dir, "--ref", "main", "README.md")
+		if code != 0 {
+			t.Fatalf("exit = %d (stderr %q)", code, errb)
+		}
+		got := strings.TrimSpace(out)
+		if !strings.HasSuffix(got, "/README.md@ref:main") {
+			t.Errorf("stdout = %q, want .../README.md@ref:main", got)
+		}
+	})
+
+	t.Run("pair resolves both halves to full shas", func(t *testing.T) {
+		t.Parallel()
+		// Abbreviated input on one side, a name on the other: both must come
+		// out as the FULL sha (`gg link` is a producer).
+		code, out, errb := runLinkCLI(t, dir, "--pair", c1[:8]+"..main")
+		if code != 0 {
+			t.Fatalf("exit = %d (stderr %q)", code, errb)
+		}
+		got := strings.TrimSpace(out)
+		if !strings.HasSuffix(got, "@"+c1+".."+c2) {
+			t.Errorf("stdout = %q, want a link ending @%s..%s", got, c1, c2)
+		}
+		l, err := model.ParseLink(got)
+		if err != nil {
+			t.Fatalf("ParseLink(%q) = %v", got, err)
+		}
+		if l.Target.Pair == nil || l.Target.Pair.A != c1 || l.Target.Pair.B != c2 {
+			t.Errorf("target = %+v, want Pair{%s, %s}", l.Target, c1, c2)
+		}
+	})
+
+	// Each refusal asserts its EXACT exit code, not merely non-zero. The split
+	// is the shipped convention and it is a deliberate ruling here: an argument
+	// the GRAMMAR cannot carry is bad input (ErrLink ⇒ 2), while a name git
+	// does not have is a lookup that failed (⇒ 1, the same code `--rev` has
+	// always used for an unknown revision). A table that only checked
+	// "non-zero" would pin neither.
+	t.Run("refusals", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			name, want string
+			exit       int
+			args       []string
+		}{
+			// Malformed ARGUMENTS — usage, exit 2.
+			{"three dots go to --preview", "use --preview", 2, []string{"--pair", c1 + "..." + c2}},
+			{"no dots at all", "--pair takes <a>..<b>", 2, []string{"--pair", c1}},
+			{"a missing half", "needs both halves", 2, []string{"--pair", c1 + ".."}},
+			{"an empty first half", "needs both halves", 2, []string{"--pair", ".." + c2}},
+			{"an inexpressible ref name", "cannot be expressed in a gg link", 2, []string{"--ref", "we:ird"}},
+			// Well-formed, but this repository does not have the name — a
+			// failed lookup, exit 1, exactly as `--rev no-such-rev` reports.
+			{"an unknown half", "unknown revision", 1, []string{"--pair", c1 + "..no-such-rev"}},
+			{"an unknown second half", "unknown revision", 1, []string{"--pair", "no-such-rev.." + c2}},
+			{"an unknown ref", "unknown revision", 1, []string{"--ref", "no-such-branch"}},
+			{"an unknown rev (the shipped precedent)", "unknown revision", 1, []string{"--rev", "no-such-rev"}},
+		} {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				code, out, errb := runLinkCLI(t, dir, tc.args...)
+				if code != tc.exit {
+					t.Fatalf("gg link %v: exit = %d, want %d (stdout %q, stderr %q)", tc.args, code, tc.exit, out, errb)
+				}
+				if !strings.Contains(errb, tc.want) {
+					t.Errorf("gg link %v: stderr = %q, want it to contain %q", tc.args, errb, tc.want)
+				}
+				if strings.TrimSpace(out) != "" {
+					t.Errorf("gg link %v printed a link anyway: %q", tc.args, out)
+				}
+			})
+		}
+	})
+}
+
+// TestLinkHintFlags: --bookmark / --shelf attach the ?<kind>=<id> landing
+// hint. The hint says WHICH SURFACE the link was copied from; it never changes
+// what the link addresses, so it composes with any target.
+func TestLinkHintFlags(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string // suffix of the printed link
+	}{
+		{"bookmark on a file link", []string{"--bookmark", "b1", "README.md"}, "/README.md?bookmark=b1"},
+		{"shelf on a file link", []string{"--shelf", "commit-123-abcdef01", "README.md"}, "/README.md?shelf=commit-123-abcdef01"},
+		{"bookmark on a ref link", []string{"--ref", "main", "--bookmark", "b1"}, "@ref:main?bookmark=b1"},
+		{"bookmark on a commit link", []string{"--rev", head, "--bookmark", "b1"}, "@" + head + "?bookmark=b1"},
+		{"bookmark with a line", []string{"--bookmark", "b1", "README.md:2"}, "/README.md:2?bookmark=b1"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			code, out, errb := runLinkCLI(t, dir, tc.args...)
+			if code != 0 {
+				t.Fatalf("exit = %d (stderr %q)", code, errb)
+			}
+			got := strings.TrimSpace(out)
+			if !strings.HasSuffix(got, tc.want) {
+				t.Errorf("stdout = %q, want a link ending %q", got, tc.want)
+			}
+			l, err := model.ParseLink(got)
+			if err != nil {
+				t.Fatalf("ParseLink(%q) = %v", got, err)
+			}
+			if l.Hint.Kind == "" || l.Hint.ID == "" {
+				t.Errorf("hint = %+v, want both halves set", l.Hint)
+			}
+		})
+	}
+
+	t.Run("two hints is a usage error", func(t *testing.T) {
+		t.Parallel()
+		code, out, errb := runLinkCLI(t, dir, "--bookmark", "b1", "--shelf", "s1")
+		if code != 2 {
+			t.Fatalf("exit = %d, want 2 (stdout %q)", code, out)
+		}
+		if !strings.Contains(errb, "--bookmark and --shelf are mutually exclusive") {
+			t.Errorf("stderr = %q, want the exclusion message", errb)
+		}
+	})
+
+	// An id holding a grammar separator cannot round-trip: parseLinkHint
+	// refuses it, so the PRODUCER must refuse it too rather than print a link
+	// its own parser rejects.
+	t.Run("an id with a separator is refused", func(t *testing.T) {
+		t.Parallel()
+		code, out, errb := runLinkCLI(t, dir, "--bookmark", "b?1", "README.md")
+		if code != 2 {
+			t.Fatalf("exit = %d, want 2 (stdout %q, stderr %q)", code, out, errb)
+		}
+		if !strings.Contains(errb, "not a readable gg link") {
+			t.Errorf("stderr = %q, want the round-trip refusal", errb)
+		}
+		if strings.TrimSpace(out) != "" {
+			t.Errorf("printed a link anyway: %q", out)
+		}
+	})
+}
+
+// TestLinkTargetFlagsAreExclusive: --cached, --rev, --preview, --ref and
+// --pair all name the TARGET, so at most one may be set — the rule --cached
+// and --rev already had, now counted rather than checked pairwise.
+func TestLinkTargetFlagsAreExclusive(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"cached+rev", []string{"--cached", "--rev", head}, "name the target; use one"},
+		{"cached+ref", []string{"--cached", "--ref", "main"}, "name the target; use one"},
+		{"rev+ref", []string{"--rev", head, "--ref", "main"}, "name the target; use one"},
+		{"ref+pair", []string{"--ref", "main", "--pair", head + ".." + head}, "name the target; use one"},
+		{"cached+pair", []string{"--cached", "--pair", head + ".." + head}, "name the target; use one"},
+		// --preview keeps its own shared message, the one `gg diff` prints.
+		{"preview+ref", []string{"--preview", "a...b", "--ref", "main"}, "one target only"},
+		{"preview+pair", []string{"--preview", "a...b", "--pair", head + ".." + head}, "one target only"},
+		{"preview+cached", []string{"--preview", "a...b", "--cached"}, "one target only"},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			code, out, errb := runLinkCLI(t, dir, tc.args...)
+			if code != 2 {
+				t.Fatalf("gg link %v: exit = %d, want 2 (stdout %q, stderr %q)", tc.args, code, out, errb)
+			}
+			if !strings.Contains(errb, tc.want) {
+				t.Errorf("gg link %v: stderr = %q, want it to contain %q", tc.args, errb, tc.want)
+			}
+			if strings.TrimSpace(out) != "" {
+				t.Errorf("gg link %v printed a link anyway: %q", tc.args, out)
+			}
+		})
+	}
+}
+
+// `gg link resolve` (and every other verb that goes through resolveLinkArg —
+// gg diff, gg show, gg note *, gg open, gg session navigate) answers with an
+// ADDRESS, and a branch tip or a change-set has none, so those links are
+// refused. THE REFUSAL IS DELIBERATE; its WORDS were not. The guard predated
+// Target.Ref/Target.Pair and reported "gg link names a commit without a sha"
+// about a link that names no sha and is missing nothing.
+func TestLinkResolveRefusesRefAndPairInItsOwnWords(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	for _, tc := range []struct{ name, link string }{
+		{"a branch tip", mustLink(t, dir, "--ref", "main")},
+		{"a change-set", mustLink(t, dir, "--pair", head+".."+head)},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			code, out, errb := runLinkCLI(t, dir, "resolve", tc.link)
+			if code != 2 {
+				t.Fatalf("link resolve %s: exit = %d, want 2 (stdout %q stderr %q)", tc.link, code, out, errb)
+			}
+			if strings.Contains(errb, "without a sha") {
+				t.Errorf("stderr still blames a missing sha, which this link never had: %q", errb)
+			}
+			for _, want := range []string{"cannot be navigated yet", "gg compare"} {
+				if !strings.Contains(errb, want) {
+					t.Errorf("stderr = %q, want it to contain %q", errb, want)
+				}
+			}
+		})
+	}
+}

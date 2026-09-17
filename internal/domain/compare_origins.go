@@ -11,7 +11,9 @@ import (
 
 // ErrNoMergeBase is returned by CompareOrigins when the two revisions share
 // no common ancestor (unrelated histories), so per-branch origin sets are
-// undefined. Callers detect it with errors.Is.
+// undefined. EndpointForLink returns it for the same reason, on a three-dot
+// preview link whose two branches share no history: one errors.Is target for
+// "these two revisions have no merge base", whichever query asked.
 var ErrNoMergeBase = errors.New("no common ancestor")
 
 // CompareOrigins attributes changed paths to each side of a branch

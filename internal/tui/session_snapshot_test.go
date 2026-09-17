@@ -3,15 +3,29 @@ package tui
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
+
+// mustShelfEndpoint is mustCommitEndpoint's shelf twin (internal/tui/wip_rows.go),
+// kept HERE because these snapshot tests are its only callers: the TUI's two
+// domain conduits hand back commit endpoints, and no production path builds a
+// shelf one any more.
+func mustShelfEndpoint(id string) model.Endpoint {
+	e, err := model.ShelfEndpoint(id)
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
 
 func TestBuildSessionSnapshotFields(t *testing.T) {
 	t.Parallel()
@@ -251,4 +265,83 @@ func TestSnapshotCarriesTheCursorLink(t *testing.T) {
 	if l := buildSessionSnapshot(bare).Cursor.Link; l != "" {
 		t.Errorf("cursor.link = %q on a model with nothing selected, want empty", l)
 	}
+}
+
+// TestEndpointProtoEveryKind is the exhaustiveness gate on the snapshot's
+// endpoint wire form. endpointProto used to end in `default: kind "commit",
+// hash e.Hash()`, so the two kinds model gained for the compare algebra — a
+// branch/tag TIP and a resolved change-set PAIR — would have serialized as
+// {"kind":"commit","hash":""}: an agent told the compare stands on a commit
+// and handed no commit to look at. Each kind now has a spelling of its own.
+func TestEndpointProtoEveryKind(t *testing.T) {
+	t.Parallel()
+	const shaA = "1111111111111111111111111111111111111111"
+	const shaB = "2222222222222222222222222222222222222222"
+	mustCommit := func(h string) model.Endpoint {
+		t.Helper()
+		e, err := model.CommitEndpoint(h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	mustRef := func(name string) model.Endpoint {
+		t.Helper()
+		e, err := model.RefEndpoint(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	mustPair := func(a, b string) model.Endpoint {
+		t.Helper()
+		e, err := model.PairEndpoint(a, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return e
+	}
+	for _, tc := range []struct {
+		name string
+		ep   model.Endpoint
+		want snapEndpoint
+	}{
+		{"worktree", model.WorkTreeEndpoint(), snapEndpoint{Kind: "worktree"}},
+		{"index", model.IndexEndpoint(), snapEndpoint{Kind: "index"}},
+		{"commit", mustCommit(shaA), snapEndpoint{Kind: "commit", Hash: shaA}},
+		{"shelf", mustShelfEndpoint("commit-abc1234-deadbeef"), snapEndpoint{Kind: "shelf", ShelfID: "commit-abc1234-deadbeef"}},
+		{"ref", mustRef("main"), snapEndpoint{Kind: "ref", Ref: "main"}},
+		{"pair", mustPair(shaA, shaB), snapEndpoint{Kind: "pair", PairA: shaA, PairB: shaB}},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := endpointProto(tc.ep)
+			if got == nil || *got != tc.want {
+				t.Fatalf("endpointProto(%s) = %+v, want %+v", tc.name, got, tc.want)
+			}
+			if tc.name != "commit" && got.Kind == "commit" {
+				t.Fatalf("%s must not serialize as kind commit", tc.name)
+			}
+		})
+	}
+}
+
+// The UNSET endpoint is a programming error, not "the working tree", and the
+// snapshot says so loudly rather than publishing an endpoint nobody can
+// explain. Unreachable in practice: endpointProto is called only in
+// filesModeCompare, whose entry point already calls Endpoint.Display() on the
+// same value, which panics on the zero endpoint first.
+func TestEndpointProtoPanicsOnTheUnsetEndpoint(t *testing.T) {
+	t.Parallel()
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("endpointProto(model.Endpoint{}) must panic, not serialize as a commit")
+		}
+		if !strings.Contains(fmt.Sprint(r), "endpointProto") {
+			t.Fatalf("panic = %v, want it to name endpointProto", r)
+		}
+	}()
+	_ = endpointProto(model.Endpoint{})
 }

@@ -19,21 +19,17 @@ type wipRow struct {
 	count int
 }
 
-// mustCommitEndpoint and mustShelfEndpoint build an Endpoint from a hash/id
-// that came from git (a feed row, a rev-parse) or a gg store (a shelf
-// entry) — several TUI call sites cannot return an error, so a validation
-// failure there is a bug in the caller, not bad user input, and panics
-// loudly instead of building a silently wrong endpoint.
+// mustCommitEndpoint builds an Endpoint from a hash that came from git (a
+// feed row, a rev-parse) — several TUI call sites cannot return an error, so
+// a validation failure there is a bug in the caller, not bad user input, and
+// panics loudly instead of building a silently wrong endpoint.
+//
+// Its shelf twin lives beside the only code that still wants one
+// (session_snapshot_test.go): this branch left mustShelfEndpoint with no
+// production caller, and a panicking helper nothing calls is a trap, not a
+// guard.
 func mustCommitEndpoint(hash string) model.Endpoint {
 	e, err := model.CommitEndpoint(hash)
-	if err != nil {
-		panic(err)
-	}
-	return e
-}
-
-func mustShelfEndpoint(id string) model.Endpoint {
-	e, err := model.ShelfEndpoint(id)
 	if err != nil {
 		panic(err)
 	}

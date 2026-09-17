@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -801,11 +802,21 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 // "missing is not an error" convention.
 //
 // Called on the UPDATE thread (file_finder.go's "ff-diff" action) and pinned
-// directly by TestCompareTagDoesNotKeyOnAMovingRev.
+// directly by TestCompareTagDoesNotKeyOnAMovingRev — which is why the read is
+// deadlined: see updateThreadGitTimeout for why a synchronous domain read
+// here can otherwise wedge the whole UI.
 func (m Model) resolveHeadEndpoint() (model.Endpoint, error) {
-	sha, ok, err := m.svc.ResolveRev(context.Background(), "HEAD")
+	return m.resolveHeadEndpointWithin(updateThreadGitTimeout)
+}
+
+// resolveHeadEndpointWithin is resolveHeadEndpoint with the deadline exposed,
+// so a test can drive the expiry path without racing a real reservation.
+func (m Model) resolveHeadEndpointWithin(d time.Duration) (model.Endpoint, error) {
+	ctx, cancel := updateThreadCtx(d)
+	defer cancel()
+	sha, ok, err := m.svc.ResolveRev(ctx, "HEAD")
 	if err != nil {
-		return model.Endpoint{}, err
+		return model.Endpoint{}, busyOr(err)
 	}
 	if !ok {
 		return model.Endpoint{}, errors.New("no commit yet")

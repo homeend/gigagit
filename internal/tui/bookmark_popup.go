@@ -594,12 +594,27 @@ func (m Model) compareCommitBookmark(b model.Bookmark) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("select a different commit to compare against")
 		return m, nil
 	}
+	// b.Commit comes back from the bookmark STORE — a machine-local TOML file
+	// written by an older gg, hand-editable, and never re-validated on read.
+	// mustCommitEndpoint on it turned a stale or edited record into a whole-app
+	// panic, the same shape as the core.abbrev regression. Validate and
+	// decline. (subject is a feed row, i.e. `git log --format=%H`, so it is
+	// always a full sha — but it costs nothing to check it on the same path,
+	// and the check is what keeps the must* out of this file entirely.)
+	base, err := model.CommitEndpoint(b.Commit)
+	if err != nil {
+		m.statusMsg = i18n.T("the recorded commit is not usable")
+		return m, nil
+	}
+	subj, err := model.CommitEndpoint(subject)
+	if err != nil {
+		m.statusMsg = i18n.T("the recorded commit is not usable")
+		return m, nil
+	}
 	// Park the switcher (the files view is not a layer and must not draw
 	// under it); esc/l on the compare returns to it.
 	return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) {
-		return m.openCompareFiles(
-			mustCommitEndpoint(b.Commit), // base
-			mustCommitEndpoint(subject))  // subject
+		return m.openCompareFiles(base, subj)
 	})
 }
 

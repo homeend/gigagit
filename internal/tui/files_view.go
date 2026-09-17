@@ -388,6 +388,20 @@ type compareFilesMsg struct {
 // (left = older, right = newer), e.g. a commit vs the working tree. The proven
 // single-commit path is untouched; this is a parallel mode (filesModeCompare).
 func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
+	// compareTagFor is the FIRST thing that touches these values and it calls
+	// Endpoint.CacheTag(), which PANICS by design on an unresolved ref (a
+	// moving name must never become a cache key) and on the zero Endpoint. A
+	// panic here takes the whole Bubble Tea process with it, so an endpoint
+	// this view cannot identify is declined with a status line instead.
+	//
+	// Unreachable from today's two domain→TUI conduits, which hand back only
+	// commit and shelf endpoints — but this is the branch that teaches domain
+	// to construct new kinds, so the boundary is asserted rather than assumed.
+	// Resolve a ref through domain.EvalEndpoint before opening a compare.
+	if !endpointComparable(left) || !endpointComparable(right) {
+		m.statusMsg = i18n.T("no commit selected to compare against")
+		return m, nil
+	}
 	tag := compareTagFor(left, right)
 	// Already showing (or loading) this exact comparison: keep it — re-running
 	// the load would only blank and repaint identical content. Each caller
@@ -404,11 +418,20 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 	m.filesLeft = left
 	m.filesRight = right
 	// h/b (history/blame) context: prefer a commit side; "" means working tree.
+	// A PAIR counts, and its NEWER side is the commit — PairB() is a resolved
+	// sha (model.PairEndpoint requires 7..64 hex on both halves), and the
+	// pair's own byte source is b, so history/blame stand where the compare's
+	// content does. Without this arm a pair fell to the default and silently
+	// gave those surfaces the working tree.
 	switch {
 	case right.Kind() == model.EndpointCommit:
 		m.filesHash = right.Hash()
+	case right.Kind() == model.EndpointPair:
+		m.filesHash = right.PairB()
 	case left.Kind() == model.EndpointCommit:
 		m.filesHash = left.Hash()
+	case left.Kind() == model.EndpointPair:
+		m.filesHash = left.PairB()
 	default:
 		m.filesHash = ""
 	}

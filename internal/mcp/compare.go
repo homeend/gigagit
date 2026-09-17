@@ -171,7 +171,24 @@ func (s *Server) registerCompareTools(srv *sdk.Server) {
 			return nil, out, fmt.Errorf("right: %v", err)
 		}
 		out.LeftDisplay, out.RightDisplay = ld, rd
-		files, err := s.svc.CompareFiles(ctx, left, right)
+		// EvalEndpoint + CompareSets, NOT CompareFiles. The two sides are
+		// whatever the client named, in whatever order it named them — nothing
+		// here constrains the pair — and CompareFiles is a thin wrapper over
+		// git's own diff, which only walks forward (a commit, then the index,
+		// then the working tree). Asking {left: worktree, right: commit} through
+		// it answered "DiffTreeFiles: unsupported endpoint pair 1 → 3" while
+		// `gg compare @worktree main` compared, which is one compare frontend
+		// disagreeing with another about what a user may ask. CompareSets is
+		// total: it asks a reversed pair forward and inverts the answer.
+		leftSet, err := s.svc.EvalEndpoint(ctx, left)
+		if err != nil {
+			return nil, out, fmt.Errorf("left: %v", err)
+		}
+		rightSet, err := s.svc.EvalEndpoint(ctx, right)
+		if err != nil {
+			return nil, out, fmt.Errorf("right: %v", err)
+		}
+		files, err := s.svc.CompareSets(ctx, leftSet, rightSet)
 		if err != nil {
 			return nil, out, fmt.Errorf("comparing: %v", err)
 		}
