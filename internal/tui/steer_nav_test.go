@@ -945,3 +945,49 @@ func flattenCmd(t *testing.T, cmd tea.Cmd) []tea.Msg {
 	}
 	return []tea.Msg{msg}
 }
+
+// TestSteerNavigateRefWithAFileOpensByHash is the FILE-carrying half of the
+// ref lane, and it must agree with its file-less sibling
+// (TestSteerNavigateRefOpensTheTipsFiles) about what a tip is.
+//
+// The file-less arm deliberately opens by hash for either origin, because
+// steerNavigate's commit arm refuses "commit not loaded in the feed" and a
+// BRANCH TIP is precisely the commit least likely to be paged in. The
+// file-carrying arm delegated to steerNavigateCommitFile, whose first move is
+// that same feed probe — so the two halves of one lane disagreed: no file
+// landed, a file refused. This fixture never loads the feed (commitsTotal()
+// is 0), which is the common case for a freshly launched `gg open`.
+func TestSteerNavigateRefWithAFileOpensByHash(t *testing.T) {
+	t.Parallel()
+	dir, _, _, c3 := refPairRepo(t)
+	m := refPairModel(t, dir)
+	sdir := m.steerDir
+	if m.commitsTotal() != 0 {
+		t.Fatalf("fixture precondition: the feed must be empty, got %d rows", m.commitsTotal())
+	}
+	c := steer.Command{
+		ID: "r-file-1", Cmd: "navigate",
+		Target: &steer.Target{State: "ref", Ref: "feat/x"},
+		File:   "c.txt", Wait: true,
+	}
+	m, cmd := m.applySteer(c)
+	m = pumpDiff(t, m, cmd)
+
+	r, ok := steer.AwaitReply(sdir, "r-file-1", 2*time.Second)
+	if !ok {
+		t.Fatal("no reply")
+	}
+	if !r.OK {
+		t.Fatalf("refused with %q — a ref names a TREE, so its file opens by hash "+
+			"exactly as the file-less arm does; the feed probe belongs to the plain-commit lane", r.Error)
+	}
+	if m.filesView == nil {
+		t.Fatal("no files view opened")
+	}
+	if m.filesHash != c3 {
+		t.Errorf("filesHash = %q, want the tip %q", m.filesHash, c3)
+	}
+	if m.diffLayer() == nil {
+		t.Error("c.txt's diff must be open: the command named a file")
+	}
+}

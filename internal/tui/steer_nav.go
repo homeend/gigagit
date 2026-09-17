@@ -306,11 +306,23 @@ func (m Model) steerNavigateRef(c steer.Command) (Model, tea.Cmd) {
 		return m, m.answerSteer(c, steerFail(c, name+" does not resolve here"))
 	}
 	hash := strings.TrimSpace(sha)
-	// Reuse the commit lanes verbatim: the ref is spent.
 	nc := c
 	nc.Target = &steer.Target{State: "commit", Commit: hash}
 	if nc.File != "" {
-		return m.steerNavigateCommitFile(nc)
+		// NOT steerNavigateCommitFile: its first move is a probe of the
+		// ALREADY-LOADED feed that refuses "commit not loaded in the feed",
+		// and a branch tip is the commit least likely to be paged in — the
+		// very reason the file-less arm below opens by hash. Delegating here
+		// made the two halves of ONE lane disagree: no file landed, a file
+		// refused. Open by hash and park on the file list, which is what
+		// steerNavigateCommitFile does AFTER its probe.
+		nm := m.steerToPanels()
+		nm, cmd := nm.openChangedFiles(model.Commit{Hash: hash})
+		// hash, not a feed row's Hash: openChangedFiles writes exactly this
+		// string into m.filesHash, and drainPendingFiles gates on equality
+		// with it.
+		nm.pendingSteer = &pendingSteer{cmd: nc, stage: steerStageFiles, hash: hash, at: time.Now()}
+		return nm, cmd
 	}
 	// NOT steerNavigate(nc) with nc.Commit set: that arm refuses an agent's
 	// navigate for a commit the feed has not paged in, and a branch tip is the
