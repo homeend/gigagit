@@ -851,6 +851,23 @@ func TestSteerNavigatePairOpensACompare(t *testing.T) {
 	if m.filesLeft.Kind() == model.EndpointPair || m.filesRight.Kind() == model.EndpointPair {
 		t.Error("a pair navigate must never build a PairEndpoint: that keys the cache on one SIDE of a two-sided view")
 	}
+	// The RANGE, not c3's own change: b.txt (introduced by c2) and c.txt
+	// (introduced by c3) are both in the change-set c1..feat/x, but a.txt is
+	// NOT — it already existed at c1, so it differs from neither side.
+	hasPath := func(p string) bool {
+		for _, l := range m.filesView.lines {
+			if l.path == p {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasPath("b.txt") || !hasPath("c.txt") {
+		t.Errorf("compare file list = %+v, want b.txt and c.txt (the RANGE c1..feat/x)", m.filesView.lines)
+	}
+	if hasPath("a.txt") {
+		t.Error("a.txt already existed at c1 and must not appear in the c1..feat/x change-set")
+	}
 	r, ok := steer.AwaitReply(sdir, "pr-1", 2*time.Second)
 	if !ok || !r.OK {
 		t.Fatalf("reply = %+v ok=%v", r, ok)
