@@ -55,7 +55,12 @@ func TestSteerHintJSIsWired(t *testing.T) {
 		// disagreement the TUI had (loadShelfForHintCmd). The fallback tries
 		// every OTHER known bucket before reporting an entry gone.
 		{"async function findShelfEntryInOtherBuckets(id) {", "sidebar.js must define the F1 cross-bucket fallback"},
-		{"li = await findShelfEntryInOtherBuckets(id);", "revealHintEntry must call the fallback on a shelf miss"},
+		// The call, not its assignment form: the fallback now returns
+		// {li, unchecked} so a bucket that could not be READ is reported
+		// apart from a bucket that lacks the entry, and pinning the old
+		// `li = await …` spelling only pinned that refactor shut.
+		{"await findShelfEntryInOtherBuckets(id)", "revealHintEntry must call the fallback on a shelf miss"},
+		{"could not check every shelf bucket for ", "a failed bucket fetch must not be reported as \"is gone\" — that claim is unprovable when a read failed"},
 		{"state.shelfBuckets = sh.buckets || [];", "fetchBranches must keep the bucket name list the fallback iterates"},
 		{`getJSON("/api/shelf?bucket=" + encodeURIComponent(name))`, "the fallback must reuse the EXISTING /api/shelf?bucket= endpoint, not invent a new one"},
 	}

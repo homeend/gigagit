@@ -781,6 +781,7 @@ async function revealHintEntry(kind, id) {
   }
   const sectionName = kind === "bookmark" ? "bookmarks" : "shelf";
   let li = $(listName).querySelector('li[data-id="' + CSS.escape(id) + '"]');
+  let unchecked = false; // a bucket fetch failed, so "is gone" is unprovable
   if (!li && kind === "shelf") {
     // Fix F1: domain's own presence check (ShelfFind, also relied on by
     // EvalLink) scans EVERY bucket, but this page's shelf list — like the
@@ -790,14 +791,23 @@ async function revealHintEntry(kind, id) {
     // reported "gone" here: the exact bug the controller reproduced end to
     // end. Fall back to every OTHER known bucket before giving up, so
     // domain and this page never disagree about whether the entry exists.
-    li = await findShelfEntryInOtherBuckets(id);
+    const found = await findShelfEntryInOtherBuckets(id);
+    li = found.li;
+    unchecked = found.unchecked;
   }
   if (!li) {
     // Absent — the hint degrades, it never fails: the navigate already
     // landed elsewhere (the with-address shape), or, for a hint-only link,
     // the server already hard-refused an absent one before this could ever
-    // post (ruling S11) — either way, no popup, just a notice.
-    opLine("gg link: " + kind + " " + id + " is gone; the link still landed", true);
+    // post (ruling S11) — either way, no popup, just a notice. `unchecked`
+    // keeps the two cases apart: a bucket we could not read is not a bucket
+    // that lacks the entry, and "is gone" would be a claim we cannot make.
+    opLine(
+      unchecked
+        ? "gg link: could not check every shelf bucket for " + id + "; the link still landed"
+        : "gg link: " + kind + " " + id + " is gone; the link still landed",
+      true
+    );
     return;
   }
   if (isCollapsed(sectionName)) toggleSection(sectionName);
@@ -813,11 +823,17 @@ async function revealHintEntry(kind, id) {
 // ordinary re-render can find it too) and re-renders, returning the now-
 // present <li>. null when no bucket holds it.
 async function findShelfEntryInOtherBuckets(id) {
+  let unchecked = false;
   for (const name of state.shelfBuckets || []) {
     let body;
     try {
       body = await getJSON("/api/shelf?bucket=" + encodeURIComponent(name));
     } catch {
+      // A bucket we could not READ is not a bucket that lacks the entry.
+      // Remember that, so the caller says "could not check" rather than
+      // "is gone" — telling a user their shelved bytes are gone when the
+      // server merely hiccupped is the worse of the two wrong answers.
+      unchecked = true;
       continue;
     }
     const hit = (body.entries || []).find((e) => e.id === id);
@@ -826,9 +842,9 @@ async function findShelfEntryInOtherBuckets(id) {
       state.shelf = (state.shelf || []).concat([hit]);
     }
     renderShelf();
-    return $("shelf-list").querySelector('li[data-id="' + CSS.escape(id) + '"]');
+    return { li: $("shelf-list").querySelector('li[data-id="' + CSS.escape(id) + '"]'), unchecked: false };
   }
-  return null;
+  return { li: null, unchecked };
 }
 
 

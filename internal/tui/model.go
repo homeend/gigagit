@@ -999,7 +999,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.shelfEntries = nil
 				m.pendingCompare = nil
 			}
-			if ph := m.pendingHint; ph != nil {
+			// Only the hint's OWN load may fail it — see the bookmark twin.
+			if ph := m.pendingHint; ph != nil && msg.gen == ph.tag {
 				m.pendingHint = nil
 				if ph.mustAnswer {
 					return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "loading the shelf: "+msg.err.Error()))
@@ -1117,7 +1118,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMsg = i18n.T("bookmarks: %s", msg.err.Error())
 			m.pendingCompare = nil // don't let stale compare state hijack the next plain `g`
-			if ph := m.pendingHint; ph != nil {
+			// Only the hint's OWN load may fail it: a stray load erroring is
+			// not this hint's failure, and consuming the pending here would
+			// abandon a reveal whose own load is still in flight and may
+			// well succeed. Same gen==tag rule as the success path below.
+			if ph := m.pendingHint; ph != nil && msg.gen == ph.tag {
 				m.pendingHint = nil
 				if ph.mustAnswer {
 					return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "loading bookmarks: "+msg.err.Error()))
@@ -1155,6 +1160,18 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, reply
 			}
 			return m.pushLayer(p), reply
+		}
+		if msg.gen != 0 {
+			// A hint's OWN load (gen is nonzero only for those) that no
+			// longer matches a pendingHint: the hint was already consumed by
+			// a NEWER load, or the pending was dropped. Falling through would
+			// take the ordinary-open branch below and `*existing = *p` would
+			// reset sel to 0 — silently un-revealing a row the user was just
+			// shown. The shelf arm gets this from its own msg.hintBucket
+			// backstop; this is that backstop's bookmark twin (the scoped
+			// re-review found it missing on exactly this arm — near-duplicate
+			// handlers, a guard in one and not the other).
+			return m, nil
 		}
 		p := newBookmarkPopup(msg.items)
 		if pc := m.pendingCompare; pc != nil && pc.target == compareBookmark {

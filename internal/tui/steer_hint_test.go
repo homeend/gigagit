@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -510,3 +511,119 @@ func TestSteerEnumRefusalRejectsAnUnknownHintKind(t *testing.T) {
 		}
 	}
 }
+
+// TestAStaleHintLoadDoesNotUnrevealTheBookmarkRow closes the asymmetry the
+// scoped re-review found in fix F3: the shelf arm returns early on
+// msg.hintBucket, so a hint-minted load that no longer matches a pending
+// hint can never fall through to the ordinary switcher-open branch. The
+// bookmark arm had no twin, and bookmarksLoadedMsg carries the same
+// information in `gen` (0 = an ordinary `g`, non-zero = a hint's OWN load).
+//
+// The race is two hinted navigates landing close together with their loads
+// arriving reversed: the newer load reveals and clears pendingHint, then the
+// older one arrives to find nothing pending, takes the plain-open branch, and
+// `*existing = *p` resets sel to 0 — silently un-revealing a row the user was
+// just shown. Same shape as the shelf arm, one arm over: ruling S5's family.
+func TestAStaleHintLoadDoesNotUnrevealTheBookmarkRow(t *testing.T) {
+	dir := gittest.BasicRepo(t, "hi\n")
+	m := hintNavModel(t, dir)
+	ctx := context.Background()
+	older, err := m.svc.BookmarkAdd(ctx, model.Bookmark{State: model.StateUnstaged, Worktree: dir, Path: "README.md"})
+	if err != nil {
+		t.Fatalf("BookmarkAdd: %v", err)
+	}
+	head, _, err := m.svc.ResolveRev(ctx, "HEAD")
+	if err != nil {
+		t.Fatalf("ResolveRev: %v", err)
+	}
+	if _, err := m.svc.BookmarkAdd(ctx, model.Bookmark{State: model.StateCommitted, Commit: strings.TrimSpace(head), Path: "README.md"}); err != nil {
+		t.Fatalf("BookmarkAdd: %v", err)
+	}
+	items, err := m.svc.BookmarkList(ctx, 0, 0)
+	if err != nil {
+		t.Fatalf("BookmarkList: %v", err)
+	}
+	// The newer hinted navigate (gen 2) lands and reveals the older bookmark.
+	m.hintGen = 2
+	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n2", HintKind: "bookmark", HintID: older.ID}, tag: 2}
+	tm, _ := m.Update(bookmarksLoadedMsg{items: items, gen: 2})
+	m = tm.(Model)
+	p := m.bookmarkSwitcher()
+	if p == nil {
+		t.Fatal("the matching hint load must reveal")
+	}
+	revealed := p.sel
+	if got, ok := p.selected(); !ok || got.ID != older.ID {
+		t.Fatalf("selected = %+v ok=%v, want %s", got, ok, older.ID)
+	}
+	// Now the EARLIER navigate's load (gen 1) finally arrives. Nothing is
+	// pending any more, and it must not touch the revealed popup.
+	tm, _ = m.Update(bookmarksLoadedMsg{items: items, gen: 1})
+	m = tm.(Model)
+	p = m.bookmarkSwitcher()
+	if p == nil {
+		t.Fatal("a stale hint load must not close the popup")
+	}
+	if p.sel != revealed {
+		t.Errorf("sel = %d after a stale hint load, want %d — the reveal was silently undone", p.sel, revealed)
+	}
+	if got, ok := p.selected(); !ok || got.ID != older.ID {
+		t.Errorf("selected = %+v ok=%v, want %s still revealed", got, ok, older.ID)
+	}
+}
+
+// TestAStrayErroringLoadDoesNotFailAPendingHint closes the scoped re-review's
+// finding 3, in both near-duplicate arms: the err paths consumed
+// m.pendingHint without checking gen, so an unrelated load that happened to
+// error would abandon (and, for a --wait command, FAIL) a reveal whose own
+// load was still in flight and might well succeed. Only the hint's own load
+// may fail it — the same gen==tag rule the success paths already applied.
+func TestAStrayErroringLoadDoesNotFailAPendingHint(t *testing.T) {
+	dir := gittest.BasicRepo(t, "hi\n")
+
+	t.Run("bookmark", func(t *testing.T) {
+		m := hintNavModel(t, dir)
+		m.hintGen = 2
+		ph := &pendingHint{cmd: steer.Command{ID: "n1", HintKind: "bookmark", HintID: "b1", Wait: true}, mustAnswer: true, tag: 2}
+		m.pendingHint = ph
+		tm, cmd := m.Update(bookmarksLoadedMsg{err: errStrayLoad, gen: 1})
+		nm := tm.(Model)
+		if nm.pendingHint == nil {
+			t.Error("a stray erroring load must not consume this hint's pending reveal")
+		}
+		if cmd != nil {
+			t.Error("a stray erroring load must not answer (and so fail) the hint's command")
+		}
+		// The hint's OWN erroring load still fails it.
+		tm, cmd = nm.Update(bookmarksLoadedMsg{err: errStrayLoad, gen: 2})
+		if tm.(Model).pendingHint != nil {
+			t.Error("the hint's own erroring load must consume the pending")
+		}
+		if cmd == nil {
+			t.Error("the hint's own erroring load must answer a Wait command")
+		}
+	})
+
+	t.Run("shelf", func(t *testing.T) {
+		m := hintNavModel(t, dir)
+		m.hintGen = 2
+		m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n2", HintKind: "shelf", HintID: "s1", Wait: true}, mustAnswer: true, tag: 2}
+		tm, cmd := m.Update(shelfLoadedMsg{err: errStrayLoad, gen: 1})
+		nm := tm.(Model)
+		if nm.pendingHint == nil {
+			t.Error("a stray erroring load must not consume this hint's pending reveal")
+		}
+		if cmd != nil {
+			t.Error("a stray erroring load must not answer (and so fail) the hint's command")
+		}
+		tm, cmd = nm.Update(shelfLoadedMsg{err: errStrayLoad, gen: 2})
+		if tm.(Model).pendingHint != nil {
+			t.Error("the hint's own erroring load must consume the pending")
+		}
+		if cmd == nil {
+			t.Error("the hint's own erroring load must answer a Wait command")
+		}
+	})
+}
+
+var errStrayLoad = errors.New("stray load failed")
