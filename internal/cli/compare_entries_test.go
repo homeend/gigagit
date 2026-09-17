@@ -120,7 +120,9 @@ func TestCompareShelfEntryFrozenAndPatch(t *testing.T) {
 		t.Errorf("stderr = %q, want the frozen note", errb)
 	}
 
-	// Frozen fallback: --patch lane (flags precede positionals).
+	// Frozen fallback: --patch lane (flags precede positionals). This lane
+	// re-derives both sets from the endpoints and renders per member, so it
+	// answers — the --patch refusal must NOT swallow it.
 	code, out, _ = runCompare(t, dir, "compare", "--patch", "shelf:"+id, baseSha)
 	if code != 0 {
 		t.Fatalf("--patch exit %d", code)
@@ -129,6 +131,32 @@ func TestCompareShelfEntryFrozenAndPatch(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("--patch stdout missing %q:\n%s", want, out)
 		}
+	}
+
+	// The SAME entry spelled as a link. Two things are being pinned here:
+	//
+	//  1. `gg://<checkout>@<gone sha>?shelf=<id>` falls back to the frozen tar
+	//     exactly as `shelf:<id>` does — before, this spelling leaked git's
+	//     raw "fatal: bad object".
+	//  2. Adding a /<path> NARROWS the set, and ComparePatch re-derives its
+	//     sets from the endpoints, so it cannot honour a projection: --patch
+	//     is refused there even though the un-narrowed shelf link renders.
+	linkBase := "gg://" + filepath.ToSlash(dir)
+	code, out, errb = runCompare(t, dir, "compare", linkBase+"@"+doomedSha+"?shelf="+id, baseSha)
+	if code != 0 {
+		t.Fatalf("link spelling of the frozen entry: exit %d, stderr %q", code, errb)
+	}
+	if !strings.Contains(out, "M\tf.txt") {
+		t.Errorf("link spelling stdout = %q, want M\\tf.txt", out)
+	}
+
+	code, out, errb = runCompare(t, dir, "compare", "--patch",
+		linkBase+"/f.txt@"+doomedSha+"?shelf="+id, baseSha)
+	if code != 2 {
+		t.Fatalf("--patch of a NARROWED shelf link: exit %d, want 2 (stdout %q stderr %q)", code, out, errb)
+	}
+	if !strings.Contains(errb, "--patch renders whole endpoints") {
+		t.Errorf("stderr = %q, want the projection refusal", errb)
 	}
 }
 

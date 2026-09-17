@@ -25,6 +25,13 @@ type FileSet struct {
 	ep      model.Endpoint
 	paths   []string
 	bounded bool // explicit, NOT len(paths) > 0: an empty bounded set is legal
+	// narrowed records that this set is a PROJECTION of its endpoint's own
+	// set rather than the whole of it — a link with a /<path> (narrowTo).
+	// It is not derivable from ep, which narrowTo carries over untouched, and
+	// it is the one thing a consumer that re-derives sets FROM the endpoint
+	// (domain.ComparePatch's shelf lane) cannot reconstruct. Frontends ask
+	// Narrowed() before handing a set to such a consumer.
+	narrowed bool
 	// has answers "does this member have BYTES at ep" for every enumerated
 	// path. It is NOT redundant with paths (ruling R6): a change-set
 	// enumerates the files it DELETED, and `git show <b>:<deleted>` cannot
@@ -56,6 +63,15 @@ func (f FileSet) Paths() []string {
 // fs.Endpoint().Bounded() is false while fs.Bounded() is true. Ask the SET
 // whether it enumerates its paths; ask the ENDPOINT only for bytes.
 func (f FileSet) Endpoint() model.Endpoint { return f.ep }
+
+// Narrowed reports whether this set is a PROJECTION of its endpoint's own
+// file set (a link's /<path>) rather than the whole of it.
+//
+// It exists for one question: may this set be handed to a consumer that
+// re-derives the sets from the ENDPOINTS instead of taking them? ComparePatch
+// does exactly that on its shelf lane, so a narrowed set given to it would
+// silently widen back to every member of the tar.
+func (f FileSet) Narrowed() bool { return f.narrowed }
 
 // Has reports whether path has readable bytes at this set's endpoint. Only
 // meaningful for a bounded set; the unbounded lane asks endpointHas instead.
@@ -166,6 +182,33 @@ func (s *Service) EvalEndpoint(ctx context.Context, e model.Endpoint) (FileSet, 
 		return boundedSetWith(b, paths, has), nil
 
 	case model.EndpointShelf:
+		// A shelf entry is one of TWO things, and the entry kind is the only
+		// discriminator (shelfResolve makes the same split for bytes):
+		//
+		//   commit entry — a tar of the paths the shelved commit changed.
+		//   FILE entry   — one blob captured from the working tree or index,
+		//                  whose bytes may correspond to nothing in git. This
+		//                  is spec §3.3's exception: the address-less shelf
+		//                  link, the one link in the system with no address at
+		//                  all, and the reason EndpointForLink has an arm for
+		//                  it. Routing it through ShelfCommitFiles (which
+		//                  refuses a non-commit entry) made that link
+		//                  buildable and un-evaluatable.
+		entry, err := s.ShelfFind(ctx, e.ShelfID())
+		if err != nil {
+			return FileSet{}, err
+		}
+		if !entry.IsCommit() {
+			// ONE member: the path the blob was captured from. Refused rather
+			// than guessed when the record carries none — a set whose single
+			// key is "" would compare the whole tree against one blob.
+			if entry.Origin.Path == "" {
+				return FileSet{}, fmt.Errorf("shelf: entry %s records no origin path, so it names no file", e.ShelfID())
+			}
+			// has stays nil: the blob IS the member's bytes, so it always has
+			// some — the same "every member has bytes" the tar case relies on.
+			return boundedSetWith(e, []string{entry.Origin.Path}, nil), nil
+		}
 		members, err := s.ShelfCommitFiles(ctx, e.ShelfID())
 		if err != nil {
 			return FileSet{}, err
@@ -246,7 +289,22 @@ func (s *Service) endpointHas(ctx context.Context, e model.Endpoint, paths []str
 		// skip-worktree entry, so on a sparse checkout it would call every
 		// sparse-excluded path present. The filesystem is the authority.
 		// No batching either: a stat takes no argv.
-		return s.WorktreeFilesPresent(ctx, paths)
+		//
+		// COPIED into out, like the two arms above, rather than handed back as
+		// it comes. WorktreeFilesPresent goes through query(), so concurrent
+		// callers that coalesce on one flight all receive the LEADER'S map
+		// header — returning it directly would make every caller's "own"
+		// result the same object, and a map is the easiest thing here to write
+		// into by accident. sortedCompareRows' doc records the same hazard for
+		// the slice half of the algebra.
+		found, err := s.WorktreeFilesPresent(ctx, paths)
+		if err != nil {
+			return nil, err
+		}
+		for p, ok := range found {
+			out[p] = ok
+		}
+		return out, nil
 
 	case model.EndpointRef:
 		// Unreachable: EvalEndpoint resolves a ref to a commit before any set

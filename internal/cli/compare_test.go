@@ -525,36 +525,61 @@ func TestCompareShelfAgainstTheWorkingTree(t *testing.T) {
 	}
 }
 
-// TestComparePatchOfABoundedSideIsTheEndpointsDiff pins the KNOWN GAP the
-// --patch arm's TODO(plan 3) names, so it is a documented shape rather than a
-// surprise: ComparePatch still takes two ENDPOINTS, not two file sets, so
-// --patch of a bounded side renders the endpoints' whole diff instead of the
-// projection the default listing shows.
-func TestComparePatchOfABoundedSideIsTheEndpointsDiff(t *testing.T) {
+// TestComparePatchOfABoundedSideIsRefused: --patch renders whole ENDPOINTS,
+// so it cannot answer a comparison whose key set was narrowed. It used to
+// print the endpoints' whole diff anyway — silently a DIFFERENT comparison
+// from the one the default listing shows, with nothing to say so. The
+// reachable shape is not the exotic one the old TODO described (bounded ×
+// bounded): it is a single-file link, which is the spelling every "copy gg
+// link" button in the product emits.
+//
+// Rendering a PROJECTED patch stays deferred. Refusing is not that work.
+func TestComparePatchOfABoundedSideIsRefused(t *testing.T) {
 	t.Parallel()
 	dir, c1, c2, _ := linkCompareRepo(t)
-	pair := mustLink(t, dir, "--pair", c1+".."+c2)
 
-	// The LISTING is the projection: the change-set's one member.
-	code, out, errb := runCLI(t, dir, "compare", pair, "HEAD")
-	if code != 0 {
-		t.Fatalf("compare <pair-link> HEAD: exit %d (stderr %q)", code, errb)
-	}
-	if out != "M\tb.txt\n" {
-		t.Fatalf("listing = %q, want exactly the projection \"M\\tb.txt\\n\"", out)
-	}
+	for _, tc := range []struct{ name, link string }{
+		// A single-FILE link: bounded to one path, and the shape a user
+		// actually pastes.
+		{"single-file link", mustLink(t, dir, "--rev", c2, "b.txt")},
+		// A CHANGE-SET link: bounded to the paths c1..c2 touched.
+		{"change-set link", mustLink(t, dir, "--pair", c1+".."+c2)},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// The LISTING is the projection, and still answers.
+			code, out, errb := runCLI(t, dir, "compare", tc.link, "HEAD")
+			if code != 0 {
+				t.Fatalf("compare %s HEAD: exit %d (stderr %q)", tc.link, code, errb)
+			}
+			if out != "M\tb.txt\n" {
+				t.Fatalf("listing = %q, want exactly the projection \"M\\tb.txt\\n\"", out)
+			}
 
-	// The PATCH is c2 → c3, the endpoints' own diff, so README.md is in it.
-	code, out, errb = runCLI(t, dir, "compare", "--patch", pair, "HEAD")
-	if code != 0 {
-		t.Fatalf("compare --patch <pair-link> HEAD: exit %d (stderr %q)", code, errb)
-	}
-	if !strings.Contains(out, "b.txt") {
-		t.Errorf("patch should carry b.txt:\n%s", out)
-	}
-	if !strings.Contains(out, "README.md") {
-		t.Errorf("KNOWN GAP changed: --patch now respects the projection. "+
-			"Update the TODO(plan 3) in cmdCompare and this test.\n%s", out)
+			// --patch refuses rather than answering a different question.
+			code, out, errb = runCLI(t, dir, "compare", "--patch", tc.link, "HEAD")
+			if code != 2 {
+				t.Fatalf("compare --patch %s HEAD: exit %d, want 2; stdout %q stderr %q",
+					tc.link, code, out, errb)
+			}
+			if out != "" {
+				t.Errorf("stdout must stay empty, got %q", out)
+			}
+			for _, want := range []string{
+				"compare: --patch renders whole endpoints",
+				"drop --patch",
+			} {
+				if !strings.Contains(errb, want) {
+					t.Errorf("stderr = %q, want it to contain %q", errb, want)
+				}
+			}
+			// README.md is the file the user never named. Its appearance was
+			// the bug; it must not appear even in the refusal.
+			if strings.Contains(out, "README.md") {
+				t.Errorf("--patch still renders the whole-tree diff:\n%s", out)
+			}
+		})
 	}
 }
 

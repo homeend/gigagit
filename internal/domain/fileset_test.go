@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/repogate"
 )
 
 // EvalEndpoint is the spec's §3.1 rule made executable: a POINT evaluates to
@@ -442,5 +444,87 @@ func TestEndpointHasBatchesALargePathSet(t *testing.T) {
 		if want := i%2 == 0; got[k] != want {
 			t.Fatalf("has[%q] = %v, want %v", k, got[k], want)
 		}
+	}
+}
+
+// endpointHas' WORKING-TREE arm must hand back a map the CALLER owns, exactly
+// as its commit and index siblings do. WorktreeFilesPresent goes through
+// query(), so two callers that coalesce on one flight used to receive the
+// leader's map header — the same object, each believing it owned it.
+//
+// The flight is held open deterministically rather than by sleeping: the test
+// takes an exclusive reservation first, so the LEADER parks inside the gate's
+// queue (observable through Gate.Queue) while still holding the flight key,
+// and the second caller can only be a follower.
+func TestEndpointHasWorktreeResultIsNotShared(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	writeAndCommit(t, dir, "seed", map[string]string{"here.txt": "x\n"})
+	ctx := context.Background()
+	paths := []string{"here.txt", "gone.txt"}
+
+	gate := svc.gateFor(ctx)
+	hold, err := gate.Acquire(ctx, repogate.TreeWrite, "test: hold the gate open")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	type res struct {
+		m   map[string]bool
+		err error
+	}
+	leader, follower := make(chan res, 1), make(chan res, 1)
+	go func() {
+		m, err := svc.endpointHas(ctx, model.WorkTreeEndpoint(), paths)
+		leader <- res{m, err}
+	}()
+
+	// Wait for the leader to be PARKED in the gate queue: at that point it is
+	// inside flightGroup.Do's fn and the key is held.
+	waiters := func() int {
+		n := 0
+		for _, e := range gate.Queue() {
+			if e.Waiting {
+				n++
+			}
+		}
+		return n
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for waiters() == 0 {
+		if time.Now().After(deadline) {
+			hold.Release()
+			t.Fatal("the leader never reached the gate queue")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	go func() {
+		m, err := svc.endpointHas(ctx, model.WorkTreeEndpoint(), paths)
+		follower <- res{m, err}
+	}()
+	// A follower joins the leader's flight and never queues; a second QUEUED
+	// waiter would mean it started its own flight, and the aliasing this test
+	// is about could not arise. Settle briefly, then assert we still see one.
+	time.Sleep(50 * time.Millisecond)
+	if n := waiters(); n != 1 {
+		hold.Release()
+		t.Skipf("the second caller did not join the leader's flight (%d waiters)", n)
+	}
+
+	hold.Release()
+	a, b := <-leader, <-follower
+	if a.err != nil || b.err != nil {
+		t.Fatalf("endpointHas: %v / %v", a.err, b.err)
+	}
+	// Both callers were told the map is theirs. Prove it of one by writing to
+	// it, which is exactly the accident this guards.
+	a.m["here.txt"] = !a.m["here.txt"]
+	a.m["a-key-the-probe-never-saw"] = true
+	if _, leaked := b.m["a-key-the-probe-never-saw"]; leaked {
+		t.Fatal("the two coalescing callers share one map: a write by one is visible to the other")
+	}
+	if !b.m["here.txt"] {
+		t.Fatal("the leader's flipped value leaked into the follower's map")
 	}
 }

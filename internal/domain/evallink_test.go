@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/shelf"
 )
 
 // gitOut runs one git command in dir and returns its trimmed stdout.
@@ -95,8 +96,10 @@ func TestEndpointForLinkShelfHintIsTheOnlyContentSource(t *testing.T) {
 		t.Fatalf("a bookmark hint must not move the endpoint, got kind=%d", ep.Kind())
 	}
 
-	// And a shelf hint on a link that DOES address a commit stays the commit:
-	// the exception is for links with no address at all.
+	// And a shelf hint on a link that DOES address a LIVE commit stays the
+	// commit: the hint is a fallback byte source, not a second identity, so
+	// it only speaks once the sha stops resolving
+	// (TestEvalLinkShelfHintFallsBackToTheFrozenTar).
 	addressed, err := model.ParseLink("gg://x@" + f.c2 + "?shelf=entry7")
 	if err != nil {
 		t.Fatal(err)
@@ -106,7 +109,7 @@ func TestEndpointForLinkShelfHintIsTheOnlyContentSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	if ep.Kind() != model.EndpointCommit || ep.Hash() != f.c2 {
-		t.Fatalf("a shelf hint on an ADDRESSED link must be ignored, got kind=%d hash=%q", ep.Kind(), ep.Hash())
+		t.Fatalf("a shelf hint on a link addressing a LIVE commit must be ignored, got kind=%d hash=%q", ep.Kind(), ep.Hash())
 	}
 }
 
@@ -504,5 +507,145 @@ func TestCompareTwoLinks(t *testing.T) {
 	// alone, and a.txt's bytes differ between c1 and c3.
 	if len(got) != 1 || got[0].Path != "a.txt" || got[0].Status != "M" {
 		t.Fatalf("got %v, want exactly a.txt M", got)
+	}
+}
+
+// A shelf hint on a link that DOES address a commit is the spec's §3.3 table
+// row 1 and §6's "shelved commit gc'd, frozen tar present → use the tar": the
+// hint is a FALLBACK byte source, so once the sha stops resolving the link
+// must land on the frozen tar rather than sending a read after a dead object.
+// `gg compare shelf:<id> …` (ResolveCommitEntryEndpoint) already did this;
+// the link spelling of the same entry did not, so the two spellings answered
+// differently — one with rows, the other with git's "fatal: bad object".
+func TestEvalLinkShelfHintFallsBackToTheFrozenTar(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	initial := writeAndCommit(t, dir, "initial", map[string]string{"keep.txt": "keep\n"})
+	sha := writeAndCommit(t, dir, "doomed", map[string]string{"g.txt": "g\n"})
+	entry, err := svc.ShelfAddCommit(ctx, sha, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Make sha genuinely unreachable, the way export_test.go's durability
+	// check does: rewind main below it, expire every reflog, then prune.
+	gitRun(t, dir, "update-ref", "refs/heads/main", initial)
+	gitRun(t, dir, "checkout", "-f", "main")
+	gitRun(t, dir, "reflog", "expire", "--expire=all", "--all")
+	gitRun(t, dir, "gc", "--prune=now")
+	probe := exec.Command("git", "cat-file", "-e", sha)
+	probe.Dir = dir
+	if out, err := probe.CombinedOutput(); err == nil {
+		t.Fatalf("commit %s was not pruned (out=%s) — the fallback is not exercised", sha, out)
+	}
+
+	l, err := model.ParseLink("gg://x@" + sha + "?shelf=" + entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, err := svc.EvalLink(ctx, l)
+	if err != nil {
+		t.Fatalf("EvalLink of a gc'd shelf-hinted commit link: %v", err)
+	}
+	if fs.Endpoint().Kind() != model.EndpointShelf || fs.Endpoint().ShelfID() != entry.ID {
+		t.Fatalf("endpoint = kind %d id %q, want the frozen shelf entry %q",
+			fs.Endpoint().Kind(), fs.Endpoint().ShelfID(), entry.ID)
+	}
+	if !fs.Bounded() {
+		t.Fatalf("a frozen shelf entry is a BOUNDED set; got unbounded")
+	}
+	if got := fs.Paths(); len(got) != 1 || got[0] != "g.txt" {
+		t.Fatalf("paths = %v, want [g.txt] (the tar's one member)", got)
+	}
+
+	// And the comparison answers rather than leaking git's "bad object":
+	// g.txt is not on disk any more, so it reads as deleted.
+	wt, err := svc.EvalEndpoint(ctx, model.WorkTreeEndpoint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := svc.CompareSets(ctx, fs, wt)
+	if err != nil {
+		t.Fatalf("CompareSets(frozen, @worktree): %v", err)
+	}
+	if len(rows) != 1 || rows[0].Status != "D" || rows[0].Path != "g.txt" {
+		t.Fatalf("rows = %+v, want exactly D g.txt", rows)
+	}
+}
+
+// The address-less shelf link is spec §3.3's named exception — a shelved
+// WORKING-TREE file, whose bytes were never in git, so the hint is the only
+// content source and the link has no address at all. EndpointForLink has had
+// an arm for it all along, but EvalEndpoint routed every shelf endpoint
+// through ShelfCommitFiles, which refuses a file entry outright — so the one
+// link in the system with no address could be BUILT and never EVALUATED.
+//
+// Through EvalLink, deliberately: stopping at EndpointForLink is what hid
+// this.
+func TestEvalLinkAddressLessShelfFileIsOneBoundedMember(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	writeAndCommit(t, dir, "seed", map[string]string{"e.txt": "shelved\n"})
+	entry, err := svc.ShelfAdd(ctx, model.FileAddress{
+		State: model.StateUnstaged, Worktree: dir, Path: "e.txt",
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.IsCommit() {
+		t.Fatalf("fixture is wrong: %s is a shelved COMMIT, not a file", entry.ID)
+	}
+
+	l, err := model.ParseLink("gg://x?shelf=" + entry.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, err := svc.EvalLink(ctx, l)
+	if err != nil {
+		t.Fatalf("EvalLink of the address-less shelf link: %v", err)
+	}
+	if fs.Endpoint().Kind() != model.EndpointShelf || fs.Endpoint().ShelfID() != entry.ID {
+		t.Fatalf("endpoint = kind %d id %q, want the shelf entry", fs.Endpoint().Kind(), fs.Endpoint().ShelfID())
+	}
+	if !fs.Bounded() {
+		t.Fatal("a shelved file is ONE member, so the set is bounded")
+	}
+	if got := fs.Paths(); len(got) != 1 || got[0] != "e.txt" {
+		t.Fatalf("paths = %v, want [e.txt] (the entry's origin path)", got)
+	}
+	if !fs.Has("e.txt") {
+		t.Fatal("the one member has bytes — the blob IS the entry")
+	}
+
+	// It compares, which is the whole point. The file on disk still holds the
+	// shelved bytes, so there is nothing to report.
+	wt, err := svc.EvalEndpoint(ctx, model.WorkTreeEndpoint())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := svc.CompareSets(ctx, fs, wt)
+	if err != nil {
+		t.Fatalf("CompareSets(shelved file, @worktree): %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("rows = %+v, want none (the shelved bytes are already on disk)", rows)
+	}
+
+	// Change the file and the projection reports exactly that one path.
+	if err := os.WriteFile(filepath.Join(dir, "e.txt"), []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rows, err = svc.CompareSets(ctx, fs, wt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Status != "M" || rows[0].Path != "e.txt" {
+		t.Fatalf("rows = %+v, want exactly M e.txt", rows)
 	}
 }

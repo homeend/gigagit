@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v78 -->
+<!-- gg:using-gg:v79 -->
 
 # Using gg (gigagit)
 
@@ -124,8 +124,12 @@ gg://<repo>@<sha>?bookmark=<id>            a trailing ?<kind>=<id> hint: bookmar
 whichever commit it sits on today. `@<a>..<b>` is git's two-dot range and is
 the one link form that names a SET OF FILES rather than a whole tree — each
 half may be a sha or a refname. The `?<hint>` suffix records which UI surface
-a link was copied from; it never changes what the link addresses, and `gg
-compare` ignores it. Because `?` is now the hint separator, a path, a
+a link was copied from; `gg compare` ignores it, so a bookmarked commit and
+the same commit off the log are one endpoint. The only exception is a
+`?shelf=` hint that is the sole surviving source of the BYTES: a link with no
+address at all (`gg://<repo>?shelf=<id>`, a shelved working-tree file) reads
+the shelved blob, and `gg://<repo>@<sha>?shelf=<id>` falls back to the frozen
+tar once that sha has been gc'd. Because `?` is the hint separator, a path, a
 checkout path or a ref name containing `?` cannot appear in a link at all —
 `gg link` refuses to print one rather than emit something that reparses
 differently.
@@ -325,8 +329,11 @@ finds the right one here.
   stderr, scoped to the files that commit changed) — and a frozen entry
   compares against `@staged`/`@worktree` too, which answers "is my shelved work
   already in my tree?". `--patch` prints unified diffs instead of the file
-  list; it is the one lane that still needs the endpoints oldest→newest (a
-  reversed live pair is exit 2 and says so — drop `--patch` for the list).
+  list; it renders whole endpoints, so it refuses (exit 2, saying so) the two
+  comparisons it cannot describe: a side whose FILE SET it would drop (any
+  link with a `/<path>`, any `@<a>..<b>` change-set) and a reversed live pair.
+  Drop `--patch` for the changed-file list in both cases. A shelf entry is
+  fine — that lane renders per member — unless a `/<path>` narrows it.
 - **Either side of `gg compare` may be a `gg://` link**, mixed freely with the
   rest. A link with a `/<path>`, or a `@<a>..<b>` change-set target, names a
   SET OF FILES; comparing it against a whole tree projects the tree onto that

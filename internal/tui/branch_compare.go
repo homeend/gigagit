@@ -77,8 +77,34 @@ func (m Model) branchTipHash(name string) (string, bool) {
 // compareTagFor is the compare-view identity tag for an endpoint pair; both
 // openCompareFiles and openBranchCompare must build the SAME tag for the
 // same pair (the same-pair guard and every stale-msg gate key off it).
+//
+// PRECONDITION: both endpoints pass endpointComparable. CacheTag panics on the
+// two kinds it refuses, so calling this with one of them kills the process.
 func compareTagFor(left, right model.Endpoint) string {
 	return "cmp:" + left.CacheTag() + ":" + right.CacheTag()
+}
+
+// endpointComparable reports whether an endpoint can open a compare view here
+// — which is exactly "Endpoint.CacheTag() will not panic on it", since the tag
+// is the compare's identity and is built before anything else.
+//
+// ONE ARM PER KIND, no default: a kind added to the iota block must be decided
+// here rather than silently inheriting an answer. The two refusals:
+//
+//   - EndpointRef — a ref NAME moves, so CacheTag refuses it by design rather
+//     than key the session diff cache on a value that changes underneath it.
+//     domain.EvalEndpoint resolves one to a commit; do that first.
+//   - EndpointInvalid — the zero Endpoint is an unset variable, never "the
+//     working tree" (model.Endpoint's own idiom).
+func endpointComparable(e model.Endpoint) bool {
+	switch e.Kind() {
+	case model.EndpointWorkTree, model.EndpointIndex, model.EndpointShelf,
+		model.EndpointCommit, model.EndpointPair:
+		return true
+	case model.EndpointRef:
+		return false
+	}
+	return false
 }
 
 // openBranchCompare opens the compare files view for two branches (full

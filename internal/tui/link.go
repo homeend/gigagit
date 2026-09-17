@@ -31,9 +31,9 @@ func (m Model) linkRepoFor(worktree string) (model.LinkRepo, bool) {
 
 // linkFor builds the gg:// address for one place in this repository, or
 // refuses. It refuses when the grammar cannot hold the place: a path
-// containing '@', ':' or '#' (spec §1 — the producers refuse rather than emit
+// containing '@', ':', '#' or '?' (spec §1 — the producers refuse rather than emit
 // something that reparses as a different place), a remoteless checkout whose
-// own PATH holds '@' or '#' (model.LinkAbsOK — same rule, other half of the
+// own PATH holds '@', '#' or '?' (model.LinkAbsOK — same rule, other half of the
 // link), a shelf entry (there is no shelf form), or a commit address with no
 // full sha (a producer always knows the full sha; anything shorter did not
 // come from a real commit read).
@@ -127,7 +127,13 @@ func (m Model) previewLinkFor(source, target, path string, line int) (string, bo
 //  2. else the diff view itself on top → the cursor LINE (the point of the
 //     feature); a diff with no note address (a two-sided compare, or any
 //     other view the loader never stamped) refuses outright rather than
-//     falling through to a lower-precedence surface underneath it.
+//     falling through to a lower-precedence surface underneath it. That
+//     refusal is a PRODUCER gap, not a grammar one: the grammar now has
+//     `@<a>..<b>` for exactly a two-revision pair (model.LinkPair), so a
+//     compare view IS addressable — emitting one from here is deferred UI
+//     scope. What must not happen meanwhile is falling back to the newer
+//     side's own commit link, which describes parent→b, not a→b. The web
+//     twin (internal/web/static/links.js, linkFor) carries the same note.
 //     2a. a preview's diff → the PREVIEW form with the cursor line: the diff's
 //     note address is a commit on the tip, but the place the user is looking
 //     at is the preview, and that is the address that travels.

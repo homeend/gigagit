@@ -15,6 +15,18 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
+// mustShelfEndpoint is mustCommitEndpoint's shelf twin (internal/tui/wip_rows.go),
+// kept HERE because these snapshot tests are its only callers: the TUI's two
+// domain conduits hand back commit endpoints, and no production path builds a
+// shelf one any more.
+func mustShelfEndpoint(id string) model.Endpoint {
+	e, err := model.ShelfEndpoint(id)
+	if err != nil {
+		panic(err)
+	}
+	return e
+}
+
 func TestBuildSessionSnapshotFields(t *testing.T) {
 	t.Parallel()
 	m := newTestModel(t)

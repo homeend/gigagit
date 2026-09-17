@@ -28,15 +28,38 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   sha or a refname). A trailing `?<kind>=<id>` names the UI surface a link was
   copied from (`bookmark`, `shelf` or `stash`); it is carried and parsed, and
   `gg compare` deliberately IGNORES it — a bookmarked commit and the same
-  commit picked off the log are one endpoint. The single exception is a
-  `?shelf=<id>` on a link with no target at all, where the shelved copy is the
-  only place the bytes exist. (The surfaces that will LAND on the hint are not
-  wired yet.) Because the FIRST `?` is now the hint
+  commit picked off the log are one endpoint. The exceptions are the two the
+  design names, both cases where the shelved copy is the only place the bytes
+  survive: a `?shelf=<id>` on a link with **no target at all**
+  (`gg://repo?shelf=<id>`, a shelved working-tree file, which compares as a
+  one-file set), and a `?shelf=<id>` on a **commit link whose sha has been
+  gc'd**, which falls back to the frozen tar exactly as `gg compare
+  shelf:<id>` does. While the sha still resolves the hint changes nothing.
+  (The surfaces that will LAND on the hint are not wired yet.) Because the
+  FIRST `?` is now the hint
   separator, a `?` can no longer appear in a link's path, in a checkout path
   (the local `gg:///abs/path` form), or in a branch or tag name carried by a
   link. `gg link` and the TUI refuse to print one rather than emit something
   that reparses as another place.
 
+
+- **Links that name no single commit are refused with words that fit.** A
+  branch-tip (`@ref:<name>`) or change-set (`@<a>..<b>`) link handed to a verb
+  that needs an ADDRESS — `gg link resolve`, `gg diff`, `gg show`, the `gg
+  note` verbs, `gg open`, `gg session navigate` — still exits 2, as it always
+  did, but now says a branch-tip or change-set link cannot be navigated yet
+  and points at `gg compare`, instead of claiming the link "names a commit
+  without a sha" it never had.
+
+- **Fixed: `gg link <path>` could print a link to a DIFFERENT file.** A path
+  argument containing a `?` — legal on Linux and macOS — was not screened,
+  and the grammar reads everything from the first `?` as the hint: `gg link
+  'a?bookmark=x.txt'` printed, with exit 0, the link for the unrelated file
+  `a`. `?` is now refused at the producer alongside `@` and `#`, as the
+  documentation already promised, and the refusal names it. The browser's own
+  link producer had the same three predicates out of step with the grammar
+  (no `?`, and refusing `...` where git forbids `..`), so a `gg web`
+  copy-link could be a string the CLI would then misread; they match again.
 - **`gg compare` no longer refuses a "reversed" pair.** `gg compare @worktree
   main` used to be a usage error telling you to "order endpoints
   oldest→newest"; it now compares, with the statuses turned round (what reads
@@ -55,12 +78,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   sha has been gc'd is *frozen*; while the commit exists the entry still
   resolves to it and compares live.)
 
-- **`gg compare --patch` of a reversed live pair says how to get the answer.**
-  This one pair is still refused (exit 2, as it was before): `--patch` renders
-  two endpoints through git's own diff, which has no reverse form. The message
-  now names the two ways out — drop `--patch` for the changed-file list, which
-  does answer it, or order the endpoints oldest→newest — instead of only
-  lecturing about ordering.
+- **`gg compare --patch` says what it cannot render instead of rendering
+  something else.** `--patch` walks two whole *endpoints* through git's own
+  diff, so it cannot describe a comparison that was narrowed to a file set.
+  Two shapes are refused (exit 2), each in gg's own words:
+
+  - **A side whose file set `--patch` would silently drop** — any link with a
+    `/<path>` (the spelling every "copy gg link" button emits) and any
+    `@<a>..<b>` change-set. `gg compare --patch gg://repo/b.txt@<sha> HEAD`
+    used to print the whole-tree diff of the two commits, so `--patch` and the
+    default listing quietly described *different comparisons*: files the user
+    never named appeared in the patch. The message points at dropping
+    `--patch` for the changed-file list, which does answer the question asked.
+    (Rendering the *projected* patch — which hunks of a file a projection
+    contains — is a separate question and is not implemented.) A frozen shelf
+    entry is unaffected: `gg compare --patch shelf:<id> <commit>` renders per
+    member as it always did, and is refused only if a `/<path>` narrows it.
+  - **A reversed live pair**, as before: git's diff has no reverse form. The
+    message now names the two ways out — drop `--patch`, or order the
+    endpoints oldest→newest — instead of only lecturing about ordering.
 
 - **`gg compare`'s changed-file list is sorted by path.** It used to print
   git's own order with untracked files appended, so `gg compare main @worktree`

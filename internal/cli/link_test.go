@@ -242,9 +242,15 @@ func TestLinkPathSeparatorMessages(t *testing.T) {
 	t.Parallel()
 	dir := newCLIRepo(t)
 	for _, tc := range []struct{ name, arg, want string }{
-		{"at in path", "we@ird.go", "path contains @, : or #"},
-		{"hash in path", "we#ird.go", "path contains @, : or #"},
-		{"hash then junk", "a.go#x", "path contains @, : or #"},
+		{"at in path", "we@ird.go", "path contains @, :, # or ?"},
+		{"hash in path", "we#ird.go", "path contains @, :, # or ?"},
+		{"hash then junk", "a.go#x", "path contains @, :, # or ?"},
+		// '?' became the hint separator (Task 1), so it is as inexpressible
+		// as '@' — and MORE dangerous, because ParseLink does not fail on it:
+		// it silently eats the tail as a hint and leaves a link to a
+		// DIFFERENT, possibly existing, file.
+		{"question in path", "a?bookmark=x.txt", "path contains @, :, # or ?"},
+		{"question then junk", "a?b.txt", "path contains @, :, # or ?"},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
@@ -266,6 +272,38 @@ func TestLinkPathSeparatorMessages(t *testing.T) {
 	}
 	if got := strings.TrimSpace(out); !strings.HasSuffix(got, "/README.md#2") {
 		t.Errorf("stdout = %q, want a link ending /README.md#2", got)
+	}
+}
+
+// A '?' in the path argument used to be the ONE separator that did not fail
+// loudly: ParseLink eats everything from the first '?' as the hint, so the
+// probe handed back the TRUNCATED path and `gg link` printed, with exit 0, a
+// link to a different file that happens to exist. Two real files make that
+// visible — the refusal is the only correct answer, since the grammar cannot
+// hold either name.
+func TestLinkRefusesAPathWithAQuestionMark(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	for _, name := range []string{"a", "a?bookmark=x.txt", "a?b.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(name+"\n"), 0o644); err != nil {
+			t.Skipf("this filesystem cannot hold %q: %v", name, err)
+		}
+	}
+	for _, arg := range []string{"a?bookmark=x.txt", "a?b.txt"} {
+		arg := arg
+		t.Run(arg, func(t *testing.T) {
+			t.Parallel()
+			code, out, errb := runLinkCLI(t, dir, arg)
+			if code != 2 {
+				t.Fatalf("exit = %d, want 2; stdout %q stderr %q", code, out, errb)
+			}
+			if strings.TrimSpace(out) != "" {
+				t.Errorf("stdout = %q, want nothing printed", out)
+			}
+			if !strings.Contains(errb, "path contains @, :, # or ?") {
+				t.Errorf("stderr = %q, want the path-separator refusal naming '?'", errb)
+			}
+		})
 	}
 }
 
@@ -635,6 +673,39 @@ func TestLinkTargetFlagsAreExclusive(t *testing.T) {
 			}
 			if strings.TrimSpace(out) != "" {
 				t.Errorf("gg link %v printed a link anyway: %q", tc.args, out)
+			}
+		})
+	}
+}
+
+// `gg link resolve` (and every other verb that goes through resolveLinkArg —
+// gg diff, gg show, gg note *, gg open, gg session navigate) answers with an
+// ADDRESS, and a branch tip or a change-set has none, so those links are
+// refused. THE REFUSAL IS DELIBERATE; its WORDS were not. The guard predated
+// Target.Ref/Target.Pair and reported "gg link names a commit without a sha"
+// about a link that names no sha and is missing nothing.
+func TestLinkResolveRefusesRefAndPairInItsOwnWords(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	for _, tc := range []struct{ name, link string }{
+		{"a branch tip", mustLink(t, dir, "--ref", "main")},
+		{"a change-set", mustLink(t, dir, "--pair", head+".."+head)},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			code, out, errb := runLinkCLI(t, dir, "resolve", tc.link)
+			if code != 2 {
+				t.Fatalf("link resolve %s: exit = %d, want 2 (stdout %q stderr %q)", tc.link, code, out, errb)
+			}
+			if strings.Contains(errb, "without a sha") {
+				t.Errorf("stderr still blames a missing sha, which this link never had: %q", errb)
+			}
+			for _, want := range []string{"cannot be navigated yet", "gg compare"} {
+				if !strings.Contains(errb, want) {
+					t.Errorf("stderr = %q, want it to contain %q", errb, want)
+				}
 			}
 		})
 	}

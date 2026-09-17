@@ -179,10 +179,15 @@ func filesModeProtoName(fm filesMode) string {
 //
 // EndpointInvalid panics, in model.Endpoint's own idiom: the zero Endpoint is
 // an unset variable, never "the working tree". It is unreachable — this is
-// called only in filesModeCompare, whose entry point (files_view.go's compare
-// gesture) already calls left.Display() on the same value, and Display panics
-// on Invalid — so the arm exists to keep an impossible state loud rather than
-// let it become an empty JSON object nobody can explain.
+// called only in filesModeCompare, and openCompareFiles (files_view.go) now
+// DECLINES an endpoint it cannot identify before it stores one, through
+// endpointComparable, which refuses EndpointInvalid and EndpointRef by name.
+// So the arm exists to keep an impossible state loud rather than let it
+// become an empty JSON object nobody can explain.
+//
+// (An earlier version of this comment credited left.Display(); Display is not
+// the first thing that touches the value — compareTagFor/CacheTag() is, and it
+// is what the guard was added in front of.)
 func endpointProto(e model.Endpoint) *snapEndpoint {
 	switch e.Kind() {
 	case model.EndpointWorkTree:

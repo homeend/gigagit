@@ -14,10 +14,21 @@ import (
 //
 // The hint is IGNORED here, deliberately: spec §3.3 rule 1 says compare
 // ignores it, and that is what keeps the algebra a 2×2 instead of a
-// bookmark × shelf × commit matrix. The ONE exception is a hint that is the
-// only CONTENT source — a shelved working-tree file, whose bytes were never in
-// git — which is why a shelf hint on a link with NO address becomes a shelf
-// endpoint rather than a working-tree one.
+// bookmark × shelf × commit matrix. A `?bookmark=` hint therefore NEVER
+// changes the answer.
+//
+// A `?shelf=` hint has the spec's two named exceptions, and only those two —
+// both because a shelf entry can be the only place the BYTES survive (spec
+// §3.3's exception table, §6):
+//
+//  1. NO ADDRESS at all (a shelved working-tree file, whose bytes were never
+//     in git) ⇒ the shelf endpoint, not the working tree.
+//  2. A COMMIT address whose sha no longer resolves ⇒ the frozen tar, through
+//     ResolveCommitEntryEndpoint's hybrid. While the sha resolves this is the
+//     plain commit endpoint, so rule 1 still holds for every live link.
+//
+// Neither exception makes the hint an identity: both are fallbacks for bytes
+// with nowhere else to come from.
 //
 // Side, Line and Hunk are ignored too: they are where a link LANDS, not what
 // it addresses. Narrowing to a link's /<path> is EvalLink's job, not this
@@ -95,6 +106,24 @@ func (s *Service) EndpointForLink(ctx context.Context, l model.Link) (model.Endp
 		return model.PairEndpoint(base, src)
 
 	case t.Commit != "":
+		// THE HINT'S SECOND AND LAST EXCEPTION to rule 1 (the first is the
+		// address-less form above). Spec §3.3's table row 1 and §6's
+		// "shelved commit gc'd, frozen tar present → use the tar" both say a
+		// shelf-hinted commit reads live WHILE THE SHA RESOLVES and falls back
+		// to the frozen tar once it does not — so the hint is not a second
+		// identity here, it is a FALLBACK byte source for an address that has
+		// died. That is exactly ResolveCommitEntryEndpoint's hybrid, which is
+		// what `gg compare shelf:<id>` already goes through; routing the link
+		// spelling anywhere else made two spellings of one entry answer
+		// differently, the second with git's raw "fatal: bad object".
+		//
+		// Rule 1 is intact: while the commit exists this returns the same
+		// CommitEndpoint an unhinted link would, so a bookmarked commit and
+		// the same commit off the log stay ONE endpoint. Do not "simplify"
+		// this back to model.CommitEndpoint.
+		if l.Hint.Kind == "shelf" {
+			return s.ResolveCommitEntryEndpoint(ctx, t.Commit, l.Hint.ID)
+		}
 		return model.CommitEndpoint(t.Commit)
 	}
 	return model.Endpoint{}, fmt.Errorf("%w: the link addresses nothing comparable", model.ErrLink)
@@ -187,15 +216,20 @@ func (s *Service) EvalLink(ctx context.Context, l model.Link) (FileSet, error) {
 // so Has() answers true for any path, member or not. compareBoundedPair
 // documents the same trap and guards it the same way.
 func (s *Service) narrowTo(ctx context.Context, fs FileSet, path string) (FileSet, error) {
+	narrowed := func(has bool) FileSet {
+		out := boundedSetWith(fs.Endpoint(), []string{path}, map[string]bool{path: has})
+		// The ONE thing the endpoint cannot say afterwards: this set is a
+		// projection, not the endpoint's own set. FileSet.Narrowed's doc names
+		// the consumer that needs to know.
+		out.narrowed = true
+		return out
+	}
 	if fs.Bounded() {
-		has := fs.Has(path) && slices.Contains(fs.Paths(), path)
-		return boundedSetWith(fs.Endpoint(), []string{path},
-			map[string]bool{path: has}), nil
+		return narrowed(fs.Has(path) && slices.Contains(fs.Paths(), path)), nil
 	}
 	present, err := s.endpointHas(ctx, fs.Endpoint(), []string{path})
 	if err != nil {
 		return FileSet{}, err
 	}
-	return boundedSetWith(fs.Endpoint(), []string{path},
-		map[string]bool{path: present[path]}), nil
+	return narrowed(present[path]), nil
 }

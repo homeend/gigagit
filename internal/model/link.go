@@ -403,7 +403,7 @@ func ParseLink(s string) (Link, error) {
 	// its Repo.Abs legitimately carries a drive colon, and the checkout/path
 	// split has not happened yet.
 	if !LinkPathOK(path) {
-		return linkErr("%q is not a git path: a path cannot contain @, : or #", path)
+		return linkErr("%q is not a git path: a path cannot contain @, :, # or ?", path)
 	}
 	l.Repo.Name, l.Path = name, path
 	if l.Path == "" && (l.Line > 0 || l.Hunk > 0) {

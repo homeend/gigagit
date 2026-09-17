@@ -87,6 +87,19 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 	if opts.OpenFn == nil {
 		opts.OpenFn = Open
 	}
+	// A branch TIP (@ref:<name>) and a CHANGE-SET (@<a>..<b>) are well formed
+	// and simply not navigable yet: LocateLink's doc says why (a ref has no
+	// single commit, and a pair is BOUNDED, which model.FileAddress has no
+	// field for), and making them navigable belongs to a later plan. The
+	// REFUSAL is the ruling; only the words are new. It used to fall through
+	// to the empty-sha guard below and report "names a commit without a sha"
+	// about a link that names no sha and is missing nothing — and it reaches
+	// six verbs through cli.resolveLinkArg (gg diff, gg show, every gg note
+	// verb, gg open, gg session navigate), which the agent skill tells an
+	// agent to hand any pasted link to.
+	if l.Target.Ref != "" || l.Target.Pair != nil {
+		return Resolved{}, fmt.Errorf("%w: a branch-tip or change-set link cannot be navigated yet — it names no single commit; hand it to `gg compare`, which evaluates the target itself", model.ErrLink)
+	}
 	// StateCommitted is FileState's ZERO value, so a Link built programmatically
 	// (not via ParseLink, which never leaves Commit empty for this state) could
 	// slip through with no sha. Refuse it here rather than reaching finishLink's

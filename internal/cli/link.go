@@ -101,7 +101,7 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 			return 1
 		}
 		if !model.LinkRefOK(tgt.Source) || !model.LinkRefOK(tgt.Target) {
-			fmt.Fprintf(stderr, "link: %s...%s cannot be expressed in a gg link (a branch name may not contain @, : or #)\n", tgt.Target, tgt.Source)
+			fmt.Fprintf(stderr, "link: %s...%s cannot be expressed in a gg link (a branch or tag name may not contain @, :, #, ? or whitespace)\n", tgt.Target, tgt.Source)
 			return 1
 		}
 		prev = &model.LinkPreview{Source: tgt.Source, Target: tgt.Target}
@@ -162,8 +162,19 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 		// checked here — it is the line suffix, and on Windows it is also the
 		// drive colon of a perfectly good absolute argument; LinkPathOK gets
 		// the REBASED, top-level-relative path below, which has neither.
-		if strings.ContainsRune(raw, '@') || !linkHunkSuffixOK(raw) {
-			return model.Link{}, fmt.Errorf("%w: path contains @, : or # — no gg link", model.ErrLink)
+		//
+		// '?' is checked for a STRONGER reason than the other two: ParseLink
+		// does not fail on it. It reads everything from the first '?' as the
+		// hint and hands back a TRUNCATED path, so without this guard
+		// `gg link 'a?bookmark=x.txt'` printed, with exit 0, a link to the
+		// unrelated file "a" — LinkPathOK below is only ever asked about the
+		// already-shortened path and can never see the '?'. A '?' in the
+		// argument is therefore refused outright rather than read as a hint:
+		// `gg link`'s hint channel is --bookmark/--shelf, and a filename is
+		// not a second spelling of it. (Consequently probe.Hint is always
+		// empty here; there is no hint to carry or to drop.)
+		if strings.ContainsAny(raw, "@?") || !linkHunkSuffixOK(raw) {
+			return model.Link{}, fmt.Errorf("%w: path contains @, :, # or ? — no gg link", model.ErrLink)
 		}
 		probe, err := probeLinkArg(raw)
 		if err != nil {
@@ -174,7 +185,7 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 			return model.Link{}, err
 		}
 		if !model.LinkPathOK(rel) {
-			return model.Link{}, fmt.Errorf("%w: path contains @, : or # — no gg link", model.ErrLink)
+			return model.Link{}, fmt.Errorf("%w: path contains @, :, # or ? — no gg link", model.ErrLink)
 		}
 		if rel == "" && (probe.Line > 0 || probe.Hunk > 0) {
 			return model.Link{}, fmt.Errorf("%w: a line or a hunk needs a file path", model.ErrLink)
@@ -261,7 +272,7 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 	// would emit a link ParseLink refuses (the first '@' is the target
 	// separator, the first '#' the hunk one). Refuse to print it instead.
 	if !model.LinkAbsOK(abs) {
-		return model.Link{}, fmt.Errorf("%w: this repository has no remote and its checkout path %q contains @ or # — no gg link", model.ErrLink, abs)
+		return model.Link{}, fmt.Errorf("%w: this repository has no remote and its checkout path %q contains @, # or ? — no gg link", model.ErrLink, abs)
 	}
 	l.Repo = model.LinkRepo{Abs: abs}
 	return l, linkRoundTrips(l)

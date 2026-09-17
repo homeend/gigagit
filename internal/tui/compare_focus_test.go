@@ -145,3 +145,58 @@ func TestSelectCommitThenWorktreeCompares(t *testing.T) {
 		t.Fatalf("endpoints = %v↔%v, want Commit↔WorkTree", mm.filesLeft.Kind(), mm.filesRight.Kind())
 	}
 }
+
+// compareTagFor is the FIRST statement of openCompareFiles, and it calls
+// Endpoint.CacheTag(), which panics by design on an unresolved ref (a moving
+// name must never become a cache key). A panic there takes the whole Bubble
+// Tea process down, so the boundary is asserted rather than assumed: this
+// branch is the one that gives domain new endpoint kinds to hand out.
+func TestOpenCompareFilesRefusesAnUntaggableEndpoint(t *testing.T) {
+	t.Parallel()
+	ref, err := model.RefEndpoint("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name        string
+		left, right model.Endpoint
+	}{
+		{"ref on the left", ref, model.WorkTreeEndpoint()},
+		{"ref on the right", model.WorkTreeEndpoint(), ref},
+		{"the zero endpoint", model.Endpoint{}, model.WorkTreeEndpoint()},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			m := loadedModelLinearCommits(t, 3)
+			mm, cmd := m.openCompareFiles(tc.left, tc.right)
+			if cmd != nil {
+				t.Error("a refused compare must not start a load")
+			}
+			if mm.filesView != nil || mm.inCompareMode() {
+				t.Error("a refused compare must not open the files view")
+			}
+			if mm.statusMsg == "" {
+				t.Error("a refused compare must say so in the status line")
+			}
+		})
+	}
+}
+
+// An EndpointPair's newer side is a resolved sha, so a compare that stands on
+// one has a perfectly good commit for h/b (history/blame) to use. It used to
+// fall to the switch's default and silently hand those surfaces the WORKING
+// TREE instead.
+func TestOpenCompareFilesTakesAPairsNewerSideAsTheFilesHash(t *testing.T) {
+	t.Parallel()
+	m := loadedModelLinearCommits(t, 3)
+	a, b := m.commits[2].Hash, m.commits[1].Hash
+	pair, err := model.PairEndpoint(a, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mm, _ := m.openCompareFiles(pair, model.WorkTreeEndpoint())
+	if mm.filesHash != b {
+		t.Fatalf("filesHash = %q, want the pair's newer side %q", mm.filesHash, b)
+	}
+}

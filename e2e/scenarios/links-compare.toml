@@ -143,6 +143,31 @@ exit = 2
 cmd  = ["link", "--ref", "main", "--bookmark", "a?b"]
 exit = 2
 
+# And the PRODUCER's own path argument. This is the shape that shipped broken:
+# ParseLink does not fail on a '?' — it eats the tail as a hint — so gg link
+# printed, exit 0, a link to a TRUNCATED path. Nothing but gg link itself can
+# catch it, which is why the run above (link resolve) was not enough.
+[[run]]
+cmd  = ["link", "keep.txt?bookmark=x.txt"]
+exit = 2
+stdout_excludes = ["gg:///"]
+
+# --patch renders whole ENDPOINTS, so a side that names a FILE SET cannot be
+# rendered: it would silently print the two endpoints' whole-tree diff, a
+# different comparison from the one the default listing gives. The link below
+# is bounded by its /<path>.
+[[run]]
+cmd             = ["compare", "--patch", "gg://{{cwd}}/f1.txt@ref:main", "c1"]
+exit            = 2
+stdout_excludes = ["diff --git"]
+
+# Dropping --patch answers, scoped to the one file the link named.
+[[run]]
+cmd             = ["compare", "gg://{{cwd}}/f1.txt@ref:main", "c1"]
+exit            = 0
+stdout_contains = ["f1.txt"]
+stdout_excludes = ["keep.txt", "f2.txt"]
+
 # Three dots are git's other range vocabulary; gg spells that a merge preview.
 [[run]]
 cmd  = ["link", "--pair", "c1...main"]

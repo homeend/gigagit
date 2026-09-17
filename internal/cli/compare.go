@@ -101,19 +101,31 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 		return code
 	}
 	if *patch {
-		// ComparePatch still takes ENDPOINTS, not sets: a bounded × bounded
-		// pair therefore renders the two endpoints' whole diff rather than the
-		// projection the file list shows, and a reversed live pair surfaces
-		// livePairSpec's own refusal instead of being inverted the way
-		// CompareSets inverts it.
+		// ComparePatch takes ENDPOINTS, not the file sets resolved above, so a
+		// key set it cannot re-derive from an endpoint is simply LOST: it
+		// would print the two endpoints' whole diff, a different comparison
+		// from the one the default listing shows, with nothing on screen to
+		// say so. patchLosesTheKeySet is the exact condition; refuse there
+		// rather than answer a question the user did not ask.
 		//
-		// TODO(plan 3): two changes, neither a mere signature change.
-		// (1) model.DiffSpec has no `-R`, so inverting a live pair the way
-		// CompareSets does needs a Reverse flag on the spec and three new argv
-		// forms. (2) A set-taking ComparePatch sibling, so --patch and the
-		// default listing describe the same comparison — a patch of a
-		// PROJECTION is a new rendering question (which hunks of a file the
-		// projection even contains), not a refactor.
+		// The reachable shape is not an exotic one. Any link with a /<path>
+		// is bounded, and that is the spelling every "copy gg link" button in
+		// the product emits.
+		//
+		// TODO(plan 3): what is DEFERRED is rendering a PROJECTED patch for
+		// the lanes that lose the set — a set-taking ComparePatch sibling,
+		// which is a new question (which hunks of a file a projection even
+		// contains), not a signature change. Deferred alongside it: inverting
+		// a reversed LIVE pair, which needs a Reverse flag on model.DiffSpec
+		// (it has no `-R`) and three new argv forms; that one still surfaces
+		// below as ErrComparePatchPair.
+		if patchLosesTheKeySet(left, right) {
+			fmt.Fprintf(stderr, "compare: --patch renders whole endpoints, and %s names a file set "+
+				"(a link with a /<path>, or an <a>..<b> change-set); "+
+				"drop --patch for the changed-file list of exactly those files\n",
+				boundedSideName(left, right))
+			return 2
+		}
 		diff, err := svc.ComparePatch(context.Background(), left.Endpoint(), right.Endpoint())
 		if err != nil {
 			// The one gap gets gg's own words. domain's refusal names a Go
@@ -290,4 +302,40 @@ func compareLinkSet(ctx context.Context, statePath string, svc *domain.Service, 
 		return domain.FileSet{}, 1
 	}
 	return fs, 0
+}
+
+// patchLosesTheKeySet reports whether handing these two sets to ComparePatch
+// would silently discard a key set — the one thing --patch must never do.
+//
+// ComparePatch has two lanes, and they differ exactly here:
+//
+//   - A SHELF on either side: it re-derives both sets with EvalEndpoint and
+//     renders per member, so a bounded shelf (or its frozen-fallback twin)
+//     comes out right — the shipped `gg compare --patch shelf:<gc'd id>`
+//     answer. The one thing it cannot reconstruct is a PROJECTION, because
+//     narrowTo carries the endpoint over untouched; that is what
+//     FileSet.Narrowed is for.
+//   - Anything else: livePairSpec maps the two endpoints straight to git argv
+//     and the sets are not consulted at all, so ANY bounded side is lost.
+func patchLosesTheKeySet(left, right domain.FileSet) bool {
+	if left.Narrowed() || right.Narrowed() {
+		return true
+	}
+	if left.Endpoint().Kind() == model.EndpointShelf || right.Endpoint().Kind() == model.EndpointShelf {
+		return false
+	}
+	return left.Bounded() || right.Bounded()
+}
+
+// boundedSideName names the side to blame, for the refusal message.
+func boundedSideName(left, right domain.FileSet) string {
+	lb, rb := left.Bounded() || left.Narrowed(), right.Bounded() || right.Narrowed()
+	switch {
+	case lb && rb:
+		return "both sides name"
+	case lb:
+		return "the left side"
+	default:
+		return "the right side"
+	}
 }
