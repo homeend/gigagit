@@ -751,6 +751,40 @@ function locateCurrentBranch() {
   setTimeout(() => li.classList.remove("flash"), 900);
 }
 
+// revealHintEntry reveals the bookmark or shelf row a navigate's hint (spec
+// §3.3) named — live.js's steerNavigate calls this AFTER the navigate has
+// landed, unconditionally, never from inside the landing function itself
+// (which has several early `return`s; a reveal placed after only one of
+// them would silently skip every other shape — the same trap ruling S2
+// named one file over). kind is "bookmark", "shelf" or "stash" (the
+// server's toSteerWire already validated the closed set); "stash" has no
+// producer and no row this page knows how to find, so it degrades with a
+// notice rather than throwing (spec §3.3 rule 3: the hint degrades, it
+// never fails). Both stores render `data-id` on every row (renderBookmarks/
+// renderShelf), so the lookup is a plain attribute selector — escaped,
+// since parseLinkHint permits a `"` in an id.
+function revealHintEntry(kind, id) {
+  const listName = kind === "bookmark" ? "bookmarks-list" : kind === "shelf" ? "shelf-list" : null;
+  if (!listName) {
+    opLine("gg link: this page cannot reveal a " + kind + " hint", true);
+    return;
+  }
+  const sectionName = kind === "bookmark" ? "bookmarks" : "shelf";
+  const li = $(listName).querySelector('li[data-id="' + CSS.escape(id) + '"]');
+  if (!li) {
+    // Absent — the hint degrades, it never fails: the navigate already
+    // landed elsewhere (the with-address shape), or, for a hint-only link,
+    // the server already hard-refused an absent one before this could ever
+    // post (ruling S11) — either way, no popup, just a notice.
+    opLine("gg link: " + kind + " " + id + " is gone; the link still landed", true);
+    return;
+  }
+  if (isCollapsed(sectionName)) toggleSection(sectionName);
+  li.scrollIntoView({ block: "center" });
+  li.classList.add("flash");
+  setTimeout(() => li.classList.remove("flash"), 900);
+}
+
 
 // isCollapsed reads the fold straight off the list, so redrawing a header
 // (after a sort cycle) cannot flip the chevron by accident.
@@ -1283,4 +1317,4 @@ $("shelf-list").addEventListener("contextmenu", (e) => {
   if (s) showShelfMenu(s, e.clientX, e.clientY);
 });
 
-export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
+export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };

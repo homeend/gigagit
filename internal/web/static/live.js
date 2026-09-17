@@ -10,7 +10,7 @@
 import { attnKey, getJSON, runOnce, state } from "./core.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { fetchNotes, markDiffRow, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
-import { fetchBranches } from "./sidebar.js";
+import { fetchBranches, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved } from "./previews.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
@@ -293,11 +293,29 @@ async function openCompareForPair(a, b) {
   await openCompare(a, b);
 }
 
-// steerNavigate opens what the command names and marks the landed row. It
-// reuses the very openers the .-menu rows use — openFile does the layout
-// switch and routes a working-tree entry to openStatusDiff itself — so a
-// steered landing is indistinguishable from a clicked one.
+// steerNavigate is the whole navigate verb: it lands where the command
+// names (steerNavigateLand), then reveals the bookmark/shelf row its hint
+// (spec §3.3) named — hint_kind/hint_id, the closed set the server's
+// toSteerWire already validated. The reveal is called HERE, unconditionally
+// after the land, rather than appended inside steerNavigateLand: that
+// function has SEVERAL early `return`s (the file-less preview/ref/pair
+// reveals, the `else if (!s.file)` hint-only fall-through, the shared
+// `if (!s.line) return;` tail) — a reveal placed after any one of them would
+// silently skip every other shape (the same trap ruling S2 named one file
+// over, in finishLink's arms).
 async function steerNavigate(s) {
+  await steerNavigateLand(s);
+  if (s.hint_kind) revealHintEntry(s.hint_kind, s.hint_id);
+}
+
+// steerNavigateLand opens what the command names and marks the landed row.
+// It reuses the very openers the .-menu rows use — openFile does the layout
+// switch and routes a working-tree entry to openStatusDiff itself — so a
+// steered landing is indistinguishable from a clicked one. A hint-only
+// command (no state, no file, no commit, no step) falls through to the
+// `else if (!s.file)` branch below and lands on nothing — the reveal above
+// IS its landing (ruling S13).
+async function steerNavigateLand(s) {
   if (s.step) {
     stepNote(s.step === "next_note" ? 1 : -1);
     return;

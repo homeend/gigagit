@@ -91,17 +91,20 @@ func TestSteerNavigateLineGuardCoversRefAndPair(t *testing.T) {
 		t.Fatal(err)
 	}
 	src := string(b)
-	i := strings.Index(src, "async function steerNavigate(s) {")
+	// Task 6 split the old steerNavigate in two: steerNavigate is now a thin
+	// land-then-reveal wrapper, and steerNavigateLand is where this guard
+	// (and the ref/pair branches below) actually live.
+	i := strings.Index(src, "async function steerNavigateLand(s) {")
 	if i < 0 {
-		t.Fatal("live.js: steerNavigate is gone")
+		t.Fatal("live.js: steerNavigateLand is gone")
 	}
 	j := strings.Index(src[i:], "\n}\n")
 	if j < 0 {
-		t.Fatal("live.js: could not find the end of steerNavigate")
+		t.Fatal("live.js: could not find the end of steerNavigateLand")
 	}
 	body := src[i : i+j]
 	if !strings.Contains(body, `if (!s.line) return;`) {
-		t.Fatal(`live.js: steerNavigate lost its "if (!s.line) return;" guard`)
+		t.Fatal(`live.js: steerNavigateLand lost its "if (!s.line) return;" guard`)
 	}
 	// Both new branches must fall through to that ONE guard rather than
 	// returning early themselves right after opening the file — an early
@@ -114,7 +117,7 @@ func TestSteerNavigateLineGuardCoversRefAndPair(t *testing.T) {
 		marker := `s.state === "` + st + `"`
 		bi := strings.Index(body, marker)
 		if bi < 0 {
-			t.Fatalf("live.js: steerNavigate has no %s branch", marker)
+			t.Fatalf("live.js: steerNavigateLand has no %s branch", marker)
 		}
 		if bi >= strings.Index(body, `if (!s.line) return;`) {
 			t.Fatalf("live.js: the %s branch must precede the shared line guard, not bypass it", marker)

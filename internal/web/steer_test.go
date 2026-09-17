@@ -446,6 +446,59 @@ func TestSteerWireRefusesABadPairTarget(t *testing.T) {
 	}
 }
 
+// --- Task 6: the wire accepts a hint-only navigate and refuses an unknown
+// hint kind (S13 point 2) --------------------------------------------------
+
+// TestSteerWireAcceptsAHintOnlyNavigate pins S13: a navigate carrying only
+// hint_kind/hint_id — no File, no Commit, no Target — must clear the
+// "navigate needs a file, a commit or a step" gate the same way a
+// preview/ref/pair reveal already does.
+func TestSteerWireAcceptsAHintOnlyNavigate(t *testing.T) {
+	t.Parallel()
+	w, err := toSteerWire(steer.Command{Cmd: "navigate", HintKind: "bookmark", HintID: "b1"})
+	if err != nil {
+		t.Fatalf("toSteerWire: %v", err)
+	}
+	if w.HintKind != "bookmark" || w.HintID != "b1" {
+		t.Errorf("wire hint = %s/%s, want bookmark/b1", w.HintKind, w.HintID)
+	}
+}
+
+// TestSteerWireCarriesAHintAlongsideAnOrdinaryFile pins the with-address
+// row: the hint must not change WHERE the navigate lands.
+func TestSteerWireCarriesAHintAlongsideAnOrdinaryFile(t *testing.T) {
+	t.Parallel()
+	w, err := toSteerWire(steer.Command{Cmd: "navigate", File: "a.txt", HintKind: "shelf", HintID: "s1"})
+	if err != nil {
+		t.Fatalf("toSteerWire: %v", err)
+	}
+	if w.File != "a.txt" {
+		t.Errorf("File = %q, want a.txt (the hint must not change WHERE it lands)", w.File)
+	}
+	if w.HintKind != "shelf" || w.HintID != "s1" {
+		t.Errorf("wire hint = %s/%s, want shelf/s1", w.HintKind, w.HintID)
+	}
+}
+
+// TestSteerWireRefusesAnUnknownHintKind pins ruling S13 point 2: the closed
+// set (model.LinkHint's grammar: bookmark/shelf/stash) is a wire refusal
+// for anything outside it, never a notice — the grammar already closed that
+// set.
+func TestSteerWireRefusesAnUnknownHintKind(t *testing.T) {
+	t.Parallel()
+	if _, err := toSteerWire(steer.Command{Cmd: "navigate", File: "a.txt", HintKind: "evil", HintID: "1"}); err == nil {
+		t.Error("toSteerWire = nil error, want a refusal for an unknown hint kind")
+	}
+	if _, err := toSteerWire(steer.Command{Cmd: "navigate", File: "a.txt", HintKind: "bookmark", HintID: ""}); err == nil {
+		t.Error("toSteerWire = nil error, want a refusal for a hint kind with no id")
+	}
+	for _, kind := range []string{"bookmark", "shelf", "stash"} {
+		if _, err := toSteerWire(steer.Command{Cmd: "navigate", File: "a.txt", HintKind: kind, HintID: "1"}); err != nil {
+			t.Errorf("toSteerWire(kind=%q): %v, want acceptance (the closed set)", kind, err)
+		}
+	}
+}
+
 // TestRefNavigateAndPairNavigateLandOnDifferentFileSets is ruling S5: a ref
 // names a POINT (that commit's own diff against its parent — the same
 // changed-file view any ordinary feed commit opens, live.js's

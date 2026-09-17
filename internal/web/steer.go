@@ -90,6 +90,13 @@ type steerWire struct {
 	Start   int      `json:"start,omitempty"`
 	End     int      `json:"end,omitempty"`
 	Tone    string   `json:"tone,omitempty"`
+	// HintKind/HintID name the UI surface a navigate's link was copied from
+	// (spec §3.3) — "bookmark", "shelf" or "stash", the closed set
+	// model.LinkHint's grammar already validated, so the page can reveal it
+	// (or degrade with a notice for "stash", which has no producer) exactly
+	// as steer.Command carries it.
+	HintKind string `json:"hint_kind,omitempty"`
+	HintID   string `json:"hint_id,omitempty"`
 }
 
 // steerPanels is the protocol's panel vocabulary — internal/tui's
@@ -183,6 +190,21 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 			w.Side = "new"
 		}
 	}
+	// The hint's closed set (model.LinkHint's grammar already closed it:
+	// "bookmark", "shelf" or "stash") is validated regardless of Cmd, like
+	// Target/Line above — an unknown kind is a wire refusal, never a notice,
+	// because the grammar already closed that set (S13 point 2).
+	if c.HintKind != "" {
+		switch c.HintKind {
+		case "bookmark", "shelf", "stash":
+		default:
+			return w, fmt.Errorf("unknown hint kind %q", c.HintKind)
+		}
+		if c.HintID == "" {
+			return w, errors.New("a hint needs an id")
+		}
+		w.HintKind, w.HintID = c.HintKind, c.HintID
+	}
 	switch c.Cmd {
 	case "navigate":
 		switch c.Step {
@@ -190,10 +212,12 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 		default:
 			return w, fmt.Errorf("unknown step %q", c.Step)
 		}
-		// A preview/ref/pair with no file is a REVEAL — the one navigate shape
+		// A preview/ref/pair with no file is a REVEAL — one navigate shape
 		// that names a place (the Previews entry, a branch tip, a change-set)
-		// without naming a file or a commit.
-		if c.File == "" && c.Commit == "" && c.Step == "" &&
+		// without naming a file or a commit. A hint-only navigate is another
+		// (S13): no File, no Commit, no Target at all — the reveal IS the
+		// landing.
+		if c.File == "" && c.Commit == "" && c.Step == "" && c.HintKind == "" &&
 			w.State != "preview" && w.State != "ref" && w.State != "pair" {
 			return w, errors.New("navigate needs a file, a commit or a step")
 		}
