@@ -81,6 +81,10 @@ func (fs *FileStore) lock() (func(), error) {
 	// The retry budget uses the REAL clock, never the Now seam: a test that
 	// freezes Now for expiry must not spin here forever on a held lock.
 	deadline := time.Now().Add(lockWait)
+	// last is the most recent reason the create failed, so the deadline error
+	// says WHICH wall we hit — a held lock reads differently from a name
+	// Windows is still tearing down.
+	var last error
 	for {
 		f, err := os.OpenFile(fs.lockPath(), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err == nil {
@@ -99,9 +103,23 @@ func (fs *FileStore) lock() (func(), error) {
 			}
 			return func() { releaseLock(fs.lockPath(), token) }, nil
 		}
-		if !errors.Is(err, os.ErrExist) {
+		// ErrExist is the ordinary "someone holds it" answer. ErrPermission
+		// must ALSO retry, and only Windows shows why: os.Remove there marks a
+		// file whose handle someone still holds (an on-access virus scanner,
+		// the search indexer) as PENDING DELETE rather than unlinking it, and
+		// an O_EXCL create against that name then fails with
+		// ERROR_ACCESS_DENIED — not ErrExist. Aborting on it failed a write
+		// outright for a condition that clears in milliseconds; the Windows
+		// suite caught it as "Access is denied" from a Put whose lock had
+		// already been released. Anything else is a real defect and still
+		// aborts at once.
+		if !errors.Is(err, os.ErrExist) && !errors.Is(err, os.ErrPermission) {
 			return nil, err
 		}
+		// A pending-delete name also refuses os.Stat, so the staleness check
+		// below simply does not fire for one — which is correct: a lock nobody
+		// holds any more is not a stale lock to break, it is a name to retry.
+		last = err
 		if fi, statErr := os.Stat(fs.lockPath()); statErr == nil && time.Since(fi.ModTime()) > lockStale {
 			// Stale: the writer died holding it. Retry at once only if the
 			// removal actually worked — otherwise (permissions, a Windows
@@ -112,7 +130,7 @@ func (fs *FileStore) lock() (func(), error) {
 			}
 		}
 		if time.Now().After(deadline) {
-			return nil, errors.New("preview: previews.toml.lock is held; try again")
+			return nil, fmt.Errorf("preview: previews.toml.lock is held; try again (last: %v)", last)
 		}
 		time.Sleep(lockPoll)
 	}

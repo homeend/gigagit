@@ -60,3 +60,27 @@ func TestCopyShaResolveWithoutAService(t *testing.T) {
 		t.Fatalf("a nil service must fall back, got %q", got)
 	}
 }
+
+// TestUpdateThreadTimeoutClearsTheWindowsFloor is the portable guard for a
+// defect only Windows can show.
+//
+// The deadline was 300ms. On Windows a single git invocation — CreateProcess
+// plus whatever an on-access scanner adds — routinely exceeds that, so the
+// full suite there failed five tui tests at once, every one of them on an
+// IDLE repo: HEAD refusing to resolve, the sha copy falling back to the
+// abbreviated form, the compare tag refusing to build, ff-diff opening
+// nothing. In a session that is every compare gesture and every ref/pair
+// navigate reporting "repo busy, try again" about a repo nobody is holding.
+//
+// The assertions below pass on Linux at 300ms, which is exactly why this test
+// is a FLOOR and not a behavioural check: nothing observable on this platform
+// stops someone tightening the constant back.
+func TestUpdateThreadTimeoutClearsTheWindowsFloor(t *testing.T) {
+	t.Parallel()
+	if updateThreadGitTimeout < updateThreadGitFloor {
+		t.Fatalf("updateThreadGitTimeout = %v, must be at least %v: a deadline "+
+			"shorter than one git invocation on Windows makes every synchronous "+
+			"Update-thread read decline on an idle repo",
+			updateThreadGitTimeout, updateThreadGitFloor)
+	}
+}
