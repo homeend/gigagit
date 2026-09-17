@@ -76,6 +76,24 @@ func TestSteerCommandForLinkAcceptsALineLessFile(t *testing.T) {
 	if c.File != "a.txt" || c.Line != nil {
 		t.Fatalf("command = %+v, want File a.txt and no Line", c)
 	}
+
+	// The PREVIEW arm carries the same rule in a second place, and a rule with
+	// one test is a rule enforced in one place: reverting only the preview
+	// hunk left every other test in this package green.
+	pl, err := model.ParseLink("gg://r/a.txt@main...feat/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, ok = steerCommandForLink(pl)
+	if !ok {
+		t.Fatal("steerCommandForLink refused a line-less preview file link")
+	}
+	if c.File != "a.txt" || c.Line != nil {
+		t.Fatalf("preview command = %+v, want File a.txt and no Line", c)
+	}
+	if c.Target == nil || c.Target.State != "preview" || c.Target.Source != "feat/x" || c.Target.Target != "main" {
+		t.Fatalf("preview target = %+v, want main...feat/x", c.Target)
+	}
 }
 
 // TestStartAtReadyPredicate exercises startAtReady() directly, field by

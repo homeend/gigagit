@@ -189,3 +189,85 @@ func TestTargetOf(t *testing.T) {
 		t.Errorf("untracked → %+v", got)
 	}
 }
+
+// previewRepo builds a checkout where main and feat/x have diverged, so
+// `@main...feat/x` is a previewable pair. b.txt exists only on feat/x, which
+// makes it the preview's one changed file.
+func previewRepo(t *testing.T) (string, *domain.Service) {
+	t.Helper()
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = dir
+		c.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run("init", "-q", "-b", "main")
+	write("a.txt", "1\n2\n3\n")
+	run("add", ".")
+	run("commit", "-q", "-m", "base")
+	run("checkout", "-q", "-b", "feat/x")
+	write("b.txt", "x\ny\nz\n")
+	run("add", ".")
+	run("commit", "-q", "-m", "feature")
+	run("checkout", "-q", "main")
+	write("a.txt", "1\n2\n3\n4\n")
+	run("add", ".")
+	run("commit", "-q", "-m", "main moves on")
+	return dir, domain.Open(dir)
+}
+
+// TestPreviewFileLinkWithNoLineOpensTheFile is R1 for the PREVIEW arm of
+// Command — the arm TestFileLinkWithNoLineOpensTheFile does not reach.
+//
+// It exists because reverting only the preview-arm hunk left every other test
+// in this package green: the general arm and the preview arm carry the same
+// rule in two places, and a rule with one test is a rule enforced in one
+// place. A `gg link <path> --preview <target>...<source>` link names a file in
+// a merge preview and, like every other file link, may carry no line.
+func TestPreviewFileLinkWithNoLineOpensTheFile(t *testing.T) {
+	t.Parallel()
+	dir, svc := previewRepo(t)
+	ctx := context.Background()
+	res := resolve(t, svc, model.Link{
+		Repo: model.LinkRepo{Abs: abs(dir)}, Path: "b.txt",
+		Target: model.LinkTarget{
+			State:   model.StateCommitted,
+			Preview: &model.LinkPreview{Source: "feat/x", Target: "main"},
+		},
+		Side: model.NoteSideNew,
+	}.String())
+	c, err := Command(ctx, svc, res)
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+	if c.Cmd != "navigate" || c.File != "b.txt" {
+		t.Fatalf("command = %+v, want a navigate naming b.txt", c)
+	}
+	if c.Line != nil {
+		t.Errorf("Line = %+v, want nil (open the file, do not move the cursor)", c.Line)
+	}
+	if c.Target == nil || c.Target.State != "preview" || c.Target.Source != "feat/x" || c.Target.Target != "main" {
+		t.Errorf("target = %+v, want the preview pair main...feat/x", c.Target)
+	}
+
+	// The pair with a LINE still lands on it: this test must not pass by
+	// making the preview arm drop lines altogether.
+	res.Line = 2
+	c, err = Command(ctx, svc, res)
+	if err != nil {
+		t.Fatalf("Command (with a line): %v", err)
+	}
+	if c.Line == nil || c.Line.No != 2 || c.Line.Side != "new" {
+		t.Errorf("Line = %+v, want new:2", c.Line)
+	}
+}
