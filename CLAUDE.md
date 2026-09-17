@@ -77,13 +77,14 @@ feature; keep THIS file's map to one line per package.
 | `agentskill` | Two embedded skills ("using-gg", "reviewing-with-gg") behind a Skill value type (go:embed + per-skill version marker) that teach AI agents the gg CLI and the review-notes lane. |
 | `agentinit`  | Hardcoded agent registry + detect/status/install behind `gg init` and the TUI Settings popup. |
 | `exttool`    | Catalog of external tools/AI agents gg can run per task category (`conflict`, `commit_message`, `review`, `conflict_complete`); template generation + detection; `$GG_MESSAGE_FILE`-wins-over-stdout capture contract. |
-| `config`     | TOML config (`.gg.toml`), field-level overlay (defaults→global→repo), `<seq>` counters, `[[tools.command]]` blocks, scoped line-edit writers. Repo config may live committed or machine-private (one active file). |
+| `config`     | TOML config (`.gg.toml`), field-level overlay (defaults→global→repo), `<seq>` counters, `[[tools.command]]` and `[[branches.filter]]` blocks, scoped line-edit writers. Repo config may live committed or machine-private (one active file). |
 | `template`   | Pure token resolver for branch/path templates and external-tool commands (per-token-kind quoting; validation makes bad templates inert); `FlattenForCmd` cmd.exe repair; shared conflict-context doc rendering. |
 | `textdiff`   | Pure line-alignment engine (Myers + guards) behind the side-by-side diff; optional word-level intraline spans. |
 | `syntax`     | Pure chroma wrapper: `Detect(path)` → lexer, `Lex(lang, src)` → per-source-line token runs (`Tok{Start,End,Class}`, rune offsets, coarse `Class` enum). DAG leaf; `domain.Differ` attaches runs to `Diff.OldTok/NewTok`. |
 | `theme`      | Pure colour-role catalogue (`Terminal` zero-value = inherit, `Dark` Campbell, `Light` neutral grey/charcoal) behind `[ui] theme`, plus `Override`/`Overlay`/`Merge`/`RoleDocs` over one `roleFields` table for the config's `[themes.<name>]` per-role overrides; the TUI builds lipgloss styles from it (`styles.go`) and paints the frame (`paint.go`). DAG leaf. |
 | `commitgraph`| Pure single-line commit-graph lane engine; no git/TUI/lipgloss imports. |
 | `changeset`  | Pure before/after change-set comparison (`Compare`) behind drift detection: a status flip like M→A is a resurrection and alarms (`Added`), a path only in the before set is absorbed upstream and stays quiet (`Removed`). DAG leaf: stdlib only, no git. |
+| `branchfilter`| Pure five-slot branch-filter model: `Slot` (TOML shape), `Compile` (RE2 + age parse, inert-with-reason), `Apply` (hide / show-only + exempt rows) — the ONE matcher the TUI and web share. DAG leaf. |
 | `cache`      | Generic injected in-memory LRU cache factory (entry-count + byte budget); first consumer is the commit-diff cache. |
 | `fsprobe`    | Pure per-OS probe classifying paths on slow "foreign" filesystem mounts (9p/WSL drvfs, cifs/smb, nfs, fuse; UNC on Windows) behind the repo-switcher slow-fs warning; fail-open, callers probe off-thread. DAG leaf. |
 | `clipboard`  | System-clipboard writer: native OS command first (WSL-interop-gated `clip.exe`, Wayland-socket-resolved `wl-copy`, …), OSC 52 fallback; `Probe()` backs the clipboard notices. |
@@ -93,7 +94,7 @@ feature; keep THIS file's map to one line per package.
 | `notebatch`  | Pure parser for the two agent JSON note-batch shapes (hunk agent-context v1, comment apply); shared by CLI, MCP and the review importer. DAG leaf. |
 | `preview`    | Machine-local registry of saved merge previews (`source → target` branch-name pairs; records only, TOML + lock under XDG state). Owned by `domain`; frontends never import it. |
 | `profile`    | Named git-identity presets, global + per-repo scoped. Owned by `domain`. |
-| `promptstate`| Machine-local UX memory: suppressed prompts, dismissed notices, approved external-tool command hashes (`CommandHash` shared by TUI and web). |
+| `promptstate`| Machine-local UX memory: suppressed prompts, dismissed notices, approved external-tool command hashes (`CommandHash` shared by TUI and web), the active branch-filter slot per repo per list. |
 | `prefix`     | Templated branch-name prefix registry, global + per-repo scoped. Owned by `domain`. |
 | `shellinit`  | `gg shell-init [bash|zsh|fish]` wrappers (cd-on-switch via `--cwd-file`). |
 | `observ`     | Observability: span ring buffer + sink (operation log), redaction, panic dump, session failure ring + `errors.log`. |

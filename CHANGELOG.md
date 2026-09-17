@@ -8,6 +8,22 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Added: branch filters — five configurable slots on the Branches and Remotes
+  lists (`alt+1…5`).** A slot is a named rule in `.gg.toml` (`[[branches.filter]]`,
+  global or repo — a repo block replaces the global one for the same slot) that
+  hides, or shows only, branches by tip age (`older_than`/`younger_than`: 90d 12w
+  6m 1y) and name (prefix, suffix, contains, Go RE2 regex); set clauses AND
+  together. One slot is active per list (the same key clears it), remembered per
+  repo and shared by the TUI and `gg web`. HEAD, branches checked out in a
+  worktree and the current branch's upstream are never hidden (a dim `∗` marks a
+  row the rule would otherwise hide). The panel header reads `▽2 stale · 12
+  hidden`; an active `/` filter stacks on top. Edit the slots from Settings `,` →
+  *Branch filters…* or the web settings view; an invalid block is inert with
+  its reason (never an error), and a duplicate slot number in one file is
+  skipped with a warning (first wins). Web: a `▽` chip on each list
+  header, `alt+1…5` (branches) / `alt+shift+1…5` (remotes); remotes are filtered
+  before the 100-row cap. Not `ctrl+1…5`: terminals deliver ctrl+3 as ESC and
+  browsers reserve ctrl+digit for tab switching.
 - **Fixed: `C`/`I` in the conflict hunk picker left a one-sided region undecided,
   so `ctrl+s` refused to apply.** A region with nothing on the chosen side
   (all of its lines came from the other branch) has nothing to offer "take

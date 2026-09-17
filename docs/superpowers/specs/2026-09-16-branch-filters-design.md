@@ -78,7 +78,7 @@ Semantics:
   rule.
 - `now` is taken once per evaluation (a list refresh), never per row.
 
-Validation (`branchfilter.Validate`): slot outside 1..5, unknown mode, an
+Validation (`branchfilter.Compile`): slot outside 1..5, unknown mode, an
 unparsable duration, an uncompilable regex, or a duplicate slot in ONE file
 makes the block **inert**, with a one-line reason. An inert slot loads as
 "slot N: invalid — <reason>" in Settings and alt+N answers with the reason in
@@ -171,12 +171,6 @@ func BranchRows(bs []model.Branch) []branchfilter.Row                       // N
 func RemoteBranchRows(rbs []model.RemoteBranch) []branchfilter.Row          // Branch (the part after the remote), UnixTime
 ```
 
-The two `Filter*` queries compute exemptions (HEAD + worktree branches;
-HEAD's upstream) and call `branchfilter.Apply`. They are pure over their
-inputs so the TUI can memoise and the web can call them per request.
-Reads stay under the existing read reservation; `SetActiveBranchFilter` is a
-state-file write, not a git write, and takes no reservation.
-
 ## TUI
 
 - **Keys:** `alt+1`…`alt+5` on the focused Branches or Remotes panel select
@@ -252,7 +246,7 @@ state-file write, not a git write, and takes no reservation.
 | Situation | Behaviour |
 |---|---|
 | Invalid regex / duration / mode / slot in TOML | slot inert with reason; Settings shows it; alt+N says it; list unfiltered |
-| Duplicate slot in one file | later block inert ("duplicate of slot N") |
+| Duplicate slot in one file | skipped with a warning shown in Settings (first wins) |
 | Stored active slot no longer valid | loads as none; nothing rewritten |
 | Editor save fails (no repo config path, write error) | status line "branch filter 2 not saved: <err>", popup stays open |
 | `prompts.toml` unwritable | alt+N still applies for the session; status line notes "not remembered: <err>" |

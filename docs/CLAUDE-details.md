@@ -1114,3 +1114,160 @@ arrival — but NOT on a resize, which changes no line index; blame on `blameMsg
 the preview on `fileContentMsg` and with the struct itself on close. Search keys
 never clear it. The diff's `onOld`, by contrast, is CARRIED across `diffMsg`
 (it is the user's choice, not the loader's) and is not inherited by a new file.
+
+### Branch filters (`internal/branchfilter`, spec `docs/superpowers/specs/2026-09-16-branch-filters-design.md`)
+
+Five numbered slots (`alt+1…5`) on the Branches and Remotes panels, one active
+slot per list, shared by the TUI and `gg web`. `internal/branchfilter` is the
+ONE evaluator (stdlib-only DAG leaf): `Slot` is the TOML shape, `Compile`
+parses ages (`ParseAge`: `d`/`w`/`m`/`y`, calendar-free approximations) and the
+regex, and never returns an error — a bad block travels inertly inside
+`Compiled.Err` so every caller shows the SAME reason instead of a startup
+failure. `Compiled.Empty` (no clause set) is a distinct, also-inert state
+(`Usable() = Err == nil && !Empty`). `CompileAll([]Slot) ([5]Compiled,
+warnings)` places blocks by `Slot.Slot-1`; a block whose slot is out of range,
+or a second block for an already-filled slot, is **skipped with a warning**
+(first wins) rather than either erroring or silently flipping the rule — Settings
+renders `warnings`. `Apply(c, rows, exempt, now)` evaluates every row: a
+`hide` mode hides a match, a `show` mode hides a NON-match; a row that would
+be hidden but is in `exempt` becomes `Verdict.Exempt` instead of `Hidden`, so
+callers dim-mark it rather than dropping it. Within a slot every set clause
+(age + name) is **AND**ed together — there is no cross-slot combination, only
+one slot is ever active per list.
+
+**Config: `[[branches.filter]]` lives under a `[branches]` header, not a bare
+`[branch_filters]` name.** `gg config populate` writes one plain `[section]`
+header per settings group and then the array-of-table blocks under it; a
+top-level table NAMED after the array (`[branch_filters]`) would collide with
+the `[[branches.filter]]` blocks themselves in TOML's namespace. `[branches]`
+sidesteps that: it is populate's documentation header, and `filter` is the
+one field under it (`internal/config/branches.go`).
+
+**Overlay is the second deliberate exception to field-level overlay** (the
+first is `[[tools.command]]`): `overlayBranchFilters` replaces a global slot N
+WHOLE with a repo slot N — a filter is one rule, not independently
+inheritable fields. A slot the repo file omits falls through from global.
+Duplicates within ONE file are left in place (`CompileAll` keeps the first),
+so a hand-edit never silently flips a rule out from under the user.
+`config.SetBranchFilter`/`RemoveBranchFilter` are scoped line-edit writers
+(precedent: the theme-role and tools writers) that replace or delete exactly
+the block whose `slot = N`, preserving everything else byte-for-byte;
+`BranchFilterScopes(globalPath, repoPath, slot) (inGlobal, inRepo bool)`
+decodes each file independently (no overlay) so Settings/the popup can show
+provenance and target the right file on delete.
+
+**Peel repo before global.** `d` (TUI) / "remove" (web) target the REPO
+definition first when one exists, and only fall through to the global
+definition when the repo has none — removing a repo override never deletes
+the global rule as a side effect, and the second press (now showing
+`scope: "global"`) removes that. Both surfaces compute this from
+`BranchFilterScopes`, never by guessing from `Compiled` alone.
+
+**Edit-form scope defaults to repo only when the slot is ALREADY defined in
+the repo file** (`inRepo` from `BranchFilterScopes`), else global — both the
+TUI popup and the web settings form. The opposite default (repo whenever a
+repo config path exists) was tried and reverted: it would silently write a
+brand-new rule into a possibly-committed `.gg.toml`, and it made a global
+copy of an already-repo-overridden rule invisible to `d`/remove while still
+activating it in every OTHER repo. An unset slot's form opens on **global**.
+
+**Active-slot memo (TUI only): key = (slot, list length, pointer identity of
+row 0), not content.** `branchFilterMemo{slot, n, head, hidden, exempt,
+count}` — every refresh path assigns branches/remotes a NEW backing slice
+(never mutates a row in place), so the `head` pointer changes whenever the
+data actually could have; the memo short-circuits `displayIndices`, which
+fires many times per keystroke. `bfMemo.invalidate()` (a shared pointer,
+survives the value-receiver `Model` copy) is called at all 7 sites that
+assign `m.branches`/`m.remoteBranches`/`m.worktrees` — the key alone would
+miss worktree-only or upstream-only changes, since exemptions also read the
+worktree list and HEAD's upstream, neither of which moves the filtered
+list's own pointer — and once more from `applyBranchFilterConfig`, because
+the key carries the slot NUMBER, never the RULE: an edited rule saved under
+the same slot number would otherwise keep serving stale verdicts.
+
+**The repo key is the git common dir the health probe resolved — ONLY that,
+never the worktree-path fallback `toolRepoKey` uses.** `bfRepoKey()` returns
+`""` until `m.repoHealthKnown`, gating on the flag rather than trusting
+`m.repoHealth` directly: `reRoot` clears `repoHealthKnown` but NOT the
+`repoHealth` struct itself, so between a repo switch and the new probe's
+answer the struct still holds the OLD repo's common dir. Without the gate, the
+switch's own config/data-loaded path would load repo A's remembered slots
+into repo B's model, latch the load, and let an `alt+N` pressed in that
+window persist into A's promptstate record. The web keys the identical
+`prompts.toml` record by `svc.GitCommonDir(ctx)` — the two frontends would
+split their memory if either used a different key.
+
+**Two-flag load latch, because reRoot's own two async replies race.**
+`reRoot` batches the health probe and the full data load together, and the
+probe (one cheap read) wins essentially every time. `loadBranchFilterSlots`
+requires BOTH `bfCfgApplied` (set only in `applyBranchFilterConfig`, i.e. this
+repo's OWN rules are compiled) and a non-empty `bfRepoKey()`, then latches
+`bfSlotsLoaded` so a later arrival cannot clobber a since-made `alt+N`. A
+single flag was tried first and failed: the probe would land first, key in
+hand but still holding the OLD repo's `branchFilters`, validate the new
+repo's remembered slot against the WRONG rules (dropping a usable slot to 0,
+or keeping a slot number whose rule happened to be inert under the old
+config), and latch — turning the config's own, correct load into a no-op.
+Whichever of the two lands second now completes the load; both flags are
+reset in `reRoot`. Startup is unaffected: `run.go` compiles the config
+synchronously before `Init` dispatches the first probe.
+
+**Remotes: sort → filter → cap, in that order — a web-only concern**
+(`internal/web/remotes.go`, a comment records the reason; the TUI's Remotes
+panel has no row cap, so it only needs sort → filter). Filtering after the
+cap would mean "the 100 most recent remote branches" silently shrank to fewer
+visible rows whenever a filter hid some of them; filtering before it keeps
+the section's meaning intact and lets `filter.hidden` count the truly-hidden
+rows rather than the ones the cap would have dropped anyway. Verdicts are
+computed from the SORTED slice so index alignment holds through the later cap.
+
+**Web keys on `e.code`, never `e.key`.** `branchFilterKey(e)` in
+`branchfilter.js` matches `e.code === "Digit1".."Digit5"` with `altKey` (and
+`shiftKey` for Remotes) — with Alt held, `e.key` is a dead or accented
+character on several keyboard layouts, while `e.code` names the physical key
+regardless of layout or modifier. **`notifications.js` collision guard:** its
+own, separate keydown listener opened the notification centre on a bare `!`
+with no modifier check, and on a US layout `alt+shift+1` PRODUCES `!` — so
+the chip's own alt+shift+1 for Remotes was reopening the notice popup instead
+(or as well). Consuming the key in `keys.js` cannot stop a second listener on
+the same document target, so the guard (`|| e.altKey || e.ctrlKey ||
+e.metaKey`) had to go into `notifications.js` itself, not the filter code.
+**`showCtxMenu` has no `disabled` row kind**, so an unusable slot (inert or
+empty) in the chip menu renders as a non-clickable `{header: "4  (invalid —
+…)"}` row instead — visible so the five numbered slots always read as five,
+inert so it cannot be activated. If a later feature wants a true
+greyed-out row, `showCtxMenu` needs a real disabled kind added (a shared
+`layers.js` change, not something this feature could do locally).
+
+**Not `ctrl+1…5`.** Terminals typically deliver `ctrl+3` as a bare ESC (it is
+the same control code), and browsers reserve `ctrl+digit` for tab switching
+on every major platform; `alt+digit` is the only chord free on both surfaces
+(a Linux Firefox exception: it binds `alt+1…8` to tab switching too, and
+content-side `preventDefault()` does not reliably suppress it — the chip
+menu is the fallback there, and the help text names both paths).
+
+**Exemptions** (`domain.ExemptBranches`/`ExemptRemoteBranches`): HEAD, any
+branch checked out in ANY worktree, and — on the Remotes list only — the
+current branch's own upstream. These never actually disappear from a filtered
+list; a rule that would have hidden them instead marks `Verdict.Exempt`, and
+both frontends render a dim `∗` (with an explanatory hover/title) rather than
+dropping the row — switching away from an exempt row would otherwise strand
+the user on state gg itself just hid.
+
+**Rulings carried from the spec (do not re-litigate):** keys are alt+1…5;
+radio per list (the active slot's own key clears it); scope covers local AND
+remote branches, with the active slot independent per list; slots are defined
+in TOML plus an editor UI (TUI Settings popup, web Settings view); the active
+slot is persisted per repo in `prompts.toml`, shared by TUI and web; there is
+exactly one evaluator in Go and the web receives verdicts, never re-deriving
+them client-side; HEAD/worktree-checked-out/upstream rows are always shown,
+merely marked; within a slot, set clauses AND together and `mode` alone picks
+hide vs. show-only.
+
+**Known pre-existing bug (found by Task 5, not introduced by this feature):**
+a long SELECTED branch row overflows the panel's right border — reproduced
+with NO filter active and NO `∗` marker present (`main
+(/tmp/…/bf-scratch)` bleeding past `│`), so the selected-row render path
+skips whatever elision unselected rows get. The `∗` marker widens such a row
+by two columns, which makes an already-overflowing row overflow further, but
+does not itself cause the overflow.
