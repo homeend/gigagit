@@ -165,12 +165,20 @@ func TestRecordOnCorruptFileErrorsAndDoesNotClobber(t *testing.T) {
 func TestConcurrentRecordsOnOneStoreAllLand(t *testing.T) {
 	t.Parallel()
 	fs := NewFileStore(t.TempDir())
+	// Max/2 per goroutine, so the total is EXACTLY Max and nothing is meant
+	// to be evicted. This is what makes the test able to fail: the plan's
+	// original shape recorded 2*Max links into a ring capped at Max and then
+	// asserted len == Max, which the CAP guarantees however many entries an
+	// interleaved read-merge dropped — the assertion could not observe the
+	// loss its own message named. Verified: with both the file lock AND the
+	// mutex removed, the original passed; this one does not.
+	const per = Max / 2
 	var wg sync.WaitGroup
 	for g := 0; g < 2; g++ {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
-			for i := 0; i < 20; i++ {
+			for i := 0; i < per; i++ {
 				link := fmt.Sprintf("gg://repo/g%d-%02d", g, i)
 				if err := fs.Record(entryAt(link, g*100+i)); err != nil {
 					t.Errorf("Record(%s): %v", link, err)
@@ -183,19 +191,44 @@ func TestConcurrentRecordsOnOneStoreAllLand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != Max {
-		t.Fatalf("len = %d, want %d — a writer lost an entry", len(got), Max)
+	if len(got) != 2*per {
+		t.Fatalf("len = %d, want %d — a writer's entry was lost to an interleaved read-merge", len(got), 2*per)
 	}
+	// Every link both goroutines recorded must be present BY NAME: a lost
+	// entry is the failure this test exists to catch, and only the set can
+	// show it.
+	have := make(map[string]bool, len(got))
 	for _, e := range got {
 		if e.Link == "" || e.Desc == "" || e.Created == "" {
 			t.Fatalf("malformed entry survived: %+v", e)
 		}
+		have[e.Link] = true
+	}
+	for g := 0; g < 2; g++ {
+		for i := 0; i < per; i++ {
+			link := fmt.Sprintf("gg://repo/g%d-%02d", g, i)
+			if !have[link] {
+				t.Errorf("%s is missing — a concurrent read-merge dropped it", link)
+			}
+		}
 	}
 }
 
-// Gap 1: TestConcurrentRecordsOnOneStoreAllLand proves the in-process mutex
-// only — both goroutines share one FileStore, so the O_EXCL file lock is
-// never contended and removing it would leave that test green.
+// Gap 1, as it actually turned out. Two claims were made about
+// TestConcurrentRecordsOnOneStoreAllLand and BOTH were wrong; the controller
+// settled it by experiment:
+//   - the brief said it proves the in-process mutex. It does not:
+//     filelock.Acquire's O_EXCL create is self-serialising even for two
+//     goroutines in one process, so the mutex has no independent
+//     correctness role (it only saves a same-process waiter a 20ms poll).
+//   - the implementer said the file lock is what it proves. Also no: with
+//     the ORIGINAL assertions, removing the file lock AND the mutex left it
+//     green, because it recorded 2*Max links into a ring capped at Max and
+//     then asserted len == Max — which the cap guarantees.
+//
+// It now records exactly Max links and checks the SET, so a dropped entry
+// fails it. Either guard alone is enough to keep it green, which is the
+// honest claim: it proves mutual exclusion exists, not which one.
 //
 // TestRecordWaitsForAHeldLock is the only test whose failure proves the
 // CROSS-PROCESS lock is load-bearing: it creates links.toml.lock itself (no
