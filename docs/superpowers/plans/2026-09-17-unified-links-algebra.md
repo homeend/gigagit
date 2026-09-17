@@ -1611,30 +1611,53 @@ import (
 // exists for. A fixture with no deletions lets a comparison that blindly
 // reads every member pass.
 type compareFixture struct {
-	dir            string
-	svc            *Service
-	c1, c2, c3     string
+	dir        string
+	svc        *Service
+	c1, c2, c3 string
 }
 
+// NOTE on helper names, checked against the tree (a previous task's brief got
+// these wrong): `internal/domain`'s service-plus-repo helper is
+// `newRealRepo(t) (string, *Service)` in compare_test.go, NOT `newTestService`.
+// `internal/gittest` has `BasicRepo` and `Run` but NO `Write` — use
+// `os.WriteFile`. And `gittest.BasicRepo(t, s)` creates **README.md** holding
+// s, not a.txt, so this fixture writes a.txt itself.
 func newCompareFixture(t *testing.T) compareFixture {
 	t.Helper()
-	dir := gittest.BasicRepo(t, "one\n") // creates a.txt = "one\n" and commits
-	svc := newTestService(t, dir)
+	dir, svc := newRealRepo(t)
 	ctx := context.Background()
-	c1, _, err := svc.ResolveRev(ctx, "HEAD")
-	if err != nil {
-		t.Fatal(err)
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
-	gittest.Write(t, dir, "a.txt", "two\n")
-	gittest.Write(t, dir, "b.txt", "bee\n")
+	rev := func() string {
+		t.Helper()
+		sha, ok, err := svc.ResolveRev(ctx, "HEAD")
+		if err != nil || !ok {
+			t.Fatalf("ResolveRev(HEAD): %v ok=%v", err, ok)
+		}
+		return sha
+	}
+
+	write("a.txt", "one\n")
+	gittest.Run(t, dir, "add", "a.txt")
+	gittest.Run(t, dir, "commit", "-m", "c1")
+	c1 := rev()
+
+	write("a.txt", "two\n")
+	write("b.txt", "bee\n")
 	gittest.Run(t, dir, "add", "a.txt", "b.txt")
 	gittest.Run(t, dir, "commit", "-m", "c2")
-	c2, _, _ := svc.ResolveRev(ctx, "HEAD")
-	gittest.Write(t, dir, "a.txt", "three\n")
+	c2 := rev()
+
+	write("a.txt", "three\n")
 	gittest.Run(t, dir, "rm", "-f", "b.txt")
 	gittest.Run(t, dir, "add", "a.txt")
 	gittest.Run(t, dir, "commit", "-m", "c3")
-	c3, _, _ := svc.ResolveRev(ctx, "HEAD")
+	c3 := rev()
+
 	return compareFixture{dir: dir, svc: svc, c1: c1, c2: c2, c3: c3}
 }
 
