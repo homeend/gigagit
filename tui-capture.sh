@@ -137,7 +137,7 @@ send_tokens() { # tokens (whitespace-separated); word-splitting is intentional
       pgdown|PgDown)    tmux send-keys -t "$SESSION" PageDown ;;
       C-*|M-*)          tmux send-keys -t "$SESSION" "$t" ;;   # ctrl/meta chords
       \<*\>)            echo "tui-capture: skipping diagnostic-only token: $t" >&2 ;; # gg --record's keyToken fallback (e.g. "<f1>") — not in send_tokens' vocabulary; sending it as literal text would type the bracket text into the app instead of pressing the key
-      *)                tmux send-keys -t "$SESSION" -l "$t" ;; # literal: ".", "?", digits, words
+      *)                tmux send-keys -t "$SESSION" -l -- "$t" ;; # literal: ".", "?", digits, words; -- so "-7d" is text, not a flag
     esac
     sleep 0.05
   done
