@@ -170,7 +170,7 @@ func (m Model) toggleBranchFilter(slot int) Model {
 	if next == 0 {
 		m.statusMsg = i18n.T("branch filter off")
 	} else {
-		m.statusMsg = i18n.T("branch filter %d: %s", next, m.branchFilters[next-1].Label())
+		m.statusMsg = i18n.T("branch filter %d: %s", next, bfLabel(m.branchFilters[next-1]))
 	}
 	switch key := m.bfRepoKey(); {
 	case m.promptStore == nil:
@@ -191,6 +191,7 @@ func (m Model) toggleBranchFilter(slot int) Model {
 // and forget the memo (whose key carries the slot number, not the rule).
 func (m Model) applyBranchFilterConfig() Model {
 	m.branchFilters, m.branchFilterWarnings = branchfilter.CompileAll(m.cfg.Branches.Filter)
+	m.bfCfgApplied = true
 	m.bfMemo.invalidate()
 	return m.loadBranchFilterSlots()
 }
@@ -213,15 +214,26 @@ func (m Model) bfRepoKey() string {
 	return m.repoHealth.GitCommonDir
 }
 
-// loadBranchFilterSlots reads the remembered slots for this repo once the
-// repo key is known. A slot that no longer exists or is unusable loads as
-// none (nothing is rewritten). Idempotent per key resolution (bfSlotsLoaded).
+// loadBranchFilterSlots reads the remembered slots for this repo once BOTH of
+// its inputs have landed: the repo key (the health probe) and this repo's own
+// compiled rules (its config). A slot that no longer exists or is unusable
+// loads as none (nothing is rewritten). The load then latches (bfSlotsLoaded)
+// so a later probe cannot clobber an alt+N made since.
+//
+// Both gates are load-bearing after a repo switch: reRoot batches loadCmd and
+// repoHealthCmd together, and the probe wins that race essentially every
+// time. Without bfCfgApplied the probe's load would validate the NEW repo's
+// remembered slot against the OLD repo's compiled rules — silently dropping
+// it, or keeping a number whose rule is inert — and latch, leaving the
+// config's own load a no-op. Whichever of the two lands second completes it.
+// Startup is unaffected: run.go compiles the config synchronously before Init
+// dispatches the first probe.
 func (m Model) loadBranchFilterSlots() Model {
 	if m.branchFilterSlot == nil {
 		m.branchFilterSlot = map[panel]int{}
 	}
 	key := m.bfRepoKey()
-	if m.promptStore == nil || key == "" || m.bfSlotsLoaded {
+	if m.promptStore == nil || key == "" || !m.bfCfgApplied || m.bfSlotsLoaded {
 		return m
 	}
 	for _, p := range []panel{panelBranches, panelRemotes} {
@@ -272,6 +284,17 @@ func bfSummary(c branchfilter.Compiled) string {
 	return mode + " · " + strings.Join(parts, ", ")
 }
 
+// bfLabel is Compiled.Label translated: the user's name when the slot has
+// one, otherwise the "slot N" fallback. The leaf's English Label() is for the
+// web and the logs; every string a TUI header or status line shows goes
+// through i18n.T.
+func bfLabel(c branchfilter.Compiled) string {
+	if n := strings.TrimSpace(c.Name); n != "" {
+		return n
+	}
+	return i18n.T("slot %d", c.Slot.Slot)
+}
+
 // branchFilterDecoration is the panel-header suffix: " ▽2 stale · 12 hidden",
 // or " ▽2 stale" when nothing is hidden, or "" with no active slot.
 func (m Model) branchFilterDecoration(p panel) string {
@@ -280,7 +303,7 @@ func (m Model) branchFilterDecoration(p panel) string {
 		return ""
 	}
 	_, _, n := m.branchFilterHidden(p)
-	s := " ▽" + strconv.Itoa(c.Slot.Slot) + " " + c.Label()
+	s := " ▽" + strconv.Itoa(c.Slot.Slot) + " " + bfLabel(*c)
 	if n > 0 {
 		s += " · " + i18n.T("%d hidden", n)
 	}

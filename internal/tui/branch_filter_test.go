@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/branchfilter"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/promptstate"
 )
@@ -224,7 +225,9 @@ func TestAltDigitWhileTypingSlashFilterIsIgnored(t *testing.T) {
 func TestToggleWithoutRepoKeyAppliesButIsNotRemembered(t *testing.T) {
 	t.Parallel()
 	m := bfModel(t)
-	m.repoHealth.GitCommonDir = "" // health probe not resolved yet
+	// The lifecycle's real "not resolved yet": reRoot clears the flag and
+	// leaves the (now stale) snapshot in place — it never blanks GitCommonDir.
+	m.repoHealthKnown = false
 	mm, _ := m.Update(altKey('1'))
 	m = mm.(Model)
 	if m.branchFilterSlot[panelBranches] != 1 {
@@ -256,6 +259,86 @@ func TestRepoSwitchDropsTheRememberedSlotsUntilTheNewProbeLands(t *testing.T) {
 	m = m.applyBranchFilterConfig()
 	if m.bfSlotsLoaded {
 		t.Error("loadBranchFilterSlots latched on an unresolved repo key")
+	}
+}
+
+// bfSwitchedModel is a model in reRoot's post-switch state: the new repo's
+// slot is remembered in promptstate and its config names slot 5, but neither
+// the health probe nor the config has landed — branchFilters still holds the
+// OLD repo's rules, under which slot 5 is empty (and so unusable).
+func bfSwitchedModel(t *testing.T) (Model, string) {
+	t.Helper()
+	const newKey = "/new/.git"
+	m := bfModel(t)
+	if err := m.promptStore.SetBranchFilterSlot(newKey, promptstate.BranchFilterListBranches, 5); err != nil {
+		t.Fatal(err)
+	}
+	m.branchFilterSlot = map[panel]int{}
+	m.bfSlotsLoaded = false
+	m.bfCfgApplied = false
+	m.repoHealthKnown = false
+	m.cfg.Branches.Filter = []branchfilter.Slot{{Slot: 5, Name: "new", Prefix: "feat/"}}
+	return m, newKey
+}
+
+// bfProbeLands is applyRepoHealth's branch-filter half.
+func bfProbeLands(m Model, key string) Model {
+	m.repoHealth.GitCommonDir = key
+	m.repoHealthKnown = true
+	return m.loadBranchFilterSlots()
+}
+
+// reRoot batches loadCmd and repoHealthCmd, so the config and the probe race.
+// Whichever lands second must complete the load — a probe that latched first
+// would have validated slot 5 against the OLD repo's rules and dropped it.
+func TestRepoSwitchLoadCompletesInEitherArrivalOrder(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		drive func(Model, string) Model
+	}{
+		{"probe first (the real race winner)", func(m Model, k string) Model {
+			m = bfProbeLands(m, k)
+			if m.bfSlotsLoaded {
+				t.Error("the probe latched the load before this repo's rules were compiled")
+			}
+			return m.applyBranchFilterConfig()
+		}},
+		{"config first", func(m Model, k string) Model {
+			m = m.applyBranchFilterConfig()
+			if m.bfSlotsLoaded {
+				t.Error("the config latched the load before the repo key resolved")
+			}
+			return bfProbeLands(m, k)
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			m, key := bfSwitchedModel(t)
+			m = tc.drive(m, key)
+			if !m.bfSlotsLoaded {
+				t.Fatal("the load never completed")
+			}
+			if got := m.branchFilterSlot[panelBranches]; got != 5 {
+				t.Errorf("remembered slot = %d, want 5 (validated against the OLD repo's rules?)", got)
+			}
+		})
+	}
+}
+
+func TestUnnamedSlotLabelIsTranslatable(t *testing.T) {
+	t.Parallel()
+	m := bfModel(t)
+	// Slot 4 carries no name, so the header falls back to "slot N" — which
+	// must come from the bundle, not branchfilter's English Label().
+	m.branchFilters, _ = branchfilter.CompileAll([]branchfilter.Slot{{Slot: 4, Prefix: "feat/"}})
+	m.branchFilterSlot[panelBranches] = 4
+	if got := m.branchFilterDecoration(panelBranches); got != " ▽4 slot 4 · 2 hidden" {
+		t.Errorf("decoration = %q", got)
+	}
+	if got := bfLabel(m.branchFilters[3]); got != i18n.T("slot %d", 4) {
+		t.Errorf("bfLabel = %q, want the translated fallback", got)
 	}
 }
 

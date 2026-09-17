@@ -277,7 +277,8 @@ type Model struct {
 	branchFilters        [branchfilter.MaxSlots]branchfilter.Compiled // compiled from m.cfg; zero = all empty
 	branchFilterWarnings []string                                     // CompileAll's warnings, shown in the Settings popup
 	branchFilterSlot     map[panel]int                                // panelBranches / panelRemotes → active slot, 0 = none
-	bfSlotsLoaded        bool                                         // loadBranchFilterSlots ran with a resolved repo key
+	bfSlotsLoaded        bool                                         // loadBranchFilterSlots ran with BOTH a resolved repo key and this repo's rules
+	bfCfgApplied         bool                                         // this repo's [[branches.filter]] blocks are the ones in branchFilters
 	bfMemo               *branchFilterMemos                           // shared pointer, like filterMemo; invalidate() on every list/worktree write
 
 	dispModes map[panel]dispMode // per-panel text display mode (zero value = modeCutoff); z cycles
@@ -3990,7 +3991,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.filterMemo = &commitFilterMemo{}    // fresh pointer: an in-flight copy from the old repo must not repopulate the new repo's memo
 	m.bfMemo = &branchFilterMemos{}       // same, for the branch-filter verdicts
 	m.branchFilterSlot = map[panel]int{}  // the active slot is per repo; the new repo's is read back by loadBranchFilterSlots
-	m.bfSlotsLoaded = false               // …which re-arms once the new repo's health probe resolves its common dir
+	m.bfSlotsLoaded = false               // …which re-arms once BOTH the new repo's health probe and its config have landed
+	m.bfCfgApplied = false                // branchFilters still holds the OLD repo's rules until dataLoadedMsg recompiles them
 	m.stashView = nil                     // the new repo has its own stashes
 	m = m.closeFilesView()                // the new repo has a different commit list
 	m = m.reconcileFullscreenFocus()      // a resuming pin must not inherit focus from a surface that just closed
