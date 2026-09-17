@@ -12,8 +12,17 @@ type endpointCase struct {
 	display  string
 	live     bool
 	cacheTag string
-	source   FileSource
-	locator  string
+	// cacheTagPanics marks the one kind whose CacheTag has NO safe answer:
+	// EndpointRef. Returning the ref name would put a MOVING value in the
+	// session diff-cache key (plan 1a's headline bug), and returning "" would
+	// make two different refs collide inside CompareFiles's singleflight key.
+	// Holding an unresolved ref where a cache key is needed is a programming
+	// error, so it panics like any other endpointKindBug. When this is set,
+	// cacheTag is ignored.
+	cacheTagPanics bool
+	bounded        bool
+	source         FileSource
+	locator        string
 }
 
 func endpointCases() []endpointCase {
@@ -25,6 +34,7 @@ func endpointCases() []endpointCase {
 			display:  "Working Tree",
 			live:     true,
 			cacheTag: "worktree",
+			bounded:  false,
 			source:   SourceUnstaged,
 			locator:  "",
 		},
@@ -35,6 +45,7 @@ func endpointCases() []endpointCase {
 			display:  "Staged",
 			live:     true,
 			cacheTag: "index",
+			bounded:  false,
 			source:   SourceStaged,
 			locator:  "",
 		},
@@ -52,6 +63,7 @@ func endpointCases() []endpointCase {
 			display:  "abc1234",
 			live:     false,
 			cacheTag: "abc1234def5678",
+			bounded:  false,
 			source:   SourceCommit,
 			locator:  "abc1234def5678",
 		},
@@ -69,8 +81,45 @@ func endpointCases() []endpointCase {
 			display:  "shelf #wt-parser (frozen)",
 			live:     false,
 			cacheTag: "shelf:wt-parser-9f3a1",
+			bounded:  true,
 			source:   SourceShelf,
 			locator:  "wt-parser-9f3a1",
+		},
+		{
+			kind: EndpointRef,
+			name: "ref",
+			build: func(t *testing.T) Endpoint {
+				t.Helper()
+				e, err := RefEndpoint("feat/unified-links")
+				if err != nil {
+					t.Fatalf("RefEndpoint: %v", err)
+				}
+				return e
+			},
+			display:        "feat/unified-links",
+			live:           true, // a tip MOVES: nothing may cache a diff against it
+			cacheTagPanics: true,
+			bounded:        false, // a point: the whole tree at that tip
+			source:         SourceCommit,
+			locator:        "feat/unified-links", // `git show <ref>:<path>` is correct
+		},
+		{
+			kind: EndpointPair,
+			name: "pair",
+			build: func(t *testing.T) Endpoint {
+				t.Helper()
+				e, err := PairEndpoint("abc1234def5678", "abc9999fff0000")
+				if err != nil {
+					t.Fatalf("PairEndpoint: %v", err)
+				}
+				return e
+			},
+			display:  "abc1234..abc9999",
+			live:     false,
+			cacheTag: "pair:abc1234def5678..abc9999fff0000",
+			bounded:  true,
+			source:   SourceCommit,
+			locator:  "abc9999fff0000", // the NEW side is what a file read means
 		},
 	}
 }
@@ -111,7 +160,19 @@ func TestEndpointMethodsMatchTheTable(t *testing.T) {
 			if got := e.IsLive(); got != c.live {
 				t.Errorf("IsLive() = %v, want %v", got, c.live)
 			}
-			if got := e.CacheTag(); got != c.cacheTag {
+			if got := e.Bounded(); got != c.bounded {
+				t.Errorf("Bounded() = %v, want %v", got, c.bounded)
+			}
+			if c.cacheTagPanics {
+				func() {
+					defer func() {
+						if recover() == nil {
+							t.Errorf("CacheTag() on kind %s must panic", c.name)
+						}
+					}()
+					_ = e.CacheTag()
+				}()
+			} else if got := e.CacheTag(); got != c.cacheTag {
 				t.Errorf("CacheTag() = %q, want %q", got, c.cacheTag)
 			}
 			ref := e.FileRef("some/path.go")
@@ -150,5 +211,36 @@ func TestInvalidEndpointPanics(t *testing.T) {
 			}()
 			tc.call(Endpoint{})
 		})
+	}
+}
+
+// A pair of one commit is legal and means "nothing changed" (ruling R7).
+func TestPairEndpointAcceptsIdenticalHalves(t *testing.T) {
+	t.Parallel()
+	if _, err := PairEndpoint("abc1234def5678", "abc1234def5678"); err != nil {
+		t.Fatalf("PairEndpoint(x, x) must be legal: %v", err)
+	}
+}
+
+func TestNewEndpointConstructorsReject(t *testing.T) {
+	t.Parallel()
+	if _, err := RefEndpoint(""); err == nil {
+		t.Error("RefEndpoint(\"\") must fail")
+	}
+	if _, err := RefEndpoint("fe@at"); err == nil {
+		t.Error("RefEndpoint must reject a name LinkRefOK refuses")
+	}
+	for _, tc := range [][2]string{
+		{"", "abc1234def5678"},
+		{"abc1234def5678", ""},
+		{"abc1", "abc1234def5678"},           // too short
+		{"zzzz123def5678", "abc1234def5678"}, // not hex
+		// NOTE: PairEndpoint(x, x) is NOT rejected -- ruling R7. A fully
+		// merged branch's three-dot pair legitimately has base == source,
+		// and an empty bounded set is a result, not an error (spec section 6).
+	} {
+		if _, err := PairEndpoint(tc[0], tc[1]); err == nil {
+			t.Errorf("PairEndpoint(%q, %q) must fail", tc[0], tc[1])
+		}
 	}
 }

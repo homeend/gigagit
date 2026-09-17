@@ -268,6 +268,8 @@ const (
 	EndpointIndex                 // the index (staged)
 	EndpointCommit                // a commit, by Hash
 	EndpointShelf                 // a shelved commit's frozen changed-file set, by ShelfID
+	EndpointRef                   // a branch/tag TIP by name — unbounded, and it MOVES
+	EndpointPair                  // a resolved <a>..<b> sha pair — bounded (a change-set)
 
 	// endpointKindCount must stay LAST. It is the exhaustiveness bound:
 	// endpoint_exhaustive_test.go walks EndpointInvalid+1 .. endpointKindCount
@@ -280,7 +282,8 @@ const (
 //
 // Its fields are unexported on purpose: the only way to make one is a
 // constructor (WorkTreeEndpoint, IndexEndpoint, CommitEndpoint,
-// ShelfEndpoint), each of which validates. Holding an Endpoint therefore
+// ShelfEndpoint, RefEndpoint, PairEndpoint), each of which validates. Holding
+// an Endpoint therefore
 // PROVES it is consistent, and no consumer re-checks. The zero value is
 // EndpointInvalid -- an unset variable or an error return, never a usable
 // endpoint.
@@ -288,6 +291,13 @@ type Endpoint struct {
 	kind    EndpointKind
 	hash    string // commit hash when kind == EndpointCommit; "" otherwise
 	shelfID string // shelf entry id when kind == EndpointShelf; "" otherwise
+	ref     string // branch/tag name when kind == EndpointRef; "" otherwise
+	// a, b are the two RESOLVED shas of an EndpointPair. Deliberately shas and
+	// not names, and deliberately no three-dot flag (plan 1b ruling R1): a
+	// three-dot pair means merge-base(target, source)..source, and the merge
+	// base is a RESOLUTION that only domain can make. Storing names here would
+	// put a moving value in CacheTag, which is plan 1a's headline bug.
+	a, b string
 }
 
 // Kind is the endpoint's kind. EndpointInvalid means unset.
@@ -301,6 +311,14 @@ func (e Endpoint) Hash() string { return e.hash }
 
 // ShelfID is the shelf entry id, or "" for any other kind.
 func (e Endpoint) ShelfID() string { return e.shelfID }
+
+// Ref is the branch/tag name, or "" for any other kind.
+func (e Endpoint) Ref() string { return e.ref }
+
+// PairA and PairB are the older and newer sha of a pair endpoint, or "" for
+// any other kind.
+func (e Endpoint) PairA() string { return e.a }
+func (e Endpoint) PairB() string { return e.b }
 
 // Display is the human label for an endpoint.
 func (e Endpoint) Display() string {
@@ -316,13 +334,23 @@ func (e Endpoint) Display() string {
 		}
 		return "shelf #" + id + " (frozen)"
 	case EndpointCommit:
-		if len(e.hash) > 7 {
-			return e.hash[:7]
-		}
-		return e.hash
+		return shortEndpointHash(e.hash)
+	case EndpointRef:
+		return e.ref
+	case EndpointPair:
+		return shortEndpointHash(e.a) + ".." + shortEndpointHash(e.b)
 	default:
 		panic(endpointKindBug("Display", e.kind))
 	}
+}
+
+// shortEndpointHash is the 7-character display form of an object id, matching
+// Display's commit arm.
+func shortEndpointHash(h string) string {
+	if len(h) > 7 {
+		return h[:7]
+	}
+	return h
 }
 
 // FileRef maps the endpoint to a resolvable file reference for path.
@@ -336,6 +364,15 @@ func (e Endpoint) FileRef(path string) FileRef {
 		return FileRef{Source: SourceShelf, Locator: e.shelfID, Path: path}
 	case EndpointCommit:
 		return FileRef{Source: SourceCommit, Locator: e.hash, Path: path}
+	case EndpointRef:
+		// `git show <ref>:<path>` is correct and is NOT a cache key, so a ref
+		// is a legitimate file source even though CacheTag refuses it.
+		return FileRef{Source: SourceCommit, Locator: e.ref, Path: path}
+	case EndpointPair:
+		// A pair's file content is its NEW side: the change-set's members are
+		// read as they are at b. The older side is reached through the
+		// comparison, not through a single FileRef.
+		return FileRef{Source: SourceCommit, Locator: e.b, Path: path}
 	default:
 		panic(endpointKindBug("FileRef", e.kind))
 	}
@@ -347,8 +384,10 @@ func (e Endpoint) IsLive() bool {
 	switch e.kind {
 	case EndpointWorkTree, EndpointIndex:
 		return true
-	case EndpointCommit, EndpointShelf:
+	case EndpointCommit, EndpointShelf, EndpointPair:
 		return false
+	case EndpointRef:
+		return true // a tip moves; nothing may cache a diff against it
 	default:
 		panic(endpointKindBug("IsLive", e.kind))
 	}
@@ -366,6 +405,12 @@ func (e Endpoint) CacheTag() string {
 		return "shelf:" + e.shelfID
 	case EndpointCommit:
 		return e.hash
+	case EndpointRef:
+		// NO SAFE ANSWER — see plan 1b ruling R3 and the cacheTagPanics column
+		// in endpoint_exhaustive_test.go. Resolve the ref to a commit first.
+		panic(endpointKindBug("CacheTag", e.kind))
+	case EndpointPair:
+		return "pair:" + e.a + ".." + e.b
 	default:
 		panic(endpointKindBug("CacheTag", e.kind))
 	}
@@ -417,6 +462,52 @@ func ShelfEndpoint(id string) (Endpoint, error) {
 	return Endpoint{kind: EndpointShelf, shelfID: id}, nil
 }
 
+// RefEndpoint names a branch or tag TIP. It is UNBOUNDED — a point, the whole
+// tree at that tip — and it MOVES, so domain resolves it to a commit endpoint
+// before anything compares or caches against it (plan 1b ruling R2).
+func RefEndpoint(name string) (Endpoint, error) {
+	if !LinkRefOK(name) {
+		return Endpoint{}, fmt.Errorf("%w: %q is not a branch or tag name", ErrEndpoint, name)
+	}
+	return Endpoint{kind: EndpointRef, ref: name}, nil
+}
+
+// PairEndpoint names a CHANGE-SET: the files that differ between two resolved
+// commits, a → b, older → newer. Both halves must already be full object ids —
+// see the field comment on Endpoint.a for why names are refused here.
+//
+// a == b is LEGAL and means the empty change-set (ruling R7): a fully merged
+// branch's three-dot pair has merge-base(target, source) == source, and an
+// empty bounded set is a result, not an error (spec §6).
+func PairEndpoint(a, b string) (Endpoint, error) {
+	if !commitHashOK(a) {
+		return Endpoint{}, fmt.Errorf("%w: pair's older side %q is not a commit id", ErrEndpoint, a)
+	}
+	if !commitHashOK(b) {
+		return Endpoint{}, fmt.Errorf("%w: pair's newer side %q is not a commit id", ErrEndpoint, b)
+	}
+	return Endpoint{kind: EndpointPair, a: a, b: b}, nil
+}
+
+// commitHashOK reports whether hash is a plausible commit object id: 7..64
+// hex characters -- 64, not 40, because a sha-256 repository's commit ids are
+// 64 hex characters. The bound matches model.ParseLink's and CommitEndpoint's,
+// so a link, a commit endpoint and a pair endpoint never disagree about what a
+// commit id looks like. CommitEndpoint keeps its own inline check (its two
+// branches report a more specific error than a single bool would allow);
+// PairEndpoint shares this helper for both of its halves.
+func commitHashOK(hash string) bool {
+	if len(hash) < 7 || len(hash) > 64 {
+		return false
+	}
+	for i := 0; i < len(hash); i++ {
+		if !isHexDigit(hash[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 func isHexDigit(b byte) bool {
 	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')
 }
@@ -437,9 +528,9 @@ func isHexDigit(b byte) bool {
 // determined by the kind, revisit this.
 func (e Endpoint) Bounded() bool {
 	switch e.kind {
-	case EndpointShelf:
+	case EndpointShelf, EndpointPair:
 		return true
-	case EndpointWorkTree, EndpointIndex, EndpointCommit:
+	case EndpointWorkTree, EndpointIndex, EndpointCommit, EndpointRef:
 		return false
 	default:
 		panic(endpointKindBug("Bounded", e.kind))

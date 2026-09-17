@@ -136,6 +136,34 @@ func TestShelfEndpointAcceptsAnID(t *testing.T) {
 	}
 }
 
+func TestRefEndpointAcceptsAName(t *testing.T) {
+	t.Parallel()
+	e, err := RefEndpoint("feat/unified-links")
+	if err != nil {
+		t.Fatalf("RefEndpoint: %v", err)
+	}
+	if e.Kind() != EndpointRef || e.Ref() != "feat/unified-links" {
+		t.Errorf("RefEndpoint = %+v, want kind ref and the name", e)
+	}
+	if e.Hash() != "" || e.ShelfID() != "" || e.PairA() != "" || e.PairB() != "" {
+		t.Errorf("RefEndpoint's other accessors must be \"\": %+v", e)
+	}
+}
+
+func TestPairEndpointStoresBothSides(t *testing.T) {
+	t.Parallel()
+	e, err := PairEndpoint("abc1234def5678", "abc9999fff0000")
+	if err != nil {
+		t.Fatalf("PairEndpoint: %v", err)
+	}
+	if e.Kind() != EndpointPair || e.PairA() != "abc1234def5678" || e.PairB() != "abc9999fff0000" {
+		t.Errorf("PairEndpoint = %+v, want kind pair and both shas", e)
+	}
+	if e.Hash() != "" || e.ShelfID() != "" || e.Ref() != "" {
+		t.Errorf("PairEndpoint's other accessors must be \"\": %+v", e)
+	}
+}
+
 func TestLiveEndpointConstructors(t *testing.T) {
 	t.Parallel()
 	if got := WorkTreeEndpoint(); got.Kind() != EndpointWorkTree {
@@ -146,14 +174,16 @@ func TestLiveEndpointConstructors(t *testing.T) {
 	}
 }
 
-// TestBoundedMatchesTheSpecRule pins section 3.1: a shelf entry is a finite,
-// enumerated set of paths; a tree, a tip and the index are not.
+// TestBoundedMatchesTheSpecRule pins section 3.1: a shelf entry and a
+// resolved pair are finite, enumerated sets of paths; a tree, the index and a
+// ref tip are not. The want value comes from the table's own bounded column
+// (endpoint_exhaustive_test.go), which is the one place this rule is spelled
+// out per kind.
 func TestBoundedMatchesTheSpecRule(t *testing.T) {
 	t.Parallel()
 	for _, c := range endpointCases() {
-		want := c.kind == EndpointShelf
-		if got := c.build(t).Bounded(); got != want {
-			t.Errorf("%s: Bounded() = %v, want %v", c.name, got, want)
+		if got := c.build(t).Bounded(); got != c.bounded {
+			t.Errorf("%s: Bounded() = %v, want %v", c.name, got, c.bounded)
 		}
 	}
 }
