@@ -1,0 +1,171 @@
+name = "links + compare algebra: produce links, hand them back to gg compare, and prove the pairing rules are gone"
+
+# Three tracked files, two commits and one unstaged edit:
+#
+#   c1 (tag c1)  f1.txt = "v1\n", keep.txt = "k\n"   (+ the harness's .gg.toml)
+#   c2 (main)    f1.txt = "v2\n", f2.txt = "n\n"
+#   working tree f1.txt = "dirty\n"
+#
+# keep.txt is the CONTROL: it is in every tree and changes in none of them, so
+# a stdout_excludes on it proves a comparison really is scoped and not just
+# printing the whole tree. The fixture is deliberately three files, which is
+# what lets "exactly one row" be asserted exhaustively (one contains, two
+# excludes) by a harness that has no row-count assertion.
+[input]
+steps = [
+  { write = "f1.txt", content = "v1\n" },
+  { write = "keep.txt", content = "k\n" },
+  { commit = "c1" },
+  { tag = "c1" },
+  { write = "f1.txt", content = "v2\n" },
+  { write = "f2.txt", content = "n\n" },
+  { commit = "c2" },
+  { write = "f1.txt", content = "dirty\n" },
+]
+
+# ── 1. The producers ─────────────────────────────────────────────────────
+#
+# The sandbox repo has no remote, so every link gg prints is the LOCAL form:
+# "gg://" + the absolute checkout path. The commit sha is not knowable from a
+# scenario file (and the harness substitutes only {{cwd}}), so these two runs
+# assert the SHAPE; the runs below hand equivalent links back to gg compare,
+# which is where the round trip is actually proved.
+
+[[run]]
+cmd             = ["link", "--rev", "HEAD"]
+exit            = 0
+stdout_contains = ["gg:///"]
+
+# --pair resolves BOTH halves to full shas, so the printed link is portable
+# and means the same thing tomorrow. The exclude is the assertion that matters:
+# the refnames this was asked with must not survive into the link.
+[[run]]
+cmd             = ["link", "--pair", "c1..main"]
+exit            = 0
+stdout_contains = ["gg:///", ".."]
+stdout_excludes = ["c1..main"]
+
+# A ref link keeps the NAME on purpose ("the branch", not "whichever commit it
+# sits on today"), and a hint rides on the end — so this one link IS printable
+# in full, and the next run reads the very same string back.
+[[run]]
+cmd             = ["link", "--ref", "main", "--bookmark", "b1"]
+exit            = 0
+stdout_contains = ["gg:///", "@ref:main?bookmark=b1"]
+
+# ── 2. gg compare takes links on either side ─────────────────────────────
+
+# point ↔ point (unbounded × unbounded): two branch/tag tips, forward. One
+# modified file and one added file; keep.txt is in both trees unchanged.
+[[run]]
+cmd             = ["compare", "gg://{{cwd}}@ref:c1", "gg://{{cwd}}@ref:main"]
+exit            = 0
+stdout_contains = ["M\tf1.txt", "A\tf2.txt"]
+stdout_excludes = ["keep.txt"]
+
+# change-set ↔ point (bounded × unbounded): the PAIR supplies the key set
+# {f1.txt, f2.txt} and the c1 tree is projected onto it. f2.txt is not in c1,
+# so it reads as deleted. keep.txt is in BOTH trees and still absent from the
+# answer — that is the algebra scaling DOWN to the bounded side.
+[[run]]
+cmd             = ["compare", "gg://{{cwd}}@c1..main", "gg://{{cwd}}@ref:c1"]
+exit            = 0
+stdout_contains = ["M\tf1.txt", "D\tf2.txt"]
+stdout_excludes = ["keep.txt"]
+
+# A link with a /<path> is bounded to that one file: exactly one row out of a
+# comparison (c1 → main) that otherwise has two.
+[[run]]
+cmd             = ["compare", "gg://{{cwd}}/f1.txt@ref:c1", "gg://{{cwd}}@ref:main"]
+exit            = 0
+stdout_contains = ["M\tf1.txt"]
+stdout_excludes = ["f2.txt", "keep.txt"]
+
+# The round trip: the exact string run 3 printed, handed straight back. The
+# hint is carried by the link and IGNORED by compare (grammar rule 1), so this
+# answers identically to the same comparison without it — the run after it.
+[[run]]
+cmd             = ["compare", "gg://{{cwd}}@ref:main?bookmark=b1", "gg://{{cwd}}@ref:c1"]
+exit            = 0
+stdout_contains = ["M\tf1.txt", "D\tf2.txt"]
+stdout_excludes = ["keep.txt"]
+
+[[run]]
+cmd             = ["compare", "gg://{{cwd}}@ref:main", "gg://{{cwd}}@ref:c1"]
+exit            = 0
+stdout_contains = ["M\tf1.txt", "D\tf2.txt"]
+stdout_excludes = ["keep.txt"]
+
+# A link mixes freely with the old vocabulary — it is not a mode.
+[[run]]
+cmd             = ["compare", "gg://{{cwd}}@ref:c1", "main"]
+exit            = 0
+stdout_contains = ["M\tf1.txt", "A\tf2.txt"]
+stdout_excludes = ["keep.txt"]
+
+# ── 3. The pairing rules are gone ────────────────────────────────────────
+
+# Forward, as before: main → the dirty working tree.
+[[run]]
+cmd             = ["compare", "main", "@worktree"]
+exit            = 0
+stdout_contains = ["M\tf1.txt"]
+stdout_excludes = ["keep.txt"]
+
+# REVERSED. This used to be exit 2 with "order endpoints oldest→newest…".
+# git's own diff only walks forward, so CompareSets asks this pair forward and
+# turns the answer round; the ordering rule that leaked git's limitation into
+# the CLI is deleted.
+[[run]]
+cmd             = ["compare", "@worktree", "main"]
+exit            = 0
+stdout_contains = ["M\tf1.txt"]
+stdout_excludes = ["keep.txt"]
+
+# The one lane the algebra does not cover yet: --patch still takes two
+# ENDPOINTS, and model.DiffSpec has no `-R`, so a reversed live pair is
+# refused (exit 2) — in gg's own words, naming the way out.
+[[run]]
+cmd  = ["compare", "--patch", "@worktree", "main"]
+exit = 2
+
+# ── 4. '?' belongs to the grammar now ────────────────────────────────────
+
+# A '?' in a link is the hint separator and nothing else, so a path carrying
+# one is read as a malformed hint rather than as part of the path.
+[[run]]
+cmd  = ["link", "resolve", "gg://{{cwd}}/a?b.txt"]
+exit = 2
+
+# gg link refuses to PRINT what ParseLink could not read back: a hint id
+# holding a separator is a usage error at the producer.
+[[run]]
+cmd  = ["link", "--ref", "main", "--bookmark", "a?b"]
+exit = 2
+
+# Three dots are git's other range vocabulary; gg spells that a merge preview.
+[[run]]
+cmd  = ["link", "--pair", "c1...main"]
+exit = 2
+
+# Both hints name a landing, and a link lands in one place.
+[[run]]
+cmd  = ["link", "--ref", "main", "--bookmark", "b1", "--shelf", "s1"]
+exit = 2
+
+# --cached, --rev, --preview, --ref and --pair all name the target: use one.
+[[run]]
+cmd  = ["link", "--ref", "main", "--pair", "c1..main"]
+exit = 2
+
+# Printing, resolving and comparing links never touch the repo.
+[expect]
+branch = "main"
+
+[expect.status]
+unstaged = ["f1.txt"]
+
+[expect.files]
+"f1.txt"   = "dirty\n"
+"f2.txt"   = "n\n"
+"keep.txt" = "k\n"

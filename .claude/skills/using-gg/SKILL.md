@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v77 -->
+<!-- gg:using-gg:v78 -->
 
 # Using gg (gigagit)
 
@@ -111,11 +111,27 @@ gg://<repo>/<path>[@<target>][:<line>]     <target> = a full/short sha, "staged"
 gg://<repo>/<path>[@<target>]#<hunk>       hunk numbers are `gg diff --hunks`'s
 gg://<repo>/<path>@<sha>:old:<n>           the old side of that diff
 gg://<repo>@<sha>                          a commit, no file
+gg://<repo>@ref:<branch|tag>               a branch or tag TIP: the whole tree there
+gg://<repo>@<a>..<b>                       a CHANGE-SET: only what differs between a and b
 gg://<repo>@<target>...<source>            a merge preview: the Previews tab entry
 gg://<repo>/<path>@<target>...<source>[:<line>]   a file (or new-side line) in that preview
 gg://<repo>/<path>@<target>...<source>#<hunk>     a hunk of that preview's patch
 gg:///abs/checkout/path/file.go:12         a repo with no remote: its absolute path
+gg://<repo>@<sha>?bookmark=<id>            a trailing ?<kind>=<id> hint: bookmark | shelf | stash
 ```
+
+`@ref:<name>` keeps the NAME on purpose: it addresses the branch, not
+whichever commit it sits on today. `@<a>..<b>` is git's two-dot range and is
+the one link form that names a SET OF FILES rather than a whole tree — each
+half may be a sha or a refname. The `?<hint>` suffix records which UI surface
+a link was copied from; it never changes what the link addresses, and `gg
+compare` ignores it. Because `?` is now the hint separator, a path, a
+checkout path or a ref name containing `?` cannot appear in a link at all —
+`gg link` refuses to print one rather than emit something that reparses
+differently.
+`gg link resolve` answers with an ADDRESS, so it refuses a `@ref:` or `@a..b`
+link (exit 2): there is no single commit to name. Hand those to `gg compare`,
+which evaluates the target itself.
 
 A preview link spells the branch PAIR, never a sha: the names travel between
 machines, the machine-local preview id does not. Every verb that takes a link
@@ -144,9 +160,23 @@ TUI's `#` prompt.)
 through gg's machine-local repository history — so a link made on one checkout
 finds the right one here.
 
-- `gg link [<path>[:<line>]] [--cached | --rev <commit>]` — print the link for
-  a place in the current repo. `gg link resolve <link> [--json]` says which
-  checkout it names here; exit 1 when it is unknown or ambiguous.
+- `gg link [<path>[:<line>]] [--cached | --rev <commit> | --preview <id> |
+  --ref <branch|tag> | --pair <a>..<b>] [--bookmark <id> | --shelf <id>]` —
+  print the link for a place in the current repo. Those five target flags name
+  the same thing, so pass at most one (exit 2 otherwise); `--bookmark` and
+  `--shelf` attach the landing hint and are mutually exclusive. `--pair`
+  resolves both halves to FULL shas so the link travels and still means the
+  same thing tomorrow; `--ref` keeps the name. E.g.:
+
+  ```bash
+  gg link --pair HEAD~3..HEAD        # gg://repo@<sha40>..<sha40> — the last 3 commits' change-set
+  gg link --ref main                 # gg://repo@ref:main — the branch tip, as a name
+  gg link --ref main --bookmark b1   # …with the hint that names where it was copied from
+  ```
+
+  `gg link resolve <link> [--json]` says which checkout it names here; exit 1
+  when it is unknown or ambiguous, exit 2 for a `@ref:`/`@a..b` link (no
+  single commit to resolve to — use `gg compare`).
 - **A link the user pastes is enough.** Pass it as the FIRST positional to
   `gg diff <link>`, `gg show <link>`, every `gg note` verb (`gg note add
   <link> --summary "…"`, `gg note list <link>`, `gg note reply <repo-link>
@@ -284,13 +314,35 @@ finds the right one here.
   (the index), or `@worktree` (the working tree); `<right>` defaults to
   `@worktree`. E.g. `gg compare HEAD` (working tree vs HEAD), `gg compare
   HEAD~3 HEAD` (what changed across the last 3 commits), `gg compare main
-  @staged` (the index vs `main`).
+  @staged` (the index vs `main`). Rows are sorted by path, and **the order of
+  the two endpoints is free**: `gg compare @worktree main` compares just as
+  `gg compare main @worktree` does, with the statuses turned round (what reads
+  `A` forward reads `D` reversed).
 - `gg compare [--patch] <spec> [<spec>]` — specs may also be `bookmark:<id>`
   or `shelf:<id>` (a stored commit entry; find ids via `gg bookmark list` /
   `gg shelf list`). While the entry's commit exists this is a live tree
   compare; a gc'd shelved commit falls back to its frozen snapshot (noted on
-  stderr, scoped to the files that commit changed). `--patch` prints unified
-  diffs instead of the file list.
+  stderr, scoped to the files that commit changed) — and a frozen entry
+  compares against `@staged`/`@worktree` too, which answers "is my shelved work
+  already in my tree?". `--patch` prints unified diffs instead of the file
+  list; it is the one lane that still needs the endpoints oldest→newest (a
+  reversed live pair is exit 2 and says so — drop `--patch` for the list).
+- **Either side of `gg compare` may be a `gg://` link**, mixed freely with the
+  rest. A link with a `/<path>`, or a `@<a>..<b>` change-set target, names a
+  SET OF FILES; comparing it against a whole tree projects the tree onto that
+  set, so the answer is scoped to those paths and never grows to the tree's
+  size. E.g.:
+
+  ```bash
+  gg compare gg://repo@ref:main gg://repo@ref:v1.2   # two tips, whole trees
+  gg compare gg://repo@abc1234..def5678 gg://repo@ref:main
+                                # did main already absorb that change-set?
+  gg compare gg://repo/internal/tui/model.go@ref:main main
+                                # one file, one row
+  ```
+
+  A link naming a DIFFERENT checkout is refused (exit 2): cross-repository
+  compare is not supported yet.
 - `gg preview add [--label <text>] <source> <target>` — save a MERGE PREVIEW:
   "what would <source> bring into <target>", i.e. the GitHub pull-request
   files-changed diff (`git diff target...source`, from their merge base to

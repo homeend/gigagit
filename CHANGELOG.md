@@ -8,6 +8,81 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **`gg compare` takes `gg://` links on either side, and `gg link` can build
+  the links it needs.** Either endpoint of `gg compare` may now be a link
+  instead of a rev — `gg compare gg://repo@ref:main gg://repo@ref:v1.2` — and a
+  link mixes freely with the old vocabulary (`gg compare gg://repo@a..b main`),
+  because a link is a spelling, not a mode. `gg link` gained the flags that
+  produce them: `--ref <branch|tag>` (the TIP, kept as a NAME so the link means
+  "the branch", not whichever commit it sits on today; an unknown name is
+  refused at the producer), `--pair <a>..<b>` (a CHANGE-SET, both halves
+  resolved to full shas so the link travels), and `--bookmark <id>` /
+  `--shelf <id>`, which attach a landing hint. `--cached`, `--rev`,
+  `--preview`, `--ref` and `--pair` all name the target, so at most one may be
+  given; `--bookmark` and `--shelf` are likewise mutually exclusive.
+
+- **The `gg://` grammar gained `@ref:<name>`, `@<a>..<b>` and `?<hint>` — and
+  `?` is no longer expressible inside a link.** A target may now be a branch or
+  tag tip (`gg://repo@ref:main`, a POINT: the whole tree there) or git's two-dot
+  change-set (`gg://repo@c1..c2`, BOUNDED: only what it changed, each half a
+  sha or a refname). A trailing `?<kind>=<id>` names the UI surface a link was
+  copied from (`bookmark`, `shelf` or `stash`); it is carried and parsed, and
+  `gg compare` deliberately IGNORES it — a bookmarked commit and the same
+  commit picked off the log are one endpoint. The single exception is a
+  `?shelf=<id>` on a link with no target at all, where the shelved copy is the
+  only place the bytes exist. (The surfaces that will LAND on the hint are not
+  wired yet.) Because the FIRST `?` is now the hint
+  separator, a `?` can no longer appear in a link's path, in a checkout path
+  (the local `gg:///abs/path` form), or in a branch or tag name carried by a
+  link. `gg link` and the TUI refuse to print one rather than emit something
+  that reparses as another place.
+
+- **`gg compare` no longer refuses a "reversed" pair.** `gg compare @worktree
+  main` used to be a usage error telling you to "order endpoints
+  oldest→newest"; it now compares, with the statuses turned round (what reads
+  `A` forward reads `D` reversed). That rule was git's own limitation showing
+  through the CLI — git's diff only walks forward — not a statement about what
+  a user may ask, so the comparison is asked forward and the answer inverted.
+  The MCP `gg_compare_trees` tool gets the same totality: a reversed pair there
+  used to answer `unsupported endpoint pair 1 → 3`, so the two compare
+  frontends disagreed about what could be asked.
+
+- **A frozen shelf entry can now be compared against the live index or working
+  tree.** `gg compare shelf:<id> @staged` used to be refused with "a frozen
+  shelf entry pairs only with a commit or another shelf entry". It answers the
+  real question now — "is my shelved work already in my tree?" — scoped, as
+  before, to the files the shelved commit changed. (Only a shelved commit whose
+  sha has been gc'd is *frozen*; while the commit exists the entry still
+  resolves to it and compares live.)
+
+- **`gg compare --patch` of a reversed live pair says how to get the answer.**
+  This one pair is still refused (exit 2, as it was before): `--patch` renders
+  two endpoints through git's own diff, which has no reverse form. The message
+  now names the two ways out — drop `--patch` for the changed-file list, which
+  does answer it, or order the endpoints oldest→newest — instead of only
+  lecturing about ordering.
+
+- **`gg compare`'s changed-file list is sorted by path.** It used to print
+  git's own order with untracked files appended, so `gg compare main @worktree`
+  could list `M z.txt` before `A a.txt` while the reverse direction of the same
+  comparison came out sorted: one comparison, two orders. Every lane sorts now.
+  The same applies to MCP's `gg_compare_trees`; the TUI's and browser's compare
+  views still read git's order.
+
+- **Fixed: a stale bookmark or version record could panic the whole TUI, and
+  two Update-thread git reads could hang it.** Comparing a commit bookmark, and
+  entering a Previous-versions row, fed a commit hash read straight back from a
+  store — a bookmark's TOML record, or a version ref's trailer, which is split
+  on whitespace without ever checking that a field is a sha — into a
+  constructor that panics on anything else: one stale or hand-edited record
+  took the process down. Both validate and decline with a status message now.
+  Separately, resolving HEAD for the diff view and copying a
+  commit's sha ran a synchronous git read on the Bubble Tea Update thread with
+  no deadline — behind a queued write that is itself parked on a modal the
+  frozen thread can no longer draw, that is a deadlock with no exit but killing
+  gg. Both now run under a 300 ms deadline and decline (the sha copy falls back
+  to the short hash it already had).
+
 - **Fixed: enter on a fieldless row of the Previous versions popup opened a
   files view that ↓ could not walk.** A version recorded by a one-branch op
   (amend, reset, undo-commit, delete-branch, restore — no frozen preview)
