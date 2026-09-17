@@ -60,10 +60,8 @@ func (s *Service) CompareSets(ctx context.Context, left, right FileSet) ([]model
 			// printed "M z.txt" before "A a.txt" while the reverse direction of
 			// the same pair came out sorted — one comparison, two orders.
 			//
-			// sortedCompareRows COPIES: CompareFiles' slice is served from the
-			// singleflight-coalesced query cache and is shared with every other
-			// caller, so sorting it in place would reorder somebody else's
-			// result. (invertCompareRows copies for the same reason.)
+			// sortedCompareRows COPIES rather than sorting in place; its doc
+			// says why, and invertCompareRows copies for the same reason.
 			return sortedCompareRows(files), nil
 		}
 		// git's own diff only walks FORWARD (a commit, then the index, then the
@@ -113,10 +111,23 @@ func forwardLivePair(left, right model.Endpoint) bool {
 	return false
 }
 
-// sortedCompareRows returns a path-sorted COPY. The copy is the point: the
-// input comes from CompareFiles, whose result is served from the
-// singleflight-coalesced query cache and shared with every concurrent caller,
-// so an in-place sort would reorder a slice this function does not own.
+// sortedCompareRows returns a path-sorted COPY, and never sorts its input.
+//
+// THE COPY IS THE POINT, and the reason is narrower than "there is a cache" —
+// flightGroup keeps no cache at all; it frees the key as soon as the leader
+// returns (internal/domain/flight.go). The hazard is CONCURRENT coalescing:
+// callers that arrive while one key is in flight all receive the LEADER'S
+// SLICE HEADER, the same backing array, from `query`. So if one of them
+// post-processes that slice in place — and a sort is the purest example — it
+// silently reorders the result its co-waiters are already holding. A `gg web`
+// page and an `gg mcp` tool asking for the same comparison at the same moment
+// is exactly that shape.
+//
+// TestSortedCompareRowsDoesNotMutateItsInput pins this. It is a unit test of
+// the helper, not of the race: the race needs two callers inside one flight,
+// and this repo has no deterministic way to hold a leader until a follower has
+// provably joined `flightGroup.Do` (see the Fix round 2 note in Task 7's
+// report). Pinning the helper's contract is the part that can be proved.
 func sortedCompareRows(files []model.CommitFile) []model.CommitFile {
 	out := make([]model.CommitFile, len(files))
 	copy(out, files)

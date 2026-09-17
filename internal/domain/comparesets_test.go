@@ -536,42 +536,51 @@ func TestCompareSetsForwardLaneSortsByPath(t *testing.T) {
 	}
 }
 
-// The forward lane must not SORT IN PLACE either: CompareFiles' slice is served
-// from the singleflight-coalesced query cache and shared with every concurrent
-// caller, so reordering it would reorder somebody else's result. This repo has
-// already shipped one bug of exactly that shape (a caller sorting a slice
-// domain still owned), which is why FileSet.Paths returns a copy.
-func TestCompareSetsDoesNotSortTheCachedSliceInPlace(t *testing.T) {
+// sortedCompareRows must never sort its INPUT — the forward lane hands it a
+// slice that, when two callers coalesce on one in-flight `query` key, is the
+// same backing array both of them are holding.
+//
+// This replaces a test that claimed to cover that and could not: it called
+// CompareFiles, CompareSets and CompareFiles again SEQUENTIALLY and asserted
+// the order was stable, but flightGroup frees its key the moment the leader
+// returns (flight.go: "there is no caching across completed calls"), so each
+// call re-ran git and got an independent slice. There was no shared backing
+// array for an in-place sort to corrupt, and the test passed with the copy
+// removed. See the Fix round 2 note in Task 7's report.
+//
+// This one fails with the copy removed, which is the whole of its job.
+func TestSortedCompareRowsDoesNotMutateItsInput(t *testing.T) {
 	t.Parallel()
-	f := newCompareFixture(t)
-	ctx := context.Background()
-	if err := os.WriteFile(filepath.Join(f.dir, "a.txt"), []byte("dirtied\n"), 0o644); err != nil {
-		t.Fatal(err)
+	// Deliberately in git's shape: diff order, then the untracked file that
+	// CompareFiles appends last and that sorts first.
+	in := []model.CommitFile{
+		{Status: "M", Path: "z.txt"},
+		{Status: "M", Path: "m.txt"},
+		{Status: "A", Path: "a-untracked.txt"},
 	}
-	if err := os.WriteFile(filepath.Join(f.dir, "AAA-untracked.txt"), []byte("new\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	left, right := mustTestCommit(t, f.c3), model.WorkTreeEndpoint()
-	// Prime the cache, and remember the order the raw query hands out.
-	raw, err := f.svc.CompareFiles(ctx, left, right)
-	if err != nil {
-		t.Fatalf("CompareFiles: %v", err)
-	}
-	before := make([]string, len(raw))
-	for i, r := range raw {
-		before[i] = r.Path
-	}
-	if _, err := f.svc.CompareSets(ctx, f.eval(t, left), f.eval(t, right)); err != nil {
-		t.Fatalf("CompareSets: %v", err)
-	}
-	after, err := f.svc.CompareFiles(ctx, left, right)
-	if err != nil {
-		t.Fatalf("CompareFiles (again): %v", err)
-	}
-	for i, r := range after {
-		if r.Path != before[i] {
-			t.Fatalf("CompareFiles' own order changed after CompareSets ran: %v → %v (the cached slice was sorted in place)",
-				before, after)
+	want := []string{"z.txt", "m.txt", "a-untracked.txt"}
+
+	got := sortedCompareRows(in)
+
+	for i, w := range want {
+		if in[i].Path != w {
+			var paths []string
+			for _, r := range in {
+				paths = append(paths, r.Path)
+			}
+			t.Fatalf("sortedCompareRows reordered its INPUT: %v, want it untouched as %v", paths, want)
 		}
+	}
+	if len(got) != len(in) {
+		t.Fatalf("result has %d rows, want %d", len(got), len(in))
+	}
+	if got[0].Path != "a-untracked.txt" || got[1].Path != "m.txt" || got[2].Path != "z.txt" {
+		t.Fatalf("result = %v, want it sorted by path", got)
+	}
+	// Distinct backing arrays, not merely equal contents: a caller holding the
+	// input must not see a later write through the result.
+	got[0].Path = "mutated"
+	if in[2].Path != "a-untracked.txt" {
+		t.Fatalf("result aliases the input: writing through the result changed in[2] to %q", in[2].Path)
 	}
 }
