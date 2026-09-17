@@ -26,8 +26,13 @@ type filterWire struct {
 }
 
 type slotWire struct {
-	Slot        int    `json:"slot"`
+	Slot int `json:"slot"`
+	// Name is the RAW name clause and Label is what to show (Name, or the
+	// "slot N" fallback). Keeping them apart is what lets the settings form
+	// round-trip an unnamed slot: prefilling its name input with the label
+	// would bake "slot 3" into the file on the next save.
 	Name        string `json:"name"`
+	Label       string `json:"label"`
 	Mode        string `json:"mode"`
 	Summary     string `json:"summary"`
 	Usable      bool   `json:"usable"`
@@ -158,7 +163,7 @@ func (s *Server) handleBranchFilterSet(w http.ResponseWriter, r *http.Request) {
 func slotWires(all [branchfilter.MaxSlots]branchfilter.Compiled, globalPath, repoPath string) []slotWire {
 	slots := make([]slotWire, 0, branchfilter.MaxSlots)
 	for _, c := range all {
-		sw := slotWire{Slot: c.Slot.Slot, Name: c.Label(), Mode: string(c.Mode), Summary: c.Summary(), Usable: c.Usable(),
+		sw := slotWire{Slot: c.Slot.Slot, Name: c.Slot.Name, Label: c.Label(), Mode: string(c.Mode), Summary: c.Summary(), Usable: c.Usable(),
 			OlderThan: c.OlderThan, YoungerThan: c.YoungerThan, Prefix: c.Prefix, Suffix: c.Suffix, Contains: c.Contains, Regex: c.Regex}
 		if c.Err != nil {
 			sw.Error = c.Err.Error()

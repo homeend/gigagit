@@ -2,6 +2,9 @@ package web
 
 import (
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/branchfilter"
@@ -13,6 +16,8 @@ type bfSettings struct {
 	BranchFilters []struct {
 		Slot   int    `json:"slot"`
 		Name   string `json:"name"`
+		Label  string `json:"label"`
+		Mode   string `json:"mode"`
 		Usable bool   `json:"usable"`
 		Prefix string `json:"prefix"`
 		Scope  string `json:"scope"`
@@ -89,6 +94,42 @@ func TestSettingsBranchFilterWriteAndRemove(t *testing.T) {
 	}
 	if code := post(`{"branch_filters":[{"slot":6,"scope":"repo","prefix":"x"}]}`); code != 400 {
 		t.Errorf("out-of-range slot → %d", code)
+	}
+}
+
+// TestSettingsBranchFilterUnnamedRoundTrip pins the wire split the edit form
+// depends on: the payload's name is the RAW clause (empty here) and label is
+// the "slot N" display fallback, so opening an unnamed slot and saving it
+// untouched must not bake the label into the file as a name.
+func TestSettingsBranchFilterUnnamedRoundTrip(t *testing.T) {
+	ts, dir := bfServer(t)
+	post := func(body string) int {
+		t.Helper()
+		return postJSON(t, ts, "/api/settings", body, "application/json", "", nil)
+	}
+	if code := post(`{"branch_filters":[{"slot":3,"scope":"repo","prefix":"nameless/"}]}`); code != 200 {
+		t.Fatalf("write → %d", code)
+	}
+	got := bfGet(t, ts)
+	if got.BranchFilters[2].Name != "" || got.BranchFilters[2].Label != "slot 3" {
+		t.Fatalf("unnamed slot 3 = %+v; want name \"\" with label \"slot 3\"", got.BranchFilters[2])
+	}
+	// Save it back exactly as the form would: name from the wire's raw field.
+	body := `{"branch_filters":[{"slot":3,"scope":"repo","name":"` + got.BranchFilters[2].Name +
+		`","mode":"` + got.BranchFilters[2].Mode + `","prefix":"` + got.BranchFilters[2].Prefix + `"}]}`
+	if code := post(body); code != 200 {
+		t.Fatalf("round-trip → %d", code)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, ".gg.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `name = "slot 3"`) {
+		t.Errorf("the display label was written back as a name:\n%s", raw)
+	}
+	got = bfGet(t, ts)
+	if got.BranchFilters[2].Name != "" || got.BranchFilters[2].Label != "slot 3" || got.BranchFilters[2].Prefix != "nameless/" {
+		t.Errorf("after the round trip: %+v", got.BranchFilters[2])
 	}
 }
 

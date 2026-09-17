@@ -192,13 +192,14 @@ function bfSlot(slot) {
   return ((state.settings && state.settings.branch_filters) || []).find((s) => s.slot === slot);
 }
 
-// bfScopeOf is the one provenance rule, shared by the form's default scope
-// and the remove button: anything the repo defines is peeled/written at the
-// repo layer, everything else is global. A repo-scope write never touches a
-// global rule, and a "both" slot loses its repo block first.
+// bfScopeOf is the form's default scope: the layer the repo already defines
+// the slot at, and GLOBAL for a slot nothing defines yet — the TUI popup's
+// rule, and the one that never drops a brand-new rule into a committed
+// .gg.toml unasked. (Remove peels its own way: a "both" slot loses its repo
+// block first.)
 function bfScopeOf(s) {
-  if (s && s.scope === "global") return "global";
-  return state.settings && state.settings.repo_config_path ? "repo" : "global";
+  const inRepo = s && (s.scope === "repo" || s.scope === "both");
+  return inRepo && state.settings && state.settings.repo_config_path ? "repo" : "global";
 }
 
 function bfRemoveLabel(s) {
@@ -208,7 +209,7 @@ function bfRemoveLabel(s) {
 }
 
 function bfSlotValue(s) {
-  if (s.usable) return esc(s.name) + " — " + esc(s.summary);
+  if (s.usable) return esc(s.label) + " — " + esc(s.summary);
   if (s.error) return "invalid — " + esc(s.error);
   return s.scope ? esc(s.summary) : "—";
 }
@@ -280,7 +281,12 @@ async function bfRefresh() {
   try {
     state.settings = await getJSON("/api/settings");
   } catch {}
-  renderSettings({ fresh: true });
+  // NOT a fresh render: the panel's own text fields (the intervals, retention,
+  // the hook textarea) may hold unsaved typing, and saving a filter rule is no
+  // reason to throw it away without a word. pendingEdits sees DOM != server and
+  // restores them; the form still closes, because the section re-emits an empty
+  // #bf-form.
+  renderSettings();
   if (window.__ggRefetchList) {
     await window.__ggRefetchList("branches").catch(() => {});
     await window.__ggRefetchList("remotes").catch(() => {});
@@ -435,7 +441,7 @@ $("settings-box").addEventListener("click", (e) => {
       saveBfForm(Number(t.dataset.slot));
       break;
     case "bf-cancel":
-      renderSettings({ fresh: true }); // nothing was written; drop the form
+      renderSettings(); // nothing was written; drop the form, keep panel edits
       break;
     case "bf-remove":
       removeBfSlot(Number(t.dataset.slot));

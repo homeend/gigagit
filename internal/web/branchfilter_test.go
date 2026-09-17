@@ -298,6 +298,7 @@ func TestBranchFilterSlotsListing(t *testing.T) {
 		Slots []struct {
 			Slot    int    `json:"slot"`
 			Name    string `json:"name"`
+			Label   string `json:"label"`
 			Mode    string `json:"mode"`
 			Summary string `json:"summary"`
 			Usable  bool   `json:"usable"`
@@ -317,8 +318,14 @@ func TestBranchFilterSlotsListing(t *testing.T) {
 	if out.Slots[0].Summary == "" || out.Slots[4].Summary == "" {
 		t.Errorf("every slot carries a summary: %+v", out.Slots)
 	}
-	if out.Slots[4].Name != "slot 5" || out.Slots[4].Scope != "" {
-		t.Errorf("unset slot 5 = %+v; want the fallback label and no scope", out.Slots[4])
+	if out.Slots[4].Name != "" || out.Slots[4].Label != "slot 5" || out.Slots[4].Scope != "" {
+		t.Errorf("unset slot 5 = %+v; want an EMPTY name, the fallback label and no scope", out.Slots[4])
+	}
+	// The raw name and the display label are separate fields: the settings
+	// form prefills from name, so a defined-but-unnamed slot must not hand it
+	// "slot 4" to write back into the file.
+	if out.Slots[0].Label != "feat" || out.Slots[3].Name != "" || out.Slots[3].Label != "slot 4" {
+		t.Errorf("label vs name: slot 1 = %+v, slot 4 = %+v", out.Slots[0], out.Slots[3])
 	}
 	if out.Warnings == nil {
 		t.Errorf("warnings must be [] on the wire, never null")

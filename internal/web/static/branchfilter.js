@@ -110,7 +110,7 @@ async function openFilterMenu(list, x, y) {
     ...slots.map((s) =>
       s.usable
         ? {
-            label: `${tick(!!cur && cur.slot === s.slot)}${s.slot}  ${s.name} — ${s.summary}`,
+            label: `${tick(!!cur && cur.slot === s.slot)}${s.slot}  ${s.label} — ${s.summary}`,
             act: () => setBranchFilterSlot(list, s.slot),
           }
         : { header: `${s.slot} (${s.summary})` }
