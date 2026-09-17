@@ -34,3 +34,5 @@ type Store interface {
 	// the user copied from this time is the one they will recognise.
 	Record(e Entry) error
 }
+
+var _ Store = (*FileStore)(nil)
