@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"net/http/httptest"
 	"os"
@@ -221,6 +222,52 @@ func TestRemotesFilterBeforeCap(t *testing.T) {
 		if strings.HasPrefix(r.Name, "origin/feat/") {
 			t.Errorf("hidden remote row on the wire: %s", r.Name)
 		}
+	}
+}
+
+// TestBranchFilterRepoKeyCached pins the steady-state cost of the branch
+// filter on the two live-refresh routes: the promptstate key is resolved with
+// one `git rev-parse` and then served from the process-wide cache, and a
+// re-root (a new *Service) never inherits the previous repo's key.
+func TestBranchFilterRepoKeyCached(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := bfRepo(t)
+	svc := domain.Open(dir)
+	if got := cachedRepoKey(svc); got != "" {
+		t.Fatalf("a fresh service starts with a cold key: %q", got)
+	}
+	ts := httptest.NewServer(New(svc).Handler())
+	t.Cleanup(ts.Close)
+
+	if code := putJSON(t, ts, "/api/branch-filter", `{"list":"branches","slot":1}`, "", nil); code != 200 {
+		t.Fatalf("PUT: %d", code)
+	}
+	want, err := svc.GitCommonDir(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cachedRepoKey(svc); got != want {
+		t.Fatalf("cached key = %q; want %q (resolving it must warm the cache)", got, want)
+	}
+	// Both routes must still find the record now that they read the cache
+	// instead of asking git — twice, so the warm path is the one under test.
+	for i := 0; i < 2; i++ {
+		var br bfBranchesResp
+		getJSON(t, ts, "/api/branches", &br)
+		if br.Filter == nil || br.Filter.Slot != 1 {
+			t.Fatalf("GET %d /api/branches: filter = %+v", i, br.Filter)
+		}
+		var rm struct {
+			Filter *struct{ Slot int } `json:"filter"`
+		}
+		getJSON(t, ts, "/api/remotes", &rm)
+		if rm.Filter != nil {
+			t.Fatalf("GET %d /api/remotes: remotes have their own slot: %+v", i, rm.Filter)
+		}
+	}
+	if got := cachedRepoKey(domain.Open(dir)); got != "" {
+		t.Errorf("a re-rooted service inherited the old key: %q", got)
 	}
 }
 

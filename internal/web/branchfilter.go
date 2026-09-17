@@ -43,11 +43,24 @@ type slotWire struct {
 
 // branchFilterRepoKey is the promptstate scope: the git common dir (the key
 // the TUI writes the same record under).
+//
+// It reads the process-wide cache first (notifications.go), because this runs
+// on /api/branches and /api/remotes — every live refresh, filter or not — and
+// `git rev-parse --git-common-dir` is a subprocess that domain's singleflight
+// coalesces but never caches. The cache slot is keyed by the service pointer,
+// so a re-root cannot serve the previous repo's key. This is a plain GET
+// handler, never an operation, so resolving the key here is safe (see the
+// deadlock note above rememberRepoKey).
 func (s *Server) branchFilterRepoKey(ctx context.Context, svc *domain.Service) string {
-	if common, err := svc.GitCommonDir(ctx); err == nil {
-		return common
+	if key := cachedRepoKey(svc); key != "" {
+		return key
 	}
-	return ""
+	key, err := svc.GitCommonDir(ctx)
+	if err != nil {
+		return ""
+	}
+	rememberRepoKey(svc, key)
+	return key
 }
 
 // activeBranchFilter resolves list's remembered slot to a usable Compiled;
