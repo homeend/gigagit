@@ -458,6 +458,41 @@ func resolvingAll(ctx context.Context, cands []linkCandidate, names []string, op
 	return kept
 }
 
+// hintOnlyTarget reports whether t names no PINNED content at all — no
+// commit, no ref, no pair, no preview. This is the part of "is this link
+// address-less" that finishLink's address-less presence check and
+// EndpointForLink's address-less-shelf-endpoint check (evallink.go) both
+// need identically (fix F6), so it is shared — but it is NOT, by itself,
+// either caller's whole answer, because the two ask genuinely different
+// questions once a pinned target is ruled out:
+//
+//   - finishLink additionally requires an EMPTY PATH: its question is "does
+//     this link name a PLACE at all" (RepoOnly's own definition — repo +
+//     optional path + optional target), which decides where a navigate
+//     lands. `gg://<repo>/f.txt?shelf=X` has a real place (the working-tree
+//     file f.txt) and is never address-less, no matter the hint.
+//   - EndpointForLink additionally requires State to be Unstaged or Staged
+//     (never the zero-value StateCommitted a hand-built Link with no sha
+//     would otherwise silently pass through — its own switch below refuses
+//     that case instead). Its question is "does this link name a PINNED,
+//     immutable byte source, or the live, mutable working tree/index" — and
+//     that answer does NOT depend on path at all: path-narrowing
+//     (EvalLink's narrowTo) is a separate step applied AFTER the endpoint is
+//     chosen, so `gg://<repo>/f.txt?shelf=X` (a real path, no pinned
+//     target) still substitutes the STABLE shelf snapshot for the
+//     unstable live file — this is deliberate, existing behaviour
+//     (TestEndpointForLinkShelfHintIsTheOnlyContentSource's `shelved` case)
+//     and not something this fix may change.
+//
+// Before this, EndpointForLink read `t.State == model.StateUnstaged` alone
+// — the exact predicate finishLink was corrected away from earlier in this
+// same task, for the same reason it was wrong here too: `gg://<repo>@staged
+// ?shelf=X` is address-less by RepoOnly's own definition (StateStaged, not
+// StateUnstaged) and the old predicate missed it.
+func hintOnlyTarget(t model.LinkTarget) bool {
+	return t.Commit == "" && t.Preview == nil && t.Ref == "" && t.Pair == nil
+}
+
 // finishLink builds the Resolved value for the chosen candidate: the address,
 // the worktree pin for the live states, and the FULL sha for a commit link.
 func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts ResolveOpts) (Resolved, error) {
@@ -483,10 +518,11 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 	// own already-loaded store and reveals or notices; no store lookup runs
 	// here. WITHOUT one, the hint is the link's only content, so its
 	// presence must be checked HERE: there is nothing else for the link to
-	// resolve to if it is gone. "No address" is asked of l itself (Ref/
-	// Pair/Preview/Commit all empty), never of the not-yet-computed
-	// res.Commit — this runs before the switch below fills it in.
-	if rel == "" && l.Target.Commit == "" && l.Target.Preview == nil && l.Target.Ref == "" && l.Target.Pair == nil && l.Hint.Kind != "" {
+	// resolve to if it is gone. hintOnlyTarget (fix F6: shared with
+	// EndpointForLink) plus an empty path together answer "does this link
+	// name a place at all" — asked of l itself, never of the not-yet-
+	// computed res.Commit — this runs before the switch below fills it in.
+	if rel == "" && hintOnlyTarget(l.Target) && l.Hint.Kind != "" {
 		switch l.Hint.Kind {
 		case "bookmark":
 			if _, err := opts.OpenFn(c.checkout).BookmarkGet(ctx, l.Hint.ID); err != nil {

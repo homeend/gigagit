@@ -113,6 +113,32 @@ func TestEndpointForLinkShelfHintIsTheOnlyContentSource(t *testing.T) {
 	}
 }
 
+// TestEndpointForLinkStagedShelfHintIsAlsoTheOnlyContentSource is fix F6's
+// regression: EndpointForLink used to read only `t.State ==
+// model.StateUnstaged`, missing the STAGED twin of the exact same
+// address-less shape — `gg://<repo>@staged?shelf=X` is address-less by
+// RepoOnly's own definition (no path, no commit/ref/pair/preview) exactly
+// as the plain (unstaged) form above is, and the rejected predicate got it
+// wrong for the same reason finishLink's own (already-fixed) predicate
+// would have.
+func TestEndpointForLinkStagedShelfHintIsAlsoTheOnlyContentSource(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+
+	staged, err := model.ParseLink("gg://x@staged?shelf=entry7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep, err := f.svc.EndpointForLink(ctx, staged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ep.Kind() != model.EndpointShelf || ep.ShelfID() != "entry7" {
+		t.Fatalf("an address-less STAGED shelf link must be a shelf endpoint, got kind=%d id=%q", ep.Kind(), ep.ShelfID())
+	}
+}
+
 // A /<path> makes ANY link bounded to exactly one member (spec §3.2's last
 // grammar row). This is the row that makes "compare one file against a
 // commit" work without a special case.

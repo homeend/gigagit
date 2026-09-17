@@ -45,9 +45,16 @@ import (
 func (s *Service) EndpointForLink(ctx context.Context, l model.Link) (model.Endpoint, error) {
 	t := l.Target
 
-	// The address-less shelf link: the hint is the content (spec §3.3).
-	if t.State == model.StateUnstaged && t.Commit == "" && t.Ref == "" &&
-		t.Pair == nil && t.Preview == nil && l.Hint.Kind == "shelf" {
+	// The address-less shelf link: the hint is the content (spec §3.3). A
+	// live, uncommitted state (Unstaged OR Staged — fix F6: this used to
+	// read only `t.State == model.StateUnstaged`, which missed
+	// `gg://<repo>@staged?shelf=X`) with no pinned target at all
+	// (hintOnlyTarget, linkresolve.go — shared with finishLink's own
+	// address-less check) substitutes the STABLE shelf snapshot for the
+	// live working tree/index; deliberately independent of l.Path — see
+	// hintOnlyTarget's doc comment for why a real path does not disqualify
+	// this arm.
+	if (t.State == model.StateUnstaged || t.State == model.StateStaged) && hintOnlyTarget(t) && l.Hint.Kind == "shelf" {
 		return model.ShelfEndpoint(l.Hint.ID)
 	}
 
