@@ -15,7 +15,8 @@ import (
 // to that PATHSPEC and answers the narrower question "which of these does the
 // index hold", which is how domain's endpointHas probes an index endpoint
 // without enumerating a ~100GB monorepo. `--` separates the pathspec so a path
-// that looks like an option cannot be read as one.
+// that looks like an option cannot be read as one, and each element is wrapped
+// in `:(literal)` by literalPathspec — see there for what raw paths get wrong.
 //
 // The listing is the INDEX's, not the disk's: a tracked file the user removed
 // from disk is still reported here, and `ls-files --deleted` does NOT reliably
@@ -24,7 +25,7 @@ import (
 func (r *Repo) LsFiles(ctx context.Context, paths ...string) ([]string, error) {
 	b := gitcmd.New("ls-files").Arg("-z")
 	if len(paths) > 0 {
-		b = b.Arg("--").Arg(paths...)
+		b = b.Arg("--").Arg(literalPathspec(paths)...)
 	}
 	res, err := r.Runner.Run(ctx, "git ls-files", b.ToArgv())
 	if err != nil {

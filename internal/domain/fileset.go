@@ -58,7 +58,7 @@ func (f FileSet) Paths() []string {
 func (f FileSet) Endpoint() model.Endpoint { return f.ep }
 
 // Has reports whether path has readable bytes at this set's endpoint. Only
-// meaningful for a bounded set; the unbounded lane asks endpointPaths instead.
+// meaningful for a bounded set; the unbounded lane asks endpointHas instead.
 func (f FileSet) Has(path string) bool {
 	if f.has == nil {
 		return true
@@ -198,9 +198,14 @@ const pathProbeBatch = 256
 // about three files is precisely the "you can only ever scale DOWN" rule the
 // design is built on (spec §3.5). Every probe below is limited to the keys.
 //
-// The result holds an entry for every input path. Deliberately NOT wrapped in
-// one query(): each probe takes its own Read reservation, and nesting a gated
-// read inside a held reservation can deadlock behind a queued writer.
+// The result holds an entry for every input path and for NO other path: the
+// git verbs wrap each pathspec element in `:(literal)`, so a key holding a
+// glob metacharacter cannot drag an unasked-for path into the answer, and a
+// key beginning with ':' cannot be eaten as pathspec magic and read absent.
+//
+// Deliberately NOT wrapped in one query(): each probe takes its own Read
+// reservation, and nesting a gated read inside a held reservation can deadlock
+// behind a queued writer.
 func (s *Service) endpointHas(ctx context.Context, e model.Endpoint, paths []string) (map[string]bool, error) {
 	out := make(map[string]bool, len(paths))
 	for _, p := range paths {

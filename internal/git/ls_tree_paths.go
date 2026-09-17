@@ -16,6 +16,10 @@ import (
 // the "you can only ever scale DOWN" rule inverted. TreeFiles stays for the
 // callers that genuinely want the whole tree.
 //
+// Each element is wrapped in `:(literal)` by literalPathspec, so a path
+// beginning with ':' or holding a glob metacharacter is matched verbatim —
+// see there for what raw paths get wrong.
+//
 // An empty paths list returns nil WITHOUT invoking git: `ls-tree … --` with no
 // pathspec lists the entire tree, which is the opposite of what a caller
 // passing no paths means.
@@ -23,7 +27,7 @@ func (r *Repo) TreePaths(ctx context.Context, commit string, paths []string) ([]
 	if len(paths) == 0 {
 		return nil, nil
 	}
-	argv := gitcmd.New("ls-tree").Arg("-r", "--name-only", "-z", commit).Arg("--").Arg(paths...).ToArgv()
+	argv := gitcmd.New("ls-tree").Arg("-r", "--name-only", "-z", commit).Arg("--").Arg(literalPathspec(paths)...).ToArgv()
 	res, err := r.Runner.Run(ctx, "git ls-tree (tree paths)", argv)
 	if err != nil {
 		return nil, err
