@@ -8,6 +8,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Fixed: `gg://C:/…` was read as a repository NAMED `C:`.** On Windows the
+  obvious way to build a link — the scheme plus the checkout path — yields two
+  slashes, not three, because an absolute Windows path starts with a drive
+  letter rather than `/`. `ParseLink` took that head as a remote repository
+  name, returned no error, and every resolve then blamed the machine for it:
+  `gg link names an unknown repository: C: is not in this machine's gg history`.
+  A silent misread reported as a missing repository. A bare drive head is now
+  accepted as the local form and canonicalises to the three-slash spelling gg's
+  own producers emit, and a repository name containing `:` — which no remote
+  URL can ever produce — is refused as a malformed link instead of being
+  carried as far as the registry. This made the whole `gg://` link family's
+  tests fail on Windows while passing on POSIX (`internal/cli`,
+  `internal/domain`, `internal/linknav`, `internal/tui`); they build their
+  links exactly that way, and they are right to.
 - **Web: the file-history overlay goes fullscreen.** `m` (or the `»` chip in
   its title) folds the commit list away and the box takes the whole viewport,
   so the file's change at that commit gets every pixel — a diff that stacked

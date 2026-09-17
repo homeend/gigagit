@@ -247,7 +247,9 @@ func (l Link) String() string {
 //	gg://<repo>[/<path>]@<a>..<b>[?<hint>]            a change-set
 //	gg://<repo>                                       the repository itself
 //
-// <repo> is a remote repository name, or "/" + an absolute checkout path.
+// <repo> is a remote repository name, or "/" + an absolute checkout path (a
+// bare Windows drive head, "C:/src", is accepted as an alias for "/C:/src" and
+// canonicalises to it).
 // <target> is "staged", 7..64 hex (64 covers a sha-256 repository, whose
 // commit ids every producer writes in full), "ref:<name>" (a branch or tag
 // tip) or "<a>..<b>" (a change-set, each half a sha or a refname); absent
@@ -372,11 +374,22 @@ func ParseLink(s string) (Link, error) {
 		l.Target = LinkTarget{State: StateCommitted, Commit: tail}
 	}
 
-	if strings.HasPrefix(head, "/") {
+	// The local form is "/" + an absolute checkout path — and, leniently, a
+	// BARE Windows drive head ("gg://C:/src"). gg's own producers always emit
+	// the canonical three-slash spelling (Link.String adds the separator), so
+	// the bare form is an accepted alias, never a second output shape.
+	//
+	// Accepting it is not politeness: `"gg://" + filepath.ToSlash(dir)` is the
+	// obvious way to build a link and it is CORRECT on POSIX, where an
+	// absolute path already begins with '/'. On Windows the same expression
+	// yields "gg://C:/…", which without this branch parsed as a repository
+	// NAMED "C:" — no error, and a resolve that blamed the machine ("C: is not
+	// in this machine's gg history") for a link gg had misread.
+	if strings.HasPrefix(head, "/") || isDriveHeadLink(head) {
 		abs := head
 		// gg:///C:/src → the leading separator is the scheme's, not the
 		// path's: strip it when a drive letter follows.
-		if len(abs) >= 3 && isAlphaLink(abs[1]) && abs[2] == ':' {
+		if len(abs) >= 3 && abs[0] == '/' && isAlphaLink(abs[1]) && abs[2] == ':' {
 			abs = abs[1:]
 		}
 		if abs == "" || abs == "/" {
@@ -392,6 +405,15 @@ func ParseLink(s string) (Link, error) {
 	}
 	if name == "" {
 		return linkErr("no repository")
+	}
+	// No remote repository name can hold a ':' — RepoNameFromURL cuts every
+	// URL at the last '/', ':' or '\\', so the name it derives never contains
+	// one. A head that has one and is not a drive letter (handled above) is a
+	// malformed link, and saying so is the difference between a claim about
+	// the LINK and gg's old claim about the machine ("… is not in this
+	// machine's gg history") for something that was never a repository name.
+	if strings.ContainsRune(name, ':') {
+		return linkErr("%q is not a repository name: a name cannot contain \":\" (a Windows checkout is gg:///C:/…)", name)
 	}
 	if strings.HasSuffix(path, "/") || strings.Contains(path, "//") {
 		return linkErr("%q is not a git path", path)
@@ -507,6 +529,13 @@ func parseLinkHint(s string) (LinkHint, error) {
 		return LinkHint{}, fmt.Errorf("%w: %q is not a hint id", ErrLink, id)
 	}
 	return LinkHint{Kind: kind, ID: id}, nil
+}
+
+// isDriveHeadLink reports whether s begins with a Windows drive prefix
+// ("C:"). One letter only: "ab:" is not a drive, and treating it as one would
+// make "gg://host:22/repo" a checkout path.
+func isDriveHeadLink(s string) bool {
+	return len(s) >= 2 && isAlphaLink(s[0]) && s[1] == ':'
 }
 
 func isAlphaLink(c byte) bool {
