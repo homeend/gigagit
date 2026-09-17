@@ -88,12 +88,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
     `@<a>..<b>` change-set. `gg compare --patch gg://repo/b.txt@<sha> HEAD`
     used to print the whole-tree diff of the two commits, so `--patch` and the
     default listing quietly described *different comparisons*: files the user
-    never named appeared in the patch. The message points at dropping
-    `--patch` for the changed-file list, which does answer the question asked.
-    (Rendering the *projected* patch — which hunks of a file a projection
-    contains — is a separate question and is not implemented.) A frozen shelf
-    entry is unaffected: `gg compare --patch shelf:<id> <commit>` renders per
-    member as it always did, and is refused only if a `/<path>` narrows it.
+    never named appeared in the patch. The test is applied per SIDE, so either
+    one is enough to refuse the whole comparison. The message points at
+    dropping `--patch` for the changed-file list, which does answer the
+    question asked. (Rendering the *projected* patch — which hunks of a file a
+    projection contains — is a separate question and is not implemented.) A
+    frozen shelf entry's own side is unaffected: `gg compare --patch
+    shelf:<id> <commit>` renders per member as it always did, and that side is
+    refused only if a `/<path>` narrows it — but a change-set *against* a
+    shelf entry is refused, because the change-set side is the one that
+    loses.
   - **A reversed live pair**, as before: git's diff has no reverse form. The
     message now names the two ways out — drop `--patch`, or order the
     endpoints oldest→newest — instead of only lecturing about ordering.

@@ -123,11 +123,18 @@ func forwardLivePair(left, right model.Endpoint) bool {
 // page and an `gg mcp` tool asking for the same comparison at the same moment
 // is exactly that shape.
 //
-// TestSortedCompareRowsDoesNotMutateItsInput pins this. It is a unit test of
-// the helper, not of the race: the race needs two callers inside one flight,
-// and this repo has no deterministic way to hold a leader until a follower has
-// provably joined `flightGroup.Do` (see the Fix round 2 note in Task 7's
-// report). Pinning the helper's contract is the part that can be proved.
+// TestSortedCompareRowsDoesNotMutateItsInput pins this — a unit test of the
+// helper's contract, which is the cheap half.
+//
+// The SHARING itself is provable too, and fileset_test.go's
+// TestEndpointHasWorktreeResultIsNotShared does it: take an exclusive
+// repogate reservation first, launch the leader, and poll Gate.Queue() until
+// it is parked as a waiter — at that point it is inside flightGroup.Do's fn
+// and still holding the key, so a second caller on the same key can only be a
+// follower. (An earlier version of this comment said no deterministic hook
+// existed. You cannot observe the FOLLOWER joining, but you can observe the
+// LEADER parking, which is enough.) Worth doing for this helper too if
+// anybody touches it.
 func sortedCompareRows(files []model.CommitFile) []model.CommitFile {
 	out := make([]model.CommitFile, len(files))
 	copy(out, files)

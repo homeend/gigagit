@@ -1073,15 +1073,29 @@ wrong answer rather than a raw message: it takes endpoints, so a key set it
 cannot re-derive from one is simply dropped — `gg compare --patch
 gg://repo/b.txt@<sha> HEAD` printed the two commits' whole-tree diff while the
 default listing showed the projection, two different comparisons with nothing
-on screen to say so. `cli.patchLosesTheKeySet` is the exact condition, and it is
-NARROWER than "either side is bounded", because `ComparePatch` has two lanes:
-the SHELF lane re-derives both sets with `EvalEndpoint` and renders per member
-(so `gg compare --patch shelf:<gc'd id> <commit>` answers, and must keep
-answering), while `livePairSpec`'s lane never consults the sets at all. The one
-thing the shelf lane cannot reconstruct is a PROJECTION — `narrowTo` carries the
-endpoint over untouched — which is what `FileSet.Narrowed()` exists to report.
-So: refuse if either side is narrowed, or if a bounded side exists and neither
-endpoint is a shelf. A `TODO(plan 3)` in both files records what closing the
+on screen to say so. The condition is asked **PER SIDE**
+(`cli.sideLosesItsKeySet`), and that is the whole of it: a side survives exactly
+when `EvalEndpoint(fs.Endpoint())` would reproduce its set.
+
+```go
+fs.Narrowed() || (fs.Bounded() && fs.Endpoint().Kind() != model.EndpointShelf)
+```
+
+Unbounded has nothing to lose. A non-narrowed SHELF set survives because
+`ComparePatch`'s shelf lane re-derives both sets with `EvalEndpoint` and renders
+per member (so `gg compare --patch shelf:<gc'd id> <commit>` answers, and must
+keep answering). A NARROWED set never survives, shelf or not, because `narrowTo`
+carries the endpoint over untouched — which is exactly what `FileSet.Narrowed()`
+exists to report, since neither bounded-ness nor kind can see it. Everything
+else bounded loses, above all a PAIR, whose endpoint is commit *b* and not the
+pair (`EvalEndpoint`'s Pair arm), so re-deriving hands back b's whole tree.
+
+**Asking this per PAIR is a bug, and it shipped once.** A first version
+short-circuited on "a shelf is on either side ⇒ `ComparePatch` re-derives both
+sets", which is true of the SHELF side only: `gg compare --patch <pair-link>
+shelf:<id>` then dropped the only file the change-set named and rendered a file
+it never named, reporting `M` where the listing said `A`. The per-side form
+closes it and reproduces every row the pair form got right. A `TODO(plan 3)` in both files records what closing the
 remaining gap needs (a set-taking `ComparePatch` sibling; a patch of a
 projection is a new rendering question, not a refactor).
 

@@ -525,29 +525,40 @@ func TestCompareShelfAgainstTheWorkingTree(t *testing.T) {
 	}
 }
 
+// wantPatchRefusal is the WHOLE sentence --patch prints for a side whose key
+// set it would drop, built once so every assertion below compares against it
+// literally. Substring matching is what let an ungrammatical build ship
+// ("and both sides name names a file set"), so no test here matches a fragment.
+func wantPatchRefusal(clause string) string {
+	return "compare: --patch renders whole endpoints, and " + clause +
+		" a file set (a link with a /<path>, or an <a>..<b> change-set); " +
+		"drop --patch for the changed-file list of exactly those files\n"
+}
+
 // TestComparePatchOfABoundedSideIsRefused: --patch renders whole ENDPOINTS,
-// so it cannot answer a comparison whose key set was narrowed. It used to
-// print the endpoints' whole diff anyway — silently a DIFFERENT comparison
-// from the one the default listing shows, with nothing to say so. The
-// reachable shape is not the exotic one the old TODO described (bounded ×
+// so it cannot answer a comparison whose key set it would have to honour. It
+// used to print the endpoints' whole diff anyway — silently a DIFFERENT
+// comparison from the one the default listing shows, with nothing to say so.
+// The reachable shape is not the exotic one the old TODO described (bounded ×
 // bounded): it is a single-file link, which is the spelling every "copy gg
 // link" button in the product emits.
 //
+// SERIAL (no t.Parallel) because the pair × shelf subtests need
+// XDG_STATE_HOME, which t.Setenv cannot set from a parallel test — the same
+// reason TestCompareShelfAgainstTheWorkingTree above is serial.
+//
 // Rendering a PROJECTED patch stays deferred. Refusing is not that work.
 func TestComparePatchOfABoundedSideIsRefused(t *testing.T) {
-	t.Parallel()
 	dir, c1, c2, _ := linkCompareRepo(t)
 
-	for _, tc := range []struct{ name, link string }{
+	for _, tc := range []struct{ name, link, clause string }{
 		// A single-FILE link: bounded to one path, and the shape a user
 		// actually pastes.
-		{"single-file link", mustLink(t, dir, "--rev", c2, "b.txt")},
+		{"single-file link", mustLink(t, dir, "--rev", c2, "b.txt"), "the left side names"},
 		// A CHANGE-SET link: bounded to the paths c1..c2 touched.
-		{"change-set link", mustLink(t, dir, "--pair", c1+".."+c2)},
+		{"change-set link", mustLink(t, dir, "--pair", c1+".."+c2), "the left side names"},
 	} {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			// The LISTING is the projection, and still answers.
 			code, out, errb := runCLI(t, dir, "compare", tc.link, "HEAD")
 			if code != 0 {
@@ -566,21 +577,85 @@ func TestComparePatchOfABoundedSideIsRefused(t *testing.T) {
 			if out != "" {
 				t.Errorf("stdout must stay empty, got %q", out)
 			}
-			for _, want := range []string{
-				"compare: --patch renders whole endpoints",
-				"drop --patch",
-			} {
-				if !strings.Contains(errb, want) {
-					t.Errorf("stderr = %q, want it to contain %q", errb, want)
-				}
-			}
-			// README.md is the file the user never named. Its appearance was
-			// the bug; it must not appear even in the refusal.
-			if strings.Contains(out, "README.md") {
-				t.Errorf("--patch still renders the whole-tree diff:\n%s", out)
+			if errb != wantPatchRefusal(tc.clause) {
+				t.Errorf("stderr =\n%q\nwant\n%q", errb, wantPatchRefusal(tc.clause))
 			}
 		})
 	}
+
+	// BOTH sides bounded: the message's own grammar, which a substring match
+	// could not see.
+	t.Run("both sides", func(t *testing.T) {
+		pair := mustLink(t, dir, "--pair", c1+".."+c2)
+		file := mustLink(t, dir, "--rev", c2, "b.txt")
+		code, out, errb := runCLI(t, dir, "compare", "--patch", pair, file)
+		if code != 2 {
+			t.Fatalf("exit %d, want 2; stdout %q stderr %q", code, out, errb)
+		}
+		if errb != wantPatchRefusal("both sides name") {
+			t.Errorf("stderr =\n%q\nwant\n%q", errb, wantPatchRefusal("both sides name"))
+		}
+	})
+
+	// pair × shelf, BOTH orders. This is the combination the first fix left
+	// open, and it is the Critical-2 behaviour again rather than a near-miss:
+	// the guard short-circuited on "a shelf is on one side, so ComparePatch
+	// re-derives both sets", which is true of the SHELF side only. A PAIR set
+	// carries commit b as its endpoint (EvalEndpoint's Pair arm), so
+	// re-deriving from it yields b's WHOLE TREE — the change-set's key set is
+	// gone, and the patch reports a file the listing calls A as M while
+	// dropping the only file the change-set named.
+	t.Run("pair against a frozen shelf entry", func(t *testing.T) {
+		sdir := newCLIRepo(t)
+		t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+		// The shelved commit: it touches f.txt and nothing else.
+		writeFile(t, sdir, "f.txt", "base\n")
+		gitc(t, sdir, "add", ".")
+		gitc(t, sdir, "commit", "-m", "base")
+		baseSha := headSha(t, sdir)
+		writeFile(t, sdir, "f.txt", "doomed\n")
+		gitc(t, sdir, "add", ".")
+		gitc(t, sdir, "commit", "-m", "doomed")
+		id := shelfCommitID(t, sdir, headSha(t, sdir))
+		gitc(t, sdir, "reset", "--hard", baseSha)
+		gitc(t, sdir, "reflog", "expire", "--expire=now", "--all")
+		gitc(t, sdir, "gc", "--prune=now")
+
+		// The change-set: it touches other.txt and nothing else.
+		writeFile(t, sdir, "other.txt", "one\n")
+		gitc(t, sdir, "add", ".")
+		gitc(t, sdir, "commit", "-m", "other")
+		pair := mustLink(t, sdir, "--pair", baseSha+".."+headSha(t, sdir))
+		shelf := "shelf:" + id
+
+		// The LISTING is the union of the two key sets, and answers.
+		code, out, errb := runCompare(t, sdir, "compare", pair, shelf)
+		if code != 0 {
+			t.Fatalf("listing: exit %d (stderr %q)", code, errb)
+		}
+		if out != "A\tf.txt\nD\tother.txt\n" {
+			t.Fatalf("listing = %q, want \"A\\tf.txt\\nD\\tother.txt\\n\"", out)
+		}
+
+		for _, tc := range []struct{ name, left, right, clause string }{
+			{"pair on the left", pair, shelf, "the left side names"},
+			{"pair on the right", shelf, pair, "the right side names"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				code, out, errb := runCompare(t, sdir, "compare", "--patch", tc.left, tc.right)
+				if code != 2 {
+					t.Fatalf("exit %d, want 2; stdout %q stderr %q", code, out, errb)
+				}
+				if out != "" {
+					t.Errorf("stdout must stay empty, got %q", out)
+				}
+				if !strings.Contains(errb, wantPatchRefusal(tc.clause)) {
+					t.Errorf("stderr =\n%q\nwant it to contain\n%q", errb, wantPatchRefusal(tc.clause))
+				}
+			})
+		}
+	})
 }
 
 // And the other half of that gap: --patch of a REVERSED live pair is still

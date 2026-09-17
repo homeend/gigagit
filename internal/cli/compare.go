@@ -103,10 +103,10 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 	if *patch {
 		// ComparePatch takes ENDPOINTS, not the file sets resolved above, so a
 		// key set it cannot re-derive from an endpoint is simply LOST: it
-		// would print the two endpoints' whole diff, a different comparison
-		// from the one the default listing shows, with nothing on screen to
-		// say so. patchLosesTheKeySet is the exact condition; refuse there
-		// rather than answer a question the user did not ask.
+		// would describe a different comparison from the one the default
+		// listing shows, with nothing on screen to say so. The condition is
+		// asked PER SIDE (sideLosesItsKeySet) — asking it per pair is what
+		// left `pair × shelf` answering wrongly.
 		//
 		// The reachable shape is not an exotic one. Any link with a /<path>
 		// is bounded, and that is the spelling every "copy gg link" button in
@@ -120,7 +120,7 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 		// (it has no `-R`) and three new argv forms; that one still surfaces
 		// below as ErrComparePatchPair.
 		if patchLosesTheKeySet(left, right) {
-			fmt.Fprintf(stderr, "compare: --patch renders whole endpoints, and %s names a file set "+
+			fmt.Fprintf(stderr, "compare: --patch renders whole endpoints, and %s a file set "+
 				"(a link with a /<path>, or an <a>..<b> change-set); "+
 				"drop --patch for the changed-file list of exactly those files\n",
 				boundedSideName(left, right))
@@ -304,38 +304,53 @@ func compareLinkSet(ctx context.Context, statePath string, svc *domain.Service, 
 	return fs, 0
 }
 
-// patchLosesTheKeySet reports whether handing these two sets to ComparePatch
-// would silently discard a key set — the one thing --patch must never do.
+// sideLosesItsKeySet reports whether ONE side's key set survives the trip
+// through ComparePatch, which takes endpoints and re-derives what it needs
+// from them. The question is per SIDE, not per pair: a set survives exactly
+// when EvalEndpoint(fs.Endpoint()) would reproduce it.
 //
-// ComparePatch has two lanes, and they differ exactly here:
+//   - UNBOUNDED — nothing to lose; its endpoint IS the whole tree.
+//   - SHELF endpoint, not narrowed — ComparePatch's shelf lane re-derives both
+//     sides with EvalEndpoint and renders per member, so this comes back
+//     identical. That is the shipped `gg compare --patch shelf:<gc'd id>`
+//     answer, and it must keep working.
+//   - NARROWED — a projection (a link's /<path>). narrowTo carries the
+//     endpoint over untouched, so re-deriving widens it straight back to the
+//     endpoint's own set. This is why a narrowed SHELF set still loses, and
+//     why FileSet.Narrowed has to exist: bounded-ness and kind cannot see it.
+//   - Any other BOUNDED set — above all a PAIR, whose endpoint is commit *b*
+//     and not the pair (EvalEndpoint's Pair arm), so re-deriving yields b's
+//     whole tree. livePairSpec's lane does not consult the sets at all, and
+//     the shelf lane re-derives from the wrong thing; either way the key set
+//     is gone.
 //
-//   - A SHELF on either side: it re-derives both sets with EvalEndpoint and
-//     renders per member, so a bounded shelf (or its frozen-fallback twin)
-//     comes out right — the shipped `gg compare --patch shelf:<gc'd id>`
-//     answer. The one thing it cannot reconstruct is a PROJECTION, because
-//     narrowTo carries the endpoint over untouched; that is what
-//     FileSet.Narrowed is for.
-//   - Anything else: livePairSpec maps the two endpoints straight to git argv
-//     and the sets are not consulted at all, so ANY bounded side is lost.
-func patchLosesTheKeySet(left, right domain.FileSet) bool {
-	if left.Narrowed() || right.Narrowed() {
-		return true
-	}
-	if left.Endpoint().Kind() == model.EndpointShelf || right.Endpoint().Kind() == model.EndpointShelf {
-		return false
-	}
-	return left.Bounded() || right.Bounded()
+// Asking per pair is what left `pair × shelf` open: "a shelf is on one side,
+// so ComparePatch re-derives both sets" is true of the SHELF side only. The
+// change-set's members vanished from the patch while a file it never named
+// was rendered — the same silent wrong answer this guard exists to stop.
+func sideLosesItsKeySet(fs domain.FileSet) bool {
+	return fs.Narrowed() || (fs.Bounded() && fs.Endpoint().Kind() != model.EndpointShelf)
 }
 
-// boundedSideName names the side to blame, for the refusal message.
+// patchLosesTheKeySet is sideLosesItsKeySet over the pair: --patch may run
+// only when NEITHER side would be quietly widened.
+func patchLosesTheKeySet(left, right domain.FileSet) bool {
+	return sideLosesItsKeySet(left) || sideLosesItsKeySet(right)
+}
+
+// boundedSideName names the side to blame, as a full clause — the verb travels
+// with the subject ("both sides name", not "both sides" + " names"), because
+// splitting them shipped "and both sides name names a file set". Built from
+// the SAME predicate the refusal is built from, so the message cannot name a
+// side the guard did not fire on.
 func boundedSideName(left, right domain.FileSet) string {
-	lb, rb := left.Bounded() || left.Narrowed(), right.Bounded() || right.Narrowed()
+	lb, rb := sideLosesItsKeySet(left), sideLosesItsKeySet(right)
 	switch {
 	case lb && rb:
 		return "both sides name"
 	case lb:
-		return "the left side"
+		return "the left side names"
 	default:
-		return "the right side"
+		return "the right side names"
 	}
 }

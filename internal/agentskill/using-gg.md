@@ -323,10 +323,13 @@ finds the right one here.
   compares against `@staged`/`@worktree` too, which answers "is my shelved work
   already in my tree?". `--patch` prints unified diffs instead of the file
   list; it renders whole endpoints, so it refuses (exit 2, saying so) the two
-  comparisons it cannot describe: a side whose FILE SET it would drop (any
-  link with a `/<path>`, any `@<a>..<b>` change-set) and a reversed live pair.
-  Drop `--patch` for the changed-file list in both cases. A shelf entry is
-  fine — that lane renders per member — unless a `/<path>` narrows it.
+  comparisons it cannot describe: a reversed live pair, and — judged per SIDE,
+  so EITHER one is enough to refuse the whole comparison — a side whose FILE
+  SET it would drop: any link with a `/<path>`, any `@<a>..<b>` change-set. A
+  shelf entry's own side is fine (that lane renders per member) unless a
+  `/<path>` narrows it, but `--patch` of a change-set AGAINST a shelf entry is
+  still refused, because the change-set side is the one that loses. Drop
+  `--patch` for the changed-file list in every case.
 - **Either side of `gg compare` may be a `gg://` link**, mixed freely with the
   rest. A link with a `/<path>`, or a `@<a>..<b>` change-set target, names a
   SET OF FILES; comparing it against a whole tree projects the tree onto that
