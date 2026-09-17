@@ -488,13 +488,54 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 // `gg show <commit>` and `gg diff <rev>` are untouched.
 func isLinkArg(s string) bool { return strings.HasPrefix(s, model.LinkScheme) }
 
-// resolveLinkArg parses and resolves a link positional for a consumer verb.
+// linkShapes is what one verb accepts out of the shapes Task 2 taught
+// domain.ResolveLink to hand back: a branch/tag TIP (@ref:<name>, a single
+// commit — a POINT, the whole tree there) and a CHANGE-SET (@<a>..<b>,
+// BOUNDED — only what it changed). A verb names its own allowance so the
+// refusal is decided in ONE place (ruling R4) rather than six scattered
+// guards that can drift apart.
+type linkShapes struct {
+	Ref  bool // a tip is a single commit, so most verbs take it
+	Pair bool // BOUNDED; a verb needing one commit must refuse it
+}
+
+// resolveLinkArg parses and resolves a link positional for a consumer verb,
+// with no shape check of its own. resolveLinkArgShapes is the gate every
+// consumer actually calls; this stays the plain parse-and-resolve step it
+// wraps, so there is exactly one place that talks to model.ParseLink and
+// domain.ResolveLink for a positional link argument.
 func resolveLinkArg(ctx context.Context, svc *domain.Service, s string) (domain.Resolved, error) {
 	l, err := model.ParseLink(s)
 	if err != nil {
 		return domain.Resolved{}, err
 	}
 	return domain.ResolveLink(ctx, l, linkResolveOpts(RepoStatePath, svc))
+}
+
+// resolveLinkArgShapes is resolveLinkArg plus ruling R4's shape gate: a pair
+// link is BOUNDED (it names what changed between two commits, not one place
+// in the tree), so a verb that needs a single commit to anchor on — a note,
+// `gg show` — must refuse it rather than silently widen it to the whole tree
+// at the pair's newer half (Resolved.Commit/Addr.Commit carry only that
+// half). verb names the caller in the refusal's own prose, so the message
+// reads as the verb's own limit, not the resolver's.
+//
+// There is deliberately no bare, ungated alternative left lying around for a
+// verb to reach for instead: every one of the six current consumers — and
+// any future one — must state its own allowance here, explicitly, at its own
+// call site.
+func resolveLinkArgShapes(ctx context.Context, svc *domain.Service, s string, allow linkShapes, verb string) (domain.Resolved, error) {
+	res, err := resolveLinkArg(ctx, svc, s)
+	if err != nil {
+		return domain.Resolved{}, err
+	}
+	if res.Pair != nil && !allow.Pair {
+		return domain.Resolved{}, fmt.Errorf("%w: a change-set link names what changed between two commits, not one commit to %s; hand it to `gg compare`", model.ErrLink, verb)
+	}
+	if res.Ref != "" && !allow.Ref {
+		return domain.Resolved{}, fmt.Errorf("%w: a branch or tag tip link names a moving point, not one commit to %s", model.ErrLink, verb)
+	}
+	return res, nil
 }
 
 // linkResolveOpts wires the resolver to this process (linknav.Opts): the MRU

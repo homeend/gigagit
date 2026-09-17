@@ -87,7 +87,9 @@ func cmdDiff(svc *domain.Service, dir string, args []string, stdout, stderr io.W
 			return 2
 		}
 		ctx := context.Background()
-		res, err := resolveLinkArg(ctx, svc, rev)
+		// diff opts UP for a pair: unlike show/note/highlight it needs no
+		// single commit to anchor on, only a range to diff (ruling R4).
+		res, err := resolveLinkArgShapes(ctx, svc, rev, linkShapes{Ref: true, Pair: true}, "diff")
 		if err != nil {
 			return linkExit("diff", err, stderr)
 		}

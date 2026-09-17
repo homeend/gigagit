@@ -37,7 +37,10 @@ func cmdShow(svc *domain.Service, dir string, args []string, stdout, stderr io.W
 			fmt.Fprintln(stderr, "show: a gg:// link already names the file; drop the -- <paths>")
 			return 2
 		}
-		res, err := resolveLinkArg(context.Background(), svc, rev)
+		// show keeps the refusing default: it anchors on ONE commit, and a
+		// pair's only single commit (B) is not that commit — it is the
+		// change-set's newer end (ruling R4).
+		res, err := resolveLinkArgShapes(context.Background(), svc, rev, linkShapes{Ref: true}, "show")
 		if err != nil {
 			return linkExit("show", err, stderr)
 		}

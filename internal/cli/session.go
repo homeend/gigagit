@@ -367,7 +367,9 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 			return 2
 		}
 		ctx := context.Background()
-		res, err := resolveLinkArg(ctx, svc, pos[0])
+		// navigate opts UP for a pair: it moves a live session to the place
+		// a link names, and a range is a fine place to land on (ruling R4).
+		res, err := resolveLinkArgShapes(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true}, "navigate")
 		if err != nil {
 			return linkExit("session navigate", err, stderr)
 		}
@@ -637,7 +639,10 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 		}
 		text, linkEnd := splitLinkRange(pos[0])
 		ctx := context.Background()
-		res, err := resolveLinkArg(ctx, svc, text)
+		// highlight add keeps the refusing default: a band anchors on ONE
+		// commit's diff, and a pair's only single commit (B) is not that
+		// commit — it is the change-set's newer end (ruling R4).
+		res, err := resolveLinkArgShapes(ctx, svc, text, linkShapes{Ref: true}, "highlight")
 		if err != nil {
 			return linkExit("session highlight add", err, stderr)
 		}

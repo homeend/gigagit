@@ -55,7 +55,11 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	ctx := context.Background()
-	res, err := resolveLinkArg(ctx, svc, pos[0])
+	// open opts UP for a pair: showing the link to the user means steering
+	// (or launching) at the place it names, and a range is a fine place to
+	// land on (ruling R4) — it is only ANCHORING on one commit that a pair
+	// cannot support.
+	res, err := resolveLinkArgShapes(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true}, "open")
 	if err != nil {
 		return linkExit("open", err, stderr)
 	}
