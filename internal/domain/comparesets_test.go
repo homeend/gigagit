@@ -4,10 +4,12 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/shelf"
 )
 
 // compareFixture is a repo with three commits:
@@ -183,6 +185,102 @@ func TestCompareSetsMatrix(t *testing.T) {
 	})
 }
 
+// liveArmFixture stands up the state both live-unbounded subtests below need,
+// in one repo:
+//
+//	commit A  : x.txt = "shelved", dropped.txt = "gone"   → SHELVED (the tar's
+//	            members are exactly {x.txt, dropped.txt})
+//	then      : dropped.txt is `git rm`'d (gone from BOTH the index and disk)
+//	            x.txt is staged as "staged" and then left as "worktree" on disk
+//
+// So against either live endpoint the shelf's two members answer differently:
+// x.txt is present with differing bytes (⇒ M) and dropped.txt is absent (⇒ D,
+// the shelf being the left/older side).
+type liveArmFixture struct {
+	dir string
+	svc *Service
+	ep  model.Endpoint // the shelf endpoint (the BOUNDED side)
+}
+
+func newLiveArmFixture(t *testing.T) liveArmFixture {
+	t.Helper()
+	dir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+
+	sha := writeAndCommit(t, dir, "A", map[string]string{
+		"x.txt":       "shelved\n",
+		"dropped.txt": "gone\n",
+	})
+	entry, err := svc.ShelfAddCommit(ctx, sha, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gittest.Run(t, dir, "rm", "-f", "dropped.txt")
+	if err := os.WriteFile(filepath.Join(dir, "x.txt"), []byte("staged\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, dir, "add", "x.txt")
+	if err := os.WriteFile(filepath.Join(dir, "x.txt"), []byte("worktree\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	return liveArmFixture{dir: dir, svc: svc, ep: mustShelfEndpoint(t, entry.ID)}
+}
+
+// TestCompareSetsLiveUnboundedArms covers the two unbounded kinds the matrix
+// above cannot reach: the WORKING TREE (endpointHas stats the disk, sameBytes
+// reads it through SourceUnstaged) and the INDEX (endpointHas runs a
+// pathspec-limited ls-files, sameBytes reads `git show :path`).
+//
+// These lanes are newly live. The old shelfCommitCompare listed the live side
+// with TreeFiles(right.Hash()), and Hash() is "" for both of these kinds, so
+// the pair errored out before it could ever be answered.
+//
+// The bounded side is a SHELF rather than a pair endpoint deliberately: both
+// drive the identical compareProjected code, but the shelf is the pairing the
+// surface growth actually exposed, and routing it through the public
+// CompareFiles door also proves shelfCompareFiles' new adapter reaches the
+// lane end to end.
+//
+// Each case asserts the EXACT status, never just "a row is present": a
+// presence probe that wrongly answered "absent" for everything would turn
+// x.txt's M into a D and still produce two rows.
+func TestCompareSetsLiveUnboundedArms(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		live func() model.Endpoint
+	}{
+		{"bounded x unbounded-worktree", model.WorkTreeEndpoint},
+		{"bounded x unbounded-index", model.IndexEndpoint},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newLiveArmFixture(t)
+			got, err := f.svc.CompareFiles(context.Background(), f.ep, tc.live())
+			if err != nil {
+				t.Fatalf("CompareFiles(shelf, %s): %v", tc.name, err)
+			}
+			st := statuses(got)
+			// Present on the live side with different bytes ⇒ M.
+			if st["x.txt"] != "M" {
+				t.Errorf("x.txt = %q, want M (present live, differing bytes); full result %v", st["x.txt"], st)
+			}
+			// Absent from the live side ⇒ D, the shelf being the left side.
+			if st["dropped.txt"] != "D" {
+				t.Errorf("dropped.txt = %q, want D (absent live); full result %v", st["dropped.txt"], st)
+			}
+			// Keyed on the BOUNDED side only: README.md is in every tree and
+			// on disk, but it is not a shelf member and must not appear.
+			if len(st) != 2 {
+				t.Fatalf("result = %v, want exactly the shelf's 2 members", st)
+			}
+		})
+	}
+}
+
 // DISJOINT bounded sets are a result, never an error (spec §6). Disjoint does
 // NOT mean empty: every member of one side is absent from the other, so the
 // result is all A and D. (Two EMPTY sets are the separate, degenerate case,
@@ -247,7 +345,14 @@ func TestComparePatchRefusesAnUnsupportedPair(t *testing.T) {
 	t.Parallel()
 	f := newCompareFixture(t)
 	pair := mustTestPair(t, f.c1, f.c2)
-	if _, err := f.svc.ComparePatch(context.Background(), pair, model.WorkTreeEndpoint()); err == nil {
+	_, err := f.svc.ComparePatch(context.Background(), pair, model.WorkTreeEndpoint())
+	if err == nil {
 		t.Fatal("a pair endpoint must not reach the live patch lane silently")
+	}
+	// Assert the WORDING, not merely that something failed: any unrelated
+	// ComparePatch error would satisfy a bare err != nil and the refusal this
+	// test exists for could quietly stop happening.
+	if !strings.Contains(err.Error(), "unsupported endpoint pair") {
+		t.Fatalf("ComparePatch error = %v, want livePairSpec's \"unsupported endpoint pair\" refusal", err)
 	}
 }

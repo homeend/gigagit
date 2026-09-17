@@ -91,8 +91,19 @@ func (s *Service) compareBoundedPair(ctx context.Context, left, right FileSet) (
 		}
 	}
 	for _, p := range rightPaths {
-		if !inLeft[p] && right.Has(p) {
-			out = append(out, model.CommitFile{Status: "A", Path: p})
+		if inLeft[p] {
+			continue // already decided by the left pass above
+		}
+		// Routed through compareOne like every other path, even though the
+		// left side provably has no bytes here: compareOne's doc promises it
+		// is the ONLY place a status is decided, and an inline "A" would make
+		// that promise false and the two lanes free to drift.
+		row, err := s.compareOne(ctx, left, right, p, false, right.Has(p))
+		if err != nil {
+			return nil, err
+		}
+		if row.Status != "" {
+			out = append(out, row)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
