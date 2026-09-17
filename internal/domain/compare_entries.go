@@ -3,6 +3,7 @@ package domain
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,16 @@ import (
 
 	"github.com/homeend/gigagit/internal/model"
 )
+
+// ErrComparePatchPair marks the one comparison ComparePatch cannot render: a
+// pair of endpoints that is not one of git's four forward live forms. It is a
+// gap in the PATCH lane only — CompareSets answers every pair — and it exists
+// as a sentinel so a frontend refuses in its own words rather than forwarding
+// livePairSpec's internal prose to a user.
+//
+// TODO(plan 3): model.DiffSpec has no `-R`, so removing this needs a Reverse
+// flag on the spec (and a set-taking ComparePatch for the bounded lanes).
+var ErrComparePatchPair = errors.New("this pair cannot be rendered as a patch")
 
 // CommitGoneError reports a commit-entry compare side whose sha no longer
 // resolves and which has no frozen fallback (a bookmark stores no blobs).
@@ -174,6 +185,11 @@ func isBinaryContent(data []byte) bool {
 // forward and inverted (see CompareSets' unbounded × unbounded arm), and a
 // bounded × bounded pair renders the endpoints' whole diff rather than the
 // projection. `gg compare --patch` carries a TODO(plan 3) naming that gap.
+//
+// The refusal wraps ErrComparePatchPair so a frontend can recognise it without
+// matching on prose and say so in its OWN words: this message names a Go
+// function and two raw enum ordinals, and a user's terminal is the wrong place
+// for either.
 func livePairSpec(left, right model.Endpoint) (model.DiffSpec, error) {
 	switch {
 	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointCommit:
@@ -185,7 +201,7 @@ func livePairSpec(left, right model.Endpoint) (model.DiffSpec, error) {
 	case left.Kind() == model.EndpointIndex && right.Kind() == model.EndpointWorkTree:
 		return model.DiffSpec{}, nil // bare `git diff` is already index → worktree
 	}
-	return model.DiffSpec{}, fmt.Errorf("livePairSpec: unsupported endpoint pair %d → %d", left.Kind(), right.Kind())
+	return model.DiffSpec{}, fmt.Errorf("%w: livePairSpec: unsupported endpoint pair %d → %d", ErrComparePatchPair, left.Kind(), right.Kind())
 }
 
 // RelabelNoIndexDiff strips the temp-path noise from git diff --no-index

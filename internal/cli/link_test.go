@@ -488,25 +488,38 @@ func TestLinkRefAndPairFlags(t *testing.T) {
 		}
 	})
 
+	// Each refusal asserts its EXACT exit code, not merely non-zero. The split
+	// is the shipped convention and it is a deliberate ruling here: an argument
+	// the GRAMMAR cannot carry is bad input (ErrLink ⇒ 2), while a name git
+	// does not have is a lookup that failed (⇒ 1, the same code `--rev` has
+	// always used for an unknown revision). A table that only checked
+	// "non-zero" would pin neither.
 	t.Run("refusals", func(t *testing.T) {
 		t.Parallel()
 		for _, tc := range []struct {
 			name, want string
+			exit       int
 			args       []string
 		}{
-			{"three dots go to --preview", "use --preview", []string{"--pair", c1 + "..." + c2}},
-			{"no dots at all", "--pair takes <a>..<b>", []string{"--pair", c1}},
-			{"a missing half", "needs both halves", []string{"--pair", c1 + ".."}},
-			{"an unknown half", "unknown revision", []string{"--pair", c1 + "..no-such-rev"}},
-			{"an unknown ref", "unknown revision", []string{"--ref", "no-such-branch"}},
-			{"an inexpressible ref name", "cannot be expressed in a gg link", []string{"--ref", "we:ird"}},
+			// Malformed ARGUMENTS — usage, exit 2.
+			{"three dots go to --preview", "use --preview", 2, []string{"--pair", c1 + "..." + c2}},
+			{"no dots at all", "--pair takes <a>..<b>", 2, []string{"--pair", c1}},
+			{"a missing half", "needs both halves", 2, []string{"--pair", c1 + ".."}},
+			{"an empty first half", "needs both halves", 2, []string{"--pair", ".." + c2}},
+			{"an inexpressible ref name", "cannot be expressed in a gg link", 2, []string{"--ref", "we:ird"}},
+			// Well-formed, but this repository does not have the name — a
+			// failed lookup, exit 1, exactly as `--rev no-such-rev` reports.
+			{"an unknown half", "unknown revision", 1, []string{"--pair", c1 + "..no-such-rev"}},
+			{"an unknown second half", "unknown revision", 1, []string{"--pair", "no-such-rev.." + c2}},
+			{"an unknown ref", "unknown revision", 1, []string{"--ref", "no-such-branch"}},
+			{"an unknown rev (the shipped precedent)", "unknown revision", 1, []string{"--rev", "no-such-rev"}},
 		} {
 			tc := tc
 			t.Run(tc.name, func(t *testing.T) {
 				t.Parallel()
 				code, out, errb := runLinkCLI(t, dir, tc.args...)
-				if code == 0 {
-					t.Fatalf("gg link %v: exit 0, want a refusal (stdout %q)", tc.args, out)
+				if code != tc.exit {
+					t.Fatalf("gg link %v: exit = %d, want %d (stdout %q, stderr %q)", tc.args, code, tc.exit, out, errb)
 				}
 				if !strings.Contains(errb, tc.want) {
 					t.Errorf("gg link %v: stderr = %q, want it to contain %q", tc.args, errb, tc.want)

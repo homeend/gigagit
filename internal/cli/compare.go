@@ -107,13 +107,27 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 		// livePairSpec's own refusal instead of being inverted the way
 		// CompareSets inverts it.
 		//
-		// TODO(plan 3): give ComparePatch a set-taking sibling so --patch and
-		// the default listing describe the same comparison. Left out of this
-		// task deliberately — a patch of a projection is a new rendering
-		// question (which hunks of a file the projection even contains), not a
-		// signature change.
+		// TODO(plan 3): two changes, neither a mere signature change.
+		// (1) model.DiffSpec has no `-R`, so inverting a live pair the way
+		// CompareSets does needs a Reverse flag on the spec and three new argv
+		// forms. (2) A set-taking ComparePatch sibling, so --patch and the
+		// default listing describe the same comparison — a patch of a
+		// PROJECTION is a new rendering question (which hunks of a file the
+		// projection even contains), not a refactor.
 		diff, err := svc.ComparePatch(context.Background(), left.Endpoint(), right.Endpoint())
 		if err != nil {
+			// The one gap gets gg's own words. domain's refusal names a Go
+			// function and two raw enum ordinals ("livePairSpec: unsupported
+			// endpoint pair 1 → 3"), and a user's terminal is the wrong place
+			// for either — the message it REPLACED ("order endpoints
+			// oldest→newest…") at least told the user what to type.
+			if errors.Is(err, domain.ErrComparePatchPair) {
+				fmt.Fprintf(stderr, "compare: --patch cannot render %s → %s yet; "+
+					"drop --patch for the changed-file list, or order the endpoints oldest→newest "+
+					"(a commit, then @staged, then @worktree)\n",
+					left.Endpoint().Display(), right.Endpoint().Display())
+				return 2
+			}
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -495,6 +496,82 @@ func TestCompareSetsIdenticalLiveSidesIsEmpty(t *testing.T) {
 		}
 		if len(got) != 0 {
 			t.Errorf("CompareSets(%s, itself) = %v, want no rows", ep.Display(), got)
+		}
+	}
+}
+
+// "Results are sorted by path" is this function's documented contract, and the
+// FORWARD point↔point arm used to be the one lane that broke it: it handed back
+// CompareFiles' slice verbatim, which is git's order with untracked files
+// appended. The consequence was visible — `gg compare main @worktree` printed
+// "M z.txt" before "A a.txt" while the reverse direction of the same pair came
+// out sorted.
+//
+// The untracked file is named to sort FIRST while git appends it LAST, so an
+// unsorted lane cannot pass by luck.
+func TestCompareSetsForwardLaneSortsByPath(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+	if err := os.WriteFile(filepath.Join(f.dir, "a.txt"), []byte("dirtied\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.dir, "AAA-untracked.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.svc.CompareSets(ctx, f.eval(t, mustTestCommit(t, f.c3)), f.eval(t, model.WorkTreeEndpoint()))
+	if err != nil {
+		t.Fatalf("CompareSets(c3, @worktree): %v", err)
+	}
+	if !sort.SliceIsSorted(got, func(i, j int) bool { return got[i].Path < got[j].Path }) {
+		var paths []string
+		for _, r := range got {
+			paths = append(paths, r.Path)
+		}
+		t.Fatalf("forward lane returned %v, want sorted by path", paths)
+	}
+	st := statuses(got)
+	if st["AAA-untracked.txt"] != "A" || st["a.txt"] != "M" {
+		t.Errorf("result = %v, want the untracked file A and a.txt M", st)
+	}
+}
+
+// The forward lane must not SORT IN PLACE either: CompareFiles' slice is served
+// from the singleflight-coalesced query cache and shared with every concurrent
+// caller, so reordering it would reorder somebody else's result. This repo has
+// already shipped one bug of exactly that shape (a caller sorting a slice
+// domain still owned), which is why FileSet.Paths returns a copy.
+func TestCompareSetsDoesNotSortTheCachedSliceInPlace(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	ctx := context.Background()
+	if err := os.WriteFile(filepath.Join(f.dir, "a.txt"), []byte("dirtied\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.dir, "AAA-untracked.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	left, right := mustTestCommit(t, f.c3), model.WorkTreeEndpoint()
+	// Prime the cache, and remember the order the raw query hands out.
+	raw, err := f.svc.CompareFiles(ctx, left, right)
+	if err != nil {
+		t.Fatalf("CompareFiles: %v", err)
+	}
+	before := make([]string, len(raw))
+	for i, r := range raw {
+		before[i] = r.Path
+	}
+	if _, err := f.svc.CompareSets(ctx, f.eval(t, left), f.eval(t, right)); err != nil {
+		t.Fatalf("CompareSets: %v", err)
+	}
+	after, err := f.svc.CompareFiles(ctx, left, right)
+	if err != nil {
+		t.Fatalf("CompareFiles (again): %v", err)
+	}
+	for i, r := range after {
+		if r.Path != before[i] {
+			t.Fatalf("CompareFiles' own order changed after CompareSets ran: %v → %v (the cached slice was sorted in place)",
+				before, after)
 		}
 	}
 }

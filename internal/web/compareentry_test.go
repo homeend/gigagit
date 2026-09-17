@@ -421,6 +421,12 @@ func TestCompareSideRefusesAKindTheWireCannotSpell(t *testing.T) {
 		{"pair", must(model.PairEndpoint(shaA, shaB))},
 		{"worktree", model.WorkTreeEndpoint()},
 		{"index", model.IndexEndpoint()},
+		// The UNSET endpoint belongs in this table above all: both arms format
+		// their error, and model.Endpoint.Display() PANICS on EndpointInvalid.
+		// internal/web has no recover() middleware, so formatting with Display
+		// here dropped the client's connection instead of answering 500 — the
+		// one kind the arm exists to report was the one kind it crashed on.
+		{"unset", model.Endpoint{}},
 	} {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {

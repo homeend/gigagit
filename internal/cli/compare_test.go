@@ -559,18 +559,42 @@ func TestComparePatchOfABoundedSideIsTheEndpointsDiff(t *testing.T) {
 }
 
 // And the other half of that gap: --patch of a REVERSED live pair is still
-// refused, because livePairSpec maps endpoints and only walks forward. The
-// default listing inverts it (TestCompareReversedPairNowCompares); --patch
-// does not. Exit 1, not 2: nothing about the arguments was wrong.
-func TestComparePatchOfAReversedPairIsStillRefused(t *testing.T) {
+// refused, because livePairSpec maps endpoints and only walks forward while
+// model.DiffSpec has no `-R`. The default listing inverts it
+// (TestCompareReversedPairNowCompares); --patch does not.
+//
+// IT IS REFUSED IN GG'S OWN VOICE. domain's error names a Go function and two
+// raw enum ordinals ("livePairSpec: unsupported endpoint pair 1 → 3"); the
+// message it replaced ("order endpoints oldest→newest…") at least told the
+// user what to type. Exit 2, like the refusal it replaced: the arguments are
+// the thing gg is asking the user to change.
+func TestComparePatchOfAReversedPairIsRefusedInGGsOwnVoice(t *testing.T) {
 	t.Parallel()
 	dir := newCLIRepo(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirtied\n"), 0o644)
 	code, out, errb := runCLI(t, dir, "compare", "--patch", "@worktree", "HEAD")
-	if code != 1 {
-		t.Fatalf("compare --patch @worktree HEAD: exit %d, want 1; stdout %q stderr %q", code, out, errb)
+	if code != 2 {
+		t.Fatalf("compare --patch @worktree HEAD: exit %d, want 2; stdout %q stderr %q", code, out, errb)
 	}
-	if !strings.Contains(errb, "unsupported endpoint pair") {
-		t.Errorf("stderr = %q, want livePairSpec's refusal", errb)
+	for _, want := range []string{
+		"compare: --patch cannot render",
+		"Working Tree", // the endpoints named as a user sees them
+		"drop --patch", // the way out that still answers the question
+		"order the endpoints oldest→newest",
+	} {
+		if !strings.Contains(errb, want) {
+			t.Errorf("stderr = %q, want it to contain %q", errb, want)
+		}
+	}
+	// The whole point: no Go identifier and no raw enum ordinal on the user's
+	// terminal. The listing path is held to the same standard in
+	// TestCompareReversedPairNowCompares.
+	for _, leak := range []string{"livePairSpec", "DiffTreeFiles", "unsupported endpoint pair"} {
+		if strings.Contains(errb, leak) {
+			t.Errorf("stderr leaks %q: %s", leak, errb)
+		}
+	}
+	if out != "" {
+		t.Errorf("stdout must stay empty, got %q", out)
 	}
 }

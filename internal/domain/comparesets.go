@@ -50,7 +50,21 @@ func (s *Service) CompareSets(ctx context.Context, left, right FileSet) ([]model
 			return nil, nil
 		}
 		if forwardLivePair(left.Endpoint(), right.Endpoint()) {
-			return s.CompareFiles(ctx, left.Endpoint(), right.Endpoint())
+			files, err := s.CompareFiles(ctx, left.Endpoint(), right.Endpoint())
+			if err != nil {
+				return nil, err
+			}
+			// SORTED, like every other lane and like this function's own doc
+			// promises. CompareFiles hands back git's order with untracked
+			// files appended, so without this `gg compare main @worktree`
+			// printed "M z.txt" before "A a.txt" while the reverse direction of
+			// the same pair came out sorted — one comparison, two orders.
+			//
+			// sortedCompareRows COPIES: CompareFiles' slice is served from the
+			// singleflight-coalesced query cache and is shared with every other
+			// caller, so sorting it in place would reorder somebody else's
+			// result. (invertCompareRows copies for the same reason.)
+			return sortedCompareRows(files), nil
 		}
 		// git's own diff only walks FORWARD (a commit, then the index, then the
 		// working tree — DiffTreeFiles' four supported pairs), so the reverse of
@@ -97,6 +111,17 @@ func forwardLivePair(left, right model.Endpoint) bool {
 		return true
 	}
 	return false
+}
+
+// sortedCompareRows returns a path-sorted COPY. The copy is the point: the
+// input comes from CompareFiles, whose result is served from the
+// singleflight-coalesced query cache and shared with every concurrent caller,
+// so an in-place sort would reorder a slice this function does not own.
+func sortedCompareRows(files []model.CommitFile) []model.CommitFile {
+	out := make([]model.CommitFile, len(files))
+	copy(out, files)
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
 }
 
 // invertCompareRows turns a forward diff listing round, so a reversed pair

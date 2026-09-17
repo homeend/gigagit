@@ -303,8 +303,13 @@ func commitEntrySide(svc *domain.Service, ep model.Endpoint, label string) (entr
 		// parseEntrySide, and a ref or a pair has no spec in this lane's
 		// vocabulary at all — the whole-tree entry compare is defined over
 		// stored commit entries.
+		//
+		// %d, NOT ep.Display(): Display has no EndpointInvalid arm and PANICS on
+		// the zero endpoint, and internal/web has no recover() middleware — so
+		// the one kind this arm exists to report would have dropped the client's
+		// connection instead of answering 500.
 		return entrySide{}, http.StatusInternalServerError,
-			fmt.Errorf("compare side: endpoint %s cannot be addressed as a stored commit entry", ep.Display())
+			fmt.Errorf("compare side: endpoint kind %d cannot be addressed as a stored commit entry", ep.Kind())
 	default:
 		return entrySide{}, http.StatusInternalServerError,
 			fmt.Errorf("compare side: unknown endpoint kind %d", ep.Kind())
@@ -465,8 +470,9 @@ func compareSideWire(ep model.Endpoint, spec commitEntrySpec) (entryCompareSide,
 	case model.EndpointWorkTree, model.EndpointIndex, model.EndpointRef, model.EndpointPair, model.EndpointInvalid:
 		// This lane compares two STORED COMMIT ENTRIES, so only a commit or its
 		// frozen shelf stand-in can appear. A live state, a moving tip or a
-		// change-set has no spelling here.
-		return entryCompareSide{}, "", fmt.Errorf("compare side: endpoint %s cannot be addressed as a stored commit entry", ep.Display())
+		// change-set has no spelling here. %d, not Display(), for the reason
+		// commitEntrySide gives: Display panics on the zero endpoint.
+		return entryCompareSide{}, "", fmt.Errorf("compare side: endpoint kind %d cannot be addressed as a stored commit entry", ep.Kind())
 	default:
 		return entryCompareSide{}, "", fmt.Errorf("compare side: unknown endpoint kind %d", ep.Kind())
 	}
