@@ -59,6 +59,25 @@ func TestSteerCommandForLink(t *testing.T) {
 	}
 }
 
+// TestSteerCommandForLinkAcceptsALineLessFile pins the OTHER producer: the
+// --at startup gate (gg open with no live session launches the TUI on the
+// link). It refused l.Line < 1, so a line-less link launched gg nowhere in
+// particular instead of on the file.
+func TestSteerCommandForLinkAcceptsALineLessFile(t *testing.T) {
+	t.Parallel()
+	c, ok := steerCommandForLink(model.Link{
+		Repo: model.LinkRepo{Abs: "/repo"}, Path: "a.txt",
+		Target: model.LinkTarget{State: model.StateUnstaged},
+		Side:   model.NoteSideNew,
+	})
+	if !ok {
+		t.Fatal("steerCommandForLink refused a line-less file link")
+	}
+	if c.File != "a.txt" || c.Line != nil {
+		t.Fatalf("command = %+v, want File a.txt and no Line", c)
+	}
+}
+
 // TestStartAtReadyPredicate exercises startAtReady() directly, field by
 // field: it must require startAtPending, m.ready (some data has arrived —
 // guards the window before the startup fan-out has even begun), opsIdle

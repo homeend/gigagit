@@ -19,13 +19,10 @@ import (
 	"github.com/homeend/gigagit/internal/steer"
 )
 
-// The two link-shape refusals a navigate can hit. They are CALLER mistakes
+// The one link-shape refusal a navigate can hit. It is a CALLER mistake
 // (exit 2 on the CLI), unlike a git failure (exit 1), and every consumer maps
-// them the same way.
-var (
-	ErrRepoOnly = errors.New("that link names a repository, not a place in it")
-	ErrNoLine   = errors.New("that link names a file but no line; add :<line> or #<hunk>")
-)
+// it the same way.
+var ErrRepoOnly = errors.New("that link names a repository, not a place in it")
 
 // Opts wires the resolver to this process: the MRU registry, the cwd's
 // service, and the steer-presence probe.
@@ -123,10 +120,14 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 			}
 			line = steer.Line{Side: string(side), No: rng[0]}
 		}
-		if line.No < 1 {
-			return steer.Command{}, ErrNoLine
+		// A link with no line is a link to the FILE: the consumer opens its diff
+		// and leaves the cursor where it was (steer.Command.Line's contract). It
+		// used to be ErrNoLine, which made `gg open` refuse the very link
+		// `gg link <path>` prints — the producer and the navigator disagreeing
+		// about what a valid link is.
+		if line.No > 0 {
+			c.Line = &line
 		}
-		c.Line = &line
 		return c, nil
 	}
 	if res.Addr.Path == "" {
@@ -150,10 +151,14 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 		}
 		line = l
 	}
-	if line.No < 1 {
-		return steer.Command{}, ErrNoLine
+	// A link with no line is a link to the FILE: the consumer opens its diff
+	// and leaves the cursor where it was (steer.Command.Line's contract). It
+	// used to be ErrNoLine, which made `gg open` refuse the very link
+	// `gg link <path>` prints — the producer and the navigator disagreeing
+	// about what a valid link is.
+	if line.No > 0 {
+		c.Line = &line
 	}
-	c.Line = &line
 	return c, nil
 }
 

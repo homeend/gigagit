@@ -70,11 +70,16 @@ type Line struct {
 // side + line — the CLI has already resolved --hunk N into a line number, so
 // there is exactly one landing path.
 type Command struct {
-	ID      string   `json:"id"`
-	Cmd     string   `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear"
-	File    string   `json:"file,omitempty"` // repo-relative, git slash form
-	Target  *Target  `json:"target,omitempty"`
-	Commit  string   `json:"commit,omitempty"` // navigate: reveal this commit, no file
+	ID     string  `json:"id"`
+	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear"
+	File   string  `json:"file,omitempty"` // repo-relative, git slash form
+	Target *Target `json:"target,omitempty"`
+	Commit string  `json:"commit,omitempty"` // navigate: reveal this commit, no file
+	// Line is where to land inside the file. NIL means "open File and leave
+	// the cursor alone" — the shape `gg link <path>` produces, which every
+	// consumer already honours (tui.steerNavigateStatusFile,
+	// tui.drainPendingLoad, live.js steerNavigate). A navigate naming a file
+	// is never refused for want of a line.
 	Line    *Line    `json:"line,omitempty"`
 	Step    string   `json:"step,omitempty"`    // "next_note" | "prev_note"
 	Sources []string `json:"sources,omitempty"` // reload: "notes" | "status" | "all"

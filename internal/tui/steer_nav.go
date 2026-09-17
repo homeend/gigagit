@@ -536,11 +536,10 @@ func steerCommandForLink(l model.Link) (steer.Command, bool) {
 		if l.Path == "" {
 			return c, true
 		}
-		if l.Line < 1 {
-			return steer.Command{}, false
-		}
 		c.File = l.Path
-		c.Line = &steer.Line{Side: "new", No: l.Line} // a preview has no old side
+		if l.Line > 0 {
+			c.Line = &steer.Line{Side: "new", No: l.Line} // a preview has no old side
+		}
 		return c, true
 	}
 	if l.Path == "" {
@@ -561,15 +560,14 @@ func steerCommandForLink(l model.Link) (steer.Command, bool) {
 		}
 		t.State, t.Commit = "commit", l.Target.Commit
 	}
-	if l.Line < 1 {
-		return steer.Command{}, false
-	}
-	side := "new"
-	if l.Side == model.NoteSideOld {
-		side = "old"
-	}
 	c.File, c.Target = l.Path, t
-	c.Line = &steer.Line{Side: side, No: l.Line}
+	if l.Line > 0 {
+		side := "new"
+		if l.Side == model.NoteSideOld {
+			side = "old"
+		}
+		c.Line = &steer.Line{Side: side, No: l.Line}
+	}
 	return c, true
 }
 

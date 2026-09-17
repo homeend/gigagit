@@ -316,13 +316,10 @@ func sessionOpenViewAt(path string) string {
 	return strings.Join(parts, " / ")
 }
 
-// The two link-shape refusals a navigate can hit. They are CALLER mistakes
+// The one link-shape refusal a navigate can hit. It is a CALLER mistake
 // (exit 2), unlike a git failure (exit 1), and both `gg session navigate` and
-// `gg open` map them the same way.
-var (
-	errNavLinkRepoOnly = linknav.ErrRepoOnly
-	errNavLinkNoLine   = linknav.ErrNoLine
-)
+// `gg open` map it the same way.
+var errNavLinkRepoOnly = linknav.ErrRepoOnly
 
 // navigateCommandFor builds the navigate command a RESOLVED link names
 // (linknav.Command): the single builder `gg session navigate <link>`,
@@ -333,12 +330,12 @@ func navigateCommandFor(ctx context.Context, svc *domain.Service, res domain.Res
 	return linknav.Command(ctx, svc, res)
 }
 
-// navExit maps navigateCommandFor's error onto an exit code: 2 for the two
-// link-shape refusals and a preview anchor with no new side (a caller
+// navExit maps navigateCommandFor's error onto an exit code: 2 for the
+// link-shape refusal and a preview anchor with no new side (a caller
 // mistake, same surface as `gg note add <preview link>#N`), 1 for everything
 // else (a git failure).
 func navExit(verb string, err error, stderr io.Writer) int {
-	if errors.Is(err, errNavLinkRepoOnly) || errors.Is(err, errNavLinkNoLine) || errors.Is(err, domain.ErrPreviewOldSide) {
+	if errors.Is(err, errNavLinkRepoOnly) || errors.Is(err, domain.ErrPreviewOldSide) {
 		fmt.Fprintf(stderr, "%s: %v\n", verb, err)
 		return 2
 	}

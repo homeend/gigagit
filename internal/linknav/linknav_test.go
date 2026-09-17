@@ -80,10 +80,12 @@ func TestCommandShapes(t *testing.T) {
 		t.Errorf("AtLink = %+v (%s)", at, at.String())
 	}
 
-	// A file link with no line and no hunk is refused.
+	// A file link with no line and no hunk opens the file and leaves the
+	// cursor alone: it is a link to the FILE, not a refusal.
 	nl := resolve(t, svc, "gg://"+abs(dir)+"/a.txt")
-	if _, err := Command(ctx, svc, nl); !errors.Is(err, ErrNoLine) {
-		t.Errorf("no-line link: err = %v, want ErrNoLine", err)
+	c, err = Command(ctx, svc, nl)
+	if err != nil || c.Cmd != "navigate" || c.File != "a.txt" || c.Line != nil {
+		t.Fatalf("no-line link: %+v, %v", c, err)
 	}
 
 	// A #hunk link is lowered to the FIRST line of the hunk's whole new-side
@@ -113,6 +115,56 @@ func TestCommandShapes(t *testing.T) {
 	}
 	if at := AtLink(cm, c); at.Target.State != model.StateCommitted || at.Target.Commit != sha {
 		t.Errorf("AtLink(commit) = %+v", at.Target)
+	}
+}
+
+// TestFileLinkWithNoLineOpensTheFile pins R1: `gg link <path>` emits a link
+// with no line, and Command must turn it into a navigate that names the file
+// and leaves the cursor alone — not the old ErrNoLine refusal, which made
+// `gg open` reject a link `gg link` had just produced.
+func TestFileLinkWithNoLineOpensTheFile(t *testing.T) {
+	t.Parallel()
+	dir, svc := repo(t)
+	ctx := context.Background()
+	res := resolve(t, svc, model.Link{
+		Repo: model.LinkRepo{Abs: abs(dir)}, Path: "a.txt",
+		Target: model.LinkTarget{State: model.StateUnstaged},
+		Side:   model.NoteSideNew,
+	}.String())
+	c, err := Command(ctx, svc, res)
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+	if c.Cmd != "navigate" || c.File != "a.txt" {
+		t.Fatalf("command = %+v, want a navigate naming a.txt", c)
+	}
+	if c.Line != nil {
+		t.Errorf("Line = %+v, want nil (open the file, do not move the cursor)", c.Line)
+	}
+	if c.Target == nil || c.Target.State != "unstaged" {
+		t.Errorf("target = %+v, want the working tree", c.Target)
+	}
+
+	// The commit-target twin: `gg link <path> --rev <sha>` emits an
+	// @<sha> target with a path and no line, the other shape the user hit.
+	sha, err := svc.RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res = resolve(t, svc, model.Link{
+		Repo: model.LinkRepo{Abs: abs(dir)}, Path: "a.txt",
+		Target: model.LinkTarget{State: model.StateCommitted, Commit: sha},
+		Side:   model.NoteSideNew,
+	}.String())
+	c, err = Command(ctx, svc, res)
+	if err != nil {
+		t.Fatalf("Command (commit target): %v", err)
+	}
+	if c.Cmd != "navigate" || c.File != "a.txt" || c.Line != nil {
+		t.Fatalf("commit-target command = %+v, want a navigate naming a.txt with no line", c)
+	}
+	if c.Target == nil || c.Target.State != "commit" || c.Target.Commit != sha {
+		t.Errorf("target = %+v, want commit %s", c.Target, sha)
 	}
 }
 
