@@ -107,6 +107,7 @@ type Model struct {
 	identity            model.Identity  // last-read git user identity (refreshed after SetIdentity); the identityView popup loads its own fresh copy
 
 	mark             *markState      // the m-key mark; nil = none (see mark.go)
+	blameRecent      blameRecent     // blame view's d-key "recent lines" highlight; on the Model so it survives closing blame (session-scoped)
 	pairProbe        *pairProbeReq   // in-flight branch-pair fast-forward probe; nil = none
 	fileMarks        map[string]bool // multi-selected Status file paths (keyed by path)
 	commitCompareSet map[string]bool // commits toggled into the ◉ compare selection (keyed by hash)

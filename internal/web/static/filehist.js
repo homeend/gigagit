@@ -1,7 +1,7 @@
 // filehist.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, esc, getJSON, state } from "./core.js";
-import { closeLayer, pushLayer } from "./layers.js";
+import { closeLayer, openPrompt, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { rev } from "./review.js";
@@ -229,7 +229,7 @@ async function openFileBlame(path, rev) {
     opLine("blame failed: " + (e.message || e), true);
     return;
   }
-  $("blame-title").textContent = "blame — " + path + (rev ? " @ " + rev.slice(0, 8) : " (working tree)");
+  blameBase = "blame — " + path + (rev ? " @ " + rev.slice(0, 8) : " (working tree)");
   const lines = body.lines || [];
   let html = "";
   let prev = null;
@@ -241,17 +241,151 @@ async function openFileBlame(path, rev) {
       : l.hash
         ? `<span class="bsha" data-h="${esc(l.hash)}" title="${esc(l.summary)}">${esc(l.short)}</span> ${esc(l.author)} · ${versionWhen(l.time)}`
         : `<span class="bwork">working</span>`;
+    // Every row carries its author time (unix seconds) and an uncommitted
+    // mark, so the recent-lines highlight can be re-applied without a refetch.
     html +=
-      `<div class="bline${first ? " bfirst" : ""}">` +
+      `<div class="bline${first ? " bfirst" : ""}" data-t="${Number(l.time) || 0}"${l.hash ? "" : ' data-u="1"'}>` +
       `<span class="bgut">${gut}</span>` +
       `<span class="bno">${l.line}</span>` +
       `<span class="btext">${renderCell(l.text, null, l.tok, "") || " "}</span></div>`;
   }
   $("blame-body").innerHTML = html || `<div class="notice">(empty file)</div>`;
-  // w cycles the shared long-line mode; everything else (esc included) is
-  // left to the stack's default handling.
-  pushLayer("blame", $("blame"), { onKey: (e) => { if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) { cycleTextMode(); return true; } return false; } });
+  applyBlameRecent();
+  // w cycles the shared long-line mode, d/D drive the recent-lines highlight;
+  // everything else (esc included) is left to the stack's default handling.
+  pushLayer("blame", $("blame"), { onKey: blameKey });
   $("blame-body").scrollTop = 0;
+}
+
+
+// --- recent lines ------------------------------------------------------------
+// d asks for a time span and tints every line whose commit is younger than
+// it (or uncommitted — the newest change of all); D turns the tint off. The
+// span lives in state.blameRecent for the session only (not /api/uistate),
+// so closing and reopening blame keeps the highlight, a restart does not.
+// `now` is the wall clock, NOT the blamed revision's date: blaming an old
+// commit may highlight nothing, by design.
+
+// --- time span (pure; guarded against Go) ---
+// A port of internal/timespan: parseSpan(s) → whole minutes, or null when
+// the text is not a span; formatSpan(mins) → the canonical "1d3h5m" badge.
+// Grammar: tokens <digits><w|d|h|m>, optional whitespace, any order, summed;
+// a bare number is days; m is MINUTES (not months); units are case-blind.
+// Errors: empty input, a token without digits, an unknown unit, junk after a
+// unit ("1mo", "1.5d", "1x"), a zero total. Pinned to timespan.Table by
+// timespanjs_test.go — change both sides or neither.
+const SPAN_UNITS = { w: 7 * 24 * 60, d: 24 * 60, h: 60, m: 1 };
+
+function parseSpan(s) {
+  s = String(s == null ? "" : s).trim();
+  if (s === "") return null;
+  let total = 0;
+  let i = 0;
+  const isDigit = (c) => c >= "0" && c <= "9";
+  const isWS = (c) => c === " " || c === "\t";
+  while (i < s.length) {
+    while (i < s.length && isWS(s[i])) i++;
+    if (i >= s.length) break;
+    let j = i;
+    while (j < s.length && isDigit(s[j])) j++;
+    if (j === i) return null; // a unit with no number, or junk
+    const n = Number(s.slice(i, j));
+    let unit = SPAN_UNITS.d; // a bare number is days
+    if (j < s.length) {
+      const u = SPAN_UNITS[s[j].toLowerCase()];
+      if (u !== undefined) {
+        unit = u;
+        j++;
+      }
+    }
+    // The token must end here: whitespace, another number, or the end.
+    if (j < s.length && !isWS(s[j]) && !isDigit(s[j])) return null;
+    // Go refuses a token past 1<<62 ns / unit; 76861433 is that bound in
+    // minutes, and floor-of-floor matches Go's integer division per unit.
+    if (n > Math.floor(76861433 / unit)) return null;
+    total += n * unit;
+    if (!Number.isSafeInteger(total)) return null;
+    i = j;
+  }
+  if (total <= 0) return null;
+  return total;
+}
+
+function formatSpan(mins) {
+  let m = Math.max(0, Math.floor(Number(mins) || 0));
+  const days = Math.floor(m / (24 * 60));
+  m -= days * 24 * 60;
+  const hours = Math.floor(m / 60);
+  m -= hours * 60;
+  let out = "";
+  if (days > 0) out += days + "d";
+  if (hours > 0) out += hours + "h";
+  if (m > 0 || out === "") out += m + "m";
+  return out;
+}
+// --- end time span ---
+
+const BLAME_RECENT_TITLE = "Highlight lines changed within the last…";
+const BLAME_RECENT_HINT = "e.g. 7d, 1d 3h 5m, 36h, 90m";
+
+// blameBase is the overlay title without the ≤span badge; applyBlameRecent
+// rebuilds the title from it so toggling never stacks badges.
+let blameBase = "";
+
+function applyBlameRecent() {
+  const br = state.blameRecent;
+  const on = !!(br && br.on && br.span > 0);
+  const now = Date.now();
+  for (const row of document.querySelectorAll("#blame-body .bline")) {
+    const t = Number(row.dataset.t) || 0;
+    const u = row.dataset.u === "1";
+    // Boundary inclusive: a line exactly `span` old is still recent.
+    row.classList.toggle("brecent", on && (u || now - t * 1000 <= br.span * 60000));
+  }
+  $("blame-title").textContent = blameBase + (on ? " · ≤" + formatSpan(br.span) : "");
+}
+
+// openBlameRecentPrompt asks for the span; a bad answer re-opens the prompt
+// prefilled with the offending text and the reason in the title, so the
+// error reads above the field and the status line both (the overlay's
+// backdrop dims the status line).
+function openBlameRecentPrompt(value, err) {
+  openPrompt({
+    title: err ? BLAME_RECENT_TITLE + " — " + err : BLAME_RECENT_TITLE,
+    value,
+    placeholder: BLAME_RECENT_HINT,
+    onSubmit: (text) => {
+      const mins = parseSpan(text);
+      if (mins === null) {
+        const msg = "not a time span: “" + text + "” (" + BLAME_RECENT_HINT + ")";
+        opLine(msg, true);
+        openBlameRecentPrompt(text, msg);
+        return;
+      }
+      state.blameRecent = { on: true, span: mins, last: text };
+      applyBlameRecent();
+    },
+  });
+}
+
+function blameKey(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (e.key === "w") {
+    cycleTextMode();
+    return true;
+  }
+  if (e.key === "d") {
+    e.preventDefault(); // the letter must never land in the prompt it opens
+    openBlameRecentPrompt(state.blameRecent.last);
+    return true;
+  }
+  if (e.key === "D") {
+    e.preventDefault();
+    state.blameRecent.on = false;
+    applyBlameRecent();
+    return true;
+  }
+  return false;
 }
 
 
@@ -266,4 +400,4 @@ $("blame").addEventListener("click", (e) => {
   if (e.target.id === "blame") closeLayer("blame"); // backdrop closes, box does not
 });
 
-export { closeHistory, hist, histGen, historyKey, openFileBlame, openFileHistory, openHistoryDiff, renderHistoryList };
+export { applyBlameRecent, closeHistory, formatSpan, hist, histGen, historyKey, openFileBlame, openFileHistory, openHistoryDiff, parseSpan, renderHistoryList };

@@ -54,6 +54,9 @@ const state = {
   lastDiff: null,
   diffPartial: false,      // the f toggle: true = changed lines only (a stored preference, /api/uistate)
   textMode: "wrap",        // the w cycle: how long lines show — scroll | wrap | cutoff (a stored preference, /api/uistate)
+  // The blame overlay's d/D recent-lines highlight: span in whole minutes,
+  // last = the text the prompt prefills. Session-only (never /api/uistate).
+  blameRecent: { on: false, span: 0, last: "7d" },
   diffFolds: new Set(),    // fold start indexes the reader unfolded in the open diff (reset per diff)
   diffCtx: null, // {path, rev, state} — the file the diff pane currently shows, else null
   notes: [],                 // resolved notes for the open diff (GET /api/notes)

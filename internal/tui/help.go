@@ -305,6 +305,8 @@ func helpContent() []contentLine {
 		r("e", i18n.T("open the blamed file (at this revision) in your external editor (read-only)")),
 		r("/ @", i18n.T("find text forward / backward (enter keeps it, esc cancels)")),
 		r("] [", i18n.T("next / previous hit (wraps around)")),
+		r("d", i18n.T("highlight lines changed within a time span (7d, 1d 3h 5m, 36h, 90m; uncommitted lines always count); press again to change the span")),
+		r("D", i18n.T("turn the recent-lines highlight off (the span is remembered)")),
 		r(".", i18n.T("Copy line / Copy selected lines, plus the file's path, name and commit id")),
 		r("esc/b", i18n.T("backs out one thing at a time — a search you are typing, then a line selection, then a kept query — and only then goes back; b always goes back")),
 		r("ctrl+c", i18n.T("quit")),

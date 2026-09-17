@@ -143,7 +143,8 @@ func TestTextModeIsWiredEverywhere(t *testing.T) {
 		{"keys.js", `cycleTextMode(); // the TUI's ctrl+w`, "the w key"},
 		{"keys.js", `case "textmode": cycleTextMode(); break;`, "the footer chip acts"},
 		{"filehist.js", "if (e.key === \"w\" && !e.ctrlKey && !e.metaKey && !e.altKey) {\n    cycleTextMode();", "w inside the history overlay"},
-		{"filehist.js", `pushLayer("blame", $("blame"), { onKey: (e) => { if (e.key === "w"`, "w inside the blame overlay"},
+		{"filehist.js", `pushLayer("blame", $("blame"), { onKey: blameKey })`, "the blame overlay routes keys through blameKey"},
+		{"filehist.js", "if (e.key === \"w\") {\n    cycleTextMode();", "w inside the blame overlay (blameKey)"},
 		{"app.js", `applyTextMode(ui.text_mode)`, "boot restores the stored mode"},
 		{"uistate.js", `text_mode: "wrap"`, "saveUI's base must carry the field — the endpoint REPLACES the record"},
 	}

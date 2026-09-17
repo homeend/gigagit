@@ -144,4 +144,5 @@ var Table = []Case{
 	{In: "1x", Err: true},
 	{In: "1.5d", Err: true},
 	{In: "1mo", Err: true},
+	{In: "60000d", Err: true}, // past the overflow guard (~164 years)
 }

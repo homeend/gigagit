@@ -1482,3 +1482,37 @@ with NO filter active and NO `∗` marker present (`main
 skips whatever elision unselected rows get. The `∗` marker widens such a row
 by two columns, which makes an already-overflowing row overflow further, but
 does not itself cause the overflow.
+
+### Blame recent-lines highlight (`internal/timespan`, spec `docs/superpowers/specs/2026-09-17-blame-recent-highlight-design.md`)
+
+- **What:** in the blame view `d` opens a one-field span popup; enter turns the
+  highlight ON with that span, `D` turns it off (no dialog), `d` again edits.
+  A line is recent when `now − authorTime ≤ span` OR its hash is `""`
+  (uncommitted = the newest change). `now` is wall clock at render, NOT the
+  blamed rev's date — blaming an old commit may highlight nothing, by design.
+- **Grammar** (`timespan.Parse`/`Format`): tokens `<digits><w|d|h|m>`,
+  whitespace optional, any order, tokens sum; a bare number is DAYS; `m` is
+  MINUTES (branchfilter.ParseAge's `m` is months — a different field, never
+  shared). Errors: empty, zero total, unknown unit, token without digits,
+  junk after a unit (`1mo`, `1.5d`). `Format` prints `1d3h5m` (largest unit
+  first, zero parts dropped, weeks never printed, `0m` for zero). The web
+  port (`filehist.js` parseSpan/formatSpan) is pinned to the exported
+  `timespan.Table` by `internal/web/timespanjs_test.go`.
+- **State:** `Model.blameRecent{on, span, last}` (TUI) / `state.blameRecent`
+  (web) — session-scoped, survives closing/reopening blame, not persisted
+  (ruling: not in uistate or prompts.toml unless asked). `last` seeds the
+  dialog (initially `7d`).
+- **Painting (TUI):** `st().blameRecentStyle(base)` = the row style for a
+  recent row — a background over gutter AND code from theme role
+  `blame_recent_bg` (Dark `#1F3A26`, Light `#DFF5E3`); with the role empty
+  (Terminal theme) the row goes BOLD instead (bold survives syntax colours; a
+  guessed tint would clash with the host palette). Precedence: cursor row
+  (`selectedRow` reverse video) wins whole-row, the selection stripe wins on
+  the code half, then the tint, then plain. A background-only style keeps
+  the `cls` token foregrounds (only a REVERSE style discards cls).
+- **Advertising:** footer hint gains `[d] recent`; header badge `≤<span>`
+  right-aligned like the search badge (`≤7d · 3/12` when both). Web: `d`/`D`
+  in the blame layer's `onKey` beside `w`; `.bline` rows stamped `data-t` /
+  `data-u`; `applyBlameRecent()` toggles `.brecent` without a refetch; the
+  title carries ` · ≤7d`; `#blame-hint` names the keys.
+- **Keys ruling:** `d`/`D`, not `h`/`H` — `h` means history in the diff view.
