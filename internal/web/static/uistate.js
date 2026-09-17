@@ -47,11 +47,13 @@ function saveUI(patch) {
   const base = loaded || {
     sections: [],
     sidebar_hidden: false,
+    files_hidden: false,
     sidebar_width: 0,
     files_width: 0,
     graph: "svg",
     sorts: {},
     diff_view: "full",
+    text_mode: "wrap",
   };
   loaded = { ...base, ...patch, saved: true };
   state.ui = loaded;

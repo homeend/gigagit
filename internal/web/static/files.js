@@ -52,6 +52,46 @@ function drillOut() {
 $("back-btn").addEventListener("click", drillOut);
 
 
+// applyFilesHidden is the shared "put the file list in this state" step,
+// used by the » control and by the layout restored from the server at boot.
+// Minimized, the list folds to a strip holding only the restore control (the
+// CSS `nofiles` variant) and the flexible pane takes the width — which
+// changes the diff's side-by-side/unified verdict and the commit list's
+// column, so whichever is on screen is redrawn for the new width.
+function applyFilesHidden(hidden) {
+  state.filesHidden = hidden;
+  $("panes").classList.toggle("nofiles", hidden);
+  const b = $("files-min");
+  b.textContent = hidden ? "«" : "»";
+  b.title = hidden ? "show the file list" : "hide the file list — more room for the diff";
+  b.setAttribute("aria-expanded", hidden ? "false" : "true");
+  if (state.layout === "diff") rerenderDiffKeepingPlace();
+  else renderCommits();
+}
+
+
+// toggleFilesHidden is the user-facing flip. The choice is a per-machine
+// preference (/api/uistate — the random port makes localStorage useless).
+function toggleFilesHidden() {
+  if (state.layout === "list") return; // no file list on the commit-list screen to fold (the sidebar toggle's rule)
+  applyFilesHidden(!state.filesHidden);
+  saveUI({ files_hidden: state.filesHidden });
+}
+
+
+$("files-min").addEventListener("click", toggleFilesHidden);
+
+
+registerHelp({
+  key: "» · hide the file list",
+  html:
+    "fold the file list (the right column) to a slim strip so the diff — or the commit list — takes " +
+    "its width; <b>«</b> on the strip brings it back. The <b>toggle file list</b> row in the ☰ menu's UI " +
+    "group is the same switch, and the choice is remembered per machine. esc and the footer's " +
+    "<b>back</b> chip still step out of the stage while the list is folded",
+});
+
+
 // --- files + diff panes ---
 
 // Staged layout (the GitKraken flow): "list" = the commit list alone, full
@@ -1150,7 +1190,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
       html +=
         `<tr class="${r.kind}${hunkCls(r)}${curCls(nside, no)}${attnCls(nside, no)}"${hunkAttr(r)}${anchor(nside, no)}>` +
         `<td class="no ${side}">${no || ""}</td>` +
-        `<td class="side ${side}">${renderCell(text, spans, toks, side)}</td></tr>` +
+        `<td class="side ${side}"><span class="pan">${renderCell(text, spans, toks, side)}</span></td></tr>` +
         after(2, [nside, no]);
     }
   } else if (paneWidth < 950) {
@@ -1168,20 +1208,20 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
           `<tr class="same${curCls("new", r.right_no)}${attnClsBoth(r)}"${anchor("new", r.right_no)}>` +
           `<td class="no l">${r.left_no || ""}</td>` +
           `<td class="no r">${r.right_no || ""}</td>` +
-          `<td class="side">${renderCell(r.right, null, r.right_tok, "r")}</td></tr>` +
+          `<td class="side"><span class="pan">${renderCell(r.right, null, r.right_tok, "r")}</span></td></tr>` +
           after(3, ["new", r.right_no], ["old", r.left_no]);
       } else {
         if (r.kind !== "add")
           html +=
             `<tr class="del${hunkCls(r)}${curCls("old", r.left_no)}${attnCls("old", r.left_no)}"${hunkAttr(r)}${anchor("old", r.left_no)}>` +
             `<td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
-            `<td class="side l">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</td></tr>` +
+            `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</span></td></tr>` +
             after(3, ["old", r.left_no]);
         if (r.kind !== "del")
           html +=
             `<tr class="add${hunkCls(r)}${curCls("new", r.right_no)}${attnCls("new", r.right_no)}"${hunkAttr(r)}${anchor("new", r.right_no)}>` +
             `<td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
-            `<td class="side r">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</td></tr>` +
+            `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</span></td></tr>` +
             after(3, ["new", r.right_no]);
       }
     }
@@ -1203,9 +1243,9 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
       html +=
         `<tr class="${r.kind}${hunkCls(r)}${curClsBoth(r)}${attnClsBoth(r)}"${hunkAttr(r)}${anchor(aside, ano)}${both}>` +
         `<td class="no l">${r.left_no || ""}</td>` +
-        `<td class="side l">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</td>` +
+        `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</span></td>` +
         `<td class="no r">${r.right_no || ""}</td>` +
-        `<td class="side r">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</td></tr>` +
+        `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</span></td></tr>` +
         after(4, ["new", r.right_no], ["old", r.left_no]);
     }
   }
@@ -1222,6 +1262,7 @@ function renderDiff(d) {
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   state.diffBlockIdx = -1;
   $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth, true);
+  mountPanBars($("diff-body"), $("diff-hbars"));
   updateDiffNav();
 }
 
@@ -1313,14 +1354,133 @@ function applyDiffView(mode) {
 // choice is a per-machine preference (/api/uistate — the random port makes
 // localStorage useless), and applies to every diff opened from now on, the
 // file-history overlay included.
-function toggleDiffView() {
-  applyDiffView(state.diffPartial ? "full" : "changed");
-  saveUI({ diff_view: state.diffPartial ? "changed" : "full" });
-  rerenderDiffKeepingPlace();
+// keepScroll: an unfold-all flip (the last fold row clicked) redraws the same
+// rows and must not throw the reader to the nearest change block.
+//
+// Flipping ON starts from every run folded, whatever the reader had opened
+// before flipping off: the folds are the changes-only VIEW's state, and
+// off→on is a fresh entry into it, not a resume.
+function toggleDiffView(keepScroll = false) {
+  const on = !state.diffPartial;
+  applyDiffView(on ? "changed" : "full");
+  if (on) state.diffFolds = new Set();
+  saveUI({ diff_view: on ? "changed" : "full" });
+  rerenderDiffKeepingPlace(keepScroll);
 }
 
 
 $("diff-view").addEventListener("click", toggleDiffView);
+
+
+// Long-line display mode — the TUI's ctrl+w (scroll → wrap → cutoff, in that
+// order). ONE mode for the diff pane, the history overlay and blame, kept as
+// a class on <body> so the three viewers' CSS follows it without a re-render;
+// the diff pane alone re-anchors on the change block in view, since a wrap
+// ↔ scroll flip changes every row's height. Wrap is the default: the web
+// always wrapped, so a stored layout without the field keeps its look.
+const TEXT_MODES = ["scroll", "wrap", "cutoff"];
+
+function applyTextMode(mode) {
+  if (!TEXT_MODES.includes(mode)) mode = "wrap";
+  state.textMode = mode;
+  document.body.classList.toggle("lm-scroll", mode === "scroll");
+  document.body.classList.toggle("lm-cut", mode === "cutoff");
+  const b = $("diff-mode");
+  b.textContent = mode;
+  b.title = `long lines: ${mode} — w cycles scroll → wrap → cutoff`;
+  const chip = document.querySelector('#foot button[data-act="textmode"]');
+  if (chip) chip.textContent = "w " + mode;
+}
+
+
+// cycleTextMode is the user-facing step (key w, the toolbar chip, the footer
+// chip). The choice is a per-machine preference (/api/uistate).
+function cycleTextMode() {
+  applyTextMode(TEXT_MODES[(TEXT_MODES.indexOf(state.textMode) + 1) % TEXT_MODES.length]);
+  saveUI({ text_mode: state.textMode });
+  if (state.layout === "diff") rerenderDiffKeepingPlace();
+  else mountPanBars($("diff-body"), $("diff-hbars"));
+}
+
+
+// --- scroll mode: one horizontal scrollbar PER SIDE ---
+// The table keeps the pane's width in every mode; in scroll mode each side
+// cell hides its overflow and its content (the .pan span) is shifted by a
+// CSS variable on the host — --pan-l for the old side, --pan-r for the new.
+// A bar per side, pinned to the pane's bottom edge, drives its variable: the
+// two halves scroll independently, so a long line on the right never drags
+// the left half off screen (one table-wide scroll did exactly that). A
+// single-column layout (unified, pure add/delete) shows one bar driving
+// both variables. shift+wheel over a side pans that side's bar.
+//
+// host: the element holding the table (and the variables); bars: the .hbars
+// element — a static sibling for the diff pane, appended per render for the
+// history overlay. host._pan remembers the offsets across a re-render (a
+// notes refresh, a resize) so the reader's place survives.
+function mountPanBars(host, bars) {
+  const table = host.querySelector("table.diff");
+  if (state.textMode !== "scroll" || !table) {
+    bars.classList.add("hidden");
+    host.style.removeProperty("--pan-l");
+    host.style.removeProperty("--pan-r");
+    return;
+  }
+  const twoCol = table.querySelectorAll("colgroup col").length === 4;
+  const widest = (sel) => {
+    let w = 0;
+    for (const p of host.querySelectorAll(sel)) if (p.offsetWidth > w) w = p.offsetWidth;
+    return w;
+  };
+  const cell = host.querySelector("td.side");
+  const cellW = cell ? cell.clientWidth - 12 : 0; // minus the cell padding
+  const pan = host._pan || (host._pan = { l: 0, r: 0 });
+  bars.classList.remove("hidden");
+  bars.innerHTML = twoCol
+    ? `<div class="hbar" data-side="l"><div></div></div><div class="hbar" data-side="r"><div></div></div>`
+    : `<div class="hbar" data-side="lr"><div></div></div>`;
+  for (const bar of bars.querySelectorAll(".hbar")) {
+    const side = bar.dataset.side;
+    const w = side === "l" ? widest("td.side.l > .pan") : side === "r" ? widest("td.side.r > .pan") : widest("td.side > .pan");
+    bar.firstElementChild.style.width = Math.max(w - cellW, 0) + bar.clientWidth + "px";
+    const apply = () => {
+      const x = bar.scrollLeft;
+      if (side !== "r") { pan.l = x; host.style.setProperty("--pan-l", x + "px"); }
+      if (side !== "l") { pan.r = x; host.style.setProperty("--pan-r", x + "px"); }
+    };
+    bar.addEventListener("scroll", apply);
+    bar.scrollLeft = side === "r" ? pan.r : pan.l;
+    apply();
+  }
+  if (!host._panWheel) {
+    host._panWheel = true;
+    host.addEventListener("wheel", (e) => {
+      if (state.textMode !== "scroll") return;
+      const dx = e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX;
+      if (!dx) return;
+      const td = e.target.closest && e.target.closest("td.side");
+      if (!td) return;
+      const want = td.classList.contains("l") ? "l" : "r";
+      const bar = bars.querySelector(`.hbar[data-side="${want}"]`) || bars.querySelector(".hbar");
+      if (!bar) return;
+      bar.scrollLeft += dx;
+      e.preventDefault();
+    }, { passive: false });
+  }
+}
+
+
+$("diff-mode").addEventListener("click", cycleTextMode);
+
+
+registerHelp({
+  key: "w · long lines",
+  html:
+    "cycle how lines wider than the pane are shown — <b>scroll</b> (each side gets its own " +
+    "scrollbar at the pane's bottom edge and pans on its own; shift+wheel over a side pans it), <b>wrap</b> (the default) or <b>cutoff</b> (one line per row, " +
+    "a trailing …) — the TUI's ctrl+w. The toolbar chip beside <b>changes only</b> names the current " +
+    "mode and is the same switch; it applies to the diff, the file-history overlay and blame alike, " +
+    "and is remembered per machine",
+});
 
 
 // A click on a fold row unfolds that run (and only that run) until the next
@@ -1330,6 +1490,9 @@ $("diff-body").addEventListener("click", (e) => {
   if (!tr || !state.lastDiff) return;
   state.diffFolds.add(Number(tr.dataset.fold));
   rerenderDiffKeepingPlace(true);
+  // The last run opened: what is on screen IS the full file, so the chip
+  // says so — and the preference follows, exactly as a click on it would.
+  if (!$("diff-body").querySelector("tr.fold")) toggleDiffView(true);
 });
 
 
@@ -1339,8 +1502,9 @@ registerHelp({
     "toggle the diff between the <b>full file</b> and <b>changed lines only</b> — each change with three " +
     "lines of context, every other run folded to a <i>⋯ N unchanged lines</i> row (click it to unfold " +
     "that run). The <b>changes only</b> button in the diff toolbar is the same switch; the choice is " +
-    "remembered per machine and the file-history overlay follows it. Rows carrying a review note or an " +
-    "attention band never fold away",
+    "remembered per machine and the file-history overlay follows it. Unfolding the last run flips the " +
+    "switch off (the whole file is on screen); flipping it on again starts with every run folded. Rows " +
+    "carrying a review note or an attention band never fold away",
 });
 
 
@@ -2649,4 +2813,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };

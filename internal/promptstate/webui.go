@@ -12,6 +12,9 @@ type WebUI struct {
 	Sections []string `toml:"sections"`
 	// SidebarHidden is the whole-sidebar toggle (the b key).
 	SidebarHidden bool `toml:"sidebar_hidden"`
+	// FilesHidden is the file-list minimize control (the » button on the
+	// list's back bar): the list folds to a strip so the diff gets the room.
+	FilesHidden bool `toml:"files_hidden,omitempty"`
 	// SidebarWidth / FilesWidth are the dragged pane widths in CSS pixels;
 	// 0 means "never dragged, use the default".
 	SidebarWidth int `toml:"sidebar_width"`
@@ -25,6 +28,10 @@ type WebUI struct {
 	// DiffView is the diff pane's view mode — the TUI's f toggle: "changed"
 	// shows changed lines only (folded context), "" / "full" the whole file.
 	DiffView string `toml:"diff_view,omitempty"`
+	// TextMode is how the diff pane, the history overlay and blame show lines
+	// wider than their pane — the TUI's ctrl+w: "wrap" (the default), "scroll"
+	// (horizontal scrollbar) or "cutoff" (one line, trailing …).
+	TextMode string `toml:"text_mode,omitempty"`
 }
 
 // WebUIState returns the stored layout and whether anything was ever stored.

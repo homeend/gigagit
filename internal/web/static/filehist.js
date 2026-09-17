@@ -1,12 +1,12 @@
 // filehist.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, esc, getJSON } from "./core.js";
+import { $, esc, getJSON, state } from "./core.js";
 import { closeLayer, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { rev } from "./review.js";
 import { openCommitByHash } from "./commits.js";
-import { diffHTML, renderCell, toggleDiffView } from "./files.js";
+import { cycleTextMode, diffHTML, mountPanBars, renderCell, toggleDiffView } from "./files.js";
 
 // --- file history overlay ----------------------------------------------------
 // A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
@@ -63,8 +63,14 @@ function historyKey(e) {
     e.preventDefault();
     return true;
   }
+  if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    cycleTextMode(); // the shared long-line mode; CSS on <body> redraws this overlay
+    renderHistoryDiff(); // …and the per-side scrollbars are (un)mounted
+    return true;
+  }
   if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     toggleDiffView(); // the shared preference flips; this overlay redraws itself
+    if (state.diffPartial) hist.folds = new Set(); // on = a fresh entry: every run folded
     renderHistoryDiff();
     return true;
   }
@@ -120,7 +126,12 @@ async function openHistoryDiff(i) {
 // fold set, so unfolding here never touches the diff behind it.
 function renderHistoryDiff() {
   if (!hist || !hist.diff) return;
-  $("history-diff").innerHTML = diffHTML(hist.diff, $("history-diff").clientWidth, false, hist.folds);
+  const host = $("history-diff");
+  host.innerHTML = diffHTML(hist.diff, host.clientWidth, false, hist.folds);
+  const bars = document.createElement("div");
+  bars.className = "hbars hidden";
+  host.appendChild(bars); // inside the scroll container so `sticky; bottom: 0` pins it
+  mountPanBars(host, bars);
 }
 
 
@@ -129,6 +140,9 @@ $("history-diff").addEventListener("click", (e) => {
   if (!tr || !hist || !hist.diff) return;
   hist.folds.add(Number(tr.dataset.fold));
   renderHistoryDiff();
+  // The last run opened: the overlay shows the full file, so the shared
+  // switch flips off (and the main pane behind it follows, as on any f).
+  if (!$("history-diff").querySelector("tr.fold")) toggleDiffView(true);
 });
 
 
@@ -182,7 +196,9 @@ async function openFileBlame(path, rev) {
       `<span class="btext">${renderCell(l.text, null, l.tok, "") || " "}</span></div>`;
   }
   $("blame-body").innerHTML = html || `<div class="notice">(empty file)</div>`;
-  pushLayer("blame", $("blame"), {}); // no onKey: the stack's default esc-closes applies
+  // w cycles the shared long-line mode; everything else (esc included) is
+  // left to the stack's default handling.
+  pushLayer("blame", $("blame"), { onKey: (e) => { if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) { cycleTextMode(); return true; } return false; } });
   $("blame-body").scrollTop = 0;
 }
 
