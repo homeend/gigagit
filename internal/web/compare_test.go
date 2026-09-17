@@ -118,6 +118,78 @@ func TestCompareBranchesShortAbbrev(t *testing.T) {
 	}
 }
 
+// TestCompareResolvesTagAndRemoteNamesToFullShas is the review-round-1 fix:
+// the web's steerNavigate pair arm posts NAMES (ruling R2), and those names
+// may be a tag or a remote-tracking branch, not only a local branch
+// (model.LinkPair admits either a ref name or a sha per half). Under a
+// short core.abbrev, /api/branches and /api/tags hand the CLIENT abbreviated
+// rows (%(objectname:short)) that fall below CommitEndpoint's 7-char floor —
+// exactly like TestCompareBranchesShortAbbrev above, but for the two arms
+// the plain lane used to refuse outright ("a tag or a raw sha is not a
+// local branch"). compareNamedEndpoint must resolve both to FULL shas
+// itself, the same rule branchTipEndpoint already applies to a branch.
+func TestCompareResolvesTagAndRemoteNamesToFullShas(t *testing.T) {
+	t.Parallel()
+	dir := compareRepo(t)
+	gitRun(t, dir, "config", "core.abbrev", "4")
+	gitRun(t, dir, "tag", "-a", "v1.0", "-m", "v1.0", "side")
+	gitRun(t, dir, "tag", "v-lw", "side") // lightweight: no -a, no ^{commit} peel needed
+	gitRun(t, dir, "update-ref", "refs/remotes/origin/side", "side")
+	ts := serve(t, New(domain.Open(dir)))
+
+	wantA, wantSide := gitRun(t, dir, "rev-parse", "main"), gitRun(t, dir, "rev-parse", "side")
+
+	t.Run("annotated tag", func(t *testing.T) {
+		t.Parallel()
+		var body compareResp
+		if code := getJSON(t, ts, "/api/compare?a=main&b=v1.0", &body); code != http.StatusOK {
+			t.Fatalf("code = %d", code)
+		}
+		if body.AHash != wantA || body.BHash != wantSide {
+			t.Fatalf("hashes = %q / %q, want the full tips %q / %q", body.AHash, body.BHash, wantA, wantSide)
+		}
+		if len(body.AHash) < 7 || len(body.BHash) < 7 {
+			t.Fatalf("hashes = %q / %q, want FULL shas, not the abbreviated core.abbrev=4 rows", body.AHash, body.BHash)
+		}
+	})
+	// A lightweight tag's ref already IS the commit — this proves the
+	// refs/tags/<name>^{commit} peel really is a no-op there, not just an
+	// untested claim in compareNamedEndpoint's doc comment.
+	t.Run("lightweight tag", func(t *testing.T) {
+		t.Parallel()
+		var body compareResp
+		if code := getJSON(t, ts, "/api/compare?a=main&b=v-lw", &body); code != http.StatusOK {
+			t.Fatalf("code = %d", code)
+		}
+		if body.AHash != wantA || body.BHash != wantSide {
+			t.Fatalf("hashes = %q / %q, want the full tips %q / %q", body.AHash, body.BHash, wantA, wantSide)
+		}
+	})
+	t.Run("remote", func(t *testing.T) {
+		t.Parallel()
+		var body compareResp
+		if code := getJSON(t, ts, "/api/compare?a=main&b="+url.QueryEscape("origin/side"), &body); code != http.StatusOK {
+			t.Fatalf("code = %d", code)
+		}
+		if body.AHash != wantA || body.BHash != wantSide {
+			t.Fatalf("hashes = %q / %q, want the full tips %q / %q", body.AHash, body.BHash, wantA, wantSide)
+		}
+	})
+}
+
+// TestCompareStillRefusesAnUnknownName is the regression the review round
+// asked for: widening the plain lane's allowlist to tags and remotes must
+// not turn it into "resolve any name" — a name that is none of
+// branch/tag/remote stays a 404, never a silently empty compare.
+func TestCompareStillRefusesAnUnknownName(t *testing.T) {
+	t.Parallel()
+	dir := compareRepo(t)
+	ts := serve(t, New(domain.Open(dir)))
+	if code := getJSON(t, ts, "/api/compare?a=main&b=nope-at-all", nil); code != http.StatusNotFound {
+		t.Fatalf("code = %d, want 404", code)
+	}
+}
+
 // The per-file diff of a compare row must read the two BRANCH TIPS, not a
 // commit and its parent — the tips the compare response just handed back.
 func TestCompareRevDiff(t *testing.T) {
@@ -264,7 +336,10 @@ func TestCompareRejects(t *testing.T) {
 		{"/api/compare?a=main&b=" + url.QueryEscape("--upload-pack=x"), http.StatusBadRequest},
 		{"/api/compare?a=main&b=nope", http.StatusNotFound},
 		{"/api/compare?a=nope&b=side", http.StatusNotFound},
-		// a tag or a raw sha is not a local branch: the allowlist is by name
+		// HEAD (or a raw sha) is none of the listed branch/tag/remote NAMES —
+		// the allowlist is by name (compareNamedEndpoint), not an arbitrary
+		// rev, even though a tag or a remote-tracking branch IS accepted now
+		// (see TestCompareResolvesTagAndRemoteNamesToFullShas).
 		{"/api/compare?a=main&b=HEAD", http.StatusNotFound},
 		{"/api/diff?left=" + url.QueryEscape("-x") + "&right=main&path=f.txt", http.StatusBadRequest},
 		{"/api/diff?left=main&path=f.txt", http.StatusBadRequest}, // right missing

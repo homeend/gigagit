@@ -36,23 +36,20 @@ func TestSteerRefPairJSIsWired(t *testing.T) {
 		// must call fetchBranches ITSELF at apply time (ruling R2), never read
 		// whatever the sidebar last happened to cache, or a tip that moved a
 		// moment ago would resolve to its OLD hash.
-		{"await fetchBranches()", "resolveRefTip/openCompareForPair must re-fetch at apply time, not read a stale cache"},
-		{"state.branches || []", "resolveRefTip/resolveCompareSide must reuse the branch list"},
-		{"state.tags || []", "resolveRefTip/resolveCompareSide must reuse the tag list"},
-		// openCompareForPair must reuse files.js's existing compare renderer
-		// (the same one the branch-pair "compare" menu row and the preview
-		// arm both call), never a second endpoint. An ORDINARY branch pair
-		// must take the plain lane FIRST (the server resolves each name to a
-		// FULL sha itself, branchTipEndpoint) — only a half that is NOT a
-		// local branch (a tag or a sha, which /api/compare's plain lane
-		// refuses by design: compare_test.go's TestCompareRejects pins "a tag
-		// or a raw sha is not a local branch") falls to client-side
-		// resolution and the revs:1 hex lane.
-		{"function isLocalBranch(", "openCompareForPair must gate on BOTH halves being local branches first"},
-		{"isLocalBranch(a) && isLocalBranch(b)", "an ordinary branch pair must take the plain lane, not the client-resolved hex one"},
-		{"function resolveCompareSide(", "the pair arm must resolve a tag/sha half to a hash itself"},
-		{"await openCompare(ah, bh, { revs: 1,", "a resolved non-branch pair must go through the hex lane"},
-		{"await openCompare(a, b)", "the branch-pair and unresolved-pair paths both fall back to the plain name lane"},
+		{"await fetchBranches()", "resolveRefTip must re-fetch at apply time, not read a stale cache"},
+		{"state.branches || []", "resolveRefTip must reuse the branch list"},
+		{"state.tags || []", "resolveRefTip must reuse the tag list"},
+		// Review round 1: openCompareForPair must send a NAME half straight
+		// through the plain /api/compare?a=&b= lane, never resolve it
+		// client-side off the sidebar's own abbreviated rows — the server
+		// (compare.go's compareNamedEndpoint) resolves branches, tags AND
+		// remote-tracking branches to a FULL sha itself now. Only a pair of
+		// BARE SHAS (the one shape the plain lane cannot express — it
+		// resolves names, not raw hex ids) goes through revs=1.
+		{"function isHexLike(", "openCompareForPair must detect a bare-sha half itself"},
+		{"isHexLike(a) && isHexLike(b)", "only a pair of bare shas may take the hex lane"},
+		{"await openCompare(a, b, { revs: 1,", "a bare-sha pair must go through the hex lane"},
+		{"await openCompare(a, b);\n}", "an ordinary name pair must go straight through the plain lane, unresolved"},
 		{`from "./files.js"`, "files.js must be imported in live.js"},
 	}
 	for _, c := range checks {

@@ -257,60 +257,28 @@ async function resolveRefTip(name) {
   return t ? t.target || "" : "";
 }
 
-// isLocalBranch reports whether name is a row in the sidebar's OWN branch
-// list — the one namespace /api/compare's plain lane resolves by itself,
-// server-side, against the FULL sha (branchTipEndpoint's refs/heads/<name>
-// lookup, never the sidebar's abbreviated row). Gating on this FIRST, before
-// any client-side resolution, keeps an ordinary branch pair on that better
-// path rather than silently downgrading it to an abbreviated client-side
-// hash — see openCompareForPair.
-function isLocalBranch(name) {
-  return (state.branches || []).some((x) => x.name === name);
-}
-
-// resolveCompareSide resolves one @<a>..<b> half to a hash for the cases
-// /api/compare's plain name lane cannot reach at all: the grammar admits a
-// ref NAME or a bare sha for each half (model.LinkPair), but that lane is
-// LOCAL BRANCHES ONLY by design (compare.go: "a tag or a raw sha is not a
-// local branch" — the same allowlist rationale as knownRefName elsewhere).
-// A remote-tracking branch, a tag or a sha half is therefore resolved here
-// and sent through the hex lane instead. Every value this can return is
-// whatever the sidebar's own rows carry — ABBREVIATED for a branch/remote,
-// per compare.go's branchTipEndpoint doc, same for a tag's
-// %(objectname:short) (internal/git/repo.go's Tags) — so a short
-// core.abbrev could in principle still miss CommitEndpoint's 7..64 floor;
-// there is no endpoint today that hands the page a full sha for a bare
-// name. "" means nothing here could place it.
-function resolveCompareSide(name) {
-  const b = (state.branches || []).find((x) => x.name === name);
-  if (b) return b.hash || "";
-  const r = (state.remotes || []).find((x) => x.name === name);
-  if (r) return r.hash || "";
-  const t = (state.tags || []).find((x) => x.name === name);
-  if (t) return t.target || "";
-  return /^[0-9a-f]{7,64}$/.test(name) ? name : "";
+// isHexLike reports whether name already looks like a bare commit sha (the
+// pair grammar's OTHER half shape, model.LinkPair — a NAME is the common
+// case, a raw sha is legal too) rather than a ref name.
+function isHexLike(name) {
+  return /^[0-9a-f]{7,64}$/.test(name);
 }
 
 // openCompareForPair opens a `@<a>..<b>` navigate's two-dot change-set — the
 // SAME renderer a saved preview's three-dot pair uses (files.js's
-// openCompare), fresh (fetchBranches — ruling R2, the same reason
-// resolveRefTip re-fetches). An ORDINARY branch pair takes the exact call
-// the branch-pair "compare" menu row already makes (sidebar.js's plain
-// openCompare(a, b)) — the better path, since the server resolves each
-// name to a FULL sha itself. Only when a half is NOT a local branch (a
-// remote-tracking branch, a tag, or a bare sha — none of which that plain
-// lane accepts) does this fall back to resolving it client-side and asking
-// through revs=1 instead.
+// openCompare). A NAME half — a local branch, a remote-tracking branch, or
+// a tag — is sent straight through the plain openCompare(a, b) lane: the
+// server resolves it to a FULL sha itself (compare.go's
+// compareNamedEndpoint, review round 1's fix), so there is no client-side
+// resolution left to do and no abbreviated-hash risk (an earlier version of
+// this function DID resolve names client-side, off the sidebar's own
+// %(objectname:short) rows, and a short core.abbrev made the hex lane 400).
+// Only when BOTH halves already look like bare shas does this ask through
+// revs=1 instead — the one shape the plain lane cannot express at all,
+// since it resolves NAMES, not raw hex ids.
 async function openCompareForPair(a, b) {
-  await fetchBranches();
-  if (isLocalBranch(a) && isLocalBranch(b)) {
-    await openCompare(a, b);
-    return;
-  }
-  const ah = resolveCompareSide(a);
-  const bh = resolveCompareSide(b);
-  if (ah && bh) {
-    await openCompare(ah, bh, { revs: 1, aLabel: a, bLabel: b });
+  if (isHexLike(a) && isHexLike(b)) {
+    await openCompare(a, b, { revs: 1, aLabel: a, bLabel: b });
     return;
   }
   await openCompare(a, b);
