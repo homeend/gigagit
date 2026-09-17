@@ -75,10 +75,11 @@ func (s *Server) endpointFor(ctx context.Context, side treeSideIn) (model.Endpoi
 }
 
 type fileSideIn struct {
-	Source  string `json:"source"`            // unstaged|staged|commit|shelf|bookmark
+	Source  string `json:"source"`            // unstaged|staged|commit|shelf|bookmark|link
 	Locator string `json:"locator,omitempty"` // rev (commit) or shelf entry id
 	ID      string `json:"id,omitempty"`      // bookmark id (source=bookmark)
 	Path    string `json:"path,omitempty"`    // repo-relative; member path for shelf commits
+	Link    string `json:"link,omitempty"`    // gg:// link (source=link); carries its own path and state
 }
 
 type compareFileIn struct {
@@ -116,6 +117,24 @@ func (s *Server) resolveFileSide(ctx context.Context, side fileSideIn) ([]byte, 
 		}
 		return data, b.Address().Display(), nil
 	}
+	// A gg:// link carries its own path AND state, so it needs neither the
+	// path nor the locator every other source requires — that is the whole
+	// point of a link. It is resolved through the same door the link tools
+	// use, so a link naming another checkout is refused here too.
+	if side.Source == "link" {
+		res, err := s.resolveLinkArg(ctx, side.Link)
+		if err != nil {
+			return nil, "", err
+		}
+		if res.Addr.Path == "" {
+			return nil, "", fmt.Errorf("%s names no file — compare a file link, or use gg_compare_links for a whole place", side.Link)
+		}
+		data, err := s.svc.ResolveBytes(ctx, res.Addr.FileRef())
+		if err != nil {
+			return nil, "", fmt.Errorf("reading %s: %v", side.Link, err)
+		}
+		return data, res.Addr.Display(), nil
+	}
 	if side.Path == "" {
 		return nil, "", fmt.Errorf("path is required for source %q", side.Source)
 	}
@@ -139,7 +158,7 @@ func (s *Server) resolveFileSide(ctx context.Context, side fileSideIn) ([]byte, 
 		ref.Source = model.SourceShelf
 		display = "shelf:" + side.Locator + ":" + side.Path
 	default:
-		return nil, "", fmt.Errorf(`source must be "unstaged", "staged", "commit", "shelf", or "bookmark" (got %q)`, side.Source)
+		return nil, "", fmt.Errorf(`source must be "unstaged", "staged", "commit", "shelf", "bookmark", or "link" (got %q)`, side.Source)
 	}
 	data, err := s.svc.ResolveBytes(ctx, ref)
 	if err != nil {

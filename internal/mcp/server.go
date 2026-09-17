@@ -70,6 +70,7 @@ func (s *Server) sdkServer() *sdk.Server {
 	s.registerBookmarkTools(srv)
 	s.registerShelfTools(srv)
 	s.registerCompareTools(srv)
+	s.registerLinkTools(srv)
 	s.registerExportTool(srv)
 	s.registerCherryPickTool(srv)
 	s.registerWriteTool(srv)
