@@ -33,9 +33,9 @@ algebra, no new TUI surfaces (plan 3), no `savedcompare` (plan 3).
 - **`domain` must not import `internal/steer`.** The `ResolveOpts.LiveFn` seam
   exists for exactly that. `linknav` sits between them and may import both.
 - **Every user-visible TUI string goes through `i18n.T` with a LITERAL key
-  present in all four bundles** (`en`, `ja`, `ko`, `ru`, `zh` — whichever the
-  repo carries; add the key to every bundle file under `internal/i18n`). Four
-  AST gates fail otherwise: `i18n_scan_test.go`, `options_vocab_test.go`,
+  present in all four bundles** — `ja`, `ko`, `zh`, `ru`; the English text IS
+  the key, so there is no `en` bundle. Add the key to every file under
+  `internal/i18n`. Four AST gates fail otherwise: `i18n_scan_test.go`, `options_vocab_test.go`,
   `menu_labels_test.go`, `engine_prose_test.go`. **Engine/CLI prose and every
   steer protocol VALUE stay English** — they are an agent-facing protocol.
 - **`model.Endpoint` has unexported fields.** Build one only through a
@@ -108,7 +108,32 @@ A pair's only single commit is `b`, and anchoring a note or a `show` there would
 silently widen a BOUNDED change-set into the whole tree at `b` — the same
 mistake `sideLosesItsKeySet` refuses per side in `gg compare --patch`. The
 refusal is explicit prose naming `gg compare`, never a fall-through.
-*Cost if wrong:* a user who wanted `gg show` on a pair runs `gg compare`.
+
+**Accepting a pair is not enough — `gg diff` must diff the RANGE.** The
+allow-list alone is a silent wrong answer: `cli/linkconsume.go`'s
+`linkDiffSpec` falls through to `case model.StateCommitted:` and asks
+`HunkDiffSpec(ctx, false, res.Addr.Commit, paths)`, and Task 2 sets
+`Addr.Commit` to **B** — so `gg diff gg://repo@a..b` would pass the gate and
+print `B^..B`, B's own change, at exit 0. `HunkDiffSpec` already passes a `rev`
+containing `..` straight through (`domain/hunks.go:58`), so the fix is one
+branch; Task 5 step 3b is where it goes.
+
+**And a `@ref:` link in `gg diff` means the tip's OWN change** (`tip^..tip`),
+exactly as a commit link does — not `git diff <tip>`. `@ref:main` and
+`@<that sha>` are two spellings of the same kind of target (both unbounded
+points), and two spellings of one thing must not diff differently. The bare-rev
+flag path's `gg diff <rev>` (working tree vs rev) is a different vocabulary and
+does not bind the link path; `linkDiffSpec` has always routed every link
+through `HunkDiffSpec` for that reason.
+*Cost if wrong:* `gg diff <ref link>` shows the tip commit instead of the
+uncommitted drift; the user asks `gg diff` with no link.
+A verb that names no allowance gets `{Ref: true, Pair: false}`: forgetting to
+think about a bounded shape must REFUSE, never widen. That is the same
+direction as the algebra itself — you can only ever scale down — and a test
+cannot catch a seventh verb that does not exist yet.
+*Cost if wrong:* a user who wanted `gg show` on a pair runs `gg compare`; a
+future verb that should take pairs is refused until someone passes the flag,
+which is a compile-time-visible one-line fix rather than a silent wrong answer.
 
 **R5 — The hint is honoured on navigate and degrades with a notice.** `?bookmark=<id>`
 reveals the bookmark row, `?shelf=<id>` the shelf row; the address is navigated
@@ -668,11 +693,22 @@ checkout whether or not it held the branch."
 
 **The two landings, and why:**
 
-- **`ref`** — a tip is a POINT: the whole tree there. With no file it opens that
-  commit's changed-file list (`openChangedFiles`), the same landing a `Commit`
-  navigate gets for a commit the feed has not paged in. With a file it is the
-  commit-file lane verbatim. The tip is resolved HERE, in the consumer
-  (`domain.ResolveRev` through the service), never taken from the wire.
+- **`ref`** — a tip is a POINT: the whole tree there. The tip is resolved HERE,
+  in the consumer (`domain.ResolveRev` through the service), never taken from
+  the wire. With a file it is the commit-file lane verbatim.
+
+  **With NO file it opens the files view BY HASH for both origins** — do not
+  delegate to `steerNavigate`'s `c.Commit` arm as written. That arm opens the
+  files view only when `startAtOrigin(c)` and answers an agent's navigate with
+  `"commit not loaded in the feed"`, a deliberate shipped ruling: the agent
+  asked for a feed ROW, and moving it into a files view is not that. **A branch
+  tip is precisely the commit least likely to be paged in**, so inheriting that
+  refusal would make `gg session navigate gg://repo@ref:feat/x` fail most of
+  the time. The reasoning does not transfer: a ref names a TREE, not a feed
+  row, so `openChangedFiles(model.Commit{Hash: hash})` is the honest landing
+  for either origin.
+  *Cost if wrong:* an agent that wanted the feed row gets the files view — the
+  same content, a different panel.
 - **`pair`** — a change-set is BOUNDED: it is a comparison.
   `openCompareFiles(model.CommitEndpoint(a), model.CommitEndpoint(b))` is
   exactly `git diff a b`, and `endpointComparable` already admits
@@ -756,9 +792,15 @@ func (m Model) steerNavigateRef(c steer.Command) (Model, tea.Cmd) {
 	if nc.File != "" {
 		return m.steerNavigateCommitFile(nc)
 	}
-	nc.Commit = hash
-	nc.Target = nil
-	return m.steerNavigate(nc)
+	// NOT steerNavigate(nc) with nc.Commit set: that arm refuses an agent's
+	// navigate for a commit the feed has not paged in, and a branch tip is the
+	// commit least likely to be paged in. A ref names a TREE, so open it by
+	// hash for either origin (see the landing note above).
+	nm := m.steerToPanels()
+	nm, cmd := nm.openChangedFiles(model.Commit{Hash: hash})
+	nm.focus = panelCommits
+	nm = nm.focusTree()
+	return nm, tea.Batch(cmd, nm.answerSteer(c, steerOK(c, "opened "+name+" at "+shortHash(hash))))
 }
 ```
 
@@ -803,7 +845,7 @@ Every new user-visible string gets a literal key in ALL FOUR bundles. Candidates
 needs `"▸ opened %s..%s"`. Run the gates:
 
 ```
-rtk proxy go test ./internal/tui/ -run 'TestI18n|TestOptionsVocab|TestMenuLabels|TestEnginePorse|Bundle'
+rtk proxy go test ./internal/tui/ -run 'TestI18n|TestOptionsVocab|TestMenuLabels|TestEngineProse|Bundle'
 ```
 (then the full `./internal/tui/` package, which is where the four AST gates live).
 
@@ -887,8 +929,9 @@ decision is in ONE table rather than six scattered guards.
 
 **Files:**
 - Modify: `internal/cli/link.go` — `resolveLinkArg` grows a shape allow-list
+- Modify: `internal/cli/linkconsume.go` — `linkDiffSpec` grows the PAIR branch
 - Modify: `internal/cli/diff.go`, `show.go`, `note.go`, `open.go`, `session.go` — pass their allowance
-- Test: `internal/cli/link_shapes_test.go` (**create**)
+- Test: `internal/cli/link_shapes_test.go` (**create**), `internal/cli/diff_test.go`
 
 **Interfaces:**
 ```go
@@ -905,9 +948,10 @@ func resolveLinkArgShapes(ctx context.Context, svc *domain.Service, s string, al
 ```
 
 `resolveLinkArg` keeps its signature and calls the new one with
-`linkShapes{Ref: true, Pair: true}` — every existing caller then opts DOWN
-explicitly, and a new verb that forgets to think about it gets the permissive
-default with a test that says so.
+`linkShapes{Ref: true}` — the REFUSING default (R4). A verb that wants pairs
+opts UP explicitly, at its own call site, so a seventh verb added later refuses
+a bounded shape rather than silently widening it. No test can catch a verb that
+does not exist yet; the default can.
 
 - [ ] **Step 1: Write the failing table test**
 
@@ -938,7 +982,27 @@ func TestLinkShapesPerVerb(t *testing.T) {
 
 A refused shape exits **2** (a caller mistake, the shipped convention), not 1.
 
-- [ ] **Step 2: Run it, watch every `pairOK: false` row fail** (they succeed today).
+- [ ] **Step 1b: Write the failing RANGE test** — the defect the allow-list
+  hides. Against a repo with three commits `c1 → c2 → c3`, each touching a
+  DIFFERENT file, assert `gg diff gg://<abs>@<c1>..<c3>` names the files c2 and
+  c3 changed and NOT only c3's:
+
+```go
+// TestDiffPairLinkDiffsTheRangeNotJustB is the silent-wrong-answer guard for
+// ruling R4's diff row. domain.Resolved.Pair carries both halves, but
+// Resolved.Commit and Addr.Commit carry B alone — so a pair link that merely
+// PASSES the shape gate falls through linkDiffSpec's StateCommitted arm and
+// prints B's own change (B^..B) at exit 0. Three commits, three files: the
+// wrong answer names one file, the right answer names two.
+func TestDiffPairLinkDiffsTheRangeNotJustB(t *testing.T) { … }
+```
+
+  Also assert the `--hunks` form over the same range, since that is the path a
+  note's numbering would inherit.
+
+- [ ] **Step 2: Run them, watch every `pairOK: false` row and the range test
+  fail.** The range test is the one that fails with exit 0 and wrong output —
+  see it do exactly that before fixing it.
 - [ ] **Step 3: Implement `resolveLinkArgShapes`** — after `domain.ResolveLink`
   returns, check the resolution's shape against `allow` and return a wrapped
   `model.ErrLink` naming the verb's own limit and pointing at `gg compare`:
@@ -949,9 +1013,30 @@ A refused shape exits **2** (a caller mistake, the shipped convention), not 1.
   ```
   Thread the verb's own name in so the message is the verb's, not the
   resolver's. `linkExit` already maps `model.ErrLink` to exit 2.
+- [ ] **Step 3b: Give `linkDiffSpec` the pair branch** — immediately after the
+  preview branch, before the `switch res.Addr.State`:
+
+```go
+	// A CHANGE-SET link diffs its RANGE. Addr.Commit carries B alone (the only
+	// single commit a pair has), so falling through to the StateCommitted arm
+	// below would print B^..B — B's own change — at exit 0. HunkDiffSpec
+	// passes a rev containing ".." straight through, which is the same lane
+	// `gg diff <a>..<b>` already takes.
+	if p := res.Pair; p != nil {
+		return svc.HunkDiffSpec(ctx, false, p.A+".."+p.B, paths)
+	}
+```
+
+  A `@ref:` link needs NO branch: `Addr.Commit` is the resolved tip and the
+  `StateCommitted` arm gives `tip^..tip`, which is the ruling (R4's last
+  paragraph). Say so in a comment there so the next reader does not "fix" it.
+
 - [ ] **Step 4: Pass each verb's allowance at its call site**, one line each.
+  Only `diff`, `open` and `session navigate` pass `Pair: true`; the other three
+  pass nothing and inherit the refusing default.
 - [ ] **Step 5: Run, prove non-vacuous** (flip one row's allowance and watch the
-  table catch it), **commit.**
+  table catch it; revert step 3b's branch and watch the range test print one
+  file), **commit.**
 
 ---
 
@@ -1142,7 +1227,13 @@ func (s *Service) LinkHistory(ctx context.Context) []linkhist.Entry
 - [ ] **Step 7: Extend archtest** — add `internal/linkhist` to whatever list
   pins "no frontend imports a domain-owned store", and assert it FAILS when a
   frontend imports it (add the import temporarily, run, remove).
-- [ ] **Step 8: Run all four packages, prove non-vacuous, commit.**
+- [ ] **Step 8: Write the e2e round trip** — a TOML scenario under
+  `e2e/scenarios/`, per the `writing-e2e-scenarios` skill: `gg link <path>` →
+  `gg links` (the row is listed) → `gg open <that link>` with no live session
+  and the launcher stubbed (exit 0, the launcher received the link). This is
+  spec §7's `e2e` row and the round trip whose two halves disagreed — the
+  reason Task 1 exists.
+- [ ] **Step 9: Run all four packages plus `./e2e/`, prove non-vacuous, commit.**
 
 ---
 
@@ -1266,9 +1357,8 @@ it in plan 3). §4.4 `linkresolve`/`linknav`/`steer`/`agentskill`/`links.js` →
 Tasks 2, 3, 4, 6, 9, 11. §5.3 `gg links` → Task 8; `gg compare --save` → plan 3
 (it needs `savedcompare`). §5.4 all four MCP items → Task 10. §5.5
 `/api/linkhist` → Task 9; the two-field dialog and the Previews tab → plan 3.
-§6 the two hint rows → Task 6. §7's `e2e` row → **gap**: fold a
-`gg link` → `gg links` → `gg open` round-trip scenario into Task 8's step 6,
-under `e2e/scenarios/`, per the `writing-e2e-scenarios` skill.
+§6 the two hint rows → Task 6. §7's `e2e` row → Task 8 step 8
+(`gg link` → `gg links` → `gg open`, under `e2e/scenarios/`).
 
 **Placeholder scan.** Tasks 3, 4 and 6 name test functions whose bodies say
 "fill against the existing fixture helpers" rather than carrying full code.
@@ -1284,6 +1374,22 @@ inspects and Task 10 flattens. `linkhist.Entry{Link,Desc,Created}` (Task 7) is
 what Tasks 8, 9 and 10 carry — one shape, three surfaces.
 `linkShapes{Ref,Pair}` exists only in `internal/cli`. `linkDesc` (Task 8) is
 the Go side of the agreement Task 9 pins in JS.
+
+**Two things to carry in the DISPATCH, not the task text.**
+
+1. *Task 3, the pair-plus-file lane.* The step says to park a `pendingSteer` at
+   `steerStageFiles` "the way `steerNavigateCommitFile` does" — but
+   `drainPendingFiles` gates on `m.filesHash == ps.hash`, and
+   `openCompareFiles` sets `m.compareTag`, not `m.filesHash`. **Verify the
+   compare view's load actually drains a pending before relying on it.** If it
+   does not, the lane needs its OWN stage (`steerStageCompare` + a
+   `drainPendingCompare` keyed on `compareTag`), not a borrowed gate — a
+   pending parked on a gate nothing satisfies is a command that silently never
+   lands.
+2. *Task 4's browser step is not optional.* Plan 1b shipped `links.js` twice
+   with only a Node-level gate behind it, and the whole-branch review found the
+   predicates stale. The task review must see evidence a real browser steered a
+   live page.
 
 **One ordering hazard.** Task 5 must land before Task 10: `gg_compare_links`
 takes any link shape, and if `resolveLinkArgShapes` does not exist yet an
