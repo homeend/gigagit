@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -51,105 +50,32 @@ func (s *Service) ResolveCommitEntryEndpoint(ctx context.Context, sha, shelfID s
 // shelfCompareFiles lists the files that differ when at least one side is a
 // frozen shelf entry (left = older, right = newer, tree-diff conventions:
 // only-in-left → D, only-in-right → A, differing bytes → M, identical →
-// omitted). shelf↔commit is scoped to the shelf's member paths — the frozen
-// tar cannot speak for paths the shelved commit never changed. Deliberately
-// NOT wrapped in one query(): each underlying read (ShelfCommitFiles,
-// TreeFiles, ShowFile, ResolveBytes) takes its own Read reservation, and
-// nesting a gated read inside a held reservation can deadlock behind a
-// queued writer.
+// omitted).
+//
+// It is now a thin adapter: a shelf endpoint evaluates to a BOUNDED set (its
+// members) and everything else to an unbounded one, so the two old shelf
+// lanes are just two rows of the general algebra — shelf↔shelf is
+// bounded × bounded, shelf↔commit is bounded × unbounded — and the
+// shelfIsRight direction flag is gone: compareOne derives the same answer
+// from which side actually holds the path. shelf↔commit stays scoped to the
+// shelf's member paths for the same reason it always was: the frozen tar
+// cannot speak for paths the shelved commit never changed, and that is also
+// §3.5's "you can only ever scale DOWN".
+//
+// Deliberately NOT wrapped in one query(): each underlying read
+// (ShelfCommitFiles, endpointHas, ShowFile, ResolveBytes) takes its own Read
+// reservation, and nesting a gated read inside a held reservation can
+// deadlock behind a queued writer.
 func (s *Service) shelfCompareFiles(ctx context.Context, left, right model.Endpoint) ([]model.CommitFile, error) {
-	if left.Kind() == model.EndpointShelf && right.Kind() == model.EndpointShelf {
-		return s.shelfShelfCompare(ctx, left.ShelfID(), right.ShelfID())
-	}
-	if left.Kind() == model.EndpointShelf {
-		return s.shelfCommitCompare(ctx, left.ShelfID(), right.Hash(), false)
-	}
-	return s.shelfCommitCompare(ctx, right.ShelfID(), left.Hash(), true)
-}
-
-func (s *Service) shelfShelfCompare(ctx context.Context, leftID, rightID string) ([]model.CommitFile, error) {
-	lf, err := s.ShelfCommitFiles(ctx, leftID)
+	l, err := s.EvalEndpoint(ctx, left)
 	if err != nil {
 		return nil, err
 	}
-	rf, err := s.ShelfCommitFiles(ctx, rightID)
+	r, err := s.EvalEndpoint(ctx, right)
 	if err != nil {
 		return nil, err
 	}
-	inRight := make(map[string]bool, len(rf))
-	for _, f := range rf {
-		inRight[f.Path] = true
-	}
-	inLeft := make(map[string]bool, len(lf))
-	var out []model.CommitFile
-	for _, f := range lf {
-		inLeft[f.Path] = true
-		if !inRight[f.Path] {
-			out = append(out, model.CommitFile{Status: "D", Path: f.Path})
-			continue
-		}
-		lb, err := s.ResolveBytes(ctx, model.FileRef{Source: model.SourceShelf, Locator: leftID, Path: f.Path})
-		if err != nil {
-			return nil, err
-		}
-		rb, err := s.ResolveBytes(ctx, model.FileRef{Source: model.SourceShelf, Locator: rightID, Path: f.Path})
-		if err != nil {
-			return nil, err
-		}
-		if !bytes.Equal(lb, rb) {
-			out = append(out, model.CommitFile{Status: "M", Path: f.Path})
-		}
-	}
-	for _, f := range rf {
-		if !inLeft[f.Path] {
-			out = append(out, model.CommitFile{Status: "A", Path: f.Path})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
-	return out, nil
-}
-
-// shelfCommitCompare compares a frozen shelf entry against a live commit,
-// scoped to the shelf's members. shelfIsRight names the direction: false =
-// shelf is the left/older side (a member missing from the commit tree reads
-// as deleted), true = shelf is the right/newer side (missing reads as added).
-func (s *Service) shelfCommitCompare(ctx context.Context, shelfID, commitHash string, shelfIsRight bool) ([]model.CommitFile, error) {
-	members, err := s.ShelfCommitFiles(ctx, shelfID)
-	if err != nil {
-		return nil, err
-	}
-	tree, err := s.TreeFiles(ctx, commitHash)
-	if err != nil {
-		return nil, err
-	}
-	inTree := make(map[string]bool, len(tree))
-	for _, f := range tree {
-		inTree[f.Path] = true
-	}
-	missing := "D"
-	if shelfIsRight {
-		missing = "A"
-	}
-	var out []model.CommitFile
-	for _, f := range members {
-		if !inTree[f.Path] {
-			out = append(out, model.CommitFile{Status: missing, Path: f.Path})
-			continue
-		}
-		sb, err := s.ResolveBytes(ctx, model.FileRef{Source: model.SourceShelf, Locator: shelfID, Path: f.Path})
-		if err != nil {
-			return nil, err
-		}
-		cb, err := s.ShowFile(ctx, commitHash, f.Path)
-		if err != nil {
-			return nil, err
-		}
-		if !bytes.Equal(sb, cb) {
-			out = append(out, model.CommitFile{Status: "M", Path: f.Path})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
-	return out, nil
+	return s.CompareSets(ctx, l, r)
 }
 
 // ComparePatch renders a unified diff for an endpoint pair. Live pairs go
@@ -164,7 +90,11 @@ func (s *Service) shelfCommitCompare(ctx context.Context, shelfID, commitHash st
 // unresolved (empty bytes, no read attempted).
 func (s *Service) ComparePatch(ctx context.Context, left, right model.Endpoint) (string, error) {
 	if left.Kind() != model.EndpointShelf && right.Kind() != model.EndpointShelf {
-		return s.DiffPatch(ctx, livePairSpec(left, right))
+		spec, err := livePairSpec(left, right)
+		if err != nil {
+			return "", err
+		}
+		return s.DiffPatch(ctx, spec)
 	}
 	files, err := s.shelfCompareFiles(ctx, left, right)
 	if err != nil {
@@ -223,20 +153,27 @@ func isBinaryContent(data []byte) bool {
 	return bytes.IndexByte(data, 0) >= 0 || !utf8.Valid(data)
 }
 
-// livePairSpec maps a non-shelf endpoint pair onto the DiffSpec vocabulary.
-// Callers guarantee the pair is one of the forward forms validComparePair
-// accepts (commit↔commit, commit→index, commit→worktree, index→worktree).
-func livePairSpec(left, right model.Endpoint) model.DiffSpec {
+// livePairSpec maps a non-shelf endpoint pair onto the DiffSpec vocabulary:
+// the four forward forms the compare surfaces produce (commit↔commit,
+// commit→index, commit→worktree, index→worktree).
+//
+// It used to end in a `default:` that meant "index → working tree", which was
+// safe only while those four were the only pairs that could reach it. They are
+// not any more: a link now hands ComparePatch whatever endpoint it produced,
+// so a PAIR or a REF arriving here would have rendered a diff of something
+// else entirely, with no error at all. An unhandled pair is now a refusal.
+func livePairSpec(left, right model.Endpoint) (model.DiffSpec, error) {
 	switch {
 	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointCommit:
-		return model.DiffSpec{Rev: left.Hash() + ".." + right.Hash()}
+		return model.DiffSpec{Rev: left.Hash() + ".." + right.Hash()}, nil
 	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointIndex:
-		return model.DiffSpec{Cached: true, Rev: left.Hash()}
-	case left.Kind() == model.EndpointCommit: // → worktree
-		return model.DiffSpec{Rev: left.Hash()}
-	default: // index → worktree
-		return model.DiffSpec{}
+		return model.DiffSpec{Cached: true, Rev: left.Hash()}, nil
+	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointWorkTree:
+		return model.DiffSpec{Rev: left.Hash()}, nil
+	case left.Kind() == model.EndpointIndex && right.Kind() == model.EndpointWorkTree:
+		return model.DiffSpec{}, nil // bare `git diff` is already index → worktree
 	}
+	return model.DiffSpec{}, fmt.Errorf("livePairSpec: unsupported endpoint pair %d → %d", left.Kind(), right.Kind())
 }
 
 // RelabelNoIndexDiff strips the temp-path noise from git diff --no-index
