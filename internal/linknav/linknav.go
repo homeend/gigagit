@@ -162,11 +162,21 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 			return c, nil // open the compare
 		}
 		c.File = res.Addr.Path
-		// A pair's file diff is against its newer end B — res.Commit already
-		// holds it — exactly as the ref arm lowers against its tip.
+		// A pair's hunks are numbered against the RANGE, `a..b` — NOT against
+		// res.Commit, which holds B alone. HunkLine lowers through
+		// HunkDiffSpec, and that turns a bare commit into <commit>^..<commit>,
+		// so passing B would number against B's OWN change: `#1` of
+		// `@c1..c3` landed on the only hunk of c3^..c3 (line 12 in the test
+		// below) instead of the range's first hunk (line 1). A silent wrong
+		// landing, and the same mistake in the same shape as a pair link that
+		// diffs B^..B instead of a..b. HunkDiffSpec passes a rev containing
+		// ".." straight through, which is the lane `gg diff a..b --hunks`
+		// already takes. The preview arm above needs PreviewHunkAnchor for the
+		// same reason: its numbering is merge-base → tip, not the tip's own
+		// change.
 		line := steer.Line{Side: string(res.Side), No: res.Line}
 		if res.Hunk > 0 {
-			l, err := HunkLine(ctx, svc, res.Addr.State == model.StateStaged, res.Commit, res.Addr.Path, res.Hunk)
+			l, err := HunkLine(ctx, svc, false, p.A+".."+p.B, res.Addr.Path, res.Hunk)
 			if err != nil {
 				return steer.Command{}, err
 			}
