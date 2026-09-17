@@ -43,7 +43,7 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 		// Every note subcommand keeps the refusing default: a note anchors
 		// on ONE commit, and a pair's only single commit (B) is not that
 		// commit — it is the change-set's newer end (ruling R4).
-		res, err := resolveLinkArgShapes(context.Background(), svc, rest[0], linkShapes{Ref: true}, "anchor")
+		res, err := resolveLinkArg(context.Background(), svc, rest[0], linkShapes{Ref: true}, "anchor")
 		if err != nil {
 			return linkExit("note "+sub, err, stderr)
 		}

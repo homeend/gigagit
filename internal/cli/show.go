@@ -40,7 +40,7 @@ func cmdShow(svc *domain.Service, dir string, args []string, stdout, stderr io.W
 		// show keeps the refusing default: it anchors on ONE commit, and a
 		// pair's only single commit (B) is not that commit — it is the
 		// change-set's newer end (ruling R4).
-		res, err := resolveLinkArgShapes(context.Background(), svc, rev, linkShapes{Ref: true}, "show")
+		res, err := resolveLinkArg(context.Background(), svc, rev, linkShapes{Ref: true}, "show")
 		if err != nil {
 			return linkExit("show", err, stderr)
 		}

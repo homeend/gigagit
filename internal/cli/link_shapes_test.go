@@ -135,3 +135,51 @@ func TestDiffPairLinkDiffsTheRangeNotJustB(t *testing.T) {
 		}
 	})
 }
+
+// TestOneDoorToTheLinkResolver pins the structural half of ruling R4.
+//
+// The shape gate is only worth as much as its unavoidability. Task 5 first
+// shipped `resolveLinkArg` (three args, no gate) sitting beside
+// `resolveLinkArgShapes` (five args, gated), with a comment asserting nobody
+// would reach for the short one. That is a convention, not an invariant: a
+// seventh verb's author, scanning for the shortest resolver, gets a pair
+// resolution with no gate, no compiler complaint and no failing test — since
+// a per-verb table can only test the verbs that exist.
+//
+// So there is now exactly ONE function in this package that calls
+// domain.ResolveLink, and it takes the allowance as a parameter. A call
+// written from muscle memory — resolveLinkArg(ctx, svc, arg) — fails to
+// COMPILE. This test fails if a second door is ever opened.
+func TestOneDoorToTheLinkResolver(t *testing.T) {
+	t.Parallel()
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var callers []string
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(b), "domain.ResolveLink(") {
+			callers = append(callers, f)
+		}
+	}
+	if len(callers) != 1 || callers[0] != "link.go" {
+		t.Errorf("domain.ResolveLink is called from %v, want link.go alone — every "+
+			"link positional must go through resolveLinkArg's shape gate (ruling R4)", callers)
+	}
+	src, err := os.ReadFile("link.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The gate is carried in the signature, not in a comment: drop the
+	// allowance parameter and every call site must be revisited.
+	if !strings.Contains(string(src), "func resolveLinkArg(ctx context.Context, svc *domain.Service, s string, allow linkShapes, verb string)") {
+		t.Error("resolveLinkArg must take the allowance and the verb, so an ungated call cannot compile")
+	}
+}
