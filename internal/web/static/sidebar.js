@@ -1227,7 +1227,20 @@ async function addFileEntry(store, path, fileState, sha) {
 
 async function removeEntry(store, id) {
   try {
-    await fetch("/api/" + store + "?id=" + encodeURIComponent(id), { method: "DELETE" });
+    // The JSON content type is required, body or no body: these two routes
+    // now go through the server's writeGuard like every other mutating
+    // route (they were the only four that did not). previews.js's
+    // removePreview has carried the same header, and the same comment, since
+    // it was written.
+    const resp = await fetch("/api/" + store + "?id=" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      opLine(store + ": " + (body.error || resp.statusText), true);
+      return;
+    }
   } catch (e) {
     opLine(store + ": " + (e.message || e), true);
     return;
