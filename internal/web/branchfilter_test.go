@@ -324,3 +324,58 @@ func TestBranchFilterSlotsListing(t *testing.T) {
 		t.Errorf("warnings must be [] on the wire, never null")
 	}
 }
+
+// TestRemotesExemptUpstreamUnderShowSlot is the remotes twin of
+// TestBranchesExemptHeadUnderShowSlot: a show-only rule that matches no
+// remote branch would hide every row, but HEAD's upstream is exempt — and
+// the remotes wire (which DROPS hidden rows rather than flagging them) must
+// carry that survivor's exempt flag so the sidebar can mark it.
+func TestRemotesExemptUpstreamUnderShowSlot(t *testing.T) {
+	ts, dir := bfServer(t)
+	gitRun(t, dir, "remote", "add", "origin", dir)
+	gitRun(t, dir, "update-ref", "refs/remotes/origin/main", "HEAD")
+	gitRun(t, dir, "branch", "--set-upstream-to=origin/main", "main")
+	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte(`
+[[branches.filter]]
+slot = 1
+name = "only fix"
+mode = "show"
+prefix = "fix/"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Fixture check first, so a missing upstream cannot masquerade as a
+	// handler bug.
+	var br bfBranchesResp
+	getJSON(t, ts, "/api/branches", &br)
+	head := ""
+	for _, b := range br.Branches {
+		if b.IsHead {
+			head = b.Name
+		}
+	}
+	if head != "main" {
+		t.Fatalf("fixture HEAD = %q; want main", head)
+	}
+	if code := putJSON(t, ts, "/api/branch-filter", `{"list":"remotes","slot":1}`, "", nil); code != 200 {
+		t.Fatalf("PUT: %d", code)
+	}
+	var out struct {
+		Remotes []struct {
+			Name   string `json:"name"`
+			Hidden bool   `json:"hidden"`
+			Exempt bool   `json:"exempt"`
+		} `json:"remotes"`
+		Filter *struct{ Hidden int } `json:"filter"`
+	}
+	getJSON(t, ts, "/api/remotes", &out)
+	if len(out.Remotes) != 1 || out.Remotes[0].Name != "origin/main" {
+		t.Fatalf("remotes = %+v; want only the exempt upstream row", out.Remotes)
+	}
+	if !out.Remotes[0].Exempt || out.Remotes[0].Hidden {
+		t.Errorf("origin/main: exempt=%v hidden=%v; the upstream row survives, flagged", out.Remotes[0].Exempt, out.Remotes[0].Hidden)
+	}
+	if out.Filter == nil || out.Filter.Hidden != len(allRemotes(t, dir))-1 {
+		t.Errorf("filter = %+v; want every other remote hidden", out.Filter)
+	}
+}

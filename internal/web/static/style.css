@@ -310,8 +310,9 @@ mark.r { background: var(--span-add); color: inherit; }
 .filterchip.on { color: var(--accent); opacity: 1; border-color: var(--border); }
 .filterchip:hover { color: var(--accent); opacity: 1; border-color: var(--border); }
 .filterchip + .sortchip { margin-left: 4px; }
-/* ∗ on a row the active rule would hide but may not (checked out somewhere). */
-#branches-list li.exempt .exempt-mark { opacity: .55; margin-left: 3px; }
+/* ∗ on a row the active rule would hide but may not (checked out somewhere,
+   or — in the remotes list — the current branch's upstream). */
+#branches-list li.exempt .exempt-mark, #remotes-list li.exempt .exempt-mark { opacity: .55; margin-left: 3px; }
 /* ⌖ locate (branches header only): scrolls the checked-out row into view. */
 .side-header .locate { margin-left: 6px; cursor: pointer; opacity: 0.6; font-size: 13px; }
 .side-header .locate:hover { color: var(--accent); opacity: 1; }

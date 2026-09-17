@@ -142,7 +142,18 @@ function renderBranches() {
 
 function renderRemotes() {
   let html = sortedBy("remotes", state.remotes, (rb) => rb.name, (rb) => rb.time)
-    .map((rb) => `<li data-n="${esc(rb.name)}" data-h="${esc(rb.hash)}">${mark(false)}${esc(rb.name)}</li>`)
+    .map((rb) => {
+      // ∗ marks a row the active rule WOULD hide but may not — here the
+      // current branch's upstream, the row f/find and pull land on. Same
+      // marker and wording as the branches list.
+      const exemptMark = rb.exempt
+        ? `<span class="exempt-mark" title="the active filter would hide this row; kept because it is checked out">∗</span>`
+        : "";
+      return (
+        `<li class="${rb.exempt ? "exempt" : ""}" data-n="${esc(rb.name)}" data-h="${esc(rb.hash)}">` +
+        `${mark(false)}${esc(rb.name)}${exemptMark}</li>`
+      );
+    })
     .join("");
   if (state.remotesTruncated) html += `<li class="more">… more (capped at 100)</li>`;
   $("remotes-list").innerHTML = html;
