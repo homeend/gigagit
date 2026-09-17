@@ -1220,6 +1220,57 @@ go test ./internal/domain/ -run TestEvalEndpoint -count=1
 
 Expected: compile failure — `EvalEndpoint` undefined.
 
+- [ ] **Step 3a: Two carry-overs from Task 3's review, in `internal/model/model.go`**
+
+Both are small and both belong here, because this task is the reason the first
+one can never fire in practice.
+
+1. **Give `EndpointRef.CacheTag()`'s panic its own message.** It currently
+   reuses `endpointKindBug`, whose text reads "unknown EndpointKind N; add a
+   case arm and a row…" — which is actively misleading here: the arm and the
+   row both exist, and the panic is a deliberate refusal, not a missing case.
+   A developer who hits it needs to be told what to do instead. Replace just
+   that arm's panic argument:
+
+```go
+	case EndpointRef:
+		// NO SAFE ANSWER, deliberately (plan 1b ruling R3). A ref name MOVES,
+		// so returning it would key the session diff cache on a value that
+		// changes underneath it — the exact bug plan 1a shipped a fix for —
+		// and returning "" would collide two different refs inside
+		// domain.CompareFiles's singleflight key. Resolve the ref to a commit
+		// first: domain.EvalEndpoint does it, and every compare path runs
+		// through it.
+		panic("model: CacheTag on an unresolved ref endpoint (" + e.ref +
+			"); resolve it to a commit first — see domain.EvalEndpoint")
+```
+
+Update the `cacheTagPanics` row's comment in
+`endpoint_exhaustive_test.go` to point at this message rather than at
+`endpointKindBug`. The test asserts only that it panics, so no assertion
+changes.
+
+2. **Route `CommitEndpoint` through `commitHashOK`.** Task 3 extracted that
+   predicate but left `CommitEndpoint` with its own inline copy of the 7..64
+   bound, so the bound now lives in two places and a future change could
+   update one and miss the other. Keep `CommitEndpoint`'s distinct error text
+   — that is why it was left alone — but take the *predicate* from the shared
+   helper:
+
+```go
+func CommitEndpoint(hash string) (Endpoint, error) {
+	if !commitHashOK(hash) {
+		return Endpoint{}, fmt.Errorf("%w: %q is not a commit id (want 7 to 64 hex characters)", ErrEndpoint, hash)
+	}
+	return Endpoint{kind: EndpointCommit, hash: hash}, nil
+}
+```
+
+Read `CommitEndpoint`'s current error text before you replace it and keep the
+wording it already has if a test asserts on it — `grep -rn "is not a commit" internal/`.
+
+Run `go test ./internal/model/ -count=1` after these two before moving on.
+
 - [ ] **Step 3: Add the tracked-path probe to `internal/git`**
 
 `endpointPaths` needs the member set of an unbounded endpoint. A commit has
@@ -2535,6 +2586,20 @@ whole diff rather than the projection — **and add a `TODO(plan 3)` naming
 that gap**, or fix it by giving `ComparePatch` a set-taking sibling if it is
 cheap. Decide during implementation and say which you chose in the commit
 message.
+
+**Harden the THREE remaining "default means commit" sites, not one.** Task 3's
+review found a third after the audit named two, and the pattern is exactly the
+cross-task seam that bit plan 1a: a fix round hardened 2 of 4 frontends while
+another task had introduced the same shape in the other 2. Do all of them in
+this task, and say in the commit message which four sites you touched.
+
+`internal/web/compare.go`'s `commitEntrySide` (~line 290) and `compareSideWire`
+(~line 434) both read `if ep.Kind() == EndpointShelf { … } else { "commit:" +
+ep.Hash() }`. A ref or pair endpoint takes the `else` and is wired to the
+browser as `commit:` with an EMPTY hash. Give each an explicit per-kind
+decision and a refusal for a kind the wire cannot express, matching how the
+surrounding handlers report an error (`writeErr` or its local equivalent —
+read the file).
 
 **Also harden `endpointProto` in `internal/tui/session_snapshot.go`.** Task 3's
 audit found it: its `default:` arm serializes any unknown kind as
