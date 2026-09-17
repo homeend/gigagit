@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"sort"
 	"testing"
 
@@ -444,8 +445,10 @@ func TestNotesAtScopesToTheCheckout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if root.Address.Worktree != "/wt" {
-		t.Fatalf("NoteAdd stamped worktree %q, want /wt", root.Address.Worktree)
+	// NATIVE separators: TopLevel filepath.Cleans git's slash output, so the
+	// fake's "/wt" comes back as "\\wt" on Windows. The want must convert too.
+	if want := filepath.FromSlash("/wt"); root.Address.Worktree != want {
+		t.Fatalf("NoteAdd stamped worktree %q, want %q", root.Address.Worktree, want)
 	}
 	if _, err := svc.NoteReply(ctx, root.ID, model.Note{Summary: "agreed"}); err != nil {
 		t.Fatal(err)

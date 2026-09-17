@@ -624,3 +624,74 @@ func TestAllDigitBranchNameIsRefused(t *testing.T) {
 		t.Fatal("an all-digit ref name must be refused, not silently reparsed")
 	}
 }
+
+// TestParseLinkAcceptsABareWindowsDriveHead pins the LENIENT local spelling:
+// `gg://C:/src/repo` with TWO slashes, which is what `"gg://" + ToSlash(dir)`
+// produces on Windows and what a human retypes from memory. gg's own
+// producers always emit the canonical three-slash form, so this is an accepted
+// alias, not a second output shape — String() canonicalises it back.
+//
+// Before this, the head was read as a repository NAMED "C:" with the rest as
+// its path: no error, exit 0, and a resolve that reported "C: is not in this
+// machine's gg history". A silent wrong answer, and the reason the whole link
+// family's tests failed on Windows while passing on POSIX.
+func TestParseLinkAcceptsABareWindowsDriveHead(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name, in, abs, canon string
+		line                 int
+	}{
+		{"file and line", "gg://C:/src/repo/f.go:42", "C:/src/repo/f.go", "gg:///C:/src/repo/f.go:42", 42},
+		{"checkout only", "gg://D:/src/repo", "D:/src/repo", "gg:///D:/src/repo", 0},
+		{"lowercase drive", "gg://c:/src/repo/f.go", "c:/src/repo/f.go", "gg:///c:/src/repo/f.go", 0},
+		{"drive root", "gg://C:/", "C:/", "gg:///C:/", 0},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ParseLink(tc.in)
+			if err != nil {
+				t.Fatalf("ParseLink(%q) = %v", tc.in, err)
+			}
+			if !got.IsLocal() || got.Repo.Abs != tc.abs || got.Repo.Name != "" {
+				t.Fatalf("repo = %+v, want local Abs %q", got.Repo, tc.abs)
+			}
+			if got.Line != tc.line {
+				t.Errorf("Line = %d, want %d", got.Line, tc.line)
+			}
+			if s := got.String(); s != tc.canon {
+				t.Errorf("String() = %q, want the canonical %q", s, tc.canon)
+			}
+			// The canonical form must parse to the very same place.
+			again, err := ParseLink(tc.canon)
+			if err != nil {
+				t.Fatalf("ParseLink(%q) = %v", tc.canon, err)
+			}
+			if again.Repo.Abs != got.Repo.Abs || again.Line != got.Line {
+				t.Errorf("canonical re-parse = %+v/%d, want %+v/%d", again.Repo, again.Line, got.Repo, got.Line)
+			}
+		})
+	}
+}
+
+// TestParseLinkRefusesAColonInARepositoryName is the other half of the drive
+// fix: no remote repository name can hold a ':' (RepoNameFromURL cuts at the
+// last '/', ':' or '\'), so a head that has one and is NOT a drive letter is
+// a malformed link, not a repository nobody has opened. Refusing it here
+// turns "gg link names an unknown repository" — a claim about the machine —
+// into a claim about the link.
+func TestParseLinkRefusesAColonInARepositoryName(t *testing.T) {
+	t.Parallel()
+	for _, in := range []string{
+		"gg://ab:/src/repo/f.go", // two letters: not a drive
+		"gg://host:22/repo/f.go",
+		"gg://:/repo/f.go",
+	} {
+		if l, err := ParseLink(in); err == nil {
+			t.Errorf("ParseLink(%q) = %+v, want a refusal", in, l)
+		} else if !errors.Is(err, ErrLink) {
+			t.Errorf("ParseLink(%q) error %v does not wrap ErrLink", in, err)
+		}
+	}
+}
