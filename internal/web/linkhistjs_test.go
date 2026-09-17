@@ -104,6 +104,16 @@ func TestLinkHistJSIsWired(t *testing.T) {
 		{"links.js", "copyLink,", "copyLink must be exported for files.js"},
 		{"links.js", "linkDesc,", "linkDesc must be exported for files.js"},
 		{"files.js", "copyLink(", "files.js's two copy rows must record like the rest"},
+		// The web PRODUCER of a hinted link. Task 6 built the consumer
+		// (revealHintEntry), but until these rows existed only `gg link
+		// --bookmark` on the CLI could make one, so the reveal was
+		// unreachable from the browser that owns the row.
+		{"links.js", `registerRows("bookmark"`, "a bookmark row must offer its own hinted link"},
+		{"links.js", `registerRows("shelf"`, "a shelf row must offer its own hinted link"},
+		{"links.js", "linkHintKindOK", "the producer must refuse a kind outside the closed set"},
+		{"links.js", "linkHintIDOK", "the producer must refuse an id that cannot round-trip"},
+		{"sidebar.js", `extraRows("bookmark"`, "the bookmark menu must consult the contributors"},
+		{"sidebar.js", `extraRows("shelf"`, "the shelf menu must consult the contributors"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(read(c.file), c.want) {

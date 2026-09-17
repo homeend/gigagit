@@ -509,6 +509,21 @@ func LinkRefOK(s string) bool {
 	return !strings.ContainsAny(s, "@:#? \t")
 }
 
+// LinkHintKindOK reports whether kind is one of the closed set a hint may
+// name. Exported for PRODUCERS (the web's links.js twin among them): a
+// producer must refuse an unknown kind rather than emit a link ParseLink
+// would reject.
+func LinkHintKindOK(kind string) bool { return linkHintKinds[kind] }
+
+// LinkHintIDOK reports whether id can ride a hint: non-empty and free of the
+// grammar's separators (plus '/' and whitespace, which would split the hint
+// or the path). This is the same rule parseLinkHint enforces below — one
+// rule, one place, so a producer and the parser cannot disagree about what
+// round-trips.
+func LinkHintIDOK(id string) bool {
+	return id != "" && !strings.ContainsAny(id, "@:#?/ \t")
+}
+
 // parseLinkHint reads "<kind>=<id>". Both halves are mandatory, the kind must
 // be one linkHintKinds knows, and the id may not contain a grammar separator
 // — a hint that cannot round-trip is refused at parse time rather than
@@ -519,13 +534,13 @@ func parseLinkHint(s string) (LinkHint, error) {
 		return LinkHint{}, fmt.Errorf("%w: a hint reads <kind>=<id>, got %q", ErrLink, s)
 	}
 	kind, id := s[:i], s[i+1:]
-	if !linkHintKinds[kind] {
+	if !LinkHintKindOK(kind) {
 		return LinkHint{}, fmt.Errorf("%w: unknown hint kind %q (want bookmark, shelf or stash)", ErrLink, kind)
 	}
 	if id == "" {
 		return LinkHint{}, fmt.Errorf("%w: hint %q has no id", ErrLink, kind)
 	}
-	if strings.ContainsAny(id, "@:#?/ \t") {
+	if !LinkHintIDOK(id) {
 		return LinkHint{}, fmt.Errorf("%w: %q is not a hint id", ErrLink, id)
 	}
 	return LinkHint{Kind: kind, ID: id}, nil

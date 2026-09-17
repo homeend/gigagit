@@ -54,6 +54,18 @@ function linkRefOK(s) {
   return !!s && !s.includes("..") && !/[@:#? \t]/.test(s);
 }
 
+// The hint's closed set and its id rule — the JS twins of
+// internal/model.LinkHintKindOK and LinkHintIDOK. A hint id may not carry a
+// grammar separator, a '/' or whitespace, or the link would not reparse: the
+// producer refuses instead of emitting something ParseLink rejects.
+function linkHintKindOK(kind) {
+  return kind === "bookmark" || kind === "shelf" || kind === "stash";
+}
+
+function linkHintIDOK(id) {
+  return !!id && !/[@:#?/ \t]/.test(id);
+}
+
 // linkFor builds the address for one place. ctx is a diffCtx-shaped
 // {path, rev, state, compare, preview}; side is "new"/"old" and no a 1-based
 // line (both optional). Returns "" when the place has no expressible link —
@@ -75,9 +87,17 @@ function linkRefOK(s) {
 // side (ParseLink refuses `:old:` for it), so an old-side line degrades to the
 // file form rather than misdescribing the place. Both names must pass
 // linkRefOK or the place is inexpressible.
+// ctx.hint = {kind, id} appends the `?<kind>=<id>` landing hint (spec §3.3):
+// WHICH surface the link was copied from. It never changes where the link
+// lands — only which row a consumer reveals there — and it goes last,
+// because '?' opens the final segment of the grammar. An unknown kind or an
+// id that cannot round-trip refuses the whole link rather than dropping the
+// hint silently.
 function linkFor(repo, worktree, ctx, side, no) {
   const preview = (ctx && ctx.preview) || null;
   if (ctx && ctx.compare && !preview) return "";
+  const hint = (ctx && ctx.hint) || null;
+  if (hint && !(linkHintKindOK(hint.kind) && linkHintIDOK(hint.id))) return "";
   if (preview && !(linkRefOK(preview.source) && linkRefOK(preview.target))) return "";
   const head = repoSegment(repo, worktree);
   if (!head) return "";
@@ -107,6 +127,9 @@ function linkFor(repo, worktree, ctx, side, no) {
     if (!path) return "";
     s += ":" + (side === "old" ? "old:" : "") + no;
   }
+  // Last, always: '?' opens the grammar's final segment, so anything after it
+  // would be read as part of the hint id.
+  if (hint) s += "?" + hint.kind + "=" + hint.id;
   return s;
 }
 
@@ -218,6 +241,50 @@ registerRows("preview", (e) => {
     preview: { source: e.source, target: e.target },
   });
   return link ? [copyLinkRow(link, linkDesc("preview", e.target + "..." + e.source, ""))] : [];
+});
+
+// A bookmark or shelf row copies the entry's ADDRESS plus a
+// `?<kind>=<id>` hint naming the surface it came from (spec §3.3). This is
+// the web PRODUCER of a hinted link: the consumer already exists (Task 6's
+// revealHintEntry lands such a link back on this very row), but until now
+// only `gg link --bookmark` on the CLI could make one, so the reveal was
+// unreachable from the browser that owns the row.
+//
+// The address is the entry's own: a commit entry's `@<sha>`, a staged
+// entry's `@staged`, or the plain working-tree form. A SHELVED FILE has no
+// git address at all — its bytes were never committed — so its link is the
+// hint-only form `gg://<repo>?shelf=<id>`, which is why entryHintLink asks
+// linkFor for a path-less, target-less link and lets the hint carry it.
+function entryHintLink(kind, e) {
+  const st = e.is_commit || e.kind === "commit" ? "commit" : e.state || "unstaged";
+  // A shelved FILE's bytes are frozen in gg's own store, not in git: the
+  // entry's recorded path/state describe where it CAME from, and the link
+  // that can actually reproduce it is the hint alone.
+  const hintOnly = kind === "shelf" && e.kind !== "commit";
+  return linkFor(state.repo, state.worktree, {
+    path: hintOnly ? "" : e.path || "",
+    rev: e.commit || "",
+    state: hintOnly ? "unstaged" : st,
+    hint: { kind, id: e.id },
+  });
+}
+
+// entryDesc labels the row by the NAME the user gave the entry, falling back
+// to the store's own display string and then the id — the same precedence
+// sidebar.js's entryLabel uses, so `gg links` and the sidebar agree about
+// what an entry is called.
+function entryDesc(kind, e) {
+  return linkDesc(kind, e.label || e.display || e.id, "");
+}
+
+registerRows("bookmark", (e) => {
+  const link = entryHintLink("bookmark", e);
+  return link ? [copyLinkRow(link, entryDesc("bookmark", e))] : [];
+});
+
+registerRows("shelf", (e) => {
+  const link = entryHintLink("shelf", e);
+  return link ? [copyLinkRow(link, entryDesc("shelf", e))] : [];
 });
 
 export { copyLink, linkDesc, linkFor };
