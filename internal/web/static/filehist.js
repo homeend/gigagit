@@ -6,7 +6,7 @@ import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { rev } from "./review.js";
 import { openCommitByHash } from "./commits.js";
-import { diffHTML, renderCell, toggleDiffView } from "./files.js";
+import { cycleTextMode, diffHTML, renderCell, toggleDiffView } from "./files.js";
 
 // --- file history overlay ----------------------------------------------------
 // A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
@@ -61,6 +61,10 @@ function historyKey(e) {
       openHistoryDiff(Math.max(0, Math.min(hist.rows.length - 1, hist.sel + d)));
     }
     e.preventDefault();
+    return true;
+  }
+  if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    cycleTextMode(); // the shared long-line mode; CSS on <body> redraws this overlay
     return true;
   }
   if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -186,7 +190,9 @@ async function openFileBlame(path, rev) {
       `<span class="btext">${renderCell(l.text, null, l.tok, "") || " "}</span></div>`;
   }
   $("blame-body").innerHTML = html || `<div class="notice">(empty file)</div>`;
-  pushLayer("blame", $("blame"), {}); // no onKey: the stack's default esc-closes applies
+  // w cycles the shared long-line mode; everything else (esc included) is
+  // left to the stack's default handling.
+  pushLayer("blame", $("blame"), { onKey: (e) => { if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) { cycleTextMode(); return true; } return false; } });
   $("blame-body").scrollTop = 0;
 }
 

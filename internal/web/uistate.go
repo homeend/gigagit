@@ -41,6 +41,9 @@ type uiStateWire struct {
 	// DiffView is the diff pane's view mode: "changed" (changed lines only,
 	// the TUI's f) or "full" (the default).
 	DiffView string `json:"diff_view"`
+	// TextMode is the long-line display mode shared by the diff pane, the
+	// history overlay and blame: "wrap" (the default), "scroll" or "cutoff".
+	TextMode string `json:"text_mode"`
 	// Sorts is the per-list display order (list name -> sort mode). Always
 	// emitted (never null) so the client can index it without a guard.
 	Sorts map[string]string `json:"sorts"`
@@ -60,7 +63,7 @@ func (s *Server) webUIStore() *promptstate.FileStore {
 func (s *Server) handleUIStateGet(w http.ResponseWriter, r *http.Request) {
 	store := s.webUIStore()
 	if store == nil {
-		writeJSON(w, uiStateWire{Sections: []string{}, Sorts: map[string]string{}, DiffView: "full"})
+		writeJSON(w, uiStateWire{Sections: []string{}, Sorts: map[string]string{}, DiffView: "full", TextMode: "wrap"})
 		return
 	}
 	st, saved := store.WebUIState()
@@ -74,6 +77,7 @@ func (s *Server) handleUIStateGet(w http.ResponseWriter, r *http.Request) {
 		Graph:         st.Graph,
 		Sorts:         allowedSorts(st.Sorts), // re-resolved: the file is editable by hand
 		DiffView:      allowedDiffView(st.DiffView),
+		TextMode:      allowedTextMode(st.TextMode),
 	})
 }
 
@@ -97,6 +101,7 @@ func (s *Server) handleUIStateSet(w http.ResponseWriter, r *http.Request) {
 		Graph:         allowedGraph(in.Graph),
 		Sorts:         allowedSorts(in.Sorts),
 		DiffView:      allowedDiffView(in.DiffView),
+		TextMode:      allowedTextMode(in.TextMode),
 	}); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
@@ -150,6 +155,16 @@ func allowedDiffView(mode string) string {
 		return "changed"
 	}
 	return "full"
+}
+
+// allowedTextMode resolves the long-line display mode; anything unknown is
+// the wrapping default the web always had.
+func allowedTextMode(mode string) string {
+	switch mode {
+	case "scroll", "cutoff":
+		return mode
+	}
+	return "wrap"
 }
 
 func clampPaneWidth(px int) int {

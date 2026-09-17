@@ -106,6 +106,7 @@
         <button id="prev-change" title="previous change">‹ change</button>
         <button id="next-change" title="next change">change ›</button>
         <button id="diff-view" title="changed lines only ↔ full file (f)" aria-pressed="false">changes only</button>
+        <button id="diff-mode" title="long lines: wrap — w cycles scroll → wrap → cutoff">wrap</button>
         <button id="hist-btn" title="this file's history">history</button>
         <button id="blame-btn" title="blame this file">blame</button>
       </span>
@@ -118,7 +119,7 @@
   <div id="drift-head"><span id="drift-title"></span><button id="drift-dismiss">dismiss</button></div>
   <ul id="drift-list"></ul>
 </div>
-<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">t toggle sidebar</button><button data-act="graph">g graph</button><button data-act="filter">/ filter</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="sort">o sort</button><button data-act="diffview">f changes only</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
+<footer id="foot"><span>j/k move</span><span>enter open</span><button data-act="back">esc back</button><button data-act="sidebar">t toggle sidebar</button><button data-act="graph">g graph</button><button data-act="filter">/ filter</button><button data-act="stage">s stage</button><button data-act="unstage">u unstage</button><button data-act="sort">o sort</button><button data-act="diffview">f changes only</button><button data-act="textmode">w wrap</button><button data-act="pull">p pull</button><button data-act="push">P push</button><button data-act="refresh">r refresh</button><button data-act="help">? help</button><button data-act="palette">ctrl+k palette</button></footer>
 <div id="ctx-menu" class="hidden"></div>
 <div id="modal" class="hidden">
   <div id="modal-box">
@@ -176,14 +177,14 @@
       <ul id="history-list"></ul>
       <div id="history-diff"></div>
     </div>
-    <div id="history-hint">click a commit for the file's change there · show opens the full commit · esc closes</div>
+    <div id="history-hint">click a commit for the file's change there · show opens the full commit · f changes only · w long lines: scroll / wrap / cutoff · esc closes</div>
   </div>
 </div>
 <div id="blame" class="hidden">
   <div id="blame-box">
     <div id="blame-title"></div>
     <div id="blame-body"></div>
-    <div id="blame-hint">click a line's commit to open it · esc closes</div>
+    <div id="blame-hint">click a line's commit to open it · w long lines: scroll / wrap / cutoff · esc closes</div>
   </div>
 </div>
 <div id="review" class="hidden">

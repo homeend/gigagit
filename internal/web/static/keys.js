@@ -5,7 +5,7 @@ import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
-import { addNotePrompt, cycleFilesSort, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNotesAgent } from "./files.js";
+import { addNotePrompt, cycleFilesSort, cycleTextMode, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNotesAgent } from "./files.js";
 import { openPalette } from "./palette.js";
 
 // --- focus + keyboard ---
@@ -152,6 +152,8 @@ document.addEventListener("keydown", (e) => {
     }
   } else if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     toggleDiffView(); // the TUI's f: changed lines only ↔ full file
+  } else if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    cycleTextMode(); // the TUI's ctrl+w (a browser owns ctrl+w itself): scroll → wrap → cutoff
   } else if (e.key === "o") {
     // the TUI's o: cycle the focused list's display order. The working-tree
     // file list is the one the keyboard can reach — the sidebar's lists cycle
@@ -195,6 +197,7 @@ $("foot").addEventListener("click", (e) => {
     case "unstage": stageFocused(true); break;
     case "sort": if (state.pane === "files" && state.filesMode === "status") cycleFilesSort(); break;
     case "diffview": toggleDiffView(); break;
+    case "textmode": cycleTextMode(); break;
     case "pull": doPull(); break;
     case "push": doPush(); break;
     case "refresh": manualRefresh(); break;

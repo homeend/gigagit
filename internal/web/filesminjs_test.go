@@ -112,3 +112,38 @@ func TestChangesOnlyAndFoldsAgree(t *testing.T) {
 		}
 	}
 }
+
+// The long-line mode (the TUI's ctrl+w) is one switch for three viewers and
+// a stored preference; every hop is a place it can silently half-work.
+func TestTextModeIsWiredEverywhere(t *testing.T) {
+	t.Parallel()
+	read := func(name string) string {
+		b, err := os.ReadFile(filepath.Join("static", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	checks := []struct{ file, want, why string }{
+		{"index.html", `id="diff-mode"`, "the toolbar chip"},
+		{"index.html", `data-act="textmode"`, "the footer chip"},
+		{"index.html", `w long lines: scroll / wrap / cutoff`, "both overlays' hints name the key"},
+		{"style.css", `body.lm-scroll table.diff { table-layout: auto; width: max-content; min-width: 100%; }`, "scroll mode grows the table"},
+		{"style.css", `body.lm-cut table.diff td.side { white-space: pre; overflow: hidden; text-overflow: ellipsis; }`, "cutoff mode ellipsizes"},
+		{"style.css", `body.lm-scroll .bline { white-space: pre; width: max-content; min-width: 100%; }`, "blame scroll mode"},
+		{"style.css", `body.lm-cut .btext { overflow: hidden; text-overflow: ellipsis; }`, "blame cutoff mode"},
+		{"files.js", `const TEXT_MODES = ["scroll", "wrap", "cutoff"];`, "the TUI's ctrl+w order"},
+		{"files.js", `saveUI({ text_mode: state.textMode });`, "the cycle must persist"},
+		{"keys.js", `cycleTextMode(); // the TUI's ctrl+w`, "the w key"},
+		{"keys.js", `case "textmode": cycleTextMode(); break;`, "the footer chip acts"},
+		{"filehist.js", "if (e.key === \"w\" && !e.ctrlKey && !e.metaKey && !e.altKey) {\n    cycleTextMode();", "w inside the history overlay"},
+		{"filehist.js", `pushLayer("blame", $("blame"), { onKey: (e) => { if (e.key === "w"`, "w inside the blame overlay"},
+		{"app.js", `applyTextMode(ui.text_mode)`, "boot restores the stored mode"},
+		{"uistate.js", `text_mode: "wrap"`, "saveUI's base must carry the field — the endpoint REPLACES the record"},
+	}
+	for _, c := range checks {
+		if !strings.Contains(read(c.file), c.want) {
+			t.Errorf("%s: missing %q — %s", c.file, c.want, c.why)
+		}
+	}
+}

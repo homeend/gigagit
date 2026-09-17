@@ -1371,6 +1371,50 @@ function toggleDiffView(keepScroll = false) {
 $("diff-view").addEventListener("click", toggleDiffView);
 
 
+// Long-line display mode — the TUI's ctrl+w (scroll → wrap → cutoff, in that
+// order). ONE mode for the diff pane, the history overlay and blame, kept as
+// a class on <body> so the three viewers' CSS follows it without a re-render;
+// the diff pane alone re-anchors on the change block in view, since a wrap
+// ↔ scroll flip changes every row's height. Wrap is the default: the web
+// always wrapped, so a stored layout without the field keeps its look.
+const TEXT_MODES = ["scroll", "wrap", "cutoff"];
+
+function applyTextMode(mode) {
+  if (!TEXT_MODES.includes(mode)) mode = "wrap";
+  state.textMode = mode;
+  document.body.classList.toggle("lm-scroll", mode === "scroll");
+  document.body.classList.toggle("lm-cut", mode === "cutoff");
+  const b = $("diff-mode");
+  b.textContent = mode;
+  b.title = `long lines: ${mode} — w cycles scroll → wrap → cutoff`;
+  const chip = document.querySelector('#foot button[data-act="textmode"]');
+  if (chip) chip.textContent = "w " + mode;
+}
+
+
+// cycleTextMode is the user-facing step (key w, the toolbar chip, the footer
+// chip). The choice is a per-machine preference (/api/uistate).
+function cycleTextMode() {
+  applyTextMode(TEXT_MODES[(TEXT_MODES.indexOf(state.textMode) + 1) % TEXT_MODES.length]);
+  saveUI({ text_mode: state.textMode });
+  if (state.layout === "diff") rerenderDiffKeepingPlace();
+}
+
+
+$("diff-mode").addEventListener("click", cycleTextMode);
+
+
+registerHelp({
+  key: "w · long lines",
+  html:
+    "cycle how lines wider than the pane are shown — <b>scroll</b> (the pane scrolls sideways; " +
+    "shift+wheel or the scrollbar pans), <b>wrap</b> (the default) or <b>cutoff</b> (one line per row, " +
+    "a trailing …) — the TUI's ctrl+w. The toolbar chip beside <b>changes only</b> names the current " +
+    "mode and is the same switch; it applies to the diff, the file-history overlay and blame alike, " +
+    "and is remembered per machine",
+});
+
+
 // A click on a fold row unfolds that run (and only that run) until the next
 // diff opens. The stepper's place survives: an unfold adds equal rows only.
 $("diff-body").addEventListener("click", (e) => {
@@ -2701,4 +2745,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, applyFilesHidden, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, applyFilesHidden, applyTextMode, cycleTextMode, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };

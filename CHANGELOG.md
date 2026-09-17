@@ -8,6 +8,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: long lines get the TUI's three display modes.** `w` (or the new
+  toolbar chip beside *changes only*, or the footer chip) cycles
+  **scroll** → **wrap** → **cutoff**, the TUI's `ctrl+w` order (a browser
+  owns `ctrl+w` itself): scroll grows the table to its content and the pane
+  scrolls sideways, wrap is the default the web always had, cutoff shows
+  one line per row with a trailing `…`. One mode governs the diff pane, the
+  file-history overlay and the blame overlay alike (`w` works inside both
+  overlays), and it is remembered per machine (`text_mode` in
+  `/api/uistate`).
+
 - **Web: the file list folds to a strip, its back bar stays put, and every
   long-line viewer wraps.** The file list's top bar (`← back`) is now
   sticky, so a long list no longer scrolls the way out off the top, and it

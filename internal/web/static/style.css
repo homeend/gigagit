@@ -169,6 +169,18 @@ tr.change td.side.r { background: var(--add); }
 table.diff tr.attn-info  td.side, table.diff tr.attn-info  td.no { background: var(--attn-info); }
 table.diff tr.attn-warn  td.side, table.diff tr.attn-warn  td.no { background: var(--attn-warn); }
 table.diff tr.attn-error td.side, table.diff tr.attn-error td.no { background: var(--attn-error); }
+/* Long-line display mode — the TUI's ctrl+w. ONE class on <body> governs
+   the diff pane, the history overlay and the blame overlay alike: wrap (the
+   default, no class), scroll (the table grows to its content and the pane
+   scrolls sideways) or cutoff (one line per row, a trailing …). The pane
+   scroll containers (#diff-pane, #history-diff, #blame-body) are already
+   overflow: auto, so scroll mode needs only a wider table / row. */
+body.lm-scroll table.diff { table-layout: auto; width: max-content; min-width: 100%; }
+body.lm-scroll table.diff td.side { white-space: pre; }
+body.lm-cut table.diff td.side { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+body.lm-scroll .bline { white-space: pre; width: max-content; min-width: 100%; }
+body.lm-cut .bline { white-space: pre; }
+body.lm-cut .btext { overflow: hidden; text-overflow: ellipsis; }
 /* syntax classes (see internal/syntax Class.String); same hues as the TUI palette */
 table.diff .tk-kw, #blame-body .tk-kw  { color: #b48bff; }
 table.diff .tk-ty, #blame-body .tk-ty  { color: #5fd7af; }

@@ -53,6 +53,7 @@ function saveUI(patch) {
     graph: "svg",
     sorts: {},
     diff_view: "full",
+    text_mode: "wrap",
   };
   loaded = { ...base, ...patch, saved: true };
   state.ui = loaded;

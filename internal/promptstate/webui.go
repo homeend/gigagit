@@ -28,6 +28,10 @@ type WebUI struct {
 	// DiffView is the diff pane's view mode — the TUI's f toggle: "changed"
 	// shows changed lines only (folded context), "" / "full" the whole file.
 	DiffView string `toml:"diff_view,omitempty"`
+	// TextMode is how the diff pane, the history overlay and blame show lines
+	// wider than their pane — the TUI's ctrl+w: "wrap" (the default), "scroll"
+	// (horizontal scrollbar) or "cutoff" (one line, trailing …).
+	TextMode string `toml:"text_mode,omitempty"`
 }
 
 // WebUIState returns the stored layout and whether anything was ever stored.
