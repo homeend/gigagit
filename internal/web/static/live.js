@@ -9,7 +9,7 @@
 // after a dropped stream reloads everything, since events were missed.
 import { attnKey, getJSON, runOnce, state } from "./core.js";
 import { fetchStatus, wtCount } from "./status.js";
-import { fetchNotes, markDiffRow, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
+import { fetchNotes, markDiffRow, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
 import { fetchBranches } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved } from "./previews.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
@@ -239,6 +239,59 @@ function steerHighlightClear(s) {
   if (state.lastDiff) renderDiff(state.lastDiff);
 }
 
+// resolveRefTip resolves a `@ref:<name>` navigate's branch/tag NAME to its
+// tip hash — no new endpoint: fetchBranches already loads both branches and
+// tags in one round trip (the sidebar's own refresh), so a lookup against it
+// is exactly what previews.js's tipOf does for a saved pair. It is called
+// HERE, at apply time, rather than reading whatever the sidebar last cached
+// (ruling R2): a stale cache would land a branch that moved a moment ago on
+// its OLD tip, precisely the bug the name-on-the-wire rule exists to avoid.
+// "" means the freshly fetched lists still have no row for it (a deleted
+// branch, or a tag past the sidebar's row cap), and the caller no-ops rather
+// than opening the wrong thing.
+async function resolveRefTip(name) {
+  await fetchBranches();
+  const b = (state.branches || []).find((x) => x.name === name);
+  if (b) return b.hash || "";
+  const t = (state.tags || []).find((x) => x.name === name);
+  return t ? t.target || "" : "";
+}
+
+// resolveCompareSide resolves one @<a>..<b> half to a full commit hash: the
+// grammar admits either a ref NAME or a bare sha for each half
+// (model.LinkPair), but /api/compare's plain name lane is BRANCHES ONLY by
+// design (compare.go: "a tag or a raw sha is not a local branch" — the same
+// allowlist rationale as knownRefName elsewhere). A tag or sha half must
+// therefore be resolved to a hash here and sent through the hex lane
+// instead. "" means neither list nor the hex-looking check could place it.
+function resolveCompareSide(name) {
+  const b = (state.branches || []).find((x) => x.name === name);
+  if (b) return b.hash || "";
+  const t = (state.tags || []).find((x) => x.name === name);
+  if (t) return t.target || "";
+  return /^[0-9a-f]{7,64}$/.test(name) ? name : "";
+}
+
+// openCompareForPair opens a `@<a>..<b>` navigate's two-dot change-set. Both
+// halves are resolved to full hashes HERE, fresh (fetchBranches — ruling R2,
+// the same reason resolveRefTip re-fetches), and handed to the SAME renderer
+// a saved preview's three-dot pair uses (files.js's openCompare) — over
+// revs=1 instead of a merge-base-resolved pair, which is the only way this
+// difference from the branch-pair "compare" menu row's plain openCompare(a,
+// b) call (sidebar.js) can reach a tag or a sha half. When a half resolves
+// to neither a known ref nor a sha-looking string, this falls back to the
+// plain name lane so an ordinary branch pair still works unchanged.
+async function openCompareForPair(a, b) {
+  await fetchBranches();
+  const ah = resolveCompareSide(a);
+  const bh = resolveCompareSide(b);
+  if (ah && bh) {
+    await openCompare(ah, bh, { revs: 1, aLabel: a, bLabel: b });
+    return;
+  }
+  await openCompare(a, b);
+}
+
 // steerNavigate opens what the command names and marks the landed row. It
 // reuses the very openers the .-menu rows use — openFile does the layout
 // switch and routes a working-tree entry to openStatusDiff itself — so a
@@ -253,6 +306,24 @@ async function steerNavigate(s) {
     // between post and apply is honoured (the TUI consumer does the same).
     await openPreviewForPair(s.source, s.target);
     if (!s.file) return; // a file-less preview navigate only reveals the stage
+    const i = state.files.findIndex((f) => f.path === s.file);
+    if (i < 0) return;
+    await openFile(i);
+  } else if (s.state === "ref") {
+    // The NAME, never a sha: the tip is resolved here, so a branch that moved
+    // between post and apply is honoured (the TUI consumer does the same).
+    const sha = await resolveRefTip(s.ref);
+    if (!sha) return;
+    await openCommitByHash(sha, s.ref);
+    if (!s.file) return; // a file-less ref navigate only reveals the tree
+    const i = state.files.findIndex((f) => f.path === s.file);
+    if (i < 0) return;
+    await openFile(i);
+  } else if (s.state === "pair") {
+    // A change-set is BOUNDED, so it is opened as a comparison — never as a
+    // commit's tree, which is what the ref arm above opens instead.
+    await openCompareForPair(s.a, s.b);
+    if (!s.file) return; // a file-less pair navigate only reveals the compare
     const i = state.files.findIndex((f) => f.path === s.file);
     if (i < 0) return;
     await openFile(i);

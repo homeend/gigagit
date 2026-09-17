@@ -79,6 +79,9 @@ type steerWire struct {
 	Commit  string   `json:"commit,omitempty"`
 	Source  string   `json:"source,omitempty"`
 	Target  string   `json:"target,omitempty"`
+	Ref     string   `json:"ref,omitempty"`
+	A       string   `json:"a,omitempty"`
+	B       string   `json:"b,omitempty"`
 	Side    string   `json:"side,omitempty"`
 	Line    int      `json:"line,omitempty"`
 	Step    string   `json:"step,omitempty"`
@@ -115,7 +118,8 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 		return w, errors.New("unsafe commit")
 	}
 	if c.Target != nil {
-		if c.Target.State == "preview" {
+		switch c.Target.State {
+		case "preview":
 			// A preview target is NOT a note state: it names a branch pair, and
 			// the page resolves the tip itself. Handled before noteState, whose
 			// allowlist has no entry for it.
@@ -129,7 +133,29 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 				return w, errors.New("a preview target cannot also carry a commit")
 			}
 			w.State, w.Source, w.Target = "preview", c.Target.Source, c.Target.Target
-		} else {
+		case "ref":
+			// A ref target is not a note state either: it names a branch or tag
+			// TIP, and the page resolves it itself (ruling R2) rather than
+			// receiving a sha that might already be stale by the time it lands.
+			// Emptiness is refused in the navigate case below, beside the commit
+			// arm's identical rule — this is only the argv-injection guard, which
+			// must run whether or not Ref is later found empty.
+			if c.Target.Ref != "" && !isGitArgSafe(c.Target.Ref) {
+				return w, errors.New("unsafe ref")
+			}
+			w.State, w.Ref = "ref", c.Target.Ref
+		case "pair":
+			// A pair target names a CHANGE-SET's two halves, resolved by the page
+			// itself for the same reason a ref is. Emptiness is refused in the
+			// navigate case below, beside the ref and commit arms' identical rule.
+			if c.Target.A != "" && !isGitArgSafe(c.Target.A) {
+				return w, errors.New("unsafe pair half")
+			}
+			if c.Target.B != "" && !isGitArgSafe(c.Target.B) {
+				return w, errors.New("unsafe pair half")
+			}
+			w.State, w.A, w.B = "pair", c.Target.A, c.Target.B
+		default:
 			if _, ok := noteState(c.Target.State); !ok {
 				return w, fmt.Errorf("unknown state %q", c.Target.State)
 			}
@@ -164,15 +190,27 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 		default:
 			return w, fmt.Errorf("unknown step %q", c.Step)
 		}
-		// A preview with no file is a REVEAL of the Previews entry — the one
-		// navigate shape that names a place without naming a file or a commit.
-		if c.File == "" && c.Commit == "" && c.Step == "" && w.State != "preview" {
+		// A preview/ref/pair with no file is a REVEAL — the one navigate shape
+		// that names a place (the Previews entry, a branch tip, a change-set)
+		// without naming a file or a commit.
+		if c.File == "" && c.Commit == "" && c.Step == "" &&
+			w.State != "preview" && w.State != "ref" && w.State != "pair" {
 			return w, errors.New("navigate needs a file, a commit or a step")
 		}
 		// state "commit" with no sha names no commit at all: the page would
 		// open /api/commit/ and 404 on its own.
 		if w.State == "commit" && w.Commit == "" {
 			return w, errors.New("a commit target needs a commit")
+		}
+		// The NAME is load-bearing: steerNavigate's resolveRefTip resolves it at
+		// apply time (ruling R2), so an empty one has nothing to resolve.
+		if w.State == "ref" && w.Ref == "" {
+			return w, errors.New("a ref target needs ref")
+		}
+		// Both halves are load-bearing: a half-filled pair would silently
+		// degrade into "some commit", exactly the preview target's rule.
+		if w.State == "pair" && (w.A == "" || w.B == "") {
+			return w, errors.New("a pair target needs a and b")
 		}
 	case "reload":
 		if len(w.Sources) == 0 {

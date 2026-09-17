@@ -49,6 +49,14 @@ func TestSteerEndpointRejectsBadValues(t *testing.T) {
 		`{"id":"1-1","cmd":"navigate","file":"a.txt","line":{"side":"middle","no":1}}`,
 		`{"id":"1-1","cmd":"navigate","file":"--upload-pack=evil","target":{"state":"unstaged"}}`,
 		`{"id":"1-1","cmd":"navigate","commit":"-x"}`,
+		// A ref target with no ref has nothing to resolve.
+		`{"id":"1-1","cmd":"navigate","file":"a.txt","target":{"state":"ref"}}`,
+		// A pair target with a half missing would silently degrade into "some
+		// commit", exactly the preview target's rule.
+		`{"id":"1-1","cmd":"navigate","file":"a.txt","target":{"state":"pair","a":"main"}}`,
+		// Argv injection: a ref name starting with "-" must be refused by the
+		// same guard the commit case above uses.
+		`{"id":"1-1","cmd":"navigate","file":"a.txt","target":{"state":"ref","ref":"--upload-pack=evil"}}`,
 		`{"id":"1-1","cmd":"highlight","file":"a.txt","start":1,"tone":"shout"}`,
 		`{"id":"1-1","cmd":"reload","sources":["weather"]}`,
 		// A panel gg does not have: the protocol's nine names are the whole
@@ -310,5 +318,215 @@ func TestSteerWireRefusesAPreviewTargetWithACommit(t *testing.T) {
 		Target: &steer.Target{State: "preview", Source: "feat/x", Target: "main"},
 	}); err == nil {
 		t.Error("toSteerWire = nil error, want a refusal for a preview target carrying a commit")
+	}
+}
+
+// TestSteerEndpointAcceptsRefAndPairTargets is the HTTP-level twin of the
+// toSteerWire unit tests below: a ref/pair navigate must clear writeGuard
+// and the handler's own refusal, ending in 202 (the endpoint's body is
+// always empty; toSteerWire's return value is what the tests below pin).
+func TestSteerEndpointAcceptsRefAndPairTargets(t *testing.T) {
+	t.Parallel()
+	for _, body := range []string{
+		`{"id":"1-1","cmd":"navigate","target":{"state":"ref","ref":"main"}}`,
+		`{"id":"1-1","cmd":"navigate","file":"a.txt","target":{"state":"ref","ref":"main"}}`,
+		`{"id":"1-1","cmd":"navigate","target":{"state":"pair","a":"main","b":"feat/x"}}`,
+		`{"id":"1-1","cmd":"navigate","file":"a.txt","target":{"state":"pair","a":"main","b":"feat/x"}}`,
+	} {
+		body := body
+		t.Run(body, func(t *testing.T) {
+			t.Parallel()
+			if code := steerPost(t, newSteerServer(t), body, "application/json"); code != http.StatusAccepted {
+				t.Errorf("status = %d, want 202 for %s", code, body)
+			}
+		})
+	}
+}
+
+// TestSteerWireAcceptsTheRefTarget mirrors
+// TestSteerWireAcceptsThePreviewTarget: the NAME rides the wire (ruling R2),
+// never a resolved sha, so the page can re-resolve it at apply time.
+func TestSteerWireAcceptsTheRefTarget(t *testing.T) {
+	t.Parallel()
+	w, err := toSteerWire(steer.Command{
+		Cmd:    "navigate",
+		File:   "a.txt",
+		Target: &steer.Target{State: "ref", Ref: "main"},
+		Line:   &steer.Line{Side: "new", No: 4},
+	})
+	if err != nil {
+		t.Fatalf("toSteerWire: %v", err)
+	}
+	if w.State != "ref" || w.Ref != "main" {
+		t.Errorf("wire = {state:%q ref:%q}, want the ref target", w.State, w.Ref)
+	}
+	if w.Side != "new" || w.Line != 4 {
+		t.Errorf("wire line = %s:%d", w.Side, w.Line)
+	}
+}
+
+// A ref navigate with NO file reveals the tree at that tip — the ref arm's
+// equivalent of the preview reveal above.
+func TestSteerWireAcceptsARefRevealWithNoFile(t *testing.T) {
+	t.Parallel()
+	if _, err := toSteerWire(steer.Command{
+		Cmd:    "navigate",
+		Target: &steer.Target{State: "ref", Ref: "main"},
+	}); err != nil {
+		t.Fatalf("toSteerWire: %v", err)
+	}
+}
+
+func TestSteerWireRefusesARefTargetWithNoRef(t *testing.T) {
+	t.Parallel()
+	if _, err := toSteerWire(steer.Command{
+		Cmd: "navigate", File: "a.txt", Target: &steer.Target{State: "ref"},
+	}); err == nil {
+		t.Error("toSteerWire = nil error, want a refusal for a ref target with no ref")
+	}
+}
+
+// The argv-injection case named in the task brief: a ref name starting with
+// "-" must be refused by the SAME guard the commit case uses (isGitArgSafe),
+// matching the existing `"navigate","commit":"-x"` row.
+func TestSteerWireRefusesArgvInjectionInRef(t *testing.T) {
+	t.Parallel()
+	if _, err := toSteerWire(steer.Command{
+		Cmd: "navigate", File: "a.txt", Target: &steer.Target{State: "ref", Ref: "--upload-pack=evil"},
+	}); err == nil {
+		t.Error("toSteerWire = nil error, want a refusal for an argv-injection ref")
+	}
+}
+
+// TestSteerWireAcceptsThePairTarget mirrors the preview/ref target tests: A
+// and B ride the wire as NAMES (ruling R2), and the consumer resolves them
+// at apply time.
+func TestSteerWireAcceptsThePairTarget(t *testing.T) {
+	t.Parallel()
+	w, err := toSteerWire(steer.Command{
+		Cmd:    "navigate",
+		File:   "a.txt",
+		Target: &steer.Target{State: "pair", A: "main", B: "feat/x"},
+		Line:   &steer.Line{Side: "new", No: 4},
+	})
+	if err != nil {
+		t.Fatalf("toSteerWire: %v", err)
+	}
+	if w.State != "pair" || w.A != "main" || w.B != "feat/x" {
+		t.Errorf("wire = {state:%q a:%q b:%q}, want the pair target", w.State, w.A, w.B)
+	}
+	if w.Side != "new" || w.Line != 4 {
+		t.Errorf("wire line = %s:%d", w.Side, w.Line)
+	}
+}
+
+// A pair navigate with NO file reveals the whole compare — the pair arm's
+// equivalent of the preview reveal above.
+func TestSteerWireAcceptsAPairRevealWithNoFile(t *testing.T) {
+	t.Parallel()
+	if _, err := toSteerWire(steer.Command{
+		Cmd:    "navigate",
+		Target: &steer.Target{State: "pair", A: "main", B: "feat/x"},
+	}); err != nil {
+		t.Fatalf("toSteerWire: %v", err)
+	}
+}
+
+func TestSteerWireRefusesABadPairTarget(t *testing.T) {
+	t.Parallel()
+	for _, tg := range []*steer.Target{
+		{State: "pair", A: "main"},                         // no b half
+		{State: "pair", B: "feat/x"},                       // no a half
+		{State: "pair", A: "--upload-pack=x", B: "feat/x"}, // argv injection
+		{State: "pair", A: "main", B: "--evil"},
+	} {
+		if _, err := toSteerWire(steer.Command{Cmd: "navigate", File: "a.txt", Target: tg}); err == nil {
+			t.Errorf("toSteerWire(%+v) = nil error, want a refusal", *tg)
+		}
+	}
+}
+
+// TestRefNavigateAndPairNavigateLandOnDifferentFileSets is ruling S5: a ref
+// names a POINT (that commit's own diff against its parent — the same
+// changed-file view any ordinary feed commit opens, live.js's
+// openCommitByHash) while a pair names a BOUNDED range (the literal a..b
+// tree diff, which may span many commits, live.js's openCompareForPair).
+// toSteerWire never touches git, so this pins the REUSE decision behind the
+// two JS helpers against a real repo instead — the exact two endpoints
+// resolveRefTip's landing (GET /api/commit/{sha}) and openCompareForPair
+// (GET /api/compare) call — without a browser (S6).
+//
+// The fixture is built so the two shapes cannot coincidentally agree: feat
+// is TWO commits ahead of main (c2 adds y.txt, c3 rewrites f.txt). A ref
+// navigate to feat's tip opens only c3's own change (f.txt); a pair navigate
+// main..feat opens the whole range (f.txt AND y.txt). Task 3's TUI fix
+// (9af4f800) exists because an earlier version of this exact shape landed
+// the same file list for both arms.
+func TestRefNavigateAndPairNavigateLandOnDifferentFileSets(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-b", "main")
+	write := func(name, content string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("f.txt", "v1\n")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "c1")
+	gitRun(t, dir, "branch", "feat")
+	gitRun(t, dir, "checkout", "feat")
+	write("y.txt", "new\n")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "c2 add y.txt")
+	write("f.txt", "v2\n")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "c3 change f.txt")
+	gitRun(t, dir, "checkout", "main")
+	tip := gitRun(t, dir, "rev-parse", "feat")
+
+	ts := serve(t, New(domain.Open(dir)))
+
+	// The ref arm: resolveRefTip resolves "feat" to tip, and
+	// openCommitByHash opens GET /api/commit/{sha} — the commit's OWN diff.
+	var refBody struct {
+		Files []struct {
+			Path string `json:"path"`
+		} `json:"files"`
+	}
+	if code := getJSON(t, ts, "/api/commit/"+tip, &refBody); code != http.StatusOK {
+		t.Fatalf("GET /api/commit/%s: status %d", tip, code)
+	}
+	refPaths := map[string]bool{}
+	for _, f := range refBody.Files {
+		refPaths[f.Path] = true
+	}
+
+	// The pair arm: openCompareForPair opens GET /api/compare?a=main&b=feat
+	// — the literal change-set, spanning both of feat's commits.
+	var pairBody struct {
+		Files []struct {
+			Path string `json:"path"`
+		} `json:"files"`
+	}
+	if code := getJSON(t, ts, "/api/compare?a=main&b=feat", &pairBody); code != http.StatusOK {
+		t.Fatalf("GET /api/compare?a=main&b=feat: status %d", code)
+	}
+	pairPaths := map[string]bool{}
+	for _, f := range pairBody.Files {
+		pairPaths[f.Path] = true
+	}
+
+	if refPaths["y.txt"] {
+		t.Errorf("ref (feat's own commit) unexpectedly includes y.txt — the fixture failed to separate the two arms")
+	}
+	if !refPaths["f.txt"] {
+		t.Errorf("ref (feat's own commit) = %v, want f.txt", refPaths)
+	}
+	if !pairPaths["y.txt"] || !pairPaths["f.txt"] {
+		t.Errorf("pair (main..feat) = %v, want both f.txt and y.txt", pairPaths)
+	}
+	if len(refPaths) == 0 || len(refPaths) >= len(pairPaths) {
+		t.Errorf("ref file set %v is not smaller than pair file set %v — ref and pair must disagree", refPaths, pairPaths)
 	}
 }
