@@ -1190,7 +1190,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
       html +=
         `<tr class="${r.kind}${hunkCls(r)}${curCls(nside, no)}${attnCls(nside, no)}"${hunkAttr(r)}${anchor(nside, no)}>` +
         `<td class="no ${side}">${no || ""}</td>` +
-        `<td class="side ${side}">${renderCell(text, spans, toks, side)}</td></tr>` +
+        `<td class="side ${side}"><span class="pan">${renderCell(text, spans, toks, side)}</span></td></tr>` +
         after(2, [nside, no]);
     }
   } else if (paneWidth < 950) {
@@ -1208,20 +1208,20 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
           `<tr class="same${curCls("new", r.right_no)}${attnClsBoth(r)}"${anchor("new", r.right_no)}>` +
           `<td class="no l">${r.left_no || ""}</td>` +
           `<td class="no r">${r.right_no || ""}</td>` +
-          `<td class="side">${renderCell(r.right, null, r.right_tok, "r")}</td></tr>` +
+          `<td class="side"><span class="pan">${renderCell(r.right, null, r.right_tok, "r")}</span></td></tr>` +
           after(3, ["new", r.right_no], ["old", r.left_no]);
       } else {
         if (r.kind !== "add")
           html +=
             `<tr class="del${hunkCls(r)}${curCls("old", r.left_no)}${attnCls("old", r.left_no)}"${hunkAttr(r)}${anchor("old", r.left_no)}>` +
             `<td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
-            `<td class="side l">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</td></tr>` +
+            `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</span></td></tr>` +
             after(3, ["old", r.left_no]);
         if (r.kind !== "del")
           html +=
             `<tr class="add${hunkCls(r)}${curCls("new", r.right_no)}${attnCls("new", r.right_no)}"${hunkAttr(r)}${anchor("new", r.right_no)}>` +
             `<td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
-            `<td class="side r">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</td></tr>` +
+            `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</span></td></tr>` +
             after(3, ["new", r.right_no]);
       }
     }
@@ -1243,9 +1243,9 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
       html +=
         `<tr class="${r.kind}${hunkCls(r)}${curClsBoth(r)}${attnClsBoth(r)}"${hunkAttr(r)}${anchor(aside, ano)}${both}>` +
         `<td class="no l">${r.left_no || ""}</td>` +
-        `<td class="side l">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</td>` +
+        `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</span></td>` +
         `<td class="no r">${r.right_no || ""}</td>` +
-        `<td class="side r">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</td></tr>` +
+        `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</span></td></tr>` +
         after(4, ["new", r.right_no], ["old", r.left_no]);
     }
   }
@@ -1262,6 +1262,7 @@ function renderDiff(d) {
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   state.diffBlockIdx = -1;
   $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth, true);
+  mountPanBars($("diff-body"), $("diff-hbars"));
   updateDiffNav();
 }
 
@@ -1398,6 +1399,73 @@ function cycleTextMode() {
   applyTextMode(TEXT_MODES[(TEXT_MODES.indexOf(state.textMode) + 1) % TEXT_MODES.length]);
   saveUI({ text_mode: state.textMode });
   if (state.layout === "diff") rerenderDiffKeepingPlace();
+  else mountPanBars($("diff-body"), $("diff-hbars"));
+}
+
+
+// --- scroll mode: one horizontal scrollbar PER SIDE ---
+// The table keeps the pane's width in every mode; in scroll mode each side
+// cell hides its overflow and its content (the .pan span) is shifted by a
+// CSS variable on the host — --pan-l for the old side, --pan-r for the new.
+// A bar per side, pinned to the pane's bottom edge, drives its variable: the
+// two halves scroll independently, so a long line on the right never drags
+// the left half off screen (one table-wide scroll did exactly that). A
+// single-column layout (unified, pure add/delete) shows one bar driving
+// both variables. shift+wheel over a side pans that side's bar.
+//
+// host: the element holding the table (and the variables); bars: the .hbars
+// element — a static sibling for the diff pane, appended per render for the
+// history overlay. host._pan remembers the offsets across a re-render (a
+// notes refresh, a resize) so the reader's place survives.
+function mountPanBars(host, bars) {
+  const table = host.querySelector("table.diff");
+  if (state.textMode !== "scroll" || !table) {
+    bars.classList.add("hidden");
+    host.style.removeProperty("--pan-l");
+    host.style.removeProperty("--pan-r");
+    return;
+  }
+  const twoCol = table.querySelectorAll("colgroup col").length === 4;
+  const widest = (sel) => {
+    let w = 0;
+    for (const p of host.querySelectorAll(sel)) if (p.offsetWidth > w) w = p.offsetWidth;
+    return w;
+  };
+  const cell = host.querySelector("td.side");
+  const cellW = cell ? cell.clientWidth - 12 : 0; // minus the cell padding
+  const pan = host._pan || (host._pan = { l: 0, r: 0 });
+  bars.classList.remove("hidden");
+  bars.innerHTML = twoCol
+    ? `<div class="hbar" data-side="l"><div></div></div><div class="hbar" data-side="r"><div></div></div>`
+    : `<div class="hbar" data-side="lr"><div></div></div>`;
+  for (const bar of bars.querySelectorAll(".hbar")) {
+    const side = bar.dataset.side;
+    const w = side === "l" ? widest("td.side.l > .pan") : side === "r" ? widest("td.side.r > .pan") : widest("td.side > .pan");
+    bar.firstElementChild.style.width = Math.max(w - cellW, 0) + bar.clientWidth + "px";
+    const apply = () => {
+      const x = bar.scrollLeft;
+      if (side !== "r") { pan.l = x; host.style.setProperty("--pan-l", x + "px"); }
+      if (side !== "l") { pan.r = x; host.style.setProperty("--pan-r", x + "px"); }
+    };
+    bar.addEventListener("scroll", apply);
+    bar.scrollLeft = side === "r" ? pan.r : pan.l;
+    apply();
+  }
+  if (!host._panWheel) {
+    host._panWheel = true;
+    host.addEventListener("wheel", (e) => {
+      if (state.textMode !== "scroll") return;
+      const dx = e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX;
+      if (!dx) return;
+      const td = e.target.closest && e.target.closest("td.side");
+      if (!td) return;
+      const want = td.classList.contains("l") ? "l" : "r";
+      const bar = bars.querySelector(`.hbar[data-side="${want}"]`) || bars.querySelector(".hbar");
+      if (!bar) return;
+      bar.scrollLeft += dx;
+      e.preventDefault();
+    }, { passive: false });
+  }
 }
 
 
@@ -1407,8 +1475,8 @@ $("diff-mode").addEventListener("click", cycleTextMode);
 registerHelp({
   key: "w · long lines",
   html:
-    "cycle how lines wider than the pane are shown — <b>scroll</b> (the pane scrolls sideways; " +
-    "shift+wheel or the scrollbar pans), <b>wrap</b> (the default) or <b>cutoff</b> (one line per row, " +
+    "cycle how lines wider than the pane are shown — <b>scroll</b> (each side gets its own " +
+    "scrollbar at the pane's bottom edge and pans on its own; shift+wheel over a side pans it), <b>wrap</b> (the default) or <b>cutoff</b> (one line per row, " +
     "a trailing …) — the TUI's ctrl+w. The toolbar chip beside <b>changes only</b> names the current " +
     "mode and is the same switch; it applies to the diff, the file-history overlay and blame alike, " +
     "and is remembered per machine",
@@ -2745,4 +2813,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, applyFilesHidden, applyTextMode, cycleTextMode, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };

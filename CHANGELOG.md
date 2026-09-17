@@ -11,9 +11,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **Web: long lines get the TUI's three display modes.** `w` (or the new
   toolbar chip beside *changes only*, or the footer chip) cycles
   **scroll** → **wrap** → **cutoff**, the TUI's `ctrl+w` order (a browser
-  owns `ctrl+w` itself): scroll grows the table to its content and the pane
-  scrolls sideways, wrap is the default the web always had, cutoff shows
-  one line per row with a trailing `…`. One mode governs the diff pane, the
+  owns `ctrl+w` itself): scroll gives **each side its own horizontal
+  scrollbar** at the pane's bottom edge (the two halves pan independently;
+  shift+wheel over a side pans it; a single-column diff has one bar), wrap
+  is the default the web always had, cutoff shows one line per row with a
+  trailing `…`. In blame's scroll mode the gutter and line number stay put. One mode governs the diff pane, the
   file-history overlay and the blame overlay alike (`w` works inside both
   overlays), and it is remembered per machine (`text_mode` in
   `/api/uistate`).

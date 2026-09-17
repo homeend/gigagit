@@ -133,7 +133,10 @@ body.resizing { cursor: col-resize; user-select: none; }
 /* The toolbar WRAPS under the title on a narrow pane: seven buttons in one
    row overflowed a 300px column and scrolled the whole pane sideways — the
    wrapped table then read as unwrapped. */
-#diff-header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+/* z-index: scroll mode transforms every side cell's content, and a transformed
+   box paints OVER a sticky one that has no stacking level — the panned lines
+   slid under the toolbar and showed through it. */
+#diff-header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; z-index: 2; }
 #diff-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #diff-nav { flex: 0 1 auto; display: flex; flex-wrap: wrap; gap: 4px; }
 #diff-nav button {
@@ -175,10 +178,23 @@ table.diff tr.attn-error td.side, table.diff tr.attn-error td.no { background: v
    scrolls sideways) or cutoff (one line per row, a trailing …). The pane
    scroll containers (#diff-pane, #history-diff, #blame-body) are already
    overflow: auto, so scroll mode needs only a wider table / row. */
-body.lm-scroll table.diff { table-layout: auto; width: max-content; min-width: 100%; }
-body.lm-scroll table.diff td.side { white-space: pre; }
+body.lm-scroll table.diff td.side { white-space: pre; overflow: hidden; }
+/* The side's content shifts by the host's --pan-l / --pan-r (mountPanBars);
+   the cell's overflow: hidden clips it. inline-block only HERE: an atomic
+   inline under cutoff's text-overflow would vanish whole instead of
+   ellipsizing. */
+body.lm-scroll table.diff td.side > .pan { display: inline-block; transform: translateX(calc(-1 * var(--pan-r, 0px))); }
+body.lm-scroll table.diff td.side.l > .pan { transform: translateX(calc(-1 * var(--pan-l, 0px))); }
+.hbars { display: flex; position: sticky; bottom: 0; left: 0; z-index: 1; background: var(--bg-alt); border-top: 1px solid var(--border); }
+.hbars.hidden { display: none; }
+.hbars .hbar { flex: 1 1 0; min-width: 0; overflow-x: auto; overflow-y: hidden; height: 14px; }
+.hbars .hbar:first-child:not(:last-child) { border-right: 1px solid var(--border); }
+.hbars .hbar > div { height: 1px; }
 body.lm-cut table.diff td.side { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 body.lm-scroll .bline { white-space: pre; width: max-content; min-width: 100%; }
+/* blame's gutter and line number stay put while the code scrolls sideways */
+body.lm-scroll .bgut { position: sticky; left: 0; width: 300px; background: var(--bg-alt); }
+body.lm-scroll .bno { position: sticky; left: 300px; background: var(--bg-alt); }
 body.lm-cut .bline { white-space: pre; }
 body.lm-cut .btext { overflow: hidden; text-overflow: ellipsis; }
 /* syntax classes (see internal/syntax Class.String); same hues as the TUI palette */

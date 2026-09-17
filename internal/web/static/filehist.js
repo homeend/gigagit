@@ -6,7 +6,7 @@ import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { rev } from "./review.js";
 import { openCommitByHash } from "./commits.js";
-import { cycleTextMode, diffHTML, renderCell, toggleDiffView } from "./files.js";
+import { cycleTextMode, diffHTML, mountPanBars, renderCell, toggleDiffView } from "./files.js";
 
 // --- file history overlay ----------------------------------------------------
 // A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
@@ -65,6 +65,7 @@ function historyKey(e) {
   }
   if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     cycleTextMode(); // the shared long-line mode; CSS on <body> redraws this overlay
+    renderHistoryDiff(); // …and the per-side scrollbars are (un)mounted
     return true;
   }
   if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -125,7 +126,12 @@ async function openHistoryDiff(i) {
 // fold set, so unfolding here never touches the diff behind it.
 function renderHistoryDiff() {
   if (!hist || !hist.diff) return;
-  $("history-diff").innerHTML = diffHTML(hist.diff, $("history-diff").clientWidth, false, hist.folds);
+  const host = $("history-diff");
+  host.innerHTML = diffHTML(hist.diff, host.clientWidth, false, hist.folds);
+  const bars = document.createElement("div");
+  bars.className = "hbars hidden";
+  host.appendChild(bars); // inside the scroll container so `sticky; bottom: 0` pins it
+  mountPanBars(host, bars);
 }
 
 
