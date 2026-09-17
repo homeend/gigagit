@@ -47,10 +47,10 @@ const (
 )
 
 // Target names where a file lives: the working tree (unstaged/untracked), the
-// index (staged), one commit, or one MERGE PREVIEW. Values are protocol
-// strings, always English.
+// index (staged), one commit, one MERGE PREVIEW, a branch/tag TIP, or a
+// bounded CHANGE-SET. Values are protocol strings, always English.
 type Target struct {
-	State  string `json:"state,omitempty"`  // "unstaged" | "staged" | "untracked" | "commit" | "preview"
+	State  string `json:"state,omitempty"`  // "unstaged" | "staged" | "untracked" | "commit" | "preview" | "ref" | "pair"
 	Commit string `json:"commit,omitempty"` // full 40-hex sha when State == "commit"
 	// Source and Target are the preview's branch NAMES, set iff State ==
 	// "preview" (git's <target>...<source> order). Commit stays EMPTY for a
@@ -58,6 +58,13 @@ type Target struct {
 	// the tip itself, so a tip that moved between post and apply is honoured.
 	Source string `json:"source,omitempty"`
 	Target string `json:"target,omitempty"`
+	// Ref is set iff State == "ref": the branch or tag NAME. The NAME rides
+	// the wire, never a frozen tip — the consumer resolves it itself, the
+	// same rule Source/Target already follow for a preview.
+	Ref string `json:"ref,omitempty"`
+	// A and B are set iff State == "pair": the change-set's two halves.
+	A string `json:"a,omitempty"`
+	B string `json:"b,omitempty"`
 }
 
 // Line is a landing point in a diff: a 1-based number on one of its two sides.

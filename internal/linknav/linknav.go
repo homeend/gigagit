@@ -130,6 +130,53 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 		}
 		return c, nil
 	}
+	if res.Ref != "" {
+		// The NAME rides the wire, never the tip: the consumer resolves it
+		// itself, so a tip that moved between post and apply is honoured —
+		// the rule the preview arm above already follows.
+		c.Target = &steer.Target{State: "ref", Ref: res.Ref}
+		if res.Addr.Path == "" {
+			return c, nil // reveal the tree at that tip
+		}
+		c.File = res.Addr.Path
+		// A ref is a POINT, so its file diff is the commit lane's: lower a
+		// hunk against the resolved tip, exactly as the commit arm does.
+		line := steer.Line{Side: string(res.Side), No: res.Line}
+		if res.Hunk > 0 {
+			l, err := HunkLine(ctx, svc, res.Addr.State == model.StateStaged, res.Commit, res.Addr.Path, res.Hunk)
+			if err != nil {
+				return steer.Command{}, err
+			}
+			line = l
+		}
+		if line.No > 0 {
+			c.Line = &line
+		}
+		return c, nil
+	}
+	if p := res.Pair; p != nil {
+		// The two halves ride the wire as NAMES, exactly like the ref arm
+		// above: the consumer resolves them itself.
+		c.Target = &steer.Target{State: "pair", A: p.A, B: p.B}
+		if res.Addr.Path == "" {
+			return c, nil // open the compare
+		}
+		c.File = res.Addr.Path
+		// A pair's file diff is against its newer end B — res.Commit already
+		// holds it — exactly as the ref arm lowers against its tip.
+		line := steer.Line{Side: string(res.Side), No: res.Line}
+		if res.Hunk > 0 {
+			l, err := HunkLine(ctx, svc, res.Addr.State == model.StateStaged, res.Commit, res.Addr.Path, res.Hunk)
+			if err != nil {
+				return steer.Command{}, err
+			}
+			line = l
+		}
+		if line.No > 0 {
+			c.Line = &line
+		}
+		return c, nil
+	}
 	if res.Addr.Path == "" {
 		// A link with no path reveals the commit (spec §1).
 		if res.Commit == "" {
@@ -173,19 +220,24 @@ func AtLink(res domain.Resolved, c steer.Command) model.Link {
 		Path: res.Addr.Path,
 		Side: model.NoteSideNew,
 	}
-	if res.Preview != nil {
+	switch {
+	case res.Preview != nil:
 		l.Target = model.LinkTarget{
 			State:   model.StateCommitted,
 			Preview: &model.LinkPreview{Source: res.Preview.Source, Target: res.Preview.Target},
 		}
-		// A preview link never carries Side old — Command already refused an
-		// old-side preview hunk (domain.ErrPreviewOldSide) before c reached
-		// here, so Side stays NoteSideNew unconditionally.
-	} else {
+	case res.Ref != "":
+		l.Target = model.LinkTarget{State: model.StateCommitted, Ref: res.Ref}
+	case res.Pair != nil:
+		l.Target = model.LinkTarget{State: model.StateCommitted, Pair: res.Pair}
+	default:
 		l.Target = model.LinkTarget{State: res.Addr.State, Commit: res.Addr.Commit}
-		if c.Line != nil && c.Line.Side == "old" {
-			l.Side = model.NoteSideOld
-		}
+	}
+	// A preview link never carries Side old — Command already refused an
+	// old-side preview hunk (domain.ErrPreviewOldSide) before c reached
+	// here, so this is a no-op for one; every other shape may.
+	if c.Line != nil && c.Line.Side == "old" {
+		l.Side = model.NoteSideOld
 	}
 	if c.Line != nil {
 		l.Line = c.Line.No

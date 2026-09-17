@@ -190,6 +190,106 @@ func TestTargetOf(t *testing.T) {
 	}
 }
 
+// refPairRepo builds a checkout with two commits on main, so its own tip
+// (@ref:main) and the two commits as a change-set (@<first>..<second>) are
+// both resolvable without a registry.
+func refPairRepo(t *testing.T) (dir string, svc *domain.Service, first, second string) {
+	t.Helper()
+	dir = t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = dir
+		c.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run("init", "-q", "-b", "main")
+	write("a.txt", "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n")
+	run("add", ".")
+	run("commit", "-q", "-m", "one")
+	svc = domain.Open(dir)
+	ctx := context.Background()
+	var err error
+	first, err = svc.RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	write("a.txt", "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n")
+	run("add", ".")
+	run("commit", "-q", "-m", "two")
+	second, err = svc.RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir, svc, first, second
+}
+
+// TestRefAndPairCommandShapes exercises the two arms Task 2 adds: a ref
+// (branch tip) and a pair (change-set), each with and without a path — and
+// that AtLink round-trips each back to a link whose String() equals the
+// input, the same guarantee the working-tree and commit shapes already have.
+func TestRefAndPairCommandShapes(t *testing.T) {
+	t.Parallel()
+	dir, svc, first, second := refPairRepo(t)
+	ctx := context.Background()
+	a := abs(dir)
+
+	cases := []struct {
+		name     string
+		link     string
+		wantFile string
+	}{
+		{"ref, no path", "gg://" + a + "@ref:main", ""},
+		{"ref, with path", "gg://" + a + "/a.txt@ref:main", "a.txt"},
+		{"pair, no path", "gg://" + a + "@" + first + ".." + second, ""},
+		{"pair, with path", "gg://" + a + "/a.txt@" + first + ".." + second, "a.txt"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			res := resolve(t, svc, tc.link)
+			c, err := Command(ctx, svc, res)
+			if err != nil {
+				t.Fatalf("Command(%q): %v", tc.link, err)
+			}
+			if c.Cmd != "navigate" {
+				t.Errorf("Cmd = %q, want navigate", c.Cmd)
+			}
+			if c.File != tc.wantFile {
+				t.Errorf("File = %q, want %q", c.File, tc.wantFile)
+			}
+			if c.Line != nil {
+				t.Errorf("Line = %+v, want nil (no line named in the link)", c.Line)
+			}
+			switch {
+			case res.Ref != "":
+				if c.Target == nil || c.Target.State != "ref" || c.Target.Ref != "main" {
+					t.Errorf("Target = %+v, want ref main", c.Target)
+				}
+			case res.Pair != nil:
+				if c.Target == nil || c.Target.State != "pair" || c.Target.A != first || c.Target.B != second {
+					t.Errorf("Target = %+v, want pair %s..%s", c.Target, first, second)
+				}
+			default:
+				t.Fatalf("resolved %+v carries neither Ref nor Pair", res)
+			}
+			at := AtLink(res, c)
+			if at.String() != tc.link {
+				t.Errorf("AtLink round-trip = %q, want %q", at.String(), tc.link)
+			}
+		})
+	}
+}
+
 // previewRepo builds a checkout where main and feat/x have diverged, so
 // `@main...feat/x` is a previewable pair. b.txt exists only on feat/x, which
 // makes it the preview's one changed file.

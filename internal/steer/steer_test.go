@@ -160,6 +160,38 @@ func TestDiscardSweepsCommandsAndRepliesOnly(t *testing.T) {
 	}
 }
 
+// TestPostDrainRoundTripsRefAndPairTargets pins that a ref/pair Target's new
+// fields survive Post/Drain exactly like the preview target's Source/Target
+// already do: the NAME (or the two-halves NAME pair) is what rides the wire.
+func TestPostDrainRoundTripsRefAndPairTargets(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	refID, err := Post(dir, Command{Cmd: "navigate", File: "a.go", Target: &Target{State: "ref", Ref: "main"}})
+	if err != nil {
+		t.Fatalf("Post ref: %v", err)
+	}
+	pairID, err := Post(dir, Command{Cmd: "navigate", File: "a.go", Target: &Target{State: "pair", A: "main", B: "feat/x"}})
+	if err != nil {
+		t.Fatalf("Post pair: %v", err)
+	}
+	got := Drain(dir)
+	if len(got) != 2 {
+		t.Fatalf("Drain = %d commands, want 2", len(got))
+	}
+	byID := map[string]Command{}
+	for _, c := range got {
+		byID[c.ID] = c
+	}
+	ref, ok := byID[refID]
+	if !ok || ref.Target == nil || ref.Target.State != "ref" || ref.Target.Ref != "main" {
+		t.Errorf("ref command = %+v, want Target.State=ref Target.Ref=main", ref)
+	}
+	pair, ok := byID[pairID]
+	if !ok || pair.Target == nil || pair.Target.State != "pair" || pair.Target.A != "main" || pair.Target.B != "feat/x" {
+		t.Errorf("pair command = %+v, want Target.State=pair A=main B=feat/x", pair)
+	}
+}
+
 func TestCommandJSONOmitsEmptyFields(t *testing.T) {
 	t.Parallel()
 	data, err := json.Marshal(Command{ID: "1-1", Cmd: "reload", Sources: []string{"notes"}})

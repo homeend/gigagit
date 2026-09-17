@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/repos"
 )
@@ -874,27 +875,127 @@ func TestLocateLinkSplitsALocalLinkForEveryTarget(t *testing.T) {
 	}
 }
 
-// ResolveLink still refuses a ref or pair link, and that is the reason
-// LocateLink exists rather than a reason to stop using ResolveLink: model
-// .FileAddress has no field for a moving tip, and none for a BOUNDED
-// change-set, so finishing one would mean flattening `@a..b` into commit b —
-// the silent wrong answer this feature is built to avoid.
-func TestResolveLinkStillRefusesARefOrPairLink(t *testing.T) {
+// TestResolveLinkRefYieldsTheTipAndKeepsTheName pins R2: a @ref: link resolves
+// so a consumer can navigate it, and the NAME survives resolution — freezing
+// the tip at resolve time and dropping the name is exactly what the preview
+// lane refuses to do.
+func TestResolveLinkRefYieldsTheTipAndKeepsTheName(t *testing.T) {
 	t.Parallel()
-	here, svc := newRealRepo(t)
-	head := headOf(t, here)
-	abs := filepath.ToSlash(here)
-	for _, link := range []string{
-		"gg://" + abs + "@ref:main",
-		"gg://" + abs + "@" + head + ".." + head,
-	} {
-		l, err := model.ParseLink(link)
-		if err != nil {
-			t.Fatalf("ParseLink(%q): %v", link, err)
-		}
-		if _, err := ResolveLink(context.Background(), l, ResolveOpts{Cwd: svc}); !errors.Is(err, model.ErrLink) {
-			t.Errorf("ResolveLink(%q) err = %v, want a model.ErrLink refusal", link, err)
-		}
+	dir := gittest.BasicRepo(t, "hello\n")
+	svc := Open(dir)
+	head, _, err := svc.ResolveRev(context.Background(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := model.ParseLink(model.Link{
+		Repo:   model.LinkRepo{Abs: filepath.ToSlash(dir)},
+		Target: model.LinkTarget{State: model.StateCommitted, Ref: "main"},
+		Side:   model.NoteSideNew,
+	}.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := ResolveLink(context.Background(), l, ResolveOpts{Cwd: svc})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if res.Ref != "main" {
+		t.Errorf("Ref = %q, want main", res.Ref)
+	}
+	if res.Commit != strings.TrimSpace(head) {
+		t.Errorf("Commit = %q, want the tip %q", res.Commit, head)
+	}
+}
+
+// TestResolveLinkPairResolvesBothHalves pins that a change-set's two halves
+// each resolve to a FULL sha, and Commit carries B — the newer end (ruling
+// R4): A is captured before a second commit moves "main" forward, B rides the
+// ref name and must resolve to the NEW tip, not the frozen A.
+func TestResolveLinkPairResolvesBothHalves(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "hello\n")
+	svc := Open(dir)
+	ctx := context.Background()
+	first, _, err := svc.ResolveRev(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first = strings.TrimSpace(first)
+	runGitIn(t, dir, "commit", "--allow-empty", "-m", "second")
+	tip, _, err := svc.ResolveRev(ctx, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tip = strings.TrimSpace(tip)
+	abs := filepath.ToSlash(dir)
+	l, err := model.ParseLink("gg://" + abs + "@" + first + "..main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := ResolveLink(ctx, l, ResolveOpts{Cwd: svc})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if res.Pair == nil {
+		t.Fatal("Resolved.Pair must be set")
+	}
+	if res.Pair.A != first || res.Pair.B != tip {
+		t.Errorf("Pair = %+v, want A=%q B=%q", res.Pair, first, tip)
+	}
+	if res.Commit != tip || res.Addr.Commit != tip {
+		t.Errorf("Commit/Addr.Commit = %q/%q, want B %q", res.Commit, res.Addr.Commit, tip)
+	}
+}
+
+// TestResolveLinkRefSkipsACheckoutWithoutTheBranch pins R3: a ref link is
+// StateCommitted with an EMPTY Commit, so it skips the containment filter
+// (Commit != "" is load-bearing there) — without a dedicated candidate filter
+// the resolver would take the MRU checkout regardless of whether it holds the
+// branch. withoutBranch is the MORE recently opened entry: only the ref
+// filter can keep the resolve off it.
+func TestResolveLinkRefSkipsACheckoutWithoutTheBranch(t *testing.T) {
+	t.Parallel()
+	withoutBranch := linkRepoWithRemote(t, "gigagit") // main only
+	withBranch := linkRepoWithBranch(t, "gigagit", "feat/x")
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	if err := repos.Touch(state, withoutBranch, "gigagit", time.Unix(9000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.Touch(state, withBranch, "gigagit", time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	l, err := model.ParseLink("gg://gigagit@ref:feat/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if !samePathLink(got.Checkout, withBranch) {
+		t.Errorf("Checkout = %q, want the checkout holding feat/x %q", got.Checkout, withBranch)
+	}
+	if got.Ref != "feat/x" {
+		t.Errorf("Ref = %q, want feat/x", got.Ref)
+	}
+}
+
+// TestResolveLinkPairRefusedWhenNoCheckoutHoldsBothHalves mirrors the preview
+// refusal's words: the error names the repo and both halves.
+func TestResolveLinkPairRefusedWhenNoCheckoutHoldsBothHalves(t *testing.T) {
+	t.Parallel()
+	here := linkRepoWithRemote(t, "gigagit")
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	l, err := model.ParseLink("gg://gigagit@main..feat/nope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state, Cwd: Open(here)})
+	if !errors.Is(err, ErrLinkUnknownRepo) {
+		t.Fatalf("err = %v, want ErrLinkUnknownRepo", err)
+	}
+	if !strings.Contains(err.Error(), "gigagit") || !strings.Contains(err.Error(), "main") || !strings.Contains(err.Error(), "feat/nope") {
+		t.Errorf("error %q must name the repo and both halves", err)
 	}
 }
 
