@@ -435,6 +435,33 @@ func (s *Service) TreeFiles(ctx context.Context, hash string) ([]model.CommitFil
 	})
 }
 
+// ListFiles returns the repo's TRACKED paths under a Read reservation —
+// deleted=false the index's entries, deleted=true only those the index holds
+// but disk no longer has. It is the member-set probe behind the index and
+// working-tree endpoints (see endpointPaths).
+//
+// The two modes carry DIFFERENT singleflight keys: endpointPaths asks for both
+// back to back, and one shared key would coalesce a concurrent pair into one
+// answer.
+func (s *Service) ListFiles(ctx context.Context, deleted bool) ([]string, error) {
+	key := "ls-files"
+	if deleted {
+		key = "ls-files:deleted"
+	}
+	return query(ctx, s, key, func(ctx context.Context) ([]string, error) {
+		return s.repo.ListFiles(ctx, deleted)
+	})
+}
+
+// UntrackedFiles returns the repo's untracked, non-ignored paths under a Read
+// reservation — the half of the working tree's member set that ls-files, which
+// reads the index, cannot see.
+func (s *Service) UntrackedFiles(ctx context.Context) ([]string, error) {
+	return query(ctx, s, "untracked-files", func(ctx context.Context) ([]string, error) {
+		return s.repo.UntrackedFiles(ctx)
+	})
+}
+
 // CompareFiles returns the files that differ between two endpoints (left =
 // older, right = newer), under a Read reservation. The singleflight key
 // includes both endpoints; live endpoints (working tree / index) change
