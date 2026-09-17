@@ -270,8 +270,9 @@ gg://<repo>@<sha>?bookmark=<id>            # a trailing ?<kind>=<id> hint: where
 ```
 
 A `?` is the hint separator now, so it cannot appear in a path, in a checkout
-path or in a ref name carried by a link. `gg link` and the TUI refuse to print
-such a link rather than emit one that reparses as something else.
+path or in a ref name carried by a link. `gg link`, the TUI and `gg web`'s
+copy-link buttons all refuse to print such a link rather than emit one that
+reparses as something else.
 
 ```bash
 gg link internal/tui/steer.go:42        # print the link for a place here

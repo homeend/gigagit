@@ -103,7 +103,11 @@ func endpointComparable(e model.Endpoint) bool {
 		return true
 	case model.EndpointRef:
 		return false
+	case model.EndpointInvalid:
+		return false
 	}
+	// Only a kind added to the iota block without being decided above reaches
+	// here, and "cannot open a compare" is the safe answer for one.
 	return false
 }
 
