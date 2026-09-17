@@ -41,14 +41,18 @@ func TestSteerRefPairJSIsWired(t *testing.T) {
 		{"state.tags || []", "resolveRefTip/resolveCompareSide must reuse the tag list"},
 		// openCompareForPair must reuse files.js's existing compare renderer
 		// (the same one the branch-pair "compare" menu row and the preview
-		// arm both call), never a second endpoint — over revs:1 once each half
-		// is resolved to a hash (a tag or a sha half cannot go through
-		// /api/compare's plain, branches-only name lane: compare.go's own
-		// TestCompareRejects pins "a tag or a raw sha is not a local branch"),
-		// falling back to the plain name lane for an ordinary branch pair.
+		// arm both call), never a second endpoint. An ORDINARY branch pair
+		// must take the plain lane FIRST (the server resolves each name to a
+		// FULL sha itself, branchTipEndpoint) — only a half that is NOT a
+		// local branch (a tag or a sha, which /api/compare's plain lane
+		// refuses by design: compare_test.go's TestCompareRejects pins "a tag
+		// or a raw sha is not a local branch") falls to client-side
+		// resolution and the revs:1 hex lane.
+		{"function isLocalBranch(", "openCompareForPair must gate on BOTH halves being local branches first"},
+		{"isLocalBranch(a) && isLocalBranch(b)", "an ordinary branch pair must take the plain lane, not the client-resolved hex one"},
 		{"function resolveCompareSide(", "the pair arm must resolve a tag/sha half to a hash itself"},
-		{"await openCompare(ah, bh, { revs: 1,", "a resolved pair must go through the hex lane, not the branch-only one"},
-		{"await openCompare(a, b)", "an unresolved pair must fall back to the plain name lane"},
+		{"await openCompare(ah, bh, { revs: 1,", "a resolved non-branch pair must go through the hex lane"},
+		{"await openCompare(a, b)", "the branch-pair and unresolved-pair paths both fall back to the plain name lane"},
 		{`from "./files.js"`, "files.js must be imported in live.js"},
 	}
 	for _, c := range checks {

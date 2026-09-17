@@ -257,32 +257,56 @@ async function resolveRefTip(name) {
   return t ? t.target || "" : "";
 }
 
-// resolveCompareSide resolves one @<a>..<b> half to a full commit hash: the
-// grammar admits either a ref NAME or a bare sha for each half
-// (model.LinkPair), but /api/compare's plain name lane is BRANCHES ONLY by
-// design (compare.go: "a tag or a raw sha is not a local branch" — the same
-// allowlist rationale as knownRefName elsewhere). A tag or sha half must
-// therefore be resolved to a hash here and sent through the hex lane
-// instead. "" means neither list nor the hex-looking check could place it.
+// isLocalBranch reports whether name is a row in the sidebar's OWN branch
+// list — the one namespace /api/compare's plain lane resolves by itself,
+// server-side, against the FULL sha (branchTipEndpoint's refs/heads/<name>
+// lookup, never the sidebar's abbreviated row). Gating on this FIRST, before
+// any client-side resolution, keeps an ordinary branch pair on that better
+// path rather than silently downgrading it to an abbreviated client-side
+// hash — see openCompareForPair.
+function isLocalBranch(name) {
+  return (state.branches || []).some((x) => x.name === name);
+}
+
+// resolveCompareSide resolves one @<a>..<b> half to a hash for the cases
+// /api/compare's plain name lane cannot reach at all: the grammar admits a
+// ref NAME or a bare sha for each half (model.LinkPair), but that lane is
+// LOCAL BRANCHES ONLY by design (compare.go: "a tag or a raw sha is not a
+// local branch" — the same allowlist rationale as knownRefName elsewhere).
+// A remote-tracking branch, a tag or a sha half is therefore resolved here
+// and sent through the hex lane instead. Every value this can return is
+// whatever the sidebar's own rows carry — ABBREVIATED for a branch/remote,
+// per compare.go's branchTipEndpoint doc, same for a tag's
+// %(objectname:short) (internal/git/repo.go's Tags) — so a short
+// core.abbrev could in principle still miss CommitEndpoint's 7..64 floor;
+// there is no endpoint today that hands the page a full sha for a bare
+// name. "" means nothing here could place it.
 function resolveCompareSide(name) {
   const b = (state.branches || []).find((x) => x.name === name);
   if (b) return b.hash || "";
+  const r = (state.remotes || []).find((x) => x.name === name);
+  if (r) return r.hash || "";
   const t = (state.tags || []).find((x) => x.name === name);
   if (t) return t.target || "";
   return /^[0-9a-f]{7,64}$/.test(name) ? name : "";
 }
 
-// openCompareForPair opens a `@<a>..<b>` navigate's two-dot change-set. Both
-// halves are resolved to full hashes HERE, fresh (fetchBranches — ruling R2,
-// the same reason resolveRefTip re-fetches), and handed to the SAME renderer
-// a saved preview's three-dot pair uses (files.js's openCompare) — over
-// revs=1 instead of a merge-base-resolved pair, which is the only way this
-// difference from the branch-pair "compare" menu row's plain openCompare(a,
-// b) call (sidebar.js) can reach a tag or a sha half. When a half resolves
-// to neither a known ref nor a sha-looking string, this falls back to the
-// plain name lane so an ordinary branch pair still works unchanged.
+// openCompareForPair opens a `@<a>..<b>` navigate's two-dot change-set — the
+// SAME renderer a saved preview's three-dot pair uses (files.js's
+// openCompare), fresh (fetchBranches — ruling R2, the same reason
+// resolveRefTip re-fetches). An ORDINARY branch pair takes the exact call
+// the branch-pair "compare" menu row already makes (sidebar.js's plain
+// openCompare(a, b)) — the better path, since the server resolves each
+// name to a FULL sha itself. Only when a half is NOT a local branch (a
+// remote-tracking branch, a tag, or a bare sha — none of which that plain
+// lane accepts) does this fall back to resolving it client-side and asking
+// through revs=1 instead.
 async function openCompareForPair(a, b) {
   await fetchBranches();
+  if (isLocalBranch(a) && isLocalBranch(b)) {
+    await openCompare(a, b);
+    return;
+  }
   const ah = resolveCompareSide(a);
   const bh = resolveCompareSide(b);
   if (ah && bh) {
