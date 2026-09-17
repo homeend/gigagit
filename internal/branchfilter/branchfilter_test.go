@@ -28,6 +28,13 @@ func TestParseAge(t *testing.T) {
 		{"3", 0, false},
 		{"3h", 0, false},
 		{"3dd", 0, false},
+		// time.Duration tops out near 292 years. Past that the multiply
+		// wraps NEGATIVE, Compile reads the clause as unset, and a
+		// hide-mode slot with no name clause hides every non-exempt row —
+		// so an over-large age must be refused, not truncated.
+		{"292y", 292 * 365 * 24 * time.Hour, true},
+		{"293y", 0, false},
+		{"3600m", 0, false},
 	}
 	for _, c := range cases {
 		got, err := ParseAge(c.in)

@@ -218,3 +218,133 @@ func TestRemoveBranchFilterIgnoresTrailingCommentedSlotLine(t *testing.T) {
 		t.Errorf("block not removed:\n%s", got)
 	}
 }
+
+// TestBranchFilterDuplicateSlotInOneFileKeepsFirst pins what the docs
+// promise: within ONE file a duplicate slot is left in place, so CompileAll
+// keeps the FIRST block and warns. The overlay must not fold same-file
+// blocks together slot-by-slot — that would silently make the LAST one win
+// before CompileAll could see the duplicate, and the writers (which target
+// the first block) would then edit a block nothing reads.
+func TestBranchFilterDuplicateSlotInOneFileKeepsFirst(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	global := writeCfg(t, dir, "global.toml", `
+[[branches.filter]]
+slot = 2
+name = "first"
+prefix = "feat/"
+
+[[branches.filter]]
+slot = 2
+name = "second"
+prefix = "fix/"
+`)
+	cfg, err := Load(global, filepath.Join(dir, "absent.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Branches.Filter) != 2 {
+		t.Fatalf("both blocks must survive the overlay for CompileAll to see the duplicate: %+v", cfg.Branches.Filter)
+	}
+	all, warnings := branchfilter.CompileAll(cfg.Branches.Filter)
+	if all[1].Name != "first" || all[1].Prefix != "feat/" {
+		t.Errorf("slot 2 = %+v; want the FIRST block, which is the one the writers edit", all[1].Slot)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "slot 2") {
+		t.Errorf("warnings = %v; want exactly one naming slot 2", warnings)
+	}
+}
+
+// TestBranchFilterRepoBlockReplacesEveryGlobalCopy is the other half: the
+// repo layer still replaces a global slot WHOLE — including a global file
+// that carries the slot twice, which must leave no duplicate behind.
+func TestBranchFilterRepoBlockReplacesEveryGlobalCopy(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	global := writeCfg(t, dir, "g.toml", `
+[[branches.filter]]
+slot = 1
+name = "keep-me"
+prefix = "a"
+
+[[branches.filter]]
+slot = 2
+name = "global-first"
+prefix = "b"
+
+[[branches.filter]]
+slot = 2
+name = "global-second"
+prefix = "c"
+`)
+	repo := writeCfg(t, dir, "r.toml", `
+[[branches.filter]]
+slot = 2
+name = "repo"
+suffix = "-wip"
+`)
+	cfg, err := Load(global, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	all, warnings := branchfilter.CompileAll(cfg.Branches.Filter)
+	if all[0].Name != "keep-me" || all[0].Prefix != "a" {
+		t.Errorf("slot 1 should fall through from global: %+v", all[0].Slot)
+	}
+	if all[1].Name != "repo" || all[1].Suffix != "-wip" || all[1].Prefix != "" {
+		t.Errorf("slot 2 = %+v; want the repo block WHOLE (no field inherited from global)", all[1].Slot)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %v; the repo block displaces BOTH global copies, so no duplicate is left", warnings)
+	}
+}
+
+// TestSetBranchFilterFindsSlotLineWithTrailingComment: the spec's own
+// example comments every line (`slot = 2   # 1..5, required`). A trailing
+// comment is part of the line, not of the value — if the writer parsed it
+// into the slot number it would read 0, miss the block, and append a
+// duplicate instead of replacing in place.
+func TestSetBranchFilterFindsSlotLineWithTrailingComment(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := writeCfg(t, dir, "set.toml", "[[branches.filter]]\nslot = 2   # 1..5, required\nname = \"hand-written\"\nprefix = \"feat/\"\n")
+	if err := SetBranchFilter(p, branchfilter.Slot{Slot: 2, Name: "replaced", Prefix: "fix/"}); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(p)
+	got := string(raw)
+	if n := strings.Count(got, "[[branches.filter]]"); n != 1 {
+		t.Fatalf("want exactly one block (replaced in place), got %d:\n%s", n, got)
+	}
+	if strings.Contains(got, "hand-written") || !strings.Contains(got, `name = "replaced"`) {
+		t.Errorf("slot 2 not replaced:\n%s", got)
+	}
+	cfg, err := Load(p, filepath.Join(dir, "absent.toml"))
+	if err != nil {
+		t.Fatalf("written file must decode: %v\n%s", err, got)
+	}
+	all, _ := branchfilter.CompileAll(cfg.Branches.Filter)
+	if all[1].Prefix != "fix/" {
+		t.Errorf("slot 2 = %+v", all[1].Slot)
+	}
+}
+
+// TestRemoveBranchFilterFindsSlotLineWithTrailingComment is the Remove twin:
+// the popup reports "removed" unconditionally, so a writer that cannot find
+// the block deletes nothing and says it did.
+func TestRemoveBranchFilterFindsSlotLineWithTrailingComment(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := writeCfg(t, dir, "rm.toml", "[ui]\nwheel_step = 2\n\n[[branches.filter]]\nslot = 2   # 1..5, required\nname = \"hand-written\"\nprefix = \"feat/\"\n")
+	if err := RemoveBranchFilter(p, 2); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(p)
+	got := string(raw)
+	if strings.Contains(got, "[[branches.filter]]") {
+		t.Errorf("block not removed:\n%s", got)
+	}
+	if !strings.Contains(got, "wheel_step = 2") {
+		t.Errorf("the rest of the file must survive:\n%s", got)
+	}
+}

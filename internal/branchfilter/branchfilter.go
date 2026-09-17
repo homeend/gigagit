@@ -9,6 +9,7 @@ package branchfilter
 import (
 	"errors"
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -121,6 +122,13 @@ func ParseAge(s string) (time.Duration, error) {
 	n, err := strconv.Atoi(s[:len(s)-1])
 	if err != nil || n <= 0 {
 		return 0, errors.New("age must be a positive whole number of d, w, m or y (e.g. 90d)")
+	}
+	// time.Duration is an int64 of nanoseconds, so it tops out near 292
+	// years: "293y" would wrap NEGATIVE, Compile would read the clause as
+	// unset, and a hide-mode slot with no name clause would then hide every
+	// non-exempt branch. Refuse the value instead of silently inverting it.
+	if int64(n) > int64(math.MaxInt64)/int64(unit) {
+		return 0, errors.New("age too large (must be under ~292 years)")
 	}
 	return time.Duration(n) * unit, nil
 }

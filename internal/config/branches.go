@@ -26,19 +26,26 @@ type BranchesConfig struct {
 // file are left in place (CompileAll keeps the first, so hand-editing never
 // silently flips a rule).
 func overlayBranchFilters(dst *BranchesConfig, src BranchesConfig) {
+	if len(src.Filter) == 0 {
+		return
+	}
+	// Replace only what a PREVIOUS layer contributed: drop every dst entry
+	// whose slot this layer redefines, then append ALL of src — duplicates
+	// included. Merging src into dst slot-by-slot instead would collapse a
+	// same-file duplicate to last-wins before CompileAll ever sees it, so
+	// the promised first-wins warning would never fire and the editor (which
+	// targets the FIRST block) would write to a block nothing reads.
+	defined := make(map[int]bool, len(src.Filter))
 	for _, s := range src.Filter {
-		replaced := false
-		for i, have := range dst.Filter {
-			if have.Slot == s.Slot {
-				dst.Filter[i] = s
-				replaced = true
-				break
-			}
-		}
-		if !replaced {
-			dst.Filter = append(dst.Filter, s)
+		defined[s.Slot] = true
+	}
+	out := make([]branchfilter.Slot, 0, len(dst.Filter)+len(src.Filter))
+	for _, s := range dst.Filter {
+		if !defined[s.Slot] {
+			out = append(out, s)
 		}
 	}
+	dst.Filter = append(out, src.Filter...)
 }
 
 const branchFilterHeader = "[[branches.filter]]"
@@ -92,6 +99,12 @@ func branchFilterBlocks(lines []string) (spans [][2]int, slots []int) {
 			// line" regression this guards against.
 			if !strings.HasPrefix(trimmed, "#") && slot == 0 && lineAssignsKey(trimmed, "slot") {
 				_, v, _ := strings.Cut(trimmed, "=")
+				// A trailing comment is part of the line, not of the value:
+				// `slot = 2   # 1..5` must parse as 2, or both writers would
+				// see slot 0 and miss the block entirely (Remove silently
+				// no-ops, Set appends a duplicate). The value is an integer,
+				// so there is no quoted string a `#` could belong to.
+				v, _, _ = strings.Cut(v, "#")
 				slot, _ = strconv.Atoi(strings.TrimSpace(v))
 				continue
 			}

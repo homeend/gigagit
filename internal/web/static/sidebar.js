@@ -145,9 +145,10 @@ function renderRemotes() {
     .map((rb) => {
       // ∗ marks a row the active rule WOULD hide but may not — here the
       // current branch's upstream, the row f/find and pull land on. Same
-      // marker and wording as the branches list.
+      // marker as the branches list, but the REASON differs: a remote row is
+      // never "checked out", so the title names the upstream relation.
       const exemptMark = rb.exempt
-        ? `<span class="exempt-mark" title="the active filter would hide this row; kept because it is checked out">∗</span>`
+        ? `<span class="exempt-mark" title="the active filter would hide this row; kept because it is the current branch's upstream">∗</span>`
         : "";
       return (
         `<li class="${rb.exempt ? "exempt" : ""}" data-n="${esc(rb.name)}" data-h="${esc(rb.hash)}">` +

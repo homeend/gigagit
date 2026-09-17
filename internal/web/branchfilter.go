@@ -79,7 +79,13 @@ func (s *Server) activeBranchFilter(ctx context.Context, svc *domain.Service, li
 	if store == nil {
 		return nil
 	}
-	slot := store.BranchFilterSlot(s.branchFilterRepoKey(ctx, svc), list)
+	// An unresolvable repo is no repo: reading under the empty key would
+	// serve whatever a bad WRITE once left in the store's "" record.
+	key := s.branchFilterRepoKey(ctx, svc)
+	if key == "" {
+		return nil
+	}
+	slot := store.BranchFilterSlot(key, list)
 	if slot < 1 || slot > branchfilter.MaxSlots {
 		return nil
 	}
@@ -150,7 +156,17 @@ func (s *Server) handleBranchFilterSet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, errors.New("no state dir to remember the filter in"))
 		return
 	}
-	if err := store.SetBranchFilterSlot(s.branchFilterRepoKey(ctx, svc), req.List, *req.Slot); err != nil {
+	// The promptstate record is keyed by the git common dir, which is also
+	// what the TUI writes under. With no key there is nothing to key it to:
+	// writing anyway would persist a `[branch_filter.""]` record no reader
+	// ever looks up, so the chip would come back off and the user would
+	// never learn why. Say so instead of pretending it stuck.
+	key := s.branchFilterRepoKey(ctx, svc)
+	if key == "" {
+		writeErr(w, http.StatusServiceUnavailable, errors.New("repo not resolved — not remembered"))
+		return
+	}
+	if err := store.SetBranchFilterSlot(key, req.List, *req.Slot); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}

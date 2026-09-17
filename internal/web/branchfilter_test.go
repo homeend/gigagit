@@ -2,7 +2,10 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -11,7 +14,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // bfRepo makes a repo with main (HEAD), feat/a, feat/old (backdated 200d),
@@ -385,4 +390,79 @@ prefix = "fix/"
 	if out.Filter == nil || out.Filter.Hidden != len(allRemotes(t, dir))-1 {
 		t.Errorf("filter = %+v; want every other remote hidden", out.Filter)
 	}
+}
+
+// TestRemoteVerdictsGoInactiveWhenTheBranchListFails pins how /api/remotes
+// degrades: the branch list IS the exemption input (HEAD's upstream), so if
+// it cannot be read the rule must not run at all. Applying it anyway would
+// hide every matching row INCLUDING the upstream — the row f/find and pull
+// land on — which is the opposite of how /api/branches degrades.
+func TestRemoteVerdictsGoInactiveWhenTheBranchListFails(t *testing.T) {
+	t.Parallel()
+	c := branchfilter.Compile(branchfilter.Slot{Slot: 1, Name: "not-main", Mode: branchfilter.ModeShow, Prefix: "feat/"})
+	if !c.Usable() {
+		t.Fatalf("fixture rule is inert: %s", c.Summary())
+	}
+	rbs := []model.RemoteBranch{
+		{Name: "origin/feat/a", Remote: "origin", Branch: "feat/a"},
+		{Name: "origin/main", Remote: "origin", Branch: "main"},
+	}
+	bs := []model.Branch{{Name: "main", IsHead: true, Upstream: "origin/main"}}
+
+	active, verdicts, hidden := remoteVerdicts(&c, rbs, bs, nil)
+	if active == nil || hidden != 0 || len(verdicts) != 2 {
+		t.Fatalf("healthy read: active=%v hidden=%d verdicts=%+v", active != nil, hidden, verdicts)
+	}
+	if verdicts[1].Hidden || !verdicts[1].Exempt {
+		t.Errorf("origin/main is HEAD's upstream: want exempt, not hidden: %+v", verdicts[1])
+	}
+
+	active, verdicts, hidden = remoteVerdicts(&c, rbs, nil, errors.New("branch list unavailable"))
+	if active != nil || verdicts != nil || hidden != 0 {
+		t.Errorf("failed branch read: active=%v verdicts=%+v hidden=%d; want the filter INACTIVE (filter: null, every row shown)", active != nil, verdicts, hidden)
+	}
+}
+
+// TestBranchFilterPutRefusesAnUnresolvedRepo: the promptstate record is keyed
+// by the git common dir, which is also the key the TUI reads. With no key,
+// storing would write a `[branch_filter.""]` record nothing ever looks up —
+// the chip would come back off with no explanation. Refuse and say so.
+func TestBranchFilterPutRefusesAnUnresolvedRepo(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir() // NOT a git repo: `git rev-parse --git-common-dir` fails
+	ts := httptest.NewServer(New(domain.Open(dir)).Handler())
+	t.Cleanup(ts.Close)
+
+	// slot 0 (clear) is the one body that reaches the store without first
+	// needing a readable config, so it isolates the key check. putJSON only
+	// decodes 2xx bodies, so the error text is read straight off the wire.
+	req, err := http.NewRequest("PUT", ts.URL+"/api/branch-filter", strings.NewReader(`{"list":"branches","slot":0}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("PUT with an unresolved repo = %d; want 503\n%s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), "not remembered") {
+		t.Errorf("body = %s; want it to say the slot was not remembered", body)
+	}
+	// Nothing may have been written under the empty key.
+	_ = filepath.Walk(state, func(p string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if raw, rerr := os.ReadFile(p); rerr == nil && strings.Contains(string(raw), "branch_filter") {
+			t.Errorf("%s recorded a slot under the empty key:\n%s", p, raw)
+		}
+		return nil
+	})
 }

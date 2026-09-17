@@ -1221,6 +1221,26 @@ the section's meaning intact and lets `filter.hidden` count the truly-hidden
 rows rather than the ones the cap would have dropped anyway. Verdicts are
 computed from the SORTED slice so index alignment holds through the later cap.
 
+**A missing exemption input turns the filter OFF for that request, never
+"apply to everything".** On `/api/remotes` the branch list IS the exemption
+input (HEAD's upstream), so `remoteVerdicts(active, rbs, bs, berr)` returns a
+nil rule when `svc.Branches` failed: the payload carries `filter: null` and
+every row shows, rather than a transient read failure hiding the very row
+`f`/find and pull land on. `/api/branches` degrades the same direction (a
+failed worktree read only loses the OTHER checkouts; HEAD stays exempt
+either way). Likewise, an unresolved repo key (`svc.GitCommonDir` failed and
+the process cache is cold) makes `activeBranchFilter` return nil, and the PUT
+that would have stored a slot under it answers **503 "repo not resolved — not
+remembered"** instead of writing a `[branch_filter.""]` promptstate record no
+reader ever looks up. Two parsing counterparts, both in the same spirit:
+`ParseAge` REFUSES a value past `time.Duration`'s ~292-year ceiling (`293y`,
+`3600m`) rather than letting the multiply wrap negative — a wrapped age reads
+as an unset clause, and a hide-mode slot with no name clause would then hide
+every non-exempt row — and `branchFilterBlocks` strips a trailing `#` comment
+off the `slot =` value before `Atoi`, because the spec's own example comments
+that line and a slot parsed as 0 makes `RemoveBranchFilter` a silent no-op
+and `SetBranchFilter` append a duplicate.
+
 **Web keys on `e.code`, never `e.key`.** `branchFilterKey(e)` in
 `branchfilter.js` matches `e.code === "Digit1".."Digit5"` with `altKey` (and
 `shiftKey` for Remotes) — with Alt held, `e.key` is a dead or accented

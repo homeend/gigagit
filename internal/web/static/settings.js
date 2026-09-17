@@ -180,8 +180,8 @@ async function saveSettings() {
 // section note.
 const BF_CLAUSES = [
   ["name", "name", "shown on the chip"],
-  ["older_than", "older than", "90d · 6mo · 1y"],
-  ["younger_than", "younger than", "7d · 24h"],
+  ["older_than", "older than", "90d · 6m · 1y"],
+  ["younger_than", "younger than", "7d · 2w"],
   ["prefix", "prefix", "feat/"],
   ["suffix", "suffix", "-wip"],
   ["contains", "contains", "release"],

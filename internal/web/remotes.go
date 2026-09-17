@@ -25,6 +25,21 @@ type remoteRow struct {
 	Exempt bool `json:"exempt"`
 }
 
+// remoteVerdicts runs active over rbs, exempting HEAD's upstream using bs.
+// berr is the branch list's read error: the branch list IS the exemption
+// input here, so without it the rule would apply to every row — including
+// HEAD's upstream, the row f/find and pull land on. In that case the filter
+// goes INACTIVE for this request (a nil first return, so the payload carries
+// `filter: null`), which is how /api/branches degrades too: a transient read
+// failure must never silently over-hide.
+func remoteVerdicts(active *branchfilter.Compiled, rbs []model.RemoteBranch, bs []model.Branch, berr error) (*branchfilter.Compiled, []branchfilter.Verdict, int) {
+	if active == nil || berr != nil {
+		return nil, nil, 0
+	}
+	verdicts, hidden := applyFilter(active, domain.RemoteBranchRows(rbs), domain.ExemptRemoteBranches(rbs, bs))
+	return active, verdicts, hidden
+}
+
 func (s *Server) handleRemotes(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	ctx := readCtx(r)
@@ -49,10 +64,7 @@ func (s *Server) handleRemotes(w http.ResponseWriter, r *http.Request) {
 	hidden := 0
 	if active != nil {
 		bs, berr := svc.Branches(ctx)
-		if berr != nil {
-			bs = nil // no upstream row to protect; the rule simply applies to all
-		}
-		verdicts, hidden = applyFilter(active, domain.RemoteBranchRows(rbs), domain.ExemptRemoteBranches(rbs, bs))
+		active, verdicts, hidden = remoteVerdicts(active, rbs, bs, berr)
 	}
 	// Hidden rows are dropped here (the branches payload flags them instead —
 	// it has no cap to spend them on), so the row is built in the same pass
