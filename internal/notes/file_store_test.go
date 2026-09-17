@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/filelock"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -167,7 +168,7 @@ func TestStaleLockIsTakenOver(t *testing.T) {
 	if err := os.WriteFile(lock, []byte("stale"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	old := time.Now().Add(-2 * lockStale)
+	old := time.Now().Add(-2 * filelock.Stale)
 	if err := os.Chtimes(lock, old, old); err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +176,7 @@ func TestStaleLockIsTakenOver(t *testing.T) {
 	if err := fs.Put(noteAt("aaaaaaaa", 1)); err != nil {
 		t.Fatalf("a stale lock must be broken, got %v", err)
 	}
-	if time.Since(start) > lockWait {
+	if time.Since(start) > filelock.Wait {
 		t.Fatal("a stale lock must be broken without waiting out the full retry budget")
 	}
 	if got, _ := fs.Load(); len(got) != 1 {
@@ -225,7 +226,7 @@ func TestPutWaitsForAHeldLock(t *testing.T) {
 	select {
 	case err := <-done:
 		t.Fatalf("Put returned (%v) while the lock was held", err)
-	case <-time.After(200 * time.Millisecond): // well under lockWait
+	case <-time.After(200 * time.Millisecond): // well under filelock.Wait
 	}
 
 	if err := os.Remove(lock); err != nil {
@@ -240,7 +241,7 @@ func TestPutWaitsForAHeldLock(t *testing.T) {
 }
 
 // TestHeldLockGivesUpAtTheDeadline pins the retry loop's exit: a lock held
-// past lockWait fails the write instead of waiting or spinning forever.
+// past filelock.Wait fails the write instead of waiting or spinning forever.
 func TestHeldLockGivesUpAtTheDeadline(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -259,10 +260,10 @@ func TestHeldLockGivesUpAtTheDeadline(t *testing.T) {
 		if err == nil {
 			t.Fatal("Put must fail while the lock is held")
 		}
-		if elapsed := time.Since(start); elapsed < lockWait {
-			t.Fatalf("gave up after %v, before the %v budget", elapsed, lockWait)
+		if elapsed := time.Since(start); elapsed < filelock.Wait {
+			t.Fatalf("gave up after %v, before the %v budget", elapsed, filelock.Wait)
 		}
-	case <-time.After(4 * lockWait):
+	case <-time.After(4 * filelock.Wait):
 		t.Fatal("Put never gave up: the retry loop does not honour its deadline")
 	}
 }
@@ -281,7 +282,7 @@ func TestUnremovableStaleLockStillGivesUp(t *testing.T) {
 	if err := os.WriteFile(lock, []byte("stale"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	old := time.Now().Add(-2 * lockStale)
+	old := time.Now().Add(-2 * filelock.Stale)
 	if err := os.Chtimes(lock, old, old); err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +303,7 @@ func TestUnremovableStaleLockStillGivesUp(t *testing.T) {
 		if err == nil {
 			t.Fatal("Put must fail: the stale lock could not be broken")
 		}
-	case <-time.After(4 * lockWait):
+	case <-time.After(4 * filelock.Wait):
 		t.Fatal("Put spun on an unremovable stale lock instead of giving up")
 	}
 }
@@ -453,64 +454,5 @@ func TestLockReleaseOnlyRemovesItsOwn(t *testing.T) {
 	b, err := os.ReadFile(taken.lockPath())
 	if err != nil || string(b) != "another-gg" {
 		t.Fatalf("release must leave a lock it no longer owns alone: %q err %v", b, err)
-	}
-}
-
-// TestLockRetriesAPermissionRefusal is the portable stand-in for a Windows
-// pending-delete name.
-//
-// os.Remove on Windows does not unlink a file whose handle someone still
-// holds — an on-access virus scanner, the search indexer — it marks the name
-// PENDING DELETE, and an O_EXCL create against it then fails with
-// ERROR_ACCESS_DENIED rather than ErrExist. The lock loop aborted on anything
-// that was not ErrExist, so a write failed outright for a condition that
-// clears in milliseconds. The Windows suite caught it as "Access is denied"
-// from a Put whose lock had already been released.
-//
-// Windows cannot be driven from here, but the BRANCH can: an unwritable
-// directory makes the same create fail with ErrPermission. Restoring the
-// permission mid-flight must let the parked writer through, which is exactly
-// what the pending-delete case needs and what the old code refused.
-func TestLockRetriesAPermissionRefusal(t *testing.T) {
-	t.Parallel()
-	if runtime.GOOS == "windows" {
-		t.Skip("chmod does not gate file creation on Windows; this models the Windows case FROM posix")
-	}
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores the directory mode, so the refusal never happens")
-	}
-	dir := t.TempDir()
-	fs := NewFileStore(dir)
-	// Create the store's file first: only the LOCK's creation must be refused,
-	// not the read that precedes it.
-	if err := fs.Put(noteAt("aaaaaaaa", 1)); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chmod(dir, 0o500); err != nil { // r-x: no new names
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
-
-	done := make(chan error, 1)
-	go func() { done <- fs.Put(noteAt("bbbbbbbb", 2)) }()
-
-	select {
-	case err := <-done:
-		t.Fatalf("Put returned (%v) while the directory refused the lock", err)
-	case <-time.After(150 * time.Millisecond): // well under lockWait
-	}
-
-	if err := os.Chmod(dir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := <-done; err != nil {
-		t.Fatalf("Put after the refusal cleared: %v", err)
-	}
-	got, err := fs.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("the waiting writer lost its note: %d notes, want 2", len(got))
 	}
 }
