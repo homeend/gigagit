@@ -305,7 +305,7 @@ async function openCompareForPair(a, b) {
 // over, in finishLink's arms).
 async function steerNavigate(s) {
   await steerNavigateLand(s);
-  if (s.hint_kind) revealHintEntry(s.hint_kind, s.hint_id);
+  if (s.hint_kind) await revealHintEntry(s.hint_kind, s.hint_id);
 }
 
 // steerNavigateLand opens what the command names and marks the landed row.
