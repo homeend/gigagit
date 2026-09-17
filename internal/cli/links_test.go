@@ -107,8 +107,14 @@ func TestLinksUsageErrorOnExtraArgument(t *testing.T) {
 // TestLinksIsRoutedByCLIRun: `gg links` reaches cmdLinks through the real
 // verb router, not just through a direct cmdLinks call — the end-to-end
 // wiring `gg link` prints + `gg links` lists.
+//
+// SERIAL — no t.Parallel(): it writes the package global RepoStatePath, and
+// every other verb that resolves a link READS it (resolveLinkArg →
+// linkResolveOpts). repo_test.go's helper states the rule in a comment and
+// linksession_serial_test.go is named for it; this test broke it and the
+// race detector caught it only once a later merge changed which tests
+// overlap — the race was latent here all along, not introduced by the merge.
 func TestLinksIsRoutedByCLIRun(t *testing.T) {
-	t.Parallel()
 	old := RepoStatePath
 	RepoStatePath = ""
 	defer func() { RepoStatePath = old }()
