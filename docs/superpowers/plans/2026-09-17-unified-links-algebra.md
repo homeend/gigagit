@@ -2553,6 +2553,17 @@ bounded and an Endpoint alone cannot say so:
 			fmt.Fprintln(stderr, "compare:", err)
 			return domain.FileSet{}, 2
 		}
+		// RESOLVE BEFORE EVALUATING — this is a correctness requirement, not
+		// a formality. A PARSED local-form link (gg:///abs/checkout/dir/f.go)
+		// carries the checkout AND the file path undivided in Repo.Abs with
+		// Link.Path == "" — the grammar puts no delimiter between them, and
+		// only this machine's repo registry can split them, which is exactly
+		// what domain.ResolveLink does. Hand an unresolved local link to
+		// EvalLink and a FILE link silently evaluates as a WHOLE-TREE link:
+		// a wrong answer with no error, which is the one class this plan has
+		// refused to ship. Use the Resolved value's own path and address, not
+		// the raw parsed Link. Task 6 recorded this as a precondition on
+		// EvalLink's doc comment; honouring it is this task's job.
 		fs, err := svc.EvalLink(ctx, l)
 		if err != nil {
 			fmt.Fprintln(stderr, "compare:", err)
@@ -2579,7 +2590,10 @@ compare: gg://<other>/… names a different repository; cross-repository compare
 ```
 
 Then `validComparePair` **goes away entirely** — the algebra is total, so there
-is no invalid pair any more. Delete it and its tests, and delete the two
+is no invalid pair any more. Task 6 confirmed there is no domain equivalent of
+its ordering refusal and none is needed: `CompareSets` handles every ordering,
+including the shelf × live pair the CLI currently rejects. Drop it
+deliberately, and say in the commit message that you did. Delete it and its tests, and delete the two
 "order endpoints oldest→newest" / "a frozen shelf entry pairs only with…"
 error branches from `cmdCompare`. This is the point of the plan: the pairing
 rules stop being a CLI concern.
