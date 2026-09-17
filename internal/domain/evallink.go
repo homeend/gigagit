@@ -22,6 +22,15 @@ import (
 // Side, Line and Hunk are ignored too: they are where a link LANDS, not what
 // it addresses. Narrowing to a link's /<path> is EvalLink's job, not this
 // one's — an endpoint names a byte source, never a key set.
+//
+// THE RESULT MAY BE AN UNRESOLVED EndpointRef, and a ref MOVES: this is the
+// answer to "what does this link address", which for "@ref:main" is the
+// branch, not whichever commit it happens to sit on. Nothing that COMPARES or
+// CACHES may take it as it stands — Endpoint.CacheTag panics on a ref by
+// design, so a moving name cannot become a cache key. EvalEndpoint is the one
+// place a ref is allowed to die (plan 1b ruling R2), which is why EvalLink
+// always goes through it. A caller wanting only to DISPLAY what a link
+// addresses may use this directly; any other caller resolves first.
 func (s *Service) EndpointForLink(ctx context.Context, l model.Link) (model.Endpoint, error) {
 	t := l.Target
 

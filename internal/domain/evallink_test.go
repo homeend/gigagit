@@ -195,6 +195,111 @@ func TestEvalLinkNarrowsALivePoint(t *testing.T) {
 	}
 }
 
+// narrowTo's BOUNDED arm: a /<path> on a link whose target is already a
+// bounded set (a pair, a shelf). The set never grows — §3.5 only ever scales
+// DOWN — so the answer is "one member, and does it have bytes here".
+//
+// A path that is not a MEMBER of the bounded set has no bytes there. For a
+// PAIR that already falls out of its has map (a non-member misses to false);
+// for a SHELF it does NOT, because a shelf's has map is nil, meaning "every
+// member has bytes" — so Has() answers true for ANY path, member or not, and
+// without narrowTo's membership check the later byte read would be sent after
+// a file the tar does not hold. compareBoundedPair guards the identical trap.
+func TestEvalLinkNarrowsABoundedSet(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a pair, narrowed", func(t *testing.T) {
+		t.Parallel()
+		f := newCompareFixture(t)
+		ctx := context.Background()
+
+		// The c1..c3 change-set is {a.txt} alone: b.txt was added at c2 and
+		// deleted at c3, so it never enters the set.
+		member, err := model.ParseLink("gg://x/a.txt@" + f.c1 + ".." + f.c3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs, err := f.svc.EvalLink(ctx, member)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !fs.Bounded() || len(fs.Paths()) != 1 || fs.Paths()[0] != "a.txt" || !fs.Has("a.txt") {
+			t.Fatalf("a.txt is a member with bytes at c3: bounded=%v paths=%v has=%v",
+				fs.Bounded(), fs.Paths(), fs.Has("a.txt"))
+		}
+
+		outsider, err := model.ParseLink("gg://x/b.txt@" + f.c1 + ".." + f.c3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs, err = f.svc.EvalLink(ctx, outsider)
+		if err != nil {
+			t.Fatalf("narrowing to a non-member must evaluate, not error (ruling R6): %v", err)
+		}
+		if !fs.Bounded() || len(fs.Paths()) != 1 || fs.Paths()[0] != "b.txt" {
+			t.Fatalf("the set must be bounded to b.txt alone, got bounded=%v paths=%v", fs.Bounded(), fs.Paths())
+		}
+		if fs.Has("b.txt") {
+			t.Fatal("b.txt is not in the c1..c3 change-set, so it has no bytes there; Has said true")
+		}
+	})
+
+	t.Run("a shelf, narrowed", func(t *testing.T) {
+		t.Parallel()
+		// newLiveArmFixture's shelf entry holds exactly {x.txt, dropped.txt}.
+		// README.md is in the repo and on disk but is NOT a member — the case
+		// the nil has map would answer true for.
+		f := newLiveArmFixture(t)
+		ctx := context.Background()
+		id := f.ep.ShelfID()
+
+		member, err := model.ParseLink("gg://x/x.txt?shelf=" + id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs, err := f.svc.EvalLink(ctx, member)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !fs.Bounded() || len(fs.Paths()) != 1 || fs.Paths()[0] != "x.txt" || !fs.Has("x.txt") {
+			t.Fatalf("x.txt is a shelf member: bounded=%v paths=%v has=%v",
+				fs.Bounded(), fs.Paths(), fs.Has("x.txt"))
+		}
+
+		outsider, err := model.ParseLink("gg://x/README.md?shelf=" + id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs, err = f.svc.EvalLink(ctx, outsider)
+		if err != nil {
+			t.Fatalf("narrowing a shelf to a non-member must evaluate, not error: %v", err)
+		}
+		if !fs.Bounded() || len(fs.Paths()) != 1 || fs.Paths()[0] != "README.md" {
+			t.Fatalf("the set must be bounded to README.md alone, got bounded=%v paths=%v", fs.Bounded(), fs.Paths())
+		}
+		if fs.Has("README.md") {
+			t.Fatal("README.md is not a shelf member, so the tar holds no bytes for it; Has said true " +
+				"(a nil has map answers true for any path — narrowTo must check MEMBERSHIP)")
+		}
+
+		// End to end: the narrowed non-member compared against the live
+		// working tree, where README.md DOES exist. Without the membership
+		// check this is not merely a wrong flag — sameBytes asks the shelf tar
+		// for a file it never held and the whole comparison hard-errors.
+		live, err := f.svc.EvalEndpoint(ctx, model.WorkTreeEndpoint())
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := f.svc.CompareSets(ctx, fs, live)
+		if err != nil {
+			t.Fatalf("comparing a non-member against the working tree must report A, not fail the read: %v", err)
+		}
+		if len(got) != 1 || got[0].Path != "README.md" || got[0].Status != "A" {
+			t.Fatalf("got %v, want exactly README.md A", got)
+		}
+	})
+}
+
 // A ref link is a POINT — the whole tree at that tip — and EvalEndpoint is the
 // only place the moving name may die: the set's endpoint is a COMMIT, never
 // an EndpointRef (plan 1b ruling R2).
