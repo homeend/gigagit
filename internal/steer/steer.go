@@ -96,6 +96,17 @@ type Command struct {
 	End     int      `json:"end,omitempty"`
 	Tone    string   `json:"tone,omitempty"` // "info" | "warn" | "error"
 	Wait    bool     `json:"wait,omitempty"`
+	// HintKind/HintID name the UI surface a navigate's link was copied from
+	// ("bookmark", "shelf" or "stash" — model.LinkHint's closed set, spec
+	// §3.3/§3.4). They never change WHERE a navigate lands — only which
+	// surface a consumer reveals once it has landed — and a consumer that
+	// cannot show the kind (today: "stash", which has no producer) lands
+	// anyway and degrades with a notice (spec §3.3 rule 3: the hint
+	// degrades, it never fails). The one exception is a hint-only navigate —
+	// no File, no Commit, no Target, a link with no address at all — whose
+	// landing IS the reveal.
+	HintKind string `json:"hint_kind,omitempty"`
+	HintID   string `json:"hint_id,omitempty"`
 }
 
 // Reply is the consumer's answer to one command. Detail and Error are English

@@ -37,6 +37,46 @@ func TestPostDrainRoundTripAndOrder(t *testing.T) {
 	}
 }
 
+// TestCommandHintFieldsRoundTripThroughJSON pins the wire shape Task 6 adds:
+// hint_kind/hint_id survive Post/Drain, and stay absent (omitempty) for a
+// command that carries no hint — a regression a consumer's JSON decode could
+// silently drop without ever failing a build.
+func TestCommandHintFieldsRoundTripThroughJSON(t *testing.T) {
+	t.Parallel()
+	dir := filepath.Join(t.TempDir(), "inbox")
+	if _, err := Post(dir, Command{ID: "1", Cmd: "navigate", HintKind: "bookmark", HintID: "b1"}); err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	got := Drain(dir)
+	if len(got) != 1 {
+		t.Fatalf("Drain = %d, want 1", len(got))
+	}
+	if got[0].HintKind != "bookmark" || got[0].HintID != "b1" {
+		t.Errorf("hint = %q/%q, want bookmark/b1", got[0].HintKind, got[0].HintID)
+	}
+
+	// Read the raw file bytes before Drain would remove it: omitempty means a
+	// hint-less command's JSON carries neither key at all.
+	id2, err := Post(dir, Command{ID: "2", Cmd: "navigate", File: "a.txt"})
+	if err != nil {
+		t.Fatalf("Post: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "cmd-"+id2+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "hint_kind") || strings.Contains(string(raw), "hint_id") {
+		t.Errorf("hint-less command JSON = %s, want no hint_kind/hint_id key", raw)
+	}
+	var decoded Command
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.HintKind != "" || decoded.HintID != "" {
+		t.Errorf("decoded hint = %q/%q, want both empty", decoded.HintKind, decoded.HintID)
+	}
+}
+
 func TestPostFillsAnEmptyID(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

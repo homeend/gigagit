@@ -50,6 +50,13 @@ type Resolved struct {
 	// and a consumer that needs one (a note, a `gg show`) is refused by
 	// ruling R4 rather than silently handed it.
 	Pair *model.LinkPair
+	// Hint is the UI surface the link was copied from (spec §3.3): it never
+	// changes WHERE this resolves, only which surface a consumer reveals once
+	// it lands. Copied blind from the link in finishLink's common prologue —
+	// a consumer with an address looks the entry up itself; ResolveLink only
+	// checks presence when there is no address at all, because then the hint
+	// is the link's only content (see finishLink).
+	Hint model.LinkHint
 }
 
 // ResolveOpts carries everything the resolver may not reach for itself, so a
@@ -464,11 +471,40 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 		Line:     l.Line,
 		Side:     l.Side,
 		Hunk:     l.Hunk,
+		Hint:     l.Hint,
 	}
 	if res.Side == "" {
 		res.Side = model.NoteSideNew
 	}
 	res.Addr.Path = rel
+
+	// S11: a hint is checked in two layers. WITH an address, domain copies it
+	// blind (the assignment above) — the consumer looks the entry up in its
+	// own already-loaded store and reveals or notices; no store lookup runs
+	// here. WITHOUT one, the hint is the link's only content, so its
+	// presence must be checked HERE: there is nothing else for the link to
+	// resolve to if it is gone. "No address" is asked of l itself (Ref/
+	// Pair/Preview/Commit all empty), never of the not-yet-computed
+	// res.Commit — this runs before the switch below fills it in.
+	if rel == "" && l.Target.Commit == "" && l.Target.Preview == nil && l.Target.Ref == "" && l.Target.Pair == nil && l.Hint.Kind != "" {
+		switch l.Hint.Kind {
+		case "bookmark":
+			if _, err := opts.OpenFn(c.checkout).BookmarkGet(ctx, l.Hint.ID); err != nil {
+				return Resolved{}, fmt.Errorf("%w: %s has no %s %q, and the link names nothing else", model.ErrLink, c.checkout, l.Hint.Kind, l.Hint.ID)
+			}
+		case "shelf":
+			if _, err := opts.OpenFn(c.checkout).ShelfFind(ctx, l.Hint.ID); err != nil {
+				return Resolved{}, fmt.Errorf("%w: %s has no %s %q, and the link names nothing else", model.ErrLink, c.checkout, l.Hint.Kind, l.Hint.ID)
+			}
+		default:
+			// "stash" (spec §3.4) and any future kind this build cannot
+			// check: there is no presence lookup to fall back on, so an
+			// address-less link naming one is always a hard error rather
+			// than a silent pass-through.
+			return Resolved{}, fmt.Errorf("%w: %s has no way to check a %s hint (%q), and the link names nothing else", model.ErrLink, c.checkout, l.Hint.Kind, l.Hint.ID)
+		}
+	}
+
 	switch l.Target.State {
 	case model.StateCommitted:
 		if r := l.Target.Ref; r != "" {
