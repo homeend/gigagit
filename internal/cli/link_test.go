@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/linkhist"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -714,5 +716,161 @@ func TestLinkResolveNowResolvesRefAndPair(t *testing.T) {
 				t.Errorf("stdout = %q, want it to name the resolved commit %q", out, head)
 			}
 		})
+	}
+}
+
+// TestLinkDescForms pins linkDesc's table (spec §4.3), plus the fallback
+// kind ("link") a caller passes for a shape the table has no row for.
+func TestLinkDescForms(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name, kind, id, subject, want string
+	}{
+		{"branch", "branch", "feat/x", "", "branch: feat/x"},
+		{"bookmark", "bookmark", "auth fix", "", "bookmark: auth fix"},
+		{"shelf", "shelf", "WIP parser", "", "shelf: WIP parser"},
+		{"preview", "preview", "main...feat/x", "", "preview: main...feat/x"},
+		{"commit", "commit", "abc123", "fix auth", "commit: abc123 fix auth"},
+		{"stash", "stash", "", "WIP on main", "stash: WIP on main"},
+		{"file", "file", "src/main.go", "", "file: src/main.go"},
+		{"fallback", "link", "gg://gigagit@1234567..89abcde", "", "link: gg://gigagit@1234567..89abcde"},
+	}
+	for _, c := range cases {
+		if got := linkDesc(c.kind, c.id, c.subject); got != c.want {
+			t.Errorf("%s: linkDesc(%q,%q,%q) = %q, want %q", c.name, c.kind, c.id, c.subject, got, c.want)
+		}
+	}
+}
+
+// TestLinkDescTruncatesLongFreeText pins descMax=60: a commit subject or a
+// bookmark/shelf label is otherwise unbounded, and a stored Desc must stay
+// one line.
+func TestLinkDescTruncatesLongFreeText(t *testing.T) {
+	t.Parallel()
+	long := strings.Repeat("x", 100)
+	if got := linkDesc("commit", "abc123", long); got != "commit: abc123 "+strings.Repeat("x", 60) {
+		t.Errorf("commit subject not truncated to 60 runes: %q", got)
+	}
+	if got := linkDesc("bookmark", long, ""); got != "bookmark: "+strings.Repeat("x", 60) {
+		t.Errorf("bookmark label not truncated to 60 runes: %q", got)
+	}
+}
+
+// linkHistSvc opens dir with an isolated, injected linkhist store so a
+// recording test never touches a shared or real XDG state directory and can
+// stay t.Parallel().
+func linkHistSvc(t *testing.T, dir string) *domain.Service {
+	t.Helper()
+	svc := domain.Open(dir)
+	svc.SetLinkHistStore(linkhist.NewFileStore(t.TempDir()))
+	return svc
+}
+
+// TestLinkRecordsAPlainPathAsFile: `gg link <path>` with no target flag
+// records "file: <path>" — spec §4.3's one row this task adds, for the
+// shape none of the spec's own six rows cover.
+func TestLinkRecordsAPlainPathAsFile(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	svc := linkHistSvc(t, dir)
+	var out, errb bytes.Buffer
+	code := runLink(linkState(t), svc, dir, []string{"README.md"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("gg link README.md: exit %d (stderr %q)", code, errb.String())
+	}
+	printed := strings.TrimSpace(out.String())
+	hist := svc.LinkHistory(context.Background())
+	if len(hist) != 1 {
+		t.Fatalf("LinkHistory = %v, want 1 entry", hist)
+	}
+	if hist[0].Link != printed {
+		t.Errorf("recorded Link = %q, want the printed link %q", hist[0].Link, printed)
+	}
+	if hist[0].Desc != "file: README.md" {
+		t.Errorf("recorded Desc = %q, want %q", hist[0].Desc, "file: README.md")
+	}
+}
+
+// TestLinkRecordsARefAsBranch: `gg link --ref main` records "branch: main".
+func TestLinkRecordsARefAsBranch(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	svc := linkHistSvc(t, dir)
+	var out, errb bytes.Buffer
+	code := runLink(linkState(t), svc, dir, []string{"--ref", "main"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("gg link --ref main: exit %d (stderr %q)", code, errb.String())
+	}
+	hist := svc.LinkHistory(context.Background())
+	if len(hist) != 1 || hist[0].Desc != "branch: main" {
+		t.Fatalf("LinkHistory = %v, want one \"branch: main\" entry", hist)
+	}
+}
+
+// TestLinkRecordsARevAsCommitWithSubject: `gg link --rev <sha>` records
+// "commit: <short> <subject>", the subject fetched by the producer (best
+// effort) since the link itself never carries prose.
+func TestLinkRecordsARevAsCommitWithSubject(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	svc := linkHistSvc(t, dir)
+	var out, errb bytes.Buffer
+	code := runLink(linkState(t), svc, dir, []string{"--rev", head}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("gg link --rev %s: exit %d (stderr %q)", head, code, errb.String())
+	}
+	hist := svc.LinkHistory(context.Background())
+	if len(hist) != 1 {
+		t.Fatalf("LinkHistory = %v, want 1 entry", hist)
+	}
+	want := "commit: " + head[:7] + " initial"
+	if hist[0].Desc != want {
+		t.Errorf("recorded Desc = %q, want %q", hist[0].Desc, want)
+	}
+}
+
+// TestLinkRecordsABookmarkHintOverTheTarget: the bookmark HINT names the
+// surface the user copied from and wins over the link's own target kind
+// (spec §4.3: a bookmark-hinted link addresses a commit, but its Desc is
+// "bookmark: …", not "commit: …").
+func TestLinkRecordsABookmarkHintOverTheTarget(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	svc := linkHistSvc(t, dir)
+	b, err := svc.BookmarkAdd(context.Background(), model.Bookmark{
+		Path: "README.md", State: model.StateUnstaged, Label: "auth fix",
+	})
+	if err != nil {
+		t.Fatalf("BookmarkAdd: %v", err)
+	}
+	var out, errb bytes.Buffer
+	code := runLink(linkState(t), svc, dir, []string{"--bookmark", b.ID}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("gg link --bookmark %s: exit %d (stderr %q)", b.ID, code, errb.String())
+	}
+	hist := svc.LinkHistory(context.Background())
+	if len(hist) != 1 || hist[0].Desc != "bookmark: auth fix" {
+		t.Fatalf("LinkHistory = %v, want one \"bookmark: auth fix\" entry", hist)
+	}
+}
+
+// TestLinkRecordingRepeatedCopyDedupsToTop: copying the SAME link twice
+// leaves one row (linkhist.FileStore's own dedup-to-top rule, exercised
+// through the producer).
+func TestLinkRecordingRepeatedCopyDedupsToTop(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	svc := linkHistSvc(t, dir)
+	for i := 0; i < 2; i++ {
+		var out, errb bytes.Buffer
+		code := runLink(linkState(t), svc, dir, []string{"README.md"}, &out, &errb)
+		if code != 0 {
+			t.Fatalf("gg link README.md (copy %d): exit %d (stderr %q)", i, code, errb.String())
+		}
+	}
+	hist := svc.LinkHistory(context.Background())
+	if len(hist) != 1 {
+		t.Fatalf("LinkHistory = %v, want exactly 1 entry after two identical copies", hist)
 	}
 }

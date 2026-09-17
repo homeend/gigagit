@@ -22,6 +22,7 @@ import (
 // it says so here instead.
 const linkUsage = "usage: gg link [<path>[:<line>]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>> | --ref <branch|tag> | --pair <a>..<b>] [--bookmark <id> | --shelf <id>]\n" +
 	"       gg link resolve <gg://…> [--json]\n" +
+	"       gg links [--json]  (this repo's copied-link history)\n" +
 	"quote links that carry #<hunk> — an unquoted # starts a shell comment"
 
 // cmdLink is `gg link`: print a portable gg:// address, or resolve one.
@@ -117,6 +118,11 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
+	// Best-effort, after the link is known good: a history that cannot be
+	// written must never fail the copy the user asked for, and must never
+	// change what gets printed or the exit code.
+	kind, id, subject := linkRecordFields(ctx, svc, l)
+	svc.RecordLink(ctx, l.String(), linkDesc(kind, id, subject))
 	fmt.Fprintln(stdout, l.String())
 	return 0
 }
@@ -291,6 +297,115 @@ func linkRoundTrips(l model.Link) error {
 		return fmt.Errorf("%w: %s is not a readable gg link (%v)", model.ErrLink, s, err)
 	}
 	return nil
+}
+
+// descMax caps the free-text portion of a stored Desc — a commit subject or
+// a bookmark/shelf label is otherwise unbounded — so one row of `gg links`
+// stays one line.
+const descMax = 60
+
+// truncateDesc bounds s to descMax runes, trimming surrounding whitespace
+// first. Rune-safe: cutting mid-multibyte-character would corrupt the tail.
+func truncateDesc(s string) string {
+	s = strings.TrimSpace(s)
+	r := []rune(s)
+	if len(r) <= descMax {
+		return s
+	}
+	return string(r[:descMax])
+}
+
+// linkDesc is the human label stored with a copied link (ruling R7: captured
+// at creation, never derived at read time — the describing context, which
+// row the user was on, is gone by the time anything lists this). The forms
+// are spec §4.3's table:
+//
+//	branch:   <name>
+//	bookmark: <label>
+//	shelf:    <label>
+//	preview:  <target>...<source>
+//	commit:   <short> <subject>
+//	stash:    <subject>
+//	file:     <path>
+//
+// commit and stash are the only kinds whose free text is a SUBJECT rather
+// than the id itself (a stash's subject is the only thing that makes its
+// row recognisable once stash@{N} is gone from the link); every other kind,
+// including a caller-chosen fallback kind for a shape the table has no row
+// for, prints "<kind>: <id>".
+func linkDesc(kind, id, subject string) string {
+	switch kind {
+	case "commit":
+		return "commit: " + id + " " + truncateDesc(subject)
+	case "stash":
+		return "stash: " + truncateDesc(subject)
+	default:
+		return kind + ": " + truncateDesc(id)
+	}
+}
+
+// linkRecordFields decides what to pass linkDesc for l, the link a producer
+// (`gg link`, `gg compare`) is about to record. Priority:
+//
+//  1. A copy-source HINT (bookmark/shelf/stash) names the surface the user
+//     copied FROM, and wins over the link's own target — spec §4.3's own
+//     bookmark/shelf example links both address a commit target, and their
+//     Desc is still "bookmark: …" / "shelf: …", not "commit: …".
+//  2. Otherwise the link's own target: preview, branch (ref) or commit (rev).
+//  3. Otherwise a bare path, if one is set: "file: <path>".
+//  4. Otherwise the shape has NO row in spec §4.3's table — a --pair
+//     change-set link, a --cached link, or the bare working tree with no
+//     path and no target flags. Rather than invent a false row (or leave
+//     Desc blank), these fall back to kind "link" with id = the link's own
+//     text, which linkDesc's default arm renders as "link: gg://…".
+//
+// Every lookup here is BEST-EFFORT: a bookmark/shelf that no longer exists,
+// or a commit git can no longer show, falls back to the raw id rather than
+// making the record — or the copy it describes — fail.
+func linkRecordFields(ctx context.Context, svc *domain.Service, l model.Link) (kind, id, subject string) {
+	switch l.Hint.Kind {
+	case "bookmark":
+		label := l.Hint.ID
+		if b, err := svc.BookmarkGet(ctx, l.Hint.ID); err == nil && b.Label != "" {
+			label = b.Label
+		}
+		return "bookmark", label, ""
+	case "shelf":
+		label := l.Hint.ID
+		if e, err := svc.ShelfFind(ctx, l.Hint.ID); err == nil && e.Label != "" {
+			label = e.Label
+		}
+		return "shelf", label, ""
+	case "stash":
+		// No producer wired in this task creates a stash-hinted link (`gg
+		// link` has no --stash flag): the grammar and linkhist.Entry both
+		// carry the shape, but nothing populates it yet. The hint's own id
+		// (a stash index, e.g. "0") is the best available fallback until a
+		// producer resolves it to the stash's actual subject.
+		return "stash", "", l.Hint.ID
+	}
+	switch {
+	case l.Target.Preview != nil:
+		return "preview", l.Target.Preview.Target + "..." + l.Target.Preview.Source, ""
+	case l.Target.Ref != "":
+		return "branch", l.Target.Ref, ""
+	case l.Target.Commit != "":
+		short := l.Target.Commit
+		if len(short) > 7 {
+			short = short[:7]
+		}
+		subj := ""
+		if line, found, err := svc.CommitLookup(ctx, l.Target.Commit); err == nil && found {
+			subj = line.Subject
+		}
+		return "commit", short, subj
+	case l.Path != "":
+		return "file", l.Path, ""
+	default:
+		// A --pair change-set (no single name to show), --cached, or the
+		// bare working tree: none has a row in spec §4.3's table.
+		return "link", l.String(), ""
+	}
 }
 
 // splitLinkPair splits a --pair argument on the grammar's own two-dot form.

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/linkhist"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/repos"
 )
@@ -696,5 +699,105 @@ func TestComparePatchOfAReversedPairIsRefusedInGGsOwnVoice(t *testing.T) {
 	}
 	if out != "" {
 		t.Errorf("stdout must stay empty, got %q", out)
+	}
+}
+
+// compareHistSvc opens dir with an isolated, injected linkhist store — the
+// compare-side twin of link_test.go's linkHistSvc.
+func compareHistSvc(t *testing.T, dir string) *domain.Service {
+	t.Helper()
+	svc := openCLIService(t, dir)
+	svc.SetLinkHistStore(linkhist.NewFileStore(t.TempDir()))
+	return svc
+}
+
+// TestCompareRecordsLinkPositionalsOnSuccess: R8 — a gg:// link positional is
+// recorded on a successful compare; a non-link positional (a plain commit-ish
+// here) is not, even though it sits right beside a link that IS recorded.
+func TestCompareRecordsLinkPositionalsOnSuccess(t *testing.T) {
+	t.Parallel()
+	dir, c1, c2, _ := linkCompareRepo(t)
+	svc := compareHistSvc(t, dir)
+	pair := mustLink(t, dir, "--pair", c1+".."+c2)
+
+	var out, errb bytes.Buffer
+	code := cmdCompare(linkState(t), svc, []string{pair, "HEAD"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("compare %s HEAD: exit %d (stderr %q)", pair, code, errb.String())
+	}
+
+	hist := svc.LinkHistory(context.Background())
+	if len(hist) != 1 {
+		t.Fatalf("LinkHistory = %v, want exactly 1 entry (the link side only, not HEAD)", hist)
+	}
+	if hist[0].Link != pair {
+		t.Errorf("recorded Link = %q, want %q", hist[0].Link, pair)
+	}
+}
+
+// TestCompareRecordsBothSidesWhenBothAreLinks.
+func TestCompareRecordsBothSidesWhenBothAreLinks(t *testing.T) {
+	t.Parallel()
+	dir, c1, c2, c3 := linkCompareRepo(t)
+	svc := compareHistSvc(t, dir)
+	pair := mustLink(t, dir, "--pair", c1+".."+c2)
+	commit := mustLink(t, dir, "--rev", c3)
+
+	var out, errb bytes.Buffer
+	code := cmdCompare(linkState(t), svc, []string{pair, commit}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("compare %s %s: exit %d (stderr %q)", pair, commit, code, errb.String())
+	}
+
+	hist := svc.LinkHistory(context.Background())
+	if len(hist) != 2 {
+		t.Fatalf("LinkHistory = %v, want 2 entries", hist)
+	}
+	got := map[string]bool{hist[0].Link: true, hist[1].Link: true}
+	if !got[pair] || !got[commit] {
+		t.Fatalf("LinkHistory = %v, want both %q and %q", hist, pair, commit)
+	}
+}
+
+// TestCompareDoesNotRecordOnFailure: R8 — nothing is recorded when compare
+// fails at the FIRST possible point (an unresolvable positional), even
+// though the left side is a perfectly good link.
+func TestCompareDoesNotRecordOnFailure(t *testing.T) {
+	t.Parallel()
+	dir, c1, c2, _ := linkCompareRepo(t)
+	svc := compareHistSvc(t, dir)
+	pair := mustLink(t, dir, "--pair", c1+".."+c2)
+
+	var out, errb bytes.Buffer
+	code := cmdCompare(linkState(t), svc, []string{pair, "not-a-real-rev"}, &out, &errb)
+	if code == 0 {
+		t.Fatalf("compare %s not-a-real-rev: exit 0, want a failure", pair)
+	}
+
+	if hist := svc.LinkHistory(context.Background()); len(hist) != 0 {
+		t.Fatalf("LinkHistory = %v, want no entries after a failed compare", hist)
+	}
+}
+
+// TestCompareDoesNotRecordOnPatchFailureAfterBothSidesResolved: R8 again,
+// but for a failure that happens AFTER both positionals resolved
+// successfully — patchLosesTheKeySet's refusal (--patch on a bounded link).
+// This is the shape a misplaced record call (before the failure check,
+// rather than after) would slip through even though the first-point-of-
+// failure test above already passes.
+func TestCompareDoesNotRecordOnPatchFailureAfterBothSidesResolved(t *testing.T) {
+	t.Parallel()
+	dir, c1, c2, _ := linkCompareRepo(t)
+	svc := compareHistSvc(t, dir)
+	pair := mustLink(t, dir, "--pair", c1+".."+c2)
+
+	var out, errb bytes.Buffer
+	code := cmdCompare(linkState(t), svc, []string{"--patch", pair}, &out, &errb)
+	if code != 2 {
+		t.Fatalf("compare --patch %s: exit %d (stderr %q), want 2 (patchLosesTheKeySet)", pair, code, errb.String())
+	}
+
+	if hist := svc.LinkHistory(context.Background()); len(hist) != 0 {
+		t.Fatalf("LinkHistory = %v, want no entries after a refused --patch compare", hist)
 	}
 }

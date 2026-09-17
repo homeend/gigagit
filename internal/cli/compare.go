@@ -143,6 +143,7 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
+		recordCompareLinks(context.Background(), svc, args[0], rightTok)
 		fmt.Fprint(stdout, diff)
 		return 0
 	}
@@ -151,8 +152,31 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
+	recordCompareLinks(context.Background(), svc, args[0], rightTok)
 	printCompareFiles(stdout, files)
 	return 0
+}
+
+// recordCompareLinks best-effort records each of toks that is a gg:// link
+// (ruling R8: cmdCompare calls this only from its two success returns, never
+// from a failure path — a `bookmark:<id>`/`shelf:<id>`/commit-ish positional
+// is not a link and is skipped). A parse failure here is unreachable in
+// practice (cmdCompare already resolved tok successfully via
+// resolveCompareSpec, which parses every link positional), but best-effort
+// means skipping that token silently rather than failing the compare that
+// already succeeded.
+func recordCompareLinks(ctx context.Context, svc *domain.Service, toks ...string) {
+	for _, tok := range toks {
+		if !isLinkArg(tok) {
+			continue
+		}
+		l, err := model.ParseLink(tok)
+		if err != nil {
+			continue
+		}
+		kind, id, subject := linkRecordFields(ctx, svc, l)
+		svc.RecordLink(ctx, tok, linkDesc(kind, id, subject))
+	}
 }
 
 // resolveCompareSpec turns one CLI token into the FILE SET it names.

@@ -19,6 +19,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
+	"github.com/homeend/gigagit/internal/linkhist"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notes"
 	"github.com/homeend/gigagit/internal/observ"
@@ -45,6 +46,7 @@ type Service struct {
 	shelf      shelf.Store      // lazily resolved; nil disables the shelf
 	bookmark   bookmark.Store   // lazily resolved; nil disables bookmarks
 	searchhist searchhist.Store // lazily resolved; nil disables search history
+	linkhist   linkhist.Store   // lazily resolved; nil disables copied-link history
 
 	notes      notes.Store   // lazily resolved; nil disables notes
 	notesOff   bool          // hard "no store" (the disabled-path test)
