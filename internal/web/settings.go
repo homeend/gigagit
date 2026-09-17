@@ -7,7 +7,9 @@ import (
 	"net/http"
 	"path/filepath"
 	"slices"
+	"strconv"
 
+	"github.com/homeend/gigagit/internal/branchfilter"
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
@@ -54,6 +56,12 @@ type settingsPayload struct {
 	CommitGraphKnown   bool            `json:"commit_graph_known"`
 	CommitGraphPresent bool            `json:"commit_graph_present"`
 	CommitGraphAuto    bool            `json:"commit_graph_auto"` // fetch.writeCommitGraph=true
+	// The five branch-filter slots, with the raw clauses the edit form
+	// prefills from and the provenance ("global"/"repo"/"both") the remove
+	// button peels one layer of. Warnings are the blocks CompileAll could
+	// not place (a bad slot number, a duplicate) — never null on the wire.
+	BranchFilters        []slotWire `json:"branch_filters"`
+	BranchFilterWarnings []string   `json:"branch_filter_warnings"`
 }
 
 func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +106,14 @@ func (s *Server) handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		RepoConfigPrivate: filepath.Base(active) != ".gg.toml",
 		GlobalConfigPath:  config.DefaultGlobalPath(),
 	}
+	// cfg is already the global+repo overlay, so this is the same [5] the
+	// chip menu lists; slotWires re-decodes each file for the provenance.
+	all, warnings := branchfilter.CompileAll(cfg.Branches.Filter)
+	if warnings == nil {
+		warnings = []string{}
+	}
+	p.BranchFilters = slotWires(all, config.DefaultGlobalPath(), active)
+	p.BranchFilterWarnings = warnings
 	if common, cerr := svc.GitCommonDir(ctx); cerr == nil && common != "" {
 		p.WatchSupported = gitwatch.Supported(common)
 	}
@@ -123,16 +139,40 @@ func webOpLogPath() string {
 }
 
 type settingsWriteRequest struct {
-	ShowGraph          string           `json:"show_graph"`  // "on" | "off"
-	CommitSort         string           `json:"commit_sort"` // "date-order" | "plain"
-	AutoRefresh        *bool            `json:"auto_refresh"`
-	RemoteTagsAuto     *bool            `json:"remote_tags_auto"`
-	OpLog              *bool            `json:"op_log"`
-	VersionsEnabled    *bool            `json:"versions_enabled"`
-	VersionsMaxAgeDays *int             `json:"versions_max_age_days"` // -1 = keep forever, else > 0
-	Refresh            map[string]int   `json:"refresh"`               // source → seconds (0 = off)
-	RefreshWatch       map[string]*bool `json:"refresh_watch"`         // watch-eligible source → on/off
-	Hook               *string          `json:"hook"`
+	ShowGraph          string             `json:"show_graph"`  // "on" | "off"
+	CommitSort         string             `json:"commit_sort"` // "date-order" | "plain"
+	AutoRefresh        *bool              `json:"auto_refresh"`
+	RemoteTagsAuto     *bool              `json:"remote_tags_auto"`
+	OpLog              *bool              `json:"op_log"`
+	VersionsEnabled    *bool              `json:"versions_enabled"`
+	VersionsMaxAgeDays *int               `json:"versions_max_age_days"` // -1 = keep forever, else > 0
+	Refresh            map[string]int     `json:"refresh"`               // source → seconds (0 = off)
+	RefreshWatch       map[string]*bool   `json:"refresh_watch"`         // watch-eligible source → on/off
+	Hook               *string            `json:"hook"`
+	BranchFilters      []branchFilterEdit `json:"branch_filters"`
+}
+
+// branchFilterEdit is one slot write (or removal). The clause fields are
+// spelled out rather than embedding branchfilter.Slot: the embedded type
+// carries its own "slot" json tag, and two keys of that name in one object
+// is a collision the decoder resolves by dropping both.
+type branchFilterEdit struct {
+	Slot        int    `json:"slot"`
+	Scope       string `json:"scope"` // "global" | "repo"
+	Remove      bool   `json:"remove"`
+	Name        string `json:"name"`
+	Mode        string `json:"mode"`
+	OlderThan   string `json:"older_than"`
+	YoungerThan string `json:"younger_than"`
+	Prefix      string `json:"prefix"`
+	Suffix      string `json:"suffix"`
+	Contains    string `json:"contains"`
+	Regex       string `json:"regex"`
+}
+
+func (e branchFilterEdit) slot() branchfilter.Slot {
+	return branchfilter.Slot{Slot: e.Slot, Name: e.Name, Mode: branchfilter.Mode(e.Mode), OlderThan: e.OlderThan,
+		YoungerThan: e.YoungerThan, Prefix: e.Prefix, Suffix: e.Suffix, Contains: e.Contains, Regex: e.Regex}
 }
 
 // handleSettingsSet validates every named field first, then writes — a bad
@@ -182,16 +222,44 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// A batch of slot edits is all-or-nothing: every one is compiled here,
+	// so a bad regex in the second block cannot leave the first one written.
+	repoEdit := false
+	for _, e := range req.BranchFilters {
+		if e.Scope != "global" && e.Scope != "repo" {
+			writeErr(w, http.StatusBadRequest, errors.New("branch filter scope must be global or repo"))
+			return
+		}
+		if e.Scope == "repo" {
+			repoEdit = true
+		}
+		if e.Slot < 1 || e.Slot > branchfilter.MaxSlots {
+			writeErr(w, http.StatusBadRequest, errors.New("branch filter slot must be 1.."+strconv.Itoa(branchfilter.MaxSlots)))
+			return
+		}
+		if e.Remove {
+			continue
+		}
+		c := branchfilter.Compile(e.slot())
+		if c.Err != nil {
+			writeErr(w, http.StatusBadRequest, errors.New("slot "+strconv.Itoa(e.Slot)+": "+c.Err.Error()))
+			return
+		}
+		if c.Empty {
+			writeErr(w, http.StatusBadRequest, errors.New("slot "+strconv.Itoa(e.Slot)+": set at least one clause"))
+			return
+		}
+	}
 	if req.ShowGraph == "" && req.CommitSort == "" && req.AutoRefresh == nil && req.RemoteTagsAuto == nil &&
 		req.OpLog == nil && req.VersionsEnabled == nil && req.VersionsMaxAgeDays == nil &&
-		len(req.Refresh) == 0 && len(req.RefreshWatch) == 0 && req.Hook == nil {
+		len(req.Refresh) == 0 && len(req.RefreshWatch) == 0 && req.Hook == nil && len(req.BranchFilters) == 0 {
 		writeErr(w, http.StatusBadRequest, errors.New("nothing to set"))
 		return
 	}
 
 	// Per-repo destination.
 	needRepo := req.ShowGraph != "" || req.CommitSort != "" || req.VersionsEnabled != nil ||
-		req.VersionsMaxAgeDays != nil || len(req.Refresh) > 0 || len(req.RefreshWatch) > 0 || req.Hook != nil
+		req.VersionsMaxAgeDays != nil || len(req.Refresh) > 0 || len(req.RefreshWatch) > 0 || req.Hook != nil || repoEdit
 	repoPath := ""
 	if needRepo {
 		p, err := s.activeRepoConfigPath(r.Context(), svc)
@@ -248,6 +316,24 @@ func (s *Server) handleSettingsSet(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Hook != nil {
 		if err := config.SetWorktreePostCreateHook(repoPath, *req.Hook); err != nil {
+			fail(err)
+			return
+		}
+	}
+	// Branch filters name their own destination per edit, so this block is
+	// the one write that straddles both files.
+	for _, e := range req.BranchFilters {
+		path := repoPath
+		if e.Scope == "global" {
+			path = config.DefaultGlobalPath()
+		}
+		var err error
+		if e.Remove {
+			err = config.RemoveBranchFilter(path, e.Slot)
+		} else {
+			err = config.SetBranchFilter(path, e.slot())
+		}
+		if err != nil {
 			fail(err)
 			return
 		}

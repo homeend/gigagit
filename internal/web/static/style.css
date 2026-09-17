@@ -408,6 +408,19 @@ mark.r { background: var(--span-add); color: inherit; }
 #settings-box .ssave button { border-color: #a8843c; color: #d9a441; font-weight: 600; }
 #settings-box :disabled, #identity-box :disabled, #prefixes-box :disabled { opacity: .45; cursor: default; }
 #settings-box .serr, #identity-box .serr, #prefixes-box .serr { color: var(--err, #e66); min-height: 1.2em; }
+/* branch filters: one row per slot, and the edit form that drops under them.
+   The form is a labelled column (not the flow the value rows use) — eight
+   clause fields in a flow read as noise. */
+#settings-box .sbf .sval { flex: 1 1 200px; }
+#settings-box #bf-form.hidden { display: none; }
+#settings-box #bf-form { margin: 8px 0 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 4px; display: flex; flex-direction: column; gap: 4px; }
+#settings-box .bfhead { color: var(--accent); margin-bottom: 4px; }
+#settings-box .bffield { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--dim); }
+#settings-box .bffield > span { flex: none; width: 110px; }
+#settings-box .bffield input, #settings-box .bffield select { flex: 1 1 180px; }
+#settings-box select { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 4px; font: inherit; }
+#settings-box .bfbtns { display: flex; gap: 8px; margin-top: 6px; }
+#settings-box .bferr { color: var(--err, #e66); font-size: 11px; }
 #settings-box .sfoot, #identity-box .sfoot, #prefixes-box .sfoot, #exttools-box .sfoot, #sesserrors-box .sfoot { margin-top: 10px; color: var(--dim); font-size: 11px; }
 /* identity-only bits: a profile is ONE line — name, identity (ellipsized),
    buttons pinned right; form inputs get a usable width */
