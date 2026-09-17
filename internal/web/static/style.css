@@ -3,6 +3,7 @@
   --accent: #6ea8fe; --sel: #2a3550; --border: #2a2e37;
   --add: #1f3d2b; --del: #46262a; --span-add: #2f6b41; --span-del: #8a3b42;
   --attn-info: #1e3350; --attn-warn: #3d3520; --attn-error: #43242a;
+  --recent-bg: #1F3A26; /* blame's "changed within the last …" tint (the TUI's blame_recent_bg, Dark) */
   --lane0: #6ea8fe; --lane1: #f2a65a; --lane2: #7bd88f; --lane3: #e06c9f;
   --lane4: #b58ef2; --lane5: #5ad0c8; --lane6: #e0c06c; --lane7: #f27a6a;
   /* Pane widths — the drag handles rewrite --sb-w / --files-w on #panes. */
@@ -835,6 +836,11 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #blame-body { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
 .bline { display: flex; white-space: pre-wrap; }
 .bline.bfirst { border-top: 1px solid var(--border); }
+/* The d/D recent-lines highlight tints the WHOLE row, gutter and code. In
+   scroll mode the sticky gutter and line number paint --bg-alt over the
+   scrolled code (above), so they must carry the tint themselves. */
+#blame-body .bline.brecent { background: var(--recent-bg, rgba(76,175,80,.18)); }
+body.lm-scroll #blame-body .bline.brecent .bgut, body.lm-scroll #blame-body .bline.brecent .bno { background: var(--recent-bg, rgba(76,175,80,.18)); }
 .bgut { flex: none; width: clamp(150px, 34%, 300px); overflow: hidden; text-overflow: ellipsis; white-space: pre; color: var(--dim); padding-left: 10px; }
 .bsha { color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
 .bwork { color: var(--dim); font-style: italic; }

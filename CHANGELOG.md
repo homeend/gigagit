@@ -8,6 +8,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Blame: highlight lines by commit age (TUI + web).** In the blame view
+  `d` asks for an age filter and tints every matching line across gutter and
+  code, so the fresh — or the ancient — edits in a file stand out at a glance.
+  `-7d` is younger than a week, `+30d` older than a month, `+1d -7d` the lines
+  between (both bounds inclusive, order-free); a bare span means younger than,
+  so `7d`, `1d 3h 5m`, `36h`, `90m` still work, a bare number is days and a
+  bare unit is one of it (`+w`). Age is measured from now, not from the
+  blamed revision; uncommitted lines are age 0, so they match a `-` bound and
+  never a `+` one. `D` turns it off, `d` again edits; the highlight is OFF
+  whenever blame opens, only the last text is remembered as the dialog's
+  prefill (the first typed rune replaces it). The TUI shows the filter
+  (`+1d -7d`) in the header beside the search badge; the web blame overlay
+  takes the same keys and shows it in its title. Tint colour: the new theme
+  role `blame_recent_bg` (dark and light defaults; under the
+  inherit-everything `terminal` theme the lines go bold instead). Minutes are
+  `m` here — the branch-filter age grammar, where `m` is months, is a
+  different field and unchanged. New DAG leaf `internal/timespan` owns the
+  grammar; the browser runs a port pinned to the Go conformance table.
 - **`gg links`, and a link history behind it.** Every "copy gg link" action
   now records the link it copied, with the label the surface it came from
   gave it (`bookmark: <name>`, `commit: <short> <subject>`, `file: <path>`).

@@ -1,7 +1,7 @@
 // filehist.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 import { $, esc, getJSON, state } from "./core.js";
-import { closeLayer, pushLayer } from "./layers.js";
+import { closeLayer, openPrompt, pushLayer } from "./layers.js";
 import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { rev } from "./review.js";
@@ -229,7 +229,7 @@ async function openFileBlame(path, rev) {
     opLine("blame failed: " + (e.message || e), true);
     return;
   }
-  $("blame-title").textContent = "blame — " + path + (rev ? " @ " + rev.slice(0, 8) : " (working tree)");
+  blameBase = "blame — " + path + (rev ? " @ " + rev.slice(0, 8) : " (working tree)");
   const lines = body.lines || [];
   let html = "";
   let prev = null;
@@ -241,17 +241,235 @@ async function openFileBlame(path, rev) {
       : l.hash
         ? `<span class="bsha" data-h="${esc(l.hash)}" title="${esc(l.summary)}">${esc(l.short)}</span> ${esc(l.author)} · ${versionWhen(l.time)}`
         : `<span class="bwork">working</span>`;
+    // Every row carries its author time (unix seconds) and an uncommitted
+    // mark, so the recent-lines highlight can be re-applied without a refetch.
     html +=
-      `<div class="bline${first ? " bfirst" : ""}">` +
+      `<div class="bline${first ? " bfirst" : ""}" data-t="${Number(l.time) || 0}"${l.hash ? "" : ' data-u="1"'}>` +
       `<span class="bgut">${gut}</span>` +
       `<span class="bno">${l.line}</span>` +
       `<span class="btext">${renderCell(l.text, null, l.tok, "") || " "}</span></div>`;
   }
   $("blame-body").innerHTML = html || `<div class="notice">(empty file)</div>`;
-  // w cycles the shared long-line mode; everything else (esc included) is
-  // left to the stack's default handling.
-  pushLayer("blame", $("blame"), { onKey: (e) => { if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) { cycleTextMode(); return true; } return false; } });
+  // Off on open: a fresh overlay never inherits the last one's tint; only
+  // the last dialog text survives, to prefill the next d.
+  state.blameRecent.on = false;
+  applyBlameRecent();
+  // w cycles the shared long-line mode, d/D drive the age highlight;
+  // everything else (esc included) is left to the stack's default handling.
+  pushLayer("blame", $("blame"), { onKey: blameKey });
   $("blame-body").scrollTop = 0;
+}
+
+
+// --- age highlight -----------------------------------------------------------
+// d asks for an age filter and tints every line whose age falls inside it;
+// D turns the tint off. The filter lives in state.blameRecent for the
+// session only (not /api/uistate); opening blame always starts OFF — only
+// the last dialog text survives, to prefill the next d. Uncommitted lines
+// have age 0 (the newest change of all). `now` is the wall clock, NOT the
+// blamed revision's date: blaming an old commit may highlight nothing, by
+// design.
+
+// --- time span (pure; guarded against Go) ---
+// A port of internal/timespan: parseSpan(s) → whole minutes, or null when
+// the text is not a span; formatSpan(mins) → the canonical "1d3h5m" badge;
+// parseFilter(s) → {older, younger} (minutes, null for an absent half) or
+// null; formatFilter(f) → the signed badge "+1d2h -7d4h"; filterMatches(f,
+// ageMins) → the inclusive window test.
+// Span grammar: tokens <digits><w|d|h|m> (either part optional, not both),
+// optional whitespace, any order, summed; a bare number is days, a bare
+// unit is one of it; m is MINUTES (not months); units are case-blind.
+// Errors: empty input, junk, an unknown unit, junk after a unit ("1mo",
+// "1.5d", "1x"), a zero total.
+// Filter grammar: up to two signed halves, "-<span>" = younger than (age at
+// most span), "+<span>" = older than (age at least span); a leading unsigned
+// span is the "-" half; each sign owns every token up to the next sign
+// (whitespace after the sign is fine). Errors: a span
+// error inside a half, a second "-" or "+", a sign with nothing after it,
+// an older bound above the younger one. Pinned to timespan.Table by
+// timespanjs_test.go — change both sides or neither.
+const SPAN_UNITS = { w: 7 * 24 * 60, d: 24 * 60, h: 60, m: 1 };
+
+function parseSpan(s) {
+  s = String(s == null ? "" : s).trim();
+  if (s === "") return null;
+  let total = 0;
+  let i = 0;
+  const isDigit = (c) => c >= "0" && c <= "9";
+  const isWS = (c) => c === " " || c === "\t";
+  while (i < s.length) {
+    while (i < s.length && isWS(s[i])) i++;
+    if (i >= s.length) break;
+    let j = i;
+    while (j < s.length && isDigit(s[j])) j++;
+    const n = j > i ? Number(s.slice(i, j)) : 1; // a bare unit ("w") is one of it
+    let unit = SPAN_UNITS.d; // a bare number is days
+    if (j < s.length) {
+      const u = SPAN_UNITS[s[j].toLowerCase()];
+      if (u !== undefined) {
+        unit = u;
+        j++;
+      }
+    }
+    if (j === i) return null; // neither a number nor a unit: junk
+    // The token must end here: whitespace, another number, or the end.
+    if (j < s.length && !isWS(s[j]) && !isDigit(s[j])) return null;
+    // Go refuses a token past 1<<62 ns / unit; 76861433 is that bound in
+    // minutes, and floor-of-floor matches Go's integer division per unit.
+    if (n > Math.floor(76861433 / unit)) return null;
+    total += n * unit;
+    if (!Number.isSafeInteger(total)) return null;
+    i = j;
+  }
+  if (total <= 0) return null;
+  return total;
+}
+
+function formatSpan(mins) {
+  let m = Math.max(0, Math.floor(Number(mins) || 0));
+  const days = Math.floor(m / (24 * 60));
+  m -= days * 24 * 60;
+  const hours = Math.floor(m / 60);
+  m -= hours * 60;
+  let out = "";
+  if (days > 0) out += days + "d";
+  if (hours > 0) out += hours + "h";
+  if (m > 0 || out === "") out += m + "m";
+  return out;
+}
+
+// parseFilter splits the text at its signs: the run before the first sign
+// (if any) is an unsigned "-" half; each sign then owns the run up to the
+// next sign, and every run goes through parseSpan.
+function parseFilter(s) {
+  s = String(s == null ? "" : s).trim();
+  if (s === "") return null;
+  const f = { older: null, younger: null };
+  const apply = (sign, text) => {
+    const mins = parseSpan(text);
+    if (mins === null) return false;
+    const key = sign === "+" ? "older" : "younger";
+    if (f[key] !== null) return false; // a second - or + half
+    f[key] = mins;
+    return true;
+  };
+  let sign = "-";
+  let start = 0;
+  let seenSign = false;
+  for (let i = 0; i <= s.length; i++) {
+    if (i < s.length && s[i] !== "+" && s[i] !== "-") continue;
+    const seg = s.slice(start, i).trim();
+    if (seg === "") {
+      if (seenSign) return null; // a sign with nothing after it
+    } else if (!apply(sign, seg)) {
+      return null;
+    }
+    if (i < s.length) {
+      sign = s[i];
+      start = i + 1;
+      seenSign = true;
+    }
+  }
+  if (f.older !== null && f.younger !== null && f.older > f.younger) return null; // empty range
+  return f;
+}
+
+// formatFilter prints the canonical signed form, older half first:
+// "-7d", "+30d", "+1d2h -7d4h". Empty when neither half is set.
+function formatFilter(f) {
+  const parts = [];
+  if (f && f.older !== null && f.older !== undefined) parts.push("+" + formatSpan(f.older));
+  if (f && f.younger !== null && f.younger !== undefined) parts.push("-" + formatSpan(f.younger));
+  return parts.join(" ");
+}
+
+// filterMatches reports whether an age (minutes, fractional allowed — the
+// boundary is inclusive at full precision) falls inside the window. A
+// negative age (clock skew) clamps to zero and behaves like an uncommitted
+// line; a filter with no half set matches nothing.
+function filterMatches(f, ageMins) {
+  if (!f) return false;
+  const hasOlder = f.older !== null && f.older !== undefined;
+  const hasYounger = f.younger !== null && f.younger !== undefined;
+  if (!hasOlder && !hasYounger) return false;
+  const age = Math.max(0, Number(ageMins) || 0);
+  if (hasOlder && age < f.older) return false;
+  if (hasYounger && age > f.younger) return false;
+  return true;
+}
+// --- end time span ---
+
+const BLAME_RECENT_TITLE = "Highlight lines by age…";
+const BLAME_RECENT_HINT = "-7d younger · +30d older · +1d -7d between · +w";
+
+// blameBase is the overlay title without the age badge; applyBlameRecent
+// rebuilds the title from it so toggling never stacks badges.
+let blameBase = "";
+
+function applyBlameRecent() {
+  const br = state.blameRecent;
+  const on = !!(br && br.on && br.f);
+  const now = Date.now();
+  for (const row of document.querySelectorAll("#blame-body .bline")) {
+    const t = Number(row.dataset.t) || 0;
+    // An uncommitted row is age 0: it matches a "-" half, never a "+" half.
+    const age = row.dataset.u === "1" ? 0 : (now - t * 1000) / 60000;
+    row.classList.toggle("brecent", on && filterMatches(br.f, age));
+  }
+  $("blame-title").textContent = blameBase + (on ? " · " + formatFilter(br.f) : "");
+}
+
+// openBlameRecentPrompt asks for the age filter; a bad answer re-opens the
+// prompt prefilled with the offending text and the reason in the title, so
+// the error reads above the field and the status line both (the overlay's
+// backdrop dims the status line).
+function openBlameRecentPrompt(value, err) {
+  openPrompt({
+    title: err ? BLAME_RECENT_TITLE + " — " + err : BLAME_RECENT_TITLE,
+    value,
+    placeholder: BLAME_RECENT_HINT,
+    onSubmit: (text) => {
+      const f = parseFilter(text);
+      if (f === null) {
+        const msg = "not an age filter: “" + text + "” (" + BLAME_RECENT_HINT + ")";
+        opLine(msg, true);
+        openBlameRecentPrompt(text, msg);
+        return;
+      }
+      state.blameRecent = { on: true, f, last: text };
+      applyBlameRecent();
+    },
+  });
+}
+
+registerHelp({
+  key: "d / D · blame age highlight",
+  html:
+    "in the blame overlay, <b>d</b> asks for an age filter and tints every line whose commit falls inside it, " +
+    "measured from now: <b>-7d</b> younger than a week, <b>+30d</b> older than a month, <b>+1d -7d</b> between the two " +
+    "(both bounds inclusive; a bare span is the younger half, <b>+w</b> is a week, <b>1d 3h 5m</b> adds up, a bare number is days, m is minutes). " +
+    "Uncommitted lines are age 0. <b>D</b> turns the tint off, <b>d</b> again edits the filter. " +
+    "Off whenever blame opens; only the last text is kept to prefill the prompt — the TUI's d / D in its blame view",
+});
+
+function blameKey(e) {
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (e.key === "w") {
+    cycleTextMode();
+    return true;
+  }
+  if (e.key === "d") {
+    e.preventDefault(); // the letter must never land in the prompt it opens
+    openBlameRecentPrompt(state.blameRecent.last);
+    return true;
+  }
+  if (e.key === "D") {
+    e.preventDefault();
+    state.blameRecent.on = false;
+    applyBlameRecent();
+    return true;
+  }
+  return false;
 }
 
 
@@ -266,4 +484,4 @@ $("blame").addEventListener("click", (e) => {
   if (e.target.id === "blame") closeLayer("blame"); // backdrop closes, box does not
 });
 
-export { closeHistory, hist, histGen, historyKey, openFileBlame, openFileHistory, openHistoryDiff, renderHistoryList };
+export { applyBlameRecent, closeHistory, filterMatches, formatFilter, formatSpan, hist, histGen, historyKey, openFileBlame, openFileHistory, openHistoryDiff, parseFilter, parseSpan, renderHistoryList };

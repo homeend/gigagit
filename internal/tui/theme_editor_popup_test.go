@@ -65,8 +65,8 @@ func TestThemeEditorListsEveryRole(t *testing.T) {
 	prev := activeTheme()
 	defer setTheme(prev)
 	_, p := themeEditorModel(t, "light")
-	if len(p.roles) != 55 {
-		t.Fatalf("roles = %d, want 55", len(p.roles))
+	if len(p.roles) != 56 {
+		t.Fatalf("roles = %d, want 56", len(p.roles))
 	}
 	if p.roles[0].Key != "bg" {
 		t.Fatalf("first role = %q", p.roles[0].Key)

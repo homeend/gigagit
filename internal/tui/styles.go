@@ -54,6 +54,7 @@ type styles struct {
 	diffEmph       lipgloss.Style
 	searchCurBg    string // theme role search_current_bg; "" = flip (see currentHitStyle)
 	selectionBg    string // theme role selection_bg; "" = flip (see selectionStyle)
+	blameRecentBg  string // theme role blame_recent_bg; "" = bold (see blameRecentStyle)
 	diffCursorRow  lipgloss.Style
 	diffCursorNo   lipgloss.Style
 	diffAddCursor  lipgloss.Style
@@ -152,6 +153,7 @@ func buildStyles(th theme.Theme) *styles {
 	// relative to the row it lands on (legacy carries no selection colour, so
 	// the Terminal theme flips).
 	s.selectionBg = th.Selection
+	s.blameRecentBg = th.BlameRecentBg
 	s.diffCursorRow = ns().Background(pick(th.CursorRowBg, legacy.CursorRowBg))
 	s.diffCursorNo = ns().Bold(true).Foreground(bright)
 	s.diffAddCursor = ns().Background(pick(th.DiffAddCursorBg, legacy.DiffAddCursorBg))
@@ -249,6 +251,22 @@ func (s *styles) selectionStyle(base lipgloss.Style) lipgloss.Style {
 		return base.Reverse(false).Background(lipgloss.Color(s.selectionBg))
 	}
 	return base.Reverse(!base.GetReverse())
+}
+
+// blameRecentStyle paints a blame row whose commit falls within the user's
+// "recent" span (d in the blame view). With the theme role blame_recent_bg
+// set it is a background tint under the whole row — gutter and code — so a
+// block's extent reads, and syntax foregrounds still paint on top (a
+// background-only style keeps token colours). With the role unset (the
+// Terminal theme) the row goes bold instead: bold survives syntax colours and
+// reads in any terminal, where a guessed tint would clash with the host's
+// palette. The cursor row and the selection stripe are painted by their own
+// styles and never come through here.
+func (s *styles) blameRecentStyle(base lipgloss.Style) lipgloss.Style {
+	if s.blameRecentBg != "" {
+		return base.Background(lipgloss.Color(s.blameRecentBg))
+	}
+	return base.Bold(true)
 }
 
 // frame returns the colours paintFrame lays under the whole screen; both ""

@@ -8,8 +8,8 @@ func TestRolesCoversEveryEditableRole(t *testing.T) {
 	if len(rs) != len(roleFields)+7+11 {
 		t.Fatalf("Roles() = %d entries, want %d scalars + 7 lanes + 11 syntax", len(rs), len(roleFields))
 	}
-	if len(rs) != 55 {
-		t.Fatalf("Roles() = %d, want 55", len(rs))
+	if len(rs) != 56 {
+		t.Fatalf("Roles() = %d, want 56", len(rs))
 	}
 	// Order: roleFields, then lanes, then syntax.
 	for i, f := range roleFields {
