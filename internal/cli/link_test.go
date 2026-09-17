@@ -679,12 +679,20 @@ func TestLinkTargetFlagsAreExclusive(t *testing.T) {
 }
 
 // `gg link resolve` (and every other verb that goes through resolveLinkArg —
-// gg diff, gg show, gg note *, gg open, gg session navigate) answers with an
-// ADDRESS, and a branch tip or a change-set has none, so those links are
-// refused. THE REFUSAL IS DELIBERATE; its WORDS were not. The guard predated
-// Target.Ref/Target.Pair and reported "gg link names a commit without a sha"
-// about a link that names no sha and is missing nothing.
-func TestLinkResolveRefusesRefAndPairInItsOwnWords(t *testing.T) {
+// gg diff, gg show, gg note *, gg open, gg session navigate) used to refuse a
+// branch tip or a change-set outright: model.FileAddress has no field for
+// either shape, and domain.ResolveLink deliberately refused them (plan 1b).
+// That refusal was lifted for navigation's sake (a later plan's Task 2):
+// ResolveLink now resolves both, carrying the tip (or the newer half of the
+// pair) as Resolved.Commit/Addr.Commit, alongside the NAME(s) in the new
+// Resolved.Ref/Resolved.Pair fields the CLI's plain-text and JSON output do
+// not read yet. So `gg link resolve` on one of these now succeeds — it just
+// prints the same "commit <sha>" line a plain commit link would, without
+// naming the shape. Teaching this verb's output to say "ref main" or "pair
+// a..b" is not this task's job (it never reads Resolved.Ref/Resolved.Pair);
+// this test only pins that the link no longer refuses and does not silently
+// mis-blame a missing sha.
+func TestLinkResolveNowResolvesRefAndPair(t *testing.T) {
 	t.Parallel()
 	dir := newCLIRepo(t)
 	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
@@ -696,16 +704,14 @@ func TestLinkResolveRefusesRefAndPairInItsOwnWords(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			code, out, errb := runLinkCLI(t, dir, "resolve", tc.link)
-			if code != 2 {
-				t.Fatalf("link resolve %s: exit = %d, want 2 (stdout %q stderr %q)", tc.link, code, out, errb)
+			if code != 0 {
+				t.Fatalf("link resolve %s: exit = %d, want 0 (stdout %q stderr %q)", tc.link, code, out, errb)
 			}
-			if strings.Contains(errb, "without a sha") {
-				t.Errorf("stderr still blames a missing sha, which this link never had: %q", errb)
+			if errb != "" {
+				t.Errorf("stderr = %q, want empty", errb)
 			}
-			for _, want := range []string{"cannot be navigated yet", "gg compare"} {
-				if !strings.Contains(errb, want) {
-					t.Errorf("stderr = %q, want it to contain %q", errb, want)
-				}
+			if !strings.Contains(out, head) {
+				t.Errorf("stdout = %q, want it to name the resolved commit %q", out, head)
 			}
 		})
 	}
