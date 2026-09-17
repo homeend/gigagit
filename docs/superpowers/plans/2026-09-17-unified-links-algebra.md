@@ -1576,7 +1576,13 @@ git commit -m "feat(domain): EvalEndpoint turns an endpoint into a bounded or un
 - Modify: `internal/domain/compare_entries.go` (fold `shelfCompareFiles` in)
 
 **Interfaces:**
-- Consumes: `FileSet`, `EvalEndpoint`, `endpointPaths` from Task 4.
+- Consumes: `FileSet`, `EvalEndpoint`, and `endpointHas(ctx, e, paths)` from
+  Task 4. NOTE: Task 4's own section below still shows an earlier
+  `endpointPaths(ctx, e)` that enumerated the whole unbounded side; a review
+  found that violates the design rule and it was reworked before this task
+  started. The shipped name and signature are
+  `endpointHas(ctx context.Context, e model.Endpoint, paths []string) (map[string]bool, error)`
+  — read the function in `internal/domain/fileset.go`, not Task 4's text.
 - Produces:
   ```go
   func (s *Service) CompareSets(ctx context.Context, left, right FileSet) ([]model.CommitFile, error)
@@ -1949,7 +1955,12 @@ func (s *Service) compareProjected(ctx context.Context, left, right, keys FileSe
 	if !right.Bounded() {
 		unbounded = right
 	}
-	present, err := s.endpointPaths(ctx, unbounded.Endpoint())
+	// endpointHas takes the KEY SET, deliberately: the unbounded side is never
+	// enumerated. A `git ls-tree -r` over a ~1M-path head, per comparison, to
+	// answer a question about a handful of files is the "you can only ever
+	// scale DOWN" rule violated head-on. Task 4 reworked the probe for exactly
+	// this call — read its doc comment before changing the shape here.
+	present, err := s.endpointHas(ctx, unbounded.Endpoint(), keys.Paths())
 	if err != nil {
 		return nil, err
 	}
@@ -2124,7 +2135,8 @@ one fails, the algebra disagrees with the shipped shelf semantics and the
 ALGEBRA is what to fix.
 
 One behaviour to watch: the old `shelfCommitCompare` listed the tree with
-`TreeFiles(commitHash)`; `endpointPaths` does the same for a commit. If a test
+`TreeFiles(commitHash)`; `endpointHas` asks a pathspec-limited `ls-tree` for a
+commit, which answers the same question for the paths that matter. If a test
 fails on the `D`/`A` direction, re-read `compareProjected`'s `missing`
 parameter against the old `shelfIsRight` flag — `shelfIsRight == true` meant
 the shelf was the RIGHT/newer side, which is `missing = "A"`.
@@ -2424,7 +2436,7 @@ func (s *Service) narrowTo(ctx context.Context, fs FileSet, path string) (FileSe
 		return boundedSetWith(fs.Endpoint(), []string{path},
 			map[string]bool{path: fs.Has(path)}), nil
 	}
-	present, err := s.endpointPaths(ctx, fs.Endpoint())
+	present, err := s.endpointHas(ctx, fs.Endpoint(), []string{path})
 	if err != nil {
 		return FileSet{}, err
 	}
