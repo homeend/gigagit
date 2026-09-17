@@ -223,7 +223,8 @@ func TestBlameRecentPaintsTheRowDark(t *testing.T) {
 	setTheme(theme.Dark)
 
 	now := time.Now()
-	m := Model{width: 100, height: 30, blameRecent: blameRecent{on: true, span: 7 * 24 * time.Hour}}
+	// 120 wide: the footer hint (with [d] recent at its end) must not be clipped.
+	m := Model{width: 120, height: 30, blameRecent: blameRecent{on: true, span: 7 * 24 * time.Hour}}
 	b := recentFixture(now)
 	out := b.render(m, "")
 
