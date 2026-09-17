@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -34,7 +33,7 @@ func (s *Service) profileStores(ctx context.Context) (global, repo profile.Store
 
 	base := ProfileStatePath
 	if base == "" {
-		base = profileBaseDir()
+		base = stateBaseDir("profile")
 	}
 	if base == "" {
 		return nil, nil // profiles disabled (no state dir)
@@ -50,27 +49,6 @@ func (s *Service) profileStores(ctx context.Context) (global, repo profile.Store
 	s.profileGlobal, s.profileRepo = g, r
 	s.mu.Unlock()
 	return g, r
-}
-
-// profileBaseDir resolves <state>/gg/profile cross-platform (mirrors
-// bookmarkBaseDir). "" when no home/state dir exists.
-func profileBaseDir() string {
-	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
-	// deliberate override — and the only way tests can isolate state on
-	// Windows); %LocalAppData% is the ambient Windows default.
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "profile")
-	}
-	if runtime.GOOS == "windows" {
-		if lad := os.Getenv("LocalAppData"); lad != "" {
-			return filepath.Join(lad, "gg", "profile")
-		}
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".local", "state", "gg", "profile")
 }
 
 // Profiles lists global rows then repo rows, each tagged with its scope.

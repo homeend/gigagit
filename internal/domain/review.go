@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -139,7 +138,7 @@ func (s *Service) ReviewReportNotes(ctx context.Context, target ReviewTarget, re
 // the archive browsable; the label in the name says what each report is at a
 // glance.
 func (s *Service) writeReviewReport(ctx context.Context, label, content string, now time.Time) (string, error) {
-	base := reviewsBaseDir()
+	base := stateBaseDir("reviews")
 	if base == "" {
 		return "", fmt.Errorf("review: no state dir available")
 	}
@@ -167,26 +166,6 @@ func truncateLabel(s string, n int) string {
 		return s
 	}
 	return strings.TrimRight(string(r[:n]), " ")
-}
-
-// reviewsBaseDir mirrors shelfBaseDir (shelfstore.go) with a "reviews" leaf.
-func reviewsBaseDir() string {
-	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
-	// deliberate override — and the only way tests can isolate state on
-	// Windows); %LocalAppData% is the ambient Windows default.
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "reviews")
-	}
-	if runtime.GOOS == "windows" {
-		if lad := os.Getenv("LocalAppData"); lad != "" {
-			return filepath.Join(lad, "gg", "reviews")
-		}
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".local", "state", "gg", "reviews")
 }
 
 // sanitizeRangeForFilename replaces bytes unsafe inside one filename segment

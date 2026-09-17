@@ -4,9 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/shelf"
@@ -37,7 +35,7 @@ func (s *Service) shelfStore(ctx context.Context) shelf.Store {
 
 	root := ShelfStatePath
 	if root == "" {
-		base := shelfBaseDir() // <state>/gg/shelf
+		base := stateBaseDir("shelf")
 		if base == "" {
 			return nil
 		}
@@ -52,27 +50,6 @@ func (s *Service) shelfStore(ctx context.Context) shelf.Store {
 	s.shelf = st
 	s.mu.Unlock()
 	return st
-}
-
-// shelfBaseDir resolves <state>/gg/shelf cross-platform (mirrors
-// repos.DefaultStatePath). "" when no home/state dir exists.
-func shelfBaseDir() string {
-	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
-	// deliberate override — and the only way tests can isolate state on
-	// Windows); %LocalAppData% is the ambient Windows default.
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "shelf")
-	}
-	if runtime.GOOS == "windows" {
-		if lad := os.Getenv("LocalAppData"); lad != "" {
-			return filepath.Join(lad, "gg", "shelf")
-		}
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".local", "state", "gg", "shelf")
 }
 
 // repoKey hashes the git common dir to a short stable directory name.

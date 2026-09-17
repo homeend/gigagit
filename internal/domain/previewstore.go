@@ -2,9 +2,7 @@ package domain
 
 import (
 	"context"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/preview"
@@ -42,7 +40,7 @@ func (s *Service) previewStore(ctx context.Context) preview.Store {
 	}
 	root := PreviewStatePath
 	if root == "" {
-		base := previewBaseDir()
+		base := stateBaseDir("previews")
 		if base == "" {
 			return nil
 		}
@@ -60,24 +58,4 @@ func (s *Service) previewStore(ctx context.Context) preview.Store {
 	st = s.preview
 	s.mu.Unlock()
 	return st
-}
-
-// previewBaseDir mirrors notesBaseDir with a "previews" leaf.
-func previewBaseDir() string {
-	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
-	// deliberate override — and the only way tests can isolate state on
-	// Windows); %LocalAppData% is the ambient Windows default.
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "previews")
-	}
-	if runtime.GOOS == "windows" {
-		if lad := os.Getenv("LocalAppData"); lad != "" {
-			return filepath.Join(lad, "gg", "previews")
-		}
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".local", "state", "gg", "previews")
 }

@@ -2,9 +2,7 @@ package domain
 
 import (
 	"context"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/bookmark"
@@ -35,7 +33,7 @@ func (s *Service) bookmarkStore(ctx context.Context) bookmark.Store {
 
 	root := BookmarkStatePath
 	if root == "" {
-		base := bookmarkBaseDir()
+		base := stateBaseDir("bookmark")
 		if base == "" {
 			return nil
 		}
@@ -50,25 +48,4 @@ func (s *Service) bookmarkStore(ctx context.Context) bookmark.Store {
 	s.bookmark = st
 	s.mu.Unlock()
 	return st
-}
-
-// bookmarkBaseDir resolves <state>/gg/bookmark cross-platform (mirrors
-// shelfBaseDir). "" when no home/state dir exists.
-func bookmarkBaseDir() string {
-	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
-	// deliberate override — and the only way tests can isolate state on
-	// Windows); %LocalAppData% is the ambient Windows default.
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "bookmark")
-	}
-	if runtime.GOOS == "windows" {
-		if lad := os.Getenv("LocalAppData"); lad != "" {
-			return filepath.Join(lad, "gg", "bookmark")
-		}
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".local", "state", "gg", "bookmark")
 }
