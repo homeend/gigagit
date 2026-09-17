@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -200,5 +201,52 @@ func TestLinkResolveHintExitCodesDifferByAddressPresence(t *testing.T) {
 	addressLess := "gg://" + filepath.ToSlash(dir) + "?shelf=nope"
 	if code := runLink(statePath, svc, dir, []string{"resolve", addressLess}, &out, &errb); code != 2 {
 		t.Fatalf("exit = %d (stderr %q), want 2 — the hint was the link's only content and it is gone", code, errb.String())
+	}
+}
+
+// TestLinkResolveDistinguishesRefFromPair pins what `gg link resolve` used to
+// lose. Before this, a @ref: link and a @a..b link resolved to IDENTICAL
+// output — both just `state: commit` plus B — so the single field that makes
+// the two shapes different was the one a caller could not see. They must
+// disagree on one fixture (ruling S5), in --json and in the terse line.
+func TestLinkResolveDistinguishesRefFromPair(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	head := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+	if out, err := exec.Command("git", "-C", dir, "commit", "--allow-empty", "-m", "second").CombinedOutput(); err != nil {
+		t.Fatalf("commit: %v\n%s", err, out)
+	}
+	head2 := strings.TrimSpace(gitOut(t, dir, "rev-parse", "HEAD"))
+
+	refCode, refOut, _ := runLinkCLI(t, dir, "resolve", "--json", "gg://"+dir+"@ref:main")
+	pairCode, pairOut, _ := runLinkCLI(t, dir, "resolve", "--json", "gg://"+dir+"@"+head+".."+head2)
+	if refCode != 0 || pairCode != 0 {
+		t.Fatalf("exits = %d / %d, want 0 (both shapes resolve since Task 2)", refCode, pairCode)
+	}
+	if refOut == pairOut {
+		t.Fatalf("a ref link and a pair link resolved IDENTICALLY:\n%s", refOut)
+	}
+	if !strings.Contains(refOut, `"ref":"main"`) {
+		t.Errorf("ref JSON = %s, want the NAME (it is what travels, ruling R2)", refOut)
+	}
+	if strings.Contains(refOut, `"pair_a"`) {
+		t.Errorf("ref JSON = %s, must not report a pair", refOut)
+	}
+	if !strings.Contains(pairOut, `"pair_a":"`+head+`"`) || !strings.Contains(pairOut, `"pair_b":"`+head2+`"`) {
+		t.Errorf("pair JSON = %s, want both ends as full shas", pairOut)
+	}
+	if strings.Contains(pairOut, `"ref"`) {
+		t.Errorf("pair JSON = %s, must not report a ref", pairOut)
+	}
+
+	// The terse line must distinguish them too: an agent reading stdout
+	// rather than JSON needs the same answer.
+	_, refTerse, _ := runLinkCLI(t, dir, "resolve", "gg://"+dir+"@ref:main")
+	_, pairTerse, _ := runLinkCLI(t, dir, "resolve", "gg://"+dir+"@"+head+".."+head2)
+	if !strings.Contains(refTerse, "ref main") {
+		t.Errorf("ref terse = %q, want it to name the ref", refTerse)
+	}
+	if !strings.Contains(pairTerse, "pair "+head+".."+head2) {
+		t.Errorf("pair terse = %q, want it to name both ends", pairTerse)
 	}
 }

@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v80 -->
+<!-- gg:using-gg:v81 -->
 
 # Using gg (gigagit)
 
@@ -133,9 +133,20 @@ tar once that sha has been gc'd. Because `?` is the hint separator, a path, a
 checkout path or a ref name containing `?` cannot appear in a link at all —
 `gg link` refuses to print one rather than emit something that reparses
 differently.
-`gg link resolve` answers with an ADDRESS, so it refuses a `@ref:` or `@a..b`
-link (exit 2): there is no single commit to name. Hand those to `gg compare`,
-which evaluates the target itself.
+`gg link resolve` takes both: a `@ref:` link answers with `ref <name>` plus
+the tip it resolves to HERE, a `@a..b` link with `pair <a>..<b>`, and
+`--json` carries `ref` / `pair_a` + `pair_b` beside the address fields. The
+verbs that CONSUME a link are stricter, and differ from each other:
+
+| link shape | `gg diff`, `gg open`, `gg session navigate` | `gg show`, every `gg note` verb, `gg session highlight` |
+|---|---|---|
+| `@ref:<name>` — a whole tree | takes it | takes it |
+| `@<a>..<b>` — a change-set | takes it | **refuses it, exit 2** |
+
+A change-set's only single commit is its newer end, and anchoring a note or a
+`gg show` there would silently widen a bounded set of files into a whole
+tree — so those verbs refuse rather than guess. `gg compare` evaluates either
+shape directly.
 
 A preview link spells the branch PAIR, never a sha: the names travel between
 machines, the machine-local preview id does not. Every verb that takes a link
@@ -147,8 +158,10 @@ naming a delete-only hunk (no new side) is instead refused at RUN time, on
 `gg note add`, `gg session navigate` and `gg session highlight add`. Build one
 with `gg link --preview <id|label|<target>...<source>> [<path>[:<line>]]`.
 
-`gg open <link>` shows it to the user in their gg: it steers whatever gg
-session is live in the link's checkout (`--no-wait` skips waiting for that
+`gg open <link>` shows it to the user in their gg: a link with no `:<line>`
+opens the file and leaves the cursor alone (the plain `gg link <path>` form
+is exactly this, so a link gg itself printed is always openable). It steers
+whatever gg session is live in the link's checkout (`--no-wait` skips waiting for that
 session's answer), or starts the TUI there positioned on the link; a bare
 repository link (`gg://<repo>`) just opens the TUI in that checkout. `--web`
 names the browser instead: a live `gg web` page is steered (only the page),
@@ -178,9 +191,16 @@ finds the right one here.
   gg link --ref main --bookmark b1   # …with the hint that names where it was copied from
   ```
 
-  `gg link resolve <link> [--json]` says which checkout it names here; exit 1
-  when it is unknown or ambiguous, exit 2 for a `@ref:`/`@a..b` link (no
-  single commit to resolve to — use `gg compare`).
+  `gg link resolve <link> [--json]` says which checkout it names here and the
+  address inside it; exit 1 when the repository is unknown or ambiguous,
+  exit 2 when the link itself is malformed.
+- `gg links [--json]` — the links copied in this repository, newest first,
+  one `<desc>\t<link>` row per line. Every "copy gg link" action records here:
+  `gg link`, `gg compare` on a link argument, and the browser's own copy rows.
+  **Use it to pick up a place the user just copied instead of asking them to
+  paste it again.** Twenty rows are kept; re-copying a link moves it to the
+  top rather than adding a second row. Nothing copied yet prints nothing and
+  exits 0.
 - **A link the user pastes is enough.** Pass it as the FIRST positional to
   `gg diff <link>`, `gg show <link>`, every `gg note` verb (`gg note add
   <link> --summary "…"`, `gg note list <link>`, `gg note reply <repo-link>
@@ -778,6 +798,27 @@ shelved/bookmarked commit; falls back to the shelf's stored patch when the
 original was gc'd) and `gg_write_to_worktree` (restore a stored file
 version as an unstaged change). The mutating tools are annotated
 destructive, so your MCP client prompts before running them.
+
+MCP also carries the `gg://` link surface, so a link a human pastes into the
+chat needs no shell round-trip:
+
+- `gg_link_resolve {link}` — take the link apart: `checkout`, `path`,
+  `state`, `commit`, plus `ref` for a branch-tip link, `pair_a`/`pair_b` for
+  a change-set, `preview_source`/`preview_target` for a merge preview,
+  and `line`/`side`/`hunk`/`hint_kind`/`hint_id` when the link carries them.
+  A field is OMITTED when the link does not name it, so an absent `line`
+  means "no line", never line 0.
+- `gg_link_list {}` — this repo's copied-link ring, newest first, the same
+  rows `gg links` prints.
+- `gg_compare_links {left, right}` — the changed files between the two places
+  two links name, in either order. Two links naming different repositories
+  are refused.
+- `gg_compare_file` takes `{"source":"link","link":"gg://…"}` as either side:
+  a link carries its own path and state, so it needs neither `path` nor
+  `locator`.
+
+All four resolve against the repository that server was started in; a link
+naming a different checkout is refused rather than answered from elsewhere.
 
 MCP also carries the review-notes surface — the same store `gg note` writes:
 

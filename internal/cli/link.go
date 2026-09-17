@@ -528,6 +528,20 @@ type wireResolvedLink struct {
 	Side     string `json:"side,omitempty"`
 	Line     int    `json:"line,omitempty"`
 	Hunk     int    `json:"hunk,omitempty"`
+	// Ref is the branch or tag NAME when the link named a tip (@ref:<name>);
+	// Commit carries the tip as it resolved HERE. PairA/PairB are the
+	// change-set's ends when it named one (@<a>..<b>), each a full sha.
+	//
+	// Without these, a ref link and a pair link resolved to identical JSON —
+	// both just `state: commit` plus B — so the one field that distinguishes
+	// the two shapes was the one the caller could not see. The MCP tool
+	// gg_link_resolve reports the same set; two frontends describing one
+	// resolution differently is this feature family's oldest bug.
+	Ref      string `json:"ref,omitempty"`
+	PairA    string `json:"pair_a,omitempty"`
+	PairB    string `json:"pair_b,omitempty"`
+	HintKind string `json:"hint_kind,omitempty"`
+	HintID   string `json:"hint_id,omitempty"`
 }
 
 // linkResolve is `gg link resolve <link> [--json]`: which checkout on THIS
@@ -569,6 +583,11 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 		if res.Preview != nil {
 			w.Source, w.Target = res.Preview.Source, res.Preview.Target
 		}
+		w.Ref = res.Ref
+		if p := res.Pair; p != nil {
+			w.PairA, w.PairB = p.A, p.B
+		}
+		w.HintKind, w.HintID = res.Hint.Kind, res.Hint.ID
 		if err := json.NewEncoder(stdout).Encode(w); err != nil {
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
@@ -577,12 +596,22 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 	}
 	fmt.Fprintln(stdout, res.Checkout)
 	line := res.Addr.State.String()
+	switch {
+	case res.Ref != "":
+		// The NAME is the point of a ref link (ruling R2) — printing only
+		// the sha it resolved to today would drop what travels.
+		line = "ref " + res.Ref
+	case res.Pair != nil:
+		line = "pair " + res.Pair.A + ".." + res.Pair.B
+	}
 	if res.Preview != nil {
 		// A preview's state word alone ("committed") would say nothing about
 		// WHICH commit or why: name the pair, then the tip it resolved to.
 		line = "preview " + res.Preview.Target + "..." + res.Preview.Source
 	}
-	if res.Addr.Commit != "" {
+	if res.Addr.Commit != "" && res.Pair == nil {
+		// A pair already printed both its ends; appending B again would read
+		// as a third commit.
 		line += " " + res.Addr.Commit
 	}
 	if res.Addr.Path != "" {

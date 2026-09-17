@@ -876,7 +876,78 @@ hint is a fallback content source, never a second identity:
    keeps rule 1 true for every live link.
 
 A hint whose kind is outside the closed set, or whose id holds a separator, is
-refused at parse rather than carried.
+refused at parse rather than carried. `model.LinkHintKindOK` /
+`LinkHintIDOK` are that rule, exported so the producers (including links.js's
+JS twin) refuse the same things the parser does — one rule, one definition.
+
+#### Navigating a hint, and the per-verb acceptance table (2026-09-17)
+
+**A hint is a PLACE.** `linknav.RepoOnly` reports false for a link carrying
+one, so `gg://<repo>?shelf=<id>` navigates: its landing IS the reveal. The
+wire shape is a navigate with no `File`, `Commit` or `Target` — only
+`hint_kind`/`hint_id` — and all three acceptance points (linknav, the web's
+`toSteerWire`, `gg session navigate`) take it.
+
+**Presence is checked in two layers, deliberately.** `domain.Resolved` is a
+value with no notice channel, so it cannot report a degraded hint. A link
+WITH an address carries the hint through `finishLink`'s common prologue
+(never a per-target arm — the ref and pair arms `return` early) and the
+CONSUMER looks the entry up in its own store, revealing it or noticing.
+A link WITHOUT an address checks presence in DOMAIN and hard-errors, because
+the hint is the only content source. Spec §3.3 rule 3 versus §6, in code.
+
+**The consumer must agree with domain about presence.** `shelf.FileStore.Find`
+scans EVERY bucket; the TUI's `loadShelfCmd` and `/api/shelf` list the DEFAULT
+bucket only. An entry put anywhere else by `gg shelf add --bucket <name>`
+resolved as present and was then reported "gone" — and the TUI answered
+`steerFail`, so the navigate FAILED on an entry that exists. Both consumers
+now look across buckets on the reveal path. Do not "fix" this by narrowing
+`ShelfFind`: `evallink.go` resolves a shelf id all-bucket for compare, and
+narrowing it would make navigate and compare disagree instead.
+
+**Per-verb acceptance (ruling R4).** `linkShapes` is a struct in the
+resolver's SIGNATURE, so a caller cannot forget to declare what it takes:
+
+| verb | `@ref:` | `@<a>..<b>` |
+|---|---|---|
+| `gg diff`, `gg open`, `gg session navigate` | yes | yes |
+| `gg show`, every `gg note` verb, `gg session highlight` | yes | **no, exit 2** |
+
+A change-set's only single commit is its newer end; anchoring a note there
+would silently widen a bounded file set into a whole tree. `gg link resolve`
+takes both and REPORTS which it got (`ref <name>` / `pair <a>..<b>`, plus
+`ref`/`pair_a`/`pair_b` in `--json`) — before that both shapes resolved to
+identical output, so the one field distinguishing them was invisible.
+
+#### The copied-link history (`internal/linkhist`, 2026-09-17)
+
+A per-repo 20-entry MRU, records only, keyed on the link TEXT: re-copying
+moves a row to the top and replaces its `Desc`. `Desc` is captured AT COPY
+TIME (ruling R7) — the context that describes a link, which row the user was
+on, is gone by the time anything lists it. The forms are spec §4.3's table;
+`internal/cli.linkDesc` and links.js's twin are pinned against each other by
+`TestLinkDescJSMatchesGo`, because the CLI and the web write the SAME ring.
+
+Producers: `gg link`, `gg compare` on a link positional (only at exit 0,
+ruling R8), and every "copy gg link" row in the browser. There were five such
+rows in the web and only three shared a helper — the other two called
+`copyText` directly — so `TestEveryCopyGGLinkRowRecords` reads every
+`static/*.js` for the label and fails if its row does not record.
+
+The web posts to `/api/linkhist` after the clipboard write, fire-and-forget:
+a history that cannot be written must never make the copy look failed, the
+same posture `RecordLink` takes. The ring is SERVED, never kept in browser
+storage — `gg web` binds a random port every run and storage is per-origin,
+so a client-side ring would vanish on the next start.
+
+**Testing gotcha worth keeping.** The obvious concurrency test — two
+goroutines recording `2*Max` links, then asserting `len == Max` — CANNOT
+FAIL: the cap guarantees the count however many entries an interleaved
+read-merge dropped. Record exactly `Max` and check the SET by name. And
+`filelock.Acquire`'s `O_EXCL` create is self-serialising for same-process
+callers too, so the store's `sync.Mutex` has no independent correctness role;
+only a test that holds the lock FILE externally proves the cross-process lock.
+
 
 **The local form has no delimiter** between the checkout and the file path, so
 `ParseLink` does not try to split it: `Repo.Abs` holds the whole absolute
