@@ -38,6 +38,44 @@ func (r *Repo) ReadWorktreeFile(ctx context.Context, path string) ([]byte, error
 	return os.ReadFile(full)
 }
 
+// WorktreeFilesPresent reports, for each given path (repo-root-relative,
+// slash-separated), whether the working tree actually HAS that file on disk.
+//
+// Deliberately a stat, not a git invocation: git has no listing that answers
+// "what is on disk". `ls-files` reads the INDEX, and `ls-files --deleted` —
+// the obvious candidate — does not see a SKIP-WORKTREE entry at all, so on a
+// sparse checkout it calls every sparse-excluded path present. Those are the
+// deployments this repo targets, so the filesystem is made the authority on
+// the filesystem. It also gets untracked-but-present right for free.
+//
+// os.Lstat, not os.Stat: a dangling symlink IS an entry in the working tree
+// (git tracks the link, not its target).
+//
+// A path that escapes the working tree is reported ABSENT rather than
+// erroring: it cannot be a member of the tree, and one malformed entry in a
+// bounded side must not fail the whole comparison. The result holds an entry
+// for every input path.
+func (r *Repo) WorktreeFilesPresent(ctx context.Context, paths []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(paths))
+	if len(paths) == 0 {
+		return out, nil
+	}
+	top, err := r.TopLevel(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range paths {
+		full, err := worktreePath(top, p)
+		if err != nil {
+			out[p] = false
+			continue
+		}
+		_, statErr := os.Lstat(full)
+		out[p] = statErr == nil
+	}
+	return out, nil
+}
+
 // WriteWorktreeFile writes content to path (repo-root-relative) in the working
 // tree, truncating an existing file (its mode is preserved by the OS since the
 // file already exists). Missing parent directories are created, so it can also

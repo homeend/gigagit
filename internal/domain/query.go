@@ -435,33 +435,6 @@ func (s *Service) TreeFiles(ctx context.Context, hash string) ([]model.CommitFil
 	})
 }
 
-// ListFiles returns the repo's TRACKED paths under a Read reservation —
-// deleted=false the index's entries, deleted=true only those the index holds
-// but disk no longer has. It is the member-set probe behind the index and
-// working-tree endpoints (see endpointPaths).
-//
-// The two modes carry DIFFERENT singleflight keys: endpointPaths asks for both
-// back to back, and one shared key would coalesce a concurrent pair into one
-// answer.
-func (s *Service) ListFiles(ctx context.Context, deleted bool) ([]string, error) {
-	key := "ls-files"
-	if deleted {
-		key = "ls-files:deleted"
-	}
-	return query(ctx, s, key, func(ctx context.Context) ([]string, error) {
-		return s.repo.ListFiles(ctx, deleted)
-	})
-}
-
-// UntrackedFiles returns the repo's untracked, non-ignored paths under a Read
-// reservation — the half of the working tree's member set that ls-files, which
-// reads the index, cannot see.
-func (s *Service) UntrackedFiles(ctx context.Context) ([]string, error) {
-	return query(ctx, s, "untracked-files", func(ctx context.Context) ([]string, error) {
-		return s.repo.UntrackedFiles(ctx)
-	})
-}
-
 // CompareFiles returns the files that differ between two endpoints (left =
 // older, right = newer), under a Read reservation. The singleflight key
 // includes both endpoints; live endpoints (working tree / index) change
@@ -607,11 +580,41 @@ func (s *Service) GitDir(ctx context.Context) (string, error) {
 	return query(ctx, s, "gitdir", s.repo.GitDir)
 }
 
-// LsFiles returns every tracked file (paths relative to the working-tree root),
-// under a Read reservation, singleflighted.
-func (s *Service) LsFiles(ctx context.Context) ([]string, error) {
-	return query(ctx, s, "ls-files", func(ctx context.Context) ([]string, error) {
-		return s.repo.LsFiles(ctx)
+// LsFiles returns tracked files (paths relative to the working-tree root),
+// under a Read reservation, singleflighted. With no paths that is every
+// tracked file (the file finder, the file-path popup, web deep search); with
+// paths it is limited to that pathspec (endpointHas's index probe).
+//
+// The singleflight key carries the pathspec, so a LIMITED call can never
+// coalesce with an unlimited one and receive the whole-repo listing as its
+// answer — the two questions differ, and the finder's unlimited call runs
+// off-thread on exactly the surfaces a comparison also runs on.
+func (s *Service) LsFiles(ctx context.Context, paths ...string) ([]string, error) {
+	key := "ls-files"
+	if len(paths) > 0 {
+		key = "ls-files:" + strings.Join(paths, "\x00")
+	}
+	return query(ctx, s, key, func(ctx context.Context) ([]string, error) {
+		return s.repo.LsFiles(ctx, paths...)
+	})
+}
+
+// TreePaths returns the subset of paths that commit hash's tree contains,
+// under a Read reservation, coalesced per hash+pathspec. The pathspec-limited
+// twin of TreeFiles: see the git verb for why a full tree listing must not be
+// used to answer a question about a handful of files.
+func (s *Service) TreePaths(ctx context.Context, hash string, paths []string) ([]string, error) {
+	return query(ctx, s, "tree-paths:"+hash+":"+strings.Join(paths, "\x00"), func(ctx context.Context) ([]string, error) {
+		return s.repo.TreePaths(ctx, hash, paths)
+	})
+}
+
+// WorktreeFilesPresent reports which of paths are actually on disk in the
+// working tree, under a Read reservation. A stat, not a git invocation — see
+// the git verb for why git cannot answer this.
+func (s *Service) WorktreeFilesPresent(ctx context.Context, paths []string) (map[string]bool, error) {
+	return query(ctx, s, "worktree-present:"+strings.Join(paths, "\x00"), func(ctx context.Context) (map[string]bool, error) {
+		return s.repo.WorktreeFilesPresent(ctx, paths)
 	})
 }
 

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -153,65 +154,293 @@ func TestEvalEndpointPairMarksDeletedMembersAsHavingNoBytes(t *testing.T) {
 	}
 }
 
-// endpointPaths's working-tree lane is tracked ∪ untracked − deleted. The
-// subtraction is the whole point: `git ls-files` lists the INDEX, so a tracked
-// file the user removed from disk still appears there.
-func TestEndpointPathsWorkTreeSubtractsDeleted(t *testing.T) {
+// A rename is TWO members of the change-set: the new path (with bytes at b)
+// and the old one (gone from b, exactly like a deletion). Enumerating only the
+// new path made a rename compare as an addition with no matching deletion.
+func TestEvalEndpointPairEnumeratesARenamesOldPath(t *testing.T) {
 	t.Parallel()
 	dir, svc := newRealRepo(t)
 	ctx := context.Background()
 
-	for _, name := range []string{"kept.txt", "dropped.txt"} {
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("x\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+	head, ok, err := svc.ResolveRev(ctx, "HEAD")
+	if err != nil || !ok {
+		t.Fatalf("ResolveRev(HEAD): %v ok=%v", err, ok)
 	}
-	gittest.Run(t, dir, "add", "kept.txt", "dropped.txt")
-	gittest.Run(t, dir, "commit", "-m", "two tracked files")
-	if err := os.WriteFile(filepath.Join(dir, "fresh.txt"), []byte("new\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// os.Remove, NOT `git rm`: the file must stay in the index and vanish from
-	// disk, which is exactly what `ls-files --deleted` reports.
-	if err := os.Remove(filepath.Join(dir, "dropped.txt")); err != nil {
+	gittest.Run(t, dir, "mv", "README.md", "DOCS.md")
+	gittest.Run(t, dir, "commit", "-m", "rename the readme")
+	after, _, err := svc.ResolveRev(ctx, "HEAD")
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	set, err := svc.endpointPaths(ctx, model.WorkTreeEndpoint())
+	pair, err := model.PairEndpoint(head, after)
 	if err != nil {
-		t.Fatalf("endpointPaths(worktree): %v", err)
+		t.Fatal(err)
 	}
-	for _, want := range []string{"README.md", "kept.txt", "fresh.txt"} {
-		if !set[want] {
-			t.Errorf("working tree must contain %q, got %v", want, set)
-		}
-	}
-	if set["dropped.txt"] {
-		t.Errorf("a file removed from disk is not in the working tree, got %v", set)
-	}
-
-	// The index still holds it — that is the difference the two lanes encode.
-	idx, err := svc.endpointPaths(ctx, model.IndexEndpoint())
+	fs, err := svc.EvalEndpoint(ctx, pair)
 	if err != nil {
-		t.Fatalf("endpointPaths(index): %v", err)
+		t.Fatalf("EvalEndpoint: %v", err)
 	}
-	if !idx["dropped.txt"] {
-		t.Errorf("the index still holds a file only removed from disk, got %v", idx)
+	got := fs.Paths()
+	if len(got) != 2 || got[0] != "DOCS.md" || got[1] != "README.md" {
+		t.Fatalf("Paths() = %v, want [DOCS.md README.md] — a rename is two members", got)
 	}
-	if idx["fresh.txt"] {
-		t.Errorf("an untracked file is not in the index, got %v", idx)
+	if !fs.Has("DOCS.md") {
+		t.Error("the rename's NEW path has bytes at the pair's newer side")
+	}
+	if fs.Has("README.md") {
+		t.Error("the rename's OLD path is gone from the pair's newer side")
 	}
 }
 
-// A bounded endpoint has no member set to probe: asking for one is a caller bug.
-func TestEndpointPathsRefusesABoundedEndpoint(t *testing.T) {
+// An abbreviated sha must be normalized: two abbreviations of one commit are
+// two CacheTags, which fragments the compare cache and probes one tree twice.
+func TestEvalEndpointNormalizesAShortCommit(t *testing.T) {
 	t.Parallel()
 	_, svc := newRealRepo(t)
+	ctx := context.Background()
+
+	full, ok, err := svc.ResolveRev(ctx, "HEAD")
+	if err != nil || !ok {
+		t.Fatalf("ResolveRev(HEAD): %v ok=%v", err, ok)
+	}
+	short, err := model.CommitEndpoint(full[:8])
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, err := svc.EvalEndpoint(ctx, short)
+	if err != nil {
+		t.Fatalf("EvalEndpoint: %v", err)
+	}
+	if fs.Endpoint().Hash() != full {
+		t.Fatalf("Hash() = %q, want the full sha %q", fs.Endpoint().Hash(), full)
+	}
+}
+
+// The two invariants the type exists for, both of which a refactor to
+// `bounded: len(paths) > 0` would silently break.
+func TestFileSetInvariants(t *testing.T) {
+	t.Parallel()
+	ep, err := model.CommitEndpoint("abc1234def5678")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// An EMPTY bounded set is legal and stays bounded: a fully merged branch's
+	// three-dot pair has merge-base(target, source) == source (ruling R7).
+	empty := boundedSetWith(ep, nil, nil)
+	if !empty.Bounded() {
+		t.Error("an empty change-set is BOUNDED — it enumerates zero paths, it is not a point")
+	}
+	if p := empty.Paths(); p == nil || len(p) != 0 {
+		t.Errorf("a bounded set's Paths() is non-nil and empty, got %v", p)
+	}
+
+	// A nil has map means "every member has bytes" — the shelf lane, where
+	// every tar member is readable.
+	if !empty.Has("anything.txt") {
+		t.Error("a nil has map must read as: every member has bytes")
+	}
+
+	// Paths() hands out a copy: mutating it must not reach the set.
+	set := boundedSetWith(ep, []string{"b.txt", "a.txt"}, nil)
+	got := set.Paths()
+	got[0] = "MUTATED"
+	if again := set.Paths(); again[0] != "a.txt" {
+		t.Errorf("Paths() handed out its backing slice: %v", again)
+	}
+
+	// An unbounded set enumerates nothing at all.
+	if p := unboundedSet(ep).Paths(); p != nil {
+		t.Errorf("an unbounded set's Paths() is nil, got %v", p)
+	}
+}
+
+// endpointHas answers presence for the keys a BOUNDED side supplies, per kind.
+// The worktree lane is the one that must not ask git: see the skip-worktree
+// test below.
+func TestEndpointHasPerKind(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	ctx := context.Background()
+
+	if err := os.WriteFile(filepath.Join(dir, "kept.txt"), []byte("k\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, dir, "add", "kept.txt")
+	gittest.Run(t, dir, "commit", "-m", "kept")
+	head, ok, err := svc.ResolveRev(ctx, "HEAD")
+	if err != nil || !ok {
+		t.Fatalf("ResolveRev(HEAD): %v ok=%v", err, ok)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "fresh.txt"), []byte("f\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	keys := []string{"README.md", "kept.txt", "fresh.txt", "never.txt"}
+
+	commit, err := model.CommitEndpoint(head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name string
+		ep   model.Endpoint
+		want map[string]bool
+	}{
+		// fresh.txt is untracked: in neither the tree nor the index, but it IS
+		// on disk.
+		{"commit", commit, map[string]bool{"README.md": true, "kept.txt": true, "fresh.txt": false, "never.txt": false}},
+		{"index", model.IndexEndpoint(), map[string]bool{"README.md": true, "kept.txt": true, "fresh.txt": false, "never.txt": false}},
+		{"worktree", model.WorkTreeEndpoint(), map[string]bool{"README.md": true, "kept.txt": true, "fresh.txt": true, "never.txt": false}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := svc.endpointHas(ctx, tc.ep, keys)
+			if err != nil {
+				t.Fatalf("endpointHas: %v", err)
+			}
+			if len(got) != len(keys) {
+				t.Fatalf("endpointHas returned %d entries for %d keys: %v", len(got), len(keys), got)
+			}
+			for k, want := range tc.want {
+				if got[k] != want {
+					t.Errorf("%s: has[%q] = %v, want %v (full: %v)", tc.name, k, got[k], want, got)
+				}
+			}
+		})
+	}
+}
+
+// THE reason the worktree lane stats instead of asking git: `ls-files
+// --deleted` does not report a SKIP-WORKTREE entry that is gone from disk, so
+// a sparse checkout — this repo's primary deployment — would call every
+// sparse-excluded path present, which is the exact failure the probe exists to
+// prevent.
+func TestEndpointHasWorkTreeSeesASkipWorktreeRemoval(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	ctx := context.Background()
+
+	if err := os.WriteFile(filepath.Join(dir, "sparse.txt"), []byte("s\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gittest.Run(t, dir, "add", "sparse.txt")
+	gittest.Run(t, dir, "commit", "-m", "a file that will be sparse-excluded")
+
+	gittest.Run(t, dir, "update-index", "--skip-worktree", "sparse.txt")
+	if err := os.Remove(filepath.Join(dir, "sparse.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Pin the git behaviour this test defends against, so a future git that
+	// changes it shows up here rather than as a silent wrong answer.
+	deleted, err := svc.LsFiles(ctx, "sparse.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(deleted) != 1 {
+		t.Fatalf("the index still holds a skip-worktree path: ls-files = %v", deleted)
+	}
+
+	got, err := svc.endpointHas(ctx, model.WorkTreeEndpoint(), []string{"sparse.txt", "README.md"})
+	if err != nil {
+		t.Fatalf("endpointHas: %v", err)
+	}
+	if got["sparse.txt"] {
+		t.Error("a skip-worktree file removed from disk is NOT in the working tree — git's --deleted cannot see it, so the probe must stat")
+	}
+	if !got["README.md"] {
+		t.Error("README.md is on disk")
+	}
+}
+
+// A plain `rm`'d tracked file is the ordinary case of the same rule.
+func TestEndpointHasWorkTreeSeesAPlainRemoval(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+
+	if err := os.Remove(filepath.Join(dir, "README.md")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := svc.endpointHas(context.Background(), model.WorkTreeEndpoint(), []string{"README.md"})
+	if err != nil {
+		t.Fatalf("endpointHas: %v", err)
+	}
+	if got["README.md"] {
+		t.Error("a file removed from disk is not in the working tree")
+	}
+}
+
+// Presence is asked only of the side that is UNBOUNDED; a bounded side answers
+// from its own Has map, and a ref must have been resolved away long before.
+func TestEndpointHasRefusesBoundedAndUnresolvedKinds(t *testing.T) {
+	t.Parallel()
+	_, svc := newRealRepo(t)
+	ctx := context.Background()
+
 	pair, err := model.PairEndpoint("abc1234def5678", "abc9999fff0000")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.endpointPaths(context.Background(), pair); err == nil {
-		t.Fatal("endpointPaths on a bounded endpoint must error")
+	shelf, err := model.ShelfEndpoint("entry-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref, err := model.RefEndpoint("main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ep := range []model.Endpoint{pair, shelf, ref} {
+		if _, err := svc.endpointHas(ctx, ep, []string{"a.txt"}); err == nil {
+			t.Errorf("endpointHas on kind %d must error", ep.Kind())
+		}
+	}
+	// An empty key set is not an error — it is the empty question.
+	got, err := svc.endpointHas(ctx, pair, nil)
+	if err != nil || len(got) != 0 {
+		t.Errorf("endpointHas(_, nil) = %v, %v; want an empty map and no error", got, err)
+	}
+}
+
+// The batcher is what keeps a large change-set's pathspec under every OS's
+// argv cap; one probe per batch, and the union is the answer.
+func TestEndpointHasBatchesALargePathSet(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	ctx := context.Background()
+
+	const n = pathProbeBatch*2 + 7 // spans three batches, last one partial
+	keys := make([]string, 0, n)
+	for i := range n {
+		name := fmt.Sprintf("f%04d.txt", i)
+		keys = append(keys, name)
+		if i%2 == 0 { // only half exist, so a batch cannot pass by answering "all"
+			if err := os.WriteFile(filepath.Join(dir, name), []byte("x\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	gittest.Run(t, dir, "add", "-A")
+	gittest.Run(t, dir, "commit", "-m", "half the files")
+	head, ok, err := svc.ResolveRev(ctx, "HEAD")
+	if err != nil || !ok {
+		t.Fatalf("ResolveRev(HEAD): %v ok=%v", err, ok)
+	}
+	commit, err := model.CommitEndpoint(head)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := svc.endpointHas(ctx, commit, keys)
+	if err != nil {
+		t.Fatalf("endpointHas: %v", err)
+	}
+	if len(got) != n {
+		t.Fatalf("endpointHas returned %d entries, want %d", len(got), n)
+	}
+	for i, k := range keys {
+		if want := i%2 == 0; got[k] != want {
+			t.Fatalf("has[%q] = %v, want %v", k, got[k], want)
+		}
 	}
 }

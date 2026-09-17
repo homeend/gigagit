@@ -112,8 +112,8 @@ func TestCompareCommitRange(t *testing.T) {
 // resolver used to read svc.CommitLookup, i.e. `git log --format=%h`, whose
 // width honours core.abbrev — git's legal minimum is 4, while
 // model.CommitEndpoint requires 7..64. On `core.abbrev = 4` every commit-ish
-// token therefore failed with "commit hash must be 7..64 characters, got 4"
-// and exit 2, on a path that used to work. Both pairs are covered: the live
+// token therefore failed — today's wording is `"dead" is not a commit id
+// (want 7 to 64 hex characters)` — and exited 2, on a path that used to work. Both pairs are covered: the live
 // pair (never cached) and the commit↔commit pair (the one that caches).
 func TestCompareShortCoreAbbrev(t *testing.T) {
 	t.Parallel()

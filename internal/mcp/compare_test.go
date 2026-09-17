@@ -34,8 +34,8 @@ func TestCompareTreesWorktreeVsCommit(t *testing.T) {
 // svc.CommitLookup hands back model.LogLine.Hash — `%h`, whose width honours
 // core.abbrev (git's legal minimum is 4) — so building the Endpoint from it
 // made a legal repo config a hard failure: `resolving "HEAD": bad endpoint:
-// commit hash must be 7..64 characters, got 4`. The rev is resolved to its
-// FULL sha instead.
+// "dead" is not a commit id (want 7 to 64 hex characters)`. The rev is
+// resolved to its FULL sha instead.
 func TestCompareTreesShortAbbrev(t *testing.T) {
 	e := newTestEnv(t)
 	gitRun(t, e.dir, "config", "core.abbrev", "4")

@@ -37,10 +37,24 @@ type FileSet struct {
 // Bounded reports whether the set enumerates its paths.
 func (f FileSet) Bounded() bool { return f.bounded }
 
-// Paths is the sorted key set, or nil when unbounded.
-func (f FileSet) Paths() []string { return f.paths }
+// Paths is the sorted key set, or nil when unbounded. It returns a COPY:
+// FileSet is exported and crosses into the frontends, and this repo has
+// already shipped one bug from a caller sorting a slice domain still owned.
+func (f FileSet) Paths() []string {
+	if f.paths == nil {
+		return nil
+	}
+	out := make([]string, len(f.paths))
+	copy(out, f.paths)
+	return out
+}
 
 // Endpoint is the resolved byte source for a path in this set.
+//
+// It is NOT the set's boundedness, and the two deliberately disagree: a PAIR
+// set is bounded, but its endpoint is commit b — a point, so
+// fs.Endpoint().Bounded() is false while fs.Bounded() is true. Ask the SET
+// whether it enumerates its paths; ask the ENDPOINT only for bytes.
 func (f FileSet) Endpoint() model.Endpoint { return f.ep }
 
 // Has reports whether path has readable bytes at this set's endpoint. Only
@@ -76,7 +90,29 @@ func unboundedSet(ep model.Endpoint) FileSet { return FileSet{ep: ep} }
 // same rule.
 func (s *Service) EvalEndpoint(ctx context.Context, e model.Endpoint) (FileSet, error) {
 	switch e.Kind() {
-	case model.EndpointWorkTree, model.EndpointIndex, model.EndpointCommit:
+	case model.EndpointWorkTree, model.EndpointIndex:
+		return unboundedSet(e), nil
+
+	case model.EndpointCommit:
+		// Normalize an ABBREVIATED sha to its full one. Two abbreviations of
+		// one commit are two different CacheTags, so leaving them fragments
+		// the compare cache and probes the same tree twice. A full sha (40 for
+		// sha-1, 64 for sha-256) is passed through untouched, so the common
+		// path costs no git invocation.
+		if l := len(e.Hash()); l != 40 && l != 64 {
+			sha, ok, err := s.ResolveRev(ctx, e.Hash())
+			if err != nil {
+				return FileSet{}, err
+			}
+			if !ok {
+				return FileSet{}, fmt.Errorf("unknown commit %q", e.Hash())
+			}
+			full, err := model.CommitEndpoint(sha)
+			if err != nil {
+				return FileSet{}, err
+			}
+			return unboundedSet(full), nil
+		}
 		return unboundedSet(e), nil
 
 	case model.EndpointRef:
@@ -111,15 +147,21 @@ func (s *Service) EvalEndpoint(ctx context.Context, e model.Endpoint) (FileSet, 
 		// so it is enumerated with has[path] = false and CompareSets reports
 		// it through A/D instead of trying to read it (ruling R6).
 		//
-		// KNOWN GAP (1b): DiffTreeFiles passes -M, so a rename arrives as one
-		// "R" row carrying the NEW path only; the old path is not enumerated.
-		// A renamed file therefore compares as an addition on this side. That
-		// matches what `git diff --name-status` reports and is left as-is.
+		// A RENAME is two members, not one: DiffTreeFiles passes -M, so it
+		// arrives as a single "R" row carrying both paths, and the old path is
+		// as gone from b as any deletion. Enumerating only the new path would
+		// make a rename compare as an addition with no matching deletion.
+		// A COPY ("C") is different — its old path still exists at b — so only
+		// R contributes the extra member.
 		paths := make([]string, 0, len(files))
 		has := make(map[string]bool, len(files))
 		for _, f := range files {
 			paths = append(paths, f.Path)
 			has[f.Path] = f.Status != "D"
+			if f.Status == "R" && f.OldPath != "" {
+				paths = append(paths, f.OldPath)
+				has[f.OldPath] = false
+			}
 		}
 		return boundedSetWith(b, paths, has), nil
 
@@ -140,75 +182,92 @@ func (s *Service) EvalEndpoint(ctx context.Context, e model.Endpoint) (FileSet, 
 	}
 }
 
-// endpointPaths is the MEMBER SET of an unbounded endpoint — the probe
-// "does this tree contain <path>". It exists only for the unbounded × bounded
-// lane of CompareSets, where a key absent from the tree reads as A or D
-// (spec §3.5).
+// pathProbeBatch caps how many paths go into one pathspec. A bounded side can
+// hold thousands of members, and every OS bounds a process argv (Linux's
+// MAX_ARG_STRLEN/ARG_MAX, Windows' ~32k command line) — a single unbatched
+// invocation would fail outright on a large change-set. A few hundred keeps
+// the argv far under every limit while holding the invocation count to
+// members/batch.
+const pathProbeBatch = 256
+
+// endpointHas answers "does this path have readable bytes at this endpoint"
+// for the paths a BOUNDED side supplies — never for the whole repository.
 //
-// One listing, not one probe per path: a bounded side may hold hundreds of
-// members, and `git cat-file -e` per path would be hundreds of invocations.
-func (s *Service) endpointPaths(ctx context.Context, e model.Endpoint) (map[string]bool, error) {
-	var list []string
+// It takes the key set because the unbounded side must never be enumerated: a
+// ls-tree of a ~100GB monorepo's head, per comparison, to answer a question
+// about three files is precisely the "you can only ever scale DOWN" rule the
+// design is built on (spec §3.5). Every probe below is limited to the keys.
+//
+// The result holds an entry for every input path. Deliberately NOT wrapped in
+// one query(): each probe takes its own Read reservation, and nesting a gated
+// read inside a held reservation can deadlock behind a queued writer.
+func (s *Service) endpointHas(ctx context.Context, e model.Endpoint, paths []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		out[p] = false
+	}
+	if len(paths) == 0 {
+		return out, nil
+	}
+
 	switch e.Kind() {
 	case model.EndpointCommit:
-		files, err := s.TreeFiles(ctx, e.Hash())
-		if err != nil {
-			return nil, err
-		}
-		for _, f := range files {
-			list = append(list, f.Path)
-		}
-	case model.EndpointIndex:
-		var err error
-		if list, err = s.ListFiles(ctx, false); err != nil {
-			return nil, err
-		}
-	case model.EndpointWorkTree:
-		// tracked ∪ untracked − deleted. The subtraction matters: ls-files
-		// lists the INDEX, so a tracked file the user `rm`'d still appears
-		// there, and calling it "present" would send ResolveBytes after a
-		// file that is not on disk.
-		tracked, err := s.ListFiles(ctx, false)
-		if err != nil {
-			return nil, err
-		}
-		untracked, err := s.UntrackedFiles(ctx)
-		if err != nil {
-			return nil, err
-		}
-		gone, err := s.ListFiles(ctx, true)
-		if err != nil {
-			return nil, err
-		}
-		removed := make(map[string]bool, len(gone))
-		for _, p := range gone {
-			removed[p] = true
-		}
-		// Never `append(tracked, untracked...)`: tracked is the slice a
-		// singleflight read handed out and other callers may hold it, so
-		// filling its spare capacity would scribble on theirs.
-		for _, src := range [][]string{tracked, untracked} {
-			for _, p := range src {
-				if !removed[p] {
-					list = append(list, p)
-				}
+		for _, batch := range batchPaths(paths) {
+			found, err := s.TreePaths(ctx, e.Hash(), batch)
+			if err != nil {
+				return nil, err
+			}
+			for _, p := range found {
+				out[p] = true
 			}
 		}
-	case model.EndpointShelf, model.EndpointPair:
-		// A bounded endpoint never reaches here: CompareSets asks for the
-		// member set only of the side its own Bounded() said is unbounded.
-		return nil, fmt.Errorf("endpointPaths: %d is not an unbounded endpoint", e.Kind())
+		return out, nil
+
+	case model.EndpointIndex:
+		for _, batch := range batchPaths(paths) {
+			found, err := s.LsFiles(ctx, batch...)
+			if err != nil {
+				return nil, err
+			}
+			for _, p := range found {
+				out[p] = true
+			}
+		}
+		return out, nil
+
+	case model.EndpointWorkTree:
+		// No git here at all: the question is "is this file on disk", and no
+		// git listing answers it — `ls-files --deleted` cannot see a
+		// skip-worktree entry, so on a sparse checkout it would call every
+		// sparse-excluded path present. The filesystem is the authority.
+		// No batching either: a stat takes no argv.
+		return s.WorktreeFilesPresent(ctx, paths)
+
 	case model.EndpointRef:
-		// A ref IS unbounded, but it moves: EvalEndpoint resolved it to a
-		// commit long before anything asked for a member set, so one arriving
-		// here means a caller skipped that step.
-		return nil, fmt.Errorf("endpointPaths: ref %q was never resolved to a commit — call EvalEndpoint first", e.Ref())
+		// Unreachable: EvalEndpoint resolves a ref to a commit before any set
+		// — and therefore any probe built from one — can see it. An explicit
+		// arm rather than a silent default, so this stays a loud bug report.
+		return nil, fmt.Errorf("endpointHas: ref %q was never resolved to a commit — call EvalEndpoint first", e.Ref())
+
+	case model.EndpointShelf, model.EndpointPair:
+		// A bounded side answers presence from its own FileSet.Has map, which
+		// EvalEndpoint already built. Routing it through here would mean
+		// enumerating it a second time.
+		return nil, fmt.Errorf("endpointHas: %d is bounded — ask its FileSet.Has instead", e.Kind())
+
 	default:
-		return nil, fmt.Errorf("endpointPaths: unknown endpoint kind %d", e.Kind())
+		return nil, fmt.Errorf("endpointHas: unknown endpoint kind %d", e.Kind())
 	}
-	set := make(map[string]bool, len(list))
-	for _, p := range list {
-		set[p] = true
+}
+
+// batchPaths splits paths into pathProbeBatch-sized chunks that share the
+// input's backing array (read-only use only — every caller just passes them to
+// a pathspec).
+func batchPaths(paths []string) [][]string {
+	var out [][]string
+	for i := 0; i < len(paths); i += pathProbeBatch {
+		end := min(i+pathProbeBatch, len(paths))
+		out = append(out, paths[i:end])
 	}
-	return set, nil
+	return out
 }
