@@ -82,6 +82,30 @@ there); a pair is BOUNDED (what it changed), which is a compare, not a commit.
 *Cost if wrong:* a ref link could instead have frozen the tip at post time; the
 preview lane already made the opposite call and nothing has argued against it.
 
+**Correction (after Task 4's review, 2026-09-17).** R2 as written above is
+true of the REF arm and NOT of the pair arm, and the difference is by design,
+not by accident:
+
+- `@ref:<name>` — `domain.finishLink` keeps the NAME in `Resolved.Ref`, so
+  every producer puts a name on the wire and every consumer re-resolves it. A
+  tip that moves between post and apply IS honoured.
+- `@<a>..<b>` — `finishLink` resolves BOTH halves to full shas before the
+  command is composed, so every real producer (`gg open`, `gg session
+  navigate`, `gg link --pair`) puts SHAS on the wire. That is correct and
+  deliberate: a change-set is a fixed pair of commits — that is what makes it
+  BOUNDED, re-comparable and portable between machines, and `gg link --pair`
+  already advertises "both halves resolved to full shas so the link travels".
+  A pair does not track a moving branch.
+
+So the consumers' name-handling for a pair (`steerNavigatePair`'s
+`ResolveRev`, and the web's `openCompareForPair`) is DEFENSIVE, not the main
+path: it is reachable by a hand-composed steer post — which an agent can
+make — and by the TUI's `--at` converter, which passes a link's halves
+verbatim. It must work, and Task 4's fix round made it work; but a
+browser-verified name-pair scenario is not representative of what `gg open`
+actually sends, and nobody should conclude from it that the sha path is
+untested.
+
 **R3 — `locateLink` filters ref and pair candidates by name containment,
 ALWAYS.** A ref link is `StateCommitted` with an EMPTY `Commit`, so today it
 skips the commit-containment filter (`l.Target.Commit != ""` is load-bearing

@@ -138,3 +138,44 @@ func TestSteerNavigateLineGuardCoversRefAndPair(t *testing.T) {
 		}
 	}
 }
+
+// TestResolveRefTipCoversRemotesAndSaysSoOnAMiss pins two things the Task 4
+// review found missing, both in the same three lines.
+//
+// `@ref:<name>` is NOT restricted to a local branch or a tag: model.LinkRefOK
+// forbids only the grammar's separators and whitespace, and
+// domain.finishLink's ref arm resolves the name with a bare ResolveRev — so
+// `@ref:origin/main` is a legal, resolvable link everywhere EXCEPT here, where
+// resolveRefTip looked in state.branches and state.tags alone and returned "".
+//
+// And a "" used to `return` in silence, leaving a page that looked as though
+// nothing had been asked of it. A swallowed failure that renders a plausible
+// screen is this feature family's signature bug: two of Task 4's own defects
+// were 4xx responses the page dropped on the floor (ruling S7).
+func TestResolveRefTipCoversRemotesAndSaysSoOnAMiss(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "live.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, c := range []struct{ want, why string }{
+		{"state.remotes || []", "resolveRefTip must look in state.remotes: @ref:origin/main is a legal link"},
+		{`opLine("gg link: cannot place "`, "a ref this page cannot place must SAY so, never return in silence"},
+		{"loadRepo, opLine", "opLine must be imported from ops.js for that message"},
+	} {
+		if !strings.Contains(src, c.want) {
+			t.Errorf("live.js is missing %q — %s", c.want, c.why)
+		}
+	}
+	// The miss must report BEFORE it returns: a bare `if (!sha) return;` is
+	// the exact shape this test exists to forbid.
+	i := strings.Index(src, "const sha = await resolveRefTip(s.ref);")
+	if i < 0 {
+		t.Fatal("the ref arm no longer calls resolveRefTip")
+	}
+	rest := src[i:]
+	if j := strings.Index(rest, "opLine("); j < 0 || j > strings.Index(rest, "openCommitByHash") {
+		t.Error("the ref arm must report an unplaceable ref before it opens anything")
+	}
+}

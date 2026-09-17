@@ -14,7 +14,7 @@ import { fetchBranches } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved } from "./previews.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
-import { loadRepo } from "./ops.js";
+import { loadRepo, opLine } from "./ops.js";
 
 const COALESCE_MS = 150; // one burst of watcher events → one refresh
 const RETRY_MS = 500; // a refresh is already running → try again after it
@@ -253,6 +253,15 @@ async function resolveRefTip(name) {
   await fetchBranches();
   const b = (state.branches || []).find((x) => x.name === name);
   if (b) return b.hash || "";
+  // Remotes too: @ref:<name> is NOT restricted to a local branch or a tag.
+  // model.LinkRefOK only forbids the grammar's separators and whitespace, and
+  // domain.finishLink's ref arm resolves the name with a bare ResolveRev — so
+  // `@ref:origin/main` is a legal, resolvable link end to end through the CLI,
+  // the domain and the TUI. Without this lookup it silently did nothing HERE
+  // alone, which is the worst of the three outcomes. fetchBranches already
+  // populates state.remotes in the same round trip.
+  const r = (state.remotes || []).find((x) => x.name === name);
+  if (r) return r.hash || "";
   const t = (state.tags || []).find((x) => x.name === name);
   return t ? t.target || "" : "";
 }
@@ -305,7 +314,15 @@ async function steerNavigate(s) {
     // The NAME, never a sha: the tip is resolved here, so a branch that moved
     // between post and apply is honoured (the TUI consumer does the same).
     const sha = await resolveRefTip(s.ref);
-    if (!sha) return;
+    if (!sha) {
+      // SAY SO. A ref this page cannot place — a name past the sidebar's row
+      // cap, a rev expression like HEAD~2, a branch deleted since the link was
+      // made — used to return here in silence, leaving a page that looked as
+      // though nothing had been asked of it. A swallowed failure that renders
+      // a plausible screen is this feature's signature bug (ruling S7).
+      opLine("gg link: cannot place " + s.ref + " in this repository", true);
+      return;
+    }
     await openCommitByHash(sha, s.ref);
     if (!s.file) return; // a file-less ref navigate only reveals the tree
     const i = state.files.findIndex((f) => f.path === s.file);
