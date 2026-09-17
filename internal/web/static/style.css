@@ -795,7 +795,16 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #history { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 21; }
 #history.hidden { display: none; }
 #history-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; height: 88vh; display: flex; flex-direction: column; }
-#history-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+#history-title { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+#history-title-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#history-max { flex: none; background: none; color: var(--dim); border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; font: inherit; cursor: pointer; }
+#history-max:hover { border-color: var(--accent); color: var(--accent); }
+/* fullscreen (m / »): the commit list folds away and the box takes the whole
+   viewport — the diff gets everything; j/k still walk the commits and the
+   title carries "n/N · subject" so the reader knows where they are. Hidden by
+   ID: a bare .hidden class on a new element is styled nowhere. */
+#history.max #history-box { width: 100vw; height: 100vh; border: none; border-radius: 0; }
+#history.max #history-list { display: none; }
 #history-hint { padding: 6px 14px; border-top: 1px solid var(--border); color: var(--dim); font-size: 11px; }
 #history-main { display: flex; flex: 1; min-height: 0; }
 #history-list { list-style: none; margin: 0; padding: 6px 0; width: min(360px, 40%); flex: none; overflow-y: auto; border-right: 1px solid var(--border); }

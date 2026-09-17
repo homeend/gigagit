@@ -153,3 +153,38 @@ func TestTextModeIsWiredEverywhere(t *testing.T) {
 		}
 	}
 }
+
+// The history overlay's fullscreen flip (m / the » chip) touches markup, CSS
+// and the module; a missed edit half-works silently (a chip the next open
+// wipes, a list hidden by a class nothing styles, a diff laid out for the
+// two-pane width).
+func TestHistoryFullscreenIsWiredEverywhere(t *testing.T) {
+	t.Parallel()
+	read := func(name string) string {
+		b, err := os.ReadFile(filepath.Join("static", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	checks := []struct{ file, want, why string }{
+		{"index.html", `id="history-title-text"`, "the title text lives in its own span — textContent on the div would wipe the chip"},
+		{"index.html", `id="history-max"`, "the maximize/restore chip"},
+		{"index.html", `m fullscreen`, "the hint names the key"},
+		{"style.css", `#history.max #history-list { display: none; }`, "hidden by ID — a bare .hidden class is styled nowhere"},
+		{"style.css", `#history.max #history-box { width: 100vw; height: 100vh;`, "the box takes the whole viewport"},
+		{"filehist.js", `function applyHistoryMax(`, "the shared put-it-in-this-state step"},
+		{"filehist.js", `function toggleHistoryMax(`, "the user-facing flip"},
+		{"filehist.js", `classList.toggle("max"`, "the class the CSS keys on"},
+		{"filehist.js", `applyHistoryMax(false)`, "every open starts two-pane (the TUI's ctrl+t rule)"},
+		{"filehist.js", "if (e.key === \"m\" && !e.ctrlKey && !e.metaKey && !e.altKey) {\n    toggleHistoryMax();", "m inside the history overlay"},
+		{"filehist.js", `$("history-max").addEventListener("click", toggleHistoryMax);`, "the chip flips it"},
+		{"filehist.js", `$("history-title-text").textContent`, "writes go to the span, never the div"},
+		{"filehist.js", `registerHelp({`, "the ? help lists the gesture"},
+	}
+	for _, c := range checks {
+		if !strings.Contains(read(c.file), c.want) {
+			t.Errorf("%s: missing %q — %s", c.file, c.want, c.why)
+		}
+	}
+}

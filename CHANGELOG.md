@@ -8,6 +8,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: the file-history overlay goes fullscreen.** `m` (or the `»` chip in
+  its title) folds the commit list away and the box takes the whole viewport,
+  so the file's change at that commit gets every pixel — a diff that stacked
+  in the narrow pane spreads side by side. `j`/`k` still walk the commits
+  meanwhile and the title reads `n/N · sha subject` so the open commit stays
+  named; `«` or `m` again brings the list back. Like the TUI's `ctrl+t`, every
+  open starts two-pane (nothing is persisted).
 - **Added: branch filters — five configurable slots on the Branches and Remotes
   lists (`alt+1…5`).** A slot is a named rule in `.gg.toml` (`[[branches.filter]]`,
   global or repo — a repo block replaces the global one for the same slot) that

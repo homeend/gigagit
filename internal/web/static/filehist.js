@@ -7,6 +7,7 @@ import { versionWhen } from "./versions.js";
 import { rev } from "./review.js";
 import { openCommitByHash } from "./commits.js";
 import { cycleTextMode, diffHTML, mountPanBars, renderCell, toggleDiffView } from "./files.js";
+import { registerHelp } from "./menus.js";
 
 // --- file history overlay ----------------------------------------------------
 // A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
@@ -19,7 +20,8 @@ let histGen = 0;
 async function openFileHistory(path, rev) {
   const gen = ++histGen;
   hist = { path, rev: rev || "", rows: [], sel: 0, gen };
-  $("history-title").textContent = "history — " + path + (rev ? " @ " + rev.slice(0, 8) : "");
+  setHistoryTitle();
+  applyHistoryMax(false); // every open starts two-pane (the TUI's ctrl+t rule)
   $("history-list").innerHTML = `<li class="empty">loading…</li>`;
   $("history-diff").innerHTML = "";
   pushLayer("history", $("history"), { onKey: historyKey });
@@ -50,6 +52,39 @@ function closeHistory() {
 }
 
 
+// setHistoryTitle writes the title span (never the div — the » chip lives
+// beside it). With rows loaded it carries "n/N · subject" so the reader still
+// knows which commit is open once the list is folded away in fullscreen.
+function setHistoryTitle() {
+  let t = "history — " + hist.path + (hist.rev ? " @ " + hist.rev.slice(0, 8) : "");
+  if (hist.rows.length) {
+    const r = hist.rows[hist.sel];
+    t += " · " + (hist.sel + 1) + "/" + hist.rows.length + " · " + r.short + " " + r.subject;
+  }
+  $("history-title-text").textContent = t;
+}
+
+
+// applyHistoryMax puts the overlay in (or out of) fullscreen: the commit list
+// folds away and the box takes the viewport. The diff is laid out for the
+// host's width and the per-side scrollbars are (un)mounted from it, so it is
+// redrawn after every flip. Transient like the TUI's ctrl+t — not persisted.
+function applyHistoryMax(on) {
+  $("history").classList.toggle("max", on);
+  const b = $("history-max");
+  b.textContent = on ? "«" : "»";
+  b.title = on ? "back to the two-pane view — show the commit list (m)" : "fullscreen — hide the commit list, the diff takes the whole screen (m)";
+  b.setAttribute("aria-expanded", on ? "false" : "true");
+  renderHistoryDiff();
+}
+
+
+function toggleHistoryMax() {
+  if (!hist) return;
+  applyHistoryMax(!$("history").classList.contains("max"));
+}
+
+
 function historyKey(e) {
   if (e.key === "Escape") {
     closeHistory();
@@ -66,6 +101,10 @@ function historyKey(e) {
   if (e.key === "w" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     cycleTextMode(); // the shared long-line mode; CSS on <body> redraws this overlay
     renderHistoryDiff(); // …and the per-side scrollbars are (un)mounted
+    return true;
+  }
+  if (e.key === "m" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    toggleHistoryMax();
     return true;
   }
   if (e.key === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -96,6 +135,7 @@ function renderHistoryList() {
 async function openHistoryDiff(i) {
   hist.sel = i;
   renderHistoryList();
+  setHistoryTitle();
   const r = hist.rows[i];
   const gen = hist.gen;
   // The /api/diff COMMIT form is already parent-vs-commit with A/D handling —
@@ -161,6 +201,18 @@ $("history-list").addEventListener("click", (e) => {
 
 $("history").addEventListener("click", (e) => {
   if (e.target.id === "history") closeHistory(); // backdrop closes, box does not
+});
+
+$("history-max").addEventListener("click", toggleHistoryMax);
+
+
+registerHelp({
+  key: "file history · m fullscreen",
+  html:
+    "inside the file-history overlay, <b>m</b> (or the <b>»</b> chip in its title) folds the commit " +
+    "list away and the box takes the whole screen, so the diff gets everything; <b>«</b> or <b>m</b> " +
+    "again brings the list back. j/k still walk the commits meanwhile and the title reads " +
+    "<b>n/N · subject</b> so you know which one is open. Every open starts two-pane",
 });
 
 
