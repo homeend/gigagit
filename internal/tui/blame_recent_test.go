@@ -120,6 +120,28 @@ func TestBlameRecentKeyDOpensPopupAndEnterApplies(t *testing.T) {
 	}
 }
 
+// The first typed rune REPLACES the prefill (the web prompt selects its value
+// for the same reason): "7d" + typed "3d" is 3d, never 7d3d. Backspace first
+// keeps the prefill editable in place.
+func TestBlameRecentFirstRuneReplacesPrefill(t *testing.T) {
+	t.Parallel()
+	m, b := blameSearchModel()
+	m, _ = b.update(m, keyMsg("d"))
+	keys := append(runesOf("3d"), keyMsg("enter"))
+	m = typeRecentPopup(t, m, keys...)
+	if want := (blameRecent{on: true, span: 3 * 24 * time.Hour, last: "3d"}); m.blameRecent != want {
+		t.Errorf("typing over the prefill: blameRecent = %+v, want %+v", m.blameRecent, want)
+	}
+	// Editing the prefill in place (backspace first) keeps the rest of it.
+	m, _ = b.update(m, keyMsg("d"))
+	keys = append(clearField(1), runesOf("h")...)
+	keys = append(keys, keyMsg("enter"))
+	m = typeRecentPopup(t, m, keys...)
+	if want := (blameRecent{on: true, span: 3 * time.Hour, last: "3h"}); m.blameRecent != want {
+		t.Errorf("editing the prefill in place: blameRecent = %+v, want %+v", m.blameRecent, want)
+	}
+}
+
 // Junk keeps the popup open with an inline error; the state is untouched.
 func TestBlameRecentJunkKeepsPopupWithError(t *testing.T) {
 	t.Parallel()

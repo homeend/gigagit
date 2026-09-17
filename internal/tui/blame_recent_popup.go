@@ -19,12 +19,17 @@ type blameRecentPopup struct {
 	popupMax
 	input textfield // the span text
 	err   string    // inline error from the last failed parse; "" = none
+	// pristine is true until the first key touches the prefilled span: a typed
+	// rune then REPLACES the prefill instead of appending to it ("7d" + typed
+	// "3d" must be 3d, never 7d3d) — the web prompt selects its value for the
+	// same reason. Backspace, arrows and the rest edit the prefill in place.
+	pristine bool
 }
 
 // openBlameRecentPopup pushes the span dialog prefilled with the last span
 // used (or the default). Only the blame view opens it.
 func (m Model) openBlameRecentPopup() (Model, tea.Cmd) {
-	return m.pushLayer(&blameRecentPopup{input: newTextField(blameRecentSeed(m.blameRecent))}), nil
+	return m.pushLayer(&blameRecentPopup{input: newTextField(blameRecentSeed(m.blameRecent)), pristine: true}), nil
 }
 
 func (p *blameRecentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -44,6 +49,10 @@ func (p *blameRecentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.blameRecent = blameRecent{on: true, span: span, last: text}
 		return m.popLayer(), nil
 	default:
+		if p.pristine && (msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace) {
+			p.input = newTextField("") // the first typed rune replaces the prefill
+		}
+		p.pristine = false
 		// Spaces are part of the grammar ("1d 3h 5m"): HandleEditKey inserts
 		// them like any rune.
 		if p.input.HandleEditKey(msg) {

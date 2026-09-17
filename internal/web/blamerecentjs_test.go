@@ -30,6 +30,7 @@ func TestBlameRecentIsWiredEverywhere(t *testing.T) {
 		{"filehist.js", `" · ≤" + formatSpan(br.span)`, "the title badge while on"},
 		{"filehist.js", `e.key === "d"`, "d opens the span prompt"},
 		{"filehist.js", `e.key === "D"`, "D turns the highlight off"},
+		{"filehist.js", `key: "d / D · blame recent lines"`, "the ? help must advertise the keys, not only the overlay's hint line"},
 		{"filehist.js", `onKey: blameKey`, "the blame layer must route keys through the named handler"},
 		{"filehist.js", `state.blameRecent = { on: true, span: mins, last: text }`, "a parsed span turns the highlight on and is remembered for the next prompt"},
 		{"filehist.js", `openBlameRecentPrompt(text, msg)`, "a bad span re-opens the prompt prefilled with the offending text"},

@@ -368,6 +368,15 @@ function openBlameRecentPrompt(value, err) {
   });
 }
 
+registerHelp({
+  key: "d / D · blame recent lines",
+  html:
+    "in the blame overlay, <b>d</b> asks for a time span — <b>7d</b>, <b>1d 3h 5m</b>, <b>36h</b>, <b>90m</b> " +
+    "(a bare number is days) — and tints every line whose commit is younger than that, measured from now; " +
+    "uncommitted lines always count. <b>D</b> turns the tint off, <b>d</b> again edits the span. " +
+    "Remembered for the session — the TUI's d / D in its blame view",
+});
+
 function blameKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
   if (e.key === "w") {
