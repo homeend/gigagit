@@ -250,29 +250,43 @@ async function openFileBlame(path, rev) {
       `<span class="btext">${renderCell(l.text, null, l.tok, "") || " "}</span></div>`;
   }
   $("blame-body").innerHTML = html || `<div class="notice">(empty file)</div>`;
+  // Off on open: a fresh overlay never inherits the last one's tint; only
+  // the last dialog text survives, to prefill the next d.
+  state.blameRecent.on = false;
   applyBlameRecent();
-  // w cycles the shared long-line mode, d/D drive the recent-lines highlight;
+  // w cycles the shared long-line mode, d/D drive the age highlight;
   // everything else (esc included) is left to the stack's default handling.
   pushLayer("blame", $("blame"), { onKey: blameKey });
   $("blame-body").scrollTop = 0;
 }
 
 
-// --- recent lines ------------------------------------------------------------
-// d asks for a time span and tints every line whose commit is younger than
-// it (or uncommitted — the newest change of all); D turns the tint off. The
-// span lives in state.blameRecent for the session only (not /api/uistate),
-// so closing and reopening blame keeps the highlight, a restart does not.
-// `now` is the wall clock, NOT the blamed revision's date: blaming an old
-// commit may highlight nothing, by design.
+// --- age highlight -----------------------------------------------------------
+// d asks for an age filter and tints every line whose age falls inside it;
+// D turns the tint off. The filter lives in state.blameRecent for the
+// session only (not /api/uistate); opening blame always starts OFF — only
+// the last dialog text survives, to prefill the next d. Uncommitted lines
+// have age 0 (the newest change of all). `now` is the wall clock, NOT the
+// blamed revision's date: blaming an old commit may highlight nothing, by
+// design.
 
 // --- time span (pure; guarded against Go) ---
 // A port of internal/timespan: parseSpan(s) → whole minutes, or null when
-// the text is not a span; formatSpan(mins) → the canonical "1d3h5m" badge.
-// Grammar: tokens <digits><w|d|h|m>, optional whitespace, any order, summed;
-// a bare number is days; m is MINUTES (not months); units are case-blind.
-// Errors: empty input, a token without digits, an unknown unit, junk after a
-// unit ("1mo", "1.5d", "1x"), a zero total. Pinned to timespan.Table by
+// the text is not a span; formatSpan(mins) → the canonical "1d3h5m" badge;
+// parseFilter(s) → {older, younger} (minutes, null for an absent half) or
+// null; formatFilter(f) → the signed badge "+1d2h -7d4h"; filterMatches(f,
+// ageMins) → the inclusive window test.
+// Span grammar: tokens <digits><w|d|h|m> (either part optional, not both),
+// optional whitespace, any order, summed; a bare number is days, a bare
+// unit is one of it; m is MINUTES (not months); units are case-blind.
+// Errors: empty input, junk, an unknown unit, junk after a unit ("1mo",
+// "1.5d", "1x"), a zero total.
+// Filter grammar: up to two signed halves, "-<span>" = younger than (age at
+// most span), "+<span>" = older than (age at least span); a leading unsigned
+// span is the "-" half; each sign owns every token up to the next sign
+// (whitespace after the sign is fine). Errors: a span
+// error inside a half, a second "-" or "+", a sign with nothing after it,
+// an older bound above the younger one. Pinned to timespan.Table by
 // timespanjs_test.go — change both sides or neither.
 const SPAN_UNITS = { w: 7 * 24 * 60, d: 24 * 60, h: 60, m: 1 };
 
@@ -288,8 +302,7 @@ function parseSpan(s) {
     if (i >= s.length) break;
     let j = i;
     while (j < s.length && isDigit(s[j])) j++;
-    if (j === i) return null; // a unit with no number, or junk
-    const n = Number(s.slice(i, j));
+    const n = j > i ? Number(s.slice(i, j)) : 1; // a bare unit ("w") is one of it
     let unit = SPAN_UNITS.d; // a bare number is days
     if (j < s.length) {
       const u = SPAN_UNITS[s[j].toLowerCase()];
@@ -298,6 +311,7 @@ function parseSpan(s) {
         j++;
       }
     }
+    if (j === i) return null; // neither a number nor a unit: junk
     // The token must end here: whitespace, another number, or the end.
     if (j < s.length && !isWS(s[j]) && !isDigit(s[j])) return null;
     // Go refuses a token past 1<<62 ns / unit; 76861433 is that bound in
@@ -323,31 +337,91 @@ function formatSpan(mins) {
   if (m > 0 || out === "") out += m + "m";
   return out;
 }
+
+// parseFilter splits the text at its signs: the run before the first sign
+// (if any) is an unsigned "-" half; each sign then owns the run up to the
+// next sign, and every run goes through parseSpan.
+function parseFilter(s) {
+  s = String(s == null ? "" : s).trim();
+  if (s === "") return null;
+  const f = { older: null, younger: null };
+  const apply = (sign, text) => {
+    const mins = parseSpan(text);
+    if (mins === null) return false;
+    const key = sign === "+" ? "older" : "younger";
+    if (f[key] !== null) return false; // a second - or + half
+    f[key] = mins;
+    return true;
+  };
+  let sign = "-";
+  let start = 0;
+  let seenSign = false;
+  for (let i = 0; i <= s.length; i++) {
+    if (i < s.length && s[i] !== "+" && s[i] !== "-") continue;
+    const seg = s.slice(start, i).trim();
+    if (seg === "") {
+      if (seenSign) return null; // a sign with nothing after it
+    } else if (!apply(sign, seg)) {
+      return null;
+    }
+    if (i < s.length) {
+      sign = s[i];
+      start = i + 1;
+      seenSign = true;
+    }
+  }
+  if (f.older !== null && f.younger !== null && f.older > f.younger) return null; // empty range
+  return f;
+}
+
+// formatFilter prints the canonical signed form, older half first:
+// "-7d", "+30d", "+1d2h -7d4h". Empty when neither half is set.
+function formatFilter(f) {
+  const parts = [];
+  if (f && f.older !== null && f.older !== undefined) parts.push("+" + formatSpan(f.older));
+  if (f && f.younger !== null && f.younger !== undefined) parts.push("-" + formatSpan(f.younger));
+  return parts.join(" ");
+}
+
+// filterMatches reports whether an age (minutes, fractional allowed — the
+// boundary is inclusive at full precision) falls inside the window. A
+// negative age (clock skew) clamps to zero and behaves like an uncommitted
+// line; a filter with no half set matches nothing.
+function filterMatches(f, ageMins) {
+  if (!f) return false;
+  const hasOlder = f.older !== null && f.older !== undefined;
+  const hasYounger = f.younger !== null && f.younger !== undefined;
+  if (!hasOlder && !hasYounger) return false;
+  const age = Math.max(0, Number(ageMins) || 0);
+  if (hasOlder && age < f.older) return false;
+  if (hasYounger && age > f.younger) return false;
+  return true;
+}
 // --- end time span ---
 
-const BLAME_RECENT_TITLE = "Highlight lines changed within the last…";
-const BLAME_RECENT_HINT = "e.g. 7d, 1d 3h 5m, 36h, 90m";
+const BLAME_RECENT_TITLE = "Highlight lines by age…";
+const BLAME_RECENT_HINT = "-7d younger · +30d older · +1d -7d between · +w";
 
-// blameBase is the overlay title without the ≤span badge; applyBlameRecent
+// blameBase is the overlay title without the age badge; applyBlameRecent
 // rebuilds the title from it so toggling never stacks badges.
 let blameBase = "";
 
 function applyBlameRecent() {
   const br = state.blameRecent;
-  const on = !!(br && br.on && br.span > 0);
+  const on = !!(br && br.on && br.f);
   const now = Date.now();
   for (const row of document.querySelectorAll("#blame-body .bline")) {
     const t = Number(row.dataset.t) || 0;
-    const u = row.dataset.u === "1";
-    // Boundary inclusive: a line exactly `span` old is still recent.
-    row.classList.toggle("brecent", on && (u || now - t * 1000 <= br.span * 60000));
+    // An uncommitted row is age 0: it matches a "-" half, never a "+" half.
+    const age = row.dataset.u === "1" ? 0 : (now - t * 1000) / 60000;
+    row.classList.toggle("brecent", on && filterMatches(br.f, age));
   }
-  $("blame-title").textContent = blameBase + (on ? " · ≤" + formatSpan(br.span) : "");
+  $("blame-title").textContent = blameBase + (on ? " · " + formatFilter(br.f) : "");
 }
 
-// openBlameRecentPrompt asks for the span; a bad answer re-opens the prompt
-// prefilled with the offending text and the reason in the title, so the
-// error reads above the field and the status line both (the overlay's
+// openBlameRecentPrompt asks for the age filter; a bad answer re-opens the
+// prompt prefilled with the offending text and the reason in the title, so
+// the error reads above the field and the status line both (the overlay's
 // backdrop dims the status line).
 function openBlameRecentPrompt(value, err) {
   openPrompt({
@@ -355,26 +429,27 @@ function openBlameRecentPrompt(value, err) {
     value,
     placeholder: BLAME_RECENT_HINT,
     onSubmit: (text) => {
-      const mins = parseSpan(text);
-      if (mins === null) {
-        const msg = "not a time span: “" + text + "” (" + BLAME_RECENT_HINT + ")";
+      const f = parseFilter(text);
+      if (f === null) {
+        const msg = "not an age filter: “" + text + "” (" + BLAME_RECENT_HINT + ")";
         opLine(msg, true);
         openBlameRecentPrompt(text, msg);
         return;
       }
-      state.blameRecent = { on: true, span: mins, last: text };
+      state.blameRecent = { on: true, f, last: text };
       applyBlameRecent();
     },
   });
 }
 
 registerHelp({
-  key: "d / D · blame recent lines",
+  key: "d / D · blame age highlight",
   html:
-    "in the blame overlay, <b>d</b> asks for a time span — <b>7d</b>, <b>1d 3h 5m</b>, <b>36h</b>, <b>90m</b> " +
-    "(a bare number is days) — and tints every line whose commit is younger than that, measured from now; " +
-    "uncommitted lines always count. <b>D</b> turns the tint off, <b>d</b> again edits the span. " +
-    "Remembered for the session — the TUI's d / D in its blame view",
+    "in the blame overlay, <b>d</b> asks for an age filter and tints every line whose commit falls inside it, " +
+    "measured from now: <b>-7d</b> younger than a week, <b>+30d</b> older than a month, <b>+1d -7d</b> between the two " +
+    "(both bounds inclusive; a bare span is the younger half, <b>+w</b> is a week, <b>1d 3h 5m</b> adds up, a bare number is days, m is minutes). " +
+    "Uncommitted lines are age 0. <b>D</b> turns the tint off, <b>d</b> again edits the filter. " +
+    "Off whenever blame opens; only the last text is kept to prefill the prompt — the TUI's d / D in its blame view",
 });
 
 function blameKey(e) {
@@ -409,4 +484,4 @@ $("blame").addEventListener("click", (e) => {
   if (e.target.id === "blame") closeLayer("blame"); // backdrop closes, box does not
 });
 
-export { applyBlameRecent, closeHistory, formatSpan, hist, histGen, historyKey, openFileBlame, openFileHistory, openHistoryDiff, parseSpan, renderHistoryList };
+export { applyBlameRecent, closeHistory, filterMatches, formatFilter, formatSpan, hist, histGen, historyKey, openFileBlame, openFileHistory, openHistoryDiff, parseFilter, parseSpan, renderHistoryList };

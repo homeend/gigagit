@@ -7,45 +7,40 @@ import (
 	"github.com/homeend/gigagit/internal/timespan"
 )
 
-// blameRecent is the blame view's "lines changed within the last…" highlight
-// (d opens the span dialog, D turns it off). It lives on the Model — not on
-// the blameView — so the span and the on/off state survive closing and
-// reopening blame for the session. Not persisted across runs (ruling in the
-// design spec: session-scoped).
+// blameRecent is the blame view's "highlight lines by commit age" state (d
+// opens the filter dialog, D turns it off). It lives on the blameView, so a
+// freshly opened blame always starts OFF (ruling in the design spec, revision
+// 2); only the last submitted TEXT survives on the Model (blameRecentLast)
+// to prefill the next dialog. Not persisted across runs.
 type blameRecent struct {
-	on   bool          // highlight is showing
-	span time.Duration // the parsed span the highlight compares against
-	last string        // the text last submitted; prefills the next dialog
+	on bool            // highlight is showing
+	f  timespan.Filter // the parsed age window the highlight compares against
 }
 
-// blameRecentDefaultSpan is what the dialog offers before the user has ever
-// typed a span.
-const blameRecentDefaultSpan = "7d"
+// blameRecentDefaultText is what the dialog offers before the user has ever
+// typed a filter.
+const blameRecentDefaultText = "7d"
 
-// blameRecentSeed is the dialog's prefill: the last span the user submitted,
+// blameRecentSeed is the dialog's prefill: the last text the user submitted,
 // or the default when there is none yet.
-func blameRecentSeed(r blameRecent) string {
-	if r.last == "" {
-		return blameRecentDefaultSpan
+func blameRecentSeed(last string) string {
+	if last == "" {
+		return blameRecentDefaultText
 	}
-	return r.last
+	return last
 }
 
-// lineRecent reports whether a blame line falls inside the recent span: its
-// commit's author time is within span of now (boundary inclusive), or the
-// line is uncommitted (hash "" — the newest change of all). now is the wall
-// clock at render time, not the blamed revision's date, so blaming an old
-// commit may highlight nothing; that is documented, not a bug. A zero Time
-// (the epoch) is simply very old.
-func lineRecent(ln model.BlameLine, now time.Time, span time.Duration) bool {
-	if ln.Hash == "" {
-		return true
+// lineMatches reports whether a blame line falls inside the age filter: its
+// age (now minus the commit's author time) satisfies f. An uncommitted line
+// (hash "") has age 0 — the newest change of all — so it matches a "-" half
+// and never a "+" half. now is the wall clock at render time, not the blamed
+// revision's date, so blaming an old commit may highlight nothing under a
+// "-" filter; that is documented, not a bug. A zero Time (the epoch) is
+// simply very old.
+func lineMatches(ln model.BlameLine, now time.Time, f timespan.Filter) bool {
+	var age time.Duration
+	if ln.Hash != "" {
+		age = now.Sub(time.Unix(ln.Time, 0))
 	}
-	return now.Sub(time.Unix(ln.Time, 0)) <= span
-}
-
-// blameRecentBadge is the header badge shown while the highlight is on:
-// "≤" + the canonical span ("≤7d", "≤1d3h5m").
-func blameRecentBadge(span time.Duration) string {
-	return "≤" + timespan.Format(span)
+	return f.Matches(age)
 }

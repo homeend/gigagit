@@ -8,21 +8,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
-- **Blame: highlight the lines changed within a time span (TUI + web).** In
-  the blame view `d` asks for a span — `7d`, `1d 3h 5m`, `36h`, `90m`; a
-  bare number is days — and every line whose commit is younger than that
-  (measured from now, not from the blamed revision; uncommitted lines always
-  count) is tinted across gutter and code, so the fresh edits in an old file
-  stand out at a glance. `D` turns it off; `d` again edits the span. The span
-  is remembered for the session and the highlight stays on across blame
-  windows until `D`. The TUI shows `≤1d3h5m` in the header beside the search
-  badge; the web blame overlay takes the same keys and shows the span in its
-  title. Tint colour: the new theme role `blame_recent_bg` (dark and light
-  defaults; under the inherit-everything `terminal` theme the lines go bold
-  instead). Minutes are `m` here — the branch-filter age grammar, where `m`
-  is months, is a different field and unchanged. New DAG leaf
-  `internal/timespan` owns the grammar; the browser runs a port pinned to
-  the Go conformance table.
+- **Blame: highlight lines by commit age (TUI + web).** In the blame view
+  `d` asks for an age filter and tints every matching line across gutter and
+  code, so the fresh — or the ancient — edits in a file stand out at a glance.
+  `-7d` is younger than a week, `+30d` older than a month, `+1d -7d` the lines
+  between (both bounds inclusive, order-free); a bare span means younger than,
+  so `7d`, `1d 3h 5m`, `36h`, `90m` still work, a bare number is days and a
+  bare unit is one of it (`+w`). Age is measured from now, not from the
+  blamed revision; uncommitted lines are age 0, so they match a `-` bound and
+  never a `+` one. `D` turns it off, `d` again edits; the highlight is OFF
+  whenever blame opens, only the last text is remembered as the dialog's
+  prefill (the first typed rune replaces it). The TUI shows the filter
+  (`+1d -7d`) in the header beside the search badge; the web blame overlay
+  takes the same keys and shows it in its title. Tint colour: the new theme
+  role `blame_recent_bg` (dark and light defaults; under the
+  inherit-everything `terminal` theme the lines go bold instead). Minutes are
+  `m` here — the branch-filter age grammar, where `m` is months, is a
+  different field and unchanged. New DAG leaf `internal/timespan` owns the
+  grammar; the browser runs a port pinned to the Go conformance table.
+
 - **Fixed: `gg://C:/…` was read as a repository NAMED `C:`.** On Windows the
   obvious way to build a link — the scheme plus the checkout path — yields two
   slashes, not three, because an absolute Windows path starts with a drive

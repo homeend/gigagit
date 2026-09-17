@@ -38,6 +38,9 @@ type blameView struct {
 	search     textSearch
 	searchOrig blameOrigin
 	san        []string
+	// recent is the d-key age highlight. On the VIEW, so every open starts
+	// off; the last dialog text lives on Model.blameRecentLast instead.
+	recent blameRecent
 }
 
 // blameOrigin is the view state a live search restores when esc cancels it.
@@ -264,11 +267,11 @@ func (b *blameView) render(m Model, _ string) string {
 
 	title := i18n.T("blame: %s", b.ctx.path+revSuffix(b.ctx.rev))
 	header := truncate(title, w)
-	// Right-aligned badges, like the diff's: the recent-span badge (≤7d) and
-	// the search badge share the slot as "≤7d · /q  1/3".
+	// Right-aligned badges, like the diff's: the age-filter badge (-7d, +30d,
+	// +1d -7d) and the search badge share the slot as "-7d · /q  1/3".
 	bd := b.search.badge()
-	if m.blameRecent.on {
-		rb := blameRecentBadge(m.blameRecent.span)
+	if b.recent.on {
+		rb := b.recent.f.String()
 		if bd != "" {
 			bd = rb + " · " + bd
 		} else {
@@ -282,7 +285,7 @@ func (b *blameView) render(m Model, _ string) string {
 		}
 		header = truncate(padRight(truncate(title, avail), avail)+"  "+bd, w)
 	}
-	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [enter] history  [e] editor  [esc/b] back  [d] recent"), w)
+	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [enter] history  [e] editor  [esc/b] back  [d] age"), w)
 	if b.lsel.on {
 		// The selection variant replaces the lot, so the way out (esc) is
 		// always on screen.
@@ -323,8 +326,8 @@ func (b *blameView) render(m Model, _ string) string {
 		var st lipgloss.Style
 		if i == b.sel {
 			st = s.selectedRow
-		} else if m.blameRecent.on && lineRecent(ln, now, m.blameRecent.span) {
-			// The recent tint is the ROW style, so the gutter (winRow.prefix)
+		} else if b.recent.on && lineMatches(ln, now, b.recent.f) {
+			// The age tint is the ROW style, so the gutter (winRow.prefix)
 			// wears it too and a block's extent reads. The cursor row keeps its
 			// reverse video untouched, and the selection stripe below composes
 			// over the tint on the code half (most specific wins).
@@ -435,10 +438,10 @@ func (b *blameView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	// ctrl+c (handled above) remains the universal quit.
 	case "esc", "b":
 		return m.popLayer(), nil
-	case "d": // highlight lines changed within a span (also to change the span)
-		return m.openBlameRecentPopup()
-	case "D": // highlight off; the last span is kept for the next d
-		m.blameRecent.on = false
+	case "d": // highlight lines by commit age (also to change the filter)
+		return m.openBlameRecentPopup(b)
+	case "D": // highlight off; the last text is kept on the Model for the next d
+		b.recent.on = false
 		return m, nil
 	case "down", "j":
 		if b.sel < len(b.lines)-1 {

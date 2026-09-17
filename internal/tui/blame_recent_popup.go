@@ -9,27 +9,30 @@ import (
 	"github.com/homeend/gigagit/internal/timespan"
 )
 
-// blameRecentPopup is the one-field span dialog behind the blame view's d
-// key: type "7d", "1d 3h 5m", "36h" or "90m" and enter turns the recent-lines
-// highlight on for that span. Modelled on gotoCommitPopup: a span that does
-// not parse keeps the popup open with an inline error under the field; esc
-// leaves the highlight exactly as it was. Reads and writes Model.blameRecent,
-// never blameView state, so the span survives closing blame.
+// blameRecentPopup is the one-field age-filter dialog behind the blame view's
+// d key: type "-7d" (younger than a week), "+30d" (older than a month),
+// "+1d -7d" (between) or a bare "7d" (≡ -7d) and enter turns the highlight
+// on for that window. Modelled on gotoCommitPopup: text that does not parse
+// keeps the popup open with an inline error under the field; esc leaves the
+// highlight exactly as it was. Enter writes the filter onto the blameView it
+// was opened over (bv) and the raw text onto Model.blameRecentLast — the
+// on/off state dies with the view, the text seeds the next dialog.
 type blameRecentPopup struct {
 	popupMax
-	input textfield // the span text
-	err   string    // inline error from the last failed parse; "" = none
-	// pristine is true until the first key touches the prefilled span: a typed
+	bv    *blameView // the view the dialog was opened over; enter writes bv.recent
+	input textfield  // the filter text
+	err   string     // inline error from the last failed parse; "" = none
+	// pristine is true until the first key touches the prefilled text: a typed
 	// rune then REPLACES the prefill instead of appending to it ("7d" + typed
 	// "3d" must be 3d, never 7d3d) — the web prompt selects its value for the
 	// same reason. Backspace, arrows and the rest edit the prefill in place.
 	pristine bool
 }
 
-// openBlameRecentPopup pushes the span dialog prefilled with the last span
-// used (or the default). Only the blame view opens it.
-func (m Model) openBlameRecentPopup() (Model, tea.Cmd) {
-	return m.pushLayer(&blameRecentPopup{input: newTextField(blameRecentSeed(m.blameRecent)), pristine: true}), nil
+// openBlameRecentPopup pushes the age dialog over b, prefilled with the last
+// text submitted (or the default). Only the blame view opens it.
+func (m Model) openBlameRecentPopup(b *blameView) (Model, tea.Cmd) {
+	return m.pushLayer(&blameRecentPopup{bv: b, input: newTextField(blameRecentSeed(m.blameRecentLast)), pristine: true}), nil
 }
 
 func (p *blameRecentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
@@ -41,19 +44,20 @@ func (p *blameRecentPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.popLayer(), nil
 	case tea.KeyEnter:
 		text := strings.TrimSpace(p.input.Value())
-		span, err := timespan.Parse(text)
+		f, err := timespan.ParseFilter(text)
 		if err != nil {
-			p.err = i18n.T("not a time span: %s", text)
+			p.err = i18n.T("not an age filter: %s", text)
 			return m, nil
 		}
-		m.blameRecent = blameRecent{on: true, span: span, last: text}
+		p.bv.recent = blameRecent{on: true, f: f}
+		m.blameRecentLast = text
 		return m.popLayer(), nil
 	default:
 		if p.pristine && (msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace) {
 			p.input = newTextField("") // the first typed rune replaces the prefill
 		}
 		p.pristine = false
-		// Spaces are part of the grammar ("1d 3h 5m"): HandleEditKey inserts
+		// Spaces are part of the grammar ("+1d 2h -7d"): HandleEditKey inserts
 		// them like any rune.
 		if p.input.HandleEditKey(msg) {
 			p.err = "" // editing clears the stale error
@@ -70,9 +74,9 @@ func (p *blameRecentPopup) render(m Model, below string) string {
 func (p *blameRecentPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	var b strings.Builder
-	b.WriteString(i18n.T("Highlight lines changed within the last…") + "\n\n")
+	b.WriteString(i18n.T("Highlight lines by age…") + "\n\n")
 	b.WriteString(viewField(i18n.T("span: "), p.input, true, popupContentWidth(w)) + "\n")
-	b.WriteString(st().dim.Render(i18n.T("e.g. 7d, 1d 3h 5m, 36h, 90m")) + "\n")
+	b.WriteString(st().dim.Render(i18n.T("-7d younger · +30d older · +1d -7d between · +w = older than a week")) + "\n")
 	if p.err != "" {
 		b.WriteString("\n" + st().errorText.Render(p.err) + "\n")
 	}
