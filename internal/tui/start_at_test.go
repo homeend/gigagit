@@ -59,6 +59,68 @@ func TestSteerCommandForLink(t *testing.T) {
 	}
 }
 
+// TestSteerCommandForLinkBuildsRefAndPair pins the step-6 regression: before
+// this task, `gg open 'gg://repo@ref:branch'` with no live session RESOLVED
+// the link, found no live session, launched a fresh TUI in that checkout (a
+// real side effect), and only THEN answered the generic "names no place gg
+// can open" refusal — the len(Commit) < 40 guard failed closed only by
+// accident, since a ref/pair link's Commit is always empty. Both arms must
+// build a real command instead.
+func TestSteerCommandForLinkBuildsRefAndPair(t *testing.T) {
+	t.Parallel()
+	c, ok := steerCommandForLink(mustLink(t, "gg://r@ref:feat/x"))
+	if !ok || c.Target == nil || c.Target.State != "ref" || c.Target.Ref != "feat/x" {
+		t.Fatalf("ref link = %+v,%v", c, ok)
+	}
+	if c.File != "" || c.Line != nil {
+		t.Errorf("a repo-level ref link must carry no file: %+v", c)
+	}
+
+	c, ok = steerCommandForLink(mustLink(t, "gg://r/a.txt@ref:feat/x:9"))
+	if !ok || c.File != "a.txt" || c.Target == nil || c.Target.State != "ref" || c.Target.Ref != "feat/x" {
+		t.Fatalf("ref file link = %+v,%v", c, ok)
+	}
+	if c.Line == nil || c.Line.No != 9 || c.Line.Side != "new" {
+		t.Fatalf("line = %+v", c.Line)
+	}
+
+	c, ok = steerCommandForLink(mustLink(t, "gg://r@main..feat/x"))
+	if !ok || c.Target == nil || c.Target.State != "pair" || c.Target.A != "main" || c.Target.B != "feat/x" {
+		t.Fatalf("pair link = %+v,%v", c, ok)
+	}
+	if c.File != "" || c.Line != nil {
+		t.Errorf("a repo-level pair link must carry no file: %+v", c)
+	}
+
+	c, ok = steerCommandForLink(mustLink(t, "gg://r/a.txt@main..feat/x:3"))
+	if !ok || c.File != "a.txt" || c.Target == nil || c.Target.State != "pair" || c.Target.A != "main" || c.Target.B != "feat/x" {
+		t.Fatalf("pair file link = %+v,%v", c, ok)
+	}
+	if c.Line == nil || c.Line.No != 3 {
+		t.Fatalf("line = %+v", c.Line)
+	}
+}
+
+// TestStartAtRefLinkLandsOnTheTip is the end-to-end half of the step-6
+// regression: applySteer must actually land the command steerCommandForLink
+// built, not just build it.
+func TestStartAtRefLinkLandsOnTheTip(t *testing.T) {
+	t.Parallel()
+	m, _ := previewSteerModel(t)
+	c, ok := steerCommandForLink(mustLink(t, "gg://gigagit@ref:main"))
+	if !ok {
+		t.Fatal("steerCommandForLink must build a command for a ref link")
+	}
+	m, cmd := m.applySteer(c)
+	m = drainMsgs(t, m, cmd, 6)
+	if m.filesView == nil {
+		t.Fatal("the ref link must have opened the tip's files")
+	}
+	if strings.Contains(m.statusMsg, "no place gg can open") {
+		t.Error("must not fall back to the generic refusal")
+	}
+}
+
 // TestSteerCommandForLinkAcceptsALineLessFile pins the OTHER producer: the
 // --at startup gate (gg open with no live session launches the TUI on the
 // link). It refused l.Line < 1, so a line-less link launched gg nowhere in

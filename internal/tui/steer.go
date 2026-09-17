@@ -274,6 +274,18 @@ func steerEnumRefusal(c steer.Command) string {
 			if c.Commit != "" {
 				return "a preview target cannot also carry a commit"
 			}
+		case "ref":
+			// The NAME is load-bearing: steerNavigateRef resolves it at apply
+			// time (ruling R2), so an empty one has nothing to resolve.
+			if c.Target.Ref == "" {
+				return "a ref target needs ref"
+			}
+		case "pair":
+			// Both halves are load-bearing: a half-filled pair would silently
+			// degrade into "some commit", exactly the preview target's rule.
+			if c.Target.A == "" || c.Target.B == "" {
+				return "a pair target needs a and b"
+			}
 		default:
 			return "unknown target state " + strconv.Quote(c.Target.State)
 		}

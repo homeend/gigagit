@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,6 +22,7 @@ const (
 	steerStageFiles                         // a commit's changed-file list
 	steerStageDiff                          // the diff itself; land the cursor
 	steerStagePreview                       // a merge preview's compare file list
+	steerStageCompare                       // a pair's compare file list (openCompareFiles)
 )
 
 // steerPendingTTL bounds a parked navigate. The user can close the view the
@@ -30,9 +32,12 @@ const steerPendingTTL = 5 * time.Second
 
 // pendingSteer is a navigate command parked until the load it needs arrives.
 type pendingSteer struct {
-	cmd    steer.Command
-	stage  steerStage
-	tag    string // steerStageDiff: the m.diffTag this landing belongs to
+	cmd   steer.Command
+	stage steerStage
+	// tag is the m.diffTag this landing belongs to (steerStageDiff) or the
+	// m.compareTag the pair's file list is loading under (steerStageCompare)
+	// -- never both at once, since a pendingSteer holds exactly one stage.
+	tag    string
 	hash   string // steerStageFiles: the commit whose file list is loading
 	source string // steerStagePreview: the pair whose compare list is loading
 	target string
@@ -124,6 +129,10 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 		return m.steerStep(c)
 	case c.Target != nil && c.Target.State == "preview":
 		return m.steerNavigatePreview(c)
+	case c.Target != nil && c.Target.State == "ref":
+		return m.steerNavigateRef(c)
+	case c.Target != nil && c.Target.State == "pair":
+		return m.steerNavigatePair(c)
 	case c.File != "" && c.Target != nil && c.Target.State == "commit":
 		return m.steerNavigateCommitFile(c)
 	case c.File != "":
@@ -275,6 +284,107 @@ func (m Model) steerNavigateCommitFile(c steer.Command) (Model, tea.Cmd) {
 	return m, cmd
 }
 
+// steerNavigateRef lands a @ref:<name> navigate. The wire carries the NAME
+// (ruling R2), so the tip is resolved HERE: a branch that moved between post
+// and apply lands on the new tip. Once resolved it is an ordinary commit
+// navigate, so it delegates rather than duplicating either landing.
+func (m Model) steerNavigateRef(c steer.Command) (Model, tea.Cmd) {
+	name := c.Target.Ref
+	if name == "" {
+		return m, m.answerSteer(c, steerFail(c, "target.state \"ref\" needs target.ref"))
+	}
+	// A DEADLINED read on the Update thread: the ff-pull lane does not set
+	// m.running, so a background fetch can hold the gate with opsIdle() still
+	// true. updateThreadCtx is the seam plan 1b added for exactly this.
+	ctx, cancel := updateThreadCtx(updateThreadGitTimeout)
+	defer cancel()
+	sha, ok, err := m.svc.ResolveRev(ctx, name)
+	if err := busyOr(err); err != nil {
+		return m, m.answerSteer(c, steerFail(c, "resolving "+name+": "+err.Error()))
+	}
+	if !ok {
+		return m, m.answerSteer(c, steerFail(c, name+" does not resolve here"))
+	}
+	hash := strings.TrimSpace(sha)
+	// Reuse the commit lanes verbatim: the ref is spent.
+	nc := c
+	nc.Target = &steer.Target{State: "commit", Commit: hash}
+	if nc.File != "" {
+		return m.steerNavigateCommitFile(nc)
+	}
+	// NOT steerNavigate(nc) with nc.Commit set: that arm refuses an agent's
+	// navigate for a commit the feed has not paged in, and a branch tip is the
+	// commit least likely to be paged in. A ref names a TREE, so open it by
+	// hash for either origin (see the landing note above).
+	nm := m.steerToPanels()
+	nm, cmd := nm.openChangedFiles(model.Commit{Hash: hash})
+	nm.focus = panelCommits
+	nm = nm.focusTree()
+	if startAtOrigin(c) {
+		nm = nm.steerNotice(i18n.T("▸ opened %s", name+" at "+shortHash(hash)))
+	}
+	return nm, tea.Batch(cmd, nm.answerSteer(c, steerOK(c, "opened "+name+" at "+shortHash(hash))))
+}
+
+// steerNavigatePair lands a @<a>..<b> navigate: a change-set is BOUNDED, so
+// it is a COMPARISON, and the compare files view is where a comparison
+// lives. The halves arrive as names or shas and are resolved here for the
+// same reason a ref is (ruling R2): a moving name must be re-resolved at
+// apply time, never taken frozen off the wire.
+//
+// CommitEndpoint on each half, never PairEndpoint: an endpoint pair is one
+// bounded SET, and openCompareFiles wants the two sides that produce it.
+func (m Model) steerNavigatePair(c steer.Command) (Model, tea.Cmd) {
+	a, b := c.Target.A, c.Target.B
+	if a == "" || b == "" {
+		return m, m.answerSteer(c, steerFail(c, "target.state \"pair\" needs target.a and target.b"))
+	}
+	// Both halves resolved under ONE deadline: the same Update-thread hazard
+	// steerNavigateRef guards against.
+	ctx, cancel := updateThreadCtx(updateThreadGitTimeout)
+	defer cancel()
+	ash, aok, aerr := m.svc.ResolveRev(ctx, a)
+	if err := busyOr(aerr); err != nil {
+		return m, m.answerSteer(c, steerFail(c, "resolving "+a+": "+err.Error()))
+	}
+	if !aok {
+		return m, m.answerSteer(c, steerFail(c, a+" does not resolve here"))
+	}
+	bsh, bok, berr := m.svc.ResolveRev(ctx, b)
+	if err := busyOr(berr); err != nil {
+		return m, m.answerSteer(c, steerFail(c, "resolving "+b+": "+err.Error()))
+	}
+	if !bok {
+		return m, m.answerSteer(c, steerFail(c, b+" does not resolve here"))
+	}
+	ahash, bhash := strings.TrimSpace(ash), strings.TrimSpace(bsh)
+	left, err := model.CommitEndpoint(ahash)
+	if err != nil {
+		return m, m.answerSteer(c, steerFail(c, "resolving "+a+": "+err.Error()))
+	}
+	right, err := model.CommitEndpoint(bhash)
+	if err != nil {
+		return m, m.answerSteer(c, steerFail(c, "resolving "+b+": "+err.Error()))
+	}
+
+	m = m.steerToPanels()
+	nm, cmd := m.openCompareFiles(left, right)
+	pair := shortHash(ahash) + ".." + shortHash(bhash)
+	if startAtOrigin(c) {
+		nm = nm.steerNotice(i18n.T("▸ opened %s..%s", shortHash(ahash), shortHash(bhash)))
+	}
+	if c.File == "" {
+		return nm, tea.Batch(cmd, nm.answerSteer(c, steerOK(c, "opened "+pair)))
+	}
+	// Park the COMPARE's tag: drainPendingCompare gates on it, never on
+	// m.filesHash (drainPendingFiles' gate) — openCompareFiles happens to also
+	// set m.filesHash from one side's hash, but compareFilesMsg's handler
+	// never routes a compare's success through drainPendingFiles, so a
+	// pending parked there would never drain.
+	nm.pendingSteer = &pendingSteer{cmd: c, stage: steerStageCompare, tag: nm.compareTag, at: time.Now()}
+	return nm, cmd
+}
+
 // drainPendingStatus retries the path lookup after the one status reload.
 func (m Model) drainPendingStatus() (Model, tea.Cmd) {
 	ps := m.pendingSteer
@@ -344,6 +454,25 @@ func (m Model) drainPendingFiles() (Model, tea.Cmd) {
 	return m.drainPendingLoad(c, m.filesView.lines,
 		"opened "+c.File+" in "+shortHash(ps.hash),
 		c.File+" is not in commit "+shortHash(ps.hash))
+}
+
+// drainPendingCompare selects the commanded path in a pair's freshly loaded
+// compare file list and opens its diff, advancing to the diff stage. It is
+// drainPendingFiles' and drainPendingPreview's twin for the change-set lane:
+// compareFilesMsg (not commitFilesMsg) fills a pair's file list, and its
+// handler never routes success through drainPendingFiles, so a pending
+// parked on m.filesHash (drainPendingFiles' gate) would never drain — gate on
+// m.compareTag instead, the identity a two-sided view actually carries.
+func (m Model) drainPendingCompare() (Model, tea.Cmd) {
+	ps := m.pendingSteer
+	if ps == nil || ps.stage != steerStageCompare || m.filesView == nil || ps.tag != m.compareTag {
+		return m, nil
+	}
+	c := ps.cmd
+	pair := c.Target.A + ".." + c.Target.B
+	return m.drainPendingLoad(c, m.filesView.lines,
+		"opened "+c.File+" in "+pair,
+		c.File+" is not in "+pair)
 }
 
 // drainPendingDiff lands the cursor once the diff it was parked on has arrived.
@@ -539,6 +668,40 @@ func steerCommandForLink(l model.Link) (steer.Command, bool) {
 		c.File = l.Path
 		if l.Line > 0 {
 			c.Line = &steer.Line{Side: "new", No: l.Line} // a preview has no old side
+		}
+		return c, true
+	}
+	if name := l.Target.Ref; name != "" {
+		// A tip's NAME rides the wire (ruling R2): the started TUI resolves it
+		// itself, in steerNavigateRef, the same place a live session does.
+		c.Target = &steer.Target{State: "ref", Ref: name}
+		if l.Path == "" {
+			return c, true
+		}
+		c.File = l.Path
+		if l.Line > 0 {
+			side := "new"
+			if l.Side == model.NoteSideOld {
+				side = "old"
+			}
+			c.Line = &steer.Line{Side: side, No: l.Line}
+		}
+		return c, true
+	}
+	if p := l.Target.Pair; p != nil {
+		// Each half may be a sha or a refname (model.LinkPair) and rides the
+		// wire as-is: steerNavigatePair resolves both at apply time.
+		c.Target = &steer.Target{State: "pair", A: p.A, B: p.B}
+		if l.Path == "" {
+			return c, true
+		}
+		c.File = l.Path
+		if l.Line > 0 {
+			side := "new"
+			if l.Side == model.NoteSideOld {
+				side = "old"
+			}
+			c.Line = &steer.Line{Side: side, No: l.Line}
 		}
 		return c, true
 	}

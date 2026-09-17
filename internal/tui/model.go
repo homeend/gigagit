@@ -817,6 +817,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if po := m.previewOpen; po != nil && m.pendingPreviewFor(po.source, po.target) {
 				return m.failPending("the preview's file list failed to load: " + msg.err.Error())
 			}
+			if ps := m.pendingSteer; ps != nil && ps.stage == steerStageCompare && ps.tag == msg.tag {
+				return m.failPending("the compare's file list failed to load: " + msg.err.Error())
+			}
 			return m, nil
 		}
 		if m.comparePair != nil {
@@ -838,7 +841,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			po.keepPath = ""
 		}
-		// A parked preview navigate waits on exactly this list.
+		// A parked pair navigate waits on exactly this list; a parked preview
+		// navigate waits on the same message but a DIFFERENT stage — each
+		// drain checks its own stage and is a no-op for the other's pending.
+		if ps := m.pendingSteer; ps != nil && ps.stage == steerStageCompare {
+			return m.drainPendingCompare()
+		}
 		return m.drainPendingPreview()
 	case previewOpenMsg:
 		return m.handlePreviewOpenMsg(msg)
