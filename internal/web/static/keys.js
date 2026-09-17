@@ -7,6 +7,7 @@ import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stag
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { addNotePrompt, cycleFilesSort, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleMark, toggleNotesAgent } from "./files.js";
 import { openPalette } from "./palette.js";
+import { branchFilterKey } from "./branchfilter.js";
 
 // --- focus + keyboard ---
 
@@ -86,6 +87,9 @@ document.addEventListener("keydown", (e) => {
     openPalette("cmd");
     return;
   }
+  // alt+1…5 / alt+shift+1…5: branch-filter slots. Not inside inputs — a
+  // digit typed into the commit box must stay a digit.
+  if (!(e.target.closest && e.target.closest("input,textarea")) && branchFilterKey(e)) return;
   // Form fields own the keyboard: without this, typing a commit message
   // triggers j/k navigation and s/u staging. Ctrl/Cmd+Enter commits.
   if (e.target.closest && e.target.closest("input,textarea")) {

@@ -13,6 +13,7 @@ import { openCompare } from "./files.js";
 import { openFileHistory } from "./filehist.js";
 import { extraRows } from "./menus.js";
 import { nextSortMode, setSortMode, sortChipHTML, sortMode, sortedBy } from "./sortlist.js";
+import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilter.js";
 
 // The remotes and tags payloads are CAPPED at 100 rows server-side, so their
 // order has to be decided there — sorting the truncated window would show the
@@ -33,13 +34,16 @@ async function fetchBranches() {
     getJSON("/api/shelf").catch(() => ({ entries: [] })),
   ]);
   state.branches = b.branches || [];
+  // The full array is kept, hidden rows and all: renderBranches drops them at
+  // paint time, and the menus (and the drag-and-drop targets) look a branch up
+  // by name out of state.branches.
+  applyFilterHeader("branches", b.filter);
   state.worktrees = w.worktrees || [];
   takeTags(tg);
   state.stashes = st.stashes || [];
   state.reflog = rl.entries || [];
   state.reflogTruncated = !!rl.truncated;
-  state.remotes = rm.remotes || [];
-  state.remotesTruncated = !!rm.truncated;
+  takeRemotes(rm);
   state.bookmarks = bm.entries || [];
   state.shelf = sh.entries || [];
   renderBranches();
@@ -51,6 +55,31 @@ async function fetchBranches() {
   renderBookmarks();
   renderShelf();
 }
+
+
+// takeRemotes installs a /api/remotes payload. The rows arrive filtered AND
+// capped server-side (filter before cap), so there is nothing to recompute
+// here — only the chip's header to remember.
+function takeRemotes(rm) {
+  state.remotes = rm.remotes || [];
+  state.remotesTruncated = !!rm.truncated;
+  applyFilterHeader("remotes", rm.filter);
+}
+
+
+// fetchRemotes reloads the remotes list alone — what a new sort order or a
+// new filter slot needs, since both are decided by the server.
+async function fetchRemotes() {
+  const rm = await getJSON("/api/remotes?" + sortParam("remotes")).catch(() => null);
+  if (rm) takeRemotes(rm);
+  renderRemotes();
+}
+
+
+// __ggRefetchList is the hand-off branchfilter.js reloads a list through: it
+// cannot import this module (ops.js already imports it, so the edge would
+// close a cycle), the same reason previews.js hands over __ggAddPreview.
+window.__ggRefetchList = (list) => (list === "remotes" ? fetchRemotes() : fetchBranches());
 
 
 // MARK is the one "this is the current one" glyph, shared by every sidebar
@@ -76,6 +105,9 @@ function listCols(id) {
 function renderBranches() {
   const cols = listCols("branches-list");
   $("branches-list").innerHTML = sortedBy("branches", state.branches, (b) => b.name, (b) => b.time)
+    // The active branch filter's verdict, decided server-side. Hidden rows are
+    // dropped here rather than upstream so state.branches stays the whole list.
+    .filter((b) => !b.hidden)
     .map((b) => {
       const ab =
         (b.ahead ? "↑" + b.ahead : "") + (b.behind ? (b.ahead ? " " : "") + "↓" + b.behind : "");
@@ -85,17 +117,26 @@ function renderBranches() {
       // narrow to say anything useful (< 4 columns) and it is dropped rather
       // than shown as a bare "…".
       const path = worktreePathForBranch(b.name);
-      const budget = cols - 2 - Array.from(b.name).length - (ab ? ab.length + 1 : 0) - 1;
+      const budget = cols - 2 - Array.from(b.name).length - (ab ? ab.length + 1 : 0) - 1 - (b.exempt ? 1 : 0);
       const wt = path && budget >= 4 ? elidePath(path, budget) : "";
+      // ∗ marks a row the active rule WOULD hide but may not: the checked-out
+      // branch and any branch checked out in a worktree are never hidden, or
+      // the list would stop showing you where you are.
+      const exemptMark = b.exempt
+        ? `<span class="exempt-mark" title="the active filter would hide this row; kept because it is checked out">∗</span>`
+        : "";
       return (
-        `<li class="${b.is_head ? "head" : ""}" draggable="true" data-n="${esc(b.name)}"` +
+        `<li class="${b.is_head ? "head" : ""}${b.exempt ? " exempt" : ""}" draggable="true" data-n="${esc(b.name)}"` +
         (path ? ` title="${esc(path)}"` : "") + `>` +
-        `${mark(b.is_head)}${esc(b.name)}` +
+        `${mark(b.is_head)}${esc(b.name)}${exemptMark}` +
         (wt ? `<span class="wpath">${esc(wt)}</span>` : "") +
         `${ab ? `<span class="ab">${ab}</span>` : ""}</li>`
       );
     })
     .join("");
+  // The chip carries the hidden count, so the header has to be redrawn with
+  // the rows it counts.
+  applySection("branches", isCollapsed("branches"));
 }
 
 
@@ -105,6 +146,7 @@ function renderRemotes() {
     .join("");
   if (state.remotesTruncated) html += `<li class="more">… more (capped at 100)</li>`;
   $("remotes-list").innerHTML = html;
+  applySection("remotes", isCollapsed("remotes")); // the chip's hidden count
 }
 
 
@@ -678,7 +720,7 @@ function applySection(name, collapsed) {
         ? `<span class="locate" title="new merge preview (a in the TUI)">+</span>`
         : "";
   $(name + "-header").innerHTML =
-    (collapsed ? "\u25b8 " : "\u25be ") + esc(name) + control + sortChipHTML(name);
+    (collapsed ? "\u25b8 " : "\u25be ") + esc(name) + control + filterChipHTML(name) + sortChipHTML(name);
 }
 
 
@@ -712,12 +754,7 @@ async function cycleListSort(name) {
   setSortMode(name, nextSortMode(name));
   applySection(name, isCollapsed(name)); // redraw the chip's label
   if (name === "remotes") {
-    const rm = await getJSON("/api/remotes?" + sortParam("remotes")).catch(() => null);
-    if (rm) {
-      state.remotes = rm.remotes || [];
-      state.remotesTruncated = !!rm.truncated;
-    }
-    renderRemotes();
+    await fetchRemotes();
     return;
   }
   if (name === "tags") {
@@ -757,6 +794,10 @@ SECTIONS.forEach((n) => {
   $(n + "-header").addEventListener("click", (e) => {
     // The chip lives INSIDE the header, whose click folds the section — so it
     // claims its own clicks rather than folding what you were re-ordering.
+    if (e.target.closest(".filterchip")) {
+      openFilterMenu(n, e.clientX, e.clientY);
+      return;
+    }
     if (e.target.closest(".sortchip")) {
       cycleListSort(n);
       return;

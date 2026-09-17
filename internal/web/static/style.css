@@ -296,6 +296,19 @@ mark.r { background: var(--span-add); color: inherit; }
   border: 1px solid transparent; border-radius: 3px; padding: 0 4px; cursor: pointer;
 }
 .sortchip:hover { color: var(--accent); opacity: 1; border-color: var(--border); }
+/* The branch-filter chip (branches and remotes only): the active slot, or a
+   bare ▽ when none is on. It takes the header's free space so the two chips
+   sit together at the right — the sort chip's own margin-left:auto would
+   otherwise split the gap between them. */
+.filterchip {
+  margin-left: auto; font-size: 11px; color: var(--dim); opacity: .7;
+  border: 1px solid transparent; border-radius: 3px; padding: 0 4px; cursor: pointer;
+}
+.filterchip.on { color: var(--accent); opacity: 1; border-color: var(--border); }
+.filterchip:hover { color: var(--accent); opacity: 1; border-color: var(--border); }
+.filterchip + .sortchip { margin-left: 4px; }
+/* ∗ on a row the active rule would hide but may not (checked out somewhere). */
+#branches-list li.exempt .exempt-mark { opacity: .55; margin-left: 3px; }
 /* ⌖ locate (branches header only): scrolls the checked-out row into view. */
 .side-header .locate { margin-left: 6px; cursor: pointer; opacity: 0.6; font-size: 13px; }
 .side-header .locate:hover { color: var(--accent); opacity: 1; }
