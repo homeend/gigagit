@@ -140,10 +140,17 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 		}
 		c.File = res.Addr.Path
 		// A ref is a POINT, so its file diff is the commit lane's: lower a
-		// hunk against the resolved tip, exactly as the commit arm does.
+		// hunk against the resolved tip, exactly as the commit arm does —
+		// tip^..tip, which is what `@<that sha>` would give. (Contrast the
+		// pair arm below, which must lower against its RANGE.)
+		//
+		// cached is a literal false, not `res.Addr.State == StateStaged`: a
+		// ref target is always StateCommitted (ParseLink sets it, finishLink's
+		// ref arm never touches Addr.State), so that expression was
+		// always-false and read as though staging were reachable here.
 		line := steer.Line{Side: string(res.Side), No: res.Line}
 		if res.Hunk > 0 {
-			l, err := HunkLine(ctx, svc, res.Addr.State == model.StateStaged, res.Commit, res.Addr.Path, res.Hunk)
+			l, err := HunkLine(ctx, svc, false, res.Commit, res.Addr.Path, res.Hunk)
 			if err != nil {
 				return steer.Command{}, err
 			}
