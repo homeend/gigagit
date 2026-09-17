@@ -41,6 +41,7 @@ type Override struct {
 
 	SearchCurrent string `toml:"search_current_bg"`
 	Selection     string `toml:"selection_bg"`
+	BlameRecentBg string `toml:"blame_recent_bg"`
 
 	NoticeHot string `toml:"notice_hot"`
 	NoticeDim string `toml:"notice_dim"`
@@ -106,6 +107,7 @@ var roleFields = []roleField{
 
 	{"search_current_bg", "background of the CURRENT in-view search hit (empty = invert the hit against its row)", func(t *Theme) *string { return &t.SearchCurrent }, func(o *Override) *string { return &o.SearchCurrent }},
 	{"selection_bg", "background of a selected line's text in the diff, blame and the file preview (empty = invert the line against its row)", func(t *Theme) *string { return &t.Selection }, func(o *Override) *string { return &o.Selection }},
+	{"blame_recent_bg", "background of a blame line whose commit is within the d-key \"recent\" span (empty = bold the line instead)", func(t *Theme) *string { return &t.BlameRecentBg }, func(o *Override) *string { return &o.BlameRecentBg }},
 
 	{"notice_hot", "notification-center badge while it blinks", func(t *Theme) *string { return &t.NoticeHot }, func(o *Override) *string { return &o.NoticeHot }},
 	{"notice_dim", "notification-center badge at rest", func(t *Theme) *string { return &t.NoticeDim }, func(o *Override) *string { return &o.NoticeDim }},

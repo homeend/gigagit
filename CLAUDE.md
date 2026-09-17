@@ -13,6 +13,11 @@ Module: `github.com/homeend/gigagit` · Go 1.26.
 
 ## Workflow
 
+**NEVER USE SUB AGENTS.** Do every task in the main session yourself — no
+Agent/Task tool, no parallel implementer fan-out, no "dispatch to a
+subagent" step. Plans are executed sequentially by the one session that
+wrote them.
+
 **Always develop features in a worktree.** Create a dedicated worktree with a
 feature branch (`gg branch create <feat/...>` + `gg worktree add --branch
 <feat/...>`), commit the work there, then `gg merge` it back into `main` and
@@ -149,8 +154,8 @@ live session's keystrokes in the same keyscript format for replay.
 
 ## Development workflow
 
-Features follow: **brainstorm → spec → plan → subagent-driven execution → human merges**
-(superpowers skills). Specs live in `docs/superpowers/specs/`, plans in
+Features follow: **brainstorm → spec → plan → execution by THIS session (never
+subagents) → human merges** (superpowers skills). Specs live in `docs/superpowers/specs/`, plans in
 `docs/superpowers/plans/`, one feature branch off `main` per feature, with a
 final review before merge.
 

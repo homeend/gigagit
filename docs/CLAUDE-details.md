@@ -1482,3 +1482,46 @@ with NO filter active and NO `∗` marker present (`main
 skips whatever elision unselected rows get. The `∗` marker widens such a row
 by two columns, which makes an already-overflowing row overflow further, but
 does not itself cause the overflow.
+
+### Blame age highlight (`internal/timespan`, spec `docs/superpowers/specs/2026-09-17-blame-recent-highlight-design.md`)
+
+- **What:** in the blame view `d` opens a one-field age-filter popup; enter
+  turns the highlight ON with that filter, `D` turns it off (no dialog), `d`
+  again edits. The highlight is OFF whenever blame opens (revision 2): `on`
+  and the `timespan.Filter` live on the `blameView`, the Model keeps only
+  `blameRecentLast` (the text that prefills the dialog; `""` → `7d`; the
+  first typed rune replaces the prefill, like the web prompt's select).
+  Web: `state.blameRecent{on, f, last}`, `openFileBlame` resets `on`.
+- **Grammar** (`timespan.ParseFilter`): up to two signed halves. `-<span>` =
+  younger than (age ≤ span), `+<span>` = older than (age ≥ span), both
+  INCLUSIVE; a leading unsigned span is the `-` half; each sign owns every
+  token up to the next sign, whitespace after a sign ok; both halves = a
+  range (`+1d 2h -7d 4h`, order-free). A span is tokens `<digits><unit>`
+  (either part optional, not both): bare number = DAYS, bare unit = one of it
+  (`+w`), `m` = MINUTES (branchfilter's `m` is months — separate grammar).
+  Errors: a second `-`/`+`, a sign with nothing after it, older > younger
+  (`+7d -1d`), empty, zero total, unknown unit, junk after a unit (`1mo`,
+  `1.5d`). `+7d -7d` is legal. `Filter.String()` = canonical echo, older
+  first: `-7d`, `+30d`, `+1d2h -7d4h`. The web port (filehist.js
+  parseFilter/formatFilter/filterMatches) is pinned to the exported
+  `timespan.Table` by `internal/web/timespanjs_test.go` — extend the table,
+  never one side.
+- **Recency:** age = `now − authorTime` at render (wall clock, NOT the blamed
+  rev's date — blaming an old commit may highlight nothing); uncommitted
+  lines (hash `""`) are age 0 → match a `-` half, never a `+` half.
+- **Painting (TUI):** `st().blameRecentStyle(base)` = the row style for a
+  matching row — a background over gutter AND code from theme role
+  `blame_recent_bg` (Dark `#1F3A26`, Light `#DFF5E3`); with the role empty
+  (Terminal theme) the row goes BOLD instead (bold survives syntax colours; a
+  guessed tint would clash with the host palette). Precedence: cursor row
+  (`selectedRow` reverse video) wins whole-row, the selection stripe wins on
+  the code half, then the tint, then plain. A background-only style keeps
+  the `cls` token foregrounds (only a REVERSE style discards cls).
+- **Advertising:** footer hint ends with `[d] age` (last, so a narrow
+  terminal clips it rather than `[esc/b] back`); header badge = the filter
+  text, right-aligned like the search badge (`+1d -7d · 3/12` when both).
+  Web: `d`/`D` in the blame layer's `onKey` beside `w`; `.bline` rows stamped
+  `data-t` / `data-u`; `applyBlameRecent()` toggles `.brecent` without a
+  refetch (scroll mode's sticky `.bgut`/`.bno` carry the tint too); the
+  title carries ` · +1d -7d`; `#blame-hint` and the `?` help name the keys.
+- **Keys ruling:** `d`/`D`, not `h`/`H` — `h` means history in the diff view.
