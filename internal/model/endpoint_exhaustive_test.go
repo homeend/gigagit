@@ -17,8 +17,11 @@ type endpointCase struct {
 	// session diff-cache key (plan 1a's headline bug), and returning "" would
 	// make two different refs collide inside CompareFiles's singleflight key.
 	// Holding an unresolved ref where a cache key is needed is a programming
-	// error, so it panics like any other endpointKindBug. When this is set,
-	// cacheTag is ignored.
+	// error, so it panics — with its OWN message ("CacheTag on an unresolved
+	// ref endpoint … resolve it to a commit first — see domain.EvalEndpoint"),
+	// not endpointKindBug's "add a case arm": the arm and this row both exist,
+	// and the panic is a deliberate refusal rather than a missing case. When
+	// this is set, cacheTag is ignored.
 	cacheTagPanics bool
 	bounded        bool
 	source         FileSource

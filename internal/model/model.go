@@ -406,9 +406,15 @@ func (e Endpoint) CacheTag() string {
 	case EndpointCommit:
 		return e.hash
 	case EndpointRef:
-		// NO SAFE ANSWER — see plan 1b ruling R3 and the cacheTagPanics column
-		// in endpoint_exhaustive_test.go. Resolve the ref to a commit first.
-		panic(endpointKindBug("CacheTag", e.kind))
+		// NO SAFE ANSWER, deliberately (plan 1b ruling R3). A ref name MOVES,
+		// so returning it would key the session diff cache on a value that
+		// changes underneath it — the exact bug plan 1a shipped a fix for —
+		// and returning "" would collide two different refs inside
+		// domain.CompareFiles's singleflight key. Resolve the ref to a commit
+		// first: domain.EvalEndpoint does it, and every compare path runs
+		// through it.
+		panic("model: CacheTag on an unresolved ref endpoint (" + e.ref +
+			"); resolve it to a commit first — see domain.EvalEndpoint")
 	case EndpointPair:
 		return "pair:" + e.a + ".." + e.b
 	default:
@@ -443,13 +449,8 @@ func IndexEndpoint() Endpoint { return Endpoint{kind: EndpointIndex} }
 // hex characters. The bound matches model.ParseLink's, so a link and an
 // endpoint never disagree about what a commit id looks like.
 func CommitEndpoint(hash string) (Endpoint, error) {
-	if len(hash) < 7 || len(hash) > 64 {
-		return Endpoint{}, fmt.Errorf("%w: commit hash must be 7..64 characters, got %d", ErrEndpoint, len(hash))
-	}
-	for i := 0; i < len(hash); i++ {
-		if !isHexDigit(hash[i]) {
-			return Endpoint{}, fmt.Errorf("%w: commit hash must be hex, got %q", ErrEndpoint, hash)
-		}
+	if !commitHashOK(hash) {
+		return Endpoint{}, fmt.Errorf("%w: %q is not a commit id (want 7 to 64 hex characters)", ErrEndpoint, hash)
 	}
 	return Endpoint{kind: EndpointCommit, hash: hash}, nil
 }
@@ -491,11 +492,11 @@ func PairEndpoint(a, b string) (Endpoint, error) {
 
 // commitHashOK reports whether hash is a plausible commit object id: 7..64
 // hex characters -- 64, not 40, because a sha-256 repository's commit ids are
-// 64 hex characters. The bound matches model.ParseLink's and CommitEndpoint's,
-// so a link, a commit endpoint and a pair endpoint never disagree about what a
-// commit id looks like. CommitEndpoint keeps its own inline check (its two
-// branches report a more specific error than a single bool would allow);
-// PairEndpoint shares this helper for both of its halves.
+// 64 hex characters. The bound matches model.ParseLink's, so a link, a commit
+// endpoint and a pair endpoint never disagree about what a commit id looks
+// like: it lives HERE and only here. CommitEndpoint and PairEndpoint (for both
+// of its halves) take the predicate from this helper and keep only their own
+// error wording, which is what tells a caller WHICH side was malformed.
 func commitHashOK(hash string) bool {
 	if len(hash) < 7 || len(hash) > 64 {
 		return false
