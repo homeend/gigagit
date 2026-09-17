@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -349,7 +350,7 @@ func TestEvalLinkThreeDotWithoutACommonAncestor(t *testing.T) {
 	}
 	if _, err := f.svc.EndpointForLink(context.Background(), l); err == nil {
 		t.Fatal("two unrelated histories have no preview; want an error")
-	} else if !strings.Contains(err.Error(), "no common ancestor") {
+	} else if !errors.Is(err, ErrNoMergeBase) {
 		t.Fatalf("want ErrNoMergeBase, got %v", err)
 	}
 }
