@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/homeend/gigagit/internal/branchfilter"
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/promptstate"
@@ -194,6 +195,31 @@ func (m Model) applyBranchFilterConfig() Model {
 	m.bfCfgApplied = true
 	m.bfMemo.invalidate()
 	return m.loadBranchFilterSlots()
+}
+
+// reloadConfigAfterBranchFilterWrite re-reads the effective config after a
+// Settings write and recompiles the slots through the one applyBranchFilterConfig
+// path (so the memo is dropped with them). An active slot whose definition
+// vanished — or turned unusable — is then cleared, and that 0 is persisted, so
+// the panel never keeps filtering by a rule the user just deleted.
+//
+// A failed Load leaves m.cfg alone: the slots then recompile to what they
+// already were, which is the same state the user sees now — better than
+// blanking every rule because one write raced a hand edit.
+func (m Model) reloadConfigAfterBranchFilterWrite() Model {
+	if cfg, err := config.Load(config.DefaultGlobalPath(), m.repoConfigPath); err == nil {
+		m.cfg = cfg
+	}
+	m = m.applyBranchFilterConfig()
+	for _, p := range []panel{panelBranches, panelRemotes} {
+		if s := m.branchFilterSlot[p]; s > 0 && !m.branchFilters[s-1].Usable() {
+			m.branchFilterSlot[p] = 0
+			if key := m.bfRepoKey(); m.promptStore != nil && key != "" {
+				_ = m.promptStore.SetBranchFilterSlot(key, branchFilterListName(p), 0)
+			}
+		}
+	}
+	return m
 }
 
 // bfRepoKey is the promptstate scope for this feature: the git common dir

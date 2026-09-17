@@ -47,27 +47,28 @@ type settingsPopup struct {
 }
 
 const (
-	settingsMenuTools        = "External tools"
-	settingsMenuIdentity     = "Identity & profiles"
-	settingsMenuPrefixes     = "Branch prefixes"
-	settingsMenuHook         = "Worktree post-create hook"
-	settingsMenuOpLog        = "Operation log"
-	settingsMenuErrors       = "Session errors"
-	settingsMenuAutoRefresh  = "Auto-refresh"
-	settingsMenuRemoteTags   = "Auto remote-tag refresh"
-	settingsMenuRates        = "Refresh rates"
-	settingsMenuOpsHist      = "Operations history"
-	settingsMenuCommitSort   = "Commit sort"
-	settingsMenuShowGraph    = "Show graph"
-	settingsMenuLanguage     = "Language"
-	settingsMenuTheme        = "Theme"
-	settingsMenuThemeColours = "Theme colours"
-	settingsMenuRepoLoc      = "Repo settings location"
-	settingsMenuCommitGraph  = "Commit-graph"
+	settingsMenuTools         = "External tools"
+	settingsMenuIdentity      = "Identity & profiles"
+	settingsMenuPrefixes      = "Branch prefixes"
+	settingsMenuBranchFilters = "Branch filters"
+	settingsMenuHook          = "Worktree post-create hook"
+	settingsMenuOpLog         = "Operation log"
+	settingsMenuErrors        = "Session errors"
+	settingsMenuAutoRefresh   = "Auto-refresh"
+	settingsMenuRemoteTags    = "Auto remote-tag refresh"
+	settingsMenuRates         = "Refresh rates"
+	settingsMenuOpsHist       = "Operations history"
+	settingsMenuCommitSort    = "Commit sort"
+	settingsMenuShowGraph     = "Show graph"
+	settingsMenuLanguage      = "Language"
+	settingsMenuTheme         = "Theme"
+	settingsMenuThemeColours  = "Theme colours"
+	settingsMenuRepoLoc       = "Repo settings location"
+	settingsMenuCommitGraph   = "Commit-graph"
 )
 
 // settingsMenu is the top-level menu order.
-var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuOpsHist, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuTheme, settingsMenuThemeColours, settingsMenuRepoLoc, settingsMenuCommitGraph}
+var settingsMenu = []string{settingsMenuTools, settingsMenuIdentity, settingsMenuPrefixes, settingsMenuBranchFilters, settingsMenuHook, settingsMenuOpLog, settingsMenuErrors, settingsMenuAutoRefresh, settingsMenuRemoteTags, settingsMenuRates, settingsMenuOpsHist, settingsMenuCommitSort, settingsMenuShowGraph, settingsMenuLanguage, settingsMenuTheme, settingsMenuThemeColours, settingsMenuRepoLoc, settingsMenuCommitGraph}
 
 // commitSortModes is the cycle order for the "Commit sort" menu toggle:
 // date-order (default; git --date-order, perfect lanes) → plain (fast, git's
@@ -86,6 +87,8 @@ func settingsMenuTitle(entry string) string {
 		return i18n.T("Identity & profiles")
 	case settingsMenuPrefixes:
 		return i18n.T("Branch prefixes")
+	case settingsMenuBranchFilters:
+		return i18n.T("Branch filters…")
 	case settingsMenuHook:
 		return i18n.T("Worktree post-create hook")
 	case settingsMenuOpLog:
@@ -485,6 +488,8 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m.openIdentityView()
 			case settingsMenuPrefixes:
 				return m.openPrefixSettings()
+			case settingsMenuBranchFilters:
+				return m.openBranchFilterSettings()
 			case settingsMenuHook:
 				return m.openHookEditor(), nil
 			case settingsMenuOpLog:
