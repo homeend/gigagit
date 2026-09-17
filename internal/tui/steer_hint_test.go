@@ -275,7 +275,11 @@ func TestBookmarksLoadedMsgAbsentMustAnswerHintUsesTheNoLandingWording(t *testin
 	dir := gittest.BasicRepo(t, "hi\n")
 	m := hintNavModel(t, dir)
 	m.hintGen++
-	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n1", HintKind: "bookmark", HintID: "nope"}, mustAnswer: true, tag: m.hintGen}
+	// Wait: true is load-bearing, not decoration: answerSteer returns a nil
+	// Cmd for a command nobody is waiting on (`!c.Wait || m.steerDir == ""`,
+	// steer.go:248), so without it the reply assertion below can never hold
+	// however right the handler is.
+	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n1", HintKind: "bookmark", HintID: "nope", Wait: true}, mustAnswer: true, tag: m.hintGen}
 	tm, cmd := m.Update(bookmarksLoadedMsg{items: nil, gen: m.hintGen})
 	nm := tm.(Model)
 	if want := i18n.T("that link's bookmark could not be found"); nm.statusMsg != want {
