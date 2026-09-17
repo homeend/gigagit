@@ -28,7 +28,11 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 	}
 	checks := []struct{ file, want, why string }{
 		{"app.js", "./links.js", "the module must be imported at boot"},
-		{"links.js", "export { linkFor }", "linkFor is the shared producer"},
+		// Membership, not the whole line: this pinned `export { linkFor }`
+		// verbatim and broke the moment Task 9 exported copyLink beside it.
+		// A gate should pin the CONTRACT (linkFor is exported) and not the
+		// spelling around it, or it only pins the next refactor shut.
+		{"links.js", "linkFor", "linkFor is the shared producer"},
 		{"links.js", `registerRows("file"`, "file rows must contribute a copy-link row"},
 		{"links.js", `registerRows("commit"`, "commit rows must contribute a copy-link row"},
 		{"links.js", "copyText(", "the row copies through the shared clipboard helper"},

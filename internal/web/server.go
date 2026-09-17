@@ -138,6 +138,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/bookmarks", s.handleBookmarks)
 	mux.HandleFunc("POST /api/bookmarks", s.handleBookmarkAdd)
 	mux.HandleFunc("DELETE /api/bookmarks", s.handleBookmarkRemove)
+	mux.HandleFunc("GET /api/linkhist", s.handleLinkHist)
+	mux.HandleFunc("POST /api/linkhist", writeGuard(s.handleLinkHistAdd))
 	mux.HandleFunc("GET /api/shelf", s.handleShelf)
 	mux.HandleFunc("POST /api/shelf", s.handleShelfAdd)
 	mux.HandleFunc("DELETE /api/shelf", s.handleShelfRemove)

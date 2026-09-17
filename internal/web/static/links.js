@@ -110,14 +110,71 @@ function linkFor(repo, worktree, ctx, side, no) {
   return s;
 }
 
+// descMax caps the free-text portion of a Desc — a commit subject or a
+// bookmark label is otherwise unbounded — so one row of `gg links` stays one
+// line. The Go twin is internal/cli.descMax; TestLinkDescJSMatchesGo pins the
+// pair, including the rune-safe cut (a naive slice would split a multi-byte
+// character; JS strings are UTF-16, so [...s] is the spread that matches Go's
+// []rune).
+const descMax = 60;
+
+function truncateDesc(s) {
+  const t = (s || "").trim();
+  const r = [...t];
+  return r.length <= descMax ? t : r.slice(0, descMax).join("");
+}
+
+// linkDesc is the human label stored beside a copied link (ruling R7:
+// captured at creation, never derived at read time — the context that
+// describes it, which row the user was on, is gone by the time anything
+// lists it). The forms are spec §4.3's table and MUST match
+// internal/cli.linkDesc exactly: the CLI and the web write into the same
+// per-repo ring, so a second vocabulary for it would show the user two
+// spellings of the same thing.
+function linkDesc(kind, id, subject) {
+  switch (kind) {
+    case "commit":
+      return "commit: " + id + " " + truncateDesc(subject);
+    case "stash":
+      return "stash: " + truncateDesc(subject);
+    default:
+      return kind + ": " + truncateDesc(id);
+  }
+}
+
 // --- end link producer ---
+
+// copyLink copies link to the clipboard and then reports it to the
+// server-side history (Task 9). Two things are deliberate:
+//
+//   - The POST is fire-and-forget with a swallowed rejection. A history that
+//     cannot be recorded must never make the copy the user asked for look
+//     like it failed — the same best-effort posture domain.RecordLink takes
+//     on the write side and `gg link` takes on the CLI side.
+//   - The history is SERVED, never kept in the browser. `gg web` binds a
+//     random port every run and localStorage is per-origin, so a ring kept
+//     client-side would vanish on the next start. That is the whole reason
+//     /api/linkhist exists.
+//
+// EVERY "copy gg link" action goes through here. There were five of them and
+// only three came through copyLinkRow — files.js's "to this line" and "to
+// this note" rows called copyText directly, so recording only in copyLinkRow
+// would have left two shipped copy actions silently unrecorded.
+function copyLink(link, desc) {
+  copyText(link, "gg link");
+  fetch("/api/linkhist", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ link, desc: desc || "" }),
+  }).catch(() => {});
+}
 
 // copyLinkRow is the shared row: an `act` field, never a `run` one (that
 // belongs to the command palette's own dispatcher) — showCtxMenu's click
 // handler (layers.js) calls .act() with no guard, so a palette-shaped row
 // would throw.
-function copyLinkRow(link) {
-  return { label: "copy gg link", act: () => copyText(link, "gg link") };
+function copyLinkRow(link, desc) {
+  return { label: "copy gg link", act: () => copyLink(link, desc) };
 }
 
 registerRows("file", (ctx) => {
@@ -139,12 +196,14 @@ registerRows("file", (ctx) => {
     compare: ctx.compare,
     preview: ctx.preview || null,
   });
-  return link ? [copyLinkRow(link)] : [];
+  return link ? [copyLinkRow(link, linkDesc("file", ctx.path, ""))] : [];
 });
 
 registerRows("commit", (c) => {
   const link = linkFor(state.repo, state.worktree, { path: "", rev: c.hash, state: "commit" });
-  return link ? [copyLinkRow(link)] : [];
+  // The commit form carries the SHORT sha and the subject, matching the CLI's
+  // `commit: <short> <subject>`; c.hash is full on the wire.
+  return link ? [copyLinkRow(link, linkDesc("commit", (c.hash || "").slice(0, 8), c.subject || ""))] : [];
 });
 
 // A Previews group row copies the pair's own link, `gg://<repo>@<target>...
@@ -158,7 +217,7 @@ registerRows("preview", (e) => {
     compare: true,
     preview: { source: e.source, target: e.target },
   });
-  return link ? [copyLinkRow(link)] : [];
+  return link ? [copyLinkRow(link, linkDesc("preview", e.target + "..." + e.source, ""))] : [];
 });
 
-export { linkFor };
+export { copyLink, linkDesc, linkFor };

@@ -4,7 +4,7 @@ import { $, attnKey, charWidth, elidePath, esc, getJSON, postJSON, runOnce, rune
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { addFileEntry } from "./sidebar.js";
 import { extraRows, registerHelp } from "./menus.js";
-import { linkFor } from "./links.js";
+import { copyLink, linkDesc, linkFor } from "./links.js";
 import { applyStatus, buildStatusEntries, fetchStatus } from "./status.js";
 import { nextSortMode, setSortMode, sortChipHTML } from "./sortlist.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
@@ -2002,7 +2002,14 @@ $("diff-body").addEventListener("contextmenu", (e) => {
         if (rn) { side = "new"; no = rn; }
       }
       const link = linkFor(state.repo, state.worktree, state.diffCtx, side, no);
-      if (link) rows.push({ label: "copy gg link to this line", act: () => copyText(link, "gg link") });
+      // Recorded like every other copy (Task 9): copyLink, never copyText.
+      // The Desc names the FILE — a line link's row in `gg links` has to be
+      // recognisable, and the line number is already in the link text.
+      if (link)
+        rows.push({
+          label: "copy gg link to this line",
+          act: () => copyLink(link, linkDesc("file", (state.diffCtx && state.diffCtx.path) || "", "")),
+        });
     }
     if (!rows.length) return; // nothing of our own to say: keep the browser's menu
     e.preventDefault();
@@ -2026,7 +2033,11 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     { label: "Reply…", act: () => replyNotePrompt(n) },
   ];
   const nlink = linkFor(state.repo, state.worktree, state.diffCtx, n.side, n.line);
-  if (nlink) noteRows.push({ label: "copy gg link to this note", act: () => copyText(nlink, "gg link") });
+  if (nlink)
+    noteRows.push({
+      label: "copy gg link to this note",
+      act: () => copyLink(nlink, linkDesc("file", (state.diffCtx && state.diffCtx.path) || "", "")),
+    });
   showCtxMenu(
     [
       ...noteRows,
