@@ -3,26 +3,18 @@ package notes
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"sort"
-	"strconv"
 	"sync"
-	"time"
 
 	"github.com/pelletier/go-toml/v2"
 
+	"github.com/homeend/gigagit/internal/filelock"
 	"github.com/homeend/gigagit/internal/model"
-)
-
-const (
-	lockWait  = 2 * time.Second       // total retry budget for the cross-process lock
-	lockPoll  = 20 * time.Millisecond // retry interval
-	lockStale = 30 * time.Second      // a lock older than this is a crashed writer's
 )
 
 // FileStore keeps notes.toml under root, rewritten atomically (temp+rename,
@@ -78,77 +70,9 @@ func (fs *FileStore) read() ([]model.Note, error) {
 // the file under a concurrent writer.
 func (fs *FileStore) Load() ([]model.Note, error) { return fs.read() }
 
-// lock takes the cross-process lock, breaking one that is older than
-// lockStale (a crashed writer). Returns a release func.
-func (fs *FileStore) lock() (func(), error) {
-	if err := os.MkdirAll(fs.root, 0o755); err != nil {
-		return nil, err
-	}
-	// The retry budget uses the REAL clock, never the Now seam: a test that
-	// freezes Now for expiry must not spin here forever on a held lock.
-	deadline := time.Now().Add(lockWait)
-	for {
-		f, err := os.OpenFile(fs.lockPath(), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-		if err == nil {
-			// Stamp the lock with an owner token and check it before removing:
-			// after a stale takeover (below) a SECOND process can be holding a
-			// freshly created lock under the same name, and an unconditional
-			// release would delete someone else's.
-			token := lockToken()
-			_, werr := f.WriteString(token)
-			cerr := f.Close()
-			if werr != nil || cerr != nil {
-				// A token-less lock would be released by nobody but the 30 s
-				// staleness breaker, so drop it and report the failure.
-				os.Remove(fs.lockPath())
-				return nil, errors.Join(werr, cerr)
-			}
-			return func() { releaseLock(fs.lockPath(), token) }, nil
-		}
-		if !errors.Is(err, os.ErrExist) {
-			return nil, err
-		}
-		if fi, statErr := os.Stat(fs.lockPath()); statErr == nil && time.Since(fi.ModTime()) > lockStale {
-			// Stale: the writer died holding it. Retry at once only if the
-			// removal actually worked — otherwise (permissions, a Windows
-			// share, a racing breaker) fall through to the deadline check and
-			// the backoff, so an unremovable stale lock can never spin.
-			if rmErr := os.Remove(fs.lockPath()); rmErr == nil {
-				continue
-			}
-		}
-		if time.Now().After(deadline) {
-			return nil, errors.New("notes: notes.toml.lock is held; try again")
-		}
-		time.Sleep(lockPoll)
-	}
-}
-
-// lockToken is one lock holder's identity: this process plus a random nonce,
-// so two runs of the same pid (or two Stores in one process) never collide.
-func lockToken() string {
-	var b [8]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		// Randomness is a nicety here; the pid alone still beats no token.
-		return strconv.Itoa(os.Getpid())
-	}
-	return strconv.Itoa(os.Getpid()) + "-" + hex.EncodeToString(b[:])
-}
-
-// releaseLock removes the lock only while WE still hold it. A lock file whose
-// content is someone else's token was taken over after our own was declared
-// stale, and removing it would strand that writer without a lock. A lock we
-// cannot read at all is removed anyway: we wrote it a moment ago, so a read
-// error is far likelier a transient (drvfs/9p) than a takeover, and leaving
-// it would stall every writer for the 30 s stale window; the Remove is a
-// no-op if it is already gone. The takeover race that leaves is a
-// microsecond gap behind a lock that was ALREADY 30 s stale.
-func releaseLock(path, token string) {
-	if b, err := os.ReadFile(path); err == nil && string(b) != token {
-		return
-	}
-	os.Remove(path)
-}
+// lock takes the cross-process lock (internal/filelock: an O_EXCL lock file,
+// breaking one that has gone stale). Returns a release func.
+func (fs *FileStore) lock() (func(), error) { return filelock.Acquire(fs.lockPath()) }
 
 // write persists ns via temp-file + rename (the bookmark/seq-state pattern).
 func (fs *FileStore) write(ns []model.Note) error {

@@ -157,6 +157,11 @@ func (m Model) drainSteer() (Model, tea.Cmd) {
 	if exp != nil {
 		cmds = append(cmds, exp)
 	}
+	var hexp tea.Cmd
+	m, hexp = m.expirePendingHint(time.Now())
+	if hexp != nil {
+		cmds = append(cmds, hexp)
+	}
 	for _, c := range steer.Drain(m.steerDir) {
 		var cmd tea.Cmd
 		m, cmd = m.applySteer(c)
@@ -274,6 +279,18 @@ func steerEnumRefusal(c steer.Command) string {
 			if c.Commit != "" {
 				return "a preview target cannot also carry a commit"
 			}
+		case "ref":
+			// The NAME is load-bearing: steerNavigateRef resolves it at apply
+			// time (ruling R2), so an empty one has nothing to resolve.
+			if c.Target.Ref == "" {
+				return "a ref target needs ref"
+			}
+		case "pair":
+			// Both halves are load-bearing: a half-filled pair would silently
+			// degrade into "some commit", exactly the preview target's rule.
+			if c.Target.A == "" || c.Target.B == "" {
+				return "a pair target needs a and b"
+			}
 		default:
 			return "unknown target state " + strconv.Quote(c.Target.State)
 		}
@@ -283,6 +300,20 @@ func steerEnumRefusal(c steer.Command) string {
 		case "", "new", "old":
 		default:
 			return "unknown side " + strconv.Quote(c.Line.Side)
+		}
+	}
+	// The hint's closed set (model.LinkHint's grammar already closed it:
+	// "bookmark", "shelf" or "stash") mirrors the web endpoint's toSteerWire
+	// so the same command is refused the same way whichever consumer picks
+	// it up (S13 point 2).
+	if c.HintKind != "" {
+		switch c.HintKind {
+		case "bookmark", "shelf", "stash":
+		default:
+			return "unknown hint kind " + strconv.Quote(c.HintKind)
+		}
+		if c.HintID == "" {
+			return "a hint needs an id"
 		}
 	}
 	return ""

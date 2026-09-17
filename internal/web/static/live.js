@@ -9,12 +9,12 @@
 // after a dropped stream reloads everything, since events were missed.
 import { attnKey, getJSON, runOnce, state } from "./core.js";
 import { fetchStatus, wtCount } from "./status.js";
-import { fetchNotes, markDiffRow, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
-import { fetchBranches } from "./sidebar.js";
+import { fetchNotes, markDiffRow, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
+import { fetchBranches, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved } from "./previews.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
-import { loadRepo } from "./ops.js";
+import { loadRepo, opLine } from "./ops.js";
 
 const COALESCE_MS = 150; // one burst of watcher events → one refresh
 const RETRY_MS = 500; // a refresh is already running → try again after it
@@ -239,11 +239,83 @@ function steerHighlightClear(s) {
   if (state.lastDiff) renderDiff(state.lastDiff);
 }
 
-// steerNavigate opens what the command names and marks the landed row. It
-// reuses the very openers the .-menu rows use — openFile does the layout
-// switch and routes a working-tree entry to openStatusDiff itself — so a
-// steered landing is indistinguishable from a clicked one.
+// resolveRefTip resolves a `@ref:<name>` navigate's branch/tag NAME to its
+// tip hash — no new endpoint: fetchBranches already loads both branches and
+// tags in one round trip (the sidebar's own refresh), so a lookup against it
+// is exactly what previews.js's tipOf does for a saved pair. It is called
+// HERE, at apply time, rather than reading whatever the sidebar last cached
+// (ruling R2): a stale cache would land a branch that moved a moment ago on
+// its OLD tip, precisely the bug the name-on-the-wire rule exists to avoid.
+// "" means the freshly fetched lists still have no row for it (a deleted
+// branch, or a tag past the sidebar's row cap), and the caller no-ops rather
+// than opening the wrong thing.
+async function resolveRefTip(name) {
+  await fetchBranches();
+  const b = (state.branches || []).find((x) => x.name === name);
+  if (b) return b.hash || "";
+  // Remotes too: @ref:<name> is NOT restricted to a local branch or a tag.
+  // model.LinkRefOK only forbids the grammar's separators and whitespace, and
+  // domain.finishLink's ref arm resolves the name with a bare ResolveRev — so
+  // `@ref:origin/main` is a legal, resolvable link end to end through the CLI,
+  // the domain and the TUI. Without this lookup it silently did nothing HERE
+  // alone, which is the worst of the three outcomes. fetchBranches already
+  // populates state.remotes in the same round trip.
+  const r = (state.remotes || []).find((x) => x.name === name);
+  if (r) return r.hash || "";
+  const t = (state.tags || []).find((x) => x.name === name);
+  return t ? t.target || "" : "";
+}
+
+// isHexLike reports whether name already looks like a bare commit sha (the
+// pair grammar's OTHER half shape, model.LinkPair — a NAME is the common
+// case, a raw sha is legal too) rather than a ref name.
+function isHexLike(name) {
+  return /^[0-9a-f]{7,64}$/.test(name);
+}
+
+// openCompareForPair opens a `@<a>..<b>` navigate's two-dot change-set — the
+// SAME renderer a saved preview's three-dot pair uses (files.js's
+// openCompare). A NAME half — a local branch, a remote-tracking branch, or
+// a tag — is sent straight through the plain openCompare(a, b) lane: the
+// server resolves it to a FULL sha itself (compare.go's
+// compareNamedEndpoint, review round 1's fix), so there is no client-side
+// resolution left to do and no abbreviated-hash risk (an earlier version of
+// this function DID resolve names client-side, off the sidebar's own
+// %(objectname:short) rows, and a short core.abbrev made the hex lane 400).
+// Only when BOTH halves already look like bare shas does this ask through
+// revs=1 instead — the one shape the plain lane cannot express at all,
+// since it resolves NAMES, not raw hex ids.
+async function openCompareForPair(a, b) {
+  if (isHexLike(a) && isHexLike(b)) {
+    await openCompare(a, b, { revs: 1, aLabel: a, bLabel: b });
+    return;
+  }
+  await openCompare(a, b);
+}
+
+// steerNavigate is the whole navigate verb: it lands where the command
+// names (steerNavigateLand), then reveals the bookmark/shelf row its hint
+// (spec §3.3) named — hint_kind/hint_id, the closed set the server's
+// toSteerWire already validated. The reveal is called HERE, unconditionally
+// after the land, rather than appended inside steerNavigateLand: that
+// function has SEVERAL early `return`s (the file-less preview/ref/pair
+// reveals, the `else if (!s.file)` hint-only fall-through, the shared
+// `if (!s.line) return;` tail) — a reveal placed after any one of them would
+// silently skip every other shape (the same trap ruling S2 named one file
+// over, in finishLink's arms).
 async function steerNavigate(s) {
+  await steerNavigateLand(s);
+  if (s.hint_kind) await revealHintEntry(s.hint_kind, s.hint_id);
+}
+
+// steerNavigateLand opens what the command names and marks the landed row.
+// It reuses the very openers the .-menu rows use — openFile does the layout
+// switch and routes a working-tree entry to openStatusDiff itself — so a
+// steered landing is indistinguishable from a clicked one. A hint-only
+// command (no state, no file, no commit, no step) falls through to the
+// `else if (!s.file)` branch below and lands on nothing — the reveal above
+// IS its landing (ruling S13).
+async function steerNavigateLand(s) {
   if (s.step) {
     stepNote(s.step === "next_note" ? 1 : -1);
     return;
@@ -253,6 +325,32 @@ async function steerNavigate(s) {
     // between post and apply is honoured (the TUI consumer does the same).
     await openPreviewForPair(s.source, s.target);
     if (!s.file) return; // a file-less preview navigate only reveals the stage
+    const i = state.files.findIndex((f) => f.path === s.file);
+    if (i < 0) return;
+    await openFile(i);
+  } else if (s.state === "ref") {
+    // The NAME, never a sha: the tip is resolved here, so a branch that moved
+    // between post and apply is honoured (the TUI consumer does the same).
+    const sha = await resolveRefTip(s.ref);
+    if (!sha) {
+      // SAY SO. A ref this page cannot place — a name past the sidebar's row
+      // cap, a rev expression like HEAD~2, a branch deleted since the link was
+      // made — used to return here in silence, leaving a page that looked as
+      // though nothing had been asked of it. A swallowed failure that renders
+      // a plausible screen is this feature's signature bug (ruling S7).
+      opLine("gg link: cannot place " + s.ref + " in this repository", true);
+      return;
+    }
+    await openCommitByHash(sha, s.ref);
+    if (!s.file) return; // a file-less ref navigate only reveals the tree
+    const i = state.files.findIndex((f) => f.path === s.file);
+    if (i < 0) return;
+    await openFile(i);
+  } else if (s.state === "pair") {
+    // A change-set is BOUNDED, so it is opened as a comparison — never as a
+    // commit's tree, which is what the ref arm above opens instead.
+    await openCompareForPair(s.a, s.b);
+    if (!s.file) return; // a file-less pair navigate only reveals the compare
     const i = state.files.findIndex((f) => f.path === s.file);
     if (i < 0) return;
     await openFile(i);

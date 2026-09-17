@@ -61,6 +61,8 @@ type Model struct {
 	pendingDriftPaused     bool                // true when the armed op is resuming a merge/rebase paused for conflicts (see notify.go's driftNotice)
 	pendingGotoTip         string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
 	pendingSteer           *pendingSteer       // parked navigate (steer_nav.go); drained by the load it waits on
+	pendingHint            *pendingHint        // navigate whose hint (steer_nav.go) is being revealed; drained by bookmarksLoadedMsg/shelfLoadedMsg
+	hintGen                int                 // generation guard for pendingHint (fix F3): bumped on every stage, stamped into the hint's OWN load so an unrelated bookmark/shelf load in flight can never be mistaken for it
 	startAt                model.Link          // --at: where to land once the preconditions below have landed
 	startAtPending         bool                // consumed exactly once, by startAtReady's last precondition
 	startAtPreviewsSeen    bool                // the srcPreviews read has landed at least once since startup
@@ -818,6 +820,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if po := m.previewOpen; po != nil && m.pendingPreviewFor(po.source, po.target) {
 				return m.failPending("the preview's file list failed to load: " + msg.err.Error())
 			}
+			if ps := m.pendingSteer; ps != nil && ps.stage == steerStageCompare && ps.tag == msg.tag {
+				return m.failPending("the compare's file list failed to load: " + msg.err.Error())
+			}
 			return m, nil
 		}
 		if m.comparePair != nil {
@@ -839,7 +844,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			po.keepPath = ""
 		}
-		// A parked preview navigate waits on exactly this list.
+		// A parked pair navigate waits on exactly this list; a parked preview
+		// navigate waits on the same message but a DIFFERENT stage — each
+		// drain checks its own stage and is a no-op for the other's pending.
+		if ps := m.pendingSteer; ps != nil && ps.stage == steerStageCompare {
+			return m.drainPendingCompare()
+		}
 		return m.drainPendingPreview()
 	case previewOpenMsg:
 		return m.handlePreviewOpenMsg(msg)
@@ -983,12 +993,73 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A disabled shelf (no state dir) reports its reason but is not fatal.
 		if msg.err != nil {
 			m.statusMsg = i18n.T("shelf: %s", msg.err.Error())
-			m.shelfEntries = nil
-			m.pendingCompare = nil
-		} else {
+			if !msg.hintBucket {
+				// A hint's own bucket-scoped load (fix F1) must never blank
+				// the general cache: msg.entries there was never the
+				// default bucket's list to begin with.
+				m.shelfEntries = nil
+				m.pendingCompare = nil
+			}
+			// Only the hint's OWN load may fail it — see the bookmark twin.
+			if ph := m.pendingHint; ph != nil && msg.gen == ph.tag {
+				m.pendingHint = nil
+				if ph.mustAnswer {
+					return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "loading the shelf: "+msg.err.Error()))
+				}
+			}
+			return m, nil
+		}
+		if !msg.hintBucket {
 			m.shelfEntries = msg.entries
 		}
-		if msg.open && msg.err == nil {
+		if msg.open {
+			// The hint reveal (Task 6, steer_nav.go's navigateLanded /
+			// steerNavigateHintOnly) takes priority over the ordinary open:
+			// it is staged by a navigate that just landed (or IS landing),
+			// never by a plain `G` keypress alongside a pendingCompare.
+			// gen must match tag (fix F3): a `G` press already in flight
+			// when the hint landed answers with gen 0, which never matches
+			// a real pendingHint.tag (m.hintGen is pre-incremented so it is
+			// never 0), so that unrelated load takes the ordinary branch
+			// below instead of being mistaken for this reveal's own.
+			if ph := m.pendingHint; ph != nil && ph.cmd.HintKind == "shelf" && msg.gen == ph.tag {
+				m.pendingHint = nil
+				m.pendingCompare = nil // fix F3: a stale compare intent must not hijack the next plain `G`
+				idx := shelfIndexByID(msg.entries, ph.cmd.HintID)
+				if idx < 0 {
+					// Absent (spec §3.3 rule 3: the hint degrades, it never
+					// fails) — do not push the popup at all. mustAnswer gets
+					// its OWN wording (fix F2): for the hint-only shape
+					// nothing landed at all, so "it still landed" would
+					// contradict the steerFail the agent receives on this
+					// same command.
+					if ph.mustAnswer {
+						m.statusMsg = i18n.T("that link's shelf entry could not be found")
+						return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "shelf "+ph.cmd.HintID+" is gone"))
+					}
+					m.statusMsg = i18n.T("that link's shelf entry is gone; it still landed")
+					return m, nil
+				}
+				p := newShelfPopup(msg.entries)
+				p.sel = idx
+				var reply tea.Cmd
+				if ph.mustAnswer {
+					reply = m.answerSteer(ph.cmd, steerOK(ph.cmd, "revealed shelf "+ph.cmd.HintID))
+				}
+				if existing := m.shelfSwitcher(); existing != nil {
+					*existing = *p
+				} else {
+					m = m.pushLayer(p)
+				}
+				return m, reply
+			}
+			if msg.hintBucket {
+				// Defensive (should not happen: this load's gen is minted
+				// fresh right before firing it): a bucket-scoped list is
+				// never the right thing to show as an ordinary switcher
+				// open, so never fall through to that branch below.
+				return m, nil
+			}
 			p := newShelfPopup(msg.entries)
 			if pc := m.pendingCompare; pc != nil && pc.target == compareShelf {
 				if pc.entry != nil {
@@ -1048,6 +1119,59 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMsg = i18n.T("bookmarks: %s", msg.err.Error())
 			m.pendingCompare = nil // don't let stale compare state hijack the next plain `g`
+			// Only the hint's OWN load may fail it: a stray load erroring is
+			// not this hint's failure, and consuming the pending here would
+			// abandon a reveal whose own load is still in flight and may
+			// well succeed. Same gen==tag rule as the success path below.
+			if ph := m.pendingHint; ph != nil && msg.gen == ph.tag {
+				m.pendingHint = nil
+				if ph.mustAnswer {
+					return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "loading bookmarks: "+msg.err.Error()))
+				}
+			}
+			return m, nil
+		}
+		// The hint reveal (Task 6) takes priority over the ordinary open: it
+		// is staged by a navigate that just landed (or IS landing), never by
+		// a plain `g` keypress alongside a pendingCompare. gen must match
+		// tag (fix F3) — see the shelf twin's comment for why.
+		if ph := m.pendingHint; ph != nil && ph.cmd.HintKind == "bookmark" && msg.gen == ph.tag {
+			m.pendingHint = nil
+			m.pendingCompare = nil // fix F3: a stale compare intent must not hijack the next plain `g`
+			idx := bookmarkIndexByID(msg.items, ph.cmd.HintID)
+			if idx < 0 {
+				// Absent (spec §3.3 rule 3: the hint degrades, it never
+				// fails) — do not push the popup at all. mustAnswer gets its
+				// OWN wording (fix F2) — see the shelf twin's comment.
+				if ph.mustAnswer {
+					m.statusMsg = i18n.T("that link's bookmark could not be found")
+					return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "bookmark "+ph.cmd.HintID+" is gone"))
+				}
+				m.statusMsg = i18n.T("that link's bookmark is gone; it still landed")
+				return m, nil
+			}
+			p := newBookmarkPopup(msg.items)
+			p.sel = idx
+			var reply tea.Cmd
+			if ph.mustAnswer {
+				reply = m.answerSteer(ph.cmd, steerOK(ph.cmd, "revealed bookmark "+ph.cmd.HintID))
+			}
+			if existing := m.bookmarkSwitcher(); existing != nil {
+				*existing = *p
+				return m, reply
+			}
+			return m.pushLayer(p), reply
+		}
+		if msg.gen != 0 {
+			// A hint's OWN load (gen is nonzero only for those) that no
+			// longer matches a pendingHint: the hint was already consumed by
+			// a NEWER load, or the pending was dropped. Falling through would
+			// take the ordinary-open branch below and `*existing = *p` would
+			// reset sel to 0 — silently un-revealing a row the user was just
+			// shown. The shelf arm gets this from its own msg.hintBucket
+			// backstop; this is that backstop's bookmark twin (the scoped
+			// re-review found it missing on exactly this arm — near-duplicate
+			// handlers, a guard in one and not the other).
 			return m, nil
 		}
 		p := newBookmarkPopup(msg.items)
@@ -4019,6 +4143,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingWorktreeMoveOld = ""                // a repo switch must not fire a stale move cleanup
 	m.pendingGotoTip = ""                        // a repo switch must not fire a stale tip jump
 	m.pendingSteer = nil                         // the repo it referred to is gone; its inbox went with it
+	m.pendingHint = nil                          // ditto: its navigate referred to the old repo
 	m.attention = map[attentionKey][]steerMark{} // the marks referred to the old repo's files
 	m.pendingCheckout = pendingCheckout{}        // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil

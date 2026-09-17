@@ -683,6 +683,248 @@ func pumpAll(t *testing.T, m Model, cmd tea.Cmd) Model {
 	return m
 }
 
+// refPairRepo builds a repo with three commits, each touching a DIFFERENT
+// file, and a branch "feat/x" at the tip (c3). It is the ONE shared fixture
+// for both the ref and the pair navigate tests (ruling S5): a ref landing on
+// feat/x must show only c3's own file (c.txt), while a pair spanning
+// c1..feat/x must show the RANGE's files (b.txt and c.txt, introduced by c2
+// and c3) — proving the two lanes never collapse into the same landing for
+// what looks like the same tip.
+func refPairRepo(t *testing.T) (dir, c1, c2, c3 string) {
+	t.Helper()
+	dir = gittest.BasicRepo(t, "hi\n")
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a.txt", "a\n")
+	gitRun(t, dir, "add", "a.txt")
+	gitRun(t, dir, "commit", "-m", "c1")
+	c1 = gitOut(t, dir, "rev-parse", "HEAD")
+
+	write("b.txt", "b\n")
+	gitRun(t, dir, "add", "b.txt")
+	gitRun(t, dir, "commit", "-m", "c2")
+	c2 = gitOut(t, dir, "rev-parse", "HEAD")
+
+	write("c.txt", "c\n")
+	gitRun(t, dir, "add", "c.txt")
+	gitRun(t, dir, "commit", "-m", "c3")
+	c3 = gitOut(t, dir, "rev-parse", "HEAD")
+
+	gitRun(t, dir, "branch", "feat/x", c3)
+	return dir, c1, c2, c3
+}
+
+// refPairModel wraps dir in a Model with a real steering inbox, ready for
+// applySteer — the starting point for every ref/pair navigate test.
+func refPairModel(t *testing.T, dir string) Model {
+	t.Helper()
+	m := New(domain.Open(dir))
+	m.cfg = config.Defaults()
+	m.currentWorktree = dir
+	m.steerDir = filepath.Join(t.TempDir(), "steer")
+	m = m.initSteerInbox()
+	m.ready = true
+	m.loading = false
+	m.width, m.height = 200, 60
+	return m
+}
+
+// advanceBranch commits name/body onto branch and returns the new tip. Used
+// by TestSteerNavigateRefResolvesAtApplyTime to move a branch AFTER the
+// steer.Command naming it was built.
+func advanceBranch(t *testing.T, dir, branch, name, body, msg string) string {
+	t.Helper()
+	gitRun(t, dir, "checkout", branch)
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "add", name)
+	gitRun(t, dir, "commit", "-m", msg)
+	return gitOut(t, dir, "rev-parse", "HEAD")
+}
+
+// TestSteerNavigateRefOpensTheTipsFiles pins R2's consumer half: the wire
+// carries the NAME, and the TUI resolves it, landing a single-commit files
+// view on the tip's OWN changed files — never the compare view a pair would
+// open (S5: contrast with TestSteerNavigatePairOpensACompare on this same
+// fixture).
+func TestSteerNavigateRefOpensTheTipsFiles(t *testing.T) {
+	t.Parallel()
+	dir, _, _, c3 := refPairRepo(t)
+	m := refPairModel(t, dir)
+	sdir := m.steerDir
+	c := steer.Command{ID: "r-1", Cmd: "navigate", Target: &steer.Target{State: "ref", Ref: "feat/x"}, Wait: true}
+	m, cmd := m.applySteer(c)
+	m = pumpDiff(t, m, cmd)
+	if m.filesView == nil {
+		t.Fatal("no files view opened")
+	}
+	if m.inCompareMode() {
+		t.Error("a ref landing must be a single-commit files view, never a compare")
+	}
+	if m.filesHash != c3 {
+		t.Errorf("filesHash = %q, want the tip %q", m.filesHash, c3)
+	}
+	r, ok := steer.AwaitReply(sdir, "r-1", 2*time.Second)
+	if !ok || !r.OK || !strings.Contains(r.Detail, "opened feat/x") {
+		t.Fatalf("reply = %+v ok=%v, want ok:true naming feat/x", r, ok)
+	}
+}
+
+// TestSteerNavigateRefResolvesAtApplyTime advances the branch AFTER building
+// the command and asserts the landing is the new tip. This is the test that
+// earns the name-on-the-wire ruling; freezing the sha passes every other
+// test in this file.
+func TestSteerNavigateRefResolvesAtApplyTime(t *testing.T) {
+	t.Parallel()
+	dir, _, _, c3 := refPairRepo(t)
+	m := refPairModel(t, dir)
+	sdir := m.steerDir
+	c := steer.Command{ID: "r-2", Cmd: "navigate", Target: &steer.Target{State: "ref", Ref: "feat/x"}, Wait: true}
+
+	c4 := advanceBranch(t, dir, "feat/x", "d.txt", "d\n", "c4")
+	if c4 == c3 {
+		t.Fatal("fixture did not actually move the branch")
+	}
+
+	m, cmd := m.applySteer(c)
+	m = pumpDiff(t, m, cmd)
+	if m.filesHash != c4 {
+		t.Errorf("filesHash = %q, want the NEW tip %q — the poster's captured sha %q must not win", m.filesHash, c4, c3)
+	}
+	r, ok := steer.AwaitReply(sdir, "r-2", 2*time.Second)
+	if !ok || !r.OK {
+		t.Fatalf("reply = %+v ok=%v", r, ok)
+	}
+}
+
+// TestSteerNavigateRefUnknownBranchRefuses asserts an English protocol
+// refusal naming the branch, and that nothing in the model moved.
+func TestSteerNavigateRefUnknownBranchRefuses(t *testing.T) {
+	t.Parallel()
+	dir, _, _, _ := refPairRepo(t)
+	m := refPairModel(t, dir)
+	sdir := m.steerDir
+	m = m.pushLayer(&diffView{title: "user's own diff"})
+	c := steer.Command{ID: "r-3", Cmd: "navigate", Target: &steer.Target{State: "ref", Ref: "feat/nope"}, Wait: true}
+	m, cmd := m.applySteer(c)
+	runSteerCmd(t, cmd)
+	if m.filesView != nil {
+		t.Error("a refused ref navigate must not have opened a files view")
+	}
+	if m.topLayer() == nil {
+		t.Error("a refusal must leave the user's open view alone")
+	}
+	r, ok := steer.AwaitReply(sdir, "r-3", 2*time.Second)
+	if !ok || r.OK || !strings.Contains(r.Error, "feat/nope") {
+		t.Fatalf("reply = %+v ok=%v, want ok:false naming feat/nope", r, ok)
+	}
+}
+
+// TestSteerNavigatePairOpensACompare asserts filesModeCompare and the two
+// endpoints, and that a pair NEVER reaches openCompareFiles as a PairEndpoint
+// (CacheTag would key the cache on one side of a two-sided view). S5: run
+// against the SAME fixture as the ref tests above — feat/x names the exact
+// tip this pair's B half resolves to, yet the landing here must be a
+// compare, never the single-commit files view the ref test asserts.
+func TestSteerNavigatePairOpensACompare(t *testing.T) {
+	t.Parallel()
+	dir, c1, _, c3 := refPairRepo(t)
+	m := refPairModel(t, dir)
+	sdir := m.steerDir
+	c := steer.Command{ID: "pr-1", Cmd: "navigate",
+		Target: &steer.Target{State: "pair", A: c1, B: "feat/x"}, Wait: true}
+	m, cmd := m.applySteer(c)
+	m = pumpDiff(t, m, cmd)
+	if !m.inCompareMode() {
+		t.Fatal("a pair navigate must open the compare view, not a single-commit files view")
+	}
+	if m.filesLeft.Kind() != model.EndpointCommit || m.filesLeft.Hash() != c1 {
+		t.Errorf("filesLeft = %+v, want CommitEndpoint(%s)", m.filesLeft, c1)
+	}
+	if m.filesRight.Kind() != model.EndpointCommit || m.filesRight.Hash() != c3 {
+		t.Errorf("filesRight = %+v, want CommitEndpoint(%s)", m.filesRight, c3)
+	}
+	if m.filesLeft.Kind() == model.EndpointPair || m.filesRight.Kind() == model.EndpointPair {
+		t.Error("a pair navigate must never build a PairEndpoint: that keys the cache on one SIDE of a two-sided view")
+	}
+	// The RANGE, not c3's own change: b.txt (introduced by c2) and c.txt
+	// (introduced by c3) are both in the change-set c1..feat/x, but a.txt is
+	// NOT — it already existed at c1, so it differs from neither side.
+	hasPath := func(p string) bool {
+		for _, l := range m.filesView.lines {
+			if l.path == p {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasPath("b.txt") || !hasPath("c.txt") {
+		t.Errorf("compare file list = %+v, want b.txt and c.txt (the RANGE c1..feat/x)", m.filesView.lines)
+	}
+	if hasPath("a.txt") {
+		t.Error("a.txt already existed at c1 and must not appear in the c1..feat/x change-set")
+	}
+	r, ok := steer.AwaitReply(sdir, "pr-1", 2*time.Second)
+	if !ok || !r.OK {
+		t.Fatalf("reply = %+v ok=%v", r, ok)
+	}
+}
+
+// TestSteerNavigatePairUnknownHalfRefuses names the unresolved half in an
+// English protocol refusal.
+func TestSteerNavigatePairUnknownHalfRefuses(t *testing.T) {
+	t.Parallel()
+	dir, c1, _, _ := refPairRepo(t)
+	m := refPairModel(t, dir)
+	sdir := m.steerDir
+	c := steer.Command{ID: "pr-2", Cmd: "navigate",
+		Target: &steer.Target{State: "pair", A: c1, B: "nope/nope"}, Wait: true}
+	m, cmd := m.applySteer(c)
+	runSteerCmd(t, cmd)
+	if m.filesView != nil {
+		t.Error("a refused pair navigate must not have opened a files view")
+	}
+	r, ok := steer.AwaitReply(sdir, "pr-2", 2*time.Second)
+	if !ok || r.OK || !strings.Contains(r.Error, "nope/nope") {
+		t.Fatalf("reply = %+v ok=%v, want ok:false naming nope/nope", r, ok)
+	}
+}
+
+// TestSteerNavigatePairWithFileOpensTheDiff proves the pair-plus-file pending
+// actually drains. openCompareFiles sets m.compareTag, not m.filesHash's
+// SIBLING gate (drainPendingFiles keys on m.filesHash, which the compare
+// handler's success path never routes through drainPendingFiles/drainPendingLoad
+// for) — a pending parked on the wrong gate never lands, and the CLI hangs
+// out its wait instead of getting a reply.
+func TestSteerNavigatePairWithFileOpensTheDiff(t *testing.T) {
+	t.Parallel()
+	dir, c1, _, _ := refPairRepo(t)
+	m := refPairModel(t, dir)
+	sdir := m.steerDir
+	c := steer.Command{ID: "pr-3", Cmd: "navigate", File: "c.txt",
+		Target: &steer.Target{State: "pair", A: c1, B: "feat/x"},
+		Line:   &steer.Line{Side: "new", No: 1}, Wait: true}
+	m, cmd := m.applySteer(c)
+	if m.pendingSteer == nil {
+		t.Fatal("a pair-plus-file navigate must park until the compare's file list loads")
+	}
+	m = pumpAll(t, m, cmd)
+	if m.diffLayer() == nil {
+		t.Fatal("the file's diff must be open")
+	}
+	if m.pendingSteer != nil {
+		t.Errorf("pending = %+v, want it drained once the compare's file list and diff both landed", m.pendingSteer)
+	}
+	r, ok := steer.AwaitReply(sdir, "pr-3", 3*time.Second)
+	if !ok || !r.OK || !strings.Contains(r.Detail, "c.txt:1") {
+		t.Fatalf("reply = %+v ok=%v, want ok:true detailing c.txt:1", r, ok)
+	}
+}
+
 // flattenCmd runs one tea.Cmd tree and returns every non-nil message it
 // produced, batches expanded.
 func flattenCmd(t *testing.T, cmd tea.Cmd) []tea.Msg {
@@ -702,4 +944,50 @@ func flattenCmd(t *testing.T, cmd tea.Cmd) []tea.Msg {
 		return out
 	}
 	return []tea.Msg{msg}
+}
+
+// TestSteerNavigateRefWithAFileOpensByHash is the FILE-carrying half of the
+// ref lane, and it must agree with its file-less sibling
+// (TestSteerNavigateRefOpensTheTipsFiles) about what a tip is.
+//
+// The file-less arm deliberately opens by hash for either origin, because
+// steerNavigate's commit arm refuses "commit not loaded in the feed" and a
+// BRANCH TIP is precisely the commit least likely to be paged in. The
+// file-carrying arm delegated to steerNavigateCommitFile, whose first move is
+// that same feed probe — so the two halves of one lane disagreed: no file
+// landed, a file refused. This fixture never loads the feed (commitsTotal()
+// is 0), which is the common case for a freshly launched `gg open`.
+func TestSteerNavigateRefWithAFileOpensByHash(t *testing.T) {
+	t.Parallel()
+	dir, _, _, c3 := refPairRepo(t)
+	m := refPairModel(t, dir)
+	sdir := m.steerDir
+	if m.commitsTotal() != 0 {
+		t.Fatalf("fixture precondition: the feed must be empty, got %d rows", m.commitsTotal())
+	}
+	c := steer.Command{
+		ID: "r-file-1", Cmd: "navigate",
+		Target: &steer.Target{State: "ref", Ref: "feat/x"},
+		File:   "c.txt", Wait: true,
+	}
+	m, cmd := m.applySteer(c)
+	m = pumpDiff(t, m, cmd)
+
+	r, ok := steer.AwaitReply(sdir, "r-file-1", 2*time.Second)
+	if !ok {
+		t.Fatal("no reply")
+	}
+	if !r.OK {
+		t.Fatalf("refused with %q — a ref names a TREE, so its file opens by hash "+
+			"exactly as the file-less arm does; the feed probe belongs to the plain-commit lane", r.Error)
+	}
+	if m.filesView == nil {
+		t.Fatal("no files view opened")
+	}
+	if m.filesHash != c3 {
+		t.Errorf("filesHash = %q, want the tip %q", m.filesHash, c3)
+	}
+	if m.diffLayer() == nil {
+		t.Error("c.txt's diff must be open: the command named a file")
+	}
 }

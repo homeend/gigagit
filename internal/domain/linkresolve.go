@@ -39,6 +39,24 @@ type Resolved struct {
 	// and every consumer that would otherwise read a --preview argument reads
 	// this instead. nil for every other link.
 	Preview *PreviewNoteSet
+	// Ref is the branch or tag NAME when the link named a tip
+	// (@ref:<name>). Commit and Addr.Commit carry the tip as it resolved
+	// HERE, so a caller that wants an address has one — but the NAME is
+	// what travels, and every consumer re-resolves it (ruling R2).
+	Ref string
+	// Pair is the change-set when the link named one (@<a>..<b>), each half
+	// resolved to a FULL sha on the chosen checkout. Commit and Addr.Commit
+	// carry B: a change-set's newer end is the only single commit it has,
+	// and a consumer that needs one (a note, a `gg show`) is refused by
+	// ruling R4 rather than silently handed it.
+	Pair *model.LinkPair
+	// Hint is the UI surface the link was copied from (spec §3.3): it never
+	// changes WHERE this resolves, only which surface a consumer reveals once
+	// it lands. Copied blind from the link in finishLink's common prologue —
+	// a consumer with an address looks the entry up itself; ResolveLink only
+	// checks presence when there is no address at all, because then the hint
+	// is the link's only content (see finishLink).
+	Hint model.LinkHint
 }
 
 // ResolveOpts carries everything the resolver may not reach for itself, so a
@@ -87,24 +105,14 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 	if opts.OpenFn == nil {
 		opts.OpenFn = Open
 	}
-	// A branch TIP (@ref:<name>) and a CHANGE-SET (@<a>..<b>) are well formed
-	// and simply not navigable yet: LocateLink's doc says why (a ref has no
-	// single commit, and a pair is BOUNDED, which model.FileAddress has no
-	// field for), and making them navigable belongs to a later plan. The
-	// REFUSAL is the ruling; only the words are new. It used to fall through
-	// to the empty-sha guard below and report "names a commit without a sha"
-	// about a link that names no sha and is missing nothing — and it reaches
-	// six verbs through cli.resolveLinkArg (gg diff, gg show, every gg note
-	// verb, gg open, gg session navigate), which the agent skill tells an
-	// agent to hand any pasted link to.
-	if l.Target.Ref != "" || l.Target.Pair != nil {
-		return Resolved{}, fmt.Errorf("%w: a branch-tip or change-set link cannot be navigated yet — it names no single commit; hand it to `gg compare`, which evaluates the target itself", model.ErrLink)
-	}
 	// StateCommitted is FileState's ZERO value, so a Link built programmatically
 	// (not via ParseLink, which never leaves Commit empty for this state) could
 	// slip through with no sha. Refuse it here rather than reaching finishLink's
-	// ResolveRev with an empty ref.
-	if l.Target.State == model.StateCommitted && l.Target.Commit == "" && l.Target.Preview == nil {
+	// ResolveRev with an empty ref. A ref or pair link is StateCommitted with an
+	// EMPTY Commit BY DESIGN (the tip/halves are per-machine resolutions), so
+	// both are exempted from this guard.
+	if l.Target.State == model.StateCommitted && l.Target.Commit == "" &&
+		l.Target.Preview == nil && l.Target.Ref == "" && l.Target.Pair == nil {
 		return Resolved{}, fmt.Errorf("%w: gg link names a commit without a sha", model.ErrLink)
 	}
 	c, err := locateLink(ctx, l, opts)
@@ -119,17 +127,20 @@ func ResolveLink(ctx context.Context, l model.Link, opts ResolveOpts) (Resolved,
 // inside it.
 //
 // It exists because the second half — turning the target into an ADDRESS —
-// cannot express every link. A `@ref:<name>` tip and a `@<a>..<b>` change-set
-// have no single commit (and a pair is BOUNDED, which model.FileAddress has no
-// field for), so ResolveLink refuses them rather than flatten a change-set into
-// its newer commit. The SPLIT, though, is exactly as necessary for those links
-// as for any other: a parsed LOCAL-form link carries the checkout and the file
-// path undivided in Repo.Abs with Link.Path empty (see model.LinkRepo), and
-// only this machine's registry can divide them.
+// cannot express every link the way a consumer of the RAW target needs it. A
+// `@ref:<name>` tip is a MOVING point and a `@<a>..<b>` change-set is BOUNDED
+// (model.FileAddress has no field for either shape: ResolveLink's Resolved
+// carries the tip/halves as it saw them HERE, which is an address of sorts,
+// but collapses the moving name or the bounded set into a single point). The
+// SPLIT, though, is exactly as necessary for those links as for any other: a
+// parsed LOCAL-form link carries the checkout and the file path undivided in
+// Repo.Abs with Link.Path empty (see model.LinkRepo), and only this machine's
+// registry can divide them.
 //
 // So a consumer that evaluates a link's own target itself — domain.EvalLink's
-// callers — locates with this, takes relPath as the link's Path, and keeps the
-// target it parsed. A consumer that wants an address keeps calling ResolveLink.
+// callers, which need the NAME or the BOUNDED pair, not a frozen point —
+// locates with this, takes relPath as the link's Path, and keeps the target it
+// parsed. A consumer that wants an address keeps calling ResolveLink.
 //
 // The returned path is repo-relative, cleaned, and never escapes the checkout.
 func LocateLink(ctx context.Context, l model.Link, opts ResolveOpts) (checkout, relPath string, err error) {
@@ -171,6 +182,18 @@ func locateLink(ctx context.Context, l model.Link, opts ResolveOpts) (linkCandid
 		kept := previewCandidates(ctx, cands, p, opts)
 		if len(kept) == 0 {
 			return linkCandidate{}, fmt.Errorf("%w: no checkout of %s holds both %s and %s", ErrLinkUnknownRepo, linkRepoLabel(l), p.Target, p.Source)
+		}
+		cands = kept
+	}
+	// A ref or pair link names REFS, so a checkout that cannot resolve them
+	// cannot show it. Like previewCandidates this runs ALWAYS, not only on a
+	// tie: a ref link is StateCommitted with an EMPTY Commit, so it skips the
+	// containment filter below (Commit != "" is load-bearing there) and would
+	// otherwise take the MRU checkout whether or not it holds the branch.
+	if names := linkTargetRefs(l); len(names) > 0 {
+		kept := resolvingAll(ctx, cands, names, opts)
+		if len(kept) == 0 {
+			return linkCandidate{}, fmt.Errorf("%w: no checkout of %s resolves %s", ErrLinkUnknownRepo, linkRepoLabel(l), strings.Join(names, " and "))
 		}
 		cands = kept
 	}
@@ -400,6 +423,76 @@ func previewCandidates(ctx context.Context, cands []linkCandidate, p *model.Link
 	return kept
 }
 
+// linkTargetRefs lists the ref names a link's TARGET needs resolved on the
+// checkout that shows it: the tip for @ref:<name>, both halves for @<a>..<b>.
+// A preview has its own filter (its halves are branch names by definition);
+// every other target names at most a sha, which containment already covers.
+func linkTargetRefs(l model.Link) []string {
+	if l.Target.Ref != "" {
+		return []string{l.Target.Ref}
+	}
+	if p := l.Target.Pair; p != nil {
+		return []string{p.A, p.B}
+	}
+	return nil
+}
+
+// resolvingAll keeps the candidates on which EVERY name resolves. ResolveRev
+// is the same probe containing() and previewCandidates() use, and a candidate
+// whose probe errors is simply not a candidate, exactly as there.
+func resolvingAll(ctx context.Context, cands []linkCandidate, names []string, opts ResolveOpts) []linkCandidate {
+	var kept []linkCandidate
+	for _, c := range cands {
+		svc := opts.OpenFn(c.checkout)
+		ok := true
+		for _, n := range names {
+			if _, found, err := svc.ResolveRev(ctx, n); err != nil || !found {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			kept = append(kept, c)
+		}
+	}
+	return kept
+}
+
+// hintOnlyTarget reports whether t names no PINNED content at all — no
+// commit, no ref, no pair, no preview. This is the part of "is this link
+// address-less" that finishLink's address-less presence check and
+// EndpointForLink's address-less-shelf-endpoint check (evallink.go) both
+// need identically (fix F6), so it is shared — but it is NOT, by itself,
+// either caller's whole answer, because the two ask genuinely different
+// questions once a pinned target is ruled out:
+//
+//   - finishLink additionally requires an EMPTY PATH: its question is "does
+//     this link name a PLACE at all" (RepoOnly's own definition — repo +
+//     optional path + optional target), which decides where a navigate
+//     lands. `gg://<repo>/f.txt?shelf=X` has a real place (the working-tree
+//     file f.txt) and is never address-less, no matter the hint.
+//   - EndpointForLink additionally requires State to be Unstaged or Staged
+//     (never the zero-value StateCommitted a hand-built Link with no sha
+//     would otherwise silently pass through — its own switch below refuses
+//     that case instead). Its question is "does this link name a PINNED,
+//     immutable byte source, or the live, mutable working tree/index" — and
+//     that answer does NOT depend on path at all: path-narrowing
+//     (EvalLink's narrowTo) is a separate step applied AFTER the endpoint is
+//     chosen, so `gg://<repo>/f.txt?shelf=X` (a real path, no pinned
+//     target) still substitutes the STABLE shelf snapshot for the
+//     unstable live file — this is deliberate, existing behaviour
+//     (TestEndpointForLinkShelfHintIsTheOnlyContentSource's `shelved` case)
+//     and not something this fix may change.
+//
+// Before this, EndpointForLink read `t.State == model.StateUnstaged` alone
+// — the exact predicate finishLink was corrected away from earlier in this
+// same task, for the same reason it was wrong here too: `gg://<repo>@staged
+// ?shelf=X` is address-less by RepoOnly's own definition (StateStaged, not
+// StateUnstaged) and the old predicate missed it.
+func hintOnlyTarget(t model.LinkTarget) bool {
+	return t.Commit == "" && t.Preview == nil && t.Ref == "" && t.Pair == nil
+}
+
 // finishLink builds the Resolved value for the chosen candidate: the address,
 // the worktree pin for the live states, and the FULL sha for a commit link.
 func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts ResolveOpts) (Resolved, error) {
@@ -407,19 +500,85 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 	if err != nil {
 		return Resolved{}, err
 	}
-	r := Resolved{
+	res := Resolved{
 		Checkout: c.checkout,
 		Addr:     l.Address(),
 		Line:     l.Line,
 		Side:     l.Side,
 		Hunk:     l.Hunk,
+		Hint:     l.Hint,
 	}
-	if r.Side == "" {
-		r.Side = model.NoteSideNew
+	if res.Side == "" {
+		res.Side = model.NoteSideNew
 	}
-	r.Addr.Path = rel
+	res.Addr.Path = rel
+
+	// S11: a hint is checked in two layers. WITH an address, domain copies it
+	// blind (the assignment above) — the consumer looks the entry up in its
+	// own already-loaded store and reveals or notices; no store lookup runs
+	// here. WITHOUT one, the hint is the link's only content, so its
+	// presence must be checked HERE: there is nothing else for the link to
+	// resolve to if it is gone. hintOnlyTarget (fix F6: shared with
+	// EndpointForLink) plus an empty path together answer "does this link
+	// name a place at all" — asked of l itself, never of the not-yet-
+	// computed res.Commit — this runs before the switch below fills it in.
+	if rel == "" && hintOnlyTarget(l.Target) && l.Hint.Kind != "" {
+		switch l.Hint.Kind {
+		case "bookmark":
+			if _, err := opts.OpenFn(c.checkout).BookmarkGet(ctx, l.Hint.ID); err != nil {
+				return Resolved{}, fmt.Errorf("%w: %s has no %s %q, and the link names nothing else", model.ErrLink, c.checkout, l.Hint.Kind, l.Hint.ID)
+			}
+		case "shelf":
+			if _, err := opts.OpenFn(c.checkout).ShelfFind(ctx, l.Hint.ID); err != nil {
+				return Resolved{}, fmt.Errorf("%w: %s has no %s %q, and the link names nothing else", model.ErrLink, c.checkout, l.Hint.Kind, l.Hint.ID)
+			}
+		default:
+			// "stash" (spec §3.4) and any future kind this build cannot
+			// check: there is no presence lookup to fall back on, so an
+			// address-less link naming one is always a hard error rather
+			// than a silent pass-through.
+			return Resolved{}, fmt.Errorf("%w: %s has no way to check a %s hint (%q), and the link names nothing else", model.ErrLink, c.checkout, l.Hint.Kind, l.Hint.ID)
+		}
+	}
+
 	switch l.Target.State {
 	case model.StateCommitted:
+		if r := l.Target.Ref; r != "" {
+			// The NAME is what travels and what every consumer re-resolves
+			// (ruling R2); the tip is resolved here only so a caller wanting
+			// an ADDRESS has one. ResolveRev peels to ^{commit} and expands to
+			// the full sha — the same call the commit arm makes.
+			full, found, err := opts.OpenFn(c.checkout).ResolveRev(ctx, r)
+			if err != nil {
+				return Resolved{}, err
+			}
+			if !found {
+				return Resolved{}, fmt.Errorf("%w: %s does not resolve %s", ErrLinkUnknownRepo, c.checkout, r)
+			}
+			r2 := strings.TrimSpace(full)
+			res.Ref, res.Commit, res.Addr.Commit = r, r2, r2
+			return res, nil
+		}
+		if p := l.Target.Pair; p != nil {
+			svc := opts.OpenFn(c.checkout)
+			a, aok, aerr := svc.ResolveRev(ctx, p.A)
+			b, bok, berr := svc.ResolveRev(ctx, p.B)
+			if aerr != nil {
+				return Resolved{}, aerr
+			}
+			if berr != nil {
+				return Resolved{}, berr
+			}
+			if !aok || !bok {
+				return Resolved{}, fmt.Errorf("%w: %s does not resolve %s..%s", ErrLinkUnknownRepo, c.checkout, p.A, p.B)
+			}
+			// Commit carries B — the change-set's newer end and its only
+			// single commit. Ruling R4 refuses the verbs that would anchor on
+			// it rather than let a bounded set widen into the tree at B.
+			res.Pair = &model.LinkPair{A: strings.TrimSpace(a), B: strings.TrimSpace(b)}
+			res.Commit, res.Addr.Commit = res.Pair.B, res.Pair.B
+			return res, nil
+		}
 		if p := l.Target.Preview; p != nil {
 			// The tip is resolved HERE, on the chosen checkout, so every
 			// consumer gets exactly the set `--preview <target>...<source>`
@@ -434,9 +593,9 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 			if !set.OK() {
 				return Resolved{}, fmt.Errorf("%w: %s does not show %s...%s (merged, or no common base)", ErrLinkUnknownRepo, c.checkout, p.Target, p.Source)
 			}
-			r.Preview = &set
-			r.Commit, r.Addr.Commit = set.Tip, set.Tip
-			return r, nil
+			res.Preview = &set
+			res.Commit, res.Addr.Commit = set.Tip, set.Tip
+			return res, nil
 		}
 		// ResolveRev peels to ^{commit} and is also the >=7-hex → full-sha
 		// expansion: no second verb exists for that. OpenFn is defaulted once
@@ -449,11 +608,11 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 			return Resolved{}, fmt.Errorf("%w: %s does not contain commit %s", ErrLinkUnknownRepo, c.checkout, l.Target.Commit)
 		}
 		full = strings.TrimSpace(full)
-		r.Commit, r.Addr.Commit = full, full
+		res.Commit, res.Addr.Commit = full, full
 	default:
-		r.Addr.Worktree = c.checkout
+		res.Addr.Worktree = c.checkout
 	}
-	return r, nil
+	return res, nil
 }
 
 // cleanLinkRelPath cleans a link's repo-relative path and refuses one that

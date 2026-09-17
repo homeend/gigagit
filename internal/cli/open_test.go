@@ -133,3 +133,65 @@ func TestOpenBareRepositoryLinkLaunchesTheTUIThere(t *testing.T) {
 		t.Errorf("stderr = %q", errb.String())
 	}
 }
+
+// TestOpenSteersAFileLinkWithNoLine is the round trip for R1: `gg link
+// <path>` emits a link with no line, and `gg open` on that very link must
+// steer a navigate that names the file and leaves the cursor alone — not the
+// old ErrNoLine exit-2 refusal, which made `gg open` reject the very link
+// `gg link` had just printed.
+func TestOpenSteersAFileLinkWithNoLine(t *testing.T) {
+	dir := previewRepo(t)
+	svc := openCLIService(t, dir)
+	inbox := steerDirFor(svc)
+	livePresence(t, inbox)
+	t.Cleanup(func() { steer.Discard(inbox) })
+	link := model.Link{
+		Repo:   model.LinkRepo{Abs: filepath.ToSlash(dir)},
+		Path:   "m.txt",
+		Target: model.LinkTarget{State: model.StateUnstaged},
+		Side:   model.NoteSideNew,
+	}.String()
+	var out, errb strings.Builder
+	code := cmdOpen(svc, []string{link, "--no-wait"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("exit = %d: %s", code, errb.String())
+	}
+	if !strings.Contains(out.String(), "steered: ") {
+		t.Errorf("stdout = %q, want a \"steered:\" line", out.String())
+	}
+	got := steer.Drain(inbox)
+	if len(got) != 1 || got[0].Cmd != "navigate" || got[0].File != "m.txt" {
+		t.Fatalf("posted = %+v, want one navigate naming m.txt", got)
+	}
+	if got[0].Line != nil {
+		t.Errorf("Line = %+v, want nil (open the file, do not move the cursor)", got[0].Line)
+	}
+
+	// The COMMIT-target twin: the web UI's own "copy gg link" row prints
+	// exactly this shape for a committed file — gg:///<abs>/m.txt@<sha> — and
+	// it hit the identical ErrNoLine refusal `gg open` also gave the
+	// working-tree form above.
+	sha := runGit(t, dir, "rev-parse", "HEAD")
+	commitLink := model.Link{
+		Repo:   model.LinkRepo{Abs: filepath.ToSlash(dir)},
+		Path:   "m.txt",
+		Target: model.LinkTarget{State: model.StateCommitted, Commit: sha},
+		Side:   model.NoteSideNew,
+	}.String()
+	out.Reset()
+	errb.Reset()
+	code = cmdOpen(svc, []string{commitLink, "--no-wait"}, &out, &errb)
+	if code != 0 {
+		t.Fatalf("commit-target: exit = %d: %s", code, errb.String())
+	}
+	got = steer.Drain(inbox)
+	if len(got) != 1 || got[0].Cmd != "navigate" || got[0].File != "m.txt" {
+		t.Fatalf("commit-target posted = %+v, want one navigate naming m.txt", got)
+	}
+	if got[0].Target == nil || got[0].Target.State != "commit" || got[0].Target.Commit != sha {
+		t.Errorf("commit-target = %+v, want commit %s", got[0].Target, sha)
+	}
+	if got[0].Line != nil {
+		t.Errorf("commit-target Line = %+v, want nil", got[0].Line)
+	}
+}

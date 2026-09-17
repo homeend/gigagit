@@ -10,8 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/bookmark"
+	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/repos"
+	"github.com/homeend/gigagit/internal/shelf"
 )
 
 // linkRepoWithRemote makes a repo whose origin URL yields name.
@@ -874,27 +877,127 @@ func TestLocateLinkSplitsALocalLinkForEveryTarget(t *testing.T) {
 	}
 }
 
-// ResolveLink still refuses a ref or pair link, and that is the reason
-// LocateLink exists rather than a reason to stop using ResolveLink: model
-// .FileAddress has no field for a moving tip, and none for a BOUNDED
-// change-set, so finishing one would mean flattening `@a..b` into commit b —
-// the silent wrong answer this feature is built to avoid.
-func TestResolveLinkStillRefusesARefOrPairLink(t *testing.T) {
+// TestResolveLinkRefYieldsTheTipAndKeepsTheName pins R2: a @ref: link resolves
+// so a consumer can navigate it, and the NAME survives resolution — freezing
+// the tip at resolve time and dropping the name is exactly what the preview
+// lane refuses to do.
+func TestResolveLinkRefYieldsTheTipAndKeepsTheName(t *testing.T) {
 	t.Parallel()
-	here, svc := newRealRepo(t)
-	head := headOf(t, here)
-	abs := filepath.ToSlash(here)
-	for _, link := range []string{
-		"gg://" + abs + "@ref:main",
-		"gg://" + abs + "@" + head + ".." + head,
-	} {
-		l, err := model.ParseLink(link)
-		if err != nil {
-			t.Fatalf("ParseLink(%q): %v", link, err)
-		}
-		if _, err := ResolveLink(context.Background(), l, ResolveOpts{Cwd: svc}); !errors.Is(err, model.ErrLink) {
-			t.Errorf("ResolveLink(%q) err = %v, want a model.ErrLink refusal", link, err)
-		}
+	dir := gittest.BasicRepo(t, "hello\n")
+	svc := Open(dir)
+	head, _, err := svc.ResolveRev(context.Background(), "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := model.ParseLink(model.Link{
+		Repo:   model.LinkRepo{Abs: filepath.ToSlash(dir)},
+		Target: model.LinkTarget{State: model.StateCommitted, Ref: "main"},
+		Side:   model.NoteSideNew,
+	}.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := ResolveLink(context.Background(), l, ResolveOpts{Cwd: svc})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if res.Ref != "main" {
+		t.Errorf("Ref = %q, want main", res.Ref)
+	}
+	if res.Commit != strings.TrimSpace(head) {
+		t.Errorf("Commit = %q, want the tip %q", res.Commit, head)
+	}
+}
+
+// TestResolveLinkPairResolvesBothHalves pins that a change-set's two halves
+// each resolve to a FULL sha, and Commit carries B — the newer end (ruling
+// R4): A is captured before a second commit moves "main" forward, B rides the
+// ref name and must resolve to the NEW tip, not the frozen A.
+func TestResolveLinkPairResolvesBothHalves(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "hello\n")
+	svc := Open(dir)
+	ctx := context.Background()
+	first, _, err := svc.ResolveRev(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first = strings.TrimSpace(first)
+	runGitIn(t, dir, "commit", "--allow-empty", "-m", "second")
+	tip, _, err := svc.ResolveRev(ctx, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tip = strings.TrimSpace(tip)
+	abs := filepath.ToSlash(dir)
+	l, err := model.ParseLink("gg://" + abs + "@" + first + "..main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := ResolveLink(ctx, l, ResolveOpts{Cwd: svc})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if res.Pair == nil {
+		t.Fatal("Resolved.Pair must be set")
+	}
+	if res.Pair.A != first || res.Pair.B != tip {
+		t.Errorf("Pair = %+v, want A=%q B=%q", res.Pair, first, tip)
+	}
+	if res.Commit != tip || res.Addr.Commit != tip {
+		t.Errorf("Commit/Addr.Commit = %q/%q, want B %q", res.Commit, res.Addr.Commit, tip)
+	}
+}
+
+// TestResolveLinkRefSkipsACheckoutWithoutTheBranch pins R3: a ref link is
+// StateCommitted with an EMPTY Commit, so it skips the containment filter
+// (Commit != "" is load-bearing there) — without a dedicated candidate filter
+// the resolver would take the MRU checkout regardless of whether it holds the
+// branch. withoutBranch is the MORE recently opened entry: only the ref
+// filter can keep the resolve off it.
+func TestResolveLinkRefSkipsACheckoutWithoutTheBranch(t *testing.T) {
+	t.Parallel()
+	withoutBranch := linkRepoWithRemote(t, "gigagit") // main only
+	withBranch := linkRepoWithBranch(t, "gigagit", "feat/x")
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	if err := repos.Touch(state, withoutBranch, "gigagit", time.Unix(9000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.Touch(state, withBranch, "gigagit", time.Unix(1000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	l, err := model.ParseLink("gg://gigagit@ref:feat/x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state})
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if !samePathLink(got.Checkout, withBranch) {
+		t.Errorf("Checkout = %q, want the checkout holding feat/x %q", got.Checkout, withBranch)
+	}
+	if got.Ref != "feat/x" {
+		t.Errorf("Ref = %q, want feat/x", got.Ref)
+	}
+}
+
+// TestResolveLinkPairRefusedWhenNoCheckoutHoldsBothHalves mirrors the preview
+// refusal's words: the error names the repo and both halves.
+func TestResolveLinkPairRefusedWhenNoCheckoutHoldsBothHalves(t *testing.T) {
+	t.Parallel()
+	here := linkRepoWithRemote(t, "gigagit")
+	state := filepath.Join(t.TempDir(), "repos.toml")
+	l, err := model.ParseLink("gg://gigagit@main..feat/nope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = ResolveLink(context.Background(), l, ResolveOpts{RegistryPath: state, Cwd: Open(here)})
+	if !errors.Is(err, ErrLinkUnknownRepo) {
+		t.Fatalf("err = %v, want ErrLinkUnknownRepo", err)
+	}
+	if !strings.Contains(err.Error(), "gigagit") || !strings.Contains(err.Error(), "main") || !strings.Contains(err.Error(), "feat/nope") {
+		t.Errorf("error %q must name the repo and both halves", err)
 	}
 }
 
@@ -952,5 +1055,176 @@ func TestLocateLinkRefusesAPathEscapingTheCheckout(t *testing.T) {
 	}
 	if _, _, err := LocateLink(context.Background(), l, ResolveOpts{Cwd: Open(here)}); !errors.Is(err, model.ErrLink) {
 		t.Fatalf("err = %v, want a model.ErrLink escape refusal", err)
+	}
+}
+
+// --- Task 6: the hint carries through, and degrades with a hard error only
+// when the link has no other content (spec §3.3, ruling S11) --------------
+
+// hintTestSvc opens dir with fresh, hermetic bookmark/shelf stores (never the
+// user's real XDG state) and a ResolveOpts whose OpenFn always answers with
+// THIS service — the only checkout every test below resolves against, so a
+// hint's presence check reaches the store the test actually seeded.
+func hintTestSvc(t *testing.T, dir string) (*Service, ResolveOpts) {
+	t.Helper()
+	svc := Open(dir)
+	svc.SetBookmarkStore(bookmark.NewFileStore(t.TempDir()))
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	return svc, ResolveOpts{Cwd: svc, OpenFn: func(string) *Service { return svc }}
+}
+
+// TestResolveLinkCarriesHintThroughRefArm pins ruling S2 applied to the hint:
+// finishLink's ref arm returns EARLY (line ~488), so a per-arm assignment
+// would silently drop the hint for this shape. The hint composes with an
+// address here — a ref names a whole tree — so no presence check runs.
+func TestResolveLinkCarriesHintThroughRefArm(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "hello\n")
+	_, opts := hintTestSvc(t, dir)
+	l, err := model.ParseLink("gg://" + filepath.ToSlash(dir) + "@ref:main?bookmark=b1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := ResolveLink(context.Background(), l, opts)
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if res.Hint.Kind != "bookmark" || res.Hint.ID != "b1" {
+		t.Errorf("Hint = %+v, want bookmark/b1 (the ref arm's early return must not drop it)", res.Hint)
+	}
+}
+
+// TestResolveLinkCarriesHintThroughPairArm is the pair arm's twin of the ref
+// test above: finishLink's pair arm also returns early.
+func TestResolveLinkCarriesHintThroughPairArm(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "hello\n")
+	svc, opts := hintTestSvc(t, dir)
+	ctx := context.Background()
+	first, _, err := svc.ResolveRev(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first = strings.TrimSpace(first)
+	runGitIn(t, dir, "commit", "--allow-empty", "-m", "second")
+	abs := filepath.ToSlash(dir)
+	l, err := model.ParseLink("gg://" + abs + "@" + first + "..main?shelf=s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := ResolveLink(ctx, l, opts)
+	if err != nil {
+		t.Fatalf("ResolveLink: %v", err)
+	}
+	if res.Hint.Kind != "shelf" || res.Hint.ID != "s1" {
+		t.Errorf("Hint = %+v, want shelf/s1 (the pair arm's early return must not drop it)", res.Hint)
+	}
+}
+
+// TestResolveLinkWithAddressHintAbsentDoesNotError pins ruling S11's WITH-
+// an-address row: domain copies the hint BLIND and never looks the entry up
+// itself, so an absent id is not domain's problem — the consumer decides.
+// This is the exit-0 half of the S5 pair task 6 owes (see
+// TestLinkResolveAddressLessAbsentHintIsAHardError in the cli package for the
+// exit-2 half on the SAME absent id).
+func TestResolveLinkWithAddressHintAbsentDoesNotError(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "hello\n")
+	head := headOf(t, dir)
+	_, opts := hintTestSvc(t, dir) // no bookmark/shelf ever added: "X" is absent
+	l, err := model.ParseLink("gg://" + filepath.ToSlash(dir) + "/README.md@" + head + "?shelf=X")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := ResolveLink(context.Background(), l, opts)
+	if err != nil {
+		t.Fatalf("ResolveLink: %v, want success — an address-carrying link never fails on an absent hint", err)
+	}
+	if res.Hint.Kind != "shelf" || res.Hint.ID != "X" {
+		t.Errorf("Hint = %+v, want shelf/X copied through regardless of presence", res.Hint)
+	}
+	if res.Addr.Path != "README.md" || res.Addr.Commit != head {
+		t.Errorf("address = %+v, want the file to still land", res.Addr)
+	}
+}
+
+// TestResolveLinkAddressLessHintPresentBookmarkSucceeds is the PRESENT half
+// of S11's address-less row: the hint is the link's only content, and it is
+// there, so the resolve succeeds with no address at all.
+func TestResolveLinkAddressLessHintPresentBookmarkSucceeds(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "hello\n")
+	svc, opts := hintTestSvc(t, dir)
+	b, err := svc.BookmarkAdd(context.Background(), model.Bookmark{
+		State: model.StateUnstaged, Worktree: dir, Path: "README.md",
+	})
+	if err != nil {
+		t.Fatalf("BookmarkAdd: %v", err)
+	}
+	l, err := model.ParseLink("gg://" + filepath.ToSlash(dir) + "?bookmark=" + b.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := ResolveLink(context.Background(), l, opts)
+	if err != nil {
+		t.Fatalf("ResolveLink: %v, want success — the bookmark exists", err)
+	}
+	if res.Hint.Kind != "bookmark" || res.Hint.ID != b.ID {
+		t.Errorf("Hint = %+v, want bookmark/%s", res.Hint, b.ID)
+	}
+	if res.Addr.Path != "" || res.Commit != "" || res.Preview != nil {
+		t.Errorf("an address-less resolve must gain no address: %+v", res)
+	}
+}
+
+// TestResolveLinkAddressLessHintAbsentBookmarkIsAHardError is the ABSENT half:
+// with nothing else to resolve to, a missing bookmark is a hard error (spec
+// §6), not a notice — the notice is a CONSUMER behaviour for the
+// with-address case only.
+func TestResolveLinkAddressLessHintAbsentBookmarkIsAHardError(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "hello\n")
+	_, opts := hintTestSvc(t, dir)
+	l, err := model.ParseLink("gg://" + filepath.ToSlash(dir) + "?bookmark=nope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = ResolveLink(context.Background(), l, opts)
+	if !errors.Is(err, model.ErrLink) {
+		t.Fatalf("err = %v, want a model.ErrLink hard error", err)
+	}
+}
+
+// TestResolveLinkAddressLessHintAbsentShelfIsAHardError is the shelf twin.
+func TestResolveLinkAddressLessHintAbsentShelfIsAHardError(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "hello\n")
+	_, opts := hintTestSvc(t, dir)
+	l, err := model.ParseLink("gg://" + filepath.ToSlash(dir) + "?shelf=nope")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = ResolveLink(context.Background(), l, opts)
+	if !errors.Is(err, model.ErrLink) {
+		t.Fatalf("err = %v, want a model.ErrLink hard error", err)
+	}
+}
+
+// TestResolveLinkAddressLessStashHintIsAlwaysAHardError pins ruling S9's
+// third kind: "stash" parses (model.linkHintKinds) but has no producer and no
+// presence lookup a resolver can fall back on, so an address-less "?stash="
+// link is ALWAYS a hard error — never a silent pass-through into the switch
+// below (which would otherwise treat it as a bare working-tree link).
+func TestResolveLinkAddressLessStashHintIsAlwaysAHardError(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "hello\n")
+	_, opts := hintTestSvc(t, dir)
+	l, err := model.ParseLink("gg://" + filepath.ToSlash(dir) + "?stash=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = ResolveLink(context.Background(), l, opts)
+	if !errors.Is(err, model.ErrLink) {
+		t.Fatalf("err = %v, want a model.ErrLink hard error", err)
 	}
 }

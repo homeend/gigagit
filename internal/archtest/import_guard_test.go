@@ -20,6 +20,7 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 		"github.com/homeend/gigagit/internal/searchhist": "frontends must reach the search-history store through internal/domain",
 		"github.com/homeend/gigagit/internal/profile":    "frontends must reach the profile store through internal/domain",
 		"github.com/homeend/gigagit/internal/prefix":     "frontends must reach the prefix store through internal/domain",
+		"github.com/homeend/gigagit/internal/linkhist":   "frontends must reach the copied-link history store through internal/domain",
 	}
 	for _, pkg := range []string{
 		"github.com/homeend/gigagit/internal/tui",
@@ -162,6 +163,47 @@ func TestBranchfilterIsStdlibOnly(t *testing.T) {
 	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/branchfilter") {
 		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
 			t.Errorf("internal/branchfilter imports %s — it must stay stdlib only", imp)
+		}
+	}
+}
+
+// TestFilelockIsAStdlibLeaf pins internal/filelock's dependency budget. It is
+// the ONE cross-process lock behind every per-repo state file — notes,
+// previews and the link history all delegate to it — precisely so a fix (like
+// the Windows ErrPermission retry) lands once instead of in three copies. A
+// dependency here would be a dependency of all three stores at once, and the
+// package has to stay trivially testable with a bare temp dir.
+//
+// Unlike the stores above it is NOT in the frontend-import ban: it is a
+// generic utility like internal/cache, not a store holding user data.
+func TestFilelockIsAStdlibLeaf(t *testing.T) {
+	t.Parallel()
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/filelock") {
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/filelock imports %s — it must stay stdlib only", imp)
+		}
+	}
+}
+
+// TestLinkhistIsALeaf pins internal/linkhist's dependency budget: a
+// records-only MRU of copied gg:// links, owned by internal/domain. It takes
+// an explicit root — XDG resolution is domain's job, and that is where the
+// project's "a new store checks XDG_STATE_HOME first" rule is satisfied — so
+// linkhist must never reach for internal/config or internal/git to find its
+// own directory. Its whole budget is stdlib, the shared file lock, and the
+// same TOML library every other store already uses.
+func TestLinkhistIsALeaf(t *testing.T) {
+	t.Parallel()
+	allowed := map[string]bool{
+		"github.com/homeend/gigagit/internal/filelock": true,
+		"github.com/pelletier/go-toml/v2":              true,
+	}
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/linkhist") {
+		if allowed[imp] {
+			continue
+		}
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/linkhist imports %s — only stdlib, internal/filelock and go-toml are allowed", imp)
 		}
 	}
 }

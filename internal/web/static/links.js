@@ -54,6 +54,18 @@ function linkRefOK(s) {
   return !!s && !s.includes("..") && !/[@:#? \t]/.test(s);
 }
 
+// The hint's closed set and its id rule — the JS twins of
+// internal/model.LinkHintKindOK and LinkHintIDOK. A hint id may not carry a
+// grammar separator, a '/' or whitespace, or the link would not reparse: the
+// producer refuses instead of emitting something ParseLink rejects.
+function linkHintKindOK(kind) {
+  return kind === "bookmark" || kind === "shelf" || kind === "stash";
+}
+
+function linkHintIDOK(id) {
+  return !!id && !/[@:#?/ \t]/.test(id);
+}
+
 // linkFor builds the address for one place. ctx is a diffCtx-shaped
 // {path, rev, state, compare, preview}; side is "new"/"old" and no a 1-based
 // line (both optional). Returns "" when the place has no expressible link —
@@ -75,9 +87,17 @@ function linkRefOK(s) {
 // side (ParseLink refuses `:old:` for it), so an old-side line degrades to the
 // file form rather than misdescribing the place. Both names must pass
 // linkRefOK or the place is inexpressible.
+// ctx.hint = {kind, id} appends the `?<kind>=<id>` landing hint (spec §3.3):
+// WHICH surface the link was copied from. It never changes where the link
+// lands — only which row a consumer reveals there — and it goes last,
+// because '?' opens the final segment of the grammar. An unknown kind or an
+// id that cannot round-trip refuses the whole link rather than dropping the
+// hint silently.
 function linkFor(repo, worktree, ctx, side, no) {
   const preview = (ctx && ctx.preview) || null;
   if (ctx && ctx.compare && !preview) return "";
+  const hint = (ctx && ctx.hint) || null;
+  if (hint && !(linkHintKindOK(hint.kind) && linkHintIDOK(hint.id))) return "";
   if (preview && !(linkRefOK(preview.source) && linkRefOK(preview.target))) return "";
   const head = repoSegment(repo, worktree);
   if (!head) return "";
@@ -107,17 +127,77 @@ function linkFor(repo, worktree, ctx, side, no) {
     if (!path) return "";
     s += ":" + (side === "old" ? "old:" : "") + no;
   }
+  // Last, always: '?' opens the grammar's final segment, so anything after it
+  // would be read as part of the hint id.
+  if (hint) s += "?" + hint.kind + "=" + hint.id;
   return s;
 }
 
+// descMax caps the free-text portion of a Desc — a commit subject or a
+// bookmark label is otherwise unbounded — so one row of `gg links` stays one
+// line. The Go twin is internal/cli.descMax; TestLinkDescJSMatchesGo pins the
+// pair, including the rune-safe cut (a naive slice would split a multi-byte
+// character; JS strings are UTF-16, so [...s] is the spread that matches Go's
+// []rune).
+const descMax = 60;
+
+function truncateDesc(s) {
+  const t = (s || "").trim();
+  const r = [...t];
+  return r.length <= descMax ? t : r.slice(0, descMax).join("");
+}
+
+// linkDesc is the human label stored beside a copied link (ruling R7:
+// captured at creation, never derived at read time — the context that
+// describes it, which row the user was on, is gone by the time anything
+// lists it). The forms are spec §4.3's table and MUST match
+// internal/cli.linkDesc exactly: the CLI and the web write into the same
+// per-repo ring, so a second vocabulary for it would show the user two
+// spellings of the same thing.
+function linkDesc(kind, id, subject) {
+  switch (kind) {
+    case "commit":
+      return "commit: " + id + " " + truncateDesc(subject);
+    case "stash":
+      return "stash: " + truncateDesc(subject);
+    default:
+      return kind + ": " + truncateDesc(id);
+  }
+}
+
 // --- end link producer ---
+
+// copyLink copies link to the clipboard and then reports it to the
+// server-side history (Task 9). Two things are deliberate:
+//
+//   - The POST is fire-and-forget with a swallowed rejection. A history that
+//     cannot be recorded must never make the copy the user asked for look
+//     like it failed — the same best-effort posture domain.RecordLink takes
+//     on the write side and `gg link` takes on the CLI side.
+//   - The history is SERVED, never kept in the browser. `gg web` binds a
+//     random port every run and localStorage is per-origin, so a ring kept
+//     client-side would vanish on the next start. That is the whole reason
+//     /api/linkhist exists.
+//
+// EVERY "copy gg link" action goes through here. There were five of them and
+// only three came through copyLinkRow — files.js's "to this line" and "to
+// this note" rows called copyText directly, so recording only in copyLinkRow
+// would have left two shipped copy actions silently unrecorded.
+function copyLink(link, desc) {
+  copyText(link, "gg link");
+  fetch("/api/linkhist", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ link, desc: desc || "" }),
+  }).catch(() => {});
+}
 
 // copyLinkRow is the shared row: an `act` field, never a `run` one (that
 // belongs to the command palette's own dispatcher) — showCtxMenu's click
 // handler (layers.js) calls .act() with no guard, so a palette-shaped row
 // would throw.
-function copyLinkRow(link) {
-  return { label: "copy gg link", act: () => copyText(link, "gg link") };
+function copyLinkRow(link, desc) {
+  return { label: "copy gg link", act: () => copyLink(link, desc) };
 }
 
 registerRows("file", (ctx) => {
@@ -139,12 +219,14 @@ registerRows("file", (ctx) => {
     compare: ctx.compare,
     preview: ctx.preview || null,
   });
-  return link ? [copyLinkRow(link)] : [];
+  return link ? [copyLinkRow(link, linkDesc("file", ctx.path, ""))] : [];
 });
 
 registerRows("commit", (c) => {
   const link = linkFor(state.repo, state.worktree, { path: "", rev: c.hash, state: "commit" });
-  return link ? [copyLinkRow(link)] : [];
+  // The commit form carries the SHORT sha and the subject, matching the CLI's
+  // `commit: <short> <subject>`; c.hash is full on the wire.
+  return link ? [copyLinkRow(link, linkDesc("commit", (c.hash || "").slice(0, 8), c.subject || ""))] : [];
 });
 
 // A Previews group row copies the pair's own link, `gg://<repo>@<target>...
@@ -158,7 +240,51 @@ registerRows("preview", (e) => {
     compare: true,
     preview: { source: e.source, target: e.target },
   });
-  return link ? [copyLinkRow(link)] : [];
+  return link ? [copyLinkRow(link, linkDesc("preview", e.target + "..." + e.source, ""))] : [];
 });
 
-export { linkFor };
+// A bookmark or shelf row copies the entry's ADDRESS plus a
+// `?<kind>=<id>` hint naming the surface it came from (spec §3.3). This is
+// the web PRODUCER of a hinted link: the consumer already exists (Task 6's
+// revealHintEntry lands such a link back on this very row), but until now
+// only `gg link --bookmark` on the CLI could make one, so the reveal was
+// unreachable from the browser that owns the row.
+//
+// The address is the entry's own: a commit entry's `@<sha>`, a staged
+// entry's `@staged`, or the plain working-tree form. A SHELVED FILE has no
+// git address at all — its bytes were never committed — so its link is the
+// hint-only form `gg://<repo>?shelf=<id>`, which is why entryHintLink asks
+// linkFor for a path-less, target-less link and lets the hint carry it.
+function entryHintLink(kind, e) {
+  const st = e.is_commit || e.kind === "commit" ? "commit" : e.state || "unstaged";
+  // A shelved FILE's bytes are frozen in gg's own store, not in git: the
+  // entry's recorded path/state describe where it CAME from, and the link
+  // that can actually reproduce it is the hint alone.
+  const hintOnly = kind === "shelf" && e.kind !== "commit";
+  return linkFor(state.repo, state.worktree, {
+    path: hintOnly ? "" : e.path || "",
+    rev: e.commit || "",
+    state: hintOnly ? "unstaged" : st,
+    hint: { kind, id: e.id },
+  });
+}
+
+// entryDesc labels the row by the NAME the user gave the entry, falling back
+// to the store's own display string and then the id — the same precedence
+// sidebar.js's entryLabel uses, so `gg links` and the sidebar agree about
+// what an entry is called.
+function entryDesc(kind, e) {
+  return linkDesc(kind, e.label || e.display || e.id, "");
+}
+
+registerRows("bookmark", (e) => {
+  const link = entryHintLink("bookmark", e);
+  return link ? [copyLinkRow(link, entryDesc("bookmark", e))] : [];
+});
+
+registerRows("shelf", (e) => {
+  const link = entryHintLink("shelf", e);
+  return link ? [copyLinkRow(link, entryDesc("shelf", e))] : [];
+});
+
+export { copyLink, linkDesc, linkFor };

@@ -356,7 +356,14 @@ mark.r { background: var(--span-add); color: inherit; }
 /* ⌖ locate (branches header only): scrolls the checked-out row into view. */
 .side-header .locate { margin-left: 6px; cursor: pointer; opacity: 0.6; font-size: 13px; }
 .side-header .locate:hover { color: var(--accent); opacity: 1; }
-#branches-list li.flash { background: var(--sel); }
+/* Fix F7: revealHintEntry (live.js/sidebar.js) also flashes a bookmarks-list
+   or shelf-list row (Task 6's hint reveal) — the branches-only rule above
+   left those two fully transparent, so the reveal unfolded and scrolled
+   correctly and then painted nothing. Grouped with the branches rule, not
+   folded into it, so a future list added to revealHintEntry's target set
+   without a matching rule here is exactly what the archtest-style gate in
+   internal/web pins against. */
+#branches-list li.flash, #bookmarks-list li.flash, #shelf-list li.flash { background: var(--sel); }
 #worktrees-list, #tags-list, #stashes-list { list-style: none; }
 #worktrees-list li, #tags-list li, #stashes-list li { padding: 2px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #branches-list li .wpath, #worktrees-list li .wpath, #tags-list li .tsub, #stashes-list li .tsub { color: var(--dim); font-size: 11px; padding-left: 6px; }

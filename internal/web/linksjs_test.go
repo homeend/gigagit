@@ -28,7 +28,11 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 	}
 	checks := []struct{ file, want, why string }{
 		{"app.js", "./links.js", "the module must be imported at boot"},
-		{"links.js", "export { linkFor }", "linkFor is the shared producer"},
+		// Membership, not the whole line: this pinned `export { linkFor }`
+		// verbatim and broke the moment Task 9 exported copyLink beside it.
+		// A gate should pin the CONTRACT (linkFor is exported) and not the
+		// spelling around it, or it only pins the next refactor shut.
+		{"links.js", "linkFor", "linkFor is the shared producer"},
 		{"links.js", `registerRows("file"`, "file rows must contribute a copy-link row"},
 		{"links.js", `registerRows("commit"`, "commit rows must contribute a copy-link row"},
 		{"links.js", "copyText(", "the row copies through the shared clipboard helper"},
@@ -97,7 +101,7 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 // from the Go grammar's canonical renderer — not that two hand-written
 // stringifications happen to disagree.
 func wantLink(repoName, worktree, path, rev, st, side string, no int, compare bool) string {
-	return wantLinkPreview(repoName, worktree, path, rev, st, side, no, compare, "", "")
+	return wantLinkPreview(repoName, worktree, path, rev, st, side, no, compare, "", "", "", "")
 }
 
 // wantLinkPreview is wantLink with the merge-preview pair: a compare ctx
@@ -106,8 +110,13 @@ func wantLink(repoName, worktree, path, rev, st, side string, no int, compare bo
 // ruling (2026-09-16) — an old-side line degrades to the file form, because a
 // preview has no old side. That drop is applied HERE, explicitly: String()
 // would force the side and still render ":N", which is not the ruling.
-func wantLinkPreview(repoName, worktree, path, rev, st, side string, no int, compare bool, source, target string) string {
+func wantLinkPreview(repoName, worktree, path, rev, st, side string, no int, compare bool, source, target, hintKind, hintID string) string {
 	if compare && source == "" {
+		return ""
+	}
+	// A hint that cannot round-trip refuses the whole link, exactly as the
+	// producer does — never a link with the hint quietly dropped.
+	if hintKind != "" && !(model.LinkHintKindOK(hintKind) && model.LinkHintIDOK(hintID)) {
 		return ""
 	}
 	if source != "" && (!model.LinkRefOK(source) || !model.LinkRefOK(target)) {
@@ -129,6 +138,9 @@ func wantLinkPreview(repoName, worktree, path, rev, st, side string, no int, com
 		l.Repo = model.LinkRepo{Abs: worktree}
 	}
 	l.Path = path
+	if hintKind != "" {
+		l.Hint = model.LinkHint{Kind: hintKind, ID: hintID}
+	}
 	if source != "" {
 		l.Target = model.LinkTarget{State: model.StateCommitted, Preview: &model.LinkPreview{Source: source, Target: target}}
 		l.Side = model.NoteSideNew
@@ -198,6 +210,8 @@ func TestLinkForJSMatchesGo(t *testing.T) {
 		Compare  bool   `json:"compare"`
 		Source   string `json:"source"` // both set = a merge preview's pair (ctx.preview)
 		Target   string `json:"target"`
+		HintKind string `json:"hintKind"` // ctx.hint = {kind, id}: the ?<kind>=<id> landing hint
+		HintID   string `json:"hintID"`
 	}
 	cases := []tcase{
 		{Name: "remote unstaged file, no line", Repo: "gigagit", Path: "internal/web/files.js", State: "unstaged"},
@@ -274,11 +288,35 @@ func TestLinkForJSMatchesGo(t *testing.T) {
 		// twin only refused three.
 		{Name: "preview source with .. refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "a..b", Target: "main"},
 		{Name: "preview target with .. refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x", Target: "ma..in"},
+		// The ?<kind>=<id> landing hint (spec §3.3). The web is now a
+		// PRODUCER of these: a bookmark or shelf row copies its own address
+		// plus the hint, which is what makes Task 6's revealHintEntry
+		// reachable from the browser that owns the row.
+		{Name: "bookmark hint on a working-tree file", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: "unstaged-a-b-go-1234abcd"},
+		{Name: "bookmark hint on a commit file", Repo: "gigagit", Path: "a/b.go", Rev: fullSha, State: "commit", HintKind: "bookmark", HintID: "commit-a-b-go-1234abcd"},
+		{Name: "bookmark hint on a staged file", Repo: "gigagit", Path: "a/b.go", State: "staged", HintKind: "bookmark", HintID: "staged-a-b-go-1234abcd"},
+		{Name: "shelf hint, hint-only (a shelved file has no git address)", Repo: "gigagit", State: "unstaged", HintKind: "shelf", HintID: "unstaged-a-b-go-1234abcd"},
+		{Name: "shelf hint on a shelved commit", Repo: "gigagit", Rev: fullSha, State: "commit", HintKind: "shelf", HintID: "commit-1234abcd"},
+		{Name: "local bookmark hint", Worktree: "/mnt/t/repo", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: "x1"},
+		{Name: "hint rides AFTER the line", Repo: "gigagit", Path: "a/b.go", State: "unstaged", Side: "new", No: 42, HintKind: "bookmark", HintID: "x1"},
+		{Name: "hint on a preview pair", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x", Target: "main", HintKind: "bookmark", HintID: "x1"},
+		// Every way a hint can fail to round-trip must refuse the LINK, never
+		// drop the hint silently: the id rule is internal/model.LinkHintIDOK.
+		{Name: "unknown hint kind refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "wishlist", HintID: "x1"},
+		{Name: "empty hint id refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: ""},
+		{Name: "hint id with @ refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: "a@b"},
+		{Name: "hint id with : refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: "a:b"},
+		{Name: "hint id with # refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: "a#b"},
+		{Name: "hint id with ? refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: "a?b"},
+		{Name: "hint id with / refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: "a/b"},
+		{Name: "hint id with a space refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: "a b"},
+		{Name: "hint id with a tab refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: "a\tb"},
+		{Name: "stash hint is in the closed set even with no producer", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "stash", HintID: "3"},
 	}
 
 	want := make([]string, len(cases))
 	for n, c := range cases {
-		want[n] = wantLinkPreview(c.Repo, c.Worktree, c.Path, c.Rev, c.State, c.Side, c.No, c.Compare, c.Source, c.Target)
+		want[n] = wantLinkPreview(c.Repo, c.Worktree, c.Path, c.Rev, c.State, c.Side, c.No, c.Compare, c.Source, c.Target, c.HintKind, c.HintID)
 	}
 
 	// Both halves of this test implement the preview rules by hand, so pin
@@ -311,7 +349,7 @@ const cases = JSON.parse(readFileSync(process.argv[3], "utf8"));
 const linkFor = new Function(pure + "; return linkFor;")();
 const out = cases.map((c) => {
   const repo = c.repo ? { link_repo: c.repo } : null;
-  const ctx = { path: c.path, rev: c.rev, state: c.state, compare: c.compare, preview: c.source ? { source: c.source, target: c.target } : null };
+  const ctx = { path: c.path, rev: c.rev, state: c.state, compare: c.compare, preview: c.source ? { source: c.source, target: c.target } : null, hint: c.hintKind ? { kind: c.hintKind, id: c.hintID } : null };
   return linkFor(repo, c.worktree, ctx, c.side, c.no);
 });
 console.log(JSON.stringify(out));

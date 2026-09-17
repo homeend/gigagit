@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/filelock"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -131,7 +132,7 @@ func TestUnremovableStaleLockStillGivesUp(t *testing.T) {
 	if err := os.WriteFile(lock, []byte("stale"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	old := time.Now().Add(-2 * lockStale)
+	old := time.Now().Add(-2 * filelock.Stale)
 	os.Chtimes(lock, old, old)
 	os.Chmod(dir, 0o555) // the stale lock cannot be removed
 	t.Cleanup(func() { os.Chmod(dir, 0o755) })

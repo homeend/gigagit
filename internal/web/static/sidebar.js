@@ -46,6 +46,10 @@ async function fetchBranches() {
   takeRemotes(rm);
   state.bookmarks = bm.entries || [];
   state.shelf = sh.entries || [];
+  // Fix F1: /api/shelf already returns every bucket NAME beside the
+  // default bucket's entries (it always has — nothing server-side
+  // changed); revealHintEntry's cross-bucket fallback needs that list.
+  state.shelfBuckets = sh.buckets || [];
   renderBranches();
   renderRemotes();
   renderWorktrees();
@@ -751,6 +755,98 @@ function locateCurrentBranch() {
   setTimeout(() => li.classList.remove("flash"), 900);
 }
 
+// revealHintEntry reveals the bookmark or shelf row a navigate's hint (spec
+// §3.3) named — live.js's steerNavigate calls this AFTER the navigate has
+// landed, unconditionally, never from inside the landing function itself
+// (which has several early `return`s; a reveal placed after only one of
+// them would silently skip every other shape — the same trap ruling S2
+// named one file over). kind is "bookmark", "shelf" or "stash" (the
+// server's toSteerWire already validated the closed set); "stash" has no
+// producer and no row this page knows how to find, so it degrades with a
+// notice rather than throwing (spec §3.3 rule 3: the hint degrades, it
+// never fails). Both stores render `data-id` on every row (renderBookmarks/
+// renderShelf), so the lookup is a plain attribute selector — escaped,
+// since parseLinkHint permits a `"` in an id.
+//
+// KNOWN INCOMPLETENESS (parked, controller ruling S14): both /api/bookmarks
+// and /api/shelf cap at 200 rows (maxBookmarkRows/maxShelfRows), unlike the
+// TUI's unlimited load — a hint naming entry #201+ reveals in the TUI and
+// reports "gone" here. Needs a by-id lookup endpoint, not a bigger cap;
+// deferred to Task 9's /api/linkhist work.
+async function revealHintEntry(kind, id) {
+  const listName = kind === "bookmark" ? "bookmarks-list" : kind === "shelf" ? "shelf-list" : null;
+  if (!listName) {
+    opLine("gg link: this page cannot reveal a " + kind + " hint", true);
+    return;
+  }
+  const sectionName = kind === "bookmark" ? "bookmarks" : "shelf";
+  let li = $(listName).querySelector('li[data-id="' + CSS.escape(id) + '"]');
+  let unchecked = false; // a bucket fetch failed, so "is gone" is unprovable
+  if (!li && kind === "shelf") {
+    // Fix F1: domain's own presence check (ShelfFind, also relied on by
+    // EvalLink) scans EVERY bucket, but this page's shelf list — like the
+    // TUI's plain loadShelfCmd before its own F1 fix — is fetched from the
+    // DEFAULT bucket only (GET /api/shelf with no ?bucket=). An entry `gg
+    // shelf add --bucket <name>` put anywhere else resolved as present and
+    // reported "gone" here: the exact bug the controller reproduced end to
+    // end. Fall back to every OTHER known bucket before giving up, so
+    // domain and this page never disagree about whether the entry exists.
+    const found = await findShelfEntryInOtherBuckets(id);
+    li = found.li;
+    unchecked = found.unchecked;
+  }
+  if (!li) {
+    // Absent — the hint degrades, it never fails: the navigate already
+    // landed elsewhere (the with-address shape), or, for a hint-only link,
+    // the server already hard-refused an absent one before this could ever
+    // post (ruling S11) — either way, no popup, just a notice. `unchecked`
+    // keeps the two cases apart: a bucket we could not read is not a bucket
+    // that lacks the entry, and "is gone" would be a claim we cannot make.
+    opLine(
+      unchecked
+        ? "gg link: could not check every shelf bucket for " + id + "; the link still landed"
+        : "gg link: " + kind + " " + id + " is gone; the link still landed",
+      true
+    );
+    return;
+  }
+  if (isCollapsed(sectionName)) toggleSection(sectionName);
+  li.scrollIntoView({ block: "center" });
+  li.classList.add("flash");
+  setTimeout(() => li.classList.remove("flash"), 900);
+}
+
+// findShelfEntryInOtherBuckets is revealHintEntry's F1 fallback: it tries
+// every bucket name the last /api/shelf fetch reported (state.shelfBuckets)
+// — one GET per bucket, and buckets are few, so this only costs anything on
+// a miss — merges the first hit into state.shelf (so a later reveal or an
+// ordinary re-render can find it too) and re-renders, returning the now-
+// present <li>. null when no bucket holds it.
+async function findShelfEntryInOtherBuckets(id) {
+  let unchecked = false;
+  for (const name of state.shelfBuckets || []) {
+    let body;
+    try {
+      body = await getJSON("/api/shelf?bucket=" + encodeURIComponent(name));
+    } catch {
+      // A bucket we could not READ is not a bucket that lacks the entry.
+      // Remember that, so the caller says "could not check" rather than
+      // "is gone" — telling a user their shelved bytes are gone when the
+      // server merely hiccupped is the worse of the two wrong answers.
+      unchecked = true;
+      continue;
+    }
+    const hit = (body.entries || []).find((e) => e.id === id);
+    if (!hit) continue;
+    if (!(state.shelf || []).some((e) => e.id === id)) {
+      state.shelf = (state.shelf || []).concat([hit]);
+    }
+    renderShelf();
+    return { li: $("shelf-list").querySelector('li[data-id="' + CSS.escape(id) + '"]'), unchecked: false };
+  }
+  return { li: null, unchecked };
+}
+
 
 // isCollapsed reads the fold straight off the list, so redrawing a header
 // (after a sort cycle) cannot flip the chevron by accident.
@@ -1131,7 +1227,20 @@ async function addFileEntry(store, path, fileState, sha) {
 
 async function removeEntry(store, id) {
   try {
-    await fetch("/api/" + store + "?id=" + encodeURIComponent(id), { method: "DELETE" });
+    // The JSON content type is required, body or no body: these two routes
+    // now go through the server's writeGuard like every other mutating
+    // route (they were the only four that did not). previews.js's
+    // removePreview has carried the same header, and the same comment, since
+    // it was written.
+    const resp = await fetch("/api/" + store + "?id=" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      opLine(store + ": " + (body.error || resp.statusText), true);
+      return;
+    }
   } catch (e) {
     opLine(store + ": " + (e.message || e), true);
     return;
@@ -1283,4 +1392,4 @@ $("shelf-list").addEventListener("contextmenu", (e) => {
   if (s) showShelfMenu(s, e.clientX, e.clientY);
 });
 
-export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
+export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };

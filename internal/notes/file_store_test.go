@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/filelock"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -167,7 +168,7 @@ func TestStaleLockIsTakenOver(t *testing.T) {
 	if err := os.WriteFile(lock, []byte("stale"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	old := time.Now().Add(-2 * lockStale)
+	old := time.Now().Add(-2 * filelock.Stale)
 	if err := os.Chtimes(lock, old, old); err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +176,7 @@ func TestStaleLockIsTakenOver(t *testing.T) {
 	if err := fs.Put(noteAt("aaaaaaaa", 1)); err != nil {
 		t.Fatalf("a stale lock must be broken, got %v", err)
 	}
-	if time.Since(start) > lockWait {
+	if time.Since(start) > filelock.Wait {
 		t.Fatal("a stale lock must be broken without waiting out the full retry budget")
 	}
 	if got, _ := fs.Load(); len(got) != 1 {
@@ -225,7 +226,7 @@ func TestPutWaitsForAHeldLock(t *testing.T) {
 	select {
 	case err := <-done:
 		t.Fatalf("Put returned (%v) while the lock was held", err)
-	case <-time.After(200 * time.Millisecond): // well under lockWait
+	case <-time.After(200 * time.Millisecond): // well under filelock.Wait
 	}
 
 	if err := os.Remove(lock); err != nil {
@@ -240,7 +241,7 @@ func TestPutWaitsForAHeldLock(t *testing.T) {
 }
 
 // TestHeldLockGivesUpAtTheDeadline pins the retry loop's exit: a lock held
-// past lockWait fails the write instead of waiting or spinning forever.
+// past filelock.Wait fails the write instead of waiting or spinning forever.
 func TestHeldLockGivesUpAtTheDeadline(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -259,10 +260,10 @@ func TestHeldLockGivesUpAtTheDeadline(t *testing.T) {
 		if err == nil {
 			t.Fatal("Put must fail while the lock is held")
 		}
-		if elapsed := time.Since(start); elapsed < lockWait {
-			t.Fatalf("gave up after %v, before the %v budget", elapsed, lockWait)
+		if elapsed := time.Since(start); elapsed < filelock.Wait {
+			t.Fatalf("gave up after %v, before the %v budget", elapsed, filelock.Wait)
 		}
-	case <-time.After(4 * lockWait):
+	case <-time.After(4 * filelock.Wait):
 		t.Fatal("Put never gave up: the retry loop does not honour its deadline")
 	}
 }
@@ -281,7 +282,7 @@ func TestUnremovableStaleLockStillGivesUp(t *testing.T) {
 	if err := os.WriteFile(lock, []byte("stale"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	old := time.Now().Add(-2 * lockStale)
+	old := time.Now().Add(-2 * filelock.Stale)
 	if err := os.Chtimes(lock, old, old); err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +303,7 @@ func TestUnremovableStaleLockStillGivesUp(t *testing.T) {
 		if err == nil {
 			t.Fatal("Put must fail: the stale lock could not be broken")
 		}
-	case <-time.After(4 * lockWait):
+	case <-time.After(4 * filelock.Wait):
 		t.Fatal("Put spun on an unremovable stale lock instead of giving up")
 	}
 }

@@ -19,12 +19,18 @@ func isolateState(t *testing.T) {
 }
 
 // deleteJSON issues a DELETE (the remove lane) and returns the status code.
+// The JSON content type is set because these routes now go through the
+// server's writeGuard like every other mutating route — body or no body,
+// exactly as sidebar.js's removeEntry and previews.js's removePreview send
+// it. Without it the guard answers 415 before the handler runs, which is how
+// this helper first caught the wrapping.
 func deleteJSON(t *testing.T, ts *httptest.Server, path string) int {
 	t.Helper()
 	req, err := http.NewRequest("DELETE", ts.URL+path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE %s: %v", path, err)

@@ -47,10 +47,22 @@ func linkDiffSpec(ctx context.Context, svc *domain.Service, res domain.Resolved)
 	if tgt, ok := previewTargetFromLink(res); ok {
 		return tgt.withPaths(paths), nil
 	}
+	// A CHANGE-SET link diffs its RANGE. Addr.Commit carries B alone (the only
+	// single commit a pair has), so falling through to the StateCommitted arm
+	// below would print B^..B — B's own change — at exit 0. HunkDiffSpec
+	// passes a rev containing ".." straight through, which is the same lane
+	// `gg diff <a>..<b>` already takes.
+	if p := res.Pair; p != nil {
+		return svc.HunkDiffSpec(ctx, false, p.A+".."+p.B, paths)
+	}
 	switch res.Addr.State {
 	case model.StateStaged:
 		return svc.HunkDiffSpec(ctx, true, "", paths)
 	case model.StateCommitted:
+		// A @ref: link needs NO branch here: Addr.Commit is the resolved
+		// TIP, and this arm gives tip^..tip — the tip's own change, exactly
+		// like a plain commit link (R4's last paragraph). Do not "fix" this
+		// into a range; a ref is a POINT, not a pair.
 		return svc.HunkDiffSpec(ctx, false, res.Addr.Commit, paths)
 	default:
 		return svc.HunkDiffSpec(ctx, false, "", paths)

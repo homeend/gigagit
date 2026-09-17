@@ -2,9 +2,7 @@ package domain
 
 import (
 	"context"
-	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/notes"
@@ -90,7 +88,7 @@ func (s *Service) notesStore(ctx context.Context) notes.Store {
 
 	root := NotesStatePath
 	if root == "" {
-		base := notesBaseDir()
+		base := stateBaseDir("notes")
 		if base == "" {
 			return nil
 		}
@@ -113,25 +111,4 @@ func (s *Service) notesStore(ctx context.Context) notes.Store {
 		st.SetPolicy(notes.Policy{MaxEntries: max})
 	}
 	return st
-}
-
-// notesBaseDir resolves <state>/gg/notes cross-platform (mirrors
-// bookmarkBaseDir). "" when no home/state dir exists.
-func notesBaseDir() string {
-	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
-	// deliberate override — and the only way tests can isolate state on
-	// Windows); %LocalAppData% is the ambient Windows default.
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "notes")
-	}
-	if runtime.GOOS == "windows" {
-		if lad := os.Getenv("LocalAppData"); lad != "" {
-			return filepath.Join(lad, "gg", "notes")
-		}
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".local", "state", "gg", "notes")
 }

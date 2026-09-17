@@ -282,6 +282,7 @@ gg link --ref main                      # …the branch tip, kept as a name
 gg link --pair HEAD~3..HEAD             # …the last 3 commits' change-set (both halves = full shas)
 gg link --ref main --bookmark b1        # …with a landing hint appended
 gg link resolve gg://gigagit/a.go:3     # which checkout on this machine?
+gg links                                # the links copied here, newest first
 
 gg compare gg://gigagit@ref:main gg://gigagit@ref:v1.2         # links on either side of a compare
 gg compare gg://gigagit/internal/tui/model.go@ref:main main    # one file, one row
@@ -296,6 +297,17 @@ gg open  gg://gigagit/a.go@main...feat/login:12   # show it in the user's gg
 gg open  gg://gigagit                             # just open gg in that checkout
 gg open --web gg://gigagit/a.go@main...feat/login:12   # …in the browser: steer a live gg web page or start one (foreground)
 ```
+
+A **change-set** link (`@<a>..<b>`) names a bounded set of files, so the verbs
+that need one commit refuse it rather than guess: `gg diff`, `gg open` and
+`gg session navigate` take it, while `gg show`, the `gg note` verbs and
+`gg session highlight` take a `@ref:` tip but exit 2 on a change-set —
+anchoring on its newer end would quietly widen the set into a whole tree.
+
+Every copy records into a per-repo history that `gg links` prints and the
+`gg_link_list` MCP tool serves; copying the same link again moves it to the
+top. The browser records through it too, so a link copied in `gg web` shows
+up in `gg links`.
 
 `<repo>` is the repository name of the repo's remote, resolved through the
 repository history behind the `R` switcher — so a link made on one machine

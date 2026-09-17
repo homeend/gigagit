@@ -47,10 +47,10 @@ const (
 )
 
 // Target names where a file lives: the working tree (unstaged/untracked), the
-// index (staged), one commit, or one MERGE PREVIEW. Values are protocol
-// strings, always English.
+// index (staged), one commit, one MERGE PREVIEW, a branch/tag TIP, or a
+// bounded CHANGE-SET. Values are protocol strings, always English.
 type Target struct {
-	State  string `json:"state,omitempty"`  // "unstaged" | "staged" | "untracked" | "commit" | "preview"
+	State  string `json:"state,omitempty"`  // "unstaged" | "staged" | "untracked" | "commit" | "preview" | "ref" | "pair"
 	Commit string `json:"commit,omitempty"` // full 40-hex sha when State == "commit"
 	// Source and Target are the preview's branch NAMES, set iff State ==
 	// "preview" (git's <target>...<source> order). Commit stays EMPTY for a
@@ -58,6 +58,13 @@ type Target struct {
 	// the tip itself, so a tip that moved between post and apply is honoured.
 	Source string `json:"source,omitempty"`
 	Target string `json:"target,omitempty"`
+	// Ref is set iff State == "ref": the branch or tag NAME. The NAME rides
+	// the wire, never a frozen tip — the consumer resolves it itself, the
+	// same rule Source/Target already follow for a preview.
+	Ref string `json:"ref,omitempty"`
+	// A and B are set iff State == "pair": the change-set's two halves.
+	A string `json:"a,omitempty"`
+	B string `json:"b,omitempty"`
 }
 
 // Line is a landing point in a diff: a 1-based number on one of its two sides.
@@ -70,11 +77,16 @@ type Line struct {
 // side + line — the CLI has already resolved --hunk N into a line number, so
 // there is exactly one landing path.
 type Command struct {
-	ID      string   `json:"id"`
-	Cmd     string   `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear"
-	File    string   `json:"file,omitempty"` // repo-relative, git slash form
-	Target  *Target  `json:"target,omitempty"`
-	Commit  string   `json:"commit,omitempty"` // navigate: reveal this commit, no file
+	ID     string  `json:"id"`
+	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear"
+	File   string  `json:"file,omitempty"` // repo-relative, git slash form
+	Target *Target `json:"target,omitempty"`
+	Commit string  `json:"commit,omitempty"` // navigate: reveal this commit, no file
+	// Line is where to land inside the file. NIL means "open File and leave
+	// the cursor alone" — the shape `gg link <path>` produces, which every
+	// consumer already honours (tui.steerNavigateStatusFile,
+	// tui.drainPendingLoad, live.js steerNavigate). A navigate naming a file
+	// is never refused for want of a line.
 	Line    *Line    `json:"line,omitempty"`
 	Step    string   `json:"step,omitempty"`    // "next_note" | "prev_note"
 	Sources []string `json:"sources,omitempty"` // reload: "notes" | "status" | "all"
@@ -84,6 +96,17 @@ type Command struct {
 	End     int      `json:"end,omitempty"`
 	Tone    string   `json:"tone,omitempty"` // "info" | "warn" | "error"
 	Wait    bool     `json:"wait,omitempty"`
+	// HintKind/HintID name the UI surface a navigate's link was copied from
+	// ("bookmark", "shelf" or "stash" — model.LinkHint's closed set, spec
+	// §3.3/§3.4). They never change WHERE a navigate lands — only which
+	// surface a consumer reveals once it has landed — and a consumer that
+	// cannot show the kind (today: "stash", which has no producer) lands
+	// anyway and degrades with a notice (spec §3.3 rule 3: the hint
+	// degrades, it never fails). The one exception is a hint-only navigate —
+	// no File, no Commit, no Target, a link with no address at all — whose
+	// landing IS the reveal.
+	HintKind string `json:"hint_kind,omitempty"`
+	HintID   string `json:"hint_id,omitempty"`
 }
 
 // Reply is the consumer's answer to one command. Detail and Error are English

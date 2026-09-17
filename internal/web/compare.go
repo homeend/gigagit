@@ -14,6 +14,8 @@ import (
 
 // Branch ↔ branch comparison: the whole tip-to-tip changed-file list, each
 // file tagged with which side actually touched it since the two diverged.
+// Each side may also name a remote-tracking branch or a tag (compareNamedEndpoint) —
+// not an arbitrary rev.
 //
 // Both names are resolved to TIP HASHES here, and the client's per-file diffs
 // then run against those hashes rather than the names. That is the TUI's rule
@@ -22,10 +24,10 @@ import (
 // commit to the branch, re-open the same compare, and the stale diff comes
 // back.
 //
-// The names are resolved against the server's own branch list rather than
-// merely sanitized (the solo / remove-worktree allowlist precedent):
-// isGitArgSafe covers argv, but an unknown name would yield an empty compare
-// indistinguishable from "these two branches are identical".
+// The names are resolved against the server's own branch/tag/remote lists
+// rather than merely sanitized (the solo / remove-worktree allowlist
+// precedent): isGitArgSafe covers argv, but an unknown name would yield an
+// empty compare indistinguishable from "these two sides are identical".
 
 // compareFile is one changed path in a branch comparison.
 type compareFile struct {
@@ -108,6 +110,83 @@ func branchTipEndpoint(ctx context.Context, svc *domain.Service, name string) (m
 	return ep, sha, 0, nil
 }
 
+// remoteBranchTip returns name's tip hash from a remote-tracking list, or ""
+// if no such row exists — the RemoteBranch twin of branchTip.
+func remoteBranchTip(rs []model.RemoteBranch, name string) string {
+	for _, r := range rs {
+		if r.Name == name {
+			return r.Hash
+		}
+	}
+	return ""
+}
+
+// tagNamed reports whether name is one of the repo's tags — the allowlist
+// check for the tag arm of compareNamedEndpoint, mirroring branchTip's role
+// for branches.
+func tagNamed(tags []model.Tag, name string) bool {
+	for _, t := range tags {
+		if t.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// compareNamedEndpoint resolves one already-allowlisted NAME — a local
+// branch, a remote-tracking branch, or a tag — to its FULL commit sha and
+// endpoint, for the plain (non-revs) compare lane. The allowlist stays
+// name-specific (an unknown name must not yield an empty compare
+// indistinguishable from "these two sides are identical" — the same
+// rationale as knownRefName's), checked against the three lists FIRST;
+// only a name found in one of them is resolved. A local or remote branch
+// resolves via its own ref directly (it already points straight at a
+// commit, branchTipEndpoint's rule); a tag resolves via
+// refs/tags/<name>^{commit} — the peel an ANNOTATED tag needs to reach its
+// commit (a lightweight tag's ref already IS the commit, and ^{commit} on
+// a commit is a no-op, so one form covers both). Every resolution goes
+// through ResolveRev, never the caller's own row: the client only ever
+// carries %h / %(objectname:short) values (core.abbrev, legal down to 4),
+// well under CommitEndpoint's 7..64 floor.
+//
+// The switch checks local branches, then remotes, then tags — DELIBERATELY
+// not git's own tags-before-heads disambiguation order. A local branch
+// always wins a same-named tag here, continuing branchTipEndpoint's own
+// rule (its doc comment: "a tag of the same name outranks a branch in
+// git's rev-parse disambiguation"); a name found nowhere in these three
+// lists is refused rather than silently falling through to some other
+// git-visible ref.
+func compareNamedEndpoint(ctx context.Context, svc *domain.Service, branches []model.Branch, tags []model.Tag, remotes []model.RemoteBranch, name string) (model.Endpoint, string, int, error) {
+	switch {
+	case branchTip(branches, name) != "":
+		return branchTipEndpoint(ctx, svc, name)
+	case remoteBranchTip(remotes, name) != "":
+		return resolveRefEndpoint(ctx, svc, "refs/remotes/"+name)
+	case tagNamed(tags, name):
+		return resolveRefEndpoint(ctx, svc, "refs/tags/"+name+"^{commit}")
+	}
+	return model.Endpoint{}, "", http.StatusNotFound, errors.New("unknown branch")
+}
+
+// resolveRefEndpoint resolves ref — an exact git ref/rev EXPRESSION built
+// entirely from an already-allowlisted name, never a raw client value — to
+// its full sha and commit endpoint.
+func resolveRefEndpoint(ctx context.Context, svc *domain.Service, ref string) (model.Endpoint, string, int, error) {
+	sha, ok, err := svc.ResolveRev(ctx, ref)
+	if err != nil {
+		return model.Endpoint{}, "", http.StatusInternalServerError, err
+	}
+	if !ok {
+		return model.Endpoint{}, "", http.StatusNotFound, errors.New("unknown ref")
+	}
+	hash := strings.TrimSpace(sha)
+	ep, err := model.CommitEndpoint(hash)
+	if err != nil {
+		return model.Endpoint{}, "", http.StatusInternalServerError, err
+	}
+	return ep, hash, 0, nil
+}
+
 // pathOrigin classifies a changed path against the two origin sets. A rename
 // counts on either of its paths, matching the TUI's filterCompareFiles.
 func pathOrigin(o model.CompareOrigins, f model.CommitFile) string {
@@ -155,23 +234,43 @@ func (s *Server) handleCompare(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid branch"))
 			return
 		}
+		// The lists are the allowlist check; the endpoints are built from
+		// the names' FULL shas (compareNamedEndpoint), never a client-carried
+		// abbreviated row. A local branch, a remote-tracking branch or a tag
+		// may name either side — NOT an arbitrary rev: the allowlist stays
+		// name-specific for the reason the doc comment above gives.
 		branches, err := svc.Branches(r.Context())
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}
-		// The tips are the allowlist check only; the endpoints are built
-		// from the names' FULL shas (branchTipEndpoint).
+		// Tags and remotes are fetched LAZILY, only when BOTH sides are not
+		// already local branches: Tags() "forces git to read every tag
+		// object — seconds on a huge pack" (its own doc comment; this
+		// project targets 100GB monorepos), and RemoteBranches is a
+		// known-fallible read (domain's TestSnapshotRemoteBranchesBestEffort
+		// exists because of it). An ordinary branch/branch compare — the
+		// sidebar's "compare src ↔ dst" row, and every pair before this
+		// review round — must keep the exact cost and failure surface it
+		// always had, never pay for or fail on a list it does not need.
+		var tags []model.Tag
+		var remotes []model.RemoteBranch
 		if branchTip(branches, a) == "" || branchTip(branches, b) == "" {
-			writeErr(w, http.StatusNotFound, errors.New("unknown branch"))
-			return
+			if tags, err = svc.Tags(r.Context()); err != nil {
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
+			if remotes, err = svc.RemoteBranches(r.Context()); err != nil {
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
 		}
 		var code int
-		if aEP, aHash, code, err = branchTipEndpoint(r.Context(), svc, a); err != nil {
+		if aEP, aHash, code, err = compareNamedEndpoint(r.Context(), svc, branches, tags, remotes, a); err != nil {
 			writeErr(w, code, err)
 			return
 		}
-		if bEP, bHash, code, err = branchTipEndpoint(r.Context(), svc, b); err != nil {
+		if bEP, bHash, code, err = compareNamedEndpoint(r.Context(), svc, branches, tags, remotes, b); err != nil {
 			writeErr(w, code, err)
 			return
 		}

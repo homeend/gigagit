@@ -1,0 +1,53 @@
+name = "linkhist round trip: gg link records, gg links lists it, gg open hands it to the launcher"
+
+[input]
+steps = [
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\n" },
+  { commit = "seed" },
+]
+
+# The sandbox repo has no remote, so gg link prints the LOCAL form. A bare
+# path with no line/hunk is deliberately the shape Task 1 fixed a
+# producer/consumer disagreement over (a line-less link `gg open`'d nowhere
+# in particular) — this scenario is that round trip's other half: the same
+# bare link now also has to survive the linkhist producer/consumer pair
+# (`gg link` records it, `gg links` lists it back) without losing its shape.
+[[run]]
+cmd             = ["link", "a.txt"]
+exit            = 0
+stdout_contains = ["gg:///", "/a.txt"]
+stdout_excludes = ["@"]
+
+# gg links lists the row `gg link` just recorded: "file: a.txt" (spec §4.3's
+# extra row for a bare path — none of the spec's own six kinds apply), a
+# tab, then the same link text `gg link` printed above.
+[[run]]
+cmd             = ["links"]
+exit            = 0
+stdout_contains = ["file: a.txt", "gg:///", "/a.txt"]
+
+# Re-copying the SAME link (identical text) must dedup-to-top, not add a
+# second row — gg links still prints exactly one line for a.txt.
+[[run]]
+cmd             = ["link", "a.txt"]
+exit            = 0
+
+[[run]]
+cmd             = ["links", "--json"]
+exit            = 0
+stdout_contains = ["\"desc\":\"file: a.txt\""]
+
+# gg open hands the SAME link to the launcher. The e2e harness runs the CLI
+# in-process with no cli.LaunchTUI/LaunchWeb installed (there is no
+# per-scenario launcher stub — see s92_preview_links.toml's identical run
+# and TestOpenWithoutASessionOrALauncherExitsOne), so with no live session in
+# this checkout this exits 1 rather than the 0 a real installed launcher
+# would give; the exit-1 prose itself is pinned by that CLI test, not here.
+[[run]]
+cmd  = ["open", "gg://{{cwd}}/a.txt"]
+exit = 1
+
+# Printing, listing and opening a link never touches the repo.
+[expect]
+branch = "main"
+clean  = true

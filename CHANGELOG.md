@@ -26,6 +26,53 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `m` here — the branch-filter age grammar, where `m` is months, is a
   different field and unchanged. New DAG leaf `internal/timespan` owns the
   grammar; the browser runs a port pinned to the Go conformance table.
+- **`gg links`, and a link history behind it.** Every "copy gg link" action
+  now records the link it copied, with the label the surface it came from
+  gave it (`bookmark: <name>`, `commit: <short> <subject>`, `file: <path>`).
+  `gg links [--json]` prints the ring newest-first, twenty rows, re-copying a
+  link moving it to the top rather than adding a second row. The browser
+  records through `POST /api/linkhist` and reads through `GET` — never
+  browser storage, because `gg web` binds a random port every run and
+  anything kept per-origin would be gone on the next start. The CLI and the
+  web write the same per-repo ring, so `gg links` lists what you copied in
+  the browser.
+
+- **`gg open` on a link with no line opens the file.** `gg link <path>`
+  prints exactly that shape, and opening it used to be refused — gg would not
+  accept a link it had just printed.
+
+- **Branch-tip and change-set links reach every verb that can honour them.**
+  `@ref:<name>` and `@<a>..<b>` now navigate: `gg diff`, `gg open` and
+  `gg session navigate` take both, in the TUI and in `gg web`. `gg show`,
+  the `gg note` verbs and `gg session highlight` take a ref and refuse a
+  change-set (exit 2): a change-set's only single commit is its newer end,
+  and anchoring there would silently widen a bounded set of files into a
+  whole tree.
+
+- **`gg link resolve` tells a branch tip from a change-set.** It answers
+  `ref <name>` or `pair <a>..<b>` (and carries `ref`/`pair_a`/`pair_b`/the
+  hint in `--json`). Both shapes previously resolved to identical output —
+  the one field that distinguishes them was the one you could not see.
+
+- **The `?bookmark=`/`?shelf=` hint is honoured on navigate.** A link copied
+  from a bookmark or shelf row lands where it always did and then reveals
+  that row. A hint naming an entry that is gone still lands, and says so;
+  only the address-less form (`gg://<repo>?shelf=<id>`, a shelved
+  working-tree file whose bytes were never in git) is a hard error, because
+  nothing else can supply the content. Bookmark and shelf rows in `gg web`
+  now offer "copy gg link", so such a link can be made in the browser.
+
+- **Three MCP tools for links:** `gg_link_resolve` (take a link apart),
+  `gg_link_list` (the copied-link ring) and `gg_compare_links` (compare the
+  two places two links name, in either order). `gg_compare_file` also accepts
+  `{"source":"link","link":"gg://…"}` as either side. All of them resolve
+  against the repository the server was started in.
+
+- **Fixed: four mutating web routes ran without the write guard.** `POST` and
+  `DELETE` on `/api/bookmarks` and `/api/shelf` skipped the JSON
+  content-type and loopback-origin checks every other write has, so a page in
+  your browser could reach them on whatever port `gg web` held. A test now
+  fails for any mutating route registered without the guard.
 
 - **Fixed: `gg://C:/…` was read as a repository NAMED `C:`.** On Windows the
   obvious way to build a link — the scheme plus the checkout path — yields two

@@ -6,7 +6,6 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -38,7 +37,7 @@ func (s *Service) prefixStores(ctx context.Context) (global, repo prefix.Store) 
 
 	base := PrefixStatePath
 	if base == "" {
-		base = prefixBaseDir()
+		base = stateBaseDir("prefix")
 	}
 	if base == "" {
 		return nil, nil // prefixes disabled (no state dir)
@@ -54,26 +53,6 @@ func (s *Service) prefixStores(ctx context.Context) (global, repo prefix.Store) 
 	s.prefixGlobal, s.prefixRepo = g, r
 	s.mu.Unlock()
 	return g, r
-}
-
-// prefixBaseDir resolves <state>/gg/prefix cross-platform (mirrors profileBaseDir).
-func prefixBaseDir() string {
-	// An explicitly-set $XDG_STATE_HOME wins on every platform (it is a
-	// deliberate override — and the only way tests can isolate state on
-	// Windows); %LocalAppData% is the ambient Windows default.
-	if s := os.Getenv("XDG_STATE_HOME"); s != "" {
-		return filepath.Join(s, "gg", "prefix")
-	}
-	if runtime.GOOS == "windows" {
-		if lad := os.Getenv("LocalAppData"); lad != "" {
-			return filepath.Join(lad, "gg", "prefix")
-		}
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return filepath.Join(home, ".local", "state", "gg", "prefix")
 }
 
 // Prefixes lists global rows then repo rows, each tagged with its scope.
