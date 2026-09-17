@@ -20,6 +20,7 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 		"github.com/homeend/gigagit/internal/searchhist": "frontends must reach the search-history store through internal/domain",
 		"github.com/homeend/gigagit/internal/profile":    "frontends must reach the profile store through internal/domain",
 		"github.com/homeend/gigagit/internal/prefix":     "frontends must reach the prefix store through internal/domain",
+		"github.com/homeend/gigagit/internal/linkhist":   "frontends must reach the copied-link history store through internal/domain",
 	}
 	for _, pkg := range []string{
 		"github.com/homeend/gigagit/internal/tui",
