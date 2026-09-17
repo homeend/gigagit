@@ -1984,6 +1984,58 @@ func (s *Service) shelfCompareFiles(ctx context.Context, left, right model.Endpo
 
 Delete `shelfShelfCompare` and `shelfCommitCompare`.
 
+**Also harden `livePairSpec` in the same file.** Task 3's audit found it: its
+`default:` arm returns `model.DiffSpec{}`, which git reads as
+`index → working tree`. Today only the four kinds it enumerates can reach it,
+but Task 7 hands `ComparePatch` whatever endpoint a link produced — so an
+`EndpointPair` or `EndpointRef` arriving here would SILENTLY DIFF THE WRONG
+THING instead of failing. That is the worst class of bug this plan can ship.
+Give it an explicit arm per kind and an error return:
+
+```go
+// livePairSpec maps a non-shelf endpoint pair onto the DiffSpec vocabulary.
+//
+// It used to end in a `default:` that meant "index → working tree", which was
+// safe only while the four enumerated kinds were the only ones that existed.
+// They are not any more: a pair or a ref endpoint reaching that arm would
+// have produced a diff of something else entirely, with no error — so an
+// unhandled pair is now a refusal.
+func livePairSpec(left, right model.Endpoint) (model.DiffSpec, error) {
+	switch {
+	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointCommit:
+		return model.DiffSpec{Rev: left.Hash() + ".." + right.Hash()}, nil
+	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointIndex:
+		return model.DiffSpec{Cached: true, Rev: left.Hash()}, nil
+	case left.Kind() == model.EndpointCommit && right.Kind() == model.EndpointWorkTree:
+		return model.DiffSpec{Rev: left.Hash()}, nil
+	case left.Kind() == model.EndpointIndex && right.Kind() == model.EndpointWorkTree:
+		return model.DiffSpec{}, nil // bare `git diff` is already index → worktree
+	}
+	return model.DiffSpec{}, fmt.Errorf("livePairSpec: unsupported endpoint pair %d → %d", left.Kind(), right.Kind())
+}
+```
+
+Update its one caller in `ComparePatch` to handle the error. Add a test in
+`internal/domain/comparesets_test.go` that a pair endpoint reaching
+`ComparePatch` errors rather than returning a diff of the working tree:
+
+```go
+// A pair endpoint reaching the LIVE patch lane must refuse, not silently
+// render `git diff` (index → working tree). livePairSpec's old default arm
+// would have done exactly that.
+func TestComparePatchRefusesAnUnsupportedPair(t *testing.T) {
+	t.Parallel()
+	f := newCompareFixture(t)
+	pair, err := model.PairEndpoint(f.c1, f.c2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.ComparePatch(context.Background(), pair, model.WorkTreeEndpoint()); err == nil {
+		t.Fatal("a pair endpoint must not reach the live patch lane silently")
+	}
+}
+```
+
 - [ ] **Step 6: Run the WHOLE domain suite — the old shelf tests are the proof**
 
 ```bash
@@ -2483,6 +2535,17 @@ whole diff rather than the projection — **and add a `TODO(plan 3)` naming
 that gap**, or fix it by giving `ComparePatch` a set-taking sibling if it is
 cheap. Decide during implementation and say which you chose in the commit
 message.
+
+**Also harden `endpointProto` in `internal/tui/session_snapshot.go`.** Task 3's
+audit found it: its `default:` arm serializes any unknown kind as
+`commit:""`. The TUI does not build a ref or pair endpoint in this plan, so it
+is unreachable today — but it is precisely the "default means commit" trap the
+predecessor plan existed to remove, and leaving one behind while adding two
+kinds that would fall into it is how the next silent bug ships. Give it an
+explicit arm per kind. A kind the snapshot cannot express is an error or a
+panic, matching whatever the surrounding code does with an impossible state —
+read the function and its caller before choosing, and say which you chose and
+why in the commit message.
 
 Update the usage string to mention links:
 
