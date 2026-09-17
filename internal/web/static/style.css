@@ -287,7 +287,7 @@ mark.r { background: var(--span-add); color: inherit; }
 #modal-options button:hover { border-color: var(--accent); }
 #modal-options button.danger { color: #f27a6a; }
 #modal-options button.danger:hover { border-color: #f27a6a; }
-.side-header { padding: 6px 8px 2px; color: var(--dim); border-top: 1px solid var(--border); margin-top: 6px; display: flex; align-items: baseline; }
+.side-header { padding: 6px 8px 2px; color: var(--dim); border-top: 1px solid var(--border); margin-top: 6px; display: flex; align-items: baseline; white-space: nowrap; }
 /* The sort chip: the list's current display order, clickable to cycle it (the
    TUI's `o` key). Muted until hovered — it is a control you reach for now and
    then, not a label competing with the section name. */
@@ -299,10 +299,13 @@ mark.r { background: var(--span-add); color: inherit; }
 /* The branch-filter chip (branches and remotes only): the active slot, or a
    bare ▽ when none is on. It takes the header's free space so the two chips
    sit together at the right — the sort chip's own margin-left:auto would
-   otherwise split the gap between them. */
+   otherwise split the gap between them. A slot name is user-chosen and
+   unbounded, so the chip ellipsizes rather than wrapping the header into four
+   lines — the full rule is in its title either way. */
 .filterchip {
   margin-left: auto; font-size: 11px; color: var(--dim); opacity: .7;
   border: 1px solid transparent; border-radius: 3px; padding: 0 4px; cursor: pointer;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
 }
 .filterchip.on { color: var(--accent); opacity: 1; border-color: var(--border); }
 .filterchip:hover { color: var(--accent); opacity: 1; border-color: var(--border); }

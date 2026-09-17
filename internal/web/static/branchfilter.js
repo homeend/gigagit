@@ -34,8 +34,11 @@ function filterChipHTML(list) {
   if (!LISTS.has(list)) return "";
   const f = state.branchFilter[list];
   const label = f ? `▽${f.slot} ${f.name}${f.hidden ? " · " + f.hidden + " hidden" : ""}` : "▽";
+  // The title carries the hidden count too: a narrow sidebar ellipsizes the
+  // chip, and that suffix is the first thing to go.
   const title = f
-    ? `branch filter ${f.slot} (${f.mode === "show" ? "show only" : "hide"} ${f.name}) — click to change`
+    ? `branch filter ${f.slot} (${f.mode === "show" ? "show only" : "hide"} ${f.name})` +
+      `${f.hidden ? ` — ${f.hidden} row${f.hidden === 1 ? "" : "s"} hidden` : ""} — click to change`
     : "branch filter: none — click to pick one (alt+1…5)";
   return `<span class="filterchip${f ? " on" : ""}" data-filter="${esc(list)}" title="${esc(title)}">${esc(label)}</span>`;
 }
@@ -94,8 +97,12 @@ async function openFilterMenu(list, x, y) {
   }
   state.branchFilterSlots = slots;
   const cur = state.branchFilter[list];
+  // The marker column is padded with NO-BREAK spaces: #ctx-menu button has no
+  // white-space rule, so ordinary leading spaces collapse and the ✓ rows would
+  // sit two columns right of the rest.
+  const tick = (on) => (on ? "✓ " : "  ");
   const rows = [
-    { label: (cur ? "  " : "✓ ") + "none", act: () => setBranchFilterSlot(list, 0) },
+    { label: tick(!cur) + "none", act: () => setBranchFilterSlot(list, 0) },
     // An unusable slot (invalid regex, or nothing set) is shown rather than
     // dropped — five numbered slots always exist, and a gap would read as a
     // bug rather than as "nothing is defined there". It renders as a
@@ -103,10 +110,10 @@ async function openFilterMenu(list, x, y) {
     ...slots.map((s) =>
       s.usable
         ? {
-            label: `${cur && cur.slot === s.slot ? "✓ " : "  "}${s.slot}  ${s.name} — ${s.summary}`,
+            label: `${tick(!!cur && cur.slot === s.slot)}${s.slot}  ${s.name} — ${s.summary}`,
             act: () => setBranchFilterSlot(list, s.slot),
           }
-        : { header: `${s.slot}  (${s.summary})` }
+        : { header: `${s.slot} (${s.summary})` }
     ),
   ];
   showCtxMenu(rows, x, y);
