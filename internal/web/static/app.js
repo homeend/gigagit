@@ -18,7 +18,7 @@ import "./filehist.js";
 import "./review.js";
 import { applyStoredWidths } from "./resize.js";
 import { applyGraphMode, loadCommits, renderCommits } from "./commits.js";
-import { applyDiffView, refreshNoteCounts } from "./files.js";
+import { applyDiffView, applyFilesHidden, refreshNoteCounts } from "./files.js";
 import { focusPane } from "./keys.js";
 import { fetchHealth } from "./bigrepo.js";
 import "./settings.js";
@@ -55,6 +55,7 @@ async function applyStoredLayout() {
   applyStoredSections(ui.sections);
   applyStoredWidths(ui.sidebar_width, ui.files_width);
   if (ui.sidebar_hidden) applySidebarHidden(true);
+  if (ui.files_hidden) applyFilesHidden(true);
   applyGraphMode(ui.graph);
   applyDiffView(ui.diff_view);
 }

@@ -298,7 +298,11 @@ file), and a Previews row copies the pair's own link. Quote a link that carries 
 comment.
 
 The browser UI copies the same things the TUI's `.` menu does, from where they
-are on screen. In an open commit, the **file list cuts long paths from the
+are on screen. In an open commit, the file list's top bar stays on screen while
+the list scrolls, and its **»** control folds the list to a slim strip so the
+diff gets the width on a small screen (**«** brings it back; the ☰ menu's
+*toggle file list* is the same switch, remembered per machine). The **file
+list cuts long paths from the
 middle** the way the TUI does — whole directories drop out around a `…`, so
 the file name and the head of the path both survive a narrow pane (the row's
 tooltip carries the path in full). The **diff header's file path** copies on a

@@ -12,6 +12,9 @@ type WebUI struct {
 	Sections []string `toml:"sections"`
 	// SidebarHidden is the whole-sidebar toggle (the b key).
 	SidebarHidden bool `toml:"sidebar_hidden"`
+	// FilesHidden is the file-list minimize control (the » button on the
+	// list's back bar): the list folds to a strip so the diff gets the room.
+	FilesHidden bool `toml:"files_hidden,omitempty"`
 	// SidebarWidth / FilesWidth are the dragged pane widths in CSS pixels;
 	// 0 means "never dragged, use the default".
 	SidebarWidth int `toml:"sidebar_width"`

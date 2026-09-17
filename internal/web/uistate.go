@@ -34,6 +34,7 @@ type uiStateWire struct {
 	Saved         bool     `json:"saved"`
 	Sections      []string `json:"sections"`
 	SidebarHidden bool     `json:"sidebar_hidden"`
+	FilesHidden   bool     `json:"files_hidden"`
 	SidebarWidth  int      `json:"sidebar_width"`
 	FilesWidth    int      `json:"files_width"`
 	Graph         string   `json:"graph"`
@@ -67,6 +68,7 @@ func (s *Server) handleUIStateGet(w http.ResponseWriter, r *http.Request) {
 		Saved:         saved,
 		Sections:      st.Sections,
 		SidebarHidden: st.SidebarHidden,
+		FilesHidden:   st.FilesHidden,
 		SidebarWidth:  st.SidebarWidth,
 		FilesWidth:    st.FilesWidth,
 		Graph:         st.Graph,
@@ -89,6 +91,7 @@ func (s *Server) handleUIStateSet(w http.ResponseWriter, r *http.Request) {
 	if err := store.SetWebUIState(promptstate.WebUI{
 		Sections:      allowedSections(in.Sections),
 		SidebarHidden: in.SidebarHidden,
+		FilesHidden:   in.FilesHidden,
 		SidebarWidth:  clampPaneWidth(in.SidebarWidth),
 		FilesWidth:    clampPaneWidth(in.FilesWidth),
 		Graph:         allowedGraph(in.Graph),

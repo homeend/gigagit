@@ -12,7 +12,7 @@ import { openExtToolsView } from "./exttools.js";
 import { openSessionErrorsView } from "./sessionerrors.js";
 import { startReview } from "./review.js";
 import { gotoCommitPrompt, openCommitFilter, toggleGraphMode } from "./commits.js";
-import { openWorkingTree } from "./files.js";
+import { openWorkingTree, toggleFilesHidden } from "./files.js";
 import { extraRows } from "./menus.js";
 import { applyPatchPrompt, pickEntryToCopy } from "./patch.js";
 import { openStashPick } from "./conflicts.js";
@@ -398,6 +398,7 @@ function openGlobalMenu() {
     { label: "refresh", act: () => manualRefresh() },
     { label: "session errors…", act: () => openSessionErrorsView() },
     { label: "settings…", act: () => openSettings() },
+    { label: "toggle file list", act: () => toggleFilesHidden() },
     { label: "toggle graph", act: () => toggleGraphMode() },
     { label: "toggle sidebar", act: () => toggleSidebar() },
     { header: "Config" },

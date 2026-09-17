@@ -8,6 +8,29 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: the file list folds to a strip, its back bar stays put, and every
+  long-line viewer wraps.** The file list's top bar (`← back`) is now
+  sticky, so a long list no longer scrolls the way out off the top, and it
+  carries a **»** control that minimizes the list to a slim strip — the
+  diff (or the commit list) takes the width, **«** on the strip brings the
+  list back, esc and the footer's back chip keep working meanwhile, and the
+  ☰ menu's UI group has the same switch as *toggle file list*. The choice
+  is remembered per machine (`files_hidden` in `/api/uistate`). The blame
+  overlay now wraps long lines (it drew `white-space: pre` and scrolled
+  thousands of pixels sideways), its gutter yields on a narrow window, the
+  history overlay's commit column does too, and the diff toolbar wraps
+  under the title instead of scrolling the whole pane sideways on a narrow
+  pane — which made the (already wrapping) diff read as unwrapped.
+
+- **Fixed: the web diff's *changes only* switch and its fold rows disagreed.**
+  Unfolding the last `⋯ N unchanged lines` row left the chip lit while the
+  whole file was on screen; flipping the chip off and on again resumed the
+  runs opened before instead of a fresh changes-only view. Now unfolding
+  the last run flips the switch off (and the stored preference with it,
+  exactly as a click on the chip would; the scroll position stays), and
+  flipping it on starts with every run folded. The file-history overlay
+  follows both rules.
+
 - **Fixed: the web blame overlay showed the file uncoloured.** The TUI's
   blame overlay has had syntax colouring since the blame/preview wave, but
   `gg web`'s `/api/blame` never lexed the lines and the overlay painted

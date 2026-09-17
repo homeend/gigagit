@@ -49,6 +49,7 @@ const state = {
   // list's ◆N badges). null means "not known yet" — draw no badge at all.
   previewCounts: null,
   sidebar: true,
+  filesHidden: false, // the file list's » control: folded to a strip (a stored preference, /api/uistate)
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
   diffPartial: false,      // the f toggle: true = changed lines only (a stored preference, /api/uistate)

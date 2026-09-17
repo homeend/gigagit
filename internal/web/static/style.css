@@ -130,9 +130,12 @@ body.resizing { cursor: col-resize; user-select: none; }
 }
 #files-desc-more:hover { border-color: var(--accent); }
 #files-desc-more.hidden { display: none; }
-#diff-header { display: flex; align-items: center; gap: 8px; }
+/* The toolbar WRAPS under the title on a narrow pane: seven buttons in one
+   row overflowed a 300px column and scrolled the whole pane sideways — the
+   wrapped table then read as unwrapped. */
+#diff-header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 #diff-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#diff-nav { flex: 0 0 auto; display: flex; gap: 4px; }
+#diff-nav { flex: 0 1 auto; display: flex; flex-wrap: wrap; gap: 4px; }
 #diff-nav button {
   background: var(--bg); color: var(--fg); border: 1px solid var(--border);
   border-radius: 3px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer;
@@ -412,12 +415,40 @@ mark.r { background: var(--span-add); color: inherit; }
 #identity-box input, #prefixes-box input { flex: 1 1 220px; }
 #identity-box .stgl, #prefixes-box .stgl { min-width: 150px; }
 #branches-list li.head { cursor: pointer; } /* left-click = go to tip, safe for HEAD too */
+/* The back bar is the file list's top chrome: ← back on the left, the
+   minimize control (») pinned right. It rides with the commit header in one
+   STICKY wrapper (#files-top) inside the scrolling pane — a long file list
+   used to carry the back button off the top, and the way out looked gone. */
+#files-top { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+#files-top #files-header { position: static; } /* the wrapper is the sticky one: two sticky siblings both pinned at 0 and the bar painted over the header's first line */
+#back-bar {
+  display: flex; align-items: stretch;
+  background: var(--bg-alt); border-bottom: 1px solid var(--border);
+}
 #back-btn {
-  display: block; width: 100%; text-align: left; padding: 4px 8px;
-  background: var(--bg-alt); color: var(--dim); border: none;
-  border-bottom: 1px solid var(--border); font: inherit; cursor: pointer;
+  display: block; flex: 1 1 auto; min-width: 0; text-align: left; padding: 4px 8px;
+  background: var(--bg-alt); color: var(--dim); border: none; font: inherit; cursor: pointer;
 }
 #back-btn:hover { color: var(--accent); }
+#files-min {
+  flex: none; padding: 4px 8px; background: var(--bg-alt); color: var(--dim);
+  border: none; border-left: 1px solid var(--border); font: inherit; cursor: pointer;
+}
+#files-min:hover { color: var(--accent); }
+/* Minimized file list (the » control, `files_hidden` in /api/uistate): the
+   pane folds to a strip holding only the restore control and its drag handle
+   goes, so the flexible pane — the diff, or the commit list — takes the
+   width. Both stages that show the list get a template; the strip is `auto`
+   so the button's own width sizes the column. esc and the footer's back chip
+   still step out of the stage while the list is folded — never a trap. */
+#panes.files.nofiles { grid-template-columns: var(--sb-w) var(--rs-w) 1fr auto; }
+#panes.files.nosb.nofiles { grid-template-columns: 1fr auto; }
+#panes.detail.nofiles { grid-template-columns: 1fr auto; }
+#panes.nofiles #rs-detail { display: none; }
+#panes.nofiles #files-pane > :not(#files-top), #panes.nofiles #files-header { display: none; }
+#panes.nofiles #back-bar { flex-direction: column; }
+#panes.nofiles #back-btn { display: none; }
+#panes.nofiles #files-min { border-left: none; border-bottom: 1px solid var(--border); }
 #branches-header, .side-header { cursor: pointer; user-select: none; } /* click folds/unfolds */
 /* Folding a section hides its list. EVERY sidebar list belongs here: remotes
    and reflog were missing, so clicking their headers set the class and flipped
@@ -709,7 +740,7 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #history-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
 #history-hint { padding: 6px 14px; border-top: 1px solid var(--border); color: var(--dim); font-size: 11px; }
 #history-main { display: flex; flex: 1; min-height: 0; }
-#history-list { list-style: none; margin: 0; padding: 6px 0; width: 360px; flex: none; overflow-y: auto; border-right: 1px solid var(--border); }
+#history-list { list-style: none; margin: 0; padding: 6px 0; width: min(360px, 40%); flex: none; overflow-y: auto; border-right: 1px solid var(--border); }
 #history-list li { padding: 5px 14px; cursor: pointer; }
 #history-list li:hover { background: var(--sel); }
 #history-list li.sel { background: var(--sel); }
@@ -728,13 +759,13 @@ tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
 #blame-title { padding: 10px 14px; border-bottom: 1px solid var(--border); }
 #blame-hint { padding: 6px 14px; border-top: 1px solid var(--border); color: var(--dim); font-size: 11px; }
 #blame-body { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
-.bline { display: flex; white-space: pre; }
+.bline { display: flex; white-space: pre-wrap; }
 .bline.bfirst { border-top: 1px solid var(--border); }
-.bgut { flex: none; width: 300px; overflow: hidden; text-overflow: ellipsis; color: var(--dim); padding-left: 10px; }
+.bgut { flex: none; width: clamp(150px, 34%, 300px); overflow: hidden; text-overflow: ellipsis; white-space: pre; color: var(--dim); padding-left: 10px; }
 .bsha { color: var(--accent); cursor: pointer; text-decoration: underline dotted; }
 .bwork { color: var(--dim); font-style: italic; }
 .bno { flex: none; width: 4em; text-align: right; color: var(--dim); padding-right: 10px; }
-.btext { flex: 1; }
+.btext { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 
 /* AI review: the lane (chooser / approval / progress) and the report viewer.
    Both sit at 21 with the other panel overlays — the ctx-menu (40) and the

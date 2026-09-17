@@ -52,6 +52,46 @@ function drillOut() {
 $("back-btn").addEventListener("click", drillOut);
 
 
+// applyFilesHidden is the shared "put the file list in this state" step,
+// used by the » control and by the layout restored from the server at boot.
+// Minimized, the list folds to a strip holding only the restore control (the
+// CSS `nofiles` variant) and the flexible pane takes the width — which
+// changes the diff's side-by-side/unified verdict and the commit list's
+// column, so whichever is on screen is redrawn for the new width.
+function applyFilesHidden(hidden) {
+  state.filesHidden = hidden;
+  $("panes").classList.toggle("nofiles", hidden);
+  const b = $("files-min");
+  b.textContent = hidden ? "«" : "»";
+  b.title = hidden ? "show the file list" : "hide the file list — more room for the diff";
+  b.setAttribute("aria-expanded", hidden ? "false" : "true");
+  if (state.layout === "diff") rerenderDiffKeepingPlace();
+  else renderCommits();
+}
+
+
+// toggleFilesHidden is the user-facing flip. The choice is a per-machine
+// preference (/api/uistate — the random port makes localStorage useless).
+function toggleFilesHidden() {
+  if (state.layout === "list") return; // no file list on the commit-list screen to fold (the sidebar toggle's rule)
+  applyFilesHidden(!state.filesHidden);
+  saveUI({ files_hidden: state.filesHidden });
+}
+
+
+$("files-min").addEventListener("click", toggleFilesHidden);
+
+
+registerHelp({
+  key: "» · hide the file list",
+  html:
+    "fold the file list (the right column) to a slim strip so the diff — or the commit list — takes " +
+    "its width; <b>«</b> on the strip brings it back. The <b>toggle file list</b> row in the ☰ menu's UI " +
+    "group is the same switch, and the choice is remembered per machine. esc and the footer's " +
+    "<b>back</b> chip still step out of the stage while the list is folded",
+});
+
+
 // --- files + diff panes ---
 
 // Staged layout (the GitKraken flow): "list" = the commit list alone, full
@@ -1313,10 +1353,18 @@ function applyDiffView(mode) {
 // choice is a per-machine preference (/api/uistate — the random port makes
 // localStorage useless), and applies to every diff opened from now on, the
 // file-history overlay included.
-function toggleDiffView() {
-  applyDiffView(state.diffPartial ? "full" : "changed");
-  saveUI({ diff_view: state.diffPartial ? "changed" : "full" });
-  rerenderDiffKeepingPlace();
+// keepScroll: an unfold-all flip (the last fold row clicked) redraws the same
+// rows and must not throw the reader to the nearest change block.
+//
+// Flipping ON starts from every run folded, whatever the reader had opened
+// before flipping off: the folds are the changes-only VIEW's state, and
+// off→on is a fresh entry into it, not a resume.
+function toggleDiffView(keepScroll = false) {
+  const on = !state.diffPartial;
+  applyDiffView(on ? "changed" : "full");
+  if (on) state.diffFolds = new Set();
+  saveUI({ diff_view: on ? "changed" : "full" });
+  rerenderDiffKeepingPlace(keepScroll);
 }
 
 
@@ -1330,6 +1378,9 @@ $("diff-body").addEventListener("click", (e) => {
   if (!tr || !state.lastDiff) return;
   state.diffFolds.add(Number(tr.dataset.fold));
   rerenderDiffKeepingPlace(true);
+  // The last run opened: what is on screen IS the full file, so the chip
+  // says so — and the preference follows, exactly as a click on it would.
+  if (!$("diff-body").querySelector("tr.fold")) toggleDiffView(true);
 });
 
 
@@ -1339,8 +1390,9 @@ registerHelp({
     "toggle the diff between the <b>full file</b> and <b>changed lines only</b> — each change with three " +
     "lines of context, every other run folded to a <i>⋯ N unchanged lines</i> row (click it to unfold " +
     "that run). The <b>changes only</b> button in the diff toolbar is the same switch; the choice is " +
-    "remembered per machine and the file-history overlay follows it. Rows carrying a review note or an " +
-    "attention band never fold away",
+    "remembered per machine and the file-history overlay follows it. Unfolding the last run flips the " +
+    "switch off (the whole file is on screen); flipping it on again starts with every run folded. Rows " +
+    "carrying a review note or an attention band never fold away",
 });
 
 
@@ -2649,4 +2701,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, applyFilesHidden, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
