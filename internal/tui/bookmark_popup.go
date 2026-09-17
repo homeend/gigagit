@@ -60,6 +60,12 @@ func bookmarkDisplay(b model.Bookmark) string {
 type bookmarksLoadedMsg struct {
 	items []model.Bookmark
 	err   error
+	// gen is 0 for an ordinary load (openBookmarkSwitcher's ping) and the
+	// staging m.hintGen value for a Task 6 hint reveal's OWN load (fix F3);
+	// the handler only lets a hint consume the message whose gen matches
+	// its own pendingHint.tag, so an unrelated in-flight load can never be
+	// mistaken for it.
+	gen int
 }
 
 // openBookmarkSwitcher opens the global bookmark quick-switcher. It is wired
@@ -78,6 +84,17 @@ func (m Model) loadBookmarksCmd() tea.Cmd {
 	return func() tea.Msg {
 		bs, err := svc.BookmarkList(context.Background(), 0, 0)
 		return bookmarksLoadedMsg{items: bs, err: err}
+	}
+}
+
+// loadBookmarksForHintCmd is loadBookmarksCmd's Task 6 hint twin (fix F3):
+// it stamps the returned message with tag (the staging m.hintGen), the
+// generation guard pendingHint.tag matches against.
+func (m Model) loadBookmarksForHintCmd(tag int) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		bs, err := svc.BookmarkList(context.Background(), 0, 0)
+		return bookmarksLoadedMsg{items: bs, err: err, gen: tag}
 	}
 }
 

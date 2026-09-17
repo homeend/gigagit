@@ -40,6 +40,34 @@ const steerPendingTTL = 5 * time.Second
 type pendingHint struct {
 	cmd        steer.Command
 	mustAnswer bool
+	// tag and at are pendingSteer's own guard pattern (fix F3): tag is the
+	// m.hintGen value stamped into THIS reveal's own load
+	// (loadBookmarksForHintCmd/loadShelfForHintCmd), so a load an unrelated
+	// `g`/`G` keypress already had in flight — which carries no tag a real
+	// hint load would — can never be mistaken for this one's arrival (and,
+	// symmetrically, this one's arrival is never swallowed by that load's
+	// handler running first). at bounds how long a reveal parks on a load
+	// that never arrives (a disabled store, a repo switch racing it).
+	tag int
+	at  time.Time
+}
+
+// pendingHintTTL mirrors steerPendingTTL: a hint reveal parked on a
+// bookmark/shelf load that never arrives must not park forever.
+const pendingHintTTL = 5 * time.Second
+
+// expirePendingHint gives up on a parked hint reveal whose load never
+// arrived. Called from the same heartbeat expirePendingSteer is (fix F3).
+func (m Model) expirePendingHint(now time.Time) (Model, tea.Cmd) {
+	ph := m.pendingHint
+	if ph == nil || now.Sub(ph.at) < pendingHintTTL {
+		return m, nil
+	}
+	m.pendingHint = nil
+	if ph.mustAnswer {
+		return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "the "+ph.cmd.HintKind+" list did not load in time"))
+	}
+	return m, nil
 }
 
 // pendingSteer is a navigate command parked until the load it needs arrives.
@@ -130,7 +158,13 @@ func (m Model) steerStep(c steer.Command) (Model, tea.Cmd) {
 	if dir < 0 {
 		what = "previous"
 	}
-	return m, m.answerSteer(c, steerOK(c, "stepped to the "+what+" note"))
+	// navigateLanded, not answerSteer directly (fix F4): a step navigate
+	// carrying a hint must reveal too, the same as every other landing
+	// shape — live.js's steerNavigate already does, because it wraps the
+	// WHOLE verb rather than special-casing steerNavigateLand's own
+	// `if (s.step) { …; return; }` arm, and this arm was the one the TUI
+	// side had not routed through the chokepoint.
+	return m.navigateLanded(c, "stepped to the "+what+" note")
 }
 
 // steerNavigate is the whole navigate verb. It resolves what it can
@@ -192,26 +226,31 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 	return m, m.answerSteer(c, steerFail(c, "navigate needs a file, a commit or a step"))
 }
 
-// navigateLanded is the ONE place a navigate's own success is recorded: it
-// answers the command — the navigate's success is whether it LANDED, never
-// whether its hint could be shown (spec §3.3 rule 3) — and, when c carries a
-// hint, stages the post-landing REVEAL: a bookmark/shelf popup with that row
+// navigateLanded is the ONE place a navigate's own success is recorded (now
+// true of every shape, including the step verb — fix F4): it answers the
+// command — the navigate's success is whether it LANDED, never whether its
+// hint could be shown (spec §3.3 rule 3) — and, when c carries a hint,
+// stages the post-landing REVEAL: a bookmark/shelf popup with that row
 // selected, or a notice for a kind this build has no reveal for (S9: the
 // default degrades, it never silently drops). Every landing site that used
 // to build steerOK directly calls this instead, so the hint cannot end up
 // wired into only SOME of them — the S2/S5 defect shape this plan keeps
-// hitting.
+// hitting. Each stage bumps m.hintGen and stamps it into the reveal's own
+// load (fix F3): a `g`/`G` press already in flight when this lands must not
+// be mistaken for this reveal's arrival, nor swallow it.
 func (m Model) navigateLanded(c steer.Command, detail string) (Model, tea.Cmd) {
 	reply := m.answerSteer(c, steerOK(c, detail))
 	switch c.HintKind {
 	case "":
 		return m, reply
 	case "bookmark":
-		m.pendingHint = &pendingHint{cmd: c}
-		return m, tea.Batch(reply, m.loadBookmarksCmd())
+		m.hintGen++
+		m.pendingHint = &pendingHint{cmd: c, tag: m.hintGen, at: time.Now()}
+		return m, tea.Batch(reply, m.loadBookmarksForHintCmd(m.hintGen))
 	case "shelf":
-		m.pendingHint = &pendingHint{cmd: c}
-		return m, tea.Batch(reply, m.loadShelfCmd(true))
+		m.hintGen++
+		m.pendingHint = &pendingHint{cmd: c, tag: m.hintGen, at: time.Now()}
+		return m, tea.Batch(reply, m.loadShelfForHintCmd(c.HintID, m.hintGen))
 	default:
 		// "stash" (spec §3.4, no producer) and any future kind this build
 		// cannot reveal: the navigate already landed, so this degrades with
@@ -231,11 +270,13 @@ func (m Model) navigateLanded(c steer.Command, detail string) (Model, tea.Cmd) {
 func (m Model) steerNavigateHintOnly(c steer.Command) (Model, tea.Cmd) {
 	switch c.HintKind {
 	case "bookmark":
-		m.pendingHint = &pendingHint{cmd: c, mustAnswer: true}
-		return m, m.loadBookmarksCmd()
+		m.hintGen++
+		m.pendingHint = &pendingHint{cmd: c, mustAnswer: true, tag: m.hintGen, at: time.Now()}
+		return m, m.loadBookmarksForHintCmd(m.hintGen)
 	case "shelf":
-		m.pendingHint = &pendingHint{cmd: c, mustAnswer: true}
-		return m, m.loadShelfCmd(true)
+		m.hintGen++
+		m.pendingHint = &pendingHint{cmd: c, mustAnswer: true, tag: m.hintGen, at: time.Now()}
+		return m, m.loadShelfForHintCmd(c.HintID, m.hintGen)
 	default:
 		return m, m.answerSteer(c, steerFail(c, "that link's "+c.HintKind+" hint has no landing gg can show"))
 	}

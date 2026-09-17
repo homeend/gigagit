@@ -2,11 +2,13 @@ package tui
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/gittest"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -86,6 +88,12 @@ func TestNavigateLandedStagesPendingHintForBookmark(t *testing.T) {
 	if nm.pendingHint.mustAnswer {
 		t.Error("the with-address shape must not require a second answer (already answered)")
 	}
+	if nm.pendingHint.tag == 0 {
+		t.Error("fix F3: tag must be a fresh, nonzero m.hintGen value — 0 collides with an ordinary load's default gen")
+	}
+	if nm.pendingHint.tag != nm.hintGen {
+		t.Errorf("tag = %d, want the model's own hintGen %d", nm.pendingHint.tag, nm.hintGen)
+	}
 	if cmd == nil {
 		t.Fatal("navigateLanded must still return the landing's own reply command")
 	}
@@ -116,28 +124,49 @@ func TestNavigateLandedDegradesAnUnrevealableHintKind(t *testing.T) {
 
 // TestBookmarksLoadedMsgRevealsThePendingHintRow is the PRESENT half of the
 // with-address consumer test: the reveal must select the RIGHT row, not
-// just open a popup — BookmarkList returns newest-first, so the hinted
-// (older) entry sits at index 1, never 0.
+// just open a popup. Fix F8: this fixture used to bookmark a FABRICATED
+// commit ("deadbeef…") that does not exist in the repo, and BookmarkAdd
+// does a real `git rev-parse <commit>:<path>` to record the blob — the
+// fixture could never stand up, so the newest-first ordering assumption
+// below (taken from BookmarkList's doc comment) had never actually
+// executed. Both bookmarks now use the fixture's REAL HEAD commit, with
+// explicit, strictly-ordered Created timestamps so the ordering is
+// deterministic rather than racing on time.Now()'s clock resolution.
 func TestBookmarksLoadedMsgRevealsThePendingHintRow(t *testing.T) {
 	dir := gittest.BasicRepo(t, "hi\n")
 	m := hintNavModel(t, dir)
 	ctx := context.Background()
-	older, err := m.svc.BookmarkAdd(ctx, model.Bookmark{State: model.StateUnstaged, Worktree: dir, Path: "README.md"})
+	head, _, err := m.svc.ResolveRev(ctx, "HEAD")
 	if err != nil {
-		t.Fatalf("BookmarkAdd: %v", err)
+		t.Fatalf("ResolveRev: %v", err)
 	}
-	if _, err := m.svc.BookmarkAdd(ctx, model.Bookmark{State: model.StateCommitted, Commit: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", Path: "other.txt"}); err != nil {
-		t.Fatalf("BookmarkAdd: %v", err)
+	head = strings.TrimSpace(head)
+	older, err := m.svc.BookmarkAdd(ctx, model.Bookmark{
+		State: model.StateUnstaged, Worktree: dir, Path: "README.md",
+		Created: time.Now().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("BookmarkAdd (older): %v", err)
+	}
+	newer, err := m.svc.BookmarkAdd(ctx, model.Bookmark{
+		State: model.StateCommitted, Commit: head, Path: "README.md",
+		Created: time.Now(),
+	})
+	if err != nil {
+		t.Fatalf("BookmarkAdd (newer): %v", err)
 	}
 	items, err := m.svc.BookmarkList(ctx, 0, 0)
 	if err != nil {
 		t.Fatalf("BookmarkList: %v", err)
 	}
-	if len(items) != 2 || items[1].ID != older.ID {
-		t.Fatalf("fixture: items = %+v, want the older bookmark at index 1 (newest-first)", items)
+	// Confirmed empirically now, not restated from the doc comment: newest
+	// first means the LATER Created timestamp sorts to index 0.
+	if len(items) != 2 || items[0].ID != newer.ID || items[1].ID != older.ID {
+		t.Fatalf("fixture: items = %+v, want newer at 0 and older (the hinted one) at 1", items)
 	}
-	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n1", HintKind: "bookmark", HintID: older.ID}}
-	tm, _ := m.Update(bookmarksLoadedMsg{items: items})
+	m.hintGen++
+	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n1", HintKind: "bookmark", HintID: older.ID}, tag: m.hintGen}
+	tm, _ := m.Update(bookmarksLoadedMsg{items: items, gen: m.hintGen})
 	nm := tm.(Model)
 	p := nm.bookmarkSwitcher()
 	if p == nil {
@@ -155,26 +184,108 @@ func TestBookmarksLoadedMsgRevealsThePendingHintRow(t *testing.T) {
 	}
 }
 
+// TestBookmarksLoadedMsgIgnoresAnUnrelatedLoadInFlight pins fix F3's race:
+// the user presses `g` (an ordinary load, gen 0, already in flight) just
+// before a hinted navigate lands (stages pendingHint, tag N, fires its OWN
+// load). The ordinary load's message must arrive WITHOUT consuming the
+// hint or resetting anything — only the message carrying the matching gen
+// may.
+func TestBookmarksLoadedMsgIgnoresAnUnrelatedLoadInFlight(t *testing.T) {
+	dir := gittest.BasicRepo(t, "hi\n")
+	m := hintNavModel(t, dir)
+	ctx := context.Background()
+	b, err := m.svc.BookmarkAdd(ctx, model.Bookmark{State: model.StateUnstaged, Worktree: dir, Path: "README.md"})
+	if err != nil {
+		t.Fatalf("BookmarkAdd: %v", err)
+	}
+	items, err := m.svc.BookmarkList(ctx, 0, 0)
+	if err != nil {
+		t.Fatalf("BookmarkList: %v", err)
+	}
+	m.hintGen++
+	tag := m.hintGen
+	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n1", HintKind: "bookmark", HintID: b.ID}, tag: tag}
+
+	// The unrelated load's message: gen 0 (an ordinary loadBookmarksCmd
+	// never sets it), arriving BEFORE the hint's own.
+	tm, _ := m.Update(bookmarksLoadedMsg{items: items, gen: 0})
+	nm := tm.(Model)
+	if nm.pendingHint == nil {
+		t.Fatal("an unrelated load (gen 0) must NOT consume the pendingHint")
+	}
+	if nm.pendingHint.tag != tag {
+		t.Fatalf("pendingHint = %+v, want it untouched (tag %d)", nm.pendingHint, tag)
+	}
+	// It still opens the popup normally (the ordinary branch) — just
+	// without disturbing the parked hint.
+	if p := nm.bookmarkSwitcher(); p == nil {
+		t.Error("the unrelated load must still open the switcher through the ordinary branch")
+	}
+
+	// NOW the hint's own load arrives (gen == tag): it must still reveal
+	// correctly, proving the hint survived the earlier, unrelated message.
+	tm2, _ := nm.Update(bookmarksLoadedMsg{items: items, gen: tag})
+	nm2 := tm2.(Model)
+	if nm2.pendingHint != nil {
+		t.Error("the matching-gen message must consume the pendingHint")
+	}
+	p := nm2.bookmarkSwitcher()
+	if p == nil {
+		t.Fatal("the hint's own load must reveal the bookmark popup")
+	}
+	got, ok := p.selected()
+	if !ok || got.ID != b.ID {
+		t.Fatalf("selected = %+v ok=%v, want %s", got, ok, b.ID)
+	}
+}
+
 // TestBookmarksLoadedMsgAbsentHintNoticesWithoutOpeningAPopup is the ABSENT
 // half: no popup, a notice, the navigate itself is untouched (it already
 // answered elsewhere — mustAnswer is false here).
 func TestBookmarksLoadedMsgAbsentHintNoticesWithoutOpeningAPopup(t *testing.T) {
 	dir := gittest.BasicRepo(t, "hi\n")
 	m := hintNavModel(t, dir)
-	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n1", HintKind: "bookmark", HintID: "nope"}}
-	tm, cmd := m.Update(bookmarksLoadedMsg{items: nil})
+	m.hintGen++
+	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n1", HintKind: "bookmark", HintID: "nope"}, tag: m.hintGen}
+	tm, cmd := m.Update(bookmarksLoadedMsg{items: nil, gen: m.hintGen})
 	nm := tm.(Model)
 	if p := nm.bookmarkSwitcher(); p != nil {
 		t.Error("an absent hint must NOT open the popup")
 	}
-	if nm.statusMsg == "" {
-		t.Error("an absent hint must still notice (spec §3.3 rule 3: degrades, never fails)")
+	// Fix F2: the with-address absent case DID land (elsewhere) — the
+	// wording must say so, distinct from the mustAnswer wording below.
+	if want := i18n.T("that link's bookmark is gone; it still landed"); nm.statusMsg != want {
+		t.Errorf("statusMsg = %q, want %q", nm.statusMsg, want)
 	}
 	if nm.pendingHint != nil {
 		t.Error("pendingHint must be cleared")
 	}
 	if cmd != nil {
 		t.Error("the with-address absent case must not post a second reply (mustAnswer is false)")
+	}
+}
+
+// TestBookmarksLoadedMsgAbsentMustAnswerHintUsesTheNoLandingWording pins fix
+// F2 directly at the message-handler level (the end-to-end twin,
+// TestSteerNavigateHintOnlyAbsentAnswersFail, only checks the steer reply):
+// for the hint-only shape nothing landed at all, so the status bar must NOT
+// claim "it still landed" — that would contradict the steerFail the agent
+// receives on the very same command.
+func TestBookmarksLoadedMsgAbsentMustAnswerHintUsesTheNoLandingWording(t *testing.T) {
+	dir := gittest.BasicRepo(t, "hi\n")
+	m := hintNavModel(t, dir)
+	m.hintGen++
+	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n1", HintKind: "bookmark", HintID: "nope"}, mustAnswer: true, tag: m.hintGen}
+	tm, cmd := m.Update(bookmarksLoadedMsg{items: nil, gen: m.hintGen})
+	nm := tm.(Model)
+	if want := i18n.T("that link's bookmark could not be found"); nm.statusMsg != want {
+		t.Errorf("statusMsg = %q, want %q (never \"it still landed\" — nothing landed)", nm.statusMsg, want)
+	}
+	if strings.Contains(nm.statusMsg, "still landed") {
+		t.Errorf("statusMsg = %q must not claim anything landed", nm.statusMsg)
+	}
+	if cmd == nil {
+		t.Fatal("the hint-only shape must still answer (steerFail) — this is its only reply")
 	}
 }
 
@@ -192,8 +303,9 @@ func TestShelfLoadedMsgRevealsThePendingHintRow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ShelfList: %v", err)
 	}
-	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n2", HintKind: "shelf", HintID: e.ID}}
-	tm, _ := m.Update(shelfLoadedMsg{entries: items, open: true})
+	m.hintGen++
+	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n2", HintKind: "shelf", HintID: e.ID}, tag: m.hintGen}
+	tm, _ := m.Update(shelfLoadedMsg{entries: items, open: true, gen: m.hintGen})
 	nm := tm.(Model)
 	p := nm.shelfSwitcher()
 	if p == nil {
@@ -213,17 +325,93 @@ func TestShelfLoadedMsgRevealsThePendingHintRow(t *testing.T) {
 func TestShelfLoadedMsgAbsentHintNoticesWithoutOpeningAPopup(t *testing.T) {
 	dir := gittest.BasicRepo(t, "hi\n")
 	m := hintNavModel(t, dir)
-	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n2", HintKind: "shelf", HintID: "nope"}}
-	tm, _ := m.Update(shelfLoadedMsg{entries: nil, open: true})
+	m.hintGen++
+	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n2", HintKind: "shelf", HintID: "nope"}, tag: m.hintGen}
+	tm, _ := m.Update(shelfLoadedMsg{entries: nil, open: true, gen: m.hintGen})
 	nm := tm.(Model)
 	if p := nm.shelfSwitcher(); p != nil {
 		t.Error("an absent hint must NOT open the popup")
 	}
-	if nm.statusMsg == "" {
-		t.Error("an absent hint must still notice")
+	if want := i18n.T("that link's shelf entry is gone; it still landed"); nm.statusMsg != want {
+		t.Errorf("statusMsg = %q, want %q", nm.statusMsg, want)
 	}
 	if nm.pendingHint != nil {
 		t.Error("pendingHint must be cleared")
+	}
+}
+
+// TestShelfLoadedMsgHintInANonDefaultBucketReveals pins fix F1: domain's
+// ShelfFind scans EVERY bucket, but the ordinary ShelfList("", …) any plain
+// `G` open uses lists the DEFAULT bucket only. An entry `gg shelf add
+// --bucket wip` put anywhere else must still reveal — the exact repro the
+// controller ran end to end (`gg open --web` reporting a present entry
+// "gone"). This is the S5 pair the brief asked for: the SAME id must not be
+// "present" to domain (ShelfFind, checked first) and "gone" to the
+// consumer (checked second, on the SAME store).
+func TestShelfLoadedMsgHintInANonDefaultBucketReveals(t *testing.T) {
+	dir := gittest.BasicRepo(t, "hi\n")
+	m := hintNavModel(t, dir)
+	ctx := context.Background()
+	e, err := m.svc.ShelfAdd(ctx, model.FileAddress{State: model.StateUnstaged, Worktree: dir, Path: "README.md"}, "wip")
+	if err != nil {
+		t.Fatalf("ShelfAdd(bucket=wip): %v", err)
+	}
+	if e.Bucket != "wip" {
+		t.Fatalf("fixture: entry bucket = %q, want wip", e.Bucket)
+	}
+	// Domain's own presence check: this is what ResolveLink's address-less
+	// hint check (and evallink.go) both call, and it must agree the entry
+	// is present.
+	found, err := m.svc.ShelfFind(ctx, e.ID)
+	if err != nil || found.ID != e.ID {
+		t.Fatalf("ShelfFind: %v (found=%+v) — domain must consider it present", err, found)
+	}
+	// The plain default-bucket list must NOT contain it — this is the bug's
+	// precondition, not the fix: without loadShelfForHintCmd's bucket-aware
+	// lookup, the consumer and domain disagree.
+	def, err := m.svc.ShelfList(ctx, "", 0, 0)
+	if err != nil {
+		t.Fatalf("ShelfList(default): %v", err)
+	}
+	if shelfIndexByID(def, e.ID) >= 0 {
+		t.Fatalf("fixture: entry must NOT be in the default bucket's list")
+	}
+
+	// The fix under test: loadShelfForHintCmd resolves the entry's OWN
+	// bucket first (ShelfFind), then lists THAT bucket.
+	m.hintGen++
+	tag := m.hintGen
+	sdir := m.steerDir
+	m.pendingHint = &pendingHint{cmd: steer.Command{ID: "n3", HintKind: "shelf", HintID: e.ID, Wait: true}, mustAnswer: true, tag: tag}
+	msg := m.loadShelfForHintCmd(e.ID, tag)().(shelfLoadedMsg)
+	if msg.err != nil {
+		t.Fatalf("loadShelfForHintCmd: %v", msg.err)
+	}
+	if shelfIndexByID(msg.entries, e.ID) < 0 {
+		t.Fatalf("loadShelfForHintCmd entries = %+v, want the wip-bucket entry %s present", msg.entries, e.ID)
+	}
+	tm, cmd := m.Update(msg)
+	nm := tm.(Model)
+	p := nm.shelfSwitcher()
+	if p == nil {
+		t.Fatal("an entry in a non-default bucket must still reveal (fix F1) — domain and the consumer must agree")
+	}
+	got, ok := p.selected()
+	if !ok || got.ID != e.ID {
+		t.Fatalf("selected = %+v ok=%v, want %s", got, ok, e.ID)
+	}
+	if cmd == nil {
+		t.Fatal("the hint-only shape (Wait: true) must post a reply")
+	}
+	cmd()
+	r, ok := steer.AwaitReply(sdir, "n3", 2*time.Second)
+	if !ok || !r.OK {
+		t.Fatalf("reply = %+v ok=%v, want ok:true — fix F1: a present (bucketed) entry must not steerFail (spec §3.3 rule 3 inverted was the bug)", r, ok)
+	}
+	// m.shelfEntries (the general default-bucket cache) must be untouched
+	// by a bucket-scoped hint load.
+	if idx := shelfIndexByID(nm.shelfEntries, e.ID); idx >= 0 {
+		t.Error("a hint's bucket-scoped load must never leak into the general m.shelfEntries cache")
 	}
 }
 
