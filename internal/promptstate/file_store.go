@@ -22,12 +22,18 @@ type records struct {
 	// A POINTER so "never saved" stays distinguishable from "saved, all
 	// defaults" — see WebUIState.
 	WebUI *WebUI `toml:"web_ui,omitempty"`
+	// BranchFilter is each repo's active branch-filter slot per list.
+	BranchFilter map[string]branchFilterRecord `toml:"branch_filter,omitempty"`
 }
 
 // read loads the file; a missing or malformed file reads as empty (UX memory
 // is best-effort — never block the TUI on it).
 func (fs *FileStore) read() records {
-	empty := records{DismissedNotices: map[string][]string{}, ApprovedTools: map[string][]string{}}
+	empty := records{
+		DismissedNotices: map[string][]string{},
+		ApprovedTools:    map[string][]string{},
+		BranchFilter:     map[string]branchFilterRecord{},
+	}
 	data, err := os.ReadFile(fs.path)
 	if err != nil {
 		return empty
@@ -41,6 +47,9 @@ func (fs *FileStore) read() records {
 	}
 	if r.ApprovedTools == nil {
 		r.ApprovedTools = map[string][]string{}
+	}
+	if r.BranchFilter == nil {
+		r.BranchFilter = map[string]branchFilterRecord{}
 	}
 	return r
 }

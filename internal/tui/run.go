@@ -59,6 +59,11 @@ func Run(svc *domain.Service, recordPath string, at model.Link) (string, error) 
 	// later. Every pre-load fallback helper (Model.wheelStep and friends)
 	// treats a defaults-filled cfg exactly as it treats the zero value.
 	m.cfg = cfg
+	// Compile the branch-filter slots from the startup config. The remembered
+	// ACTIVE slot cannot load yet (the health probe has not resolved the common
+	// dir); loadBranchFilterSlots is a no-op until it does, and notify.go's
+	// applyRepoHealth runs it then.
+	m = m.applyBranchFilterConfig()
 	m = m.initSnapshotTarget()
 	// The inbox is keyed by worktree under the session dir the snapshot just
 	// resolved; the watcher itself starts from Init().

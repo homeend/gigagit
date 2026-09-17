@@ -208,6 +208,7 @@ type Config struct {
 	Versions VersionsConfig `toml:"versions"`
 	Notes    NotesConfig    `toml:"notes"`
 	Tools    ToolsConfig    `toml:"tools"`
+	Branches BranchesConfig `toml:"branches"`
 
 	// Themes holds per-theme colour overrides, one [themes.<name>] table per
 	// built-in theme name (terminal/dark/light). Unknown names are kept and
@@ -250,6 +251,7 @@ func Load(globalPath, repoPath string) (Config, error) {
 			overlayVersions(&cfg.Versions, layer.Versions)
 			overlayNotes(&cfg.Notes, layer.Notes)
 			overlayTools(&cfg.Tools, layer.Tools)
+			overlayBranchFilters(&cfg.Branches, layer.Branches)
 			overlayThemes(&cfg.Themes, layer.Themes)
 		}
 	}

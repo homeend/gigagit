@@ -1067,8 +1067,11 @@ func (m Model) branchRows() []string {
 			}
 		}
 	}
+	// A branch the active filter WOULD hide but may not (HEAD, or checked out
+	// in a worktree) is marked so the row's presence is explained.
+	_, exempt, _ := m.branchFilterHidden(panelBranches)
 	out := make([]string, 0, len(m.branches))
-	for _, b := range m.branches {
+	for i, b := range m.branches {
 		gutter := make([]rune, 0, len(indicators)+1)
 		for i, ind := range indicators {
 			if active[i] {
@@ -1085,6 +1088,9 @@ func (m Model) branchRows() []string {
 		if path, ok := m.worktreePathOf(b.Name); ok {
 			row += " (" + path + ")"
 		}
+		if i < len(exempt) && exempt[i] {
+			row += branchFilterExemptMark
+		}
 		out = append(out, row)
 	}
 	return out
@@ -1092,9 +1098,16 @@ func (m Model) branchRows() []string {
 
 // remoteRows builds the Remotes tab rows: one short ref per line.
 func (m Model) remoteRows() []string {
+	// The current branch's upstream row is exempt from a filter that would
+	// hide it (see branchRows).
+	_, exempt, _ := m.branchFilterHidden(panelRemotes)
 	out := make([]string, 0, len(m.remoteBranches))
-	for _, rb := range m.remoteBranches {
-		out = append(out, "  "+rb.Name)
+	for i, rb := range m.remoteBranches {
+		row := "  " + rb.Name
+		if i < len(exempt) && exempt[i] {
+			row += branchFilterExemptMark
+		}
+		out = append(out, row)
 	}
 	return out
 }

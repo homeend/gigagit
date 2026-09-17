@@ -164,6 +164,171 @@ async function saveSettings() {
   renderSettings({ fresh: true });
 }
 
+// ── branch filters ────────────────────────────────────────────────────────
+//
+// The five slots the ▽ chip activates. This section owns its own save
+// button, separate from the panel's batched one: a rule is a form, not a
+// field, and half a rule is not a value the panel could sensibly carry in
+// its unsaved bar.
+//
+// The clause inputs are prefilled from the slot's RAW fields (never the
+// rendered summary), so opening and saving a slot round-trips what is in
+// the file.
+
+// BF_CLAUSES is the text-clause vocabulary, in form order. Every set clause
+// must hold (AND) for a branch to match — the engine's rule, echoed in the
+// section note.
+const BF_CLAUSES = [
+  ["name", "name", "shown on the chip"],
+  ["older_than", "older than", "90d · 6m · 1y"],
+  ["younger_than", "younger than", "7d · 2w"],
+  ["prefix", "prefix", "feat/"],
+  ["suffix", "suffix", "-wip"],
+  ["contains", "contains", "release"],
+  ["regex", "regex", "^(feat|fix)/"],
+];
+
+function bfSlot(slot) {
+  return ((state.settings && state.settings.branch_filters) || []).find((s) => s.slot === slot);
+}
+
+// bfScopeOf is the form's default scope: the layer the repo already defines
+// the slot at, and GLOBAL for a slot nothing defines yet — the TUI popup's
+// rule, and the one that never drops a brand-new rule into a committed
+// .gg.toml unasked. (Remove peels its own way: a "both" slot loses its repo
+// block first.)
+function bfScopeOf(s) {
+  const inRepo = s && (s.scope === "repo" || s.scope === "both");
+  return inRepo && state.settings && state.settings.repo_config_path ? "repo" : "global";
+}
+
+function bfRemoveLabel(s) {
+  if (s.scope === "both") return "remove (repo)";
+  if (s.scope === "global") return "remove (global)";
+  return "remove";
+}
+
+function bfSlotValue(s) {
+  if (s.usable) return esc(s.label) + " — " + esc(s.summary);
+  if (s.error) return "invalid — " + esc(s.error);
+  return s.scope ? esc(s.summary) : "—";
+}
+
+function bfSection(d) {
+  const warn = (d.branch_filter_warnings || []).length
+    ? `<div class="srow"><span class="swarn">${esc(d.branch_filter_warnings.join(" · "))}</span></div>`
+    : "";
+  const rows = (d.branch_filters || [])
+    .map((s) => {
+      const rm =
+        s.scope || s.usable || s.error
+          ? `<button class="sact" data-act="bf-remove" data-slot="${s.slot}">${esc(bfRemoveLabel(s))}</button>`
+          : "";
+      return (
+        `<div class="srow sbf" data-slot="${s.slot}"><span class="slbl">slot ${s.slot}</span>` +
+        `<span class="sval">${bfSlotValue(s)}</span>` +
+        `<button class="sact" data-act="bf-edit" data-slot="${s.slot}">edit…</button>${rm}</div>`
+      );
+    })
+    .join("");
+  return `
+    <h3>branch filters</h3>
+    <div class="srow"><span class="snote">five slots for the branches / remotes lists (alt+1…5 · alt+shift+1…5, or the ▽ chip). a repo block replaces the global block for the same slot</span></div>
+    ${warn}${rows}
+    <div id="bf-form" class="hidden"></div>`;
+}
+
+function bfField(s, key, label, hint) {
+  return (
+    `<label class="bffield"><span>${esc(label)}</span>` +
+    `<input type="text" data-bf="${key}" spellcheck="false" value="${esc(s[key] || "")}" placeholder="${esc(hint)}"></label>`
+  );
+}
+
+function bfOption(value, label, cur) {
+  return `<option value="${value}"${value === cur ? " selected" : ""}>${esc(label)}</option>`;
+}
+
+// openBfForm draws the editor for one slot under the list. Cancel simply
+// re-renders the panel: nothing is written until save.
+function openBfForm(slot) {
+  const s = bfSlot(slot);
+  const box = document.getElementById("bf-form");
+  if (!s || !box) return;
+  const d = state.settings;
+  const scope = bfScopeOf(s);
+  box.classList.remove("hidden");
+  box.innerHTML = `
+    <div class="bfhead">slot ${s.slot}</div>
+    ${BF_CLAUSES.map(([k, label, hint]) => bfField(s, k, label, hint)).join("")}
+    <label class="bffield"><span>mode</span><select data-bf="mode">
+      ${bfOption("hide", "hide matches", s.mode === "show" ? "show" : "hide")}${bfOption("show", "show only matches", s.mode === "show" ? "show" : "hide")}
+    </select></label>
+    <label class="bffield"><span>scope</span><select data-bf="scope">
+      ${bfOption("repo", "this repo (" + (d.repo_config_path || "no repo file") + ")", scope)}${bfOption("global", "global (" + (d.global_config_path || "") + ")", scope)}
+    </select></label>
+    <div class="srow"><span class="snote">every clause you set must hold (AND); leave a clause empty to drop it</span></div>
+    <div class="bfbtns"><button class="sact" data-act="bf-save" data-slot="${s.slot}">save rule</button><button class="sact" data-act="bf-cancel">cancel</button></div>
+    <div class="bferr"></div>`;
+  const first = box.querySelector("input[data-bf]");
+  if (first) first.focus();
+}
+
+// bfRefresh re-reads the settings payload and redraws, then reloads BOTH
+// sidebar lists: an active slot whose rule just changed must re-evaluate,
+// and a list may be filtered by a slot other than the one just edited.
+async function bfRefresh() {
+  try {
+    state.settings = await getJSON("/api/settings");
+  } catch {}
+  // NOT a fresh render: the panel's own text fields (the intervals, retention,
+  // the hook textarea) may hold unsaved typing, and saving a filter rule is no
+  // reason to throw it away without a word. pendingEdits sees DOM != server and
+  // restores them; the form still closes, because the section re-emits an empty
+  // #bf-form.
+  renderSettings();
+  if (window.__ggRefetchList) {
+    await window.__ggRefetchList("branches").catch(() => {});
+    await window.__ggRefetchList("remotes").catch(() => {});
+  }
+}
+
+async function saveBfForm(slot) {
+  const box = document.getElementById("bf-form");
+  if (!box) return;
+  const edit = { slot, scope: box.querySelector('[data-bf="scope"]').value, mode: box.querySelector('[data-bf="mode"]').value };
+  for (const [k] of BF_CLAUSES) edit[k] = box.querySelector(`[data-bf="${k}"]`).value.trim();
+  const err = box.querySelector(".bferr");
+  const controls = [...box.querySelectorAll("input, select, button")];
+  controls.forEach((el) => (el.disabled = true));
+  try {
+    await postJSON("/api/settings", { branch_filters: [edit] });
+  } catch (e) {
+    controls.forEach((el) => (el.disabled = false));
+    if (err) err.textContent = "not saved: " + e.message;
+    return;
+  }
+  await bfRefresh();
+}
+
+// removeBfSlot peels ONE layer, the TUI's d: the repo block when the repo
+// defines it (including a "both" slot, whose global rule then takes over),
+// the global block otherwise. A repo's settings page never deletes a global
+// rule as a side effect.
+async function removeBfSlot(slot) {
+  const s = bfSlot(slot);
+  if (!s) return;
+  const scope = s.scope === "global" ? "global" : "repo";
+  try {
+    await postJSON("/api/settings", { branch_filters: [{ slot, scope, remove: true }] });
+  } catch (e) {
+    const err = $("settings-box").querySelector(".serr");
+    if (err) err.textContent = "not removed: " + e.message;
+    return;
+  }
+  await bfRefresh();
+}
+
 const onOff = (b) => (b ? "on" : "off");
 const toggleBtn = (key, val) => `<button class="stgl${val ? " on" : ""}" data-k="${key}">${onOff(val)}</button>`;
 
@@ -221,6 +386,7 @@ function renderSettings(opts = {}) {
     <div class="srow"><span class="slbl">operations history</span>${toggleBtn("versions_enabled", d.versions_enabled)}<span class="snote">pre-operation branch snapshots (per repo)</span></div>
     <div class="srow"><span class="slbl">history retention</span><input type="text" inputmode="numeric" id="s-retention" value="${d.versions_max_age_days}"><span class="snote">days; -1 = keep forever</span></div>
     <div class="srow"><span class="slbl">operation log <span class="stui">(TUI)</span></span>${toggleBtn("op_log", d.op_log)}<span class="snote">${esc(d.op_log_path || "")}</span></div>
+    ${bfSection(d)}
     <h3>repo</h3>
     <div class="srow"><span class="slbl">settings file</span><span class="sval">${esc(d.repo_config_path)}</span><span class="snote">${d.repo_config_private ? "machine-local (private)" : "committed .gg.toml"} · move it from the TUI</span></div>
     <div class="srow shook"><span class="slbl">worktree post-create hook</span><textarea id="s-hook" rows="3" spellcheck="false">${esc(d.hook || "")}</textarea></div>
@@ -267,6 +433,18 @@ $("settings-box").addEventListener("click", (e) => {
       break;
     case "save":
       saveSettings();
+      break;
+    case "bf-edit":
+      openBfForm(Number(t.dataset.slot));
+      break;
+    case "bf-save":
+      saveBfForm(Number(t.dataset.slot));
+      break;
+    case "bf-cancel":
+      renderSettings(); // nothing was written; drop the form, keep panel edits
+      break;
+    case "bf-remove":
+      removeBfSlot(Number(t.dataset.slot));
       break;
     case "commit-graph":
       // The op writes the graph then sets fetch.writeCommitGraph — the same

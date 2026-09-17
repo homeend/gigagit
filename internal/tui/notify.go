@@ -120,6 +120,10 @@ func (m Model) applyRepoHealth(msg repoHealthMsg) (Model, tea.Cmd) {
 	}
 	m.repoHealth = msg.health
 	m.repoHealthKnown = true
+	// The common dir is the branch-filter promptstate key, and this is where it
+	// first resolves — the load that normally sticks (bfSlotsLoaded keeps later
+	// probes from re-reading and clobbering an alt+N made since).
+	m = m.loadBranchFilterSlots()
 	m.clipAvail = msg.clipAvail
 
 	prev := make(map[string]bool, len(m.notices))

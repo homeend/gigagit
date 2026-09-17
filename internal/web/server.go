@@ -114,6 +114,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/stashes", s.handleStashes)
 	mux.HandleFunc("GET /api/reflog", s.handleReflog)
 	mux.HandleFunc("GET /api/remotes", s.handleRemotes)
+	// Branch filters: the five slots, and the active one per list (the same
+	// per-repo record alt+1…5 writes in the TUI) — see branchfilter.go.
+	mux.HandleFunc("GET /api/branch-filters", s.handleBranchFilters)
+	mux.HandleFunc("PUT /api/branch-filter", writeGuard(s.handleBranchFilterSet))
 	mux.HandleFunc("GET /api/settings", s.handleSettingsGet)
 	mux.HandleFunc("POST /api/settings", writeGuard(s.handleSettingsSet))
 	// The browser's own layout: kept server-side because gg web's port (and so

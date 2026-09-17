@@ -214,7 +214,11 @@ registerHelp({ key: "!", html: "notifications — repository problems gg can fix
 // the key and the surface stay in one file; layers own the keyboard first, so
 // this only fires when nothing is open — the keys.js rule.
 document.addEventListener("keydown", (e) => {
-  if (e.key !== "!" || topLayer()) return;
+  // Modifiers disqualify it: on a US layout alt+shift+1 IS "!" , and that is
+  // the remotes branch-filter key (branchfilter.js). This listener is separate
+  // from keys.js's, so consuming the key there cannot stop it — the guard has
+  // to live here.
+  if (e.key !== "!" || e.altKey || e.ctrlKey || e.metaKey || topLayer()) return;
   if (e.target.closest && e.target.closest("input,textarea")) return;
   e.preventDefault();
   openNotifications();
