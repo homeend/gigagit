@@ -54,10 +54,13 @@ func Resolve(ctx context.Context, registryPath string, cwd *domain.Service, s st
 }
 
 // RepoOnly reports whether res names a checkout and nothing in it — no path,
-// no commit, no preview. Such a link has no place to navigate to; opening it
-// means opening gg in that checkout.
+// no commit, no preview, AND no hint. Such a link has no place to navigate
+// to; opening it means opening gg in that checkout. A hint IS a place (S10):
+// a link that carries one but resolved no address (gg://<repo>?shelf=X)
+// still has somewhere to land — the reveal itself (ruling S12/S13) — so it
+// must not fall into the bare-repository path a truly empty link takes.
 func RepoOnly(res domain.Resolved) bool {
-	return res.Addr.Path == "" && res.Commit == "" && res.Preview == nil
+	return res.Addr.Path == "" && res.Commit == "" && res.Preview == nil && res.Hint.Kind == ""
 }
 
 // TargetOf is the wire target a file address names.
@@ -101,6 +104,10 @@ func HunkLine(ctx context.Context, svc *domain.Service, cached bool, rev, path s
 // is asked there, wherever the caller ran.
 func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (steer.Command, error) {
 	c := steer.Command{Cmd: "navigate"}
+	// Set ONCE, before any of this function's several early returns (ruling
+	// S2 applied to a second function): every arm below returns this same c,
+	// so the hint rides whichever shape the link turns out to be.
+	c.HintKind, c.HintID = res.Hint.Kind, res.Hint.ID
 	if res.Preview != nil {
 		// The PAIR rides the wire, never the tip: the consumer resolves the tip
 		// itself, so a tip that moved between post and apply is honoured.
@@ -197,6 +204,12 @@ func Command(ctx context.Context, svc *domain.Service, res domain.Resolved) (ste
 	if res.Addr.Path == "" {
 		// A link with no path reveals the commit (spec §1).
 		if res.Commit == "" {
+			if res.Hint.Kind != "" {
+				// S13: a hint-only navigate — no File, no Commit, no
+				// Target. The reveal IS the landing (ruling S12: never
+				// adopt the entry's own stored address).
+				return c, nil
+			}
 			return steer.Command{}, ErrRepoOnly
 		}
 		c.Commit = res.Commit
@@ -236,6 +249,7 @@ func AtLink(res domain.Resolved, c steer.Command) model.Link {
 		Repo: model.LinkRepo{Abs: filepath.ToSlash(filepath.Clean(res.Checkout))},
 		Path: res.Addr.Path,
 		Side: model.NoteSideNew,
+		Hint: res.Hint,
 	}
 	switch {
 	case res.Preview != nil:

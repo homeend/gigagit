@@ -371,3 +371,83 @@ func TestPreviewFileLinkWithNoLineOpensTheFile(t *testing.T) {
 		t.Errorf("Line = %+v, want new:2", c.Line)
 	}
 }
+
+// --- Task 6: a hint is a place (S10), and it never changes WHERE a
+// navigate lands (S13) --------------------------------------------------
+
+// TestRepoOnlyTreatsAHintAsAPlace pins ruling S10's predicate change directly
+// against domain.Resolved values, with no repo needed: a truly empty
+// Resolved is still bare, but one carrying only a hint is not.
+func TestRepoOnlyTreatsAHintAsAPlace(t *testing.T) {
+	t.Parallel()
+	if !RepoOnly(domain.Resolved{}) {
+		t.Error("a truly empty Resolved must still be RepoOnly")
+	}
+	hinted := domain.Resolved{Hint: model.LinkHint{Kind: "bookmark", ID: "b1"}}
+	if RepoOnly(hinted) {
+		t.Error("RepoOnly must be false once Hint.Kind is set (S10)")
+	}
+}
+
+// TestCommandCarriesHintAlongsideAnAddress pins that a hint composing with an
+// ordinary address changes nothing about WHERE the navigate lands (spec
+// §3.3 rule 2) — the address-carrying row of the truth table, where domain
+// never checked presence, so an unknown id here is not an error.
+func TestCommandCarriesHintAlongsideAnAddress(t *testing.T) {
+	t.Parallel()
+	dir, svc := repo(t)
+	ctx := context.Background()
+	res := resolve(t, svc, "gg://"+abs(dir)+"/a.txt:2?shelf=s9")
+	c, err := Command(ctx, svc, res)
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+	if c.HintKind != "shelf" || c.HintID != "s9" {
+		t.Errorf("hint = %s/%s, want shelf/s9", c.HintKind, c.HintID)
+	}
+	if c.File != "a.txt" || c.Line == nil || c.Line.No != 2 {
+		t.Errorf("the hint must not change WHERE it lands: %+v", c)
+	}
+}
+
+// TestCommandHintOnlyRevealsWithNoAddress pins ruling S13: a link with no
+// address at all (gg://<repo>?bookmark=<id>) builds a navigate carrying only
+// the hint — no File, no Commit, no Target — and RepoOnly no longer refuses
+// it (S10). AtLink (the --at launcher producer) carries the hint through and,
+// per ruling S12, never adopts the bookmark's own stored address.
+//
+// SERIAL: sets domain.BookmarkStatePath, a process-global test seam, so this
+// must not run under t.Parallel() beside another test that also sets it.
+func TestCommandHintOnlyRevealsWithNoAddress(t *testing.T) {
+	old := domain.BookmarkStatePath
+	domain.BookmarkStatePath = t.TempDir()
+	t.Cleanup(func() { domain.BookmarkStatePath = old })
+
+	dir, svc := repo(t)
+	ctx := context.Background()
+	b, err := svc.BookmarkAdd(ctx, model.Bookmark{State: model.StateUnstaged, Worktree: dir, Path: "a.txt"})
+	if err != nil {
+		t.Fatalf("BookmarkAdd: %v", err)
+	}
+	res := resolve(t, svc, "gg://"+abs(dir)+"?bookmark="+b.ID)
+	if RepoOnly(res) {
+		t.Error("RepoOnly must be false once a hint is present (S10)")
+	}
+	c, err := Command(ctx, svc, res)
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+	if c.Cmd != "navigate" || c.File != "" || c.Commit != "" || c.Target != nil {
+		t.Fatalf("hint-only command = %+v, want no File/Commit/Target (S13)", c)
+	}
+	if c.HintKind != "bookmark" || c.HintID != b.ID {
+		t.Errorf("hint = %s/%s, want bookmark/%s", c.HintKind, c.HintID, b.ID)
+	}
+	at := AtLink(res, c)
+	if at.Hint.Kind != "bookmark" || at.Hint.ID != b.ID {
+		t.Errorf("AtLink hint = %+v, want it carried through (S10 producer)", at.Hint)
+	}
+	if at.Path != "" || at.Target.Commit != "" {
+		t.Errorf("AtLink must not adopt the bookmark's own stored address (S12): %+v", at)
+	}
+}
