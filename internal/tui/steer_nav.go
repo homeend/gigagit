@@ -30,6 +30,18 @@ const (
 // bound the pending would then land on an unrelated later diff.
 const steerPendingTTL = 5 * time.Second
 
+// pendingHint carries the navigate whose hint (spec §3.3) is being revealed
+// across the async bookmark/shelf load, mirroring pendingCompare's staged-
+// intent pattern (bookmark_compare.go). mustAnswer is true only for the
+// hint-only shape (S13): its landing IS the reveal, so the async load's own
+// present/absent finding is what answers the steer command. The with-address
+// shape has already answered by the time this is staged (navigateLanded), so
+// its absent case is a statusMsg notice only — never a second reply.
+type pendingHint struct {
+	cmd        steer.Command
+	mustAnswer bool
+}
+
 // pendingSteer is a navigate command parked until the load it needs arrives.
 type pendingSteer struct {
 	cmd   steer.Command
@@ -137,6 +149,12 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 		return m.steerNavigateCommitFile(c)
 	case c.File != "":
 		return m.steerNavigateStatusFile(c, false)
+	case c.HintKind != "" && c.Commit == "":
+		// S13: a hint-only navigate — no File (excluded above), no Commit, no
+		// Target (excluded above), no Step (excluded above). A link with no
+		// address at all, whose landing IS the reveal (ruling S12: never
+		// adopt the entry's own stored address).
+		return m.steerNavigateHintOnly(c)
 	case c.Commit != "":
 		// Probe first: gotoLoadedCommit (and steerToPanels) MOVE the view, and
 		// a commit the feed has not paged in is a refusal, not a reason to
@@ -153,7 +171,8 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 				nm.focus = panelCommits
 				nm = nm.focusTree()
 				nm.statusMsg = i18n.T("▸ opened %s", shortHash(c.Commit))
-				return nm, cmd
+				rm, rcmd := nm.navigateLanded(c, "opened "+shortHash(c.Commit))
+				return rm, tea.Batch(cmd, rcmd)
 			}
 			return m, m.answerSteer(c, steerFail(c, "commit not loaded in the feed"))
 		}
@@ -168,9 +187,58 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 			// was already selected would otherwise look like nothing happened.
 			nm.statusMsg = i18n.T("▸ opened %s", shortHash(c.Commit))
 		}
-		return nm, nm.answerSteer(c, steerOK(c, "revealed commit "+shortHash(c.Commit)))
+		return nm.navigateLanded(c, "revealed commit "+shortHash(c.Commit))
 	}
 	return m, m.answerSteer(c, steerFail(c, "navigate needs a file, a commit or a step"))
+}
+
+// navigateLanded is the ONE place a navigate's own success is recorded: it
+// answers the command — the navigate's success is whether it LANDED, never
+// whether its hint could be shown (spec §3.3 rule 3) — and, when c carries a
+// hint, stages the post-landing REVEAL: a bookmark/shelf popup with that row
+// selected, or a notice for a kind this build has no reveal for (S9: the
+// default degrades, it never silently drops). Every landing site that used
+// to build steerOK directly calls this instead, so the hint cannot end up
+// wired into only SOME of them — the S2/S5 defect shape this plan keeps
+// hitting.
+func (m Model) navigateLanded(c steer.Command, detail string) (Model, tea.Cmd) {
+	reply := m.answerSteer(c, steerOK(c, detail))
+	switch c.HintKind {
+	case "":
+		return m, reply
+	case "bookmark":
+		m.pendingHint = &pendingHint{cmd: c}
+		return m, tea.Batch(reply, m.loadBookmarksCmd())
+	case "shelf":
+		m.pendingHint = &pendingHint{cmd: c}
+		return m, tea.Batch(reply, m.loadShelfCmd(true))
+	default:
+		// "stash" (spec §3.4, no producer) and any future kind this build
+		// cannot reveal: the navigate already landed, so this degrades with
+		// a notice rather than touching the reply.
+		m.statusMsg = i18n.T("that link's hint has no landing gg can show")
+		return m, reply
+	}
+}
+
+// steerNavigateHintOnly lands a hint-only navigate (S13): a link with no
+// address at all, whose landing IS the reveal. Domain has already checked
+// presence for this shape before a Command could even be built (ruling S11
+// — resolveLink hard-errors an absent address-less hint at resolve time), so
+// kind is bookmark or shelf in every real path; the default below stays an
+// explicit refusal (S9) rather than a silent no-op for whatever reaches here
+// defensively (e.g. a hand-crafted command bypassing the normal producers).
+func (m Model) steerNavigateHintOnly(c steer.Command) (Model, tea.Cmd) {
+	switch c.HintKind {
+	case "bookmark":
+		m.pendingHint = &pendingHint{cmd: c, mustAnswer: true}
+		return m, m.loadBookmarksCmd()
+	case "shelf":
+		m.pendingHint = &pendingHint{cmd: c, mustAnswer: true}
+		return m, m.loadShelfCmd(true)
+	default:
+		return m, m.answerSteer(c, steerFail(c, "that link's "+c.HintKind+" hint has no landing gg can show"))
+	}
 }
 
 // steerCommitRow is the Commits panel's equivalent of steerStatusRow: it scans
@@ -254,7 +322,8 @@ func (m Model) steerNavigateStatusFile(c steer.Command, retried bool) (Model, te
 	tm, cmd := m.openStatusDiff(f, staged)
 	m = tm.(Model)
 	if c.Line == nil {
-		return m, tea.Batch(cmd, m.answerSteer(c, steerOK(c, "opened "+c.File)))
+		rm, rcmd := m.navigateLanded(c, "opened "+c.File)
+		return rm, tea.Batch(cmd, rcmd)
 	}
 	m.pendingSteer = &pendingSteer{cmd: c, stage: steerStageDiff, tag: m.diffTag, at: time.Now()}
 	return m, cmd
@@ -335,7 +404,8 @@ func (m Model) steerNavigateRef(c steer.Command) (Model, tea.Cmd) {
 	if startAtOrigin(c) {
 		nm = nm.steerNotice(i18n.T("▸ opened %s", name+" at "+shortHash(hash)))
 	}
-	return nm, tea.Batch(cmd, nm.answerSteer(c, steerOK(c, "opened "+name+" at "+shortHash(hash))))
+	rm, rcmd := nm.navigateLanded(c, "opened "+name+" at "+shortHash(hash))
+	return rm, tea.Batch(cmd, rcmd)
 }
 
 // steerNavigatePair lands a @<a>..<b> navigate: a change-set is BOUNDED, so
@@ -386,7 +456,8 @@ func (m Model) steerNavigatePair(c steer.Command) (Model, tea.Cmd) {
 		nm = nm.steerNotice(i18n.T("▸ opened %s..%s", shortHash(ahash), shortHash(bhash)))
 	}
 	if c.File == "" {
-		return nm, tea.Batch(cmd, nm.answerSteer(c, steerOK(c, "opened "+pair)))
+		rm, rcmd := nm.navigateLanded(c, "opened "+pair)
+		return rm, tea.Batch(cmd, rcmd)
 	}
 	// Park the COMPARE's tag: drainPendingCompare gates on it, never on
 	// m.filesHash (drainPendingFiles' gate) — openCompareFiles happens to also
@@ -442,7 +513,8 @@ func (m Model) drainPendingLoad(c steer.Command, lines []contentLine, opened, no
 		}
 		if c.Line == nil {
 			m.pendingSteer = nil
-			return m, tea.Batch(cmd, m.answerSteer(c, steerOK(c, opened)))
+			rm, rcmd := m.navigateLanded(c, opened)
+			return rm, tea.Batch(cmd, rcmd)
 		}
 		m.pendingSteer = &pendingSteer{cmd: c, stage: steerStageDiff, tag: m.diffTag, at: time.Now()}
 		return m, cmd
@@ -564,7 +636,7 @@ func (m Model) landSteer(v *diffView, c steer.Command) (Model, tea.Cmd) {
 	if clamped {
 		detail += "; clamped to line " + strconv.Itoa(no)
 	}
-	return m, m.answerSteer(c, steerOK(c, detail))
+	return m.navigateLanded(c, detail)
 }
 
 // failPending answers and clears whatever is parked. Every failure branch of
@@ -622,7 +694,7 @@ func (m Model) steerNavigatePreview(c steer.Command) (Model, tea.Cmd) {
 		} else {
 			m = m.steerNotice(i18n.T("▸ agent moved the focus"))
 		}
-		return m, m.answerSteer(c, steerOK(c, "revealed preview "+tgt+"..."+src))
+		return m.navigateLanded(c, "revealed preview "+tgt+"..."+src)
 	}
 	// Decided before the view moves: openDiffForFileLine refuses below 60
 	// columns with an i18n status message, and a reply must be English prose.
@@ -672,6 +744,11 @@ func steerCommandForLink(l model.Link) (steer.Command, bool) {
 		return steer.Command{}, false
 	}
 	c := steer.Command{Cmd: "navigate"}
+	// Set ONCE, before any of this function's several early returns (ruling
+	// S2's lesson applied to a second function): every arm below returns
+	// this same c, so the hint rides whichever shape the link turns out to
+	// be.
+	c.HintKind, c.HintID = l.Hint.Kind, l.Hint.ID
 	if p := l.Target.Preview; p != nil {
 		c.Target = &steer.Target{State: "preview", Source: p.Source, Target: p.Target}
 		if l.Path == "" {
@@ -719,11 +796,16 @@ func steerCommandForLink(l model.Link) (steer.Command, bool) {
 	}
 	if l.Path == "" {
 		// A commit reveal needs the FULL sha: the consumer compares hashes.
-		if l.Target.State != model.StateCommitted || len(l.Target.Commit) < 40 {
-			return steer.Command{}, false
+		if l.Target.State == model.StateCommitted && len(l.Target.Commit) >= 40 {
+			c.Commit = l.Target.Commit
+			return c, true
 		}
-		c.Commit = l.Target.Commit
-		return c, true
+		if l.Target.Commit == "" && l.Hint.Kind != "" {
+			// S13: a hint-only link — no path, no commit at all — whose
+			// landing IS the reveal.
+			return c, true
+		}
+		return steer.Command{}, false
 	}
 	t := &steer.Target{State: "unstaged"}
 	switch l.Target.State {

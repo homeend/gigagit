@@ -81,6 +81,19 @@ func (p *shelfPopup) selected() (model.ShelfEntry, bool) {
 	return p.items[vis[p.sel]], true
 }
 
+// shelfIndexByID finds id's index in a freshly loaded list, BEFORE a popup
+// exists to search — the reveal (Task 6) sets p.sel to it directly, which is
+// safe only because a fresh popup's filter is empty (visibleIdx() is then
+// the identity permutation over items).
+func shelfIndexByID(items []model.ShelfEntry, id string) int {
+	for i, e := range items {
+		if e.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
 // render composites the switcher box over `below` (the overlay-stack contract).
 func (p *shelfPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()

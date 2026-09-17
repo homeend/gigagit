@@ -61,6 +61,7 @@ type Model struct {
 	pendingDriftPaused     bool                // true when the armed op is resuming a merge/rebase paused for conflicts (see notify.go's driftNotice)
 	pendingGotoTip         string              // branch tip to jump to once the ctrl+g solo reload lands (drained by commitsReloadedMsg)
 	pendingSteer           *pendingSteer       // parked navigate (steer_nav.go); drained by the load it waits on
+	pendingHint            *pendingHint        // navigate whose hint (steer_nav.go) is being revealed; drained by bookmarksLoadedMsg/shelfLoadedMsg
 	startAt                model.Link          // --at: where to land once the preconditions below have landed
 	startAtPending         bool                // consumed exactly once, by startAtReady's last precondition
 	startAtPreviewsSeen    bool                // the srcPreviews read has landed at least once since startup
@@ -992,10 +993,45 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("shelf: %s", msg.err.Error())
 			m.shelfEntries = nil
 			m.pendingCompare = nil
-		} else {
-			m.shelfEntries = msg.entries
+			if ph := m.pendingHint; ph != nil {
+				m.pendingHint = nil
+				if ph.mustAnswer {
+					return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "loading the shelf: "+msg.err.Error()))
+				}
+			}
+			return m, nil
 		}
-		if msg.open && msg.err == nil {
+		m.shelfEntries = msg.entries
+		if msg.open {
+			// The hint reveal (Task 6, steer_nav.go's navigateLanded /
+			// steerNavigateHintOnly) takes priority over the ordinary open:
+			// it is staged by a navigate that just landed (or IS landing),
+			// never by a plain `G` keypress alongside a pendingCompare.
+			if ph := m.pendingHint; ph != nil && ph.cmd.HintKind == "shelf" {
+				m.pendingHint = nil
+				idx := shelfIndexByID(msg.entries, ph.cmd.HintID)
+				if idx < 0 {
+					// Absent (spec §3.3 rule 3: the hint degrades, it never
+					// fails) — do not push the popup at all.
+					m.statusMsg = i18n.T("that link's shelf entry is gone; it still landed")
+					if ph.mustAnswer {
+						return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "shelf "+ph.cmd.HintID+" is gone"))
+					}
+					return m, nil
+				}
+				p := newShelfPopup(msg.entries)
+				p.sel = idx
+				var reply tea.Cmd
+				if ph.mustAnswer {
+					reply = m.answerSteer(ph.cmd, steerOK(ph.cmd, "revealed shelf "+ph.cmd.HintID))
+				}
+				if existing := m.shelfSwitcher(); existing != nil {
+					*existing = *p
+				} else {
+					m = m.pushLayer(p)
+				}
+				return m, reply
+			}
 			p := newShelfPopup(msg.entries)
 			if pc := m.pendingCompare; pc != nil && pc.target == compareShelf {
 				if pc.entry != nil {
@@ -1055,7 +1091,40 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.statusMsg = i18n.T("bookmarks: %s", msg.err.Error())
 			m.pendingCompare = nil // don't let stale compare state hijack the next plain `g`
+			if ph := m.pendingHint; ph != nil {
+				m.pendingHint = nil
+				if ph.mustAnswer {
+					return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "loading bookmarks: "+msg.err.Error()))
+				}
+			}
 			return m, nil
+		}
+		// The hint reveal (Task 6) takes priority over the ordinary open: it
+		// is staged by a navigate that just landed (or IS landing), never by
+		// a plain `g` keypress alongside a pendingCompare.
+		if ph := m.pendingHint; ph != nil && ph.cmd.HintKind == "bookmark" {
+			m.pendingHint = nil
+			idx := bookmarkIndexByID(msg.items, ph.cmd.HintID)
+			if idx < 0 {
+				// Absent (spec §3.3 rule 3: the hint degrades, it never
+				// fails) — do not push the popup at all.
+				m.statusMsg = i18n.T("that link's bookmark is gone; it still landed")
+				if ph.mustAnswer {
+					return m, m.answerSteer(ph.cmd, steerFail(ph.cmd, "bookmark "+ph.cmd.HintID+" is gone"))
+				}
+				return m, nil
+			}
+			p := newBookmarkPopup(msg.items)
+			p.sel = idx
+			var reply tea.Cmd
+			if ph.mustAnswer {
+				reply = m.answerSteer(ph.cmd, steerOK(ph.cmd, "revealed bookmark "+ph.cmd.HintID))
+			}
+			if existing := m.bookmarkSwitcher(); existing != nil {
+				*existing = *p
+				return m, reply
+			}
+			return m.pushLayer(p), reply
 		}
 		p := newBookmarkPopup(msg.items)
 		if pc := m.pendingCompare; pc != nil && pc.target == compareBookmark {
@@ -4026,6 +4095,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingWorktreeMoveOld = ""                // a repo switch must not fire a stale move cleanup
 	m.pendingGotoTip = ""                        // a repo switch must not fire a stale tip jump
 	m.pendingSteer = nil                         // the repo it referred to is gone; its inbox went with it
+	m.pendingHint = nil                          // ditto: its navigate referred to the old repo
 	m.attention = map[attentionKey][]steerMark{} // the marks referred to the old repo's files
 	m.pendingCheckout = pendingCheckout{}        // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil

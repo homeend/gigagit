@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/repos"
 )
 
@@ -110,6 +111,46 @@ func TestGotoLinkBareSameCheckoutIsANotice(t *testing.T) {
 	}
 	if m.statusMsg != i18n.T("that link names this checkout") {
 		t.Errorf("status = %q", m.statusMsg)
+	}
+}
+
+// TestGotoLinkHintOnlySameCheckoutRevealsWithoutANotice pins ruling S10 at
+// the # paste prompt's own resolve path (resolveLinkCmd/RepoOnly): an
+// address-less link carrying a hint (gg://<repo>?bookmark=<id>) must NOT
+// take the bare-checkout notice above — it has somewhere to land, the
+// reveal itself (ruling S13).
+//
+// SERIAL: sets domain.BookmarkStatePath, a process-global test seam, so
+// this must not run under t.Parallel() (Go pauses every parallel test in
+// this package until the serial ones finish, so this is safe beside them).
+func TestGotoLinkHintOnlySameCheckoutRevealsWithoutANotice(t *testing.T) {
+	oldB := domain.BookmarkStatePath
+	domain.BookmarkStatePath = t.TempDir()
+	t.Cleanup(func() { domain.BookmarkStatePath = oldB })
+
+	m, top := gotoLinkModel(t)
+	b, err := m.svc.BookmarkAdd(context.Background(), model.Bookmark{
+		State: model.StateUnstaged, Worktree: top, Path: "a.txt",
+	})
+	if err != nil {
+		t.Fatalf("BookmarkAdd: %v", err)
+	}
+	m, cmd := pasteLink(t, m, linkTo(top, "?bookmark="+b.ID))
+	m, cmd = send(m, cmd())
+	if layerOf[*gotoCommitPopup](m) != nil {
+		t.Fatal("a resolved link must close the prompt")
+	}
+	m = pumpDiff(t, m, cmd)
+	if m.statusMsg == i18n.T("that link names this checkout") {
+		t.Fatal("a hint-carrying address-less link must not take the bare-checkout notice (ruling S10)")
+	}
+	p := m.bookmarkSwitcher()
+	if p == nil {
+		t.Fatal("the reveal IS the landing — the bookmark popup must open")
+	}
+	got, ok := p.selected()
+	if !ok || got.ID != b.ID {
+		t.Fatalf("selected = %+v ok=%v, want %s", got, ok, b.ID)
 	}
 }
 

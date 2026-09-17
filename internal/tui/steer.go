@@ -297,6 +297,20 @@ func steerEnumRefusal(c steer.Command) string {
 			return "unknown side " + strconv.Quote(c.Line.Side)
 		}
 	}
+	// The hint's closed set (model.LinkHint's grammar already closed it:
+	// "bookmark", "shelf" or "stash") mirrors the web endpoint's toSteerWire
+	// so the same command is refused the same way whichever consumer picks
+	// it up (S13 point 2).
+	if c.HintKind != "" {
+		switch c.HintKind {
+		case "bookmark", "shelf", "stash":
+		default:
+			return "unknown hint kind " + strconv.Quote(c.HintKind)
+		}
+		if c.HintID == "" {
+			return "a hint needs an id"
+		}
+	}
 	return ""
 }
 

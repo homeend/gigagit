@@ -176,6 +176,19 @@ func (p *bookmarkPopup) byID(id string) (model.Bookmark, bool) {
 	return model.Bookmark{}, false
 }
 
+// bookmarkIndexByID finds id's index in a freshly loaded list, BEFORE a
+// popup exists to search — the reveal (Task 6) sets p.sel to it directly,
+// which is safe only because a fresh popup's filter is empty (visibleIdx()
+// is then the identity permutation over items).
+func bookmarkIndexByID(items []model.Bookmark, id string) int {
+	for i, b := range items {
+		if b.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
 // update handles one key while the switcher is open (the overlay contract). The
 // popup is navigation-first (letters are actions, matching every other gg list);
 // `/` enters a filter sub-mode where runes type a query until esc/enter.
