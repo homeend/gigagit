@@ -37,14 +37,26 @@ type LinkPreview struct {
 	Source, Target string
 }
 
+// LinkPair is the two-dot half of a link target: a CHANGE-SET, git's
+// `<a>..<b>`. Unlike LinkPreview (which is deliberately a pair of branch
+// NAMES so it travels), each half here may be a sha or a refname: the common
+// producer resolves a commit's first parent and emits two shas, while a
+// human may reasonably type `@main..feat/x`.
+//
+// A pair is BOUNDED (spec §3.1): it evaluates to the files that differ
+// between its two halves, not to a whole tree.
+type LinkPair struct{ A, B string }
+
 // LinkTarget is which pair of texts the link addresses: the working tree
-// (index → file), the index (HEAD → index), a commit (parent → commit), or a
-// merge preview (merge-base → source tip).
+// (index → file), the index (HEAD → index), a commit (parent → commit), a
+// merge preview (merge-base → source tip), a branch/tag tip, or a change-set
+// pair.
 type LinkTarget struct {
 	State FileState // StateUnstaged (default), StateStaged or StateCommitted
-	// Commit is set iff State == StateCommitted AND Preview is nil; 7..64 hex
-	// characters — 64, not 40, because a sha-256 repository's commit ids are 64
-	// hex characters and every producer writes the FULL sha.
+	// Commit is set iff State == StateCommitted AND Preview, Ref and Pair are
+	// all nil/empty; 7..64 hex characters — 64, not 40, because a sha-256
+	// repository's commit ids are 64 hex characters and every producer writes
+	// the FULL sha.
 	Commit string
 	// Preview is set iff the target text carried git's three-dot pair
 	// (<target>...<source>). State is StateCommitted and Commit is EMPTY: which
@@ -53,6 +65,14 @@ type LinkTarget struct {
 	// meaningless zero-sha address for a preview link — callers use
 	// domain.ResolveLink and read Resolved.Addr / Resolved.Preview instead.
 	Preview *LinkPreview
+	// Ref is set iff the target read "ref:<name>" — a branch or tag TIP.
+	// State is StateCommitted and Commit is EMPTY: which commit the tip is
+	// today is a per-machine, per-moment question only domain can answer.
+	// A ref target is UNBOUNDED: it is a point, the whole tree at that tip.
+	Ref string
+	// Pair is set iff the target carried git's two-dot form (<a>..<b>).
+	// State is StateCommitted and Commit is EMPTY. A pair is BOUNDED.
+	Pair *LinkPair
 }
 
 // LinkHint is the HTML-anchor half of a link: WHICH UI surface it was copied
@@ -135,9 +155,10 @@ func LinkAbsOK(abs string) bool {
 // the resolver, which is also the only thing that can fill Path for a PARSED
 // local link (see LinkRepo.Abs).
 //
-// It is NOT meaningful for a PREVIEW link: the source tip is resolved per
-// machine, so the returned address carries an empty commit. domain.ResolveLink
-// (the only caller in the tree) branches on Target.Preview before reaching it.
+// It is NOT meaningful for a PREVIEW, REF or PAIR link: in each case the
+// commit is a per-machine (and, for a ref, per-moment) resolution, so the
+// returned address carries an empty commit. domain.ResolveLink (the only
+// caller in the tree) branches on Target.Preview/Ref/Pair before reaching it.
 func (l Link) Address() FileAddress {
 	return FileAddress{Path: l.Path, State: l.Target.State, Commit: l.Target.Commit}
 }
@@ -174,6 +195,18 @@ func (l Link) String() string {
 			b.WriteString(p.Source)
 			break
 		}
+		if r := l.Target.Ref; r != "" {
+			b.WriteString("@ref:")
+			b.WriteString(r)
+			break
+		}
+		if p := l.Target.Pair; p != nil {
+			b.WriteByte('@')
+			b.WriteString(p.A)
+			b.WriteString("..")
+			b.WriteString(p.B)
+			break
+		}
 		// StateCommitted is FileState's ZERO value, so a Link nobody filled in
 		// would otherwise render a bare "@". Only a real sha earns the target.
 		if l.Target.Commit != "" {
@@ -206,16 +239,22 @@ func (l Link) String() string {
 
 // ParseLink reads the strict grammar:
 //
-//	gg://<repo>/<path>[@<target>][:<line>]   file / line
-//	gg://<repo>/<path>[@<target>]#<hunk>     hunk (git @@ order, 1-based)
-//	gg://<repo>@<commit>                     a commit, no path
-//	gg://<repo>[/<path>]@<target>...<source>[:<line>|#<hunk>]  a merge preview
-//	gg://<repo>                              the repository itself
+//	gg://<repo>/<path>[@<target>][:<line>][?<hint>]   file / line
+//	gg://<repo>/<path>[@<target>]#<hunk>[?<hint>]     hunk (git @@ order, 1-based)
+//	gg://<repo>@<commit>[?<hint>]                     a commit, no path
+//	gg://<repo>[/<path>]@<target>...<source>[:<line>|#<hunk>][?<hint>]  a merge preview
+//	gg://<repo>[/<path>]@ref:<name>[:<line>|#<hunk>][?<hint>]           a branch/tag tip
+//	gg://<repo>[/<path>]@<a>..<b>[?<hint>]            a change-set
+//	gg://<repo>                                       the repository itself
 //
 // <repo> is a remote repository name, or "/" + an absolute checkout path.
-// <target> is "staged" or 7..64 hex (64 covers a sha-256 repository, whose
-// commit ids every producer writes in full); absent means the working tree. <line> is
-// "<n>" (new side) or "old:<n>". Errors are English and wrap ErrLink.
+// <target> is "staged", 7..64 hex (64 covers a sha-256 repository, whose
+// commit ids every producer writes in full), "ref:<name>" (a branch or tag
+// tip) or "<a>..<b>" (a change-set, each half a sha or a refname); absent
+// means the working tree. <line> is "<n>" (new side) or "old:<n>". <hint> is
+// "<kind>=<id>" naming the UI surface the link was copied from ("bookmark",
+// "shelf" or "stash"); it never changes what the link addresses. Errors are
+// English and wrap ErrLink.
 func ParseLink(s string) (Link, error) {
 	s = strings.TrimSpace(s)
 	if !strings.HasPrefix(s, LinkScheme) {
@@ -305,8 +344,30 @@ func ParseLink(s string) (Link, error) {
 			l.Target = LinkTarget{State: StateCommitted, Preview: &LinkPreview{Source: src, Target: tgt}}
 			break
 		}
+		if name, ok := strings.CutPrefix(tail, "ref:"); ok {
+			if !LinkRefOK(name) {
+				return linkErr("%q is not a branch or tag name", name)
+			}
+			l.Target = LinkTarget{State: StateCommitted, Ref: name}
+			break
+		}
+		if i := strings.Index(tail, ".."); i >= 0 {
+			a, bb := tail[:i], tail[i+2:]
+			if a == "" || bb == "" {
+				return linkErr("a change-set names <a>..<b>, got %q", tail)
+			}
+			// Each half is a sha or a refname. LinkRefOK already rejects the
+			// grammar's separators AND ".." (Task 1 tightened it), so a half
+			// that would reparse as a different pair cannot get through.
+			okHalf := func(s string) bool { return isShaLink(s) || LinkRefOK(s) }
+			if !okHalf(a) || !okHalf(bb) {
+				return linkErr("%q is not a pair of commits or branch names", tail)
+			}
+			l.Target = LinkTarget{State: StateCommitted, Pair: &LinkPair{A: a, B: bb}}
+			break
+		}
 		if !isHexLink(tail) || len(tail) < 7 || len(tail) > 64 {
-			return linkErr("target must be \"staged\", a commit sha of 7 to 64 hex characters, or <target>...<source>, got %q", tail)
+			return linkErr("target must be \"staged\", a commit sha of 7 to 64 hex characters, \"ref:<name>\", <a>..<b> or <target>...<source>, got %q", tail)
 		}
 		l.Target = LinkTarget{State: StateCommitted, Commit: tail}
 	}
