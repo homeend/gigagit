@@ -146,3 +146,30 @@ every `d`/`D`.
 `internal/theme/{theme.go,override.go}`, `internal/i18n/*.toml` (four),
 `internal/web/static/{filehist.js,style.css,index.html}`,
 `internal/web/blamerecentjs_test.go`, `CHANGELOG.md`, `docs/CLAUDE-details.md`.
+
+## Revision 2 (2026-09-17, approved): age FILTER + off on open
+
+**Off on open.** Opening blame always starts with the highlight OFF. Only the
+last dialog TEXT survives (it prefills the next `d`); the on/off state does
+not. TUI: `on`/`filter` move onto the `blameView` (a fresh view = off), the
+Model keeps only `blameRecentLast`. Web: `openFileBlame` resets
+`state.blameRecent.on = false`, keeps `last`.
+
+**Signed grammar** (`timespan.ParseFilter`): the text is up to two halves.
+`-<span>` = younger than (age ≤ span); `+<span>` = older than (age ≥ span);
+both inclusive. A leading unsigned span is the `-` half (`7d` ≡ `-7d`). Each
+sign owns every token up to the next sign; a space after the sign is fine.
+A bare unit means one of it (`+w` = older than 1 week); a bare number is
+still days. Examples: `+1d 2h -7d 4h`, `-7w`, `+w`, `+1d 23h -1234h`,
+`-7d +1d` (order-free). Uncommitted lines have age 0: they match a `-` half
+and never a `+` half. Errors: a second `-` or `+`, a sign with nothing
+after it, an older bound above the younger one (`+7d -1d`), plus the token
+errors of revision 1. `+7d -7d` is legal (matches age exactly 7d).
+
+**Badge / echo:** `Filter.String()` prints the canonical signed form,
+older half first: `-7d`, `+30d`, `+1d2h -7d4h`. TUI header badge and web
+title carry that text (no `≤`). Dialog hint: `-7d younger · +30d older ·
++1d -7d between`.
+
+**Parity:** `timespan.Table` rows gain the filter fields; the JS port
+(`parseFilter`/`formatFilter`) is pinned to it.
