@@ -60,7 +60,7 @@ function extraRows(menu, ctx) {
 // every feature edits one file. registerHelp appends a row from the feature's
 // own module at boot, after the static ones.
 function registerHelp({ key, html }) {
-  const box = $("help-box");
+  const box = $("help-body"); // the scrolling body under the bar: what the ? search walks
   if (!box) return;
   const row = document.createElement("div");
   row.className = "hrow";

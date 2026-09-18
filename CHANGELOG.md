@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: in-view text search in the `?` help popup.** The help overlay now
+  takes the same `/` `@` `]` `[` search as the diff pane and blame: `/`
+  opens a bar under the title, typing re-finds the help's rows (headings
+  included) case-insensitively, tints every hit — inside bold and code
+  markup too — brightens the current one and scrolls it into view;
+  `enter` keeps the query, `]` / `[` step with wrap, `esc` clears a kept
+  query before a second `esc` (or `?`) closes the help. A query never
+  survives a close. The TUI's `/` in its help viewer, in the browser.
+
 - **Web: an opened diff or blame takes the keyboard.** Opening a file's diff
   (by mouse or `enter`) or the blame overlay left the browser's focus on the
   file row or the button that opened it, so `↓`/`↑` moved the file cursor

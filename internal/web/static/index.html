@@ -232,7 +232,9 @@
 </div>
 <div id="help" class="hidden">
   <div id="help-box">
-    <h2>gg web — keys &amp; features</h2>
+    <h2>gg web — keys &amp; features <span id="help-h2-hint">/ find in this help · ] [ next / prev</span></h2>
+    <div id="help-search" class="hidden search-bar"><span id="help-search-lead">/</span><input id="help-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this help — enter keeps it, ] [ step, esc clears"><span id="help-search-count"></span></div>
+    <div id="help-body">
     <h3>Keys</h3>
     <div class="hrow"><span class="hkey">j / k · ↓ / ↑</span><span>move the selection (commit list, or file list in detail)</span></div>
     <div class="hrow"><span class="hkey">enter</span><span>open the selected commit (file list appears right) / open the selected file (diff)</span></div>
@@ -289,6 +291,7 @@
     <h3>Notes</h3>
     <div class="hrow"><span class="hkey">decisions</span><span>operations pause mid-flight and ask in the modal; destructive options render red; esc aborts when an abort option exists</span></div>
     <div class="hrow"><span class="hkey">connection</span><span>a dropped stream reconnects and replays; if the server is gone the op line reports it and the UI unlocks</span></div>
+    </div>
   </div>
 </div>
 <script type="module" src="/static/app.js"></script>

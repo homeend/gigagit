@@ -26,6 +26,7 @@ import "./identity.js";
 import "./prefixes.js";
 import "./exttools.js";
 import "./sessionerrors.js";
+import "./helpsearch.js";
 import "./palette.js";
 // Feature modules: imported for their side effects only (they register their
 // own menu rows and help rows — see menus.js).
