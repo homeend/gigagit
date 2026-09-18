@@ -388,6 +388,14 @@ func (m Model) landOnNote(dir int) (Model, bool) {
 // cursorToNoteLine moves the cursor to the line `find` names, expanding the view when
 // that line is a fold hiding the note (what f does), and reports whether it
 // moved. Shared by the in-file walk and the file step's landing.
+//
+// It reveals the NOTE, not just its anchor. A note's box renders AFTER the
+// line it hangs off, and setCursorLine scrolls the minimum that puts the
+// ANCHOR on screen — which parks it on the bottom row with every row of the
+// box below the fold. The user then jumps and sees no note at all, which reads
+// as a jump to nowhere. revealCursorNotes is the existing scroll that takes
+// the anchor's whole block (content row + its note rows) into view; a jump TO
+// a note is exactly what it is for.
 func (m Model) cursorToNoteLine(v *diffView, find func() (int, bool)) (Model, bool) {
 	body := m.diffBodyRows()
 	li, ok := find()
@@ -399,6 +407,7 @@ func (m Model) cursorToNoteLine(v *diffView, find func() (int, bool)) (Model, bo
 		return m, false
 	}
 	v.setCursorLine(li, body)
+	v.revealCursorNotes(body)
 	return m, true
 }
 
