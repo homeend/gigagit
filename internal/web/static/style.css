@@ -220,8 +220,8 @@ mark.r { background: var(--span-add); color: inherit; }
    rule on table.diff alone paints nothing in blame. A hit wins over the
    intraline mark and the token colour it rides on; the current one is
    brighter and outlined so it reads at a glance among many. */
-table.diff .hit, #blame-body .hit { background: var(--hit-bg); color: inherit; }
-table.diff .hit.cur, #blame-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
+table.diff .hit, #blame-body .hit, #help-body .hit { background: var(--hit-bg); color: inherit; }
+table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
 .notice { padding: 12px; color: var(--dim); }
 #foot { display: flex; gap: 14px; padding: 4px 12px; color: var(--dim); border-top: 1px solid var(--border); background: var(--bg-alt); white-space: nowrap; overflow: hidden; }
 #foot button { background: none; border: none; color: inherit; font: inherit; padding: 0; cursor: pointer; }
@@ -613,7 +613,11 @@ table.diff .hit.cur, #blame-body .hit.cur { background: var(--hit-cur-bg); outli
 #bigrepo-bar button:disabled { opacity: .45; cursor: default; }
 #help { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; cursor: pointer; }
 #help.hidden { display: none; }
-#help-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; max-width: 700px; max-height: 84vh; overflow-y: auto; cursor: default; }
+#help-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; max-width: 700px; max-height: 84vh; display: flex; flex-direction: column; cursor: default; }
+#help-body { overflow-y: auto; min-height: 0; }
+#help-search { flex: none; margin: 0 0 8px; }
+#help-search.hidden { display: none; }
+#help-h2-hint { float: right; font-weight: normal; font-size: 11px; color: var(--dim); margin-left: 12px; }
 #help-box h2 { margin: 0 0 10px; font-size: 15px; }
 #help-box h3 { margin: 14px 0 6px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
 #help-box .hrow { display: flex; gap: 14px; line-height: 1.65; }

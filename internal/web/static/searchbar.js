@@ -144,12 +144,12 @@ function bindSearchBar(id, host) {
 registerHelp({
   key: "/ · @ · ] · [ · in-view search",
   html:
-    "in an open diff, or in the blame overlay: <b>/</b> searches the visible text forward, <b>@</b> backward " +
+    "in an open diff, in the blame overlay, or in this help: <b>/</b> searches the visible text forward, <b>@</b> backward " +
     "(case-insensitive; in <b>changes only</b> mode the folded lines are not searched — unfold or press <b>f</b>). " +
     "Typing scrolls to the nearest hit as you go and the bar counts <b>hit/total</b>; <b>enter</b> keeps the query and " +
     "hands the keys back to the view, <b>]</b> / <b>[</b> step to the next / previous hit (wrapping), " +
     "<b>esc</b> while typing puts the view back where it was, <b>esc</b> on a kept query clears it — only the next esc " +
-    "leaves the diff or closes blame. Every hit is tinted, the current one brighter — the TUI's / @ ] [ in its diff, blame and preview views",
+    "leaves the diff or closes blame / help. Every hit is tinted, the current one brighter — the TUI's / @ ] [ in its diff, blame and preview views",
 });
 
 export { bindSearchBar };

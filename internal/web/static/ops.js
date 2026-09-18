@@ -12,6 +12,7 @@ import { reconcileStatusView, stage } from "./files.js";
 import { fetchPreviews, reopenPreviewIfMoved } from "./previews.js";
 import { fetchHealth } from "./bigrepo.js";
 import { checkDrift, hideDrift } from "./versions.js";
+import { clearHelpSearch, helpSearchKey, openHelpSearch } from "./helpsearch.js";
 
 // --- op transport client ---
 
@@ -627,13 +628,25 @@ function hideModal() {
 
 
 function openHelp() {
+  openHelpSearch(); // a fresh open starts unsearched, over the rows as they are now
   pushLayer("help", $("help"), {
     onKey: (e) => {
-      if (e.key === "Escape" || e.key === "?") closeLayer("help");
+      // A key typed into the search bar is the query's (its own listener
+      // takes enter and esc) — and must NOT be preventDefault'ed below, or
+      // the character never lands in the input.
+      if (e.target === $("help-search-input")) return true;
+      if (helpSearchKey(e)) return true;
+      if (e.key === "Escape" || e.key === "?") closeHelp();
       e.preventDefault();
       return true; // help owns the keyboard until closed
     },
   });
+}
+
+
+function closeHelp() {
+  clearHelpSearch(); // a kept query's tint must not outlive the overlay
+  closeLayer("help");
 }
 
 
