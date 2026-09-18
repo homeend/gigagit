@@ -153,7 +153,7 @@ func (m Model) openSubshell() (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("shell: %s", err.Error())
 		return m, nil
 	}
-	return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+	return m, handover(cmd, func(err error) tea.Msg {
 		return shellDoneMsg{script: script, err: err}
 	})
 }
@@ -170,7 +170,7 @@ func (m Model) runShellCommand(command string) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("shell: %s", err.Error())
 		return m, nil
 	}
-	return m, tea.ExecProcess(cmd, func(err error) tea.Msg {
+	return m, handover(cmd, func(err error) tea.Msg {
 		return shellDoneMsg{script: script, err: err}
 	})
 }

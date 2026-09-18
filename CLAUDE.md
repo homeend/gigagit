@@ -124,6 +124,7 @@ Entry point: `cmd/gg/main.go` — routes `shell-init`/`inspect`/CLI subcommands,
   them: TUI modal, CLI policy/stdin, MCP `MapDecider`, web parking modal.
   Include an explicit `abort` option when cancel must be expressible (the TUI
   maps esc to it).
+- **Every terminal handover rides `handover()`** (`internal/tui/autowrap.go`), never a raw `tea.ExecProcess`: the TUI runs with terminal autowrap off and the child needs it on (an AST-free grep test enforces this).
 - **TUI `Model` is a value receiver** with pointer fields (`modal`, `popup`) for state that must persist across the value copy.
 - **A window opened from a popup returns to that popup when closed.** The
   popup is hidden while the window is open, never destroyed. Layer-stack

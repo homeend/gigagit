@@ -87,7 +87,7 @@ func writeReadOnlyTempFile(name string, data []byte) (string, error) {
 // editorViewMsg handler so Bubble Tea suspends the TUI for the editor.
 func viewExternalCmd(path, name string, line int) tea.Cmd {
 	cmd := editorCommandAt(resolveEditor(), path, line)
-	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+	return handover(cmd, func(err error) tea.Msg {
 		return editorViewFinishedMsg{path: path, name: name, err: err}
 	})
 }
