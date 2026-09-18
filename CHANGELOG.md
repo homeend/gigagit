@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Fix: a note jump shows the NOTE, not just its anchor line.** `}`/`{`
+  land on the line a note hangs off, but a note's box renders *after* that
+  line and the cursor move scrolls only far enough to put the **anchor** on
+  screen — parking it on the bottom row with every row of the box below the
+  fold. The jump was landing correctly and showing nothing, which reads as a
+  jump to nowhere; most visible in a merge preview, whose new side is the
+  whole file at the tip, so an agent's note can sit a hundred lines from any
+  hunk. The jump now runs the same `revealCursorNotes` scroll the async notes
+  load already used, so the box that was jumped to is on screen. Covers the
+  in-file walk and the file step's landing alike.
+
 - **Fix: `}`/`{` land ON the note in the next file.** Stepping to the next
   (previous) file that carries notes reopened that file and left the cursor
   wherever the loader parked it — the first change block — which in a merge
