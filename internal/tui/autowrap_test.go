@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -50,6 +52,9 @@ func TestAutowrapOffRestoresWrapOnPanic(t *testing.T) {
 // the child paints, not on the child's own captured stdout.
 func TestHandoverCmdWrapsOnAroundTheChild(t *testing.T) {
 	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX-only: pins the child's exact stdout via sh -c printf")
+	}
 	var buf bytes.Buffer
 	c := &handoverCmd{Cmd: exec.Command("sh", "-c", "printf child")}
 	c.SetStdin(strings.NewReader(""))
@@ -72,7 +77,7 @@ func TestHandoverCmdRestoresWrapOffOnFailure(t *testing.T) {
 		name string
 		cmd  *exec.Cmd
 	}{
-		{"non-zero exit", exec.Command("sh", "-c", "exit 3")},
+		{"non-zero exit", exitCmd(3)},
 		{"never starts", exec.Command("/nonexistent/gg-no-such-binary")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -97,6 +102,9 @@ func TestHandoverCmdRestoresWrapOffOnFailure(t *testing.T) {
 // terminal writer regardless, because that is the screen the child draws on.
 func TestHandoverCmdKeepsPresetStdio(t *testing.T) {
 	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX-only: pins the child's exact stdout via sh -c printf")
+	}
 	var term, captured bytes.Buffer
 	cmd := exec.Command("sh", "-c", "printf child")
 	cmd.Stdout = &captured
@@ -112,6 +120,14 @@ func TestHandoverCmdKeepsPresetStdio(t *testing.T) {
 	if got := term.String(); got != "\x1b[?7h\x1b[?7l" {
 		t.Fatalf("terminal = %q: wrap bytes must reach the terminal, never the capture", got)
 	}
+}
+
+// exitCmd is a child that exits with code on either shell family.
+func exitCmd(code int) *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd", "/C", "exit "+strconv.Itoa(code))
+	}
+	return exec.Command("sh", "-c", "exit "+strconv.Itoa(code))
 }
 
 // TestNoRawExecProcessInTUI is the gate: every terminal handover must ride
