@@ -19,21 +19,56 @@ import (
 )
 
 // livePresence writes a fresh tui.json so the routing table's "TUI only" row
-// applies. Liveness is the mtime, so simply writing the file makes it live.
+// applies, and keeps it fresh the way a session does (keepPresenceAlive).
 func livePresence(t *testing.T, dir string) {
 	t.Helper()
 	if err := steer.Touch(dir, steer.TUIPresence, steer.Presence{PID: 4242, Worktree: "/w", Started: time.Now().UTC().Format(time.RFC3339)}); err != nil {
 		t.Fatal(err)
 	}
+	keepPresenceAlive(t, dir, steer.TUIPresence)
 }
 
 // liveWebPresence writes a fresh web.json pointing at url, so the routing
-// table's "web" rows apply.
+// table's "web" rows apply, and keeps it fresh (keepPresenceAlive).
 func liveWebPresence(t *testing.T, dir, url string) {
 	t.Helper()
 	if err := steer.Touch(dir, steer.WebPresence, steer.Presence{PID: 77, Worktree: "/w", URL: url}); err != nil {
 		t.Fatal(err)
 	}
+	keepPresenceAlive(t, dir, steer.WebPresence)
+}
+
+// keepPresenceAlive mirrors a real session's 1 s presence tick: it refreshes
+// the presence file's mtime every 500 ms until the test ends. Liveness is the
+// mtime and steer.LiveWindow is 5 s; a test that writes the presence ONCE and
+// then resolves a link through several git spawns before the presence is read
+// goes stale under full-suite load on Windows (measured ages of 5–40 s), and
+// "no live gg session" / a launch instead of a post follow. The tick only
+// refreshes a file that exists (os.Chtimes, never Touch's rewrite path), so a
+// test that deliberately Removes a presence is left alone; a refresh failure
+// ends the tick.
+func keepPresenceAlive(t *testing.T, dir, name string) {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		tick := time.NewTicker(500 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-tick.C:
+				now := time.Now()
+				if err := os.Chtimes(path, now, now); err != nil {
+					return
+				}
+			}
+		}
+	}()
+	t.Cleanup(func() { close(stop); <-done })
 }
 
 // answer runs a fake consumer: it drains one command and replies. Returns the
