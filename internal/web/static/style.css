@@ -64,6 +64,11 @@ body {
 body.resizing { cursor: col-resize; user-select: none; }
 .pane { overflow: auto; border-right: 1px solid var(--border); min-width: 0; }
 .pane.focused { box-shadow: inset 2px 0 0 var(--accent); }
+/* The diff pane and the blame body take DOM focus when they open (and on a
+   click inside), so the wheel, space and the page keys scroll the content the
+   reader is looking at — never the file row or the button the mouse left the
+   focus on. No ring: the .focused inset bar / the overlay border say enough. */
+#diff-pane:focus, #blame-body:focus { outline: none; }
 /* flex column so the quick-filter bar SHRINKS the scroll area instead of
    pushing its last row under the pane edge (the load-more hint was clipped) */
 #commits-pane { overflow: hidden; display: flex; flex-direction: column; }

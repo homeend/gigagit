@@ -543,6 +543,7 @@ async function openEntryFileDiff({ left, right, path, leftLabel, rightLabel, sta
     if (gen !== state.detailGen) return; // superseded by a newer open or esc
     renderDiff(d);
     jumpToFirstChange();
+    focusDiff();
   } catch (e) {
     if (gen !== state.detailGen) return;
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
@@ -915,6 +916,7 @@ async function openFile(i) {
     const [d] = await Promise.all([getJSON("/api/diff?" + q), fetchNotes(false)]);
     renderDiff(d);
     jumpToFirstChange();
+    focusDiff();
   } catch (e) {
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
@@ -945,6 +947,7 @@ async function openStatusDiff(i) {
     renderDiff(d);
     renderHunkBar();
     jumpToFirstChange();
+    focusDiff();
   } catch (e) {
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
@@ -2117,6 +2120,49 @@ function changeNavRows() {
 }
 
 
+// ---- content focus + keyboard scrolling ----------------------------------
+// Opening a diff puts DOM focus on the pane (tabindex=-1 in index.html), so
+// the wheel, space and the page keys scroll the diff — not the file row, the
+// blame button or whatever the mouse left the focus on. The key handler
+// below does not depend on that focus, though: in the diff layout the arrows
+// and page keys always scroll the diff, wherever the focus sits.
+function focusDiff() {
+  const pane = $("diff-pane");
+  if (document.activeElement !== pane) pane.focus({ preventScroll: true });
+}
+
+// scrollKey scrolls `el` for a navigation key (↑/↓ a step, PgUp/PgDn a page
+// less one step so context carries over, Home/End the ends) and reports
+// whether the key was one. The step is a few text rows — the TUI scrolls a
+// line per arrow; a browser's own arrow scroll is about the same.
+const SCROLL_STEP = 40;
+function scrollKey(el, e) {
+  let dy = null;
+  switch (e.key) {
+    case "ArrowDown": dy = SCROLL_STEP; break;
+    case "ArrowUp": dy = -SCROLL_STEP; break;
+    case "PageDown": dy = el.clientHeight - SCROLL_STEP; break;
+    case "PageUp": dy = -(el.clientHeight - SCROLL_STEP); break;
+    case "Home": el.scrollTop = 0; e.preventDefault(); return true;
+    case "End": el.scrollTop = el.scrollHeight; e.preventDefault(); return true;
+    default: return false;
+  }
+  el.scrollTop += dy;
+  e.preventDefault();
+  return true;
+}
+
+// diffScrollKey is the diff layout's arrow / page / home / end handling:
+// scroll the diff (the TUI's ↑↓ scroll a line there). j/k stay the file
+// cursor's, so the keyboard can still walk the file list behind the diff.
+// Not while a conflict picker owns the pane — it has its own cursor.
+function diffScrollKey(e) {
+  if (state.layout !== "diff" || conflictPick) return false;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  return scrollKey($("diff-pane"), e);
+}
+
+
 // ---- in-view search (the TUI's / @ ] [ in its diff view) -----------------
 // The engine (inviewsearch.js) and the bar (searchbar.js) are shared with
 // blame; this block is what the DIFF host owns: which lines are searched,
@@ -2208,6 +2254,7 @@ const diffSearchBar = bindSearchBar("diff-search", {
   },
   render: () => rerenderDiffKeepingPlace(true),
   goTo: goToDiffHit,
+  focus: focusDiff, // enter hands the keys back to the CONTENT, not the body
 });
 
 // diffSearchKey is the diff layout's first refusal on a bare key: / and @
@@ -2992,4 +3039,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, diffSearchKey, diffSearchBar, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };

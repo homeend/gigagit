@@ -95,7 +95,7 @@
     <ul id="files-list"></ul>
   </section>
   <div id="rs-detail" class="resizer" title="drag to resize · double-click to reset"></div>
-  <section id="diff-pane" class="pane">
+  <section id="diff-pane" class="pane" tabindex="-1">
     <div id="diff-header">
       <span id="diff-title"></span>
       <span id="hunk-bar" class="hidden"><button id="hunk-stage" disabled>stage selected (0)</button><button id="hunk-all">all</button><button id="hunk-none">none</button></span>
@@ -186,7 +186,7 @@
   <div id="blame-box">
     <div id="blame-title"></div>
     <div id="blame-search" class="hidden search-bar"><span id="blame-search-lead">/</span><input id="blame-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this file — enter keeps it, ] [ step, esc clears"><span id="blame-search-count"></span></div>
-    <div id="blame-body"></div>
+    <div id="blame-body" tabindex="-1"></div>
     <div id="blame-hint">click a line's commit to open it · w long lines: scroll / wrap / cutoff · / find · ] [ next / prev · d age highlight · D off · esc closes</div>
   </div>
 </div>
