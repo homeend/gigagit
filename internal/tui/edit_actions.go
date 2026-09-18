@@ -149,7 +149,7 @@ func (m Model) editFileAtCmd(rel string, line int) tea.Cmd {
 	abs := filepath.Join(m.currentWorktree, rel)
 	cmd := editorCommandAt(resolveEditor(), abs, line)
 	cmd.Dir = m.currentWorktree
-	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+	return handover(cmd, func(err error) tea.Msg {
 		return editorFinishedMsg{path: rel, err: err}
 	})
 }

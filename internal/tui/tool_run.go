@@ -317,7 +317,7 @@ func (m Model) execToolCmd(pending *pendingToolRun) tea.Cmd {
 	}
 	preMtime := toolPreMtime(pending)
 	cmd := toolExecCmd(context.Background(), script, m.currentWorktree, pending.env)
-	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+	return handover(cmd, func(err error) tea.Msg {
 		return toolFinishedMsg{pending: pending, script: script, preMtime: preMtime, start: start, err: err}
 	})
 }

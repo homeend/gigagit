@@ -8,6 +8,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Fix: a handed-over terminal wraps again.** Since the 2026-09-16 wide-glyph
+  fix ran the TUI with the terminal's automatic line wrap (DECAWM) off, every
+  child gg suspended itself for — the editor, the ctrl+o subshell and its
+  one-shot command, the external viewer, a terminal-mode conflict/commit tool
+  — inherited a non-wrapping terminal: the subshell clipped long lines at the
+  right edge, and Junie's full-screen renderer (26.9.7, which advances rows
+  by letting the terminal wrap) painted its whole grid onto the top row, so
+  "Junie (yolo)" for a conflict showed one line and nothing else. Every
+  handover now rides one path that switches wrap on before the child starts
+  and off again the moment it exits (also when it fails to start or exits
+  non-zero), so the clip guard still holds for the rest of the session; a
+  test forbids a raw `tea.ExecProcess` in the TUI package.
+
 - **Blame: highlight lines by commit age (TUI + web).** In the blame view
   `d` asks for an age filter and tints every matching line across gutter and
   code, so the fresh — or the ancient — edits in a file stand out at a glance.
