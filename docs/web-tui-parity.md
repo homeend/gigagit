@@ -80,6 +80,12 @@ Commit amend is TUI-only too (the web's commit op has no amend lane).
   side (subject, author, sha prefix). The TUI adds `ctrl+f` eager paging into
   unloaded history, the `\` server-side feed filter (path / author / message /
   date range), and the `F` fuzzy file finder.
+- **Searching text in a view.** Both have the in-view search (`/`, `@`
+  backward, `]`/`[` step with wrap, `esc` clears) in the diff view and in
+  blame, with the same rules (case-insensitive, visible lines only, a same
+  row counted once). The TUI also searches the View-file preview and the
+  hunk picker; the web's file-history overlay and conflict picker have no
+  search.
 - **Stash create.** The web stashes the whole tree with a message; the TUI
   popup offers a per-file checklist.
 - **Commit context menu.** Mostly closed. What the TUI still has that the web

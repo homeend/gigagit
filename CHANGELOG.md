@@ -8,6 +8,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: in-view text search in the diff and in blame (`/`, `@`, `]`, `[`).**
+  The browser UI now has the TUI's in-view search: in an open diff, or in the
+  blame overlay, `/` opens a search bar under the toolbar (`@` opens it
+  searching backward) and every keystroke re-finds the visible text
+  case-insensitively, tints every hit, brightens the current one and scrolls
+  it into view — from where you were reading, not from the top. `enter`
+  keeps the query and hands the keys back to the view, `]` / `[` step to the
+  next / previous hit (wrapping; in scroll mode the side's pan follows the
+  hit), `esc` while typing puts the view back where it was, and `esc` on a
+  kept query clears it — only the next `esc` leaves the diff or closes
+  blame. The bar counts `hit/total` (`0/0` for no match). As in the TUI it
+  is an in-view search: in **changes only** mode the folded lines are not
+  searched, and a row whose two sides carry the same text is counted once
+  and painted in both columns. Toggling `f`, a resize or a notes refresh
+  re-finds; stepping to another file starts with no search. The footer's
+  `/` chip reads **/ find** while a diff is open (the commit filter it names
+  elsewhere has no list to filter there), and the `?` help and the blame
+  hint line document the keys.
+
 - **Fix: `}`/`{` land ON the note in the next file.** Stepping to the next
   (previous) file that carries notes reopened that file and left the cursor
   wherever the loader parked it — the first change block — which in a merge
