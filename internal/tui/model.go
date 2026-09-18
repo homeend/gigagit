@@ -149,6 +149,10 @@ type Model struct {
 
 	noteCounts    domain.NoteCounts // badge counts (srcNotes); zero value = no badges
 	notesAgentOff bool              // `a`: hide agent-written notes for this session
+	// noteLand parks the landing a }/{ FILE step owes the user: the step opens
+	// the next noted file asynchronously, so the note to sit on is not known
+	// until that file's notes arrive (notesLoadedMsg). nil = nothing parked.
+	noteLand *noteLanding
 
 	// filesPreviewSet / filesPreviewCounts are the open preview's note scope
 	// and its per-path badge counts; nil/empty when the files view is not
@@ -511,6 +515,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		dv.notes = msg.notes
 		dv.relayout(dv.width)
 		dv.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
+		// A }/{ file step parked its landing here, not at open time: the notes
+		// it must land on only exist now. It supersedes the re-anchor above —
+		// the cursor it restored is the loader's, not one the user placed.
+		if m.noteLand != nil && m.noteLand.tag == msg.tag {
+			dir := m.noteLand.dir
+			m.noteLand = nil
+			var landed bool
+			if m, landed = m.landOnNote(dir); landed {
+				return m, nil
+			}
+		}
 		if wasVisible {
 			dv.revealCursorNotes(body)
 		}

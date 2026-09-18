@@ -8,6 +8,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Fix: `}`/`{` land ON the note in the next file.** Stepping to the next
+  (previous) file that carries notes reopened that file and left the cursor
+  wherever the loader parked it — the first change block — which in a merge
+  preview, where the note may sit hundreds of lines away in an unchanged run,
+  reads as a jump to nowhere near any note. Worse backwards: `{` landed above
+  the previous file's notes, so the next `{` found nothing before the cursor
+  and dead-ended on "no previous file with notes" instead of walking back
+  through them. The step now parks its landing (the file and its notes both
+  load asynchronously, so the line cannot be chosen at key time) and, when
+  that file's notes arrive, puts the cursor on its **first** note for `}` and
+  its **last** for `{`, expanding a fold that hides it exactly as `}` does
+  inside one file. Any key the user presses in the meantime spends the parked
+  landing, so a slow notes load can never yank a cursor they have since moved.
+
 - **Fix: a handed-over terminal wraps again.** Since the 2026-09-16 wide-glyph
   fix ran the TUI with the terminal's automatic line wrap (DECAWM) off, every
   child gg suspended itself for — the editor, the ctrl+o subshell and its
