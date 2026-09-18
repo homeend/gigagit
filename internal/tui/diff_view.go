@@ -858,6 +858,10 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	fileArmed := v.fileArm
 	v.fileArm = fileArmNone
 	m.diffNotice = ""
+	// A parked }/{ landing lives until the next key too: once the user has
+	// touched the cursor themselves, a notes load arriving late must not yank it
+	// away. The }/{ cases below re-park their own.
+	m.noteLand = nil
 	zc := v.zCycle
 	v.zCycle = alignCenter
 	body := m.diffBodyRows()

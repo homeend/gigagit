@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"math"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -322,13 +323,32 @@ func (m Model) withNoteTarget(act func(Model, noteTarget) (tea.Model, tea.Cmd)) 
 // nextNoteLine is the next (dir>0) / previous (dir<0) logical line that carries
 // a note — including a FOLD entry that hides one, which the caller expands.
 func (v *diffView) nextNoteLine(dir int) (int, bool) {
+	return v.noteLineFrom(dir, v.curLine)
+}
+
+// edgeNoteLine is this file's FIRST (dir>0) / LAST (dir<0) annotated line,
+// wherever the cursor happens to sit. It is where a }/{ file step lands: the
+// step's promise is "the next file that carries notes", so arriving anywhere
+// but on one of that file's notes — the loader parks the cursor on the first
+// change block — is the gesture stopping one step short.
+func (v *diffView) edgeNoteLine(dir int) (int, bool) {
+	if dir > 0 {
+		return v.noteLineFrom(dir, -1)
+	}
+	return v.noteLineFrom(dir, math.MaxInt)
+}
+
+// noteLineFrom is the nearest annotated logical line strictly beyond `from` in
+// direction dir — including a FOLD entry that hides one, which the caller
+// expands.
+func (v *diffView) noteLineFrom(dir, from int) (int, bool) {
 	byLine, foldMark := v.noteRowIndex()
 	best, found := -1, false
 	consider := func(li int) {
-		if dir > 0 && li <= v.curLine {
+		if dir > 0 && li <= from {
 			return
 		}
-		if dir < 0 && li >= v.curLine {
+		if dir < 0 && li >= from {
 			return
 		}
 		if !found || (dir > 0 && li < best) || (dir < 0 && li > best) {
@@ -352,8 +372,24 @@ func (m Model) jumpNote(dir int) (Model, bool) {
 	if v == nil {
 		return m, false
 	}
+	return m.cursorToNoteLine(v, func() (int, bool) { return v.nextNoteLine(dir) })
+}
+
+// landOnNote puts the cursor on this file's first (dir>0) / last (dir<0) note
+// — the landing a }/{ file step parks until the new file's notes arrive.
+func (m Model) landOnNote(dir int) (Model, bool) {
+	v := m.diffLayer()
+	if v == nil {
+		return m, false
+	}
+	return m.cursorToNoteLine(v, func() (int, bool) { return v.edgeNoteLine(dir) })
+}
+
+// cursorToNoteLine moves the cursor to the line `find` names, expanding the view when
+// that line is a fold hiding the note (what f does), and reports whether it
+// moved. Shared by the in-file walk and the file step's landing.
+func (m Model) cursorToNoteLine(v *diffView, find func() (int, bool)) (Model, bool) {
 	body := m.diffBodyRows()
-	find := func() (int, bool) { return v.nextNoteLine(dir) }
 	li, ok := find()
 	if !ok {
 		return m, false
@@ -406,7 +442,20 @@ func (m Model) stepNotedFile(dir int) (tea.Model, tea.Cmd) {
 		tm, cmd = nm.stepDiffFile(dir)
 		nm = tm.(Model)
 	}
+	// Park the landing: the file just opened loads asynchronously, and its
+	// notes land later still (notesLoadedMsg), so the line to sit on cannot be
+	// chosen here. Tagged with the diff the step opened, exactly like every
+	// other parked navigation — notes for a file the user has already stepped
+	// away from must never move the cursor.
+	nm.noteLand = &noteLanding{dir: dir, tag: nm.diffTag}
 	return nm, cmd
+}
+
+// noteLanding is the cursor placement a }/{ file step owes the user once the
+// file it opened has told us where its notes are.
+type noteLanding struct {
+	dir int    // >0 = land on the file's first note, <0 = on its last
+	tag string // the diffTag the step opened; a mismatch drops the landing
 }
 
 // nextNotedFile counts how many plain file steps in direction dir land on a
