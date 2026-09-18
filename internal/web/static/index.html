@@ -110,6 +110,7 @@
         <button id="hist-btn" title="this file's history">history</button>
         <button id="blame-btn" title="blame this file">blame</button>
       </span>
+      <div id="diff-search" class="hidden search-bar"><span id="diff-search-lead">/</span><input id="diff-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this diff — enter keeps it, ] [ step, esc clears"><span id="diff-search-count"></span></div>
     </div>
     <div id="diff-body"></div>
     <div id="diff-hbars" class="hbars hidden"></div>
@@ -184,8 +185,9 @@
 <div id="blame" class="hidden">
   <div id="blame-box">
     <div id="blame-title"></div>
+    <div id="blame-search" class="hidden search-bar"><span id="blame-search-lead">/</span><input id="blame-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this file — enter keeps it, ] [ step, esc clears"><span id="blame-search-count"></span></div>
     <div id="blame-body"></div>
-    <div id="blame-hint">click a line's commit to open it · w long lines: scroll / wrap / cutoff · d age highlight · D off · esc closes</div>
+    <div id="blame-hint">click a line's commit to open it · w long lines: scroll / wrap / cutoff · / find · ] [ next / prev · d age highlight · D off · esc closes</div>
   </div>
 </div>
 <div id="review" class="hidden">

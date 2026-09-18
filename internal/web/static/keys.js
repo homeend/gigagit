@@ -5,7 +5,7 @@ import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
-import { addNotePrompt, cycleFilesSort, cycleTextMode, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNotesAgent } from "./files.js";
+import { addNotePrompt, cycleFilesSort, cycleTextMode, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNotesAgent } from "./files.js";
 import { openPalette } from "./palette.js";
 import { branchFilterKey } from "./branchfilter.js";
 
@@ -110,6 +110,10 @@ document.addEventListener("keydown", (e) => {
     }
     return;
   }
+  // The diff layout's in-view search has first refusal: / and @ open it
+  // (the commits pane is off-screen there, so / has no filter to open), ] [
+  // step it, and esc clears a kept query BEFORE it would leave the diff.
+  if (diffSearchKey(e)) return;
   if (e.key === "j" || e.key === "ArrowDown") {
     e.preventDefault();
     moveCursor(1);
@@ -196,7 +200,7 @@ $("foot").addEventListener("click", (e) => {
     case "back": drillOut(); break;
     case "sidebar": toggleSidebar(); break;
     case "graph": toggleGraphMode(); break;
-    case "filter": openCommitFilter(); break;
+    case "filter": if (state.layout === "diff") diffSearchBar.open(false); else openCommitFilter(); break;
     case "stage": stageFocused(false); break;
     case "unstage": stageFocused(true); break;
     case "sort": if (state.pane === "files" && state.filesMode === "status") cycleFilesSort(); break;

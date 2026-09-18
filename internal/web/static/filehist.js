@@ -8,6 +8,8 @@ import { rev } from "./review.js";
 import { openCommitByHash } from "./commits.js";
 import { cycleTextMode, diffHTML, mountPanBars, renderCell, toggleDiffView } from "./files.js";
 import { registerHelp } from "./menus.js";
+import { Search } from "./inviewsearch.js";
+import { bindSearchBar } from "./searchbar.js";
 
 // --- file history overlay ----------------------------------------------------
 // A layer, not a layout mode: esc drops you exactly where you were. Gen-guarded
@@ -230,10 +232,32 @@ async function openFileBlame(path, rev) {
     return;
   }
   blameBase = "blame — " + path + (rev ? " @ " + rev.slice(0, 8) : " (working tree)");
-  const lines = body.lines || [];
+  blameLines = body.lines || [];
+  blameSearchBar.reset(); // a new file is a new search
+  renderBlame();
+  // Off on open: a fresh overlay never inherits the last one's tint; only
+  // the last dialog text survives, to prefill the next d.
+  state.blameRecent.on = false;
+  applyBlameRecent();
+  // w cycles the shared long-line mode, d/D drive the age highlight, / @ ] [
+  // the in-view search; everything else (esc included) is left to the
+  // stack's default handling.
+  pushLayer("blame", $("blame"), { onKey: blameKey });
+  $("blame-body").scrollTop = 0;
+}
+
+// blameLines is the open file's blame, kept so the overlay can be redrawn
+// (a search re-find paints its hits in the render) without a refetch.
+let blameLines = [];
+
+// renderBlame draws blameLines into the overlay. The in-view search is
+// re-found here, over the lines drawn, so hits and paint always agree; every
+// row carries its index (data-i) so a hit can be found by it.
+function renderBlame() {
+  if (blameSearch.query) blameSearch.refind(blameLines.map((l, i) => ({ row: i, side: 0, text: l.text || "" })));
   let html = "";
   let prev = null;
-  for (const l of lines) {
+  blameLines.forEach((l, i) => {
     const first = l.hash !== prev;
     prev = l.hash;
     const gut = !first
@@ -244,20 +268,81 @@ async function openFileBlame(path, rev) {
     // Every row carries its author time (unix seconds) and an uncommitted
     // mark, so the recent-lines highlight can be re-applied without a refetch.
     html +=
-      `<div class="bline${first ? " bfirst" : ""}" data-t="${Number(l.time) || 0}"${l.hash ? "" : ' data-u="1"'}>` +
+      `<div class="bline${first ? " bfirst" : ""}" data-i="${i}" data-t="${Number(l.time) || 0}"${l.hash ? "" : ' data-u="1"'}>` +
       `<span class="bgut">${gut}</span>` +
       `<span class="bno">${l.line}</span>` +
-      `<span class="btext">${renderCell(l.text, null, l.tok, "") || " "}</span></div>`;
-  }
+      `<span class="btext">${renderCell(l.text, null, l.tok, "", blameSearch.query ? blameSearch.hitsOn(i, 0) : null) || " "}</span></div>`;
+  });
   $("blame-body").innerHTML = html || `<div class="notice">(empty file)</div>`;
-  // Off on open: a fresh overlay never inherits the last one's tint; only
-  // the last dialog text survives, to prefill the next d.
-  state.blameRecent.on = false;
-  applyBlameRecent();
-  // w cycles the shared long-line mode, d/D drive the age highlight;
-  // everything else (esc included) is left to the stack's default handling.
-  pushLayer("blame", $("blame"), { onKey: blameKey });
-  $("blame-body").scrollTop = 0;
+  blameSearchBar.paint(); // the render re-found: the count must follow
+}
+
+// ---- in-view search (the TUI's / @ ] [ in its blame view) ----------------
+const blameSearch = new Search();
+
+function blameHitEls(i) {
+  return $("blame-body").querySelectorAll(`.hit[data-h="${i}"]`);
+}
+
+// goToBlameHit makes hit i current — moving the class, not re-rendering —
+// and scrolls it into view; #blame-body scrolls both ways, so a long line's
+// hit is revealed horizontally by the same call.
+function goToBlameHit(i) {
+  if (i < 0 || i >= blameSearch.hits.length) return;
+  if (blameSearch.cur !== i) {
+    for (const el of blameHitEls(blameSearch.cur)) el.classList.remove("cur");
+    blameSearch.cur = i;
+    for (const el of blameHitEls(i)) el.classList.add("cur");
+  }
+  const el = blameHitEls(i)[0];
+  if (el) el.scrollIntoView({ block: "center", inline: "nearest" });
+}
+
+const blameSearchBar = bindSearchBar("blame-search", {
+  search: blameSearch,
+  here: () => {
+    const box = $("blame-body").getBoundingClientRect();
+    for (const row of $("blame-body").querySelectorAll(".bline[data-i]")) {
+      if (row.getBoundingClientRect().bottom >= box.top) return { row: Number(row.dataset.i), side: 0, col: -1 };
+    }
+    return { row: 0, side: 0, col: -1 };
+  },
+  origin: () => ({ top: $("blame-body").scrollTop, left: $("blame-body").scrollLeft }),
+  restore: (o) => {
+    $("blame-body").scrollTop = o.top;
+    $("blame-body").scrollLeft = o.left;
+  },
+  render: () => {
+    const body = $("blame-body");
+    const top = body.scrollTop, left = body.scrollLeft;
+    renderBlame();
+    applyBlameRecent(); // the tint is a class per row: re-apply after a redraw
+    body.scrollTop = top;
+    body.scrollLeft = left;
+  },
+  goTo: goToBlameHit,
+});
+
+// blameSearchKey is the blame layer's first refusal on a bare key: / and @
+// open a search, ] and [ step a kept one, esc clears a kept one (and
+// reports it, so the layer's default esc does not ALSO close the overlay).
+function blameSearchKey(e) {
+  if (e.key === "/" || e.key === "@") {
+    e.preventDefault(); // the browser's quick-find, and the key must not land in the input
+    blameSearchBar.open(e.key === "@");
+    return true;
+  }
+  if (e.key === "]" || e.key === "[") {
+    if (!blameSearch.query) return false;
+    e.preventDefault();
+    blameSearchBar.step(e.key === "]" ? 1 : -1);
+    return true;
+  }
+  if (e.key === "Escape" && blameSearch.active()) {
+    blameSearchBar.clear();
+    return true;
+  }
+  return false;
 }
 
 
@@ -453,7 +538,12 @@ registerHelp({
 });
 
 function blameKey(e) {
+  // A key typed into the search bar is the query's (its own listener takes
+  // enter and esc): it must reach neither w / d / D nor the layer's default
+  // esc, which would close the overlay under the reader's fingers.
+  if (e.target === $("blame-search-input")) return true;
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (blameSearchKey(e)) return true;
   if (e.key === "w") {
     cycleTextMode();
     return true;

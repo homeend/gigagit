@@ -13,6 +13,8 @@ import { rev } from "./review.js";
 import { renderCommits, rewordPrompt } from "./commits.js";
 import { focusPane, moveCursor, stepCommitCursor } from "./keys.js";
 import { saveUI } from "./uistate.js";
+import { Search } from "./inviewsearch.js";
+import { bindSearchBar } from "./searchbar.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -106,6 +108,10 @@ function setLayout(mode) {
   p.classList.toggle("solo", mode === "list");
   p.classList.toggle("files", mode === "files");
   p.classList.toggle("detail", mode === "diff");
+  // The footer's / chip is the commit filter everywhere but in the diff
+  // layout, where the commits pane is off-screen and / finds text instead.
+  const fchip = document.querySelector('#foot button[data-act="filter"]');
+  if (fchip) fchip.textContent = mode === "diff" ? "/ find" : "/ filter";
   // The commits pane is display:none in the diff stage: that drops its
   // scroll position, and any render while hidden (a live refresh, r, a notes
   // count) sizes the virtual window for a zero-height pane — ten rows, which
@@ -126,6 +132,7 @@ function enterFilesStage() {
   $("diff-body").innerHTML = "";
   state.lastDiff = null;
   state.diffCtx = null;
+  diffSearchBar.reset(); // the pane is empty now; nothing to unpaint
   setFilesMeta(""); // every stage starts without a date; only a commit open sets one
   setFilesDesc(""); // …and without a description
   $("files-title").dataset.sha = ""; // …and without a commit id; see setCommitTitle
@@ -999,8 +1006,17 @@ async function stage(body) {
 // <mark class="l|r"> and (b) syntax runs in <span class="tk-…">. Both are
 // rune ranges over the raw line; a mark wins over a syntax class inside it so
 // the emphasis stays legible, matching the TUI.
-function renderCell(text, spans, toks, side) {
-  if ((!spans || !spans.length) && (!toks || !toks.length)) return esc(text);
+// renderCell paints one line: intraline change spans (mark), syntax token
+// runs (tk-* spans) and in-view search hits — three masks over the line's
+// RUNES (every offset the server or the search engine hands over is a rune
+// offset), merged into the fewest elements. A search hit rides as a class on
+// whatever element the segment already gets (a mark, a token span, else a
+// bare span) plus its hit index, so the current one can be found and moved
+// without a re-render; hits are painted HERE, from the host's search state,
+// never added to the DOM afterwards — every re-render (a resize, the f
+// toggle, a notes refresh) would drop a post-hoc class.
+function renderCell(text, spans, toks, side, hits) {
+  if ((!spans || !spans.length) && (!toks || !toks.length) && (!hits || !hits.length)) return esc(text);
   const rs = runes(text);
   const emph = new Array(rs.length).fill(false);
   for (const [a, b] of spans || []) for (let i = a; i < b && i < rs.length; i++) emph[i] = true;
@@ -1013,13 +1029,26 @@ function renderCell(text, spans, toks, side) {
     if (!/^[a-z]{2,3}$/.test(c)) continue;
     for (let i = a; i < b && i < rs.length; i++) cls[i] = c;
   }
+  // hit[i] = 1 + the hit's index (0 = no hit), cur[i] whether it is the
+  // current one; hits never overlap (the engine advances past each match).
+  const hit = new Array(rs.length).fill(0);
+  const cur = new Array(rs.length).fill(false);
+  for (const h of hits || []) {
+    for (let i = h.start; i < h.end && i < rs.length; i++) {
+      hit[i] = h.idx + 1;
+      cur[i] = !!h.cur;
+    }
+  }
   let out = "";
   for (let i = 0; i < rs.length; ) {
     let j = i + 1;
-    while (j < rs.length && emph[j] === emph[i] && cls[j] === cls[i]) j++;
+    while (j < rs.length && emph[j] === emph[i] && cls[j] === cls[i] && hit[j] === hit[i]) j++;
     const seg = esc(rs.slice(i, j).join(""));
-    if (emph[i]) out += `<mark class="${side}">${seg}</mark>`;
-    else if (cls[i]) out += `<span class="tk-${cls[i]}">${seg}</span>`;
+    const hc = hit[i] ? (cur[i] ? "hit cur" : "hit") : "";
+    const hd = hit[i] ? ` data-h="${hit[i] - 1}"` : "";
+    if (emph[i]) out += `<mark class="${side}${hc ? " " + hc : ""}"${hd}>${seg}</mark>`;
+    else if (cls[i]) out += `<span class="tk-${cls[i]}${hc ? " " + hc : ""}"${hd}>${seg}</span>`;
+    else if (hc) out += `<span class="${hc}"${hd}>${seg}</span>`;
     else out += seg;
     i = j;
   }
@@ -1171,6 +1200,19 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
   // colspan fold, which would hand every column an equal share and balloon
   // the line-number gutter to a quarter of the pane. A colgroup fixes the
   // gutter widths up front, whatever row comes first.
+  // Every rendered row carries its index into d.rows (data-i): the in-view
+  // search addresses hits by that index, and a ]/[ step finds the row by it.
+  const rowIndex = new Map(rows.map((r, i) => [r, i]));
+  const ri = (r) => rowIndex.get(r);
+  // The in-view search runs over the VISIBLE rows (folded runs are not
+  // searched — it is an in-view search, as in the TUI), so it is re-found
+  // here, where the fold set is known, on every render. Gated on notesOn
+  // like curCls: the file-history overlay renders through this same function
+  // and must never paint the diff pane's hits.
+  const hs = notesOn && diffSearch.query ? diffSearch : null;
+  if (hs) hs.refind(diffSearchLines(items, ri));
+  const hitsL = (r) => (hs ? hs.hitsOn(ri(r), r.kind === "same" ? 1 : 0) : null);
+  const hitsR = (r) => (hs ? hs.hitsOn(ri(r), 1) : null);
   const cols = pureAdd || pureDel ? 2 : paneWidth < 950 ? 3 : 4;
   const colgroup =
     cols === 2 ? `<col class="no"><col>` : cols === 3 ? `<col class="no"><col class="no"><col>` : `<col class="no"><col><col class="no"><col>`;
@@ -1187,10 +1229,11 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
       const text = pureAdd ? r.right : r.left;
       const spans = pureAdd ? r.right_spans : r.left_spans;
       const toks = pureAdd ? r.right_tok : r.left_tok;
+      const hits = pureAdd ? hitsR(r) : hitsL(r);
       html +=
-        `<tr class="${r.kind}${hunkCls(r)}${curCls(nside, no)}${attnCls(nside, no)}"${hunkAttr(r)}${anchor(nside, no)}>` +
+        `<tr class="${r.kind}${hunkCls(r)}${curCls(nside, no)}${attnCls(nside, no)}"${hunkAttr(r)}${anchor(nside, no)} data-i="${ri(r)}">` +
         `<td class="no ${side}">${no || ""}</td>` +
-        `<td class="side ${side}"><span class="pan">${renderCell(text, spans, toks, side)}</span></td></tr>` +
+        `<td class="side ${side}"><span class="pan">${renderCell(text, spans, toks, side, hits)}</span></td></tr>` +
         after(2, [nside, no]);
     }
   } else if (paneWidth < 950) {
@@ -1205,23 +1248,23 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
       }
       if (r.kind === "same") {
         html +=
-          `<tr class="same${curCls("new", r.right_no)}${attnClsBoth(r)}"${anchor("new", r.right_no)}>` +
+          `<tr class="same${curCls("new", r.right_no)}${attnClsBoth(r)}"${anchor("new", r.right_no)} data-i="${ri(r)}">` +
           `<td class="no l">${r.left_no || ""}</td>` +
           `<td class="no r">${r.right_no || ""}</td>` +
-          `<td class="side"><span class="pan">${renderCell(r.right, null, r.right_tok, "r")}</span></td></tr>` +
+          `<td class="side"><span class="pan">${renderCell(r.right, null, r.right_tok, "r", hitsR(r))}</span></td></tr>` +
           after(3, ["new", r.right_no], ["old", r.left_no]);
       } else {
         if (r.kind !== "add")
           html +=
-            `<tr class="del${hunkCls(r)}${curCls("old", r.left_no)}${attnCls("old", r.left_no)}"${hunkAttr(r)}${anchor("old", r.left_no)}>` +
+            `<tr class="del${hunkCls(r)}${curCls("old", r.left_no)}${attnCls("old", r.left_no)}"${hunkAttr(r)}${anchor("old", r.left_no)} data-i="${ri(r)}">` +
             `<td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
-            `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</span></td></tr>` +
+            `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l", hitsL(r))}</span></td></tr>` +
             after(3, ["old", r.left_no]);
         if (r.kind !== "del")
           html +=
-            `<tr class="add${hunkCls(r)}${curCls("new", r.right_no)}${attnCls("new", r.right_no)}"${hunkAttr(r)}${anchor("new", r.right_no)}>` +
+            `<tr class="add${hunkCls(r)}${curCls("new", r.right_no)}${attnCls("new", r.right_no)}"${hunkAttr(r)}${anchor("new", r.right_no)} data-i="${ri(r)}">` +
             `<td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
-            `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</span></td></tr>` +
+            `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r", hitsR(r))}</span></td></tr>` +
             after(3, ["new", r.right_no]);
       }
     }
@@ -1241,11 +1284,11 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
       // default anchor is the new side.
       const both = notesOn ? ` data-lno="${r.left_no || 0}" data-rno="${r.right_no || 0}"` : "";
       html +=
-        `<tr class="${r.kind}${hunkCls(r)}${curClsBoth(r)}${attnClsBoth(r)}"${hunkAttr(r)}${anchor(aside, ano)}${both}>` +
+        `<tr class="${r.kind}${hunkCls(r)}${curClsBoth(r)}${attnClsBoth(r)}"${hunkAttr(r)}${anchor(aside, ano)}${both} data-i="${ri(r)}">` +
         `<td class="no l">${r.left_no || ""}</td>` +
-        `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l")}</span></td>` +
+        `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l", hitsL(r))}</span></td>` +
         `<td class="no r">${r.right_no || ""}</td>` +
-        `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r")}</span></td></tr>` +
+        `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r", hitsR(r))}</span></td></tr>` +
         after(4, ["new", r.right_no], ["old", r.left_no]);
     }
   }
@@ -1258,11 +1301,16 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
 function renderDiff(d) {
   // A NEW diff starts with every run folded; a re-render of the same one (a
   // resize, a notes refresh, the f toggle) keeps the folds the reader opened.
-  if (d !== state.lastDiff) state.diffFolds = new Set();
+  // A new diff is also a new search: the query does not follow a file step.
+  if (d !== state.lastDiff) {
+    state.diffFolds = new Set();
+    diffSearchBar.reset(); // no re-render: this render is the new file's
+  }
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   state.diffBlockIdx = -1;
   $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth, true);
   mountPanBars($("diff-body"), $("diff-hbars"));
+  diffSearchBar.paint(); // the render re-found: the count must follow
   updateDiffNav();
 }
 
@@ -2069,6 +2117,126 @@ function changeNavRows() {
 }
 
 
+// ---- in-view search (the TUI's / @ ] [ in its diff view) -----------------
+// The engine (inviewsearch.js) and the bar (searchbar.js) are shared with
+// blame; this block is what the DIFF host owns: which lines are searched,
+// how a hit is found in the rendered table, and where the reader "is".
+const diffSearch = new Search();
+
+// diffSearchLines lists the searchable text of the rendered items (folds
+// skipped) in document order, keyed by the row's index into d.rows. A row
+// whose two sides carry the same text (same) is searched on the RIGHT only —
+// searching both would make ] stop twice on one piece of text — and painted
+// in both columns; every other row is searched on each side it has a line on.
+function diffSearchLines(items, ri) {
+  const out = [];
+  for (const r of items) {
+    if (r.fold) continue;
+    const i = ri(r);
+    if (r.kind === "same") {
+      out.push({ row: i, side: 1, text: r.right || "" });
+      continue;
+    }
+    if (r.left_no) out.push({ row: i, side: 0, text: r.left || "" });
+    if (r.right_no) out.push({ row: i, side: 1, text: r.right || "" });
+  }
+  return out;
+}
+
+// diffSearchHere is where the reader is when no hit is current: the first
+// rendered row inside the pane's viewport (col -1 = before its text), so a
+// typed query lands on the nearest hit from the screen, not from the top.
+function diffSearchHere() {
+  const pane = $("diff-pane").getBoundingClientRect();
+  for (const tr of $("diff-body").querySelectorAll("table.diff tr[data-i]")) {
+    if (tr.getBoundingClientRect().bottom >= pane.top) return { row: Number(tr.dataset.i), side: 0, col: -1 };
+  }
+  return { row: 0, side: 0, col: -1 };
+}
+
+// diffHitEls are the elements one hit was rendered into (a hit split across
+// syntax runs is several), in the diff pane only.
+function diffHitEls(i) {
+  return $("diff-body").querySelectorAll(`table.diff .hit[data-h="${i}"]`);
+}
+
+// goToDiffHit makes hit i current — moving the class, not re-rendering — and
+// scrolls it into view; in scroll mode the side's pan bar is dragged so the
+// hit's columns are on screen too (the TUI's panFor).
+function goToDiffHit(i) {
+  if (i < 0 || i >= diffSearch.hits.length) return;
+  if (diffSearch.cur !== i) {
+    for (const el of diffHitEls(diffSearch.cur)) el.classList.remove("cur");
+    diffSearch.cur = i;
+    for (const el of diffHitEls(i)) el.classList.add("cur");
+  }
+  const els = diffHitEls(i);
+  if (!els.length) return;
+  const el = els[0];
+  el.scrollIntoView({ block: "center", inline: "nearest" });
+  if (state.textMode !== "scroll") return;
+  const td = el.closest("td.side");
+  const pan = el.closest(".pan");
+  if (!td || !pan) return;
+  const side = td.classList.contains("l") ? "l" : "r";
+  const bars = $("diff-hbars");
+  const bar = bars.querySelector(`.hbar[data-side="${side}"]`) || bars.querySelector(".hbar");
+  if (!bar) return;
+  // The hit's x within the (translated) line, against the cell's width.
+  const x = el.getBoundingClientRect().left - pan.getBoundingClientRect().left;
+  const w = el.getBoundingClientRect().width;
+  const cellW = td.clientWidth - 12;
+  const cur = bar.scrollLeft;
+  if (x < cur || x + w > cur + cellW) bar.scrollLeft = Math.max(0, x - Math.floor(cellW / 3));
+}
+
+// The bar: typing re-renders the diff — the render is what re-finds, over
+// the rows it actually paints — keeping the scroll position, then lands on
+// the current hit; esc restores the pane's scroll and pan.
+const diffSearchBar = bindSearchBar("diff-search", {
+  search: diffSearch,
+  here: diffSearchHere,
+  origin: () => {
+    const bars = $("diff-hbars");
+    const pan = {};
+    for (const b of bars.querySelectorAll(".hbar")) pan[b.dataset.side] = b.scrollLeft;
+    return { top: $("diff-pane").scrollTop, pan };
+  },
+  restore: (o) => {
+    $("diff-pane").scrollTop = o.top;
+    for (const b of $("diff-hbars").querySelectorAll(".hbar")) if (o.pan[b.dataset.side] != null) b.scrollLeft = o.pan[b.dataset.side];
+  },
+  render: () => rerenderDiffKeepingPlace(true),
+  goTo: goToDiffHit,
+});
+
+// diffSearchKey is the diff layout's first refusal on a bare key: / and @
+// open a search, ] and [ step a kept one, esc clears a kept one (and
+// reports it, so the caller's esc does not ALSO leave the diff). Anything
+// else — and everything while no diff is open or a conflict picker owns
+// the pane — is not the search's.
+function diffSearchKey(e) {
+  if (state.layout !== "diff" || !state.lastDiff || conflictPick) return false;
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (e.key === "/" || e.key === "@") {
+    e.preventDefault(); // the browser's quick-find, and the key must not land in the input
+    diffSearchBar.open(e.key === "@");
+    return true;
+  }
+  if (e.key === "]" || e.key === "[") {
+    if (!diffSearch.query) return false;
+    e.preventDefault();
+    diffSearchBar.step(e.key === "]" ? 1 : -1);
+    return true;
+  }
+  if (e.key === "Escape" && diffSearch.active()) {
+    diffSearchBar.clear();
+    return true;
+  }
+  return false;
+}
+
+
 function updateDiffNav() {
   const list = activeFileList();
   $("prev-file").disabled = list.length === 0 || state.fileCursor <= 0;
@@ -2824,4 +2992,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, diffSearchKey, diffSearchBar, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };

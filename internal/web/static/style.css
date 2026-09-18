@@ -4,6 +4,7 @@
   --add: #1f3d2b; --del: #46262a; --span-add: #2f6b41; --span-del: #8a3b42;
   --attn-info: #1e3350; --attn-warn: #3d3520; --attn-error: #43242a;
   --recent-bg: #1F3A26; /* blame's "changed within the last …" tint (the TUI's blame_recent_bg, Dark) */
+  --hit-bg: #4a4416; --hit-cur-bg: #6B5F11; /* in-view search hits; the current one is the TUI's search_current_bg (Dark) */
   --lane0: #6ea8fe; --lane1: #f2a65a; --lane2: #7bd88f; --lane3: #e06c9f;
   --lane4: #b58ef2; --lane5: #5ad0c8; --lane6: #e0c06c; --lane7: #f27a6a;
   /* Pane widths — the drag handles rewrite --sb-w / --files-w on #panes. */
@@ -210,6 +211,12 @@ table.diff .tk-pn, #blame-body .tk-pn  { color: #bcbcbc; }
 table.diff .tk-at, #blame-body .tk-at  { color: #d7af87; }
 mark.l { background: var(--span-del); color: inherit; }
 mark.r { background: var(--span-add); color: inherit; }
+/* In-view search hits, scoped to BOTH hosts like the .tk-* classes above: a
+   rule on table.diff alone paints nothing in blame. A hit wins over the
+   intraline mark and the token colour it rides on; the current one is
+   brighter and outlined so it reads at a glance among many. */
+table.diff .hit, #blame-body .hit { background: var(--hit-bg); color: inherit; }
+table.diff .hit.cur, #blame-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
 .notice { padding: 12px; color: var(--dim); }
 #foot { display: flex; gap: 14px; padding: 4px 12px; color: var(--dim); border-top: 1px solid var(--border); background: var(--bg-alt); white-space: nowrap; overflow: hidden; }
 #foot button { background: none; border: none; color: inherit; font: inherit; padding: 0; cursor: pointer; }
@@ -875,6 +882,17 @@ body.lm-scroll #blame-body .bline.brecent .bgut, body.lm-scroll #blame-body .bli
    coverage explicit and deeper paging an explicit click. */
 #cfilter { display: flex; gap: 8px; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--border); }
 #cfilter.hidden { display: none; }
+/* The in-view search bars (diff pane, blame overlay). gg web hides by ID:
+   each bar has its own hidden rule. The diff's bar is a full-width row of
+   the (sticky) diff header, so it neither scrolls away nor covers a line. */
+.search-bar { display: flex; gap: 8px; align-items: center; padding: 3px 8px; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+.search-bar input { flex: 1; min-width: 0; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; font: inherit; }
+.search-bar input:focus { border-color: var(--accent); outline: none; }
+.search-bar > span:first-child { color: var(--accent); font-weight: bold; }
+.search-bar > span:last-child { color: var(--dim); font-size: 11px; white-space: nowrap; min-width: 4ch; text-align: right; }
+#diff-search { flex: 1 0 100%; }
+#diff-search.hidden { display: none; }
+#blame-search.hidden { display: none; }
 #cfilter input { flex: 1; background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; font: inherit; }
 #cfilter input:focus { border-color: var(--accent); outline: none; }
 #cfilter-count { color: var(--dim); font-size: 11px; white-space: nowrap; }
