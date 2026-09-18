@@ -6,7 +6,7 @@ import { opLine } from "./ops.js";
 import { versionWhen } from "./versions.js";
 import { rev } from "./review.js";
 import { openCommitByHash } from "./commits.js";
-import { cycleTextMode, diffHTML, mountPanBars, renderCell, toggleDiffView } from "./files.js";
+import { cycleTextMode, diffHTML, mountPanBars, renderCell, scrollKey, toggleDiffView } from "./files.js";
 import { registerHelp } from "./menus.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
@@ -244,6 +244,10 @@ async function openFileBlame(path, rev) {
   // stack's default handling.
   pushLayer("blame", $("blame"), { onKey: blameKey });
   $("blame-body").scrollTop = 0;
+  // Focus the content, not the button that opened it: the wheel, space and
+  // the page keys then scroll the blame — and blameKey scrolls it for the
+  // arrows and page keys whatever holds the focus.
+  $("blame-body").focus({ preventScroll: true });
 }
 
 // blameLines is the open file's blame, kept so the overlay can be redrawn
@@ -321,6 +325,7 @@ const blameSearchBar = bindSearchBar("blame-search", {
     body.scrollLeft = left;
   },
   goTo: goToBlameHit,
+  focus: () => $("blame-body").focus({ preventScroll: true }),
 });
 
 // blameSearchKey is the blame layer's first refusal on a bare key: / and @
@@ -544,6 +549,7 @@ function blameKey(e) {
   if (e.target === $("blame-search-input")) return true;
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
   if (blameSearchKey(e)) return true;
+  if (!e.shiftKey && scrollKey($("blame-body"), e)) return true; // ↑↓ PgUp PgDn Home End scroll the blame
   if (e.key === "w") {
     cycleTextMode();
     return true;

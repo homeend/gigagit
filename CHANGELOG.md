@@ -8,6 +8,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Web: an opened diff or blame takes the keyboard.** Opening a file's diff
+  (by mouse or `enter`) or the blame overlay left the browser's focus on the
+  file row or the button that opened it, so `↓`/`↑` moved the file cursor
+  behind the diff and `PgUp`/`PgDn`/space scrolled nothing. The content now
+  takes focus when it opens (and on a click inside it), and in the diff
+  layout `↑`/`↓`, `PgUp`/`PgDn`, `Home`/`End` always scroll the diff — the
+  TUI's `↑↓` there — wherever the mouse left the focus; `j`/`k` still walk
+  the file list behind it. The blame overlay scrolls for the same keys.
+  `enter` in the in-view search bar hands the keys back to the content, not
+  the page.
+
 - **Web: in-view text search in the diff and in blame (`/`, `@`, `]`, `[`).**
   The browser UI now has the TUI's in-view search: in an open diff, or in the
   blame overlay, `/` opens a search bar under the toolbar (`@` opens it

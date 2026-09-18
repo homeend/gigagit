@@ -63,3 +63,40 @@ func TestInViewSearchStaticWiring(t *testing.T) {
 		t.Error("files.js: the footer's / chip is not relabelled for the diff layout")
 	}
 }
+
+// Opening a diff or blame must hand the keyboard to the CONTENT: focus lands
+// on the pane / the blame body (both focusable, ring-less), and the arrow and
+// page keys scroll it whatever the mouse left the focus on.
+func TestContentFocusStaticWiring(t *testing.T) {
+	t.Parallel()
+	read := func(name string) string {
+		b, err := os.ReadFile(filepath.Join("static", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	checks := []struct{ file, want, why string }{
+		{"index.html", `id="diff-pane" class="pane" tabindex="-1"`, "the diff pane must be focusable"},
+		{"index.html", `id="blame-body" tabindex="-1"`, "the blame body must be focusable"},
+		{"style.css", `#diff-pane:focus, #blame-body:focus { outline: none; }`, "no focus ring on the content"},
+		{"files.js", `function focusDiff(`, "the one put-focus-on-the-diff step"},
+		{"files.js", `function scrollKey(`, "the shared arrow/page/home/end scroller"},
+		{"files.js", `function diffScrollKey(`, "the diff layout's scroll-key hook"},
+		{"files.js", `focus: focusDiff,`, "enter in the search bar returns focus to the diff"},
+		{"keys.js", `if (diffScrollKey(e)) return;`, "the document handler routes diff-layout arrows to the scroller before the cursor move"},
+		{"filehist.js", `$("blame-body").focus({ preventScroll: true });`, "blame focuses its body on open"},
+		{"filehist.js", `scrollKey($("blame-body"), e)`, "the blame layer scrolls for the arrows and page keys"},
+		{"searchbar.js", `if (host.focus) host.focus();`, "enter hands the keys to the content, not the body"},
+	}
+	for _, c := range checks {
+		if !strings.Contains(read(c.file), c.want) {
+			t.Errorf("%s: missing %q — %s", c.file, c.want, c.why)
+		}
+	}
+	// focusDiff must run at every diff OPEN (entry diff, commit file, status
+	// file) — three call sites plus the definition and the bar hook.
+	if n := strings.Count(read("files.js"), "    focusDiff();\n"); n != 3 {
+		t.Errorf("files.js: focusDiff() called %d times, want 3 (entry diff, commit file, status file)", n)
+	}
+}

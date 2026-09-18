@@ -5,7 +5,7 @@ import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
-import { addNotePrompt, cycleFilesSort, cycleTextMode, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNotesAgent } from "./files.js";
+import { addNotePrompt, cycleFilesSort, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNotesAgent } from "./files.js";
 import { openPalette } from "./palette.js";
 import { branchFilterKey } from "./branchfilter.js";
 
@@ -114,6 +114,9 @@ document.addEventListener("keydown", (e) => {
   // (the commits pane is off-screen there, so / has no filter to open), ] [
   // step it, and esc clears a kept query BEFORE it would leave the diff.
   if (diffSearchKey(e)) return;
+  // In the diff layout the arrows and page keys scroll the DIFF (the TUI's
+  // ↑↓ there), wherever the mouse left the focus; j/k still walk the files.
+  if (diffScrollKey(e)) return;
   if (e.key === "j" || e.key === "ArrowDown") {
     e.preventDefault();
     moveCursor(1);

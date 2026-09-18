@@ -17,6 +17,7 @@ import { stepHit } from "./inviewsearch.js";
 //   goTo(i)    make hit i current and scroll it into view
 //   here()     where the reader is with no hit current (a {row, side, col})
 //   origin()   the view state esc restores; restore(o) puts it back
+//   focus()    optional: put DOM focus on the content once enter blurs the bar
 // It returns the verbs the host's key hook calls: open(backward),
 // step(delta), clear(), reset(), active() — and paint(), which a host calls
 // after a re-render of its own so the count follows the re-find.
@@ -57,6 +58,7 @@ function bindSearchBar(id, host) {
       return;
     }
     paint();
+    if (host.focus) host.focus(); // the keys go back to the content, not the body
   };
   const cancel = () => {
     s.typing = false;
