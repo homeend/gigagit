@@ -49,6 +49,14 @@ func resolve(t *testing.T, svc *domain.Service, s string) domain.Resolved {
 
 func abs(dir string) string { return filepath.ToSlash(dir) }
 
+// rendered is the text String() emits for a local link at dir followed by
+// rest: "gg:///C:/x" on Windows, "gg:///mnt/x" on POSIX. "gg://C:/x" is a
+// valid INPUT spelling (ParseLink takes both) but not the rendered one, so a
+// round-trip want must be built with String()'s own rule.
+func rendered(dir, rest string) string {
+	return model.Link{Repo: model.LinkRepo{Abs: abs(dir)}}.String() + rest
+}
+
 func TestCommandShapes(t *testing.T) {
 	t.Parallel()
 	dir, svc := repo(t)
@@ -283,8 +291,8 @@ func TestRefAndPairCommandShapes(t *testing.T) {
 				t.Fatalf("resolved %+v carries neither Ref nor Pair", res)
 			}
 			at := AtLink(res, c)
-			if at.String() != tc.link {
-				t.Errorf("AtLink round-trip = %q, want %q", at.String(), tc.link)
+			if want := rendered(dir, strings.TrimPrefix(tc.link, "gg://"+a)); at.String() != want {
+				t.Errorf("AtLink round-trip = %q, want %q", at.String(), want)
 			}
 		})
 	}
