@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Pull requests in the web UI (list, open, forget)
+
+**`gg web` lists the repository's pull requests** in a new sidebar section,
+*pull requests*, right under *previews* — read-only, like the rest of the
+feature, and only when a usable `gh` is found (without one the section is never
+shown; there is no notice). Rows lead with the review verdict (`✓` approved ·
+`✗` changes requested · `●` review required · `draft`); a pull request gg
+already knows stays listed, dimmed, after it is closed or merged. **Click**
+fetches the head into `refs/gg/pr/<n>` and opens the PR's diff (`base…head`,
+titled `PR #7 · title`) on the merge-preview compare screen; a closed or merged
+PR whose head is already here opens without a fetch. **Right-click**: copy URL,
+forget. The header's **⟳** re-reads the list, and the server re-reads it every
+`[refresh] prs` seconds (300; `0` = off) **whatever `[refresh] enabled` says**
+— every open tab follows through the live stream.
+
+The page names a pull request by its **number** and nothing else: the pair is
+resolved server-side, so no ref or sha a browser sends ever reaches git, and a
+`GET` never calls the forge (the list is a server-side cache with one lane that
+talks to `gh`). Review threads inside the diff, note collapse and the PR
+details view are the next plan; until then a PR diff carries your own notes on
+its head commit and refuses *copy link*.
+
 ## Saved comparisons absorb merge previews
 
 `internal/savedcompare` is now the one store behind both saved comparisons and
