@@ -19,13 +19,18 @@ forge-neutral so GitLab (`glab`) and Gitea (`tea`) are one more implementation.
    "Outdated" section with their original hunk snippet.
 3. Resolved threads are marked and collapsed; collapsing is built as a generic
    note-box mechanism so local notes get it too.
-4. Open PRs only. Closed/merged + search is a follow-up.
+4. Only open PRs are *discovered*. Browsing/searching closed/merged ones is a
+   follow-up.
 5. A read-only CLI ships in this cut; the web UI is a follow-up.
 6. Which repository a checkout maps to is `gh`'s answer; no remote picker.
 7. Bodies render as wrapped plain text; markdown is a follow-up.
 8. Poll interval defaults to 5 minutes, plus a manual refresh key.
 9. No forge tool, or the tool cannot read this repo's PRs → the feature is
    not shown at all: no tab, no notice.
+10. Detection runs ONCE, at startup. Not available then → the feature is off
+    for the whole session (no mid-session re-detection).
+11. A PR gg already knows never disappears because it was closed or merged:
+    it stays in the list, marked `closed` / `merged`.
 
 ## Approach
 
@@ -49,13 +54,14 @@ type PullRequest struct {
     Number       int
     Title, Body  string
     Author       string
-    State        string    // "open" (only state listed in this cut)
+    State        string    // "open" | "closed" | "merged"
     Draft        bool
     ReviewState  string    // "", "approved", "changes_requested", "review_required"
     Source       string    // head branch name (may live in a fork)
     SourceRepo   string    // "owner/name" when the head is in a fork, else ""
     Target       string    // base branch name
     HeadSHA      string
+    BaseSHA      string    // baseRefOid: the diff's left side once closed/merged
     Comments     int       // total comment count, for the row badge
     URL          string
     Created, Updated time.Time
@@ -100,7 +106,7 @@ type Provider interface {
   failure ⇒ not usable; the error is kept for `gg pr` diagnostics only.
 - `ListOpen`: `gh pr list --state open --limit 100 --json
   number,title,author,isDraft,reviewDecision,headRefName,headRepositoryOwner,
-  headRepository,baseRefName,headRefOid,comments,url,createdAt,updatedAt`.
+  headRepository,baseRefName,baseRefOid,headRefOid,state,comments,url,createdAt,updatedAt`.
   Cap 100, newest first; the tab shows a "100+ — showing newest" row at the cap.
 - `PR`: `gh pr view <n> --json …` (same fields + `body`).
 - `Comments`: one `gh api graphql` call for `reviewThreads` (path, line,
@@ -128,11 +134,12 @@ today); domain tries them in order and keeps the first whose `Detect` passes.
   `NeedsStoreProbes` = false.
 
 `domain` owns the probe: `Service.ForgeStatus(ctx)` runs `Detect` across
-`forge.Default`, singleflight-coalesced and cached for the session (re-run
-only by the manual refresh key while no provider is active, so a user who
-runs `gh auth login` mid-session can light the tab up without restarting).
-It is **never** part of the blocking startup preflight: the TUI fires it as a
-background command after first paint; the network call cannot delay launch.
+`forge.Default` exactly once per session and caches the verdict — there is no
+re-detection (ruling 10); a user who fixes `gh` restarts gg. The probe is
+*started* at startup but is not part of the blocking preflight: the TUI fires
+it alongside its initial loads and the tab appears when the verdict lands, so
+the network call cannot delay first paint. On a repo switch (`R`) the new
+repo's service probes once, the same way.
 
 ## 3. `FetchPRHead` engine op
 
@@ -151,9 +158,8 @@ background command after first paint; the network call cannot delay launch.
 - No Decider forks. Failure surfaces as the op error (TUI toast / CLI stderr).
 - `git.PRRefPrefix = "refs/gg/pr/"` sits beside `VersionRefPrefix`; the
   existing `--decorate-refs-exclude=refs/gg/*` already keeps it out of the
-  graph. Stale refs for PRs no longer open are pruned by the list refresh
-  (`domain` deletes `refs/gg/pr/<n>` for every n absent from `ListOpen`, under
-  RefWrite, best-effort).
+  graph. Refs are never pruned automatically — a fetched ref is what makes a
+  PR "known" across sessions (§4a); the row's *Forget* action deletes it.
 - TUI: mapped in `opAffectedSources` to nothing but `srcPRs` (no branch,
   status or feed source changes).
 
@@ -191,6 +197,26 @@ pair still load and render alongside. Every store mutation path
 typed `ErrReadOnlyNote`; `RemoveAllNotes` skips them and counts only store
 notes in its typed-confirm prompt.
 
+### 4a. Known PRs — closed/merged rows stay (ruling 11)
+
+`PullRequests` returns the union of:
+- **open** — `ListOpen`;
+- **known, no longer open** — every n that was in a previous `ListOpen`
+  result this session, or that has a local `refs/gg/pr/<n>` (the user opened
+  it, in any session), and is absent from `ListOpen`. Each is re-read with
+  `PR(n)` once to learn `closed`/`merged`; a terminal state is cached for the
+  session and not re-polled (it cannot change back often enough to matter; the
+  manual refresh re-reads it).
+
+So a PR the user merely saw stays for the session; a PR the user opened stays
+across restarts, because its ref is the durable record — no new state file.
+Known rows sort after open ones, newest first. `engine.ForgetPR{Number}`
+(RefWrite) deletes the ref and drops the row; it is refused for an open PR
+that has no ref (nothing to forget). A merged PR's diff still opens
+(`target...refs/gg/pr/<n>` is empty once merged with a merge commit, so for a
+`merged`/`closed` row the pair's left side is the PR's recorded base sha —
+`baseRefOid` — instead of the moving target tip).
+
 The preview pair for PR n is `target...refs/gg/pr/<n>`. A test pins that
 `EvalEndpoint`/the preview summary accept a non-branch full refname; if any
 step insists on `refs/heads/`, that step is widened to "any ref that
@@ -213,7 +239,11 @@ the store's branch-name shape is untouched).
   default **300**, `0` = never, floor `MinSeconds`. No gitwatch trigger (the
   data is remote). `r` on the tab = manual refresh (list + the open PR's
   comments); the global refresh key includes it.
+- Closed/merged/unavailable rows are dimmed and carry the state word in place
+  of the review badge (§4a).
 - Keys on a row: `enter` open the PR diff · `i` PR hub popup · `r` refresh ·
+  *Forget* (`.` menu + a key; known non-open rows only, confirm-free since it
+  only drops a private ref) ·
   `y`-family copy: PR URL, and the `gg://` pair link · `.` menu with the same
   actions. Footer and help advertise all of them.
 - `enter`: run `FetchPRHead` via `domain.Execute`, then open the pair through
@@ -263,10 +293,11 @@ forge-provided text (titles, bodies, logins) is never translated.
 ## 6. CLI
 
 ```
-gg pr list [--json]            # open PRs
+gg pr list [--json]            # open PRs + known closed/merged (state field)
 gg pr view <n> [--json]        # header + description + conversation + outdated
 gg pr comments <n> [--json]    # inline threads (path:line, side, resolved), then general
 gg pr fetch <n>                # FetchPRHead; prints refs/gg/pr/<n>
+gg pr forget <n>               # ForgetPR
 ```
 
 - No usable provider → exit 1 with the `Detect` reason on stderr (the CLI is
@@ -288,7 +319,8 @@ popup row next to the other intervals).
 | `gh` missing / unauthenticated / not a GitHub repo | no tab, no notice; `gg pr` explains |
 | network or rate-limit failure after the tab is shown | error row in the tab / in-place error in hub; previous list kept until a read succeeds |
 | fetch of the PR head fails | op error toast; the diff does not open |
-| PR closed between list and open | `PR()` says not open → toast, row dropped on next refresh |
+| PR closed/merged while listed | row stays, re-marked `closed`/`merged` on the next refresh; it still opens |
+| known PR deleted on the forge / `PR(n)` 404 | row stays marked `unavailable`; *Forget* removes it |
 | comment on a path absent from the diff | treated as Outdated (hub), never dropped |
 | >100 PRs / >500 comments | capped, with a visible truncation row/line |
 | `gh` hangs | every call has a 30 s context timeout; SIGTERM via the Runner |
