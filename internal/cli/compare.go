@@ -144,17 +144,37 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 		fmt.Fprintln(stderr, compareUsage)
 		return 2
 	}
-	left, code := resolveCompareSpec(statePath, svc, args[0], stderr)
-	if code != 0 {
-		return code
-	}
 	rightTok := "@worktree"
 	if len(args) > 1 {
 		rightTok = args[1]
 	}
-	right, code := resolveCompareSpec(statePath, svc, rightTok, stderr)
-	if code != 0 {
-		return code
+	var (
+		left, right domain.FileSet
+		files       []model.CommitFile
+		compared    bool // files already holds the answer
+	)
+	if isLinkArg(args[0]) && isLinkArg(rightTok) && !*patch {
+		// Two links: the ONE door every frontend compares links through
+		// (spec D6). --patch keeps the per-side lane below — it needs the two
+		// sets for its guards and never the file list.
+		c, err := svc.CompareLinks(ctx, args[0], rightTok, linkResolveOpts(statePath, svc))
+		var se *domain.LinkSideError
+		switch {
+		case errors.As(err, &se):
+			return compareLinkExit(err, stderr)
+		case err != nil:
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		left, right, files, compared = c.Left, c.Right, c.Files, true
+	} else {
+		var code int
+		if left, code = resolveCompareSpec(statePath, svc, args[0], stderr); code != 0 {
+			return code
+		}
+		if right, code = resolveCompareSpec(statePath, svc, rightTok, stderr); code != 0 {
+			return code
+		}
 	}
 	if *patch {
 		// ComparePatch takes ENDPOINTS, not the file sets resolved above, so a
@@ -208,10 +228,12 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 		fmt.Fprint(stdout, diff)
 		return 0
 	}
-	files, err := svc.CompareSets(context.Background(), left, right)
-	if err != nil {
-		fmt.Fprintln(stderr, "error:", err)
-		return 1
+	if !compared {
+		var err error
+		if files, err = svc.CompareSets(context.Background(), left, right); err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
 	}
 	recordCompareLinks(ctx, svc, args[0], rightTok)
 	if *save != "" {
@@ -473,54 +495,34 @@ func evalCompareEndpoint(ctx context.Context, svc *domain.Service, ep model.Endp
 	return fs, 0
 }
 
-// compareLinkSet evaluates a gg:// link argument to its file set.
-//
-// THE LINK IS LOCATED BEFORE IT IS EVALUATED, and that order is a correctness
-// requirement rather than a formality. A PARSED local-form link
-// (gg:///abs/checkout/dir/f.go) carries the checkout AND the file path
-// undivided in Repo.Abs with Link.Path == "" — the grammar puts no delimiter
-// between them, and only this machine's repository registry can split them.
-// Hand an unresolved local link to EvalLink and a FILE link silently evaluates
-// as a WHOLE-TREE link: a wrong answer with no error, which is the one class
-// this feature refuses to ship. domain.LocateLink performs the split (and
-// refuses a path that escapes the checkout); the located path is then the
-// link's Path, while the TARGET stays exactly as parsed — a `@<a>..<b>`
-// change-set must not be flattened into an address, which is why this goes
-// through LocateLink and not ResolveLink.
+// compareLinkSet evaluates ONE gg:// link argument to its file set — the lane
+// for a link compared against the older vocabulary (`gg compare HEAD <link>`).
+// domain.EvalLinkText is the door: it locates the link before evaluating it
+// and refuses another checkout, and its doc comment says why that order is a
+// correctness rule. Two links go through domain.CompareLinks instead.
 func compareLinkSet(ctx context.Context, statePath string, svc *domain.Service, tok string, stderr io.Writer) (domain.FileSet, int) {
-	l, err := model.ParseLink(tok)
+	fs, err := svc.EvalLinkText(ctx, tok, linkResolveOpts(statePath, svc))
 	if err != nil {
-		fmt.Fprintln(stderr, "compare:", err)
-		return domain.FileSet{}, 2
-	}
-	top, err := svc.TopLevel(ctx)
-	if err != nil {
-		fmt.Fprintln(stderr, "compare:", err)
-		return domain.FileSet{}, 1
-	}
-	checkout, rel, err := domain.LocateLink(ctx, l, linkResolveOpts(statePath, svc))
-	if err != nil {
-		return domain.FileSet{}, linkExit("compare", err, stderr)
-	}
-	// Cross-repository compare is deferred (spec §9). Both sides would evaluate
-	// to file sets happily, but every read goes through ONE domain.Service under
-	// ONE repogate reservation, so two repositories need two reservations taken
-	// in a fixed global order to avoid deadlock. Refuse explicitly rather than
-	// silently compare against the wrong checkout.
-	if !domain.SameCheckout(checkout, top) {
-		fmt.Fprintf(stderr, "compare: %s names a different repository (%s); cross-repository compare is not supported yet\n", tok, checkout)
-		return domain.FileSet{}, 2
-	}
-	l.Path = rel
-	fs, err := svc.EvalLink(ctx, l)
-	if err != nil {
-		fmt.Fprintln(stderr, "compare:", err)
-		if errors.Is(err, model.ErrLink) {
-			return domain.FileSet{}, 2
-		}
-		return domain.FileSet{}, 1
+		return domain.FileSet{}, compareLinkExit(err, stderr)
 	}
 	return fs, 0
+}
+
+// compareLinkExit reports a link side's failure and maps it onto an exit
+// code: 2 for a caller mistake (a malformed link, or one naming another
+// repository), 1 for a well-formed link that names nothing resolvable here.
+// A *domain.LinkSideError prints as its CAUSE: which side failed is a dialog's
+// concern, and the message is the one the one-link lane has always printed.
+func compareLinkExit(err error, stderr io.Writer) int {
+	var se *domain.LinkSideError
+	if errors.As(err, &se) {
+		err = se.Err
+	}
+	fmt.Fprintln(stderr, "compare:", err)
+	if errors.Is(err, model.ErrLink) || errors.Is(err, domain.ErrLinkCrossRepo) {
+		return 2
+	}
+	return 1
 }
 
 // sideLosesItsKeySet reports whether ONE side's key set survives the trip
