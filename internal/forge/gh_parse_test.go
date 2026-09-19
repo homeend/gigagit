@@ -74,7 +74,10 @@ func TestParseThreads(t *testing.T) {
 	if c := by["C3"]; c.Kind != model.ForgeCommentFile || !c.Resolved || c.Line != 0 {
 		t.Errorf("C3 = %+v", c)
 	}
-	if c := by["C4"]; !c.Outdated || c.Side != model.NoteSideOld || c.Author != "ghost" || c.Hunk == "" {
+	// An outdated thread has no CURRENT line; it keeps the original one so a
+	// reader can still tell where the remark was made.
+	if c := by["C4"]; !c.Outdated || c.Side != model.NoteSideOld || c.Author != "ghost" || c.Hunk == "" ||
+		c.Line != 6 || c.StartLine != 5 {
 		t.Errorf("C4 = %+v", c)
 	}
 	if c := by["G1"]; c.Kind != model.ForgeCommentGeneral {

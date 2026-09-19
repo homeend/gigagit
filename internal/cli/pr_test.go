@@ -64,7 +64,7 @@ func TestPRViewAndComments(t *testing.T) {
 	}
 	for _, want := range []string{"#7", "merged", "https://github.com/homeend/gigagit/pull/7", "Second paragraph.",
 		"── conversation ──", "bob: nice work", "carol [changes_requested]: needs the rename", "dave [approved]",
-		"── outdated ──", "a.go (old) ghost: old remark", "-old"} {
+		"── outdated ──", "a.go:5-6 (old) ghost: old remark", "-old"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("view lacks %q:\n%s", want, out)
 		}
@@ -73,7 +73,7 @@ func TestPRViewAndComments(t *testing.T) {
 		t.Errorf("view must say the comment list was truncated:\n%s", out)
 	}
 	out, _, _ = runPR(t, dir, "comments", "#7")
-	for _, want := range []string{"a.go:10-12 (new) carol: rename this", "  alice: done", "b.go (file) carol: split this file [resolved]"} {
+	for _, want := range []string{"a.go:10-12 (new) carol: rename this", "  alice: done", "b.go (file) carol [resolved]: split this file"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("comments lacks %q:\n%s", want, out)
 		}
@@ -85,6 +85,29 @@ func TestPRViewAndComments(t *testing.T) {
 	var cs map[string]any
 	if err := json.Unmarshal([]byte(out), &cs); code != 0 || err != nil || cs["inline"] == nil || cs["truncated"] != true {
 		t.Errorf("comments json = %s (%v)", out, err)
+	}
+}
+
+// Agents parse --json: an empty bucket must be [], never null, and a
+// multi-line body must not masquerade as further rows in the text form.
+func TestPRCommentsEmptyBucketsAndMultilineBodies(t *testing.T) {
+	dir := prRepo(t, "pr-list.json")
+	forgetest.Seed(t, filepath.Join(dir, ".git", "fakegh"), map[string]string{
+		"threads-3.json": `{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[]},"comments":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"G1","author":{"login":"bob"},"body":"first line\nsecond line","createdAt":"2026-09-02T08:00:00Z","updatedAt":"2026-09-02T08:00:00Z"}]},"reviews":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}`,
+		"pr-view-3.json": `{"number":3,"title":"t","state":"OPEN","url":"u"}`,
+	})
+	out, errs, code := runPR(t, dir, "comments", "3", "--json")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errs)
+	}
+	for _, want := range []string{`"inline": []`, `"outdated": []`} {
+		if !strings.Contains(out, want) {
+			t.Errorf("json lacks %s:\n%s", want, out)
+		}
+	}
+	out, _, _ = runPR(t, dir, "view", "3")
+	if !strings.Contains(out, "bob: first line\n    second line\n") {
+		t.Errorf("continuation lines must be indented:\n%s", out)
 	}
 }
 

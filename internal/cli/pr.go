@@ -166,13 +166,13 @@ func printPRView(w io.Writer, p model.PullRequest, cs domain.PRComments) {
 			if c.Verdict != "" {
 				who += " [" + c.Verdict + "]"
 			}
-			fmt.Fprintf(w, "%s: %s\n", who, c.Body)
+			fmt.Fprintf(w, "%s: %s\n", who, hang(c.Body))
 		}
 	}
 	if len(cs.Outdated) > 0 {
 		fmt.Fprintln(w, "\n── outdated ──")
 		for _, c := range cs.Outdated {
-			fmt.Fprintf(w, "%s (%s) %s: %s\n", c.Path, c.Side, c.Author, c.Body)
+			fmt.Fprintf(w, "%s %s: %s\n", commentWhere(c), c.Author, hang(c.Body))
 			if c.ParentID == "" && c.Hunk != "" {
 				for _, l := range lastLines(c.Hunk, 6) {
 					fmt.Fprintln(w, "    "+l)
@@ -191,27 +191,39 @@ func printPRComments(w io.Writer, cs domain.PRComments) {
 	}
 	for _, c := range cs.Inline {
 		if c.ParentID != "" {
-			fmt.Fprintf(w, "  %s: %s\n", c.Author, c.Body)
+			fmt.Fprintf(w, "  %s: %s\n", c.Author, hang(c.Body))
 			continue
 		}
-		where := c.Path + " (file)"
-		if c.Kind == model.ForgeCommentInline {
-			span := strconv.Itoa(c.Line)
-			if c.StartLine > 0 && c.StartLine != c.Line {
-				span = strconv.Itoa(c.StartLine) + "-" + span
-			}
-			where = fmt.Sprintf("%s:%s (%s)", c.Path, span, c.Side)
-		}
-		tail := ""
+		who := c.Author
 		if c.Resolved {
-			tail = " [resolved]"
+			who += " [resolved]" // beside the author: a body may run many lines
 		}
-		fmt.Fprintf(w, "%s %s: %s%s\n", where, c.Author, c.Body, tail)
+		fmt.Fprintf(w, "%s %s: %s\n", commentWhere(c), who, hang(c.Body))
 	}
 	if cs.Truncated {
 		fmt.Fprintln(w, "(comment list truncated)")
 	}
 }
+
+// commentWhere is a comment's anchor label: "a.go:10-12 (new)", "a.go:7 (old)",
+// "a.go (file)", or "a.go (old)" when the forge kept no line at all.
+func commentWhere(c model.ForgeComment) string {
+	switch {
+	case c.Kind == model.ForgeCommentFile:
+		return c.Path + " (file)"
+	case c.Line <= 0:
+		return fmt.Sprintf("%s (%s)", c.Path, c.Side)
+	}
+	span := strconv.Itoa(c.Line)
+	if c.StartLine > 0 && c.StartLine != c.Line {
+		span = strconv.Itoa(c.StartLine) + "-" + span
+	}
+	return fmt.Sprintf("%s:%s (%s)", c.Path, span, c.Side)
+}
+
+// hang indents a body's continuation lines so a multi-line comment cannot be
+// mistaken for further rows.
+func hang(body string) string { return strings.ReplaceAll(body, "\n", "\n    ") }
 
 func lastLines(s string, n int) []string {
 	ls := strings.Split(strings.TrimRight(s, "\n"), "\n")

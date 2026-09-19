@@ -7,7 +7,7 @@
   {"path":"b.go","line":null,"startLine":null,"diffSide":"RIGHT","subjectType":"FILE","isResolved":true,"isOutdated":false,
    "comments":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"id":"C3","replyTo":null,"author":{"login":"carol"},"body":"split this file","diffHunk":"","createdAt":"2026-09-02T10:00:00Z","updatedAt":"2026-09-02T10:00:00Z"}]}},
-  {"path":"a.go","line":null,"startLine":null,"diffSide":"LEFT","subjectType":"LINE","isResolved":false,"isOutdated":true,
+  {"path":"a.go","line":null,"startLine":null,"originalLine":6,"originalStartLine":5,"diffSide":"LEFT","subjectType":"LINE","isResolved":false,"isOutdated":true,
    "comments":{"pageInfo":{"hasNextPage":false},"nodes":[
     {"id":"C4","replyTo":null,"author":null,"body":"old remark","diffHunk":"@@ -5,2 +5,2 @@\n-old\n+new","createdAt":"2026-09-01T12:00:00Z","updatedAt":"2026-09-01T12:00:00Z"}]}}]},
  "comments":{"pageInfo":{"hasNextPage":false},"nodes":[

@@ -26,7 +26,7 @@ stdout_excludes = ["── outdated ──", "truncated"]
 [[run]]
 cmd             = ["pr", "comments", "7"]
 exit            = 0
-stdout_contains = ["a.go:1 (new) carol: rename the package [resolved]"]
+stdout_contains = ["a.go:1 (new) carol [resolved]: rename the package"]
 
 # Unknown to the forge: an error, never a crash or an empty success.
 [[run]]

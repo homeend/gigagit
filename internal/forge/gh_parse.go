@@ -100,14 +100,18 @@ type ghThreadComment struct {
 }
 
 type ghThread struct {
-	Path        string `json:"path"`
-	Line        *int   `json:"line"`
-	StartLine   *int   `json:"startLine"`
-	DiffSide    string `json:"diffSide"`
-	SubjectType string `json:"subjectType"`
-	IsResolved  bool   `json:"isResolved"`
-	IsOutdated  bool   `json:"isOutdated"`
-	Comments    struct {
+	Path      string `json:"path"`
+	Line      *int   `json:"line"`
+	StartLine *int   `json:"startLine"`
+	// The original position survives a thread going outdated (line is null
+	// then); it is only a label — an outdated thread is never anchored.
+	OriginalLine      *int   `json:"originalLine"`
+	OriginalStartLine *int   `json:"originalStartLine"`
+	DiffSide          string `json:"diffSide"`
+	SubjectType       string `json:"subjectType"`
+	IsResolved        bool   `json:"isResolved"`
+	IsOutdated        bool   `json:"isOutdated"`
+	Comments          struct {
 		PageInfo ghPage            `json:"pageInfo"`
 		Nodes    []ghThreadComment `json:"nodes"`
 	} `json:"comments"`
@@ -176,6 +180,12 @@ func parseThreads(b []byte) ([]model.ForgeComment, bool, error) {
 		}
 		if th.StartLine != nil {
 			start = *th.StartLine
+		}
+		if th.IsOutdated && th.Line == nil && th.OriginalLine != nil {
+			line, start = *th.OriginalLine, *th.OriginalLine
+			if th.OriginalStartLine != nil {
+				start = *th.OriginalStartLine
+			}
 		}
 		for _, c := range th.Comments.Nodes {
 			fc := model.ForgeComment{

@@ -22,7 +22,7 @@ const prFields = "number,title,author,state,isDraft,reviewDecision,headRefName,i
 // threadsQuery is single-page by design: hasNextPage on any connection
 // surfaces as truncated rather than a pagination loop.
 const threadsQuery = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){
-reviewThreads(first:100){pageInfo{hasNextPage} nodes{path line startLine diffSide subjectType isResolved isOutdated
+reviewThreads(first:100){pageInfo{hasNextPage} nodes{path line startLine originalLine originalStartLine diffSide subjectType isResolved isOutdated
 comments(first:50){pageInfo{hasNextPage} nodes{id replyTo{id} author{login} body diffHunk createdAt updatedAt}}}}
 comments(first:100){pageInfo{hasNextPage} nodes{id author{login} body createdAt updatedAt}}
 reviews(first:100){pageInfo{hasNextPage} nodes{id author{login} body state submittedAt}}}}}`

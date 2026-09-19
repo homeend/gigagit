@@ -2218,7 +2218,8 @@ gg pr list        → "#7  open    alice  feat/forge → main  [changes_requeste
 gg pr view 7      → header line as above, URL line, blank, body, then "── conversation ──" and
                     "── outdated ──" sections (each only when non-empty)
 gg pr comments 7  → per inline/file comment: "a.go:10-12 (new) carol: rename this"
-                    replies indented two spaces; resolved threads suffixed " [resolved]";
+                    replies indented two spaces; a resolved thread prints "carol [resolved]: …";
+                    continuation lines of a body hang-indent 4; outdated rows keep their ORIGINAL line;
                     file-level prints "b.go (file)"
 gg pr fetch 7     → prints "refs/gg/pr/7"
 gg pr forget 7    → prints the op summary

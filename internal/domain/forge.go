@@ -209,7 +209,9 @@ func (s *Service) PRComments(ctx context.Context, n int) (PRComments, error) {
 	if err != nil {
 		return PRComments{}, err
 	}
-	out := PRComments{Truncated: truncated}
+	// Empty buckets are [] on the wire, never null: agents index into them.
+	out := PRComments{Inline: []model.ForgeComment{}, Hub: []model.ForgeComment{},
+		Outdated: []model.ForgeComment{}, Truncated: truncated}
 	for _, c := range cs {
 		switch {
 		case c.Kind == model.ForgeCommentGeneral || c.Kind == model.ForgeCommentReview:
