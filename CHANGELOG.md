@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Copy no longer trusts a dead `WAYLAND_DISPLAY`
+
+On WSL every copy action could paint a green "Copied" while the clipboard never
+changed, with no notice. `WAYLAND_DISPLAY=wayland-0` was set, but
+`XDG_RUNTIME_DIR` (`/run/user/<uid>`) did not exist — the live socket sat in
+WSLg's own `/mnt/wslg/runtime-dir` — and WSL interop was off, so `clip.exe` was
+rightly skipped. gg took the variable's word, selected a `wl-copy` that could
+not connect, and the OSC 52 fallback reported success.
+
+- The display now resolves against **live sockets only**: the inherited value
+  when its socket exists, else a `wayland-N` in the runtime dir (the tmux
+  case), else one in `/mnt/wslg/runtime-dir`.
+- The `wl-copy` child is handed the display that resolved whenever it differs
+  from the inherited one — it used to get it only when the variable was empty,
+  so a set-but-dead value was inherited and failed.
+- When no socket is live anywhere, `wl-copy` is not selected at all, so the
+  existing "no clipboard" / WSL-interop notice can fire instead of a false
+  "Copied".
+
 ## Saved comparisons absorb merge previews
 
 `internal/savedcompare` is now the one store behind both saved comparisons and
