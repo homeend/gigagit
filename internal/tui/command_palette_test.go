@@ -92,6 +92,7 @@ func TestPaletteRegistryOrder(t *testing.T) {
 		{"Apply patch…", ""},
 		{"Branch versions…", ""},
 		{"Browse remote branches", ""},
+		{"Compare with link…", ""},
 		{"File blame", ""},
 		{"File history", ""},
 		{"Find", "F"},

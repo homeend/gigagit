@@ -51,21 +51,6 @@ func setSides(p *linkComparePopup, left, right string) {
 	p.side[0].input, p.side[1].input = newTextField(left), newTextField(right)
 }
 
-func TestThePaletteListsCompareWithLinkAlphabetically(t *testing.T) {
-	t.Parallel()
-	cmds := paletteCommands()
-	for i, c := range cmds {
-		if c.label != "Compare with link…" {
-			continue
-		}
-		if i == 0 || i == len(cmds)-1 || cmds[i-1].label != "Browse remote branches" || cmds[i+1].label != "File blame" {
-			t.Fatalf("Compare with link… sits at %d, want it between Browse remote branches and File blame", i)
-		}
-		return
-	}
-	t.Fatal("the palette has no Compare with link… entry")
-}
-
 func TestTheHistoryLoadFillsEveryPickerOfItsHost(t *testing.T) {
 	t.Parallel()
 	m, _, _, _ := linkDialogModel(t, "gg://r@ref:main", "gg://r@ref:feat/x")
