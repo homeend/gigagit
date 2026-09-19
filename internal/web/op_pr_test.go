@@ -213,3 +213,60 @@ func TestPRForgetDropsRefAndRow(t *testing.T) {
 		t.Errorf("refs/gg/pr/5 survived the forget: %s", out)
 	}
 }
+
+type prRevalidateResp struct {
+	Moved bool   `json:"moved"`
+	State string `json:"state"`
+}
+
+// The background half of a cached open: it asks the forge, folds the answer
+// into the listed row, and says whether a fetch would change the diff.
+func TestPRRevalidateReportsMovedAndUpdatesTheRow(t *testing.T) {
+	dir, bare, head := prFixture(t)
+	pr := openPR(7, "Add a thing")
+	pr.HeadSHA = head
+	f := &fakeForge{open: []model.PullRequest{pr}, baseURL: bare}
+	ts, _ := prServe(t, dir, f)
+	waitPRsLoaded(t, ts)
+
+	var out prRevalidateResp
+	if code := postJSON(t, ts, "/api/pr/revalidate?n=7", "{}", "application/json", "", &out); code != 200 || !out.Moved {
+		t.Fatalf("no local head yet: code=%d %+v, want moved", code, out)
+	}
+	if done := runPROp(t, ts, "pr-fetch", 7); done["ok"] != true {
+		t.Fatalf("pr-fetch: %v", done)
+	}
+	out = prRevalidateResp{}
+	postJSON(t, ts, "/api/pr/revalidate?n=7", "{}", "application/json", "", &out)
+	if out.Moved || out.State != "open" {
+		t.Fatalf("head is current: %+v, want not moved", out)
+	}
+
+	// The PR is merged on the forge: the row follows without a re-list.
+	merged := pr
+	merged.State = model.PRStateMerged
+	f.mu.Lock()
+	f.open, f.byN = nil, map[int]model.PullRequest{7: merged}
+	f.mu.Unlock()
+	lists := f.listCount()
+	out = prRevalidateResp{}
+	postJSON(t, ts, "/api/pr/revalidate?n=7", "{}", "application/json", "", &out)
+	if out.State != "merged" {
+		t.Fatalf("got %+v, want state merged", out)
+	}
+	var l prListResp
+	getJSON(t, ts, "/api/pr", &l)
+	if len(l.PRs) != 1 || l.PRs[0].State != "merged" || f.listCount() != lists {
+		t.Errorf("row = %+v, lists %d → %d (a revalidate must not re-list)", l.PRs, lists, f.listCount())
+	}
+
+	if code := postJSON(t, ts, "/api/pr/revalidate?n=99", "{}", "application/json", "", nil); code != 404 {
+		t.Errorf("a PR the page was never shown = %d, want 404", code)
+	}
+	if code := postJSON(t, ts, "/api/pr/revalidate?n=x", "{}", "application/json", "", nil); code != 400 {
+		t.Errorf("n=x = %d, want 400", code)
+	}
+	if code := postJSON(t, ts, "/api/pr/revalidate?n=7", "{}", "application/json", "https://evil.example", nil); code != 403 {
+		t.Errorf("cross-origin = %d, want 403", code)
+	}
+}

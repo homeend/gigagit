@@ -596,6 +596,16 @@ function renderCompareBar() {
     bar.innerHTML = `<button class="on" disabled>all (${c.all.length})</button>`;
     return;
   }
+  // A merge preview (and a pull request, which rides the same screen) is
+  // merge-base → tip by construction: "only <side>" can never apply, and two
+  // dead buttons with elided labels only read as something broken. The bar
+  // says what is showing instead.
+  if (c.previewBar) {
+    bar.innerHTML =
+      `<button class="on" disabled>all (${c.all.length})</button>` +
+      `<span class="cmpnote" title="${esc(c.previewBar)}">${esc(c.previewBar)}</span>`;
+    return;
+  }
   // Without a merge base there are no origin sets, so only "all" is
   // meaningful — the comparison itself still stands (compare.go).
   const off = c.originsError

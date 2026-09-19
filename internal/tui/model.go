@@ -183,9 +183,14 @@ type Model struct {
 	// The open PR diff's comment reads (pr_comments.go): one at a time, and
 	// when the last one started (the comment poll's own clock).
 	prCommentsInflight bool
-	prCommentsLast     time.Time
-	previewOpen        *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
-	previewGen         int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
+	// prRevalidateInflight: one background "is this PR's head still current?"
+	// read per open (pr_revalidate.go). prRevalidateSkip names the PR whose NEXT
+	// open is the reopen a revalidation caused — that one must not ask again.
+	prRevalidateInflight bool
+	prRevalidateSkip     int
+	prCommentsLast       time.Time
+	previewOpen          *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
+	previewGen           int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
 
 	// Where the cursor lands once a mutation's reload arrives. Set by
 	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
@@ -2839,6 +2844,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCommentsMsg:
 		return m.handlePRCommentsMsg(msg)
 
+	case prRevalidatedMsg:
+		return m.handlePRRevalidatedMsg(msg)
+
 	case prCountsMsg:
 		if msg.gen == m.previewGen && m.filesPreviewSet != nil && msg.counts != nil {
 			m.filesPreviewCounts = msg.counts
@@ -3182,6 +3190,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var prCmd tea.Cmd
 		if prOpen != nil && msg.err == nil {
 			prCmd = m.openPRPreviewCmd(*prOpen) // the head is local now: open its diff
+			// Computing the pair's diff is the slow half on a big repository:
+			// say so, or the fetch's "done" reads as the end of the story.
+			m.statusMsg = i18n.T("opening PR #%d…", prOpen.Number)
 		}
 		if prsReload && msg.err == nil {
 			m, prCmd = m.readPRsCmd(context.Background(), false, false)

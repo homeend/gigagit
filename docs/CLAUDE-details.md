@@ -1821,6 +1821,31 @@ under it would otherwise block every later PR diff from fetching.
   check (refresh disabled, `prs = 10`, no click) saw it.
   `TestFetchPRsIsImportedWhereItIsCalled` pins it. `fetchPRs` is single-flight
   with ONE queued re-run — a dropped call could keep a pre-update answer.
+- **The PR cache is domain-level** (`internal/domain/forge_cache.go`), so
+  every frontend gets it: the LISTING seeds `forgePRCache` (it carries the head
+  sha), `baseRepo` is asked once per session, and `PRFetchOp` reads both from
+  the cache — zero forge calls for a PR the user can see. With the cached
+  `HeadSHA`, `FetchPRHead`'s idempotence check turns an unchanged PR into a
+  purely local op. Eviction is LAZY (on the next cache access; no timer
+  goroutine): entries unused for `prCacheIdle` (5 min) go; `forgeNow` is the
+  test clock. `PRRevalidate` ALWAYS asks the forge, refreshes the cache (and
+  `forgeTerminal` for a no-longer-open PR) and reports `Moved` (local ref
+  missing or ≠ the forge's head).
+- **Stale-while-revalidate, both frontends.** Web: a `fetched` row opens from
+  `GET /api/pr/open` at once, then `POST /api/pr/revalidate?n=` (guarded; folds
+  the answer into the cached ROW without a re-list); `moved` + the PR still on
+  screen → `pr-fetch` + re-open. TUI: `handlePreviewOpenMsg` fires
+  `prRevalidateCmd` after the view is up; a moved head re-runs `openPRCmd` and
+  `prRevalidateSkip` stops that reopen from revalidating again (a fetch that
+  cannot reach the forge's head would loop). The in-flight flag is cleared
+  before the "still my view" check, as in `handlePRCommentsMsg`.
+- **The loading mask** (`#pr-mask`, prs.js `maskOn/maskOff`) is
+  `position: fixed`, sized from `#panes` minus the sidebar, dismissable by a
+  click, cleared in a `finally` and by a 90 s safety timer. A browser check's
+  visibility helper must not use `offsetParent` for it — that is null for
+  every fixed element.
+- **`compare.previewBar`** replaces the origin-filter buttons for a merge
+  preview / PR (they could only ever be disabled there).
 - **Tests:** web `TestMain` sets `domain.ForgeDisabled`; PR tests inject
   `fakeForge` via `SetForgeProviders` and a ticker-less hub (`prServe`), so
   they need no env. Browser fixture = the TUI one copied, with PR 12 a REAL

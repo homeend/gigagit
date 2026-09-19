@@ -237,6 +237,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
    ellipsises rather than pushing its neighbours off the pane. */
 #compare-bar { padding: 3px 8px; display: flex; gap: 6px; border-bottom: 1px solid var(--border); }
 #compare-bar.hidden { display: none; }
+#compare-bar .cmpnote { color: var(--dim); font-size: 11px; align-self: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 #compare-bar button {
   background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border);
   border-radius: 3px; padding: 1px 8px; font: inherit; font-size: 11px; cursor: pointer;
@@ -286,6 +287,16 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #prs-list li .prmark.changes_requested { color: var(--lane7); }
 #prs-list li .prword { color: var(--dim); font-size: 11px; padding-right: 6px; }
 #prs-list.collapsed { display: none; }
+#prs-list li.prbusy .prnum::before { content: "\27f3 "; display: inline-block; color: var(--accent); animation: prspin 1s linear infinite; }
+/* The loading mask over the panes right of the sidebar (prs.js sizes it). A
+   PR open is seconds of network + git; without it the page just sits there. */
+#pr-mask { position: fixed; z-index: 40; background: rgba(20, 22, 26, 0.72); display: flex; align-items: center; justify-content: center; cursor: progress; }
+#pr-mask.hidden { display: none; }
+#pr-mask-box { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 26px; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 6px; max-width: 70%; }
+#pr-mask-spin { font-size: 26px; color: var(--accent); animation: prspin 1s linear infinite; }
+#pr-mask-text { color: var(--fg); text-align: center; overflow-wrap: anywhere; }
+#pr-mask-hint { color: var(--dim); font-size: 11px; }
+@keyframes prspin { to { transform: rotate(360deg); } }
 /* The marker column: one glyph wide plus its separator, reserved on EVERY row
    so an unmarked name starts at the same column as a marked one. */
 .mk { display: inline-block; width: 2ch; flex: none; color: var(--accent); }

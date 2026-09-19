@@ -31,6 +31,7 @@ func init() {
 		mux.HandleFunc("GET /api/pr", s.handlePRs)
 		mux.HandleFunc("POST /api/pr/refresh", writeGuard(s.handlePRRefresh))
 		mux.HandleFunc("GET /api/pr/open", s.handlePROpen)
+		mux.HandleFunc("POST /api/pr/revalidate", writeGuard(s.handlePRRevalidate))
 	})
 }
 
@@ -270,4 +271,44 @@ func (s *Server) handlePROpen(w http.ResponseWriter, r *http.Request) {
 	body := previewOpenBody(eps, label, pr.Source, pr.Target)
 	body["pr"] = n
 	writeJSON(w, body)
+}
+
+// prRevalidateBudget bounds the one forge call a cached open still makes.
+const prRevalidateBudget = 30 * time.Second
+
+// handlePRRevalidate is the background half of a cached open. The page shows
+// the diff it already has (a local read), then posts here: the forge is asked
+// for PR n, the listed row takes the answer (no re-list), and "moved" says
+// whether a pr-fetch would change what is on screen. It spends a forge call,
+// so it is a guarded POST.
+func (s *Server) handlePRRevalidate(w http.ResponseWriter, r *http.Request) {
+	n, ok := prNumber(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, errPRNumber)
+		return
+	}
+	svc := s.service()
+	if _, ok := s.cachedPR(svc, n); !ok {
+		writeErr(w, http.StatusNotFound, fmt.Errorf("unknown pull request #%d", n))
+		return
+	}
+	ctx, cancel := context.WithTimeout(readCtx(r), prRevalidateBudget)
+	defer cancel()
+	rv, err := svc.PRRevalidate(ctx, n)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err)
+		return
+	}
+	s.prs.mu.Lock()
+	if s.prs.svc == svc {
+		rows := slices.Clone(s.prs.prs)
+		for i := range rows {
+			if rows[i].Number == n {
+				rows[i] = rv.PR
+			}
+		}
+		s.prs.prs = rows
+	}
+	s.prs.mu.Unlock()
+	writeJSON(w, map[string]any{"moved": rv.Moved, "state": rv.PR.State})
 }

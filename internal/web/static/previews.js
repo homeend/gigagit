@@ -198,6 +198,9 @@ export async function openPreviewBody(body, moved) {
   // merge-base(x)" is empty by construction), so it goes off the same way a
   // missing merge base turns it off — with the reason on the buttons.
   state.compare.originsError = "a merge preview is already merge-base → tip";
+  state.compare.previewBar = body.pr
+    ? body.source + " → " + body.target + " · read-only"
+    : "merge-base(" + body.target + ") → " + body.source;
   applyCompareFilter();
   armPreview(body);
   if (moved) opLine("preview updated: " + moved + " moved");

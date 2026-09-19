@@ -75,7 +75,7 @@ function renderPRs() {
     .map((pr) => {
       const p = prRowParts(pr, now);
       return (
-        `<li data-pr="${pr.number}" class="${p.dim ? "prdim" : ""}" title="${esc(p.tip)}">` +
+        `<li data-pr="${pr.number}" class="${(p.dim ? "prdim" : "") + (state.prBusy === pr.number ? " prbusy" : "")}" title="${esc(p.tip)}">` +
         `<span class="prnum">#${pr.number}</span>` +
         // The status cell LEADS the row: the sidebar is narrow and cuts a
         // row's tail, and the verdict is what you scan the list for.
@@ -105,52 +105,136 @@ function refreshPRs() {
 }
 window.__ggRefreshPRs = refreshPRs;
 
-// showPR opens PR n's diff. The server resolves the pair; "unfetched" means
-// there is no local head yet, which a fetch fixes — once.
-async function showPR(n, fetched) {
+// --- the loading mask ---------------------------------------------------------
+// Opening a pull request is seconds of network and git with nothing to look
+// at, so the panes right of the sidebar are masked while it runs and the row
+// spins. The mask never traps: a click dismisses it (the open carries on and
+// lands when it lands), and it clears itself whatever way the open ends.
+let maskTimer = null;
+function maskOn(n, text) {
+  const side = $("branches-pane").getBoundingClientRect();
+  const panes = $("panes").getBoundingClientRect();
+  const m = $("pr-mask");
+  const left = side.width ? side.right : panes.left; // a hidden sidebar has no width
+  m.style.left = left + "px";
+  m.style.top = panes.top + "px";
+  m.style.width = Math.max(0, panes.right - left) + "px";
+  m.style.height = panes.height + "px";
+  $("pr-mask-text").textContent = text;
+  m.classList.remove("hidden");
+  state.prBusy = n;
+  renderPRs();
+  clearTimeout(maskTimer);
+  maskTimer = setTimeout(maskOff, 90000); // never outlive a wedged request
+}
+function maskOff() {
+  clearTimeout(maskTimer);
+  $("pr-mask").classList.add("hidden");
+  if (state.prBusy) {
+    state.prBusy = 0;
+    renderPRs();
+  }
+}
+$("pr-mask").addEventListener("click", maskOff);
+
+function prLabel(n) {
+  const pr = (state.prs || []).find((p) => p.number === n);
+  return "pull request #" + n + (pr && pr.title ? " \u00b7 " + pr.title : "");
+}
+
+// showPR opens PR n's diff from the LOCAL head — no network. The server
+// resolves the pair; "unfetched" means there is no local head yet.
+async function showPR(n, moved) {
   let body;
   try {
     body = await getJSON("/api/pr/open?n=" + n);
   } catch (err) {
     opLine("pull request #" + n + ": " + (err.message || err), true);
-    return;
+    return "error";
   }
-  if (body.state === "unfetched") {
-    if (fetched) opLine("pull request #" + n + ": the head did not arrive", true);
-    else fetchThenShow(n);
-    return;
-  }
+  if (body.state === "unfetched") return "unfetched";
   await openPreviewBody(body, "");
+  if (moved) opLine("pull request #" + n + " updated: new commits on the forge");
+  return "shown";
 }
 
-async function fetchThenShow(n) {
-  if (opBusy()) return; // one live op; the server would 409 anyway
-  let resp;
-  try {
-    resp = await postJSON("/api/op", { op: "pr-fetch", number: n });
-  } catch (err) {
-    opLine("pull request #" + n + ": " + (err.message || err), true);
-    return;
-  }
-  // onDone REPLACES the generic done handling: a PR fetch writes one private
-  // ref, so nothing but this list (and the diff it opens) needs a reload.
-  followOp(resp.op_id, "fetching pull request #" + n, "pr-fetch", (ev) => {
-    fetchPRs();
-    if (!ev.ok) {
-      opLine("error: " + (ev.error || "operation failed"), true);
+// fetchPR runs the pr-fetch op and resolves true when the head arrived.
+function fetchPR(n) {
+  return new Promise((resolve) => {
+    if (opBusy()) {
+      opLine("pull request #" + n + ": another operation is running", true);
+      resolve(false);
       return;
     }
-    opLine(ev.summary || "fetched pull request #" + n);
-    showPR(n, true);
+    postJSON("/api/op", { op: "pr-fetch", number: n }).then(
+      (resp) =>
+        // onDone REPLACES the generic done handling: a PR fetch writes one
+        // private ref, so nothing but this list needs a reload.
+        followOp(resp.op_id, "fetching " + prLabel(n), "pr-fetch", (ev) => {
+          fetchPRs();
+          if (!ev.ok) opLine("error: " + (ev.error || "operation failed"), true);
+          resolve(!!ev.ok);
+        }),
+      (err) => {
+        opLine("pull request #" + n + ": " + (err.message || err), true);
+        resolve(false);
+      }
+    );
   });
 }
 
-// openPR is the row click. An OPEN pull request is fetched first, every time:
-// its head moves. A closed or merged one no longer does, so a head that is
-// already here opens as it is.
-function openPR(pr) {
-  if (pr.state !== "open" && pr.fetched) showPR(pr.number, false);
-  else fetchThenShow(pr.number);
+// revalidate is the background half of a cached open: the diff is already on
+// screen (from the local head), and only now is the forge asked whether that
+// head is still the PR's. A moved head is fetched and the diff re-opened — if
+// the user is still looking at it.
+async function revalidate(n) {
+  let rv;
+  try {
+    rv = await postJSON("/api/pr/revalidate?n=" + n, {});
+  } catch {
+    return; // offline, rate-limited: the diff on screen stands
+  }
+  fetchPRs(); // the row may have changed state (merged, closed)
+  if (!rv.moved) return;
+  const po = state.previewOpen;
+  if (!po || po.pr !== n) return; // they moved on; the next open fetches
+  opLine("⟳ " + prLabel(n) + " has new commits — updating…");
+  if (await fetchPR(n)) {
+    const now = state.previewOpen;
+    if (now && now.pr === n) await showPR(n, true);
+  }
+}
+
+// openPR is the row click: serve what is here, then check the forge.
+//   - a head that is already local opens AT ONCE (a purely local read), and
+//     revalidate() updates it in the background when the forge moved on;
+//   - otherwise the head is fetched first, under the mask.
+// The server's PR cache makes the fetch itself cheap the second time: the
+// head sha comes from the listing, so an unchanged PR skips the network.
+let opening = 0;
+async function openPR(pr) {
+  const n = pr.number;
+  if (opening) return; // one open at a time; the mask says which
+  opening = n;
+  maskOn(n, "opening " + prLabel(n) + "…");
+  try {
+    if (pr.fetched) {
+      const how = await showPR(n, false);
+      if (how === "shown") {
+        maskOff();
+        if (pr.state === "open") revalidate(n); // a closed PR's head no longer moves
+        return;
+      }
+      if (how === "error") return;
+    }
+    $("pr-mask-text").textContent = "fetching " + prLabel(n) + "…";
+    if (!(await fetchPR(n))) return;
+    $("pr-mask-text").textContent = "computing the diff of " + prLabel(n) + "…";
+    if ((await showPR(n, false)) === "unfetched") opLine("pull request #" + n + ": the head did not arrive", true);
+  } finally {
+    opening = 0;
+    maskOff();
+  }
 }
 
 function forgetPR(pr) {
@@ -177,7 +261,7 @@ function forgetPR(pr) {
 }
 
 function showPRMenu(pr, x, y) {
-  const items = [{ label: "open pull request #" + pr.number, act: () => openPR(pr) }];
+  const items = [{ label: (pr.fetched ? "open" : "fetch and open") + " pull request #" + pr.number, act: () => openPR(pr) }];
   if (pr.url) items.push({ label: "copy URL", act: () => copyText(pr.url, "pull request URL") });
   items.push(...extraRows("pr", pr));
   // Forget means something only where gg holds something: a fetched head, or
@@ -208,13 +292,26 @@ $("prs-list").addEventListener("contextmenu", (ev) => {
   showPRMenu(pr, ev.clientX, ev.clientY);
 });
 
+// Right-click on the open PR's header or bar: the PR's menu, not the browser's.
+for (const id of ["files-header", "compare-bar"]) {
+  $(id).addEventListener("contextmenu", (ev) => {
+    const po = state.previewOpen;
+    if (!po || !po.pr || state.filesMode !== "compare") return;
+    const pr = (state.prs || []).find((p) => p.number === po.pr);
+    if (!pr) return;
+    ev.preventDefault();
+    showPRMenu(pr, ev.clientX, ev.clientY);
+  });
+}
+
 registerHelp({
   key: "pull requests",
   html:
     "with a usable <b>gh</b> the sidebar lists the repository's open pull requests (read-only — gg never " +
     "writes to the forge). The row leads with the review verdict: <b>✓</b> approved, <b>✗</b> changes " +
     "requested, <b>●</b> review required. <b>Click</b> fetches the head and opens the PR's diff on the merge " +
-    "preview screen; <b>right-click</b> for copy URL and forget. A pull request gg already knows stays " +
+    "preview screen (a loading mask covers the panes meanwhile; a pull request opened before shows at once " +
+    "and is checked against the forge in the background); <b>right-click</b> for copy URL and forget. A pull request gg already knows stays " +
     "listed, dimmed, after it is closed or merged. The header's <b>⟳</b> re-reads the list; it also " +
     "re-reads itself every <b>[refresh] prs</b> seconds (300; 0 = off), whatever the auto-refresh switch says",
 });
