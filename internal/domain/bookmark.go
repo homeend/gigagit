@@ -65,18 +65,31 @@ func (s *Service) BookmarkRemove(ctx context.Context, id string) error {
 // compare never races a TreeWrite op mid-rewrite; the shelf store is not git
 // state and stays ungated.
 func (s *Service) BookmarkBytes(ctx context.Context, b model.Bookmark) ([]byte, error) {
+	return s.bookmarkBytes(ctx, b, false)
+}
+
+// bookmarkBytes is BookmarkBytes with the failure seam selectable. quiet is
+// for BookmarkProbe, whose whole job is to ask about entries that may be dead:
+// a miss there is the ANSWER, not a failure, and logged through query it would
+// add an errors.log row on every click of a dead bookmark (the CommitLookup
+// convention).
+func (s *Service) bookmarkBytes(ctx context.Context, b model.Bookmark, quiet bool) ([]byte, error) {
+	read := query[[]byte]
+	if quiet {
+		read = queryQuiet[[]byte]
+	}
 	if b.IsCommit() {
 		return nil, errors.New("bookmark: commit bookmark has no file bytes")
 	}
 	switch b.State {
 	case model.StateCommitted:
-		return query(ctx, s, "catfile:"+b.SHA, func(ctx context.Context) ([]byte, error) {
+		return read(ctx, s, "catfile:"+b.SHA, func(ctx context.Context) ([]byte, error) {
 			return s.repo.CatFileBlob(ctx, b.SHA)
 		})
 	case model.StateShelf:
 		return s.ShelfBlob(ctx, b.ShelfID)
 	case model.StateStaged:
-		return query(ctx, s, "showindir:"+b.Worktree+":"+b.Path, func(ctx context.Context) ([]byte, error) {
+		return read(ctx, s, "showindir:"+b.Worktree+":"+b.Path, func(ctx context.Context) ([]byte, error) {
 			return s.repo.ShowFileInDir(ctx, b.Worktree, "", b.Path)
 		})
 	case model.StateUnstaged, model.StateUntracked:
@@ -84,10 +97,57 @@ func (s *Service) BookmarkBytes(ctx context.Context, b model.Bookmark) ([]byte, 
 		if err != nil {
 			return nil, err
 		}
-		return query(ctx, s, "bookmarkfile:"+b.Worktree+":"+b.Path, func(ctx context.Context) ([]byte, error) {
+		return read(ctx, s, "bookmarkfile:"+b.Worktree+":"+b.Path, func(ctx context.Context) ([]byte, error) {
 			return os.ReadFile(full)
 		})
 	default:
 		return nil, errors.New("bookmark: unknown state")
 	}
+}
+
+// EntryGoneError reports a stored entry whose target can no longer be read: a
+// bookmark is a pointer, so once the commit or blob it names is rebased away
+// and gc'd (or the live file is deleted) there is nothing left to open. What
+// names the target for the notice every frontend shows; Cause keeps git's own
+// words for a detail line.
+type EntryGoneError struct {
+	What  string
+	Cause error
+}
+
+func (e *EntryGoneError) Error() string { return e.What + " is no longer available" }
+
+func (e *EntryGoneError) Unwrap() error { return e.Cause }
+
+// BookmarkProbe reports whether what b points at can still be opened: nil, or
+// an *EntryGoneError. It is the ONE availability check the frontends ask
+// before opening a bookmark, so the TUI and the web answer a dead one with the
+// same sentence instead of a raw git error and silence respectively. A
+// cancelled context is returned as itself — never as "gone".
+func (s *Service) BookmarkProbe(ctx context.Context, b model.Bookmark) error {
+	short := b.Commit
+	if len(short) > 7 {
+		short = short[:7]
+	}
+	if b.IsCommit() {
+		_, found, err := s.CommitLookup(ctx, b.Commit)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return &EntryGoneError{What: "commit " + short, Cause: &CommitGoneError{SHA: b.Commit}}
+		}
+		return nil
+	}
+	if _, err := s.bookmarkBytes(ctx, b, true); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		what := b.Path
+		if b.State == model.StateCommitted && short != "" {
+			what += " @ " + short
+		}
+		return &EntryGoneError{What: what, Cause: err}
+	}
+	return nil
 }

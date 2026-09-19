@@ -38,6 +38,25 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   The TUI PRs tab, the PR hub popup and inline comments as read-only note
   boxes follow in the next two stages.
 
+- **Fixed — web: clicking a shelved commit did nothing once the original
+  commit was gone.** The browser opened the ORIGINAL commit by hash; after
+  the rebase + gc that is the usual reason to shelve, that request 404'd
+  into an unhandled rejection and the click was silent — while the TUI
+  opened the entry's frozen files. The click (and a new **browse the frozen
+  files** menu row) now opens the frozen members against the working tree,
+  the TUI's `enter`; **show the original commit** stays in the menu.
+- **A bookmark that points at nothing any more says so — in both frontends,
+  for ten seconds.** A bookmark is a pointer: once its commit or blob is
+  rebased away, the web did nothing and the TUI opened a view holding git's
+  raw `bad object` / `cat-file … bad file`. One check, `domain.BookmarkProbe`
+  (`GET /api/bookmarks/check` on the wire), now answers both with the same
+  sentence — `commit 1f0726e is no longer available`. The web shows it as a
+  new pop-up toast (bottom right, 10 s, hover holds it, click dismisses, git's
+  own words as a dim detail line); the TUI stays on the bookmark switcher and
+  shows it as a STICKY status notice that survives keypresses for 10 s
+  instead of dying on the next key. Any commit opened by hash in the web
+  (links, reflog, tags) reports a missing commit the same way.
+
 - **Web: in-view text search in the `?` help popup.** The help overlay now
   takes the same `/` `@` `]` `[` search as the diff pane and blame: `/`
   opens a bar under the title, typing re-finds the help's rows (headings

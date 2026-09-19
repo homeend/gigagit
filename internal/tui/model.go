@@ -226,6 +226,8 @@ type Model struct {
 	opStart   time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
 	opIsFetch bool      // the in-flight op is engine.Fetch → record its duration into the fetch refresh row on completion
 	statusMsg string
+	stickyMsg string // the sticky notice on the status line, "" when none: keypresses do not wipe it (entry_gone.go)
+	stickyGen int    // drops a stale sticky-notice expiry tick
 	lastError string // full text of the most recent status message worth reopening (a failure, or anything the one-line bar had to cut); [E] shows it wrapped (error_popup.go)
 	loadedOK  bool   // a snapshot load has succeeded at least once: a later failure keeps the interface instead of blanking it
 	opMsgs    chan tea.Msg
@@ -991,11 +993,20 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	case entryGoneMsg:
+		return m.entryGone(msg)
+	case stickyExpiredMsg:
+		return m.expireSticky(msg), nil
 	case entryCompareMsg:
 		if msg.gen != m.entryCompareGen {
 			return m, nil
 		}
 		if msg.err != nil {
+			// A bookmark is a pointer: its commit gone is not a compare
+			// failure but "this entry is dead", said the sticky way.
+			if text, ok := entryGoneText(msg.err); ok {
+				return m.stickyNotice(text)
+			}
 			m.statusMsg = i18n.T("compare: %s", msg.err.Error())
 			return m, nil
 		}
@@ -1716,7 +1727,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// so a stale error doesn't linger across navigation and reloads; the
 		// handlers below re-set it when they have something fresh to say. Gated
 		// on idle so an in-flight op's "working…" notice survives stray keys.
-		if !m.running {
+		if !m.running && (m.stickyMsg == "" || m.statusMsg != m.stickyMsg) {
 			m.statusMsg = ""
 		}
 		if m.modal != nil {

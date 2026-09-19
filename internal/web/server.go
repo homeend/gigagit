@@ -136,6 +136,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/commits", s.handleCommits)
 	mux.HandleFunc("GET /api/commit-message", s.handleCommitMessage)
 	mux.HandleFunc("GET /api/bookmarks", s.handleBookmarks)
+	mux.HandleFunc("GET /api/bookmarks/check", s.handleBookmarkCheck)
 	mux.HandleFunc("POST /api/bookmarks", writeGuard(s.handleBookmarkAdd))
 	mux.HandleFunc("DELETE /api/bookmarks", writeGuard(s.handleBookmarkRemove))
 	mux.HandleFunc("GET /api/linkhist", s.handleLinkHist)
