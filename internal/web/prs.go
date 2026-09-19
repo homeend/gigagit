@@ -2,7 +2,10 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -26,6 +29,7 @@ func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
 		mux.HandleFunc("GET /api/pr", s.handlePRs)
 		mux.HandleFunc("POST /api/pr/refresh", writeGuard(s.handlePRRefresh))
+		mux.HandleFunc("GET /api/pr/open", s.handlePROpen)
 	})
 }
 
@@ -193,4 +197,60 @@ func (s *Server) handlePRRefresh(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	s.loadPRs(svc)
 	s.writePRs(w, r, svc)
+}
+
+// dropCachedPR removes a no-longer-open row at once, so a forgotten PR leaves
+// the list without waiting for the re-list. An open one stays: forgetting it
+// only drops the local ref, the forge still lists it.
+func (s *Server) dropCachedPR(svc *domain.Service, n int) {
+	s.prs.mu.Lock()
+	defer s.prs.mu.Unlock()
+	c := s.prs.at(svc)
+	c.prs = slices.DeleteFunc(slices.Clone(c.prs), func(p model.PullRequest) bool {
+		return p.Number == n && !p.IsOpen()
+	})
+}
+
+// prNumber parses the ?n= of a pull-request read. Anything but a positive
+// integer is refused before it can reach a ref name.
+func prNumber(r *http.Request) (int, bool) {
+	n, err := strconv.Atoi(r.URL.Query().Get("n"))
+	return n, err == nil && n > 0
+}
+
+// handlePROpen resolves PR n to the pair its diff opens on and answers the
+// merge preview's open shape, so the page shows it on the same compare screen.
+// "source"/"target" in the answer are DISPLAY names — the head may live in a
+// fork — and are never read back as refs.
+//
+// state "unfetched" (no local refs/gg/pr/<n>) is a LIVE ref check, never the
+// cached row's flag: the page asks right after a pr-fetch finishes, while the
+// post-run re-list is still in flight.
+func (s *Server) handlePROpen(w http.ResponseWriter, r *http.Request) {
+	n, ok := prNumber(r)
+	if !ok {
+		writeErr(w, http.StatusBadRequest, errPRNumber)
+		return
+	}
+	svc := s.service()
+	pr, ok := s.cachedPR(svc, n)
+	if !ok {
+		writeErr(w, http.StatusNotFound, fmt.Errorf("unknown pull request #%d", n))
+		return
+	}
+	label := fmt.Sprintf("PR #%d · %s", n, pr.Title)
+	ctx := readCtx(r)
+	if !svc.PRFetched(ctx)[n] {
+		writeJSON(w, map[string]any{"state": "unfetched", "label": label, "pr": n, "source": pr.Source, "target": pr.Target})
+		return
+	}
+	pair := svc.PRPair(ctx, pr)
+	eps, err := svc.PreviewOpen(ctx, pair.Head, pair.Base)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	body := previewOpenBody(eps, label, pr.Source, pr.Target)
+	body["pr"] = n
+	writeJSON(w, body)
 }

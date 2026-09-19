@@ -74,7 +74,32 @@ type liveHub struct {
 	// onRemoteTags receives each successful interval listing of the remote's
 	// tags (the Server stores it for the sidebar's ▲; nil in tests that
 	// build a bare hub).
+	// onPRs runs the pull-request list lane when it is due (prs.go).
+	onPRs func(svc *domain.Service)
 	onRemoteTags func(*domain.Service, map[string]bool)
+}
+
+// livePRsSource is the pull-request list lane. It is NOT in liveSources: it
+// polls on [refresh] prs whatever the master switch says (the forge is not
+// the local repo — turning local auto-refresh off must not freeze the PR
+// list), and it is a lane the ticker RUNS, never a changed source it emits.
+const livePRsSource = "prs"
+
+// prsInterval is the prs lane's poll interval: [refresh] prs (unset = 300,
+// 0 = off), floored by min_seconds like every other source.
+func prsInterval(cfg config.RefreshConfig) (int, bool) {
+	base := cfg.PRsSeconds()
+	if base <= 0 {
+		return 0, false
+	}
+	min := cfg.MinSeconds
+	if min <= 0 {
+		min = liveMinSeconds
+	}
+	if base < min {
+		base = min
+	}
+	return base, true
 }
 
 func newLiveHub(cfg config.RefreshConfig, watchOK bool, gate func() bool) *liveHub {
@@ -92,6 +117,7 @@ func newLiveHub(cfg config.RefreshConfig, watchOK bool, gate func() bool) *liveH
 	for _, src := range liveSources {
 		h.lastRun[src] = now
 	}
+	h.lastRun[livePRsSource] = now
 	return h
 }
 
@@ -292,7 +318,19 @@ func (s *Server) startLive(ctx context.Context) {
 	if prev != nil {
 		prev.close()
 	}
+	// The list lane only ever RE-lists: a service nobody asked about (or one
+	// with no usable forge) never earns an interval forge call. It kicks — the
+	// ticker is one lane, and a forge listing takes seconds.
+	h.onPRs = func(svc *domain.Service) {
+		if state, _, _, _ := s.prsSnapshot(svc); state == prsReady {
+			s.kickPRs(svc, true)
+		}
+	}
 	if !cfg.Enabled {
+		// The prs lane does not answer to the master switch.
+		if _, on := prsInterval(cfg); on {
+			go h.tickLoop(svc)
+		}
 		return
 	}
 	// Watcher: only the eligible sources toggled on, only when the fs can.
@@ -389,12 +427,27 @@ func (h *liveHub) tickOnce(svc *domain.Service) {
 		return
 	}
 	h.mu.Lock()
-	cfg, stopped := h.cfg, h.stopped
+	cfg, stopped, onPRs := h.cfg, h.stopped, h.onPRs
 	h.mu.Unlock()
-	if stopped || !cfg.Enabled {
+	if stopped {
 		return
 	}
 	now := liveNow()
+	// Before the master switch: the prs lane has its own key.
+	if secs, on := prsInterval(cfg); on && onPRs != nil {
+		h.mu.Lock()
+		due := now.Sub(h.lastRun[livePRsSource]) >= time.Duration(secs)*time.Second
+		if due {
+			h.lastRun[livePRsSource] = now
+		}
+		h.mu.Unlock()
+		if due {
+			onPRs(svc)
+		}
+	}
+	if !cfg.Enabled {
+		return
+	}
 	for _, src := range liveSources {
 		secs, on := liveInterval(cfg, src)
 		if !on || h.watchActive(src) {
