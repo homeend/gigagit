@@ -62,10 +62,30 @@ type StoreProbe struct {
 	HasData bool
 }
 
+// LegacyProbe is what the resolver knows about one superseded store. Present
+// means its data file is still on THIS machine.
+//
+// Deliberately not a StoreProbe: a StoreProbe's Format comes from a git-ref
+// marker inside .git, which is the wrong scope for a machine-local file — one
+// .git opened from two environments (a Windows checkout reached from WSL, say)
+// is ONE marker and TWO data directories, so a marker-based verdict would
+// report one side's migration as the other side's fact and orphan the second
+// file permanently.
+type LegacyProbe struct{ Present bool }
+
 // Probes is everything the resolver is allowed to look at.
 type Probes struct {
 	Stores     map[string]StoreProbe
+	Legacy     map[string]LegacyProbe
 	GitVersion [3]int
+	Forge      *ForgeProbe // nil = not probed (yet)
+}
+
+// ForgeProbe is what detection learned about a code forge for this repo.
+// Provider is the usable provider's name ("" = none); Err says why not.
+type ForgeProbe struct {
+	Provider string
+	Err      string
 }
 
 // Requirement is one thing a feature needs.
@@ -144,6 +164,36 @@ func (d DataFormat) RepairStore() string { return d.Store }
 
 func (d DataFormat) NeedsStoreProbes() bool { return true }
 
+// LegacyStore requires that a superseded store's data has been absorbed —
+// i.e. that its file is gone from this machine.
+//
+// There are no format NUMBERS here, unlike DataFormat: the old store and the
+// new one are different FILES, so "is the legacy file still present" is the
+// whole question. That also makes the check machine-local, which a git-ref
+// format marker cannot be (see LegacyProbe).
+type LegacyStore struct{ Store string }
+
+func (l LegacyStore) Fit(p Probes) Fit {
+	if p.Legacy[l.Store].Present {
+		return FitTooOld
+	}
+	return FitOK
+}
+
+func (l LegacyStore) Reason(p Probes) Text {
+	return Text{Format: "the %s store still holds data from an older layout", Args: []any{l.Store}}
+}
+
+func (l LegacyStore) Remedy(p Probes) Text {
+	return Text{Format: "Upgrade gg to use this feature."}
+}
+
+func (l LegacyStore) RepairStore() string { return l.Store }
+
+// NeedsStoreProbes is FALSE: this requirement reads Probes.Legacy, never
+// Probes.Stores, so it never obliges a caller to run the git-ref probes.
+func (l LegacyStore) NeedsStoreProbes() bool { return false }
+
 // GitVersion requires a minimum git binary version. Never repairable.
 type GitVersion struct {
 	Min [3]int
@@ -174,6 +224,32 @@ func (g GitVersion) RepairStore() string { return "" }
 
 func (g GitVersion) NeedsStoreProbes() bool { return false }
 
+// ForgeUsable requires a forge CLI that can read this repository's pull
+// requests. Unprobed counts as unusable: the feature lights up only on a
+// positive verdict.
+type ForgeUsable struct{}
+
+func (ForgeUsable) Fit(p Probes) Fit {
+	if p.Forge != nil && p.Forge.Provider != "" {
+		return FitOK
+	}
+	return FitTooOld
+}
+
+func (ForgeUsable) Reason(p Probes) Text {
+	if p.Forge == nil || p.Forge.Err == "" {
+		return Text{Format: "no forge CLI can read this repository's pull requests"}
+	}
+	return Text{Format: "no forge CLI can read this repository's pull requests: %s", Args: []any{p.Forge.Err}}
+}
+
+func (ForgeUsable) Remedy(Probes) Text {
+	return Text{Format: "install the GitHub CLI and run `gh auth login`, then restart gg"}
+}
+
+func (ForgeUsable) RepairStore() string    { return "" }
+func (ForgeUsable) NeedsStoreProbes() bool { return false }
+
 func less(a, b [3]int) bool {
 	for i := range a {
 		if a[i] != b[i] {
@@ -185,11 +261,25 @@ func less(a, b [3]int) bool {
 
 func verString(v [3]int) string { return fmt.Sprintf("%d.%d.%d", v[0], v[1], v[2]) }
 
-// Migration repairs one store from a lower format. Describe returns the
-// consequence prose shown before consent.
+// Migration repairs one store. Describe returns the consequence prose shown
+// before consent.
 type Migration struct {
 	Store    string
 	From, To int
+	// Action names the BODY domain will construct for this migration — an
+	// English protocol value ("discard-refs", "convert-previews"), not code,
+	// so this package stays a stdlib leaf whose whole decision table is
+	// testable with plain values.
+	Action string
+	// Lossless says this migration destroys nothing, so it may run without
+	// asking: there is no loss to confess.
+	//
+	// The polarity is deliberate and the ZERO VALUE IS THE SAFE ONE. Spelled
+	// the other way round ("Consent bool"), a migration that simply forgot to
+	// declare would destroy a user's data unasked — and the branch-versions
+	// migration, the one that really does destroy, declares nothing here.
+	// Forgetting must fail towards the consent screen, never past it.
+	Lossless bool
 	Describe func() Text
 }
 
@@ -199,6 +289,9 @@ type Feature struct {
 	Criticality Criticality
 	Requires    []Requirement
 	Migrate     *Migration // nil when nothing is repairable
+	// Silent features never surface a "feature unavailable" notice: their
+	// absence is the normal state of a box without the external tool.
+	Silent bool
 }
 
 // Verdict is a feature's resolved state plus, when not Satisfied, why and

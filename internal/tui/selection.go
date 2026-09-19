@@ -1,5 +1,7 @@
 package tui
 
+import "strconv"
+
 // panelSelKey returns a stable identity for the currently-selected row of p,
 // so a refresh that reorders or removes rows can restore the selection by
 // identity rather than by a now-meaningless index.
@@ -65,6 +67,8 @@ func (m Model) rowKeyAt(p panel, i int) string {
 		return m.reflog[u].Hash
 	case panelPreviews:
 		return m.previews[u].rec.ID
+	case panelPRs:
+		return strconv.Itoa(m.prs[u].Number)
 	}
 	return ""
 }

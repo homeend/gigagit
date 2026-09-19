@@ -8,9 +8,6 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
-	"github.com/homeend/gigagit/internal/git"
-	"github.com/homeend/gigagit/internal/gitexec"
-	"github.com/homeend/gigagit/internal/observ"
 )
 
 // Drives a real SmartPull that diverges from origin, so it raises a
@@ -51,7 +48,7 @@ func TestSmartPullDecisionAnsweredThroughModal(t *testing.T) {
 	gitRun(clone, "add", ".")
 	gitRun(clone, "commit", "-m", "local")
 
-	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", clone, observ.NewRing(50))}
+	repo := testRepo(t, clone)
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	m = loaded.(Model)

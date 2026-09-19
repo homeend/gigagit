@@ -1,0 +1,76 @@
+name = "saved comparisons: gg compare --save/--saved/--list, and previews over the new store"
+
+[input]
+steps = [
+  { write = "a.txt", content = "alpha\n" },
+  { commit = "seed" },
+  { write = "b.txt", content = "bravo\n" },
+  { commit = "add b" },
+  { branch = "feat/x" },
+]
+
+# --save stores the comparison and still prints the ordinary changed-file
+# list. The id goes to STDERR, so stdout stays pipeable: a caller running
+# `gg compare --save x A B | cut -f2` must not find an id row among the files.
+[[run]]
+cmd             = ["compare", "--save", "my work", "HEAD~1", "HEAD"]
+exit            = 0
+stdout_contains = ["b.txt"]
+stdout_excludes = ["my work"]
+
+# --list is the surface a script reads ids back from: four tab-separated
+# columns, both sides real gg:// links.
+[[run]]
+cmd             = ["compare", "--list"]
+exit            = 0
+stdout_contains = ["my work", "gg:///"]
+
+# --saved re-runs it by LABEL and prints what the direct invocation printed.
+[[run]]
+cmd             = ["compare", "--saved", "my work"]
+exit            = 0
+stdout_contains = ["b.txt"]
+
+# An unknown saved spec is a usage error naming the spec, never a silent
+# 0-exit no-op.
+[[run]]
+cmd  = ["compare", "--saved", "nosuchthing"]
+exit = 2
+
+# --save writes and --saved reads; asking for both is a usage error.
+[[run]]
+cmd  = ["compare", "--save", "a", "--saved", "b"]
+exit = 2
+
+# A token that cannot be expressed as a link is refused. Unlike the
+# best-effort link history, --save was asked for in so many words.
+[[run]]
+cmd  = ["compare", "--save", "x", "bookmark:nosuchid", "@worktree"]
+exit = 2
+
+# …and it stored nothing: the store still holds exactly the one row.
+[[run]]
+cmd             = ["compare", "--list"]
+exit            = 0
+stdout_contains = ["my work"]
+stdout_excludes = ["bookmark"]
+
+# Merge previews now live in the SAME store, through the domain façade.
+# `gg preview add` writes it and `gg preview list` reads it back, which is the
+# end-to-end proof that the façade is wired — the case that went dark between
+# two commits during this plan.
+[[run]]
+cmd  = ["preview", "add", "--label", "login", "feat/x", "main"]
+exit = 0
+
+[[run]]
+cmd             = ["preview", "list"]
+exit            = 0
+stdout_contains = ["login", "feat/x", "main"]
+
+# A merge preview is a SET, so it does NOT show up as a saved pair's right
+# half — but it IS in the same store, beside the pair.
+[[run]]
+cmd             = ["compare", "--list"]
+exit            = 0
+stdout_contains = ["my work", "login"]

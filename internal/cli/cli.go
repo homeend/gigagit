@@ -64,6 +64,13 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	// Lossless migrations run before any surface reads a store: they need no
+	// decision from the user, and a surface that read first would read the
+	// old layout. A failure is REPORTED and does not stop gg — a store that
+	// could not be converted is a degraded surface, not a broken repository.
+	if err := svc.RunAutoMigrations(context.Background()); err != nil {
+		fmt.Fprintln(stderr, "warning: migrating stores:", err)
+	}
 	cmd, rest := args[0], args[1:]
 	// Record this repo in the switcher registry (best-effort: errors and
 	// non-repo working directories are ignored). Skip for "repo" subcommands
@@ -157,6 +164,8 @@ func runOne(svc *domain.Service, workdir, cmd string, rest []string, stdin io.Re
 		return cmdCompare(RepoStatePath, svc, rest, stdout, stderr)
 	case "preview":
 		return cmdPreview(svc, rest, stdout, stderr)
+	case "pr":
+		return cmdPR(svc, rest, stdout, stderr)
 	case "diff":
 		return cmdDiff(svc, workdir, rest, stdout, stderr)
 	case "show":
@@ -191,7 +200,7 @@ var commands = map[string]bool{
 	"switch": true, "checkout": true, "branch": true, "stash": true, "undo": true, "merge": true, "rebase": true, "worktree": true,
 	"cherry-pick": true, "revert": true, "reset": true, "fast-forward": true,
 	"discard": true, "add": true, "unstage": true, "shelf": true, "bookmark": true, "log": true, "prefix": true,
-	"remote": true, "tag": true, "compare": true, "preview": true, "diff": true, "show": true,
+	"remote": true, "tag": true, "compare": true, "preview": true, "pr": true, "diff": true, "show": true,
 	"inspect": true, "repo": true, "init": true, "config": true, "batch": true,
 	"review": true, "apply": true, "versions": true, "unlock": true, "migrate": true,
 	"note": true, "skill": true, "session": true, "link": true, "links": true, "open": true,

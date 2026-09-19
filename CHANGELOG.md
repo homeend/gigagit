@@ -6,7 +6,131 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Saved comparisons absorb merge previews
+
+`internal/savedcompare` is now the one store behind both saved comparisons and
+saved merge previews. An entry is a **pair** of `gg://` links or a **set** (one
+link — which is what a merge preview is: "everything `feat/x` would bring into
+`main`"). Links are stored unresolved, which is what lets a saved preview keep
+following its branches as they move.
+
+**Your saved merge previews are CONVERTED, not discarded.** The design
+originally called for deleting `previews.toml` after asking. Converting turned
+out to be both cheaper and lossless: ids, labels and creation times are carried
+across verbatim, so `gg preview <id>` keeps working, and preview notes need no
+migration at all because they key on branch names. It also fixes a real hole —
+the format marker is a git ref inside `.git` while the data is machine-local,
+so one checkout opened from two environments (a Windows drive reached from WSL,
+say) would have had one side's migration silently orphan the other side's file.
+The conversion runs per machine, the first time gg opens that repository.
+
+New CLI surface:
+
+- `gg compare --save <label> <left> [<right>]` — run the comparison and keep
+  it. Both sides are stored as links whatever you typed, so `bookmark:<id>`,
+  `shelf:<id>`, `@staged`, `@worktree` and a bare commit-ish all become links.
+  stdout is unchanged (still the changed-file list, still pipeable); the saved
+  id is reported on stderr.
+- `gg compare --saved <id|label>` — re-run a stored comparison; it prints
+  exactly what the original invocation printed.
+- `gg compare --list` — `<id>\t<label>\t<left>\t<right>` per row, empty right
+  for a saved preview, nothing at all when none are stored.
+
+Under it, a migration now names its own action: `engine.ApplyMigration` runs
+the `MigrationAction` it was handed instead of hardcoding ref deletion, and
+`preflight` gained a machine-local legacy-store probe. A `Migration` says
+whether it is `Lossless`; the zero value asks for consent, so a migration that
+forgets to declare falls toward the consent screen rather than past it.
+
 ## [Unreleased]
+
+- **Tests: a tui test no longer deletes its repo under a running git.** A test
+  that only asserts "the op started" returned while `startOp`'s goroutine was
+  still running git, and `t.TempDir`'s cleanup lost the race on a loaded CI
+  box (`unlinkat …/.git: directory not empty`, first seen on
+  `TestSKeyOnLocalBranchStillSmartSwitches`). Every real-git repo handle in
+  the tui tests now comes from `testRepo`, whose runner refuses new git
+  invocations and waits out the in-flight ones before the temp dir is removed.
+  Test-only; no production change.
+
+- **Pull requests in the TUI: a fifth left-top tab, a PR hub popup, and a
+  poll of its own.** When a forge CLI can read the repository's pull requests
+  (GitHub's `gh`, signed in — probed once at startup, off the UI thread), the
+  top-left box grows a **Pull requests** tab beside Branches / Remotes /
+  Worktrees / Previews (`PR` in the header; `ctrl+←/→` or a click reaches it).
+  Without a usable `gh` there is no tab, no key, no notice and no further call.
+  Rows read `#<n>  <status>  <title>  <author>  <source → target>` — the status
+  leads (`✓` approved, `✗` changes requested, `…` review required, `draft`)
+  because the narrow column cuts a row's tail. A PR gg already knows never
+  disappears when it closes: it stays, dimmed, with `merged` / `closed` /
+  `unavailable` as its status. `enter` fetches the PR head into the private
+  `refs/gg/pr/<n>` (fork PRs too, through your own remote) and opens
+  `base…head` on the merge-preview surface, titled `PR #<n> · <title>`, with
+  everything that view has (diff, blame, history, notes, search). `i` opens the
+  **PR hub**: title, state line, URL, the description as plain wrapped text,
+  the conversation with review verdicts, and the *outdated* review threads with
+  the tail of their hunk — `/` filters, `ctrl+t` maximizes, `s` saves, `y`
+  copies the URL, `r` reloads, `esc` returns to the tab. `y` on a row copies the
+  PR URL; `d` *forgets* a merged/closed/unavailable PR (drops the private ref
+  and the row — nothing on the forge changes); all four are in the `.` menu,
+  the footer and `?` help. The list is re-read by `r` and in the background
+  every **`[refresh] prs`** seconds — default `300`, `0` = off, floored by
+  `min_seconds`, and **independent of `[refresh] enabled`**: remote data has no
+  file watcher, so the PR poll is its own switch (it is a row in Settings →
+  Refresh rates). A failed re-read keeps the previous list and shows the
+  failure in the tab header (`! github: …`); an empty tab shows it with
+  `[r] retry`. `gh` now always runs with `GH_PROMPT_DISABLED=1` and
+  `GH_NO_UPDATE_NOTIFIER=1`, and its calls appear in the operation log. Still
+  read-only; inline comments as note boxes are the next cut.
+
+- **Pull requests, read-only (`gg pr`) — the core of the forge integration.**
+  gg can now read the current repository's pull requests through the forge's
+  own CLI (GitHub's `gh` today), and never writes to the forge: nothing is
+  posted, edited, resolved or submitted. `gg pr list` prints the open PRs,
+  newest-updated first (`#<n> <state> <author>  <source> → <target> [draft]
+  [<review state>]  <title>`, a fork head as `owner:branch`); `gg pr view <n>`
+  adds the description, the conversation (general comments and review
+  verdicts, oldest first) and the *outdated* inline threads with their
+  original line and hunk tail; `gg pr comments <n>` prints the inline and
+  file-level threads that still have a position (`a.go:10-12 (new) carol
+  [resolved]: …`, replies indented). All three take `--json`.
+  `gg pr fetch <n>` brings the PR head — fork PRs included — into the private
+  ref `refs/gg/pr/<n>` (local only, never pushed, never decorated in the
+  graph, a no-op when already current), fetching through whichever configured
+  remote names the base repository so your own transport and credentials are
+  used; read the change with `gg diff <target>...refs/gg/pr/<n>`.
+  **A PR gg knows never disappears because it closed**: one that was listed
+  open earlier in the session, or that you fetched (in any session — the ref
+  is the record, there is no state file), stays listed marked `closed`,
+  `merged` or `unavailable` until `gg pr forget <n>` drops it.
+  Detection runs **once per session**: `gh` must be installed, logged in and
+  able to read this repo's PRs, otherwise the feature is simply off (the CLI
+  says why; the TUI will show nothing — the new *silent* preflight feature
+  kind raises no notice). Comment reads are per PR and single-page: 100
+  threads × 50 comments, 100 conversation comments, 100 reviews, with a
+  visible "truncated" marker beyond. Everything above one `forge.Provider`
+  interface is forge-neutral, so GitLab/Gitea are one more implementation.
+  The TUI PRs tab, the PR hub popup and inline comments as read-only note
+  boxes follow in the next two stages.
+
+- **Fixed — web: clicking a shelved commit did nothing once the original
+  commit was gone.** The browser opened the ORIGINAL commit by hash; after
+  the rebase + gc that is the usual reason to shelve, that request 404'd
+  into an unhandled rejection and the click was silent — while the TUI
+  opened the entry's frozen files. The click (and a new **browse the frozen
+  files** menu row) now opens the frozen members against the working tree,
+  the TUI's `enter`; **show the original commit** stays in the menu.
+- **A bookmark that points at nothing any more says so — in both frontends,
+  for ten seconds.** A bookmark is a pointer: once its commit or blob is
+  rebased away, the web did nothing and the TUI opened a view holding git's
+  raw `bad object` / `cat-file … bad file`. One check, `domain.BookmarkProbe`
+  (`GET /api/bookmarks/check` on the wire), now answers both with the same
+  sentence — `commit 1f0726e is no longer available`. The web shows it as a
+  new pop-up toast (bottom right, 10 s, hover holds it, click dismisses, git's
+  own words as a dim detail line); the TUI stays on the bookmark switcher and
+  shows it as a STICKY status notice that survives keypresses for 10 s
+  instead of dying on the next key. Any commit opened by hash in the web
+  (links, reflog, tags) reports a missing commit the same way.
 
 - **Web: in-view text search in the `?` help popup.** The help overlay now
   takes the same `/` `@` `]` `[` search as the diff pane and blame: `/`

@@ -1,0 +1,16 @@
+[
+  {"number":7,"title":"Add forge tab","author":{"login":"alice"},"state":"OPEN","isDraft":false,
+   "reviewDecision":"CHANGES_REQUESTED","headRefName":"feat/forge","isCrossRepository":false,
+   "headRepositoryOwner":{"login":"homeend"},"headRepository":{"name":"gigagit"},
+   "baseRefName":"main","baseRefOid":"1111111111111111111111111111111111111111",
+   "headRefOid":"2222222222222222222222222222222222222222",
+   "url":"https://github.com/homeend/gigagit/pull/7",
+   "createdAt":"2026-09-01T10:00:00Z","updatedAt":"2026-09-02T11:30:00Z"},
+  {"number":9,"title":"Fork fix","author":{"login":"bob"},"state":"OPEN","isDraft":true,
+   "reviewDecision":"","headRefName":"fix/typo","isCrossRepository":true,
+   "headRepositoryOwner":{"login":"bob"},"headRepository":{"name":"gigagit"},
+   "baseRefName":"main","baseRefOid":"1111111111111111111111111111111111111111",
+   "headRefOid":"3333333333333333333333333333333333333333",
+   "url":"https://github.com/homeend/gigagit/pull/9",
+   "createdAt":"2026-09-03T10:00:00Z","updatedAt":"2026-09-03T10:00:00Z"}
+]

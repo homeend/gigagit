@@ -12,13 +12,12 @@ import (
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/observ"
 )
 
 func newRepo(t *testing.T) *git.Repo {
 	t.Helper()
 	dir := gittest.BasicRepo(t, "hi\n")
-	return &git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))}
+	return testRepo(t, dir)
 }
 
 func TestLoadCmdReturnsPopulatedData(t *testing.T) {

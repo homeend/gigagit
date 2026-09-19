@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v81 -->
+<!-- gg:using-gg:v83 -->
 
 # Using gg (gigagit)
 
@@ -373,6 +373,31 @@ finds the right one here.
 
   A link naming a DIFFERENT checkout is refused (exit 2): cross-repository
   compare is not supported yet.
+- `gg compare --save <label> <left> [<right>]` — run the comparison AND keep
+  it. Both sides are stored as `gg://` links whatever you typed, so
+  `bookmark:<id>`, `shelf:<id>`, `@staged`, `@worktree` and a bare commit-ish
+  all become links. A token that cannot be expressed as one is refused
+  (exit 2) and nothing is stored; a comparison that FAILS stores nothing
+  either.
+
+  **stdout is unchanged** — still the `<status>\t<path>` list, so it stays
+  pipeable. The saved id is reported on stderr as `# saved: <id>\t<label>`.
+- `gg compare --saved <id|label>` — re-run a stored comparison. It prints
+  exactly what the original invocation printed.
+- `gg compare --list` — the stored comparisons, one
+  `<id>\t<label>\t<left>\t<right>` line each. A saved MERGE PREVIEW is a
+  one-sided entry, so its `<right>` column is EMPTY — the column count is
+  fixed either way, for `cut`. Nothing is printed when none are stored.
+
+  ```bash
+  gg compare --save "auth refactor" main feat/auth
+  gg compare --list | cut -f1,2        # ids and labels
+  gg compare --saved "auth refactor"   # run it again later
+  ```
+
+  Saved comparisons and saved merge previews share ONE store, so
+  `gg compare --list` shows both and `gg preview list` shows the previews
+  among them.
 - `gg preview add [--label <text>] <source> <target>` — save a MERGE PREVIEW:
   "what would <source> bring into <target>", i.e. the GitHub pull-request
   files-changed diff (`git diff target...source`, from their merge base to
@@ -411,6 +436,33 @@ finds the right one here.
   checked-out branch and branches checked out in a worktree. An unmerged
   branch is a `branch-unmerged` fork (`force-delete`/`keep`): pass `--force`
   to pre-answer it.
+- `gg pr list|view|comments|fetch|forget` — READ-ONLY pull requests through the
+  forge's own CLI (GitHub's `gh` today; nothing is ever posted, edited or
+  submitted). Needs `gh` installed, logged in and able to read this repo;
+  otherwise every verb exits 1 with `gg pr: no forge CLI can read this
+  repository's pull requests: <why>`. `--json` may sit anywhere.
+  `gg pr list [--json]` prints `#<n> <state> <author>  <source> → <target>
+  [draft] [<review_state>]  <title>` — open PRs first, newest-updated first; a
+  fork head prints `owner:branch`. PRs gg already knows stay listed after they
+  close, marked `closed`/`merged` (or `unavailable` when the forge no longer
+  answers): known = listed open earlier in this process, or fetched.
+  `gg pr view <n> [--json]` prints the row, the URL, the description, then
+  `── conversation ──` (general comments and review verdicts, oldest first,
+  `carol [changes_requested]: …`) and `── outdated ──` (inline threads whose
+  lines later pushes changed, with their original line and hunk tail).
+  `gg pr comments <n> [--json]` prints the inline threads that still have a
+  position: `a.go:10-12 (new) carol [resolved]: body`, replies indented two
+  spaces, file-level threads as `a.go (file)`, body continuation lines indented
+  four. JSON: `{inline, hub, outdated, truncated}` of `{id, parent_id, kind
+  (inline|file|general|review), author, body, path, side (old|new), line,
+  start_line, outdated, resolved, hunk, verdict, created, updated}`;
+  `truncated` = the PR has more than gg reads (100 threads × 50 comments, 100
+  conversation comments, 100 reviews — per PR).
+  `gg pr fetch <n>` fetches the PR head into the private ref `refs/gg/pr/<n>`
+  (a local ref only — never pushed, never shown in the graph; a no-op when
+  already current) and prints the ref, so the change itself reads with
+  `gg diff <target>...refs/gg/pr/<n>`. Fork PRs work. `gg pr forget <n>`
+  deletes that ref and drops a closed row.
 - `gg versions [<branch>]` — list a branch's recorded pre-operation
   snapshots (taken automatically before merges, rebases, resets, amends,
   and branch deletion), newest first: `<id> <short-sha> <time> <subject>`.

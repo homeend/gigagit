@@ -10,9 +10,6 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
-	"github.com/homeend/gigagit/internal/git"
-	"github.com/homeend/gigagit/internal/gitexec"
-	"github.com/homeend/gigagit/internal/observ"
 )
 
 func TestDueItemsRespectsIntervalAndMaster(t *testing.T) {
@@ -134,8 +131,7 @@ func newTestModelWithRemote(t *testing.T) Model {
 	run(root, "clone", origin, clone)
 	run(clone, "checkout", "main")
 
-	runner := gitexec.NewExecRunner("git", clone, observ.NewRing(50))
-	return New(domain.New(&git.Repo{Runner: runner}))
+	return New(domain.New(testRepo(t, clone)))
 }
 
 // BLOCKING-bug guard: a silent (auto) read that fails — e.g. context.Canceled

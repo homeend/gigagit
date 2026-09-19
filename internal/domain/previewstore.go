@@ -1,61 +1,39 @@
 package domain
 
 import (
-	"context"
-	"path/filepath"
-	"strings"
-
-	"github.com/homeend/gigagit/internal/preview"
+	"github.com/homeend/gigagit/internal/savedcompare"
 )
 
-// PreviewStatePath overrides the previews root dir ("" = XDG default).
+// The merge-preview SEAMS. The store itself is internal/savedcompare (a
+// merge preview is a saved comparison whose right half is absent, spec §4.5);
+// what remains here are the names internal/tui and internal/web already use
+// in their TestMain, which cannot import a store package.
+//
+// They keep their "preview" spelling deliberately: renaming them is churn
+// that belongs with plan 3c, when the Previews tab becomes the
+// saved-comparisons tab and the vocabulary changes for the user too.
+
+// PreviewStatePath overrides the state root process-wide ("" = XDG default).
 var PreviewStatePath string
 
 // PreviewsDisabled turns the surface off process-wide — the TEST seam for
-// packages that cannot import internal/preview (tui/web TestMain). An
-// injected store (UsePreviewsDir) still wins for that Service.
+// packages that cannot import the store (tui/web TestMain). An injected store
+// (UsePreviewsDir) still wins for that Service.
 var PreviewsDisabled bool
 
-// UsePreviewsDir points one Service at its own store under dir.
-func (s *Service) UsePreviewsDir(dir string) { s.SetPreviewStore(preview.NewFileStore(dir)) }
+// UsePreviewsDir points one Service at its own store under dir. It records
+// the DIRECTORY as well as the store: the previews migration works on files
+// (previews.toml is a sibling of savedcompare.toml), and a store value cannot
+// be asked where it lives.
+func (s *Service) UsePreviewsDir(dir string) {
+	// Order matters: UseSavedCompareDir re-arms lazy resolution, so the
+	// explicit store goes in AFTER it, never before.
+	s.UseSavedCompareDir(dir)
+	s.SetSavedCompareStore(savedcompare.NewFileStore(dir))
+}
 
 // SetPreviewStore injects a store (tests); nil re-arms lazy resolution.
-func (s *Service) SetPreviewStore(st preview.Store) {
-	s.mu.Lock()
-	s.preview = st
-	s.mu.Unlock()
-}
-
-// previewStore resolves (once) the per-repo store, keyed by git common dir
-// under <state>/gg/previews. nil = disabled (no state dir, or PreviewsDisabled).
-func (s *Service) previewStore(ctx context.Context) preview.Store {
-	s.mu.Lock()
-	st := s.preview
-	s.mu.Unlock()
-	if st != nil {
-		return st
-	}
-	if PreviewsDisabled {
-		return nil
-	}
-	root := PreviewStatePath
-	if root == "" {
-		base := stateBaseDir("previews")
-		if base == "" {
-			return nil
-		}
-		key := "unknown"
-		if cd, err := s.GitCommonDir(ctx); err == nil {
-			key = repoKey(strings.TrimSpace(cd))
-		}
-		root = filepath.Join(base, key)
-	}
-	fs := preview.NewFileStore(root)
-	s.mu.Lock()
-	if s.preview == nil {
-		s.preview = fs
-	}
-	st = s.preview
-	s.mu.Unlock()
-	return st
-}
+//
+// Deprecated: the preview store and the saved-comparison store are one store.
+// Call SetSavedCompareStore.
+func (s *Service) SetPreviewStore(st savedcompare.Store) { s.SetSavedCompareStore(st) }

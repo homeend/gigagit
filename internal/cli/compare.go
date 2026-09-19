@@ -53,7 +53,8 @@ func parseEndpoint(s string, resolve func(rev string) (hash string, ok bool, err
 }
 
 // compareUsage is printed for every usage error of `gg compare`.
-const compareUsage = "usage: gg compare [--patch] <left> [<right>]   " +
+const compareUsage = "usage: gg compare [--patch] [--save <label>] <left> [<right>]   " +
+	"| gg compare --saved <id|label>   | gg compare --list   " +
 	"(endpoints: a gg:// link, a commit, @staged, @worktree, bookmark:<id>, shelf:<id>; right defaults to @worktree)"
 
 // cmdCompare prints the changed-file list (or, with --patch, unified diffs)
@@ -80,10 +81,41 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 	fs := flag.NewFlagSet("compare", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	patch := fs.Bool("patch", false, "print unified diffs instead of the changed-file list")
+	save := fs.String("save", "", "store this comparison under `<label>`")
+	saved := fs.String("saved", "", "re-run the stored comparison named by `<id|label>`")
+	list := fs.Bool("list", false, "print the stored comparisons and exit")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	args = fs.Args()
+	ctx := context.Background()
+	if *list && (*save != "" || *saved != "") {
+		fmt.Fprintln(stderr, compareUsage)
+		return 2
+	}
+	if *save != "" && *saved != "" {
+		fmt.Fprintln(stderr, "compare: --save writes and --saved reads; use one")
+		return 2
+	}
+	if *list {
+		return cmdCompareList(ctx, svc, stdout, stderr)
+	}
+	if *saved != "" {
+		// A stored comparison substitutes its two link texts for the
+		// positionals and then takes exactly the ordinary path below, so a
+		// saved comparison and its direct invocation print byte-identical
+		// output. A SET-shaped record supplies the left side only, and the
+		// right keeps its @worktree default.
+		c, err := svc.SavedCompareGet(ctx, *saved)
+		if err != nil {
+			fmt.Fprintf(stderr, "compare: no saved comparison %q\n", *saved)
+			return 2
+		}
+		args = []string{c.Left}
+		if c.Right != "" {
+			args = append(args, c.Right)
+		}
+	}
 	if len(args) == 0 {
 		fmt.Fprintln(stderr, compareUsage)
 		return 2
@@ -143,7 +175,12 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
-		recordCompareLinks(context.Background(), svc, args[0], rightTok)
+		recordCompareLinks(ctx, svc, args[0], rightTok)
+		if *save != "" {
+			if code := saveComparison(ctx, svc, *save, args[0], rightTok, stderr); code != 0 {
+				return code
+			}
+		}
 		fmt.Fprint(stdout, diff)
 		return 0
 	}
@@ -152,8 +189,105 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	recordCompareLinks(context.Background(), svc, args[0], rightTok)
+	recordCompareLinks(ctx, svc, args[0], rightTok)
+	if *save != "" {
+		if code := saveComparison(ctx, svc, *save, args[0], rightTok, stderr); code != 0 {
+			return code
+		}
+	}
 	printCompareFiles(stdout, files)
+	return 0
+}
+
+// compareTokenLink maps one `gg compare` token onto the link that names the
+// same place. Links are the primary spelling (spec §5.3) and the older
+// vocabulary maps onto them, which is what lets a saved comparison hold two
+// links whatever the user typed.
+//
+// buildLink is the ONE producer — a link is never assembled by string
+// concatenation here, or `gg compare --save` could emit a spelling `gg link`
+// would not, and the round-trip through ParseLink would stop holding.
+func compareTokenLink(ctx context.Context, svc *domain.Service, tok string) (model.Link, error) {
+	switch {
+	case isLinkArg(tok):
+		return model.ParseLink(tok)
+	case tok == "@worktree":
+		return buildLink(ctx, svc, ".", "", linkOpts{})
+	case tok == "@staged", tok == "@index":
+		return buildLink(ctx, svc, ".", "", linkOpts{Cached: true})
+	case strings.HasPrefix(tok, "bookmark:"):
+		id := strings.TrimPrefix(tok, "bookmark:")
+		b, err := svc.BookmarkGet(ctx, id)
+		if err != nil {
+			return model.Link{}, fmt.Errorf("bookmark %q: %w", id, err)
+		}
+		if !b.IsCommit() {
+			return model.Link{}, fmt.Errorf("bookmark %q is a file bookmark, not a commit", id)
+		}
+		return buildLink(ctx, svc, ".", "", linkOpts{Rev: b.Commit, Hint: model.LinkHint{Kind: "bookmark", ID: id}})
+	case strings.HasPrefix(tok, "shelf:"):
+		id := strings.TrimPrefix(tok, "shelf:")
+		e, err := svc.ShelfFind(ctx, id)
+		if err != nil {
+			return model.Link{}, fmt.Errorf("shelf %q: %w", id, err)
+		}
+		if !e.IsCommit() {
+			return model.Link{}, fmt.Errorf("shelf entry %q is a file entry, not a commit", id)
+		}
+		return buildLink(ctx, svc, ".", "", linkOpts{Rev: e.Origin.Commit, Hint: model.LinkHint{Kind: "shelf", ID: id}})
+	default:
+		return buildLink(ctx, svc, ".", "", linkOpts{Rev: tok})
+	}
+}
+
+// saveComparison stores the just-completed comparison. It runs ONLY from
+// cmdCompare's success returns, beside recordCompareLinks (ruling R8): a
+// comparison that failed is not one the user asked to keep.
+//
+// Unlike recordCompareLinks this is NOT best-effort. The user asked for it in
+// so many words, so a token that cannot be expressed as a link is a usage
+// error rather than a silent skip.
+func saveComparison(ctx context.Context, svc *domain.Service, label, leftTok, rightTok string, stderr io.Writer) int {
+	left, err := compareTokenLink(ctx, svc, leftTok)
+	if err != nil {
+		fmt.Fprintf(stderr, "compare --save: %s: %v\n", leftTok, err)
+		return 2
+	}
+	right, err := compareTokenLink(ctx, svc, rightTok)
+	if err != nil {
+		fmt.Fprintf(stderr, "compare --save: %s: %v\n", rightTok, err)
+		return 2
+	}
+	c, err := svc.SavedCompareAdd(ctx, left.String(), right.String(), label)
+	if err != nil && !errors.Is(err, domain.ErrSavedCompareExists) {
+		fmt.Fprintln(stderr, "compare --save:", err)
+		return 1
+	}
+	// The id goes to STDERR, like the "# frozen compare:" notice above it and
+	// for the same reason: stdout is the changed-file list, and a caller
+	// piping it to cut must not find an id row in the middle. `gg compare
+	// --list` is where a script reads ids back.
+	note := ""
+	if errors.Is(err, domain.ErrSavedCompareExists) {
+		note = " (already saved)"
+	}
+	fmt.Fprintf(stderr, "# saved: %s\t%s%s\n", c.ID, c.Label, note)
+	return 0
+}
+
+// cmdCompareList prints "<id>\t<label>\t<left>\t<right>" per stored
+// comparison. A SET-shaped record has an EMPTY right field, which keeps the
+// column count fixed for `cut`. Nothing is printed when the store is empty —
+// the convention `gg links` already follows.
+func cmdCompareList(ctx context.Context, svc *domain.Service, stdout, stderr io.Writer) int {
+	cs, err := svc.SavedCompareList(ctx)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	for _, c := range cs {
+		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\n", c.ID, c.Label, c.Left, c.Right)
+	}
 	return 0
 }
 

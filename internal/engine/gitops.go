@@ -39,6 +39,7 @@ type GitOps interface {
 	StampStoreFormat(ctx context.Context, store string, format int) error
 
 	Fetch(ctx context.Context, remote string) error
+	FetchRefspec(ctx context.Context, remote, src, dst string) error
 	FetchAll(ctx context.Context) error
 	RemoteNames(ctx context.Context) ([]string, error)
 	ListRemoteHeads(ctx context.Context, remote string) ([]model.RemoteHead, error)

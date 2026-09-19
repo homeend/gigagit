@@ -526,8 +526,12 @@ func (m Model) renderInterface() string {
 			if g.boxH[p] <= 0 {
 				continue
 			}
-			rows, _ := m.panelViewWindowed(p, g.boxH[p])
-			boxes = append(boxes, m.renderPanel(p, m.leftPanelLabel(p), rows, nil, g.leftW, g.boxH[p]))
+			rows, idx := m.panelViewWindowed(p, g.boxH[p])
+			var decos []rowDecorator
+			if p == panelPRs {
+				decos = m.prDecorators(idx)
+			}
+			boxes = append(boxes, m.renderPanel(p, m.leftPanelLabel(p), rows, decos, g.leftW, g.boxH[p]))
 		}
 		left = lipgloss.JoinVertical(lipgloss.Left, boxes...)
 	}
@@ -616,7 +620,14 @@ func (m Model) leftPanelLabel(p panel) string {
 	case panelFiles, panelTags:
 		return m.panelLabel(p, filesTabLabel(p, m.panelLen(panelFiles), m.panelLen(panelTags)))
 	default: // the Branches/Remotes/Worktrees tab slot
-		return m.panelLabel(p, tabBarLabel(p))
+		label := joinTabSegs(topTabSegsWith(p, m.forgeShown))
+		if p == panelPRs && m.prsErr != "" && len(m.prs) > 0 {
+			// A failed re-read keeps the previous list; the failure rides the
+			// header so the rows keep their indices (emptyPanelText covers the
+			// no-rows case).
+			label += "  ! " + m.prErrText()
+		}
+		return m.panelLabel(p, label)
 	}
 }
 
@@ -667,19 +678,28 @@ func tabSegAt(segs []tabSeg, col int) (panel, bool) {
 // translated (i18n.T) and may contain wide CJK glyphs; renderPanel's truncate
 // and tabSegAt's column lookup both work in display columns (lipgloss.Width),
 // not bytes/runes, so this stays safe.
-func topTabSegs(active panel) []tabSeg {
+func topTabSegs(active panel) []tabSeg { return topTabSegsWith(active, false) }
+
+// topTabSegsWith is topTabSegs plus, when prs is set, the Pull requests tab —
+// present only once a forge CLI has proved usable (Model.forgeShown).
+func topTabSegsWith(active panel, prs bool) []tabSeg {
 	mark := func(p panel, full, short string) string {
 		if p == active {
 			return "[" + full + "]"
 		}
 		return short
 	}
-	return []tabSeg{
+	segs := []tabSeg{
 		{panelBranches, mark(panelBranches, i18n.T("Branches"), "B")},
 		{panelRemotes, mark(panelRemotes, i18n.T("Remotes"), "R")},
 		{panelWorktrees, mark(panelWorktrees, i18n.T("Worktrees"), "W")},
 		{panelPreviews, mark(panelPreviews, i18n.T("Previews"), "P")},
 	}
+	if prs {
+		// "PR", not "P": Previews owns the single letter.
+		segs = append(segs, tabSeg{panelPRs, mark(panelPRs, i18n.T("Pull requests"), "PR")})
+	}
+	return segs
 }
 
 // filesTabSegs builds the middle-slot tabs (Files · Tags): the active tab spelled
@@ -744,7 +764,7 @@ func (m Model) renderPanel(p panel, label string, rows []string, decos []rowDeco
 		// No room for any data rows below the label; render the label only so the
 		// panel never exceeds boxH (windowRows would otherwise force one row).
 	} else if len(rows) == 0 {
-		lines = append(lines, padRight(truncate(i18n.T("  (none)"), innerW), innerW))
+		lines = append(lines, padRight(truncate(m.emptyPanelText(p), innerW), innerW))
 	} else {
 		marked := m.markedDisplayIndices(p)
 		cmpSet := m.compareSetDisplayIndices(p)

@@ -116,6 +116,11 @@ gg compare [--patch] <left> [<right>]   # changed-file list (or --patch: unified
                                       # shelf:<id> (a stored commit entry — hybrid: live sha while it exists, frozen
                                       # tar once gc'd, noted on stderr); <right> defaults to @worktree
                                       # order is free (@worktree first just inverts the statuses); rows sorted by path
+gg compare --save <label> <left> [<right>]  # run it AND keep it; both sides stored as gg:// links whatever you typed
+                                      # stdout stays the changed-file list (pipeable); the id goes to stderr
+gg compare --saved <id|label>           # re-run a stored comparison; prints exactly what the original printed
+gg compare --list                       # <id>\t<label>\t<left>\t<right> per row; empty right = a saved merge preview
+                                      # saved comparisons and saved previews share one store
                                       # a link with a /<path>, or an @<a>..<b> target, scopes the answer to those files
 gg preview list                       # id  label  source  target  state  files  ahead, one row per saved pair
 gg preview add [--label <text>] <source> <target>   # save a pair; state/counts recompute from the live tips on every read
@@ -345,6 +350,40 @@ link to this line*). And the file list's header copies
 everything it shows: right-click anywhere in it for *copy short commit id* /
 *copy commit id* / *copy commit title* / *copy date* / *copy author* — or, if
 text in the header is selected, a plain *copy* of the selection.
+
+### Pull requests (read-only)
+
+With the GitHub CLI installed and logged in (`gh auth login`), gg reads the
+repository's pull requests — and only reads: nothing is ever posted, edited or
+submitted.
+
+```bash
+gg pr list [--json]           # open PRs, newest-updated first; known closed/merged ones stay, marked
+gg pr view 123 [--json]       # description, conversation + review verdicts, outdated inline threads
+gg pr comments 123 [--json]   # inline / file-level threads that still have a position
+gg pr fetch 123               # PR head (forks too) → private ref refs/gg/pr/123; prints the ref
+gg diff main...refs/gg/pr/123 # read the change
+gg pr forget 123              # drop the ref (and a closed PR's row)
+```
+
+In the TUI the same data is a **Pull requests** tab — the fifth tab of the
+top-left box (`PR` in its header), present only when a usable `gh` was found at
+startup. Rows lead with their status (`✓` approved · `✗` changes requested ·
+`…` review required · `draft`; `merged` / `closed` / `unavailable` for a PR that
+is no longer open — those stay listed, dimmed). `enter` fetches the head and
+opens the PR's diff (`base…head`, titled `PR #123 · title`) in the same view a
+merge preview uses; `i` opens the PR hub (description, conversation with review
+verdicts, outdated threads; `y` copies the URL, `r` reloads); `y` copies the PR
+URL; `d` forgets a PR that is no longer open. `r` re-reads the list, and gg
+re-reads it in the background every `[refresh] prs` seconds (default `300`,
+`0` = off) — independently of the `[refresh] enabled` master switch.
+
+`refs/gg/pr/<n>` is local only: never pushed, never shown in the commit graph.
+The fetch goes through whichever of your remotes names the base repository, so
+it uses your own ssh/https setup. `gh` is detected once per run; without a
+usable `gh` the verbs exit 1 and say why. Per PR, gg reads up to 100 review
+threads (50 comments each), 100 conversation comments and 100 reviews, and says
+so when a PR has more. `GG_GH_BIN` points gg at a different `gh` binary.
 
 ### Shell integration (cd-on-switch)
 
@@ -589,6 +628,7 @@ reflog      = 120
 feed        = 120    # commit feed
 fetch       = 300    # run `git fetch` every 5 min (network; errors swallowed)
 remote_tags = 300    # check which tags exist on the remote every 5 min (network; errors swallowed)
+prs = 300            # re-read the pull-request list every 5 min (the default; 0 = off). NOT gated by `enabled`
 
 min_seconds = 10     # floor on any interval (no source polls faster than this)
 

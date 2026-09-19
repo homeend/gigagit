@@ -17,6 +17,7 @@ import (
 	"github.com/homeend/gigagit/internal/bookmark"
 	"github.com/homeend/gigagit/internal/cache"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/linkhist"
@@ -25,9 +26,9 @@ import (
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/prefix"
 	"github.com/homeend/gigagit/internal/preflight"
-	"github.com/homeend/gigagit/internal/preview"
 	"github.com/homeend/gigagit/internal/profile"
 	"github.com/homeend/gigagit/internal/repogate"
+	"github.com/homeend/gigagit/internal/savedcompare"
 	"github.com/homeend/gigagit/internal/searchhist"
 	"github.com/homeend/gigagit/internal/shelf"
 )
@@ -48,10 +49,17 @@ type Service struct {
 	searchhist searchhist.Store // lazily resolved; nil disables search history
 	linkhist   linkhist.Store   // lazily resolved; nil disables copied-link history
 
-	notes      notes.Store   // lazily resolved; nil disables notes
-	notesOff   bool          // hard "no store" (the disabled-path test)
-	preview    preview.Store // lazily resolved; nil disables previews
-	noteCounts *NoteCounts   // cached badge counts; nil = cold, invalidated by every mutation
+	notes        notes.Store        // lazily resolved; nil disables notes
+	notesOff     bool               // hard "no store" (the disabled-path test)
+	savedCompare savedcompare.Store // lazily resolved; nil disables saved comparisons AND merge previews
+	// savedCompareRoot is the per-Service state directory override, set by
+	// UsePreviewsDir. It exists alongside the injected STORE because the
+	// previews migration needs the DIRECTORY (previews.toml is a sibling of
+	// savedcompare.toml there), and a store value cannot be asked where it
+	// lives. Tests inject per-Service so they stay parallel; the process-wide
+	// PreviewStatePath global remains for the frontends' TestMain seams.
+	savedCompareRoot string
+	noteCounts       *NoteCounts // cached badge counts; nil = cold, invalidated by every mutation
 	// previewCounts caches PreviewNoteCounts per (tip, base) pair. It follows
 	// BOTH clocks: a new tip is a new key, and every note mutation drops the
 	// whole map through invalidateNoteCounts (ruling 7) — counts read the
@@ -79,6 +87,20 @@ type Service struct {
 
 	prefixGlobal prefix.Store // lazily resolved; nil disables prefixes
 	prefixRepo   prefix.Store // lazily resolved; nil disables prefixes
+
+	// forgeMu guards forge detection and the known-PR set (forge.go). It is
+	// never held across a provider call (the probe is a network round trip and
+	// Preflight reads forgeProbe under it), and never while taking preflightMu
+	// (Preflight holds preflightMu then takes forgeMu — the reverse deadlocks).
+	forgeMu        sync.Mutex
+	forgeProviders []forge.Provider // nil = forge.Default; tests inject
+	forgeRec       observ.Recorder  // the session's span ring, so gh calls reach the operation log; nil for a Service built by New
+	forgeProbed    bool
+	forgeProbing   chan struct{}  // non-nil while the one probe is in flight; closed when it lands
+	forgeActive    forge.Provider // nil when none is usable
+	forgeErr       error
+	forgeSeen      map[int]bool              // PR numbers listed open this session
+	forgeTerminal  map[int]model.PullRequest // cached closed/merged/unavailable reads
 
 	// preflightMu guards the resolved verdicts. reRoot builds a FRESH Service,
 	// so a cached resolution can never outlive the repo it describes.
@@ -201,6 +223,9 @@ func openWith(workdir string, sshBatch bool, ring *observ.Ring) *Service {
 	}
 	s := New(&git.Repo{Runner: gitexec.NewLimitRunner(er)})
 	s.workdir = workdir
+	if ring != nil {
+		s.forgeRec = ring // guarded: a nil *Ring in the interface would not be a nil Recorder
+	}
 	return s
 }
 

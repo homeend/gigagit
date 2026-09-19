@@ -9,10 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
-	"github.com/homeend/gigagit/internal/git"
-	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/observ"
 )
 
 func pushRealGit(t *testing.T, dir string, args ...string) {
@@ -45,7 +42,7 @@ func TestPushBranchRowPushesSelectedNotCurrent(t *testing.T) {
 	pushRealGit(t, dir, "commit", "--allow-empty", "-m", "feature commit")
 	pushRealGit(t, dir, "checkout", "master") // HEAD is NOT feature
 
-	svc := domain.New(&git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))})
+	svc := domain.New(testRepo(t, dir))
 	m := New(svc)
 	m.loading = false
 	m.focus = panelBranches

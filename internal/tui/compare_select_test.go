@@ -9,9 +9,6 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
-	"github.com/homeend/gigagit/internal/git"
-	"github.com/homeend/gigagit/internal/gitexec"
-	"github.com/homeend/gigagit/internal/observ"
 )
 
 // loadedModelLinearCommits builds a real repo with n linear commits (commit k
@@ -36,7 +33,7 @@ func loadedModelLinearCommits(t *testing.T, n int) Model {
 		run("add", ".")
 		run("commit", "-m", "c"+strconv.Itoa(k))
 	}
-	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))}
+	repo := testRepo(t, dir)
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	mm := loaded.(Model)

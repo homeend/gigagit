@@ -9,9 +9,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/git"
-	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/observ"
 )
 
 // narrowRefspecRepo mirrors internal/engine's narrowClone (unexported there,
@@ -48,7 +46,7 @@ func narrowRefspecRepo(t *testing.T) *git.Repo {
 	run(local, "switch", "-c", "feat")
 	run(local, "commit", "--allow-empty", "-m", "feat1")
 	run(local, "push", "origin", "feat") // exists on origin, but narrow refspec still won't see it
-	return &git.Repo{Runner: gitexec.NewExecRunner("git", local, observ.NewRing(50))}
+	return testRepo(t, local)
 }
 
 func TestNarrowRefspecNoticeNilWhenNoUnmapped(t *testing.T) {

@@ -264,23 +264,14 @@ func buildLink(ctx context.Context, svc *domain.Service, workdir, pathArg string
 		l.Target = model.LinkTarget{State: model.StateUnstaged}
 	}
 
-	name, err := svc.RepoName(ctx)
+	// ONE derivation of the repo half, shared with every other producer (the
+	// previews migration composes links nobody typed): two would be two arms
+	// that must agree and eventually would not.
+	repo, err := svc.LinkRepo(ctx)
 	if err != nil {
 		return model.Link{}, err
 	}
-	if name != "" {
-		l.Repo = model.LinkRepo{Name: name}
-		return l, linkRoundTrips(l)
-	}
-	abs := filepath.ToSlash(filepath.Clean(top))
-	// The local form carries the CHECKOUT path, which is no more expressible
-	// than a file path is: a checkout under /home/user@corp or /mnt/backup#1
-	// would emit a link ParseLink refuses (the first '@' is the target
-	// separator, the first '#' the hunk one). Refuse to print it instead.
-	if !model.LinkAbsOK(abs) {
-		return model.Link{}, fmt.Errorf("%w: this repository has no remote and its checkout path %q contains @, # or ? — no gg link", model.ErrLink, abs)
-	}
-	l.Repo = model.LinkRepo{Abs: abs}
+	l.Repo = repo
 	return l, linkRoundTrips(l)
 }
 

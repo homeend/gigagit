@@ -631,21 +631,21 @@ func (m Model) compareCommitBookmark(b model.Bookmark) (Model, tea.Cmd) {
 	// decline. (subject is a feed row, i.e. `git log --format=%H`, so it is
 	// always a full sha — but it costs nothing to check it on the same path,
 	// and the check is what keeps the must* out of this file entirely.)
-	base, err := model.CommitEndpoint(b.Commit)
-	if err != nil {
+	if _, err := model.CommitEndpoint(b.Commit); err != nil {
 		m.statusMsg = i18n.T("the recorded commit is not usable")
 		return m, nil
 	}
-	subj, err := model.CommitEndpoint(subject)
-	if err != nil {
+	if _, err := model.CommitEndpoint(subject); err != nil {
 		m.statusMsg = i18n.T("the recorded commit is not usable")
 		return m, nil
 	}
-	// Park the switcher (the files view is not a layer and must not draw
-	// under it); esc/l on the compare returns to it.
-	return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) {
-		return m.openCompareFiles(base, subj)
-	})
+	// Resolved OFF the UI thread first (startEntryCompare): a bookmark is a
+	// pointer, and one whose commit was rebased away used to open a files view
+	// reading "(load failed)" under git's raw "bad object". The resolve reports
+	// it as a CommitGoneError, which lands as a sticky notice on the switcher;
+	// a live one hands off to the files view exactly as before (the switcher
+	// parked, esc/l returning to it).
+	return m.startEntryCompare(bookmarkEntrySide(b), entrySide{sha: subject, label: shortHash(subject)})
 }
 
 // commitBookmarkNotice sets a "not for a commit bookmark" status and reports
@@ -687,6 +687,12 @@ func (m Model) loadBookmarkCompareCmd(bm model.Bookmark) tea.Cmd {
 	full := filepath.Join(root, bm.Path)
 
 	return func() tea.Msg {
+		// A bookmark is a pointer. Asked first, a dead one is a notice on the
+		// switcher instead of a diff view holding git's raw "bad file".
+		var gone *domain.EntryGoneError
+		if err := svc.BookmarkProbe(context.Background(), bm); errors.As(err, &gone) {
+			return entryGoneMsg{tag: tag, err: err}
+		}
 		oldSrc := func(ctx context.Context) ([]byte, error) { return svc.BookmarkBytes(ctx, bm) }
 		var newSrc domain.ByteSource
 		switch st, err := os.Stat(full); {

@@ -43,6 +43,7 @@ func TestFeaturesAreSatisfiedOnACurrentRepo(t *testing.T) {
 	p := preflight.Probes{
 		Stores:     map[string]preflight.StoreProbe{StoreVersions: {Format: VersionsFormat, HasData: true}},
 		GitVersion: [3]int{2, 45, 0},
+		Forge:      &preflight.ForgeProbe{Provider: "github"},
 	}
 	for _, v := range preflight.Resolve(Features(), p) {
 		if v.State != preflight.Satisfied {

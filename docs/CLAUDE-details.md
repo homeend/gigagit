@@ -1596,3 +1596,127 @@ does not itself cause the overflow.
   refetch (scroll mode's sticky `.bgut`/`.bno` carry the tint too); the
   title carries ` · +1d -7d`; `#blame-hint` and the `?` help name the keys.
 - **Keys ruling:** `d`/`D`, not `h`/`H` — `h` means history in the diff view.
+
+### Forge pull requests, read-only (`internal/forge`, plan 1 of 3, spec `docs/superpowers/specs/2026-09-19-forge-prs-design.md`)
+
+**Shape.** `model.PullRequest` / `model.ForgeComment` are provider-neutral and
+live in `model` because frontends must name them but may not import a
+domain-owned package. `forge.Provider` (`Detect`, `ListOpen`, `PR`, `Comments`,
+`BaseRepo`, `HeadRefspec`) is the seam; `forge.GH` is the only implementation
+and runs `gh` through a `gitexec.ExecRunner` built with the gh binary path
+(`$GG_GH_BIN`, else `gh`) — the runner was already binary-agnostic. Every gh
+call has a 30 s timeout. `TestGHArgvIsReadOnly` pins that no mutating token
+(`-X`, `comment`, `review`, `edit`, `merge`, …) ever appears in an argv.
+
+**Detection is once per `domain.Service`** (user ruling): `ForgeStatus` probes
+on its first call (`gh pr list --limit 1 --json number` = installed + authed +
+repo resolves) and caches forever; a user who fixes gh restarts gg. It is a
+network round trip, so frontends call it off the UI thread. `Preflight` NEVER
+probes — it reads the `forgeProbe()` snapshot (nil = unprobed = unsatisfiable),
+and `ForgeStatus` invalidates the preflight cache after its one probe. **Locks:**
+the probe runs OUTSIDE `forgeMu` (it can take its full 30 s, and everything
+that calls `Preflight` — notices, `FeatureEnabled`, the web gate — reads
+`forgeProbe` under that lock); concurrent first callers wait on the
+`forgeProbing` channel so `Detect` still runs once, and `forgeProbe` says
+"unprobed" while it is in flight. Order is `preflightMu` → `forgeMu`, so
+`ForgeStatus` calls `invalidatePreflight` with `forgeMu` released. The `forge`
+feature is `Optional` + `Silent`: `noticesForVerdicts` skips silent verdicts, so
+a box without gh shows no notice (the CLI, which was asked, prints the reason).
+
+**Known PRs never disappear when they close** (user ruling). `PullRequests` =
+`ListOpen` ∪ known-but-not-open, where known = listed open earlier this
+session (`forgeSeen`) or has a `refs/gg/pr/<n>` ref. The REF is the
+cross-session record — there is no state file, and refs are never pruned
+automatically. A non-open PR is read once with `PR(n)` and cached
+(`forgeTerminal`); `ErrNotFound` → state `unavailable` (cached), a transient
+error → `unavailable` uncached. `PRForgetOp` drops the session entry and the op
+deletes the ref. Open rows first, each group newest-updated first.
+
+**The fetch.** `engine.FetchPRHead` (RefWrite) force-fetches
+`refs/pull/<n>/head` (the provider's `HeadRefspec`, fully qualified — no DWIM)
+into `refs/gg/pr/<n>` with `--no-tags --no-write-fetch-head`; when the ref
+already equals the PR's `HeadSHA` it costs one rev-parse and no network.
+`PRFetchOp` picks the remote: the configured remote whose URL `RepoSlug`s to
+the base repo gh reports (ssh and https spellings compare equal), else gh's
+`sshUrl`/`url`. GitHub serves fork PR heads from the BASE repo, so forks need
+nothing special. `refs/gg/*` is already excluded from graph decorations.
+
+**`PRPair`** picks the diff's left side: an open PR → its target branch; a
+closed/merged one → the forge's recorded `baseRefOid` (after a merge the
+target tip contains the head, so `target...head` is empty); each falls
+through when it does not resolve locally, ending at `<remote>/<target>`.
+
+**Comments** come from ONE `gh api graphql` call per PR using gh's own
+`{owner}`/`{repo}` placeholders (GraphQL because REST has no `isResolved`),
+single-page by design: 100 threads × 50 comments, 100 conversation comments,
+100 reviews, `hasNextPage` anywhere → `Truncated`. `PRComments` buckets them:
+`Inline` (line or file-level threads with a current position), `Outdated`
+(GitHub nulls `line`; the parser keeps `originalLine` as a LABEL only — never
+anchor an outdated thread), `Hub` (conversation + review verdicts,
+chronological). A `COMMENTED` review with an empty body is dropped: it is only
+the envelope of its inline comments. A deleted account's null author is
+`ghost`. Buckets are `[]`, never `null`, on the wire.
+
+**Testing.** `internal/forge/testdata/fakegh` is a Go-built fake `gh`
+(`forgetest.BuildFakeGH`, built once per process, Windows-safe) answering from
+`$GG_FAKEGH_DIR`, else `<cwd>/.git/fakegh/*.json` — which is how an e2e TOML
+scenario seeds it with plain `write` steps. The e2e `TestMain` points
+`GG_GH_BIN` at it for EVERY scenario, so the suite can never reach the real
+gh. Tests that set that env are serial. Domain tests inject a `fakeForge` via
+`svc.SetForgeProviders`.
+
+### Forge pull requests in the TUI (plan 2 of 3, `docs/superpowers/plans/2026-09-19-forge-prs-2-tui.md`)
+
+**The list is a synthetic refresh item, not a source.** `prsItem =
+refreshItem{isPRs: true}` (like `fetchItem`/`remoteTagsItem`) with its own
+`prsLoadedMsg`, read by `readPRsCmd` (`pr_panel.go`). It is a NETWORK read
+through `gh` that may take its whole 30 s timeout, so it must never hold
+`srcLoading`/`m.loading`, never block `r` behind `anySourceInflight`, and never
+ride an "all sources" fan-out. `prsGen` drops a stale arrival, `prsInflight`
+stops a second read, a `context.Canceled` arrival (a user op pre-empted the
+background lane) is not a failure. `dataAvailableMsg`'s lane-freeing check
+excludes every synthetic item — their zero `source` is `srcStatus`.
+
+**The poll ignores `[refresh] enabled`.** `dueItems` skips `isPRs`; `prsDue`
+(pure) checks `cfg.PRsSeconds()` with the `min_seconds` floor and no master
+gate, and `refreshTick` appends `prsItem` only when `m.forgeShown`.
+`RefreshConfig.PRs` is a `*int` (`toml:"prs"`): the overlay's zero-is-unset rule
+could not otherwise express "0 = off" over a 300 default. It is a Settings →
+Refresh rates row like the others (`scheduledItems`).
+
+**One probe, a sticky tab.** `kickForgeProbe` (the `configReadyMsg` startup arm,
+and `dataLoadedMsg` after a `reRoot`) dispatches the one read per repo session;
+its `domain.ForgeStatus` rides the message. The first available status sets
+`forgeShown`, which is what `m.leftTabs()` / `topTabSegsWith` / `activateTab`
+consult; it never flips back in that repo (a later failure is `prsErr`: the
+header's `! github: …` over the previous list, or the empty-panel text with
+`[r] retry`). `reRoot` resets all of it and moves an active PR tab to Branches.
+Test seam: `domain.ForgeDisabled` (set in the TUI `TestMain`) keeps every test
+off the real `gh`; `pr_read_serial_test.go` lifts it serially against the fake.
+
+**enter = three hops.** `openPRCmd` resolves `svc.PRFetchOp` off-thread (it
+asks the forge for the base repo) → `prFetchReadyMsg` arms `pendingPROpen` and
+`startOp`s the `FetchPRHead` → `opFinishedMsg` success runs
+`openPRPreviewCmd` (`svc.PRPair` → `PreviewOpen(head, base)`), a one-off
+preview (`id ""`). `previewOpenMsg.title` / `previewOpenState.title` override
+`previewTitle`, and `reopenPreviewCmd` carries the open pair's title along so a
+previews refresh cannot rename a PR diff to "Merge preview: refs/gg/pr/7 → …".
+`opAffectedSources` maps both PR ops to an EMPTY, non-nil slice (nil = all =
+the remote-tags ls-remote probe). `ForgetPR` re-reads the list through
+`pendingPRsReload` — the list is not a registry source, so `pendingSources`
+cannot carry it.
+
+**The hub** (`pr_hub.go`) is `prHubPopup{*contentPopup}`: scroll, `/` filter,
+`s`, `ctrl+t` and esc-to-opener come from the embedded popup; it adds `y` (copy
+URL) and `r` (reload), advertised on the popup's `footer` line. Async fill
+follows the commit-message viewer, gated on the PR number. The list read has no
+body, so the hub re-reads the PR (`svc.PullRequest`) with its comments.
+`model.PullRequest.ReviewState` is LOWER-case (`approved`,
+`changes_requested`, `review_required`) — the parser lower-cases
+`reviewDecision`.
+
+**Fixture gotcha.** A scratch repo whose `origin` reaches a local bare repo
+through `url.<path>.insteadOf` does not work: `git remote get-url` returns the
+rewritten path, `RepoSlug` no longer matches the forge's slug, and the fetch
+falls back to the forge URL — the real GitHub. Point `repo-view.json`'s `url`
+at the bare repo instead.
