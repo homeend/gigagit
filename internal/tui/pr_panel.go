@@ -140,12 +140,12 @@ func (l prList) Key(i int) string  { return strconv.Itoa(l.items[i].Number) }
 // prReviewMark is the one-cell review verdict of an open PR. Narrow glyphs
 // only: a wide one overflows the row in tmux (the ☰ lesson).
 func prReviewMark(state string) string {
-	switch state {
-	case "APPROVED":
+	switch state { // model.PullRequest.ReviewState is the forge's word, lower-cased
+	case "approved":
 		return "✓"
-	case "CHANGES_REQUESTED":
+	case "changes_requested":
 		return "✗"
-	case "REVIEW_REQUIRED":
+	case "review_required":
 		return "…"
 	}
 	return ""
@@ -181,34 +181,50 @@ func prBranches(p model.PullRequest) string {
 	return src + " → " + p.Target
 }
 
-// prRows renders "#N  title  author  source → target  [draft]  <mark|state>",
-// the number column padded to the widest number. Forge text is never
-// translated; only "draft" and the state word are.
+// prStatusCell is a row's status: the state word of a PR that is no longer
+// open, else the review mark and "draft".
+func prStatusCell(p model.PullRequest) string {
+	if !p.IsOpen() {
+		return prStateWord(p.State)
+	}
+	cell := prReviewMark(p.ReviewState)
+	if p.Draft {
+		if cell != "" {
+			cell += " "
+		}
+		cell += i18n.T("draft")
+	}
+	return cell
+}
+
+// prRows renders "#N  <status>  title  author  source → target", the number
+// and status columns padded to their widest cell. The status LEADS: the left
+// column is narrow and cuts a row's tail, and "merged" or a review verdict is
+// what a list row must never lose. Forge text is never translated; only
+// "draft" and the state word are.
 func (m Model) prRows() []string {
 	nums := make([]string, len(m.prs))
 	for i, p := range m.prs {
 		nums[i] = "#" + strconv.Itoa(p.Number)
 	}
-	w := maxLabelWidth(2, nums...)
+	status := make([]string, len(m.prs))
+	for i, p := range m.prs {
+		status[i] = prStatusCell(p)
+	}
+	w, sw := maxLabelWidth(2, nums...), maxLabelWidth(0, status...)
 	out := make([]string, 0, len(m.prs))
 	for i, p := range m.prs {
-		cells := []string{padCell(nums[i], w), sanitizeRowText(p.Title)}
+		cells := []string{padCell(nums[i], w)}
+		if sw > 0 {
+			cells = append(cells, padCell(status[i], sw))
+		}
+		cells = append(cells, sanitizeRowText(p.Title))
 		for _, c := range []string{p.Author, prBranches(p)} {
 			if c != "" {
 				cells = append(cells, c)
 			}
 		}
-		if p.Draft && p.IsOpen() {
-			cells = append(cells, i18n.T("draft"))
-		}
-		tail := prReviewMark(p.ReviewState)
-		if !p.IsOpen() {
-			tail = prStateWord(p.State)
-		}
-		if tail != "" {
-			cells = append(cells, tail)
-		}
-		out = append(out, strings.Join(cells, "  "))
+		out = append(out, strings.TrimRight(strings.Join(cells, "  "), " "))
 	}
 	return out
 }

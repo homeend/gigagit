@@ -18,7 +18,7 @@ func forgeOK() domain.ForgeStatus { return domain.ForgeStatus{Provider: "github"
 func testPRs() []model.PullRequest {
 	return []model.PullRequest{
 		{Number: 7, Title: "Add streaming parser", Author: "octocat", State: model.PRStateOpen,
-			Source: "feat/x", Target: "main", ReviewState: "APPROVED", URL: "https://github.com/o/r/pull/7",
+			Source: "feat/x", Target: "main", ReviewState: "approved", URL: "https://github.com/o/r/pull/7",
 			Updated: time.Unix(1_700_000_000, 0)},
 		{Number: 12, Title: "Old work", Author: "hubot", State: model.PRStateMerged,
 			Source: "old", Target: "main", URL: "https://github.com/o/r/pull/12",

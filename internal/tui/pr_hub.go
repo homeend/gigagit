@@ -78,9 +78,9 @@ func (m Model) handlePRHubMsg(msg prHubMsg) (Model, tea.Cmd) {
 	}
 	now := time.Now()
 	if msg.err != nil {
+		// The retry key is already on the footer line ([r] reload).
 		hub.lines = append(prHubHeader(hub.pr, now),
-			contentLine{text: i18n.T("(load failed: %s)", firstLine(msg.err.Error()))},
-			contentLine{text: i18n.T("[r] retry")})
+			contentLine{text: i18n.T("(load failed: %s)", firstLine(msg.err.Error()))})
 		hub.sel = 0
 		return m, nil
 	}
@@ -124,12 +124,12 @@ func prVerdictWord(v string) string {
 
 // prReviewStateWord is the PR-level review state of the header line.
 func prReviewStateWord(s string) string {
-	switch s {
-	case "APPROVED":
+	switch s { // lower-cased by the forge parser
+	case "approved":
 		return i18n.T("approved")
-	case "CHANGES_REQUESTED":
+	case "changes_requested":
 		return i18n.T("changes requested")
-	case "REVIEW_REQUIRED":
+	case "review_required":
 		return i18n.T("review required")
 	}
 	return ""

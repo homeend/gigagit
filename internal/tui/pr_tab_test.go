@@ -59,7 +59,7 @@ func TestPRRows(t *testing.T) {
 	m := prModel(t)
 	m.prs = append(m.prs,
 		model.PullRequest{Number: 101, Title: "Fork work", Author: "eve", State: model.PRStateOpen, Draft: true,
-			Source: "patch-1", SourceRepo: "eve/r", Target: "main", ReviewState: "CHANGES_REQUESTED"},
+			Source: "patch-1", SourceRepo: "eve/r", Target: "main", ReviewState: "changes_requested"},
 		model.PullRequest{Number: 5, Title: "Gone", State: model.PRStateUnavailable},
 	)
 	rows := m.prRows()
@@ -71,15 +71,20 @@ func TestPRRows(t *testing.T) {
 			t.Errorf("row 0 = %q, missing %q", rows[0], want)
 		}
 	}
-	if !strings.HasSuffix(rows[1], "merged") || strings.Contains(rows[1], "✓") {
+	if !strings.HasPrefix(rows[1], "#12   merged") || strings.Contains(rows[1], "✓") {
 		t.Errorf("merged row = %q: the state word replaces the review mark", rows[1])
+	}
+	// The status cell LEADS the row: the left column is narrow and cuts a
+	// row's tail, and the state is the one thing a list must never lose.
+	if !strings.HasPrefix(rows[0], "#7    ✓") {
+		t.Errorf("row 0 = %q, want the review mark right after the number", rows[0])
 	}
 	for _, want := range []string{"#101", "eve:patch-1 → main", "draft", "✗"} {
 		if !strings.Contains(rows[2], want) {
 			t.Errorf("row 2 = %q, missing %q", rows[2], want)
 		}
 	}
-	if !strings.HasSuffix(rows[3], "unavailable") {
+	if !strings.HasPrefix(rows[3], "#5    unavailable") {
 		t.Errorf("row 3 = %q", rows[3])
 	}
 	// Numbers share one column: "#7" is padded to "#101".
