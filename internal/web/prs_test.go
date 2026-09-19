@@ -28,6 +28,10 @@ type fakeForge struct {
 	lists   int
 	baseURL string
 	gate    chan struct{} // when non-nil, ListOpen blocks until it is closed
+
+	comments     []model.ForgeComment
+	commentsErr  error
+	commentCalls int
 }
 
 func (f *fakeForge) Name() string { return "fake" }
@@ -66,7 +70,10 @@ func (f *fakeForge) PR(_ context.Context, n int) (model.PullRequest, error) {
 	return model.PullRequest{}, forge.ErrNotFound
 }
 func (f *fakeForge) Comments(context.Context, int) ([]model.ForgeComment, bool, error) {
-	return nil, false, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.commentCalls++
+	return slices.Clone(f.comments), false, f.commentsErr
 }
 func (f *fakeForge) BaseRepo(context.Context) (string, string, error) { return "", f.baseURL, nil }
 func (f *fakeForge) HeadRefspec(n int) string                         { return fmt.Sprintf("refs/pull/%d/head", n) }
@@ -286,4 +293,16 @@ func TestPRLoadAfterRerootLeavesTheNewCacheAlone(t *testing.T) {
 	if owner != other || rows != 0 {
 		t.Fatalf("the stale listing took the cache back (owner is other: %v, rows %d)", owner == other, rows)
 	}
+}
+
+// fakeForgeServer pairs a test server with the fake forge behind it.
+type fakeForgeServer struct {
+	ts *httptest.Server
+	ff *fakeForge
+}
+
+func (f *fakeForgeServer) calls() int {
+	f.ff.mu.Lock()
+	defer f.ff.mu.Unlock()
+	return f.ff.commentCalls
 }
