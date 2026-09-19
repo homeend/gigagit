@@ -12,15 +12,16 @@ import (
 // are exempt.
 func TestFrontendsDoNotImportGit(t *testing.T) {
 	forbidden := map[string]string{
-		"github.com/homeend/gigagit/internal/git":        "frontends must reach git through internal/domain",
-		"github.com/homeend/gigagit/internal/shelf":      "frontends must reach the shelf store through internal/domain",
-		"github.com/homeend/gigagit/internal/bookmark":   "frontends must reach the bookmark store through internal/domain",
-		"github.com/homeend/gigagit/internal/notes":      "frontends must reach the note store through internal/domain",
-		"github.com/homeend/gigagit/internal/preview":    "frontends must reach the preview store through internal/domain",
-		"github.com/homeend/gigagit/internal/searchhist": "frontends must reach the search-history store through internal/domain",
-		"github.com/homeend/gigagit/internal/profile":    "frontends must reach the profile store through internal/domain",
-		"github.com/homeend/gigagit/internal/prefix":     "frontends must reach the prefix store through internal/domain",
-		"github.com/homeend/gigagit/internal/linkhist":   "frontends must reach the copied-link history store through internal/domain",
+		"github.com/homeend/gigagit/internal/git":          "frontends must reach git through internal/domain",
+		"github.com/homeend/gigagit/internal/shelf":        "frontends must reach the shelf store through internal/domain",
+		"github.com/homeend/gigagit/internal/bookmark":     "frontends must reach the bookmark store through internal/domain",
+		"github.com/homeend/gigagit/internal/notes":        "frontends must reach the note store through internal/domain",
+		"github.com/homeend/gigagit/internal/preview":      "frontends must reach the preview store through internal/domain",
+		"github.com/homeend/gigagit/internal/searchhist":   "frontends must reach the search-history store through internal/domain",
+		"github.com/homeend/gigagit/internal/profile":      "frontends must reach the profile store through internal/domain",
+		"github.com/homeend/gigagit/internal/prefix":       "frontends must reach the prefix store through internal/domain",
+		"github.com/homeend/gigagit/internal/linkhist":     "frontends must reach the copied-link history store through internal/domain",
+		"github.com/homeend/gigagit/internal/savedcompare": "frontends must reach the saved-comparison store through internal/domain",
 	}
 	for _, pkg := range []string{
 		"github.com/homeend/gigagit/internal/tui",
@@ -181,6 +182,34 @@ func TestFilelockIsAStdlibLeaf(t *testing.T) {
 	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/filelock") {
 		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
 			t.Errorf("internal/filelock imports %s — it must stay stdlib only", imp)
+		}
+	}
+}
+
+// TestSavedCompareIsALeaf pins internal/savedcompare's dependency budget: a
+// records-only registry of saved comparisons, owned by internal/domain. Like
+// linkhist it takes an explicit root — XDG resolution is domain's job — so it
+// must never reach for internal/config or internal/git to find its own
+// directory. Its whole budget is stdlib, internal/model (the gg:// Link it
+// stores), the shared file lock, and the same TOML library every other store
+// already uses.
+//
+// internal/model in particular: an entry holds model.Link values, not link
+// STRINGS, so the package that owns the grammar is a legitimate dependency
+// here where it would not be for linkhist (which stores raw text).
+func TestSavedCompareIsALeaf(t *testing.T) {
+	t.Parallel()
+	allowed := map[string]bool{
+		"github.com/homeend/gigagit/internal/filelock": true,
+		"github.com/homeend/gigagit/internal/model":    true,
+		"github.com/pelletier/go-toml/v2":              true,
+	}
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/savedcompare") {
+		if allowed[imp] {
+			continue
+		}
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/savedcompare imports %s — only stdlib, internal/model, internal/filelock and go-toml are allowed", imp)
 		}
 	}
 }
