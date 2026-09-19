@@ -103,9 +103,12 @@ func (s *Service) RecordCopiedLink(ctx, text string)     // ParseLink → Descri
 path → `link: <text>`) and adds one arm **before** the fallback: a pair whose
 `b` is stash-shaped (§3.3) → `stash: <subject of b>`.
 
-`copyToClipboardCmd(ok, text)` gains, after a successful copy:
-`if isLinkText(text) { svc.RecordCopiedLink(ctx, text) }`. Best-effort, off
-the UI thread, never changes the status line. `internal/tui` has exactly one
+`copyToClipboardCmd(ok, text)` gains, **before** the clipboard write and
+regardless of its outcome: `if isLinkText(text) { svc.RecordCopiedLink(ctx,
+text) }`. When the clipboard is broken (WSL interop down) the history is the
+only place the link survives, which is when it matters most. Best-effort, off
+the UI thread, never changes the status line. The write itself goes through a
+per-Model `clipWrite` seam so a test can run the command. `internal/tui` has exactly one
 call to `clipboard.Copy`; a grep gate keeps it that way, which is what makes
 "chokepoint" a fact rather than a hope.
 
@@ -165,7 +168,7 @@ and the tree read only when `b` has three parents.
 ### 3.4 The history picker (one component, three hosts)
 
 ```go
-type linkHistPicker struct { entries []linkhist.Entry; sel int; loaded bool }
+type linkHistPicker struct { rows []histRow; sel int; loaded, active bool }
 ```
 
 Hosts: the `#` prompt (3b-1) and both dialog fields (3b-2). The host loads it
@@ -175,9 +178,9 @@ with a gen-tagged `linkHistCmd` when it opens — never a synchronous read in
 returns, `enter` on a row **fills the field** and returns focus to it.
 In the `#` prompt a fill also submits (it is a navigation prompt; a second
 enter buys nothing). Empty history renders one dim line, not an empty box.
-`frontends never import linkhist` stays true: the TUI sees a domain view
-type, `domain.LinkHistoryEntry{Link, Desc}`… which `LinkHistory` must return
-instead of `[]linkhist.Entry` if archtest objects (the plan checks first).
+`frontends never import linkhist` stays true: the load command copies each
+entry into a TUI-local `histRow{link, desc}` at the message boundary, so the
+package is never named.
 
 ### 3.5 The one door (D6)
 
