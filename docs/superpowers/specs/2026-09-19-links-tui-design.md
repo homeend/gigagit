@@ -136,7 +136,17 @@ its `run` fires `resolveStashPairCmd(ref)` → `svc.StashPair(ctx, ref)
 (parent, sha string, err)` → on the message, build the link and hand it to
 `copyToClipboardCmd`. `stash@{N}` is an *input* to the resolve and never
 reaches the link; the gate asserts the copied text contains neither
-`stash@` nor `{`.
+`stash@` nor `{`. For the same reason a stash row has **no `gg session`
+snapshot link**: `contextLinkText` is pure Model reads, and the Model does
+not hold a stash's sha.
+
+**Known window, closed by 3b-2.** After 3b-1, `gg compare <stash link>`
+reports a `-u` stash's untracked file as `A`, but pasting the same link into
+`#` lands through `openCompareFiles(commit a, commit b)` → `CompareFiles`,
+the tracked-only diff. Two frontends disagreeing on one link is the shape
+this feature exists to remove, so 3b-2 routes **pair landing** through the
+set-shaped view of §3.6. It is a window, not a wrong link: the copied text
+is already correct.
 
 Both switchers' `L` is inert in compare-pick mode, like every other key
 there, and is added to their `?` cheat sheets.
@@ -145,7 +155,17 @@ there, and is added to their `?` cheat sheets.
 
 `EvalEndpoint`'s pair arm, after enumerating `a..b`:
 
-1. `b` is **stash-shaped** iff it has exactly three parents, `a` is the
+Two rules, deliberately separate — one changes an answer, the other only
+words a history row:
+
+- **The description rule** (best-effort, `DescribeLink` only): `a` is `b`'s
+  first parent, `b` has two or three parents, and `b`'s subject starts
+  `WIP on ` or `On `. An ordinary merge satisfies the parent test, so the
+  subject is what guards it; a wrong guess costs one mislabelled history row.
+- **The set rule** (changes what a comparison reports, so it is structural
+  and never reads a subject):
+
+1. `b` is **`-u`-stash-shaped** iff it has exactly three parents, `a` is the
    first, and the third parent is a **root** commit. The root test is
    load-bearing: an octopus merge also has three parents, and on a monorepo
    its third parent's tree is 100k files entering as additions. A stash's
@@ -153,6 +173,7 @@ there, and is added to their `?` cheat sheets.
    has.
 2. When stash-shaped, every file in the third parent's tree joins the set
    with `has = true` and a **per-path byte source** of the third parent.
+   A plain two-parent stash needs no set change: `a..b` is already right.
 
 ```go
 func (f FileSet) Source(path string) model.Endpoint // f.ep unless overridden for this path
@@ -351,7 +372,7 @@ against the **built binary**.
 | plan | tasks | stands alone because |
 |---|---|---|
 | **3b-1** links in, links out | `DescribeLink` move · clipboard chokepoint · §3.4 stash algebra + `FileSet.Source` · `StashPair` + the four copy surfaces · the history picker in `#` · `--remove`/`--rename` · docs | every link the TUI shows can be copied, is recorded, and can be pasted back; no dialog needed |
-| **3b-2** the dialog | `CompareLinks` door (CLI+MCP moved onto it) · `BoundKind` + `SuggestBase` · the set-shaped view **with** the dialog that opens it · save · Previews panel pair rows · bookmark↔shelf cross arms · docs | needs 3b-1's picker and `Source`; ends with the full round trip |
+| **3b-2** the dialog | `CompareLinks` door (CLI+MCP moved onto it) · pair-link landing (`#`, `gg open`, `gg session navigate`) through the set-shaped view · `BoundKind` + `SuggestBase` · the set-shaped view **with** the dialog that opens it · save · Previews panel pair rows · bookmark↔shelf cross arms · docs | needs 3b-1's picker and `Source`; ends with the full round trip |
 
 Plan 3b-2 is written after 3b-1 merges, against the code that then exists.
 

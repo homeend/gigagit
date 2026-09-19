@@ -88,6 +88,10 @@ func (s *Service) UseLinkHistDir(dir string) // per-service, parallel-safe; re-a
 - [ ] **Step 1 — read before moving.** `sed -n 285,400p internal/cli/link.go`;
   note `descMax`'s value, `truncateDesc`, `linkDesc`, `linkRecordFields`, and
   every caller: `grep -rn 'linkDesc\|linkRecordFields\|truncateDesc\|descMax' internal`.
+  Known today: `link.go`, `compare.go`, `linkdescjs_test.go`, and
+  `link_test.go:745` (`TestLinkDescTruncatesLongFreeText` and its
+  neighbours) — those unit tests **move with the function** into
+  `internal/domain/linkdesc_test.go`; they are not deleted.
 
 - [ ] **Step 2 — failing tests** (`internal/domain/linkdesc_test.go`, parallel,
   `newRealRepo(t)` + `svc.UseLinkHistDir(t.TempDir())`):
@@ -191,12 +195,13 @@ func (s *Service) StashPair(ctx context.Context, ref string) (parent, sha string
 func (f FileSet) Source(path string) model.Endpoint
 ```
 
-**The shape rule (spec §3.3):** `b` is stash-shaped iff it has two or three
-parents, `a` equals the first, and — when there is a third — that third
-parent is a **root** commit. A two-parent `b` is only *described* as a stash
-when `a == p1` **and** `b`'s subject starts `WIP on ` or `On ` (a plain merge
-also has two parents; it needs no set change, so the subject test guards
-only the description). Only the three-parent case changes the set.
+**Two rules (spec §3.3), kept in two functions so neither can borrow the
+other's looseness:**
+- `stashShape` — the **set** rule, structural only: exactly three parents,
+  `a` is the first, the third is a **root**. `ok == true` ⇒ `Untracked != ""`.
+- `looksLikeAStash(ctx, a, b)` — the **description** rule, best-effort: `a`
+  is `b`'s first parent, two or three parents, subject starts `WIP on ` or
+  `On `. Used by `linkDescFields` only.
 
 - [ ] **Step 1 — fixture helper** in `stashshape_test.go`:
 
@@ -278,6 +283,16 @@ func TestOctopusMergeIsNotAStash(t *testing.T) {
 	if len(fs.Paths()) != len(plain) { t.Fatalf("octopus widened: %v vs %d plain rows", fs.Paths(), len(plain)) }
 }
 
+// BOTH stash arms are described: the -u one (three parents) and a plain one
+// (two parents, which an ordinary merge also has — hence the subject test).
+func TestDescribeLinkNamesAPlainStashButNotAMerge(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	… seed; edit tracked.txt; `git stash push -m plain` (NO -u) → StashPair → desc has prefix "stash: " …
+	… then a real two-parent merge m with first parent a → DescribeLink(@a..m) has prefix "link: " …
+	_ = dir
+}
+
 func TestDescribeLinkNamesAStash(t *testing.T) {
 	t.Parallel()
 	_, svc, parent, sha := stashFixture(t)
@@ -329,6 +344,8 @@ func TestDescribeLinkNamesAStash(t *testing.T) {
 | `Source` always returns `f.ep` | `…IncludesUntracked…` (bytes) **and** `…ReportsTheUntrackedFileAsAdded` (hard error) |
 | `narrowTo` does not carry `src` | `TestNarrowedStashLink…` |
 | drop the "third parent is a root" test | `TestOctopusMergeIsNotAStash` |
+| `looksLikeAStash` drops the subject test | `…PlainStashButNotAMerge` (the merge row) |
+| `linkDescFields` asks `stashShape` instead of `looksLikeAStash` | `…PlainStashButNotAMerge` (the plain-stash row) |
 | `compareOne` reads `right.Endpoint()` again | `…ReportsTheUntrackedFileAsAdded` |
 
 - [ ] **Step 7 — the MCP/CLI answer moved too.** Add one row to an existing
@@ -472,6 +489,21 @@ func TestRefRowsCopyTheNameNotTheSha(t *testing.T) {
 		if _, err := model.ParseLink(got); err != nil { t.Errorf("does not reparse: %v", err) }
 		r, ok := rowByID(m.actionRows(), "copy-link") // the menu offers the SAME text
 		if !ok || r.copyText != c.want { t.Errorf("%v menu row: %+v", c.focus, r) }
+	}
+}
+
+// Emission is half the contract. An ANNOTATED tag's name resolves to the tag
+// OBJECT unless it is peeled (TestGotoCommitAnnotatedTagLoadsFiles exists
+// because `#` once got that wrong), so the copied link is EVALUATED too — for
+// a lightweight and an annotated tag on the same commit, which must agree.
+func TestACopiedTagLinkEvaluatesToItsCommit(t *testing.T) {
+	t.Parallel()
+	… real repo: `git tag light`, `git tag -a ann -m x` on HEAD …
+	for _, name := range []string{"light", "ann"} {
+		text, _ := m.refLinkFor(name)
+		l, _ := model.ParseLink(text)
+		fs, err := m.svc.EvalLink(context.Background(), l)
+		if err != nil || fs.Bounded() || fs.Endpoint().Hash() != head { t.Errorf("%s: %+v, %v", name, fs.Endpoint(), err) }
 	}
 }
 
