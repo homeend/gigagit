@@ -161,6 +161,7 @@ func (s *Service) pullRequests(ctx context.Context, p forge.Provider) ([]model.P
 		isOpen[pr.Number] = true
 		s.forgeSeen[pr.Number] = true
 		delete(s.forgeTerminal, pr.Number) // reopened
+		s.putPRLocked(pr, false)           // the listing seeds the open cache
 	}
 	for n := range s.forgeSeen {
 		known[n] = true
@@ -276,11 +277,14 @@ func (s *Service) PRFetchOp(ctx context.Context, n int) (engine.FetchPRHead, err
 	if err != nil {
 		return engine.FetchPRHead{}, err
 	}
-	pr, err := p.PR(ctx, n)
+	// Both answers come from the cache when it has them: the listing already
+	// carried this PR's head, and the base repository does not change. A head
+	// that moved since is PRRevalidate's job, off the user's click path.
+	pr, err := s.cachedPR(ctx, p, n)
 	if err != nil {
 		return engine.FetchPRHead{}, err
 	}
-	slug, fallback, err := p.BaseRepo(ctx)
+	slug, fallback, err := s.baseRepo(ctx, p)
 	if err != nil {
 		return engine.FetchPRHead{}, err
 	}
@@ -306,8 +310,26 @@ func (s *Service) PRForgetOp(n int) engine.ForgetPR {
 	delete(s.forgeSeen, n)
 	delete(s.forgeTerminal, n)
 	delete(s.forgeComments, n)
+	delete(s.forgePRCache, n)
 	s.forgeMu.Unlock()
 	return engine.ForgetPR{Number: n}
+}
+
+// PRFetched reports which pull requests have a local refs/gg/pr/<n> — the
+// PRs whose diff opens without a fetch. A pure ref read (no forge call); it
+// fails open to an empty set.
+func (s *Service) PRFetched(ctx context.Context) map[int]bool {
+	out := map[int]bool{}
+	refs, err := s.repo.ForEachRef(ctx, git.PRRefPrefix)
+	if err != nil {
+		return out
+	}
+	for _, r := range refs {
+		if n, ok := git.ParsePRRef(r.Ref); ok {
+			out[n] = true
+		}
+	}
+	return out
 }
 
 // PRPair is the rev pair a PR's diff opens on: Base...Head.

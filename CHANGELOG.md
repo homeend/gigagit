@@ -94,6 +94,46 @@ Under the hood: `domain.DescribeLink` is now the one describer behind every
 history row (it lived unexported in `internal/cli`, out of the TUI's reach),
 and a member's bytes are read through `FileSet.Source(path)`.
 
+## Pull requests in the web UI (list, open, forget)
+
+**`gg web` lists the repository's pull requests** in a new sidebar section,
+*pull requests*, right under *previews* — read-only, like the rest of the
+feature, and only when a usable `gh` is found (without one the section is never
+shown; there is no notice). Rows lead with the review verdict (`✓` approved ·
+`✗` changes requested · `●` review required — the TUI's `…` reads as a
+truncation in a browser — · `draft`); a pull request gg
+already knows stays listed, dimmed, after it is closed or merged. **Click**
+fetches the head into `refs/gg/pr/<n>` and opens the PR's diff (`base…head`,
+titled `PR #7 · title`) on the merge-preview compare screen; a closed or merged
+PR whose head is already here opens without a fetch. **Right-click**: copy URL,
+forget. The header's **⟳** re-reads the list, and the server re-reads it every
+`[refresh] prs` seconds (300; `0` = off) **whatever `[refresh] enabled` says**
+— every open tab follows through the live stream.
+
+**Opening a pull request is cached, and says that it is working.** Every
+open used to cost two `gh` round trips before git even started, then a network
+fetch — seconds with nothing on screen. Now a pull-request cache in the domain
+layer (so the TUI and the web share it) serves the head sha from the listing
+and the base repository from the session: a PR whose head is already local
+opens **at once** from what is here, and the forge is asked *afterwards*, in
+the background — only a head that really moved is fetched and the diff
+re-opened (`PR #7 has new commits — updating…`). Cached PRs nobody used for
+five minutes are evicted; the fetched refs themselves never are. On lazygit a
+repeat open went from ~4 s to ~50 ms. While a first open runs, `gg web` masks
+the panes with *fetching pull request #7 · title…* (click to dismiss) and spins
+the row; the TUI says `fetching PR #7…` then `opening PR #7…`. The PR diff's
+filter bar no longer shows two dead, elided *only …* buttons — it reads
+`all (N)` plus `source → target · read-only` (merge previews get the same
+treatment) — and right-clicking the PR's header opens the PR menu instead of
+the browser's.
+
+The page names a pull request by its **number** and nothing else: the pair is
+resolved server-side, so no ref or sha a browser sends ever reaches git, and a
+`GET` never calls the forge (the list is a server-side cache with one lane that
+talks to `gh`). Review threads inside the diff, note collapse and the PR
+details view are the next plan; until then a PR diff carries your own notes on
+its head commit and refuses *copy link*.
+
 ## Saved comparisons absorb merge previews
 
 `internal/savedcompare` is now the one store behind both saved comparisons and

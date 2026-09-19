@@ -390,6 +390,14 @@ one row and `O` all of them (this works for your own notes too); a resolved
 thread starts collapsed. Comments are re-read every `[refresh] prs` seconds
 while the diff is open and on `r`; `i` opens the PR hub from the diff.
 
+In **`gg web`** the list is a *pull requests* section of the sidebar (under
+*previews*), shown only with a usable `gh`: click a row to fetch and open its
+diff, right-click for *copy URL* and *forget*, **⟳** on the header to re-read.
+It follows `[refresh] prs` too, in every open tab. A pull request you opened
+before shows at once from the local head and is checked against the forge in
+the background (new commits are fetched and the diff re-opened); a first open
+masks the panes with a loading notice.
+
 `refs/gg/pr/<n>` is local only: never pushed, never shown in the commit graph.
 The fetch goes through whichever of your remotes names the base repository, so
 it uses your own ssh/https setup. `gh` is detected once per run; without a

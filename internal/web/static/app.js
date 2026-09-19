@@ -41,6 +41,7 @@ import "./search.js";
 import "./remoteheads.js";
 import "./links.js";
 import { fetchPreviews } from "./previews.js";
+import { fetchPRs } from "./prs.js";
 import { applyStartAt, connectLive } from "./live.js";
 
 // applyStoredLayout puts back the layout gg remembered for this machine:
@@ -84,6 +85,7 @@ async function boot() {
     fetchStatus().then(() => renderCommits()),
     fetchBranches(),
     fetchPreviews(), // its own fetch: previews.js cannot ride sidebar.js
+    fetchPRs(), // stays hidden unless the server reports a usable forge
     refreshNoteCounts(), // the ◆N badges, best-effort like the rest
   ];
   for (const p of firstLoad) p.catch(() => {});

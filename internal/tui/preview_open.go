@@ -198,6 +198,20 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 		var prCmd tea.Cmd
 		m, prCmd = m.prCommentsCmd(false)
 		cmd = tea.Batch(cmd, prCmd)
+		// The diff came from what is local (the PR cache makes an unchanged PR
+		// a purely local open); only now is the forge asked whether that head
+		// is still the PR's.
+		// "opening PR #n…" has done its job; a reopen the revalidation caused
+		// says what changed instead.
+		if msg.moved == "" {
+			m.statusMsg = ""
+		}
+		if m.prRevalidateSkip == msg.prNumber {
+			m.statusMsg = i18n.T("PR #%d updated: new commits", msg.prNumber)
+		}
+		var rvCmd tea.Cmd
+		m, rvCmd = m.prRevalidateCmd(msg.prNumber)
+		cmd = tea.Batch(cmd, rvCmd)
 	}
 	return m, cmd
 }

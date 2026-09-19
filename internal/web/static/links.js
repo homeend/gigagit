@@ -96,6 +96,9 @@ function linkHintIDOK(id) {
 function linkFor(repo, worktree, ctx, side, no) {
   const preview = (ctx && ctx.preview) || null;
   if (ctx && ctx.compare && !preview) return "";
+  // A pull request's diff names its sides for DISPLAY (the head may live in a
+  // fork): a link built from them would address some other pair. Refuse.
+  if (preview && preview.pr) return "";
   const hint = (ctx && ctx.hint) || null;
   if (hint && !(linkHintKindOK(hint.kind) && linkHintIDOK(hint.id))) return "";
   if (preview && !(linkRefOK(preview.source) && linkRefOK(preview.target))) return "";
