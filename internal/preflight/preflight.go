@@ -66,6 +66,14 @@ type StoreProbe struct {
 type Probes struct {
 	Stores     map[string]StoreProbe
 	GitVersion [3]int
+	Forge      *ForgeProbe // nil = not probed (yet)
+}
+
+// ForgeProbe is what detection learned about a code forge for this repo.
+// Provider is the usable provider's name ("" = none); Err says why not.
+type ForgeProbe struct {
+	Provider string
+	Err      string
 }
 
 // Requirement is one thing a feature needs.
@@ -174,6 +182,32 @@ func (g GitVersion) RepairStore() string { return "" }
 
 func (g GitVersion) NeedsStoreProbes() bool { return false }
 
+// ForgeUsable requires a forge CLI that can read this repository's pull
+// requests. Unprobed counts as unusable: the feature lights up only on a
+// positive verdict.
+type ForgeUsable struct{}
+
+func (ForgeUsable) Fit(p Probes) Fit {
+	if p.Forge != nil && p.Forge.Provider != "" {
+		return FitOK
+	}
+	return FitTooOld
+}
+
+func (ForgeUsable) Reason(p Probes) Text {
+	if p.Forge == nil || p.Forge.Err == "" {
+		return Text{Format: "no forge CLI can read this repository's pull requests"}
+	}
+	return Text{Format: "no forge CLI can read this repository's pull requests: %s", Args: []any{p.Forge.Err}}
+}
+
+func (ForgeUsable) Remedy(Probes) Text {
+	return Text{Format: "install the GitHub CLI and run `gh auth login`, then restart gg"}
+}
+
+func (ForgeUsable) RepairStore() string    { return "" }
+func (ForgeUsable) NeedsStoreProbes() bool { return false }
+
 func less(a, b [3]int) bool {
 	for i := range a {
 		if a[i] != b[i] {
@@ -199,6 +233,9 @@ type Feature struct {
 	Criticality Criticality
 	Requires    []Requirement
 	Migrate     *Migration // nil when nothing is repairable
+	// Silent features never surface a "feature unavailable" notice: their
+	// absence is the normal state of a box without the external tool.
+	Silent bool
 }
 
 // Verdict is a feature's resolved state plus, when not Satisfied, why and

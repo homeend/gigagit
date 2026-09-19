@@ -404,6 +404,33 @@ finds the right one here.
   checked-out branch and branches checked out in a worktree. An unmerged
   branch is a `branch-unmerged` fork (`force-delete`/`keep`): pass `--force`
   to pre-answer it.
+- `gg pr list|view|comments|fetch|forget` — READ-ONLY pull requests through the
+  forge's own CLI (GitHub's `gh` today; nothing is ever posted, edited or
+  submitted). Needs `gh` installed, logged in and able to read this repo;
+  otherwise every verb exits 1 with `gg pr: no forge CLI can read this
+  repository's pull requests: <why>`. `--json` may sit anywhere.
+  `gg pr list [--json]` prints `#<n> <state> <author>  <source> → <target>
+  [draft] [<review_state>]  <title>` — open PRs first, newest-updated first; a
+  fork head prints `owner:branch`. PRs gg already knows stay listed after they
+  close, marked `closed`/`merged` (or `unavailable` when the forge no longer
+  answers): known = listed open earlier in this process, or fetched.
+  `gg pr view <n> [--json]` prints the row, the URL, the description, then
+  `── conversation ──` (general comments and review verdicts, oldest first,
+  `carol [changes_requested]: …`) and `── outdated ──` (inline threads whose
+  lines later pushes changed, with their original line and hunk tail).
+  `gg pr comments <n> [--json]` prints the inline threads that still have a
+  position: `a.go:10-12 (new) carol [resolved]: body`, replies indented two
+  spaces, file-level threads as `a.go (file)`, body continuation lines indented
+  four. JSON: `{inline, hub, outdated, truncated}` of `{id, parent_id, kind
+  (inline|file|general|review), author, body, path, side (old|new), line,
+  start_line, outdated, resolved, hunk, verdict, created, updated}`;
+  `truncated` = the PR has more than gg reads (100 threads × 50 comments, 100
+  conversation comments, 100 reviews — per PR).
+  `gg pr fetch <n>` fetches the PR head into the private ref `refs/gg/pr/<n>`
+  (a local ref only — never pushed, never shown in the graph; a no-op when
+  already current) and prints the ref, so the change itself reads with
+  `gg diff <target>...refs/gg/pr/<n>`. Fork PRs work. `gg pr forget <n>`
+  deletes that ref and drops a closed row.
 - `gg versions [<branch>]` — list a branch's recorded pre-operation
   snapshots (taken automatically before merges, rebases, resets, amends,
   and branch deletion), newest first: `<id> <short-sha> <time> <subject>`.
