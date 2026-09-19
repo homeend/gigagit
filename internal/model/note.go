@@ -14,7 +14,31 @@ type NoteSource string
 const (
 	NoteSourceUser  NoteSource = "user"
 	NoteSourceAgent NoteSource = "agent"
+	// NoteSourceForge is a review comment read from a forge (a pull request's
+	// inline or file-level thread). It is never stored and never editable: gg
+	// reads the forge, it does not write to it.
+	NoteSourceForge NoteSource = "forge"
 )
+
+// ForgeNoteIDPrefix marks the id of a note converted from a forge comment.
+// Store ids never carry it, so the two id spaces cannot collide.
+const ForgeNoteIDPrefix = "forge:"
+
+// IsForgeNoteID reports whether id names a forge comment, not a stored note.
+func IsForgeNoteID(id string) bool { return strings.HasPrefix(id, ForgeNoteIDPrefix) }
+
+// NoteTagResolved tags a forge thread its reviewers marked resolved.
+const NoteTagResolved = "resolved"
+
+// NoteHasTag reports whether n carries tag.
+func NoteHasTag(n Note, tag string) bool {
+	for _, t := range n.Tags {
+		if t == tag {
+			return true
+		}
+	}
+	return false
+}
 
 // NoteSide is the diff side a note's line range indexes.
 type NoteSide string

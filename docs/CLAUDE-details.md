@@ -1771,3 +1771,47 @@ through `url.<path>.insteadOf` does not work: `git remote get-url` returns the
 rewritten path, `RepoSlug` no longer matches the forge's slug, and the fetch
 falls back to the forge URL — the real GitHub. Point `repo-view.json`'s `url`
 at the bare repo instead.
+
+### Forge review comments in the PR diff (plan 3 of 3, `docs/superpowers/plans/2026-09-19-forge-prs-3-comments.md`)
+
+**How domain knows a preview is a PR.** The PR diff is a one-off preview whose
+source is `refs/gg/pr/<n>`; `git.ParsePRRef(set.Source)` is the whole
+detection — nothing is threaded through the TUI.
+
+**Fetch and read are split.** `PRCommentsRefresh(ctx, n)` is the ONLY network
+call: it caches `PRComments` per PR under `forgeMu` (provider call outside the
+lock) and reports `changed` from a stable signature (ids, bodies, positions,
+resolved, `Updated.Unix()` — never `reflect.DeepEqual` over `time.Time`). The
+readers — `PreviewNotesFor`, `PreviewNotesAll`, `PreviewNoteCounts` — consult
+the cache only, so opening a PR diff never waits on `gh`. `PreviewNotesAt`
+(CLI/web/MCP) does not merge them: the CLI has `gg pr comments`.
+
+**Conversion** (`forge_notes.go`): one root per thread, replies nested and
+inheriting the root's anchor; id `forge:<id>`, `NoteSourceForge`, body's first
+line = Summary, rest = Rationale, `resolved` tag, `Range{0,0}` for a file-level
+comment, `Status` active. Forge notes are appended AFTER
+`keepResolved(resolveNotes(...))` — a preview resolves against the new side
+only and would drop every LEFT-side comment as stale. `PreviewNoteCounts`
+merges into a FRESH map (the store half is a shared cached instance) and never
+caches the forge half. `ErrNotesDisabled` is swallowed when forge notes exist.
+`NoteEdit`/`NoteReply`/`NoteRemove` reject `forge:` ids with `ErrReadOnlyNote`;
+`NotesClear` works by address in the store, so it cannot touch one.
+
+**TUI.** `isFileLevelNote` (forge source + zero range — a STORED zero-range
+note is malformed and stays unanchored) anchors on `v.lines[0]`.
+`withEditableNoteTarget` filters forge threads out of E/R/Delete and says
+"forge comments are read-only" through `m.diffNotice` — the full-screen diff
+hides the status bar, so `statusMsg` alone is invisible there.
+`diffHasTipNotes` skips forge notes. Collapse: `diffView.collapsed[rootID]`,
+row kind `noteRowCollapsed`, seeded once per id in `setNotes`
+(`collapseSeeded`), `relayoutKeepingCursor` after a toggle; `o`/`O` are
+help-and-menu-only (the diff footer is at its 140-column budget).
+
+**The comment poll is its own tick.** `refreshTick` returns early under any
+layer and the diff IS a layer, so `prCommentsTick` runs beside it in the
+heartbeat arm (gated on no op/modal/load, `scheduledInterval(prsItem)`,
+`prCommentsLast`, one in flight). `handlePRCommentsMsg` clears
+`prCommentsInflight` BEFORE the PR-number check — a read whose view closed
+under it would otherwise block every later PR diff from fetching.
+`previewOpenMsg.prNumber` / `previewOpenState.prNumber` ride a re-resolve like
+`title`; `handlePreviewOpenMsg` chains the first fetch when `prNumber > 0`.

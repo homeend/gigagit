@@ -108,6 +108,12 @@ func availableActions(m Model) []actionRow {
 		}
 		rows = append(rows, m.diffAlignRows()...)
 		rows = append(rows, m.noteMenuRows()...)
+		rows = append(rows, m.noteCollapseRows()...)
+		if m.openPRNumber() > 0 {
+			rows = append(rows, actionRow{id: "pr-hub-diff", key: "i", label: i18n.T("Pull request details…"), run: func(m Model) (tea.Model, tea.Cmd) {
+				return m.openPRHubFromDiff()
+			}})
+		}
 		if r, ok := m.noteListMenuRow(); ok {
 			rows = append(rows, r)
 		}

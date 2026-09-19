@@ -100,8 +100,9 @@ type Service struct {
 	forgeProbing   chan struct{}  // non-nil while the one probe is in flight; closed when it lands
 	forgeActive    forge.Provider // nil when none is usable
 	forgeErr       error
-	forgeSeen      map[int]bool              // PR numbers listed open this session
-	forgeTerminal  map[int]model.PullRequest // cached closed/merged/unavailable reads
+	forgeSeen      map[int]bool               // PR numbers listed open this session
+	forgeTerminal  map[int]model.PullRequest  // cached closed/merged/unavailable reads
+	forgeComments  map[int]forgeCommentsEntry // PRCommentsRefresh's cache; the note readers never fetch
 
 	// preflightMu guards the resolved verdicts. reRoot builds a FRESH Service,
 	// so a cached resolution can never outlive the repo it describes.

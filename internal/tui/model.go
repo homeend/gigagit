@@ -182,8 +182,12 @@ type Model struct {
 	// pendingPRsReload re-reads the PR list once the running ForgetPR lands
 	// (the list is not a registry source, so pendingSources cannot carry it).
 	pendingPRsReload bool
-	previewOpen      *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
-	previewGen       int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
+	// The open PR diff's comment reads (pr_comments.go): one at a time, and
+	// when the last one started (the comment poll's own clock).
+	prCommentsInflight bool
+	prCommentsLast     time.Time
+	previewOpen        *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
+	previewGen         int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
 
 	// Where the cursor lands once a mutation's reload arrives. Set by
 	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
@@ -546,7 +550,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		body := m.diffBodyRows()
 		cr, hadRow := dv.cursorRow()
 		wasVisible := dv.cursorVisible(body) // a free-scrolled view keeps its place
-		dv.notes = msg.notes
+		dv.setNotes(msg.notes)
 		dv.relayout(dv.width)
 		dv.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
 		// A }/{ file step parked its landing here, not at open time: the notes
@@ -2836,6 +2840,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prHubMsg:
 		return m.handlePRHubMsg(msg)
 
+	case prCommentsMsg:
+		return m.handlePRCommentsMsg(msg)
+
+	case prCountsMsg:
+		if msg.gen == m.previewGen && m.filesPreviewSet != nil && msg.counts != nil {
+			m.filesPreviewCounts = msg.counts
+		}
+		return m, nil
+
 	case bgFetchDoneMsg:
 		// Drop stale completions: if a newer fetch was launched (e.g. a user op
 		// preempted the old one and a new cycle started), the old message must not
@@ -2895,6 +2908,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// REPO's filesystem while the inbox lives in the state dir.
 		var cmd tea.Cmd
 		m, cmd = m.refreshTick(time.Now())
+		var prcCmd tea.Cmd
+		m, prcCmd = m.prCommentsTick(time.Now())
+		cmd = tea.Batch(cmd, prcCmd)
 		m = m.maybeWriteSnapshot()
 		m.touchSteerPresence()
 		var scmd tea.Cmd

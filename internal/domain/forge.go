@@ -305,6 +305,7 @@ func (s *Service) PRForgetOp(n int) engine.ForgetPR {
 	s.forgeMu.Lock()
 	delete(s.forgeSeen, n)
 	delete(s.forgeTerminal, n)
+	delete(s.forgeComments, n)
 	s.forgeMu.Unlock()
 	return engine.ForgetPR{Number: n}
 }
