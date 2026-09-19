@@ -73,6 +73,7 @@ type Model struct {
 	pushCheckGen           int                 // generation guard for the async pre-push remote-tag check
 	pickGen                int                 // generation guard for the async cherry-pick commit probe
 	entryCompareGen        int                 // drops stale commit-entry compare resolves (the pickGen pattern)
+	linkHistGen            int                 // drops a copied-link history load a newer host has superseded
 	pickPatchTemp          string              // patch lane's temp file; removed when its op finishes
 	reflog                 []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree        string
@@ -3593,6 +3594,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case startAtFailMsg:
 		m.statusMsg = i18n.T("error: %s", msg.reason)
 		return m, nil
+	case linkHistLoadedMsg:
+		return m.loadedLinkHist(msg)
 	case stashLinkMsg:
 		return m.resolvedStashLink(msg)
 	case clipboardCopiedMsg:
