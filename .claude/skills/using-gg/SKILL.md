@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v82 -->
+<!-- gg:using-gg:v83 -->
 
 # Using gg (gigagit)
 
@@ -373,6 +373,31 @@ finds the right one here.
 
   A link naming a DIFFERENT checkout is refused (exit 2): cross-repository
   compare is not supported yet.
+- `gg compare --save <label> <left> [<right>]` — run the comparison AND keep
+  it. Both sides are stored as `gg://` links whatever you typed, so
+  `bookmark:<id>`, `shelf:<id>`, `@staged`, `@worktree` and a bare commit-ish
+  all become links. A token that cannot be expressed as one is refused
+  (exit 2) and nothing is stored; a comparison that FAILS stores nothing
+  either.
+
+  **stdout is unchanged** — still the `<status>\t<path>` list, so it stays
+  pipeable. The saved id is reported on stderr as `# saved: <id>\t<label>`.
+- `gg compare --saved <id|label>` — re-run a stored comparison. It prints
+  exactly what the original invocation printed.
+- `gg compare --list` — the stored comparisons, one
+  `<id>\t<label>\t<left>\t<right>` line each. A saved MERGE PREVIEW is a
+  one-sided entry, so its `<right>` column is EMPTY — the column count is
+  fixed either way, for `cut`. Nothing is printed when none are stored.
+
+  ```bash
+  gg compare --save "auth refactor" main feat/auth
+  gg compare --list | cut -f1,2        # ids and labels
+  gg compare --saved "auth refactor"   # run it again later
+  ```
+
+  Saved comparisons and saved merge previews share ONE store, so
+  `gg compare --list` shows both and `gg preview list` shows the previews
+  among them.
 - `gg preview add [--label <text>] <source> <target>` — save a MERGE PREVIEW:
   "what would <source> bring into <target>", i.e. the GitHub pull-request
   files-changed diff (`git diff target...source`, from their merge base to
