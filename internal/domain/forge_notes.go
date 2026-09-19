@@ -58,6 +58,15 @@ func prCommentsSig(c PRComments) string {
 	return b.String()
 }
 
+// PRCommentsCached is PR n's comments as the last PRCommentsRefresh left
+// them; ok is false when nothing was fetched yet. It never calls the forge.
+func (s *Service) PRCommentsCached(n int) (PRComments, bool) {
+	s.forgeMu.Lock()
+	defer s.forgeMu.Unlock()
+	e, ok := s.forgeComments[n]
+	return e.c, ok
+}
+
 // dropForgeComments forgets PR n's cached comments (ForgetPR).
 func (s *Service) dropForgeComments(n int) {
 	s.forgeMu.Lock()

@@ -1,5 +1,11 @@
 package domain
 
+import (
+	"time"
+
+	"github.com/homeend/gigagit/internal/model"
+)
+
 // WireNote is the JSON projection of one resolved note thread, shared by every
 // frontend that speaks JSON: the web handlers, `gg note list --json` and the
 // MCP note tools. It lives in domain because internal/cli and internal/mcp
@@ -18,6 +24,13 @@ type WireNote struct {
 	Rationale string     `json:"rationale,omitempty"`
 	Status    string     `json:"status"`
 	Replies   []WireNote `json:"replies,omitempty"`
+	// ReadOnly marks a forge review comment: gg shows it and never edits,
+	// answers or removes it. Resolved is the forge's own thread flag; FileLevel
+	// a comment on the whole file (no line — it renders above the file).
+	ReadOnly  bool   `json:"read_only,omitempty"`
+	Resolved  bool   `json:"resolved,omitempty"`
+	FileLevel bool   `json:"file_level,omitempty"`
+	Created   string `json:"created,omitempty"` // RFC 3339; empty when unknown
 }
 
 // ToWireNote flattens one resolved thread. Line and Range are the RESOLVED
@@ -30,6 +43,14 @@ func ToWireNote(r ResolvedNote) WireNote {
 		Author: r.Note.Author, Path: r.Note.Address.Path, Rev: r.Note.Address.Commit,
 		Side: string(r.Note.Side), Line: r.Range[1], Range: r.Range,
 		Summary: r.Note.Summary, Rationale: r.Note.Rationale, Status: string(r.Status),
+	}
+	if r.Note.Source == model.NoteSourceForge {
+		w.ReadOnly = true
+		w.Resolved = model.NoteHasTag(r.Note, model.NoteTagResolved)
+		w.FileLevel = r.Range == [2]int{}
+	}
+	if !r.Note.Created.IsZero() {
+		w.Created = r.Note.Created.UTC().Format(time.RFC3339)
 	}
 	for _, rep := range r.Replies {
 		w.Replies = append(w.Replies, ToWireNote(rep))

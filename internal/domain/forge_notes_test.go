@@ -140,3 +140,65 @@ func TestForgeNotesAreReadOnly(t *testing.T) {
 		t.Fatalf("NoteRemove = %v", err)
 	}
 }
+
+// The diff-less read (the web handler, the CLI, MCP) must see the same forge
+// threads the TUI's PreviewNotesFor does — before this it returned nothing for
+// a file with no stored notes, while the counts already included them.
+func TestPreviewNotesAtMergesForgeThreads(t *testing.T) {
+	t.Parallel()
+	ff := &fakeForge{comments: reviewThreads()}
+	svc := newForgeSvc(t, ff)
+	ctx := context.Background()
+	if _, err := svc.PRCommentsRefresh(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	ff.commentCalls = 0
+	ns, err := svc.PreviewNotesAt(ctx, prSet("7"), "a.go")
+	if err != nil || len(ns) != 2 || ns[0].Note.ID != "forge:C1" || len(ns[0].Replies) != 1 {
+		t.Fatalf("PreviewNotesAt(a.go) = %+v, err %v", ns, err)
+	}
+	if file, err := svc.PreviewNotesAt(ctx, prSet("7"), "b.txt"); err != nil || len(file) != 1 {
+		t.Fatalf("PreviewNotesAt(b.txt) = %d notes, err %v", len(file), err)
+	}
+	if ff.commentCalls != 0 {
+		t.Fatalf("a read called the provider %d times", ff.commentCalls)
+	}
+}
+
+func TestPRCommentsCachedIsEmptyBeforeARefresh(t *testing.T) {
+	t.Parallel()
+	svc := newForgeSvc(t, &fakeForge{comments: reviewThreads()})
+	if _, ok := svc.PRCommentsCached(7); ok {
+		t.Fatal("nothing was fetched yet")
+	}
+	if _, err := svc.PRCommentsRefresh(context.Background(), 7); err != nil {
+		t.Fatal(err)
+	}
+	c, ok := svc.PRCommentsCached(7)
+	if !ok || len(c.Outdated) != 1 || len(c.Hub) != 1 {
+		t.Fatalf("cached = %+v ok %v", c, ok)
+	}
+}
+
+func TestWireNoteForgeFields(t *testing.T) {
+	t.Parallel()
+	svc := newForgeSvc(t, &fakeForge{comments: reviewThreads()})
+	if _, err := svc.PRCommentsRefresh(context.Background(), 7); err != nil {
+		t.Fatal(err)
+	}
+	root := ToWireNote(svc.forgeNotesFor(prSet("7"), "a.go")[0])
+	if !root.ReadOnly || !root.Resolved || root.FileLevel || root.Created != "2023-11-14T22:13:20Z" {
+		t.Fatalf("resolved line thread = %+v", root)
+	}
+	if len(root.Replies) != 1 || !root.Replies[0].ReadOnly || root.Replies[0].Resolved {
+		t.Fatalf("reply = %+v", root.Replies)
+	}
+	file := ToWireNote(svc.forgeNotesFor(prSet("7"), "b.txt")[0])
+	if !file.ReadOnly || !file.FileLevel {
+		t.Fatalf("file-level thread = %+v", file)
+	}
+	mine := ToWireNote(ResolvedNote{Note: model.Note{ID: "n1", Source: model.NoteSourceUser}})
+	if mine.ReadOnly || mine.Resolved || mine.FileLevel || mine.Created != "" {
+		t.Fatalf("a stored note = %+v", mine)
+	}
+}
