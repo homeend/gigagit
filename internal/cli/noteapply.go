@@ -111,7 +111,11 @@ func noteApply(svc *domain.Service, link *domain.Resolved, args []string, stdin 
 	rule := domain.NoteSideBoth
 	previewed := false
 	if link != nil {
-		if pv, ok := previewTargetFromLink(*link); ok {
+		pv, ok, perr := noteScopeFromLink(ctx, svc, *link)
+		if perr != nil {
+			return noteExit(perr, stderr)
+		}
+		if ok {
 			// The same three facts --preview sets: stored on the tip, hunk
 			// numbers from the PREVIEW's patch, new side only.
 			spec := pv.Spec

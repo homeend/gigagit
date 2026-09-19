@@ -51,7 +51,10 @@ func linkDiffSpec(ctx context.Context, svc *domain.Service, res domain.Resolved)
 	// single commit a pair has), so falling through to the StateCommitted arm
 	// below would print B^..B — B's own change — at exit 0. HunkDiffSpec
 	// passes a rev containing ".." straight through, which is the same lane
-	// `gg diff <a>..<b>` already takes.
+	// `gg diff <a>..<b>` already takes — and the very spec the pair's note
+	// scope hands out (PreviewNoteSet.DiffSpec; pinned by
+	// TestPairLinkDiffSpecEqualsItsNoteScope), built here without the scope's
+	// rev-list because `gg diff` needs no notes.
 	if p := res.Pair; p != nil {
 		return svc.HunkDiffSpec(ctx, false, p.A+".."+p.B, paths)
 	}

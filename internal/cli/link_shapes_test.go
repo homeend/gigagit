@@ -42,10 +42,12 @@ func linkShapeRefused(code int, errb string) bool {
 }
 
 // TestLinkShapesPerVerb is ruling R4 as a table. A pair's only single commit
-// is B, and anchoring a note or a `gg show` there would silently widen a
-// BOUNDED change-set into the whole tree at B — the same mistake
-// sideLosesItsKeySet refuses per side in `gg compare --patch`. Every verb
-// accepts a ref (a tip is one commit); three of the six must refuse a pair.
+// is B, and a `gg show` there would silently widen a BOUNDED change-set into
+// the whole tree at B — the same mistake sideLosesItsKeySet refuses per side
+// in `gg compare --patch`. Every verb accepts a ref (a tip is one commit);
+// `gg show` alone refuses a pair. The note verbs and highlight USED to refuse
+// it too; since pair notes (2026-09-20) a change-set is a note scope — notes
+// gathered along a..b, written to b's new side — so they take it.
 func TestLinkShapesPerVerb(t *testing.T) {
 	t.Parallel()
 	dir, refLink, pairLink := linkShapeFixture(t)
@@ -56,10 +58,10 @@ func TestLinkShapesPerVerb(t *testing.T) {
 	}{
 		{[]string{"diff"}, true, true},
 		{[]string{"show"}, true, false},
-		{[]string{"note", "list"}, true, false},
+		{[]string{"note", "list"}, true, true},
 		{[]string{"open"}, true, true},
 		{[]string{"session", "navigate"}, true, true},
-		{[]string{"session", "highlight", "add"}, true, false},
+		{[]string{"session", "highlight", "add"}, true, true},
 	}
 
 	run := func(t *testing.T, verb []string, link string, ok bool) {
