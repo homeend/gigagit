@@ -366,6 +366,18 @@ gg diff main...refs/gg/pr/123 # read the change
 gg pr forget 123              # drop the ref (and a closed PR's row)
 ```
 
+In the TUI the same data is a **Pull requests** tab — the fifth tab of the
+top-left box (`PR` in its header), present only when a usable `gh` was found at
+startup. Rows lead with their status (`✓` approved · `✗` changes requested ·
+`…` review required · `draft`; `merged` / `closed` / `unavailable` for a PR that
+is no longer open — those stay listed, dimmed). `enter` fetches the head and
+opens the PR's diff (`base…head`, titled `PR #123 · title`) in the same view a
+merge preview uses; `i` opens the PR hub (description, conversation with review
+verdicts, outdated threads; `y` copies the URL, `r` reloads); `y` copies the PR
+URL; `d` forgets a PR that is no longer open. `r` re-reads the list, and gg
+re-reads it in the background every `[refresh] prs` seconds (default `300`,
+`0` = off) — independently of the `[refresh] enabled` master switch.
+
 `refs/gg/pr/<n>` is local only: never pushed, never shown in the commit graph.
 The fetch goes through whichever of your remotes names the base repository, so
 it uses your own ssh/https setup. `gh` is detected once per run; without a
@@ -616,6 +628,7 @@ reflog      = 120
 feed        = 120    # commit feed
 fetch       = 300    # run `git fetch` every 5 min (network; errors swallowed)
 remote_tags = 300    # check which tags exist on the remote every 5 min (network; errors swallowed)
+prs = 300            # re-read the pull-request list every 5 min (the default; 0 = off). NOT gated by `enabled`
 
 min_seconds = 10     # floor on any interval (no source polls faster than this)
 

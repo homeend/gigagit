@@ -1664,3 +1664,59 @@ scenario seeds it with plain `write` steps. The e2e `TestMain` points
 `GG_GH_BIN` at it for EVERY scenario, so the suite can never reach the real
 gh. Tests that set that env are serial. Domain tests inject a `fakeForge` via
 `svc.SetForgeProviders`.
+
+### Forge pull requests in the TUI (plan 2 of 3, `docs/superpowers/plans/2026-09-19-forge-prs-2-tui.md`)
+
+**The list is a synthetic refresh item, not a source.** `prsItem =
+refreshItem{isPRs: true}` (like `fetchItem`/`remoteTagsItem`) with its own
+`prsLoadedMsg`, read by `readPRsCmd` (`pr_panel.go`). It is a NETWORK read
+through `gh` that may take its whole 30 s timeout, so it must never hold
+`srcLoading`/`m.loading`, never block `r` behind `anySourceInflight`, and never
+ride an "all sources" fan-out. `prsGen` drops a stale arrival, `prsInflight`
+stops a second read, a `context.Canceled` arrival (a user op pre-empted the
+background lane) is not a failure. `dataAvailableMsg`'s lane-freeing check
+excludes every synthetic item — their zero `source` is `srcStatus`.
+
+**The poll ignores `[refresh] enabled`.** `dueItems` skips `isPRs`; `prsDue`
+(pure) checks `cfg.PRsSeconds()` with the `min_seconds` floor and no master
+gate, and `refreshTick` appends `prsItem` only when `m.forgeShown`.
+`RefreshConfig.PRs` is a `*int` (`toml:"prs"`): the overlay's zero-is-unset rule
+could not otherwise express "0 = off" over a 300 default. It is a Settings →
+Refresh rates row like the others (`scheduledItems`).
+
+**One probe, a sticky tab.** `kickForgeProbe` (the `configReadyMsg` startup arm,
+and `dataLoadedMsg` after a `reRoot`) dispatches the one read per repo session;
+its `domain.ForgeStatus` rides the message. The first available status sets
+`forgeShown`, which is what `m.leftTabs()` / `topTabSegsWith` / `activateTab`
+consult; it never flips back in that repo (a later failure is `prsErr`: the
+header's `! github: …` over the previous list, or the empty-panel text with
+`[r] retry`). `reRoot` resets all of it and moves an active PR tab to Branches.
+Test seam: `domain.ForgeDisabled` (set in the TUI `TestMain`) keeps every test
+off the real `gh`; `pr_read_serial_test.go` lifts it serially against the fake.
+
+**enter = three hops.** `openPRCmd` resolves `svc.PRFetchOp` off-thread (it
+asks the forge for the base repo) → `prFetchReadyMsg` arms `pendingPROpen` and
+`startOp`s the `FetchPRHead` → `opFinishedMsg` success runs
+`openPRPreviewCmd` (`svc.PRPair` → `PreviewOpen(head, base)`), a one-off
+preview (`id ""`). `previewOpenMsg.title` / `previewOpenState.title` override
+`previewTitle`, and `reopenPreviewCmd` carries the open pair's title along so a
+previews refresh cannot rename a PR diff to "Merge preview: refs/gg/pr/7 → …".
+`opAffectedSources` maps both PR ops to an EMPTY, non-nil slice (nil = all =
+the remote-tags ls-remote probe). `ForgetPR` re-reads the list through
+`pendingPRsReload` — the list is not a registry source, so `pendingSources`
+cannot carry it.
+
+**The hub** (`pr_hub.go`) is `prHubPopup{*contentPopup}`: scroll, `/` filter,
+`s`, `ctrl+t` and esc-to-opener come from the embedded popup; it adds `y` (copy
+URL) and `r` (reload), advertised on the popup's `footer` line. Async fill
+follows the commit-message viewer, gated on the PR number. The list read has no
+body, so the hub re-reads the PR (`svc.PullRequest`) with its comments.
+`model.PullRequest.ReviewState` is LOWER-case (`approved`,
+`changes_requested`, `review_required`) — the parser lower-cases
+`reviewDecision`.
+
+**Fixture gotcha.** A scratch repo whose `origin` reaches a local bare repo
+through `url.<path>.insteadOf` does not work: `git remote get-url` returns the
+rewritten path, `RepoSlug` no longer matches the forge's slug, and the fetch
+falls back to the forge URL — the real GitHub. Point `repo-view.json`'s `url`
+at the bare repo instead.
