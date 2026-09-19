@@ -146,7 +146,7 @@ func TestStashMenuSameFourRowsUnderFilesView(t *testing.T) {
 	for _, r := range availableActions(m) {
 		ids = append(ids, r.id)
 	}
-	want := []string{"copy-stash-ref", "stash-apply", "stash-pop", "stash-drop"}
+	want := []string{"copy-stash-ref", "copy-link", "stash-apply", "stash-pop", "stash-drop"}
 	if len(ids) != len(want) {
 		t.Fatalf("menu rows = %v, want exactly %v", ids, want)
 	}

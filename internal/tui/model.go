@@ -3593,6 +3593,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case startAtFailMsg:
 		m.statusMsg = i18n.T("error: %s", msg.reason)
 		return m, nil
+	case stashLinkMsg:
+		return m.resolvedStashLink(msg)
 	case clipboardCopiedMsg:
 		if msg.err != nil {
 			m.statusMsg = i18n.T("copy failed: %s", msg.err.Error())
