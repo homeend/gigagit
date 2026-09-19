@@ -251,8 +251,22 @@ func previewDiff(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 		}
 		return renderDiffSpec(ctx, svc, tgt.Spec, true, *asJSON, false, false, stdout, stderr)
 	}
+	if fs.NArg() == 1 {
+		// One argument names a saved COMMIT PAIR (a merge preview is typed as
+		// its two branches here); it prints exactly what `gg preview show` does.
+		p, err := svc.PairGet(context.Background(), fs.Arg(0))
+		if errors.Is(err, domain.ErrPairNotFound) {
+			fmt.Fprintf(stderr, "preview diff: no saved pair %q (a merge preview is <source> <target>)\n", fs.Arg(0))
+			return 1
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		return printPair(svc, p, *patch, stdout, stderr)
+	}
 	if fs.NArg() != 2 {
-		fmt.Fprintln(stderr, "usage: gg preview diff [--patch] <source> <target>")
+		fmt.Fprintln(stderr, "usage: gg preview diff [--patch] <source> <target> | <pair id|label>")
 		return 2
 	}
 	return printPreview(svc, fs.Arg(0), fs.Arg(1), *patch, stdout, stderr)

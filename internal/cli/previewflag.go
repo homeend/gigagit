@@ -10,13 +10,16 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// --preview is the ONE way an agent addresses a merge preview from the CLI:
-// a saved record's id or label, or git's three-dot form <target>...<source>
-// (which needs no saved record). One parser, shared by diff, note and review,
-// so the three can never disagree about what a preview's diff is.
+// --preview is the ONE way an agent addresses a merge preview OR a commit pair
+// from the CLI: a saved entry's id or label, git's three-dot form
+// <target>...<source>, or the two-dot <a>..<b> (neither needs a saved entry).
+// One parser — domain.NoteScopeResolve, shared with MCP — behind diff, note
+// and review, so they can never disagree about what the scope's diff is.
 
 // previewTarget is a resolved --preview argument.
 type previewTarget struct {
+	// Source and Target are the branch pair's NAMES; both are empty for a
+	// commit pair (Set.IsPair()) — prose goes through scopeName.
 	Source, Target string
 	Set            domain.PreviewNoteSet
 	// Spec is the PREVIEW's diff, straight from Set.DiffSpec() — the single
@@ -32,7 +35,7 @@ type previewFlag struct{ spec *string }
 
 func addPreviewFlag(fs *flag.FlagSet) previewFlag {
 	return previewFlag{spec: fs.String("preview", "",
-		"a merge preview: <id>, <label>, or <target>...<source>")}
+		"a merge preview or a commit pair: <id>, <label>, <target>...<source> or <a>..<b>")}
 }
 
 func (pf previewFlag) set() bool { return pf.spec != nil && *pf.spec != "" }
@@ -49,28 +52,19 @@ func previewUsageErr(verb string, stderr io.Writer) int {
 // where it is simply nothing to show): a CLI caller asked for that diff by
 // name and must not be handed an empty one.
 func resolvePreviewTarget(ctx context.Context, svc *domain.Service, spec string) (previewTarget, error) {
-	source, target, err := svc.PreviewResolve(ctx, spec)
+	set, err := svc.NoteScopeResolve(ctx, spec)
 	if err != nil {
 		return previewTarget{}, err
 	}
-	sum, err := svc.PreviewSummary(ctx, source, target)
-	if err != nil {
-		return previewTarget{}, err
+	return previewTarget{Source: set.Source, Target: set.Target, Set: set, Spec: set.DiffSpec()}, nil
+}
+
+// scopeName is how prose names a note scope: the branch pair, or <a7>..<b7>.
+func scopeName(set domain.PreviewNoteSet) string {
+	if set.IsPair() {
+		return set.Base[:7] + ".." + set.Tip[:7]
 	}
-	switch sum.State {
-	case domain.PreviewOK:
-	case domain.PreviewMissingSource:
-		return previewTarget{}, fmt.Errorf("preview: missing: %s", source)
-	case domain.PreviewMissingTarget:
-		return previewTarget{}, fmt.Errorf("preview: missing: %s", target)
-	default:
-		return previewTarget{}, fmt.Errorf("preview: %s → %s: %s", source, target, sum.State)
-	}
-	set, err := svc.PreviewNotes(ctx, source, target)
-	if err != nil {
-		return previewTarget{}, err
-	}
-	return previewTarget{Source: source, Target: target, Set: set, Spec: set.DiffSpec()}, nil
+	return set.Target + " ... " + set.Source
 }
 
 // withPaths copies the spec with -- <paths> applied.

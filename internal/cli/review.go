@@ -72,7 +72,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 		// exactly what a preview needs.
 		arg = tgt.Spec.Rev
 		target = domain.ReviewTarget{Kind: domain.ReviewRange, Range: tgt.Spec.Rev,
-			Label: tgt.Target + " ... " + tgt.Source, Diff: tgt.Spec}
+			Label: scopeName(tgt.Set), Diff: tgt.Spec}
 		spec := tgt.Spec
 		hunkSpec = &spec
 	case *working:
