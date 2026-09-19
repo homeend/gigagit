@@ -46,6 +46,27 @@ func TestPRSectionIsBornHidden(t *testing.T) {
 	}
 }
 
+// live.js once USED fetchPRs without importing it: the ReferenceError was
+// swallowed by the refresh lane's catch, so the interval re-list never reached
+// the page — and only a browser run showed it. Every module that calls it
+// must import it.
+func TestFetchPRsIsImportedWhereItIsCalled(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"live.js", "app.js"} {
+		b, err := os.ReadFile(filepath.Join("static", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		js := string(b)
+		if !strings.Contains(js, "fetchPRs()") {
+			t.Errorf("%s no longer calls fetchPRs — the pull-request list would not follow it", name)
+		}
+		if !regexp.MustCompile(`import \{[^}]*\bfetchPRs\b[^}]*\} from "\./prs\.js"`).MatchString(js) {
+			t.Errorf("%s calls fetchPRs without importing it from ./prs.js", name)
+		}
+	}
+}
+
 // The page names a pull request by NUMBER. Nothing in prs.js may put a ref or
 // a branch name on a PR endpoint's query string.
 func TestPRPageSendsOnlyTheNumber(t *testing.T) {

@@ -41,12 +41,27 @@ function take(body) {
   }
 }
 
-export async function fetchPRs() {
-  try {
-    take(await getJSON("/api/pr"));
-  } catch {
-    // A failed read is not "the pull requests are gone": the rows stand.
+// fetchPRs is single-flight (boot, the backoff and a live event can overlap),
+// but a call that arrives mid-flight is not DROPPED: the answer in flight may
+// predate what that call was about, so one more read runs after it.
+let again = false;
+export function fetchPRs() {
+  const run = runOnce("prs", async () => {
+    try {
+      take(await getJSON("/api/pr"));
+    } catch {
+      // A failed read is not "the pull requests are gone": the rows stand.
+    }
+  });
+  if (!run) {
+    again = true;
+    return Promise.resolve();
   }
+  return run.then(() => {
+    if (!again) return;
+    again = false;
+    return fetchPRs();
+  });
 }
 
 function renderPRs() {

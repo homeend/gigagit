@@ -91,6 +91,8 @@ type Server struct {
 	rt remoteTagCache
 	// prs is the pull-request list lane's memory (prs.go).
 	prs prCache
+	// prBudget overrides prLoadBudget (tests); zero = the default.
+	prBudget time.Duration
 }
 
 func New(svc *domain.Service) *Server {

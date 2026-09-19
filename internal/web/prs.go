@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -123,12 +124,22 @@ func (s *Server) loadPRs(svc *domain.Service) {
 	c.loading = true
 	s.prs.mu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), prLoadBudget)
+	budget := prLoadBudget
+	if s.prBudget > 0 {
+		budget = s.prBudget
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 	state, errText := prsReady, ""
 	var rows []model.PullRequest
-	if !svc.ForgeStatus(ctx).Available() {
+	if st := svc.ForgeStatus(ctx); !st.Available() {
 		state = prsOff
+		// A probe that ran out of time is not a verdict — domain does not cache
+		// it either. Stay unprobed so the next read (or ⟳) asks again, instead
+		// of turning the feature off for the session over one slow start.
+		if ctx.Err() != nil || errors.Is(st.Err, context.DeadlineExceeded) || errors.Is(st.Err, context.Canceled) {
+			state, errText = prsUnprobed, "the forge did not answer in time"
+		}
 	} else if got, err := svc.PullRequests(ctx); err != nil {
 		errText = err.Error()
 	} else {
@@ -136,7 +147,13 @@ func (s *Server) loadPRs(svc *domain.Service) {
 	}
 
 	s.prs.mu.Lock()
-	c = s.prs.at(svc)
+	if s.prs.svc != svc {
+		// Re-rooted while this listing ran: the cache belongs to another
+		// repository now, and at() would hand it BACK to this one.
+		s.prs.mu.Unlock()
+		return
+	}
+	c = &s.prs
 	c.loading = false
 	c.state = state
 	c.err = errText

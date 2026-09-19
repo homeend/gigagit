@@ -74,6 +74,9 @@ type liveHub struct {
 	// onRemoteTags receives each successful interval listing of the remote's
 	// tags (the Server stores it for the sidebar's ▲; nil in tests that
 	// build a bare hub).
+	// now / tick are the clock seams as they stood when the hub was built.
+	now  func() time.Time
+	tick time.Duration
 	// onPRs runs the pull-request list lane when it is due (prs.go).
 	onPRs        func(svc *domain.Service)
 	onRemoteTags func(*domain.Service, map[string]bool)
@@ -110,10 +113,16 @@ func newLiveHub(cfg config.RefreshConfig, watchOK bool, gate func() bool) *liveH
 		watchOK: watchOK,
 		gate:    gate,
 		lastRun: map[string]time.Time{},
+		// The clock seams are read ONCE, here, on the caller's goroutine: the
+		// tick loop outlives a test that does not Close its server, and a
+		// goroutine reading the package variables would race the next test's
+		// useFakeClock.
+		now:  liveNow,
+		tick: liveTick,
 	}
 	// Seed every source as "just refreshed": the page that connects has just
 	// loaded everything, so the first interval poll waits a full interval.
-	now := liveNow()
+	now := h.now()
 	for _, src := range liveSources {
 		h.lastRun[src] = now
 	}
@@ -405,7 +414,7 @@ func (h *liveHub) watchLoop(w *gitwatch.Watcher) {
 // tickLoop runs tickOnce every liveTick until the hub stops. One lane: a
 // slow fetch simply delays the next due-check, it never overlaps it.
 func (h *liveHub) tickLoop(svc *domain.Service) {
-	t := time.NewTicker(liveTick)
+	t := time.NewTicker(h.tick)
 	defer t.Stop()
 	for {
 		select {
@@ -432,7 +441,7 @@ func (h *liveHub) tickOnce(svc *domain.Service) {
 	if stopped {
 		return
 	}
-	now := liveNow()
+	now := h.now()
 	// Before the master switch: the prs lane has its own key.
 	if secs, on := prsInterval(cfg); on && onPRs != nil {
 		h.mu.Lock()

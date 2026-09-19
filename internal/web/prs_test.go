@@ -242,3 +242,48 @@ func TestPRCacheIsPerService(t *testing.T) {
 		t.Errorf("the previous repo's rows leaked: %+v", out)
 	}
 }
+
+// slowForge's probe never answers within the caller's budget.
+type slowForge struct{ fakeForge }
+
+func (f *slowForge) Detect(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// A probe that timed out is not "no forge": the next read must ask again
+// rather than hide the feature for the rest of the session.
+func TestPRListProbeTimeoutIsNotFinal(t *testing.T) {
+	t.Parallel()
+	_, srv := prServe(t, newRepoDir(t, 1), &fakeForge{})
+	srv.prBudget = 50 * time.Millisecond
+	srv.service().SetForgeProviders([]forge.Provider{&slowForge{}})
+	srv.loadPRs(srv.service())
+	if state, _, errText, _ := srv.prsSnapshot(srv.service()); state != prsUnprobed || errText == "" {
+		t.Fatalf("after a timed-out probe: state=%q err=%q, want unprobed with a reason", state, errText)
+	}
+}
+
+// A listing that finishes after a re-root must not hand the cache back to the
+// repository it was started for.
+func TestPRLoadAfterRerootLeavesTheNewCacheAlone(t *testing.T) {
+	t.Parallel()
+	f := &fakeForge{open: []model.PullRequest{openPR(7, "old repo")}, gate: make(chan struct{})}
+	_, srv := prServe(t, newRepoDir(t, 1), f)
+	old := srv.service()
+	done := make(chan struct{})
+	go func() { defer close(done); srv.loadPRs(old) }()
+
+	other := domain.Open(newRepoDir(t, 2))
+	other.SetForgeProviders([]forge.Provider{&fakeForge{}})
+	srv.svc.Store(other)
+	srv.prsSnapshot(other) // the new repo's first read positions the cache on it
+	close(f.gate)
+	<-done
+	srv.prs.mu.Lock()
+	owner, rows := srv.prs.svc, len(srv.prs.prs)
+	srv.prs.mu.Unlock()
+	if owner != other || rows != 0 {
+		t.Fatalf("the stale listing took the cache back (owner is other: %v, rows %d)", owner == other, rows)
+	}
+}

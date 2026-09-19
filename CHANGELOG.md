@@ -12,7 +12,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 *pull requests*, right under *previews* — read-only, like the rest of the
 feature, and only when a usable `gh` is found (without one the section is never
 shown; there is no notice). Rows lead with the review verdict (`✓` approved ·
-`✗` changes requested · `●` review required · `draft`); a pull request gg
+`✗` changes requested · `●` review required — the TUI's `…` reads as a
+truncation in a browser — · `draft`); a pull request gg
 already knows stays listed, dimmed, after it is closed or merged. **Click**
 fetches the head into `refs/gg/pr/<n>` and opens the PR's diff (`base…head`,
 titled `PR #7 · title`) on the merge-preview compare screen; a closed or merged

@@ -1807,6 +1807,20 @@ under it would otherwise block every later PR diff from fetching.
   read it as a plain commit diff on the head sha, `linkFor` refuses, and
   `reopenPreviewIfMoved` returns early. Plan 5 replaces the first three with
   `pr=n` reads.
+- **The hub captures its clock seams at construction** (`h.now`, `h.tick`).
+  With prs on by default EVERY `startLive` now runs a tick loop, even with
+  refresh disabled; a loop leaked by a test that never Closes read the package
+  `liveNow`/`liveTick` and raced the next test's `useFakeClock` (the race gate
+  caught it).
+- **A timed-out probe is not `off`** (`loadPRs`): domain does not cache a
+  cancelled probe, so the web stays unprobed with an error text and the next
+  read retries. A listing that finishes after a re-root returns without
+  touching the cache (`prCache.at` would hand it back to the old service).
+- **`fetchPRs` was called in live.js without an import**: the ReferenceError
+  was swallowed by the refresh lane's catch and only the browser interval
+  check (refresh disabled, `prs = 10`, no click) saw it.
+  `TestFetchPRsIsImportedWhereItIsCalled` pins it. `fetchPRs` is single-flight
+  with ONE queued re-run — a dropped call could keep a pre-update answer.
 - **Tests:** web `TestMain` sets `domain.ForgeDisabled`; PR tests inject
   `fakeForge` via `SetForgeProviders` and a ticker-less hub (`prServe`), so
   they need no env. Browser fixture = the TUI one copied, with PR 12 a REAL
