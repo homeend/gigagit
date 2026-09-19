@@ -156,7 +156,7 @@ neither side). Texts are stored as given, untrimmed input trimmed once with
   | `TestCompareLinksLocalFormFileLinkIsOneFile` | up front: `CompareLinks(gg://abs@c1, gg://abs@c2)` has **2** files (the arms differ). Then `gg://abs/sub/a.go@c1` ↔ `gg://abs/sub/a.go@c2` → exactly `M sub/a.go`. |
   | `TestCompareLinksNameFormAgreesWithLocalForm` | `gg://r/sub/a.go@c1 ↔ gg://r/sub/a.go@c2` gives the same `Files` as the local-form row. |
   | `TestCompareLinksTwoLocalFileLinksAreOneCheckout` | `gg://abs/sub/a.go@c1 ↔ gg://abs/sub/b.go@c2` is NOT refused; result is `D sub/a.go` + `A sub/b.go` (key-based algebra, D8). |
-  | `TestCompareLinksRefusesAnotherCheckout` | right = a second real repo registered through `ResolveOpts.OpenFn`/registry as the existing cross-repo resolve tests do → `errors.Is(err, ErrLinkCrossRepo)`, `errors.As` → `Side == LinkSideRight`, and `!errors.Is(err, model.ErrLink)`. |
+  | `TestCompareLinksRefusesAnotherCheckout` | right = a second real repo **listed in a `repos` registry file passed as `ResolveOpts.RegistryPath`** (the pattern in `linkresolve_test.go`, grep `RegistryPath:`). Without the registry the link has NO candidate and fails as `ErrLinkUnknownRepo` before `SameCheckout` is ever asked — the test could not see its subject. Assert up front that the same call WITHOUT the registry gives `ErrLinkUnknownRepo` (the arms differ). With it → `errors.Is(err, ErrLinkCrossRepo)`, `errors.As` → `Side == LinkSideRight`, and `!errors.Is(err, model.ErrLink)`. |
   | `TestCompareLinksGrammarErrorNamesItsSide` | left `"gg://"`-garbage → `errors.Is(err, model.ErrLink)` THROUGH the wrapper and `Side == LinkSideLeft`; swap the arguments → `LinkSideRight`. |
   | `TestCompareLinksKeepsTheTextsAsGiven` | `LeftText/RightText` equal the inputs (a name-form text is not rewritten to local form). |
   | `TestCompareLinksStashSetReadsItsOwnSource` | `stashFixture` (3b-1): `gg://abs@<parent> ↔ gg://abs@<parent>..<sha>` lists the untracked file as `A`, and `c.Right.Source("scratch.txt") != c.Right.Endpoint()`. |
@@ -223,9 +223,14 @@ neither side). Texts are stored as given, untrimmed input trimmed once with
   → rows. Errors pass through (`LinkSideError` already says `left: …`;
   a bare error keeps the `comparing: ` prefix). Delete `sameLinkRepo`; delete
   `linkRepoLabel` only if `grep -n linkRepoLabel internal/mcp` shows no other
-  caller. `TestCompareLinksRefusesTwoRepositories` asserts the substring
-  `different repositor` so both the old and new wording satisfy it — then
-  tighten it to `cross-repository`.
+  caller. **MCP cannot reach the cross-repo refusal, by design:** it passes
+  `ResolveOpts{Cwd: s.svc}` with no registry (the policy `resolveLinkArg`
+  documents), so a link to another checkout has no candidate and is refused as
+  *unknown here* ("not in this machine's gg history"). Rewrite
+  `TestCompareLinksRefusesTwoRepositories` to assert that refusal names the
+  RIGHT side (`right:` prefix) and the unknown-repo text, and say in its
+  comment why `cross-repository` is unreachable from MCP — so nobody "fixes"
+  it by handing MCP a registry.
 - [ ] **Step 4 — run** `go test ./internal/mcp -count=1` → PASS.
 - [ ] **Step 5 — break table.**
 
@@ -421,6 +426,12 @@ Behaviour:
   `side[Side].err`, else `p.err`; success → `handOffToFilesView` wrapping
   `openLinkCompare` (the dialog is parked, and esc on the view returns to it
   with both fields intact).
+- `busy = false` is set BEFORE the hand-off: esc on the view returns to this
+  parked dialog, and a dialog still `busy` could never submit again.
+- `esc` on a busy dialog clears `m.linkCompareWant`, so the in-flight load is
+  dropped instead of opening a view the user cancelled. `beginFilesView`
+  clears it too (a newer view supersedes an older load, as `compareTag` does
+  for `openCompareFiles`).
 - An "already showing" no-op submit (nil cmd) just hands off to the open view.
 - Editing a field clears that side's `err` and `p.err`. `space` is dropped
   (a link holds none). `esc` closes; `ctrl+c` quits. `ctrl+t` maximizes
@@ -449,6 +460,8 @@ Behaviour:
   | `TestASideErrorRendersUnderItsOwnField` | right unparseable → `side[1].err != ""`, `side[0].err == ""`, `busy == false`; the rendered box shows the message BELOW field 2's line (index of the message line > index of field 2's line, and field 1's next line is not it). Then mirror it for the left. |
   | `TestEditingClearsTheError` | type a rune into field 2 → `side[1].err == ""`. |
   | `TestEnterOnLinkOneMovesOnAndNeverSubmits` | both fields filled, focus 0, enter → focus 1 (link 2 while no base rows), `busy == false`. |
+  | `TestEscWhileBusyCancelsTheLoad` | submit, esc BEFORE pumping, then deliver the msg → no files view, `linkCompareWant == ""`. |
+  | `TestTheDialogCanSubmitAgainAfterComingBack` | submit → view → esc → change field 2 → enter → a second view with the new tag (`busy` was reset). |
   | `TestAnEmptySideDoesNotSubmit` | right empty, enter on link 2 → no cmd, not busy. |
   | `TestTheDialogNeverExceedsItsWidth` | an 80-col model with a 300-char link → every rendered line's display width ≤ the box width. |
 
@@ -463,6 +476,8 @@ Behaviour:
   | success uses `popLayer` instead of `handOffToFilesView` | `TestEscOnTheViewReturnsToTheDialog…` |
   | `loadedLinkHist` fills only `histPickers()[0]` | `TestTheHistoryLoadFillsEveryPickerOfItsHost` |
   | move the palette row to the end | `…Alphabetically` |
+  | drop `busy = false` before the hand-off | `TestTheDialogCanSubmitAgainAfterComingBack` |
+  | esc leaves `linkCompareWant` set | `TestEscWhileBusyCancelsTheLoad` |
 
 - [ ] **Step 7 — i18n + the AST gates** (`go test ./internal/tui -run 'I18n|i18n|Menu|Vocab|RenderOrder' -count=1`).
 - [ ] **Step 8 — commit:** `feat(tui): Compare with link… — two link fields over the copied-link history`.
@@ -616,13 +631,19 @@ Dialog:
   confirm take the id + a `isCmp bool`, never a second copy of themselves.
 - Preview-only actions on a comparison row (`preview-swap`, the notes list,
   copy link) decline with `i18n.T("not available for a saved comparison")`.
-  The row's `.` menu offers **Copy left link** / **Copy right link**
+  `contextLinkText`'s `panelPreviews` arm returns `false` when the row is a
+  comparison. The row's `.` menu offers **Copy left link** / **Copy right link**
   (`copyToClipboardCmd`, so both record).
 
-- [ ] **Step 1 — failing tests.**
+- [ ] **Step 1 — failing tests.** Fixture `savedCompareModel(t)` =
+  `switcherLinkModel` + **`m.svc.UseSavedCompareDir(t.TempDir())`** — without
+  it ten parallel tests write the USER's real `savedcompare.toml`. The first
+  test below pins the isolation itself (3a's defect #2 shape).
 
   | test | asserts |
   |---|---|
+  | `TestTheSaveFixtureWritesOnlyItsTempDir` | after a save, `savedcompare.toml` exists under the fixture's temp dir (walk it). |
+  | `TestCopyLinkOnAComparisonRowDeclines` | focus a comparison row: `m.contextLinkText()` → `ok == false` (the `panelPreviews` arm at `link.go:236` would otherwise call `previewLinkFor("", "", …)`). |
   | `TestSaveComparisonStoresTheTwoTexts` | open a link compare, `.` → Save comparison…, enter with an empty label → `SavedCompareList` holds one non-set entry whose `Left/Right` equal the view's TEXTS (name-form in, name-form stored) and whose label is non-empty. |
   | `TestSavingTwiceIsANoticeNotAnError` | second save → status contains "already saved as", list still has 1. |
   | `TestSaveComparisonIsAbsentFromAnOrdinaryCompare` | `openCompareFiles(c1, c2)` → the menu has no `save-comparison` row. |
@@ -645,6 +666,8 @@ Dialog:
   | `readPreviews` drops the `!IsSet()` filter | `TestThePanelListsBothShapes` (the SET appears twice → 3 rows) |
   | "Copy right link" copies `cmp.Left` | `TestCopyLeftAndRightLink…` |
   | the menu row is unconditional | `TestSaveComparisonIsAbsent…` |
+  | the fixture drops `UseSavedCompareDir` | `TestTheSaveFixtureWritesOnlyItsTempDir` (run this break with `XDG_STATE_HOME=$SCRATCH/xdg` so the real store is never touched) |
+  | `contextLinkText`'s previews arm ignores `cmp` | `TestCopyLinkOnAComparisonRowDeclines` |
 
 - [ ] **Step 6 — i18n, gates, commit:** `feat(tui): Save comparison… and saved comparisons in the Previews panel`.
 
@@ -708,6 +731,11 @@ Dialog:
 
 ### Task 9: docs, headless round trip, the gate
 
+- [ ] **Amend the spec** (`2026-09-19-links-tui-design.md`) so it matches the
+  code: §3.5 gains `EvalLinkText` + `ErrLinkCrossRepo` (P2, P3) and the note
+  that MCP cannot reach the cross-repo refusal; §3.7 `BaseSuggestion` gains
+  `Self`, `WithBase` is named, `ctrl+enter` is struck (P4, P5, P7); §3.8's
+  label default becomes "empty = the store's default" (P9); §6 notes P1.
 - [ ] **Docs.** `CHANGELOG.md` section "Compare with link…";
   `README.md` (the palette command, the base picker, saved comparisons in the
   Previews tab, the closed stash window); `docs/CLAUDE-details.md` "Links in
