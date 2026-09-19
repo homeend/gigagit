@@ -7,6 +7,7 @@ import "github.com/homeend/gigagit/internal/preflight"
 const (
 	FeatureCore     = "core"
 	FeatureVersions = "versions"
+	FeatureForge    = "forge"
 
 	StoreVersions = "versions"
 )
@@ -49,6 +50,12 @@ func Features() []preflight.Feature {
 					}
 				},
 			},
+		},
+		{
+			ID:          FeatureForge,
+			Criticality: preflight.Optional,
+			Silent:      true, // no forge CLI is the normal case, not a problem to report
+			Requires:    []preflight.Requirement{preflight.ForgeUsable{}},
 		},
 	}
 }

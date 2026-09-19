@@ -24,6 +24,11 @@ func TestPreflightSatisfiedOnAFreshRepo(t *testing.T) {
 		t.Fatal("Preflight returned no verdicts")
 	}
 	for _, v := range vs {
+		if v.Feature.Silent {
+			// Depends on an external tool (the forge CLI), not on the repo:
+			// unprobed here, and legitimately unavailable on a clean box.
+			continue
+		}
 		if v.State != preflight.Satisfied {
 			t.Errorf("feature %q = %v, want Satisfied (%s)", v.Feature.ID, v.State, v.Reason.Format)
 		}

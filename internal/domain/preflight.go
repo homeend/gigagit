@@ -71,7 +71,17 @@ func (s *Service) probesFrom(ctx context.Context, formats map[string]int) (prefl
 			StoreVersions: {Format: formats[StoreVersions], HasData: len(versionRefs) > 0},
 		},
 		GitVersion: ver,
+		// A snapshot, never a probe: forge detection is a network round trip
+		// and belongs to ForgeStatus, not to this synchronous resolve.
+		Forge: s.forgeProbe(),
 	}, formats, nil
+}
+
+// invalidatePreflight drops the cached verdicts (the forge verdict changed).
+func (s *Service) invalidatePreflight() {
+	s.preflightMu.Lock()
+	s.preflightDone, s.preflightOut, s.preflightMarks = false, nil, nil
+	s.preflightMu.Unlock()
 }
 
 // Preflight resolves every declared feature against this repository.
