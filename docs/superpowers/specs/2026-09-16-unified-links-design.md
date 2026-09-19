@@ -494,12 +494,18 @@ Domain still decides WHAT (it already computes `storeRefs`; it now also
 constructs the action) and the op still only runs it under the lock, so
 `ApplyMigration`'s "dumb executor" contract is preserved rather than weakened.
 
-**Consent.** `Migration` gains `Consent bool`. True is today's flow exactly —
-`PendingMigrations` reports it and the three consent screens are unchanged, so
-branch-versions still asks before destroying. False means lossless: it runs
+**Consent.** `Migration` gains `Lossless bool` — **not** `Consent bool`, and
+the polarity is the whole point: the zero value must be the SAFE one. Spelled
+as `Consent`, a migration that simply forgot to declare would destroy a user's
+data unasked, and the branch-versions migration — the one that really does
+destroy — declares nothing in this field at all. Forgetting has to fail
+towards the consent screen, never past it.
+
+So `Lossless: false` (the default) is today's flow exactly: `PendingMigrations`
+reports it and the three consent screens are unchanged. `Lossless: true` runs
 without asking and reports what it did. `Service.RunAutoMigrations(ctx)` is
-called once per process from the composition root and costs one `os.Stat`
-when there is nothing to do.
+called once per process from the composition root and costs one `os.Stat` when
+there is nothing to do.
 ---
 
 ## 5. Surfaces

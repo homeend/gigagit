@@ -38,7 +38,7 @@
 | `internal/savedcompare/convert.go` (create) | The legacy `previews.toml` shape, FROZEN locally, plus `ConvertLegacy(dir)`: read → convert → merge → write → remove the old file |
 | `internal/engine/apply_migration.go` (modify) | `MigrationAction` interface; `ApplyMigration.Refs` becomes `ApplyMigration.Action` |
 | `internal/engine/migration_actions.go` (create) | `DiscardRefs` (today's body, extracted verbatim) and `ConvertPreviews` |
-| `internal/preflight/preflight.go` (modify) | `Probes.Legacy`, the `LegacyStore` requirement, `Migration.Action` and `Migration.Consent` |
+| `internal/preflight/preflight.go` (modify) | `Probes.Legacy`, the `LegacyStore` requirement, `Migration.Action` and `Migration.Lossless` |
 | `internal/domain/features.go` (modify) | `FeaturePreviews` + `StorePreviews`, declaring the lossless conversion |
 | `internal/domain/preflight.go` (modify) | probe the legacy file; build the action; `RunAutoMigrations`; `PendingMigrations` reports only consent-requiring migrations |
 | `internal/domain/savedcomparestore.go` (create, replaces `previewstore.go`) | the lazy per-repo store resolver, keeping the `PreviewStatePath` / `PreviewsDisabled` / `UsePreviewsDir` seam names |
@@ -1098,7 +1098,7 @@ git commit -m "refactor(engine): a migration names its own action"
   type LegacyProbe struct{ Present bool }
   // Probes gains: Legacy map[string]LegacyProbe
   type LegacyStore struct{ Store string }   // implements Requirement
-  // Migration gains: Action string; Consent bool
+  // Migration gains: Action string; Lossless bool  (NOT Consent: the zero value must be the safe one)
   ```
 
 **Why a new requirement kind rather than `DataFormat`:** `DataFormat` compares a store's marker against a version range, and the marker is a git ref inside `.git`. `previews.toml` is machine-local, so a ref-backed marker would be stamped by one environment and read as authoritative by another that still holds the file. There are no format numbers in this migration at all: `previews.toml` and `savedcompare.toml` are different files, so the complete question is "is the legacy file still here, on this machine".
@@ -1147,7 +1147,7 @@ func TestLegacyStoreResolvesRepairableWithAMigration(t *testing.T) {
 		ID:          "previews",
 		Criticality: Optional,
 		Requires:    []Requirement{LegacyStore{Store: "previews"}},
-		Migrate:     &Migration{Store: "previews", To: 2, Action: "convert-previews", Consent: false},
+		Migrate:     &Migration{Store: "previews", To: 2, Action: "convert-previews", Lossless: true},
 	}
 	vs := Resolve([]Feature{f}, Probes{Legacy: map[string]LegacyProbe{"previews": {Present: true}}})
 	if len(vs) != 1 {
@@ -1158,21 +1158,27 @@ func TestLegacyStoreResolvesRepairableWithAMigration(t *testing.T) {
 	}
 }
 
-// Consent is what splits a destructive migration from a lossless one, and the
-// zero value is the LOSSLESS one — so a migration that destroys data has to
-// say so explicitly rather than inherit silence.
-func TestMigrationConsentDefaultsToFalse(t *testing.T) {
+// THE POLARITY GATE. Lossless is what lets a migration run unasked, and its
+// zero value must be the SAFE one: a migration that forgot to declare has to
+// fall towards the consent screen, never past it. The case that makes this
+// matter is named in the test: the branch-versions migration, the one that
+// really does destroy data, declares nothing in this field at all.
+func TestAMigrationThatDeclaresNothingIsNotLossless(t *testing.T) {
 	t.Parallel()
 	var m Migration
-	if m.Consent {
-		t.Fatal("Migration.Consent defaults to true")
+	if m.Lossless {
+		t.Fatal("an undeclared Migration reads as lossless — it would destroy data unasked")
+	}
+	versions := Migration{Store: "versions", From: 1, To: 2}
+	if versions.Lossless {
+		t.Fatal("the branch-versions discard reads as lossless")
 	}
 }
 ```
 
 - [ ] **Step 2: Run it to make sure it fails**
 
-Run: `go test ./internal/preflight/ -run 'Legacy|Consent' -v`
+Run: `go test ./internal/preflight/ -run 'Legacy|Lossless' -v`
 Expected: FAIL to COMPILE — `undefined: LegacyStore`, `unknown field Legacy in struct literal of type Probes`.
 
 - [ ] **Step 3: Implement**
@@ -1242,11 +1248,11 @@ type Migration struct {
 	// so this package stays a stdlib leaf whose whole decision table is
 	// testable with plain values.
 	Action string
-	// Consent gates whether the user is asked first. TRUE for a migration
-	// that destroys data — the consent screen exists to make that loss
-	// honest. FALSE (the zero value) for a lossless one, which has no loss to
-	// confess and simply runs, reporting what it did.
-	Consent  bool
+	// Lossless says this migration destroys nothing, so it may run without
+	// asking. The ZERO VALUE IS THE SAFE ONE: spelled "Consent bool", a
+	// migration that forgot to declare would destroy data unasked, and the
+	// branch-versions migration declares nothing here.
+	Lossless bool
 	Describe func() Text
 }
 ```
@@ -1283,7 +1289,7 @@ git commit -m "feat(preflight): probe a machine-local legacy store; a migration 
 - Test: `internal/domain/previewmigration_test.go` (create)
 
 **Interfaces:**
-- Consumes: `preflight.LegacyStore`, `preflight.Migration{Action, Consent}` (Task 5); `engine.MigrationAction`, `engine.ApplyMigration{Action}` (Task 4); `savedcompare.ConvertLegacy(dir, repo)` and `savedcompare.LegacyFile` (Task 3).
+- Consumes: `preflight.LegacyStore`, `preflight.Migration{Action, Lossless}` (Task 5); `engine.MigrationAction`, `engine.ApplyMigration{Action}` (Task 4); `savedcompare.ConvertLegacy(dir, repo)` and `savedcompare.LegacyFile` (Task 3).
 - Produces:
   ```go
   const FeaturePreviews = "previews"
@@ -1455,13 +1461,13 @@ and inside `Features()`:
 	Requires: []preflight.Requirement{
 		preflight.LegacyStore{Store: StorePreviews},
 	},
-	// LOSSLESS, so Consent is false: every saved preview is converted into
+	// Lossless: every saved preview is converted into
 	// the savedcompare store with its id, label and creation time intact,
 	// and preview notes need no migration at all — they key on the branch
 	// NAMES. There is nothing to confess, so there is nothing to ask.
 	Migrate: &preflight.Migration{
 		Store: StorePreviews, From: 1, To: PreviewsFormat,
-		Action: "convert-previews", Consent: false,
+		Action: "convert-previews", Lossless: true,
 		Describe: func() preflight.Text {
 			return preflight.Text{
 				Format: "Folds your saved merge previews into the saved-comparison store. Nothing is lost: ids, labels and creation times are kept, and preview notes are unaffected.",
@@ -1503,7 +1509,7 @@ func (s *Service) legacyPreviewsPresent(ctx context.Context) bool {
 
 ```go
 mig := v.Feature.Migrate
-if !mig.Consent {
+if !mig.Lossless {
 	continue // lossless: RunAutoMigrations handles it; never prompt
 }
 ```
@@ -1525,7 +1531,7 @@ func (s *Service) RunAutoMigrations(ctx context.Context) error {
 	}
 	ran := false
 	for _, v := range vs {
-		if v.State != preflight.Repairable || v.Feature.Migrate == nil || v.Feature.Migrate.Consent {
+		if v.State != preflight.Repairable || v.Feature.Migrate == nil || !v.Feature.Migrate.Lossless {
 			continue
 		}
 		mig := v.Feature.Migrate
@@ -1615,8 +1621,8 @@ Expected: PASS.
 
 | break | test that must fail |
 |---|---|
-| `RunAutoMigrations` skips migrations with `Consent == false` (inverted condition) | `TestRunAutoMigrationsConvertsPreviewsWithoutConsent` |
-| `PendingMigrations` drops its `!mig.Consent` skip | `TestPendingMigrationsExcludesLosslessOnes` |
+| `RunAutoMigrations` skips migrations with `Lossless == true` (inverted condition) | `TestRunAutoMigrationsConvertsPreviewsWithoutConsent` |
+| `PendingMigrations` drops its `!mig.Lossless` skip | `TestPendingMigrationsExcludesLosslessOnes` |
 | `legacyPreviewsPresent` returns `true` unconditionally | `TestRunAutoMigrationsWithNothingToDoIsANoOp` |
 
 - [ ] **Step 9: Commit**
@@ -2526,7 +2532,7 @@ Report: the branch, the commit range, the full-gate result, and any finding park
 | §4.5 CONVERT, not discard; lossless; preview notes unaffected | 3, 6 |
 | §4.5.1 pluggable check — machine-local probe + `LegacyStore` | 5 |
 | §4.5.1 pluggable action — `MigrationAction`, `DiscardRefs`, `ConvertPreviews` | 4, 6 |
-| §4.5.1 `Migration.Consent`; lossless runs without asking | 5, 6 |
+| §4.5.1 `Migration.Lossless`; lossless runs without asking | 5, 6 |
 | §4.5.1 `RunAutoMigrations` from the composition root | 6 |
 | §5.3 `gg compare --save <label>` | 9 |
 | §5.3 the old vocabulary maps onto links | 9 (`compareTokenLink`) |
@@ -2536,4 +2542,4 @@ Report: the branch, the commit range, the full-gate result, and any finding park
 
 **Placeholder scan.** No "TBD"/"TODO"/"handle edge cases" steps. Three steps direct the implementer to read an existing file before copying its pattern (Task 2 Step 4, Task 7 Step 3, Task 9 Step 2) rather than reproducing a hundred lines the repository already holds — each names the exact file and the exact properties to preserve.
 
-**Type consistency.** `savedcompare.Entry` / `ID(left, right string)` / `IsSet()` are defined in Task 2 and used under those names in 3, 6, 7 and 8. `MigrationAction` / `DiscardRefs` / `ConvertPreviews` are defined in 4 and 6 and used in 6. `LegacyProbe` / `LegacyStore` / `Migration.Action` / `Migration.Consent` are defined in 5 and used in 6. `savedCompareDir` is defined in Task 6 and reused unchanged by Task 7's `savedCompareStore`, so the tasks run in order with no forward reference. `SavedCompareAdd/List/Get/Remove` are defined in 8 and used in 9 and in one Task 7 test.
+**Type consistency.** `savedcompare.Entry` / `ID(left, right string)` / `IsSet()` are defined in Task 2 and used under those names in 3, 6, 7 and 8. `MigrationAction` / `DiscardRefs` / `ConvertPreviews` are defined in 4 and 6 and used in 6. `LegacyProbe` / `LegacyStore` / `Migration.Action` / `Migration.Lossless` are defined in 5 and used in 6. `savedCompareDir` is defined in Task 6 and reused unchanged by Task 7's `savedCompareStore`, so the tasks run in order with no forward reference. `SavedCompareAdd/List/Get/Remove` are defined in 8 and used in 9 and in one Task 7 test.
