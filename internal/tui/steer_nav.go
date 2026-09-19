@@ -712,8 +712,8 @@ func (m Model) steerNavigatePreview(c steer.Command) (Model, tea.Cmd) {
 	// Which saved row, if any, holds this pair. "" means a show-once open.
 	id, bi := "", -1
 	for i, r := range m.previews {
-		if r.rec.Source == src && r.rec.Target == tgt {
-			id, bi = r.rec.ID, i
+		if rec, ok := r.merge(); ok && rec.Source == src && rec.Target == tgt {
+			id, bi = rec.ID, i
 			break
 		}
 	}

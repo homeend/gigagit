@@ -1,0 +1,61 @@
+name = "saved commit pairs: gg preview add <a>..<b> stores a frozen commits diff beside merge previews"
+
+[input]
+steps = [
+  { write = "a.txt", content = "alpha\n" },
+  { commit = "seed" },
+  { write = "b.txt", content = "bravo\n" },
+  { commit = "add b" },
+]
+
+# ONE positional holding ".." is a pair. Both revs freeze to full shas at save
+# time, so HEAD~1..HEAD stores two commits, never the moving names.
+[[run]]
+cmd  = ["preview", "add", "--label", "last change", "HEAD~1..HEAD"]
+exit = 0
+
+# The pair lists in the preview columns with state "pair", and the revs it was
+# saved under are gone: what is stored is shas.
+[[run]]
+cmd             = ["preview", "list"]
+exit            = 0
+stdout_contains = ["last change", "\tpair\t1\t0"]
+stdout_excludes = ["HEAD"]
+
+# show prints the TWO-dot changed-file list between the frozen commits.
+[[run]]
+cmd             = ["preview", "show", "last change"]
+exit            = 0
+stdout_contains = ["b.txt"]
+stdout_excludes = ["a.txt"]
+
+# The store is shared with saved comparisons: the pair is a SET there (one
+# link, an empty right half), which is what makes it an endpoint of a later
+# set-vs-set compare.
+[[run]]
+cmd             = ["compare", "--list"]
+exit            = 0
+stdout_contains = ["last change", "gg:///"]
+
+# Saving the same pair again names the existing row instead of duplicating it.
+[[run]]
+cmd  = ["preview", "add", "HEAD~1..HEAD"]
+exit = 1
+
+# Two spellings of ONE commit are not a pair.
+[[run]]
+cmd  = ["preview", "add", "HEAD..HEAD"]
+exit = 2
+
+[[run]]
+cmd  = ["preview", "rename", "last change", "renamed"]
+exit = 0
+
+[[run]]
+cmd  = ["preview", "rm", "renamed"]
+exit = 0
+
+[[run]]
+cmd             = ["preview", "list"]
+exit            = 0
+stdout_excludes = ["renamed", "pair"]

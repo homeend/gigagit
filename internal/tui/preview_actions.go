@@ -21,6 +21,10 @@ type previewMutatedMsg struct {
 	open           bool
 	fromTab        bool
 	source, target string
+	// pairSaved is the label of the commit pair a save just stored ("" for
+	// every other mutation); pairExisted says the pair was already there.
+	pairSaved   string
+	pairExisted bool
 }
 
 // previewAddCmd saves a pair off the UI thread. A duplicate is NOT an error:
@@ -37,17 +41,47 @@ func (m Model) previewAddCmd(source, target, label string, open, fromTab bool) t
 	}
 }
 
-func (m Model) previewRenameCmd(id, label string) tea.Cmd {
+// previewRenameCmd and previewRemoveCmd take the row KIND because each domain
+// surface refuses the other's rows: PreviewRename on a pair id is "not found",
+// by design (a preview surface never relabels what it cannot show).
+func (m Model) previewRenameCmd(kind previewRowKind, id, label string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
-		return previewMutatedMsg{err: svc.PreviewRename(context.Background(), id, label), focusID: id, fromTab: true}
+		var err error
+		if kind == rowPair {
+			err = svc.PairRename(context.Background(), id, label)
+		} else {
+			err = svc.PreviewRename(context.Background(), id, label)
+		}
+		return previewMutatedMsg{err: err, focusID: id, fromTab: true}
 	}
 }
 
-func (m Model) previewRemoveCmd(id string) tea.Cmd {
+func (m Model) previewRemoveCmd(kind previewRowKind, id string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
-		return previewMutatedMsg{err: svc.PreviewRemove(context.Background(), id), fromTab: true}
+		var err error
+		if kind == rowPair {
+			err = svc.PairRemove(context.Background(), id)
+		} else {
+			err = svc.PreviewRemove(context.Background(), id)
+		}
+		return previewMutatedMsg{err: err, fromTab: true}
+	}
+}
+
+// pairAddCmd saves the commit pair a..b (both freeze to full shas in domain)
+// and focuses its Previews row; an already-saved pair focuses the existing
+// row instead of failing, like previewAddCmd.
+func (m Model) pairAddCmd(a, b, label string, fromTab bool) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		p, err := svc.PairAdd(context.Background(), a, b, label)
+		existed := errors.Is(err, domain.ErrPairExists)
+		if existed {
+			err = nil
+		}
+		return previewMutatedMsg{err: err, focusID: p.ID, fromTab: fromTab, pairSaved: p.Label, pairExisted: existed}
 	}
 }
 
@@ -60,6 +94,12 @@ func (m Model) handlePreviewMutatedMsg(msg previewMutatedMsg) (Model, tea.Cmd) {
 	}
 	m.previewFocusID = msg.focusID
 	m.previewFocusTab = msg.fromTab
+	if msg.pairSaved != "" {
+		m.statusMsg = i18n.T("saved to previews: %s", msg.pairSaved)
+		if msg.pairExisted {
+			m.statusMsg = i18n.T("already saved as %s", msg.pairSaved)
+		}
+	}
 	var open tea.Cmd
 	if msg.open {
 		open = m.openPreviewCmd(msg.focusID, msg.source, msg.target, "")
@@ -93,7 +133,7 @@ func (m Model) openPreviewRenamePopup() (Model, bool) {
 	if !ok {
 		return m, false
 	}
-	return m.pushLayer(&previewRenamePopup{id: r.rec.ID, label: newTextField(r.rec.Label)}), true
+	return m.pushLayer(&previewRenamePopup{id: r.id(), kind: r.kind, label: newTextField(r.label())}), true
 }
 
 // confirmPreviewRemove raises the remove confirm for the selected row. The
@@ -104,17 +144,17 @@ func (m Model) confirmPreviewRemove() Model {
 	if !ok {
 		return m
 	}
-	id := r.rec.ID
+	id, kind := r.id(), r.kind
 	m.modal = &decisionState{
 		req: engine.DecisionRequest{
 			ID:      "preview-remove",
-			Prompt:  i18n.T("Remove preview %s?", r.rec.Label),
+			Prompt:  i18n.T("Remove preview %s?", r.label()),
 			Options: []string{"Remove", "Cancel"},
 		},
 		sel: 1,
 		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
 			if opt == "Remove" {
-				return m, m.previewRemoveCmd(id)
+				return m, m.previewRemoveCmd(kind, id)
 			}
 			return m, nil
 		},
@@ -164,5 +204,9 @@ func (m Model) previewSwapCmd() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	return m.previewAddCmd(r.rec.Target, r.rec.Source, "", false, true)
+	rec, isMerge := r.merge()
+	if !isMerge {
+		return m.pairAddCmd(r.pair.B, r.pair.A, "", true)
+	}
+	return m.previewAddCmd(rec.Target, rec.Source, "", false, true)
 }

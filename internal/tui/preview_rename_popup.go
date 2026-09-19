@@ -13,6 +13,7 @@ import (
 type previewRenamePopup struct {
 	popupMax
 	id    string
+	kind  previewRowKind // which store surface renames it: a pair never goes through PreviewRename
 	label textfield
 }
 
@@ -30,7 +31,7 @@ func (p *previewRenamePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		if v == "" {
 			return m, nil // an empty label would erase the row's only name
 		}
-		return m, m.previewRenameCmd(p.id, v)
+		return m, m.previewRenameCmd(p.kind, p.id, v)
 	default:
 		p.label.HandleEditKey(msg)
 	}

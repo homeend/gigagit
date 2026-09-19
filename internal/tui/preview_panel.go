@@ -3,20 +3,75 @@ package tui
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
-// previewRow is one saved merge preview with its live summary. A row whose
-// summary read failed keeps err (rendered as the state text).
+// previewRowKind says which saved change-set a Previews row is. The ZERO kind
+// is the merge preview, deliberately and against the package's Invalid-first
+// habit: every producer and fixture that predates pairs builds
+// previewRow{rec: …}, and a row with a filled rec and no kind IS a merge
+// preview. The value never leaves this package.
+type previewRowKind int
+
+const (
+	rowMerge previewRowKind = iota
+	rowPair                 // a saved commit pair: two frozen shas (domain.CommitPair)
+)
+
+// previewRow is one saved change-set with its summary: a merge preview (rec,
+// sum, notes) or a commit pair (pair, psum). A row whose summary read failed
+// keeps err (rendered as the state text).
+//
+// rec is read ONLY through merge(), and only in this file (a gate test holds
+// that): a pair row's rec is ZERO, and handing its empty Source/Target to a
+// merge-preview path ends in a confusing git error rather than a refusal.
 type previewRow struct {
+	kind   previewRowKind
 	rec    model.MergePreview
+	pair   domain.CommitPair
+	psum   domain.PairSummary
 	sum    domain.PreviewSummary
 	notes  int            // root notes gathered along the branch, hidden ones included
 	byPath map[string]int // the same counts per path; feeds the open preview's file list
 	err    error
+}
+
+// merge is the row as a merge preview; false for a pair.
+func (r previewRow) merge() (model.MergePreview, bool) { return r.rec, r.kind == rowMerge }
+
+// id, label and created are the kind-agnostic identity of a row: what the
+// list keys, names and sorts by.
+func (r previewRow) id() string {
+	if r.kind == rowPair {
+		return r.pair.ID
+	}
+	return r.rec.ID
+}
+
+func (r previewRow) label() string {
+	if r.kind == rowPair {
+		return r.pair.Label
+	}
+	return r.rec.Label
+}
+
+func (r previewRow) created() time.Time {
+	if r.kind == rowPair {
+		return r.pair.Created
+	}
+	return r.rec.Created
+}
+
+// subject is the middle column: what the row is a diff OF.
+func (r previewRow) subject() string {
+	if r.kind == rowPair {
+		return shortHash(r.pair.A) + ".." + shortHash(r.pair.B)
+	}
+	return r.rec.Source + " → " + r.rec.Target
 }
 
 // previewsPayload is srcPreviews' dataAvailableMsg value.
@@ -48,6 +103,17 @@ func readPreviews(ctx context.Context, svc *domain.Service) (previewsPayload, er
 		}
 		rows = append(rows, row)
 	}
+	// Saved commit pairs follow the merge previews. A frozen pair's summary
+	// is cached by its two shas in domain, so a refresh costs two rev-parse
+	// existence checks per pair and no diff.
+	pairs, err := svc.PairList(ctx)
+	if err != nil {
+		return previewsPayload{}, err
+	}
+	for _, p := range pairs {
+		psum, err := svc.PairSummary(ctx, p.A, p.B)
+		rows = append(rows, previewRow{kind: rowPair, pair: p, psum: psum, err: err})
+	}
 	return previewsPayload{rows: rows}, nil
 }
 
@@ -68,14 +134,26 @@ func (l previewList) Haystack(i int) string {
 	return strings.TrimSuffix(l.text[i], noteBadge(l.rows[i].notes))
 }
 
-func (l previewList) Name(i int) string { return l.rows[i].rec.Label }
-func (l previewList) Date(i int) int64  { return l.rows[i].rec.Created.Unix() }
-func (l previewList) Key(i int) string  { return l.rows[i].rec.ID }
+func (l previewList) Name(i int) string { return l.rows[i].label() }
+func (l previewList) Date(i int) int64  { return l.rows[i].created().Unix() }
+func (l previewList) Key(i int) string  { return l.rows[i].id() }
 
 // previewStateText is the right-hand cell: counts when ok, else the state.
 func previewStateText(r previewRow) string {
 	if r.err != nil {
 		return i18n.T("error: %s", r.err.Error())
+	}
+	if r.kind == rowPair {
+		switch r.psum.State {
+		case domain.PairMissingA:
+			return i18n.T("missing commit: %s", shortHash(r.pair.A))
+		case domain.PairMissingB:
+			return i18n.T("missing commit: %s", shortHash(r.pair.B))
+		}
+		if r.psum.Files == 1 {
+			return i18n.T("1 file")
+		}
+		return i18n.T("%d files", r.psum.Files)
 	}
 	switch r.sum.State {
 	case domain.PreviewMerged:
@@ -98,15 +176,14 @@ func previewStateText(r previewRow) string {
 func (m Model) previewRows() []string {
 	labels := make([]string, len(m.previews))
 	for i, r := range m.previews {
-		labels[i] = r.rec.Label
+		labels[i] = r.label()
 	}
 	w := maxLabelWidth(8, labels...)
 	out := make([]string, 0, len(m.previews))
 	for _, r := range m.previews {
-		pair := r.rec.Source + " → " + r.rec.Target
 		// The SAME ◆N badge every other note-bearing row wears (it brings its
 		// own leading gap), never a glyph of this panel's own.
-		out = append(out, padCell(r.rec.Label, w)+"  "+pair+"  "+previewStateText(r)+noteBadge(r.notes))
+		out = append(out, padCell(r.label(), w)+"  "+r.subject()+"  "+previewStateText(r)+noteBadge(r.notes))
 	}
 	return out
 }

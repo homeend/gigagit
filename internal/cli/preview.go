@@ -6,13 +6,14 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
 
 // cmdPreview implements `gg preview <list|add|rm|rename|show|diff> …`: saved
-// merge previews — "what would <source> bring into <target>", the GitHub PR
+// merge previews and saved commit pairs — "what would <source> bring into <target>", the GitHub PR
 // files-changed diff (merge-base(target, source)..source). Records store
 // branch NAMES; every show recomputes from the current tips.
 func cmdPreview(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
@@ -73,6 +74,29 @@ func previewList(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 		ok++
 		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%d\t%d\n", p.ID, p.Label, p.Source, p.Target, sum.State, sum.Files, sum.Ahead)
 	}
+	// Saved commit pairs follow, in the SAME seven columns so one cut serves
+	// both kinds: <a> and <b> are full shas where a preview prints its branch
+	// names, the state reads "pair" (or "missing"), and ahead is always 0.
+	pairs, err := svc.PairList(ctx)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	for _, p := range pairs {
+		sum, err := svc.PairSummary(ctx, p.A, p.B)
+		if err != nil {
+			failed++
+			fmt.Fprintf(stderr, "preview list: %s: %v\n", p.ID, err)
+			fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\terror\t0\t0\n", p.ID, p.Label, p.A, p.B)
+			continue
+		}
+		ok++
+		state := "pair"
+		if sum.State != domain.PairOK {
+			state = "missing"
+		}
+		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\t%s\t%d\t0\n", p.ID, p.Label, p.A, p.B, state, sum.Files)
+	}
 	if ok == 0 && failed > 0 {
 		return 1
 	}
@@ -86,8 +110,13 @@ func previewAdd(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
+	if fs.NArg() == 1 {
+		if a, b, ok := pairSpec(fs.Arg(0)); ok {
+			return previewAddPair(svc, a, b, *label, stdout, stderr)
+		}
+	}
 	if fs.NArg() != 2 {
-		fmt.Fprintln(stderr, "usage: gg preview add [--label <text>] <source> <target>")
+		fmt.Fprintln(stderr, "usage: gg preview add [--label <text>] <source> <target> | <a>..<b>")
 		return 2
 	}
 	p, err := svc.PreviewAdd(context.Background(), fs.Arg(0), fs.Arg(1), *label)
@@ -117,6 +146,11 @@ func previewRemove(svc *domain.Service, args []string, stdout, stderr io.Writer)
 	p, err := svc.PreviewGet(ctx, fs.Arg(0))
 	if err == nil {
 		err = svc.PreviewRemove(ctx, p.ID)
+	} else if errors.Is(err, domain.ErrPreviewNotFound) {
+		var pr domain.CommitPair
+		if pr, err = svc.PairGet(ctx, fs.Arg(0)); err == nil {
+			err = svc.PairRemove(ctx, pr.ID)
+		}
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
@@ -139,6 +173,11 @@ func previewRename(svc *domain.Service, args []string, stdout, stderr io.Writer)
 	p, err := svc.PreviewGet(ctx, fs.Arg(0))
 	if err == nil {
 		err = svc.PreviewRename(ctx, p.ID, fs.Arg(1))
+	} else if errors.Is(err, domain.ErrPreviewNotFound) {
+		var pr domain.CommitPair
+		if pr, err = svc.PairGet(ctx, fs.Arg(0)); err == nil {
+			err = svc.PairRename(ctx, pr.ID, fs.Arg(1))
+		}
 	}
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
@@ -159,6 +198,11 @@ func previewShow(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 		return 2
 	}
 	p, err := svc.PreviewGet(context.Background(), fs.Arg(0))
+	if errors.Is(err, domain.ErrPreviewNotFound) {
+		if pr, perr := svc.PairGet(context.Background(), fs.Arg(0)); perr == nil {
+			return printPair(svc, pr, *patch, stdout, stderr)
+		}
+	}
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -264,4 +308,68 @@ func printCompareFiles(stdout io.Writer, files []model.CommitFile) {
 		}
 		fmt.Fprintf(stdout, "%s\t%s\n", f.Status, f.Path)
 	}
+}
+
+// pairSpec splits "<a>..<b>", the spelling of a saved commit pair. A
+// three-dot text is a merge preview and is NOT a pair; a refname cannot hold
+// "..", so the first ".." is the separator.
+func pairSpec(s string) (a, b string, ok bool) {
+	if strings.Contains(s, "...") {
+		return "", "", false
+	}
+	a, b, ok = strings.Cut(s, "..")
+	return a, b, ok && a != "" && b != ""
+}
+
+// previewAddPair saves the change-set a..b. Both revs FREEZE to full shas in
+// domain.PairAdd, so `gg preview add main..feat/x` stores today's two tips
+// and never follows the branches — a moving comparison is a merge preview.
+func previewAddPair(svc *domain.Service, a, b, label string, stdout, stderr io.Writer) int {
+	p, err := svc.PairAdd(context.Background(), a, b, label)
+	if errors.Is(err, domain.ErrPairExists) {
+		fmt.Fprintf(stderr, "preview add: %s already saved as %s (%s)\n", p.DefaultLabel(), p.ID, p.Label)
+		return 1
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, "preview add:", err)
+		return 2
+	}
+	fmt.Fprintln(stdout, p.ID)
+	return 0
+}
+
+// printPair is printPreview for a saved commit pair: the TWO-dot file list
+// or patch between its frozen commits.
+func printPair(svc *domain.Service, p domain.CommitPair, patch bool, stdout, stderr io.Writer) int {
+	ctx := context.Background()
+	eps, err := svc.PairOpen(ctx, p.A, p.B)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	switch eps.Summary.State {
+	case domain.PairOK:
+	case domain.PairMissingA:
+		fmt.Fprintf(stderr, "preview: commit %s is not in this repository\n", p.A)
+		return 1
+	default:
+		fmt.Fprintf(stderr, "preview: commit %s is not in this repository\n", p.B)
+		return 1
+	}
+	if patch {
+		diff, err := svc.ComparePatch(ctx, eps.Left, eps.Right)
+		if err != nil {
+			fmt.Fprintln(stderr, "error:", err)
+			return 1
+		}
+		fmt.Fprint(stdout, diff)
+		return 0
+	}
+	files, err := svc.CompareFiles(ctx, eps.Left, eps.Right)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	printCompareFiles(stdout, files)
+	return 0
 }
