@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/observ"
 )
 
 // CallTimeout bounds every provider subprocess.
@@ -31,4 +32,9 @@ type Provider interface {
 	BaseRepo(ctx context.Context) (slug, fallbackURL string, err error)
 	// HeadRefspec is the server-side ref holding PR n's head.
 	HeadRefspec(n int) string
+}
+
+// Default is the provider list, in probe order.
+func Default(workDir string, rec observ.Recorder) []Provider {
+	return []Provider{NewGH(workDir, rec)}
 }
