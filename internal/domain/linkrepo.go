@@ -22,10 +22,12 @@ import (
 // yield a link ParseLink refuses (the first '@' is the target separator, the
 // first '#' the hunk one). That is an error rather than a mangled link.
 func (s *Service) LinkRepo(ctx context.Context) (model.LinkRepo, error) {
-	name, err := s.RepoName(ctx)
-	if err != nil {
-		return model.LinkRepo{}, err
-	}
+	// A remote-query failure DEGRADES to the local form rather than failing,
+	// the same policy RepoName already applies one line further in (a
+	// RemoteURL error reads as "no remote"). Composing a link is now part of
+	// saving a merge preview, and a transient `git remote` failure must not
+	// be able to stop a user saving one.
+	name, _ := s.RepoName(ctx)
 	if name != "" {
 		return model.LinkRepo{Name: name}, nil
 	}
