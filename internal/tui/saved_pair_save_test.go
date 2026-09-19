@@ -73,6 +73,9 @@ func TestSavePairDirectionIsCompareSelections(t *testing.T) {
 	if err != nil || len(pairs) != 1 || pairs[0].A != older || pairs[0].B != newer {
 		t.Fatalf("saved = %+v, %v; want %s..%s", pairs, err, older, newer)
 	}
+	if pairs[0].Label != m.commits[0].Subject {
+		t.Fatalf("label = %q, want the newer commit's subject %q", pairs[0].Label, m.commits[0].Subject)
+	}
 	if !strings.Contains(m.statusMsg, pairs[0].Label) {
 		t.Fatalf("status = %q, want the saved label", m.statusMsg)
 	}

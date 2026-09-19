@@ -73,10 +73,10 @@ func (m Model) previewRemoveCmd(kind previewRowKind, id string) tea.Cmd {
 // pairAddCmd saves the commit pair a..b (both freeze to full shas in domain)
 // and focuses its Previews row; an already-saved pair focuses the existing
 // row instead of failing, like previewAddCmd.
-func (m Model) pairAddCmd(a, b string, fromTab bool) tea.Cmd {
+func (m Model) pairAddCmd(a, b, label string, fromTab bool) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
-		p, err := svc.PairAdd(context.Background(), a, b, "")
+		p, err := svc.PairAdd(context.Background(), a, b, label)
 		existed := errors.Is(err, domain.ErrPairExists)
 		if existed {
 			err = nil
@@ -206,7 +206,7 @@ func (m Model) previewSwapCmd() tea.Cmd {
 	}
 	rec, isMerge := r.merge()
 	if !isMerge {
-		return m.pairAddCmd(r.pair.B, r.pair.A, true)
+		return m.pairAddCmd(r.pair.B, r.pair.A, "", true)
 	}
 	return m.previewAddCmd(rec.Target, rec.Source, "", false, true)
 }
