@@ -2706,6 +2706,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if c, ok := m.commitForMessageView(); ok {
 				return m.openCommitMessagePopup(c)
 			}
+			if p, ok := m.selectedPR(); ok && m.canOpenPR() {
+				return m.openPRHub(p)
+			}
 		case "I":
 			if c, ok := m.commitForMessageView(); ok {
 				return m.openCommitMessageEditor(c)
@@ -2810,6 +2813,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case prFetchReadyMsg:
 		return m.handlePRFetchReady(msg)
+
+	case prHubMsg:
+		return m.handlePRHubMsg(msg)
 
 	case bgFetchDoneMsg:
 		// Drop stale completions: if a newer fetch was launched (e.g. a user op
