@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Saved comparisons absorb merge previews
+
+`internal/savedcompare` is now the one store behind both saved comparisons and
+saved merge previews. An entry is a **pair** of `gg://` links or a **set** (one
+link — which is what a merge preview is: "everything `feat/x` would bring into
+`main`"). Links are stored unresolved, which is what lets a saved preview keep
+following its branches as they move.
+
+**Your saved merge previews are CONVERTED, not discarded.** The design
+originally called for deleting `previews.toml` after asking. Converting turned
+out to be both cheaper and lossless: ids, labels and creation times are carried
+across verbatim, so `gg preview <id>` keeps working, and preview notes need no
+migration at all because they key on branch names. It also fixes a real hole —
+the format marker is a git ref inside `.git` while the data is machine-local,
+so one checkout opened from two environments (a Windows drive reached from WSL,
+say) would have had one side's migration silently orphan the other side's file.
+The conversion runs per machine, the first time gg opens that repository.
+
+New CLI surface:
+
+- `gg compare --save <label> <left> [<right>]` — run the comparison and keep
+  it. Both sides are stored as links whatever you typed, so `bookmark:<id>`,
+  `shelf:<id>`, `@staged`, `@worktree` and a bare commit-ish all become links.
+  stdout is unchanged (still the changed-file list, still pipeable); the saved
+  id is reported on stderr.
+- `gg compare --saved <id|label>` — re-run a stored comparison; it prints
+  exactly what the original invocation printed.
+- `gg compare --list` — `<id>\t<label>\t<left>\t<right>` per row, empty right
+  for a saved preview, nothing at all when none are stored.
+
+Under it, a migration now names its own action: `engine.ApplyMigration` runs
+the `MigrationAction` it was handed instead of hardcoding ref deletion, and
+`preflight` gained a machine-local legacy-store probe. A `Migration` says
+whether it is `Lossless`; the zero value asks for consent, so a migration that
+forgets to declare falls toward the consent screen rather than past it.
+
 ## [Unreleased]
 
 - **Tests: a tui test no longer deletes its repo under a running git.** A test

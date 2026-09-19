@@ -33,6 +33,16 @@ func TestCompareSaveStoresBothSidesAsLinks(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d, stderr: %s", code, errb)
 	}
+	// STDOUT stays the changed-file list, parseable by `cut`: every line has
+	// the two columns printCompareFiles emits, and no id row among them.
+	for _, ln := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if ln == "" {
+			continue
+		}
+		if n := len(strings.Split(ln, "\t")); n != 2 {
+			t.Fatalf("stdout line %q has %d columns, want the 2 of a file list", ln, n)
+		}
+	}
 
 	lcode, lout, lerr := runCLI(t, dir, "compare", "--list")
 	if lcode != 0 {
@@ -57,8 +67,11 @@ func TestCompareSaveStoresBothSidesAsLinks(t *testing.T) {
 	if strings.Contains(right, "@") {
 		t.Fatalf("@worktree mapped to a pinned target: %q", right)
 	}
-	if !strings.Contains(out, id) {
-		t.Fatalf("stdout did not name the id %q: %q", id, out)
+	if strings.Contains(out, id) {
+		t.Fatalf("the id leaked into stdout, which must stay a parseable file list: %q", out)
+	}
+	if !strings.Contains(errb, id) {
+		t.Fatalf("stderr did not report the saved id %q: %q", id, errb)
 	}
 }
 

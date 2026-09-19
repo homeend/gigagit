@@ -177,7 +177,7 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 		}
 		recordCompareLinks(ctx, svc, args[0], rightTok)
 		if *save != "" {
-			if code := saveComparison(ctx, svc, *save, args[0], rightTok, stdout, stderr); code != 0 {
+			if code := saveComparison(ctx, svc, *save, args[0], rightTok, stderr); code != 0 {
 				return code
 			}
 		}
@@ -191,7 +191,7 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 	}
 	recordCompareLinks(ctx, svc, args[0], rightTok)
 	if *save != "" {
-		if code := saveComparison(ctx, svc, *save, args[0], rightTok, stdout, stderr); code != 0 {
+		if code := saveComparison(ctx, svc, *save, args[0], rightTok, stderr); code != 0 {
 			return code
 		}
 	}
@@ -247,7 +247,7 @@ func compareTokenLink(ctx context.Context, svc *domain.Service, tok string) (mod
 // Unlike recordCompareLinks this is NOT best-effort. The user asked for it in
 // so many words, so a token that cannot be expressed as a link is a usage
 // error rather than a silent skip.
-func saveComparison(ctx context.Context, svc *domain.Service, label, leftTok, rightTok string, stdout, stderr io.Writer) int {
+func saveComparison(ctx context.Context, svc *domain.Service, label, leftTok, rightTok string, stderr io.Writer) int {
 	left, err := compareTokenLink(ctx, svc, leftTok)
 	if err != nil {
 		fmt.Fprintf(stderr, "compare --save: %s: %v\n", leftTok, err)
@@ -259,15 +259,19 @@ func saveComparison(ctx context.Context, svc *domain.Service, label, leftTok, ri
 		return 2
 	}
 	c, err := svc.SavedCompareAdd(ctx, left.String(), right.String(), label)
-	if errors.Is(err, domain.ErrSavedCompareExists) {
-		fmt.Fprintf(stdout, "%s\t%s (already saved)\n", c.ID, c.Label)
-		return 0
-	}
-	if err != nil {
+	if err != nil && !errors.Is(err, domain.ErrSavedCompareExists) {
 		fmt.Fprintln(stderr, "compare --save:", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "%s\t%s\n", c.ID, c.Label)
+	// The id goes to STDERR, like the "# frozen compare:" notice above it and
+	// for the same reason: stdout is the changed-file list, and a caller
+	// piping it to cut must not find an id row in the middle. `gg compare
+	// --list` is where a script reads ids back.
+	note := ""
+	if errors.Is(err, domain.ErrSavedCompareExists) {
+		note = " (already saved)"
+	}
+	fmt.Fprintf(stderr, "# saved: %s\t%s%s\n", c.ID, c.Label, note)
 	return 0
 }
 

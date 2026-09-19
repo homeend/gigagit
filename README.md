@@ -116,6 +116,11 @@ gg compare [--patch] <left> [<right>]   # changed-file list (or --patch: unified
                                       # shelf:<id> (a stored commit entry — hybrid: live sha while it exists, frozen
                                       # tar once gc'd, noted on stderr); <right> defaults to @worktree
                                       # order is free (@worktree first just inverts the statuses); rows sorted by path
+gg compare --save <label> <left> [<right>]  # run it AND keep it; both sides stored as gg:// links whatever you typed
+                                      # stdout stays the changed-file list (pipeable); the id goes to stderr
+gg compare --saved <id|label>           # re-run a stored comparison; prints exactly what the original printed
+gg compare --list                       # <id>\t<label>\t<left>\t<right> per row; empty right = a saved merge preview
+                                      # saved comparisons and saved previews share one store
                                       # a link with a /<path>, or an @<a>..<b> target, scopes the answer to those files
 gg preview list                       # id  label  source  target  state  files  ahead, one row per saved pair
 gg preview add [--label <text>] <source> <target>   # save a pair; state/counts recompute from the live tips on every read
