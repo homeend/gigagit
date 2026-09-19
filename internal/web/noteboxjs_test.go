@@ -57,7 +57,7 @@ console.log(JSON.stringify({ titles, ages, seed: [...seed].sort(), t1, after1, t
 	}
 	var got struct {
 		Titles, Ages, Seed, After1, After2, AllOn, AllOff []string
-		T1, T2                                          bool
+		T1, T2                                            bool
 	}
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatalf("decode %s: %v", out, err)
