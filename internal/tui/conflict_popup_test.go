@@ -13,10 +13,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
-	"github.com/homeend/gigagit/internal/git"
-	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/observ"
 )
 
 // conflictModel builds a Model whose status holds two unmerged files (a
@@ -67,7 +64,7 @@ func conflictRepoTUI(t *testing.T) Model {
 	run("rm", "-q", "md.txt")
 	run("commit", "-qm", "main")
 	run("merge", "feature") // conflicts (exit 1) — tolerated above
-	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))}
+	repo := testRepo(t, dir)
 	m := New(domain.New(repo))
 	m.width, m.height = 120, 30
 	m.loading = false

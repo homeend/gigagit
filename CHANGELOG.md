@@ -8,6 +8,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Tests: a tui test no longer deletes its repo under a running git.** A test
+  that only asserts "the op started" returned while `startOp`'s goroutine was
+  still running git, and `t.TempDir`'s cleanup lost the race on a loaded CI
+  box (`unlinkat …/.git: directory not empty`, first seen on
+  `TestSKeyOnLocalBranchStillSmartSwitches`). Every real-git repo handle in
+  the tui tests now comes from `testRepo`, whose runner refuses new git
+  invocations and waits out the in-flight ones before the temp dir is removed.
+  Test-only; no production change.
+
 - **Pull requests, read-only (`gg pr`) — the core of the forge integration.**
   gg can now read the current repository's pull requests through the forge's
   own CLI (GitHub's `gh` today), and never writes to the forge: nothing is

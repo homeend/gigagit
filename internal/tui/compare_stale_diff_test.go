@@ -8,10 +8,7 @@ import (
 	"testing"
 
 	"github.com/homeend/gigagit/internal/domain"
-	"github.com/homeend/gigagit/internal/git"
-	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -43,7 +40,7 @@ func loadedModelTwoFileCompare(t *testing.T) (Model, model.Endpoint, model.Endpo
 	run("add", ".")
 	run("commit", "-m", "c2")
 
-	repo := &git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))}
+	repo := testRepo(t, dir)
 	m := New(domain.New(repo))
 	loaded, _ := m.Update(m.loadCmd()())
 	mm := loaded.(Model)

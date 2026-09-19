@@ -14,9 +14,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/git"
-	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/observ"
 )
 
 // --- fixture helpers (the branch_push_realgit_test.go pushRealGit pattern) ---
@@ -53,8 +51,9 @@ func driftInitRepo(t *testing.T) string {
 }
 
 // driftSvc builds a domain.Service over a real repo at dir.
-func driftSvc(dir string) *domain.Service {
-	return domain.New(&git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))})
+func driftSvc(t *testing.T, dir string) *domain.Service {
+	t.Helper()
+	return domain.New(testRepo(t, dir))
 }
 
 // driftStampVersionsFormat marks the store as format 2 (the versions
@@ -197,7 +196,7 @@ func TestVersionsPopupEnterFieldlessOpensCommitView(t *testing.T) {
 func TestDriftCheckCmdReportsResurrectionNamingPath(t *testing.T) {
 	t.Parallel()
 	dir := driftInitRepo(t) // main, f.txt = "hi\n"
-	svc := driftSvc(dir)
+	svc := driftSvc(t, dir)
 	ctx := context.Background()
 
 	driftWriteFile(t, dir, "f3.txt", "hi\n")
@@ -418,7 +417,7 @@ func TestDriftNoticeNoDriftNoPauseIsSilent(t *testing.T) {
 func TestOpFinishedMsgDispatchesDriftCheckOnChangedSuccess(t *testing.T) {
 	t.Parallel()
 	dir := driftInitRepo(t)
-	svc := driftSvc(dir)
+	svc := driftSvc(t, dir)
 
 	m := Model{svc: svc, status: model.WorkingTreeStatus{Branch: "main"}}
 	m.pendingDriftBranch = "main"
@@ -462,7 +461,7 @@ func TestOpFinishedMsgDispatchesDriftCheckOnChangedSuccess(t *testing.T) {
 func TestOpFinishedMsgSkipsDriftCheckOnError(t *testing.T) {
 	t.Parallel()
 	dir := driftInitRepo(t)
-	m := Model{svc: driftSvc(dir), status: model.WorkingTreeStatus{Branch: "main"}}
+	m := Model{svc: driftSvc(t, dir), status: model.WorkingTreeStatus{Branch: "main"}}
 	m.pendingDriftBranch = "main"
 	m.pendingDriftPaused = false
 	m.pendingSources = []sourceKey{srcStatus}
