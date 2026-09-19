@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v83 -->
+<!-- gg:using-gg:v84 -->
 
 # Using gg (gigagit)
 
@@ -413,6 +413,19 @@ finds the right one here.
   `gg preview diff <id|label> --hunks [--json]` numbers a saved preview's
   hunks (the same numbering as `gg diff --preview P --hunks`);
   `gg preview rename <id|label> <text>`; `gg preview rm <id|label>`.
+- `gg preview add [--label <text>] <a>..<b>` — save a COMMIT PAIR: the plain
+  two-dot diff between two commits, as a named entry beside the merge
+  previews. ONE argument holding `..` (three dots is a merge preview, not a
+  pair). Any rev works and both sides FREEZE to full shas at save time, so
+  `gg preview add main..feat/x` stores today's two tips and never follows the
+  branches. Prints the id; an already-saved pair exits 1 naming the existing
+  id; an unknown rev or `a == b` exits 2. `gg preview list` prints a pair in
+  the same seven columns — `<id>\t<label>\t<a-full-sha>\t<b-full-sha>\tpair\t<files>\t0`
+  (state `missing` when a commit is gone) — after the previews;
+  `show [--patch]`, `rename` and `rm` take a pair's id or label too. Its link
+  is `gg://<repo>@<a>..<b>` (see `gg compare --list`), which `gg diff`,
+  `gg open` and `gg compare` accept. `--preview` flags and note verbs do NOT
+  take a pair yet.
   Notes live inside a preview: `gg diff --preview <id|label|<target>...<source>>
   [--hunks [--json]]` prints the preview's own patch and numbers its hunks,
   and `gg note add --preview P --file F (--new-line N | --hunk H) --summary …`

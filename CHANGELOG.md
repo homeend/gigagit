@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Saved commit pairs
+
+The diff between two commits can now be **saved and named**, beside merge
+previews. In the Commits panel mark two commits with `m`, open the `.` menu
+and pick **Save to previews** (or **Save reversed to previews**); the entry
+appears in the **Previews** tab as `label  <a7>..<b7>  N files`. `enter` opens
+the diff (titled `Saved diff: <label>`), `e` renames, `d` removes, `s` saves the
+reversed pair, and the row's copy-link action yields `gg://<repo>@<a>..<b>` —
+a link `gg diff`, `gg open`, `gg compare` and an agent can all take.
+
+- **The two commits are FROZEN.** Whatever was marked — even a branch tip — is
+  stored as a full sha, so the entry never follows a branch. A moving
+  comparison is what a merge preview is for. The direction is older → newer,
+  exactly the one *Compare selection* diffs in; `space` is unchanged and still
+  only opens the diff.
+- The rows show only while **exactly two commits** are marked: a ◇ Working
+  tree / ◇ Staged row cannot be frozen, and a 3+ range is a different
+  change-set.
+- A commit that is no longer in the repository (a gc, another clone) leaves the
+  entry listed as `missing commit: <sha7>`; it cannot open but can still be
+  renamed or removed.
+- CLI: `gg preview add [--label <text>] <a>..<b>` (one argument holding `..`;
+  any rev is accepted and frozen), and `gg preview list | show | rename | rm`
+  cover both kinds. `list` keeps its seven columns — a pair prints its two full
+  shas where a preview prints branch names, state `pair` (or `missing`), ahead 0.
+- No new store: a saved pair is a set-shaped `savedcompare` entry
+  (`Left: gg://<repo>@<a>..<b>`, no right half), the same shape a merge preview
+  has — so `gg compare --list` shows it, and a pair and a preview are already
+  comparable with `gg compare <link> <link>`.
+- Not in this change: the web Previews tab, review notes inside a saved pair,
+  and a `?preview=<id>` landing hint.
+
 ## Saved comparisons absorb merge previews
 
 `internal/savedcompare` is now the one store behind both saved comparisons and

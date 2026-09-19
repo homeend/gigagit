@@ -1185,6 +1185,37 @@ inexpressible kind as a 500; they use `%d` rather than `ep.Display()` because
 `Display` has no `EndpointInvalid` arm and PANICS on the zero endpoint, and
 `internal/web` has no `recover()` middleware.
 
+### Saved commit pairs (2026-09-19)
+
+A saved commit pair is a SET-shaped `savedcompare.Entry` —
+`Left: gg://<repo>@<A40>..<B40>`, `Right: nil` — the shape a merge preview has,
+differing only in `Left.Target` (`Pair` vs `Preview`). No store, file or state
+kind of its own. `domain/pair.go` is `domain/preview.go`'s twin:
+
+- `PairAdd` FREEZES both revs to full shas (ruling: a pair never follows a
+  branch) and dedups through the store's (Left, Right) rule.
+- `pairFromEntry` and `previewFromEntry` are two recognisers over one store and
+  must DISAGREE on a shared fixture (`TestPairAndPreviewRecognisersDisagree`):
+  each surface sees exactly its own rows, and a Left+Right comparison is seen
+  by neither. `pairFromEntry` also rejects pair sets it did not produce (names,
+  short shas, a path, a hint).
+- `PairRename`/`PairRemove` are guarded by `PairGet`, mirroring the preview
+  pair: neither surface can relabel or delete the other's rows.
+- `PairOpen` counts files TWO-dot via `CompareFiles` and caches the count by
+  `(a, b)` in the `"preview"` cache — a frozen pair is immutable and the
+  Previews tab re-reads on every branches arrival. Only `PairOK` is cached.
+- TUI: `previewRow` is a two-kind row whose ZERO kind is the merge preview (so
+  pre-pair fixtures stay valid). `rec` is read only through `merge()`, and only
+  in `preview_panel.go` — `TestPreviewRowRecIsReadOnlyInItsOwnFile` (AST). A
+  pair opens as a plain commit comparison: `previewOpen` and `filesPreviewSet`
+  stay unset. The save rows take their direction from
+  `compareSelectionEndpoints`, by construction.
+- Deferred, with the rule already decided: a `?preview=<id>` hint must be a
+  LOOKUP (by id, else by matching `Left`, else show-once), never a checksum —
+  the id hashes link TEXT and converted previews keep legacy ids. Pair notes =
+  ordinary notes on `B`, new side, via `PreviewNoteSet{Tip: B, Base: A}`.
+  Spec: `docs/superpowers/specs/2026-09-19-saved-commit-pairs-design.md`.
+
 ### Preview links (feature B, 2026-09-15)
 
 `model.LinkTarget.Preview *LinkPreview{Source, Target}` is set iff the target
