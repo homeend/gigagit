@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // recordingModel is a real Model whose link history lives in a temp dir and
@@ -110,5 +112,28 @@ func TestTheTUIHasOneClipboardWriter(t *testing.T) {
 	}
 	if len(where) != 1 || where[0] != "model.go" {
 		t.Fatalf("clipboard.Copy is referenced in %v; it must be reachable only through Model.clipWrite (set once, in New)", where)
+	}
+}
+
+// The chokepoint records from TEXT. In a remoteless checkout a file's link is
+// the LOCAL form, whose checkout and path are undivided until located — so
+// this is the row that recorded as "link: gg:///…" while `gg link <path>`
+// recorded the same text as "file: <path>".
+func TestAFileCopiedInARemotelessCheckoutRecordsAsItsFile(t *testing.T) {
+	t.Parallel()
+	m, _ := recordingModel(t)
+	top, err := m.svc.TopLevel(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.currentWorktree = top
+	text, ok := m.linkFor(model.FileAddress{Path: "sub/a.go", State: model.StateUnstaged}, model.NoteSideNew, 0, 0)
+	if !ok || !strings.HasPrefix(text, "gg:///") {
+		t.Fatalf("fixture: want a LOCAL-form link, got %q (%v)", text, ok)
+	}
+	m.copyToClipboardCmd("ok", text)()
+	h := m.svc.LinkHistory(context.Background())
+	if len(h) != 1 || h[0].Link != text || h[0].Desc != "file: sub/a.go" {
+		t.Fatalf("history = %+v", h)
 	}
 }

@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -101,5 +102,44 @@ func TestUseLinkHistDirReArmsAResolvedStore(t *testing.T) {
 	svc.UseLinkHistDir(t.TempDir())
 	if h := svc.LinkHistory(ctx); len(h) != 0 {
 		t.Fatalf("store still on the old dir: %+v", h)
+	}
+}
+
+// A PARSED local-form link carries the checkout AND the file undivided in
+// Repo.Abs with Path empty — only a split against the checkout can tell
+// "a file" from "the whole tree". RecordCopiedLink describes from TEXT, so
+// without the split every file copied in a remoteless checkout recorded as
+// "link: gg:///…" while `gg link <path>`, holding the structured link, recorded
+// the same text as "file: <path>". One link text, one description.
+func TestALocalFormFileLinkDescribesAsItsFile(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	ctx := context.Background()
+	top, err := svc.TopLevel(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	abs := filepath.ToSlash(top)
+	if !strings.HasPrefix(abs, "/") {
+		abs = "/" + abs // a Windows drive path renders as gg:///C:/…
+	}
+	_ = dir
+	for _, c := range []struct{ name, text, want string }{
+		{"a working-tree file", "gg://" + abs + "/sub/a.go", "file: sub/a.go"},
+		{"a staged file", "gg://" + abs + "/sub/a.go@staged", "file: sub/a.go"},
+		// NOT a file of this checkout: another directory entirely. Best-effort
+		// means it keeps the fallback rather than inventing a path.
+		{"another checkout", "gg://" + filepath.ToSlash(t.TempDir()) + "/x/a.go", "link: gg://"},
+	} {
+		l, err := model.ParseLink(c.text)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if l.Path != "" {
+			t.Fatalf("%s: fixture is useless — the parser already split the path (%q)", c.name, l.Path)
+		}
+		if got := svc.DescribeLink(ctx, l); !strings.HasPrefix(got, c.want) {
+			t.Errorf("%s: DescribeLink = %q, want prefix %q", c.name, got, c.want)
+		}
 	}
 }

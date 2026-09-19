@@ -136,7 +136,21 @@ func (s *Service) linkDescFields(ctx context.Context, l model.Link) (kind, id, s
 // the CLI, the TUI and (through its gated JS twin) the web share. It lives in
 // domain because domain owns the history store and every lookup a label
 // needs; it used to live in internal/cli, where the TUI could not reach it.
+//
+// A link that arrives as TEXT and is then parsed may be a LOCAL-form file link,
+// which carries the checkout and the file undivided in Repo.Abs with Path
+// empty (model.LinkRepo; EvalLink's doc comment names the same trap). Left
+// unsplit it would describe as the "link:" fallback while the very same text,
+// built by `gg link <path>` from a structured link, describes as "file:
+// <path>". So the path is located first — through LocateLink, the one splitter
+// (it owns the path normalisation, Windows drive form included) — against THIS
+// checkout only. Best-effort: a link into some other directory stays as it is.
 func (s *Service) DescribeLink(ctx context.Context, l model.Link) string {
+	if l.Repo.Abs != "" && l.Path == "" {
+		if _, rel, err := LocateLink(ctx, l, ResolveOpts{Cwd: s}); err == nil && rel != "" {
+			l.Path = rel
+		}
+	}
 	return LinkDesc(s.linkDescFields(ctx, l))
 }
 
