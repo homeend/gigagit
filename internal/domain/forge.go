@@ -310,6 +310,23 @@ func (s *Service) PRForgetOp(n int) engine.ForgetPR {
 	return engine.ForgetPR{Number: n}
 }
 
+// PRFetched reports which pull requests have a local refs/gg/pr/<n> — the
+// PRs whose diff opens without a fetch. A pure ref read (no forge call); it
+// fails open to an empty set.
+func (s *Service) PRFetched(ctx context.Context) map[int]bool {
+	out := map[int]bool{}
+	refs, err := s.repo.ForEachRef(ctx, git.PRRefPrefix)
+	if err != nil {
+		return out
+	}
+	for _, r := range refs {
+		if n, ok := git.ParsePRRef(r.Ref); ok {
+			out[n] = true
+		}
+	}
+	return out
+}
+
 // PRPair is the rev pair a PR's diff opens on: Base...Head.
 type PRPair struct{ Base, Head string }
 

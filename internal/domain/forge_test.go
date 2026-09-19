@@ -351,3 +351,23 @@ func TestForgeStatusCancelledProbeIsNotCached(t *testing.T) {
 		t.Errorf("Detect ran %d times, want 2", n)
 	}
 }
+
+func TestPRFetchedListsTheLocalPRRefs(t *testing.T) {
+	t.Parallel()
+	svc := newForgeSvc(t, &fakeForge{})
+	ctx := context.Background()
+	if got := svc.PRFetched(ctx); len(got) != 0 {
+		t.Fatalf("fresh repo: %v", got)
+	}
+	head, err := svc.repo.ResolveCommit(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.repo.UpdateRef(ctx, git.PRRef(7), head); err != nil {
+		t.Fatal(err)
+	}
+	got := svc.PRFetched(ctx)
+	if len(got) != 1 || !got[7] {
+		t.Errorf("got %v, want {7}", got)
+	}
+}
