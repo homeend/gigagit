@@ -120,6 +120,8 @@ gg compare --save <label> <left> [<right>]  # run it AND keep it; both sides sto
                                       # stdout stays the changed-file list (pipeable); the id goes to stderr
 gg compare --saved <id|label>           # re-run a stored comparison; prints exactly what the original printed
 gg compare --list                       # <id>\t<label>\t<left>\t<right> per row; empty right = a saved merge preview
+gg compare --rename <id|label> <label>  # relabel a stored comparison (the id does not change)
+gg compare --remove <id|label>          # delete one (a saved merge preview is a row of the same store)
                                       # saved comparisons and saved previews share one store
                                       # a link with a /<path>, or an @<a>..<b> target, scopes the answer to those files
 gg preview list                       # id  label  source  target  state  files  ahead, one row per saved pair

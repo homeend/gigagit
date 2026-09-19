@@ -1216,6 +1216,57 @@ kind of its own. `domain/pair.go` is `domain/preview.go`'s twin:
   ordinary notes on `B`, new side, via `PreviewNoteSet{Tip: B, Base: A}`.
   Spec: `docs/superpowers/specs/2026-09-19-saved-commit-pairs-design.md`.
 
+### Links in the TUI — recording, stash pairs, the `#` history (plan 3b-1, 2026-09-19)
+
+**Recording lives at the clipboard writer.** `internal/tui` has exactly one
+reference to `clipboard.Copy` — `New` hands it to `Model.clipWrite` — and
+`copyToClipboardCmd` is the only caller of that field
+(`TestTheTUIHasOneClipboardWriter`, counted over the token stream so comments
+may name it). Text that is a link is recorded there through
+`domain.RecordCopiedLink`, BEFORE the write and whatever its outcome. A new
+copy row therefore records for free; do not add a per-row record call, and do
+not add a second writer. A `Model` literal (no `New`) has a nil `clipWrite`
+and reports `errNoClipboardWriter` rather than touching the real clipboard.
+
+**`domain.DescribeLink`** is the one describer (`LinkDesc` + the field
+derivation that used to be `cli.linkRecordFields`). Its JS twin in
+`links.js` is pinned by `TestLinkDescJSMatchesGo`, now in `internal/domain`.
+Priority: hint → preview → ref → commit → **stash-looking pair** → path →
+`link: <text>`.
+
+**Two stash rules, two functions — never merge them.**
+`stashShape(a, b)` is the SET rule and is structural only: `b` has exactly
+three parents, `a` is the first, the third is a ROOT. It decides whether
+`EvalEndpoint`'s pair arm adds the third parent's files (spec §3.4); the root
+test is what keeps an octopus merge from pouring a whole tree into the set.
+`looksLikeAStash(a, b)` is the DESCRIPTION rule: first-parent match, two or
+three parents, subject starts `WIP on ` / `On `. It only words a history row.
+
+**`FileSet.Source(path)`** is where a member's bytes live — the set's endpoint
+unless overridden (`FileSet.src`, today only a `-u` stash's untracked files).
+Read member bytes through it, never through `Endpoint()`. `narrowTo` rebuilds
+a set from its endpoint and must carry the override across
+(`TestNarrowedStashLinkKeepsTheThirdParentSource`). A comparison only READS a
+member that exists on both sides — an `A`/`D` row is decided without bytes —
+so a test of `Source` needs the path on both sides with different content.
+
+**The stash copy row is the one asynchronous copy row**: `stash@{N}` is
+positional, so the row resolves it (`domain.StashPair` → first parent + sha,
+both full) and copies on the reply (`stashLinkMsg`). Its `copyText` is empty
+by construction. The ref never reaches the link.
+
+**`linkHistPicker`** (`linkhist_picker.go`) is one component with several
+hosts (`linkHistHost`): the `#` prompt now, the compare dialog's two fields in
+3b-2. The host owns the field, the picker the list; loads are gen-tagged
+(`Model.linkHistGen`) and never happen in `pushLayer`. `esc` in the list
+returns to the field and must not close the host. Rows are TUI-local
+`histRow`s so the package never imports `internal/linkhist`.
+
+**Known window until 3b-2:** `gg compare <stash link>` lists a `-u` stash's
+untracked file; landing the same link through `#` still opens
+`openCompareFiles(commit a, commit b)` → `CompareFiles`, the tracked-only
+diff. 3b-2 routes pair landing through the set-shaped view.
+
 ### Preview links (feature B, 2026-09-15)
 
 `model.LinkTarget.Preview *LinkPreview{Source, Target}` is set iff the target

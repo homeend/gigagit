@@ -229,6 +229,13 @@ func (s *Service) narrowTo(ctx context.Context, fs FileSet, path string) (FileSe
 		// projection, not the endpoint's own set. FileSet.Narrowed's doc names
 		// the consumer that needs to know.
 		out.narrowed = true
+		// The projection keeps the member's OWN byte source. boundedSetWith
+		// rebuilds the set from the endpoint alone, so without this a narrowed
+		// link to a `-u` stash's untracked file would read it from the stash
+		// commit, where it does not exist.
+		if ep := fs.Source(path); ep != fs.Endpoint() {
+			out.src = map[string]model.Endpoint{path: ep}
+		}
 		return out
 	}
 	if fs.Bounded() {

@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"slices"
 	"strconv"
@@ -72,6 +73,7 @@ type Model struct {
 	pushCheckGen           int                 // generation guard for the async pre-push remote-tag check
 	pickGen                int                 // generation guard for the async cherry-pick commit probe
 	entryCompareGen        int                 // drops stale commit-entry compare resolves (the pickGen pattern)
+	linkHistGen            int                 // drops a copied-link history load a newer host has superseded
 	pickPatchTemp          string              // patch lane's temp file; removed when its op finishes
 	reflog                 []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree        string
@@ -195,55 +197,56 @@ type Model struct {
 
 	layers *layerStack // top-of-everything window pile: full-screen surfaces + centered popups; nil/empty = none
 
-	svc                 *domain.Service                 // command layer; all git access goes through svc
-	feed                *domain.CommitFeed              // single source of truth for commits
-	commitsExhausted    bool                            // false → "Commits N+", true → "Commits N"
-	commitsLoading      bool                            // a feed reload/page is in flight → show the loading glyph in the Commits title
-	graphLayer          *commitgraph.Layer              // persistent lane-fold state so paging older commits appends to the graph in O(new) instead of re-laying all (nil = rebuild from scratch)
-	graphLaidReal       int                             // count of real commits already folded into commitGraphRows via graphLayer
-	graphWipLaid        int                             // WIP-row count folded into the current layer; a change forces a full rebuild
-	graphBaseHash       string                          // commits[0].Hash when the layer was seeded; a change (new HEAD / scope) forces a full rebuild
-	graphWidth          int                             // current uniform fit width (display columns) of commitGraphRows
-	commitsIdx          []int                           // cached identity display-index slice for the unfiltered default-sort Commits panel (shared, read-only; valid iff len == commitsTotal); maintained by rebuildCommitGraph
-	filterMemo          *commitFilterMemo               // memoized filtered Commits index (see filter_memo.go); nil in zero-value test Models = unmemoized
-	identWCache         int                             // cached commitIdentWidth (O(n) lipgloss scan otherwise run per frame); maintained by rebuildCommitGraph
-	identWValid         bool                            // identWCache reflects current commits+branches; false → commitIdentWidth falls back to a full scan
-	feedScopeApplied    string                          // signature of the scope last applied to the feed (see feedScopeSig); reload only when the desired scope differs
-	commitScopeBranches []string                        // included branches for the feed; empty = all local branches
-	commitFilter        commitFilterFields              // path/author/grep/date narrowing of the feed
-	commitGraphRows     []string                        // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
-	commitGraphLanes    []int                           // cached node lane per unified row, parallel to the unified WIP+commits list
-	segLayer            *commitgraph.SegmentLayer       // persistent segment-fold state (the coloring analog of graphLayer); nil = rebuild from scratch
-	commitSegs          []int                           // cached development-line segment per commit (REAL commits only — no WIP prefix); colors scoped-view dots
-	segBoundaryHashes   map[string]bool                 // merge-base fork points for the active scope (async, from ScopeBoundaries); boundary marks decorations can't supply once a base branch moved past the fork
-	wipRows             []wipRow                        // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty
-	commitListMode      bool                            // Commits feed rendered as a flat ●-gutter list, not a graph
-	commitGraphCols     int                             // graph window width in LANES; 0 = use configured default
-	commitGraphScroll   int                             // leftmost visible lane (0-based); resets on feed reload
-	opCancel            context.CancelFunc              // cancels the in-flight op's context; nil when idle
-	loadGen             int                             // bumped per superseding load; stale dataLoadedMsg are dropped
-	srcGen              map[sourceKey]int               // per-source generation; stale dataAvailableMsg dropped
-	srcInflight         map[sourceKey]bool              // a read of this source is outstanding (coalescing)
-	srcLoading          map[sourceKey]bool              // a manual read is in flight → consuming panels show ⏳
-	repoConfigPath      string                          // <repo-top>/.gg.toml; the refresh-rates editor writes here
-	watchSupported      bool                            // gitwatch.Supported(commonDir); false on WSL2 9p → watch sources fall back to polling
-	watcher             *gitwatch.Watcher               // file-watcher; nil when unsupported or no sources enabled
-	watchGen            int                             // bumped per (re)build; stale watch msgs are dropped
-	bgCtx               context.Context                 // context for in-flight background (auto) reads; cancelled when a user op starts
-	bgCancel            context.CancelFunc              // cancels bgCtx; nil when no background batch is active
-	genCancel           context.CancelFunc              // cancels an in-flight commit-popup ctrl+g generate run; nil when none is active
-	reviewGen           int                             // monotonic guard for the review capture lane; bumped on dispatch, cancel, reRoot — a stale/killed result carrying an older gen is dropped (survives a lane being popped and re-pushed, unlike a per-lane counter)
-	reviewCancel        context.CancelFunc              // cancels an in-flight review run; nil when none is active
-	reviewRunning       bool                            // a review runs in the background (lane already popped); blocks other external-LLM actions and drives the blinking status indicator
-	reviewRunningLabel  string                          // scope label for the running-review status segment (e.g. "main..HEAD" / "working changes")
-	reviewBlink         bool                            // blink phase for the running-review status segment (style alternation, never terminal blink)
-	refreshLastRun      map[refreshItem]time.Time       // last time each scheduled item fired (background scheduler)
-	refreshDur          map[refreshItem][]time.Duration // rolling ring (≤10) of measured read durations per item (Phase C)
-	bgQueue             []refreshItem                   // FIFO of pending background reads; one drains per tick
-	bgBusy              bool                            // a background read is in flight (sole lane-occupancy truth)
-	bgActiveItem        refreshItem                     // the running background item — meaningful ONLY when bgBusy
-	bgFetchGen          int                             // bumped per fetch launch; stale bgFetchDoneMsg are dropped
-	proc                process                         // the single active long-running process; nil = none. IS the interface lock.
+	svc                 *domain.Service                                  // command layer; all git access goes through svc
+	clipWrite           func(tty io.Writer, text string) (string, error) // the clipboard writer behind copyToClipboardCmd; New sets the real one
+	feed                *domain.CommitFeed                               // single source of truth for commits
+	commitsExhausted    bool                                             // false → "Commits N+", true → "Commits N"
+	commitsLoading      bool                                             // a feed reload/page is in flight → show the loading glyph in the Commits title
+	graphLayer          *commitgraph.Layer                               // persistent lane-fold state so paging older commits appends to the graph in O(new) instead of re-laying all (nil = rebuild from scratch)
+	graphLaidReal       int                                              // count of real commits already folded into commitGraphRows via graphLayer
+	graphWipLaid        int                                              // WIP-row count folded into the current layer; a change forces a full rebuild
+	graphBaseHash       string                                           // commits[0].Hash when the layer was seeded; a change (new HEAD / scope) forces a full rebuild
+	graphWidth          int                                              // current uniform fit width (display columns) of commitGraphRows
+	commitsIdx          []int                                            // cached identity display-index slice for the unfiltered default-sort Commits panel (shared, read-only; valid iff len == commitsTotal); maintained by rebuildCommitGraph
+	filterMemo          *commitFilterMemo                                // memoized filtered Commits index (see filter_memo.go); nil in zero-value test Models = unmemoized
+	identWCache         int                                              // cached commitIdentWidth (O(n) lipgloss scan otherwise run per frame); maintained by rebuildCommitGraph
+	identWValid         bool                                             // identWCache reflects current commits+branches; false → commitIdentWidth falls back to a full scan
+	feedScopeApplied    string                                           // signature of the scope last applied to the feed (see feedScopeSig); reload only when the desired scope differs
+	commitScopeBranches []string                                         // included branches for the feed; empty = all local branches
+	commitFilter        commitFilterFields                               // path/author/grep/date narrowing of the feed
+	commitGraphRows     []string                                         // cached single-line graph cells, parallel to the unified WIP+commits list; empty = none
+	commitGraphLanes    []int                                            // cached node lane per unified row, parallel to the unified WIP+commits list
+	segLayer            *commitgraph.SegmentLayer                        // persistent segment-fold state (the coloring analog of graphLayer); nil = rebuild from scratch
+	commitSegs          []int                                            // cached development-line segment per commit (REAL commits only — no WIP prefix); colors scoped-view dots
+	segBoundaryHashes   map[string]bool                                  // merge-base fork points for the active scope (async, from ScopeBoundaries); boundary marks decorations can't supply once a base branch moved past the fork
+	wipRows             []wipRow                                         // 0–2 derived pseudo-rows (Working tree / Staged) shown atop the Commits feed when dirty
+	commitListMode      bool                                             // Commits feed rendered as a flat ●-gutter list, not a graph
+	commitGraphCols     int                                              // graph window width in LANES; 0 = use configured default
+	commitGraphScroll   int                                              // leftmost visible lane (0-based); resets on feed reload
+	opCancel            context.CancelFunc                               // cancels the in-flight op's context; nil when idle
+	loadGen             int                                              // bumped per superseding load; stale dataLoadedMsg are dropped
+	srcGen              map[sourceKey]int                                // per-source generation; stale dataAvailableMsg dropped
+	srcInflight         map[sourceKey]bool                               // a read of this source is outstanding (coalescing)
+	srcLoading          map[sourceKey]bool                               // a manual read is in flight → consuming panels show ⏳
+	repoConfigPath      string                                           // <repo-top>/.gg.toml; the refresh-rates editor writes here
+	watchSupported      bool                                             // gitwatch.Supported(commonDir); false on WSL2 9p → watch sources fall back to polling
+	watcher             *gitwatch.Watcher                                // file-watcher; nil when unsupported or no sources enabled
+	watchGen            int                                              // bumped per (re)build; stale watch msgs are dropped
+	bgCtx               context.Context                                  // context for in-flight background (auto) reads; cancelled when a user op starts
+	bgCancel            context.CancelFunc                               // cancels bgCtx; nil when no background batch is active
+	genCancel           context.CancelFunc                               // cancels an in-flight commit-popup ctrl+g generate run; nil when none is active
+	reviewGen           int                                              // monotonic guard for the review capture lane; bumped on dispatch, cancel, reRoot — a stale/killed result carrying an older gen is dropped (survives a lane being popped and re-pushed, unlike a per-lane counter)
+	reviewCancel        context.CancelFunc                               // cancels an in-flight review run; nil when none is active
+	reviewRunning       bool                                             // a review runs in the background (lane already popped); blocks other external-LLM actions and drives the blinking status indicator
+	reviewRunningLabel  string                                           // scope label for the running-review status segment (e.g. "main..HEAD" / "working changes")
+	reviewBlink         bool                                             // blink phase for the running-review status segment (style alternation, never terminal blink)
+	refreshLastRun      map[refreshItem]time.Time                        // last time each scheduled item fired (background scheduler)
+	refreshDur          map[refreshItem][]time.Duration                  // rolling ring (≤10) of measured read durations per item (Phase C)
+	bgQueue             []refreshItem                                    // FIFO of pending background reads; one drains per tick
+	bgBusy              bool                                             // a background read is in flight (sole lane-occupancy truth)
+	bgActiveItem        refreshItem                                      // the running background item — meaningful ONLY when bgBusy
+	bgFetchGen          int                                              // bumped per fetch launch; stale bgFetchDoneMsg are dropped
+	proc                process                                          // the single active long-running process; nil = none. IS the interface lock.
 
 	running   bool
 	opStart   time.Time // when the in-flight op began; the heartbeat reads it for the busy line's elapsed readout
@@ -388,6 +391,7 @@ var bottomTabs = []panel{panelStaged, panelReflog}
 func New(svc *domain.Service) Model {
 	return Model{
 		svc:                    svc,
+		clipWrite:              clipboard.Copy,
 		feed:                   svc.CommitFeed(),
 		loading:                true,
 		sel:                    map[panel]int{},
@@ -3612,6 +3616,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case startAtFailMsg:
 		m.statusMsg = i18n.T("error: %s", msg.reason)
 		return m, nil
+	case linkHistLoadedMsg:
+		return m.loadedLinkHist(msg)
+	case stashLinkMsg:
+		return m.resolvedStashLink(msg)
 	case clipboardCopiedMsg:
 		if msg.err != nil {
 			m.statusMsg = i18n.T("copy failed: %s", msg.err.Error())

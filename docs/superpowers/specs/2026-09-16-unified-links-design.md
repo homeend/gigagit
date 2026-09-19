@@ -161,7 +161,9 @@ Two rules specific to stashes:
    silently name a different stash. The producer resolves to the sha at copy
    time, exactly as it already does for a commit's parent. `?stash=<n>`
    survives only as a landing hint, and it is the most fragile hint in the
-   system: N changes while the thing it names does not.
+   system: N changes while the thing it names does not. **(2026-09-19: the
+   TUI's stash copy row emits NO hint — landing the pair already shows the
+   stash. See `2026-09-19-links-tui-design.md` D4.)**
 2. **A stash link can dangle, with no fallback.** A stash commit is reachable
    only through `refs/stash` and its reflog; pop or drop it and the sha
    becomes gc-able. Unlike a shelved commit there is no frozen tar, so this is
@@ -592,6 +594,13 @@ The dialog is the convenience layer.
   paste *or* from the 20-row history → the compare view → *Save comparison*.
 - Re-plumb: **bookmark↔shelf** compare moves from menu-selection to links.
   bookmark↔bookmark and shelf↔shelf keep their existing menus.
+  **(2026-09-19, narrowed: the commit arms move and commit↔file becomes
+  legal; file↔file keeps its two-ref diff, because it compares two blobs
+  whose paths may differ and the key-based algebra cannot. See
+  `2026-09-19-links-tui-design.md` D8, §3.9.)**
+- **(2026-09-19)** The bookmark and shelf switchers gain `L` (copy link); the
+  Previews panel lists saved PAIRS as well as previews (§4.5 already said
+  so; it was phased under 3c by mistake — D7).
 - Every new string routed through `i18n.T` with a literal key in all four
   bundles.
 
@@ -675,7 +684,7 @@ binds a random port each run, which empties `localStorage`.
 
 ## 8. Phasing
 
-Six plans, each a sound stopping point. (Plan 1a grew a Task 3b during execution — see the plan. Plan 3 was split into 3a/3b/3c on 2026-09-19: as one plan it was larger than 1a+1b+2 combined, and the three pieces have a clean dependency order — only the dialogs need the store, and only the store needs the migration.)
+Seven plans, each a sound stopping point. (Plan 1a grew a Task 3b during execution — see the plan. Plan 3 was split into 3a/3b/3c on 2026-09-19: as one plan it was larger than 1a+1b+2 combined, and the three pieces have a clean dependency order — only the dialogs need the store, and only the store needs the migration.)
 
 | plan | contents | why it stands alone |
 |---|---|---|
@@ -683,8 +692,14 @@ Six plans, each a sound stopping point. (Plan 1a grew a Task 3b during execution
 | **1b** | grammar (`ref:`, `..`, `?hint`) · the new `Endpoint` kinds · `EvalEndpoint`/`CompareSets` · CLI `compare`/`link` | the whole algebra, fully tested; agents can use it the day it lands, no UI needed |
 | **2** | `linkhist` · MCP tools · navigation hints (`linknav`, `steer`, both consumers) · agentskill bump | links become referenceable and navigable everywhere |
 | **3a** | `savedcompare` store + the previews CONVERSION (§4.5) · the generalized `Migration` action and machine-local probe (§4.5.1) · a domain façade over `PreviewAdd/List/Get/Rename/Remove` · `gg compare --save/--saved/--list` | `model.MergePreview` reaches only four consumer files, so the façade keeps every frontend compiling untouched: the store lands, converts and is usable from the CLI with no UI work at all |
-| **3b** | TUI copy rows (branch, **stash**) · the `#` prompt history picker · the "Compare with link…" palette command + the shared base picker (§5.1) · bookmark↔shelf compare re-plumbed onto links | the copy rows and the history picker need neither the store nor the dialog; the palette needs 3a only to save |
-| **3c** | web two-field dialog + the same base picker · the Previews tab listing saved comparisons | the web half of the same two surfaces, on a base picker already settled in 3b |
+| **3b-1** | the TUI RECORDS copied links (it never did) · `domain.DescribeLink` · §3.4's untracked-files rule, deferred since 1b · copy rows (branch/remote/tag, **stash**, bookmark, shelf) · the `#` prompt history picker · `gg compare --remove/--rename` | every link the TUI shows can be copied, is recorded, and can be pasted back; needs neither the store nor the dialog |
+| **3b-2** | `domain.CompareLinks` (one door for CLI, MCP, TUI) · a SET-shaped TUI compare view + pair-link landing through it · the "Compare with link…" palette command + the shared base picker (§5.1) · *Save comparison* · the Previews panel lists saved pairs · bookmark↔shelf cross arms | the dialog and the only view that can show its answer land together |
+| **3c** | web two-field dialog + the same base picker · the web Previews tab listing saved comparisons | the web half of the same two surfaces, on a base picker already settled in 3b-2 |
+
+(3b was split into 3b-1/3b-2 on 2026-09-19: reading the TUI found that it
+never recorded a copied link, that its compare view cannot show a link
+comparison at all, and that §3.4 was still unimplemented. Design:
+`docs/superpowers/specs/2026-09-19-links-tui-design.md`.)
 
 ---
 

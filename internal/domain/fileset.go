@@ -39,6 +39,12 @@ type FileSet struct {
 	// there and hard-errors instead of reporting A/D. nil ⇒ every member has
 	// bytes, which is the shelf and whole-tree case.
 	has map[string]bool
+	// src overrides the byte source for individual members; nil (or a miss)
+	// means ep. It exists for ONE shape today — a `-u` stash, whose untracked
+	// files live in the stash commit's THIRD parent rather than in its own
+	// tree (spec §3.4) — and is why a member's bytes are read through
+	// Source(path), never through Endpoint() directly.
+	src map[string]model.Endpoint
 }
 
 // Bounded reports whether the set enumerates its paths.
@@ -63,6 +69,17 @@ func (f FileSet) Paths() []string {
 // fs.Endpoint().Bounded() is false while fs.Bounded() is true. Ask the SET
 // whether it enumerates its paths; ask the ENDPOINT only for bytes.
 func (f FileSet) Endpoint() model.Endpoint { return f.ep }
+
+// Source is the resolved byte source for ONE member: the set's endpoint unless
+// this path is overridden (FileSet.src). Every byte read of a member goes
+// through here; Endpoint() answers "which endpoint is this set", not "where do
+// this path's bytes live".
+func (f FileSet) Source(path string) model.Endpoint {
+	if ep, ok := f.src[path]; ok {
+		return ep
+	}
+	return f.ep
+}
 
 // Narrowed reports whether this set is a PROJECTION of its endpoint's own
 // file set (a link's /<path>) rather than the whole of it.
@@ -91,6 +108,15 @@ func boundedSetWith(ep model.Endpoint, paths []string, has map[string]bool) File
 	}
 	sort.Strings(paths)
 	return FileSet{ep: ep, paths: paths, bounded: true, has: has}
+}
+
+// boundedSetFull is boundedSetWith plus per-path byte sources (nil = none).
+func boundedSetFull(ep model.Endpoint, paths []string, has map[string]bool, src map[string]model.Endpoint) FileSet {
+	fs := boundedSetWith(ep, paths, has)
+	if len(src) > 0 {
+		fs.src = src
+	}
+	return fs
 }
 
 func unboundedSet(ep model.Endpoint) FileSet { return FileSet{ep: ep} }
@@ -179,7 +205,35 @@ func (s *Service) EvalEndpoint(ctx context.Context, e model.Endpoint) (FileSet, 
 				has[f.OldPath] = false
 			}
 		}
-		return boundedSetWith(b, paths, has), nil
+		// A `-u` stash keeps its untracked files in a THIRD, parentless
+		// parent, which a..b cannot see (spec §3.4). They join the set as
+		// members whose bytes are read from that parent. A path the tracked
+		// diff already names keeps its own row: the tracked answer wins.
+		shape, isStash, err := s.stashShape(ctx, e.PairA(), e.PairB())
+		if err != nil {
+			return FileSet{}, err
+		}
+		var src map[string]model.Endpoint
+		if isStash {
+			untracked, err := model.CommitEndpoint(shape.Untracked)
+			if err != nil {
+				return FileSet{}, err
+			}
+			ufiles, err := s.TreeFiles(ctx, shape.Untracked)
+			if err != nil {
+				return FileSet{}, err
+			}
+			src = make(map[string]model.Endpoint, len(ufiles))
+			for _, f := range ufiles {
+				if _, member := has[f.Path]; member {
+					continue
+				}
+				paths = append(paths, f.Path)
+				has[f.Path] = true
+				src[f.Path] = untracked
+			}
+		}
+		return boundedSetFull(b, paths, has, src), nil
 
 	case model.EndpointShelf:
 		// A shelf entry is one of TWO things, and the entry kind is the only

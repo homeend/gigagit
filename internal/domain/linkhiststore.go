@@ -13,6 +13,18 @@ import (
 // location. cmd/gg leaves it ""; tests point it at a temp dir.
 var LinkHistStatePath string
 
+// UseLinkHistDir points THIS service's link history at dir. Unlike the
+// package-level LinkHistStatePath it is per service, so parallel tests (and
+// the TUI's, which may not import internal/linkhist to inject a store) can
+// each hold their own. It re-arms an already-resolved store: a read and a
+// write must never disagree about where the data lives.
+func (s *Service) UseLinkHistDir(dir string) {
+	s.mu.Lock()
+	s.linkHistRoot = dir
+	s.linkhist = nil
+	s.mu.Unlock()
+}
+
 // SetLinkHistStore injects a store (tests).
 func (s *Service) SetLinkHistStore(st linkhist.Store) {
 	s.mu.Lock()
@@ -31,9 +43,12 @@ func (s *Service) linkHistStore(ctx context.Context) linkhist.Store {
 		s.mu.Unlock()
 		return st
 	}
+	root := s.linkHistRoot
 	s.mu.Unlock()
 
-	root := LinkHistStatePath
+	if root == "" {
+		root = LinkHistStatePath
+	}
 	if root == "" {
 		base := stateBaseDir("linkhist")
 		if base == "" {

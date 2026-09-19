@@ -135,7 +135,7 @@ function linkFor(repo, worktree, ctx, side, no) {
 
 // descMax caps the free-text portion of a Desc — a commit subject or a
 // bookmark label is otherwise unbounded — so one row of `gg links` stays one
-// line. The Go twin is internal/cli.descMax; TestLinkDescJSMatchesGo pins the
+// line. The Go twin is internal/domain.DescMax; TestLinkDescJSMatchesGo pins the
 // pair, including the rune-safe cut (a naive slice would split a multi-byte
 // character; JS strings are UTF-16, so [...s] is the spread that matches Go's
 // []rune).
