@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/forge/forgetest"
 )
 
 // TestMain pins git's environment process-wide so both the builder's git
@@ -31,6 +33,15 @@ func TestMain(m *testing.M) {
 	os.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "xdg"))     // gg global config isolation
 	os.Setenv("XDG_STATE_HOME", filepath.Join(dir, "xdgstate")) // gg shelf store isolation
 	os.Unsetenv("GIT_DIR")                                      // ambient GIT_DIR would redirect every git call
+	// A fake gh for every scenario: it answers only from <repo>/.git/fakegh, so
+	// a scenario that seeds no fixtures sees "no usable forge" — and the real
+	// gh on a developer's box can never leak network calls into the suite.
+	fakeGH, err := forgetest.BuildFakeGHMain()
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv(forgetest.EnvBin, fakeGH)
+	os.Unsetenv(forgetest.EnvFixtures)
 	code := func() int {
 		defer os.RemoveAll(dir)
 		return m.Run()
