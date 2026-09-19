@@ -16,9 +16,14 @@ is a PR, with no new plumbing through the TUI. `domain` converts cached
 status active — the forge already vouched for the position) and appends them in
 `PreviewNotesFor` / `PreviewNotesAt` / `PreviewNotesAll` / `PreviewNoteCounts`,
 so the diff, the file-list badges, `}`/`{`, search and "List notes…" pick them
-up through the code that already serves store notes. Comments are cached per PR
-on the Service (one network read per open; `PRCommentsRefresh` re-reads and
-reports whether anything changed). Collapse is view state on `diffView`
+up through the code that already serves store notes. **Fetch and read are
+split:** `PRCommentsRefresh(ctx, n)` is the ONLY network call (it fills the
+per-PR cache on the Service and reports whether anything changed); every read
+path consults the cache only, so opening a PR diff never waits on `gh`. The TUI
+fetches through one `prCommentsCmd` — right after a PR files view opens, on a
+heartbeat tick of its own (`prCommentsTick`: the diff view is a layer, and
+`refreshTick` is suppressed under any layer, so the list poll cannot carry it),
+and on `r` inside a PR diff / PR files view. Collapse is view state on `diffView`
 (`collapsed map[rootID]bool`), rendered as a new one-row note kind.
 
 **Tech stack:** Go 1.26, Bubble Tea; plan 1/2 APIs (`PRComments`,
@@ -48,12 +53,19 @@ reports whether anything changed). Collapse is view state on `diffView`
    top of the file, one row below where the spec drew it.
 3. Collapse keys: `o` toggles the note at the cursor, `O` collapses/expands
    all (both also in the `.` menu). Resolved forge threads start collapsed.
+4a. The box title is `github · author · 2d ago · a.go R12 [· resolved]` —
+   the provider name leads (the spec had it third) so it sits where `note` /
+   `agent note` sit today.
 4. An inline comment whose line is not in the PR diff (the forge positions
    against its own diff) is simply not drawn; it remains readable in the hub
    through `gg pr comments`. No re-bucketing into Outdated.
-5. `gg://` pair-link copy for a PR is dropped: the link would name
-   `refs/gg/pr/<n>`, a machine-local ref that resolves nowhere else. `y`
-   (the PR's web URL) is the portable address.
+5. `gg://` pair-link copy: the preview surface already has `L` /
+   "Copy gg link"; Task 5 captures it on a PR diff. If it yields
+   `<base>...refs/gg/pr/<n>` (resolvable anywhere after `gg pr fetch <n>`)
+   there is nothing to build; otherwise it is recorded as a follow-up.
+6. CLI/web `PreviewNotesAt` on a PR pair sees forge notes only when the
+   process has them cached — the CLI has `gg pr comments`; web PRs are a
+   follow-up.
 
 ## File map
 
@@ -82,17 +94,21 @@ reports whether anything changed). Collapse is view state on `diffView`
     tag `resolved`, `Status` active, body → `Summary` = first line,
     `Rationale` = the rest;
   - a non-PR set returns nil and makes NO provider call;
-  - the provider is called once for two paths (cache), again after
-    `PRCommentsRefresh`, whose `changed` is false for identical data and true
-    when a comment is added;
-  - a provider error → nil notes, nil error, and the next call retries;
+  - reads NEVER call the provider: before `PRCommentsRefresh` a PR set has no
+    forge notes; after it, two paths are served from the cache with no further
+    call; a second refresh reports `changed` false for identical data and true
+    when a comment is added or a thread resolves (compared on a stable
+    projection — id, body, resolved, updated unix — never `reflect.DeepEqual`
+    over `time.Time`);
+  - a provider error from the refresh is returned, and the previous cache stays;
+  - a LEFT-side comment survives (forge notes are appended AFTER
+    `keepResolved(resolveNotes(...))`, which has no old lines and would drop it);
   - `PreviewNotesFor` on a PR set returns store notes + forge notes;
     `PreviewNoteCounts` counts forge roots per path;
   - `NoteEdit` / `NoteReply` / `NoteRemove` with a `forge:` id →
     `ErrReadOnlyNote`, store untouched.
 - [ ] Implement. Cache under `forgeMu`: `forgeComments map[int]PRComments`;
-  the provider call runs OUTSIDE the lock (plan-1 rule). `reflect.DeepEqual`
-  for `changed`. `ForgetPR` path drops the cache entry.
+  the provider call runs OUTSIDE the lock (plan-1 rule). `ForgetPR` path drops the cache entry.
 - [ ] `go test ./internal/domain/ ./internal/model/` → green; commit
   `feat(domain): forge review comments as read-only notes on a PR preview`.
 
@@ -100,9 +116,9 @@ reports whether anything changed). Collapse is view state on `diffView`
 
 - [ ] **Tests** (`internal/tui/forge_notes_test.go`, building a `diffView`
   the way `diff_notes_test.go` does):
-  - title of a forge root: `review · octocat · 2d ago · a.go R12`, plus
-    ` · resolved` when tagged; a file-level one reads `review · octocat · … ·
-    a.go (file)`;
+  - title of a forge root: `github · octocat · 2d ago · a.go R12`, plus
+    ` · resolved` when tagged; a file-level one reads `github · octocat · … ·
+    a.go (file)` and its rows carry `side = new` (right pane);
   - a `Range{0,0}` forge note anchors on the first non-fold line, new side;
   - `E`, `R`, delete (and their `.` menu rows) on a forge note do nothing but
     set `forge comments are read-only`; `c` on the same line still adds a
@@ -134,8 +150,11 @@ reports whether anything changed). Collapse is view state on `diffView`
 
 - [ ] `previewOpenMsg.prNumber` / `previewOpenState.prNumber` (set by
   `openPRPreviewCmd`, carried by `reopenPreviewCmd` like `title`).
-- [ ] **Tests**: a successful `prsLoadedMsg` while a PR diff is open returns
-  a `prCommentsCmd`; `prCommentsMsg{n, changed: true}` for the open PR
+- [ ] **Tests**: `handlePreviewOpenMsg` with `prNumber > 0` chains a
+  `prCommentsCmd`; `prCommentsTick` fires under an open diff layer (where
+  `refreshTick` is suppressed) once `PRsSeconds` elapsed, never with
+  `prs = 0`, never while one is in flight or an op runs; `r` in a PR diff and
+  in a PR files view issues it; `prCommentsMsg{n, changed: true}` for the open PR
   re-issues `loadNotesCmd` (when a diff layer is up) and refreshes
   `filesPreviewCounts`; `changed: false` or another PR's number does
   nothing; cursor and `collapsed` survive the reload; `i` in the diff view /
