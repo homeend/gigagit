@@ -116,6 +116,27 @@ func (m Model) previewLinkFor(source, target, path string, line int) (string, bo
 	return l.String(), true
 }
 
+// refLinkFor builds the gg:// address of a branch or tag TIP: `@ref:<name>`.
+// The NAME rides the link and the consumer re-resolves it (plan 1b ruling R2)
+// — a ref link follows its branch, which is the whole point of copying one
+// instead of the commit underneath it. A point, so UNBOUNDED: comparing two
+// of them compares the two tips. It refuses a name the grammar cannot hold.
+func (m Model) refLinkFor(name string) (string, bool) {
+	if !model.LinkRefOK(name) {
+		return "", false
+	}
+	repo, ok := m.linkRepoFor("")
+	if !ok {
+		return "", false
+	}
+	l := model.Link{
+		Repo:   repo,
+		Target: model.LinkTarget{State: model.StateCommitted, Ref: name},
+		Side:   model.NoteSideNew,
+	}
+	return l.String(), true
+}
+
 // contextLinkText is the link for whatever the user is looking at, mirroring
 // contextCopyRows' precedence exactly (controller ruling P23): a stack
 // surface (history/blame) on top of a diff out-ranks the diff underneath it
@@ -149,6 +170,9 @@ func (m Model) previewLinkFor(source, target, path string, line int) (string, bo
 //     the open preview, so this returns the PAIR's own link rather than
 //     falling through to a lower-precedence surface.
 //     3b. the Previews panel row → the pair's own link.
+//     3c. a Branches / Remotes / Tags row → the ref's own link (`@ref:<name>`),
+//     gated on !inContentWindow() exactly like the Commits arm below: a files
+//     view opened over one of those panels is not "the branch".
 func (m Model) contextLinkText() (string, bool) {
 	switch m.topLayer().(type) {
 	case *historyView, *blameView:
@@ -192,6 +216,22 @@ func (m Model) contextLinkText() (string, bool) {
 	if !m.inContentWindow() && m.focus == panelPreviews {
 		if r, ok := m.selectedPreview(); ok {
 			return m.previewLinkFor(r.rec.Source, r.rec.Target, "", 0)
+		}
+	}
+	if !m.inContentWindow() {
+		switch m.focus {
+		case panelBranches:
+			if bi, ok := m.backingIndex(panelBranches); ok && bi < len(m.branches) {
+				return m.refLinkFor(m.branches[bi].Name)
+			}
+		case panelRemotes:
+			if bi, ok := m.backingIndex(panelRemotes); ok && bi < len(m.remoteBranches) {
+				return m.refLinkFor(m.remoteBranches[bi].Name)
+			}
+		case panelTags:
+			if bi, ok := m.backingIndex(panelTags); ok && bi >= 0 && bi < len(m.tags) {
+				return m.refLinkFor(m.tags[bi].Name)
+			}
 		}
 	}
 	if !m.inContentWindow() && m.focus == panelCommits {
