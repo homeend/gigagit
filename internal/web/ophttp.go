@@ -24,8 +24,8 @@ type opStartRequest struct {
 	Sha     string `json:"sha"`
 	// Number is a pull request's number (pr-fetch, pr-forget) — the only way the
 	// page names one.
-	Number int `json:"number"`
-	Name    string `json:"name"` // new branch name (create-branch, rename-branch); user.name (set-identity)
+	Number int    `json:"number"`
+	Name   string `json:"name"` // new branch name (create-branch, rename-branch); user.name (set-identity)
 	// create-branch: the picked prefix's identity when the name came from a
 	// prefix prefill — its <seq> counters bump after a successful create.
 	PrefixID    string `json:"prefix_id"`

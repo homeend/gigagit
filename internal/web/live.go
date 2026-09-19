@@ -75,7 +75,7 @@ type liveHub struct {
 	// tags (the Server stores it for the sidebar's ▲; nil in tests that
 	// build a bare hub).
 	// onPRs runs the pull-request list lane when it is due (prs.go).
-	onPRs func(svc *domain.Service)
+	onPRs        func(svc *domain.Service)
 	onRemoteTags func(*domain.Service, map[string]bool)
 }
 
