@@ -94,6 +94,7 @@ type Service struct {
 	// (Preflight holds preflightMu then takes forgeMu — the reverse deadlocks).
 	forgeMu        sync.Mutex
 	forgeProviders []forge.Provider // nil = forge.Default; tests inject
+	forgeRec       observ.Recorder  // the session's span ring, so gh calls reach the operation log; nil for a Service built by New
 	forgeProbed    bool
 	forgeProbing   chan struct{}  // non-nil while the one probe is in flight; closed when it lands
 	forgeActive    forge.Provider // nil when none is usable
@@ -222,6 +223,9 @@ func openWith(workdir string, sshBatch bool, ring *observ.Ring) *Service {
 	}
 	s := New(&git.Repo{Runner: gitexec.NewLimitRunner(er)})
 	s.workdir = workdir
+	if ring != nil {
+		s.forgeRec = ring // guarded: a nil *Ring in the interface would not be a nil Recorder
+	}
 	return s
 }
 

@@ -16,6 +16,7 @@ type previewOpenState struct {
 	id, source, target string
 	srcHash, tgtHash   string
 	tag                string // the compare tag opened with
+	title              string // files-view title override ("" = previewTitle); a PR diff wears "PR #N · title"
 	keepPath           string // path to re-select after a re-arm ("" = top)
 }
 
@@ -29,6 +30,7 @@ type previewOpenMsg struct {
 	keepPath           string
 	moved              string // ref whose tip moved; the "moved" notice, emitted only if the view really re-opens
 	gen                int
+	title              string // files-view title override; "" = previewTitle(source, target)
 	eps                domain.PreviewEndpoints
 	set                domain.PreviewNoteSet // the note scope; zero when the pair is not ok
 	counts             map[string]int        // per-path root-note counts for the file list
@@ -54,10 +56,16 @@ func (m Model) openPreviewCmd(id, source, target, keepPath string) tea.Cmd {
 // re-open path (a changed compare tag) says anything.
 func (m Model) reopenPreviewCmd(id, source, target, keepPath, moved string) tea.Cmd {
 	svc, gen := m.svc, m.previewGen
+	// A re-resolve of the pair that is already open keeps the title it opened
+	// with (a PR diff must not fall back to "Merge preview: refs/gg/pr/7 → …").
+	title := ""
+	if po := m.previewOpen; po != nil && po.id == id && po.source == source && po.target == target {
+		title = po.title
+	}
 	return func() tea.Msg {
 		eps, err := svc.PreviewOpen(context.Background(), source, target)
 		msg := previewOpenMsg{
-			id: id, source: source, target: target,
+			id: id, source: source, target: target, title: title,
 			keepPath: keepPath, moved: moved, gen: gen, eps: eps, err: err,
 		}
 		// The note scope rides the SAME resolve, so the file list paints its
@@ -124,6 +132,11 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 		po.id == msg.id && po.source == msg.source && po.target == msg.target
 	if msg.eps.Summary.State != domain.PreviewOK {
 		m.statusMsg = previewStateNotice(msg.source, msg.target, msg.eps.Summary.State)
+		if msg.title != "" {
+			// A titled pair is a pull request: its endpoints are a private ref
+			// and a sha, which would read as noise in the branch sentence.
+			m.statusMsg = i18n.T("%s: nothing to show against its base", msg.title)
+		}
 		if isOpen {
 			m = m.closePreviewView() // the open pair stopped being previewable
 		}
@@ -154,6 +167,9 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m, cmd = m.openCompareFiles(msg.eps.Left, msg.eps.Right)
 	m.filesTitle = previewTitle(msg.source, msg.target)
+	if msg.title != "" {
+		m.filesTitle = msg.title
+	}
 	m.filesContext = m.filesTitle
 	// openCompareFiles ran closeFilesView (which clears previewOpen and bumps
 	// previewGen), so the state is armed after it — and the generation is
@@ -169,7 +185,7 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 	m.previewOpen = &previewOpenState{
 		id: msg.id, source: msg.source, target: msg.target,
 		srcHash: msg.eps.Summary.SourceHash, tgtHash: msg.eps.Summary.TargetHash,
-		tag: tag, keepPath: msg.keepPath,
+		tag: tag, keepPath: msg.keepPath, title: msg.title,
 	}
 	if msg.moved != "" { // a re-open the user can see: say which tip moved
 		m.statusMsg = i18n.T("preview updated: %s moved", msg.moved)

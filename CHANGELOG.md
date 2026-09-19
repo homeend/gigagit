@@ -17,6 +17,36 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   invocations and waits out the in-flight ones before the temp dir is removed.
   Test-only; no production change.
 
+- **Pull requests in the TUI: a fifth left-top tab, a PR hub popup, and a
+  poll of its own.** When a forge CLI can read the repository's pull requests
+  (GitHub's `gh`, signed in — probed once at startup, off the UI thread), the
+  top-left box grows a **Pull requests** tab beside Branches / Remotes /
+  Worktrees / Previews (`PR` in the header; `ctrl+←/→` or a click reaches it).
+  Without a usable `gh` there is no tab, no key, no notice and no further call.
+  Rows read `#<n>  <status>  <title>  <author>  <source → target>` — the status
+  leads (`✓` approved, `✗` changes requested, `…` review required, `draft`)
+  because the narrow column cuts a row's tail. A PR gg already knows never
+  disappears when it closes: it stays, dimmed, with `merged` / `closed` /
+  `unavailable` as its status. `enter` fetches the PR head into the private
+  `refs/gg/pr/<n>` (fork PRs too, through your own remote) and opens
+  `base…head` on the merge-preview surface, titled `PR #<n> · <title>`, with
+  everything that view has (diff, blame, history, notes, search). `i` opens the
+  **PR hub**: title, state line, URL, the description as plain wrapped text,
+  the conversation with review verdicts, and the *outdated* review threads with
+  the tail of their hunk — `/` filters, `ctrl+t` maximizes, `s` saves, `y`
+  copies the URL, `r` reloads, `esc` returns to the tab. `y` on a row copies the
+  PR URL; `d` *forgets* a merged/closed/unavailable PR (drops the private ref
+  and the row — nothing on the forge changes); all four are in the `.` menu,
+  the footer and `?` help. The list is re-read by `r` and in the background
+  every **`[refresh] prs`** seconds — default `300`, `0` = off, floored by
+  `min_seconds`, and **independent of `[refresh] enabled`**: remote data has no
+  file watcher, so the PR poll is its own switch (it is a row in Settings →
+  Refresh rates). A failed re-read keeps the previous list and shows the
+  failure in the tab header (`! github: …`); an empty tab shows it with
+  `[r] retry`. `gh` now always runs with `GH_PROMPT_DISABLED=1` and
+  `GH_NO_UPDATE_NOTIFIER=1`, and its calls appear in the operation log. Still
+  read-only; inline comments as note boxes are the next cut.
+
 - **Pull requests, read-only (`gg pr`) — the core of the forge integration.**
   gg can now read the current repository's pull requests through the forge's
   own CLI (GitHub's `gh` today), and never writes to the forge: nothing is

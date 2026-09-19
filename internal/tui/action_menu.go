@@ -455,6 +455,14 @@ func actionMenuLabel(id string) (string, bool) {
 		return i18n.T("Remove preview…"), true
 	case "preview-swap":
 		return i18n.T("Save reversed preview"), true
+	case "pr-open":
+		return i18n.T("Open pull request diff"), true
+	case "pr-hub":
+		return i18n.T("Pull request details…"), true
+	case "pr-copy":
+		return i18n.T("Copy pull request URL"), true
+	case "pr-forget":
+		return i18n.T("Forget pull request"), true
 	case "checkout-remote":
 		return i18n.T("Check out remote branch"), true
 	case "switch-remote":

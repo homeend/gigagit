@@ -160,9 +160,28 @@ type Model struct {
 	filesPreviewSet    *domain.PreviewNoteSet
 	filesPreviewCounts map[string]int
 
-	previews    []previewRow      // saved merge previews + live summaries (srcPreviews)
-	previewOpen *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
-	previewGen  int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
+	previews []previewRow // saved merge previews + live summaries (srcPreviews)
+
+	// Pull requests (pr_panel.go). forgeShown flips true on the first read that
+	// finds a usable forge CLI and stays true for this repo session (reRoot
+	// resets it): the tab never vanishes under the user, a later failure is
+	// prsErr — an error row over the PREVIOUS list.
+	forgeShown       bool
+	forgeProvider    string // "github"; the error row's prefix
+	forgeProbeKicked bool   // the one startup read has been dispatched for this repo
+	prs              []model.PullRequest
+	prsErr           string // first line of the last list failure; "" = fine
+	prsLoaded        bool   // a list has landed at least once (distinguishes "loading" from "none")
+	prsInflight      bool
+	prsGen           int
+	// pendingPROpen is the PR whose diff opens once its FetchPRHead succeeds
+	// (the pendingSwitch pattern; opFinishedMsg consumes and clears it).
+	pendingPROpen *model.PullRequest
+	// pendingPRsReload re-reads the PR list once the running ForgetPR lands
+	// (the list is not a registry source, so pendingSources cannot carry it).
+	pendingPRsReload bool
+	previewOpen      *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
+	previewGen       int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
 
 	// Where the cursor lands once a mutation's reload arrives. Set by
 	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
@@ -338,12 +357,21 @@ const (
 	panelTags
 	panelReflog
 	panelPreviews
+	panelPRs
 	panelCount
 )
 
 // leftTabs is the display order of the shared left-slot tabs; the ctrl+←/→
-// cycle walks this list. Enum value order is unrelated to display order.
-var leftTabs = []panel{panelBranches, panelRemotes, panelWorktrees, panelPreviews}
+// cycle walks this list. Enum value order is unrelated to display order. The
+// Pull requests tab exists only once a forge CLI has proved usable for this
+// repository (forgeShown): with no forge the feature is simply not there.
+func (m Model) leftTabs() []panel {
+	tabs := []panel{panelBranches, panelRemotes, panelWorktrees, panelPreviews}
+	if m.forgeShown {
+		tabs = append(tabs, panelPRs)
+	}
+	return tabs
+}
 
 // filesTabs is the display/cycle order of the middle-slot tabs (the Files box).
 var filesTabs = []panel{panelFiles, panelTags}
@@ -1342,7 +1370,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// nothing is loaded yet (a reconcile would degrade to the same walk).
 		m, cmd = m.reloadAllCmd(reloadOpts{manual: true, startup: true, hardFeed: true})
 		m.watchGen++
-		return m, tea.Batch(themeCmd, cmd, m.startWatchCmd(m.watchGen), steerCmd)
+		var forgeCmd tea.Cmd
+		m, forgeCmd = m.kickForgeProbe()
+		return m, tea.Batch(themeCmd, cmd, m.startWatchCmd(m.watchGen), steerCmd, forgeCmd)
 	case dataLoadedMsg:
 		if msg.gen != m.loadGen {
 			return m, nil // superseded by a newer load
@@ -1460,12 +1490,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.feedUpstreams()) > 0 && m.feedScopeApplied != m.feedScopeSig() {
 				var reload tea.Cmd
 				m, reload = m.startFeedReload()
-				return m, tea.Batch(themeCmd, reload, previewsCmd, steerCmd)
+				var forgeCmd tea.Cmd
+				m, forgeCmd = m.kickForgeProbe()
+				return m, tea.Batch(themeCmd, reload, previewsCmd, steerCmd, forgeCmd)
 			}
 			// Conflicts are surfaced as a non-blocking notice ("press [x] to
 			// resolve"); entering the resolution process is the user's choice (x),
 			// so a lingering conflict never traps the interface.
-			return m, tea.Batch(themeCmd, previewsCmd, steerCmd)
+			var forgeCmd tea.Cmd
+			m, forgeCmd = m.kickForgeProbe()
+			return m, tea.Batch(themeCmd, previewsCmd, steerCmd, forgeCmd)
 		}
 	case dataAvailableMsg:
 		// Free the background lane the moment its active read's message arrives —
@@ -1473,7 +1507,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// would otherwise make this (now-stale) bg message early-return without
 		// clearing bgBusy, deadlocking the lane until restart. Gated on bgBusy
 		// (the sole occupancy truth) + a non-fetch, non-manual match.
-		if m.bgBusy && !m.bgActiveItem.isFetch && !msg.manual && m.bgActiveItem.source == msg.source {
+		if m.bgBusy && !m.bgActiveItem.isFetch && !m.bgActiveItem.isRemoteTags && !m.bgActiveItem.isPRs && !msg.manual && m.bgActiveItem.source == msg.source {
 			m.bgBusy = false
 		}
 		if msg.gen != m.srcGen[msg.source] {
@@ -1994,6 +2028,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// starts the commit list clean: the user's escape hatch when a
 				// reconciled deep tail has gone stale (someone rewrote history).
 				m, cmd = m.reloadAllCmd(reloadOpts{manual: true, hardFeed: true})
+				// r also re-reads the pull requests — outside the source
+				// registry, so a slow gh never holds the panels' spinners.
+				if m.forgeShown {
+					var prCmd tea.Cmd
+					m, prCmd = m.readPRsCmd(context.Background(), false, true)
+					cmd = tea.Batch(cmd, prCmd)
+				}
 				return m, cmd
 			}
 		case "p":
@@ -2250,8 +2291,20 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				mm, _ := m.openPreviewRenamePopup()
 				return mm, nil
 			}
+		case "y":
+			if m.canOpenPR() {
+				return m.copyPRURL()
+			}
 		case "d":
 			switch m.focus {
+			case panelPRs:
+				if m.canForgetPR() {
+					return m.forgetPR()
+				}
+				if _, ok := m.selectedPR(); ok && m.opsIdle() {
+					m.statusMsg = i18n.T("only a closed or merged pull request can be forgotten")
+				}
+				return m, nil
 			case panelPreviews:
 				if m.canEditPreview() {
 					return m.confirmPreviewRemove(), nil
@@ -2339,6 +2392,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Previews: enter opens the saved pair in the compare files view
 			// (target…source, the GitHub-PR diff). A pair that cannot be
 			// previewed right now says why instead of opening an empty view.
+			// Pull requests: enter fetches the PR head into gg's private ref,
+			// then opens base…head on the same surface a merge preview uses.
+			if m.focus == panelPRs {
+				if p, ok := m.selectedPR(); ok && m.canOpenPR() {
+					return m.openPRCmd(p)
+				}
+				return m, nil
+			}
 			if m.focus == panelPreviews {
 				if r, ok := m.selectedPreview(); ok && m.opsIdle() {
 					if r.sum.State != domain.PreviewOK {
@@ -2443,7 +2504,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case m.focus == panelStaged || m.focus == panelReflog:
 				return m.activateTab(nextInOrder(bottomTabs, m.bottomTab(), dir)), nil
 			default:
-				return m.activateTab(nextInOrder(leftTabs, m.activeLeftTab, dir)), nil
+				return m.activateTab(nextInOrder(m.leftTabs(), m.activeLeftTab, dir)), nil
 			}
 		case "right":
 			if m.focus != panelCommits && !m.fullMaxActive() {
@@ -2660,6 +2721,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if c, ok := m.commitForMessageView(); ok {
 				return m.openCommitMessagePopup(c)
 			}
+			if p, ok := m.selectedPR(); ok && m.canOpenPR() {
+				return m.openPRHub(p)
+			}
 		case "I":
 			if c, ok := m.commitForMessageView(); ok {
 				return m.openCommitMessageEditor(c)
@@ -2759,6 +2823,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case opDecisionMsg:
 		m.modal = &decisionState{req: msg.req, reply: msg.reply}
 		return m, waitForOp(m.opMsgs)
+	case prsLoadedMsg:
+		return m.handlePRsLoaded(msg)
+
+	case prFetchReadyMsg:
+		return m.handlePRFetchReady(msg)
+
+	case prHubMsg:
+		return m.handlePRHubMsg(msg)
+
 	case bgFetchDoneMsg:
 		// Drop stale completions: if a newer fetch was launched (e.g. a user op
 		// preempted the old one and a new cycle started), the old message must not
@@ -2961,6 +3034,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var pushTags []string
 		var noticeCfg *engine.SetGitConfig
 		pendingCo := m.pendingCheckout // captured; cleared below whatever happened
+		prOpen := m.pendingPROpen      // captured; cleared below whatever happened
+		m.pendingPROpen = nil
+		prsReload := m.pendingPRsReload
+		m.pendingPRsReload = false
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 			// A lock failure is recoverable in-app; arm the notice before the
@@ -3086,7 +3163,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// No hardFeed: an op that adds commits (commit, merge, cherry-pick) should
 		// prepend them, not collapse the list back to page 0.
 		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), reloadOpts{manual: true})
-		return m, tea.Batch(healthCmd, cmd, driftCmd)
+		var prCmd tea.Cmd
+		if prOpen != nil && msg.err == nil {
+			prCmd = m.openPRPreviewCmd(*prOpen) // the head is local now: open its diff
+		}
+		if prsReload && msg.err == nil {
+			m, prCmd = m.readPRsCmd(context.Background(), false, false)
+		}
+		return m, tea.Batch(healthCmd, cmd, driftCmd, prCmd)
 
 	case prefixDataMsg:
 		if v := layerOf[*prefixSettingsView](m); v != nil {
@@ -3689,8 +3773,11 @@ func (m Model) middleTab() panel {
 // both keep identical bookkeeping (the top slot also updates lastLeftPanel, the
 // ←-return target). A non-tab panel is left unchanged.
 func (m Model) activateTab(p panel) Model {
+	if p == panelPRs && !m.forgeShown {
+		return m // no usable forge: there is no such tab (a steer/click cannot conjure it)
+	}
 	switch p {
-	case panelBranches, panelRemotes, panelWorktrees, panelPreviews:
+	case panelBranches, panelRemotes, panelWorktrees, panelPreviews, panelPRs:
 		m.activeLeftTab = p
 		m.focus = p
 		m.lastLeftPanel = p
@@ -3866,7 +3953,7 @@ func (m Model) leftReturnTarget() panel {
 		return m.leftMax
 	}
 	p := m.lastLeftPanel
-	if (p == panelBranches || p == panelWorktrees || p == panelRemotes || p == panelPreviews) && p != m.activeLeftTab {
+	if (p == panelBranches || p == panelWorktrees || p == panelRemotes || p == panelPreviews || p == panelPRs) && p != m.activeLeftTab {
 		p = m.activeLeftTab
 	}
 	if m.layout().boxH[p] <= 0 { // hidden (inactive tab, or Staged on a short terminal)
@@ -4200,6 +4287,17 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.pendingNoticeConfig = nil
 	m.refreshHealthAfterOp = false
 	m.previews = nil // the old repo's saved previews must not linger in the new one
+	// The forge belongs to the repository: the new Service probes afresh, and
+	// until it answers there is no Pull requests tab to stand on.
+	m.forgeShown, m.forgeProvider, m.forgeProbeKicked = false, "", false
+	m.prs, m.prsErr, m.prsLoaded, m.prsInflight = nil, "", false, false
+	m.prsGen++ // drop the old repo's in-flight list read
+	if m.activeLeftTab == panelPRs {
+		if m.focus == panelPRs {
+			m.focus = panelBranches
+		}
+		m.activeLeftTab = panelBranches
+	}
 	// Drop every read still in flight for the OLD repo. Without the bump a
 	// read chained off repo B's snapshot lands after a switch to repo C and
 	// writes B's rows into C's model — and its arrival sets ready = true and

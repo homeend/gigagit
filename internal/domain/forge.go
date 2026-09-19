@@ -33,6 +33,12 @@ func (s *Service) SetForgeProviders(ps []forge.Provider) {
 	s.forgeProviders = ps
 }
 
+// ForgeDisabled is a TEST seam (the NotesDisabled precedent): a frontend test
+// binary sets it in TestMain so no Service ever shells out to the real forge
+// CLI — the probe is a network call. A Service with injected providers
+// (SetForgeProviders) ignores it.
+var ForgeDisabled bool
+
 // ForgeStatus probes the forge providers on its FIRST call and answers from
 // that verdict for the rest of the session — there is no re-detection: a user
 // who installs or logs into gh restarts gg. The first call makes a network
@@ -57,11 +63,11 @@ func (s *Service) ForgeStatus(ctx context.Context) ForgeStatus {
 		}
 		done := make(chan struct{})
 		s.forgeProbing = done
-		ps := s.forgeProviders
+		ps, rec := s.forgeProviders, s.forgeRec
 		s.forgeMu.Unlock()
 
-		if ps == nil {
-			ps = forge.Default(s.workdir, nil)
+		if ps == nil && !ForgeDisabled {
+			ps = forge.Default(s.workdir, rec)
 		}
 		var active forge.Provider
 		probeErr := ErrForgeUnavailable

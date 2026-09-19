@@ -49,8 +49,12 @@ func (g *GH) HeadRefspec(n int) string { return "refs/pull/" + strconv.Itoa(n) +
 func (g *GH) run(ctx context.Context, name string, argv ...string) (gitexec.Result, error) {
 	ctx, cancel := context.WithTimeout(ctx, CallTimeout)
 	defer cancel()
-	return g.r.Run(ctx, name, argv)
+	return g.r.RunEnv(ctx, name, argv, ghEnv)
 }
+
+// ghEnv rides every call: gh must never stop to ask a question (there is no
+// terminal behind it) nor print its update banner into output gg parses.
+var ghEnv = []string{"GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1"}
 
 func (g *GH) Detect(ctx context.Context) error {
 	_, err := g.run(ctx, "gh pr list (detect)", "pr", "list", "--limit", "1", "--json", "number")

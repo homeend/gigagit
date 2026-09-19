@@ -67,6 +67,7 @@ var settingDocs = []settingDoc{
 	{"refresh", "feed", 0, "seconds between background commit-feed refresh; 0 = off"},
 	{"refresh", "fetch", 0, "seconds between background `git fetch`; 0 = off"},
 	{"refresh", "remote_tags", 0, "seconds between background remote-tag (ls-remote) lookups; 0 = off"},
+	{"refresh", "prs", 300, "seconds between pull-request list reads (needs a usable forge CLI, e.g. gh); 0 = off; NOT gated by refresh.enabled"},
 	{"refresh", "min_seconds", 10, "floor on any auto-refresh interval; no source polls more often than this"},
 	{"refresh", "disable_remote_tags_auto", false, "disable auto remote-tag refresh on tag-list changes (default: on)"},
 

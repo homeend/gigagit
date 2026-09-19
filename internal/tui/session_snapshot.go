@@ -136,6 +136,8 @@ func panelProtoName(p panel) string {
 		return "reflog"
 	case panelPreviews:
 		return "previews"
+	case panelPRs:
+		return "prs"
 	}
 	return ""
 }
@@ -145,7 +147,7 @@ func panelProtoName(p panel) string {
 // names are refused rather than defaulted — an agent that named a panel gg does
 // not have should hear so.
 func panelFromProtoName(s string) (panel, bool) {
-	for _, p := range []panel{panelBranches, panelWorktrees, panelRemotes, panelFiles, panelStaged, panelCommits, panelTags, panelReflog, panelPreviews} {
+	for _, p := range []panel{panelBranches, panelWorktrees, panelRemotes, panelFiles, panelStaged, panelCommits, panelTags, panelReflog, panelPreviews, panelPRs} {
 		if panelProtoName(p) == s {
 			return p, true
 		}
