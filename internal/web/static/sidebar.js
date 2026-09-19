@@ -715,7 +715,7 @@ $("worktrees-list").addEventListener("contextmenu", (e) => {
 // lists you consult now and then, so the sidebar opens on what you steer with
 // (branches, remotes, worktrees) rather than a screenful of tags. It applies
 // only until something is saved - after that, your own layout is what returns.
-const COLLAPSED_DEFAULT = ["previews", "tags", "stashes", "reflog", "bookmarks", "shelf"];
+const COLLAPSED_DEFAULT = ["previews", "prs", "tags", "stashes", "reflog", "bookmarks", "shelf"];
 
 // Every header carries its state as a chevron - pointing down when open,
 // right when folded - so a folded section still reads as something you can
@@ -735,9 +735,13 @@ function applySection(name, collapsed) {
       ? `<span class="locate" title="scroll to the current branch (f in the TUI)">\u2316</span>`
       : name === "previews"
         ? `<span class="locate" title="new merge preview (a in the TUI)">+</span>`
-        : "";
+        : name === "prs"
+          ? `<span class="locate" title="re-read the pull requests from the forge (r in the TUI)">\u27f3</span>`
+          : "";
+  // The section's id is short ("prs"); its header spells the name out.
+  const label = name === "prs" ? "pull requests" : name;
   $(name + "-header").innerHTML =
-    (collapsed ? "\u25b8 " : "\u25be ") + esc(name) + control + filterChipHTML(name) + sortChipHTML(name);
+    (collapsed ? "\u25b8 " : "\u25be ") + esc(label) + control + filterChipHTML(name) + sortChipHTML(name);
 }
 
 
@@ -918,6 +922,12 @@ SECTIONS.forEach((n) => {
       if (n === "previews") {
         if (isCollapsed(n)) toggleSection(n); // the new row must land in view
         if (window.__ggAddPreview) window.__ggAddPreview();
+        return;
+      }
+      // The pull-requests header's control RE-READS the forge (prs.js hands
+      // the flow over on the window for the same import-cycle reason).
+      if (n === "prs") {
+        if (window.__ggRefreshPRs) window.__ggRefreshPRs();
         return;
       }
       locateCurrentBranch();

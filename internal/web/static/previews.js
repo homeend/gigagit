@@ -120,13 +120,20 @@ function armPreview(body) {
     // The source tip IS the note write target: a preview note is an ordinary
     // committed note on it (spec §1.1). The page never computes this itself.
     tip: body.source_hash,
+    // A pull request's diff (prs.js) rides this same screen. Its source and
+    // target are DISPLAY names — the head may live in a fork — so nothing may
+    // send them back to the server as refs.
+    pr: body.pr || 0,
   };
   // The previous PAIR's per-file numbers must not survive onto this one's file
   // list; loadPreviewCounts fills them in again a moment later. Re-arming the
   // same pair (a tip that moved) keeps the numbers standing meanwhile, so the
   // badges do not blink off on every refresh.
   if (!samePair) state.previewCounts = null;
-  loadPreviewCounts(body.source, body.target);
+  // /api/preview/notes resolves branch NAMES; a PR's would 404 (a fork) or,
+  // worse, read a same-named local pair's notes.
+  if (state.previewOpen.pr) state.previewCounts = {};
+  else loadPreviewCounts(body.source, body.target);
 }
 
 
@@ -150,14 +157,17 @@ async function loadPreviewCounts(source, target) {
 
 
 function previewTitle(body) {
+  if (body.pr) return body.label + " (" + body.source + " → " + body.target + ")";
   return "merge preview: " + body.source + " → " + body.target;
 }
 
 
-async function openPreviewBody(body, moved) {
+export async function openPreviewBody(body, moved) {
   const po = state.previewOpen;
   if (body.state !== "ok") {
-    opLine("merge preview " + body.source + " → " + body.target + ": " + stateText(body), true);
+    // A pull request names itself; a merge preview is named by its pair.
+    const what = body.pr ? body.label : "merge preview " + body.source + " → " + body.target;
+    opLine(what + ": " + stateText(body), true);
     // Only the pair that is actually on screen closes: a notice about another
     // row must not take someone else's view down.
     if (po && po.source === body.source && po.target === body.target && previewShowing()) closePreviewView();
@@ -434,6 +444,9 @@ export async function reopenPreviewIfMoved() {
   const po = state.previewOpen;
   if (!po) return;
   if (state.previewsStale) return; // the list this pass would reason from never arrived
+  // A pull request's head moves only when the user fetches it again, and its
+  // names are not branches: there is no tip here to watch.
+  if (po.pr) return;
   if (!previewShowing()) {
     state.previewOpen = null; // something else owns the screen now
     return;
