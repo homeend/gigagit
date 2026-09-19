@@ -79,3 +79,35 @@ func (m Model) openPRPreviewCmd(p model.PullRequest) tea.Cmd {
 		return msg
 	}
 }
+
+// canForgetPR gates Forget: only a PR that is no longer open can be dropped —
+// an open one is listed by the forge and would come straight back.
+func (m Model) canForgetPR() bool {
+	p, ok := m.selectedPR()
+	return m.focus == panelPRs && ok && !p.IsOpen() && m.opsIdle()
+}
+
+// forgetPR drops gg's private ref for the selected PR and, with it, the row.
+// Confirm-free: nothing of the user's is lost (the ref is refetchable, the
+// forge is untouched). The list re-reads once the op lands.
+func (m Model) forgetPR() (Model, tea.Cmd) {
+	p, ok := m.selectedPR()
+	if !ok || m.svc == nil {
+		return m, nil
+	}
+	m.pendingPRsReload = true
+	return m.startOp(m.svc.PRForgetOp(p.Number))
+}
+
+// copyPRURL puts the selected PR's web URL on the clipboard.
+func (m Model) copyPRURL() (Model, tea.Cmd) {
+	p, ok := m.selectedPR()
+	if !ok {
+		return m, nil
+	}
+	if p.URL == "" {
+		m.statusMsg = i18n.T("this pull request has no URL")
+		return m, nil
+	}
+	return m, m.copyToClipboardCmd(i18n.T("copied PR URL"), p.URL)
+}

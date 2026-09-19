@@ -177,8 +177,11 @@ type Model struct {
 	// pendingPROpen is the PR whose diff opens once its FetchPRHead succeeds
 	// (the pendingSwitch pattern; opFinishedMsg consumes and clears it).
 	pendingPROpen *model.PullRequest
-	previewOpen   *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
-	previewGen    int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
+	// pendingPRsReload re-reads the PR list once the running ForgetPR lands
+	// (the list is not a registry source, so pendingSources cannot carry it).
+	pendingPRsReload bool
+	previewOpen      *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
+	previewGen       int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
 
 	// Where the cursor lands once a mutation's reload arrives. Set by
 	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
@@ -2288,8 +2291,20 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				mm, _ := m.openPreviewRenamePopup()
 				return mm, nil
 			}
+		case "y":
+			if m.canOpenPR() {
+				return m.copyPRURL()
+			}
 		case "d":
 			switch m.focus {
+			case panelPRs:
+				if m.canForgetPR() {
+					return m.forgetPR()
+				}
+				if _, ok := m.selectedPR(); ok && m.opsIdle() {
+					m.statusMsg = i18n.T("only a closed or merged pull request can be forgotten")
+				}
+				return m, nil
 			case panelPreviews:
 				if m.canEditPreview() {
 					return m.confirmPreviewRemove(), nil
@@ -3021,6 +3036,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		pendingCo := m.pendingCheckout // captured; cleared below whatever happened
 		prOpen := m.pendingPROpen      // captured; cleared below whatever happened
 		m.pendingPROpen = nil
+		prsReload := m.pendingPRsReload
+		m.pendingPRsReload = false
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 			// A lock failure is recoverable in-app; arm the notice before the
@@ -3149,6 +3166,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var prCmd tea.Cmd
 		if prOpen != nil && msg.err == nil {
 			prCmd = m.openPRPreviewCmd(*prOpen) // the head is local now: open its diff
+		}
+		if prsReload && msg.err == nil {
+			m, prCmd = m.readPRsCmd(context.Background(), false, false)
 		}
 		return m, tea.Batch(healthCmd, cmd, driftCmd, prCmd)
 
