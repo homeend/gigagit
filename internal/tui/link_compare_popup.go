@@ -226,7 +226,13 @@ func (p *linkComparePopup) render(m Model, below string) string {
 
 func (p *linkComparePopup) box(m Model) string {
 	w, _ := m.overlayDims()
-	cw := popupContentWidth(w)
+	// The WIDE popup width: a gg:// link is a path with a sha on the end, and
+	// the standard 56-column prose box wraps even a short one over three lines.
+	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
+	cw := inner - st().modalStyle.GetHorizontalPadding()
+	if cw < 1 {
+		cw = 1
+	}
 	mark := func(r lcRow) string {
 		if p.focus == r {
 			return "> "
@@ -243,6 +249,12 @@ func (p *linkComparePopup) box(m Model) string {
 		}
 		focused := p.focus == r
 		b.WriteString(viewField(mark(r)+label, s.input, focused && !s.hist.active, cw) + "\n")
+		// The history opens under ITS field, and only once ↓ asks for it: this
+		// is a form, and a 20-row list between a link and its base row (or two
+		// of them) would bury it. The footer says the list is there.
+		if focused && s.hist.active {
+			b.WriteString(s.hist.view(cw) + "\n")
+		}
 		if s.hasBase() {
 			br := lcBase1
 			if i == 1 {
@@ -258,13 +270,6 @@ func (p *linkComparePopup) box(m Model) string {
 		if s.err != "" {
 			b.WriteString("    " + st().errorText.Render(elideMiddle(s.err, cw-4)) + "\n")
 		}
-		// The history belongs to the field it sits under, and only the focused
-		// field shows one — two 20-row lists would bury the form.
-		if focused && !p.busy {
-			if h := s.hist.view(cw); h != "" {
-				b.WriteString(h + "\n")
-			}
-		}
 	}
 	if p.err != "" {
 		b.WriteString("\n" + st().errorText.Render(elideMiddle(p.err, cw)) + "\n")
@@ -277,8 +282,10 @@ func (p *linkComparePopup) box(m Model) string {
 		b.WriteString("\n" + i18n.T("[enter] bound the link with this base  [tab] complete / next  [esc] close"))
 	case !p.focus.isBase() && p.cur().hist.active:
 		b.WriteString("\n" + i18n.T("[enter] use this link  [↑] back to the field  [esc] back"))
+	case len(p.cur().hist.rows) == 0:
+		b.WriteString("\n" + i18n.T("[tab] next  [ctrl+s] swap  [enter] compare  [esc] close"))
 	default:
 		b.WriteString("\n" + i18n.T("[tab] next  [↓] copied links  [ctrl+s] swap  [enter] compare  [esc] close"))
 	}
-	return st().modalStyle.Width(popupResolveWidth(w, p.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
+	return st().modalStyle.Width(inner).Render(b.String()) + "\n"
 }
