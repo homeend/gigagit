@@ -560,3 +560,20 @@ func isAlphaLink(c byte) bool {
 func linkErr(format string, args ...any) (Link, error) {
 	return Link{}, fmt.Errorf("%w: "+format, append([]any{ErrLink}, args...)...)
 }
+
+// MarshalText renders the link as its own text, so a Link stored in TOML or
+// JSON is the string a user could paste. Pairs with UnmarshalText; together
+// they make any file holding a Link a standing String(Parse(s)) == s witness.
+func (l Link) MarshalText() ([]byte, error) { return []byte(l.String()), nil }
+
+// UnmarshalText parses the link text. A malformed value is an ERROR, never a
+// zero Link: a corrupt stored row must fail loudly rather than read as the
+// working tree of an unnamed repository.
+func (l *Link) UnmarshalText(b []byte) error {
+	parsed, err := ParseLink(string(b))
+	if err != nil {
+		return err
+	}
+	*l = parsed
+	return nil
+}
