@@ -17,16 +17,18 @@ import (
 
 // fakeForge is a scriptable forge.Provider.
 type fakeForge struct {
-	mu         sync.Mutex
-	detectErr  error
-	detectGate chan struct{} // non-nil: Detect blocks until it is closed
-	detects    atomic.Int32
-	open       []model.PullRequest
-	byNum      map[int]model.PullRequest // PR(n); missing → forge.ErrNotFound
-	prCalls    map[int]int
-	comments   []model.ForgeComment
-	truncated  bool
-	slug, url  string
+	mu           sync.Mutex
+	detectErr    error
+	detectGate   chan struct{} // non-nil: Detect blocks until it is closed
+	detects      atomic.Int32
+	open         []model.PullRequest
+	byNum        map[int]model.PullRequest // PR(n); missing → forge.ErrNotFound
+	prCalls      map[int]int
+	comments     []model.ForgeComment
+	commentsErr  error
+	commentCalls int
+	truncated    bool
+	slug, url    string
 }
 
 func (f *fakeForge) Name() string { return "fake" }
@@ -56,7 +58,13 @@ func (f *fakeForge) PR(_ context.Context, n int) (model.PullRequest, error) {
 	return p, nil
 }
 func (f *fakeForge) Comments(context.Context, int) ([]model.ForgeComment, bool, error) {
-	return f.comments, f.truncated, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.commentCalls++
+	if f.commentsErr != nil {
+		return nil, false, f.commentsErr
+	}
+	return append([]model.ForgeComment(nil), f.comments...), f.truncated, nil
 }
 func (f *fakeForge) BaseRepo(context.Context) (string, string, error) { return f.slug, f.url, nil }
 func (f *fakeForge) HeadRefspec(int) string                           { return "refs/pull/x/head" }

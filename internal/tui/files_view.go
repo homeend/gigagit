@@ -531,7 +531,14 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openShelfSwitcher()
 	case "F": // global fuzzy file finder
 		return m.openFileFinder()
+	case "r": // a PR's file list: re-read its review comments (inert elsewhere)
+		if m.openPRNumber() > 0 {
+			return m.prCommentsCmd(true)
+		}
 	case "i": // show the displayed commit's message, mirroring the Commits-panel i
+		if m.openPRNumber() > 0 { // a PR diff has no commit of its own: i is its hub
+			return m.openPRHubFromDiff()
+		}
 		// Resolve the commit the tree is ACTUALLY showing (filesViewCommit, keyed
 		// by filesHash) — not the Commits-panel cursor: a reflog/tags-opened view
 		// sets focus=panelCommits but displays a different commit. The popup layers

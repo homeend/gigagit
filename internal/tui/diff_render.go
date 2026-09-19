@@ -727,6 +727,10 @@ func noteRowCells(nl noteLine, paneW int) string {
 		cell = frame.Render("╰" + strings.Repeat("─", paneW-2) + "╯")
 	case noteRowBlank:
 		cell = frame.Render("│") + strings.Repeat(" ", paneW-2) + frame.Render("│")
+	case noteRowCollapsed:
+		// No frame: one row, led by the fold mark in the thread's frame colour.
+		body := padRight(truncate(sanitizeLine(nl.text), paneW-2), paneW-2)
+		cell = frame.Render("▸ ") + text.Render(body)
 	default:
 		body := padRight(truncate(sanitizeLine(nl.text), inner), inner)
 		cell = frame.Render("│ ") + text.Render(body) + frame.Render(" │")

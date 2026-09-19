@@ -44,6 +44,31 @@ forgets to declare falls toward the consent screen rather than past it.
 
 ## [Unreleased]
 
+- **Pull-request review comments inside the PR diff — and any note box now
+  collapses.** Open a pull request from the Pull requests tab and its review
+  threads appear on their lines, drawn by the same note boxes local review
+  notes use: `review · <author> · <age> · <path> R<line>` (`L<line>` for a
+  comment on the old side, in the left pane; `· resolved` when its reviewers
+  closed it), replies indented. A comment on a whole file sits at the top of
+  that file. The file list wears the usual `◆N` badges, and `}` / `{`, the
+  in-view search and **List notes…** (which marks them `review`) all include
+  them. They are **read-only**: `E`, `R` and *Delete note* are not offered on
+  a forge thread (the diff says "forge comments are read-only"), *Remove all
+  notes…* never counts them, and the domain rejects a `forge:` id outright —
+  gg still writes nothing to the forge. Your own notes on the same lines work
+  as before. **Collapse** is generic: `o` folds the note at the cursor to one
+  row (`▸ author: summary (2 replies)`), `O` folds or unfolds every note in the
+  view, both also in the `.` menu; it is view state, nothing is stored, and a
+  thread the forge marks resolved starts collapsed (once — a reload never
+  re-folds what you opened). The comments are fetched *after* the diff opens
+  (opening never waits on `gh`), re-read every `[refresh] prs` seconds while
+  the PR diff is open (a tick of its own — the ordinary background refresh
+  stands down under an open diff), and on `r` in the PR's diff or file list;
+  the cursor, scroll and collapse state survive a reload. `i` in the PR's diff
+  or file list opens the PR hub and `esc` returns. **Copy link** (`L`) on a PR
+  diff yields `gg://…/<base>...refs/gg/pr/<n>`, which any checkout resolves
+  after `gg pr fetch <n>`. Outdated threads stay in the hub.
+
 - **Tests: a tui test no longer deletes its repo under a running git.** A test
   that only asserts "the op started" returned while `startOp`'s goroutine was
   still running git, and `t.TempDir`'s cleanup lost the race on a loaded CI

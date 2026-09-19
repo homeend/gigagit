@@ -68,7 +68,7 @@ func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
 		p.setPick(0)
 		p.summary, p.rationale = newTextField(""), newTextField("")
 	case noteEdit, noteReply:
-		return m.withNoteTarget(func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
+		return m.withEditableNoteTarget(func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
 			return m.openNotePopupFor(mode, t)
 		})
 	}
