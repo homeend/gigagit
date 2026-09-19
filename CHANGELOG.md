@@ -8,6 +8,36 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Pull requests, read-only (`gg pr`) — the core of the forge integration.**
+  gg can now read the current repository's pull requests through the forge's
+  own CLI (GitHub's `gh` today), and never writes to the forge: nothing is
+  posted, edited, resolved or submitted. `gg pr list` prints the open PRs,
+  newest-updated first (`#<n> <state> <author>  <source> → <target> [draft]
+  [<review state>]  <title>`, a fork head as `owner:branch`); `gg pr view <n>`
+  adds the description, the conversation (general comments and review
+  verdicts, oldest first) and the *outdated* inline threads with their
+  original line and hunk tail; `gg pr comments <n>` prints the inline and
+  file-level threads that still have a position (`a.go:10-12 (new) carol
+  [resolved]: …`, replies indented). All three take `--json`.
+  `gg pr fetch <n>` brings the PR head — fork PRs included — into the private
+  ref `refs/gg/pr/<n>` (local only, never pushed, never decorated in the
+  graph, a no-op when already current), fetching through whichever configured
+  remote names the base repository so your own transport and credentials are
+  used; read the change with `gg diff <target>...refs/gg/pr/<n>`.
+  **A PR gg knows never disappears because it closed**: one that was listed
+  open earlier in the session, or that you fetched (in any session — the ref
+  is the record, there is no state file), stays listed marked `closed`,
+  `merged` or `unavailable` until `gg pr forget <n>` drops it.
+  Detection runs **once per session**: `gh` must be installed, logged in and
+  able to read this repo's PRs, otherwise the feature is simply off (the CLI
+  says why; the TUI will show nothing — the new *silent* preflight feature
+  kind raises no notice). Comment reads are per PR and single-page: 100
+  threads × 50 comments, 100 conversation comments, 100 reviews, with a
+  visible "truncated" marker beyond. Everything above one `forge.Provider`
+  interface is forge-neutral, so GitLab/Gitea are one more implementation.
+  The TUI PRs tab, the PR hub popup and inline comments as read-only note
+  boxes follow in the next two stages.
+
 - **Web: in-view text search in the `?` help popup.** The help overlay now
   takes the same `/` `@` `]` `[` search as the diff pane and blame: `/`
   opens a bar under the title, typing re-finds the help's rows (headings

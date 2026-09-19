@@ -1,6 +1,6 @@
 # Forge pull requests (read-only) — design
 
-Date: 2026-09-19 · Branch: `feat/forge-prs` · Status: awaiting review
+Date: 2026-09-19 · Branch: `feat/forge-prs` · Status: approved; plan 1 of 3 (core + CLI) implemented
 
 ## Goal
 
@@ -31,6 +31,31 @@ forge-neutral so GitLab (`glab`) and Gitea (`tea`) are one more implementation.
     for the whole session (no mid-session re-detection).
 11. A PR gg already knows never disappears because it was closed or merged:
     it stays in the list, marked `closed` / `merged`.
+
+## Amendments made while implementing plan 1 (2026-09-19)
+
+Where the text below disagrees, these win:
+
+1. **The PR/comment types live in `internal/model`** (`model.PullRequest`,
+   `model.ForgeComment`), not in `forge`: frontends must name them and may not
+   import a domain-owned package. `forge` keeps `Provider` + the `gh` impl.
+   `Provider` also has `BaseRepo(ctx) (slug, fallbackURL, err)`, and
+   `Comments` returns `(comments, truncated, err)`.
+2. **No comment count on PR rows** (list or TUI badge): `gh pr list --json`
+   has no count field — `comments` returns every body. `PullRequest.Comments`
+   and the `💬` badge are dropped.
+3. **Comment reads are single-page, per PR**: 100 review threads × 50
+   comments, 100 conversation comments, 100 reviews; any `hasNextPage` sets
+   `Truncated`. (User confirmed the caps are per PR and fine.)
+4. **The fake `gh`** reads canned JSON from `$GG_FAKEGH_DIR`, else
+   `<cwd>/.git/fakegh/`, so an e2e scenario seeds it with plain `write` steps.
+5. `HeadRefspec` is fully qualified: `refs/pull/<n>/head`.
+6. An **outdated** thread keeps its `originalLine` as a display label
+   (GitHub nulls `line`); it is still never anchored in the diff.
+7. `--json` comment buckets are `[]`, never `null`; text output hang-indents
+   a body's continuation lines and prints `author [resolved]: …`.
+8. Detection is cached per `domain.Service` and `Preflight` never runs the
+   network probe itself — it reads a snapshot (unprobed = unsatisfiable).
 
 ## Approach
 
