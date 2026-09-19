@@ -342,7 +342,7 @@ Both are DAG leaves owned by `domain`; frontends never import them, per the
 | package | contents | precedent to copy |
 |---|---|---|
 | `internal/linkhist` | the 20-entry MRU of created links: `{Link, Desc, Created}`, TOML + `O_EXCL` lock under XDG state | `internal/notes`, `domain/searchstore.go` |
-| `internal/savedcompare` | `{Left, Right model.Link, Label string}` — absorbs merge previews (§4.5) | `internal/preview` |
+| `internal/savedcompare` | `{ID, Left model.Link, Right *model.Link, Label, Created}` — absorbs merge previews, `Right == nil` ⇒ a saved SET (§4.5) | `internal/preview` |
 
 Not named `clipboard` — that package already exists (the OS clipboard writer).
 
@@ -385,19 +385,47 @@ A saved comparison and a merge preview are the same *kind* (both bounded) but
 not the same *shape*: `MergePreview{Source,Target}` is one side, and preview
 notes anchor on its source tip.
 
-**Decision: migrate.** One `savedcompare` store at format 2; `previews.toml`
-data is **discarded** on consent rather than converted. gg's user base is
-small enough that conversion is not worth the design cost, and a single store
-keeps the Previews surface listing one concept.
+**Decision (amended 2026-09-19): CONVERT.** The original decision here was to
+discard `previews.toml` on consent, on the reasoning that conversion cost
+design effort the user base did not justify. Reading the code reversed all
+three premises:
+
+- **The conversion is the function this section already writes.** A preview
+  becomes `{Left: gg://repo@target...source, Right: nil}` — that sentence is
+  the whole body. Both things that could have made it lossy do not:
+  `preview.ID` is `sha256(source \x00 target)` truncated, so an id is
+  recomputable (and is carried over verbatim anyway), and `PreviewNotes`
+  keys on the branch NAMES, never on a preview record — the notes are
+  ordinary committed notes at the source tip and need no migration at all.
+- **The discard is the expensive path.** It needs a file-backed action in
+  `ApplyMigration`, a `storeFiles` sibling to `storeRefs`, a registered
+  preflight feature, and consent prose rendered on CLI, TUI and web.
+  Conversion needs none of it: consent exists to make data loss honest, and
+  a lossless conversion has no loss to confess.
+- **The discard is wrong on a dual-environment checkout.** `StampStoreFormat`
+  writes a git ref (`refs/gg/meta/<store>/<format>`, inside `.git`);
+  `previews.toml` lives under XDG state. One `.git` opened from both WSL and
+  Windows is one marker and two state directories. Consenting from one side
+  stamps the marker and deletes that side's file; the other side then probes
+  `Format=2, HasData=true`, reads Satisfied, never prompts, and orphans a
+  live `previews.toml` silently and permanently.
+
+**There are no format numbers in this migration.** `previews.toml` and
+`savedcompare.toml` are different files, so the complete probe is "does the
+legacy file still exist on this machine". No marker, no ref, no scope
+mismatch — each environment converts its own copy the first time it runs.
+`DataFormat` and the branch-versions feature are untouched.
 
 **A merge preview is one bounded *set*, not a comparison**, so the store holds
 both shapes explicitly:
 
 ```go
 type Entry struct {
-    Left  model.Link
-    Right *model.Link // nil ⇒ a saved SET (a merge preview), not a pair
-    Label string
+    ID      string      // stable; converted previews keep their OLD id verbatim
+    Left    model.Link
+    Right   *model.Link // nil ⇒ a saved SET (a merge preview), not a pair
+    Label   string
+    Created time.Time
 }
 ```
 
@@ -406,16 +434,72 @@ Preview notes keep anchoring on the source tip, which that link still yields.
 A saved comparison sets both. The Previews tab lists both — they are the same
 kind (bounded), and either can be an endpoint of the next comparison.
 
-**Framework gap to build.** `preflight.StoreProbe{Format, HasData}` →
-verdict → consent prose → `engine.ApplyMigration` is exactly the right
-machinery ("discards a store's unreadable data and stamps the new format
-marker… only after explicit consent"), and `StoreVersions` 1→2 is the
-precedent. But `ApplyMigration` today only deletes **git refs** (`op.Refs` →
-`DeleteRef`) and stamps via `Repo.StampStoreFormat` — the only registered
-store is ref-backed. `previews.toml` is a machine-local XDG **file** store, so
-the op needs a file-backed discard action alongside `Refs`. Small and clean,
-but it is new work, not free reuse.
+`ID` derives from the LINK TEXTS, `sha256(left \x00 right)` truncated —
+**one derivation for both shapes, never branching on shape**, because a hash
+that branches is the signature two-arms defect. Converted entries carry their
+old id across so existing `gg preview <id>` invocations keep working. `Add`
+dedups on `(Left, Right)`, never on the id.
 
+`model.Link` gains `MarshalText`/`UnmarshalText` over the existing
+`String`/`ParseLink` pair, so the stored file holds readable link text rather
+than an exploded struct — and so the store's own file is a standing
+`String(Parse(s)) == s` witness.
+
+The store reuses `stateBaseDir("previews")/<repo-key>/` — deliberately the
+same kind string and the same directory. The converter then finds
+`previews.toml` as a sibling with no path plumbing, and
+`statebasedir_callers_test.go`'s pinned kind set stays unchanged. A kind
+string is a directory on a user's disk; adding one here buys nothing.
+
+#### 4.5.1 The migration framework, generalized
+
+The preflight machinery is pluggable on the CHECK half and hardcoded on the
+DO half. `Requirement` is an interface any feature may implement; `Migration`
+is pure data (`{Store, From, To, Describe}`) with no action in it, and the
+work is fixed in `engine.ApplyMigration`: delete the refs it was handed, stamp
+the marker. A feature can declare what it needs and what the user would lose,
+but not how to fix it — the one fix in the box is *delete these refs*.
+
+Plan 3a closes that asymmetry, in both halves:
+
+**The check.** `preflight.Probes` carries only git-ref marker formats and the
+git version, which is why a machine-local store cannot be probed honestly.
+Add a machine-local probe channel and a `Requirement` implementation over it:
+
+```go
+type LegacyStore struct{ Store string } // FitTooOld when the legacy file is present
+```
+
+**The action.** `Migration` names an action instead of implying one, and
+`ApplyMigration` keeps the reservation, the events and the summary while
+delegating the body:
+
+```go
+// engine
+type MigrationAction interface {
+    Apply(ctx context.Context, deps OpDeps) (n int, err error) // n = entries affected
+}
+type DiscardRefs     struct{ Refs []string } // today's hardcoded body, extracted verbatim
+type ConvertPreviews struct{ Dir string }    // previews.toml → savedcompare.toml, then remove
+
+type ApplyMigration struct {
+    Feature string
+    Store   string
+    To      int
+    Action  MigrationAction // replaces Refs
+}
+```
+
+Domain still decides WHAT (it already computes `storeRefs`; it now also
+constructs the action) and the op still only runs it under the lock, so
+`ApplyMigration`'s "dumb executor" contract is preserved rather than weakened.
+
+**Consent.** `Migration` gains `Consent bool`. True is today's flow exactly —
+`PendingMigrations` reports it and the three consent screens are unchanged, so
+branch-versions still asks before destroying. False means lossless: it runs
+without asking and reports what it did. `Service.RunAutoMigrations(ctx)` is
+called once per process from the composition root and costs one `os.Stat`
+when there is nothing to do.
 ---
 
 ## 5. Surfaces
@@ -585,14 +669,16 @@ binds a random port each run, which empties `localStorage`.
 
 ## 8. Phasing
 
-Four plans, each a sound stopping point. (Plan 1a grew a Task 3b during execution — see the plan.)
+Six plans, each a sound stopping point. (Plan 1a grew a Task 3b during execution — see the plan. Plan 3 was split into 3a/3b/3c on 2026-09-19: as one plan it was larger than 1a+1b+2 combined, and the three pieces have a clean dependency order — only the dialogs need the store, and only the store needs the migration.)
 
 | plan | contents | why it stands alone |
 |---|---|---|
 | **1a** | `Endpoint` hardening (§4.0) alone: unexported fields + constructors, `EndpointInvalid` first, panicking defaults, the exhaustiveness table, 54 literals respelled | a pure refactor with no new kinds — it must land and go green *before* any new kind exists, or it is fixing three traps and adding to them in one diff |
 | **1b** | grammar (`ref:`, `..`, `?hint`) · the new `Endpoint` kinds · `EvalEndpoint`/`CompareSets` · CLI `compare`/`link` | the whole algebra, fully tested; agents can use it the day it lands, no UI needed |
 | **2** | `linkhist` · MCP tools · navigation hints (`linknav`, `steer`, both consumers) · agentskill bump | links become referenceable and navigable everywhere |
-| **3** | TUI copy rows + compare palette · the shared base picker (§5.1) · web surfaces · `savedcompare` store + the file-backed migration | the UI layer, on a settled core |
+| **3a** | `savedcompare` store + the previews CONVERSION (§4.5) · the generalized `Migration` action and machine-local probe (§4.5.1) · a domain façade over `PreviewAdd/List/Get/Rename/Remove` · `gg compare --save/--saved/--list` | `model.MergePreview` reaches only four consumer files, so the façade keeps every frontend compiling untouched: the store lands, converts and is usable from the CLI with no UI work at all |
+| **3b** | TUI copy rows (branch, **stash**) · the `#` prompt history picker · the "Compare with link…" palette command + the shared base picker (§5.1) · bookmark↔shelf compare re-plumbed onto links | the copy rows and the history picker need neither the store nor the dialog; the palette needs 3a only to save |
+| **3c** | web two-field dialog + the same base picker · the Previews tab listing saved comparisons | the web half of the same two surfaces, on a base picker already settled in 3b |
 
 ---
 
