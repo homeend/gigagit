@@ -103,3 +103,33 @@ func TestGHAgainstFakeBinary(t *testing.T) {
 		t.Error("Detect against an empty fixture dir = nil, want an error")
 	}
 }
+
+// gh must never stop to ask a question or print an update banner into output
+// gg parses: every call carries the two switches that turn both off.
+func TestGHCallsAreNonInteractive(t *testing.T) {
+	t.Parallel()
+	f := gitexec.NewFakeRunner()
+	f.SetHandler("gh pr list (detect)", func(context.Context, []string) (gitexec.Result, error) {
+		return gitexec.Result{Stdout: "[]"}, nil
+	})
+	f.SetHandler("gh repo view", func(context.Context, []string) (gitexec.Result, error) {
+		return gitexec.Result{Stdout: string(fixture(t, "repo-view.json"))}, nil
+	})
+	g := NewGHWithRunner(f)
+	if err := g.Detect(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := g.BaseRepo(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Calls) != 2 {
+		t.Fatalf("calls = %d, want 2", len(f.Calls))
+	}
+	for _, c := range f.Calls {
+		for _, want := range []string{"GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1"} {
+			if !slices.Contains(c.Env, want) {
+				t.Errorf("%s ran without %s (env %v)", c.Name, want, c.Env)
+			}
+		}
+	}
+}

@@ -57,11 +57,11 @@ func (s *Service) ForgeStatus(ctx context.Context) ForgeStatus {
 		}
 		done := make(chan struct{})
 		s.forgeProbing = done
-		ps := s.forgeProviders
+		ps, rec := s.forgeProviders, s.forgeRec
 		s.forgeMu.Unlock()
 
 		if ps == nil {
-			ps = forge.Default(s.workdir, nil)
+			ps = forge.Default(s.workdir, rec)
 		}
 		var active forge.Provider
 		probeErr := ErrForgeUnavailable
