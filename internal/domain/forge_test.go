@@ -29,6 +29,7 @@ type fakeForge struct {
 	commentCalls int
 	truncated    bool
 	slug, url    string
+	baseCalls    int
 }
 
 func (f *fakeForge) Name() string { return "fake" }
@@ -66,8 +67,13 @@ func (f *fakeForge) Comments(context.Context, int) ([]model.ForgeComment, bool, 
 	}
 	return append([]model.ForgeComment(nil), f.comments...), f.truncated, nil
 }
-func (f *fakeForge) BaseRepo(context.Context) (string, string, error) { return f.slug, f.url, nil }
-func (f *fakeForge) HeadRefspec(int) string                           { return "refs/pull/x/head" }
+func (f *fakeForge) BaseRepo(context.Context) (string, string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.baseCalls++
+	return f.slug, f.url, nil
+}
+func (f *fakeForge) HeadRefspec(int) string { return "refs/pull/x/head" }
 
 func newForgeSvc(t *testing.T, ff *fakeForge) *Service {
 	t.Helper()
@@ -369,5 +375,109 @@ func TestPRFetchedListsTheLocalPRRefs(t *testing.T) {
 	got := svc.PRFetched(ctx)
 	if len(got) != 1 || !got[7] {
 		t.Errorf("got %v, want {7}", got)
+	}
+}
+
+func (f *fakeForge) calls(n int) (prCalls, baseCalls int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.prCalls[n], f.baseCalls
+}
+
+// Opening a pull request the list already showed costs NO forge call: the
+// listing carries the head sha, and the base repository does not change
+// within a session.
+func TestPRFetchOpIsServedFromTheListing(t *testing.T) {
+	t.Parallel()
+	ff := &fakeForge{url: "u"}
+	ff.setOpen(pr(7, "open", 1))
+	svc := newForgeSvc(t, ff)
+	ctx := context.Background()
+	if _, err := svc.PullRequests(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		op, err := svc.PRFetchOp(ctx, 7)
+		if err != nil || op.HeadSHA != "h" {
+			t.Fatalf("op = %+v, %v", op, err)
+		}
+	}
+	if prCalls, baseCalls := ff.calls(7); prCalls != 0 || baseCalls != 1 {
+		t.Errorf("PR() called %d times (want 0), BaseRepo %d (want 1)", prCalls, baseCalls)
+	}
+}
+
+// A pull request nobody touched for prCacheIdle is evicted: the next open asks
+// the forge again.
+func TestPRCacheEvictsIdleEntries(t *testing.T) {
+	t.Parallel()
+	ff := &fakeForge{url: "u", byNum: map[int]model.PullRequest{7: pr(7, "open", 1)}}
+	svc := newForgeSvc(t, ff)
+	now := time.Unix(1_700_000_000, 0)
+	svc.forgeNow = func() time.Time { return now }
+	ctx := context.Background()
+	for range 2 {
+		if _, err := svc.PRFetchOp(ctx, 7); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, _ := ff.calls(7); n != 1 {
+		t.Fatalf("within the idle window: PR() called %d times, want 1", n)
+	}
+	now = now.Add(prCacheIdle - time.Second)
+	svc.PRFetchOp(ctx, 7) // a use: the window restarts
+	now = now.Add(prCacheIdle - time.Second)
+	svc.PRFetchOp(ctx, 7)
+	if n, _ := ff.calls(7); n != 1 {
+		t.Fatalf("a used entry must stay: PR() called %d times, want 1", n)
+	}
+	now = now.Add(prCacheIdle + time.Second)
+	svc.PRFetchOp(ctx, 7)
+	if n, _ := ff.calls(7); n != 2 {
+		t.Errorf("after the idle window: PR() called %d times, want 2", n)
+	}
+}
+
+// PRRevalidate is the background half of stale-while-revalidate: it always
+// asks the forge, refreshes the cache, and says whether the local head is
+// behind.
+func TestPRRevalidateReportsAMovedHead(t *testing.T) {
+	t.Parallel()
+	ff := &fakeForge{url: "u"}
+	svc := newForgeSvc(t, ff)
+	ctx := context.Background()
+	head, err := svc.repo.ResolveCommit(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := pr(7, "open", 1)
+	p.HeadSHA = head
+	ff.setOpen(p)
+	ff.mu.Lock()
+	ff.byNum = map[int]model.PullRequest{7: p}
+	ff.mu.Unlock()
+	if _, err := svc.PullRequests(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if rv, err := svc.PRRevalidate(ctx, 7); err != nil || !rv.Moved {
+		t.Fatalf("no local ref yet: %+v, %v (want moved)", rv, err)
+	}
+	if err := svc.repo.UpdateRef(ctx, git.PRRef(7), head); err != nil {
+		t.Fatal(err)
+	}
+	if rv, err := svc.PRRevalidate(ctx, 7); err != nil || rv.Moved {
+		t.Fatalf("ref at the forge's head: %+v, %v (want not moved)", rv, err)
+	}
+	p.HeadSHA = "feedfacefeedfacefeedfacefeedfacefeedface"
+	ff.mu.Lock()
+	ff.byNum = map[int]model.PullRequest{7: p}
+	ff.open = nil
+	ff.mu.Unlock()
+	rv, err := svc.PRRevalidate(ctx, 7)
+	if err != nil || !rv.Moved || rv.PR.HeadSHA != p.HeadSHA {
+		t.Fatalf("forge moved on: %+v, %v", rv, err)
+	}
+	if op, _ := svc.PRFetchOp(ctx, 7); op.HeadSHA != p.HeadSHA {
+		t.Errorf("the next fetch must aim at the new head, got %q", op.HeadSHA)
 	}
 }
