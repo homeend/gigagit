@@ -146,10 +146,17 @@ func TestPRsLoadedStaleAndCancelledAreDropped(t *testing.T) {
 	m := newTestModel(t)
 	m.forgeShown, m.prs = true, testPRs()
 	m.prsGen, m.prsInflight = 3, true
-	nm, _ := m.Update(prsLoadedMsg{gen: 2, status: domain.ForgeStatus{Provider: "github"}})
+	// The stale arrival is the BACKGROUND lane's read (a repo switch bumped the
+	// generation under it): its data is dropped, but it must still free the
+	// lane — nothing else will, and every background poll would stop.
+	m.bgBusy, m.bgActiveItem = true, prsItem
+	nm, _ := m.Update(prsLoadedMsg{gen: 2, bg: true, status: domain.ForgeStatus{Provider: "github"}})
 	m = nm.(Model)
 	if len(m.prs) != 2 || !m.prsInflight {
 		t.Fatalf("a stale read must change nothing (prs=%d inflight=%v)", len(m.prs), m.prsInflight)
+	}
+	if m.bgBusy {
+		t.Fatal("a stale background read must still free the lane")
 	}
 	nm, _ = m.Update(prsLoadedMsg{gen: 3, status: domain.ForgeStatus{Provider: "github"}, err: context.Canceled})
 	m = nm.(Model)

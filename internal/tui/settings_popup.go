@@ -852,7 +852,9 @@ func (p *settingsPopup) box(m Model) string {
 	} else if p.ratesView {
 		b.WriteString(i18n.T("Refresh rates") + "\n\n")
 		if !m.cfg.Refresh.Enabled {
-			b.WriteString("  " + i18n.T("auto-refresh is OFF — enable it in Settings → Auto-refresh") + "\n\n")
+			b.WriteString("  " + i18n.T("auto-refresh is OFF — enable it in Settings → Auto-refresh") + "\n")
+			// The one row that switch does not govern must not read as dead.
+			b.WriteString("  " + i18n.T("(prs polls regardless: pull requests have their own switch, 0 = off)") + "\n\n")
 		}
 		// Column header. "file-watch" labels the [x]/[ ] checkbox column so it is not
 		// an unexplained box; the legend below the table says what it means. Header

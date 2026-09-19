@@ -70,13 +70,16 @@ func (m Model) kickForgeProbe() (Model, tea.Cmd) {
 // usable status and then stays for the repo session: a later failure keeps the
 // previous list and becomes an error row, never a vanishing tab.
 func (m Model) handlePRsLoaded(msg prsLoadedMsg) (Model, tea.Cmd) {
+	// Free the background lane BEFORE the stale-gen check (the dataAvailableMsg
+	// rule): a repo switch bumps prsGen under an in-flight background read, and
+	// if its arrival returned early the lane would stay busy for good.
+	if msg.bg && m.bgBusy && m.bgActiveItem.isPRs {
+		m.bgBusy = false
+	}
 	if msg.gen != m.prsGen {
 		return m, nil // superseded (a repo switch, a newer read)
 	}
 	m.prsInflight = false
-	if msg.bg && m.bgBusy && m.bgActiveItem.isPRs {
-		m.bgBusy = false
-	}
 	cancelled := errors.Is(msg.err, context.Canceled) || errors.Is(msg.status.Err, context.Canceled)
 	if cancelled {
 		return m, nil // pre-empted by a user op: not a failure, and nothing new to show
