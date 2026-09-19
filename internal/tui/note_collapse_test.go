@@ -69,10 +69,14 @@ func TestOTogglesTheNoteAtTheCursor(t *testing.T) {
 		t.Fatal("o again expands it")
 	}
 	// Away from any note, o does nothing.
+	// Fold it first, so "o reached a far-away note" would be visible as an unfold.
+	v.setCursorLine(4, m.diffBodyRows())
+	m, _ = v.update(m, synthKey("o"))
+	v = m.diffLayer()
 	v.setCursorLine(15, m.diffBodyRows())
 	m, _ = v.update(m, synthKey("o"))
-	if len(m.diffLayer().collapsed) != 0 && m.diffLayer().collapsed["forge:C1"] {
-		t.Fatal("o with no note in reach changed something")
+	if got := m.diffLayer().collapsed; !got["forge:C1"] || len(got) != 1 {
+		t.Fatalf("o with no note in reach changed something: %v", got)
 	}
 }
 

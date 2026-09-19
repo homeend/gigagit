@@ -156,4 +156,13 @@ func TestPRDiffLinkNamesThePrivateRef(t *testing.T) {
 	if !strings.Contains(text, "main...refs/gg/pr/7") {
 		t.Fatalf("link = %q (parsed %+v)", text, l)
 	}
+	// A merged PR's base is a recorded sha, not a branch.
+	sha := "9170adf91d5348c5a2a453345d530fed8f11ec22"
+	text, ok = m.previewLinkFor("refs/gg/pr/12", sha, "", 0)
+	if !ok {
+		t.Fatal("a merged PR's pair (sha base) must be linkable too")
+	}
+	if _, err := model.ParseLink(text); err != nil || !strings.Contains(text, sha+"...refs/gg/pr/12") {
+		t.Fatalf("sha-based link %q: %v", text, err)
+	}
 }
