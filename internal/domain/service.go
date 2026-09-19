@@ -39,15 +39,16 @@ type Service struct {
 	repo    *git.Repo
 	workdir string // fallback gate key when common-dir resolution fails
 
-	mu         sync.Mutex
-	gate       *repogate.Gate   // resolved lazily on first Execute or query
-	flight     flightGroup      // coalesces concurrent calls sharing a key
-	factory    cache.Factory    // vends the diff (and future) caches
-	differ     Differ           // memoized production diff engine
-	shelf      shelf.Store      // lazily resolved; nil disables the shelf
-	bookmark   bookmark.Store   // lazily resolved; nil disables bookmarks
-	searchhist searchhist.Store // lazily resolved; nil disables search history
-	linkhist   linkhist.Store   // lazily resolved; nil disables copied-link history
+	mu           sync.Mutex
+	gate         *repogate.Gate   // resolved lazily on first Execute or query
+	flight       flightGroup      // coalesces concurrent calls sharing a key
+	factory      cache.Factory    // vends the diff (and future) caches
+	differ       Differ           // memoized production diff engine
+	shelf        shelf.Store      // lazily resolved; nil disables the shelf
+	bookmark     bookmark.Store   // lazily resolved; nil disables bookmarks
+	searchhist   searchhist.Store // lazily resolved; nil disables search history
+	linkhist     linkhist.Store   // lazily resolved; nil disables copied-link history
+	linkHistRoot string           // UseLinkHistDir's per-service override; "" = the defaults
 
 	notes        notes.Store        // lazily resolved; nil disables notes
 	notesOff     bool               // hard "no store" (the disabled-path test)

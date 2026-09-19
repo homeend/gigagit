@@ -801,3 +801,33 @@ func TestCompareDoesNotRecordOnPatchFailureAfterBothSidesResolved(t *testing.T) 
 		t.Fatalf("LinkHistory = %v, want no entries after a refused --patch compare", hist)
 	}
 }
+
+// TestCompareAStashLinkListsItsUntrackedFiles is spec §3.4 at the CLI: a `-u`
+// stash keeps its untracked files in a third parent that `<parent>..<stash>`
+// cannot see, and the link must still mean "what I stashed".
+func TestCompareAStashLinkListsItsUntrackedFiles(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "scratch.txt"), []byte("u\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, dir, "stash", "push", "-u", "-m", "wip")
+	sha := strings.TrimSpace(gitOut(t, dir, "rev-parse", "stash@{0}"))
+	parent := strings.TrimSpace(gitOut(t, dir, "rev-parse", "stash@{0}^1"))
+
+	// The arms differ: git's own first-parent diff does not name the file.
+	if plain := gitOut(t, dir, "diff", "--name-only", parent, sha); strings.Contains(plain, "scratch.txt") {
+		t.Fatalf("fixture broken: the plain diff already lists scratch.txt: %q", plain)
+	}
+	pair := mustLink(t, dir, "--pair", parent+".."+sha)
+	code, out, errb := runCLI(t, dir, "compare", parent, pair)
+	if code != 0 {
+		t.Fatalf("exit %d (stderr %q)", code, errb)
+	}
+	if !strings.Contains(out, "A\tscratch.txt") || !strings.Contains(out, "M\tREADME.md") {
+		t.Errorf("compare <parent> <stash link> = %q, want scratch.txt added and README.md modified", out)
+	}
+}

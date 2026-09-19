@@ -297,7 +297,9 @@ func (s *Service) compareOne(ctx context.Context, left, right FileSet, path stri
 	case !onLeft && !onRight:
 		return model.CommitFile{}, nil
 	}
-	same, err := s.sameBytes(ctx, left.Endpoint(), right.Endpoint(), path)
+	// Source, not Endpoint: a member's bytes may live somewhere other than
+	// its set's own endpoint (a `-u` stash's untracked files — FileSet.src).
+	same, err := s.sameBytes(ctx, left.Source(path), right.Source(path), path)
 	if err != nil {
 		return model.CommitFile{}, err
 	}

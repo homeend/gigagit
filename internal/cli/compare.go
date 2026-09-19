@@ -308,8 +308,7 @@ func recordCompareLinks(ctx context.Context, svc *domain.Service, toks ...string
 		if err != nil {
 			continue
 		}
-		kind, id, subject := linkRecordFields(ctx, svc, l)
-		svc.RecordLink(ctx, tok, linkDesc(kind, id, subject))
+		svc.RecordLink(ctx, tok, svc.DescribeLink(ctx, l))
 	}
 }
 
