@@ -16,13 +16,12 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
-	"github.com/homeend/gigagit/internal/observ"
 )
 
 func newRepoDir(t *testing.T) (string, *git.Repo) {
 	t.Helper()
 	dir := gittest.BasicRepo(t, "hi\n")
-	return dir, &git.Repo{Runner: gitexec.NewExecRunner("git", dir, observ.NewRing(50))}
+	return dir, testRepo(t, dir)
 }
 
 func driveOp(t *testing.T, m Model, cmd tea.Cmd) Model {
