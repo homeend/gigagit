@@ -149,7 +149,9 @@ func (s *Server) kickPRs(svc *domain.Service)             // one background load
   reload + emit (for `pr-forget`, `dropCachedPR` first). Open handler:
   `cachedPR` → `svc.PRPair` → if the head ref does not resolve
   (`svc.PRFetched`) answer `unfetched`; else `svc.PreviewOpen(ctx, pair.Head,
-  pair.Base)` and write the shared shape (factor `previewOpenBody(eps, label,
+  pair.Base)` (the `unfetched` verdict is a LIVE ref check — the post-run
+  cache reload races `onDone → showPR`, so the cache's `fetched` is never
+  consulted here) and write the shared shape (factor `previewOpenBody(eps, label,
   source, target) map[string]any` out of `writePreviewOpen`).
 - [ ] **Step 4 — green; commit** `feat(web): pr-fetch / pr-forget ops and the PR open endpoint`.
 
@@ -174,8 +176,10 @@ func (s *Server) kickPRs(svc *domain.Service)             // one background load
   `prsInterval(cfg) (int, bool)`; in `tickOnce`, after the op gate and BEFORE
   `!cfg.Enabled`, the `prs` due-check (own `lastRun["prs"]`, seeded in
   `newLiveHub`); `startLive`: `if !cfg.Enabled { if prs on { go h.tickLoop(svc) }; return }`.
-  `startLive` wires `h.onPRs = func(svc) { if s.prsState(svc) == "ready" { s.loadPRs(svc) } }`
-  — an unprobed or `off` cache is never polled.
+  `startLive` wires `h.onPRs = func(svc) { if s.prsState(svc) == "ready" { s.kickPRs(svc, true) } }`
+  — a KICK, never an inline load: `tickOnce` is one lane and a gh list takes
+  seconds. An unprobed or `off` cache is never polled. The page needs no
+  change for R4: `connectLive` applies `changed` whatever the hello's `live` says.
 - [ ] **Step 4 — green; commit** `feat(web): live source prs polls on [refresh] prs, outside the master switch`.
 
 ### Task 4: the sidebar section
@@ -214,7 +218,13 @@ section-name allowlist and add `prs`.
 - [ ] **Step 5 — seams in existing files.** `previews.js`: `armPreview`
   stores `pr: body.pr || 0`; `previewTitle(body)` returns `body.label` for a
   PR; `reopenPreviewIfMoved` returns early for `po.pr` (its refresh is plan
-  5's job); export `openPreviewBody`. `core.js` SECTIONS += `prs`;
+  5's job); export `openPreviewBody`. A PR body's `source`/`target` are
+  DISPLAY names — sent to `/api/preview/notes` they would 404 (a fork
+  branch) or, worse, read a same-named LOCAL pair's notes. So for `po.pr`:
+  `armPreview` skips `loadPreviewCounts` (counts = `{}`), and files.js
+  `noteQuery`/`fetchNotes` treat the diff as a plain commit diff on the head
+  sha (`rev` + `state=commit`, the `/api/notes` endpoint). Plan 5 replaces
+  this with `pr=n`. Row click honours `opBusy()` before posting the op. `core.js` SECTIONS += `prs`;
   `sidebar.js` COLLAPSED_DEFAULT += `prs`, header label map; `live.js`:
   `if (want.has("prs")) jobs.push(fetchPRs())`; `app.js` boot: `fetchPRs()`.
   Help: a "Pull requests" block.

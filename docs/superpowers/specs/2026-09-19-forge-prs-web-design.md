@@ -146,8 +146,8 @@ returns already include forge threads the notes list omits.
 `PreviewNoteSet` from `PRPair` and answers the same shape. `WireNote` gains
 `read_only` (true for `NoteSourceForge`), `resolved`, `file_level`,
 `created`. `POST /api/pr/comments/refresh?n=7` → `PRCommentsRefresh`,
-answers `{changed}`. `/api/pr/open` calls the refresh once before answering
-(best-effort: a failure opens the diff without threads).
+answers `{changed}`. The PAGE posts it right after a PR diff opens (a GET
+never calls the forge — R2); a failure leaves the diff without threads.
 
 `GET /api/pr/details?n=7` → `PullRequest` (body) + `PRComments` (hub,
 outdated, truncated). This is a forge call, so it is the overlay's explicit
