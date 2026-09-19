@@ -404,6 +404,22 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			return m.startPickCommit(pickTarget{sha: b.Commit})
+		case "L":
+			// Copy this row's gg:// link: the bookmark's own address plus ?bookmark=<id>.
+			// Inert while picking a compare target, like every other action key.
+			if p.inCompareMode() {
+				return m, nil
+			}
+			b, ok := p.selected()
+			if !ok {
+				return m, nil
+			}
+			text, ok := m.hintedLinkFor(b.Address(), model.LinkHint{Kind: "bookmark", ID: b.ID})
+			if !ok {
+				m.statusMsg = i18n.T("▸ no gg link for this place")
+				return m, nil
+			}
+			return m, m.copyToClipboardCmd(i18n.T("Copied link: %s", text), text)
 		case "y":
 			if p.inCompareMode() {
 				return m, nil

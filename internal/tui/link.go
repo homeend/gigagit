@@ -46,6 +46,25 @@ func (m Model) linkRepoFor(worktree string) (model.LinkRepo, bool) {
 // TUI hunk-picker producer without a signature change, matching the CLI/web
 // producers' shape (spec §7).
 func (m Model) linkFor(addr model.FileAddress, side model.NoteSide, line, hunk int) (string, bool) {
+	return m.buildLinkFor(addr, side, line, hunk, model.LinkHint{})
+}
+
+// hintedLinkFor is linkFor plus a landing hint: the link a bookmark or shelf
+// ROW copies, so pasting it reveals that entry (`?bookmark=<id>` /
+// `?shelf=<id>`). The hint never changes what the link ADDRESSES — compare
+// ignores it (spec §3.3 rule 1) — with the two shelf exceptions
+// domain.EndpointForLink documents, which exist precisely so a shelved
+// working-tree file, whose bytes were never in git, is still comparable.
+// A hint the grammar cannot hold is refused, like every other separator.
+func (m Model) hintedLinkFor(addr model.FileAddress, hint model.LinkHint) (string, bool) {
+	if !model.LinkHintKindOK(hint.Kind) || !model.LinkHintIDOK(hint.ID) {
+		return "", false
+	}
+	return m.buildLinkFor(addr, model.NoteSideNew, 0, 0, hint)
+}
+
+// buildLinkFor is the one builder behind linkFor and hintedLinkFor.
+func (m Model) buildLinkFor(addr model.FileAddress, side model.NoteSide, line, hunk int, hint model.LinkHint) (string, bool) {
 	if addr.Path != "" && !model.LinkPathOK(addr.Path) {
 		return "", false
 	}
@@ -73,6 +92,7 @@ func (m Model) linkFor(addr model.FileAddress, side model.NoteSide, line, hunk i
 		l.Target = model.LinkTarget{State: model.StateUnstaged}
 	}
 	l.Side, l.Line, l.Hunk = side, line, hunk
+	l.Hint = hint
 	if l.Side == "" {
 		l.Side = model.NoteSideNew
 	}
