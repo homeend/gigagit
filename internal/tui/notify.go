@@ -224,9 +224,16 @@ func featureDisabledNotices(svc *domain.Service, repoKey string) []notice {
 	if err != nil {
 		return nil // best-effort, like every other health-derived notice
 	}
+	return noticesForVerdicts(vs, repoKey)
+}
+
+// noticesForVerdicts is the pure half of featureDisabledNotices. A Silent
+// feature never raises a notice: its absence (no forge CLI on this box) is
+// the normal case, not a problem to report.
+func noticesForVerdicts(vs []preflight.Verdict, repoKey string) []notice {
 	var out []notice
 	for _, v := range vs {
-		if v.State == preflight.Satisfied {
+		if v.State == preflight.Satisfied || v.Feature.Silent {
 			continue
 		}
 		out = append(out, noticeForVerdict(v, repoKey))
