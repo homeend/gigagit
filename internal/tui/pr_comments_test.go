@@ -3,12 +3,14 @@ package tui
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // prDiffModel is a model whose files view shows pull request #7's diff.
@@ -135,5 +137,23 @@ func TestRAndIInsideAPRFilesView(t *testing.T) {
 	nm, _ = mm.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if got := nm.(Model); layerOf[*prHubPopup](got) != nil || got.filesView == nil {
 		t.Fatal("esc closes the hub back onto the PR's file list")
+	}
+}
+
+// The preview surface's Copy link already covers a PR diff: the pair is
+// <base>...refs/gg/pr/<n>, which any checkout resolves after `gg pr fetch <n>`.
+func TestPRDiffLinkNamesThePrivateRef(t *testing.T) {
+	t.Parallel()
+	m := prDiffModel(t)
+	text, ok := m.previewLinkFor("refs/gg/pr/7", "main", "a.go", 3)
+	if !ok {
+		t.Fatal("a PR pair must be linkable")
+	}
+	l, err := model.ParseLink(text)
+	if err != nil {
+		t.Fatalf("the copied link %q does not parse: %v", text, err)
+	}
+	if !strings.Contains(text, "main...refs/gg/pr/7") {
+		t.Fatalf("link = %q (parsed %+v)", text, l)
 	}
 }

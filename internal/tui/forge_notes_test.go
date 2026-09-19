@@ -91,6 +91,9 @@ func TestForgeNotesAreReadOnlyInTheDiff(t *testing.T) {
 		if _, open := nm.topLayer().(*notePopup); open {
 			t.Fatalf("%s opened a form on a forge comment", key)
 		}
+		if !strings.Contains(nm.diffNotice, "read-only") {
+			t.Fatalf("%s: the diff's own notice box must say it (the status bar is hidden there), got %q", key, nm.diffNotice)
+		}
 		if !strings.Contains(nm.statusMsg, "read-only") {
 			t.Fatalf("%s: status = %q", key, nm.statusMsg)
 		}

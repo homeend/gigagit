@@ -75,6 +75,25 @@ Where the text below disagrees, these win:
 6. Moved to plan 3: the `gg://` pair-link copy, opening the hub from the open
    PR diff, the comment re-poll.
 
+## Amendments made while implementing plan 3 (2026-09-19)
+
+1. `PRComments.Inline` stays `[]model.ForgeComment`; conversion to notes is a
+   separate, cache-backed domain step. Reads never fetch — `PRCommentsRefresh`
+   is the only network call, issued after the diff opens.
+2. The diff view is side-by-side only; a file-level comment hangs off the
+   view's first line (the top of the file), right pane.
+3. Box title: `review · author · age · path R12 [· resolved]` (the note does
+   not carry the provider's name).
+4. Collapse keys `o` / `O` (menu + help only; the footer is full). Resolved
+   forge threads start collapsed, once.
+5. The comment poll is a heartbeat tick of its own: the ordinary refresh lane
+   is suppressed under an open diff layer.
+6. An inline comment whose line is not in gg's diff is not drawn (it stays in
+   `gg pr comments`); no re-bucketing into Outdated.
+7. The `gg://` pair link needed nothing: the preview surface's Copy link
+   already yields `<base>...refs/gg/pr/<n>`.
+8. `PreviewNotesAt` (CLI/web/MCP) does not merge forge notes.
+
 ## Approach
 
 Chosen: a forge-neutral leaf package `internal/forge` (types + `Provider`

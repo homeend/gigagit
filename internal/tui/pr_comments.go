@@ -86,12 +86,14 @@ func (m Model) handlePRCommentsMsg(msg prCommentsMsg) (Model, tea.Cmd) {
 	if msg.err != nil {
 		if msg.manual {
 			m.statusMsg = i18n.T("PR comments: %s", firstLine(msg.err.Error()))
+			m = m.noticeInDiff()
 		}
 		return m, nil
 	}
 	if !msg.changed {
 		if msg.manual {
 			m.statusMsg = i18n.T("PR comments are up to date")
+			m = m.noticeInDiff()
 		}
 		return m, nil
 	}
@@ -100,6 +102,15 @@ func (m Model) handlePRCommentsMsg(msg prCommentsMsg) (Model, tea.Cmd) {
 		cmds = append(cmds, m.loadNotesCmd())
 	}
 	return m, tea.Batch(cmds...)
+}
+
+// noticeInDiff mirrors the status line into the diff view's own notice box —
+// the full-screen diff hides the status bar, and r pressed there must answer.
+func (m Model) noticeInDiff() Model {
+	if m.diffLayer() != nil {
+		m.diffNotice = m.statusMsg
+	}
+	return m
 }
 
 // prCountsCmd recounts the open preview's notes per path (store + forge).

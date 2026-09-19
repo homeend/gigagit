@@ -53,9 +53,9 @@ and on `r` inside a PR diff / PR files view. Collapse is view state on `diffView
    top of the file, one row below where the spec drew it.
 3. Collapse keys: `o` toggles the note at the cursor, `O` collapses/expands
    all (both also in the `.` menu). Resolved forge threads start collapsed.
-4a. The box title is `github · author · 2d ago · a.go R12 [· resolved]` —
-   the provider name leads (the spec had it third) so it sits where `note` /
-   `agent note` sit today.
+4a. The box title is `review · author · 2d ago · a.go R12 [· resolved]` —
+   `review` sits where `note` / `agent note` sit today (the note does not
+   carry the provider's name).
 4. An inline comment whose line is not in the PR diff (the forge positions
    against its own diff) is simply not drawn; it remains readable in the hub
    through `gg pr comments`. No re-bucketing into Outdated.

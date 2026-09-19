@@ -305,6 +305,7 @@ func (m Model) withEditableNoteTarget(act func(Model, noteTarget) (tea.Model, te
 	ts := editableNoteTargets(all)
 	if len(ts) == 0 && len(all) > 0 {
 		m.statusMsg = i18n.T("forge comments are read-only")
+		m.diffNotice = m.statusMsg // the full-screen diff has no status bar: its own notice box says it
 		return m, nil
 	}
 	return m.withNoteTargetIn(ts, act)
