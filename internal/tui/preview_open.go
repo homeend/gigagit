@@ -242,7 +242,9 @@ func (m Model) afterPreviewsRefresh() (Model, tea.Cmd) {
 	if po.id != "" {
 		found := false
 		for _, r := range m.previews {
-			if r.rec.ID != po.id {
+			// Only a MERGE row can be the open preview: a pair is frozen, so
+			// nothing about it can move out from under its view.
+			if rec, ok := r.merge(); !ok || rec.ID != po.id {
 				continue
 			}
 			found = true

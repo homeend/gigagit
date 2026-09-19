@@ -900,6 +900,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePreviewOpenMsg(msg)
 	case previewMutatedMsg:
 		return m.handlePreviewMutatedMsg(msg)
+	case pairOpenMsg:
+		return m.handlePairOpenMsg(msg)
 	case pairOpsMsg:
 		// Only the LATEST probe may open the popup: a re-pair while an older
 		// probe was in flight replaced pairProbe, so the older msg no longer
@@ -2402,11 +2404,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.focus == panelPreviews {
 				if r, ok := m.selectedPreview(); ok && m.opsIdle() {
+					rec, isMerge := r.merge()
+					if !isMerge {
+						return m.openPairRow(r)
+					}
 					if r.sum.State != domain.PreviewOK {
-						m.statusMsg = previewStateNotice(r.rec.Source, r.rec.Target, r.sum.State)
+						m.statusMsg = previewStateNotice(rec.Source, rec.Target, r.sum.State)
 						return m, nil
 					}
-					return m, m.openPreviewCmd(r.rec.ID, r.rec.Source, r.rec.Target, "")
+					return m, m.openPreviewCmd(rec.ID, rec.Source, rec.Target, "")
 				}
 				return m, nil
 			}

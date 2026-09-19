@@ -89,6 +89,21 @@ func (m Model) linkFor(addr model.FileAddress, side model.NoteSide, line, hunk i
 //
 // It refuses, rather than emitting something that reparses as a different
 // place, when a branch NAME or the path is not expressible in the grammar.
+// pairLinkFor is the bare link of a saved commit pair: gg://<repo>@<a>..<b>
+// over its two FULL shas — the text the store holds as the entry's left half,
+// so what a user copies and what `gg compare --list` prints are one spelling.
+func (m Model) pairLinkFor(a, b string) (string, bool) {
+	repo, ok := m.linkRepoFor("")
+	if !ok {
+		return "", false
+	}
+	return model.Link{
+		Repo:   repo,
+		Target: model.LinkTarget{State: model.StateCommitted, Pair: &model.LinkPair{A: a, B: b}},
+		Side:   model.NoteSideNew,
+	}.String(), true
+}
+
 func (m Model) previewLinkFor(source, target, path string, line int) (string, bool) {
 	if !model.LinkRefOK(source) || !model.LinkRefOK(target) {
 		return "", false
@@ -191,7 +206,10 @@ func (m Model) contextLinkText() (string, bool) {
 	}
 	if !m.inContentWindow() && m.focus == panelPreviews {
 		if r, ok := m.selectedPreview(); ok {
-			return m.previewLinkFor(r.rec.Source, r.rec.Target, "", 0)
+			if rec, isMerge := r.merge(); isMerge {
+				return m.previewLinkFor(rec.Source, rec.Target, "", 0)
+			}
+			return m.pairLinkFor(r.pair.A, r.pair.B)
 		}
 	}
 	if !m.inContentWindow() && m.focus == panelCommits {
