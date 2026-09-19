@@ -33,7 +33,7 @@
 | `internal/domain/pair_test.go` (new) | all domain tests for the above |
 | `internal/cli/preview.go` | the pair arm on add / list / show / rm / rename / diff |
 | `internal/cli/preview_pair_test.go` (new) | CLI tests |
-| `e2e/scenarios/s96_saved_pairs.toml` (new; renumber if 96 is taken) | end-to-end |
+| `e2e/scenarios/s96_saved_pairs.toml` (new; s95 is the last taken) | end-to-end |
 | `internal/tui/preview_panel.go` | two-kind `previewRow`, accessors, `readPreviews`, row text |
 | `internal/tui/preview_actions.go`, `preview_open.go`, `model.go`, `link.go` | every `selectedPreview()` consumer handles a pair |
 | `internal/tui/pair_save.go` (new) | the two Commits-panel `.` rows + the save command |
@@ -559,7 +559,8 @@ func TestPairLeftEvaluatesToABoundedSetComparableWithAPreview(t *testing.T) {
 Match `EvalLink` / `CompareSets` / `Bounded` to their real signatures in
 `internal/domain/fileset.go` and its tests before running.
 
-- [ ] **Step 5: commit** — `feat(domain): PairSummary + PairOpen (two-dot, frozen)`.
+- [ ] **Step 5: cache the summary by (A,B).** `chainPreviewsRead` fires on every branches/remotes arrival, and a frozen pair's file count is immutable — on a 100GB monorepo one `diff-tree` per saved pair per refresh is not acceptable. Read how `PreviewSummary` caches by hash pair (`TestPreviewSummaryCachedByHashPair`, `callCount`) and reuse that cache with a `"pair:"+a+":"+b` key. Only a `PairOK` result is cached (a missing commit may appear after a fetch). Test: two `PairSummary` calls on a `FakeRunner`-counted service run the diff ONCE; a missing-side result is NOT cached.
+- [ ] **Step 6: commit** — `feat(domain): PairSummary + PairOpen (two-dot, frozen, cached)`.
 
 ---
 
@@ -573,7 +574,7 @@ Behaviour (read `preview.go` fully first; keep every existing output byte-identi
 
 | verb | pair behaviour |
 |---|---|
-| `preview add <a>..<b> [--label L]` | exactly ONE positional containing `..` and NOT `...` → `PairAdd`. Prints `<id>\t<label>`. `ErrPairExists` → stderr `preview add: <a7>..<b7> already saved as <id> (<label>)`, exit 1. Bad rev / same commit → exit 2. |
+| `preview add <a>..<b> [--label L]` | exactly ONE positional containing `..` and NOT `...` → `PairAdd`. Prints the id alone, like `preview add` today. `ErrPairExists` → stderr `preview add: <a7>..<b7> already saved as <id> (<label>)`, exit 1. Bad rev / same commit → exit 2. |
 | `preview list` | merge previews first (unchanged lines), then pair rows: `<id>\t<label>\t<a7>..<b7>\t<N files \| missing: <sha7>>`; `--json` rows gain `"kind":"pair","a":…,"b":…` (previews gain `"kind":"preview"`). |
 | `preview show <id\|label>` | try `PreviewGet`, on `ErrPreviewNotFound` try `PairGet`; pair prints id, label, full `a`, full `b`, state. |
 | `preview rm` / `rename` | same fall-through → `PairRemove` / `PairRename`. |
@@ -593,7 +594,7 @@ func pairSpec(s string) (a, b string, ok bool) {
 }
 ```
 
-- [ ] **Step 1: failing tests** — table test for `pairSpec` (`"a..b"` ok; `"main...feat"`, `"a.."`, `"..b"`, `"ab"` not ok) + `TestPreviewAddPair`, `TestPreviewListShowsBothKinds`, `TestPreviewRmRenameShowFallThroughToPairs`, `TestPreviewAddThreeDotStillRoutesToPreviewError`, using the package's existing CLI test repo helper (`previewRepo` in the cli tests uses `t.Setenv` → these tests stay SERIAL, no `t.Parallel()`).
+- [ ] **Step 1: failing tests** — table test for `pairSpec` (`"a..b"` ok; `"main...feat"`, `"a.."`, `"..b"`, `"ab"` not ok) + `TestPreviewAddPair`, `TestPreviewListShowsBothKinds`, `TestPreviewRmRenameShowFallThroughToPairs`, `TestPreviewAddOneThreeDotArgIsStillAUsageError` (today `NArg() != 2` → usage, exit 2; a lone `main...feat` must keep that, never reach `PairAdd`), using the package's existing CLI test repo helper (`previewRepo` in the cli tests uses `t.Setenv` → these tests stay SERIAL, no `t.Parallel()`).
 - [ ] **Step 2: run → FAIL.**
 - [ ] **Step 3: implement** in `preview.go`. Update the unknown-subcommand usage strings to mention `<a>..<b>`.
 - [ ] **Step 4: run** `rtk go test ./internal/cli/ -run 'Preview|PairSpec'` → PASS.
@@ -610,35 +611,30 @@ func pairSpec(s string) (a, b string, ok bool) {
 - Consumes: `svc.PairList/PairSummary/PairOpen/PairRename/PairRemove/PairAdd`, `m.openCompareFiles(left, right)`, `m.linkFor…`/link recording helpers in `link.go`.
 - Produces:
   ```go
-  type previewRowKind int // previewRowInvalid, rowMerge, rowPair
+  type previewRowKind int // rowMerge (zero), rowPair
+  func (r previewRow) merge() (model.MergePreview, bool)
   // previewRow gains: kind previewRowKind; pair domain.CommitPair; psum domain.PairSummary
   func (r previewRow) id() string
   func (r previewRow) label() string
   func (r previewRow) created() time.Time
   ```
 
-- [ ] **Step 1: failing tests** (`pair_test.go`, `t.Parallel()`, repo via `testRepo`): (1) a model whose `m.previews` holds one `rowMerge` and one `rowPair` renders two rows, the pair row containing `<a7>..<b7>` and `N files`; a `PairMissingB` row contains `missing: <b7>`; (2) `previewList.Key/Name/Date` return the pair's id/label/created; (3) enter on an OK pair row returns a cmd whose message opens compare-files with endpoints A, B and leaves `m.previewOpen == nil` and `filesPreviewSet` zero; enter on a missing pair sets `statusMsg` and returns no cmd; (4) `e` opens the rename popup prefilled with the pair label and its command calls `PairRename`; (5) `d` confirm → `PairRemove`; (6) `s` → `PairAdd(b, a)`; (7) copy-link on a pair row yields `gg://<repo>@<A>..<B>` (full shas) and records it in linkhist; (8) **the consumer gate**:
+- [ ] **Step 1: failing tests** (`pair_test.go`, `t.Parallel()`, repo via `testRepo`): (1) a model whose `m.previews` holds one `rowMerge` and one `rowPair` renders two rows, the pair row containing `<a7>..<b7>` and `N files`; a `PairMissingB` row contains `missing: <b7>`; (2) `previewList.Key/Name/Date` return the pair's id/label/created; (3) enter on an OK pair row returns a cmd whose message opens compare-files with endpoints A, B and leaves `m.previewOpen == nil` and `filesPreviewSet` zero; enter on a missing pair sets `statusMsg` and returns no cmd; (4) `e` opens the rename popup prefilled with the pair label and its command calls `PairRename`; (5) `d` confirm → `PairRemove`; (6) `s` → `PairAdd(b, a)`; (7) copy-link on a pair row yields `gg://<repo>@<A>..<B>` (full shas) and records it in linkhist; (8) **the consumer gate** — type-level, not a caller list (a list lets a new caller be appended without ever handling a pair): `previewRow.rec` is read ONLY through
 
 ```go
-// Every selectedPreview() caller must branch on the row kind: a pair row has a
-// ZERO rec, and handing its empty Source/Target to a merge-preview path yields
-// a confusing git error. A new caller fails here until it is listed — and
-// listing it means having handled rowPair.
-func TestEverySelectedPreviewCallerHandlesPairs(t *testing.T) {
-	t.Parallel()
-	want := map[string]bool{ // enclosing func → handled
-		"canEditPreview": true, "openPreviewRenamePopup": true, "confirmPreviewRemove": true,
-		"previewSwapCmd": true, "contextLinkText": true, "handleKey": true,
-	}
-	// go/parser over internal/tui/*.go (non-test): collect the name of every
-	// FuncDecl containing a CallExpr to selectedPreview; assert the set equals
-	// the keys of want. Fill the real enclosing names in when writing it.
-}
+// merge is the row as a merge preview; false for a pair, whose rec is ZERO —
+// handing its empty Source/Target to a merge-preview path is a confusing git
+// error, so every consumer is forced through this ok.
+func (r previewRow) merge() (model.MergePreview, bool) { return r.rec, r.kind != rowPair }
 ```
+
+and the gate is an AST test over `internal/tui/*.go` (non-test): every `SelectorExpr` whose `Sel.Name == "rec"` must sit in `preview_panel.go`. Today 19 `.rec` reads exist across the package — all move behind `merge()` / `id()` / `label()` / `created()` in this task.
+
+**Kind zero = merge, deliberately.** `previewRowKind` is `rowMerge` (0), `rowPair` (1) — NOT Invalid-first: existing fixtures (`preview_notes_test.go`, 3 literals) and every producer build `previewRow{rec: …}` with no kind, and a row with a zero kind and a filled `rec` IS a merge preview. The Invalid-first convention protects values that cross a boundary; this one never leaves the package.
 
 - [ ] **Step 2: run → FAIL.**
 - [ ] **Step 3: implement.**
-  - `preview_panel.go`: add the kind + fields + accessors; `readPreviews` sets `kind: rowMerge` on existing rows then appends, per `PairList` entry, `previewRow{kind: rowPair, pair: p, psum: sum, err: err}`; `previewList` and `previewRows` use the accessors; `previewStateText` gains the pair arm:
+  - `preview_panel.go`: add the kind + fields + accessors; `readPreviews` leaves existing rows at the zero kind then appends, per `PairList` entry, `previewRow{kind: rowPair, pair: p, psum: sum, err: err}`; `previewList` and `previewRows` use the accessors; `previewStateText` gains the pair arm:
     ```go
     if r.kind == rowPair {
         switch r.psum.State {
@@ -655,10 +651,10 @@ func TestEverySelectedPreviewCallerHandlesPairs(t *testing.T) {
     ```
     and the middle column is `shortHash(A)+".."+shortHash(B)` for a pair (use the package's existing short-hash helper).
   - `preview_actions.go`: `previewRenameCmd(kind, id, label)` / `previewRemoveCmd(kind, id)` dispatch to `Pair*` for `rowPair`; the rename popup and the remove confirm carry the kind; `previewSwapCmd` on a pair → a `pairAddCmd(b, a)` returning `previewMutatedMsg{focusID: p.ID, fromTab: true}` with `ErrPairExists` folded to nil.
-  - `model.go` enter arm: `rowPair` → missing → `m.statusMsg = i18n.T("missing: %s", …)`; else a cmd running `svc.PairOpen` off-thread → `pairOpenMsg{eps, err, label}` → handler calls `m.openCompareFiles(eps.Left, eps.Right)` with the files-view title `i18n.T("Saved diff: %s", label)`. It must NOT set `m.previewOpen` nor arm `filesPreviewSet` (notes are out of scope; spec §5.2).
+  - `model.go` enter arm: `rowPair` → missing → `m.statusMsg = i18n.T("missing: %s", …)`; else a cmd running `svc.PairOpen` off-thread → `pairOpenMsg{eps, err, label, gen}` stamped with `m.previewGen` exactly as `openPreviewCmd` does (the handler DROPS a message whose gen is stale — a second enter or a row switch must not deliver an old open) → handler calls `m.openCompareFiles(eps.Left, eps.Right)`. `openCompareFiles(left, right)` takes no title: read how `previewOpenMsg.title` reaches the files view and thread the same override for `i18n.T("Saved diff: %s", label)`; if that override is reachable only through `m.previewOpen`, add a `filesTitle string` field the files view prefers when set and clear it in `closeFilesView`. It must NOT set `m.previewOpen` nor arm `filesPreviewSet` (notes are out of scope; spec §5.2).
   - `link.go`: pair row → the stored link text (compose via the same producer `previewLinkFor` uses, with `LinkTarget.Pair`), recorded in linkhist like every copy row.
 - [ ] **Step 4: run** `rtk go test ./internal/tui/ -run 'Pair|Preview|I18n|Vocab|MenuLabels'` → PASS (the i18n AST gates included).
-- [ ] **Step 5: watch the gate fail** — add a throwaway `selectedPreview()` call in a new func → gate FAILS; remove it.
+- [ ] **Step 5: watch the gate fail** — add a throwaway `_ = r.rec.Source` in `preview_actions.go` → gate FAILS; remove it.
 - [ ] **Step 6: commit** — `feat(tui): the Previews tab lists saved commit pairs`.
 
 ---
@@ -671,7 +667,7 @@ func TestEverySelectedPreviewCallerHandlesPairs(t *testing.T) {
 - Consumes: `m.validCompareKeys()`, `m.compareKeyRank(k)`, `wipKey(wipRow{kind: wipWorktree|wipStaged})`, `svc.PairAdd`.
 - Produces:
   ```go
-  func (m Model) pairSaveKeys() (older, newer string, ok bool) // exactly 2 commit keys, no ◇ rows; older = max rank
+  func (m Model) pairSaveShas() (a, b string, ok bool) // exactly 2 commit keys, no ◇ rows; direction = compareSelectionEndpoints'
   func (m Model) commitSavePairRows() []actionRow              // ids "commit-save-pair", "commit-save-pair-reversed"
   type pairSavedMsg struct{ p domain.CommitPair; existed bool; err error }
   ```
@@ -686,13 +682,17 @@ func TestEverySelectedPreviewCallerHandlesPairs(t *testing.T) {
 | 1 commit + ◇ Working tree | 0 |
 | 1 commit + ◇ Staged | 0 |
 
-plus: marks made **newest first** still save `A = older, B = newer` (direction by feed rank, not mark order); the reversed row swaps; `pairSavedMsg` sets status `saved to previews: <label>` / `already saved as <label>`, chains a previews read, sets `m.previewFocusID`, and **leaves `m.commitCompareSet` untouched**; rows are absent when `m.focus != panelCommits` or ops are running.
+plus: marks made **newest first** still save `A = older, B = newer` (direction by feed rank, not mark order) — asserted as EQUAL to `compareSelectionEndpoints()`' left/right on the same model, so the two can never drift; the reversed row swaps; `pairSavedMsg` sets status `saved to previews: <label>` / `already saved as <label>`, chains a previews read, sets `m.previewFocusID`, and **leaves `m.commitCompareSet` untouched**; rows are absent when `m.focus != panelCommits` or ops are running.
 
 - [ ] **Step 2: run → FAIL.**
 - [ ] **Step 3: implement** `pair_save.go`:
 
 ```go
-func (m Model) pairSaveKeys() (older, newer string, ok bool) {
+// pairSaveShas is the pair "Save to previews" stores. It does NOT rank the
+// marks itself: it takes the two endpoints compareSelectionEndpoints already
+// chose, so the saved direction IS the direction Compare selection diffs in,
+// by construction rather than by two arms agreeing.
+func (m Model) pairSaveShas() (a, b string, ok bool) {
 	keys := m.validCompareKeys()
 	if len(keys) != 2 {
 		return "", "", false
@@ -702,18 +702,18 @@ func (m Model) pairSaveKeys() (older, newer string, ok bool) {
 			return "", "", false
 		}
 	}
-	older, newer = keys[0], keys[1]
-	if m.compareKeyRank(older) < m.compareKeyRank(newer) {
-		older, newer = newer, older // older = the LARGER feed rank
+	left, right, _, ok := m.compareSelectionEndpoints()
+	if !ok {
+		return "", "", false
 	}
-	return older, newer, true
+	return left.CacheTag(), right.CacheTag(), true // a commit endpoint's tag is its sha
 }
 
 func (m Model) commitSavePairRows() []actionRow {
 	if m.focus != panelCommits || !m.opsIdle() {
 		return nil
 	}
-	older, newer, ok := m.pairSaveKeys()
+	older, newer, ok := m.pairSaveShas()
 	if !ok {
 		return nil
 	}
