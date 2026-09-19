@@ -908,6 +908,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.drainPendingPreview()
 	case linkCompareLoadedMsg:
 		return m.loadedLinkCompare(msg)
+	case baseSuggestedMsg:
+		if p, ok := m.topLayer().(*linkComparePopup); ok {
+			p.suggested(msg)
+		}
+		return m, nil
 	case previewOpenMsg:
 		return m.handlePreviewOpenMsg(msg)
 	case previewMutatedMsg:

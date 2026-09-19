@@ -8,6 +8,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // lcRow is one focusable row of the compare dialog, in tab order. The base
@@ -37,6 +38,14 @@ type linkCompareSide struct {
 	input textfield
 	hist  linkHistPicker
 	err   string
+
+	// The base row (link_compare_base.go). sug answers for sugFor and no other
+	// text; asked is the text a suggestion is in flight for.
+	base      textfield
+	baseDirty bool // the user typed into the base field
+	sug       domain.BaseSuggestion
+	sugFor    string
+	asked     string
 }
 
 // linkComparePopup is the palette's "Compare with link…": two gg:// links,
@@ -65,7 +74,23 @@ func (m Model) openLinkComparePopup() (Model, tea.Cmd) {
 // rows is the tab order: the link fields, each followed by its base row when
 // it has one.
 func (p *linkComparePopup) rows() []lcRow {
-	return []lcRow{lcLink1, lcLink2}
+	rows := []lcRow{lcLink1}
+	if p.side[0].hasBase() {
+		rows = append(rows, lcBase1)
+	}
+	rows = append(rows, lcLink2)
+	if p.side[1].hasBase() {
+		rows = append(rows, lcBase2)
+	}
+	return rows
+}
+
+// refresh re-derives both base rows; every path that can change a link field
+// ends here.
+func (p *linkComparePopup) refresh(m Model) tea.Cmd {
+	cmd := tea.Batch(p.side[0].refresh(m), p.side[1].refresh(m))
+	p.normalizeFocus()
+	return cmd
 }
 
 // step moves the focus by d rows, wrapping, over the rows that exist NOW.
@@ -111,6 +136,7 @@ func (p *linkComparePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				// a form, and the other side may still be empty.
 				p.cur().input = newTextField(picked)
 				p.cur().err, p.err = "", ""
+				return m, p.refresh(m)
 			}
 			return m, nil
 		}
@@ -126,6 +152,9 @@ func (p *linkComparePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		return m.popLayer(), nil
 	case tea.KeyTab:
+		if p.focus.isBase() && p.cur().completeBase(m) {
+			return m, nil
+		}
 		p.step(1)
 	case tea.KeyShiftTab, tea.KeyUp:
 		p.step(-1)
@@ -135,7 +164,16 @@ func (p *linkComparePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 	case tea.KeyCtrlS:
 		p.side[0], p.side[1] = p.side[1], p.side[0]
+		p.normalizeFocus()
 	case tea.KeyEnter:
+		if p.focus.isBase() {
+			if p.cur().applyBase() {
+				p.err = ""
+				p.normalizeFocus() // the row is gone: back onto its link field
+				return m, p.refresh(m)
+			}
+			return m, nil
+		}
 		if p.focus != lcLink2 {
 			p.step(1)
 			return m, nil
@@ -144,8 +182,19 @@ func (p *linkComparePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case tea.KeySpace:
 		// a link holds no space — drop it
 	default:
-		if !p.busy && p.cur().input.HandleEditKey(msg) {
+		if p.busy {
+			return m, nil
+		}
+		if p.focus.isBase() {
+			if p.cur().base.HandleEditKey(msg) {
+				p.cur().baseDirty = true
+				p.cur().err, p.err = "", ""
+			}
+			return m, nil
+		}
+		if p.cur().input.HandleEditKey(msg) {
 			p.cur().err, p.err = "", ""
+			return m, p.refresh(m)
 		}
 	}
 	return m, nil
@@ -194,6 +243,18 @@ func (p *linkComparePopup) box(m Model) string {
 		}
 		focused := p.focus == r
 		b.WriteString(viewField(mark(r)+label, s.input, focused && !s.hist.active, cw) + "\n")
+		if s.hasBase() {
+			br := lcBase1
+			if i == 1 {
+				br = lcBase2
+			}
+			b.WriteString(viewField(mark(br)+"  "+s.baseLabel(), s.base, p.focus == br, cw) + "\n")
+			if p.focus == br && s.sug.Kind == model.LinkBoundRef && s.baseDirty {
+				if ms := m.branchSuggestions(s.base.Value()); len(ms) > 0 {
+					b.WriteString("    " + elideMiddle(i18n.T("matches: ")+strings.Join(ms, "  "), cw-4) + "\n")
+				}
+			}
+		}
 		if s.err != "" {
 			b.WriteString("    " + st().errorText.Render(elideMiddle(s.err, cw-4)) + "\n")
 		}
@@ -212,6 +273,8 @@ func (p *linkComparePopup) box(m Model) string {
 	case p.busy:
 		b.WriteString("\n" + i18n.T("comparing…") + "\n")
 		b.WriteString("\n" + i18n.T("[esc] cancel"))
+	case p.focus.isBase():
+		b.WriteString("\n" + i18n.T("[enter] bound the link with this base  [tab] complete / next  [esc] close"))
 	case !p.focus.isBase() && p.cur().hist.active:
 		b.WriteString("\n" + i18n.T("[enter] use this link  [↑] back to the field  [esc] back"))
 	default:

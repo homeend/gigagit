@@ -80,8 +80,14 @@ func TestAPickFillsItsOwnFieldAndDoesNotSubmit(t *testing.T) {
 	if got := p.side[0].input.Value(); got != left {
 		t.Errorf("left field = %q, want it untouched", got)
 	}
-	if p.busy || m.linkCompareWant != "" || cmd != nil {
+	// Checked BEFORE anything is pumped: a submit sets busy and the want
+	// synchronously, and a comparison that then fails would reset both. The
+	// cmd itself may be non-nil — the pick asks what would bound the link.
+	if p.busy || m.linkCompareWant != "" {
 		t.Error("a pick must not submit")
+	}
+	if m = pumpAll(t, m, cmd); m.filesView != nil {
+		t.Error("a pick opened a view")
 	}
 }
 
