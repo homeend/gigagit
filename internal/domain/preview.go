@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/preview"
+	"github.com/homeend/gigagit/internal/savedcompare"
 )
 
 var ErrPreviewsDisabled = errors.New("previews: no state directory available")
@@ -14,9 +14,52 @@ var ErrPreviewsDisabled = errors.New("previews: no state directory available")
 // ErrPreviewNotFound / ErrPreviewExists WRAP the store's errors so frontends
 // (which cannot import internal/preview) can errors.Is them.
 var (
-	ErrPreviewNotFound = fmt.Errorf("%w", preview.ErrNotFound) // message stays "preview: not found"
-	ErrPreviewExists   = fmt.Errorf("%w", preview.ErrExists)
+	ErrPreviewNotFound = fmt.Errorf("%w", savedcompare.ErrNotFound)
+	ErrPreviewExists   = fmt.Errorf("%w", savedcompare.ErrExists)
 )
+
+// A merge preview IS a saved comparison whose right half is absent: one
+// bounded set, "everything feat/x would bring into main" (spec §4.5). The two
+// functions below are the whole of that equivalence, and they are two arms
+// that look alike and must undo each other EXACTLY.
+//
+// TARGET FIRST, both ways. PreviewAdd(source, target) means "what source
+// brings into target", which renders merge-base(target, source)..source and
+// is spelled `@target...source` — the order `git diff target...source` reads.
+// A swap in either arm is invisible to a round-trip test, because a DOUBLE
+// swap round-trips perfectly; only asserting the link TEXT between them, on a
+// fixture whose two names differ, can see it.
+
+// entryFromPreview renders a saved merge preview as a set-shaped entry.
+func entryFromPreview(repo model.LinkRepo, p model.MergePreview) (savedcompare.Entry, error) {
+	l, err := model.ParseLink(model.Link{Repo: repo, Target: model.LinkTarget{
+		State:   model.StateCommitted,
+		Preview: &model.LinkPreview{Source: p.Source, Target: p.Target},
+	}}.String())
+	if err != nil {
+		return savedcompare.Entry{}, err
+	}
+	return savedcompare.Entry{ID: p.ID, Left: l, Label: p.Label, Created: p.Created}, nil
+}
+
+// previewFromEntry reads a set-shaped entry back as a merge preview, and
+// reports false for everything that is not one: a PAIR-shaped entry (a saved
+// comparison) and a set whose left half is not a three-dot preview link (a
+// saved change-set). Both are legitimate savedcompare rows that the preview
+// surfaces must not show — and must not delete.
+func previewFromEntry(e savedcompare.Entry) (model.MergePreview, bool) {
+	if e.Right != nil {
+		return model.MergePreview{}, false
+	}
+	pv := e.Left.Target.Preview
+	if pv == nil {
+		return model.MergePreview{}, false
+	}
+	return model.MergePreview{
+		ID: e.ID, Source: pv.Source, Target: pv.Target,
+		Label: e.Label, Created: e.Created,
+	}, true
+}
 
 // errPreviewPairShape is a three-dot --preview argument missing one side.
 var errPreviewPairShape = errors.New("preview: expected <target>...<source>")
@@ -25,7 +68,7 @@ var errPreviewPairShape = errors.New("preview: expected <target>...<source>")
 // then stores the pair. A duplicate returns the EXISTING record with
 // ErrPreviewExists so frontends can focus it instead of failing.
 func (s *Service) PreviewAdd(ctx context.Context, source, target, label string) (model.MergePreview, error) {
-	st := s.previewStore(ctx)
+	st := s.savedCompareStore(ctx)
 	if st == nil {
 		return model.MergePreview{}, ErrPreviewsDisabled
 	}
@@ -39,19 +82,49 @@ func (s *Service) PreviewAdd(ctx context.Context, source, target, label string) 
 			return model.MergePreview{}, fmt.Errorf("preview: %q is not a branch or commit", name)
 		}
 	}
-	p, err := st.Add(model.MergePreview{Source: source, Target: target, Label: label})
-	if errors.Is(err, preview.ErrExists) {
+	repo, err := s.LinkRepo(ctx)
+	if err != nil {
+		return model.MergePreview{}, err
+	}
+	e, err := entryFromPreview(repo, model.MergePreview{Source: source, Target: target, Label: label})
+	if err != nil {
+		return model.MergePreview{}, err
+	}
+	if e.Label == "" {
+		// The preview vocabulary's own default ("feat/x → main"), not the
+		// store's generic one: this label is what the Previews surfaces show.
+		e.Label = model.MergePreview{Source: source, Target: target}.DefaultLabel()
+	}
+	stored, err := st.Add(e)
+	p, ok := previewFromEntry(stored)
+	if !ok {
+		return model.MergePreview{}, fmt.Errorf("preview: stored entry %q is not a merge preview", stored.ID)
+	}
+	if errors.Is(err, savedcompare.ErrExists) {
 		return p, ErrPreviewExists
 	}
 	return p, err
 }
 
+// PreviewList returns the merge previews among the saved comparisons, in
+// insertion order. A PAIR-shaped entry is a saved comparison, not a preview,
+// and is filtered out here rather than rendered as a half-empty preview.
 func (s *Service) PreviewList(ctx context.Context) ([]model.MergePreview, error) {
-	st := s.previewStore(ctx)
+	st := s.savedCompareStore(ctx)
 	if st == nil {
 		return nil, ErrPreviewsDisabled
 	}
-	return st.List()
+	es, err := st.List()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.MergePreview, 0, len(es))
+	for _, e := range es {
+		if p, ok := previewFromEntry(e); ok {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 // PreviewGet finds a record by id, else by exact label (first match).
@@ -74,11 +147,14 @@ func (s *Service) PreviewGet(ctx context.Context, idOrLabel string) (model.Merge
 }
 
 func (s *Service) PreviewRename(ctx context.Context, id, label string) error {
-	st := s.previewStore(ctx)
+	st := s.savedCompareStore(ctx)
 	if st == nil {
 		return ErrPreviewsDisabled
 	}
-	if err := st.Rename(id, label); errors.Is(err, preview.ErrNotFound) {
+	if _, err := s.PreviewGet(ctx, id); err != nil {
+		return err // not a merge preview: never rename a saved comparison here
+	}
+	if err := st.Rename(id, label); errors.Is(err, savedcompare.ErrNotFound) {
 		return ErrPreviewNotFound
 	} else {
 		return err
@@ -86,11 +162,17 @@ func (s *Service) PreviewRename(ctx context.Context, id, label string) error {
 }
 
 func (s *Service) PreviewRemove(ctx context.Context, id string) error {
-	st := s.previewStore(ctx)
+	st := s.savedCompareStore(ctx)
 	if st == nil {
 		return ErrPreviewsDisabled
 	}
-	if err := st.Remove(id); errors.Is(err, preview.ErrNotFound) {
+	// Look it up as a PREVIEW first: without this a saved comparison could be
+	// deleted through a preview surface that never shows it, by an id the
+	// user only has because the two shapes share one store.
+	if _, err := s.PreviewGet(ctx, id); err != nil {
+		return err
+	}
+	if err := st.Remove(id); errors.Is(err, savedcompare.ErrNotFound) {
 		return ErrPreviewNotFound
 	} else {
 		return err
