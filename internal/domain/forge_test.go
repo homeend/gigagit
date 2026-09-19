@@ -17,20 +17,24 @@ import (
 
 // fakeForge is a scriptable forge.Provider.
 type fakeForge struct {
-	mu        sync.Mutex
-	detectErr error
-	detects   atomic.Int32
-	open      []model.PullRequest
-	byNum     map[int]model.PullRequest // PR(n); missing → forge.ErrNotFound
-	prCalls   map[int]int
-	comments  []model.ForgeComment
-	truncated bool
-	slug, url string
+	mu         sync.Mutex
+	detectErr  error
+	detectGate chan struct{} // non-nil: Detect blocks until it is closed
+	detects    atomic.Int32
+	open       []model.PullRequest
+	byNum      map[int]model.PullRequest // PR(n); missing → forge.ErrNotFound
+	prCalls    map[int]int
+	comments   []model.ForgeComment
+	truncated  bool
+	slug, url  string
 }
 
 func (f *fakeForge) Name() string { return "fake" }
 func (f *fakeForge) Detect(context.Context) error {
 	f.detects.Add(1)
+	if f.detectGate != nil {
+		<-f.detectGate
+	}
 	return f.detectErr
 }
 func (f *fakeForge) ListOpen(context.Context) ([]model.PullRequest, error) {
@@ -272,5 +276,70 @@ func TestPRPair(t *testing.T) {
 	missing := "0123456789012345678901234567890123456789"
 	if p := svc.PRPair(ctx, model.PullRequest{Number: 7, State: "open", Target: "dev", BaseSHA: missing}); p.Base != "origin/dev" {
 		t.Errorf("remote-tracking fallback = %+v", p)
+	}
+}
+
+// The probe is a network call that may hang for its whole timeout. Preflight —
+// which notices, FeatureEnabled and the web gate all call — must answer
+// "unprobed" straight away instead of queueing behind it.
+func TestPreflightDoesNotWaitForAnInFlightProbe(t *testing.T) {
+	t.Parallel()
+	ff := &fakeForge{detectGate: make(chan struct{})}
+	svc := newForgeSvc(t, ff)
+	ctx := context.Background()
+	statuses := make(chan ForgeStatus, 2)
+	for range 2 { // two concurrent first callers share ONE probe
+		go func() { statuses <- svc.ForgeStatus(ctx) }()
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for ff.detects.Load() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the probe never started")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	done := make(chan []preflight.Verdict, 1)
+	go func() {
+		vs, _ := svc.Preflight(ctx)
+		done <- vs
+	}()
+	select {
+	case vs := <-done:
+		for _, v := range vs {
+			if v.Feature.ID == FeatureForge && v.State == preflight.Satisfied {
+				t.Error("forge verdict Satisfied while the probe is still in flight")
+			}
+		}
+	case <-time.After(3 * time.Second):
+		close(ff.detectGate)
+		t.Fatal("Preflight blocked behind the in-flight forge probe")
+	}
+	close(ff.detectGate)
+	for range 2 {
+		if st := <-statuses; !st.Available() {
+			t.Errorf("status = %+v", st)
+		}
+	}
+	if n := ff.detects.Load(); n != 1 {
+		t.Errorf("Detect ran %d times, want 1", n)
+	}
+}
+
+// A cancelled caller is not a verdict about gh: the next caller probes again.
+func TestForgeStatusCancelledProbeIsNotCached(t *testing.T) {
+	t.Parallel()
+	ff := &fakeForge{detectErr: context.Canceled}
+	svc := newForgeSvc(t, ff)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if st := svc.ForgeStatus(ctx); st.Available() {
+		t.Fatalf("status = %+v", st)
+	}
+	ff.detectErr = nil
+	if st := svc.ForgeStatus(context.Background()); !st.Available() {
+		t.Errorf("after a cancelled probe the next call must probe again: %+v", st)
+	}
+	if n := ff.detects.Load(); n != 2 {
+		t.Errorf("Detect ran %d times, want 2", n)
 	}
 }

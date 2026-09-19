@@ -36,35 +36,66 @@ func (s *Service) SetForgeProviders(ps []forge.Provider) {
 // ForgeStatus probes the forge providers on its FIRST call and answers from
 // that verdict for the rest of the session — there is no re-detection: a user
 // who installs or logs into gh restarts gg. The first call makes a network
-// round trip, so frontends call it off their UI thread. Concurrent first
-// calls serialise on forgeMu, so Detect still runs once.
+// round trip, so frontends call it off their UI thread.
+//
+// The probe runs OUTSIDE forgeMu: it can take its whole timeout, and
+// Preflight (notices, FeatureEnabled, the web gate) reads forgeProbe under
+// that lock. Concurrent first callers wait on forgeProbing, so Detect still
+// runs once; forgeProbe reports "unprobed" while it is in flight.
 func (s *Service) ForgeStatus(ctx context.Context) ForgeStatus {
 	s.forgeMu.Lock()
-	probedNow := false
-	if !s.forgeProbed {
+	for !s.forgeProbed {
+		if wait := s.forgeProbing; wait != nil {
+			s.forgeMu.Unlock()
+			select {
+			case <-wait:
+			case <-ctx.Done():
+				return ForgeStatus{Err: errors.Join(ErrForgeUnavailable, ctx.Err())}
+			}
+			s.forgeMu.Lock()
+			continue
+		}
+		done := make(chan struct{})
+		s.forgeProbing = done
 		ps := s.forgeProviders
+		s.forgeMu.Unlock()
+
 		if ps == nil {
 			ps = forge.Default(s.workdir, nil)
 		}
-		s.forgeErr = ErrForgeUnavailable
+		var active forge.Provider
+		probeErr := ErrForgeUnavailable
 		for _, p := range ps {
 			err := p.Detect(ctx)
 			if err == nil {
-				s.forgeActive, s.forgeErr = p, nil
+				active, probeErr = p, nil
 				break
 			}
-			s.forgeErr = errors.Join(ErrForgeUnavailable, err)
+			probeErr = errors.Join(ErrForgeUnavailable, err)
 		}
-		s.forgeProbed, probedNow = true, true
+
+		if active == nil && ctx.Err() != nil {
+			// The CALLER gave up (a cancelled startup, a closed request) — that
+			// says nothing about gh. Do not burn the session's one verdict on it.
+			s.forgeMu.Lock()
+			s.forgeProbing = nil
+			s.forgeMu.Unlock()
+			close(done)
+			return ForgeStatus{Err: errors.Join(ErrForgeUnavailable, ctx.Err())}
+		}
+		s.forgeMu.Lock()
+		s.forgeActive, s.forgeErr = active, probeErr
+		s.forgeProbed, s.forgeProbing = true, nil
+		s.forgeMu.Unlock()
+		close(done)
+		s.invalidatePreflight() // the forge verdict just changed; never under forgeMu
+		s.forgeMu.Lock()
 	}
 	st := ForgeStatus{Err: s.forgeErr}
 	if s.forgeActive != nil {
 		st = ForgeStatus{Provider: s.forgeActive.Name()}
 	}
 	s.forgeMu.Unlock()
-	if probedNow {
-		s.invalidatePreflight() // after unlocking: see the lock-order note on forgeMu
-	}
 	return st
 }
 

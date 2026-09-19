@@ -1613,9 +1613,13 @@ on its first call (`gh pr list --limit 1 --json number` = installed + authed +
 repo resolves) and caches forever; a user who fixes gh restarts gg. It is a
 network round trip, so frontends call it off the UI thread. `Preflight` NEVER
 probes — it reads the `forgeProbe()` snapshot (nil = unprobed = unsatisfiable),
-and `ForgeStatus` invalidates the preflight cache after its one probe. **Lock
-order:** `Preflight` holds `preflightMu` then takes `forgeMu`; `ForgeStatus`
-therefore releases `forgeMu` BEFORE calling `invalidatePreflight`. The `forge`
+and `ForgeStatus` invalidates the preflight cache after its one probe. **Locks:**
+the probe runs OUTSIDE `forgeMu` (it can take its full 30 s, and everything
+that calls `Preflight` — notices, `FeatureEnabled`, the web gate — reads
+`forgeProbe` under that lock); concurrent first callers wait on the
+`forgeProbing` channel so `Detect` still runs once, and `forgeProbe` says
+"unprobed" while it is in flight. Order is `preflightMu` → `forgeMu`, so
+`ForgeStatus` calls `invalidatePreflight` with `forgeMu` released. The `forge`
 feature is `Optional` + `Silent`: `noticesForVerdicts` skips silent verdicts, so
 a box without gh shows no notice (the CLI, which was asked, prints the reason).
 
