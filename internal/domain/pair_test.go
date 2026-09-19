@@ -10,7 +10,10 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/gittest"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 func revOf(t *testing.T, dir, rev string) string {
@@ -144,5 +147,89 @@ func TestPairRenameRemoveOnlyTouchPairs(t *testing.T) {
 	}
 	if _, err := svc.PairGet(ctx, pr.ID); !errors.Is(err, ErrPairNotFound) {
 		t.Fatalf("get after remove = %v", err)
+	}
+}
+
+func TestPairSummaryAndOpen(t *testing.T) {
+	t.Parallel()
+	dir, svc := previewRepo(t)
+	ctx := context.Background()
+	a, b := revOf(t, dir, "main"), revOf(t, dir, "feat/x")
+	// main..feat/x TWO-dot: a.txt, b.txt added AND m.txt absent on feat/x = 3
+	// paths. The THREE-dot diff of the same commits is 2, so a summary that
+	// reused the merge-preview range would be caught here.
+	sum, err := svc.PairSummary(ctx, a, b)
+	if err != nil || sum.State != PairOK || sum.Files != 3 {
+		t.Fatalf("summary = %+v, %v; want PairOK with 3 files", sum, err)
+	}
+	eps, err := svc.PairOpen(ctx, a, b)
+	if err != nil || eps.Left.CacheTag() != a || eps.Right.CacheTag() != b {
+		t.Fatalf("open = %+v, %v", eps, err)
+	}
+	gone := "0123456789abcdef0123456789abcdef01234567"
+	if sum, _ := svc.PairSummary(ctx, gone, b); sum.State != PairMissingA {
+		t.Fatalf("missing A = %+v", sum)
+	}
+	if sum, _ := svc.PairSummary(ctx, a, gone); sum.State != PairMissingB {
+		t.Fatalf("missing B = %+v", sum)
+	}
+	if eps, err := svc.PairOpen(ctx, a, gone); err != nil || eps.Summary.State != PairMissingB || eps.Left != (model.Endpoint{}) {
+		t.Fatalf("open with a gone side = %+v, %v", eps, err)
+	}
+}
+
+// A frozen pair's file count is immutable: the second read must cost no diff.
+// (query() coalesces only IN-FLIGHT callers, so a sequential second read
+// reaches git unless the cache answers — watched failing with it removed.)
+func TestPairSummaryCachedByShaPair(t *testing.T) {
+	t.Parallel()
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git rev-parse verify commit (resolve)", gitexec.Result{Stdout: "1111111111111111111111111111111111111111\n"})
+	f.SetResponse("git diff (compare files)", gitexec.Result{Stdout: "M\x00a.txt\x00A\x00b.txt\x00"})
+	svc := New(&git.Repo{Runner: f})
+	ctx := context.Background()
+	a := "1111111111111111111111111111111111111111"
+	b := "2222222222222222222222222222222222222222"
+	first, err := svc.PairSummary(ctx, a, b)
+	if err != nil || first.State != PairOK || first.Files != 2 {
+		t.Fatalf("first = %+v, %v", first, err)
+	}
+	n := callCount(f, "git diff (compare files)")
+	if n == 0 {
+		t.Fatal("the fixture never ran the diff: the assertion below would see nothing")
+	}
+	if _, err := svc.PairSummary(ctx, a, b); err != nil {
+		t.Fatal(err)
+	}
+	if got := callCount(f, "git diff (compare files)"); got != n {
+		t.Fatalf("diff ran %d times, want %d: a frozen pair's count must come from the cache", got, n)
+	}
+}
+
+func TestPairLeftEvaluatesToABoundedSetComparableWithAPreview(t *testing.T) {
+	t.Parallel()
+	_, svc := previewRepo(t)
+	ctx := context.Background()
+	if _, err := svc.PreviewAdd(ctx, "feat/x", "main", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.PairAdd(ctx, "main", "feat/x", ""); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := svc.SavedCompareList(ctx)
+	var sets []FileSet
+	for _, c := range all {
+		l, err := model.ParseLink(c.Left)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fs, err := svc.EvalLink(ctx, l)
+		if err != nil || !fs.Bounded() {
+			t.Fatalf("%s: bounded=%v err=%v", c.Left, fs.Bounded(), err)
+		}
+		sets = append(sets, fs)
+	}
+	if _, err := svc.CompareSets(ctx, sets[0], sets[1]); err != nil {
+		t.Fatalf("preview x pair: %v", err)
 	}
 }

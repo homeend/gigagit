@@ -181,3 +181,68 @@ func (s *Service) PairRemove(ctx context.Context, id string) error {
 		return err
 	}
 }
+
+// PairState is why a pair can or cannot open. Zero is invalid on purpose.
+type PairState int
+
+const (
+	PairInvalid PairState = iota
+	PairOK
+	PairMissingA // the old side is not in this repository (gc, another clone)
+	PairMissingB
+)
+
+// PairSummary is a pair's row state. A frozen pair never moves, so unlike
+// PreviewSummary there is no movement to detect.
+type PairSummary struct {
+	State PairState
+	Files int // paths differing between A and B — TWO-dot, tip to tip
+}
+
+// PairEndpoints is what a frontend opens the compare view with. Both zero
+// unless PairOK.
+type PairEndpoints struct {
+	Summary     PairSummary
+	Left, Right model.Endpoint
+}
+
+// PairSummary is PairOpen's summary alone.
+func (s *Service) PairSummary(ctx context.Context, a, b string) (PairSummary, error) {
+	eps, err := s.PairOpen(ctx, a, b)
+	return eps.Summary, err
+}
+
+// PairOpen checks both commits still exist, then counts the files that differ
+// between them. The count of a FROZEN pair is immutable, so it is cached by
+// (a, b) for the session: the Previews tab re-reads its rows on every
+// branches arrival, and one diff-tree per saved pair per refresh is not a
+// cost a large repository should pay. Only an OK count is cached — a missing
+// commit may arrive with the next fetch.
+func (s *Service) PairOpen(ctx context.Context, a, b string) (PairEndpoints, error) {
+	for i, sha := range []string{a, b} {
+		if _, ok, err := s.ResolveRev(ctx, sha); err != nil {
+			return PairEndpoints{}, err
+		} else if !ok {
+			return PairEndpoints{Summary: PairSummary{State: PairMissingA + PairState(i)}}, nil
+		}
+	}
+	left, err := model.CommitEndpoint(a)
+	if err != nil {
+		return PairEndpoints{}, err
+	}
+	right, err := model.CommitEndpoint(b)
+	if err != nil {
+		return PairEndpoints{}, err
+	}
+	v, err := s.factory.Cache("preview").GetOrLoad("pair-summary:"+a+":"+b, func() (any, error) {
+		files, err := s.CompareFiles(ctx, left, right)
+		if err != nil {
+			return nil, err
+		}
+		return len(files), nil
+	})
+	if err != nil {
+		return PairEndpoints{}, err
+	}
+	return PairEndpoints{Summary: PairSummary{State: PairOK, Files: v.(int)}, Left: left, Right: right}, nil
+}
