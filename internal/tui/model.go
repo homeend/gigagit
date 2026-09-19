@@ -542,7 +542,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		body := m.diffBodyRows()
 		cr, hadRow := dv.cursorRow()
 		wasVisible := dv.cursorVisible(body) // a free-scrolled view keeps its place
-		dv.notes = msg.notes
+		dv.setNotes(msg.notes)
 		dv.relayout(dv.width)
 		dv.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
 		// A }/{ file step parked its landing here, not at open time: the notes

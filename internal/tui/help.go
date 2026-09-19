@@ -277,6 +277,7 @@ func helpContent() []contentLine {
 		r("", i18n.T("the cursor marker style is [ui] diff_cursor = row | number | off; the . menu's Cursor marker row switches it for the session")),
 		r("c", i18n.T("add a review note at the cursor line (a summary, plus an optional rationale; an empty summary cancels)")),
 		r("E/R", i18n.T("edit / reply to the note next to the cursor line (several on one line: a chooser)")),
+		r("o/O", i18n.T("collapse / expand the note next to the cursor line to a single row (▸ author: summary); O does it for every note in the view. View state only — nothing is stored")),
 		r("a", i18n.T("show or hide agent-written notes; your own notes always stay visible")),
 		r("L", i18n.T("copy a gg:// link to the cursor line — paste it in a chat and gg diff / gg note add / gg session navigate take it straight back (also the . menu's Copy link row does the same in the Files, Staged and Commits panels and a commit's files view)")),
 		r("}/{", i18n.T("jump to the next / previous annotated line (a folded note expands the view); at the last / first one, press again to step to the next / previous file that carries notes")),

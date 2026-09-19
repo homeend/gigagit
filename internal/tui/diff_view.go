@@ -88,6 +88,13 @@ type diffView struct {
 	// hideAgent mirrors Model.notesAgentOff onto the view, because relayout
 	// (called by rebuild, ctrl+w and every resize) has no Model to ask.
 	hideAgent bool
+	// collapsed folds a thread (by root id) to one row; o toggles the thread at
+	// the cursor, O all of them. View state only — nothing is stored. A forge
+	// thread its reviewers resolved starts collapsed, ONCE: collapseSeeded
+	// remembers which ids were already seeded, so a notes reload (a comment
+	// re-poll, a mutation) never re-folds what the user opened.
+	collapsed      map[string]bool
+	collapseSeeded map[string]bool
 	// noteAddr is the address notes on THIS view hang off — the pair of texts
 	// domain.noteSideLines will re-read for the sweep. Stamped by the loader
 	// that knows which two sides it is comparing, never derived from Model
@@ -909,6 +916,10 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			nm, cmd := r.run(m)
 			return nm.(Model), cmd
 		}
+	case "o":
+		return m.toggleNoteCollapse(), nil
+	case "O":
+		return m.toggleAllNotesCollapse(), nil
 	case "c":
 		return m.openNotePopup(noteAdd)
 	case "E":
