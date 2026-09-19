@@ -2,8 +2,6 @@ package domain
 
 import (
 	"context"
-	"path/filepath"
-	"strings"
 
 	"github.com/homeend/gigagit/internal/preview"
 )
@@ -16,8 +14,14 @@ var PreviewStatePath string
 // injected store (UsePreviewsDir) still wins for that Service.
 var PreviewsDisabled bool
 
-// UsePreviewsDir points one Service at its own store under dir.
-func (s *Service) UsePreviewsDir(dir string) { s.SetPreviewStore(preview.NewFileStore(dir)) }
+// UsePreviewsDir points one Service at its own store under dir. It records
+// the DIRECTORY as well as the store: the previews migration works on files
+// (previews.toml is a sibling of savedcompare.toml), and a store value cannot
+// be asked where it lives.
+func (s *Service) UsePreviewsDir(dir string) {
+	s.UseSavedCompareDir(dir)
+	s.SetPreviewStore(preview.NewFileStore(dir))
+}
 
 // SetPreviewStore injects a store (tests); nil re-arms lazy resolution.
 func (s *Service) SetPreviewStore(st preview.Store) {
@@ -35,20 +39,15 @@ func (s *Service) previewStore(ctx context.Context) preview.Store {
 	if st != nil {
 		return st
 	}
-	if PreviewsDisabled {
-		return nil
-	}
-	root := PreviewStatePath
+	// ONE derivation of the directory, shared with the saved-comparison store
+	// that supersedes this one — they are the same directory, and the
+	// previews migration finds previews.toml there as a sibling. Two
+	// derivations of a path that must agree is how a user's data gets
+	// orphaned; domain's stateBaseDir caller gate refuses the duplicate
+	// outright.
+	root := s.savedCompareDir(ctx)
 	if root == "" {
-		base := stateBaseDir("previews")
-		if base == "" {
-			return nil
-		}
-		key := "unknown"
-		if cd, err := s.GitCommonDir(ctx); err == nil {
-			key = repoKey(strings.TrimSpace(cd))
-		}
-		root = filepath.Join(base, key)
+		return nil
 	}
 	fs := preview.NewFileStore(root)
 	s.mu.Lock()

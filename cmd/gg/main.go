@@ -180,6 +180,13 @@ func launchTUI(dir string, at model.Link, recordPath, cwdFile string) int {
 		fmt.Fprintln(os.Stderr, friendlyGitError(err))
 		return 1
 	}
+	// Lossless migrations run before any surface reads a store: they need no
+	// decision from the user, and a surface that read first would read the
+	// old layout. A failure is REPORTED and does not stop gg — a store that
+	// could not be converted is a degraded surface, not a broken repository.
+	if err := svc.RunAutoMigrations(context.Background()); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: migrating stores:", err)
+	}
 	proceed, err := tui.Preflight(svc, os.Stdin, os.Stderr)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)

@@ -38,6 +38,13 @@ func Serve(ctx context.Context, workdir, addr string, launch bool, startAt *stee
 	if err := svc.PreflightRequired(ctx); err != nil {
 		return err
 	}
+	// Lossless migrations run before any surface reads a store: they need no
+	// decision from the user, and a surface that read first would read the
+	// old layout. A failure is REPORTED and does not stop gg — a store that
+	// could not be converted is a degraded surface, not a broken repository.
+	if err := svc.RunAutoMigrations(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, "warning: migrating stores:", err)
+	}
 	touchMRU(ctx, svc, repos.DefaultStatePath())
 	// Honor [versions] like the one-shot frontends do (cli.Run applies it per
 	// invocation; this server lives long, so boot + re-root + settings writes

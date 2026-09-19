@@ -48,10 +48,17 @@ type Service struct {
 	searchhist searchhist.Store // lazily resolved; nil disables search history
 	linkhist   linkhist.Store   // lazily resolved; nil disables copied-link history
 
-	notes      notes.Store   // lazily resolved; nil disables notes
-	notesOff   bool          // hard "no store" (the disabled-path test)
-	preview    preview.Store // lazily resolved; nil disables previews
-	noteCounts *NoteCounts   // cached badge counts; nil = cold, invalidated by every mutation
+	notes    notes.Store   // lazily resolved; nil disables notes
+	notesOff bool          // hard "no store" (the disabled-path test)
+	preview  preview.Store // lazily resolved; nil disables previews
+	// savedCompareRoot is the per-Service state directory override, set by
+	// UsePreviewsDir. It exists alongside the injected STORE because the
+	// previews migration needs the DIRECTORY (previews.toml is a sibling of
+	// savedcompare.toml there), and a store value cannot be asked where it
+	// lives. Tests inject per-Service so they stay parallel; the process-wide
+	// PreviewStatePath global remains for the frontends' TestMain seams.
+	savedCompareRoot string
+	noteCounts       *NoteCounts // cached badge counts; nil = cold, invalidated by every mutation
 	// previewCounts caches PreviewNoteCounts per (tip, base) pair. It follows
 	// BOTH clocks: a new tip is a new key, and every note mutation drops the
 	// whole map through invalidateNoteCounts (ruling 7) — counts read the
