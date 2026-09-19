@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/preflight"
 )
 
 const legacyPreviewsTOML = `[[previews]]
@@ -128,5 +130,31 @@ func TestMigrationActionRefusesAnUnknownName(t *testing.T) {
 	_, svc := previewRepo(t)
 	if _, err := svc.migrationAction(context.Background(), "previews", "no-such-action"); err == nil {
 		t.Fatal("migrationAction accepted an unknown action name")
+	}
+}
+
+// RunAutoMigrations resolves against a Probes carrying ONLY the legacy map,
+// so it must consider only features whose every requirement reads that map.
+//
+// The trap is specific and it is already in the tree: ForgeUsable reports
+// NeedsStoreProbes() == false while reading Probes.Forge, so the obvious
+// predicate would wave a forge-gated feature through to be judged on a
+// channel this path never fills. The guard names what it supports instead.
+func TestOnlyLegacyRequirementsRefusesEveryOtherKind(t *testing.T) {
+	t.Parallel()
+	legacy := preflight.Feature{Requires: []preflight.Requirement{preflight.LegacyStore{Store: "previews"}}}
+	if !onlyLegacyRequirements(legacy) {
+		t.Fatal("a LegacyStore-only feature was refused")
+	}
+	for name, f := range map[string]preflight.Feature{
+		"forge":    {Requires: []preflight.Requirement{preflight.ForgeUsable{}}},
+		"format":   {Requires: []preflight.Requirement{preflight.DataFormat{Store: "versions", Min: 2, Max: 2}}},
+		"gitver":   {Requires: []preflight.Requirement{preflight.GitVersion{Min: [3]int{2, 30, 0}}}},
+		"mixed":    {Requires: []preflight.Requirement{preflight.LegacyStore{Store: "previews"}, preflight.ForgeUsable{}}},
+		"norequir": {},
+	} {
+		if onlyLegacyRequirements(f) {
+			t.Fatalf("%s: accepted a feature this path cannot probe for", name)
+		}
 	}
 }

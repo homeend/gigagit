@@ -369,6 +369,20 @@ func (s *Service) migrationAction(ctx context.Context, store, action string) (en
 	}
 }
 
+// onlyLegacyRequirements reports whether every requirement of f is a
+// LegacyStore — the one requirement kind RunAutoMigrations fills probes for.
+func onlyLegacyRequirements(f preflight.Feature) bool {
+	if len(f.Requires) == 0 {
+		return false
+	}
+	for _, r := range f.Requires {
+		if _, ok := r.(preflight.LegacyStore); !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // RunAutoMigrations applies every pending migration that declares itself
 // LOSSLESS, because it has no loss to confess. Called once per process from
 // the composition root, before a surface starts; it costs one os.Stat per
@@ -389,10 +403,13 @@ func (s *Service) RunAutoMigrations(ctx context.Context) error {
 		if f.Migrate == nil || !f.Migrate.Lossless {
 			continue
 		}
-		if preflight.NeedsStoreProbes([]preflight.Feature{f}) {
-			// A lossless migration gated on a git-ref format would have to
-			// pay for the probes; none exists, and one should not be added
-			// without deciding what it costs every `gg` invocation.
+		if !onlyLegacyRequirements(f) {
+			// Resolved against a Probes carrying ONLY the legacy map, so a
+			// feature asking anything else would be judged on channels this
+			// function never filled. Asking NeedsStoreProbes() is not enough:
+			// it answers for Probes.Stores alone, and ForgeUsable reports
+			// false while reading Probes.Forge. Name what is supported
+			// instead of enumerating what is not.
 			continue
 		}
 		cheap = append(cheap, f)
