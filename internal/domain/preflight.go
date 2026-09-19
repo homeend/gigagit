@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"os"
+	"path/filepath"
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/preflight"
+	"github.com/homeend/gigagit/internal/savedcompare"
 )
 
 // ErrFeatureDisabled is returned by a query or command whose feature preflight
@@ -70,6 +73,12 @@ func (s *Service) probesFrom(ctx context.Context, formats map[string]int) (prefl
 		Stores: map[string]preflight.StoreProbe{
 			StoreVersions: {Format: formats[StoreVersions], HasData: len(versionRefs) > 0},
 		},
+		// Legacy probes are MACHINE-LOCAL and never read a marker: the
+		// marker is a git ref shared by every environment that opens this
+		// .git, and the data it would describe is not.
+		Legacy: map[string]preflight.LegacyProbe{
+			StorePreviews: {Present: s.legacyPreviewsPresent(ctx)},
+		},
 		GitVersion: ver,
 		// A snapshot, never a probe: forge detection is a network round trip
 		// and belongs to ForgeStatus, not to this synchronous resolve.
@@ -77,7 +86,8 @@ func (s *Service) probesFrom(ctx context.Context, formats map[string]int) (prefl
 	}, formats, nil
 }
 
-// invalidatePreflight drops the cached verdicts (the forge verdict changed).
+// invalidatePreflight drops the cached verdicts so the next Preflight sees
+// the new state (a forge verdict changed, or a migration just ran).
 func (s *Service) invalidatePreflight() {
 	s.preflightMu.Lock()
 	s.preflightDone, s.preflightOut, s.preflightMarks = false, nil, nil
@@ -240,6 +250,11 @@ type PendingMigration struct {
 	ConsequenceFormat string
 	ConsequenceArgs   []any
 	Refs              []string
+	// Action is the declared body name, carried through so the consent path
+	// and the automatic path construct the migration through the SAME
+	// builder (migrationAction) and can never disagree about what a
+	// migration does.
+	Action string
 }
 
 // storeRefs lists the refs a store owns, so a migration can report exactly
@@ -271,6 +286,12 @@ func (s *Service) PendingMigrations(ctx context.Context) ([]PendingMigration, er
 			continue
 		}
 		mig := v.Feature.Migrate
+		if mig.Lossless {
+			// Lossless: RunAutoMigrations handles it. This list feeds the
+			// three consent screens, and asking about a migration that loses
+			// nothing is a prompt with no decision in it.
+			continue
+		}
 		refs, err := s.storeRefs(ctx, mig.Store)
 		if err != nil {
 			return nil, err
@@ -291,6 +312,7 @@ func (s *Service) PendingMigrations(ctx context.Context) ([]PendingMigration, er
 			ConsequenceFormat: format,
 			ConsequenceArgs:   args,
 			Refs:              refs,
+			Action:            mig.Action,
 		})
 	}
 	return out, nil
@@ -299,12 +321,123 @@ func (s *Service) PendingMigrations(ctx context.Context) ([]PendingMigration, er
 // RunMigration applies one pending migration through Execute, then drops the
 // cached verdicts so the next Preflight sees the new state.
 func (s *Service) RunMigration(ctx context.Context, m PendingMigration) error {
-	op := engine.ApplyMigration{Feature: m.Feature, Store: m.Store, To: m.To, Refs: m.Refs}
+	act, err := s.migrationAction(ctx, m.Store, m.Action)
+	if err != nil {
+		return err
+	}
+	op := engine.ApplyMigration{Feature: m.Feature, Store: m.Store, To: m.To, Action: act}
 	if _, err := s.Execute(ctx, op, nil, nil); err != nil {
 		return err
 	}
-	s.preflightMu.Lock()
-	s.preflightDone, s.preflightOut, s.preflightMarks = false, nil, nil
-	s.preflightMu.Unlock()
+	s.invalidatePreflight()
+	return nil
+}
+
+// legacyPreviewsPresent reports whether this machine still holds the
+// superseded previews.toml for this repository. One os.Stat; a missing state
+// directory reads as absent.
+func (s *Service) legacyPreviewsPresent(ctx context.Context) bool {
+	dir := s.savedCompareDir(ctx)
+	if dir == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(dir, savedcompare.LegacyFile))
+	return err == nil
+}
+
+// migrationAction builds the BODY for one declared migration. This is the ONE
+// place an Action name becomes code, which is what lets preflight stay a
+// stdlib leaf whose whole decision table is testable with plain values — and
+// what stops the consent path and the automatic path from constructing
+// different bodies for the same migration.
+func (s *Service) migrationAction(ctx context.Context, store, action string) (engine.MigrationAction, error) {
+	switch action {
+	case "convert-previews":
+		repo, err := s.LinkRepo(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return convertPreviews{Dir: s.savedCompareDir(ctx), Repo: repo}, nil
+	case "discard-refs", "":
+		refs, err := s.storeRefs(ctx, store)
+		if err != nil {
+			return nil, err
+		}
+		return engine.DiscardRefs{Refs: refs}, nil
+	default:
+		return nil, fmt.Errorf("preflight: no migration action named %q", action)
+	}
+}
+
+// onlyLegacyRequirements reports whether every requirement of f is a
+// LegacyStore — the one requirement kind RunAutoMigrations fills probes for.
+func onlyLegacyRequirements(f preflight.Feature) bool {
+	if len(f.Requires) == 0 {
+		return false
+	}
+	for _, r := range f.Requires {
+		if _, ok := r.(preflight.LegacyStore); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// RunAutoMigrations applies every pending migration that declares itself
+// LOSSLESS, because it has no loss to confess. Called once per process from
+// the composition root, before a surface starts; it costs one os.Stat per
+// registered legacy store when there is nothing to do.
+//
+// Consent-requiring migrations are NOT run here — they stay in
+// PendingMigrations for the CLI/TUI/web consent screens.
+func (s *Service) RunAutoMigrations(ctx context.Context) error {
+	// Deliberately NOT s.Preflight: that resolves every feature and runs the
+	// git-ref store probes (a for-each-ref), and this is called from
+	// cli.Run — once per `gg` invocation, on the agent-facing surface. A
+	// lossless migration is declared over MACHINE-LOCAL probes, so resolve
+	// only the features whose requirements say they need nothing else
+	// (Requirement.NeedsStoreProbes is the leaf's own authority on that).
+	// When there is nothing to convert this costs one os.Stat and no git.
+	var cheap []preflight.Feature
+	for _, f := range Features() {
+		if f.Migrate == nil || !f.Migrate.Lossless {
+			continue
+		}
+		if !onlyLegacyRequirements(f) {
+			// Resolved against a Probes carrying ONLY the legacy map, so a
+			// feature asking anything else would be judged on channels this
+			// function never filled. Asking NeedsStoreProbes() is not enough:
+			// it answers for Probes.Stores alone, and ForgeUsable reports
+			// false while reading Probes.Forge. Name what is supported
+			// instead of enumerating what is not.
+			continue
+		}
+		cheap = append(cheap, f)
+	}
+	if len(cheap) == 0 {
+		return nil
+	}
+	probes := preflight.Probes{Legacy: map[string]preflight.LegacyProbe{
+		StorePreviews: {Present: s.legacyPreviewsPresent(ctx)},
+	}}
+	ran := false
+	for _, v := range preflight.Resolve(cheap, probes) {
+		if v.State != preflight.Repairable {
+			continue
+		}
+		mig := v.Feature.Migrate
+		act, err := s.migrationAction(ctx, mig.Store, mig.Action)
+		if err != nil {
+			return err
+		}
+		op := engine.ApplyMigration{Feature: v.Feature.ID, Store: mig.Store, To: mig.To, Action: act}
+		if _, err := s.Execute(ctx, op, nil, nil); err != nil {
+			return err
+		}
+		ran = true
+	}
+	if ran {
+		s.invalidatePreflight()
+	}
 	return nil
 }

@@ -64,6 +64,13 @@ func Run(workdir string, args []string, stdin io.Reader, stdout, stderr io.Write
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
+	// Lossless migrations run before any surface reads a store: they need no
+	// decision from the user, and a surface that read first would read the
+	// old layout. A failure is REPORTED and does not stop gg — a store that
+	// could not be converted is a degraded surface, not a broken repository.
+	if err := svc.RunAutoMigrations(context.Background()); err != nil {
+		fmt.Fprintln(stderr, "warning: migrating stores:", err)
+	}
 	cmd, rest := args[0], args[1:]
 	// Record this repo in the switcher registry (best-effort: errors and
 	// non-repo working directories are ignored). Skip for "repo" subcommands
