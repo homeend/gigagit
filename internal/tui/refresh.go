@@ -17,6 +17,7 @@ type refreshItem struct {
 	source       sourceKey
 	isFetch      bool
 	isRemoteTags bool
+	isPRs        bool
 }
 
 var fetchItem = refreshItem{isFetch: true}
@@ -25,17 +26,27 @@ var fetchItem = refreshItem{isFetch: true}
 // It is not a sourceKey so the all-source r/reloadAll sweep never triggers it.
 var remoteTagsItem = refreshItem{isRemoteTags: true}
 
+// prsItem is the synthetic refresh item for the pull-request list (pr_panel.go).
+// Synthetic, not a sourceKey, because it is a NETWORK read through the forge
+// CLI: it must never hold m.loading, block r behind a 30 s gh call, or ride an
+// "all sources" fan-out. It is also the one item the [refresh] enabled master
+// switch does not gate — see prsDue.
+var prsItem = refreshItem{isPRs: true}
+
 // scheduledItems is the fixed set the scheduler considers each tick: the panel
 // sources plus the two synthetic network items (fetch, remote-tags).
 // (srcIdentity is intentionally excluded — identity changes only via SetIdentity.)
 var scheduledItems = []refreshItem{
 	{source: srcStatus}, {source: srcBranches}, {source: srcRemotes},
 	{source: srcWorktrees}, {source: srcTags}, {source: srcReflog},
-	{source: srcFeed}, fetchItem, remoteTagsItem,
+	{source: srcFeed}, fetchItem, remoteTagsItem, prsItem,
 }
 
 // refreshIntervalFor returns the configured seconds for it (0 = off).
 func refreshIntervalFor(cfg config.RefreshConfig, it refreshItem) int {
+	if it.isPRs {
+		return cfg.PRsSeconds()
+	}
 	if it.isRemoteTags {
 		return cfg.RemoteTags
 	}
@@ -99,6 +110,9 @@ func scheduledInterval(cfg config.RefreshConfig, it refreshItem) (int, bool) {
 // refreshTomlKey is the [refresh] TOML key for an item. Note srcFeed's display
 // name is "commits" but its config key is "feed".
 func refreshTomlKey(it refreshItem) string {
+	if it.isPRs {
+		return "prs"
+	}
 	if it.isRemoteTags {
 		return "remote_tags"
 	}
@@ -129,7 +143,7 @@ func refreshTomlKey(it refreshItem) string {
 // sets a *_watch bool for a not-yet-wired source still polls (never goes stale).
 // D1: worktrees, reflog. D2: branches, remotes (recursive ref-tree watching).
 func watchEligible(it refreshItem) bool {
-	if it.isFetch {
+	if it.isFetch || it.isRemoteTags || it.isPRs {
 		return false
 	}
 	switch it.source {
@@ -163,6 +177,11 @@ func watchActive(cfg config.RefreshConfig, watchSupported bool, it refreshItem) 
 
 // setRefreshIntervalField writes secs into the RefreshConfig field for an item.
 func setRefreshIntervalField(cfg *config.RefreshConfig, it refreshItem, secs int) {
+	if it.isPRs {
+		v := secs
+		cfg.PRs = &v
+		return
+	}
 	if it.isRemoteTags {
 		cfg.RemoteTags = secs
 		return
@@ -313,6 +332,11 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 		return m, nil
 	}
 	due := dueItems(now, m.refreshLastRun, m.cfg.Refresh, m.watchSupported, false)
+	// The pull-request poll rides the same lane but not the same switch, and
+	// only once a forge CLI has proved usable (no forge → no call, ever).
+	if m.forgeShown && !m.prsInflight && prsDue(now, m.refreshLastRun, m.cfg.Refresh) {
+		due = append(due, prsItem)
+	}
 	m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, due)
 	if m.bgBusy || len(m.bgQueue) == 0 {
 		return m, nil
@@ -328,7 +352,7 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	// re-enqueuing here keeps latency low when inflight clears before the next tick.
 	// Synthetic items (isFetch, isRemoteTags) are excluded: they have no sourceKey
 	// and must not read srcInflight[source-zero] (which is srcStatus).
-	if !it.isFetch && !it.isRemoteTags && m.srcInflight[it.source] {
+	if !it.isFetch && !it.isRemoteTags && !it.isPRs && m.srcInflight[it.source] {
 		m.bgQueue = enqueueDue(m.bgQueue, m.bgActiveItem, m.bgBusy, []refreshItem{it})
 		return m, nil
 	}
@@ -339,6 +363,11 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if it.isRemoteTags && m.svc == nil {
+		return m, nil
+	}
+	// A PR read already in flight (a manual r) must not get a second one; the
+	// next due tick re-adds it. svc nil: same stranded-lane guard as above.
+	if it.isPRs && (m.svc == nil || m.prsInflight || !m.forgeShown) {
 		return m, nil
 	}
 	if m.bgCancel == nil {
@@ -353,6 +382,11 @@ func (m Model) refreshTick(now time.Time) (Model, tea.Cmd) {
 	}
 	if it.isRemoteTags {
 		return m, m.remoteTagsCmd(m.bgCtx, false)
+	}
+	if it.isPRs {
+		var cmd tea.Cmd
+		m, cmd = m.readPRsCmd(m.bgCtx, true, false)
+		return m, cmd
 	}
 	m.srcGen[it.source]++
 	m.srcInflight[it.source] = true
@@ -401,6 +435,9 @@ func dueItems(now time.Time, lastRun map[refreshItem]time.Time, cfg config.Refre
 	}
 	var due []refreshItem
 	for _, it := range scheduledItems {
+		if it.isPRs {
+			continue // gated on a usable forge, which only the Model knows: prsDue
+		}
 		if watchActive(cfg, watchSupported, it) {
 			continue // driven by the file watcher, not the timer
 		}
@@ -414,6 +451,18 @@ func dueItems(now time.Time, lastRun map[refreshItem]time.Time, cfg config.Refre
 		}
 	}
 	return due
+}
+
+// prsDue reports whether the pull-request poll's interval has elapsed. It
+// deliberately ignores cfg.Enabled (ruling: the PR poll is its own switch —
+// [refresh] prs, 0 = off); the min_seconds floor still applies.
+func prsDue(now time.Time, lastRun map[refreshItem]time.Time, cfg config.RefreshConfig) bool {
+	secs, on := scheduledInterval(cfg, prsItem)
+	if !on {
+		return false
+	}
+	last, seen := lastRun[prsItem]
+	return !seen || now.Sub(last) >= time.Duration(secs)*time.Second
 }
 
 // bgRefreshHint is the unobtrusive status-line marker shown while the single
@@ -433,6 +482,8 @@ func (m Model) bgRefreshHint() string {
 	switch {
 	case m.bgActiveItem.isRemoteTags:
 		name = i18n.T("remote tags")
+	case m.bgActiveItem.isPRs:
+		name = i18n.T("pull requests")
 	case !m.bgActiveItem.isFetch:
 		name = sourceDisplayName(m.bgActiveItem.source)
 	}

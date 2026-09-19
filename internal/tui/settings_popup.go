@@ -869,6 +869,8 @@ func (p *settingsPopup) box(m Model) string {
 			name := "fetch"
 			if it.isRemoteTags {
 				name = "remote_tags"
+			} else if it.isPRs {
+				name = "prs"
 			} else if !it.isFetch {
 				name = sourceNames[it.source]
 			}
