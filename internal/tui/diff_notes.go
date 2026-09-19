@@ -3,6 +3,7 @@ package tui
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -120,7 +121,23 @@ func dropAgentRows(rows []noteLine) []noteLine {
 // the END of its range on its side (§4.4 phase-2 hunks anchor at the range
 // end). See lineAnchor for the return contract.
 func (v *diffView) noteAnchorLine(r domain.ResolvedNote) (int, bool) {
+	if isFileLevelNote(r) {
+		// A forge comment on the whole file hangs off the view's first real
+		// line — the top of the file. (The line may be a fold: then it is the
+		// fold that gets the note mark, like any other hidden anchor.)
+		if len(v.lines) == 0 {
+			return -1, false
+		}
+		return 0, v.lines[0].Fold == 0
+	}
 	return v.lineAnchor(r.Range[1], r.Note.Side == model.NoteSideOld)
+}
+
+// isFileLevelNote reports a forge comment anchored to the file, not a line:
+// the zero range. Only a forge note may be one — a STORED note with a zero
+// range is malformed and stays unanchored.
+func isFileLevelNote(r domain.ResolvedNote) bool {
+	return r.Note.Source == model.NoteSourceForge && r.Range == [2]int{}
 }
 
 // lineAnchor finds the logical line carrying number no on the old (old=true) or
@@ -225,6 +242,9 @@ func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int) []noteLine {
 // plus "(stale)" when the anchor text is gone — hunk's
 // "agent note - updates/garmin.go R204".
 func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
+	if r.Note.Source == model.NoteSourceForge {
+		return v.forgeNoteTitle(r)
+	}
 	kind := i18n.T("note")
 	if r.Note.Source == model.NoteSourceAgent {
 		kind = i18n.T("agent note")
@@ -248,6 +268,34 @@ func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
 		t += " " + i18n.T("(stale)")
 	}
 	return t
+}
+
+// forgeNoteTitle is a forge review thread's top rule: "review · author · 2d ago
+// · path R12", "(file)" in place of the line for a whole-file comment, and
+// "· resolved" when its reviewers closed the thread. The login, the path and
+// the age stamp are data; only the words are translated.
+func (v *diffView) forgeNoteTitle(r domain.ResolvedNote) string {
+	parts := []string{i18n.T("review")}
+	if r.Note.Author != "" {
+		parts = append(parts, r.Note.Author)
+	}
+	if !r.Note.Created.IsZero() {
+		parts = append(parts, ageString(time.Now(), r.Note.Created))
+	}
+	where := v.noteAddr.Path
+	switch {
+	case isFileLevelNote(r):
+		where += " " + i18n.T("(file)")
+	case r.Note.Side == model.NoteSideOld:
+		where += " L" + strconv.Itoa(r.Range[1])
+	default:
+		where += " R" + strconv.Itoa(r.Range[1])
+	}
+	parts = append(parts, where)
+	if model.NoteHasTag(r.Note, model.NoteTagResolved) {
+		parts = append(parts, i18n.T("resolved"))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // noteBodyLines is one note's own rows inside a box: the summary (bold on a

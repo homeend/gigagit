@@ -294,7 +294,34 @@ func noteChoiceOptions(ts []noteTarget) []string {
 // agent has been through): a chooser modal lists them by summary and act runs
 // on the pick; esc / Cancel does nothing.
 func (m Model) withNoteTarget(act func(Model, noteTarget) (tea.Model, tea.Cmd)) (tea.Model, tea.Cmd) {
-	ts := m.notesAtCursor()
+	return m.withNoteTargetIn(m.notesAtCursor(), act)
+}
+
+// withEditableNoteTarget is withNoteTarget for the MUTATING gestures (edit,
+// reply, delete): forge review threads are read-only, so they are not offered.
+// A line carrying only forge threads says so instead of silently doing nothing.
+func (m Model) withEditableNoteTarget(act func(Model, noteTarget) (tea.Model, tea.Cmd)) (tea.Model, tea.Cmd) {
+	all := m.notesAtCursor()
+	ts := editableNoteTargets(all)
+	if len(ts) == 0 && len(all) > 0 {
+		m.statusMsg = i18n.T("forge comments are read-only")
+		return m, nil
+	}
+	return m.withNoteTargetIn(ts, act)
+}
+
+// editableNoteTargets drops the forge threads from a target set.
+func editableNoteTargets(ts []noteTarget) []noteTarget {
+	out := ts[:0:0]
+	for _, t := range ts {
+		if t.note.Source != model.NoteSourceForge {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+func (m Model) withNoteTargetIn(ts []noteTarget, act func(Model, noteTarget) (tea.Model, tea.Cmd)) (tea.Model, tea.Cmd) {
 	switch len(ts) {
 	case 0:
 		return m, nil
@@ -509,8 +536,8 @@ func (m Model) noteMenuRows() []actionRow {
 	if _, ok := m.topLayer().(*diffView); !ok {
 		return nil
 	}
-	if _, ok := m.noteNearCursor(); !ok {
-		return nil
+	if len(editableNoteTargets(m.notesAtCursor())) == 0 {
+		return nil // nothing in reach, or only read-only forge threads
 	}
 	open := func(id, label string, mode noteFormMode) actionRow {
 		return actionRow{id: id, label: label, run: func(m Model) (tea.Model, tea.Cmd) {
@@ -535,14 +562,14 @@ func (m Model) noteDeleteRow() (actionRow, bool) {
 	if _, ok := m.topLayer().(*diffView); !ok {
 		return actionRow{}, false
 	}
-	if _, ok := m.noteNearCursor(); !ok {
+	if len(editableNoteTargets(m.notesAtCursor())) == 0 {
 		return actionRow{}, false
 	}
 	return actionRow{
 		id:    "note-delete",
 		label: i18n.T("Delete note"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.withNoteTarget(func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
+			return m.withEditableNoteTarget(func(m Model, t noteTarget) (tea.Model, tea.Cmd) {
 				return m.confirmNoteDelete(t)
 			})
 		},
