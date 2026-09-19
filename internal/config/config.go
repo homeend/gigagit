@@ -163,6 +163,13 @@ type RefreshConfig struct {
 	Fetch      int  `toml:"fetch"`       // seconds between background `git fetch`; 0 = off
 	RemoteTags int  `toml:"remote_tags"` // seconds between background remote-tag (ls-remote) lookups; 0 = off
 
+	// PRs is the pull-request list poll in seconds. Unlike every other interval
+	// it is INDEPENDENT of Enabled — the list is remote data no file watcher or
+	// git read can refresh — and it defaults ON: nil = unset → 300, an explicit
+	// 0 = off. A pointer because the overlay's zero-is-unset rule could not
+	// otherwise express "off" over a non-zero default. Read it via PRsSeconds.
+	PRs *int `toml:"prs"`
+
 	// MinSeconds is the floor on any auto-refresh interval: no source polls more
 	// often than this, even when a source reads very cheaply. 0 = unset → default 10.
 	MinSeconds int `toml:"min_seconds"`
@@ -411,6 +418,21 @@ func overlayDebug(dst *DebugConfig, src DebugConfig) {
 	}
 }
 
+// defaultPRsSeconds is the pull-request poll when no layer sets [refresh] prs.
+const defaultPRsSeconds = 300
+
+// PRsSeconds is the effective pull-request poll interval: unset → 300, an
+// explicit 0 (or a negative value) → off.
+func (r RefreshConfig) PRsSeconds() int {
+	if r.PRs == nil {
+		return defaultPRsSeconds
+	}
+	if *r.PRs < 0 {
+		return 0
+	}
+	return *r.PRs
+}
+
 // overlayRefresh copies each set field of src onto dst. Intervals use the
 // zero-is-unset rule (0 = unset). Enabled uses inverted polarity: default false
 // is "off", so only a true in a higher layer overlays (a higher layer cannot
@@ -445,6 +467,10 @@ func overlayRefresh(dst *RefreshConfig, src RefreshConfig) {
 	}
 	if src.RemoteTags > 0 {
 		dst.RemoteTags = src.RemoteTags
+	}
+	if src.PRs != nil {
+		v := *src.PRs // copy: a layer's value must not alias the merged config
+		dst.PRs = &v
 	}
 	if src.MinSeconds > 0 {
 		dst.MinSeconds = src.MinSeconds
