@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Links in, links out — the TUI copies, records and re-opens `gg://` links
+
+**The TUI now records every link it copies.** It was the one frontend that
+never did: `gg links`, the web's history and the MCP list only ever showed
+links copied from the CLI or the browser. Recording happens at the TUI's single
+clipboard writer, so no copy row can forget — and it happens *before* the
+clipboard write, whatever its outcome, because a broken clipboard (WSL interop
+down) is exactly when the history is the only place the link survives.
+
+**New copy surfaces.** `.` → *Copy link* on a **branch**, **remote-branch** or
+**tag** row copies `gg://<repo>@ref:<name>` — the name rides, so the link
+follows the branch. On a **stash** row it copies the change-set the stash holds,
+`gg://<repo>@<parent>..<stash-sha>`: both halves resolved, never `stash@{N}`,
+which every push and drop renumbers. **`L`** in the bookmark and shelf
+switchers copies that entry's link with its `?bookmark=` / `?shelf=` landing
+hint.
+
+**The `#` prompt picks from what you copied.** `↓` moves into the last twenty
+copied links (newest first, from any frontend); `enter` goes there. `esc` or
+`↑` on the first row returns to the field, and typing always lands in it.
+
+**A stash link means "what I stashed" — including untracked files.** A `-u`
+stash keeps its untracked files in a third, parentless parent that
+`<parent>..<stash>` cannot see, so a comparison silently omitted them (spec
+§3.4, deferred since the algebra landed). Such a pair now enumerates them as
+additions, read from that parent. The rule is structural — three parents, the
+first is the pair's `a`, the third is a *root* — so an octopus merge, which
+also has three parents, is untouched.
+
+**`gg compare --remove <id|label>` and `--rename <id|label> <new-label>`.** Both
+domain verbs existed with no CLI caller; removing a saved comparison meant
+editing `savedcompare.toml` by hand.
+
+Under the hood: `domain.DescribeLink` is now the one describer behind every
+history row (it lived unexported in `internal/cli`, out of the TUI's reach),
+and a member's bytes are read through `FileSet.Source(path)`.
+
 ## Saved comparisons absorb merge previews
 
 `internal/savedcompare` is now the one store behind both saved comparisons and

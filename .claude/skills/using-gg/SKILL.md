@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v83 -->
+<!-- gg:using-gg:v84 -->
 
 # Using gg (gigagit)
 
@@ -194,9 +194,17 @@ finds the right one here.
   `gg link resolve <link> [--json]` says which checkout it names here and the
   address inside it; exit 1 when the repository is unknown or ambiguous,
   exit 2 when the link itself is malformed.
+- A STASH is linked as the change-set it holds: `gg://<repo>@<parent>..<stash-sha>`
+  (both full shas — never `stash@{N}`, which is renumbered by every push and
+  drop). For a stash made with untracked files (`git stash -u`) the set
+  INCLUDES those files, as additions, although `git diff <parent> <stash>`
+  does not show them: the link means "what was stashed". `gg links` describes
+  such a row as `stash: <subject>`.
 - `gg links [--json]` — the links copied in this repository, newest first,
   one `<desc>\t<link>` row per line. Every "copy gg link" action records here:
-  `gg link`, `gg compare` on a link argument, and the browser's own copy rows.
+  `gg link`, `gg compare` on a link argument, the browser's own copy rows, and
+  every link copied in the TUI (Copy link on a file, commit, branch, tag,
+  preview or stash row; `L` in the bookmark and shelf switchers).
   **Use it to pick up a place the user just copied instead of asking them to
   paste it again.** Twenty rows are kept; re-copying a link moves it to the
   top rather than adding a second row. Nothing copied yet prints nothing and
@@ -388,11 +396,19 @@ finds the right one here.
   `<id>\t<label>\t<left>\t<right>` line each. A saved MERGE PREVIEW is a
   one-sided entry, so its `<right>` column is EMPTY — the column count is
   fixed either way, for `cut`. Nothing is printed when none are stored.
+- `gg compare --remove <id|label>` — delete ONE stored comparison (a saved
+  merge preview is a row of the same store, so this removes one too).
+  `gg compare --rename <id|label> <new-label>` relabels one; the id is derived
+  from the two links, so it does not change. Both take no endpoints, print
+  nothing on stdout, and confirm on stderr (`# removed: <id>\t<label>` /
+  `# renamed: <id>\t<label>`). An unknown `<id|label>` is exit 2.
 
   ```bash
   gg compare --save "auth refactor" main feat/auth
   gg compare --list | cut -f1,2        # ids and labels
   gg compare --saved "auth refactor"   # run it again later
+  gg compare --rename "auth refactor" "auth refactor v2"
+  gg compare --remove "auth refactor v2"
   ```
 
   Saved comparisons and saved merge previews share ONE store, so
