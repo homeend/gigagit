@@ -65,18 +65,31 @@ func (s *Service) BookmarkRemove(ctx context.Context, id string) error {
 // compare never races a TreeWrite op mid-rewrite; the shelf store is not git
 // state and stays ungated.
 func (s *Service) BookmarkBytes(ctx context.Context, b model.Bookmark) ([]byte, error) {
+	return s.bookmarkBytes(ctx, b, false)
+}
+
+// bookmarkBytes is BookmarkBytes with the failure seam selectable. quiet is
+// for BookmarkProbe, whose whole job is to ask about entries that may be dead:
+// a miss there is the ANSWER, not a failure, and logged through query it would
+// add an errors.log row on every click of a dead bookmark (the CommitLookup
+// convention).
+func (s *Service) bookmarkBytes(ctx context.Context, b model.Bookmark, quiet bool) ([]byte, error) {
+	read := query[[]byte]
+	if quiet {
+		read = queryQuiet[[]byte]
+	}
 	if b.IsCommit() {
 		return nil, errors.New("bookmark: commit bookmark has no file bytes")
 	}
 	switch b.State {
 	case model.StateCommitted:
-		return query(ctx, s, "catfile:"+b.SHA, func(ctx context.Context) ([]byte, error) {
+		return read(ctx, s, "catfile:"+b.SHA, func(ctx context.Context) ([]byte, error) {
 			return s.repo.CatFileBlob(ctx, b.SHA)
 		})
 	case model.StateShelf:
 		return s.ShelfBlob(ctx, b.ShelfID)
 	case model.StateStaged:
-		return query(ctx, s, "showindir:"+b.Worktree+":"+b.Path, func(ctx context.Context) ([]byte, error) {
+		return read(ctx, s, "showindir:"+b.Worktree+":"+b.Path, func(ctx context.Context) ([]byte, error) {
 			return s.repo.ShowFileInDir(ctx, b.Worktree, "", b.Path)
 		})
 	case model.StateUnstaged, model.StateUntracked:
@@ -84,7 +97,7 @@ func (s *Service) BookmarkBytes(ctx context.Context, b model.Bookmark) ([]byte, 
 		if err != nil {
 			return nil, err
 		}
-		return query(ctx, s, "bookmarkfile:"+b.Worktree+":"+b.Path, func(ctx context.Context) ([]byte, error) {
+		return read(ctx, s, "bookmarkfile:"+b.Worktree+":"+b.Path, func(ctx context.Context) ([]byte, error) {
 			return os.ReadFile(full)
 		})
 	default:
@@ -126,7 +139,7 @@ func (s *Service) BookmarkProbe(ctx context.Context, b model.Bookmark) error {
 		}
 		return nil
 	}
-	if _, err := s.BookmarkBytes(ctx, b); err != nil {
+	if _, err := s.bookmarkBytes(ctx, b, true); err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
