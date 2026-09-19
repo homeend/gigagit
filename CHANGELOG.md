@@ -8,6 +8,55 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ## [Unreleased]
 
+- **Pull requests, read-only (`gg pr`) — the core of the forge integration.**
+  gg can now read the current repository's pull requests through the forge's
+  own CLI (GitHub's `gh` today), and never writes to the forge: nothing is
+  posted, edited, resolved or submitted. `gg pr list` prints the open PRs,
+  newest-updated first (`#<n> <state> <author>  <source> → <target> [draft]
+  [<review state>]  <title>`, a fork head as `owner:branch`); `gg pr view <n>`
+  adds the description, the conversation (general comments and review
+  verdicts, oldest first) and the *outdated* inline threads with their
+  original line and hunk tail; `gg pr comments <n>` prints the inline and
+  file-level threads that still have a position (`a.go:10-12 (new) carol
+  [resolved]: …`, replies indented). All three take `--json`.
+  `gg pr fetch <n>` brings the PR head — fork PRs included — into the private
+  ref `refs/gg/pr/<n>` (local only, never pushed, never decorated in the
+  graph, a no-op when already current), fetching through whichever configured
+  remote names the base repository so your own transport and credentials are
+  used; read the change with `gg diff <target>...refs/gg/pr/<n>`.
+  **A PR gg knows never disappears because it closed**: one that was listed
+  open earlier in the session, or that you fetched (in any session — the ref
+  is the record, there is no state file), stays listed marked `closed`,
+  `merged` or `unavailable` until `gg pr forget <n>` drops it.
+  Detection runs **once per session**: `gh` must be installed, logged in and
+  able to read this repo's PRs, otherwise the feature is simply off (the CLI
+  says why; the TUI will show nothing — the new *silent* preflight feature
+  kind raises no notice). Comment reads are per PR and single-page: 100
+  threads × 50 comments, 100 conversation comments, 100 reviews, with a
+  visible "truncated" marker beyond. Everything above one `forge.Provider`
+  interface is forge-neutral, so GitLab/Gitea are one more implementation.
+  The TUI PRs tab, the PR hub popup and inline comments as read-only note
+  boxes follow in the next two stages.
+
+- **Fixed — web: clicking a shelved commit did nothing once the original
+  commit was gone.** The browser opened the ORIGINAL commit by hash; after
+  the rebase + gc that is the usual reason to shelve, that request 404'd
+  into an unhandled rejection and the click was silent — while the TUI
+  opened the entry's frozen files. The click (and a new **browse the frozen
+  files** menu row) now opens the frozen members against the working tree,
+  the TUI's `enter`; **show the original commit** stays in the menu.
+- **A bookmark that points at nothing any more says so — in both frontends,
+  for ten seconds.** A bookmark is a pointer: once its commit or blob is
+  rebased away, the web did nothing and the TUI opened a view holding git's
+  raw `bad object` / `cat-file … bad file`. One check, `domain.BookmarkProbe`
+  (`GET /api/bookmarks/check` on the wire), now answers both with the same
+  sentence — `commit 1f0726e is no longer available`. The web shows it as a
+  new pop-up toast (bottom right, 10 s, hover holds it, click dismisses, git's
+  own words as a dim detail line); the TUI stays on the bookmark switcher and
+  shows it as a STICKY status notice that survives keypresses for 10 s
+  instead of dying on the next key. Any commit opened by hash in the web
+  (links, reflog, tags) reports a missing commit the same way.
+
 - **Web: in-view text search in the `?` help popup.** The help overlay now
   takes the same `/` `@` `]` `[` search as the diff pane and blame: `/`
   opens a bar under the title, typing re-finds the help's rows (headings

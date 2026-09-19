@@ -8,6 +8,7 @@ const (
 	FeatureCore     = "core"
 	FeatureVersions = "versions"
 	FeaturePreviews = "previews"
+	FeatureForge    = "forge"
 
 	StoreVersions = "versions"
 	StorePreviews = "previews"
@@ -81,6 +82,12 @@ func Features() []preflight.Feature {
 					}
 				},
 			},
+		},
+		{
+			ID:          FeatureForge,
+			Criticality: preflight.Optional,
+			Silent:      true, // no forge CLI is the normal case, not a problem to report
+			Requires:    []preflight.Requirement{preflight.ForgeUsable{}},
 		},
 	}
 }

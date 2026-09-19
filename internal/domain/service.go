@@ -17,6 +17,7 @@ import (
 	"github.com/homeend/gigagit/internal/bookmark"
 	"github.com/homeend/gigagit/internal/cache"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/forge"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/linkhist"
@@ -86,6 +87,19 @@ type Service struct {
 
 	prefixGlobal prefix.Store // lazily resolved; nil disables prefixes
 	prefixRepo   prefix.Store // lazily resolved; nil disables prefixes
+
+	// forgeMu guards forge detection and the known-PR set (forge.go). It is
+	// never held across a provider call (the probe is a network round trip and
+	// Preflight reads forgeProbe under it), and never while taking preflightMu
+	// (Preflight holds preflightMu then takes forgeMu — the reverse deadlocks).
+	forgeMu        sync.Mutex
+	forgeProviders []forge.Provider // nil = forge.Default; tests inject
+	forgeProbed    bool
+	forgeProbing   chan struct{}  // non-nil while the one probe is in flight; closed when it lands
+	forgeActive    forge.Provider // nil when none is usable
+	forgeErr       error
+	forgeSeen      map[int]bool              // PR numbers listed open this session
+	forgeTerminal  map[int]model.PullRequest // cached closed/merged/unavailable reads
 
 	// preflightMu guards the resolved verdicts. reRoot builds a FRESH Service,
 	// so a cached resolution can never outlive the repo it describes.

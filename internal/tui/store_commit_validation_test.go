@@ -57,7 +57,17 @@ func TestCommitBookmarkCompareStillOpensOnAGoodHash(t *testing.T) {
 	m.focus = panelCommits
 	m = m.pushLayer(&bookmarkPopup{})
 
-	got, _ := m.compareCommitBookmark(model.Bookmark{Commit: m.commits[2].Hash})
+	// The open is two steps now: the sides resolve off the UI thread first
+	// (a bookmark whose commit is gone must be a notice, not a broken view),
+	// and the resolved pair opens the comparison.
+	got, cmd := m.compareCommitBookmark(model.Bookmark{Commit: m.commits[2].Hash})
+	if cmd == nil || got.statusMsg != "" {
+		t.Fatalf("a valid stored commit must dispatch the resolve (cmd=%v msg=%q)", cmd, got.statusMsg)
+	}
+	left, _ := model.CommitEndpoint(m.commits[2].Hash)
+	right, _ := model.CommitEndpoint(m.commits[0].Hash)
+	mm, _ := got.Update(entryCompareMsg{gen: got.entryCompareGen, left: left, right: right})
+	got = mm.(Model)
 
 	if got.filesView == nil || !got.inCompareMode() {
 		t.Fatal("a valid stored commit must open the comparison")

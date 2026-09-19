@@ -127,6 +127,14 @@ func TestCommitBookmarkEnterComparesVsSelected(t *testing.T) {
 
 	mm, cmd := m.Update(keyMsg("enter"))
 	m = mm.(Model)
+	if cmd == nil {
+		t.Fatal("enter must dispatch the off-thread resolve of both sides")
+	}
+	// The resolve's answer (both commits live) is what opens the compare.
+	left, _ := model.CommitEndpoint(base)
+	right, _ := model.CommitEndpoint(m.commits[0].Hash)
+	mm, cmd = m.Update(entryCompareMsg{gen: m.entryCompareGen, left: left, right: right})
+	m = mm.(Model)
 	if m.bookmarkSwitcher() != nil {
 		t.Fatal("enter should close the switcher (cleared layers)")
 	}

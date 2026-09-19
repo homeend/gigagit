@@ -10,6 +10,7 @@ import { addCommitEntry } from "./sidebar.js";
 import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare, openWorkingTree, renderFiles, setCommitTitle, setFilesDesc, setFilesMeta } from "./files.js";
 import { focusPane, moveCursor } from "./keys.js";
 import { extraRows } from "./menus.js";
+import { entryGone } from "./toast.js";
 
 // Feed-scoped state that lives on the shared object so search.js (which owns
 // the filter bar) can set it without this module importing that one — the
@@ -527,8 +528,17 @@ async function openCommit(i) {
 // sidebar tags (and future non-feed jump-ins).
 async function openCommitByHash(hash, title) {
   const gen = ++state.detailGen;
-  const body = await getJSON("/api/commit/" + hash);
-  if (gen !== state.detailGen) return; // superseded by a newer open or esc
+  let body;
+  try {
+    body = await getJSON("/api/commit/" + hash);
+  } catch (e) {
+    // Reached by hash from a bookmark, a shelf entry or a link — i.e. from
+    // something that OUTLIVES the commit. Unhandled, this was a click that
+    // did nothing at all.
+    if (gen === state.detailGen) entryGone("commit " + hash.slice(0, 7), e.message || String(e));
+    return false;
+  }
+  if (gen !== state.detailGen) return false; // superseded by a newer open or esc
   state.files = body.files || [];
   state.fileCursor = 0;
   state.fileSha = hash;
@@ -539,6 +549,7 @@ async function openCommitByHash(hash, title) {
   setFilesDesc(body.message || "");
   renderFiles();
   focusPane();
+  return true; // callers that go on to open a FILE must not do so over a stale list
 }
 
 

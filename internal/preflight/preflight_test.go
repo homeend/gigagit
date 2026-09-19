@@ -161,3 +161,27 @@ func TestGitVersionAndDataFormatDeclareNeedsStoreProbes(t *testing.T) {
 		t.Error("DataFormat.NeedsStoreProbes() = false, want true")
 	}
 }
+
+func TestForgeUsable(t *testing.T) {
+	t.Parallel()
+	f := []Feature{{ID: "forge", Criticality: Optional, Silent: true, Requires: []Requirement{ForgeUsable{}}}}
+	for name, tc := range map[string]struct {
+		p    Probes
+		want State
+	}{
+		"unprobed":  {Probes{}, Unsatisfiable},
+		"missing":   {Probes{Forge: &ForgeProbe{Err: "gh: not found"}}, Unsatisfiable},
+		"available": {Probes{Forge: &ForgeProbe{Provider: "github"}}, Satisfied},
+	} {
+		v := Resolve(f, tc.p)[0]
+		if v.State != tc.want {
+			t.Errorf("%s: state = %v, want %v", name, v.State, tc.want)
+		}
+		if !v.Feature.Silent {
+			t.Errorf("%s: Silent lost", name)
+		}
+	}
+	if NeedsStoreProbes(f) {
+		t.Error("ForgeUsable must not need store probes")
+	}
+}

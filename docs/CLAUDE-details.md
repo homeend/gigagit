@@ -1596,3 +1596,71 @@ does not itself cause the overflow.
   refetch (scroll mode's sticky `.bgut`/`.bno` carry the tint too); the
   title carries ` · +1d -7d`; `#blame-hint` and the `?` help name the keys.
 - **Keys ruling:** `d`/`D`, not `h`/`H` — `h` means history in the diff view.
+
+### Forge pull requests, read-only (`internal/forge`, plan 1 of 3, spec `docs/superpowers/specs/2026-09-19-forge-prs-design.md`)
+
+**Shape.** `model.PullRequest` / `model.ForgeComment` are provider-neutral and
+live in `model` because frontends must name them but may not import a
+domain-owned package. `forge.Provider` (`Detect`, `ListOpen`, `PR`, `Comments`,
+`BaseRepo`, `HeadRefspec`) is the seam; `forge.GH` is the only implementation
+and runs `gh` through a `gitexec.ExecRunner` built with the gh binary path
+(`$GG_GH_BIN`, else `gh`) — the runner was already binary-agnostic. Every gh
+call has a 30 s timeout. `TestGHArgvIsReadOnly` pins that no mutating token
+(`-X`, `comment`, `review`, `edit`, `merge`, …) ever appears in an argv.
+
+**Detection is once per `domain.Service`** (user ruling): `ForgeStatus` probes
+on its first call (`gh pr list --limit 1 --json number` = installed + authed +
+repo resolves) and caches forever; a user who fixes gh restarts gg. It is a
+network round trip, so frontends call it off the UI thread. `Preflight` NEVER
+probes — it reads the `forgeProbe()` snapshot (nil = unprobed = unsatisfiable),
+and `ForgeStatus` invalidates the preflight cache after its one probe. **Locks:**
+the probe runs OUTSIDE `forgeMu` (it can take its full 30 s, and everything
+that calls `Preflight` — notices, `FeatureEnabled`, the web gate — reads
+`forgeProbe` under that lock); concurrent first callers wait on the
+`forgeProbing` channel so `Detect` still runs once, and `forgeProbe` says
+"unprobed" while it is in flight. Order is `preflightMu` → `forgeMu`, so
+`ForgeStatus` calls `invalidatePreflight` with `forgeMu` released. The `forge`
+feature is `Optional` + `Silent`: `noticesForVerdicts` skips silent verdicts, so
+a box without gh shows no notice (the CLI, which was asked, prints the reason).
+
+**Known PRs never disappear when they close** (user ruling). `PullRequests` =
+`ListOpen` ∪ known-but-not-open, where known = listed open earlier this
+session (`forgeSeen`) or has a `refs/gg/pr/<n>` ref. The REF is the
+cross-session record — there is no state file, and refs are never pruned
+automatically. A non-open PR is read once with `PR(n)` and cached
+(`forgeTerminal`); `ErrNotFound` → state `unavailable` (cached), a transient
+error → `unavailable` uncached. `PRForgetOp` drops the session entry and the op
+deletes the ref. Open rows first, each group newest-updated first.
+
+**The fetch.** `engine.FetchPRHead` (RefWrite) force-fetches
+`refs/pull/<n>/head` (the provider's `HeadRefspec`, fully qualified — no DWIM)
+into `refs/gg/pr/<n>` with `--no-tags --no-write-fetch-head`; when the ref
+already equals the PR's `HeadSHA` it costs one rev-parse and no network.
+`PRFetchOp` picks the remote: the configured remote whose URL `RepoSlug`s to
+the base repo gh reports (ssh and https spellings compare equal), else gh's
+`sshUrl`/`url`. GitHub serves fork PR heads from the BASE repo, so forks need
+nothing special. `refs/gg/*` is already excluded from graph decorations.
+
+**`PRPair`** picks the diff's left side: an open PR → its target branch; a
+closed/merged one → the forge's recorded `baseRefOid` (after a merge the
+target tip contains the head, so `target...head` is empty); each falls
+through when it does not resolve locally, ending at `<remote>/<target>`.
+
+**Comments** come from ONE `gh api graphql` call per PR using gh's own
+`{owner}`/`{repo}` placeholders (GraphQL because REST has no `isResolved`),
+single-page by design: 100 threads × 50 comments, 100 conversation comments,
+100 reviews, `hasNextPage` anywhere → `Truncated`. `PRComments` buckets them:
+`Inline` (line or file-level threads with a current position), `Outdated`
+(GitHub nulls `line`; the parser keeps `originalLine` as a LABEL only — never
+anchor an outdated thread), `Hub` (conversation + review verdicts,
+chronological). A `COMMENTED` review with an empty body is dropped: it is only
+the envelope of its inline comments. A deleted account's null author is
+`ghost`. Buckets are `[]`, never `null`, on the wire.
+
+**Testing.** `internal/forge/testdata/fakegh` is a Go-built fake `gh`
+(`forgetest.BuildFakeGH`, built once per process, Windows-safe) answering from
+`$GG_FAKEGH_DIR`, else `<cwd>/.git/fakegh/*.json` — which is how an e2e TOML
+scenario seeds it with plain `write` steps. The e2e `TestMain` points
+`GG_GH_BIN` at it for EVERY scenario, so the suite can never reach the real
+gh. Tests that set that env are serial. Domain tests inject a `fakeForge` via
+`svc.SetForgeProviders`.

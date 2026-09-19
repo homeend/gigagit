@@ -1,0 +1,50 @@
+name = "cli: gg pr reads pull requests from a forge CLI, read-only"
+
+# The e2e TestMain points GG_GH_BIN at a fake gh that answers from
+# <repo>/.git/fakegh/*.json. Seeding those files is what makes a forge
+# "available" here; the writes land under .git, so the tree stays clean.
+[input]
+steps = [
+  { write = "a.go", content = "package a\n" },
+  { commit = "base" },
+  { write = ".git/fakegh/pr-list.json", content = '[{"number":7,"title":"Add forge tab","author":{"login":"alice"},"state":"OPEN","isDraft":true,"reviewDecision":"","headRefName":"feat/forge","isCrossRepository":false,"baseRefName":"main","baseRefOid":"1111111111111111111111111111111111111111","headRefOid":"2222222222222222222222222222222222222222","url":"https://example.test/pull/7","createdAt":"2026-09-01T10:00:00Z","updatedAt":"2026-09-02T11:30:00Z"}]' },
+  { write = ".git/fakegh/pr-view-7.json", content = '{"number":7,"title":"Add forge tab","author":{"login":"alice"},"state":"OPEN","isDraft":true,"reviewDecision":"","headRefName":"feat/forge","isCrossRepository":false,"baseRefName":"main","baseRefOid":"1111111111111111111111111111111111111111","headRefOid":"2222222222222222222222222222222222222222","url":"https://example.test/pull/7","createdAt":"2026-09-01T10:00:00Z","updatedAt":"2026-09-02T11:30:00Z","body":"Adds the tab."}' },
+  { write = ".git/fakegh/threads-7.json", content = '{"data":{"repository":{"pullRequest":{"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[{"path":"a.go","line":1,"startLine":null,"diffSide":"RIGHT","subjectType":"LINE","isResolved":true,"isOutdated":false,"comments":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"C1","replyTo":null,"author":{"login":"carol"},"body":"rename the package","diffHunk":"@@ -0,0 +1 @@\n+package a","createdAt":"2026-09-02T09:00:00Z","updatedAt":"2026-09-02T09:00:00Z"}]}}]},"comments":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"G1","author":{"login":"bob"},"body":"nice work","createdAt":"2026-09-02T08:00:00Z","updatedAt":"2026-09-02T08:00:00Z"}]},"reviews":{"pageInfo":{"hasNextPage":false},"nodes":[]}}}}}' },
+]
+
+[[run]]
+cmd             = ["pr", "list"]
+exit            = 0
+stdout_contains = ["#7", "open", "alice", "feat/forge → main", "[draft]", "Add forge tab"]
+
+[[run]]
+cmd             = ["pr", "view", "7"]
+exit            = 0
+stdout_contains = ["https://example.test/pull/7", "Adds the tab.", "── conversation ──", "bob: nice work"]
+stdout_excludes = ["── outdated ──", "truncated"]
+
+[[run]]
+cmd             = ["pr", "comments", "7"]
+exit            = 0
+stdout_contains = ["a.go:1 (new) carol [resolved]: rename the package"]
+
+# Unknown to the forge: an error, never a crash or an empty success.
+[[run]]
+cmd  = ["pr", "view", "8"]
+exit = 1
+
+# Forgetting a PR that was never fetched touches nothing.
+[[run]]
+cmd             = ["pr", "forget", "7"]
+exit            = 0
+stdout_contains = ["was not fetched"]
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"a.go" = "package a\n"
+
+[[expect.log]]
+subjects = ["base"]

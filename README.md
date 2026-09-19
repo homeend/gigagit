@@ -346,6 +346,28 @@ everything it shows: right-click anywhere in it for *copy short commit id* /
 *copy commit id* / *copy commit title* / *copy date* / *copy author* — or, if
 text in the header is selected, a plain *copy* of the selection.
 
+### Pull requests (read-only)
+
+With the GitHub CLI installed and logged in (`gh auth login`), gg reads the
+repository's pull requests — and only reads: nothing is ever posted, edited or
+submitted.
+
+```bash
+gg pr list [--json]           # open PRs, newest-updated first; known closed/merged ones stay, marked
+gg pr view 123 [--json]       # description, conversation + review verdicts, outdated inline threads
+gg pr comments 123 [--json]   # inline / file-level threads that still have a position
+gg pr fetch 123               # PR head (forks too) → private ref refs/gg/pr/123; prints the ref
+gg diff main...refs/gg/pr/123 # read the change
+gg pr forget 123              # drop the ref (and a closed PR's row)
+```
+
+`refs/gg/pr/<n>` is local only: never pushed, never shown in the commit graph.
+The fetch goes through whichever of your remotes names the base repository, so
+it uses your own ssh/https setup. `gh` is detected once per run; without a
+usable `gh` the verbs exit 1 and say why. Per PR, gg reads up to 100 review
+threads (50 comments each), 100 conversation comments and 100 reviews, and says
+so when a PR has more. `GG_GH_BIN` points gg at a different `gh` binary.
+
 ### Shell integration (cd-on-switch)
 
 So switching/creating a worktree can move your shell into it:

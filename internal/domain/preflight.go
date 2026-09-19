@@ -80,7 +80,18 @@ func (s *Service) probesFrom(ctx context.Context, formats map[string]int) (prefl
 			StorePreviews: {Present: s.legacyPreviewsPresent(ctx)},
 		},
 		GitVersion: ver,
+		// A snapshot, never a probe: forge detection is a network round trip
+		// and belongs to ForgeStatus, not to this synchronous resolve.
+		Forge: s.forgeProbe(),
 	}, formats, nil
+}
+
+// invalidatePreflight drops the cached verdicts so the next Preflight sees
+// the new state (a forge verdict changed, or a migration just ran).
+func (s *Service) invalidatePreflight() {
+	s.preflightMu.Lock()
+	s.preflightDone, s.preflightOut, s.preflightMarks = false, nil, nil
+	s.preflightMu.Unlock()
 }
 
 // Preflight resolves every declared feature against this repository.
@@ -320,14 +331,6 @@ func (s *Service) RunMigration(ctx context.Context, m PendingMigration) error {
 	}
 	s.invalidatePreflight()
 	return nil
-}
-
-// invalidatePreflight drops the cached verdicts so the next Preflight sees
-// the new state.
-func (s *Service) invalidatePreflight() {
-	s.preflightMu.Lock()
-	s.preflightDone, s.preflightOut, s.preflightMarks = false, nil, nil
-	s.preflightMu.Unlock()
 }
 
 // legacyPreviewsPresent reports whether this machine still holds the
