@@ -1,364 +1,261 @@
-# Saved commit pairs — a second kind of saved change-set
+# Saved commit pairs — store a commits diff, show it in the Previews tab
 
-Date: 2026-09-19 · Branch: `feat/saved-pairs` · Status: DRAFT for review
+Date: 2026-09-19 (rev 2) · Branch: `feat/saved-pairs` · Status: DRAFT for review
 
-Builds on `2026-09-09-merge-preview-design.md`, `2026-09-10-preview-notes-design.md`
-and `2026-09-16-unified-links-design.md` (whose §4.5 single-store fold stays
-parked — see §9).
+Rev 2 rewrites rev 1 against main `ea94b45d`, where plan 3a of
+`2026-09-16-unified-links-design.md` shipped `internal/savedcompare` and
+CONVERTED merge previews into it. Rev 1's own store (`pairstore`,
+`pairs.toml`, `ChangeSets`) is withdrawn — the store already exists.
 
 ---
 
 ## 1. Problem
 
-A merge preview (`target...source`, branch NAMES, recomputed from live tips)
-is today the only change-set a user can save, name, annotate and hand to an
-agent. The other change-set gg already shows — the diff between two marked
-commits (`m`, `m`, `.` → Compare selection) — is throwaway: close the view and
-it is gone, it has no entry in the Previews tab, and it cannot carry notes.
+The diff between two marked commits (`m`, `m`, `.` → Compare selection) is
+throwaway: close the view and it is gone. A merge preview is the only
+change-set a user can save and name.
 
-The user's goal (2026-09-19, verbatim intent): *compare some change set with
-some other change set and check how much they differ* — a previous version of
-a branch against a merge preview; three agents given the same job, compared
-against each other. A commit-pair diff "is the same as a merge request to some
-extent", so the two kinds must be **complementary**: saved in one place,
-linked the same way, annotated the same way, and — next phase — comparable
-with each other.
+The user's goal: saved change-sets of BOTH kinds, complementary, so that one
+can later be compared with another (a previous state of a branch vs a merge
+preview; three agents' attempts at the same job).
 
-## 2. Goals
+## 2. Scope (user ruling, 2026-09-19)
 
-1. Save the diff between two commits as a named entry beside merge previews.
-2. Point at it with a `gg://` link that lands ON the saved entry, so an agent
-   can be told "this diff contains those changes, check them and do X".
-3. Review notes on a saved pair, through the same lane previews use.
-4. Shape every piece so that **set × set comparison of any two saved entries**
-   (§8, next phase) needs no store, listing or link change.
+**In:** (1) the mechanics that store a commits diff; (2) showing it in the
+TUI Previews tab.
 
-### Non-goals
+**Out — other sessions own it or it waits for them:**
 
-- Set × set comparison UI (deferred to the next phase; designed-for in §8).
-- Live / moving pairs. A moving comparison is what a merge preview is.
-- Saving a 3+ commit ◉ range, or a pair with ◇ Working tree / ◇ Staged.
-- Folding previews and pairs into one `savedcompare` store (§9).
-- Entry-scoped notes (§6.1).
+| out | owner / reason |
+|---|---|
+| "Compare with link…" palette, set × set compare UI | plan 3b, in development |
+| web Previews tab listing saved entries | plan 3c |
+| `?preview=<id>` landing hint | deferred; rev 1 §5 — note its id rule was wrong (§7) |
+| review notes on a pair | deferred; rev 1 §6 stays the intended design |
+| MCP listing | follows 3c |
 
-## 3. Rulings (user, 2026-09-19 — do not re-ask)
+## 3. Rulings that still bind
 
 | # | ruling |
 |---|---|
-| P1 | Pairs are a **second record kind beside** merge previews. `previews.toml` and `MergePreview` are untouched; no migration, nothing discarded. |
-| P2 | A pair is **two full shas, frozen at save time, always** — even when a marked commit was a branch tip. |
-| P3 | The entry's link carries a new **`?preview=<id>` hint** so opening it lands on the saved entry. |
-| P4 | Saved pairs **support review notes**. |
-| P5 | Set × set compare moves to the **next phase**, but this design must make it cheap. |
-| P6 | Save gesture = **`m` + `m` then the `.` menu**. `space` is unchanged: it always opens the diff, never saves. |
+| P2 | A pair is **two FULL shas, frozen at save time**, even when a marked commit was a branch tip. |
+| P6 | Save gesture = **`m` + `m`, then the `.` menu**. `space` is unchanged — it always opens the diff. |
+| — | From plan 3a: `Add` dedups on the **(Left, Right) pair, never the id**; entries hold link TEXT; the id is `sha256(leftText\0rightText)[:8]`; the store lives under `stateBaseDir("previews")`. |
 
-## 4. Model
+## 4. Model — no new store, no new type on disk
 
-### 4.1 The record
+A saved commit pair is a **set-shaped** `savedcompare.Entry`:
+
+```
+Entry{ Left: gg://<repo>@<A40>..<B40>, Right: nil, Label, Created }
+```
+
+— exactly the shape a merge preview has (`Left: @target...source, Right: nil`),
+differing only in `Left.Target`: `Pair != nil` instead of `Preview != nil`.
+That is the whole "complementary" requirement at the data level, and it is
+why the future set × set compare needs nothing from this feature: both kinds
+are already `EvalLink`-able bounded sets in one store.
+
+**Today's gap, precisely:**
+
+1. nothing PRODUCES such an entry — `gg compare --save` always stores a Left
+   AND a Right; only `PreviewAdd` writes a set, and only a three-dot one;
+2. nothing SHOWS one — `previewFromEntry` (`domain/preview.go:50`) drops any
+   entry whose `Left.Target.Preview` is nil, and the TUI reads `PreviewList`.
+
+### 4.1 Domain — `internal/domain/pair.go` (new file)
 
 ```go
-// internal/model/pair.go
-type SavedPair struct {
-    ID      string    `toml:"id"`    // sha256(A + "\x00" + B)[:8] — direction-sensitive
-    A       string    `toml:"a"`     // full 40-hex sha: the OLD side
-    B       string    `toml:"b"`     // full 40-hex sha: the NEW side
-    Label   string    `toml:"label"` // default "<a7>..<b7> <subject of B>"
-    Created time.Time `toml:"created"`
+// CommitPair is a saved commits diff as a frontend sees it.
+type CommitPair struct {
+    ID, Label string
+    A, B      string    // full shas: old side, new side
+    Created   time.Time
 }
+func (p CommitPair) DefaultLabel() string // "<a7>..<b7>"
+
+type PairState int // PairInvalid, PairOK, PairMissingA, PairMissingB
+type PairSummary struct { State PairState; Files int }
+
+func (s *Service) PairAdd(ctx, a, b, label string) (CommitPair, error)
+func (s *Service) PairList(ctx) ([]CommitPair, error)
+func (s *Service) PairGet(ctx, idOrLabel string) (CommitPair, error)
+func (s *Service) PairSummary(ctx, a, b string) (PairSummary, error)
+func (s *Service) PairOpen(ctx, a, b string) (PreviewEndpoints, error)
 ```
 
-The id is a pure function of the address, exactly like `preview.ID`, so it is
-identical on every machine — that is what lets a hint carry it (§5).
-`A..B` and `B..A` are two entries, as `main→feat` and `feat→main` are today.
+- **`PairAdd`** resolves `a` and `b` to full commit shas (so a CLI caller may
+  pass a short sha, tag or branch — it FREEZES here, ruling P2), refuses
+  `a == b` after resolution, accepts unrelated commits (a two-dot diff needs
+  no ancestry), composes `Left` from `s.LinkRepo(ctx)` +
+  `LinkTarget{State: Committed, Pair: &LinkPair{A, B}}`, and calls the store's
+  `Add`. `ErrExists` returns the stored row with `ErrPairExists`, so a
+  frontend focuses it — the `PreviewAdd` contract. Empty label →
+  `DefaultLabel()`. A machine-local file write under a Read reservation — a
+  domain call like `PreviewAdd`, **not** an engine op.
+- **`pairFromEntry(e) (CommitPair, bool)`** — the recogniser, twin of
+  `previewFromEntry`: `Right == nil`, `Left.Target.Pair != nil`,
+  `Left.Path == ""`, no hint, both halves FULL shas. Anything else (a
+  name-pair someone stored through `SavedCompareAdd`, a path-narrowed set)
+  is **not** a CommitPair and stays out of the list — this feature does not
+  promise to render shapes it did not produce.
+- **`PairList`/`PairGet`** filter `st.List()` through it, as `PreviewList`
+  does. **Rename and remove need nothing new**: `SavedCompareRename/Remove`
+  are id-keyed and shape-agnostic.
+- **`PairSummary`**: both shas exist → `PairOK` + the changed-file count of
+  `A..B`; else the missing side. A frozen pair never "moves", so unlike
+  `PreviewSummary` there is no movement detection and the count is cacheable
+  by `(A,B)` for the session.
+- **`PairOpen`** → `PreviewEndpoints{Left: commit A, Right: commit B}` — the
+  shape `PreviewOpen` returns, so the TUI opens it through the same
+  compare-files path.
 
-### 4.2 The store — `internal/pairstore` (new DAG leaf)
+**The two recognisers must DISAGREE on one fixture** (the unified-links
+lesson): one store holding a preview entry, a pair entry and a Left+Right
+comparison → `PreviewList` sees exactly the first, `PairList` exactly the
+second, neither sees the third.
 
-A copy of `internal/preview`'s shape: `Store` interface (`Add` → `ErrExists`
-+ the stored record, `Get`, `List` insertion-ordered, `Rename`, `Remove`),
-`FileStore` over **`pairs.toml`** under XDG state behind `internal/filelock`.
+### 4.2 Gone commits
 
-**Why a separate file and not a second array in `previews.toml`:** an older
-`gg` that reads and rewrites `previews.toml` would silently drop an array it
-does not know. A separate file cannot be damaged by an old binary, and needs
-no format bump or preflight requirement.
+A sha that no longer resolves (gc, another clone) → `PairMissingA/B`: the row
+is listed with `missing: <sha7>`, cannot open; rename / remove / copy link
+still work. Never auto-removed.
 
-Owned by `domain`; frontends never import it (archtest leaf gate, like
-`linkhist`). New `stateBaseDir` kind `"pairs"` — a kind string is a directory
-on a user's disk; `TestStateBaseDirCallersPassKnownKinds` learns it.
+## 5. TUI
 
-### 4.3 Domain — one listing over both kinds
+### 5.1 Saving — Commits panel `.` menu
 
-```go
-type ChangeSetKind int // ChangeSetInvalid first, then MergePreviewKind, CommitPairKind
+Two rows directly after *Compare selection*: **Save to previews** and
+**Save reversed to previews**.
 
-type ChangeSetEntry struct {
-    Kind   ChangeSetKind
-    ID     string
-    Label  string
-    Link   model.Link      // @target...source?preview=<id>  |  @<a>..<b>?preview=<id>
-    Status ChangeSetStatus // OK | Gone (a branch or a sha no longer resolves)
-    Notes  int             // ◆N badge count (0 when notes are disabled)
-}
-
-func (s *Service) ChangeSets(ctx) ([]ChangeSetEntry, error) // previews first, then pairs; insertion order within each
-func (s *Service) ChangeSetGet(ctx, idOrLabel string) (ChangeSetEntry, error) // ids of the two kinds share one namespace; a collision is a hard error naming both
-func (s *Service) PairAdd(ctx, a, b, label string) (model.SavedPair, error)
-func (s *Service) PairRename(ctx, id, label string) error
-func (s *Service) PairRemove(ctx, id string) error
-func (s *Service) PairOpen(ctx, id string) (PreviewEndpoints, error)
-```
-
-**The Previews surface of every frontend renders from `ChangeSets`, never
-from the two stores.** `Link` is the load-bearing field: every entry, of
-either kind, is `EvalLink`-able into a BOUNDED `FileSet`. This is ruling P5's
-whole cost — see §8.
-
-`PairAdd` resolves both revs to full shas (CLI callers may pass short shas,
-tags or branch names; they freeze at save time), refuses `a == b`, and accepts
-unrelated commits (a two-dot diff needs no ancestry). It is a machine-local
-file write under a Read reservation — a domain call like `PreviewAdd`, **not**
-an engine op.
-
-`PairOpen` returns the same `PreviewEndpoints` shape `PreviewOpen` does
-(`left = A`, `right = B`), so the files view opens through the existing
-compare path with `compare:true`.
-
-**Gone commits.** A sha that no longer exists (gc, another clone) gives the
-entry `Status: Gone`: listed, greyed, not openable; rename / remove / copy
-link still work. Never auto-removed.
-
-## 5. Links
-
-### 5.1 Grammar — one new hint kind
-
-`model.linkHintKinds` gains `"preview"`. `LinkHintIDOK` already admits 8 hex.
-
-```
-gg://<repo>@<a>..<b>?preview=<id>                 a saved pair
-gg://<repo>/<path>@<a>..<b>:42?preview=<id>       a line in it (new side)
-gg://<repo>@<target>...<source>?preview=<id>      a saved MERGE PREVIEW — same hint, for symmetry
-```
-
-`web/static/links.js` moves in lockstep (`TestLinkDescJSMatchesGo` and the
-hint-kind twin).
-
-### 5.2 Meaning — a hint is a place
-
-Unlike `bookmark`/`shelf` ids, a preview id is derivable from the address, so
-the hint adds no *content* — it adds the **landing**: "open this as the saved
-entry in the Previews surface", versus the bare link's "open this diff".
-
-Consumer rules (both TUI and web, one table-driven test that makes the two
-kinds DISAGREE on one fixture — the unified-links lesson):
-
-| situation | behaviour |
+| ◉ set | rows |
 |---|---|
-| hint id matches the address AND the entry is saved here | reveal + flash the Previews row, then open it |
-| hint id matches, entry NOT saved here | open the diff **show-once** (the preview precedent), notice "not saved here — `.` → Save to previews" |
-| hint id does NOT match `ID(address)` | hard error, exit 2 — a hand-edited or corrupted link |
-| a `?preview=` hint with **no address** | hard error (domain, spec'd in unified-links §6: a hint without an address must be the only content source, and this one carries none) |
+| exactly 2 commits | shown |
+| 0, 1, 3+ | hidden |
+| holds ◇ Working tree or ◇ Staged | hidden (cannot freeze) |
 
-`linknav.RepoOnly` is already false for any hinted link; no change.
+Direction: **older → newer by feed order** — the order *Compare selection*
+already diffs in — never mark order; *reversed* swaps. On save: status
+"saved to previews: <label>"; on `ErrPairExists`: "already saved as <label>".
+No naming prompt on save (rename with `e` in the tab) — one keystroke, like
+`s` on a preview. The marks are left as they are.
 
-### 5.3 Per-verb acceptance (ruling R4, amended)
+The same two rows appear in the files view's commits-side `.` menu when the
+open comparison is a two-commit pair.
 
-| verb | `@ref:` | `@<a>..<b>` | change |
-|---|---|---|---|
-| `gg diff`, `gg open`, `gg session navigate`, `gg compare` | yes | yes | — |
-| every `gg note` verb (`note.go:46`), `gg session highlight` (`session.go:645`) | yes | **yes** | **was exit 2** |
-| `gg show` | yes | exit 2 ("use gg diff") | — (matches preview links) |
+### 5.2 Previews tab
 
-`linkShapes` in the resolver's signature is the mechanism; the note verbs'
-declaration flips. A pair link on a note verb is accepted **saved or not** —
-the same as `--preview target...source` works on an unsaved preview.
-
-### 5.4 `linkhist` description
-
-```
-pair:     3f2a1c9..9c1f2a3 fix auth      gg://gigagit@3f2a…..9c1f…?preview=1a2b3c4d
-```
-
-## 6. Notes on a pair
-
-### 6.1 What a pair note IS
-
-A pair note is an **ordinary committed note on commit B, new side** — the
-`gg review A..B` range rule, and exactly what a preview note is on its source
-tip. Consequences, stated so nobody is surprised:
-
-- it is visible wherever B's diff is shown, not only inside the saved entry;
-- removing the entry does not remove its notes;
-- the old side (A) is **not addressable** — `ErrPreviewOldSide`, exit 2, on a
-  delete-only hunk, identical to previews.
-
-Entry-scoped notes would be a different store and a different design;
-out of scope.
-
-### 6.2 Mechanism — generalize, do not fork
-
-`domain.PreviewNoteSet{Source, Target, Tip, Base, Commits}` with
-`DiffSpec() = <base>..<tip>` is already the shape a pair needs:
-
-| field | merge preview | saved pair |
-|---|---|---|
-| `Tip` | source tip | `B` |
-| `Base` | merge base | `A` |
-| `Commits` | `base..tip` | `A..B` (rev-list; may be empty for unrelated commits → just `B`) |
-| `Source`/`Target` | branch names | empty |
-
-One new constructor `PairNotes(ctx, a, b) (PreviewNoteSet, error)`; the one
-resolver and one loader (`PreviewNotesFor/At/All`, `PreviewNoteCounts`,
-`PreviewHunkAnchor`) are reused untouched. Because `Tip` is frozen, a pair
-note never becomes *outdated* by the entry moving; notes gathered from earlier
-commits in `A..B` still resolve by fingerprint → active / moved / outdated.
-
-Code keyed on "is this a preview" by `Source != ""` must be found and re-keyed
-on the set being non-zero (`Tip != ""`) — a sweep task in the plan, with a
-test that runs one fixture through both kinds.
-
-## 7. Surfaces
-
-### 7.1 TUI
-
-- **Commits panel `.` menu** — two rows, right after *Compare selection*:
-  **Save to previews** and **Save reversed to previews**. Shown only when the
-  ◉ set is **exactly two commits**; hidden when it holds ◇ Working tree /
-  ◇ Staged or any other count. Direction: older → newer by **feed order**
-  (the same order *Compare selection* uses), never mark order. `ErrExists` →
-  status "already saved as <label>" and the row is revealed. Same two rows in
-  the files view's commits-side `.` menu when the open compare is an unsaved
-  commit pair (this is also the show-once "save?" affordance of §5.2).
-- **Previews tab** renders `ChangeSets`. A pair row: `⇄` kind glyph (previews
-  keep theirs), label, `◆N` badge, greyed when Gone. enter = open, `.` menu =
-  open / rename / remove (confirm) / copy gg link. `m` stays **unbound** here
-  — reserved for §8.
-- **Open pair** = files view via the compare path; `filesPreviewSet` armed
-  from `PairNotes` so `}`/`{`, `c`, note boxes and `◆N` file badges work as in
-  a preview. `contextLinkText` gains the pair arm (heading rows fall back to
-  the bare entry link, as previews do).
-- `#` paste prompt / `gg open --at`: `steerNavigatePreview` gains the pair arm
-  with the §5.2 table.
-- Help (`?`) rows + footer advert for the new `.` rows; all strings through
-  `i18n.T` in all four bundles; new ops mapped in `opAffectedSources` (the
-  Previews source refreshes after add/rename/remove).
-
-### 7.2 CLI
-
-```
-gg preview add <a>..<b> [--label L]     # one arg containing ".." = a pair (a refname cannot hold "..")
-gg preview add <source> <target>        # unchanged
-gg preview list [--json]                # both kinds; a KIND column: preview | pair
-gg preview show|rm|rename <id|label>    # either kind, via ChangeSetGet
-gg preview diff <id|label|a..b> [--hunks]
-gg link --preview <id|label|a..b|target...source> [<path>[:<line>|#<hunk>]]   # emits ?preview=<id> when saved
---preview <…|a..b>                      # on gg diff / note add|list|apply / review — previewflag.go grows the pair arm
-```
-
-`gg link resolve` reports `pair <a>..<b>` as today, plus `preview <id>` and
-`saved: yes|no`. Exit codes: 2 for a bad spec / mismatched hint / old-side
-anchor; 1 for a Gone entry.
-
-### 7.3 MCP
-
-The preview list tool returns both kinds with `kind`, `link`, `status`; the
-note tools' `preview` arg accepts a pair spec or id. Read surface + the
-existing gated note writes — no new mutation class.
-
-### 7.4 Web
-
-`GET /api/preview` returns `ChangeSets` rows (`kind` added; existing fields
-kept for merge previews). `POST /api/preview` accepts `{a, b, label}` beside
-`{source, target, label}`; rename / remove / open / diff / notes take either
-kind's id. Commit-list: with exactly two commits marked, the commit menu gains
-**save to previews** / **save reversed**. Previews group: pair rows, same menu
-+ copy gg link (`links.js` `linkFor` pair ctx; `TestEveryCopyGGLinkRowRecords`
-covers it). `live.js` `state==="preview"` arm handles the pair + the reveal
-flash (`TestRevealHintEntryTargetsHaveAFlashRule` — the row needs a flash CSS
-rule that actually paints).
-
-### 7.5 Steer
-
-`steer.Target{State:"preview"}` gains `A`, `B` (mutually exclusive with
-`Source`/`Target`; `Commit` stays empty) and the hint id. TUI
-`steerEnumRefusal` and web `toSteerWire` validate the exclusivity.
-
-## 8. Designed-for: set × set compare (NEXT phase, not built here)
-
-The goal in §1 lands as: mark one Previews entry (`m`), mark a second → the
-files view over
+`previewRow` becomes a two-kind row:
 
 ```go
-CompareSets(EvalLink(x.Link), EvalLink(y.Link))   // bounded × bounded
+type previewRow struct {
+    kind  previewRowKind     // previewRowInvalid first, then rowMerge, rowPair
+    rec   model.MergePreview // rowMerge
+    pair  domain.CommitPair  // rowPair
+    psum  domain.PairSummary // rowPair
+    ...                      // sum / notes / byPath / err unchanged
+}
+func (r previewRow) id() string; func (r previewRow) label() string; created()
 ```
 
-— the union of both sets' paths; per file, X's new-side bytes vs Y's;
-present in one only ⇒ A / D. Three agents = pairwise. Already true at the CLI
-today: `gg compare <link> <link>`.
+`readPreviews` appends `PairList` rows after the merge previews. Row text:
 
-What THIS feature guarantees so that phase is only a gesture + a view:
+```
+<label>  <a7>..<b7>  <N files | missing: <sha7>>
+```
 
-1. every saved entry, of either kind, exposes an `EvalLink`-able `Link`;
-2. frontends list entries through one kind-agnostic `ChangeSets`;
-3. `m` is left unbound in the Previews tab / web Previews group;
-4. nothing here assumes "a Previews row is a branch pair".
+No `◆N` badge (notes are out of scope). `previewList.Key/Name/Date` and the
+haystack go through the accessors, so sort chips and `/` filter work across
+both kinds.
 
-A test pins (1): for each kind, `EvalLink(entry.Link)` is bounded and
-`CompareSets` over a pair entry × a preview entry succeeds.
+**Every `selectedPreview()` consumer must handle both kinds** — six sites
+today (`link.go:193`, `model.go:2404`, `preview_actions.go:81/92/103/163`):
 
-## 9. Relation to unified-links §4.5 (`savedcompare`)
+| key | merge preview (unchanged) | pair |
+|---|---|---|
+| enter | open preview | `PairOpen` → compare-files view, `compare:true`, **`filesPreviewSet` NOT armed** |
+| `e` | rename | rename (same popup, `SavedCompareRename`) |
+| `d` | remove (confirm) | remove (same confirm, `SavedCompareRemove`) |
+| `s` | save reversed | save reversed (`PairAdd(b, a)`) |
+| `a` | add form (source/target) | — (the form stays branch-only; pairs are saved from Commits) |
+| copy gg link | `@target...source` | bare `gg://<repo>@<A>..<B>` — the stored `Left`, verbatim; recorded in `linkhist` |
 
-§4.5 planned one store absorbing previews, discarding `previews.toml` on
-consent. Ruling P1 chose not to pay that now. This design does not block it:
-`ChangeSetEntry` is already the union view §4.5 wanted, and a later fold would
-change two stores into one *behind* `ChangeSets` with no frontend change. A
-saved COMPARISON (`Right != nil`) remains plan-3 territory.
+A gate test enumerates `selectedPreview()` callers by AST and fails when a new
+one appears without a row in this table's test — so a seventh consumer cannot
+silently treat a pair as a merge preview (zero-valued `rec` → empty branch
+names → a confusing git error).
 
-## 10. Error handling
+Help (`?`) + footer advert; every string via `i18n.T` in all four bundles;
+the save action refreshes `srcPreviews`.
+
+## 6. CLI — the minimum that makes the mechanics scriptable
+
+```
+gg preview add <a>..<b> [--label L]   # ONE positional holding ".." and not "..." = a pair
+gg preview add <source> <target>      # unchanged
+gg preview list                       # both kinds; pair rows print <a7>..<b7> where a preview prints source → target
+gg preview show|rm|rename|diff <id|label>   # either kind
+```
+
+A refname cannot contain `..`, so the one-positional form is unambiguous.
+`gg compare.go` is deliberately NOT touched (plan 3b/3c sessions are near it).
+Exit codes: 2 bad spec / unresolvable rev / `a == b`; 1 already saved (prints
+id + label, like `preview add` today) or a missing commit on show/diff.
+
+`using-gg.md` gains the pair form + a `Version` bump.
+
+## 7. Notes for the deferred phases (so they are not re-derived wrong)
+
+- **Hint ids are a LOOKUP, never a checksum.** Rev 1 said "hint id ≠
+  ID(address) → exit 2". Wrong against the shipped store: the id hashes link
+  TEXT (the repo may be spelled by remote name or by path), and converted
+  previews keep legacy ids. A future `?preview=<id>` consumer finds the entry
+  by id, else by matching `Left`, else opens show-once.
+- **Pair notes** = ordinary committed notes on `B`, new side, via
+  `PreviewNoteSet{Tip: B, Base: A, Commits: A..B}`; flips `linkShapes` for the
+  note verbs (`cli/note.go`, `cli/session.go` highlight). Arming
+  `filesPreviewSet` for a pair is that phase's switch.
+- **Set × set compare** needs nothing from here: both kinds are set-shaped
+  entries whose `Left` evaluates to a bounded `FileSet`.
+
+## 8. Error handling
 
 | case | behaviour |
 |---|---|
-| `a == b` | refuse: "a pair needs two different commits" |
-| rev does not resolve at save | exit 2, names the rev |
-| already saved | `ErrExists` → CLI exit 1 with id+label; TUI/web reveal the row |
-| entry Gone | listed greyed; open / diff / notes → exit 1 "commit <sha7> is not in this repository" |
-| hint id ≠ `ID(address)` | exit 2 |
-| id collision between kinds (8 hex, astronomically rare) | `ChangeSetGet` hard-errors naming both; a label disambiguates |
-| old-side note anchor | `ErrPreviewOldSide`, exit 2 |
-| `pairs.toml` locked / unreadable | the `filelock` + notes-store precedent: error surfaces, no partial write |
+| `a == b` after resolution | refuse: "a pair needs two different commits" |
+| a rev does not resolve at save | CLI exit 2 naming it; TUI status line |
+| already saved | existing row returned; TUI focuses it, CLI exit 1 |
+| commit gone | row listed `missing: <sha7>`; open/diff refuse; rename/remove work |
+| store disabled / locked / unreadable | the existing `ErrSavedComparesDisabled` + `filelock` behaviour, surfaced unchanged |
 
-## 11. Testing
+## 9. Testing (TDD; every guard watched failing with the GUARD removed)
 
-- `pairstore`: the `preview` store suite + a cross-process lock test that
-  holds the lock FILE externally (the store mutex proves nothing).
-- domain: `PairAdd` freezes names to shas; Gone status; `ChangeSets` order;
-  §8 guarantee test; both-kinds-one-fixture note test (the two arms must
-  DISAGREE somewhere — `Source` empty vs set).
-- model: `String(Parse(s)) == s` round-trips for the three §5.1 forms; hint
-  kind twin in `links.js`.
-- Every guard is watched failing **with the guard removed**, not the feature.
-- TUI: menu gating table (0/1/2/3 marks, ◇ rows), reveal + show-once + mismatch
-  landings; headless `tui-capture.sh` smoke of save → Previews row → open →
-  add note → copy link → `#` paste lands on the row.
-- CLI/e2e: `s93_saved_pairs.toml` — add, list, link, note add via the link,
-  `gg compare <pair link> <preview link>`.
-- Web: static-wiring tests + a playwright probe asserting **visibility** of
-  the saved row and the flash paint, run against the unfixed build first.
+- domain: `PairAdd` freezes a branch name to a full sha (advance the branch →
+  the stored pair is unchanged); `a == b`; unrelated commits accepted; dedup
+  returns the stored row; the three-entry DISAGREE fixture (§4.1);
+  `pairFromEntry` rejects short-sha, named, path-narrowed and hinted sets;
+  `PairSummary` missing sides; §7 guarantee — `EvalLink(pair Left)` is bounded
+  and `CompareSets(pair, preview)` succeeds.
+- TUI: menu gating table (0/1/2/3 marks, ◇ rows, direction by feed order with
+  marks made newest-first); Previews rows for both kinds; each of the six
+  consumers on a pair row; the AST consumer gate; rename/remove round-trip.
+  Tests `t.Parallel()`, repos via `testRepo`.
+- Headless smoke (`tui-capture.sh`): mark two → `.` → Save → Previews tab row
+  visible → enter opens the files view → copy link.
+- CLI + e2e: next free scenario number — add, list, show, diff, rm; the
+  one-positional parse; a three-dot arg still routes to the merge-preview arm.
 
-## 12. Phasing — one plan per phase, executed in order by one session
+## 10. Plan shape
 
-| phase | contents | stands alone because |
-|---|---|---|
-| **A** | `model.SavedPair`, `pairstore`, domain `ChangeSets`/`Pair*`, TUI save rows + Previews tab, CLI `gg preview` pair arms, MCP list, web save/list/open, bare `@a..b` copy-link | pairs are saveable and openable everywhere; links already work bare |
-| **B** | `?preview=<id>` hint: grammar + `links.js`, `steer`, both reveal consumers, show-once landing, `gg link` emits it, `linkhist` desc | links land on the entry |
-| **C** | notes on pairs: `PairNotes`, the `Source != ""` sweep, R4 flip for note verbs / highlight / review, TUI + web note lanes in an open pair, MCP note arg | the agent hand-off of §1 is complete |
-| *(next)* | §8 set × set compare | — |
+One plan, one session, no subagents, in a worktree; ordered so no commit
+leaves a dark window (plan 3a's defect #1): domain recogniser + `PairAdd`
+first → CLI → TUI tab rendering both kinds → TUI save rows → docs
+(`CHANGELOG.md`, `README.md`, `using-gg.md` + version, `docs/CLAUDE-details.md`).
+`CLAUDE.md` needs no change (no new package). Race gate on the MERGED tree
+before asking to merge — plans 3b/3c touch `internal/tui` concurrently
+(`action_menu.go` is the likely conflict).
 
-Docs per phase: `CHANGELOG.md`, `README.md`, `internal/agentskill/using-gg.md`
-(+ `reviewing-with-gg` in C) with a `Version` bump, `docs/CLAUDE-details.md`;
-`CLAUDE.md` gets one `pairstore` row in phase A.
+## 11. Open questions
 
-## 13. Open questions
-
-None blocking. For the plans: the pair row's kind glyph (`⇄` assumed; must be
-single-width — the wide-glyph overflow lesson), and whether `gg preview list`
-terse output needs the KIND column first or last.
+None blocking. For the plan: whether pair rows sort after merge previews or
+interleave by creation time under the default sort (assumed: after).
