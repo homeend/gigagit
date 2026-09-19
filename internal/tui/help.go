@@ -102,6 +102,7 @@ func helpContent() []contentLine {
 		r("i", i18n.T("pull request details: title, state, description, the conversation with review verdicts, and outdated review threads ([y] copies the URL, [r] reloads, [/] filters, [ctrl+t] fullscreen)")),
 		r("y", i18n.T("copy the pull request's URL")),
 		r("d", i18n.T("forget a merged, closed or unavailable pull request: drops the private ref and the row (nothing on the forge changes)")),
+		r("", i18n.T("inside a pull request's diff its review threads show as read-only note boxes on their lines (a whole-file comment sits at the top of the file; a resolved thread starts collapsed — o / O collapse and expand); [i] opens the pull request's details from there, [r] re-reads the comments, and they are re-read on the same [refresh] prs timer while the diff is open")),
 		r("r", i18n.T("refresh re-reads the pull requests too; in the background they are re-read every [refresh] prs seconds (default 300, 0 = off) — independently of the auto-refresh master switch")),
 		h(i18n.T("Tags panel")),
 		r("", i18n.T("a tab in the middle (Files) box — ctrl+←/→ switches Files ⇄ Tags; ● annotated, ○ lightweight; ▲ marks tags that exist on the default remote (origin or first remote) — local-only or not-yet-checked tags show no marker (deliberately indistinguishable before a lookup runs)")),

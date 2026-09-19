@@ -17,6 +17,7 @@ type previewOpenState struct {
 	srcHash, tgtHash   string
 	tag                string // the compare tag opened with
 	title              string // files-view title override ("" = previewTitle); a PR diff wears "PR #N · title"
+	prNumber           int    // the pull request this preview shows (0 = an ordinary preview); pr_comments.go keys off it
 	keepPath           string // path to re-select after a re-arm ("" = top)
 }
 
@@ -31,6 +32,7 @@ type previewOpenMsg struct {
 	moved              string // ref whose tip moved; the "moved" notice, emitted only if the view really re-opens
 	gen                int
 	title              string // files-view title override; "" = previewTitle(source, target)
+	prNumber           int    // set by openPRPreviewCmd; carried across a re-resolve like title
 	eps                domain.PreviewEndpoints
 	set                domain.PreviewNoteSet // the note scope; zero when the pair is not ok
 	counts             map[string]int        // per-path root-note counts for the file list
@@ -58,14 +60,14 @@ func (m Model) reopenPreviewCmd(id, source, target, keepPath, moved string) tea.
 	svc, gen := m.svc, m.previewGen
 	// A re-resolve of the pair that is already open keeps the title it opened
 	// with (a PR diff must not fall back to "Merge preview: refs/gg/pr/7 → …").
-	title := ""
+	title, prNumber := "", 0
 	if po := m.previewOpen; po != nil && po.id == id && po.source == source && po.target == target {
-		title = po.title
+		title, prNumber = po.title, po.prNumber
 	}
 	return func() tea.Msg {
 		eps, err := svc.PreviewOpen(context.Background(), source, target)
 		msg := previewOpenMsg{
-			id: id, source: source, target: target, title: title,
+			id: id, source: source, target: target, title: title, prNumber: prNumber,
 			keepPath: keepPath, moved: moved, gen: gen, eps: eps, err: err,
 		}
 		// The note scope rides the SAME resolve, so the file list paints its
@@ -185,10 +187,17 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 	m.previewOpen = &previewOpenState{
 		id: msg.id, source: msg.source, target: msg.target,
 		srcHash: msg.eps.Summary.SourceHash, tgtHash: msg.eps.Summary.TargetHash,
-		tag: tag, keepPath: msg.keepPath, title: msg.title,
+		tag: tag, keepPath: msg.keepPath, title: msg.title, prNumber: msg.prNumber,
 	}
 	if msg.moved != "" { // a re-open the user can see: say which tip moved
 		m.statusMsg = i18n.T("preview updated: %s moved", msg.moved)
+	}
+	if msg.prNumber > 0 {
+		// The PR's review threads are fetched AFTER the view is up, never in
+		// the resolve: opening a diff must not wait on the forge CLI.
+		var prCmd tea.Cmd
+		m, prCmd = m.prCommentsCmd(false)
+		cmd = tea.Batch(cmd, prCmd)
 	}
 	return m, cmd
 }

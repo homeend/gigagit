@@ -69,7 +69,7 @@ func (m Model) openPRPreviewCmd(p model.PullRequest) tea.Cmd {
 		ctx := context.Background()
 		pair := svc.PRPair(ctx, p)
 		eps, err := svc.PreviewOpen(ctx, pair.Head, pair.Base)
-		msg := previewOpenMsg{source: pair.Head, target: pair.Base, gen: gen, eps: eps, err: err, title: title}
+		msg := previewOpenMsg{source: pair.Head, target: pair.Base, gen: gen, eps: eps, err: err, title: title, prNumber: p.Number}
 		if err == nil && eps.Summary.State == domain.PreviewOK {
 			if set, serr := svc.PreviewNotes(ctx, pair.Head, pair.Base); serr == nil {
 				msg.set = set

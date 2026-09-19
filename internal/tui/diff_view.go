@@ -916,6 +916,14 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			nm, cmd := r.run(m)
 			return nm.(Model), cmd
 		}
+	case "r": // a PR's diff: re-read its review comments (inert elsewhere)
+		if m.openPRNumber() > 0 {
+			return m.prCommentsCmd(true)
+		}
+	case "i": // a PR's diff: the pull request's hub (title, description, conversation)
+		if m.openPRNumber() > 0 {
+			return m.openPRHubFromDiff()
+		}
 	case "o":
 		return m.toggleNoteCollapse(), nil
 	case "O":
