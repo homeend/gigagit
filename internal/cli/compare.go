@@ -55,6 +55,7 @@ func parseEndpoint(s string, resolve func(rev string) (hash string, ok bool, err
 // compareUsage is printed for every usage error of `gg compare`.
 const compareUsage = "usage: gg compare [--patch] [--save <label>] <left> [<right>]   " +
 	"| gg compare --saved <id|label>   | gg compare --list   " +
+	"| gg compare --remove <id|label>   | gg compare --rename <id|label> <new-label>   " +
 	"(endpoints: a gg:// link, a commit, @staged, @worktree, bookmark:<id>, shelf:<id>; right defaults to @worktree)"
 
 // cmdCompare prints the changed-file list (or, with --patch, unified diffs)
@@ -84,11 +85,34 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 	save := fs.String("save", "", "store this comparison under `<label>`")
 	saved := fs.String("saved", "", "re-run the stored comparison named by `<id|label>`")
 	list := fs.Bool("list", false, "print the stored comparisons and exit")
+	remove := fs.String("remove", "", "delete the stored comparison named by `<id|label>`")
+	rename := fs.String("rename", "", "give the stored comparison named by `<id|label>` the label that follows")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	args = fs.Args()
 	ctx := context.Background()
+	// --remove and --rename MANAGE the store; they never run a comparison, so
+	// each stands alone: no other mode flag, and no endpoints (--rename's one
+	// positional is the new label).
+	if *remove != "" || *rename != "" {
+		if *list || *patch || *save != "" || *saved != "" || (*remove != "" && *rename != "") {
+			fmt.Fprintln(stderr, compareUsage)
+			return 2
+		}
+		if *remove != "" {
+			if len(args) != 0 {
+				fmt.Fprintln(stderr, compareUsage)
+				return 2
+			}
+			return cmdCompareRemove(ctx, svc, *remove, stderr)
+		}
+		if len(args) != 1 || strings.TrimSpace(args[0]) == "" {
+			fmt.Fprintln(stderr, compareUsage)
+			return 2
+		}
+		return cmdCompareRename(ctx, svc, *rename, args[0], stderr)
+	}
 	if *list && (*save != "" || *saved != "") {
 		fmt.Fprintln(stderr, compareUsage)
 		return 2
@@ -272,6 +296,44 @@ func saveComparison(ctx context.Context, svc *domain.Service, label, leftTok, ri
 		note = " (already saved)"
 	}
 	fmt.Fprintf(stderr, "# saved: %s\t%s%s\n", c.ID, c.Label, note)
+	return 0
+}
+
+// cmdCompareRemove deletes one stored comparison, named by id or label. The
+// spec is resolved FIRST and the store is then asked to delete that one id, so
+// a label can never widen into "every row that matches". An unknown spec is
+// the usage error --saved already reports. The confirmation goes to stderr,
+// like `# saved:` — stdout carries comparison output only, and this prints none.
+//
+// A converted merge preview is a row of the same store, so this removes one
+// too; `gg preview remove` stays the preview-shaped door to the same thing.
+func cmdCompareRemove(ctx context.Context, svc *domain.Service, spec string, stderr io.Writer) int {
+	c, err := svc.SavedCompareGet(ctx, spec)
+	if err != nil {
+		fmt.Fprintf(stderr, "compare: no saved comparison %q\n", spec)
+		return 2
+	}
+	if err := svc.SavedCompareRemove(ctx, c.ID); err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	fmt.Fprintf(stderr, "# removed: %s\t%s\n", c.ID, c.Label)
+	return 0
+}
+
+// cmdCompareRename relabels one stored comparison. The id is derived from the
+// two links, not the label, so it does not move.
+func cmdCompareRename(ctx context.Context, svc *domain.Service, spec, label string, stderr io.Writer) int {
+	c, err := svc.SavedCompareGet(ctx, spec)
+	if err != nil {
+		fmt.Fprintf(stderr, "compare: no saved comparison %q\n", spec)
+		return 2
+	}
+	if err := svc.SavedCompareRename(ctx, c.ID, label); err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	fmt.Fprintf(stderr, "# renamed: %s\t%s\n", c.ID, strings.TrimSpace(label))
 	return 0
 }
 

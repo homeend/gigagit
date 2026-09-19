@@ -74,3 +74,51 @@ stdout_contains = ["login", "feat/x", "main"]
 cmd             = ["compare", "--list"]
 exit            = 0
 stdout_contains = ["my work", "login"]
+
+# --rename relabels by id OR label; the id is derived from the two links, so
+# it does not move and the row keeps its place.
+[[run]]
+cmd  = ["compare", "--rename", "my work", "my renamed work"]
+exit = 0
+
+[[run]]
+cmd             = ["compare", "--list"]
+exit            = 0
+stdout_contains = ["my renamed work", "login"]
+stdout_excludes = ["my work\t"]
+
+# The old label now names nothing.
+[[run]]
+cmd  = ["compare", "--saved", "my work"]
+exit = 2
+
+# --remove deletes EXACTLY the named row: the preview beside it survives.
+[[run]]
+cmd  = ["compare", "--remove", "my renamed work"]
+exit = 0
+
+[[run]]
+cmd             = ["compare", "--list"]
+exit            = 0
+stdout_contains = ["login"]
+stdout_excludes = ["my renamed work"]
+
+# An unknown spec is a usage error, and --remove takes no endpoints.
+[[run]]
+cmd  = ["compare", "--remove", "nosuchthing"]
+exit = 2
+
+[[run]]
+cmd  = ["compare", "--remove", "login", "HEAD"]
+exit = 2
+
+# The same store holds the preview, so --remove reaches it as well — and the
+# preview surface agrees that it is gone.
+[[run]]
+cmd  = ["compare", "--remove", "login"]
+exit = 0
+
+[[run]]
+cmd             = ["preview", "list"]
+exit            = 0
+stdout_excludes = ["login"]
