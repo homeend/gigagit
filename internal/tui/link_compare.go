@@ -92,8 +92,16 @@ func (m Model) loadedLinkCompare(msg linkCompareLoadedMsg) (Model, tea.Cmd) {
 	// A failed compare must be retryable: clearing the want is what lets the
 	// SAME pair be asked again.
 	m.linkCompareWant = ""
+	steered := m.pendingSteer != nil && m.pendingSteer.stage == steerStageCompare && m.pendingSteer.tag == msg.tag
+	if !steered {
+		// The dialog that asked takes its own answer: a failure belongs under
+		// one of its fields, and success parks it behind the view.
+		if p, ok := m.topLayer().(*linkComparePopup); ok && p.busy {
+			return p.loaded(m, msg)
+		}
+	}
 	if msg.err != nil {
-		if ps := m.pendingSteer; ps != nil && ps.stage == steerStageCompare && ps.tag == msg.tag {
+		if steered {
 			return m.failPending("the compare failed: " + msg.err.Error())
 		}
 		m.statusMsg = i18n.T("compare: %s", msg.err.Error())
