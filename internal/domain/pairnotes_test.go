@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -149,5 +150,76 @@ func TestForgeNotesIgnoreAPairSet(t *testing.T) {
 	}
 	if got := svc.forgeNotesFor(set, ""); len(got) != 0 {
 		t.Fatalf("a commit pair is no pull request: %v", got)
+	}
+}
+
+func TestNoteScopeResolve(t *testing.T) {
+	t.Parallel()
+	svc, dir := newPreviewRepo(t)
+	ctx := context.Background()
+	a, b := revParse(t, dir, "main"), revParse(t, dir, "feat")
+	pv, err := svc.PreviewAdd(ctx, "feat", "main", "shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr, err := svc.PairAdd(ctx, "main", "feat", "attempt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A pair whose label collides with the preview's: the preview wins, the
+	// order `gg preview show/rm/rename` already follow.
+	shadow, err := svc.PairAdd(ctx, "main", "feat~1", "shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range []struct {
+		spec   string
+		isPair bool
+		tip    string
+	}{
+		{"main...feat", false, b},
+		{"main..feat", true, b},
+		{a + ".." + b, true, b},
+		{pv.ID, false, b},
+		{"shared", false, b},
+		{pr.ID, true, b},
+		{"attempt", true, b},
+		{shadow.ID, true, revParse(t, dir, "feat~1")},
+	} {
+		set, err := svc.NoteScopeResolve(ctx, c.spec)
+		if err != nil {
+			t.Fatalf("%q: %v", c.spec, err)
+		}
+		if !set.OK() || set.IsPair() != c.isPair || set.Tip != c.tip {
+			t.Fatalf("%q: got %+v, want pair=%v tip=%s", c.spec, set, c.isPair, c.tip)
+		}
+	}
+}
+
+func TestNoteScopeResolveRefusals(t *testing.T) {
+	t.Parallel()
+	svc, _ := newPreviewRepo(t)
+	ctx := context.Background()
+	gone := strings.Repeat("0123456789", 4)
+
+	if _, err := svc.NoteScopeResolve(ctx, "nope"); !errors.Is(err, ErrPreviewNotFound) {
+		t.Fatalf("unknown id: err = %v, want ErrPreviewNotFound", err)
+	}
+	for _, spec := range []string{"...feat", "main...", "..feat", "main.."} {
+		if _, err := svc.NoteScopeResolve(ctx, spec); !errors.Is(err, errPreviewPairShape) {
+			t.Fatalf("%q: err = %v, want errPreviewPairShape", spec, err)
+		}
+	}
+	for spec, want := range map[string]string{
+		"main...gone":   "preview: missing: gone",
+		"main.." + gone: "preview: missing commit: " + gone,
+		gone + "..main": "preview: missing commit: " + gone,
+		"feat...feat":   "preview: feat → feat: ",
+	} {
+		_, err := svc.NoteScopeResolve(ctx, spec)
+		if err == nil || !strings.HasPrefix(err.Error(), want) {
+			t.Fatalf("%q: err = %v, want prefix %q", spec, err, want)
+		}
 	}
 }
