@@ -46,6 +46,25 @@ func (m Model) linkRepoFor(worktree string) (model.LinkRepo, bool) {
 // TUI hunk-picker producer without a signature change, matching the CLI/web
 // producers' shape (spec §7).
 func (m Model) linkFor(addr model.FileAddress, side model.NoteSide, line, hunk int) (string, bool) {
+	return m.buildLinkFor(addr, side, line, hunk, model.LinkHint{})
+}
+
+// hintedLinkFor is linkFor plus a landing hint: the link a bookmark or shelf
+// ROW copies, so pasting it reveals that entry (`?bookmark=<id>` /
+// `?shelf=<id>`). The hint never changes what the link ADDRESSES — compare
+// ignores it (spec §3.3 rule 1) — with the two shelf exceptions
+// domain.EndpointForLink documents, which exist precisely so a shelved
+// working-tree file, whose bytes were never in git, is still comparable.
+// A hint the grammar cannot hold is refused, like every other separator.
+func (m Model) hintedLinkFor(addr model.FileAddress, hint model.LinkHint) (string, bool) {
+	if !model.LinkHintKindOK(hint.Kind) || !model.LinkHintIDOK(hint.ID) {
+		return "", false
+	}
+	return m.buildLinkFor(addr, model.NoteSideNew, 0, 0, hint)
+}
+
+// buildLinkFor is the one builder behind linkFor and hintedLinkFor.
+func (m Model) buildLinkFor(addr model.FileAddress, side model.NoteSide, line, hunk int, hint model.LinkHint) (string, bool) {
 	if addr.Path != "" && !model.LinkPathOK(addr.Path) {
 		return "", false
 	}
@@ -73,6 +92,7 @@ func (m Model) linkFor(addr model.FileAddress, side model.NoteSide, line, hunk i
 		l.Target = model.LinkTarget{State: model.StateUnstaged}
 	}
 	l.Side, l.Line, l.Hunk = side, line, hunk
+	l.Hint = hint
 	if l.Side == "" {
 		l.Side = model.NoteSideNew
 	}
@@ -116,6 +136,27 @@ func (m Model) previewLinkFor(source, target, path string, line int) (string, bo
 	return l.String(), true
 }
 
+// refLinkFor builds the gg:// address of a branch or tag TIP: `@ref:<name>`.
+// The NAME rides the link and the consumer re-resolves it (plan 1b ruling R2)
+// — a ref link follows its branch, which is the whole point of copying one
+// instead of the commit underneath it. A point, so UNBOUNDED: comparing two
+// of them compares the two tips. It refuses a name the grammar cannot hold.
+func (m Model) refLinkFor(name string) (string, bool) {
+	if !model.LinkRefOK(name) {
+		return "", false
+	}
+	repo, ok := m.linkRepoFor("")
+	if !ok {
+		return "", false
+	}
+	l := model.Link{
+		Repo:   repo,
+		Target: model.LinkTarget{State: model.StateCommitted, Ref: name},
+		Side:   model.NoteSideNew,
+	}
+	return l.String(), true
+}
+
 // contextLinkText is the link for whatever the user is looking at, mirroring
 // contextCopyRows' precedence exactly (controller ruling P23): a stack
 // surface (history/blame) on top of a diff out-ranks the diff underneath it
@@ -149,6 +190,9 @@ func (m Model) previewLinkFor(source, target, path string, line int) (string, bo
 //     the open preview, so this returns the PAIR's own link rather than
 //     falling through to a lower-precedence surface.
 //     3b. the Previews panel row → the pair's own link.
+//     3c. a Branches / Remotes / Tags row → the ref's own link (`@ref:<name>`),
+//     gated on !inContentWindow() exactly like the Commits arm below: a files
+//     view opened over one of those panels is not "the branch".
 func (m Model) contextLinkText() (string, bool) {
 	switch m.topLayer().(type) {
 	case *historyView, *blameView:
@@ -192,6 +236,22 @@ func (m Model) contextLinkText() (string, bool) {
 	if !m.inContentWindow() && m.focus == panelPreviews {
 		if r, ok := m.selectedPreview(); ok {
 			return m.previewLinkFor(r.rec.Source, r.rec.Target, "", 0)
+		}
+	}
+	if !m.inContentWindow() {
+		switch m.focus {
+		case panelBranches:
+			if bi, ok := m.backingIndex(panelBranches); ok && bi < len(m.branches) {
+				return m.refLinkFor(m.branches[bi].Name)
+			}
+		case panelRemotes:
+			if bi, ok := m.backingIndex(panelRemotes); ok && bi < len(m.remoteBranches) {
+				return m.refLinkFor(m.remoteBranches[bi].Name)
+			}
+		case panelTags:
+			if bi, ok := m.backingIndex(panelTags); ok && bi >= 0 && bi < len(m.tags) {
+				return m.refLinkFor(m.tags[bi].Name)
+			}
 		}
 	}
 	if !m.inContentWindow() && m.focus == panelCommits {

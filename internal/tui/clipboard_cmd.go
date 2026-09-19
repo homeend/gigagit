@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"io"
 	"os"
 	"path"
@@ -9,7 +11,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
 
-	"github.com/homeend/gigagit/internal/clipboard"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -23,6 +24,10 @@ func (m Model) absFilePath(base, rel string) string {
 	}
 	return filepath.Join(base, rel)
 }
+
+// errNoClipboardWriter is what a Model built without New (a test literal)
+// reports instead of reaching for the real clipboard.
+var errNoClipboardWriter = errors.New("no clipboard writer")
 
 // clipboardCopiedMsg reports the outcome of a copy action. ok is the success
 // status line; err (when non-nil) becomes a "copy failed: …" status.
@@ -39,13 +44,30 @@ type clipboardCopiedMsg struct {
 // stdout but a separate stream, so the escape never interleaves inside a
 // rendered frame; a redirected stderr is omitted instead of dumping escape
 // bytes into a file.
+//
+// THIS IS THE TUI'S ONE CLIPBOARD WRITER, and that is what lets it keep spec
+// §5's rule — every copied gg:// link appends to the history — without any
+// producer having to remember: text that is a link is recorded here. It is
+// recorded BEFORE the write and whatever the write's outcome, because a broken
+// clipboard (WSL interop down) is exactly when the history is the only place
+// the link survives. TestTheTUIHasOneClipboardWriter keeps "one" true.
+//
+// The write goes through Model.clipWrite (New sets the real one) so a test
+// can run this command without touching the user's clipboard.
 func (m Model) copyToClipboardCmd(ok, text string) tea.Cmd {
+	svc, write := m.svc, m.clipWrite
 	return func() tea.Msg {
+		if svc != nil && isLinkText(text) {
+			svc.RecordCopiedLink(context.Background(), text)
+		}
+		if write == nil {
+			return clipboardCopiedMsg{err: errNoClipboardWriter}
+		}
 		var tty io.Writer
 		if isatty.IsTerminal(os.Stderr.Fd()) {
 			tty = os.Stderr
 		}
-		if _, err := clipboard.Copy(tty, text); err != nil {
+		if _, err := write(tty, text); err != nil {
 			return clipboardCopiedMsg{err: err}
 		}
 		return clipboardCopiedMsg{ok: ok}

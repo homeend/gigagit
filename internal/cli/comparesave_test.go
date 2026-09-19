@@ -171,3 +171,118 @@ func TestCompareSavedUnknownSpecIsUsage(t *testing.T) {
 		t.Fatalf("stderr does not name the spec: %s", errb)
 	}
 }
+
+// twoSaved stores two comparisons and returns their ids in save order.
+func twoSaved(t *testing.T) (dir, firstID, secondID string) {
+	t.Helper()
+	dir, head, parent := saveRepo(t)
+	for _, a := range [][]string{
+		{"compare", "--save", "first", parent, head},
+		{"compare", "--save", "second", head, "@worktree"},
+	} {
+		if code, _, errb := runCLI(t, dir, a...); code != 0 {
+			t.Fatalf("%v: exit %d, stderr: %s", a, code, errb)
+		}
+	}
+	_, lout, _ := runCLI(t, dir, "compare", "--list")
+	ids := map[string]string{}
+	for _, ln := range strings.Split(strings.TrimRight(lout, "\n"), "\n") {
+		f := strings.Split(ln, "\t")
+		ids[f[1]] = f[0]
+	}
+	if ids["first"] == "" || ids["second"] == "" || ids["first"] == ids["second"] {
+		t.Fatalf("fixture: list = %q", lout)
+	}
+	return dir, ids["first"], ids["second"]
+}
+
+// TWO rows, and the one removed is the SECOND, by label: a remove that deleted
+// everything, or the first row, or matched loosely, cannot pass.
+func TestCompareRemoveDeletesExactlyTheNamedRow(t *testing.T) {
+	dir, firstID, secondID := twoSaved(t)
+
+	code, out, errb := runCLI(t, dir, "compare", "--remove", "second")
+	if code != 0 || out != "" {
+		t.Fatalf("exit %d, stdout %q (must be empty), stderr %q", code, out, errb)
+	}
+	if !strings.Contains(errb, "# removed: "+secondID+"\tsecond") {
+		t.Errorf("stderr = %q, want the removed id and label", errb)
+	}
+	_, lout, _ := runCLI(t, dir, "compare", "--list")
+	if !strings.Contains(lout, firstID+"\tfirst") || strings.Contains(lout, "second") {
+		t.Fatalf("list after remove = %q, want exactly the first row", lout)
+	}
+
+	// …and by ID.
+	if code, _, errb := runCLI(t, dir, "compare", "--remove", firstID); code != 0 {
+		t.Fatalf("remove by id: exit %d, stderr %q", code, errb)
+	}
+	if _, lout, _ := runCLI(t, dir, "compare", "--list"); lout != "" {
+		t.Fatalf("list = %q, want empty", lout)
+	}
+}
+
+func TestCompareRenameKeepsTheIDAndLeavesTheOtherRowAlone(t *testing.T) {
+	dir, firstID, secondID := twoSaved(t)
+	code, out, errb := runCLI(t, dir, "compare", "--rename", "second", "a better name")
+	if code != 0 || out != "" {
+		t.Fatalf("exit %d, stdout %q, stderr %q", code, out, errb)
+	}
+	if !strings.Contains(errb, "# renamed: "+secondID+"\ta better name") {
+		t.Errorf("stderr = %q", errb)
+	}
+	_, lout, _ := runCLI(t, dir, "compare", "--list")
+	if !strings.Contains(lout, secondID+"\ta better name\t") || !strings.Contains(lout, firstID+"\tfirst\t") {
+		t.Fatalf("list = %q", lout)
+	}
+	// The new label now names it; the old one names nothing.
+	if code, _, _ := runCLI(t, dir, "compare", "--saved", "a better name"); code != 0 {
+		t.Error("--saved by the new label failed")
+	}
+	if code, _, _ := runCLI(t, dir, "compare", "--saved", "second"); code != 2 {
+		t.Errorf("--saved by the OLD label: exit %d, want 2", code)
+	}
+}
+
+func TestCompareRemoveAndRenameUsageErrors(t *testing.T) {
+	dir, _, _ := twoSaved(t)
+	for _, a := range [][]string{
+		{"compare", "--remove", "nosuch"},
+		{"compare", "--rename", "nosuch", "x"},
+		{"compare", "--rename", "first"},                // no new label
+		{"compare", "--rename", "first", "a", "b"},      // two positionals
+		{"compare", "--remove", "first", "HEAD"},        // an endpoint
+		{"compare", "--remove", "first", "--list"},      // flag after a positional-less mode
+		{"compare", "--list", "--remove", "first"},      //
+		{"compare", "--save", "x", "--remove", "first"}, //
+		{"compare", "--saved", "first", "--rename", "second", "z"},
+		{"compare", "--remove", "first", "--rename", "second", "z"},
+	} {
+		if code, _, _ := runCLI(t, dir, a...); code != 2 {
+			t.Errorf("%v: exit %d, want 2", a, code)
+		}
+	}
+	// None of those touched the store.
+	_, lout, _ := runCLI(t, dir, "compare", "--list")
+	if strings.Count(lout, "\n") != 2 || !strings.Contains(lout, "\tfirst\t") || !strings.Contains(lout, "\tsecond\t") {
+		t.Fatalf("a refused invocation changed the store: %q", lout)
+	}
+}
+
+// A converted merge preview is a row of the SAME store, so --remove reaches it.
+func TestCompareRemoveReachesASavedPreview(t *testing.T) {
+	dir, _, _ := saveRepo(t)
+	gitRun(t, dir, "branch", "feat/x")
+	if code, _, errb := runCLI(t, dir, "preview", "add", "--label", "my preview", "feat/x", "main"); code != 0 {
+		t.Fatalf("preview add: exit %d, stderr %q", code, errb)
+	}
+	if _, pout, _ := runCLI(t, dir, "preview", "list"); !strings.Contains(pout, "my preview") {
+		t.Fatalf("fixture: preview list = %q", pout)
+	}
+	if code, _, errb := runCLI(t, dir, "compare", "--remove", "my preview"); code != 0 {
+		t.Fatalf("exit %d, stderr %q", code, errb)
+	}
+	if _, pout, _ := runCLI(t, dir, "preview", "list"); strings.Contains(pout, "my preview") {
+		t.Fatalf("preview list still shows it: %q", pout)
+	}
+}

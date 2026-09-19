@@ -353,6 +353,23 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				sha:     e.Origin.Commit,
 				shelfID: e.ID, hasPatch: e.PatchSHA != "",
 			})
+		case "L":
+			// Copy this row's gg:// link: the entry's ORIGIN address plus ?shelf=<id>; for a file captured
+			// from the working tree that hint is the only content source (spec §3.3).
+			// Inert while picking a compare target, like every other action key.
+			if p.inCompareMode() {
+				return m, nil
+			}
+			e, ok := p.selected()
+			if !ok {
+				return m, nil
+			}
+			text, ok := m.hintedLinkFor(e.Origin, model.LinkHint{Kind: "shelf", ID: e.ID})
+			if !ok {
+				m.statusMsg = i18n.T("▸ no gg link for this place")
+				return m, nil
+			}
+			return m, m.copyToClipboardCmd(i18n.T("Copied link: %s", text), text)
 		case "y":
 			if p.inCompareMode() {
 				return m, nil
