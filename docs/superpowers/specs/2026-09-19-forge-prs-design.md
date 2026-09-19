@@ -57,6 +57,24 @@ Where the text below disagrees, these win:
 8. Detection is cached per `domain.Service` and `Preflight` never runs the
    network probe itself — it reads a snapshot (unprobed = unsatisfiable).
 
+## Amendments made while implementing plan 2 (2026-09-19)
+
+1. The poll key is `[refresh] prs` (ruling 13), a `*int`: unset = 300, an
+   explicit `0` = off. It is NOT gated by `[refresh] enabled`.
+2. There is no `srcPRs`: the list is a synthetic refresh item (`prsItem`) with
+   its own message, because a network read must never hold the source
+   registry's loading state or the `r` key.
+3. Row layout is `#N  <status>  title  author  source → target` — the status
+   leads, since the narrow left column cuts a row's tail. No `💬N` badge
+   (`gh pr list` has no comment count).
+4. The hub is a wrapped `contentPopup`: its search is the popup's `/`
+   type-to-filter, not the `/ @ ] [` in-view search; hunk snippets are plain
+   `+`/`-` lines.
+5. Manual refresh is the global `r` (it re-reads PRs too); Forget is `d`, copy
+   URL is `y`. A list failure rides the tab header over the previous list.
+6. Moved to plan 3: the `gg://` pair-link copy, opening the hub from the open
+   PR diff, the comment re-poll.
+
 ## Approach
 
 Chosen: a forge-neutral leaf package `internal/forge` (types + `Provider`
