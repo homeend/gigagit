@@ -3,12 +3,14 @@ package tui
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -119,4 +121,152 @@ func firstLine(s string) string {
 		}
 	}
 	return ""
+}
+
+// prList is the panelList behind the Pull requests tab: Key is the PR number
+// (stable across reorders and state changes), Name the title, Date the last
+// update.
+type prList struct {
+	items []model.PullRequest
+	text  []string
+}
+
+func (l prList) Len() int          { return len(l.items) }
+func (l prList) Row(i int) string  { return l.text[i] }
+func (l prList) Name(i int) string { return l.items[i].Title }
+func (l prList) Date(i int) int64  { return l.items[i].Updated.Unix() }
+func (l prList) Key(i int) string  { return strconv.Itoa(l.items[i].Number) }
+
+// prReviewMark is the one-cell review verdict of an open PR. Narrow glyphs
+// only: a wide one overflows the row in tmux (the ☰ lesson).
+func prReviewMark(state string) string {
+	switch state {
+	case "APPROVED":
+		return "✓"
+	case "CHANGES_REQUESTED":
+		return "✗"
+	case "REVIEW_REQUIRED":
+		return "…"
+	}
+	return ""
+}
+
+// prStateWord is the translated state of a PR that is no longer open ("" for
+// an open one). A known PR never leaves the list when it closes — it is
+// re-marked with this word instead.
+func prStateWord(state string) string {
+	switch state {
+	case model.PRStateMerged:
+		return i18n.T("merged")
+	case model.PRStateClosed:
+		return i18n.T("closed")
+	case model.PRStateUnavailable:
+		return i18n.T("unavailable")
+	}
+	return ""
+}
+
+// prBranches is "source → target", a fork's head spelled owner:branch the way
+// the forge does.
+func prBranches(p model.PullRequest) string {
+	src := p.Source
+	if p.SourceRepo != "" {
+		if owner, _, ok := strings.Cut(p.SourceRepo, "/"); ok {
+			src = owner + ":" + src
+		}
+	}
+	if src == "" && p.Target == "" {
+		return ""
+	}
+	return src + " → " + p.Target
+}
+
+// prRows renders "#N  title  author  source → target  [draft]  <mark|state>",
+// the number column padded to the widest number. Forge text is never
+// translated; only "draft" and the state word are.
+func (m Model) prRows() []string {
+	nums := make([]string, len(m.prs))
+	for i, p := range m.prs {
+		nums[i] = "#" + strconv.Itoa(p.Number)
+	}
+	w := maxLabelWidth(2, nums...)
+	out := make([]string, 0, len(m.prs))
+	for i, p := range m.prs {
+		cells := []string{padCell(nums[i], w), sanitizeRowText(p.Title)}
+		for _, c := range []string{p.Author, prBranches(p)} {
+			if c != "" {
+				cells = append(cells, c)
+			}
+		}
+		if p.Draft && p.IsOpen() {
+			cells = append(cells, i18n.T("draft"))
+		}
+		tail := prReviewMark(p.ReviewState)
+		if !p.IsOpen() {
+			tail = prStateWord(p.State)
+		}
+		if tail != "" {
+			cells = append(cells, tail)
+		}
+		out = append(out, strings.Join(cells, "  "))
+	}
+	return out
+}
+
+// sanitizeRowText keeps forge-provided text on one clean row: control
+// characters (a title can hold a tab or an escape) become spaces.
+func sanitizeRowText(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, s)
+}
+
+// selectedPR is the focused row when the Pull requests tab has one.
+func (m Model) selectedPR() (model.PullRequest, bool) {
+	i, ok := m.backingIndex(panelPRs)
+	if !ok || i >= len(m.prs) {
+		return model.PullRequest{}, false
+	}
+	return m.prs[i], true
+}
+
+// prDecorators dims every row whose PR is no longer open; idx is the display
+// → backing map panelViewWindowed returned.
+func (m Model) prDecorators(idx []int) []rowDecorator {
+	decos := make([]rowDecorator, len(idx))
+	for j, i := range idx {
+		if i >= 0 && i < len(m.prs) && !m.prs[i].IsOpen() {
+			decos[j] = dimRowDecorator()
+		}
+	}
+	return decos
+}
+
+// prErrText is the list failure as the user reads it: "github: <first line>".
+func (m Model) prErrText() string {
+	if m.prsErr == "" {
+		return ""
+	}
+	return m.forgeProvider + ": " + m.prsErr
+}
+
+// emptyPanelText is what a panel with no rows says. Every panel says
+// "(none)"; the Pull requests tab distinguishes a list still on its way, a
+// failed read (with the key that retries it) and a repository with no open
+// pull request.
+func (m Model) emptyPanelText(p panel) string {
+	if p == panelPRs {
+		switch {
+		case m.prsErr != "":
+			return "  " + i18n.T("%s — [r] retry", m.prErrText())
+		case !m.prsLoaded:
+			return "  " + i18n.T("(loading…)")
+		default:
+			return "  " + i18n.T("(no open pull requests)")
+		}
+	}
+	return i18n.T("  (none)")
 }

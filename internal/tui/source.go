@@ -317,6 +317,11 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		return []sourceKey{srcBranches, srcRemotes, srcFeed}
 	case engine.Fetch:
 		return []sourceKey{srcRemotes}
+	case engine.FetchPRHead, engine.ForgetPR:
+		// Both touch only gg's private refs/gg/pr/<n> — invisible to every
+		// panel (the graph excludes refs/gg/*). Empty, NOT nil: nil means
+		// "all sources" and would auto-fire the remote-tags ls-remote probe.
+		return []sourceKey{}
 	case engine.AddFetchMappings:
 		// New remote-tracking refs appear (Remotes panel, the feed's %D
 		// decorations/↓↑ markers) and tracked branches gain ahead/behind

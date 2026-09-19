@@ -174,8 +174,11 @@ type Model struct {
 	prsLoaded        bool   // a list has landed at least once (distinguishes "loading" from "none")
 	prsInflight      bool
 	prsGen           int
-	previewOpen      *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
-	previewGen       int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
+	// pendingPROpen is the PR whose diff opens once its FetchPRHead succeeds
+	// (the pendingSwitch pattern; opFinishedMsg consumes and clears it).
+	pendingPROpen *model.PullRequest
+	previewOpen   *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
+	previewGen    int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
 
 	// Where the cursor lands once a mutation's reload arrives. Set by
 	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
@@ -2374,6 +2377,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Previews: enter opens the saved pair in the compare files view
 			// (target…source, the GitHub-PR diff). A pair that cannot be
 			// previewed right now says why instead of opening an empty view.
+			// Pull requests: enter fetches the PR head into gg's private ref,
+			// then opens base…head on the same surface a merge preview uses.
+			if m.focus == panelPRs {
+				if p, ok := m.selectedPR(); ok && m.canOpenPR() {
+					return m.openPRCmd(p)
+				}
+				return m, nil
+			}
 			if m.focus == panelPreviews {
 				if r, ok := m.selectedPreview(); ok && m.opsIdle() {
 					if r.sum.State != domain.PreviewOK {
@@ -2797,6 +2808,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prsLoadedMsg:
 		return m.handlePRsLoaded(msg)
 
+	case prFetchReadyMsg:
+		return m.handlePRFetchReady(msg)
+
 	case bgFetchDoneMsg:
 		// Drop stale completions: if a newer fetch was launched (e.g. a user op
 		// preempted the old one and a new cycle started), the old message must not
@@ -2999,6 +3013,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var pushTags []string
 		var noticeCfg *engine.SetGitConfig
 		pendingCo := m.pendingCheckout // captured; cleared below whatever happened
+		prOpen := m.pendingPROpen      // captured; cleared below whatever happened
+		m.pendingPROpen = nil
 		if msg.err != nil {
 			m.statusMsg = friendlyOpError(msg.err)
 			// A lock failure is recoverable in-app; arm the notice before the
@@ -3124,7 +3140,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// No hardFeed: an op that adds commits (commit, merge, cherry-pick) should
 		// prepend them, not collapse the list back to page 0.
 		m, cmd = m.reloadSourcesCmd(sourcesOrAll(srcs), reloadOpts{manual: true})
-		return m, tea.Batch(healthCmd, cmd, driftCmd)
+		var prCmd tea.Cmd
+		if prOpen != nil && msg.err == nil {
+			prCmd = m.openPRPreviewCmd(*prOpen) // the head is local now: open its diff
+		}
+		return m, tea.Batch(healthCmd, cmd, driftCmd, prCmd)
 
 	case prefixDataMsg:
 		if v := layerOf[*prefixSettingsView](m); v != nil {
@@ -3727,8 +3747,11 @@ func (m Model) middleTab() panel {
 // both keep identical bookkeeping (the top slot also updates lastLeftPanel, the
 // ←-return target). A non-tab panel is left unchanged.
 func (m Model) activateTab(p panel) Model {
+	if p == panelPRs && !m.forgeShown {
+		return m // no usable forge: there is no such tab (a steer/click cannot conjure it)
+	}
 	switch p {
-	case panelBranches, panelRemotes, panelWorktrees, panelPreviews:
+	case panelBranches, panelRemotes, panelWorktrees, panelPreviews, panelPRs:
 		m.activeLeftTab = p
 		m.focus = p
 		m.lastLeftPanel = p
@@ -3904,7 +3927,7 @@ func (m Model) leftReturnTarget() panel {
 		return m.leftMax
 	}
 	p := m.lastLeftPanel
-	if (p == panelBranches || p == panelWorktrees || p == panelRemotes || p == panelPreviews) && p != m.activeLeftTab {
+	if (p == panelBranches || p == panelWorktrees || p == panelRemotes || p == panelPreviews || p == panelPRs) && p != m.activeLeftTab {
 		p = m.activeLeftTab
 	}
 	if m.layout().boxH[p] <= 0 { // hidden (inactive tab, or Staged on a short terminal)

@@ -13,6 +13,8 @@ import (
 
 func intPtr(v int) *int { return &v }
 
+func forgeOK() domain.ForgeStatus { return domain.ForgeStatus{Provider: "github"} }
+
 func testPRs() []model.PullRequest {
 	return []model.PullRequest{
 		{Number: 7, Title: "Add streaming parser", Author: "octocat", State: model.PRStateOpen,
