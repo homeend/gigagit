@@ -69,6 +69,9 @@ func (m Model) noteRemoveAllRow() (actionRow, bool) {
 // diffHasTipNotes reports whether any visible thread is anchored on commit.
 func diffHasTipNotes(v *diffView, commit string) bool {
 	for _, r := range v.notes {
+		if r.Note.Source == model.NoteSourceForge {
+			continue // a forge thread is not stored: there is nothing to remove
+		}
 		if r.Note.Address.Commit == commit {
 			return true
 		}

@@ -379,6 +379,15 @@ URL; `d` forgets a PR that is no longer open. `r` re-reads the list, and gg
 re-reads it in the background every `[refresh] prs` seconds (default `300`,
 `0` = off) — independently of the `[refresh] enabled` master switch.
 
+Inside a PR's diff its **review threads** show as read-only note boxes on
+their lines (`review · author · age · path R12`, left pane for a comment on the
+old side, a whole-file comment at the top of the file, `◆N` badges in the file
+list); `}` / `{`, search and *List notes…* include them, and `E` / `R` / delete
+refuse — gg never writes to the forge. `o` collapses the note at the cursor to
+one row and `O` all of them (this works for your own notes too); a resolved
+thread starts collapsed. Comments are re-read every `[refresh] prs` seconds
+while the diff is open and on `r`; `i` opens the PR hub from the diff.
+
 `refs/gg/pr/<n>` is local only: never pushed, never shown in the commit graph.
 The fetch goes through whichever of your remotes names the base repository, so
 it uses your own ssh/https setup. `gh` is detected once per run; without a

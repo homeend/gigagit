@@ -33,7 +33,11 @@ type noteListEntry struct {
 	replies int
 	stale   bool // the anchor text is gone: the ◆ goes dim
 	agent   bool // agent-written thread: the ◆ takes the agent frame colour
-	filter  string
+	// forge marks a read-only review thread from the forge; resolved is its
+	// reviewers' verdict on it. Both are spelled out on the row.
+	forge    bool
+	resolved bool
+	filter   string
 }
 
 // line renders the entry to w columns: "◆ new:15  ada  summary  +2". The fixed
@@ -41,12 +45,18 @@ type noteListEntry struct {
 // count survives a narrow popup and only the free text is cut.
 func (e noteListEntry) line(w int) string {
 	head := "◆ " + e.anchor + "  "
+	if e.forge {
+		head += i18n.T("review") + "  "
+	}
 	if e.author != "" {
 		head += e.author + "  "
 	}
 	tail := ""
 	if e.replies > 0 {
 		tail = "  +" + strconv.Itoa(e.replies)
+	}
+	if e.resolved {
+		tail += "  " + i18n.T("resolved")
 	}
 	budget := w - lipgloss.Width(head) - lipgloss.Width(tail)
 	if budget < 1 {
@@ -69,6 +79,9 @@ func noteListEntries(ns []domain.ResolvedNote) []noteListEntry {
 		if r.Range[1] != r.Range[0] {
 			anchor += "-" + strconv.Itoa(r.Range[1])
 		}
+		if isFileLevelNote(r) {
+			anchor = i18n.T("file")
+		}
 		author := sanitizeLine(r.Note.Author)
 		summary := sanitizeLine(r.Note.Summary)
 		out = append(out, noteListEntry{
@@ -79,7 +92,8 @@ func noteListEntries(ns []domain.ResolvedNote) []noteListEntry {
 			replies: len(r.Replies),
 			stale:   r.Status == model.NoteStale,
 			agent:   r.Note.Source == model.NoteSourceAgent,
-			filter:  strings.ToLower(summary + "\x00" + author),
+			forge:   r.Note.Source == model.NoteSourceForge, resolved: model.NoteHasTag(r.Note, model.NoteTagResolved),
+			filter: strings.ToLower(summary + "\x00" + author),
 		})
 	}
 	return out

@@ -3,7 +3,9 @@ package tui
 import (
 	"strconv"
 	"strings"
+	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -45,11 +47,12 @@ type noteLine struct {
 type noteRowKind int
 
 const (
-	noteRowTop     noteRowKind = iota // ╭─ title ───╮
-	noteRowBlank                      // │           │
-	noteRowSummary                    // │ Summary   │  (bold; wraps, never cut)
-	noteRowText                       // │ rationale │  (wraps)
-	noteRowBottom                     // ╰───────────╯
+	noteRowTop       noteRowKind = iota // ╭─ title ───╮
+	noteRowBlank                        // │           │
+	noteRowSummary                      // │ Summary   │  (bold; wraps, never cut)
+	noteRowText                         // │ rationale │  (wraps)
+	noteRowBottom                       // ╰───────────╯
+	noteRowCollapsed                    // ▸ author: summary… (N replies) — the whole thread on one row
 )
 
 // noteBoxFrame is the fixed width a box row spends on its frame and inner
@@ -120,7 +123,23 @@ func dropAgentRows(rows []noteLine) []noteLine {
 // the END of its range on its side (§4.4 phase-2 hunks anchor at the range
 // end). See lineAnchor for the return contract.
 func (v *diffView) noteAnchorLine(r domain.ResolvedNote) (int, bool) {
+	if isFileLevelNote(r) {
+		// A forge comment on the whole file hangs off the view's first real
+		// line — the top of the file. (The line may be a fold: then it is the
+		// fold that gets the note mark, like any other hidden anchor.)
+		if len(v.lines) == 0 {
+			return -1, false
+		}
+		return 0, v.lines[0].Fold == 0
+	}
 	return v.lineAnchor(r.Range[1], r.Note.Side == model.NoteSideOld)
+}
+
+// isFileLevelNote reports a forge comment anchored to the file, not a line:
+// the zero range. Only a forge note may be one — a STORED note with a zero
+// range is malformed and stays unanchored.
+func isFileLevelNote(r domain.ResolvedNote) bool {
+	return r.Note.Source == model.NoteSourceForge && r.Range == [2]int{}
 }
 
 // lineAnchor finds the logical line carrying number no on the old (old=true) or
@@ -188,7 +207,7 @@ func (v *diffView) lastLineNo(old bool) int {
 // a frame with nothing inside is not a note to show.
 func hasNoteContent(rows []noteLine) bool {
 	for _, nl := range rows {
-		if nl.kind == noteRowSummary || nl.kind == noteRowText {
+		if nl.kind == noteRowSummary || nl.kind == noteRowText || nl.kind == noteRowCollapsed {
 			return true
 		}
 	}
@@ -202,6 +221,9 @@ func hasNoteContent(rows []noteLine) bool {
 // the whole thread is agent-written, so a user reply under an agent root
 // keeps its frame while the `a` layer is off.
 func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int) []noteLine {
+	if v.collapsed[r.Note.ID] {
+		return []noteLine{v.collapsedNoteLine(r)}
+	}
 	stale := r.Status == model.NoteStale
 	allAgent := r.Note.Source == model.NoteSourceAgent
 	for _, rep := range r.Replies {
@@ -220,11 +242,132 @@ func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int) []noteLine {
 	return append(rows, frame(noteRowBlank, ""), frame(noteRowBottom, ""))
 }
 
+// collapsedNoteLine is a whole thread on one row: "author: summary (N
+// replies)". The painter prefixes ▸ and cuts it to the pane. It is agent-tagged
+// like a frame row — only when the whole thread is — so the `a` layer hides it
+// exactly when it would hide the open box.
+func (v *diffView) collapsedNoteLine(r domain.ResolvedNote) noteLine {
+	allAgent := r.Note.Source == model.NoteSourceAgent
+	for _, rep := range r.Replies {
+		if rep.Note.Source != model.NoteSourceAgent {
+			allAgent = false
+		}
+	}
+	text := r.Note.Summary
+	if r.Note.Author != "" {
+		text = r.Note.Author + ": " + text
+	}
+	switch n := len(r.Replies); {
+	case n == 1:
+		text += " " + i18n.T("(1 reply)")
+	case n > 1:
+		text += " " + i18n.T("(%d replies)", n)
+	}
+	side := r.Note.Side
+	if side == "" {
+		side = model.NoteSideNew
+	}
+	return noteLine{id: r.Note.ID, rootID: r.Note.ID, kind: noteRowCollapsed, side: side,
+		text: sanitizeLine(text), stale: r.Status == model.NoteStale, agent: allAgent}
+}
+
+// setNotes replaces the view's threads and seeds the collapse state of the
+// ones seen for the first time: a forge thread marked resolved starts folded.
+func (v *diffView) setNotes(ns []domain.ResolvedNote) {
+	v.notes = ns
+	if v.collapsed == nil {
+		v.collapsed = map[string]bool{}
+	}
+	if v.collapseSeeded == nil {
+		v.collapseSeeded = map[string]bool{}
+	}
+	for _, r := range ns {
+		if v.collapseSeeded[r.Note.ID] {
+			continue
+		}
+		v.collapseSeeded[r.Note.ID] = true
+		if r.Note.Source == model.NoteSourceForge && model.NoteHasTag(r.Note, model.NoteTagResolved) {
+			v.collapsed[r.Note.ID] = true
+		}
+	}
+}
+
+// relayoutKeepingCursor re-lays the view after its note rows changed height,
+// the way a notes arrival does: the cursor stays on its logical line and a
+// free-scrolled view keeps its place.
+func (m Model) relayoutKeepingCursor(v *diffView) {
+	body := m.diffBodyRows()
+	cr, hadRow := v.cursorRow()
+	wasVisible := v.cursorVisible(body)
+	v.relayout(v.width)
+	v.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
+}
+
+// toggleNoteCollapse folds or unfolds every thread in reach of the cursor
+// (the ones E/R/Delete would offer — forge threads included: folding changes
+// nothing but the view).
+func (m Model) toggleNoteCollapse() Model {
+	v := m.diffLayer()
+	ts := m.notesAtCursor()
+	if v == nil || len(ts) == 0 {
+		return m
+	}
+	if v.collapsed == nil {
+		v.collapsed = map[string]bool{}
+	}
+	want := false // any open thread in reach → fold them all; else unfold
+	for _, t := range ts {
+		if !v.collapsed[t.rootID] {
+			want = true
+		}
+	}
+	for _, t := range ts {
+		v.collapsed[t.rootID] = want
+	}
+	m.relayoutKeepingCursor(v)
+	return m
+}
+
+// toggleAllNotesCollapse folds every thread when any is open, else unfolds all.
+func (m Model) toggleAllNotesCollapse() Model {
+	v := m.diffLayer()
+	if v == nil || len(v.notes) == 0 {
+		return m
+	}
+	if v.collapsed == nil {
+		v.collapsed = map[string]bool{}
+	}
+	want := false
+	for _, r := range v.notes {
+		if !v.collapsed[r.Note.ID] {
+			want = true
+		}
+	}
+	for _, r := range v.notes {
+		v.collapsed[r.Note.ID] = want
+	}
+	m.relayoutKeepingCursor(v)
+	return m
+}
+
+// allNotesCollapsed reports whether O would expand (every thread is folded).
+func (v *diffView) allNotesCollapsed() bool {
+	for _, r := range v.notes {
+		if !v.collapsed[r.Note.ID] {
+			return false
+		}
+	}
+	return len(v.notes) > 0
+}
+
 // noteBoxTitle is the text in a box's top rule: "agent note" or "note", the
 // author, the file and the anchored line (R for the new side, L for the old),
 // plus "(stale)" when the anchor text is gone — hunk's
 // "agent note - updates/garmin.go R204".
 func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
+	if r.Note.Source == model.NoteSourceForge {
+		return v.forgeNoteTitle(r)
+	}
 	kind := i18n.T("note")
 	if r.Note.Source == model.NoteSourceAgent {
 		kind = i18n.T("agent note")
@@ -248,6 +391,34 @@ func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
 		t += " " + i18n.T("(stale)")
 	}
 	return t
+}
+
+// forgeNoteTitle is a forge review thread's top rule: "review · author · 2d ago
+// · path R12", "(file)" in place of the line for a whole-file comment, and
+// "· resolved" when its reviewers closed the thread. The login, the path and
+// the age stamp are data; only the words are translated.
+func (v *diffView) forgeNoteTitle(r domain.ResolvedNote) string {
+	parts := []string{i18n.T("review")}
+	if r.Note.Author != "" {
+		parts = append(parts, r.Note.Author)
+	}
+	if !r.Note.Created.IsZero() {
+		parts = append(parts, ageString(time.Now(), r.Note.Created))
+	}
+	where := v.noteAddr.Path
+	switch {
+	case isFileLevelNote(r):
+		where += " " + i18n.T("(file)")
+	case r.Note.Side == model.NoteSideOld:
+		where += " L" + strconv.Itoa(r.Range[1])
+	default:
+		where += " R" + strconv.Itoa(r.Range[1])
+	}
+	parts = append(parts, where)
+	if model.NoteHasTag(r.Note, model.NoteTagResolved) {
+		parts = append(parts, i18n.T("resolved"))
+	}
+	return strings.Join(parts, " · ")
 }
 
 // noteBodyLines is one note's own rows inside a box: the summary (bold on a
@@ -304,4 +475,30 @@ func noteBadge(n int) string {
 		return ""
 	}
 	return "  ◆" + strconv.Itoa(n)
+}
+
+// noteCollapseRows are the . menu's collapse rows (keys o / O; the diff footer
+// has no room left for them, so the menu and ? are where they are advertised).
+func (m Model) noteCollapseRows() []actionRow {
+	v, ok := m.topLayer().(*diffView)
+	if !ok || len(v.notes) == 0 {
+		return nil
+	}
+	var rows []actionRow
+	if ts := m.notesAtCursor(); len(ts) > 0 {
+		label := i18n.T("Collapse note")
+		if v.collapsed[ts[0].rootID] {
+			label = i18n.T("Expand note")
+		}
+		rows = append(rows, actionRow{id: "note-collapse", key: "o", label: label, run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.toggleNoteCollapse(), nil
+		}})
+	}
+	label := i18n.T("Collapse all notes")
+	if v.allNotesCollapsed() {
+		label = i18n.T("Expand all notes")
+	}
+	return append(rows, actionRow{id: "note-collapse-all", key: "O", label: label, run: func(m Model) (tea.Model, tea.Cmd) {
+		return m.toggleAllNotesCollapse(), nil
+	}})
 }

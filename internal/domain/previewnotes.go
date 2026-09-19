@@ -215,15 +215,22 @@ func (s *Service) PreviewNotesFor(ctx context.Context, set PreviewNoteSet, path 
 	if path == "" {
 		return nil, errPreviewNotesNeedPath
 	}
+	// A pull request's review threads ride along, appended AFTER the store
+	// notes are resolved: they are active by construction and must not pass
+	// through resolveNotes (no old side here — a LEFT comment would be dropped).
+	forge := s.forgeNotesFor(set, path)
 	mine, err := s.loadPreviewNotes(ctx, set, path)
 	if err != nil {
+		if len(forge) > 0 && errors.Is(err, ErrNotesDisabled) {
+			return forge, nil // no note store on this machine: the forge's threads still show
+		}
 		return nil, err
 	}
 	if len(mine) == 0 {
-		return nil, nil
+		return forge, nil
 	}
 	_, newLines := diffSideLines(d)
-	return keepResolved(resolveNotes(mine, nil, newLines)), nil
+	return append(keepResolved(resolveNotes(mine, nil, newLines)), forge...), nil
 }
 
 // PreviewNotesAt is PreviewNotesFor for a caller with no diff in hand (the web
@@ -272,9 +279,13 @@ func (s *Service) PreviewNotesAll(ctx context.Context, set PreviewNoteSet) (map[
 	if !set.OK() {
 		return map[string][]ResolvedNote{}, nil
 	}
+	forge := s.forgeNotesFor(set, "")
 	mine, err := s.loadPreviewNotes(ctx, set, "")
 	if err != nil {
-		return nil, err
+		if len(forge) == 0 || !errors.Is(err, ErrNotesDisabled) {
+			return nil, err
+		}
+		mine = nil // no store here; the forge's threads still list
 	}
 	byPath := map[string][]model.Note{}
 	for _, n := range mine {
@@ -296,6 +307,9 @@ func (s *Service) PreviewNotesAll(ctx context.Context, set PreviewNoteSet) (map[
 		if got := keepResolved(resolveNotes(byPath[p], nil, newLines)); len(got) > 0 {
 			out[p] = got
 		}
+	}
+	for _, r := range forge { // active by construction: appended, never re-resolved
+		out[r.Note.Address.Path] = append(out[r.Note.Address.Path], r)
 	}
 	return out, nil
 }
@@ -330,6 +344,29 @@ type previewCountEntry struct {
 //
 // The maps are the cached instance, shared by every caller: READ-ONLY.
 func (s *Service) PreviewNoteCounts(ctx context.Context, set PreviewNoteSet) (map[string]int, int, error) {
+	byPath, total, err := s.previewStoreCounts(ctx, set)
+	fp, ft := s.forgeNoteCounts(set)
+	if ft == 0 {
+		return byPath, total, err
+	}
+	if err != nil && !errors.Is(err, ErrNotesDisabled) {
+		return byPath, total, err
+	}
+	// The store's map is the shared cached instance (read-only): merge into a
+	// fresh one. The forge half is never cached here — it changes on a refresh
+	// the notes generation knows nothing about.
+	merged := make(map[string]int, len(byPath)+len(fp))
+	for p, n := range byPath {
+		merged[p] = n
+	}
+	for p, n := range fp {
+		merged[p] += n
+	}
+	return merged, total + ft, nil
+}
+
+// previewStoreCounts is the stored-notes half of PreviewNoteCounts.
+func (s *Service) previewStoreCounts(ctx context.Context, set PreviewNoteSet) (map[string]int, int, error) {
 	if !set.OK() {
 		return map[string]int{}, 0, nil
 	}

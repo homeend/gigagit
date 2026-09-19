@@ -184,6 +184,9 @@ func checkNoteRange(rng [2]int, side model.NoteSide, path string, lines []string
 
 // NoteEdit replaces one note's summary and rationale.
 func (s *Service) NoteEdit(ctx context.Context, id, summary, rationale string) error {
+	if model.IsForgeNoteID(id) {
+		return ErrReadOnlyNote
+	}
 	st := s.notesStore(ctx)
 	if st == nil {
 		return ErrNotesDisabled
@@ -214,6 +217,9 @@ func (s *Service) NoteEdit(ctx context.Context, id, summary, rationale string) e
 // from non-replies, so a note whose parent is itself a reply would be dropped
 // inside Put while this call reported success.
 func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) (model.Note, error) {
+	if model.IsForgeNoteID(parentID) {
+		return model.Note{}, ErrReadOnlyNote
+	}
 	st := s.notesStore(ctx)
 	if st == nil {
 		return model.Note{}, ErrNotesDisabled
@@ -246,6 +252,9 @@ func (s *Service) NoteReply(ctx context.Context, parentID string, n model.Note) 
 
 // NoteRemove deletes a note; a root takes its replies with it.
 func (s *Service) NoteRemove(ctx context.Context, id string) error {
+	if model.IsForgeNoteID(id) {
+		return ErrReadOnlyNote
+	}
 	st := s.notesStore(ctx)
 	if st == nil {
 		return ErrNotesDisabled
