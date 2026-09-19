@@ -289,7 +289,7 @@ func (s *Service) PendingMigrations(ctx context.Context) ([]PendingMigration, er
 // RunMigration applies one pending migration through Execute, then drops the
 // cached verdicts so the next Preflight sees the new state.
 func (s *Service) RunMigration(ctx context.Context, m PendingMigration) error {
-	op := engine.ApplyMigration{Feature: m.Feature, Store: m.Store, To: m.To, Refs: m.Refs}
+	op := engine.ApplyMigration{Feature: m.Feature, Store: m.Store, To: m.To, Action: engine.DiscardRefs{Refs: m.Refs}}
 	if _, err := s.Execute(ctx, op, nil, nil); err != nil {
 		return err
 	}

@@ -31,7 +31,7 @@ func TestApplyMigrationDeletesRefsAndStamps(t *testing.T) {
 		Feature: "versions",
 		Store:   "versions",
 		To:      2,
-		Refs:    refs,
+		Action:  DiscardRefs{Refs: refs},
 	}
 	res, err := op.Run(ctx, deps)
 	if err != nil {
