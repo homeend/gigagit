@@ -9,9 +9,10 @@ import { featureDisabled } from "./preflight.js";
 import { openRebaseEditor } from "./rebase.js";
 import { startReview } from "./review.js";
 import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./commits.js";
-import { openCompare } from "./files.js";
+import { openCompare, openEntryCompare } from "./files.js";
 import { openFileHistory } from "./filehist.js";
 import { extraRows } from "./menus.js";
+import { entryGone, toast } from "./toast.js";
 import { nextSortMode, setSortMode, sortChipHTML, sortMode, sortedBy } from "./sortlist.js";
 import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilter.js";
 
@@ -1255,10 +1256,58 @@ async function removeEntry(store, id) {
 function openEntry(e) {
   if (e.is_commit || e.kind === "commit") {
     if (e.commit) openCommitByHash(e.commit, entryLabel(e));
-    else opLine("this entry is frozen content, not a commit in git", true);
+    else toast("this entry is frozen content, not a commit in git", { err: true });
     return;
   }
   if (e.path) openFileHistory(e.path, e.commit || "");
+}
+
+
+// openBookmark asks FIRST whether the bookmark still points at anything. A
+// bookmark is a pointer, not a copy: a rebase plus a gc leaves it naming a
+// commit git no longer has, and opening it then was a click that did nothing
+// (a file bookmark opened a history overlay reading "error: bad object").
+// The answer is domain's BookmarkProbe — the sentence the TUI shows too.
+async function openBookmark(b) {
+  let got;
+  try {
+    got = await getJSON("/api/bookmarks/check?id=" + encodeURIComponent(b.id));
+  } catch (e) {
+    toast("bookmark: " + (e.message || e), { err: true });
+    return;
+  }
+  if (!got.available) {
+    toast(got.message || entryLabel(b) + " is no longer available", { err: true, detail: got.detail });
+    return;
+  }
+  openEntry(b);
+}
+
+
+// openShelfEntry: a shelved COMMIT opens its FROZEN FILES, the TUI's enter —
+// never the original commit. The shelf exists for commits you are about to
+// lose, so "show the original" is the one thing that stops working for
+// exactly the entries that matter: its sha 404s after the rebase+gc, and the
+// click did nothing. The frozen members open as a comparison against the
+// working tree (the TUI's per-row diff), through the same frozen lane an
+// entry compare uses, so each file diffs via /api/entry-diff. The live commit
+// stays one menu row away ("show the original commit").
+async function openShelfEntry(e) {
+  if (e.kind !== "commit") return openEntry(e);
+  let got;
+  try {
+    got = await getJSON("/api/shelf/files?id=" + encodeURIComponent(e.id));
+  } catch (err) {
+    entryGone(entryLabel(e), err.message || String(err));
+    return;
+  }
+  openEntryCompare({
+    left: { label: "shelf: " + entryLabel(e), spec: "shelf:" + e.id },
+    right: { label: "working tree", spec: "worktree" },
+    files: (got.files || []).map((p) => ({ path: p, status: "" })),
+    frozen: true,
+    frozen_note: "the files frozen with this shelved commit",
+  });
 }
 
 
@@ -1296,8 +1345,8 @@ async function pickShelfFile(e, x, y) {
 
 function showBookmarkMenu(e, x, y) {
   const items = [];
-  if (e.is_commit && e.commit) items.push({ label: "show commit", act: () => openEntry(e) });
-  else if (e.path) items.push({ label: "file history", act: () => openEntry(e) });
+  if (e.is_commit && e.commit) items.push({ label: "show commit", act: () => openBookmark(e) });
+  else if (e.path) items.push({ label: "file history", act: () => openBookmark(e) });
   if (e.commit) items.push({ label: "copy commit id", act: () => copyText(e.commit, "commit id " + e.commit.slice(0, 8)) });
   if (e.path) items.push({ label: "copy path", act: () => copyText(e.path, "path " + e.path) });
   if (e.path) {
@@ -1326,6 +1375,7 @@ function showBookmarkMenu(e, x, y) {
 function showShelfMenu(e, x, y) {
   const items = [];
   if (e.kind === "commit") {
+    items.push({ label: "browse the frozen files", act: () => openShelfEntry(e) });
     if (e.commit) items.push({ label: "show the original commit", act: () => openEntry(e) });
     items.push({ sep: true });
     // The frozen files are the entry's real content; restoring one is picked
@@ -1366,7 +1416,7 @@ $("bookmarks-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
   if (!li || !li.dataset.id) return;
   const b = (state.bookmarks || []).find((x) => x.id === li.dataset.id);
-  if (b) openEntry(b);
+  if (b) openBookmark(b);
 });
 
 $("bookmarks-list").addEventListener("contextmenu", (e) => {
@@ -1381,7 +1431,7 @@ $("shelf-list").addEventListener("click", (e) => {
   const li = e.target.closest("li");
   if (!li || !li.dataset.id) return;
   const s = (state.shelf || []).find((x) => x.id === li.dataset.id);
-  if (s) openEntry(s);
+  if (s) openShelfEntry(s);
 });
 
 $("shelf-list").addEventListener("contextmenu", (e) => {

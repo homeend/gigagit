@@ -189,3 +189,34 @@ func (s *Server) handleBookmarkRemove(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"ok": true})
 }
+
+// handleBookmarkCheck answers "can this bookmark still be opened?" before the
+// page tries to. A bookmark is a pointer, so a rebase plus a gc leaves it
+// naming nothing; the page used to find that out as an unhandled 404 and show
+// NOTHING, while the TUI printed git's raw error. Both now ask domain's
+// BookmarkProbe and show its one sentence. A dead bookmark is a 200 with
+// available=false — it is an answer, not a failure of this request.
+func (s *Server) handleBookmarkCheck(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		writeErr(w, http.StatusBadRequest, errors.New("id required"))
+		return
+	}
+	svc := s.service()
+	ctx := readCtx(r)
+	b, err := svc.BookmarkGet(ctx, id)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, err)
+		return
+	}
+	err = svc.BookmarkProbe(ctx, b)
+	var gone *domain.EntryGoneError
+	switch {
+	case err == nil:
+		writeJSON(w, map[string]any{"available": true})
+	case errors.As(err, &gone):
+		writeJSON(w, map[string]any{"available": false, "message": gone.Error(), "detail": gone.Cause.Error()})
+	default:
+		writeErr(w, http.StatusInternalServerError, err)
+	}
+}

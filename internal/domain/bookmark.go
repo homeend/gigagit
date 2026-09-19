@@ -91,3 +91,50 @@ func (s *Service) BookmarkBytes(ctx context.Context, b model.Bookmark) ([]byte, 
 		return nil, errors.New("bookmark: unknown state")
 	}
 }
+
+// EntryGoneError reports a stored entry whose target can no longer be read: a
+// bookmark is a pointer, so once the commit or blob it names is rebased away
+// and gc'd (or the live file is deleted) there is nothing left to open. What
+// names the target for the notice every frontend shows; Cause keeps git's own
+// words for a detail line.
+type EntryGoneError struct {
+	What  string
+	Cause error
+}
+
+func (e *EntryGoneError) Error() string { return e.What + " is no longer available" }
+
+func (e *EntryGoneError) Unwrap() error { return e.Cause }
+
+// BookmarkProbe reports whether what b points at can still be opened: nil, or
+// an *EntryGoneError. It is the ONE availability check the frontends ask
+// before opening a bookmark, so the TUI and the web answer a dead one with the
+// same sentence instead of a raw git error and silence respectively. A
+// cancelled context is returned as itself — never as "gone".
+func (s *Service) BookmarkProbe(ctx context.Context, b model.Bookmark) error {
+	short := b.Commit
+	if len(short) > 7 {
+		short = short[:7]
+	}
+	if b.IsCommit() {
+		_, found, err := s.CommitLookup(ctx, b.Commit)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return &EntryGoneError{What: "commit " + short, Cause: &CommitGoneError{SHA: b.Commit}}
+		}
+		return nil
+	}
+	if _, err := s.BookmarkBytes(ctx, b); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		what := b.Path
+		if b.State == model.StateCommitted && short != "" {
+			what += " @ " + short
+		}
+		return &EntryGoneError{What: what, Cause: err}
+	}
+	return nil
+}

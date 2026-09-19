@@ -341,7 +341,7 @@ async function steerNavigateLand(s) {
       opLine("gg link: cannot place " + s.ref + " in this repository", true);
       return;
     }
-    await openCommitByHash(sha, s.ref);
+    if (!(await openCommitByHash(sha, s.ref))) return;
     if (!s.file) return; // a file-less ref navigate only reveals the tree
     const i = state.files.findIndex((f) => f.path === s.file);
     if (i < 0) return;
@@ -358,7 +358,7 @@ async function steerNavigateLand(s) {
     if (s.commit) await openCommitByHash(s.commit, s.commit.slice(0, 8));
     return;
   } else if (s.state === "commit") {
-    await openCommitByHash(s.commit, s.commit.slice(0, 8));
+    if (!(await openCommitByHash(s.commit, s.commit.slice(0, 8)))) return;
     const i = state.files.findIndex((f) => f.path === s.file);
     if (i < 0) return;
     await openFile(i);
