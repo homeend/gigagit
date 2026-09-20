@@ -93,16 +93,17 @@ type Service struct {
 	// never held across a provider call (the probe is a network round trip and
 	// Preflight reads forgeProbe under it), and never while taking preflightMu
 	// (Preflight holds preflightMu then takes forgeMu — the reverse deadlocks).
-	forgeMu        sync.Mutex
-	forgeProviders []forge.Provider // nil = forge.Default; tests inject
-	forgeRec       observ.Recorder  // the session's span ring, so gh calls reach the operation log; nil for a Service built by New
-	forgeProbed    bool
-	forgeProbing   chan struct{}  // non-nil while the one probe is in flight; closed when it lands
-	forgeActive    forge.Provider // nil when none is usable
-	forgeErr       error
-	forgeSeen      map[int]bool               // PR numbers listed open this session
-	forgeTerminal  map[int]model.PullRequest  // cached closed/merged/unavailable reads
-	forgeComments  map[int]forgeCommentsEntry // PRCommentsRefresh's cache; the note readers never fetch
+	forgeMu         sync.Mutex
+	forgeProviders  []forge.Provider // nil = forge.Default; tests inject
+	forgeRec        observ.Recorder  // the session's span ring, so gh calls reach the operation log; nil for a Service built by New
+	forgeProbed     bool
+	forgeProbing    chan struct{}  // non-nil while the one probe is in flight; closed when it lands
+	forgeActive     forge.Provider // nil when none is usable
+	forgeErr        error
+	forgeSeen       map[int]bool               // PR numbers listed open this session
+	forgeTerminal   map[int]model.PullRequest  // cached closed/merged/unavailable reads
+	forgeComments   map[int]forgeCommentsEntry // PRCommentsRefresh's cache; the note readers never fetch
+	forgeSearchLast *PRSearchResult            // PRSearch's last answer (session-only)
 	// forgePRCache holds single pull requests (forge_cache.go): an open is served
 	// from it and revalidated in the background; an entry nobody used for
 	// prCacheIdle is evicted. forgeBase is the base repository, fixed for the
