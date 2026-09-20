@@ -241,6 +241,15 @@ CLI is unaffected: it prints `ForgeComment.Body`, not the note split.
 
 ## 7. TUI
 
+> **Amended by plan 2** (`plans/2026-09-20-forge-prs-markdown-2-tui.md`), which
+> is what shipped: (a) NO new theme roles — inline styles are terminal
+> attributes riding the existing `[]syntax.Class` mask as TUI-local
+> pseudo-classes, only code takes a (syntax-palette) colour; (b) the hub is
+> NOT re-laid on resize — it emits unwrapped rows and the `modeWrap` popup
+> wraps them at draw time; only note boxes pre-wrap; (c) `contentLine` needed
+> no new field, `noteLine` gained `cls`. The text below is the original
+> proposal.
+
 One renderer, `internal/tui/md_render.go`:
 
 ```go

@@ -532,7 +532,13 @@ func forgeNoteBodyLines(r domain.ResolvedNote, mk func(noteRowKind, string) note
 		add(noteRowSummary, mdInlineRows([]markdown.Inline{{Kind: markdown.InText, Text: r.Note.Summary}}, w, head))
 	}
 	if r.Note.Rationale != "" {
-		add(noteRowText, mdRows(markdown.Parse(r.Note.Rationale), w))
+		body := mdRows(markdown.Parse(r.Note.Rationale), w)
+		// A thread summarised by the label "suggestion" opens with that very
+		// block: its caption would only say the summary again.
+		if r.SummarySrc == "" && r.Note.Summary == markdown.LabelSuggestion && len(body) > 0 && body[0].text == i18n.T("suggestion") {
+			body = body[1:]
+		}
+		add(noteRowText, body)
 	}
 	return rows
 }

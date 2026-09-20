@@ -46,7 +46,8 @@ comparison…; a `@a..b` link lands through the same door) · **pull
 requests** (read-only: list, fetch + open the PR diff, copy URL, forget,
 `[refresh] prs` poll and ⟳, review threads inside the diff as read-only note
 boxes, the details overlay — the TUI's PR hub — and the comment re-poll;
-PR text is RENDERED AS MARKDOWN here, which the TUI does not do yet) ·
+PR text is rendered as markdown in both — the web paints the parsed tree
+as HTML, the TUI lays it out in rows) ·
 **note folding** (every note box: click the title, `z` / `Z` — the TUI's
 `o` / `O`).
 

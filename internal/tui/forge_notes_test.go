@@ -185,8 +185,10 @@ func TestForgeNoteBodyRendersMarkdown(t *testing.T) {
 
 	label := forge
 	label.Note.Summary, label.SummarySrc = "suggestion", ""
-	if lr := noteBodyLines(label, "forge:C1", 0, innerW, false); lr[0].text != "suggestion" {
-		t.Errorf("a label summary takes the plain path: %q", lr[0].text)
+	label.Note.Rationale = fence + "suggestion\ny := 1\n" + fence
+	lr := noteBodyLines(label, "forge:C1", 0, innerW, false)
+	if len(lr) != 2 || lr[0].text != "suggestion" || lr[0].kind != noteRowSummary || lr[1].text != "  y := 1" {
+		t.Errorf("a label summary is plain and its block's caption is not repeated: %+v", lr)
 	}
 
 	mine := domain.ResolvedNote{Note: model.Note{ID: "n1", Source: model.NoteSourceUser, Side: model.NoteSideNew,

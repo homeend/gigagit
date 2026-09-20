@@ -2235,3 +2235,39 @@ under it would otherwise block every later PR diff from fetching.
   `pr-view-7.md.json` (markdown + hostile strings), runs `pw/md.mjs`
   (29 checks), restores `pr-view-7.base.json`; `prweb/mdguards.py` removes one
   guard at a time and expects named checks red.
+
+### Forge PR text as markdown — the TUI (plan 2, `docs/superpowers/plans/2026-09-20-forge-prs-markdown-2-tui.md`)
+
+- **`mdRows(doc, width) []mdRow`** (`tui/md_render.go`) is the one layout:
+  text rows + a per-rune mask, `len(cls) == len([]rune(text))` always. The
+  mask is the EXISTING `[]syntax.Class` channel (`contentLine.cls` →
+  `winRow.cls` → `styledRuns` → `styles.syntaxStyle`) extended with TUI-local
+  pseudo-classes `mdStrong…mdQuote` (values ≥ 100, never in `syntax`), which
+  `syntaxStyle` routes to `mdStyle` — ATTRIBUTES over the base style (bold,
+  italic, strikethrough, underline, faint); only `mdCode` takes a colour, the
+  String syntax colour (bold when the theme has none). No new theme roles —
+  a spec §7 amendment. Wrap, hscroll, search emphasis and the reverse-video
+  mask drop therefore apply unchanged.
+- **Width:** `width > 0` word-wraps prose (display-width aware, hard-splits an
+  over-long word, hangs list/quote continuations by prefixing inner rows laid
+  out at `width - prefixW`); code and tables are CLIPPED (`mdClip`), never
+  reflowed; `mdRows` clips every row once more, so a prefix on a degenerate
+  width cannot overflow. `width <= 0` = one row per logical line.
+- **The hub does not pre-wrap** (`prMarkdownLines`, `mdRows(doc, 0)`): it is a
+  `modeWrap` popup, `renderWindow` wraps at draw time with its intrinsic hang
+  indent (`wrapAlignIndent` = everything before the first letter/digit, which
+  is exactly a list marker or quote bar), so ctrl+t maximize re-flows for
+  free. `prTextLines` remains for the outdated threads' HUNKS (code).
+  Behaviour change: a paragraph line's leading whitespace folds, as on the
+  forge.
+- **Note boxes pre-wrap** (`forgeNoteBodyLines`, width = the box): `noteLine`
+  gained `cls`; the summary comes from `ResolvedNote.SummarySrc`'s inline
+  tree behind the plain `↳ author: ` lead (`mdInlineRows`), a LABEL summary
+  (empty `SummarySrc`) stays plain, and a thread summarised `suggestion`
+  drops its leading block's caption (the web does the same through
+  `mdHTML(doc, esc, {skipFirstCaption})`). `noteRowCells` paints a masked row
+  with `styledRuns`; a stale box drops the mask (grey throughout). Local
+  notes take the old path byte-identically (`cls == nil`).
+- **Code tokens** keep their real syntax classes: `mdSanitizeMapped` carries
+  the parser's rune offsets across tab expansion / control-char flattening.
+- Every rune of forge text passes `sanitizeLine` BEFORE its mask is built.

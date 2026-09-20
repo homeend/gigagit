@@ -74,6 +74,8 @@ console.log(JSON.stringify({
   evil: mdHTML(evil, esc),
   deep: mdHTML({ blocks: [deep] }, esc).length > 0,
   empty: [mdHTML(null, esc), mdHTML(undefined, esc), mdHTML({}, esc), mdHTML({ blocks: "x" }, esc), mdInlineHTML(null, esc), mdInlineHTML("x", esc)],
+  capOff: mdHTML(trees.thread, esc, { skipFirstCaption: true }),
+  capFirst: mdHTML({ blocks: [{ k: "code", lang: "suggestion", lines: [{ t: "a" }] }, { k: "code", lang: "suggestion", lines: [{ t: "b" }] }] }, esc, { skipFirstCaption: true }),
   inline: mdInlineHTML([{ k: "text", t: "Rename " }, { k: "code", t: "<x>" }, { k: "strong", in: [{ k: "text", t: "now" }] }], esc),
 }));
 `
@@ -85,11 +87,12 @@ console.log(JSON.stringify({
 		t.Fatalf("node: %v\n%s", err, out)
 	}
 	var got struct {
-		HTML   map[string]string
-		Evil   string
-		Deep   bool
-		Empty  []string
-		Inline string
+		HTML             map[string]string
+		Evil             string
+		Deep             bool
+		Empty            []string
+		Inline           string
+		CapOff, CapFirst string
 	}
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatalf("%v\n%s", err, out)
@@ -153,6 +156,11 @@ console.log(JSON.stringify({
 	}
 	if n := strings.Count(got.Evil, "<a "); n != 1 {
 		t.Errorf("evil: %d links painted, want only the https one\n%s", n, got.Evil)
+	}
+	// skipFirstCaption drops only a LEADING suggestion's caption: the thread
+	// fixture opens with prose, so its (later) suggestion keeps the caption.
+	if strings.Count(got.CapOff, "md-cap") != 1 || strings.Count(got.CapFirst, "md-cap") != 1 || !strings.HasPrefix(got.CapFirst, "<pre") {
+		t.Errorf("skipFirstCaption: thread=%d first=%q", strings.Count(got.CapOff, "md-cap"), got.CapFirst)
 	}
 	if !got.Deep {
 		t.Error("a 200-deep tree must paint (bounded), not throw")
