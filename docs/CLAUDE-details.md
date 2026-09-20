@@ -2304,6 +2304,46 @@ under it would otherwise block every later PR diff from fetching.
   the parser's rune offsets across tab expansion / control-char flattening.
 - Every rune of forge text passes `sanitizeLine` BEFORE its mask is built.
 
+### Forge PR search — seam, domain, CLI, TUI (plan 1, `docs/superpowers/plans/2026-09-20-forge-prs-search-1-core-cli-tui.md`, spec `docs/superpowers/specs/2026-09-20-forge-prs-search-design.md`)
+
+- **Seam.** `forge.PRQuery{State, Text, Limit}` + `Provider.Search` →
+  `(prs, more, err)`. `Normalize()` (state `""`→`all`, limit `0`→50, 1…200,
+  text trimmed) runs in `domain` before any provider sees the query. States are
+  forge-neutral words (`all|open|closed|merged`); `forge.PRStates()` is ALSO the
+  frontends' cycle order (all → closed → merged → open).
+- **gh.** One `gh pr list --state S --limit N+1 --search "<text> sort:updated-desc" --json …`
+  (FakeRunner name `gh pr search`). `--search` is ALWAYS present: gh orders a
+  plain listing by CREATION and a searched one by best match (checked against a
+  real repo), so without the qualifier a cut at N is not the N newest-updated.
+  A text with its own `sort:` field is passed verbatim. The text is the VALUE of
+  `--search`, so a leading dash is safe. The extra row is the `more` probe.
+- **fakegh** routes `pr list` to `pr-search.json` iff the argv holds `--search`
+  (Detect and ListOpen never do) — it does not filter or limit.
+- **Domain.** `PRSearch` (single-flight per normalized query) / `PRSearchLast`
+  (session-only, cloned out, never calls the forge; a failed search keeps the
+  previous answer). A text matching `^#?[0-9]+$` (n > 0) is a NUMBER LOOKUP via
+  `PullRequest(n)` — state ignored, `ErrNotFound` → empty result, no error.
+  Rows seed the PR cache (`putPRLocked(pr, false)`) but NEVER `forgeSeen`: a
+  search must not grow `PullRequests`' list (ruling 4) — a found PR becomes
+  known only through its fetched ref. Frontends use `domain.PRQuery`,
+  `PRStateFilter*`, `PRStateFilters()`, `NormalizePRQuery`.
+- **CLI.** The value flags take the NEXT argument unconditionally (or `=`), so
+  `--search -label:bug` parses; they are a usage error on any verb but `list`.
+- **TUI.** `prSearchPopup` (layer, two zones: prompt / rows). In the prompt every
+  printable key is text; in the rows zone every key is swallowed. Answers are
+  gated on `busy && msg.q == asked` (the `prHubMsg.number` pattern). The rows
+  call `openPRCmd` / `openPRHub` directly — `canOpenPR`/`selectedPR` are
+  `focus == panelPRs`-bound and read the TAB's row. The popup stays on the stack
+  through the fetch op; `handlePreviewOpenMsg` parks it with
+  `handOffToFilesView` ONLY when `layerOf[*prSearchPopup]` is live — gating on
+  "any top layer" would park a hub or note popup during a moved-tip re-open.
+  `enter` on a PR the tab does not list arms `pendingPRsReload`; opFinished
+  BATCHES that re-read with the PR open (it used to assign, dropping the open).
+  `prRows()` is now `prRowsFor(m.prs)` — one painter for the tab and the popup.
+- Footer binding `pr-search` is `scopeWindow` (it needs no row: an empty list is
+  when search matters). Palette entry carries `feature: FeatureForge` and is
+  filtered on `!m.forgeShown`.
+
 ### Wrap mode wraps on words (`internal/tui/window.go`)
 
 - `winOpts.charWrap` (default false) picks modeWrap's layout, and BOTH

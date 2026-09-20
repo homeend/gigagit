@@ -25,6 +25,9 @@ type Provider interface {
 	// able to read THIS repository's pull requests.
 	Detect(ctx context.Context) error
 	ListOpen(ctx context.Context) ([]model.PullRequest, error)
+	// Search lists the pull requests matching q (already Normalized), newest
+	// updated first; more reports that the forge had rows beyond q.Limit.
+	Search(ctx context.Context, q PRQuery) (prs []model.PullRequest, more bool, err error)
 	PR(ctx context.Context, n int) (model.PullRequest, error)
 	Comments(ctx context.Context, n int) (cs []model.ForgeComment, truncated bool, err error)
 	// BaseRepo names the repository PRs target: its RepoSlug and a clone URL

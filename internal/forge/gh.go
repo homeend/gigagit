@@ -69,6 +69,40 @@ func (g *GH) ListOpen(ctx context.Context) ([]model.PullRequest, error) {
 	return parsePRList([]byte(res.Stdout))
 }
 
+// Search is one `gh pr list`. gh orders a plain listing by creation date and a
+// searched one by best match, so a cut at N would not be the N newest-updated:
+// the sort qualifier rides every search unless the text brings its own. One
+// row more than asked for is requested — it is how "more" is known.
+func (g *GH) Search(ctx context.Context, q PRQuery) ([]model.PullRequest, bool, error) {
+	text := q.Text
+	if !hasSortQualifier(text) {
+		text = strings.TrimSpace(text + " sort:updated-desc")
+	}
+	// text is the VALUE of --search: a leading dash cannot become a flag.
+	res, err := g.run(ctx, "gh pr search", "pr", "list", "--state", q.State,
+		"--limit", strconv.Itoa(q.Limit+1), "--search", text, "--json", prFields)
+	if err != nil {
+		return nil, false, err
+	}
+	prs, err := parsePRList([]byte(res.Stdout))
+	if err != nil {
+		return nil, false, err
+	}
+	if len(prs) > q.Limit {
+		return prs[:q.Limit], true, nil
+	}
+	return prs, false, nil
+}
+
+func hasSortQualifier(text string) bool {
+	for _, f := range strings.Fields(text) {
+		if strings.HasPrefix(f, "sort:") {
+			return true
+		}
+	}
+	return false
+}
+
 func (g *GH) PR(ctx context.Context, n int) (model.PullRequest, error) {
 	res, err := g.run(ctx, "gh pr view", "pr", "view", strconv.Itoa(n), "--json", prFields+",body")
 	if err != nil {

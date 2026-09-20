@@ -205,18 +205,22 @@ func prStatusCell(p model.PullRequest) string {
 // column is narrow and cuts a row's tail, and "merged" or a review verdict is
 // what a list row must never lose. Forge text is never translated; only
 // "draft" and the state word are.
-func (m Model) prRows() []string {
-	nums := make([]string, len(m.prs))
-	for i, p := range m.prs {
+func (m Model) prRows() []string { return prRowsFor(m.prs) }
+
+// prRowsFor is the one pull-request row painter: the Pull requests tab and
+// the search popup's results read alike.
+func prRowsFor(prs []model.PullRequest) []string {
+	nums := make([]string, len(prs))
+	for i, p := range prs {
 		nums[i] = "#" + strconv.Itoa(p.Number)
 	}
-	status := make([]string, len(m.prs))
-	for i, p := range m.prs {
+	status := make([]string, len(prs))
+	for i, p := range prs {
 		status[i] = prStatusCell(p)
 	}
 	w, sw := maxLabelWidth(2, nums...), maxLabelWidth(0, status...)
-	out := make([]string, 0, len(m.prs))
-	for i, p := range m.prs {
+	out := make([]string, 0, len(prs))
+	for i, p := range prs {
 		cells := []string{padCell(nums[i], w)}
 		if sw > 0 {
 			cells = append(cells, padCell(status[i], sw))

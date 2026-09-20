@@ -180,15 +180,18 @@ func (s *Service) pullRequests(ctx context.Context, p forge.Provider) ([]model.P
 			rest = append(rest, s.terminalPR(ctx, p, n))
 		}
 	}
-	byUpdated := func(a, b model.PullRequest) int {
-		if c := b.Updated.Compare(a.Updated); c != 0 {
-			return c
-		}
-		return b.Number - a.Number
-	}
-	slices.SortFunc(open, byUpdated)
-	slices.SortFunc(rest, byUpdated)
+	slices.SortFunc(open, prByUpdated)
+	slices.SortFunc(rest, prByUpdated)
 	return append(open, rest...), nil
+}
+
+// prByUpdated orders pull requests newest-updated first, the number breaking
+// a tie.
+func prByUpdated(a, b model.PullRequest) int {
+	if c := b.Updated.Compare(a.Updated); c != 0 {
+		return c
+	}
+	return b.Number - a.Number
 }
 
 // terminalPR reads a no-longer-open PR once and caches the answer: a

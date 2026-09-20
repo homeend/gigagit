@@ -47,6 +47,11 @@ func paletteCommands() []paletteCommand {
 		{label: i18n.T("Open repo"), run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
 		{label: i18n.T("Open shell"), keyHint: "ctrl+o", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openSubshell() }},
 		{label: i18n.T("Run shell command…"), run: func(m Model) (Model, tea.Cmd) { return m.openShellCmdPopup() }},
+		{label: i18n.T("Search pull requests…"), keyHint: "A", feature: domain.FeatureForge, run: func(m Model) (Model, tea.Cmd) {
+			m = m.popLayer()
+			m = m.activateTab(panelPRs)
+			return m.openPRSearch()
+		}},
 		{label: i18n.T("Set up agent skills (using-gg)"), run: func(m Model) (Model, tea.Cmd) {
 			m = m.popLayer()
 			m, cmd := m.openSettings()
@@ -143,6 +148,9 @@ func (m Model) availablePaletteCommands() []paletteCommand {
 	for _, c := range all {
 		if c.feature == domain.FeatureVersions && !m.versionsFeatureEnabled() {
 			continue
+		}
+		if c.feature == domain.FeatureForge && !m.forgeShown {
+			continue // no usable forge CLI: no pull-request UI at all
 		}
 		out = append(out, c)
 	}

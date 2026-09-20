@@ -20,6 +20,13 @@ func main() {
 	switch {
 	case len(a) >= 2 && a[0] == "pr" && a[1] == "list":
 		name = "pr-list.json"
+		// A search always carries --search; detection and the open listing
+		// never do.
+		for _, s := range a {
+			if s == "--search" {
+				name = "pr-search.json"
+			}
+		}
 	case len(a) >= 3 && a[0] == "pr" && a[1] == "view":
 		name = "pr-view-" + a[2] + ".json"
 	case len(a) >= 2 && a[0] == "repo" && a[1] == "view":
