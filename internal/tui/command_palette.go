@@ -24,11 +24,29 @@ type paletteCommand struct {
 }
 
 // commandPalette is the generic command launcher (ctrl+p). It holds the palette
-// entries (see paletteCommands) and grows by adding a paletteCommand.
+// entries (see paletteCommands) and grows by adding a paletteCommand. Like the
+// . action menu it is always in type-to-filter mode: printable keys extend
+// query, arrows move, enter runs — sel indexes visible(), never cmds.
 type commandPalette struct {
 	popupMax
-	cmds []paletteCommand
-	sel  int
+	cmds  []paletteCommand
+	sel   int
+	query string
+}
+
+// visible is cmds narrowed to the labels containing query, case-insensitively.
+func (p *commandPalette) visible() []paletteCommand {
+	if p.query == "" {
+		return p.cmds
+	}
+	q := strings.ToLower(p.query)
+	var out []paletteCommand
+	for _, c := range p.cmds {
+		if strings.Contains(strings.ToLower(c.label), q) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // paletteCommands is the registry of palette entries, in display order.
@@ -71,15 +89,17 @@ func (m Model) openCommandPalette() (Model, tea.Cmd) {
 }
 
 func (p *commandPalette) move(d int) {
-	if len(p.cmds) == 0 {
+	n := len(p.visible())
+	if n == 0 {
+		p.sel = 0
 		return
 	}
 	p.sel += d
 	if p.sel < 0 {
 		p.sel = 0
 	}
-	if p.sel >= len(p.cmds) {
-		p.sel = len(p.cmds) - 1
+	if p.sel >= n {
+		p.sel = n - 1
 	}
 }
 
@@ -87,22 +107,41 @@ func (p *commandPalette) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
-	switch msg.String() {
-	case "esc":
+	// Arrows/pages move the selection live while typing; every printable key
+	// (j, k and q included) stays query text.
+	if filterMotion(msg, p.move, popupFilterPage) {
+		return m, nil
+	}
+	switch msg.Type {
+	case tea.KeyEsc:
+		// First esc clears an active filter; esc with no filter closes.
+		if p.query != "" {
+			p.query, p.sel = "", 0
+			return m, nil
+		}
 		return m.popLayer(), nil
-	case "up", "k":
-		p.move(-1)
-	case "down", "j":
-		p.move(+1)
-	case "enter":
-		if p.sel < 0 || p.sel >= len(p.cmds) {
+	case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
+		if r := []rune(p.query); len(r) > 0 {
+			p.query = string(r[:len(r)-1])
+		}
+		p.sel = 0
+	case tea.KeySpace:
+		// Labels contain spaces; space extends the filter like any rune.
+		p.query += " "
+		p.sel = 0
+	case tea.KeyRunes:
+		p.query += string(msg.Runes)
+		p.sel = 0
+	case tea.KeyEnter:
+		vis := p.visible()
+		if p.sel < 0 || p.sel >= len(vis) {
 			return m, nil
 		}
 		// Launch the command ON TOP of the palette (don't pop it): the palette is
 		// the source, so esc out of the launched popup reveals it again. A command
 		// that opens a terminal surface (e.g. the files view) unwinds the palette
 		// itself — see resolvedGotoCommit.
-		return p.cmds[p.sel].run(m)
+		return vis[p.sel].run(m)
 	}
 	return m, nil
 }
@@ -116,9 +155,17 @@ func (p *commandPalette) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupResolveWidth(w, p.maximized, popupInnerWidth(w))
 	textW := popupTextWidth(inner)
-	parts := []string{i18n.T("Commands"), ""}
+	header := i18n.T("Commands")
+	if p.query != "" {
+		header += "  " + p.query + "█"
+	}
+	parts := []string{header, ""}
 	s := st()
-	for i, c := range p.cmds {
+	vis := p.visible()
+	if len(vis) == 0 {
+		parts = append(parts, padRight("  "+i18n.T("(no match)"), textW))
+	}
+	for i, c := range vis {
 		prefix := "  "
 		st := lipgloss.NewStyle()
 		if i == p.sel {
@@ -135,7 +182,10 @@ func (p *commandPalette) box(m Model) string {
 		}
 		parts = append(parts, st.Render(padRight(row, textW)))
 	}
-	parts = append(parts, "", i18n.T("[enter] run  [esc] close"))
+	// Wrap the hint so [esc] close survives on a narrow popup.
+	hint := []string{i18n.T("type to filter"), i18n.T("[enter] run"), i18n.T("[esc] close")}
+	parts = append(parts, "")
+	parts = append(parts, wrapParts(hint, textW, "  ")...)
 	return popupBox(inner, strings.Join(parts, "\n"))
 }
 
