@@ -540,6 +540,9 @@ function openEntryCompare(body) {
 function openLinkCompare(body) {
   state.detailGen++;
   state.previewOpen = null; // never mistaken for an open merge preview
+  // …and the previous screen's per-file totals must not paint on this one's
+  // rows: only armPreview cleared them before a pair could read the same slot.
+  state.previewCounts = null;
   state.compare = {
     a: body.left.desc,
     b: body.right.desc,
@@ -548,6 +551,10 @@ function openLinkCompare(body) {
     aSpec: body.left.spec,
     bSpec: body.right.spec,
     links: { left: body.left.text, right: body.right.text },
+    // A PAIR LANDING names its two commits (the server says so; two typed
+    // links never do): that is the note scope. It lives on the comparison and
+    // dies with it — not in previewOpen, which means "tips that can move".
+    pair: body.pair && body.pair.a && body.pair.b ? { a: body.pair.a, b: body.pair.b } : null,
     all: body.files || [],
     filter: "all",
     originsError: "",
@@ -558,6 +565,42 @@ function openLinkCompare(body) {
   $("files-title").textContent = (body.label ? body.label + " — " : "") + state.compare.a + " ↔ " + state.compare.b;
   applyCompareFilter();
   focusPane();
+  if (state.compare.pair) loadPairCounts();
+}
+
+
+// pairCtx is the commit pair whose comparison is ON SCREEN — the predicate the
+// pair's note lane gates on, beside openPreviewCtx. The layout check matters:
+// drillOut (esc) returns to the commit list leaving filesMode and
+// state.compare standing, and a closed screen must not keep fetching.
+function pairCtx() {
+  if (state.filesMode !== "compare" || state.layout === "list") return null;
+  return (state.compare && state.compare.pair) || null;
+}
+
+
+// pairNoteCtx is the `preview` slice a pair's diff context carries: no names
+// (there are none), so every reader of source/target must ask .pair first.
+function pairNoteCtx(p) {
+  return { pair: { a: p.a, b: p.b }, source: "", target: "", pr: 0, linkSource: "", linkTarget: "" };
+}
+
+
+// loadPairCounts fetches the pair's per-file note totals (no path), so the
+// file list carries its ◆N badges from the first paint.
+async function loadPairCounts() {
+  const p = pairCtx();
+  if (!p) return;
+  let d;
+  try {
+    d = await getJSON("/api/pair/notes?a=" + p.a + "&b=" + p.b);
+  } catch {
+    return; // decoration: no badge beats a wrong badge
+  }
+  const now = pairCtx();
+  if (!now || now.a !== p.a || now.b !== p.b) return; // superseded
+  state.previewCounts = d.counts || {};
+  renderFiles();
 }
 
 
@@ -565,7 +608,10 @@ function openLinkCompare(body) {
 // and the file here, typically). Both labels go in the title: a diff whose
 // sides are not named is unreadable when neither of them is "the commit you
 // are looking at".
-async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightLabel, status }) {
+// ctx, when given, is the diff context of a row whose NEW side is a real
+// commit's content (a commit pair's row): it turns the note lane on. Every
+// other caller leaves it out and the diff stays context-free.
+async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightLabel, status, ctx }) {
   const gen = ++state.detailGen;
   if (state.layout !== "diff") {
     state.pane = "files";
@@ -573,8 +619,9 @@ async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightL
     focusPane();
   }
   clearDiffHunks();
-  state.diffCtx = null; // history/blame need a rev; a stored copy has none
+  state.diffCtx = ctx || null; // history/blame need a rev; a stored copy has none
   state.diffRow = null; // …and the previous diff's marked row must not paint a row of this one
+  state.notes = [];
   setDiffTitle(path, leftLabel + " ↔ " + rightLabel + " · ");
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
@@ -582,7 +629,9 @@ async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightL
   if (status) q.set("status", status);
   if (oldPath) q.set("old_path", oldPath); // a rename's left side lives at its old path
   try {
-    const d = await getJSON("/api/entry-diff?" + q);
+    // The notes ride ALONGSIDE the diff (openFile's rule): the ◆ rows have to
+    // be in the first paint. Without a ctx fetchNotes has nothing to ask.
+    const [d] = await Promise.all([getJSON("/api/entry-diff?" + q), fetchNotes(false)]);
     if (gen !== state.detailGen) return; // superseded by a newer open or esc
     renderDiff(d);
     jumpToFirstChange();
@@ -812,7 +861,7 @@ function renderFiles() {
     // totals come from the gathered set (state.previewCounts), not from the
     // per-commit index, because a note on an older commit of the branch counts
     // for the file too.
-    const prev = openPreviewCtx();
+    const prev = openPreviewCtx() || pairCtx();
     const badge = (f) =>
       prev && state.previewCounts
         ? noteBadgeHTML(state.previewCounts[f.path])
@@ -922,7 +971,14 @@ async function openFile(i) {
   // own: this arm must run before the hash lane below, which has no hashes to
   // read here.
   if (state.filesMode === "compare" && state.compare.links) {
+    // A pair's row is note-addressable when its new side IS the file at b. A
+    // row that names its own right side is not (a `-u` stash keeps untracked
+    // files on a third parent): it stays context-free.
+    const pair = !f.right_spec ? pairCtx() : null;
     return openEntryFileDiff({
+      ctx: pair
+        ? { path: f.path, rev: pair.b, state: "commit", notes: true, compare: true, preview: pairNoteCtx(pair) }
+        : null,
       left: f.left_spec || state.compare.aSpec,
       right: f.right_spec || state.compare.bSpec,
       path: f.path,
@@ -1698,6 +1754,15 @@ function noteQuery() {
     q.set("state", "commit");
     return q;
   }
+  if (state.diffCtx.preview && state.diffCtx.preview.pair) {
+    // A commit pair has no names: it is read by its two ids. rev and state
+    // ride along for the WRITE — a pair note is an ordinary note on b.
+    q.set("a", state.diffCtx.preview.pair.a);
+    q.set("b", state.diffCtx.preview.pair.b);
+    q.set("rev", state.diffCtx.rev);
+    q.set("state", "commit");
+    return q;
+  }
   if (state.diffCtx.preview) {
     // The preview gathers notes along the branch, so the READ is keyed on the
     // PAIR: a note written against an older commit still belongs here. rev and
@@ -1741,7 +1806,8 @@ async function fetchNotes(rerender = true) {
   // endpoint resolves branch NAMES, and a PR's are display text (a fork's
   // branch, or worse a same-named local one).
   const prev = !!state.diffCtx.preview;
-  const url = !prev ? "/api/notes?" : state.diffCtx.preview.pr ? "/api/pr/notes?" : "/api/preview/notes?";
+  const pv = state.diffCtx.preview;
+  const url = !prev ? "/api/notes?" : pv.pr ? "/api/pr/notes?" : pv.pair ? "/api/pair/notes?" : "/api/preview/notes?";
   try {
     const d = await getJSON(url + q);
     state.notes = d.notes || [];
@@ -1791,6 +1857,9 @@ async function refreshNoteCounts() {
     state.noteCounts = { by_path: {}, by_commit: {}, by_commit_path: {} };
   }
   renderFiles();
+  // A preview's totals ride fetchPreviews; a pair has no such ride, so a note
+  // written elsewhere reaches its badges from here.
+  loadPairCounts();
 }
 
 
@@ -3103,7 +3172,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
           sha: rev,
           section: "commit",
           compare: state.filesMode === "compare",
-          preview: po ? previewCtx(po) : null,
+          preview: po ? previewCtx(po) : pairCtx() ? pairNoteCtx(pairCtx()) : null,
         }),
       ],
       e.clientX,
