@@ -83,7 +83,7 @@ func (s *Server) handlePRNotes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, n := range res {
-			notes = append(notes, domain.ToWireNotePreview(n, true))
+			notes = append(notes, domain.ToWireNoteRendered(n, true))
 		}
 	}
 	counts, total, cerr := svc.PreviewNoteCounts(ctx, set)
@@ -157,18 +157,30 @@ func (s *Server) handlePRDetailsCached(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, body)
 }
 
-func prDetailsBody(pr model.PullRequest, c domain.PRComments) map[string]any {
-	return map[string]any{
-		"pr":        pr,
-		"hub":       orEmptyComments(c.Hub),
-		"outdated":  orEmptyComments(c.Outdated),
-		"truncated": c.Truncated,
-	}
+// wireComment is a forge comment plus its body parsed as markdown: the page
+// paints the tree and keeps the raw body for copy and as its fallback.
+type wireComment struct {
+	model.ForgeComment
+	MD *domain.MarkdownDoc `json:"md,omitempty"`
 }
 
-func orEmptyComments(c []model.ForgeComment) []model.ForgeComment {
-	if c == nil {
-		return []model.ForgeComment{}
+func prDetailsBody(pr model.PullRequest, c domain.PRComments) map[string]any {
+	body := map[string]any{
+		"pr":        pr,
+		"hub":       wireComments(c.Hub),
+		"outdated":  wireComments(c.Outdated),
+		"truncated": c.Truncated,
 	}
-	return c
+	if md := domain.ParseMarkdown(pr.Body); md != nil {
+		body["body_md"] = md
+	}
+	return body
+}
+
+func wireComments(cs []model.ForgeComment) []wireComment {
+	out := make([]wireComment, 0, len(cs))
+	for _, c := range cs {
+		out = append(out, wireComment{ForgeComment: c, MD: domain.ParseMarkdown(c.Body)})
+	}
+	return out
 }

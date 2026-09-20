@@ -225,3 +225,49 @@ func TestPROpenCarriesLinkPair(t *testing.T) {
 		t.Fatalf("link pair = %+v", out)
 	}
 }
+
+// Both details verbs carry the parsed markdown BESIDE the raw text: the page
+// paints the trees, and the raw strings stay for copy and as the fallback.
+func TestPRDetailsCarriesParsedMarkdown(t *testing.T) {
+	fs, _ := prNotesServer(t)
+	type doc struct {
+		Blocks []struct {
+			K string `json:"k"`
+		} `json:"blocks"`
+	}
+	type comment struct {
+		Body string `json:"body"`
+		MD   *doc   `json:"md"`
+	}
+	type details struct {
+		PR struct {
+			Body string `json:"body"`
+		} `json:"pr"`
+		BodyMD   *doc      `json:"body_md"`
+		Hub      []comment `json:"hub"`
+		Outdated []comment `json:"outdated"`
+	}
+	check := func(verb string, d details) {
+		t.Helper()
+		if d.BodyMD == nil || len(d.BodyMD.Blocks) != 1 || d.BodyMD.Blocks[0].K != "p" || d.PR.Body != "the description" {
+			t.Fatalf("%s: body_md = %+v beside body %q", verb, d.BodyMD, d.PR.Body)
+		}
+		for _, c := range append(d.Hub, d.Outdated...) {
+			if c.Body == "" || c.MD == nil || len(c.MD.Blocks) == 0 {
+				t.Fatalf("%s: comment %q has md %+v", verb, c.Body, c.MD)
+			}
+		}
+		if len(d.Hub) != 1 || len(d.Outdated) != 1 {
+			t.Fatalf("%s: hub %d outdated %d", verb, len(d.Hub), len(d.Outdated))
+		}
+	}
+	var fresh, cached details
+	if code := postJSON(t, fs.ts, "/api/pr/details?n=7", "{}", "application/json", "", &fresh); code != 200 {
+		t.Fatalf("POST = %d", code)
+	}
+	check("POST", fresh)
+	if code := getJSON(t, fs.ts, "/api/pr/details?n=7", &cached); code != 200 {
+		t.Fatalf("GET = %d", code)
+	}
+	check("GET", cached)
+}
