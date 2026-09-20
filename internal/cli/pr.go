@@ -12,7 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-const prUsage = `usage: gg pr list [--json]
+const prUsage = `usage: gg pr list [--state all|open|closed|merged] [--search <text>] [--limit <n>] [--json]
        gg pr view <number> [--json]
        gg pr comments <number> [--json]
        gg pr fetch <number>
@@ -24,13 +24,41 @@ const prUsage = `usage: gg pr list [--json]
 // missing forge CLI is an error with the detection reason.
 func cmdPR(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	usage := func() int { fmt.Fprintln(stderr, prUsage); return 2 }
-	// --json may sit before or after the number (agents write both).
-	asJSON := false
+	// --json may sit before or after the number (agents write both). The
+	// search flags take a value — the NEXT argument whatever it looks like
+	// (GitHub's "-label:bug" starts with a dash), or the --flag=value form.
+	asJSON, searching := false, false
+	var query domain.PRQuery
 	var pos []string
-	for _, a := range args {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		name, val, hasVal := strings.Cut(a, "=")
 		switch {
 		case a == "--json" || a == "-json":
 			asJSON = true
+		case name == "--state" || name == "--search" || name == "--limit":
+			if !hasVal {
+				if i+1 >= len(args) {
+					fmt.Fprintf(stderr, "error: %s needs a value\n", name)
+					return usage()
+				}
+				i++
+				val = args[i]
+			}
+			searching = true
+			switch name {
+			case "--state":
+				query.State = val
+			case "--search":
+				query.Text = val
+			case "--limit":
+				n, err := strconv.Atoi(val)
+				if err != nil || n < 1 {
+					fmt.Fprintf(stderr, "error: --limit %q is not a positive number\n", val)
+					return usage()
+				}
+				query.Limit = n
+			}
 		case strings.HasPrefix(a, "-"):
 			fmt.Fprintf(stderr, "error: unknown flag %s\n", a)
 			return usage()
@@ -47,6 +75,13 @@ func cmdPR(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		if len(pos) != 1 {
 			return usage()
 		}
+		if searching {
+			var err error
+			if query, err = domain.NormalizePRQuery(query); err != nil {
+				fmt.Fprintln(stderr, "error:", err)
+				return usage()
+			}
+		}
 	case "view", "comments", "fetch", "forget":
 		if len(pos) != 2 {
 			return usage()
@@ -57,6 +92,10 @@ func cmdPR(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 			return usage()
 		}
 	default:
+		return usage()
+	}
+	if searching && verb != "list" {
+		fmt.Fprintln(stderr, "error: --state, --search and --limit belong to gg pr list")
 		return usage()
 	}
 
@@ -76,9 +115,24 @@ func cmdPR(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	}
 	switch verb {
 	case "list":
-		prs, err := svc.PullRequests(ctx)
+		// A search flag turns the listing into a forge search of any state;
+		// without one it is the open + known list, as ever.
+		var prs []model.PullRequest
+		var err error
+		more := false
+		if searching {
+			var res domain.PRSearchResult
+			res, err = svc.PRSearch(ctx, query)
+			prs, more = res.PRs, res.More
+		} else {
+			prs, err = svc.PullRequests(ctx)
+		}
 		if err != nil {
 			return fail(err)
+		}
+		if more {
+			// stderr: the rows (and --json) stay exactly the pull requests.
+			fmt.Fprintln(stderr, "more results — narrow the search")
 		}
 		if asJSON {
 			if prs == nil {
