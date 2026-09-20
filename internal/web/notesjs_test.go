@@ -29,6 +29,17 @@ func jsFunc(t *testing.T, file, name string) string {
 	return s[i : i+j+2]
 }
 
+// noteboxInline is notebox.js with its `export`s stripped, so the functions
+// files.js imports are in scope for a painter extracted with jsFunc.
+func noteboxInline(t *testing.T) string {
+	t.Helper()
+	src, err := os.ReadFile(filepath.Join("static", "notebox.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.ReplaceAll(string(src), "export function", "function") + "\n"
+}
+
 // TestNoteRowsHTMLJS runs the shipped note-row painter under node. Notes carry
 // FREE TEXT written by a person or an agent, so the escaping is a security
 // property, not a cosmetic one; the agent-layer filter is per ROW (a user
@@ -56,7 +67,7 @@ func TestNoteRowsHTMLJS(t *testing.T) {
 	blob, _ := json.Marshal(notes)
 
 	script := "const esc = (x) => String(x).replace(/[&<>\"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));\n" +
-		"const state = { diffCtx: {path:'f'}, notes: JSON.parse(process.argv[1]), notesAgentOff: false };\n" + fns +
+		"const state = { diffCtx: {path:'f'}, notes: JSON.parse(process.argv[1]), notesAgentOff: false, noteCollapsed: new Set(['n4']) };\n" + noteboxInline(t) + fns +
 		"\nconst on = noteRowsHTML('new', 3, 4);\n" +
 		"state.notesAgentOff = true;\n" +
 		"const off = noteRowsHTML('new', 3, 4);\n" +
@@ -94,6 +105,14 @@ func TestNoteRowsHTMLJS(t *testing.T) {
 	}
 	if n := strings.Count(got.On, "data-note="); n != 4 {
 		t.Fatalf("agent layer ON: %d note ids, want 4 (root + 2 replies + the agent root): %s", n, got.On)
+	}
+	// n4 is in the collapse set: its ROW carries the class the CSS folds on,
+	// and only its row.
+	if strings.Count(got.On, " collapsed\"") != 1 || !strings.Contains(got.On, `stale agent collapsed" data-note="n4"`) {
+		t.Fatalf("a collapsed thread must carry the class on its row: %s", got.On)
+	}
+	if strings.Count(got.On, `data-collapse="`) != 2 {
+		t.Fatalf("every box title is a fold handle: %s", got.On)
 	}
 	if !strings.Contains(got.On, "note stale") {
 		t.Fatalf("a stale note must carry its class: %s", got.On)
@@ -139,8 +158,8 @@ func TestNotesInertOnAComparisonJS(t *testing.T) {
 
 	script := "const esc = (x) => String(x);\n" +
 		"const URLSearchParams = globalThis.URLSearchParams;\n" +
-		"const state = { diffCtx: null, notesAgentOff: false,\n" +
-		"  notes: [{id:'n1', side:'new', line:3, source:'user', status:'active', summary:'s'}] };\n" + fns +
+		"const state = { diffCtx: null, notesAgentOff: false, noteCollapsed: new Set(),\n" +
+		"  notes: [{id:'n1', side:'new', line:3, source:'user', status:'active', summary:'s'}] };\n" + noteboxInline(t) + fns +
 		"\nconst q = (ctx) => { state.diffCtx = ctx; const r = noteQuery(); return r === null ? null : r.toString(); };\n" +
 		"const rows = (ctx) => { state.diffCtx = ctx; return noteRowsHTML('new', 3, 4); };\n" +
 		"const commitCtx = {path:'a.go', rev:'beef', state:'commit'};\n" +
@@ -397,5 +416,57 @@ func TestNotesEventReloadsPreviews(t *testing.T) {
 	line := src[strings.LastIndex(src[:i], "\n")+1 : i]
 	if !strings.Contains(line, `want.has("notes")`) {
 		t.Fatalf("the previews refetch must also fire on the notes source, got %q", line)
+	}
+}
+
+// TestForgeNoteBoxesJS: a pull request's review threads ride the same painter.
+// They are read-only boxes of their own class, the agent-layer switch never
+// hides one (whatever its source says), a whole-file thread spans the row and
+// leads the table, and the read is keyed on the PR NUMBER alone.
+func TestForgeNoteBoxesJS(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	fns := jsFunc(t, "files.js", "notesArmed") + "\n" + jsFunc(t, "files.js", "noteQuery") + "\n" +
+		jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteBoxHTML") + "\n" +
+		jsFunc(t, "files.js", "fileNoteRowsHTML")
+	script := "const esc = (x) => String(x);\n" +
+		"const state = { notesAgentOff: true, noteCollapsed: new Set(['forge:C3']),\n" +
+		"  diffCtx: {path:'a.go', rev:'beef', state:'commit', preview:{source:'alice:feat', target:'main', pr:7}},\n" +
+		"  notes: [\n" +
+		"   {id:'forge:C1', side:'new', line:3, source:'forge', author:'carol', status:'active', read_only:true, summary:'why'},\n" +
+		"   {id:'forge:C3', side:'new', line:3, source:'forge', author:'dave', status:'active', read_only:true, resolved:true, summary:'done'},\n" +
+		"   {id:'forge:C4', side:'new', line:0, source:'forge', author:'erin', status:'active', read_only:true, file_level:true, summary:'whole file'},\n" +
+		"   {id:'n9', side:'new', line:3, source:'agent', status:'active', summary:'bot'}] };\n" +
+		noteboxInline(t) + fns +
+		"\nconsole.log(JSON.stringify({ line: noteRowsHTML('new', 3, 4), file: fileNoteRowsHTML(4), query: noteQuery().toString() }));\n"
+	out, err := exec.Command(node, "-e", script).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	var got struct{ Line, File, Query string }
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("decode %q: %v", out, err)
+	}
+	if n := strings.Count(got.Line, "<tr "); n != 2 || strings.Contains(got.Line, "bot") {
+		t.Fatalf("agent layer OFF must keep both forge threads and drop the agent note: %s", got.Line)
+	}
+	if !strings.Contains(got.Line, `class="notebox forge"`) || !strings.Contains(got.Line, "review · carol") {
+		t.Fatalf("a forge thread is its own kind of box: %s", got.Line)
+	}
+	if !strings.Contains(got.Line, `forge collapsed" data-note="forge:C3"`) || !strings.Contains(got.Line, "· resolved") {
+		t.Fatalf("the resolved thread renders folded and says so: %s", got.Line)
+	}
+	if strings.Contains(got.Line, "whole file") {
+		t.Fatalf("a whole-file thread hangs off no line: %s", got.Line)
+	}
+	if !strings.Contains(got.File, `<td class="note" colspan="4">`) || strings.Contains(got.File, "note-gap") ||
+		!strings.Contains(got.File, "a.go (file)") || !strings.Contains(got.File, " filenote") {
+		t.Fatalf("a whole-file thread spans the row: %s", got.File)
+	}
+	if got.Query != "path=a.go&n=7&rev=beef&state=commit" {
+		t.Fatalf("a PR's notes are asked for by NUMBER: %q", got.Query)
 	}
 }

@@ -61,6 +61,8 @@ const state = {
   diffCtx: null, // {path, rev, state} — the file the diff pane currently shows, else null
   notes: [],                 // resolved notes for the open diff (GET /api/notes)
   noteCounts: { by_path: {}, by_commit: {}, by_commit_path: {} },
+  noteCollapsed: new Set(),  // root ids of the folded note threads of the open diff
+  noteCollapsedFor: "",      // the diff that set was seeded for (path + rev)
   notesAgentOff: false,      // the TUI's `a`: hide agent-written notes
   diffRow: null,             // {side, no} — the clicked diff row `c` anchors on
   // Attention bands an agent painted (gg session highlight), keyed by

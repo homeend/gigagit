@@ -94,6 +94,41 @@ Under the hood: `domain.DescribeLink` is now the one describer behind every
 history row (it lived unexported in `internal/cli`, out of the TUI's reach),
 and a member's bytes are read through `FileSet.Source(path)`.
 
+## Pull requests in the web UI: review threads, note folding, details
+
+**A pull request's review threads now show inside its diff in `gg web`**, as
+read-only note boxes (teal, titled `review · author · age · file R12`) on the
+line they were written on — left-side comments included, and a comment on the
+whole file leads the file. They can be folded and their place copied as a gg
+link; they cannot be edited, answered or removed, the agent-notes switch (`a`)
+never hides them, and `c` still adds a note of your own beside them. The file
+list's `◆N` badges count them.
+
+**Every note box in the web folds to its title line** — click the title, or
+`z` for the note you are on and `Z` for every thread of the file (the TUI's
+`o` / `O`; `o` is the web's sort key). The ◆ menu has the same row. A pull
+request's *resolved* threads start folded; a fold you made by hand survives a
+comment re-poll.
+
+**`details…`** (a pull request's right-click menu, or the `details` chip on its
+open diff) opens an overlay with the description, the conversation with each
+review's verdict, and the *outdated* review threads — the ones the forge can no
+longer place on a line — each with the hunk it was written on. `j`/`k` scroll,
+esc or a click outside closes it.
+
+Comments are read from the forge right AFTER the diff opens (the click path
+stays local) and again on every `[refresh] prs` tick or **⟳**; the diff
+redraws only when something changed. A PR diff's lines and notes copy a proper
+link again: `gg://repo/file@main...refs/gg/pr/7:3`.
+
+Under the hood: `domain.PreviewNotesAt` — the diff-less read the web, the CLI
+and MCP use — now carries the forge's threads like the TUI's read always did
+(`gg note list --preview … --file x` lists them too). The wire note gained
+`read_only`, `resolved`, `file_level` and `created`. New routes, all keyed on
+the PR NUMBER: `GET /api/pr/notes` (cache only — a GET never calls `gh`) and
+the two that do spend a forge call, as guarded POSTs:
+`/api/pr/comments/refresh` → `{changed}` and `/api/pr/details`.
+
 ## Pull requests in the web UI (list, open, forget)
 
 **`gg web` lists the repository's pull requests** in a new sidebar section,

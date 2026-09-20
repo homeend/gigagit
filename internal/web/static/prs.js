@@ -14,8 +14,10 @@ import { $, esc, getJSON, postJSON, runOnce, state } from "./core.js";
 import { copyText, showCtxMenu } from "./layers.js";
 import { followOp, opBusy, opLine, showLocalConfirm } from "./ops.js";
 import { extraRows, registerHelp } from "./menus.js";
-import { openPreviewBody } from "./previews.js";
+import { loadPRCounts, openPreviewBody } from "./previews.js";
+import { fetchNotes } from "./files.js";
 import { prRowParts } from "./prsrow.js";
+import { openPRDetails } from "./prdetails.js";
 
 // While the server's first listing is still in flight the answer says
 // loaded:false. The "prs" event normally brings the rows in, but a fast forge
@@ -155,7 +157,30 @@ async function showPR(n, moved) {
   if (body.state === "unfetched") return "unfetched";
   await openPreviewBody(body, "");
   if (moved) opLine("pull request #" + n + " updated: new commits on the forge");
+  // The diff is up with whatever threads the server had cached; only NOW is
+  // the forge asked for the PR's comments (never on the click path).
+  refreshPRComments(n);
   return "shown";
+}
+
+// refreshPRComments re-reads PR n's review comments from the forge and, when
+// they changed, redraws the threads of the diff on screen. It runs after a PR
+// diff opens and on every `prs` live event; a failure is silent — the diff
+// simply stays without (newer) threads.
+export function refreshPRComments(n) {
+  return runOnce("pr-comments", async () => {
+    let r;
+    try {
+      r = await postJSON("/api/pr/comments/refresh?n=" + n, {});
+    } catch {
+      return;
+    }
+    const po = state.previewOpen;
+    if (!r.changed || !po || po.pr !== n || state.filesMode !== "compare") return;
+    const ctx = state.diffCtx;
+    if (ctx && ctx.preview && ctx.preview.pr === n) await fetchNotes(); // also refreshes the ◆N badges
+    else await loadPRCounts(n);
+  });
 }
 
 // fetchPR runs the pr-fetch op and resolves true when the head arrived.
@@ -262,6 +287,9 @@ function forgetPR(pr) {
 
 function showPRMenu(pr, x, y) {
   const items = [{ label: (pr.fetched ? "open" : "fetch and open") + " pull request #" + pr.number, act: () => openPR(pr) }];
+  // The description, the conversation and the outdated threads: the parts of
+  // a PR that have no place in its diff. Not for a row the forge has lost.
+  if (pr.state !== "unavailable") items.push({ label: "details…", act: () => openPRDetails(pr.number) });
   if (pr.url) items.push({ label: "copy URL", act: () => copyText(pr.url, "pull request URL") });
   items.push(...extraRows("pr", pr));
   // Forget means something only where gg holds something: a fetched head, or

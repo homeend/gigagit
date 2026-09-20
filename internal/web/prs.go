@@ -270,6 +270,9 @@ func (s *Server) handlePROpen(w http.ResponseWriter, r *http.Request) {
 	}
 	body := previewOpenBody(eps, label, pr.Source, pr.Target)
 	body["pr"] = n
+	// The pair as a gg:// link names it. Sent OUT only (R1): the page pastes
+	// them into a copied link and never hands them back as a wire value.
+	body["link_source"], body["link_target"] = pair.Head, pair.Base
 	writeJSON(w, body)
 }
 
