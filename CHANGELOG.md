@@ -35,6 +35,17 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - Both steer validators (TUI inbox, `gg web` endpoint) ask
   `model.LinkHintKindOK` rather than retyping the closed set. Embedded
   using-gg skill v90.
+## Command palette: type to filter
+
+### Changed
+
+- TUI command palette (`ctrl+p`): just start typing to narrow the commands,
+  exactly like the `.` action menu — a case-insensitive substring match on the
+  label, the query shown next to the title, `(no match)` when nothing fits.
+  `↑`/`↓`/`pgup`/`pgdn` move within the filtered rows, `enter` runs the
+  selected one, `backspace` trims the query, and the first `esc` clears the
+  filter (the next one closes). `j`/`k` are filter text now, so they no longer
+  move the selection.
 
 ## `}` / `{` reach a note that sits behind the freshly opened cursor
 
