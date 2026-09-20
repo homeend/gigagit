@@ -1909,7 +1909,7 @@ function noteBoxHTML(n, cols) {
   const part = (r, head) =>
     `<div class="notesum">${esc(head)}${r.summary_md && r.summary_md.length ? mdInlineHTML(r.summary_md, esc) : esc(r.summary)}</div>`;
   const text = (r) =>
-    r.md ? `<div class="notetext md">${mdHTML(r.md, esc)}</div>` : r.rationale ? `<div class="notetext">${esc(r.rationale)}</div>` : "";
+    r.md ? `<div class="notetext md">${mdHTML(r.md, esc, { skipFirstCaption: r.summary === "suggestion" })}</div>` : r.rationale ? `<div class="notetext">${esc(r.rationale)}</div>` : "";
   // The title is the collapse handle (click, or z): the box keeps its title
   // line and drops its body. The fold is a CLASS on the row, toggled in place
   // — never a re-render, which would reset the ‹/› stepper and jolt the scroll.

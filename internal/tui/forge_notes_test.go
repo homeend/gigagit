@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 	"time"
@@ -135,5 +137,84 @@ func TestNotesListMarksForgeThreads(t *testing.T) {
 	}
 	if line := es[0].line(100); !strings.Contains(line, "review") || !strings.Contains(line, "resolved") {
 		t.Fatalf("list row = %q", line)
+	}
+}
+
+// A forge thread is markdown: its box rows come from the parsed tree (markers
+// gone, styles on the mask, wrapped to the box). A LOCAL note with the very
+// same text is shown as typed and carries no mask at all.
+func TestForgeNoteBodyRendersMarkdown(t *testing.T) {
+	t.Parallel()
+	fence := "```"
+	forge := domain.ResolvedNote{
+		Note: model.Note{ID: "forge:C1", Source: model.NoteSourceForge, Side: model.NoteSideNew,
+			Summary: "Rename x to y", Rationale: "- it is **shorter** and this item is long enough to wrap\n\n" + fence + "suggestion\ny := 1\n" + fence},
+		SummarySrc: "Rename `x` to **y**",
+	}
+	const innerW = 30
+	rows := noteBodyLines(forge, "forge:C1", 0, innerW, false)
+	var texts []string
+	for _, nl := range rows {
+		texts = append(texts, nl.text)
+		if len(nl.cls) != len([]rune(nl.text)) {
+			t.Fatalf("mask/text mismatch on %q", nl.text)
+		}
+		if lipgloss.Width(nl.text) > innerW {
+			t.Fatalf("row wider than the box: %q", nl.text)
+		}
+	}
+	joined := strings.Join(texts, "\n")
+	if rows[0].kind != noteRowSummary || rows[0].text != "Rename x to y" || strings.ContainsAny(joined, "*`") {
+		t.Fatalf("rows:\n%s", joined)
+	}
+	for _, want := range []string{"• it is shorter and this item", "\n  ", "suggestion", "  y := 1"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("missing %q in:\n%s", want, joined)
+		}
+	}
+	if c := rows[0].cls[strings.Index(rows[0].text, "x")]; c != mdCode {
+		t.Errorf("summary code class %d", c)
+	}
+
+	reply := forge
+	reply.Note.Author = "carol"
+	rr := noteBodyLines(reply, "forge:C1", 1, innerW, false)
+	if !strings.HasPrefix(rr[0].text, "  ↳ carol: Rename x") {
+		t.Errorf("reply head: %q", rr[0].text)
+	}
+
+	label := forge
+	label.Note.Summary, label.SummarySrc = "suggestion", ""
+	label.Note.Rationale = fence + "suggestion\ny := 1\n" + fence
+	lr := noteBodyLines(label, "forge:C1", 0, innerW, false)
+	if len(lr) != 2 || lr[0].text != "suggestion" || lr[0].kind != noteRowSummary || lr[1].text != "  y := 1" {
+		t.Errorf("a label summary is plain and its block's caption is not repeated: %+v", lr)
+	}
+
+	mine := domain.ResolvedNote{Note: model.Note{ID: "n1", Source: model.NoteSourceUser, Side: model.NoteSideNew,
+		Summary: "Rename `x` to **y**", Rationale: "- it is **shorter**"}}
+	for _, nl := range noteBodyLines(mine, "n1", 0, innerW, false) {
+		if nl.cls != nil {
+			t.Fatalf("a local note is never styled: %q", nl.text)
+		}
+	}
+	if got := noteBodyLines(mine, "n1", 0, innerW, false); got[0].text != "Rename `x` to **y**" || got[1].text != "- it is **shorter**" {
+		t.Fatalf("a local note is shown as typed: %q / %q", got[0].text, got[1].text)
+	}
+
+	// Painted: the strong run is bold, and the cell is exactly the pane wide.
+	const paneW = 40
+	var strong noteLine
+	for _, nl := range rows {
+		if strings.Contains(nl.text, "shorter") {
+			strong = nl
+		}
+	}
+	cell := noteRowCells(strong, paneW)
+	if w := lipgloss.Width(cell); w != 2*paneW+1 {
+		t.Errorf("painted row is %d wide, want %d", w, 2*paneW+1)
+	}
+	if !strings.Contains(ansi.Strip(cell), "shorter") {
+		t.Errorf("painted row lost its text: %q", cell)
 	}
 }

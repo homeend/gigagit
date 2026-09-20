@@ -209,7 +209,13 @@ func (s *styles) syntaxColor(c syntax.Class) string {
 
 // syntaxStyle returns base with c's foreground applied ("" leaves base alone,
 // so an uncoloured class renders byte-identically to the pre-syntax path).
+//
+// The markdown pseudo-classes (md_render.go) ride the same mask and resolve
+// here too, to attributes rather than a palette colour.
 func (s *styles) syntaxStyle(base lipgloss.Style, c syntax.Class) lipgloss.Style {
+	if c >= mdStrong && c < mdClassEnd {
+		return s.mdStyle(base, c)
+	}
 	if col := s.syntaxColor(c); col != "" {
 		return base.Foreground(lipgloss.Color(col))
 	}

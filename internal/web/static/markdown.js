@@ -55,12 +55,14 @@ function anchor(url, inner, esc) {
 }
 
 // mdHTML paints a whole parsed text ({blocks: [...]}); "" for anything else.
-export function mdHTML(doc, esc) {
+// opts.skipFirstCaption drops the "suggestion" caption of a LEADING suggestion
+// block: a note whose bold summary already reads "suggestion" would say it twice.
+export function mdHTML(doc, esc, opts) {
   if (!doc || typeof doc !== "object") return "";
-  return blocksHTML(doc.blocks, esc, 0);
+  return blocksHTML(doc.blocks, esc, 0, "", !!(opts && opts.skipFirstCaption));
 }
 
-function blocksHTML(blocks, esc, depth, lead = "") {
+function blocksHTML(blocks, esc, depth, lead = "", noFirstCap = false) {
   if (depth > MAX_DEPTH) return "";
   let out = "";
   let first = true;
@@ -73,7 +75,7 @@ function blocksHTML(blocks, esc, depth, lead = "") {
       case "h": out += head + headingHTML(b, esc); break;
       case "list": out += head + listHTML(b, esc, depth); break;
       case "quote": out += `${head}<blockquote class="md-q">${blocksHTML(b.blocks, esc, depth + 1)}</blockquote>`; break;
-      case "code": out += head + codeHTML(b, esc); break;
+      case "code": out += head + codeHTML(b, esc, first && noFirstCap); break;
       case "table": out += head + tableHTML(b, esc); break;
       case "hr": out += `${head}<hr class="md-hr">`; break;
       default: out += `<p>${head}${mdInlineHTML(b.in, esc)}</p>`;
@@ -105,9 +107,9 @@ function listHTML(b, esc, depth) {
   return `<${tag} class="md-list"${start}>${items}</${tag}>`;
 }
 
-function codeHTML(b, esc) {
+function codeHTML(b, esc, noCap) {
   const lang = LANG.test(str(b.lang)) ? str(b.lang) : "";
-  const cap = lang.toLowerCase() === "suggestion" ? `<div class="md-cap">suggestion</div>` : "";
+  const cap = !noCap && lang.toLowerCase() === "suggestion" ? `<div class="md-cap">suggestion</div>` : "";
   const lines = arr(b.lines).map((l) => codeLineHTML(l, esc)).join("\n");
   return `${cap}<pre class="md-code"${lang ? ` data-lang="${esc(lang)}"` : ""}><code>${lines}</code></pre>`;
 }
