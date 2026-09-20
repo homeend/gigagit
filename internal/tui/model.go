@@ -929,6 +929,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case previewOpenMsg:
 		return m.handlePreviewOpenMsg(msg)
+	case prSearchMsg:
+		return m.handlePRSearchMsg(msg)
 	case previewMutatedMsg:
 		return m.handlePreviewMutatedMsg(msg)
 	case pairOpenMsg:
@@ -2211,6 +2213,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				return m.confirmOp(engine.SmartSwitch{Branch: b.Name}, i18n.T("Switch to %s?", b.Name))
+			}
+		case "A": // Pull requests tab: ask the forge for PRs of any state
+			if m.canSearchPRs() {
+				return m.openPRSearch()
 			}
 		case "S":
 			if m.stashView != nil { // toggle closed (focus is on a left panel here)
