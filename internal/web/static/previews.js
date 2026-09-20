@@ -14,6 +14,7 @@ import { applyCompareFilter, drillOut, noteBadgeHTML, openCompare, renderFiles }
 import { extraRows, registerHelp, registerRows } from "./menus.js";
 import { copyLink } from "./links.js";
 import { runLinkCompare } from "./linkcompare.js";
+import { isCollapsed, toggleSection } from "./sidebar.js";
 
 // fetchPreviews loads the list and renders it. A failure leaves an EMPTY list
 // rather than the previous one: a stale row invites a click that opens a pair
@@ -34,6 +35,38 @@ export async function fetchPreviews() {
   }
   await fetchSavedCompares();
   renderPreviews();
+}
+
+// revealSavedSet honours a navigate's `?preview=<id>` hint once the link has
+// landed: the saved row it was copied from is scrolled into view and flashed.
+// The id is a LOOKUP — by id, else by the row naming the same set as the
+// landing (the id hashes link TEXT, which spells the repository differently
+// on another machine), else a notice: the link landed "show once" and nothing
+// here holds it. A two-link comparison is never named by a hint. One re-fetch
+// before a miss is believed: the row may have been saved since the last load.
+export async function revealSavedSet(s) {
+  const find = () => {
+    const rows = (state.previews || []).concat((state.savedCompares || []).filter((e) => e.kind === "pair"));
+    return (
+      rows.find((e) => e.id === s.hint_id) ||
+      (s.state === "preview" ? (state.previews || []).find((e) => e.source === s.source && e.target === s.target) : null) ||
+      (s.state === "pair" ? (state.savedCompares || []).find((e) => e.kind === "pair" && e.a === s.a && e.b === s.b) : null)
+    );
+  };
+  let e = find();
+  if (!e) {
+    await fetchPreviews();
+    e = find();
+  }
+  const li = e ? $("previews-list").querySelector('li[data-id="' + CSS.escape(e.id) + '"]') : null;
+  if (!li) {
+    opLine("gg link: preview " + s.hint_id + " is not saved here; the link still landed", true);
+    return;
+  }
+  if (isCollapsed("previews")) toggleSection("previews");
+  li.scrollIntoView({ block: "center" });
+  li.classList.add("flash");
+  setTimeout(() => li.classList.remove("flash"), 900);
 }
 
 // fetchSavedCompares loads the tab's other two kinds (/api/saved-compares):

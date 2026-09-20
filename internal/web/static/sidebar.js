@@ -1429,4 +1429,4 @@ $("shelf-list").addEventListener("contextmenu", (e) => {
   if (s) showShelfMenu(s, e.clientX, e.clientY);
 });
 
-export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
+export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, isCollapsed, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };

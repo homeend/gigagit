@@ -30,7 +30,8 @@ func TestSteerHintJSIsWired(t *testing.T) {
 	// inside the landing function, which has several early `return`s (the
 	// same S2 trap named one file over in domain's finishLink).
 	liveChecks := []struct{ want, why string }{
-		{"async function steerNavigate(s) {\n  await steerNavigateLand(s);\n  if (s.hint_kind) await revealHintEntry(s.hint_kind, s.hint_id);\n}", "steerNavigate must land THEN reveal, unconditionally"},
+		{"async function steerNavigate(s) {\n  await steerNavigateLand(s);\n  if (s.hint_kind) await revealHint(s);\n}", "steerNavigate must land THEN reveal, unconditionally"},
+		{"return s.hint_kind === \"preview\" ? revealSavedSet(s) : revealHintEntry(s.hint_kind, s.hint_id);", "revealHint must route a preview hint to previews.js and every other kind to the sidebar"},
 		{"async function steerNavigateLand(s) {", "the old steerNavigate body must be renamed, not duplicated"},
 		{"revealHintEntry } from \"./sidebar.js\"", "live.js must import revealHintEntry from sidebar.js"},
 	}
@@ -150,5 +151,41 @@ func TestRevealHintEntryTargetsHaveAFlashRule(t *testing.T) {
 		if !haveFlash[id] {
 			t.Errorf("style.css has no `#%s li.flash` rule — revealHintEntry can target this list and flash it invisibly", id)
 		}
+	}
+}
+
+// TestRevealSavedSetTargetHasAFlashRule is the twin of the gate above for the
+// ?preview= hint, whose reveal lives in previews.js: gg web hides and paints by
+// ID, so a `flash` class on a list with no `#<list> li.flash` rule paints
+// nothing — a reveal nobody can see.
+func TestRevealSavedSetTargetHasAFlashRule(t *testing.T) {
+	t.Parallel()
+	src, err := os.ReadFile(filepath.Join("static", "previews.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	css, err := os.ReadFile(filepath.Join("static", "style.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := strings.Index(string(src), "export async function revealSavedSet(s) {")
+	if i < 0 {
+		t.Fatal("previews.js: revealSavedSet is gone")
+	}
+	j := strings.Index(string(src)[i:], "\n}\n")
+	body := string(src)[i : i+j]
+	m := regexp.MustCompile(`\$\("([a-z]+-list)"\)`).FindStringSubmatch(body)
+	if m == nil || !strings.Contains(body, `classList.add("flash")`) {
+		t.Fatalf("previews.js: revealSavedSet no longer flashes a *-list row — this gate's extraction is stale")
+	}
+	if !regexp.MustCompile(`#` + m[1] + `\s+li\.flash\b`).Match(css) {
+		t.Errorf("style.css has no `#%s li.flash` rule — the reveal would flash invisibly", m[1])
+	}
+	live, err := os.ReadFile(filepath.Join("static", "live.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(live), `s.hint_kind === "preview" ? revealSavedSet(s)`) {
+		t.Error("live.js: revealHint no longer routes a preview hint to revealSavedSet")
 	}
 }
