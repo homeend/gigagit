@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v85 -->
+<!-- gg:using-gg:v86 -->
 
 # Using gg (gigagit)
 
@@ -440,8 +440,15 @@ finds the right one here.
   (state `missing` when a commit is gone) — after the previews;
   `show [--patch]`, `rename` and `rm` take a pair's id or label too. Its link
   is `gg://<repo>@<a>..<b>` (see `gg compare --list`), which `gg diff`,
-  `gg open` and `gg compare` accept. `--preview` flags and note verbs do NOT
-  take a pair yet.
+  `gg open` and `gg compare` accept. A pair is also a NOTE SCOPE, exactly like
+  a merge preview: `--preview` takes `<a>..<b>` or a saved pair's id/label on
+  `gg diff`, `gg note add|list|apply`, `gg review` and `gg link`, and every
+  `gg note` verb plus `gg session highlight add` accept the pair link itself
+  (`gg note add gg://<repo>/<path>@<a>..<b>:<line> --summary …`, `#<hunk>`
+  numbered over the pair's patch). Notes land on `b`, NEW side only — they are
+  ordinary notes on that commit and outlive the saved entry; `:old:` or a
+  delete-only hunk exits 2, and `gg show <pair link>` still exits 2.
+  `gg preview diff [--patch] <pair id|label>` prints a saved pair.
   Notes live inside a preview: `gg diff --preview <id|label|<target>...<source>>
   [--hunks [--json]]` prints the preview's own patch and numbers its hunks,
   and `gg note add --preview P --file F (--new-line N | --hunk H) --summary …`

@@ -1,0 +1,76 @@
+name = "pair notes: a change-set link and --preview <a>..<b> are one note scope; notes live on b and outlive the saved entry"
+
+[input]
+steps = [
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\n" },
+  { commit = "seed" },
+  { branch = "feat/x" },
+  { switch = "feat/x" },
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\nDELTA\n" },
+  { commit = "add DELTA" },
+  { switch = "main" },
+]
+
+[[run]]
+cmd  = ["preview", "add", "--label", "attempt", "main..feat/x"]
+exit = 0
+
+# A change-set link is a NOTE SCOPE: the note is written to b (feat/x's tip),
+# new side. Before pair notes this was ruling R4's exit 2.
+[[run]]
+cmd  = ["note", "add", "gg://{{cwd}}/a.txt@main..feat/x:4", "--summary", "why DELTA"]
+exit = 0
+
+# The saved pair's label, the typed pair and the bare link all read that scope.
+[[run]]
+cmd             = ["note", "list", "--preview", "attempt"]
+exit            = 0
+stdout_contains = ["why DELTA"]
+
+[[run]]
+cmd             = ["note", "list", "--preview", "main..feat/x", "--file", "a.txt"]
+exit            = 0
+stdout_contains = ["why DELTA"]
+
+[[run]]
+cmd             = ["note", "list", "gg://{{cwd}}@main..feat/x"]
+exit            = 0
+stdout_contains = ["why DELTA"]
+
+# It is an ORDINARY committed note on b: the plain commit target sees it too.
+[[run]]
+cmd             = ["note", "list", "--rev", "feat/x", "--file", "a.txt"]
+exit            = 0
+stdout_contains = ["why DELTA"]
+
+# The pair badge in the preview columns counts it (last column).
+[[run]]
+cmd             = ["preview", "list"]
+exit            = 0
+stdout_contains = ["attempt"]
+
+# The old side (commit a) is not addressable through a pair.
+[[run]]
+cmd  = ["note", "add", "gg://{{cwd}}/a.txt@main..feat/x:old:1", "--summary", "nope"]
+exit = 2
+
+# `gg show` keeps refusing a change-set: a pair is not one commit.
+[[run]]
+cmd  = ["show", "gg://{{cwd}}/a.txt@main..feat/x"]
+exit = 2
+
+# gg preview diff takes the saved pair by name.
+[[run]]
+cmd             = ["preview", "diff", "attempt"]
+exit            = 0
+stdout_contains = ["a.txt"]
+
+# Removing the entry never removes its notes: they belong to b.
+[[run]]
+cmd  = ["preview", "rm", "attempt"]
+exit = 0
+
+[[run]]
+cmd             = ["note", "list", "--rev", "feat/x", "--file", "a.txt"]
+exit            = 0
+stdout_contains = ["why DELTA"]

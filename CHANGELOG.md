@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review notes on a commit pair
+
+A commit pair — saved in the Previews tab, or just named by a
+`gg://<repo>@<a>..<b>` link — is now a **note scope**, exactly like a merge
+preview: an agent annotates the diff, you read the notes inside it.
+
+- **Nothing new is stored.** A pair note is an ordinary committed note on the
+  newer commit `b`, new side: it shows wherever `b` is shown and outlives the
+  saved entry. Notes are gathered along `a..b`, so one written on an
+  intermediate commit shows too (as *outdated* when `b` changed its lines). The
+  older commit `a` is not addressable (exit 2), the rule a preview and
+  `gg review a..b` already follow.
+- **CLI:** every `gg note` verb and `gg session highlight add` accept a
+  change-set link (`gg note add gg://repo/path@a..b:42 …`, `#N` numbered over
+  the pair's own patch); `gg show <pair link>` still refuses. `--preview` now
+  takes `<a>..<b>` or a saved pair's id/label on `gg diff`, `gg note
+  add|list|apply`, `gg review` and `gg link`; `gg preview diff <pair>` prints a
+  saved pair. One parser (`domain.NoteScopeResolve`) serves the CLI and MCP.
+- **MCP:** the note tools' `preview` argument takes the same pair forms.
+- **TUI:** opening a saved pair — or landing on a pair link through `gg open` /
+  the `#` prompt — arms the notes: `◆N` on the Previews row and per file,
+  note boxes in the diff, `c` to add, `}` / `{` to step, and *Copy link* yields
+  the pair link with path and line. The scope arrives by its own message, gated
+  on the two commits the view shows, so it does not depend on which opener
+  built the view.
+- A reversed pair (`b` an ancestor of `a`, what `s` saves) has an empty `a..b`;
+  the scope always includes `b` itself so notes written to it still show.
+
 ## Copy no longer trusts a dead `WAYLAND_DISPLAY`
 
 On WSL every copy action could paint a green "Copied" while the clipboard never
