@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A link's bookmark / shelf hint finds its entry past the web's list page
+
+### Fixed
+
+- `gg web` lists 200 bookmarks and one shelf bucket; a `gg://…?bookmark=<id>` or
+  `?shelf=<id>` hint naming an entry outside that page landed and then said
+  "is gone" about an entry that exists (the TUI, which loads everything,
+  revealed it). A miss in the loaded list now asks the store by id —
+  `GET /api/bookmarks?id=` / `GET /api/shelf?id=` (every bucket) — and reveals
+  the row. "is gone" is said only on the server's 404; a lookup that failed
+  says it could not look the entry up. This replaces the page's per-bucket walk.
+- A steered commit pair with a branch NAME for one half (`gg session navigate`
+  written by hand; a `gg://` link always carries two ids) fell to the web's
+  older endpoint-shaped compare and lost what the pair's own lane has — a `-u`
+  stash's untracked file, the pair's review notes. The server now freezes each
+  half that resolves to its full id before the page sees it, for a posted steer
+  and for `gg open --web`'s start-at alike. A half that names nothing is left
+  as it came, and the page reports it as before.
 ## Review notes on a commit pair, in `gg web`
 
 A commit pair opened in the browser — from its Previews row, or landed by a

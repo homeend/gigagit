@@ -80,7 +80,29 @@ func bookmarkRowFrom(b model.Bookmark) bookmarkRow {
 	return r
 }
 
+// entryByIDStatus separates "no such entry" (404 — the page may say "gone")
+// from a store that could not be read (500 — it may not).
+func entryByIDStatus(err error) int {
+	switch {
+	case errors.Is(err, domain.ErrBookmarkNotFound), errors.Is(err, domain.ErrShelfEntryNotFound),
+		errors.Is(err, domain.ErrBookmarksDisabled), errors.Is(err, domain.ErrShelfDisabled):
+		return http.StatusNotFound
+	}
+	return http.StatusInternalServerError
+}
+
 func (s *Server) handleBookmarks(w http.ResponseWriter, r *http.Request) {
+	// ?id= answers ONE entry from the store, past the page below: a link's
+	// ?bookmark=<id> hint names an entry, not a position in a list.
+	if id := r.URL.Query().Get("id"); id != "" {
+		b, err := s.service().BookmarkGet(readCtx(r), id)
+		if err != nil {
+			writeErr(w, entryByIDStatus(err), err)
+			return
+		}
+		writeJSON(w, map[string]any{"entries": []bookmarkRow{bookmarkRowFrom(b)}})
+		return
+	}
 	bs, err := s.service().BookmarkList(readCtx(r), 0, maxBookmarkRows)
 	if err != nil {
 		// A machine with no state directory has no bookmarks — an empty
