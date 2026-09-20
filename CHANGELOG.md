@@ -94,6 +94,14 @@ Under the hood: `domain.DescribeLink` is now the one describer behind every
 history row (it lived unexported in `internal/cli`, out of the TUI's reach),
 and a member's bytes are read through `FileSet.Source(path)`.
 
+## Web: a cut files-pane title shows whole on hover
+
+The files pane's title is one elided line, and a pull request's (`PR #n · title
+(source → target)`) never fits: hovering a CUT title now shows it whole (every
+mode's title, not just a PR's). On a merge preview / PR the bar's file count no
+longer shrinks to `all…` — the note beside it is what elides — and says what it
+is on hover.
+
 ## Pull requests in the web UI: review threads, note folding, details
 
 **A pull request's review threads now show inside its diff in `gg web`**, as

@@ -661,6 +661,8 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 .prd-where { color: var(--accent); }
 .prd-hunk { margin: 4px 0 6px; padding: 6px 8px; background: var(--bg); border-radius: 4px; overflow-x: auto; font-size: .92em; }
 .prd-reply { margin-left: 18px; }
+/* The count must stay readable: the note beside it is what elides. */
+#compare-bar button.cmpall { flex: none; max-width: none; overflow: visible; }
 #compare-bar #pr-details-chip { flex: none; overflow: visible; max-width: none; }
 #help-search { flex: none; margin: 0 0 8px; }
 #help-search.hidden { display: none; }

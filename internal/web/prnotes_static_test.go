@@ -92,3 +92,18 @@ func TestPRThreadEndpointsOnThePage(t *testing.T) {
 		}
 	}
 }
+
+// The files title is one elided line; a PR's never fits. It must offer the
+// whole text on hover, and the bar's file count must never be the part that
+// elides ("all…" told nobody anything).
+func TestPRHeaderIsReadable(t *testing.T) {
+	t.Parallel()
+	files, css := readStatic(t, "files.js"), readStatic(t, "style.css")
+	if !regexp.MustCompile(`\$\("files-title"\)\.addEventListener\("mouseenter"`).MatchString(files) ||
+		!strings.Contains(files, "el.scrollWidth > el.clientWidth ? el.textContent") {
+		t.Error("files.js: a cut #files-title must show its full text as a tooltip")
+	}
+	if !regexp.MustCompile(`#compare-bar button\.cmpall \{[^}]*flex: none`).MatchString(css) || !strings.Contains(files, `class="on cmpall"`) {
+		t.Error("the preview bar's file count must not shrink")
+	}
+}
