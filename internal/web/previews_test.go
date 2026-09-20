@@ -68,7 +68,7 @@ type pvList struct {
 // call the test exercises is stubbed below). The handler names come from
 // internal/git's span names — see resolve.go, mergebase.go, preview.go.
 //
-//   - "git rev-parse verify commit (resolve)" resolves feat/x and main to
+//   - "git rev-parse verify commit (find)" resolves feat/x and main to
 //     distinct fixed hashes (ResolveRev, called for both source and target).
 //   - "git merge-base" and "git rev-list --left-right --count" succeed
 //     (ahead=1), so PreviewSummary reaches the files step.
@@ -79,7 +79,7 @@ type pvList struct {
 func fakePreviewSvc(t *testing.T, diffErr error) *domain.Service {
 	t.Helper()
 	f := gitexec.NewFakeRunner()
-	f.SetHandler("git rev-parse verify commit (resolve)", func(_ context.Context, argv []string) (gitexec.Result, error) {
+	f.SetHandler("git rev-parse verify commit (find)", func(_ context.Context, argv []string) (gitexec.Result, error) {
 		ref := strings.TrimSuffix(argv[len(argv)-1], "^{commit}")
 		switch ref {
 		case "feat/x":

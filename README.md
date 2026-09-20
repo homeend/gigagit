@@ -111,7 +111,7 @@ gg log [-n N] [<rev>|<A..B>]  # terse "<short-sha> <subject>" history, newest fi
 gg diff [--stat|--name-only] [--cached] [<rev>|<A..B>] [-- <paths>...]
                                       # full patch by default; --stat = terse per-file +A -D; --name-only = bare paths
 gg show <commit> [--patch] [-- <file>...]   # "<short-sha> <subject>" header + terse stat (default) or full patch
-gg compare [--patch] <left> [<right>]   # changed-file list (or --patch: unified diffs) between two endpoints
+gg compare [--patch] <left> [<right>]   # changed-file list (or --patch: unified diffs of exactly those files) between two endpoints or gg:// links
                                       # endpoints: a gg:// link, a commit-ish, @staged, @worktree, bookmark:<id>,
                                       # shelf:<id> (a stored commit entry — hybrid: live sha while it exists, frozen
                                       # tar once gc'd, noted on stderr); <right> defaults to @worktree

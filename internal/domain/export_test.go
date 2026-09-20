@@ -240,3 +240,31 @@ func TestResolveRev(t *testing.T) {
 		t.Fatalf("missing rev: found=%v err=%v, want false, nil", found, err)
 	}
 }
+
+// A revision git cannot find and a repository git cannot READ are different
+// answers. ResolveRev used to fold both into found=false, so a broken checkout
+// reported "unknown revision" — to an agent branching on the exit code, the
+// wrong fault. Missing stays (false, nil); a git failure is an error.
+func TestResolveRevTellsABrokenRepoFromAMissingRev(t *testing.T) {
+	t.Parallel()
+	repoDir, svc := newRealRepo(t)
+	ctx := context.Background()
+	writeCommit(t, repoDir, "a.txt", "a\n", "subject")
+	sha := headHash(t, repoDir)
+
+	// Every flavour of "not a commit here" is a clean miss — one fixture, so
+	// the two arms below have to disagree on it.
+	for _, rev := range []string{"no-such-rev", strings.Repeat("ab", 20), "HEAD:a.txt", "HEAD^^^^", ""} {
+		if _, found, err := svc.ResolveRev(ctx, rev); err != nil || found {
+			t.Errorf("missing %q: found=%v err=%v, want false, nil", rev, found, err)
+		}
+	}
+	// Now break the repository itself: HEAD is unreadable, so git refuses
+	// everything — including a sha that resolved a moment ago.
+	if err := os.WriteFile(filepath.Join(repoDir, ".git", "HEAD"), []byte("garbage\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := svc.ResolveRev(ctx, sha); err == nil {
+		t.Fatalf("a broken repo: found=%v err=nil, want an error (not \"unknown revision\")", found)
+	}
+}
