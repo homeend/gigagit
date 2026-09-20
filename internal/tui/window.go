@@ -72,6 +72,10 @@ type winRow struct {
 	// A POINTER, not a value: lipgloss.Style holds TerminalColor interface
 	// fields, so there is no safe "is it the zero value" comparison.
 	body *lipgloss.Style
+	// noWrap keeps a PREFORMATTED row on one line in modeWrap — it is cut like
+	// a modeCutoff row instead of reflowed: a table's aligned columns or a code
+	// line inside otherwise wrapping prose (ctrl+w's scroll mode shows it all).
+	noWrap bool
 }
 
 // winOpts is everything renderWindow needs besides the rows. anchor is the
@@ -82,6 +86,24 @@ type winOpts struct {
 	anchor  int
 	hscroll int // modeScroll horizontal offset (display columns)
 	prefixW int // width of the frozen winRow.prefix column (0 = none)
+	// charWrap makes modeWrap break at the last COLUMN, mid-word if need be —
+	// what a code view wants (blame, the file preview: a line's columns are
+	// its meaning). The default, false, is the prose wrap every other window
+	// takes: break at a space, split only a word wider than the line, and hang
+	// a numbered item under its text like any other marker.
+	charWrap bool
+}
+
+// wrapRow is modeWrap's layout of one row under o: its display segments and
+// the hang indent they were laid out with. renderWindow and wrapContentLines
+// both go through it, so a line count can never disagree with the layout.
+func wrapRow(text string, bodyW int, o winOpts) ([]string, int) {
+	if o.charWrap {
+		indent := wrapAlignIndent(text, bodyW)
+		return wrapHang(text, bodyW, indent, 1<<20), indent // huge cap => clean full wrap, no ellipsis
+	}
+	indent := wrapAlignIndentProse(text, bodyW)
+	return wrapHangWords(text, bodyW, indent), indent
 }
 
 // windowRowBounds returns the half-open [lo, hi) slice of the n logical rows
@@ -200,10 +222,14 @@ func renderWindow(rows []winRow, o winOpts) []string {
 			rcls = nil
 		}
 		remph := r.emph
-		switch o.mode {
+		rowMode := o.mode
+		if r.noWrap && rowMode == modeWrap {
+			rowMode = modeCutoff // a preformatted row is cut, never reflowed
+		}
+		switch rowMode {
 		case modeWrap:
-			indent := wrapAlignIndent(r.text, bodyW)
-			segs = wrapHang(r.text, bodyW, indent, 1<<20) // huge cap => clean full wrap, no ellipsis
+			var indent int
+			segs, indent = wrapRow(r.text, bodyW, o)
 			if rcls != nil {
 				segCls = wrapSegMask(r.text, rcls, segs, indent, bodyW)
 			}
@@ -502,6 +528,116 @@ func wrapHang(s string, w, indent, maxLines int) []string {
 	return out
 }
 
+// wrapAlignIndentProse is wrapAlignIndent for a prose row: a list NUMBER is a
+// marker too, so "  12. text" hangs under "text" — wrapAlignIndent alone stops
+// at the first digit and would hang it under the number. Only the exact shape
+// <spaces><digits><. or )><space> counts, so a row that merely starts with a
+// number (a date, a version, a count) keeps the plain rule.
+func wrapAlignIndentProse(s string, bodyW int) int {
+	r := []rune(s)
+	i := 0
+	for i < len(r) && r[i] == ' ' {
+		i++
+	}
+	d := i
+	for d < len(r) && d-i < 9 && r[d] >= '0' && r[d] <= '9' {
+		d++
+	}
+	if d == i || d+1 >= len(r) || (r[d] != '.' && r[d] != ')') || r[d+1] != ' ' {
+		return wrapAlignIndent(s, bodyW)
+	}
+	end := d + 1
+	for end < len(r) && r[end] == ' ' {
+		end++
+	}
+	if end >= len(r) {
+		return 0 // a bare marker: nothing to align under
+	}
+	if w := lipgloss.Width(string(r[:end])); w < bodyW/2 {
+		return w
+	}
+	return bodyW / 2
+}
+
+// wrapHangWords is wrapHang breaking at SPACES: a line ends after the last
+// space that fits, and only a word wider than the line is split mid-word.
+// Like wrapHang, every segment is a verbatim rune slice of s (continuations
+// behind indent pad spaces) — the break keeps its space at the END of the
+// line rather than dropping it — so wrapSegMask maps masks onto these
+// segments exactly as it does onto wrapHang's. A break is never taken inside
+// the row's own lead (its indent and marker), which would strand the marker
+// on a line of its own.
+func wrapHangWords(s string, w, indent int) []string {
+	if w < 1 {
+		w = 1
+	}
+	if indent > w-1 {
+		indent = w - 1
+	}
+	if indent < 0 {
+		indent = 0
+	}
+	if lipgloss.Width(s) <= w {
+		return []string{s}
+	}
+	pad := strings.Repeat(" ", indent)
+	var out []string
+	rest := s
+	lead := 0 // runes of the first line that are lead (indent + marker), not text
+	for _, c := range s {
+		if unicode.IsLetter(c) || unicode.IsDigit(c) {
+			break
+		}
+		lead++
+	}
+	if indent > 0 { // a numbered marker is lead too
+		for n, width := 0, 0; n < len([]rune(s)) && width < indent; n++ {
+			width += lipgloss.Width(string([]rune(s)[n]))
+			if n+1 > lead {
+				lead = n + 1
+			}
+		}
+	}
+	for first := true; rest != ""; first = false {
+		lineW := w
+		if !first {
+			lineW = w - indent
+		}
+		if lipgloss.Width(rest) <= lineW {
+			out = append(out, prefixIf(!first, pad, rest))
+			break
+		}
+		head, tail := splitWidth(rest, lineW)
+		// Step back to the last space that fits, so the line ends WITH its
+		// space. That holds for a word that exactly fills the line too: taking
+		// it would start the next line with the space (segments are verbatim,
+		// nothing is dropped), so the line gives up that word instead.
+		{
+			hr := []rune(head)
+			min := 0
+			if first {
+				min = lead
+			}
+			for i := len(hr) - 1; i > min; i-- {
+				if hr[i] == ' ' && strings.TrimSpace(string(hr[:i])) != "" {
+					head, tail = string(hr[:i+1]), string(hr[i+1:])+tail
+					break
+				}
+			}
+		}
+		out = append(out, prefixIf(!first, pad, head))
+		rest = tail
+	}
+	return out
+}
+
+func prefixIf(cond bool, pad, s string) string {
+	if cond {
+		return pad + s
+	}
+	return s
+}
+
 // wrapContentLines returns how many display lines rows occupy under o in wrap
 // mode (indent included), capped at max with early exit — callers use it to
 // size a popup's height budget to its wrapped content instead of the
@@ -530,7 +666,11 @@ func wrapContentLines(rows []winRow, o winOpts, max int) int {
 	}
 	n := 0
 	for _, r := range rows {
-		segs := len(wrapHang(r.text, w-pw, wrapAlignIndent(r.text, w-pw), 1<<20))
+		segs := 1
+		if !r.noWrap {
+			laid, _ := wrapRow(r.text, w-pw, o)
+			segs = len(laid)
+		}
 		if segs == 0 {
 			segs = 1 // renderWindow substitutes one blank line for an empty row
 		}

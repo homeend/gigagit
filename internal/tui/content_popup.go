@@ -39,6 +39,7 @@ type contentLine struct {
 	// heading lines never carry one.
 	cls     []syntax.Class
 	heading bool
+	noWrap  bool   // a preformatted line (code, a table row): cut in wrap mode, never reflowed
 	path    string // file's (new) path
 	oldPath string // set only for renames/copies
 	status  string // model.CommitFile.Status letter ("A","M","D","R","C","T")
@@ -54,7 +55,10 @@ type contentPopup struct {
 	lines  []contentLine // full, unfiltered content
 	query  string        // case-insensitive substring over non-heading lines
 	typing bool          // true while /-input mode is capturing keys
-	sel    int           // cursor index into the FILTERED view — and, in the FILE PREVIEW, the TOP visible line (it is a pager)
+	// charWrap: the content is CODE (a file's text), so wrap mode breaks at the
+	// last column instead of at spaces — see winOpts.charWrap.
+	charWrap bool
+	sel      int // cursor index into the FILTERED view — and, in the FILE PREVIEW, the TOP visible line (it is a pager)
 	// cur is the FILE PREVIEW's line cursor: an index into lines (spec §4.7).
 	// It is read ONLY by renderFilePreview and the preview key paths — the help
 	// window, the files tree and the error popup share this struct and never
@@ -375,6 +379,9 @@ func (p *contentPopup) box(m Model) string {
 			wr[i] = winRow{text: "  " + l.text, cls: offsetCls(l.cls, 2)}
 		}
 	}
+	for i, l := range vis {
+		wr[i].noWrap = l.noWrap
+	}
 	capRows := m.contentPageRows()
 	// contentPageRows budgets for title + blank + hint. Anything else the box
 	// draws has to be paid for here or the box grows past the terminal: block
@@ -406,7 +413,7 @@ func (p *contentPopup) box(m Model) string {
 	// drift from the window it is sizing; it also counts an empty row as the
 	// one blank line renderWindow substitutes (git's stderr separates its
 	// paragraphs with blank lines, so the tail used to fall off the window).
-	o := winOpts{w: bodyW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll}
+	o := winOpts{w: bodyW, mode: p.mode, anchor: p.sel, hscroll: p.hscroll, charWrap: p.charWrap}
 	o.h = wrapContentLines(wr, o, capRows)
 	win := renderWindow(wr, o)
 

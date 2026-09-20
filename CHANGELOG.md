@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Wrap mode wraps on words
+
+`ctrl+w`'s **wrap** display mode used to fill every line to its last column and
+break wherever that fell — `https://exampl` / `e.com/spec`. It now breaks at
+spaces, in every window that can wrap (panels, popups, the help window, commit
+messages, the stash list, the PR hub…):
+
+- A line ends after the last space that fits; only a word wider than the line
+  is split. Nothing is dropped or re-spaced, so colours and search hits land
+  exactly where they did.
+- A **numbered** item (`1. `, `12) `) now hangs under its text like a bullet or
+  a quote bar does, instead of under its number.
+- **Code views keep the column-exact wrap** — blame, the file preview and
+  *View content*: there a line's columns are its meaning.
+- In the **PR hub**, code lines, tables and an outdated thread's hunk are no
+  longer reflowed in wrap mode: they are cut with `…` (scroll mode shows them
+  whole), so a table keeps its columns.
+- The label a review thread is summarised by when it opens with a block —
+  `suggestion`, `code`, `quote`, `table` — is now translated in the TUI.
+
 ## Pull-request text renders as markdown in the TUI
 
 The PR hub popup (description, conversation, verdicts, outdated threads) and

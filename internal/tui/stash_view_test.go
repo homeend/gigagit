@@ -250,7 +250,9 @@ func TestStashListWrapMode(t *testing.T) {
 	m.width, m.height = 80, 24
 	m.focus = panelCommits
 	m.stashView = &stashView{entries: []model.StashEntry{{Ref: "stash@{0}", Subject: strings.Repeat("z", 60)}}, mode: modeWrap}
-	out := m.renderStashList(20, 6)
+	// The prose wrap keeps the ref on its own line and splits only the one
+	// over-long word, so the subject needs three rows of its own.
+	out := m.renderStashList(20, 8)
 	if strings.Count(out, "z") < 30 {
 		t.Errorf("stash wrap mode did not expand the long subject:\n%s", out)
 	}
