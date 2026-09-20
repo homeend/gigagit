@@ -302,6 +302,12 @@ func (m Model) revealSavedSet(c steer.Command) Model {
 		m = m.activateTab(panelPreviews)
 	} else {
 		m.activeLeftTab, m.lastLeftPanel = panelPreviews, panelPreviews
+		if m.filesView != nil {
+			// esc/l hand the keyboard back to filesReturnFocus. Left on the
+			// tab the user came from, it would name a panel that is no longer
+			// shown — focus on a hidden list. The revealed row is the return.
+			m.filesReturnFocus = panelPreviews
+		}
 	}
 	for di, b := range m.displayIndices(panelPreviews) {
 		if b == bi {

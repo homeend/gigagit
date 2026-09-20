@@ -96,11 +96,17 @@ func TestPreviewHintRevealKeepsAnOpenViewsFocus(t *testing.T) {
 	m := previewHintModel(t)
 	m.focus = panelCommits
 	m.filesView = &contentPopup{}
+	m.filesReturnFocus = panelBranches
 	nm, _ := m.navigateLanded(pairCmd(m, m.previews[1].id()), "opened")
 	if nm.focus != panelCommits {
 		t.Errorf("focus = %v, want it left where the landing put it", nm.focus)
 	}
 	if nm.activeLeftTab != panelPreviews {
 		t.Errorf("active left tab = %v, want Previews underneath the open view", nm.activeLeftTab)
+	}
+	// Closing the view must hand the keyboard to the revealed row, never to
+	// the tab the user came from — that tab is no longer the one shown.
+	if nm.filesReturnFocus != panelPreviews {
+		t.Errorf("filesReturnFocus = %v, want the Previews panel", nm.filesReturnFocus)
 	}
 }
