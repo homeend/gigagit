@@ -59,9 +59,12 @@ func LinkDesc(kind, id, subject string) string {
 //     copied FROM, and wins over the link's own target — spec §4.3's own
 //     bookmark/shelf example links both address a commit target, and their
 //     Desc is still "bookmark: …" / "shelf: …", not "commit: …".
-//  2. Otherwise the link's own target: preview, branch (ref) or commit (rev).
-//  3. Otherwise a bare path, if one is set: "file: <path>".
-//  4. Otherwise the shape has NO row in spec §4.3's table — a --pair
+//  2. Otherwise a stash-shaped pair: "stash: <subject>" (spec §3.4).
+//  3. Otherwise a PATH, read at any point or inside any pair or preview:
+//     "file: <path>". The point is already in the link text; the path is
+//     what makes the row recognisable.
+//  4. Otherwise the link's own target: preview, branch (ref) or commit (rev).
+//  5. Otherwise the shape has NO row in spec §4.3's table — a --pair
 //     change-set link, a --cached link, or the bare working tree with no
 //     path and no target flags. Rather than invent a false row (or leave
 //     Desc blank), these fall back to kind "link" with id = the link's own
@@ -93,20 +96,6 @@ func (s *Service) linkDescFields(ctx context.Context, l model.Link) (kind, id, s
 		return "stash", "", l.Hint.ID
 	}
 	switch {
-	case l.Target.Preview != nil:
-		return "preview", l.Target.Preview.Target + "..." + l.Target.Preview.Source, ""
-	case l.Target.Ref != "":
-		return "branch", l.Target.Ref, ""
-	case l.Target.Commit != "":
-		short := l.Target.Commit
-		if len(short) > 7 {
-			short = short[:7]
-		}
-		subj := ""
-		if line, found, err := s.CommitLookup(ctx, l.Target.Commit); err == nil && found {
-			subj = line.Subject
-		}
-		return "commit", short, subj
 	case l.Target.Pair != nil:
 		// A stash is copied as the PAIR it changes (spec §3.4), and once
 		// stash@{N} is gone from the link its subject is the only thing that
@@ -124,7 +113,25 @@ func (s *Service) linkDescFields(ctx context.Context, l model.Link) (kind, id, s
 		}
 		return "link", l.String(), ""
 	case l.Path != "":
+		// A path wins over the point it is read at, as the web's copy rows have
+		// always recorded it ("file: <path>" at any rev). Tested the other way
+		// round, one file at two refs titled a comparison "branch: feat/x ↔
+		// branch: main".
 		return "file", l.Path, ""
+	case l.Target.Preview != nil:
+		return "preview", l.Target.Preview.Target + "..." + l.Target.Preview.Source, ""
+	case l.Target.Ref != "":
+		return "branch", l.Target.Ref, ""
+	case l.Target.Commit != "":
+		short := l.Target.Commit
+		if len(short) > 7 {
+			short = short[:7]
+		}
+		subj := ""
+		if line, found, err := s.CommitLookup(ctx, l.Target.Commit); err == nil && found {
+			subj = line.Subject
+		}
+		return "commit", short, subj
 	default:
 		// A --pair change-set (no single name to show), --cached, or the
 		// bare working tree: none has a row in spec §4.3's table.

@@ -60,6 +60,13 @@ func TestDescribeLinkTable(t *testing.T) {
 		{"preview", "gg://r@main...feat/x", "preview: main...feat/x"},
 		{"file", "gg://r/a/b.go", "file: a/b.go"},
 		{"commit", "gg://r@" + sha, "commit: " + sha[:7] + " seed subject"},
+		// A PATH wins over the point it is read at: the rows above and these
+		// share a target and must disagree. Without it one file at two refs
+		// titled a comparison "branch: feat/x ↔ branch: main".
+		{"file at a ref", "gg://r/a.txt@ref:feat/x", "file: a.txt"},
+		{"file at a commit", "gg://r/a.txt@" + sha, "file: a.txt"},
+		{"file in a preview", "gg://r/a.txt@main...feat/x", "file: a.txt"},
+		{"file in a pair", "gg://r/a.txt@" + sha + ".." + sha, "file: a.txt"},
 		// The fallback's free text is the link itself, cut at DescMax like any other.
 		{"pair falls back", "gg://r@" + sha + ".." + sha, "link: " + ("gg://r@" + sha + ".." + sha)[:DescMax]},
 		{"hint wins over target", "gg://r@" + sha + "?bookmark=nosuch", "bookmark: nosuch"},
@@ -123,10 +130,13 @@ func TestALocalFormFileLinkDescribesAsItsFile(t *testing.T) {
 	if !strings.HasPrefix(abs, "/") {
 		abs = "/" + abs // a Windows drive path renders as gg:///C:/…
 	}
-	_ = dir
 	for _, c := range []struct{ name, text, want string }{
 		{"a working-tree file", "gg://" + abs + "/sub/a.go", "file: sub/a.go"},
 		{"a staged file", "gg://" + abs + "/sub/a.go@staged", "file: sub/a.go"},
+		// The split must happen BEFORE the target is looked at, or these two
+		// describe as the branch and the commit they are read at.
+		{"a file at a ref", "gg://" + abs + "/sub/a.go@ref:main", "file: sub/a.go"},
+		{"a file at a commit", "gg://" + abs + "/sub/a.go@" + headHash(t, dir), "file: sub/a.go"},
 		// NOT a file of this checkout: another directory entirely. Best-effort
 		// means it keeps the fallback rather than inventing a path.
 		{"another checkout", "gg://" + filepath.ToSlash(t.TempDir()) + "/x/a.go", "link: gg://"},
