@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -125,8 +126,9 @@ func (s *Service) forgeNotesFor(set PreviewNoteSet, path string) []ResolvedNote 
 // bold row), the rest the rationale; a file-level comment has Range{0,0}, the
 // renderer's "top of the file" sentinel.
 func forgeNote(c model.ForgeComment, tip string) ResolvedNote {
-	body := strings.TrimSpace(strings.ReplaceAll(c.Body, "\r\n", "\n"))
-	summary, rest, _ := strings.Cut(body, "\n")
+	// The body is markdown: the split follows its first BLOCK, so a comment
+	// that opens with a suggestion or a table is not cut through its fence.
+	summary, rest, rawFirst := markdown.Summary(c.Body)
 	side := c.Side
 	if side == "" {
 		side = model.NoteSideNew
@@ -142,7 +144,7 @@ func forgeNote(c model.ForgeComment, tip string) ResolvedNote {
 		ID: model.ForgeNoteIDPrefix + c.ID, Source: model.NoteSourceForge, Author: c.Author,
 		Address: model.FileAddress{State: model.StateCommitted, Commit: tip, Path: c.Path},
 		Side:    side, Range: rng,
-		Summary: strings.TrimSpace(summary), Rationale: strings.TrimSpace(rest),
+		Summary: summary, Rationale: rest,
 		Created: c.Created, Updated: c.Updated,
 	}
 	if c.ParentID != "" {
@@ -151,7 +153,7 @@ func forgeNote(c model.ForgeComment, tip string) ResolvedNote {
 	if c.Resolved {
 		n.Tags = []string{model.NoteTagResolved}
 	}
-	return ResolvedNote{Note: n, Status: model.NoteActive, Range: rng}
+	return ResolvedNote{Note: n, Status: model.NoteActive, Range: rng, SummarySrc: rawFirst}
 }
 
 // forgeNoteCounts counts the PR's cached threads per path (roots only — a

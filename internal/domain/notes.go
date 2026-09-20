@@ -40,6 +40,10 @@ type ResolvedNote struct {
 	Status  model.NoteStatus
 	Range   [2]int
 	Replies []ResolvedNote
+	// SummarySrc is a FORGE note's summary line with its markdown markers
+	// intact (Note.Summary is that line as plain text). Empty for a stored
+	// note, and for a forge note whose summary is a label ("suggestion").
+	SummarySrc string
 }
 
 // NoteCounts are the row-painter badges: how many note THREADS (root notes,

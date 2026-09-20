@@ -1,8 +1,10 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
+	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -31,6 +33,12 @@ type WireNote struct {
 	Resolved  bool   `json:"resolved,omitempty"`
 	FileLevel bool   `json:"file_level,omitempty"`
 	Created   string `json:"created,omitempty"` // RFC 3339; empty when unknown
+	// MD is a FORGE note's rationale parsed as markdown and SummaryMD its
+	// summary line's inline tree; a page paints them instead of the plain
+	// strings above. Only ToWireNoteRendered fills them, and never for a
+	// stored note: that is shown as typed.
+	MD        *MarkdownDoc      `json:"md,omitempty"`
+	SummaryMD []markdown.Inline `json:"summary_md,omitempty"`
 }
 
 // ToWireNote flattens one resolved thread. Line and Range are the RESOLVED
@@ -74,4 +82,38 @@ func ToWireNotePreview(r ResolvedNote, preview bool) WireNote {
 		w.Replies[i] = ToWireNotePreview(rep, true)
 	}
 	return w
+}
+
+// ToWireNoteRendered is ToWireNotePreview for a frontend that RENDERS notes
+// (the web page): forge notes also carry their parsed markdown. The JSON the
+// CLI and MCP hand to agents goes through ToWireNote/ToWireNotePreview and
+// stays free of the trees — an agent reads the raw markdown.
+func ToWireNoteRendered(r ResolvedNote, preview bool) WireNote {
+	w := ToWireNotePreview(r, preview)
+	attachMarkdown(&w, r)
+	return w
+}
+
+func attachMarkdown(w *WireNote, r ResolvedNote) {
+	if r.Note.Source == model.NoteSourceForge {
+		w.MD = ParseMarkdown(r.Note.Rationale)
+		w.SummaryMD = markdown.ParseInline(r.SummarySrc)
+	}
+	for i := range r.Replies {
+		attachMarkdown(&w.Replies[i], r.Replies[i])
+	}
+}
+
+// MarkdownDoc is a parsed forge text. The alias lets a frontend hold one
+// without importing the parser.
+type MarkdownDoc = markdown.Doc
+
+// ParseMarkdown parses forge text (a PR description, a comment); nil for
+// blank text, so a wire field built from it is omitted.
+func ParseMarkdown(src string) *MarkdownDoc {
+	if strings.TrimSpace(src) == "" {
+		return nil
+	}
+	d := markdown.Parse(src)
+	return &d
 }
