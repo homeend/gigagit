@@ -54,6 +54,14 @@ func (m Model) pointLinkFor(sha string) (string, bool) {
 // already shows exactly this comparison — re-running it would only blank and
 // repaint identical content.
 func (m Model) startLinkCompare(left, right string) (Model, tea.Cmd) {
+	return m.startLinkCompareAfter(left, right, nil)
+}
+
+// startLinkCompareAfter is startLinkCompare with a check that runs first, off
+// the UI thread; its error is the comparison's. The entry cross-compare uses
+// it to keep saying "this bookmark's commit is gone" in gg's own words, which
+// the door — knowing only links — would report as a bare unknown revision.
+func (m Model) startLinkCompareAfter(left, right string, pre func(context.Context) error) (Model, tea.Cmd) {
 	tag := linkCompareTag(left, right)
 	if m.filesView != nil && m.inCompareMode() && m.compareTag == tag {
 		return m, nil
@@ -62,6 +70,11 @@ func (m Model) startLinkCompare(left, right string) (Model, tea.Cmd) {
 	svc, statePath := m.svc, m.statePath
 	return m, func() tea.Msg {
 		ctx := context.Background()
+		if pre != nil {
+			if err := pre(ctx); err != nil {
+				return linkCompareLoadedMsg{tag: tag, err: err}
+			}
+		}
 		c, err := svc.CompareLinks(ctx, left, right, linknav.Opts(statePath, svc))
 		if err != nil {
 			return linkCompareLoadedMsg{tag: tag, err: err}
@@ -104,8 +117,19 @@ func (m Model) loadedLinkCompare(msg linkCompareLoadedMsg) (Model, tea.Cmd) {
 		if steered {
 			return m.failPending("the compare failed: " + msg.err.Error())
 		}
+		// A bookmark is a pointer: its commit gone is not a compare failure
+		// but "this entry is dead", said the sticky way (entryCompareMsg's rule).
+		if text, ok := entryGoneText(msg.err); ok {
+			return m.stickyNotice(text)
+		}
 		m.statusMsg = i18n.T("compare: %s", msg.err.Error())
 		return m, nil
+	}
+	if m.topLayer() != nil {
+		// Asked for from a popup (a switcher picking its second side): the
+		// files view is not a layer, so the popup is parked, never drawn over
+		// it — and comes back when the view closes.
+		return m.handOffToFilesView(func(m Model) (Model, tea.Cmd) { return m.openLinkCompare(msg) })
 	}
 	return m.openLinkCompare(msg)
 }

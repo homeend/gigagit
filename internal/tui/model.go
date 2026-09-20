@@ -1147,7 +1147,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					p.compareRef = &pc.ref
 				}
-				p.compareLabel = pc.label
+				p.compareLabel, p.compareLink = pc.label, pc.link
 				m.pendingCompare = nil
 			}
 			if existing := m.shelfSwitcher(); existing != nil {
@@ -1261,7 +1261,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				p.compareRef = &pc.ref
 			}
-			p.compareLabel = pc.label
+			p.compareLabel, p.compareLink = pc.label, pc.link
 			m.pendingCompare = nil
 		}
 		if existing := m.bookmarkSwitcher(); existing != nil {
