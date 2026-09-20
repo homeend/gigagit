@@ -96,6 +96,16 @@ function linkHintIDOK(id) {
 function linkFor(repo, worktree, ctx, side, no) {
   let preview = (ctx && ctx.preview) || null;
   if (ctx && ctx.compare && !preview) return "";
+  // A COMMIT PAIR rides the same slot with no names at all (files.js hands it
+  // over as preview.pair): it is asked for FIRST, because everything below
+  // reads source/target — Go's "ask IsPair() before the names". Two full ids
+  // or nothing: a producer always knows them, and an abbreviation would grow
+  // ambiguous as history does.
+  const pair = (preview && preview.pair) || null;
+  if (pair) {
+    if ((pair.a || "").length < 40 || (pair.b || "").length < 40) return "";
+    preview = null;
+  }
   // A pull request's diff names its sides for DISPLAY (the head may live in a
   // fork): a link built from them would address some other pair. The server
   // hands out the pair that IS addressable — gg's private refs/gg/pr/<n>
@@ -112,7 +122,12 @@ function linkFor(repo, worktree, ctx, side, no) {
   const path = (ctx && ctx.path) || "";
   if (path && !linkPathOK(path)) return "";
   let s = head + (path ? "/" + path : "");
-  if (preview) {
+  if (pair) {
+    // `@<a>..<b>` (internal/model.LinkPair). Like a preview, a pair link has
+    // no old side: a line there degrades to the file form.
+    s += "@" + pair.a + ".." + pair.b;
+    if (side === "old") no = 0;
+  } else if (preview) {
     s += "@" + preview.target + "..." + preview.source;
     if (side === "old") no = 0;
   } else {
