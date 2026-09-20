@@ -56,6 +56,18 @@
     <!-- Born hidden: prs.js un-hides the pair only when the server reports a
          usable forge (no gh → no pull-request UI at all). -->
     <div id="prs-header" class="side-header hidden">pull requests</div>
+    <!-- Pull-request search (any state). The box follows the section: hidden
+         with it, folded with it (style.css reads the list's .collapsed). -->
+    <div id="pr-search-box" class="hidden">
+      <div id="pr-search-row">
+        <button id="pr-search-state" type="button" title="state to search: click to cycle all / closed / merged / open">all</button>
+        <input id="pr-search" type="text" spellcheck="false" autocomplete="off" placeholder="search pull requests… (A)" title="text goes to the forge's own search (author:name, head:branch…); a bare number opens that pull request. Enter searches.">
+      </div>
+      <div id="pr-search-results" class="hidden">
+        <div id="pr-search-head"><span id="pr-search-count"></span><span id="pr-search-close" title="close the results">✕</span></div>
+        <ul id="pr-search-list"></ul>
+      </div>
+    </div>
     <ul id="prs-list" class="hidden"></ul>
     <div id="tags-header" class="side-header">tags</div>
     <ul id="tags-list"></ul>

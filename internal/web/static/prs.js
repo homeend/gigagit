@@ -33,6 +33,8 @@ function take(body) {
   state.prsError = body.error || "";
   $("prs-header").classList.toggle("hidden", !state.prsAvailable);
   $("prs-list").classList.toggle("hidden", !state.prsAvailable);
+  $("pr-search-box").classList.toggle("hidden", !state.prsAvailable);
+  bootSearch();
   $("prs-header").title = state.prsError ? "last refresh failed: " + state.prsError : "";
   renderPRs();
   if (!body.loaded && backoffAt < BACKOFF_MS.length && !backoffTimer) {
@@ -73,21 +75,28 @@ function renderPRs() {
     $("prs-list").innerHTML = `<li class="none">no open pull requests</li>`;
     return;
   }
-  $("prs-list").innerHTML = rows
-    .map((pr) => {
-      const p = prRowParts(pr, now);
-      return (
-        `<li data-pr="${pr.number}" class="${(p.dim ? "prdim" : "") + (state.prBusy === pr.number ? " prbusy" : "")}" title="${esc(p.tip)}">` +
-        `<span class="prnum">#${pr.number}</span>` +
-        // The status cell LEADS the row: the sidebar is narrow and cuts a
-        // row's tail, and the verdict is what you scan the list for.
-        (p.mark ? `<span class="prmark ${esc(pr.review_state)}">${p.mark}</span>` : "") +
-        (p.word ? `<span class="prword">${esc(p.word)}</span>` : "") +
-        esc(p.title) +
-        `</li>`
-      );
-    })
-    .join("");
+  $("prs-list").innerHTML = rows.map((pr) => prRowHTML(pr, now)).join("");
+}
+
+// prRowHTML is the one row painter: the list and the search results read alike.
+function prRowHTML(pr, now) {
+  const p = prRowParts(pr, now);
+  return (
+    `<li data-pr="${pr.number}" class="${(p.dim ? "prdim" : "") + (state.prBusy === pr.number ? " prbusy" : "")}" title="${esc(p.tip)}">` +
+    `<span class="prnum">#${pr.number}</span>` +
+    // The status cell LEADS the row: the sidebar is narrow and cuts a
+    // row's tail, and the verdict is what you scan the list for.
+    (p.mark ? `<span class="prmark ${esc(pr.review_state)}">${p.mark}</span>` : "") +
+    (p.word ? `<span class="prword">${esc(p.word)}</span>` : "") +
+    esc(p.title) +
+    `</li>`
+  );
+}
+
+// knownPR finds a pull request the page was shown — in the list, or among the
+// search results (a closed PR found by searching is in no list until fetched).
+function knownPR(n) {
+  return (state.prs || []).find((p) => p.number === n) || ((state.prSearch && state.prSearch.prs) || []).find((p) => p.number === n);
 }
 
 // refreshPRs is the header's ⟳: the one page action that spends a forge call.
@@ -126,6 +135,7 @@ function maskOn(n, text) {
   m.classList.remove("hidden");
   state.prBusy = n;
   renderPRs();
+  renderSearch();
   clearTimeout(maskTimer);
   maskTimer = setTimeout(maskOff, 90000); // never outlive a wedged request
 }
@@ -135,12 +145,13 @@ function maskOff() {
   if (state.prBusy) {
     state.prBusy = 0;
     renderPRs();
+    renderSearch();
   }
 }
 $("pr-mask").addEventListener("click", maskOff);
 
 function prLabel(n) {
-  const pr = (state.prs || []).find((p) => p.number === n);
+  const pr = knownPR(n);
   return "pull request #" + n + (pr && pr.title ? " \u00b7 " + pr.title : "");
 }
 
@@ -254,6 +265,7 @@ async function openPR(pr) {
     }
     $("pr-mask-text").textContent = "fetching " + prLabel(n) + "…";
     if (!(await fetchPR(n))) return;
+    pr.fetched = true; // a second click on this row shows the diff without another fetch
     $("pr-mask-text").textContent = "computing the diff of " + prLabel(n) + "…";
     if ((await showPR(n, false)) === "unfetched") opLine("pull request #" + n + ": the head did not arrive", true);
   } finally {
@@ -325,12 +337,122 @@ for (const id of ["files-header", "compare-bar"]) {
   $(id).addEventListener("contextmenu", (ev) => {
     const po = state.previewOpen;
     if (!po || !po.pr || state.filesMode !== "compare") return;
-    const pr = (state.prs || []).find((p) => p.number === po.pr);
+    const pr = knownPR(po.pr);
     if (!pr) return;
     ev.preventDefault();
     showPRMenu(pr, ev.clientX, ev.clientY);
   });
 }
+
+// --- search ---------------------------------------------------------------------
+// The list holds the OPEN pull requests (plus the ones gg already knows). A
+// closed or merged one that was never fetched is found by searching: the text
+// goes to the forge's own search, the state chip narrows it, a bare number
+// looks that PR up. The results are a transient set under the search row —
+// opening one fetches its head, which is what makes it a row of the list.
+// The search is the POST (it spends a forge call); the GET is the server's
+// last answer, which a reloaded page shows again for free.
+const SEARCH_STATES = ["all", "closed", "merged", "open"];
+let searchBooted = false;
+
+function takeSearch(body) {
+  if (!body || !body.query) return;
+  state.prSearch = { query: body.query, prs: body.prs || [], more: !!body.more, error: "", busy: false };
+  $("pr-search").value = body.query.text || "";
+  $("pr-search-state").textContent = body.query.state || "all";
+  $("pr-search-results").classList.remove("hidden");
+  renderSearch();
+}
+
+function renderSearch() {
+  const sr = state.prSearch;
+  if (!sr) return;
+  const now = Date.now();
+  let html = sr.prs.map((pr) => prRowHTML(pr, now)).join("");
+  if (sr.busy) html = `<li class="none">searching…</li>`;
+  else if (sr.error) html = `<li class="err">${esc(sr.error)}</li>` + html;
+  else if (!sr.prs.length) html = `<li class="none">no pull requests match</li>`;
+  if (!sr.busy && sr.more) html += `<li class="none">more results — narrow the search</li>`;
+  $("pr-search-list").innerHTML = html;
+  $("pr-search-count").textContent = sr.busy ? "searching" : "results \u00b7 " + sr.prs.length + (sr.more ? "+" : "");
+}
+
+// bootSearch shows the server's last answer once the section is known to
+// exist. A GET: it never reaches the forge.
+function bootSearch() {
+  if (searchBooted || !state.prsAvailable) return;
+  searchBooted = true;
+  getJSON("/api/pr/search").then(takeSearch, () => {});
+}
+
+function runSearch() {
+  const text = $("pr-search").value;
+  const st = $("pr-search-state").textContent;
+  const prev = state.prSearch || { prs: [], more: false };
+  const run = runOnce("pr-search", async () => {
+    state.prSearch = { query: { text, state: st }, prs: prev.prs, more: prev.more, error: "", busy: true };
+    $("pr-search-results").classList.remove("hidden");
+    renderSearch();
+    try {
+      takeSearch(await postJSON("/api/pr/search", { text, state: st }));
+    } catch (err) {
+      // A failed search keeps the rows that were standing, and says why.
+      state.prSearch = { query: { text, state: st }, prs: prev.prs, more: prev.more, error: String(err.message || err), busy: false };
+      renderSearch();
+    }
+  });
+  if (run) run.catch(() => {});
+}
+
+// focusPRSearch is the page's A: unfold the section if it is folded, and put
+// the caret in the search field. keys.js reaches it on the window (importing
+// this module there would close a cycle).
+function focusPRSearch() {
+  if (!state.prsAvailable) return false;
+  if ($("prs-list").classList.contains("collapsed")) $("prs-header").click();
+  $("pr-search").focus();
+  $("pr-search").select();
+  return true;
+}
+window.__ggFocusPRSearch = focusPRSearch;
+
+$("pr-search").addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter") {
+    ev.preventDefault();
+    runSearch();
+  } else if (ev.key === "Escape") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    $("pr-search").blur();
+  }
+});
+
+$("pr-search-state").addEventListener("click", () => {
+  const b = $("pr-search-state");
+  b.textContent = SEARCH_STATES[(SEARCH_STATES.indexOf(b.textContent) + 1) % SEARCH_STATES.length];
+});
+
+// ✕ only puts the results away; the server still has them for the next load.
+$("pr-search-close").addEventListener("click", () => $("pr-search-results").classList.add("hidden"));
+
+function searchRowPR(li) {
+  const n = Number(li.dataset.pr);
+  return ((state.prSearch && state.prSearch.prs) || []).find((p) => p.number === n);
+}
+
+$("pr-search-list").addEventListener("click", (ev) => {
+  const li = ev.target.closest("li");
+  const pr = li && li.dataset.pr ? searchRowPR(li) : null;
+  if (pr) openPR(pr);
+});
+
+$("pr-search-list").addEventListener("contextmenu", (ev) => {
+  const li = ev.target.closest("li");
+  const pr = li && li.dataset.pr ? searchRowPR(li) : null;
+  if (!pr) return;
+  ev.preventDefault();
+  showPRMenu(pr, ev.clientX, ev.clientY);
+});
 
 registerHelp({
   key: "pull requests",
@@ -340,6 +462,11 @@ registerHelp({
     "requested, <b>●</b> review required. <b>Click</b> fetches the head and opens the PR's diff on the merge " +
     "preview screen (a loading mask covers the panes meanwhile; a pull request opened before shows at once " +
     "and is checked against the forge in the background); <b>right-click</b> for copy URL and forget. A pull request gg already knows stays " +
-    "listed, dimmed, after it is closed or merged. The header's <b>⟳</b> re-reads the list; it also " +
+    "listed, dimmed, after it is closed or merged. <b>A</b> (or a click) puts the caret in the section's " +
+    "<b>search</b> field: it asks the forge for pull requests of ANY state — the way to a closed or merged " +
+    "one gg never fetched. The text goes to the forge's own search (<b>author:name</b>, <b>head:branch</b>…), " +
+    "the chip cycles all / closed / merged / open, a bare number opens that pull request, <b>Enter</b> " +
+    "searches; the 50 newest-updated matches show under the field and act like list rows, and opening one " +
+    "makes it a row of the list. The last search is shown again after a reload. The header's <b>⟳</b> re-reads the list; it also " +
     "re-reads itself every <b>[refresh] prs</b> seconds (300; 0 = off), whatever the auto-refresh switch says",
 });

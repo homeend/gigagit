@@ -2365,6 +2365,29 @@ under it would otherwise block every later PR diff from fetching.
   when search matters). Palette entry carries `feature: FeatureForge` and is
   filtered on `!m.forgeShown`.
 
+### Forge PR search — the web (plan 2, `docs/superpowers/plans/2026-09-20-forge-prs-search-2-web.md`)
+
+- `prsearch.go`: `POST /api/pr/search` `{text,state}` (writeGuard, limit fixed at
+  `PRSearchDefaultLimit`, 45 s budget; bad state 400, no forge 404, forge
+  failure 502) and `GET /api/pr/search`. The server keeps NO result cache:
+  `domain.PRSearchLast` is per-service, session-only and never calls the forge —
+  it IS the GET (R2). Answer `{query:{text,state}|null, prs:[prRow], more}`.
+- `cachedPR` (prs.go) falls back to the last search's rows — that is what lets
+  `/api/pr/open?n=`, revalidate and the details routes accept a searched-only
+  NUMBER (R1). A NEW search replaces those rows, so an older result's number
+  stops resolving unless it was fetched meanwhile (then the polled list has it).
+- Page: `#pr-search-box` sits right BEFORE `#prs-list` and folds with the section
+  through `#pr-search-box:has(+ #prs-list.collapsed)` (the fold class lives on
+  the list; the adjacency is pinned by a static test). `#pr-search-box` and
+  `#pr-search-results` each have their own `.hidden` rule (R3). `prRowHTML` is
+  the one row painter for both lists; `knownPR(n)` looks in both.
+  `window.__ggFocusPRSearch` hands `A` to keys.js (import cycle); it unfolds the
+  section by clicking its header. `openPR` marks `pr.fetched` after a fetch so a
+  second click on a result does not fetch again.
+- Browser fixture: scratchpad `prweb/runsearch.sh` (a gh wrapper that LOGS its
+  argv — the R2 check counts `--search` lines), `pw/search.mjs` (32 checks),
+  `prweb/searchguards.py` (8 guards, restore by re-writing the saved text).
+
 ### Wrap mode wraps on words (`internal/tui/window.go`)
 
 - `winOpts.charWrap` (default false) picks modeWrap's layout, and BOTH

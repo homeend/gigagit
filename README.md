@@ -430,6 +430,12 @@ while the diff is open and on `r`; `i` opens the PR hub from the diff.
 In **`gg web`** the list is a *pull requests* section of the sidebar (under
 *previews*), shown only with a usable `gh`: click a row to fetch and open its
 diff, right-click for *copy URL* and *forget*, **⟳** on the header to re-read.
+The section has a **search** field (`A` focuses it): it asks the forge for pull
+requests of any state — text in the forge's own syntax, a chip cycling *all /
+closed / merged / open*, a bare number for a direct lookup, `Enter` to search.
+The 50 newest-updated matches show under the field and act like list rows;
+opening one makes it a row of the list, and the last search is shown again after
+a reload.
 It follows `[refresh] prs` too, in every open tab. A pull request you opened
 before shows at once from the local head and is checked against the forge in
 the background (new commits are fetched and the diff re-opened); a first open
