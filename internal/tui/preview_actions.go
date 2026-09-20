@@ -48,9 +48,12 @@ func (m Model) previewRenameCmd(kind previewRowKind, id, label string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		var err error
-		if kind == rowPair {
+		switch kind {
+		case rowPair:
 			err = svc.PairRename(context.Background(), id, label)
-		} else {
+		case rowCompare:
+			err = svc.SavedCompareRename(context.Background(), id, label)
+		default:
 			err = svc.PreviewRename(context.Background(), id, label)
 		}
 		return previewMutatedMsg{err: err, focusID: id, fromTab: true}
@@ -61,9 +64,12 @@ func (m Model) previewRemoveCmd(kind previewRowKind, id string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		var err error
-		if kind == rowPair {
+		switch kind {
+		case rowPair:
 			err = svc.PairRemove(context.Background(), id)
-		} else {
+		case rowCompare:
+			err = svc.SavedCompareRemove(context.Background(), id)
+		default:
 			err = svc.PreviewRemove(context.Background(), id)
 		}
 		return previewMutatedMsg{err: err, fromTab: true}
@@ -203,6 +209,10 @@ func (m Model) previewSwapCmd() tea.Cmd {
 	r, ok := m.selectedPreview()
 	if !ok {
 		return nil
+	}
+	if c, ok := r.compare(); ok {
+		// A comparison reversed is the same two links the other way round.
+		return m.saveCompareCmd(c.Right, c.Left, "")
 	}
 	rec, isMerge := r.merge()
 	if !isMerge {

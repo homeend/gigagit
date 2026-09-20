@@ -33,6 +33,7 @@ type bookmarkPopup struct {
 	compareRef   *model.FileRef // non-nil → compare mode (enter diffs against the highlighted bookmark)
 	compareEntry *entrySide     // commit-entry compare mode: the first pick (nil = none)
 	compareLabel string         // human label for the focused side, shown in the header
+	compareLink  string         // the first pick's gg:// link when it came from the shelf switcher (the cross flow); "" otherwise
 }
 
 // inCompareMode reports whether this switcher was opened to pick the second
@@ -286,6 +287,20 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if !ok {
 				return m, nil
 			}
+			if second, ok := m.bookmarkLink(b); ok && p.compareLink != "" {
+				// The cross flow, on links: commit↔commit is the same answer
+				// through the one door, and commit↔FILE is legal there — a
+				// whole tree against one member.
+				commits := []entrySide{*p.compareEntry}
+				if b.IsCommit() {
+					if sameEntryCommit(*p.compareEntry, bookmarkEntrySide(b)) {
+						m.statusMsg = i18n.T("select a different commit to compare against")
+						return m, nil
+					}
+					commits = append(commits, bookmarkEntrySide(b))
+				}
+				return m.startCrossCompare(p.compareLink, second, commits...)
+			}
 			if !b.IsCommit() {
 				m.statusMsg = i18n.T("cannot compare a commit against a file")
 				return m, nil
@@ -298,9 +313,17 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 				return m, nil
 			}
 			if b.IsCommit() {
+				// file↔commit is legal in the cross flow (the first pick is a
+				// shelf entry with a link); a focused file from a . menu has
+				// none and keeps the refusal.
+				if second, ok := m.bookmarkLink(b); ok && p.compareLink != "" {
+					return m.startCrossCompare(p.compareLink, second, bookmarkEntrySide(b))
+				}
 				m.statusMsg = i18n.T("cannot compare a file against a commit bookmark")
 				return m, nil
 			}
+			// file↔file keeps its two-ref diff: the paths may differ, and on
+			// links a.go vs b.go is one D and one A, never a diff.
 			return m.openCompareFocusedVsBookmark(*p.compareRef, p.compareLabel, b)
 		}
 		if b, ok := p.selected(); ok && b.IsCommit() {
@@ -357,12 +380,13 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			}
 			// Keep this switcher on the stack: the shelf picker is pushed on top so
 			// esc in it returns here (the diff on a pick clears both via openPickerDiff).
+			link, _ := m.bookmarkLink(b) // "" = no link form: the second pick keeps the endpoint flow
 			if b.IsCommit() {
 				side := bookmarkEntrySide(b)
-				m.pendingCompare = &pendingCompare{entry: &side, label: side.label, target: compareShelf}
+				m.pendingCompare = &pendingCompare{entry: &side, link: link, label: side.label, target: compareShelf}
 				return m, m.loadShelfCmd(true)
 			}
-			m.pendingCompare = &pendingCompare{ref: bookmarkToFileRef(b), label: bookmarkDisplay(b), target: compareShelf}
+			m.pendingCompare = &pendingCompare{ref: bookmarkToFileRef(b), link: link, label: bookmarkDisplay(b), target: compareShelf}
 			return m, m.loadShelfCmd(true)
 		case "e":
 			if p.inCompareMode() {
@@ -414,7 +438,7 @@ func (p *bookmarkPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if !ok {
 				return m, nil
 			}
-			text, ok := m.hintedLinkFor(b.Address(), model.LinkHint{Kind: "bookmark", ID: b.ID})
+			text, ok := m.bookmarkLink(b)
 			if !ok {
 				m.statusMsg = i18n.T("▸ no gg link for this place")
 				return m, nil

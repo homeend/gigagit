@@ -33,7 +33,7 @@ func bookmarkSwitcherHelp(compare bool) []contentLine {
 	if compare {
 		return []contentLine{
 			cheatRow("↑/k ↓/j", i18n.T("move the selection")),
-			cheatRow("enter", i18n.T("compare the first pick against the highlighted bookmark (file vs file, or commit vs commit)")),
+			cheatRow("enter", i18n.T("compare the first pick against the highlighted bookmark (file vs file, or commit vs commit, or a commit against one file)")),
 			cheatRow("/", i18n.T("filter the list (enter keeps, esc cancels)")),
 			cheatRow("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 			cheatRow("ctrl+t", i18n.T("toggle fullscreen: wider box, more visible rows")),
@@ -50,7 +50,7 @@ func bookmarkSwitcherHelp(compare bool) []contentLine {
 		cheatRow("y", i18n.T("copy the bookmarked file's path, absolute path, or name to the clipboard (file bookmarks only)")),
 		cheatRow("L", i18n.T("copy this bookmark's gg:// link (paste it into # to come back here)")),
 		cheatRow("m", i18n.T("mark one, then a second bookmark to compare the two (two files, or two commit bookmarks as a whole-tree compare)")),
-		cheatRow("c", i18n.T("compare the highlighted bookmark against a shelf entry (file vs file, or commit vs shelved commit)")),
+		cheatRow("c", i18n.T("compare the highlighted bookmark against a shelf entry (file vs file, or commit vs shelved commit, or a commit against one file)")),
 		cheatRow("x", i18n.T("remove the bookmark (confirms)")),
 		cheatRow("/", i18n.T("filter the list (enter keeps, esc cancels)")),
 		cheatRow("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
@@ -64,7 +64,7 @@ func shelfSwitcherHelp(compare bool) []contentLine {
 	if compare {
 		return []contentLine{
 			cheatRow("↑/k ↓/j", i18n.T("move the selection")),
-			cheatRow("enter", i18n.T("compare the first pick against the highlighted entry (file vs file, or commit vs commit)")),
+			cheatRow("enter", i18n.T("compare the first pick against the highlighted entry (file vs file, or commit vs commit, or a commit against one file)")),
 			cheatRow("/", i18n.T("filter the list (enter keeps, esc cancels)")),
 			cheatRow("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
 			cheatRow("ctrl+t", i18n.T("toggle fullscreen: wider box, more visible rows")),
@@ -81,7 +81,7 @@ func shelfSwitcherHelp(compare bool) []contentLine {
 		cheatRow("y", i18n.T("copy the file's path, absolute path, or name to the clipboard (file entries only)")),
 		cheatRow("L", i18n.T("copy this entry's gg:// link (paste it into # to come back here)")),
 		cheatRow("m", i18n.T("mark one, then a second entry to compare the two (two files, or two shelved commits as a whole-tree compare)")),
-		cheatRow("c", i18n.T("compare the highlighted entry against a bookmark (file vs file, or shelved commit vs commit bookmark)")),
+		cheatRow("c", i18n.T("compare the highlighted entry against a bookmark (file vs file, or shelved commit vs commit bookmark, or a commit against one file)")),
 		cheatRow("x", i18n.T("remove from the shelf (confirms)")),
 		cheatRow("/", i18n.T("filter the list (enter keeps, esc cancels)")),
 		cheatRow("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),

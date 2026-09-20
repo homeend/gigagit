@@ -28,6 +28,7 @@ type shelfPopup struct {
 	compareRef   *model.FileRef // compare mode: enter diffs compareRef (left) vs the picked entry (right)
 	compareEntry *entrySide     // commit-entry compare mode: the first pick (nil = none)
 	compareLabel string
+	compareLink  string // the first pick's gg:// link when it came from the bookmark switcher (the cross flow); "" otherwise
 }
 
 // inCompareMode reports whether this switcher was opened to pick the second
@@ -241,6 +242,18 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		if p.compareEntry != nil {
+			if second, ok := m.shelfEntryLink(e); ok && p.compareLink != "" {
+				// The cross flow, on links — see the bookmark switcher's twin.
+				commits := []entrySide{*p.compareEntry}
+				if e.IsCommit() {
+					if sameEntryCommit(*p.compareEntry, shelfEntrySide(e)) {
+						m.statusMsg = i18n.T("select a different commit to compare against")
+						return m, nil
+					}
+					commits = append(commits, shelfEntrySide(e))
+				}
+				return m.startCrossCompare(p.compareLink, second, commits...)
+			}
 			if !e.IsCommit() {
 				m.statusMsg = i18n.T("cannot compare a commit against a file")
 				return m, nil
@@ -249,6 +262,9 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		}
 		if p.compareRef != nil {
 			if e.IsCommit() {
+				if second, ok := m.shelfEntryLink(e); ok && p.compareLink != "" {
+					return m.startCrossCompare(p.compareLink, second, shelfEntrySide(e))
+				}
 				m.statusMsg = i18n.T("cannot compare a file against a shelved commit")
 				return m, nil
 			}
@@ -364,7 +380,7 @@ func (p *shelfPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			if !ok {
 				return m, nil
 			}
-			text, ok := m.hintedLinkFor(e.Origin, model.LinkHint{Kind: "shelf", ID: e.ID})
+			text, ok := m.shelfEntryLink(e)
 			if !ok {
 				m.statusMsg = i18n.T("▸ no gg link for this place")
 				return m, nil
@@ -473,14 +489,15 @@ func (m Model) shelfCompareAgainstBookmark() (Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
+	link, _ := m.shelfEntryLink(e) // "" = no link form: the second pick keeps the endpoint flow
 	if e.IsCommit() {
 		side := shelfEntrySide(e)
-		m.pendingCompare = &pendingCompare{entry: &side, label: side.label, target: compareBookmark}
+		m.pendingCompare = &pendingCompare{entry: &side, link: link, label: side.label, target: compareBookmark}
 		return m, m.loadBookmarksCmd()
 	}
 	ref := model.FileRef{Source: model.SourceShelf, Locator: e.ID, Path: e.Origin.Path}
 	// Keep this switcher on the stack: the bookmark picker is pushed on top so esc
 	// in it returns here (the diff on a pick clears both via openPickerDiff).
-	m.pendingCompare = &pendingCompare{ref: ref, label: i18n.T("shelf #%s", shortShelf(e)), target: compareBookmark}
+	m.pendingCompare = &pendingCompare{ref: ref, link: link, label: i18n.T("shelf #%s", shortShelf(e)), target: compareBookmark}
 	return m, m.loadBookmarksCmd()
 }

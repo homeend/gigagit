@@ -122,25 +122,27 @@ type Model struct {
 	conflict          domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 	resumePromptShown bool                 // one-shot: the continue/abort prompt fired for the current paused-op instance; re-arms when the state clears (maybeResumePrompt)
 
-	filesMode         filesMode         // authoritative source mode (changed/fullTree/compare/stash)
-	filesView         *contentPopup     // commit files tree replacing the left column; nil = closed
-	filesTitle        string            // "Files <short-hash> <subject>", updated with the content — rendered/localized display text; NEVER parsed
-	filesContext      string            // diff-view context payload (ref/subject or compare label) mirroring filesTitle's content sans any "Files "/panel framing; the diff view's "@ <context>" header reads THIS, not filesTitle
-	filesCommit       model.Commit      // the RESOLVED commit the view is showing (date/author/subject), incl. the ones fetched for a bare sha; backs the date line and filesViewCommit's fallback. Zero UnixTime = unknown: no date line is drawn and no row is spent
-	filesHash         string            // commit the view wants; gates stale async results
-	filesLeft         model.Endpoint    // compare mode: older side
-	filesRight        model.Endpoint    // compare mode: newer side
-	compareTag        string            // gates stale compareFilesMsg results
-	comparePair       *comparePairState // branch-pair compare extension (origin filter); nil for every other compare
-	filesStashTag     string            // when the files tree is showing a stash: its ref (gates stash-file loads)
-	filesShelfID      string            // shelf mode: the shelved-commit entry id (gates shelf-file loads, keys member refs)
-	filesShelfLabel   string            // shelf mode: "shelf #<short>" display label for diff contexts
-	filesReturnFocus  panel             // panel that opened the files view; esc/l restore focus here (the view itself runs on panelCommits)
-	filesReturnLayers []layer           // layer stack parked by a popup that handed off to the files view (handOffToFilesView); esc/l restore it, every other teardown drops it (closeFilesView zeroes it)
-	filesTreeFocused  bool              // true = the tree side owns vertical movement (←/→/tab)
-	filesReadInflight bool              // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
-	filesPreview      *contentPopup     // full-tree mode: read-only file content shown in the right column (nil = none)
-	filesPreviewTag   string            // <path>@<hash>; gates stale ShowFile results for the preview
+	filesMode         filesMode              // authoritative source mode (changed/fullTree/compare/stash)
+	filesView         *contentPopup          // commit files tree replacing the left column; nil = closed
+	filesTitle        string                 // "Files <short-hash> <subject>", updated with the content — rendered/localized display text; NEVER parsed
+	filesContext      string                 // diff-view context payload (ref/subject or compare label) mirroring filesTitle's content sans any "Files "/panel framing; the diff view's "@ <context>" header reads THIS, not filesTitle
+	filesCommit       model.Commit           // the RESOLVED commit the view is showing (date/author/subject), incl. the ones fetched for a bare sha; backs the date line and filesViewCommit's fallback. Zero UnixTime = unknown: no date line is drawn and no row is spent
+	filesHash         string                 // commit the view wants; gates stale async results
+	filesLeft         model.Endpoint         // compare mode: older side
+	filesRight        model.Endpoint         // compare mode: newer side
+	compareTag        string                 // gates stale compareFilesMsg results
+	comparePair       *comparePairState      // branch-pair compare extension (origin filter); nil for every other compare
+	filesSets         *domain.LinkComparison // link compare: the two file sets, for per-member byte sources; nil for every endpoint compare
+	linkCompareWant   string                 // tag of the link compare in flight; "" = none (a stale or cancelled load is dropped)
+	filesStashTag     string                 // when the files tree is showing a stash: its ref (gates stash-file loads)
+	filesShelfID      string                 // shelf mode: the shelved-commit entry id (gates shelf-file loads, keys member refs)
+	filesShelfLabel   string                 // shelf mode: "shelf #<short>" display label for diff contexts
+	filesReturnFocus  panel                  // panel that opened the files view; esc/l restore focus here (the view itself runs on panelCommits)
+	filesReturnLayers []layer                // layer stack parked by a popup that handed off to the files view (handOffToFilesView); esc/l restore it, every other teardown drops it (closeFilesView zeroes it)
+	filesTreeFocused  bool                   // true = the tree side owns vertical movement (←/→/tab)
+	filesReadInflight bool                   // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
+	filesPreview      *contentPopup          // full-tree mode: read-only file content shown in the right column (nil = none)
+	filesPreviewTag   string                 // <path>@<hash>; gates stale ShowFile results for the preview
 
 	diffTag     string      // request key of the wanted diff; gates stale async results
 	diffNav     diffNavKind // which list the open diff was opened from (Home/End file-stepping)
@@ -909,6 +911,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.drainPendingCompare()
 		}
 		return m.drainPendingPreview()
+	case linkCompareLoadedMsg:
+		return m.loadedLinkCompare(msg)
+	case compareSavedMsg:
+		return m.savedCompare(msg)
+	case baseSuggestedMsg:
+		if p, ok := m.topLayer().(*linkComparePopup); ok {
+			p.suggested(msg)
+		}
+		return m, nil
 	case previewOpenMsg:
 		return m.handlePreviewOpenMsg(msg)
 	case previewMutatedMsg:
@@ -1136,7 +1147,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					p.compareRef = &pc.ref
 				}
-				p.compareLabel = pc.label
+				p.compareLabel, p.compareLink = pc.label, pc.link
 				m.pendingCompare = nil
 			}
 			if existing := m.shelfSwitcher(); existing != nil {
@@ -1250,7 +1261,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				p.compareRef = &pc.ref
 			}
-			p.compareLabel = pc.label
+			p.compareLabel, p.compareLink = pc.label, pc.link
 			m.pendingCompare = nil
 		}
 		if existing := m.bookmarkSwitcher(); existing != nil {
@@ -2417,6 +2428,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.focus == panelPreviews {
 				if r, ok := m.selectedPreview(); ok && m.opsIdle() {
+					if c, ok := r.compare(); ok {
+						return m.startLinkCompare(c.Left, c.Right)
+					}
 					rec, isMerge := r.merge()
 					if !isMerge {
 						return m.openPairRow(r)

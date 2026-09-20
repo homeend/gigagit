@@ -44,7 +44,7 @@ type linkHistLoadedMsg struct {
 }
 
 // linkHistHost is a layer that embeds a picker.
-type linkHistHost interface{ histPicker() *linkHistPicker }
+type linkHistHost interface{ histPickers() []*linkHistPicker }
 
 // linkHistCmd reads the history off the UI thread (it is a file read behind a
 // cross-process lock — never something to do inside pushLayer).
@@ -70,12 +70,17 @@ func (m Model) loadedLinkHist(msg linkHistLoadedMsg) (Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	p := host.histPicker()
-	p.rows = msg.rows
-	if len(p.rows) > linkHistMax {
-		p.rows = p.rows[:linkHistMax]
+	rows := msg.rows
+	if len(rows) > linkHistMax {
+		rows = rows[:linkHistMax]
 	}
-	p.sel, p.loaded, p.active = 0, true, false
+	// EVERY picker of the host: the compare dialog has one per link field, and
+	// a load that filled only the first would leave the second saying "no
+	// copied links yet" beside a full history.
+	for _, p := range host.histPickers() {
+		p.rows = rows
+		p.sel, p.loaded, p.active = 0, true, false
+	}
 	return m, nil
 }
 

@@ -1216,6 +1216,88 @@ kind of its own. `domain/pair.go` is `domain/preview.go`'s twin:
   ordinary notes on `B`, new side, via `PreviewNoteSet{Tip: B, Base: A}`.
   Spec: `docs/superpowers/specs/2026-09-19-saved-commit-pairs-design.md`.
 
+### Links in the TUI — the compare dialog and the one door (plan 3b-2, 2026-09-20)
+
+**`domain.CompareLinks(ctx, leftText, rightText, opts)` is the one door** from
+two link TEXTS to a comparison, and `EvalLinkText` is its one-sided half (the
+CLI's `gg compare HEAD <link>`). Order inside is a correctness rule: parse →
+**locate** → same-checkout → `EvalLink`. A parsed LOCAL-form link
+(`gg:///abs/dir/f.go@…`) holds checkout and file undivided in `Repo.Abs` with
+`Path == ""`; skip the locate and a file link silently evaluates as the whole
+tree (MCP shipped exactly that). `internal/archtest`
+(`TestFrontendsReachLinkSetsThroughTheDoor`) forbids any `.EvalLink(` call in
+`tui`/`cli`/`mcp`/`web`. Failures carry their side — `*LinkSideError{Side, Err}`,
+which **unwraps**, so exit codes and `errors.Is` key on the cause. Another
+checkout is `ErrLinkCrossRepo`, its own sentinel (wrapping `model.ErrLink` would
+call a well-formed link "bad"); the CLI exits 2 on either. **The cross-repo
+refusal needs a registry to be reachable**: with none, a foreign link has no
+candidate and fails first as `ErrLinkUnknownRepo`. MCP passes no registry by
+design, so it can only ever report "unknown here" — do not "fix" that.
+
+**The set-shaped view** (`link_compare.go`). `startLinkCompare` runs the door
+off-thread and `openLinkCompare` opens the files view with the list already in
+hand; `Model.filesSets` holds the two sets. The view's identity is
+`linkCompareTag` = the two TEXTS — `gg://r@sha` and `gg://r/f@sha` share an
+endpoint, so an endpoint tag calls the second "already showing".
+`compareSides(row)` is where a row's bytes come from: `filesLeft/filesRight`
+for an endpoint compare, `FileSet.Source(path)` per side for a link compare;
+the diff tag AND the Differ cache key are built from what it returns, so a
+third-parent read is never served under `b`'s key. `closeFilesView` clears
+`filesSets` and `linkCompareWant` (the in-flight tag — a stale or cancelled
+load is dropped; a failed one clears it so the same pair can be retried). A
+load that lands while a popup is on top hands off (`handOffToFilesView`), so
+the popup is parked and returns when the view closes. `gg session state` still
+reports such a view as its two ENDPOINTS — it is a report, nothing restores
+from it.
+
+**Pair landing goes through it.** `steerNavigatePair` (the funnel for `#`,
+`gg open`, `gg session navigate`) builds `pointLinkFor(a)` ↔ `pairLinkFor(a, b)`
+and parks `pendingSteer` on the text tag whether or not a file was named: the
+view does not exist until the comparison lands, so the reply and the
+`▸ opened a..b` notice are raised in `drainPendingCompare`, not at dispatch.
+The view's endpoints are still commit a / commit b (a pair set's own endpoint
+is its `b`), never a `PairEndpoint`. No link form for the checkout → the old
+endpoint path.
+
+**The dialog** (`link_compare_popup.go`, `link_compare_base.go`). Two
+`linkCompareSide`s, each a field + a `linkHistPicker` + its own error; a
+`linkHistHost` now returns ALL its pickers and one load fills each. A pick
+FILLS its field — only `#` submits on pick. `ctrl+enter` is deliberately not
+bound (terminals do not deliver it). The dialog uses the WIDE popup width and
+shows a history list only once `↓` opened it. **Base rows:**
+`model.Link.BoundKind()` is pure and is only the cheap gate — `None` is
+certain, but it cannot tell a local-form FILE link from a whole tree, so the
+row exists on `domain.SuggestBase`'s located `Kind`, never on the pure one. A
+suggestion answers for the exact text it was asked about (`sugFor`/`asked`), so
+an edit or a swap in flight drops it. `enter` on the row is the ONLY rewrite:
+`model.Link.WithBase(base, self)` → `@B...A` (target first) or
+`@<parent>..<self>`, where `self` is `BaseSuggestion.Self`, the FULL sha — the
+field may hold an abbreviation a user typed. `tab` completes a *typed* ref base
+(`branchSuggestions`, shared with the preview form); an untouched suggestion is
+never completed away. Trunk = `refs/remotes/origin/HEAD`
+(`git.RemoteDefaultBranch`) → local `main` → local `master`, skipping the ref
+itself; gg has no trunk setting and this order is the whole notion.
+
+**Saved comparisons in the Previews tab.** `previewRow` has THREE kinds:
+`rowMerge`, `rowPair` (a commit pair — one SET entry holding `@A..B`) and
+`rowCompare` (a two-link entry). "Pair" is `rowPair`'s word; never call a
+comparison one. `readPreviews` takes exactly the non-set `SavedCompareList`
+entries (the set ones are already listed through `PreviewList`/`PairList`).
+Every site that branches on `merge()` and used to assume a pair otherwise must
+check `compare()` FIRST — a comparison row's `pair` is zero
+(`model.go` enter, `previewSwapCmd`, `contextLinkText`). A comparison has no
+single Copy link; `comparisonLinkRows` offers each half. The save label starts
+EMPTY: the store fills its own default, a rule `tui` cannot import.
+
+**bookmark↔shelf.** `pendingCompare.link` / `compareLink` carry the first
+pick's link into the other switcher; a non-empty link is what routes the second
+pick through `startCrossCompare`. commit↔commit and commit↔file go through the
+door; **file↔file keeps the two-ref diff** (paths may differ; on links that is
+one `D` and one `A`). Commit entries are pre-checked with
+`ResolveCommitEntryEndpoint` so a dead bookmark still gets `entryGoneText`'s
+sticky notice. A focused file from a `.` menu has no link and keeps the
+refusal. The same-kind MARK flow (`m`, `m`) is untouched.
+
 ### Links in the TUI — recording, stash pairs, the `#` history (plan 3b-1, 2026-09-19)
 
 **Recording lives at the clipboard writer.** `internal/tui` has exactly one
