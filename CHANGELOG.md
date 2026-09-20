@@ -6,6 +6,65 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Compare with link… — any two `gg://` links, compared inside the TUI
+
+**A palette command compares two links.** *Compare with link…* (`ctrl+p`) opens
+a dialog with a left and a right `gg://` link: type them, paste them, or press
+`↓` to pick from the links you copied. `ctrl+s` swaps the sides; `enter` on the
+right link compares. A side that fails says why **under its own field**. The
+result opens in the files view; `esc` there returns to the dialog with both
+fields intact.
+
+**The base picker.** A link that names a whole branch, tag or commit gets a
+**base row** under it, prefilled and labelled with where the suggestion came
+from: the branch's *upstream*, else the *trunk* (origin's default branch, else
+a local `main`, else `master` — never the branch itself), or a commit's
+*parent*. The row is an offer — tabbing through it changes nothing. `enter` on
+it rewrites the link field into the bounded link: `@<base>...<branch>` (target
+first, git's own three-dot order) or `@<parent>..<sha>` with the full sha. The
+comparison then lists only what that branch or commit changed; leave the row
+alone to compare the whole tree. `tab` completes a base you typed against the
+branch names. There is no dialog state a `gg compare <left> <right>` could not
+spell.
+
+**Save it, find it again.** `.` → *Save comparison…* in a link comparison
+stores its two links (an empty label takes a default; saving it twice names
+the existing entry). The **Previews** tab lists saved comparisons beside merge
+previews and commit pairs, as `<left> ↔ <right>`: `enter` runs it again, `e`
+renames, `d` removes, `s` saves it reversed, and the `.` menu offers *Copy
+left link* / *Copy right link*. A comparison whose link no longer resolves
+keeps its row and says why when opened. These are the entries
+`gg compare --save` / `--list` / `--saved` already wrote and read — one store.
+
+**A stash link landed in the TUI now shows its untracked files.** `gg compare
+<stash link>` listed a `-u` stash's untracked file while the same link pasted
+into `#` (or opened with `gg open` / `gg session navigate`) did not: landing a
+change-set was a two-commit tree diff, which cannot contain them. Landing now
+goes through the same comparison the CLI runs, so both frontends give one
+answer; the `gg session` reply is sent once the view has actually opened.
+
+**bookmark ↔ shelf compares a commit against a file.** Picking a commit
+bookmark and then a shelved *file* (or the other way round) was refused; the
+two entries are now compared as links — a whole tree against one member.
+Commit against commit goes the same way, file against file keeps its two-ref
+diff (the two paths may differ), and a bookmark whose commit is gone still
+says so in gg's own words.
+
+**Fixed: `gg_compare_links` (MCP) compared the whole tree for a file link.** A
+local-form link (`gg:///path/to/checkout/f.go@<sha>`, what every copy row emits
+in a checkout with no remote) holds its checkout and its file undivided until
+the link is *located*. The MCP tool evaluated without locating, so comparing
+`…/a.txt@c1` with `…/a.txt@c2` listed every changed file, not `a.txt` — a wrong
+answer with no error — and comparing two *different* files of one checkout was
+refused as "different repositories". Both were proven against the shipped tool
+before the fix.
+
+Under the hood: `domain.CompareLinks` (and its one-sided half, `EvalLinkText`)
+is now the one door from link text to a comparison — CLI, MCP and TUI all call
+it, and an archtest forbids a frontend calling `EvalLink` itself.
+`model.Link.BoundKind` / `WithBase` and `domain.SuggestBase` carry the base
+picker and are what the web dialog will reuse.
+
 ## Copy no longer trusts a dead `WAYLAND_DISPLAY`
 
 On WSL every copy action could paint a green "Copied" while the clipboard never

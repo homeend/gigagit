@@ -222,6 +222,18 @@ with the CLI's old vocabulary (`@worktree`, `bookmark:<id>`) already maps
 onto a link through `compareTokenLink`, so the CLI uses the door for every
 pair of tokens it can spell as links and its existing path for the rest.
 
+> **As built (3b-2).** The door has a one-sided half,
+> `EvalLinkText(ctx, text, opts) (FileSet, error)` — what `gg compare HEAD
+> <link>` needs — and `CompareLinks` is that twice plus `CompareSets`. An
+> archtest forbids `EvalLink` outside `domain`. Another checkout is its own
+> sentinel, `ErrLinkCrossRepo`, not a wrapped `model.ErrLink` (the link is
+> well-formed); the CLI exits 2 on either. `LinkSideError` unwraps. The
+> cross-repo refusal is reachable only when the other checkout is in the
+> registry — with none it fails first as unknown — so **MCP, which passes no
+> registry by design, can only report "unknown here"**. F4 was proven, twice
+> over: a file link compared the whole tree, and two files of one checkout
+> were refused as two repositories.
+
 ### 3.6 The set-shaped compare view (F3)
 
 `openLinkCompare(c domain.LinkComparison)` opens the files view in compare
@@ -239,6 +251,12 @@ mode with the file list **already in hand**:
 
 Dialog submit and this view open in the **same task**: a door with no caller
 and a view with no opener are not a mergeable boundary.
+
+> **As built.** The view's first opener was pair LANDING, one task before the
+> dialog — an opener all the same, so the rule's reason held. The byte sources
+> go through `compareSides(row)`, which also feeds the diff tag and the Differ
+> cache key. `.` also keeps the view's other rows; **Save comparison…** is
+> added only when the view is a link comparison.
 
 ### 3.7 The dialog and the base picker (§5.1)
 
@@ -262,9 +280,19 @@ when its field's kind is not none**.
 The suggestion is one domain call, reused by 3c:
 
 ```go
-type BaseSuggestion struct{ Base string; Why string } // Why: "upstream" | "trunk" | "parent" | ""
-func (s *Service) SuggestBase(ctx, l model.Link) (BaseSuggestion, error)
+type BaseSuggestion struct{ Kind model.LinkBoundKind; Base, Why, Self string } // Why: "upstream" | "trunk" | "parent" | ""
+func (s *Service) SuggestBase(ctx, l model.Link, o ResolveOpts) (BaseSuggestion, error)
+func (l Link) WithBase(base, self string) (Link, bool) // model — the ONE rewrite
 ```
+
+> **As built.** Two additions the first draft missed. `Self` is a commit
+> link's own FULL sha: a user types `@abc1234`, and a pair half is never
+> abbreviated. `Kind` is the bound kind **as located**: the pure
+> `BoundKind()` cannot tell a local-form file link (`gg:///abs/f.go@ref:x`,
+> file still inside the repo half) from a whole tree, so the base row exists
+> on `SuggestBase`'s say-so and the pure kind is only the cheap "certainly
+> none" gate. The rewrite itself is `model.Link.WithBase`, pure, so 3c's JS
+> twin is gated against it as well as against `BoundKind`.
 
 - ref → its upstream; else **trunk** = `refs/remotes/origin/HEAD`'s target,
   else local `main`, else local `master`; else empty (row shown, nothing
@@ -288,14 +316,22 @@ invocation could not express.
 
 Keys: `tab`/`shift+tab` walk link 1 → base 1 → link 2 → base 2 (skipping
 hidden rows); `↓` opens the history under a link field; `ctrl+s` swaps sides;
-`enter` on link 2 (or `ctrl+enter` anywhere) submits; errors render under the
-field `LinkSideError.Side` names; `esc` closes. `popupMax` embedded.
+`enter` on link 2 submits (on link 1 it moves on); errors render under the
+field `LinkSideError.Side` names; `esc` closes — or, while a comparison is in
+flight, withdraws it and keeps the form. `popupMax` embedded.
+
+> **As built.** `ctrl+enter` is NOT bound: terminals do not deliver it as a
+> distinct key. `tab` on a base row the user typed into completes it (and
+> stays); an untouched suggestion is never completed away, and `enter` rewrites
+> with exactly what the field holds. A pick from the history FILLS its field
+> and never submits. The dialog uses the wide popup width and shows a history
+> list only after `↓`.
 
 ### 3.8 Saving, and listing what was saved (D7)
 
-**Save comparison…** prompts for a label (default
-`savedcompare.DefaultLabel`) and calls `SavedCompareAdd(ctx, LeftText,
-RightText, label)`; `ErrSavedCompareExists` is a notice ("already saved as
+**Save comparison…** prompts for a label (the field starts EMPTY — the store
+fills its own default for an empty label, a rule `tui` cannot import and must
+not copy) and calls `SavedCompareAdd(ctx, LeftText, RightText, label)`; `ErrSavedCompareExists` is a notice ("already saved as
 …"), not an error.
 
 The Previews panel loads `SavedCompareList`. SET rows keep today's rendering
@@ -306,6 +342,13 @@ stored texts and opens 3.6's view; rename and remove route by shape to
 A pair row's Copy link is refused (a pair is two links); its two halves are
 offered as **Copy left link** / **Copy right link**.
 
+> **As built.** *Saved commit pairs* merged to main while 3b-2 was in flight
+> and took the word "pair" for a SET entry holding `@A..B` (`rowPair`). A
+> two-link entry is therefore a **comparison** (`rowCompare`) everywhere in the
+> code and the UI; the panel has three kinds. `s` does not decline on a
+> comparison row: it saves the comparison reversed, what it does for the other
+> two kinds.
+
 ### 3.9 bookmark↔shelf (D8)
 
 | first pick | second pick | today | 3b |
@@ -314,6 +357,14 @@ offered as **Copy left link** / **Copy right link**.
 | commit | file | refused ("cannot compare a commit against a file") | **legal**: same door |
 | file | commit | refused | **legal**: same door |
 | file | file | two-ref diff | **unchanged** |
+
+> **As built.** The popups' `compareEntry` mode IS the cross flow (the
+> same-kind compare is the separate mark flow, `m` then `m`, untouched). What
+> routes a second pick through the door is the first pick's LINK arriving with
+> it (`pendingCompare.link` → `compareLink`); a focused file picked from a `.`
+> menu has none and keeps the refusal, and an entry with no link form falls
+> back to the endpoint compare. Commit entries are pre-checked so a dead
+> bookmark still reads "no longer available".
 
 Only the **cross** flow changes (`pendingCompare` between the two
 switchers). bookmark↔bookmark and shelf↔shelf keep `startEntryCompare`, per
