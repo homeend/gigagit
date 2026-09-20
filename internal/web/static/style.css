@@ -276,18 +276,34 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 /* Pull requests. Hiding is per ID in this stylesheet: a bare class="hidden"
    with no rule of its own is always visible. */
 #prs-header.hidden, #prs-list.hidden { display: none; }
+/* Pull-request search. Every hidden element has its own rule (R3): there is
+   no global .hidden. The box folds with the section — the fold is a class on
+   the list that FOLLOWS it. */
+#pr-search-box.hidden, #pr-search-results.hidden { display: none; }
+#pr-search-box:has(+ #prs-list.collapsed) { display: none; }
+#pr-search-row { display: flex; gap: 4px; padding: 2px 8px 4px; }
+#pr-search-state { flex: none; min-width: 52px; padding: 1px 4px; font: inherit; font-size: 11px; color: var(--dim); background: var(--bg-alt); border: 1px solid var(--border); border-radius: 3px; cursor: pointer; }
+#pr-search-state:hover { color: var(--accent); }
+#pr-search { flex: 1; min-width: 0; padding: 1px 4px; font: inherit; color: var(--fg); background: var(--bg); border: 1px solid var(--border); border-radius: 3px; }
+#pr-search:focus { outline: none; border-color: var(--accent); }
+#pr-search-results { border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border); margin-bottom: 4px; }
+#pr-search-head { display: flex; justify-content: space-between; padding: 2px 10px; color: var(--dim); font-size: 11px; }
+#pr-search-close { cursor: pointer; }
+#pr-search-close:hover { color: var(--accent); }
+#pr-search-list { list-style: none; max-height: 40vh; overflow-y: auto; }
+#pr-search-list li.err { color: var(--lane7); cursor: default; white-space: normal; }
 #prs-list { list-style: none; }
-#prs-list li { padding: 2px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#prs-list li:hover { background: var(--bg-alt); }
-#prs-list li.none { color: var(--dim); cursor: default; }
-#prs-list li.prdim { color: var(--dim); }
-#prs-list li .prnum { color: var(--dim); padding-right: 6px; }
-#prs-list li .prmark { padding-right: 4px; }
-#prs-list li .prmark.approved { color: var(--lane2); }
-#prs-list li .prmark.changes_requested { color: var(--lane7); }
-#prs-list li .prword { color: var(--dim); font-size: 11px; padding-right: 6px; }
+#prs-list li, #pr-search-list li { padding: 2px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#prs-list li:hover, #pr-search-list li:hover { background: var(--bg-alt); }
+#prs-list li.none, #pr-search-list li.none { color: var(--dim); cursor: default; }
+#prs-list li.prdim, #pr-search-list li.prdim { color: var(--dim); }
+#prs-list li .prnum, #pr-search-list li .prnum { color: var(--dim); padding-right: 6px; }
+#prs-list li .prmark, #pr-search-list li .prmark { padding-right: 4px; }
+#prs-list li .prmark.approved, #pr-search-list li .prmark.approved { color: var(--lane2); }
+#prs-list li .prmark.changes_requested, #pr-search-list li .prmark.changes_requested { color: var(--lane7); }
+#prs-list li .prword, #pr-search-list li .prword { color: var(--dim); font-size: 11px; padding-right: 6px; }
 #prs-list.collapsed { display: none; }
-#prs-list li.prbusy .prnum::before { content: "\27f3 "; display: inline-block; color: var(--accent); animation: prspin 1s linear infinite; }
+#prs-list li.prbusy .prnum::before, #pr-search-list li.prbusy .prnum::before { content: "\27f3 "; display: inline-block; color: var(--accent); animation: prspin 1s linear infinite; }
 /* The loading mask over the panes right of the sidebar (prs.js sizes it). A
    PR open is seconds of network + git; without it the page just sits there. */
 #pr-mask { position: fixed; z-index: 40; background: rgba(20, 22, 26, 0.72); display: flex; align-items: center; justify-content: center; cursor: progress; }

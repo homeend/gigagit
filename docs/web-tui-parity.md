@@ -47,7 +47,8 @@ copied-link history, side swap, per-side errors, the base row, save
 comparison…; a `@a..b` link lands through the same door) · **pull
 requests** (read-only: list, fetch + open the PR diff, copy URL, forget,
 `[refresh] prs` poll and ⟳, review threads inside the diff as read-only note
-boxes, the details overlay — the TUI's PR hub — and the comment re-poll;
+boxes, the details overlay — the TUI's PR hub — the comment re-poll, and the
+any-state **search** — the TUI's `A` — as a field + state chip in the section;
 PR text is rendered as markdown in both — the web paints the parsed tree
 as HTML, the TUI lays it out in rows) ·
 **note folding** (every note box: click the title, `z` / `Z` — the TUI's
