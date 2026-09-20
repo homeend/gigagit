@@ -35,6 +35,10 @@ func TestLinkCompareJSIsWiredEverywhere(t *testing.T) {
 		{"style.css", "#linkcmp-err.hidden", "the form error's own hide rule"},
 		{"style.css", "#linkcmp-err-left.hidden", "the left error's own hide rule"},
 		{"style.css", "#linkcmp-err-right.hidden", "the right error's own hide rule"},
+		{"linkcompare.js", `getJSON("/api/linkhist")`, "the history comes from the server's ring, never browser storage"},
+		{"style.css", "#linkcmp-hist-left.hidden", "the left history list's own hide rule"},
+		{"style.css", "#linkcmp-hist-right.hidden", "the right history list's own hide rule"},
+		{"index.html", `id="linkcmp-swap"`, "the swap control"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(read(c.file), c.want) {
@@ -46,6 +50,12 @@ func TestLinkCompareJSIsWiredEverywhere(t *testing.T) {
 	files := read("files.js")
 	if arm, hash := strings.Index(files, "state.compare.links) {"), strings.Index(files, `q.set("left", state.compare.aHash)`); arm < 0 || hash < 0 || arm > hash {
 		t.Errorf("files.js: the link-comparison arm (%d) must come before the hash lane (%d)", arm, hash)
+	}
+	// A pick FILLS its field; it never compares.
+	if i := strings.Index(read("linkcompare.js"), "function pickHist("); i < 0 {
+		t.Error("linkcompare.js: no pickHist")
+	} else if body := read("linkcompare.js")[i:]; strings.Contains(body[:strings.Index(body, "\n}\n")], "submit(") {
+		t.Error("linkcompare.js: pickHist submits — a pick only fills the field")
 	}
 	// gg web binds a random port each run, which empties browser storage.
 	src := read("linkcompare.js")

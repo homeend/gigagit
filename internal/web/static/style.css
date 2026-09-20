@@ -662,6 +662,12 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #linkcmp-box input { flex: 1; min-width: 0; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 4px 8px; font: inherit; }
 #linkcmp-box input:focus { outline: none; border-color: var(--accent); }
 #linkcmp-box .lc-err { color: var(--del-fg, #e06c75); font-size: 12px; margin-top: 3px; overflow-wrap: anywhere; }
+#linkcmp-hist-left.hidden, #linkcmp-hist-right.hidden { display: none; }
+#linkcmp-box .lc-hist { list-style: none; margin: 4px 0 0; padding: 0; max-height: 180px; overflow-y: auto; border: 1px solid var(--border); border-radius: 3px; }
+#linkcmp-box .lc-hist li { padding: 3px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#linkcmp-box .lc-hist li.sel, #linkcmp-box .lc-hist li:hover { background: var(--sel, rgba(127,127,127,.25)); }
+#linkcmp-box .lc-hist li.none { color: var(--dim); cursor: default; }
+#linkcmp-box .lc-hist .psub { color: var(--dim); margin-left: 10px; font-size: 11px; }
 #linkcmp-foot { display: flex; gap: 8px; justify-content: flex-end; }
 #prdetails-status { flex: none; margin: 0 0 8px; font-size: 11px; color: var(--dim); }
 #prdetails-status.hidden { display: none; }

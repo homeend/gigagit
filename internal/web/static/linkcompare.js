@@ -4,7 +4,7 @@
 // text through domain.CompareLinks — the same door the CLI, MCP and the TUI
 // use — so no frontend can disagree about what a link means.
 
-import { $, getJSON, runOnce } from "./core.js";
+import { $, esc, getJSON, runOnce } from "./core.js";
 import { openLinkCompare } from "./files.js";
 import { closeLayer, pushLayer } from "./layers.js";
 import { registerHelp, registerRows } from "./menus.js";
@@ -42,6 +42,77 @@ export async function runLinkCompare(query, onErr) {
   return true;
 }
 
+// fieldChanged runs after anything but typing replaced a field's text (a
+// history pick, a swap).
+function fieldChanged() {}
+
+// --- copied-link history (GET /api/linkhist) ---
+// The ring is the server's: gg web binds a random port each run, which empties
+// browser storage, and the TUI and CLI feed the same ring.
+let histOpen = ""; // the side whose list is showing
+let histRows = [];
+let histSel = 0;
+
+function paintHist() {
+  const ul = $("linkcmp-hist-" + histOpen);
+  ul.innerHTML = histRows.length
+    ? histRows
+        .map(
+          (r, i) =>
+            `<li data-i="${i}"${i === histSel ? ' class="sel"' : ""} title="${esc(r.link)}">${esc(r.desc || r.link)}` +
+            `<span class="psub">${esc(r.link)}</span></li>`
+        )
+        .join("")
+    : `<li class="none">no copied links yet</li>`;
+  ul.classList.remove("hidden");
+  const sel = ul.querySelector("li.sel");
+  if (sel) sel.scrollIntoView({ block: "nearest" });
+}
+
+function closeHist() {
+  if (!histOpen) return;
+  $("linkcmp-hist-" + histOpen).classList.add("hidden");
+  histOpen = "";
+}
+
+async function openHist(side) {
+  closeHist();
+  let rows = [];
+  try {
+    rows = (await getJSON("/api/linkhist")).links || [];
+  } catch {
+    rows = []; // an unreadable history is an empty one; the field still works
+  }
+  histOpen = side;
+  histRows = rows;
+  histSel = 0;
+  paintHist();
+}
+
+// pickHist FILLS the field. It never compares: the user may still want a base,
+// or the other side.
+function pickHist(i) {
+  const r = histRows[i];
+  const side = histOpen;
+  closeHist();
+  if (!r || !side) return;
+  field(side).value = r.link;
+  setErr(side, "");
+  field(side).focus();
+  fieldChanged(side);
+}
+
+function swap() {
+  closeHist();
+  const text = field("left").value;
+  field("left").value = field("right").value;
+  field("right").value = text;
+  const err = $("linkcmp-err-left").textContent;
+  setErr("left", $("linkcmp-err-right").textContent);
+  setErr("right", err);
+  SIDES.forEach(fieldChanged);
+}
+
 function submit() {
   clearErrs();
   const left = field("left").value.trim();
@@ -59,6 +130,7 @@ function submit() {
 }
 
 function close() {
+  closeHist();
   closeLayer("linkcmp");
 }
 
@@ -66,7 +138,28 @@ function close() {
 // key), but it preventDefaults ONLY the keys it acts on: everything else is
 // the focused field's own.
 function onKey(e) {
-  if (e.key === "Escape") {
+  if (histOpen) {
+    // The open list takes the keys it understands; esc closes the LIST.
+    if (e.key === "ArrowDown") histSel = Math.min(histSel + 1, Math.max(histRows.length - 1, 0));
+    else if (e.key === "ArrowUp") histSel = Math.max(histSel - 1, 0);
+    else if (e.key === "Enter") pickHist(histSel);
+    else if (e.key === "Escape") closeHist();
+    else {
+      closeHist(); // typing goes to the field
+      return true;
+    }
+    e.preventDefault();
+    if (histOpen) paintHist();
+    return true;
+  }
+  const side = SIDES.find((s) => e.target === field(s));
+  if (e.key === "ArrowDown" && side) {
+    e.preventDefault();
+    openHist(side);
+  } else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+    e.preventDefault(); // the browser's own "save page"
+    swap();
+  } else if (e.key === "Escape") {
     e.preventDefault();
     close();
   } else if (e.key === "Enter" && e.target === field("left")) {
@@ -94,6 +187,13 @@ $("linkcmp").addEventListener("click", close); // the backdrop
 $("linkcmp-box").addEventListener("click", (e) => e.stopPropagation());
 $("linkcmp-close").addEventListener("click", close);
 $("linkcmp-go").addEventListener("click", submit);
+$("linkcmp-swap").addEventListener("click", swap);
+$("linkcmp-box").addEventListener("click", (e) => {
+  const btn = e.target.closest(".lc-hist-btn");
+  if (btn) return histOpen === btn.dataset.side ? closeHist() : openHist(btn.dataset.side);
+  const li = e.target.closest(".lc-hist li[data-i]");
+  if (li) pickHist(Number(li.dataset.i));
+});
 
 registerRows("menu", () => [{ label: "compare with link…", act: () => openLinkCompareDialog() }]);
 
@@ -102,6 +202,8 @@ registerHelp({
   html:
     "<b>compare with link…</b> (the command palette, or the ☰ menu) compares any two <b>gg://</b> links — a " +
     "branch, a commit, a stash, a file at a revision, a change-set, the working tree. Paste one link in each " +
-    "field; <b>enter</b> moves on and then compares, <b>esc</b> closes. An error is shown under the field it " +
+    "field; <b>enter</b> moves on and then compares, <b>esc</b> closes. <b>↓</b> (or ▾) lists the links you " +
+    "copied — in the web, the TUI or the CLI — and a pick fills the field without comparing. <b>ctrl+s</b> " +
+    "(or ⇅ swap) exchanges the two sides. An error is shown under the field it " +
     "belongs to. The result opens as a comparison: every file that differs, each with its diff",
 });
