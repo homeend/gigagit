@@ -140,7 +140,7 @@ func callCount(f *gitexec.FakeRunner, name string) int {
 func TestPreviewSummaryCachedByHashPair(t *testing.T) {
 	t.Parallel()
 	f := gitexec.NewFakeRunner()
-	f.SetResponse("git rev-parse verify commit (resolve)", gitexec.Result{Stdout: "1111111111111111111111111111111111111111\n"})
+	f.SetResponse("git rev-parse verify commit (find)", gitexec.Result{Stdout: "1111111111111111111111111111111111111111\n"})
 	f.SetResponse("git merge-base", gitexec.Result{Stdout: "2222222222222222222222222222222222222222\n"})
 	f.SetResponse("git rev-list --left-right --count", gitexec.Result{Stdout: "1\t3\n"})
 	f.SetResponse("git diff --name-only (range)", gitexec.Result{Stdout: "a\x00b\x00"})
@@ -174,7 +174,7 @@ func TestPreviewSummaryCachedByHashPair(t *testing.T) {
 func TestPreviewSummaryMergeBaseCancellationNotCached(t *testing.T) {
 	t.Parallel()
 	f := gitexec.NewFakeRunner()
-	f.SetResponse("git rev-parse verify commit (resolve)", gitexec.Result{Stdout: "3333333333333333333333333333333333333333\n"})
+	f.SetResponse("git rev-parse verify commit (find)", gitexec.Result{Stdout: "3333333333333333333333333333333333333333\n"})
 	ctx, cancel := context.WithCancel(context.Background())
 	first := true
 	f.SetHandler("git merge-base", func(c context.Context, argv []string) (gitexec.Result, error) {

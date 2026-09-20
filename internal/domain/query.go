@@ -648,21 +648,28 @@ func (s *Service) CommitLookup(ctx context.Context, rev string) (model.LogLine, 
 
 // ResolveRev resolves rev to its FULL commit sha, reporting found=false when
 // git cannot resolve it. Missing is an expected state here (a typo, a gc'd
-// sha), so it is not an error and never recorded to the failure log
-// (queryQuiet) — the CommitLookup convention. CommitLookup stays the
-// display-facing short-sha read; this exists for callers that must match
-// feed rows by full hash (the web goto-sha).
+// sha), so it is not an error — the CommitLookup convention. A git FAILURE is:
+// a repository git cannot read must not answer "unknown revision", which sends
+// an agent branching on the exit code after the wrong fault. Only real
+// failures reach the error, so this rides query (recorded), not queryQuiet.
+// CommitLookup stays the display-facing short-sha read; this exists for
+// callers that must match feed rows by full hash (the web goto-sha).
 func (s *Service) ResolveRev(ctx context.Context, rev string) (string, bool, error) {
-	sha, err := queryQuiet(ctx, s, "resolveRev:"+rev, func(ctx context.Context) (string, error) {
-		return s.repo.ResolveCommit(ctx, rev)
+	type hit struct {
+		sha   string
+		found bool
+	}
+	h, err := query(ctx, s, "resolveRev:"+rev, func(ctx context.Context) (hit, error) {
+		sha, found, err := s.repo.FindCommit(ctx, rev)
+		return hit{sha, found}, err
 	})
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", false, ctx.Err()
 		}
-		return "", false, nil
+		return "", false, err
 	}
-	return sha, true, nil
+	return h.sha, h.found, nil
 }
 
 // BranchVersions lists a branch's recorded pre-operation snapshots, newest

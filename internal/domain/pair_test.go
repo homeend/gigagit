@@ -184,7 +184,7 @@ func TestPairSummaryAndOpen(t *testing.T) {
 func TestPairSummaryCachedByShaPair(t *testing.T) {
 	t.Parallel()
 	f := gitexec.NewFakeRunner()
-	f.SetResponse("git rev-parse verify commit (resolve)", gitexec.Result{Stdout: "1111111111111111111111111111111111111111\n"})
+	f.SetResponse("git rev-parse verify commit (find)", gitexec.Result{Stdout: "1111111111111111111111111111111111111111\n"})
 	f.SetResponse("git diff (compare files)", gitexec.Result{Stdout: "M\x00a.txt\x00A\x00b.txt\x00"})
 	svc := New(&git.Repo{Runner: f})
 	ctx := context.Background()

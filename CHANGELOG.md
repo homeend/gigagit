@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A repository git cannot read is no longer "unknown revision"
+
+### Fixed
+
+- `domain.ResolveRev` folded every git failure into "not found", so a checkout
+  git could not read (an unreadable object store, a broken `HEAD`) answered as
+  if the revision were missing — `gg link resolve` said the repository "does not
+  contain commit <sha>" about a commit it holds. An agent branching on that was
+  sent after the wrong fault. A missing revision (an unknown name, a gc'd sha,
+  a blob, an empty string) is still a clean "not found"; a git failure is now
+  an error carrying git's own message, and is recorded in the failure log.
+  New git verb `FindCommit` (`rev-parse -q --verify`, exit 1 = not found).
+
 ## Pull-request text renders as markdown in the TUI
 
 The PR hub popup (description, conversation, verdicts, outdated threads) and

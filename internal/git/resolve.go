@@ -22,3 +22,21 @@ func (r *Repo) ResolveCommit(ctx context.Context, ref string) (string, error) {
 	}
 	return strings.TrimSpace(res.Stdout), nil
 }
+
+// FindCommit is ResolveCommit for a caller to whom "no such commit" is an
+// ANSWER, not a failure: found=false, nil when ref names nothing that peels to
+// a commit here. With -q, rev-parse keeps exit 1 for exactly that — an unknown
+// name, a gc'd sha, a blob, an empty string — and anything else (exit 128: a
+// repository git cannot read) is a real error, returned as one. Folding the
+// two together reports a broken checkout as "unknown revision".
+func (r *Repo) FindCommit(ctx context.Context, ref string) (sha string, found bool, err error) {
+	argv := gitcmd.New("rev-parse").Arg("-q", "--verify", ref+"^{commit}").ToArgv()
+	res, err := r.Runner.Run(ctx, "git rev-parse verify commit (find)", argv)
+	if err == nil {
+		return strings.TrimSpace(res.Stdout), true, nil
+	}
+	if res.ExitCode == 1 {
+		return "", false, nil
+	}
+	return "", false, err
+}
