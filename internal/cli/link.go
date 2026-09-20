@@ -113,6 +113,16 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 		if !tgt.Set.IsPair() {
 			prev = &model.LinkPreview{Source: tgt.Source, Target: tgt.Target}
 		}
+		// The ENTRY's own link says where it came from: ?preview=<id> reveals
+		// the saved row on landing. Only when the argument named a saved entry
+		// (a typed <target>...<source> names none), only for the entry itself
+		// (a file inside it lands on the file), and never over an explicit
+		// --bookmark/--shelf hint.
+		if arg == "" && hint.Kind == "" {
+			if id, ok := savedSetID(ctx, svc, *pf.spec); ok && model.LinkHintIDOK(id) {
+				hint = model.LinkHint{Kind: "preview", ID: id}
+			}
+		}
 	}
 	l, err := buildLink(ctx, svc, workdir, arg, linkOpts{
 		Cached: *cached, Rev: *rev, Ref: *ref, Pair: *pair, Preview: prev, Hint: hint,
@@ -576,4 +586,21 @@ func resolveLinkArg(ctx context.Context, svc *domain.Service, s string, allow li
 // registry, the cwd's service, and the steer-presence probe.
 func linkResolveOpts(statePath string, svc *domain.Service) domain.ResolveOpts {
 	return linknav.Opts(statePath, svc)
+}
+
+// savedSetID is the id of the saved merge preview or commit pair spec names
+// by id or label — the same precedence NoteScopeResolve gives the two (a
+// preview wins a shared label). A typed range names no entry.
+func savedSetID(ctx context.Context, svc *domain.Service, spec string) (string, bool) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" || strings.Contains(spec, "..") {
+		return "", false
+	}
+	if p, err := svc.PreviewGet(ctx, spec); err == nil {
+		return p.ID, true
+	}
+	if p, err := svc.PairGet(ctx, spec); err == nil {
+		return p.ID, true
+	}
+	return "", false
 }

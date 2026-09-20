@@ -174,6 +174,19 @@ func TestPairRowCopiesTheBareFullShaPairLink(t *testing.T) {
 	}
 }
 
+// The ROW's copy carries the landing hint on top of that stored text; the
+// bare builder above stays what the store and `gg compare --list` spell.
+func TestPairRowCopyCarriesThePreviewHint(t *testing.T) {
+	t.Parallel()
+	m, p := savedPairModel(t)
+	m = m.activateTab(panelPreviews)
+	m.sel[panelPreviews] = 1
+	got, ok := m.contextLinkText()
+	if !ok || !strings.HasSuffix(got, "@"+p.A+".."+p.B+"?preview="+p.ID) {
+		t.Fatalf("pair row link = %q,%v; want the pair link + ?preview=%s", got, ok, p.ID)
+	}
+}
+
 // previewRow.rec is ZERO on a pair row, so a consumer that reads it directly
 // hands empty branch names to a merge-preview path. Every reader outside the
 // row's own file must go through merge(), whose ok forces the question.

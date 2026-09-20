@@ -897,6 +897,26 @@ a comparison that is not on screen, stays silent on error, and drops an answer
 whose `state.compare` identity changed meanwhile. The pair file menu's rev rows
 use `hereRev = rev || pairCtx().b` and are withheld from a `right_spec` row;
 the link contributor still receives the comparison's own (empty) rev.
+**`?preview=<id>` — a saved Previews entry (merge preview OR commit pair).**
+One kind for both set-shaped entries; a two-link comparison has no single link
+and never carries it. Producers are ENTRY-level only: the TUI Previews row
+copy (`withPreviewHint` in `tui/link.go`), the web rows (the pair row's
+server-built `link` in `web/savedcompares.go`, the merge row in `links.js`)
+and `gg link --preview <id|label>` with no path (`savedSetID`; a typed range
+— including one that spells a pair's default `<a7>..<b7>` label — names no
+entry). A file or line copied inside an open preview stays bare. The store
+keeps the bare text. Consumers look the entry up AFTER the address landed —
+by id, else by the entry naming the same set (previews: source + target
+names; pairs: the two full shas), else a notice — because the id hashes link
+TEXT, which spells the repository by name on one machine and by path on
+another. TUI: `revealSavedSet` (no load to wait for — Previews is a startup
+source); under an open files view it moves the tab + cursor and re-points
+`filesReturnFocus`, never the keyboard. Web: `previews.js revealSavedSet`,
+routed by `live.js revealHint`, one re-fetch before a miss is believed.
+Address-less is refused in `finishLink` by name. Both steer validators ask
+`model.LinkHintKindOK` instead of retyping the set. `DescribeLink` reads the
+hinted link as `preview: <label>` / `pair: <label>` when saved, else falls
+through to the address arms.
 
 **Presence is checked in two layers, deliberately.** `domain.Resolved` is a
 value with no notice channel, so it cannot report a degraded hint. A link

@@ -28,6 +28,46 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (and `branches_watch` or an interval for ref moves). Known limit: a file
   that was already listed and whose bytes changed again keeps its row, so an
   open diff of it is refreshed by re-opening it.
+## `?preview=<id>` — a link copied off a saved Previews entry reveals its row
+
+### Added
+
+- A fourth landing hint, `?preview=<id>`, for the two set-shaped saved entries:
+  a merge preview (`gg://r@main...feat/x?preview=<id>`) and a commit pair
+  (`gg://r@<a>..<b>?preview=<id>`). It never changes what the link addresses;
+  after the usual landing the consumer reveals the saved row — looked up **by
+  id, else by the entry holding the same set, else a notice** ("preview <id>
+  is not saved here; the link still landed"). The id is a lookup key, never a
+  checksum: it hashes link text, which spells the repository differently on
+  another machine. A `?preview=` hint with no address is refused by name.
+- Producers, entry-level only: the TUI Previews tab's row copy, `gg web`'s
+  "copy gg link" on a merge-preview or pair row, and `gg link --preview
+  <id|label>` with no path. A typed `<target>...<source>` / `<a>..<b>` and a
+  file or line inside a preview stay bare; a two-link comparison has no
+  single link and never carries the hint.
+- TUI: the Previews tab is left on the revealed row underneath the landed
+  view, and closing that view returns the keyboard to it. Web: the row is
+  scrolled into view and flashed (the collapsed Previews section opens).
+- A hinted link describes as the saved entry's label (`preview: <label>`,
+  `pair: <label>`) in `gg links` and the copied-link ring; unsaved, it reads
+  as its address does today.
+
+### Changed
+
+- Both steer validators (TUI inbox, `gg web` endpoint) ask
+  `model.LinkHintKindOK` rather than retyping the closed set. Embedded
+  using-gg skill v90.
+## Command palette: type to filter
+
+### Changed
+
+- TUI command palette (`ctrl+p`): just start typing to narrow the commands,
+  exactly like the `.` action menu — a case-insensitive substring match on the
+  label, the query shown next to the title, `(no match)` when nothing fits.
+  `↑`/`↓`/`pgup`/`pgdn` move within the filtered rows, `enter` runs the
+  selected one, `backspace` trims the query, and the first `esc` clears the
+  filter (the next one closes). `j`/`k` are filter text now, so they no longer
+  move the selection.
 
 ## `}` / `{` reach a note that sits behind the freshly opened cursor
 

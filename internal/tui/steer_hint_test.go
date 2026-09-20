@@ -505,7 +505,7 @@ func TestSteerEnumRefusalRejectsAnUnknownHintKind(t *testing.T) {
 	if got := steerEnumRefusal(steer.Command{HintKind: "bookmark", HintID: ""}); got == "" {
 		t.Error("a hint kind with no id must be refused")
 	}
-	for _, kind := range []string{"bookmark", "shelf", "stash"} {
+	for _, kind := range []string{"bookmark", "shelf", "stash", "preview"} {
 		if got := steerEnumRefusal(steer.Command{HintKind: kind, HintID: "1"}); got != "" {
 			t.Errorf("kind %q must be accepted by the enum gate, got refusal %q", kind, got)
 		}

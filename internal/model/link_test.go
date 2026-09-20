@@ -443,6 +443,11 @@ func TestLinkHintRoundTrip(t *testing.T) {
 		"gg://gigagit/internal/a.go@abc1234def:42?bookmark=b1",
 		"gg://gigagit/internal/a.go@abc1234def#3?shelf=s1",
 		"gg://gigagit@9c1f2a3456?stash=0",
+		// ?preview= names a SAVED entry of the Previews surface — a merge
+		// preview or a commit pair — in the name form and the local form.
+		"gg://gigagit@main...feat/x?preview=1a2b3c4d",
+		"gg://gigagit@abc1234def..9c1f2a3456?preview=1a2b3c4d",
+		"gg:///mnt/t/repo@main...feat/x?preview=1a2b3c4d",
 	} {
 		t.Run(s, func(t *testing.T) {
 			t.Parallel()

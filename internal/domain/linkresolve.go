@@ -532,6 +532,11 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 			if _, err := opts.OpenFn(c.checkout).ShelfFind(ctx, l.Hint.ID); err != nil {
 				return Resolved{}, fmt.Errorf("%w: %s has no %s %q, and the link names nothing else", model.ErrLink, c.checkout, l.Hint.Kind, l.Hint.ID)
 			}
+		case "preview":
+			// A saved preview or pair IS its address — the hint only says
+			// where it was copied from — so without one the link names
+			// nothing, whether or not this store holds the id.
+			return Resolved{}, fmt.Errorf("%w: a preview hint needs the set it names (@<target>...<source> or @<a>..<b>); %q alone names nothing", model.ErrLink, l.Hint.ID)
 		default:
 			// "stash" (spec §3.4) and any future kind this build cannot
 			// check: there is no presence lookup to fall back on, so an

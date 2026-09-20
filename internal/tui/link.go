@@ -136,6 +136,25 @@ func (m Model) previewLinkFor(source, target, path string, line int) (string, bo
 	return l.String(), true
 }
 
+// withPreviewHint decorates a SAVED Previews row's link with its landing hint,
+// ?preview=<id>: the same address, plus "reveal this row". Only the row's own
+// copy wears it — a file or line copied from inside an open preview lands on
+// the line, and the store keeps the bare text. An id the grammar cannot carry
+// degrades to the bare link rather than refusing the copy.
+func withPreviewHint(id string) func(string, bool) (string, bool) {
+	return func(text string, ok bool) (string, bool) {
+		if !ok || !model.LinkHintIDOK(id) {
+			return text, ok
+		}
+		l, err := model.ParseLink(text)
+		if err != nil {
+			return text, ok
+		}
+		l.Hint = model.LinkHint{Kind: "preview", ID: id}
+		return l.String(), true
+	}
+}
+
 // refLinkFor builds the gg:// address of a branch or tag TIP: `@ref:<name>`.
 // The NAME rides the link and the consumer re-resolves it (plan 1b ruling R2)
 // — a ref link follows its branch, which is the whole point of copying one
@@ -241,9 +260,9 @@ func (m Model) contextLinkText() (string, bool) {
 				return "", false
 			}
 			if rec, isMerge := r.merge(); isMerge {
-				return m.previewLinkFor(rec.Source, rec.Target, "", 0)
+				return withPreviewHint(r.id())(m.previewLinkFor(rec.Source, rec.Target, "", 0))
 			}
-			return m.pairLinkFor(r.pair.A, r.pair.B)
+			return withPreviewHint(r.id())(m.pairLinkFor(r.pair.A, r.pair.B))
 		}
 	}
 	if !m.inContentWindow() {

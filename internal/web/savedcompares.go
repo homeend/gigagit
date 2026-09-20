@@ -221,7 +221,7 @@ func (s *Server) handleSavedCompares(w http.ResponseWriter, r *http.Request) {
 	rows := make([]savedCompareRow, 0, len(all))
 	for _, p := range pairs {
 		row := pairRow(p)
-		row.Link = linkOf[p.ID]
+		row.Link = withPreviewHint(linkOf[p.ID], p.ID)
 		row.Desc = describeLinkText(r, svc, row.Link)
 		// One pair's transient git failure must not blank the list.
 		if sum, err := svc.PairSummary(ctx, p.A, p.B); err != nil {
@@ -291,4 +291,16 @@ func (s *Server) handleSavedCompareRemove(w http.ResponseWriter, r *http.Request
 	}
 	s.emitPreviews()
 	writeJSON(w, map[string]any{"ok": true})
+}
+
+// withPreviewHint is a saved set's link as its ROW copies it: the stored text
+// plus ?preview=<id>, the landing that reveals the row again. The store keeps
+// the bare text; an id or text the grammar cannot carry degrades to it.
+func withPreviewHint(text, id string) string {
+	l, err := model.ParseLink(text)
+	if err != nil || !model.LinkHintIDOK(id) {
+		return text
+	}
+	l.Hint = model.LinkHint{Kind: "preview", ID: id}
+	return l.String()
 }
