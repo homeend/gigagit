@@ -32,6 +32,25 @@ when the reviewer lands.
 - Two TYPED links never arm the note scope, even when they spell a pair (the
   TUI's rule). A row whose bytes are not at `b` — a `-u` stash's untracked file
   — has no note lane.
+## Wrap mode wraps on words
+
+`ctrl+w`'s **wrap** display mode used to fill every line to its last column and
+break wherever that fell — `https://exampl` / `e.com/spec`. It now breaks at
+spaces, in every window that can wrap (panels, popups, the help window, commit
+messages, the stash list, the PR hub…):
+
+- A line ends after the last space that fits; only a word wider than the line
+  is split. Nothing is dropped or re-spaced, so colours and search hits land
+  exactly where they did.
+- A **numbered** item (`1. `, `12) `) now hangs under its text like a bullet or
+  a quote bar does, instead of under its number.
+- **Code views keep the column-exact wrap** — blame, the file preview and
+  *View content*: there a line's columns are its meaning.
+- In the **PR hub**, code lines, tables and an outdated thread's hunk are no
+  longer reflowed in wrap mode: they are cut with `…` (scroll mode shows them
+  whole), so a table keeps its columns.
+- The label a review thread is summarised by when it opens with a block —
+  `suggestion`, `code`, `quote`, `table` — is now translated in the TUI.
 
 ## Pull-request text renders as markdown in the TUI
 
