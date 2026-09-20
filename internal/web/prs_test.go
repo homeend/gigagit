@@ -32,6 +32,7 @@ type fakeForge struct {
 	comments     []model.ForgeComment
 	commentsErr  error
 	commentCalls int
+	prReads      int
 }
 
 func (f *fakeForge) Name() string { return "fake" }
@@ -59,6 +60,7 @@ func (f *fakeForge) ListOpen(ctx context.Context) ([]model.PullRequest, error) {
 func (f *fakeForge) PR(_ context.Context, n int) (model.PullRequest, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.prReads++
 	for _, p := range f.open {
 		if p.Number == n {
 			return p, nil
@@ -305,4 +307,10 @@ func (f *fakeForgeServer) calls() int {
 	f.ff.mu.Lock()
 	defer f.ff.mu.Unlock()
 	return f.ff.commentCalls
+}
+
+func (f *fakeForgeServer) prCalls() int {
+	f.ff.mu.Lock()
+	defer f.ff.mu.Unlock()
+	return f.ff.prReads
 }

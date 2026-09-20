@@ -225,7 +225,16 @@ func (s *Service) PullRequest(ctx context.Context, n int) (model.PullRequest, er
 	if err != nil {
 		return model.PullRequest{}, err
 	}
-	return p.PR(ctx, n)
+	pr, err := p.PR(ctx, n)
+	if err != nil {
+		return model.PullRequest{}, err
+	}
+	// A full read (it carries the body) feeds the cache: the details view is
+	// served from it the next time, before the forge answers.
+	s.forgeMu.Lock()
+	s.putPRLocked(pr, true)
+	s.forgeMu.Unlock()
+	return pr, nil
 }
 
 // PRComments is one PR's comments, bucketed by where a frontend shows them.

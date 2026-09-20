@@ -2108,3 +2108,11 @@ under it would otherwise block every later PR diff from fetching.
   on a preview; the sidebar is not on screen while a file's diff is open, so
   test a sidebar row's menu before opening a file; wrap the whole script in
   try/catch so an abort prints as a FAIL instead of an empty result table.
+- **Details, stale-first (follow-up):** `openPRDetails` pushes the layer
+  BEFORE any request (loading line inside), then `GET /api/pr/details`
+  (cache-only: `domain.PRDetailsCached` = a FULL cached PR + a comments entry,
+  `{cached:false}` otherwise; `PullRequest` now `putPRLocked(pr, true)`), then
+  the POST. `showing` guards a slow answer against repainting another PR's
+  overlay; a refresh keeps `scrollTop`. Fixture note: a listed row overwrites
+  the cached TITLE (the body survives), so list/view fixtures that disagree
+  show the list's title until the POST lands.

@@ -83,6 +83,15 @@ func TestPRThreadEndpointsOnThePage(t *testing.T) {
 	if !strings.Contains(prs, `postJSON("/api/pr/comments/refresh?n="`) {
 		t.Error("prs.js must POST the comment refresh")
 	}
+	// Stale-first: the overlay is pushed BEFORE any request, and asks for the
+	// cached copy (a GET) before the fresh one.
+	push, get, post := strings.Index(det, `pushLayer("prdetails"`), strings.Index(det, `getJSON("/api/pr/details?n="`), strings.Index(det, `postJSON("/api/pr/details?n="`)
+	if push < 0 || get < push || post < get {
+		t.Errorf("prdetails.js: want pushLayer < cached GET < fresh POST, got %d %d %d", push, get, post)
+	}
+	if !regexp.MustCompile(`#prdetails-status\.hidden\s*\{\s*display:\s*none`).MatchString(readStatic(t, "style.css")) {
+		t.Error("style.css: no #prdetails-status.hidden rule")
+	}
 	if !strings.Contains(det, `postJSON("/api/pr/details?n="`) {
 		t.Error("prdetails.js must POST the details load (R2: a GET never calls the forge)")
 	}
@@ -90,5 +99,20 @@ func TestPRThreadEndpointsOnThePage(t *testing.T) {
 		if strings.Contains(det, bad) || strings.Contains(prs, bad) {
 			t.Errorf("a PR module mentions %q — the pair never travels back to the server", bad)
 		}
+	}
+}
+
+// The files title is one elided line; a PR's never fits. It must offer the
+// whole text on hover, and the bar's file count must never be the part that
+// elides ("all…" told nobody anything).
+func TestPRHeaderIsReadable(t *testing.T) {
+	t.Parallel()
+	files, css := readStatic(t, "files.js"), readStatic(t, "style.css")
+	if !regexp.MustCompile(`\$\("files-title"\)\.addEventListener\("mouseenter"`).MatchString(files) ||
+		!strings.Contains(files, "el.scrollWidth > el.clientWidth ? el.textContent") {
+		t.Error("files.js: a cut #files-title must show its full text as a tooltip")
+	}
+	if !regexp.MustCompile(`#compare-bar button\.cmpall \{[^}]*flex: none`).MatchString(css) || !strings.Contains(files, `class="on cmpall"`) {
+		t.Error("the preview bar's file count must not shrink")
 	}
 }

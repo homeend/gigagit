@@ -7,9 +7,8 @@
 // spends a forge call, and a GET never does (R2). It is the overlay's own,
 // explicit load — nothing else triggers it.
 
-import { $, esc, postJSON, runOnce, state } from "./core.js";
+import { $, esc, getJSON, postJSON, runOnce, state } from "./core.js";
 import { closeLayer, copyText, pushLayer } from "./layers.js";
-import { opLine } from "./ops.js";
 import { registerHelp } from "./menus.js";
 import { noteAge } from "./notebox.js";
 
@@ -66,45 +65,80 @@ function render(d) {
     (d.truncated ? `<div class="prd-none">…the forge returned more comments than gg reads (the newest are missing)</div>` : "");
   const copy = $("prdetails-copy");
   if (copy) copy.addEventListener("click", () => copyText(pr.url, "pull request URL"));
-  $("prdetails-body").scrollTop = 0;
 }
 
+// status is the line under the title: what the overlay is doing right now
+// (spinning), or why what it shows is not fresh (err).
+function status(text, kind) {
+  const el = $("prdetails-status");
+  el.textContent = text || "";
+  el.className = text ? kind || "busy" : "hidden";
+}
+
+function onKey(e) {
+  const body = $("prdetails-body");
+  const page = Math.max(40, body.clientHeight - 40);
+  if (e.key === "Escape" || e.key === "q") close();
+  else if (e.key === "j" || e.key === "ArrowDown") body.scrollTop += 40;
+  else if (e.key === "k" || e.key === "ArrowUp") body.scrollTop -= 40;
+  else if (e.key === "PageDown" || e.key === " ") body.scrollTop += page;
+  else if (e.key === "PageUp") body.scrollTop -= page;
+  else if (e.key === "g") body.scrollTop = 0;
+  else if (e.key === "G") body.scrollTop = body.scrollHeight;
+  else if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "a")) return true; // copying text stays the browser's
+  e.preventDefault();
+  return true; // the overlay owns the keyboard until closed
+}
+
+// showing is the PR the overlay is open on (0 = closed): a slow answer for a
+// PR the reader has already left must not repaint someone else's overlay.
+let showing = 0;
+
 function close() {
+  showing = 0;
   closeLayer("prdetails");
 }
 
-// openPRDetails reads PR n's details and shows them. A failed read opens
-// nothing: an empty overlay would say "this PR has no description".
+// openPRDetails shows the overlay AT ONCE, then fills it:
+//   1. a loading line (the forge takes seconds; a click must answer now);
+//   2. what the server has cached from an earlier look — a GET, no forge call;
+//   3. the fresh read (the POST), which replaces it and clears the notice.
+// A failed fresh read keeps the cached copy on screen and says so.
 export function openPRDetails(n) {
+  const pr = (state.prs || []).find((p) => p.number === n);
+  showing = n;
+  $("prdetails-title").textContent = "#" + n + (pr && pr.title ? " · " + pr.title : "");
+  $("prdetails-body").innerHTML = `<div class="prd-loading"><span class="prd-spin">⟳</span> reading pull request #${n} from the forge…</div>`;
+  status("");
+  pushLayer("prdetails", $("prdetails"), { onKey });
   const run = runOnce("pr-details", async () => {
-    opLine("⟳ reading pull request #" + n + "…");
-    let d;
+    let have = false;
     try {
-      d = await postJSON("/api/pr/details?n=" + n, {});
-    } catch (err) {
-      opLine("pull request #" + n + ": " + (err.message || err), true);
-      return;
+      const c = await getJSON("/api/pr/details?n=" + n);
+      if (showing !== n) return;
+      if (c.cached) {
+        render(c);
+        have = true;
+        status("⟳ checking the forge for changes…");
+      }
+    } catch {
+      // no cached copy is not an error: the fresh read below is the real one
     }
-    opLine("");
-    render(d);
-    pushLayer("prdetails", $("prdetails"), {
-      onKey: (e) => {
-        const body = $("prdetails-body");
-        const page = Math.max(40, body.clientHeight - 40);
-        if (e.key === "Escape" || e.key === "q") close();
-        else if (e.key === "j" || e.key === "ArrowDown") body.scrollTop += 40;
-        else if (e.key === "k" || e.key === "ArrowUp") body.scrollTop -= 40;
-        else if (e.key === "PageDown" || e.key === " ") body.scrollTop += page;
-        else if (e.key === "PageUp") body.scrollTop -= page;
-        else if (e.key === "g") body.scrollTop = 0;
-        else if (e.key === "G") body.scrollTop = body.scrollHeight;
-        else if ((e.ctrlKey || e.metaKey) && (e.key === "c" || e.key === "a")) return true; // copying text stays the browser's
-        e.preventDefault();
-        return true; // the overlay owns the keyboard until closed
-      },
-    });
+    try {
+      const d = await postJSON("/api/pr/details?n=" + n, {});
+      if (showing !== n) return;
+      const at = $("prdetails-body").scrollTop;
+      render(d);
+      if (have) $("prdetails-body").scrollTop = at; // a refresh must not yank the reader back up
+      status("");
+    } catch (err) {
+      if (showing !== n) return;
+      const why = err.message || String(err);
+      if (have) status("could not reach the forge — showing the last copy (" + why + ")", "err");
+      else $("prdetails-body").innerHTML = `<div class="prd-loading err">${esc(why)}</div>`;
+    }
   });
-  if (!run) opLine("pull request details are already loading…");
+  if (!run) status("⟳ still reading…");
 }
 
 $("prdetails").addEventListener("click", close); // the backdrop

@@ -337,6 +337,16 @@ $("files-title").addEventListener("mouseenter", (e) => {
 // subject. Stages with no single commit behind them (the working tree, a
 // comparison, a preview) keep writing plain text through files-title and
 // enterFilesStage clears the sha, so their header offers nothing.
+// The title is one elided line (a pull request's is "PR #n · title (source →
+// target)" — far wider than the files pane). Hovering a CUT title shows it
+// whole; a title that fits gets no tooltip. Done on hover, for every mode's
+// title at once, so no writer of #files-title has to remember it.
+$("files-title").addEventListener("mouseenter", (e) => {
+  const el = e.currentTarget;
+  el.title = el.scrollWidth > el.clientWidth ? el.textContent : "";
+});
+
+
 function setCommitTitle(hash, short, subject) {
   const el = $("files-title");
   el.dataset.sha = hash || "";
@@ -603,7 +613,7 @@ function renderCompareBar() {
   // says what is showing instead.
   if (c.previewBar) {
     bar.innerHTML =
-      `<button class="on" disabled>all (${c.all.length})</button>` +
+      `<button class="on cmpall" disabled title="all ${c.all.length} changed files — a merge preview / pull request has no per-side filter">all (${c.all.length})</button>` +
       // A pull request also offers what its diff cannot hold (prdetails.js
       // owns the click). Ahead of the note: that text elides, the chip must not.
       (c.previewPR ? `<button id="pr-details-chip" title="description, conversation, outdated review threads">details</button>` : "") +

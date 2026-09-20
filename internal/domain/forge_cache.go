@@ -72,6 +72,22 @@ func (s *Service) takePRLocked(n int) (forgePREntry, bool) {
 	return e, ok
 }
 
+// PRDetailsCached is what a details view can show BEFORE the forge answers:
+// PR n with its body and its comments, as the last reads left them. ok is
+// false until both were read once (a listed row has no body; half a view is
+// not a cached view). It never calls the forge, and counts as a use — a PR
+// whose details are being looked at is not idle.
+func (s *Service) PRDetailsCached(n int) (model.PullRequest, PRComments, bool) {
+	s.forgeMu.Lock()
+	defer s.forgeMu.Unlock()
+	e, ok := s.takePRLocked(n)
+	c, had := s.forgeComments[n]
+	if !ok || !e.full || !had {
+		return model.PullRequest{}, PRComments{}, false
+	}
+	return e.pr, c.c, true
+}
+
 // cachedPR is PR n from the cache, else from the forge (and then cached).
 func (s *Service) cachedPR(ctx context.Context, p forge.Provider, n int) (model.PullRequest, error) {
 	s.forgeMu.Lock()

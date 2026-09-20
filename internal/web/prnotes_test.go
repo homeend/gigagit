@@ -1,7 +1,6 @@
 package web
 
 import (
-	"net/http"
 	"testing"
 	"time"
 
@@ -149,14 +148,39 @@ func TestPRForgePostsAreWriteGuarded(t *testing.T) {
 			t.Errorf("non-JSON %s = %d, want 415", path, code)
 		}
 	}
-	// R2: the details read spends forge calls, so it is never a GET.
-	resp, err := http.Get(ts.URL + "/api/pr/details?n=7")
-	if err != nil {
-		t.Fatal(err)
+}
+
+// The details overlay opens at once on what the server already holds: the GET
+// is cache-only (R2 — it never calls the forge), says cached:false until a
+// POST has read the PR, and afterwards answers the POST's own shape.
+func TestPRDetailsGetIsCacheOnly(t *testing.T) {
+	fs, _ := prNotesServer(t)
+	type details struct {
+		Cached   bool                 `json:"cached"`
+		PR       model.PullRequest    `json:"pr"`
+		Hub      []model.ForgeComment `json:"hub"`
+		Outdated []model.ForgeComment `json:"outdated"`
 	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusMethodNotAllowed {
-		t.Errorf("GET details = %d, want 405", resp.StatusCode)
+	var cold details
+	if code := getJSON(t, fs.ts, "/api/pr/details?n=7", &cold); code != 200 || cold.Cached {
+		t.Fatalf("before any forge read: %d %+v", code, cold)
+	}
+	if code := postJSON(t, fs.ts, "/api/pr/details?n=7", "{}", "application/json", "", nil); code != 200 {
+		t.Fatalf("details POST = %d", code)
+	}
+	calls, prCalls := fs.calls(), fs.prCalls()
+	var warm details
+	if code := getJSON(t, fs.ts, "/api/pr/details?n=7", &warm); code != 200 {
+		t.Fatalf("details GET = %d", code)
+	}
+	if !warm.Cached || warm.PR.Body != "the description" || len(warm.Hub) != 1 || len(warm.Outdated) != 1 {
+		t.Fatalf("warm = %+v", warm)
+	}
+	if fs.calls() != calls || fs.prCalls() != prCalls {
+		t.Fatal("the details GET called the forge")
+	}
+	if code := getJSON(t, fs.ts, "/api/pr/details?n=99", nil); code != 404 {
+		t.Errorf("unknown PR = %d, want 404", code)
 	}
 }
 
