@@ -143,7 +143,7 @@ func TestServerToolRosterAndAnnotations(t *testing.T) {
 		"gg_shelf_commit_files": true, "gg_shelf_read": true,
 		"gg_compare_trees": true, "gg_compare_file": true,
 		"gg_notes_list":   true,
-		"gg_link_resolve": true, "gg_link_list": true, "gg_compare_links": true,
+		"gg_link_resolve": true, "gg_link_list": true, "gg_compare_links": true, "gg_compare_list": true,
 		// non-read-only:
 		"gg_export": false, "gg_cherry_pick": false, "gg_write_to_worktree": false,
 		"gg_note_add": false, "gg_notes_apply": false, "gg_note_rm": false,

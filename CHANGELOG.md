@@ -21,6 +21,18 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   walk ends where it ends and arms the file step as before; it never wraps.
   `gg session navigate --next-comment|--prev-comment` shares the rule. `gg web`
   already wrapped and is unchanged.
+## MCP: `gg_compare_list` — an agent can find a saved preview, pair or comparison
+
+### Added
+
+- `gg_compare_list {}` (read-only): the saved comparisons `gg compare --list`
+  prints, one row each with `id`, `label`, `kind` (`preview` / `pair` /
+  `comparison`), the entry's `gg://` link(s) and their descriptions, and
+  `created`. Until now the MCP surface could only USE a saved entry it had
+  been handed — the note tools' `preview` argument takes a preview's or
+  pair's id or label, `gg_compare_links` takes a comparison's two links — and
+  had no way to enumerate them (`gg_link_list` is the copied-link ring, not
+  the saved store). Embedded using-gg skill v89.
 
 ## `gg compare --patch` renders any comparison the listing answers
 
