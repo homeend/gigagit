@@ -101,6 +101,7 @@ func TestPaletteRegistryOrder(t *testing.T) {
 		{"Open repo", ""},
 		{"Open shell", "ctrl+o"},
 		{"Run shell command…", ""},
+		{"Search pull requests…", "A"},
 		{"Set up agent skills (using-gg)", ""},
 		{"Show commit", "#"},
 	}

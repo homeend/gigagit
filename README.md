@@ -385,12 +385,25 @@ submitted.
 
 ```bash
 gg pr list [--json]           # open PRs, newest-updated first; known closed/merged ones stay, marked
+gg pr list --state merged --search "login author:kim"   # SEARCH the forge: any state (all|open|closed|merged,
+                              # default all), GitHub search syntax, 50 newest-updated (--limit 1…200);
+                              # --search 123 (or '#123') looks that PR up directly
 gg pr view 123 [--json]       # description, conversation + review verdicts, outdated inline threads
 gg pr comments 123 [--json]   # inline / file-level threads that still have a position
 gg pr fetch 123               # PR head (forks too) → private ref refs/gg/pr/123; prints the ref
 gg diff main...refs/gg/pr/123 # read the change
 gg pr forget 123              # drop the ref (and a closed PR's row)
 ```
+
+The plain list holds the open pull requests (plus the ones gg already knows).
+A closed or merged PR you never fetched is found by **searching**: in the TUI
+`A` on the Pull requests tab opens a search popup — type text (it goes to the
+forge's own search, so `author:kim` or `head:fix/login` work), `tab` cycles
+*all / closed / merged / open*, `enter` searches; a bare number opens that PR.
+The result rows act like rows of the tab (`enter` diff, `i` details, `y` copy
+URL), closing a diff or the details returns to the results, and the last search
+is kept for the session. Results are a transient set: a found PR joins the tab
+once you open it (its fetched ref makes it known), until you forget it (`d`).
 
 In the TUI the same data is a **Pull requests** tab — the fifth tab of the
 top-left box (`PR` in its header), present only when a usable `gh` was found at

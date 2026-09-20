@@ -143,3 +143,61 @@ func TestPRForgetWithoutARefIsANoOp(t *testing.T) {
 		t.Errorf("exit %d, stdout %q, stderr %q", code, out, errs)
 	}
 }
+
+func TestPRListSearch(t *testing.T) {
+	dir := prRepo(t, "pr-list.json", "pr-search.json")
+	// The plain list is untouched: open pull requests only.
+	out, _, _ := runPR(t, dir, "list")
+	if strings.Contains(out, "#5") || strings.Contains(out, "#3") {
+		t.Fatalf("plain list shows search rows:\n%s", out)
+	}
+	for _, args := range [][]string{
+		{"list", "--state", "all"},
+		{"list", "--state=closed"},
+		{"list", "--search", "-label:bug"}, // a value that starts with a dash
+		{"list", "--search=login", "--limit=50"},
+		{"--limit", "3", "list"},
+	} {
+		out, errs, code := runPR(t, dir, args...)
+		if code != 0 {
+			t.Fatalf("%v: exit %d: %s", args, code, errs)
+		}
+		for _, want := range []string{"#5", "merged", "Fix login redirect", "#3", "closed", "#7"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("%v: output lacks %q:\n%s", args, want, out)
+			}
+		}
+		if strings.Contains(errs, "more results") {
+			t.Errorf("%v: three rows fit, yet stderr says %q", args, errs)
+		}
+	}
+	// The forge had a row beyond the limit: said on STDERR, never in the rows.
+	out, errs, code := runPR(t, dir, "list", "--state", "all", "--limit", "2")
+	if code != 0 || !strings.Contains(errs, "more results — narrow the search") || strings.Contains(out, "more results") {
+		t.Errorf("limit 2: code=%d stdout=%q stderr=%q", code, out, errs)
+	}
+	if n := strings.Count(out, "\n"); n != 2 {
+		t.Errorf("limit 2 printed %d rows:\n%s", n, out)
+	}
+	out, _, _ = runPR(t, dir, "list", "--state", "all", "--json")
+	var prs []map[string]any
+	if err := json.Unmarshal([]byte(out), &prs); err != nil || len(prs) != 3 {
+		t.Errorf("json = %s (%v)", out, err)
+	}
+}
+
+func TestPRListSearchUsage(t *testing.T) {
+	dir := prRepo(t, "pr-list.json", "pr-search.json")
+	for _, args := range [][]string{
+		{"list", "--state", "draft"},
+		{"list", "--limit", "0"},
+		{"list", "--limit", "201"},
+		{"list", "--limit", "many"},
+		{"list", "--search"}, // no value
+		{"view", "7", "--state", "all"},
+	} {
+		if _, errs, code := runPR(t, dir, args...); code != 2 {
+			t.Errorf("%v: exit %d, want 2 (%s)", args, code, errs)
+		}
+	}
+}

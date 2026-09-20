@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v87 -->
+<!-- gg:using-gg:v88 -->
 
 # Using gg (gigagit)
 
@@ -480,6 +480,16 @@ finds the right one here.
   fork head prints `owner:branch`. PRs gg already knows stay listed after they
   close, marked `closed`/`merged` (or `unavailable` when the forge no longer
   answers): known = listed open earlier in this process, or fetched.
+  `gg pr list --state all|open|closed|merged --search <text> --limit <n>`
+  (any one of the three flags) SEARCHES the forge instead — the way to a
+  closed/merged PR gg never fetched. Same row format and the same bare JSON
+  array; state defaults to `all`, limit to 50 (1…200), newest-updated first.
+  `<text>` is the forge's own search syntax (`author:kim`, `head:fix/x`,
+  `-label:bug` — a value may start with a dash; `--search=<text>` works too);
+  a text that is only a number (`123`, `#123`) looks that PR up directly and
+  ignores `--state` (unknown number = empty list, exit 0). When the forge has
+  more rows than the limit, `more results — narrow the search` goes to STDERR.
+  A bad state or limit exits 2. Search results never join the plain list.
   `gg pr view <n> [--json]` prints the row, the URL, the description, then
   `── conversation ──` (general comments and review verdicts, oldest first,
   `carol [changes_requested]: …`) and `── outdated ──` (inline threads whose

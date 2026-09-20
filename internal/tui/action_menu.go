@@ -473,6 +473,8 @@ func actionMenuLabel(id string) (string, bool) {
 		return i18n.T("Pull request details…"), true
 	case "pr-copy":
 		return i18n.T("Copy pull request URL"), true
+	case "pr-search":
+		return i18n.T("Search pull requests…"), true
 	case "pr-forget":
 		return i18n.T("Forget pull request"), true
 	case "checkout-remote":

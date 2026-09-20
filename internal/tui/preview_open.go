@@ -167,7 +167,15 @@ func (m Model) handlePreviewOpenMsg(msg previewOpenMsg) (Model, tea.Cmd) {
 	// origin-filtered), which a preview must never inherit.
 	m.compareTag = ""
 	var cmd tea.Cmd
-	m, cmd = m.openCompareFiles(msg.eps.Left, msg.eps.Right)
+	open := func(m Model) (Model, tea.Cmd) { return m.openCompareFiles(msg.eps.Left, msg.eps.Right) }
+	if layerOf[*prSearchPopup](m) != nil {
+		// Opened from the search popup: park it, so closing the diff comes
+		// back to the results. ONLY that popup parks — a moved-tip re-open
+		// under a hub or a note popup must not hide what the user is reading.
+		m, cmd = m.handOffToFilesView(open)
+	} else {
+		m, cmd = open(m)
+	}
 	m.filesTitle = previewTitle(msg.source, msg.target)
 	if msg.title != "" {
 		m.filesTitle = msg.title

@@ -46,6 +46,40 @@ a side that names a file set, and a reversed live pair.
   into domain, behind `domain.ComparePatchSets`, and `FileSet.Narrowed` is no
   longer exported — a frontend offering a patch can no longer forget the rule.
   (The entry above then turned the refusal into a render.)
+
+## Pull-request search: closed and merged PRs can be found (CLI + TUI)
+
+### Added
+
+- **`gg pr list --state all|open|closed|merged --search <text> --limit <n>`** —
+  any of the three flags turns the listing into a forge search of ANY state
+  (default `all`, 50 rows, 1…200, newest-updated first). The text is the
+  forge's own search syntax, handed over unparsed (`author:kim`,
+  `head:fix/login`, `-label:bug`); a text that is only a number (`123`, `#123`)
+  looks that pull request up directly. When the forge has more than the limit,
+  `more results — narrow the search` goes to stderr; `--json` stays a bare
+  array. The plain `gg pr list` is unchanged.
+- **TUI: `A` on the Pull requests tab** (also the `.` menu and the palette's
+  *Search pull requests…*) opens a search popup: a prompt with a state chip
+  (`tab` cycles all → closed → merged → open) over the result rows, which are
+  painted by the tab's own row painter and act like its rows — `enter` opens
+  the diff, `i` the details, `y` copies the URL. Closing the diff or the
+  details returns to the results; the last search is shown again when the popup
+  reopens (session-only, nothing on disk).
+- Results are a transient set: a search never adds rows to the normal list. A
+  found PR joins it the usual way — opening it fetches `refs/gg/pr/<n>`, which
+  makes it a known row until it is forgotten (`d`).
+- `forge.Provider.Search(PRQuery)` — the forge-neutral seam (`State`, opaque
+  `Text`, `Limit`). The gh provider always passes `--search` with
+  `sort:updated-desc` (unless the text brings its own `sort:`): `gh pr list`
+  orders by creation date, and by best match once a search is given, so a cut
+  at N would otherwise not be the N newest-updated. It asks for one row more
+  than the limit to learn whether there is more.
+
+- Opening a found PR arms both its diff and a re-read of the tab's list (that is
+  how it shows up there as a known row); the op's follow-up commands are
+  batched, so the re-read cannot displace the open.
+
 ## A link's bookmark / shelf hint finds its entry past the web's list page
 
 ### Fixed

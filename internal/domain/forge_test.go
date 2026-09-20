@@ -30,6 +30,10 @@ type fakeForge struct {
 	truncated    bool
 	slug, url    string
 	baseCalls    int
+	search       []model.PullRequest // Search's answer
+	searchMore   bool
+	searchErr    error
+	searchCalls  []forge.PRQuery
 }
 
 func (f *fakeForge) Name() string { return "fake" }
@@ -44,6 +48,15 @@ func (f *fakeForge) ListOpen(context.Context) ([]model.PullRequest, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]model.PullRequest(nil), f.open...), nil
+}
+func (f *fakeForge) Search(_ context.Context, q forge.PRQuery) ([]model.PullRequest, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.searchCalls = append(f.searchCalls, q)
+	if f.searchErr != nil {
+		return nil, false, f.searchErr
+	}
+	return append([]model.PullRequest(nil), f.search...), f.searchMore, nil
 }
 func (f *fakeForge) PR(_ context.Context, n int) (model.PullRequest, error) {
 	f.mu.Lock()
