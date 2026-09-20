@@ -168,6 +168,9 @@ func (p *prSearchPopup) updateRows(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		// The popup stays on the stack through the fetch; the PR's diff parks
 		// it (handlePreviewOpenMsg), so closing the diff comes back here.
 		if pr, ok := p.selected(); ok && m.opsIdle() {
+			// The fetched ref makes a found PR KNOWN: re-read the tab's list
+			// once the fetch lands, so it is there when the popup closes.
+			m.pendingPRsReload = !slices.ContainsFunc(m.prs, func(have model.PullRequest) bool { return have.Number == pr.Number })
 			return m.openPRCmd(pr)
 		}
 	case "i":
@@ -226,7 +229,11 @@ func (p *prSearchPopup) box(m Model) string {
 	switch {
 	case !p.has:
 		if !p.busy && p.err == "" {
-			parts = append(parts, s.dim.Render(truncate(i18n.T("closed, merged and open pull requests — text goes to the forge's search; a number opens that pull request"), textW)))
+			// Packed word by word: the hint must read whole in a narrow popup.
+			intro := i18n.T("closed, merged and open pull requests — text goes to the forge's search; a number opens that pull request")
+			for _, l := range wrapParts(strings.Fields(intro), textW, " ") {
+				parts = append(parts, s.dim.Render(l))
+			}
 		}
 	case len(p.res.PRs) == 0:
 		parts = append(parts, s.dim.Render(i18n.T("no pull requests match")))

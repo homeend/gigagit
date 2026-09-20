@@ -3239,7 +3239,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("opening PR #%d…", prOpen.Number)
 		}
 		if prsReload && msg.err == nil {
-			m, prCmd = m.readPRsCmd(context.Background(), false, false)
+			// Batched, never assigned: a search result's fetch arms BOTH the
+			// open above and this re-read.
+			var listCmd tea.Cmd
+			m, listCmd = m.readPRsCmd(context.Background(), false, false)
+			prCmd = tea.Batch(prCmd, listCmd)
 		}
 		return m, tea.Batch(healthCmd, cmd, driftCmd, prCmd)
 

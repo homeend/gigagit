@@ -259,15 +259,28 @@ func TestPRSearchDiffParksThePopup(t *testing.T) {
 	if _, cmd := m.Update(keyMsg("enter")); cmd == nil {
 		t.Fatal("enter on a result must start the open")
 	}
+	nm, _ := m.Update(keyMsg("enter"))
+	m = nm.(Model)
 	if m.topLayer() != p {
 		t.Fatal("the popup must stay up while the head is fetched")
 	}
+	// #12 is already a row of the tab; a PR the tab does not have re-reads
+	// the list once its fetch lands — that is how it becomes a known row.
+	if m.pendingPRsReload {
+		t.Fatal("a PR the tab already lists needs no re-read")
+	}
+	m = typeKeysPR(t, m, "down")
+	nm, _ = m.Update(keyMsg("enter"))
+	if !nm.(Model).pendingPRsReload {
+		t.Fatal("opening a PR the tab does not list must arm the list re-read")
+	}
+	m = typeKeysPR(t, m, "up")
 	eps, err := m.svc.PreviewOpen(context.Background(), "feat/x", "main")
 	if err != nil {
 		t.Fatal(err)
 	}
 	open := previewOpenMsg{source: "feat/x", target: "main", gen: m.previewGen, eps: eps, title: "PR #12 · Old work"}
-	nm, _ := m.Update(open)
+	nm, _ = m.Update(open)
 	m = nm.(Model)
 	if m.filesView == nil || m.topLayer() != nil || len(m.filesReturnLayers) != 1 || m.filesReturnLayers[0] != layer(p) {
 		t.Fatalf("the diff must park the popup (view=%v top=%T parked=%d)", m.filesView != nil, m.topLayer(), len(m.filesReturnLayers))
@@ -286,5 +299,33 @@ func TestPRSearchDiffParksThePopup(t *testing.T) {
 	m2 = nm.(Model)
 	if len(m2.filesReturnLayers) != 0 || m2.topLayer() == nil {
 		t.Fatalf("an unrelated layer was parked (parked=%d top=%T)", len(m2.filesReturnLayers), m2.topLayer())
+	}
+}
+
+// The palette offers the search only where there is a forge, and opens it on
+// the Pull requests tab whatever was focused.
+func TestPRSearchFromThePalette(t *testing.T) {
+	t.Parallel()
+	has := func(m Model) *paletteCommand {
+		for _, c := range m.availablePaletteCommands() {
+			if c.keyHint == "A" {
+				return &c
+			}
+		}
+		return nil
+	}
+	if has(loadedModel(t)) != nil {
+		t.Fatal("no forge: the palette must not offer the search")
+	}
+	m := prModel(t)
+	m = m.activateTab(panelBranches)
+	c := has(m)
+	if c == nil {
+		t.Fatal("the palette lacks the search")
+	}
+	m, _ = m.openCommandPalette()
+	m, _ = c.run(m)
+	if layerOf[*prSearchPopup](m) == nil || m.focus != panelPRs || layerOf[*commandPalette](m) != nil {
+		t.Fatalf("palette run: popup=%v focus=%v", layerOf[*prSearchPopup](m) != nil, m.focus)
 	}
 }

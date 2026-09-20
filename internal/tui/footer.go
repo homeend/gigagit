@@ -75,6 +75,7 @@ func contextBindings() []footerBinding {
 		{"pr-open", "enter", i18n.T("[enter] open"), func(m Model) bool { return m.canOpenPR() }, scopeRow},
 		{"pr-hub", "i", i18n.T("[i]nfo"), func(m Model) bool { return m.canOpenPR() }, scopeRow},
 		{"pr-copy", "y", i18n.T("[y] copy URL"), func(m Model) bool { return m.canOpenPR() }, scopeRow},
+		{"pr-search", "A", i18n.T("[A] search"), func(m Model) bool { return m.canSearchPRs() }, scopeWindow},
 		{"pr-forget", "d", i18n.T("[d] forget"), func(m Model) bool { return m.canForgetPR() }, scopeRow},
 		{"checkout-remote", "c", i18n.T("[c]heckout"), func(m Model) bool { return m.focus == panelRemotes && m.canCheckoutRemote() }, scopeRow},
 		{"switch-remote", "s", i18n.T("[s]witch"), func(m Model) bool { return m.focus == panelRemotes && m.canCheckoutRemote() }, scopeRow},
