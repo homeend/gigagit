@@ -248,6 +248,9 @@ right (the file link narrows to one file); only the title is. The web's handler
 test asserts a side's description is non-empty, which cannot see this. A fix
 belongs in `DescribeLink`, with its own test on a file-at-ref link.
 
+**Fixed after 3c** (`fix/linkdesc-file-at-ref`): a path now wins over the point
+target — `file: <path>` — with name-form and local-form rows in the domain tests.
+
 ## 6. Out of scope
 
 Cross-repository compare · pair notes in the web (W9) · the 200-row cap on
