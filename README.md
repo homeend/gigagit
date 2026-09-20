@@ -486,6 +486,10 @@ agents already have the `gg` CLI for those — but the things only gg knows:
 - **Compare** — `gg_compare_trees` (changed files between worktree/index/any
   commit), `gg_compare_file` (unified diff between any two file versions,
   including bookmarks and shelved-commit members).
+- **Links and saved comparisons** — `gg_link_resolve`, `gg_link_list` (the
+  copied-link ring), `gg_compare_links` (the changed files between two
+  `gg://` links) and `gg_compare_list` (every saved merge preview, commit
+  pair and two-link comparison, with the ids the note tools take).
 - **Export** — `gg_export` copies a bookmark or shelf entry into a local
   directory.
 - **Review notes** — `gg_notes_list` (read-only) plus the consent-gated

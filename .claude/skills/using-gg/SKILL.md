@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v88 -->
+<!-- gg:using-gg:v89 -->
 
 # Using gg (gigagit)
 
@@ -909,6 +909,12 @@ chat needs no shell round-trip:
 - `gg_compare_links {left, right}` — the changed files between the two places
   two links name, in either order. Two links naming different repositories
   are refused.
+- `gg_compare_list {}` — the SAVED comparisons `gg compare --list` prints:
+  each row has `id`, `label`, `kind` (`preview` = a merge preview, `pair` = a
+  frozen commit pair, `comparison` = two links), `left`/`left_desc` and — for
+  a comparison only — `right`/`right_desc`. A preview's or pair's `id` or
+  `label` is what the note tools' `preview` argument takes; a comparison's
+  `left` and `right` go straight into `gg_compare_links`.
 - `gg_compare_file` takes `{"source":"link","link":"gg://…"}` as either side:
   a link carries its own path and state, so it needs neither `path` nor
   `locator`.
