@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 
+	"github.com/homeend/gigagit/internal/bookmark"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -39,6 +40,10 @@ func (s *Service) BookmarkList(ctx context.Context, skip, limit int) ([]model.Bo
 	}
 	return st.List(skip, limit)
 }
+
+// ErrBookmarkNotFound is BookmarkGet's "no such id" — the store's own value,
+// re-exported because frontends never import internal/bookmark.
+var ErrBookmarkNotFound = bookmark.ErrNotFound
 
 // BookmarkGet returns one bookmark by id.
 func (s *Service) BookmarkGet(ctx context.Context, id string) (model.Bookmark, error) {

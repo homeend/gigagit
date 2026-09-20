@@ -51,6 +51,21 @@ func shelfRowFrom(e model.ShelfEntry) shelfRow {
 func (s *Server) handleShelf(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	ctx := readCtx(r)
+	// ?id= answers ONE entry wherever it lives — ShelfFind scans every bucket,
+	// the list below reads one — so a bucket beside it is a contradiction.
+	if id := r.URL.Query().Get("id"); id != "" {
+		if r.URL.Query().Get("bucket") != "" {
+			writeErr(w, http.StatusBadRequest, errors.New("give id or bucket, not both"))
+			return
+		}
+		e, err := svc.ShelfFind(ctx, id)
+		if err != nil {
+			writeErr(w, entryByIDStatus(err), err)
+			return
+		}
+		writeJSON(w, map[string]any{"entries": []shelfRow{shelfRowFrom(e)}})
+		return
+	}
 	es, err := svc.ShelfList(ctx, r.URL.Query().Get("bucket"), 0, maxShelfRows)
 	if err != nil {
 		// No state directory = nothing shelved, an empty section (the

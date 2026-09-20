@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A link's bookmark / shelf hint finds its entry past the web's list page
+
+### Fixed
+
+- `gg web` lists 200 bookmarks and one shelf bucket; a `gg://…?bookmark=<id>` or
+  `?shelf=<id>` hint naming an entry outside that page landed and then said
+  "is gone" about an entry that exists (the TUI, which loads everything,
+  revealed it). A miss in the loaded list now asks the store by id —
+  `GET /api/bookmarks?id=` / `GET /api/shelf?id=` (every bucket) — and reveals
+  the row. "is gone" is said only on the server's 404; a lookup that failed
+  says it could not look the entry up. This replaces the page's per-bucket walk.
+
 ## Pull-request text renders as markdown in the TUI
 
 The PR hub popup (description, conversation, verdicts, outdated threads) and
