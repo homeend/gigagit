@@ -16,6 +16,7 @@ import { saveUI } from "./uistate.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
+import { mdHTML, mdInlineHTML } from "./markdown.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -1784,8 +1785,13 @@ function noteBoxHTML(n, cols) {
   const kind = n.read_only ? "forge" : agent ? "agent" : "user";
   const folded = state.noteCollapsed.has(n.id);
   const title = noteTitle(n, state.diffCtx.path, prev, Date.now());
-  const part = (m) => `<div class="notesum">${esc(m)}</div>`;
-  const text = (r) => (r.rationale ? `<div class="notetext">${esc(r.rationale)}</div>` : "");
+  // A FORGE note is markdown, and the server sends it parsed (summary_md, md):
+  // those trees are painted. A note written here is shown exactly as typed —
+  // it carries no tree, so it falls to the escaped text.
+  const part = (r, head) =>
+    `<div class="notesum">${esc(head)}${r.summary_md && r.summary_md.length ? mdInlineHTML(r.summary_md, esc) : esc(r.summary)}</div>`;
+  const text = (r) =>
+    r.md ? `<div class="notetext md">${mdHTML(r.md, esc)}</div>` : r.rationale ? `<div class="notetext">${esc(r.rationale)}</div>` : "";
   // The title is the collapse handle (click, or z): the box keeps its title
   // line and drops its body. The fold is a CLASS on the row, toggled in place
   // — never a re-render, which would reset the ‹/› stepper and jolt the scroll.
@@ -1793,9 +1799,9 @@ function noteBoxHTML(n, cols) {
     `<div class="notebox ${kind}${stale ? " " + cls : ""}">` +
     `<div class="notetitle" data-collapse="${esc(n.id)}" title="click (or z) to collapse / expand">` +
     `<span class="notefold"></span>${esc(title)}</div>`;
-  if (rootOn) box += part(n.summary) + text(n);
+  if (rootOn) box += part(n, "") + text(n);
   for (const r of reps) {
-    box += `<div class="notereply" data-note="${esc(r.id)}">` + part("↳ " + (r.author ? r.author + ": " : "") + r.summary) + text(r) + `</div>`;
+    box += `<div class="notereply" data-note="${esc(r.id)}">` + part(r, "↳ " + (r.author ? r.author + ": " : "")) + text(r) + `</div>`;
   }
   box += `</div>`;
   const cell = (span) => `<td class="note" colspan="${span}">${box}</td>`;
@@ -2142,6 +2148,8 @@ $("diff-body").addEventListener("click", (e) => {
 
 
 $("diff-body").addEventListener("contextmenu", (e) => {
+  // A link inside a forge note keeps the BROWSER's menu (copy link address…).
+  if (e.target.closest("a[href]")) return;
   // A reply block carries its own id inside the thread's row, so the menu
   // targets the exact note under the pointer (root or reply).
   const tr = e.target.closest("[data-note]");

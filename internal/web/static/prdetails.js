@@ -11,12 +11,19 @@ import { $, esc, getJSON, postJSON, runOnce, state } from "./core.js";
 import { closeLayer, copyText, pushLayer } from "./layers.js";
 import { registerHelp } from "./menus.js";
 import { noteAge } from "./notebox.js";
+import { mdHTML } from "./markdown.js";
 
 const VERDICTS = { approved: "✓ approved", changes_requested: "✗ changes requested", commented: "commented" };
 
+// textHTML is one forge text: the tree the server parsed it into, painted —
+// or, when an answer carries none, the raw text exactly as before.
+function textHTML(md, raw) {
+  return md ? `<div class="prd-text md">${mdHTML(md, esc)}</div>` : `<div class="prd-text">${esc(raw || "")}</div>`;
+}
+
 function commentHTML(c, now) {
   const head = [c.author || "ghost", noteAge(c.created, now), VERDICTS[c.verdict] || ""].filter(Boolean).join(" · ");
-  return `<div class="prd-comment"><div class="prd-who">${esc(head)}</div><div class="prd-text">${esc(c.body || "")}</div></div>`;
+  return `<div class="prd-comment"><div class="prd-who">${esc(head)}</div>${textHTML(c.md, c.body)}</div>`;
 }
 
 // threadsHTML groups the outdated comments into threads (a reply names its
@@ -58,7 +65,7 @@ function render(d) {
     `<div class="prd-meta">${esc(meta)}</div>` +
     (pr.url ? `<div class="prd-url"><span>${esc(pr.url)}</span> <button id="prdetails-copy">copy URL</button></div>` : "") +
     `<h3>description</h3>` +
-    (pr.body ? `<div class="prd-text">${esc(pr.body)}</div>` : `<div class="prd-none">no description</div>`) +
+    (pr.body ? textHTML(d.body_md, pr.body) : `<div class="prd-none">no description</div>`) +
     `<h3>conversation (${hub.length})</h3>` +
     (hub.length ? hub.map((c) => commentHTML(c, now)).join("") : `<div class="prd-none">no comments</div>`) +
     (outdated.length ? `<h3>outdated review threads</h3>` + threadsHTML(outdated, now) : "") +

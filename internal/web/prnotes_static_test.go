@@ -116,3 +116,42 @@ func TestPRHeaderIsReadable(t *testing.T) {
 		t.Error("the preview bar's file count must not shrink")
 	}
 }
+
+// Forge text reaches the page's innerHTML through exactly two doors: the
+// painter (a parsed tree) or esc() (the fallback). The token colours are
+// selector-scoped, so the overlay has to be on their list or a fenced block
+// there paints grey.
+func TestPRMarkdownIsWiredAndStyled(t *testing.T) {
+	t.Parallel()
+	read := func(name string) string {
+		b, err := os.ReadFile(filepath.Join("static", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	details, files, css := read("prdetails.js"), read("files.js"), read("style.css")
+	if !strings.Contains(details, `import { mdHTML } from "./markdown.js";`) {
+		t.Error("prdetails.js must import the painter")
+	}
+	if !strings.Contains(files, `import { mdHTML, mdInlineHTML } from "./markdown.js";`) {
+		t.Error("files.js must import the painter")
+	}
+	if n := strings.Count(details, "pr.body"); n != 2 || !strings.Contains(details, "textHTML(d.body_md, pr.body)") {
+		t.Errorf("the description goes through textHTML only (pr.body seen %d times)", n)
+	}
+	if n := strings.Count(details, "c.body"); n != 1 || !strings.Contains(details, "textHTML(c.md, c.body)") {
+		t.Errorf("a comment body goes through textHTML only (c.body seen %d times)", n)
+	}
+	if !strings.Contains(details, "mdHTML(md, esc)") || !strings.Contains(details, "esc(raw || \"\")") {
+		t.Error("textHTML paints the tree or escapes the raw text")
+	}
+	for _, rule := range []string{"#prdetails .tk-kw", "#prdetails .tk-str", "#prdetails .tk-cmt", ".md pre.md-code", ".md table.md-table", ".md { white-space: normal;"} {
+		if !strings.Contains(css, rule) {
+			t.Errorf("style.css misses %q", rule)
+		}
+	}
+	if !strings.Contains(files, `if (e.target.closest("a[href]")) return;`) {
+		t.Error("a link inside a note keeps the browser's own context menu")
+	}
+}
