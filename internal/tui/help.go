@@ -93,6 +93,7 @@ func helpContent() []contentLine {
 		h(i18n.T("Previews panel")),
 		r("", i18n.T("saved (source → target) branch pairs; each row shows its label, the pair and its live state (file/commit counts, merged, missing, no common base)")),
 		r("", i18n.T("saved commit pairs list here too: <a>..<b> between two FROZEN commits with the changed-file count (missing commit when one is gone). enter opens the diff, e renames, d removes, s saves the reversed pair; save one from the Commits panel (m, m, then . → Save to previews) or with gg preview add <a>..<b>")),
+		r("", i18n.T("saved comparisons list here too: two gg:// links shown as <left> ↔ <right>, saved from a link comparison (. → Save comparison…) or with gg compare --save. enter runs the comparison again, e renames, d removes, s saves it reversed, and the .-menu copies either link; a comparison whose link no longer resolves stays listed and says why when opened")),
 		r("enter", i18n.T("open the preview: the target…source diff, exactly what the merge would bring in")),
 		r("a", i18n.T("add a preview: type the source, [tab] to the target ([ctrl+s] swaps them); each field completes against the branch names")),
 		r("", i18n.T("a remote target is added the same way — type its full name, e.g. origin/main")),
