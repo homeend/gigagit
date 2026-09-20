@@ -182,6 +182,7 @@ let promptMode = "line";
 // there is no ok, and the confirm keys do nothing — a read-only prompt that
 // still submitted on ctrl+enter would call an onSubmit nobody passed.
 let promptReadonly = false;
+let promptAllowEmpty = false; // openPrompt({allowEmpty}): "" is an answer
 
 // promptField is the control the prompt's own value comes from: the textarea
 // only when it is the whole prompt.
@@ -203,8 +204,11 @@ function promptField() {
 // something optional about it".
 // readonly: with multiline, show the text without editing it (the commit
 // message VIEWER): no ok button, cancel reads "close", esc is the way out.
-function openPrompt({ title, value, placeholder, onSubmit, extra, multiline, body, readonly }) {
+function openPrompt({ title, value, placeholder, onSubmit, extra, multiline, body, readonly, allowEmpty }) {
   promptCb = onSubmit;
+  // allowEmpty: an empty answer is meaningful to this caller (a label whose
+  // default is the store's to choose), so enter on an empty field submits "".
+  promptAllowEmpty = !!allowEmpty;
   promptExtraCb = extra ? extra.run : null;
   promptReadonly = !!(multiline && readonly);
   $("prompt-text").readOnly = promptReadonly;
@@ -310,6 +314,7 @@ function closePrompt() {
   // back to the one-line default, so the next prompt starts from a known shape
   promptMode = "line";
   promptReadonly = false;
+  promptAllowEmpty = false;
   $("prompt-text").readOnly = false;
   $("prompt-ok").classList.remove("hidden");
   $("prompt-cancel").textContent = "cancel";
@@ -324,7 +329,7 @@ function closePrompt() {
 function submitPrompt() {
   if (promptReadonly) return; // nothing to submit from a viewer
   const v = promptField().value.trim();
-  if (!v) return; // nothing to submit; leave the prompt open
+  if (!v && !promptAllowEmpty) return; // nothing to submit; leave the prompt open
   // The body is optional BY DESIGN: empty is a meaningful answer (no
   // annotation => a lightweight tag), so it is never trimmed away into
   // nothing the caller cannot distinguish.

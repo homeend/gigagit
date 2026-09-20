@@ -9,6 +9,7 @@
 // after a dropped stream reloads everything, since events were missed.
 import { attnKey, getJSON, runOnce, state } from "./core.js";
 import { fetchStatus, wtCount } from "./status.js";
+import { runLinkCompare } from "./linkcompare.js";
 import { fetchNotes, markDiffRow, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
 import { fetchBranches, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved } from "./previews.js";
@@ -279,6 +280,10 @@ async function resolveRefTip(name) {
 // isHexLike reports whether name already looks like a bare commit sha (the
 // pair grammar's OTHER half shape, model.LinkPair — a NAME is the common
 // case, a raw sha is legal too) rather than a ref name.
+function isFullSha(name) {
+  return /^([0-9a-f]{40}|[0-9a-f]{64})$/.test(name);
+}
+
 function isHexLike(name) {
   return /^[0-9a-f]{7,64}$/.test(name);
 }
@@ -359,7 +364,12 @@ async function steerNavigateLand(s) {
   } else if (s.state === "pair") {
     // A change-set is BOUNDED, so it is opened as a comparison — never as a
     // commit's tree, which is what the ref arm above opens instead.
-    await openCompareForPair(s.a, s.b);
+    // Two FULL ids — what the link resolver always sends — land through the
+    // server's one door, where a `-u` stash's untracked file is a member. The
+    // endpoint-shaped lane below cannot see it; it stays for a NAME half,
+    // which the door has no link text for.
+    if (isFullSha(s.a) && isFullSha(s.b)) await runLinkCompare(new URLSearchParams({ a: s.a, b: s.b }).toString());
+    else await openCompareForPair(s.a, s.b);
     if (!s.file) return; // a file-less pair navigate only reveals the compare
     const i = state.files.findIndex((f) => f.path === s.file);
     if (i < 0) return;

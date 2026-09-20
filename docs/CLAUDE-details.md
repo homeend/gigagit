@@ -1262,6 +1262,68 @@ A commit pair is a NOTE SCOPE built by `domain.PairNotes(a, b)` —
 - Badge refresh: the `srcNotes` arm re-dispatches `pairNotesRefreshCmd` (a pair
   has no `previewOpen`, nothing to re-resolve, nothing that can "move").
 
+### Links in `gg web` — the dialog, the view, the Previews tab (plan 3c, 2026-09-20)
+
+Spec `docs/superpowers/specs/2026-09-20-links-web-design.md` (W1–W10), plan
+`docs/superpowers/plans/2026-09-20-links-web.md`. Layout and transport only:
+no new domain function.
+
+- **No JS link parser, so no JS rewrite (W1).** `static/links.js` PRODUCES
+  links; nothing in `static/` parses one. `GET /api/link-base?link=` answers
+  `SuggestBase`'s LOCATED kind + suggestion (`{kind: none|ref|commit, base,
+  why}`); with `&base=` it answers `{link}` from `model.Link.WithBase(base,
+  sug.Self)`. `Self` never crosses the wire. A link still being typed (does not
+  parse, sha does not resolve yet) is `{"kind":"none"}` 200 — no row — while a
+  REWRITE asked for by name is 422. This replaced the 3b spec's "Go↔JS gate for
+  `BoundKind`": there is no JS twin to drift.
+- **`GET /api/compare-links` is the web's door** (`linkcompare.go`). Exactly ONE
+  input form: `left`+`right` (texts) · `id` (a saved comparison's texts, or a
+  saved pair → `pairSides`) · `a`+`b` (two FULL ids → `pairSides`). `pairSides`
+  = the point `a` against `@a..b`, built as `model.Link`s. Errors:
+  `*LinkSideError` → `{error, side}` with the CAUSE's message; `model.ErrLink`
+  400, any other side error 422, a bare error 500. Link text is NOT run through
+  `isGitArgSafe` (it holds `://`, `@`, `?`); the door parses it. The web passes
+  `ResolveOpts{Cwd, RegistryPath: s.reposStatePath()}` (`linkOpts`), so — unlike
+  MCP — the cross-repository refusal is reachable and tested.
+- **Per-member byte sources ride the wire per ROW.** A side's `spec` is
+  `linkSideSpec(FileSet.Endpoint())`; a row carries `left_spec`/`right_spec`
+  only where `Source(path)` differs (a `-u` stash's untracked file → the third
+  parent). `linkSideSpec` is per KIND with no answering default; a pair spells
+  as `commit:<b>` (`Endpoint.FileRef`'s rule). The vocabulary is
+  `/api/entry-diff`'s, so there is no new diff lane.
+- **`/api/entry-diff` takes `old_path`.** It read both sides at the new path,
+  so an `R` row's left side was absent. `leftPathOf(old, path)` is NOT
+  `oldPathFor` — that one returns "" for a non-rename. The cache key gains
+  `<old` only when the paths differ, so it still shares entries with
+  `handleRevDiff`.
+- **Client:** `files.js openLinkCompare(body)` sets `state.compare.links`
+  (+ `aSpec/bSpec`, empty hashes, `previewOpen = null`); `openFile`'s `links` arm
+  runs BEFORE the hash lane (a source gate pins the order) and passes
+  `f.left_spec || aSpec`. With no single revision, the file menu drops its rev
+  rows. `linkcompare.js runLinkCompare(query, onErr)` is the one client path
+  into the route — dialog, saved row, pair landing. `getJSON` now keeps
+  `err.data` (the `side`). `openPrompt({allowEmpty})` lets an empty label reach
+  the store, which owns the default.
+- **Dialog keys:** the overlay returns true for every key but
+  `preventDefault`s only the ones it acts on, so typing reaches the field. With
+  a history list open, esc closes the LIST. `enter` on a base input rewrites and
+  never compares. `lookupBase` never assigns a link field (a source gate reads
+  its body); the stale-answer guard compares the asked text with the field's.
+- **Previews tab:** `/api/preview` is untouched (the PR lane and
+  `reopenPreviewIfMoved` hang off `state.previews`). `GET /api/saved-compares`
+  serves pairs then comparisons; `fetchPreviews` awaits it, so no caller
+  changed. Rows carry `data-kind`; `rowEntry` picks the list by it.
+  `savedEntry(id)` is the ONE classifier behind open / rename / remove: it asks
+  domain (`PairGet`, `SavedCompare.IsSet`), requires the id to match EXACTLY
+  (domain's getters also accept a label), and reports a merge preview's id as
+  not found. A comparison row has no live summary (unbounded work per refresh);
+  a pair's is domain's cached count.
+- **Parked:** review notes on a web pair row (`armPreview` is keyed on branch
+  names); a live re-open of a link comparison when a ref under it moves.
+- **Probes** (scratchpad, not committed) assert computed `display`, and were
+  each run against a deliberately broken build first: no `#id.hidden` rules, a
+  pick that submits, a lookup that auto-applies, the old landing lane.
+
 ### Links in the TUI — the compare dialog and the one door (plan 3b-2, 2026-09-20)
 
 **`domain.CompareLinks(ctx, leftText, rightText, opts)` is the one door** from

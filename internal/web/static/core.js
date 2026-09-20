@@ -38,6 +38,7 @@ const state = {
   bookmarks: [], // gg's own store: live references to a file or a commit
   shelf: [],     // gg's own store: frozen copies (a file's bytes, a commit's files)
   previews: [],  // saved merge previews: (source → target) pairs, recomputed from the live tips
+  savedCompares: [], // the Previews tab's other kinds: commit pairs (@a..b) and comparisons (two links)
   previewsDisabled: false, // the previews store is unavailable (no state dir)
   previewsStale: false, // the last previews fetch failed: the rows stand, but nothing may be concluded from them
   // {id, source, target, sourceHash, targetHash, tip} while a preview owns the
@@ -131,7 +132,11 @@ function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch {} }
 async function getJSON(url) {
   const resp = await fetch(url);
   const body = await resp.json();
-  if (!resp.ok) throw new Error(body.error || resp.statusText);
+  if (!resp.ok) {
+    const err = new Error(body.error || resp.statusText);
+    err.data = body; // structured refusals, as postJSON keeps them (a link comparison's `side`)
+    throw err;
+  }
   return body;
 }
 

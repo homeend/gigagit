@@ -331,6 +331,13 @@ runs it again, `e`/`d`/`s` rename, remove and save it reversed, and the `.`
 menu copies either link. In the bookmark and shelf switchers, comparing across
 the two (`c`) now also accepts a commit against a single file.
 
+`gg web` has the same dialog — **compare with link…** in the command palette
+or the ☰ menu — with the same history picks (`↓` or ▾), swap (`ctrl+s` or ⇅)
+and base row (`enter` on it, or **bound**). **save comparison…** sits on the
+open comparison's bar, and the sidebar's **Previews** section lists merge
+previews, commit pairs and comparisons together: click to open, right-click to
+rename, save reversed, copy a link or remove.
+
 `<repo>` is the repository name of the repo's remote, resolved through the
 repository history behind the `R` switcher — so a link made on one machine
 finds the matching checkout here. In the TUI, `#` (or the palette's

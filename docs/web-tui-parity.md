@@ -37,7 +37,12 @@ restore to a path, restore one file from a shelved commit, cherry-pick a
 shelved commit — live or from its frozen patch) · **merge previews** (saved
 `source → target` branch-name pairs, previewed as the merge-base..source
 diff rather than a tip-to-tip compare: list, add, rename, remove, save the
-reversed pair, open, and live re-open when a tracked tip moves) · **pull
+reversed pair, open, and live re-open when a tracked tip moves) · **commit
+pairs and saved comparisons** in the same Previews section (list, open, rename,
+remove, save reversed, copy gg link — either half of a comparison) ·
+**compare with link…** (two `gg://` links through `domain.CompareLinks`: the
+copied-link history, side swap, per-side errors, the base row, save
+comparison…; a `@a..b` link lands through the same door) · **pull
 requests** (read-only: list, fetch + open the PR diff, copy URL, forget,
 `[refresh] prs` poll and ⟳, review threads inside the diff as read-only note
 boxes, the details overlay — the TUI's PR hub — and the comment re-poll) ·
