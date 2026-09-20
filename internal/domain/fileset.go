@@ -29,8 +29,8 @@ type FileSet struct {
 	// set rather than the whole of it — a link with a /<path> (narrowTo).
 	// It is not derivable from ep, which narrowTo carries over untouched, and
 	// it is the one thing a consumer that re-derives sets FROM the endpoint
-	// (domain.ComparePatch's shelf lane) cannot reconstruct. Frontends ask
-	// Narrowed() before handing a set to such a consumer.
+	// (domain.ComparePatch's shelf lane) cannot reconstruct — patchLosesKeySet
+	// reads it, so no frontend has to.
 	narrowed bool
 	// has answers "does this member have BYTES at ep" for every enumerated
 	// path. It is NOT redundant with paths (ruling R6): a change-set
@@ -80,15 +80,6 @@ func (f FileSet) Source(path string) model.Endpoint {
 	}
 	return f.ep
 }
-
-// Narrowed reports whether this set is a PROJECTION of its endpoint's own
-// file set (a link's /<path>) rather than the whole of it.
-//
-// It exists for one question: may this set be handed to a consumer that
-// re-derives the sets from the ENDPOINTS instead of taking them? ComparePatch
-// does exactly that on its shelf lane, so a narrowed set given to it would
-// silently widen back to every member of the tar.
-func (f FileSet) Narrowed() bool { return f.narrowed }
 
 // Has reports whether path has readable bytes at this set's endpoint. Only
 // meaningful for a bounded set; the unbounded lane asks endpointHas instead.

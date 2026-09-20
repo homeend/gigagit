@@ -1103,7 +1103,7 @@ funnels through `EvalEndpoint` to get one.
 - `EvalLink(ctx, l)` — a link's set: `EndpointForLink` for the target, then
   narrowing to the link's `/<path>` when it has one. A file link is therefore
   bounded to one key even when its target is a whole tree. `narrowTo` also
-  marks the result `Narrowed()`: the endpoint is carried over untouched, so
+  marks the result `narrowed`: the endpoint is carried over untouched, so
   "this set is a projection" is not derivable from it afterwards, and a
   consumer that re-derives sets FROM endpoints (`ComparePatch`'s shelf lane)
   would otherwise widen it back silently.
@@ -1150,18 +1150,18 @@ cannot re-derive from one is simply dropped — `gg compare --patch
 gg://repo/b.txt@<sha> HEAD` printed the two commits' whole-tree diff while the
 default listing showed the projection, two different comparisons with nothing
 on screen to say so. The condition is asked **PER SIDE**
-(`cli.sideLosesItsKeySet`), and that is the whole of it: a side survives exactly
+(`FileSet.patchLosesKeySet`, behind the door `domain.ComparePatchSets` — it lived in `internal/cli` until 2026-09-20), and that is the whole of it: a side survives exactly
 when `EvalEndpoint(fs.Endpoint())` would reproduce its set.
 
 ```go
-fs.Narrowed() || (fs.Bounded() && fs.Endpoint().Kind() != model.EndpointShelf)
+f.narrowed || (f.bounded && f.ep.Kind() != model.EndpointShelf)
 ```
 
 Unbounded has nothing to lose. A non-narrowed SHELF set survives because
 `ComparePatch`'s shelf lane re-derives both sets with `EvalEndpoint` and renders
 per member (so `gg compare --patch shelf:<gc'd id> <commit>` answers, and must
 keep answering). A NARROWED set never survives, shelf or not, because `narrowTo`
-carries the endpoint over untouched — which is exactly what `FileSet.Narrowed()`
+carries the endpoint over untouched — which is exactly what `FileSet.narrowed`
 exists to report, since neither bounded-ness nor kind can see it. Everything
 else bounded loses, above all a PAIR, whose endpoint is commit *b* and not the
 pair (`EvalEndpoint`'s Pair arm), so re-deriving hands back b's whole tree.

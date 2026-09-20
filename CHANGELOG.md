@@ -19,6 +19,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   an error carrying git's own message, and is recorded in the failure log.
   New git verb `FindCommit` (`rev-parse -q --verify`, exit 1 = not found).
 
+### Changed
+
+- The rule that stops `gg compare --patch` from silently widening a file set
+  (a link with a `/<path>`, an `<a>..<b>` change-set) moved from `internal/cli`
+  into domain: `domain.ComparePatchSets` refuses per side with a
+  `*PatchLosesSetError`, and `FileSet.Narrowed` is no longer exported. No
+  behaviour change — a frontend offering a patch can no longer forget the rule.
+
 ## Pull-request text renders as markdown in the TUI
 
 The PR hub popup (description, conversation, verdicts, outdated threads) and

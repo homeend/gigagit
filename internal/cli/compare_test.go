@@ -841,7 +841,7 @@ func TestCompareDoesNotRecordOnFailure(t *testing.T) {
 
 // TestCompareDoesNotRecordOnPatchFailureAfterBothSidesResolved: R8 again,
 // but for a failure that happens AFTER both positionals resolved
-// successfully — patchLosesTheKeySet's refusal (--patch on a bounded link).
+// successfully — domain.ComparePatchSets's refusal (--patch on a bounded link).
 // This is the shape a misplaced record call (before the failure check,
 // rather than after) would slip through even though the first-point-of-
 // failure test above already passes.
@@ -854,7 +854,7 @@ func TestCompareDoesNotRecordOnPatchFailureAfterBothSidesResolved(t *testing.T) 
 	var out, errb bytes.Buffer
 	code := cmdCompare(linkState(t), svc, []string{"--patch", pair}, &out, &errb)
 	if code != 2 {
-		t.Fatalf("compare --patch %s: exit %d (stderr %q), want 2 (patchLosesTheKeySet)", pair, code, errb.String())
+		t.Fatalf("compare --patch %s: exit %d (stderr %q), want 2 (domain.ComparePatchSets)", pair, code, errb.String())
 	}
 
 	if hist := svc.LinkHistory(context.Background()); len(hist) != 0 {
