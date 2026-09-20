@@ -52,6 +52,30 @@ func LinkDesc(kind, id, subject string) string {
 	}
 }
 
+// savedSetLabel finds the set-shaped saved entry with this id: "preview" for
+// a merge preview, "pair" for a commit pair. A two-link comparison is never
+// named by a hint (it has no single link), so it never answers here.
+func (s *Service) savedSetLabel(ctx context.Context, id string) (kind, label string, ok bool) {
+	cs, err := s.SavedCompareList(ctx)
+	if err != nil {
+		return "", "", false
+	}
+	for _, c := range cs {
+		if c.ID != id || !c.IsSet() || c.Label == "" {
+			continue
+		}
+		l, err := model.ParseLink(c.Left)
+		if err != nil {
+			return "", "", false
+		}
+		if l.Target.Pair != nil {
+			return "pair", c.Label, true
+		}
+		return "preview", c.Label, true
+	}
+	return "", "", false
+}
+
 // linkDescFields decides what to pass linkDesc for l, the link a producer
 // (`gg link`, `gg compare`) is about to record. Priority:
 //
@@ -94,6 +118,14 @@ func (s *Service) linkDescFields(ctx context.Context, l model.Link) (kind, id, s
 		// (a stash index, e.g. "0") is the best available fallback until a
 		// producer resolves it to the stash's actual subject.
 		return "stash", "", l.Hint.ID
+	case "preview":
+		// The SAVED entry's label, when this store holds it. The id is a
+		// lookup key and nothing else: a miss — another machine, a removed
+		// entry — falls THROUGH to the address arms below, which describe the
+		// same set without a label, rather than printing an id nobody can read.
+		if kind, label, ok := s.savedSetLabel(ctx, l.Hint.ID); ok {
+			return kind, label, ""
+		}
 	}
 	switch {
 	case l.Target.Pair != nil:
