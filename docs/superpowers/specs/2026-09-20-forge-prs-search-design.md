@@ -64,7 +64,7 @@ Search(ctx context.Context, q PRQuery) (prs []model.PullRequest, more bool, err 
 `Provider` gains `Search`. The gh implementation is one invocation:
 
 ```
-gh pr list --state <state> --limit <limit+1> --json <prFields> [--search <text>]
+gh pr list --state <state> --limit <limit+1> --search <text + sort> --json <prFields>
 ```
 
 - The extra row is how `more` is known; it is cut before returning.
