@@ -205,3 +205,105 @@ func TestLinkSideSpecPerKind(t *testing.T) {
 		t.Errorf("commit: %q, %v", got, err)
 	}
 }
+
+// stashLinkRepo: a `-u` stash holding one tracked edit and one untracked file.
+// Afterwards the untracked path is REWRITTEN in the working tree, so its row
+// is M and both sides' bytes must really be read — a comparison decides an
+// A or D row without reading anything.
+func stashLinkRepo(t *testing.T) (dir, stashSha string) {
+	t.Helper()
+	dir, _, _ = linkRepo(t)
+	write(t, dir, "a.txt", "stashed\n")
+	write(t, dir, "scratch.txt", "from the stash\n")
+	gitRun(t, dir, "stash", "push", "-u", "-m", "wip")
+	stashSha = gitRun(t, dir, "rev-parse", "stash@{0}")
+	write(t, dir, "scratch.txt", "in the tree now\n")
+	return dir, stashSha
+}
+
+func pairTarget(a, b string) model.LinkTarget {
+	return model.LinkTarget{State: model.StateCommitted, Pair: &model.LinkPair{A: a, B: b}}
+}
+
+func fileNamed(files []linkCmpFile, path string) *linkCmpFile {
+	for i := range files {
+		if files[i].Path == path {
+			return &files[i]
+		}
+	}
+	return nil
+}
+
+func diffSides(d entryDiffResp) (left, right string) {
+	for _, r := range d.Rows {
+		left += r.Left + "\n"
+		right += r.Right + "\n"
+	}
+	return
+}
+
+// The web's compareSides: a `-u` stash keeps its untracked files on a THIRD
+// parent, so that member's bytes are not at the side's own endpoint. The row
+// must say where they are, and /api/entry-diff must be able to read there.
+func TestCompareLinksCarriesPerMemberSources(t *testing.T) {
+	dir, stashSha := stashLinkRepo(t)
+	ts := linkServe(t, dir)
+	parent := gitRun(t, dir, "rev-parse", stashSha+"^1")
+	third := gitRun(t, dir, "rev-parse", stashSha+"^3")
+	var got linkCmp
+	if code := getAny(t, ts, cmpURL(localLink(dir, "", pairTarget(parent, stashSha)), localLink(dir, "", model.LinkTarget{})), &got); code != http.StatusOK {
+		t.Fatalf("code=%d err=%s", code, got.Error)
+	}
+	row := fileNamed(got.Files, "scratch.txt")
+	if row == nil || row.Status != "M" {
+		t.Fatalf("scratch.txt row = %+v in %+v, want M", row, got.Files)
+	}
+	if got.Left.Spec != "commit:"+stashSha {
+		t.Fatalf("fixture: the side's own spec = %q", got.Left.Spec)
+	}
+	if row.LeftSpec != "commit:"+third {
+		t.Fatalf("left_spec = %q, want the stash's third parent commit:%s", row.LeftSpec, third)
+	}
+	if tracked := fileNamed(got.Files, "a.txt"); tracked == nil || tracked.LeftSpec != "" {
+		t.Errorf("a tracked member reads from the side's own endpoint: %+v", tracked)
+	}
+	var d entryDiffResp
+	if code := getJSON(t, ts, entryDiffURL(row.LeftSpec, got.Right.Spec, "scratch.txt", "M"), &d); code != http.StatusOK {
+		t.Fatalf("entry-diff: %d", code)
+	}
+	if l, r := diffSides(d); !strings.Contains(l, "from the stash") || !strings.Contains(r, "in the tree now") {
+		t.Errorf("left = %q right = %q", l, r)
+	}
+}
+
+// F3: a rename's LEFT side is read at its OLD path. The same request without
+// old_path must answer differently, or this test sees nothing.
+func TestEntryDiffReadsTheLeftSideAtOldPath(t *testing.T) {
+	isolateState(t)
+	dir := newRepoDir(t, 1)
+	write(t, dir, "old.txt", strings.Repeat("moved line\n", 20))
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "add old")
+	x := gitRun(t, dir, "rev-parse", "HEAD")
+	gitRun(t, dir, "mv", "old.txt", "new.txt")
+	gitRun(t, dir, "commit", "-m", "rename")
+	y := gitRun(t, dir, "rev-parse", "HEAD")
+	ts := serve(t, New(domain.Open(dir)))
+
+	base := entryDiffURL("commit:"+x, "commit:"+y, "new.txt", "R")
+	var with entryDiffResp
+	if code := getJSON(t, ts, base+"&old_path=old.txt", &with); code != http.StatusOK {
+		t.Fatalf("with old_path: %d", code)
+	}
+	if l, _ := diffSides(with); !strings.Contains(l, "moved line") {
+		t.Errorf("left side = %q, want the OLD file's bytes", l)
+	}
+	var without entryDiffResp
+	code := getJSON(t, ts, base, &without)
+	if l, _ := diffSides(without); code == http.StatusOK && strings.Contains(l, "moved line") {
+		t.Fatal("fixture: without old_path the left side already reads the old bytes — the arms do not differ")
+	}
+	if code := getJSON(t, ts, base+"&old_path=-x", nil); code != http.StatusBadRequest {
+		t.Errorf("an unsafe old_path: %d, want 400", code)
+	}
+}

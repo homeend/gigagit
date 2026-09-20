@@ -137,6 +137,22 @@
     <div id="prdetails-body"></div>
   </div>
 </div>
+<!-- linkcompare.js: compare two gg:// links. -->
+<div id="linkcmp" class="hidden">
+  <div id="linkcmp-box">
+    <h2><span>compare with link</span><button id="linkcmp-close" title="close (esc)">esc</button></h2>
+    <div class="lc-side">
+      <div class="lc-row"><input id="linkcmp-left" class="lc-link" placeholder="gg://… — link 1" spellcheck="false" autocomplete="off"></div>
+      <div id="linkcmp-err-left" class="lc-err hidden"></div>
+    </div>
+    <div class="lc-side">
+      <div class="lc-row"><input id="linkcmp-right" class="lc-link" placeholder="gg://… — link 2" spellcheck="false" autocomplete="off"></div>
+      <div id="linkcmp-err-right" class="lc-err hidden"></div>
+    </div>
+    <div id="linkcmp-err" class="lc-err hidden"></div>
+    <div id="linkcmp-foot"><button id="linkcmp-go">compare</button></div>
+  </div>
+</div>
 <div id="modal" class="hidden">
   <div id="modal-box">
     <div id="modal-prompt"></div>

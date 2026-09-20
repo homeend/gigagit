@@ -21,6 +21,7 @@ import { openGitConfig } from "./gitconfig.js";
 import { openAgentSetup } from "./agentsetup.js";
 import { openFeedFilter, openFinder } from "./search.js";
 import { openRemoteHeads } from "./remoteheads.js";
+import { openLinkCompareDialog } from "./linkcompare.js";
 import { locateCurrentBranch } from "./sidebar.js";
 import { featureDisabled } from "./preflight.js";
 
@@ -46,6 +47,7 @@ function paletteCommands() {
     { label: "branch prefixes…", detail: "", run: () => openPrefixesView() },
     { label: "external tools…", detail: "", run: () => openExtToolsView() },
     { label: "session errors…", detail: "", run: () => openSessionErrorsView() },
+    { label: "compare with link…", detail: "", run: () => openLinkCompareDialog() },
     { label: "create branch…", detail: "", run: () => openCreateBranchPrompt() },
     { label: "go to current branch", detail: "", run: () => locateCurrentBranch() },
     { label: "branch versions…", detail: "", run: () => openVersionBranches() },

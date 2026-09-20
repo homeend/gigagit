@@ -530,11 +530,41 @@ function openEntryCompare(body) {
 }
 
 
+// openLinkCompare shows a LINK comparison (/api/compare-links): two gg:// link
+// texts the server ran through domain.CompareLinks. It is the entry compare's
+// screen and, like it, addressed by SPEC rather than by two hashes — but per
+// ROW where a member's bytes live somewhere other than its side's own
+// endpoint (a `-u` stash keeps its untracked files on a third parent). Two
+// arbitrary links have no merge base to speak of, so there are no origin sets.
+function openLinkCompare(body) {
+  state.detailGen++;
+  state.previewOpen = null; // never mistaken for an open merge preview
+  state.compare = {
+    a: body.left.desc,
+    b: body.right.desc,
+    aHash: "",
+    bHash: "",
+    aSpec: body.left.spec,
+    bSpec: body.right.spec,
+    links: { left: body.left.text, right: body.right.text },
+    all: body.files || [],
+    filter: "all",
+    originsError: "",
+  };
+  state.filesMode = "compare";
+  state.fileSha = null;
+  enterFilesStage();
+  $("files-title").textContent = (body.label ? body.label + " — " : "") + state.compare.a + " ↔ " + state.compare.b;
+  applyCompareFilter();
+  focusPane();
+}
+
+
 // openEntryFileDiff opens ONE file between two arbitrary sides (a stored copy
 // and the file here, typically). Both labels go in the title: a diff whose
 // sides are not named is unreadable when neither of them is "the commit you
 // are looking at".
-async function openEntryFileDiff({ left, right, path, leftLabel, rightLabel, status }) {
+async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightLabel, status }) {
   const gen = ++state.detailGen;
   if (state.layout !== "diff") {
     state.pane = "files";
@@ -549,6 +579,7 @@ async function openEntryFileDiff({ left, right, path, leftLabel, rightLabel, sta
   updateDiffNav();
   const q = new URLSearchParams({ left, right, path });
   if (status) q.set("status", status);
+  if (oldPath) q.set("old_path", oldPath); // a rename's left side lives at its old path
   try {
     const d = await getJSON("/api/entry-diff?" + q);
     if (gen !== state.detailGen) return; // superseded by a newer open or esc
@@ -578,7 +609,7 @@ function applyCompareFilter() {
     // diff pane is not on screen, and stepping back there from an open
     // diff must not strand a stale one.
     $("files-list").innerHTML = `<li class="sect">${
-      c.all.length ? "no files match this filter" : c.frozen ? "nothing differs" : "the two branches are identical"
+      c.all.length ? "no files match this filter" : c.frozen || c.links ? "nothing differs" : "the two branches are identical"
     }</li>`;
     if (state.layout === "diff") drillOut();
     return;
@@ -603,7 +634,7 @@ function renderCompareBar() {
   // the count alone rather than two buttons that can only disappoint. The
   // frozen note itself is in the header, where the two sides are named; a
   // second copy here would only repeat it.
-  if (c.frozen) {
+  if (c.frozen || c.links) {
     bar.innerHTML = `<button class="on" disabled>all (${c.all.length})</button>`;
     return;
   }
@@ -882,6 +913,20 @@ async function openFile(i) {
   updateDiffNav();
   if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
+  // A link comparison addresses its sides by spec too, and a ROW may name its
+  // own: this arm must run before the hash lane below, which has no hashes to
+  // read here.
+  if (state.filesMode === "compare" && state.compare.links) {
+    return openEntryFileDiff({
+      left: f.left_spec || state.compare.aSpec,
+      right: f.right_spec || state.compare.bSpec,
+      path: f.path,
+      oldPath: f.old_path || "",
+      status: f.status,
+      leftLabel: state.compare.a,
+      rightLabel: state.compare.b,
+    });
+  }
   // A frozen entry compare addresses its sides by SPEC, not by two hashes:
   // one of them is a snapshot in gg's own store that git cannot read.
   if (state.filesMode === "compare" && state.compare.frozen) {
@@ -3018,14 +3063,22 @@ $("files-list").addEventListener("contextmenu", (e) => {
     renderFiles();
     const rev = state.filesMode === "compare" ? state.compare.bHash : f.sha || state.fileSha;
     const po = openPreviewCtx();
+    // A link comparison has no single revision to be "here": its right side
+    // may be the working tree, a stash's third parent, a shelf entry. The rows
+    // that need one are left out rather than sent an empty rev.
+    const revRows = rev
+      ? [
+          { label: "file history", act: () => openFileHistory(f.path, rev) },
+          { label: "blame at this commit", act: () => openFileBlame(f.path, rev) },
+          // gg's own stores, addressed at the commit being viewed: a bookmark
+          // points AT this version, a shelf entry freezes its bytes.
+          { label: "bookmark this file", act: () => addFileEntry("bookmarks", f.path, "committed", rev) },
+          { label: "add to shelf", act: () => addFileEntry("shelf", f.path, "committed", rev) },
+        ]
+      : [];
     showCtxMenu(
       [
-        { label: "file history", act: () => openFileHistory(f.path, rev) },
-        { label: "blame at this commit", act: () => openFileBlame(f.path, rev) },
-        // gg's own stores, addressed at the commit being viewed: a bookmark
-        // points AT this version, a shelf entry freezes its bytes.
-        { label: "bookmark this file", act: () => addFileEntry("bookmarks", f.path, "committed", rev) },
-        { label: "add to shelf", act: () => addFileEntry("shelf", f.path, "committed", rev) },
+        ...revRows,
         ...copyPathRows(f.path),
         // A compare row's rev is bHash, but the diff on screen is aHash →
         // bHash, not bHash^ → bHash — a commit-state link would misdescribe
@@ -3176,4 +3229,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };

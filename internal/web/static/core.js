@@ -131,7 +131,11 @@ function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch {} }
 async function getJSON(url) {
   const resp = await fetch(url);
   const body = await resp.json();
-  if (!resp.ok) throw new Error(body.error || resp.statusText);
+  if (!resp.ok) {
+    const err = new Error(body.error || resp.statusText);
+    err.data = body; // structured refusals, as postJSON keeps them (a link comparison's `side`)
+    throw err;
+  }
   return body;
 }
 

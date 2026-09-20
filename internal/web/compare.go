@@ -495,6 +495,14 @@ func (s *Server) handleEntryDiff(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
 		return
 	}
+	// A rename's LEFT side lives at its OLD path. Without this the left cell
+	// of an R row read the new path at the old revision: absent, so the whole
+	// file looked added.
+	leftPath := leftPathOf(q.Get("old_path"), path)
+	if !isGitArgSafe(leftPath) {
+		writeErr(w, http.StatusBadRequest, errors.New("invalid old_path"))
+		return
+	}
 	ctx := r.Context()
 	left, code, err := parseEntrySide(ctx, svc, q.Get("left"))
 	if err != nil {
@@ -509,7 +517,7 @@ func (s *Server) handleEntryDiff(w http.ResponseWriter, r *http.Request) {
 	status := q.Get("status")
 	var oldSrc, newSrc domain.ByteSource
 	if status != "A" {
-		oldSrc = maybeLenient(left, func(ctx context.Context) ([]byte, error) { return left.bytes(ctx, path) })
+		oldSrc = maybeLenient(left, func(ctx context.Context) ([]byte, error) { return left.bytes(ctx, leftPath) })
 	}
 	if status != "D" {
 		newSrc = maybeLenient(right, func(ctx context.Context) ([]byte, error) { return right.bytes(ctx, path) })
@@ -521,6 +529,11 @@ func (s *Server) handleEntryDiff(w http.ResponseWriter, r *http.Request) {
 	key := ""
 	if !left.live && !right.live {
 		key = left.tag + ".." + right.tag + ":" + path
+		if leftPath != path {
+			// Its own entry: the same pair and path without old_path is a
+			// different (and wrong) diff, and must never be served for this one.
+			key += "<" + leftPath
+		}
 	}
 	d, derr := svc.Differ().Diff(ctx, domain.Request{Key: key, Path: path, Old: oldSrc, New: newSrc})
 	if derr != nil {
