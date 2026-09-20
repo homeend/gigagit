@@ -180,6 +180,35 @@ func TestPRCommentsCachedIsEmptyBeforeARefresh(t *testing.T) {
 	}
 }
 
+// The details view is served stale-first: what the last forge read left in the
+// caches, with no forge call; nothing until BOTH halves were read once.
+func TestPRDetailsCached(t *testing.T) {
+	t.Parallel()
+	ff := &fakeForge{comments: reviewThreads(), byNum: map[int]model.PullRequest{7: {Number: 7, Title: "t", Body: "the body"}}}
+	svc := newForgeSvc(t, ff)
+	ctx := context.Background()
+	if _, _, ok := svc.PRDetailsCached(7); ok {
+		t.Fatal("nothing was read yet")
+	}
+	if _, err := svc.PullRequest(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok := svc.PRDetailsCached(7); ok {
+		t.Fatal("the comments were never read: half a view is not a cached view")
+	}
+	if _, err := svc.PRCommentsRefresh(ctx, 7); err != nil {
+		t.Fatal(err)
+	}
+	ff.commentCalls = 0
+	pr, c, ok := svc.PRDetailsCached(7)
+	if !ok || pr.Body != "the body" || len(c.Hub) != 1 || len(c.Outdated) != 1 {
+		t.Fatalf("cached = %+v %+v ok %v", pr, c, ok)
+	}
+	if ff.commentCalls != 0 {
+		t.Fatal("a cached read called the forge")
+	}
+}
+
 func TestWireNoteForgeFields(t *testing.T) {
 	t.Parallel()
 	svc := newForgeSvc(t, &fakeForge{comments: reviewThreads()})

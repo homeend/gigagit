@@ -83,6 +83,15 @@ func TestPRThreadEndpointsOnThePage(t *testing.T) {
 	if !strings.Contains(prs, `postJSON("/api/pr/comments/refresh?n="`) {
 		t.Error("prs.js must POST the comment refresh")
 	}
+	// Stale-first: the overlay is pushed BEFORE any request, and asks for the
+	// cached copy (a GET) before the fresh one.
+	push, get, post := strings.Index(det, `pushLayer("prdetails"`), strings.Index(det, `getJSON("/api/pr/details?n="`), strings.Index(det, `postJSON("/api/pr/details?n="`)
+	if push < 0 || get < push || post < get {
+		t.Errorf("prdetails.js: want pushLayer < cached GET < fresh POST, got %d %d %d", push, get, post)
+	}
+	if !regexp.MustCompile(`#prdetails-status\.hidden\s*\{\s*display:\s*none`).MatchString(readStatic(t, "style.css")) {
+		t.Error("style.css: no #prdetails-status.hidden rule")
+	}
 	if !strings.Contains(det, `postJSON("/api/pr/details?n="`) {
 		t.Error("prdetails.js must POST the details load (R2: a GET never calls the forge)")
 	}

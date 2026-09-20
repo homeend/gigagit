@@ -24,6 +24,7 @@ func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
 		mux.HandleFunc("GET /api/pr/notes", s.handlePRNotes)
 		mux.HandleFunc("POST /api/pr/comments/refresh", writeGuard(s.handlePRCommentsRefresh))
+		mux.HandleFunc("GET /api/pr/details", s.handlePRDetailsCached)
 		mux.HandleFunc("POST /api/pr/details", writeGuard(s.handlePRDetails))
 	})
 }
@@ -134,12 +135,35 @@ func (s *Server) handlePRDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c, _ := svc.PRCommentsCached(pr.Number)
-	writeJSON(w, map[string]any{
-		"pr":        full,
+	writeJSON(w, prDetailsBody(full, c))
+}
+
+// handlePRDetailsCached is the overlay's FIRST read: what the last forge read
+// left in the domain's caches, so a PR looked at before shows at once while
+// the POST above re-reads it. It never calls the forge (R2); "cached": false
+// means there is nothing to show yet and the page waits for the POST.
+func (s *Server) handlePRDetailsCached(w http.ResponseWriter, r *http.Request) {
+	svc, pr, ok := s.knownPR(w, r)
+	if !ok {
+		return
+	}
+	full, c, ok := svc.PRDetailsCached(pr.Number)
+	if !ok {
+		writeJSON(w, map[string]any{"cached": false})
+		return
+	}
+	body := prDetailsBody(full, c)
+	body["cached"] = true
+	writeJSON(w, body)
+}
+
+func prDetailsBody(pr model.PullRequest, c domain.PRComments) map[string]any {
+	return map[string]any{
+		"pr":        pr,
 		"hub":       orEmptyComments(c.Hub),
 		"outdated":  orEmptyComments(c.Outdated),
 		"truncated": c.Truncated,
-	})
+	}
 }
 
 func orEmptyComments(c []model.ForgeComment) []model.ForgeComment {

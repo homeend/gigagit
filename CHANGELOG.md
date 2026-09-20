@@ -94,6 +94,18 @@ Under the hood: `domain.DescribeLink` is now the one describer behind every
 history row (it lived unexported in `internal/cli`, out of the TUI's reach),
 and a member's bytes are read through `FileSet.Source(path)`.
 
+## Web: the pull-request details popup opens at once, cached
+
+Opening a PR's **details** used to show nothing for the seconds the forge
+took. The popup now opens immediately with a loading line inside; a PR whose
+details were read before shows its **cached** copy at once (`⟳ checking the
+forge for changes…` under the title) and is replaced by the fresh read when it
+lands — the scroll position stays. If the forge cannot be reached the cached
+copy stays, with the reason; with nothing cached the popup says why. The
+cache is the domain's shared PR cache (`PullRequest` now feeds it;
+`PRDetailsCached`), served by a new cache-only `GET /api/pr/details` — the
+forge-spending read stays the guarded POST.
+
 ## Web: a cut files-pane title shows whole on hover
 
 The files pane's title is one elided line, and a pull request's (`PR #n · title
