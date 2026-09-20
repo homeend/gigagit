@@ -733,7 +733,15 @@ func noteRowCells(nl noteLine, paneW int) string {
 		cell = frame.Render("▸ ") + text.Render(body)
 	default:
 		body := padRight(truncate(sanitizeLine(nl.text), inner), inner)
-		cell = frame.Render("│ ") + text.Render(body) + frame.Render(" │")
+		painted := text.Render(body)
+		// A forge note's rows carry a class mask (rendered markdown). A stale
+		// box stays grey throughout, and a mask the truncate guard has
+		// outrun is dropped rather than mis-applied.
+		if runes := []rune(body); nl.cls != nil && !nl.stale && len(nl.cls) <= len(runes) {
+			cls := append(append([]syntax.Class{}, nl.cls...), make([]syntax.Class, len(runes)-len(nl.cls))...)
+			painted = styledRuns(runes, make([]emphLevel, len(runes)), cls, text)
+		}
+		cell = frame.Render("│ ") + painted + frame.Render(" │")
 	}
 	blank := strings.Repeat(" ", paneW)
 	if nl.side == model.NoteSideOld {
