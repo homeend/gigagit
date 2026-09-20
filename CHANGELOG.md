@@ -35,10 +35,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   at N would otherwise not be the N newest-updated. It asks for one row more
   than the limit to learn whether there is more.
 
-### Fixed
-
-- An op that armed BOTH a pull request's open and the list re-read dropped the
-  open (the second command overwrote the first); they are batched now.
+- Opening a found PR arms both its diff and a re-read of the tab's list (that is
+  how it shows up there as a known row); the op's follow-up commands are
+  batched, so the re-read cannot displace the open.
 
 ## A link's bookmark / shelf hint finds its entry past the web's list page
 
