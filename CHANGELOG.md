@@ -18,6 +18,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   filter (the next one closes). `j`/`k` are filter text now, so they no longer
   move the selection.
 
+## Web: the pull-request loading mask no longer covers an open menu
+
+### Fixed
+
+- `gg web`: the mask that dims the panes while a pull request loads shared the
+  menus' `z-index` (40) and came later in the page, so it painted OVER the
+  main menu, a context menu, the palette and even a decision modal opened
+  meanwhile. It now sits at 10 — above the panes' sticky chrome, below every
+  overlay — and a static test pins that order.
+
 ## `}` / `{` reach a note that sits behind the freshly opened cursor
 
 ### Fixed

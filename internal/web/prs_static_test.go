@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -83,5 +84,32 @@ func TestPRPageSendsOnlyTheNumber(t *testing.T) {
 	}
 	if !strings.Contains(js, `"/api/pr/open?n=" + n`) {
 		t.Error("prs.js: the open read must be /api/pr/open?n=<number>")
+	}
+}
+
+// The loading mask dims the PANES; it is not a dialog. Anything the user opens
+// while a pull request loads — the main menu, a context menu, the palette, a
+// decision modal — must paint above it, so its z-index stays below every
+// overlay's (a mask at the menu's own 40 once painted over the open menu).
+func TestPRMaskSitsBelowEveryOverlay(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "style.css"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	css := string(b)
+	zOf := func(id string) int {
+		m := regexp.MustCompile(`(?m)^[^{\n]*#` + id + `\b[^{\n]*\{[^}]*z-index:\s*(\d+)`).FindStringSubmatch(css)
+		if m == nil {
+			t.Fatalf("style.css: no z-index rule for #%s", id)
+		}
+		n, _ := strconv.Atoi(m[1])
+		return n
+	}
+	mask := zOf("pr-mask")
+	for _, id := range []string{"ctx-menu", "modal", "preflight", "palette", "prompt", "help", "settings", "prdetails", "history", "blame"} {
+		if z := zOf(id); mask >= z {
+			t.Errorf("#pr-mask z-index %d must be below #%s's %d", mask, id, z)
+		}
 	}
 }
