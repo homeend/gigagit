@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Pull-request text renders as markdown in the TUI
+
+The PR hub popup (description, conversation, verdicts, outdated threads) and
+the review-thread boxes inside the PR diff now show pull-request text rendered,
+as `gg web` already did — same parser, laid out for a terminal.
+
+- **Inline:** bold, italic, strikethrough and inline code lose their markers
+  and take terminal attributes (inline code borrows the string colour); a link
+  reads `text (url)` — text underlined, url dim; an image `[image: alt] (url)`;
+  `@mentions` and `#123` are bold. They are attributes, not theme colours, so
+  the Terminal theme renders them too.
+- **Blocks:** headings (bold + underlined), `•` / numbered / `☐ ☑` lists with a
+  hanging indent, `│` quotes, rules, fenced code indented and syntax-coloured
+  (never reflowed — clipped), tables in aligned columns, and a dim
+  `suggestion` caption over a suggestion block (shown, never applied).
+- The hub is not pre-wrapped: the popup wraps each row as it draws, so ctrl+t
+  maximize re-flows the text; `/` filter and scrolling work on the rendered
+  text. An outdated thread's hunk is code and stays literal.
+- A thread summarised as **suggestion** no longer repeats that word as the
+  block's caption (web and TUI).
+- Your own and agents' notes are still shown exactly as typed.
+
 ## A file link at a ref or commit describes as its file
 
 ### Fixed
@@ -37,9 +59,7 @@ them rendered instead of as raw text.
 - **A thread's bold summary line** follows the markdown: a comment that opens
   with a suggestion, a quote or a table is summarised as `suggestion` /
   `quote` / `table` rather than by a line of backticks, and its body stays
-  whole. Plain-prose comments split exactly as before. (This also tidies the
-  TUI's thread rows, which still show the text unrendered — the TUI is the
-  next stage.)
+  whole. Plain-prose comments split exactly as before.
 - **Unchanged on purpose:** your own and agents' review notes are shown exactly
   as typed; `gg pr view` / `gg pr comments` keep the raw markdown, and the note
   JSON handed to agents (`gg note list --json`, MCP) carries no parsed trees —

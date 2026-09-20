@@ -10,7 +10,9 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -39,6 +41,9 @@ type noteLine struct {
 	text   string         // this row's text (already wrapped to the box; frame rows: the title)
 	stale  bool           // the anchor text is gone: render dim
 	agent  bool           // this ROW's own note is agent-written (the `a` layer filter)
+	// cls is the row's per-rune class mask — set only on a FORGE note's rows,
+	// whose text is rendered markdown (md_render.go); nil everywhere else.
+	cls []syntax.Class
 }
 
 // noteRowKind is one row's role inside a note box, hunk-style: a rounded
@@ -440,6 +445,10 @@ func noteBodyLines(r domain.ResolvedNote, rootID string, depth, innerW int, stal
 		}
 	}
 	var rows []noteLine
+	w := innerW - len([]rune(indent))
+	if r.Note.Source == model.NoteSourceForge {
+		return forgeNoteBodyLines(r, mk, indent, head, w)
+	}
 	for _, ln := range noteWrap(sanitizeLine(head+r.Note.Summary), innerW-len([]rune(indent))) {
 		rows = append(rows, mk(noteRowSummary, indent+ln))
 	}
@@ -501,4 +510,35 @@ func (m Model) noteCollapseRows() []actionRow {
 	return append(rows, actionRow{id: "note-collapse-all", key: "O", label: label, run: func(m Model) (tea.Model, tea.Cmd) {
 		return m.toggleAllNotesCollapse(), nil
 	}})
+}
+
+// forgeNoteBodyLines is noteBodyLines for a forge comment, whose text is
+// markdown: the summary from its source line's inline tree (a label summary —
+// "suggestion" — has none and stays plain), the rationale from its parsed
+// blocks. Both are wrapped here, to the box, masks and all.
+func forgeNoteBodyLines(r domain.ResolvedNote, mk func(noteRowKind, string) noteLine, indent, head string, w int) []noteLine {
+	pad := make([]syntax.Class, len([]rune(indent)))
+	var rows []noteLine
+	add := func(kind noteRowKind, mr []mdRow) {
+		for _, row := range mr {
+			nl := mk(kind, indent+row.text)
+			nl.cls = append(append([]syntax.Class{}, pad...), row.cls...)
+			rows = append(rows, nl)
+		}
+	}
+	if r.SummarySrc != "" {
+		add(noteRowSummary, mdInlineRows(markdown.ParseInline(r.SummarySrc), w, head))
+	} else {
+		add(noteRowSummary, mdInlineRows([]markdown.Inline{{Kind: markdown.InText, Text: r.Note.Summary}}, w, head))
+	}
+	if r.Note.Rationale != "" {
+		body := mdRows(markdown.Parse(r.Note.Rationale), w)
+		// A thread summarised by the label "suggestion" opens with that very
+		// block: its caption would only say the summary again.
+		if r.SummarySrc == "" && r.Note.Summary == markdown.LabelSuggestion && len(body) > 0 && body[0].text == i18n.T("suggestion") {
+			body = body[1:]
+		}
+		add(noteRowText, body)
+	}
+	return rows
 }

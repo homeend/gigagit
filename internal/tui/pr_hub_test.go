@@ -10,6 +10,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 func hubText(ls []contentLine) string {
@@ -59,7 +60,9 @@ func TestPRHubBody(t *testing.T) {
 	ls := prHubBody(p, c, now)
 	got := hubText(ls)
 	for _, want := range []string{
-		"Description", "  First line", "      indented",
+		// The body is markdown: a paragraph line's leading whitespace folds, as
+		// it does on the forge (the hunk below still proves tab expansion).
+		"Description", "  First line", "  indented·[31m", "+   x := 1",
 		"Conversation (2)", "  hubot · 2d ago", "    looks good overall",
 		"  octocat · 1d ago · changes requested", "    please split this",
 		"Outdated (1)", "  parser.go:42 · hubot · 5d ago · resolved", "    please rename",
@@ -147,5 +150,64 @@ func TestPRHubLoadFailureOffersRetry(t *testing.T) {
 	nm, cmd := m.Update(keyMsg("r"))
 	if cmd == nil || !strings.Contains(hubText(layerOf[*prHubPopup](nm.(Model)).lines), "loading") {
 		t.Fatal("r must reload the hub")
+	}
+}
+
+// Forge prose is markdown: the hub lays the parsed tree out — markers gone,
+// styles on the class mask — while a plain-prose body reads exactly as before
+// and an outdated thread's HUNK (code, not markdown) stays literal.
+func TestPRHubRendersMarkdown(t *testing.T) {
+	t.Parallel()
+	got := prMarkdownLines("# T\n\n- [x] a **b**\n- see [doc](https://d.x)", "  ")
+	var texts []string
+	for _, l := range got {
+		texts = append(texts, l.text)
+		if len(l.cls) != len([]rune(l.text)) {
+			t.Fatalf("mask/text mismatch on %q", l.text)
+		}
+	}
+	if want := "  T|  |  ☑ a b|  • see doc (https://d.x)"; strings.Join(texts, "|") != want {
+		t.Fatalf("texts = %q, want %q", strings.Join(texts, "|"), want)
+	}
+	at := func(line int, sub string) syntax.Class {
+		i := strings.Index(got[line].text, sub)
+		return got[line].cls[len([]rune(got[line].text[:i]))]
+	}
+	if at(0, "T") != mdHeading || at(2, "b") != mdStrong || at(3, "doc") != mdLink || at(3, "(https") != mdDim || got[2].cls[0] != syntax.Plain {
+		t.Fatalf("classes: %v / %v / %v", got[0].cls, got[2].cls, got[3].cls)
+	}
+
+	plain := "nice work\nreally\n\nsecond paragraph"
+	var a, b []string
+	for _, l := range prMarkdownLines(plain, "    ") {
+		a = append(a, l.text)
+	}
+	for _, l := range prTextLines(plain, "    ") {
+		b = append(b, strings.TrimRight(l.text, " "))
+	}
+	for i := range a {
+		a[i] = strings.TrimRight(a[i], " ")
+	}
+	if strings.Join(a, "|") != strings.Join(b, "|") {
+		t.Fatalf("plain prose changed:\n got %q\nwant %q", a, b)
+	}
+
+	body := prHubBody(model.PullRequest{Number: 7, Body: "**bold** body"},
+		domain.PRComments{
+			Hub:      []model.ForgeComment{{ID: "H", Author: "bob", Body: "`code` here"}},
+			Outdated: []model.ForgeComment{{ID: "O", Author: "eve", Path: "a.go", Line: 3, Hunk: "@@ -1 +1 @@\n-**old**\n+new", Body: "> quoted"}},
+		}, time.Now())
+	var all []string
+	for _, l := range body {
+		all = append(all, l.text)
+	}
+	joined := strings.Join(all, "\n")
+	for _, want := range []string{"  bold body", "    code here", "    -**old**", "    │ quoted"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("hub body misses %q:\n%s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "`code`") || strings.Contains(joined, "**bold**") {
+		t.Errorf("markers survived:\n%s", joined)
 	}
 }
