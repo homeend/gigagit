@@ -1,0 +1,74 @@
+{
+ "blocks": [
+  {
+   "k": "table",
+   "head": [
+    [
+     {
+      "k": "text",
+      "t": "Name"
+     }
+    ],
+    [
+     {
+      "k": "text",
+      "t": "Count"
+     }
+    ],
+    [
+     {
+      "k": "text",
+      "t": "Note"
+     }
+    ]
+   ],
+   "rows": [
+    [
+     [
+      {
+       "k": "text",
+       "t": "alpha"
+      }
+     ],
+     [
+      {
+       "k": "text",
+       "t": "1"
+      }
+     ],
+     [
+      {
+       "k": "strong",
+       "in": [
+        {
+         "k": "text",
+         "t": "bold"
+        }
+       ]
+      }
+     ]
+    ],
+    [
+     [
+      {
+       "k": "text",
+       "t": "beta | gamma"
+      }
+     ],
+     [
+      {
+       "k": "text",
+       "t": "22"
+      }
+     ],
+     []
+    ]
+   ],
+   "align": [
+    "left",
+    "right",
+    "center"
+   ]
+  }
+ ]
+}

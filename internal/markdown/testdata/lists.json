@@ -1,0 +1,136 @@
+{
+ "blocks": [
+  {
+   "k": "list",
+   "items": [
+    {
+     "blocks": [
+      {
+       "k": "p",
+       "in": [
+        {
+         "k": "text",
+         "t": "first"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "blocks": [
+      {
+       "k": "p",
+       "in": [
+        {
+         "k": "text",
+         "t": "second with "
+        },
+        {
+         "k": "code",
+         "t": "code"
+        }
+       ]
+      },
+      {
+       "k": "list",
+       "items": [
+        {
+         "blocks": [
+          {
+           "k": "p",
+           "in": [
+            {
+             "k": "text",
+             "t": "nested one"
+            }
+           ]
+          }
+         ]
+        },
+        {
+         "blocks": [
+          {
+           "k": "p",
+           "in": [
+            {
+             "k": "text",
+             "t": "nested two"
+            }
+           ]
+          }
+         ]
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "k": "list",
+   "ordered": true,
+   "start": 3,
+   "items": [
+    {
+     "blocks": [
+      {
+       "k": "p",
+       "in": [
+        {
+         "k": "text",
+         "t": "three"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "blocks": [
+      {
+       "k": "p",
+       "in": [
+        {
+         "k": "text",
+         "t": "four"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "k": "list",
+   "items": [
+    {
+     "task": "open",
+     "blocks": [
+      {
+       "k": "p",
+       "in": [
+        {
+         "k": "text",
+         "t": "open task"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "task": "done",
+     "blocks": [
+      {
+       "k": "p",
+       "in": [
+        {
+         "k": "text",
+         "t": "done task"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

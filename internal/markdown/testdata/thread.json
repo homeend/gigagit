@@ -1,0 +1,70 @@
+{
+ "blocks": [
+  {
+   "k": "p",
+   "in": [
+    {
+     "k": "text",
+     "t": "Rename "
+    },
+    {
+     "k": "code",
+     "t": "fetchAll"
+    },
+    {
+     "k": "text",
+     "t": " to "
+    },
+    {
+     "k": "strong",
+     "in": [
+      {
+       "k": "text",
+       "t": "fetchOpen"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "k": "list",
+   "items": [
+    {
+     "blocks": [
+      {
+       "k": "p",
+       "in": [
+        {
+         "k": "text",
+         "t": "it only fetches open PRs"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "blocks": [
+      {
+       "k": "p",
+       "in": [
+        {
+         "k": "text",
+         "t": "the name lies"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "k": "code",
+   "lang": "suggestion",
+   "lines": [
+    {
+     "t": "func fetchOpen() {}"
+    }
+   ]
+  }
+ ]
+}
