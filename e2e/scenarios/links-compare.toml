@@ -122,12 +122,13 @@ exit            = 0
 stdout_contains = ["M\tf1.txt"]
 stdout_excludes = ["keep.txt"]
 
-# The one lane the algebra does not cover yet: --patch still takes two
-# ENDPOINTS, and model.DiffSpec has no `-R`, so a reversed live pair is
-# refused (exit 2) — in gg's own words, naming the way out.
+# --patch reads the same way round: a reversed live pair used to be refused
+# (model.DiffSpec has no `-R`); it renders per member now, left → right.
 [[run]]
-cmd  = ["compare", "--patch", "@worktree", "main"]
-exit = 2
+cmd             = ["compare", "--patch", "@worktree", "main"]
+exit            = 0
+stdout_contains = ["+++ b/f1.txt"]
+stdout_excludes = ["keep.txt"]
 
 # ── 4. '?' belongs to the grammar now ────────────────────────────────────
 
@@ -152,16 +153,16 @@ cmd  = ["link", "keep.txt?bookmark=x.txt"]
 exit = 2
 stdout_excludes = ["gg:///"]
 
-# --patch renders whole ENDPOINTS, so a side that names a FILE SET cannot be
-# rendered: it would silently print the two endpoints' whole-tree diff, a
-# different comparison from the one the default listing gives. The link below
-# is bounded by its /<path>.
+# --patch is the patch of exactly the rows the listing shows. The link below is
+# bounded by its /<path>, so it renders that one file — never the two
+# endpoints' whole-tree diff, a different comparison from the listing's.
 [[run]]
 cmd             = ["compare", "--patch", "gg://{{cwd}}/f1.txt@ref:main", "c1"]
-exit            = 2
-stdout_excludes = ["diff --git"]
+exit            = 0
+stdout_contains = ["+++ b/f1.txt"]
+stdout_excludes = ["f2.txt", "keep.txt"]
 
-# Dropping --patch answers, scoped to the one file the link named.
+# The listing of the same comparison: the one file the link named.
 [[run]]
 cmd             = ["compare", "gg://{{cwd}}/f1.txt@ref:main", "c1"]
 exit            = 0

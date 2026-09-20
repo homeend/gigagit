@@ -177,45 +177,13 @@ func cmdCompare(statePath string, svc *domain.Service, args []string, stdout, st
 		}
 	}
 	if *patch {
-		// A patch renders ENDPOINTS, not the file sets resolved above, so a
-		// key set an endpoint cannot reproduce would simply be LOST: a
-		// different comparison from the one the default listing shows, with
-		// nothing on screen to say so. The rule is domain's (ComparePatchSets
-		// asks it per side); this frontend only words the refusal.
-		//
-		// The reachable shape is not an exotic one. Any link with a /<path>
-		// is bounded, and that is the spelling every "copy gg link" button in
-		// the product emits.
-		//
-		// TODO(plan 3): what is DEFERRED is rendering a PROJECTED patch for
-		// the lanes that lose the set — a set-taking ComparePatch sibling,
-		// which is a new question (which hunks of a file a projection even
-		// contains), not a signature change. Deferred alongside it: inverting
-		// a reversed LIVE pair, which needs a Reverse flag on model.DiffSpec
-		// (it has no `-R`) and three new argv forms; that one still surfaces
-		// below as ErrComparePatchPair.
+		// The patch of exactly the rows the default listing shows. Which lane
+		// may render it — one git invocation for two whole endpoints, per
+		// member for a file set (a link with a /<path>, an <a>..<b>
+		// change-set) or a reversed live pair — is domain's call
+		// (ComparePatchSets); both used to be refused here.
 		diff, err := svc.ComparePatchSets(context.Background(), left, right)
 		if err != nil {
-			var lost *domain.PatchLosesSetError
-			if errors.As(err, &lost) {
-				fmt.Fprintf(stderr, "compare: --patch renders whole endpoints, and %s a file set "+
-					"(a link with a /<path>, or an <a>..<b> change-set); "+
-					"drop --patch for the changed-file list of exactly those files\n",
-					boundedSideName(lost))
-				return 2
-			}
-			// The one gap gets gg's own words. domain's refusal names a Go
-			// function and two raw enum ordinals ("livePairSpec: unsupported
-			// endpoint pair 1 → 3"), and a user's terminal is the wrong place
-			// for either — the message it REPLACED ("order endpoints
-			// oldest→newest…") at least told the user what to type.
-			if errors.Is(err, domain.ErrComparePatchPair) {
-				fmt.Fprintf(stderr, "compare: --patch cannot render %s → %s yet; "+
-					"drop --patch for the changed-file list, or order the endpoints oldest→newest "+
-					"(a commit, then @staged, then @worktree)\n",
-					left.Endpoint().Display(), right.Endpoint().Display())
-				return 2
-			}
 			fmt.Fprintln(stderr, "error:", err)
 			return 1
 		}
@@ -523,21 +491,4 @@ func compareLinkExit(err error, stderr io.Writer) int {
 		return 2
 	}
 	return 1
-}
-
-// boundedSideName names the side to blame, as a full clause — the verb travels
-// with the subject ("both sides name", not "both sides" + " names"), because
-// splitting them shipped "and both sides name names a file set". Built from
-// the SAME predicate the refusal is built from, so the message cannot name a
-// side the guard did not fire on.
-func boundedSideName(lost *domain.PatchLosesSetError) string {
-	lb, rb := lost.Left, lost.Right
-	switch {
-	case lb && rb:
-		return "both sides name"
-	case lb:
-		return "the left side names"
-	default:
-		return "the right side names"
-	}
 }

@@ -2,18 +2,14 @@ package domain
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
 )
-
-// PatchLosesSetError is ComparePatchSets' refusal: ComparePatch renders whole
-// ENDPOINTS, and at least one side is a file set its endpoint cannot
-// reproduce. Left/Right say which, so a frontend can name the side.
-type PatchLosesSetError struct{ Left, Right bool }
-
-func (e *PatchLosesSetError) Error() string {
-	return "a patch renders whole endpoints, and this comparison names a file set (a link with a /<path>, or an <a>..<b> change-set)"
-}
 
 // patchLosesKeySet reports whether ONE side's key set survives the trip
 // through ComparePatch, which takes endpoints and re-derives what it needs
@@ -43,15 +39,88 @@ func (f FileSet) patchLosesKeySet() bool {
 	return f.narrowed || (f.bounded && f.ep.Kind() != model.EndpointShelf)
 }
 
-// ComparePatchSets is ComparePatch for a caller holding the comparison's FILE
-// SETS: it refuses (a *PatchLosesSetError) when either side would be quietly
-// widened, and otherwise renders the two endpoints. It lives here — not in a
-// frontend — because the rule is a fact about the compare algebra: a frontend
-// that called ComparePatch with left.Endpoint(), right.Endpoint() directly
-// would print a different comparison from the one its own listing shows.
+// ComparePatchSets renders a comparison of two FILE SETS as a unified diff —
+// the patch of exactly the rows CompareSets lists for them. It lives here, not
+// in a frontend, because which lane may render a comparison is a fact about
+// the compare algebra.
+//
+//   - Two sides their endpoints reproduce go to ComparePatch: one git
+//     invocation for a live pair, the per-member lane for a shelf entry.
+//   - A side that would LOSE its key set there (patchLosesKeySet), and a pair
+//     ComparePatch cannot spell (a reversed live pair — model.DiffSpec has no
+//     -R), render per member instead. That lane costs one `diff --no-index`
+//     and up to two blob reads per row, so it runs only where the fast lane
+//     would describe a different comparison, or none.
 func (s *Service) ComparePatchSets(ctx context.Context, left, right FileSet) (string, error) {
-	if l, r := left.patchLosesKeySet(), right.patchLosesKeySet(); l || r {
-		return "", &PatchLosesSetError{Left: l, Right: r}
+	if !left.patchLosesKeySet() && !right.patchLosesKeySet() {
+		patch, err := s.ComparePatch(ctx, left.ep, right.ep)
+		if !errors.Is(err, ErrComparePatchPair) {
+			return patch, err
+		}
 	}
-	return s.ComparePatch(ctx, left.ep, right.ep)
+	return s.patchPerMember(ctx, left, right)
+}
+
+// patchPerMember renders left → right one listed file at a time: both sides'
+// bytes into temp files, `git diff --no-index`, headers relabelled to
+// a/<path> b/<path>. It needs nothing of git but bytes, so it renders ANY
+// comparison CompareSets can list.
+//
+// A member's bytes come from Source(path), never from the set's endpoint (a
+// `-u` stash keeps untracked files on a third parent), and a rename's left
+// side lives at its OLD path. A read error on a side the row says IS present
+// propagates; only the side an "A"/"D" status says is absent goes unread.
+func (s *Service) patchPerMember(ctx context.Context, left, right FileSet) (string, error) {
+	files, err := s.CompareSets(ctx, left, right)
+	if err != nil {
+		return "", err
+	}
+	tmp, err := os.MkdirTemp("", "gg-compare-*")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(tmp)
+	var b strings.Builder
+	for i, f := range files {
+		lpath := f.Path
+		if f.OldPath != "" {
+			lpath = f.OldPath
+		}
+		var lb, rb []byte
+		switch f.Status {
+		case "A": // left genuinely absent; only the right side is read
+			rb, err = s.ResolveBytes(ctx, right.Source(f.Path).FileRef(f.Path))
+		case "D": // right genuinely absent; only the left side is read
+			lb, err = s.ResolveBytes(ctx, left.Source(lpath).FileRef(lpath))
+		default: // both sides are present — resolve both, any error propagates
+			lb, err = s.ResolveBytes(ctx, left.Source(lpath).FileRef(lpath))
+			if err == nil {
+				rb, err = s.ResolveBytes(ctx, right.Source(f.Path).FileRef(f.Path))
+			}
+		}
+		if err != nil {
+			return "", err
+		}
+		if isBinaryContent(lb) || isBinaryContent(rb) {
+			// git diff --no-index would print the temp paths on this line
+			// (no @@ hunk to flip RelabelNoIndexDiff's header latch), so a
+			// binary pair is rendered directly instead of ever being diffed.
+			fmt.Fprintf(&b, "Binary files a/%s and b/%s differ\n", lpath, f.Path)
+			continue
+		}
+		lp := filepath.Join(tmp, fmt.Sprintf("l%d", i))
+		rp := filepath.Join(tmp, fmt.Sprintf("r%d", i))
+		if err := os.WriteFile(lp, lb, 0o600); err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(rp, rb, 0o600); err != nil {
+			return "", err
+		}
+		diff, err := s.DiffNoIndex(ctx, lp, rp)
+		if err != nil {
+			return "", err
+		}
+		b.WriteString(RelabelNoIndexDiff(diff, "a/"+lpath, "b/"+f.Path))
+	}
+	return b.String(), nil
 }

@@ -1157,6 +1157,16 @@ when `EvalEndpoint(fs.Endpoint())` would reproduce its set.
 f.narrowed || (f.bounded && f.ep.Kind() != model.EndpointShelf)
 ```
 
+**A side that loses is RENDERED, not refused (2026-09-20).** `ComparePatchSets`
+sends two surviving sides to `ComparePatch` (one git invocation) and everything
+else — a lost set, or a pair `ComparePatch` answers with `ErrComparePatchPair`
+(a reversed live pair) — to `patchPerMember`: `CompareSets`' own rows, bytes
+from `fs.Source(path)` (never `Endpoint()`: a `-u` stash's third parent), the
+left side of a rename row at `OldPath`, `diff --no-index` per row. The shelf
+lane is the same function. `model.DiffSpec` has no `Reverse` on purpose: per
+member, a reversed pair needs no `-R`. Spec
+`docs/superpowers/specs/2026-09-20-compare-patch-projected-design.md`.
+
 Unbounded has nothing to lose. A non-narrowed SHELF set survives because
 `ComparePatch`'s shelf lane re-derives both sets with `EvalEndpoint` and renders
 per member (so `gg compare --patch shelf:<gc'd id> <commit>` answers, and must

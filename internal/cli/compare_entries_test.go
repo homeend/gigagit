@@ -138,9 +138,9 @@ func TestCompareShelfEntryFrozenAndPatch(t *testing.T) {
 	//  1. `gg://<checkout>@<gone sha>?shelf=<id>` falls back to the frozen tar
 	//     exactly as `shelf:<id>` does — before, this spelling leaked git's
 	//     raw "fatal: bad object".
-	//  2. Adding a /<path> NARROWS the set, and ComparePatch re-derives its
-	//     sets from the endpoints, so it cannot honour a projection: --patch
-	//     is refused there even though the un-narrowed shelf link renders.
+	//  2. Adding a /<path> NARROWS the set. ComparePatch re-derives its sets
+	//     from the endpoints and would widen it back, so domain renders a
+	//     narrowed set per member instead — it used to be refused.
 	linkBase := "gg://" + filepath.ToSlash(dir)
 	code, out, errb = runCompare(t, dir, "compare", linkBase+"@"+doomedSha+"?shelf="+id, baseSha)
 	if code != 0 {
@@ -152,11 +152,11 @@ func TestCompareShelfEntryFrozenAndPatch(t *testing.T) {
 
 	code, out, errb = runCompare(t, dir, "compare", "--patch",
 		linkBase+"/f.txt@"+doomedSha+"?shelf="+id, baseSha)
-	if code != 2 {
-		t.Fatalf("--patch of a NARROWED shelf link: exit %d, want 2 (stdout %q stderr %q)", code, out, errb)
+	if code != 0 {
+		t.Fatalf("--patch of a NARROWED shelf link: exit %d (stdout %q stderr %q)", code, out, errb)
 	}
-	if !strings.Contains(errb, "--patch renders whole endpoints") {
-		t.Errorf("stderr = %q, want the projection refusal", errb)
+	if !strings.Contains(out, "+++ b/f.txt") || !strings.Contains(out, "-doomed\n+base") {
+		t.Errorf("stdout = %q, want the frozen f.txt against the base", out)
 	}
 }
 

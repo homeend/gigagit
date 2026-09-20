@@ -6,6 +6,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -588,86 +590,80 @@ func TestCompareShelfAgainstTheWorkingTree(t *testing.T) {
 	}
 }
 
-// wantPatchRefusal is the WHOLE sentence --patch prints for a side whose key
-// set it would drop, built once so every assertion below compares against it
-// literally. Substring matching is what let an ungrammatical build ship
-// ("and both sides name names a file set"), so no test here matches a fragment.
-func wantPatchRefusal(clause string) string {
-	return "compare: --patch renders whole endpoints, and " + clause +
-		" a file set (a link with a /<path>, or an <a>..<b> change-set); " +
-		"drop --patch for the changed-file list of exactly those files\n"
+// patchedFiles is the b/<path> of every file a --patch output renders, sorted.
+func patchedFiles(patch string) []string {
+	var out []string
+	for _, ln := range strings.Split(patch, "\n") {
+		if p, ok := strings.CutPrefix(ln, "+++ b/"); ok {
+			out = append(out, p)
+		} else if p, ok := strings.CutPrefix(ln, "--- a/"); ok && strings.Contains(patch, ln+"\n+++ /dev/null") {
+			out = append(out, p) // a deletion has no b/ side
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
-// TestComparePatchOfABoundedSideIsRefused: --patch renders whole ENDPOINTS,
-// so it cannot answer a comparison whose key set it would have to honour. It
-// used to print the endpoints' whole diff anyway — silently a DIFFERENT
-// comparison from the one the default listing shows, with nothing to say so.
-// The reachable shape is not the exotic one the old TODO described (bounded ×
-// bounded): it is a single-file link, which is the spelling every "copy gg
-// link" button in the product emits.
+// listedFiles is the path column of the default listing, sorted.
+func listedFiles(listing string) []string {
+	var out []string
+	for _, ln := range strings.Split(strings.TrimSpace(listing), "\n") {
+		if _, p, ok := strings.Cut(ln, "\t"); ok {
+			out = append(out, p)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// TestComparePatchRendersExactlyTheListing: --patch is the patch of the rows
+// the default listing shows — no more, no fewer. It used to print the
+// ENDPOINTS' whole diff for a file set (silently a different comparison), then
+// to refuse (exit 2); a file set now renders per member. The reachable shape is
+// the everyday one: a single-file link is what every "copy gg link" button in
+// the product emits.
 //
 // SERIAL (no t.Parallel) because the pair × shelf subtests need
-// XDG_STATE_HOME, which t.Setenv cannot set from a parallel test — the same
-// reason TestCompareShelfAgainstTheWorkingTree above is serial.
-//
-// Rendering a PROJECTED patch stays deferred. Refusing is not that work.
-func TestComparePatchOfABoundedSideIsRefused(t *testing.T) {
+// XDG_STATE_HOME, which t.Setenv cannot set from a parallel test.
+func TestComparePatchRendersExactlyTheListing(t *testing.T) {
 	dir, c1, c2, _ := linkCompareRepo(t)
+	file := mustLink(t, dir, "--rev", c2, "b.txt")
+	pair := mustLink(t, dir, "--pair", c1+".."+c2)
 
-	for _, tc := range []struct{ name, link, clause string }{
-		// A single-FILE link: bounded to one path, and the shape a user
-		// actually pastes.
-		{"single-file link", mustLink(t, dir, "--rev", c2, "b.txt"), "the left side names"},
-		// A CHANGE-SET link: bounded to the paths c1..c2 touched.
-		{"change-set link", mustLink(t, dir, "--pair", c1+".."+c2), "the left side names"},
+	// The look-alike: the two POINTS differ in more than b.txt, so a patch that
+	// still rendered whole endpoints would show more than the listing does.
+	code, whole, errb := runCLI(t, dir, "compare", "--patch", c2, "HEAD")
+	if code != 0 {
+		t.Fatalf("fixture: exit %d (stderr %q)", code, errb)
+	}
+	if got := patchedFiles(whole); len(got) < 2 {
+		t.Fatalf("fixture: the endpoints must differ in more than one file, got %v", got)
+	}
+
+	for _, tc := range []struct{ name, left, right string }{
+		{"single-file link", file, "HEAD"},
+		{"change-set link", pair, "HEAD"},
+		{"both sides", pair, file},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			// The LISTING is the projection, and still answers.
-			code, out, errb := runCLI(t, dir, "compare", tc.link, "HEAD")
+			code, listing, errb := runCLI(t, dir, "compare", tc.left, tc.right)
 			if code != 0 {
-				t.Fatalf("compare %s HEAD: exit %d (stderr %q)", tc.link, code, errb)
+				t.Fatalf("listing: exit %d (stderr %q)", code, errb)
 			}
-			if out != "M\tb.txt\n" {
-				t.Fatalf("listing = %q, want exactly the projection \"M\\tb.txt\\n\"", out)
+			code, patch, errb := runCLI(t, dir, "compare", "--patch", tc.left, tc.right)
+			if code != 0 || errb != "" {
+				t.Fatalf("--patch: exit %d, stderr %q", code, errb)
 			}
-
-			// --patch refuses rather than answering a different question.
-			code, out, errb = runCLI(t, dir, "compare", "--patch", tc.link, "HEAD")
-			if code != 2 {
-				t.Fatalf("compare --patch %s HEAD: exit %d, want 2; stdout %q stderr %q",
-					tc.link, code, out, errb)
-			}
-			if out != "" {
-				t.Errorf("stdout must stay empty, got %q", out)
-			}
-			if errb != wantPatchRefusal(tc.clause) {
-				t.Errorf("stderr =\n%q\nwant\n%q", errb, wantPatchRefusal(tc.clause))
+			if got, want := patchedFiles(patch), listedFiles(listing); !slices.Equal(got, want) {
+				t.Errorf("--patch renders %v, the listing shows %v", got, want)
 			}
 		})
 	}
 
-	// BOTH sides bounded: the message's own grammar, which a substring match
-	// could not see.
-	t.Run("both sides", func(t *testing.T) {
-		pair := mustLink(t, dir, "--pair", c1+".."+c2)
-		file := mustLink(t, dir, "--rev", c2, "b.txt")
-		code, out, errb := runCLI(t, dir, "compare", "--patch", pair, file)
-		if code != 2 {
-			t.Fatalf("exit %d, want 2; stdout %q stderr %q", code, out, errb)
-		}
-		if errb != wantPatchRefusal("both sides name") {
-			t.Errorf("stderr =\n%q\nwant\n%q", errb, wantPatchRefusal("both sides name"))
-		}
-	})
-
-	// pair × shelf, BOTH orders. This is the combination the first fix left
-	// open, and it is the Critical-2 behaviour again rather than a near-miss:
-	// the guard short-circuited on "a shelf is on one side, so ComparePatch
-	// re-derives both sets", which is true of the SHELF side only. A PAIR set
-	// carries commit b as its endpoint (EvalEndpoint's Pair arm), so
-	// re-deriving from it yields b's WHOLE TREE — the change-set's key set is
-	// gone, and the patch reports a file the listing calls A as M while
-	// dropping the only file the change-set named.
+	// pair × shelf, BOTH orders — the combination that once answered wrongly:
+	// a PAIR set carries commit b as its endpoint, so re-deriving from it
+	// yields b's WHOLE TREE, the patch reported a file the listing calls A as M
+	// and dropped the only file the change-set named.
 	t.Run("pair against a frozen shelf entry", func(t *testing.T) {
 		sdir := newCLIRepo(t)
 		t.Setenv("XDG_STATE_HOME", t.TempDir())
@@ -692,7 +688,6 @@ func TestComparePatchOfABoundedSideIsRefused(t *testing.T) {
 		pair := mustLink(t, sdir, "--pair", baseSha+".."+headSha(t, sdir))
 		shelf := "shelf:" + id
 
-		// The LISTING is the union of the two key sets, and answers.
 		code, out, errb := runCompare(t, sdir, "compare", pair, shelf)
 		if code != 0 {
 			t.Fatalf("listing: exit %d (stderr %q)", code, errb)
@@ -700,65 +695,39 @@ func TestComparePatchOfABoundedSideIsRefused(t *testing.T) {
 		if out != "A\tf.txt\nD\tother.txt\n" {
 			t.Fatalf("listing = %q, want \"A\\tf.txt\\nD\\tother.txt\\n\"", out)
 		}
-
-		for _, tc := range []struct{ name, left, right, clause string }{
-			{"pair on the left", pair, shelf, "the left side names"},
-			{"pair on the right", shelf, pair, "the right side names"},
+		for _, tc := range []struct{ name, left, right, added string }{
+			{"pair on the left", pair, shelf, "+doomed"},
+			{"pair on the right", shelf, pair, "+one"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				code, out, errb := runCompare(t, sdir, "compare", "--patch", tc.left, tc.right)
-				if code != 2 {
-					t.Fatalf("exit %d, want 2; stdout %q stderr %q", code, out, errb)
+				code, patch, errb := runCompare(t, sdir, "compare", "--patch", tc.left, tc.right)
+				if code != 0 {
+					t.Fatalf("exit %d, stderr %q", code, errb)
 				}
-				if out != "" {
-					t.Errorf("stdout must stay empty, got %q", out)
+				if got := patchedFiles(patch); !slices.Equal(got, []string{"f.txt", "other.txt"}) {
+					t.Errorf("--patch renders %v, want the listing's two files:\n%s", got, patch)
 				}
-				if !strings.Contains(errb, wantPatchRefusal(tc.clause)) {
-					t.Errorf("stderr =\n%q\nwant it to contain\n%q", errb, wantPatchRefusal(tc.clause))
+				if !strings.Contains(patch, tc.added) {
+					t.Errorf("the patch must read left → right (%q):\n%s", tc.added, patch)
 				}
 			})
 		}
 	})
 }
 
-// And the other half of that gap: --patch of a REVERSED live pair is still
-// refused, because livePairSpec maps endpoints and only walks forward while
-// model.DiffSpec has no `-R`. The default listing inverts it
-// (TestCompareReversedPairNowCompares); --patch does not.
-//
-// IT IS REFUSED IN GG'S OWN VOICE. domain's error names a Go function and two
-// raw enum ordinals ("livePairSpec: unsupported endpoint pair 1 → 3"); the
-// message it replaced ("order endpoints oldest→newest…") at least told the
-// user what to type. Exit 2, like the refusal it replaced: the arguments are
-// the thing gg is asking the user to change.
-func TestComparePatchOfAReversedPairIsRefusedInGGsOwnVoice(t *testing.T) {
+// --patch of a REVERSED live pair used to be refused (model.DiffSpec has no
+// `-R`). The listing already inverted it (TestCompareReversedPairNowCompares);
+// the patch now reads the same way round — left → right, as typed.
+func TestComparePatchOfAReversedPairReadsAsTyped(t *testing.T) {
 	t.Parallel()
 	dir := newCLIRepo(t)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("dirtied\n"), 0o644)
 	code, out, errb := runCLI(t, dir, "compare", "--patch", "@worktree", "HEAD")
-	if code != 2 {
-		t.Fatalf("compare --patch @worktree HEAD: exit %d, want 2; stdout %q stderr %q", code, out, errb)
+	if code != 0 || errb != "" {
+		t.Fatalf("compare --patch @worktree HEAD: exit %d, stderr %q", code, errb)
 	}
-	for _, want := range []string{
-		"compare: --patch cannot render",
-		"Working Tree", // the endpoints named as a user sees them
-		"drop --patch", // the way out that still answers the question
-		"order the endpoints oldest→newest",
-	} {
-		if !strings.Contains(errb, want) {
-			t.Errorf("stderr = %q, want it to contain %q", errb, want)
-		}
-	}
-	// The whole point: no Go identifier and no raw enum ordinal on the user's
-	// terminal. The listing path is held to the same standard in
-	// TestCompareReversedPairNowCompares.
-	for _, leak := range []string{"livePairSpec", "DiffTreeFiles", "unsupported endpoint pair"} {
-		if strings.Contains(errb, leak) {
-			t.Errorf("stderr leaks %q: %s", leak, errb)
-		}
-	}
-	if out != "" {
-		t.Errorf("stdout must stay empty, got %q", out)
+	if !strings.Contains(out, "-dirtied") || strings.Contains(out, "+dirtied") {
+		t.Fatalf("the working tree is the LEFT side, so its line is removed:\n%s", out)
 	}
 }
 
@@ -839,26 +808,23 @@ func TestCompareDoesNotRecordOnFailure(t *testing.T) {
 	}
 }
 
-// TestCompareDoesNotRecordOnPatchFailureAfterBothSidesResolved: R8 again,
-// but for a failure that happens AFTER both positionals resolved
-// successfully — domain.ComparePatchSets's refusal (--patch on a bounded link).
-// This is the shape a misplaced record call (before the failure check,
-// rather than after) would slip through even though the first-point-of-
-// failure test above already passes.
-func TestCompareDoesNotRecordOnPatchFailureAfterBothSidesResolved(t *testing.T) {
+// TestComparePatchOfALinkRecordsIt: R8's other half. --patch on a bounded
+// link used to be the one failure that happened AFTER both positionals
+// resolved (a refusal), and this test pinned that it recorded nothing. The
+// refusal is gone — that comparison renders — so what is left to pin is the
+// success path: a link that compared, with --patch, is recorded like any other.
+func TestComparePatchOfALinkRecordsIt(t *testing.T) {
 	t.Parallel()
 	dir, c1, c2, _ := linkCompareRepo(t)
 	svc := compareHistSvc(t, dir)
 	pair := mustLink(t, dir, "--pair", c1+".."+c2)
 
 	var out, errb bytes.Buffer
-	code := cmdCompare(linkState(t), svc, []string{"--patch", pair}, &out, &errb)
-	if code != 2 {
-		t.Fatalf("compare --patch %s: exit %d (stderr %q), want 2 (domain.ComparePatchSets)", pair, code, errb.String())
+	if code := cmdCompare(linkState(t), svc, []string{"--patch", pair}, &out, &errb); code != 0 {
+		t.Fatalf("compare --patch %s: exit %d (stderr %q)", pair, code, errb.String())
 	}
-
-	if hist := svc.LinkHistory(context.Background()); len(hist) != 0 {
-		t.Fatalf("LinkHistory = %v, want no entries after a refused --patch compare", hist)
+	if hist := svc.LinkHistory(context.Background()); len(hist) != 1 || hist[0].Link != pair {
+		t.Fatalf("LinkHistory = %v, want the compared link", hist)
 	}
 }
 

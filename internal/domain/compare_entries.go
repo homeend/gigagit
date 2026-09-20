@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -19,8 +17,9 @@ import (
 // as a sentinel so a frontend refuses in its own words rather than forwarding
 // livePairSpec's internal prose to a user.
 //
-// TODO(plan 3): model.DiffSpec has no `-R`, so removing this needs a Reverse
-// flag on the spec (and a set-taking ComparePatch for the bounded lanes).
+// ComparePatchSets — the door a frontend holding file sets uses — catches it
+// and renders the pair per member, so only a caller of ComparePatch itself
+// (two endpoints by construction) can still see it.
 var ErrComparePatchPair = errors.New("this pair cannot be rendered as a patch")
 
 // CommitGoneError reports a commit-entry compare side whose sha no longer
@@ -107,54 +106,15 @@ func (s *Service) ComparePatch(ctx context.Context, left, right model.Endpoint) 
 		}
 		return s.DiffPatch(ctx, spec)
 	}
-	files, err := s.shelfCompareFiles(ctx, left, right)
+	l, err := s.EvalEndpoint(ctx, left)
 	if err != nil {
 		return "", err
 	}
-	tmp, err := os.MkdirTemp("", "gg-compare-*")
+	r, err := s.EvalEndpoint(ctx, right)
 	if err != nil {
 		return "", err
 	}
-	defer os.RemoveAll(tmp)
-	var b strings.Builder
-	for i, f := range files {
-		var lb, rb []byte
-		switch f.Status {
-		case "A": // left genuinely absent; only the right side is read
-			rb, err = s.ResolveBytes(ctx, right.FileRef(f.Path))
-		case "D": // right genuinely absent; only the left side is read
-			lb, err = s.ResolveBytes(ctx, left.FileRef(f.Path))
-		default: // "M": both sides are present — resolve both, any error propagates
-			lb, err = s.ResolveBytes(ctx, left.FileRef(f.Path))
-			if err == nil {
-				rb, err = s.ResolveBytes(ctx, right.FileRef(f.Path))
-			}
-		}
-		if err != nil {
-			return "", err
-		}
-		if isBinaryContent(lb) || isBinaryContent(rb) {
-			// git diff --no-index would print the temp paths on this line
-			// (no @@ hunk to flip RelabelNoIndexDiff's header latch), so a
-			// binary pair is rendered directly instead of ever being diffed.
-			fmt.Fprintf(&b, "Binary files a/%s and b/%s differ\n", f.Path, f.Path)
-			continue
-		}
-		lp := filepath.Join(tmp, fmt.Sprintf("l%d", i))
-		rp := filepath.Join(tmp, fmt.Sprintf("r%d", i))
-		if err := os.WriteFile(lp, lb, 0o600); err != nil {
-			return "", err
-		}
-		if err := os.WriteFile(rp, rb, 0o600); err != nil {
-			return "", err
-		}
-		diff, err := s.DiffNoIndex(ctx, lp, rp)
-		if err != nil {
-			return "", err
-		}
-		b.WriteString(RelabelNoIndexDiff(diff, "a/"+f.Path, "b/"+f.Path))
-	}
-	return b.String(), nil
+	return s.patchPerMember(ctx, l, r)
 }
 
 // isBinaryContent reports whether data looks binary — a NUL byte, or invalid
@@ -184,7 +144,8 @@ func isBinaryContent(data []byte) bool {
 // two endpoints, so a reversed live pair is refused here rather than asked
 // forward and inverted (see CompareSets' unbounded × unbounded arm), and a
 // bounded × bounded pair renders the endpoints' whole diff rather than the
-// projection. `gg compare --patch` carries a TODO(plan 3) naming that gap.
+// projection. ComparePatchSets is the total door: it sends both of those to
+// the per-member lane (patchPerMember).
 //
 // The refusal wraps ErrComparePatchPair so a frontend can recognise it without
 // matching on prose and say so in its OWN words: this message names a Go

@@ -43,7 +43,7 @@ func linkShapeRefused(code int, errb string) bool {
 
 // TestLinkShapesPerVerb is ruling R4 as a table. A pair's only single commit
 // is B, and a `gg show` there would silently widen a BOUNDED change-set into
-// the whole tree at B — the same mistake domain.ComparePatchSets refuses per side
+// the whole tree at B — the same mistake domain.ComparePatchSets avoids per side
 // in `gg compare --patch`. Every verb accepts a ref (a tip is one commit);
 // `gg show` alone refuses a pair. The note verbs and highlight USED to refuse
 // it too; since pair notes (2026-09-20) a change-set is a note scope — notes

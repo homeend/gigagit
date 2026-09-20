@@ -350,14 +350,12 @@ finds the right one here.
   stderr, scoped to the files that commit changed) — and a frozen entry
   compares against `@staged`/`@worktree` too, which answers "is my shelved work
   already in my tree?". `--patch` prints unified diffs instead of the file
-  list; it renders whole endpoints, so it refuses (exit 2, saying so) the two
-  comparisons it cannot describe: a reversed live pair, and — judged per SIDE,
-  so EITHER one is enough to refuse the whole comparison — a side whose FILE
-  SET it would drop: any link with a `/<path>`, any `@<a>..<b>` change-set. A
-  shelf entry's own side is fine (that lane renders per member) unless a
-  `/<path>` narrows it, but `--patch` of a change-set AGAINST a shelf entry is
-  still refused, because the change-set side is the one that loses. Drop
-  `--patch` for the changed-file list in every case.
+  list — the patch of EXACTLY the rows the listing shows, read left → right as
+  typed, for every comparison the listing answers: a link with a `/<path>`
+  renders that one file, an `@<a>..<b>` change-set its members, a reversed
+  pair (`@worktree` then a commit) the same diff the other way round. (A file
+  set renders one file at a time, so a very large one is slower than two whole
+  endpoints.)
 - **Either side of `gg compare` may be a `gg://` link**, mixed freely with the
   rest. A link with a `/<path>`, or a `@<a>..<b>` change-set target, names a
   SET OF FILES; comparing it against a whole tree projects the tree onto that
