@@ -65,6 +65,7 @@ func TestLayeringDAG(t *testing.T) {
 		"promptstate": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"textdiff":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"syntax":      {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"markdown":    {"config", "model", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "i18n", "theme"},
 		"steer":       {"config", "model", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "gitwatch", "i18n", "theme"},
 		// linknav sits between domain and the frontends: the one link→navigate
 		// builder cli AND tui share, so it may reach neither.

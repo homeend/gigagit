@@ -1,0 +1,194 @@
+{
+ "blocks": [
+  {
+   "k": "h",
+   "level": 1,
+   "in": [
+    {
+     "k": "text",
+     "t": "Forge tab"
+    }
+   ]
+  },
+  {
+   "k": "p",
+   "in": [
+    {
+     "k": "text",
+     "t": "Adds the "
+    },
+    {
+     "k": "strong",
+     "in": [
+      {
+       "k": "text",
+       "t": "forge"
+      }
+     ]
+    },
+    {
+     "k": "text",
+     "t": " tab with "
+    },
+    {
+     "k": "em",
+     "in": [
+      {
+       "k": "text",
+       "t": "read-only"
+      }
+     ]
+    },
+    {
+     "k": "text",
+     "t": " PRs, "
+    },
+    {
+     "k": "del",
+     "in": [
+      {
+       "k": "text",
+       "t": "no writes"
+      }
+     ]
+    },
+    {
+     "k": "text",
+     "t": " and "
+    },
+    {
+     "k": "code",
+     "t": "inline code"
+    },
+    {
+     "k": "text",
+     "t": "."
+    },
+    {
+     "k": "br"
+    },
+    {
+     "k": "text",
+     "t": "See "
+    },
+    {
+     "k": "link",
+     "url": "https://example.com/spec",
+     "in": [
+      {
+       "k": "text",
+       "t": "the spec"
+      }
+     ]
+    },
+    {
+     "k": "text",
+     "t": " or "
+    },
+    {
+     "k": "link",
+     "url": "https://example.com/plain",
+     "in": [
+      {
+       "k": "text",
+       "t": "https://example.com/plain"
+      }
+     ]
+    },
+    {
+     "k": "text",
+     "t": "."
+    }
+   ]
+  },
+  {
+   "k": "h",
+   "level": 2,
+   "in": [
+    {
+     "k": "text",
+     "t": "Details"
+    }
+   ]
+  },
+  {
+   "k": "p",
+   "in": [
+    {
+     "k": "text",
+     "t": "cc "
+    },
+    {
+     "k": "ref",
+     "t": "@carol"
+    },
+    {
+     "k": "text",
+     "t": " — fixes "
+    },
+    {
+     "k": "ref",
+     "t": "#12"
+    },
+    {
+     "k": "text",
+     "t": " and "
+    },
+    {
+     "k": "ref",
+     "t": "octo/repo#7"
+    }
+   ]
+  },
+  {
+   "k": "p",
+   "in": [
+    {
+     "k": "image",
+     "t": "screenshot",
+     "url": "https://example.com/shot.png"
+    }
+   ]
+  },
+  {
+   "k": "hr"
+  },
+  {
+   "k": "quote",
+   "blocks": [
+    {
+     "k": "p",
+     "in": [
+      {
+       "k": "text",
+       "t": "quoted "
+      },
+      {
+       "k": "strong",
+       "in": [
+        {
+         "k": "text",
+         "t": "reply"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "k": "quote",
+     "blocks": [
+      {
+       "k": "p",
+       "in": [
+        {
+         "k": "text",
+         "t": "nested quote"
+        }
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

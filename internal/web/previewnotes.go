@@ -60,7 +60,7 @@ func (s *Server) handlePreviewNotes(w http.ResponseWriter, r *http.Request) {
 		}
 		notes = make([]wireNote, 0, len(res))
 		for _, n := range res {
-			notes = append(notes, domain.ToWireNotePreview(n, true))
+			notes = append(notes, domain.ToWireNoteRendered(n, true))
 		}
 	}
 	counts, total, cerr := s.service().PreviewNoteCounts(ctx, set)

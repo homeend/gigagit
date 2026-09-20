@@ -2,7 +2,9 @@ package domain
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -229,5 +231,57 @@ func TestWireNoteForgeFields(t *testing.T) {
 	mine := ToWireNote(ResolvedNote{Note: model.Note{ID: "n1", Source: model.NoteSourceUser}})
 	if mine.ReadOnly || mine.Resolved || mine.FileLevel || mine.Created != "" {
 		t.Fatalf("a stored note = %+v", mine)
+	}
+}
+
+// A review comment is markdown: the split follows its blocks, and only a
+// FORGE note carries parsed trees on the wire — a local note is never parsed.
+func TestForgeNotesCarryMarkdown(t *testing.T) {
+	t.Parallel()
+	fence := "```"
+	sugg := forgeNote(model.ForgeComment{ID: "S", Kind: model.ForgeCommentInline, Path: "a.go", Line: 3,
+		Body: fence + "suggestion\r\nx := 1\r\n" + fence}, "tip")
+	if sugg.Note.Summary != "suggestion" || !strings.Contains(sugg.Note.Rationale, "x := 1") || sugg.SummarySrc != "" {
+		t.Fatalf("suggestion split = %q / %q / %q", sugg.Note.Summary, sugg.Note.Rationale, sugg.SummarySrc)
+	}
+	prose := forgeNote(model.ForgeComment{ID: "P", Kind: model.ForgeCommentInline, Path: "a.go", Line: 3,
+		Body: "Rename `x` to **y**\n\n- shorter\n- clearer"}, "tip")
+	if prose.Note.Summary != "Rename x to y" || prose.Note.Rationale != "- shorter\n- clearer" || prose.SummarySrc != "Rename `x` to **y**" {
+		t.Fatalf("prose split = %q / %q / %q", prose.Note.Summary, prose.Note.Rationale, prose.SummarySrc)
+	}
+	plain := forgeNote(model.ForgeComment{ID: "Q", Body: "nice work\nreally"}, "tip")
+	if plain.Note.Summary != "nice work" || plain.Note.Rationale != "really" {
+		t.Fatalf("plain split = %q / %q", plain.Note.Summary, plain.Note.Rationale)
+	}
+
+	prose.Replies = []ResolvedNote{sugg}
+	if bare := ToWireNote(prose); bare.MD != nil || bare.SummaryMD != nil {
+		t.Fatal("the agent-facing wire (CLI, MCP) stays free of parsed trees")
+	}
+	w := ToWireNoteRendered(prose, true)
+	if w.MD == nil || len(w.MD.Blocks) != 1 || w.MD.Blocks[0].Kind != "list" {
+		t.Fatalf("root md = %+v", w.MD)
+	}
+	if len(w.SummaryMD) < 3 || w.SummaryMD[1].Kind != "code" {
+		t.Fatalf("summary_md = %+v", w.SummaryMD)
+	}
+	if r := w.Replies[0]; r.MD == nil || r.MD.Blocks[0].Kind != "code" || len(r.SummaryMD) != 0 {
+		t.Fatalf("reply md = %+v / %+v", r.MD, r.SummaryMD)
+	}
+	if one := ToWireNoteRendered(plain, false); one.MD == nil || len(one.SummaryMD) != 1 {
+		t.Fatalf("plain forge note = %+v / %+v", one.MD, one.SummaryMD)
+	}
+
+	mine := ToWireNoteRendered(ResolvedNote{Note: model.Note{ID: "n1", Source: model.NoteSourceUser,
+		Summary: "**mine**", Rationale: "- stays\n- typed"}, SummarySrc: "**mine**"}, true)
+	raw, err := json.Marshal(mine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mine.MD != nil || mine.SummaryMD != nil || strings.Contains(string(raw), `"md"`) || strings.Contains(string(raw), `"summary_md"`) {
+		t.Fatalf("a local note must never be parsed: %s", raw)
+	}
+	if doc := ParseMarkdown(""); doc != nil {
+		t.Fatal("empty text parses to nil, so the wire omits it")
 	}
 }

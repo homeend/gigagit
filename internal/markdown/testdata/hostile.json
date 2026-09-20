@@ -1,0 +1,104 @@
+{
+ "blocks": [
+  {
+   "k": "p",
+   "in": [
+    {
+     "k": "text",
+     "t": "<script>window.__pwned=1</script>"
+    }
+   ]
+  },
+  {
+   "k": "p",
+   "in": [
+    {
+     "k": "text",
+     "t": "<img src=x onerror=\"window.__pwned=1\">"
+    }
+   ]
+  },
+  {
+   "k": "p",
+   "in": [
+    {
+     "k": "text",
+     "t": "click data rel (../x.md)"
+    }
+   ]
+  },
+  {
+   "k": "p",
+   "in": [
+    {
+     "k": "text",
+     "t": "x "
+    },
+    {
+     "k": "link",
+     "url": "https://example.com/?a=\"b\"&c='d'",
+     "in": [
+      {
+       "k": "text",
+       "t": "q"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "k": "code",
+   "lines": [
+    {
+     "t": "code </code></pre><script>window.__pwned=1</script>"
+    }
+   ]
+  },
+  {
+   "k": "p",
+   "in": [
+    {
+     "k": "text",
+     "t": "ansi \u001b[31mred\u001b[0m text"
+    }
+   ]
+  },
+  {
+   "k": "table",
+   "head": [
+    [
+     {
+      "k": "text",
+      "t": "a\"b"
+     }
+    ],
+    [
+     {
+      "k": "text",
+      "t": "<i>c</i>"
+     }
+    ]
+   ],
+   "rows": [
+    [
+     [
+      {
+       "k": "code",
+       "t": "</td>"
+      }
+     ],
+     [
+      {
+       "k": "text",
+       "t": "x"
+      }
+     ]
+    ]
+   ],
+   "align": [
+    "",
+    ""
+   ]
+  }
+ ]
+}

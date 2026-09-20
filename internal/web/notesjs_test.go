@@ -470,3 +470,67 @@ func TestForgeNoteBoxesJS(t *testing.T) {
 		t.Fatalf("a PR's notes are asked for by NUMBER: %q", got.Query)
 	}
 }
+
+// markdownInline is markdown.js with its exports stripped, for the node
+// harnesses that inline files.js functions.
+func markdownInline(t *testing.T) string {
+	t.Helper()
+	src, err := os.ReadFile(filepath.Join("static", "markdown.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.ReplaceAll(string(src), "export function", "function") + "\n"
+}
+
+// A forge note is markdown and arrives parsed: its trees are painted. A note
+// written HERE carries no tree and is shown exactly as typed — markdown
+// markers, angle brackets and all — so the feature can never restyle (or
+// un-escape) the user's own text.
+func TestForgeNoteBoxesRenderMarkdownJS(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	fns := jsFunc(t, "files.js", "notesArmed") + "\n" + jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteBoxHTML")
+	script := `const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const list = { blocks: [{ k: "list", items: [{ blocks: [{ k: "p", in: [{ k: "text", t: "shorter" }] }] }] }] };
+const state = { notesAgentOff: false, noteCollapsed: new Set(),
+  diffCtx: { path: "a.go", rev: "beef", state: "commit", preview: { source: "alice:feat", target: "main", pr: 7 } },
+  notes: [
+   { id: "forge:C1", side: "new", line: 3, source: "forge", author: "carol", status: "active", read_only: true,
+     summary: "Rename x", summary_md: [{ k: "text", t: "Rename " }, { k: "code", t: "x" }], rationale: "- shorter", md: list,
+     replies: [{ id: "forge:C2", source: "forge", author: "dave", status: "active", read_only: true,
+       summary: "ok", summary_md: [{ k: "strong", in: [{ k: "text", t: "ok" }] }] }] },
+   { id: "forge:C5", side: "new", line: 3, source: "forge", author: "erin", status: "active", read_only: true,
+     summary: "<old> wire", rationale: "no **tree** sent" },
+   { id: "n1", side: "new", line: 3, source: "user", status: "active", summary: "**mine** <b>", rationale: "- typed\n- as is",
+     summary_md: [], md: null }] };
+` + noteboxInline(t) + markdownInline(t) + fns + `
+console.log(JSON.stringify({ html: noteRowsHTML("new", 3, 4) }));
+`
+	out, err := exec.Command(node, "-e", script).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	var got struct{ HTML string }
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("decode %q: %v", out, err)
+	}
+	for _, want := range []string{
+		`<div class="notesum">Rename <code class="md-ic">x</code></div>`,
+		`<div class="notetext md"><ul class="md-list"><li><p>shorter</p></li></ul></div>`,
+		`<div class="notesum">↳ dave: <strong>ok</strong></div>`,
+		// A forge note from a server that sent no tree falls back to the text.
+		`<div class="notesum">&lt;old&gt; wire</div>`, `<div class="notetext">no **tree** sent</div>`,
+		// The user's own note: never parsed, never unescaped.
+		`<div class="notesum">**mine** &lt;b&gt;</div>`, "<div class=\"notetext\">- typed\n- as is</div>",
+	} {
+		if !strings.Contains(got.HTML, want) {
+			t.Errorf("missing %s\n%s", want, got.HTML)
+		}
+	}
+	if n := strings.Count(got.HTML, "notetext md"); n != 1 {
+		t.Errorf("%d rendered rationales, want only the forge note that carried a tree\n%s", n, got.HTML)
+	}
+}
