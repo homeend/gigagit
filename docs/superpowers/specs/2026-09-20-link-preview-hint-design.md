@@ -114,6 +114,23 @@ do it) · any change to the per-verb R4 table.
   not; e2e scenario row in `links-*.toml`.
 - Break table per task, as always.
 
+## As built (2026-09-21)
+
+- §2.4 TUI: no `pendingHint` parking — the Previews rows are a startup
+  source and a start-at landing already waits for that fan-out, so the arm is
+  synchronous (`revealSavedSet`). Under an open files view it also re-points
+  `filesReturnFocus`, or esc would hand the keyboard to a tab no longer shown
+  (found on the real binary, not by a unit test).
+- §2.4 web: the reveal lives in `previews.js` (`revealSavedSet`), routed by a
+  new `live.js revealHint`; `steerNavigate` stays the pinned thin wrapper.
+  The flash rule has its own gate (`TestRevealSavedSetTargetHasAFlashRule`).
+- §2.3 web: the merge row's link is built in JS (`links.js`), the pair row's
+  on the server — two producers, both covered by the playwright probe.
+- §2.3 CLI: a typed range that happens to spell a saved pair's DEFAULT label
+  (`<a7>..<b7>`) is a range, not an entry — it stays bare.
+- §2.5: a saved pair describes as `pair: <label>` (rev 1 §5.4's word).
+- Both steer validators now call `model.LinkHintKindOK`.
+
 ## 5. Decisions made here (tell me if any is wrong)
 
 1. One kind, `preview`, for merge previews AND pairs (rev 1 §5.1).

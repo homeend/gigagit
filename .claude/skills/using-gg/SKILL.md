@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v89 -->
+<!-- gg:using-gg:v90 -->
 
 # Using gg (gigagit)
 
@@ -117,7 +117,8 @@ gg://<repo>@<target>...<source>            a merge preview: the Previews tab ent
 gg://<repo>/<path>@<target>...<source>[:<line>]   a file (or new-side line) in that preview
 gg://<repo>/<path>@<target>...<source>#<hunk>     a hunk of that preview's patch
 gg:///abs/checkout/path/file.go:12         a repo with no remote: its absolute path
-gg://<repo>@<sha>?bookmark=<id>            a trailing ?<kind>=<id> hint: bookmark | shelf | stash
+gg://<repo>@<sha>?bookmark=<id>            a trailing ?<kind>=<id> hint: bookmark | shelf | stash | preview
+gg://<repo>@<a>..<b>?preview=<id>          a SAVED pair (or, on a <target>...<source> link, a saved merge preview)
 ```
 
 `@ref:<name>` keeps the NAME on purpose: it addresses the branch, not
@@ -132,7 +133,11 @@ the shelved blob, and `gg://<repo>@<sha>?shelf=<id>` falls back to the frozen
 tar once that sha has been gc'd. Because `?` is the hint separator, a path, a
 checkout path or a ref name containing `?` cannot appear in a link at all —
 `gg link` refuses to print one rather than emit something that reparses
-differently.
+differently. `?preview=<id>` marks a link copied off a SAVED Previews entry
+(a merge preview or a commit pair): it lands exactly like the bare link and
+then reveals the saved row — by id, else by the entry holding the same set,
+else a "not saved here" notice. The id is a lookup key, never a checksum, and
+a `?preview=` hint with no `@…` address is refused (it names nothing).
 `gg link resolve` takes both: a `@ref:` link answers with `ref <name>` plus
 the tip it resolves to HERE, a `@a..b` link with `pair <a>..<b>`, and
 `--json` carries `ref` / `pair_a` + `pair_b` beside the address fields. The
@@ -181,7 +186,9 @@ finds the right one here.
   --ref <branch|tag> | --pair <a>..<b>] [--bookmark <id> | --shelf <id>]` —
   print the link for a place in the current repo. Those five target flags name
   the same thing, so pass at most one (exit 2 otherwise); `--bookmark` and
-  `--shelf` attach the landing hint and are mutually exclusive. `--pair`
+  `--shelf` attach the landing hint and are mutually exclusive. `--preview`
+  given a saved entry's id or label (not a typed range, and with no path)
+  appends `?preview=<id>` by itself. `--pair`
   resolves both halves to FULL shas so the link travels and still means the
   same thing tomorrow; `--ref` keeps the name. E.g.:
 
