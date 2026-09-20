@@ -1247,8 +1247,12 @@ A commit pair is a NOTE SCOPE built by `domain.PairNotes(a, b)` —
   `pairNotesCmd(a, b)` → `pairNotesMsg`, armed iff the generation matches AND
   the view on screen compares commit a with commit b (`showsCommitPair` reads
   the ENDPOINTS, never `compareTag` — a link-shaped compare tags differently)
-  AND no merge preview is open. Dispatched from `handlePairOpenMsg` and
-  `steerNavigatePair`, always AFTER `openCompareFiles` (it bumps `previewGen`).
+  AND no merge preview is open. Dispatched from `handlePairOpenMsg`, from
+  `steerNavigatePair`'s endpoint-shaped fallback, and — since plan 3b-2 lands a
+  change-set navigate through the link-shaped compare — from `openLinkCompare`
+  (`steeredPairNotesCmd`: only a `State:"pair"` navigate arms, so a generic
+  link compare of two far-apart points never pays the rev-list). Always built
+  AFTER the view opens (`beginFilesView`/`openCompareFiles` bump `previewGen`).
 - **The late stamp.** A steered landing opens the file's diff the moment the
   list lands, which can beat the scope. The handler stamps the live diff layer
   (matched by the `cmp:<left>:<right>:` prefix of `m.diffTag`; `v.compare` is
