@@ -253,6 +253,7 @@ target — `file: <path>` — with name-form and local-form rows in the domain t
 
 ## 6. Out of scope
 
-Cross-repository compare · pair notes in the web (W9) · the 200-row cap on
+Cross-repository compare · pair notes in the web (W9 — since built:
+`2026-09-20-pair-notes-web-design.md`) · the 200-row cap on
 `/api/bookmarks` and `/api/shelf` · renaming the `Preview*` seams · a JS link
 parser · a live re-open of a link comparison when a ref under it moves.

@@ -1262,6 +1262,27 @@ A commit pair is a NOTE SCOPE built by `domain.PairNotes(a, b)` —
 - Badge refresh: the `srcNotes` arm re-dispatches `pairNotesRefreshCmd` (a pair
   has no `previewOpen`, nothing to re-resolve, nothing that can "move").
 
+### Pair notes in `gg web` (2026-09-20)
+
+Spec `docs/superpowers/specs/2026-09-20-pair-notes-web-design.md` (N1–N10). No
+domain change.
+
+- **The scope rides the COMPARISON** (`state.compare.pair`), never
+  `state.previewOpen` — that slot means "tips that can move" and is re-resolved
+  by branch name on every refresh. `/api/compare-links` names `pair` for the
+  `a + b` form and a saved pair's `id` ONLY; two typed links never arm.
+- `pairCtx()` is the one predicate (compare mode, a pair, layout not `list` —
+  `drillOut` leaves `state.compare` standing). Its diff context is
+  `preview: {pair: {a, b}, source: "", target: ""}`: **every reader of
+  `preview.source/target` must ask `.pair` first** (`noteQuery`, `fetchNotes`'
+  URL, `linkFor`) — the JS twin of Go's `IsPair()`.
+- `openEntryFileDiff` takes an optional `ctx`; with one it fetches notes in the
+  same `Promise.all` as the diff. A row carrying `right_spec` gets none.
+- Counts share `state.previewCounts`, so `openLinkCompare` nulls it; a `notes`
+  event reaches the badges through `refreshNoteCounts` → `loadPairCounts`.
+- `GET /api/pair/notes` is the twin of `/api/preview/notes` (and of
+  `/api/pr/notes`): full ids instead of allowlisted names.
+
 ### Links in `gg web` — the dialog, the view, the Previews tab (plan 3c, 2026-09-20)
 
 Spec `docs/superpowers/specs/2026-09-20-links-web-design.md` (W1–W10), plan
