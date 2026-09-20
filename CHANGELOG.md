@@ -28,8 +28,11 @@ them rendered instead of as raw text.
   TUI's thread rows, which still show the text unrendered — the TUI is the
   next stage.)
 - **Unchanged on purpose:** your own and agents' review notes are shown exactly
-  as typed; `gg pr view` / `gg pr comments` and the note JSON handed to agents
-  keep the raw markdown.
+  as typed; `gg pr view` / `gg pr comments` keep the raw markdown, and the note
+  JSON handed to agents (`gg note list --json`, MCP) carries no parsed trees —
+  a forge thread's `rationale` there is still raw markdown. Its one-line
+  `summary` is the exception everywhere: it is now plain text with the markers
+  stripped (`**Fix** \`x\`` reads `Fix x`), or the label described above.
 - One parser, in Go (`internal/markdown`, no new dependency): the page is sent
   a parsed tree and only paints it, escaping every leaf — there is no markdown
   parser and no HTML sanitizer in the browser to get wrong.
