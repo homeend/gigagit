@@ -259,6 +259,9 @@ func (v *diffView) collapsedNoteLine(r domain.ResolvedNote) noteLine {
 		}
 	}
 	text := r.Note.Summary
+	if r.Note.Source == model.NoteSourceForge && r.SummarySrc == "" {
+		text = forgeLabelText(text) // a label summary reads in the UI's language
+	}
 	if r.Note.Author != "" {
 		text = r.Note.Author + ": " + text
 	}
@@ -529,7 +532,7 @@ func forgeNoteBodyLines(r domain.ResolvedNote, mk func(noteRowKind, string) note
 	if r.SummarySrc != "" {
 		add(noteRowSummary, mdInlineRows(markdown.ParseInline(r.SummarySrc), w, head))
 	} else {
-		add(noteRowSummary, mdInlineRows([]markdown.Inline{{Kind: markdown.InText, Text: r.Note.Summary}}, w, head))
+		add(noteRowSummary, mdInlineRows([]markdown.Inline{{Kind: markdown.InText, Text: forgeLabelText(r.Note.Summary)}}, w, head))
 	}
 	if r.Note.Rationale != "" {
 		body := mdRows(markdown.Parse(r.Note.Rationale), w)
@@ -541,4 +544,21 @@ func forgeNoteBodyLines(r domain.ResolvedNote, mk func(noteRowKind, string) note
 		add(noteRowText, body)
 	}
 	return rows
+}
+
+// forgeLabelText translates a LABEL summary — what domain calls a review
+// comment that opens with a block instead of a line of prose (English
+// protocol text, markdown.Label*). Anything else is returned as it is.
+func forgeLabelText(summary string) string {
+	switch summary {
+	case markdown.LabelSuggestion:
+		return i18n.T("suggestion")
+	case markdown.LabelCode:
+		return i18n.T("code")
+	case markdown.LabelQuote:
+		return i18n.T("quote")
+	case markdown.LabelTable:
+		return i18n.T("table")
+	}
+	return summary
 }

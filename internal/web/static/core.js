@@ -135,6 +135,7 @@ async function getJSON(url) {
   if (!resp.ok) {
     const err = new Error(body.error || resp.statusText);
     err.data = body; // structured refusals, as postJSON keeps them (a link comparison's `side`)
+    err.status = resp.status; // a 404 is an ANSWER ("no such entry"), a 500 is not
     throw err;
   }
   return body;

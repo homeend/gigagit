@@ -141,6 +141,10 @@ func (s *Service) shelfResolve(ctx context.Context, entryID, path string) ([]byt
 	return tarMember(blob, path)
 }
 
+// ErrShelfEntryNotFound is ShelfFind's "no such id" — the store's own value,
+// re-exported because frontends never import internal/shelf.
+var ErrShelfEntryNotFound = shelf.ErrNotFound
+
 // ShelfFind returns an entry's metadata by id (a local index read; no
 // reservation). The entry-kind discriminator for callers that must branch on
 // file-vs-commit without fetching the blob (the MCP read/export tools).

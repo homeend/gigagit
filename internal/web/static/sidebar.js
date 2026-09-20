@@ -47,10 +47,6 @@ async function fetchBranches() {
   takeRemotes(rm);
   state.bookmarks = bm.entries || [];
   state.shelf = sh.entries || [];
-  // Fix F1: /api/shelf already returns every bucket NAME beside the
-  // default bucket's entries (it always has — nothing server-side
-  // changed); revealHintEntry's cross-bucket fallback needs that list.
-  state.shelfBuckets = sh.buckets || [];
   renderBranches();
   renderRemotes();
   renderWorktrees();
@@ -773,11 +769,10 @@ function locateCurrentBranch() {
 // renderShelf), so the lookup is a plain attribute selector — escaped,
 // since parseLinkHint permits a `"` in an id.
 //
-// KNOWN INCOMPLETENESS (parked, controller ruling S14): both /api/bookmarks
-// and /api/shelf cap at 200 rows (maxBookmarkRows/maxShelfRows), unlike the
-// TUI's unlimited load — a hint naming entry #201+ reveals in the TUI and
-// reports "gone" here. Needs a by-id lookup endpoint, not a bigger cap;
-// deferred to Task 9's /api/linkhist work.
+// A miss in the LOADED list proves nothing: both lists are pages (200 rows;
+// the shelf's is one bucket of several), while a hint names one ENTRY. So a
+// miss asks the store by id — /api/bookmarks?id=, /api/shelf?id= (domain's
+// ShelfFind scans every bucket) — and only the server's 404 is "gone".
 async function revealHintEntry(kind, id) {
   const listName = kind === "bookmark" ? "bookmarks-list" : kind === "shelf" ? "shelf-list" : null;
   if (!listName) {
@@ -786,17 +781,9 @@ async function revealHintEntry(kind, id) {
   }
   const sectionName = kind === "bookmark" ? "bookmarks" : "shelf";
   let li = $(listName).querySelector('li[data-id="' + CSS.escape(id) + '"]');
-  let unchecked = false; // a bucket fetch failed, so "is gone" is unprovable
-  if (!li && kind === "shelf") {
-    // Fix F1: domain's own presence check (ShelfFind, also relied on by
-    // EvalLink) scans EVERY bucket, but this page's shelf list — like the
-    // TUI's plain loadShelfCmd before its own F1 fix — is fetched from the
-    // DEFAULT bucket only (GET /api/shelf with no ?bucket=). An entry `gg
-    // shelf add --bucket <name>` put anywhere else resolved as present and
-    // reported "gone" here: the exact bug the controller reproduced end to
-    // end. Fall back to every OTHER known bucket before giving up, so
-    // domain and this page never disagree about whether the entry exists.
-    const found = await findShelfEntryInOtherBuckets(id);
+  let unchecked = false; // the lookup itself failed, so "is gone" is unprovable
+  if (!li) {
+    const found = await findEntryByID(kind, id);
     li = found.li;
     unchecked = found.unchecked;
   }
@@ -805,11 +792,11 @@ async function revealHintEntry(kind, id) {
     // landed elsewhere (the with-address shape), or, for a hint-only link,
     // the server already hard-refused an absent one before this could ever
     // post (ruling S11) — either way, no popup, just a notice. `unchecked`
-    // keeps the two cases apart: a bucket we could not read is not a bucket
+    // keeps the two cases apart: a store we could not read is not a store
     // that lacks the entry, and "is gone" would be a claim we cannot make.
     opLine(
       unchecked
-        ? "gg link: could not check every shelf bucket for " + id + "; the link still landed"
+        ? "gg link: could not look up " + kind + " " + id + "; the link still landed"
         : "gg link: " + kind + " " + id + " is gone; the link still landed",
       true
     );
@@ -821,35 +808,25 @@ async function revealHintEntry(kind, id) {
   setTimeout(() => li.classList.remove("flash"), 900);
 }
 
-// findShelfEntryInOtherBuckets is revealHintEntry's F1 fallback: it tries
-// every bucket name the last /api/shelf fetch reported (state.shelfBuckets)
-// — one GET per bucket, and buckets are few, so this only costs anything on
-// a miss — merges the first hit into state.shelf (so a later reveal or an
-// ordinary re-render can find it too) and re-renders, returning the now-
-// present <li>. null when no bucket holds it.
-async function findShelfEntryInOtherBuckets(id) {
-  let unchecked = false;
-  for (const name of state.shelfBuckets || []) {
-    let body;
-    try {
-      body = await getJSON("/api/shelf?bucket=" + encodeURIComponent(name));
-    } catch {
-      // A bucket we could not READ is not a bucket that lacks the entry.
-      // Remember that, so the caller says "could not check" rather than
-      // "is gone" — telling a user their shelved bytes are gone when the
-      // server merely hiccupped is the worse of the two wrong answers.
-      unchecked = true;
-      continue;
-    }
-    const hit = (body.entries || []).find((e) => e.id === id);
-    if (!hit) continue;
-    if (!(state.shelf || []).some((e) => e.id === id)) {
-      state.shelf = (state.shelf || []).concat([hit]);
-    }
-    renderShelf();
-    return { li: $("shelf-list").querySelector('li[data-id="' + CSS.escape(id) + '"]'), unchecked: false };
+// findEntryByID is revealHintEntry's miss path: one GET for the one entry,
+// merged into the loaded list (so a later reveal or an ordinary re-render
+// finds it too) and re-rendered, returning the now-present <li>. Only a 404
+// is "no such entry"; anything else leaves the question open.
+async function findEntryByID(kind, id) {
+  const shelf = kind === "shelf";
+  let body;
+  try {
+    body = await getJSON((shelf ? "/api/shelf?id=" : "/api/bookmarks?id=") + encodeURIComponent(id));
+  } catch (e) {
+    return { li: null, unchecked: e.status !== 404 };
   }
-  return { li: null, unchecked };
+  const hit = (body.entries || []).find((e) => e.id === id);
+  if (!hit) return { li: null, unchecked: false };
+  const key = shelf ? "shelf" : "bookmarks";
+  if (!(state[key] || []).some((e) => e.id === id)) state[key] = (state[key] || []).concat([hit]);
+  if (shelf) renderShelf();
+  else renderBookmarks();
+  return { li: $(shelf ? "shelf-list" : "bookmarks-list").querySelector('li[data-id="' + CSS.escape(id) + '"]'), unchecked: false };
 }
 
 

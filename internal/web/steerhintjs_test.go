@@ -46,23 +46,18 @@ func TestSteerHintJSIsWired(t *testing.T) {
 	}
 
 	sidebarChecks := []struct{ want, why string }{
-		{"async function revealHintEntry(kind, id) {", "sidebar.js must define the reveal, and it must be async (fix F1's cross-bucket fallback awaits a fetch)"},
+		{"async function revealHintEntry(kind, id) {", "sidebar.js must define the reveal, and it must be async (the by-id lookup awaits a fetch)"},
 		{`kind === "bookmark" ? "bookmarks-list" : kind === "shelf" ? "shelf-list" : null`, "the closed set is bookmark/shelf; anything else (stash) has no list to search"},
 		{`querySelector('li[data-id="' + CSS.escape(id) + '"]')`, "the row lookup must escape the id (parseLinkHint permits a doublequote)"},
 		{"revealHintEntry", "revealHintEntry must be exported"},
-		// Fix F1: GET /api/shelf lists the default bucket only, but domain's
-		// own presence check (ShelfFind) scans every bucket — the same
-		// disagreement the TUI had (loadShelfForHintCmd). The fallback tries
-		// every OTHER known bucket before reporting an entry gone.
-		{"async function findShelfEntryInOtherBuckets(id) {", "sidebar.js must define the F1 cross-bucket fallback"},
-		// The call, not its assignment form: the fallback now returns
-		// {li, unchecked} so a bucket that could not be READ is reported
-		// apart from a bucket that lacks the entry, and pinning the old
-		// `li = await …` spelling only pinned that refactor shut.
-		{"await findShelfEntryInOtherBuckets(id)", "revealHintEntry must call the fallback on a shelf miss"},
-		{"could not check every shelf bucket for ", "a failed bucket fetch must not be reported as \"is gone\" — that claim is unprovable when a read failed"},
-		{"state.shelfBuckets = sh.buckets || [];", "fetchBranches must keep the bucket name list the fallback iterates"},
-		{`getJSON("/api/shelf?bucket=" + encodeURIComponent(name))`, "the fallback must reuse the EXISTING /api/shelf?bucket= endpoint, not invent a new one"},
+		// The loaded lists are PAGES (200 rows; the shelf's is one bucket of
+		// several) and a hint names one ENTRY: a miss asks the store by id.
+		// This replaced fix F1's per-bucket walk — ShelfFind scans every
+		// bucket server-side — and closes the 200-row cap for both kinds.
+		{"findEntryByID(kind, id)", "a miss in the loaded list must ask the store by id, for BOTH kinds"},
+		{`"/api/shelf?id=" : "/api/bookmarks?id="`, "the lookup must use the by-id form of the two list endpoints"},
+		{"e.status !== 404", "only the server's 404 is \"gone\"; any other failure leaves the question open"},
+		{"could not look up ", "a failed lookup must not be reported as \"is gone\" — that claim is unprovable when the read failed"},
 	}
 	for _, c := range sidebarChecks {
 		if !strings.Contains(sidebar, c.want) {

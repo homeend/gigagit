@@ -363,7 +363,7 @@ func (b *blameView) render(m Model, _ string) string {
 		wr[i-lo] = winRow{prefix: gutter + "│", text: string(disp), cls: cls, emph: emph, style: st, body: bodySt}
 	}
 
-	win := renderWindow(wr, winOpts{w: w, h: body, mode: b.mode, anchor: b.sel - lo, hscroll: b.hscroll, prefixW: gw + 1})
+	win := renderWindow(wr, winOpts{w: w, h: body, mode: b.mode, anchor: b.sel - lo, hscroll: b.hscroll, prefixW: gw + 1, charWrap: true})
 	switch {
 	case b.loading:
 		win = padLines(i18n.T("  (loading…)"), w, body)

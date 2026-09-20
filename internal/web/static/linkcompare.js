@@ -283,8 +283,12 @@ function saveComparisonPrompt() {
     allowEmpty: true,
     onSubmit: async (label) => {
       try {
-        const out = await postJSON("/api/saved-compares", { left: links.left, right: links.right, label });
-        opLine("saved comparison " + out.entry.label);
+        // A pair landing is saved as the PAIR it is: kept as two links it would
+        // re-open as a plain comparison, with its notes gone.
+        const pair = state.compare.pair;
+        const body = pair ? { a: pair.a, b: pair.b, label } : { left: links.left, right: links.right, label };
+        const out = await postJSON("/api/saved-compares", body);
+        opLine((pair ? "saved pair " : "saved comparison ") + out.entry.label);
       } catch (e) {
         if (e.data && e.data.id) opLine("already saved as " + e.data.label);
         else opLine("save comparison: " + (e.message || e), true);

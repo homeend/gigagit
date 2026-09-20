@@ -444,7 +444,7 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate(i18n.T("  (empty)"), innerW), innerW))
 	} else {
-		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: 0, hscroll: p.hscroll})
+		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: 0, hscroll: p.hscroll, charWrap: true})
 		lines = append(lines, win...)
 	}
 	for len(lines) < contentH-1 {

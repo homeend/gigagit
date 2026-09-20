@@ -46,6 +46,69 @@ a side that names a file set, and a reversed live pair.
   into domain, behind `domain.ComparePatchSets`, and `FileSet.Narrowed` is no
   longer exported — a frontend offering a patch can no longer forget the rule.
   (The entry above then turned the refusal into a render.)
+## A link's bookmark / shelf hint finds its entry past the web's list page
+
+### Fixed
+
+- `gg web` lists 200 bookmarks and one shelf bucket; a `gg://…?bookmark=<id>` or
+  `?shelf=<id>` hint naming an entry outside that page landed and then said
+  "is gone" about an entry that exists (the TUI, which loads everything,
+  revealed it). A miss in the loaded list now asks the store by id —
+  `GET /api/bookmarks?id=` / `GET /api/shelf?id=` (every bucket) — and reveals
+  the row. "is gone" is said only on the server's 404; a lookup that failed
+  says it could not look the entry up. This replaces the page's per-bucket walk.
+- A steered commit pair with a branch NAME for one half (`gg session navigate`
+  written by hand; a `gg://` link always carries two ids) fell to the web's
+  older endpoint-shaped compare and lost what the pair's own lane has — a `-u`
+  stash's untracked file, the pair's review notes. The server now freezes each
+  half that resolves to its full id before the page sees it, for a posted steer
+  and for `gg open --web`'s start-at alike. A half that names nothing is left
+  as it came, and the page reports it as before.
+## Review notes on a commit pair, in `gg web`
+
+A commit pair opened in the browser — from its Previews row, or landed by a
+`@a..b` link (`gg open --web`, `gg session navigate`) — now carries its review
+notes, as it already did in the TUI, the CLI and MCP. This closes the agent
+hand-off: notes written with `gg note add --preview <a>..<b>` are on screen
+when the reviewer lands.
+
+### Added
+
+- ◆N badges on the pair's files, the notes as rows of each file's diff (in the
+  first paint), and `c` / `E` / `R` on a new-side line. A note is an ordinary
+  committed note on `b`; an old-side line refuses, as in a merge preview. The
+  badges follow a note written elsewhere while the pair is open.
+- "copy gg link to this line" (and the ◆ note menu's copy row) in a pair diff:
+  `gg://…/path@<a>..<b>:N`. An old-side line degrades to the file form.
+- `GET /api/pair/notes?a=&b=[&path=]` (two full commit ids), and
+  `/api/compare-links` names the `pair` for a pair landing.
+
+### Changed
+
+- "save comparison…" on a landed pair saves a PAIR, not two links — kept as a
+  comparison it would re-open without its notes.
+- Two TYPED links never arm the note scope, even when they spell a pair (the
+  TUI's rule). A row whose bytes are not at `b` — a `-u` stash's untracked file
+  — has no note lane.
+## Wrap mode wraps on words
+
+`ctrl+w`'s **wrap** display mode used to fill every line to its last column and
+break wherever that fell — `https://exampl` / `e.com/spec`. It now breaks at
+spaces, in every window that can wrap (panels, popups, the help window, commit
+messages, the stash list, the PR hub…):
+
+- A line ends after the last space that fits; only a word wider than the line
+  is split. Nothing is dropped or re-spaced, so colours and search hits land
+  exactly where they did.
+- A **numbered** item (`1. `, `12) `) now hangs under its text like a bullet or
+  a quote bar does, instead of under its number.
+- **Code views keep the column-exact wrap** — blame, the file preview and
+  *View content*: there a line's columns are its meaning.
+- In the **PR hub**, code lines, tables and an outdated thread's hunk are no
+  longer reflowed in wrap mode: they are cut with `…` (scroll mode shows them
+  whole), so a table keeps its columns.
+- The label a review thread is summarised by when it opens with a block —
+  `suggestion`, `code`, `quote`, `table` — is now translated in the TUI.
 
 ## Pull-request text renders as markdown in the TUI
 

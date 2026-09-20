@@ -43,6 +43,7 @@ func (s *Server) setStartAt(c steer.Command) error {
 	if err != nil {
 		return err
 	}
+	s.freezePair(context.Background(), &w)
 	s.startAtMu.Lock()
 	s.startAt = &w
 	s.startAtMu.Unlock()
@@ -107,6 +108,29 @@ type steerWire struct {
 var steerPanels = map[string]bool{
 	"branches": true, "worktrees": true, "remotes": true, "files": true,
 	"staged": true, "commits": true, "tags": true, "reflog": true, "previews": true,
+}
+
+// freezePair turns a pair target's halves into FULL commit ids wherever they
+// resolve. The link resolver already sends ids (ruling R2), but a hand-written
+// `gg session navigate` may name a branch for one half — and the page lands
+// only a two-id pair through the server's one door (/api/compare-links), where
+// a `-u` stash's untracked file is a member and the pair's review notes arm. A
+// MIXED pair used to fall to the endpoint-shaped lane and lose both. A half
+// that does not resolve is left as it came: the page's own lane reports it,
+// exactly as before. Best-effort by design — a steer is never refused here.
+func (s *Server) freezePair(ctx context.Context, w *steerWire) {
+	if w.State != "pair" {
+		return
+	}
+	svc := s.service()
+	for _, half := range []*string{&w.A, &w.B} {
+		if isFullSha(*half) {
+			continue
+		}
+		if sha, ok, err := svc.ResolveRev(ctx, *half); err == nil && ok {
+			*half = sha
+		}
+	}
 }
 
 // toSteerWire validates one posted command. Untrusted values reach git argv
@@ -302,6 +326,7 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
+	s.freezePair(readCtx(r), &wire)
 	// The hub drops everything while an op is in flight. A steer must not
 	// vanish that way, so refuse it out loud instead — the CLI prints
 	// "operation in flight" and exits 1.
