@@ -89,7 +89,7 @@ type LinkTarget struct {
 // git: there the hint is the only content source, and the link has no address
 // at all. That link cannot travel between machines, by construction.
 type LinkHint struct {
-	Kind string // "bookmark", "shelf" or "stash"; "" = no hint
+	Kind string // "bookmark", "shelf", "stash" or "preview"; "" = no hint
 	ID   string // the machine-local id; never empty when Kind is set
 }
 
@@ -104,7 +104,12 @@ func (h LinkHint) String() string {
 // linkHintKinds is the closed set. A hint whose kind is not here is refused
 // rather than carried: an unknown landing is a link this build cannot honour,
 // and silently dropping it would make the link mean something else.
-var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true}
+//
+// "preview" names a SAVED entry of the Previews surface — a merge preview or a
+// commit pair, both set-shaped. Its id is a LOOKUP key, never a checksum of
+// the address: the id hashes link TEXT, which spells the repository by name
+// on one machine and by path on another.
+var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true, "preview": true}
 
 // Link is one place in one repository: a file, a line on one side of one
 // diff, a hunk, or a commit.
