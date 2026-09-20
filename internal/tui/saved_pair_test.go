@@ -65,7 +65,7 @@ func TestPairRowMissingCommitStateAndEnterRefusal(t *testing.T) {
 	}
 }
 
-func TestEnterOnPairRowOpensAPlainCommitComparison(t *testing.T) {
+func TestEnterOnPairRowOpensACommitComparisonWithoutPreviewState(t *testing.T) {
 	t.Parallel()
 	m, p := savedPairModel(t)
 	m.sel[panelPreviews] = 1

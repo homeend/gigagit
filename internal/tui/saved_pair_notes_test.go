@@ -4,12 +4,14 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // pairWithNote is savedPairModel with the notes store opted in and one
@@ -231,5 +233,46 @@ func TestScopeLinkDisagreesOnOneFixture(t *testing.T) {
 				t.Fatalf("%s: %q parsed to the wrong kind: %+v", c.name, text, l.Target)
 			}
 		}
+	}
+}
+
+// `gg session highlight add <pair link>` targets commit b: the band paints in
+// the pair's diff (stamped at b), and the old side — commit a's text — is
+// refused exactly as in a merge preview.
+func TestHighlightLandsInThePairDiff(t *testing.T) {
+	t.Parallel()
+	dir, c1, _, c3 := refPairRepo(t)
+	m := refPairModel(t, dir)
+	sdir := m.steerDir
+	nav := steer.Command{ID: "ph-0", Cmd: "navigate", File: "c.txt",
+		Target: &steer.Target{State: "pair", A: c1, B: "feat/x"},
+		Line:   &steer.Line{Side: "new", No: 1}, Wait: true}
+	m, cmd := m.applySteer(nav)
+	m = pumpAll(t, m, cmd)
+
+	// A band is keyed on the FEED's hash for the commit (resolveAttnKey), and a
+	// commit the feed has not paged in is refused — the rule a merge preview's
+	// tip already lives under. Put b in the feed, as the all-branches feed does.
+	m.commits = []model.Commit{{Hash: c3, Subject: "c3"}}
+	m = m.rebuildCommitGraph()
+
+	mark := steer.Command{ID: "ph-1", Cmd: "highlight", File: "c.txt",
+		Target: &steer.Target{State: "commit", Commit: c3},
+		Side:   "new", Start: 1, End: 1, Tone: "warn", Wait: true}
+	m, cmd = m.applySteer(mark)
+	runSteerCmd(t, cmd)
+	if r, ok := steer.AwaitReply(sdir, "ph-1", 2*time.Second); !ok || !r.OK {
+		t.Fatalf("reply = %+v ok=%v", r, ok)
+	}
+	if _, painted := m.attnMarkFor(m.diffLayer(), textdiff.Row{RightNo: 1}); !painted {
+		t.Fatal("the band must paint in the pair's diff")
+	}
+
+	old := mark
+	old.ID, old.Side = "ph-2", "old"
+	m, cmd = m.applySteer(old)
+	runSteerCmd(t, cmd)
+	if r, ok := steer.AwaitReply(sdir, "ph-2", 2*time.Second); !ok || r.OK || !strings.Contains(r.Error, "new side") {
+		t.Fatalf("an old-side band in a pair must be refused, reply = %+v ok=%v", r, ok)
 	}
 }

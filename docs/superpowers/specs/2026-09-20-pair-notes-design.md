@@ -112,8 +112,11 @@ func noteScopeFromLink(ctx context.Context, svc *domain.Service, res domain.Reso
   `previewTargetFromLink(*link)` for `noteScopeFromLink` — a dispatch-line
   edit; the verbs then run the existing preview lane: gather along `A..B`,
   write to B new side, `#N` numbered over `A..B` via `PreviewHunkAnchor`.
-- `linkDiffSpec` calls the same adapter, and its separate `res.Pair` arm is
-  removed — one lane yields `A..B`, not two.
+- **As built (amended 2026-09-20):** `linkDiffSpec` KEEPS its own `res.Pair`
+  arm — routing it through the adapter would cost a rev-list on every plain
+  `gg diff <pair link>`, which needs no notes. Both yield the identical
+  `DiffSpec{Rev: "<A>..<B>"}`; `TestPairLinkDiffSpecEqualsItsNoteScope` pins
+  them equal so hunk numbers cannot drift.
 - A pair link carrying `:old:` on a note verb or highlight → exit 2 with
   `ErrPreviewOldSide`. (`gg diff` keeps accepting it; it anchors nothing.)
 - `previewTarget.Source/Target` are empty for a pair; any message that prints
@@ -220,6 +223,19 @@ steered pair landing arms the set. Headless smoke with `tui-capture.sh`:
 saved pair → file → note box visible, `}` lands on it.
 
 Gate: re-merge main, build the merged tree, `./test.sh race` on it.
+
+## 5.1 As-built notes (2026-09-20)
+
+- The late scope (4.4) needed a second half: `diffMsg` replaces the whole view
+  with the loader's snapshot, which predates the stamp — the `diffMsg` arm now
+  keeps a note stamp that landed on the live view while the load was in flight.
+  `v.compare` is false for an added file, so the live diff is matched by its
+  `cmp:<left>:<right>:` tag prefix instead.
+- `gg link --preview <pair>` emits the change-set link (it sets `--pair`).
+- A highlight band needs commit `b` in the loaded feed (`resolveAttnKey`), the
+  pre-existing rule a merge preview's tip already lives under; unchanged here.
+- Selected-row overflow in the Previews tab: not reproduced at 150 columns with
+  a `◆N` pair row; left in the backlog.
 
 ## 6. Risks
 
