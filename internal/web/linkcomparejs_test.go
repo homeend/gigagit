@@ -39,6 +39,11 @@ func TestLinkCompareJSIsWiredEverywhere(t *testing.T) {
 		{"style.css", "#linkcmp-hist-left.hidden", "the left history list's own hide rule"},
 		{"style.css", "#linkcmp-hist-right.hidden", "the right history list's own hide rule"},
 		{"index.html", `id="linkcmp-swap"`, "the swap control"},
+		{"linkcompare.js", "/api/link-base", "the server classifies and rewrites; the page has no link parser"},
+		{"style.css", "#linkcmp-base-left.hidden", "the left base row's own hide rule"},
+		{"style.css", "#linkcmp-base-right.hidden", "the right base row's own hide rule"},
+		{"style.css", "#linkcmp-baseerr-left.hidden", "the left base error's own hide rule"},
+		{"style.css", "#linkcmp-baseerr-right.hidden", "the right base error's own hide rule"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(read(c.file), c.want) {
@@ -56,6 +61,13 @@ func TestLinkCompareJSIsWiredEverywhere(t *testing.T) {
 		t.Error("linkcompare.js: no pickHist")
 	} else if body := read("linkcompare.js")[i:]; strings.Contains(body[:strings.Index(body, "\n}\n")], "submit(") {
 		t.Error("linkcompare.js: pickHist submits — a pick only fills the field")
+	}
+	// Nothing is rewritten until the user acts on the base row: the LOOKUP must
+	// never assign a link field.
+	if i := strings.Index(read("linkcompare.js"), "async function lookupBase("); i < 0 {
+		t.Error("linkcompare.js: no lookupBase")
+	} else if body := read("linkcompare.js")[i:]; strings.Contains(body[:strings.Index(body, "\n}\n")], "field(side).value =") {
+		t.Error("linkcompare.js: lookupBase assigns the link field — only applyBase may rewrite it")
 	}
 	// gg web binds a random port each run, which empties browser storage.
 	src := read("linkcompare.js")

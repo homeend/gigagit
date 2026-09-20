@@ -143,11 +143,19 @@
     <h2><span>compare with link</span><button id="linkcmp-close" title="close (esc)">esc</button></h2>
     <div class="lc-side">
       <div class="lc-row"><input id="linkcmp-left" class="lc-link" placeholder="gg://… — link 1" spellcheck="false" autocomplete="off"><button class="lc-hist-btn" data-side="left" title="copied links (↓)">▾</button></div>
+      <div id="linkcmp-base-left" class="lc-base hidden" data-side="left">
+        <div class="lc-row"><label for="linkcmp-basein-left">base <span class="lc-why"></span></label><input id="linkcmp-basein-left" class="lc-basein" spellcheck="false" autocomplete="off"><button class="lc-bound" data-side="left" title="rewrite the link to be relative to this base (enter)">bound</button></div>
+        <div id="linkcmp-baseerr-left" class="lc-err hidden"></div>
+      </div>
       <div id="linkcmp-err-left" class="lc-err hidden"></div>
       <ul id="linkcmp-hist-left" class="lc-hist hidden"></ul>
     </div>
     <div class="lc-side">
       <div class="lc-row"><input id="linkcmp-right" class="lc-link" placeholder="gg://… — link 2" spellcheck="false" autocomplete="off"><button class="lc-hist-btn" data-side="right" title="copied links (↓)">▾</button></div>
+      <div id="linkcmp-base-right" class="lc-base hidden" data-side="right">
+        <div class="lc-row"><label for="linkcmp-basein-right">base <span class="lc-why"></span></label><input id="linkcmp-basein-right" class="lc-basein" spellcheck="false" autocomplete="off"><button class="lc-bound" data-side="right" title="rewrite the link to be relative to this base (enter)">bound</button></div>
+        <div id="linkcmp-baseerr-right" class="lc-err hidden"></div>
+      </div>
       <div id="linkcmp-err-right" class="lc-err hidden"></div>
       <ul id="linkcmp-hist-right" class="lc-hist hidden"></ul>
     </div>

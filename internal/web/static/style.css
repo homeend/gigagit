@@ -663,6 +663,9 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #linkcmp-box input:focus { outline: none; border-color: var(--accent); }
 #linkcmp-box .lc-err { color: var(--del-fg, #e06c75); font-size: 12px; margin-top: 3px; overflow-wrap: anywhere; }
 #linkcmp-hist-left.hidden, #linkcmp-hist-right.hidden { display: none; }
+#linkcmp-base-left.hidden, #linkcmp-base-right.hidden, #linkcmp-baseerr-left.hidden, #linkcmp-baseerr-right.hidden { display: none; }
+#linkcmp-box .lc-base { margin: 4px 0 0 22px; }
+#linkcmp-box .lc-base label { color: var(--dim); font-size: 12px; white-space: nowrap; }
 #linkcmp-box .lc-hist { list-style: none; margin: 4px 0 0; padding: 0; max-height: 180px; overflow-y: auto; border: 1px solid var(--border); border-radius: 3px; }
 #linkcmp-box .lc-hist li { padding: 3px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #linkcmp-box .lc-hist li.sel, #linkcmp-box .lc-hist li:hover { background: var(--sel, rgba(127,127,127,.25)); }

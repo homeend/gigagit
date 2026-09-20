@@ -42,9 +42,74 @@ export async function runLinkCompare(query, onErr) {
   return true;
 }
 
-// fieldChanged runs after anything but typing replaced a field's text (a
-// history pick, a swap).
-function fieldChanged() {}
+// --- the base picker (GET /api/link-base) ---
+// A branch tip or a whole commit is an UNBOUNDED point: comparing it means
+// comparing every file. A base bounds it — `@<base>...<branch>`, the files a
+// merge of the branch into the base would change; `@<parent>..<sha>`, what the
+// commit changed. The server says whether a field's link can take one and
+// which to offer, and the server writes the bounded link: this page cannot
+// parse a link, so it must not rewrite one.
+const baseRow = (side) => $("linkcmp-base-" + side);
+const baseInput = (side) => $("linkcmp-basein-" + side);
+const baseTimer = { left: 0, right: 0 };
+
+function setBaseErr(side, text) {
+  const el = $("linkcmp-baseerr-" + side);
+  el.textContent = text || "";
+  el.classList.toggle("hidden", !text);
+}
+
+function hideBase(side) {
+  baseRow(side).classList.add("hidden");
+  setBaseErr(side, "");
+}
+
+// fieldChanged runs whenever a link field's text changed — typed, picked or
+// swapped. The lookup is debounced per side; the two sides are independent,
+// so they share no single-flight key, and a late answer is dropped by
+// comparing the text it was asked for with the text the field holds NOW.
+function fieldChanged(side) {
+  clearTimeout(baseTimer[side]);
+  baseTimer[side] = setTimeout(() => lookupBase(side), 250);
+}
+
+// lookupBase shows or hides the base row. It NEVER touches the link field:
+// nothing is rewritten until the user acts on the base row (applyBase).
+async function lookupBase(side) {
+  const text = field(side).value.trim();
+  if (!text) return hideBase(side);
+  let sug;
+  try {
+    sug = await getJSON("/api/link-base?" + new URLSearchParams({ link: text }));
+  } catch {
+    return hideBase(side);
+  }
+  if (field(side).value.trim() !== text) return; // a late answer for text the field no longer holds
+  if (sug.kind !== "ref" && sug.kind !== "commit") return hideBase(side);
+  baseInput(side).value = sug.base || "";
+  baseInput(side).placeholder = sug.kind === "ref" ? "a branch or tag" : "the parent's full commit id";
+  baseRow(side).querySelector(".lc-why").textContent = sug.why ? "(" + sug.why + ")" : "";
+  setBaseErr(side, "");
+  baseRow(side).classList.remove("hidden");
+}
+
+// applyBase is the ONLY thing that rewrites a link field, and only on the
+// user's say-so: enter on the base row, or its button.
+async function applyBase(side) {
+  const base = baseInput(side).value.trim();
+  if (!base) return setBaseErr(side, "a base is required");
+  const text = field(side).value.trim();
+  let out;
+  try {
+    out = await getJSON("/api/link-base?" + new URLSearchParams({ link: text, base }));
+  } catch (e) {
+    return setBaseErr(side, e.message || String(e));
+  }
+  if (field(side).value.trim() !== text) return;
+  field(side).value = out.link;
+  hideBase(side); // the field is bounded now
+  field(side).focus();
+}
 
 // --- copied-link history (GET /api/linkhist) ---
 // The ring is the server's: gg web binds a random port each run, which empties
@@ -98,6 +163,7 @@ function pickHist(i) {
   if (!r || !side) return;
   field(side).value = r.link;
   setErr(side, "");
+  hideBase(side);
   field(side).focus();
   fieldChanged(side);
 }
@@ -110,6 +176,7 @@ function swap() {
   const err = $("linkcmp-err-left").textContent;
   setErr("left", $("linkcmp-err-right").textContent);
   setErr("right", err);
+  SIDES.forEach(hideBase); // each row was about the OTHER link; the lookups bring back what fits
   SIDES.forEach(fieldChanged);
 }
 
@@ -153,7 +220,11 @@ function onKey(e) {
     return true;
   }
   const side = SIDES.find((s) => e.target === field(s));
-  if (e.key === "ArrowDown" && side) {
+  const baseSide = SIDES.find((s) => e.target === baseInput(s));
+  if (e.key === "Enter" && baseSide) {
+    e.preventDefault();
+    applyBase(baseSide); // enter on a base row rewrites; it never compares
+  } else if (e.key === "ArrowDown" && side) {
     e.preventDefault();
     openHist(side);
   } else if ((e.ctrlKey || e.metaKey) && e.key === "s") {
@@ -180,6 +251,7 @@ export function openLinkCompareDialog(prefill) {
   if (p.left !== undefined) field("left").value = p.left;
   if (p.right !== undefined) field("right").value = p.right;
   pushLayer("linkcmp", $("linkcmp"), { onKey });
+  SIDES.forEach(fieldChanged);
   field(field("left").value && !field("right").value ? "right" : "left").focus();
 }
 
@@ -192,8 +264,11 @@ $("linkcmp-box").addEventListener("click", (e) => {
   const btn = e.target.closest(".lc-hist-btn");
   if (btn) return histOpen === btn.dataset.side ? closeHist() : openHist(btn.dataset.side);
   const li = e.target.closest(".lc-hist li[data-i]");
-  if (li) pickHist(Number(li.dataset.i));
+  if (li) return pickHist(Number(li.dataset.i));
+  const bound = e.target.closest(".lc-bound");
+  if (bound) applyBase(bound.dataset.side);
 });
+SIDES.forEach((s) => field(s).addEventListener("input", () => fieldChanged(s)));
 
 registerRows("menu", () => [{ label: "compare with link…", act: () => openLinkCompareDialog() }]);
 
@@ -204,6 +279,10 @@ registerHelp({
     "branch, a commit, a stash, a file at a revision, a change-set, the working tree. Paste one link in each " +
     "field; <b>enter</b> moves on and then compares, <b>esc</b> closes. <b>↓</b> (or ▾) lists the links you " +
     "copied — in the web, the TUI or the CLI — and a pick fills the field without comparing. <b>ctrl+s</b> " +
-    "(or ⇅ swap) exchanges the two sides. An error is shown under the field it " +
+    "(or ⇅ swap) exchanges the two sides. A <b>base</b> row appears under a link to a branch, a tag or a " +
+    "whole commit, prefilled with its upstream (else the trunk), or the commit's parent: <b>enter</b> on it " +
+    "(or <b>bound</b>) rewrites the link to the files a merge into that base would change — " +
+    "<b>@base...branch</b> — or to what the commit changed. Nothing is rewritten until you do; leaving it " +
+    "alone compares the whole tips. An error is shown under the field it " +
     "belongs to. The result opens as a comparison: every file that differs, each with its diff",
 });
