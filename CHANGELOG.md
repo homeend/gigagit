@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Pull-request search in `gg web`
+
+### Added
+
+- The sidebar's *pull requests* section has a **search** field and a state chip
+  (`A` focuses the field, unfolding the section first): it asks the forge for
+  pull requests of ANY state — the way to a closed or merged one gg never
+  fetched. The text goes to the forge's own search, the chip cycles all →
+  closed → merged → open, a bare number looks that pull request up, `Enter`
+  searches. The 50 newest-updated matches show in a results block under the
+  field (✕ puts it away) and act like list rows: click fetches and opens the
+  diff, right-click is the pull-request menu. Opening a result makes it a
+  (dimmed) row of the list; the results themselves never join it.
+- `POST /api/pr/search` (write-guarded — it spends the forge call) and
+  `GET /api/pr/search`, which answers the session's last result and never
+  reaches the forge, so a reloaded page shows its results again for free.
+  `/api/pr/open`, `/api/pr/revalidate` and the details routes accept the number
+  of a searched-only pull request. With no usable `gh` there is no search UI.
+
 ## `gg compare --patch` renders any comparison the listing answers
 
 `gg compare` has been total since the links work — any two endpoints or links
