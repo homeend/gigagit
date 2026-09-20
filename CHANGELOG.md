@@ -17,6 +17,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `GET /api/bookmarks?id=` / `GET /api/shelf?id=` (every bucket) — and reveals
   the row. "is gone" is said only on the server's 404; a lookup that failed
   says it could not look the entry up. This replaces the page's per-bucket walk.
+- A steered commit pair with a branch NAME for one half (`gg session navigate`
+  written by hand; a `gg://` link always carries two ids) fell to the web's
+  older endpoint-shaped compare and lost what the pair's own lane has — a `-u`
+  stash's untracked file, the pair's review notes. The server now freezes each
+  half that resolves to its full id before the page sees it, for a posted steer
+  and for `gg open --web`'s start-at alike. A half that names nothing is left
+  as it came, and the page reports it as before.
 
 ## Pull-request text renders as markdown in the TUI
 
