@@ -101,12 +101,21 @@ func (s *Server) prsSnapshot(svc *domain.Service) (state string, rows []model.Pu
 	return c.state, c.prs, c.err, c.loading
 }
 
-// cachedPR finds PR n among the rows the page was shown.
+// cachedPR finds PR n among the rows the page was shown: the polled list
+// first, then the last search's results (prsearch.go) — a closed PR found by
+// searching is in no list until it has been fetched.
 func (s *Server) cachedPR(svc *domain.Service, n int) (model.PullRequest, bool) {
 	_, rows, _, _ := s.prsSnapshot(svc)
 	for _, p := range rows {
 		if p.Number == n {
 			return p, true
+		}
+	}
+	if last, ok := svc.PRSearchLast(); ok {
+		for _, p := range last.PRs {
+			if p.Number == n {
+				return p, true
+			}
 		}
 	}
 	return model.PullRequest{}, false
