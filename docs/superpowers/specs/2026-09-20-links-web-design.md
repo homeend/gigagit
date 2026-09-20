@@ -238,6 +238,16 @@ without a link text.
   (history, blame, bookmark, shelf) — found while wiring the view.
 - `openPrompt` gained `allowEmpty`; an empty label must reach the store.
 
+**Found, not fixed (domain, pre-existing — 3c changes no domain code).**
+`domain.linkDescFields` tests the target (`Ref`, `Commit`) before the `Path`, so
+a FILE link at a ref describes as `branch: feat/x`, not as the file. A
+comparison of `@ref:feat/x` against `/a.txt@ref:feat/x` is therefore titled
+`branch: feat/x ↔ branch: feat/x` — in the web AND in the TUI, which share the
+function — and the copied-link history shows the same. The comparison itself is
+right (the file link narrows to one file); only the title is. The web's handler
+test asserts a side's description is non-empty, which cannot see this. A fix
+belongs in `DescribeLink`, with its own test on a file-at-ref link.
+
 ## 6. Out of scope
 
 Cross-repository compare · pair notes in the web (W9) · the 200-row cap on
