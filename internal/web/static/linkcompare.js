@@ -4,9 +4,9 @@
 // text through domain.CompareLinks — the same door the CLI, MCP and the TUI
 // use — so no frontend can disagree about what a link means.
 
-import { $, esc, getJSON, runOnce } from "./core.js";
+import { $, esc, getJSON, postJSON, runOnce, state } from "./core.js";
 import { openLinkCompare } from "./files.js";
-import { closeLayer, pushLayer } from "./layers.js";
+import { closeLayer, openPrompt, pushLayer } from "./layers.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { opLine } from "./ops.js";
 
@@ -270,6 +270,33 @@ $("linkcmp-box").addEventListener("click", (e) => {
 });
 SIDES.forEach((s) => field(s).addEventListener("input", () => fieldChanged(s)));
 
+// --- save comparison… ---
+// The chip on an open link comparison's bar (files.js paints it). The label
+// starts EMPTY and an empty answer is sent as it is: the default label is the
+// store's rule, and this page must not invent one.
+function saveComparisonPrompt() {
+  const links = state.compare && state.compare.links;
+  if (!links) return;
+  openPrompt({
+    title: "Save comparison — label (empty for the default)",
+    value: "",
+    allowEmpty: true,
+    onSubmit: async (label) => {
+      try {
+        const out = await postJSON("/api/saved-compares", { left: links.left, right: links.right, label });
+        opLine("saved comparison " + out.entry.label);
+      } catch (e) {
+        if (e.data && e.data.id) opLine("already saved as " + e.data.label);
+        else opLine("save comparison: " + (e.message || e), true);
+      }
+    },
+  });
+}
+
+$("compare-bar").addEventListener("click", (e) => {
+  if (e.target.closest("#link-save-chip")) saveComparisonPrompt();
+});
+
 registerRows("menu", () => [{ label: "compare with link…", act: () => openLinkCompareDialog() }]);
 
 registerHelp({
@@ -284,5 +311,6 @@ registerHelp({
     "(or <b>bound</b>) rewrites the link to the files a merge into that base would change — " +
     "<b>@base...branch</b> — or to what the commit changed. Nothing is rewritten until you do; leaving it " +
     "alone compares the whole tips. An error is shown under the field it " +
-    "belongs to. The result opens as a comparison: every file that differs, each with its diff",
+    "belongs to. The result opens as a comparison: every file that differs, each with its diff. " +
+    "<b>save comparison…</b> on its bar keeps it in the <b>Previews</b> tab (an empty label takes the default)",
 });

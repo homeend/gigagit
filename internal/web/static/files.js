@@ -635,7 +635,11 @@ function renderCompareBar() {
   // frozen note itself is in the header, where the two sides are named; a
   // second copy here would only repeat it.
   if (c.frozen || c.links) {
-    bar.innerHTML = `<button class="on" disabled>all (${c.all.length})</button>`;
+    bar.innerHTML =
+      `<button class="on" disabled>all (${c.all.length})</button>` +
+      // A link comparison is two texts, so it can be kept (linkcompare.js owns
+      // the click); a frozen entry compare is addressed by ids and cannot.
+      (c.links ? `<button id="link-save-chip" title="keep this comparison in the Previews tab">save comparison…</button>` : "");
     return;
   }
   // A merge preview (and a pull request, which rides the same screen) is
