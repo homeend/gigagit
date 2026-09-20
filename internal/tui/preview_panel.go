@@ -112,7 +112,16 @@ func readPreviews(ctx context.Context, svc *domain.Service) (previewsPayload, er
 	}
 	for _, p := range pairs {
 		psum, err := svc.PairSummary(ctx, p.A, p.B)
-		rows = append(rows, previewRow{kind: rowPair, pair: p, psum: psum, err: err})
+		row := previewRow{kind: rowPair, pair: p, psum: psum, err: err}
+		// The same badge a merge row carries: root notes along a..b.
+		if err == nil && psum.State == domain.PairOK {
+			if set, serr := svc.PairNotes(ctx, p.A, p.B); serr == nil {
+				if byPath, total, cerr := svc.PreviewNoteCounts(ctx, set); cerr == nil {
+					row.notes, row.byPath = total, byPath
+				}
+			}
+		}
+		rows = append(rows, row)
 	}
 	return previewsPayload{rows: rows}, nil
 }

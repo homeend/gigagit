@@ -492,6 +492,9 @@ func (m Model) steerNavigatePair(c steer.Command) (Model, tea.Cmd) {
 
 	m = m.steerToPanels()
 	nm, cmd := m.openCompareFiles(left, right)
+	if nc := nm.pairNotesCmd(ahash, bhash); nc != nil { // the pair's review notes (saved_pair_notes.go)
+		cmd = tea.Batch(cmd, nc)
+	}
 	pair := shortHash(ahash) + ".." + shortHash(bhash)
 	if startAtOrigin(c) {
 		nm = nm.steerNotice(i18n.T("▸ opened %s..%s", shortHash(ahash), shortHash(bhash)))

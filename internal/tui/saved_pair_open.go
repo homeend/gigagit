@@ -48,9 +48,10 @@ func (m Model) openPairRow(r previewRow) (Model, tea.Cmd) {
 	}
 }
 
-// handlePairOpenMsg opens the files view over the pair's two commits. It is a
-// plain commit comparison: previewOpen and filesPreviewSet stay UNSET, because
-// a frozen pair has no tips to follow and (for now) no note scope.
+// handlePairOpenMsg opens the files view over the pair's two commits.
+// previewOpen stays UNSET — a frozen pair has no tips to follow — and the note
+// scope arrives by its own message (pairNotesMsg), gated on the two commits
+// the view shows rather than on this opener.
 func (m Model) handlePairOpenMsg(msg pairOpenMsg) (Model, tea.Cmd) {
 	if msg.gen != m.previewGen {
 		return m, nil
@@ -71,5 +72,9 @@ func (m Model) handlePairOpenMsg(msg pairOpenMsg) (Model, tea.Cmd) {
 	m, cmd = m.openCompareFiles(msg.eps.Left, msg.eps.Right)
 	m.filesTitle = pairTitle(msg.pair.Label)
 	m.filesContext = m.filesTitle
+	// After openCompareFiles: it bumped previewGen, which the command stamps.
+	if nc := m.pairNotesCmd(msg.pair.A, msg.pair.B); nc != nil {
+		cmd = tea.Batch(cmd, nc)
+	}
 	return m, cmd
 }

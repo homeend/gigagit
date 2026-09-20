@@ -212,7 +212,7 @@ func (m Model) contextLinkText() (string, bool) {
 			// side inside a preview, so `has == false` on a deletion row is
 			// exactly the "line 0, new side" the spec asks for.
 			if set := m.previewNoteSet(); set != nil {
-				return m.previewLinkFor(set.Source, set.Target, addr.Path, line)
+				return m.scopeLinkFor(set, addr.Path, line)
 			}
 			return m.linkFor(addr, side, line, 0)
 		}
@@ -226,9 +226,9 @@ func (m Model) contextLinkText() (string, bool) {
 	// the branches below: every row here belongs to the open preview.
 	if set := m.filesPreviewSet; set != nil && m.filesView != nil {
 		if b, ok := m.focusedBookmark(); ok {
-			return m.previewLinkFor(set.Source, set.Target, b.Path, 0)
+			return m.scopeLinkFor(set, b.Path, 0)
 		}
-		return m.previewLinkFor(set.Source, set.Target, "", 0)
+		return m.scopeLinkFor(set, "", 0)
 	}
 	if b, ok := m.focusedBookmark(); ok {
 		return m.linkFor(b.Address(), model.NoteSideNew, 0, 0)
