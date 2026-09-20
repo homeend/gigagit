@@ -114,3 +114,11 @@ stale-counts null · `pairCtx` without the layout check · an armed `right_spec`
 row · the chip posting two links · no live count refresh · `noteQuery` without
 its pair arm. The stale-counts check holds the pair's fetch back with a routed
 delay — without it the window is too short to see.
+
+**N9 is true of the DIFF only.** The open diff's history/blame read
+`diffCtx.rev = b`. The file LIST's right-click menu still keys its rev rows on
+`state.compare.bHash`, which is empty for a link comparison, so a pair's file
+row offers no history / blame / bookmark / shelf there. Left as is.
+
+The probe watched `c` and `E`; `R` and the ◆ menu's copy row ride the same
+context (`linkFor`'s pair arm is pinned by the node gate) and were not driven.
