@@ -290,7 +290,9 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #prs-list li.prbusy .prnum::before { content: "\27f3 "; display: inline-block; color: var(--accent); animation: prspin 1s linear infinite; }
 /* The loading mask over the panes right of the sidebar (prs.js sizes it). A
    PR open is seconds of network + git; without it the page just sits there. */
-#pr-mask { position: fixed; z-index: 40; background: rgba(20, 22, 26, 0.72); display: flex; align-items: center; justify-content: center; cursor: progress; }
+/* z-index 10: the mask dims the panes, so it sits above their sticky chrome
+   (1–2) and BELOW every overlay (11+), the modal and the menus. */
+#pr-mask { position: fixed; z-index: 10; background: rgba(20, 22, 26, 0.72); display: flex; align-items: center; justify-content: center; cursor: progress; }
 #pr-mask.hidden { display: none; }
 #pr-mask-box { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 18px 26px; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 6px; max-width: 70%; }
 #pr-mask-spin { font-size: 26px; color: var(--accent); animation: prspin 1s linear infinite; }

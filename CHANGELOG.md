@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Web: the pull-request loading mask no longer covers an open menu
+
+### Fixed
+
+- `gg web`: the mask that dims the panes while a pull request loads shared the
+  menus' `z-index` (40) and came later in the page, so it painted OVER the
+  main menu, a context menu, the palette and even a decision modal opened
+  meanwhile. It now sits at 10 — above the panes' sticky chrome, below every
+  overlay — and a static test pins that order.
+
 ## `}` / `{` reach a note that sits behind the freshly opened cursor
 
 ### Fixed
