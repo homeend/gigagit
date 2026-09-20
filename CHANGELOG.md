@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## `gg web`: commit pairs catch up — note total on the row, file actions at `b`, live link comparisons
+
+### Added
+
+- A saved **commit pair**'s row in the Previews section shows its review-note
+  total (◆N), as a merge preview's row and the TUI's pair row already did.
+  `/api/saved-compares` carries `notes` on a pair row — the root notes along
+  `a..b`, never `a`'s own.
+- A pair's file rows get **file history / blame at this commit / bookmark
+  this file / add to shelf** in their right-click menu, addressed at `b`. A
+  link comparison has no single revision to be "here", but a pair landing
+  does. A row whose bytes live off that side's own endpoint — a `-u` stash's
+  untracked file, kept on a third parent — still gets none of them.
+- An open **link comparison follows what moves under it**: when a side names
+  a branch tip or the working tree, a live refs/status refresh re-asks the
+  comparison with the same two links and, only when the rows differ, swaps
+  them in place — the filter, the stage and the cursor's FILE stay, and an
+  open diff closes only if its own row is gone. A pair (two frozen commits)
+  is never re-asked. Like every live refresh it needs `[refresh] enabled`
+  (and `branches_watch` or an interval for ref moves). Known limit: a file
+  that was already listed and whose bytes changed again keeps its row, so an
+  open diff of it is refreshed by re-opening it.
+
 ## `}` / `{` reach a note that sits behind the freshly opened cursor
 
 ### Fixed

@@ -5,7 +5,7 @@
 // use — so no frontend can disagree about what a link means.
 
 import { $, esc, getJSON, postJSON, runOnce, state } from "./core.js";
-import { openLinkCompare } from "./files.js";
+import { openLinkCompare, updateLinkCompareFiles } from "./files.js";
 import { closeLayer, openPrompt, pushLayer } from "./layers.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { opLine } from "./ops.js";
@@ -40,6 +40,33 @@ export async function runLinkCompare(query, onErr) {
   }
   openLinkCompare(body);
   return true;
+}
+
+// refreshLinkCompare keeps an OPEN link comparison live: a side that names a
+// branch tip or the working tree moves under it, and the listing on screen
+// would otherwise describe a comparison that no longer exists. It re-asks
+// the ONE door with the very two link texts the screen was opened from and,
+// only when the answer's rows differ, swaps them in place.
+//
+// A pair landing is skipped — two frozen commits cannot move — and so is a
+// comparison that is not on screen (drillOut leaves state.compare standing).
+// A failure is silent: a transient error must not tear down a good screen,
+// and the next tick asks again. The identity check drops an answer that
+// arrives after the user has opened something else.
+export async function refreshLinkCompare() {
+  const c = state.filesMode === "compare" && state.layout !== "list" ? state.compare : null;
+  if (!c || !c.links || c.pair) return;
+  let body;
+  try {
+    body = await getJSON("/api/compare-links?" + new URLSearchParams({ left: c.links.left, right: c.links.right }));
+  } catch {
+    return;
+  }
+  if (state.compare !== c || state.filesMode !== "compare") return;
+  const files = body.files || [];
+  if (JSON.stringify(files) === JSON.stringify(c.all)) return;
+  updateLinkCompareFiles(files);
+  opLine("comparison updated: " + files.length + " file" + (files.length === 1 ? "" : "s"));
 }
 
 // --- the base picker (GET /api/link-base) ---
