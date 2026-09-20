@@ -2116,3 +2116,60 @@ under it would otherwise block every later PR diff from fetching.
   overlay; a refresh keeps `scrollTop`. Fixture note: a listed row overwrites
   the cached TITLE (the body survives), so list/view fixtures that disagree
   show the list's title until the POST lands.
+
+### Forge PR text as markdown — parser core + web (plan 1, `docs/superpowers/plans/2026-09-20-forge-prs-markdown-1-core-web.md`, spec `docs/superpowers/specs/2026-09-20-forge-prs-markdown-design.md`)
+
+- **One parser, in Go.** `internal/markdown` (leaf: stdlib + `syntax`) —
+  `Parse(src) Doc` is total and bounded (`MaxInput` 256 KiB → plain
+  paragraphs, `MaxDepth` 8, `MaxTableCols` 64, `MaxLexLines` 2000). The `Doc`
+  JSON tags ARE the web wire shape; `testdata/*.md → *.json` goldens pin it
+  and the web's node test (`markdownjs_test.go`) paints those same files.
+  Regenerate with `go test ./internal/markdown/ -update`.
+- **Subset, deliberately:** ATX headings, paragraphs (every newline is a hard
+  break, as in GitHub comments), bullet/ordered/task lists, quotes, fenced
+  code, pipe tables, rules; strong/em/del, code spans, links, angle + bare
+  autolinks, images, `@mention` / `#123` / `org/repo#9` refs, escapes. Raw
+  HTML, reference links, footnotes, setext headings, indented code, emoji
+  shortcodes and entities are literal text.
+- **`safeURL` is the one gate** for link/image destinations: only a clean
+  `http(s)` URL ever lands in `Inline.URL`. Verdicts: ok / show (relative,
+  `mailto:` → the text plus ` (dest)`) / drop (`javascript:`, `data:`,
+  `vbscript:`, sniffed with whitespace and control bytes squeezed out).
+- **Closer searches are memoised per run** (`noCloser`, `noTicks`) and link
+  scans are length-capped, so a wall of unmatched `*` / `[` / backticks stays
+  linear (`TestInlineIsBounded`). `FuzzParse` checks the consumer invariants
+  (`checkDoc`) and that no LETTER is lost (digits are: an ordered list keeps
+  its number in `Start`).
+- **Fence colouring:** `colourCode` hands the lower-cased fence language to
+  `syntax.Lex` (chroma resolves aliases: golang, sh, js, py, yml…). `Lang` is
+  kept only when it is a tame identifier, so an info string never reaches a
+  class name or an attribute. `suggestion` is never lexed.
+- **The thread split** is `markdown.Summary(body) (summary, rest, rawFirst)`:
+  prose/heading → first line (markers stripped) + the rest; a list → first
+  item's line, rest = the WHOLE body; fence/quote/table/rule → a label
+  (`code`, `suggestion`, `quote`, `table`, `—`), rest = the whole body. Plain
+  prose splits exactly as the old `strings.Cut` did
+  (`TestSummaryKeepsThePlainSplit`). `rawFirst` rides on
+  `ResolvedNote.SummarySrc` (a domain type — nothing new is stored).
+- **Trees are opt-in on the wire.** `ToWireNoteRendered` (web only) attaches
+  `md` (the rationale) and `summary_md` to FORGE notes, replies included;
+  `ToWireNote`/`ToWireNotePreview` — what the CLI and MCP give agents — never
+  do, and a stored note is never parsed. `/api/pr/details` (both verbs) adds
+  `body_md` and per-comment `md` BESIDE the raw strings. `web` reaches the
+  parser through `domain.ParseMarkdown` / `domain.MarkdownDoc`. Parsing is
+  local, so R2 holds.
+- **`static/markdown.js` is a painter**, import-free and DOM-free
+  (`mdHTML`, `mdInlineHTML`, `esc` injected). Closed tag list, headings
+  painted as `h3…h6` with `.md-hN` classes, `href` only for `^https?://`
+  (re-checked there), images as links, tok classes `^[a-z]{1,4}$`, aligns
+  from a fixed set, every value type-checked, depth-capped. A forge note /
+  comment WITHOUT a tree falls back to `esc(raw)`.
+- **Gotchas:** the `.tk-*` colours are selector-scoped — `#prdetails .tk-*`
+  was added (note boxes already sit under `table.diff`); `#prdetails-box h3`
+  out-ranks a plain `.md .md-h`, so those rules name `#prdetails` too; the
+  host boxes are `white-space: pre-wrap`, `.md` resets it; a right-click on
+  `a[href]` inside a note returns early so the browser's own menu shows.
+- **Browser fixture:** `prweb/runmd.sh` swaps in `threads-7.md.json` +
+  `pr-view-7.md.json` (markdown + hostile strings), runs `pw/md.mjs`
+  (29 checks), restores `pr-view-7.base.json`; `prweb/mdguards.py` removes one
+  guard at a time and expects named checks red.

@@ -137,10 +137,14 @@ synchronous inside `Parse`; callers already run off the UI thread (§4, §7).
 
 - `forgeNote` (`forge_notes.go`) splits the body with `markdown.Summary`
   instead of `strings.Cut` (§6).
-- `WireNote` gains `MD *markdown.Doc` (`json:"md,omitempty"`), set only when
-  `Source == forge` and the rationale is non-empty: the parsed RATIONALE. It
-  also gains `SummaryMD []markdown.Inline` (`json:"summary_md,omitempty"`),
-  the summary line's inline tree. Local notes never carry either.
+- `WireNote` gains `MD *MarkdownDoc` (`json:"md,omitempty"`, the parsed
+  RATIONALE) and `SummaryMD []markdown.Inline` (`json:"summary_md,omitempty"`,
+  the summary line's inline tree). They are OPT-IN: only
+  `ToWireNoteRendered` — the web's builder — fills them, only for forge
+  notes (replies included). `ToWireNote` / `ToWireNotePreview`, which the CLI
+  and MCP hand to agents, never carry a tree, and a local note is never
+  parsed. The summary's source line travels on `ResolvedNote.SummarySrc` (a
+  domain type; nothing new is stored).
 - `model.ForgeComment` and `model.PullRequest` stay plain data (model cannot
   import markdown's lexer-backed tree without pulling `syntax` into `model`).
   The web details answer wraps them instead (§4).

@@ -40,7 +40,8 @@ diff rather than a tip-to-tip compare: list, add, rename, remove, save the
 reversed pair, open, and live re-open when a tracked tip moves) · **pull
 requests** (read-only: list, fetch + open the PR diff, copy URL, forget,
 `[refresh] prs` poll and ⟳, review threads inside the diff as read-only note
-boxes, the details overlay — the TUI's PR hub — and the comment re-poll) ·
+boxes, the details overlay — the TUI's PR hub — and the comment re-poll;
+PR text is RENDERED AS MARKDOWN here, which the TUI does not do yet) ·
 **note folding** (every note box: click the title, `z` / `Z` — the TUI's
 `o` / `O`).
 

@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Pull-request text renders as markdown (web)
+
+A pull request's description, its conversation and review verdicts, and the
+review threads inside the PR diff are written in markdown — `gg web` now shows
+them rendered instead of as raw text.
+
+- **What renders:** headings, bold / italic / strikethrough, inline code,
+  fenced code blocks (syntax-coloured when the fence names a language), bullet,
+  numbered and task lists, quotes, tables, rules, links, `@mentions` and `#123`
+  references. A GitHub **suggestion** block shows as a captioned code block —
+  it is shown, never applied.
+- **Links** open in a new tab and only when they are `http(s)`; any other
+  destination is shown as text (`javascript:` and `data:` ones not at all).
+  **Images are never fetched**: `![alt](url)` becomes an `[image: alt]` link.
+  Raw HTML in a comment is shown literally, never interpreted.
+- **A thread's bold summary line** follows the markdown: a comment that opens
+  with a suggestion, a quote or a table is summarised as `suggestion` /
+  `quote` / `table` rather than by a line of backticks, and its body stays
+  whole. Plain-prose comments split exactly as before. (This also tidies the
+  TUI's thread rows, which still show the text unrendered — the TUI is the
+  next stage.)
+- **Unchanged on purpose:** your own and agents' review notes are shown exactly
+  as typed; `gg pr view` / `gg pr comments` and the note JSON handed to agents
+  keep the raw markdown.
+- One parser, in Go (`internal/markdown`, no new dependency): the page is sent
+  a parsed tree and only paints it, escaping every leaf — there is no markdown
+  parser and no HTML sanitizer in the browser to get wrong.
+
 ## Review notes on a commit pair
 
 A commit pair — saved in the Previews tab, or just named by a

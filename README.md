@@ -417,6 +417,15 @@ are re-read on every `[refresh] prs` tick; every note box folds from its title
 on the open diff — shows the description, the conversation with the review
 verdicts, and the outdated threads with their hunks.
 
+Pull-request text is **rendered as markdown** in `gg web` — the description,
+comments, verdicts and review threads: headings, emphasis, lists and task
+lists, quotes, tables, syntax-coloured code blocks, captioned *suggestion*
+blocks (shown, never applied). Links open in a new tab and only when they are
+`http(s)`; images are never fetched (they become `[image: alt]` links) and raw
+HTML is shown as text. Your own review notes stay exactly as typed, and the
+CLI (`gg pr view`, `gg pr comments`) keeps the raw markdown for agents. The TUI
+still shows PR text unrendered.
+
 `refs/gg/pr/<n>` is local only: never pushed, never shown in the commit graph.
 The fetch goes through whichever of your remotes names the base repository, so
 it uses your own ssh/https setup. `gh` is detected once per run; without a
