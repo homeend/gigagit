@@ -347,6 +347,7 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.commitCompareSelectionRow(); ok {
 		out = append(out, r)
 	}
+	out = append(out, m.commitSavePairRows()...)
 	if r, ok := m.markedRangeReviewRow(); ok {
 		out = append(out, r)
 	}

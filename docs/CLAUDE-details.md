@@ -1185,6 +1185,37 @@ inexpressible kind as a 500; they use `%d` rather than `ep.Display()` because
 `Display` has no `EndpointInvalid` arm and PANICS on the zero endpoint, and
 `internal/web` has no `recover()` middleware.
 
+### Saved commit pairs (2026-09-19)
+
+A saved commit pair is a SET-shaped `savedcompare.Entry` —
+`Left: gg://<repo>@<A40>..<B40>`, `Right: nil` — the shape a merge preview has,
+differing only in `Left.Target` (`Pair` vs `Preview`). No store, file or state
+kind of its own. `domain/pair.go` is `domain/preview.go`'s twin:
+
+- `PairAdd` FREEZES both revs to full shas (ruling: a pair never follows a
+  branch) and dedups through the store's (Left, Right) rule.
+- `pairFromEntry` and `previewFromEntry` are two recognisers over one store and
+  must DISAGREE on a shared fixture (`TestPairAndPreviewRecognisersDisagree`):
+  each surface sees exactly its own rows, and a Left+Right comparison is seen
+  by neither. `pairFromEntry` also rejects pair sets it did not produce (names,
+  short shas, a path, a hint).
+- `PairRename`/`PairRemove` are guarded by `PairGet`, mirroring the preview
+  pair: neither surface can relabel or delete the other's rows.
+- `PairOpen` counts files TWO-dot via `CompareFiles` and caches the count by
+  `(a, b)` in the `"preview"` cache — a frozen pair is immutable and the
+  Previews tab re-reads on every branches arrival. Only `PairOK` is cached.
+- TUI: `previewRow` is a two-kind row whose ZERO kind is the merge preview (so
+  pre-pair fixtures stay valid). `rec` is read only through `merge()`, and only
+  in `preview_panel.go` — `TestPreviewRowRecIsReadOnlyInItsOwnFile` (AST). A
+  pair opens as a plain commit comparison: `previewOpen` and `filesPreviewSet`
+  stay unset. The save rows take their direction from
+  `compareSelectionEndpoints`, by construction.
+- Deferred, with the rule already decided: a `?preview=<id>` hint must be a
+  LOOKUP (by id, else by matching `Left`, else show-once), never a checksum —
+  the id hashes link TEXT and converted previews keep legacy ids. Pair notes =
+  ordinary notes on `B`, new side, via `PreviewNoteSet{Tip: B, Base: A}`.
+  Spec: `docs/superpowers/specs/2026-09-19-saved-commit-pairs-design.md`.
+
 ### Links in the TUI — recording, stash pairs, the `#` history (plan 3b-1, 2026-09-19)
 
 **Recording lives at the clipboard writer.** `internal/tui` has exactly one
@@ -1815,3 +1846,89 @@ heartbeat arm (gated on no op/modal/load, `scheduledInterval(prsItem)`,
 under it would otherwise block every later PR diff from fetching.
 `previewOpenMsg.prNumber` / `previewOpenState.prNumber` ride a re-resolve like
 `title`; `handlePreviewOpenMsg` chains the first fetch when `prNumber > 0`.
+
+### Forge pull requests in the web UI (plan 4, `docs/superpowers/plans/2026-09-19-forge-prs-4-web-list.md`, spec `docs/superpowers/specs/2026-09-19-forge-prs-web-design.md`)
+
+- **The wire value is the PR NUMBER.** The preview endpoints allowlist
+  `source`/`target` against the branch lists; `refs/gg/pr/<n>` and a merged
+  PR's base sha are not branches and are never accepted from the page.
+  `GET /api/pr/open?n=` finds the PR among the rows the page was SHOWN (404
+  otherwise), resolves `PRPair` server-side and answers the preview-open shape
+  (`previewOpenBody`, shared with `writePreviewOpen`) plus `pr`. Its
+  `source`/`target` are DISPLAY names (the head may live in a fork).
+  `prs_static_test.go` pins that prs.js puts nothing but `n` on a PR URL.
+- **A GET never calls the forge.** `prCache` (`internal/web/prs.go`, keyed to
+  the service pointer like `remoteTagCache`) holds the last listing;
+  `loadPRs` is the one lane that probes + lists, then emits the live source
+  `prs`. `GET /api/pr` kicks ONE background load for an unprobed service and
+  answers `{available, loaded, error, prs}` at once; `POST /api/pr/refresh` is
+  the guarded synchronous re-list (the header's ⟳). Forge callers in the web:
+  the list lane, the `pr-fetch` builder (`PRFetchOp` reads the head sha), and
+  plan 5's comments refresh.
+- **`state:"unfetched"` is a LIVE ref check** (`domain.PRFetched`), never the
+  cached row's `fetched`: the page asks right after `pr-fetch` finishes, while
+  the post-run re-list is still in flight.
+- **Ops ride `RegisterOp`** (`op_pr.go`); the `OpBuilder` cleanup slot is the
+  post-run hook (`kickPRs(svc, true)`, plus `dropCachedPR` for a forget, which
+  removes only a NON-open row). `opStartRequest.Number` is new.
+- **The `prs` live lane is outside the master switch** (ruling 13):
+  `prsInterval` = `PRsSeconds()` floored by `min_seconds`; `tickOnce` runs its
+  due-check after the op-in-flight gate and BEFORE `!cfg.Enabled`; `startLive`
+  starts the tick loop for prs alone when refresh is disabled. `onPRs` KICKS
+  (the ticker is one lane, a gh list takes seconds) and only a `ready` cache —
+  a service nobody asked about, or one without a forge, never earns an
+  interval gh call. `prs` is deliberately not in `liveSources`.
+- **Client:** `#prs-header` / `#prs-list` are born `class="hidden"` and need
+  their own `#id.hidden` rule (hiding is per id here). `prs.js` un-hides on
+  `available`, re-asks on a 1/2/4 s backoff while `loaded:false` (the
+  kick-then-emit race), and hands `window.__ggRefreshPRs` to sidebar.js (no
+  import — the previews.js cycle). `prsrow.js` is import-free and node-tested;
+  `review_state` is LOWER-case on the wire.
+- **A PR diff rides `state.previewOpen` with `pr: n`.** Because its names are
+  display text: `armPreview` skips `loadPreviewCounts`, `noteQuery`/`fetchNotes`
+  read it as a plain commit diff on the head sha, `linkFor` refuses, and
+  `reopenPreviewIfMoved` returns early. Plan 5 replaces the first three with
+  `pr=n` reads.
+- **The hub captures its clock seams at construction** (`h.now`, `h.tick`).
+  With prs on by default EVERY `startLive` now runs a tick loop, even with
+  refresh disabled; a loop leaked by a test that never Closes read the package
+  `liveNow`/`liveTick` and raced the next test's `useFakeClock` (the race gate
+  caught it).
+- **A timed-out probe is not `off`** (`loadPRs`): domain does not cache a
+  cancelled probe, so the web stays unprobed with an error text and the next
+  read retries. A listing that finishes after a re-root returns without
+  touching the cache (`prCache.at` would hand it back to the old service).
+- **`fetchPRs` was called in live.js without an import**: the ReferenceError
+  was swallowed by the refresh lane's catch and only the browser interval
+  check (refresh disabled, `prs = 10`, no click) saw it.
+  `TestFetchPRsIsImportedWhereItIsCalled` pins it. `fetchPRs` is single-flight
+  with ONE queued re-run — a dropped call could keep a pre-update answer.
+- **The PR cache is domain-level** (`internal/domain/forge_cache.go`), so
+  every frontend gets it: the LISTING seeds `forgePRCache` (it carries the head
+  sha), `baseRepo` is asked once per session, and `PRFetchOp` reads both from
+  the cache — zero forge calls for a PR the user can see. With the cached
+  `HeadSHA`, `FetchPRHead`'s idempotence check turns an unchanged PR into a
+  purely local op. Eviction is LAZY (on the next cache access; no timer
+  goroutine): entries unused for `prCacheIdle` (5 min) go; `forgeNow` is the
+  test clock. `PRRevalidate` ALWAYS asks the forge, refreshes the cache (and
+  `forgeTerminal` for a no-longer-open PR) and reports `Moved` (local ref
+  missing or ≠ the forge's head).
+- **Stale-while-revalidate, both frontends.** Web: a `fetched` row opens from
+  `GET /api/pr/open` at once, then `POST /api/pr/revalidate?n=` (guarded; folds
+  the answer into the cached ROW without a re-list); `moved` + the PR still on
+  screen → `pr-fetch` + re-open. TUI: `handlePreviewOpenMsg` fires
+  `prRevalidateCmd` after the view is up; a moved head re-runs `openPRCmd` and
+  `prRevalidateSkip` stops that reopen from revalidating again (a fetch that
+  cannot reach the forge's head would loop). The in-flight flag is cleared
+  before the "still my view" check, as in `handlePRCommentsMsg`.
+- **The loading mask** (`#pr-mask`, prs.js `maskOn/maskOff`) is
+  `position: fixed`, sized from `#panes` minus the sidebar, dismissable by a
+  click, cleared in a `finally` and by a 90 s safety timer. A browser check's
+  visibility helper must not use `offsetParent` for it — that is null for
+  every fixed element.
+- **`compare.previewBar`** replaces the origin-filter buttons for a merge
+  preview / PR (they could only ever be disabled there).
+- **Tests:** web `TestMain` sets `domain.ForgeDisabled`; PR tests inject
+  `fakeForge` via `SetForgeProviders` and a ticker-less hub (`prServe`), so
+  they need no env. Browser fixture = the TUI one copied, with PR 12 a REAL
+  merged PR (head ≠ base) — head == base reads as preview state `merged`.

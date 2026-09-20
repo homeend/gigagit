@@ -89,6 +89,10 @@ type Server struct {
 	// rt is the last remote tag listing (remotetags.go): the ▲ on the tags
 	// sidebar and the gate on "delete from remote".
 	rt remoteTagCache
+	// prs is the pull-request list lane's memory (prs.go).
+	prs prCache
+	// prBudget overrides prLoadBudget (tests); zero = the default.
+	prBudget time.Duration
 }
 
 func New(svc *domain.Service) *Server {

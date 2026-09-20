@@ -75,7 +75,8 @@ func TestPreviewsSectionSitsAfterWorktrees(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(core), `"worktrees", "previews", "tags"`) {
+	// (The pull-requests section sits right after previews — prs_static_test.go.)
+	if !strings.Contains(string(core), `"worktrees", "previews", "prs", "tags"`) {
 		t.Errorf("core.js: SECTIONS must list previews between worktrees and tags, matching the markup")
 	}
 }

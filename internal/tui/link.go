@@ -235,7 +235,10 @@ func (m Model) contextLinkText() (string, bool) {
 	}
 	if !m.inContentWindow() && m.focus == panelPreviews {
 		if r, ok := m.selectedPreview(); ok {
-			return m.previewLinkFor(r.rec.Source, r.rec.Target, "", 0)
+			if rec, isMerge := r.merge(); isMerge {
+				return m.previewLinkFor(rec.Source, rec.Target, "", 0)
+			}
+			return m.pairLinkFor(r.pair.A, r.pair.B)
 		}
 	}
 	if !m.inContentWindow() {

@@ -187,9 +187,14 @@ type Model struct {
 	// The open PR diff's comment reads (pr_comments.go): one at a time, and
 	// when the last one started (the comment poll's own clock).
 	prCommentsInflight bool
-	prCommentsLast     time.Time
-	previewOpen        *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
-	previewGen         int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
+	// prRevalidateInflight: one background "is this PR's head still current?"
+	// read per open (pr_revalidate.go). prRevalidateSkip names the PR whose NEXT
+	// open is the reopen a revalidation caused — that one must not ask again.
+	prRevalidateInflight bool
+	prRevalidateSkip     int
+	prCommentsLast       time.Time
+	previewOpen          *previewOpenState // the merge preview the compare view is showing; nil = none (pointer: survives the value copy)
+	previewGen           int               // files-view generation; gates stale previewOpenMsg results (closeFilesView bumps it)
 
 	// Where the cursor lands once a mutation's reload arrives. Set by
 	// handlePreviewMutatedMsg, consumed (and cleared) by the srcPreviews
@@ -917,6 +922,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePreviewOpenMsg(msg)
 	case previewMutatedMsg:
 		return m.handlePreviewMutatedMsg(msg)
+	case pairOpenMsg:
+		return m.handlePairOpenMsg(msg)
 	case pairOpsMsg:
 		// Only the LATEST probe may open the popup: a re-pair while an older
 		// probe was in flight replaced pairProbe, so the older msg no longer
@@ -2419,11 +2426,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.focus == panelPreviews {
 				if r, ok := m.selectedPreview(); ok && m.opsIdle() {
+					rec, isMerge := r.merge()
+					if !isMerge {
+						return m.openPairRow(r)
+					}
 					if r.sum.State != domain.PreviewOK {
-						m.statusMsg = previewStateNotice(r.rec.Source, r.rec.Target, r.sum.State)
+						m.statusMsg = previewStateNotice(rec.Source, rec.Target, r.sum.State)
 						return m, nil
 					}
-					return m, m.openPreviewCmd(r.rec.ID, r.rec.Source, r.rec.Target, "")
+					return m, m.openPreviewCmd(rec.ID, rec.Source, rec.Target, "")
 				}
 				return m, nil
 			}
@@ -2852,6 +2863,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case prCommentsMsg:
 		return m.handlePRCommentsMsg(msg)
 
+	case prRevalidatedMsg:
+		return m.handlePRRevalidatedMsg(msg)
+
 	case prCountsMsg:
 		if msg.gen == m.previewGen && m.filesPreviewSet != nil && msg.counts != nil {
 			m.filesPreviewCounts = msg.counts
@@ -3195,6 +3209,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var prCmd tea.Cmd
 		if prOpen != nil && msg.err == nil {
 			prCmd = m.openPRPreviewCmd(*prOpen) // the head is local now: open its diff
+			// Computing the pair's diff is the slow half on a big repository:
+			// say so, or the fetch's "done" reads as the end of the story.
+			m.statusMsg = i18n.T("opening PR #%d…", prOpen.Number)
 		}
 		if prsReload && msg.err == nil {
 			m, prCmd = m.readPRsCmd(context.Background(), false, false)

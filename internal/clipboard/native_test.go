@@ -263,12 +263,58 @@ func TestWSLInteropOK(t *testing.T) {
 	}
 }
 
-// TestResolveWaylandDisplayFromEnv: a set WAYLAND_DISPLAY is used verbatim,
-// with no filesystem probe.
+// listenWayland puts a real listening unix socket named name in dir.
+func listenWayland(t *testing.T, dir, name string) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-socket probe is a POSIX concern")
+	}
+	p := filepath.Join(dir, name)
+	ln, err := net.Listen("unix", p)
+	if err != nil {
+		t.Fatalf("listen unix: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	return p
+}
+
+// TestResolveWaylandDisplayFromEnv: a set WAYLAND_DISPLAY whose socket is
+// LIVE is used verbatim — a bare name under XDG_RUNTIME_DIR, or an absolute
+// path as libwayland allows.
 func TestResolveWaylandDisplayFromEnv(t *testing.T) {
-	disp, ok := resolveWaylandDisplay(envWith(map[string]string{"WAYLAND_DISPLAY": "wayland-3"}))
+	dir := t.TempDir()
+	abs := listenWayland(t, dir, "wayland-3")
+	disp, ok := resolveWaylandDisplayIn(envWith(map[string]string{"WAYLAND_DISPLAY": "wayland-3", "XDG_RUNTIME_DIR": dir}), nil)
 	if !ok || disp != "wayland-3" {
-		t.Errorf("resolveWaylandDisplay = (%q, %v), want (wayland-3, true)", disp, ok)
+		t.Errorf("bare name = (%q, %v), want (wayland-3, true)", disp, ok)
+	}
+	disp, ok = resolveWaylandDisplayIn(envWith(map[string]string{"WAYLAND_DISPLAY": abs, "XDG_RUNTIME_DIR": t.TempDir()}), nil)
+	if !ok || disp != abs {
+		t.Errorf("absolute = (%q, %v), want (%q, true)", disp, ok, abs)
+	}
+}
+
+// TestResolveWaylandDisplayDeadEnvFallsThrough is the WSL case that shipped
+// broken: WAYLAND_DISPLAY=wayland-0 is set but XDG_RUNTIME_DIR does not hold
+// it (/run/user/<uid> missing; the live socket sits in WSLg's own runtime
+// dir). Trusting the variable picked wl-copy, which failed, and the OSC 52
+// fallback then painted a green "Copied" over a clipboard that never changed.
+func TestResolveWaylandDisplayDeadEnvFallsThrough(t *testing.T) {
+	dead := filepath.Join(t.TempDir(), "gone") // XDG_RUNTIME_DIR that does not exist
+	env := envWith(map[string]string{"WAYLAND_DISPLAY": "wayland-0", "XDG_RUNTIME_DIR": dead})
+
+	// No live socket anywhere: the display does NOT resolve, so wl-copy is
+	// never selected and the no-clipboard notice can fire.
+	if disp, ok := resolveWaylandDisplayIn(env, []string{t.TempDir()}); ok {
+		t.Fatalf("a dead WAYLAND_DISPLAY resolved to %q", disp)
+	}
+
+	// A live socket in a fallback dir is found, by ABSOLUTE path.
+	wslg := t.TempDir()
+	want := listenWayland(t, wslg, "wayland-0")
+	disp, ok := resolveWaylandDisplayIn(env, []string{wslg})
+	if !ok || disp != want {
+		t.Fatalf("fallback = (%q, %v), want (%q, true)", disp, ok, want)
 	}
 }
 
@@ -568,5 +614,33 @@ func TestCopyNativeErrorFallsToOSC52(t *testing.T) {
 	}
 	if method != "osc52" || tty.n != 1 {
 		t.Errorf("native error should fall through to OSC 52 (method=%q writes=%d)", method, tty.n)
+	}
+}
+
+// TestNativeCopyCmdOverridesADeadWaylandDisplay: when the display resolved to
+// something OTHER than the inherited WAYLAND_DISPLAY (the variable names a
+// socket that is not there), the wl-copy child must be handed the resolved
+// one. Injecting it only when the variable was empty left wl-copy inheriting
+// the dead value and failing.
+func TestNativeCopyCmdOverridesADeadWaylandDisplay(t *testing.T) {
+	look := func(name string) (string, error) {
+		if name == "wl-copy" {
+			return "/usr/bin/wl-copy", nil
+		}
+		return "", os.ErrNotExist
+	}
+	env := envWith(map[string]string{"WAYLAND_DISPLAY": "wayland-0"})
+	resolved := func() (string, bool) { return "/mnt/wslg/runtime-dir/wayland-0", true }
+	nc, ok := nativeCopyCmd("linux", true, env, look, resolved, func() bool { return false })
+	if !ok || len(nc.argv) == 0 || nc.argv[0] != "wl-copy" {
+		t.Fatalf("nativeCopyCmd = %+v, %v", nc, ok)
+	}
+	if len(nc.env) != 1 || nc.env[0] != "WAYLAND_DISPLAY=/mnt/wslg/runtime-dir/wayland-0" {
+		t.Fatalf("child env = %v, want the RESOLVED display", nc.env)
+	}
+	// A live inherited value needs no override.
+	same := func() (string, bool) { return "wayland-0", true }
+	if nc, _ := nativeCopyCmd("linux", true, env, look, same, func() bool { return false }); len(nc.env) != 0 {
+		t.Fatalf("a live inherited display was overridden: %v", nc.env)
 	}
 }

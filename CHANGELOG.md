@@ -6,6 +6,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Copy no longer trusts a dead `WAYLAND_DISPLAY`
+
+On WSL every copy action could paint a green "Copied" while the clipboard never
+changed, with no notice. `WAYLAND_DISPLAY=wayland-0` was set, but
+`XDG_RUNTIME_DIR` (`/run/user/<uid>`) did not exist — the live socket sat in
+WSLg's own `/mnt/wslg/runtime-dir` — and WSL interop was off, so `clip.exe` was
+rightly skipped. gg took the variable's word, selected a `wl-copy` that could
+not connect, and the OSC 52 fallback reported success.
+
+- The display now resolves against **live sockets only**: the inherited value
+  when its socket exists, else a `wayland-N` in the runtime dir (the tmux
+  case), else one in `/mnt/wslg/runtime-dir`.
+- The `wl-copy` child is handed the display that resolved whenever it differs
+  from the inherited one — it used to get it only when the variable was empty,
+  so a set-but-dead value was inherited and failed.
+- When no socket is live anywhere, `wl-copy` is not selected at all, so the
+  existing "no clipboard" / WSL-interop notice can fire instead of a false
+  "Copied".
+
+## Saved commit pairs
+
+The diff between two commits can now be **saved and named**, beside merge
+previews. In the Commits panel mark two commits with `m`, open the `.` menu
+and pick **Save to previews** (or **Save reversed to previews**); the entry
+appears in the **Previews** tab as `label  <a7>..<b7>  N files`. `enter` opens
+the diff (titled `Saved diff: <label>`), `e` renames, `d` removes, `s` saves the
+reversed pair, and the row's copy-link action yields `gg://<repo>@<a>..<b>` —
+a link `gg diff`, `gg open`, `gg compare` and an agent can all take.
+
+- **The two commits are FROZEN.** Whatever was marked — even a branch tip — is
+  stored as a full sha, so the entry never follows a branch. A moving
+  comparison is what a merge preview is for. The direction is older → newer,
+  exactly the one *Compare selection* diffs in; `space` is unchanged and still
+  only opens the diff.
+- The rows show only while **exactly two commits** are marked: a ◇ Working
+  tree / ◇ Staged row cannot be frozen, and a 3+ range is a different
+  change-set.
+- A commit that is no longer in the repository (a gc, another clone) leaves the
+  entry listed as `missing commit: <sha7>`; it cannot open but can still be
+  renamed or removed.
+- CLI: `gg preview add [--label <text>] <a>..<b>` (one argument holding `..`;
+  any rev is accepted and frozen), and `gg preview list | show | rename | rm`
+  cover both kinds. `list` keeps its seven columns — a pair prints its two full
+  shas where a preview prints branch names, state `pair` (or `missing`), ahead 0.
+- No new store: a saved pair is a set-shaped `savedcompare` entry
+  (`Left: gg://<repo>@<a>..<b>`, no right half), the same shape a merge preview
+  has — so `gg compare --list` shows it, and a pair and a preview are already
+  comparable with `gg compare <link> <link>`.
+- Not in this change: the web Previews tab, review notes inside a saved pair,
+  and a `?preview=<id>` landing hint.
+
 ## Links in, links out — the TUI copies, records and re-opens `gg://` links
 
 **The TUI now records every link it copies.** It was the one frontend that
@@ -42,6 +93,46 @@ editing `savedcompare.toml` by hand.
 Under the hood: `domain.DescribeLink` is now the one describer behind every
 history row (it lived unexported in `internal/cli`, out of the TUI's reach),
 and a member's bytes are read through `FileSet.Source(path)`.
+
+## Pull requests in the web UI (list, open, forget)
+
+**`gg web` lists the repository's pull requests** in a new sidebar section,
+*pull requests*, right under *previews* — read-only, like the rest of the
+feature, and only when a usable `gh` is found (without one the section is never
+shown; there is no notice). Rows lead with the review verdict (`✓` approved ·
+`✗` changes requested · `●` review required — the TUI's `…` reads as a
+truncation in a browser — · `draft`); a pull request gg
+already knows stays listed, dimmed, after it is closed or merged. **Click**
+fetches the head into `refs/gg/pr/<n>` and opens the PR's diff (`base…head`,
+titled `PR #7 · title`) on the merge-preview compare screen; a closed or merged
+PR whose head is already here opens without a fetch. **Right-click**: copy URL,
+forget. The header's **⟳** re-reads the list, and the server re-reads it every
+`[refresh] prs` seconds (300; `0` = off) **whatever `[refresh] enabled` says**
+— every open tab follows through the live stream.
+
+**Opening a pull request is cached, and says that it is working.** Every
+open used to cost two `gh` round trips before git even started, then a network
+fetch — seconds with nothing on screen. Now a pull-request cache in the domain
+layer (so the TUI and the web share it) serves the head sha from the listing
+and the base repository from the session: a PR whose head is already local
+opens **at once** from what is here, and the forge is asked *afterwards*, in
+the background — only a head that really moved is fetched and the diff
+re-opened (`PR #7 has new commits — updating…`). Cached PRs nobody used for
+five minutes are evicted; the fetched refs themselves never are. On lazygit a
+repeat open went from ~4 s to ~50 ms. While a first open runs, `gg web` masks
+the panes with *fetching pull request #7 · title…* (click to dismiss) and spins
+the row; the TUI says `fetching PR #7…` then `opening PR #7…`. The PR diff's
+filter bar no longer shows two dead, elided *only …* buttons — it reads
+`all (N)` plus `source → target · read-only` (merge previews get the same
+treatment) — and right-clicking the PR's header opens the PR menu instead of
+the browser's.
+
+The page names a pull request by its **number** and nothing else: the pair is
+resolved server-side, so no ref or sha a browser sends ever reaches git, and a
+`GET` never calls the forge (the list is a server-side cache with one lane that
+talks to `gh`). Review threads inside the diff, note collapse and the PR
+details view are the next plan; until then a PR diff carries your own notes on
+its head commit and refuses *copy link*.
 
 ## Saved comparisons absorb merge previews
 

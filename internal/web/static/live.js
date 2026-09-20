@@ -12,6 +12,7 @@ import { fetchStatus, wtCount } from "./status.js";
 import { fetchNotes, markDiffRow, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
 import { fetchBranches, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved } from "./previews.js";
+import { fetchPRs } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { loadRepo, opLine } from "./ops.js";
@@ -125,6 +126,9 @@ async function refreshSources(want) {
   // total, so a note write changes the LIST as well as the open diff (the same
   // reason the TUI chains its previews read off the notes source).
   if (sidebar || want.has("previews") || want.has("notes")) jobs.push(fetchPreviews());
+  // "prs" is the server's pull-request lane having re-listed (its own
+  // [refresh] prs interval, a finished pr-fetch / pr-forget).
+  if (want.has("prs")) jobs.push(fetchPRs());
   await Promise.all(jobs);
   // After the previews list lands: an open preview whose tips moved re-opens
   // itself, one whose pair vanished closes with a notice.

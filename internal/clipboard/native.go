@@ -71,8 +71,11 @@ func nativeCopyCmd(goos string, isWSL bool, env func(string) string, lookPath fu
 		if has("wl-copy") {
 			if disp, ok := waylandDisplay(); ok {
 				nc := nativeCopy{argv: []string{"wl-copy"}}
-				if env("WAYLAND_DISPLAY") == "" {
-					// Recovered off-env (tmux stripped it): the child needs it.
+				if env("WAYLAND_DISPLAY") != disp {
+					// Recovered off-env: tmux stripped the variable, or it
+					// names a socket that is not there. Either way the child
+					// must be handed the display that resolved — an inherited
+					// dead value would fail wl-copy just the same.
 					nc.env = []string{"WAYLAND_DISPLAY=" + disp}
 				}
 				return nc, true
@@ -88,19 +91,55 @@ func nativeCopyCmd(goos string, isWSL bool, env func(string) string, lookPath fu
 	return nativeCopy{}, false
 }
 
-// resolveWaylandDisplay returns the WAYLAND_DISPLAY to use for wl-copy. A value
-// already in the environment is used verbatim; otherwise (the tmux case) the
-// runtime dir is scanned for a live wayland-N socket and its absolute path is
-// returned, so the wl-copy child connects even without XDG_RUNTIME_DIR set.
+// wslgRuntimeDir is where WSLg itself keeps its Wayland socket. A WSL distro
+// normally reaches it through /run/user/<uid>, but that path can be missing
+// altogether while WAYLAND_DISPLAY still names the socket.
+const wslgRuntimeDir = "/mnt/wslg/runtime-dir"
+
+// resolveWaylandDisplay returns the WAYLAND_DISPLAY to use for wl-copy.
 func resolveWaylandDisplay(env func(string) string) (string, bool) {
-	if d := env("WAYLAND_DISPLAY"); d != "" {
-		return d, true
-	}
+	return resolveWaylandDisplayIn(env, []string{wslgRuntimeDir})
+}
+
+// resolveWaylandDisplayIn resolves the display against LIVE sockets only:
+//
+//  1. a WAYLAND_DISPLAY from the environment, verbatim — but only when the
+//     socket it names exists. The variable alone proves nothing: on WSL it can
+//     be set while XDG_RUNTIME_DIR does not hold the socket, and trusting it
+//     selects a wl-copy that cannot connect, after which the OSC 52 fallback
+//     reports a copy that never happened and no notice fires;
+//  2. else a wayland-N socket in the runtime dir (the tmux case, which strips
+//     the variable);
+//  3. else one in a fallback dir (WSLg's own).
+//
+// 2 and 3 return an ABSOLUTE path, which libwayland uses as-is, so the child
+// connects whatever its XDG_RUNTIME_DIR says.
+func resolveWaylandDisplayIn(env func(string) string, fallbackDirs []string) (string, bool) {
 	runtimeDir := env("XDG_RUNTIME_DIR")
 	if runtimeDir == "" {
 		runtimeDir = fmt.Sprintf("/run/user/%d", os.Getuid())
 	}
-	return findWaylandSocket(runtimeDir)
+	if d := env("WAYLAND_DISPLAY"); d != "" {
+		path := d
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(runtimeDir, d)
+		}
+		if isSocket(path) {
+			return d, true
+		}
+	}
+	for _, dir := range append([]string{runtimeDir}, fallbackDirs...) {
+		if disp, ok := findWaylandSocket(dir); ok {
+			return disp, true
+		}
+	}
+	return "", false
+}
+
+// isSocket reports whether path is an existing unix socket.
+func isSocket(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Mode()&os.ModeSocket != 0
 }
 
 // findWaylandSocket scans runtimeDir for a Wayland display socket (wayland-0,

@@ -208,12 +208,18 @@ func (s *Server) writePreviewOpen(w http.ResponseWriter, r *http.Request, label,
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, map[string]any{
+	writeJSON(w, previewOpenBody(eps, label, source, target))
+}
+
+// previewOpenBody is the open/diff wire shape, shared with the pull-request
+// open (prs.go), which opens on the same compare screen.
+func previewOpenBody(eps domain.PreviewEndpoints, label, source, target string) map[string]any {
+	return map[string]any{
 		"state": eps.Summary.State.String(), "label": label,
 		"source": source, "target": target,
 		"left": eps.Left.Hash(), "right": eps.Right.Hash(),
 		"source_hash": eps.Summary.SourceHash, "target_hash": eps.Summary.TargetHash,
-	})
+	}
 }
 
 func (s *Server) handlePreviewOpen(w http.ResponseWriter, r *http.Request) {

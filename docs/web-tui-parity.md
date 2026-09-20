@@ -37,7 +37,10 @@ restore to a path, restore one file from a shelved commit, cherry-pick a
 shelved commit — live or from its frozen patch) · **merge previews** (saved
 `source → target` branch-name pairs, previewed as the merge-base..source
 diff rather than a tip-to-tip compare: list, add, rename, remove, save the
-reversed pair, open, and live re-open when a tracked tip moves).
+reversed pair, open, and live re-open when a tracked tip moves) · **pull
+requests** (read-only: list, fetch + open the PR diff, copy URL, forget,
+`[refresh] prs` poll and ⟳ — review threads, note collapse and the PR details
+view are still TUI-only).
 
 ## Missing from the web
 

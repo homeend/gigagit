@@ -596,6 +596,16 @@ function renderCompareBar() {
     bar.innerHTML = `<button class="on" disabled>all (${c.all.length})</button>`;
     return;
   }
+  // A merge preview (and a pull request, which rides the same screen) is
+  // merge-base → tip by construction: "only <side>" can never apply, and two
+  // dead buttons with elided labels only read as something broken. The bar
+  // says what is showing instead.
+  if (c.previewBar) {
+    bar.innerHTML =
+      `<button class="on" disabled>all (${c.all.length})</button>` +
+      `<span class="cmpnote" title="${esc(c.previewBar)}">${esc(c.previewBar)}</span>`;
+    return;
+  }
   // Without a merge base there are no origin sets, so only "all" is
   // meaningful — the comparison itself still stands (compare.go).
   const off = c.originsError
@@ -890,7 +900,9 @@ async function openFile(i) {
     // The pair the gathered note set is read by: a preview note may have been
     // written against an OLDER commit on the branch, so the query is the pair,
     // never this one tip.
-    preview: prev ? { source: prev.source, target: prev.target } : null,
+    // pr (a number) marks a pull request's diff: its source/target are display
+    // names, so the note lane and the link builder must not read them as refs.
+    preview: prev ? { source: prev.source, target: prev.target, pr: prev.pr || 0 } : null,
     // links.js documents ctx.compare as THE refusal for a two-revision view;
     // carrying it here means the diff-LINE copy-link path uses that documented
     // guard too, instead of relying on notesArmed() to happen to be off.
@@ -1597,7 +1609,7 @@ function notesArmed() {
 function noteQuery() {
   if (!notesArmed()) return null;
   const q = new URLSearchParams({ path: state.diffCtx.path });
-  if (state.diffCtx.preview) {
+  if (state.diffCtx.preview && !state.diffCtx.preview.pr) {
     // The preview gathers notes along the branch, so the READ is keyed on the
     // PAIR: a note written against an older commit still belongs here. rev and
     // state ride along unchanged because they are what the WRITE needs — a
@@ -1636,7 +1648,10 @@ async function fetchNotes(rerender = true) {
     state.notes = [];
     return;
   }
-  const prev = !!state.diffCtx.preview;
+  // A pull request's diff reads as a plain commit diff on its head: the pair
+  // endpoint resolves branch NAMES, and a PR's are display text (a fork's
+  // branch, or worse a same-named local one).
+  const prev = !!state.diffCtx.preview && !state.diffCtx.preview.pr;
   try {
     const d = await getJSON((prev ? "/api/preview/notes?" : "/api/notes?") + q);
     state.notes = d.notes || [];
@@ -2901,7 +2916,7 @@ $("files-list").addEventListener("contextmenu", (e) => {
           sha: rev,
           section: "commit",
           compare: state.filesMode === "compare",
-          preview: po ? { source: po.source, target: po.target } : null,
+          preview: po ? { source: po.source, target: po.target, pr: po.pr || 0 } : null,
         }),
       ],
       e.clientX,

@@ -65,6 +65,9 @@ func TestMain(m *testing.M) {
 	// Merge previews are off package-wide for the same reason; a test that
 	// means to exercise them calls svc.UsePreviewsDir(t.TempDir()).
 	domain.PreviewsDisabled = true
+	// No test may shell out to the real gh: a test that means to exercise pull
+	// requests injects a provider (prServe).
+	domain.ForgeDisabled = true
 	code := m.Run()
 	if ggBinDir != "" {
 		_ = os.RemoveAll(ggBinDir)

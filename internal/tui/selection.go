@@ -66,7 +66,7 @@ func (m Model) rowKeyAt(p panel, i int) string {
 	case panelReflog:
 		return m.reflog[u].Hash
 	case panelPreviews:
-		return m.previews[u].rec.ID
+		return m.previews[u].id()
 	case panelPRs:
 		return strconv.Itoa(m.prs[u].Number)
 	}

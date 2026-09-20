@@ -103,6 +103,13 @@ type Service struct {
 	forgeSeen      map[int]bool               // PR numbers listed open this session
 	forgeTerminal  map[int]model.PullRequest  // cached closed/merged/unavailable reads
 	forgeComments  map[int]forgeCommentsEntry // PRCommentsRefresh's cache; the note readers never fetch
+	// forgePRCache holds single pull requests (forge_cache.go): an open is served
+	// from it and revalidated in the background; an entry nobody used for
+	// prCacheIdle is evicted. forgeBase is the base repository, fixed for the
+	// session. forgeNow is the cache clock (nil = time.Now; tests move it).
+	forgePRCache map[int]forgePREntry
+	forgeBase    *forgeBaseRepo
+	forgeNow     func() time.Time
 
 	// preflightMu guards the resolved verdicts. reRoot builds a FRESH Service,
 	// so a cached resolution can never outlive the repo it describes.
