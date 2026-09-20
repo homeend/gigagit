@@ -6,6 +6,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Compare with link… in `gg web`, and the whole Previews tab
+
+The browser gets the dialog the TUI has, and its Previews tab now lists
+everything the store holds.
+
+- **compare with link…** (the command palette or the ☰ menu): two `gg://` link
+  fields. **↓** (or ▾) lists the links you copied — in the web, the TUI or the
+  CLI — and a pick fills the field without comparing; **ctrl+s** (or ⇅) swaps
+  the sides; an error is shown under the field it belongs to.
+- **A base row** appears under a link to a branch, a tag or a whole commit,
+  prefilled with its upstream (else the trunk), or the commit's parent.
+  **enter** on it (or **bound**) rewrites the link — `@<base>...<branch>`,
+  target first, or `@<parent>..<full sha>`. Nothing is rewritten until you do.
+  The page has no link parser, so the server classifies and rewrites
+  (`GET /api/link-base`, over `model.Link.WithBase` — the one rewrite): a link
+  typed in the browser and one typed in the TUI cannot bound differently.
+- **One door.** `GET /api/compare-links` runs `domain.CompareLinks`, as the CLI,
+  MCP and the TUI do. It takes two link texts, a saved id, or two full commit
+  ids, so the dialog, a saved row and a `@a..b` landing are one lane.
+- **The result** is a comparison screen whose files each read from the right
+  place: a `-u` stash's untracked file lives on the stash's third parent, and
+  its row says so. **save comparison…** on its bar keeps it (an empty label
+  takes the store's default).
+- **The Previews tab** lists saved **commit pairs** (`a..b`, with their file
+  count, or which side is missing) and saved **comparisons** beside the merge
+  previews: click to open; right-click for rename, save reversed, copy gg link
+  (— left / — right on a comparison) and remove. They are the entries
+  `gg compare --save` / `--list` and `gg preview add a..b` write.
+
+### Fixed
+
+- **A `gg://…@a..b` link to a `-u` stash, opened in `gg web`, did not list the
+  stash's untracked files.** The landing went through the endpoint-shaped
+  `/api/compare`, which cannot see a third parent; it now goes through the door.
+  (The TUI's half of this was closed in the compare-dialog work.)
+- **A renamed file's left side read the wrong path** in a stored-entry
+  comparison: `/api/entry-diff` read both sides at the NEW path, so the old
+  revision had nothing there and the file looked wholly added. It takes
+  `old_path` now.
+
 ## Review notes on a commit pair
 
 A commit pair — saved in the Previews tab, or just named by a

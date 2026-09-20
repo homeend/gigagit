@@ -221,6 +221,23 @@ without a link text.
 
 ---
 
+## 5a. As built
+
+- `GET /api/link-base` answers `{"kind":"none"}` not only for an unparseable
+  link but for any link `SuggestBase` cannot answer yet (a sha that does not
+  resolve while it is being typed). With `&base=` the same conditions are 422.
+- `/api/compare-links`' error `error` field carries the CAUSE's message, without
+  `LinkSideError`'s `left: ` prefix — `side` says it.
+- The classifier is `savedEntry`, and it asks domain (`PairGet`,
+  `SavedCompare.IsSet`) instead of re-parsing link shapes; it also requires an
+  EXACT id, since domain's getters accept a label too.
+- `POST /api/saved-compares` refuses a lone `left`: `SavedCompareAdd` would
+  store it as a one-link SET.
+- Tasks 6–8 landed as one commit: they share `savedEntry` and one file.
+- The file menu in a link comparison drops the rows that need one revision
+  (history, blame, bookmark, shelf) — found while wiring the view.
+- `openPrompt` gained `allowEmpty`; an empty label must reach the store.
+
 ## 6. Out of scope
 
 Cross-repository compare · pair notes in the web (W9) · the 200-row cap on
