@@ -251,6 +251,10 @@ func (m Model) navigateLanded(c steer.Command, detail string) (Model, tea.Cmd) {
 		m.hintGen++
 		m.pendingHint = &pendingHint{cmd: c, tag: m.hintGen, at: time.Now()}
 		return m, tea.Batch(reply, m.loadShelfForHintCmd(c.HintID, m.hintGen))
+	case "preview":
+		// No load to wait for: the Previews rows are a startup source, and a
+		// start-at landing already waits for that fan-out.
+		return m.revealSavedSet(c), reply
 	default:
 		// "stash" (spec §3.4, no producer) and any future kind this build
 		// cannot reveal: the navigate already landed, so this degrades with
@@ -258,6 +262,54 @@ func (m Model) navigateLanded(c steer.Command, detail string) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("that link's hint has no landing gg can show")
 		return m, reply
 	}
+}
+
+// revealSavedSet honours a ?preview=<id> hint after its link has landed: the
+// Previews tab is left showing the saved entry the link was copied from, so
+// closing the landed view returns the user to it. The id is a LOOKUP — by id,
+// else by the entry naming the same set as the address (the id hashes link
+// TEXT, which spells the repository differently on another machine), else a
+// notice: the link landed "show once" and nothing here holds it.
+//
+// It works UNDER an open view: the tab and its cursor move, the keyboard does
+// not leave the view the landing just opened.
+func (m Model) revealSavedSet(c steer.Command) Model {
+	bi := -1
+	for i, r := range m.previews {
+		if _, isCmp := r.compare(); !isCmp && r.id() == c.HintID {
+			bi = i
+			break
+		}
+	}
+	if bi < 0 && c.Target != nil {
+		for i, r := range m.previews {
+			if rec, ok := r.merge(); ok {
+				if c.Target.State == "preview" && rec.Source == c.Target.Source && rec.Target == c.Target.Target {
+					bi = i
+					break
+				}
+			} else if r.kind == rowPair && c.Target.State == "pair" && r.pair.A == c.Target.A && r.pair.B == c.Target.B {
+				bi = i
+				break
+			}
+		}
+	}
+	if bi < 0 {
+		m.statusMsg = i18n.T("preview %s is not saved here; the link still landed", c.HintID)
+		return m
+	}
+	if m.filesView == nil && !m.inContentWindow() {
+		m = m.activateTab(panelPreviews)
+	} else {
+		m.activeLeftTab, m.lastLeftPanel = panelPreviews, panelPreviews
+	}
+	for di, b := range m.displayIndices(panelPreviews) {
+		if b == bi {
+			m.sel[panelPreviews] = di
+			break
+		}
+	}
+	return m
 }
 
 // steerNavigateHintOnly lands a hint-only navigate (S13): a link with no
