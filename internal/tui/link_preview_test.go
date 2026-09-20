@@ -63,7 +63,9 @@ func TestPreviewsPanelRowCopiesThePreviewLink(t *testing.T) {
 	m, _, _ := mergePreviewModel(t)
 	m.linkRepoName = "gigagit"
 	m = m.activateTab(panelPreviews)
-	want := "gg://gigagit@main...feat/x"
+	// A SAVED row's link says so: ?preview=<id> is the landing that reveals
+	// this row again (the id is a lookup key, never part of the address).
+	want := "gg://gigagit@main...feat/x?preview=" + m.previews[0].id()
 	got, ok := m.contextLinkText()
 	if !ok {
 		t.Fatal("the Previews panel must offer a link")
