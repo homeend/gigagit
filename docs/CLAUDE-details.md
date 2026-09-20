@@ -1932,3 +1932,51 @@ under it would otherwise block every later PR diff from fetching.
   `fakeForge` via `SetForgeProviders` and a ticker-less hub (`prServe`), so
   they need no env. Browser fixture = the TUI one copied, with PR 12 a REAL
   merged PR (head ≠ base) — head == base reads as preview state `merged`.
+
+### Forge PRs in the web UI — threads, note folding, details (plan 5, `docs/superpowers/plans/2026-09-20-forge-prs-5-web-comments.md`)
+
+- **Domain:** `PreviewNotesAt` (the diff-less read: web, CLI, MCP) mirrors
+  `PreviewNotesFor` — `forgeNotesFor(set, path)` appended AFTER
+  `keepResolved`, returned alone when the file has no stored notes or the
+  machine has no note store. `PRCommentsCached(n)` reads the comment cache
+  without a forge call. `WireNote` gained `read_only` (source = forge),
+  `resolved`, `file_level` (forge + zero range) and `created` (RFC 3339
+  string — a `time.Time` would never `omitempty`).
+- **Routes (`internal/web/prnotes.go`), all keyed on `?n=`:**
+  `GET /api/pr/notes[&path=]` = `/api/preview/notes`' shape over
+  `PreviewNotes(pair.Head, pair.Base)` — the HEAD is the set's source, because
+  the domain recognises a PR by `ParsePRRef(set.Source)`; no path = counts
+  only; an unfetched PR answers the empty shape. It never calls the forge.
+  `POST /api/pr/comments/refresh` → `{changed}` and `POST /api/pr/details` →
+  `{pr (with body), hub, outdated, truncated}` are the two forge-spending
+  calls, write-guarded, under `prRevalidateBudget`. **Spec amendment:** details
+  was drafted as a GET; the PR body is not in the listing, so it always costs
+  a forge call and R2 (a GET never calls the forge) makes it a POST.
+  `/api/pr/open` also sends `link_source` / `link_target` (the PRPair) OUT;
+  they are never read back (R1).
+- **Client:** `notebox.js` (import-free, node-tested) owns the title text and
+  the collapse set. `state.noteCollapsed` holds ROOT ids and is re-seeded
+  (resolved forge threads) only when `path + rev` changes — a note write or a
+  comment re-poll re-reads the same diff and must keep hand-made folds. The
+  fold is a CLASS on the `<tr>` toggled in place (`toggleNoteCollapsed`);
+  `renderDiff` would reset the ‹/› stepper and jolt the scroll. Whole-file
+  threads (`file_level`, line 0) are skipped by `noteRowsHTML` and emitted by
+  `fileNoteRowsHTML` right after the `<colgroup>`, full-span even in the split
+  layout. The agent-off filter exempts `read_only`. `E`/`R` and the ◆ menu
+  refuse a read-only note (`readOnlyNote`).
+- **Re-poll:** `refreshPRComments(n)` (`prs.js`, `runOnce("pr-comments")`) runs
+  at the end of `showPR` — after the diff is on screen, never on the click
+  path — and from `live.js` on every `prs` event while a PR is open. When
+  `changed`: `fetchNotes()` if a file of that PR is open (it also carries the
+  counts), else `loadPRCounts(n)`.
+- **Details overlay:** `#prdetails` has its OWN `#prdetails.hidden` rule (the
+  web hides by ID; without it the backdrop covers the page from load — the
+  browser run with the rule removed dies on the first click). `prdetails.js`
+  owns the compare-bar chip's click, so `files.js` never imports it.
+- **Links:** `linkFor` swaps a PR ctx's display pair for
+  `{linkSource, linkTarget}` and refuses without them.
+- **Browser-check lessons:** in the split layout `tr[data-no] td.side` is the
+  LEFT cell — clicking it marks the OLD side, and `c` then (correctly) refuses
+  on a preview; the sidebar is not on screen while a file's diff is open, so
+  test a sidebar row's menu before opening a file; wrap the whole script in
+  try/catch so an abort prints as a FAIL instead of an empty result table.
