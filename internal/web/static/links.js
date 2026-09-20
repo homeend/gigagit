@@ -256,14 +256,18 @@ registerRows("commit", (c) => {
 // <source>` — no path, no line: the address of the preview itself, the form
 // an agent hands back after annotating its branch (the TUI's Previews-panel
 // "Copy link"). e is the registry entry: its NAMES, never the tips.
+//
+// A SAVED row says so: `?preview=<id>` is the landing that reveals this row
+// again (the id is a lookup key, never part of the address). An id the
+// grammar cannot carry degrades to the bare link rather than losing the row,
+// and the description is the entry's label — what domain.DescribeLink reads
+// the hinted link as.
 registerRows("preview", (e) => {
-  const link = linkFor(state.repo, state.worktree, {
-    path: "",
-    state: "commit",
-    compare: true,
-    preview: { source: e.source, target: e.target },
-  });
-  return link ? [copyLinkRow(link, linkDesc("preview", e.target + "..." + e.source, ""))] : [];
+  const ctx = { path: "", state: "commit", compare: true, preview: { source: e.source, target: e.target } };
+  const link =
+    linkFor(state.repo, state.worktree, { ...ctx, hint: { kind: "preview", id: e.id } }) ||
+    linkFor(state.repo, state.worktree, ctx);
+  return link ? [copyLinkRow(link, linkDesc("preview", e.label || e.target + "..." + e.source, ""))] : [];
 });
 
 // A bookmark or shelf row copies the entry's ADDRESS plus a
