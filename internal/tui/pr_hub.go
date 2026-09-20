@@ -10,7 +10,9 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/syntax"
 )
 
 // prHubPopup is the pull-request hub: title, state line, description, the
@@ -177,6 +179,21 @@ func prTextLines(body, indent string) []contentLine {
 	return out
 }
 
+// prMarkdownLines is forge PROSE — a description, a comment — laid out from its
+// parsed markdown: markers gone, inline styles and code colours on the class
+// mask. Rows are NOT pre-wrapped: the hub is a modeWrap popup, so renderWindow
+// wraps each row at render time (hanging a list item's continuation under its
+// text) and a ctrl+t maximize re-wraps for free. prTextLines stays for the
+// outdated threads' hunks, which are code.
+func prMarkdownLines(body, indent string) []contentLine {
+	lead := make([]syntax.Class, len([]rune(indent)))
+	var out []contentLine
+	for _, row := range mdRows(markdown.Parse(body), 0) {
+		out = append(out, contentLine{text: indent + row.text, cls: append(append([]syntax.Class{}, lead...), row.cls...)})
+	}
+	return out
+}
+
 // prCommentHead is "author · age [· extra…]".
 func prCommentHead(c model.ForgeComment, now time.Time, extra ...string) string {
 	parts := []string{c.Author}
@@ -198,7 +215,7 @@ func prHubBody(p model.PullRequest, c domain.PRComments, now time.Time) []conten
 	if strings.TrimSpace(p.Body) == "" {
 		out = append(out, contentLine{text: "  " + i18n.T("(no description)")})
 	} else {
-		out = append(out, prTextLines(p.Body, "  ")...)
+		out = append(out, prMarkdownLines(p.Body, "  ")...)
 	}
 	out = append(out, contentLine{text: ""},
 		contentLine{text: i18n.T("Conversation (%d)", len(c.Hub)), heading: true})
@@ -208,7 +225,7 @@ func prHubBody(p model.PullRequest, c domain.PRComments, now time.Time) []conten
 	for _, cm := range c.Hub {
 		out = append(out, contentLine{text: "  " + prCommentHead(cm, now, prVerdictWord(cm.Verdict))})
 		if strings.TrimSpace(cm.Body) != "" {
-			out = append(out, prTextLines(cm.Body, "    ")...)
+			out = append(out, prMarkdownLines(cm.Body, "    ")...)
 		}
 	}
 	if roots := countRoots(c.Outdated); roots > 0 {
@@ -217,7 +234,7 @@ func prHubBody(p model.PullRequest, c domain.PRComments, now time.Time) []conten
 		for _, cm := range c.Outdated {
 			if cm.ParentID != "" { // a reply hangs under its thread's root
 				out = append(out, contentLine{text: "    ↳ " + prCommentHead(cm, now)})
-				out = append(out, prTextLines(cm.Body, "      ")...)
+				out = append(out, prMarkdownLines(cm.Body, "      ")...)
 				continue
 			}
 			where := cm.Path
@@ -234,7 +251,7 @@ func prHubBody(p model.PullRequest, c domain.PRComments, now time.Time) []conten
 			if cm.Hunk != "" {
 				out = append(out, prTextLines(strings.Join(tailLines(cm.Hunk, prHubHunkLines), "\n"), "    ")...)
 			}
-			out = append(out, prTextLines(cm.Body, "    ")...)
+			out = append(out, prMarkdownLines(cm.Body, "    ")...)
 		}
 	}
 	if c.Truncated {
