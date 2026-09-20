@@ -168,13 +168,14 @@ func prHubHeader(p model.PullRequest, now time.Time) []contentLine {
 	return append(out, contentLine{text: ""})
 }
 
-// prTextLines is forge prose as indented content lines: CRs stripped, tabs
+// prTextLines is forge CODE (an outdated thread's hunk tail) as indented,
+// never-reflowed content lines: CRs stripped, tabs
 // expanded and control characters neutralised by the diff view's sanitizer.
 func prTextLines(body, indent string) []contentLine {
 	body = strings.TrimRight(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
 	var out []contentLine
 	for _, l := range strings.Split(body, "\n") {
-		out = append(out, contentLine{text: indent + sanitizeLine(l)})
+		out = append(out, contentLine{text: indent + sanitizeLine(l), noWrap: true})
 	}
 	return out
 }
@@ -189,7 +190,7 @@ func prMarkdownLines(body, indent string) []contentLine {
 	lead := make([]syntax.Class, len([]rune(indent)))
 	var out []contentLine
 	for _, row := range mdRows(markdown.Parse(body), 0) {
-		out = append(out, contentLine{text: indent + row.text, cls: append(append([]syntax.Class{}, lead...), row.cls...)})
+		out = append(out, contentLine{text: indent + row.text, cls: append(append([]syntax.Class{}, lead...), row.cls...), noWrap: row.pre})
 	}
 	return out
 }

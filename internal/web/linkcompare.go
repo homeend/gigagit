@@ -149,7 +149,12 @@ func (s *Server) handleCompareLinks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Only a PAIR landing names its pair (the note scope the page arms): the
+	// two-link form never does, even when its links spell one — a comparison
+	// of two far-apart points must not pay the pair's rev-list.
+	var pair *[2]string
 	if a != "" {
+		pair = &[2]string{a, b}
 		repo, err := svc.LinkRepo(r.Context())
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, err)
@@ -157,11 +162,12 @@ func (s *Server) handleCompareLinks(w http.ResponseWriter, r *http.Request) {
 		}
 		left, right = pairSides(repo, a, b)
 	}
-	s.writeLinkComparison(w, r, left, right, label)
+	s.writeLinkComparison(w, r, left, right, label, pair)
 }
 
 // writeLinkComparison runs the door and answers the comparison's wire shape.
-func (s *Server) writeLinkComparison(w http.ResponseWriter, r *http.Request, left, right, label string) {
+// pair, when set, is the commit pair this comparison IS — two full ids.
+func (s *Server) writeLinkComparison(w http.ResponseWriter, r *http.Request, left, right, label string, pair *[2]string) {
 	svc := s.service()
 	ctx := r.Context()
 	c, err := svc.CompareLinks(ctx, left, right, s.linkOpts(svc))
@@ -212,6 +218,9 @@ func (s *Server) writeLinkComparison(w http.ResponseWriter, r *http.Request, lef
 	out := map[string]any{"left": lw, "right": rw, "files": files}
 	if label != "" {
 		out["label"] = label
+	}
+	if pair != nil {
+		out["pair"] = map[string]string{"a": pair[0], "b": pair[1]}
 	}
 	writeJSON(w, out)
 }

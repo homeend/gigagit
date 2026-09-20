@@ -666,5 +666,7 @@ registerHelp({
     "files-changed diff). <b>+</b> on the section header adds one; right-click a row for " +
     "rename / save reversed / remove. The section also lists saved <b>commit pairs</b> (two frozen " +
     "commits, <b>a..b</b>) and saved <b>comparisons</b> (two gg links — see <b>compare with link</b>): " +
-    "click to open, right-click for rename / save reversed / copy gg link / remove",
+    "click to open, right-click for rename / save reversed / copy gg link / remove. A commit pair " +
+    "carries <b>review notes</b> like a merge preview does: ◆ badges on its files, <b>c</b> on a " +
+    "new-side line (a note is stored on <b>b</b>)",
 });
