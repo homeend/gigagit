@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## `}` / `{` reach a note that sits behind the freshly opened cursor
+
+### Fixed
+
+- TUI diff view: a diff opens with the cursor on its first change block, so a
+  review note ABOVE that block was invisible to the first `}` — it found
+  nothing ahead, answered "} again → next file with notes" and the second
+  press left the file without ever visiting the note (common in a merge
+  preview, whose new side is the whole file). While no note of the open file
+  has been visited, a `}` with nothing ahead now lands on the file's FIRST
+  note, and a `{` with nothing behind on its LAST. Once a note was visited —
+  by a jump, a file step's landing, or a cursor parked on one by hand — the
+  walk ends where it ends and arms the file step as before; it never wraps.
+  `gg session navigate --next-comment|--prev-comment` shares the rule. `gg web`
+  already wrapped and is unchanged.
+## MCP: `gg_compare_list` — an agent can find a saved preview, pair or comparison
+
+### Added
+
+- `gg_compare_list {}` (read-only): the saved comparisons `gg compare --list`
+  prints, one row each with `id`, `label`, `kind` (`preview` / `pair` /
+  `comparison`), the entry's `gg://` link(s) and their descriptions, and
+  `created`. Until now the MCP surface could only USE a saved entry it had
+  been handed — the note tools' `preview` argument takes a preview's or
+  pair's id or label, `gg_compare_links` takes a comparison's two links — and
+  had no way to enumerate them (`gg_link_list` is the copied-link ring, not
+  the saved store). Embedded using-gg skill v89.
+
 ## `gg compare --patch` renders any comparison the listing answers
 
 `gg compare` has been total since the links work — any two endpoints or links

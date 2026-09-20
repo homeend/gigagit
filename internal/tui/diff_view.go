@@ -77,9 +77,14 @@ type diffView struct {
 	// rebuild(), by ctrl+w's relayout and by a diffMsg reload — anything that
 	// changes what a line index MEANS — but never by a resize or a search key.
 	lsel    lineSel
-	wrapArm wrapDir     // boundary press primed a wrap-around (see wrapDir); cleared on any other key
-	fileArm fileArmDir  // top/bottom press primed a step to the prev/next file; cleared on any other key
-	zCycle  cursorAlign // the alignment the NEXT z applies (center → top → bottom); reset by any other key
+	wrapArm wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
+	fileArm fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
+	// noteVisited: a }/{ jump (or a file step's landing) has put the cursor on
+	// one of THIS file's notes. Until then a jump that finds nothing beyond the
+	// cursor falls back to the file's first/last note (see jumpNote) — a fresh
+	// diff opens on its first change block, which can sit below a note.
+	noteVisited bool
+	zCycle      cursorAlign // the alignment the NEXT z applies (center → top → bottom); reset by any other key
 	// notes are the resolved review notes for this view's address, loaded
 	// asynchronously (notesLoadedMsg) and re-loaded after every mutation and
 	// srcNotes refresh. relayout turns them into synthetic display rows;

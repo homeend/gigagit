@@ -400,7 +400,26 @@ func (m Model) jumpNote(dir int) (Model, bool) {
 	if v == nil {
 		return m, false
 	}
-	return m.cursorToNoteLine(v, func() (int, bool) { return v.nextNoteLine(dir) })
+	// A fresh diff opens with the cursor on its first change block, so a note
+	// ABOVE that block (below it, for {) lies behind the cursor and a strict
+	// "beyond the cursor" search walks straight past it to the file step. While
+	// no note of this file has been visited, fall back to the file's edge note.
+	// Once one has, the walk ends where it ends — it never wraps. A cursor the
+	// user parked ON a note by hand has visited it just the same.
+	return m.cursorToNoteLine(v, func() (int, bool) {
+		if li, ok := v.nextNoteLine(dir); ok || v.noteVisited || v.cursorOnNote() {
+			return li, ok
+		}
+		return v.edgeNoteLine(dir)
+	})
+}
+
+// cursorOnNote reports whether the cursor's logical line carries a note (or a
+// fold hiding one).
+func (v *diffView) cursorOnNote() bool {
+	byLine, foldMark := v.noteRowIndex()
+	_, on := byLine[v.curLine]
+	return on || foldMark[v.curLine]
 }
 
 // landOnNote puts the cursor on this file's first (dir>0) / last (dir<0) note
@@ -436,6 +455,7 @@ func (m Model) cursorToNoteLine(v *diffView, find func() (int, bool)) (Model, bo
 	}
 	v.setCursorLine(li, body)
 	v.revealCursorNotes(body)
+	v.noteVisited = true
 	return m, true
 }
 
