@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## A file link at a ref or commit describes as its file
+
+### Fixed
+
+- A `gg://` link naming a FILE at a ref, a commit or inside a merge preview
+  (`gg://r/a.txt@ref:feat/x`) described as the point it was read at —
+  `branch: feat/x` — so comparing one file across two refs was titled
+  `branch: feat/x ↔ branch: main` in the TUI and in `gg web`, and `gg links`
+  listed the copy under the branch. A path now wins: `file: a.txt`, the label
+  the web's copy rows have always recorded. A hint still wins over a path, and
+  a stash-shaped pair still reads `stash: <subject>`. Already-recorded history
+  rows keep the label they were stored with.
+
 ## Pull-request text renders as markdown (web)
 
 A pull request's description, its conversation and review verdicts, and the

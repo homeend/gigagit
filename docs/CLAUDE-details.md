@@ -1421,8 +1421,9 @@ and reports `errNoClipboardWriter` rather than touching the real clipboard.
 **`domain.DescribeLink`** is the one describer (`LinkDesc` + the field
 derivation that used to be `cli.linkRecordFields`). Its JS twin in
 `links.js` is pinned by `TestLinkDescJSMatchesGo`, now in `internal/domain`.
-Priority: hint → preview → ref → commit → **stash-looking pair** → path →
-`link: <text>`.
+Priority: hint → **stash-looking pair** → **path** (at any point, in any pair
+or preview — the point is already in the link text) → preview → ref → commit →
+`link: <text>`. The local-form split runs first, or a path is never seen.
 
 **Two stash rules, two functions — never merge them.**
 `stashShape(a, b)` is the SET rule and is structural only: `b` has exactly
