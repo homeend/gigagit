@@ -2,7 +2,7 @@
 
 Addendum to `2026-09-20-links-web-design.md` (it parked this as W9) and to
 `2026-09-20-pair-notes-design.md` (the domain + TUI + CLI + MCP half, shipped).
-Status: **proposed — awaiting review.**
+Status: **built** on `feat/web-pair-notes` — see §6.
 
 ## 1. The gap
 
@@ -102,3 +102,15 @@ save chip on a steered pair produces a PAIR row (N10); the line copy row yields 
 `gg link resolve` accepts.
 
 Break table per task; each guard removed, not the feature.
+
+## 6. As built
+
+N1–N10 as written. Two notes: `pair` is set in `handleCompareLinks` wherever
+`a` is non-empty after the form switch (both pair forms converge there), and
+the live refresh hangs off `refreshNoteCounts` rather than `live.js` — one
+call site, already on the `notes` event. The probe (22 checks) went red against
+eight broken builds, one per guard: no `pair` on the wire · `ctx` ignored · the
+stale-counts null · `pairCtx` without the layout check · an armed `right_spec`
+row · the chip posting two links · no live count refresh · `noteQuery` without
+its pair arm. The stale-counts check holds the pair's fetch back with a routed
+delay — without it the window is too short to see.

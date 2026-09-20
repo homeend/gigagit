@@ -39,7 +39,9 @@ shelved commit — live or from its frozen patch) · **merge previews** (saved
 diff rather than a tip-to-tip compare: list, add, rename, remove, save the
 reversed pair, open, and live re-open when a tracked tip moves) · **commit
 pairs and saved comparisons** in the same Previews section (list, open, rename,
-remove, save reversed, copy gg link — either half of a comparison) ·
+remove, save reversed, copy gg link — either half of a comparison; a commit
+pair carries its **review notes**: badges, note rows, `c`/`E`/`R` on the new
+side, the line copy row as a `@a..b` link) ·
 **compare with link…** (two `gg://` links through `domain.CompareLinks`: the
 copied-link history, side swap, per-side errors, the base row, save
 comparison…; a `@a..b` link lands through the same door) · **pull

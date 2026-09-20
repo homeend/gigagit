@@ -6,7 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
-## A file link at a ref or commit describes as its file
+## Review notes on a commit pair, in `gg web`
+
+A commit pair opened in the browser — from its Previews row, or landed by a
+`@a..b` link (`gg open --web`, `gg session navigate`) — now carries its review
+notes, as it already did in the TUI, the CLI and MCP. This closes the agent
+hand-off: notes written with `gg note add --preview <a>..<b>` are on screen
+when the reviewer lands.
+
+### Added
+
+- ◆N badges on the pair's files, the notes as rows of each file's diff (in the
+  first paint), and `c` / `E` / `R` on a new-side line. A note is an ordinary
+  committed note on `b`; an old-side line refuses, as in a merge preview. The
+  badges follow a note written elsewhere while the pair is open.
+- "copy gg link to this line" (and the ◆ note menu's copy row) in a pair diff:
+  `gg://…/path@<a>..<b>:N`. An old-side line degrades to the file form.
+- `GET /api/pair/notes?a=&b=[&path=]` (two full commit ids), and
+  `/api/compare-links` names the `pair` for a pair landing.
+
+### Changed
+
+- "save comparison…" on a landed pair saves a PAIR, not two links — kept as a
+  comparison it would re-open without its notes.
+- Two TYPED links never arm the note scope, even when they spell a pair (the
+  TUI's rule). A row whose bytes are not at `b` — a `-u` stash's untracked file
+  — has no note lane.
+
 
 ### Fixed
 

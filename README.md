@@ -336,7 +336,9 @@ or the ☰ menu — with the same history picks (`↓` or ▾), swap (`ctrl+s` o
 and base row (`enter` on it, or **bound**). **save comparison…** sits on the
 open comparison's bar, and the sidebar's **Previews** section lists merge
 previews, commit pairs and comparisons together: click to open, right-click to
-rename, save reversed, copy a link or remove.
+rename, save reversed, copy a link or remove. A commit pair opened there — or
+landed by a `@a..b` link — carries its **review notes** as in the TUI: `◆N` on
+its files, the notes inside each diff, `c` on a new-side line.
 
 `<repo>` is the repository name of the repo's remote, resolved through the
 repository history behind the `R` switcher — so a link made on one machine
