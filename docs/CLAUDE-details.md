@@ -1216,6 +1216,52 @@ kind of its own. `domain/pair.go` is `domain/preview.go`'s twin:
   ordinary notes on `B`, new side, via `PreviewNoteSet{Tip: B, Base: A}`.
   Spec: `docs/superpowers/specs/2026-09-19-saved-commit-pairs-design.md`.
 
+### Pair notes (2026-09-20)
+
+A commit pair is a NOTE SCOPE built by `domain.PairNotes(a, b)` —
+`PreviewNoteSet{Tip: b, Base: a, Commits: a..b}` with EMPTY `Source`/`Target`
+(`set.IsPair()`). Nothing forks: `loadPreviewNotes`, `PreviewNotesFor/At/All`,
+`PreviewNoteCounts`, `PreviewHunkAnchor` read only Tip/Base/Commits. Spec
+`docs/superpowers/specs/2026-09-20-pair-notes-design.md`.
+
+- **`b` is always a member of `Commits`.** `a..b` is empty when `b` is an
+  ancestor of `a` (a reversed save); without the prepend the write target's own
+  notes are never gathered (`TestPairNotesReversedPairStillHoldsItsTip`).
+- **`PairNotes` reads no saved entry** — an unsaved pair link gets the same
+  scope, which is what makes the agent hand-off work before the `?preview=`
+  hint exists.
+- **`domain.NoteScopeResolve`** is THE parser of `--preview` and MCP's
+  `preview` arg (`...` → preview, `..` → pair, else id/label with the preview
+  winning a shared label). `cli.resolvePreviewTarget` and `mcp.previewSet` are
+  thin calls onto it; every refusal message lives there.
+- **`domain.Resolved.Preview` stays nil for a pair link.** `linknav`,
+  `tui/steer.go` and `web/steer.go` dispatch on it and refuse a preview with
+  empty names; `gg open <pair link>` keeps riding steer `State:"pair"`. The CLI
+  builds the scope in `cli/notescope.go` (`noteScopeFromLink`) instead.
+  `linkDiffSpec` keeps its own pair arm (no rev-list for a plain `gg diff`);
+  `TestPairLinkDiffSpecEqualsItsNoteScope` pins the two specs equal.
+- Readers of `set.Source/Target` must ask `IsPair()` first: `cli.scopeName`
+  (prose), `gg link --preview` (emits `--pair`), `tui.scopeLinkFor`.
+  `forgeNotesFor` is naturally empty (`ParsePRRef("")`).
+- **TUI arming is a message, not an opener** (`tui/saved_pair_notes.go`):
+  `pairNotesCmd(a, b)` → `pairNotesMsg`, armed iff the generation matches AND
+  the view on screen compares commit a with commit b (`showsCommitPair` reads
+  the ENDPOINTS, never `compareTag` — a link-shaped compare tags differently)
+  AND no merge preview is open. Dispatched from `handlePairOpenMsg`, from
+  `steerNavigatePair`'s endpoint-shaped fallback, and — since plan 3b-2 lands a
+  change-set navigate through the link-shaped compare — from `openLinkCompare`
+  (`steeredPairNotesCmd`: only a `State:"pair"` navigate arms, so a generic
+  link compare of two far-apart points never pays the rev-list). Always built
+  AFTER the view opens (`beginFilesView`/`openCompareFiles` bump `previewGen`).
+- **The late stamp.** A steered landing opens the file's diff the moment the
+  list lands, which can beat the scope. The handler stamps the live diff layer
+  (matched by the `cmp:<left>:<right>:` prefix of `m.diffTag`; `v.compare` is
+  false for an added file, so it is NOT the test) — and the `diffMsg` arm keeps
+  a stamp that landed on the live view while the load was in flight, because
+  the loader's `inheritIdentity` snapshot predates it.
+- Badge refresh: the `srcNotes` arm re-dispatches `pairNotesRefreshCmd` (a pair
+  has no `previewOpen`, nothing to re-resolve, nothing that can "move").
+
 ### Links in the TUI — the compare dialog and the one door (plan 3b-2, 2026-09-20)
 
 **`domain.CompareLinks(ctx, leftText, rightText, opts)` is the one door** from

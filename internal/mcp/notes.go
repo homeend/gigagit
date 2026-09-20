@@ -105,7 +105,7 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		Description: "List gg review notes, resolved against the current content. Omit file to list " +
 			"every note this checkout can see. Target: none = the unstaged working tree, cached=true " +
 			"= the staged diff, rev = one commit's own change. type filters user/agent/all. " +
-			`preview = "<target>...<source>" (or a saved preview's id/label) addresses a MERGE PREVIEW ` +
+			`preview = "<target>...<source>" (or a saved preview's id/label) addresses a MERGE PREVIEW (or, as "<a>..<b>" or a saved pair's id/label, a COMMIT PAIR whose tip is b) ` +
 			"instead: the note is stored on the source tip, new side only; status reports \"outdated\" " +
 			"for a note whose lines a later commit changed.",
 		Annotations:  readOnlyAnnotations(),
@@ -153,7 +153,7 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 		Description: "Leave one anchored review note. Pass file plus exactly one of hunk (see " +
 			"gg diff --hunks), new_line or old_line (1-based). Target: none = the unstaged working " +
 			"tree, cached=true = the staged diff, rev = one commit (a range is refused). " +
-			`preview = "<target>...<source>" (or a saved preview's id/label) addresses a MERGE PREVIEW ` +
+			`preview = "<target>...<source>" (or a saved preview's id/label) addresses a MERGE PREVIEW (or, as "<a>..<b>" or a saved pair's id/label, a COMMIT PAIR whose tip is b) ` +
 			"instead: the note is stored on the source tip, new side only. MUTATES gg's note store.",
 		Annotations:  mutatingAnnotations(),
 		OutputSchema: wireNoteOutputSchema,
@@ -245,7 +245,7 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 			`or a comment batch ({"comments":[{"filePath":…,"newLine":N,"summary":…}]}). ` +
 			"The whole batch is validated first: one bad item stores nothing. Unanchored top-level/file " +
 			"summaries come back as contexts. " +
-			`preview = "<target>...<source>" (or a saved preview's id/label) addresses a MERGE PREVIEW ` +
+			`preview = "<target>...<source>" (or a saved preview's id/label) addresses a MERGE PREVIEW (or, as "<a>..<b>" or a saved pair's id/label, a COMMIT PAIR whose tip is b) ` +
 			"instead: the note is stored on the source tip, new side only; an old-side item is skipped " +
 			"(reported in `skipped`/`warning`), not stored. MUTATES gg's note store.",
 		Annotations:  mutatingAnnotations(),
@@ -334,39 +334,14 @@ func (s *Server) registerNoteTools(srv *sdk.Server) {
 
 // previewSet resolves a request's preview target. It is mutually exclusive
 // with cached/rev: two targets in one call is a caller error, never a silent
-// precedence rule. A non-OK pair names its state word (missing source,
-// missing target, merged, no base) exactly as the CLI's resolvePreviewTarget
-// (internal/cli/previewflag.go) does, rather than one coarse "not
-// previewable" message.
+// precedence rule. The parse and every refusal live in
+// domain.NoteScopeResolve, shared with the CLI's --preview, so the two
+// frontends answer one spec with one set or one message.
 func (s *Server) previewSet(ctx context.Context, t noteTargetIn) (domain.PreviewNoteSet, error) {
 	if t.Cached || t.Rev != "" {
 		return domain.PreviewNoteSet{}, fmt.Errorf("one target only: preview cannot be combined with rev or cached")
 	}
-	source, target, err := s.svc.PreviewResolve(ctx, t.Preview)
-	if err != nil {
-		return domain.PreviewNoteSet{}, err
-	}
-	sum, err := s.svc.PreviewSummary(ctx, source, target)
-	if err != nil {
-		return domain.PreviewNoteSet{}, err
-	}
-	switch sum.State {
-	case domain.PreviewOK:
-	case domain.PreviewMissingSource:
-		return domain.PreviewNoteSet{}, fmt.Errorf("preview: missing: %s", source)
-	case domain.PreviewMissingTarget:
-		return domain.PreviewNoteSet{}, fmt.Errorf("preview: missing: %s", target)
-	default:
-		return domain.PreviewNoteSet{}, fmt.Errorf("preview: %s → %s: %s", source, target, sum.State)
-	}
-	set, err := s.svc.PreviewNotes(ctx, source, target)
-	if err != nil {
-		return domain.PreviewNoteSet{}, err
-	}
-	if !set.OK() {
-		return domain.PreviewNoteSet{}, fmt.Errorf("preview %s → %s is not previewable", source, target)
-	}
-	return set, nil
+	return s.svc.NoteScopeResolve(ctx, t.Preview)
 }
 
 // previewNotesFor gathers a preview's notes for one path, or — with no path —

@@ -65,7 +65,7 @@ func TestPairRowMissingCommitStateAndEnterRefusal(t *testing.T) {
 	}
 }
 
-func TestEnterOnPairRowOpensAPlainCommitComparison(t *testing.T) {
+func TestEnterOnPairRowOpensACommitComparisonWithoutPreviewState(t *testing.T) {
 	t.Parallel()
 	m, p := savedPairModel(t)
 	m.sel[panelPreviews] = 1
@@ -77,9 +77,13 @@ func TestEnterOnPairRowOpensAPlainCommitComparison(t *testing.T) {
 	if m.filesTitle != pairTitle("attempt") {
 		t.Fatalf("title = %q", m.filesTitle)
 	}
-	// A frozen pair is NOT a merge preview: nothing follows tips, no note scope.
-	if m.previewOpen != nil || m.filesPreviewSet != nil {
-		t.Fatalf("pair armed preview state: open=%v set=%v", m.previewOpen, m.filesPreviewSet)
+	// A frozen pair is NOT a merge preview: nothing follows tips. Its note
+	// scope is a PAIR scope (saved_pair_notes_test.go covers it).
+	if m.previewOpen != nil {
+		t.Fatalf("pair armed previewOpen: %v", m.previewOpen)
+	}
+	if set := m.filesPreviewSet; set != nil && !set.IsPair() {
+		t.Fatalf("a pair must never carry a branch-pair scope: %+v", set)
 	}
 	if !strings.Contains(m.compareTag, p.A) || !strings.Contains(m.compareTag, p.B) {
 		t.Fatalf("compare tag %q must name both frozen shas", m.compareTag)

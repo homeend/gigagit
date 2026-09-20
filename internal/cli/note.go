@@ -40,10 +40,10 @@ func cmdNote(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr
 	// to that worktree, not the caller's.
 	var link *domain.Resolved
 	if len(rest) > 0 && isLinkArg(rest[0]) {
-		// Every note subcommand keeps the refusing default: a note anchors
-		// on ONE commit, and a pair's only single commit (B) is not that
-		// commit — it is the change-set's newer end (ruling R4).
-		res, err := resolveLinkArg(context.Background(), svc, rest[0], linkShapes{Ref: true}, "anchor")
+		// A change-set link @<a>..<b> is a NOTE SCOPE, exactly like a merge
+		// preview's: notes are gathered along a..b and written to b, new side
+		// (noteScopeFromLink). Ruling R4's refusal stays on `gg show`.
+		res, err := resolveLinkArg(context.Background(), svc, rest[0], linkShapes{Ref: true, Pair: true}, "anchor")
 		if err != nil {
 			return linkExit("note "+sub, err, stderr)
 		}
@@ -106,7 +106,7 @@ func noteLinkShape(sub string, res domain.Resolved) string {
 			return "that link names a repository, not a file"
 		}
 	case "list":
-		if !hasPath && res.Preview == nil {
+		if !hasPath && res.Preview == nil && res.Pair == nil {
 			return "that link names a repository, not a file"
 		}
 	case "reply", "rm":
@@ -328,7 +328,16 @@ func noteAdd(svc *domain.Service, link *domain.Resolved, args []string, stdout, 
 			return 2
 		}
 		addr = link.Addr
-		pv, isPreview := previewTargetFromLink(*link)
+		pv, isPreview, perr := noteScopeFromLink(ctx, svc, *link)
+		if perr != nil {
+			return noteExit(perr, stderr)
+		}
+		if isPreview && link.Side == model.NoteSideOld {
+			// Only a change-set link can say :old: (a preview link refuses it
+			// at parse); its old side is commit a, which no note scope names.
+			fmt.Fprintln(stderr, "note add: notes in a change-set anchor on the new side (drop :old:)")
+			return 2
+		}
 		switch {
 		case link.Hunk > 0 && isPreview:
 			// PreviewHunkAnchor is the ONE place the preview's hunk numbering
@@ -655,7 +664,11 @@ func noteList(svc *domain.Service, link *domain.Resolved, args []string, stdout,
 		}
 		// A link's line and hunk are ignored: `note list` is about a FILE's
 		// threads, exactly as `--file` is.
-		if pv, ok := previewTargetFromLink(*link); ok {
+		pv, ok, perr := noteScopeFromLink(ctx, svc, *link)
+		if perr != nil {
+			return noteExit(perr, stderr)
+		}
+		if ok {
 			// A preview GATHERS notes along the branch and reports stale as
 			// "outdated" — the same rows --preview prints, not the tip's own.
 			got, gerr := previewResolvedNotes(ctx, svc, pv.Set, link.Addr.Path)

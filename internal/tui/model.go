@@ -525,7 +525,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// opposite — the line stream is brand new, so the indexes it holds mean
 		// nothing any more.
 		onOld := dv.onOld
+		// A note stamp that landed on the LIVE view while this load was in
+		// flight (a commit pair's scope arrives by its own message) is newer
+		// than the identity the loader snapshotted at dispatch: keep it.
+		lateAddr, lateSet := dv.noteAddr, dv.previewSet
 		*dv = *msg.view
+		if dv.noteAddr.Path == "" && lateAddr.Path != "" {
+			dv.noteAddr, dv.previewSet = lateAddr, lateSet
+		}
 		dv.loading = false
 		dv.compare = dv.compare || compare
 		dv.search, dv.searchOrig = search, searchOrig
@@ -926,6 +933,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handlePreviewMutatedMsg(msg)
 	case pairOpenMsg:
 		return m.handlePairOpenMsg(msg)
+	case pairNotesMsg:
+		return m.handlePairNotesMsg(msg)
 	case pairOpsMsg:
 		// Only the LATEST probe may open the popup: a re-pair while an older
 		// probe was in flight replaced pairProbe, so the older msg no longer
@@ -1736,6 +1745,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// fan-out reads previews already.
 			if !msg.startup && (m.previewOpen != nil || m.activeLeftTab == panelPreviews) {
 				m, previewsChain = m.chainPreviewsRead()
+			}
+			// A commit pair's scope has no previewOpen and no tips to follow:
+			// its badges refresh on their own (nil unless one is on screen).
+			if rc := m.pairNotesRefreshCmd(); rc != nil {
+				previewsChain = tea.Batch(previewsChain, rc)
 			}
 			// The badge counts just changed, so an open diff's own notes may
 			// have too (a sweep, an agent write, a manual r). Re-resolve them;

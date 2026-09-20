@@ -101,11 +101,18 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 			fmt.Fprintln(stderr, "error:", terr)
 			return 1
 		}
-		if !model.LinkRefOK(tgt.Source) || !model.LinkRefOK(tgt.Target) {
+		if tgt.Set.IsPair() {
+			// A commit pair's link is the change-set form: the very link --pair
+			// builds, from the two frozen shas (--pair itself was refused above:
+			// one target only).
+			*pair = tgt.Set.Base + ".." + tgt.Set.Tip
+		} else if !model.LinkRefOK(tgt.Source) || !model.LinkRefOK(tgt.Target) {
 			fmt.Fprintf(stderr, "link: %s...%s cannot be expressed in a gg link (a branch or tag name may not contain @, :, #, ? or whitespace)\n", tgt.Target, tgt.Source)
 			return 1
 		}
-		prev = &model.LinkPreview{Source: tgt.Source, Target: tgt.Target}
+		if !tgt.Set.IsPair() {
+			prev = &model.LinkPreview{Source: tgt.Source, Target: tgt.Target}
+		}
 	}
 	l, err := buildLink(ctx, svc, workdir, arg, linkOpts{
 		Cached: *cached, Rev: *rev, Ref: *ref, Pair: *pair, Preview: prev, Hint: hint,

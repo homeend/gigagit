@@ -159,7 +159,15 @@ func (m Model) openLinkCompare(msg linkCompareLoadedMsg) (Model, tea.Cmd) {
 	m.compareTag = msg.tag
 	m.filesTreeFocused = true
 	if ps := m.pendingSteer; ps != nil && ps.stage == steerStageCompare && ps.tag == msg.tag {
-		return m.drainPendingCompare()
+		// A steered change-set landing (@<a>..<b>) is a NOTE SCOPE: its review
+		// notes ride along (saved_pair_notes.go). Built here, after
+		// beginFilesView bumped the generation the command stamps.
+		notes := m.steeredPairNotesCmd(ps.cmd)
+		nm, cmd := m.drainPendingCompare()
+		if notes != nil {
+			cmd = tea.Batch(cmd, notes)
+		}
+		return nm, cmd
 	}
 	return m, nil
 }

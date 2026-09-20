@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v7 -->
+<!-- gg:reviewing-with-gg:v8 -->
 
 # Reviewing with gg
 
@@ -42,6 +42,13 @@ done, print `gg link --preview <id|label>` and hand THAT link back to the user
 — they open it with `gg open <link>`, which steers their running gg straight
 into the preview. A bare preview name only works on your machine; the link
 works everywhere.
+
+When the change to review is "what happened between two commits" rather than a
+branch against its target — a previous state of the branch, another agent's
+attempt — use a COMMIT PAIR the same way: `gg note add --preview <a>..<b>
+--file <path> --new-line <n> …` (or `gg preview add <a>..<b>` first and use its
+id). Notes land on `<b>`, new side only. Hand back `gg link --preview <a>..<b>`
+— a `gg://<repo>@<a>..<b>` link the user opens with `gg open`.
 
 ## Choosing the target
 

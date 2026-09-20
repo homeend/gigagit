@@ -639,12 +639,17 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 		}
 		text, linkEnd := splitLinkRange(pos[0])
 		ctx := context.Background()
-		// highlight add keeps the refusing default: a band anchors on ONE
-		// commit's diff, and a pair's only single commit (B) is not that
-		// commit — it is the change-set's newer end (ruling R4).
-		res, err := resolveLinkArg(ctx, svc, text, linkShapes{Ref: true}, "highlight")
+		// A change-set link lands its band on commit b, new side — the address
+		// a pair's diff is stamped with once its note scope is armed.
+		res, err := resolveLinkArg(ctx, svc, text, linkShapes{Ref: true, Pair: true}, "highlight")
 		if err != nil {
 			return linkExit("session highlight add", err, stderr)
+		}
+		if res.Pair != nil && res.Side == model.NoteSideOld {
+			// The band is keyed on commit b; a pair's old side is commit a's
+			// text, which that key does not name.
+			fmt.Fprintln(stderr, "session highlight add: a change-set link highlights the new side (drop :old:)")
+			return 2
 		}
 		if res.Addr.Path == "" || (res.Line < 1 && res.Hunk < 1) {
 			fmt.Fprintln(stderr, "session highlight add: the link needs a file and a line or hunk (gg://<repo>/<path>[@<target>]:<line>[-<end>] or #<hunk>)")
@@ -665,12 +670,17 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 				fmt.Fprintln(stderr, "session highlight add: a #<hunk> link already names a range; drop -<end> and --end")
 				return 2
 			}
-			if res.Preview != nil {
+			scope, scoped, serr := noteScopeFromLink(ctx, target, res)
+			if serr != nil {
+				fmt.Fprintln(stderr, "error:", serr)
+				return 1
+			}
+			if scoped {
 				// PreviewHunkAnchor, never a plain HunkRange over
 				// linkDiffSpec's patch: it is the ONE place the preview's
 				// old-side refusal lives, so a delete-only hunk cannot land a
 				// band on a side no stored address names.
-				hs, rng, herr := target.PreviewHunkAnchor(ctx, *res.Preview, res.Addr.Path, res.Hunk)
+				hs, rng, herr := target.PreviewHunkAnchor(ctx, scope.Set, res.Addr.Path, res.Hunk)
 				if errors.Is(herr, domain.ErrPreviewOldSide) {
 					fmt.Fprintln(stderr, "session highlight add:", herr)
 					return 2
