@@ -38,6 +38,7 @@ const state = {
   bookmarks: [], // gg's own store: live references to a file or a commit
   shelf: [],     // gg's own store: frozen copies (a file's bytes, a commit's files)
   previews: [],  // saved merge previews: (source → target) pairs, recomputed from the live tips
+  savedCompares: [], // the Previews tab's other kinds: commit pairs (@a..b) and comparisons (two links)
   previewsDisabled: false, // the previews store is unavailable (no state dir)
   previewsStale: false, // the last previews fetch failed: the rows stand, but nothing may be concluded from them
   // {id, source, target, sourceHash, targetHash, tip} while a preview owns the

@@ -75,7 +75,9 @@ func TestEveryCopyGGLinkRowRecords(t *testing.T) {
 		}
 	}
 	// If the labels are ever reworded, this gate would quietly guard nothing.
-	if found < 3 {
+	// The floor tracks the rows that exist (6 when the Previews tab's pair and
+	// comparison rows landed): a reworded label would otherwise slip under it.
+	if found < 6 {
 		t.Errorf("found only %d \"copy gg link\" rows — the label changed and this gate has stopped seeing them", found)
 	}
 }

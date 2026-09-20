@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // The Previews tab's other two kinds. A merge preview keeps /api/preview, which
@@ -21,7 +22,10 @@ import (
 
 func init() {
 	RegisterRoutes(func(mux *http.ServeMux, s *Server) {
+		mux.HandleFunc("GET /api/saved-compares", s.handleSavedCompares)
 		mux.HandleFunc("POST /api/saved-compares", writeGuard(s.handleSavedCompareAdd))
+		mux.HandleFunc("POST /api/saved-compares/rename", writeGuard(s.handleSavedCompareRename))
+		mux.HandleFunc("DELETE /api/saved-compares", writeGuard(s.handleSavedCompareRemove))
 	})
 }
 
@@ -34,6 +38,7 @@ type savedCompareRow struct {
 	Kind  string `json:"kind"` // "pair" | "compare"
 	// a pair
 	Link  string `json:"link,omitempty"`
+	Desc  string `json:"desc,omitempty"` // what copying the pair's link records
 	A     string `json:"a,omitempty"`
 	B     string `json:"b,omitempty"`
 	State string `json:"state,omitempty"`
@@ -131,4 +136,147 @@ func savedCompareErrStatus(err error, fallback int) int {
 		return http.StatusServiceUnavailable
 	}
 	return fallback
+}
+
+// savedEntry finds the row an id names and says which kind it is. It is the
+// ONE classifier behind open, rename and remove: a merge preview's id — which
+// lives in the same store — is "not found" here, so a surface that never shows
+// previews cannot rename or delete one. The id must match EXACTLY: domain's
+// getters also accept a label, and a label typed as an id must not reach
+// another row.
+func savedEntry(r *http.Request, svc *domain.Service, id string) (kind string, p domain.CommitPair, c domain.SavedCompare, err error) {
+	if id == "" {
+		return "", p, c, domain.ErrSavedCompareNotFound
+	}
+	ctx := r.Context()
+	if p, err = svc.PairGet(ctx, id); err == nil && p.ID == id {
+		return "pair", p, c, nil
+	} else if err != nil && !errors.Is(err, domain.ErrPairNotFound) {
+		return "", p, c, err
+	}
+	c, err = svc.SavedCompareGet(ctx, id)
+	if err != nil {
+		return "", p, c, err
+	}
+	if c.ID != id || c.IsSet() {
+		return "", p, c, domain.ErrSavedCompareNotFound
+	}
+	return "compare", p, c, nil
+}
+
+// describeLinkText is a link text's one-line description, or the text itself
+// when it no longer parses (the row must still list, so it can be removed).
+func describeLinkText(r *http.Request, svc *domain.Service, text string) string {
+	l, err := model.ParseLink(text)
+	if err != nil {
+		return text
+	}
+	return svc.DescribeLink(r.Context(), l)
+}
+
+// pairStateWire is the wire spelling of a pair's row state. No default arm
+// that answers "ok": an unknown state must not read as openable.
+func pairStateWire(st domain.PairState) string {
+	switch st {
+	case domain.PairOK:
+		return "ok"
+	case domain.PairMissingA:
+		return "missing-a"
+	case domain.PairMissingB:
+		return "missing-b"
+	case domain.PairInvalid:
+		return "error"
+	}
+	return "error"
+}
+
+// handleSavedCompares lists the pairs, then the comparisons, each in store
+// order. A comparison row carries NO live summary: evaluating two arbitrary
+// links per row per refresh is unbounded work (a pair's count is cached by
+// domain, and frozen).
+func (s *Server) handleSavedCompares(w http.ResponseWriter, r *http.Request) {
+	svc := s.service()
+	ctx := readCtx(r)
+	all, err := svc.SavedCompareList(ctx)
+	if err != nil {
+		if errors.Is(err, domain.ErrSavedComparesDisabled) {
+			writeJSON(w, map[string]any{"entries": []savedCompareRow{}, "disabled": true})
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	pairs, err := svc.PairList(ctx)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	linkOf := make(map[string]string, len(all))
+	for _, c := range all {
+		linkOf[c.ID] = c.Left
+	}
+	rows := make([]savedCompareRow, 0, len(all))
+	for _, p := range pairs {
+		row := pairRow(p)
+		row.Link = linkOf[p.ID]
+		row.Desc = describeLinkText(r, svc, row.Link)
+		// One pair's transient git failure must not blank the list.
+		if sum, err := svc.PairSummary(ctx, p.A, p.B); err != nil {
+			row.State, row.Error = "error", err.Error()
+		} else {
+			row.State, row.Files = pairStateWire(sum.State), sum.Files
+		}
+		rows = append(rows, row)
+	}
+	for _, c := range all {
+		if c.IsSet() {
+			continue // a merge preview (/api/preview) or a pair (above)
+		}
+		row := comparisonRow(c)
+		row.LeftDesc, row.RightDesc = describeLinkText(r, svc, c.Left), describeLinkText(r, svc, c.Right)
+		rows = append(rows, row)
+	}
+	writeJSON(w, map[string]any{"entries": rows})
+}
+
+func (s *Server) handleSavedCompareRename(w http.ResponseWriter, r *http.Request) {
+	var req struct{ ID, Label string }
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSavedCompareBody)).Decode(&req); err != nil || req.ID == "" || req.Label == "" {
+		writeErr(w, http.StatusBadRequest, errors.New("id and label required"))
+		return
+	}
+	svc := s.service()
+	kind, _, _, err := savedEntry(r, svc, req.ID)
+	if err == nil {
+		if kind == "pair" {
+			err = svc.PairRename(readCtx(r), req.ID, req.Label)
+		} else {
+			err = svc.SavedCompareRename(readCtx(r), req.ID, req.Label)
+		}
+	}
+	if err != nil {
+		writeErr(w, savedCompareErrStatus(err, http.StatusInternalServerError), err)
+		return
+	}
+	s.emitPreviews()
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) handleSavedCompareRemove(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	svc := s.service()
+	kind, _, _, err := savedEntry(r, svc, id)
+	if err == nil {
+		if kind == "pair" {
+			err = svc.PairRemove(readCtx(r), id)
+		} else {
+			err = svc.SavedCompareRemove(readCtx(r), id)
+		}
+	}
+	if err != nil {
+		writeErr(w, savedCompareErrStatus(err, http.StatusInternalServerError), err)
+		return
+	}
+	s.emitPreviews()
+	writeJSON(w, map[string]any{"ok": true})
 }

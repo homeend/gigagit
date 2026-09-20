@@ -97,14 +97,67 @@ type linkFileWire struct {
 	RightSpec string `json:"right_spec,omitempty"`
 }
 
+// pairSides spells a commit pair as the two links the door compares: the
+// point a against the change-set a..b — what the TUI's pair landing compares.
+// Built as Links and rendered by String, never assembled from text.
+func pairSides(repo model.LinkRepo, a, b string) (left, right string) {
+	left = model.Link{Repo: repo, Target: model.LinkTarget{State: model.StateCommitted, Commit: a}}.String()
+	right = model.Link{Repo: repo, Target: model.LinkTarget{State: model.StateCommitted, Pair: &model.LinkPair{A: a, B: b}}}.String()
+	return left, right
+}
+
+// handleCompareLinks takes exactly ONE of three input forms, so a dialog
+// submit, a saved row and a pair landing are one lane:
+//
+//	left + right   two link texts, as given
+//	id             a saved comparison's texts, or a saved pair's two commits
+//	a + b          two FULL commit ids (a `@a..b` navigate)
 func (s *Server) handleCompareLinks(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	left, right := q.Get("left"), q.Get("right")
-	if left == "" || right == "" || q.Get("id") != "" || q.Get("a") != "" || q.Get("b") != "" {
+	left, right, id, a, b := q.Get("left"), q.Get("right"), q.Get("id"), q.Get("a"), q.Get("b")
+	forms := 0
+	for _, given := range []bool{left != "" || right != "", id != "", a != "" || b != ""} {
+		if given {
+			forms++
+		}
+	}
+	if forms != 1 {
 		writeErr(w, http.StatusBadRequest, errors.New("give exactly one of: left + right, id, a + b"))
 		return
 	}
-	s.writeLinkComparison(w, r, left, right, "")
+	svc := s.service()
+	label := ""
+	switch {
+	case id != "":
+		kind, p, c, err := savedEntry(r, svc, id)
+		if err != nil {
+			writeErr(w, savedCompareErrStatus(err, http.StatusInternalServerError), err)
+			return
+		}
+		label, left, right = c.Label, c.Left, c.Right
+		if kind == "pair" {
+			label, a, b = p.Label, p.A, p.B
+		}
+	case a != "" || b != "":
+		if !isFullSha(a) || !isFullSha(b) {
+			writeErr(w, http.StatusBadRequest, errors.New("a and b must be full commit ids"))
+			return
+		}
+	default:
+		if left == "" || right == "" {
+			writeErr(w, http.StatusBadRequest, errors.New("a comparison needs both links"))
+			return
+		}
+	}
+	if a != "" {
+		repo, err := svc.LinkRepo(r.Context())
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err)
+			return
+		}
+		left, right = pairSides(repo, a, b)
+	}
+	s.writeLinkComparison(w, r, left, right, label)
 }
 
 // writeLinkComparison runs the door and answers the comparison's wire shape.

@@ -12,6 +12,8 @@ import { openPrompt, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { applyCompareFilter, drillOut, noteBadgeHTML, openCompare, renderFiles } from "./files.js";
 import { extraRows, registerHelp, registerRows } from "./menus.js";
+import { copyLink } from "./links.js";
+import { runLinkCompare } from "./linkcompare.js";
 
 // fetchPreviews loads the list and renders it. A failure leaves an EMPTY list
 // rather than the previous one: a stale row invites a click that opens a pair
@@ -30,7 +32,21 @@ export async function fetchPreviews() {
     state.previewsStale = true;
     return;
   }
+  await fetchSavedCompares();
   renderPreviews();
+}
+
+// fetchSavedCompares loads the tab's other two kinds (/api/saved-compares):
+// commit PAIRS — one saved link holding @a..b — and COMPARISONS — two saved
+// links. A failure keeps the rows standing, for the reason above; it never
+// fails the merge previews' own load.
+async function fetchSavedCompares() {
+  try {
+    const body = await getJSON("/api/saved-compares");
+    state.savedCompares = body.disabled ? [] : body.entries || [];
+  } catch {
+    // keep what is there
+  }
 }
 const refresh = () => fetchPreviews();
 
@@ -49,6 +65,30 @@ function stateText(e) {
   return (e.files === 1 ? "1 file" : e.files + " files") + " ↑" + e.ahead;
 }
 
+
+// pairStateText is a commit pair's right-hand cell (the TUI's pair row).
+function pairStateText(e) {
+  switch (e.state) {
+    case "missing-a": return "missing: " + e.a.slice(0, 8);
+    case "missing-b": return "missing: " + e.b.slice(0, 8);
+    case "error": return "error: " + (e.error || "");
+  }
+  return e.files === 1 ? "1 file" : e.files + " files";
+}
+
+// savedRowHTML paints a pair or a comparison. data-kind tells the click and
+// the menu which list the row's id belongs to: the three kinds share one
+// store, so an id alone does not say.
+function savedRowHTML(e) {
+  const sub = e.kind === "pair" ? e.a.slice(0, 8) + ".." + e.b.slice(0, 8) : e.left_desc + " ↔ " + e.right_desc;
+  const tip = e.kind === "pair" ? e.link : e.left + "\n" + e.right;
+  return (
+    `<li data-id="${esc(e.id)}" data-kind="${esc(e.kind)}" title="${esc(tip)}"><span class="mk"></span>` +
+    `${esc(e.label)}<span class="psub">${esc(sub)}</span>` +
+    (e.kind === "pair" ? `<span class="psub">${esc(pairStateText(e))}</span>` : "") +
+    `</li>`
+  );
+}
 
 function renderPreviews() {
   if (state.previewsDisabled) {
@@ -69,6 +109,8 @@ function renderPreviews() {
         noteBadgeHTML(e.notes) +
         `</li>`
     )
+    // Merge previews first, then pairs, then comparisons (the server's order).
+    .concat((state.savedCompares || []).map(savedRowHTML))
     .join("");
 }
 
@@ -428,15 +470,113 @@ function showPreviewMenu(e, x, y) {
 }
 
 
+// --- commit pairs and comparisons (/api/saved-compares) ---
+// Both open through /api/compare-links?id= — the server's one door — and both
+// are renamed and removed through routes that look the id's KIND up themselves.
+const openSaved = (e) => runLinkCompare("id=" + encodeURIComponent(e.id));
+
+function renameSaved(e) {
+  openPrompt({
+    title: "Rename " + e.label + " to:",
+    value: e.label,
+    onSubmit: async (label) => {
+      try {
+        await postJSON("/api/saved-compares/rename", { id: e.id, label });
+      } catch (err) {
+        opLine("rename: " + (err.message || err), true);
+        return;
+      }
+      refresh();
+    },
+  });
+}
+
+// saveSaved posts a new pair or comparison; "already saved" names the row.
+async function saveSaved(body) {
+  try {
+    const out = await postJSON("/api/saved-compares", body);
+    opLine("saved " + out.entry.label);
+  } catch (err) {
+    if (err.data && err.data.id) opLine("already saved as " + err.data.label);
+    else opLine("save: " + (err.message || err), true);
+    return;
+  }
+  refresh();
+}
+
+async function removeSaved(e) {
+  try {
+    // DELETE goes through writeGuard: the JSON content type, body or no body.
+    const resp = await fetch("/api/saved-compares?id=" + encodeURIComponent(e.id), {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      opLine("remove: " + (body.error || resp.statusText), true);
+      return;
+    }
+  } catch (err) {
+    opLine("remove: " + (err.message || err), true);
+    return;
+  }
+  refresh();
+}
+
+function confirmRemoveSaved(e, what) {
+  showLocalConfirm("Remove the " + what + " " + e.label + "?", ["remove", "abort"], (o) => {
+    if (o === "remove") removeSaved(e);
+  });
+}
+
+function showPairMenu(e, x, y) {
+  showCtxMenu(
+    [
+      { label: "open commit pair", act: () => openSaved(e) },
+      { label: "rename…", act: () => renameSaved(e) },
+      { label: "save reversed (" + e.b.slice(0, 8) + ".." + e.a.slice(0, 8) + ")", act: () => saveSaved({ a: e.b, b: e.a, label: "" }) },
+      { label: "copy gg link", act: () => copyLink(e.link, e.desc) },
+      { sep: true },
+      { label: "remove pair", danger: true, act: () => confirmRemoveSaved(e, "pair") },
+    ],
+    x,
+    y
+  );
+}
+
+// A comparison is TWO links, so there is no one link to copy: each half is
+// offered by name.
+function showComparisonMenu(e, x, y) {
+  showCtxMenu(
+    [
+      { label: "open comparison", act: () => openSaved(e) },
+      { label: "rename…", act: () => renameSaved(e) },
+      { label: "save reversed", act: () => saveSaved({ left: e.right, right: e.left, label: "" }) },
+      { label: "copy gg link — left", act: () => copyLink(e.left, e.left_desc) },
+      { label: "copy gg link — right", act: () => copyLink(e.right, e.right_desc) },
+      { sep: true },
+      { label: "remove comparison", danger: true, act: () => confirmRemoveSaved(e, "comparison") },
+    ],
+    x,
+    y
+  );
+}
+
+// rowEntry finds a row in the list its KIND names: the three kinds share one
+// store and one <ul>, and a merge preview's handlers must never be handed a
+// pair.
 function rowEntry(li) {
-  return (state.previews || []).find((x) => x.id === li.dataset.id);
+  const list = li.dataset.kind ? state.savedCompares : state.previews;
+  return (list || []).find((x) => x.id === li.dataset.id);
 }
 
 $("previews-list").addEventListener("click", (ev) => {
   const li = ev.target.closest("li");
   if (!li || !li.dataset.id) return;
   const e = rowEntry(li);
-  if (e) openPreviewEntry(e);
+  if (!e) return;
+  if (li.dataset.kind) openSaved(e);
+  else openPreviewEntry(e);
 });
 
 $("previews-list").addEventListener("contextmenu", (ev) => {
@@ -444,7 +584,10 @@ $("previews-list").addEventListener("contextmenu", (ev) => {
   if (!li || !li.dataset.id) return;
   ev.preventDefault();
   const e = rowEntry(li);
-  if (e) showPreviewMenu(e, ev.clientX, ev.clientY);
+  if (!e) return;
+  if (li.dataset.kind === "pair") showPairMenu(e, ev.clientX, ev.clientY);
+  else if (li.dataset.kind === "compare") showComparisonMenu(e, ev.clientX, ev.clientY);
+  else showPreviewMenu(e, ev.clientX, ev.clientY);
 });
 
 
@@ -521,5 +664,7 @@ registerHelp({
   html:
     "saved <b>merge previews</b> — what a source branch would bring into a target (GitHub's " +
     "files-changed diff). <b>+</b> on the section header adds one; right-click a row for " +
-    "rename / save reversed / remove",
+    "rename / save reversed / remove. The section also lists saved <b>commit pairs</b> (two frozen " +
+    "commits, <b>a..b</b>) and saved <b>comparisons</b> (two gg links — see <b>compare with link</b>): " +
+    "click to open, right-click for rename / save reversed / copy gg link / remove",
 });
