@@ -52,7 +52,7 @@ func naiveWrapWindow(rows []winRow, o winOpts) []string {
 	}
 	var dl []dline
 	for ri, r := range rows {
-		segs := wrapHang(r.text, bodyW, wrapAlignIndent(r.text, bodyW), 1<<20)
+		segs, _ := wrapRow(r.text, bodyW, o) // the prose wrap, or the column wrap under o.charWrap
 		if len(segs) == 0 {
 			segs = []string{""}
 		}
@@ -129,7 +129,7 @@ func TestRenderWindowWrapMatchesFullLayout(t *testing.T) {
 			rows := wrapTestRows(n, withPrefix)
 			for _, h := range []int{1, 3, 7, 12} {
 				for anchor := -2; anchor <= n+2; anchor++ {
-					o := winOpts{w: 12, h: h, mode: modeWrap, anchor: anchor}
+					o := winOpts{w: 12, h: h, mode: modeWrap, anchor: anchor, charWrap: (anchor+h)%2 == 0} // both wraps
 					if withPrefix {
 						o.prefixW = 3
 					}

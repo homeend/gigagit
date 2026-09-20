@@ -71,6 +71,9 @@ func (s *styles) mdStyle(base lipgloss.Style, c syntax.Class) lipgloss.Style {
 type mdRow struct {
 	text string
 	cls  []syntax.Class
+	// pre marks a PREFORMATTED row — a code line, a table row: a host that
+	// wraps at draw time must cut it instead (contentLine.noWrap).
+	pre bool
 }
 
 // mdRun is a stretch of runes of one class, the unit inline layout works in.
@@ -169,7 +172,7 @@ func mdPrefix(rows []mdRow, first, rest string, c syntax.Class) []mdRow {
 			p = first
 		}
 		lead := mdPlainRow(p, c)
-		rows[i] = mdRow{text: lead.text + rows[i].text, cls: append(lead.cls, rows[i].cls...)}
+		rows[i] = mdRow{text: lead.text + rows[i].text, cls: append(lead.cls, rows[i].cls...), pre: rows[i].pre}
 	}
 	return rows
 }
@@ -216,7 +219,7 @@ func mdCodeBlock(b markdown.Block, width int) []mdRow {
 				cls[k] = c
 			}
 		}
-		row := mdRow{text: "  " + string(disp), cls: append([]syntax.Class{syntax.Plain, syntax.Plain}, cls...)}
+		row := mdRow{text: "  " + string(disp), cls: append([]syntax.Class{syntax.Plain, syntax.Plain}, cls...), pre: true}
 		out = append(out, mdClip(row, width))
 	}
 	return out
@@ -272,7 +275,7 @@ func mdClip(row mdRow, width int) mdRow {
 		w += cw
 		n++
 	}
-	return mdRow{text: string(r[:n]), cls: row.cls[:n]}
+	return mdRow{text: string(r[:n]), cls: row.cls[:n], pre: row.pre}
 }
 
 // mdTable lays a table out in aligned columns sized to their widest cell.
@@ -344,13 +347,17 @@ func mdTable(b markdown.Block, width int) []mdRow {
 		for c := range line {
 			parts[c] = pad(line[c], c)
 		}
-		out = append(out, mdClip(join(parts, " │ "), width))
+		line := join(parts, " │ ")
+		line.pre = true
+		out = append(out, mdClip(line, width))
 		if i == 0 {
 			rules := make([]mdRow, cols)
 			for c := range rules {
 				rules[c] = mdPlainRow(strings.Repeat("─", widths[c]), mdDim)
 			}
-			out = append(out, mdClip(join(rules, "─┼─"), width))
+			rule := join(rules, "─┼─")
+			rule.pre = true
+			out = append(out, mdClip(rule, width))
 		}
 	}
 	return out

@@ -466,7 +466,7 @@ func TestBlameRenderMatchesFullBuildRegardlessOfWindow(t *testing.T) {
 				now := time.Now()
 				got := blameBodyLines(t, b.render(m, ""), body)
 				full := blameRowsFull(b, gw, now)
-				want := renderWindow(full, winOpts{w: w, h: body, mode: mode, anchor: sel, hscroll: b.hscroll, prefixW: gw + 1})
+				want := renderWindow(full, winOpts{w: w, h: body, mode: mode, anchor: sel, hscroll: b.hscroll, prefixW: gw + 1, charWrap: true})
 
 				if len(got) != len(want) {
 					t.Fatalf("body line count %d != reference %d", len(got), len(want))

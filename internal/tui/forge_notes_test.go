@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -216,5 +217,30 @@ func TestForgeNoteBodyRendersMarkdown(t *testing.T) {
 	}
 	if !strings.Contains(ansi.Strip(cell), "shorter") {
 		t.Errorf("painted row lost its text: %q", cell)
+	}
+}
+
+// A label summary is English protocol text from the domain; the TUI shows it
+// in the UI's language — in the box and on the collapsed row — and leaves a
+// reviewer's own one-word summary alone.
+func TestForgeLabelSummaryIsTranslated(t *testing.T) { // serial: switches the process-wide language
+	if err := i18n.SetLanguage("ja", t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = i18n.SetLanguage("", "") })
+	for label, want := range map[string]string{"suggestion": "提案", "code": "コード", "quote": "引用", "table": "表", "—": "—", "nice": "nice"} {
+		if got := forgeLabelText(label); got != want {
+			t.Errorf("forgeLabelText(%q) = %q, want %q", label, got, want)
+		}
+	}
+	r := domain.ResolvedNote{Note: model.Note{ID: "forge:C9", Source: model.NoteSourceForge, Side: model.NoteSideNew,
+		Summary: "quote", Rationale: "> said"}}
+	if rows := noteBodyLines(r, "forge:C9", 0, 30, false); rows[0].text != "引用" {
+		t.Errorf("box summary = %q", rows[0].text)
+	}
+	typed := r
+	typed.SummarySrc = "quote"
+	if rows := noteBodyLines(typed, "forge:C9", 0, 30, false); rows[0].text != "quote" {
+		t.Errorf("a reviewer's own word is not a label: %q", rows[0].text)
 	}
 }

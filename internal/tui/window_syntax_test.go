@@ -147,7 +147,8 @@ func TestRenderWindowClsColoursWrapContinuation(t *testing.T) {
 	for i := 11; i < 14; i++ { // foo
 		cls[i] = syntax.Func
 	}
-	out := renderWindow([]winRow{{text: text, cls: cls}}, winOpts{w: 12, h: 2, mode: modeWrap, anchor: 0})
+	// charWrap: this is a CODE line, the column-exact wrap a code view asks for.
+	out := renderWindow([]winRow{{text: text, cls: cls}}, winOpts{w: 12, h: 2, mode: modeWrap, anchor: 0, charWrap: true})
 	if got := ansi.Strip(out[0]); got != "    return f" {
 		t.Fatalf("line 0 = %q", got)
 	}

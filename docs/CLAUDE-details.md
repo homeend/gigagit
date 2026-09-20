@@ -2272,3 +2272,28 @@ under it would otherwise block every later PR diff from fetching.
 - **Code tokens** keep their real syntax classes: `mdSanitizeMapped` carries
   the parser's rune offsets across tab expansion / control-char flattening.
 - Every rune of forge text passes `sanitizeLine` BEFORE its mask is built.
+
+### Wrap mode wraps on words (`internal/tui/window.go`)
+
+- `winOpts.charWrap` (default false) picks modeWrap's layout, and BOTH
+  `renderWindow` and `wrapContentLines` go through `wrapRow`, so a line count
+  can never disagree with the layout. Default = `wrapHangWords` (break after
+  the last space that fits; only an over-wide word is split; never a break
+  inside the row's own lead, which would strand a marker) +
+  `wrapAlignIndentProse` (a `<digits><. or )><space>` marker hangs like a
+  bullet; a row that merely starts with a number keeps the plain rule).
+  `charWrap: true` = the old `wrapHang` + `wrapAlignIndent`, set by the CODE
+  views only: `blame_view`, `file_preview`, and the *View content*
+  `contentPopup` (`contentPopup.charWrap`). The two-column diff/blame cells
+  (`twocol.go`) have their own wrap and are untouched.
+- **Invariant kept:** every segment is a VERBATIM rune slice of the text
+  (continuations behind pad spaces) — the break keeps its space at the END of
+  the line, nothing is dropped — so `wrapSegMask` maps class and emphasis
+  masks unchanged. Consequence: a word that exactly fills a line is given up
+  to the next line rather than starting it with the space.
+- `winRow.noWrap` / `contentLine.noWrap`: a PREFORMATTED row is rendered as a
+  cutoff row inside modeWrap (one line, `…`) and counts as one line. Set from
+  `mdRow.pre` (code lines, table rows and rules) and by `prTextLines` (hunks).
+- `forgeLabelText` translates the domain's label summaries in the note box and
+  the collapsed row; it keys on `SummarySrc == ""`, so a reviewer who really
+  wrote "quote" is left alone.
