@@ -150,6 +150,10 @@ document.addEventListener("keydown", (e) => {
     doPush();
   } else if (e.key === "?") {
     openHelp();
+  } else if (e.key === "A" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    // the TUI's A on the Pull requests tab: search PRs of any state. prs.js
+    // owns the field (no forge → no field → the key does nothing).
+    if (window.__ggFocusPRSearch && window.__ggFocusPRSearch()) e.preventDefault();
   } else if (e.key === "r") {
     manualRefresh(); // the TUI's r: says it is working, and starts the list clean
   } else if (e.key === "s" || e.key === "u") {
