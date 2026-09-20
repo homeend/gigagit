@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -163,63 +164,30 @@ func (s *Server) registerLinkTools(srv *sdk.Server) {
 		if err := s.repoCheck(); err != nil {
 			return nil, out, err
 		}
-		left, err := model.ParseLink(in.Left)
+		// domain.CompareLinks is the ONE door (spec D6): it locates each link
+		// before evaluating it, which is what splits a local-form link's
+		// checkout from its file. This tool used to evaluate without locating,
+		// so a file link compared the whole tree, and its cross-repository
+		// pre-check compared two unsplit repo halves — two files of one
+		// checkout read as two repositories.
+		//
+		// No registry is supplied, the policy resolveLinkArg documents: a link
+		// naming another checkout has no candidate here and is refused as
+		// unknown, so the door's cross-repository refusal is unreachable from
+		// this server by design.
+		c, err := s.svc.CompareLinks(ctx, in.Left, in.Right, domain.ResolveOpts{Cwd: s.svc})
 		if err != nil {
-			return nil, out, fmt.Errorf("left: %v", err)
-		}
-		right, err := model.ParseLink(in.Right)
-		if err != nil {
-			return nil, out, fmt.Errorf("right: %v", err)
-		}
-		// Spec §9: two links naming DIFFERENT repositories are refused in
-		// phase 1. Checked on the links' own identity, before either is
-		// resolved, so the message names the disagreement rather than
-		// whichever half happened to fail to resolve first.
-		if !sameLinkRepo(left, right) {
-			return nil, out, fmt.Errorf("left and right name different repositories (%s and %s); comparing across repositories is not supported yet",
-				linkRepoLabel(left.Repo), linkRepoLabel(right.Repo))
-		}
-		leftSet, err := s.svc.EvalLink(ctx, left)
-		if err != nil {
-			return nil, out, fmt.Errorf("left: %v", err)
-		}
-		rightSet, err := s.svc.EvalLink(ctx, right)
-		if err != nil {
-			return nil, out, fmt.Errorf("right: %v", err)
-		}
-		// CompareSets, never CompareFiles — the same reason gg_compare_trees
-		// gives: the algebra is total, while git's own diff walks only
-		// forward, and one compare frontend disagreeing with another about
-		// what a user may ask is the bug plan 1b fixed.
-		files, err := s.svc.CompareSets(ctx, leftSet, rightSet)
-		if err != nil {
+			var se *domain.LinkSideError
+			if errors.As(err, &se) {
+				return nil, out, err // already says which side
+			}
 			return nil, out, fmt.Errorf("comparing: %v", err)
 		}
+		files := c.Files
 		out.LeftDisplay, out.RightDisplay = in.Left, in.Right
 		for _, f := range files {
 			out.Files = append(out.Files, commitFileRowFrom(f))
 		}
 		return nil, out, nil
 	})
-}
-
-// linkRepoLabel names a link's repository half for a message: the remote
-// name when it has one, else the absolute checkout path.
-func linkRepoLabel(r model.LinkRepo) string {
-	if r.Name != "" {
-		return r.Name
-	}
-	return r.Abs
-}
-
-// sameLinkRepo reports whether two links name the same checkout identity —
-// both by remote NAME or both by absolute PATH. A name and a path are not
-// compared: the same repo can legitimately be spelled either way, and
-// deciding they differ would refuse a pair that is actually fine. The
-// resolver settles that case instead, by refusing a foreign link outright.
-func sameLinkRepo(a, b model.Link) bool {
-	if a.Repo.Name != "" || b.Repo.Name != "" {
-		return a.Repo.Name == b.Repo.Name
-	}
-	return a.Repo.Abs == b.Repo.Abs
 }

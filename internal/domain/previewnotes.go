@@ -248,12 +248,19 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 	if path == "" {
 		return nil, errPreviewNotesNeedPath
 	}
+	// A pull request's review threads ride along exactly as in
+	// PreviewNotesFor: active by construction, appended after the store's
+	// notes, and shown alone when this machine has no store (or no notes).
+	forge := s.forgeNotesFor(set, path)
 	mine, err := s.loadPreviewNotes(ctx, set, path)
 	if err != nil {
+		if len(forge) > 0 && errors.Is(err, ErrNotesDisabled) {
+			return forge, nil
+		}
 		return nil, err
 	}
 	if len(mine) == 0 {
-		return nil, nil
+		return forge, nil
 	}
 	var newLines []string
 	if b, ferr := s.ShowFile(ctx, set.Tip, path); ferr == nil {
@@ -262,7 +269,7 @@ func (s *Service) PreviewNotesAt(ctx context.Context, set PreviewNoteSet, path s
 	// newLines stays nil when the path is gone from the tip: resolveOne then
 	// reports orphaned, and keepResolved hides those — exactly the rule the
 	// ordinary note path follows for a deleted file.
-	return keepResolved(resolveNotes(mine, nil, newLines)), nil
+	return append(keepResolved(resolveNotes(mine, nil, newLines)), forge...), nil
 }
 
 // PreviewNotesAll is PreviewNotesAt for EVERY path the preview carries notes

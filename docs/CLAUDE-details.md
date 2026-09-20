@@ -1258,6 +1258,88 @@ A commit pair is a NOTE SCOPE built by `domain.PairNotes(a, b)` —
 - Badge refresh: the `srcNotes` arm re-dispatches `pairNotesRefreshCmd` (a pair
   has no `previewOpen`, nothing to re-resolve, nothing that can "move").
 
+### Links in the TUI — the compare dialog and the one door (plan 3b-2, 2026-09-20)
+
+**`domain.CompareLinks(ctx, leftText, rightText, opts)` is the one door** from
+two link TEXTS to a comparison, and `EvalLinkText` is its one-sided half (the
+CLI's `gg compare HEAD <link>`). Order inside is a correctness rule: parse →
+**locate** → same-checkout → `EvalLink`. A parsed LOCAL-form link
+(`gg:///abs/dir/f.go@…`) holds checkout and file undivided in `Repo.Abs` with
+`Path == ""`; skip the locate and a file link silently evaluates as the whole
+tree (MCP shipped exactly that). `internal/archtest`
+(`TestFrontendsReachLinkSetsThroughTheDoor`) forbids any `.EvalLink(` call in
+`tui`/`cli`/`mcp`/`web`. Failures carry their side — `*LinkSideError{Side, Err}`,
+which **unwraps**, so exit codes and `errors.Is` key on the cause. Another
+checkout is `ErrLinkCrossRepo`, its own sentinel (wrapping `model.ErrLink` would
+call a well-formed link "bad"); the CLI exits 2 on either. **The cross-repo
+refusal needs a registry to be reachable**: with none, a foreign link has no
+candidate and fails first as `ErrLinkUnknownRepo`. MCP passes no registry by
+design, so it can only ever report "unknown here" — do not "fix" that.
+
+**The set-shaped view** (`link_compare.go`). `startLinkCompare` runs the door
+off-thread and `openLinkCompare` opens the files view with the list already in
+hand; `Model.filesSets` holds the two sets. The view's identity is
+`linkCompareTag` = the two TEXTS — `gg://r@sha` and `gg://r/f@sha` share an
+endpoint, so an endpoint tag calls the second "already showing".
+`compareSides(row)` is where a row's bytes come from: `filesLeft/filesRight`
+for an endpoint compare, `FileSet.Source(path)` per side for a link compare;
+the diff tag AND the Differ cache key are built from what it returns, so a
+third-parent read is never served under `b`'s key. `closeFilesView` clears
+`filesSets` and `linkCompareWant` (the in-flight tag — a stale or cancelled
+load is dropped; a failed one clears it so the same pair can be retried). A
+load that lands while a popup is on top hands off (`handOffToFilesView`), so
+the popup is parked and returns when the view closes. `gg session state` still
+reports such a view as its two ENDPOINTS — it is a report, nothing restores
+from it.
+
+**Pair landing goes through it.** `steerNavigatePair` (the funnel for `#`,
+`gg open`, `gg session navigate`) builds `pointLinkFor(a)` ↔ `pairLinkFor(a, b)`
+and parks `pendingSteer` on the text tag whether or not a file was named: the
+view does not exist until the comparison lands, so the reply and the
+`▸ opened a..b` notice are raised in `drainPendingCompare`, not at dispatch.
+The view's endpoints are still commit a / commit b (a pair set's own endpoint
+is its `b`), never a `PairEndpoint`. No link form for the checkout → the old
+endpoint path.
+
+**The dialog** (`link_compare_popup.go`, `link_compare_base.go`). Two
+`linkCompareSide`s, each a field + a `linkHistPicker` + its own error; a
+`linkHistHost` now returns ALL its pickers and one load fills each. A pick
+FILLS its field — only `#` submits on pick. `ctrl+enter` is deliberately not
+bound (terminals do not deliver it). The dialog uses the WIDE popup width and
+shows a history list only once `↓` opened it. **Base rows:**
+`model.Link.BoundKind()` is pure and is only the cheap gate — `None` is
+certain, but it cannot tell a local-form FILE link from a whole tree, so the
+row exists on `domain.SuggestBase`'s located `Kind`, never on the pure one. A
+suggestion answers for the exact text it was asked about (`sugFor`/`asked`), so
+an edit or a swap in flight drops it. `enter` on the row is the ONLY rewrite:
+`model.Link.WithBase(base, self)` → `@B...A` (target first) or
+`@<parent>..<self>`, where `self` is `BaseSuggestion.Self`, the FULL sha — the
+field may hold an abbreviation a user typed. `tab` completes a *typed* ref base
+(`branchSuggestions`, shared with the preview form); an untouched suggestion is
+never completed away. Trunk = `refs/remotes/origin/HEAD`
+(`git.RemoteDefaultBranch`) → local `main` → local `master`, skipping the ref
+itself; gg has no trunk setting and this order is the whole notion.
+
+**Saved comparisons in the Previews tab.** `previewRow` has THREE kinds:
+`rowMerge`, `rowPair` (a commit pair — one SET entry holding `@A..B`) and
+`rowCompare` (a two-link entry). "Pair" is `rowPair`'s word; never call a
+comparison one. `readPreviews` takes exactly the non-set `SavedCompareList`
+entries (the set ones are already listed through `PreviewList`/`PairList`).
+Every site that branches on `merge()` and used to assume a pair otherwise must
+check `compare()` FIRST — a comparison row's `pair` is zero
+(`model.go` enter, `previewSwapCmd`, `contextLinkText`). A comparison has no
+single Copy link; `comparisonLinkRows` offers each half. The save label starts
+EMPTY: the store fills its own default, a rule `tui` cannot import.
+
+**bookmark↔shelf.** `pendingCompare.link` / `compareLink` carry the first
+pick's link into the other switcher; a non-empty link is what routes the second
+pick through `startCrossCompare`. commit↔commit and commit↔file go through the
+door; **file↔file keeps the two-ref diff** (paths may differ; on links that is
+one `D` and one `A`). Commit entries are pre-checked with
+`ResolveCommitEntryEndpoint` so a dead bookmark still gets `entryGoneText`'s
+sticky notice. A focused file from a `.` menu has no link and keeps the
+refusal. The same-kind MARK flow (`m`, `m`) is untouched.
+
 ### Links in the TUI — recording, stash pairs, the `#` history (plan 3b-1, 2026-09-19)
 
 **Recording lives at the clipboard writer.** `internal/tui` has exactly one
@@ -1974,3 +2056,51 @@ under it would otherwise block every later PR diff from fetching.
   `fakeForge` via `SetForgeProviders` and a ticker-less hub (`prServe`), so
   they need no env. Browser fixture = the TUI one copied, with PR 12 a REAL
   merged PR (head ≠ base) — head == base reads as preview state `merged`.
+
+### Forge PRs in the web UI — threads, note folding, details (plan 5, `docs/superpowers/plans/2026-09-20-forge-prs-5-web-comments.md`)
+
+- **Domain:** `PreviewNotesAt` (the diff-less read: web, CLI, MCP) mirrors
+  `PreviewNotesFor` — `forgeNotesFor(set, path)` appended AFTER
+  `keepResolved`, returned alone when the file has no stored notes or the
+  machine has no note store. `PRCommentsCached(n)` reads the comment cache
+  without a forge call. `WireNote` gained `read_only` (source = forge),
+  `resolved`, `file_level` (forge + zero range) and `created` (RFC 3339
+  string — a `time.Time` would never `omitempty`).
+- **Routes (`internal/web/prnotes.go`), all keyed on `?n=`:**
+  `GET /api/pr/notes[&path=]` = `/api/preview/notes`' shape over
+  `PreviewNotes(pair.Head, pair.Base)` — the HEAD is the set's source, because
+  the domain recognises a PR by `ParsePRRef(set.Source)`; no path = counts
+  only; an unfetched PR answers the empty shape. It never calls the forge.
+  `POST /api/pr/comments/refresh` → `{changed}` and `POST /api/pr/details` →
+  `{pr (with body), hub, outdated, truncated}` are the two forge-spending
+  calls, write-guarded, under `prRevalidateBudget`. **Spec amendment:** details
+  was drafted as a GET; the PR body is not in the listing, so it always costs
+  a forge call and R2 (a GET never calls the forge) makes it a POST.
+  `/api/pr/open` also sends `link_source` / `link_target` (the PRPair) OUT;
+  they are never read back (R1).
+- **Client:** `notebox.js` (import-free, node-tested) owns the title text and
+  the collapse set. `state.noteCollapsed` holds ROOT ids and is re-seeded
+  (resolved forge threads) only when `path + rev` changes — a note write or a
+  comment re-poll re-reads the same diff and must keep hand-made folds. The
+  fold is a CLASS on the `<tr>` toggled in place (`toggleNoteCollapsed`);
+  `renderDiff` would reset the ‹/› stepper and jolt the scroll. Whole-file
+  threads (`file_level`, line 0) are skipped by `noteRowsHTML` and emitted by
+  `fileNoteRowsHTML` right after the `<colgroup>`, full-span even in the split
+  layout. The agent-off filter exempts `read_only`. `E`/`R` and the ◆ menu
+  refuse a read-only note (`readOnlyNote`).
+- **Re-poll:** `refreshPRComments(n)` (`prs.js`, `runOnce("pr-comments")`) runs
+  at the end of `showPR` — after the diff is on screen, never on the click
+  path — and from `live.js` on every `prs` event while a PR is open. When
+  `changed`: `fetchNotes()` if a file of that PR is open (it also carries the
+  counts), else `loadPRCounts(n)`.
+- **Details overlay:** `#prdetails` has its OWN `#prdetails.hidden` rule (the
+  web hides by ID; without it the backdrop covers the page from load — the
+  browser run with the rule removed dies on the first click). `prdetails.js`
+  owns the compare-bar chip's click, so `files.js` never imports it.
+- **Links:** `linkFor` swaps a PR ctx's display pair for
+  `{linkSource, linkTarget}` and refuses without them.
+- **Browser-check lessons:** in the split layout `tr[data-no] td.side` is the
+  LEFT cell — clicking it marks the OLD side, and `c` then (correctly) refuses
+  on a preview; the sidebar is not on screen while a file's diff is open, so
+  test a sidebar row's menu before opening a file; wrap the whole script in
+  try/catch so an abort prints as a FAIL instead of an empty result table.

@@ -12,7 +12,7 @@ import { fetchStatus, wtCount } from "./status.js";
 import { fetchNotes, markDiffRow, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
 import { fetchBranches, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved } from "./previews.js";
-import { fetchPRs } from "./prs.js";
+import { fetchPRs, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { loadRepo, opLine } from "./ops.js";
@@ -128,7 +128,13 @@ async function refreshSources(want) {
   if (sidebar || want.has("previews") || want.has("notes")) jobs.push(fetchPreviews());
   // "prs" is the server's pull-request lane having re-listed (its own
   // [refresh] prs interval, a finished pr-fetch / pr-forget).
-  if (want.has("prs")) jobs.push(fetchPRs());
+  if (want.has("prs")) {
+    jobs.push(fetchPRs());
+    // The lane's tick is also the comment poll of the PR on screen. Not
+    // awaited: it is a forge call, and the refresh must not wait on one.
+    const po = state.previewOpen;
+    if (po && po.pr && state.filesMode === "compare") refreshPRComments(po.pr);
+  }
   await Promise.all(jobs);
   // After the previews list lands: an open preview whose tips moved re-opens
   // itself, one whose pair vanished closes with a notice.

@@ -47,6 +47,10 @@ func (m Model) closeFilesView() Model {
 	m.filesRight = model.Endpoint{}
 	m.compareTag = ""
 	m.comparePair = nil
+	m.filesSets = nil
+	// A link compare still loading was asked for by the view that just
+	// closed (or by one a newer open supersedes): drop it on arrival.
+	m.linkCompareWant = ""
 	// inCompareMode() is true for a plain branch/pair compare too, so a preview
 	// scope left behind here would stamp the NEXT compare as a preview and make
 	// its rows note-addressable at a stale tip. This is the single exit point.
@@ -417,29 +421,35 @@ func (m Model) openCompareFiles(left, right model.Endpoint) (Model, tea.Cmd) {
 	m.filesMode = filesModeCompare
 	m.filesLeft = left
 	m.filesRight = right
-	// h/b (history/blame) context: prefer a commit side; "" means working tree.
-	// A PAIR counts, and its NEWER side is the commit — PairB() is a resolved
-	// sha (model.PairEndpoint requires 7..64 hex on both halves), and the
-	// pair's own byte source is b, so history/blame stand where the compare's
-	// content does. Without this arm a pair fell to the default and silently
-	// gave those surfaces the working tree.
-	switch {
-	case right.Kind() == model.EndpointCommit:
-		m.filesHash = right.Hash()
-	case right.Kind() == model.EndpointPair:
-		m.filesHash = right.PairB()
-	case left.Kind() == model.EndpointCommit:
-		m.filesHash = left.Hash()
-	case left.Kind() == model.EndpointPair:
-		m.filesHash = left.PairB()
-	default:
-		m.filesHash = ""
-	}
+	m.filesHash = compareFilesHash(left, right)
 	m.compareTag = tag
 	// Focus the tree: compare mode has no live commit list, and moving the commit
 	// selection would discard the comparison. The focus-switch keys are inert here.
 	m.filesTreeFocused = true
 	return m, m.loadCompareFilesCmd(left, right, tag)
+}
+
+// compareFilesHash is a compare view's h/b (history/blame) context: the commit
+// side, preferring the right; "" means the working tree. Shared by the
+// endpoint-shaped and the link-shaped opener so the two cannot drift.
+//
+// A PAIR counts, and its NEWER side is the commit — PairB() is a resolved sha
+// (model.PairEndpoint requires 7..64 hex on both halves), and the pair's own
+// byte source is b, so history/blame stand where the compare's content does.
+// Without those arms a pair fell to the default and silently gave those
+// surfaces the working tree.
+func compareFilesHash(left, right model.Endpoint) string {
+	switch {
+	case right.Kind() == model.EndpointCommit:
+		return right.Hash()
+	case right.Kind() == model.EndpointPair:
+		return right.PairB()
+	case left.Kind() == model.EndpointCommit:
+		return left.Hash()
+	case left.Kind() == model.EndpointPair:
+		return left.PairB()
+	}
+	return ""
 }
 
 // loadCompareFilesCmd fetches the changed-file list off the UI thread.
@@ -834,8 +844,11 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 			dv.previewSet = set
 			dv.noteAddr = model.FileAddress{State: model.StateCommitted, Commit: set.Tip, Path: l.path}
 		}
-		m.diffTag = "cmp:" + m.filesLeft.CacheTag() + ":" + m.filesRight.CacheTag() + ":" + l.path
-		return m, m.loadCompareDiffCmd(m.filesLeft, m.filesRight, l)
+		// compareSides, not filesLeft/filesRight: a link compare's member may
+		// have its own byte source, and the tag + cache key must follow it.
+		left, right := m.compareSides(l)
+		m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
+		return m, m.loadCompareDiffCmd(left, right, l)
 	}
 	if m.inShelfFiles() {
 		// Shelf mode: the frozen member (old) against the working file (new) —

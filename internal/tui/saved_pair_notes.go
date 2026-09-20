@@ -8,6 +8,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // Review notes on a commit pair.
@@ -116,4 +117,20 @@ func (m Model) scopeLinkFor(set *domain.PreviewNoteSet, path string, line int) (
 		return m.pairFileLinkFor(set.Base, set.Tip, path, line)
 	}
 	return m.previewLinkFor(set.Source, set.Target, path, line)
+}
+
+// steeredPairNotesCmd is pairNotesCmd for a link-shaped landing: nil unless
+// the command that opened the view was a change-set navigate and the view
+// really shows its two commits. Only a PAIR navigate arms — a generic link
+// compare of two far-apart points would pay a rev-list over everything between
+// them for a scope nobody asked for.
+func (m Model) steeredPairNotesCmd(c steer.Command) tea.Cmd {
+	if c.Target == nil || c.Target.State != "pair" {
+		return nil
+	}
+	l, r := m.filesLeft, m.filesRight
+	if l.Kind() != model.EndpointCommit || r.Kind() != model.EndpointCommit {
+		return nil
+	}
+	return m.pairNotesCmd(l.Hash(), r.Hash())
 }

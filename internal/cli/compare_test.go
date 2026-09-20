@@ -359,6 +359,66 @@ func TestCompareFileLinkIsSplitBeforeItIsEvaluated(t *testing.T) {
 	}
 }
 
+// TestCompareTwoLocalFormFileLinksThroughTheDoor: BOTH tokens are links, the
+// lane that goes through domain.CompareLinks. The expectation is the one the
+// MCP and TUI legs share (spec §5 "one door"): a local-form file link is one
+// file, never the whole tree.
+func TestCompareTwoLocalFormFileLinksThroughTheDoor(t *testing.T) {
+	t.Parallel()
+	dir, _, c2, c3 := linkCompareRepo(t)
+	state := linkState(t)
+	code, out, errb := runCompareAt(t, state, dir, mustLink(t, dir, "--rev", c2), mustLink(t, dir, "--rev", c3))
+	if code != 0 || out != "M\tREADME.md\nM\tb.txt\n" {
+		t.Fatalf("fixture: whole-tree c2..c3 = %d %q (stderr %q), want two files — the arms must differ", code, out, errb)
+	}
+	left, right := mustLink(t, dir, "--rev", c2, "b.txt"), mustLink(t, dir, "--rev", c3, "b.txt")
+	if !strings.Contains(left, "/b.txt@") || !strings.HasPrefix(left, "gg:///") {
+		t.Fatalf("gg link printed %q, want a local-form file link", left)
+	}
+	code, out, errb = runCompareAt(t, state, dir, left, right)
+	if code != 0 || out != "M\tb.txt\n" {
+		t.Fatalf("compare <file-link> <file-link> = %d %q (stderr %q), want exactly \"M\\tb.txt\\n\"", code, out, errb)
+	}
+}
+
+// TestCompareTwoLinksKeepsItsExitCodesAndWording: the two-link lane reports a
+// failing side exactly as the one-link lane does — same exit codes, and no
+// "left:"/"right:" prefix leaking out of the door into messages scripts read.
+func TestCompareTwoLinksKeepsItsExitCodesAndWording(t *testing.T) {
+	t.Parallel()
+	here, _, _, c3 := linkCompareRepo(t)
+	other := newCLIRepo(t)
+	state := linkState(t)
+	if err := repos.Touch(state, other, "", time.Unix(9000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	good := mustLink(t, here, "--rev", c3)
+	for _, c := range []struct {
+		name, left, right string
+		code              int
+		want              string
+	}{
+		{"cross-repo right", good, "gg://" + filepath.ToSlash(other) + "/README.md", 2, "compare: gg://" + filepath.ToSlash(other) + "/README.md names a different repository"},
+		{"cross-repo left", "gg://" + filepath.ToSlash(other) + "/README.md", good, 2, "cross-repository compare is not supported yet"},
+		{"bad link right", good, "gg://somerepo@nothex", 2, "compare: bad gg link"},
+		{"unknown repo right", good, "gg://nowhere-on-this-machine@ref:main", 1, "is not in this machine's gg history"},
+	} {
+		code, out, errb := runCompareAt(t, state, here, c.left, c.right)
+		if code != c.code {
+			t.Errorf("%s: exit %d, want %d (stderr %q)", c.name, code, c.code, errb)
+		}
+		if !strings.Contains(errb, c.want) {
+			t.Errorf("%s: stderr %q, want it to contain %q", c.name, errb, c.want)
+		}
+		if strings.Contains(errb, "left: ") || strings.Contains(errb, "right: ") {
+			t.Errorf("%s: stderr %q leaks the door's side prefix", c.name, errb)
+		}
+		if out != "" {
+			t.Errorf("%s: stdout must stay empty, got %q", c.name, out)
+		}
+	}
+}
+
 // TestCompareBackCompatVocabulary: every old spelling keeps working, with the
 // same exit codes. Nothing about links is a mode.
 func TestCompareBackCompatVocabulary(t *testing.T) {

@@ -455,8 +455,14 @@ func (m Model) steerNavigateRef(c steer.Command) (Model, tea.Cmd) {
 // same reason a ref is (ruling R2): a moving name must be re-resolved at
 // apply time, never taken frozen off the wire.
 //
-// CommitEndpoint on each half, never PairEndpoint: an endpoint pair is one
-// bounded SET, and openCompareFiles wants the two sides that produce it.
+// It lands through domain.CompareLinks — commit a's whole tree against the
+// change-set a..b — the same door `gg compare <link>` answers through, so the
+// TUI and the CLI cannot disagree about one link. That is what shows a `-u`
+// stash's untracked files here: they are members of the SET (read from the
+// stash's third parent), and no two-commit tree diff contains them.
+//
+// The view's two endpoints are still commit a and commit b, never a
+// PairEndpoint: a pair set's own endpoint is its b side.
 func (m Model) steerNavigatePair(c steer.Command) (Model, tea.Cmd) {
 	a, b := c.Target.A, c.Target.B
 	if a == "" || b == "" {
@@ -491,6 +497,22 @@ func (m Model) steerNavigatePair(c steer.Command) (Model, tea.Cmd) {
 	}
 
 	m = m.steerToPanels()
+	if leftText, lok := m.pointLinkFor(ahash); lok {
+		if rightText, rok := m.pairLinkFor(ahash, bhash); rok {
+			// Parked whether or not a file was named: the view does not exist
+			// until the comparison lands, so the reply (and the notice) wait
+			// for loadedLinkCompare rather than claiming an open that may fail.
+			nm, cmd := m.startLinkCompare(leftText, rightText)
+			nm.pendingSteer = &pendingSteer{cmd: c, stage: steerStageCompare, tag: linkCompareTag(leftText, rightText), at: time.Now()}
+			if cmd == nil { // already showing this very comparison
+				return nm.drainPendingCompare()
+			}
+			return nm, cmd
+		}
+	}
+	// No link form for this checkout (its path holds a character the grammar
+	// cannot): the endpoint-shaped compare, which is right for every pair
+	// except a `-u` stash's.
 	nm, cmd := m.openCompareFiles(left, right)
 	if nc := nm.pairNotesCmd(ahash, bhash); nc != nil { // the pair's review notes (saved_pair_notes.go)
 		cmd = tea.Batch(cmd, nc)
@@ -598,6 +620,17 @@ func (m Model) drainPendingCompare() (Model, tea.Cmd) {
 	}
 	c := ps.cmd
 	pair := c.Target.A + ".." + c.Target.B
+	// A link-shaped landing could not say so at dispatch — its view did not
+	// exist yet — so the notice is raised here, once the list is in hand.
+	if m.filesSets != nil && startAtOrigin(c) {
+		m = m.steerNotice(i18n.T("▸ opened %s..%s", shortHash(m.filesLeft.Hash()), shortHash(m.filesRight.Hash())))
+	}
+	if c.File == "" {
+		// A link-shaped landing parks even a file-less navigate; its list
+		// being here IS the landing.
+		m.pendingSteer = nil
+		return m.navigateLanded(c, "opened "+shortHash(m.filesLeft.Hash())+".."+shortHash(m.filesRight.Hash()))
+	}
 	return m.drainPendingLoad(c, m.filesView.lines,
 		"opened "+c.File+" in "+pair,
 		c.File+" is not in "+pair)

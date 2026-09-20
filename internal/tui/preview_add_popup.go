@@ -47,7 +47,13 @@ func (p *previewAddPopup) field() *textfield {
 
 // suggestions ranks the candidates against the focused field's text.
 func (p *previewAddPopup) suggestions(m Model) []string {
-	q := strings.TrimSpace(p.field().Value())
+	return m.branchSuggestions(p.field().Value())
+}
+
+// branchSuggestions ranks the branch-name candidates against typed text — the
+// one completion the preview form and the compare dialog's base row share.
+func (m Model) branchSuggestions(typed string) []string {
+	q := strings.TrimSpace(typed)
 	if q == "" {
 		return nil // an empty field would list every branch; say nothing instead
 	}
@@ -59,15 +65,23 @@ func (p *previewAddPopup) suggestions(m Model) []string {
 	return out
 }
 
+// namesABranch reports whether typed text is exactly a candidate.
+func (m Model) namesABranch(typed string) bool {
+	v := strings.TrimSpace(typed)
+	for _, c := range m.branchNameCandidates() {
+		if c == v {
+			return true
+		}
+	}
+	return false
+}
+
 // accept replaces the focused field with the top suggestion unless the typed
 // text already names a branch exactly. Text that matches nothing is left
 // alone: the add itself refuses it, naming what the user typed.
 func (p *previewAddPopup) accept(m Model) {
-	v := strings.TrimSpace(p.field().Value())
-	for _, c := range m.branchNameCandidates() {
-		if c == v {
-			return
-		}
+	if m.namesABranch(p.field().Value()) {
+		return
 	}
 	if s := p.suggestions(m); len(s) > 0 {
 		*p.field() = newTextField(s[0])

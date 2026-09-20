@@ -20,6 +20,12 @@ type previewRowKind int
 const (
 	rowMerge previewRowKind = iota
 	rowPair                 // a saved commit pair: two frozen shas (domain.CommitPair)
+	// rowCompare is a saved COMPARISON: two gg:// links (a two-link
+	// savedcompare entry), re-run through domain.CompareLinks. Not a "pair":
+	// that word is rowPair's, one link holding @<a>..<b>. Every site that
+	// branches on merge() must handle this kind BEFORE assuming rowPair — a
+	// comparison row's pair is ZERO, exactly as a pair row's rec is.
+	rowCompare
 )
 
 // previewRow is one saved change-set with its summary: a merge preview (rec,
@@ -30,14 +36,16 @@ const (
 // that): a pair row's rec is ZERO, and handing its empty Source/Target to a
 // merge-preview path ends in a confusing git error rather than a refusal.
 type previewRow struct {
-	kind   previewRowKind
-	rec    model.MergePreview
-	pair   domain.CommitPair
-	psum   domain.PairSummary
-	sum    domain.PreviewSummary
-	notes  int            // root notes gathered along the branch, hidden ones included
-	byPath map[string]int // the same counts per path; feeds the open preview's file list
-	err    error
+	kind    previewRowKind
+	rec     model.MergePreview
+	pair    domain.CommitPair
+	psum    domain.PairSummary
+	cmp     domain.SavedCompare // rowCompare: the two link texts, id, label
+	cmpDesc [2]string           // rowCompare: each link's one-line description
+	sum     domain.PreviewSummary
+	notes   int            // root notes gathered along the branch, hidden ones included
+	byPath  map[string]int // the same counts per path; feeds the open preview's file list
+	err     error
 }
 
 // merge is the row as a merge preview; false for a pair.
@@ -46,33 +54,48 @@ func (r previewRow) merge() (model.MergePreview, bool) { return r.rec, r.kind ==
 // id, label and created are the kind-agnostic identity of a row: what the
 // list keys, names and sorts by.
 func (r previewRow) id() string {
-	if r.kind == rowPair {
+	switch r.kind {
+	case rowPair:
 		return r.pair.ID
+	case rowCompare:
+		return r.cmp.ID
 	}
 	return r.rec.ID
 }
 
 func (r previewRow) label() string {
-	if r.kind == rowPair {
+	switch r.kind {
+	case rowPair:
 		return r.pair.Label
+	case rowCompare:
+		return r.cmp.Label
 	}
 	return r.rec.Label
 }
 
 func (r previewRow) created() time.Time {
-	if r.kind == rowPair {
+	switch r.kind {
+	case rowPair:
 		return r.pair.Created
+	case rowCompare:
+		return r.cmp.Created
 	}
 	return r.rec.Created
 }
 
 // subject is the middle column: what the row is a diff OF.
 func (r previewRow) subject() string {
-	if r.kind == rowPair {
+	switch r.kind {
+	case rowPair:
 		return shortHash(r.pair.A) + ".." + shortHash(r.pair.B)
+	case rowCompare:
+		return r.cmpDesc[0] + " ↔ " + r.cmpDesc[1]
 	}
 	return r.rec.Source + " → " + r.rec.Target
 }
+
+// compare is the row as a saved comparison; false for the other two kinds.
+func (r previewRow) compare() (domain.SavedCompare, bool) { return r.cmp, r.kind == rowCompare }
 
 // previewsPayload is srcPreviews' dataAvailableMsg value.
 type previewsPayload struct{ rows []previewRow }
@@ -123,6 +146,23 @@ func readPreviews(ctx context.Context, svc *domain.Service) (previewsPayload, er
 		}
 		rows = append(rows, row)
 	}
+	// Saved COMPARISONS last: the two-link entries. The SET-shaped entries are
+	// the rows above (a merge preview, a commit pair), reached through their
+	// own façades — so exactly the non-set ones are taken here, or every
+	// preview would be listed twice. A row costs two descriptions and no
+	// comparison: it is evaluated when it is opened, and a link that no longer
+	// resolves keeps its row (it can still be renamed, copied and removed).
+	saved, err := svc.SavedCompareList(ctx)
+	if err != nil {
+		return previewsPayload{}, err
+	}
+	for _, c := range saved {
+		if c.IsSet() {
+			continue
+		}
+		rows = append(rows, previewRow{kind: rowCompare, cmp: c,
+			cmpDesc: [2]string{describeLinkText(ctx, svc, c.Left), describeLinkText(ctx, svc, c.Right)}})
+	}
 	return previewsPayload{rows: rows}, nil
 }
 
@@ -151,6 +191,9 @@ func (l previewList) Key(i int) string  { return l.rows[i].id() }
 func previewStateText(r previewRow) string {
 	if r.err != nil {
 		return i18n.T("error: %s", r.err.Error())
+	}
+	if r.kind == rowCompare {
+		return "" // nothing is evaluated until the row is opened
 	}
 	if r.kind == rowPair {
 		switch r.psum.State {

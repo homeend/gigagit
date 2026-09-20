@@ -34,6 +34,65 @@ preview: an agent annotates the diff, you read the notes inside it.
 - A reversed pair (`b` an ancestor of `a`, what `s` saves) has an empty `a..b`;
   the scope always includes `b` itself so notes written to it still show.
 
+## Compare with link… — any two `gg://` links, compared inside the TUI
+
+**A palette command compares two links.** *Compare with link…* (`ctrl+p`) opens
+a dialog with a left and a right `gg://` link: type them, paste them, or press
+`↓` to pick from the links you copied. `ctrl+s` swaps the sides; `enter` on the
+right link compares. A side that fails says why **under its own field**. The
+result opens in the files view; `esc` there returns to the dialog with both
+fields intact.
+
+**The base picker.** A link that names a whole branch, tag or commit gets a
+**base row** under it, prefilled and labelled with where the suggestion came
+from: the branch's *upstream*, else the *trunk* (origin's default branch, else
+a local `main`, else `master` — never the branch itself), or a commit's
+*parent*. The row is an offer — tabbing through it changes nothing. `enter` on
+it rewrites the link field into the bounded link: `@<base>...<branch>` (target
+first, git's own three-dot order) or `@<parent>..<sha>` with the full sha. The
+comparison then lists only what that branch or commit changed; leave the row
+alone to compare the whole tree. `tab` completes a base you typed against the
+branch names. There is no dialog state a `gg compare <left> <right>` could not
+spell.
+
+**Save it, find it again.** `.` → *Save comparison…* in a link comparison
+stores its two links (an empty label takes a default; saving it twice names
+the existing entry). The **Previews** tab lists saved comparisons beside merge
+previews and commit pairs, as `<left> ↔ <right>`: `enter` runs it again, `e`
+renames, `d` removes, `s` saves it reversed, and the `.` menu offers *Copy
+left link* / *Copy right link*. A comparison whose link no longer resolves
+keeps its row and says why when opened. These are the entries
+`gg compare --save` / `--list` / `--saved` already wrote and read — one store.
+
+**A stash link landed in the TUI now shows its untracked files.** `gg compare
+<stash link>` listed a `-u` stash's untracked file while the same link pasted
+into `#` (or opened with `gg open` / `gg session navigate`) did not: landing a
+change-set was a two-commit tree diff, which cannot contain them. Landing now
+goes through the same comparison the CLI runs, so both frontends give one
+answer; the `gg session` reply is sent once the view has actually opened.
+
+**bookmark ↔ shelf compares a commit against a file.** Picking a commit
+bookmark and then a shelved *file* (or the other way round) was refused; the
+two entries are now compared as links — a whole tree against one member.
+Commit against commit goes the same way, file against file keeps its two-ref
+diff (the two paths may differ), and a bookmark whose commit is gone still
+says so in gg's own words.
+
+**Fixed: `gg_compare_links` (MCP) compared the whole tree for a file link.** A
+local-form link (`gg:///path/to/checkout/f.go@<sha>`, what every copy row emits
+in a checkout with no remote) holds its checkout and its file undivided until
+the link is *located*. The MCP tool evaluated without locating, so comparing
+`…/a.txt@c1` with `…/a.txt@c2` listed every changed file, not `a.txt` — a wrong
+answer with no error — and comparing two *different* files of one checkout was
+refused as "different repositories". Both were proven against the shipped tool
+before the fix.
+
+Under the hood: `domain.CompareLinks` (and its one-sided half, `EvalLinkText`)
+is now the one door from link text to a comparison — CLI, MCP and TUI all call
+it, and an archtest forbids a frontend calling `EvalLink` itself.
+`model.Link.BoundKind` / `WithBase` and `domain.SuggestBase` carry the base
+picker and are what the web dialog will reuse.
+
 ## Copy no longer trusts a dead `WAYLAND_DISPLAY`
 
 On WSL every copy action could paint a green "Copied" while the clipboard never
@@ -121,6 +180,41 @@ editing `savedcompare.toml` by hand.
 Under the hood: `domain.DescribeLink` is now the one describer behind every
 history row (it lived unexported in `internal/cli`, out of the TUI's reach),
 and a member's bytes are read through `FileSet.Source(path)`.
+
+## Pull requests in the web UI: review threads, note folding, details
+
+**A pull request's review threads now show inside its diff in `gg web`**, as
+read-only note boxes (teal, titled `review · author · age · file R12`) on the
+line they were written on — left-side comments included, and a comment on the
+whole file leads the file. They can be folded and their place copied as a gg
+link; they cannot be edited, answered or removed, the agent-notes switch (`a`)
+never hides them, and `c` still adds a note of your own beside them. The file
+list's `◆N` badges count them.
+
+**Every note box in the web folds to its title line** — click the title, or
+`z` for the note you are on and `Z` for every thread of the file (the TUI's
+`o` / `O`; `o` is the web's sort key). The ◆ menu has the same row. A pull
+request's *resolved* threads start folded; a fold you made by hand survives a
+comment re-poll.
+
+**`details…`** (a pull request's right-click menu, or the `details` chip on its
+open diff) opens an overlay with the description, the conversation with each
+review's verdict, and the *outdated* review threads — the ones the forge can no
+longer place on a line — each with the hunk it was written on. `j`/`k` scroll,
+esc or a click outside closes it.
+
+Comments are read from the forge right AFTER the diff opens (the click path
+stays local) and again on every `[refresh] prs` tick or **⟳**; the diff
+redraws only when something changed. A PR diff's lines and notes copy a proper
+link again: `gg://repo/file@main...refs/gg/pr/7:3`.
+
+Under the hood: `domain.PreviewNotesAt` — the diff-less read the web, the CLI
+and MCP use — now carries the forge's threads like the TUI's read always did
+(`gg note list --preview … --file x` lists them too). The wire note gained
+`read_only`, `resolved`, `file_level` and `created`. New routes, all keyed on
+the PR NUMBER: `GET /api/pr/notes` (cache only — a GET never calls `gh`) and
+the two that do spend a forge call, as guarded POSTs:
+`/api/pr/comments/refresh` → `{changed}` and `/api/pr/details`.
 
 ## Pull requests in the web UI (list, open, forget)
 

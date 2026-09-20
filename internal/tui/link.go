@@ -235,6 +235,11 @@ func (m Model) contextLinkText() (string, bool) {
 	}
 	if !m.inContentWindow() && m.focus == panelPreviews {
 		if r, ok := m.selectedPreview(); ok {
+			if _, isCmp := r.compare(); isCmp {
+				// A comparison is TWO links; "the link for this place" has no
+				// answer. Its halves are offered by name (comparisonLinkRows).
+				return "", false
+			}
 			if rec, isMerge := r.merge(); isMerge {
 				return m.previewLinkFor(rec.Source, rec.Target, "", 0)
 			}

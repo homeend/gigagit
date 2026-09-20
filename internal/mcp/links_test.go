@@ -186,10 +186,72 @@ func TestCompareLinksReportsChangedFiles(t *testing.T) {
 	}
 }
 
-// Spec §9: two links naming different repositories are refused in phase 1.
-// The message must name the disagreement, not whichever half failed to
-// resolve first.
-func TestCompareLinksRefusesTwoRepositories(t *testing.T) {
+// twoFileFixture commits a.txt and b.txt, then changes BOTH, so a whole-tree
+// comparison lists two files and a file link's one — the arms differ, which
+// is what lets a test see whether a file link was narrowed.
+func twoFileFixture(t *testing.T, e *testEnv) (c1, c2 string) {
+	t.Helper()
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(e.dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("b.txt", "b one\n")
+	gitRun(t, e.dir, "add", "-A")
+	gitRun(t, e.dir, "commit", "-m", "add b.txt")
+	c1 = gitRun(t, e.dir, "rev-parse", "HEAD")
+	write("a.txt", "a two\n")
+	write("b.txt", "b two\n")
+	gitRun(t, e.dir, "add", "-A")
+	gitRun(t, e.dir, "commit", "-m", "change both")
+	return c1, gitRun(t, e.dir, "rev-parse", "HEAD")
+}
+
+func compareRows(out map[string]any) []string {
+	var rows []string
+	for _, f := range out["files"].([]any) {
+		m := f.(map[string]any)
+		rows = append(rows, m["status"].(string)+" "+m["path"].(string))
+	}
+	return rows
+}
+
+// A parsed LOCAL-form file link holds the checkout and the file undivided in
+// its repo half; only a locate splits them. gg_compare_links used to evaluate
+// without locating, so a file link compared the WHOLE TREE — a wrong answer
+// with no error.
+func TestCompareLinksNarrowsALocalFormFileLink(t *testing.T) {
+	e := newTestEnv(t)
+	c1, c2 := twoFileFixture(t, e)
+	whole := e.call(t, "gg_compare_links", map[string]any{"left": linkTo(e, "@"+c1), "right": linkTo(e, "@"+c2)})
+	if rows := compareRows(whole); len(rows) != 2 {
+		t.Fatalf("fixture: the whole-tree comparison lists %v, want 2 files — the arms must differ", rows)
+	}
+	out := e.call(t, "gg_compare_links", map[string]any{"left": linkTo(e, "/a.txt@"+c1), "right": linkTo(e, "/a.txt@"+c2)})
+	if rows := compareRows(out); len(rows) != 1 || rows[0] != "M a.txt" {
+		t.Fatalf("files = %v, want exactly [M a.txt]", rows)
+	}
+}
+
+// The same missing locate made the cross-repository pre-check compare two
+// UNSPLIT repo halves, so two files of ONE checkout read as two repositories.
+func TestCompareLinksTwoFilesOfOneCheckoutAreNotTwoRepositories(t *testing.T) {
+	e := newTestEnv(t)
+	c1, c2 := twoFileFixture(t, e)
+	out := e.call(t, "gg_compare_links", map[string]any{"left": linkTo(e, "/a.txt@"+c1), "right": linkTo(e, "/b.txt@"+c2)})
+	if rows := compareRows(out); strings.Join(rows, "|") != "D a.txt|A b.txt" {
+		t.Fatalf("files = %v, want [D a.txt, A b.txt]", rows)
+	}
+}
+
+// A link naming ANOTHER checkout is refused, and the refusal names its side.
+//
+// It reads as "unknown here", not as the door's cross-repository refusal, and
+// that is deliberate: this server hands the resolver no registry (the policy
+// resolveLinkArg documents — it answers only for the checkout it was pointed
+// at), so another checkout is never a candidate and domain.ErrLinkCrossRepo is
+// unreachable from MCP. Do not "fix" this by supplying a registry.
+func TestCompareLinksRefusesAnotherCheckout(t *testing.T) {
 	e := newTestEnv(t)
 	other := t.TempDir()
 	gitRun(t, other, "init", "-b", "main")
@@ -197,8 +259,16 @@ func TestCompareLinksRefusesTwoRepositories(t *testing.T) {
 		"left":  linkTo(e, "/a.txt"),
 		"right": "gg://" + filepath.ToSlash(other) + "/a.txt",
 	})
-	if !strings.Contains(msg, "different repositories") {
-		t.Errorf("error = %q, want it to name the cross-repo refusal", msg)
+	if !strings.HasPrefix(msg, "right: ") || !strings.Contains(msg, "unknown repository") {
+		t.Errorf("error = %q, want the RIGHT side refused as an unknown repository", msg)
+	}
+	// The mirror: the side named must follow the link, not be a constant.
+	msg = e.callErr(t, "gg_compare_links", map[string]any{
+		"left":  "gg://" + filepath.ToSlash(other) + "/a.txt",
+		"right": linkTo(e, "/a.txt"),
+	})
+	if !strings.HasPrefix(msg, "left: ") {
+		t.Errorf("error = %q, want the LEFT side named", msg)
 	}
 }
 

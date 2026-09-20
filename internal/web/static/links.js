@@ -94,11 +94,16 @@ function linkHintIDOK(id) {
 // id that cannot round-trip refuses the whole link rather than dropping the
 // hint silently.
 function linkFor(repo, worktree, ctx, side, no) {
-  const preview = (ctx && ctx.preview) || null;
+  let preview = (ctx && ctx.preview) || null;
   if (ctx && ctx.compare && !preview) return "";
   // A pull request's diff names its sides for DISPLAY (the head may live in a
-  // fork): a link built from them would address some other pair. Refuse.
-  if (preview && preview.pr) return "";
+  // fork): a link built from them would address some other pair. The server
+  // hands out the pair that IS addressable — gg's private refs/gg/pr/<n>
+  // against the base — and the link is built from that, or refused.
+  if (preview && preview.pr) {
+    if (!preview.linkSource || !preview.linkTarget) return "";
+    preview = { source: preview.linkSource, target: preview.linkTarget };
+  }
   const hint = (ctx && ctx.hint) || null;
   if (hint && !(linkHintKindOK(hint.kind) && linkHintIDOK(hint.id))) return "";
   if (preview && !(linkRefOK(preview.source) && linkRefOK(preview.target))) return "";

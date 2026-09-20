@@ -24,8 +24,13 @@ const (
 // the Model, never on the not-yet-built popup (mirrors the reword-prefill fix).
 // target decides which picker (bookmark vs shelf) consumes it.
 type pendingCompare struct {
-	ref    model.FileRef
-	entry  *entrySide // non-nil = the first pick is a commit entry (ref is then unused)
+	ref   model.FileRef
+	entry *entrySide // non-nil = the first pick is a commit entry (ref is then unused)
+	// link is the first pick's gg:// link when it came from the OTHER switcher
+	// (the cross flow); "" for a focused file picked from a . menu, and for an
+	// entry the grammar cannot address. A non-empty link is what routes the
+	// second pick through domain.CompareLinks.
+	link   string
 	label  string
 	target comparePopupKind
 }

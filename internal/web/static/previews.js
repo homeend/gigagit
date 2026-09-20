@@ -124,6 +124,10 @@ function armPreview(body) {
     // target are DISPLAY names — the head may live in a fork — so nothing may
     // send them back to the server as refs.
     pr: body.pr || 0,
+    // …and the pair a gg:// link to this PR's diff names instead
+    // (refs/gg/pr/<n> against the base). Copied into links, never sent back.
+    linkSource: body.link_source || "",
+    linkTarget: body.link_target || "",
   };
   // The previous PAIR's per-file numbers must not survive onto this one's file
   // list; loadPreviewCounts fills them in again a moment later. Re-arming the
@@ -131,9 +135,25 @@ function armPreview(body) {
   // badges do not blink off on every refresh.
   if (!samePair) state.previewCounts = null;
   // /api/preview/notes resolves branch NAMES; a PR's would 404 (a fork) or,
-  // worse, read a same-named local pair's notes.
-  if (state.previewOpen.pr) state.previewCounts = {};
+  // worse, read a same-named local pair's notes — a PR asks by its number.
+  if (state.previewOpen.pr) loadPRCounts(state.previewOpen.pr);
   else loadPreviewCounts(body.source, body.target);
+}
+
+
+// loadPRCounts is loadPreviewCounts for a pull request: its local notes plus
+// the review threads the server has cached, per file.
+export async function loadPRCounts(n) {
+  let d;
+  try {
+    d = await getJSON("/api/pr/notes?n=" + n);
+  } catch {
+    return; // decoration: no badge beats a wrong badge
+  }
+  const po = state.previewOpen;
+  if (!po || po.pr !== n) return; // superseded
+  state.previewCounts = d.counts || {};
+  renderFiles();
 }
 
 
@@ -198,6 +218,7 @@ export async function openPreviewBody(body, moved) {
   // merge-base(x)" is empty by construction), so it goes off the same way a
   // missing merge base turns it off — with the reason on the buttons.
   state.compare.originsError = "a merge preview is already merge-base → tip";
+  state.compare.previewPR = body.pr || 0;
   state.compare.previewBar = body.pr
     ? body.source + " → " + body.target + " · read-only"
     : "merge-base(" + body.target + ") → " + body.source;

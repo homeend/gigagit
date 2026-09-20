@@ -319,6 +319,18 @@ Every copy records into a per-repo history that `gg links` prints and the
 top. The browser records through it too, so a link copied in `gg web` shows
 up in `gg links`.
 
+**Compare with link…** (the `ctrl+p` palette) compares any two links inside the
+TUI: type or paste them, or press `↓` to pick from the links you copied;
+`ctrl+s` swaps the sides. A link naming a whole branch, tag or commit gets a
+**base row** under it — the branch's upstream or the trunk, a commit's parent.
+`enter` on that row rewrites the link into the bounded one (`@<base>...<branch>`
+or `@<parent>..<sha>`), so the comparison lists only what it changed; leave the
+row alone to compare the whole tree. `.` → **Save comparison…** keeps it in the
+**Previews** tab (the same entries `gg compare --save` / `--list` use): `enter`
+runs it again, `e`/`d`/`s` rename, remove and save it reversed, and the `.`
+menu copies either link. In the bookmark and shelf switchers, comparing across
+the two (`c`) now also accepts a commit against a single file.
+
 `<repo>` is the repository name of the repo's remote, resolved through the
 repository history behind the `R` switcher — so a link made on one machine
 finds the matching checkout here. In the TUI, `#` (or the palette's
@@ -398,7 +410,12 @@ diff, right-click for *copy URL* and *forget*, **⟳** on the header to re-read.
 It follows `[refresh] prs` too, in every open tab. A pull request you opened
 before shows at once from the local head and is checked against the forge in
 the background (new commits are fetched and the diff re-opened); a first open
-masks the panes with a loading notice.
+masks the panes with a loading notice. Review threads show inside the diff as
+read-only boxes (resolved ones folded; a whole-file comment leads the file) and
+are re-read on every `[refresh] prs` tick; every note box folds from its title
+(click, `z`, `Z` for all). **details…** in the row menu — or the `details` chip
+on the open diff — shows the description, the conversation with the review
+verdicts, and the outdated threads with their hunks.
 
 `refs/gg/pr/<n>` is local only: never pushed, never shown in the commit graph.
 The fetch goes through whichever of your remotes names the base repository, so

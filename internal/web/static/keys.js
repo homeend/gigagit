@@ -5,7 +5,7 @@ import { closeLayer, topLayer } from "./layers.js";
 import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
-import { addNotePrompt, cycleFilesSort, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNotesAgent } from "./files.js";
+import { addNotePrompt, cycleFilesSort, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { openPalette } from "./palette.js";
 import { branchFilterKey } from "./branchfilter.js";
 
@@ -184,6 +184,10 @@ document.addEventListener("keydown", (e) => {
     replyNotePrompt();
   } else if (noteKey(e, "a")) {
     toggleNotesAgent();
+  } else if (noteKey(e, "z")) {
+    collapseNearestNote(); // the TUI's o: fold the note you are on (o is the web's sort key)
+  } else if (noteKey(e, "Z")) {
+    toggleNoteCollapsed(null); // the TUI's O: every thread of this file
   } else if (noteKey(e, "}") || noteKey(e, "{")) {
     stepNote(e.key === "}" ? 1 : -1);
   } else if (e.key === "/") {

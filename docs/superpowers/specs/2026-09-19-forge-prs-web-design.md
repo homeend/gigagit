@@ -149,9 +149,11 @@ returns already include forge threads the notes list omits.
 answers `{changed}`. The PAGE posts it right after a PR diff opens (a GET
 never calls the forge — R2); a failure leaves the diff without threads.
 
-`GET /api/pr/details?n=7` → `PullRequest` (body) + `PRComments` (hub,
-outdated, truncated). This is a forge call, so it is the overlay's explicit
-load, never a side effect.
+`POST /api/pr/details?n=7` → `PullRequest` (body) + `PRComments` (hub,
+outdated, truncated). **Amended by plan 5:** this was drafted as a GET, which
+breaks R2 — the PR body is not in the listing (`gh pr view` only), so the
+overlay's load is always a forge call. It is therefore a write-guarded POST,
+the overlay's explicit load and never a side effect.
 
 **Client:**
 - `noteQuery` uses `pr` when `state.diffCtx.preview.pr` is set.

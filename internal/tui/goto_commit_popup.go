@@ -25,7 +25,7 @@ type gotoCommitPopup struct {
 	hist      linkHistPicker  // the copied-link history under the input (↓ enters it)
 }
 
-func (p *gotoCommitPopup) histPicker() *linkHistPicker { return &p.hist }
+func (p *gotoCommitPopup) histPickers() []*linkHistPicker { return []*linkHistPicker{&p.hist} }
 
 // openGotoCommitPopup pushes a fresh show-commit input. The shared seam called
 // by both the `#` key and the palette command, so the two paths never diverge.

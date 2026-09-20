@@ -87,6 +87,9 @@ func availableActions(m Model) []actionRow {
 				rows = append(rows, r)
 			}
 		} else if frontIsFilesView {
+			if r, ok := m.saveComparisonRow(); ok {
+				rows = append(rows, r)
+			}
 			if r, ok := m.viewFileRow(); ok {
 				rows = append(rows, r)
 			}
@@ -174,6 +177,7 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.contextLinkRow(); ok {
 		out = insertCopyLinkRow(out, r)
 	}
+	out = append(out, m.comparisonLinkRows()...)
 	out = append(out, window...)
 	if r, ok := m.fileEditRow(); ok {
 		out = append(out, r)
