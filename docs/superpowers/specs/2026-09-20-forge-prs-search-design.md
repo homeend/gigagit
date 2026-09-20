@@ -67,10 +67,15 @@ Search(ctx context.Context, q PRQuery) (prs []model.PullRequest, more bool, err 
 gh pr list --state <state> --limit <limit+1> --json <prFields> [--search <text>]
 ```
 
-- `--search` is omitted when `Text` is empty (a plain state listing).
 - The extra row is how `more` is known; it is cut before returning.
 - The text is the VALUE of `--search`, so a leading `-` cannot become a flag.
 - `parsePRList` is reused; rows carry no body (as in the open listing).
+- **Order.** `gh pr list` orders by CREATION date, and by "best match" once
+  `--search` is given (checked against a real repository, 2026-09-20), so a
+  cut at N would not be the N newest-updated. The gh provider therefore
+  ALWAYS passes `--search`, appending `sort:updated-desc` unless the text
+  already carries a `sort:` qualifier (empty text → `--search
+  sort:updated-desc`). This is GitHub syntax and stays below the seam.
 - An unknown `State` or a `Limit` outside 1…`MaxSearchLimit` is an error from
   `PRQuery.Normalize()` (`""` → `all`, `0` → `DefaultSearchLimit`), which
   every caller runs first; the provider never sees a bad query.
