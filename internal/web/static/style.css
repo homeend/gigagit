@@ -640,6 +640,28 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #help.hidden { display: none; }
 #help-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; max-width: 700px; max-height: 84vh; display: flex; flex-direction: column; cursor: default; }
 #help-body { overflow-y: auto; min-height: 0; }
+/* The pull-request details overlay rides the help overlay's frame. The web
+   hides by ID, so it needs its OWN .hidden rule. */
+#prdetails { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 11; cursor: pointer; }
+#prdetails.hidden { display: none; }
+#prdetails-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; padding: 18px 24px; width: min(860px, 92vw); max-height: 84vh; display: flex; flex-direction: column; cursor: default; }
+#prdetails-box h2 { margin: 0 0 10px; font-size: 15px; display: flex; gap: 12px; align-items: baseline; }
+#prdetails-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+#prdetails-box button { background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 8px; font: inherit; font-size: 11px; cursor: pointer; }
+#prdetails-box button:hover { border-color: var(--accent); }
+#prdetails-close { flex: none; }
+#prdetails-box h3 { margin: 16px 0 6px; font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+#prdetails-body { overflow-y: auto; min-height: 0; line-height: 1.5; }
+.prd-meta, .prd-url, .prd-none { color: var(--dim); }
+.prd-url button { margin-left: 8px; }
+.prd-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.prd-comment { margin: 0 0 10px; padding-left: 10px; border-left: 2px solid var(--border, #444); }
+.prd-who { color: #4fb3a8; font-size: .92em; }
+.prd-thread { margin: 0 0 14px; }
+.prd-where { color: var(--accent); }
+.prd-hunk { margin: 4px 0 6px; padding: 6px 8px; background: var(--bg); border-radius: 4px; overflow-x: auto; font-size: .92em; }
+.prd-reply { margin-left: 18px; }
+#compare-bar #pr-details-chip { flex: none; overflow: visible; max-width: none; }
 #help-search { flex: none; margin: 0 0 8px; }
 #help-search.hidden { display: none; }
 #help-h2-hint { float: right; font-weight: normal; font-size: 11px; color: var(--dim); margin-left: 12px; }
@@ -998,6 +1020,18 @@ table.diff tr.note td.note-gap { cursor: default; }
    name a preview uses for it (domain.PreviewStatus). */
 .notebox.outdated { border-color: var(--dim); color: var(--dim); }
 .notebox.outdated .notetitle { color: var(--dim); }
+/* A forge review thread (a pull request's comments): read-only, its own tint. */
+.notebox.forge { border-color: #4fb3a8; }
+.notebox.forge .notetitle { color: #4fb3a8; }
+/* Every box folds from its title line (click, or z / Z): the title stays, the
+   body goes. The fold is a class on the ROW so it toggles without a re-render. */
+.notetitle { cursor: pointer; }
+.notefold::before { content: "▾ "; }
+table.diff tr.note.collapsed .notefold::before { content: "▸ "; }
+table.diff tr.note.collapsed .notesum,
+table.diff tr.note.collapsed .notetext,
+table.diff tr.note.collapsed .notereply { display: none; }
+table.diff tr.note.collapsed .notebox { padding: 8px 12px 2px; }
 .notesum { font-weight: bold; }
 .notetext { opacity: .8; margin-top: 2px; }
 .notereply { margin-top: 8px; padding-left: 12px; }
