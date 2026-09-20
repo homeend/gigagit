@@ -40,15 +40,15 @@ The hint never changes what the link addresses (hint rule 1) and it degrades,
 never fails (rule 3). The address lands exactly as it does today; afterwards
 the consumer looks the entry up in its OWN loaded Previews list:
 
-| lookup, in order | result |
+| lookup, in order (the rev 2 ruling, unchanged) | result |
 |---|---|
-| 1. an entry with this id **that names the same set as the link's address** | reveal that row |
-| 2. any entry naming the same set (previews: same source + target names; pairs: same two full shas) | reveal that row |
+| 1. an entry with this id | reveal that row |
+| 2. an entry naming the same set as the link's address (previews: same source + target names; pairs: same two full shas) | reveal that row |
 | 3. nothing | notice: `preview <id> is not saved here; the link still landed` — this is rev 1's "show once": the diff is open, nothing is stored |
 
-"Names the same set" is compared on the PARSED halves, never on link text —
-the id hashes link text, and the text spells the repository by remote name on
-one machine and by path on another, which is exactly why step 2 exists.
+Step 2 compares the PARSED halves, never link text — the id hashes link
+text, and the text spells the repository by remote name on one machine and by
+path on another, which is exactly why step 2 exists.
 
 An `?preview=` hint with **no address** stays a hard error in
 `domain.finishLink` (the existing default arm — the hint carries no content
@@ -104,9 +104,8 @@ do it) · any change to the per-verb R4 table.
   rows; an address-less `?preview=` is refused by `finishLink`.
 - domain: `DescribeLink` — label when saved, fall-through when not; the two
   must disagree on one fixture (a saved and an unsaved link of the same set).
-- TUI: reveal by id · reveal by matching set when the id is foreign · an id
-  that hits an entry of a DIFFERENT set does not reveal it · notice on a
-  miss · the parked reveal drains once and is spent by a newer generation ·
+- TUI: reveal by id · reveal by matching set when the id is foreign ·
+  notice on a miss · the parked reveal drains once and is spent by a newer generation ·
   producer adds the hint for merge + pair rows and none for a comparison row.
 - web: handler test for the row `link`; node gates; a playwright probe
   (computed `display`, flash class, run first against a build with the
@@ -118,10 +117,6 @@ do it) · any change to the per-verb R4 table.
 ## 5. Decisions made here (tell me if any is wrong)
 
 1. One kind, `preview`, for merge previews AND pairs (rev 1 §5.1).
-2. An id hit counts only if the entry names the same set as the address;
-   otherwise the lookup continues by set. Rev 2 said "by id, else by matching
-   Left, else show once" — this only adds that a hand-edited or colliding id
-   can never reveal an unrelated row.
-3. Only entry-level copies produce the hint (§2.3).
-4. Address-less `?preview=` remains a hard error.
-5. `using-gg` is bumped: `gg link --preview <saved>` now prints a hinted link.
+2. Only entry-level copies produce the hint (§2.3).
+3. Address-less `?preview=` remains a hard error.
+4. `using-gg` is bumped: `gg link --preview <saved>` now prints a hinted link.
