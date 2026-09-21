@@ -88,7 +88,7 @@ func TestAltDigitSelectsSlotAndHidesRows(t *testing.T) {
 	if m.branchFilterSlot[panelBranches] != 1 {
 		t.Errorf("active = %d", m.branchFilterSlot[panelBranches])
 	}
-	if d := m.branchFilterDecoration(panelBranches); d != " ▽1 feat · 2 hidden" {
+	if d := m.branchFilterDecoration(panelBranches); d != " ▾1 feat · 2 hidden" {
 		t.Errorf("decoration = %q", d)
 	}
 }
@@ -334,7 +334,7 @@ func TestUnnamedSlotLabelIsTranslatable(t *testing.T) {
 	// must come from the bundle, not branchfilter's English Label().
 	m.branchFilters, _ = branchfilter.CompileAll([]branchfilter.Slot{{Slot: 4, Prefix: "feat/"}})
 	m.branchFilterSlot[panelBranches] = 4
-	if got := m.branchFilterDecoration(panelBranches); got != " ▽4 slot 4 · 2 hidden" {
+	if got := m.branchFilterDecoration(panelBranches); got != " ▾4 slot 4 · 2 hidden" {
 		t.Errorf("decoration = %q", got)
 	}
 	if got := bfLabel(m.branchFilters[3]); got != i18n.T("slot %d", 4) {

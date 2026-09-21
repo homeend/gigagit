@@ -166,7 +166,7 @@ async function saveSettings() {
 
 // ── branch filters ────────────────────────────────────────────────────────
 //
-// The five slots the ▽ chip activates. This section owns its own save
+// The five slots the ▾ chip activates. This section owns its own save
 // button, separate from the panel's batched one: a rule is a form, not a
 // field, and half a rule is not a value the panel could sensibly carry in
 // its unsaved bar.
@@ -233,7 +233,7 @@ function bfSection(d) {
     .join("");
   return `
     <h3>branch filters</h3>
-    <div class="srow"><span class="snote">five slots for the branches / remotes lists (alt+1…5 · alt+shift+1…5, or the ▽ chip). a repo block replaces the global block for the same slot</span></div>
+    <div class="srow"><span class="snote">five slots for the branches / remotes lists (alt+1…5 · alt+shift+1…5, or the ▾ chip). a repo block replaces the global block for the same slot</span></div>
     ${warn}${rows}
     <div id="bf-form" class="hidden"></div>`;
 }

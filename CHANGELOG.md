@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Branch filters: a marker that does not crowd the slot number
+
+### Fixed
+
+- The active branch-filter marker in the Branches / Remotes header (and the
+  `gg web` chip) is now `▾` instead of `▽`. U+25BD is an East Asian
+  ambiguous-width character, so many terminals drew it two cells wide on top
+  of the slot digit next to it, which made the header hard to read.
+
 ## `gg web`: drag one Previews row onto another to compare them
 
 Comparing two saved change-sets meant copying one row's link, opening **compare
@@ -23,6 +32,7 @@ a drop target (the browser's own no-drop cursor), as is a row dropped on
 itself. The way in without a drag is **compare with…** in a preview's or a
 pair's right-click menu — the compare dialog, its left field holding that
 row's link. Client only: no new route, no new preference.
+
 
 ## Previews tab: mark two rows and compare them
 

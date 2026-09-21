@@ -393,7 +393,7 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 }
 .sortchip:hover { color: var(--accent); opacity: 1; border-color: var(--border); }
 /* The branch-filter chip (branches and remotes only): the active slot, or a
-   bare ▽ when none is on. It takes the header's free space so the two chips
+   bare ▾ when none is on. It takes the header's free space so the two chips
    sit together at the right — the sort chip's own margin-left:auto would
    otherwise split the gap between them. A slot name is user-chosen and
    unbounded, so the chip ellipsizes rather than wrapping the header into four
