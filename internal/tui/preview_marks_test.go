@@ -176,3 +176,36 @@ func TestPreviewMarkSurvivesTheFilter(t *testing.T) {
 		t.Fatalf("visible row first, hidden mark second\n got %q\nwant %q", got, want)
 	}
 }
+
+// The load takes seconds on a slow mount and the view opens only when it
+// lands: the key must SAY it is working, and a second space meanwhile must not
+// unmark the row (the reported "I have to press it again" bug).
+func TestPreviewCompareInFlightSaysSoAndSwallowsSpace(t *testing.T) {
+	t.Parallel()
+	m, _, _ := previewMarksModel(t)
+	m, _ = previewSpace(t, m, 0)
+	m, cmd := previewSpace(t, m, 1)
+	if cmd == nil || m.statusMsg != "comparing…" {
+		t.Fatalf("the second mark must announce the load: cmd=%v status=%q", cmd != nil, m.statusMsg)
+	}
+	m, again := previewSpace(t, m, 1)
+	if again != nil || len(m.previewCompareSet) != 2 {
+		t.Fatalf("space while loading is swallowed: cmd=%v set=%v", again != nil, m.previewCompareSet)
+	}
+	m = pumpAll(t, m, cmd)
+	if m.filesSets == nil {
+		t.Fatalf("the first load still opens the view (status %q)", m.statusMsg)
+	}
+}
+
+func TestPreviewEscCancelsALoadingCompare(t *testing.T) {
+	t.Parallel()
+	m, _, _ := previewMarksModel(t)
+	m, _ = previewSpace(t, m, 0)
+	m, cmd := previewSpace(t, m, 1)
+	m, _ = send(m, keyType(tea.KeyEsc))
+	m = pumpAll(t, m, cmd)
+	if m.filesSets != nil || len(m.previewCompareSet) != 0 {
+		t.Fatalf("esc drops the marks and the load: sets=%v set=%v", m.filesSets != nil, m.previewCompareSet)
+	}
+}

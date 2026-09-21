@@ -76,6 +76,14 @@ func (m Model) togglePreviewMark(limit int) (_ Model, marked bool) {
 	if !m.opsIdle() {
 		return m, false
 	}
+	// A comparison is loading (a link compare is ~50 git calls — seconds on a
+	// slow mount). Swallow the key: a second space here would UNMARK the row
+	// the user just marked, and the view would then open over a set that no
+	// longer says why. esc cancels (it drops the marks and the load).
+	if m.linkCompareWant != "" {
+		m.statusMsg = i18n.T("comparing…")
+		return m, false
+	}
 	r, ok := m.selectedPreview()
 	if !ok {
 		return m, false
@@ -119,7 +127,13 @@ func (m Model) compareMarkedPreviews() (Model, tea.Cmd) {
 	if len(links) != 2 {
 		return m, nil
 	}
-	return m.startLinkCompare(links[0], links[1])
+	m, cmd := m.startLinkCompare(links[0], links[1])
+	if cmd != nil {
+		// The view only opens when the load lands; until then this line is the
+		// one sign the key did anything.
+		m.statusMsg = i18n.T("comparing…")
+	}
+	return m, cmd
 }
 
 // previewCompareMarkedRow is the `.` menu's consumer of the m-marked pair.

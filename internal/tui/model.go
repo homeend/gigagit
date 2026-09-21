@@ -2822,6 +2822,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.focus == panelPreviews && len(m.previewCompareSet) > 0 {
 				m.previewCompareSet = nil
+				if m.linkCompareWant != "" { // a compare of those marks is loading: drop it on arrival
+					m.linkCompareWant = ""
+					m.statusMsg = ""
+				}
 				return m, nil
 			}
 			// Same on the file panels: one esc drops ALL m-marked files.
