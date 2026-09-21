@@ -6,6 +6,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## `gg web`: two change-sets, side by side — the symmetric comparison view
+
+Comparing two change-sets (two merge previews, a commit pair against a
+preview, two agents' attempts at one job) used to paint as an ordinary file
+list, and that list said it badly: `D` there meant "only the left set touches
+this file", a file both sets changed **identically** vanished, a file one set
+**deletes** and the other never touched vanished too, and nothing named the
+diff's direction.
+
+- A link comparison whose two sides are both *sets* now offers **⇄ symmetric**
+  (chip on the comparison's bar, or `v`): the left set's file list on the left,
+  the right set's on the right, **row for row**, with one diff between them.
+- Each side says what THAT set holds: a normal row (it changes the file), a
+  struck-through `D` row (the set **deletes** it), or an inert `· · ·` gap (the
+  set does not touch it). A centre glyph sums the row up — `≠` differ, `=` the
+  same in both, `◁` / `▷` only one side. Clicking either side selects the row
+  on both.
+- Filter chips with counts (`1`–`4`): **differ** · **all** · **one side** ·
+  **same**. Identical files are dimmed and hidden by default; the counts are
+  the summary ("3 differ · 1 same").
+- The **arrow over the diff** names the direction — which set is the old side,
+  which the new — and a click (or `x`) flips it. The two lists never move; only
+  the diff turns around.
+- A file with content on neither side (deleted by one set, untouched by the
+  other) says so instead of opening an empty diff.
+- Opt-in, remembered per user (`/api/uistate`), and off below a 1200px window,
+  where the chip is disabled and the classic list shows. The classic view is
+  unchanged. Pair landings and comparisons with a whole-tree side do not offer
+  it — there are no two member lists to align.
+- **The compare-with-link dialog says what its links are.** Under each field
+  sits the link's description — `pair: Fix tests to use the right field name`,
+  `preview: main...feat/x` — whether it was picked from the history, pasted or
+  typed, plus *copied from a saved preview* when it carries that landing hint.
+  The field itself still holds the link; two forty-digit ids told nobody which
+  change they had picked.
+- **Comparing says it is comparing.** Two large sets take seconds: the dialog
+  shows a spinner line and disables its button, and the bottom line says
+  *comparing… reading both sides* for a saved row or a pair landing too.
+- **The file list's header names the kind of screen**: a *preview comparison*,
+  *commit-pair comparison*, *link comparison* or *commit pair* badge ahead of
+  the two descriptions, with both link texts in its tooltip.
+- Under it: `domain.LinkComparison.SymmetricRows()` aligns two bounded sets
+  (pure, no git call) and `/api/compare-links` answers them as `sym` beside the
+  unchanged `files`. TUI, CLI and MCP are untouched.
+
 ## `gg web`: the page notices when the server is gone
 
 ### Added

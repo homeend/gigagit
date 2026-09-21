@@ -69,7 +69,7 @@ func TestUIStateStartsUnsaved(t *testing.T) {
 
 func TestUIStateRoundTrips(t *testing.T) {
 	ts := serve(t, uiServer(t))
-	body := `{"sections":["tags","reflog"],"sidebar_hidden":true,"sidebar_width":310,"files_width":420,"graph":"off","diff_view":"changed","files_hidden":true,"text_mode":"scroll"}`
+	body := `{"sections":["tags","reflog"],"sidebar_hidden":true,"sidebar_width":310,"files_width":420,"graph":"off","diff_view":"changed","files_hidden":true,"sym_compare":true,"text_mode":"scroll"}`
 	var put uiStateWire
 	if code := putJSON(t, ts, "/api/uistate", body, "", &put); code != http.StatusOK {
 		t.Fatalf("PUT code = %d", code)
@@ -78,7 +78,7 @@ func TestUIStateRoundTrips(t *testing.T) {
 		t.Fatal("PUT response must report saved=true")
 	}
 	st := getUIState(t, ts)
-	if !st.Saved || st.SidebarWidth != 310 || st.FilesWidth != 420 || !st.SidebarHidden || st.Graph != "off" || st.DiffView != "changed" || !st.FilesHidden || st.TextMode != "scroll" {
+	if !st.Saved || st.SidebarWidth != 310 || st.FilesWidth != 420 || !st.SidebarHidden || st.Graph != "off" || st.DiffView != "changed" || !st.FilesHidden || !st.SymCompare || st.TextMode != "scroll" {
 		t.Fatalf("round trip = %+v", st)
 	}
 	if len(st.Sections) != 2 || st.Sections[0] != "tags" || st.Sections[1] != "reflog" {

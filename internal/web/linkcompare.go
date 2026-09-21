@@ -85,6 +85,28 @@ type linkSideWire struct {
 	Text string `json:"text"`
 	Desc string `json:"desc"`
 	Spec string `json:"spec"`
+	// Kind is what the link NAMES — preview | pair | commit | ref | staged |
+	// worktree — so the page can title the screen ("preview comparison")
+	// without parsing a link, which it cannot do.
+	Kind string `json:"kind"`
+}
+
+// linkTargetKind names a parsed link's target for the wire.
+func linkTargetKind(l model.Link) string {
+	t := l.Target
+	switch {
+	case t.Preview != nil:
+		return "preview"
+	case t.Pair != nil:
+		return "pair"
+	case t.Ref != "":
+		return "ref"
+	case t.State == model.StateCommitted:
+		return "commit"
+	case t.State == model.StateStaged:
+		return "staged"
+	}
+	return "worktree"
 }
 
 type linkFileWire struct {
@@ -95,6 +117,40 @@ type linkFileWire struct {
 	// other than its side's own endpoint (a `-u` stash's untracked file).
 	LeftSpec  string `json:"left_spec,omitempty"`
 	RightSpec string `json:"right_spec,omitempty"`
+}
+
+// symRowWire is one aligned row: the path, what each side holds for it
+// (domain.MemberState) and whether the plain listing reports it. The specs
+// follow linkFileWire's rule — set only where this member's bytes live
+// somewhere other than its side's own endpoint — and ride EVERY row, because
+// an identical row is openable too.
+type symRowWire struct {
+	Path      string `json:"path"`
+	Left      string `json:"left"`
+	Right     string `json:"right"`
+	Differs   bool   `json:"differs"`
+	LeftSpec  string `json:"left_spec,omitempty"`
+	RightSpec string `json:"right_spec,omitempty"`
+}
+
+func symWireRows(c domain.LinkComparison, rows []domain.SymRow, leftSpec, rightSpec string) ([]symRowWire, error) {
+	out := make([]symRowWire, len(rows))
+	for i, r := range rows {
+		ls, lerr := linkSideSpec(c.Left.Source(r.Path))
+		rs, rerr := linkSideSpec(c.Right.Source(r.Path))
+		if err := errors.Join(lerr, rerr); err != nil {
+			return nil, err
+		}
+		row := symRowWire{Path: r.Path, Left: string(r.Left), Right: string(r.Right), Differs: r.Differs}
+		if ls != leftSpec {
+			row.LeftSpec = ls
+		}
+		if rs != rightSpec {
+			row.RightSpec = rs
+		}
+		out[i] = row
+	}
+	return out, nil
 }
 
 // pairSides spells a commit pair as the two links the door compares: the
@@ -180,11 +236,11 @@ func (s *Server) writeLinkComparison(w http.ResponseWriter, r *http.Request, lef
 	}
 	sideWire := func(text string, fs domain.FileSet) (linkSideWire, error) {
 		spec, err := linkSideSpec(fs.Endpoint())
-		desc := text
+		desc, kind := text, ""
 		if l, perr := model.ParseLink(text); perr == nil {
-			desc = svc.DescribeLink(ctx, l)
+			desc, kind = svc.DescribeLink(ctx, l), linkTargetKind(l)
 		}
-		return linkSideWire{Text: text, Desc: desc, Spec: spec}, err
+		return linkSideWire{Text: text, Desc: desc, Spec: spec, Kind: kind}, err
 	}
 	lw, err := sideWire(c.LeftText, c.Left)
 	if err != nil {
@@ -216,6 +272,20 @@ func (s *Server) writeLinkComparison(w http.ResponseWriter, r *http.Request, lef
 		files[i] = row
 	}
 	out := map[string]any{"left": lw, "right": rw, "files": files}
+	// Two BOUNDED sets also answer their ALIGNED rows (the symmetric view). A
+	// pair landing is a commit diff with a note scope, not two sets, and an
+	// unbounded side has no members to align: neither carries the field, and
+	// the page offers the view only where it is there.
+	if pair == nil {
+		if rows, ok := c.SymmetricRows(); ok {
+			sym, err := symWireRows(c, rows, lw.Spec, rw.Spec)
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, err)
+				return
+			}
+			out["sym"] = sym
+		}
+	}
 	if label != "" {
 		out["label"] = label
 	}

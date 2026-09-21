@@ -99,13 +99,17 @@
     </div>
     <div id="commits-scroll"><div id="commits-spacer"><div id="commits-window"></div></div></div>
   </section>
+  <section id="symleft-pane" class="pane">
+    <div id="symleft-spacer"></div>
+    <ul id="symleft-list"></ul>
+  </section>
   <section id="files-pane" class="pane">
     <div id="files-top">
     <div id="back-bar">
       <button id="back-btn" title="one stage back (esc): diff → files → list">← back</button>
       <button id="files-min" title="hide the file list — more room for the diff" aria-expanded="true">»</button>
     </div>
-    <div id="files-header"><span id="files-title"></span><span id="files-sort" class="hidden"></span><span id="files-meta" class="hidden"></span><div id="files-desc" class="hidden"></div><button id="files-desc-more" class="hidden" title="open the whole commit message">show full message…</button></div>
+    <div id="files-header"><span id="files-kind" class="hidden"></span><span id="files-title"></span><span id="files-sort" class="hidden"></span><span id="files-meta" class="hidden"></span><div id="files-desc" class="hidden"></div><button id="files-desc-more" class="hidden" title="open the whole commit message">show full message…</button></div>
     </div>
     <div id="compare-bar" class="hidden"></div>
     <div id="files-actions" class="hidden">
@@ -122,6 +126,7 @@
   </section>
   <div id="rs-detail" class="resizer" title="drag to resize · double-click to reset"></div>
   <section id="diff-pane" class="pane" tabindex="-1">
+    <div id="sym-dir" class="hidden"></div>
     <div id="diff-header">
       <span id="diff-title"></span>
       <span id="hunk-bar" class="hidden"><button id="hunk-stage" disabled>stage selected (0)</button><button id="hunk-all">all</button><button id="hunk-none">none</button></span>
@@ -169,6 +174,7 @@
         <div class="lc-row"><label for="linkcmp-basein-left">base <span class="lc-why"></span></label><input id="linkcmp-basein-left" class="lc-basein" spellcheck="false" autocomplete="off"><button class="lc-bound" data-side="left" title="rewrite the link to be relative to this base (enter)">bound</button></div>
         <div id="linkcmp-baseerr-left" class="lc-err hidden"></div>
       </div>
+      <div id="linkcmp-desc-left" class="lc-desc hidden"></div>
       <div id="linkcmp-err-left" class="lc-err hidden"></div>
       <ul id="linkcmp-hist-left" class="lc-hist hidden"></ul>
     </div>
@@ -178,10 +184,12 @@
         <div class="lc-row"><label for="linkcmp-basein-right">base <span class="lc-why"></span></label><input id="linkcmp-basein-right" class="lc-basein" spellcheck="false" autocomplete="off"><button class="lc-bound" data-side="right" title="rewrite the link to be relative to this base (enter)">bound</button></div>
         <div id="linkcmp-baseerr-right" class="lc-err hidden"></div>
       </div>
+      <div id="linkcmp-desc-right" class="lc-desc hidden"></div>
       <div id="linkcmp-err-right" class="lc-err hidden"></div>
       <ul id="linkcmp-hist-right" class="lc-hist hidden"></ul>
     </div>
     <div id="linkcmp-err" class="lc-err hidden"></div>
+    <div id="linkcmp-busy" class="hidden"><span class="lc-spin"></span>comparing… reading both sides</div>
     <div id="linkcmp-foot"><button id="linkcmp-swap" title="swap sides (ctrl+s)">⇅ swap</button><button id="linkcmp-go">compare</button></div>
   </div>
 </div>
@@ -321,6 +329,7 @@
     <div class="hrow"><span class="hkey">branch</span><span>click: jump the list to its tip · right-click: switch, pull / push it, <b>merge it into the current branch</b>, <b>rebase the current branch onto it</b> (the drag pair-ops as plain rows) or <b>fast-forward the current branch to it</b> (refused unless it is strictly ahead), copy its name / tip commit id / worktree path, delete · drag onto another branch: merge or rebase</span></div>
     <div class="hrow"><span class="hkey">make a branch</span><span>right-click a branch → <b>rename</b>, <b>create branch from here</b>, or <b>create worktree for this branch</b> (only when it has none). Each asks in a one-line prompt: enter confirms, esc cancels. A configured worktree post-create hook is shown for approval before it runs</span></div>
     <div class="hrow"><span class="hkey">compare two branches</span><span>drag a branch onto another → <b>compare A ↔ B</b> lists every file that differs between the two tips. The bar above the file list filters by <b>origin</b>: only the files one side changed since the branches diverged (a file both sides touched shows in either). Without a common ancestor the list still opens — only the filter is unavailable</span></div>
+    <div class="hrow"><span class="hkey">two change-sets, side by side</span><span>a link comparison of two SETS (two previews, a pair against a preview, two agents' attempts) offers <b>⇄ symmetric</b> (<b>v</b>): each set's file list on its own side, row for row — a gap where a set does not touch the file, a struck-through row where it DELETES it, and a dimmed <b>=</b> row where both changed it identically. One diff sits between them; the arrow over it (<b>x</b>) flips which set is old and which is new — the lists stay put. <b>1</b>–<b>4</b> filter: differ · all · one side · same. It needs a window at least 1200px wide and is remembered.</span></div>
     <div class="hrow"><span class="hkey">force push</span><span>right-click a branch → <b>force push…</b> asks which kind before doing anything: <b>force-with-lease</b> (refuses if the remote moved since your last fetch) or plain <b>force</b> (overwrites regardless), both red, plus abort. The same prompt you get when an ordinary push is rejected — this row just reaches it without waiting for the rejection</span></div>
     <div class="hrow"><span class="hkey">previous versions</span><span>right-click a branch → <b>previous versions…</b> lists what it pointed at before each recent operation (merge, rebase, amend, reset, delete…). Click one to <b>restore</b> the branch to it, copy its commit id, or delete the snapshot. Restoring is itself recorded, so it can be undone the same way</span></div>
     <div class="hrow"><span class="hkey">review (AI)</span><span>right-click a branch → <b>review … (AI)</b> runs a configured review agent over that branch's work; the ☰ menu and palette carry <b>review working changes</b>. gg names a <b>tool</b>, never a command: the command comes from your own <code>[[tools.command]]</code> config with <code>category = "review"</code>, is shown in full for approval before its first run, and the approval is remembered per repo until you edit it. The report is shown when it finishes and also saved to a file, whose path the viewer shows</span></div>

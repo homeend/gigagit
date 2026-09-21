@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>gg web — symmetric compare (MOCK)</title>
+<style>
+:root {
+  --bg: #14161a; --bg-alt: #1c1f26; --fg: #d8dee9; --dim: #7a828e;
+  --accent: #6ea8fe; --sel: #2a3550; --border: #2a2e37; --edge: #3a4150;
+  --add: #1f3d2b; --del: #46262a; --span-add: #2f6b41; --span-del: #8a3b42;
+  --warn: #e0c06c; --ok: #7bd88f; --bad: #f27a6a;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { display: flex; flex-direction: column; background: var(--bg); color: var(--fg);
+  font: 13px/1.5 "JetBrains Mono", "Cascadia Code", Consolas, monospace; }
+#top { padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+#top b { color: var(--accent); } #top .dim { color: var(--dim); }
+#mockbar { padding: 4px 12px; background: #3d3520; color: var(--warn); font-size: 12px; }
+#bar { display: flex; gap: 10px; align-items: center; padding: 6px 12px;
+  border-bottom: 1px solid var(--border); background: var(--bg-alt); flex-wrap: wrap; }
+#bar .title { color: var(--dim); margin-right: auto; }
+.chip { border: 1px solid var(--border); border-radius: 10px; padding: 0 9px; cursor: pointer;
+  color: var(--dim); background: none; font: inherit; }
+.chip.on { color: var(--fg); border-color: var(--accent); background: var(--sel); }
+.chip:disabled { opacity: .4; cursor: not-allowed; }
+.chip b { color: var(--accent); font-weight: normal; }
+#panes { flex: 1; display: grid; min-height: 0; grid-template-columns: 300px 1fr 300px; }
+#panes.classic { grid-template-columns: 1fr 320px; }
+#panes.classic #left { display: none; }
+#panes.classic #mid { order: 1; } #panes.classic #right { order: 2; }
+.list { overflow: auto; border-right: 1px solid var(--edge); }
+#right { border-right: 0; border-left: 1px solid var(--edge); }
+.list h3 { position: sticky; top: 0; background: var(--bg-alt); font-size: 12px; font-weight: normal;
+  padding: 5px 10px; border-bottom: 1px solid var(--border); color: var(--dim); }
+.list h3 b { color: var(--fg); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row { display: flex; height: 24px; align-items: center; padding: 0 8px; gap: 6px; white-space: nowrap; overflow: hidden; }
+.row.click { cursor: pointer; } .row.click:hover { background: #20242d; }
+.row.sel { background: var(--sel) !important; }
+.row .st { width: 12px; color: var(--dim); text-align: center; }
+.row .p { overflow: hidden; text-overflow: ellipsis; }
+.row .g { margin-left: auto; width: 16px; text-align: center; }
+#left .row { flex-direction: row; } #left .row .g { order: 3; }
+#right .row .g { order: -1; margin-left: 0; margin-right: 2px; }
+.row.absent { color: #3a4150; cursor: default; }
+.row.absent .p { letter-spacing: 2px; }
+.row.deleted .p { text-decoration: line-through; color: var(--bad); }
+.row.deleted .st { color: var(--bad); }
+.row.same { opacity: .45; }
+.g.ne { color: var(--warn); } .g.eq { color: var(--ok); } .g.ol, .g.or { color: var(--accent); }
+#mid { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+#dir { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 7px 12px;
+  border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+#dir .lab { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dir .lab.l { text-align: right; } #dir .lab small { color: var(--dim); display: block; font-size: 11px; }
+#dir .lab.old b { color: var(--bad); } #dir .lab.new b { color: var(--ok); }
+#flip { font: inherit; font-size: 18px; line-height: 1; color: var(--accent); background: var(--bg);
+  border: 1px solid var(--accent); border-radius: 14px; padding: 2px 16px; cursor: pointer; }
+#flip:hover { background: var(--sel); }
+#fhead { padding: 5px 12px; color: var(--dim); border-bottom: 1px solid var(--border); }
+#fhead b { color: var(--fg); }
+#diff { flex: 1; overflow: auto; }
+table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
+table.diff td { padding: 0 8px; white-space: pre; overflow: hidden; text-overflow: ellipsis; vertical-align: top; }
+table.diff td.no { width: 44px; text-align: right; color: var(--dim); user-select: none; }
+table.diff td.sep { width: 1px; padding: 0; background: var(--border); }
+td.add { background: var(--add); } td.del { background: var(--del); } td.gap { background: #181b20; }
+.empty { padding: 40px; color: var(--dim); text-align: center; }
+#foot { padding: 4px 12px; border-top: 1px solid var(--border); background: var(--bg-alt); color: var(--dim); font-size: 12px; }
+kbd { border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; color: var(--fg); }
+</style>
+</head>
+<body>
+<div id="top"><b>acme-shop</b> <span class="dim">⎇ main</span></div>
+<div id="mockbar">MOCK — static page with fake data. Not wired to gg. Try: click rows on either side · the arrow · the chips · <kbd>j</kbd>/<kbd>k</kbd> · <kbd>x</kbd> flip · <kbd>s</kbd> symmetric on/off</div>
+
+<div id="bar">
+  <span class="title">Saved comparison: <b style="color:var(--fg)">login — agent A vs agent B</b></span>
+  <span id="chips"></span>
+  <button class="chip on" id="sym" title="two aligned file lists (needs a wide window)">⇄ symmetric</button>
+</div>
+
+<div id="panes">
+  <div class="list" id="left"></div>
+  <div id="mid">
+    <div id="dir">
+      <div class="lab l" id="labL"></div>
+      <button id="flip" title="flip the diff direction (x)">→</button>
+      <div class="lab r" id="labR"></div>
+    </div>
+    <div id="fhead"></div>
+    <div id="diff"></div>
+  </div>
+  <div class="list" id="right"></div>
+</div>
+<div id="foot"><kbd>j</kbd>/<kbd>k</kbd> row · <kbd>x</kbd> flip direction · <kbd>s</kbd> symmetric view · <kbd>1</kbd>–<kbd>4</kbd> filter · <kbd>esc</kbd> back</div>
+
+<script>
+// ---- fake data --------------------------------------------------------------
+// per side: "present" | "deleted" (the set deletes this file) | "absent" (not in this set)
+const L = { name: "preview: main ... agent-a/login", sub: "6 files · merge-base 4f1c2ab → a91e0d3" };
+const R = { name: "preview: main ... agent-b/login", sub: "7 files · merge-base 4f1c2ab → 77b3c10" };
+const rows = [
+  { p: "auth/login.go",          l: "present", r: "present", same: false,
+    a: ["func Login(u, p string) error {", "\tif u == \"\" {", "\t\treturn ErrNoUser", "\t}", "\treturn check(u, p)", "}"],
+    b: ["func Login(ctx context.Context, u, p string) error {", "\tif u == \"\" || p == \"\" {", "\t\treturn ErrCredentials", "\t}", "\treturn check(ctx, u, p)", "}"] },
+  { p: "auth/login_test.go",     l: "present", r: "present", same: false,
+    a: ["func TestLogin(t *testing.T) {", "\tif err := Login(\"\", \"x\"); err == nil {", "\t\tt.Fatal(\"want error\")", "\t}", "}"],
+    b: ["func TestLogin(t *testing.T) {", "\tfor _, c := range cases {", "\t\tif err := Login(ctx, c.u, c.p); !errors.Is(err, c.want) {", "\t\t\tt.Fatalf(\"%s: %v\", c.name, err)", "\t\t}", "\t}", "}"] },
+  { p: "auth/errors.go",         l: "present", r: "present", same: true,
+    a: ["var ErrNoUser = errors.New(\"no user\")", "var ErrLocked = errors.New(\"locked\")"],
+    b: ["var ErrNoUser = errors.New(\"no user\")", "var ErrLocked = errors.New(\"locked\")"] },
+  { p: "auth/legacy_md5.go",     l: "deleted", r: "present", same: false,
+    a: null, b: ["// Deprecated: kept for old accounts.", "func md5sum(s string) string {", "\treturn hex(md5.Sum([]byte(s)))", "}"] },
+  { p: "auth/ratelimit.go",      l: "absent",  r: "present", same: false,
+    a: null, b: ["type limiter struct{ n int }", "", "func (l *limiter) Allow() bool {", "\tl.n++", "\treturn l.n < 5", "}"] },
+  { p: "docs/login.md",          l: "present", r: "absent",  same: false,
+    a: ["# Login", "", "Call `auth.Login(user, pass)`.", "Errors: ErrNoUser, ErrLocked."], b: null },
+  { p: "go.mod",                 l: "present", r: "present", same: true,
+    a: ["module acme/shop", "go 1.26"], b: ["module acme/shop", "go 1.26"] },
+  { p: "web/login.html",         l: "absent",  r: "deleted", same: false, a: null, b: null },
+];
+// ---- state ------------------------------------------------------------------
+let sel = 0, flipped = false, filter = "diff", symmetric = true;
+const kind = r => r.same ? "eq" : (r.l === "absent" || (r.l === "deleted" && r.r !== "deleted" && false)) ? "or"
+  : r.l === "absent" ? "or" : r.r === "absent" ? "ol" : "ne";
+const GLYPH = { ne: "≠", eq: "=", ol: "◁", or: "▷" };
+const TIP = { ne: "differs", eq: "identical in both sets", ol: "only in the left set", or: "only in the right set" };
+const FILTERS = [["diff", "differences", r => !r.same], ["all", "all", () => true],
+  ["one", "one side only", r => r.l === "absent" || r.r === "absent"], ["eq", "identical", r => r.same]];
+const visible = () => rows.filter(FILTERS.find(f => f[0] === filter)[2]);
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+
+function sideRow(r, side, i) {
+  const st = r[side], k = kind(r);
+  const g = `<span class="g ${k}" title="${TIP[k]}">${GLYPH[k]}</span>`;
+  if (st === "absent") return `<div class="row absent" title="not in this set"><span class="st"></span><span class="p">· · · · · ·</span>${g}</div>`;
+  const cls = ["row", "click", st === "deleted" ? "deleted" : "", r.same ? "same" : "", i === sel ? "sel" : ""].join(" ");
+  const mark = st === "deleted" ? "D" : r.same ? "" : "M";
+  const tip = st === "deleted" ? "this set DELETES the file" : "in this set";
+  return `<div class="${cls}" data-i="${i}" title="${tip}"><span class="st">${mark}</span><span class="p">${esc(r.p)}</span>${g}</div>`;
+}
+function classicRow(r, i) {           // today's view: one list, tree-diff letters
+  const from = flipped ? "r" : "l", to = flipped ? "l" : "r";
+  const has = s => r[s] === "present";
+  const st = r.same ? "=" : !has(from) && has(to) ? "A" : has(from) && !has(to) ? "D" : "M";
+  return `<div class="row click ${r.same ? "same" : ""} ${i === sel ? "sel" : ""}" data-i="${i}"><span class="st">${st}</span><span class="p">${esc(r.p)}</span></div>`;
+}
+function diffTable(r) {
+  const from = flipped ? r.b : r.a, to = flipped ? r.a : r.b;
+  if (!from && !to) return `<div class="empty">The right set deletes this file and the left set never touched it — there is no content on either side to compare.</div>`;
+  const n = Math.max(from ? from.length : 0, to ? to.length : 0); let h = `<table class="diff">`;
+  for (let i = 0; i < n; i++) {
+    const a = from && from[i] !== undefined ? from[i] : null, b = to && to[i] !== undefined ? to[i] : null;
+    const ch = a !== b;
+    h += `<tr><td class="no">${a !== null ? i + 1 : ""}</td><td class="${a === null ? "gap" : ch ? "del" : ""}">${a !== null ? esc(a) : ""}</td>`
+       + `<td class="sep"></td><td class="no">${b !== null ? i + 1 : ""}</td><td class="${b === null ? "gap" : ch ? "add" : ""}">${b !== null ? esc(b) : ""}</td></tr>`;
+  }
+  return h + `</table>`;
+}
+function render() {
+  const vis = visible(); if (sel >= vis.length) sel = Math.max(0, vis.length - 1);
+  document.getElementById("chips").innerHTML = FILTERS.map(([id, label, fn], n) =>
+    `<button class="chip ${filter === id ? "on" : ""}" data-f="${id}" title="key ${n + 1}">${label} <b>${rows.filter(fn).length}</b></button>`).join(" ");
+  document.getElementById("panes").className = symmetric ? "" : "classic";
+  document.getElementById("sym").classList.toggle("on", symmetric);
+  const head = (s, role) => `<h3>${role}<b title="${s.name}">${s.name}</b>${s.sub}</h3>`;
+  document.getElementById("left").innerHTML = head(L, "LEFT set") + vis.map((r, i) => sideRow(r, "l", i)).join("");
+  document.getElementById("right").innerHTML = symmetric
+    ? head(R, "RIGHT set") + vis.map((r, i) => sideRow(r, "r", i)).join("")
+    : `<h3>Files<b>today's single list</b>${vis.length} rows</h3>` + vis.map(classicRow).join("");
+  const o = flipped ? R : L, nw = flipped ? L : R;
+  document.getElementById("labL").className = "lab l " + (flipped ? "new" : "old");
+  document.getElementById("labR").className = "lab r " + (flipped ? "old" : "new");
+  document.getElementById("labL").innerHTML = `<b>${L.name}</b><small>${flipped ? "new side of the diff" : "old side of the diff"}</small>`;
+  document.getElementById("labR").innerHTML = `<b>${R.name}</b><small>${flipped ? "old side of the diff" : "new side of the diff"}</small>`;
+  document.getElementById("flip").textContent = flipped ? "←" : "→";
+  const r = vis[sel];
+  if (!r) { document.getElementById("fhead").innerHTML = ""; document.getElementById("diff").innerHTML = `<div class="empty">nothing matches this filter</div>`; return; }
+  const k = kind(r);
+  const what = { ne: "differs between the two sets", eq: "identical in both sets — they agree",
+    ol: "only in the left set", or: "only in the right set" }[k]
+    + (r.l === "deleted" ? " · the LEFT set deletes it" : "") + (r.r === "deleted" ? " · the RIGHT set deletes it" : "");
+  document.getElementById("fhead").innerHTML = `<b>${esc(r.p)}</b> — ${what} <span style="float:right">old: ${o.name.replace("preview: ", "")} &nbsp; new: ${nw.name.replace("preview: ", "")}</span>`;
+  document.getElementById("diff").innerHTML = diffTable(r);
+}
+document.addEventListener("click", e => {
+  const row = e.target.closest(".row.click"); if (row) { sel = +row.dataset.i; return render(); }
+  const chip = e.target.closest("[data-f]"); if (chip) { filter = chip.dataset.f; sel = 0; return render(); }
+  if (e.target.id === "flip") { flipped = !flipped; return render(); }
+  if (e.target.id === "sym") { symmetric = !symmetric; return render(); }
+});
+document.addEventListener("keydown", e => {
+  const n = visible().length;
+  if (e.key === "j" || e.key === "ArrowDown") sel = Math.min(n - 1, sel + 1);
+  else if (e.key === "k" || e.key === "ArrowUp") sel = Math.max(0, sel - 1);
+  else if (e.key === "x") flipped = !flipped;
+  else if (e.key === "s") symmetric = !symmetric;
+  else if ("1234".includes(e.key)) { filter = FILTERS[+e.key - 1][0]; sel = 0; }
+  else return;
+  e.preventDefault(); render();
+});
+function gate() {                    // the width gate: too narrow → classic, toggle disabled
+  const ok = window.innerWidth >= 1200, b = document.getElementById("sym");
+  b.disabled = !ok; b.title = ok ? "two aligned file lists (s)" : "needs a window at least 1200px wide";
+  if (!ok && symmetric) { symmetric = false; render(); }
+}
+window.addEventListener("resize", gate);
+render(); gate();
+</script>
+</body>
+</html>

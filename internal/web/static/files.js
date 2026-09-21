@@ -13,6 +13,7 @@ import { rev } from "./review.js";
 import { renderCommits, rewordPrompt } from "./commits.js";
 import { focusPane, moveCursor, stepCommitCursor } from "./keys.js";
 import { saveUI } from "./uistate.js";
+import { openSymRow, renderSymLists, symActive, symBarHTML, symEmpty, symLayoutChanged, symOffered, symReapply, symRows } from "./symcompare.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
@@ -41,6 +42,15 @@ function reconcileStatusView() {
 // drillOut steps ONE stage back — diff → file list → full-width commit
 // list. The esc key, the ← back button, and the footer chip all share it.
 function drillOut() {
+  if (state.layout === "diff" && symActive()) {
+    // The symmetric view has no files-only stage to step back to (it opens
+    // straight onto a diff): esc leaves the comparison's screen.
+    state.detailGen++;
+    state.pane = "commits";
+    setLayout("list");
+    focusPane();
+    return;
+  }
   if (state.layout === "diff") {
     enterFilesStage(); // also clears the diff a late fetch may repaint
     focusPane();
@@ -69,6 +79,9 @@ function applyFilesHidden(hidden) {
   b.textContent = hidden ? "«" : "»";
   b.title = hidden ? "show the file list" : "hide the file list — more room for the diff";
   b.setAttribute("aria-expanded", hidden ? "false" : "true");
+  // A folded list cannot be one of two aligned lists: the symmetric view
+  // steps aside (and comes back with the list), which no layout change says.
+  if (symOffered()) return symReapply();
   if (state.layout === "diff") rerenderDiffKeepingPlace();
   else renderCommits();
 }
@@ -120,6 +133,7 @@ function setLayout(mode) {
   // is all the list showed after esc until the user scrolled. Coming back
   // into either stage that shows the pane re-renders and rescrolls it.
   if (mode === "list" || (mode === "files" && was === "diff")) stepCommitCursor(0);
+  symLayoutChanged(); // the symmetric grid exists only in the diff stage
 }
 
 
@@ -137,9 +151,35 @@ function enterFilesStage() {
   diffSearchBar.reset(); // the pane is empty now; nothing to unpaint
   setFilesMeta(""); // every stage starts without a date; only a commit open sets one
   setFilesDesc(""); // …and without a description
+  // The kind badge is DERIVED, not cleared: esc from a diff re-enters this
+  // stage inside the same comparison, whose badge must stay; every other
+  // screen sets filesMode before coming here, so it reads as "no badge".
+  const lc = state.filesMode === "compare" && state.compare && state.compare.links ? state.compare : null;
+  setFilesKind(lc ? lc.kindLabel || "" : "", lc ? lc.kindTip || "" : "");
   $("files-title").dataset.sha = ""; // …and without a commit id; see setCommitTitle
   $("files-title").dataset.subject = "";
   $("files-title").dataset.short = "";
+}
+
+
+// setFilesKind draws (or hides) the badge that says WHAT KIND of screen this
+// file list is. A comparison's title is two descriptions and an arrow, which
+// reads like any other header; the badge is what makes "this is a comparison
+// of two previews" obvious at a glance. Hidden by ID (#files-kind.hidden).
+function setFilesKind(text, tip) {
+  const el = $("files-kind");
+  el.textContent = text;
+  el.title = tip || "";
+  el.classList.toggle("hidden", !text);
+}
+
+// compareKindLabel names a link comparison from what its two sides ARE.
+function compareKindLabel(body) {
+  if (body.pair) return "commit pair";
+  const l = body.left.kind, r = body.right.kind;
+  if (l === "preview" && r === "preview") return "preview comparison";
+  if (l === "pair" && r === "pair") return "commit-pair comparison";
+  return "link comparison";
 }
 
 
@@ -556,6 +596,13 @@ function openLinkCompare(body) {
     // dies with it — not in previewOpen, which means "tips that can move".
     pair: body.pair && body.pair.a && body.pair.b ? { a: body.pair.a, b: body.pair.b } : null,
     all: body.files || [],
+    // Two BOUNDED sets also answer their aligned rows: the symmetric view
+    // (symcompare.js). No `sym` → the view is not offered.
+    kindLabel: compareKindLabel(body),
+    kindTip: body.left.text + "\n↔\n" + body.right.text,
+    sym: body.sym || null,
+    symFilter: "diff",
+    flipped: false,
     filter: "all",
     originsError: "",
   };
@@ -563,9 +610,13 @@ function openLinkCompare(body) {
   state.fileSha = null;
   enterFilesStage();
   $("files-title").textContent = (body.label ? body.label + " — " : "") + state.compare.a + " ↔ " + state.compare.b;
+  $("files-title").title = state.compare.a + "  ↔  " + state.compare.b;
   applyCompareFilter();
   focusPane();
   if (state.compare.pair) loadPairCounts();
+  // The symmetric view opens straight onto its first row's diff (or, with no
+  // row to show, onto its own empty state).
+  if (symActive()) symReapply();
 }
 
 
@@ -574,11 +625,12 @@ function openLinkCompare(body) {
 // openLinkCompare it tears nothing down: the filter, the stage and the cursor's
 // FILE stay (the cursor follows its path, since rows shift), and an open diff
 // closes only when its own row is gone.
-function updateLinkCompareFiles(files) {
+function updateLinkCompareFiles(files, sym) {
   const c = state.compare;
   const cur = state.files[state.fileCursor];
   c.all = files || [];
-  state.files = c.filter === "all" ? c.all : c.all.filter((f) => f.origin === c.filter || f.origin === "both");
+  c.sym = sym || null;
+  state.files = compareRows(c);
   if (!state.files.length) {
     applyCompareFilter(); // the one painter of the empty state
     return;
@@ -669,10 +721,19 @@ async function openEntryFileDiff({ left, right, path, oldPath, leftLabel, rightL
 // The origin filter (the TUI's f key): "all", or only the files one side
 // touched since the two diverged. A file both sides touched stays in both
 // filtered views — the TUI's filterCompareFiles rule.
+// compareRows is the ONE place a comparison's rows become state.files: the
+// aligned rows while the symmetric view is on, else the (origin-filtered)
+// plain listing. Every writer goes through it, or a live refresh would hand
+// the symmetric painter rows with no per-side state.
+function compareRows(c) {
+  if (symActive()) return symRows(c);
+  return c.filter === "all" ? c.all : c.all.filter((f) => f.origin === c.filter || f.origin === "both");
+}
+
+
 function applyCompareFilter() {
   const c = state.compare;
-  state.files =
-    c.filter === "all" ? c.all : c.all.filter((f) => f.origin === c.filter || f.origin === "both");
+  state.files = compareRows(c);
   state.fileCursor = 0;
   renderFiles();
   updateDiffNav();
@@ -683,6 +744,10 @@ function applyCompareFilter() {
     $("files-list").innerHTML = `<li class="sect">${
       c.all.length ? "no files match this filter" : c.frozen || c.links ? "nothing differs" : "the two branches are identical"
     }</li>`;
+    // The symmetric view's esc LEAVES the comparison (it has no files-only
+    // stage), so an empty filter must not route through drillOut there: a chip
+    // would close the screen it sits on. The view says so in place instead.
+    if (symActive()) return symEmpty();
     if (state.layout === "diff") drillOut();
     return;
   }
@@ -708,7 +773,7 @@ function renderCompareBar() {
   // second copy here would only repeat it.
   if (c.frozen || c.links) {
     bar.innerHTML =
-      `<button class="on" disabled>all (${c.all.length})</button>` +
+      (symOffered() ? symBarHTML() : `<button class="on" disabled>all (${c.all.length})</button>`) +
       // A link comparison is two texts, so it can be kept (linkcompare.js owns
       // the click); a frozen entry compare is addressed by ids and cannot.
       (c.links ? `<button id="link-save-chip" title="keep this comparison in the Previews tab">save comparison…</button>` : "");
@@ -874,6 +939,7 @@ function renderFiles() {
     $("files-actions").classList.add("hidden");
     $("commit-box").classList.add("hidden");
     $("conflict-note").classList.add("hidden");
+    if (symActive()) return renderSymLists(); // two aligned lists (symcompare.js)
     // A commit file's notes are keyed "<sha>:<path>" — the sha this row's diff
     // would open. A COMPARISON gets no badge at all: its diff is not
     // note-addressable (see openFile), so a ◆ would advertise notes that its
@@ -992,6 +1058,7 @@ async function openFile(i) {
   // A link comparison addresses its sides by spec too, and a ROW may name its
   // own: this arm must run before the hash lane below, which has no hashes to
   // read here.
+  if (state.filesMode === "compare" && state.compare.links && symActive()) return openSymRow(f);
   if (state.filesMode === "compare" && state.compare.links) {
     // A pair's row is note-addressable when its new side IS the file at b. A
     // row that names its own right side is not (a `-u` stash keeps untracked
@@ -3341,4 +3408,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };

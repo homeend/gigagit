@@ -1302,6 +1302,66 @@ A commit pair is a NOTE SCOPE built by `domain.PairNotes(a, b)` —
 - Badge refresh: the `srcNotes` arm re-dispatches `pairNotesRefreshCmd` (a pair
   has no `previewOpen`, nothing to re-resolve, nothing that can "move").
 
+### Symmetric comparison view in `gg web` (2026-09-21)
+
+Spec `docs/superpowers/specs/2026-09-21-web-symmetric-compare-design.md`,
+research note and the approved static mock beside it (`mocks/`).
+
+- **Domain:** `LinkComparison.SymmetricRows()` (`domain/symrows.go`) — the
+  UNION of two bounded sets' members, sorted, each side `absent | present |
+  deleted` (`MemberState`), `Differs` READ from `c.Files` (never re-derived, so
+  the view cannot disagree with the listing). Membership comes from the path
+  list, never `Has`: a nil `has` map answers true for any path. `ok == false`
+  unless both sets are bounded. Pure — no git call.
+- **Why it exists:** `compareOne` omits a path with bytes on neither side
+  (deleted × absent, deleted × deleted) and an identical one. Those rows are
+  exactly what the classic list cannot show.
+- **Wire:** `sym` on `/api/compare-links`, only for two bounded sets and never
+  on a pair landing (`a`+`b`); `files` stays byte-identical (the live refresh's
+  `JSON.stringify` equality check reads it).
+- **Web:** `static/symcompare.js`; `files.js` holds dispatch lines only.
+  `symActive()` = offered ∧ `uistate.sym_compare` ∧ `innerWidth >= 1200` ∧ the
+  file list not minimized. **`compareRows(c)` is the ONE writer of a
+  comparison's `state.files`** (`applyCompareFilter`, `updateLinkCompareFiles`)
+  — a live refresh once would have handed the painter plain rows. While active
+  `state.files` holds the VISIBLE aligned rows with a direction-aware synthesized
+  `status` (`=` when the row does not differ): one index space for the cursor,
+  the stepper and both lists.
+- The right list IS `#files-list` (its click/context-menu handlers keep
+  working; a gap has no `data-i`, so they cannot act on it); `#symleft-pane`
+  mirrors it. Row alignment = a measured spacer (`syncGeometry`, NOT rounded —
+  the panes' borders put the list on a fractional pixel) + mirrored `scrollTop`.
+- The grid (`#panes.detail.sym`) exists only in the diff stage and is painted
+  by `paintGrid()` — called from `setLayout` AND at the top of `applySym`,
+  because a toggle or a resize with a diff already open changes no layout.
+  `esc` from the view leaves the comparison (it has no files-only stage).
+- Chips use `data-sf` / `data-symtoggle`: `#compare-bar`'s own handler takes
+  every `button[data-f]`. A zero-count filter is disabled (and its key inert).
+- **An empty view must not `drillOut`.** esc leaves the comparison here, so
+  `applyCompareFilter`'s empty branch returns `symEmpty()` first — without it a
+  live refresh that empties the rows closes the screen. The OPEN path recovers
+  by itself (`symReapply`), so only the refresh path proves this guard: the
+  probe calls `updateLinkCompareFiles([], [])` directly.
+- `applyFilesHidden` re-applies the view (`symReapply`): `symActive()` reads
+  `!state.filesHidden`, and `.sym` would otherwise outlive it and beat
+  `.nofiles` in the cascade.
+- Dialog words: `/api/link-base` also answers `desc` (`DescribeLink`) and
+  `origin` ("copied from a saved <hint kind>") for any PARSED link, base-able or
+  not; `linkcompare.js setDesc` paints them under the field (a history pick
+  paints the row's own label at once, the lookup confirms). `DescribeLink`'s
+  "link:" fallback for an UNSAVED pair is pinned by three domain tests — left
+  alone. Sides carry `kind` (`linkTargetKind`) → `compareKindLabel` → the
+  `#files-kind` badge, which `enterFilesStage` DERIVES from the open comparison
+  (never clears): esc from a diff re-enters that stage inside the same one.
+  `runLinkCompare` owns the "comparing…" op line for every entry; the dialog
+  adds `setBusy`. Probe: scratchpad `web/dlgprobe.mjs` (delays the route 900ms
+  so the busy state is observable).
+- Known limit: the live refresh's equality key is `files`, so a `sym`-only
+  change (both sets gain an identical file) waits for a reopen.
+- Probe: scratchpad `web/symprobe.mjs` + `run-symprobe.sh` (a FRESH state copy
+  per run — the preference persists server-side and would flip the first
+  click). It fails against a build with `sym` stripped.
+
 ### Pair notes in `gg web` (2026-09-20)
 
 Spec `docs/superpowers/specs/2026-09-20-pair-notes-web-design.md` (N1–N10). No
