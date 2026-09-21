@@ -94,8 +94,11 @@ The single-file globals (`state.diffCtx`, `state.diffRow`, `state.notes`,
 `state.lastDiff`, `diffHunks`) remain for single-file mode. Code that reads
 them is routed through an **active-slot accessor** (`activeDiff()`), which in
 single-file mode returns the globals and in stacked mode returns the slot under
-the cursor / viewport top. v1 introduces the accessor and uses it for
-navigation; each follow-up phase moves its feature onto it.
+the cursor / viewport top. v1 needs no accessor: while a stack is up every
+single-diff global is null and each reader already no-ops on null (history /
+blame buttons, search, the fold listener, live re-renders). The accessor
+arrives with the notes + cursor follow-up (plan 4a), the first feature that
+needs per-slot context.
 
 Stack state lives in one object (`state.stack = {gen, slots, byKey, queue,
 observer}`), torn down by every path that tears down today's diff (screen

@@ -888,7 +888,7 @@ Expected: PASS (every existing `*js_test.go` still green).
 - Test: `internal/web/stackviewjs_test.go` (extend)
 
 **Interfaces:**
-- Consumes: from `stack.js` — every export of Task 4. From `files.js` — `activeFileList, clearDiffHunks, closeConflictPick, diffHTML, fileDiffURL, mountPanBars, openConflictPicker, openFile, renderFiles, setLayout, updateDiffNav`. From `core.js` — `$, esc, getJSON, state`. From `keys.js` — `focusPane`. From `symcompare.js` — `symActive`.
+- Consumes: from `stack.js` — every export of Task 4. From `files.js` — `activeFileList, clearDiffHunks, closeConflictPick, diffHTML, enterFilesStage, fileDiffURL, mountPanBars, openFile, openStatusDiff, renderFiles, setLayout, updateDiffNav`. From `core.js` — `$, esc, getJSON, state`. From `keys.js` — `focusPane`. From `symcompare.js` — `symActive`.
 - Produces (exported from `stackview.js`): `stackOn() → bool`, `openStack(i)`, `teardownStack()`, `reconcileStack()`, `rerenderStack(resetFolds = false)`, `toggleStacked()`, `collapseCurrent()`, `toggleAllCollapsed()`.
 - Produces (files.js): `closeConflictPick()` — `conflictPick = null; renderResolveBar();`.
 
@@ -974,8 +974,8 @@ import {
   enterFilesStage,
   fileDiffURL,
   mountPanBars,
-  openConflictPicker,
   openFile,
+  openStatusDiff,
   renderFiles,
   setLayout,
   updateDiffNav,
@@ -1019,7 +1019,7 @@ function openStack(i) {
   buildStack(list, group, i);
 }
 
-function buildStack(list, group, anchorIdx) {
+async function buildStack(list, group, anchorIdx) {
   teardownStack();
   state.detailGen++; // a single-file diff still loading must not land over the stack
   clearDiffHunks();
@@ -1036,8 +1036,15 @@ function buildStack(list, group, anchorIdx) {
   const slots = buildSlots(stackRows(list, group));
   const st = { list, group, slots, near: new Set(), anchor: 0, inFlight: 0 };
   state.stack = st;
+  // Counts FIRST: they size every placeholder. Painted with no counts, all
+  // sections are a few rows tall, the whole change set sits "near" the
+  // viewport, and the loader fetches the first three files wherever the
+  // reader is — lazy in name only. (Best-effort: no counts → small
+  // placeholders, as for entry/link sets.)
+  $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
+  await loadCounts(st);
+  if (state.stack !== st) return; // superseded while the counts loaded
   paintStack(st);
-  loadCounts(st);
   scrollToFile(st, anchorIdx);
 }
 
@@ -1127,6 +1134,9 @@ function repaintSlot(st, k) {
 function rerenderStack(resetFolds = false) {
   const st = state.stack;
   if (!st) return;
+  // #diff-header wraps (flex-wrap) at narrow widths: re-measure what the
+  // file headers stick under
+  $("diff-pane").style.setProperty("--diff-head-h", $("diff-header").offsetHeight + "px");
   st.slots.forEach((s, k) => {
     if (resetFolds) s.folds = new Set();
     if (s.diff && !s.collapsed) repaintSlot(st, k);
@@ -1194,8 +1204,10 @@ async function loadCounts(st) {
     const x = by.get(s.path);
     if (!x) return;
     s.counts = x.binary ? { binary: true } : { add: x.add, del: x.del };
-    const el = sectionEl(k);
-    if (el) el.querySelector(".stk-head").outerHTML = headHTML(s);
+    const el = sectionEl(k); // absent on a first build: paintStack comes after
+    if (!el) return;
+    el.querySelector(".stk-head").outerHTML = headHTML(s);
+    if (!s.diff && !s.collapsed) el.querySelector(".stk-body").innerHTML = bodyHTML(s); // re-size the placeholder
   });
 }
 
@@ -1293,9 +1305,9 @@ $("diff-body").addEventListener("click", (e) => {
   if (!sec) return;
   const k = Number(sec.dataset.k);
   if (e.target.closest(".stk-resolve")) {
-    const f = st.slots[k].f;
+    const i = st.slots[k].idx;
     teardownStack();
-    openConflictPicker(f);
+    openStatusDiff(i); // sets the title/ctx the picker's exits expect, then opens it
     return;
   }
   if (e.target.closest(".stk-head")) return toggleSlot(k);
@@ -1325,8 +1337,8 @@ function reconcileStack() {
   st.slots = reconcileSlots(st.slots, rows);
   const k = Math.max(0, st.slots.findIndex((s) => s.key === anchorKey));
   paintStack(st);
-  loadCounts(st);
   scrollToFile(st, st.slots[k].idx);
+  loadCounts(st); // a refresh changes counts too; heads and placeholders repaint in place
 }
 
 // --- the toggle -----------------------------------------------------------
@@ -1573,7 +1585,13 @@ import { chromium } from "playwright";
 import { spawn } from "node:child_process";
 
 const [gg, repo, port] = process.argv.slice(2);
-const srv = spawn(gg, ["web", "--addr", `127.0.0.1:${port}`, "--no-open"], { cwd: repo, stdio: "inherit" });
+// A PRIVATE state dir: S writes /api/uistate, which must never flip the
+// user's real prefs (and a pre-set pref would invert every S below).
+const srv = spawn(gg, ["web", "--addr", `127.0.0.1:${port}`, "--no-open"], {
+  cwd: repo,
+  stdio: "inherit",
+  env: { ...process.env, XDG_STATE_HOME: `${repo}/../state-${port}` },
+});
 const fail = (m) => { console.error("FAIL:", m); srv.kill(); process.exit(1); };
 await new Promise((r) => setTimeout(r, 1500));
 const b = await chromium.launch();
@@ -1700,6 +1718,15 @@ Expected: all stages PASS. On a failure: fix, re-run the failing package, then t
   stack; `revealDiffRow` finds no row (it reads `state.lastDiff`, null) and
   returns null — the same miss it reports today for an absent line, no throw.
   Line landing is plan 4a.
+- Verified during planning: `diffHTML`'s attention bands read
+  `state.diffCtx` only when `notesOn` (false in a stack) — safe with a null
+  ctx. The » fold goes through `rerenderDiffKeepingPlace` (hooked); the pane
+  resizer drag re-renders no diff today either (parity). A compare filter
+  change hands out a new `state.files` array and `openFile(0)` → a rebuild.
+- `/api/numstat?left&right` uses `DiffStat` (`git diff --numstat`, no
+  explicit `-M`): a user with `diff.renames=false` sees a rename's counts on
+  two paths (the header then falls back to the loaded diff's counts). Minor;
+  not fixed here.
 - Mixed single-/two-column tables in one stack share one set of pan bars
   (`mountPanBars` measures the first table's column count): acceptable for
   `w` = scroll in v1; revisit if the probe screenshot shows it.
