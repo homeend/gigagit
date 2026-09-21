@@ -1336,7 +1336,17 @@ research note and the approved static mock beside it (`mocks/`).
   because a toggle or a resize with a diff already open changes no layout.
   `esc` from the view leaves the comparison (it has no files-only stage).
 - Chips use `data-sf` / `data-symtoggle`: `#compare-bar`'s own handler takes
-  every `button[data-f]`.
+  every `button[data-f]`. A zero-count filter is disabled (and its key inert).
+- **An empty view must not `drillOut`.** esc leaves the comparison here, so
+  `applyCompareFilter`'s empty branch returns `symEmpty()` first — without it a
+  live refresh that empties the rows closes the screen. The OPEN path recovers
+  by itself (`symReapply`), so only the refresh path proves this guard: the
+  probe calls `updateLinkCompareFiles([], [])` directly.
+- `applyFilesHidden` re-applies the view (`symReapply`): `symActive()` reads
+  `!state.filesHidden`, and `.sym` would otherwise outlive it and beat
+  `.nofiles` in the cascade.
+- Known limit: the live refresh's equality key is `files`, so a `sym`-only
+  change (both sets gain an identical file) waits for a reopen.
 - Probe: scratchpad `web/symprobe.mjs` + `run-symprobe.sh` (a FRESH state copy
   per run — the preference persists server-side and would flip the first
   click). It fails against a build with `sym` stripped.

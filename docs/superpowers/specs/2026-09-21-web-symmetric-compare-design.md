@@ -125,6 +125,25 @@ what a narrow window, an unbounded side or the chip switched off shows.
 **Live refresh.** `updateLinkCompareFiles` keeps comparing `files`; when they
 differ the new `sym` rides the same answer and replaces `compare.sym`.
 
+## 5.1 As built (amended 2026-09-21)
+
+- **`esc` LEAVES the comparison** from the symmetric view (not "one stage back
+  as today"): the view opens straight onto a diff and has no files-only stage.
+- Keys are `v` (toggle), `x` (flip), `1`–`4` (filters) — `s` is staging.
+  `j`/`k` move the ROW cursor and `enter` opens, the web UI's existing rule.
+- Chip labels are short (`differ · all · one side · same`) and the bar wraps:
+  the pane is ~320px and the bar's buttons elide at 45%.
+- A zero-count filter is not offered: its chip is disabled and its key does
+  nothing. An EMPTY view (nothing differs; a live refresh emptied the rows)
+  stays up and says so (`symEmpty`) — `applyCompareFilter`'s usual `drillOut`
+  would close the screen here, since esc leaves the comparison.
+- `»` (fold the file list) makes the view step aside and come back with the
+  list: `applyFilesHidden` re-applies it, because no layout change says so.
+- An identical row DOES open its diff (all-same): seeing what two attempts
+  agreed on is why those rows are shown.
+- Known limit: the live refresh compares `files` only, so a change that alters
+  `sym` alone (both sets gain an identical file) waits for the next reopen.
+
 ## 6. Testing
 
 - Domain (`symrows_test.go`, parallel): a fixture with every combination —

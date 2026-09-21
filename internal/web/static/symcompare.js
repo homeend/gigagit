@@ -15,7 +15,7 @@
 
 import { $, esc, state } from "./core.js";
 import { saveUI } from "./uistate.js";
-import { applyCompareFilter, openEntryFileDiff, openFile, renderFiles, setDiffTitle } from "./files.js";
+import { applyCompareFilter, openEntryFileDiff, openFile, renderFiles, setDiffTitle, setLayout } from "./files.js";
 
 // SYM_MIN_WIDTH: two file lists and a side-by-side diff stop fitting below
 // this, so the view falls back to the classic list and its chip is disabled.
@@ -160,8 +160,14 @@ function symBarHTML() {
   const active = symActive();
   const chips = active
     ? FILTERS.map(
-        ([id, label, tip, fn]) =>
-          `<button data-sf="${id}" title="${tip}"${c.symFilter === id ? ' class="on"' : ""}>${label} ${c.sym.filter(fn).length}</button>`
+        ([id, label, tip, fn]) => {
+          const n = c.sym.filter(fn).length;
+          // A filter with nothing behind it is not offered — except the one
+          // that is ON, which must stay pressable-looking so the bar still
+          // says where the user is.
+          const off = n === 0 && c.symFilter !== id ? " disabled" : "";
+          return `<button data-sf="${id}" title="${tip}"${c.symFilter === id ? ' class="on"' : ""}${off}>${label} ${n}</button>`;
+        }
       ).join("")
     : `<button class="on" disabled>all (${c.all.length})</button>`;
   const wide = wideEnough();
@@ -188,7 +194,13 @@ function applySym(keepPath) {
     const i = path ? state.files.findIndex((f) => f.path === path) : -1;
     if (i >= 0) state.fileCursor = i;
     if (state.files.length) openFile(state.fileCursor);
-    else paintGrid();
+    else {
+      // Nothing to open, but the view is still the three-column one: put its
+      // stage up so the empty lists and the chips are what the user sees.
+      if (state.layout !== "diff") setLayout("diff");
+      paintGrid();
+      symEmpty();
+    }
   } else {
     const i = path ? state.files.findIndex((f) => f.path === path) : -1;
     if (i >= 0) state.fileCursor = i;
@@ -218,6 +230,10 @@ function flip() {
 
 function setFilter(id) {
   if (!symActive()) return;
+  // A filter with nothing behind it is not offered: its chip is disabled, and
+  // the key that names it does nothing either.
+  const f = FILTERS.find((x) => x[0] === id);
+  if (!f || (id !== state.compare.symFilter && !state.compare.sym.some(f[3]))) return;
   state.compare.symFilter = id;
   state.fileCursor = 0;
   applyCompareFilter();
@@ -252,6 +268,25 @@ function openSymRow(f) {
     rightLabel: fl ? c.a : c.b,
     status: f.status === "=" ? "M" : f.status,
   });
+}
+
+// symEmpty is the view with NO visible row (the two sets agree on everything
+// and the filter is "differ"; a live refresh emptied the filter). The screen
+// stays: both lists say so, and the bar's chips are the way on.
+function symEmpty() {
+  const c = state.compare;
+  const note = `<li class="symgap" aria-hidden="true"><span class="sympath">${c.sym.length ? "no files match this filter" : "nothing in either set"}</span></li>`;
+  $("symleft-list").innerHTML = headRowHTML("left set", c.a) + note;
+  $("files-list").innerHTML = headRowHTML("right set", c.b) + note;
+  state.detailGen++; // a diff still loading must not land over this
+  state.diffCtx = null;
+  state.notes = [];
+  if (state.layout === "diff") {
+    setDiffTitle("");
+    $("diff-body").innerHTML = `<div class="notice">${c.symFilter === "diff" && c.sym.length ? "the two sets do not differ — see <b>all</b> or <b>same</b>" : "no files match this filter"}</div>`;
+  }
+  renderDirBar();
+  syncGeometry();
 }
 
 function noContentWhy(f) {
@@ -302,4 +337,4 @@ window.addEventListener("resize", () => {
   else renderFiles();
 });
 
-export { SYM_MIN_WIDTH, symActive, symOffered, symRows, renderSymLists, symBarHTML, openSymRow, symKey, symLayoutChanged, statusFor, kindOf };
+export { SYM_MIN_WIDTH, applySym as symReapply, symEmpty, symActive, symOffered, symRows, renderSymLists, symBarHTML, openSymRow, symKey, symLayoutChanged, statusFor, kindOf };

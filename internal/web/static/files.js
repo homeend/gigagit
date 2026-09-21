@@ -13,7 +13,7 @@ import { rev } from "./review.js";
 import { renderCommits, rewordPrompt } from "./commits.js";
 import { focusPane, moveCursor, stepCommitCursor } from "./keys.js";
 import { saveUI } from "./uistate.js";
-import { openSymRow, renderSymLists, symActive, symBarHTML, symLayoutChanged, symOffered, symRows } from "./symcompare.js";
+import { openSymRow, renderSymLists, symActive, symBarHTML, symEmpty, symLayoutChanged, symOffered, symReapply, symRows } from "./symcompare.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
@@ -79,6 +79,9 @@ function applyFilesHidden(hidden) {
   b.textContent = hidden ? "«" : "»";
   b.title = hidden ? "show the file list" : "hide the file list — more room for the diff";
   b.setAttribute("aria-expanded", hidden ? "false" : "true");
+  // A folded list cannot be one of two aligned lists: the symmetric view
+  // steps aside (and comes back with the list), which no layout change says.
+  if (symOffered()) return symReapply();
   if (state.layout === "diff") rerenderDiffKeepingPlace();
   else renderCommits();
 }
@@ -582,8 +585,9 @@ function openLinkCompare(body) {
   applyCompareFilter();
   focusPane();
   if (state.compare.pair) loadPairCounts();
-  // The symmetric view opens straight onto its first row's diff.
-  if (symActive() && state.files.length) openFile(0);
+  // The symmetric view opens straight onto its first row's diff (or, with no
+  // row to show, onto its own empty state).
+  if (symActive()) symReapply();
 }
 
 
@@ -711,6 +715,10 @@ function applyCompareFilter() {
     $("files-list").innerHTML = `<li class="sect">${
       c.all.length ? "no files match this filter" : c.frozen || c.links ? "nothing differs" : "the two branches are identical"
     }</li>`;
+    // The symmetric view's esc LEAVES the comparison (it has no files-only
+    // stage), so an empty filter must not route through drillOut there: a chip
+    // would close the screen it sits on. The view says so in place instead.
+    if (symActive()) return symEmpty();
     if (state.layout === "diff") drillOut();
     return;
   }
