@@ -1040,6 +1040,43 @@ function openPreviewCtx() {
 }
 
 
+// fileDiffURL is the ONE place a listed file becomes the URL its diff is read
+// from, in the screen's current mode — the single-file opens and the stacked
+// view's loader (stackview.js) both fetch through it, so the two can never
+// show different diffs for one row. null = there is nothing to diff (a
+// conflict is resolved in the hunk picker).
+function fileDiffURL(f) {
+  if (state.filesMode === "status") {
+    if (f.section === "conflicts") return null;
+    const q = new URLSearchParams({ wt: f.section === "staged" ? "staged" : "unstaged", path: f.path });
+    if (f.orig_path) q.set("old", f.orig_path);
+    return "/api/diff?" + q;
+  }
+  const c = state.compare;
+  // A link comparison (a row may name its own sides) and a frozen entry
+  // compare address their sides by SPEC: one may be a snapshot git cannot read.
+  if (state.filesMode === "compare" && (c.links || c.frozen)) {
+    const q = new URLSearchParams({
+      left: (c.links && f.left_spec) || c.aSpec,
+      right: (c.links && f.right_spec) || c.bSpec,
+      path: f.path,
+    });
+    if (f.status) q.set("status", f.status);
+    if (c.links && f.old_path) q.set("old_path", f.old_path);
+    return "/api/entry-diff?" + q;
+  }
+  const q = new URLSearchParams({ path: f.path, status: f.status });
+  if (state.filesMode === "compare") {
+    q.set("left", c.aHash);
+    q.set("right", c.bHash);
+  } else {
+    q.set("sha", f.sha || state.fileSha);
+  }
+  if (f.old_path) q.set("old", f.old_path);
+  return "/api/diff?" + q;
+}
+
+
 async function openFile(i) {
   clearDiffHunks();
   // The layout switch sits in the SYNC prefix: an esc during a slow diff
@@ -1119,14 +1156,6 @@ async function openFile(i) {
   };
   state.diffRow = null;
   state.notes = [];
-  const q = new URLSearchParams({ path: f.path, status: f.status });
-  if (state.filesMode === "compare") {
-    q.set("left", state.compare.aHash);
-    q.set("right", state.compare.bHash);
-  } else {
-    q.set("sha", f.sha || state.fileSha);
-  }
-  if (f.old_path) q.set("old", f.old_path);
   setDiffTitle(f.path);
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
@@ -1134,7 +1163,7 @@ async function openFile(i) {
     // The notes ride ALONGSIDE the diff fetch, not after it: the ◆ rows have
     // to be in the first paint, and a second serial round-trip would show the
     // diff without them first.
-    const [d] = await Promise.all([getJSON("/api/diff?" + q), fetchNotes(false)]);
+    const [d] = await Promise.all([getJSON(fileDiffURL(f)), fetchNotes(false)]);
     renderDiff(d);
     jumpToFirstChange();
     focusDiff();
@@ -1154,12 +1183,10 @@ async function openStatusDiff(i) {
   state.notes = [];
   setDiffTitle(f.path);
   if (f.section === "conflicts") return openConflictPicker(f);
-  const q = new URLSearchParams({ wt: f.section === "staged" ? "staged" : "unstaged", path: f.path });
-  if (f.orig_path) q.set("old", f.orig_path);
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
-    const [d] = await Promise.all([getJSON("/api/diff?" + q), fetchNotes(false)]);
+    const [d] = await Promise.all([getJSON(fileDiffURL(f)), fetchNotes(false)]);
     // server tags eligible unstaged diffs with hunk ordinals — arm inline
     // staging BEFORE the render so the rows pick up their hk classes
     if (d.hunks && hunkEligible(f)) {
@@ -3408,4 +3435,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
