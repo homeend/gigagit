@@ -83,7 +83,9 @@ func pairOpsFor(p panel) []pairOp {
 			// Two branches that fix the same thing, each measured against a
 			// base the user names (no default): saved as ONE comparison and
 			// opened at once. The … says it asks for that base first.
-			label:   func(marked, selected string) string { return i18n.T("Symmetric merge preview %s, %s…", marked, selected) },
+			label: func(marked, selected string) string {
+				return i18n.T("Symmetric merge preview %s, %s…", marked, selected)
+			},
 			enabled: true,
 			stacked: true,
 			open: func(m Model, marked, selected string) (Model, tea.Cmd) {
