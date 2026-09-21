@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Symmetric merge preview: two branches measured against one base
+
+### Added
+
+- **Symmetric merge preview.** Pick two branches A and B, then name a base
+  (there is no default), and gg saves ONE comparison: what A would bring into
+  the base against what B would bring into it — two branches that fix the
+  same thing, side by side. The entry holds branch names, so it stays live.
+  It opens at once, and the Previews list shows it as a `sym` row whose menu
+  also opens either side's merge preview. Start it from the TUI's Branches
+  pair picker (`m`, `m` → **Symmetric merge preview A, B…**), from `gg web`'s
+  branch drag & drop menu or its ☰ menu (**new symmetric merge preview…**),
+  or with `gg preview add --symmetric --base <base> <a> <b>`. Saving an
+  existing one opens it instead.
+- The TUI shows its *comparing…* popup when `enter` opens any saved
+  comparison on the Previews tab, not only after marking two rows.
+
 ## `gg web`: the symmetric comparison's file lists cut long paths from the middle
 
 ### Fixed
