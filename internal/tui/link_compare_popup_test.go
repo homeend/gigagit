@@ -270,3 +270,24 @@ func TestTheDialogNeverExceedsItsWidth(t *testing.T) {
 		}
 	}
 }
+
+// A busy dialog is LOCKED: the comparison in flight was built from the fields
+// as they stood, so typing, swapping, moving or re-submitting must do nothing
+// until it lands or esc withdraws it.
+func TestABusyDialogIsLocked(t *testing.T) {
+	t.Parallel()
+	m, dir, c1, c3 := linkDialogModel(t)
+	left, right := localLink(dir, "@"+c1), localLink(dir, "@"+c3)
+	setSides(linkDialog(t, m), left, right)
+	m, _ = pressKeys(t, m, typeKey(tea.KeyTab), typeKey(tea.KeyEnter))
+	p := linkDialog(t, m)
+	focus, want := p.focus, m.linkCompareWant
+	m, cmd := pressKeys(t, m, keyMsg("x"), typeKey(tea.KeyBackspace), typeKey(tea.KeyCtrlS),
+		typeKey(tea.KeyTab), typeKey(tea.KeyDown), typeKey(tea.KeyUp), typeKey(tea.KeyEnter))
+	p = linkDialog(t, m)
+	if cmd != nil || !p.busy || p.focus != focus || m.linkCompareWant != want ||
+		p.side[0].input.Value() != left || p.side[1].input.Value() != right {
+		t.Fatalf("a busy dialog changed: cmd=%v busy=%v focus=%v left=%q right=%q",
+			cmd != nil, p.busy, p.focus, p.side[0].input.Value(), p.side[1].input.Value())
+	}
+}

@@ -28,6 +28,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   slow mount, and the view opens only when it lands. It owns the keyboard, so
   a second `space` can no longer unmark the row just marked.
 
+### Fixed
+
+- The TUI's **compare with link** dialog is locked while its comparison loads:
+  it showed **comparing…** but still took typing, `ctrl+s`, `tab` and the
+  arrows, so the form could drift from the comparison about to open. Only
+  `esc` (withdraw the comparison) gets through now.
+
 ## `gg web`: the page notices when the server is gone
 
 ### Added

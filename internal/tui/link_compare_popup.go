@@ -129,6 +129,12 @@ func (p *linkComparePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
 	}
+	// LOCKED while a comparison loads: it was built from the fields as they
+	// stood, so an edit, a swap or a focus move now would leave the form
+	// disagreeing with the view about to open. Only esc (withdraw) gets through.
+	if p.busy && msg.Type != tea.KeyEsc {
+		return m, nil
+	}
 	if !p.focus.isBase() {
 		if picked, handled := p.cur().hist.key(msg); handled {
 			if picked != "" {
