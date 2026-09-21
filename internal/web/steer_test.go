@@ -583,3 +583,17 @@ func TestRefNavigateAndPairNavigateLandOnDifferentFileSets(t *testing.T) {
 		t.Errorf("ref file set %v is not smaller than pair file set %v — ref and pair must disagree", refPaths, pairPaths)
 	}
 }
+
+// TestSteerWireAcceptsAPreviewHint: the closed set is model's, not a list
+// retyped here — a kind the grammar admits must never be refused as unknown
+// by the page's own endpoint.
+func TestSteerWireAcceptsAPreviewHint(t *testing.T) {
+	t.Parallel()
+	w, err := toSteerWire(steer.Command{Cmd: "navigate", Commit: "abc1234", HintKind: "preview", HintID: "1a2b3c4d"})
+	if err != nil {
+		t.Fatalf("toSteerWire: %v", err)
+	}
+	if w.HintKind != "preview" || w.HintID != "1a2b3c4d" {
+		t.Errorf("wire hint = %s/%s, want preview/1a2b3c4d", w.HintKind, w.HintID)
+	}
+}

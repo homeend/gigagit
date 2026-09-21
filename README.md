@@ -278,6 +278,7 @@ gg://<repo>@<target>...<source>            # a merge preview (branch names, neve
 gg://<repo>/<path>@<target>...<source>:<n> # a file / new-side line in it
 gg:///abs/checkout/file.go:12              # a repo with no remote
 gg://<repo>@<sha>?bookmark=<id>            # a trailing ?<kind>=<id> hint: where the link was copied from
+gg://<repo>@<a>..<b>?preview=<id>          # …a saved Previews entry: lands the same, then reveals its row
 ```
 
 A `?` is the hint separator now, so it cannot appear in a path, in a checkout

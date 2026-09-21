@@ -12,11 +12,11 @@ import (
 )
 
 type savedRow struct {
-	ID, Label, Kind, Link, A, B, State string
-	Files                              int
-	Left, Right                        string
-	LeftDesc                           string `json:"left_desc"`
-	RightDesc                          string `json:"right_desc"`
+	ID, Label, Kind, Link, Desc, A, B, State string
+	Files                                    int
+	Left, Right                              string
+	LeftDesc                                 string `json:"left_desc"`
+	RightDesc                                string `json:"right_desc"`
 }
 
 type savedResp struct {
@@ -182,8 +182,13 @@ func TestSavedComparesListsPairsAndComparisonsNotPreviews(t *testing.T) {
 	if pair.Kind != "pair" || pair.ID != pairID || pair.State != "ok" || pair.Files != 3 || !isFullSha(pair.A) || !isFullSha(pair.B) {
 		t.Errorf("pair row = %+v", pair)
 	}
-	if !strings.HasSuffix(pair.Link, "@"+pair.A+".."+pair.B) {
-		t.Errorf("pair link = %q, want its stored @a..b link", pair.Link)
+	// The row's link is what "copy gg link" copies: the stored @a..b link
+	// plus the landing hint that reveals this row again.
+	if !strings.HasSuffix(pair.Link, "@"+pair.A+".."+pair.B+"?preview="+pair.ID) {
+		t.Errorf("pair link = %q, want its stored @a..b link + ?preview=%s", pair.Link, pair.ID)
+	}
+	if !strings.HasPrefix(pair.Desc, "pair: ") {
+		t.Errorf("pair desc = %q, want the saved entry's label form", pair.Desc)
 	}
 	if cmp.Kind != "compare" || cmp.ID != cmpID || cmp.Left == "" || cmp.Right == "" || cmp.LeftDesc == "" || cmp.RightDesc == "" {
 		t.Errorf("comparison row = %+v", cmp)

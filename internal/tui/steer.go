@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -303,13 +304,11 @@ func steerEnumRefusal(c steer.Command) string {
 		}
 	}
 	// The hint's closed set (model.LinkHint's grammar already closed it:
-	// "bookmark", "shelf" or "stash") mirrors the web endpoint's toSteerWire
+	// model.LinkHintKindOK is the one definition) mirrors the web endpoint's toSteerWire
 	// so the same command is refused the same way whichever consumer picks
 	// it up (S13 point 2).
 	if c.HintKind != "" {
-		switch c.HintKind {
-		case "bookmark", "shelf", "stash":
-		default:
+		if !model.LinkHintKindOK(c.HintKind) {
 			return "unknown hint kind " + strconv.Quote(c.HintKind)
 		}
 		if c.HintID == "" {

@@ -37,6 +37,19 @@ cmd             = ["compare", "--list"]
 exit            = 0
 stdout_contains = ["last change", "gg:///"]
 
+# The stored link stays BARE (above); the ENTRY's own link says where it came
+# from — ?preview=<id> reveals the saved row on landing — while a typed range
+# names no entry and stays bare.
+[[run]]
+cmd             = ["link", "--preview", "last change"]
+exit            = 0
+stdout_contains = ["..", "?preview="]
+
+[[run]]
+cmd             = ["link", "--preview", "HEAD~1..HEAD"]
+exit            = 0
+stdout_excludes = ["?preview="]
+
 # Saving the same pair again names the existing row instead of duplicating it.
 [[run]]
 cmd  = ["preview", "add", "HEAD~1..HEAD"]

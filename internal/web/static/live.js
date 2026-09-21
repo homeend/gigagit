@@ -12,7 +12,7 @@ import { fetchStatus, wtCount } from "./status.js";
 import { runLinkCompare } from "./linkcompare.js";
 import { fetchNotes, markDiffRow, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
 import { fetchBranches, revealHintEntry } from "./sidebar.js";
-import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved } from "./previews.js";
+import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved, revealSavedSet } from "./previews.js";
 import { fetchPRs, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
@@ -320,7 +320,14 @@ async function openCompareForPair(a, b) {
 // over, in finishLink's arms).
 async function steerNavigate(s) {
   await steerNavigateLand(s);
-  if (s.hint_kind) await revealHintEntry(s.hint_kind, s.hint_id);
+  if (s.hint_kind) await revealHint(s);
+}
+
+// revealHint routes a landed navigate's hint to its surface. A preview hint
+// is looked up against the landing's own set as well as its id, so it takes
+// the whole command; the entry kinds need only kind + id.
+function revealHint(s) {
+  return s.hint_kind === "preview" ? revealSavedSet(s) : revealHintEntry(s.hint_kind, s.hint_id);
 }
 
 // steerNavigateLand opens what the command names and marks the landed row.

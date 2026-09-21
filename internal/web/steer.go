@@ -11,6 +11,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -219,9 +220,7 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 	// Target/Line above — an unknown kind is a wire refusal, never a notice,
 	// because the grammar already closed that set (S13 point 2).
 	if c.HintKind != "" {
-		switch c.HintKind {
-		case "bookmark", "shelf", "stash":
-		default:
+		if !model.LinkHintKindOK(c.HintKind) {
 			return w, fmt.Errorf("unknown hint kind %q", c.HintKind)
 		}
 		if c.HintID == "" {

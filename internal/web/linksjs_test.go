@@ -311,6 +311,7 @@ func TestLinkForJSMatchesGo(t *testing.T) {
 		{Name: "hint id with / refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: "a/b"},
 		{Name: "hint id with a space refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: "a b"},
 		{Name: "hint id with a tab refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "bookmark", HintID: "a\tb"},
+		{Name: "preview hint on a merge preview", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x", Target: "main", HintKind: "preview", HintID: "1a2b3c4d"},
 		{Name: "stash hint is in the closed set even with no producer", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "stash", HintID: "3"},
 	}
 

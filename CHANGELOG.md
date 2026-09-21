@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## `?preview=<id>` — a link copied off a saved Previews entry reveals its row
+
+### Added
+
+- A fourth landing hint, `?preview=<id>`, for the two set-shaped saved entries:
+  a merge preview (`gg://r@main...feat/x?preview=<id>`) and a commit pair
+  (`gg://r@<a>..<b>?preview=<id>`). It never changes what the link addresses;
+  after the usual landing the consumer reveals the saved row — looked up **by
+  id, else by the entry holding the same set, else a notice** ("preview <id>
+  is not saved here; the link still landed"). The id is a lookup key, never a
+  checksum: it hashes link text, which spells the repository differently on
+  another machine. A `?preview=` hint with no address is refused by name.
+- Producers, entry-level only: the TUI Previews tab's row copy, `gg web`'s
+  "copy gg link" on a merge-preview or pair row, and `gg link --preview
+  <id|label>` with no path. A typed `<target>...<source>` / `<a>..<b>` and a
+  file or line inside a preview stay bare; a two-link comparison has no
+  single link and never carries the hint.
+- TUI: the Previews tab is left on the revealed row underneath the landed
+  view, and closing that view returns the keyboard to it. Web: the row is
+  scrolled into view and flashed (the collapsed Previews section opens).
+- A hinted link describes as the saved entry's label (`preview: <label>`,
+  `pair: <label>`) in `gg links` and the copied-link ring; unsaved, it reads
+  as its address does today.
+
+### Changed
+
+- Both steer validators (TUI inbox, `gg web` endpoint) ask
+  `model.LinkHintKindOK` rather than retyping the closed set. Embedded
+  using-gg skill v90.
 ## Command palette: type to filter
 
 ### Changed
