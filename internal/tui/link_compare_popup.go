@@ -46,6 +46,10 @@ type linkCompareSide struct {
 	sug       domain.BaseSuggestion
 	sugFor    string
 	asked     string
+
+	// The description row (link_compare_desc.go): desc answers for descFor and
+	// no other text; descAsked is the text a description is in flight for.
+	desc, descFor, descAsked string
 }
 
 // linkComparePopup is the palette's "Compare with link…": two gg:// links,
@@ -128,6 +132,12 @@ func (p *linkComparePopup) submit(m Model) (Model, tea.Cmd) {
 func (p *linkComparePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
 		return m, tea.Quit
+	}
+	// LOCKED while a comparison loads: it was built from the fields as they
+	// stood, so an edit, a swap or a focus move now would leave the form
+	// disagreeing with the view about to open. Only esc (withdraw) gets through.
+	if p.busy && msg.Type != tea.KeyEsc {
+		return m, nil
 	}
 	if !p.focus.isBase() {
 		if picked, handled := p.cur().hist.key(msg); handled {
@@ -246,6 +256,10 @@ func (p *linkComparePopup) box(m Model) string {
 		label := i18n.T("left:  ")
 		if i == 1 {
 			label = i18n.T("right: ")
+			// A blank row parts the two sides: each is a field plus up to three
+			// rows of its own (history, description, base), and run together
+			// they read as one block.
+			b.WriteString("\n")
 		}
 		focused := p.focus == r
 		b.WriteString(viewField(mark(r)+label, s.input, focused && !s.hist.active, cw) + "\n")
@@ -254,6 +268,9 @@ func (p *linkComparePopup) box(m Model) string {
 		// of them) would bury it. The footer says the list is there.
 		if focused && s.hist.active {
 			b.WriteString(s.hist.view(cw) + "\n")
+		}
+		if d := s.descLine(); d != "" {
+			b.WriteString("    " + st().dim.Render(elideMiddle(d, cw-4)) + "\n")
 		}
 		if s.hasBase() {
 			br := lcBase1

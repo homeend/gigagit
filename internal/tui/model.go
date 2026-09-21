@@ -110,12 +110,13 @@ type Model struct {
 	pendingSources      []sourceKey     // sources to refresh after this op; nil = all (set at the startOp call site)
 	identity            model.Identity  // last-read git user identity (refreshed after SetIdentity); the identityView popup loads its own fresh copy
 
-	mark             *markState      // the m-key mark; nil = none (see mark.go)
-	blameRecentLast  string          // last text submitted to the blame view's d-key age dialog; seeds the next one (the on/off state lives on the blameView and dies with it)
-	pairProbe        *pairProbeReq   // in-flight branch-pair fast-forward probe; nil = none
-	fileMarks        map[string]bool // multi-selected Status file paths (keyed by path)
-	commitCompareSet map[string]bool // commits toggled into the ◉ compare selection (keyed by hash)
-	actionMenu       *actionMenu     // . action menu (list + run available actions); nil = closed
+	mark              *markState      // the m-key mark; nil = none (see mark.go)
+	blameRecentLast   string          // last text submitted to the blame view's d-key age dialog; seeds the next one (the on/off state lives on the blameView and dies with it)
+	pairProbe         *pairProbeReq   // in-flight branch-pair fast-forward probe; nil = none
+	fileMarks         map[string]bool // multi-selected Status file paths (keyed by path)
+	commitCompareSet  map[string]bool // commits toggled into the ◉ compare selection (keyed by hash)
+	previewCompareSet map[string]bool // Previews rows toggled into the ◉ compare selection (keyed by row id; preview_marks.go)
+	actionMenu        *actionMenu     // . action menu (list + run available actions); nil = closed
 
 	stashView *stashView // stash list in the right column (over Commits); nil = closed
 
@@ -925,6 +926,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case baseSuggestedMsg:
 		if p, ok := m.topLayer().(*linkComparePopup); ok {
 			p.suggested(msg)
+		}
+		return m, nil
+	case linkDescribedMsg:
+		if p, ok := m.topLayer().(*linkComparePopup); ok {
+			p.described(msg)
 		}
 		return m, nil
 	case previewOpenMsg:
@@ -2055,6 +2061,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelCommits {
 				return m.handleCommitSpaceKey()
 			}
+			if m.focus == panelPreviews {
+				return m.handlePreviewSpaceKey()
+			}
 			return m.handleStageKey()
 		}
 		switch msg.String() {
@@ -2814,6 +2823,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// is what space is for).
 			if m.focus == panelCommits && len(m.commitCompareSet) > 0 {
 				m.commitCompareSet = nil
+				return m, nil
+			}
+			if m.focus == panelPreviews && len(m.previewCompareSet) > 0 {
+				m.previewCompareSet = nil
+				if m.linkCompareWant != "" { // a compare of those marks is loading: drop it on arrival
+					m.linkCompareWant = ""
+					m.statusMsg = ""
+				}
 				return m, nil
 			}
 			// Same on the file panels: one esc drops ALL m-marked files.
@@ -4309,6 +4326,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.sel = map[panel]int{}
 	m.mark = nil                          // a mark from the old repo must not re-attach by name in the new one
 	m.fileMarks = nil                     // likewise drop Status file-marks from the old repo
+	m.previewCompareSet = nil             // same: preview row ids belong to the old repo's store
 	m.commitCompareSet = nil              // ◉ marks are repo-scoped: stale keys from the old repo would eat the two space slots and skew Unmark-all counts
 	m.commitScopeBranches = nil           // the fresh feed walks all branches; a kept solo/multi scope would leave the ◉ branch marker and "solo:" title pointing at a scope the feed no longer has
 	m.commitFilter = commitFilterFields{} // same staleness: the filter is part of the feed scope the new feed doesn't carry

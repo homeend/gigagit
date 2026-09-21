@@ -351,6 +351,12 @@ func (m Model) appendCommitContextRows(out []actionRow) []actionRow {
 	if r, ok := m.commitCompareSelectionRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.previewCompareMarkedRow(); ok {
+		out = append(out, r)
+	}
+	if r, ok := m.previewMarksClearRow(); ok {
+		out = append(out, r)
+	}
 	out = append(out, m.commitSavePairRows()...)
 	if r, ok := m.markedRangeReviewRow(); ok {
 		out = append(out, r)
@@ -449,6 +455,10 @@ func actionMenuLabel(id string) (string, bool) {
 		return i18n.T("Mark branch for compare"), true
 	case "unmark":
 		return i18n.T("Unmark branch"), true
+	case "preview-mark":
+		return i18n.T("Mark preview for compare"), true
+	case "preview-unmark":
+		return i18n.T("Unmark preview"), true
 	case "pair":
 		return i18n.T("Compare with marked branch"), true
 	case "switch-worktree":

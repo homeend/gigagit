@@ -464,13 +464,19 @@ func (m Model) commitCompareStagedRow() (actionRow, bool) {
 // the set is non-empty.
 func (m Model) compareSetDisplayIndices(p panel) map[int]bool {
 	out := map[int]bool{}
-	if p != panelCommits || len(m.commitCompareSet) == 0 {
+	set := m.commitCompareSet
+	if p == panelPreviews {
+		set = m.previewCompareSet
+	} else if p != panelCommits {
+		return out
+	}
+	if len(set) == 0 {
 		return out
 	}
 	l := m.listFor(p)
 	idx := m.displayIndices(p) // idx only; avoid materializing styled rows
 	for n, i := range idx {
-		if m.commitCompareSet[l.Key(i)] {
+		if set[l.Key(i)] {
 			out[n] = true
 		}
 	}

@@ -270,3 +270,70 @@ func TestTheDialogNeverExceedsItsWidth(t *testing.T) {
 		}
 	}
 }
+
+// A busy dialog is LOCKED: the comparison in flight was built from the fields
+// as they stood, so typing, swapping, moving or re-submitting must do nothing
+// until it lands or esc withdraws it.
+func TestABusyDialogIsLocked(t *testing.T) {
+	t.Parallel()
+	m, dir, c1, c3 := linkDialogModel(t)
+	left, right := localLink(dir, "@"+c1), localLink(dir, "@"+c3)
+	setSides(linkDialog(t, m), left, right)
+	m, _ = pressKeys(t, m, typeKey(tea.KeyTab), typeKey(tea.KeyEnter))
+	p := linkDialog(t, m)
+	focus, want := p.focus, m.linkCompareWant
+	m, cmd := pressKeys(t, m, keyMsg("x"), typeKey(tea.KeyBackspace), typeKey(tea.KeyCtrlS),
+		typeKey(tea.KeyTab), typeKey(tea.KeyDown), typeKey(tea.KeyUp), typeKey(tea.KeyEnter))
+	p = linkDialog(t, m)
+	if cmd != nil || !p.busy || p.focus != focus || m.linkCompareWant != want ||
+		p.side[0].input.Value() != left || p.side[1].input.Value() != right {
+		t.Fatalf("a busy dialog changed: cmd=%v busy=%v focus=%v left=%q right=%q",
+			cmd != nil, p.busy, p.focus, p.side[0].input.Value(), p.side[1].input.Value())
+	}
+}
+
+// A link field is forty hex digits; the row under it says what it IS — the
+// same words the copied-link history shows — and where a hinted link came from.
+func TestTheDialogDescribesItsLinks(t *testing.T) {
+	t.Parallel()
+	m, dir, c1, c3 := linkDialogModel(t)
+	p := linkDialog(t, m)
+	pair := localLink(dir, "@"+c1+".."+c3)
+	setSides(p, pair+"?preview=abc123", "not a link")
+	m = pumpAll(t, m, p.refresh(m))
+	p = linkDialog(t, m)
+	want := describeLinkText(context.Background(), m.svc, pair+"?preview=abc123") + " · copied from a saved preview"
+	if got := p.side[0].descLine(); got != want {
+		t.Fatalf("left description = %q, want %q", got, want)
+	}
+	if got := p.side[1].descLine(); got != "" {
+		t.Fatalf("text that is no link has no description, got %q", got)
+	}
+	if out := m.View(); !strings.Contains(out, "copied from a saved preview") {
+		t.Fatalf("the description must be on screen:\n%s", out)
+	}
+	// Editing the field drops the words at once: they described other text.
+	m, _ = pressKeys(t, m, keyMsg("x"))
+	if got := linkDialog(t, m).side[0].descLine(); got != "" {
+		t.Fatalf("a stale description survived an edit: %q", got)
+	}
+}
+
+// ctrl+s swaps the fields; each description follows ITS link.
+func TestDescriptionsFollowASwap(t *testing.T) {
+	t.Parallel()
+	m, dir, c1, c3 := linkDialogModel(t)
+	p := linkDialog(t, m)
+	setSides(p, localLink(dir, "@"+c1), localLink(dir, "@"+c3))
+	m = pumpAll(t, m, p.refresh(m))
+	l0, r0 := linkDialog(t, m).side[0].descLine(), linkDialog(t, m).side[1].descLine()
+	if l0 == "" || r0 == "" || l0 == r0 {
+		t.Fatalf("fixture: descriptions %q / %q", l0, r0)
+	}
+	m, cmd := pressKeys(t, m, typeKey(tea.KeyCtrlS))
+	m = pumpAll(t, m, cmd)
+	p = linkDialog(t, m)
+	if p.side[0].descLine() != r0 || p.side[1].descLine() != l0 {
+		t.Fatalf("after swap: %q / %q, want %q / %q", p.side[0].descLine(), p.side[1].descLine(), r0, l0)
+	}
+}
