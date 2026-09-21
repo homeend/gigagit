@@ -77,6 +77,9 @@ func (p *pairOpPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		marked, selected := p.marked, p.selected
+		if op.open != nil && op.stacked {
+			return op.open(m, marked, selected)
+		}
 		m = m.popLayer()
 		m.mark = nil
 		if op.open != nil {

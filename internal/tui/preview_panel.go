@@ -42,6 +42,7 @@ type previewRow struct {
 	psum    domain.PairSummary
 	cmp     domain.SavedCompare // rowCompare: the two link texts, id, label
 	cmpDesc [2]string           // rowCompare: each link's one-line description
+	sym     *domain.Symmetric   // rowCompare: non-nil when it is a symmetric merge preview (domain.SymmetricOf)
 	sum     domain.PreviewSummary
 	notes   int            // root notes gathered along the branch, hidden ones included
 	byPath  map[string]int // the same counts per path; feeds the open preview's file list
@@ -89,6 +90,11 @@ func (r previewRow) subject() string {
 	case rowPair:
 		return shortHash(r.pair.A) + ".." + shortHash(r.pair.B)
 	case rowCompare:
+		if r.sym != nil {
+			// ASCII badge: a new glyph must be EAW-neutral, and ↔ reads as a
+			// left arrow in a monospace cell.
+			return "sym  " + i18n.T("%s vs %s", r.sym.A, r.sym.B) + "  " + i18n.T("base: %s", r.sym.Base)
+		}
 		return r.cmpDesc[0] + " ↔ " + r.cmpDesc[1]
 	}
 	return r.rec.Source + " → " + r.rec.Target
@@ -160,8 +166,12 @@ func readPreviews(ctx context.Context, svc *domain.Service) (previewsPayload, er
 		if c.IsSet() {
 			continue
 		}
-		rows = append(rows, previewRow{kind: rowCompare, cmp: c,
-			cmpDesc: [2]string{describeLinkText(ctx, svc, c.Left), describeLinkText(ctx, svc, c.Right)}})
+		row := previewRow{kind: rowCompare, cmp: c,
+			cmpDesc: [2]string{describeLinkText(ctx, svc, c.Left), describeLinkText(ctx, svc, c.Right)}}
+		if sym, ok := domain.SymmetricOf(c); ok {
+			row.sym = &sym
+		}
+		rows = append(rows, row)
 	}
 	return previewsPayload{rows: rows}, nil
 }

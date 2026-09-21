@@ -128,18 +128,22 @@ func (m Model) compareMarkedPreviews() (Model, tea.Cmd) {
 	if len(links) != 2 {
 		return m, nil
 	}
-	subject := m.previewMarkedSubjects()
-	m, cmd := m.startLinkCompare(links[0], links[1])
+	return m.openCompareWithLoading(links[0], links[1], m.previewMarkedSubjects())
+}
+
+// openCompareWithLoading starts the link comparison of left and right. A link
+// compare is ~50 git calls — seconds on a slow mount, a minute on a big repo —
+// and the view opens only when the load lands. Until then a small popup says
+// so (and owns the keyboard, so a second space cannot unmark the row just
+// marked); esc cancels. Not a placeholder files view: compare mode with no
+// endpoints is a state other readers (the session snapshot) rightly refuse.
+// A no-op start — that comparison already on screen — pushes nothing.
+func (m Model) openCompareWithLoading(left, right, subject string) (Model, tea.Cmd) {
+	m, cmd := m.startLinkCompare(left, right)
 	if cmd == nil {
 		return m, nil
 	}
-	// A link compare is ~50 git calls — seconds on a slow mount — and the view
-	// opens only when the load lands. Until then a small popup says so (and
-	// owns the keyboard, so a second space cannot unmark the row just marked).
-	// Not a placeholder files view: compare mode with no endpoints is a state
-	// other readers (the session snapshot) rightly refuse.
-	m = m.pushLayer(&compareLoadingPopup{tag: m.linkCompareWant, subject: subject})
-	return m, cmd
+	return m.pushLayer(&compareLoadingPopup{tag: m.linkCompareWant, subject: subject}), cmd
 }
 
 // previewCompareMarkedRow is the `.` menu's consumer of the m-marked pair.

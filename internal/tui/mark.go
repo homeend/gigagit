@@ -27,6 +27,10 @@ type pairOp struct {
 	// open, when non-nil, is used instead of build+startOp: the picker calls it
 	// to open a view (e.g. the interactive-rebase editor) for (marked, selected).
 	open func(m Model, marked, selected string) (Model, tea.Cmd)
+	// stacked keeps the picker (and the mark) under what open pushes, so esc
+	// there returns to it — a window opened from a popup returns to that
+	// popup. The pushed window drops both when it hands off.
+	stacked bool
 }
 
 // pairOpsFor returns panel p's pair-operations. Only Branches has any; the
@@ -73,6 +77,17 @@ func pairOpsFor(p panel) []pairOp {
 			enabled: true,
 			open: func(m Model, marked, selected string) (Model, tea.Cmd) {
 				return m.openPreviewPairDialog(marked, selected)
+			},
+		},
+		{
+			// Two branches that fix the same thing, each measured against a
+			// base the user names (no default): saved as ONE comparison and
+			// opened at once. The … says it asks for that base first.
+			label:   func(marked, selected string) string { return i18n.T("Symmetric merge preview %s, %s…", marked, selected) },
+			enabled: true,
+			stacked: true,
+			open: func(m Model, marked, selected string) (Model, tea.Cmd) {
+				return m.openSymmetricBase(marked, selected)
 			},
 		},
 	}
