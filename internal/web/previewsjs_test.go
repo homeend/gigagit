@@ -103,7 +103,7 @@ func TestPreviewsDragDropIsWired(t *testing.T) {
 		{"previews.js", `"compare and save…"`, "the drop menu saves"},
 		{"previews.js", `"compare with…"`, "the menu twin of the drag"},
 		{"previews.js", `previewRowLink`, "one link builder, shared with copy gg link"},
-		{"links.js", `previewRowLink };`, "links.js exports the builder"},
+		{"links.js", `previewRowLink`, "links.js exports the builder"},
 		{"style.css", `#previews-list li.drop-target`, "the highlight is styled per list"},
 		{"core.js", `dragPreview`, "the drag state lives in core state"},
 		{"previews.js", `<b>Drag</b> a merge preview`, "the section's help says the gesture exists"},
