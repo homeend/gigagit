@@ -1,0 +1,111 @@
+package web
+
+import (
+	"net/url"
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+)
+
+type symRowGot struct {
+	Path      string `json:"path"`
+	Left      string `json:"left"`
+	Right     string `json:"right"`
+	Differs   bool   `json:"differs"`
+	LeftSpec  string `json:"left_spec"`
+	RightSpec string `json:"right_spec"`
+}
+
+type linkCmpSym struct {
+	Files []linkCmpFile
+	Sym   []symRowGot
+}
+
+// twoAttemptsRepo: main, and two branches off it that are two attempts at one
+// job — they change diff.txt differently and same.txt identically, only A
+// deletes gone.txt, and each adds a file of its own.
+func twoAttemptsRepo(t *testing.T) (dir, base, a, b string) {
+	t.Helper()
+	isolateState(t)
+	dir = newRepoDir(t, 1)
+	put := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, f := range []string{"diff.txt", "same.txt", "gone.txt"} {
+		put(f, "base\n")
+	}
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "base")
+	base = gitRun(t, dir, "rev-parse", "HEAD")
+
+	gitRun(t, dir, "checkout", "-q", "-b", "agent-a")
+	put("diff.txt", "from a\n")
+	put("same.txt", "agreed\n")
+	put("onlya.txt", "a\n")
+	gitRun(t, dir, "rm", "-q", "gone.txt")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "attempt a")
+	a = gitRun(t, dir, "rev-parse", "HEAD")
+
+	gitRun(t, dir, "checkout", "-q", "-b", "agent-b", base)
+	put("diff.txt", "from b\n")
+	put("same.txt", "agreed\n")
+	put("onlyb.txt", "b\n")
+	gitRun(t, dir, "add", "-A")
+	gitRun(t, dir, "commit", "-m", "attempt b")
+	b = gitRun(t, dir, "rev-parse", "HEAD")
+	gitRun(t, dir, "checkout", "-q", "main")
+	return dir, base, a, b
+}
+
+// Two BOUNDED sets answer the aligned rows beside the plain listing: every
+// member of either set, each side saying absent / present / deleted.
+func TestCompareLinksAnswersTheAlignedRows(t *testing.T) {
+	dir, base, a, b := twoAttemptsRepo(t)
+	ts := linkServe(t, dir)
+	var got linkCmpSym
+	left, right := localLink(dir, "", pairTarget(base, a)), localLink(dir, "", pairTarget(base, b))
+	if code := getAny(t, ts, cmpURL(left, right), &got); code != 200 {
+		t.Fatalf("status %d", code)
+	}
+	want := []symRowGot{
+		{Path: "diff.txt", Left: "present", Right: "present", Differs: true},
+		{Path: "gone.txt", Left: "deleted", Right: "absent"},
+		{Path: "onlya.txt", Left: "present", Right: "absent", Differs: true},
+		{Path: "onlyb.txt", Left: "absent", Right: "present", Differs: true},
+		{Path: "same.txt", Left: "present", Right: "present"},
+	}
+	if !reflect.DeepEqual(got.Sym, want) {
+		t.Fatalf("sym:\n got %+v\nwant %+v", got.Sym, want)
+	}
+	// The plain listing is untouched: the three rows that differ, as before.
+	var paths []string
+	for _, f := range got.Files {
+		paths = append(paths, f.Status+" "+f.Path)
+	}
+	if !reflect.DeepEqual(paths, []string{"M diff.txt", "D onlya.txt", "A onlyb.txt"}) {
+		t.Fatalf("files = %v", paths)
+	}
+}
+
+// An unbounded side has no member list to align, and a PAIR LANDING is a
+// commit diff with a note scope, not two sets: neither offers the view.
+func TestCompareLinksOffersNoAlignedRowsWithoutTwoSets(t *testing.T) {
+	dir, base, a, _ := twoAttemptsRepo(t)
+	ts := linkServe(t, dir)
+	for name, path := range map[string]string{
+		"a point side": cmpURL(localLink(dir, "", commitTarget(base)), localLink(dir, "", pairTarget(base, a))),
+		"pair landing": "/api/compare-links?" + url.Values{"a": {base}, "b": {a}}.Encode(),
+	} {
+		var raw map[string]any
+		if code := getAny(t, ts, path, &raw); code != 200 {
+			t.Fatalf("%s: status %d", name, code)
+		}
+		if _, has := raw["sym"]; has {
+			t.Fatalf("%s: must not carry sym: %v", name, raw["sym"])
+		}
+	}
+}
