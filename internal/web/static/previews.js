@@ -12,8 +12,8 @@ import { openPrompt, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { applyCompareFilter, drillOut, noteBadgeHTML, openCompare, renderFiles } from "./files.js";
 import { extraRows, registerHelp, registerRows } from "./menus.js";
-import { copyLink } from "./links.js";
-import { runLinkCompare } from "./linkcompare.js";
+import { copyLink, previewRowLink } from "./links.js";
+import { openLinkCompareDialog, runLinkCompare } from "./linkcompare.js";
 import { isCollapsed, toggleSection } from "./sidebar.js";
 
 // fetchPreviews loads the list and renders it. A failure leaves an EMPTY list
@@ -109,6 +109,21 @@ function pairStateText(e) {
   return e.files === 1 ? "1 file" : e.files + " files";
 }
 
+// rowLink is the ONE gg:// link a row stands for — what its "copy gg link"
+// copies: a pair's saved link, a merge preview's target...source. A comparison
+// is TWO links, so it has none, and neither has a merge row whose ref names
+// the link grammar cannot carry. A row without a link takes no part in a drag
+// & drop compare, on either end (the TUI's previewRowLink refusal).
+function rowLink(e) {
+  if (e.kind === "compare") return "";
+  return e.kind === "pair" ? e.link || "" : previewRowLink(e);
+}
+// The attribute is decided by KIND alone: the first paint can land before the
+// repo identity a merge row's link is built from, and a row that silently
+// stayed undraggable until the next refresh would be a heisenbug. A row whose
+// link turns out unbuildable is refused by the listeners instead.
+const dragAttr = (e) => (e.kind === "compare" ? "" : ' draggable="true"');
+
 // savedRowHTML paints a pair or a comparison. data-kind tells the click and
 // the menu which list the row's id belongs to: the three kinds share one
 // store, so an id alone does not say.
@@ -116,7 +131,7 @@ function savedRowHTML(e) {
   const sub = e.kind === "pair" ? e.a.slice(0, 8) + ".." + e.b.slice(0, 8) : e.left_desc + " ↔ " + e.right_desc;
   const tip = e.kind === "pair" ? e.link : e.left + "\n" + e.right;
   return (
-    `<li data-id="${esc(e.id)}" data-kind="${esc(e.kind)}" title="${esc(tip)}"><span class="mk"></span>` +
+    `<li data-id="${esc(e.id)}" data-kind="${esc(e.kind)}"${dragAttr(e)} title="${esc(tip)}"><span class="mk"></span>` +
     `${esc(e.label)}<span class="psub">${esc(sub)}</span>` +
     (e.kind === "pair" ? `<span class="psub">${esc(pairStateText(e))}</span>` : "") +
     // The pair's review-note total — the merge rows' badge, one painter.
@@ -133,7 +148,7 @@ function renderPreviews() {
   $("previews-list").innerHTML = (state.previews || [])
     .map(
       (e) =>
-        `<li data-id="${esc(e.id)}" title="${esc(e.source + " → " + e.target)}"><span class="mk"></span>` +
+        `<li data-id="${esc(e.id)}" data-kind="preview"${dragAttr(e)} title="${esc(e.source + " → " + e.target)}"><span class="mk"></span>` +
         `${esc(e.label)}<span class="psub">${esc(e.source + " → " + e.target)}</span>` +
         `<span class="psub">${esc(stateText(e))}</span>` +
         // The pair's review-note total, the ◆N the TUI paints on the row. Its
@@ -492,6 +507,7 @@ function showPreviewMenu(e, x, y) {
     { label: "save reversed (" + e.target + " → " + e.source + ")", act: () => savePreview(e.target, e.source, "", false) },
   ];
   items.push(...extraRows("preview", e));
+  items.push(...compareWithRows(e));
   items.push({ sep: true });
   items.push({
     label: "remove preview",
@@ -571,6 +587,7 @@ function showPairMenu(e, x, y) {
       { label: "rename…", act: () => renameSaved(e) },
       { label: "save reversed (" + e.b.slice(0, 8) + ".." + e.a.slice(0, 8) + ")", act: () => saveSaved({ a: e.b, b: e.a, label: "" }) },
       { label: "copy gg link", act: () => copyLink(e.link, e.desc) },
+      ...compareWithRows(e),
       { sep: true },
       { label: "remove pair", danger: true, act: () => confirmRemoveSaved(e, "pair") },
     ],
@@ -601,8 +618,15 @@ function showComparisonMenu(e, x, y) {
 // store and one <ul>, and a merge preview's handlers must never be handed a
 // pair.
 function rowEntry(li) {
-  const list = li.dataset.kind ? state.savedCompares : state.previews;
-  return (list || []).find((x) => x.id === li.dataset.id);
+  return findRow(li.dataset.id, li.dataset.kind);
+}
+
+// findRow looks a row up by id in the list its kind names. The drag & drop
+// handlers use it at DROP time: renderPreviews replaces the list's innerHTML
+// on every live refresh, so an element held across a drag would be stale.
+function findRow(id, kind) {
+  const list = kind === "pair" || kind === "compare" ? state.savedCompares : state.previews;
+  return (list || []).find((x) => x.id === id);
 }
 
 $("previews-list").addEventListener("click", (ev) => {
@@ -610,7 +634,7 @@ $("previews-list").addEventListener("click", (ev) => {
   if (!li || !li.dataset.id) return;
   const e = rowEntry(li);
   if (!e) return;
-  if (li.dataset.kind) openSaved(e);
+  if (li.dataset.kind === "pair" || li.dataset.kind === "compare") openSaved(e);
   else openPreviewEntry(e);
 });
 
@@ -624,6 +648,123 @@ $("previews-list").addEventListener("contextmenu", (ev) => {
   else if (li.dataset.kind === "compare") showComparisonMenu(e, ev.clientX, ev.clientY);
   else showPreviewMenu(e, ev.clientX, ev.clientY);
 });
+
+
+// --- drag & drop compare ---
+// Drag a row onto another to compare the two change-sets — the branch list's
+// gesture (sidebar.js), and like it the drop opens the shared ctx-menu naming
+// the pair in both directions: the menu row IS the confirmation. Only rows
+// with ONE link take part (rowLink); the client never screens what the two
+// links ARE — the server is the one judge, and its refusal goes to the op line.
+const previewsList = $("previews-list");
+
+previewsList.addEventListener("dragstart", (ev) => {
+  const li = ev.target.closest("li");
+  const e = li && li.dataset.id ? rowEntry(li) : null;
+  if (!e || !rowLink(e)) {
+    ev.preventDefault(); // no link, no drag
+    return;
+  }
+  state.dragPreview = { id: li.dataset.id, kind: li.dataset.kind };
+  // Required for a drag to start at all in Firefox.
+  ev.dataTransfer.setData("text/plain", rowLink(e));
+  ev.dataTransfer.effectAllowed = "move";
+});
+
+previewsList.addEventListener("dragover", (ev) => {
+  const li = ev.target.closest("li");
+  const src = state.dragPreview;
+  if (!li || !li.dataset.id || !src) return;
+  if (li.dataset.id === src.id && li.dataset.kind === src.kind) return;
+  const e = rowEntry(li);
+  if (!e || !rowLink(e)) return;
+  // preventDefault is what marks this row as a valid drop target; a row that
+  // returned above keeps the browser's own "no drop" cursor.
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = "move";
+  li.classList.add("drop-target");
+});
+
+previewsList.addEventListener("dragleave", (ev) => {
+  const li = ev.target.closest("li");
+  if (li) li.classList.remove("drop-target");
+});
+
+previewsList.addEventListener("dragend", () => {
+  state.dragPreview = null;
+  clearPreviewDropTargets();
+});
+
+previewsList.addEventListener("drop", (ev) => {
+  const li = ev.target.closest("li");
+  const from = state.dragPreview;
+  state.dragPreview = null;
+  clearPreviewDropTargets();
+  if (!li || !li.dataset.id || !from) return;
+  // Both ends are looked up NOW: a live refresh may have removed either.
+  const src = findRow(from.id, from.kind);
+  const dst = rowEntry(li);
+  if (!src || !dst || src === dst || !rowLink(src) || !rowLink(dst)) return;
+  ev.preventDefault();
+  showPreviewPairMenu(src, dst, ev.clientX, ev.clientY);
+});
+
+function clearPreviewDropTargets() {
+  for (const el of previewsList.querySelectorAll(".drop-target")) el.classList.remove("drop-target");
+}
+
+const compareRows = (l, r) => runLinkCompare(new URLSearchParams({ left: rowLink(l), right: rowLink(r) }).toString());
+
+// showPreviewPairMenu offers the comparison of (dragged, dropped-on). The left
+// side is the OLD one, so both directions are spelled out by label.
+function showPreviewPairMenu(src, dst, x, y) {
+  showCtxMenu(
+    [
+      { label: "compare " + src.label + " ↔ " + dst.label, act: () => compareRows(src, dst) },
+      { label: "compare " + dst.label + " ↔ " + src.label, act: () => compareRows(dst, src) },
+      { sep: true },
+      { label: "compare and save…", act: () => compareAndSave(src, dst) },
+      { sep: true },
+      { label: "cancel", act: () => {} },
+    ],
+    x,
+    y
+  );
+}
+
+// compareAndSave saves the two links as a comparison, then opens it BY ID —
+// the saved row's own door, so the screen is the one a later click reopens.
+// An already-saved pair of links opens the row that holds it.
+function compareAndSave(l, r) {
+  openPrompt({
+    title: "Save the comparison as:",
+    value: l.label + " vs " + r.label,
+    onSubmit: async (label) => {
+      let id;
+      try {
+        const out = await postJSON("/api/saved-compares", { left: rowLink(l), right: rowLink(r), label });
+        id = out.entry.id;
+        opLine("saved " + out.entry.label);
+      } catch (err) {
+        if (!(err.data && err.data.id)) {
+          opLine("save: " + (err.message || err), true);
+          return;
+        }
+        id = err.data.id;
+        opLine("already saved as " + err.data.label);
+      }
+      await refresh();
+      runLinkCompare("id=" + encodeURIComponent(id));
+    },
+  });
+}
+
+// compareWithRows is the drag's menu twin (drag is the power-user path): the
+// compare-with-link dialog, its LEFT field holding this row's link.
+function compareWithRows(e) {
+  const link = rowLink(e);
+  return link ? [{ label: "compare with…", act: () => openLinkCompareDialog({ left: link }) }] : [];
+}
 
 
 // Branch row: preview merging THIS branch into the checked-out one.

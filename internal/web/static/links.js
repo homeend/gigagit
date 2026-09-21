@@ -262,11 +262,20 @@ registerRows("commit", (c) => {
 // grammar cannot carry degrades to the bare link rather than losing the row,
 // and the description is the entry's label — what domain.DescribeLink reads
 // the hinted link as.
-registerRows("preview", (e) => {
+//
+// previewRowLink is the ONE builder of that link: the row's "copy gg link" and
+// a drag & drop compare (previews.js) must hand out the very same text. ""
+// when the grammar cannot carry the row's ref names.
+function previewRowLink(e) {
   const ctx = { path: "", state: "commit", compare: true, preview: { source: e.source, target: e.target } };
-  const link =
+  return (
     linkFor(state.repo, state.worktree, { ...ctx, hint: { kind: "preview", id: e.id } }) ||
-    linkFor(state.repo, state.worktree, ctx);
+    linkFor(state.repo, state.worktree, ctx)
+  );
+}
+
+registerRows("preview", (e) => {
+  const link = previewRowLink(e);
   return link ? [copyLinkRow(link, linkDesc("preview", e.label || e.target + "..." + e.source, ""))] : [];
 });
 
@@ -314,4 +323,4 @@ registerRows("shelf", (e) => {
   return link ? [copyLinkRow(link, entryDesc("shelf", e))] : [];
 });
 
-export { copyLink, linkDesc, linkFor };
+export { copyLink, linkDesc, linkFor, previewRowLink };

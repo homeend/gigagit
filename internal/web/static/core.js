@@ -77,6 +77,7 @@ const state = {
   diffBlockIdx: -1,
   detailGen: 0,
   dragBranch: null, // name of the branch being dragged, else null
+  dragPreview: null, // {id, kind} of the Previews row being dragged, else null
   solo: "", // branch the commit list is narrowed to ("" = every branch)
   // A parked (backgrounded) long task, and then its result until collected:
   // {label, status: running|done|failed|cancelled, title, path, report, error}
