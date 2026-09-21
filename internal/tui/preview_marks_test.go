@@ -89,7 +89,8 @@ func TestPreviewSpaceTogglesOffAndRefusesAThird(t *testing.T) {
 	}
 	m, _ = previewSpace(t, m, 0)
 	m, _ = previewSpace(t, m, 1)
-	m.linkCompareWant, m.statusMsg = "", ""
+	m, _ = send(m, keyType(tea.KeyEsc)) // the compare view opened: back to the panel, marks kept
+	m.statusMsg = ""
 	m, cmd = previewSpace(t, m, 2)
 	if cmd != nil || len(m.previewCompareSet) != 2 || m.linkCompareWant != "" || m.statusMsg == "" {
 		t.Fatalf("a third mark is refused with a notice: cmd=%v set=%v status=%q", cmd, m.previewCompareSet, m.statusMsg)
@@ -178,34 +179,55 @@ func TestPreviewMarkSurvivesTheFilter(t *testing.T) {
 }
 
 // The load takes seconds on a slow mount and the view opens only when it
-// lands: the key must SAY it is working, and a second space meanwhile must not
-// unmark the row (the reported "I have to press it again" bug).
-func TestPreviewCompareInFlightSaysSoAndSwallowsSpace(t *testing.T) {
+// lands: a popup says so AT ONCE and owns the keys (the reported "I have to
+// press it again" bug was a dead-looking panel where a second space unmarked).
+func TestPreviewCompareShowsALoadingPopup(t *testing.T) {
 	t.Parallel()
-	m, _, _ := previewMarksModel(t)
+	m, mergeLink, _ := previewMarksModel(t)
 	m, _ = previewSpace(t, m, 0)
 	m, cmd := previewSpace(t, m, 1)
-	if cmd == nil || m.statusMsg != "comparing…" {
-		t.Fatalf("the second mark must announce the load: cmd=%v status=%q", cmd != nil, m.statusMsg)
+	if _, ok := m.topLayer().(*compareLoadingPopup); !ok || cmd == nil {
+		t.Fatalf("second mark opens the loading popup: top=%T cmd=%v", m.topLayer(), cmd != nil)
 	}
-	m, again := previewSpace(t, m, 1)
+	if out := m.View(); !strings.Contains(out, "comparing…") || !strings.Contains(out, "login ↔ attempt") {
+		t.Fatalf("the popup names what is loading:\n%s", out)
+	}
+	m, again := send(m, keyType(tea.KeySpace))
 	if again != nil || len(m.previewCompareSet) != 2 {
 		t.Fatalf("space while loading is swallowed: cmd=%v set=%v", again != nil, m.previewCompareSet)
 	}
 	m = pumpAll(t, m, cmd)
-	if m.filesSets == nil {
-		t.Fatalf("the first load still opens the view (status %q)", m.statusMsg)
+	if m.filesSets == nil || m.filesSets.LeftText != mergeLink || m.topLayer() != nil {
+		t.Fatalf("the load closes the popup and opens the view: top=%T status=%q", m.topLayer(), m.statusMsg)
+	}
+	m, _ = send(m, keyType(tea.KeyEsc))
+	if m.filesView != nil || m.topLayer() != nil || m.focus != panelPreviews || len(m.previewCompareSet) != 2 {
+		t.Fatalf("esc returns to Previews (not the popup) with both marks: top=%T focus=%v", m.topLayer(), m.focus)
 	}
 }
 
-func TestPreviewEscCancelsALoadingCompare(t *testing.T) {
+func TestPreviewEscOnTheLoadingPopupCancels(t *testing.T) {
 	t.Parallel()
 	m, _, _ := previewMarksModel(t)
 	m, _ = previewSpace(t, m, 0)
 	m, cmd := previewSpace(t, m, 1)
 	m, _ = send(m, keyType(tea.KeyEsc))
+	if m.topLayer() != nil || len(m.previewCompareSet) != 2 {
+		t.Fatalf("esc closes the popup and keeps the marks: top=%T set=%v", m.topLayer(), m.previewCompareSet)
+	}
 	m = pumpAll(t, m, cmd)
-	if m.filesSets != nil || len(m.previewCompareSet) != 0 {
-		t.Fatalf("esc drops the marks and the load: sets=%v set=%v", m.filesSets != nil, m.previewCompareSet)
+	if m.filesView != nil {
+		t.Fatal("a cancelled load must not open the view")
+	}
+}
+
+func TestPreviewFailedCompareClosesTheLoadingPopup(t *testing.T) {
+	t.Parallel()
+	m, _, _ := previewMarksModel(t)
+	m, _ = previewSpace(t, m, 0)
+	m, _ = previewSpace(t, m, 1)
+	m, _ = m.loadedLinkCompare(linkCompareLoadedMsg{tag: m.linkCompareWant, err: context.DeadlineExceeded})
+	if m.topLayer() != nil || m.filesView != nil || !strings.Contains(m.statusMsg, "compare") {
+		t.Fatalf("a failure closes the popup and says why: top=%T status=%q", m.topLayer(), m.statusMsg)
 	}
 }

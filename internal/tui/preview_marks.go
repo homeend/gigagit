@@ -2,6 +2,7 @@ package tui
 
 import (
 	"sort"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -127,12 +128,17 @@ func (m Model) compareMarkedPreviews() (Model, tea.Cmd) {
 	if len(links) != 2 {
 		return m, nil
 	}
+	subject := m.previewMarkedSubjects()
 	m, cmd := m.startLinkCompare(links[0], links[1])
-	if cmd != nil {
-		// The view only opens when the load lands; until then this line is the
-		// one sign the key did anything.
-		m.statusMsg = i18n.T("comparing…")
+	if cmd == nil {
+		return m, nil
 	}
+	// A link compare is ~50 git calls — seconds on a slow mount — and the view
+	// opens only when the load lands. Until then a small popup says so (and
+	// owns the keyboard, so a second space cannot unmark the row just marked).
+	// Not a placeholder files view: compare mode with no endpoints is a state
+	// other readers (the session snapshot) rightly refuse.
+	m = m.pushLayer(&compareLoadingPopup{tag: m.linkCompareWant, subject: subject})
 	return m, cmd
 }
 
@@ -163,4 +169,54 @@ func (m Model) previewMarksClearRow() (actionRow, bool) {
 			return m, nil
 		},
 	}, true
+}
+
+// previewMarkedSubjects names the marked rows for the loading popup, in the
+// order the comparison takes them: "<label> ↔ <label>".
+func (m Model) previewMarkedSubjects() string {
+	var names []string
+	for _, i := range m.displayIndices(panelPreviews) {
+		if i < len(m.previews) && m.previewCompareSet[m.previews[i].id()] {
+			names = append(names, m.previews[i].label())
+		}
+	}
+	return strings.Join(names, " ↔ ")
+}
+
+// compareLoadingPopup sits over the Previews tab while the marked rows'
+// comparison loads. esc cancels the load (the result is dropped on arrival);
+// every other key is swallowed. loadedLinkCompare closes it — see
+// closeCompareLoading — BEFORE opening the view, so the view is not "opened
+// from a popup" and esc on it returns to the panel, not to this.
+type compareLoadingPopup struct {
+	tag     string
+	subject string
+}
+
+func (p *compareLoadingPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "esc":
+		if m.linkCompareWant == p.tag {
+			m.linkCompareWant = ""
+		}
+		m.statusMsg = ""
+		return m.popLayer(), nil
+	}
+	return m, nil
+}
+
+func (p *compareLoadingPopup) render(m Model, below string) string {
+	w, h := m.overlayDims()
+	body := i18n.T("comparing…") + "\n\n" + p.subject + "\n\n" + i18n.T("[esc] cancel")
+	return overlayCenter(clipToHeight(below, h), popupBox(popupInnerWidth(w), body), w, h)
+}
+
+// closeCompareLoading pops the loading popup when it waits for tag.
+func (m Model) closeCompareLoading(tag string) Model {
+	if p, ok := m.topLayer().(*compareLoadingPopup); ok && p.tag == tag {
+		return m.popLayer()
+	}
+	return m
 }

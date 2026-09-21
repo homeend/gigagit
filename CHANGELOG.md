@@ -23,10 +23,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   marked first.
 - A saved comparison row (`<left> ↔ <right>`) is already two links and cannot
   be marked; `space`/`m` on it says so.
-- The status line says **comparing…** the moment the comparison starts — a
-  link compare is dozens of git calls, seconds on a slow mount, and the view
-  opens only when it lands. While it loads, `space`/`m` are swallowed (a
-  second press would have unmarked the row just marked); `esc` cancels it.
+- A **comparing…** popup (naming the two rows, `esc` cancels) opens the moment
+  the comparison starts — a link compare is dozens of git calls, seconds on a
+  slow mount, and the view opens only when it lands. It owns the keyboard, so
+  a second `space` can no longer unmark the row just marked.
 
 ## `gg web`: the page notices when the server is gone
 
