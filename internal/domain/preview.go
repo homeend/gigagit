@@ -32,10 +32,7 @@ var (
 
 // entryFromPreview renders a saved merge preview as a set-shaped entry.
 func entryFromPreview(repo model.LinkRepo, p model.MergePreview) (savedcompare.Entry, error) {
-	l, err := model.ParseLink(model.Link{Repo: repo, Target: model.LinkTarget{
-		State:   model.StateCommitted,
-		Preview: &model.LinkPreview{Source: p.Source, Target: p.Target},
-	}}.String())
+	l, err := model.ParseLink(previewLinkText(repo, p.Source, p.Target))
 	if err != nil {
 		return savedcompare.Entry{}, err
 	}
