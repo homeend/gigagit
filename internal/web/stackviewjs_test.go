@@ -21,3 +21,42 @@ func TestFileDiffURLIsShared(t *testing.T) {
 		t.Error("files.js builds a /api/diff URL inline again — route it through fileDiffURL")
 	}
 }
+
+// The stack is only reachable if the doors route into it and every exit
+// tears it down; each of these lines is one of those doors or exits.
+func TestStackViewWired(t *testing.T) {
+	t.Parallel()
+	files := readStatic(t, "files.js")
+	for _, want := range []string{
+		"if (stackOn()) return openStack(i);",      // openFile routes into the stack
+		`if (mode !== "diff") teardownStack();`,    // leaving the diff stage drops it
+		"if (state.stack) return rerenderStack();", // f / w / resize re-render the stack
+		"reconcileStack();",                        // a status re-read keeps its sections
+	} {
+		if !strings.Contains(files, want) {
+			t.Errorf("files.js is missing %q", want)
+		}
+	}
+	view := readStatic(t, "stackview.js")
+	for _, want := range []string{
+		"new IntersectionObserver(",
+		"STACK_MAX_IN_FLIGHT",
+		`getJSON("/api/numstat?"`,
+		"getJSON(fileDiffURL(",
+		"state.ui && state.ui.stacked_diff",
+		"saveUI({ stacked_diff:",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("stackview.js is missing %q", want)
+		}
+	}
+	css := readStatic(t, "style.css")
+	for _, want := range []string{".stk-head", "position: sticky", "var(--diff-head-h", "#stack-fold-all.hidden"} {
+		if !strings.Contains(css, want) {
+			t.Errorf("style.css is missing %q", want)
+		}
+	}
+	if !strings.Contains(readStatic(t, "app.js"), `import "./stackview.js";`) {
+		t.Error("app.js does not load stackview.js")
+	}
+}

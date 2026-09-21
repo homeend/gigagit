@@ -16,6 +16,7 @@ import "./versions.js";
 import "./rebase.js";
 import "./filehist.js";
 import "./review.js";
+import "./stackview.js";
 import { applyStoredWidths } from "./resize.js";
 import { applyGraphMode, loadCommits, renderCommits } from "./commits.js";
 import { applyDiffView, applyFilesHidden, applyTextMode, refreshNoteCounts } from "./files.js";

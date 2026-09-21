@@ -18,6 +18,7 @@ import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
+import { openStack, reconcileStack, rerenderStack, stackOn, teardownStack } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -36,6 +37,7 @@ function reconcileStatusView() {
     conflictPick = null;
     renderResolveBar();
   }
+  reconcileStack();
 }
 
 
@@ -117,6 +119,7 @@ registerHelp({
 // the diff replaces the commits area, file list stays right. esc steps one
 // stage back (drillOut).
 function setLayout(mode) {
+  if (mode !== "diff") teardownStack(); // the stack lives in the diff stage only
   const was = state.layout;
   state.layout = mode;
   const p = $("panes");
@@ -1090,6 +1093,10 @@ async function openFile(i) {
   state.fileCursor = i;
   renderFiles();
   updateDiffNav();
+  // The stacked view (S) shows every file in one scroll: this row is a
+  // place in it, not a diff of its own (stackview.js).
+  if (stackOn()) return openStack(i);
+  teardownStack(); // a single-file open replaces any stack on screen
   if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
   // A link comparison addresses its sides by spec too, and a ROW may name its
@@ -1597,6 +1604,7 @@ function visibleChangeBlock() {
 // must not be thrown to the block they last stepped to).
 // A conflict picker owns #diff-body while open: never draw the diff over it.
 function rerenderDiffKeepingPlace(keepScroll = false) {
+  if (state.stack) return rerenderStack();
   if (!state.lastDiff || conflictPick) return;
   const pane = $("diff-pane");
   const top = pane.scrollTop;
@@ -1667,7 +1675,8 @@ function toggleDiffView(keepScroll = false) {
   applyDiffView(on ? "changed" : "full");
   if (on) state.diffFolds = new Set();
   saveUI({ diff_view: on ? "changed" : "full" });
-  rerenderDiffKeepingPlace(keepScroll);
+  if (state.stack) rerenderStack(on); // flipping ON starts every file folded
+  else rerenderDiffKeepingPlace(keepScroll);
 }
 
 
@@ -2958,6 +2967,14 @@ function assembleOutput(v) {
 }
 
 
+// closeConflictPick drops an open hunk picker's state (a stack is taking
+// the pane) and hides its bar.
+function closeConflictPick() {
+  conflictPick = null;
+  renderResolveBar();
+}
+
+
 async function openConflictPicker(f) {
   clearDiffHunks(); // also nulls conflictPick — order matters, set it after
   setDiffTitle(f.path, "", " — resolve");
@@ -3435,4 +3452,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };

@@ -1196,3 +1196,25 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 /* the files header says WHAT KIND of screen a comparison is */
 #files-kind { display: inline-block; margin-right: 6px; padding: 0 6px; border: 1px solid var(--accent); border-radius: 8px; color: var(--accent); font-size: 11px; vertical-align: 1px; white-space: nowrap; }
 #files-kind.hidden { display: none; }
+
+/* Stacked diff (stackview.js): one bordered section per file; its header
+   sticks just under #diff-header (whose height paintStack writes into
+   --diff-head-h). overflow-anchor stays auto: a section above the viewport
+   growing as it loads must not push the reader's file away. */
+.stk { padding: 4px 6px 24px; }
+.stk-file { border: 1px solid var(--border); border-radius: 4px; margin: 8px 0; }
+.stk-head {
+  position: sticky; top: var(--diff-head-h, 0px); z-index: 1;
+  display: flex; align-items: center; gap: 8px; padding: 4px 8px;
+  background: var(--bg-alt); border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.stk-file.collapsed .stk-head { border-bottom: none; }
+.stk-fold { color: var(--dim); width: 1em; }
+.stk-path { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stk-counts { color: var(--dim); white-space: nowrap; }
+.stk-add { color: #7bd88f; }
+.stk-del { color: #f27a6a; }
+.stk-bin { color: var(--dim); }
+.stk-ph { color: var(--dim); padding: 8px; }
+#stack-btn.on, #foot button[data-act="stacked"].on { color: var(--accent); }
+#stack-fold-all.hidden { display: none; }
