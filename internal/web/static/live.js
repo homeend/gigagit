@@ -9,7 +9,7 @@
 // after a dropped stream reloads everything, since events were missed.
 import { attnKey, getJSON, runOnce, state } from "./core.js";
 import { fetchStatus, wtCount } from "./status.js";
-import { runLinkCompare } from "./linkcompare.js";
+import { refreshLinkCompare, runLinkCompare } from "./linkcompare.js";
 import { fetchNotes, markDiffRow, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
 import { fetchBranches, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved, revealSavedSet } from "./previews.js";
@@ -140,6 +140,9 @@ async function refreshSources(want) {
   // After the previews list lands: an open preview whose tips moved re-opens
   // itself, one whose pair vanished closes with a notice.
   await reopenPreviewIfMoved();
+  // A link comparison with a live side (a branch tip, the working tree) moves
+  // with the refs and the status; notes and PRs cannot change its rows.
+  if (sidebar || want.has("status") || want.has("feed")) await refreshLinkCompare();
   if (want.has("status")) reconcileStatusView();
   if (want.has("feed")) {
     await loadCommits(false, false);

@@ -888,6 +888,15 @@ wire shape is a navigate with no `File`, `Commit` or `Target` — only
 `hint_kind`/`hint_id` — and all three acceptance points (linknav, the web's
 `toSteerWire`, `gg session navigate`) take it.
 
+**Web link comparisons are live, pairs are not.** `linkcompare.js
+refreshLinkCompare` re-asks `/api/compare-links` with `state.compare.links`
+after a sidebar/status/feed refresh and hands differing rows to `files.js
+updateLinkCompareFiles` (in place: cursor follows its path, never
+`openLinkCompare`, which resets the screen). It skips `state.compare.pair` and
+a comparison that is not on screen, stays silent on error, and drops an answer
+whose `state.compare` identity changed meanwhile. The pair file menu's rev rows
+use `hereRev = rev || pairCtx().b` and are withheld from a `right_spec` row;
+the link contributor still receives the comparison's own (empty) rev.
 **`?preview=<id>` — a saved Previews entry (merge preview OR commit pair).**
 One kind for both set-shaped entries; a two-link comparison has no single link
 and never carries it. Producers are ENTRY-level only: the TUI Previews row

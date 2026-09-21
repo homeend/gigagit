@@ -119,6 +119,8 @@ function savedRowHTML(e) {
     `<li data-id="${esc(e.id)}" data-kind="${esc(e.kind)}" title="${esc(tip)}"><span class="mk"></span>` +
     `${esc(e.label)}<span class="psub">${esc(sub)}</span>` +
     (e.kind === "pair" ? `<span class="psub">${esc(pairStateText(e))}</span>` : "") +
+    // The pair's review-note total — the merge rows' badge, one painter.
+    (e.kind === "pair" ? noteBadgeHTML(e.notes) : "") +
     `</li>`
   );
 }

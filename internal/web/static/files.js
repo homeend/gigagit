@@ -569,6 +569,28 @@ function openLinkCompare(body) {
 }
 
 
+// updateLinkCompareFiles swaps a LIVE link comparison's rows in place — what
+// refreshLinkCompare calls when something under the comparison moved. Unlike
+// openLinkCompare it tears nothing down: the filter, the stage and the cursor's
+// FILE stay (the cursor follows its path, since rows shift), and an open diff
+// closes only when its own row is gone.
+function updateLinkCompareFiles(files) {
+  const c = state.compare;
+  const cur = state.files[state.fileCursor];
+  c.all = files || [];
+  state.files = c.filter === "all" ? c.all : c.all.filter((f) => f.origin === c.filter || f.origin === "both");
+  if (!state.files.length) {
+    applyCompareFilter(); // the one painter of the empty state
+    return;
+  }
+  const i = cur ? state.files.findIndex((f) => f.path === cur.path) : -1;
+  state.fileCursor = i >= 0 ? i : Math.min(state.fileCursor, state.files.length - 1);
+  renderFiles();
+  updateDiffNav();
+  if (i < 0 && state.layout === "diff") drillOut();
+}
+
+
 // pairCtx is the commit pair whose comparison is ON SCREEN — the predicate the
 // pair's note lane gates on, beside openPreviewCtx. The layout check matters:
 // drillOut (esc) returns to the commit list leaving filesMode and
@@ -3147,14 +3169,23 @@ $("files-list").addEventListener("contextmenu", (e) => {
     // A link comparison has no single revision to be "here": its right side
     // may be the working tree, a stash's third parent, a shelf entry. The rows
     // that need one are left out rather than sent an empty rev.
-    const revRows = rev
+    //
+    // A PAIR landing is the exception: its right side IS one commit, b — the
+    // server named it (pairCtx). Only for a row whose bytes live on that side's
+    // own endpoint, though: a `-u` stash keeps its untracked files on a third
+    // parent (right_spec), and "history at b" would be history of a file b
+    // never held. hereRev is for these rows ONLY — the link contributor below
+    // still gets the comparison's own (empty) rev and the pair as its address.
+    const pc = pairCtx();
+    const hereRev = rev || (pc && !f.right_spec ? pc.b : "");
+    const revRows = hereRev
       ? [
-          { label: "file history", act: () => openFileHistory(f.path, rev) },
-          { label: "blame at this commit", act: () => openFileBlame(f.path, rev) },
+          { label: "file history", act: () => openFileHistory(f.path, hereRev) },
+          { label: "blame at this commit", act: () => openFileBlame(f.path, hereRev) },
           // gg's own stores, addressed at the commit being viewed: a bookmark
           // points AT this version, a shelf entry freezes its bytes.
-          { label: "bookmark this file", act: () => addFileEntry("bookmarks", f.path, "committed", rev) },
-          { label: "add to shelf", act: () => addFileEntry("shelf", f.path, "committed", rev) },
+          { label: "bookmark this file", act: () => addFileEntry("bookmarks", f.path, "committed", hereRev) },
+          { label: "add to shelf", act: () => addFileEntry("shelf", f.path, "committed", hereRev) },
         ]
       : [];
     showCtxMenu(
@@ -3310,4 +3341,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };

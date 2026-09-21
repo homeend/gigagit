@@ -43,6 +43,9 @@ type savedCompareRow struct {
 	B     string `json:"b,omitempty"`
 	State string `json:"state,omitempty"`
 	Files int    `json:"files,omitempty"`
+	// Notes is the pair's root-note total along a..b, the ◆N the TUI paints
+	// on the row (the merge preview row's field, same meaning).
+	Notes int    `json:"notes,omitempty"`
 	Error string `json:"error,omitempty"`
 	// a comparison
 	Left      string `json:"left,omitempty"`
@@ -225,6 +228,15 @@ func (s *Server) handleSavedCompares(w http.ResponseWriter, r *http.Request) {
 			row.State, row.Error = "error", err.Error()
 		} else {
 			row.State, row.Files = pairStateWire(sum.State), sum.Files
+			// A pair with a missing half has no note scope at all: no
+			// badge, and no store read (the merge rows' ruling 6).
+			if sum.State == domain.PairOK {
+				if set, serr := svc.PairNotes(ctx, p.A, p.B); serr == nil {
+					if _, total, cerr := svc.PreviewNoteCounts(ctx, set); cerr == nil {
+						row.Notes = total
+					}
+				}
+			}
 		}
 		rows = append(rows, row)
 	}
