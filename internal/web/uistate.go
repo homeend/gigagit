@@ -35,9 +35,12 @@ type uiStateWire struct {
 	Sections      []string `json:"sections"`
 	SidebarHidden bool     `json:"sidebar_hidden"`
 	FilesHidden   bool     `json:"files_hidden"`
-	SidebarWidth  int      `json:"sidebar_width"`
-	FilesWidth    int      `json:"files_width"`
-	Graph         string   `json:"graph"`
+	// SymCompare is the symmetric (two aligned lists) view of a link
+	// comparison: on or off, the user's choice (symcompare.js).
+	SymCompare   bool   `json:"sym_compare"`
+	SidebarWidth int    `json:"sidebar_width"`
+	FilesWidth   int    `json:"files_width"`
+	Graph        string `json:"graph"`
 	// DiffView is the diff pane's view mode: "changed" (changed lines only,
 	// the TUI's f) or "full" (the default).
 	DiffView string `json:"diff_view"`
@@ -72,6 +75,7 @@ func (s *Server) handleUIStateGet(w http.ResponseWriter, r *http.Request) {
 		Sections:      st.Sections,
 		SidebarHidden: st.SidebarHidden,
 		FilesHidden:   st.FilesHidden,
+		SymCompare:    st.SymCompare,
 		SidebarWidth:  st.SidebarWidth,
 		FilesWidth:    st.FilesWidth,
 		Graph:         st.Graph,
@@ -96,6 +100,7 @@ func (s *Server) handleUIStateSet(w http.ResponseWriter, r *http.Request) {
 		Sections:      allowedSections(in.Sections),
 		SidebarHidden: in.SidebarHidden,
 		FilesHidden:   in.FilesHidden,
+		SymCompare:    in.SymCompare,
 		SidebarWidth:  clampPaneWidth(in.SidebarWidth),
 		FilesWidth:    clampPaneWidth(in.FilesWidth),
 		Graph:         allowedGraph(in.Graph),

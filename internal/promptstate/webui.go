@@ -15,6 +15,9 @@ type WebUI struct {
 	// FilesHidden is the file-list minimize control (the » button on the
 	// list's back bar): the list folds to a strip so the diff gets the room.
 	FilesHidden bool `toml:"files_hidden,omitempty"`
+	// SymCompare is gg web's symmetric view of a link comparison (two aligned
+	// file lists around one diff): the user's on/off choice.
+	SymCompare bool `toml:"sym_compare,omitempty"`
 	// SidebarWidth / FilesWidth are the dragged pane widths in CSS pixels;
 	// 0 means "never dragged, use the default".
 	SidebarWidth int `toml:"sidebar_width"`
