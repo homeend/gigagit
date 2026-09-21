@@ -13,7 +13,7 @@
 // in here through a handful of dispatch lines (symRows, renderSymLists,
 // symBarHTML, openSymRow, symKey, symLayoutChanged) and everything else stays its own.
 
-import { $, esc, state } from "./core.js";
+import { $, charWidth, elidePath, esc, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { applyCompareFilter, openEntryFileDiff, openFile, renderFiles, setDiffTitle, setLayout } from "./files.js";
 
@@ -75,7 +75,25 @@ function symRows(c) {
 
 // --- the two lists ---
 
-function sideRowHTML(r, side, i) {
+// A long path is cut the way the normal file list cuts it (files.js's
+// filePathHTML): whole segments out of the MIDDLE through elidePath, so the
+// file name and the head of the path both survive — not by the CSS ellipsis,
+// which drops the tail. The budget is each list's own measured width less
+// what else sits on a row; the CSS ellipsis stays as the backstop, so one
+// column is left spare.
+const SYM_ROW_PX = 16 + 2 * 6 + 12 + 16; // li padding 0 8px, two 6px gaps, .st 12px, .symg 16px
+
+// symCols is list id's path budget in columns, or 0 (render the path whole)
+// while the list has no usable width yet.
+function symCols(id) {
+  const el = $(id);
+  const px = el ? el.clientWidth : 0;
+  if (px <= 0) return 0;
+  const cols = Math.floor((px - SYM_ROW_PX) / charWidth()) - 1;
+  return cols >= 4 ? cols : 0; // below "…/x" there is nothing useful to show
+}
+
+function sideRowHTML(r, side, i, cols) {
   const st = r[side];
   const glyph = `<span class="symg ${r.kind}" title="${KIND_TIP[r.kind]}">${GLYPH[r.kind]}</span>`;
   if (st === "absent") {
@@ -86,7 +104,7 @@ function sideRowHTML(r, side, i) {
   const cls = [i === state.fileCursor ? "sel" : "", st === "deleted" ? "symdel" : "", r.kind === "eq" ? "symeq" : ""].filter(Boolean).join(" ");
   const mark = st === "deleted" ? "D" : r.differs ? "M" : "";
   const tip = st === "deleted" ? "this set DELETES the file" : "in this set";
-  const path = `<span class="sympath" title="${esc(r.path)}">${esc(r.path)}</span>`;
+  const path = `<span class="sympath" title="${esc(r.path)}">${esc(cols ? elidePath(r.path, cols) : r.path)}</span>`;
   const stEl = `<span class="st ${mark}">${mark}</span>`;
   return `<li class="${cls}" data-i="${i}" title="${tip}">${side === "right" ? glyph + stEl + path : stEl + path + glyph}</li>`;
 }
@@ -101,8 +119,10 @@ function headRowHTML(role, desc) {
 function renderSymLists() {
   const c = state.compare;
   const rows = state.files;
-  $("symleft-list").innerHTML = headRowHTML("left set", c.a) + rows.map((r, i) => sideRowHTML(r, "left", i)).join("");
-  $("files-list").innerHTML = headRowHTML("right set", c.b) + rows.map((r, i) => sideRowHTML(r, "right", i)).join("");
+  const lcols = symCols("symleft-list");
+  const rcols = symCols("files-list");
+  $("symleft-list").innerHTML = headRowHTML("left set", c.a) + rows.map((r, i) => sideRowHTML(r, "left", i, lcols)).join("");
+  $("files-list").innerHTML = headRowHTML("right set", c.b) + rows.map((r, i) => sideRowHTML(r, "right", i, rcols)).join("");
   renderDirBar();
   syncGeometry();
 }

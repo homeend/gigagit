@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## `gg web`: the symmetric comparison's file lists cut long paths from the middle
+
+### Fixed
+
+- In the symmetric view of a comparison (two aligned file lists around one
+  diff), a path too long for its list was cut at the END, hiding the file
+  name. Both lists now cut it the way the normal file list does: whole
+  directories go from the middle (`src/very/…/elision/file.go`), the file
+  name stays, the full path is on hover, and resizing the lists re-cuts it.
+
 ## Branch filters: a marker that does not crowd the slot number
 
 ### Fixed
