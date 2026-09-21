@@ -45,7 +45,9 @@ pair carries its **review notes**: the ◆N total on its row, badges, note rows,
 right-click menu has history / blame / bookmark / shelf at `b`) ·
 **compare with link…** (two `gg://` links through `domain.CompareLinks`: the
 copied-link history, side swap, per-side errors, the base row, save
-comparison…; a `@a..b` link lands through the same door) · **pull
+comparison…; a `@a..b` link lands through the same door; **web only:** the
+⇄ symmetric view of two sets — two row-aligned file lists around one diff, a
+flippable direction arrow, differ / all / one side / same filters) · **pull
 requests** (read-only: list, fetch + open the PR diff, copy URL, forget,
 `[refresh] prs` poll and ⟳, review threads inside the diff as read-only note
 boxes, the details overlay — the TUI's PR hub — the comment re-poll, and the

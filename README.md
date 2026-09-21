@@ -341,6 +341,15 @@ rename, save reversed, copy a link or remove. A commit pair opened there — or
 landed by a `@a..b` link — carries its **review notes** as in the TUI: `◆N` on
 its files, the notes inside each diff, `c` on a new-side line.
 
+A comparison of two **change-sets** (two previews, a pair against a preview,
+two agents' attempts) also offers **⇄ symmetric** (`v`): each set's file list on
+its own side, row for row, with one diff between them — a `· · ·` gap where a
+set does not touch the file, a struck-through row where it *deletes* it, a
+dimmed `=` row where both changed it identically. The arrow over the diff says
+which set is old and which is new, and `x` (or a click) flips it while the
+lists stay put; `1`–`4` filter *differ · all · one side · same*. Web only,
+remembered, and off below a 1200px window.
+
 `<repo>` is the repository name of the repo's remote, resolved through the
 repository history behind the `R` switcher — so a link made on one machine
 finds the matching checkout here. In the TUI, `#` (or the palette's
