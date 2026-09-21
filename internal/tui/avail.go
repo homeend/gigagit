@@ -226,7 +226,7 @@ func (m Model) canMark() bool {
 	if m.focus == panelCommits && m.isWipRow(m.commitSelUnified()) {
 		return true // a WIP pseudo-row can be marked for compare
 	}
-	if m.focus != panelBranches && m.focus != panelCommits && !m.isFilesPanel(m.focus) {
+	if m.focus != panelBranches && m.focus != panelCommits && m.focus != panelPreviews && !m.isFilesPanel(m.focus) {
 		return false
 	}
 	_, ok := m.backingIndex(m.focus)

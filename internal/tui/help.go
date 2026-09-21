@@ -96,6 +96,8 @@ func helpContent() []contentLine {
 		r("", i18n.T("review notes work in a saved commit pair as in a merge preview: they sit on the newer commit (new side only — the older commit is not addressable), ◆N counts them on the row and per file, c adds one, } / { step between them; an agent writes them through the pair link or gg note add --preview <a>..<b>")),
 		r("", i18n.T("saved comparisons list here too: two gg:// links shown as <left> ↔ <right>, saved from a link comparison (. → Save comparison…) or with gg compare --save. enter runs the comparison again, e renames, d removes, s saves it reversed, and the .-menu copies either link; a comparison whose link no longer resolves stays listed and says why when opened")),
 		r("enter", i18n.T("open the preview: the target…source diff, exactly what the merge would bring in")),
+		r("space", i18n.T("mark / unmark the selected preview or commit pair for compare (◉), capped at two: the second space-mark immediately compares the two rows — each row's own gg:// link, exactly what copying both links and comparing them does; the upper row is the left side. esc clears ALL marks. A saved comparison (<left> ↔ <right>) is already two links and cannot be marked")),
+		r("m", i18n.T("mark / unmark the selected row into the same ◉ set without opening anything; with exactly 2 marked, . → Compare the 2 marked previews runs the comparison (. → Unmark all previews clears)")),
 		r("a", i18n.T("add a preview: type the source, [tab] to the target ([ctrl+s] swaps them); each field completes against the branch names")),
 		r("", i18n.T("a remote target is added the same way — type its full name, e.g. origin/main")),
 		r("e", i18n.T("rename the selected preview's label (the pair itself is its identity and never changes)")),

@@ -71,6 +71,25 @@ func contextBindings() []footerBinding {
 		{"preview-add", "a", i18n.T("[a]dd"), func(m Model) bool { return m.canAddPreview() }, scopeWindow},
 		{"preview-rename", "e", i18n.T("[e] rename"), func(m Model) bool { return m.canEditPreview() }, scopeRow},
 		{"preview-delete", "d", i18n.T("[d]elete"), func(m Model) bool { return m.canEditPreview() }, scopeRow},
+		{"", "space", i18n.T("[space] mark"), func(m Model) bool {
+			// Raw set size, as on Commits: ≥ 2 is ambiguous under stale marks.
+			if m.focus != panelPreviews || !m.opsIdle() || len(m.previewCompareSet) > 1 {
+				return false
+			}
+			r, ok := m.selectedPreview()
+			if !ok || m.previewCompareSet[r.id()] {
+				return false
+			}
+			_, linked := m.previewRowLink(r)
+			return linked
+		}, scopeRow},
+		{"", "space", i18n.T("[space] unmark"), func(m Model) bool {
+			if m.focus != panelPreviews || !m.opsIdle() {
+				return false
+			}
+			r, ok := m.selectedPreview()
+			return ok && m.previewCompareSet[r.id()]
+		}, scopeRow},
 		{"preview-swap", "s", i18n.T("[s]wap"), func(m Model) bool { return m.canEditPreview() }, scopeRow},
 		{"pr-open", "enter", i18n.T("[enter] open"), func(m Model) bool { return m.canOpenPR() }, scopeRow},
 		{"pr-hub", "i", i18n.T("[i]nfo"), func(m Model) bool { return m.canOpenPR() }, scopeRow},

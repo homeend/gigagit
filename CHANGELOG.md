@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Previews tab: mark two rows and compare them
+
+### Added
+
+- In the TUI's **Previews** tab, `space` and `m` mark rows (◉) the way they
+  mark commits. The second `space` opens the comparison of the two marked
+  rows at once; `m` only marks, and with exactly two marked the `.` menu
+  offers **Compare the 2 marked previews** (and **Unmark all previews**).
+  `esc` clears the marks; a third `space` is refused with a hint.
+- The comparison is each row's own `gg://` link — a merge preview's
+  `<target>...<source>`, a commit pair's `@<a>..<b>` — run through the same
+  door as `gg compare <link> <link>` and the `#` compare dialog, so the result
+  is exactly what copying both links by hand gives, and `.` → **Save
+  comparison…** works on it. The upper row is the left side, whichever was
+  marked first.
+- A saved comparison row (`<left> ↔ <right>`) is already two links and cannot
+  be marked; `space`/`m` on it says so.
+
 ## `gg web`: the page notices when the server is gone
 
 ### Added

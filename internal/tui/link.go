@@ -254,15 +254,10 @@ func (m Model) contextLinkText() (string, bool) {
 	}
 	if !m.inContentWindow() && m.focus == panelPreviews {
 		if r, ok := m.selectedPreview(); ok {
-			if _, isCmp := r.compare(); isCmp {
-				// A comparison is TWO links; "the link for this place" has no
-				// answer. Its halves are offered by name (comparisonLinkRows).
-				return "", false
-			}
-			if rec, isMerge := r.merge(); isMerge {
-				return withPreviewHint(r.id())(m.previewLinkFor(rec.Source, rec.Target, "", 0))
-			}
-			return withPreviewHint(r.id())(m.pairLinkFor(r.pair.A, r.pair.B))
+			// A comparison is TWO links; "the link for this place" has no
+			// answer (previewRowLink refuses). Its halves are offered by name
+			// (comparisonLinkRows).
+			return withPreviewHint(r.id())(m.previewRowLink(r))
 		}
 	}
 	if !m.inContentWindow() {

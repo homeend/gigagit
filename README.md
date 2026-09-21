@@ -332,6 +332,13 @@ runs it again, `e`/`d`/`s` rename, remove and save it reversed, and the `.`
 menu copies either link. In the bookmark and shelf switchers, comparing across
 the two (`c`) now also accepts a commit against a single file.
 
+Two **Previews** rows compare against each other without copying anything:
+`space` marks a merge preview or a commit pair (◉), and the second `space`
+opens the comparison of the two rows' own links — the upper row on the left.
+`m` marks without opening (`.` → **Compare the 2 marked previews**), `esc`
+clears the marks. A saved comparison row is already two links, so it cannot be
+marked.
+
 `gg web` has the same dialog — **compare with link…** in the command palette
 or the ☰ menu — with the same history picks (`↓` or ▾), swap (`ctrl+s` or ⇅)
 and base row (`enter` on it, or **bound**). **save comparison…** sits on the
