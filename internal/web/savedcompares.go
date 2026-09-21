@@ -25,6 +25,7 @@ func init() {
 		mux.HandleFunc("GET /api/saved-compares", s.handleSavedCompares)
 		mux.HandleFunc("POST /api/saved-compares", writeGuard(s.handleSavedCompareAdd))
 		mux.HandleFunc("POST /api/saved-compares/rename", writeGuard(s.handleSavedCompareRename))
+		mux.HandleFunc("POST /api/saved-compares/symmetric", writeGuard(s.handleSymmetricAdd))
 		mux.HandleFunc("DELETE /api/saved-compares", writeGuard(s.handleSavedCompareRemove))
 	})
 }
@@ -52,10 +53,49 @@ type savedCompareRow struct {
 	Right     string `json:"right,omitempty"`
 	LeftDesc  string `json:"left_desc,omitempty"`
 	RightDesc string `json:"right_desc,omitempty"`
+	// Symmetric is set on a comparison that is a symmetric merge preview —
+	// recognised by domain, so the page never parses a link.
+	Symmetric *symWire `json:"symmetric,omitempty"`
+}
+
+// symWire is a symmetric merge preview's three branches.
+type symWire struct {
+	A    string `json:"a"`
+	B    string `json:"b"`
+	Base string `json:"base"`
 }
 
 func comparisonRow(c domain.SavedCompare) savedCompareRow {
-	return savedCompareRow{ID: c.ID, Label: c.Label, Kind: "compare", Left: c.Left, Right: c.Right}
+	row := savedCompareRow{ID: c.ID, Label: c.Label, Kind: "compare", Left: c.Left, Right: c.Right}
+	if sym, ok := domain.SymmetricOf(c); ok {
+		row.Symmetric = &symWire{A: sym.A, B: sym.B, Base: sym.Base}
+	}
+	return row
+}
+
+// handleSymmetricAdd saves a symmetric merge preview ({a, b, base, label}):
+// the comparison @base...a against @base...b. Every refusal domain makes
+// before storing — a missing or repeated name, an unknown one — is the
+// caller's input, so it is a 400; a duplicate answers 409 with the row that
+// is already there, which the page opens instead.
+func (s *Server) handleSymmetricAdd(w http.ResponseWriter, r *http.Request) {
+	var req struct{ A, B, Base, Label string }
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSavedCompareBody)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
+		return
+	}
+	c, err := s.service().SymmetricPreviewAdd(readCtx(r), req.A, req.B, req.Base, req.Label)
+	switch {
+	case errors.Is(err, domain.ErrSavedCompareExists):
+		writeAlreadySaved(w, c.ID, c.Label)
+	case errors.Is(err, domain.ErrSavedComparesDisabled):
+		writeErr(w, http.StatusServiceUnavailable, err)
+	case err != nil:
+		writeErr(w, http.StatusBadRequest, err)
+	default:
+		s.emitPreviews()
+		writeJSON(w, map[string]any{"entry": comparisonRow(c)})
+	}
 }
 
 func pairRow(p domain.CommitPair) savedCompareRow {
