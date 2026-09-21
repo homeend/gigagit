@@ -10,6 +10,7 @@
 // do about it), hovering holds it, a click dismisses it. It takes no keys and
 // is not a layer: whatever is open underneath keeps the keyboard, esc included.
 import { esc } from "./core.js";
+import { isServerDown } from "./serverdown.js";
 
 const TOAST_MS = 10000;
 
@@ -33,6 +34,9 @@ document.body.append(host);
 // toast shows text (and an optional dimmer detail line) for ten seconds.
 // opts: { err: red border, detail: second line, ms: override the lifetime }.
 function toast(text, opts) {
+  // Under the server-down veil every failure is the same failure, already
+  // on screen — not a wall of "Failed to fetch".
+  if (isServerDown()) return;
   const o = opts || {};
   const el = document.createElement("div");
   el.className = "toast" + (o.err ? " err" : "");

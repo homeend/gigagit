@@ -93,10 +93,15 @@ type Server struct {
 	prs prCache
 	// prBudget overrides prLoadBudget (tests); zero = the default.
 	prBudget time.Duration
+
+	// closing is closed once by announceShutdown: every /api/events stream
+	// then sends a last "shutdown" message and ends (live.go).
+	closing     chan struct{}
+	closingOnce sync.Once
 }
 
 func New(svc *domain.Service) *Server {
-	s := &Server{}
+	s := &Server{closing: make(chan struct{})}
 	s.svc.Store(svc)
 	return s
 }
@@ -111,6 +116,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /{$}", s.handleIndex)
 	mux.Handle("GET /static/", http.FileServerFS(staticFS))
 	mux.HandleFunc("GET /api/repo", s.handleRepo)
+	// The page's liveness probe (static/serverdown.js). It must never touch
+	// the repository: reads serialise under the per-repo gate, so a probe
+	// queued behind a long operation would read as a dead server.
+	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, map[string]any{"ok": true})
+	})
 	mux.HandleFunc("GET /api/status", s.handleStatus)
 	mux.HandleFunc("GET /api/branches", s.handleBranches)
 	mux.HandleFunc("GET /api/worktrees", s.handleWorktrees)

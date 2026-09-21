@@ -395,6 +395,17 @@ func (s *Server) restartLive(ctx context.Context) { s.startLive(ctx) }
 // the HTTP server has shut down.
 func (s *Server) Close() { s.stopLive() }
 
+// announceShutdown tells every open /api/events stream the server is going
+// away, so a tab paints its server-down bar at once instead of probing a
+// dead port for seconds. Idempotent. A replaced hub is NOT this: a re-root
+// ends the streams too, and the tab must simply reconnect.
+func (s *Server) announceShutdown() {
+	if s.closing == nil {
+		return
+	}
+	s.closingOnce.Do(func() { close(s.closing) })
+}
+
 // watchLoop forwards watcher events as fan-out emits until the watcher or
 // the hub stops.
 func (h *liveHub) watchLoop(w *gitwatch.Watcher) {
@@ -545,6 +556,10 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		case <-ping.C:
 			fmt.Fprint(w, ": ping\n\n")
 			fl.Flush()
+		case <-s.closing:
+			writeLiveSSE(w, liveMsg{Changed: []string{}, Reason: "shutdown"})
+			fl.Flush()
+			return
 		case <-r.Context().Done():
 			return
 		}

@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## `gg web`: the page notices when the server is gone
+
+### Added
+
+- When `gg web` stops, the page says so. A red bar — **gg web is not
+  running** — drops over a dimmed page that swallows every click and key, so
+  a dead page no longer looks alive while each action fails on its own with
+  an unrelated error. It is not dismissible: nothing can work until the
+  server answers, and when it does (restarted on the same `--addr`) the bar
+  clears by itself and the page reloads its data.
+- Detection never trusts one signal. A dropped event stream or a failed API
+  call only starts a probe of the new gate-free `GET /api/ping`; the bar
+  appears on the **second** failed probe (~1.5 s), so a repo switch — which
+  ends every stream on purpose — never raises it. `ctrl+c` is faster: the
+  server now sends a last `shutdown` message on `/api/events` and waits (up
+  to 2 s) for it to reach the tabs before exiting.
+- After ten seconds down the bar adds a hint: `gg web` picks a new port on
+  every start unless `--addr 127.0.0.1:<port>` is given, so a restarted
+  server may be at a different URL.
+
 ## `gg web`: commit pairs catch up — note total on the row, file actions at `b`, live link comparisons
 
 ### Added

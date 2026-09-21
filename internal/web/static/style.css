@@ -1120,3 +1120,13 @@ table.diff tr.note.collapsed .notebox { padding: 8px 12px 2px; }
 .md .md-ref { color: var(--accent); }
 .notesum code.md-ic { font-family: inherit; background: rgba(127, 127, 127, .22); border-radius: 3px; padding: 0 4px; }
 .notesum a { color: var(--accent); }
+
+/* The server-down veil (serverdown.js). z-index 100: above EVERYTHING (modal
+   30, ctx-menu 40, toasts 50) — it swallows every click on a dead page. */
+#server-down { position: fixed; inset: 0; z-index: 100; background: rgba(20, 22, 26, 0.6); cursor: not-allowed; }
+#server-down.hidden { display: none; }
+#server-down-bar { background: #a12a2a; color: #fff; padding: 10px 16px; font-size: 13px; line-height: 1.5; box-shadow: 0 2px 10px rgba(0,0,0,.5); cursor: default; }
+#server-down-bar code { background: rgba(0,0,0,.25); padding: 0 4px; border-radius: 3px; color: #fff; }
+#server-down-spin { opacity: .8; margin-left: 6px; }
+#server-down-hint { margin-top: 4px; opacity: .95; }
+#server-down-hint.hidden { display: none; }
