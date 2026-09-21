@@ -61,8 +61,9 @@ different axis), the hunk picker / conflict resolver, blame, file preview.
 - `S` works from the file list and from the diff. Flipping **keeps position**:
   single → stacked scrolls the stack to the file that was open; stacked →
   single opens the file whose header is at the top of the viewport.
-- When the pref is on, opening a change set lands directly in the stacked
-  diff (web: the `diff` layout stage, scrolled to the chosen file).
+- When the pref is on, opening ANY file of a change set (click, enter, the
+  file stepper, a link) opens the stack scrolled to that file; the change
+  set's file-list stage itself is unchanged.
 
 ## 5. Data model
 
@@ -127,14 +128,15 @@ Header text goes through `i18n.T` with keys in all four bundles.
   scrollbar stays stable.
 - An `IntersectionObserver` (root = the diff pane, `rootMargin` ≈ one pane
   height) enqueues slots that are visible or near.
-- The queue runs **at most 3 fetches in flight**, nearest-to-viewport first.
+- The loader runs **at most 3 fetches in flight**, picking among the
+  near-viewport slots the one nearest the current file (the set is re-read at
+  every pick, so a slot scrolled away before its turn is simply never picked).
   The server serialises reads per repo (memory: web-runonce-task-gate), so an
   unbounded fan-out would stack and feel slower than switching files.
 - Each fetch uses the endpoint that source already uses today (`/api/diff`
   with sha / left+right / wt, or the entry-diff endpoint). No new diff endpoint.
 - `state.stack.gen` is bumped on toggle, screen change, filter/flip change and
-  working-tree refresh; an answer whose gen is stale is dropped. A queued slot
-  that has scrolled out of range before its turn is dequeued (back to `idle`).
+  working-tree refresh; an answer for a stack no longer on screen is dropped.
 - `binary`, `tooLarge`, `error` render a one-line notice as the body — the
   same wording the single-file view uses today.
 - Notes (for the follow-up) ride alongside each slot's fetch, as today's
@@ -167,10 +169,12 @@ Controls (both frontends):
 `▾ M  src/pkg/file.go   +12 −3`
 
 - Status letter coloured as in the file list; renames read `old/path → new/path`.
-- **Counts**: file-listing responses gain optional per-file `add` / `del`,
-  computed by one `git diff --numstat -z` per change set (a new git verb +
-  domain query, reusing the existing `ParseNumstat` rename handling) wherever
-  git has a tree pair: commit, branch/link compare, working-tree sections.
+- **Counts**: a separate `GET /api/numstat` (`?sha=` | `?left=&right=` |
+  `?wt=staged|unstaged`) answers one `--numstat -z` per change set, parsed by
+  the existing `git.ParseNumstat`, wherever git has a tree pair: commit,
+  hash compare, working-tree sections. It is asked ONLY while a stack is open,
+  so the listing endpoints (and the status poll) pay nothing when the view is
+  off.
   Entry / shelf / preview / link-set sources have no git pair; their counts are
   computed from the diff rows when the file loads, and the header shows no
   counts until then. Binary files show `bin`.
@@ -186,8 +190,9 @@ Controls (both frontends):
 - Clicking a file in the tree (or in either symmetric list) scrolls to its
   header, expanding (and so loading) it if collapsed.
 - The tree / list highlight follows the file whose header is at the pane top.
-- `n` / `p` jump header to header; `j` / `k` in the tree move the highlight and
-  scroll the stack.
+- `j` / `k` (and the toolbar's `‹ file` / `file ›`) move the file cursor and
+  scroll the stack to that header. (`n`/`p` are NOT used on the web: `p` is
+  pull there.)
 - Side-by-side vs unified is decided once per stack from the pane width (the
   existing rule), so every file in the stack uses the same layout; a resize
   re-renders loaded slots from their stored `diff`.
