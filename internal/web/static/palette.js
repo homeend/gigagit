@@ -13,6 +13,7 @@ import { openSessionErrorsView } from "./sessionerrors.js";
 import { startReview } from "./review.js";
 import { gotoCommitPrompt, openCommitFilter, toggleGraphMode } from "./commits.js";
 import { openWorkingTree, toggleFilesHidden } from "./files.js";
+import { toggleStacked } from "./stackview.js";
 import { extraRows } from "./menus.js";
 import { applyPatchPrompt, pickEntryToCopy } from "./patch.js";
 import { openStashPick } from "./conflicts.js";
@@ -68,6 +69,7 @@ function paletteCommands() {
     { label: "open working tree", detail: "", run: () => openWorkingTree(0) }, // 0 = the WT row; a bare call would set state.cursor = undefined and break j/k/enter
     { label: "toggle sidebar", detail: "t", run: () => toggleSidebar() },
     { label: "toggle graph", detail: "g", run: () => toggleGraphMode() },
+    { label: "toggle stacked diff", detail: "S", run: () => toggleStacked() },
     { label: "help", detail: "?", run: () => openHelp() },
   ];
   // A feature preflight turned off has nothing to open — the entry point is
@@ -403,6 +405,7 @@ function openGlobalMenu() {
     { label: "toggle file list", act: () => toggleFilesHidden() },
     { label: "toggle graph", act: () => toggleGraphMode() },
     { label: "toggle sidebar", act: () => toggleSidebar() },
+    { label: "toggle stacked diff (S)", act: () => toggleStacked() },
     { header: "Config" },
     { label: "identity & profiles…", act: () => openIdentityView() },
     { label: "agent setup…", act: () => openAgentSetup() },

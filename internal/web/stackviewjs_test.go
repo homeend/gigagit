@@ -60,3 +60,25 @@ func TestStackViewWired(t *testing.T) {
 		t.Error("app.js does not load stackview.js")
 	}
 }
+
+func TestStackKeysWired(t *testing.T) {
+	t.Parallel()
+	keys := readStatic(t, "keys.js")
+	for _, want := range []string{
+		`e.key === "S"`, "toggleStacked()",
+		`e.key === "-"`, "collapseCurrent()",
+		`e.key === "_"`, "toggleAllCollapsed()",
+		`case "stacked": toggleStacked(); break;`,
+		"if (state.stack && state.layout === \"diff\") return openFile(state.fileCursor);",
+	} {
+		if !strings.Contains(keys, want) {
+			t.Errorf("keys.js is missing %q", want)
+		}
+	}
+	if !strings.Contains(readStatic(t, "index.html"), `data-act="stacked"`) {
+		t.Error("the footer has no stacked chip (advertise in help AND footer)")
+	}
+	if !strings.Contains(readStatic(t, "palette.js"), "toggleStacked()") {
+		t.Error("the ☰ menu has no stacked-diff row")
+	}
+}
