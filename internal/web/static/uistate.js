@@ -49,6 +49,7 @@ function saveUI(patch) {
     sidebar_hidden: false,
     files_hidden: false,
     sym_compare: false,
+    stacked_diff: false,
     sidebar_width: 0,
     files_width: 0,
     graph: "svg",

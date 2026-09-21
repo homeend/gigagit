@@ -37,7 +37,10 @@ type uiStateWire struct {
 	FilesHidden   bool     `json:"files_hidden"`
 	// SymCompare is the symmetric (two aligned lists) view of a link
 	// comparison: on or off, the user's choice (symcompare.js).
-	SymCompare   bool   `json:"sym_compare"`
+	SymCompare bool `json:"sym_compare"`
+	// StackedDiff is the stacked (all files, one scroll) diff view: on or off
+	// (stackview.js).
+	StackedDiff  bool   `json:"stacked_diff"`
 	SidebarWidth int    `json:"sidebar_width"`
 	FilesWidth   int    `json:"files_width"`
 	Graph        string `json:"graph"`
@@ -76,6 +79,7 @@ func (s *Server) handleUIStateGet(w http.ResponseWriter, r *http.Request) {
 		SidebarHidden: st.SidebarHidden,
 		FilesHidden:   st.FilesHidden,
 		SymCompare:    st.SymCompare,
+		StackedDiff:   st.StackedDiff,
 		SidebarWidth:  st.SidebarWidth,
 		FilesWidth:    st.FilesWidth,
 		Graph:         st.Graph,
@@ -101,6 +105,7 @@ func (s *Server) handleUIStateSet(w http.ResponseWriter, r *http.Request) {
 		SidebarHidden: in.SidebarHidden,
 		FilesHidden:   in.FilesHidden,
 		SymCompare:    in.SymCompare,
+		StackedDiff:   in.StackedDiff,
 		SidebarWidth:  clampPaneWidth(in.SidebarWidth),
 		FilesWidth:    clampPaneWidth(in.FilesWidth),
 		Graph:         allowedGraph(in.Graph),
