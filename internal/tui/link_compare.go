@@ -105,6 +105,7 @@ func (m Model) loadedLinkCompare(msg linkCompareLoadedMsg) (Model, tea.Cmd) {
 	// A failed compare must be retryable: clearing the want is what lets the
 	// SAME pair be asked again.
 	m.linkCompareWant = ""
+	m = m.closeCompareLoading(msg.tag) // the Previews marks' "comparing…" popup, if it asked
 	steered := m.pendingSteer != nil && m.pendingSteer.stage == steerStageCompare && m.pendingSteer.tag == msg.tag
 	if !steered {
 		// The dialog that asked takes its own answer: a failure belongs under

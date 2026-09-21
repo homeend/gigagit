@@ -117,6 +117,12 @@ func (m Model) handleMarkKey() (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	// Previews tab: m toggles the ◉ compare selection, uncapped and with no
+	// auto-diff; the `.` menu compares exactly two (preview_marks.go).
+	if m.focus == panelPreviews {
+		m, _ = m.togglePreviewMark(0)
+		return m, nil
+	}
 	// No mark, a mark in another panel, or a dead mark: (re-)mark here.
 	if m.mark == nil || m.mark.panel != m.focus || !m.markAlive() {
 		m.mark = &markState{panel: m.focus, key: key, display: key}

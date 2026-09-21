@@ -24,6 +24,43 @@ itself. The way in without a drag is **compare with…** in a preview's or a
 pair's right-click menu — the compare dialog, its left field holding that
 row's link. Client only: no new route, no new preference.
 
+## Previews tab: mark two rows and compare them
+
+### Added
+
+- In the TUI's **Previews** tab, `space` and `m` mark rows (◉) the way they
+  mark commits. The second `space` opens the comparison of the two marked
+  rows at once; `m` only marks, and with exactly two marked the `.` menu
+  offers **Compare the 2 marked previews** (and **Unmark all previews**).
+  `esc` clears the marks; a third `space` is refused with a hint.
+- The comparison is each row's own `gg://` link — a merge preview's
+  `<target>...<source>`, a commit pair's `@<a>..<b>` — run through the same
+  door as `gg compare <link> <link>` and the `#` compare dialog, so the result
+  is exactly what copying both links by hand gives, and `.` → **Save
+  comparison…** works on it. The upper row is the left side, whichever was
+  marked first.
+- A saved comparison row (`<left> ↔ <right>`) is already two links and cannot
+  be marked; `space`/`m` on it says so.
+- A **comparing…** popup (naming the two rows, `esc` cancels) opens the moment
+  the comparison starts — a link compare is dozens of git calls, seconds on a
+  slow mount, and the view opens only when it lands. It owns the keyboard, so
+  a second `space` can no longer unmark the row just marked.
+
+- The TUI's **compare with link** dialog describes its links: under each
+  field, what the link IS — `pair: Fix tests…`, `branch: master`, the same
+  words the copied-link history shows — and, for a link carrying a landing
+  hint, where it came from (`· copied from a saved preview`). Typed, pasted
+  and picked links all get it; the row follows its link through `ctrl+s` and
+  disappears the moment the field is edited.
+
+### Fixed
+
+- The TUI's **compare with link** dialog is locked while its comparison loads:
+  it showed **comparing…** but still took typing, `ctrl+s`, `tab` and the
+  arrows, so the form could drift from the comparison about to open. Only
+  `esc` (withdraw the comparison) gets through now.
+
+
 ## `gg web`: two change-sets, side by side — the symmetric comparison view
 
 Comparing two change-sets (two merge previews, a commit pair against a
@@ -68,6 +105,7 @@ diff's direction.
 - Under it: `domain.LinkComparison.SymmetricRows()` aligns two bounded sets
   (pure, no git call) and `/api/compare-links` answers them as `sym` beside the
   unchanged `files`. TUI, CLI and MCP are untouched.
+
 
 ## `gg web`: the page notices when the server is gone
 

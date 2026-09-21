@@ -156,6 +156,9 @@ No server change. No new preference.
 - A synthetic `drop` ignores the drop permission, so the probe asserts
   `dragover` is cancelled directly.
 
+- The TUI twin (D5) landed on main while this was built (`2c8691b3`, space /
+  `m` marks on two Previews rows); main was merged in, nothing here touches it.
+
 ## 9. Out of scope
 
 The TUI twin (D5); dragging rows from other sections (bookmarks, shelf,
