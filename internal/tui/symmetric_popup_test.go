@@ -109,3 +109,25 @@ func TestSymmetricBaseEscReturnsToThePairMenu(t *testing.T) {
 		t.Fatalf("esc must return to the pair menu, top = %T", m.topLayer())
 	}
 }
+
+// The save hands off to a WINDOW (the comparison), not an operation: it drops
+// the base popup and the pair menu, and nothing else on the stack.
+func TestSymmetricSaveKeepsTheLayerUnderThePairMenu(t *testing.T) {
+	t.Parallel()
+	m := symModel(t)
+	under := &saveComparePopup{label: newTextField("")}
+	m = m.pushLayer(under)
+	ops := pairOpsFor(panelBranches)
+	p := newPairOpPopup(m.width, "feat/x", "feat/y", ops)
+	p.sel = len(ops) - 1
+	m = m.pushLayer(p)
+	m, _ = send(m, keyType(tea.KeyEnter))
+	m = typeText(t, m, "main")
+	m, cmd := send(m, keyType(tea.KeyEnter))
+	if cmd == nil {
+		t.Fatal("enter with a base must save")
+	}
+	if m.topLayer() != layer(under) {
+		t.Fatalf("top after the save = %T, want the layer that was under the pair menu", m.topLayer())
+	}
+}

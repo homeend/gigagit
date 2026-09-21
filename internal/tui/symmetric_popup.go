@@ -64,9 +64,13 @@ func (p *symmetricBasePopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.statusMsg = i18n.T("the base must differ from %s and %s", p.a, p.b)
 			return m, nil
 		}
-		// Handing off to a save that ends in the comparison view: drop this
-		// popup, the pair menu under it and the mark they came from.
-		m = m.clearLayers()
+		// Handing off to a save that ends in the comparison view (a window,
+		// not an operation — so pops, never clearLayers): drop this popup and
+		// the pair menu it is stacked on, leaving whatever was under them.
+		m = m.popLayer()
+		if _, ok := m.topLayer().(*pairOpPopup); ok {
+			m = m.popLayer()
+		}
 		m.mark = nil
 		m.statusMsg = i18n.T("saving symmetric merge preview…")
 		return m, m.symmetricAddCmd(p.a, p.b, base)

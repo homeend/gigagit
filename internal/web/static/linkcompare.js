@@ -34,16 +34,30 @@ export async function runLinkCompare(query, onErr) {
   // Every entry (the dialog, a saved row, a pair landing) says it is working:
   // two large sets take seconds, and a click that seems to do nothing gets
   // clicked again.
-  opLine("comparing… reading both sides");
+  //
+  // The line must also OUTLIVE opLine's 30s expiry: on a big repo two merge
+  // bases and two diffs take a minute, and a notice that vanished half way
+  // reads as "nothing is happening". So while the answer is out, the line is
+  // re-posted every 5s with the time waited — each post re-arms the expiry —
+  // but only while it is still OUR line (another message is never clobbered).
+  const busy = "comparing… reading both sides";
+  const t0 = Date.now();
+  opLine(busy);
+  const beat = setInterval(() => {
+    if (!$("op-text").textContent.startsWith(busy)) return;
+    opLine(busy + " (" + Math.round((Date.now() - t0) / 1000) + "s)");
+  }, 5000);
   try {
     body = await getJSON("/api/compare-links?" + query);
   } catch (e) {
+    clearInterval(beat);
     if (onErr) {
       opLine("");
       onErr(e);
     } else opLine("compare: " + (e.message || e), true);
     return false;
   }
+  clearInterval(beat);
   opLine("");
   openLinkCompare(body);
   return true;
