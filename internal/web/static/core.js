@@ -1,3 +1,5 @@
+import { suspectServerDown } from "./serverdown.js";
+
 // core.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
 
@@ -129,8 +131,21 @@ function ssGet(k) { try { return sessionStorage.getItem(k); } catch { return nul
 function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch {} }
 
 
+// apiFetch is fetch for our own API. A REJECTED fetch (refused, reset — a
+// TypeError, never an HTTP status) is what a dead server looks like, so it
+// starts the liveness probe (serverdown.js); the caller still gets the error.
+async function apiFetch(url, init) {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    if (err instanceof TypeError) suspectServerDown();
+    throw err;
+  }
+}
+
+
 async function getJSON(url) {
-  const resp = await fetch(url);
+  const resp = await apiFetch(url);
   const body = await resp.json();
   if (!resp.ok) {
     const err = new Error(body.error || resp.statusText);
@@ -143,7 +158,7 @@ async function getJSON(url) {
 
 
 async function postJSON(url, body) {
-  const resp = await fetch(url, {
+  const resp = await apiFetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

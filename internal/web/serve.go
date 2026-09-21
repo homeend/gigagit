@@ -81,15 +81,29 @@ func Serve(ctx context.Context, workdir, addr string, launch bool, startAt *stee
 	}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
+	// Serve returns the moment Shutdown STARTS, so the exit waits on done:
+	// the streams' last "shutdown" message must be on the wire before the
+	// process goes. The handlers return right after writing it; the timeout
+	// only bounds a stuck connection.
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		<-ctx.Done()
-		_ = httpSrv.Shutdown(context.Background())
+		srv.announceShutdown()
+		sctx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
+		defer cancel()
+		_ = httpSrv.Shutdown(sctx)
 	}()
 	if err := httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
 		return err
 	}
+	<-done
 	return nil
 }
+
+// shutdownGrace bounds the wait for the /api/events streams to send their
+// last "shutdown" message on exit.
+const shutdownGrace = 2 * time.Second
 
 // preflight verifies the served directory resolves to a repository. The
 // dominant real-world failure is a WORKTREE created in the other

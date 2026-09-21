@@ -8,6 +8,7 @@
 // manualRefresh uses too — an `r` press and a push coalesce); a reconnect
 // after a dropped stream reloads everything, since events were missed.
 import { attnKey, getJSON, runOnce, state } from "./core.js";
+import { isServerDown, onServerUp, serverSeen, serverShutdown, suspectServerDown } from "./serverdown.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { refreshLinkCompare, runLinkCompare } from "./linkcompare.js";
 import { fetchNotes, markDiffRow, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
@@ -35,9 +36,11 @@ const SIDEBAR = new Set(["branches", "remotes", "worktrees", "tags", "reflog"]);
 const pending = new Set();
 let timer = null;
 let connected = false; // a second hello is a RECONNECT → full refresh
+let liveES = null;
 
 function connectLive() {
   const es = new EventSource("/api/events");
+  liveES = es;
   es.onmessage = (m) => {
     let msg;
     try {
@@ -45,7 +48,16 @@ function connectLive() {
     } catch {
       return;
     }
+    // The server's goodbye (ctrl+c): paint the server-down veil at once
+    // rather than probe a dead port for seconds.
+    if (msg.reason === "shutdown") {
+      serverShutdown();
+      return;
+    }
     if (msg.reason === "hello") {
+      // A hello is a sign of life. It must clear the veil BEFORE the full
+      // refresh below is scheduled: a flush while down drops its sources.
+      serverSeen();
       state.live = { enabled: !!msg.live, watch: !!msg.watch };
       // A hello means a NEW hub: the server replaces it wholesale on re-root
       // (and on a refresh-settings write), which ends every stream and brings
@@ -69,9 +81,18 @@ function connectLive() {
     arm(COALESCE_MS);
   };
   // EventSource reconnects on its own; the re-hello then reloads in full.
-  es.onerror = () => {};
+  // An error alone proves nothing (the server ends every stream on a
+  // re-root), so it only starts the liveness probe — see serverdown.js.
+  es.onerror = () => suspectServerDown();
   return es;
 }
+
+// Back from down: a stream the browser is still retrying reconnects by
+// itself and its hello reloads everything. One it gave up on (CLOSED) never
+// will — the page would be up but deaf — so open a fresh one.
+onServerUp(() => {
+  if (liveES && liveES.readyState === EventSource.CLOSED) connectLive();
+});
 
 function arm(ms) {
   if (timer) return;
@@ -90,6 +111,11 @@ function scheduleFull() {
 
 function flush() {
   if (!pending.size) return;
+  if (isServerDown()) {
+    // No refresh fan against a dead port; the hello on reconnect reloads all.
+    pending.clear();
+    return;
+  }
   if (state.op) {
     // An op owns the data: its refreshAfterOp reloads everything, so the
     // pending names are moot — drop them rather than replay stale ones.
