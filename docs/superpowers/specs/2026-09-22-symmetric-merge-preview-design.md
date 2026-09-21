@@ -73,14 +73,20 @@ Deleting the row removes the single entry.
 - **Creating it:** mark branch A (`m`), move to B, press `m`. The pair
   menu (`mark.go`) gains **"Symmetric merge preview %s, %s…"** after
   "Merge preview %s → %s…".
-- **Base picker:** a popup listing local branches with the cursor on **no
-  row** (the first `j`/`↓` lands on row 0) and `/` type-to-filter. Enter
-  with no selection does nothing. A and B are listed but refused with a
-  status message. `esc` returns to the pair menu (a window opened from a
-  popup returns to it).
-- **Submitting:** a busy state ("saving symmetric merge preview…"), then
-  `startLinkCompare(left, right)`. That path already shows the
-  **"comparing…"** popup until the view lands, and `esc` there cancels.
+- **Base picker:** a one-field popup that starts **EMPTY**, with fuzzy
+  branch completion (the `previewAddPopup` idiom: `branchSuggestions`,
+  tab accepts the top one).
+  - Enter on an empty field does nothing.
+  - A or B as the base is refused with a status message.
+  - `esc` returns to the pair menu. A new `pairOp.stacked` flag keeps the
+    menu under the popup, since `pairOpPopup` otherwise pops itself before
+    `open`.
+- **Submitting:** a status line says "saving symmetric merge preview…".
+  The comparison then opens through `openCompareWithLoading`, which is the
+  marks flow's **"comparing…"** popup extracted into a helper; `esc` there
+  cancels.
+- **Enter on ANY saved comparison row** in Previews now also shows that
+  popup. Today it opens silently.
 - **Previews tab:**
   - A symmetric `rowCompare` gets a `sym` badge (ASCII: new glyphs must be
     EAW-neutral) and shows `A vs B` plus `base: <base>` in its description.
@@ -101,13 +107,17 @@ Deleting the row removes the single entry.
   each validated with `knownName`.
 - **The base prompt starts EMPTY** in both routes. An empty submit or an
   unknown name is refused with an opLine and the prompt stays open.
-- **Server:** `POST /api/previews/symmetric {a, b, base, label}` goes
-  behind `writeGuard` and returns the saved compare (201, or 200 for an
-  existing entry) plus a refusal text on 400.
-- **Loading:** the row that started the flow and the Previews header show a
-  busy state until the save returns. The comparison then opens through the
-  existing symmetric compare view, which has its own busy dialog. Route it
-  through `runOnce` so a double click does not stack.
+- **Server:** `POST /api/saved-compares/symmetric {a, b, base, label}`,
+  behind `writeGuard`. It answers:
+  - `200 {entry}` on success.
+  - `409 {error, id, label}` for a duplicate (the web's existing
+    convention). The page treats it as success and opens the existing
+    entry.
+  - `400` for a refusal and `503` when the store is off.
+- **Loading:** the flow runs under `runOnce("symmetric-preview")`, so a
+  second click does not stack. The op line says "saving symmetric merge
+  preview…", then `runLinkCompare` says "comparing… reading both sides"
+  until the view opens.
 - **Previews list:** the row gets a `sym` badge. Its menu adds "open merge
   preview A → base" and "… B → base". Delete removes the entry.
 - The server hands the recognised `{a, b, base}` to the page with each
@@ -116,12 +126,15 @@ Deleting the row removes the single entry.
 ## CLI
 
 - `gg preview add --symmetric --base <base> <A> <B> [--label L]`:
-  - Saves the entry and prints the id on stderr, like the other saves.
-  - A duplicate prints "already saved as <label>" and exits 0.
-  - Without `--base` it refuses with usage, since there is no default.
+  - Saves the entry and prints the id on **stdout** (the `gg preview add`
+    convention).
+  - A duplicate prints the existing id on stdout and "already saved as
+    <label>" on stderr, and exits 0.
+  - Without `--base` it refuses with usage (exit 2), since there is no
+    default. `--base` without `--symmetric` is also a usage error.
 - `gg compare --saved <id>` already runs it.
-- `gg compare --list` and `gg preview list` tag symmetric rows with `sym`
-  and `base: <base>`.
+- `gg compare --list` and `gg preview list` stay **unchanged**. `--list`
+  already prints both link texts, and they spell the base.
 - Update `internal/agentskill/using-gg.md` and bump `agentskill.Version`.
 
 ## Errors
