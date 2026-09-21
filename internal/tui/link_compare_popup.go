@@ -46,6 +46,10 @@ type linkCompareSide struct {
 	sug       domain.BaseSuggestion
 	sugFor    string
 	asked     string
+
+	// The description row (link_compare_desc.go): desc answers for descFor and
+	// no other text; descAsked is the text a description is in flight for.
+	desc, descFor, descAsked string
 }
 
 // linkComparePopup is the palette's "Compare with link…": two gg:// links,
@@ -260,6 +264,9 @@ func (p *linkComparePopup) box(m Model) string {
 		// of them) would bury it. The footer says the list is there.
 		if focused && s.hist.active {
 			b.WriteString(s.hist.view(cw) + "\n")
+		}
+		if d := s.descLine(); d != "" {
+			b.WriteString("    " + st().dim.Render(elideMiddle(d, cw-4)) + "\n")
 		}
 		if s.hasBase() {
 			br := lcBase1

@@ -322,7 +322,9 @@ up in `gg links`.
 
 **Compare with link…** (the `ctrl+p` palette) compares any two links inside the
 TUI: type or paste them, or press `↓` to pick from the links you copied;
-`ctrl+s` swaps the sides. A link naming a whole branch, tag or commit gets a
+`ctrl+s` swaps the sides. Each field says what its link is underneath
+(`pair: …`, `branch: …`, and `· copied from a saved preview` for a hinted
+link). A link naming a whole branch, tag or commit gets a
 **base row** under it — the branch's upstream or the trunk, a commit's parent.
 `enter` on that row rewrites the link into the bounded one (`@<base>...<branch>`
 or `@<parent>..<sha>`), so the comparison lists only what it changed; leave the

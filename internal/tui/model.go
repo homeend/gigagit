@@ -928,6 +928,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			p.suggested(msg)
 		}
 		return m, nil
+	case linkDescribedMsg:
+		if p, ok := m.topLayer().(*linkComparePopup); ok {
+			p.described(msg)
+		}
+		return m, nil
 	case previewOpenMsg:
 		return m.handlePreviewOpenMsg(msg)
 	case prSearchMsg:

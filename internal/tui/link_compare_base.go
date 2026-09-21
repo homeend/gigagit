@@ -54,6 +54,10 @@ func (s *linkCompareSide) hasBase() bool {
 // is domain's to confirm — model.Link.BoundKind cannot tell a local-form file
 // link from a whole tree.
 func (s *linkCompareSide) refresh(m Model) tea.Cmd {
+	return tea.Batch(s.refreshDesc(m), s.refreshBase(m))
+}
+
+func (s *linkCompareSide) refreshBase(m Model) tea.Cmd {
 	text := s.linkText()
 	if text == s.sugFor || text == s.asked {
 		return nil

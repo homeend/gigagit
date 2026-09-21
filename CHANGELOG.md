@@ -28,6 +28,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   slow mount, and the view opens only when it lands. It owns the keyboard, so
   a second `space` can no longer unmark the row just marked.
 
+- The TUI's **compare with link** dialog describes its links: under each
+  field, what the link IS — `pair: Fix tests…`, `branch: master`, the same
+  words the copied-link history shows — and, for a link carrying a landing
+  hint, where it came from (`· copied from a saved preview`). Typed, pasted
+  and picked links all get it; the row follows its link through `ctrl+s` and
+  disappears the moment the field is edited.
+
 ### Fixed
 
 - The TUI's **compare with link** dialog is locked while its comparison loads:
