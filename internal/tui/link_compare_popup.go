@@ -256,6 +256,10 @@ func (p *linkComparePopup) box(m Model) string {
 		label := i18n.T("left:  ")
 		if i == 1 {
 			label = i18n.T("right: ")
+			// A blank row parts the two sides: each is a field plus up to three
+			// rows of its own (history, description, base), and run together
+			// they read as one block.
+			b.WriteString("\n")
 		}
 		focused := p.focus == r
 		b.WriteString(viewField(mark(r)+label, s.input, focused && !s.hist.active, cw) + "\n")
