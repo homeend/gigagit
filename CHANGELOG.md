@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Symmetric merge preview: two branches measured against one base
+
+### Added
+
+- **Symmetric merge preview.** Pick two branches A and B, then name a base
+  (there is no default), and gg saves ONE comparison: what A would bring into
+  the base against what B would bring into it — two branches that fix the
+  same thing, side by side. The entry holds branch names, so it stays live.
+  It opens at once, and the Previews list shows it as a `sym` row whose menu
+  also opens either side's merge preview. Start it from the TUI's Branches
+  pair picker (`m`, `m` → **Symmetric merge preview A, B…**), from `gg web`'s
+  branch drag & drop menu or its ☰ menu (**new symmetric merge preview…**),
+  or with `gg preview add --symmetric --base <base> <a> <b>`. Saving an
+  existing one opens it instead.
+- The TUI shows its *comparing…* popup when `enter` opens any saved
+  comparison on the Previews tab, not only after marking two rows.
+- `gg web`'s branch prompts for a merge preview and a symmetric merge
+  preview now suggest branch names as you type, ranked like the TUI (tab
+  or enter takes the top one; click takes any). An unknown or repeated name
+  is refused INSIDE the prompt, which stays open. Before, the refusal went
+  to the status line behind the prompt's dimmed backdrop.
+- `gg web`: a link comparison slower than 30 seconds keeps its
+  *comparing…* line, now with the time waited, instead of losing it half way.
 ## `gg web`: the symmetric comparison's direction bar stays on screen
 
 ### Fixed

@@ -1225,6 +1225,24 @@ inexpressible kind as a 500; they use `%d` rather than `ep.Display()` because
 `Display` has no `EndpointInvalid` arm and PANICS on the zero endpoint, and
 `internal/web` has no `recover()` middleware.
 
+### Symmetric merge previews (2026-09-22)
+
+NOT a store kind: an ordinary TWO-link `savedcompare` entry,
+`Left: gg://<repo>@<base>...<A>`, `Right: gg://<repo>@<base>...<B>` (target
+first, A left — `previewLinkText` is the one construction, shared with
+`entryFromPreview`). `domain.SymmetricOf` is the ONLY recogniser: both halves
+whole-tree preview links (no path/line/hunk/hint), same repo, same target,
+different sources. A hand-saved comparison of two such previews is therefore
+symmetric too (ruling: same data). Frontends never parse links for it: the
+TUI stores `previewRow.sym`, the web gets `symmetric: {a, b, base}` on each
+comparison row. Creating it: `SymmetricPreviewAdd` (a duplicate returns the
+existing entry + `ErrSavedCompareExists`, opened as success everywhere);
+`POST /api/saved-compares/symmetric` (409 on a duplicate, the web's
+convention); `gg preview add --symmetric --base` (the id on STDOUT, a
+duplicate exits 0). The TUI base popup is stacked on the pair menu via
+`pairOp.stacked` (the picker normally pops itself before `open`). The base
+never has a default in any frontend.
+
 ### Saved commit pairs (2026-09-19)
 
 A saved commit pair is a SET-shaped `savedcompare.Entry` —

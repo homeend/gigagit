@@ -106,8 +106,17 @@ func previewList(svc *domain.Service, args []string, stdout, stderr io.Writer) i
 func previewAdd(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("preview add", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	label := fs.String("label", "", "human label (default: \"<source> → <target>\")")
+	label := fs.String("label", "", "human label (default: \"<source> → <target>\"; with --symmetric \"<a> vs <b> (base: <base>)\")")
+	symmetric := fs.Bool("symmetric", false, "save a symmetric merge preview: what <a> and <b> would each bring into --base, compared")
+	base := fs.String("base", "", "the base branch of a --symmetric preview (required: there is no default)")
 	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *symmetric {
+		return previewAddSymmetric(svc, fs.Args(), *base, *label, stdout, stderr)
+	}
+	if *base != "" {
+		fmt.Fprintln(stderr, "preview add: --base is only for --symmetric")
 		return 2
 	}
 	if fs.NArg() == 1 {
@@ -116,7 +125,7 @@ func previewAdd(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 		}
 	}
 	if fs.NArg() != 2 {
-		fmt.Fprintln(stderr, "usage: gg preview add [--label <text>] <source> <target> | <a>..<b>")
+		fmt.Fprintln(stderr, "usage: gg preview add [--label <text>] <source> <target> | <a>..<b> | --symmetric --base <base> <a> <b>")
 		return 2
 	}
 	p, err := svc.PreviewAdd(context.Background(), fs.Arg(0), fs.Arg(1), *label)
@@ -129,6 +138,29 @@ func previewAdd(svc *domain.Service, args []string, stdout, stderr io.Writer) in
 		return 1
 	}
 	fmt.Fprintln(stdout, p.ID)
+	return 0
+}
+
+// previewAddSymmetric saves ONE comparison, @base...a against @base...b,
+// and prints its id. A duplicate is not an error: its id is printed as a new
+// one would be (a script re-running the add gets the same answer), with a
+// note on stderr.
+func previewAddSymmetric(svc *domain.Service, args []string, base, label string, stdout, stderr io.Writer) int {
+	if len(args) != 2 || strings.TrimSpace(base) == "" {
+		fmt.Fprintln(stderr, "usage: gg preview add --symmetric --base <base> [--label <text>] <a> <b>")
+		return 2
+	}
+	c, err := svc.SymmetricPreviewAdd(context.Background(), args[0], args[1], base, label)
+	if errors.Is(err, domain.ErrSavedCompareExists) {
+		fmt.Fprintf(stderr, "preview add: already saved as %s (%s)\n", c.ID, c.Label)
+		fmt.Fprintln(stdout, c.ID)
+		return 0
+	}
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	fmt.Fprintln(stdout, c.ID)
 	return 0
 }
 

@@ -7,7 +7,7 @@
 // import it, so a sidebar → previews → files edge would close an import cycle
 // with top-level code on both ends. previews.js therefore owns its own fetch,
 // and live.js / ops.js / app.js call it beside fetchBranches.
-import { $, esc, getJSON, postJSON, state } from "./core.js";
+import { $, esc, getJSON, postJSON, runOnce, state } from "./core.js";
 import { openPrompt, showCtxMenu } from "./layers.js";
 import { opLine, showLocalConfirm } from "./ops.js";
 import { applyCompareFilter, drillOut, noteBadgeHTML, openCompare, renderFiles } from "./files.js";
@@ -128,10 +128,19 @@ const dragAttr = (e) => (e.kind === "compare" ? "" : ' draggable="true"');
 // the menu which list the row's id belongs to: the three kinds share one
 // store, so an id alone does not say.
 function savedRowHTML(e) {
-  const sub = e.kind === "pair" ? e.a.slice(0, 8) + ".." + e.b.slice(0, 8) : e.left_desc + " ↔ " + e.right_desc;
+  // A symmetric merge preview (the server recognised it; the page parses no
+  // link) names its three branches instead of the two link descriptions.
+  const sym = e.kind === "compare" && e.symmetric;
+  const sub =
+    e.kind === "pair"
+      ? e.a.slice(0, 8) + ".." + e.b.slice(0, 8)
+      : sym
+        ? sym.a + " vs " + sym.b + " · base: " + sym.base
+        : e.left_desc + " ↔ " + e.right_desc;
   const tip = e.kind === "pair" ? e.link : e.left + "\n" + e.right;
   return (
     `<li data-id="${esc(e.id)}" data-kind="${esc(e.kind)}"${dragAttr(e)} title="${esc(tip)}"><span class="mk"></span>` +
+    (sym ? `<span class="psub">sym</span> ` : "") +
     `${esc(e.label)}<span class="psub">${esc(sub)}</span>` +
     (e.kind === "pair" ? `<span class="psub">${esc(pairStateText(e))}</span>` : "") +
     // The pair's review-note total — the merge rows' badge, one painter.
@@ -427,36 +436,102 @@ function knownName(n) {
 }
 
 
+// branchCheck is a branch prompt's validate: the in-box refusal for a name
+// this page does not know ("" accepts). others are names the answer must
+// differ from, each with its own words.
+const branchCheck = (others) => (n) => {
+  if (!knownName(n)) return "unknown branch " + n;
+  for (const [name, why] of others) if (n === name) return why;
+  return "";
+};
+
 // addPreviewFlow: two prompts (source, then the branch it would be merged
-// into), each validated before the next opens.
+// into), each completing branch names and refusing an unknown one in place.
 function addPreviewFlow() {
   openPrompt({
     title: "Merge preview — source branch:",
     value: "",
+    suggest: true,
+    validate: branchCheck([]),
     onSubmit: (source) => {
-      if (!knownName(source)) {
-        opLine("unknown branch " + source, true);
-        return;
-      }
       const cur = (state.branches || []).find((b) => b.is_head);
       openPrompt({
         title: "Merge preview — merge " + source + " into:",
         value: cur && cur.name !== source ? cur.name : "main",
-        onSubmit: (target) => {
-          if (!knownName(target)) {
-            opLine("unknown branch " + target, true);
-            return;
-          }
-          if (target === source) {
-            opLine("source and target are the same branch", true);
-            return;
-          }
-          savePreview(source, target, "", true);
-        },
+        suggest: true,
+        validate: branchCheck([[source, "source and target are the same branch"]]),
+        onSubmit: (target) => savePreview(source, target, "", true),
       });
     },
   });
 }
+
+// symmetricPreviewFlow asks for the BASE of a symmetric merge preview of a
+// and b — what each would bring into it, compared: two branches that fix the
+// same thing. The prompt starts EMPTY and is never filled in (the base is
+// not guessed); it completes branch names like the TUI's base popup, and a
+// refused answer is said inside the box, which stays open. The save and the
+// two-sided compare after it can take a minute on a big repo, so the whole
+// task runs under runOnce: a second submit is dropped, not stacked.
+function symmetricPreviewFlow(a, b) {
+  openPrompt({
+    title: "Symmetric merge preview — " + a + " and " + b + " — base branch:",
+    value: "",
+    suggest: true,
+    validate: branchCheck([
+      [a, "the base must differ from " + a + " and " + b],
+      [b, "the base must differ from " + a + " and " + b],
+    ]),
+    onSubmit: (base) => {
+      if (!runOnce("symmetric-preview", () => saveSymmetric(a, b, base))) {
+        opLine("a symmetric merge preview is already being saved…");
+      }
+    },
+  });
+}
+
+// saveSymmetric stores the comparison (a duplicate is the existing row, and
+// opens like a new one) and opens it through the one link-compare path,
+// whose op line says "comparing…" until the view lands.
+async function saveSymmetric(a, b, base) {
+  opLine("saving symmetric merge preview " + a + " vs " + b + " (base: " + base + ")…");
+  let id;
+  try {
+    id = (await postJSON("/api/saved-compares/symmetric", { a, b, base, label: "" })).entry.id;
+  } catch (err) {
+    if (!(err.data && err.data.id)) {
+      opLine("symmetric merge preview: " + (err.message || err), true);
+      return;
+    }
+    id = err.data.id;
+  }
+  refresh();
+  await runLinkCompare("id=" + encodeURIComponent(id));
+}
+
+// newSymmetricFlow is the Previews menu's entry: the first branch, the
+// second, then the base — each prompt empty and completing branch names.
+function newSymmetricFlow() {
+  openPrompt({
+    title: "Symmetric merge preview — first branch:",
+    value: "",
+    suggest: true,
+    validate: branchCheck([]),
+    onSubmit: (a) =>
+      openPrompt({
+        title: "Symmetric merge preview — second branch (compared with " + a + "):",
+        value: "",
+        suggest: true,
+        validate: branchCheck([[a, "the two branches are the same"]]),
+        onSubmit: (b) => symmetricPreviewFlow(a, b),
+      }),
+  });
+}
+// The branch drop menu starts the flow from a dragged pair. sidebar.js cannot
+// import this module (see __ggAddPreview below), so the handle goes through
+// the window.
+window.__ggSymmetricPreview = (a, b) => symmetricPreviewFlow(a, b);
+
 // The sidebar header's + control starts the flow. sidebar.js cannot import
 // this module (the cycle above), so the handle goes through the window.
 window.__ggAddPreview = addPreviewFlow;
@@ -602,6 +677,13 @@ function showComparisonMenu(e, x, y) {
   showCtxMenu(
     [
       { label: "open comparison", act: () => openSaved(e) },
+      // A symmetric row is made of two merge previews: open either one.
+      ...(e.symmetric
+        ? [e.symmetric.a, e.symmetric.b].map((src) => ({
+            label: "open merge preview " + src + " → " + e.symmetric.base,
+            act: () => openPreviewForPair(src, e.symmetric.base),
+          }))
+        : []),
       { label: "rename…", act: () => renameSaved(e) },
       { label: "save reversed", act: () => saveSaved({ left: e.right, right: e.left, label: "" }) },
       { label: "copy gg link — left", act: () => copyLink(e.left, e.left_desc) },
@@ -779,7 +861,10 @@ registerRows("branch", (b) => {
   ];
 });
 
-registerRows("menu", () => [{ label: "new merge preview…", act: addPreviewFlow }]);
+registerRows("menu", () => [
+  { label: "new merge preview…", act: addPreviewFlow },
+  { label: "new symmetric merge preview…", act: newSymmetricFlow },
+]);
 
 
 // reopenPreviewIfMoved runs after a sidebar refresh: an open preview whose
@@ -848,5 +933,8 @@ registerHelp({
     "carries <b>review notes</b> like a merge preview does: ◆ badges on its files, <b>c</b> on a " +
     "new-side line (a note is stored on <b>b</b>). <b>Drag</b> a merge preview or a commit pair onto " +
     "another to compare the two change-sets: the drop offers both directions and <b>compare and " +
-    "save…</b>; <b>compare with…</b> in the row's menu is the same without a drag",
+    "save…</b>; <b>compare with…</b> in the row's menu is the same without a drag. A <b>symmetric " +
+    "merge preview</b> (the menu's <b>new symmetric merge preview…</b>, or drag one branch onto " +
+    "another) compares what two branches would each bring into a base you name — saved as one " +
+    "<b>sym</b> row; its menu also opens either side's merge preview",
 });

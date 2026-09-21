@@ -734,6 +734,15 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
    one-line input in use, and the multi-line textarea below it still holding
    what the previous step typed. */
 #prompt-input.hidden { display: none; }
+/* branch hints under a one-line prompt (openPrompt({suggest})) and the
+   prompt's own refusal line: INSIDE the box, never behind its backdrop */
+#prompt-sugg { margin: 6px 14px 0; display: flex; flex-wrap: wrap; gap: 6px; font-size: 12px; }
+#prompt-sugg.hidden { display: none; }
+#prompt-sugg .psug { color: var(--dim); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; cursor: pointer; }
+#prompt-sugg .psug:first-child { color: var(--fg); border-color: var(--accent); }
+#prompt-sugg .psug:hover { border-color: var(--accent); }
+#prompt-err { margin: 6px 14px 0; color: #f27a6a; font-size: 12px; } /* matches #op-line.err */
+#prompt-err.hidden { display: none; }
 /* the multiline variant (reword): same box, room for a message body */
 #prompt-text { margin: 0 14px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 7px 10px; font: inherit; outline: none; resize: vertical; min-height: 7em; }
 #prompt-text.hidden { display: none; }

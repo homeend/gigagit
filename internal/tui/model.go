@@ -923,6 +923,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.loadedLinkCompare(msg)
 	case compareSavedMsg:
 		return m.savedCompare(msg)
+	case symmetricSavedMsg:
+		return m.symmetricSaved(msg)
 	case baseSuggestedMsg:
 		if p, ok := m.topLayer().(*linkComparePopup); ok {
 			p.suggested(msg)
@@ -2458,7 +2460,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelPreviews {
 				if r, ok := m.selectedPreview(); ok && m.opsIdle() {
 					if c, ok := r.compare(); ok {
-						return m.startLinkCompare(c.Left, c.Right)
+						return m.openCompareWithLoading(c.Left, c.Right, r.label())
 					}
 					rec, isMerge := r.merge()
 					if !isMerge {

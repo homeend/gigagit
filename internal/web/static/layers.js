@@ -1,6 +1,6 @@
 // layers.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, esc } from "./core.js";
+import { $, esc, getJSON } from "./core.js";
 import { opLine } from "./ops.js";
 
 // --- overlay layer stack ---
@@ -183,6 +183,21 @@ let promptMode = "line";
 // still submitted on ctrl+enter would call an onSubmit nobody passed.
 let promptReadonly = false;
 let promptAllowEmpty = false; // openPrompt({allowEmpty}): "" is an answer
+// openPrompt({suggest}): the one-line field completes BRANCH names — the TUI
+// preview form's strip: up to five server-ranked names under the field
+// (/api/branch-suggest, the TUI's own fuzzy.Rank), the first one bright; tab
+// or enter take it when the typed text is not itself one of them, a click
+// takes any. promptSugg holds the names answered for promptSuggFor (the text
+// they were ranked against) — a stale answer is never accepted.
+let promptSuggest = false;
+let promptSugg = [];
+let promptSuggFor = "";
+let promptSuggGen = 0;
+let promptSuggTimer = null;
+// openPrompt({validate}): v → a refusal text, or "" to accept. A refusal is
+// shown INSIDE the box and the prompt stays open with the text kept — the op
+// line would sit behind the prompt's backdrop.
+let promptValidate = null;
 
 // promptField is the control the prompt's own value comes from: the textarea
 // only when it is the whole prompt.
@@ -204,8 +219,14 @@ function promptField() {
 // something optional about it".
 // readonly: with multiline, show the text without editing it (the commit
 // message VIEWER): no ok button, cancel reads "close", esc is the way out.
-function openPrompt({ title, value, placeholder, onSubmit, extra, multiline, body, readonly, allowEmpty }) {
+function openPrompt({ title, value, placeholder, onSubmit, extra, multiline, body, readonly, allowEmpty, suggest, validate }) {
   promptCb = onSubmit;
+  promptSuggest = !!suggest && !multiline && !body;
+  promptValidate = validate || null;
+  promptSugg = [];
+  promptSuggFor = "";
+  renderPromptSugg();
+  setPromptErr("");
   // allowEmpty: an empty answer is meaningful to this caller (a label whose
   // default is the store's to choose), so enter on an empty field submits "".
   promptAllowEmpty = !!allowEmpty;
@@ -233,7 +254,9 @@ function openPrompt({ title, value, placeholder, onSubmit, extra, multiline, bod
     ? "ctrl+enter (or ctrl+s) to confirm · esc to cancel"
     : body
       ? "enter to confirm · tab for the field below · esc to cancel"
-      : "enter to confirm · esc to cancel";
+      : promptSuggest
+        ? "enter to confirm · tab completes · esc to cancel"
+        : "enter to confirm · esc to cancel";
   // Clear whatever this prompt is not using. A hidden field's contents are
   // invisible — and an invisible leftover is what would be submitted if a
   // later prompt switched shape, or read back by anything inspecting the DOM.
@@ -302,8 +325,71 @@ function resetPromptSize() {
 }
 
 
+// --- branch hints + the in-box refusal ---
+function setPromptErr(text) {
+  $("prompt-err").textContent = text || "";
+  $("prompt-err").classList.toggle("hidden", !text);
+}
+
+function renderPromptSugg() {
+  const el = $("prompt-sugg");
+  el.innerHTML = promptSugg.map((n) => `<span class="psug" data-v="${esc(n)}">${esc(n)}</span>`).join("");
+  el.classList.toggle("hidden", !promptSuggest || !promptSugg.length);
+}
+
+async function fetchPromptSugg() {
+  const q = $("prompt-input").value.trim();
+  const gen = ++promptSuggGen;
+  let names = [];
+  if (q) {
+    try {
+      names = (await getJSON("/api/branch-suggest?q=" + encodeURIComponent(q))).names || [];
+    } catch {
+      names = []; // hints are a convenience: a failed lookup shows none
+    }
+  }
+  if (gen !== promptSuggGen || !promptSuggest) return; // a later keystroke already asked
+  promptSugg = names;
+  promptSuggFor = q;
+  renderPromptSugg();
+}
+
+// acceptPromptSugg is the TUI's accept: the top hint replaces the text unless
+// the text already IS one of the hints. Only hints ranked for the text on
+// screen count, so a fast typist never gets an answer to an older prefix.
+function acceptPromptSugg() {
+  const f = $("prompt-input");
+  const v = f.value.trim();
+  if (!promptSuggest || !promptSugg.length || promptSuggFor !== v || promptSugg.includes(v)) return false;
+  f.value = promptSugg[0];
+  fetchPromptSugg();
+  return true;
+}
+
+$("prompt-input").addEventListener("input", () => {
+  setPromptErr("");
+  if (!promptSuggest) return;
+  clearTimeout(promptSuggTimer);
+  promptSuggTimer = setTimeout(fetchPromptSugg, 80);
+});
+$("prompt-sugg").addEventListener("mousedown", (e) => {
+  const s = e.target.closest(".psug");
+  if (!s) return;
+  e.preventDefault(); // keep the focus in the field
+  $("prompt-input").value = s.dataset.v;
+  setPromptErr("");
+  fetchPromptSugg();
+});
+
+
 function closePrompt() {
   promptCb = null;
+  promptSuggest = false;
+  promptValidate = null;
+  promptSugg = [];
+  clearTimeout(promptSuggTimer);
+  renderPromptSugg();
+  setPromptErr("");
   promptExtraCb = null;
   $("prompt-extra").classList.add("hidden");
   // Blur before closing: the form-field guard keys off the focused element,
@@ -330,6 +416,14 @@ function submitPrompt() {
   if (promptReadonly) return; // nothing to submit from a viewer
   const v = promptField().value.trim();
   if (!v && !promptAllowEmpty) return; // nothing to submit; leave the prompt open
+  if (promptValidate) {
+    const why = promptValidate(v);
+    if (why) {
+      setPromptErr(why);
+      promptField().focus();
+      return;
+    }
+  }
   // The body is optional BY DESIGN: empty is a meaningful answer (no
   // annotation => a lightweight tag), so it is never trimmed away into
   // nothing the caller cannot distinguish.
@@ -381,8 +475,14 @@ function promptKey(e) {
     }
     return false;
   }
+  if (e.key === "Tab" && promptSuggest) {
+    e.preventDefault();
+    acceptPromptSugg();
+    return true;
+  }
   if (e.key === "Enter") {
     e.preventDefault();
+    acceptPromptSugg(); // the TUI's enter: take the top hint first
     submitPrompt();
     return true;
   }

@@ -1,0 +1,53 @@
+name = "symmetric merge preview: gg preview add --symmetric --base saves ONE live comparison"
+
+[input]
+steps = [
+  { write = "README.md", content = "hi\n" },
+  { commit = "initial" },
+  { branch = "feat/x" },
+  { branch = "feat/y" },
+  { switch = "feat/x" },
+  { write = "x.txt", content = "x\n" },
+  { commit = "add x" },
+  { switch = "feat/y" },
+  { write = "y.txt", content = "y\n" },
+  { commit = "add y" },
+  { switch = "main" },
+]
+
+# No --base is a usage error: the base is never guessed.
+[[run]]
+cmd  = ["preview", "add", "--symmetric", "feat/x", "feat/y"]
+exit = 2
+
+# --base without --symmetric is a usage error too.
+[[run]]
+cmd  = ["preview", "add", "--base", "main", "feat/x", "main"]
+exit = 2
+
+# A base equal to one of the branches is refused before anything is stored.
+[[run]]
+cmd  = ["preview", "add", "--symmetric", "--base", "feat/x", "feat/x", "feat/y"]
+exit = 1
+
+[[run]]
+cmd  = ["preview", "add", "--symmetric", "--base", "main", "feat/x", "feat/y"]
+exit = 0
+
+# ONE comparison, both links spelled base first, A on the left.
+[[run]]
+cmd             = ["compare", "--list"]
+exit            = 0
+stdout_contains = ["feat/x vs feat/y (base: main)", "@main...feat/x\t", "@main...feat/y"]
+
+# A duplicate is reused, not an error.
+[[run]]
+cmd  = ["preview", "add", "--symmetric", "--base", "main", "feat/x", "feat/y"]
+exit = 0
+
+# It runs like any saved comparison: what each branch brings into main.
+[[run]]
+cmd             = ["compare", "--saved", "feat/x vs feat/y (base: main)"]
+exit            = 0
+stdout_contains = ["x.txt", "y.txt"]
+stdout_excludes = ["README.md"]

@@ -427,6 +427,15 @@ finds the right one here.
   `gg preview diff <id|label> --hunks [--json]` numbers a saved preview's
   hunks (the same numbering as `gg diff --preview P --hunks`);
   `gg preview rename <id|label> <text>`; `gg preview rm <id|label>`.
+- `gg preview add --symmetric --base <base> [--label <text>] <a> <b>` — save a
+  SYMMETRIC MERGE PREVIEW: ONE saved comparison of `@<base>...<a>` against
+  `@<base>...<b>` — what each branch would bring into the base, compared (two
+  branches that fix the same thing). `--base` is required (no default); a base
+  equal to `<a>` or `<b>` exits 1, a missing `--base` exits 2. It holds branch
+  NAMES, so it stays live. Prints the id; an already-saved one prints the
+  existing id and exits 0. It is listed by `gg compare --list` (not
+  `gg preview list`) and run with `gg compare --saved <id|label>`; the default
+  label is `<a> vs <b> (base: <base>)`.
 - `gg preview add [--label <text>] <a>..<b>` — save a COMMIT PAIR: the plain
   two-dot diff between two commits, as a named entry beside the merge
   previews. ONE argument holding `..` (three dots is a merge preview, not a
