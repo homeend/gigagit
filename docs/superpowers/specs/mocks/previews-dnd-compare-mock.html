@@ -166,8 +166,8 @@ document.addEventListener("mousedown", (e) => { if (!e.target.closest("#ctx")) $
 
 function pairMenu(src, dst, x, y) {
   menu([
-    { label: "compare  " + src.label + "  ↔  " + dst.label, act: () => compare(src, dst) },
-    { label: "compare  " + dst.label + "  ↔  " + src.label, act: () => compare(dst, src) },
+    { label: "compare  " + src.label + "  →  " + dst.label, act: () => compare(src, dst) },
+    { label: "compare  " + dst.label + "  →  " + src.label, act: () => compare(dst, src) },
     { sep: true },
     { label: "compare and save…", act: () => save(src, dst) },
     { sep: true },

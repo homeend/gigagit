@@ -715,13 +715,15 @@ function clearPreviewDropTargets() {
 
 const compareRows = (l, r) => runLinkCompare(new URLSearchParams({ left: rowLink(l), right: rowLink(r) }).toString());
 
-// showPreviewPairMenu offers the comparison of (dragged, dropped-on). The left
-// side is the OLD one, so both directions are spelled out by label.
+// showPreviewPairMenu offers the comparison of (dragged, dropped-on). The two
+// rows differ ONLY in direction, so the label draws it: old → new, the arrow the
+// symmetric view's direction bar uses. (↔ is one cramped cell in the menu's
+// monospace font and read as a left arrow.)
 function showPreviewPairMenu(src, dst, x, y) {
   showCtxMenu(
     [
-      { label: "compare " + src.label + " ↔ " + dst.label, act: () => compareRows(src, dst) },
-      { label: "compare " + dst.label + " ↔ " + src.label, act: () => compareRows(dst, src) },
+      { label: "compare " + src.label + " → " + dst.label, act: () => compareRows(src, dst) },
+      { label: "compare " + dst.label + " → " + src.label, act: () => compareRows(dst, src) },
       { sep: true },
       { label: "compare and save…", act: () => compareAndSave(src, dst) },
       { sep: true },

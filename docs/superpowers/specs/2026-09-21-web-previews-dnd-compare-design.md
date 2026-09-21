@@ -50,8 +50,8 @@ the op line (`compare: …`, red). The client never screens a pair.
    the confirmation, as it is for branches:
 
    ```
-   compare  <dragged>  ↔  <dropped-on>
-   compare  <dropped-on>  ↔  <dragged>
+   compare  <dragged>  →  <dropped-on>      (old → new)
+   compare  <dropped-on>  →  <dragged>
    ─────────
    compare and save…
    ─────────
