@@ -704,3 +704,64 @@ func TestLogScopedExcludesVersionRefDecorations(t *testing.T) {
 		}
 	}
 }
+
+func TestCommitNumstatArgv(t *testing.T) {
+	t.Parallel()
+	f := gitexec.NewFakeRunner()
+	f.SetResponse("git log (commit numstat)", gitexec.Result{Stdout: "3\t1\tfile.txt\x00"})
+	repo := &Repo{Runner: f}
+	out, err := repo.CommitNumstat(context.Background(), "abc123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv := strings.Join(f.Calls[0].Argv, " ")
+	for _, part := range []string{"log", "-1", "-m", "--first-parent", "--root", "--numstat", "-M", "-z", "--format=", "abc123"} {
+		if !strings.Contains(argv, part) {
+			t.Fatalf("argv = %q, missing %q", argv, part)
+		}
+	}
+	if got := ParseNumstat(out); len(got) != 1 || got[0].Added != 3 || got[0].Deleted != 1 {
+		t.Fatalf("parsed = %+v", got)
+	}
+}
+
+// The stacked diff's header counts must name the SAME paths CommitFiles lists:
+// root commit, a rename, and a binary file, against a real git.
+func TestCommitNumstatRealRepo(t *testing.T) {
+	t.Parallel()
+	dir, runner := newTestRepo(t) // root commit adds README.md ("hello\n")
+	repo := &Repo{Runner: runner}
+	head := func() string {
+		out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	parse := func(rev string) []model.DiffStat {
+		out, err := repo.CommitNumstat(context.Background(), rev)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ParseNumstat(out)
+	}
+
+	if got := parse(head()); len(got) != 1 || got[0].Path != "README.md" || got[0].Added != 1 || got[0].Deleted != 0 {
+		t.Fatalf("root commit stats = %+v, want [README.md +1 -0]", got)
+	}
+
+	gitIn(t, dir, "mv", "README.md", "DOCS.md")
+	gitIn(t, dir, "commit", "-m", "rename")
+	if got := parse(head()); len(got) != 1 || got[0].Path != "DOCS.md" || got[0].OldPath != "README.md" {
+		t.Fatalf("rename stats = %+v, want DOCS.md renamed from README.md", got)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "blob.bin"), []byte{0, 1, 2, 0, 3}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, dir, "add", "blob.bin")
+	gitIn(t, dir, "commit", "-m", "binary")
+	if got := parse(head()); len(got) != 1 || got[0].Path != "blob.bin" || !got[0].Binary {
+		t.Fatalf("binary stats = %+v, want blob.bin binary", got)
+	}
+}
