@@ -31,8 +31,8 @@ func compareBranches() []model.Branch {
 func TestPairOpsIncludeCompare(t *testing.T) {
 	t.Parallel()
 	ops := pairOpsFor(panelBranches)
-	if len(ops) != 5 {
-		t.Fatalf("pairOpsFor(panelBranches) has %d ops, want 5", len(ops))
+	if len(ops) != 6 {
+		t.Fatalf("pairOpsFor(panelBranches) has %d ops, want 6", len(ops))
 	}
 	got := ops[3].label("feat/x", "main")
 	if got != "Compare feat/x ↔ main" {
