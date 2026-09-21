@@ -167,13 +167,22 @@ function sectionEl(k) {
   return document.querySelector(`#diff-body .stk-file[data-k="${k}"]`);
 }
 
+// repaintSlot redraws one section. A section ABOVE the file being read
+// changes height when it loads (its placeholder is only an estimate), which
+// would push the reader's file away; the reader's header is put back where it
+// was. The browser's own scroll anchoring cannot do this reliably — the
+// reader's section is often repainted in the same beat, removing the node it
+// anchored on — so it is off for the stack (style.css) and done here.
 function repaintSlot(st, k) {
   const el = sectionEl(k);
   if (!el) return;
   const s = st.slots[k];
+  const pin = k < st.anchor ? sectionEl(st.anchor) : null;
+  const before = pin ? pin.getBoundingClientRect().top : 0;
   el.classList.toggle("collapsed", s.collapsed);
   el.querySelector(".stk-head").outerHTML = headHTML(s);
   el.querySelector(".stk-body").innerHTML = bodyHTML(s);
+  if (pin) $("diff-pane").scrollTop += pin.getBoundingClientRect().top - before;
   mountPanBars($("diff-body"), $("diff-hbars"));
   updateDiffNav(); // the ‹ change › buttons count the rendered change runs
 }

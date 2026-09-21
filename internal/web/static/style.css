@@ -1199,8 +1199,10 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 
 /* Stacked diff (stackview.js): one bordered section per file; its header
    sticks just under #diff-header (whose height paintStack writes into
-   --diff-head-h). overflow-anchor stays auto: a section above the viewport
-   growing as it loads must not push the reader's file away. */
+   --diff-head-h). Browser scroll anchoring is OFF while a stack is up:
+   repaintSlot keeps the reader's file in place itself, and two corrections
+   would double the jump. */
+#diff-pane:has(.stk) { overflow-anchor: none; }
 .stk { padding: 4px 6px 24px; }
 .stk-file { border: 1px solid var(--border); border-radius: 4px; margin: 8px 0; }
 .stk-head {
