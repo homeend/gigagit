@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## `gg web`: the symmetric comparison's direction bar stays on screen
+
+### Fixed
+
+- In the symmetric view of a comparison, the direction bar (old side → new
+  side) scrolled away as soon as **‹ change** / **change ›** moved the diff,
+  and the toolbar under it jumped up under the cursor. The bar is now pinned
+  with the diff header, so the buttons stay where they are.
+
 ## `gg web`: the symmetric comparison's file lists cut long paths from the middle
 
 ### Fixed
