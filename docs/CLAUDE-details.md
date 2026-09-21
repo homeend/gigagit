@@ -1302,6 +1302,43 @@ A commit pair is a NOTE SCOPE built by `domain.PairNotes(a, b)` —
 - Badge refresh: the `srcNotes` arm re-dispatches `pairNotesRefreshCmd` (a pair
   has no `previewOpen`, nothing to re-resolve, nothing that can "move").
 
+### Stacked diff view in `gg web` (plan 1 — web core, 2026-09-22)
+
+Spec `docs/superpowers/specs/2026-09-22-stacked-diff-view-design.md`, plan
+`docs/superpowers/plans/2026-09-22-stacked-diff-web-core.md`. `S` flips
+`/api/uistate` `stacked_diff`; while on, `openFile(i)` routes to
+`stackview.js` `openStack(i)` instead of a single diff.
+
+- **Two modules.** `stack.js` is pure and import-free (slots, `stackRows`,
+  `nextToLoad`, `reconcileSlots`, `countsFromDiff`; node-tested by
+  `stackjs_test.go`). `stackview.js` owns the DOM: `state.stack = {list,
+  group, slots, near, anchor, inFlight}`.
+- **Same-stack test is array identity.** `openStack` scrolls when
+  `state.stack.list === activeFileList()` (and the working-tree group
+  matches); a new commit, a compare filter change or a status re-read hands
+  out a new array → a rebuild (the status path goes through
+  `reconcileStack`, which keeps slot OBJECTS so in-flight loads land).
+- **One URL builder.** `fileDiffURL(f)` (files.js) is what both the
+  single-file opens and the stack loader fetch — never build a diff URL
+  inline again (`TestFileDiffURLIsShared`).
+- **Counts before first paint.** `buildStack` awaits `/api/numstat` before
+  `paintStack`: placeholder heights come from the counts. Painted without
+  them every section is ~3 rows, the whole set is "near", and the loader
+  fetches the first three files wherever the reader is. Entry / link sets
+  have no numstat source and count from each loaded diff.
+- **Teardown points.** `setLayout(mode !== "diff")`, a single-file
+  `openFile`, the conflict row's **open resolver** (→ `openStatusDiff`), and
+  an emptied working-tree group (`enterFilesStage`). While a stack is up
+  every single-diff global (`lastDiff`, `diffCtx`, `diffRow`, `notes`) is
+  null, which is how search, history/blame, the fold listener and the live
+  re-renders all stand aside. `rerenderDiffKeepingPlace` / `toggleDiffView`
+  hand off to `rerenderStack`.
+- **Web keys.** `S`, `-`, `_`; `/` toasts (search reads one diff); `j`/`k`
+  scroll the stack via `openFile`. NOT `n`/`p` — `p` is pull.
+- **Deferred.** The symmetric view (`stackOn()` is false while
+  `symActive()`), notes/cursor (the per-slot accessor arrives with them),
+  search, hunk staging, the TUI.
+
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)
 
 Spec `docs/superpowers/specs/2026-09-21-web-previews-dnd-compare-design.md`.

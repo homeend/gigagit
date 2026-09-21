@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## `gg web`: the stacked diff — every file in one scroll (`S`)
+
+### Added
+
+- **Stacked diff view.** `S` (or the **stacked** chip in the diff toolbar, the
+  footer chip, or the ☰ / ctrl+k menus) shows every file of the open commit,
+  comparison, merge preview, pull request or working-tree section in ONE
+  scroll, the way GitHub's *Files changed* does: a header per file (status,
+  path, `old → new` on a rename, `+added −deleted`) with its diff below. The
+  header of the file you are reading sticks under the toolbar.
+- Files load as they scroll near the view, at most three at a time; a change
+  set of more than 100 files opens with every file folded to its header.
+  `-` folds (or unfolds) the current file, `_` folds / unfolds all, a click on
+  a header folds that one, and **fold all** in the toolbar does the same.
+- The file list follows the file you are reading; clicking a file (or `j`/`k`,
+  `‹ file` / `file ›`) scrolls to it. In the working tree the staged files and
+  the rest are stacked separately; a conflicted file shows its header with an
+  **open resolver** button. A status refresh keeps your place and folds.
+- The choice is remembered per machine (`stacked_diff` in `/api/uistate`).
+  New read-only `GET /api/numstat` (`?sha=` | `?left=&right=` |
+  `?wt=staged|unstaged`) answers the header counts — asked only while a stack
+  is open.
+- Not yet inside a stack: in-view search (`/` says to switch back), review
+  notes and the line cursor, inline hunk staging. The symmetric comparison
+  and the TUI get the stack in their own follow-ups.
+
 ## `gg web`: the symmetric comparison's file lists cut long paths from the middle
 
 ### Fixed

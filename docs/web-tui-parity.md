@@ -49,7 +49,9 @@ comparison…; a `@a..b` link lands through the same door; **web only:** the
 ⇄ symmetric view of two sets — two row-aligned file lists around one diff, a
 flippable direction arrow, differ / all / one side / same filters; and drag a
 Previews row onto another to start the comparison — the TUI's twin is space /
-`m` marks on two Previews rows) · **pull
+`m` marks on two Previews rows; and the **stacked diff** (`S`) — every file
+of a change set in one scroll, header + diff per file — whose TUI twin is a
+planned follow-up) · **pull
 requests** (read-only: list, fetch + open the PR diff, copy URL, forget,
 `[refresh] prs` poll and ⟳, review threads inside the diff as read-only note
 boxes, the details overlay — the TUI's PR hub — the comment re-poll, and the
