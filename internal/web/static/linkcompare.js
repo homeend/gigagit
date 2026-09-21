@@ -65,7 +65,7 @@ export async function refreshLinkCompare() {
   if (state.compare !== c || state.filesMode !== "compare") return;
   const files = body.files || [];
   if (JSON.stringify(files) === JSON.stringify(c.all)) return;
-  updateLinkCompareFiles(files);
+  updateLinkCompareFiles(files, body.sym);
   opLine("comparison updated: " + files.length + " file" + (files.length === 1 ? "" : "s"));
 }
 

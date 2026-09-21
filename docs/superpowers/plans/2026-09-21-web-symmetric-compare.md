@@ -70,6 +70,17 @@ cleanup), `keys.js` (`1`–`4`, `s`, `x` gated); embed/import guard test.
   listener re-evaluates and falls back).
 - [ ] direction bar; flip re-opens the current row with swapped specs/labels.
 - [ ] identical / no-content rows paint a notice, no fetch.
+- [ ] ONE chokepoint `setCompareRows()` assigns `state.files` (sym-visible rows
+  when active, else `c.all`) — called from `openLinkCompare`,
+  `applyCompareFilter` AND `updateLinkCompareFiles`; `refreshLinkCompare`
+  (linkcompare.js) passes `body.sym` along. `c.all` stays the plain `files`.
+- [ ] sym chips use `data-sf`, never `data-f` (the bar's handler owns that).
+- [ ] both lists start at the same y: one fixed header height under `.sym`.
+- [ ] every sym row carries a synthesized `status` (direction-aware, recomputed
+  on flip) — menus, stepper and copy-link read `f.status`.
+- [ ] check `keys.js` for `s`, `x`, `1`–`4` before binding; pick free keys.
+- [ ] "no content" keys on the two STATES, not on `!differs`; an identical row
+  DOES fetch its diff (all-Same) — notice only when it would render nothing.
 - [ ] help overlay rows + footer hint for `s` / `x`.
 - [ ] Commit `feat(web): symmetric view for a link comparison`.
 

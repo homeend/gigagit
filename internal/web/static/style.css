@@ -1130,3 +1130,55 @@ table.diff tr.note.collapsed .notebox { padding: 8px 12px 2px; }
 #server-down-spin { opacity: .8; margin-left: 6px; }
 #server-down-hint { margin-top: 4px; opacity: .95; }
 #server-down-hint.hidden { display: none; }
+
+/* --- the symmetric view of a link comparison (symcompare.js) ---
+   Three columns in the diff stage: LEFT set's list | diff | RIGHT set's list.
+   The right list is #files-pane itself; #symleft-pane mirrors it row for row
+   and exists nowhere else, so it is display:none outside `.sym`. */
+#symleft-pane { display: none; }
+#panes.detail.sym { grid-template-columns: var(--files-w) 1fr var(--rs-w) var(--files-w); }
+#panes.detail.sym #symleft-pane { display: block; order: 0; border-right: 1px solid #3a4150; scrollbar-width: none; }
+#symleft-list { list-style: none; }
+#symleft-list li, #panes.sym #files-list li {
+  display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px;
+  white-space: nowrap; overflow: hidden; cursor: pointer;
+}
+#symleft-list li.sel { background: var(--sel); }
+#symleft-list li .st, #panes.sym #files-list li .st { flex: 0 0 12px; text-align: center; }
+.sympath { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.symg { flex: 0 0 16px; text-align: center; }
+.symg.ne { color: var(--lane6); } .symg.eq { color: var(--lane2); }
+.symg.ol, .symg.or { color: var(--accent); }
+li.symgap { color: #3a4150; cursor: default !important; }
+li.symgap .sympath { letter-spacing: 2px; }
+li.symdel .sympath { text-decoration: line-through; color: var(--lane7); }
+li.symdel .st { color: var(--lane7); }
+li.symeq { opacity: .5; }
+li.symeq.sel { opacity: 1; }
+li.symhead {
+  cursor: default !important; color: var(--dim); font-size: 11px; background: var(--bg-alt);
+  border-bottom: 1px solid var(--border); position: sticky; top: 0;
+}
+li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#sym-dir {
+  display: flex; align-items: center; justify-content: center; gap: 12px; padding: 6px 12px;
+  border-bottom: 1px solid var(--border); background: var(--bg-alt);
+}
+#sym-dir.hidden { display: none; }
+#sym-dir .symlab { flex: 1 1 0; min-width: 0; }
+#sym-dir .symlab.l { text-align: right; }
+#sym-dir .symlab b { display: block; font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#sym-dir .symlab small { color: var(--dim); font-size: 11px; }
+#sym-dir .symlab.old b { color: var(--lane7); }
+#sym-dir .symlab.new b { color: var(--lane2); }
+#sym-flip {
+  font: inherit; font-size: 18px; line-height: 1; color: var(--accent); background: var(--bg);
+  border: 1px solid var(--accent); border-radius: 14px; padding: 2px 16px; cursor: pointer;
+}
+#sym-flip:hover { background: var(--sel); }
+/* The symmetric chips are many and short: they wrap onto a second line rather
+   than elide into "dif…" (the bar's 45% cap is for two long branch names). The
+   left pane's spacer is measured from the list, so a taller bar keeps the rows
+   aligned by construction. */
+#compare-bar button[data-sf], #compare-bar button[data-symtoggle] { max-width: none; flex: 0 0 auto; }
+#compare-bar:has(button[data-symtoggle]) { flex-wrap: wrap; row-gap: 3px; }
