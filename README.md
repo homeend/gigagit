@@ -350,6 +350,11 @@ which set is old and which is new, and `x` (or a click) flips it while the
 lists stay put; `1`–`4` filter *differ · all · one side · same*. Web only,
 remembered, and off below a 1200px window.
 
+The quick way to start one: **drag** a merge preview or a commit pair onto
+another row of the section. The drop opens a menu with both directions and
+**compare and save…**; **compare with…** in a row's right-click menu opens the
+compare dialog with that row's link already in the left field.
+
 `<repo>` is the repository name of the repo's remote, resolved through the
 repository history behind the `R` switcher — so a link made on one machine
 finds the matching checkout here. In the TUI, `#` (or the palette's

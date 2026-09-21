@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## `gg web`: drag one Previews row onto another to compare them
+
+Comparing two saved change-sets meant copying one row's link, opening **compare
+with link…**, pasting, copying the other, pasting again. The Previews section
+now takes the branch list's gesture: **drag** a merge preview or a commit pair
+onto another — the row under the pointer is outlined — and the drop opens a
+small menu naming the pair in **both directions**, plus **compare and save…**
+(asks for a label, saves the comparison, opens it). The comparison is the
+ordinary link comparison of the two rows' own links — exactly what each row's
+**copy gg link** copies — so two sets land in the ⇄ symmetric view, and the
+server stays the one judge of a link: a preview whose branch is gone can be
+dragged, and the refusal is said on the op line. A saved **comparison** row
+holds two links, so it has no one link to compare: it is neither draggable nor
+a drop target (the browser's own no-drop cursor), as is a row dropped on
+itself. The way in without a drag is **compare with…** in a preview's or a
+pair's right-click menu — the compare dialog, its left field holding that
+row's link. Client only: no new route, no new preference.
+
 ## `gg web`: two change-sets, side by side — the symmetric comparison view
 
 Comparing two change-sets (two merge previews, a commit pair against a

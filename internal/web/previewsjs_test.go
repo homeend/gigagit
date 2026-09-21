@@ -106,6 +106,7 @@ func TestPreviewsDragDropIsWired(t *testing.T) {
 		{"links.js", `previewRowLink };`, "links.js exports the builder"},
 		{"style.css", `#previews-list li.drop-target`, "the highlight is styled per list"},
 		{"core.js", `dragPreview`, "the drag state lives in core state"},
+		{"previews.js", `<b>Drag</b> a merge preview`, "the section's help says the gesture exists"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(read(c.file), c.want) {

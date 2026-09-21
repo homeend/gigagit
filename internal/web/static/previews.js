@@ -844,5 +844,7 @@ registerHelp({
     "commits, <b>a..b</b>) and saved <b>comparisons</b> (two gg links — see <b>compare with link</b>): " +
     "click to open, right-click for rename / save reversed / copy gg link / remove. A commit pair " +
     "carries <b>review notes</b> like a merge preview does: ◆ badges on its files, <b>c</b> on a " +
-    "new-side line (a note is stored on <b>b</b>)",
+    "new-side line (a note is stored on <b>b</b>). <b>Drag</b> a merge preview or a commit pair onto " +
+    "another to compare the two change-sets: the drop offers both directions and <b>compare and " +
+    "save…</b>; <b>compare with…</b> in the row's menu is the same without a drag",
 });

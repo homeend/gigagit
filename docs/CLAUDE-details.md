@@ -1302,6 +1302,35 @@ A commit pair is a NOTE SCOPE built by `domain.PairNotes(a, b)` —
 - Badge refresh: the `srcNotes` arm re-dispatches `pairNotesRefreshCmd` (a pair
   has no `previewOpen`, nothing to re-resolve, nothing that can "move").
 
+### Drag & drop compare in the `gg web` Previews section (2026-09-21)
+
+Spec `docs/superpowers/specs/2026-09-21-web-previews-dnd-compare-design.md`.
+Client only, all in `static/previews.js` (it owns `#previews-list`; `sidebar.js`
+cannot import it — the import cycle).
+
+- **`rowLink(e)` is the one link of a row**: a pair's `e.link`, a merge
+  preview's `links.js` `previewRowLink(e)` (the builder its "copy gg link" row
+  uses — one builder, so the compared text IS the copied text, hint included),
+  `""` for a comparison (two links). A row without a link is refused by the
+  listeners on both ends.
+- **`draggable` is decided by KIND, not by `rowLink`**: the first paint can
+  land before `state.repo`, and a merge row that stayed undraggable until the
+  next refresh would be a heisenbug. `dragstart` cancels a linkless row.
+- Merge rows now carry `data-kind="preview"`; `findRow(id, kind)` picks the
+  list (`pair`/`compare` → `state.savedCompares`). Handlers test the kind by
+  VALUE — truthiness used to mean "a saved row".
+- The drag state is `{id, kind}` in `state.dragPreview`, and both ends are
+  looked up at DROP time: `renderPreviews` replaces `innerHTML` on every live
+  refresh, so an element held across a drag is stale.
+- `dragover`'s `preventDefault` IS the drop permission; returning before it
+  gives the browser's no-drop cursor for free (self, comparison rows).
+- `.drop-target` is styled PER LIST (`#branches-list li…, #previews-list li…`).
+- The client never screens what the two links are: the server refuses, the op
+  line says it. "compare and save…" opens the saved row BY ID (also when the
+  pair of links was already saved).
+- Probe note: a synthetic `drop` fires whether or not `dragover` was cancelled,
+  so the permission needs its own assertion (`!dispatchEvent(dragover)`).
+
 ### Symmetric comparison view in `gg web` (2026-09-21)
 
 Spec `docs/superpowers/specs/2026-09-21-web-symmetric-compare-design.md`,

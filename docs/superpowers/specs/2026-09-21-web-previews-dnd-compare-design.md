@@ -114,7 +114,7 @@ All client code lives in `static/previews.js` — it owns `#previews-list`, and
 - `showPreviewPairMenu(src, dst, x, y)` and the `compare with…` rows.
 - `style.css`: `#previews-list li.drop-target` joins the `#branches-list` rule
   (the class is styled per list — without this the highlight is invisible).
-- `index.html`: one help line under Previews.
+- the Previews section's help text (`registerHelp` in `previews.js`).
 
 No server change. No new preference.
 
@@ -144,6 +144,17 @@ No server change. No new preference.
   `preventDefault` removed, (b) the CSS rule removed, (c) the drop handler
   removed.
 - `./test.sh race` on the merged tree.
+
+## 8.1 As built
+
+- `draggable` is painted by KIND (merge preview, pair), not by whether the
+  link builds: the first paint can precede the repo identity. A linkless row
+  cancels its own `dragstart`.
+- The guard-removal runs: no `preventDefault` → the permission check fails; no
+  CSS rule → both outline checks fail; no `drop` listener → the menu and every
+  landing fail. A real-mouse drag in Chromium was checked as well.
+- A synthetic `drop` ignores the drop permission, so the probe asserts
+  `dragover` is cancelled directly.
 
 ## 9. Out of scope
 

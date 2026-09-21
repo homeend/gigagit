@@ -47,7 +47,9 @@ right-click menu has history / blame / bookmark / shelf at `b`) ·
 copied-link history, side swap, per-side errors, the base row, save
 comparison…; a `@a..b` link lands through the same door; **web only:** the
 ⇄ symmetric view of two sets — two row-aligned file lists around one diff, a
-flippable direction arrow, differ / all / one side / same filters) · **pull
+flippable direction arrow, differ / all / one side / same filters; and drag a
+Previews row onto another to start the comparison — the TUI's twin is space /
+`m` marks on two Previews rows) · **pull
 requests** (read-only: list, fetch + open the PR diff, copy URL, forget,
 `[refresh] prs` poll and ⟳, review threads inside the diff as read-only note
 boxes, the details overlay — the TUI's PR hub — the comment re-poll, and the
