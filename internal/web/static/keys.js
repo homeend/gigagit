@@ -209,7 +209,7 @@ document.addEventListener("keydown", (e) => {
   } else if (e.key === "_" && state.stack) {
     e.preventDefault();
     toggleAllCollapsed();
-  } else if (e.key === "/" && state.stack) {
+  } else if ((e.key === "/" || e.key === "@") && state.stack) {
     // in-view search reads ONE diff; the stack has many (a follow-up plan)
     e.preventDefault();
     toast("search works in the single-file view — S switches");

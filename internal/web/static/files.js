@@ -1170,11 +1170,14 @@ async function openFile(i) {
     // The notes ride ALONGSIDE the diff fetch, not after it: the ◆ rows have
     // to be in the first paint, and a second serial round-trip would show the
     // diff without them first.
+    const gen = state.detailGen; // a newer open, esc or a stack (S) supersedes this one
     const [d] = await Promise.all([getJSON(fileDiffURL(f)), fetchNotes(false)]);
+    if (gen !== state.detailGen) return;
     renderDiff(d);
     jumpToFirstChange();
     focusDiff();
   } catch (e) {
+    if (state.stack) return; // superseded by a stack: its error is not this pane's
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
   }
@@ -1193,7 +1196,9 @@ async function openStatusDiff(i) {
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
+    const gen = state.detailGen; // a newer open, esc or a stack (S) supersedes this one
     const [d] = await Promise.all([getJSON(fileDiffURL(f)), fetchNotes(false)]);
+    if (gen !== state.detailGen) return;
     // server tags eligible unstaged diffs with hunk ordinals — arm inline
     // staging BEFORE the render so the rows pick up their hk classes
     if (d.hunks && hunkEligible(f)) {
@@ -1204,6 +1209,7 @@ async function openStatusDiff(i) {
     jumpToFirstChange();
     focusDiff();
   } catch (e) {
+    if (state.stack) return; // superseded by a stack: its error is not this pane's
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
   }
@@ -1560,6 +1566,8 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
 
 
 function renderDiff(d) {
+  // A single diff never paints over a stack: the stack owns #diff-body.
+  if (state.stack) return;
   // A NEW diff starts with every run folded; a re-render of the same one (a
   // resize, a notes refresh, the f toggle) keeps the folds the reader opened.
   // A new diff is also a new search: the query does not follow a file step.

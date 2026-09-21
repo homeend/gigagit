@@ -56,8 +56,17 @@ func TestStackViewWired(t *testing.T) {
 			t.Errorf("style.css is missing %q", want)
 		}
 	}
-	if !strings.Contains(readStatic(t, "app.js"), `import "./stackview.js";`) {
+	if !strings.Contains(readStatic(t, "app.js"), `from "./stackview.js";`) {
 		t.Error("app.js does not load stackview.js")
+	}
+	// A single-file diff still loading when S builds a stack must not paint
+	// over it (found by the working-tree browser probe: click a file, press S
+	// before its diff lands).
+	if !strings.Contains(files, "// A single diff never paints over a stack") {
+		t.Error("renderDiff lost its stack guard")
+	}
+	if n := strings.Count(files, "if (gen !== state.detailGen) return;"); n < 3 {
+		t.Errorf("only %d opens drop a superseded answer, want the commit, working-tree and entry opens", n)
 	}
 }
 

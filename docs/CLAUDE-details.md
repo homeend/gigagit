@@ -1333,7 +1333,16 @@ Spec `docs/superpowers/specs/2026-09-22-stacked-diff-view-design.md`, plan
   null, which is how search, history/blame, the fold listener and the live
   re-renders all stand aside. `rerenderDiffKeepingPlace` / `toggleDiffView`
   hand off to `rerenderStack`.
-- **Web keys.** `S`, `-`, `_`; `/` toasts (search reads one diff); `j`/`k`
+- **A single diff still loading must not paint over a stack.** Click a file
+  then press `S` before its diff lands: the late answer used to overwrite
+  `#diff-body`. `openFile` / `openStatusDiff` now drop a superseded answer
+  (`detailGen`, which `buildStack` bumps) and `renderDiff` refuses while
+  `state.stack` is set. Only the working-tree probe caught it.
+- **Scroll pinning is manual.** Placeholders are estimates; `repaintSlot`
+  puts the reader's header back when a section above it grows, and
+  `#diff-pane:has(.stk)` sets `overflow-anchor: none` (browser anchoring
+  lost its node whenever the reader's section repainted in the same beat).
+- **Web keys.** `S`, `-`, `_`; `/` and `@` toast (search reads one diff); `j`/`k`
   scroll the stack via `openFile`. NOT `n`/`p` — `p` is pull.
 - **Deferred.** The symmetric view (`stackOn()` is false while
   `symActive()`), notes/cursor (the per-slot accessor arrives with them),
