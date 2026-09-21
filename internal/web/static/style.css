@@ -1182,3 +1182,16 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
    aligned by construction. */
 #compare-bar button[data-sf], #compare-bar button[data-symtoggle] { max-width: none; flex: 0 0 auto; }
 #compare-bar:has(button[data-symtoggle]) { flex-wrap: wrap; row-gap: 3px; }
+
+/* compare with link: what each field's link IS, in words; the busy line */
+#linkcmp-box .lc-desc { color: var(--dim); font-size: 12px; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#linkcmp-box .lc-desc b { color: var(--fg); font-weight: normal; }
+#linkcmp-desc-left.hidden, #linkcmp-desc-right.hidden { display: none; }
+#linkcmp-busy { color: var(--accent); font-size: 12px; margin-top: 8px; display: flex; align-items: center; gap: 8px; }
+#linkcmp-busy.hidden { display: none; }
+.lc-spin { width: 10px; height: 10px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: lcspin .8s linear infinite; }
+@keyframes lcspin { to { transform: rotate(360deg); } }
+#linkcmp-go:disabled { opacity: .5; cursor: wait; }
+/* the files header says WHAT KIND of screen a comparison is */
+#files-kind { display: inline-block; margin-right: 6px; padding: 0 6px; border: 1px solid var(--accent); border-radius: 8px; color: var(--accent); font-size: 11px; vertical-align: 1px; white-space: nowrap; }
+#files-kind.hidden { display: none; }

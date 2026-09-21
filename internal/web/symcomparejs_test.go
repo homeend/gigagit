@@ -37,6 +37,15 @@ func TestSymmetricCompareIsWiredEverywhere(t *testing.T) {
 		{"keys.js", `if (symKey(e)) return;`, "v / x / 1–4"},
 		{"symcompare.js", `saveUI({ sym_compare:`, "the choice persists server-side (random port: localStorage is useless)"},
 		{"symcompare.js", `data-sf=`, "the chips must NOT use data-f: the compare bar's own handler owns that"},
+		{"index.html", `id="linkcmp-desc-left" class="lc-desc hidden"`, "what the left field's link IS, in words"},
+		{"index.html", `id="linkcmp-busy" class="hidden"`, "the dialog must say it is comparing"},
+		{"index.html", `id="files-kind" class="hidden"`, "the header's kind badge"},
+		{"style.css", `#linkcmp-busy.hidden { display: none; }`, "hidden BY ID"},
+		{"style.css", `#files-kind.hidden { display: none; }`, "hidden BY ID"},
+		{"style.css", `#linkcmp-desc-left.hidden, #linkcmp-desc-right.hidden { display: none; }`, "hidden BY ID"},
+		{"linkcompare.js", `opLine("comparing… reading both sides");`, "every entry says it is working, not only the dialog"},
+		{"linkcompare.js", `setDesc(side, r.desc || "", "");`, "a history pick carries its words into the field"},
+		{"files.js", `setFilesKind(lc ? lc.kindLabel`, "the badge is DERIVED in enterFilesStage, so esc from a diff keeps it"},
 		{"uistate.js", `sym_compare: false`, "saveUI's base must carry the field — the endpoint REPLACES the record"},
 	} {
 		if !strings.Contains(read(c.file), c.want) {

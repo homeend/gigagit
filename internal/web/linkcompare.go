@@ -85,6 +85,28 @@ type linkSideWire struct {
 	Text string `json:"text"`
 	Desc string `json:"desc"`
 	Spec string `json:"spec"`
+	// Kind is what the link NAMES — preview | pair | commit | ref | staged |
+	// worktree — so the page can title the screen ("preview comparison")
+	// without parsing a link, which it cannot do.
+	Kind string `json:"kind"`
+}
+
+// linkTargetKind names a parsed link's target for the wire.
+func linkTargetKind(l model.Link) string {
+	t := l.Target
+	switch {
+	case t.Preview != nil:
+		return "preview"
+	case t.Pair != nil:
+		return "pair"
+	case t.Ref != "":
+		return "ref"
+	case t.State == model.StateCommitted:
+		return "commit"
+	case t.State == model.StateStaged:
+		return "staged"
+	}
+	return "worktree"
 }
 
 type linkFileWire struct {
@@ -214,11 +236,11 @@ func (s *Server) writeLinkComparison(w http.ResponseWriter, r *http.Request, lef
 	}
 	sideWire := func(text string, fs domain.FileSet) (linkSideWire, error) {
 		spec, err := linkSideSpec(fs.Endpoint())
-		desc := text
+		desc, kind := text, ""
 		if l, perr := model.ParseLink(text); perr == nil {
-			desc = svc.DescribeLink(ctx, l)
+			desc, kind = svc.DescribeLink(ctx, l), linkTargetKind(l)
 		}
-		return linkSideWire{Text: text, Desc: desc, Spec: spec}, err
+		return linkSideWire{Text: text, Desc: desc, Spec: spec, Kind: kind}, err
 	}
 	lw, err := sideWire(c.LeftText, c.Left)
 	if err != nil {

@@ -35,6 +35,18 @@ diff's direction.
   where the chip is disabled and the classic list shows. The classic view is
   unchanged. Pair landings and comparisons with a whole-tree side do not offer
   it — there are no two member lists to align.
+- **The compare-with-link dialog says what its links are.** Under each field
+  sits the link's description — `pair: Fix tests to use the right field name`,
+  `preview: main...feat/x` — whether it was picked from the history, pasted or
+  typed, plus *copied from a saved preview* when it carries that landing hint.
+  The field itself still holds the link; two forty-digit ids told nobody which
+  change they had picked.
+- **Comparing says it is comparing.** Two large sets take seconds: the dialog
+  shows a spinner line and disables its button, and the bottom line says
+  *comparing… reading both sides* for a saved row or a pair landing too.
+- **The file list's header names the kind of screen**: a *preview comparison*,
+  *commit-pair comparison*, *link comparison* or *commit pair* badge ahead of
+  the two descriptions, with both link texts in its tooltip.
 - Under it: `domain.LinkComparison.SymmetricRows()` aligns two bounded sets
   (pure, no git call) and `/api/compare-links` answers them as `sym` beside the
   unchanged `files`. TUI, CLI and MCP are untouched.

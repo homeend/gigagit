@@ -1,11 +1,14 @@
 package web
 
 import (
+	"context"
 	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 type symRowGot struct {
@@ -107,5 +110,60 @@ func TestCompareLinksOffersNoAlignedRowsWithoutTwoSets(t *testing.T) {
 		if _, has := raw["sym"]; has {
 			t.Fatalf("%s: must not carry sym: %v", name, raw["sym"])
 		}
+	}
+}
+
+// Each side says what KIND of thing its link names, so the page can title the
+// screen ("preview comparison") without parsing a link — which it cannot.
+func TestCompareLinksNamesEachSidesKind(t *testing.T) {
+	dir, base, a, _ := twoAttemptsRepo(t)
+	ts := linkServe(t, dir)
+	var got struct{ Left, Right struct{ Kind string } }
+	preview := localLink(dir, "", model.LinkTarget{State: model.StateCommitted, Preview: &model.LinkPreview{Source: "agent-b", Target: "main"}})
+	if code := getAny(t, ts, cmpURL(localLink(dir, "", pairTarget(base, a)), preview), &got); code != 200 {
+		t.Fatalf("status %d", code)
+	}
+	if got.Left.Kind != "pair" || got.Right.Kind != "preview" {
+		t.Fatalf("kinds = %q / %q, want pair / preview", got.Left.Kind, got.Right.Kind)
+	}
+}
+
+// /api/link-base DESCRIBES the link it classifies: the dialog's field holds two
+// forty-digit ids, and the words are what tell the user which change it is. A
+// landing hint names where the link was copied from.
+func TestLinkBaseDescribesTheLink(t *testing.T) {
+	dir, base, a, _ := twoAttemptsRepo(t)
+	srv, svc := linkServer(t, dir)
+	ts := serve(t, srv)
+	saved, err := svc.PairAdd(context.Background(), base, a, "attempt a, reviewed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	type answer struct{ Kind, Desc, Origin string }
+	ask := func(link string) answer {
+		t.Helper()
+		var got answer
+		if code := getAny(t, ts, "/api/link-base?"+url.Values{"link": {link}}.Encode(), &got); code != 200 {
+			t.Fatalf("%s: status %d", link, code)
+		}
+		return got
+	}
+	link := localLink(dir, "", pairTarget(base, a))
+	// Copied off the saved Previews row: the entry's LABEL, and where it came from.
+	if got := ask(link + "?preview=" + saved.ID); got.Desc != "pair: attempt a, reviewed" || got.Origin != "copied from a saved preview" {
+		t.Fatalf("a hinted link names its entry and its origin: %+v", got)
+	}
+	// The bare link still describes (domain's own words for it) and has no origin.
+	if got := ask(link); got.Desc == "" || got.Origin != "" {
+		t.Fatalf("a bare link: %+v", got)
+	}
+	// A preview link is a bound kind of its own and describes as the branch pair.
+	preview := localLink(dir, "", model.LinkTarget{State: model.StateCommitted, Preview: &model.LinkPreview{Source: "agent-b", Target: "main"}})
+	if got := ask(preview); got.Desc != "preview: main...agent-b" {
+		t.Fatalf("a preview link: %+v", got)
+	}
+	// A link still being typed describes nothing, and is not an error.
+	if got := ask("gg://nope@"); got.Desc != "" || got.Kind != "none" {
+		t.Fatalf("an unparseable link: %+v", got)
 	}
 }

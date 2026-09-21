@@ -31,13 +31,20 @@ function clearErrs() {
 // side) or to the op line (everyone else).
 export async function runLinkCompare(query, onErr) {
   let body;
+  // Every entry (the dialog, a saved row, a pair landing) says it is working:
+  // two large sets take seconds, and a click that seems to do nothing gets
+  // clicked again.
+  opLine("comparing… reading both sides");
   try {
     body = await getJSON("/api/compare-links?" + query);
   } catch (e) {
-    if (onErr) onErr(e);
-    else opLine("compare: " + (e.message || e), true);
+    if (onErr) {
+      opLine("");
+      onErr(e);
+    } else opLine("compare: " + (e.message || e), true);
     return false;
   }
+  opLine("");
   openLinkCompare(body);
   return true;
 }
@@ -100,18 +107,35 @@ function fieldChanged(side) {
   baseTimer[side] = setTimeout(() => lookupBase(side), 250);
 }
 
+// setDesc paints (or hides) the line under a field that says what its link IS
+// — "pair: Fix tests to use the right field name" — and where it came from
+// when it carries a landing hint ("copied from a saved preview").
+function setDesc(side, desc, origin) {
+  const el = $("linkcmp-desc-" + side);
+  el.classList.toggle("hidden", !desc);
+  el.innerHTML = desc ? `<b>${esc(desc)}</b>${origin ? " · " + esc(origin) : ""}` : "";
+  el.title = desc;
+}
+
 // lookupBase shows or hides the base row. It NEVER touches the link field:
 // nothing is rewritten until the user acts on the base row (applyBase).
 async function lookupBase(side) {
   const text = field(side).value.trim();
-  if (!text) return hideBase(side);
+  if (!text) {
+    setDesc(side, "", "");
+    return hideBase(side);
+  }
   let sug;
   try {
     sug = await getJSON("/api/link-base?" + new URLSearchParams({ link: text }));
   } catch {
+    setDesc(side, "", "");
     return hideBase(side);
   }
   if (field(side).value.trim() !== text) return; // a late answer for text the field no longer holds
+  // The same answer DESCRIBES the link: the field holds two forty-digit ids,
+  // and the words are what tell the user which change it is.
+  setDesc(side, sug.desc || "", sug.origin || "");
   if (sug.kind !== "ref" && sug.kind !== "commit") return hideBase(side);
   baseInput(side).value = sug.base || "";
   baseInput(side).placeholder = sug.kind === "ref" ? "a branch or tag" : "the parent's full commit id";
@@ -190,6 +214,9 @@ function pickHist(i) {
   if (!r || !side) return;
   field(side).value = r.link;
   setErr(side, "");
+  // The row's own words follow the link into the field at once; the lookup
+  // below confirms them (and adds the origin) a moment later.
+  setDesc(side, r.desc || "", "");
   hideBase(side);
   field(side).focus();
   fieldChanged(side);
@@ -200,6 +227,7 @@ function swap() {
   const text = field("left").value;
   field("left").value = field("right").value;
   field("right").value = text;
+  SIDES.forEach((s) => setDesc(s, "", "")); // each line described the OTHER link; the lookups repaint
   const err = $("linkcmp-err-left").textContent;
   setErr("left", $("linkcmp-err-right").textContent);
   setErr("right", err);
@@ -215,12 +243,25 @@ function submit() {
   if (!right) setErr("right", "a link is required");
   if (!left || !right) return; // nothing to ask the server
   const started = runOnce("link-compare", async () => {
-    const ok = await runLinkCompare(new URLSearchParams({ left, right }).toString(), (e) =>
-      setErr(e.data && SIDES.includes(e.data.side) ? e.data.side : "", e.message || String(e))
-    );
-    if (ok) close();
+    // Comparing two large sets reads every member of both: seconds, not
+    // milliseconds. The dialog says so, and the button cannot be pressed twice.
+    setBusy(true);
+    try {
+      const ok = await runLinkCompare(new URLSearchParams({ left, right }).toString(), (e) =>
+        setErr(e.data && SIDES.includes(e.data.side) ? e.data.side : "", e.message || String(e))
+      );
+      if (ok) close();
+    } finally {
+      setBusy(false);
+    }
   });
   if (!started) setErr("", "still comparing…");
+}
+
+function setBusy(on) {
+  $("linkcmp-busy").classList.toggle("hidden", !on);
+  $("linkcmp-go").disabled = on;
+  $("linkcmp-go").textContent = on ? "comparing…" : "compare";
 }
 
 function close() {

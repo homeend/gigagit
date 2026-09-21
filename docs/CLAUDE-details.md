@@ -1345,6 +1345,17 @@ research note and the approved static mock beside it (`mocks/`).
 - `applyFilesHidden` re-applies the view (`symReapply`): `symActive()` reads
   `!state.filesHidden`, and `.sym` would otherwise outlive it and beat
   `.nofiles` in the cascade.
+- Dialog words: `/api/link-base` also answers `desc` (`DescribeLink`) and
+  `origin` ("copied from a saved <hint kind>") for any PARSED link, base-able or
+  not; `linkcompare.js setDesc` paints them under the field (a history pick
+  paints the row's own label at once, the lookup confirms). `DescribeLink`'s
+  "link:" fallback for an UNSAVED pair is pinned by three domain tests — left
+  alone. Sides carry `kind` (`linkTargetKind`) → `compareKindLabel` → the
+  `#files-kind` badge, which `enterFilesStage` DERIVES from the open comparison
+  (never clears): esc from a diff re-enters that stage inside the same one.
+  `runLinkCompare` owns the "comparing…" op line for every entry; the dialog
+  adds `setBusy`. Probe: scratchpad `web/dlgprobe.mjs` (delays the route 900ms
+  so the busy state is observable).
 - Known limit: the live refresh's equality key is `files`, so a `sym`-only
   change (both sets gain an identical file) waits for a reopen.
 - Probe: scratchpad `web/symprobe.mjs` + `run-symprobe.sh` (a FRESH state copy

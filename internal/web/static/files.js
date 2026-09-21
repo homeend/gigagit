@@ -151,9 +151,35 @@ function enterFilesStage() {
   diffSearchBar.reset(); // the pane is empty now; nothing to unpaint
   setFilesMeta(""); // every stage starts without a date; only a commit open sets one
   setFilesDesc(""); // …and without a description
+  // The kind badge is DERIVED, not cleared: esc from a diff re-enters this
+  // stage inside the same comparison, whose badge must stay; every other
+  // screen sets filesMode before coming here, so it reads as "no badge".
+  const lc = state.filesMode === "compare" && state.compare && state.compare.links ? state.compare : null;
+  setFilesKind(lc ? lc.kindLabel || "" : "", lc ? lc.kindTip || "" : "");
   $("files-title").dataset.sha = ""; // …and without a commit id; see setCommitTitle
   $("files-title").dataset.subject = "";
   $("files-title").dataset.short = "";
+}
+
+
+// setFilesKind draws (or hides) the badge that says WHAT KIND of screen this
+// file list is. A comparison's title is two descriptions and an arrow, which
+// reads like any other header; the badge is what makes "this is a comparison
+// of two previews" obvious at a glance. Hidden by ID (#files-kind.hidden).
+function setFilesKind(text, tip) {
+  const el = $("files-kind");
+  el.textContent = text;
+  el.title = tip || "";
+  el.classList.toggle("hidden", !text);
+}
+
+// compareKindLabel names a link comparison from what its two sides ARE.
+function compareKindLabel(body) {
+  if (body.pair) return "commit pair";
+  const l = body.left.kind, r = body.right.kind;
+  if (l === "preview" && r === "preview") return "preview comparison";
+  if (l === "pair" && r === "pair") return "commit-pair comparison";
+  return "link comparison";
 }
 
 
@@ -572,6 +598,8 @@ function openLinkCompare(body) {
     all: body.files || [],
     // Two BOUNDED sets also answer their aligned rows: the symmetric view
     // (symcompare.js). No `sym` → the view is not offered.
+    kindLabel: compareKindLabel(body),
+    kindTip: body.left.text + "\n↔\n" + body.right.text,
     sym: body.sym || null,
     symFilter: "diff",
     flipped: false,
@@ -582,6 +610,7 @@ function openLinkCompare(body) {
   state.fileSha = null;
   enterFilesStage();
   $("files-title").textContent = (body.label ? body.label + " — " : "") + state.compare.a + " ↔ " + state.compare.b;
+  $("files-title").title = state.compare.a + "  ↔  " + state.compare.b;
   applyCompareFilter();
   focusPane();
   if (state.compare.pair) loadPairCounts();

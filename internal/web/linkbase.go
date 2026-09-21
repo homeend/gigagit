@@ -56,6 +56,17 @@ func (s *Server) handleLinkBase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	svc := s.service()
+	// A parsed link is DESCRIBED too (desc, and origin when it carries a landing
+	// hint): the dialog's field holds forty hex digits, and the history row the
+	// user picked it from said "pair: Fix tests…". The words follow the link into
+	// the field — and a typed or pasted link gets the same ones.
+	described := func(m map[string]string) map[string]string {
+		m["desc"] = svc.DescribeLink(r.Context(), l)
+		if l.Hint.Kind != "" {
+			m["origin"] = "copied from a saved " + l.Hint.Kind
+		}
+		return m
+	}
 	// The kind comes from SuggestBase, which LOCATES the link: the pure
 	// BoundKind cannot tell a local-form file link from a whole tree.
 	sug, err := svc.SuggestBase(r.Context(), l, s.linkOpts(svc))
@@ -64,11 +75,15 @@ func (s *Server) handleLinkBase(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusInternalServerError, err)
 			return
 		}
+		if base == "" {
+			writeJSON(w, described(map[string]string{"kind": "none"}))
+			return
+		}
 		none(err)
 		return
 	}
 	if base == "" {
-		writeJSON(w, map[string]string{"kind": linkBoundKindWire(sug.Kind), "base": sug.Base, "why": sug.Why})
+		writeJSON(w, described(map[string]string{"kind": linkBoundKindWire(sug.Kind), "base": sug.Base, "why": sug.Why}))
 		return
 	}
 	if sug.Kind == model.LinkBoundNone {
