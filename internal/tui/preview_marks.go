@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"sort"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/i18n"
@@ -27,20 +29,42 @@ func (m Model) previewRowLink(r previewRow) (string, bool) {
 }
 
 // previewMarkedLinks are the marked rows' links in DISPLAY order (upper row
-// first), whichever was marked first. Marks whose row is gone, filtered out or
-// linkless are skipped: the set is stale-tolerant, like commitCompareSet.
+// first), whichever was marked first. It walks the ROWS, not the visible ones
+// — a mark hidden by the / filter still counts, exactly as on Commits
+// (compareSelectionEndpoints) — and only ORDERS by display position, hidden
+// rows after the visible ones. Marks whose row is gone or linkless are
+// skipped: the set is stale-tolerant, like commitCompareSet.
 func (m Model) previewMarkedLinks() []string {
 	if len(m.previewCompareSet) == 0 {
 		return nil
 	}
-	var out []string
-	for _, i := range m.displayIndices(panelPreviews) {
-		if i >= len(m.previews) || !m.previewCompareSet[m.previews[i].id()] {
+	pos := make(map[int]int, len(m.previews))
+	for n, i := range m.displayIndices(panelPreviews) {
+		pos[i] = n
+	}
+	type marked struct {
+		at   int
+		link string
+	}
+	var rows []marked
+	for i, r := range m.previews {
+		if !m.previewCompareSet[r.id()] {
 			continue
 		}
-		if l, ok := m.previewRowLink(m.previews[i]); ok {
-			out = append(out, l)
+		l, ok := m.previewRowLink(r)
+		if !ok {
+			continue
 		}
+		at, visible := pos[i]
+		if !visible {
+			at = len(m.previews) + i
+		}
+		rows = append(rows, marked{at, l})
+	}
+	sort.Slice(rows, func(a, b int) bool { return rows[a].at < rows[b].at })
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = r.link
 	}
 	return out
 }

@@ -161,3 +161,18 @@ func TestPreviewEscClearsMarks(t *testing.T) {
 		t.Fatalf("esc drops the marks: %v", m.previewCompareSet)
 	}
 }
+
+// A mark the / filter hides still holds its slot and still feeds the compare.
+func TestPreviewMarkSurvivesTheFilter(t *testing.T) {
+	t.Parallel()
+	m, mergeLink, pairLink := previewMarksModel(t)
+	m, _ = previewSpace(t, m, 0)
+	m.filterPanel, m.filterQuery = panelPreviews, "attempt" // the pair row's label: hides row 0
+	if idx := m.displayIndices(panelPreviews); len(idx) != 1 || idx[0] != 1 {
+		t.Fatalf("fixture: the filter must leave only the pair row, got %v", idx)
+	}
+	m, _ = previewSpace(t, m, 0)
+	if got, want := m.linkCompareWant, linkCompareTag(pairLink, mergeLink); got != want {
+		t.Fatalf("visible row first, hidden mark second\n got %q\nwant %q", got, want)
+	}
+}

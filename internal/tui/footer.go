@@ -90,6 +90,24 @@ func contextBindings() []footerBinding {
 			r, ok := m.selectedPreview()
 			return ok && m.previewCompareSet[r.id()]
 		}, scopeRow},
+		{"preview-mark", "m", i18n.T("[m]ark"), func(m Model) bool {
+			if m.focus != panelPreviews || !m.canMark() {
+				return false
+			}
+			r, ok := m.selectedPreview()
+			if !ok || m.previewCompareSet[r.id()] {
+				return false
+			}
+			_, linked := m.previewRowLink(r)
+			return linked
+		}, scopeRow},
+		{"preview-unmark", "m", i18n.T("[m] unmark"), func(m Model) bool {
+			if m.focus != panelPreviews || !m.canMark() {
+				return false
+			}
+			r, ok := m.selectedPreview()
+			return ok && m.previewCompareSet[r.id()]
+		}, scopeRow},
 		{"preview-swap", "s", i18n.T("[s]wap"), func(m Model) bool { return m.canEditPreview() }, scopeRow},
 		{"pr-open", "enter", i18n.T("[enter] open"), func(m Model) bool { return m.canOpenPR() }, scopeRow},
 		{"pr-hub", "i", i18n.T("[i]nfo"), func(m Model) bool { return m.canOpenPR() }, scopeRow},
