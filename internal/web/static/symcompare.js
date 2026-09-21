@@ -81,7 +81,7 @@ function sideRowHTML(r, side, i) {
   if (st === "absent") {
     // A gap, not a row: no data-i, so neither the click nor the context-menu
     // handler can act on it, and it is hidden from assistive tech.
-    return `<li class="symgap" aria-hidden="true" title="not in this set">${side === "right" ? glyph : ""}<span class="sympath">· · · · · ·</span>${side === "left" ? glyph : ""}</li>`;
+    return `<li class="symgap${i === state.fileCursor ? " sel" : ""}" aria-hidden="true" title="not in this set">${side === "right" ? glyph : ""}<span class="sympath">· · · · · ·</span>${side === "left" ? glyph : ""}</li>`;
   }
   const cls = [i === state.fileCursor ? "sel" : "", st === "deleted" ? "symdel" : "", r.kind === "eq" ? "symeq" : ""].filter(Boolean).join(" ");
   const mark = st === "deleted" ? "D" : r.differs ? "M" : "";
