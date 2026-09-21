@@ -1166,6 +1166,13 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
   border-bottom: 1px solid var(--border); background: var(--bg-alt);
 }
 #sym-dir.hidden { display: none; }
+/* The direction bar rides with the diff header in one STICKY wrapper
+   (#diff-top), the #files-top pattern: on its own it scrolled away as soon as
+   ‹ change / change › moved the diff, and the toolbar jumped up under the
+   cursor. The header inside stops being sticky itself, or two siblings both
+   pinned at 0 paint over each other. */
+#diff-top { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+#diff-top #diff-header { position: static; }
 #sym-dir .symlab { flex: 1 1 0; min-width: 0; }
 #sym-dir .symlab.l { text-align: right; }
 #sym-dir .symlab b { display: block; font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
