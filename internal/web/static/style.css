@@ -324,8 +324,9 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 .rtag.off { color: var(--dim); }
 #branches-list li.head { color: var(--accent); font-weight: bold; cursor: default; }
 #branches-list li .ab { float: right; color: var(--dim); font-size: 11px; }
-/* A branch row accepting a drop — the only feedback that the pair is valid. */
-#branches-list li.drop-target {
+/* A branch (or Previews) row accepting a drop — the only feedback that the
+   pair is valid. Styled per list: a bare .drop-target paints nothing. */
+#branches-list li.drop-target, #previews-list li.drop-target {
   outline: 1px solid var(--lane0);
   outline-offset: -1px;
   background: rgba(110, 168, 254, 0.12);

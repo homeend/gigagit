@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>gg web — drag & drop compare in Previews (MOCK)</title>
+<style>
+:root {
+  --bg: #14161a; --bg-alt: #1c1f26; --fg: #d8dee9; --dim: #7a828e;
+  --accent: #6ea8fe; --sel: #2a3550; --border: #2a2e37; --edge: #3a4150;
+  --warn: #e0c06c; --ok: #7bd88f; --bad: #f27a6a; --lane0: #6ea8fe;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body { display: flex; flex-direction: column; background: var(--bg); color: var(--fg);
+  font: 13px/1.5 "JetBrains Mono", "Cascadia Code", Consolas, monospace; }
+#top { padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--bg-alt); }
+#top b { color: var(--accent); } .dim { color: var(--dim); }
+#mockbar { padding: 4px 12px; background: #3d3520; color: var(--warn); font-size: 12px; }
+#main { flex: 1; display: grid; grid-template-columns: 340px 1fr; min-height: 0; }
+#side { border-right: 1px solid var(--edge); overflow: auto; }
+h3 { font-size: 12px; font-weight: normal; color: var(--dim); padding: 5px 10px;
+  background: var(--bg-alt); border-bottom: 1px solid var(--border); border-top: 1px solid var(--border); }
+h3 b { color: var(--fg); }
+ul { list-style: none; }
+li { padding: 2px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+li:hover { background: var(--bg-alt); }
+li .psub { color: var(--dim); font-size: 11px; padding-left: 6px; }
+li .bad { color: var(--bad); }
+li[draggable="true"] { cursor: grab; }
+li.nodrag { cursor: pointer; }
+li.dragging { opacity: .45; }
+li.drop-target { outline: 1px solid var(--lane0); outline-offset: -1px; background: rgba(110,168,254,.12); }
+li.flash { background: var(--sel); }
+li.kindhead { color: var(--dim); font-size: 11px; cursor: default; padding-top: 6px; }
+li.kindhead:hover { background: none; }
+#stage { display: flex; flex-direction: column; min-width: 0; }
+#files-head { padding: 6px 12px; border-bottom: 1px solid var(--border); background: var(--bg-alt); min-height: 33px; }
+#kind { display: inline-block; border: 1px solid var(--accent); color: var(--accent); border-radius: 9px;
+  padding: 0 8px; font-size: 11px; margin-right: 8px; }
+#kind.hidden { display: none; }
+#body { flex: 1; padding: 18px; overflow: auto; color: var(--dim); }
+#body h2 { font-size: 14px; color: var(--fg); margin-bottom: 8px; font-weight: normal; }
+#body p { margin-bottom: 8px; max-width: 760px; }
+#body kbd { border: 1px solid var(--border); border-radius: 3px; padding: 0 5px; color: var(--fg); }
+#sym { display: grid; grid-template-columns: 1fr 60px 1fr; gap: 0; margin-top: 12px; border: 1px solid var(--border); max-width: 760px; }
+#sym.hidden { display: none; }
+#sym .col { padding: 8px 10px; } #sym .col b { color: var(--fg); display: block; }
+#sym .col .tag { font-size: 11px; color: var(--dim); }
+#sym .mid { display: flex; align-items: center; justify-content: center; border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+#flip { background: none; border: 1px solid var(--accent); color: var(--accent); border-radius: 12px; font: inherit; font-size: 16px; padding: 0 10px; cursor: pointer; }
+#op { padding: 3px 12px; color: var(--accent); background: var(--bg-alt); border-top: 1px solid var(--border); min-height: 26px; }
+#op.err { color: var(--bad); }
+#ctx { position: fixed; z-index: 40; background: var(--bg-alt); border: 1px solid var(--border); border-radius: 4px;
+  display: flex; flex-direction: column; min-width: 220px; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+#ctx.hidden { display: none; }
+#ctx button { background: none; border: none; color: var(--fg); font: inherit; text-align: left; padding: 5px 12px; cursor: pointer; }
+#ctx button:hover { background: var(--sel); }
+#ctx hr { border: 0; border-top: 1px solid var(--border); margin: 3px 0; }
+#ctx .hd { color: var(--dim); font-size: 11px; padding: 4px 12px 2px; }
+#dlg { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 50; }
+#dlg.hidden { display: none; }
+#dlg .box { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 6px; padding: 14px 16px; width: 640px; }
+#dlg label { display: block; color: var(--dim); font-size: 12px; margin-top: 8px; }
+#dlg input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--fg); font: inherit; padding: 4px 6px; }
+#dlg .desc { color: var(--ok); font-size: 11px; min-height: 16px; }
+#dlg .btns { margin-top: 12px; text-align: right; }
+#dlg button { background: none; border: 1px solid var(--border); color: var(--fg); font: inherit; padding: 2px 12px; cursor: pointer; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div id="top"><b>gg web</b> <span class="dim">— symrepo · main</span></div>
+<div id="mockbar">MOCK — fake data, nothing is computed. Try: drag a Previews row onto another · drop on itself / on a comparison row (refused) · right-click a row → compare with…</div>
+<div id="main">
+  <div id="side">
+    <h3><b>Branches</b> <span class="dim">(drag one onto another → merge / rebase — exists today)</span></h3>
+    <ul><li>main</li><li>agent-a</li><li>agent-b</li><li>agent-c</li></ul>
+    <h3><b>Previews</b> <span class="dim">+ </span></h3>
+    <ul id="previews"></ul>
+  </div>
+  <div id="stage">
+    <div id="files-head"><span id="kind" class="hidden"></span><span id="title" class="dim">commit list</span></div>
+    <div id="body">
+      <h2>Drag &amp; drop compare — what to try</h2>
+      <p>1. Drag <b>login, attempt A</b> onto <b>login, attempt B</b>. While you hover, the target row is outlined (the branch list's highlight). Release → a small menu: both directions, and <i>compare and save…</i>.</p>
+      <p>2. Hover the row you are dragging, or the <b>comparison</b> row at the bottom: no outline, the browser's “no drop” cursor. Releasing does nothing.</p>
+      <p>3. Drag the broken row (<span style="color:var(--bad)">missing: agent-x</span>) — allowed; the server's refusal appears on the op line at the bottom.</p>
+      <p>4. No mouse drag? Right-click a preview or pair row → <b>compare with…</b> opens the existing dialog with the left link filled in.</p>
+      <p>After a compare, the header shows the kind badge and (two sets, wide window, ⇄ on) the symmetric view. <kbd>x</kbd> / the arrow flips.</p>
+      <div id="sym" class="hidden">
+        <div class="col"><span class="tag" id="ltag">old</span><b id="lname"></b><span class="dim" id="llink"></span></div>
+        <div class="mid"><button id="flip" title="flip direction (x)">→</button></div>
+        <div class="col"><span class="tag" id="rtag">new</span><b id="rname"></b><span class="dim" id="rlink"></span></div>
+      </div>
+    </div>
+    <div id="op"></div>
+  </div>
+</div>
+<div id="ctx" class="hidden"></div>
+<div id="dlg" class="hidden"><div class="box">
+  <b>Compare with link</b>
+  <label>left (old)</label><input id="dl" readonly><div class="desc" id="dld"></div>
+  <label>right (new)</label><input id="dr" placeholder="paste a gg:// link — ↓ lists recently copied links"><div class="desc"></div>
+  <div class="btns"><button id="dclose">close</button></div>
+</div></div>
+
+<script>
+const rows = [
+  { id: "p1", kind: "preview", label: "login, attempt A", sub: "agent-a → main", st: "4 files ↑3", link: "gg://symrepo@main...agent-a?preview=p1" },
+  { id: "p2", kind: "preview", label: "login, attempt B", sub: "agent-b → main", st: "5 files ↑4", link: "gg://symrepo@main...agent-b?preview=p2" },
+  { id: "p3", kind: "preview", label: "login, attempt X", sub: "agent-x → main", st: "missing: agent-x", bad: true, link: "gg://symrepo@main...agent-x?preview=p3" },
+  { id: "c1", kind: "pair", label: "rate limiter rework", sub: "a1b2c3d4..e5f6a7b8", st: "3 files", link: "gg://symrepo@a1b2c3d4..e5f6a7b8?preview=c1" },
+  { id: "c2", kind: "pair", label: "error type cleanup", sub: "0f9e8d7c..1a2b3c4d", st: "2 files", link: "gg://symrepo@0f9e8d7c..1a2b3c4d?preview=c2" },
+  { id: "x1", kind: "compare", label: "login-a-vs-b", sub: "preview: login, attempt A ↔ preview: login, attempt B", st: "" },
+];
+const $ = (id) => document.getElementById(id);
+const byId = (id) => rows.find((r) => r.id === id);
+const draggable = (r) => r && r.kind !== "compare";
+const heads = { preview: "merge previews", pair: "commit pairs", compare: "comparisons — two links, not draggable" };
+
+function render() {
+  let last = "", html = "";
+  for (const r of rows) {
+    if (r.kind !== last) { html += `<li class="kindhead">${heads[r.kind]}</li>`; last = r.kind; }
+    html += `<li data-id="${r.id}" data-kind="${r.kind}" ${draggable(r) ? 'draggable="true"' : 'class="nodrag"'} title="${r.link || "two links"}">` +
+      `${r.label}<span class="psub">${r.sub}</span>` + (r.st ? `<span class="psub ${r.bad ? "bad" : ""}">${r.st}</span>` : "") + `</li>`;
+  }
+  $("previews").innerHTML = html;
+}
+render();
+
+let drag = null;
+const list = $("previews");
+const clearTargets = () => list.querySelectorAll(".drop-target,.dragging").forEach((e) => e.classList.remove("drop-target", "dragging"));
+list.addEventListener("dragstart", (e) => {
+  const li = e.target.closest("li[data-id]");
+  if (!li || !draggable(byId(li.dataset.id))) return e.preventDefault();
+  drag = li.dataset.id; li.classList.add("dragging");
+  e.dataTransfer.setData("text/plain", byId(drag).label); e.dataTransfer.effectAllowed = "move";
+});
+list.addEventListener("dragover", (e) => {
+  const li = e.target.closest("li[data-id]");
+  if (!li || !drag || li.dataset.id === drag || !draggable(byId(li.dataset.id))) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = "move"; li.classList.add("drop-target");
+});
+list.addEventListener("dragleave", (e) => { const li = e.target.closest("li"); if (li) li.classList.remove("drop-target"); });
+list.addEventListener("dragend", () => { drag = null; clearTargets(); });
+list.addEventListener("drop", (e) => {
+  const li = e.target.closest("li[data-id]"); const src = byId(drag); drag = null; clearTargets();
+  if (!li || !src) return; const dst = byId(li.dataset.id);
+  if (!draggable(dst) || dst === src) return;
+  e.preventDefault(); pairMenu(src, dst, e.clientX, e.clientY);
+});
+
+function menu(items, x, y) {
+  const c = $("ctx"); c.innerHTML = "";
+  for (const it of items) {
+    if (it.sep) { c.appendChild(document.createElement("hr")); continue; }
+    if (it.hd) { const d = document.createElement("div"); d.className = "hd"; d.textContent = it.hd; c.appendChild(d); continue; }
+    const b = document.createElement("button"); b.textContent = it.label;
+    b.onclick = () => { c.classList.add("hidden"); it.act && it.act(); }; c.appendChild(b);
+  }
+  c.classList.remove("hidden");
+  c.style.left = Math.min(x, innerWidth - c.offsetWidth - 8) + "px"; c.style.top = Math.min(y, innerHeight - c.offsetHeight - 8) + "px";
+}
+document.addEventListener("mousedown", (e) => { if (!e.target.closest("#ctx")) $("ctx").classList.add("hidden"); });
+
+function pairMenu(src, dst, x, y) {
+  menu([
+    { label: "compare  " + src.label + "  →  " + dst.label, act: () => compare(src, dst) },
+    { label: "compare  " + dst.label + "  →  " + src.label, act: () => compare(dst, src) },
+    { sep: true },
+    { label: "compare and save…", act: () => save(src, dst) },
+    { sep: true },
+    { label: "cancel" },
+  ], x, y);
+}
+
+let cur = null;
+function op(t, err) { $("op").textContent = t; $("op").className = err ? "err" : ""; }
+function compare(l, r) {
+  op("comparing… reading both sides");
+  setTimeout(() => {
+    const broken = [l, r].find((s) => s.bad);
+    if (broken) return op("compare: " + broken.link + ": branch agent-x not found", true);
+    op(""); cur = { l, r, flipped: false }; paint();
+  }, 700);
+}
+function kindLabel(l, r) { return l.kind === "preview" && r.kind === "preview" ? "preview comparison" : l.kind === "pair" && r.kind === "pair" ? "commit-pair comparison" : "link comparison"; }
+function paint() {
+  const { l, r, flipped } = cur;
+  $("kind").textContent = kindLabel(l, r); $("kind").classList.remove("hidden");
+  $("title").textContent = (flipped ? r.label + " ↔ " + l.label : l.label + " ↔ " + r.label) + " — 5 files";
+  $("sym").classList.remove("hidden");
+  $("lname").textContent = l.kind + ": " + l.label; $("llink").textContent = l.sub;
+  $("rname").textContent = r.kind + ": " + r.label; $("rlink").textContent = r.sub;
+  $("ltag").textContent = flipped ? "new" : "old"; $("rtag").textContent = flipped ? "old" : "new";
+  $("flip").textContent = flipped ? "←" : "→";
+}
+$("flip").onclick = () => { if (cur) { cur.flipped = !cur.flipped; paint(); } };
+document.addEventListener("keydown", (e) => { if (e.key === "x" && cur && e.target.tagName !== "INPUT") $("flip").click(); if (e.key === "Escape") { $("dlg").classList.add("hidden"); $("ctx").classList.add("hidden"); } });
+
+function save(l, r) {
+  const label = prompt("Save the comparison as:", l.label + " vs " + r.label);
+  if (!label) return;
+  rows.push({ id: "x" + (rows.length + 1), kind: "compare", label, sub: l.kind + ": " + l.label + " ↔ " + r.kind + ": " + r.label, st: "" });
+  render(); op("saved " + label);
+  const li = list.querySelector("li:last-child"); li.classList.add("flash"); setTimeout(() => li.classList.remove("flash"), 900);
+  compare(l, r);
+}
+
+list.addEventListener("contextmenu", (e) => {
+  const li = e.target.closest("li[data-id]"); if (!li) return; e.preventDefault();
+  const r = byId(li.dataset.id);
+  const open = r.kind === "preview" ? "open merge preview" : r.kind === "pair" ? "open commit pair" : "open comparison";
+  const items = [{ label: open }, { label: "rename…" }, { label: "save reversed" }];
+  if (draggable(r)) items.push({ label: "copy gg link" }, { sep: true }, { hd: "NEW" }, { label: "compare with…", act: () => dialog(r) });
+  items.push({ sep: true }, { label: "remove" });
+  menu(items, e.clientX, e.clientY);
+});
+function dialog(r) { $("dl").value = r.link; $("dld").textContent = r.kind + ": " + r.label + " — copied from a saved " + (r.kind === "pair" ? "commit pair" : "preview"); $("dlg").classList.remove("hidden"); $("dr").focus(); }
+$("dclose").onclick = () => $("dlg").classList.add("hidden");
+</script>
+</body>
+</html>

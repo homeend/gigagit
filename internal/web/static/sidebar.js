@@ -572,8 +572,10 @@ async function showBranchPairMenu(src, dst, x, y) {
     label: "interactive rebase " + src + " onto " + dst + "…",
     act: () => openRebaseEditor(src, dst),
   });
-  // Read-only, so it sits below the ops that rewrite history.
-  items.push({ label: "compare " + src + " ↔ " + dst, act: () => openCompare(src, dst) });
+  // Read-only, so it sits below the ops that rewrite history. The arrow is
+  // the comparison's direction (src is the old side); ↔ is one cramped cell
+  // in the menu's monospace font and read as a left arrow.
+  items.push({ label: "compare " + src + " → " + dst, act: () => openCompare(src, dst) });
   showCtxMenu(items, x, y);
 }
 

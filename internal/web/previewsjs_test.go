@@ -80,3 +80,37 @@ func TestPreviewsSectionSitsAfterWorktrees(t *testing.T) {
 		t.Errorf("core.js: SECTIONS must list previews between worktrees and tags, matching the markup")
 	}
 }
+
+// Drag & drop compare: the highlight class is styled per list, and each
+// listener is load-bearing (dragover's preventDefault IS the drop permission).
+func TestPreviewsDragDropIsWired(t *testing.T) {
+	t.Parallel()
+	read := func(name string) string {
+		b, err := os.ReadFile(filepath.Join("static", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	checks := []struct{ file, want, why string }{
+		{"previews.js", `draggable="true"`, "preview and pair rows start a drag"},
+		{"previews.js", `data-kind="preview"`, "a merge row names its kind for the drop lookup"},
+		{"previews.js", `addEventListener("dragstart"`, "the drag source"},
+		{"previews.js", `addEventListener("dragover"`, "the drop permission and the highlight"},
+		{"previews.js", `addEventListener("dragleave"`, "the highlight goes off"},
+		{"previews.js", `addEventListener("dragend"`, "an abandoned drag clears its state"},
+		{"previews.js", `addEventListener("drop"`, "the drop opens the pair menu"},
+		{"previews.js", `"compare and save…"`, "the drop menu saves"},
+		{"previews.js", `"compare with…"`, "the menu twin of the drag"},
+		{"previews.js", `previewRowLink`, "one link builder, shared with copy gg link"},
+		{"links.js", `previewRowLink`, "links.js exports the builder"},
+		{"style.css", `#previews-list li.drop-target`, "the highlight is styled per list"},
+		{"core.js", `dragPreview`, "the drag state lives in core state"},
+		{"previews.js", `<b>Drag</b> a merge preview`, "the section's help says the gesture exists"},
+	}
+	for _, c := range checks {
+		if !strings.Contains(read(c.file), c.want) {
+			t.Errorf("%s: missing %q — %s", c.file, c.want, c.why)
+		}
+	}
+}
