@@ -436,55 +436,53 @@ function knownName(n) {
 }
 
 
+// branchCheck is a branch prompt's validate: the in-box refusal for a name
+// this page does not know ("" accepts). others are names the answer must
+// differ from, each with its own words.
+const branchCheck = (others) => (n) => {
+  if (!knownName(n)) return "unknown branch " + n;
+  for (const [name, why] of others) if (n === name) return why;
+  return "";
+};
+
 // addPreviewFlow: two prompts (source, then the branch it would be merged
-// into), each validated before the next opens.
+// into), each completing branch names and refusing an unknown one in place.
 function addPreviewFlow() {
   openPrompt({
     title: "Merge preview — source branch:",
     value: "",
+    suggest: true,
+    validate: branchCheck([]),
     onSubmit: (source) => {
-      if (!knownName(source)) {
-        opLine("unknown branch " + source, true);
-        return;
-      }
       const cur = (state.branches || []).find((b) => b.is_head);
       openPrompt({
         title: "Merge preview — merge " + source + " into:",
         value: cur && cur.name !== source ? cur.name : "main",
-        onSubmit: (target) => {
-          if (!knownName(target)) {
-            opLine("unknown branch " + target, true);
-            return;
-          }
-          if (target === source) {
-            opLine("source and target are the same branch", true);
-            return;
-          }
-          savePreview(source, target, "", true);
-        },
+        suggest: true,
+        validate: branchCheck([[source, "source and target are the same branch"]]),
+        onSubmit: (target) => savePreview(source, target, "", true),
       });
     },
   });
 }
+
 // symmetricPreviewFlow asks for the BASE of a symmetric merge preview of a
 // and b — what each would bring into it, compared: two branches that fix the
 // same thing. The prompt starts EMPTY and is never filled in (the base is
-// not guessed); a refused answer re-opens it with the text kept. The save
-// and the two-sided compare after it can take a minute on a big repo, so the
-// whole task runs under runOnce: a second submit is dropped, not stacked.
-function symmetricPreviewFlow(a, b, typed) {
+// not guessed); it completes branch names like the TUI's base popup, and a
+// refused answer is said inside the box, which stays open. The save and the
+// two-sided compare after it can take a minute on a big repo, so the whole
+// task runs under runOnce: a second submit is dropped, not stacked.
+function symmetricPreviewFlow(a, b) {
   openPrompt({
     title: "Symmetric merge preview — " + a + " and " + b + " — base branch:",
-    value: typed || "",
+    value: "",
+    suggest: true,
+    validate: branchCheck([
+      [a, "the base must differ from " + a + " and " + b],
+      [b, "the base must differ from " + a + " and " + b],
+    ]),
     onSubmit: (base) => {
-      let why = "";
-      if (!knownName(base)) why = "unknown branch " + base;
-      else if (base === a || base === b) why = "the base must differ from " + a + " and " + b;
-      if (why) {
-        opLine(why, true);
-        symmetricPreviewFlow(a, b, base);
-        return;
-      }
       if (!runOnce("symmetric-preview", () => saveSymmetric(a, b, base))) {
         opLine("a symmetric merge preview is already being saved…");
       }
@@ -512,33 +510,21 @@ async function saveSymmetric(a, b, base) {
 }
 
 // newSymmetricFlow is the Previews menu's entry: the first branch, the
-// second, then the base — each prompt empty, each name checked before the
-// next opens.
+// second, then the base — each prompt empty and completing branch names.
 function newSymmetricFlow() {
   openPrompt({
     title: "Symmetric merge preview — first branch:",
     value: "",
-    onSubmit: (a) => {
-      if (!knownName(a)) {
-        opLine("unknown branch " + a, true);
-        return;
-      }
+    suggest: true,
+    validate: branchCheck([]),
+    onSubmit: (a) =>
       openPrompt({
         title: "Symmetric merge preview — second branch (compared with " + a + "):",
         value: "",
-        onSubmit: (b) => {
-          if (!knownName(b)) {
-            opLine("unknown branch " + b, true);
-            return;
-          }
-          if (a === b) {
-            opLine("the two branches are the same", true);
-            return;
-          }
-          symmetricPreviewFlow(a, b);
-        },
-      });
-    },
+        suggest: true,
+        validate: branchCheck([[a, "the two branches are the same"]]),
+        onSubmit: (b) => symmetricPreviewFlow(a, b),
+      }),
   });
 }
 // The branch drop menu starts the flow from a dragged pair. sidebar.js cannot

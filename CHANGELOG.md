@@ -22,6 +22,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   existing one opens it instead.
 - The TUI shows its *comparing…* popup when `enter` opens any saved
   comparison on the Previews tab, not only after marking two rows.
+- `gg web`'s branch prompts for a merge preview and a symmetric merge
+  preview now suggest branch names as you type, ranked like the TUI (tab
+  or enter takes the top one; click takes any). An unknown or repeated name
+  is refused INSIDE the prompt, which stays open. Before, the refusal went
+  to the status line behind the prompt's dimmed backdrop.
+- `gg web`: a link comparison slower than 30 seconds keeps its
+  *comparing…* line, now with the time waited, instead of losing it half way.
 
 ## `gg web`: the symmetric comparison's file lists cut long paths from the middle
 
