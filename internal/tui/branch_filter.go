@@ -321,15 +321,20 @@ func bfLabel(c branchfilter.Compiled) string {
 	return i18n.T("slot %d", c.Slot.Slot)
 }
 
-// branchFilterDecoration is the panel-header suffix: " ▽2 stale · 12 hidden",
-// or " ▽2 stale" when nothing is hidden, or "" with no active slot.
+// branchFilterGlyph marks an active filter in the panel header. It must stay
+// an East Asian NEUTRAL-width rune: the former U+25BD is ambiguous-width, so
+// terminals drew it two cells wide over the slot digit beside it.
+const branchFilterGlyph = "▾"
+
+// branchFilterDecoration is the panel-header suffix: " ▾2 stale · 12 hidden",
+// or " ▾2 stale" when nothing is hidden, or "" with no active slot.
 func (m Model) branchFilterDecoration(p panel) string {
 	c := m.activeBranchFilter(p)
 	if c == nil {
 		return ""
 	}
 	_, _, n := m.branchFilterHidden(p)
-	s := " ▽" + strconv.Itoa(c.Slot.Slot) + " " + bfLabel(*c)
+	s := " " + branchFilterGlyph + strconv.Itoa(c.Slot.Slot) + " " + bfLabel(*c)
 	if n > 0 {
 		s += " · " + i18n.T("%d hidden", n)
 	}

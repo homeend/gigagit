@@ -29,11 +29,11 @@ function applyFilterHeader(list, filter) {
 
 // filterChipHTML is the control itself, drawn at the right of the section
 // header next to the sort chip. Its label is the TUI's panel-header
-// decoration ("▽2 stale · 12 hidden"), so the two surfaces read the same.
+// decoration ("▾2 stale · 12 hidden"), so the two surfaces read the same.
 function filterChipHTML(list) {
   if (!LISTS.has(list)) return "";
   const f = state.branchFilter[list];
-  const label = f ? `▽${f.slot} ${f.name}${f.hidden ? " · " + f.hidden + " hidden" : ""}` : "▽";
+  const label = f ? `▾${f.slot} ${f.name}${f.hidden ? " · " + f.hidden + " hidden" : ""}` : "▾";
   // The title carries the hidden count too: a narrow sidebar ellipsizes the
   // chip, and that suffix is the first thing to go.
   const title = f
