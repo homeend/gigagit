@@ -47,6 +47,9 @@ func TestSymmetricCompareIsWiredEverywhere(t *testing.T) {
 		{"linkcompare.js", `setDesc(side, r.desc || "", "");`, "a history pick carries its words into the field"},
 		{"files.js", `setFilesKind(lc ? lc.kindLabel`, "the badge is DERIVED in enterFilesStage, so esc from a diff keeps it"},
 		{"uistate.js", `sym_compare: false`, "saveUI's base must carry the field — the endpoint REPLACES the record"},
+		{"symcompare.js", `elidePath(r.path, cols)`, "a long path is cut from the MIDDLE like the normal file list, not at the tail"},
+		{"symcompare.js", `symCols("symleft-list")`, "the left list's budget is its OWN measured width"},
+		{"symcompare.js", `symCols("files-list")`, "the right list's budget is its own measured width"},
 	} {
 		if !strings.Contains(read(c.file), c.want) {
 			t.Errorf("%s: missing %q — %s", c.file, c.want, c.why)
