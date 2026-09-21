@@ -60,7 +60,6 @@ row's link. Client only: no new route, no new preference.
   arrows, so the form could drift from the comparison about to open. Only
   `esc` (withdraw the comparison) gets through now.
 
-
 ## `gg web`: two change-sets, side by side — the symmetric comparison view
 
 Comparing two change-sets (two merge previews, a commit pair against a
