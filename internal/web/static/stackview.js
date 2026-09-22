@@ -14,12 +14,17 @@ import { $, esc, getJSON, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { registerHelp } from "./menus.js";
 import { focusPane } from "./keys.js";
+import { seedCollapsed } from "./notebox.js";
 import {
   activeFileList,
   clearDiffHunks,
   closeConflictPick,
   diffHTML,
   enterFilesStage,
+  globalNoteCtx,
+  notesArmed,
+  notesFor,
+  rowNoteCtx,
   fileDiffURL,
   mountPanBars,
   openFile,
@@ -85,6 +90,9 @@ async function buildStack(list, group, anchorIdx) {
     focusPane();
   }
   const slots = buildSlots(stackRows(list, group));
+  // A fresh stack starts with no resolved notes anywhere: each slot fetches
+  // its own as it loads.
+  for (const s of slots) { s.notes = []; s.ctx = null; s.row = null; }
   // painted/want: until the first paint an open (a second openFile in the
   // same tick — applySym and setFilter open row 0, then the kept row) only
   // moves the target; the first paint lands on it.
@@ -144,7 +152,10 @@ function bodyHTML(s) {
   }
   if (s.load === "error") return `<div class="notice">error: ${esc(s.error)}</div>`;
   // a kept slot re-fetching after a refresh paints its old diff until the new one lands
-  if (s.diff) return diffHTML(s.diff, $("diff-pane").clientWidth, false, s.folds);
+  if (s.diff) {
+    const nc = { ctx: s.ctx || null, notes: s.notes || [], row: s.row || null };
+    return diffHTML(s.diff, $("diff-pane").clientWidth, notesArmed(nc.ctx), s.folds, nc);
+  }
   return `<div class="stk-ph" style="height:${estimateHeight(s, ROW_PX)}px">loading…</div>`;
 }
 
@@ -264,6 +275,11 @@ async function load(st, s) {
     s.diff = d;
     s.load = "ok";
     if (!s.counts) s.counts = countsFromDiff(d);
+    // This file's own review notes, against the context its own row builds —
+    // the same door the single-file view uses (rowNoteCtx), so a note written
+    // in a stack is filed at the same address as one written file by file. A
+    // file that is not note-addressable fetches nothing at all.
+    await loadSlotNotes(st, s);
   } catch (e) {
     s.load = "error";
     s.error = e.message || String(e);
@@ -279,6 +295,76 @@ async function load(st, s) {
   pump(st);
 }
 
+// loadSlotNotes resolves ONE slot's notes. Best-effort, like the single-file
+// lane: a transient failure leaves the slot's rows as they are rather than
+// making its ◆ rows vanish.
+async function loadSlotNotes(st, s) {
+  s.ctx = rowNoteCtx(s.f);
+  if (!s.ctx) return;
+  let d = null;
+  try {
+    d = await notesFor(s.ctx);
+  } catch {
+    return;
+  }
+  if (state.stack !== st || !d) return;
+  s.notes = d.notes || [];
+  // The forge's resolved threads start folded, once per file. The collapse set
+  // itself stays view-wide: a thread's id is unique across files, so one set
+  // folds the whole stack (and Z folds all of it).
+  if (!s.seeded) {
+    s.seeded = true;
+    for (const id of seedCollapsed(s.notes)) state.noteCollapsed.add(id);
+  }
+  if (d.counts) state.previewCounts = d.counts;
+}
+
+
+// refreshStackNotes re-reads EVERY loaded slot's notes and repaints them. It
+// is what a note write, a sweep or a live "notes" event runs in a stack: one
+// address per file, so there is no single fetch to redo — the same fan-out
+// the TUI's loadNotesCmd does.
+async function refreshStackNotes() {
+  const st = state.stack;
+  if (!st) return;
+  const loaded = st.slots.filter((s) => s.load === "ok" && s.ctx);
+  await Promise.all(loaded.map((s) => loadSlotNotes(st, s)));
+  if (state.stack !== st) return;
+  for (const s of loaded) {
+    const k = st.slots.indexOf(s);
+    if (k >= 0) repaintSlot(st, k);
+  }
+}
+
+
+// noteScope is the DOM root a per-file note gesture acts in: the active
+// slot's section, or the whole pane when there is no stack.
+function noteScope() {
+  const st = state.stack;
+  if (!st) return $("diff-body");
+  return sectionEl(st.anchor) || $("diff-body");
+}
+
+
+// activeDiff is WHOSE notes the note keys act on: stacked, the slot under the
+// cursor (the file whose header the reader is at, or the row they clicked);
+// otherwise the single-file view's own globals. This is the accessor the
+// design reserved for this phase — every note reader goes through it instead
+// of reading state.diffCtx / state.notes directly.
+function activeDiff() {
+  const st = state.stack;
+  if (!st) return globalNoteCtx();
+  const s = st.slots[st.anchor] || st.slots[0];
+  if (!s) return globalNoteCtx();
+  return { ctx: s.ctx || null, notes: s.notes || [], row: s.row || null, slot: s };
+}
+// stackAllNotes is every loaded slot's notes, in stream order — what a
+// whole-view gesture (Z, the notes list, a }/{ walk) reads.
+function stackAllNotes() {
+  const st = state.stack;
+  if (!st) return state.notes || [];
+  return st.slots.flatMap((s) => s.notes || []);
+}
 // numstatQuery names the change set to /api/numstat, or null when git has no
 // tree pair for it (entry, shelf and link sets count from each loaded diff).
 function numstatQuery(st) {
@@ -508,4 +594,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, followInList, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

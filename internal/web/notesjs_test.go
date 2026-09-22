@@ -52,7 +52,7 @@ func TestNoteRowsHTMLJS(t *testing.T) {
 		t.Skip("node not installed; the JS guard needs it")
 	}
 	fns := jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteBoxHTML") +
-		"\n" + jsFunc(t, "files.js", "notesArmed")
+		"\n" + jsFunc(t, "files.js", "notesArmed") + "\n" + jsFunc(t, "files.js", "globalNoteCtx")
 
 	notes := []map[string]any{
 		{"id": "n1", "side": "new", "line": 3, "source": "user", "status": "active",
@@ -154,7 +154,8 @@ func TestNotesInertOnAComparisonJS(t *testing.T) {
 		t.Skip("node not installed; the JS guard needs it")
 	}
 	fns := jsFunc(t, "files.js", "notesArmed") + "\n" + jsFunc(t, "files.js", "noteQuery") +
-		"\n" + jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteBoxHTML")
+		"\n" + jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteBoxHTML") +
+		"\n" + jsFunc(t, "files.js", "globalNoteCtx")
 
 	script := "const esc = (x) => String(x);\n" +
 		"const URLSearchParams = globalThis.URLSearchParams;\n" +
@@ -271,11 +272,13 @@ func hasCodeLineWith(src, tok string) bool {
 func TestPreviewAddNoteFallsForwardToTheNewSide(t *testing.T) {
 	t.Parallel()
 	add := jsFunc(t, "files.js", "addNotePrompt")
-	if !strings.Contains(add, "!state.diffRow") {
-		t.Fatal("addNotePrompt must fall forward only when the row was NOT clicked (!state.diffRow)")
+	// The marked row is read through activeDiff() (a stack has one per FILE),
+	// so the "nothing was clicked" test is !ad.row.
+	if !strings.Contains(add, "!ad.row") {
+		t.Fatal("addNotePrompt must fall forward only when the row was NOT clicked (!ad.row)")
 	}
-	if !strings.Contains(add, "firstNewSideRow()") {
-		t.Fatal("addNotePrompt must fall forward to the first new-side row")
+	if !strings.Contains(add, "firstNewSideRow(scope)") {
+		t.Fatal("addNotePrompt must fall forward to the first new-side row, inside the active file's scope")
 	}
 	fwd := jsFunc(t, "files.js", "firstNewSideRow")
 	if !strings.Contains(fwd, `tr[data-no][data-side="new"]`) {
@@ -431,7 +434,7 @@ func TestForgeNoteBoxesJS(t *testing.T) {
 	}
 	fns := jsFunc(t, "files.js", "notesArmed") + "\n" + jsFunc(t, "files.js", "noteQuery") + "\n" +
 		jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteBoxHTML") + "\n" +
-		jsFunc(t, "files.js", "fileNoteRowsHTML")
+		jsFunc(t, "files.js", "fileNoteRowsHTML") + "\n" + jsFunc(t, "files.js", "globalNoteCtx")
 	script := "const esc = (x) => String(x);\n" +
 		"const state = { notesAgentOff: true, noteCollapsed: new Set(['forge:C3']),\n" +
 		"  diffCtx: {path:'a.go', rev:'beef', state:'commit', preview:{source:'alice:feat', target:'main', pr:7}},\n" +
@@ -492,7 +495,7 @@ func TestForgeNoteBoxesRenderMarkdownJS(t *testing.T) {
 	if err != nil {
 		t.Skip("node not installed; the JS guard needs it")
 	}
-	fns := jsFunc(t, "files.js", "notesArmed") + "\n" + jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteBoxHTML")
+	fns := jsFunc(t, "files.js", "notesArmed") + "\n" + jsFunc(t, "files.js", "noteRowsHTML") + "\n" + jsFunc(t, "files.js", "noteBoxHTML") + "\n" + jsFunc(t, "files.js", "globalNoteCtx")
 	script := `const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const list = { blocks: [{ k: "list", items: [{ blocks: [{ k: "p", in: [{ k: "text", t: "shorter" }] }] }] }] };
 const state = { notesAgentOff: false, noteCollapsed: new Set(),
