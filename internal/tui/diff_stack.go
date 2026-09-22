@@ -32,6 +32,8 @@ const (
 	lineBody   lineKind = iota // a diff row, or a fold separator (textdiff.Line as before)
 	lineHeader                 // a stacked file's header row
 	linePlace                  // a stacked file's one-line state: loading / binary / too large / error / no difference / conflict
+	lineGap                    // the blank line that opens a stacked file
+	lineRule                   // the rule under a stacked file's header
 )
 
 // diffLine is one logical line of the diff stream. It embeds textdiff.Line, so
@@ -51,7 +53,9 @@ func (l diffLine) isBody() bool { return l.kind == lineBody && l.Fold == 0 }
 // isStop reports whether the cursor may rest here: body rows and file headers,
 // never a fold separator or a placeholder. A header is a stop deliberately —
 // a FOLDED file has nothing but its header, and `-` unfolds the cursor's file.
-func (l diffLine) isStop() bool { return l.Fold == 0 && l.kind != linePlace }
+func (l diffLine) isStop() bool {
+	return (l.kind == lineBody && l.Fold == 0) || l.kind == lineHeader
+}
 
 // wrapLines lifts a pure textdiff stream into the view's stream (one file,
 // all body lines) — what the single-file view's rebuild produces.
@@ -96,7 +100,8 @@ type stackFile struct {
 	add, del              int
 	counted               bool // add/del are known (from numstat, or from the rows on load)
 	bin                   bool // numstat says binary
-	start                 int  // index of this file's header in v.lines (stamped by spliceStack)
+	start                 int  // index of this file's FIRST line in v.lines (its blank line; the header on the first file)
+	hdr                   int  // index of this file's header line (stamped by spliceStack)
 }
 
 // diffStack is the open stack: which list it came from and its files.
@@ -124,8 +129,16 @@ func (v *diffView) spliceStack() {
 	for i := range v.stk.files {
 		f := &v.stk.files[i]
 		f.start = len(v.lines)
-		v.blocks = append(v.blocks, f.start)
+		// A blank line opens each file and a rule closes its header, so the
+		// files read as separate blocks instead of one unbroken column. The
+		// first file skips the blank — there is nothing above it to separate.
+		if i > 0 {
+			v.lines = append(v.lines, diffLine{file: i, kind: lineGap})
+		}
+		f.hdr = len(v.lines)
+		v.blocks = append(v.blocks, f.hdr)
 		v.lines = append(v.lines, diffLine{file: i, kind: lineHeader})
+		v.lines = append(v.lines, diffLine{file: i, kind: lineRule})
 		if f.collapsed {
 			continue
 		}
@@ -244,11 +257,12 @@ func (v *diffView) anchorAt(li int) stackAnchor {
 		return stackAnchor{inFile: -1}
 	}
 	f := v.lines[li].file
-	a := stackAnchor{file: f, inFile: -1}
-	if f >= 0 && f < len(v.stk.files) && v.lines[li].kind != lineHeader {
-		a.inFile = li - v.stk.files[f].start - 1
+	if f < 0 || f >= len(v.stk.files) {
+		return stackAnchor{inFile: -1}
 	}
-	return a
+	// Measured from the file's FIRST line, so the blank line and the rule
+	// shift nothing when a stream is re-spliced.
+	return stackAnchor{file: f, inFile: li - v.stk.files[f].start}
 }
 
 // lineAt maps an anchor back to a logical line in the CURRENT stream, clamped
@@ -263,9 +277,9 @@ func (v *diffView) lineAt(a stackAnchor) int {
 	}
 	lo, hi := v.fileLineRange(f)
 	if a.inFile < 0 {
-		return lo
+		return v.stk.files[f].hdr
 	}
-	li := lo + 1 + a.inFile
+	li := lo + a.inFile
 	if li > hi {
 		li = hi
 	}

@@ -1427,6 +1427,12 @@ scrolled to the file.
   file index and a kind (body / header / placeholder) — so every `.Row` /
   `.Fold` reader, the display-row layout, wrap and scroll modes, the search
   and the cursor work unchanged. The pure `textdiff` leaf learns nothing.
+- **Each file is framed.** `spliceStack` puts a blank `lineGap` above every
+  header (not the first file's — nothing is above it) and a full-width
+  `lineRule` under it, so files read as blocks rather than one column. Neither
+  is a cursor stop, and `stackFile` therefore carries BOTH `start` (its first
+  line) and `hdr` (its header); anchors measure from `start`, so the frame
+  lines shift nothing across a re-splice.
 - **The jump blocks ARE the headers.** `spliceStack` sets `v.blocks` to the
   header line indices, so `n`/`p`, the wrap arming, `focusBlock`,
   `deriveOrdinal` and `f`/`ctrl+w`'s re-anchor all step file to file with no

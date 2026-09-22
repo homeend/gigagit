@@ -28,6 +28,15 @@ import (
 // suite. Tests that need their own config dir still override the variable with
 // t.Setenv.
 //
+// XDG_STATE_HOME is pinned for the same reason, and it is not cosmetic: the
+// model reads the MACHINE's promptstate at construction (suppressed prompts,
+// and the stacked-diff preference the S key writes). With the developer's own
+// state dir in play, a diff opened in a test could come up STACKED because
+// they had pressed S in their own session — which made a shared helper's
+// `cmd().(diffMsg)` panic on a batch. Machine-local UX memory must never
+// steer the suite; a test that means to exercise it points a FileStore at its
+// own t.TempDir().
+//
 // Merge previews get the same treatment as notes for the same reason:
 // srcPreviews is part of the all-source fan-out, so without this every loading
 // test would resolve the USER's real state dir. A test that means to exercise
@@ -41,7 +50,13 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("XDG_CONFIG_HOME", dir)
+	state, err := os.MkdirTemp("", "gg-tui-state")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("XDG_STATE_HOME", state)
 	code := m.Run()
+	os.RemoveAll(state)
 	os.RemoveAll(dir)
 	os.Exit(code)
 }

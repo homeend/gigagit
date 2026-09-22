@@ -139,7 +139,7 @@ func (m Model) openStack(nav diffNavKind, focusPath string, seed *diffView) (tea
 	body := m.diffBodyRows()
 	dv.cur = focus
 	if seeded >= 0 {
-		dv.setCursorLine(dv.stk.files[focus].start+1+seeded, body)
+		dv.setCursorLine(dv.stk.files[focus].hdr+2+seeded, body) // past the header and its rule
 		dv.alignCursor(alignCenter, body)
 	} else {
 		dv.focusBlock(focus, body) // the file's header, with the usual lead above it
@@ -225,7 +225,7 @@ func (m Model) foldFile(v *diffView, i int, body int) Model {
 	}
 	v.stk.files[i].collapsed = !v.stk.files[i].collapsed
 	v.rebuild()
-	v.setCursorLine(v.stk.files[i].start, body)
+	v.setCursorLine(v.stk.files[i].hdr, body)
 	v.syncStackTitle()
 	return m
 }
@@ -297,7 +297,7 @@ func (m Model) stackKey(v *diffView, msg tea.KeyMsg, body int) (tea.Model, tea.C
 			v.stk.files[i].collapsed = fold
 		}
 		v.rebuild()
-		v.setCursorLine(v.stk.files[cur].start, body)
+		v.setCursorLine(v.stk.files[cur].hdr, body)
 		v.syncStackTitle()
 		nm, cmd := m.pumpStack()
 		return nm, cmd, true
