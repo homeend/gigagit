@@ -468,11 +468,13 @@ func TestNoteFileStepTwoPress(t *testing.T) {
 func TestDiffHintFitsItsBudget(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []longMode{longScroll, longWrap, longTruncate} {
-		h := diffHintFor(mode)
+		h := diffHintFor(mode, false)
 		if w := lipgloss.Width(h); w > 140 {
 			t.Errorf("hint (mode %d) is %d columns, budget is 140: %q", mode, w, h)
 		}
-		for _, k := range []string{"[c}{]", "[spc]", "[e]", "[n/p]", "[f]", "[h/b]", "[esc] back"} {
+		// [e] edit gave up its place to [S] stack when the stacked view
+		// shipped (it stays in the . menu and the help); the rest are pinned.
+		for _, k := range []string{"[c}{]", "[spc]", "[S]", "[n/p]", "[f]", "[h/b]", "[esc] back"} {
 			if !strings.Contains(h, k) {
 				t.Errorf("hint (mode %d) lost %s: %q", mode, k, h)
 			}

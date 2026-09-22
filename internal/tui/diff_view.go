@@ -593,6 +593,15 @@ func (m Model) openStatusDiff(f model.FileStatus, staged bool) (tea.Model, tea.C
 	} else {
 		m.diffNav = diffNavStatus
 	}
+	if m.diffStacked {
+		// The stacked preference is on: this file opens inside its section's
+		// stack, scrolled to it (design §4).
+		nav := diffNavStatus
+		if staged {
+			nav = diffNavStaged
+		}
+		return m.openStack(nav, f.Path, nil)
+	}
 	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, noteAddr: m.statusNoteAddress(f, staged)}
 	if dv := m.diffLayer(); dv != nil {
 		*dv = *v // stepping: reuse the entry already on the stack
@@ -910,6 +919,11 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if nm, cmd, handled := m.diffSearchKey(v, msg, body); handled {
 		return nm, cmd
 	}
+	// The stacked view's own keys, and the single-file keys that do not apply
+	// in a stack (diff_stack_keys.go). S itself is handled there for both.
+	if nm, cmd, handled := m.stackKey(v, msg, body); handled {
+		return nm, cmd
+	}
 	switch msg.String() {
 	case ".":
 		return m.openActionMenu(), nil
@@ -938,7 +952,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "?":
 		// The diff footer is packed and truncates on a narrow terminal: the
 		// help opens with this window's keys first, then the Diff view section.
-		return m.pushLayer(newContentPopup(i18n.T("Help — keys"), helpFor(i18n.T("Diff view (enter)"), diffHintFor(v.long)))), nil
+		return m.pushLayer(newContentPopup(i18n.T("Help — keys"), helpFor(i18n.T("Diff view (enter)"), diffHintFor(v.long, v.stk != nil)))), nil
 	case "e":
 		if r, ok := m.diffEditRow(); ok {
 			nm, cmd := r.run(m)
@@ -1169,6 +1183,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			v.hOffset = 0
 		}
 	}
+	// Whatever the key moved the cursor to, the view's title (and with it every
+	// per-file action) names the file the cursor is now in.
+	v.syncStackTitle()
 	return m, nil
 }
 

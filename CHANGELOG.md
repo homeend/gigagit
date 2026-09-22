@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Stacked diff view in the TUI
+
+### Added
+
+- **`S` in the full-screen diff view shows every file of the list in one
+  scroll.** Each file gets a header line — fold mark, status letter, path
+  (`old → new` on a rename) and `+added −deleted` — with its diff directly
+  below, so a whole commit, comparison, preview or working-tree section reads
+  top to bottom without stepping file by file. The browser UI has had this
+  since the previous two waves; the two preferences are remembered
+  separately, per machine.
+- **Files load as you reach them.** A file is read when it comes within about
+  two screens of what you are looking at, at most three at a time, and a file
+  arriving above the viewport never moves the line you are reading. A list of
+  more than 100 files opens folded, except the file you opened.
+- **Keys.** `n`/`p` step from file header to file header (`ctrl+↓`/`ctrl+↑`
+  too); `home`/`end` go to the top and bottom of the whole stack and no
+  longer step to another file, since every file is already there; `-` folds
+  or unfolds the file under the cursor and `_` does it for all of them; `J`
+  lists the stack's files to jump to, typing to filter. `S` again returns to
+  the single-file view, on the file you were reading.
+- **Working tree.** The stack is the section the cursor is in — all unstaged
+  or all staged, never mixed. It follows a live refresh: files that are gone
+  drop out, new ones appear in list order, and a file you have already read
+  stays on screen while it is re-read, so a background refresh never blanks
+  the view. A conflicted file shows as a header with `enter` opening the
+  conflict resolver, since a conflict has no plain diff.
+- **The `.` menu and the `?` help carry all of it**, and the footer gains
+  `[S] stack` — `[e] edit` moved into the menu and the help to pay for it.
+
+### Notes
+
+- Review notes, in-view hunk staging and the changes-only fold stay
+  single-file for now; press `S` to go back to one file for them. The stacked
+  view's own model is built so each attaches per file later.
+
 ## TUI status bar names the commit's author
 
 ### Changed

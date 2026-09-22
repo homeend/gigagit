@@ -2,10 +2,14 @@ package tui
 
 import (
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
@@ -258,5 +262,416 @@ func TestStackTitleFollowsTheCursorFile(t *testing.T) {
 	v.syncStackTitle()
 	if v.title != "f1.go" {
 		t.Fatalf("title = %q, want f1.go", v.title)
+	}
+}
+
+// tempPromptStore gives a model its own machine-local memory, so a test never
+// reads or writes the real one.
+func tempPromptStore(t *testing.T, m Model) Model {
+	t.Helper()
+	m.promptStore = promptstate.NewFileStore(filepath.Join(t.TempDir(), "prompts.toml"))
+	return m
+}
+
+// S stacks the open diff around the file being read — keeping that file, its
+// cursor line and the rows already loaded — and remembers the choice. S again
+// returns to the single file.
+func TestSFlipsSingleToStackKeepingTheFile(t *testing.T) {
+	t.Parallel()
+	m := tempPromptStore(t, treeDiffModelBlocks(2)) // the tree's b.go
+	v := m.diffLayer()
+	v.title = "b.go"
+	v.setCursorLine(20, m.diffBodyRows())
+
+	u, cmd := m.Update(keyMsg("S"))
+	mm := u.(Model)
+	sv := mm.diffLayer()
+	if sv.stk == nil || len(sv.stk.files) != 3 {
+		t.Fatalf("S must stack the three tree files, got %v", sv.stk)
+	}
+	if sv.curFile() != 1 || sv.title != "b.go" {
+		t.Fatalf("the stack must sit on b.go: file %d, title %q", sv.curFile(), sv.title)
+	}
+	if r, ok := sv.cursorRow(); !ok || r.RightNo != 21 {
+		t.Fatalf("the seeded file keeps its cursor line, got %+v (ok %v)", r, ok)
+	}
+	if !mm.diffStacked || !mm.promptStore.StackedDiff() {
+		t.Fatal("S must set and persist the preference")
+	}
+	if cmd == nil {
+		t.Fatal("opening a stack must start loading its neighbours")
+	}
+
+	u2, _ := mm.Update(keyMsg("S"))
+	back := u2.(Model)
+	if back.diffLayer().stk != nil || back.diffLayer().title != "b.go" {
+		t.Fatalf("S again must return to the single view on b.go, got %q", back.diffLayer().title)
+	}
+	if back.diffStacked || back.filesView.sel != 2 {
+		t.Fatal("leaving a stack must clear the pref and point the list at the file")
+	}
+}
+
+// n/p step header to header; - folds the cursor's file; _ folds all, then
+// unfolds all.
+func TestStackNPStepHeadersAndFoldKeys(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.height, m.width = 30, 120
+	m = m.pushLayer(stackViewOf(t, sameRowsTUI(3, 1), sameRowsTUI(3, 1), sameRowsTUI(3, 1)))
+	for _, want := range []int{1, 2} {
+		u, _ := m.Update(keyMsg("n"))
+		m = u.(Model)
+		v := m.diffLayer()
+		if v.curFile() != want || v.lines[v.curLine].kind != lineHeader {
+			t.Fatalf("n must land on file %d's header, got file %d kind %v", want, v.curFile(), v.lines[v.curLine].kind)
+		}
+	}
+	u, _ := m.Update(keyMsg("-"))
+	m = u.(Model)
+	if !m.diffLayer().stk.files[2].collapsed {
+		t.Fatal("- must fold the cursor's file")
+	}
+	u, _ = m.Update(keyMsg("_"))
+	m = u.(Model)
+	for i, f := range m.diffLayer().stk.files {
+		if !f.collapsed {
+			t.Fatalf("_ with some unfolded must fold all (file %d is open)", i)
+		}
+	}
+	u, _ = m.Update(keyMsg("_"))
+	for i, f := range u.(Model).diffLayer().stk.files {
+		if f.collapsed {
+			t.Fatalf("_ with all folded must unfold all (file %d stayed folded)", i)
+		}
+	}
+}
+
+// home / end go to the ends of the WHOLE stack and never prime a file step —
+// every file of the list is already on screen.
+func TestStackHomeEndNeverArmAFileStep(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.height, m.width = 12, 120
+	m = m.pushLayer(stackViewOf(t, sameRowsTUI(20, 2), sameRowsTUI(20, 2)))
+	m.diffNav = diffNavTree
+	tag := m.diffTag
+	u, _ := m.Update(keyMsg("end"))
+	m = u.(Model)
+	u, _ = m.Update(keyMsg("end"))
+	m = u.(Model)
+	v := m.diffLayer()
+	if v.fileArm != fileArmNone || m.diffTag != tag {
+		t.Fatalf("end must not arm a file step (arm %d, tag %q)", v.fileArm, m.diffTag)
+	}
+	if v.curFile() != 1 {
+		t.Fatalf("end must reach the last file, got %d", v.curFile())
+	}
+	u, _ = m.Update(keyMsg("home"))
+	if got := u.(Model).diffLayer().curFile(); got != 0 {
+		t.Fatalf("home must reach the first file, got %d", got)
+	}
+}
+
+// The notes keys are not silently dead in a stack: they say where notes live.
+func TestStackNotesKeysSayWhereNotesLive(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.height, m.width = 20, 120
+	m = m.pushLayer(stackViewOf(t, sameRowsTUI(4, 1), sameRowsTUI(4, 1)))
+	for _, k := range []string{"c", "}", "{", "E", "R"} {
+		u, cmd := m.Update(keyMsg(k))
+		mm := u.(Model)
+		if cmd != nil {
+			t.Fatalf("%q must not start anything in a stack", k)
+		}
+		if _, isNote := mm.topLayer().(*notePopup); isNote {
+			t.Fatalf("%q must not open a note surface in a stack", k)
+		}
+		if mm.diffNotice == "" {
+			t.Fatalf("%q must say where notes live", k)
+		}
+	}
+}
+
+// Past the threshold a stack opens folded — except the file that was opened.
+func TestStackOver100OpensFoldedExceptTheOpenedFile(t *testing.T) {
+	t.Parallel()
+	m := tempPromptStore(t, treeDiffModel(1))
+	m.height, m.width = 24, 120
+	lines := []contentLine{{text: "dir/", heading: true}}
+	for i := 0; i < 101; i++ {
+		p := fmt.Sprintf("f%03d.go", i)
+		lines = append(lines, contentLine{text: "  M " + p, path: p, status: "M"})
+	}
+	m.filesView = &contentPopup{lines: lines, sel: 51} // f050.go
+	m = m.setStackedPref(true)
+	u, _ := m.openDiffForFileLine(lines[51]) // the files view's enter on f050.go
+	v := u.(Model).diffLayer()
+	if v.stk == nil || len(v.stk.files) != 101 {
+		t.Fatalf("the whole list must stack, got %v files", len(v.stk.files))
+	}
+	for i, f := range v.stk.files {
+		if want := i != 50; f.collapsed != want {
+			t.Fatalf("file %d collapsed = %v, want %v", i, f.collapsed, want)
+		}
+	}
+	if v.curFile() != 50 {
+		t.Fatalf("the stack must open on the file that was picked, got %d", v.curFile())
+	}
+}
+
+// With no list behind the diff (a picker compare) S says so and changes nothing.
+func TestSInertWithoutAList(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.height, m.width = 20, 120
+	m = tempPromptStore(t, m)
+	m = m.pushLayer(diffViewWith(sameRowsTUI(4, 1), []int{1}))
+	m.diffNav = diffNavNone
+	u, cmd := m.Update(keyMsg("S"))
+	mm := u.(Model)
+	if mm.diffLayer().stk != nil || cmd != nil {
+		t.Fatal("S must not stack a diff with no source list")
+	}
+	if mm.diffNotice == "" || mm.diffStacked {
+		t.Fatalf("S must say why and leave the pref alone (notice %q, pref %v)", mm.diffNotice, mm.diffStacked)
+	}
+}
+
+// statusStackModel opens a stack over the unstaged section of three files,
+// one of them conflicted.
+func statusStackModel(t *testing.T) Model {
+	t.Helper()
+	m := tempPromptStore(t, diffModel())
+	m.height, m.width = 20, 120
+	m = m.withStatus(model.WorkingTreeStatus{Files: []model.FileStatus{
+		{Path: "a.txt", Unstaged: 'M'},
+		{Path: "b.txt", Unstaged: 'M'},
+		{Path: "c.txt", Staged: 'U', Unstaged: 'U', Kind: model.KindUnmerged},
+	}})
+	m = m.setStackedPref(true)
+	u, _ := m.openStatusDiff(m.status.Files[0], false)
+	return u.(Model)
+}
+
+// A working-tree stack is ONE section, and a conflicted file joins it as a
+// header with the resolver behind enter — never as a diff.
+func TestStatusStackIsTheSectionWithConflictsHeaderOnly(t *testing.T) {
+	t.Parallel()
+	m := statusStackModel(t)
+	v := m.diffLayer()
+	if v.stk == nil || len(v.stk.files) != 3 || v.stk.staged {
+		t.Fatalf("the unstaged section must stack whole, got %+v", v.stk)
+	}
+	if !v.stk.files[2].conflict {
+		t.Fatal("the unmerged file must be marked as a conflict")
+	}
+	if got := wantLoads(v.stk.files, 0, 1<<30, 0, 0); slices.Contains(got, 2) {
+		t.Fatalf("a conflicted file must never be fetched, queue = %v", got)
+	}
+	v.setCursorLine(v.stk.files[2].start, m.diffBodyRows())
+	u, cmd := m.Update(keyMsg("enter"))
+	if cmd == nil {
+		t.Fatal("enter on a conflicted file must open the resolver")
+	}
+	if u.(Model).diffLayer().stk == nil {
+		t.Fatal("the stack must stay open behind the resolver load")
+	}
+}
+
+// A live status refresh follows the section: gone files drop out, new ones
+// appear, a file already read is kept on screen but marked for a re-read, and
+// the cursor stays on its own file.
+func TestStatusStackReconcilesOnRefresh(t *testing.T) {
+	t.Parallel()
+	m := statusStackModel(t)
+	v := m.diffLayer()
+	v.stk.files[1].d, v.stk.files[1].load = diffViewWith(sameRowsTUI(4, 1), []int{1}), stackLoaded
+	v.rebuild()
+	v.setCursorLine(v.stk.files[1].start+2, m.diffBodyRows())
+	v.syncStackTitle()
+	gen := v.stk.gen
+
+	m = m.withStatus(model.WorkingTreeStatus{Files: []model.FileStatus{
+		{Path: "b.txt", Unstaged: 'M'},
+		{Path: "d.txt", Unstaged: 'M'},
+	}})
+	v = m.diffLayer()
+	if v == nil || v.stk == nil {
+		t.Fatal("the stack must survive a refresh that still has files")
+	}
+	if len(v.stk.files) != 2 || v.stk.files[0].path != "b.txt" || v.stk.files[1].path != "d.txt" {
+		t.Fatalf("the stack must follow the section, got %v", stackPaths(v))
+	}
+	if v.stk.files[0].d == nil || v.stk.files[0].load != stackStale {
+		t.Fatalf("a read file must stay on screen and be marked stale, got %v", v.stk.files[0].load)
+	}
+	if v.stk.gen == gen {
+		t.Fatal("a rebuilt stack must take a new generation")
+	}
+	if v.curFile() != 0 || v.title != "b.txt" {
+		t.Fatalf("the cursor must stay on b.txt, got file %d title %q", v.curFile(), v.title)
+	}
+
+	// The section empties: the view closes back to the list.
+	m = m.withStatus(model.WorkingTreeStatus{})
+	if m.diffLayer() != nil {
+		t.Fatal("an emptied section must close the stacked view")
+	}
+}
+
+func stackPaths(v *diffView) []string {
+	var out []string
+	for _, f := range v.stk.files {
+		out = append(out, f.path)
+	}
+	return out
+}
+
+// The counts reach the headers from one numstat, before any body has loaded.
+func TestStackCountsArriveBeforeBodies(t *testing.T) {
+	t.Parallel()
+	m := statusStackModel(t)
+	v := m.diffLayer()
+	u, _ := m.Update(stackStatMsg{gen: v.stk.gen, stats: []model.DiffStat{
+		{Path: "a.txt", Added: 2, Deleted: 1},
+		{Path: "b.txt", Binary: true},
+	}})
+	m = u.(Model)
+	v = m.diffLayer()
+	if f := v.stk.files[0]; !f.counted || f.add != 2 || f.del != 1 {
+		t.Fatalf("a.txt counts = +%d −%d (counted %v)", f.add, f.del, f.counted)
+	}
+	if !v.stk.files[1].bin {
+		t.Fatal("b.txt must be marked binary")
+	}
+	out := m.renderDiffView()
+	if !strings.Contains(out, "+2 −1") || !strings.Contains(out, i18n.T("bin")) {
+		t.Fatalf("the headers must show the counts with no body loaded:\n%s", out)
+	}
+	// A stack rebuilt meanwhile ignores the old read.
+	u2, _ := m.Update(stackStatMsg{gen: v.stk.gen + 99, stats: []model.DiffStat{{Path: "a.txt", Added: 9}}})
+	if got := u2.(Model).diffLayer().stk.files[0].add; got != 2 {
+		t.Fatalf("a stale numstat must be dropped, add = %d", got)
+	}
+}
+
+// The footer advertises the stacked view in the single-file line, and the
+// stack's own keys once it is open (memory rule: help AND footer).
+func TestDiffFooterAdvertisesStack(t *testing.T) {
+	t.Parallel()
+	single := diffHintFor(longScroll, false)
+	if !strings.Contains(single, "[S] stack") {
+		t.Errorf("the single-file footer must advertise S: %q", single)
+	}
+	stacked := diffHintFor(longScroll, true)
+	for _, want := range []string{"[n/p] file", "[-/_] fold", "[J] files", "[S] single", "[esc] back"} {
+		if !strings.Contains(stacked, want) {
+			t.Errorf("the stacked footer lacks %q: %q", want, stacked)
+		}
+	}
+}
+
+// …and so does the ? help.
+func TestHelpAdvertisesStack(t *testing.T) {
+	t.Parallel()
+	lines := helpFor(i18n.T("Diff view (enter)"), diffHintFor(longScroll, false))
+	var text strings.Builder
+	for _, l := range lines {
+		text.WriteString(l.text)
+		text.WriteString("\n")
+	}
+	for _, want := range []string{"stacked view", "-/_", "J", "enter (stacked)"} {
+		if !strings.Contains(text.String(), want) {
+			t.Errorf("the diff help must cover %q", want)
+		}
+	}
+}
+
+// The . menu carries the toggle wherever a stackable diff is open, and the
+// fold / jump rows inside a stack.
+func TestDotMenuHasStackRows(t *testing.T) {
+	t.Parallel()
+	m := tempPromptStore(t, treeDiffModelBlocks(2))
+	if !rowHasID(availableActions(m), "stack-toggle") {
+		t.Fatal("a stackable diff must offer the toggle row")
+	}
+	u, _ := m.Update(keyMsg("S"))
+	rows := availableActions(u.(Model))
+	for _, id := range []string{"stack-toggle", "stack-fold", "stack-fold-all", "stack-jump"} {
+		if !rowHasID(rows, id) {
+			t.Errorf("a stack's . menu lacks %q", id)
+		}
+	}
+	// e keeps its menu row now that the footer no longer names it.
+	if !rowHasID(availableActions(m), "diff-edit-at-line") {
+		t.Error("the editor row must stay in the . menu")
+	}
+}
+
+// J opens the file list, and picking a row scrolls to (and unfolds) that file.
+func TestStackJumpMenuGoesToTheFile(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.height, m.width = 20, 120
+	m = m.pushLayer(stackViewOf(t, sameRowsTUI(4, 1), sameRowsTUI(4, 1), sameRowsTUI(4, 1)))
+	m.diffLayer().stk.files[2].collapsed = true
+	m.diffLayer().rebuild()
+	u, _ := m.Update(keyMsg("J"))
+	mm := u.(Model)
+	if mm.actionMenu == nil || len(mm.actionMenu.rows) != 3 {
+		t.Fatalf("J must list the stack's three files, got %v", mm.actionMenu)
+	}
+	nm, _ := mm.actionMenu.rows[2].run(mm)
+	v := nm.(Model).diffLayer()
+	if v.curFile() != 2 || v.stk.files[2].collapsed {
+		t.Fatalf("picking a folded file must go to it and unfold it (file %d, collapsed %v)", v.curFile(), v.stk.files[2].collapsed)
+	}
+}
+
+// Flipping to a stack must keep the file's ROWS, not just its name: the seed
+// is usually the live layer, which the stack is about to be written into.
+func TestStackSeedKeepsTheFilesRows(t *testing.T) {
+	t.Parallel()
+	m := tempPromptStore(t, treeDiffModelBlocks(2))
+	u, _ := m.Update(keyMsg("S"))
+	v := u.(Model).diffLayer()
+	f := v.stk.files[v.curFile()]
+	if f.d == nil || f.d.stk != nil || len(f.d.full) == 0 {
+		t.Fatalf("the seeded file must keep its own rows, got %+v", f.d)
+	}
+	if got := len(v.lines) - len(v.stk.files); got < 60 {
+		t.Fatalf("the seeded file's body must be in the stream, %d body lines", got)
+	}
+}
+
+// The file-step cue belongs to the single-file view: in a stack every file is
+// already on screen.
+func TestStackShowsNoFileStepCue(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.height, m.width = 20, 120
+	m = m.pushLayer(stackViewOf(t, sameRowsTUI(4, 1), sameRowsTUI(4, 1)))
+	m.diffNav = diffNavTree
+	if cue := m.boundaryCue(); cue != "" {
+		t.Fatalf("a stack must not advertise a file step, got %q", cue)
+	}
+}
+
+// Stepping with n renames the view: the header, h/b/e and the copy rows all
+// read v.title, so it must name the file the cursor moved to.
+func TestStackTitleFollowsNAndJK(t *testing.T) {
+	t.Parallel()
+	m := diffModel()
+	m.height, m.width = 20, 120
+	m = m.pushLayer(stackViewOf(t, sameRowsTUI(4, 1), sameRowsTUI(4, 1)))
+	u, _ := m.Update(keyMsg("n"))
+	if got := u.(Model).diffLayer().title; got != "f1.go" {
+		t.Fatalf("after n the title is %q, want f1.go", got)
+	}
+	u2, _ := u.(Model).Update(keyMsg("k"))
+	if got := u2.(Model).diffLayer().title; got != "f0.go" {
+		t.Fatalf("after k back into file 0 the title is %q, want f0.go", got)
 	}
 }

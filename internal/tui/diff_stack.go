@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"sort"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -456,4 +457,81 @@ func (v *diffView) syncStackTitle() {
 		return
 	}
 	v.title = v.stk.files[v.curFile()].path
+}
+
+// stackStatMsg carries one numstat read for the stack that asked for it.
+type stackStatMsg struct {
+	gen   int
+	stats []model.DiffStat
+}
+
+// stackStatCmd asks git for the whole stack's +/− counts in ONE read, wherever
+// git has a tree pair to count: a commit, a commit↔commit compare, or a
+// working-tree section. Sources with no such pair — a shelf member, a bookmark,
+// a preview, a live endpoint — return nil, and their counts come from the rows
+// as each file loads (design §7). It is asked only while a stack is open, so
+// the listings and the status poll pay nothing for it.
+func (m Model) stackStatCmd(stk *diffStack) tea.Cmd {
+	svc := m.svc
+	if svc == nil || stk == nil {
+		return nil
+	}
+	gen := stk.gen
+	switch {
+	case stk.src == diffNavStatus || stk.src == diffNavStaged:
+		cached := stk.staged
+		return func() tea.Msg {
+			stats, err := svc.DiffStat(context.Background(), model.DiffSpec{Cached: cached})
+			if err != nil {
+				return nil
+			}
+			return stackStatMsg{gen: gen, stats: stats}
+		}
+	case m.inCompareMode():
+		l, r := m.filesLeft, m.filesRight
+		if l.Kind() != model.EndpointCommit || r.Kind() != model.EndpointCommit {
+			return nil // a live or non-commit side: no immutable pair to count
+		}
+		rev := l.Hash() + ".." + r.Hash()
+		return func() tea.Msg {
+			stats, err := svc.DiffStat(context.Background(), model.DiffSpec{Rev: rev})
+			if err != nil {
+				return nil
+			}
+			return stackStatMsg{gen: gen, stats: stats}
+		}
+	case stk.src == diffNavTree && m.filesHash != "" && !m.inShelfFiles() && !m.inFullTree():
+		hash := m.filesHash
+		return func() tea.Msg {
+			stats, err := svc.CommitStat(context.Background(), hash)
+			if err != nil {
+				return nil
+			}
+			return stackStatMsg{gen: gen, stats: stats}
+		}
+	}
+	return nil
+}
+
+// applyStackStats fills the headers' counts. git's numstat is authoritative:
+// the rows only fill in files it did not name (an untracked file is not in a
+// working-tree numstat at all).
+func (m Model) applyStackStats(msg stackStatMsg) Model {
+	v := m.diffLayer()
+	if v == nil || v.stk == nil || msg.gen != v.stk.gen {
+		return m
+	}
+	by := make(map[string]model.DiffStat, len(msg.stats))
+	for _, st := range msg.stats {
+		by[st.Path] = st
+	}
+	for i := range v.stk.files {
+		st, ok := by[v.stk.files[i].path]
+		if !ok {
+			continue
+		}
+		f := &v.stk.files[i]
+		f.add, f.del, f.bin, f.counted = st.Added, st.Deleted, st.Binary, true
+	}
+	return m
 }

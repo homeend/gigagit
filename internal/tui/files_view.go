@@ -810,6 +810,11 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	}
 	m.diffNotice = "" // drop any stale notice; the stepper re-posts its arrival notice
 	m.diffNav = diffNavTree
+	if m.diffStacked && !m.inFullTree() {
+		// The stacked preference is on: every file of this list opens in one
+		// scroll, positioned on the file that was picked (design §4).
+		return m.openStack(diffNavTree, l.path, nil)
+	}
 	newV := &diffView{
 		title:   l.path,
 		context: "@ " + m.filesContext,

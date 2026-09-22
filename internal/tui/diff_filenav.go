@@ -81,6 +81,11 @@ func (m Model) boundaryCue() string {
 	if v == nil {
 		return ""
 	}
+	if v.stk != nil {
+		// A stack holds every file of the list already: there is no file to
+		// step to, and n/p there mean "next file", not "next change".
+		return ""
+	}
 	multi := len(v.dispBlocks) > 1
 	var segs []string
 	if v.onFirstBlock() { // previous-direction gestures

@@ -156,6 +156,9 @@ type Model struct {
 	// promptstate at startup and written back on every flip — machine-local,
 	// and independent of the web's own stacked pref (design R7).
 	diffStacked bool
+	// stackSeq numbers the stacks this session has opened: each one's
+	// generation, so a rebuilt stack drops the answers owed to the old one.
+	stackSeq int
 
 	noteCounts    domain.NoteCounts // badge counts (srcNotes); zero value = no badges
 	notesAgentOff bool              // `a`: hide agent-written notes for this session
@@ -526,6 +529,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+	case stackStatMsg:
+		// The stack's +/− counts, in one numstat (diff_stack.go).
+		return m.applyStackStats(msg), nil
 	case stackFileMsg:
 		// One file of the open stack arrived (diff_stack.go). Stale
 		// generations are dropped inside applyStackFile.

@@ -413,7 +413,9 @@ func (m Model) withStatus(st model.WorkingTreeStatus) Model {
 	m.status = st
 	m.filesIdx = m.fileMembership(panelFiles)
 	m.stagedIdx = m.fileMembership(panelStaged)
-	return m
+	// An open working-tree stack shows one of these two sections, so it is
+	// reconciled here — the one place the section membership is derived.
+	return m.reconcileStatusStack()
 }
 
 // fileMembership returns the backing indices of status.Files that belong to file
