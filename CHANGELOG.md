@@ -48,6 +48,27 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   and the toolbar under it jumped up under the cursor. The bar is now pinned
   with the diff header, so the buttons stay where they are.
 
+## `gg web`: the stacked diff in the symmetric comparison
+
+### Added
+
+- **`S` works in the symmetric comparison.** Both aligned file lists stay;
+  the middle column becomes one scroll of the rows the filter shows, each
+  diffed in the arrow's direction. A header adds the row's `≠ = ◁ ▷` glyph
+  and where each set stands (`left in · right deletes`); a file neither set
+  has content for is a header with the familiar "neither set has content"
+  note and is never fetched. Both lists' highlight follows the file you are
+  reading, and a click in either list scrolls to it.
+- A filter (`1`–`4`), a flip (`x`), `v`, a narrower window and a live
+  refresh rebuild the stack on the file you were reading when it is still
+  shown.
+
+### Fixed
+
+- A file near the end of a stack (any set without counts: links, entries)
+  could not be scrolled to the top — the pane ran out of scroll, and the
+  list highlighted the file above. The stack now ends with a one-pane tail.
+
 ## `gg web`: the stacked diff — every file in one scroll (`S`)
 
 ### Added
@@ -71,8 +92,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `?wt=staged|unstaged`) answers the header counts — asked only while a stack
   is open.
 - Not yet inside a stack: in-view search (`/` says to switch back), review
-  notes and the line cursor, inline hunk staging. The symmetric comparison
-  and the TUI get the stack in their own follow-ups.
+  notes and the line cursor, inline hunk staging. The TUI gets the stack in
+  its own follow-up.
 
 ## `gg web`: the symmetric comparison's file lists cut long paths from the middle
 

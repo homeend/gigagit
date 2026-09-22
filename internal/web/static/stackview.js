@@ -482,7 +482,8 @@ registerHelp({
     "a header per file (status, path, <b>+added −deleted</b>) with its diff below, like GitHub's " +
     "<i>Files changed</i>. Files load as they scroll into view; a change set of more than 100 files " +
     "opens with every file folded to its header. Clicking a file in the list scrolls to it, and the " +
-    "list follows the file you are reading. The <b>stacked</b> chip in the diff toolbar is the same " +
+    "list follows the file you are reading. In the <b>symmetric</b> comparison the stack holds the rows " +
+    "the filter shows, in the arrow's direction, between the two lists. The <b>stacked</b> chip in the diff toolbar is the same " +
     "switch; the choice is remembered per machine. Search (/) works in the single-file view",
 });
 registerHelp({
