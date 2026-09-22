@@ -386,23 +386,19 @@ func TestStackHomeEndNeverArmAFileStep(t *testing.T) {
 	}
 }
 
-// The notes keys are not silently dead in a stack: they say where notes live.
-func TestStackNotesKeysSayWhereNotesLive(t *testing.T) {
+// A stack whose files carry no address (every two-sided compare) leaves the
+// notes keys inert, exactly as the single-file view does for the same file —
+// the stack inherits each file's own addressability, it does not add a rule.
+func TestStackNotesKeysStayInertWithoutAnAddress(t *testing.T) {
 	t.Parallel()
 	m := diffModel()
 	m.height, m.width = 20, 120
 	m = m.pushLayer(stackViewOf(t, sameRowsTUI(4, 1), sameRowsTUI(4, 1)))
-	for _, k := range []string{"c", "}", "{", "E", "R"} {
-		u, cmd := m.Update(keyMsg(k))
+	for _, k := range []string{"c", "E", "R"} {
+		u, _ := m.Update(keyMsg(k))
 		mm := u.(Model)
-		if cmd != nil {
-			t.Fatalf("%q must not start anything in a stack", k)
-		}
 		if _, isNote := mm.topLayer().(*notePopup); isNote {
-			t.Fatalf("%q must not open a note surface in a stack", k)
-		}
-		if mm.diffNotice == "" {
-			t.Fatalf("%q must say where notes live", k)
+			t.Fatalf("%q must not open a note surface on an unaddressed file", k)
 		}
 	}
 }

@@ -145,3 +145,51 @@ func TestStackLoadsEachFilesNotes(t *testing.T) {
 		}
 	}
 }
+
+// The note keys act on the file under the CURSOR: its own address, stamped by
+// its own loader, not the address of the file the stack was opened on.
+func TestStackNoteKeysUseTheCursorsFile(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, cursorRows(8), cursorRows(8))
+	v.stk.files[0].path, v.stk.files[1].path = "a.go", "b.go"
+	for i, p := range []string{"a.go", "b.go"} {
+		v.stk.files[i].d.noteAddr = model.FileAddress{State: model.StateCommitted, Commit: "deadbeef", Path: p}
+	}
+	m := diffModel()
+	m.height, m.width = 24, 120
+	m = m.pushLayer(v)
+	v.relayout(v.width)
+
+	lo, _ := v.fileLineRange(1)
+	v.setCursorLine(lo+2, m.diffBodyRows()) // inside file B's body
+	addr, ok := m.diffNoteAddress()
+	if !ok || addr.Path != "b.go" {
+		t.Fatalf("want b.go's address under the cursor, got %q (ok=%v)", addr.Path, ok)
+	}
+	v.setCursorLine(2, m.diffBodyRows()) // back inside file A
+	if addr, ok := m.diffNoteAddress(); !ok || addr.Path != "a.go" {
+		t.Fatalf("want a.go's address, got %q (ok=%v)", addr.Path, ok)
+	}
+}
+
+// …and c actually opens the note prompt in a stack (it used to refuse).
+func TestStackCOpensTheNotePrompt(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, cursorRows(8), cursorRows(8))
+	for i, p := range []string{"a.go", "b.go"} {
+		v.stk.files[i].path = p
+		v.stk.files[i].d.noteAddr = model.FileAddress{State: model.StateCommitted, Commit: "deadbeef", Path: p}
+	}
+	m := diffModel()
+	m.height, m.width = 24, 120
+	m = m.pushLayer(v)
+	v.relayout(v.width)
+	lo, _ := v.fileLineRange(1)
+	v.setCursorLine(lo+2, m.diffBodyRows())
+
+	u, _ := m.Update(keyMsg("c"))
+	mm := u.(Model)
+	if _, isNote := mm.topLayer().(*notePopup); !isNote {
+		t.Fatalf("c must open the note popup in a stack; notice %q", mm.diffNotice)
+	}
+}

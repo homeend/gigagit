@@ -34,18 +34,32 @@ type noteMutatedMsg struct{ err error }
 // diffs, whose old side is not any address's old side) has no address, so notes
 // are inert there.
 func (m Model) diffNoteAddress() (model.FileAddress, bool) {
-	v := m.diffLayer()
+	v := m.diffLayer().curNoteView()
 	if v == nil || v.noteAddr.Path == "" {
 		return model.FileAddress{}, false
 	}
 	return v.noteAddr, true
 }
 
+// curNoteView is the view whose note stamps (noteAddr, previewSet, notes) apply
+// right now. Stacked that is the file the CURSOR is in: every file of a stack
+// carries the single-file view its own ordinary loader built, so its address is
+// that loader's stamp — the same rule as single-file mode, one file deeper.
+func (v *diffView) curNoteView() *diffView {
+	if v == nil || v.stk == nil {
+		return v
+	}
+	if i := v.curFile(); i >= 0 && i < len(v.stk.files) {
+		return v.stk.files[i].d
+	}
+	return nil
+}
+
 // previewNoteSet is the merge-preview scope of the diff on top, or nil. Like
 // diffNoteAddress it reads the field the LOADER stamped, never Model state at
 // key time.
 func (m Model) previewNoteSet() *domain.PreviewNoteSet {
-	v := m.diffLayer()
+	v := m.diffLayer().curNoteView()
 	if v == nil {
 		return nil
 	}
@@ -61,6 +75,9 @@ func (m Model) previewNoteSet() *domain.PreviewNoteSet {
 // would refuse a valid `c` — or a valid steer — on the view actually on screen.
 func (m Model) previewNoteScope() *domain.PreviewNoteSet {
 	if v := m.diffLayer(); v != nil {
+		if nv := v.curNoteView(); nv != nil {
+			return nv.previewSet
+		}
 		return v.previewSet
 	}
 	return m.filesPreviewSet
@@ -164,7 +181,7 @@ func (m Model) noteAnchorsAtCursor() []noteAnchor {
 	// (reviewImportTarget: ranges anchor to the tip, new side only). That holds
 	// whichever side the cursor is on.
 	oldSide := func() (noteAnchor, bool) {
-		if r.LeftNo <= 0 || v.previewSet != nil {
+		if r.LeftNo <= 0 || m.previewNoteSet() != nil {
 			return noteAnchor{}, false
 		}
 		return noteAnchor{model.NoteSideOld, r.LeftNo, model.NoteContextHash([]string{r.Left})}, true

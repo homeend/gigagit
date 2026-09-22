@@ -331,11 +331,6 @@ func (m Model) stackKey(v *diffView, msg tea.KeyMsg, body int) (tea.Model, tea.C
 		return nm, cmd, true
 	case "N", "P":
 		return m, nil, true // n/p already step files here
-	case "c", "E", "R", "}", "{", "o", "O":
-		// Review notes anchor on ONE file's addressed lines; a stack shows
-		// many. Until the notes phase, say where they live instead.
-		m.diffNotice = i18n.T("▸ notes: press S for the single-file view")
-		return m, nil, true
 	}
 	return m, nil, false
 }
