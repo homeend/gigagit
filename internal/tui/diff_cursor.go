@@ -239,6 +239,18 @@ func (v *diffView) cursorVisible(body int) bool {
 // moving the cursor), and focusBlock has already put the view on the change
 // they were reading; dragging it back to a stale off-screen cursor loses it.
 func (v *diffView) reanchorAfterRebuild(cr textdiff.Row, hadRow, wasVisible bool, body int) {
+	// Stacked, line NUMBERS are ambiguous — every file has a line 12 — so the
+	// cursor is re-found by (file, line in file) instead, and it is re-found
+	// even when it sat on a header or a placeholder (which have no row):
+	// focusBlock's seeding would otherwise drop the reader into another file.
+	if v.stk != nil {
+		v.curLine = v.lineAt(v.stackHold)
+		v.syncStackTitle()
+		if wasVisible {
+			v.ensureCursorVisible(body)
+		}
+		return
+	}
 	if !hadRow {
 		return // no row to re-find: focusBlock's seeding stands
 	}

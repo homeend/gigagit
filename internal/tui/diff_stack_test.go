@@ -675,3 +675,30 @@ func TestStackTitleFollowsNAndJK(t *testing.T) {
 		t.Fatalf("after k back into file 0 the title is %q, want f0.go", got)
 	}
 }
+
+// f (changed lines only) and ctrl+w (long-line mode) rebuild the stream. In a
+// stack the cursor must come back to the SAME file — line numbers repeat
+// across files, so re-finding by number could land in another file entirely.
+func TestStackFoldAndWrapKeepTheCursorsFile(t *testing.T) {
+	t.Parallel()
+	// Two files whose line numbers overlap exactly.
+	m := diffModel()
+	m.height, m.width = 20, 120
+	m = m.pushLayer(stackViewOf(t, sameRowsTUI(30, 12), sameRowsTUI(30, 12)))
+	v := m.diffLayer()
+	v.setCursorLine(v.stk.files[1].start+13, m.diffBodyRows())
+	v.syncStackTitle()
+	before, _ := v.cursorRow()
+
+	for _, key := range []string{"f", "ctrl+w"} {
+		u, _ := m.Update(keyMsg(key))
+		m = u.(Model)
+		v = m.diffLayer()
+		if v.curFile() != 1 || v.title != "f1.go" {
+			t.Fatalf("%s moved the cursor to file %d (%q)", key, v.curFile(), v.title)
+		}
+		if r, ok := v.cursorRow(); ok && r.RightNo != before.RightNo {
+			t.Fatalf("%s moved the cursor to line %d, want %d", key, r.RightNo, before.RightNo)
+		}
+	}
+}

@@ -80,10 +80,15 @@ type diffView struct {
 	// single-file view, and every field above then means what it always did.
 	// When set, v.lines is spliced from stk.files and the per-file rows /
 	// syntax runs live on each stackFile, not on full/oldTok/newTok.
-	stk     *diffStack
-	lsel    lineSel
-	wrapArm wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
-	fileArm fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
+	stk *diffStack
+	// stackHold is where the cursor was before a rebuild that keeps the same
+	// files (f, ctrl+w): stacked, the row's line numbers cannot re-find it,
+	// because every file has a line 12. Captured by cursorRow's callers
+	// through holdStackAnchor.
+	stackHold stackAnchor
+	lsel      lineSel
+	wrapArm   wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
+	fileArm   fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
 	// noteVisited: a }/{ jump (or a file step's landing) has put the cursor on
 	// one of THIS file's notes. Until then a jump that finds nothing beyond the
 	// cursor falls back to the file's first/last note (see jumpNote) — a fresh
@@ -998,6 +1003,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.notesAgentOff = !m.notesAgentOff
 		v.hideAgent = m.notesAgentOff
 		cr, hadRow := v.cursorRow()
+		v.stackHold = v.anchorAt(v.curLine)
 		wasVisible := v.cursorVisible(body)
 		v.relayout(v.width)
 		v.reanchorAfterRebuild(cr, hadRow, wasVisible, body)
@@ -1135,6 +1141,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "f":
 		ord := v.currentBlockOrdinal()
 		cr, hadRow := v.cursorRow()
+		v.stackHold = v.anchorAt(v.curLine)
 		wasVisible := v.cursorVisible(body)
 		v.partial = !v.partial
 		v.rebuild()
@@ -1156,6 +1163,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		v.lsel.clear() // relayout + reanchor moves what a line index means
 		ord := v.currentBlockOrdinal()
 		cr, hadRow := v.cursorRow()
+		v.stackHold = v.anchorAt(v.curLine)
 		wasVisible := v.cursorVisible(body)
 		v.long = (v.long + 1) % 3
 		v.hOffset = 0
