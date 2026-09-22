@@ -21,6 +21,7 @@ import {
   closeConflictPick,
   diffHTML,
   enterFilesStage,
+  markDiffRow,
   globalNoteCtx,
   notesArmed,
   notesFor,
@@ -337,6 +338,39 @@ async function refreshStackNotes() {
 }
 
 
+// landStackLine puts a stack on ONE file's exact line — what a gg:// link and
+// a `gg session navigate` with a line ask for. Line numbers repeat across a
+// stack (every file has a line 12), so the row is looked for inside that
+// file's own section, never in the pane at large; a folded file unfolds and an
+// unread one is fetched first, because its rows do not exist yet.
+async function landStackLine(path, side, line) {
+  const st = state.stack;
+  if (!st) return false;
+  const k = st.slots.findIndex((s) => s.path === path);
+  if (k < 0) return false;
+  const s = st.slots[k];
+  if (s.collapsed) {
+    s.collapsed = false;
+    repaintSlot(st, k);
+  }
+  scrollToFile(st, k);
+  for (let i = 0; i < 80 && state.stack === st && s.load !== "ok" && s.load !== "error" && s.load !== "none"; i++) {
+    pump(st);
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  if (state.stack !== st || s.load !== "ok") return false;
+  const sec = sectionEl(k);
+  if (!sec) return false;
+  const tr =
+    sec.querySelector(`tr[data-side="${side}"][data-no="${line}"]`) ||
+    (side === "old" ? sec.querySelector(`tr[data-lno="${line}"]`) : null);
+  if (!tr) return false;
+  markDiffRow(tr, side, line);
+  tr.scrollIntoView({ block: "center" });
+  return true;
+}
+
+
 // noteScope is the DOM root a per-file note gesture acts in: the active
 // slot's section, or the whole pane when there is no stack.
 function noteScope() {
@@ -594,4 +628,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, followInList, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, followInList, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

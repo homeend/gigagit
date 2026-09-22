@@ -282,3 +282,21 @@ func TestStackNoteGatesReadTheActiveSlot(t *testing.T) {
 		t.Fatal("files.js: the diff-body click must gate on the CLICKED row's own file")
 	}
 }
+
+// A gg:// link or a steering navigate with a LINE must land inside the named
+// file's own section: line numbers repeat across a stack, so the pane-wide
+// row lookup would mark whichever file carries that number first.
+func TestStackLineLandingIsPerFile(t *testing.T) {
+	t.Parallel()
+	view := readStatic(t, "stackview.js")
+	live := readStatic(t, "live.js")
+	if !strings.Contains(view, "async function landStackLine(path, side, line)") {
+		t.Fatal("stackview.js: landStackLine is the stack's line landing")
+	}
+	if !strings.Contains(view, "const sec = sectionEl(k);") || !strings.Contains(view, "sec.querySelector(`tr[data-side=") {
+		t.Fatal("stackview.js: the row must be looked for inside the target file's OWN section")
+	}
+	if !strings.Contains(live, "await landStackLine(s.file, side, s.line);") {
+		t.Fatal("live.js: a landing with a line must go through the stack's own lander")
+	}
+}
