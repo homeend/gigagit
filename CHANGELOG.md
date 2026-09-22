@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Settings menu type-to-filter
+
+### Changed
+
+- **The `,` Settings menu filters as you type**, like the `ctrl+p` palette
+  and the `.` action menu: any character narrows the list by option name
+  (the live state after the colon never matches), `↑`/`↓` move within the
+  matches, `enter` opens or toggles the highlighted one, and `esc` clears
+  the filter first and closes on the next press. The filter survives a trip
+  into a sub-screen and back.
+
 ## Stacked diff view in the TUI
 
 ### Added

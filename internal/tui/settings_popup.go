@@ -41,7 +41,8 @@ type settingsPopup struct {
 	toolRows          []toolWizardRow // detected tool × catalog command rows
 	toolChecked       []bool
 	sel               int      // selection within the agent picker list
-	menuSel           int      // selection within the top-level menu (independent of sel)
+	menuSel           int      // selection within visibleMenu() (independent of sel)
+	query             string   // menu-screen type-to-filter text (the ctrl+p palette's model)
 	mode              dispMode // text display mode; z cycles (cutoff default)
 	hscroll           int      // modeScroll horizontal offset
 }
@@ -127,6 +128,21 @@ func onOff(b bool) string {
 		return i18n.T("on")
 	}
 	return i18n.T("off")
+}
+
+// visibleMenu is the settingsMenu indices whose translated title contains
+// query, case-insensitively — the row's live state ("on", a path) never
+// matches. menuSel indexes this slice, never settingsMenu directly; with no
+// query the two coincide.
+func (p *settingsPopup) visibleMenu() []int {
+	q := strings.ToLower(p.query)
+	out := make([]int, 0, len(settingsMenu))
+	for i, e := range settingsMenu {
+		if q == "" || strings.Contains(strings.ToLower(settingsMenuTitle(e)), q) {
+			out = append(out, i)
+		}
+	}
+	return out
 }
 
 // settingsMenuLabel renders one menu row: translated title + live state. The
@@ -449,6 +465,11 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			p.toolsView = false
 			return m, nil
 		}
+		// First esc clears an active menu filter; esc with no filter closes.
+		if p.query != "" {
+			p.query, p.menuSel = "", 0
+			return m, nil
+		}
 		m = m.popLayer()
 		return m, nil
 	}
@@ -471,17 +492,41 @@ func (p *settingsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if !p.picker && !p.errorsView && !p.ratesView && !p.toolsView && !p.opsHistView {
+		// Type-to-filter like the ctrl+p palette: every printable key (space,
+		// j, k and q included) is query text; arrows move, enter acts.
+		vis := p.visibleMenu()
 		switch msg.Type {
 		case tea.KeyUp:
 			// Wrap: up on the first option lands on the last.
-			p.menuSel = (p.menuSel - 1 + len(settingsMenu)) % len(settingsMenu)
+			if n := len(vis); n > 0 {
+				p.menuSel = (p.menuSel - 1 + n) % n
+			}
 			return m, nil
 		case tea.KeyDown:
 			// Wrap: down on the last option lands on the first.
-			p.menuSel = (p.menuSel + 1) % len(settingsMenu)
+			if n := len(vis); n > 0 {
+				p.menuSel = (p.menuSel + 1) % n
+			}
+			return m, nil
+		case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
+			if r := []rune(p.query); len(r) > 0 {
+				p.query = string(r[:len(r)-1])
+			}
+			p.menuSel = 0
+			return m, nil
+		case tea.KeySpace:
+			p.query += " "
+			p.menuSel = 0
+			return m, nil
+		case tea.KeyRunes:
+			p.query += string(msg.Runes)
+			p.menuSel = 0
 			return m, nil
 		case tea.KeyEnter:
-			switch settingsMenu[p.menuSel] {
+			if p.menuSel < 0 || p.menuSel >= len(vis) {
+				return m, nil
+			}
+			switch settingsMenu[vis[p.menuSel]] {
 			case settingsMenuTools:
 				return m.openToolsWizard(), nil
 			case settingsMenuIdentity:
@@ -1091,22 +1136,32 @@ func (p *settingsPopup) box(m Model) string {
 		}
 		b.WriteString("\n" + strings.Join(hintLines, "\n"))
 	} else if !p.picker {
-		b.WriteString(i18n.T("Settings") + "\n\n")
-		wr := make([]winRow, len(settingsMenu))
+		header := i18n.T("Settings")
+		if p.query != "" {
+			header += "  " + p.query + "█"
+		}
+		b.WriteString(header + "\n\n")
+		vis := p.visibleMenu()
+		if len(vis) == 0 {
+			b.WriteString("  " + i18n.T("(no match)") + "\n")
+		}
+		wr := make([]winRow, len(vis))
 		s := st()
-		for i := range settingsMenu {
+		for row, i := range vis {
 			prefix := "  "
 			var st lipgloss.Style
-			if i == p.menuSel {
+			if row == p.menuSel {
 				prefix, st = "> ", s.selectedRow
 			}
-			wr[i] = winRow{text: prefix + settingsMenuLabel(m, i), style: st}
+			wr[row] = winRow{text: prefix + settingsMenuLabel(m, i), style: st}
 		}
 		// Same selected-row highlight as the . action menu (winRow + selectedRow).
-		for _, line := range renderWindow(wr, winOpts{w: textW, h: len(settingsMenu), mode: p.mode, anchor: p.menuSel, hscroll: p.hscroll}) {
+		for _, line := range renderWindow(wr, winOpts{w: textW, h: len(vis), mode: p.mode, anchor: p.menuSel, hscroll: p.hscroll}) {
 			b.WriteString(line + "\n")
 		}
-		b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] open/toggle  [esc] close"))
+		// Wrap the hint so [esc] close survives on a narrow popup.
+		hint := []string{i18n.T("type to filter"), i18n.T("[↑/↓] select"), i18n.T("[enter] open/toggle"), i18n.T("[esc] close")}
+		b.WriteString("\n" + strings.Join(wrapParts(hint, textW, "  "), "\n"))
 	} else {
 		b.WriteString(i18n.T("Set up agent skills") + "\n\n")
 		if len(p.dets) == 0 {
