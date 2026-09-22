@@ -186,6 +186,10 @@ func (m Model) unstack() (tea.Model, tea.Cmd) {
 	v := m.diffLayer()
 	f := v.stk.files[v.curFile()]
 	m = m.setStackedPref(false)
+	// The single view is loaded asynchronously and opens on its first change
+	// block, so the LINE being read is parked and landed when it arrives —
+	// otherwise S drops the reader at the top of the file they were in.
+	land := v.cursorLineLanding()
 	if v.stk.src == diffNavTree {
 		if p := m.filesView; p != nil {
 			for i, l := range p.visible() {
@@ -195,7 +199,8 @@ func (m Model) unstack() (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		return m.openDiffForFileLine(f.line)
+		tm, cmd := m.openDiffForFileLine(f.line)
+		return m.withLineLanding(land, tm, cmd)
 	}
 	p := panelFiles
 	if v.stk.staged {
@@ -214,7 +219,8 @@ func (m Model) unstack() (tea.Model, tea.Cmd) {
 		m.diffTag = ""
 		return m, nil
 	}
-	return m.openStatusDiff(f.fs, v.stk.staged)
+	tm, cmd := m.openStatusDiff(f.fs, v.stk.staged)
+	return m.withLineLanding(land, tm, cmd)
 }
 
 // foldFile folds or unfolds one file and keeps the cursor on its header, so a
@@ -331,11 +337,23 @@ func (m Model) stackKey(v *diffView, msg tea.KeyMsg, body int) (tea.Model, tea.C
 		return nm, cmd, true
 	case "N", "P":
 		return m, nil, true // n/p already step files here
-	case "c", "E", "R", "}", "{", "o", "O":
-		// Review notes anchor on ONE file's addressed lines; a stack shows
-		// many. Until the notes phase, say where they live instead.
-		m.diffNotice = i18n.T("▸ notes: press S for the single-file view")
-		return m, nil, true
+	case "ctrl+down", "ctrl+up":
+		// n/p step FILES in a stack (v.blocks are the headers), so the walk
+		// from change to change inside ONE file lives on the ctrl-arrows —
+		// their single-file meaning, one scope narrower. It stops at the
+		// file's ends: stepping on would be n's job.
+		dir := 1
+		if msg.String() == "ctrl+up" {
+			dir = -1
+		}
+		if li, ok := v.changeInFile(v.curLine, dir); ok {
+			v.setCursorLine(li, body)
+			v.syncStackTitle()
+		} else {
+			m.diffNotice = i18n.T("▸ no more changes in this file — n/p step files")
+		}
+		nm, cmd := m.pumpStack()
+		return nm, cmd, true
 	}
 	return m, nil, false
 }

@@ -41,9 +41,46 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Notes
 
-- Review notes, in-view hunk staging and the changes-only fold stay
-  single-file for now; press `S` to go back to one file for them. The stacked
-  view's own model is built so each attaches per file later.
+- In-view hunk staging and the changes-only fold stay single-file for now;
+  press `S` to go back to one file for them. The stacked view's own model is
+  built so each attaches per file later.
+
+## Review notes inside the stacked diff
+
+### Added
+
+- **Review notes work file by file inside a stacked diff.** Every file of the
+  stack carries its own note address, so `c` adds a note against the file
+  under the cursor, `E` edits and `R` replies there, and each note box is
+  drawn under its own file's line — never under another file that happens to
+  share the line number.
+- **`}` / `{` walk note to note across the whole stack.** When the next note
+  is in a file that is folded, the file unfolds; when it is in a file that has
+  not been read yet, that file is fetched and the cursor lands on the note as
+  soon as it arrives. Nothing has to be armed: every file of the list is
+  already in the view.
+- **A link or a steering navigate lands on the LINE.** `gg open <link>` and
+  `gg session navigate` with a line now put the cursor on that line inside the
+  stack, rather than at the file's header — fetching the file first if it has
+  not been read. Leaving the stack with `S` likewise keeps the line you were
+  reading instead of dropping you on the file's first change.
+- **`List notes…` covers the whole stack**, one row per thread with its file
+  named, and jumping to one unfolds its file. `Remove all notes…` still acts
+  on ONE address, so it clears the file under the cursor and is offered only
+  while that file has notes.
+- **`ctrl+↑` / `ctrl+↓` step change to change inside the file you are in.**
+  Stacked, `n`/`p` step whole files, so the change walk moves one scope in;
+  it stops at the file's ends rather than spilling into the next file.
+- The footer gains `[c}{] note` in the stacked view, and the `?` help
+  describes both the per-file notes and the in-file change walk.
+
+### Fixed
+
+- A conflicted file's header in a stack no longer shows `+n −n` counts: its
+  body is the "open the resolver" line, not a diff.
+- `tui-capture.sh` (dev tool) takes `--state <dir>` and isolates
+  `XDG_STATE_HOME` by default, so a capture can no longer write the
+  developer's own machine-local UI memory.
 
 ## TUI status bar names the commit's author
 

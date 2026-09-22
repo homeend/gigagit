@@ -147,8 +147,10 @@ func diffHintFor(long longMode, stacked bool) string {
 	if stacked {
 		// The stack's own line: the keys that only exist here (file steps,
 		// folds, the file list, the way back to one file) replace the ones
-		// that do not apply (notes, the line selection's side keys).
-		return i18n.T("[↑↓/jk] scroll  [/] find  [n/p] file  [-/_] fold  [J] files  [S] single  [f] part  [^w] %s", mode) + pan + i18n.T("  [h/b] hist  [esc] back")
+		// that do not apply (the line selection's side keys). Notes DO work
+		// per file (plan 4a), so they keep their chip; the in-file change
+		// walk (ctrl+↑/↓) has no room left and lives in the context help.
+		return i18n.T("[↑↓/jk] scroll  [/] find  [n/p] file  [c}{] note  [-/_] fold  [J] files  [S] single  [f] part  [^w] %s", mode) + pan + i18n.T("  [h/b] hist  [esc] back")
 	}
 	return i18n.T("[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] %s", mode) + pan + i18n.T("  [h/b] hist  [esc] back")
 }

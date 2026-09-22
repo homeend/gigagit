@@ -26,7 +26,11 @@ const noteListDot = 2
 // when the popup is narrow, and so the filter matches the note's own text
 // rather than whatever the layout happened to produce.
 type noteListEntry struct {
-	rootID  string
+	rootID string
+	// path names the entry's FILE, set only for a stack: the list then covers
+	// every file at once, so a bare "new:15" would not say where it lives.
+	path    string
+	file    int    // the stack file index the jump unfolds and lands in
 	anchor  string // "new:15" / "old:15-23"
 	author  string
 	summary string
@@ -44,7 +48,11 @@ type noteListEntry struct {
 // parts are laid out first and the summary takes whatever is left, so the reply
 // count survives a narrow popup and only the free text is cut.
 func (e noteListEntry) line(w int) string {
-	head := "◆ " + e.anchor + "  "
+	head := "◆ "
+	if e.path != "" {
+		head += e.path + " "
+	}
+	head += e.anchor + "  "
 	if e.forge {
 		head += i18n.T("review") + "  "
 	}
@@ -73,6 +81,13 @@ func (e noteListEntry) line(w int) string {
 // agent-written ones the `a` layer may currently be hiding in the diff body:
 // the list is the inventory of what is stored on this file.
 func noteListEntries(ns []domain.ResolvedNote) []noteListEntry {
+	return noteListEntriesIn(ns, "", 0)
+}
+
+// noteListEntriesIn is noteListEntries for ONE file of a stack: its rows carry
+// the file's path and index, so the list reads across files and the jump knows
+// which one to unfold.
+func noteListEntriesIn(ns []domain.ResolvedNote, path string, file int) []noteListEntry {
 	out := make([]noteListEntry, 0, len(ns))
 	for _, r := range ns {
 		anchor := string(r.Note.Side) + ":" + strconv.Itoa(r.Range[0])
@@ -86,6 +101,8 @@ func noteListEntries(ns []domain.ResolvedNote) []noteListEntry {
 		summary := sanitizeLine(r.Note.Summary)
 		out = append(out, noteListEntry{
 			rootID:  r.Note.ID,
+			path:    path,
+			file:    file,
 			anchor:  anchor,
 			author:  author,
 			summary: summary,
@@ -93,7 +110,7 @@ func noteListEntries(ns []domain.ResolvedNote) []noteListEntry {
 			stale:   r.Status == model.NoteStale,
 			agent:   r.Note.Source == model.NoteSourceAgent,
 			forge:   r.Note.Source == model.NoteSourceForge, resolved: model.NoteHasTag(r.Note, model.NoteTagResolved),
-			filter: strings.ToLower(summary + "\x00" + author),
+			filter: strings.ToLower(summary + "\x00" + author + "\x00" + path),
 		})
 	}
 	return out
@@ -134,13 +151,39 @@ func (m Model) diffHasNotes() bool {
 		return false
 	}
 	v := m.diffLayer()
-	return v != nil && len(v.notes) > 0
+	if v == nil {
+		return false
+	}
+	if v.stk != nil {
+		for i := range v.stk.files {
+			if len(v.notesOf(i)) > 0 {
+				return true
+			}
+		}
+		return false
+	}
+	return len(v.notes) > 0
 }
 
 // openNotesList pushes the list over the diff.
 func (m Model) openNotesList() (tea.Model, tea.Cmd) {
 	v := m.diffLayer()
-	if v == nil || len(v.notes) == 0 {
+	if v == nil {
+		return m, nil
+	}
+	if v.stk != nil {
+		// A stack's list is the whole change set's inventory, file by file in
+		// stream order; each row names its file.
+		var entries []noteListEntry
+		for i := range v.stk.files {
+			entries = append(entries, noteListEntriesIn(v.notesOf(i), v.stk.files[i].path, i)...)
+		}
+		if len(entries) == 0 {
+			return m, nil
+		}
+		return m.pushLayer(&notesListPopup{path: v.title, entries: entries}), nil
+	}
+	if len(v.notes) == 0 {
 		return m, nil
 	}
 	return m.pushLayer(&notesListPopup{path: v.title, entries: noteListEntries(v.notes)}), nil
@@ -319,7 +362,22 @@ func (m Model) gotoNote(rootID string) (Model, bool) {
 	if v == nil {
 		return m, false
 	}
+	// Stacked, the thread belongs to ONE file: it is looked for in every
+	// file's own notes, and its file is unfolded before the anchor is
+	// resolved — a folded file has no lines to land on.
+	file := -1
 	thread := func() (domain.ResolvedNote, bool) {
+		if v.stk != nil {
+			for i := range v.stk.files {
+				for _, r := range v.notesOf(i) {
+					if r.Note.ID == rootID {
+						file = i
+						return r, true
+					}
+				}
+			}
+			return domain.ResolvedNote{}, false
+		}
 		for _, r := range v.notes {
 			if r.Note.ID == rootID {
 				return r, true
@@ -327,12 +385,20 @@ func (m Model) gotoNote(rootID string) (Model, bool) {
 		}
 		return domain.ResolvedNote{}, false
 	}
+	if _, ok := thread(); ok && file >= 0 && v.stk.files[file].collapsed {
+		v.stk.files[file].collapsed = false
+		v.rebuild()
+	}
 	find := func() (int, bool) {
 		r, ok := thread()
 		if !ok {
 			return 0, false
 		}
-		li, _ := v.noteAnchorLine(r)
+		lo, hi := 0, len(v.lines)-1
+		if file >= 0 {
+			lo, hi = v.fileLineRange(file)
+		}
+		li, _ := v.noteAnchorLineIn(lo, hi, r)
 		return li, li >= 0
 	}
 	// The list is an inventory: it offers agent threads even while `a` hides
@@ -356,5 +422,6 @@ func (m Model) gotoNote(rootID string) (Model, bool) {
 	body := m.diffBodyRows()
 	v.setCursorLine(li, body)
 	v.revealCursorNotes(body)
+	v.syncStackTitle()
 	return m, true
 }

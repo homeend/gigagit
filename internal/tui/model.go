@@ -166,6 +166,10 @@ type Model struct {
 	// the next noted file asynchronously, so the note to sit on is not known
 	// until that file's notes arrive (notesLoadedMsg). nil = nothing parked.
 	noteLand *noteLanding
+	// diffLand parks the LINE a re-opened single diff owes the reader: leaving
+	// a stack with S re-opens the file asynchronously, and a fresh view lands
+	// on its first change block, not on the line being read. nil = nothing.
+	diffLand *lineLanding
 
 	// filesPreviewSet / filesPreviewCounts are the open preview's note scope
 	// and its per-path badge counts; nil/empty when the files view is not
@@ -534,9 +538,41 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyStackStats(msg), nil
 	case stackFileMsg:
 		// One file of the open stack arrived (diff_stack.go). Stale
-		// generations are dropped inside applyStackFile.
-		m = m.applyStackFile(msg)
-		return m.pumpStack()
+		// generations are dropped inside applyStackFile, which hands back the
+		// command resolving that file's own review notes.
+		m, ncmd := m.applyStackFile(msg)
+		// A parked steer lands HERE for a stack: its files arrive as
+		// stackFileMsg, never as the diffMsg the single-file view waits on.
+		var scmd tea.Cmd
+		if dv := m.diffLayer(); dv != nil {
+			m, scmd = m.drainPendingDiff(dv)
+		}
+		nm, pcmd := m.pumpStack()
+		return nm, tea.Batch(ncmd, scmd, pcmd)
+	case stackNotesMsg:
+		// One stacked file's review notes arrived. Every file of a stack
+		// resolves its own, against the address its own loader stamped.
+		dv := m.diffLayer()
+		if dv == nil || dv.stk == nil || msg.gen != dv.stk.gen || msg.err != nil {
+			return m, nil // closed, rebuilt meanwhile, or best-effort failure
+		}
+		body := m.diffBodyRows()
+		hold := dv.anchorAt(dv.curLine)
+		wasVisible := dv.cursorVisible(body)
+		dv.setNotesFor(msg.idx, msg.notes)
+		dv.rebuild()
+		dv.curLine = dv.lineAt(hold)
+		dv.scroll(0, body)
+		// A }/{ step into this file parked its landing: the note it must sit
+		// on only exists now. It supersedes the re-anchor above.
+		var landed bool
+		if m, landed = m.drainStackLanding(msg.idx, body); landed {
+			return m, nil
+		}
+		if wasVisible {
+			dv.revealCursorNotes(body)
+		}
+		return m, nil
 	case diffMsg:
 		dv := m.diffLayer()
 		if dv == nil || msg.tag != m.diffTag {
@@ -580,6 +616,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// has just overwritten curLine and offset with the loader's values.
 		var scmd tea.Cmd
 		m, scmd = m.drainPendingDiff(dv)
+		// Leaving a stack (S) parked the line the reader was on: the view it
+		// named exists only now.
+		m = m.drainLineLanding(dv, msg.tag)
 		return m, tea.Batch(m.loadNotesCmd(), scmd)
 	case notesLoadedMsg:
 		dv := m.diffLayer()

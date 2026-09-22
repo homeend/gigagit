@@ -300,6 +300,8 @@ func helpContent() []contentLine {
 		r("-/_", i18n.T("stacked: fold / unfold the file under the cursor; _ folds every file (or unfolds them all when all are folded) — a list of more than 100 files opens folded")),
 		r("J", i18n.T("stacked: jump to a file of the stack (type to filter)")),
 		r("enter (stacked)", i18n.T("on a conflicted file's header: open the conflict resolver — a conflict has no plain diff, so it shows as a header only")),
+		r("ctrl+↑/↓ (stacked)", i18n.T("stacked: previous / next change INSIDE the file under the cursor (n/p step whole files there); it stops at the file's ends")),
+		r("c/E/R/}/{ (stacked)", i18n.T("stacked: review notes work per file — each file carries its own address, }/{ walk note to note across the whole stack (unfolding and loading a file to reach one), and List notes… covers every file while Remove all notes… clears the file under the cursor")),
 		r("", i18n.T("review notes, in-view hunk staging and the changes-only fold are single-file for now: press S to go back to one file for them")),
 		r("n/p", i18n.T("next / previous change (also ctrl+↓/↑; press again at the end/start to wrap around)")),
 		r("N/P", i18n.T("from the last / first change, press twice to step to the next / previous file in the list (a bottom-left cue advertises it; a notice names the new file)")),

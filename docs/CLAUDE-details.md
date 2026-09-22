@@ -1436,8 +1436,8 @@ scrolled to the file.
 - **The jump blocks ARE the headers.** `spliceStack` sets `v.blocks` to the
   header line indices, so `n`/`p`, the wrap arming, `focusBlock`,
   `deriveOrdinal` and `f`/`ctrl+w`'s re-anchor all step file to file with no
-  new navigation code. Change-block stepping inside one file is therefore
-  not available while stacked (press `S`).
+  new navigation code. Change-block stepping inside one file therefore moved
+  to `ctrl+↑`/`ctrl+↓` while stacked (plan 4a, `changeInFile`).
 - **Per-file data lives on the file.** `stackFile.d` is the per-file view one
   of the ORDINARY single-file loaders built (`treeFileLoad` — factored out of
   `openDiffForFileLine` — or `loadStatusDiffCmd`). Syntax runs are indexed by
@@ -1460,10 +1460,8 @@ scrolled to the file.
   the header's line number inert on a header through the existing `hadRow`
   convention. `v.title` is kept synced to the cursor's file, so `h`, `b`,
   `e`, the copy rows, export and bookmarks need no stack awareness.
-- **Notes are single-file for now** (follow-up 4a): `noteAddr` stays zero on
-  a stack and `c`/`E`/`R`/`}`/`{`/`o`/`O` post "press S for the single-file
-  view" rather than anchoring every file's notes onto file 0 — `lineAnchor`
-  matches by line NUMBER.
+- **Notes are per file** (plan 4a, below): a stack's own `noteAddr` stays
+  zero, and every note surface reads the CURSOR's file instead.
 - **Working tree.** A stack is ONE section (Files or Staged);
   `reconcileStatusStack` hangs off `withStatus` (the one status write point):
   gone files drop, new ones are inserted in list order, a file already read
@@ -1480,6 +1478,65 @@ scrolled to the file.
 - **Footer trade:** `[e] edit` left the diff footer for `[S] stack` (it keeps
   its `.` menu and help rows) and "notes" lost its plural; the stacked view
   has its OWN footer line. `diffHintFor(long, stacked)`.
+
+### Review notes inside a stack (plan 4a, 2026-09-23)
+
+Spec §11 item 1, plan `docs/superpowers/plans/2026-09-22-stacked-notes.md`.
+The TUI half needed no new data plumbing: `stackFile.d` is the single-file
+view the file's ORDINARY loader built, so its `noteAddr`, `previewSet` and
+rows are that loader's stamps — one file deeper than before, same rule.
+
+- **Every anchor is scoped to a file.** `lineAnchorIn(lo, hi, …)` and
+  `noteAnchorLineIn` replaced the whole-stream searches, and `noteRowIndex`
+  runs once per file over `notesOf(i)` inside `fileLineRange(i)`. Without
+  that, line numbers repeat (every file has a line 12) and the first file
+  carrying the number collects every file's notes. A forge FILE-level note
+  anchors on its own file's first body line, not on the stack's.
+- **`stackNotesMsg`, never `notesLoadedMsg`.** The single-file message is
+  gated on the view's ONE `diffTag` and replaces the whole view's notes; in a
+  stack that drops every answer but the last and writes it over file 0 — the
+  same trap `stackFileMsg` avoided for `diffMsg`. `applyStackFile` fires
+  `stackNotesCmd` for the file that just arrived; `loadNotesCmd` fans out over
+  every LOADED file, which carries each existing refresh site (the `srcNotes`
+  arrival, a mutation, a PR re-poll) into the stack unchanged.
+- **`curNoteView()` is the accessor** the design reserved: the cursor's
+  `stk.files[curFile()].d`, or the view itself. `diffNoteAddress`,
+  `previewNoteSet` and `previewNoteScope` read it, so `c`/`E`/`R` act on the
+  file under the cursor. Notes stay inert exactly where they are inert
+  single-file — a file whose loader stamped no address (every two-sided
+  compare). No stack-specific refusal exists any more.
+- **`}` / `{` cross the stack.** The in-view walk already sees every loaded
+  file's notes; `stackNoteStep` handles the rest — the next file that carries
+  notes (`notedStackFile`: its resolved notes, else `NoteCounts`, which
+  answers WITHOUT the file's diff), unfolded and queued, with the landing
+  parked on `diffStack.land`. Nothing is armed: a stack holds every file of
+  the list already, so there is no file to step TO.
+- **`stackLanding` is one parking slot for two gestures**: `dir != 0` = this
+  file's first/last note (`}`/`{`), `no > 0` = this exact line (a `gg://`
+  link, `gg session navigate`). `drainStackLanding` consumes it when that
+  file's rows — and, for a note landing, its notes — are in the stream. A
+  note landing that finds nothing KEEPS the landing (its notes are still in
+  flight); a line landing clears it.
+- **`landSteer` resolves the file first** when stacked, and re-reads its
+  bounds on EVERY probe: `expandFoldFor` lengthens the stream, so a range
+  captured up front cuts the search short. A parked steer reaches a stack
+  through the `stackFileMsg` handler (`drainPendingDiff`), because a stack's
+  files never arrive as `diffMsg`.
+- **Leaving with `S` keeps the line.** `unstack` parks a `lineLanding`
+  (`Model.diffLand`, tag-gated) that the `diffMsg` handler drains, because
+  the single view is re-opened asynchronously and lands on its first change.
+- **The notes LIST covers the stack**, one row per thread with its file named
+  (`noteListEntriesIn`), and `gotoNote` unfolds the thread's file before
+  anchoring inside it. `Remove all notes…` is per ADDRESS, so it stays the
+  CURSOR's file and is not offered while that file has none.
+- **Footer:** the stacked line gains `[c}{] note` and lands on exactly 140
+  columns; `ctrl+↑`/`ctrl+↓` had no room and live in the `?` help.
+- **Gotchas found in verification:** a conflicted header must show no counts
+  (its body is the resolver line); `tui-capture.sh` now isolates
+  `XDG_STATE_HOME` itself (`--state`, `env` INSIDE the tmux command — an
+  exported variable never reaches the pane), and a capture re-run in the same
+  state dir inherits the pref the previous run's `S` wrote, so a snapshot can
+  silently exercise the single-file path instead.
 
 
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)

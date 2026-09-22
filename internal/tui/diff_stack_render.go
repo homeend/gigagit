@@ -39,6 +39,9 @@ func (m Model) stackRow(v *diffView, dr dRow, w int, onCursor bool) string {
 	}
 	text := mark + " " + f.status + "  " + name
 	switch {
+	case f.conflict:
+		// A conflicted file's body is the resolver line, not a diff: a numstat
+		// total there would name lines the header cannot show.
 	case f.bin || (f.d != nil && f.d.binary):
 		text += "  " + i18n.T("bin")
 	case f.counted:

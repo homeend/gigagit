@@ -53,7 +53,13 @@ Previews row onto another to start the comparison — the TUI's twin is space /
 of a change set in one scroll, header + diff per file, the symmetric
 comparison included — which the TUI now has too, with its own keys: `n`/`p`
 step file to file where the web uses `j`/`k`, home/end are the whole stack's
-ends, `J` lists the files, and `-`/`_` fold, as on the web) · **pull
+ends, `J` lists the files, and `-`/`_` fold, as on the web; **TUI only for
+now:** review notes work per file inside a stack — `c`/`E`/`R` act on the
+file under the cursor, `}`/`{` walk note to note across the whole stack
+(unfolding and loading a file to reach one), a link or a `gg session
+navigate` lands on the LINE rather than the file header, and `ctrl+↑`/`↓`
+step change to change inside one file; the browser's stack still sends you
+back to the single file for notes) · **pull
 requests** (read-only: list, fetch + open the PR diff, copy URL, forget,
 `[refresh] prs` poll and ⟳, review threads inside the diff as read-only note
 boxes, the details overlay — the TUI's PR hub — the comment re-poll, and the
