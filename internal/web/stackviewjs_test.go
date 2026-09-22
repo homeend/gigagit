@@ -215,3 +215,88 @@ func TestStackFilesPanOnTheirOwn(t *testing.T) {
 		t.Error("stackview.js mounts the pane-wide bars over the whole stack again")
 	}
 }
+
+// Review notes in a stack (plan 4a): every file carries its OWN note address,
+// so a note written inside a stack is filed exactly where the same note
+// written one file at a time would be. The single-file openers and the stack
+// must therefore build that context with the SAME function — a second builder
+// would drift silently, and the drift is a note filed against the wrong file.
+func TestStackNoteContextIsShared(t *testing.T) {
+	t.Parallel()
+	files := readStatic(t, "files.js")
+	view := readStatic(t, "stackview.js")
+
+	for _, fn := range []string{"function commitDiffCtx(f)", "function statusDiffCtx(f)", "function rowNoteCtx(f)"} {
+		if !strings.Contains(files, fn) {
+			t.Fatalf("files.js: %s is gone — the stack builds its slots' contexts with it", fn)
+		}
+	}
+	if !strings.Contains(files, "state.diffCtx = commitDiffCtx(f);") || !strings.Contains(files, "state.diffCtx = statusDiffCtx(f);") {
+		t.Fatal("files.js: the single-file openers must use the shared context builders")
+	}
+	if !strings.Contains(view, "s.ctx = rowNoteCtx(s.f)") {
+		t.Fatal("stackview.js: a slot's note context must come from rowNoteCtx — the same door openFile uses")
+	}
+
+	// The renderer takes the context EXPLICITLY. A module-level "current slot"
+	// would race: a stack paints one slot while another's notes are in flight.
+	if !strings.Contains(files, "function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null)") {
+		t.Fatal("files.js: diffHTML must take the note context as a parameter")
+	}
+	if !strings.Contains(view, "diffHTML(s.diff, $(\"diff-pane\").clientWidth, notesArmed(nc.ctx), s.folds, nc)") {
+		t.Fatal("stackview.js: a slot must paint with its own note context")
+	}
+
+	// One address per file means there is no single re-read: a write, a sweep
+	// or a live notes event fans out over the loaded slots.
+	if !strings.Contains(files, "if (state.stack) return refreshStackNotes();") {
+		t.Fatal("files.js: fetchNotes must fan out over a stack's slots")
+	}
+	if !strings.Contains(view, "async function refreshStackNotes()") || !strings.Contains(view, "function activeDiff()") {
+		t.Fatal("stackview.js: refreshStackNotes and activeDiff are the stack's note accessors")
+	}
+
+	// The marked row says which FILE the reader is in.
+	if !strings.Contains(files, "const sec = tr.closest(\".stk-file\");") {
+		t.Fatal("files.js: markDiffRow must record the row on its own slot")
+	}
+	// …and the note prompt reads that slot, not the globals.
+	add := jsFunc(t, "files.js", "addNotePrompt")
+	if !strings.Contains(add, "const ad = activeDiff();") || !strings.Contains(add, "noteQuery(ad.ctx)") {
+		t.Fatal("files.js: addNotePrompt must act on the active slot's address")
+	}
+}
+
+// Both note gates must read the ACTIVE slot's context, not the single-file
+// view's global one: state.diffCtx is null while a stack is up, so a global
+// gate leaves every note key and every row click dead inside a stack — the
+// exact defect the browser probe caught twice.
+func TestStackNoteGatesReadTheActiveSlot(t *testing.T) {
+	t.Parallel()
+	keys := readStatic(t, "keys.js")
+	if !strings.Contains(keys, "notesArmed(activeDiff().ctx)") {
+		t.Fatal("keys.js: noteKey must gate on the active slot's context")
+	}
+	files := readStatic(t, "files.js")
+	if !strings.Contains(files, "if (!notesArmed(rowSlotCtx(handle || e.target.closest(\"tr\")) || state.diffCtx)) return;") {
+		t.Fatal("files.js: the diff-body click must gate on the CLICKED row's own file")
+	}
+}
+
+// A gg:// link or a steering navigate with a LINE must land inside the named
+// file's own section: line numbers repeat across a stack, so the pane-wide
+// row lookup would mark whichever file carries that number first.
+func TestStackLineLandingIsPerFile(t *testing.T) {
+	t.Parallel()
+	view := readStatic(t, "stackview.js")
+	live := readStatic(t, "live.js")
+	if !strings.Contains(view, "async function landStackLine(path, side, line)") {
+		t.Fatal("stackview.js: landStackLine is the stack's line landing")
+	}
+	if !strings.Contains(view, "const sec = sectionEl(k);") || !strings.Contains(view, "sec.querySelector(`tr[data-side=") {
+		t.Fatal("stackview.js: the row must be looked for inside the target file's OWN section")
+	}
+	if !strings.Contains(live, "await landStackLine(s.file, side, s.line);") {
+		t.Fatal("live.js: a landing with a line must go through the stack's own lander")
+	}
+}

@@ -7,7 +7,7 @@ import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stag
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { addNotePrompt, cycleFilesSort, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
-import { collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
+import { activeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { toast } from "./toast.js";
 import { openPalette } from "./palette.js";
 import { branchFilterKey } from "./branchfilter.js";
@@ -84,8 +84,11 @@ function stepCommitCursor(delta) {
 // The modifier check is the load-bearing half: `c` and `a` are ctrl+c (copy a
 // selected diff line — the commonest thing anyone does in a diff viewer) and
 // ctrl+a (select all), and this handler sees those before the browser acts.
+// A stack has one address per FILE, so the gate reads the ACTIVE slot's
+// context (activeDiff), not the single-file view's global one — which is null
+// while a stack is up and would leave every note key dead there.
 function noteKey(e, key) {
-  return e.key === key && !e.ctrlKey && !e.metaKey && !e.altKey && notesArmed();
+  return e.key === key && !e.ctrlKey && !e.metaKey && !e.altKey && notesArmed(activeDiff().ctx);
 }
 
 

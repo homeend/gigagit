@@ -11,6 +11,7 @@ import { attnKey, getJSON, runOnce, state } from "./core.js";
 import { isServerDown, onServerUp, serverSeen, serverShutdown, suspectServerDown } from "./serverdown.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { refreshLinkCompare, runLinkCompare } from "./linkcompare.js";
+import { landStackLine } from "./stackview.js";
 import { fetchNotes, markDiffRow, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
 import { fetchBranches, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved, revealSavedSet } from "./previews.js";
@@ -432,6 +433,12 @@ async function steerNavigateLand(s) {
   // A side-by-side `change` row anchors on its NEW side, so an old-side
   // landing falls back to the row carrying that left number; a line the
   // changes-only view folded away is unfolded first.
+  // A stack holds many files: the row has to be found inside the TARGET
+  // file's own section, which may still need unfolding or fetching.
+  if (state.stack) {
+    await landStackLine(s.file, side, s.line);
+    return;
+  }
   const tr = revealDiffRow(side, s.line);
   if (!tr) return;
   markDiffRow(tr, side, s.line);

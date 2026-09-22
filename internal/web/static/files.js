@@ -19,7 +19,7 @@ import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
-import { openStack, reconcileStack, rerenderStack, stackOn, teardownStack } from "./stackview.js";
+import { activeDiff, followInList, noteScope, openStack, reconcileStack, refreshStackNotes, rerenderStack, stackAllNotes, stackOn, teardownStack } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -1156,24 +1156,7 @@ async function openFile(i) {
   // A merge preview is the ONE compare whose new side is a real commit's
   // content (the source tip), so its rows ARE note-addressable — at the tip,
   // new side only. Every other compare stays notes:false.
-  const cmp = state.filesMode === "compare";
-  const prev = openPreviewCtx();
-  state.diffCtx = {
-    path: f.path,
-    rev: prev ? prev.tip : cmp ? state.compare.bHash : f.sha || state.fileSha,
-    state: "commit",
-    notes: !cmp || !!prev,
-    // The pair the gathered note set is read by: a preview note may have been
-    // written against an OLDER commit on the branch, so the query is the pair,
-    // never this one tip.
-    // pr (a number) marks a pull request's diff: its source/target are display
-    // names, so the note lane and the link builder must not read them as refs.
-    preview: prev ? previewCtx(prev) : null,
-    // links.js documents ctx.compare as THE refusal for a two-revision view;
-    // carrying it here means the diff-LINE copy-link path uses that documented
-    // guard too, instead of relying on notesArmed() to happen to be off.
-    compare: cmp,
-  };
+  state.diffCtx = commitDiffCtx(f);
   state.diffRow = null;
   state.notes = [];
   setDiffTitle(f.path);
@@ -1197,11 +1180,67 @@ async function openFile(i) {
 }
 
 
+// commitDiffCtx is the note context of ONE row of a commit / compare /
+// preview file list — what state.diffCtx becomes when that row is opened
+// alone. It is a function, not an inline literal, because a STACK builds the
+// same context per file (stackview.js): the two must never drift, or a note
+// written in a stack would be filed against a different address than the same
+// note written one file at a time.
+function commitDiffCtx(f) {
+  const cmp = state.filesMode === "compare";
+  const prev = openPreviewCtx();
+  return {
+    path: f.path,
+    rev: prev ? prev.tip : cmp ? state.compare.bHash : f.sha || state.fileSha,
+    state: "commit",
+    notes: !cmp || !!prev,
+    // The pair the gathered note set is read by: a preview note may have been
+    // written against an OLDER commit on the branch, so the query is the pair,
+    // never this one tip.
+    // pr (a number) marks a pull request's diff: its source/target are display
+    // names, so the note lane and the link builder must not read them as refs.
+    preview: prev ? previewCtx(prev) : null,
+    // links.js documents ctx.compare as THE refusal for a two-revision view;
+    // carrying it here means the diff-LINE copy-link path uses that documented
+    // guard too, instead of relying on notesArmed() to happen to be off.
+    compare: cmp,
+  };
+}
+
+
+// statusDiffCtx is commitDiffCtx's twin for a working-tree entry. A conflicted
+// row has no diff at all (the picker opens instead), so it has no context.
+function statusDiffCtx(f) {
+  if (f.section === "conflicts") return null;
+  return { path: f.path, rev: "", state: sectionNoteState(f.section) };
+}
+
+
+// rowNoteCtx is the note context of a file-list row in the CURRENT mode — the
+// one door a stack's slot uses, mirroring openFile's own dispatch. null means
+// "not note-addressable", which is exactly where the single-file view leaves
+// notes inert too: a two-revision compare, a frozen entry compare, a link row
+// that names its own right side, and every symmetric row.
+function rowNoteCtx(f) {
+  if (state.filesMode === "status") return statusDiffCtx(f);
+  if (state.filesMode === "compare" && state.compare && state.compare.links) {
+    if (symActive()) return null;
+    // A pair's row is note-addressable when its new side IS the file at b.
+    const pair = !f.right_spec ? pairCtx() : null;
+    return pair
+      ? { path: f.path, rev: pair.b, state: "commit", notes: true, compare: true, preview: pairNoteCtx(pair) }
+      : null;
+  }
+  if (state.filesMode === "compare" && state.compare && state.compare.frozen) return null;
+  if (state.filesMode === "entry") return null;
+  return commitDiffCtx(f);
+}
+
+
 async function openStatusDiff(i) {
   clearDiffHunks();
   const f = state.statusEntries[i];
-  state.diffCtx =
-    f.section === "conflicts" ? null : { path: f.path, rev: "", state: sectionNoteState(f.section) };
+  state.diffCtx = statusDiffCtx(f);
   state.diffRow = null;
   state.notes = [];
   setDiffTitle(f.path);
@@ -1413,7 +1452,12 @@ function foldRowHTML(it, cols) {
 // anchor, the clicked row's `cur` class, and the ◆ rows themselves. It is OFF
 // by default so the file-history overlay — a different file at a different
 // revision — stays a plain table rather than borrowing the open diff's notes.
-function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
+// nctx is WHOSE notes these rows carry: {ctx, notes, row}. It is passed
+// explicitly, never read from a module-level "current slot", because a stack
+// paints one slot while another slot's notes are still in flight — a shared
+// variable would race. Omitted, it is the single-file view's own globals.
+function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null) {
+  const nc = nctx || globalNoteCtx();
   if (d.binary) return `<div class="notice">binary file</div>`;
   if (d.too_large) return `<div class="notice">diff too large</div>`;
   const rows = d.rows || [];
@@ -1421,7 +1465,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
   // below read the same either way.
   const anchor = (side, no) => (notesOn && no ? ` data-side="${side}" data-no="${no}"` : "");
   const curCls = (side, no) =>
-    notesOn && no && state.diffRow && state.diffRow.side === side && state.diffRow.no === no ? " cur" : "";
+    notesOn && no && nc.row && nc.row.side === side && nc.row.no === no ? " cur" : "";
   // A split row is "cur" when the mark sits on EITHER of its sides.
   const curClsBoth = (r) => curCls("new", r.right_no) || curCls("old", r.left_no);
   // attnCls: the row class a `gg session highlight` paints. A CLASS on the tr,
@@ -1436,7 +1480,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
   // table. Like curCls it is gated on notesOn, so the file-history overlay —
   // a different file at a different revision, rendered through this same
   // function — never borrows the open diff's bands.
-  const attnMarks = (notesOn && state.attention.size && state.attention.get(attnKey(state.diffCtx))) || null;
+  const attnMarks = (notesOn && state.attention.size && nc.ctx && state.attention.get(attnKey(nc.ctx))) || null;
   const attnCls = (side, no) => {
     if (!no || !attnMarks) return "";
     for (const m of attnMarks) {
@@ -1448,7 +1492,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
   const after = (cols, ...pairs) => {
     if (!notesOn) return "";
     let out = "";
-    for (const [side, no] of pairs) out += noteRowsHTML(side, no, cols);
+    for (const [side, no] of pairs) out += noteRowsHTML(side, no, cols, nc);
     return out;
   };
   // An all-new or all-deleted file renders single-column: a side-by-side
@@ -1462,11 +1506,11 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
   // above (a fold row has no line numbers to vote with).
   let items = rows;
   if (state.diffPartial) {
-    const noted = (side, no) => !!no && state.notes.some((n) => n.side === side && n.line === no);
+    const noted = (side, no) => !!no && nc.notes.some((n) => n.side === side && n.line === no);
     const pinned = (r) => noted("new", r.right_no) || noted("old", r.left_no) || !!attnClsBoth(r);
     items = collapseDiffRows(rows, open, notesOn ? pinned : null);
     if (items === null) {
-      const lead = notesOn ? fileNoteRowsHTML(1) : "";
+      const lead = notesOn ? fileNoteRowsHTML(1, nc) : "";
       return (
         (lead ? `<table class="diff">${lead}</table>` : "") +
         `<div class="notice">no changed lines — a mode or whitespace-only change; ` +
@@ -1496,7 +1540,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
   const colgroup =
     cols === 2 ? `<col class="no"><col>` : cols === 3 ? `<col class="no"><col class="no"><col>` : `<col class="no"><col><col class="no"><col>`;
   let html = `<table class="diff"><colgroup>${colgroup}</colgroup>`;
-  if (notesOn) html += fileNoteRowsHTML(cols);
+  if (notesOn) html += fileNoteRowsHTML(cols, nc);
   if (pureAdd || pureDel) {
     const side = pureAdd ? "r" : "l";
     const nside = pureAdd ? "new" : "old";
@@ -1941,52 +1985,52 @@ function jumpToFirstChange() {
 // (its old side is the compared revision, not bHash^), nor is an entry diff
 // against a frozen copy git cannot read; both leave `notes: false` (or no
 // diffCtx at all). Rows, keys and ◆ badges all gate on this one predicate.
-function notesArmed() {
-  return !!state.diffCtx && state.diffCtx.notes !== false;
+function notesArmed(ctx = state.diffCtx) {
+  return !!ctx && ctx.notes !== false;
 }
 
 // noteQuery builds the /api/notes query for the open diff. Working-tree diffs
 // carry their section as `state`; a commit diff carries rev + state=commit.
-function noteQuery() {
-  if (!notesArmed()) return null;
-  const q = new URLSearchParams({ path: state.diffCtx.path });
-  if (state.diffCtx.preview && state.diffCtx.preview.pr) {
+function noteQuery(ctx = state.diffCtx) {
+  if (!notesArmed(ctx)) return null;
+  const q = new URLSearchParams({ path: ctx.path });
+  if (ctx.preview && ctx.preview.pr) {
     // A pull request is named by its NUMBER, never by its sides: those are
     // display text (the head may live in a fork). rev and state ride along for
     // the WRITE, exactly as below — `c` on a PR diff adds a LOCAL note on the
     // fetched head.
-    q.set("n", String(state.diffCtx.preview.pr));
-    q.set("rev", state.diffCtx.rev);
+    q.set("n", String(ctx.preview.pr));
+    q.set("rev", ctx.rev);
     q.set("state", "commit");
     return q;
   }
-  if (state.diffCtx.preview && state.diffCtx.preview.pair) {
+  if (ctx.preview && ctx.preview.pair) {
     // A commit pair has no names: it is read by its two ids. rev and state
     // ride along for the WRITE — a pair note is an ordinary note on b.
-    q.set("a", state.diffCtx.preview.pair.a);
-    q.set("b", state.diffCtx.preview.pair.b);
-    q.set("rev", state.diffCtx.rev);
+    q.set("a", ctx.preview.pair.a);
+    q.set("b", ctx.preview.pair.b);
+    q.set("rev", ctx.rev);
     q.set("state", "commit");
     return q;
   }
-  if (state.diffCtx.preview) {
+  if (ctx.preview) {
     // The preview gathers notes along the branch, so the READ is keyed on the
     // PAIR: a note written against an older commit still belongs here. rev and
     // state ride along unchanged because they are what the WRITE needs — a
     // preview note is an ordinary commit note on the source tip, and
     // addNotePrompt builds its post out of this same query.
-    q.set("source", state.diffCtx.preview.source);
-    q.set("target", state.diffCtx.preview.target);
-    q.set("rev", state.diffCtx.rev);
+    q.set("source", ctx.preview.source);
+    q.set("target", ctx.preview.target);
+    q.set("rev", ctx.rev);
     q.set("state", "commit");
     return q;
   }
-  if (state.diffCtx.state === "commit") {
-    if (!state.diffCtx.rev) return null;
-    q.set("rev", state.diffCtx.rev);
+  if (ctx.state === "commit") {
+    if (!ctx.rev) return null;
+    q.set("rev", ctx.rev);
     q.set("state", "commit");
   } else {
-    q.set("state", state.diffCtx.state || "unstaged");
+    q.set("state", ctx.state || "unstaged");
   }
   return q;
 }
@@ -2002,25 +2046,50 @@ function sectionNoteState(section) {
 }
 
 
-async function fetchNotes(rerender = true) {
-  const q = noteQuery();
-  if (!q) {
-    state.notes = [];
-    return;
-  }
+// notesFor READS one context's notes and writes nothing. It is the door a
+// stack's slot uses (stackview.js), so a file's notes are fetched the same way
+// whether it is read alone or inside a stack. null = this context has none to
+// read (not note-addressable).
+async function notesFor(ctx) {
+  const q = noteQuery(ctx);
+  if (!q) return null;
   // A pull request reads its own twin of the preview endpoint: the pair
   // endpoint resolves branch NAMES, and a PR's are display text (a fork's
   // branch, or worse a same-named local one).
+  const pv = ctx.preview;
+  const url = !pv ? "/api/notes?" : pv.pr ? "/api/pr/notes?" : pv.pair ? "/api/pair/notes?" : "/api/preview/notes?";
+  return await getJSON(url + q);
+}
+
+
+// noteCollapseKey identifies ONE open diff for the collapse set: a new file
+// (or revision) starts with the forge's resolved threads folded, a re-read of
+// the same one keeps what the reader folded by hand.
+function noteCollapseKey(ctx) {
+  return ctx.path + "\0" + (ctx.rev || ctx.state || "");
+}
+
+
+async function fetchNotes(rerender = true) {
+  // A stack has one address per FILE, so there is no single read to redo: each
+  // loaded slot re-reads its own (the TUI fans out the same way).
+  if (state.stack) return refreshStackNotes();
+  if (!noteQuery()) {
+    state.notes = [];
+    return;
+  }
   const prev = !!state.diffCtx.preview;
-  const pv = state.diffCtx.preview;
-  const url = !prev ? "/api/notes?" : pv.pr ? "/api/pr/notes?" : pv.pair ? "/api/pair/notes?" : "/api/preview/notes?";
   try {
-    const d = await getJSON(url + q);
+    const d = await notesFor(state.diffCtx);
+    if (!d) {
+      state.notes = [];
+      return;
+    }
     state.notes = d.notes || [];
     // The collapse set is per OPEN DIFF: a new file (or revision) starts with
     // the forge's resolved threads folded, while a re-read of the same diff —
     // a write, a comment re-poll — keeps what the reader folded by hand.
-    const key = state.diffCtx.path + "\0" + (state.diffCtx.rev || state.diffCtx.state || "");
+    const key = noteCollapseKey(state.diffCtx);
     if (state.noteCollapsedFor !== key) {
       state.noteCollapsedFor = key;
       state.noteCollapsed = seedCollapsed(state.notes);
@@ -2073,14 +2142,43 @@ async function refreshNoteCounts() {
 // Agent notes are skipped while the agent layer is off; user notes always
 // show — including a user reply under a hidden agent root (the TUI's rule:
 // the filter is per ROW, by that row's own source).
-function noteRowsHTML(side, no, cols) {
-  if (!no || !notesArmed() || !state.notes.length) return "";
+function noteRowsHTML(side, no, cols, nctx = null) {
+  const nc = nctx || globalNoteCtx();
+  if (!no || !notesArmed(nc.ctx) || !nc.notes.length) return "";
   let html = "";
-  for (const n of state.notes) {
+  for (const n of nc.notes) {
     if (n.side !== side || n.line !== no) continue;
-    html += noteBoxHTML(n, cols);
+    html += noteBoxHTML(n, cols, nc);
   }
   return html;
+}
+
+
+// noteSlotCtx is the note context of the slot a NOTE belongs to: a ◆ menu's
+// "copy gg link to this note" must name that note's own file.
+function noteSlotCtx(n) {
+  if (!state.stack || !n) return null;
+  const s = state.stack.slots.find((x) => (x.notes || []).some((m) => m.id === n.id));
+  return s ? s.ctx || null : null;
+}
+
+
+// rowSlotCtx is the note context of the stack slot a DOM row sits in, or null
+// when there is no stack (or the row is outside one).
+function rowSlotCtx(el) {
+  if (!el || !state.stack) return null;
+  const sec = el.closest(".stk-file");
+  if (!sec) return null;
+  const s = state.stack.slots[Number(sec.dataset.k)];
+  return s ? s.ctx || null : null;
+}
+
+
+// globalNoteCtx is the single-file view's note context: today's globals, in
+// the shape a stack's slot carries. activeDiff() (stackview.js) returns this
+// or the cursor slot's own.
+function globalNoteCtx() {
+  return { ctx: state.diffCtx, notes: state.notes || [], row: state.diffRow };
 }
 
 
@@ -2091,7 +2189,8 @@ function noteRowsHTML(side, no, cols) {
 // note visibly hangs off one version; the single-column layouts span the row.
 // With the agent layer off, agent-written parts drop out row by row; a thread
 // with nothing left renders nothing.
-function noteBoxHTML(n, cols) {
+function noteBoxHTML(n, cols, nctx = null) {
+  const nc = nctx || globalNoteCtx();
   const off = state.notesAgentOff;
   // A forge review thread is never the agent layer's to hide, whatever its
   // author is called.
@@ -2103,12 +2202,12 @@ function noteBoxHTML(n, cols) {
   // changed is the expected case, not an edge one — so the server sends that
   // word and the row wears a class of its own.
   const stale = n.status === "stale" || n.status === "outdated";
-  const prev = !!(state.diffCtx && state.diffCtx.preview);
+  const prev = !!(nc.ctx && nc.ctx.preview);
   const cls = prev ? "outdated" : "stale";
   const agent = n.source === "agent";
   const kind = n.read_only ? "forge" : agent ? "agent" : "user";
   const folded = state.noteCollapsed.has(n.id);
-  const title = noteTitle(n, state.diffCtx.path, prev, Date.now());
+  const title = noteTitle(n, nc.ctx ? nc.ctx.path : "", prev, Date.now());
   // A FORGE note is markdown, and the server sends it parsed (summary_md, md):
   // those trees are painted. A note written here is shown exactly as typed —
   // it carries no tree, so it falls to the escaped text.
@@ -2140,9 +2239,10 @@ function noteBoxHTML(n, cols) {
 
 // fileNoteRowsHTML is the whole-file threads (a forge comment on the file,
 // not on a line): they have no row to hang off, so they lead the table.
-function fileNoteRowsHTML(cols) {
-  if (!notesArmed()) return "";
-  return state.notes.filter((n) => n.file_level).map((n) => noteBoxHTML(n, cols)).join("");
+function fileNoteRowsHTML(cols, nctx = null) {
+  const nc = nctx || globalNoteCtx();
+  if (!notesArmed(nc.ctx)) return "";
+  return nc.notes.filter((n) => n.file_level).map((n) => noteBoxHTML(n, cols, nc)).join("");
 }
 
 
@@ -2158,12 +2258,13 @@ function previewCtx(po) {
 // unless they all already are.
 function toggleNoteCollapsed(id) {
   if (id == null) {
-    const on = !state.notes.every((n) => state.noteCollapsed.has(n.id));
-    setAllCollapsed(state.noteCollapsed, state.notes, on);
+    const all = stackAllNotes();
+    const on = !all.every((n) => state.noteCollapsed.has(n.id));
+    setAllCollapsed(state.noteCollapsed, all, on);
     for (const tr of noteRowEls()) tr.classList.toggle("collapsed", on);
     return;
   }
-  const root = state.notes.find((n) => n.id === id || (n.replies || []).some((r) => r.id === id));
+  const root = stackAllNotes().find((n) => n.id === id || (n.replies || []).some((r) => r.id === id));
   if (!root) return;
   const on = toggleCollapsed(state.noteCollapsed, root.id);
   const tr = noteRowEls().find((el) => el.dataset.note === root.id);
@@ -2188,7 +2289,22 @@ function markDiffRow(tr, side, no) {
   const prev = $("diff-body").querySelector("tr.cur");
   if (prev) prev.classList.remove("cur");
   tr.classList.add("cur");
-  state.diffRow = { side, no };
+  const row = { side, no };
+  state.diffRow = row;
+  // In a stack the marked row also says WHICH FILE the reader is in: the note
+  // keys act on that slot's address, so the row is recorded on it and the slot
+  // becomes the active one.
+  const sec = tr.closest(".stk-file");
+  if (state.stack && sec) {
+    const k = Number(sec.dataset.k);
+    const s = state.stack.slots[k];
+    if (s) {
+      for (const o of state.stack.slots) if (o !== s) o.row = null;
+      s.row = row;
+      state.stack.anchor = k;
+      followInList();
+    }
+  }
   // Marking a row is an explicit "I am looking HERE", so it outranks a
   // previous }/{ landing for nearestNote. stepNote re-claims the id right
   // after its own call.
@@ -2198,12 +2314,12 @@ function markDiffRow(tr, side, no) {
 
 // firstChangedRow is where `c` lands when nothing has been clicked: the first
 // changed row of the diff, which is what a reviewer means by "here".
-function firstChangedRow() {
-  for (const tr of diffChangeBlocks()) {
+function firstChangedRow(root = null) {
+  for (const tr of diffChangeBlocks(root)) {
     const no = Number(tr.dataset.no);
     if (no) return { side: tr.dataset.side, no };
   }
-  const any = $("diff-body").querySelector("tr[data-no]");
+  const any = (root || $("diff-body")).querySelector("tr[data-no]");
   return any ? { side: any.dataset.side, no: Number(any.dataset.no) } : null;
 }
 
@@ -2226,8 +2342,8 @@ function firstChangedRow() {
 // change is a pure deletion; anchoring on a context line still beats refusing
 // `c` outright. A file with no new-side row at all returns null, and the
 // caller keeps the old-side refusal.
-function firstNewSideRow() {
-  for (const head of diffChangeBlocks()) {
+function firstNewSideRow(root = null) {
+  for (const head of diffChangeBlocks(root)) {
     for (let tr = head; tr; tr = tr.nextElementSibling) {
       if (tr.classList.contains("note")) continue; // a ◆ box, not a diff row
       if (tr.classList.contains("same")) break; // the run ended
@@ -2235,7 +2351,7 @@ function firstNewSideRow() {
       if (tr.dataset.side === "new" && no) return { side: "new", no };
     }
   }
-  const any = $("diff-body").querySelector(`tr[data-no][data-side="new"]`);
+  const any = (root || $("diff-body")).querySelector(`tr[data-no][data-side="new"]`);
   return any ? { side: "new", no: Number(any.dataset.no) } : null;
 }
 
@@ -2247,7 +2363,7 @@ function noteRowEls() {
 
 // findNote resolves an id to its wire record, replies included.
 function findNote(id) {
-  for (const n of state.notes) {
+  for (const n of stackAllNotes()) {
     if (n.id === id) return n;
     for (const r of n.replies || []) if (r.id === id) return r;
   }
@@ -2333,21 +2449,23 @@ function noteWrite(label, path, body) {
 // addNotePrompt asks for a summary + optional rationale (the prompt's two-field
 // shape) and anchors the note on the clicked row, else the first changed row.
 function addNotePrompt() {
-  const q = noteQuery();
+  const ad = activeDiff();
+  const q = noteQuery(ad.ctx);
   if (!q) return;
-  let at = state.diffRow || firstChangedRow();
+  const scope = noteScope();
+  let at = ad.row || firstChangedRow(scope);
   if (!at) return;
   // A preview's old side is the MERGE BASE, which no stored address names, so
   // there is nothing there to anchor to (domain.ErrPreviewOldSide). The refusal
   // is here rather than at the server so the prompt never opens on a line the
   // write would reject afterwards.
-  if (state.diffCtx.preview && at.side === "old") {
+  if (ad.ctx.preview && at.side === "old") {
     // Nothing was CLICKED: the old side is just where firstChangedRow landed
     // (a file whose first change is a pure deletion), not a line the user
     // named. Fall forward to the file's first new-side row instead of
     // refusing a file that has a perfectly addressable side. An explicit
     // old-side click still gets the refusal — there the user meant that line.
-    const fwd = !state.diffRow && firstNewSideRow();
+    const fwd = !ad.row && firstNewSideRow(scope);
     if (fwd) at = fwd;
     if (at.side === "old") {
       opLine("notes in a preview anchor on the new side", true);
@@ -2456,9 +2574,12 @@ function rowSideAndLine(tr, td) {
 // notesArmed: on a comparison a marked row would promise a `c` that is inert.
 // (The ◆ menu needs no guard — a comparison renders no ◆ rows to right-click.)
 $("diff-body").addEventListener("click", (e) => {
-  if (!notesArmed()) return;
-  // A note's title line is its fold handle.
+  // The gate is the clicked ROW's own file in a stack (each carries its own
+  // address), and the single-file view's context otherwise — reading the
+  // global one here would leave every row unmarkable inside a stack.
   const handle = e.target.closest(".notetitle[data-collapse]");
+  if (!notesArmed(rowSlotCtx(handle || e.target.closest("tr")) || state.diffCtx)) return;
+  // A note's title line is its fold handle.
   if (handle && getSelection().isCollapsed) {
     toggleNoteCollapsed(handle.dataset.collapse);
     return;
@@ -2502,7 +2623,10 @@ $("diff-body").addEventListener("contextmenu", (e) => {
       if (line) rows.push({ label: "copy line", act: () => copyText(line, "line") });
     }
     const row = e.target.closest("tr[data-no]");
-    if (row && notesArmed()) {
+    // In a stack the link must name the ROW's own file, not whichever slot was
+    // active: a right-click is itself a "this line" gesture.
+    const rowCtx = rowSlotCtx(row) || state.diffCtx;
+    if (row && notesArmed(rowCtx)) {
       const td = e.target.closest("td");
       let { side, no } = rowSideAndLine(row, td);
       // A preview has no old side. A context row's LEFT cell still names a
@@ -2510,18 +2634,18 @@ $("diff-body").addEventListener("contextmenu", (e) => {
       // a deletion row has none, and linkFor degrades the link to the file
       // form (the user's ruling, 2026-09-16 — the TUI's cursor on a deletion
       // row copies the same file link).
-      if (side === "old" && state.diffCtx.preview) {
+      if (side === "old" && rowCtx.preview) {
         const rn = Number(row.dataset.rno || 0);
         if (rn) { side = "new"; no = rn; }
       }
-      const link = linkFor(state.repo, state.worktree, state.diffCtx, side, no);
+      const link = linkFor(state.repo, state.worktree, rowCtx, side, no);
       // Recorded like every other copy (Task 9): copyLink, never copyText.
       // The Desc names the FILE — a line link's row in `gg links` has to be
       // recognisable, and the line number is already in the link text.
       if (link)
         rows.push({
           label: "copy gg link to this line",
-          act: () => copyLink(link, linkDesc("file", (state.diffCtx && state.diffCtx.path) || "", "")),
+          act: () => copyLink(link, linkDesc("file", (rowCtx && rowCtx.path) || "", "")),
         });
     }
     if (!rows.length) return; // nothing of our own to say: keep the browser's menu
@@ -2553,11 +2677,11 @@ $("diff-body").addEventListener("contextmenu", (e) => {
         { label: "Edit note", act: () => editNotePrompt(n) },
         { label: "Reply…", act: () => replyNotePrompt(n) },
       ];
-  const nlink = linkFor(state.repo, state.worktree, state.diffCtx, n.side, n.line);
+  const nlink = linkFor(state.repo, state.worktree, noteSlotCtx(n) || state.diffCtx, n.side, n.line);
   if (nlink)
     noteRows.push({
       label: "copy gg link to this note",
-      act: () => copyLink(nlink, linkDesc("file", (state.diffCtx && state.diffCtx.path) || "", "")),
+      act: () => copyLink(nlink, linkDesc("file", ((noteSlotCtx(n) || state.diffCtx) || {}).path || "", "")),
     });
   noteRows.push(foldRow);
   // A forge review comment is read-only: copy its place, fold it, nothing else.
@@ -2776,11 +2900,13 @@ function stepFile(delta) {
 // in the rendered diff table (add/del/change rows; a unified changed pair
 // renders del+add adjacent — still one run). Derived from the live DOM so
 // it survives any render mode (side-by-side, unified, single-column).
-function diffChangeBlocks() {
+// root is the element the walk happens in: the whole diff pane, or ONE file's
+// section inside a stack (noteScope) when the gesture belongs to a file.
+function diffChangeBlocks(root = null) {
   // Note rows are not diff rows: they carry neither "same" nor a change kind,
   // so without this filter every ◆ row would read as the start of a change
   // block and the ‹/› stepper would walk the notes instead of the changes.
-  const rows = $("diff-body").querySelectorAll("table.diff tr:not(.note)");
+  const rows = (root || $("diff-body")).querySelectorAll("table.diff tr:not(.note)");
   const blocks = [];
   let inBlock = false;
   rows.forEach((tr) => {
@@ -3533,4 +3659,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };

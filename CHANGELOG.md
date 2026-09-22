@@ -52,7 +52,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Notes
 
-- In-view hunk staging and the changes-only fold stay single-file for now;
+- In-view search, hunk staging and the changes-only fold stay single-file for now;
   press `S` to go back to one file for them. The stacked view's own model is
   built so each attaches per file later.
 
@@ -84,6 +84,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   it stops at the file's ends rather than spilling into the next file.
 - The footer gains `[c}{] note` in the stacked view, and the `?` help
   describes both the per-file notes and the in-file change walk.
+- **The browser UI does the same.** Every file of a stack there loads its own
+  notes as its diff arrives and paints them under its own lines; clicking a
+  row marks it and makes that file the one `c` / `E` / `R` act on; `}` / `{`
+  step through the whole stack's notes; `z` / `Z` fold a thread and all of
+  them; and a `gg://` link or a `gg session navigate` with a line scrolls to
+  that line inside the named file — unfolding and fetching it first.
 
 ### Fixed
 
