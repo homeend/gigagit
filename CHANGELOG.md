@@ -73,6 +73,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   scrollbar, while the two-column files below it had their lines cut off.
   The bars are now sized over every file in the stack, each line against
   its own cell, with a bar per side whenever any file is side by side.
+- The scroll-mode bars (diff, stack, file history, blame) are now drawn by gg
+  itself — a thumb you can drag, and a track to click. Firefox and macOS draw
+  overlay scrollbars that only appear on hover, so the bars looked missing.
 
 ## `gg web`: the stacked diff — every file in one scroll (`S`)
 

@@ -1398,6 +1398,12 @@ Plan `docs/superpowers/plans/2026-09-22-stacked-diff-web-symmetric.md`.
   read the first table only: a one-column file on top gave one bar measured
   against a full-width cell → no scrollbar while two-column files below were
   cut (user-found in the symmetric stack; probe `stack-probe/mixed.mjs`).
+- **Painted thumbs.** Each `.hbar` stays the native scroller (wheel, touch,
+  `scrollLeft` — search and restore drive it) but its scrollbar is hidden;
+  `mountThumb` paints `.hthumb` over it (drag pans, a track click pages).
+  Firefox/macOS overlay scrollbars only show on hover — the user saw NO bar
+  in Firefox. Headless Chromium hides scrollbars too; Playwright's Firefox
+  (`npx playwright install firefox`) is how to see what Firefox users see.
 
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)
 

@@ -1772,17 +1772,22 @@ function mountPanBars(host, bars) {
   };
   const pan = host._pan || (host._pan = { l: 0, r: 0 });
   bars.classList.remove("hidden");
-  bars.innerHTML = twoCol
-    ? `<div class="hbar" data-side="l"><div></div></div><div class="hbar" data-side="r"><div></div></div>`
-    : `<div class="hbar" data-side="lr"><div></div></div>`;
+  // Each bar is a native scroller (wheel, touch, scrollLeft — what search
+  // and restore drive) with its own scrollbar hidden, under a thumb gg paints
+  // itself: Firefox (and macOS) draw OVERLAY scrollbars that only show while
+  // hovered or scrolling, so a native 14px bar read as "no scrollbar at all".
+  const barHTML = (side) => `<div class="hbar-wrap"><div class="hbar" data-side="${side}"><div></div></div><div class="hthumb"></div></div>`;
+  bars.innerHTML = twoCol ? barHTML("l") + barHTML("r") : barHTML("lr");
   for (const bar of bars.querySelectorAll(".hbar")) {
     const side = bar.dataset.side;
     const o = side === "l" ? overflow("td.side.l > .pan") : side === "r" ? overflow("td.side:not(.l) > .pan") : overflow("td.side > .pan");
     bar.firstElementChild.style.width = Math.max(o, 0) + bar.clientWidth + "px";
+    const paintThumb = mountThumb(bar);
     const apply = () => {
       const x = bar.scrollLeft;
       if (side !== "r") { pan.l = x; host.style.setProperty("--pan-l", x + "px"); }
       if (side !== "l") { pan.r = x; host.style.setProperty("--pan-r", x + "px"); }
+      paintThumb();
     };
     bar.addEventListener("scroll", apply);
     bar.scrollLeft = side === "r" ? pan.r : pan.l;
@@ -1803,6 +1808,56 @@ function mountPanBars(host, bars) {
       e.preventDefault();
     }, { passive: false });
   }
+}
+
+
+// mountThumb wires the painted thumb beside a bar's native scroller and
+// returns its painter: the thumb's size and place mirror the scroller's
+// (hidden when nothing overflows); dragging it pans, a click on the track
+// pages toward the click.
+function mountThumb(bar) {
+  const thumb = bar.nextElementSibling;
+  const track = bar.parentElement;
+  const geom = () => {
+    const cw = bar.clientWidth;
+    const range = bar.scrollWidth - cw;
+    const w = range > 0 ? Math.max(24, (cw * cw) / bar.scrollWidth) : 0;
+    return { cw, range, w };
+  };
+  const paint = () => {
+    const { cw, range, w } = geom();
+    thumb.classList.toggle("none", range <= 1);
+    if (range <= 1) return;
+    thumb.style.width = w + "px";
+    thumb.style.left = (bar.scrollLeft / range) * (cw - w) + "px";
+  };
+  thumb.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const { cw, range, w } = geom();
+    const x0 = e.clientX;
+    const s0 = bar.scrollLeft;
+    const k = cw > w ? range / (cw - w) : 0;
+    thumb.setPointerCapture(e.pointerId);
+    thumb.classList.add("drag");
+    const move = (ev) => { bar.scrollLeft = s0 + (ev.clientX - x0) * k; };
+    const up = () => {
+      thumb.classList.remove("drag");
+      thumb.removeEventListener("pointermove", move);
+      thumb.removeEventListener("pointerup", up);
+      thumb.removeEventListener("pointercancel", up);
+    };
+    thumb.addEventListener("pointermove", move);
+    thumb.addEventListener("pointerup", up);
+    thumb.addEventListener("pointercancel", up);
+  });
+  track.addEventListener("pointerdown", (e) => {
+    if (e.target === thumb) return;
+    e.preventDefault();
+    const left = thumb.getBoundingClientRect().left;
+    bar.scrollLeft += (e.clientX < left ? -0.9 : 0.9) * bar.clientWidth;
+  });
+  return paint;
 }
 
 

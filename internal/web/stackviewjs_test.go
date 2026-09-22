@@ -175,3 +175,23 @@ func TestPanBarsMeasureEveryTable(t *testing.T) {
 		t.Error("mountPanBars decides the bars from the first table again")
 	}
 }
+
+// Scroll mode's bars paint their own thumb: Firefox (and macOS) draw OVERLAY
+// scrollbars that only show on hover, so a native 14px bar read as "no
+// scrollbar at all" (user-found in Firefox). The native one stays as the
+// scroller, hidden.
+func TestPanBarsPaintTheirThumb(t *testing.T) {
+	t.Parallel()
+	files := readStatic(t, "files.js")
+	css := readStatic(t, "style.css")
+	for _, want := range []string{`<div class="hthumb"></div>`, "const paintThumb = mountThumb(bar);", "paintThumb();"} {
+		if !strings.Contains(files, want) {
+			t.Errorf("files.js is missing %q", want)
+		}
+	}
+	for _, want := range []string{".hbars .hbar { overflow-x: auto; overflow-y: hidden; height: 14px; scrollbar-width: none; }", ".hbars .hbar::-webkit-scrollbar { display: none; }", ".hbars .hthumb {"} {
+		if !strings.Contains(css, want) {
+			t.Errorf("style.css is missing %q", want)
+		}
+	}
+}
