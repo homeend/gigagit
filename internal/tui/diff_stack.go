@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
@@ -242,6 +243,38 @@ type stackFileMsg struct {
 	view     *diffView
 }
 
+// stackNotesMsg delivers ONE file's resolved review notes into the stack that
+// asked for them. Like stackFileMsg it is deliberately not the single-file
+// message: notesLoadedMsg is gated on the view's one diffTag and replaces the
+// WHOLE view's notes, so in a stack it would drop every answer but the last
+// and write that one over file 0.
+type stackNotesMsg struct {
+	gen, idx int
+	notes    []domain.ResolvedNote
+	err      error
+}
+
+// stackNotesCmd resolves file idx's review notes off the UI thread, against
+// the address ITS OWN loader stamped (d.noteAddr / d.previewSet) and its own
+// rows — exactly what the single-file view does, once per file. A file with no
+// address (every two-sided compare) resolves nothing, so notes stay inert in a
+// stack exactly where they are inert single-file.
+func (m Model) stackNotesCmd(gen, idx int, d *diffView) tea.Cmd {
+	if m.svc == nil || d == nil || d.noteAddr.Path == "" {
+		return nil
+	}
+	svc, addr, set, rows := m.svc, d.noteAddr, d.previewSet, d.full
+	return func() tea.Msg {
+		dd := domain.Diff{Result: textdiff.Result{Rows: rows}}
+		if set != nil {
+			ns, err := svc.PreviewNotesFor(context.Background(), *set, addr.Path, dd)
+			return stackNotesMsg{gen: gen, idx: idx, notes: ns, err: err}
+		}
+		ns, err := svc.NotesFor(context.Background(), addr, dd)
+		return stackNotesMsg{gen: gen, idx: idx, notes: ns, err: err}
+	}
+}
+
 // stackAnchor is a place in the stream that survives a re-splice: which file,
 // and how far into it. Line indexes themselves do not survive — a file loading
 // above the viewport shifts every index below it.
@@ -412,10 +445,10 @@ func stackCmd(gen, idx int, c tea.Cmd) tea.Cmd {
 // counts fill in if numstat has not already named them, and the cursor and the
 // viewport keep the lines they were on — a file loading ABOVE the viewport
 // shifts every index below it, so both are re-found by (file, line in file).
-func (m Model) applyStackFile(msg stackFileMsg) Model {
+func (m Model) applyStackFile(msg stackFileMsg) (Model, tea.Cmd) {
 	v := m.diffLayer()
 	if v == nil || v.stk == nil || msg.gen != v.stk.gen || msg.idx < 0 || msg.idx >= len(v.stk.files) {
-		return m
+		return m, nil
 	}
 	f := &v.stk.files[msg.idx]
 	if f.load == stackLoading && v.stk.inflight > 0 {
@@ -444,7 +477,9 @@ func (m Model) applyStackFile(msg stackFileMsg) Model {
 	}
 	v.scroll(0, body)
 	v.syncStackTitle()
-	return m
+	// This file's own review notes follow its diff: they resolve against the
+	// rows that just arrived, so they cannot be asked for any earlier.
+	return m, m.stackNotesCmd(v.stk.gen, msg.idx, f.d)
 }
 
 // countRows is a file's +adds / −dels from its aligned rows — the count for

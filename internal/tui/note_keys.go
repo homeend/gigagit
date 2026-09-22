@@ -89,6 +89,23 @@ func (m Model) loadNotesCmd() tea.Cmd {
 	if v == nil || m.svc == nil {
 		return nil
 	}
+	// Stacked, there is no ONE address: every file has its own, so every
+	// LOADED file re-resolves its own notes. That carries each refresh site
+	// (the srcNotes arrival, a mutation, a PR re-poll) into the stack unchanged.
+	if v.stk != nil {
+		var cmds []tea.Cmd
+		for i := range v.stk.files {
+			if f := &v.stk.files[i]; f.load == stackLoaded || f.load == stackStale {
+				if c := m.stackNotesCmd(v.stk.gen, i, f.d); c != nil {
+					cmds = append(cmds, c)
+				}
+			}
+		}
+		if len(cmds) == 0 {
+			return nil
+		}
+		return tea.Batch(cmds...)
+	}
 	// The address comes off the SAME view whose rows are resolved — a blame or
 	// history layer pushed over the diff cannot redirect the read any more.
 	addr := v.noteAddr

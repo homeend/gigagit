@@ -534,9 +534,29 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyStackStats(msg), nil
 	case stackFileMsg:
 		// One file of the open stack arrived (diff_stack.go). Stale
-		// generations are dropped inside applyStackFile.
-		m = m.applyStackFile(msg)
-		return m.pumpStack()
+		// generations are dropped inside applyStackFile, which hands back the
+		// command resolving that file's own review notes.
+		m, ncmd := m.applyStackFile(msg)
+		nm, pcmd := m.pumpStack()
+		return nm, tea.Batch(ncmd, pcmd)
+	case stackNotesMsg:
+		// One stacked file's review notes arrived. Every file of a stack
+		// resolves its own, against the address its own loader stamped.
+		dv := m.diffLayer()
+		if dv == nil || dv.stk == nil || msg.gen != dv.stk.gen || msg.err != nil {
+			return m, nil // closed, rebuilt meanwhile, or best-effort failure
+		}
+		body := m.diffBodyRows()
+		hold := dv.anchorAt(dv.curLine)
+		wasVisible := dv.cursorVisible(body)
+		dv.setNotesFor(msg.idx, msg.notes)
+		dv.rebuild()
+		dv.curLine = dv.lineAt(hold)
+		dv.scroll(0, body)
+		if wasVisible {
+			dv.revealCursorNotes(body)
+		}
+		return m, nil
 	case diffMsg:
 		dv := m.diffLayer()
 		if dv == nil || msg.tag != m.diffTag {

@@ -83,32 +83,67 @@ func (v *diffView) noteInnerWidth() int {
 // a user reply under an agent root stays (keeping its indentation). User notes
 // always render (hunk's policy). A thread with nothing left to show marks no
 // fold either — a marker for something you cannot reveal is a lie.
+//
+// Stacked, it runs once per FILE over that file's own notes, anchored inside
+// that file's line range: line numbers repeat across a stack (every file has a
+// line 12), so an unscoped search would pile every file's notes onto the first
+// file carrying the number.
 func (v *diffView) noteRowIndex() (map[int][]noteLine, map[int]bool) {
-	if len(v.notes) == 0 {
-		return nil, nil
-	}
 	byLine := map[int][]noteLine{}
 	foldMark := map[int]bool{}
 	innerW := v.noteInnerWidth()
-	for _, r := range v.notes {
-		rows := v.noteBoxLines(r, innerW)
-		if v.hideAgent {
-			rows = dropAgentRows(rows)
+	add := func(file int, ns []domain.ResolvedNote) {
+		lo, hi := 0, len(v.lines)-1
+		if v.stk != nil {
+			lo, hi = v.fileLineRange(file)
 		}
-		if !hasNoteContent(rows) {
-			continue
+		for _, r := range ns {
+			rows := v.noteBoxLines(r, innerW)
+			if v.hideAgent {
+				rows = dropAgentRows(rows)
+			}
+			if !hasNoteContent(rows) {
+				continue
+			}
+			li, visible := v.noteAnchorLineIn(lo, hi, r)
+			if li < 0 {
+				continue // the anchor is not in this view at all
+			}
+			if !visible {
+				foldMark[li] = true // folded away: mark the fold rule instead
+				continue
+			}
+			byLine[li] = append(byLine[li], rows...)
 		}
-		li, visible := v.noteAnchorLine(r)
-		if li < 0 {
-			continue // the anchor is not in this view at all
+	}
+	if v.stk == nil {
+		add(0, v.notes)
+	} else {
+		for i := range v.stk.files {
+			add(i, v.notesOf(i))
 		}
-		if !visible {
-			foldMark[li] = true // folded away: mark the fold rule instead
-			continue
-		}
-		byLine[li] = append(byLine[li], rows...)
+	}
+	if len(byLine) == 0 && len(foldMark) == 0 {
+		return nil, nil // the no-notes contract every caller reads
 	}
 	return byLine, foldMark
+}
+
+// notesOf are file i's resolved notes. Stacked they live on the file's OWN
+// view — stackFile.d is the single-file view its ordinary loader built, so its
+// noteAddr and previewSet are that loader's stamps, exactly as in single-file
+// mode. Unstacked, file 0 is the view itself.
+func (v *diffView) notesOf(i int) []domain.ResolvedNote {
+	if v.stk == nil {
+		return v.notes
+	}
+	if i < 0 || i >= len(v.stk.files) {
+		return nil
+	}
+	if d := v.stk.files[i].d; d != nil {
+		return d.notes
+	}
+	return nil
 }
 
 // dropAgentRows keeps the rows the hidden agent layer still shows. It filters
@@ -127,16 +162,28 @@ func dropAgentRows(rows []noteLine) []noteLine {
 // the END of its range on its side (§4.4 phase-2 hunks anchor at the range
 // end). See lineAnchor for the return contract.
 func (v *diffView) noteAnchorLine(r domain.ResolvedNote) (int, bool) {
+	return v.noteAnchorLineIn(0, len(v.lines)-1, r)
+}
+
+// noteAnchorLineIn is noteAnchorLine restricted to the logical lines [lo, hi] —
+// one file of a stack (the whole stream when there is no stack).
+func (v *diffView) noteAnchorLineIn(lo, hi int, r domain.ResolvedNote) (int, bool) {
 	if isFileLevelNote(r) {
-		// A forge comment on the whole file hangs off the view's first real
-		// line — the top of the file. (The line may be a fold: then it is the
-		// fold that gets the note mark, like any other hidden anchor.)
-		if len(v.lines) == 0 {
-			return -1, false
+		// A forge comment on the whole file hangs off that file's first real
+		// line — the top of the file, not the top of the stack. (The line may
+		// be a fold: then it is the fold that gets the note mark, like any
+		// other hidden anchor.)
+		for li := lo; li <= hi && li < len(v.lines); li++ {
+			if li < 0 {
+				continue
+			}
+			if ln := v.lines[li]; ln.kind == lineBody {
+				return li, ln.Fold == 0
+			}
 		}
-		return 0, v.lines[0].Fold == 0
+		return -1, false
 	}
-	return v.lineAnchor(r.Range[1], r.Note.Side == model.NoteSideOld)
+	return v.lineAnchorIn(lo, hi, r.Range[1], r.Note.Side == model.NoteSideOld)
 }
 
 // isFileLevelNote reports a forge comment anchored to the file, not a line:
@@ -152,8 +199,23 @@ func isFileLevelNote(r domain.ResolvedNote) bool {
 // means the number is not in this view at all. Shared by the note anchors and
 // by live steering's landing, which knows only a side and a number.
 func (v *diffView) lineAnchor(no int, old bool) (int, bool) {
+	return v.lineAnchorIn(0, len(v.lines)-1, no, old)
+}
+
+// lineAnchorIn is lineAnchor restricted to the logical lines [lo, hi] — one
+// file of a stack. Every anchor a STACKED view resolves must name its file's
+// range: line numbers repeat across files, so an unscoped search lands in
+// whichever file happens to carry the number first. The single-file view
+// passes the whole stream and reads exactly as it always did.
+func (v *diffView) lineAnchorIn(lo, hi, no int, old bool) (int, bool) {
 	if no <= 0 {
 		return -1, false
+	}
+	if lo < 0 {
+		lo = 0
+	}
+	if hi > len(v.lines)-1 {
+		hi = len(v.lines) - 1
 	}
 	numOf := func(ln diffLine) int {
 		if old {
@@ -162,12 +224,17 @@ func (v *diffView) lineAnchor(no int, old bool) (int, bool) {
 		return ln.Row.RightNo
 	}
 	prev := 0
-	for i, ln := range v.lines {
+	for i := lo; i <= hi; i++ {
+		ln := v.lines[i]
+		if ln.kind != lineBody {
+			continue // a stacked header / rule / gap / placeholder carries no number
+		}
 		if ln.Fold > 0 {
-			// The hidden run spans (prev, next): find the next real number.
+			// The hidden run spans (prev, next): find the next real number,
+			// inside this file.
 			next := 0
-			for j := i + 1; j < len(v.lines); j++ {
-				if v.lines[j].Fold == 0 && numOf(v.lines[j]) > 0 {
+			for j := i + 1; j <= hi; j++ {
+				if v.lines[j].kind == lineBody && v.lines[j].Fold == 0 && numOf(v.lines[j]) > 0 {
 					next = numOf(v.lines[j])
 					break
 				}
@@ -282,6 +349,25 @@ func (v *diffView) collapsedNoteLine(r domain.ResolvedNote) noteLine {
 // ones seen for the first time: a forge thread marked resolved starts folded.
 func (v *diffView) setNotes(ns []domain.ResolvedNote) {
 	v.notes = ns
+	v.seedCollapsed(ns)
+}
+
+// setNotesFor stores one STACKED file's resolved notes on that file's own
+// view. The collapse set stays view-wide: a thread's root id is unique across
+// files, so one set folds the whole stack (and O folds all of it).
+func (v *diffView) setNotesFor(i int, ns []domain.ResolvedNote) {
+	if v.stk == nil || i < 0 || i >= len(v.stk.files) {
+		return
+	}
+	if d := v.stk.files[i].d; d != nil {
+		d.notes = ns
+	}
+	v.seedCollapsed(ns)
+}
+
+// seedCollapsed folds a forge thread its reviewers resolved, ONCE — a later
+// reload never re-folds what the reader opened by hand.
+func (v *diffView) seedCollapsed(ns []domain.ResolvedNote) {
 	if v.collapsed == nil {
 		v.collapsed = map[string]bool{}
 	}
