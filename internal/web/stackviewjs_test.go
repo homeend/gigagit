@@ -154,3 +154,24 @@ func TestStackTailLetsAnyHeaderReachTheTop(t *testing.T) {
 		t.Error("style.css no longer gives the stack its tail")
 	}
 }
+
+// A stack mixes one-column tables (a pure add or delete) with two-column ones.
+// The pan bars must be sized over EVERY table, each line against its own cell:
+// sized from the first table only, a one-column file on top gave one bar
+// measured against a full-width cell — no scrollbar at all while the
+// two-column files below had lines cut off (user-found, symmetric view).
+func TestPanBarsMeasureEveryTable(t *testing.T) {
+	t.Parallel()
+	files := readStatic(t, "files.js")
+	for _, want := range []string{
+		`const twoCol = !!host.querySelector("table.diff colgroup col:nth-child(4)");`,
+		"p.offsetWidth - (p.parentElement.clientWidth - 12)",
+	} {
+		if !strings.Contains(files, want) {
+			t.Errorf("mountPanBars is missing %q", want)
+		}
+	}
+	if strings.Contains(files, `table.querySelectorAll("colgroup col").length === 4`) {
+		t.Error("mountPanBars decides the bars from the first table again")
+	}
+}

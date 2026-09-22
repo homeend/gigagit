@@ -1392,6 +1392,12 @@ Plan `docs/superpowers/plans/2026-09-22-stacked-diff-web-symmetric.md`.
   (links, entries) paint 3-row placeholders, the pane ran out of scroll
   before a late header reached the top, and `syncCursor` then moved the
   highlight to the file above. Probe `stack-probe/sym.mjs` (scratchpad).
+- **Pan bars over mixed tables.** `mountPanBars` sizes each bar by the
+  largest OVERFLOW (line width − its own cell's width) over every table on
+  the host, and shows a bar per side when ANY table is two-column. It used to
+  read the first table only: a one-column file on top gave one bar measured
+  against a full-width cell → no scrollbar while two-column files below were
+  cut (user-found in the symmetric stack; probe `stack-probe/mixed.mjs`).
 
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)
 

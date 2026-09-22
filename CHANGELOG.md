@@ -68,6 +68,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - A file near the end of a stack (any set without counts: links, entries)
   could not be scrolled to the top — the pane ran out of scroll, and the
   list highlighted the file above. The stack now ends with a one-pane tail.
+- In the **scroll** long-line mode (`w`), a stack whose top file is one
+  column wide (a file only one side has — an add or a delete) showed no
+  scrollbar, while the two-column files below it had their lines cut off.
+  The bars are now sized over every file in the stack, each line against
+  its own cell, with a bar per side whenever any file is side by side.
 
 ## `gg web`: the stacked diff — every file in one scroll (`S`)
 

@@ -1757,14 +1757,19 @@ function mountPanBars(host, bars) {
     host.style.removeProperty("--pan-r");
     return;
   }
-  const twoCol = table.querySelectorAll("colgroup col").length === 4;
-  const widest = (sel) => {
-    let w = 0;
-    for (const p of host.querySelectorAll(sel)) if (p.offsetWidth > w) w = p.offsetWidth;
-    return w;
+  // Every table on the host counts, not the first: a stacked diff mixes
+  // two-column tables with one-column ones (a pure add or delete). Any
+  // two-column table → a bar per side; a one-column cell then pans with the
+  // side it shows (.l = the old side, else the new).
+  const twoCol = !!host.querySelector("table.diff colgroup col:nth-child(4)");
+  // overflow: how far the widest line a bar drives runs past ITS OWN cell —
+  // cells differ in width (a one-column cell is the whole pane, a side is
+  // half), so the widest line alone says nothing. 12 = the cell padding.
+  const overflow = (sel) => {
+    let o = 0;
+    for (const p of host.querySelectorAll(sel)) o = Math.max(o, p.offsetWidth - (p.parentElement.clientWidth - 12));
+    return o;
   };
-  const cell = host.querySelector("td.side");
-  const cellW = cell ? cell.clientWidth - 12 : 0; // minus the cell padding
   const pan = host._pan || (host._pan = { l: 0, r: 0 });
   bars.classList.remove("hidden");
   bars.innerHTML = twoCol
@@ -1772,8 +1777,8 @@ function mountPanBars(host, bars) {
     : `<div class="hbar" data-side="lr"><div></div></div>`;
   for (const bar of bars.querySelectorAll(".hbar")) {
     const side = bar.dataset.side;
-    const w = side === "l" ? widest("td.side.l > .pan") : side === "r" ? widest("td.side.r > .pan") : widest("td.side > .pan");
-    bar.firstElementChild.style.width = Math.max(w - cellW, 0) + bar.clientWidth + "px";
+    const o = side === "l" ? overflow("td.side.l > .pan") : side === "r" ? overflow("td.side:not(.l) > .pan") : overflow("td.side > .pan");
+    bar.firstElementChild.style.width = Math.max(o, 0) + bar.clientWidth + "px";
     const apply = () => {
       const x = bar.scrollLeft;
       if (side !== "r") { pan.l = x; host.style.setProperty("--pan-l", x + "px"); }
