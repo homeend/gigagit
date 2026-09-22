@@ -13,7 +13,6 @@ import (
 	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/syntax"
-	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // Review-note display rows. A resolved note becomes synthetic display rows
@@ -156,7 +155,7 @@ func (v *diffView) lineAnchor(no int, old bool) (int, bool) {
 	if no <= 0 {
 		return -1, false
 	}
-	numOf := func(ln textdiff.Line) int {
+	numOf := func(ln diffLine) int {
 		if old {
 			return ln.Row.LeftNo
 		}

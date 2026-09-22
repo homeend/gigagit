@@ -31,7 +31,10 @@ const (
 // cursorRow returns the aligned row under the cursor, or false when the view
 // has no lines or the cursor index is out of range.
 func (v *diffView) cursorRow() (textdiff.Row, bool) {
-	if v.curLine < 0 || v.curLine >= len(v.lines) || v.lines[v.curLine].Fold > 0 {
+	// A stack's header and placeholder lines carry no row, exactly like a
+	// fold: every consumer of "the row under the cursor" (the note anchor,
+	// copy line, e, the header's line number) is inert there by this check.
+	if v.curLine < 0 || v.curLine >= len(v.lines) || !v.lines[v.curLine].isBody() {
 		return textdiff.Row{}, false
 	}
 	return v.lines[v.curLine].Row, true
@@ -73,12 +76,12 @@ func (v *diffView) snapOffFold(li int) int {
 		li = n - 1
 	}
 	for j := li; j < n; j++ {
-		if v.lines[j].Fold == 0 {
+		if v.lines[j].isStop() {
 			return j
 		}
 	}
 	for j := li - 1; j >= 0; j-- {
-		if v.lines[j].Fold == 0 {
+		if v.lines[j].isStop() {
 			return j
 		}
 	}
@@ -109,7 +112,7 @@ func (v *diffView) moveCursor(delta, body int) {
 	}
 	for ; delta > 0; delta-- {
 		j := li + step
-		for j >= 0 && j < len(v.lines) && v.lines[j].Fold > 0 {
+		for j >= 0 && j < len(v.lines) && !v.lines[j].isStop() {
 			j += step
 		}
 		if j < 0 || j >= len(v.lines) {
@@ -124,7 +127,7 @@ func (v *diffView) moveCursor(delta, body int) {
 // setCursorDisp moves the cursor to the line that owns display row `row`
 // (a click). A fold row or an out-of-range row leaves the cursor alone.
 func (v *diffView) setCursorDisp(row, body int) {
-	if row < 0 || row >= len(v.disp) || v.disp[row].fold > 0 {
+	if row < 0 || row >= len(v.disp) || v.disp[row].fold > 0 || v.disp[row].kind == linePlace {
 		return
 	}
 	v.curLine = v.disp[row].line
@@ -154,11 +157,11 @@ func (v *diffView) pageCursor(delta, body int) {
 		step = -1
 	}
 	i := row
-	for i >= 0 && i < len(v.disp) && v.disp[i].fold > 0 {
+	for i >= 0 && i < len(v.disp) && !v.lines[v.disp[i].line].isStop() {
 		i += step
 	}
 	if i < 0 || i >= len(v.disp) {
-		for i = row; i >= 0 && i < len(v.disp) && v.disp[i].fold > 0; i -= step {
+		for i = row; i >= 0 && i < len(v.disp) && !v.lines[v.disp[i].line].isStop(); i -= step {
 		}
 	}
 	if i < 0 || i >= len(v.disp) {
@@ -204,7 +207,7 @@ func (v *diffView) alignCursor(mode cursorAlign, body int) {
 // hidden by a fold, or gone, leaves the index clamped and snapped off a fold.
 func (v *diffView) reanchorCursor(leftNo, rightNo int) {
 	for i, ln := range v.lines {
-		if ln.Fold == 0 && ln.Row.LeftNo == leftNo && ln.Row.RightNo == rightNo {
+		if ln.isBody() && ln.Row.LeftNo == leftNo && ln.Row.RightNo == rightNo {
 			v.curLine = i
 			return
 		}
@@ -236,6 +239,18 @@ func (v *diffView) cursorVisible(body int) bool {
 // moving the cursor), and focusBlock has already put the view on the change
 // they were reading; dragging it back to a stale off-screen cursor loses it.
 func (v *diffView) reanchorAfterRebuild(cr textdiff.Row, hadRow, wasVisible bool, body int) {
+	// Stacked, line NUMBERS are ambiguous — every file has a line 12 — so the
+	// cursor is re-found by (file, line in file) instead, and it is re-found
+	// even when it sat on a header or a placeholder (which have no row):
+	// focusBlock's seeding would otherwise drop the reader into another file.
+	if v.stk != nil {
+		v.curLine = v.lineAt(v.stackHold)
+		v.syncStackTitle()
+		if wasVisible {
+			v.ensureCursorVisible(body)
+		}
+		return
+	}
 	if !hadRow {
 		return // no row to re-find: focusBlock's seeding stands
 	}
@@ -382,7 +397,7 @@ func (v *diffView) selectedLines() []string {
 	var out []string
 	for i := lo; i <= hi; i++ {
 		ln := v.lines[i]
-		if ln.Fold > 0 || !sidePresent(ln.Row, v.onOld) {
+		if !ln.isBody() || !sidePresent(ln.Row, v.onOld) {
 			continue
 		}
 		if v.onOld {

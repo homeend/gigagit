@@ -768,8 +768,10 @@ func TestDiffAlignMenuRowFeedsZCycle(t *testing.T) {
 
 func TestDiffHintAdvertisesCursorKeys(t *testing.T) {
 	t.Parallel()
-	h := diffHintFor(longScroll)
-	for _, k := range []string{"[↑↓/jk]", "[spc]", "[alt↔]", "[e]"} {
+	h := diffHintFor(longScroll, false)
+	// [e] left the footer for [S] stack when the stacked view shipped; it is
+	// still in the help and the . menu (TestDotMenuHasStackRows covers that).
+	for _, k := range []string{"[↑↓/jk]", "[spc]", "[alt↔]", "[S]"} {
 		if !strings.Contains(h, k) {
 			t.Errorf("hint %q lacks %s", h, k)
 		}

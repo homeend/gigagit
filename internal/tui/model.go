@@ -151,6 +151,14 @@ type Model struct {
 	diffPartial bool        // session default for new diffs (false = full); the f key toggles it
 	diffLong    longMode    // session: long-line mode for new diffs (0 = scroll); w cycles
 	diffCursor  string      // session override of [ui] diff_cursor ("" = follow config); the . menu's Cursor marker row cycles it
+	// diffStacked is the S key's preference: a diff opened from a file list
+	// shows EVERY file of that list in one scroll (diff_stack.go). Read from
+	// promptstate at startup and written back on every flip — machine-local,
+	// and independent of the web's own stacked pref (design R7).
+	diffStacked bool
+	// stackSeq numbers the stacks this session has opened: each one's
+	// generation, so a rebuilt stack drops the answers owed to the old one.
+	stackSeq int
 
 	noteCounts    domain.NoteCounts // badge counts (srcNotes); zero value = no badges
 	notesAgentOff bool              // `a`: hide agent-written notes for this session
@@ -397,7 +405,7 @@ var bottomTabs = []panel{panelStaged, panelReflog}
 
 // New constructs the initial model for svc.
 func New(svc *domain.Service) Model {
-	return Model{
+	m := Model{
 		svc:                    svc,
 		clipWrite:              clipboard.Copy,
 		feed:                   svc.CommitFeed(),
@@ -421,6 +429,12 @@ func New(svc *domain.Service) Model {
 		branchFilterSlot:       map[panel]int{},
 		bfMemo:                 &branchFilterMemos{},
 	}
+	// The stacked-diff pref is machine-global, so it is read once here rather
+	// than per repo (no state dir → nil store → the single-file default).
+	if m.promptStore != nil {
+		m.diffStacked = m.promptStore.StackedDiff()
+	}
+	return m
 }
 
 // Init implements tea.Model.
@@ -508,8 +522,21 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 					v.offset = v.lineStart[topLine]
 				}
 				v.scroll(0, m.diffBodyRows())
+				if v.stk != nil {
+					// The taller (or shorter) viewport changes what is "near":
+					// top the stack's queue up for it.
+					return m.pumpStack()
+				}
 			}
 		}
+	case stackStatMsg:
+		// The stack's +/− counts, in one numstat (diff_stack.go).
+		return m.applyStackStats(msg), nil
+	case stackFileMsg:
+		// One file of the open stack arrived (diff_stack.go). Stale
+		// generations are dropped inside applyStackFile.
+		m = m.applyStackFile(msg)
+		return m.pumpStack()
 	case diffMsg:
 		dv := m.diffLayer()
 		if dv == nil || msg.tag != m.diffTag {

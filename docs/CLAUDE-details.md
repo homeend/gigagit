@@ -1412,6 +1412,70 @@ Plan `docs/superpowers/plans/2026-09-22-stacked-diff-web-symmetric.md`.
   runs BEFORE `repaintSlot`'s pin (the bars add height). `#diff-hbars` hides
   while a stack is up; `renderDiff` brings it back. Probe `perfile.mjs`.
 
+### Stacked diff view in the TUI (plan 3, 2026-09-22)
+
+Spec `docs/superpowers/specs/2026-09-22-stacked-diff-view-design.md` §5.2 /
+§6.2 / §8 / §9, plan `docs/superpowers/plans/2026-09-22-stacked-diff-tui.md`.
+`S` in the full-screen diff view shows EVERY file of the list the diff was
+opened from, one header line per file with its rows below. The preference is
+`promptstate` `tui_stacked_diff`, machine-global and independent of the web's
+(design R7), so with it on `enter` on any file opens that list's stack
+scrolled to the file.
+
+- **One stream, not a second surface.** `diffView.stk` (`diff_stack.go`) is
+  the whole feature: `v.lines` became `[]diffLine` — `textdiff.Line` plus a
+  file index and a kind (body / header / placeholder) — so every `.Row` /
+  `.Fold` reader, the display-row layout, wrap and scroll modes, the search
+  and the cursor work unchanged. The pure `textdiff` leaf learns nothing.
+- **The jump blocks ARE the headers.** `spliceStack` sets `v.blocks` to the
+  header line indices, so `n`/`p`, the wrap arming, `focusBlock`,
+  `deriveOrdinal` and `f`/`ctrl+w`'s re-anchor all step file to file with no
+  new navigation code. Change-block stepping inside one file is therefore
+  not available while stacked (press `S`).
+- **Per-file data lives on the file.** `stackFile.d` is the per-file view one
+  of the ORDINARY single-file loaders built (`treeFileLoad` — factored out of
+  `openDiffForFileLine` — or `loadStatusDiffCmd`). Syntax runs are indexed by
+  SOURCE LINE NUMBER, so `toksFor(li)` must resolve through the line's own
+  file or file B's line 5 paints with file A's tokens; `gutter()` is the
+  widest loaded file, so the numbers line up.
+- **Loading is a function of where the reader is.** `pumpStack` runs after
+  every key, arrival and resize; `wantLoads` (pure, table-tested) picks the
+  unfolded, non-conflict, idle-or-stale files whose header is within two
+  screens, nearest first, at most `stackMaxInflight` (3). `stackCmd`
+  re-labels the loader's `diffMsg` as `stackFileMsg` — the `diffMsg` handler
+  does `*dv = *msg.view` and would throw the stack away.
+- **An arrival must not move the screen.** `applyStackFile` re-finds the
+  cursor and the viewport by `stackAnchor{file, inFile, sub}` around the
+  re-splice, because a file loading ABOVE the viewport shifts every index
+  below it. `stackFileMsg` is generation-gated (`Model.stackSeq`).
+- **The cursor rests on headers** (not on placeholders): a folded file is
+  header-only, and `-` has to be able to unfold the cursor's file.
+  `cursorRow()` returns false there, which makes notes, copy-line, `e` and
+  the header's line number inert on a header through the existing `hadRow`
+  convention. `v.title` is kept synced to the cursor's file, so `h`, `b`,
+  `e`, the copy rows, export and bookmarks need no stack awareness.
+- **Notes are single-file for now** (follow-up 4a): `noteAddr` stays zero on
+  a stack and `c`/`E`/`R`/`}`/`{`/`o`/`O` post "press S for the single-file
+  view" rather than anchoring every file's notes onto file 0 — `lineAnchor`
+  matches by line NUMBER.
+- **Working tree.** A stack is ONE section (Files or Staged);
+  `reconcileStatusStack` hangs off `withStatus` (the one status write point):
+  gone files drop, new ones are inserted in list order, a file already read
+  is marked `stackStale` and KEEPS its rows on screen until the queue
+  re-reads it (no flicker on a background refresh), the cursor keeps its file
+  by PATH, and an emptied section closes the view. Conflicted rows are
+  header-only with the resolver behind `enter`.
+- **Counts.** One `stackStatCmd` per stack (`CommitStat`, `DiffStat{Rev}` for
+  a commit↔commit compare, `DiffStat{Cached}` for a section); sources with no
+  git pair (shelf, entry, preview, a live endpoint) count from the rows as
+  each file loads. Numstat wins; rows fill in what it did not name.
+- **Not stacked:** full-tree mode (not a change set) and a picker compare
+  with no list — `S` there says "nothing to stack here".
+- **Footer trade:** `[e] edit` left the diff footer for `[S] stack` (it keeps
+  its `.` menu and help rows) and "notes" lost its plural; the stacked view
+  has its OWN footer line. `diffHintFor(long, stacked)`.
+
+
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)
 
 Spec `docs/superpowers/specs/2026-09-21-web-previews-dnd-compare-design.md`.

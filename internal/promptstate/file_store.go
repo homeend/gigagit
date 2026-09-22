@@ -24,6 +24,8 @@ type records struct {
 	WebUI *WebUI `toml:"web_ui,omitempty"`
 	// BranchFilter is each repo's active branch-filter slot per list.
 	BranchFilter map[string]branchFilterRecord `toml:"branch_filter,omitempty"`
+	// StackedDiff is the TUI diff view's stacked mode (see stacked.go).
+	StackedDiff bool `toml:"tui_stacked_diff,omitempty"`
 }
 
 // read loads the file; a missing or malformed file reads as empty (UX memory
