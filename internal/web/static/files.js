@@ -10,6 +10,7 @@ import { nextSortMode, setSortMode, sortChipHTML } from "./sortlist.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { rev } from "./review.js";
+import { symPair } from "./stack.js";
 import { renderCommits, rewordPrompt } from "./commits.js";
 import { focusPane, moveCursor, stepCommitCursor } from "./keys.js";
 import { saveUI } from "./uistate.js";
@@ -640,6 +641,11 @@ function updateLinkCompareFiles(files, sym) {
   }
   const i = cur ? state.files.findIndex((f) => f.path === cur.path) : -1;
   state.fileCursor = i >= 0 ? i : Math.min(state.fileCursor, state.files.length - 1);
+  // A stack holds the OLD rows: rebuild it on the cursor's file. Deliberately
+  // BEFORE the drillOut below: when the reader's file is gone, a stack
+  // re-anchors on the clamped neighbour (the working-tree reconcile rule)
+  // instead of leaving the screen, as the single-file view does.
+  if (state.stack && state.layout === "diff") return openFile(state.fileCursor);
   renderFiles();
   updateDiffNav();
   if (i < 0 && state.layout === "diff") drillOut();
@@ -750,7 +756,7 @@ function applyCompareFilter() {
     // The symmetric view's esc LEAVES the comparison (it has no files-only
     // stage), so an empty filter must not route through drillOut there: a chip
     // would close the screen it sits on. The view says so in place instead.
-    if (symActive()) return symEmpty();
+    if (symActive()) { teardownStack(); return symEmpty(); } // an empty view has no files to stack
     if (state.layout === "diff") drillOut();
     return;
   }
@@ -1056,6 +1062,13 @@ function fileDiffURL(f) {
     return "/api/diff?" + q;
   }
   const c = state.compare;
+  // The symmetric view diffs a row in the ARROW's direction (symPair — the
+  // pair openSymRow opens), which the plain link lane below does not know.
+  if (state.filesMode === "compare" && c.links && symActive()) {
+    const p = symPair(f, c);
+    if (!p) return null; // neither set has content: the stack shows a notice instead
+    return "/api/entry-diff?" + new URLSearchParams({ left: p.left, right: p.right, path: f.path, status: p.status });
+  }
   // A link comparison (a row may name its own sides) and a frozen entry
   // compare address their sides by SPEC: one may be a snapshot git cannot read.
   if (state.filesMode === "compare" && (c.links || c.frozen)) {
@@ -1744,27 +1757,37 @@ function mountPanBars(host, bars) {
     host.style.removeProperty("--pan-r");
     return;
   }
-  const twoCol = table.querySelectorAll("colgroup col").length === 4;
-  const widest = (sel) => {
-    let w = 0;
-    for (const p of host.querySelectorAll(sel)) if (p.offsetWidth > w) w = p.offsetWidth;
-    return w;
+  // Every table on the host counts, not the first: a stacked diff mixes
+  // two-column tables with one-column ones (a pure add or delete). Any
+  // two-column table → a bar per side; a one-column cell then pans with the
+  // side it shows (.l = the old side, else the new).
+  const twoCol = !!host.querySelector("table.diff colgroup col:nth-child(4)");
+  // overflow: how far the widest line a bar drives runs past ITS OWN cell —
+  // cells differ in width (a one-column cell is the whole pane, a side is
+  // half), so the widest line alone says nothing. 12 = the cell padding.
+  const overflow = (sel) => {
+    let o = 0;
+    for (const p of host.querySelectorAll(sel)) o = Math.max(o, p.offsetWidth - (p.parentElement.clientWidth - 12));
+    return o;
   };
-  const cell = host.querySelector("td.side");
-  const cellW = cell ? cell.clientWidth - 12 : 0; // minus the cell padding
   const pan = host._pan || (host._pan = { l: 0, r: 0 });
   bars.classList.remove("hidden");
-  bars.innerHTML = twoCol
-    ? `<div class="hbar" data-side="l"><div></div></div><div class="hbar" data-side="r"><div></div></div>`
-    : `<div class="hbar" data-side="lr"><div></div></div>`;
+  // Each bar is a native scroller (wheel, touch, scrollLeft — what search
+  // and restore drive) with its own scrollbar hidden, under a thumb gg paints
+  // itself: Firefox (and macOS) draw OVERLAY scrollbars that only show while
+  // hovered or scrolling, so a native 14px bar read as "no scrollbar at all".
+  const barHTML = (side) => `<div class="hbar-wrap"><div class="hbar" data-side="${side}"><div></div></div><div class="hthumb"></div></div>`;
+  bars.innerHTML = twoCol ? barHTML("l") + barHTML("r") : barHTML("lr");
   for (const bar of bars.querySelectorAll(".hbar")) {
     const side = bar.dataset.side;
-    const w = side === "l" ? widest("td.side.l > .pan") : side === "r" ? widest("td.side.r > .pan") : widest("td.side > .pan");
-    bar.firstElementChild.style.width = Math.max(w - cellW, 0) + bar.clientWidth + "px";
+    const o = side === "l" ? overflow("td.side.l > .pan") : side === "r" ? overflow("td.side:not(.l) > .pan") : overflow("td.side > .pan");
+    bar.firstElementChild.style.width = Math.max(o, 0) + bar.clientWidth + "px";
+    const paintThumb = mountThumb(bar);
     const apply = () => {
       const x = bar.scrollLeft;
       if (side !== "r") { pan.l = x; host.style.setProperty("--pan-l", x + "px"); }
       if (side !== "l") { pan.r = x; host.style.setProperty("--pan-r", x + "px"); }
+      paintThumb();
     };
     bar.addEventListener("scroll", apply);
     bar.scrollLeft = side === "r" ? pan.r : pan.l;
@@ -1785,6 +1808,56 @@ function mountPanBars(host, bars) {
       e.preventDefault();
     }, { passive: false });
   }
+}
+
+
+// mountThumb wires the painted thumb beside a bar's native scroller and
+// returns its painter: the thumb's size and place mirror the scroller's
+// (hidden when nothing overflows); dragging it pans, a click on the track
+// pages toward the click.
+function mountThumb(bar) {
+  const thumb = bar.nextElementSibling;
+  const track = bar.parentElement;
+  const geom = () => {
+    const cw = bar.clientWidth;
+    const range = bar.scrollWidth - cw;
+    const w = range > 0 ? Math.max(24, (cw * cw) / bar.scrollWidth) : 0;
+    return { cw, range, w };
+  };
+  const paint = () => {
+    const { cw, range, w } = geom();
+    thumb.classList.toggle("none", range <= 1);
+    if (range <= 1) return;
+    thumb.style.width = w + "px";
+    thumb.style.left = (bar.scrollLeft / range) * (cw - w) + "px";
+  };
+  thumb.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const { cw, range, w } = geom();
+    const x0 = e.clientX;
+    const s0 = bar.scrollLeft;
+    const k = cw > w ? range / (cw - w) : 0;
+    thumb.setPointerCapture(e.pointerId);
+    thumb.classList.add("drag");
+    const move = (ev) => { bar.scrollLeft = s0 + (ev.clientX - x0) * k; };
+    const up = () => {
+      thumb.classList.remove("drag");
+      thumb.removeEventListener("pointermove", move);
+      thumb.removeEventListener("pointerup", up);
+      thumb.removeEventListener("pointercancel", up);
+    };
+    thumb.addEventListener("pointermove", move);
+    thumb.addEventListener("pointerup", up);
+    thumb.addEventListener("pointercancel", up);
+  });
+  track.addEventListener("pointerdown", (e) => {
+    if (e.target === thumb) return;
+    e.preventDefault();
+    const left = thumb.getBoundingClientRect().left;
+    bar.scrollLeft += (e.clientX < left ? -0.9 : 0.9) * bar.clientWidth;
+  });
+  return paint;
 }
 
 

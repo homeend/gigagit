@@ -68,6 +68,28 @@ out.statusChangeDropsDiff = next[2].diff === null && next[2].collapsed === true 
 out.midLoadAgain = next[3].again === true && next[3].load === "loading";
 out.idxUpdated = next[3].idx === 3;
 
+// 6. a symmetric row's pair, in the arrow's direction; a row's own spec wins
+const c = { aSpec: "A", bSpec: "B", flipped: false };
+const row = { path: "x", left: "present", right: "deleted", status: "D", kind: "ne", right_spec: "Rx" };
+out.pair = S.symPair(row, c);
+out.pairFlip = S.symPair({ ...row, status: "A" }, { ...c, flipped: true });
+out.pairEq = S.symPair({ path: "y", left: "present", right: "present", status: "=", kind: "eq" }, c).status;
+out.pairNone = S.symPair({ path: "z", left: "deleted", right: "absent", status: "D", kind: "or" }, c);
+out.why = S.noContentWhy({ left: "deleted", right: "absent" });
+// 7. sym slots: glyph data rides along; a no-content row is never fetched
+const ss = S.buildSlots([
+  { f: row, idx: 0 },
+  { f: { path: "z", left: "deleted", right: "absent", status: "D", kind: "or" }, idx: 1 },
+]);
+out.symKind = ss[0].kind + ss[0].left + ss[0].right + ss[0].load + ss[0].none;
+out.symNone = ss[1].load + ":" + ss[1].none;
+out.plainNone = S.buildSlots(rows(1))[0].none + "|" + S.buildSlots(rows(1))[0].kind;
+out.conflictWhy = ws[2].none;
+out.glyphs = Object.values(S.GLYPH).join("");
+// a working-tree entry has a kind of its own: it is NOT a symmetric row
+const wtRow = S.buildSlots([{ f: { path: "a", section: "changes", unstaged: "M", kind: "tracked" }, idx: 0 }])[0];
+out.wtKind = wtRow.load + "|" + wtRow.kind + "|" + wtRow.none;
+
 console.log(JSON.stringify(out));
 `
 
@@ -103,6 +125,10 @@ func TestStackJS(t *testing.T) {
 		"order":      "p1,new,p0,p2",
 		"sameObject": true, "keptDiffIdle": true, "statusChangeDropsDiff": true,
 		"midLoadAgain": true, "idxUpdated": true,
+		"pairEq": "M", "pairNone": nil,
+		"why":     "the left set deletes it, the right set does not touch it",
+		"symKind": "nepresentdeletedidle", "symNone": "none:empty",
+		"plainNone": "|", "conflictWhy": "conflict", "glyphs": "≠=◁▷", "wtKind": "idle||",
 	}
 	for k, v := range want {
 		if got[k] != v {
@@ -110,6 +136,9 @@ func TestStackJS(t *testing.T) {
 		}
 	}
 	idx := func(k string) string { b, _ := json.Marshal(got[k]); return string(b) }
+	if idx("pair") != `{"left":"A","right":"Rx","status":"D"}` || idx("pairFlip") != `{"left":"Rx","right":"A","status":"A"}` {
+		t.Errorf("symPair: %s / flipped %s", idx("pair"), idx("pairFlip"))
+	}
 	if idx("wtIdx") != "[0,1,2]" || idx("stagedIdx") != "[3]" || idx("allIdx") != "[0,1,2,3]" {
 		t.Errorf("stackRows: wt=%s staged=%s all=%s", idx("wtIdx"), idx("stagedIdx"), idx("allIdx"))
 	}

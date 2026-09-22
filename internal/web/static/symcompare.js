@@ -15,6 +15,7 @@
 
 import { $, charWidth, elidePath, esc, state } from "./core.js";
 import { saveUI } from "./uistate.js";
+import { GLYPH, KIND_TIP, noContentWhy, symPair } from "./stack.js";
 import { applyCompareFilter, openEntryFileDiff, openFile, renderFiles, setDiffTitle, setLayout } from "./files.js";
 
 // SYM_MIN_WIDTH: two file lists and a side-by-side diff stop fitting below
@@ -50,8 +51,6 @@ function kindOf(r) {
   if (r.right === "absent") return "ol";
   return r.differs ? "ne" : "eq";
 }
-const GLYPH = { ne: "≠", eq: "=", ol: "◁", or: "▷" };
-const KIND_TIP = { ne: "differs between the two sets", eq: "the same in both sets", ol: "only in the left set", or: "only in the right set" };
 
 // statusFor is the tree-diff letter of a row IN THE ARROW'S DIRECTION — what
 // menus, the stepper and /api/entry-diff read. "=" for a row that does not
@@ -226,6 +225,7 @@ function applySym(keepPath) {
     if (i >= 0) state.fileCursor = i;
     paintGrid();
     renderFiles();
+    if (state.layout === "diff" && i >= 0) openFile(i); // the kept file, not row 0
   }
 }
 
@@ -254,10 +254,15 @@ function setFilter(id) {
   // the key that names it does nothing either.
   const f = FILTERS.find((x) => x[0] === id);
   if (!f || (id !== state.compare.symFilter && !state.compare.sym.some(f[3]))) return;
+  const path = (state.files[state.fileCursor] || {}).path;
   state.compare.symFilter = id;
   state.fileCursor = 0;
-  applyCompareFilter();
-  if (state.files.length && state.layout !== "diff") openFile(0);
+  applyCompareFilter(); // under an open diff this opens row 0 (a new stack)
+  if (state.stack) {
+    // the stack keeps the file being read when the filter still shows it
+    const i = state.files.findIndex((f) => f.path === path);
+    if (i > 0) openFile(i);
+  } else if (state.files.length && state.layout !== "diff") openFile(0);
 }
 
 // --- opening a row ---
@@ -269,9 +274,8 @@ function setFilter(id) {
 function openSymRow(f) {
   const c = state.compare;
   const fl = c.flipped;
-  const left = fl ? f.right_spec || c.bSpec : f.left_spec || c.aSpec;
-  const right = fl ? f.left_spec || c.aSpec : f.right_spec || c.bSpec;
-  if (f.left !== "present" && f.right !== "present") {
+  const p = symPair(f, c);
+  if (!p) {
     // openFile already put the diff stage up and cleared the hunk state.
     state.detailGen++; // …and a diff still loading must not land over this
     state.diffCtx = null;
@@ -281,12 +285,12 @@ function openSymRow(f) {
     return;
   }
   return openEntryFileDiff({
-    left,
-    right,
+    left: p.left,
+    right: p.right,
     path: f.path,
     leftLabel: fl ? c.b : c.a,
     rightLabel: fl ? c.a : c.b,
-    status: f.status === "=" ? "M" : f.status,
+    status: p.status,
   });
 }
 
@@ -307,11 +311,6 @@ function symEmpty() {
   }
   renderDirBar();
   syncGeometry();
-}
-
-function noContentWhy(f) {
-  const say = (st, name) => (st === "deleted" ? `the ${name} set deletes it` : `the ${name} set does not touch it`);
-  return say(f.left, "left") + ", " + say(f.right, "right");
 }
 
 // --- keys, clicks, lifecycle ---

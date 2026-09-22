@@ -194,9 +194,16 @@ body.lm-scroll table.diff td.side > .pan { display: inline-block; transform: tra
 body.lm-scroll table.diff td.side.l > .pan { transform: translateX(calc(-1 * var(--pan-l, 0px))); }
 .hbars { display: flex; position: sticky; bottom: 0; left: 0; z-index: 1; background: var(--bg-alt); border-top: 1px solid var(--border); }
 .hbars.hidden { display: none; }
-.hbars .hbar { flex: 1 1 0; min-width: 0; overflow-x: auto; overflow-y: hidden; height: 14px; }
-.hbars .hbar:first-child:not(:last-child) { border-right: 1px solid var(--border); }
+/* a bar = a native scroller with its scrollbar HIDDEN + a thumb gg paints
+   (mountThumb): overlay scrollbars (Firefox, macOS) only show on hover */
+.hbars .hbar-wrap { position: relative; flex: 1 1 0; min-width: 0; height: 14px; cursor: pointer; }
+.hbars .hbar-wrap:first-child:not(:last-child) { border-right: 1px solid var(--border); }
+.hbars .hbar { overflow-x: auto; overflow-y: hidden; height: 14px; scrollbar-width: none; }
+.hbars .hbar::-webkit-scrollbar { display: none; }
 .hbars .hbar > div { height: 1px; }
+.hbars .hthumb { position: absolute; top: 3px; height: 8px; border-radius: 4px; background: var(--dim); opacity: 0.6; touch-action: none; }
+.hbars .hthumb:hover, .hbars .hthumb.drag { opacity: 1; }
+.hbars .hthumb.none { display: none; }
 body.lm-cut table.diff td.side { white-space: pre; overflow: hidden; text-overflow: ellipsis; }
 body.lm-scroll .bline { white-space: pre; width: max-content; min-width: 100%; }
 /* blame's gutter and line number stay put while the code scrolls sideways */
@@ -1220,6 +1227,7 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
    would double the jump. */
 #diff-pane:has(.stk) { overflow-anchor: none; }
 .stk { padding: 4px 6px 24px; }
+.stk::after { content: ""; display: block; height: var(--stk-tail, 0px); } /* any header can reach the top */
 .stk-file { border: 1px solid var(--border); border-radius: 4px; margin: 8px 0; }
 .stk-head {
   position: sticky; top: var(--diff-head-h, 0px); z-index: 1;
@@ -1233,6 +1241,8 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 .stk-add { color: #7bd88f; }
 .stk-del { color: #f27a6a; }
 .stk-bin { color: var(--dim); }
+.stk-sides { color: var(--dim); white-space: nowrap; font-size: 0.9em; }
+.stk-head .symg { flex: 0 0 auto; }
 .stk-ph { color: var(--dim); padding: 8px; }
 #stack-btn.on, #foot button[data-act="stacked"].on { color: var(--accent); }
 #stack-fold-all.hidden { display: none; }

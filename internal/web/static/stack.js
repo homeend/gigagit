@@ -44,6 +44,50 @@ export function statusLetter(f) {
   return f.status || "";
 }
 
+// symRow: a row of the symmetric view — its kind is one of the four the
+// view derives (≠ = ◁ ▷). Not merely "has a kind": a working-tree status
+// entry carries one of its own ("tracked", …).
+function symRow(f) {
+  return Object.hasOwn(GLYPH, f.kind || "");
+}
+
+// noContent: a symmetric row with bytes on NEITHER side — one set deletes the
+// file, the other does not touch it. There is nothing to ask the server for.
+function noContent(f) {
+  return symRow(f) && f.left !== "present" && f.right !== "present";
+}
+
+// symPair is the pair of sides a symmetric row's diff reads, in the arrow's
+// direction: a row's own spec wins over its set's, and a row that does not
+// differ ("=") is asked for as M. openSymRow and the stack's loader (through
+// fileDiffURL) both read it, so the two views can never fetch different
+// diffs for one row. null = neither side has content.
+export function symPair(f, c) {
+  if (noContent(f)) return null;
+  const fl = c.flipped;
+  return {
+    left: fl ? f.right_spec || c.bSpec : f.left_spec || c.aSpec,
+    right: fl ? f.left_spec || c.aSpec : f.right_spec || c.bSpec,
+    status: f.status === "=" ? "M" : f.status,
+  };
+}
+
+// GLYPH / KIND_TIP: a symmetric row's centre glyph and its tooltip, by kind
+// (symcompare.js's lists and the stack's headers both paint them).
+export const GLYPH = { ne: "≠", eq: "=", ol: "◁", or: "▷" };
+export const KIND_TIP = {
+  ne: "differs between the two sets",
+  eq: "the same in both sets",
+  ol: "only in the left set",
+  or: "only in the right set",
+};
+
+// noContentWhy says why a symmetric row has no diff, side by side.
+export function noContentWhy(f) {
+  const say = (st, name) => (st === "deleted" ? `the ${name} set deletes it` : `the ${name} set does not touch it`);
+  return say(f.left, "left") + ", " + say(f.right, "right");
+}
+
 export function buildSlots(rows, collapse = rows.length > STACK_COLLAPSE_OVER) {
   return rows.map(({ f, idx }) => ({
     key: slotKey(f),
@@ -53,8 +97,13 @@ export function buildSlots(rows, collapse = rows.length > STACK_COLLAPSE_OVER) {
     oldPath: f.old_path || f.orig_path || "",
     status: statusLetter(f),
     counts: null,
-    // a conflict is resolved in the hunk picker, never diffed in a stack
-    load: f.section === "conflicts" ? "none" : "idle",
+    // a conflict is resolved in the hunk picker, and a symmetric row with no
+    // bytes on either side has nothing to diff: both are header-only
+    load: f.section === "conflicts" || noContent(f) ? "none" : "idle",
+    none: f.section === "conflicts" ? "conflict" : noContent(f) ? "empty" : "",
+    kind: symRow(f) ? f.kind : "", // symmetric rows: ≠ = ◁ ▷ and each side's state
+    left: symRow(f) ? f.left : "",
+    right: symRow(f) ? f.right : "",
     collapsed: collapse,
     diff: null,
     folds: new Set(), // this file's unfolded runs in the changes-only view (diffHTML's `open`)
@@ -116,6 +165,7 @@ export function reconcileSlots(old, rows) {
     o.idx = n.idx;
     o.f = n.f;
     o.status = n.status;
+    o.none = n.none;
     o.oldPath = n.oldPath;
     if (changed) {
       o.diff = null;

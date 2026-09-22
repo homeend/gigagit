@@ -48,6 +48,38 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   and the toolbar under it jumped up under the cursor. The bar is now pinned
   with the diff header, so the buttons stay where they are.
 
+## `gg web`: the stacked diff in the symmetric comparison
+
+### Added
+
+- **`S` works in the symmetric comparison.** Both aligned file lists stay;
+  the middle column becomes one scroll of the rows the filter shows, each
+  diffed in the arrow's direction. A header adds the row's `≠ = ◁ ▷` glyph
+  and where each set stands (`left in · right deletes`); a file neither set
+  has content for is a header with the familiar "neither set has content"
+  note and is never fetched. Both lists' highlight follows the file you are
+  reading, and a click in either list scrolls to it.
+- A filter (`1`–`4`), a flip (`x`), `v`, a narrower window and a live
+  refresh rebuild the stack on the file you were reading when it is still
+  shown.
+
+### Fixed
+
+- A file near the end of a stack (any set without counts: links, entries)
+  could not be scrolled to the top — the pane ran out of scroll, and the
+  list highlighted the file above. The stack now ends with a one-pane tail.
+- In the **scroll** long-line mode (`w`), a stack whose top file is one
+  column wide (a file only one side has — an add or a delete) showed no
+  scrollbar, while the two-column files below it had their lines cut off.
+  The bars are now sized over every file in the stack, each line against
+  its own cell, with a bar per side whenever any file is side by side.
+- The scroll-mode bars (diff, stack, file history, blame) are now drawn by gg
+  itself — a thumb you can drag, and a track to click. Firefox and macOS draw
+  overlay scrollbars that only appear on hover, so the bars looked missing.
+- In a stack, every file has its **own** scroll-mode bars, under the file
+  (pinned to the pane's bottom edge while the file is on screen): a bar pans
+  that file only — the old pane-wide pair moved every file's side at once.
+
 ## `gg web`: the stacked diff — every file in one scroll (`S`)
 
 ### Added
@@ -71,8 +103,8 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `?wt=staged|unstaged`) answers the header counts — asked only while a stack
   is open.
 - Not yet inside a stack: in-view search (`/` says to switch back), review
-  notes and the line cursor, inline hunk staging. The symmetric comparison
-  and the TUI get the stack in their own follow-ups.
+  notes and the line cursor, inline hunk staging. The TUI gets the stack in
+  its own follow-up.
 
 ## `gg web`: the symmetric comparison's file lists cut long paths from the middle
 

@@ -1362,9 +1362,55 @@ Spec `docs/superpowers/specs/2026-09-22-stacked-diff-view-design.md`, plan
   lost its node whenever the reader's section repainted in the same beat).
 - **Web keys.** `S`, `-`, `_`; `/` and `@` toast (search reads one diff); `j`/`k`
   scroll the stack via `openFile`. NOT `n`/`p` — `p` is pull.
-- **Deferred.** The symmetric view (`stackOn()` is false while
-  `symActive()`), notes/cursor (the per-slot accessor arrives with them),
+- **Deferred.** Notes/cursor (the per-slot accessor arrives with them),
   search, hunk staging, the TUI.
+
+### Stacked diff in the symmetric compare (plan 2, 2026-09-22)
+
+Plan `docs/superpowers/plans/2026-09-22-stacked-diff-web-symmetric.md`.
+`stackOn()` is just the pref: in the symmetric view `activeFileList()` IS
+`symRows(c)` (visible, direction-aware rows), so the stack needed only:
+
+- **One pair builder.** `stack.js` `symPair(f, c)` (flip-aware; `=` asked as
+  `M`; null = neither side has content) is read by `openSymRow` AND
+  `fileDiffURL`'s sym arm (`TestSymPairShared`). `GLYPH` / `KIND_TIP` /
+  `noContentWhy` moved to `stack.js` too.
+- **A sym row is `Object.hasOwn(GLYPH, f.kind)`**, never "has a kind": a
+  working-tree status entry carries `kind: "tracked"`. The first cut used
+  `!!f.kind` and every working-tree slot became header-only (only the plan-1
+  working-tree probe caught it).
+- **Opens before the first paint.** `buildStack` awaits the counts; `applySym`
+  / `setFilter` open row 0 and then the kept row in the same tick. The
+  second open lands on `st.painted === false` and only moves `st.want`,
+  where the first paint then scrolls.
+- **Rebuild paths.** Filter / flip / `v` / the width gate hand out a new
+  `state.files` → a rebuild on the kept path; `updateLinkCompareFiles`
+  rebuilds on the cursor's (clamped) file instead of `drillOut` (the sym
+  view's esc leaves the screen); an empty view tears the stack down in
+  `applyCompareFilter`'s `symEmpty` arm.
+- **The one-pane tail** (`--stk-tail`, `.stk::after`): sets with no numstat
+  (links, entries) paint 3-row placeholders, the pane ran out of scroll
+  before a late header reached the top, and `syncCursor` then moved the
+  highlight to the file above. Probe `stack-probe/sym.mjs` (scratchpad).
+- **Pan bars over mixed tables.** `mountPanBars` sizes each bar by the
+  largest OVERFLOW (line width − its own cell's width) over every table on
+  the host, and shows a bar per side when ANY table is two-column. It used to
+  read the first table only: a one-column file on top gave one bar measured
+  against a full-width cell → no scrollbar while two-column files below were
+  cut (user-found in the symmetric stack; probe `stack-probe/mixed.mjs`).
+- **Painted thumbs.** Each `.hbar` stays the native scroller (wheel, touch,
+  `scrollLeft` — search and restore drive it) but its scrollbar is hidden;
+  `mountThumb` paints `.hthumb` over it (drag pans, a track click pages).
+  Firefox/macOS overlay scrollbars only show on hover — the user saw NO bar
+  in Firefox. Headless Chromium hides scrollbars too; Playwright's Firefox
+  (`npx playwright install firefox`) is how to see what Firefox users see.
+- **Per-file bars in a stack** (user ruling). Each section is
+  `head · .stk-body · .hbars.stk-hbars`; `mountSlotBars` mounts with the
+  BODY as pan host, so `--pan-l/--pan-r` and `host._pan` are per file. The
+  section's bars are `position: sticky; bottom: 0` inside the section: at the
+  pane bottom while the file fills it, at the file's end after. `mountSlotBars`
+  runs BEFORE `repaintSlot`'s pin (the bars add height). `#diff-hbars` hides
+  while a stack is up; `renderDiff` brings it back. Probe `perfile.mjs`.
 
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)
 
