@@ -798,7 +798,7 @@ func (m Model) stackStatCmd(st *diffStack) tea.Cmd
 - [ ] **Step 2:** FAIL.
 - [ ] **Step 3: Implement**
   - Match stats by `Path`. `Binary` → `bin`.
-  - Numstat never overwrites a file already `counted` from rows? No: the numstat counts are authoritative, rows only fill in the files numstat did not name.
+  - Numstat is authoritative: rows fill `add`/`del` only for files numstat did not name.
   - Untracked files are absent from `DiffStat` and fill in from rows.
   - Endpoint check: compare mode with both `m.filesLeft`/`m.filesRight` of kind `EndpointCommit` → `DiffStat{Rev: l.Hash() + ".." + r.Hash()}`. Use the real accessor name; grep `func (e Endpoint)` in `model.go`.
 - [ ] **Step 4:** `go test ./internal/tui` — PASS.
