@@ -266,3 +266,19 @@ func TestStackNoteContextIsShared(t *testing.T) {
 		t.Fatal("files.js: addNotePrompt must act on the active slot's address")
 	}
 }
+
+// Both note gates must read the ACTIVE slot's context, not the single-file
+// view's global one: state.diffCtx is null while a stack is up, so a global
+// gate leaves every note key and every row click dead inside a stack — the
+// exact defect the browser probe caught twice.
+func TestStackNoteGatesReadTheActiveSlot(t *testing.T) {
+	t.Parallel()
+	keys := readStatic(t, "keys.js")
+	if !strings.Contains(keys, "notesArmed(activeDiff().ctx)") {
+		t.Fatal("keys.js: noteKey must gate on the active slot's context")
+	}
+	files := readStatic(t, "files.js")
+	if !strings.Contains(files, "if (!notesArmed(rowSlotCtx(handle || e.target.closest(\"tr\")) || state.diffCtx)) return;") {
+		t.Fatal("files.js: the diff-body click must gate on the CLICKED row's own file")
+	}
+}

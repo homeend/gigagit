@@ -2574,9 +2574,12 @@ function rowSideAndLine(tr, td) {
 // notesArmed: on a comparison a marked row would promise a `c` that is inert.
 // (The ◆ menu needs no guard — a comparison renders no ◆ rows to right-click.)
 $("diff-body").addEventListener("click", (e) => {
-  if (!notesArmed()) return;
-  // A note's title line is its fold handle.
+  // The gate is the clicked ROW's own file in a stack (each carries its own
+  // address), and the single-file view's context otherwise — reading the
+  // global one here would leave every row unmarkable inside a stack.
   const handle = e.target.closest(".notetitle[data-collapse]");
+  if (!notesArmed(rowSlotCtx(handle || e.target.closest("tr")) || state.diffCtx)) return;
+  // A note's title line is its fold handle.
   if (handle && getSelection().isCollapsed) {
     toggleNoteCollapsed(handle.dataset.collapse);
     return;
