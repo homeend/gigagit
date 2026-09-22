@@ -1531,6 +1531,36 @@ rows are that loader's stamps — one file deeper than before, same rule.
   CURSOR's file and is not offered while that file has none.
 - **Footer:** the stacked line gains `[c}{] note` and lands on exactly 140
   columns; `ctrl+↑`/`ctrl+↓` had no room and live in the `?` help.
+**The web half** (same plan, second merge) is the `activeDiff()` accessor §5.1
+reserved, and nothing more:
+
+- **`diffHTML` takes the note context explicitly** — `nctx = {ctx, notes,
+  row}`, threaded into `noteRowsHTML` / `fileNoteRowsHTML` / `noteBoxHTML`,
+  `curCls`, the changes-only fold's `noted` pin and `attnKey`. NOT a
+  module-level "current slot": a stack paints one slot while another's notes
+  are in flight, and a shared variable would race them.
+- **One context builder, two callers.** `commitDiffCtx` / `statusDiffCtx` were
+  factored out of `openFile` / `openStatusDiff`, and `rowNoteCtx(f)` mirrors
+  `openFile`'s own dispatch for a stack's slot. A second builder would drift
+  silently, and the drift is a note filed against the wrong file.
+- **A slot fetches its own notes** in `load()` (`notesFor(ctx)`, the read half
+  of `fetchNotes`), seeds the forge's resolved threads into the view-wide
+  collapse set once, and repaints through `repaintSlot` so the reader's pin
+  keeps their place. `fetchNotes` in a stack fans out over the loaded slots
+  (`refreshStackNotes`) — one address per file, so there is no single re-read.
+- **Both GATES read the active slot** (each cost a probe run): `noteKey` in
+  keys.js gated on `notesArmed()` — the GLOBAL ctx, which is null while a
+  stack is up, so every note key was dead; and `#diff-body`'s click listener
+  did the same, so no row could be marked. They now read `activeDiff().ctx`
+  and the clicked row's own file (`rowSlotCtx`).
+- **`landStackLine`** is the web twin of the TUI's `stackLanding`: unfold,
+  fetch, then find the row INSIDE that file's section — a pane-wide lookup
+  marks whichever file carries the number first, and every file has a line 23.
+- **Probe:** `stack-probe/notes.mjs` (+ `mknotes.sh`) and `land.mjs`, run
+  against the unfixed build first, chromium AND firefox. The stored
+  `stacked_diff` pref makes `S` a TOGGLE across runs — the probe drops
+  `ui-state.json` and re-presses `S` if the first one turned the stack off.
+
 - **Gotchas found in verification:** a conflicted header must show no counts
   (its body is the resolver line); `tui-capture.sh` now isolates
   `XDG_STATE_HOME` itself (`--state`, `env` INSIDE the tmux command — an
