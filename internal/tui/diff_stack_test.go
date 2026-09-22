@@ -55,15 +55,20 @@ func TestStackSpliceHeadersThenBodies(t *testing.T) {
 	for _, l := range v.lines {
 		kinds = append(kinds, l.kind)
 	}
-	want := []lineKind{lineHeader, lineBody, lineBody, lineBody, lineHeader, linePlace, lineHeader, lineBody, lineBody}
+	want := []lineKind{
+		lineHeader, lineRule, lineBody, lineBody, lineBody, // file 0 (no blank line above the first file)
+		lineGap, lineHeader, lineRule, linePlace, // file 1, not loaded
+		lineGap, lineHeader, lineRule, lineBody, lineBody, // file 2
+	}
 	if !slices.Equal(kinds, want) {
 		t.Fatalf("stream kinds = %v, want %v", kinds, want)
 	}
-	if !slices.Equal(v.blocks, []int{0, 4, 6}) {
+	if !slices.Equal(v.blocks, []int{0, 6, 10}) {
 		t.Fatalf("blocks must be the header indices, got %v", v.blocks)
 	}
-	if v.lines[7].file != 2 || v.stk.files[2].start != 6 {
-		t.Fatalf("file index / start not stamped: line file %d, start %d", v.lines[7].file, v.stk.files[2].start)
+	if v.lines[12].file != 2 || v.stk.files[2].start != 9 || v.stk.files[2].hdr != 10 {
+		t.Fatalf("file index / start / hdr not stamped: line file %d, start %d, hdr %d",
+			v.lines[12].file, v.stk.files[2].start, v.stk.files[2].hdr)
 	}
 }
 
@@ -73,11 +78,12 @@ func TestStackCollapsedFileIsHeaderOnly(t *testing.T) {
 	v := stackViewOf(t, sameRowsTUI(3, 1), sameRowsTUI(2, 0))
 	v.stk.files[0].collapsed = true
 	v.rebuild()
-	if len(v.lines) != 1+1+2 {
-		t.Fatalf("a folded file must contribute its header only: %d lines", len(v.lines))
+	// file 0 folded: header + rule; file 1: blank, header, rule, two rows.
+	if len(v.lines) != 2+3+2 {
+		t.Fatalf("a folded file must contribute its header and rule only: %d lines", len(v.lines))
 	}
-	if v.lines[0].kind != lineHeader || v.lines[1].kind != lineHeader {
-		t.Fatal("the folded file's header must be followed straight by the next header")
+	if v.lines[0].kind != lineHeader || v.lines[1].kind != lineRule || v.lines[2].kind != lineGap {
+		t.Fatal("a folded file must run straight into the next file's blank line")
 	}
 }
 
@@ -130,18 +136,21 @@ func TestStackRenderPaintsHeaderAndPlaceholder(t *testing.T) {
 // which is what makes notes / copy / e inert there.
 func TestStackCursorStopsOnHeadersSkipsPlaceholders(t *testing.T) {
 	t.Parallel()
-	v := stackViewOf(t, sameRowsTUI(1), nil, sameRowsTUI(1)) // H B H P H B
-	v.setCursorLine(1, 10)
+	// H R B | gap H R P | gap H R B
+	v := stackViewOf(t, sameRowsTUI(1), nil, sameRowsTUI(1))
+	v.setCursorLine(2, 10) // file 0's only body row
 	v.moveCursor(1, 10)
-	if v.curLine != 2 || v.lines[2].kind != lineHeader {
-		t.Fatalf("j from a body row must land on the next header, got line %d", v.curLine)
+	if v.lines[v.curLine].kind != lineHeader || v.curFile() != 1 {
+		t.Fatalf("j from a body row must land on the next file's header, got line %d kind %v",
+			v.curLine, v.lines[v.curLine].kind)
 	}
 	if _, ok := v.cursorRow(); ok {
 		t.Fatal("cursorRow must be false on a header")
 	}
 	v.moveCursor(1, 10)
-	if v.curLine != 4 {
-		t.Fatalf("j must skip the placeholder to the next header, got %d", v.curLine)
+	if v.lines[v.curLine].kind != lineHeader || v.curFile() != 2 {
+		t.Fatalf("j must skip the rule, the placeholder and the blank line to the next header, got line %d kind %v",
+			v.curLine, v.lines[v.curLine].kind)
 	}
 	if got := v.curFile(); got != 2 {
 		t.Fatalf("the cursor's file is %d, want 2", got)
@@ -270,6 +279,10 @@ func TestStackTitleFollowsTheCursorFile(t *testing.T) {
 func tempPromptStore(t *testing.T, m Model) Model {
 	t.Helper()
 	m.promptStore = promptstate.NewFileStore(filepath.Join(t.TempDir(), "prompts.toml"))
+	// New() read the MACHINE's store before this one replaced it, so the
+	// session flag has to come from the temp store too — otherwise a test
+	// passes or fails by whether the developer left the stacked view on.
+	m.diffStacked = m.promptStore.StackedDiff()
 	return m
 }
 
@@ -700,5 +713,31 @@ func TestStackFoldAndWrapKeepTheCursorsFile(t *testing.T) {
 		if r, ok := v.cursorRow(); ok && r.RightNo != before.RightNo {
 			t.Fatalf("%s moved the cursor to line %d, want %d", key, r.RightNo, before.RightNo)
 		}
+	}
+}
+
+// Each file is framed: a blank line above its header (except the first file,
+// which has nothing above it) and a full-width rule under it.
+func TestStackFramesEachHeader(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, sameRowsTUI(2, 0), sameRowsTUI(2, 0))
+	m := diffModel()
+	m.height, m.width = 20, 80
+	m = m.pushLayer(v)
+	lines := strings.Split(m.renderDiffView(), "\n")
+	// line 0 is the view's own header; the stack starts at line 1.
+	if !strings.Contains(lines[1], "▾ M  f0.go") {
+		t.Fatalf("the first file must start at the top with no blank line: %q", lines[1])
+	}
+	rule := strings.Repeat("─", 80)
+	if !strings.Contains(lines[2], rule) {
+		t.Fatalf("a rule must run under the header, the full width: %q", lines[2])
+	}
+	// file 0 has two rows, then the blank line, then file 1's header + rule.
+	if strings.TrimSpace(lines[5]) != "" {
+		t.Fatalf("a blank line must open the next file: %q", lines[5])
+	}
+	if !strings.Contains(lines[6], "▾ M  f1.go") || !strings.Contains(lines[7], rule) {
+		t.Fatalf("the next file must read blank, header, rule: %q / %q", lines[6], lines[7])
 	}
 }

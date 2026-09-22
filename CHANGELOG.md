@@ -21,6 +21,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   two screens of what you are looking at, at most three at a time, and a file
   arriving above the viewport never moves the line you are reading. A list of
   more than 100 files opens folded, except the file you opened.
+- **Each file is set apart.** A blank line runs above every file's header and
+  a rule the width of the screen under it, so the stack reads as a series of
+  files rather than one unbroken column.
 - **Keys.** `n`/`p` step from file header to file header (`ctrl+↓`/`ctrl+↑`
   too); `home`/`end` go to the top and bottom of the whole stack and no
   longer step to another file, since every file is already there; `-` folds

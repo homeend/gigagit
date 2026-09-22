@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"strings"
+
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
@@ -18,6 +20,12 @@ func (m Model) stackRow(v *diffView, dr dRow, w int, onCursor bool) string {
 		return ""
 	}
 	s := st()
+	switch dr.kind {
+	case lineGap: // the blank line above a file's header
+		return ""
+	case lineRule: // the rule under it, the full width of the screen
+		return s.diffFold.Render(strings.Repeat("─", w))
+	}
 	if dr.kind == linePlace {
 		return truncate(s.diffFold.Render(placeText(f)), w)
 	}
