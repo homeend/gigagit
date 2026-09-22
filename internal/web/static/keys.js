@@ -7,6 +7,8 @@ import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stag
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
 import { addNotePrompt, cycleFilesSort, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
+import { collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
+import { toast } from "./toast.js";
 import { openPalette } from "./palette.js";
 import { branchFilterKey } from "./branchfilter.js";
 
@@ -25,6 +27,8 @@ function moveCursor(delta) {
     const list = state.filesMode === "status" ? state.statusEntries : state.files;
     if (!list.length) return;
     state.fileCursor = Math.max(0, Math.min(list.length - 1, state.fileCursor + delta));
+    // In a stack j/k walk the sections: the cursor's file scrolls into view.
+    if (state.stack && state.layout === "diff") return openFile(state.fileCursor);
     renderFiles();
   }
 }
@@ -197,6 +201,18 @@ document.addEventListener("keydown", (e) => {
     toggleNoteCollapsed(null); // the TUI's O: every thread of this file
   } else if (noteKey(e, "}") || noteKey(e, "{")) {
     stepNote(e.key === "}" ? 1 : -1);
+  } else if (e.key === "S" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    toggleStacked(); // every file in one scroll ↔ one file at a time
+  } else if (e.key === "-" && state.stack) {
+    e.preventDefault();
+    collapseCurrent();
+  } else if (e.key === "_" && state.stack) {
+    e.preventDefault();
+    toggleAllCollapsed();
+  } else if ((e.key === "/" || e.key === "@") && state.stack) {
+    // in-view search reads ONE diff; the stack has many (a follow-up plan)
+    e.preventDefault();
+    toast("search works in the single-file view — S switches");
   } else if (e.key === "/") {
     e.preventDefault(); // the browser's quick-find would grab it
     openCommitFilter();
@@ -220,6 +236,7 @@ $("foot").addEventListener("click", (e) => {
     case "sort": if (state.pane === "files" && state.filesMode === "status") cycleFilesSort(); break;
     case "diffview": toggleDiffView(); break;
     case "textmode": cycleTextMode(); break;
+    case "stacked": toggleStacked(); break;
     case "pull": doPull(); break;
     case "push": doPush(); break;
     case "refresh": manualRefresh(); break;

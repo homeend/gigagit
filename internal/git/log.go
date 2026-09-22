@@ -129,6 +129,23 @@ func (r *Repo) CommitFiles(ctx context.Context, hash string) ([]model.CommitFile
 	return ParseNameStatus([]byte(res.Stdout)), nil
 }
 
+// CommitNumstat returns `--numstat -z` records (parse with ParseNumstat) for
+// one commit against its FIRST parent — a root commit against the empty tree
+// — the exact pairing CommitFiles lists, so the stacked diff's per-file
+// counts name the same paths. log's empty --format= can leave separator
+// bytes ahead of the first record; they are trimmed so ParseNumstat sees
+// records only. One invocation.
+func (r *Repo) CommitNumstat(ctx context.Context, hash string) (string, error) {
+	argv := gitcmd.New("log").
+		Arg("-1", "-m", "--first-parent", "--root", "--numstat", "-M", "-z", "--format=", hash).
+		ToArgv()
+	res, err := r.Runner.Run(ctx, "git log (commit numstat)", argv)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimLeft(res.Stdout, "\n\x00"), nil
+}
+
 // TreeFiles lists every file in commit's tree — the full set that would exist
 // if the commit were checked out — via `ls-tree -r --name-only -z`. It walks
 // tree objects only (no checkout / working-tree stat), so it is cheap even on a

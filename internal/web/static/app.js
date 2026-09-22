@@ -16,6 +16,7 @@ import "./versions.js";
 import "./rebase.js";
 import "./filehist.js";
 import "./review.js";
+import { syncStackChrome } from "./stackview.js";
 import { applyStoredWidths } from "./resize.js";
 import { applyGraphMode, loadCommits, renderCommits } from "./commits.js";
 import { applyDiffView, applyFilesHidden, applyTextMode, refreshNoteCounts } from "./files.js";
@@ -63,6 +64,7 @@ async function applyStoredLayout() {
   applyGraphMode(ui.graph);
   applyDiffView(ui.diff_view);
   applyTextMode(ui.text_mode);
+  syncStackChrome(); // the S chips show a stored "stacked" before any diff opens
 }
 
 

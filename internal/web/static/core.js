@@ -55,6 +55,7 @@ const state = {
   filesHidden: false, // the file list's » control: folded to a strip (a stored preference, /api/uistate)
   op: null, // {id, es: EventSource} while an operation is live
   lastDiff: null,
+  stack: null, // the stacked diff view's live stack (stackview.js), else null
   diffPartial: false,      // the f toggle: true = changed lines only (a stored preference, /api/uistate)
   textMode: "wrap",        // the w cycle: how long lines show — scroll | wrap | cutoff (a stored preference, /api/uistate)
   // The blame overlay's d/D recent-lines highlight: span in whole minutes,

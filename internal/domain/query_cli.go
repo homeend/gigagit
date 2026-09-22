@@ -40,6 +40,19 @@ func (s *Service) DiffStat(ctx context.Context, spec model.DiffSpec) ([]model.Di
 	})
 }
 
+// CommitStat returns per-file line counts for one commit against its first
+// parent (a root commit against the empty tree) — the pairing CommitFiles
+// lists, so the two agree path for path.
+func (s *Service) CommitStat(ctx context.Context, hash string) ([]model.DiffStat, error) {
+	return query(ctx, s, "commit-stat:"+hash, func(ctx context.Context) ([]model.DiffStat, error) {
+		out, err := s.repo.CommitNumstat(ctx, hash)
+		if err != nil {
+			return nil, err
+		}
+		return git.ParseNumstat(out), nil
+	})
+}
+
 // DiffPatch returns the full patch text for spec.
 func (s *Service) DiffPatch(ctx context.Context, spec model.DiffSpec) (string, error) {
 	key := "diffpatch:" + strconv.FormatBool(spec.Cached) + ":" + spec.Rev + ":" + strings.Join(spec.Paths, "\x00")

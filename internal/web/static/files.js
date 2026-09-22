@@ -18,6 +18,7 @@ import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
+import { openStack, reconcileStack, rerenderStack, stackOn, teardownStack } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -36,6 +37,7 @@ function reconcileStatusView() {
     conflictPick = null;
     renderResolveBar();
   }
+  reconcileStack();
 }
 
 
@@ -117,6 +119,7 @@ registerHelp({
 // the diff replaces the commits area, file list stays right. esc steps one
 // stage back (drillOut).
 function setLayout(mode) {
+  if (mode !== "diff") teardownStack(); // the stack lives in the diff stage only
   const was = state.layout;
   state.layout = mode;
   const p = $("panes");
@@ -1040,6 +1043,43 @@ function openPreviewCtx() {
 }
 
 
+// fileDiffURL is the ONE place a listed file becomes the URL its diff is read
+// from, in the screen's current mode — the single-file opens and the stacked
+// view's loader (stackview.js) both fetch through it, so the two can never
+// show different diffs for one row. null = there is nothing to diff (a
+// conflict is resolved in the hunk picker).
+function fileDiffURL(f) {
+  if (state.filesMode === "status") {
+    if (f.section === "conflicts") return null;
+    const q = new URLSearchParams({ wt: f.section === "staged" ? "staged" : "unstaged", path: f.path });
+    if (f.orig_path) q.set("old", f.orig_path);
+    return "/api/diff?" + q;
+  }
+  const c = state.compare;
+  // A link comparison (a row may name its own sides) and a frozen entry
+  // compare address their sides by SPEC: one may be a snapshot git cannot read.
+  if (state.filesMode === "compare" && (c.links || c.frozen)) {
+    const q = new URLSearchParams({
+      left: (c.links && f.left_spec) || c.aSpec,
+      right: (c.links && f.right_spec) || c.bSpec,
+      path: f.path,
+    });
+    if (f.status) q.set("status", f.status);
+    if (c.links && f.old_path) q.set("old_path", f.old_path);
+    return "/api/entry-diff?" + q;
+  }
+  const q = new URLSearchParams({ path: f.path, status: f.status });
+  if (state.filesMode === "compare") {
+    q.set("left", c.aHash);
+    q.set("right", c.bHash);
+  } else {
+    q.set("sha", f.sha || state.fileSha);
+  }
+  if (f.old_path) q.set("old", f.old_path);
+  return "/api/diff?" + q;
+}
+
+
 async function openFile(i) {
   clearDiffHunks();
   // The layout switch sits in the SYNC prefix: an esc during a slow diff
@@ -1053,6 +1093,10 @@ async function openFile(i) {
   state.fileCursor = i;
   renderFiles();
   updateDiffNav();
+  // The stacked view (S) shows every file in one scroll: this row is a
+  // place in it, not a diff of its own (stackview.js).
+  if (stackOn()) return openStack(i);
+  teardownStack(); // a single-file open replaces any stack on screen
   if (state.filesMode === "status") return openStatusDiff(i);
   const f = state.files[i];
   // A link comparison addresses its sides by spec too, and a ROW may name its
@@ -1119,14 +1163,6 @@ async function openFile(i) {
   };
   state.diffRow = null;
   state.notes = [];
-  const q = new URLSearchParams({ path: f.path, status: f.status });
-  if (state.filesMode === "compare") {
-    q.set("left", state.compare.aHash);
-    q.set("right", state.compare.bHash);
-  } else {
-    q.set("sha", f.sha || state.fileSha);
-  }
-  if (f.old_path) q.set("old", f.old_path);
   setDiffTitle(f.path);
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
@@ -1134,11 +1170,14 @@ async function openFile(i) {
     // The notes ride ALONGSIDE the diff fetch, not after it: the ◆ rows have
     // to be in the first paint, and a second serial round-trip would show the
     // diff without them first.
-    const [d] = await Promise.all([getJSON("/api/diff?" + q), fetchNotes(false)]);
+    const gen = state.detailGen; // a newer open, esc or a stack (S) supersedes this one
+    const [d] = await Promise.all([getJSON(fileDiffURL(f)), fetchNotes(false)]);
+    if (gen !== state.detailGen) return;
     renderDiff(d);
     jumpToFirstChange();
     focusDiff();
   } catch (e) {
+    if (state.stack) return; // superseded by a stack: its error is not this pane's
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
   }
@@ -1154,12 +1193,12 @@ async function openStatusDiff(i) {
   state.notes = [];
   setDiffTitle(f.path);
   if (f.section === "conflicts") return openConflictPicker(f);
-  const q = new URLSearchParams({ wt: f.section === "staged" ? "staged" : "unstaged", path: f.path });
-  if (f.orig_path) q.set("old", f.orig_path);
   $("diff-body").innerHTML = `<div class="notice">loading…</div>`;
   updateDiffNav();
   try {
-    const [d] = await Promise.all([getJSON("/api/diff?" + q), fetchNotes(false)]);
+    const gen = state.detailGen; // a newer open, esc or a stack (S) supersedes this one
+    const [d] = await Promise.all([getJSON(fileDiffURL(f)), fetchNotes(false)]);
+    if (gen !== state.detailGen) return;
     // server tags eligible unstaged diffs with hunk ordinals — arm inline
     // staging BEFORE the render so the rows pick up their hk classes
     if (d.hunks && hunkEligible(f)) {
@@ -1170,6 +1209,7 @@ async function openStatusDiff(i) {
     jumpToFirstChange();
     focusDiff();
   } catch (e) {
+    if (state.stack) return; // superseded by a stack: its error is not this pane's
     $("diff-body").innerHTML = `<div class="notice">error: ${esc(e.message || e)}</div>`;
     updateDiffNav();
   }
@@ -1526,6 +1566,8 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds) {
 
 
 function renderDiff(d) {
+  // A single diff never paints over a stack: the stack owns #diff-body.
+  if (state.stack) return;
   // A NEW diff starts with every run folded; a re-render of the same one (a
   // resize, a notes refresh, the f toggle) keeps the folds the reader opened.
   // A new diff is also a new search: the query does not follow a file step.
@@ -1570,6 +1612,7 @@ function visibleChangeBlock() {
 // must not be thrown to the block they last stepped to).
 // A conflict picker owns #diff-body while open: never draw the diff over it.
 function rerenderDiffKeepingPlace(keepScroll = false) {
+  if (state.stack) return rerenderStack();
   if (!state.lastDiff || conflictPick) return;
   const pane = $("diff-pane");
   const top = pane.scrollTop;
@@ -1640,7 +1683,8 @@ function toggleDiffView(keepScroll = false) {
   applyDiffView(on ? "changed" : "full");
   if (on) state.diffFolds = new Set();
   saveUI({ diff_view: on ? "changed" : "full" });
-  rerenderDiffKeepingPlace(keepScroll);
+  if (state.stack) rerenderStack(on); // flipping ON starts every file folded
+  else rerenderDiffKeepingPlace(keepScroll);
 }
 
 
@@ -2931,6 +2975,14 @@ function assembleOutput(v) {
 }
 
 
+// closeConflictPick drops an open hunk picker's state (a stack is taking
+// the pane) and hides its bar.
+function closeConflictPick() {
+  conflictPick = null;
+  renderResolveBar();
+}
+
+
 async function openConflictPicker(f) {
   clearDiffHunks(); // also nulls conflictPick — order matters, set it after
   setDiffTitle(f.path, "", " — resolve");
@@ -3408,4 +3460,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };

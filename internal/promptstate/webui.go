@@ -18,6 +18,9 @@ type WebUI struct {
 	// SymCompare is gg web's symmetric view of a link comparison (two aligned
 	// file lists around one diff): the user's on/off choice.
 	SymCompare bool `toml:"sym_compare,omitempty"`
+	// StackedDiff is gg web's stacked diff view: every file of the open change
+	// set in one scroll (header + diff per file) instead of one file at a time.
+	StackedDiff bool `toml:"stacked_diff,omitempty"`
 	// SidebarWidth / FilesWidth are the dragged pane widths in CSS pixels;
 	// 0 means "never dragged, use the default".
 	SidebarWidth int `toml:"sidebar_width"`
