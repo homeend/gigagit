@@ -44,7 +44,13 @@ type noteRemoveAllPopup struct {
 // whole-diff gate as "List notes…" — the scope is the open diff's address, not
 // the repository.
 func (m Model) noteRemoveAllRow() (actionRow, bool) {
-	if !m.diffHasNotes() {
+	if _, ok := m.topLayer().(*diffView); !ok {
+		return actionRow{}, false
+	}
+	// Removal is per ADDRESS, so in a stack it is the CURSOR's file that is
+	// cleared — offering the row while the cursor sits in a file with no notes
+	// would name a different file than the one it would clear.
+	if len(m.diffLayer().curNotes()) == 0 {
 		return actionRow{}, false
 	}
 	addr, ok := m.diffNoteAddress()
@@ -54,7 +60,7 @@ func (m Model) noteRemoveAllRow() (actionRow, bool) {
 	// On a preview the visible notes may ALL come from older commits, which
 	// NotesClear(addr) — one address, the tip — cannot touch. Offering the
 	// row there would be a gesture that does nothing.
-	if v := m.diffLayer(); v != nil && v.previewSet != nil && !diffHasTipNotes(v, addr.Commit) {
+	if v := m.diffLayer(); v != nil && m.previewNoteSet() != nil && !diffHasTipNotes(v, addr.Commit) {
 		return actionRow{}, false
 	}
 	return actionRow{
@@ -68,7 +74,7 @@ func (m Model) noteRemoveAllRow() (actionRow, bool) {
 
 // diffHasTipNotes reports whether any visible thread is anchored on commit.
 func diffHasTipNotes(v *diffView, commit string) bool {
-	for _, r := range v.notes {
+	for _, r := range v.curNotes() {
 		if r.Note.Source == model.NoteSourceForge {
 			continue // a forge thread is not stored: there is nothing to remove
 		}
@@ -86,18 +92,18 @@ func (m Model) openNoteRemoveAll() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	v := m.diffLayer()
-	if v == nil || len(v.notes) == 0 {
+	if v == nil || len(v.curNotes()) == 0 {
 		return m, nil
 	}
 	p := &noteRemoveAllPopup{field: newTextField(""), addr: addr, path: addr.Path}
-	for _, r := range v.notes {
+	for _, r := range v.curNotes() {
 		// total counts NOTES, the same unit roots+replies does: "(2 of 3)"
 		// has to compare like with like or it reads as two different things.
 		p.total += 1 + len(r.Replies)
 		// NotesClear takes ONE address: on a preview that is the tip, so a
 		// note gathered from an older commit is not removed and must not be
 		// counted as if it were.
-		if v.previewSet == nil || r.Note.Address.Commit == addr.Commit {
+		if m.previewNoteSet() == nil || r.Note.Address.Commit == addr.Commit {
 			p.roots++
 			p.replies += len(r.Replies)
 		}

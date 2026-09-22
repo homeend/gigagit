@@ -146,6 +146,19 @@ func (v *diffView) notesOf(i int) []domain.ResolvedNote {
 	return nil
 }
 
+// curNotes are the notes of the file the note keys act on: stacked, the file
+// under the cursor (whose address is what c/E/R and Remove all use), else the
+// view's own.
+func (v *diffView) curNotes() []domain.ResolvedNote {
+	if v == nil {
+		return nil
+	}
+	if v.stk == nil {
+		return v.notes
+	}
+	return v.notesOf(v.curFile())
+}
+
 // dropAgentRows keeps the rows the hidden agent layer still shows. It filters
 // per ROW, not per thread, so the two mixed-authorship cases both behave.
 func dropAgentRows(rows []noteLine) []noteLine {

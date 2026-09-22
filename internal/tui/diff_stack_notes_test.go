@@ -333,3 +333,86 @@ func TestSKeepsTheLineWhenLeavingAStack(t *testing.T) {
 		t.Fatalf("after S the cursor sits on new line %d (ok=%v), want the line being read, %d", row.RightNo, ok, want.RightNo)
 	}
 }
+
+// "List notes…" covers the WHOLE stack: one row per thread, each naming its
+// file, and picking one lands the cursor in that file — unfolding it first.
+func TestStackNotesListCoversEveryFile(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, cursorRows(8), cursorRows(8))
+	v.stk.files[0].path, v.stk.files[1].path = "a.go", "b.go"
+	noteOnStackFile(v, 0, 3, "in a")
+	noteOnStackFile(v, 1, 5, "in b")
+	v.stk.files[1].collapsed = true
+	m := diffModel()
+	m.height, m.width = 24, 120
+	m = m.pushLayer(v)
+	v.rebuild()
+
+	if !m.diffHasNotes() {
+		t.Fatal("a stack carrying notes must offer the list")
+	}
+	u, _ := m.openNotesList()
+	mm := u.(Model)
+	p, ok := mm.topLayer().(*notesListPopup)
+	if !ok {
+		t.Fatal("the notes list must open over a stack")
+	}
+	if len(p.entries) != 2 {
+		t.Fatalf("the list must hold both files' threads, got %d", len(p.entries))
+	}
+	var rows string
+	for _, e := range p.entries {
+		rows += e.line(100) + "\n"
+	}
+	if !strings.Contains(rows, "a.go") || !strings.Contains(rows, "b.go") {
+		t.Fatalf("each row must name its file:\n%s", rows)
+	}
+	// picking b.go's thread lands in b.go, unfolded
+	mm, moved := mm.gotoNote("in b")
+	if !moved {
+		t.Fatal("the jump must move the cursor")
+	}
+	nv := mm.diffLayer()
+	if nv.stk.files[1].collapsed {
+		t.Fatal("the jump must unfold the file it lands in")
+	}
+	if got := nv.curFile(); got != 1 {
+		t.Fatalf("landed in file %d, want b.go (1)", got)
+	}
+}
+
+// Removal is per ADDRESS, so in a stack "Remove all notes…" acts on the file
+// under the cursor — and is not offered while that file has none.
+func TestStackRemoveAllFollowsTheCursorsFile(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, cursorRows(8), cursorRows(8))
+	for i, p := range []string{"a.go", "b.go"} {
+		v.stk.files[i].path = p
+		v.stk.files[i].d.noteAddr = model.FileAddress{State: model.StateCommitted, Commit: "deadbeef", Path: p}
+	}
+	noteOnStackFile(v, 1, 5, "only in b")
+	m := diffModel()
+	m.height, m.width = 24, 120
+	m = m.pushLayer(v)
+	v.rebuild()
+
+	v.setCursorLine(2, m.diffBodyRows()) // inside a.go, which has none
+	if _, ok := m.noteRemoveAllRow(); ok {
+		t.Fatal("the row must not be offered while the cursor's file has no notes")
+	}
+	lo, _ := v.fileLineRange(1)
+	v.setCursorLine(lo+2, m.diffBodyRows()) // inside b.go
+	row, ok := m.noteRemoveAllRow()
+	if !ok {
+		t.Fatal("the row must be offered in the file that has notes")
+	}
+	u, _ := row.run(m)
+	mm := u.(Model)
+	p, isPopup := mm.topLayer().(*noteRemoveAllPopup)
+	if !isPopup {
+		t.Fatal("the confirmation must open")
+	}
+	if p.path != "b.go" || p.total != 1 {
+		t.Fatalf("the confirmation names %q with %d notes, want b.go with 1", p.path, p.total)
+	}
+}
