@@ -118,3 +118,78 @@ func (v *diffView) noteLineIn(lo, hi, dir int) (int, bool) {
 	}
 	return best, found
 }
+
+// stackFileIdx finds the stack's file with this path.
+func (v *diffView) stackFileIdx(path string) (int, bool) {
+	if v.stk == nil {
+		return 0, false
+	}
+	for i := range v.stk.files {
+		if v.stk.files[i].path == path {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// lineLanding is a cursor placement owed to a diff that is still loading: the
+// line the reader was on when they left a stack (S), named by side and number
+// because the view they are going back to has not been built yet.
+type lineLanding struct {
+	tag  string // the diffTag the re-open set; a mismatch drops the landing
+	side model.NoteSide
+	no   int
+}
+
+// cursorLineLanding names the line under the cursor, or nil when the cursor
+// has no numbered row (a header, a placeholder).
+func (v *diffView) cursorLineLanding() *lineLanding {
+	r, ok := v.cursorRow()
+	if !ok {
+		return nil
+	}
+	side, no := model.NoteSideNew, r.RightNo
+	if v.onOld || no == 0 {
+		side, no = model.NoteSideOld, r.LeftNo
+	}
+	if no == 0 {
+		return nil
+	}
+	return &lineLanding{side: side, no: no}
+}
+
+// withLineLanding parks land on the diff the caller just re-opened, tagged
+// with the tag that open set.
+func (m Model) withLineLanding(land *lineLanding, tm tea.Model, cmd tea.Cmd) (tea.Model, tea.Cmd) {
+	mm, ok := tm.(Model)
+	if !ok || land == nil {
+		return tm, cmd
+	}
+	land.tag = mm.diffTag
+	mm.diffLand = land
+	return mm, cmd
+}
+
+// drainLineLanding puts the cursor on the parked line once the diff carrying
+// it has arrived. It expands a fold hiding the line, exactly as a note jump
+// and a steer landing do.
+func (m Model) drainLineLanding(v *diffView, tag string) Model {
+	if m.diffLand == nil || m.diffLand.tag != tag {
+		return m
+	}
+	land := *m.diffLand
+	m.diffLand = nil
+	old := land.side == model.NoteSideOld
+	find := func() (int, bool) { return v.lineAnchor(land.no, old) }
+	li, ok := find()
+	if !ok || li < 0 {
+		return m
+	}
+	body := m.diffBodyRows()
+	if m, li, ok = m.expandFoldFor(v, li, find); !ok {
+		return m
+	}
+	v.setCursorLine(li, body)
+	v.alignCursor(alignCenter, body)
+	return m
+}

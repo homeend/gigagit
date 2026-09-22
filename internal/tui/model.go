@@ -166,6 +166,10 @@ type Model struct {
 	// the next noted file asynchronously, so the note to sit on is not known
 	// until that file's notes arrive (notesLoadedMsg). nil = nothing parked.
 	noteLand *noteLanding
+	// diffLand parks the LINE a re-opened single diff owes the reader: leaving
+	// a stack with S re-opens the file asynchronously, and a fresh view lands
+	// on its first change block, not on the line being read. nil = nothing.
+	diffLand *lineLanding
 
 	// filesPreviewSet / filesPreviewCounts are the open preview's note scope
 	// and its per-path badge counts; nil/empty when the files view is not
@@ -537,8 +541,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// generations are dropped inside applyStackFile, which hands back the
 		// command resolving that file's own review notes.
 		m, ncmd := m.applyStackFile(msg)
+		// A parked steer lands HERE for a stack: its files arrive as
+		// stackFileMsg, never as the diffMsg the single-file view waits on.
+		var scmd tea.Cmd
+		if dv := m.diffLayer(); dv != nil {
+			m, scmd = m.drainPendingDiff(dv)
+		}
 		nm, pcmd := m.pumpStack()
-		return nm, tea.Batch(ncmd, pcmd)
+		return nm, tea.Batch(ncmd, scmd, pcmd)
 	case stackNotesMsg:
 		// One stacked file's review notes arrived. Every file of a stack
 		// resolves its own, against the address its own loader stamped.
@@ -606,6 +616,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// has just overwritten curLine and offset with the loader's values.
 		var scmd tea.Cmd
 		m, scmd = m.drainPendingDiff(dv)
+		// Leaving a stack (S) parked the line the reader was on: the view it
+		// named exists only now.
+		m = m.drainLineLanding(dv, msg.tag)
 		return m, tea.Batch(m.loadNotesCmd(), scmd)
 	case notesLoadedMsg:
 		dv := m.diffLayer()

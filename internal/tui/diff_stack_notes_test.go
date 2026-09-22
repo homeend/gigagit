@@ -7,6 +7,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // noteOnStackFile hangs one root note off file i of a stack, on the new side at
@@ -262,5 +263,73 @@ func TestStackNoteJumpLoadsAnUnfetchedFile(t *testing.T) {
 	}
 	if fv.stk.land != nil {
 		t.Fatal("a drained landing must be cleared")
+	}
+}
+
+// A steering navigate (and so a gg:// link) lands on the exact LINE inside a
+// stack, not on the file's header.
+func TestSteerNavigateLandsOnALineInsideAStack(t *testing.T) {
+	m := loadedNavModel(t)
+	m = tempPromptStore(t, m)
+	m = m.setStackedPref(true)
+	m, cmd := m.applySteer(steer.Command{
+		ID: "sn-1", Cmd: "navigate", File: "a.txt",
+		Target: &steer.Target{State: "unstaged"},
+		Line:   &steer.Line{Side: "new", No: 18},
+		Wait:   true,
+	})
+	m = pumpDiff(t, m, cmd)
+	v := m.diffLayer()
+	if v == nil || v.stk == nil {
+		t.Fatalf("the navigate must open a stack (view %v)", v)
+	}
+	row, ok := v.cursorRow()
+	if !ok {
+		t.Fatalf("no cursor row after the landing (line %d of %d)", v.curLine, len(v.lines))
+	}
+	if row.RightNo != 18 {
+		t.Fatalf("cursor landed on new line %d, want 18", row.RightNo)
+	}
+	if f, ok := v.stackFileAt(v.curLine); !ok || f.path != "a.txt" {
+		t.Fatalf("the cursor landed in %q, want a.txt", f.path)
+	}
+}
+
+// Leaving a stack with S keeps the LINE being read, not the file's first
+// change block.
+func TestSKeepsTheLineWhenLeavingAStack(t *testing.T) {
+	m := loadedNavModel(t)
+	m = tempPromptStore(t, m)
+	m = m.setStackedPref(true)
+	m, cmd := m.applySteer(steer.Command{
+		ID: "sn-2", Cmd: "navigate", File: "a.txt",
+		Target: &steer.Target{State: "unstaged"},
+		Line:   &steer.Line{Side: "new", No: 18},
+		Wait:   true,
+	})
+	m = pumpDiff(t, m, cmd)
+	sv := m.diffLayer()
+	if sv == nil || sv.stk == nil {
+		t.Fatal("the navigate must open a stack")
+	}
+	// Read on past the landing, so the line under the cursor is NOT the file's
+	// first change block — the place S used to drop the reader.
+	for i := 0; i < 6; i++ {
+		u, _ := m.Update(keyMsg("j"))
+		m = u.(Model)
+	}
+	want, ok := m.diffLayer().cursorRow()
+	if !ok || want.RightNo == 0 {
+		t.Fatalf("the reader must sit on a numbered new-side line, got %+v", want)
+	}
+	u, cmd2 := m.Update(keyMsg("S"))
+	m = pumpDiff(t, u.(Model), cmd2)
+	v := m.diffLayer()
+	if v == nil || v.stk != nil {
+		t.Fatal("S must leave the stack")
+	}
+	row, ok := v.cursorRow()
+	if !ok || row.RightNo != want.RightNo {
+		t.Fatalf("after S the cursor sits on new line %d (ok=%v), want the line being read, %d", row.RightNo, ok, want.RightNo)
 	}
 }

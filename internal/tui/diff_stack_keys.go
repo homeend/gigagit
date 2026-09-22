@@ -186,6 +186,10 @@ func (m Model) unstack() (tea.Model, tea.Cmd) {
 	v := m.diffLayer()
 	f := v.stk.files[v.curFile()]
 	m = m.setStackedPref(false)
+	// The single view is loaded asynchronously and opens on its first change
+	// block, so the LINE being read is parked and landed when it arrives —
+	// otherwise S drops the reader at the top of the file they were in.
+	land := v.cursorLineLanding()
 	if v.stk.src == diffNavTree {
 		if p := m.filesView; p != nil {
 			for i, l := range p.visible() {
@@ -195,7 +199,8 @@ func (m Model) unstack() (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		return m.openDiffForFileLine(f.line)
+		tm, cmd := m.openDiffForFileLine(f.line)
+		return m.withLineLanding(land, tm, cmd)
 	}
 	p := panelFiles
 	if v.stk.staged {
@@ -214,7 +219,8 @@ func (m Model) unstack() (tea.Model, tea.Cmd) {
 		m.diffTag = ""
 		return m, nil
 	}
-	return m.openStatusDiff(f.fs, v.stk.staged)
+	tm, cmd := m.openStatusDiff(f.fs, v.stk.staged)
+	return m.withLineLanding(land, tm, cmd)
 }
 
 // foldFile folds or unfolds one file and keeps the cursor on its header, so a

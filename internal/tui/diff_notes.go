@@ -258,8 +258,23 @@ func (v *diffView) lineAnchorIn(lo, hi, no int, old bool) (int, bool) {
 // has none (a pure addition has no old side). Live steering clamps a landing to
 // it rather than refusing an agent whose line number drifted past the end.
 func (v *diffView) lastLineNo(old bool) int {
+	return v.lastLineNoIn(0, len(v.lines)-1, old)
+}
+
+// lastLineNoIn is lastLineNo over the logical lines [lo, hi] — one file of a
+// stack, whose own last line is what a landing there must clamp to.
+func (v *diffView) lastLineNoIn(lo, hi int, old bool) int {
 	last := 0
-	for _, ln := range v.lines {
+	if lo < 0 {
+		lo = 0
+	}
+	if hi > len(v.lines)-1 {
+		hi = len(v.lines) - 1
+	}
+	for _, ln := range v.lines[lo : hi+1] {
+		if ln.kind != lineBody {
+			continue
+		}
 		if ln.Fold > 0 {
 			continue
 		}

@@ -722,7 +722,48 @@ func (m Model) landSteer(v *diffView, c steer.Command) (Model, tea.Cmd) {
 	old := c.Line.Side == "old"
 	no := c.Line.No
 	clamped := false
-	find := func() (int, bool) { return v.lineAnchor(no, old) }
+	// Stacked, the landing names a file first: line NUMBERS repeat across the
+	// stream, so the anchor is resolved inside THAT file's range. A file that
+	// is folded unfolds; one whose rows have not been fetched cannot resolve a
+	// line at all, so the landing is parked on the stack and the fetch queued —
+	// the cursor sits on that file's header until its rows arrive.
+	fi := -1
+	if v.stk != nil {
+		i, ok := v.stackFileIdx(c.File)
+		if !ok {
+			return m, m.answerSteer(c, steerFail(c, c.File+" is not in this view"))
+		}
+		f := &v.stk.files[i]
+		f.collapsed = false
+		v.rebuild()
+		v.setCursorLine(f.hdr, m.diffBodyRows())
+		v.syncStackTitle()
+		if f.load != stackLoaded && f.load != stackStale {
+			side := model.NoteSideNew
+			if old {
+				side = model.NoteSideOld
+			}
+			v.stk.land = &stackLanding{file: i, side: side, no: no}
+			nm, cmd := m.pumpStack()
+			nm.diffNotice = steerOpenedNotice(c, no)
+			nm, rcmd := nm.navigateLanded(c, "opened "+c.File+":"+strconv.Itoa(no))
+			return nm, tea.Batch(cmd, rcmd)
+		}
+		fi = i
+	}
+	// The bounds are re-read on every probe, never captured: expanding a fold
+	// lengthens the stream, so a range measured before the expansion would cut
+	// the search short (and, stacked, would name the wrong file's lines).
+	bounds := func() (int, int) {
+		if fi >= 0 {
+			return v.fileLineRange(fi)
+		}
+		return 0, len(v.lines) - 1
+	}
+	find := func() (int, bool) {
+		lo, hi := bounds()
+		return v.lineAnchorIn(lo, hi, no, old)
+	}
 
 	li, _ := find()
 	if li >= 0 {
@@ -735,7 +776,8 @@ func (m Model) landSteer(v *diffView, c steer.Command) (Model, tea.Cmd) {
 		}
 	}
 	if li < 0 {
-		last := v.lastLineNo(old)
+		blo, bhi := bounds()
+		last := v.lastLineNoIn(blo, bhi, old)
 		if last == 0 {
 			side := "new"
 			if old {
@@ -761,11 +803,7 @@ func (m Model) landSteer(v *diffView, c steer.Command) (Model, tea.Cmd) {
 	v.setCursorLine(li, body)
 	v.alignCursor(alignCenter, body)
 
-	if startAtOrigin(c) {
-		m.diffNotice = i18n.T("▸ opened %s", c.File+":"+strconv.Itoa(no))
-	} else {
-		m.diffNotice = i18n.T("▸ agent opened %s", c.File+":"+strconv.Itoa(no))
-	}
+	m.diffNotice = steerOpenedNotice(c, no)
 
 	detail := "opened " + c.File + ":" + strconv.Itoa(no)
 	if clamped {
@@ -1023,4 +1061,13 @@ func (m Model) consumeStartAt() (Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, func() tea.Msg { return startAtMsg{cmd: c} }
+}
+
+// steerOpenedNotice is the diff view's own notice for a landing: the user's
+// own link reads "opened", an agent's reads "agent opened".
+func steerOpenedNotice(c steer.Command, no int) string {
+	if startAtOrigin(c) {
+		return i18n.T("▸ opened %s", c.File+":"+strconv.Itoa(no))
+	}
+	return i18n.T("▸ agent opened %s", c.File+":"+strconv.Itoa(no))
 }
