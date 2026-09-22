@@ -21,12 +21,12 @@ import (
 
 func TestLineAnchorFindsBothSidesAndFolds(t *testing.T) {
 	t.Parallel()
-	v := &diffView{lines: []textdiff.Line{
+	v := &diffView{lines: wrapLines([]textdiff.Line{
 		{Row: textdiff.Row{LeftNo: 1, RightNo: 1}},
 		{Fold: 8}, // hides old 2-9 / new 2-9
 		{Row: textdiff.Row{LeftNo: 10, RightNo: 10}},
 		{Row: textdiff.Row{LeftNo: 0, RightNo: 11}}, // an added line: no old number
-	}}
+	})}
 	if li, vis := v.lineAnchor(10, false); li != 2 || !vis {
 		t.Errorf("new:10 = (%d,%v), want (2,true)", li, vis)
 	}

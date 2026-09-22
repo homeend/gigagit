@@ -32,4 +32,9 @@ type Store interface {
 	BranchFilterSlot(repoKey, list string) int
 	// SetBranchFilterSlot persists it (0 clears).
 	SetBranchFilterSlot(repoKey, list string, slot int) error
+	// StackedDiff reports whether the TUI diff view opens stacked (the S key).
+	// Machine-global and independent of the web's own pref.
+	StackedDiff() bool
+	// SetStackedDiff persists it.
+	SetStackedDiff(on bool) error
 }

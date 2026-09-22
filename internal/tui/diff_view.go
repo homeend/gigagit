@@ -46,20 +46,20 @@ type diffView struct {
 	full       []textdiff.Row // immutable aligned rows (the comparison result)
 	fullBlocks []int          // immutable change-block starts into full
 	// oldTok/newTok alias the (shared, cached) domain.Diff runs — READ-ONLY.
-	oldTok     [][]syntax.Tok  // syntax runs per OLD source line (index = LeftNo-1); nil = plain
-	newTok     [][]syntax.Tok  // syntax runs per NEW source line (index = RightNo-1); nil = plain
-	partial    bool            // mode: collapse unchanged runs (false = full)
-	long       longMode        // mode: how lines wider than a pane are shown (default scroll)
-	hOffset    int             // scroll mode: horizontal pan column (0 = left edge)
-	maxCell    int             // scroll mode: widest cell width (pan clamp); set by relayout
-	width      int             // overlay width at last layout (0 = unset → wrap-off)
-	lines      []textdiff.Line // logical (mode) stream that relayout consumes
-	blocks     []int           // change-block starts into lines
-	disp       []dRow          // display rows: what offset indexes and render draws
-	dispBlocks []int           // change-block starts as display-row indices (jump targets)
-	lineStart  []int           // logical line index → its first display-row index
-	offset     int             // top visible display row
-	truncated  bool            // alignment skipped (size guard)
+	oldTok     [][]syntax.Tok // syntax runs per OLD source line (index = LeftNo-1); nil = plain
+	newTok     [][]syntax.Tok // syntax runs per NEW source line (index = RightNo-1); nil = plain
+	partial    bool           // mode: collapse unchanged runs (false = full)
+	long       longMode       // mode: how lines wider than a pane are shown (default scroll)
+	hOffset    int            // scroll mode: horizontal pan column (0 = left edge)
+	maxCell    int            // scroll mode: widest cell width (pan clamp); set by relayout
+	width      int            // overlay width at last layout (0 = unset → wrap-off)
+	lines      []diffLine     // logical (mode) stream that relayout consumes (diff_stack.go)
+	blocks     []int          // change-block starts into lines
+	disp       []dRow         // display rows: what offset indexes and render draws
+	dispBlocks []int          // change-block starts as display-row indices (jump targets)
+	lineStart  []int          // logical line index → its first display-row index
+	offset     int            // top visible display row
+	truncated  bool           // alignment skipped (size guard)
 	binary     bool
 	tooLarge   bool
 	loading    bool
@@ -76,6 +76,11 @@ type diffView struct {
 	// lsel is the line selection over v.lines (space/space/enter). Cleared by
 	// rebuild(), by ctrl+w's relayout and by a diffMsg reload — anything that
 	// changes what a line index MEANS — but never by a resize or a search key.
+	// stk is the stacked view's state (diff_stack.go): nil = today's
+	// single-file view, and every field above then means what it always did.
+	// When set, v.lines is spliced from stk.files and the per-file rows /
+	// syntax runs live on each stackFile, not on full/oldTok/newTok.
+	stk     *diffStack
 	lsel    lineSel
 	wrapArm wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
 	fileArm fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
@@ -172,16 +177,25 @@ type dRow struct {
 
 	note     *noteLine // non-nil: a synthetic note row belonging to `line`
 	noteMark bool      // fold row: a note hides under this fold (◆ on the rule)
+	kind     lineKind  // stacked: a header / placeholder row (lineBody = an ordinary row)
+	file     int       // stacked: the row's file index into diffStack.files
 }
 
 // rebuild recomputes the logical (mode) stream, then the display stream.
 func (v *diffView) rebuild() {
 	v.sanLeft, v.sanRight = nil, nil // the line stream is about to change
 	v.lsel.clear()                   // …and so do the line indexes it holds
+	if v.stk != nil {
+		v.spliceStack() // the stack builds its own lines/blocks from its files
+		v.relayout(v.width)
+		v.refindAfterRebuild()
+		return
+	}
 	if v.partial {
-		v.lines, v.blocks = textdiff.Collapse(v.full, v.fullBlocks, diffContext)
+		lines, blocks := textdiff.Collapse(v.full, v.fullBlocks, diffContext)
+		v.lines, v.blocks = wrapLines(lines), blocks
 	} else {
-		v.lines = textdiff.Expand(v.full)
+		v.lines = wrapLines(textdiff.Expand(v.full))
 		v.blocks = v.fullBlocks
 	}
 	v.relayout(v.width)
@@ -209,7 +223,7 @@ func (v *diffView) relayout(width int) {
 	if paneW < 4 {
 		paneW = 4
 	}
-	gut := gutterWidth(v.full)
+	gut := v.gutter()
 	tw := paneW - gut - 1
 	if tw < 1 {
 		tw = 1
@@ -221,13 +235,18 @@ func (v *diffView) relayout(width int) {
 		v.lineStart[li] = len(v.disp)
 		ln := v.lines[li]
 		switch {
+		case ln.kind != lineBody:
+			// A stack's header / placeholder line: one full-width display row,
+			// painted by stackRow.
+			v.disp = append(v.disp, dRow{line: li, kind: ln.kind, file: ln.file, first: true})
 		case ln.Fold > 0:
 			v.disp = append(v.disp, dRow{line: li, fold: ln.Fold, noteMark: foldMark[li], first: true})
 		case v.long != longWrap || width <= 0:
 			v.disp = append(v.disp, dRow{line: li, row: ln.Row, first: true})
 		default:
-			leftSegs := wrapSide(ln.Row.Left, ln.Row.LeftSpans, tokAt(v.oldTok, ln.Row.LeftNo), ln.Row.Kind, false, tw)
-			rightSegs := wrapSide(ln.Row.Right, ln.Row.RightSpans, tokAt(v.newTok, ln.Row.RightNo), ln.Row.Kind, true, tw)
+			ot, nt := v.toksFor(li)
+			leftSegs := wrapSide(ln.Row.Left, ln.Row.LeftSpans, tokAt(ot, ln.Row.LeftNo), ln.Row.Kind, false, tw)
+			rightSegs := wrapSide(ln.Row.Right, ln.Row.RightSpans, tokAt(nt, ln.Row.RightNo), ln.Row.Kind, true, tw)
 			h := len(leftSegs)
 			if len(rightSegs) > h {
 				h = len(rightSegs)
@@ -302,7 +321,7 @@ func (v *diffView) textWidth() int {
 	if paneW < 4 {
 		paneW = 4
 	}
-	tw := paneW - gutterWidth(v.full) - 1
+	tw := paneW - v.gutter() - 1
 	if tw < 1 {
 		tw = 1
 	}
@@ -321,7 +340,7 @@ func (v *diffView) searchLines() []searchLine {
 		v.sanLeft = make([]string, len(v.lines))
 		v.sanRight = make([]string, len(v.lines))
 		for i, ln := range v.lines {
-			if ln.Fold > 0 {
+			if !ln.isBody() {
 				continue
 			}
 			v.sanLeft[i] = sanitizeLine(ln.Row.Left)
@@ -330,7 +349,7 @@ func (v *diffView) searchLines() []searchLine {
 	}
 	out := make([]searchLine, 0, len(v.lines))
 	for i, ln := range v.lines {
-		if ln.Fold > 0 {
+		if !ln.isBody() {
 			continue
 		}
 		switch ln.Row.Kind {
@@ -841,7 +860,11 @@ func (m Model) resolveHeadEndpointWithin(d time.Duration) (model.Endpoint, error
 // tea.Model return to the layer interface's Model.
 func (v *diffView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	nm, cmd := m.updateDiffViewKey(msg)
-	return nm.(Model), cmd
+	mm := nm.(Model)
+	// A stack loads what the key press brought near the viewport: the queue is
+	// a function of where the user is, not a background worker.
+	mm, load := mm.pumpStack()
+	return mm, tea.Batch(cmd, load)
 }
 
 // render draws the full-screen diff. Like the other surfaces it owns the screen

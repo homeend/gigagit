@@ -360,11 +360,11 @@ func TestScrollCellGapFiller(t *testing.T) {
 }
 
 func TestMaxCellWidthIgnoresGapSides(t *testing.T) {
-	lines := []textdiff.Line{
+	lines := wrapLines([]textdiff.Line{
 		{Row: textdiff.Row{Kind: textdiff.Same, Left: "ab", Right: "ab"}},
 		{Row: textdiff.Row{Kind: textdiff.Add, Right: "longer right side here"}},
 		{Fold: 4},
-	}
+	})
 	if got := maxCellWidth(lines); got != lipgloss.Width("longer right side here") {
 		t.Fatalf("maxCellWidth = %d, want %d", got, lipgloss.Width("longer right side here"))
 	}

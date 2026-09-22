@@ -16,13 +16,19 @@ func (v *diffView) editLine() int {
 	if ok && r.RightNo > 0 {
 		return r.RightNo
 	}
-	for i := v.curLine + 1; i < len(v.lines); i++ {
-		if ln := v.lines[i]; ln.Fold == 0 && ln.Row.RightNo > 0 {
+	// Stacked, the scan stays inside the cursor's file: another file's line
+	// number would open the wrong place in the wrong file.
+	lo, hi := 0, len(v.lines)-1
+	if v.stk != nil {
+		lo, hi = v.fileLineRange(v.curFile())
+	}
+	for i := v.curLine + 1; i <= hi; i++ {
+		if ln := v.lines[i]; ln.isBody() && ln.Row.RightNo > 0 {
 			return ln.Row.RightNo
 		}
 	}
-	for i := len(v.lines) - 1; i >= 0; i-- {
-		if ln := v.lines[i]; ln.Fold == 0 && ln.Row.RightNo > 0 {
+	for i := hi; i >= lo; i-- {
+		if ln := v.lines[i]; ln.isBody() && ln.Row.RightNo > 0 {
 			return ln.Row.RightNo
 		}
 	}

@@ -60,7 +60,7 @@ func TestDiffMsgPopulatesInPlaceUnderOverlay(t *testing.T) {
 	m, _ = m.openPickerDiff(v, "tag1", nil)
 	// Push a bookmark popup OVER the loading diff.
 	m = m.pushLayer(newBookmarkPopup(nil))
-	loaded := &diffView{title: "f", loading: true, lines: []textdiff.Line{{}}}
+	loaded := &diffView{title: "f", loading: true, lines: wrapLines([]textdiff.Line{{}})}
 	nm, _ := m.Update(diffMsg{tag: "tag1", view: loaded})
 	m = nm.(Model)
 	dv := m.diffLayer()

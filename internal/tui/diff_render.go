@@ -283,14 +283,19 @@ func (m Model) renderDiffView() string {
 		note = i18n.T("  (alignment skipped: large file)")
 	// loading/err/binary/tooLarge render their own body state below; the
 	// guards here keep the note from doubling up with them.
-	case !v.loading && v.err == nil && !v.binary && !v.tooLarge && len(v.blocks) == 0:
+	case v.stk == nil && !v.loading && v.err == nil && !v.binary && !v.tooLarge && len(v.blocks) == 0:
 		note = i18n.T("  (no content difference)")
 	}
 	head := i18n.T("diff: %s", v.title) + "  " + v.context + note
 	// Right-aligned status: which change is in view (1-based) of how many, then
 	// the visible row range.
 	right := ""
-	if len(v.blocks) > 0 {
+	switch {
+	case v.stk != nil:
+		// A stack's blocks ARE its files, so the ordinal names the file the
+		// cursor is in rather than a change within one file.
+		right = i18n.T("file %d/%d", v.curFile()+1, len(v.stk.files))
+	case len(v.blocks) > 0:
 		right = i18n.T("change %d/%d", v.currentBlockOrdinal()+1, len(v.blocks))
 	}
 	if r, ok := v.cursorRow(); ok {
@@ -357,6 +362,11 @@ func (m Model) renderDiffView() string {
 	lines := make([]string, 0, h)
 	lines = append(lines, header)
 	switch {
+	case v.stk != nil:
+		// Loading / binary / too large / failed are PER FILE in a stack: each
+		// one is a placeholder line inside the stream, never the whole body.
+		s, e := v.cursorDispRange()
+		lines = append(lines, m.diffPaneLines(v, w, body, s, e, m.cursorStyle())...)
 	case v.loading:
 		lines = append(lines, i18n.T("  (loading…)"))
 	case v.err != nil:
@@ -416,12 +426,16 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 	if paneW < 4 {
 		paneW = 4
 	}
-	gut := gutterWidth(v.full)
+	gut := v.gutter()
 	s := st()
 
 	out := make([]string, 0, body)
 	for i := v.offset; i < v.offset+body && i < len(v.disp); i++ {
 		dr := v.disp[i]
+		if dr.kind != lineBody { // a stack's header / placeholder line
+			out = append(out, m.stackRow(v, dr, w, i >= curStart && i < curEnd))
+			continue
+		}
 		if dr.note != nil {
 			out = append(out, noteRowCells(*dr.note, paneW))
 			continue
@@ -471,7 +485,8 @@ func (m Model) diffPaneLines(v *diffView, w, body int, curStart, curEnd int, sty
 		}
 		// Syntax runs for this row's source lines (nil on a gap side or an
 		// unlexed file); the wrap case already carries them in dr.left/right.
-		lt, rt := tokAt(v.oldTok, r.LeftNo), tokAt(v.newTok, r.RightNo)
+		ot, nt := v.toksFor(dr.line)
+		lt, rt := tokAt(ot, r.LeftNo), tokAt(nt, r.RightNo)
 		// In-view search hits for this logical line, per side. Nil for every
 		// row when no search is active (and for the history pane, whose
 		// diffView never routes search keys), so the no-search render is
@@ -649,10 +664,10 @@ func scrollCell(no int, text string, spans []textdiff.Span, toks []syntax.Tok, h
 
 // maxCellWidth is the widest single cell (either side, gap sides skipped)
 // across the logical lines — the horizontal extent scroll mode can pan to.
-func maxCellWidth(lines []textdiff.Line) int {
+func maxCellWidth(lines []diffLine) int {
 	max := 0
 	for _, ln := range lines {
-		if ln.Fold > 0 {
+		if !ln.isBody() {
 			continue
 		}
 		r := ln.Row

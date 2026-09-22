@@ -823,19 +823,8 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	} else {
 		m = m.pushLayer(newV)
 	}
-	if m.inFullTree() {
-		// Full-tree mode: the file may be unchanged in this commit, so a
-		// parent-diff would be empty. Diff the commit's version against the
-		// working tree instead — useful for any file in the tree.
-		left := mustCommitEndpoint(m.filesHash)
-		right := model.WorkTreeEndpoint()
-		m.diffLayer().context = i18n.T("%s ↔ working tree", shortHash(m.filesHash))
-		m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
-		return m, m.loadCompareDiffCmd(left, right, l)
-	}
 	if m.inCompareMode() {
 		dv := m.diffLayer()
-		dv.context = m.filesContext
 		// A merge preview is a compare whose NEW side is the source tip, so
 		// its rows ARE note-addressable at that commit — unlike every other
 		// compare, whose old side no stored address names. Stamp the address
@@ -844,25 +833,46 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 			dv.previewSet = set
 			dv.noteAddr = model.FileAddress{State: model.StateCommitted, Commit: set.Tip, Path: l.path}
 		}
+	}
+	cmd, tag, context := m.treeFileLoad(l)
+	m.diffLayer().context = context
+	m.diffTag = tag
+	return m, cmd
+}
+
+// treeFileLoad picks the loader for ONE files-view row: the Cmd (which yields
+// a diffMsg), its tag, and the context line the view's header shows. It is
+// openDiffForFileLine's choice of loader with no layer bookkeeping, so the
+// stacked view can run the very same loaders per file (diff_stack.go) without
+// a second copy of this dispatch.
+func (m Model) treeFileLoad(l contentLine) (cmd tea.Cmd, tag, context string) {
+	switch {
+	case m.inFullTree():
+		// Full-tree mode: the file may be unchanged in this commit, so a
+		// parent-diff would be empty. Diff the commit's version against the
+		// working tree instead — useful for any file in the tree.
+		left := mustCommitEndpoint(m.filesHash)
+		right := model.WorkTreeEndpoint()
+		tag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
+		return m.loadCompareDiffCmd(left, right, l), tag, i18n.T("%s ↔ working tree", shortHash(m.filesHash))
+	case m.inCompareMode():
 		// compareSides, not filesLeft/filesRight: a link compare's member may
 		// have its own byte source, and the tag + cache key must follow it.
 		left, right := m.compareSides(l)
-		m.diffTag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
-		return m, m.loadCompareDiffCmd(left, right, l)
-	}
-	if m.inShelfFiles() {
+		tag = "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + l.path
+		return m.loadCompareDiffCmd(left, right, l), tag, m.filesContext
+	case m.inShelfFiles():
 		// Shelf mode: the frozen member (old) against the working file (new) —
 		// the same two-ref compare the .-menu's compare-against-working-dir uses.
 		left := model.FileRef{Source: model.SourceShelf, Locator: m.filesShelfID, Path: l.path}
 		right := model.FileRef{Source: model.SourceUnstaged, Path: l.path}
 		subtitle := i18n.T("%s → working tree", m.filesShelfLabel)
-		m.diffLayer().context = subtitle
-		m.diffTag = "shelffile:" + m.filesShelfID + ":" + l.path
-		return m, m.loadCompareTwoRefsCmd(left, right, l.path, subtitle, m.diffTag)
+		tag = "shelffile:" + m.filesShelfID + ":" + l.path
+		return m.loadCompareTwoRefsCmd(left, right, l.path, subtitle, tag), tag, subtitle
 	}
 	hash := m.lineHash(l)
-	m.diffTag = "commit:" + hash + ":" + l.path
-	return m, m.loadCommitDiffCmd(hash, l)
+	tag = "commit:" + hash + ":" + l.path
+	return m.loadCommitDiffCmd(hash, l), tag, "@ " + m.filesContext
 }
 
 // moveListUnderFilesView moves the list side (the right column) by delta and
