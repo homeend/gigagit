@@ -91,3 +91,20 @@ func TestStackKeysWired(t *testing.T) {
 		t.Error("the ☰ menu has no stacked-diff row")
 	}
 }
+
+// The symmetric view's single-file open and its stack read ONE pair builder:
+// a flip must never leave the stack diffing the old direction.
+func TestSymPairShared(t *testing.T) {
+	t.Parallel()
+	files := readStatic(t, "files.js")
+	sym := readStatic(t, "symcompare.js")
+	if !strings.Contains(files, "const p = symPair(f, c);") {
+		t.Error("fileDiffURL does not build a symmetric row's URL through symPair")
+	}
+	if !strings.Contains(sym, "const p = symPair(f, c);") {
+		t.Error("openSymRow does not read its pair from symPair")
+	}
+	if strings.Contains(sym, "function noContentWhy(") || strings.Contains(sym, "const GLYPH =") {
+		t.Error("symcompare.js keeps its own noContentWhy / GLYPH — stack.js owns them")
+	}
+}

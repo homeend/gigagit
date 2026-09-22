@@ -10,6 +10,7 @@ import { nextSortMode, setSortMode, sortChipHTML } from "./sortlist.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { rev } from "./review.js";
+import { symPair } from "./stack.js";
 import { renderCommits, rewordPrompt } from "./commits.js";
 import { focusPane, moveCursor, stepCommitCursor } from "./keys.js";
 import { saveUI } from "./uistate.js";
@@ -1056,6 +1057,13 @@ function fileDiffURL(f) {
     return "/api/diff?" + q;
   }
   const c = state.compare;
+  // The symmetric view diffs a row in the ARROW's direction (symPair — the
+  // pair openSymRow opens), which the plain link lane below does not know.
+  if (state.filesMode === "compare" && c.links && symActive()) {
+    const p = symPair(f, c);
+    if (!p) return null; // neither set has content: the stack shows a notice instead
+    return "/api/entry-diff?" + new URLSearchParams({ left: p.left, right: p.right, path: f.path, status: p.status });
+  }
   // A link comparison (a row may name its own sides) and a frozen entry
   // compare address their sides by SPEC: one may be a snapshot git cannot read.
   if (state.filesMode === "compare" && (c.links || c.frozen)) {
