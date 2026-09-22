@@ -225,6 +225,7 @@ function applySym(keepPath) {
     if (i >= 0) state.fileCursor = i;
     paintGrid();
     renderFiles();
+    if (state.layout === "diff" && i >= 0) openFile(i); // the kept file, not row 0
   }
 }
 
@@ -253,10 +254,15 @@ function setFilter(id) {
   // the key that names it does nothing either.
   const f = FILTERS.find((x) => x[0] === id);
   if (!f || (id !== state.compare.symFilter && !state.compare.sym.some(f[3]))) return;
+  const path = (state.files[state.fileCursor] || {}).path;
   state.compare.symFilter = id;
   state.fileCursor = 0;
-  applyCompareFilter();
-  if (state.files.length && state.layout !== "diff") openFile(0);
+  applyCompareFilter(); // under an open diff this opens row 0 (a new stack)
+  if (state.stack) {
+    // the stack keeps the file being read when the filter still shows it
+    const i = state.files.findIndex((f) => f.path === path);
+    if (i > 0) openFile(i);
+  } else if (state.files.length && state.layout !== "diff") openFile(0);
 }
 
 // --- opening a row ---

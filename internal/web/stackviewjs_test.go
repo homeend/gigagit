@@ -108,3 +108,36 @@ func TestSymPairShared(t *testing.T) {
 		t.Error("symcompare.js keeps its own noContentWhy / GLYPH — stack.js owns them")
 	}
 }
+
+// Plan 2: the symmetric view stacks. Each line is a door into it or a path
+// that must keep the reader's file across a rebuild.
+func TestSymStackWired(t *testing.T) {
+	t.Parallel()
+	view := readStatic(t, "stackview.js")
+	sym := readStatic(t, "symcompare.js")
+	files := readStatic(t, "files.js")
+	if strings.Contains(view, "symActive()") {
+		t.Error("stackview.js still refuses the symmetric view")
+	}
+	for _, want := range []string{
+		"neither set has content for this file", // the no-content body
+		`class="stk-sides"`,                     // each side's state in the header
+		"if (!st.painted) {",                    // an open before the first paint moves the anchor
+		`scrollIntoView({ block: "nearest" })`,  // the list keeps the reader's row in view
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("stackview.js is missing %q", want)
+		}
+	}
+	if !strings.Contains(sym, "// the stack keeps the file being read when the filter still shows it") {
+		t.Error("setFilter no longer keeps the reader's file under a stack")
+	}
+	for _, want := range []string{
+		"if (state.stack && state.layout === \"diff\") return openFile(state.fileCursor);", // live refresh rebuilds
+		"teardownStack(); return symEmpty(); }",                                            // an empty view drops the stack
+	} {
+		if !strings.Contains(files, want) {
+			t.Errorf("files.js is missing %q", want)
+		}
+	}
+}

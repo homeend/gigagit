@@ -641,6 +641,11 @@ function updateLinkCompareFiles(files, sym) {
   }
   const i = cur ? state.files.findIndex((f) => f.path === cur.path) : -1;
   state.fileCursor = i >= 0 ? i : Math.min(state.fileCursor, state.files.length - 1);
+  // A stack holds the OLD rows: rebuild it on the cursor's file. Deliberately
+  // BEFORE the drillOut below: when the reader's file is gone, a stack
+  // re-anchors on the clamped neighbour (the working-tree reconcile rule)
+  // instead of leaving the screen, as the single-file view does.
+  if (state.stack && state.layout === "diff") return openFile(state.fileCursor);
   renderFiles();
   updateDiffNav();
   if (i < 0 && state.layout === "diff") drillOut();
@@ -751,7 +756,7 @@ function applyCompareFilter() {
     // The symmetric view's esc LEAVES the comparison (it has no files-only
     // stage), so an empty filter must not route through drillOut there: a chip
     // would close the screen it sits on. The view says so in place instead.
-    if (symActive()) return symEmpty();
+    if (symActive()) { teardownStack(); return symEmpty(); } // an empty view has no files to stack
     if (state.layout === "diff") drillOut();
     return;
   }

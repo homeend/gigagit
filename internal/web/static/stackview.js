@@ -14,7 +14,6 @@ import { $, esc, getJSON, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { registerHelp } from "./menus.js";
 import { focusPane } from "./keys.js";
-import { symActive } from "./symcompare.js";
 import {
   activeFileList,
   clearDiffHunks,
@@ -30,11 +29,14 @@ import {
   updateDiffNav,
 } from "./files.js";
 import {
+  GLYPH,
+  KIND_TIP,
   STACK_MAX_IN_FLIGHT,
   buildSlots,
   countsFromDiff,
   estimateHeight,
   nextToLoad,
+  noContentWhy,
   reconcileSlots,
   stackGroup,
   stackRows,
@@ -44,10 +46,10 @@ const ROW_PX = 20; // a diff row's rendered height, for placeholder estimates
 let observer = null;
 let syncRaf = 0;
 
-// stackOn: the toggle is on AND this screen can stack. The symmetric view
-// keeps its single diff until plan 2 teaches it the stack.
+// stackOn: the toggle is on. Every file-list screen stacks — the symmetric
+// view's stack holds its VISIBLE rows (state.files = symRows there).
 function stackOn() {
-  return !!(state.ui && state.ui.stacked_diff) && !symActive();
+  return !!(state.ui && state.ui.stacked_diff);
 }
 
 function teardownStack() {
@@ -83,7 +85,10 @@ async function buildStack(list, group, anchorIdx) {
     focusPane();
   }
   const slots = buildSlots(stackRows(list, group));
-  const st = { list, group, slots, near: new Set(), anchor: 0, inFlight: 0 };
+  // painted/want: until the first paint an open (a second openFile in the
+  // same tick — applySym and setFilter open row 0, then the kept row) only
+  // moves the target; the first paint lands on it.
+  const st = { list, group, slots, near: new Set(), anchor: 0, inFlight: 0, painted: false, want: anchorIdx };
   state.stack = st;
   // Counts FIRST: they size every placeholder. Painted with no counts, all
   // sections are a few rows tall, the whole change set sits "near" the
@@ -94,10 +99,13 @@ async function buildStack(list, group, anchorIdx) {
   await loadCounts(st);
   if (state.stack !== st) return; // superseded while the counts loaded
   paintStack(st);
-  scrollToFile(st, anchorIdx);
+  st.painted = true;
+  scrollToFile(st, st.want);
 }
 
 // --- painting -------------------------------------------------------------
+
+const SIDE = { absent: "—", present: "in", deleted: "deletes" };
 
 function headHTML(s) {
   const path =
@@ -108,11 +116,20 @@ function headHTML(s) {
     : c.binary
     ? `<span class="stk-bin">bin</span>`
     : `<span class="stk-add">+${c.add}</span> <span class="stk-del">−${c.del}</span>`;
+  // a symmetric row says what the two sets have to do with each other, and
+  // where each stands (the lists' own glyph and words)
+  const glyph = s.kind ? `<span class="symg ${s.kind}" title="${KIND_TIP[s.kind]}">${GLYPH[s.kind]}</span>` : "";
+  const sides = s.kind
+    ? `<span class="stk-sides">left ${SIDE[s.left] || "—"} · right ${SIDE[s.right] || "—"}</span>`
+    : "";
+  const letter = s.status === "=" ? "" : esc(s.status); // "=" is the glyph's job
   return (
     `<div class="stk-head" title="${esc(s.path)} — click to collapse / expand (-)">` +
     `<span class="stk-fold">${s.collapsed ? "▸" : "▾"}</span>` +
-    `<span class="st ${esc(s.status)}">${esc(s.status)}</span>` +
+    glyph +
+    `<span class="st ${letter}">${letter}</span>` +
     `<span class="stk-path">${path}</span>` +
+    sides +
     `<span class="stk-counts">${counts}</span></div>`
   );
 }
@@ -120,6 +137,9 @@ function headHTML(s) {
 function bodyHTML(s) {
   if (s.collapsed) return "";
   if (s.load === "none") {
+    if (s.none === "empty") {
+      return `<div class="notice">neither set has content for this file — ${esc(noContentWhy(s.f))}</div>`;
+    }
     return `<div class="notice">conflicted — <button class="stk-resolve">open resolver</button></div>`;
   }
   if (s.load === "error") return `<div class="notice">error: ${esc(s.error)}</div>`;
@@ -277,6 +297,12 @@ async function loadCounts(st) {
 function scrollToFile(st, i, expand = true) {
   const k = st.slots.findIndex((s) => s.idx === i);
   if (k < 0) return buildStack(st.list, stackGroup(st.list[i] || {}), i);
+  if (!st.painted) {
+    // still awaiting its counts: remember the target, the first paint lands there
+    st.want = i;
+    state.fileCursor = i;
+    return;
+  }
   const s = st.slots[k];
   if (expand && s.collapsed) {
     s.collapsed = false;
@@ -291,8 +317,16 @@ function scrollToFile(st, i, expand = true) {
       el.getBoundingClientRect().top - pane.getBoundingClientRect().top - $("diff-header").offsetHeight;
   }
   renderFiles();
+  followInList();
   updateDiffNav();
   pump(st);
+}
+
+// followInList keeps the highlighted row on screen as the reader moves
+// through the stack (the symmetric view's left list mirrors #files-pane).
+function followInList() {
+  const sel = document.querySelector("#files-list li.sel");
+  if (sel) sel.scrollIntoView({ block: "nearest" });
 }
 
 // topSlot: the section whose header sits at (or last passed) the line just
@@ -323,6 +357,7 @@ function syncCursor() {
   st.anchor = k;
   state.fileCursor = st.slots[k].idx;
   renderFiles(); // the list highlight follows the file being read
+  followInList();
   updateDiffNav();
 }
 
@@ -417,7 +452,7 @@ function toggleStacked() {
   const on = !(state.ui && state.ui.stacked_diff);
   saveUI({ stacked_diff: on });
   syncStackChrome();
-  if (state.layout !== "diff" || symActive()) return;
+  if (state.layout !== "diff" || !activeFileList().length) return; // an empty symmetric view has nothing to show
   if (!on) teardownStack();
   openFile(state.fileCursor);
 }

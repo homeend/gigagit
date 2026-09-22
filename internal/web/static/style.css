@@ -1233,6 +1233,8 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 .stk-add { color: #7bd88f; }
 .stk-del { color: #f27a6a; }
 .stk-bin { color: var(--dim); }
+.stk-sides { color: var(--dim); white-space: nowrap; font-size: 0.9em; }
+.stk-head .symg { flex: 0 0 auto; }
 .stk-ph { color: var(--dim); padding: 8px; }
 #stack-btn.on, #foot button[data-act="stacked"].on { color: var(--accent); }
 #stack-fold-all.hidden { display: none; }
