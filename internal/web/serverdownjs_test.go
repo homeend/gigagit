@@ -161,6 +161,7 @@ func TestServerDownStaticWiring(t *testing.T) {
 	checks := []struct{ file, want, why string }{
 		{"index.html", `id="server-down" class="hidden"`, "the bar ships hidden"},
 		{"index.html", `id="server-down-hint" class="hidden"`, "the new-port hint ships hidden"},
+		{"index.html", `unless you start it with <code>--addr 127.0.0.1:&lt;port&gt;</code> — `, "the hint names the real flag with an escaped <port> placeholder (there is no --port flag)"},
 		{"style.css", `#server-down.hidden { display: none; }`, "per-ID hidden rule — the bar would ALWAYS show"},
 		{"style.css", `#server-down-hint.hidden { display: none; }`, "per-ID hidden rule — the hint would always show"},
 		{"style.css", `#server-down { position: fixed; inset: 0; z-index: 100;`, "the veil covers the page above every overlay (modal 30, menu 40, toast 50)"},
