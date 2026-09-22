@@ -337,6 +337,23 @@ func (m Model) stackKey(v *diffView, msg tea.KeyMsg, body int) (tea.Model, tea.C
 		return nm, cmd, true
 	case "N", "P":
 		return m, nil, true // n/p already step files here
+	case "ctrl+down", "ctrl+up":
+		// n/p step FILES in a stack (v.blocks are the headers), so the walk
+		// from change to change inside ONE file lives on the ctrl-arrows —
+		// their single-file meaning, one scope narrower. It stops at the
+		// file's ends: stepping on would be n's job.
+		dir := 1
+		if msg.String() == "ctrl+up" {
+			dir = -1
+		}
+		if li, ok := v.changeInFile(v.curLine, dir); ok {
+			v.setCursorLine(li, body)
+			v.syncStackTitle()
+		} else {
+			m.diffNotice = i18n.T("▸ no more changes in this file — n/p step files")
+		}
+		nm, cmd := m.pumpStack()
+		return nm, cmd, true
 	}
 	return m, nil, false
 }

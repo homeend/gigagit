@@ -737,3 +737,67 @@ func TestStackFramesEachHeader(t *testing.T) {
 		t.Fatalf("the next file must read blank, header, rule: %q / %q", lines[6], lines[7])
 	}
 }
+
+// A conflicted file's header shows no +/− counts: its body is the resolver
+// line, not a diff, so a numstat total there names something you cannot read.
+func TestStackConflictHeaderShowsNoCounts(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, nil)
+	f := &v.stk.files[0]
+	f.conflict, f.status, f.path = true, "U", "c.go"
+	f.add, f.del, f.counted = 4, 0, true
+	v.rebuild()
+	m := diffModel()
+	m.height, m.width = 24, 120
+	m = m.pushLayer(v)
+	row := m.stackRow(v, dRow{line: f.hdr, kind: lineHeader, file: 0}, 120, false)
+	if strings.Contains(row, "+4") || strings.Contains(row, "−0") {
+		t.Fatalf("a conflicted header must show no counts: %q", row)
+	}
+	if !strings.Contains(row, "c.go") {
+		t.Fatalf("the header must still name the file: %q", row)
+	}
+}
+
+// Stacked, n/p step FILES, so the change-to-change walk inside one file moves
+// to the ctrl-arrows — and it stops at the file's ends rather than spilling
+// into the neighbouring file.
+func TestStackCtrlArrowsStepChangesInsideTheFile(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, sameRowsTUI(12, 2, 8), sameRowsTUI(12, 3))
+	m := diffModel()
+	m.height, m.width = 30, 120
+	m = m.pushLayer(v)
+	v.rebuild()
+	body := m.diffBodyRows()
+	v.setCursorLine(v.stk.files[0].hdr, body)
+
+	u, _ := m.Update(keyMsg("ctrl+down"))
+	mm := u.(Model)
+	nv := mm.diffLayer()
+	if nv.curFile() != 0 {
+		t.Fatalf("ctrl+down left file 0 (now in %d)", nv.curFile())
+	}
+	first := nv.curLine
+	if r, ok := nv.cursorRow(); !ok || r.Kind == textdiff.Same {
+		t.Fatalf("ctrl+down must land on a change, got %+v ok=%v", r, ok)
+	}
+	u2, _ := mm.Update(keyMsg("ctrl+down"))
+	mm = u2.(Model)
+	nv = mm.diffLayer()
+	if nv.curLine <= first {
+		t.Fatalf("the second ctrl+down did not advance (%d → %d)", first, nv.curLine)
+	}
+	if nv.curFile() != 0 {
+		t.Fatalf("ctrl+down stepped into file %d; n/p step files, ctrl-arrows stay in one", nv.curFile())
+	}
+	// past the file's last change it stays put and says so
+	u3, _ := mm.Update(keyMsg("ctrl+down"))
+	mm = u3.(Model)
+	if mm.diffLayer().curFile() != 0 {
+		t.Fatal("ctrl+down must not spill into the next file")
+	}
+	if mm.diffNotice == "" {
+		t.Fatal("a key that cannot move must say why")
+	}
+}

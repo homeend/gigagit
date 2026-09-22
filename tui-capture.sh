@@ -15,6 +15,11 @@ Options:
   --size <CxR>     terminal size, cols x rows (default: 120x40)
   --out <dir>      snapshot output dir (default: a fresh temp dir)
   --gg <path>      gg binary to run (default: build from this repo)
+  --state <dir>    XDG_STATE_HOME for the run (default: a fresh temp dir), so a
+                   capture never writes the developer's own machine-local UI
+                   memory (~/.local/state/gg/prompts.toml — a capture that
+                   presses S would otherwise flip their real preference).
+                   The dir is created if missing and printed with the results.
   -h, --help       show this help
 
 keyscript: steps separated by ';' or newlines. Each step is
@@ -34,13 +39,14 @@ Example:  ./tui-capture.sh "menu: . ; nav: down down ; open: enter"
 EOF
 }
 
-REPO="" SIZE="120x40" OUT="" GG="" KEYSCRIPT=""
+REPO="" SIZE="120x40" OUT="" GG="" STATE="" KEYSCRIPT=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo) REPO="$2"; shift 2 ;;
     --size) SIZE="$2"; shift 2 ;;
     --out)  OUT="$2";  shift 2 ;;
     --gg)   GG="$2";   shift 2 ;;
+    --state) STATE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     --*) echo "tui-capture: unknown option: $1" >&2; usage >&2; exit 2 ;;
     *) KEYSCRIPT="$1"; shift ;;
@@ -64,6 +70,13 @@ fi
 
 OUT="${OUT:-$(mktemp -d -t tui-capture.XXXXXX)}"
 mkdir -p "$OUT"
+
+# Machine-local UI memory is isolated by default. Exporting XDG_STATE_HOME here
+# would NOT reach gg: tmux hands a new session the environment its SERVER was
+# started with, not this script's. The variable therefore has to travel on the
+# command line, via env(1) in the pane's own command.
+STATE="${STATE:-$(mktemp -d -t tui-capture-state.XXXXXX)}"
+mkdir -p "$STATE"
 
 SESSION="ggcap_$$"
 cleanup() {
@@ -146,7 +159,8 @@ send_tokens() { # tokens (whitespace-separated); word-splitting is intentional
 sanitize() { echo "$1" | tr -cd '[:alnum:]_-'; }
 
 # launch gg in a headless PTY sized COLSxROWS, opening REPO
-tmux new-session -d -s "$SESSION" -x "$COLS" -y "$ROWS" -c "$REPO" "$GG"
+tmux new-session -d -s "$SESSION" -x "$COLS" -y "$ROWS" -c "$REPO" \
+  "env XDG_STATE_HOME=$(printf %q "$STATE") $(printf %q "$GG")"
 
 # initial screen: repo open + first async loads → allow a longer ceiling (~7s)
 settle 70 || echo "tui-capture: initial screen did not settle (captured anyway)" >&2
@@ -202,3 +216,4 @@ elif [[ -n "$KEYSCRIPT" ]]; then
 fi
 
 echo "tui-capture: $((idx + 1)) snapshot(s) in $OUT"
+echo "tui-capture: XDG_STATE_HOME was $STATE"

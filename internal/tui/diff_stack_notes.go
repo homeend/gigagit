@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/textdiff"
 )
 
 // Review notes inside a STACK (design §11 item 1). Each file carries the
@@ -192,4 +193,39 @@ func (m Model) drainLineLanding(v *diffView, tag string) Model {
 	v.setCursorLine(li, body)
 	v.alignCursor(alignCenter, body)
 	return m
+}
+
+// changeInFile is the next (dir>0) / previous (dir<0) CHANGE RUN inside the
+// cursor's own file — the walk n/p does in a single-file view, which stacked
+// steps files instead. A run is a maximal stretch of non-Same body lines, so
+// the cursor lands once per change, not once per changed line.
+func (v *diffView) changeInFile(from, dir int) (int, bool) {
+	if v.stk == nil {
+		return 0, false
+	}
+	lo, hi := v.fileLineRange(v.curFile())
+	best, found := -1, false
+	prevSame := true
+	for i := lo; i <= hi && i < len(v.lines); i++ {
+		ln := v.lines[i]
+		if !ln.isBody() {
+			continue // a header, a rule, a placeholder or a fold: not a row
+		}
+		change := ln.Row.Kind != textdiff.Same
+		start := change && prevSame
+		prevSame = !change
+		if !start {
+			continue
+		}
+		if dir > 0 && i <= from {
+			continue
+		}
+		if dir < 0 && i >= from {
+			continue
+		}
+		if !found || (dir > 0 && i < best) || (dir < 0 && i > best) {
+			best, found = i, true
+		}
+	}
+	return best, found
 }
