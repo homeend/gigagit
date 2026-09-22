@@ -44,11 +44,17 @@ export function statusLetter(f) {
   return f.status || "";
 }
 
-// noContent: a symmetric row (it carries a kind) with bytes on NEITHER side —
-// one set deletes the file, the other does not touch it. There is nothing to
-// ask the server for.
+// symRow: a row of the symmetric view — its kind is one of the four the
+// view derives (≠ = ◁ ▷). Not merely "has a kind": a working-tree status
+// entry carries one of its own ("tracked", …).
+function symRow(f) {
+  return Object.hasOwn(GLYPH, f.kind || "");
+}
+
+// noContent: a symmetric row with bytes on NEITHER side — one set deletes the
+// file, the other does not touch it. There is nothing to ask the server for.
 function noContent(f) {
-  return !!f.kind && f.left !== "present" && f.right !== "present";
+  return symRow(f) && f.left !== "present" && f.right !== "present";
 }
 
 // symPair is the pair of sides a symmetric row's diff reads, in the arrow's
@@ -95,9 +101,9 @@ export function buildSlots(rows, collapse = rows.length > STACK_COLLAPSE_OVER) {
     // bytes on either side has nothing to diff: both are header-only
     load: f.section === "conflicts" || noContent(f) ? "none" : "idle",
     none: f.section === "conflicts" ? "conflict" : noContent(f) ? "empty" : "",
-    kind: f.kind || "", // symmetric rows: ≠ = ◁ ▷ and each side's state
-    left: f.left || "",
-    right: f.right || "",
+    kind: symRow(f) ? f.kind : "", // symmetric rows: ≠ = ◁ ▷ and each side's state
+    left: symRow(f) ? f.left : "",
+    right: symRow(f) ? f.right : "",
     collapsed: collapse,
     diff: null,
     folds: new Set(), // this file's unfolded runs in the changes-only view (diffHTML's `open`)

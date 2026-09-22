@@ -159,8 +159,7 @@ function sectionHTML(s, k) {
 function paintStack(st) {
   const body = $("diff-body");
   body.innerHTML = `<div class="stk">${st.slots.map(sectionHTML).join("")}</div>`;
-  // the file headers stick just under the pane's own sticky toolbar
-  $("diff-pane").style.setProperty("--diff-head-h", $("diff-header").offsetHeight + "px");
+  measureChrome();
   const n = st.slots.length;
   $("diff-title").textContent = `${n} file${n === 1 ? "" : "s"} · stacked`;
   if (observer) observer.disconnect();
@@ -181,6 +180,20 @@ function paintStack(st) {
   mountPanBars(body, $("diff-hbars"));
   syncStackChrome();
   updateDiffNav();
+}
+
+// measureChrome sizes what the stack lays out around: the file headers stick
+// just under the pane's own sticky toolbar, and a tail of one pane height
+// after the last file lets ANY header reach the pane top. Without it a file
+// near the end cannot be scrolled to (the pane runs out of scroll), the
+// header at the top is a file above it, and the list's highlight follows
+// that file instead of the one clicked — sharpest where no counts size the
+// placeholders (link and entry sets: every unloaded file is a few rows tall).
+function measureChrome() {
+  const pane = $("diff-pane");
+  const head = $("diff-header").offsetHeight;
+  pane.style.setProperty("--diff-head-h", head + "px");
+  pane.style.setProperty("--stk-tail", Math.max(0, pane.clientHeight - head - 40) + "px");
 }
 
 function sectionEl(k) {
@@ -212,9 +225,7 @@ function repaintSlot(st, k) {
 function rerenderStack(resetFolds = false) {
   const st = state.stack;
   if (!st) return;
-  // #diff-header wraps (flex-wrap) at narrow widths: re-measure what the
-  // file headers stick under
-  $("diff-pane").style.setProperty("--diff-head-h", $("diff-header").offsetHeight + "px");
+  measureChrome(); // #diff-header wraps (flex-wrap) at narrow widths
   st.slots.forEach((s, k) => {
     if (resetFolds) s.folds = new Set();
     if (s.diff && !s.collapsed) repaintSlot(st, k);

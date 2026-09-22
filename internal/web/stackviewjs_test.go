@@ -141,3 +141,16 @@ func TestSymStackWired(t *testing.T) {
 		}
 	}
 }
+
+// A file near the end of a stack must be reachable: without a one-pane tail
+// the pane runs out of scroll, the header at the top is a file ABOVE the one
+// clicked, and the list highlight follows that file (probe-found, link sets).
+func TestStackTailLetsAnyHeaderReachTheTop(t *testing.T) {
+	t.Parallel()
+	if !strings.Contains(readStatic(t, "stackview.js"), `pane.style.setProperty("--stk-tail",`) {
+		t.Error("stackview.js no longer measures the stack's tail")
+	}
+	if !strings.Contains(readStatic(t, "style.css"), "height: var(--stk-tail, 0px)") {
+		t.Error("style.css no longer gives the stack its tail")
+	}
+}

@@ -1220,6 +1220,7 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
    would double the jump. */
 #diff-pane:has(.stk) { overflow-anchor: none; }
 .stk { padding: 4px 6px 24px; }
+.stk::after { content: ""; display: block; height: var(--stk-tail, 0px); } /* any header can reach the top */
 .stk-file { border: 1px solid var(--border); border-radius: 4px; margin: 8px 0; }
 .stk-head {
   position: sticky; top: var(--diff-head-h, 0px); z-index: 1;

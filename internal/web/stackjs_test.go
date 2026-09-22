@@ -86,6 +86,9 @@ out.symNone = ss[1].load + ":" + ss[1].none;
 out.plainNone = S.buildSlots(rows(1))[0].none + "|" + S.buildSlots(rows(1))[0].kind;
 out.conflictWhy = ws[2].none;
 out.glyphs = Object.values(S.GLYPH).join("");
+// a working-tree entry has a kind of its own: it is NOT a symmetric row
+const wtRow = S.buildSlots([{ f: { path: "a", section: "changes", unstaged: "M", kind: "tracked" }, idx: 0 }])[0];
+out.wtKind = wtRow.load + "|" + wtRow.kind + "|" + wtRow.none;
 
 console.log(JSON.stringify(out));
 `
@@ -125,7 +128,7 @@ func TestStackJS(t *testing.T) {
 		"pairEq": "M", "pairNone": nil,
 		"why":     "the left set deletes it, the right set does not touch it",
 		"symKind": "nepresentdeletedidle", "symNone": "none:empty",
-		"plainNone": "|", "conflictWhy": "conflict", "glyphs": "≠=◁▷",
+		"plainNone": "|", "conflictWhy": "conflict", "glyphs": "≠=◁▷", "wtKind": "idle||",
 	}
 	for k, v := range want {
 		if got[k] != v {
