@@ -1010,6 +1010,17 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "}":
 		var moved bool
 		if m, moved = m.jumpNote(1); !moved {
+			if v.stk != nil {
+				// A stack holds every file of the list already: there is no
+				// file to step TO, so the walk simply continues into the next
+				// file that carries notes — unfolding and fetching it if need
+				// be — with nothing to arm.
+				nm, cmd, stepped := m.stackNoteStep(v, 1)
+				if !stepped {
+					nm.diffNotice = i18n.T("▸ no next file with notes")
+				}
+				return nm, cmd
+			}
 			switch {
 			case m.diffNav == diffNavNone || !m.peekNotedFile(1):
 				m.diffNotice = i18n.T("▸ no next file with notes")
@@ -1022,6 +1033,13 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "{":
 		var moved bool
 		if m, moved = m.jumpNote(-1); !moved {
+			if v.stk != nil {
+				nm, cmd, stepped := m.stackNoteStep(v, -1)
+				if !stepped {
+					nm.diffNotice = i18n.T("▸ no previous file with notes")
+				}
+				return nm, cmd
+			}
 			switch {
 			case m.diffNav == diffNavNone || !m.peekNotedFile(-1):
 				m.diffNotice = i18n.T("▸ no previous file with notes")

@@ -193,3 +193,74 @@ func TestStackCOpensTheNotePrompt(t *testing.T) {
 		t.Fatalf("c must open the note popup in a stack; notice %q", mm.diffNotice)
 	}
 }
+
+// } crosses the whole stack: a note in a FOLDED file is reachable — the file
+// unfolds and the cursor lands on the note, with no file step to arm (every
+// file of the list is already here).
+func TestStackNoteJumpUnfoldsTheFileItLandsIn(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, cursorRows(8), cursorRows(8))
+	v.stk.files[1].collapsed = true
+	noteOnStackFile(v, 1, 4, "in the folded file")
+	m := diffModel()
+	m.height, m.width = 24, 120
+	m = m.pushLayer(v)
+	v.rebuild()
+	v.setCursorLine(2, m.diffBodyRows())
+
+	u, _ := m.Update(keyMsg("}"))
+	mm := u.(Model)
+	nv := mm.diffLayer()
+	if nv.stk.files[1].collapsed {
+		t.Fatal("} must unfold the file holding the note")
+	}
+	if got := nv.curFile(); got != 1 {
+		t.Fatalf("the cursor is in file %d, want the noted file 1 (notice %q)", got, mm.diffNotice)
+	}
+	byLine, _ := nv.noteRowIndex()
+	if _, on := byLine[nv.curLine]; !on {
+		t.Fatalf("the cursor must rest ON the note, it sits at line %d", nv.curLine)
+	}
+}
+
+// …and a file whose diff has not been fetched yet: } queues the load and parks
+// the landing, which is drained when that file's notes arrive.
+func TestStackNoteJumpLoadsAnUnfetchedFile(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, cursorRows(8), nil) // file 1 idle
+	v.stk.files[0].path, v.stk.files[1].path = "a.go", "b.go"
+	m := diffModel()
+	m.height, m.width = 24, 120
+	m.noteCounts = domain.NoteCounts{ByPath: map[string]int{"b.go": 1}}
+	m = m.pushLayer(v)
+	v.rebuild()
+	v.setCursorLine(2, m.diffBodyRows())
+
+	u, cmd := m.Update(keyMsg("}"))
+	mm := u.(Model)
+	if cmd == nil {
+		t.Fatal("} must start the load of the noted file")
+	}
+	nv := mm.diffLayer()
+	if nv.stk.land == nil || nv.stk.land.file != 1 {
+		t.Fatalf("the landing must be parked on file 1, got %+v", nv.stk.land)
+	}
+	// the file arrives, then its notes
+	d := diffViewWith(cursorRows(8), nil)
+	u2, _ := mm.Update(stackFileMsg{gen: nv.stk.gen, idx: 1, view: d})
+	mm = u2.(Model)
+	ns := []domain.ResolvedNote{rootNote("n", 4, "late", "", model.NoteSourceUser, model.NoteActive)}
+	u3, _ := mm.Update(stackNotesMsg{gen: nv.stk.gen, idx: 1, notes: ns})
+	mm = u3.(Model)
+	fv := mm.diffLayer()
+	if got := fv.curFile(); got != 1 {
+		t.Fatalf("after the late load the cursor is in file %d, want 1", got)
+	}
+	byLine, _ := fv.noteRowIndex()
+	if _, on := byLine[fv.curLine]; !on {
+		t.Fatalf("the parked landing must put the cursor ON the note (line %d)", fv.curLine)
+	}
+	if fv.stk.land != nil {
+		t.Fatal("a drained landing must be cleared")
+	}
+}

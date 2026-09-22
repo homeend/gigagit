@@ -114,6 +114,23 @@ type diffStack struct {
 	staged   bool        // status source: the Staged section rather than the Files one
 	files    []stackFile
 	inflight int // loader Cmds currently out (capped at stackMaxInflight)
+	// land is the cursor placement the stack OWES once a file it just sent for
+	// has arrived: a }/{ step into a file whose diff (or whose notes) are not
+	// here yet, a gg:// link or a steer naming a line inside it. It cannot be
+	// done at key time — the lines it names do not exist yet — so it is parked,
+	// exactly like the single-file view's }/{ landing.
+	land *stackLanding
+}
+
+// stackLanding is one parked cursor placement inside a stack. dir != 0 means
+// "this file's FIRST (dir>0) / LAST (dir<0) note"; no > 0 means "this exact
+// line on this side". A landing is dropped the moment its file is dropped
+// (a new generation rebuilds the stack and the pointer with it).
+type stackLanding struct {
+	file int
+	dir  int
+	side model.NoteSide
+	no   int
 }
 
 // spliceStack rebuilds v.lines / v.blocks from the stack's files: per file a

@@ -553,6 +553,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		dv.rebuild()
 		dv.curLine = dv.lineAt(hold)
 		dv.scroll(0, body)
+		// A }/{ step into this file parked its landing: the note it must sit
+		// on only exists now. It supersedes the re-anchor above.
+		var landed bool
+		if m, landed = m.drainStackLanding(msg.idx, body); landed {
+			return m, nil
+		}
 		if wasVisible {
 			dv.revealCursorNotes(body)
 		}
