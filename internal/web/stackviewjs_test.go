@@ -195,3 +195,23 @@ func TestPanBarsPaintTheirThumb(t *testing.T) {
 		}
 	}
 }
+
+// In a stack each file pans on its own: the section's body is the pan host
+// and the section carries its own bars. One pane-wide pair panned every
+// file's side at once (user ruling: bars under each file).
+func TestStackFilesPanOnTheirOwn(t *testing.T) {
+	t.Parallel()
+	view := readStatic(t, "stackview.js")
+	for _, want := range []string{
+		`<div class="hbars stk-hbars hidden"></div></section>`,
+		`mountPanBars(el.querySelector(".stk-body"), el.querySelector(".stk-hbars"));`,
+		`$("diff-hbars").classList.add("hidden");`,
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("stackview.js is missing %q", want)
+		}
+	}
+	if strings.Contains(view, `mountPanBars($("diff-body"), $("diff-hbars"))`) || strings.Contains(view, `mountPanBars(body, $("diff-hbars"))`) {
+		t.Error("stackview.js mounts the pane-wide bars over the whole stack again")
+	}
+}

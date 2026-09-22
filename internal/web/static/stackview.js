@@ -152,7 +152,10 @@ function sectionHTML(s, k) {
   return (
     `<section class="stk-file${s.collapsed ? " collapsed" : ""}" data-k="${k}">` +
     headHTML(s) +
-    `<div class="stk-body">${bodyHTML(s)}</div></section>`
+    `<div class="stk-body">${bodyHTML(s)}</div>` +
+    // this file's own long-line bars (scroll mode): sticky at the pane's
+    // bottom while the file is on screen, at the file's end after it
+    `<div class="hbars stk-hbars hidden"></div></section>`
   );
 }
 
@@ -177,7 +180,9 @@ function paintStack(st) {
   );
   st.near = new Set();
   for (const el of body.querySelectorAll(".stk-file")) observer.observe(el);
-  mountPanBars(body, $("diff-hbars"));
+  // the pane-wide bars stand aside: each file pans on its own (mountSlotBars)
+  $("diff-hbars").classList.add("hidden");
+  for (const el of body.querySelectorAll(".stk-file")) mountSlotBars(el);
   syncStackChrome();
   updateDiffNav();
 }
@@ -215,9 +220,18 @@ function repaintSlot(st, k) {
   el.classList.toggle("collapsed", s.collapsed);
   el.querySelector(".stk-head").outerHTML = headHTML(s);
   el.querySelector(".stk-body").innerHTML = bodyHTML(s);
+  mountSlotBars(el); // before the pin: the bars are part of the section's height
   if (pin) $("diff-pane").scrollTop += pin.getBoundingClientRect().top - before;
-  mountPanBars($("diff-body"), $("diff-hbars"));
   updateDiffNav(); // the ‹ change › buttons count the rendered change runs
+}
+
+// mountSlotBars gives one section its own scroll-mode bars: the section's body
+// is the pan host (its --pan-l / --pan-r and remembered offsets are this
+// file's alone), so a bar pans this file and no other. One pane-wide pair
+// panned every file's side at once. No table (a placeholder, a notice, a
+// folded file) → the bars hide.
+function mountSlotBars(el) {
+  mountPanBars(el.querySelector(".stk-body"), el.querySelector(".stk-hbars"));
 }
 
 // rerenderStack repaints every loaded body for a new width, the f view or

@@ -76,6 +76,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - The scroll-mode bars (diff, stack, file history, blame) are now drawn by gg
   itself — a thumb you can drag, and a track to click. Firefox and macOS draw
   overlay scrollbars that only appear on hover, so the bars looked missing.
+- In a stack, every file has its **own** scroll-mode bars, under the file
+  (pinned to the pane's bottom edge while the file is on screen): a bar pans
+  that file only — the old pane-wide pair moved every file's side at once.
 
 ## `gg web`: the stacked diff — every file in one scroll (`S`)
 

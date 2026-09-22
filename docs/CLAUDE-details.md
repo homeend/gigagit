@@ -1404,6 +1404,13 @@ Plan `docs/superpowers/plans/2026-09-22-stacked-diff-web-symmetric.md`.
   Firefox/macOS overlay scrollbars only show on hover — the user saw NO bar
   in Firefox. Headless Chromium hides scrollbars too; Playwright's Firefox
   (`npx playwright install firefox`) is how to see what Firefox users see.
+- **Per-file bars in a stack** (user ruling). Each section is
+  `head · .stk-body · .hbars.stk-hbars`; `mountSlotBars` mounts with the
+  BODY as pan host, so `--pan-l/--pan-r` and `host._pan` are per file. The
+  section's bars are `position: sticky; bottom: 0` inside the section: at the
+  pane bottom while the file fills it, at the file's end after. `mountSlotBars`
+  runs BEFORE `repaintSlot`'s pin (the bars add height). `#diff-hbars` hides
+  while a stack is up; `renderDiff` brings it back. Probe `perfile.mjs`.
 
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)
 
