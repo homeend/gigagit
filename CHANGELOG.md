@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI status bar names the commit's author
+
+### Changed
+
+- **The status bar shows the selected commit's author.** While moving
+  through the Commits panel, the bottom status line reads branch, short id,
+  then author (`⎇ feat · # 1a2b3c4 · @ Ada Lovelace`), and any status
+  message now follows that, not the other way round. Error messages still
+  lead the line.
+
 ## Symmetric merge preview: two branches measured against one base
 
 ### Added

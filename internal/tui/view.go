@@ -465,8 +465,8 @@ func (m Model) renderInterface() string {
 		add(m.reviewSegment())
 		add(markHint)
 		add(notice)
-		add(m.statusMsg)
 		add(m.commitBranchHint())
+		add(m.statusMsg)
 		add(m.bgRefreshHint())
 	}
 	statusLine := strings.Join(parts, " · ")
@@ -1234,8 +1234,10 @@ func (m Model) reviewSegment() string {
 	return st().reviewDim.Render(seg)
 }
 
-// the short id lives here because the commit list rows show the branch column
-// instead of the id. Shown in the status line, occluding no commit row.
+// commitBranchHint names the selected commit: its branch, short id and author.
+// The short id lives here because the commit list rows show the branch column
+// instead of the id. Shown in the status line ahead of any status message,
+// occluding no commit row.
 func (m Model) commitBranchHint() string {
 	if m.focus != panelCommits {
 		return ""
@@ -1257,6 +1259,9 @@ func (m Model) commitBranchHint() string {
 			h = h[:7]
 		}
 		parts = append(parts, "# "+h)
+	}
+	if c.Author != "" {
+		parts = append(parts, "@ "+c.Author)
 	}
 	return strings.Join(parts, " · ")
 }
