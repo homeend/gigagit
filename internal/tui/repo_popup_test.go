@@ -74,31 +74,20 @@ func TestPopupFilterAndSwitch(t *testing.T) {
 	m, _, otherDir := seededModel(t)
 	u, _ := m.Update(keyMsg("R"))
 	m = u.(Model)
-	// Navigation-first: press / to start filtering, then type.
-	u, _ = m.Update(keyMsg("/"))
-	m = u.(Model)
+	// Type-to-filter: letters narrow the list straight away, no / needed.
 	for _, r := range "zebra" {
 		u, _ = m.Update(keyMsg(string(r)))
 		m = u.(Model)
 	}
 	p := layerOf[*repoPopup](m)
-	if !p.filtering {
-		t.Fatal("/ should enter filter mode")
-	}
 	if got := len(p.visible()); got != 1 {
 		t.Fatalf("filtered visible = %d, want 1 (query %q)", got, p.query)
 	}
-	// First enter locks the filter (leaves input mode, popup stays open).
-	u, _ = m.Update(keyMsg("enter"))
-	m = u.(Model)
-	if p := layerOf[*repoPopup](m); p == nil || p.filtering {
-		t.Fatalf("first enter should lock the filter and keep the popup open; p=%v", p)
-	}
-	// Second enter switches to the single filtered repo.
+	// One enter switches to the single filtered repo.
 	u, _ = m.Update(keyMsg("enter"))
 	m = u.(Model)
 	if layerOf[*repoPopup](m) != nil {
-		t.Fatal("second enter should close the popup")
+		t.Fatal("enter should switch and close the popup")
 	}
 	resolvedWant, _ := filepath.EvalSymlinks(otherDir)
 	resolvedGot, _ := filepath.EvalSymlinks(m.switchTarget)
@@ -155,23 +144,28 @@ func TestPopupEscCancelsAndSwallowsKeys(t *testing.T) {
 	if m.running {
 		t.Fatal("popup leaked a global key")
 	}
-	// Navigation-first: a plain letter is swallowed but does NOT filter (you press
-	// / first). This is also what fixes the z-collision (z cycles mode, not query).
+	// Type-to-filter: a plain letter is swallowed INTO the query.
 	p := layerOf[*repoPopup](m)
-	if p.query != "" || p.filtering {
-		t.Fatalf("plain key must not filter; query = %q filtering = %v", p.query, p.filtering)
+	if p.query != "p" {
+		t.Fatalf("plain key must type into the filter; query = %q", p.query)
+	}
+	// First esc clears the filter and keeps the popup; the second closes it.
+	u, _ = m.Update(keyMsg("esc"))
+	m = u.(Model)
+	if p := layerOf[*repoPopup](m); p == nil || p.query != "" {
+		t.Fatal("first esc should clear the filter and keep the popup open")
 	}
 	u, _ = m.Update(keyMsg("esc"))
 	m = u.(Model)
 	if layerOf[*repoPopup](m) != nil {
-		t.Fatal("esc should close the popup")
+		t.Fatal("esc with no filter should close the popup")
 	}
 }
 
-// TestRepoPopupSlashFilterAndZNotCollision pins the navigation-first contract for
-// the repo switcher: / enters filter mode where `z` is a literal query character
-// (in nav mode z cycles the display mode), and arrows move the selection while
-// typing — the same model as the finder and bookmark/shelf switchers.
+// TestRepoPopupSlashFilterAndZNotCollision pins the type-to-filter contract for
+// the repo switcher (the ctrl+p palette's model): ctrl+w cycles the display
+// mode, while every printable key — z, j, k and / (paths hold slashes)
+// included — is query text, and arrows move the selection while typing.
 func TestRepoPopupSlashFilterAndZNotCollision(t *testing.T) {
 	t.Parallel()
 	m, _, _ := seededModel(t)
@@ -186,16 +180,14 @@ func TestRepoPopupSlashFilterAndZNotCollision(t *testing.T) {
 	if p.mode == mode0 || p.query != "" {
 		t.Fatalf("nav-mode z should cycle display mode, not type a query; mode==%v query=%q", p.mode, p.query)
 	}
-	// / then a z-containing query types literally.
-	u, _ = m.Update(keyMsg("/"))
-	m = u.(Model)
-	for _, r := range "zeb" {
+	// z, j, k and / all type literally.
+	for _, r := range "/zjk" {
 		u, _ = m.Update(keyMsg(string(r)))
 		m = u.(Model)
 	}
 	p = layerOf[*repoPopup](m)
-	if p.query != "zeb" {
-		t.Fatalf("/zeb should type literally in filter mode; query=%q", p.query)
+	if p.query != "/zjk" || p.sel != 0 {
+		t.Fatalf("/zjk should type literally without moving; query=%q sel=%d", p.query, p.sel)
 	}
 }
 
@@ -476,7 +468,7 @@ func TestRepoPopupTKeyIsLiteralWhileFiltering(t *testing.T) {
 	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
-	p := &repoPopup{filtering: true}
+	p := &repoPopup{}
 	p.update(m, runeKey("T"))
 	if p.query != "T" {
 		t.Fatalf(`"T" while filtering must be a literal char; query=%q`, p.query)

@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
-## Settings menu type-to-filter
+## Settings menu and repo switcher type-to-filter
 
 ### Changed
 
@@ -16,6 +16,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   matches, `enter` opens or toggles the highlighted one, and `esc` clears
   the filter first and closes on the next press. The filter survives a trip
   into a sub-screen and back.
+- **The `R` repo switcher filters as you type, too** — no `/` first. Any
+  character (`/`, `j` and `k` included, since paths hold slashes) narrows the
+  table by name or path, a single `enter` switches (the old "first enter
+  locks the filter" step is gone), and `esc` clears the filter before it
+  closes. `ctrl+d` forgets and `ctrl+w` cycles the display mode as before.
 
 ## Stacked diff view in the TUI
 
