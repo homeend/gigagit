@@ -272,7 +272,7 @@ Linux/WSL.
 | Child gone after the host closes the PTY (SIGHUP) | PASS |
 | vim: alt-screen, insert mode, `:q!` → exit status reported | PASS |
 | Codex starts and renders its trust prompt | PASS |
-| Windows ConPTY (`spike.exe cmd.exe`, run by the user in Windows Terminal) | PASS — cmd renders, `ctrl+]` intercepted. Typing / resize / Claude on Windows: pending the user's v2 run |
+| Windows ConPTY (`spike.exe cmd.exe`, run by the user in Windows Terminal) | PASS — cmd renders, typing works, bare ctrl sends nothing (v2), resize reaches the child (`mode con` 188×54), `ctrl+]` intercepted, Claude Code's start screen renders at two window sizes. One artifact: a stray `Claude Code` title left of the logo in the smaller window (likely ConPTY's reflowing repaint after a resize vs. the emulator's non-reflowing resize) |
 
 Findings that change the plan:
 1. **`x/vt` is kept** (no `vt10x` fallback needed). `SafeEmulator` suffices;
@@ -301,3 +301,6 @@ Findings that change the plan:
    Ctrl/Alt/Win alone yields a NUL rune, and the child echoed `^@` on every
    ctrl press. The console must drop NUL-only rune messages (Plan 2 key
    mapping; spike v2 does).
+6. **Windows resize artifact.** ConPTY reflows and repaints its own buffer
+   on resize; `x/vt` resizes without reflow, so stale cells can survive one
+   frame. Plan 2's console task pins a resize → full-redraw check on Windows.
