@@ -19,6 +19,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   every file has been looked at. With nothing left to open, `]` wraps as it
   does in the single-file view.
 
+  On the web the same keys work in a stack, where they used to be refused
+  with "search works in the single-file view".
+
 ### Fixed
 
 - **A stacked diff no longer loses the current search hit when a file above

@@ -311,13 +311,18 @@ function unsearchedSlots() {
 // keystroke would repaint a fifty-file stack for nothing.
 function refindStack() {
   const st = state.stack;
-  if (!st || !diffSearch.query) return;
+  if (!st) return;
+  // An EMPTY query still runs: esc clears the query and then asks the host to
+  // render, and that render is the only thing that unpaints the tint the last
+  // one left in every section.
   const lines = [];
-  st.slots.forEach((s, k) => {
-    if (s.collapsed || !s.diff || !s.lines) return;
-    const base = k * STACK_ROW_SPAN;
-    for (const l of s.lines) lines.push({ row: base + l.row, side: l.side, text: l.text });
-  });
+  if (diffSearch.query) {
+    st.slots.forEach((s, k) => {
+      if (s.collapsed || !s.diff || !s.lines) return;
+      const base = k * STACK_ROW_SPAN;
+      for (const l of s.lines) lines.push({ row: base + l.row, side: l.side, text: l.text });
+    });
+  }
   diffSearch.refind(lines);
   const hit = new Set(diffSearch.hits.map((h) => Math.floor(h.row / STACK_ROW_SPAN)));
   st.slots.forEach((s, k) => {
