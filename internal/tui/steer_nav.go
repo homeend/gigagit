@@ -173,6 +173,8 @@ func (m Model) steerNavigate(c steer.Command) (Model, tea.Cmd) {
 	switch {
 	case c.Step != "":
 		return m.steerStep(c)
+	case c.HintKind == model.ContentHintKind:
+		return m.steerNavigateContent(c)
 	case c.Target != nil && c.Target.State == "preview":
 		return m.steerNavigatePreview(c)
 	case c.Target != nil && c.Target.State == "ref":
@@ -255,6 +257,9 @@ func (m Model) navigateLanded(c steer.Command, detail string) (Model, tea.Cmd) {
 		// No load to wait for: the Previews rows are a startup source, and a
 		// start-at landing already waits for that fan-out.
 		return m.revealSavedSet(c), reply
+	case model.ContentHintKind:
+		// The landing IS the hint: the viewer is already open.
+		return m, reply
 	default:
 		// "stash" (spec §3.4, no producer) and any future kind this build
 		// cannot reveal: the navigate already landed, so this degrades with
@@ -316,6 +321,29 @@ func (m Model) revealSavedSet(c steer.Command) Model {
 		}
 	}
 	return m
+}
+
+// steerNavigateContent lands a content link (?view=content): the file's
+// working-tree bytes in the content viewer, never its diff. Presence is a
+// stat (no git), asked on the Update thread under the same deadline
+// steerNavigateRef uses, so a missing file is refused before anything moves.
+func (m Model) steerNavigateContent(c steer.Command) (Model, tea.Cmd) {
+	if c.File == "" {
+		return m, m.answerSteer(c, steerFail(c, "a content link needs a file path"))
+	}
+	ctx, cancel := updateThreadCtx(updateThreadGitTimeout)
+	defer cancel()
+	present, err := m.svc.WorktreeFilesPresent(ctx, []string{c.File})
+	if err := busyOr(err); err != nil {
+		return m, m.answerSteer(c, steerFail(c, "checking "+c.File+": "+err.Error()))
+	}
+	if !present[c.File] {
+		return m, m.answerSteer(c, steerFail(c, c.File+" is not in the working tree"))
+	}
+	m = m.steerToPanels()
+	m, load := m.openWorktreeContent(c.File)
+	m, reply := m.navigateLanded(c, "opened "+c.File)
+	return m, tea.Batch(load, reply)
 }
 
 // steerNavigateHintOnly lands a hint-only navigate (S13): a link with no
