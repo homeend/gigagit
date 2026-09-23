@@ -10,9 +10,3 @@
 // Neither pump ever waits on a consumer: Changed is a capacity-1 coalesced
 // signal and taps drop when full.
 package agentsession
-
-import (
-	// Pinned here until session.go imports them (Task 2).
-	_ "github.com/charmbracelet/x/vt"
-	_ "github.com/charmbracelet/x/xpty"
-)
