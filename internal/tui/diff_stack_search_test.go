@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/textdiff"
@@ -81,5 +82,59 @@ func TestStackSearchKeepsTheCurrentHitWhenAFileLoadsAbove(t *testing.T) {
 	}
 	if h.row != nv.curLine {
 		t.Fatalf("the current hit (line %d) parted from the cursor (line %d)", h.row, nv.curLine)
+	}
+}
+
+// D1: the count is over the whole stack, and a trailing + says the stack has
+// files it has not searched yet — folded, or never fetched.
+func TestStackSearchBadgeMarksUnsearchedFiles(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, searchRows(8, 2), searchRows(8, 5), nil) // file 2 never fetched
+	v.search.query = "needle"
+	v.search.refindFrom(v.searchLines(), v.searchPos())
+	if got := v.searchBadge(); !strings.HasSuffix(got, "+") {
+		t.Fatalf("badge %q must end in + while a file is unsearched", got)
+	}
+	v.stk.files[2].collapsed = true
+	v.stk.files[2].d, v.stk.files[2].load = diffViewWith(searchRows(8), nil), stackLoaded
+	v.rebuild()
+	if got := v.searchBadge(); !strings.HasSuffix(got, "+") {
+		t.Fatalf("badge %q must end in + while a loaded file is still FOLDED", got)
+	}
+}
+
+func TestStackSearchBadgeDropsThePlusWhenEverythingIsSearched(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, searchRows(8, 2), searchRows(8, 5), searchRows(8))
+	v.search.query = "needle"
+	v.search.refindFrom(v.searchLines(), v.searchPos())
+	if got := v.searchBadge(); strings.HasSuffix(got, "+") {
+		t.Fatalf("badge %q must not claim unsearched files when every file is loaded and open", got)
+	}
+}
+
+// A file that can never hold a hit — conflicted, binary, too large, errored —
+// does not hold the + open, or it would never clear and ] would cascade into a
+// dead end.
+func TestStackSearchBadgeIgnoresFilesThatCanNeverHoldAHit(t *testing.T) {
+	t.Parallel()
+	v := stackViewOf(t, searchRows(8, 2), searchRows(8, 5), nil)
+	v.stk.files[2].conflict, v.stk.files[2].collapsed = true, true
+	v.rebuild()
+	v.search.query = "needle"
+	v.search.refindFrom(v.searchLines(), v.searchPos())
+	if got := v.searchBadge(); strings.HasSuffix(got, "+") {
+		t.Fatalf("badge %q counted a conflicted file as unsearched", got)
+	}
+}
+
+// Single-file the badge is untouched: no stack, no +.
+func TestSearchBadgeUnchangedWithoutAStack(t *testing.T) {
+	t.Parallel()
+	v := diffViewWith(searchRows(8, 2), nil)
+	v.search.query = "needle"
+	v.search.refindFrom(v.searchLines(), v.searchPos())
+	if got, want := v.searchBadge(), v.search.badge(); got != want {
+		t.Fatalf("single-file badge %q must be the search's own %q", got, want)
 	}
 }

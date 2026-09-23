@@ -350,7 +350,7 @@ func (m Model) renderDiffView() string {
 	}
 	// In-view search badge: "/foo  3/12" (spec §4.3), right-aligned status like
 	// everything else here, so the avail math absorbs it.
-	if bd := v.search.badge(); bd != "" {
+	if bd := v.searchBadge(); bd != "" {
 		if right != "" {
 			right = bd + "  " + right
 		} else {
