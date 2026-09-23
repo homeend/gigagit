@@ -755,11 +755,10 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // into the preview can never land in the tree's filter, and only while the
 // preview owns the right column (the tree side keeps its own / entirely).
 func (m Model) previewSearchKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
-	p := m.filesPreview
-	if p == nil || m.filesTreeFocused {
+	p, rows, inner, ok := m.activePreview()
+	if !ok {
 		return m, nil, false
 	}
-	rows, inner := m.filePreviewRowsCap(), m.filePreviewInnerW()
 	if p.search.typing {
 		nm, cmd, ev := m.searchTypingKey(&p.search, msg)
 		m = nm
