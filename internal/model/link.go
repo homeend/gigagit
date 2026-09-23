@@ -109,7 +109,24 @@ func (h LinkHint) String() string {
 // commit pair, both set-shaped. Its id is a LOOKUP key, never a checksum of
 // the address: the id hashes link TEXT, which spells the repository by name
 // on one machine and by path on another.
-var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true, "preview": true}
+//
+// "view" is not a surface the link was copied FROM but the one it lands ON:
+// view=content opens the file's working-tree content in the viewer instead
+// of its diff. Only a working-tree file link may carry it (ParseLink).
+var linkHintKinds = map[string]bool{"bookmark": true, "shelf": true, "stash": true, "preview": true, "view": true}
+
+// The content hint: gg://<repo>/<path>[:<line>]?view=content names a file's
+// CONTENT on disk in the worktree — never a diff, never a commit.
+const (
+	ContentHintKind = "view"
+	ContentHintID   = "content"
+)
+
+// ContentHint is the one value a content link's hint may hold.
+var ContentHint = LinkHint{Kind: ContentHintKind, ID: ContentHintID}
+
+// IsContent reports whether l is a content link.
+func (l Link) IsContent() bool { return l.Hint.Kind == ContentHintKind }
 
 // Link is one place in one repository: a file, a line on one side of one
 // diff, a hunk, or a commit.
@@ -379,6 +396,21 @@ func ParseLink(s string) (Link, error) {
 		l.Target = LinkTarget{State: StateCommitted, Commit: tail}
 	}
 
+	// A content link names the file ON DISK: no target, no diff side, no hunk.
+	// Its path is checked below, once the remote form has split it off (the
+	// local form only learns its path in domain.ResolveLink, which refuses an
+	// address-less one there).
+	if l.IsContent() {
+		switch {
+		case l.Target.State != StateUnstaged:
+			return linkErr("a content link names the file in the working tree; drop the @ target")
+		case l.Side == NoteSideOld:
+			return linkErr("a content link has no old side; drop \"old:\"")
+		case l.Hunk > 0:
+			return linkErr("a content link names a file, not a hunk; drop \"#%d\"", l.Hunk)
+		}
+	}
+
 	// The local form is "/" + an absolute checkout path — and, leniently, a
 	// BARE Windows drive head ("gg://C:/src"). gg's own producers always emit
 	// the canonical three-slash spelling (Link.String adds the separator), so
@@ -433,6 +465,9 @@ func ParseLink(s string) (Link, error) {
 		return linkErr("%q is not a git path: a path cannot contain @, :, # or ?", path)
 	}
 	l.Repo.Name, l.Path = name, path
+	if l.IsContent() && l.Path == "" {
+		return linkErr("a content link needs a file path")
+	}
 	if l.Path == "" && (l.Line > 0 || l.Hunk > 0) {
 		return linkErr("a line or a hunk needs a file path")
 	}
@@ -540,13 +575,16 @@ func parseLinkHint(s string) (LinkHint, error) {
 	}
 	kind, id := s[:i], s[i+1:]
 	if !LinkHintKindOK(kind) {
-		return LinkHint{}, fmt.Errorf("%w: unknown hint kind %q (want bookmark, shelf or stash)", ErrLink, kind)
+		return LinkHint{}, fmt.Errorf("%w: unknown hint kind %q (want bookmark, shelf, stash, preview or view)", ErrLink, kind)
 	}
 	if id == "" {
 		return LinkHint{}, fmt.Errorf("%w: hint %q has no id", ErrLink, kind)
 	}
 	if !LinkHintIDOK(id) {
 		return LinkHint{}, fmt.Errorf("%w: %q is not a hint id", ErrLink, id)
+	}
+	if kind == ContentHintKind && id != ContentHintID {
+		return LinkHint{}, fmt.Errorf("%w: a view hint reads view=content, got %q", ErrLink, s)
 	}
 	return LinkHint{Kind: kind, ID: id}, nil
 }
