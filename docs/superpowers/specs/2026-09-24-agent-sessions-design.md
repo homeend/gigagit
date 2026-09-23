@@ -252,3 +252,47 @@ reserved-key rationale. No CLI surface change planned (using-gg untouched).
 Sessions outliving the gg process; scrollback viewing/search and copy mode in
 the console; more than one console on screen; the web attach (designed for,
 not built); CLI/MCP session verbs.
+
+## Spike findings (2026-09-24)
+
+Harness: Bubble Tea v1.3.10 + `x/xpty v0.1.4` + `x/vt v0.0.0-20260920004010-53e2afe73ae5`
+(`SafeEmulator`), the pumpIn-queue design, driven headless in a tmux PTY on
+Linux/WSL.
+
+| Check | Result |
+|---|---|
+| Claude Code starts (no stall → emulator query replies reach the child) | PASS |
+| Claude trust prompt: ↓ + enter navigate its menu | PASS |
+| Prompt typed + enter → streamed answer renders (`PONG`) | PASS |
+| Colours: 24-bit SGR from bash, Claude's styled UI, box-drawing | PASS |
+| Resize 120×40 → 80×30 re-lays out Claude's UI | PASS |
+| Bracketed paste of 3 lines lands as one multi-line input (not submitted) | PASS |
+| esc reaches Claude (esc esc cleared the input) | PASS |
+| `ctrl+]` intercepted by the host, never reaches the child | PASS |
+| Child gone after the host closes the PTY (SIGHUP) | PASS |
+| vim: alt-screen, insert mode, `:q!` → exit status reported | PASS |
+| Codex starts and renders its trust prompt | PASS |
+| Windows ConPTY | NOT RUN — `spike.exe` cross-compiles, but WSL interop is disabled on this box (no `WSLInterop` binfmt entry), so it cannot execute from here |
+
+Findings that change the plan:
+1. **`x/vt` is kept** (no `vt10x` fallback needed). `SafeEmulator` suffices;
+   it embeds `*Emulator`, so `Close` is reachable. It has no cursor-visibility
+   getter — use the `CursorVisibility` callback.
+2. **Dependency bump is forced**: `x/vt` needs `x/ansi v0.11.7`, which breaks
+   the `x/cellbuf` pseudo-version Bubble Tea v1.3.10 pins — **`x/cellbuf
+   v0.0.15` must be required explicitly**. The bump also moves
+   `colorprofile` 0.4.2, `go-runewidth` 0.0.23, `go-colorful` 1.4.0,
+   `x/term` 0.2.2, `x/sys` 0.47.0. `go build ./...` is clean; `./test.sh unit`
+   has exactly two failures, both in `internal/tui/wide_glyph_test.go`: the
+   new width tables measure ☰ (U+2630) as 2 cells (it was 1), so the
+   `widthUnsafe` guard no longer needs to rewrite it — lipgloss now agrees
+   with terminals. Only ☰ changed among 17 probed glyphs (● ◇ ↓ ▾ ✓ ✗ ⚠ ❯ ─
+   ⏵ ☀ ♦ unchanged). Fix = swap the test fixtures to a still-width-1 symbol
+   (☀ U+2600) in Plan 1 Task 1.
+3. **Batched runes**: a `tea.KeyRunes` message can carry several runes (fast
+   typing, tmux `send-keys`); send it with `SendText`, never rune-by-rune
+   through `SendKey` with only `Runes[0]` (Plan 2 key mapping).
+4. **Agents detect a host tmux through the inherited `TMUX` env var**
+   (Claude printed a tmux scroll hint). Sessions should drop `TMUX` and
+   `TMUX_PANE` from the child environment, since the console is not a tmux
+   pane (Plan 1 Task 2).
