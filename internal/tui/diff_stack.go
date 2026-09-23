@@ -486,12 +486,15 @@ func (m Model) applyStackFile(msg stackFileMsg) (Model, tea.Cmd) {
 	if len(v.lineStart) > topLine {
 		top.sub = v.offset - v.lineStart[topLine]
 	}
-	v.rebuild()
+	v.rebuildLines()
 	v.curLine = v.lineAt(cur)
 	tl := v.lineAt(top)
 	if tl < len(v.lineStart) {
 		v.offset = v.lineStart[tl] + top.sub
 	}
+	// AFTER the remap: refindAfterRebuild measures from v.curLine, and until
+	// the line above is run that index still names the OLD stream.
+	v.refindAfterRebuild()
 	v.scroll(0, body)
 	v.syncStackTitle()
 	// This file's own review notes follow its diff: they resolve against the

@@ -44,3 +44,42 @@ func TestStackSearchAlreadySpansLoadedFiles(t *testing.T) {
 		t.Fatalf("file 1 carries no needle, yet a hit was attributed to it: %v", files)
 	}
 }
+
+// A file arriving ABOVE the reader lengthens the stream and shifts every line
+// index below it. applyStackFile rebuilds the stream, then remaps the cursor
+// through a stack anchor — so the search must be re-found AFTER the remap. Run
+// inside rebuild() it measures from a line index the new stream no longer
+// means, and the current hit jumps to another file's hit.
+func TestStackSearchKeepsTheCurrentHitWhenAFileLoadsAbove(t *testing.T) {
+	t.Parallel()
+	// Dense hits: a stale line index must snap to a DIFFERENT hit, or the test
+	// cannot see the bug (two far-apart hits re-snap to the same one anyway).
+	v := stackViewOf(t, nil, searchRows(9, 1, 3, 5, 7), searchRows(9, 1, 3, 5, 7)) // file 0 not fetched
+	m := diffModel()
+	m.height, m.width = 24, 120
+	m = m.pushLayer(v)
+	body := m.diffBodyRows()
+	v.search.query = "needle"
+	v.search.refindFrom(v.searchLines(), v.searchPos())
+	if len(v.search.hits) != 8 {
+		t.Fatalf("fixture: want four hits in each loaded file, got %d", len(v.search.hits))
+	}
+	v.goToHit(len(v.search.hits)-1, body) // the hit in the LAST file
+	wantFile := v.lines[v.search.hits[v.search.cur].row].file
+	wantNo := v.lines[v.curLine].Row.RightNo
+
+	u, _ := m.Update(stackFileMsg{gen: v.stk.gen, idx: 0, view: diffViewWith(searchRows(9), nil)})
+	mm := u.(Model)
+	nv := mm.diffLayer()
+
+	if nv.lines[nv.curLine].Row.RightNo != wantNo || nv.curFile() != wantFile {
+		t.Fatalf("the cursor left file %d line %d for file %d line %d", wantFile, wantNo, nv.curFile(), nv.lines[nv.curLine].Row.RightNo)
+	}
+	h := nv.search.hits[nv.search.cur]
+	if nv.lines[h.row].file != wantFile {
+		t.Fatalf("the current hit moved to file %d, want %d", nv.lines[h.row].file, wantFile)
+	}
+	if h.row != nv.curLine {
+		t.Fatalf("the current hit (line %d) parted from the cursor (line %d)", h.row, nv.curLine)
+	}
+}
