@@ -240,10 +240,10 @@ func TestStackNoteContextIsShared(t *testing.T) {
 
 	// The renderer takes the context EXPLICITLY. A module-level "current slot"
 	// would race: a stack paints one slot while another's notes are in flight.
-	if !strings.Contains(files, "function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null)") {
-		t.Fatal("files.js: diffHTML must take the note context as a parameter")
+	if !strings.Contains(files, "function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null, hctx = null)") {
+		t.Fatal("files.js: diffHTML must take the note AND search contexts as parameters")
 	}
-	if !strings.Contains(view, "diffHTML(s.diff, $(\"diff-pane\").clientWidth, notesArmed(nc.ctx), s.folds, nc)") {
+	if !strings.Contains(view, "diffHTML(s.diff, $(\"diff-pane\").clientWidth, notesArmed(nc.ctx), s.folds, nc, hctx)") {
 		t.Fatal("stackview.js: a slot must paint with its own note context")
 	}
 
@@ -298,5 +298,87 @@ func TestStackLineLandingIsPerFile(t *testing.T) {
 	}
 	if !strings.Contains(live, "await landStackLine(s.file, side, s.line);") {
 		t.Fatal("live.js: a landing with a line must go through the stack's own lander")
+	}
+}
+
+// Plan 4b: the in-view search spans a whole stack. The browser is the only
+// place the wiring can be seen working, so these guards pin the shape the
+// probe proved — one search over one document, keyed per slot, re-found at
+// every site that changes which rows exist.
+func TestStackSearchSpansTheWholeStack(t *testing.T) {
+	t.Parallel()
+	view := readStatic(t, "stackview.js")
+	files := readStatic(t, "files.js")
+	keys := readStatic(t, "keys.js")
+
+	// The refusal is gone — and with it the toast that advertised it.
+	if strings.Contains(keys, "search works in the single-file view") {
+		t.Fatal("keys.js: a stack searches now; the refusal toast must be gone")
+	}
+	// …and the real gate was never the toast: diffSearchKey bails on
+	// state.lastDiff, which is null while a stack is up.
+	if !strings.Contains(files, "(!state.lastDiff && !state.stack)") {
+		t.Fatal("files.js: diffSearchKey's gate must admit a stack — state.lastDiff is null there")
+	}
+
+	// Line numbers repeat across a stack, and the engine orders hits by a
+	// NUMERIC row: each slot's rows are keyed into one document space.
+	if !strings.Contains(view, "const STACK_ROW_SPAN") || !strings.Contains(view, "base: slotBase(s)") {
+		t.Fatal("stackview.js: a slot must key its rows into the stack-wide space, or file B's row 12 collides with file A's")
+	}
+	// ONE re-find over every slot: a per-slot re-find leaves the hit list
+	// holding only the last slot's hits.
+	if !strings.Contains(view, "function refindStack()") {
+		t.Fatal("stackview.js: the stack must re-find once over every loaded slot")
+	}
+	if !strings.Contains(files, "const hs = hctx ? (hctx.search.query ? hctx.search : null)") {
+		t.Fatal("files.js: a slot's render must PAINT the stack's search, never re-find its own")
+	}
+	// Every site that changes which rows exist must re-find and repaint the
+	// bar, or the count goes stale (the web-inview-search probe's own lesson).
+	for _, site := range []string{"async function load(", "function rerenderStack(", "function reconcileStack("} {
+		i := strings.Index(view, site)
+		if i < 0 {
+			t.Fatalf("stackview.js: %s vanished — re-point this guard", site)
+		}
+		end := i + 1800
+		if end > len(view) {
+			end = len(view)
+		}
+		if !strings.Contains(view[i:end], "refindStack()") || !strings.Contains(view[i:end], "diffSearchBar.paint()") {
+			t.Fatalf("stackview.js: %s changes which rows exist — it must re-find and repaint the count", site)
+		}
+	}
+}
+
+// ] and [ reach a hit in a file the stack has never read, one file per step.
+func TestStackHitStepOpensUnreadFiles(t *testing.T) {
+	t.Parallel()
+	view := readStatic(t, "stackview.js")
+	files := readStatic(t, "files.js")
+	bar := readStatic(t, "searchbar.js")
+
+	if !strings.Contains(view, "stepHitStrict") {
+		t.Fatal("stackview.js: ] must know when the loaded slots have run out, not silently wrap")
+	}
+	i := strings.Index(view, "async function stackHitStep(")
+	if i < 0 {
+		t.Fatal("stackview.js: stackHitStep is the stack's ]/[")
+	}
+	body := view[i : i+2600]
+	for _, want := range []string{"s.collapsed = false", "awaitSlot(st, s)", "refindStack()", "stepHit("} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("stackview.js: stackHitStep must %q — unfold, fetch, re-find, and wrap only at the end", want)
+		}
+	}
+	// The bar cannot do this itself: its own step is synchronous.
+	if !strings.Contains(bar, "if (host.step && host.step(delta)) return;") {
+		t.Fatal("searchbar.js: a host that must FETCH to reach a hit steps itself")
+	}
+	if !strings.Contains(bar, "host.count ? host.count() : s.count()") {
+		t.Fatal("searchbar.js: a stacked host's count spans files it has not searched, and says so")
+	}
+	if !strings.Contains(files, `return unsearchedSlots() > 0 ? c + "+" : c;`) {
+		t.Fatal("files.js: the stacked count must mark that files remain unsearched")
 	}
 }

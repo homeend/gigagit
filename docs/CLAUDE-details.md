@@ -1612,6 +1612,47 @@ file that has never been fetched — plus one real ordering bug.
   `]` cascades to `f27.txt` (`2/2`, no `+`, `file 28/30`), the next wraps back.
   A 3-file fixture proves nothing here — its whole stack loads eagerly.
 
+**The web half** (same plan, second merge) had to build what the TUI already
+had, and the lever is that a stack is ONE document:
+
+- **One `diffSearch`, keyed per slot.** `before()` orders positions by a
+  NUMERIC row, so each slot's rows are keyed `k * STACK_ROW_SPAN (1e9) + the
+  row's index in its own diff`. That single change buys document order across
+  files, globally unique `data-h` (there is one Search, so hit indices are
+  global), and leaves `inviewsearch.js`, `searchbar.js`, `renderCell` and
+  `goToDiffHit` exactly as the single-file view uses them. Per-slot Search
+  objects would have needed all four to learn about slots.
+- **The render reports, the stack re-finds.** Single-file the render re-finds
+  (the fold set lives inside `diffHTML`); a stack cannot, or the hit list would
+  hold only the last slot's hits. `diffHTML` now takes `hctx = {search, base,
+  lines}`: given one it PAINTS from the stack's search and hands its searchable
+  lines to the sink instead of re-finding. `refindStack` concatenates the
+  cached `s.lines` and re-finds once, then repaints only the slots whose hits
+  changed (`s.hadHits`). One collapse per slot, and the search and the paint
+  provably share a fold set.
+- **Re-find sites:** `load()` (a slot arriving under a live query brings rows
+  the search has never seen), `rerenderStack()` (`f`, `w`, a resize change
+  which rows exist) and `reconcileStack()` — which also RE-ANCHORS, because a
+  working-tree refresh renumbers the slots and a composite row then names
+  another file. Each also calls `diffSearchBar.paint()` or the count goes
+  stale (the in-view-search probe's own lesson).
+- **The gate was `!state.lastDiff`** in `diffSearchKey`, which is null while a
+  stack is up — keys.js's "search works in the single-file view" toast was only
+  the visible half and is gone. Same shape as 4a's two dead note gates.
+- **The bar grew two optional host verbs:** `count()` (a stacked count spans
+  files not yet searched and says so with `+`) and `step(delta)` (a host that
+  must FETCH to reach the next hit steps itself — `bindSearchBar`'s own step is
+  synchronous). `awaitSlot` was lifted out of `landStackLine` and is shared.
+- **Probe:** `stack-probe/search.mjs` + `mksearchmany.sh`, against the unfixed
+  build first (it fails at `/` — the stack refused it) then chromium AND
+  firefox. It caught one defect no unit test was red for: **esc left the tint
+  painted**, because `refindStack` returned early on an empty query and the
+  bar's clear-then-render is the only thing that unpaints.
+- **Known, NOT caused by 4b:** `stack-probe/land.mjs` (plan 4a's link landing)
+  now fails on `main` too, with identical output from both builds — the steer
+  navigate empties the diff pane before `landStackLine` is ever reached
+  (`openCommitByHash` / `openFile` in live.js). Worth its own look.
+
 
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)
 
