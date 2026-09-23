@@ -510,9 +510,11 @@ func (m Model) applyStackFile(msg stackFileMsg) (Model, tea.Cmd) {
 	v.refindAfterRebuild()
 	v.scroll(0, body)
 	v.syncStackTitle()
+	// A ] / [ that stepped into this file lands now that its rows exist.
+	m, hcmd := m.drainStackHunt(msg.idx, body)
 	// This file's own review notes follow its diff: they resolve against the
 	// rows that just arrived, so they cannot be asked for any earlier.
-	return m, m.stackNotesCmd(v.stk.gen, msg.idx, f.d)
+	return m, tea.Batch(hcmd, m.stackNotesCmd(v.stk.gen, msg.idx, f.d))
 }
 
 // countRows is a file's +adds / −dels from its aligned rows — the count for

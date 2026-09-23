@@ -247,3 +247,86 @@ func TestStackHitStepInsideTheLoadedRegionJustSteps(t *testing.T) {
 		t.Fatal("a plain step must not park a hunt")
 	}
 }
+
+// The whole gesture end to end through the real key path: ] on the last hit
+// sends for the next file, and its arrival lands the cursor on that file's
+// first hit.
+func TestStackHuntLandsWhenTheFileArrives(t *testing.T) {
+	t.Parallel()
+	m, v := stackSearchModel(t, -1, searchRows(8, 2), searchRows(8, 5), nil)
+	gen := v.stk.gen
+
+	u, _ := m.Update(keyMsg("]"))
+	mm := u.(Model)
+	if mm.diffLayer().stk.hunt == nil {
+		t.Fatal("] through the key path must park a hunt")
+	}
+	u2, _ := mm.Update(stackFileMsg{gen: gen, idx: 2, view: diffViewWith(searchRows(8, 1), nil)})
+	mm = u2.(Model)
+
+	fv := mm.diffLayer()
+	if fv.curFile() != 2 {
+		t.Fatalf("the hunt landed in file %d, want 2", fv.curFile())
+	}
+	h := fv.search.hits[fv.search.cur]
+	if fv.lines[h.row].file != 2 || h.row != fv.curLine {
+		t.Fatalf("the cursor (line %d) must sit on file 2's first hit (line %d, file %d)", fv.curLine, h.row, fv.lines[h.row].file)
+	}
+	if fv.stk.hunt != nil {
+		t.Fatalf("a landed hunt must be cleared, got %+v", fv.stk.hunt)
+	}
+}
+
+// D2: a file that turns out to hold no hit hands the step on — one file per
+// round trip, never a bulk load.
+func TestStackHuntPassesOnAFileWithNoHit(t *testing.T) {
+	t.Parallel()
+	m, v := stackSearchModel(t, -1, searchRows(8, 2), nil, nil)
+	gen := v.stk.gen
+
+	u, _ := m.Update(keyMsg("]"))
+	mm := u.(Model)
+	if h := mm.diffLayer().stk.hunt; h == nil || h.file != 1 {
+		t.Fatalf("] must hunt file 1 first, got %+v", h)
+	}
+	u2, _ := mm.Update(stackFileMsg{gen: gen, idx: 1, view: diffViewWith(searchRows(8), nil)}) // no needle
+	mm = u2.(Model)
+	fv := mm.diffLayer()
+	if fv.stk.hunt == nil || fv.stk.hunt.file != 2 {
+		t.Fatalf("a hitless file must hand the hunt to file 2, got %+v", fv.stk.hunt)
+	}
+	if fv.stk.files[2].d != nil {
+		t.Fatal("the next file must not have been loaded before its turn")
+	}
+	u3, _ := mm.Update(stackFileMsg{gen: gen, idx: 2, view: diffViewWith(searchRows(8, 4), nil)})
+	mm = u3.(Model)
+	fv = mm.diffLayer()
+	if fv.curFile() != 2 || fv.stk.hunt != nil {
+		t.Fatalf("the hunt must land in file 2 and clear, file=%d hunt=%+v", fv.curFile(), fv.stk.hunt)
+	}
+	if h := fv.search.hits[fv.search.cur]; h.row != fv.curLine {
+		t.Fatalf("the cursor (%d) must sit on the hit (%d)", fv.curLine, h.row)
+	}
+}
+
+// D5: any other key abandons a pending hunt — the answer still arrives, and it
+// must not yank the cursor away from wherever the reader went.
+func TestStackHuntIsCancelledByAnyOtherKey(t *testing.T) {
+	t.Parallel()
+	m, v := stackSearchModel(t, -1, searchRows(8, 2), searchRows(8, 5), nil)
+	gen := v.stk.gen
+
+	u, _ := m.Update(keyMsg("]"))
+	mm := u.(Model)
+	u2, _ := mm.Update(keyMsg("g")) // the reader goes to the top of the stack
+	mm = u2.(Model)
+	if mm.diffLayer().stk.hunt != nil {
+		t.Fatal("another key must drop a pending hunt")
+	}
+	at := mm.diffLayer().curLine
+	u3, _ := mm.Update(stackFileMsg{gen: gen, idx: 2, view: diffViewWith(searchRows(8, 1), nil)})
+	mm = u3.(Model)
+	if got := mm.diffLayer().curLine; got != at {
+		t.Fatalf("a cancelled hunt must not move the cursor (%d → %d)", at, got)
+	}
+}

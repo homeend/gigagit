@@ -920,6 +920,12 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// touched the cursor themselves, a notes load arriving late must not yank it
 	// away. The }/{ cases below re-park their own.
 	m.noteLand = nil
+	// …and so does a parked ] / [ hunt: it belongs to that gesture alone, so
+	// any other key abandons it and the answer already out cannot yank the
+	// cursor away from wherever the reader has since gone (design D5).
+	if v.stk != nil && v.stk.hunt != nil && !isHitStepKey(msg) {
+		v.stk.hunt = nil
+	}
 	zc := v.zCycle
 	v.zCycle = alignCenter
 	body := m.diffBodyRows()
@@ -1252,9 +1258,19 @@ func (m Model) diffSearchKey(v *diffView, msg tea.KeyMsg, body int) (Model, tea.
 		v.search.open(msg.String() == "@", v.searchPos())
 		return m.recallReset(), nil, true
 	case searchNext:
+		if v.stk != nil {
+			if nm, cmd, ok := m.stackHitStep(v, 1, body); ok {
+				return nm, cmd, true
+			}
+		}
 		v.goToHit(stepHit(v.search.hits, v.searchPos(), 1), body)
 		return m, nil, true
 	case searchPrev:
+		if v.stk != nil {
+			if nm, cmd, ok := m.stackHitStep(v, -1, body); ok {
+				return nm, cmd, true
+			}
+		}
 		v.goToHit(stepHit(v.search.hits, v.searchPos(), -1), body)
 		return m, nil, true
 	case searchCleared:
