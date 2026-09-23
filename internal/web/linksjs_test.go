@@ -64,6 +64,9 @@ func TestLinksJSIsWiredEverywhere(t *testing.T) {
 		// yields. This substring exists only after that branch was added.
 		{"files.js", "copy gg link to this note", "the ◆ note menu must offer the anchor's link"},
 		{"files.js", "state.diffCtx, n.side, n.line", "the note link must be built from the OPEN diff's ctx, not the note's own rev/path"},
+		{"links.js", `"copy file link"`, "file rows must offer the content link"},
+		{"links.js", "/api/worktree-present", "the content link is copied only after the presence check"},
+		{"links.js", "is not in the working tree", "a missing file must say so on the status line"},
 	}
 	for _, c := range checks {
 		if !strings.Contains(read(c.file), c.want) {
@@ -117,6 +120,12 @@ func wantLinkPreview(repoName, worktree, path, rev, st, side string, no int, com
 	// A hint that cannot round-trip refuses the whole link, exactly as the
 	// producer does — never a link with the hint quietly dropped.
 	if hintKind != "" && !(model.LinkHintKindOK(hintKind) && model.LinkHintIDOK(hintID)) {
+		return ""
+	}
+	// A content link (?view=content) names the file ON DISK: a working-tree
+	// path, no target, no old side — model.ParseLink refuses the rest.
+	if hintKind == model.ContentHintKind &&
+		(hintID != model.ContentHintID || path == "" || st == "staged" || st == "commit" || source != "" || (side == "old" && no > 0)) {
 		return ""
 	}
 	if source != "" && (!model.LinkRefOK(source) || !model.LinkRefOK(target)) {
@@ -287,6 +296,17 @@ func TestLinkForJSMatchesGo(t *testing.T) {
 		// refname (git check-ref-format forbids them anywhere), while the JS
 		// twin only refused three.
 		{Name: "preview source with .. refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "a..b", Target: "main"},
+		// Content links (?view=content): the file ON DISK, working tree only.
+		{Name: "content link, remote", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "view", HintID: "content"},
+		{Name: "content link, local", Worktree: "/mnt/t/repo", Path: "a/b.go", State: "unstaged", HintKind: "view", HintID: "content"},
+		{Name: "content link, untracked is the working tree", Repo: "gigagit", Path: "n.txt", State: "untracked", HintKind: "view", HintID: "content"},
+		{Name: "content link with a line (v2 shape)", Repo: "gigagit", Path: "a/b.go", State: "unstaged", Side: "new", No: 7, HintKind: "view", HintID: "content"},
+		{Name: "content link on an old-side line refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", Side: "old", No: 7, HintKind: "view", HintID: "content"},
+		{Name: "content link on a commit refuses", Repo: "gigagit", Path: "a/b.go", Rev: fullSha, State: "commit", HintKind: "view", HintID: "content"},
+		{Name: "content link on staged refuses", Repo: "gigagit", Path: "a/b.go", State: "staged", HintKind: "view", HintID: "content"},
+		{Name: "content link in a preview refuses", Repo: "gigagit", Path: "a/b.go", State: "commit", Compare: true, Source: "feat/x", Target: "main", HintKind: "view", HintID: "content"},
+		{Name: "content link with no path refuses", Repo: "gigagit", State: "unstaged", HintKind: "view", HintID: "content"},
+		{Name: "view hint with another id refuses", Repo: "gigagit", Path: "a/b.go", State: "unstaged", HintKind: "view", HintID: "blame"},
 		{Name: "preview target with .. refuses", Repo: "gigagit", State: "commit", Compare: true, Source: "feat/x", Target: "ma..in"},
 		// The ?<kind>=<id> landing hint (spec §3.3). The web is now a
 		// PRODUCER of these: a bookmark or shelf row copies its own address

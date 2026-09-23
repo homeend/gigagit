@@ -226,6 +226,11 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 		if c.HintID == "" {
 			return w, errors.New("a hint needs an id")
 		}
+		if c.HintKind == model.ContentHintKind {
+			// The page has no content viewer yet (spec: v1 lands content
+			// links in the TUI only).
+			return w, errors.New("content links are not supported in gg web yet")
+		}
 		w.HintKind, w.HintID = c.HintKind, c.HintID
 	}
 	switch c.Cmd {

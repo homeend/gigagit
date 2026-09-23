@@ -4,6 +4,7 @@
 
 import { state } from "./core.js";
 import { copyText } from "./layers.js";
+import { opLine } from "./ops.js";
 import { registerRows } from "./menus.js";
 
 // --- link producer (pure; guarded against Go) ---
@@ -59,7 +60,7 @@ function linkRefOK(s) {
 // grammar separator, a '/' or whitespace, or the link would not reparse: the
 // producer refuses instead of emitting something ParseLink rejects.
 function linkHintKindOK(kind) {
-  return kind === "bookmark" || kind === "shelf" || kind === "stash" || kind === "preview";
+  return kind === "bookmark" || kind === "shelf" || kind === "stash" || kind === "preview" || kind === "view";
 }
 
 function linkHintIDOK(id) {
@@ -116,6 +117,13 @@ function linkFor(repo, worktree, ctx, side, no) {
   }
   const hint = (ctx && ctx.hint) || null;
   if (hint && !(linkHintKindOK(hint.kind) && linkHintIDOK(hint.id))) return "";
+  // A content link (?view=content) names the file ON DISK: a working-tree
+  // path, no target, no old side (internal/model ParseLink refuses the rest).
+  if (hint && hint.kind === "view") {
+    const st0 = (ctx && ctx.state) || "unstaged";
+    if (hint.id !== "content" || !(ctx && ctx.path) || preview || pair ||
+        (st0 !== "unstaged" && st0 !== "untracked") || (side === "old" && no > 0)) return "";
+  }
   if (preview && !(linkRefOK(preview.source) && linkRefOK(preview.target))) return "";
   const head = repoSegment(repo, worktree);
   if (!head) return "";
@@ -223,6 +231,18 @@ function copyLinkRow(link, desc) {
   return { label: "copy gg link", act: () => copyLink(link, desc) };
 }
 
+// copyFileLink copies a content link only when the file is on disk in this
+// worktree; otherwise the op line says why nothing was copied.
+function copyFileLink(path, link) {
+  fetch("/api/worktree-present?path=" + encodeURIComponent(path))
+    .then((r) => (r.ok ? r.json() : { present: false }))
+    .then((j) => {
+      if (j.present) copyLink(link, linkDesc("file", path, ""));
+      else opLine(path + " is not in the working tree", true);
+    })
+    .catch(() => opLine("copy failed (server unreachable)", true));
+}
+
 registerRows("file", (ctx) => {
   const st =
     ctx.section === "commit"
@@ -242,7 +262,16 @@ registerRows("file", (ctx) => {
     compare: ctx.compare,
     preview: ctx.preview || null,
   });
-  return link ? [copyLinkRow(link, linkDesc("file", ctx.path, ""))] : [];
+  // "copy file link": the file's CONTENT link — no commit, the file as it is
+  // on disk — copied only after the server says the file is there.
+  const flink = linkFor(state.repo, state.worktree, {
+    path: ctx.path,
+    state: "unstaged",
+    hint: { kind: "view", id: "content" },
+  });
+  const rows = link ? [copyLinkRow(link, linkDesc("file", ctx.path, ""))] : [];
+  if (flink) rows.push({ label: "copy file link", act: () => copyFileLink(ctx.path, flink) });
+  return rows;
 });
 
 registerRows("commit", (c) => {
