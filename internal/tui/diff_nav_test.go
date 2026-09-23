@@ -94,3 +94,38 @@ func TestNextChangeKeepsSteppingWhenTheFocusIsVisible(t *testing.T) {
 }
 
 var _ = textdiff.Same
+
+// cur can point PAST dispBlocks: a rebuild (f, ctrl+w, a stack folding a file)
+// shortens the block list without re-seating the focus. n must re-seat from the
+// viewport there, not index with a stale ordinal — this panicked in the first
+// build of the fix ("index out of range [3] with length 1").
+func TestStepDoesNotPanicOnAStaleBlockOrdinal(t *testing.T) {
+	t.Parallel()
+	rows := sameRowsTUI(60, 5, 20, 40)
+	v := diffViewWith(rows, blocksOf(rows))
+	m := diffModel()
+	m.height, m.width = 24, 120
+	m = m.pushLayer(v)
+	body := m.diffBodyRows()
+	v.focusBlock(2, body)
+
+	// the stream shrinks to one block: relayout re-seats cur into the new range
+	short := sameRowsTUI(60, 5)
+	v.full, v.fullBlocks = short, blocksOf(short)
+	v.rebuildLines()
+	if v.cur >= len(v.dispBlocks) {
+		t.Fatalf("relayout left cur past the end (%d of %d)", v.cur, len(v.dispBlocks))
+	}
+	// …and the step itself survives a stale ordinal whatever put it there.
+	v.cur = 3
+
+	u, _ := m.Update(keyMsg("n")) // must not panic
+	nv := u.(Model).diffLayer()
+	if nv.cur >= len(nv.dispBlocks) {
+		t.Fatalf("n left cur past the end (%d of %d)", nv.cur, len(nv.dispBlocks))
+	}
+	u2, _ := m.Update(keyMsg("p"))
+	if pv := u2.(Model).diffLayer(); pv.cur >= len(pv.dispBlocks) {
+		t.Fatalf("p left cur past the end (%d of %d)", pv.cur, len(pv.dispBlocks))
+	}
+}

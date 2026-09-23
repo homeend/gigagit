@@ -287,6 +287,16 @@ func (v *diffView) relayout(width int) {
 			v.dispBlocks = append(v.dispBlocks, v.lineStart[b])
 		}
 	}
+	// cur names a change in THIS list: a shorter one (f collapsing a run, a
+	// stack folding a file, a file dropping out of a working-tree stack) must
+	// not leave it pointing past the end — every reader of dispBlocks[cur]
+	// would be indexing out of range.
+	if v.cur >= len(v.dispBlocks) {
+		v.cur = len(v.dispBlocks) - 1
+	}
+	if v.cur < 0 {
+		v.cur = 0
+	}
 	if v.long == longScroll {
 		v.maxCell = maxCellWidth(v.lines)
 		v.clampHOffset()
@@ -511,6 +521,16 @@ func (v *diffView) focusBlock(i, body int) {
 func (v *diffView) reseatFromViewport(body, dir int) bool {
 	if len(v.dispBlocks) == 0 {
 		return false
+	}
+	// cur must name a change in THIS list. relayout re-seats it whenever the
+	// list shrinks, but a step is also the moment to repair one that got past
+	// the end some other way — the alternative is indexing out of range, which
+	// is what the first build of this fix did.
+	if v.cur >= len(v.dispBlocks) {
+		v.cur = len(v.dispBlocks) - 1
+	}
+	if v.cur < 0 {
+		v.cur = 0
 	}
 	at := v.dispBlocks[v.cur]
 	if at >= v.offset && at < v.offset+body {

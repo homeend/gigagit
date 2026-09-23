@@ -245,6 +245,12 @@ func (v *diffView) goToStackFile(i, body int) {
 	}
 	v.setCursorLine(v.stk.files[i].hdr, body)
 	v.jumpTo(v.lineStart[v.stk.files[i].hdr], body) // the usual lead above it
+	// Seat the change ordinal on this file's first change so the header's
+	// "change X/N" names where n would go next, not where the reader last was.
+	lo, hi := v.fileLineRange(i)
+	if b, ok := v.blockIn(lo, hi, 1); ok {
+		v.cur = b
+	}
 }
 
 // curFile is the index of the file the cursor is in (0 on an empty stack).
