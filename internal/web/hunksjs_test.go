@@ -87,12 +87,33 @@ func TestRowSelectionAndItsMenu(t *testing.T) {
 	if !strings.Contains(files, "if (hkRow) rows.unshift(...hunkMenuRows(hkRow));") {
 		t.Fatal("files.js: the diff's right-click menu must lead with the staging rows")
 	}
-	// immediate: one POST in the lane the diff is in, then a re-read
+	// The screen moves FIRST: the prediction is painted before the POST, the
+	// previous diff comes back on an error, and success re-reads ONE file
+	// quietly (the user found the wait-then-flicker round trip odd).
 	apply := jsFunc(t, "files.js", "applyRowStage")
-	for _, want := range []string{`postJSON("/api/stage-hunks", { path: v.path, lane: v.lane, blocks, hash: v.hash })`, "reconcileStatusView();", "reopenAfterHunkStage(v.path, v.lane)"} {
+	paint := strings.Index(apply, "showFileDiff(scope, predicted, null);")
+	post := strings.Index(apply, `postJSON("/api/stage-hunks", { path: v.path, lane: v.lane, blocks, hash: v.hash })`)
+	if paint < 0 || post < 0 || paint > post {
+		t.Fatalf("files.js: applyRowStage must paint the prediction BEFORE it posts:\n%s", apply)
+	}
+	for _, want := range []string{"showFileDiff(scope, before, v);", "await quietRefreshFile(scope, v.path, v.lane);"} {
 		if !strings.Contains(apply, want) {
 			t.Fatalf("files.js: applyRowStage lacks %q", want)
 		}
+	}
+	if strings.Contains(apply, "reopenAfterHunkStage(v.path") || strings.Contains(apply, "openStatusDiff(") {
+		t.Fatal("files.js: a successful action must not re-open the file (that is the flicker)")
+	}
+	// double-click acts on that one row at once
+	if !strings.Contains(files, `$("diff-body").addEventListener("dblclick", (e) => {`) || !strings.Contains(jsFunc(t, "files.js", "actOnRow"), "applyRowStage(") {
+		t.Fatal("files.js: a double-click must stage / unstage the row")
+	}
+	// the stack only repaints when a file entered or left it
+	rec := jsFunc(t, "stackview.js", "reconcileStack")
+	same := strings.Index(rec, "if (sameFiles) {")
+	full := strings.Index(rec, "paintStack(st);")
+	if same < 0 || full < 0 || same > full || !strings.Contains(rec, "quietReloadSlot(st, s)") {
+		t.Fatal("stackview.js: a refresh with the same files must re-read slots quietly, not repaint the stack")
 	}
 	// the staged section is eligible now — it is where rows are unstaged
 	if !strings.Contains(jsFunc(t, "files.js", "hunkEligible"), `f.section === "changes" || f.section === "staged"`) {

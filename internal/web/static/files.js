@@ -19,7 +19,7 @@ import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
-import { activeDiff, hunkSlotAt, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
+import { activeDiff, hunkSlotAt, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -3156,6 +3156,46 @@ $("diff-body").addEventListener("click", (e) => {
 });
 
 
+// optimisticRows is what a working-tree diff WILL look like once the rows in
+// `keys` ("hunk:row") are staged (lane "unstaged") or unstaged (lane
+// "staged") — the prediction the UI shows before the server answers, so the
+// action feels instant. Staging moves the working-tree line into the index:
+// a modified or added row becomes context, a removed row disappears.
+// Unstaging moves HEAD's line back into the index: a modified or removed row
+// becomes context, an added row disappears. Only the INDEX side's line
+// numbers move (left when staging, right when unstaging). Every row loses its
+// hunk tags: they name the bytes the server hashed BEFORE the action, and the
+// re-read that follows re-tags the file. Pure — the guard imports it.
+function optimisticRows(rows, lane, keys) {
+  const stage = lane !== "staged";
+  const out = [];
+  for (const r of rows) {
+    const { hunk, hr, hl, hw, ...base } = r;
+    const hit = hunk != null && hr != null && keys.has(hunk + ":" + hr);
+    if (!hit) {
+      out.push(base);
+      continue;
+    }
+    if (stage) {
+      if (r.kind === "del") continue; // the index drops the line
+      out.push({ ...base, kind: "same", left: r.right, left_tok: r.right_tok, left_spans: null, right_spans: null });
+    } else {
+      if (r.kind === "add") continue; // the index drops the line
+      out.push({ ...base, kind: "same", right: r.left, right_tok: r.left_tok, left_spans: null, right_spans: null });
+    }
+  }
+  // Renumber the index side from where the file's numbering starts.
+  const side = stage ? "left_no" : "right_no";
+  const first = rows.find((r) => r[side]);
+  let n = first ? first[side] - 1 : 0;
+  for (const r of out) {
+    const present = stage ? r.kind !== "add" : r.kind !== "del";
+    r[side] = present ? ++n : 0;
+  }
+  return out;
+}
+
+
 // selectionWire turns a selection into the /api/stage-hunks blocks: per hunk,
 // the rows picked.
 function selectionWire(v) {
@@ -3169,27 +3209,106 @@ function selectionWire(v) {
 }
 
 
-// applyRowStage stages (or, in the staged diff, unstages) the given blocks of
-// one file, at once. After it the diff is re-read: in a stack the status
-// re-read reconciles the slot in place; one file is re-opened in its lane.
-async function applyRowStage(scope, blocks) {
+// applyRowStage stages (or, in the staged diff, unstages) rows of one file,
+// and the SCREEN moves first: the predicted diff (optimisticRows) is painted
+// at once, the POST follows, and
+//   - on an error the previous diff comes back exactly as it was;
+//   - on success the sidebar takes the fresh status and THIS file alone is
+//     re-read quietly — no "loading…", no jump, the reader's scroll and folds
+//     kept — which re-tags it for the next action.
+// Only a file that left its section (fully staged / unstaged) takes the
+// structural path. keys are the rows acted on ("hunk:row"), blocks the wire.
+async function applyRowStage(scope, blocks, keys) {
   const v = scope.hunks;
   if (!v || !blocks.length) return;
+  const before = scope.slot ? scope.slot.diff : state.lastDiff;
+  if (!before) return;
+  const predicted = { ...before, rows: optimisticRows(before.rows || [], v.lane, keys) };
+  delete predicted.hunks;
+  showFileDiff(scope, predicted, null); // non-interactive until the answer: its tags are gone
   let resp;
   try {
     resp = await postJSON("/api/stage-hunks", { path: v.path, lane: v.lane, blocks, hash: v.hash });
   } catch (e) {
     opLine("error: " + (e.message || e), true);
-    // 409 = the file moved under the selection: re-read it for fresh tags
-    if (/file changed/.test(e.message || "") && !state.stack) reopenAfterHunkStage(v.path, v.lane);
+    // 409: the file moved under the action — the truth is a fresh read.
+    if (/file changed/.test(e.message || "")) {
+      await quietRefreshFile(scope, v.path, v.lane);
+      return;
+    }
+    v.sel = new Set(keys); // put back what the reader had chosen
+    showFileDiff(scope, before, v);
     return;
   }
-  v.sel = new Set();
   applyStatus(resp); // the 200 body IS a fresh /api/status payload
-  reconcileStatusView(); // a stack reconciles in place here: the slot re-fetches, the reader stays put
   renderFiles();
-  if (!state.stack) reopenAfterHunkStage(v.path, v.lane);
+  await quietRefreshFile(scope, v.path, v.lane);
 }
+
+
+// showFileDiff paints one file's diff in place: a stack repaints that slot
+// alone (the reader's header stays pinned), the single view re-renders
+// without resetting its folds, its search or its scroll.
+function showFileDiff(scope, d, hunks) {
+  if (scope.slot) {
+    showSlotDiff(scope.slot, d, hunks);
+    return;
+  }
+  diffHunks = hunks;
+  const pane = $("diff-pane");
+  const top = pane.scrollTop;
+  state.lastDiff = d; // the SAME file: renderDiff must not treat it as new
+  renderDiff(d);
+  pane.scrollTop = top;
+}
+
+
+// quietRefreshFile re-reads the file the action touched and repaints only
+// it. When the file has left the section the action was taken in, the view
+// takes the structural path instead (the single view re-opens what the
+// cursor lands on, the stack reconciles its file list).
+async function quietRefreshFile(scope, path, lane) {
+  const section = lane === "staged" ? "staged" : "changes";
+  const f = state.statusEntries.find((x) => x.path === path && x.section === section);
+  if (!f) {
+    if (state.stack) reconcileStack();
+    else reopenAfterHunkStage(path, lane);
+    return;
+  }
+  let d;
+  try {
+    d = await getJSON(fileDiffURL(f));
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    return;
+  }
+  const hunks = d.hunks && hunkEligible(f) ? hunkState(f.path, d.hunks) : null;
+  if (scope.slot) {
+    scope.slot.f = f;
+    showSlotDiff(scope.slot, d, hunks);
+  } else {
+    showFileDiff(scope, d, hunks);
+  }
+}
+
+
+// actOnRow is the double-click: stage (or unstage) that ONE row, now — the
+// quick path beside select + right-click.
+function actOnRow(tr) {
+  const scope = fileOf(tr);
+  if (!scope) return;
+  const key = rowKey(tr.dataset.hunk, tr.dataset.hr);
+  scope.hunks.sel = new Set();
+  void applyRowStage(scope, [{ block: Number(tr.dataset.hunk), rows: [Number(tr.dataset.hr)] }], new Set([key]));
+}
+
+
+$("diff-body").addEventListener("dblclick", (e) => {
+  const tr = e.target.closest("tr[data-hunk][data-hr]");
+  if (!tr) return;
+  getSelection().removeAllRanges(); // a double-click also selects a word: not wanted here
+  actOnRow(tr);
+});
 
 
 // reopenAfterHunkStage re-opens path in the lane the action was taken in —
@@ -3233,12 +3352,28 @@ function hunkMenuRows(tr) {
   const verb = v.lane === "staged" ? "Unstage" : "Stage";
   const n = v.sel.size;
   const block = Number(tr.dataset.hunk);
+  // "Stage hunk" predicts every row of the hunk: the ones this file shows.
+  const hunkKeys = new Set(
+    taggedRows(scope.el ? scope : null)
+      .filter((x) => Number(x.dataset.hunk) === block)
+      .map((x) => rowKey(x.dataset.hunk, x.dataset.hr))
+  );
   return [
     {
       label: `${verb} selected line${n === 1 ? "" : "s"}${n > 1 ? ` (${n})` : ""}`,
-      act: () => void applyRowStage(scope, selectionWire(v)),
+      act: () => {
+        const keys = new Set(v.sel);
+        v.sel = new Set();
+        void applyRowStage(scope, selectionWire({ sel: keys }), keys);
+      },
     },
-    { label: `${verb} hunk`, act: () => void applyRowStage(scope, [{ block, whole: true }]) },
+    {
+      label: `${verb} hunk`,
+      act: () => {
+        v.sel = new Set();
+        void applyRowStage(scope, [{ block, whole: true }], hunkKeys);
+      },
+    },
   ];
 }
 

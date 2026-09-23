@@ -40,19 +40,7 @@ import {
   updateDiffNav,
 } from "./files.js";
 import { stepHit, stepHitStrict } from "./inviewsearch.js";
-import {
-  GLYPH,
-  KIND_TIP,
-  STACK_MAX_IN_FLIGHT,
-  buildSlots,
-  countsFromDiff,
-  estimateHeight,
-  nextToLoad,
-  noContentWhy,
-  reconcileSlots,
-  stackGroup,
-  stackRows,
-} from "./stack.js";
+import { GLYPH, KIND_TIP, STACK_MAX_IN_FLIGHT, buildSlots, countsFromDiff, estimateHeight, nextToLoad, noContentWhy, reconcileSlots, stackGroup, stackRows, slotKey, statusLetter } from "./stack.js";
 
 const ROW_PX = 20; // a diff row's rendered height, for placeholder estimates
 let observer = null;
@@ -736,6 +724,26 @@ function hunkSlotAt(el) {
 }
 
 
+// showSlotDiff paints ONE file of the stack with the given diff and staging
+// state, in place — repaintSlot keeps the reader's header pinned — and
+// re-finds a live search over it. It is how a staging action shows its
+// prediction, reverts it, and lands the quiet re-read.
+function showSlotDiff(slot, d, hunks) {
+  const st = state.stack;
+  if (!st) return;
+  const k = st.slots.indexOf(slot);
+  if (k < 0) return;
+  slot.diff = d;
+  slot.load = "ok";
+  slot.hunks = hunks;
+  repaintSlot(st, k);
+  if (diffSearch.query) {
+    refindStack();
+    diffSearchBar.paint();
+  }
+}
+
+
 // --- lifecycle hooks ------------------------------------------------------
 
 // reconcileStack follows a status re-read: the working-tree stack keeps its
@@ -746,6 +754,23 @@ function reconcileStack() {
   const rows = stackRows(state.statusEntries, st.group);
   if (!rows.length) {
     enterFilesStage(); // the group emptied (all staged / unstaged): back to the list (tears the stack down)
+    return;
+  }
+  // The common case after a staging action or a watcher refresh: the SAME
+  // files, in the same order, with the same status. Repainting the whole
+  // stack then only flickers — each loaded file re-reads quietly instead and
+  // repaints only if its diff actually changed.
+  const sameFiles =
+    rows.length === st.slots.length &&
+    rows.every((r, i) => slotKey(r.f) === st.slots[i].key && statusLetter(r.f) === st.slots[i].status);
+  if (sameFiles) {
+    st.list = state.statusEntries;
+    rows.forEach((r, i) => {
+      st.slots[i].f = r.f;
+      st.slots[i].idx = r.idx;
+    });
+    for (const s of st.slots) if (s.load === "ok") void quietReloadSlot(st, s);
+    loadCounts(st);
     return;
   }
   const anchorKey = st.slots[st.anchor] && st.slots[st.anchor].key;
@@ -765,6 +790,32 @@ function reconcileStack() {
   }
   loadCounts(st); // a refresh changes counts too; heads and placeholders repaint in place
 }
+
+// quietReloadSlot re-reads one loaded file and repaints it ONLY when what
+// the server says differs from what is on screen; the selection survives
+// while the file's freshness hash is unchanged. No placeholder, no jump.
+async function quietReloadSlot(st, s) {
+  let d;
+  try {
+    d = await getJSON(fileDiffURL(s.f));
+  } catch {
+    return; // best-effort: the old diff stays
+  }
+  if (state.stack !== st || !st.slots.includes(s)) return;
+  const hunks = d.hunks && hunkEligible(s.f) ? hunkState(s.f.path, d.hunks) : null;
+  if (hunks && s.hunks && s.hunks.hash === hunks.hash) {
+    hunks.sel = s.hunks.sel;
+    hunks.anchor = s.hunks.anchor;
+  }
+  const same = s.diff && JSON.stringify(s.diff.rows) === JSON.stringify(d.rows);
+  if (same) {
+    s.diff = d; // fresh tags and hash, identical rows: nothing to paint
+    s.hunks = hunks;
+    return;
+  }
+  showSlotDiff(s, d, hunks);
+}
+
 
 // --- the toggle -----------------------------------------------------------
 
@@ -817,4 +868,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, hunkSlotAt, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, hunkSlotAt, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

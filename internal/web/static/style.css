@@ -166,8 +166,12 @@ table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
 table.diff td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 6px; }
 td.no { width: 3.5em; text-align: right; color: var(--dim); user-select: none; }
 table.diff col.no { width: 3.5em; } /* the colgroup twin: fixed layout reads widths from here when a fold row comes first */
-tr.add td.side.r, tr.add td.no.r { background: var(--add); }
-tr.del td.side.l, tr.del td.no.l { background: var(--del); }
+/* Only the TEXT cells carry the red / green: the line-number columns stay
+   the page's own dark on every row, so an added-only row's numbers look like
+   a modified row's (user ruling — a green right gutter beside a dark left one
+   read as a different kind of line). */
+tr.add td.side.r { background: var(--add); }
+tr.del td.side.l { background: var(--del); }
 tr.change td.side.l { background: var(--del); }
 tr.change td.side.r { background: var(--add); }
 /* Attention bands an agent painted (gg session highlight). These must beat the
