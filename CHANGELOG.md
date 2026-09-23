@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Change navigation in the diff view
+
+### Changed
+
+- **In a stacked diff `n`/`p` now walk change to change across the whole
+  stack**, crossing from one file into the next (unfolding and loading a file
+  to reach a change in it), and **`N`/`P` step file to file** — the meaning
+  they already carry in the single-file view. `ctrl+↑/↓` still walk the changes
+  of the cursor's file alone, and `J` still jumps to a file by name. Before
+  this, `n` stepped files: in a stack holding ONE file it had nowhere to go, so
+  it wrapped to the top of the scroll and dropped the line cursor.
+- **A stacked diff's header names both ordinals** — `change 3/12  file 2/4` —
+  so the two steps are visible.
+
+### Fixed
+
+- **`n`/`p` step from the change you can SEE.** After scrolling the diff with
+  the arrows or the wheel (which deliberately move the viewport and not the
+  cursor), the focused change could be far off screen, and `n` stepped from it:
+  with one change in the file it only primed the wrap, so the change came back
+  on the SECOND press. `n` now takes the first change at or below the top of
+  the pane and `p` the last one above it, in one press. With the focused change
+  on screen nothing changes.
+
 ## Working-tree hunk staging from the diff view
 
 ### Added

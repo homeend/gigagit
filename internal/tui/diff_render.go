@@ -130,8 +130,10 @@ func (mk cellMark) bodyFor(base lipgloss.Style) lipgloss.Style {
 // The stacked view (S) then wanted 11 more columns. [e] edit left the line for
 // it — `e` keeps a . menu row and a help row, so it stays discoverable — and
 // "notes" lost its plural, which pays the last column. The stacked variant is
-// its OWN, shorter line: no selection or notes groups apply there, and the
-// file-step, fold and file-list keys take their place.
+// its OWN line: no selection group applies there, and the change/file steps,
+// the folds and the way back to one file take its place. [J] files paid for
+// [N/P] file when n/p became the CHANGE walk (2026-09-23) — J keeps its .
+// menu row and its help row.
 func diffHintFor(long longMode, stacked, wt bool) string {
 	mode := i18n.T("scroll")
 	switch long {
@@ -157,7 +159,7 @@ func diffHintFor(long longMode, stacked, wt bool) string {
 		// that do not apply (the line selection's side keys). Notes DO work
 		// per file (plan 4a), so they keep their chip; the in-file change
 		// walk (ctrl+↑/↓) has no room left and lives in the context help.
-		return i18n.T("[↑↓/jk] scroll  [/] find  [n/p] file  [c}{] note  [-/_] fold  [J] files  [S] single  [f] part  [^w] %s", mode) + pan + tail
+		return i18n.T("[↑↓/jk] scroll  [/] find  [n/p] chg  [N/P] file  [c}{] note  [-/_] fold  [S] single  [f] part  [^w] %s", mode) + pan + tail
 	}
 	return i18n.T("[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] %s", mode) + pan + tail
 }
@@ -313,9 +315,14 @@ func (m Model) renderDiffView() string {
 	right := ""
 	switch {
 	case v.stk != nil:
-		// A stack's blocks ARE its files, so the ordinal names the file the
-		// cursor is in rather than a change within one file.
+		// Both ordinals: which file the cursor is in (N/P step these) and which
+		// change of the whole stack is focused (n/p step those). The change
+		// count covers the files whose rows are in the stream — a folded or
+		// unread file's changes join it when n opens that file.
 		right = i18n.T("file %d/%d", v.curFile()+1, len(v.stk.files))
+		if len(v.blocks) > 0 {
+			right = i18n.T("change %d/%d", v.currentBlockOrdinal()+1, len(v.blocks)) + "  " + right
+		}
 	case len(v.blocks) > 0:
 		right = i18n.T("change %d/%d", v.currentBlockOrdinal()+1, len(v.blocks))
 	}

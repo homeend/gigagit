@@ -1654,6 +1654,42 @@ had, and the lever is that a stack is ONE document:
   (`openCommitByHash` / `openFile` in live.js). Worth its own look.
 
 
+### Change navigation: from the viewport, and across a stack (2026-09-23)
+
+Two user-reported bugs, one root: the change keys reasoned from a cursor the
+reader could not see.
+
+- **`n`/`p` stepped from a change that had scrolled out of the pane.** A free
+  scroll (arrows, wheel) moves the viewport and deliberately NOT the cursor, so
+  `v.cur` can point far off screen; with a single change in the file `n` then
+  only primed the wrap and the reader needed a second press. `reseatFromViewport`
+  (diff_view.go) re-seats `cur` on the first change at or below the pane's top
+  (`n`) or the last one above it (`p`) whenever the focused block is outside
+  `[offset, offset+body)`, and that re-seat IS the step. On screen, the shipped
+  stepping and its wrap arm are untouched. The web has had this rule since the
+  in-view search work (`visibleChangeBlock`) — but only on re-render, so its own
+  `stepChange` still steps from a stale index; that parity gap is recorded, not
+  fixed here.
+- **In a stack `n` stepped FILES** (plan 3 made `v.blocks` the header indices),
+  so a one-file stack had nowhere to step: `n` primed a wrap and the second
+  press landed on the file header at the top of the scroll, with no line cursor
+  at all. **USER RULING 2026-09-23, reversing that:** `v.blocks` are now every
+  file's change starts in stream coordinates, so `n`/`p` walk the stack as one
+  document and all the stepping, wrapping and ordinal code is reused unchanged;
+  `N`/`P` — inert in a stack until now — became the file step, which is what
+  they already mean single-file; `ctrl+↑/↓` keep the in-file walk; `J` still
+  jumps by name. `stackFile.hdr` remains each file's header index, and
+  `goToStackFile` is the one "go to this file" (N/P, J, and the stack's own
+  opening all use it).
+- **A change in a folded or never-fetched file is still reachable**: `n`/`p`
+  reuse 4b's parked step — `stackHunt` gained a `kind` (`huntHit` for `]`/`[`,
+  `huntChange` for `n`/`p`) and `ownsKey`, so each gesture's own keys keep its
+  hunt alive and every other key abandons it. `drainStackHunt` lands on the
+  file's edge CHANGE for a change hunt and its edge HIT for a search one.
+- The footer traded `[J] files` for `[N/P] file` (both lines sit exactly on the
+  140-column budget); `J` keeps its `.` menu row and its help row. The stacked
+  header shows `change X/N  file Y/M`.
+
 ### Working-tree hunk staging inside a stack (plan 4c, 2026-09-23)
 
 Spec §11 item 3, plan `docs/superpowers/plans/2026-09-23-stacked-hunks.md`.
