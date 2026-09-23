@@ -68,6 +68,32 @@ func focusStackFile(t *testing.T, m Model, path string) Model {
 	return m
 }
 
+// H in a working-tree stack acts on the file under the CURSOR, not on whatever
+// the Files panel happens to have selected behind the view.
+func TestStackHStagesTheFileUnderTheCursor(t *testing.T) {
+	t.Parallel()
+	m := hunkStackModel(t, wtFiles("a.txt", "b.txt", "c.txt"), false)
+	m = focusStackFile(t, m, "b.txt")
+
+	f, staged, why := m.hunkFileHere()
+	if why != "" {
+		t.Fatalf("H refused a plain modified file: %q", why)
+	}
+	if f.Path != "b.txt" {
+		t.Fatalf("H would stage %q; it acts on the cursor's file", f.Path)
+	}
+	if staged {
+		t.Fatal("the unstaged section must open the STAGE picker, not the unstage one")
+	}
+	u, cmd := m.Update(keyMsg("H"))
+	if cmd == nil {
+		t.Fatal("H issued no command; it must read b.txt's two sides for the picker")
+	}
+	if u.(Model).statusMsg != "" {
+		t.Fatalf("H posted a notice instead of opening the picker: %q", u.(Model).statusMsg)
+	}
+}
+
 // TestWorkingTreeStackReconcilesOnStatusWrite pins the behaviour plan 4c rests
 // on instead of rebuilding: reconcileStatusStack already runs from withStatus —
 // the one place the Files/Staged membership is derived — so after a staging
