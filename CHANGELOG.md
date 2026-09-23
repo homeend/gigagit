@@ -55,6 +55,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Fixed
 
+- **`H` now says why it cannot stage a file.** The refusal (an untracked file,
+  a file staged as new, a conflict) was written to the panels' status bar,
+  which a full-screen diff covers — so the key looked dead. It appears in the
+  diff's own cue, and the footer no longer offers `[H] hunks` on a single file
+  that can only refuse.
 - **A single-file working-tree diff no longer shows a stale diff after its own
   staging round** — it re-reads itself once the status lands, and closes with
   a notice when the file has no change left in that section.

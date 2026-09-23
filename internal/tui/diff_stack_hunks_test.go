@@ -118,8 +118,10 @@ func TestStagedStackHUnstagesAndRefusesAStagedAddition(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("H on a staged-A file must refuse, not open a picker")
 	}
-	if msg := u.(Model).statusMsg; !strings.Contains(msg, "unstaged whole") {
-		t.Fatalf("no notice explaining the refusal: %q", msg)
+	// the SCREEN, not the field: a full-screen diff renders diffNotice, never
+	// the panels' statusMsg
+	if screen := u.(Model).View(); !strings.Contains(screen, "unstage the whole file") {
+		t.Fatalf("no visible notice explaining the refusal (notice=%q)", u.(Model).diffNotice)
 	}
 }
 
@@ -134,7 +136,7 @@ func TestHRefusesWhereHunksCannotApply(t *testing.T) {
 	}, false)
 
 	for _, tc := range []struct{ file, want string }{
-		{"new.txt", "staged whole"},
+		{"new.txt", "stage the whole file"},
 		{"u.txt", "resolver"},
 	} {
 		mm := focusStackFile(t, m, tc.file)
@@ -142,8 +144,8 @@ func TestHRefusesWhereHunksCannotApply(t *testing.T) {
 		if cmd != nil {
 			t.Fatalf("%s opened a picker; H must refuse", tc.file)
 		}
-		if msg := u.(Model).statusMsg; !strings.Contains(msg, tc.want) {
-			t.Fatalf("%s: notice %q does not say %q", tc.file, msg, tc.want)
+		if screen := u.(Model).View(); !strings.Contains(screen, tc.want) {
+			t.Fatalf("%s: the screen never says %q (notice=%q)", tc.file, tc.want, u.(Model).diffNotice)
 		}
 	}
 
@@ -156,8 +158,8 @@ func TestHRefusesWhereHunksCannotApply(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("a commit stack must refuse H")
 	}
-	if msg := u.(Model).statusMsg; !strings.Contains(msg, "working-tree") {
-		t.Fatalf("a commit stack's notice is %q", msg)
+	if screen := u.(Model).View(); !strings.Contains(screen, "working-tree") {
+		t.Fatalf("a commit stack's refusal is invisible (notice=%q)", u.(Model).diffNotice)
 	}
 }
 
@@ -301,5 +303,47 @@ func TestWorkingTreeStackClosesWhenItsSectionEmpties(t *testing.T) {
 	m = m.withStatus(model.WorkingTreeStatus{Files: nil})
 	if m.diffLayer() != nil {
 		t.Fatal("an emptied section must close the stack, not leave an empty one open")
+	}
+}
+
+// A refusal the reader cannot SEE is a key that "does nothing": m.statusMsg is
+// the panels' bar, and a full-screen diff renders none of it — the diff view's
+// own transient cue (m.diffNotice) is what appears there. Reported by the user
+// against an untracked file, where H correctly refuses and said so into a bar
+// that was off screen. This test renders the screen instead of reading a field.
+func TestHRefusalIsVisibleOnTheDiffScreen(t *testing.T) {
+	t.Parallel()
+	m := wtDiffModel(t, []model.FileStatus{
+		{Path: "new.txt", Unstaged: '?', Kind: model.KindUntracked},
+	}, "new.txt")
+
+	u, cmd := m.Update(keyMsg("H"))
+	nm := u.(Model)
+	if cmd != nil {
+		t.Fatal("H must refuse on an untracked file")
+	}
+	screen := nm.View()
+	if !strings.Contains(screen, "stage the whole file") {
+		t.Fatalf("the refusal never reached the screen; notice=%q statusMsg=%q", nm.diffNotice, nm.statusMsg)
+	}
+}
+
+// …and a single-file diff that can never stage hunks does not advertise the
+// key at all: one file on screen, so the chip cannot flicker as a stack's would.
+func TestFooterHidesHOnAnUnstageableSingleFile(t *testing.T) {
+	t.Parallel()
+	m := wtDiffModel(t, []model.FileStatus{
+		{Path: "new.txt", Unstaged: '?', Kind: model.KindUntracked},
+	}, "new.txt")
+	if m.hunkKeyApplies() {
+		t.Fatal("an untracked file's diff must not advertise H")
+	}
+	if strings.Contains(m.View(), "[H] hunks") {
+		t.Fatal("the footer offers H on a file it can only refuse")
+	}
+	ok := wtDiffModel(t, wtFiles("b.txt"), "b.txt")
+	ok.width = 150 // the hint is 140 columns: a narrower screen truncates its tail
+	if !ok.hunkKeyApplies() || !strings.Contains(ok.View(), "[H] hunks") {
+		t.Fatal("a modified tracked file must still advertise H")
 	}
 }

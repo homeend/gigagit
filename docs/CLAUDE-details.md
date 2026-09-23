@@ -1729,6 +1729,15 @@ a chip flickering as the cursor moved between files would be noise.
 
 Gotchas this cost:
 
+- **A refusal the reader cannot SEE is a key that does nothing.** The first
+  build posted `hunkFileHere`'s reason to `m.statusMsg` — the PANELS' status
+  bar, which a full-screen diff covers — so `H` on an untracked file looked
+  dead (the user met it that way). Refusals raised inside the diff view go to
+  `m.diffNotice`, the view's own transient cue, like every other notice there.
+  The tests that let it ship asserted the FIELD; they now render `View()`.
+  And `hunkKeyApplies` gates the footer chip on the FILE in a single-file diff
+  (one file, so it cannot flicker) while a stack stays view-level.
+
 - **A single-file working-tree diff has no reconcile of its own** — nothing in
   the TUI reloads one on a status change at all. So the picker's apply parks
   `Model.hunkReload{path, staged}` and `statusRefreshedMsg` consumes it once
