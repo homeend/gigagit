@@ -53,17 +53,20 @@ stretch.
 
 ## Domain
 
-- `WorktreeFileExists(ctx, path) (bool, error)` — lstat at the worktree root
-  through the existing worktree-path guard (a path escaping the tree is an
-  error, not `false`). A directory is `false`; a symlink counts as present
-  (lstat). No git invocation.
-- `WorktreeFileContent(ctx, path) ([]byte, error)` — reads the file from disk
-  via the same guard; missing file → a typed not-found error whose message is
-  `<path> is not in the working tree`. Content over the existing viewer cap
-  is truncated the way the HEAD viewer truncates.
-- `ContentLink(path) (string, error)` — builds the link (repo name resolution
-  shared with the existing `linkFor`/`gg link` builders) after the existence
-  check. Frontends call this; nobody assembles `?view=content` by hand.
+No new service methods: the two existing working-tree queries already answer
+both questions without a git invocation, behind the path guard that refuses
+anything escaping the tree.
+
+- `WorktreeFilesPresent(ctx, []string{path})` — the existence check (lstat, so
+  a dangling symlink counts as present; an escaping path is reported absent).
+- `WorktreeFile(ctx, path)` — the disk bytes the viewer shows.
+- `ResolveLink`: an address-less `?view=content` link (the local form only
+  learns its path here) is refused — `a content link needs a file path`.
+- Every link producer builds the link itself, the way it already builds
+  every other link: the TUI with `buildLinkFor`, the CLI with `buildLink`,
+  the web with `linkFor` (links.js). The hint is `model.ContentHint`.
+- `compare` IGNORES the hint (spec §3.3 rule 1): a content link compared is
+  simply the working-tree file.
 
 ## TUI
 
@@ -75,32 +78,36 @@ view (commit, stash, shelf-commit lists), and the Files and Staged panels.
 For a renamed row the new path is used. Not offered on commit rows or
 directory rows.
 
-Running the row fires `ContentLink` off the UI thread (a `tea.Cmd`); its
+Running the row fires the `WorktreeFilesPresent` check off the UI thread (a `tea.Cmd`); its
 message either copies (existing copy path, status `Copied link: %s`) or sets
 the status line to `%s is not in the working tree`. Both strings go into all
 four i18n bundles.
 
 **Steered landing.** `steerNavigate` gets a new case, ordered BEFORE the
-status-file case: `c.HintKind == "view"` (with `c.File != ""`, no target).
-It calls `steerToPanels`, pushes a `contentPopup` titled `View <path>` with
-`(loading…)`, loads `WorktreeFileContent` async, and answers
-`opened <path>` when the content arrives (or the not-in-working-tree failure,
-which removes the loading popup). `c.Line` is carried in the pending state
-for v2 and unused in v1. A content popup opened this way behaves like any
-other: esc closes it back to the panels.
+status-file case: `c.HintKind == "view"`. It checks presence with a
+deadlined `WorktreeFilesPresent` on the Update thread (a stat, no git — the
+`updateThreadCtx` seam `steerNavigateRef` already uses); missing → the
+navigate FAILS with `<path> is not in the working tree` and nothing moves.
+Present → `steerToPanels`, push a `contentPopup` titled `View <path>` with
+`(loading…)`, load `WorktreeFile` async (the existing `fileContentLayerMsg`
+fills it), and answer `opened <path>` through `navigateLanded` (which gets a
+silent `"view"` arm: the landing IS the hint). `c.Line` is ignored in v1.
+esc closes the popup back to the panels.
 
 If no TUI is running, `gg open` starts one positioned on the link (existing
 behaviour) and the same landing runs.
 
 ## Web
 
-**Menu row.** `copy file link` beside `copy gg link` in the file-row menu of
-the commit file list and the working-tree list. It calls a new
-`GET /api/content-link?path=<p>` (domain `ContentLink`; runs no git beyond
-the cached repo name) and hands the result to the one `copyLink` helper in
-`static/links.js`. A 404 (`not in the working tree`) shows in the status line
-the way other copy failures do. Wire path goes through the existing allowlist
-resolution.
+**Menu row.** `copy file link` beside `copy gg link` in every file-row menu
+(the one `registerRows("file", …)` contributor in `static/links.js`). It asks
+a new `GET /api/worktree-present?path=<p>` (`{"present": bool}`, backed by
+`WorktreeFilesPresent`; no git), then builds the link with `linkFor(…,
+{state: "unstaged", hint: {kind: "view", id: "content"}})` and hands it to
+the one `copyLink` helper. Missing → `opLine("<path> is not in the working
+tree", true)`, the same status line every copy reports on.
+`/api/link-base`'s `origin` is not set for a `view` hint (it is not a saved
+surface).
 
 **Landing.** A steered navigate carrying `hint_kind: "view"` answers a
 failure `content links are not supported in gg web yet`. `gg open --web
@@ -148,8 +155,7 @@ starting a server.
 ## Testing
 
 - `model`: parse/print round-trip incl. `:<line>`; every refusal row above.
-- `domain`: `WorktreeFileExists` / `WorktreeFileContent` — present, missing,
-  directory, symlink, escaping path, dirty file returns DISK bytes (not HEAD).
+- `domain`: `ResolveLink` refuses an address-less content link.
 - `cli`: `gg link --content` output, flag conflicts, missing exit 1, `:<line>`
   refused; `gg open --web` refusal; other verbs refuse the link.
 - `tui`: row placement after "Copy link" in each surface; copy path and
