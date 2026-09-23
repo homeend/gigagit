@@ -7,15 +7,16 @@ import (
 )
 
 // TestSafeRowTextNeutralizesTerminalWideSymbols guards the fix for the commit-row
-// overflow bug: ☰ (U+2630) and its symbol-block kin measure as one cell to
-// lipgloss/uniseg but terminals draw them as two, so an unsanitized subject
-// overflows the panel border and wraps, desyncing the renderer.
+// overflow bug: symbol-block runes such as ☀ (U+2600) measure as one cell to
+// lipgloss but terminals may draw them as two, so an unsanitized subject
+// overflows the panel border and wraps, desyncing the renderer. (The original
+// trigger, ☰ U+2630 from this repo's wave-3 merge subjects, now measures two
+// cells since the x/ansi 0.11 width tables, so the guard lets it through.)
 func TestSafeRowTextNeutralizesTerminalWideSymbols(t *testing.T) {
 	t.Parallel()
-	// The trigger from this repo's own wave-3 merge subjects.
-	got := safeRowText("global ☰ menu")
+	got := safeRowText("global ☀ menu")
 	if want := "global ? menu"; got != want {
-		t.Fatalf("safeRowText(☰) = %q, want %q", got, want)
+		t.Fatalf("safeRowText(☀) = %q, want %q", got, want)
 	}
 	// After sanitizing, lipgloss.Width equals the rune count — the property the
 	// panel truncation relies on to keep a row inside its border.
@@ -30,7 +31,7 @@ func TestWidthUnsafeClassification(t *testing.T) {
 	// measure as one cell (so terminals silently draw them wider) → unsafe. Only
 	// runes that actually measure width-1 qualify; a symbol uniseg already widths
 	// as 2 (e.g. ⭐ U+2B50) is excluded by the guard's own lipgloss.Width check.
-	for _, r := range []rune{0x2630 /*☰*/, 0x2600 /*☀*/, 0x2666 /*♦*/} {
+	for _, r := range []rune{0x2600 /*☀*/, 0x2666 /*♦*/, 0x2663 /*♣*/} {
 		if lipgloss.Width(string(r)) != 1 {
 			t.Fatalf("test fixture %#x is not width-1; pick another", r)
 		}
