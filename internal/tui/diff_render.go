@@ -132,7 +132,7 @@ func (mk cellMark) bodyFor(base lipgloss.Style) lipgloss.Style {
 // "notes" lost its plural, which pays the last column. The stacked variant is
 // its OWN, shorter line: no selection or notes groups apply there, and the
 // file-step, fold and file-list keys take their place.
-func diffHintFor(long longMode, stacked bool) string {
+func diffHintFor(long longMode, stacked, wt bool) string {
 	mode := i18n.T("scroll")
 	switch long {
 	case longWrap:
@@ -144,15 +144,22 @@ func diffHintFor(long longMode, stacked bool) string {
 	if long == longScroll {
 		pan = i18n.T("  [←→] pan")
 	}
+	// Both lines sit exactly on the 140-column budget, so a working-tree diff
+	// BUYS its staging key: h/b stay in ? and in ctrl+p (File history / File
+	// blame), while H exists only here and is what this view is for.
+	tail := i18n.T("  [h/b] hist  [esc] back")
+	if wt {
+		tail = i18n.T("  [H] hunks  [esc] back")
+	}
 	if stacked {
 		// The stack's own line: the keys that only exist here (file steps,
 		// folds, the file list, the way back to one file) replace the ones
 		// that do not apply (the line selection's side keys). Notes DO work
 		// per file (plan 4a), so they keep their chip; the in-file change
 		// walk (ctrl+↑/↓) has no room left and lives in the context help.
-		return i18n.T("[↑↓/jk] scroll  [/] find  [n/p] file  [c}{] note  [-/_] fold  [J] files  [S] single  [f] part  [^w] %s", mode) + pan + i18n.T("  [h/b] hist  [esc] back")
+		return i18n.T("[↑↓/jk] scroll  [/] find  [n/p] file  [c}{] note  [-/_] fold  [J] files  [S] single  [f] part  [^w] %s", mode) + pan + tail
 	}
-	return i18n.T("[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] %s", mode) + pan + i18n.T("  [h/b] hist  [esc] back")
+	return i18n.T("[↑↓/jk] scroll  [/] find  [spc] mark  [alt↔] side  [n/p] chg  [c}{] note  [S] stack  [f] part  [^w] %s", mode) + pan + tail
 }
 
 // cellSeg is one pane's text for one display row: the sanitized display runes
@@ -396,7 +403,7 @@ func (m Model) renderDiffView() string {
 	for len(lines) < h-1 {
 		lines = append(lines, "")
 	}
-	hint := diffHintFor(v.long, v.stk != nil)
+	hint := diffHintFor(v.long, v.stk != nil, m.hunkKeyApplies())
 	if v.lsel.on {
 		hint = diffSelectHint()
 	}

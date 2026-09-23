@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -118,6 +120,142 @@ func TestStagedStackHUnstagesAndRefusesAStagedAddition(t *testing.T) {
 	}
 	if msg := u.(Model).statusMsg; !strings.Contains(msg, "unstaged whole") {
 		t.Fatalf("no notice explaining the refusal: %q", msg)
+	}
+}
+
+// Where hunks cannot apply, H says why instead of opening a picker over a file
+// the staging op would reject (design D4: a conflict keeps its resolver door).
+func TestHRefusesWhereHunksCannotApply(t *testing.T) {
+	t.Parallel()
+	m := hunkStackModel(t, []model.FileStatus{
+		{Path: "a.txt", Unstaged: 'M'},
+		{Path: "new.txt", Unstaged: '?', Kind: model.KindUntracked},
+		{Path: "u.txt", Staged: 'U', Unstaged: 'U', Kind: model.KindUnmerged},
+	}, false)
+
+	for _, tc := range []struct{ file, want string }{
+		{"new.txt", "staged whole"},
+		{"u.txt", "resolver"},
+	} {
+		mm := focusStackFile(t, m, tc.file)
+		u, cmd := mm.Update(keyMsg("H"))
+		if cmd != nil {
+			t.Fatalf("%s opened a picker; H must refuse", tc.file)
+		}
+		if msg := u.(Model).statusMsg; !strings.Contains(msg, tc.want) {
+			t.Fatalf("%s: notice %q does not say %q", tc.file, msg, tc.want)
+		}
+	}
+
+	// A commit stack has no working tree to stage into.
+	cm := diffModel()
+	cm.height, cm.width = 20, 120
+	cm.diffNav = diffNavTree
+	cm = cm.pushLayer(stackViewOf(t, sameRowsTUI(3, 1)))
+	u, cmd := cm.Update(keyMsg("H"))
+	if cmd != nil {
+		t.Fatal("a commit stack must refuse H")
+	}
+	if msg := u.(Model).statusMsg; !strings.Contains(msg, "working-tree") {
+		t.Fatalf("a commit stack's notice is %q", msg)
+	}
+}
+
+// wtDiffModel opens a SINGLE-file working-tree diff (the stacked preference
+// off) on path.
+func wtDiffModel(t *testing.T, files []model.FileStatus, path string) Model {
+	t.Helper()
+	m := tempPromptStore(t, diffModel())
+	m.height, m.width = 20, 120
+	m = m.withStatus(model.WorkingTreeStatus{Files: files})
+	m = m.setStackedPref(false)
+	f, ok := m.statusFileOf(path)
+	if !ok {
+		t.Fatalf("fixture: %q is not in the status", path)
+	}
+	u, _ := m.openStatusDiff(f, false)
+	mm := u.(Model)
+	if v := mm.diffLayer(); v == nil || v.stk != nil {
+		t.Fatal("fixture: want a single-file diff, not a stack")
+	}
+	return mm
+}
+
+// D6: a stack reconciles itself on every status write, but ONE file does not —
+// nothing reloads an open working-tree diff today. So the staging round parks a
+// reload and the next status write consumes it. Parked, not unconditional: a
+// reload on every status write would throw the reader to the top of the file
+// whenever a watch-driven refresh landed.
+func TestSingleFileDiffReloadsAfterItsOwnStagingRound(t *testing.T) {
+	t.Parallel()
+	files := wtFiles("a.txt", "b.txt")
+	m := wtDiffModel(t, files, "b.txt")
+
+	if _, cmd := m.Update(keyMsg("H")); cmd == nil {
+		t.Fatal("H must open the picker from a single-file working-tree diff too")
+	}
+
+	m = m.armHunkReload("b.txt", false)
+	u, cmd := m.Update(statusRefreshedMsg{status: model.WorkingTreeStatus{Files: files}})
+	nm := u.(Model)
+	if cmd == nil {
+		t.Fatal("the parked reload was never issued")
+	}
+	if nm.hunkReload != nil {
+		t.Fatal("the reload must be consumed once, not re-fire on every refresh")
+	}
+	if nm.diffLayer() == nil {
+		t.Fatal("the file is still unstaged: its diff must stay open")
+	}
+
+	// …and when the file left the section entirely, the diff closes instead of
+	// showing a stale one.
+	m2 := wtDiffModel(t, files, "b.txt").armHunkReload("b.txt", false)
+	u2, _ := m2.Update(statusRefreshedMsg{status: model.WorkingTreeStatus{Files: wtFiles("a.txt")}})
+	nm2 := u2.(Model)
+	if nm2.diffLayer() != nil {
+		t.Fatal("a fully staged file must close its diff, not leave a stale one open")
+	}
+	if !strings.Contains(nm2.statusMsg, "b.txt") {
+		t.Fatalf("no notice naming the file that left: %q", nm2.statusMsg)
+	}
+}
+
+// A stack arms nothing: reconcileStatusStack already re-reads the file in place,
+// keeping the reader's position — a reload would blank the whole view.
+func TestAStackArmsNoReload(t *testing.T) {
+	t.Parallel()
+	m := hunkStackModel(t, wtFiles("a.txt", "b.txt"), false)
+	if m.armHunkReload("b.txt", false).hunkReload != nil {
+		t.Fatal("a stack must not park a reload; its reconcile does the work")
+	}
+}
+
+// A key nobody can see does not exist: H is advertised in the footer of every
+// working-tree diff (which buys the column from [h/b] hist — both stay in ? and
+// in ctrl+p) and carries a . menu row wherever it applies.
+func TestHIsAdvertisedWhereItApplies(t *testing.T) {
+	t.Parallel()
+	for _, stacked := range []bool{false, true} {
+		wt := diffHintFor(longScroll, stacked, true)
+		if !strings.Contains(wt, "[H] hunks") {
+			t.Fatalf("stacked=%v: the working-tree footer never offers H:\n%s", stacked, wt)
+		}
+		if w := lipgloss.Width(wt); w > 140 {
+			t.Fatalf("stacked=%v: the working-tree hint is %d columns, the budget is 140: %q", stacked, w, wt)
+		}
+		if plain := diffHintFor(longScroll, stacked, false); strings.Contains(plain, "[H] hunks") {
+			t.Fatalf("stacked=%v: a commit diff advertises a key that refuses there", stacked)
+		}
+	}
+
+	m := hunkStackModel(t, wtFiles("a.txt"), false)
+	if !hasRow(m, "diff-hunks") {
+		t.Fatal("the . menu of a working-tree stack has no hunk-staging row")
+	}
+	sm := hunkStackModel(t, []model.FileStatus{{Path: "b.txt", Staged: 'M'}}, true)
+	if r, ok := sm.diffHunkRow(); !ok || !strings.Contains(r.label, "Unstage") {
+		t.Fatalf("the Staged section's menu row is %+v; it must say Unstage", r)
 	}
 }
 

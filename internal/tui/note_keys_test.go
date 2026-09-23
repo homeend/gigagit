@@ -468,7 +468,7 @@ func TestNoteFileStepTwoPress(t *testing.T) {
 func TestDiffHintFitsItsBudget(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []longMode{longScroll, longWrap, longTruncate} {
-		h := diffHintFor(mode, false)
+		h := diffHintFor(mode, false, false)
 		if w := lipgloss.Width(h); w > 140 {
 			t.Errorf("hint (mode %d) is %d columns, budget is 140: %q", mode, w, h)
 		}

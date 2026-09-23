@@ -570,11 +570,11 @@ func TestStackCountsArriveBeforeBodies(t *testing.T) {
 // stack's own keys once it is open (memory rule: help AND footer).
 func TestDiffFooterAdvertisesStack(t *testing.T) {
 	t.Parallel()
-	single := diffHintFor(longScroll, false)
+	single := diffHintFor(longScroll, false, false)
 	if !strings.Contains(single, "[S] stack") {
 		t.Errorf("the single-file footer must advertise S: %q", single)
 	}
-	stacked := diffHintFor(longScroll, true)
+	stacked := diffHintFor(longScroll, true, false)
 	for _, want := range []string{"[n/p] file", "[-/_] fold", "[J] files", "[S] single", "[esc] back"} {
 		if !strings.Contains(stacked, want) {
 			t.Errorf("the stacked footer lacks %q: %q", want, stacked)
@@ -585,7 +585,7 @@ func TestDiffFooterAdvertisesStack(t *testing.T) {
 // …and so does the ? help.
 func TestHelpAdvertisesStack(t *testing.T) {
 	t.Parallel()
-	lines := helpFor(i18n.T("Diff view (enter)"), diffHintFor(longScroll, false))
+	lines := helpFor(i18n.T("Diff view (enter)"), diffHintFor(longScroll, false, false))
 	var text strings.Builder
 	for _, l := range lines {
 		text.WriteString(l.text)

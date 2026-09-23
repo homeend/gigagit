@@ -449,11 +449,11 @@ func TestDiffHintFitsTheBudget(t *testing.T) {
 		// Both variants of the line — single file and stacked — share the
 		// budget: a stacked footer that truncated would hide [esc] back.
 		for _, stacked := range []bool{false, true} {
-			if w := lipgloss.Width(diffHintFor(lm, stacked)); w > 140 {
-				t.Errorf("mode %d (stacked %v) hint is %d columns, the budget is 140: %q", lm, stacked, w, diffHintFor(lm, stacked))
+			if w := lipgloss.Width(diffHintFor(lm, stacked, false)); w > 140 {
+				t.Errorf("mode %d (stacked %v) hint is %d columns, the budget is 140: %q", lm, stacked, w, diffHintFor(lm, stacked, false))
 			}
 		}
-		hint := diffHintFor(lm, false)
+		hint := diffHintFor(lm, false, false)
 		find := strings.Index(hint, "[/] find")
 		if find < 0 {
 			t.Errorf("mode %d hint must advertise the search: %q", lm, hint)
@@ -470,7 +470,7 @@ func TestDiffHintFitsTheBudget(t *testing.T) {
 	}
 	// The widest variant is at the cap: any new group must shorten a label
 	// first. Update this number and diffHintFor's doc comment together.
-	if w := lipgloss.Width(diffHintFor(longScroll, false)); w != 140 {
+	if w := lipgloss.Width(diffHintFor(longScroll, false, false)); w != 140 {
 		t.Fatalf("the scroll variant measures %d columns; the doc comment says 140", w)
 	}
 	// The selection variant replaces the whole line in every mode, so it has to

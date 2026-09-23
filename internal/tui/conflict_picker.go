@@ -151,6 +151,9 @@ func newStagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
 		requireAll: false,
 		apply: func(m Model, content []byte) (Model, tea.Cmd) {
 			m = m.popLayer()
+			// The view underneath owes itself a re-read once the status lands
+			// (a stack reconciles itself and arms nothing).
+			m = m.armHunkReload(path, false)
 			return m.startOp(engine.StageHunks{Path: path, Content: content})
 		},
 		path: path,
@@ -169,6 +172,9 @@ func newUnstagePicker(path string, doc *hunkpick.Doc) *hunkPicker {
 		requireAll: false,
 		apply: func(m Model, content []byte) (Model, tea.Cmd) {
 			m = m.popLayer()
+			// The view underneath owes itself a re-read once the status lands
+			// (a stack reconciles itself and arms nothing).
+			m = m.armHunkReload(path, true)
 			return m.startOp(engine.StageHunks{Path: path, Content: content})
 		},
 		path: path,

@@ -63,6 +63,28 @@ func (m Model) hunkFileHere() (f model.FileStatus, staged bool, why string) {
 	return f, staged, ""
 }
 
+// hunkKeyApplies reports whether H belongs on this view at all: any
+// working-tree diff, staged or unstaged. It gates the footer chip — per-file
+// refusals are the notice's job, a chip that flickered as the cursor moved
+// between files would only be noise.
+func (m Model) hunkKeyApplies() bool {
+	return m.diffLayer() != nil && (m.diffNav == diffNavStatus || m.diffNav == diffNavStaged)
+}
+
+// diffHunkRow is H's . menu row — offered wherever the key applies, so the
+// gesture stays discoverable on the single-file line, where the footer has no
+// column left for it.
+func (m Model) diffHunkRow() (actionRow, bool) {
+	if !m.hunkKeyApplies() {
+		return actionRow{}, false
+	}
+	label := i18n.T("Stage hunks of this file…")
+	if m.diffNav == diffNavStaged {
+		label = i18n.T("Unstage hunks of this file…")
+	}
+	return actionRow{id: "diff-hunks", key: "H", label: label}, true
+}
+
 // statusFileOf finds a path in the working-tree status.
 func (m Model) statusFileOf(path string) (model.FileStatus, bool) {
 	for _, f := range m.status.Files {
@@ -71,6 +93,51 @@ func (m Model) statusFileOf(path string) (model.FileStatus, bool) {
 		}
 	}
 	return model.FileStatus{}, false
+}
+
+// hunkReload is a diff the staging round OWES a re-read. A stack reconciles
+// itself on every status write (reconcileStatusStack), but a SINGLE-file
+// working-tree diff has nothing of the kind — nothing reloads one on a status
+// change at all. So the picker's apply parks the file here and the next status
+// write consumes it. Parked rather than unconditional on purpose: reloading on
+// every status write would throw the reader to the top of the file whenever a
+// watch-driven refresh landed.
+type hunkReload struct {
+	path   string
+	staged bool
+}
+
+// armHunkReload parks a re-read of the open single-file working-tree diff.
+func (m Model) armHunkReload(path string, staged bool) Model {
+	if v := m.diffLayer(); v == nil || v.stk != nil {
+		return m // a stack re-reads the file in place, keeping the reader's spot
+	}
+	m.hunkReload = &hunkReload{path: path, staged: staged}
+	return m
+}
+
+// takeHunkReload consumes a parked reload against the status just written: the
+// file is re-read where it is still in its section, and the diff closes when it
+// is not (fully staged, or gone) rather than showing a diff that no longer
+// exists.
+func (m Model) takeHunkReload() (Model, tea.Cmd) {
+	r := m.hunkReload
+	if r == nil {
+		return m, nil
+	}
+	m.hunkReload = nil
+	v := m.diffLayer()
+	if v == nil || v.stk != nil {
+		return m, nil
+	}
+	f, ok := m.statusFileOf(r.path)
+	if !ok || (r.staged && !inStagedPanel(f)) || (!r.staged && !inFilesPanel(f)) {
+		m = m.popLayer()
+		m.diffTag = ""
+		m.statusMsg = i18n.T("%s has no change left here", r.path)
+		return m, nil
+	}
+	return m, m.loadStatusDiffCmd(f, r.staged)
 }
 
 // diffHunkKey is H in the diff view: open the hunk picker over this file.
