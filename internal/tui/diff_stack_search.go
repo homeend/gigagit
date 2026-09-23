@@ -180,4 +180,3 @@ func (m Model) drainStackHunt(idx, body int) (Model, tea.Cmd) {
 	}
 	return m, nil // the stack ran out: the reader stays on this file's header
 }
-
