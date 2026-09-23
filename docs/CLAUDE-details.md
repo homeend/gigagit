@@ -1698,6 +1698,56 @@ reader could not see.
   140-column budget); `J` keeps its `.` menu row and its help row. The stacked
   header shows `change X/N  file Y/M`.
 
+### Line staging in gg web — GitKraken's model (2026-09-23)
+
+User ruling, reached over three rounds of live feedback, with GitKraken's own
+help page as the reference: select ROWS, then right-click to act, at once. It
+replaced, in turn, a block pick (a click took the whole hunk) and a per-cell
+pick (a click took one side of one line) — both pick-then-apply with a
+`stage selected (n)` bar. Neither round had been asked for; each was a guess
+at "what the user means" that a question would have avoided.
+
+- **The unit is the ROW.** A modified row is ONE change (its old line replaced
+  by its new one) whichever cell is clicked; a removed-only row is its old
+  line, an added-only row its new line. Staging half a modified row would
+  leave both lines, or neither, in the index — so it is not offered.
+- **Server: `applyRowSelection` (hunks.go)** builds the new index content row
+  by row, git add -p style: a selected row contributes its TARGET version, an
+  unselected row keeps its current one. Two lanes, both oriented the way the
+  reader sees them: `unstaged` (index → working tree, target = the working
+  tree) and `staged` (HEAD → index, target = HEAD — which is how a row is
+  unstaged). Whole hunks ride the same door (`whole: true`). The original
+  `{picks: [ordinals]}` request still decodes, as whole hunks.
+- **Row identity on the wire:** `/api/diff` tags rows with `hunk` and `hr`
+  (the row's ordinal inside its hunk) in BOTH lanes, and `hunks.lane`. The
+  latch is stricter than before: `sameBlockShape` requires the displayed rows
+  (the Differ's alignment) and the doc's rows (`textdiff.Compare` with zero
+  options, what `FromDiff` uses) to split into the same blocks of the same
+  row counts — a row ordinal is meaningless otherwise, so the diff simply goes
+  untagged.
+- **Client:** `selectRow` (click / shift / ctrl-cmd), `hunkMenuRows` (a
+  right-click on an unselected row selects it alone first, then offers
+  *Stage/Unstage selected lines* and *Stage/Unstage hunk*), `applyRowStage`
+  (POST in the diff's lane, then the status re-read reconciles a stack in
+  place or re-opens the single file in its lane). Per-file state is
+  `{path, hash, lane, sel, anchor}`, per slot in a stack, and a re-fetch keeps
+  the selection only while the file's freshness hash is unchanged.
+- **Gotcha — a modifier-click is a TEXT gesture to the browser.** Shift-click
+  extends the page's text selection from the previous click, and the plain-
+  click guard ("don't act mid text-selection") then swallowed it. A mousedown
+  with shift/ctrl/cmd on a selectable row is `preventDefault`ed, and a
+  modified click clears the text selection itself.
+- **Gotcha — CSS rounds must REPLACE, not add.** Round two's rules were
+  written beside round one's, so round one's whole-row box and the ✓ in both
+  gutters kept painting over a model that no longer had them. The guard
+  `TestSelectionMarksTheWholeRow` now fails if any earlier round's selector
+  (`pick-l`, `pick-w`, `tr.hk.picked`, `#hunk-bar`, the ✓) reappears.
+- **Probes:** `stack-probe/gkstage.mjs` (single file, both lanes; reads the
+  index with real git after every action) and `gkstack.mjs` (per-file
+  selections in a stack), red on the installed build at the first assert,
+  green in chromium and firefox; `commitbox.mjs` for the sidebar. The older
+  `hunks.mjs` / `hunkline.mjs` / `hunkux.mjs` test models that no longer exist.
+
 ### Working-tree hunk staging inside a stack (plan 4c, 2026-09-23)
 
 Spec §11 item 3, plan `docs/superpowers/plans/2026-09-23-stacked-hunks.md`.
