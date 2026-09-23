@@ -47,6 +47,9 @@ type uiStateWire struct {
 	// DiffView is the diff pane's view mode: "changed" (changed lines only,
 	// the TUI's f) or "full" (the default).
 	DiffView string `json:"diff_view"`
+	// CommitTall is the commit message box's size: false = three lines (the
+	// everyday size), true = the tall box the ⤢ control opens.
+	CommitTall bool `json:"commit_tall"`
 	// TextMode is the long-line display mode shared by the diff pane, the
 	// history overlay and blame: "wrap" (the default), "scroll" or "cutoff".
 	TextMode string `json:"text_mode"`
@@ -80,6 +83,7 @@ func (s *Server) handleUIStateGet(w http.ResponseWriter, r *http.Request) {
 		FilesHidden:   st.FilesHidden,
 		SymCompare:    st.SymCompare,
 		StackedDiff:   st.StackedDiff,
+		CommitTall:    st.CommitTall,
 		SidebarWidth:  st.SidebarWidth,
 		FilesWidth:    st.FilesWidth,
 		Graph:         st.Graph,
@@ -106,6 +110,7 @@ func (s *Server) handleUIStateSet(w http.ResponseWriter, r *http.Request) {
 		FilesHidden:   in.FilesHidden,
 		SymCompare:    in.SymCompare,
 		StackedDiff:   in.StackedDiff,
+		CommitTall:    in.CommitTall,
 		SidebarWidth:  clampPaneWidth(in.SidebarWidth),
 		FilesWidth:    clampPaneWidth(in.FilesWidth),
 		Graph:         allowedGraph(in.Graph),

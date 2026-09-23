@@ -8,7 +8,7 @@ import "./layers.js";
 // The registries (op rows / help) must exist before any feature module runs.
 import "./menus.js";
 import { fetchStatus } from "./status.js";
-import { applySidebarHidden, loadRepo } from "./ops.js";
+import { applyCommitRows, applySidebarHidden, loadRepo } from "./ops.js";
 import { applyStoredSections, fetchBranches } from "./sidebar.js";
 import { applyStoredSorts } from "./sortlist.js";
 import { loadUIState, uiState } from "./uistate.js";
@@ -64,6 +64,7 @@ async function applyStoredLayout() {
   applyGraphMode(ui.graph);
   applyDiffView(ui.diff_view);
   applyTextMode(ui.text_mode);
+  applyCommitRows(); // the message box opens at the size it was left
   syncStackChrome(); // the S chips show a stored "stacked" before any diff opens
 }
 

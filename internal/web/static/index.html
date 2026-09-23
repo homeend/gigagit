@@ -118,8 +118,11 @@
     </div>
     <div id="commit-box" class="hidden">
       <textarea id="commit-msg" rows="3" placeholder="commit message — first line is the subject"></textarea>
-      <button id="commit-btn">commit</button>
-      <button id="stash-btn" title="stash all working-tree changes">stash</button>
+      <div id="commit-actions">
+        <button id="commit-btn">commit</button>
+        <button id="stash-btn" title="stash all working-tree changes">stash</button>
+        <button id="commit-grow" title="write a longer message (the size is remembered)" aria-expanded="false">⤢</button>
+      </div>
     </div>
     <div id="conflict-note" class="hidden"></div>
     <ul id="files-list"></ul>
@@ -130,7 +133,6 @@
     <div id="sym-dir" class="hidden"></div>
     <div id="diff-header">
       <span id="diff-title"></span>
-      <span id="hunk-bar" class="hidden"><button id="hunk-stage" disabled>stage selected (0)</button><button id="hunk-all">all</button><button id="hunk-none">none</button></span>
       <span id="resolve-bar" class="hidden"><span id="resolve-count"></span><button id="resolve-ours">all ours</button><button id="resolve-theirs">all theirs</button><button id="resolve-go" disabled>resolve</button></span>
       <span id="diff-nav">
         <button id="prev-file" title="previous file">‹ file</button>
