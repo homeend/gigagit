@@ -1654,6 +1654,62 @@ had, and the lever is that a stack is ONE document:
   (`openCommitByHash` / `openFile` in live.js). Worth its own look.
 
 
+### Working-tree hunk staging inside a stack (plan 4c, 2026-09-23)
+
+Spec §11 item 3, plan `docs/superpowers/plans/2026-09-23-stacked-hunks.md`.
+Two premise checks decided this plan's size, and both held:
+
+- **The working-tree stack already reconciles.** `reconcileStatusStack`
+  (`diff_stack_keys.go`) runs from `withStatus` — the ONE place the
+  Files/Staged membership is derived — so a staging round's status write
+  already drops the files that left the section, inserts new ones, marks a
+  re-read file `stackStale` (its old rows stay on screen until the lazy queue
+  reaches it) and keeps the cursor BY PATH. Nothing had to be built for "what
+  the stack does after a stage"; `TestWorkingTreeStackReconcilesOnStatusWrite`
+  and its empty-section twin pin it.
+- **There is no inline picking lane in the TUI to make per-file.** Hunk
+  staging is a full-screen `hunkPicker` LAYER, opened from the Files / Staged
+  panel's `H`. So the diff view got that same `H` (`diff_stack_hunks.go`) and
+  the picker opens OVER the stack — `pushLayer` returns to the layer beneath,
+  which is how the reader keeps their place. The web half picks inline per
+  slot; that asymmetry is deliberate, not an oversight.
+
+What `H` does: `hunkFileHere()` names the file it acts on — the CURSOR's file
+in a stack (never the Files panel's selection behind the view), the open file
+in a single working-tree diff — and returns a refusal string instead where the
+staging op could not apply: a conflict (which keeps its `enter` resolver door,
+spec §9), an untracked file, a staged `A` in the unstage lane, a running
+operation, or a commit / compare stack. The Staged section opens the UNSTAGE
+picker. `hunkKeyApplies()` gates the chrome, on the view rather than per file:
+a chip flickering as the cursor moved between files would be noise.
+
+Gotchas this cost:
+
+- **A single-file working-tree diff has no reconcile of its own** — nothing in
+  the TUI reloads one on a status change at all. So the picker's apply parks
+  `Model.hunkReload{path, staged}` and `statusRefreshedMsg` consumes it once
+  (`takeHunkReload`): the file is re-read where it is still in its section, and
+  the diff CLOSES with a notice where it is not. Parked rather than
+  unconditional on purpose — reloading on every status write would throw the
+  reader to the top of the file whenever a watch-driven refresh landed. A
+  stack arms nothing (`armHunkReload` returns early), because its reconcile
+  keeps the reader's place and a reload would blank the view.
+- **Both footer lines sat exactly on the 140-column budget.** A working-tree
+  diff therefore BUYS its key: `diffHintFor(long, stacked, wt)` trades
+  `[h/b] hist` for `[H] hunks` there and nowhere else. `h`/`b` stay in `?` and
+  in `ctrl+p` (File history / File blame), and `H` also has a `.` menu row
+  (`diff-hunks`), which is what keeps it discoverable on the single-file line.
+- The 4a-era help row claiming "in-view hunk staging and the changes-only fold
+  are single-file for now" was half false after this; it now speaks for the
+  fold alone, and the orphaned key came out of all four bundles.
+- **Evidence** (`tui-capture.sh`, three modified files with two hunks each):
+  `tab enter S n H` → the picker titled `Stage hunks: three.txt   2 hunks`
+  while the panel behind still had `one.txt` selected; `space ctrl+s` → back in
+  the stack, still `file 2/3 three.txt`, whose header had become
+  `▾ M three.txt +2 −1` — the stale re-read landing, with `git status` showing
+  `MM three.txt`.
+
+
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)
 
 Spec `docs/superpowers/specs/2026-09-21-web-previews-dnd-compare-design.md`.

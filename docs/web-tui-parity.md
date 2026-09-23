@@ -117,6 +117,12 @@ Commit amend is TUI-only too (the web's commit op has no amend lane).
   search. In a STACKED diff BOTH search every file at once, and `]`/`[` unfold
   and load a file to reach a hit (the counter's `+` means files are still
   unsearched).
+- **Hunk staging from the diff.** The TUI's `H` opens the region/line picker
+  for the file being read — single-file or stacked, staging in the Files
+  section and UNSTAGING in the Staged one. The web picks hunks inline in the
+  unstaged diff (click a block, then "stage selected"); it has no inline
+  unstage for the staged section at all, which predates the stacked view.
+
 - **Stash create.** The web stashes the whole tree with a message; the TUI
   popup offers a per-file checklist.
 - **Commit context menu.** Mostly closed. What the TUI still has that the web

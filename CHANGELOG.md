@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Working-tree hunk staging from the diff view
+
+### Added
+
+- **`H` stages hunks of the file you are reading.** In a working-tree diff —
+  one file at a time or the whole section stacked — `H` opens the region/line
+  staging picker for the file under the cursor, and the Staged section's `H`
+  opens the unstaging picker instead. It was previously reachable only from
+  the Files / Staged panel row, so a stacked review had to leave the stack to
+  stage anything. The picker opens over the view and returns to it: a stack
+  keeps the file you were reading and re-reads the one the staging changed.
+
+  `H` says why instead of opening where hunks cannot apply: a conflicted file
+  (which keeps `enter` for the resolver), an untracked file, a file staged as
+  new, or a commit / comparison diff.
+
+### Fixed
+
+- **A single-file working-tree diff no longer shows a stale diff after its own
+  staging round** — it re-reads itself once the status lands, and closes with
+  a notice when the file has no change left in that section.
+
 ## In-view search inside a stacked diff
 
 ### Added
