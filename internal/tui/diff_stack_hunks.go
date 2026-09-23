@@ -52,13 +52,13 @@ func (m Model) hunkFileHere() (f model.FileStatus, staged bool, why string) {
 	}
 	switch {
 	case f.Kind == model.KindUntracked:
-		return f, staged, i18n.T("hunks: an untracked file is staged whole")
+		return f, staged, i18n.T("cannot hunk an untracked file — stage the whole file")
 	case f.Kind == model.KindUnmerged:
 		return f, staged, i18n.T("conflicted — [enter] opens the resolver")
 	case staged && f.Staged == 'A':
 		// StageHunks can only set index content, never remove the entry: a file
 		// not yet in HEAD is unstaged whole (the Staged panel's own rule).
-		return f, staged, i18n.T("hunks: a newly added file is unstaged whole")
+		return f, staged, i18n.T("cannot hunk a newly added file — unstage the whole file")
 	}
 	return f, staged, ""
 }
@@ -68,7 +68,17 @@ func (m Model) hunkFileHere() (f model.FileStatus, staged bool, why string) {
 // refusals are the notice's job, a chip that flickered as the cursor moved
 // between files would only be noise.
 func (m Model) hunkKeyApplies() bool {
-	return m.diffLayer() != nil && (m.diffNav == diffNavStatus || m.diffNav == diffNavStaged)
+	v := m.diffLayer()
+	if v == nil || (m.diffNav != diffNavStatus && m.diffNav != diffNavStaged) {
+		return false
+	}
+	if v.stk == nil {
+		// One file on screen and it cannot flicker: gate on the file itself, so
+		// an untracked file's diff does not advertise a key that only refuses.
+		_, _, why := m.hunkFileHere()
+		return why == ""
+	}
+	return true // a stack: per-file refusals are the notice's job
 }
 
 // diffHunkRow is H's . menu row — offered wherever the key applies, so the
@@ -144,7 +154,11 @@ func (m Model) takeHunkReload() (Model, tea.Cmd) {
 func (m Model) diffHunkKey() (tea.Model, tea.Cmd) {
 	f, staged, why := m.hunkFileHere()
 	if why != "" {
-		m.statusMsg = why
+		// The DIFF's own transient cue, never m.statusMsg: a full-screen view
+		// covers the panels' status bar, so a refusal posted there is a key
+		// that silently does nothing (which is how the user met it). The ▸ is
+		// the cue's glyph, as on every other notice here.
+		m.diffNotice = "▸ " + why
 		return m, nil
 	}
 	if staged {
