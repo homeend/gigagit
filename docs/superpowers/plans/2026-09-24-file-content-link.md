@@ -1227,3 +1227,43 @@ binary path.
 git add internal/agentskill CHANGELOG.md README.md docs/CLAUDE-details.md e2e/scenarios/s93_content_links.toml
 git commit -m "docs: content links — skill v92, changelog, readme, e2e"
 ```
+
+---
+
+## Addendum tasks (spec addendum: land in the View-file preview machinery)
+
+### Task 8: refactor — one accessor for "the focused preview"
+
+**Files:** `internal/tui/preview_select.go`, `internal/tui/files_view.go`
+(`previewSearchKey`), `internal/tui/file_preview.go` (extract
+`renderPreviewBox(p, boxW, boxH, focused)` from `renderFilePreview`).
+
+- Add `func (m Model) activePreview() (p *contentPopup, rows, innerW int, ok bool)`:
+  a top `*fileViewer` answers first (its popup, `overlayDims` geometry);
+  else the files-view preview when `m.filesPreview != nil && !m.filesTreeFocused`
+  (`filePreviewRowsCap`, `filePreviewInnerW`).
+- `movePreviewCursor`, `previewSelectKey`, `previewSearchKey`,
+  `previewCopyLineRows` (and its clearing hook) use it.
+- Gate: `go test ./internal/tui -run 'Preview|Select|Search|ActionMenu' -count=1`
+  green BEFORE any new behaviour (the refactor changes nothing observable).
+
+### Task 9: `fileViewer` + the landing
+
+**Files:** create `internal/tui/file_viewer.go`, `internal/tui/file_viewer_test.go`;
+modify `layer_stack.go` (`isFullScreenLayer`), `action_menu.go`
+(`inContentWindow`, `contextCopyRows`), `bookmark.go` (`focusedBookmark`),
+`file_link.go` (`fileRowPath`), `steer_nav.go` (`steerNavigateContent`),
+`model.go` (`fileContentMsg` also fills a live `fileViewer` by tag),
+`file_finder.go` (drop `openWorktreeContent`/`loadWorktreeContentLayerCmd`),
+`steer_content_test.go` (assert the viewer, not a popup).
+
+Tests first (`file_viewer_test.go`), each against a real repo holding a dirty
+`main.go`:
+- the landing pushes a `*fileViewer`; its lines are the DISK text and carry a
+  class mask (syntax colouring);
+- alt+↓ moves the cursor; space, alt+↓, space, enter copies both lines;
+- `/` + a word + enter lands the cursor on the hit;
+- `.` menu: Copy line present, no panel rows (no "stage"), Copy link names the
+  working-tree file;
+- esc pops back to the panels; a popup pushed over it still renders;
+- `View()` fits `m.width` × `m.height` at 80×24.

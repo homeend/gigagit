@@ -172,3 +172,30 @@ starting a server.
 
 CHANGELOG, README (menu row + `gg link --content`), `docs/CLAUDE-details.md`
 (the `view` hint kind and its target restriction), `using-gg.md` + version.
+
+## Addendum (2026-09-24): land in the View-file PREVIEW machinery
+
+User testing: the landing opened the file finder's plain `contentPopup` — no
+syntax colouring, no line cursor, no select/copy — while "the viewer" the user
+means is the files view's **View file** preview (`openPreview`). Ruling (user
+chose B): the landing reuses that preview machinery.
+
+- **Refactor, no behaviour change.** The preview's functions
+  (`movePreviewCursor`, `previewSelectKey`, `previewSearchKey`,
+  `previewCopyLineRows`) stop reading `m.filesPreview` + the right-column
+  geometry directly and ask one accessor, `m.activePreview()`, for the
+  focused preview and its size (rows, inner width). The files view answers
+  exactly as today.
+- **A full-screen window, `fileViewer`** (a layer, registered in
+  `isFullScreenLayer`): title `View <path> (working tree)`, the same box the
+  preview draws (`renderPreviewBox`, extracted from `renderFilePreview`), the
+  same loader (`loadFileContentSrcCmd` over `WorktreeFile` — syntax colouring
+  honouring `[ui] diff_syntax`), and the same keys: alt+↑/↓ line cursor,
+  ↑/↓/pg scroll, space/space/enter select + copy, `/ @ ] [` search, ctrl+w
+  display mode, shift+←/→ pan, `.` menu (Copy line / Copy selected lines /
+  the file's copy rows / Copy link / Copy file link), esc closes (back to
+  whatever was beneath). Every other key is swallowed.
+- Content links (`steerNavigateContent`) open `fileViewer`; the plain-popup
+  path added earlier is removed.
+- v2 unchanged in intent: `:<line>` sets the viewer's cursor; the viewer's
+  Copy file link then carries the cursor line.
