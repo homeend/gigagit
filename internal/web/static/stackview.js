@@ -668,6 +668,7 @@ function toggleSlot(k) {
   const s = st && st.slots[k];
   if (!s) return;
   s.collapsed = !s.collapsed;
+  if (s.collapsed && s.hunks) s.hunks.sel = new Set(); // nothing hidden stays selected
   repaintSlot(st, k);
   pump(st);
 }
@@ -681,7 +682,10 @@ function toggleAllCollapsed() {
   const st = state.stack;
   if (!st) return;
   const expand = st.slots.every((s) => s.collapsed);
-  for (const s of st.slots) s.collapsed = !expand;
+  for (const s of st.slots) {
+    s.collapsed = !expand;
+    if (s.collapsed && s.hunks) s.hunks.sel = new Set(); // nothing hidden stays selected
+  }
   const at = st.slots[st.anchor] ? st.slots[st.anchor].idx : 0;
   paintStack(st);
   scrollToFile(st, at, false); // keep the reader's file at the top, folded or not
@@ -730,7 +734,7 @@ function hunkSlots() {
   if (!st) return [];
   const out = [];
   st.slots.forEach((s, k) => {
-    if (s.hunks) out.push({ k, slot: s, hunks: s.hunks, el: sectionEl(k) });
+    if (s.hunks && !s.collapsed) out.push({ k, slot: s, hunks: s.hunks, el: sectionEl(k) });
   });
   return out;
 }

@@ -36,8 +36,8 @@ func TestHunkContextIsExplicit(t *testing.T) {
 	}
 }
 
-// Each stacked file keeps its own selection, in its own lane, and a re-fetch
-// keeps it only while the file's bytes are unchanged.
+// Each stacked file keeps its SHARE of the one selection, in its own lane,
+// and a re-fetch keeps it only while the file's bytes are unchanged.
 func TestSlotCarriesItsOwnHunks(t *testing.T) {
 	t.Parallel()
 	view := readStatic(t, "stackview.js")

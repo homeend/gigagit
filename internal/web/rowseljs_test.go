@@ -95,8 +95,16 @@ func TestSelectionClearsAndDoubleClickStagesIt(t *testing.T) {
 	files := readStatic(t, "files.js")
 	keys := readStatic(t, "keys.js")
 
-	if !strings.Contains(files, `document.addEventListener("click", (e) => {`) || !strings.Contains(jsFunc(t, "files.js", "clearRowSelection"), "return true;") {
-		t.Fatal("files.js: a click outside the changed rows must clear the selection")
+	if !strings.Contains(files, `if (e.target.closest && e.target.closest("tr[data-hunk][data-hr], #ctx-menu")) return;
+    clearRowSelection();
+  },
+  true
+);`) || !strings.Contains(jsFunc(t, "files.js", "clearRowSelection"), "return true;") {
+		t.Fatal("files.js: a click outside the changed rows must clear the selection — in the CAPTURE phase, or a menu row (detached by its own handler) reads as outside")
+	}
+	// A collapsed file shows no rows: none of its rows may stay selected.
+	if !strings.Contains(jsFunc(t, "stackview.js", "hunkSlots"), "s.hunks && !s.collapsed") {
+		t.Fatal("stackview.js: a collapsed file must not take part in the selection")
 	}
 	esc := strings.Index(keys, `if (e.key === "Escape" && clearRowSelection()) return;`)
 	search := strings.Index(keys, "if (diffSearchKey(e)) return;")

@@ -3236,12 +3236,18 @@ $("diff-body").addEventListener("click", (e) => {
 
 // A click anywhere that is not a selectable row clears the selection — the
 // context lines, the header, the file list, any other pane. The menu's own
-// rows act on the selection and clear it themselves.
-document.addEventListener("click", (e) => {
-  if (e.button !== 0) return;
-  if (e.target.closest && e.target.closest("tr[data-hunk][data-hr], #ctx-menu")) return;
-  clearRowSelection();
-});
+// rows are exempt (a staging row clears it itself, "copy line" must not).
+// CAPTURE phase: the menu empties itself in its own click handler, and a
+// detached button no longer finds #ctx-menu above it.
+document.addEventListener(
+  "click",
+  (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest && e.target.closest("tr[data-hunk][data-hr], #ctx-menu")) return;
+    clearRowSelection();
+  },
+  true
+);
 
 
 // optimisticRows is what a working-tree diff WILL look like once the rows in
