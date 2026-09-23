@@ -78,9 +78,7 @@ session replaces the displayed one (the replaced session keeps running).
 ## Architecture
 
 ```
- cmd/gg ── creates ONE agentsession.Manager (process-global)
-              │
- internal/domain ── Sessions(): wraps the manager; resolves `session`
+ internal/domain ── Sessions(): the ONE process-global agentsession.Manager; resolves `session`
               │     commands from exttool+config; first-run detect+write
               │
  internal/tui ── console panel · Worktrees sub-rows · ctrl+\ popup · quit guard
@@ -93,8 +91,10 @@ session replaces the displayed one (the replaced session keeps running).
 Imports: stdlib, `charmbracelet/x/xpty` (creack/pty on Unix, ConPTY on
 Windows), and the chosen emulator. **No git, domain, or TUI imports.**
 
-- `Manager` — `map[ID]*Session` under a mutex; created once in `cmd/gg`
-  and injected; survives every `reRoot`.
+- `Manager` — `map[ID]*Session` under a mutex. The single instance is held
+  by `domain.Sessions()` (lazily created, process-global — the `repogate`
+  registry precedent), so it survives every `reRoot` (which reopens the
+  `Service`).
   - `Start(spec StartSpec) (*Session, error)` — `StartSpec{Label, AgentID,
     Argv/CommandLine, Dir, RepoName, Cols, Rows, Env}`.
   - `List() []Info` (stable order: start time), `Get(id)`, `Remove(id)`
@@ -122,8 +122,9 @@ Windows), and the chosen emulator. **No git, domain, or TUI imports.**
 
 ### `internal/domain`
 
-- `Service` gains access to the injected manager (`svc.Sessions()`); frontends
-  never import `agentsession` (added to the archtest domain-only rule).
+- `domain.Sessions()` returns the process-global manager (test seam
+  `UseSessionManager`); type aliases (`SessionInfo`, `SessionScreen`, …)
+  let frontends use it without importing `agentsession` (added to the archtest domain-only rule).
 - `SessionCommands(cfg) []SessionCommand` — the `session` category entries
   from the effective config, filtered to this frontend.
 - `EnsureSessionCommands(ctx, globalPath)` — the first-run auto-configure:
