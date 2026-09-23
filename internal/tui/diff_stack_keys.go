@@ -142,7 +142,7 @@ func (m Model) openStack(nav diffNavKind, focusPath string, seed *diffView) (tea
 		dv.setCursorLine(dv.stk.files[focus].hdr+2+seeded, body) // past the header and its rule
 		dv.alignCursor(alignCenter, body)
 	} else {
-		dv.focusBlock(focus, body) // the file's header, with the usual lead above it
+		dv.goToStackFile(focus, body) // the file's header, with the usual lead above it
 	}
 	dv.syncStackTitle()
 	mm, load := m.pumpStack()
@@ -264,11 +264,7 @@ func (m Model) stackJumpMenu(v *diffView) Model {
 					return m, nil
 				}
 				body := m.diffBodyRows()
-				if dv.stk.files[idx].collapsed {
-					dv.stk.files[idx].collapsed = false
-					dv.rebuild()
-				}
-				dv.focusBlock(idx, body)
+				dv.goToStackFile(idx, body)
 				dv.syncStackTitle()
 				return m.pumpStack()
 			},
@@ -307,6 +303,18 @@ func (m Model) stackKey(v *diffView, msg tea.KeyMsg, body int) (tea.Model, tea.C
 		v.syncStackTitle()
 		nm, cmd := m.pumpStack()
 		return nm, cmd, true
+	case "n", "p":
+		// The change walk spans the stack; a change in a folded or never-read
+		// file is reached by opening that file and parking the step
+		// (diff_stack_nav.go). Everything else is the single-file stepping.
+		dir := 1
+		if msg.String() == "p" {
+			dir = -1
+		}
+		if nm, cmd, ok := m.stackChangeStep(v, dir, body); ok {
+			return nm, cmd, true
+		}
+		return m, nil, false
 	case "J":
 		return m.stackJumpMenu(v), nil, true
 	case "enter":
@@ -336,7 +344,28 @@ func (m Model) stackKey(v *diffView, msg tea.KeyMsg, body int) (tea.Model, tea.C
 		nm, cmd := m.pumpStack()
 		return nm, cmd, true
 	case "N", "P":
-		return m, nil, true // n/p already step files here
+		// The file step: n/p walk changes across the whole stack, so stepping a
+		// WHOLE file lives on N/P — which is what they already mean in the
+		// single-file view ("go to the next file of the list"). One press here,
+		// though: there is no last-change boundary to arm against.
+		dir := 1
+		if msg.String() == "P" {
+			dir = -1
+		}
+		cur := v.curFile()
+		next := cur + dir
+		if next < 0 || next >= len(v.stk.files) {
+			if dir > 0 {
+				m.diffNotice = i18n.T("▸ no next file")
+			} else {
+				m.diffNotice = i18n.T("▸ no previous file")
+			}
+			return m, nil, true
+		}
+		v.goToStackFile(next, body)
+		v.syncStackTitle()
+		nm, cmd := m.pumpStack()
+		return nm, cmd, true
 	case "ctrl+down", "ctrl+up":
 		// n/p step FILES in a stack (v.blocks are the headers), so the walk
 		// from change to change inside ONE file lives on the ctrl-arrows —

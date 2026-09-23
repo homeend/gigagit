@@ -63,8 +63,11 @@ func TestStackSpliceHeadersThenBodies(t *testing.T) {
 	if !slices.Equal(kinds, want) {
 		t.Fatalf("stream kinds = %v, want %v", kinds, want)
 	}
-	if !slices.Equal(v.blocks, []int{0, 6, 10}) {
-		t.Fatalf("blocks must be the header indices, got %v", v.blocks)
+	// The jump blocks are every file's CHANGE starts in stream coordinates
+	// (file 0's change at line 3, file 2's at line 12) — n/p walk them across
+	// the whole stack; the headers are reached with N/P through stackFile.hdr.
+	if !slices.Equal(v.blocks, []int{3, 12}) {
+		t.Fatalf("blocks must be the stream's change starts, got %v", v.blocks)
 	}
 	if v.lines[12].file != 2 || v.stk.files[2].start != 9 || v.stk.files[2].hdr != 10 {
 		t.Fatalf("file index / start / hdr not stamped: line file %d, start %d, hdr %d",
@@ -325,7 +328,8 @@ func TestSFlipsSingleToStackKeepingTheFile(t *testing.T) {
 	}
 }
 
-// n/p step header to header; - folds the cursor's file; _ folds all, then
+// N/P step header to header (n/p walk the changes — see diff_stack_nav_test.go,
+// the user's 2026-09-23 ruling); - folds the cursor's file; _ folds all, then
 // unfolds all.
 func TestStackNPStepHeadersAndFoldKeys(t *testing.T) {
 	t.Parallel()
@@ -333,11 +337,11 @@ func TestStackNPStepHeadersAndFoldKeys(t *testing.T) {
 	m.height, m.width = 30, 120
 	m = m.pushLayer(stackViewOf(t, sameRowsTUI(3, 1), sameRowsTUI(3, 1), sameRowsTUI(3, 1)))
 	for _, want := range []int{1, 2} {
-		u, _ := m.Update(keyMsg("n"))
+		u, _ := m.Update(keyMsg("N"))
 		m = u.(Model)
 		v := m.diffLayer()
 		if v.curFile() != want || v.lines[v.curLine].kind != lineHeader {
-			t.Fatalf("n must land on file %d's header, got file %d kind %v", want, v.curFile(), v.lines[v.curLine].kind)
+			t.Fatalf("N must land on file %d's header, got file %d kind %v", want, v.curFile(), v.lines[v.curLine].kind)
 		}
 	}
 	u, _ := m.Update(keyMsg("-"))
@@ -575,7 +579,9 @@ func TestDiffFooterAdvertisesStack(t *testing.T) {
 		t.Errorf("the single-file footer must advertise S: %q", single)
 	}
 	stacked := diffHintFor(longScroll, true, false)
-	for _, want := range []string{"[n/p] file", "[-/_] fold", "[J] files", "[S] single", "[esc] back"} {
+	// J lost its footer column to [N/P] file when n/p became the change walk;
+	// it keeps its . menu row and its help row (checked below).
+	for _, want := range []string{"[n/p] chg", "[N/P] file", "[-/_] fold", "[S] single", "[esc] back"} {
 		if !strings.Contains(stacked, want) {
 			t.Errorf("the stacked footer lacks %q: %q", want, stacked)
 		}
@@ -675,12 +681,18 @@ func TestStackTitleFollowsNAndJK(t *testing.T) {
 	m := diffModel()
 	m.height, m.width = 20, 120
 	m = m.pushLayer(stackViewOf(t, sameRowsTUI(4, 1), sameRowsTUI(4, 1)))
-	u, _ := m.Update(keyMsg("n"))
+	u, _ := m.Update(keyMsg("n")) // the next change, which is in file 1
 	if got := u.(Model).diffLayer().title; got != "f1.go" {
 		t.Fatalf("after n the title is %q, want f1.go", got)
 	}
-	u2, _ := u.(Model).Update(keyMsg("k"))
-	if got := u2.(Model).diffLayer().title; got != "f0.go" {
+	// k walks the cursor back up, line by line, into file 0 (n lands on the
+	// change now, not on the header, so it takes a few).
+	mm := u.(Model)
+	for i := 0; i < 6; i++ {
+		uu, _ := mm.Update(keyMsg("k"))
+		mm = uu.(Model)
+	}
+	if got := mm.diffLayer().title; got != "f0.go" {
 		t.Fatalf("after k back into file 0 the title is %q, want f0.go", got)
 	}
 }

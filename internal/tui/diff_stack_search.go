@@ -119,7 +119,7 @@ func (m Model) stackHitStep(v *diffView, dir, body int) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 	if i, ok := v.huntTarget(v.searchFile(), dir); ok {
-		return m.openHunt(v, i, dir, body)
+		return m.openHunt(v, i, dir, huntHit, body)
 	}
 	// Nothing left to search: the wrap stands.
 	v.stk.hunt = nil
@@ -134,7 +134,7 @@ func (m Model) stackHitStep(v *diffView, dir, body int) (Model, tea.Cmd, bool) {
 // what puts it inside the loader's window, since wantLoads only picks files
 // near the reading position — then either lands at once (its rows are already
 // here) or parks the hunt and pumps the queue.
-func (m Model) openHunt(v *diffView, i, dir, body int) (Model, tea.Cmd, bool) {
+func (m Model) openHunt(v *diffView, i, dir int, kind huntKind, body int) (Model, tea.Cmd, bool) {
 	f := &v.stk.files[i]
 	had := f.d != nil
 	f.collapsed = false
@@ -142,7 +142,7 @@ func (m Model) openHunt(v *diffView, i, dir, body int) (Model, tea.Cmd, bool) {
 	v.setCursorLine(f.hdr, body)
 	v.syncStackTitle()
 	v.stk.land = nil
-	v.stk.hunt = &stackHunt{file: i, dir: dir}
+	v.stk.hunt = &stackHunt{file: i, dir: dir, kind: kind}
 	if had {
 		nm, cmd := m.drainStackHunt(i, body)
 		return nm, cmd, true
@@ -160,24 +160,24 @@ func (m Model) drainStackHunt(idx, body int) (Model, tea.Cmd) {
 	if v == nil || v.stk == nil || v.stk.hunt == nil || v.stk.hunt.file != idx {
 		return m, nil
 	}
-	dir := v.stk.hunt.dir
+	dir, kind := v.stk.hunt.dir, v.stk.hunt.kind
 	v.stk.hunt = nil
 	lo, hi := v.fileLineRange(idx)
-	if i, ok := v.hitIn(lo, hi, dir); ok {
+	if kind == huntChange {
+		if b, ok := v.blockIn(lo, hi, dir); ok {
+			v.focusBlock(b, body)
+			v.syncStackTitle()
+			return m, nil
+		}
+	} else if i, ok := v.hitIn(lo, hi, dir); ok {
 		v.goToHit(i, body)
 		v.syncStackTitle()
 		return m, nil
 	}
 	if next, ok := v.huntTarget(idx, dir); ok {
-		nm, cmd, _ := m.openHunt(v, next, dir, body)
+		nm, cmd, _ := m.openHunt(v, next, dir, kind, body)
 		return nm, cmd
 	}
 	return m, nil // the stack ran out: the reader stays on this file's header
 }
 
-// isHitStepKey reports whether a key is the ] / [ gesture a pending hunt
-// belongs to. Every other key abandons it (design D5).
-func isHitStepKey(msg tea.KeyMsg) bool {
-	s := msg.String()
-	return s == "]" || s == "["
-}

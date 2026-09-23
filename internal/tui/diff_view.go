@@ -497,6 +497,47 @@ func (v *diffView) focusBlock(i, body int) {
 	v.jumpTo(v.dispBlocks[i], body)
 }
 
+// reseatFromViewport re-seats cur on the change the reader can actually SEE,
+// and reports whether that was itself the step.
+//
+// A free scroll (arrows, wheel) moves the viewport and deliberately not the
+// cursor, so the focused change can be far off screen. Stepping from it then
+// looks broken: with one change in the file n only primed the wrap, and the
+// reader had to press n twice to be taken back to a change they could not see.
+// So when the focus is out of the pane, n takes the first change at or below
+// the pane's top and p the last one above it — the same rule gg web applies
+// through visibleChangeBlock. With the focus on screen this does nothing and
+// the shipped stepping (and its wrap arm) stands.
+func (v *diffView) reseatFromViewport(body, dir int) bool {
+	if len(v.dispBlocks) == 0 {
+		return false
+	}
+	at := v.dispBlocks[v.cur]
+	if at >= v.offset && at < v.offset+body {
+		return false // the change being stepped from is on screen
+	}
+	// seat = the first change at or below the pane's top.
+	seat := len(v.dispBlocks)
+	for i, r := range v.dispBlocks {
+		if r >= v.offset {
+			seat = i
+			break
+		}
+	}
+	if dir > 0 {
+		if seat >= len(v.dispBlocks) {
+			return false // nothing below: let the wrap arm do its work
+		}
+		v.focusBlock(seat, body)
+		return true
+	}
+	if seat == 0 {
+		return false // nothing above
+	}
+	v.focusBlock(seat-1, body)
+	return true
+}
+
 // nextBlock focuses the next change and reports whether it moved (false =
 // already on the last change, the boundary the wrap arms on). offset may not
 // change — the next change can be off-anchor — but cur always advances.
@@ -923,7 +964,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// …and so does a parked ] / [ hunt: it belongs to that gesture alone, so
 	// any other key abandons it and the answer already out cannot yank the
 	// cursor away from wherever the reader has since gone (design D5).
-	if v.stk != nil && v.stk.hunt != nil && !isHitStepKey(msg) {
+	if v.stk != nil && v.stk.hunt != nil && !v.stk.hunt.ownsKey(msg.String()) {
 		v.stk.hunt = nil
 	}
 	zc := v.zCycle
@@ -1134,6 +1175,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "n", "ctrl+down":
+		if v.reseatFromViewport(body, 1) {
+			break // the focused change was off screen: landing on a visible one IS the step
+		}
 		if !v.nextBlock(body) { // already on the last change
 			if armed == wrapToStart && len(v.dispBlocks) > 0 {
 				v.focusBlock(0, body) // second press wraps to the first
@@ -1142,6 +1186,9 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case "p", "ctrl+up":
+		if v.reseatFromViewport(body, -1) {
+			break
+		}
 		if !v.prevBlock(body) { // already on the first change
 			if armed == wrapToEnd && len(v.dispBlocks) > 0 {
 				v.focusBlock(len(v.dispBlocks)-1, body) // wraps to the last

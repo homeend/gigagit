@@ -133,7 +133,29 @@ type diffStack struct {
 // lines arrive the search is re-found and the cursor lands on that file's
 // first (dir>0) / last (dir<0) hit — and when it holds none, the step hands on
 // to the next unsearched file, one round trip at a time (design D2).
-type stackHunt struct{ file, dir int }
+type stackHunt struct {
+	file, dir int
+	kind      huntKind
+}
+
+// huntKind is what the parked step is looking for in the file it opened: a
+// search hit (] / [) or a change block (n / p). The mechanics are identical —
+// unfold, fetch, land, or hand on to the next file — only the target differs.
+type huntKind int
+
+const (
+	huntHit huntKind = iota
+	huntChange
+)
+
+// ownsKey reports whether a key belongs to the gesture that parked this hunt.
+// Every other key abandons it (design D5), including the OTHER step gesture.
+func (h *stackHunt) ownsKey(s string) bool {
+	if h.kind == huntChange {
+		return s == "n" || s == "p"
+	}
+	return s == "]" || s == "["
+}
 
 // stackLanding is one parked cursor placement inside a stack. dir != 0 means
 // "this file's FIRST (dir>0) / LAST (dir<0) note"; no > 0 means "this exact
@@ -152,9 +174,14 @@ type stackLanding struct {
 // large, failed, conflicted, or no content difference), or nothing at all when
 // the file is folded.
 //
-// v.blocks (the change-block jump targets) become the HEADER indices, which is
-// what makes n/p step file to file with no new navigation code: every jump,
-// wrap and ordinal in the single-file view is expressed in terms of blocks.
+// v.blocks (the change-block jump targets) are the CHANGE starts of every
+// file's body, offset into the stream — the stack is one document, so n/p walk
+// change to change through it exactly as they do in one file, reusing every
+// jump, wrap and ordinal. (Plan 3 had put the file HEADERS here and made n/p
+// the file step; the user reversed that on 2026-09-23 — a one-file stack left
+// n with nowhere to go, and stepping wrapped to the top of the scroll. Files
+// are stepped with N/P, which already mean "the next file" single-file, and
+// each file's header index still lives on stackFile.hdr.)
 func (v *diffView) spliceStack() {
 	v.lines, v.blocks = v.lines[:0], v.blocks[:0]
 	for i := range v.stk.files {
@@ -167,28 +194,57 @@ func (v *diffView) spliceStack() {
 			v.lines = append(v.lines, diffLine{file: i, kind: lineGap})
 		}
 		f.hdr = len(v.lines)
-		v.blocks = append(v.blocks, f.hdr)
 		v.lines = append(v.lines, diffLine{file: i, kind: lineHeader})
 		v.lines = append(v.lines, diffLine{file: i, kind: lineRule})
 		if f.collapsed {
 			continue
 		}
 		var body []textdiff.Line
+		var fileBlocks []int
 		if d := f.d; !f.conflict && d != nil && d.err == nil && !d.binary && !d.tooLarge {
 			if v.partial {
-				body, _ = textdiff.Collapse(d.full, d.fullBlocks, diffContext)
+				body, fileBlocks = textdiff.Collapse(d.full, d.fullBlocks, diffContext)
 			} else {
-				body = textdiff.Expand(d.full)
+				body, fileBlocks = textdiff.Expand(d.full), d.fullBlocks
 			}
 		}
 		if len(body) == 0 {
 			v.lines = append(v.lines, diffLine{file: i, kind: linePlace})
 			continue
 		}
+		// Each file's own change starts, moved into stream coordinates: the
+		// one block list n/p walk.
+		base := len(v.lines)
+		for _, b := range fileBlocks {
+			if b >= 0 && b < len(body) {
+				v.blocks = append(v.blocks, base+b)
+			}
+		}
 		for _, l := range body {
 			v.lines = append(v.lines, diffLine{Line: l, file: i})
 		}
 	}
+}
+
+// goToStackFile puts the cursor on file i's header, unfolding it first — the
+// stack's own "go to this file", now that the block list holds changes rather
+// than headers. Used by N/P, the J jump menu and the stack's own opening.
+func (v *diffView) goToStackFile(i, body int) {
+	if v.stk == nil || len(v.stk.files) == 0 {
+		return
+	}
+	if i < 0 {
+		i = 0
+	}
+	if i > len(v.stk.files)-1 {
+		i = len(v.stk.files) - 1
+	}
+	if v.stk.files[i].collapsed {
+		v.stk.files[i].collapsed = false
+		v.rebuild()
+	}
+	v.setCursorLine(v.stk.files[i].hdr, body)
+	v.jumpTo(v.lineStart[v.stk.files[i].hdr], body) // the usual lead above it
 }
 
 // curFile is the index of the file the cursor is in (0 on an empty stack).
