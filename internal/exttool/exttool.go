@@ -1,6 +1,7 @@
 // Package exttool is the hardcoded catalog of external tools/AI agents gg can
 // run per task category (conflict resolution, resolve-and-complete,
-// commit-message generation, and code review), plus their detection.
+// commit-message generation, code review, and interactive agent sessions),
+// plus their detection.
 // Supporting a new tool is a code change (one Builtins entry), never a
 // runtime definition — the agentinit philosophy.
 // The catalog's command TEMPLATES never execute directly: the Settings wizard
@@ -32,6 +33,10 @@ const (
 	// report an overview via GG_MESSAGE_FILE. Yolo-only: one bypass-flag
 	// variant per agent, no cautious row.
 	CatConflictComplete Category = "conflict_complete"
+	// CatSession is an interactive agent session run in gg's own embedded
+	// console (internal/agentsession) under a chosen worktree — neither a
+	// terminal handover nor a headless capture, so it has its own mode.
+	CatSession Category = "session"
 )
 
 // Mode is how a command runs: terminal = suspend the TUI and hand over the
@@ -44,6 +49,8 @@ type Mode string
 const (
 	ModeTerminal Mode = "terminal"
 	ModeCapture  Mode = "capture"
+	// ModeSession runs the command in an embedded console (CatSession only).
+	ModeSession Mode = "session"
 )
 
 // CommandTemplate is one catalog default command. Command contains <bin>
@@ -395,6 +402,8 @@ func Builtins() []Tool {
 				{Category: CatConflictComplete, Name: "Claude — resolve & complete (yolo, headless)", Mode: ModeCapture, OptIn: true, Frontends: []string{"web"}, Command: claudeCompleteHeadlessCommand},
 				{Category: CatCommitMessage, Name: "Claude", Mode: ModeCapture, Command: claudeCommitCommand},
 				{Category: CatReview, Name: "Claude", Mode: ModeCapture, Command: claudeReviewCommand},
+				{Category: CatSession, Name: "Claude", Mode: ModeSession, Command: "<bin>"},
+				{Category: CatSession, Name: "Claude (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --dangerously-skip-permissions"},
 			},
 		},
 		{
@@ -420,6 +429,8 @@ func Builtins() []Tool {
 				{Category: CatConflictComplete, Name: "Junie — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Frontends: []string{"tui"}, Command: junieCompleteCommand},
 				{Category: CatCommitMessage, Name: "Junie", Mode: ModeCapture, Command: junieCommitCommand},
 				{Category: CatReview, Name: "Junie", Mode: ModeCapture, Command: junieReviewCommand},
+				{Category: CatSession, Name: "Junie", Mode: ModeSession, Command: "<bin>"},
+				{Category: CatSession, Name: "Junie (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --brave"},
 			},
 		},
 		{
@@ -431,6 +442,8 @@ func Builtins() []Tool {
 				{Category: CatConflictComplete, Name: "Codex — resolve & complete (yolo, headless)", Mode: ModeCapture, OptIn: true, Frontends: []string{"web"}, Command: codexCompleteHeadlessCommand},
 				{Category: CatCommitMessage, Name: "Codex", Mode: ModeCapture, Command: codexCommitCommand},
 				{Category: CatReview, Name: "Codex", Mode: ModeCapture, Command: codexReviewCommand},
+				{Category: CatSession, Name: "Codex", Mode: ModeSession, Command: "<bin>"},
+				{Category: CatSession, Name: "Codex (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --dangerously-bypass-approvals-and-sandbox"},
 			},
 		},
 		{
@@ -442,6 +455,8 @@ func Builtins() []Tool {
 				{Category: CatConflictComplete, Name: "Antigravity — resolve & complete (yolo, headless)", Mode: ModeCapture, OptIn: true, Frontends: []string{"web"}, Command: agyCompleteHeadlessCommand},
 				{Category: CatCommitMessage, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyCommitCommand},
 				{Category: CatReview, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyReviewCommand},
+				{Category: CatSession, Name: "Antigravity", Mode: ModeSession, Command: "<bin>"},
+				{Category: CatSession, Name: "Antigravity (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --dangerously-skip-permissions"},
 			},
 		},
 		{
@@ -455,6 +470,8 @@ func Builtins() []Tool {
 				{Category: CatConflictComplete, Name: "Kimi — resolve & complete", Mode: ModeCapture, Frontends: []string{"tui", "web"}, Command: kimiCompleteCommand},
 				{Category: CatCommitMessage, Name: "Kimi", Mode: ModeCapture, Command: kimiCommitCommand},
 				{Category: CatReview, Name: "Kimi", Mode: ModeCapture, Command: kimiReviewCommand},
+				{Category: CatSession, Name: "Kimi", Mode: ModeSession, Command: "<bin>"},
+				{Category: CatSession, Name: "Kimi (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --yolo"},
 			},
 		},
 		{

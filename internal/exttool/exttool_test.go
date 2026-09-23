@@ -100,14 +100,17 @@ func TestBuiltinsCatalogInvariants(t *testing.T) {
 		}
 		for _, ct := range tl.Commands {
 			switch ct.Category {
-			case CatConflict, CatConflictComplete, CatCommitMessage, CatReview:
+			case CatConflict, CatConflictComplete, CatCommitMessage, CatReview, CatSession:
 			default:
 				t.Errorf("%s/%s: bad category %q", tl.ID, ct.Name, ct.Category)
 			}
 			switch ct.Mode {
-			case ModeTerminal, ModeCapture:
+			case ModeTerminal, ModeCapture, ModeSession:
 			default:
 				t.Errorf("%s/%s: bad mode %q", tl.ID, ct.Name, ct.Mode)
+			}
+			if (ct.Category == CatSession) != (ct.Mode == ModeSession) {
+				t.Errorf("%s/%s: the session category and mode go together", tl.ID, ct.Name)
 			}
 			switch ct.WhenOp {
 			case "", "merge", "rebase", "cherry-pick", "revert":
@@ -724,6 +727,37 @@ func TestHeadlessCompleteRows(t *testing.T) {
 		}
 		if got != expect {
 			t.Errorf("%s: capture conflict_complete row present=%v want %v", tl.ID, got, expect)
+		}
+	}
+}
+
+func TestSessionBuiltins(t *testing.T) {
+	want := map[string][]string{ // tool id → session command names
+		"claude":      {"Claude", "Claude (yolo)"},
+		"codex":       {"Codex", "Codex (yolo)"},
+		"junie":       {"Junie", "Junie (yolo)"},
+		"antigravity": {"Antigravity", "Antigravity (yolo)"},
+		"kimi":        {"Kimi", "Kimi (yolo)"},
+	}
+	for _, tl := range Builtins() {
+		var got []string
+		for _, c := range tl.Commands {
+			if c.Category != CatSession {
+				continue
+			}
+			if c.Mode != ModeSession {
+				t.Errorf("%s/%s: mode %q, want session", tl.ID, c.Name, c.Mode)
+			}
+			if strings.HasSuffix(c.Name, "(yolo)") != c.OptIn {
+				t.Errorf("%s/%s: OptIn=%v must match the (yolo) suffix", tl.ID, c.Name, c.OptIn)
+			}
+			if !strings.HasPrefix(c.Command, "<bin>") {
+				t.Errorf("%s/%s: command %q must start with <bin>", tl.ID, c.Name, c.Command)
+			}
+			got = append(got, c.Name)
+		}
+		if w, ok := want[tl.ID]; ok && strings.Join(got, "|") != strings.Join(w, "|") {
+			t.Errorf("%s session commands = %v, want %v", tl.ID, got, w)
 		}
 	}
 }
