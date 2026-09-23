@@ -59,9 +59,15 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	// (or launching) at the place it names, and a range is a fine place to
 	// land on (ruling R4) — it is only ANCHORING on one commit that a pair
 	// cannot support.
-	res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true}, "open")
+	res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true, Content: true}, "open")
 	if err != nil {
 		return linkExit("open", err, stderr)
+	}
+	// The page has no content viewer yet: refuse before touching any page or
+	// starting a server (a steered page refuses the same link on its own).
+	if *web && res.Hint.Kind == model.ContentHintKind {
+		fmt.Fprintln(stderr, "open: content links are not supported in gg web yet")
+		return 2
 	}
 	if linknav.RepoOnly(res) {
 		// A bare repository link names no place to steer a session to; showing

@@ -20,7 +20,7 @@ import (
 // is load-bearing: '#' starts a comment in every POSIX shell, so an unquoted
 // hunk link silently loses its hunk. gg deliberately applies no heuristic —
 // it says so here instead.
-const linkUsage = "usage: gg link [<path>[:<line>]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>> | --ref <branch|tag> | --pair <a>..<b>] [--bookmark <id> | --shelf <id>]\n" +
+const linkUsage = "usage: gg link [<path>[:<line>]] [--cached | --rev <commit> | --preview <id|label|<target>...<source>> | --ref <branch|tag> | --pair <a>..<b> | --content] [--bookmark <id> | --shelf <id>]\n" +
 	"       gg link resolve <gg://…> [--json]\n" +
 	"       gg links [--json]  (this repo's copied-link history)\n" +
 	"quote links that carry #<hunk> — an unquoted # starts a shell comment"
@@ -47,6 +47,7 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	pair := fs.String("pair", "", "address a CHANGE-SET, <a>..<b> (bounded: what it changed)")
 	bookmark := fs.String("bookmark", "", "attach a ?bookmark=<id> landing hint")
 	shelf := fs.String("shelf", "", "attach a ?shelf=<id> landing hint")
+	content := fs.Bool("content", false, "address the file's CONTENT on disk (?view=content), not a diff")
 	pf := addPreviewFlag(fs)
 	pos, err := parseSteerFlags(fs, args)
 	if err != nil {
@@ -85,6 +86,19 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 		hint = model.LinkHint{Kind: "bookmark", ID: *bookmark}
 	case *shelf != "":
 		hint = model.LinkHint{Kind: "shelf", ID: *shelf}
+	}
+	// --content names the file ON DISK: no target, no other landing, and in
+	// v1 no line (a :<line> focus is the planned next step) or hunk.
+	if *content {
+		if set > 0 || *bookmark != "" || *shelf != "" {
+			fmt.Fprintf(stderr, "link: --content names the file on disk; it takes no target or other hint\n%s\n", linkUsage)
+			return 2
+		}
+		if len(pos) != 1 || strings.Contains(pos[0], "#") || linkArgHasLine(pos[0]) {
+			fmt.Fprintf(stderr, "link: --content needs one file path, with no :<line> or #<hunk>\n%s\n", linkUsage)
+			return 2
+		}
+		hint = model.ContentHint
 	}
 	arg := ""
 	if len(pos) == 1 {
@@ -134,6 +148,17 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 		}
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
+	}
+	if *content {
+		present, perr := svc.WorktreeFilesPresent(ctx, []string{l.Path})
+		if perr != nil {
+			fmt.Fprintln(stderr, "error:", perr)
+			return 1
+		}
+		if !present[l.Path] {
+			fmt.Fprintf(stderr, "error: %s is not in the working tree\n", l.Path)
+			return 1
+		}
 	}
 	// Best-effort, after the link is known good: a history that cannot be
 	// written must never fail the copy the user asked for, and must never
@@ -530,6 +555,18 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 // `gg show <commit>` and `gg diff <rev>` are untouched.
 func isLinkArg(s string) bool { return strings.HasPrefix(s, model.LinkScheme) }
 
+// linkArgHasLine reports whether a path argument ends in ":<n>" or
+// ":old:<n>" — the line suffix --content refuses in v1. A Windows drive
+// colon is not followed by digits alone, so it never matches.
+func linkArgHasLine(s string) bool {
+	i := strings.LastIndexByte(s, ':')
+	if i < 0 {
+		return false
+	}
+	_, err := strconv.Atoi(s[i+1:])
+	return err == nil
+}
+
 // linkShapes is what one verb accepts out of the shapes Task 2 taught
 // domain.ResolveLink to hand back: a branch/tag TIP (@ref:<name>, a single
 // commit — a POINT, the whole tree there) and a CHANGE-SET (@<a>..<b>,
@@ -539,6 +576,9 @@ func isLinkArg(s string) bool { return strings.HasPrefix(s, model.LinkScheme) }
 type linkShapes struct {
 	Ref  bool // a tip is a single commit, so most verbs take it
 	Pair bool // BOUNDED; a verb needing one commit must refuse it
+	// Content is ?view=content: a file's CONTENT on disk, never a diff, so
+	// only a navigate (gg open, gg session navigate) can land it.
+	Content bool
 }
 
 // resolveLinkArg resolves a link positional for a consumer verb AND applies
@@ -578,6 +618,9 @@ func resolveLinkArg(ctx context.Context, svc *domain.Service, s string, allow li
 		// carry the tip as it resolved HERE"), so the objection can only be to
 		// the moving NAME, never to the count.
 		return domain.Resolved{}, fmt.Errorf("%w: a branch or tag tip link names a moving ref, and %s needs a pinned commit; use the sha", model.ErrLink, verb)
+	}
+	if res.Hint.Kind == model.ContentHintKind && !allow.Content {
+		return domain.Resolved{}, fmt.Errorf("%w: a content link names a file's content, not a diff, so %s cannot take it; hand it to `gg open`", model.ErrLink, verb)
 	}
 	return res, nil
 }
