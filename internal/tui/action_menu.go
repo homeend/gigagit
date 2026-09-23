@@ -62,6 +62,9 @@ func availableActions(m Model) []actionRow {
 		if r, ok := m.contextLinkRow(); ok {
 			rows = insertCopyLinkRow(rows, r)
 		}
+		if r, ok := m.contextFileLinkRow(); ok {
+			rows = insertAfterID(rows, "copy-link", r)
+		}
 		// A history/blame surface on top is a single file at a rev, not the files
 		// view underneath it. It owns the "Open in external editor" action
 		// (surfaceExternalRow); the files-view view/open rows and — below — the
@@ -180,6 +183,9 @@ func availableActions(m Model) []actionRow {
 	out := append(m.contextCopyRows(), row...)
 	if r, ok := m.contextLinkRow(); ok {
 		out = insertCopyLinkRow(out, r)
+	}
+	if r, ok := m.contextFileLinkRow(); ok {
+		out = insertAfterID(out, "copy-link", r)
 	}
 	out = append(out, m.comparisonLinkRows()...)
 	out = append(out, m.previewSymmetricSideRows()...)

@@ -3760,6 +3760,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.loadedLinkHist(msg)
 	case stashLinkMsg:
 		return m.resolvedStashLink(msg)
+	case fileLinkCheckedMsg:
+		switch {
+		case msg.err != nil:
+			m.statusMsg = i18n.T("error: %s", msg.err.Error())
+		case !msg.present:
+			m.statusMsg = i18n.T("%s is not in the working tree", msg.path)
+		default:
+			return m, m.copyToClipboardCmd(i18n.T("Copied link: %s", msg.text), msg.text)
+		}
+		return m, nil
 	case clipboardCopiedMsg:
 		if msg.err != nil {
 			m.statusMsg = i18n.T("copy failed: %s", msg.err.Error())
