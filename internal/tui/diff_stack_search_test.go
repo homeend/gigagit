@@ -138,3 +138,112 @@ func TestSearchBadgeUnchangedWithoutAStack(t *testing.T) {
 		t.Fatalf("single-file badge %q must be the search's own %q", got, want)
 	}
 }
+
+// stackSearchModel builds a Model over a stacked view with a committed query,
+// the cursor parked on the hit at index `at` (negative = the last hit).
+func stackSearchModel(t *testing.T, at int, rows ...[]textdiff.Row) (Model, *diffView) {
+	t.Helper()
+	v := stackViewOf(t, rows...)
+	m := diffModel()
+	m.height, m.width = 24, 120
+	m = m.pushLayer(v)
+	v.search.query = "needle"
+	v.search.refindFrom(v.searchLines(), v.searchPos())
+	if len(v.search.hits) == 0 {
+		t.Fatal("fixture: the query must match something in the loaded files")
+	}
+	if at < 0 {
+		at = len(v.search.hits) + at
+	}
+	v.goToHit(at, m.diffBodyRows())
+	return m, v
+}
+
+// D2/D3: ] at the last hit of the searched region must not wrap while a file
+// it has never looked at lies ahead — it unfolds that file, sends for it, and
+// parks the step.
+func TestStackHitStepHuntsIntoAnUnfetchedFile(t *testing.T) {
+	t.Parallel()
+	m, v := stackSearchModel(t, -1, searchRows(8, 2), searchRows(8, 5), nil)
+	curBefore := v.search.cur
+
+	m, cmd, ok := m.stackHitStep(v, 1, m.diffBodyRows())
+	if !ok {
+		t.Fatal("] must be handled by the stack")
+	}
+	v = m.diffLayer()
+	if v.stk.hunt == nil || v.stk.hunt.file != 2 || v.stk.hunt.dir != 1 {
+		t.Fatalf("] must park a hunt on file 2, got %+v", v.stk.hunt)
+	}
+	if v.search.cur != curBefore {
+		t.Fatalf("] must not wrap to hit %d while file 2 is unsearched", v.search.cur)
+	}
+	if cmd == nil {
+		t.Fatal("] must send for the file it steps into")
+	}
+}
+
+// D4: a folded file is unfolded by the step and stays unfolded; its rows are
+// already here, so the landing needs no round trip.
+func TestStackHitStepUnfoldsAFoldedFileAndLandsAtOnce(t *testing.T) {
+	t.Parallel()
+	m, v := stackSearchModel(t, -1, searchRows(8, 2), searchRows(8, 5), searchRows(8, 3))
+	v.stk.files[2].collapsed = true
+	v.rebuild()
+	v.search.refindFrom(v.searchLines(), v.searchPos())
+	v.goToHit(len(v.search.hits)-1, m.diffBodyRows())
+
+	m, _, ok := m.stackHitStep(v, 1, m.diffBodyRows())
+	if !ok {
+		t.Fatal("] must be handled")
+	}
+	v = m.diffLayer()
+	if v.stk.files[2].collapsed {
+		t.Fatal("] must unfold the file it steps into, and leave it unfolded")
+	}
+	if v.curFile() != 2 {
+		t.Fatalf("] landed in file %d, want the unfolded file 2", v.curFile())
+	}
+	if h := v.search.hits[v.search.cur]; v.lines[h.row].file != 2 {
+		t.Fatalf("the current hit is in file %d, want 2", v.lines[h.row].file)
+	}
+	if v.stk.hunt != nil {
+		t.Fatalf("a landing that needed no round trip must not park a hunt: %+v", v.stk.hunt)
+	}
+}
+
+// D3: with every file searched, ] wraps exactly as it does single-file.
+func TestStackHitStepWrapsOnceEverythingIsSearched(t *testing.T) {
+	t.Parallel()
+	m, v := stackSearchModel(t, -1, searchRows(8, 2), searchRows(8, 5), searchRows(8, 3))
+
+	m, _, ok := m.stackHitStep(v, 1, m.diffBodyRows())
+	if !ok {
+		t.Fatal("] must be handled")
+	}
+	v = m.diffLayer()
+	if v.search.cur != 0 {
+		t.Fatalf("] at the last hit of a fully searched stack must wrap to hit 0, got %d", v.search.cur)
+	}
+	if v.stk.hunt != nil {
+		t.Fatal("a wrap must not park a hunt")
+	}
+}
+
+// A plain step inside the searched region stays a plain step.
+func TestStackHitStepInsideTheLoadedRegionJustSteps(t *testing.T) {
+	t.Parallel()
+	m, v := stackSearchModel(t, 0, searchRows(8, 2), searchRows(8, 5), nil)
+
+	m, cmd, ok := m.stackHitStep(v, 1, m.diffBodyRows())
+	if !ok || cmd != nil {
+		t.Fatalf("a step with a hit ahead must be handled without a load (ok=%v cmd=%v)", ok, cmd)
+	}
+	v = m.diffLayer()
+	if v.search.cur != 1 || v.curFile() != 1 {
+		t.Fatalf("] must walk to the next hit (cur=%d file=%d), want hit 1 in file 1", v.search.cur, v.curFile())
+	}
+	if v.stk.hunt != nil {
+		t.Fatal("a plain step must not park a hunt")
+	}
+}

@@ -277,6 +277,27 @@ func nearestHit(hits []searchHit, pos searchPos, backward bool) int {
 	return 0
 }
 
+// stepHitStrict is stepHit without the wrap: -1 when there is no hit strictly
+// after (delta >= 0) / before (delta < 0) pos. A STACK needs the difference —
+// a wrap there means "the files in the stream have run out in this direction",
+// which is where ] goes looking for a file it has not searched yet.
+func stepHitStrict(hits []searchHit, pos searchPos, delta int) int {
+	if delta >= 0 {
+		for i, h := range hits {
+			if pos.before(hitPos(h)) {
+				return i
+			}
+		}
+		return -1
+	}
+	for i := len(hits) - 1; i >= 0; i-- {
+		if hitPos(hits[i]).before(pos) {
+			return i
+		}
+	}
+	return -1
+}
+
 // stepHit is ] and [: the first hit STRICTLY after pos (delta >= 0) or the last
 // strictly before it (delta < 0), wrapping around; -1 when there are no hits.
 // Strictness is what makes a second ] move off the hit the cursor landed on,

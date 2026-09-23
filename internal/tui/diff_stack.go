@@ -120,7 +120,20 @@ type diffStack struct {
 	// done at key time — the lines it names do not exist yet — so it is parked,
 	// exactly like the single-file view's }/{ landing.
 	land *stackLanding
+	// hunt is the ] / [ step a file owes once it arrives: the search ran out
+	// of hits in that direction, so the next file it has not searched was
+	// unfolded and sent for. Separate from `land` because it waits on the DIFF
+	// alone (a note landing also waits on stackNotesMsg), and mutually
+	// exclusive with it — setting one clears the other.
+	hunt *stackHunt
 }
+
+// stackHunt is a parked search step: file `file` was unfolded (and sent for if
+// it had never been fetched) on behalf of a ] (dir>0) / [ (dir<0). When its
+// lines arrive the search is re-found and the cursor lands on that file's
+// first (dir>0) / last (dir<0) hit — and when it holds none, the step hands on
+// to the next unsearched file, one round trip at a time (design D2).
+type stackHunt struct{ file, dir int }
 
 // stackLanding is one parked cursor placement inside a stack. dir != 0 means
 // "this file's FIRST (dir>0) / LAST (dir<0) note"; no > 0 means "this exact
