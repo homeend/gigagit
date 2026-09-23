@@ -19,7 +19,7 @@ import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
-import { activeDiff, followInList, noteScope, openStack, reconcileStack, refreshStackNotes, rerenderStack, stackAllNotes, stackOn, teardownStack } from "./stackview.js";
+import { activeDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -1456,10 +1456,20 @@ function foldRowHTML(it, cols) {
 // explicitly, never read from a module-level "current slot", because a stack
 // paints one slot while another slot's notes are still in flight — a shared
 // variable would race. Omitted, it is the single-file view's own globals.
-function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null) {
+// hctx is WHOSE search these rows carry, and it is what makes a STACK one
+// document: {search, base, lines}. `base` offsets this slot's row indexes into
+// the stack-wide key space (every file has a row 12), `lines` is a sink the
+// render hands its searchable lines to — the very rows it just painted, fold
+// set and all — and the presence of hctx says "do NOT re-find here": the stack
+// re-finds ONCE over every slot, and a per-slot re-find would leave the hit
+// list holding only the last slot's hits. Omitted, the single-file view keeps
+// its own rule: the render is what re-finds.
+function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null, hctx = null) {
   const nc = nctx || globalNoteCtx();
-  if (d.binary) return `<div class="notice">binary file</div>`;
-  if (d.too_large) return `<div class="notice">diff too large</div>`;
+  const hbase = hctx ? hctx.base : 0;
+  const hlines = (ls) => { if (hctx && hctx.lines) hctx.lines(ls); };
+  if (d.binary) return (hlines([]), `<div class="notice">binary file</div>`);
+  if (d.too_large) return (hlines([]), `<div class="notice">diff too large</div>`);
   const rows = d.rows || [];
   // anchor/cur/after are no-ops when notesOn is false, so the two layouts
   // below read the same either way.
@@ -1511,6 +1521,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
     items = collapseDiffRows(rows, open, notesOn ? pinned : null);
     if (items === null) {
       const lead = notesOn ? fileNoteRowsHTML(1, nc) : "";
+      hlines([]);
       return (
         (lead ? `<table class="diff">${lead}</table>` : "") +
         `<div class="notice">no changed lines — a mode or whitespace-only change; ` +
@@ -1532,10 +1543,16 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
   // here, where the fold set is known, on every render. Gated on notesOn
   // like curCls: the file-history overlay renders through this same function
   // and must never paint the diff pane's hits.
-  const hs = notesOn && diffSearch.query ? diffSearch : null;
-  if (hs) hs.refind(diffSearchLines(items, ri));
-  const hitsL = (r) => (hs ? hs.hitsOn(ri(r), r.kind === "same" ? 1 : 0) : null);
-  const hitsR = (r) => (hs ? hs.hitsOn(ri(r), 1) : null);
+  // Stacked (hctx), the rows are handed to the stack instead and the hits are
+  // painted from the search it has already run over every slot; the notesOn
+  // gate does not apply there, since a stack searches files whose notes are
+  // not addressable too.
+  const hs = hctx ? (hctx.search.query ? hctx.search : null) : notesOn && diffSearch.query ? diffSearch : null;
+  const slines = diffSearchLines(items, ri);
+  if (hctx) hlines(slines);
+  else if (hs) hs.refind(slines);
+  const hitsL = (r) => (hs ? hs.hitsOn(hbase + ri(r), r.kind === "same" ? 1 : 0) : null);
+  const hitsR = (r) => (hs ? hs.hitsOn(hbase + ri(r), 1) : null);
   const cols = pureAdd || pureDel ? 2 : paneWidth < 950 ? 3 : 4;
   const colgroup =
     cols === 2 ? `<col class="no"><col>` : cols === 3 ? `<col class="no"><col class="no"><col>` : `<col class="no"><col><col class="no"><col>`;
@@ -2818,7 +2835,10 @@ function goToDiffHit(i) {
   const pan = el.closest(".pan");
   if (!td || !pan) return;
   const side = td.classList.contains("l") ? "l" : "r";
-  const bars = $("diff-hbars");
+  // In a stack each FILE pans on its own, so the bar is the section's own —
+  // the pane-wide pair is hidden there and panning it would move nothing.
+  const sec = el.closest(".stk-file");
+  const bars = (sec && sec.querySelector(".stk-hbars")) || $("diff-hbars");
   const bar = bars.querySelector(`.hbar[data-side="${side}"]`) || bars.querySelector(".hbar");
   if (!bar) return;
   // The hit's x within the (translated) line, against the cell's width.
@@ -2834,7 +2854,21 @@ function goToDiffHit(i) {
 // the current hit; esc restores the pane's scroll and pan.
 const diffSearchBar = bindSearchBar("diff-search", {
   search: diffSearch,
-  here: diffSearchHere,
+  here: () => (state.stack ? stackSearchHere() : diffSearchHere()),
+  // Stacked, the count is over the WHOLE stack and a trailing + says files
+  // are still unsearched — ] steps into them (design D1).
+  count: () => {
+    const c = diffSearch.count();
+    if (!c || !state.stack) return c;
+    return unsearchedSlots() > 0 ? c + "+" : c;
+  },
+  // Stacked, a step may have to unfold and fetch a file to reach a hit, which
+  // the bar's own synchronous stepHit cannot do.
+  step: (delta) => {
+    if (!state.stack) return false;
+    stackHitStep(delta);
+    return true;
+  },
   origin: () => {
     const bars = $("diff-hbars");
     const pan = {};
@@ -2845,7 +2879,7 @@ const diffSearchBar = bindSearchBar("diff-search", {
     $("diff-pane").scrollTop = o.top;
     for (const b of $("diff-hbars").querySelectorAll(".hbar")) if (o.pan[b.dataset.side] != null) b.scrollLeft = o.pan[b.dataset.side];
   },
-  render: () => rerenderDiffKeepingPlace(true),
+  render: () => (state.stack ? refindStack() : rerenderDiffKeepingPlace(true)),
   goTo: goToDiffHit,
   focus: focusDiff, // enter hands the keys back to the CONTENT, not the body
 });
@@ -2856,7 +2890,9 @@ const diffSearchBar = bindSearchBar("diff-search", {
 // else — and everything while no diff is open or a conflict picker owns
 // the pane — is not the search's.
 function diffSearchKey(e) {
-  if (state.layout !== "diff" || !state.lastDiff || conflictPick) return false;
+  // state.lastDiff is null while a STACK is up — the stack is the open diff
+  // there, and it searches every file of itself (design §11 item 2).
+  if (state.layout !== "diff" || (!state.lastDiff && !state.stack) || conflictPick) return false;
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
   if (e.key === "/" || e.key === "@") {
     e.preventDefault(); // the browser's quick-find, and the key must not land in the input
@@ -3659,4 +3695,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };

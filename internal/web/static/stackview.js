@@ -20,7 +20,10 @@ import {
   clearDiffHunks,
   closeConflictPick,
   diffHTML,
+  diffSearch,
+  diffSearchBar,
   enterFilesStage,
+  goToDiffHit,
   markDiffRow,
   globalNoteCtx,
   notesArmed,
@@ -34,6 +37,7 @@ import {
   setLayout,
   updateDiffNav,
 } from "./files.js";
+import { stepHit, stepHitStrict } from "./inviewsearch.js";
 import {
   GLYPH,
   KIND_TIP,
@@ -63,6 +67,7 @@ function teardownStack() {
   observer = null;
   state.stack = null;
   syncStackChrome();
+  diffSearchBar.reset(); // leaving the stack is leaving the view (design D6)
 }
 
 // openStack shows list row i inside a stack: a scroll when the stack on
@@ -155,7 +160,11 @@ function bodyHTML(s) {
   // a kept slot re-fetching after a refresh paints its old diff until the new one lands
   if (s.diff) {
     const nc = { ctx: s.ctx || null, notes: s.notes || [], row: s.row || null };
-    return diffHTML(s.diff, $("diff-pane").clientWidth, notesArmed(nc.ctx), s.folds, nc);
+    // The slot paints the stack-wide search and reports the rows it painted,
+    // which is what refindStack searches next time — one collapse per slot,
+    // and the search and the paint provably share a fold set.
+    const hctx = { search: diffSearch, base: slotBase(s), lines: (ls) => (s.lines = ls) };
+    return diffHTML(s.diff, $("diff-pane").clientWidth, notesArmed(nc.ctx), s.folds, nc, hctx);
   }
   return `<div class="stk-ph" style="height:${estimateHeight(s, ROW_PX)}px">loading…</div>`;
 }
@@ -256,6 +265,140 @@ function rerenderStack(resetFolds = false) {
     if (resetFolds) s.folds = new Set();
     if (s.diff && !s.collapsed) repaintSlot(st, k);
   });
+  // f, w and a resize change WHICH rows exist: the query must be re-found over
+  // them, and the bar repainted, or the count goes stale.
+  if (diffSearch.query) {
+    refindStack();
+    diffSearchBar.paint();
+  }
+}
+
+// --- in-view search ------------------------------------------------------
+//
+// A stack is many diffs but ONE document: `/` searches every file whose rows
+// are here, ] and [ walk the whole stream, and the count is over the stack.
+// The pure engine orders hits by (row, side, col) with a NUMERIC row, so each
+// slot's rows are keyed into one space: its index times STACK_ROW_SPAN, plus
+// the row's index in its own diff. That keeps document order, keeps `data-h`
+// unique across the pane (there is ONE Search, so hit indices are global), and
+// leaves inviewsearch.js and searchbar.js exactly as the single-file view uses
+// them.
+const STACK_ROW_SPAN = 1e9; // far past any diff's row count; k * 1e9 stays exact
+
+function slotBase(s) {
+  const st = state.stack;
+  return st ? st.slots.indexOf(s) * STACK_ROW_SPAN : 0;
+}
+
+// searchableSlot: a slot that could hold a hit at all. A conflicted, binary,
+// errored or content-less file has no rows of its own, so it is never stepped
+// into and never holds the counter's "+" open.
+function searchableSlot(s) {
+  return !!s && s.load !== "none" && s.load !== "error" && !(s.diff && (s.diff.binary || s.diff.too_large));
+}
+
+// unsearchedSlots counts the searchable slots whose rows are NOT in the
+// document: folded, or never read. The counter's "+" (design D1).
+function unsearchedSlots() {
+  const st = state.stack;
+  if (!st) return 0;
+  return st.slots.filter((s) => searchableSlot(s) && (s.collapsed || s.load !== "ok")).length;
+}
+
+// refindStack re-runs the query over EVERY loaded, expanded slot at once and
+// repaints the slots whose tint changed. Re-finding per slot would leave the
+// hit list holding only the last slot's hits; painting every slot on every
+// keystroke would repaint a fifty-file stack for nothing.
+function refindStack() {
+  const st = state.stack;
+  if (!st || !diffSearch.query) return;
+  const lines = [];
+  st.slots.forEach((s, k) => {
+    if (s.collapsed || !s.diff || !s.lines) return;
+    const base = k * STACK_ROW_SPAN;
+    for (const l of s.lines) lines.push({ row: base + l.row, side: l.side, text: l.text });
+  });
+  diffSearch.refind(lines);
+  const hit = new Set(diffSearch.hits.map((h) => Math.floor(h.row / STACK_ROW_SPAN)));
+  st.slots.forEach((s, k) => {
+    const now = hit.has(k);
+    if (!now && !s.hadHits) return; // nothing to paint and nothing to unpaint
+    s.hadHits = now;
+    if (s.diff && !s.collapsed) repaintSlot(st, k);
+  });
+}
+
+// stackSearchHere is where the reader is with no hit current: the first row on
+// screen anywhere in the pane, in the stack-wide key space.
+function stackSearchHere() {
+  const st = state.stack;
+  const pane = $("diff-pane").getBoundingClientRect();
+  for (const tr of $("diff-body").querySelectorAll(".stk-file table.diff tr[data-i]")) {
+    if (tr.getBoundingClientRect().bottom < pane.top) continue;
+    const sec = tr.closest(".stk-file");
+    if (!sec) continue;
+    return { row: Number(sec.dataset.k) * STACK_ROW_SPAN + Number(tr.dataset.i), side: 0, col: -1 };
+  }
+  return { row: (st ? st.anchor : 0) * STACK_ROW_SPAN, side: 0, col: -1 };
+}
+
+// awaitSlot waits for one slot's fetch to settle, pumping the queue so it is
+// actually picked. Shared by landStackLine and the ]/[ step: both need rows
+// that do not exist yet.
+async function awaitSlot(st, s) {
+  for (let i = 0; i < 80 && state.stack === st && s.load !== "ok" && s.load !== "error" && s.load !== "none"; i++) {
+    pump(st);
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return state.stack === st && s.load === "ok";
+}
+
+// stackHitStep is ] / [ in a stack. STRICT first: a hit further on in the
+// document wins outright. When the direction runs out, the next slot that is
+// folded or unread is unfolded, fetched and re-found — one slot per round
+// trip, never a bulk load (design D2) — and the step lands on its edge hit, or
+// hands on when it holds none. Only when nothing is left to open does ] wrap,
+// exactly as it does single-file (D3).
+async function stackHitStep(delta) {
+  const st = state.stack;
+  if (!st || !diffSearch.query) return;
+  const pos = diffSearch.pos(stackSearchHere());
+  const i = stepHitStrict(diffSearch.hits, pos, delta);
+  if (i >= 0) {
+    goToDiffHit(i);
+    diffSearchBar.paint();
+    return;
+  }
+  const from = Math.floor((diffSearch.cur >= 0 ? diffSearch.hits[diffSearch.cur].row : pos.row) / STACK_ROW_SPAN);
+  const step = delta >= 0 ? 1 : -1;
+  for (let k = from + step; k >= 0 && k < st.slots.length; k += step) {
+    const s = st.slots[k];
+    if (!searchableSlot(s)) continue;
+    if (!s.collapsed && s.load === "ok") continue; // already searched
+    if (s.collapsed) {
+      s.collapsed = false;
+      repaintSlot(st, k);
+    }
+    scrollToFile(st, k);
+    if (s.load !== "ok" && !(await awaitSlot(st, s))) return;
+    if (state.stack !== st) return;
+    refindStack();
+    diffSearchBar.paint();
+    const lo = k * STACK_ROW_SPAN;
+    const mine = [];
+    diffSearch.hits.forEach((h, j) => {
+      if (h.row >= lo && h.row < lo + STACK_ROW_SPAN) mine.push(j);
+    });
+    if (mine.length) {
+      goToDiffHit(delta >= 0 ? mine[0] : mine[mine.length - 1]);
+      diffSearchBar.paint();
+      return;
+    }
+  }
+  // Nothing left to search: the wrap stands.
+  const w = stepHit(diffSearch.hits, pos, delta);
+  if (w >= 0) goToDiffHit(w);
+  diffSearchBar.paint();
 }
 
 // --- loading --------------------------------------------------------------
@@ -293,6 +436,11 @@ async function load(st, s) {
   }
   const k = st.slots.indexOf(s);
   if (k >= 0) repaintSlot(st, k);
+  // A slot arriving under a live query brings rows the search has never seen.
+  if (diffSearch.query) {
+    refindStack();
+    diffSearchBar.paint();
+  }
   pump(st);
 }
 
@@ -354,11 +502,7 @@ async function landStackLine(path, side, line) {
     repaintSlot(st, k);
   }
   scrollToFile(st, k);
-  for (let i = 0; i < 80 && state.stack === st && s.load !== "ok" && s.load !== "error" && s.load !== "none"; i++) {
-    pump(st);
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  if (state.stack !== st || s.load !== "ok") return false;
+  if (!(await awaitSlot(st, s))) return false;
   const sec = sectionEl(k);
   if (!sec) return false;
   const tr =
@@ -576,6 +720,15 @@ function reconcileStack() {
   const k = Math.max(0, st.slots.findIndex((s) => s.key === anchorKey));
   paintStack(st);
   scrollToFile(st, st.slots[k].idx);
+  // The slots were renumbered — a hit's composite row now names another file,
+  // and every slot's cached lines went with the repaint. Re-anchor on where
+  // the reader IS, then re-find.
+  if (diffSearch.query) {
+    diffSearch.origin = stackSearchHere();
+    diffSearch.cur = -1;
+    refindStack();
+    diffSearchBar.paint();
+  }
   loadCounts(st); // a refresh changes counts too; heads and placeholders repaint in place
 }
 
@@ -628,4 +781,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, followInList, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

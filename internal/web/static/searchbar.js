@@ -18,6 +18,10 @@ import { stepHit } from "./inviewsearch.js";
 //   here()     where the reader is with no hit current (a {row, side, col})
 //   origin()   the view state esc restores; restore(o) puts it back
 //   focus()    optional: put DOM focus on the content once enter blurs the bar
+//   count()    optional: overrides the painted "i/n" (a stacked host's count
+//              spans files it has not searched yet, and says so)
+//   step(d)    optional: takes the ] / [ step itself, returning true when it
+//              did — for a host that must load a view to reach the next hit
 // It returns the verbs the host's key hook calls: open(backward),
 // step(delta), clear(), reset(), active() — and paint(), which a host calls
 // after a re-render of its own so the count follows the re-find.
@@ -31,7 +35,9 @@ function bindSearchBar(id, host) {
 
   const paint = () => {
     lead.textContent = s.backward ? "@" : "/";
-    count.textContent = s.count();
+    // A host whose document spans several views (the stacked diff) says what
+    // its count means; everyone else takes the engine's own i/n.
+    count.textContent = host.count ? host.count() : s.count();
   };
   const show = () => {
     bar.classList.remove("hidden");
@@ -94,6 +100,9 @@ function bindSearchBar(id, host) {
   };
   const step = (delta) => {
     if (s.query === "") return;
+    // A host that must FETCH to reach the next hit steps itself (the stacked
+    // diff unfolds and loads a file on the way) and repaints when it lands.
+    if (host.step && host.step(delta)) return;
     const i = stepHit(s.hits, s.pos(host.here()), delta);
     if (i < 0) return;
     host.goTo(i);
