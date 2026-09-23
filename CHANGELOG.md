@@ -22,11 +22,20 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   (which keeps `enter` for the resolver), an untracked file, a file staged as
   new, or a commit / comparison diff.
 
+- **In `gg web`, hunks can be picked inside a stacked working tree.** Clicking
+  a changed block in a stacked file selects it, each file keeps its own
+  selection, and **stage selected** stages the file it names — the stack then
+  reconciles in place, re-reading the file that changed and keeping the file
+  you were reading. Picks you made in other files survive as long as those
+  files have not changed.
+
 ### Fixed
 
 - **A single-file working-tree diff no longer shows a stale diff after its own
   staging round** — it re-reads itself once the status lands, and closes with
   a notice when the file has no change left in that section.
+- **The web's `S` help no longer claims search only works in the single-file
+  view** — it has spanned the whole stack since the previous release.
 
 ## In-view search inside a stacked diff
 

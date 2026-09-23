@@ -1710,6 +1710,50 @@ Gotchas this cost:
   `MM three.txt`.
 
 
+**Web half.** `diffHunks` — the module-level "the open file's staging state" —
+was exactly the global notes (4a) and search (4b) had each had to lose:
+
+- `diffHTML` gained a THIRD explicit context, `kctx = {picks}`, beside `nctx`
+  and `hctx`; `hunkCls`/`hunkAttr` read it and never the global. The
+  single-file view passes its own `diffHunks` in, so its lane is unchanged.
+- Every slot arms `s.hunks = {path, hash, count, picks}` from its OWN diff
+  (`d.hunks`, which only `/api/diff?wt=unstaged` carries) — slots already
+  fetch through `fileDiffURL`, so no server work was needed — and paints with
+  its own picks. A click resolves the row's slot (`hunkSlotAt`) and toggles
+  THAT file's picks; `paintHunkPicks` repaints only that section, because
+  another slot's rows carry picks of their own.
+- **The bar cannot follow the anchor.** `st.anchor` is derived from the scroll
+  position (`syncCursor`), so a pick click followed by any scroll — or by the
+  file-list re-render a pick triggers — swung the bar to whatever file sat at
+  the pane top and staged THAT. The browser probe caught it in the act: a pick
+  in beta, then a pick in delta, posted `path: "beta.txt"`. A slot with LIVE
+  picks now owns the bar (`st.pickK`), which falls back to the anchor once
+  nothing is picked, and the button names the file (`stage selected (1) in
+  delta.txt`) because it need not be the one on screen. This was the risk the
+  plan's self-review flagged and left to be decided with evidence.
+- **A refresh must not eat picks in other files.** `reconcileSlots` re-fetches
+  every kept slot, which re-arms `hunks` — so picks are parked in `hunksPrev`
+  and restored when the fresh `hash` is identical (the bytes did not move, so
+  the ordinals still name the same hunks) and dropped otherwise. Staging one
+  file therefore leaves the reader's picks in another intact.
+- A staging round in a stack does NOT call `reopenAfterHunkStage` (it re-opens
+  the file as a single diff and tears the stack down): the 200 body is a fresh
+  status, so `applyStatus` → `reconcileStatusView` → `reconcileStack` keeps the
+  reader's place and re-fetches the file that changed. `reconcileStatusView`'s
+  gone-file guard is likewise the single-file lane's only — in a stack each
+  slot answers for itself.
+- **Probe:** `stack-probe/hunks.mjs` + `mkhunks.sh` (four files, two hunks
+  each, plus an untracked one), red on the unfixed build at the first assert
+  (no `data-hunk` in a stack at all), then chromium AND firefox. Two of its own
+  lessons: it must REBUILD its fixture per run (a previous run's staging left
+  the index half full and produced one wrong diagnosis), and `#op-line` carries
+  the word "Problem" in its static markup, so an error check reads `#op-text`
+  and the `hidden` class, never the element's text.
+
+Known parity gap, pre-existing: the web has no inline UNSTAGE for the staged
+section (the TUI's `H` covers both lanes). Recorded in `docs/web-tui-parity.md`.
+
+
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)
 
 Spec `docs/superpowers/specs/2026-09-21-web-previews-dnd-compare-design.md`.

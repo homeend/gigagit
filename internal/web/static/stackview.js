@@ -831,7 +831,9 @@ registerHelp({
     "opens with every file folded to its header. Clicking a file in the list scrolls to it, and the " +
     "list follows the file you are reading. In the <b>symmetric</b> comparison the stack holds the rows " +
     "the filter shows, in the arrow's direction, between the two lists. The <b>stacked</b> chip in the diff toolbar is the same " +
-    "switch; the choice is remembered per machine. Search (/) works in the single-file view",
+    "switch; the choice is remembered per machine. <b>/</b> searches every file of the stack and "
+    + "<b>]</b>/<b>[</b> step hit to hit across them; in the working tree, clicking a changed block "
+    + "picks it and <b>stage selected</b> stages that file's picks",
 });
 registerHelp({
   key: "- / _ · fold files",
