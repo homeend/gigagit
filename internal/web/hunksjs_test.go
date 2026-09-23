@@ -67,10 +67,10 @@ func TestRowSelectionAndItsMenu(t *testing.T) {
 	t.Parallel()
 	files := readStatic(t, "files.js")
 
-	sel := jsFunc(t, "files.js", "selectRow")
-	for _, want := range []string{"e.shiftKey && v.anchor", "e.ctrlKey || e.metaKey", "v.sel = new Set([key]);"} {
+	sel := jsFunc(t, "files.js", "selectStep")
+	for _, want := range []string{"mods.shift && a >= 0", "if (mods.ctrl) {", "sel = new Set([hit.id]);"} {
 		if !strings.Contains(sel, want) {
-			t.Fatalf("files.js: selectRow lacks %q:\n%s", want, sel)
+			t.Fatalf("files.js: selectStep lacks %q:\n%s", want, sel)
 		}
 	}
 	menu := jsFunc(t, "files.js", "hunkMenuRows")
@@ -90,22 +90,22 @@ func TestRowSelectionAndItsMenu(t *testing.T) {
 	// The screen moves FIRST: the prediction is painted before the POST, the
 	// previous diff comes back on an error, and success re-reads ONE file
 	// quietly (the user found the wait-then-flicker round trip odd).
-	apply := jsFunc(t, "files.js", "applyRowStage")
-	paint := strings.Index(apply, "showFileDiff(scope, predicted, null);")
+	apply := jsFunc(t, "files.js", "stageJobs")
+	paint := strings.Index(apply, "showFileDiff(j.scope, predicted, null);")
 	post := strings.Index(apply, `postJSON("/api/stage-hunks", { path: v.path, lane: v.lane, blocks, hash: v.hash })`)
 	if paint < 0 || post < 0 || paint > post {
-		t.Fatalf("files.js: applyRowStage must paint the prediction BEFORE it posts:\n%s", apply)
+		t.Fatalf("files.js: stageJobs must paint the prediction BEFORE it posts:\n%s", apply)
 	}
-	for _, want := range []string{"showFileDiff(scope, before, v);", "await quietRefreshFile(scope, v.path, v.lane);"} {
+	for _, want := range []string{"showFileDiff(scope, before, v);", "await quietRefreshFile(j.scope, j.v.path, j.v.lane);"} {
 		if !strings.Contains(apply, want) {
-			t.Fatalf("files.js: applyRowStage lacks %q", want)
+			t.Fatalf("files.js: stageJobs lacks %q", want)
 		}
 	}
 	if strings.Contains(apply, "reopenAfterHunkStage(v.path") || strings.Contains(apply, "openStatusDiff(") {
 		t.Fatal("files.js: a successful action must not re-open the file (that is the flicker)")
 	}
 	// double-click acts on that one row at once
-	if !strings.Contains(files, `$("diff-body").addEventListener("dblclick", (e) => {`) || !strings.Contains(jsFunc(t, "files.js", "actOnRow"), "applyRowStage(") {
+	if !strings.Contains(files, `$("diff-body").addEventListener("dblclick", (e) => {`) || !strings.Contains(jsFunc(t, "files.js", "actOnRow"), "stageSelection(") {
 		t.Fatal("files.js: a double-click must stage / unstage the row")
 	}
 	// the stack only repaints when a file entered or left it

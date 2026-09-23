@@ -10,6 +10,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Changed
 
+- **One selection across the stacked view.** Rows marked in several files
+  are one selection: the right-click menu counts them all ("Stage selected
+  lines (5)") and stages them all, and a shift-click range runs across files
+  in the order shown. A plain click in another file starts a new selection.
+- **Deselecting works.** Click anywhere that is not a changed row — a context
+  line, the header, the file list — or press Esc to clear the selection.
+- **Double-click stages the selection.** Double-clicking a selected row
+  stages every selected row; double-clicking any other row clears the
+  selection and stages just that row (it used to wipe the selection first).
 - **Staging part of a file works like GitKraken.** In a working-tree diff,
   click a row to select it, shift-click to select a range, ctrl/cmd-click to
   add or remove one; then right-click → **Stage selected lines**, or

@@ -124,7 +124,9 @@ Commit amend is TUI-only too (the web's commit op has no amend lane).
   diff (click, shift-click, ctrl-click), right-click → *Stage selected lines*
   / *Stage hunk*, applied at once; the Staged diff offers *Unstage selected
   lines* / *Unstage hunk*. The web's unit is the row (a modified row is one
-  change), the TUI's picker can also take one side of a line.
+  change), and one selection spans every file of a stack (double-click
+  stages it; a click elsewhere or esc clears it); the TUI's picker works one
+  file at a time and can also take one side of a line.
 
 - **Stash create.** The web stashes the whole tree with a message; the TUI
   popup offers a per-file checklist.

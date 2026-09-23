@@ -423,7 +423,6 @@ async function load(st, s) {
     // the same rows, so staging one file does not wipe the selection in another.
     if (s.hunks && s.hunksPrev && s.hunksPrev.hash === s.hunks.hash) {
       s.hunks.sel = s.hunksPrev.sel;
-      s.hunks.anchor = s.hunksPrev.anchor;
     }
     s.hunksPrev = null;
     if (!s.counts) s.counts = countsFromDiff(d);
@@ -724,6 +723,19 @@ function hunkSlotAt(el) {
 }
 
 
+// hunkSlots is every stacked file with selectable rows, in stack order —
+// the one selection spans them all.
+function hunkSlots() {
+  const st = state.stack;
+  if (!st) return [];
+  const out = [];
+  st.slots.forEach((s, k) => {
+    if (s.hunks) out.push({ k, slot: s, hunks: s.hunks, el: sectionEl(k) });
+  });
+  return out;
+}
+
+
 // showSlotDiff paints ONE file of the stack with the given diff and staging
 // state, in place — repaintSlot keeps the reader's header pinned — and
 // re-finds a live search over it. It is how a staging action shows its
@@ -805,7 +817,6 @@ async function quietReloadSlot(st, s) {
   const hunks = d.hunks && hunkEligible(s.f) ? hunkState(s.f.path, d.hunks) : null;
   if (hunks && s.hunks && s.hunks.hash === hunks.hash) {
     hunks.sel = s.hunks.sel;
-    hunks.anchor = s.hunks.anchor;
   }
   const same = s.diff && JSON.stringify(s.diff.rows) === JSON.stringify(d.rows);
   if (same) {
@@ -868,4 +879,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, hunkSlotAt, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

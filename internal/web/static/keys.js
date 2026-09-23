@@ -6,7 +6,7 @@ import { WT_H, wtCount, wtExtra } from "./status.js";
 import { doCommit, doPull, doPush, manualRefresh, openHelp, refreshAfterOp, stageFocused, toggleSidebar } from "./ops.js";
 import { closeCommitFilter, gotoCommitPrompt, openCommit, openCommitFilter, renderCommits, toggleGraphMode } from "./commits.js";
 import { symKey } from "./symcompare.js";
-import { addNotePrompt, cycleFilesSort, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
+import { addNotePrompt, clearRowSelection, cycleFilesSort, cycleTextMode, diffScrollKey, diffSearchBar, diffSearchKey, drillOut, editNotePrompt, notesArmed, openFile, renderFiles, replyNotePrompt, stepNote, toggleDiffView, toggleMark, toggleNoteCollapsed, toggleNotesAgent, collapseNearestNote } from "./files.js";
 import { activeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { toast } from "./toast.js";
 import { openPalette } from "./palette.js";
@@ -121,6 +121,9 @@ document.addEventListener("keydown", (e) => {
   // The diff layout's in-view search has first refusal: / and @ open it
   // (the commits pane is off-screen there, so / has no filter to open), ] [
   // step it, and esc clears a kept query BEFORE it would leave the diff.
+  // A row selection is the most transient thing on screen: esc drops it
+  // first, before a search or the diff itself.
+  if (e.key === "Escape" && clearRowSelection()) return;
   if (diffSearchKey(e)) return;
   // The symmetric comparison view's own keys (v, x, 1–4), only while one is up.
   if (symKey(e)) return;
