@@ -24,7 +24,9 @@ type Session struct {
 	cmd  *exec.Cmd
 
 	// ioMu serialises every emulator mutation (Write, keys, paste, resize)
-	// with closeIO, so nothing feeds the emulator after its pipe is closed.
+	// with closeIO, so nothing feeds the emulator after its pipe is closed,
+	// and with snapshot reads: SafeEmulator locks each call, but CellAt
+	// returns a live cell pointer and Width/Render are separate calls.
 	ioMu   sync.Mutex
 	closed bool
 
@@ -220,6 +222,8 @@ func (s *Session) Done() <-chan struct{} { return s.done }
 
 // screenText is the visible grid as plain text, one line per row.
 func (s *Session) screenText() string {
+	s.ioMu.Lock() // CellAt hands out a live cell pointer: read it with writes excluded
+	defer s.ioMu.Unlock()
 	var b strings.Builder
 	w, h := s.emu.Width(), s.emu.Height()
 	for y := range h {

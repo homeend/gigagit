@@ -63,6 +63,8 @@ func (s *Session) Resize(cols, rows int) error {
 
 // Screen snapshots the visible grid.
 func (s *Session) Screen() Screen {
+	s.ioMu.Lock() // one consistent snapshot: no write or resize in between
+	defer s.ioMu.Unlock()
 	w, h := s.emu.Width(), s.emu.Height()
 	lines := strings.Split(s.emu.Render(), "\n")
 	for len(lines) < h {
