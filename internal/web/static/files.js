@@ -1256,7 +1256,7 @@ async function openStatusDiff(i) {
     // server tags eligible unstaged diffs with hunk ordinals — arm inline
     // staging BEFORE the render so the rows pick up their hk classes
     if (d.hunks && hunkEligible(f)) {
-      diffHunks = { path: f.path, hash: d.hunks.hash, count: d.hunks.count, picks: new Set() };
+      diffHunks = { path: f.path, hash: d.hunks.hash, count: d.hunks.count, picks: new Map() };
     }
     renderDiff(d);
     renderHunkBar();
@@ -1377,13 +1377,31 @@ function renderCell(text, spans, toks, side, hits) {
 // hunkCls/hunkAttr decorate a diff row that belongs to a stageable hunk:
 // the data-hunk tag drives click-to-select, the classes the highlight (a
 // resize re-render keeps the current picks).
+// pickedSides reports which of a row's two cells are taken. A pick names a
+// LINE on a SIDE — the picker's own unit, and the TUI's — so a row can have
+// its left taken and its right not, or the other way round.
+function pickedSides(r, picks) {
+  const b = picks && picks.get(r.hunk);
+  if (!b) return { l: false, w: false };
+  return {
+    l: r.hl != null && b.index.has(r.hl),
+    w: r.hw != null && b.work.has(r.hw),
+  };
+}
+
+
 function hunkCls(r, kctx) {
   if (r.hunk == null || !kctx) return "";
-  // hk-top / hk-bot mark the first and last row of one hunk's run, which is
-  // what lets the CSS draw a border around the BLOCK rather than around each
-  // row: a reader has to see what one click picks, and where it ends.
+  // hk-top / hk-bot mark the first and last row of one hunk's run: the block's
+  // EXTENT, which is what a "take this side / this block" gesture acts on.
+  // "picked" says the row contributes something; which CELL it is shows on the
+  // cell itself (pick-l / pick-w), because taking a left line and taking a
+  // right line are different things.
   let cls = " hk";
-  if (kctx.picks.has(r.hunk)) cls += " picked";
+  const p = pickedSides(r, kctx.picks);
+  if (p.l || p.w) cls += " picked";
+  if (p.l) cls += " pick-l";
+  if (p.w) cls += " pick-w";
   if (kctx.first === r.hunk) cls += " hk-top";
   if (kctx.last === r.hunk) cls += " hk-bot";
   return cls;
@@ -1418,7 +1436,12 @@ function hunkRunEdges(items) {
 
 
 function hunkAttr(r, kctx) {
-  return r.hunk == null || !kctx ? "" : ` data-hunk="${r.hunk}"`;
+  if (r.hunk == null || !kctx) return "";
+  // The row says which line of its block it is on each side; a click on a cell
+  // then names exactly one pick.
+  const l = r.hl != null ? ` data-hl="${r.hl}"` : "";
+  const w = r.hw != null ? ` data-hw="${r.hw}"` : "";
+  return ` data-hunk="${r.hunk}"${l}${w}`;
 }
 
 
@@ -2718,32 +2741,65 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     const hk = hkRow ? hunkSlotAt(hkRow) || (diffHunks ? { hunks: diffHunks, el: $("diff-body") } : null) : null;
     if (hk) {
       const i = Number(hkRow.dataset.hunk);
-      const picked = hk.hunks.picks.has(i);
+      const scope = hk.k != null ? hk : null;
+      const all = hunkRowsOf(hk);
+      const arm = () => { if (hk.k != null) pickOnSlot(hk.k); };
+      // The three grains the TUI's picker has: this line (a plain click, or
+      // this row), this side of the block (its c / i), the whole block.
+      const side = cellSide(e.target, hkRow);
+      if (side) {
+        const line = Number(hkRow.dataset[side === "index" ? "hl" : "hw"]);
+        const taken = pickedSides({ hunk: i, hl: Number(hkRow.dataset.hl), hw: Number(hkRow.dataset.hw) }, hk.hunks.picks);
+        const on = side === "index" ? taken.l : taken.w;
+        rows.push({
+          label: `${on ? "drop" : "take"} this ${side === "index" ? "index" : "working"} line`,
+          act: () => {
+            toggleLinePick(hk.hunks, i, side, line);
+            arm();
+            paintHunkPicks(scope);
+          },
+        });
+      }
       rows.push({
-        label: picked ? "deselect this block" : "select this block",
+        label: "take this block's working side",
         act: () => {
-          if (picked) hk.hunks.picks.delete(i);
-          else hk.hunks.picks.add(i);
-          if (hk.k != null) pickOnSlot(hk.k);
-          paintHunkPicks(hk.k != null ? hk : null);
+          takeSide(hk.hunks, i, "work", all);
+          arm();
+          paintHunkPicks(scope);
         },
       });
+      rows.push({
+        label: "take this block's index side",
+        act: () => {
+          takeSide(hk.hunks, i, "index", all);
+          arm();
+          paintHunkPicks(scope);
+        },
+      });
+      if (hk.hunks.picks.has(i)) {
+        rows.push({
+          label: "clear this block",
+          act: () => {
+            clearBlock(hk.hunks, i);
+            arm();
+            paintHunkPicks(scope);
+          },
+        });
+      }
       rows.push({
         label: "stage this block",
         act: () => {
-          // One shot: this block alone, whatever else was picked.
-          const keep = new Set(hk.hunks.picks);
-          hk.hunks.picks = new Set([i]);
-          if (hk.k != null) pickOnSlot(hk.k);
-          void stageHunksPicked().then(() => {
-            if (hk.hunks.picks.size === 0 && keep.size) hk.hunks.picks = new Set();
-          });
+          // One shot: this block's working side alone, whatever else was taken.
+          hk.hunks.picks = new Map();
+          takeSide(hk.hunks, i, "work", all);
+          arm();
+          void stageHunksPicked();
         },
       });
-      const n = hk.hunks.picks.size;
+      const n = pickCount(hk.hunks);
       if (n) {
         rows.push({
-          label: `stage selected (${n})${hk.hunks.path ? " in " + hk.hunks.path : ""}`,
+          label: `stage selected (${n} line${n === 1 ? "" : "s"})${hk.hunks.path ? " in " + hk.hunks.path : ""}`,
           act: () => void stageHunksPicked(),
         });
       }
@@ -3115,11 +3171,11 @@ function renderHunkBar() {
     return;
   }
   bar.classList.remove("hidden");
-  const n = v.picks.size;
+  const n = pickCount(v);
   $("hunk-stage").disabled = !n;
   // Stacked, the picked file need not be the one on screen — say which it is.
   const where = state.stack && n && v.path ? ` in ${v.path}` : "";
-  $("hunk-stage").textContent = `stage selected (${n})${where}`;
+  $("hunk-stage").textContent = `stage selected (${n} line${n === 1 ? "" : "s"})${where}`;
 }
 
 
@@ -3132,7 +3188,12 @@ function paintHunkPicks(scope) {
   const root = (scope && scope.el) || $("diff-body");
   const v = scope ? scope.hunks : diffHunks;
   root.querySelectorAll("tr[data-hunk]").forEach((tr) => {
-    tr.classList.toggle("picked", !!v && v.picks.has(Number(tr.dataset.hunk)));
+    const b = v && v.picks.get(Number(tr.dataset.hunk));
+    const l = !!b && tr.dataset.hl != null && b.index.has(Number(tr.dataset.hl));
+    const w = !!b && tr.dataset.hw != null && b.work.has(Number(tr.dataset.hw));
+    tr.classList.toggle("pick-l", l);
+    tr.classList.toggle("pick-w", w);
+    tr.classList.toggle("picked", l || w);
   });
   renderHunkBar();
 }
@@ -3141,13 +3202,10 @@ function paintHunkPicks(scope) {
 async function stageHunksPicked() {
   const v = activeHunks();
   if (!v || !v.picks.size) return;
+  const wire = picksWire(v);
   let resp;
   try {
-    resp = await postJSON("/api/stage-hunks", {
-      path: v.path,
-      picks: [...v.picks].sort((a, b) => a - b),
-      hash: v.hash,
-    });
+    resp = await postJSON("/api/stage-hunks", { path: v.path, picks: wire, hash: v.hash });
   } catch (e) {
     opLine("error: " + (e.message || e), true);
     // 409 = stale picks (the file moved): reload the diff for fresh tags
@@ -3190,7 +3248,12 @@ $("hunk-all").addEventListener("click", () => {
   const h = state.stack ? activeSlotHunks() : null;
   const v = h ? h.hunks : diffHunks;
   if (!v) return;
-  v.picks = new Set(Array.from({ length: v.count }, (_, i) => i));
+  // every block's WORKING side — "stage the whole file, hunk by hunk"
+  v.picks = new Map();
+  for (const r of hunkRowsOf(h)) {
+    if (r.hunk == null || r.hw == null) continue;
+    blockPicks(v, r.hunk).work.add(r.hw);
+  }
   paintHunkPicks(h);
 });
 
@@ -3198,9 +3261,91 @@ $("hunk-none").addEventListener("click", () => {
   const h = state.stack ? activeSlotHunks() : null;
   const v = h ? h.hunks : diffHunks;
   if (!v) return;
-  v.picks = new Set();
+  v.picks = new Map();
   paintHunkPicks(h);
 });
+
+
+// hunkRowsOf is the diff rows the picks of one file are about: the slot's own
+// diff in a stack, the single open diff otherwise.
+function hunkRowsOf(h) {
+  const d = h && h.slot ? h.slot.diff : state.lastDiff;
+  return (d && d.rows) || [];
+}
+
+
+// --- picks: a block keeps the LINES taken from each side -------------------
+// The unit is (block, side, line) — hunkpick's own Pick, and what the TUI's
+// picker toggles with space. A whole-side take is every line of that side, so
+// there is one representation, not two.
+
+// blockPicks returns (creating on demand) the pick sets of one block.
+function blockPicks(v, block) {
+  let b = v.picks.get(block);
+  if (!b) {
+    b = { index: new Set(), work: new Set() };
+    v.picks.set(block, b);
+  }
+  return b;
+}
+
+
+// dropEmptyBlock keeps the map honest: a block with nothing taken is absent,
+// so "how many blocks contribute" is just picks.size.
+function dropEmptyBlock(v, block) {
+  const b = v.picks.get(block);
+  if (b && !b.index.size && !b.work.size) v.picks.delete(block);
+}
+
+
+// toggleLinePick takes (or drops) ONE line of one side — a click on a cell.
+function toggleLinePick(v, block, side, line) {
+  const b = blockPicks(v, block);
+  const set = side === "index" ? b.index : b.work;
+  if (set.has(line)) set.delete(line);
+  else set.add(line);
+  dropEmptyBlock(v, block);
+}
+
+
+// takeSide takes every line a block has on one side (the TUI's c / i), or
+// clears that side when it is already whole.
+function takeSide(v, block, side, rows) {
+  const b = blockPicks(v, block);
+  const set = side === "index" ? b.index : b.work;
+  const key = side === "index" ? "hl" : "hw";
+  const all = rows.filter((r) => r.hunk === block && r[key] != null).map((r) => r[key]);
+  const whole = all.length > 0 && all.every((n) => set.has(n));
+  set.clear();
+  if (!whole) all.forEach((n) => set.add(n));
+  dropEmptyBlock(v, block);
+}
+
+
+// clearBlock drops everything taken in a block.
+function clearBlock(v, block) {
+  v.picks.delete(block);
+}
+
+
+// pickCount is how many LINES are taken in total — what the bar counts, since
+// a block can now contribute part of itself.
+function pickCount(v) {
+  let n = 0;
+  for (const b of v.picks.values()) n += b.index.size + b.work.size;
+  return n;
+}
+
+
+// picksWire is the /api/stage-hunks shape: one entry per block that
+// contributes, naming its lines per side.
+function picksWire(v) {
+  const out = [];
+  for (const [block, b] of v.picks) {
+    out.push({ block, index: [...b.index].sort((x, y) => x - y), work: [...b.work].sort((x, y) => x - y) });
+  }
+  return out.sort((a, b) => a.block - b.block);
+}
 
 
 // Hovering one row of a stageable block outlines the WHOLE block: what a
@@ -3239,12 +3384,37 @@ $("diff-body").addEventListener("click", (e) => {
   const scope = hunkSlotAt(tr);
   const v = scope ? scope.hunks : diffHunks;
   if (!v) return;
-  const i = Number(tr.dataset.hunk);
-  if (v.picks.has(i)) v.picks.delete(i);
-  else v.picks.add(i);
+  // WHICH line: the cell decides the side, exactly as the TUI's space takes
+  // the line under the cursor on the side the cursor is on. A click that is
+  // not on a side cell (the gutter) takes nothing — the gutter's ✓ column is
+  // for reading, and whole-side / whole-block takes live in the menu.
+  const side = cellSide(e.target, tr);
+  if (!side) return;
+  const line = Number(tr.dataset[side === "index" ? "hl" : "hw"]);
+  if (!Number.isFinite(line)) return; // this row has no line on that side
+  toggleLinePick(v, Number(tr.dataset.hunk), side, line);
   if (scope) pickOnSlot(scope.k); // the bar acts on the file just picked in, scroll or no scroll
   paintHunkPicks(scope);
 });
+
+
+// cellSide says which version the clicked cell shows: the index (left) or the
+// working tree (right). Single-column layouts (a pure add / pure delete file,
+// or the narrow unified one) have one cell per row, and its side is whichever
+// line the row carries.
+function cellSide(target, tr) {
+  const td = target.closest && target.closest("td");
+  if (!td) return "";
+  // A gutter cell belongs to its own pane, so it names that side too — the
+  // middle of a side-by-side row IS the right pane's number column, and a
+  // gesture there must not fall through to nothing.
+  if (td.classList.contains("l")) return tr.dataset.hl != null ? "index" : "";
+  if (td.classList.contains("r")) return tr.dataset.hw != null ? "work" : "";
+  if (td.classList.contains("no")) return "";
+  if (tr.classList.contains("del")) return tr.dataset.hl != null ? "index" : "";
+  if (tr.classList.contains("add")) return tr.dataset.hw != null ? "work" : "";
+  return tr.dataset.hw != null ? "work" : tr.dataset.hl != null ? "index" : "";
+}
 
 
 // ---- conflict block picker (conflict surface) -----------------------------

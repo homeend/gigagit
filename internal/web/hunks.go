@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"sort"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
@@ -97,9 +99,50 @@ func (s *Server) handleHunks(w http.ResponseWriter, r *http.Request) {
 }
 
 type stageHunksRequest struct {
-	Path  string `json:"path"`
-	Picks []int  `json:"picks"`
-	Hash  string `json:"hash"`
+	Path string `json:"path"`
+	Hash string `json:"hash"`
+	// Blocks is what the picks decoded to. The wire shape is either the
+	// original list of block ordinals — "take these blocks' working side",
+	// which is what a whole-block pick has always meant — or the per-line
+	// shape the TUI's picker has always had: {"block":1,"work":[0,2],
+	// "index":[1]}. Both land here.
+	Blocks []stageBlockPick `json:"-"`
+}
+
+// stageBlockPick is one block's contribution to the staged content: the lines
+// taken from each side, or WholeWork for the old ordinal shape.
+type stageBlockPick struct {
+	Block     int   `json:"block"`
+	Index     []int `json:"index"`
+	Work      []int `json:"work"`
+	WholeWork bool  `json:"-"`
+}
+
+// decodeStagePicks parses a /api/stage-hunks body, accepting both pick shapes.
+// It is its own function so the two shapes are tested without a server.
+func decodeStagePicks(req *stageHunksRequest, body []byte) error {
+	var raw struct {
+		Path  string            `json:"path"`
+		Hash  string            `json:"hash"`
+		Picks []json.RawMessage `json:"picks"`
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return fmt.Errorf("bad request body: %w", err)
+	}
+	req.Path, req.Hash = raw.Path, raw.Hash
+	for _, p := range raw.Picks {
+		var n int
+		if err := json.Unmarshal(p, &n); err == nil {
+			req.Blocks = append(req.Blocks, stageBlockPick{Block: n, WholeWork: true})
+			continue
+		}
+		var b stageBlockPick
+		if err := json.Unmarshal(p, &b); err != nil {
+			return fmt.Errorf("bad pick %s: %w", p, err)
+		}
+		req.Blocks = append(req.Blocks, b)
+	}
+	return nil
 }
 
 // handleStageHunks stages a selection of a file's change blocks through
@@ -108,12 +151,17 @@ type stageHunksRequest struct {
 // and stage the resolved content via engine.StageHunks.
 func (s *Server) handleStageHunks(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
-	var req stageHunksRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err != nil {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
 		return
 	}
-	if len(req.Picks) == 0 {
+	var req stageHunksRequest
+	if err := decodeStagePicks(&req, body); err != nil {
+		writeErr(w, http.StatusBadRequest, err)
+		return
+	}
+	if len(req.Blocks) == 0 {
 		writeErr(w, http.StatusBadRequest, errors.New("picks required"))
 		return
 	}
@@ -127,12 +175,49 @@ func (s *Server) handleStageHunks(w http.ResponseWriter, r *http.Request) {
 	}
 	doc.SetAll(hunkpick.TakeCurrent) // default: nothing staged
 	blocks := doc.Blocks()
-	for _, p := range req.Picks {
-		if p < 0 || p >= len(blocks) {
-			writeErr(w, http.StatusBadRequest, fmt.Errorf("pick %d out of range (0..%d)", p, len(blocks)-1))
+	for _, p := range req.Blocks {
+		if p.Block < 0 || p.Block >= len(blocks) {
+			writeErr(w, http.StatusBadRequest, fmt.Errorf("pick %d out of range (0..%d)", p.Block, len(blocks)-1))
 			return
 		}
-		blocks[p].Mode = hunkpick.TakeIncoming
+		b := blocks[p.Block]
+		if p.WholeWork {
+			b.Mode = hunkpick.TakeIncoming
+			continue
+		}
+		// Line by line, the picker's own representation. The pick ORDER decides
+		// the staged line order, so it is rebuilt in READING order — by line
+		// number, the index side first where both sides name the same one,
+		// which is how a side-by-side row shows them (old above/left of new).
+		b.Mode, b.Picks = hunkpick.LineByLine, nil
+		type lp struct {
+			line int
+			side hunkpick.Side
+		}
+		var want []lp
+		for _, ln := range p.Index {
+			if ln < 0 || ln >= len(b.Current) {
+				writeErr(w, http.StatusBadRequest, fmt.Errorf("block %d: index line %d out of range", p.Block, ln))
+				return
+			}
+			want = append(want, lp{ln, hunkpick.Current})
+		}
+		for _, ln := range p.Work {
+			if ln < 0 || ln >= len(b.Incoming) {
+				writeErr(w, http.StatusBadRequest, fmt.Errorf("block %d: working line %d out of range", p.Block, ln))
+				return
+			}
+			want = append(want, lp{ln, hunkpick.Incoming})
+		}
+		sort.SliceStable(want, func(i, j int) bool {
+			if want[i].line != want[j].line {
+				return want[i].line < want[j].line
+			}
+			return want[i].side == hunkpick.Current
+		})
+		for _, w := range want {
+			b.Picks = append(b.Picks, hunkpick.Pick{Side: w.side, Line: w.line})
+		}
 	}
 	content, resolved := doc.Resolved()
 	if !resolved {

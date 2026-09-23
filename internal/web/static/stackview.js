@@ -429,7 +429,7 @@ async function load(st, s) {
     // The server tags an eligible unstaged diff with hunk ordinals and the
     // staging freshness hash — the same payload the single-file view arms
     // diffHunks from, kept HERE so every slot answers for its own file.
-    s.hunks = d.hunks && hunkEligible(s.f) ? { path: s.f.path, hash: d.hunks.hash, count: d.hunks.count, picks: new Set() } : null;
+    s.hunks = d.hunks && hunkEligible(s.f) ? { path: s.f.path, hash: d.hunks.hash, count: d.hunks.count, picks: new Map() } : null;
     // A refresh re-fetches every kept slot (reconcileSlots). Where the bytes
     // did not move — same freshness hash — the reader's picks still name the
     // same hunks, so staging one file does not wipe the picks in another.

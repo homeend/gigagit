@@ -111,17 +111,21 @@ func TestHunkBarActsOnTheActiveFile(t *testing.T) {
 // assertion sees the rendered HTML, not the source.
 const hunkPaintHarness = `
 import * as H from "./hunks.mjs";
+// A pick is (block, side, line): a row can have its LEFT taken and its right
+// not. The classes must say which cell, never "the whole row".
 const rows = [
-  { kind: "change", left: "a", right: "A", left_no: 1, right_no: 1, hunk: 0 },
+  { kind: "change", left: "a", right: "A", left_no: 1, right_no: 1, hunk: 0, hl: 0, hw: 0 },
   { kind: "same", left: "b", right: "b", left_no: 2, right_no: 2 },
-  { kind: "change", left: "c", right: "C", left_no: 3, right_no: 3, hunk: 1 },
+  { kind: "del", left: "c", left_no: 3, hunk: 1, hl: 0 },
+  { kind: "add", right: "C", right_no: 3, hunk: 1, hw: 0 },
 ];
+const picks = (o) => new Map(Object.entries(o).map(([k, v]) => [Number(k), { index: new Set(v.index || []), work: new Set(v.work || []) }]));
 const out = {};
-out.picked0 = rows.map((r) => H.hunkCls(r, { picks: new Set([0]) })).join("|");
-out.picked1 = rows.map((r) => H.hunkCls(r, { picks: new Set([1]) })).join("|");
-out.none = rows.map((r) => H.hunkCls(r, null)).join("|");
-out.attr = rows.map((r) => H.hunkAttr(r, { picks: new Set() })).join("|");
-out.attrNone = rows.map((r) => H.hunkAttr(r, null)).join("|");
+out.workOfFirst = rows.map((r) => H.hunkCls(r, { picks: picks({ 0: { work: [0] } }) })).join("|");
+out.indexOfFirst = rows.map((r) => H.hunkCls(r, { picks: picks({ 0: { index: [0] } }) })).join("|");
+out.bothOfSecond = rows.map((r) => H.hunkCls(r, { picks: picks({ 1: { index: [0], work: [0] } }) })).join("|");
+out.none = rows.map((r) => H.hunkCls(r, { picks: new Map() })).join("|");
+out.attr = rows.map((r) => H.hunkAttr(r, { picks: new Map() })).join("|");
 console.log(JSON.stringify(out));
 `
 
@@ -134,7 +138,8 @@ func TestHunkClassesFollowTheirOwnPicks(t *testing.T) {
 	src := readStatic(t, "files.js")
 	// The two helpers are pure and self-contained: lift them out so the guard
 	// runs without files.js's DOM imports.
-	mod := jsFunc(t, "files.js", "hunkCls") + "\n" + jsFunc(t, "files.js", "hunkAttr") + "\nexport { hunkCls, hunkAttr };\n"
+	mod := jsFunc(t, "files.js", "pickedSides") + "\n" + jsFunc(t, "files.js", "hunkCls") + "\n" +
+		jsFunc(t, "files.js", "hunkAttr") + "\nexport { hunkCls, hunkAttr };\n"
 	if !strings.Contains(src, "function hunkCls(r, kctx)") {
 		t.Fatal("files.js: hunkCls must take the context")
 	}
@@ -154,11 +159,14 @@ func TestHunkClassesFollowTheirOwnPicks(t *testing.T) {
 		t.Fatalf("not the harness JSON: %v\n%s", err, out)
 	}
 	want := map[string]string{
-		"picked0":  " hk picked|| hk",
-		"picked1":  " hk|| hk picked",
-		"none":     "||",
-		"attr":     ` data-hunk="0"|| data-hunk="1"`,
-		"attrNone": "||",
+		// only the row's WORKING cell is taken → pick-w, never pick-l
+		// (the harness passes no run edges, so no hk-top/hk-bot here)
+		"workOfFirst":  " hk picked pick-w|| hk| hk",
+		"indexOfFirst": " hk picked pick-l|| hk| hk",
+		// the del row's left and the add row's right, in one block
+		"bothOfSecond": " hk|| hk picked pick-l| hk picked pick-w",
+		"none":         " hk|| hk| hk",
+		"attr":         ` data-hunk="0" data-hl="0" data-hw="0"|| data-hunk="1" data-hl="0"| data-hunk="1" data-hw="0"`,
 	}
 	for k, w := range want {
 		if got[k] != w {

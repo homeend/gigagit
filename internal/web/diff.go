@@ -22,6 +22,10 @@ type diffRow struct {
 	LeftTok    []tokTriple `json:"left_tok,omitempty"`
 	RightTok   []tokTriple `json:"right_tok,omitempty"`
 	Hunk       *int        `json:"hunk,omitempty"`
+	// HunkIndexLine / HunkWorkLine are this row's line WITHIN its hunk, on the
+	// index and working-tree sides — what a per-line pick names.
+	HunkIndexLine *int `json:"hl,omitempty"`
+	HunkWorkLine  *int `json:"hw,omitempty"`
 }
 
 // tokTriple is one syntax run on the wire: [start, end, class-suffix].
@@ -65,26 +69,59 @@ func tokTriples(side [][]syntax.Tok, no int) []tokTriple {
 type diffHunksMeta struct {
 	count   int
 	hash    string
-	rowTags []int // per aligned row; -1 = context
+	rowTags hunkRowTags
+}
+
+// hunkRowTags is, per aligned row, which hunk it belongs to and which line of
+// that hunk it is on each side. -1 means "none": a context row has no hunk, a
+// deletion has no working-side line, an addition no index-side line. The line
+// indexes are what let the client pick a block LINE BY LINE, the way the TUI's
+// picker does — without them a row can only say "I belong to block 3".
+type hunkRowTags struct {
+	hunk  []int
+	index []int // line within the block's Current (index) side
+	work  []int // line within the block's Incoming (working-tree) side
 }
 
 // diffHunkTags numbers each aligned row's hunk: contiguous non-Same runs
 // in order, -1 for context rows — the same segmentation hunkpick's
-// Doc.Blocks() yields from the same alignment.
-func diffHunkTags(rows []textdiff.Row) (tags []int, count int) {
-	tags = make([]int, len(rows))
+// Doc.Blocks() yields from the same alignment — and numbers each row's line
+// within its block per side, mirroring hunkpick.FromDiff exactly (Current
+// takes the LEFT of Changed/Del rows in order, Incoming the RIGHT of
+// Changed/Add rows). The two walks live in ONE function so they cannot drift.
+func diffHunkTags(rows []textdiff.Row) (tags hunkRowTags, count int) {
+	tags = hunkRowTags{
+		hunk:  make([]int, len(rows)),
+		index: make([]int, len(rows)),
+		work:  make([]int, len(rows)),
+	}
 	in := false
+	cur, inc := 0, 0 // lines used so far on each side of the CURRENT block
 	for i, r := range rows {
+		tags.index[i], tags.work[i] = -1, -1
 		if r.Kind == textdiff.Same {
-			tags[i] = -1
+			tags.hunk[i] = -1
 			in = false
 			continue
 		}
 		if !in {
 			count++
 			in = true
+			cur, inc = 0, 0
 		}
-		tags[i] = count - 1
+		tags.hunk[i] = count - 1
+		switch r.Kind {
+		case textdiff.Changed:
+			tags.index[i], tags.work[i] = cur, inc
+			cur++
+			inc++
+		case textdiff.Del:
+			tags.index[i] = cur
+			cur++
+		case textdiff.Add:
+			tags.work[i] = inc
+			inc++
+		}
 	}
 	return tags, count
 }
@@ -312,9 +349,17 @@ func writeDiffJSON(w http.ResponseWriter, d domain.Diff, hunks *diffHunksMeta) {
 			LeftTok:    tokTriples(d.OldTok, row.LeftNo),
 			RightTok:   tokTriples(d.NewTok, row.RightNo),
 		}
-		if hunks != nil && hunks.rowTags[i] >= 0 {
-			tag := hunks.rowTags[i]
+		if hunks != nil && hunks.rowTags.hunk[i] >= 0 {
+			tag := hunks.rowTags.hunk[i]
 			rows[i].Hunk = &tag
+			if li := hunks.rowTags.index[i]; li >= 0 {
+				l := li
+				rows[i].HunkIndexLine = &l
+			}
+			if wi := hunks.rowTags.work[i]; wi >= 0 {
+				wl := wi
+				rows[i].HunkWorkLine = &wl
+			}
 		}
 	}
 	payload := map[string]any{

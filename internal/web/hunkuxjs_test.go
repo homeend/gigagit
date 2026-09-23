@@ -43,9 +43,9 @@ func TestCommitBoxIsAColumnWithAGrowControl(t *testing.T) {
 	}
 }
 
-// A reader must see WHICH rows one click takes and whether they are picked.
-// The run is outlined as one box (hk-top / hk-bot cap it), the gutter carries a
-// ✓, and hovering any row outlines the whole run.
+// A reader must see the block's extent (hk-top / hk-bot cap its frame), which
+// CELL is taken (the ✓ and the tint sit on that side's cell, never across both
+// panes), and what a click would take (hovering outlines the whole run).
 func TestAPickedBlockIsMarkedAsAUnit(t *testing.T) {
 	t.Parallel()
 	files := readStatic(t, "files.js")
@@ -58,15 +58,16 @@ func TestAPickedBlockIsMarkedAsAUnit(t *testing.T) {
 		t.Fatal("files.js: the edges must come from the rows actually painted (the fold can hide a hunk's first row)")
 	}
 	cls := jsFunc(t, "files.js", "hunkCls")
-	for _, want := range []string{"hk-top", "hk-bot", "picked"} {
+	for _, want := range []string{"hk-top", "hk-bot", "picked", "pick-l", "pick-w"} {
 		if !strings.Contains(cls, want) {
 			t.Fatalf("files.js: hunkCls must emit %q:\n%s", want, cls)
 		}
 	}
 	for _, want := range []string{
-		"tr.hk.picked.hk-top td { border-top: 1px solid var(--accent); }",
-		"tr.hk.picked.hk-bot td { border-bottom: 1px solid var(--accent); }",
-		`tr.hk.picked.hk-top td.no::before { content: "✓ ";`,
+		"tr.hk.hk-top td { border-top: 1px solid var(--border); }",
+		"tr.hk.hk-bot td { border-bottom: 1px solid var(--border); }",
+		"tr.hk.pick-l td.side.l, tr.hk.pick-w td.side.r { background: var(--sel); }",
+		`tr.hk.pick-l td.no.l::before, tr.hk.pick-w td.no.r::before { content: "✓";`,
 		"tr.hk.hk-hover td {",
 	} {
 		if !strings.Contains(css, want) {
@@ -84,9 +85,12 @@ func TestDiffMenuOffersBlockStaging(t *testing.T) {
 	t.Parallel()
 	files := readStatic(t, "files.js")
 	for _, want := range []string{
-		`label: picked ? "deselect this block" : "select this block",`,
+		"this ${side === \"index\" ? \"index\" : \"working\"} line`",
+		`label: "take this block's working side",`,
+		`label: "take this block's index side",`,
+		`label: "clear this block",`,
 		`label: "stage this block",`,
-		"`stage selected (${n})",
+		"`stage selected (${n} line",
 	} {
 		if !strings.Contains(files, want) {
 			t.Fatalf("files.js: the diff's context menu lacks %s", want)
