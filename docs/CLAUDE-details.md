@@ -1648,10 +1648,18 @@ had, and the lever is that a stack is ONE document:
   firefox. It caught one defect no unit test was red for: **esc left the tint
   painted**, because `refindStack` returned early on an empty query and the
   bar's clear-then-render is the only thing that unpaints.
-- **Known, NOT caused by 4b:** `stack-probe/land.mjs` (plan 4a's link landing)
-  now fails on `main` too, with identical output from both builds — the steer
-  navigate empties the diff pane before `landStackLine` is ever reached
-  (`openCommitByHash` / `openFile` in live.js). Worth its own look.
+- **A probe bug worth remembering:** `stack-probe/land.mjs` (plan 4a's link
+  landing) started failing on `main` as well — the pane went EMPTY and
+  `landStackLine` was never reached. It navigated to `rev-parse HEAD` while
+  CLICKING the commit "three", and `mkrepo.sh` has since grown a later "many"
+  commit in which `c.txt` does not exist: `steerNavigateLand` opened that
+  commit, found no such file (`findIndex` → −1) and returned, leaving the stage
+  switched and no diff open. The probe now resolves the sha it means
+  (`rev-list -1 --grep=^three$`). That it reproduced IDENTICALLY on the
+  unchanged `main` is what proved it was the probe and not the feature — run
+  the differential before debugging your own diff. A navigate naming a file the
+  target commit does not carry still lands on an empty pane with no notice,
+  which is a real (pre-existing) wart, not a 4b regression.
 
 
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)
