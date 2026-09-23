@@ -26,6 +26,8 @@ type diffRow struct {
 	// index and working-tree sides — what a per-line pick names.
 	HunkIndexLine *int `json:"hl,omitempty"`
 	HunkWorkLine  *int `json:"hw,omitempty"`
+	// HunkRow is the row's ordinal within its hunk: what a row selection sends.
+	HunkRow *int `json:"hr,omitempty"`
 }
 
 // tokTriple is one syntax run on the wire: [start, end, class-suffix].
@@ -69,7 +71,34 @@ func tokTriples(side [][]syntax.Tok, no int) []tokTriple {
 type diffHunksMeta struct {
 	count   int
 	hash    string
+	lane    hunkLane
 	rowTags hunkRowTags
+}
+
+// sameBlockShape checks that the displayed rows split into the same blocks of
+// the same row counts as the doc's own alignment. The displayed diff comes
+// from the Differ, the doc from hunkpick.FromDiff; if they ever disagree, no
+// row can be staged safely, so the diff simply goes untagged.
+func sameBlockShape(tags hunkRowTags, brows [][]blockRow) bool {
+	counts := make([]int, len(brows))
+	for i, h := range tags.hunk {
+		if h < 0 {
+			continue
+		}
+		if h >= len(brows) {
+			return false
+		}
+		counts[h]++
+		if tags.row[i] != counts[h]-1 {
+			return false
+		}
+	}
+	for b := range brows {
+		if counts[b] != len(brows[b]) {
+			return false
+		}
+	}
+	return true
 }
 
 // hunkRowTags is, per aligned row, which hunk it belongs to and which line of
@@ -79,8 +108,9 @@ type diffHunksMeta struct {
 // picker does — without them a row can only say "I belong to block 3".
 type hunkRowTags struct {
 	hunk  []int
-	index []int // line within the block's Current (index) side
-	work  []int // line within the block's Incoming (working-tree) side
+	row   []int // the row's ordinal within its block — the unit a selection names
+	index []int // line within the block's Current (left) side
+	work  []int // line within the block's Incoming (right) side
 }
 
 // diffHunkTags numbers each aligned row's hunk: contiguous non-Same runs
@@ -92,13 +122,14 @@ type hunkRowTags struct {
 func diffHunkTags(rows []textdiff.Row) (tags hunkRowTags, count int) {
 	tags = hunkRowTags{
 		hunk:  make([]int, len(rows)),
+		row:   make([]int, len(rows)),
 		index: make([]int, len(rows)),
 		work:  make([]int, len(rows)),
 	}
 	in := false
-	cur, inc := 0, 0 // lines used so far on each side of the CURRENT block
+	cur, inc, nrow := 0, 0, 0 // lines used so far on each side, rows so far, in the CURRENT block
 	for i, r := range rows {
-		tags.index[i], tags.work[i] = -1, -1
+		tags.index[i], tags.work[i], tags.row[i] = -1, -1, -1
 		if r.Kind == textdiff.Same {
 			tags.hunk[i] = -1
 			in = false
@@ -107,9 +138,11 @@ func diffHunkTags(rows []textdiff.Row) (tags hunkRowTags, count int) {
 		if !in {
 			count++
 			in = true
-			cur, inc = 0, 0
+			cur, inc, nrow = 0, 0, 0
 		}
 		tags.hunk[i] = count - 1
+		tags.row[i] = nrow
+		nrow++
 		switch r.Kind {
 		case textdiff.Changed:
 			tags.index[i], tags.work[i] = cur, inc
@@ -302,12 +335,18 @@ func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt s
 	// freshness hash. Any refusal or a run/block count mismatch (e.g. a
 	// truncated alignment) just yields an untagged diff — the client then
 	// simply offers no hunk staging for it.
+	// Both lanes are tagged now: the unstaged diff stages rows, the staged diff
+	// (HEAD → index) unstages them.
 	var hunks *diffHunksMeta
-	if wt == "unstaged" && oldPath == path && !d.Binary && !d.TooLarge && !d.Result.Truncated {
-		if doc, hash, ref := buildHunkDoc(r.Context(), svc, path); ref == nil {
+	if oldPath == path && !d.Binary && !d.TooLarge && !d.Result.Truncated {
+		lane := hunkLane(wt)
+		if doc, brows, hash, ref := buildHunkDoc(r.Context(), svc, path, lane); ref == nil {
 			tags, n := diffHunkTags(d.Result.Rows)
-			if n > 0 && n == len(doc.Blocks()) {
-				hunks = &diffHunksMeta{count: n, hash: hash, rowTags: tags}
+			// The latch: the rows the reader sees must be the rows the doc was
+			// built from, block for block and row for row — a row ordinal is
+			// only meaningful if both sides number the same rows.
+			if n > 0 && n == len(doc.Blocks()) && sameBlockShape(tags, brows) {
+				hunks = &diffHunksMeta{count: n, hash: hash, lane: lane, rowTags: tags}
 			}
 		}
 	}
@@ -360,6 +399,8 @@ func writeDiffJSON(w http.ResponseWriter, d domain.Diff, hunks *diffHunksMeta) {
 				wl := wi
 				rows[i].HunkWorkLine = &wl
 			}
+			hr := hunks.rowTags.row[i]
+			rows[i].HunkRow = &hr
 		}
 	}
 	payload := map[string]any{
@@ -369,7 +410,7 @@ func writeDiffJSON(w http.ResponseWriter, d domain.Diff, hunks *diffHunksMeta) {
 		"truncated": d.Result.Truncated,
 	}
 	if hunks != nil {
-		payload["hunks"] = map[string]any{"count": hunks.count, "hash": hunks.hash}
+		payload["hunks"] = map[string]any{"count": hunks.count, "hash": hunks.hash, "lane": hunks.lane}
 	}
 	writeJSON(w, payload)
 }

@@ -51,40 +51,37 @@ func TestHunkTagsCarryPerSideLineIndexes(t *testing.T) {
 	}
 }
 
-// The endpoint takes picks the way the TUI's picker holds them: a block can
-// contribute individual lines from either side. The old shape (a bare list of
-// block ordinals = "that block's working side") keeps working.
-func TestStageHunksAcceptsPerLinePicks(t *testing.T) {
+// The endpoint takes a ROW selection per block, or a whole hunk, in either
+// lane; the original bare list of block ordinals still decodes, as whole
+// blocks of the unstaged lane.
+func TestStageHunksDecodesRowsHunksAndLanes(t *testing.T) {
 	t.Parallel()
 	var req stageHunksRequest
 	if err := decodeStagePicks(&req, []byte(`{"path":"f.txt","hash":"h","picks":[2,4]}`)); err != nil {
-		t.Fatalf("the old shape must still parse: %v", err)
+		t.Fatalf("the original shape must still parse: %v", err)
 	}
-	if len(req.Blocks) != 2 || req.Blocks[0].Block != 2 || req.Blocks[1].Block != 4 {
-		t.Fatalf("old shape parsed as %+v", req.Blocks)
-	}
-	if req.Blocks[0].Work != nil {
-		t.Fatal("a bare ordinal means the WHOLE working side, which is nil lines + wholeWork")
-	}
-	if !req.Blocks[0].WholeWork {
-		t.Fatal("a bare ordinal must be marked as a whole-side take")
+	if req.Lane != laneUnstaged || len(req.Blocks) != 2 || !req.Blocks[0].Whole || req.Blocks[1].Block != 4 {
+		t.Fatalf("original shape parsed as lane=%q %+v", req.Lane, req.Blocks)
 	}
 
 	req = stageHunksRequest{}
-	if err := decodeStagePicks(&req, []byte(`{"path":"f.txt","hash":"h","picks":[{"block":1,"work":[0,2],"index":[1]}]}`)); err != nil {
-		t.Fatalf("the per-line shape must parse: %v", err)
+	body := `{"path":"f.txt","hash":"h","lane":"staged","blocks":[{"block":1,"rows":[0,2]},{"block":3,"whole":true}]}`
+	if err := decodeStagePicks(&req, []byte(body)); err != nil {
+		t.Fatalf("the row shape must parse: %v", err)
 	}
-	if len(req.Blocks) != 1 || req.Blocks[0].Block != 1 {
-		t.Fatalf("per-line shape parsed as %+v", req.Blocks)
+	if req.Lane != laneStaged {
+		t.Fatalf("lane = %q, want staged", req.Lane)
 	}
-	if got := req.Blocks[0].Work; len(got) != 2 || got[0] != 0 || got[1] != 2 {
-		t.Fatalf("work lines = %v, want [0 2]", got)
+	if len(req.Blocks) != 2 || req.Blocks[0].Block != 1 || len(req.Blocks[0].Rows) != 2 || req.Blocks[0].Rows[1] != 2 {
+		t.Fatalf("rows parsed as %+v", req.Blocks)
 	}
-	if got := req.Blocks[0].Index; len(got) != 1 || got[0] != 1 {
-		t.Fatalf("index lines = %v, want [1]", got)
+	if !req.Blocks[1].Whole {
+		t.Fatal("a whole hunk must decode as whole")
 	}
-	if req.Blocks[0].WholeWork {
-		t.Fatal("a per-line pick is not a whole-side take")
+
+	req = stageHunksRequest{}
+	if err := decodeStagePicks(&req, []byte(`{"path":"f.txt","hash":"h","lane":"sideways","blocks":[]}`)); err == nil {
+		t.Fatal("an unknown lane must be refused")
 	}
 }
 

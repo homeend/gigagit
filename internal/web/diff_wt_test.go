@@ -143,6 +143,7 @@ type hunkTagResp struct {
 	Hunks *struct {
 		Count int    `json:"count"`
 		Hash  string `json:"hash"`
+		Lane  string `json:"lane"`
 	} `json:"hunks"`
 }
 
@@ -208,15 +209,26 @@ func TestWorktreeDiffInlineHunkTags(t *testing.T) {
 		t.Fatalf("stage via diff hash code = %d", code)
 	}
 
-	// staged form and ineligible files carry no hunk metadata (fresh decode
-	// targets — json.Unmarshal leaves an existing pointer when the key is
-	// absent, so reusing d would false-fail)
+	// The STAGED form is tagged too now — it is where rows are UNSTAGED — and
+	// unstaging its hunk through its own hash puts HEAD's line back into the
+	// index. (Fresh decode targets: json.Unmarshal leaves an existing pointer
+	// when a key is absent, so reusing d would false-pass or false-fail.)
 	var staged hunkTagResp
 	if code := getJSON(t, ts, "/api/diff?wt=staged&path=big.txt", &staged); code != http.StatusOK {
 		t.Fatal("staged form")
 	}
-	if staged.Hunks != nil {
-		t.Fatalf("staged diff unexpectedly tagged: %+v", staged.Hunks)
+	if staged.Hunks == nil || staged.Hunks.Lane != "staged" || staged.Hunks.Count != 1 {
+		t.Fatalf("staged diff meta = %+v, want one hunk in the staged lane", staged.Hunks)
+	}
+	if !strings.Contains(gitRun(t, dir, "show", ":big.txt"), "l2 EDITED") {
+		t.Fatal("fixture: hunk 0 must be staged before it can be unstaged")
+	}
+	ubody := `{"path":"big.txt","lane":"staged","blocks":[{"block":0,"whole":true}],"hash":"` + staged.Hunks.Hash + `"}`
+	if code := postJSON(t, ts, "/api/stage-hunks", ubody, "application/json", "", nil); code != http.StatusOK {
+		t.Fatalf("unstage via the staged diff's hash code = %d", code)
+	}
+	if strings.Contains(gitRun(t, dir, "show", ":big.txt"), "l2 EDITED") {
+		t.Fatal("unstaging the hunk left the edited line in the index")
 	}
 	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("a\n"), 0o644); err != nil {
 		t.Fatal(err)
