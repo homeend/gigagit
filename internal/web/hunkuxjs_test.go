@@ -43,62 +43,32 @@ func TestCommitBoxIsAColumnWithAGrowControl(t *testing.T) {
 	}
 }
 
-// A reader must see the block's extent (hk-top / hk-bot cap its frame), which
-// CELL is taken (the ✓ and the tint sit on that side's cell, never across both
-// panes), and what a click would take (hovering outlines the whole run).
-func TestAPickedBlockIsMarkedAsAUnit(t *testing.T) {
+// The marks follow the unit: the whole row is selected or not, the hunk's
+// frame shows what "Stage hunk" takes, and nothing marks a single cell.
+func TestSelectionMarksTheWholeRow(t *testing.T) {
 	t.Parallel()
 	files := readStatic(t, "files.js")
 	css := readStatic(t, "style.css")
 
-	if !strings.Contains(files, "function hunkRunEdges(items)") {
-		t.Fatal("files.js: the paint must know where each hunk's run begins and ends")
-	}
 	if !strings.Contains(files, "const hkAt = kctx ? hunkRunEdges(items) : null;") {
-		t.Fatal("files.js: the edges must come from the rows actually painted (the fold can hide a hunk's first row)")
-	}
-	cls := jsFunc(t, "files.js", "hunkCls")
-	for _, want := range []string{"hk-top", "hk-bot", "picked", "pick-l", "pick-w"} {
-		if !strings.Contains(cls, want) {
-			t.Fatalf("files.js: hunkCls must emit %q:\n%s", want, cls)
-		}
+		t.Fatal("files.js: the hunk's frame must come from the rows actually painted")
 	}
 	for _, want := range []string{
 		"tr.hk.hk-top td { border-top: 1px solid var(--border); }",
 		"tr.hk.hk-bot td { border-bottom: 1px solid var(--border); }",
-		"tr.hk.pick-l td.side.l, tr.hk.pick-w td.side.r { background: var(--sel); }",
-		`tr.hk.pick-l td.no.l::before, tr.hk.pick-w td.no.r::before { content: "✓";`,
-		"tr.hk.hk-hover td {",
+		"tr.hk.hk-sel td {",
+		"tr.hk:hover td {",
 	} {
 		if !strings.Contains(css, want) {
-			t.Fatalf("style.css: missing the block's own mark: %s", want)
+			t.Fatalf("style.css: missing %s", want)
 		}
 	}
-	if !strings.Contains(files, "function paintHunkHover(key)") || !strings.Contains(files, "function hunkRunKey(tr)") {
-		t.Fatal("files.js: hovering one row must outline the whole run (no CSS selector can)")
-	}
-}
-
-// The right-click menu is where the click-to-pick mechanic is written down —
-// and the one-shot way to stage the block under the pointer.
-func TestDiffMenuOffersBlockStaging(t *testing.T) {
-	t.Parallel()
-	files := readStatic(t, "files.js")
-	for _, want := range []string{
-		"this ${side === \"index\" ? \"index\" : \"working\"} line`",
-		`label: "take this block's working side",`,
-		`label: "take this block's index side",`,
-		`label: "clear this block",`,
-		`label: "stage this block",`,
-		"`stage selected (${n} line",
-	} {
-		if !strings.Contains(files, want) {
-			t.Fatalf("files.js: the diff's context menu lacks %s", want)
+	// the earlier rounds' per-cell marks and checkmarks must be gone, all of
+	// them — one round's rules once survived next to the next round's
+	for _, gone := range []string{"pick-l", "pick-w", "tr.hk.picked", "#hunk-bar", `content: "✓`} {
+		if strings.Contains(css, gone) {
+			t.Fatalf("style.css: a stale rule survives: %s", gone)
 		}
-	}
-	// it must act on the row's OWN file, like every other per-row gesture
-	if !strings.Contains(files, "const hk = hkRow ? hunkSlotAt(hkRow) ||") {
-		t.Fatal("files.js: the menu must resolve the clicked row's own slot")
 	}
 }
 

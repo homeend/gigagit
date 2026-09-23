@@ -107,8 +107,8 @@ export function buildSlots(rows, collapse = rows.length > STACK_COLLAPSE_OVER) {
     collapsed: collapse,
     diff: null,
     folds: new Set(), // this file's unfolded runs in the changes-only view (diffHTML's `open`)
-    hunks: null, // this file's inline staging: {hash, count, picks:Set} once an eligible diff has loaded
-    hunksPrev: null, // the staging state a re-fetch is replacing: its picks survive if the bytes did
+    hunks: null, // this file's line staging: {hash, lane, sel, anchor} once an eligible diff has loaded
+    hunksPrev: null, // the staging state a re-fetch is replacing: its selection survives if the bytes did
     error: "",
     again: false, // a refresh landed mid-load: fetch once more when this one settles
   }));

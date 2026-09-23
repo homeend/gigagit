@@ -19,7 +19,7 @@ import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
-import { activeDiff, activeSlotHunks, pickOnSlot, hunkSlotAt, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
+import { activeDiff, hunkSlotAt, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -1255,11 +1255,8 @@ async function openStatusDiff(i) {
     if (gen !== state.detailGen) return;
     // server tags eligible unstaged diffs with hunk ordinals — arm inline
     // staging BEFORE the render so the rows pick up their hk classes
-    if (d.hunks && hunkEligible(f)) {
-      diffHunks = { path: f.path, hash: d.hunks.hash, count: d.hunks.count, picks: new Map() };
-    }
+    if (d.hunks && hunkEligible(f)) diffHunks = hunkState(f.path, d.hunks);
     renderDiff(d);
-    renderHunkBar();
     jumpToFirstChange();
     focusDiff();
   } catch (e) {
@@ -1377,31 +1374,13 @@ function renderCell(text, spans, toks, side, hits) {
 // hunkCls/hunkAttr decorate a diff row that belongs to a stageable hunk:
 // the data-hunk tag drives click-to-select, the classes the highlight (a
 // resize re-render keeps the current picks).
-// pickedSides reports which of a row's two cells are taken. A pick names a
-// LINE on a SIDE — the picker's own unit, and the TUI's — so a row can have
-// its left taken and its right not, or the other way round.
-function pickedSides(r, picks) {
-  const b = picks && picks.get(r.hunk);
-  if (!b) return { l: false, w: false };
-  return {
-    l: r.hl != null && b.index.has(r.hl),
-    w: r.hw != null && b.work.has(r.hw),
-  };
-}
-
-
 function hunkCls(r, kctx) {
-  if (r.hunk == null || !kctx) return "";
-  // hk-top / hk-bot mark the first and last row of one hunk's run: the block's
-  // EXTENT, which is what a "take this side / this block" gesture acts on.
-  // "picked" says the row contributes something; which CELL it is shows on the
-  // cell itself (pick-l / pick-w), because taking a left line and taking a
-  // right line are different things.
+  if (r.hunk == null || r.hr == null || !kctx) return "";
+  // hk-top / hk-bot mark the first and last row of one hunk's run: the frame a
+  // "Stage hunk" acts on. hk-sel is the reader's selection, and it is the
+  // whole row — a modified row is one change, whichever cell was clicked.
   let cls = " hk";
-  const p = pickedSides(r, kctx.picks);
-  if (p.l || p.w) cls += " picked";
-  if (p.l) cls += " pick-l";
-  if (p.w) cls += " pick-w";
+  if (kctx.sel && kctx.sel.has(r.hunk + ":" + r.hr)) cls += " hk-sel";
   if (kctx.first === r.hunk) cls += " hk-top";
   if (kctx.last === r.hunk) cls += " hk-bot";
   return cls;
@@ -1436,12 +1415,10 @@ function hunkRunEdges(items) {
 
 
 function hunkAttr(r, kctx) {
-  if (r.hunk == null || !kctx) return "";
-  // The row says which line of its block it is on each side; a click on a cell
-  // then names exactly one pick.
-  const l = r.hl != null ? ` data-hl="${r.hl}"` : "";
-  const w = r.hw != null ? ` data-hw="${r.hw}"` : "";
-  return ` data-hunk="${r.hunk}"${l}${w}`;
+  if (r.hunk == null || r.hr == null || !kctx) return "";
+  // The row names its hunk and its ordinal inside it: exactly what a
+  // selection sends to /api/stage-hunks.
+  return ` data-hunk="${r.hunk}" data-hr="${r.hr}"`;
 }
 
 
@@ -1618,7 +1595,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
   // painted: the block's border goes there (hunkCls).
   const hkAt = kctx ? hunkRunEdges(items) : null;
   const hkCls = (r) =>
-    hunkCls(r, kctx && { picks: kctx.picks, first: hkAt.first.get(r), last: hkAt.last.get(r) });
+    hunkCls(r, kctx && { sel: kctx.sel, first: hkAt.first.get(r), last: hkAt.last.get(r) });
   const hitsL = (r) => (hs ? hs.hitsOn(hbase + ri(r), r.kind === "same" ? 1 : 0) : null);
   const hitsR = (r) => (hs ? hs.hitsOn(hbase + ri(r), 1) : null);
   const cols = pureAdd || pureDel ? 2 : paneWidth < 950 ? 3 : 4;
@@ -1719,7 +1696,7 @@ function renderDiff(d) {
   }
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   state.diffBlockIdx = -1;
-  $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth, true, state.diffFolds, null, null, diffHunks ? { picks: diffHunks.picks } : null);
+  $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth, true, state.diffFolds, null, null, diffHunks ? { sel: diffHunks.sel } : null);
   mountPanBars($("diff-body"), $("diff-hbars"));
   diffSearchBar.paint(); // the render re-found: the count must follow
   updateDiffNav();
@@ -2733,77 +2710,11 @@ $("diff-body").addEventListener("contextmenu", (e) => {
           act: () => copyLink(link, linkDesc("file", (rowCtx && rowCtx.path) || "", "")),
         });
     }
-    // Staging, when the pointer is on a stageable block. These rows are the
-    // only place the click-to-pick mechanic is WRITTEN DOWN: without them a
-    // reader has no way to learn that a block can be picked at all, and no
-    // one-shot way to stage the block under the pointer.
-    const hkRow = e.target.closest("tr[data-hunk]");
-    const hk = hkRow ? hunkSlotAt(hkRow) || (diffHunks ? { hunks: diffHunks, el: $("diff-body") } : null) : null;
-    if (hk) {
-      const i = Number(hkRow.dataset.hunk);
-      const scope = hk.k != null ? hk : null;
-      const all = hunkRowsOf(hk);
-      const arm = () => { if (hk.k != null) pickOnSlot(hk.k); };
-      // The three grains the TUI's picker has: this line (a plain click, or
-      // this row), this side of the block (its c / i), the whole block.
-      const side = cellSide(e.target, hkRow);
-      if (side) {
-        const line = Number(hkRow.dataset[side === "index" ? "hl" : "hw"]);
-        const taken = pickedSides({ hunk: i, hl: Number(hkRow.dataset.hl), hw: Number(hkRow.dataset.hw) }, hk.hunks.picks);
-        const on = side === "index" ? taken.l : taken.w;
-        rows.push({
-          label: `${on ? "drop" : "take"} this ${side === "index" ? "index" : "working"} line`,
-          act: () => {
-            toggleLinePick(hk.hunks, i, side, line);
-            arm();
-            paintHunkPicks(scope);
-          },
-        });
-      }
-      rows.push({
-        label: "take this block's working side",
-        act: () => {
-          takeSide(hk.hunks, i, "work", all);
-          arm();
-          paintHunkPicks(scope);
-        },
-      });
-      rows.push({
-        label: "take this block's index side",
-        act: () => {
-          takeSide(hk.hunks, i, "index", all);
-          arm();
-          paintHunkPicks(scope);
-        },
-      });
-      if (hk.hunks.picks.has(i)) {
-        rows.push({
-          label: "clear this block",
-          act: () => {
-            clearBlock(hk.hunks, i);
-            arm();
-            paintHunkPicks(scope);
-          },
-        });
-      }
-      rows.push({
-        label: "stage this block",
-        act: () => {
-          // One shot: this block's working side alone, whatever else was taken.
-          hk.hunks.picks = new Map();
-          takeSide(hk.hunks, i, "work", all);
-          arm();
-          void stageHunksPicked();
-        },
-      });
-      const n = pickCount(hk.hunks);
-      if (n) {
-        rows.push({
-          label: `stage selected (${n} line${n === 1 ? "" : "s"})${hk.hunks.path ? " in " + hk.hunks.path : ""}`,
-          act: () => void stageHunksPicked(),
-        });
-      }
-    }
+    // Staging, on a selectable row: act on the selection, or on the hunk under
+    // the pointer (GitKraken's two rows). They lead the menu — they are what a
+    // right-click in a working-tree diff is for.
+    const hkRow = e.target.closest("tr[data-hunk][data-hr]");
+    if (hkRow) rows.unshift(...hunkMenuRows(hkRow));
     if (!rows.length) return; // nothing of our own to say: keep the browser's menu
     e.preventDefault();
     showCtxMenu(rows, e.clientX, e.clientY);
@@ -3124,106 +3035,169 @@ $("prev-change").addEventListener("click", () => stepChange(-1));
 $("next-change").addEventListener("click", () => stepChange(1));
 
 
-// ---- inline hunk staging (wave 3, reworked from live feedback) -----------
-// Hunks are selected IN the unstaged diff itself (TUI-style: full context,
-// line numbers, the same view — a separate block list lost the "what is
-// what" context). The server tags eligible /api/diff?wt=unstaged rows with
-// hunk ordinals + the staging freshness hash; clicking a tagged block
-// toggles it and the diff-header bar stages the picked set. Picks are
-// POSITIONAL against the exact bytes the server hashed — every staged
-// round changes the hash, so the diff is RELOADED after each round (a 409
-// means someone else moved the file: same reload).
+// ---- line staging, GitKraken's model ---------------------------------------
+// In a working-tree diff the reader SELECTS rows and then acts on them, and
+// every action is immediate — there is no pick-then-apply step:
+//
+//   click            select this row (and only it)
+//   ctrl/cmd-click   add or remove this row
+//   shift-click      select from the last clicked row to this one
+//   right-click      Stage selected lines / Stage hunk (the unstaged diff),
+//                    Unstage selected lines / Unstage hunk (the staged diff)
+//
+// The unit is the ROW, because that is what a side-by-side diff shows: a
+// modified row is ONE change (its old line replaced by its new one) whichever
+// cell is clicked, a removed-only row is its old line, an added-only row its
+// new line. Staging half of a modified row would put both lines, or neither,
+// into the index — so it is not offered.
+//
+// The server tags every eligible row with its hunk ("hunk") and its ordinal
+// inside it ("hr"), in BOTH lanes (d.hunks.lane): the unstaged diff stages,
+// the staged diff (HEAD → index) unstages. Selections are positional against
+// the bytes the server hashed, so after every action the diff is re-read.
 
-let diffHunks = null; // {path, hash, count, picks: Set<int>} — set only while an eligible unstaged diff is open
+let diffHunks = null; // {path, hash, lane, count, sel: Set<"hunk:row">, anchor} while an eligible diff is open
 
 
+// hunkEligible: a tracked file with an unstaged change (stage its rows) or a
+// staged one (unstage them). Untracked, conflicted and newly added files are
+// whole-file only; the server refuses to tag them anyway.
 function hunkEligible(f) {
-  return !!f && f.section === "changes" && f.kind === "tracked";
+  return !!f && f.kind === "tracked" && (f.section === "changes" || f.section === "staged");
 }
 
 
 function clearDiffHunks() {
   diffHunks = null;
   conflictPick = null;
-  renderHunkBar();
   renderResolveBar();
 }
 
 
-// activeHunks is the staging state the bar and its buttons act on: the slot
-// the reader is in while a stack is up (every slot keeps its OWN picks, and a
-// pick click moves the anchor), else the single-file view's diffHunks. One
-// file at a time either way — staging never spans slots (design D1).
-function activeHunks() {
-  if (state.stack) {
-    const h = activeSlotHunks();
-    return h ? h.hunks : null;
-  }
-  return diffHunks;
+// hunkState builds the per-file state from a diff's tags.
+function hunkState(path, h) {
+  return { path, hash: h.hash, lane: h.lane || "unstaged", count: h.count, sel: new Set(), anchor: null };
 }
 
 
-function renderHunkBar() {
-  const bar = $("hunk-bar");
-  const v = activeHunks();
-  if (!v) {
-    bar.classList.add("hidden");
-    return;
-  }
-  bar.classList.remove("hidden");
-  const n = pickCount(v);
-  $("hunk-stage").disabled = !n;
-  // Stacked, the picked file need not be the one on screen — say which it is.
-  const where = state.stack && n && v.path ? ` in ${v.path}` : "";
-  $("hunk-stage").textContent = `stage selected (${n} line${n === 1 ? "" : "s"})${where}`;
+const rowKey = (hunk, row) => hunk + ":" + row;
+
+
+// taggedRows is every selectable row of one file's table, in document order —
+// what a shift-click range walks.
+function taggedRows(scope) {
+  return [...(scope && scope.el ? scope.el : $("diff-body")).querySelectorAll("tr[data-hunk][data-hr]")];
 }
 
 
-// paintHunkPicks flips only the picked classes — no diff re-render, so
-// scroll position and text selection survive a toggle.
-function paintHunkPicks(scope) {
-  // scope = {el, hunks} for one stacked file; the single-file view paints the
-  // whole body. Never the whole body in a stack: another slot's rows carry
-  // their own picks and would be repainted from this file's set.
-  const root = (scope && scope.el) || $("diff-body");
+// fileOf resolves a clicked row to its file's staging state: the row's own
+// slot in a stack, the single open diff otherwise.
+function fileOf(tr) {
+  const slot = hunkSlotAt(tr);
+  if (slot) return slot;
+  return diffHunks ? { hunks: diffHunks, el: $("diff-body") } : null;
+}
+
+
+// paintHunkSel marks the selected rows of one file (every row, both cells —
+// the row is the unit).
+function paintHunkSel(scope) {
   const v = scope ? scope.hunks : diffHunks;
-  root.querySelectorAll("tr[data-hunk]").forEach((tr) => {
-    const b = v && v.picks.get(Number(tr.dataset.hunk));
-    const l = !!b && tr.dataset.hl != null && b.index.has(Number(tr.dataset.hl));
-    const w = !!b && tr.dataset.hw != null && b.work.has(Number(tr.dataset.hw));
-    tr.classList.toggle("pick-l", l);
-    tr.classList.toggle("pick-w", w);
-    tr.classList.toggle("picked", l || w);
+  taggedRows(scope).forEach((tr) => {
+    tr.classList.toggle("hk-sel", !!v && v.sel.has(rowKey(tr.dataset.hunk, tr.dataset.hr)));
   });
-  renderHunkBar();
 }
 
 
-async function stageHunksPicked() {
-  const v = activeHunks();
-  if (!v || !v.picks.size) return;
-  const wire = picksWire(v);
+// selectRow applies one click to a file's selection.
+function selectRow(scope, tr, e) {
+  const v = scope.hunks;
+  const key = rowKey(tr.dataset.hunk, tr.dataset.hr);
+  if (e.shiftKey && v.anchor) {
+    const rows = taggedRows(scope);
+    const a = rows.findIndex((x) => rowKey(x.dataset.hunk, x.dataset.hr) === v.anchor);
+    const b = rows.indexOf(tr);
+    if (a >= 0 && b >= 0) {
+      if (!(e.ctrlKey || e.metaKey)) v.sel = new Set();
+      for (let i = Math.min(a, b); i <= Math.max(a, b); i++) v.sel.add(rowKey(rows[i].dataset.hunk, rows[i].dataset.hr));
+      return;
+    }
+  }
+  if (e.ctrlKey || e.metaKey) {
+    if (v.sel.has(key)) v.sel.delete(key);
+    else v.sel.add(key);
+  } else {
+    v.sel = new Set([key]);
+  }
+  v.anchor = key;
+}
+
+
+// A shift / ctrl click selects ROWS, not text: the browser would otherwise
+// extend its own text selection from the previous click, and the plain-click
+// guard below would read that as a drag.
+$("diff-body").addEventListener("mousedown", (e) => {
+  if (!(e.shiftKey || e.ctrlKey || e.metaKey)) return;
+  if (e.target.closest("tr[data-hunk][data-hr]")) e.preventDefault();
+});
+
+
+$("diff-body").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr[data-hunk][data-hr]");
+  if (!tr) return;
+  const modified = e.shiftKey || e.ctrlKey || e.metaKey;
+  // a plain click that ends a text drag is a copy gesture, not a selection
+  if (!modified && !getSelection().isCollapsed) return;
+  if (modified) getSelection().removeAllRanges();
+  const scope = fileOf(tr);
+  if (!scope) return;
+  selectRow(scope, tr, e);
+  paintHunkSel(scope.el ? scope : null);
+});
+
+
+// selectionWire turns a selection into the /api/stage-hunks blocks: per hunk,
+// the rows picked.
+function selectionWire(v) {
+  const by = new Map();
+  for (const key of v.sel) {
+    const [h, r] = key.split(":").map(Number);
+    if (!by.has(h)) by.set(h, []);
+    by.get(h).push(r);
+  }
+  return [...by].sort((a, b) => a[0] - b[0]).map(([block, rows]) => ({ block, rows: rows.sort((x, y) => x - y) }));
+}
+
+
+// applyRowStage stages (or, in the staged diff, unstages) the given blocks of
+// one file, at once. After it the diff is re-read: in a stack the status
+// re-read reconciles the slot in place; one file is re-opened in its lane.
+async function applyRowStage(scope, blocks) {
+  const v = scope.hunks;
+  if (!v || !blocks.length) return;
   let resp;
   try {
-    resp = await postJSON("/api/stage-hunks", { path: v.path, picks: wire, hash: v.hash });
+    resp = await postJSON("/api/stage-hunks", { path: v.path, lane: v.lane, blocks, hash: v.hash });
   } catch (e) {
     opLine("error: " + (e.message || e), true);
-    // 409 = stale picks (the file moved): reload the diff for fresh tags
-    if (/file changed/.test(e.message || "")) reopenAfterHunkStage(v.path);
+    // 409 = the file moved under the selection: re-read it for fresh tags
+    if (/file changed/.test(e.message || "") && !state.stack) reopenAfterHunkStage(v.path, v.lane);
     return;
   }
+  v.sel = new Set();
   applyStatus(resp); // the 200 body IS a fresh /api/status payload
   reconcileStatusView(); // a stack reconciles in place here: the slot re-fetches, the reader stays put
   renderFiles();
-  if (!state.stack) reopenAfterHunkStage(v.path);
+  if (!state.stack) reopenAfterHunkStage(v.path, v.lane);
 }
 
 
-// reopenAfterHunkStage re-opens the freshest view of path after a staging
-// round: its unstaged diff while hunks remain, else whatever the cursor
-// lands on (the file may have moved wholly into Staged).
-function reopenAfterHunkStage(path) {
-  const i = state.statusEntries.findIndex((f) => f.path === path && f.section === "changes");
+// reopenAfterHunkStage re-opens path in the lane the action was taken in —
+// what is left of its unstaged (or staged) change — and falls back to what the
+// cursor lands on when the file has left that section.
+function reopenAfterHunkStage(path, lane = "unstaged") {
+  const section = lane === "staged" ? "staged" : "changes";
+  const i = state.statusEntries.findIndex((f) => f.path === path && f.section === section);
   if (i >= 0) {
     state.fileCursor = i;
     renderFiles();
@@ -3242,178 +3216,30 @@ function reopenAfterHunkStage(path) {
 }
 
 
-$("hunk-stage").addEventListener("click", () => void stageHunksPicked());
-
-$("hunk-all").addEventListener("click", () => {
-  const h = state.stack ? activeSlotHunks() : null;
-  const v = h ? h.hunks : diffHunks;
-  if (!v) return;
-  // every block's WORKING side — "stage the whole file, hunk by hunk"
-  v.picks = new Map();
-  for (const r of hunkRowsOf(h)) {
-    if (r.hunk == null || r.hw == null) continue;
-    blockPicks(v, r.hunk).work.add(r.hw);
+// hunkMenuRows are the right-click rows for a selectable row: act on the
+// selection, or on the hunk under the pointer. A right-click on a row that is
+// not selected selects it alone first — the selection must be what the menu
+// names, as in GitKraken.
+function hunkMenuRows(tr) {
+  const scope = fileOf(tr);
+  if (!scope) return [];
+  const v = scope.hunks;
+  const key = rowKey(tr.dataset.hunk, tr.dataset.hr);
+  if (!v.sel.has(key)) {
+    v.sel = new Set([key]);
+    v.anchor = key;
+    paintHunkSel(scope.el ? scope : null);
   }
-  paintHunkPicks(h);
-});
-
-$("hunk-none").addEventListener("click", () => {
-  const h = state.stack ? activeSlotHunks() : null;
-  const v = h ? h.hunks : diffHunks;
-  if (!v) return;
-  v.picks = new Map();
-  paintHunkPicks(h);
-});
-
-
-// hunkRowsOf is the diff rows the picks of one file are about: the slot's own
-// diff in a stack, the single open diff otherwise.
-function hunkRowsOf(h) {
-  const d = h && h.slot ? h.slot.diff : state.lastDiff;
-  return (d && d.rows) || [];
-}
-
-
-// --- picks: a block keeps the LINES taken from each side -------------------
-// The unit is (block, side, line) — hunkpick's own Pick, and what the TUI's
-// picker toggles with space. A whole-side take is every line of that side, so
-// there is one representation, not two.
-
-// blockPicks returns (creating on demand) the pick sets of one block.
-function blockPicks(v, block) {
-  let b = v.picks.get(block);
-  if (!b) {
-    b = { index: new Set(), work: new Set() };
-    v.picks.set(block, b);
-  }
-  return b;
-}
-
-
-// dropEmptyBlock keeps the map honest: a block with nothing taken is absent,
-// so "how many blocks contribute" is just picks.size.
-function dropEmptyBlock(v, block) {
-  const b = v.picks.get(block);
-  if (b && !b.index.size && !b.work.size) v.picks.delete(block);
-}
-
-
-// toggleLinePick takes (or drops) ONE line of one side — a click on a cell.
-function toggleLinePick(v, block, side, line) {
-  const b = blockPicks(v, block);
-  const set = side === "index" ? b.index : b.work;
-  if (set.has(line)) set.delete(line);
-  else set.add(line);
-  dropEmptyBlock(v, block);
-}
-
-
-// takeSide takes every line a block has on one side (the TUI's c / i), or
-// clears that side when it is already whole.
-function takeSide(v, block, side, rows) {
-  const b = blockPicks(v, block);
-  const set = side === "index" ? b.index : b.work;
-  const key = side === "index" ? "hl" : "hw";
-  const all = rows.filter((r) => r.hunk === block && r[key] != null).map((r) => r[key]);
-  const whole = all.length > 0 && all.every((n) => set.has(n));
-  set.clear();
-  if (!whole) all.forEach((n) => set.add(n));
-  dropEmptyBlock(v, block);
-}
-
-
-// clearBlock drops everything taken in a block.
-function clearBlock(v, block) {
-  v.picks.delete(block);
-}
-
-
-// pickCount is how many LINES are taken in total — what the bar counts, since
-// a block can now contribute part of itself.
-function pickCount(v) {
-  let n = 0;
-  for (const b of v.picks.values()) n += b.index.size + b.work.size;
-  return n;
-}
-
-
-// picksWire is the /api/stage-hunks shape: one entry per block that
-// contributes, naming its lines per side.
-function picksWire(v) {
-  const out = [];
-  for (const [block, b] of v.picks) {
-    out.push({ block, index: [...b.index].sort((x, y) => x - y), work: [...b.work].sort((x, y) => x - y) });
-  }
-  return out.sort((a, b) => a.block - b.block);
-}
-
-
-// Hovering one row of a stageable block outlines the WHOLE block: what a
-// click takes is the run, and there is no CSS selector for "the rows sharing
-// my data-hunk", so the class is set here.
-$("diff-body").addEventListener("mouseover", (e) => {
-  const tr = e.target.closest("tr[data-hunk]");
-  const key = tr ? hunkRunKey(tr) : "";
-  if (key === hoverRun) return;
-  paintHunkHover(key);
-});
-$("diff-body").addEventListener("mouseleave", () => paintHunkHover(""));
-
-let hoverRun = "";
-
-// hunkRunKey identifies one block: its ordinal, scoped to its file's section
-// (a stack paints many files, each with a hunk 0).
-function hunkRunKey(tr) {
-  const sec = tr.closest(".stk-file");
-  return (sec ? sec.dataset.k : "") + ":" + tr.dataset.hunk;
-}
-
-function paintHunkHover(key) {
-  hoverRun = key;
-  document.querySelectorAll("#diff-body tr[data-hunk]").forEach((tr) => {
-    tr.classList.toggle("hk-hover", !!key && hunkRunKey(tr) === key);
-  });
-}
-
-
-$("diff-body").addEventListener("click", (e) => {
-  const tr = e.target.closest("tr[data-hunk]");
-  if (!tr || !getSelection().isCollapsed) return; // don't toggle mid text-selection
-  // Stacked, the row says which file it belongs to; the single-file view has
-  // one. Either way the picks toggled are that file's own.
-  const scope = hunkSlotAt(tr);
-  const v = scope ? scope.hunks : diffHunks;
-  if (!v) return;
-  // WHICH line: the cell decides the side, exactly as the TUI's space takes
-  // the line under the cursor on the side the cursor is on. A click that is
-  // not on a side cell (the gutter) takes nothing — the gutter's ✓ column is
-  // for reading, and whole-side / whole-block takes live in the menu.
-  const side = cellSide(e.target, tr);
-  if (!side) return;
-  const line = Number(tr.dataset[side === "index" ? "hl" : "hw"]);
-  if (!Number.isFinite(line)) return; // this row has no line on that side
-  toggleLinePick(v, Number(tr.dataset.hunk), side, line);
-  if (scope) pickOnSlot(scope.k); // the bar acts on the file just picked in, scroll or no scroll
-  paintHunkPicks(scope);
-});
-
-
-// cellSide says which version the clicked cell shows: the index (left) or the
-// working tree (right). Single-column layouts (a pure add / pure delete file,
-// or the narrow unified one) have one cell per row, and its side is whichever
-// line the row carries.
-function cellSide(target, tr) {
-  const td = target.closest && target.closest("td");
-  if (!td) return "";
-  // A gutter cell belongs to its own pane, so it names that side too — the
-  // middle of a side-by-side row IS the right pane's number column, and a
-  // gesture there must not fall through to nothing.
-  if (td.classList.contains("l")) return tr.dataset.hl != null ? "index" : "";
-  if (td.classList.contains("r")) return tr.dataset.hw != null ? "work" : "";
-  if (td.classList.contains("no")) return "";
-  if (tr.classList.contains("del")) return tr.dataset.hl != null ? "index" : "";
-  if (tr.classList.contains("add")) return tr.dataset.hw != null ? "work" : "";
-  return tr.dataset.hw != null ? "work" : tr.dataset.hl != null ? "index" : "";
+  const verb = v.lane === "staged" ? "Unstage" : "Stage";
+  const n = v.sel.size;
+  const block = Number(tr.dataset.hunk);
+  return [
+    {
+      label: `${verb} selected line${n === 1 ? "" : "s"}${n > 1 ? ` (${n})` : ""}`,
+      act: () => void applyRowStage(scope, selectionWire(v)),
+    },
+    { label: `${verb} hunk`, act: () => void applyRowStage(scope, [{ block, whole: true }]) },
+  ];
 }
 
 
@@ -4006,4 +3832,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, paintHunkPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, renderHunkBar, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stageHunksPicked, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav };
+export { SECTION_LABELS, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState };

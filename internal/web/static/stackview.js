@@ -35,7 +35,7 @@ import {
   openFile,
   openStatusDiff,
   renderFiles,
-  renderHunkBar,
+  hunkState,
   setLayout,
   updateDiffNav,
 } from "./files.js";
@@ -166,7 +166,7 @@ function bodyHTML(s) {
     // which is what refindStack searches next time — one collapse per slot,
     // and the search and the paint provably share a fold set.
     const hctx = { search: diffSearch, base: slotBase(s), lines: (ls) => (s.lines = ls) };
-    const kctx = s.hunks ? { picks: s.hunks.picks } : null;
+    const kctx = s.hunks ? { sel: s.hunks.sel } : null;
     return diffHTML(s.diff, $("diff-pane").clientWidth, notesArmed(nc.ctx), s.folds, nc, hctx, kctx);
   }
   return `<div class="stk-ph" style="height:${estimateHeight(s, ROW_PX)}px">loading…</div>`;
@@ -429,11 +429,14 @@ async function load(st, s) {
     // The server tags an eligible unstaged diff with hunk ordinals and the
     // staging freshness hash — the same payload the single-file view arms
     // diffHunks from, kept HERE so every slot answers for its own file.
-    s.hunks = d.hunks && hunkEligible(s.f) ? { path: s.f.path, hash: d.hunks.hash, count: d.hunks.count, picks: new Map() } : null;
+    s.hunks = d.hunks && hunkEligible(s.f) ? hunkState(s.f.path, d.hunks) : null;
     // A refresh re-fetches every kept slot (reconcileSlots). Where the bytes
-    // did not move — same freshness hash — the reader's picks still name the
-    // same hunks, so staging one file does not wipe the picks in another.
-    if (s.hunks && s.hunksPrev && s.hunksPrev.hash === s.hunks.hash) s.hunks.picks = s.hunksPrev.picks;
+    // did not move — same freshness hash — the reader's selection still names
+    // the same rows, so staging one file does not wipe the selection in another.
+    if (s.hunks && s.hunksPrev && s.hunksPrev.hash === s.hunks.hash) {
+      s.hunks.sel = s.hunksPrev.sel;
+      s.hunks.anchor = s.hunksPrev.anchor;
+    }
     s.hunksPrev = null;
     if (!s.counts) s.counts = countsFromDiff(d);
     // This file's own review notes, against the context its own row builds —
@@ -453,7 +456,6 @@ async function load(st, s) {
   }
   const k = st.slots.indexOf(s);
   if (k >= 0) repaintSlot(st, k);
-  renderHunkBar(); // this file may be the one being read, and it just armed
   // A slot arriving under a live query brings rows the search has never seen.
   if (diffSearch.query) {
     refindStack();
@@ -666,7 +668,6 @@ function syncCursor() {
   renderFiles(); // the list highlight follows the file being read
   followInList();
   updateDiffNav();
-  renderHunkBar(); // …and so does the staging bar: it acts on ONE file
 }
 
 $("diff-pane").addEventListener("scroll", () => {
@@ -734,32 +735,6 @@ function hunkSlotAt(el) {
   return s && s.hunks ? { k, slot: s, hunks: s.hunks, el: sec } : null;
 }
 
-// activeSlotHunks is WHOSE picks the bar shows and stages. The anchor CANNOT
-// answer that on its own: it is derived from the scroll position (syncCursor),
-// so the moment a pick click is followed by any scroll — or by the list
-// re-render a pick triggers — the bar would swing back to whatever file sits
-// at the top of the pane and stage THAT. (The browser probe caught exactly
-// this: a pick in beta then a pick in delta staged beta.) So a slot with live
-// picks owns the bar until they are staged or cleared; with no picks anywhere
-// the bar follows the file being read.
-function activeSlotHunks() {
-  const st = state.stack;
-  if (!st) return null;
-  const at = (k) => {
-    const s = st.slots[k];
-    return s && s.hunks ? { k, slot: s, hunks: s.hunks, el: sectionEl(k) } : null;
-  };
-  const picked = at(st.pickK);
-  if (picked && picked.hunks.picks.size) return picked;
-  return at(st.anchor);
-}
-
-// pickOnSlot makes k the file the bar acts on. It does NOT move the reader's
-// anchor: the anchor means "the file on screen" and is recomputed on scroll.
-function pickOnSlot(k) {
-  const st = state.stack;
-  if (st) st.pickK = k;
-}
 
 // --- lifecycle hooks ------------------------------------------------------
 
@@ -788,7 +763,6 @@ function reconcileStack() {
     refindStack();
     diffSearchBar.paint();
   }
-  renderHunkBar(); // the slots re-fetch: their picks went with the old bytes
   loadCounts(st); // a refresh changes counts too; heads and placeholders repaint in place
 }
 
@@ -833,7 +807,7 @@ registerHelp({
     "the filter shows, in the arrow's direction, between the two lists. The <b>stacked</b> chip in the diff toolbar is the same " +
     "switch; the choice is remembered per machine. <b>/</b> searches every file of the stack and "
     + "<b>]</b>/<b>[</b> step hit to hit across them; in the working tree, clicking a changed block "
-    + "picks it and <b>stage selected</b> stages that file's picks",
+    + "selects that row (shift-click a range, ctrl-click to add) and right-click stages the selection or the hunk",
 });
 registerHelp({
   key: "- / _ · fold files",
@@ -843,4 +817,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, activeSlotHunks, pickOnSlot, hunkSlotAt, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, hunkSlotAt, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

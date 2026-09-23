@@ -792,28 +792,6 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #menu-btn:hover { border-color: var(--accent); }
 
 /* inline hunk staging: tagged rows in an unstaged diff toggle on click */
-/* A stageable block, and what is TAKEN inside it.
-   Three facts must be readable at a glance: that these rows can be picked
-   (cursor + hover outline over the whole run), where the block starts and
-   ends (hk-top / hk-bot cap its outline), and WHICH SIDE of which line is
-   taken — the unit is a line on a side, as in the TUI's picker, so the ✓ and
-   the tint sit on that CELL and never across both panes. */
-tr.hk td { cursor: pointer; }
-tr.hk td:first-child { border-left: 3px solid var(--border); }
-tr.hk.hk-hover td { box-shadow: inset 0 0 0 9999px rgba(127, 127, 127, .06); }
-tr.hk.hk-hover td:first-child { border-left-color: var(--dim); }
-/* the block's extent: a faint frame around the run, whether or not anything
-   in it is taken */
-tr.hk.hk-top td { border-top: 1px solid var(--border); }
-tr.hk.hk-bot td { border-bottom: 1px solid var(--border); }
-/* a TAKEN cell: its own tint, its own ✓ in its own gutter */
-tr.hk.pick-l td.side.l, tr.hk.pick-w td.side.r { background: var(--sel); }
-tr.hk.pick-l td.no.l, tr.hk.pick-w td.no.r { color: var(--accent); font-weight: bold; }
-tr.hk.pick-l td.no.l::before, tr.hk.pick-w td.no.r::before { content: "✓"; margin-right: 3px; }
-/* single-column layouts (pure add / pure delete / narrow unified) have one
-   side cell per row, so the row's own class decides */
-tr.hk.pick-w td.side:only-of-type, tr.hk.pick-l td.side:only-of-type { background: var(--sel); }
-tr.hk.picked td:first-child { border-left-color: var(--accent); }
 
 /* max-height is the last resort for a menu taller than the window (the file
    menu with every batch row): it scrolls rather than running off the bottom.
@@ -1147,36 +1125,25 @@ tr.hk.picked td:first-child { border-left-color: var(--accent); }
 #menu-btn:hover { border-color: var(--accent); }
 
 /* inline hunk staging: tagged rows in an unstaged diff toggle on click */
-/* A stageable block. The reader has to see three things without being told:
-   that the rows are clickable, WHICH rows one click takes (the run, not the
-   row under the pointer), and whether that run is currently picked. So the
-   whole run is outlined as one box — hk-top / hk-bot are its first and last
-   rows — the gutter carries a ✓ when picked, and hovering any row of a run
-   outlines the whole run (hk-hover is set on every row of it by files.js). */
+/* Line staging (GitKraken's model). The ROW is the unit — a modified row is
+   one change whichever cell is clicked — so every mark spans the whole row:
+   a pointer cursor and a faint hover band say "this row can be selected", the
+   selection is a solid band with an accent bar on its left, and a thin frame
+   (hk-top / hk-bot) shows how far the hunk reaches, which is what the
+   right-click "Stage hunk" takes. No checkmarks, no per-cell marks. */
 tr.hk td { cursor: pointer; }
-tr.hk td:first-child { border-left: 3px solid var(--border); }
-tr.hk.hk-hover td { box-shadow: inset 0 0 0 9999px rgba(127, 127, 127, .06); }
-tr.hk.hk-hover td:first-child { border-left-color: var(--dim); }
-tr.hk.picked td:first-child { border-left-color: var(--accent); }
-tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
-/* the run's outline: sides on every row, the cap rows close it */
-tr.hk.picked td { border-left: 1px solid var(--accent); border-right: 1px solid var(--accent); }
-tr.hk.picked td:not(:first-child):not(:last-child) { border-left: 0; border-right: 0; }
-tr.hk.picked.hk-top td { border-top: 1px solid var(--accent); }
-tr.hk.picked.hk-bot td { border-bottom: 1px solid var(--accent); }
-/* the ✓ rides in the gutter of the run's FIRST row, so one glance counts the
-   picked blocks */
-tr.hk.picked.hk-top td.no::before { content: "✓ "; color: var(--accent); font-weight: bold; }
-#hunk-bar { flex: 0 0 auto; display: flex; gap: 4px; }
-#hunk-bar.hidden { display: none; }
-#hunk-bar button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer; }
-#hunk-bar button:hover:not(:disabled) { border-color: var(--accent); }
-#hunk-bar button:disabled { opacity: .45; cursor: default; }
-#hunk-bar #hunk-stage:not(:disabled) { color: var(--accent); }
+tr.hk:hover td { box-shadow: inset 0 0 0 9999px rgba(127, 127, 127, .07); }
+tr.hk.hk-top td { border-top: 1px solid var(--border); }
+tr.hk.hk-bot td { border-bottom: 1px solid var(--border); }
+/* translucent, so the row's own red / green still says what the change is */
+tr.hk.hk-sel td { box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--accent) 24%, transparent); }
+tr.hk.hk-sel td:first-child {
+  box-shadow: inset 4px 0 0 var(--accent), inset 0 0 0 9999px color-mix(in srgb, var(--accent) 24%, transparent);
+}
 
 /* Conflict block picker — a conflicted status row opens its marker regions
    as pickable ours/theirs blocks (#cf-doc) instead of a diff table; the
-   header bar (#resolve-bar) mirrors #hunk-bar's shape. Picks are per-LINE
+   header bar (#resolve-bar) sits in the diff toolbar. Picks are per-LINE
    (checkboxes on .cf-ln rows) with a tri-state side tag and a live output
    pane (#cf-out) below the document. */
 #resolve-bar { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; }
