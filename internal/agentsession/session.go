@@ -33,6 +33,9 @@ type Session struct {
 	outDone      chan struct{} // closed when pumpOut has drained the PTY
 	closeOnce    sync.Once
 	cursorHidden atomic.Bool // DECTCEM state, fed by the emulator callback
+
+	taps map[chan []byte]struct{} // raw-output subscribers (tap.go), under mu
+	job  uintptr                  // Windows job object handle; 0 elsewhere
 }
 
 func start(id ID, spec StartSpec) (*Session, error) {
@@ -104,6 +107,7 @@ func (s *Session) pumpOut() {
 		n, err := s.pty.Read(buf)
 		if n > 0 {
 			s.withEmu(func() { _, _ = s.emu.Write(buf[:n]) })
+			s.feedTaps(buf[:n])
 			s.signal()
 		}
 		if err != nil {
@@ -230,12 +234,3 @@ func (s *Session) screenText() string {
 	}
 	return b.String()
 }
-
-// Temporary until Task 4's per-OS kill files.
-func (s *Session) kill() {
-	if s.cmd.Process != nil {
-		_ = s.cmd.Process.Kill()
-	}
-}
-
-func attachJob(*Session) {}
