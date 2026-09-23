@@ -107,6 +107,8 @@ export function buildSlots(rows, collapse = rows.length > STACK_COLLAPSE_OVER) {
     collapsed: collapse,
     diff: null,
     folds: new Set(), // this file's unfolded runs in the changes-only view (diffHTML's `open`)
+    hunks: null, // this file's inline staging: {hash, count, picks:Set} once an eligible diff has loaded
+    hunksPrev: null, // the staging state a re-fetch is replacing: its picks survive if the bytes did
     error: "",
     again: false, // a refresh landed mid-load: fetch once more when this one settles
   }));
@@ -171,6 +173,12 @@ export function reconcileSlots(old, rows) {
       o.diff = null;
       o.counts = null;
     }
+    // Picks are POSITIONAL against the bytes the server hashed, and every kept
+    // slot re-fetches below. Park them: the re-fetch restores them when the
+    // freshness hash comes back unchanged (staging one file must not silently
+    // discard what the reader picked in another), and drops them otherwise.
+    o.hunksPrev = o.hunks;
+    o.hunks = null;
     if (n.load === "none") o.load = "none";
     else if (o.load === "loading") o.again = true;
     else o.load = "idle";

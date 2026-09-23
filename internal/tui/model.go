@@ -166,6 +166,10 @@ type Model struct {
 	// the next noted file asynchronously, so the note to sit on is not known
 	// until that file's notes arrive (notesLoadedMsg). nil = nothing parked.
 	noteLand *noteLanding
+	// hunkReload parks the re-read a staging round owes a SINGLE-file
+	// working-tree diff: a stack reconciles itself on every status write, one
+	// file does not (diff_stack_hunks.go). nil = nothing parked.
+	hunkReload *hunkReload
 	// diffLand parks the LINE a re-opened single diff owes the reader: leaving
 	// a stack with S re-opens the file asynchronously, and a fresh view lands
 	// on its first change block, not on the line being read. nil = nothing.
@@ -3415,7 +3419,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if n := m.commitsTotal(); n > 0 && m.sel[panelCommits] >= n {
 			m.sel[panelCommits] = n - 1
 		}
-		return m, nil
+		// A staging round the diff view started owes that view a re-read
+		// (diff_stack_hunks.go); a stack has already reconciled itself above.
+		return m.takeHunkReload()
 
 	case stageIgnoredMsg:
 		m.running = false

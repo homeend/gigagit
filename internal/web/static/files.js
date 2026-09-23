@@ -19,7 +19,7 @@ import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
-import { activeDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
+import { activeDiff, activeSlotHunks, pickOnSlot, hunkSlotAt, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -33,7 +33,9 @@ function reconcileStatusView() {
   }
   // a status re-read can invalidate an open hunk view (file fully staged or
   // gone): exit rather than offer stale positional picks
-  if (diffHunks && !state.statusEntries.some((f) => f.path === diffHunks.path && hunkEligible(f))) clearDiffHunks();
+  // (in a stack each slot answers for itself: reconcileSlots drops its picks
+  // and re-fetches, which re-arms them from the fresh tags)
+  if (!state.stack && diffHunks && !state.statusEntries.some((f) => f.path === diffHunks.path && hunkEligible(f))) clearDiffHunks();
   if (conflictPick && !state.statusEntries.some((f) => f.path === conflictPick.path && f.section === "conflicts")) {
     conflictPick = null;
     renderResolveBar();
@@ -1375,14 +1377,14 @@ function renderCell(text, spans, toks, side, hits) {
 // hunkCls/hunkAttr decorate a diff row that belongs to a stageable hunk:
 // the data-hunk tag drives click-to-select, the classes the highlight (a
 // resize re-render keeps the current picks).
-function hunkCls(r) {
-  if (r.hunk == null || !diffHunks) return "";
-  return " hk" + (diffHunks.picks.has(r.hunk) ? " picked" : "");
+function hunkCls(r, kctx) {
+  if (r.hunk == null || !kctx) return "";
+  return " hk" + (kctx.picks.has(r.hunk) ? " picked" : "");
 }
 
 
-function hunkAttr(r) {
-  return r.hunk == null || !diffHunks ? "" : ` data-hunk="${r.hunk}"`;
+function hunkAttr(r, kctx) {
+  return r.hunk == null || !kctx ? "" : ` data-hunk="${r.hunk}"`;
 }
 
 
@@ -1464,7 +1466,12 @@ function foldRowHTML(it, cols) {
 // re-finds ONCE over every slot, and a per-slot re-find would leave the hit
 // list holding only the last slot's hits. Omitted, the single-file view keeps
 // its own rule: the render is what re-finds.
-function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null, hctx = null) {
+function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null, hctx = null, kctx = null) {
+  // kctx is WHOSE hunk picks this table paints: {picks} for the file it
+  // belongs to, null where staging does not apply. Explicit like nctx/hctx —
+  // a stack paints one file's table while another file's picks are live.
+  const hkCls = (r) => hunkCls(r, kctx);
+  const hkAttr = (r) => hunkAttr(r, kctx);
   const nc = nctx || globalNoteCtx();
   const hbase = hctx ? hctx.base : 0;
   const hlines = (ls) => { if (hctx && hctx.lines) hctx.lines(ls); };
@@ -1572,7 +1579,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
       const toks = pureAdd ? r.right_tok : r.left_tok;
       const hits = pureAdd ? hitsR(r) : hitsL(r);
       html +=
-        `<tr class="${r.kind}${hunkCls(r)}${curCls(nside, no)}${attnCls(nside, no)}"${hunkAttr(r)}${anchor(nside, no)} data-i="${ri(r)}">` +
+        `<tr class="${r.kind}${hkCls(r)}${curCls(nside, no)}${attnCls(nside, no)}"${hkAttr(r)}${anchor(nside, no)} data-i="${ri(r)}">` +
         `<td class="no ${side}">${no || ""}</td>` +
         `<td class="side ${side}"><span class="pan">${renderCell(text, spans, toks, side, hits)}</span></td></tr>` +
         after(2, [nside, no]);
@@ -1597,13 +1604,13 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
       } else {
         if (r.kind !== "add")
           html +=
-            `<tr class="del${hunkCls(r)}${curCls("old", r.left_no)}${attnCls("old", r.left_no)}"${hunkAttr(r)}${anchor("old", r.left_no)} data-i="${ri(r)}">` +
+            `<tr class="del${hkCls(r)}${curCls("old", r.left_no)}${attnCls("old", r.left_no)}"${hkAttr(r)}${anchor("old", r.left_no)} data-i="${ri(r)}">` +
             `<td class="no l">${r.left_no || ""}</td><td class="no r"></td>` +
             `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l", hitsL(r))}</span></td></tr>` +
             after(3, ["old", r.left_no]);
         if (r.kind !== "del")
           html +=
-            `<tr class="add${hunkCls(r)}${curCls("new", r.right_no)}${attnCls("new", r.right_no)}"${hunkAttr(r)}${anchor("new", r.right_no)} data-i="${ri(r)}">` +
+            `<tr class="add${hkCls(r)}${curCls("new", r.right_no)}${attnCls("new", r.right_no)}"${hkAttr(r)}${anchor("new", r.right_no)} data-i="${ri(r)}">` +
             `<td class="no l"></td><td class="no r">${r.right_no || ""}</td>` +
             `<td class="side r"><span class="pan">${renderCell(r.right, r.right_spans, r.right_tok, "r", hitsR(r))}</span></td></tr>` +
             after(3, ["new", r.right_no]);
@@ -1625,7 +1632,7 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
       // default anchor is the new side.
       const both = notesOn ? ` data-lno="${r.left_no || 0}" data-rno="${r.right_no || 0}"` : "";
       html +=
-        `<tr class="${r.kind}${hunkCls(r)}${curClsBoth(r)}${attnClsBoth(r)}"${hunkAttr(r)}${anchor(aside, ano)}${both} data-i="${ri(r)}">` +
+        `<tr class="${r.kind}${hkCls(r)}${curClsBoth(r)}${attnClsBoth(r)}"${hkAttr(r)}${anchor(aside, ano)}${both} data-i="${ri(r)}">` +
         `<td class="no l">${r.left_no || ""}</td>` +
         `<td class="side l"><span class="pan">${renderCell(r.left, r.left_spans, r.left_tok, "l", hitsL(r))}</span></td>` +
         `<td class="no r">${r.right_no || ""}</td>` +
@@ -1651,7 +1658,7 @@ function renderDiff(d) {
   }
   state.lastDiff = d; // re-rendered on window resize (layout is width-dependent)
   state.diffBlockIdx = -1;
-  $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth, true);
+  $("diff-body").innerHTML = diffHTML(d, $("diff-pane").clientWidth, true, state.diffFolds, null, null, diffHunks ? { picks: diffHunks.picks } : null);
   mountPanBars($("diff-body"), $("diff-hbars"));
   diffSearchBar.paint(); // the render re-found: the count must follow
   updateDiffNav();
@@ -3011,31 +3018,52 @@ function clearDiffHunks() {
 }
 
 
+// activeHunks is the staging state the bar and its buttons act on: the slot
+// the reader is in while a stack is up (every slot keeps its OWN picks, and a
+// pick click moves the anchor), else the single-file view's diffHunks. One
+// file at a time either way — staging never spans slots (design D1).
+function activeHunks() {
+  if (state.stack) {
+    const h = activeSlotHunks();
+    return h ? h.hunks : null;
+  }
+  return diffHunks;
+}
+
+
 function renderHunkBar() {
   const bar = $("hunk-bar");
-  if (!diffHunks) {
+  const v = activeHunks();
+  if (!v) {
     bar.classList.add("hidden");
     return;
   }
   bar.classList.remove("hidden");
-  const n = diffHunks.picks.size;
+  const n = v.picks.size;
   $("hunk-stage").disabled = !n;
-  $("hunk-stage").textContent = `stage selected (${n})`;
+  // Stacked, the picked file need not be the one on screen — say which it is.
+  const where = state.stack && n && v.path ? ` in ${v.path}` : "";
+  $("hunk-stage").textContent = `stage selected (${n})${where}`;
 }
 
 
 // paintHunkPicks flips only the picked classes — no diff re-render, so
 // scroll position and text selection survive a toggle.
-function paintHunkPicks() {
-  document.querySelectorAll("#diff-body tr[data-hunk]").forEach((tr) => {
-    tr.classList.toggle("picked", !!diffHunks && diffHunks.picks.has(Number(tr.dataset.hunk)));
+function paintHunkPicks(scope) {
+  // scope = {el, hunks} for one stacked file; the single-file view paints the
+  // whole body. Never the whole body in a stack: another slot's rows carry
+  // their own picks and would be repainted from this file's set.
+  const root = (scope && scope.el) || $("diff-body");
+  const v = scope ? scope.hunks : diffHunks;
+  root.querySelectorAll("tr[data-hunk]").forEach((tr) => {
+    tr.classList.toggle("picked", !!v && v.picks.has(Number(tr.dataset.hunk)));
   });
   renderHunkBar();
 }
 
 
 async function stageHunksPicked() {
-  const v = diffHunks;
+  const v = activeHunks();
   if (!v || !v.picks.size) return;
   let resp;
   try {
@@ -3051,9 +3079,9 @@ async function stageHunksPicked() {
     return;
   }
   applyStatus(resp); // the 200 body IS a fresh /api/status payload
-  reconcileStatusView();
+  reconcileStatusView(); // a stack reconciles in place here: the slot re-fetches, the reader stays put
   renderFiles();
-  reopenAfterHunkStage(v.path);
+  if (!state.stack) reopenAfterHunkStage(v.path);
 }
 
 
@@ -3083,26 +3111,35 @@ function reopenAfterHunkStage(path) {
 $("hunk-stage").addEventListener("click", () => void stageHunksPicked());
 
 $("hunk-all").addEventListener("click", () => {
-  if (!diffHunks) return;
-  diffHunks.picks = new Set(Array.from({ length: diffHunks.count }, (_, i) => i));
-  paintHunkPicks();
+  const h = state.stack ? activeSlotHunks() : null;
+  const v = h ? h.hunks : diffHunks;
+  if (!v) return;
+  v.picks = new Set(Array.from({ length: v.count }, (_, i) => i));
+  paintHunkPicks(h);
 });
 
 $("hunk-none").addEventListener("click", () => {
-  if (!diffHunks) return;
-  diffHunks.picks = new Set();
-  paintHunkPicks();
+  const h = state.stack ? activeSlotHunks() : null;
+  const v = h ? h.hunks : diffHunks;
+  if (!v) return;
+  v.picks = new Set();
+  paintHunkPicks(h);
 });
 
 
 $("diff-body").addEventListener("click", (e) => {
-  if (!diffHunks) return;
   const tr = e.target.closest("tr[data-hunk]");
   if (!tr || !getSelection().isCollapsed) return; // don't toggle mid text-selection
+  // Stacked, the row says which file it belongs to; the single-file view has
+  // one. Either way the picks toggled are that file's own.
+  const scope = hunkSlotAt(tr);
+  const v = scope ? scope.hunks : diffHunks;
+  if (!v) return;
   const i = Number(tr.dataset.hunk);
-  if (diffHunks.picks.has(i)) diffHunks.picks.delete(i);
-  else diffHunks.picks.add(i);
-  paintHunkPicks();
+  if (v.picks.has(i)) v.picks.delete(i);
+  else v.picks.add(i);
+  if (scope) pickOnSlot(scope.k); // the bar acts on the file just picked in, scroll or no scroll
+  paintHunkPicks(scope);
 });
 
 

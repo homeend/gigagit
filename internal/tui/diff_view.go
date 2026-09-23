@@ -964,6 +964,10 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		hv := newHistoryView(ctx)
 		m = m.pushLayer(hv)
 		return m, m.loadHistoryListCmd(ctx, hv.listTag)
+	case "H":
+		// Hunk staging for the file being read — the cursor's file in a stack
+		// (diff_stack_hunks.go). The picker opens as a layer over this view.
+		return m.diffHunkKey()
 	case "b":
 		ctx := navContext{path: v.title, rev: v.rev}
 		bv := newBlameView(ctx)
@@ -972,7 +976,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "?":
 		// The diff footer is packed and truncates on a narrow terminal: the
 		// help opens with this window's keys first, then the Diff view section.
-		return m.pushLayer(newContentPopup(i18n.T("Help — keys"), helpFor(i18n.T("Diff view (enter)"), diffHintFor(v.long, v.stk != nil)))), nil
+		return m.pushLayer(newContentPopup(i18n.T("Help — keys"), helpFor(i18n.T("Diff view (enter)"), diffHintFor(v.long, v.stk != nil, m.hunkKeyApplies())))), nil
 	case "e":
 		if r, ok := m.diffEditRow(); ok {
 			nm, cmd := r.run(m)
