@@ -114,7 +114,9 @@ Commit amend is TUI-only too (the web's commit op has no amend lane).
   blame, with the same rules (case-insensitive, visible lines only, a same
   row counted once). The TUI also searches the View-file preview and the
   hunk picker; the web's file-history overlay and conflict picker have no
-  search.
+  search. In a STACKED diff the TUI searches every file at once and `]`/`[`
+  unfold and load a file to reach a hit (the counter's `+` means files are
+  still unsearched); the web's stack refuses the search for now.
 - **Stash create.** The web stashes the whole tree with a message; the TUI
   popup offers a per-file checklist.
 - **Commit context menu.** Mostly closed. What the TUI still has that the web
