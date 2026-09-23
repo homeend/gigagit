@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v91 -->
+<!-- gg:using-gg:v92 -->
 
 # Using gg (gigagit)
 
@@ -178,12 +178,22 @@ unlike every other batch line it might launch the TUI or a server). Use it
 instead of launching `gg` yourself. (A human can also paste any link into the
 TUI's `#` prompt.)
 
+A **content link** names a file as it is ON DISK in the worktree, not a
+diff: `gg://<repo>/<path>?view=content`. `gg link --content <path>` prints
+one (exit 1 when the file is not in the working tree; `--content` takes no
+target flag, hint flag, `:<line>` or `#<hunk>`). `gg open` / `gg session
+navigate` show it in the TUI's content viewer; `gg open --web` refuses it
+(exit 2) — the web page has no viewer yet. Every other link-taking verb
+(`gg diff`, `gg show`, `gg note …`, `gg session highlight add`) refuses it
+(exit 2). When the user asks you to "open" a file for them, this is the link
+to build: `gg link --content <path>` → `gg open <link>`.
+
 `<repo>` is the repository name of the repo's remote (`gigagit`), resolved
 through gg's machine-local repository history — so a link made on one checkout
 finds the right one here.
 
 - `gg link [<path>[:<line>]] [--cached | --rev <commit> | --preview <id> |
-  --ref <branch|tag> | --pair <a>..<b>] [--bookmark <id> | --shelf <id>]` —
+  --ref <branch|tag> | --pair <a>..<b> | --content] [--bookmark <id> | --shelf <id>]` —
   print the link for a place in the current repo. Those five target flags name
   the same thing, so pass at most one (exit 2 otherwise); `--bookmark` and
   `--shelf` attach the landing hint and are mutually exclusive. `--preview`
