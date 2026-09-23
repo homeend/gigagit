@@ -1228,3 +1228,29 @@ func TestResolveLinkAddressLessStashHintIsAlwaysAHardError(t *testing.T) {
 		t.Fatalf("err = %v, want a model.ErrLink hard error", err)
 	}
 }
+
+func TestResolveLinkContentLink(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "hi\n")
+	svc := Open(dir)
+	abs := filepath.ToSlash(dir)
+	with, err := model.ParseLink("gg://" + abs + "/README.md?view=content")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := ResolveLink(context.Background(), with, ResolveOpts{Cwd: svc})
+	if err != nil {
+		t.Fatalf("ResolveLink(content link with a path) = %v", err)
+	}
+	if res.Addr.Path != "README.md" || res.Hint != model.ContentHint {
+		t.Errorf("resolved = %+v, want README.md with the content hint", res)
+	}
+	bare, err := model.ParseLink("gg://" + abs + "?view=content")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveLink(context.Background(), bare, ResolveOpts{Cwd: svc}); err == nil ||
+		!errors.Is(err, model.ErrLink) || !strings.Contains(err.Error(), "needs a file path") {
+		t.Fatalf("ResolveLink(address-less content link) = %v, want an ErrLink naming the missing path", err)
+	}
+}

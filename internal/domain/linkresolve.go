@@ -537,6 +537,11 @@ func finishLink(ctx context.Context, l model.Link, c linkCandidate, opts Resolve
 			// where it was copied from — so without one the link names
 			// nothing, whether or not this store holds the id.
 			return Resolved{}, fmt.Errorf("%w: a preview hint needs the set it names (@<target>...<source> or @<a>..<b>); %q alone names nothing", model.ErrLink, l.Hint.ID)
+		case model.ContentHintKind:
+			// A content link names a FILE's content; with no path it names
+			// nothing. (The remote form is refused by ParseLink already; the
+			// local form only learns its path here.)
+			return Resolved{}, fmt.Errorf("%w: a content link needs a file path", model.ErrLink)
 		default:
 			// "stash" (spec §3.4) and any future kind this build cannot
 			// check: there is no presence lookup to fall back on, so an
