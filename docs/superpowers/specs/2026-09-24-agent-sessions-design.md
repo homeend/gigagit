@@ -272,7 +272,7 @@ Linux/WSL.
 | Child gone after the host closes the PTY (SIGHUP) | PASS |
 | vim: alt-screen, insert mode, `:q!` → exit status reported | PASS |
 | Codex starts and renders its trust prompt | PASS |
-| Windows ConPTY | NOT RUN — `spike.exe` cross-compiles, but WSL interop is disabled on this box (no `WSLInterop` binfmt entry), so it cannot execute from here |
+| Windows ConPTY (`spike.exe cmd.exe`, run by the user in Windows Terminal) | PASS — cmd renders, `ctrl+]` intercepted. Typing / resize / Claude on Windows: pending the user's v2 run |
 
 Findings that change the plan:
 1. **`x/vt` is kept** (no `vt10x` fallback needed). `SafeEmulator` suffices;
@@ -296,3 +296,8 @@ Findings that change the plan:
    (Claude printed a tmux scroll hint). Sessions should drop `TMUX` and
    `TMUX_PANE` from the child environment, since the console is not a tmux
    pane (Plan 1 Task 2).
+5. **Windows: a bare modifier key-down arrives as `KeyRunes{0}`.** Bubble Tea
+   v1's console reader (`key_windows.go`) filters only VK_SHIFT, so pressing
+   Ctrl/Alt/Win alone yields a NUL rune, and the child echoed `^@` on every
+   ctrl press. The console must drop NUL-only rune messages (Plan 2 key
+   mapping; spike v2 does).
