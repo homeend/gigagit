@@ -1742,6 +1742,28 @@ at "what the user means" that a question would have avoided.
   gutters kept painting over a model that no longer had them. The guard
   `TestSelectionMarksTheWholeRow` now fails if any earlier round's selector
   (`pick-l`, `pick-w`, `tr.hk.picked`, `#hunk-bar`, the ✓) reappears.
+- **The screen moves first (user request: "change the UI, send, revert on
+  error, else update selectively").** `optimisticRows` predicts the diff after
+  the action — staging turns a modified/added row into context and drops a
+  removed one, renumbering the index side (left); unstaging is the mirror on
+  the right — and `applyRowStage` paints it BEFORE the POST, with the file's
+  tags stripped (they name the old bytes) so nothing can act on stale
+  ordinals meanwhile. An error restores the previous diff and selection; a
+  409 re-reads instead. Success re-reads ONE file quietly (`quietRefreshFile`:
+  no placeholder, scroll and folds kept) — the old path re-opened it through
+  `openStatusDiff`, which is where the "loading…" flash, the fold reset and
+  the jump to the first change came from.
+- **The stack's live refresh was the other flicker.** Every index change
+  fires the watcher, and `reconcileStack` repainted EVERY file. With the same
+  files in the same order and status it now re-reads each loaded slot
+  quietly (`quietReloadSlot`) and repaints one only when its rows changed;
+  the full repaint stays for a file entering or leaving the section. The
+  probe proves it with a control: the previous build replaces an untouched
+  file's table on a stage elsewhere, this one does not.
+- Double-click acts on the one row under it (`actOnRow`), in either lane.
+- **Probes:** `stack-probe/gkoptimistic.mjs` holds and fails the POST with
+  request interception, so "painted before the answer", "no loading flash"
+  and "reverted on error" are measured, not assumed.
 - **Probes:** `stack-probe/gkstage.mjs` (single file, both lanes; reads the
   index with real git after every action) and `gkstack.mjs` (per-file
   selections in a stack), red on the installed build at the first assert,

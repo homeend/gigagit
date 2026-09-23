@@ -17,6 +17,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   staged rows leave the diff and the file shows up (partially) under Staged.
   A modified row is one change, whichever side you click. This replaces the
   earlier pick-then-stage bar (`stage selected (n)`, `all`, `none`).
+- **Staging feels instant.** The diff shows the result the moment you act
+  and the request runs behind it; if the server refuses, the diff goes back
+  exactly as it was. Afterwards only the file you staged in is re-read, in
+  place — no "loading…" flash, no jump to the top, and in the stacked view
+  the other files are not repainted.
+- **Double-click a row to stage it** (in the Staged diff: to unstage it).
+- **The line-number columns are no longer tinted** on added or removed rows,
+  so both number columns read alike.
 - **The commit message box takes the whole sidebar width**, with its
   buttons underneath and a ⤢ control to switch between three and twelve
   lines; the size is remembered.
