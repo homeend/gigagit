@@ -26,6 +26,7 @@ import {
   goToDiffHit,
   markDiffRow,
   globalNoteCtx,
+  hunkEligible,
   notesArmed,
   notesFor,
   rowNoteCtx,
@@ -34,6 +35,7 @@ import {
   openFile,
   openStatusDiff,
   renderFiles,
+  renderHunkBar,
   setLayout,
   updateDiffNav,
 } from "./files.js";
@@ -102,7 +104,7 @@ async function buildStack(list, group, anchorIdx) {
   // painted/want: until the first paint an open (a second openFile in the
   // same tick — applySym and setFilter open row 0, then the kept row) only
   // moves the target; the first paint lands on it.
-  const st = { list, group, slots, near: new Set(), anchor: 0, inFlight: 0, painted: false, want: anchorIdx };
+  const st = { list, group, slots, near: new Set(), anchor: 0, pickK: -1, inFlight: 0, painted: false, want: anchorIdx };
   state.stack = st;
   // Counts FIRST: they size every placeholder. Painted with no counts, all
   // sections are a few rows tall, the whole change set sits "near" the
@@ -164,7 +166,8 @@ function bodyHTML(s) {
     // which is what refindStack searches next time — one collapse per slot,
     // and the search and the paint provably share a fold set.
     const hctx = { search: diffSearch, base: slotBase(s), lines: (ls) => (s.lines = ls) };
-    return diffHTML(s.diff, $("diff-pane").clientWidth, notesArmed(nc.ctx), s.folds, nc, hctx);
+    const kctx = s.hunks ? { picks: s.hunks.picks } : null;
+    return diffHTML(s.diff, $("diff-pane").clientWidth, notesArmed(nc.ctx), s.folds, nc, hctx, kctx);
   }
   return `<div class="stk-ph" style="height:${estimateHeight(s, ROW_PX)}px">loading…</div>`;
 }
@@ -423,6 +426,15 @@ async function load(st, s) {
     const d = await getJSON(fileDiffURL(s.f));
     s.diff = d;
     s.load = "ok";
+    // The server tags an eligible unstaged diff with hunk ordinals and the
+    // staging freshness hash — the same payload the single-file view arms
+    // diffHunks from, kept HERE so every slot answers for its own file.
+    s.hunks = d.hunks && hunkEligible(s.f) ? { path: s.f.path, hash: d.hunks.hash, count: d.hunks.count, picks: new Set() } : null;
+    // A refresh re-fetches every kept slot (reconcileSlots). Where the bytes
+    // did not move — same freshness hash — the reader's picks still name the
+    // same hunks, so staging one file does not wipe the picks in another.
+    if (s.hunks && s.hunksPrev && s.hunksPrev.hash === s.hunks.hash) s.hunks.picks = s.hunksPrev.picks;
+    s.hunksPrev = null;
     if (!s.counts) s.counts = countsFromDiff(d);
     // This file's own review notes, against the context its own row builds —
     // the same door the single-file view uses (rowNoteCtx), so a note written
@@ -441,6 +453,7 @@ async function load(st, s) {
   }
   const k = st.slots.indexOf(s);
   if (k >= 0) repaintSlot(st, k);
+  renderHunkBar(); // this file may be the one being read, and it just armed
   // A slot arriving under a live query brings rows the search has never seen.
   if (diffSearch.query) {
     refindStack();
@@ -653,6 +666,7 @@ function syncCursor() {
   renderFiles(); // the list highlight follows the file being read
   followInList();
   updateDiffNav();
+  renderHunkBar(); // …and so does the staging bar: it acts on ONE file
 }
 
 $("diff-pane").addEventListener("scroll", () => {
@@ -707,6 +721,46 @@ $("diff-body").addEventListener("click", (e) => {
   }
 });
 
+// hunkSlotAt is the slot a clicked diff row belongs to — the door the single
+// hunk bar uses to act on ONE file (design D1). Outside a stack it returns
+// null and the caller falls back to the single-file globals.
+function hunkSlotAt(el) {
+  const st = state.stack;
+  if (!st || !el) return null;
+  const sec = el.closest(".stk-file");
+  if (!sec) return null;
+  const k = Number(sec.dataset.k);
+  const s = st.slots[k];
+  return s && s.hunks ? { k, slot: s, hunks: s.hunks, el: sec } : null;
+}
+
+// activeSlotHunks is WHOSE picks the bar shows and stages. The anchor CANNOT
+// answer that on its own: it is derived from the scroll position (syncCursor),
+// so the moment a pick click is followed by any scroll — or by the list
+// re-render a pick triggers — the bar would swing back to whatever file sits
+// at the top of the pane and stage THAT. (The browser probe caught exactly
+// this: a pick in beta then a pick in delta staged beta.) So a slot with live
+// picks owns the bar until they are staged or cleared; with no picks anywhere
+// the bar follows the file being read.
+function activeSlotHunks() {
+  const st = state.stack;
+  if (!st) return null;
+  const at = (k) => {
+    const s = st.slots[k];
+    return s && s.hunks ? { k, slot: s, hunks: s.hunks, el: sectionEl(k) } : null;
+  };
+  const picked = at(st.pickK);
+  if (picked && picked.hunks.picks.size) return picked;
+  return at(st.anchor);
+}
+
+// pickOnSlot makes k the file the bar acts on. It does NOT move the reader's
+// anchor: the anchor means "the file on screen" and is recomputed on scroll.
+function pickOnSlot(k) {
+  const st = state.stack;
+  if (st) st.pickK = k;
+}
+
 // --- lifecycle hooks ------------------------------------------------------
 
 // reconcileStack follows a status re-read: the working-tree stack keeps its
@@ -734,6 +788,7 @@ function reconcileStack() {
     refindStack();
     diffSearchBar.paint();
   }
+  renderHunkBar(); // the slots re-fetch: their picks went with the old bytes
   loadCounts(st); // a refresh changes counts too; heads and placeholders repaint in place
 }
 
@@ -786,4 +841,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, activeSlotHunks, pickOnSlot, hunkSlotAt, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

@@ -240,10 +240,10 @@ func TestStackNoteContextIsShared(t *testing.T) {
 
 	// The renderer takes the context EXPLICITLY. A module-level "current slot"
 	// would race: a stack paints one slot while another's notes are in flight.
-	if !strings.Contains(files, "function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null, hctx = null)") {
-		t.Fatal("files.js: diffHTML must take the note AND search contexts as parameters")
+	if !strings.Contains(files, "function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = null, hctx = null, kctx = null)") {
+		t.Fatal("files.js: diffHTML must take the note, search AND hunk contexts as parameters")
 	}
-	if !strings.Contains(view, "diffHTML(s.diff, $(\"diff-pane\").clientWidth, notesArmed(nc.ctx), s.folds, nc, hctx)") {
+	if !strings.Contains(view, "diffHTML(s.diff, $(\"diff-pane\").clientWidth, notesArmed(nc.ctx), s.folds, nc, hctx, kctx)") {
 		t.Fatal("stackview.js: a slot must paint with its own note context")
 	}
 
@@ -341,7 +341,7 @@ func TestStackSearchSpansTheWholeStack(t *testing.T) {
 		if i < 0 {
 			t.Fatalf("stackview.js: %s vanished — re-point this guard", site)
 		}
-		end := i + 1800
+		end := i + 2400 // widened when 4c's per-slot staging joined load()
 		if end > len(view) {
 			end = len(view)
 		}
