@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## In-view search inside a stacked diff
+
+### Added
+
+- **`/`, `@`, `]` and `[` search a whole stacked diff.** Typing a query
+  matches every file of the stack whose diff has arrived, and `]` / `[` step
+  hit to hit across files — reaching a hit in a file that is folded, or has
+  never been read, by unfolding and loading it on the step (one file per step,
+  so `/` itself never loads the stack). The hit counter is over the whole
+  stack and carries a `+` while files remain unsearched; it drops the `+` once
+  every file has been looked at. With nothing left to open, `]` wraps as it
+  does in the single-file view.
+
+### Fixed
+
+- **A stacked diff no longer loses the current search hit when a file above
+  the reader finishes loading.** The query was re-found against the line index
+  the cursor had in the previous stream, so the highlight jumped to another
+  file's hit.
+
 ## Settings menu and repo switcher type-to-filter
 
 ### Changed

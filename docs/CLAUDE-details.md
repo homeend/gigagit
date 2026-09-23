@@ -1569,6 +1569,50 @@ reserved, and nothing more:
   silently exercise the single-file path instead.
 
 
+### In-view search inside a stack (plan 4b, 2026-09-23)
+
+Spec §11 item 2, plan `docs/superpowers/plans/2026-09-23-stacked-search.md`.
+**The TUI already searched a stack** and nobody had noticed: `searchLines()`
+walks `v.lines` and skips only the lines that are not bodies, so every file
+whose diff has arrived and is unfolded was in the one document all along
+(`TestStackSearchAlreadySpansLoadedFiles` pins it). 4b is therefore about the
+part of the document that is NOT in the stream — a folded file's rows, and a
+file that has never been fetched — plus one real ordering bug.
+
+- **The late-load re-find ran too early.** `applyStackFile` called
+  `rebuild()`, whose tail re-finds the query against `v.curLine`, and only
+  THEN remapped the cursor through its `stackAnchor`. A file arriving above
+  the reader lengthens the stream, so the re-find measured from an index the
+  new stream no longer meant and the current hit snapped to a neighbour's.
+  `rebuild()` now splits into `rebuildLines()` + `refindAfterRebuild()`, and
+  the stack's loader runs the re-find AFTER the remap. Same shape as plan 3's
+  `reanchorAfterRebuild` gotcha; a dense-hit fixture is needed to see it (two
+  far-apart hits re-snap to the same one and the test passes vacuously).
+- **Strict first, then hunt, then wrap (D2/D3).** `stackHitStep` tries
+  `stepHitStrict` (new in `textsearch.go`, `stepHit` without the wrap); a wrap
+  is the signal that the stream has run out in that direction, so it looks for
+  the next `searchableFile` that is folded or unfetched, unfolds it, moves the
+  cursor to its header — which is also what puts it inside `wantLoads`'
+  window — and parks a `stackHunt{file, dir}`. `drainStackHunt`, called from
+  `applyStackFile`, lands on that file's edge hit or hands the step on to the
+  next candidate. One file per round trip: `/` itself loads nothing.
+- **`searchableFile` is the predicate everywhere.** Conflicted, binary, too
+  large, errored and content-identical files can never hold a hit, so they are
+  neither hunted nor counted as unsearched — otherwise the `+` never clears
+  and the cascade walks into a dead end.
+- **The badge's `+` (D1).** `searchBadge()` = `search.badge()` plus `+` while
+  `unsearchedFiles() > 0`; the count is over the whole stack, not the file.
+  Like `badge()` it carries no `i18n.T` — it is punctuation around the user's
+  own query.
+- **A hunt is cancelled by any other key (D5)**, cleared beside `noteLand` at
+  the top of `updateDiffViewKey`, so an answer already in flight cannot yank
+  the cursor away from wherever the reader went.
+- **Verified** with `tui-capture.sh` over a 30-file fixture
+  (`stack-probe/mksearchmany.sh`): `/needle` reads `1/1+` in `f00.txt`, one
+  `]` cascades to `f27.txt` (`2/2`, no `+`, `file 28/30`), the next wraps back.
+  A 3-file fixture proves nothing here — its whole stack loads eagerly.
+
+
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)
 
 Spec `docs/superpowers/specs/2026-09-21-web-previews-dnd-compare-design.md`.

@@ -186,14 +186,24 @@ type dRow struct {
 	file     int       // stacked: the row's file index into diffStack.files
 }
 
-// rebuild recomputes the logical (mode) stream, then the display stream.
+// rebuild recomputes the logical (mode) stream, then the display stream, and
+// re-finds a committed search over it.
 func (v *diffView) rebuild() {
+	v.rebuildLines()
+	v.refindAfterRebuild()
+}
+
+// rebuildLines is rebuild WITHOUT the search re-find. A stack's loader rebuilds
+// the stream first and remaps the cursor second (a file arriving above the
+// reader shifts every index below it), and a re-find in between would measure
+// from a line index the new stream no longer means — the current hit would snap
+// to whatever hit is nearest the OLD cursor line.
+func (v *diffView) rebuildLines() {
 	v.sanLeft, v.sanRight = nil, nil // the line stream is about to change
 	v.lsel.clear()                   // …and so do the line indexes it holds
 	if v.stk != nil {
 		v.spliceStack() // the stack builds its own lines/blocks from its files
 		v.relayout(v.width)
-		v.refindAfterRebuild()
 		return
 	}
 	if v.partial {
@@ -204,7 +214,6 @@ func (v *diffView) rebuild() {
 		v.blocks = v.fullBlocks
 	}
 	v.relayout(v.width)
-	v.refindAfterRebuild()
 }
 
 // relayout builds the display-row stream (disp/dispBlocks) from the logical
@@ -911,6 +920,12 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// touched the cursor themselves, a notes load arriving late must not yank it
 	// away. The }/{ cases below re-park their own.
 	m.noteLand = nil
+	// …and so does a parked ] / [ hunt: it belongs to that gesture alone, so
+	// any other key abandons it and the answer already out cannot yank the
+	// cursor away from wherever the reader has since gone (design D5).
+	if v.stk != nil && v.stk.hunt != nil && !isHitStepKey(msg) {
+		v.stk.hunt = nil
+	}
 	zc := v.zCycle
 	v.zCycle = alignCenter
 	body := m.diffBodyRows()
@@ -1243,9 +1258,19 @@ func (m Model) diffSearchKey(v *diffView, msg tea.KeyMsg, body int) (Model, tea.
 		v.search.open(msg.String() == "@", v.searchPos())
 		return m.recallReset(), nil, true
 	case searchNext:
+		if v.stk != nil {
+			if nm, cmd, ok := m.stackHitStep(v, 1, body); ok {
+				return nm, cmd, true
+			}
+		}
 		v.goToHit(stepHit(v.search.hits, v.searchPos(), 1), body)
 		return m, nil, true
 	case searchPrev:
+		if v.stk != nil {
+			if nm, cmd, ok := m.stackHitStep(v, -1, body); ok {
+				return nm, cmd, true
+			}
+		}
 		v.goToHit(stepHit(v.search.hits, v.searchPos(), -1), body)
 		return m, nil, true
 	case searchCleared:

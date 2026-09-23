@@ -120,7 +120,20 @@ type diffStack struct {
 	// done at key time — the lines it names do not exist yet — so it is parked,
 	// exactly like the single-file view's }/{ landing.
 	land *stackLanding
+	// hunt is the ] / [ step a file owes once it arrives: the search ran out
+	// of hits in that direction, so the next file it has not searched was
+	// unfolded and sent for. Separate from `land` because it waits on the DIFF
+	// alone (a note landing also waits on stackNotesMsg), and mutually
+	// exclusive with it — setting one clears the other.
+	hunt *stackHunt
 }
+
+// stackHunt is a parked search step: file `file` was unfolded (and sent for if
+// it had never been fetched) on behalf of a ] (dir>0) / [ (dir<0). When its
+// lines arrive the search is re-found and the cursor lands on that file's
+// first (dir>0) / last (dir<0) hit — and when it holds none, the step hands on
+// to the next unsearched file, one round trip at a time (design D2).
+type stackHunt struct{ file, dir int }
 
 // stackLanding is one parked cursor placement inside a stack. dir != 0 means
 // "this file's FIRST (dir>0) / LAST (dir<0) note"; no > 0 means "this exact
@@ -486,17 +499,22 @@ func (m Model) applyStackFile(msg stackFileMsg) (Model, tea.Cmd) {
 	if len(v.lineStart) > topLine {
 		top.sub = v.offset - v.lineStart[topLine]
 	}
-	v.rebuild()
+	v.rebuildLines()
 	v.curLine = v.lineAt(cur)
 	tl := v.lineAt(top)
 	if tl < len(v.lineStart) {
 		v.offset = v.lineStart[tl] + top.sub
 	}
+	// AFTER the remap: refindAfterRebuild measures from v.curLine, and until
+	// the line above is run that index still names the OLD stream.
+	v.refindAfterRebuild()
 	v.scroll(0, body)
 	v.syncStackTitle()
+	// A ] / [ that stepped into this file lands now that its rows exist.
+	m, hcmd := m.drainStackHunt(msg.idx, body)
 	// This file's own review notes follow its diff: they resolve against the
 	// rows that just arrived, so they cannot be asked for any earlier.
-	return m, m.stackNotesCmd(v.stk.gen, msg.idx, f.d)
+	return m, tea.Batch(hcmd, m.stackNotesCmd(v.stk.gen, msg.idx, f.d))
 }
 
 // countRows is a file's +adds / −dels from its aligned rows — the count for
