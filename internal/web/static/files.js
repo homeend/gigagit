@@ -1379,7 +1379,41 @@ function renderCell(text, spans, toks, side, hits) {
 // resize re-render keeps the current picks).
 function hunkCls(r, kctx) {
   if (r.hunk == null || !kctx) return "";
-  return " hk" + (kctx.picks.has(r.hunk) ? " picked" : "");
+  // hk-top / hk-bot mark the first and last row of one hunk's run, which is
+  // what lets the CSS draw a border around the BLOCK rather than around each
+  // row: a reader has to see what one click picks, and where it ends.
+  let cls = " hk";
+  if (kctx.picks.has(r.hunk)) cls += " picked";
+  if (kctx.first === r.hunk) cls += " hk-top";
+  if (kctx.last === r.hunk) cls += " hk-bot";
+  return cls;
+}
+
+
+// hunkRunEdges finds, for the rows ACTUALLY PAINTED, which one opens and which
+// one closes each hunk's run. A hunk's rows are contiguous, so that is one
+// pass; it runs over the painted list (not the raw diff) because the
+// changes-only fold can hide a hunk's real first row, and the border has to
+// sit where the block is SEEN to begin. Pure — the guard imports it.
+function hunkRunEdges(items) {
+  const first = new Map();
+  const last = new Map();
+  let run = null; // the hunk ordinal of the run being walked
+  let opener = null;
+  let closer = null;
+  for (const r of items) {
+    const h = r && r.hunk != null ? r.hunk : null;
+    if (h !== run) {
+      if (closer && run !== null) last.set(closer, run);
+      if (h !== null) first.set(r, h);
+      opener = h !== null ? r : null;
+      run = h;
+    }
+    closer = h !== null ? r : null;
+    void opener;
+  }
+  if (closer && run !== null) last.set(closer, run);
+  return { first, last };
 }
 
 
@@ -1470,7 +1504,6 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
   // kctx is WHOSE hunk picks this table paints: {picks} for the file it
   // belongs to, null where staging does not apply. Explicit like nctx/hctx —
   // a stack paints one file's table while another file's picks are live.
-  const hkCls = (r) => hunkCls(r, kctx);
   const hkAttr = (r) => hunkAttr(r, kctx);
   const nc = nctx || globalNoteCtx();
   const hbase = hctx ? hctx.base : 0;
@@ -1558,6 +1591,11 @@ function diffHTML(d, paneWidth, notesOn = false, open = state.diffFolds, nctx = 
   const slines = diffSearchLines(items, ri);
   if (hctx) hlines(slines);
   else if (hs) hs.refind(slines);
+  // Which row opens and which closes each hunk's run, over the rows actually
+  // painted: the block's border goes there (hunkCls).
+  const hkAt = kctx ? hunkRunEdges(items) : null;
+  const hkCls = (r) =>
+    hunkCls(r, kctx && { picks: kctx.picks, first: hkAt.first.get(r), last: hkAt.last.get(r) });
   const hitsL = (r) => (hs ? hs.hitsOn(hbase + ri(r), r.kind === "same" ? 1 : 0) : null);
   const hitsR = (r) => (hs ? hs.hitsOn(hbase + ri(r), 1) : null);
   const cols = pureAdd || pureDel ? 2 : paneWidth < 950 ? 3 : 4;
@@ -2672,6 +2710,44 @@ $("diff-body").addEventListener("contextmenu", (e) => {
           act: () => copyLink(link, linkDesc("file", (rowCtx && rowCtx.path) || "", "")),
         });
     }
+    // Staging, when the pointer is on a stageable block. These rows are the
+    // only place the click-to-pick mechanic is WRITTEN DOWN: without them a
+    // reader has no way to learn that a block can be picked at all, and no
+    // one-shot way to stage the block under the pointer.
+    const hkRow = e.target.closest("tr[data-hunk]");
+    const hk = hkRow ? hunkSlotAt(hkRow) || (diffHunks ? { hunks: diffHunks, el: $("diff-body") } : null) : null;
+    if (hk) {
+      const i = Number(hkRow.dataset.hunk);
+      const picked = hk.hunks.picks.has(i);
+      rows.push({
+        label: picked ? "deselect this block" : "select this block",
+        act: () => {
+          if (picked) hk.hunks.picks.delete(i);
+          else hk.hunks.picks.add(i);
+          if (hk.k != null) pickOnSlot(hk.k);
+          paintHunkPicks(hk.k != null ? hk : null);
+        },
+      });
+      rows.push({
+        label: "stage this block",
+        act: () => {
+          // One shot: this block alone, whatever else was picked.
+          const keep = new Set(hk.hunks.picks);
+          hk.hunks.picks = new Set([i]);
+          if (hk.k != null) pickOnSlot(hk.k);
+          void stageHunksPicked().then(() => {
+            if (hk.hunks.picks.size === 0 && keep.size) hk.hunks.picks = new Set();
+          });
+        },
+      });
+      const n = hk.hunks.picks.size;
+      if (n) {
+        rows.push({
+          label: `stage selected (${n})${hk.hunks.path ? " in " + hk.hunks.path : ""}`,
+          act: () => void stageHunksPicked(),
+        });
+      }
+    }
     if (!rows.length) return; // nothing of our own to say: keep the browser's menu
     e.preventDefault();
     showCtxMenu(rows, e.clientX, e.clientY);
@@ -3125,6 +3201,34 @@ $("hunk-none").addEventListener("click", () => {
   v.picks = new Set();
   paintHunkPicks(h);
 });
+
+
+// Hovering one row of a stageable block outlines the WHOLE block: what a
+// click takes is the run, and there is no CSS selector for "the rows sharing
+// my data-hunk", so the class is set here.
+$("diff-body").addEventListener("mouseover", (e) => {
+  const tr = e.target.closest("tr[data-hunk]");
+  const key = tr ? hunkRunKey(tr) : "";
+  if (key === hoverRun) return;
+  paintHunkHover(key);
+});
+$("diff-body").addEventListener("mouseleave", () => paintHunkHover(""));
+
+let hoverRun = "";
+
+// hunkRunKey identifies one block: its ordinal, scoped to its file's section
+// (a stack paints many files, each with a hunk 0).
+function hunkRunKey(tr) {
+  const sec = tr.closest(".stk-file");
+  return (sec ? sec.dataset.k : "") + ":" + tr.dataset.hunk;
+}
+
+function paintHunkHover(key) {
+  hoverRun = key;
+  document.querySelectorAll("#diff-body tr[data-hunk]").forEach((tr) => {
+    tr.classList.toggle("hk-hover", !!key && hunkRunKey(tr) === key);
+  });
+}
 
 
 $("diff-body").addEventListener("click", (e) => {

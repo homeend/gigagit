@@ -438,15 +438,20 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #tags-list li, #stashes-list li { cursor: pointer; }
 #tags-list li:hover, #stashes-list li:hover { background: var(--bg-alt); }
 #tags-list li.more, #remotes-list li.more { color: var(--dim); cursor: default; }
-#commit-box { padding: 4px 8px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: flex-start; }
+/* A COLUMN: the message takes the sidebar's whole width (it is the thing
+   being written) and the buttons sit under it. */
+#commit-box { padding: 4px 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+#commit-actions { display: flex; gap: 8px; align-items: center; }
+#commit-actions #commit-grow { margin-left: auto; padding: 2px 8px; }
 #commit-box.hidden { display: none; }
 /* Takes the commit box's slot while a sequencer op is paused: the way to
    finish is the banner's Continue, and this line says so. */
 #conflict-note { padding: 6px 10px; border-bottom: 1px solid var(--border); color: var(--dim); font-size: 12px; font-style: italic; }
 #conflict-note.hidden { display: none; }
 #commit-box textarea {
-  flex: 1; background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border);
-  border-radius: 3px; font: inherit; padding: 3px 6px; resize: vertical;
+  width: 100%; box-sizing: border-box; background: var(--bg-alt); color: var(--fg);
+  border: 1px solid var(--border); border-radius: 3px; font: inherit; padding: 3px 6px;
+  resize: vertical;
 }
 #commit-box textarea:focus { outline: none; border-color: var(--accent); }
 #commit-box button {
@@ -787,10 +792,26 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #menu-btn:hover { border-color: var(--accent); }
 
 /* inline hunk staging: tagged rows in an unstaged diff toggle on click */
+/* A stageable block. The reader has to see three things without being told:
+   that the rows are clickable, WHICH rows one click takes (the run, not the
+   row under the pointer), and whether that run is currently picked. So the
+   whole run is outlined as one box — hk-top / hk-bot are its first and last
+   rows — the gutter carries a ✓ when picked, and hovering any row of a run
+   outlines the whole run (hk-hover is set on every row of it by files.js). */
 tr.hk td { cursor: pointer; }
 tr.hk td:first-child { border-left: 3px solid var(--border); }
+tr.hk.hk-hover td { box-shadow: inset 0 0 0 9999px rgba(127, 127, 127, .06); }
+tr.hk.hk-hover td:first-child { border-left-color: var(--dim); }
 tr.hk.picked td:first-child { border-left-color: var(--accent); }
 tr.hk.picked td.no { background: var(--sel); color: var(--fg); }
+/* the run's outline: sides on every row, the cap rows close it */
+tr.hk.picked td { border-left: 1px solid var(--accent); border-right: 1px solid var(--accent); }
+tr.hk.picked td:not(:first-child):not(:last-child) { border-left: 0; border-right: 0; }
+tr.hk.picked.hk-top td { border-top: 1px solid var(--accent); }
+tr.hk.picked.hk-bot td { border-bottom: 1px solid var(--accent); }
+/* the ✓ rides in the gutter of the run's FIRST row, so one glance counts the
+   picked blocks */
+tr.hk.picked.hk-top td.no::before { content: "✓ "; color: var(--accent); font-weight: bold; }
 #hunk-bar { flex: 0 0 auto; display: flex; gap: 4px; }
 #hunk-bar.hidden { display: none; }
 #hunk-bar button { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 3px; padding: 0 8px; font: inherit; font-size: 11px; cursor: pointer; }
