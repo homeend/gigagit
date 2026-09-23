@@ -123,7 +123,8 @@ starting a server.
   add it without a behaviour change on existing input.
 - `gg open <content link>` and `gg session navigate <content link>` need no
   new flags; the hint travels in the existing steer `HintKind`/`HintID`.
-- `gg link resolve` describes it as `file <path> (working tree content)`.
+- `gg link resolve` resolves it like any working-tree file link (its JSON
+  carries `hint_kind: "view"`).
 - Every other link-taking verb (`gg diff`, `gg note add|list|apply|clear`,
   `gg session highlight add`, `gg show`) refuses a content link with exit 2 —
   it names a file's content, not a diff.
