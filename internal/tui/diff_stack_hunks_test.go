@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -91,6 +92,32 @@ func TestStackHStagesTheFileUnderTheCursor(t *testing.T) {
 	}
 	if u.(Model).statusMsg != "" {
 		t.Fatalf("H posted a notice instead of opening the picker: %q", u.(Model).statusMsg)
+	}
+}
+
+// The Staged section unstages: the same key, the other lane. A file not yet in
+// HEAD is excluded — StageHunks can only set index content, never remove the
+// entry, so such a file is unstaged whole (the Staged panel's own rule).
+func TestStagedStackHUnstagesAndRefusesAStagedAddition(t *testing.T) {
+	t.Parallel()
+	m := hunkStackModel(t, []model.FileStatus{
+		{Path: "b.txt", Staged: 'M'},
+		{Path: "n.txt", Staged: 'A'},
+	}, true)
+
+	m = focusStackFile(t, m, "b.txt")
+	f, staged, why := m.hunkFileHere()
+	if why != "" || f.Path != "b.txt" || !staged {
+		t.Fatalf("H on a staged modification: file=%q staged=%v why=%q", f.Path, staged, why)
+	}
+
+	m = focusStackFile(t, m, "n.txt")
+	u, cmd := m.Update(keyMsg("H"))
+	if cmd != nil {
+		t.Fatal("H on a staged-A file must refuse, not open a picker")
+	}
+	if msg := u.(Model).statusMsg; !strings.Contains(msg, "unstaged whole") {
+		t.Fatalf("no notice explaining the refusal: %q", msg)
 	}
 }
 
