@@ -2,6 +2,7 @@ package web
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -113,5 +114,38 @@ func TestContentFocusStaticWiring(t *testing.T) {
 	// file) — three call sites plus the definition and the bar hook.
 	if n := strings.Count(read("files.js"), "    focusDiff();\n"); n != 3 {
 		t.Errorf("files.js: focusDiff() called %d times, want 3 (entry diff, commit file, status file)", n)
+	}
+}
+
+// stepHitStrict is stepHit WITHOUT the wrap: a stacked diff needs to know when
+// a direction is exhausted, because that is the moment ] goes looking for a
+// file it has not searched yet. A wrapping step would silently jump back to
+// the top of the stack and the unread files would never be reached.
+func TestStepHitStrictDoesNotWrapJS(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	fns := jsFunc(t, "inviewsearch.js", "before") + "\n" + jsFunc(t, "inviewsearch.js", "hitPos") +
+		"\n" + jsFunc(t, "inviewsearch.js", "stepHitStrict")
+	script := fns + `
+const hits = [{row:1,side:1,start:0,end:3},{row:5,side:1,start:0,end:3}];
+const out = [
+  stepHitStrict(hits, {row:5,side:1,col:0}, 1),   // past the last: -1
+  stepHitStrict(hits, {row:1,side:1,col:0}, -1),  // before the first: -1
+  stepHitStrict(hits, {row:1,side:1,col:0}, 1),   // the next one
+  stepHitStrict(hits, {row:5,side:1,col:0}, -1),  // the previous one
+  stepHitStrict([], {row:0,side:0,col:-1}, 1),    // no hits at all
+];
+console.log(JSON.stringify(out));
+`
+	cmd := exec.Command(node, "-e", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	if got, want := strings.TrimSpace(string(out)), "[-1,-1,1,0,-1]"; got != want {
+		t.Fatalf("stepHitStrict = %s, want %s", got, want)
 	}
 }

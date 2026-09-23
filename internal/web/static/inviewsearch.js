@@ -77,6 +77,19 @@ function nearestHit(hits, pos, backward) {
   return 0;
 }
 
+// stepHitStrict is stepHit WITHOUT the wrap: -1 when there is no hit strictly
+// after (delta >= 0) / before (delta < 0) pos. A STACK needs the difference —
+// a wrap there means "the loaded files have run out in this direction", which
+// is where ] goes looking for a file it has not searched yet.
+function stepHitStrict(hits, pos, delta) {
+  if (delta >= 0) {
+    for (let i = 0; i < hits.length; i++) if (before(pos, hitPos(hits[i]))) return i;
+    return -1;
+  }
+  for (let i = hits.length - 1; i >= 0; i--) if (before(hitPos(hits[i]), pos)) return i;
+  return -1;
+}
+
 // stepHit is `]` (delta 1) / `[` (delta -1): STRICTLY after / before pos,
 // wrapping around the document; -1 with no hits.
 function stepHit(hits, pos, delta) {
@@ -183,4 +196,4 @@ class Search {
 }
 
 
-export { Search, findHits, foldRunes, hitPos, nearestHit, stepHit };
+export { Search, findHits, foldRunes, hitPos, nearestHit, stepHit, stepHitStrict };
