@@ -1,6 +1,10 @@
 package tui
 
-import "github.com/homeend/gigagit/internal/i18n"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/homeend/gigagit/internal/i18n"
+)
 
 // maxOpenFiles is how many files one worktree keeps open (spec ruling 4).
 const maxOpenFiles = 20
@@ -119,3 +123,44 @@ func (m Model) registerDoc(d *openFile) Model {
 
 // docLoaded reports whether d holds its file's lines (not a placeholder).
 func docLoaded(d *openFile) bool { return len(d.p.lines) > 0 && d.p.lines[0].src }
+
+// backgroundDoc takes d off the screen and keeps it open (ctrl+]): the screen
+// returns to whatever was beneath it.
+func (m Model) backgroundDoc(d *openFile) Model {
+	m = m.detachDoc(d)
+	m.statusMsg = i18n.T("%s is in the background — ctrl+\\ lists open files", d.path)
+	return m
+}
+
+// closeDoc closes d for good (esc on it, x in the switcher): off the screen
+// and out of the list.
+func (m Model) closeDoc(d *openFile) Model {
+	m = m.detachDoc(d)
+	m.openFiles.remove(m.currentWorktree, d)
+	return m
+}
+
+// focusedDoc is the open file the keyboard is on: a full-screen viewer on
+// top, else the files view's focused preview.
+func (m Model) focusedDoc() (*openFile, bool) {
+	if fv, ok := m.topLayer().(*fileViewer); ok {
+		return fv.openFile, true
+	}
+	return m.focusedFilesPreview()
+}
+
+// backgroundRow is the . menu's "Send to background" for the focused open
+// file — ctrl+] for the mouse.
+func (m Model) backgroundRow() (actionRow, bool) {
+	d, ok := m.focusedDoc()
+	if !ok {
+		return actionRow{}, false
+	}
+	return actionRow{
+		id:    "file-background",
+		label: i18n.T("Send to background"),
+		run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.backgroundDoc(d), nil
+		},
+	}, true
+}

@@ -28,25 +28,21 @@ type fileLinkCheckedMsg struct {
 // "Copy file link" then says the file is not in the working tree, which is
 // the answer the user asked for.
 func (m Model) fileRowPath() (string, int, bool) {
-	switch s := m.topLayer().(type) {
-	case *fileViewer: // the viewed file itself, at the cursor line
-		line := 0
-		if p := s.p; p.cur >= 0 && p.cur < len(p.lines) && p.lines[p.cur].src {
-			line = p.cur + 1
+	if d, ok := m.focusedDoc(); ok {
+		p := d.p
+		if p.cur < 0 || p.cur >= len(p.lines) || !p.lines[p.cur].src {
+			// Still loading, or a placeholder: no line to name. The disk file
+			// itself is still linkable; another version cannot be checked.
+			return d.path, 0, d.src.kind == srcWorktree
 		}
-		return s.p.title, line, true
+		return d.path, p.cur + 1, true
+	}
+	switch m.topLayer().(type) {
 	case *historyView, *blameView:
 		return "", 0, false
 	}
 	if m.diffLayer() != nil {
 		return "", 0, false
-	}
-	if d, ok := m.focusedFilesPreview(); ok {
-		p := d.p
-		if p.cur < 0 || p.cur >= len(p.lines) || !p.lines[p.cur].src {
-			return "", 0, false // still loading, or a placeholder: no line to name
-		}
-		return d.path, p.cur + 1, true
 	}
 	path, ok := m.fileListRowPath()
 	return path, 0, ok
@@ -59,7 +55,7 @@ func (m Model) focusedFilesPreview() (*openFile, bool) {
 	if m.filesPreview == nil || m.filesTreeFocused || m.filesView == nil {
 		return nil, false
 	}
-	if _, viewer := m.topLayer().(*fileViewer); viewer {
+	if m.topLayer() != nil { // a viewer, a diff, history or blame on top has the keys
 		return nil, false
 	}
 	return m.filesPreview, true
@@ -124,7 +120,7 @@ func (m Model) contextFileLinkRow() (actionRow, bool) {
 	// From a preview, the line is only right if the disk shows the same
 	// text: snapshot the shown lines now, compare off the UI thread.
 	var shown []contentLine
-	if d, ok := m.focusedFilesPreview(); ok {
+	if d, ok := m.focusedDoc(); ok && d.src.kind != srcWorktree {
 		shown = append([]contentLine(nil), d.p.lines...)
 	}
 	svc := m.svc

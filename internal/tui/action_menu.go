@@ -65,6 +65,9 @@ func availableActions(m Model) []actionRow {
 		if r, ok := m.contextFileLinkRow(); ok {
 			rows = insertAfterID(rows, "copy-link", r)
 		}
+		if r, ok := m.backgroundRow(); ok {
+			rows = append(rows, r)
+		}
 		// A history/blame surface on top is a single file at a rev, not the files
 		// view underneath it. It owns the "Open in external editor" action
 		// (surfaceExternalRow); the files-view view/open rows and — below — the
@@ -619,7 +622,11 @@ func (m Model) contextCopyRows() []actionRow {
 	case *fileViewer:
 		// The viewer's line rows lead, as in the files view's preview; the
 		// file's own rows follow (a working-tree file: no commit).
-		return append(m.previewCopyLineRows(), m.fileCopyRows(s.p.title, "")...)
+		rev := ""
+		if s.src.kind == srcCommit {
+			rev = s.src.rev
+		}
+		return append(m.previewCopyLineRows(), m.fileCopyRows(s.path, rev)...)
 	case *historyView:
 		if s.sel >= 0 && s.sel < len(s.commits) {
 			fc := s.commits[s.sel]

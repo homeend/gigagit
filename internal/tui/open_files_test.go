@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -179,5 +180,82 @@ func TestOpenFilesArePerWorktree(t *testing.T) {
 	m.currentWorktree = home
 	if len(m.openFiles.list(home)) != 1 {
 		t.Fatal("the first worktree lost its list")
+	}
+}
+
+func keyCtrlBracket() tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyCtrlCloseBracket} }
+
+func TestCtrlBracketSendsTheViewerToTheBackground(t *testing.T) {
+	t.Parallel()
+	m, fv := viewerAt(t, "bg.txt", "x\n", 0)
+	tm, _ := m.Update(keyCtrlBracket())
+	m = tm.(Model)
+	if layerOf[*fileViewer](m) != nil {
+		t.Fatal("the viewer is still on screen")
+	}
+	if m.openFiles.find(m.currentWorktree, fv.key()) != fv.openFile {
+		t.Fatal("the backgrounded file left the list")
+	}
+	if m.statusMsg != "bg.txt is in the background — ctrl+\\ lists open files" {
+		t.Errorf("statusMsg = %q", m.statusMsg)
+	}
+}
+
+func TestEscClosesTheViewersFile(t *testing.T) {
+	t.Parallel()
+	m, fv := viewerAt(t, "gone.txt", "x\n", 0)
+	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = tm.(Model)
+	if layerOf[*fileViewer](m) != nil || m.openFiles.find(m.currentWorktree, fv.key()) != nil {
+		t.Fatal("esc must close the viewer AND drop the file from the list")
+	}
+}
+
+func TestPreviewCtrlBracketAndEsc(t *testing.T) {
+	t.Parallel()
+	m := linkPreviewModel(t, "a\nb\n", 0)
+	d := m.filesPreview
+	m = m.registerDoc(d)
+	tm, _ := m.Update(keyCtrlBracket())
+	m = tm.(Model)
+	if m.filesPreview != nil || !m.filesTreeFocused || m.openFiles.find(m.currentWorktree, d.key()) != d {
+		t.Fatalf("ctrl+]: preview=%v treeFocused=%v listed=%v", m.filesPreview != nil, m.filesTreeFocused, m.openFiles.find(m.currentWorktree, d.key()) == d)
+	}
+	m.filesPreview, m.filesTreeFocused = d, false
+	m = m.closePreview()
+	if m.openFiles.find(m.currentWorktree, d.key()) != nil {
+		t.Fatal("closing the preview must drop its file from the list")
+	}
+}
+
+func TestSendToBackgroundMenuRow(t *testing.T) {
+	t.Parallel()
+	m, fv := viewerAt(t, "menu.txt", "x\n", 0)
+	r, ok := rowByID(availableActions(m), "file-background")
+	if !ok {
+		t.Fatal(`the viewer's . menu has no "Send to background"`)
+	}
+	tm, _ := r.run(m)
+	m = tm.(Model)
+	if layerOf[*fileViewer](m) != nil || m.openFiles.find(m.currentWorktree, fv.key()) == nil {
+		t.Fatal("Send to background must act like ctrl+]")
+	}
+	p := linkPreviewModel(t, "a\n", 0)
+	if _, ok := rowByID(availableActions(p), "file-background"); !ok {
+		t.Fatal(`the preview's . menu has no "Send to background"`)
+	}
+}
+
+// A commit version on screen full-screen shows ANOTHER version than the
+// disk: its Copy file link obeys the preview's disk-match rule.
+func TestCommitViewerCopyFileLinkChecksTheDisk(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	d := newOpenFile(fileSource{kind: srcCommit, rev: strings.Repeat("ab", 20)}, "a.txt")
+	d.p.lines = fileContentLinesTok([]byte("an older\nversion\n"), nil)
+	m = m.pushLayer(&fileViewer{d})
+	m, copied := runFileLinkRow(t, m, false)
+	if copied != "" || !strings.Contains(m.statusMsg, "differs from this version") {
+		t.Fatalf("copied %q status %q, want nothing and the differs notice", copied, m.statusMsg)
 	}
 }

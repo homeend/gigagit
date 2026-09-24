@@ -76,7 +76,9 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	scroll := func(delta int) { p.sel = previewClamp(p.sel+delta, len(p.lines), rows, p.mode) }
 	switch msg.String() {
 	case "esc":
-		return m.popLayer(), nil
+		return m.closeDoc(fv.openFile), nil
+	case "ctrl+]":
+		return m.backgroundDoc(fv.openFile), nil
 	case ".":
 		return m.openActionMenu(), nil
 	case "alt+up":
@@ -115,7 +117,7 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // render owns the screen: one preview box the size of the terminal.
 func (fv *fileViewer) render(m Model, _ string) string {
 	w, h := m.overlayDims()
-	return m.renderPreviewBox(fv.p, fv.title(), w, h, true)
+	return m.renderPreviewBox(fv.p, fv.title(), w, h, true, true)
 }
 
 // title names the version on screen: the working tree, a commit or a shelf.
