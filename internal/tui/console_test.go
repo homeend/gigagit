@@ -132,3 +132,27 @@ func domainKill(s *domain.AgentSession) error { return domain.Sessions().Kill(s.
 func sessionSpecForTest(label, dir string) agentsession.StartSpec {
 	return agentsession.StartSpec{Label: label, Repo: "elsewhere", Dir: dir, Argv: []string{"sh", "-c", "sleep 5"}, Cols: 40, Rows: 10}
 }
+
+func TestConsoleFooterAndHelp(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 160, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	if f, ok := m.footerOverride(); !ok || !strings.Contains(f, "ctrl+]") || !strings.Contains(f, "ctrl+\\") {
+		t.Fatalf("focused footer = %q", f)
+	}
+	mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlCloseBracket})
+	m = mm.(Model)
+	if f, ok := m.footerOverride(); !ok || !strings.Contains(f, "[enter]") {
+		t.Fatalf("unfocused footer = %q", f)
+	}
+	found := false
+	for _, l := range helpContent() {
+		if strings.HasPrefix(l.text, "ctrl+]") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("help must document ctrl+]")
+	}
+}

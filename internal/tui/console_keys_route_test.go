@@ -100,3 +100,23 @@ func TestUnfocusedConsoleSwallowsCommitsKeys(t *testing.T) {
 		t.Fatal("j on the unfocused console must not move the hidden Commits cursor")
 	}
 }
+
+func TestConsoleKeysFromConfig(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	m.cfg.Console.StepOutKey = "ctrl+q"
+	s := startTestSession(t, m, `stty raw -echo; printf READY; while :; do dd bs=1 count=1 2>/dev/null | od -An -c; done`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "READY")
+	mm, _ := m.Update(ctrlBracket())
+	m = mm.(Model)
+	if !m.console.focused {
+		t.Fatal("with step_out_key = ctrl+q, ctrl+] belongs to the agent")
+	}
+	waitScreen(t, s, "035") // GS reached the child
+	mm, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	m = mm.(Model)
+	if m.console.focused {
+		t.Fatal("the configured step-out key must step out")
+	}
+}

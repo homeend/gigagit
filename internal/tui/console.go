@@ -202,14 +202,26 @@ func runningSessionIn(dir string) (domain.SessionInfo, bool) {
 // shortWorktreeName is the worktree's directory name, for titles and rows.
 func shortWorktreeName(path string) string { return filepath.Base(path) }
 
-// Default reserved keys; Task 9's [console] config overrides them.
+// Default reserved keys; [console] step_out_key / sessions_key override
+// them. m.cfg is the zero value until the first load, hence the fallback.
 const (
 	defaultStepOutKey  = "ctrl+]"
 	defaultSessionsKey = "ctrl+\\"
 )
 
-func (m Model) stepOutKey() string  { return defaultStepOutKey }
-func (m Model) sessionsKey() string { return defaultSessionsKey }
+func (m Model) stepOutKey() string {
+	if k := m.cfg.Console.StepOutKey; k != "" {
+		return k
+	}
+	return defaultStepOutKey
+}
+
+func (m Model) sessionsKey() string {
+	if k := m.cfg.Console.SessionsKey; k != "" {
+		return k
+	}
+	return defaultSessionsKey
+}
 
 // consolePassthrough is what an UNFOCUSED docked console lets through to
 // gg while its column has focus: moving focus away, quitting, and the
