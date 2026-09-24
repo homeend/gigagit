@@ -21,8 +21,8 @@ func TestCloseFilesViewZeroesEverything(t *testing.T) {
 	m.filesStashTag = "stash@{0}"
 	m.filesTreeFocused = true
 	m.filesReadInflight = true
-	m.filesPreview = &contentPopup{}
-	m.filesPreviewTag = "p@h"
+	m.filesPreview = &openFile{p: &contentPopup{}}
+	m.filesPreview.tag = "p@h"
 	m.filesMode = filesModeFullTree
 
 	m = m.closeFilesView()
@@ -31,7 +31,7 @@ func TestCloseFilesViewZeroesEverything(t *testing.T) {
 		m.filesContext != "" ||
 		m.filesHash != "" || m.inCompareMode() || m.inFullTree() || m.compareTag != "" ||
 		m.filesStashTag != "" || m.filesTreeFocused || m.filesReadInflight ||
-		m.filesPreviewTag != "" || m.filesLeft != (model.Endpoint{}) ||
+		m.filesLeft != (model.Endpoint{}) ||
 		m.filesRight != (model.Endpoint{}) || m.filesMode != filesModeChanged {
 		t.Fatalf("closeFilesView left stale state: %+v", m)
 	}
@@ -42,14 +42,14 @@ func TestOpenCompareDropsPreviewAndFullTree(t *testing.T) {
 	t.Parallel()
 	m := loadedModelLinearCommits(t, 2)
 	m.filesMode = filesModeFullTree
-	m.filesPreview = &contentPopup{}
-	m.filesPreviewTag = "p@h"
+	m.filesPreview = &openFile{p: &contentPopup{}}
+	m.filesPreview.tag = "p@h"
 
 	m, _ = m.openCompareFiles(
 		mustCommitEndpoint("aaaaaaa"),
 		model.WorkTreeEndpoint())
 
-	if m.filesPreview != nil || m.filesPreviewTag != "" || m.inFullTree() ||
+	if m.filesPreview != nil || m.inFullTree() ||
 		!m.inCompareMode() {
 		t.Fatal("openCompareFiles must drop preview+fullTree and enter compare mode")
 	}
@@ -62,8 +62,8 @@ func TestToggleFullTreeDropsPreview(t *testing.T) {
 	m.filesView = &contentPopup{}
 	m.filesHash = "abc"
 	m.filesMode = filesModeFullTree
-	m.filesPreview = &contentPopup{}
-	m.filesPreviewTag = "p@h"
+	m.filesPreview = &openFile{p: &contentPopup{}}
+	m.filesPreview.tag = "p@h"
 
 	m, _ = m.toggleFullTree() // fullTree -> changed
 

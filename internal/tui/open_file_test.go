@@ -102,3 +102,22 @@ func TestOpenFileFillRefindsSearch(t *testing.T) {
 		t.Fatalf("hit row %d outside the window from %d", r, d.p.sel)
 	}
 }
+
+// The user opened file X's preview, then file Y's: X's late load is stale
+// and must not overwrite Y.
+func TestStalePreviewLoadIsDropped(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	m, _ = m.openPreviewSrc(fileSource{kind: srcCommit, rev: "aaa"}, "x.txt", nil)
+	x := m.filesPreview
+	m, _ = m.openPreviewSrc(fileSource{kind: srcCommit, rev: "aaa"}, "y.txt", nil)
+	tm, _ := m.Update(fileContentMsg{tag: x.tag, lines: fileContentLinesTok([]byte("XXX\n"), nil)})
+	m = tm.(Model)
+	if l := m.filesPreview.p.lines[0]; l.src || m.filesPreview.path != "y.txt" {
+		t.Fatalf("preview = %s %+v, want y.txt still loading", m.filesPreview.path, l)
+	}
+	tm, _ = m.Update(fileContentMsg{tag: m.filesPreview.tag, lines: fileContentLinesTok([]byte("YYY\n"), nil)})
+	if l := tm.(Model).filesPreview.p.lines[0]; l.raw != "YYY" {
+		t.Fatalf("the preview's own load did not fill it: %+v", l)
+	}
+}

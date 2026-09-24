@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Open files: the file document
+
+### Fixed
+
+- Two files opened one after the other (e.g. an agent's `gg open` twice) no
+  longer leave the first stuck on "(loading…)" once you close the second.
+- The full-screen viewer's title names the version it shows: `(working
+  tree)`, `@ <sha>` or `(shelf)`.
+
 ## Agent console polish
 
 ### Fixed

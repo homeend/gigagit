@@ -19,7 +19,7 @@ func (m Model) activePreview() (p *contentPopup, rows, innerW int, ok bool) {
 		return fv.p, rows, innerW, true
 	}
 	if m.filesPreview != nil && !m.filesTreeFocused {
-		return m.filesPreview, m.filePreviewRowsCap(), m.filePreviewInnerW(), true
+		return m.filesPreview.p, m.filePreviewRowsCap(), m.filePreviewInnerW(), true
 	}
 	return nil, 0, 0, false
 }

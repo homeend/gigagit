@@ -48,12 +48,12 @@ func (m Model) viewFileRow() (actionRow, bool) {
 		// Shelf mode: the frozen member bytes, not ShowFile — filesHash is empty
 		// here and `git show :path` would silently preview the INDEX blob.
 		ref := model.FileRef{Source: model.SourceShelf, Locator: m.filesShelfID, Path: path}
-		svc, tag := m.svc, path+"@shelf:"+m.filesShelfID
+		svc, shelfID := m.svc, m.filesShelfID
 		return actionRow{
 			id:    "view-file",
 			label: i18n.T("View file (frozen shelf content)"),
 			run: func(m Model) (tea.Model, tea.Cmd) {
-				return m.openPreviewSrc(tag, path, func(ctx context.Context) ([]byte, error) {
+				return m.openPreviewSrc(fileSource{kind: srcShelf, rev: shelfID}, path, func(ctx context.Context) ([]byte, error) {
 					return svc.ResolveBytes(ctx, ref)
 				})
 			},
@@ -130,20 +130,21 @@ func (m Model) commitsTouchingFileRow() (actionRow, bool) {
 // transition (paired with closePreview).
 func (m Model) openPreview(hash, path string) (Model, tea.Cmd) {
 	svc := m.svc
-	return m.openPreviewSrc(path+"@"+hash, path, func(ctx context.Context) ([]byte, error) {
+	return m.openPreviewSrc(fileSource{kind: srcCommit, rev: hash}, path, func(ctx context.Context) ([]byte, error) {
 		return svc.ShowFile(ctx, hash, path)
 	})
 }
 
-// openPreviewSrc is the source-agnostic preview open: tag gates stale results,
-// load resolves the bytes off the UI thread. Backs both the commit preview
-// (ShowFile) and the shelf-member preview (ResolveBytes).
-func (m Model) openPreviewSrc(tag, path string, load func(context.Context) ([]byte, error)) (Model, tea.Cmd) {
+// openPreviewSrc is the source-agnostic preview open: a fresh document for
+// path at src, whose tag gates stale results; load resolves the bytes off
+// the UI thread. Backs both the commit preview (ShowFile) and the
+// shelf-member preview (ResolveBytes).
+func (m Model) openPreviewSrc(src fileSource, path string, load func(context.Context) ([]byte, error)) (Model, tea.Cmd) {
 	m.console = nil // one right-column owner at a time; the session keeps running
-	m.filesPreview = &contentPopup{title: path, lines: []contentLine{{text: i18n.T("(loading…)")}}}
-	m.filesPreviewTag = tag
+	d := newOpenFile(src, path)
+	m.filesPreview = d
 	m.filesTreeFocused = false // land in the preview to scroll
-	return m, loadFileContentSrcCmd(tag, path, m.cfg.UI.SyntaxOn(), load)
+	return m, loadFileContentSrcCmd(d.tag, path, m.cfg.UI.SyntaxOn(), load)
 }
 
 // fileContentMsg carries a previewed file's content lines, tagged so a stale load
@@ -374,7 +375,7 @@ func (p *contentPopup) snapHit(rowsCap, innerW int) {
 // Commits panel) while a preview is open. Window-then-build (a file can be large);
 // the border follows focus.
 func (m Model) renderFilePreview(boxW, boxH int) string {
-	return m.renderPreviewBox(m.filesPreview, i18n.T("View %s", m.filesPreview.title), boxW, boxH, !m.filesTreeFocused)
+	return m.renderPreviewBox(m.filesPreview.p, i18n.T("View %s", m.filesPreview.path), boxW, boxH, !m.filesTreeFocused)
 }
 
 // renderPreviewBox draws one file preview as a bordered box: title, the

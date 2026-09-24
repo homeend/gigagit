@@ -197,7 +197,7 @@ func (m Model) steerRefusal() string {
 		return "the user is typing"
 	case m.filesView != nil && m.filesView.typing:
 		return "the user is typing"
-	case m.filesPreview != nil && m.filesPreview.typing:
+	case m.filesPreview != nil && m.filesPreview.p.typing:
 		return "the user is typing"
 	case m.stashView != nil && m.stashView.typing:
 		return "the user is typing"

@@ -187,7 +187,7 @@ func TestViewFileChangedModeOpensPreview(t *testing.T) {
 	if m.filesPreview == nil {
 		t.Fatal("View file in changed mode should open the preview")
 	}
-	if body := strings.Join(linesText(m.filesPreview), "\n"); !strings.Contains(body, "alpha") {
+	if body := strings.Join(linesText(m.filesPreview.p), "\n"); !strings.Contains(body, "alpha") {
 		t.Fatalf("changed-mode preview did not load content:\n%s", body)
 	}
 }
@@ -217,7 +217,7 @@ func TestViewFileOpensPreview(t *testing.T) {
 	}
 	updated, _ = m.Update(cmd())
 	m = updated.(Model)
-	body := strings.Join(linesText(m.filesPreview), "\n")
+	body := strings.Join(linesText(m.filesPreview.p), "\n")
 	if !strings.Contains(body, "alpha") || !strings.Contains(body, "gamma") {
 		t.Fatalf("preview did not load the file content:\n%s", body)
 	}
@@ -271,8 +271,8 @@ func TestFilePreviewScrollAndClose(t *testing.T) {
 		t.Fatal("preview should be focused after opening")
 	}
 	m, _ = feedFilesView(t, m, "j") // right side focused → scroll the preview
-	if m.filesPreview.sel != 1 {
-		t.Fatalf("j should scroll the preview, sel=%d", m.filesPreview.sel)
+	if m.filesPreview.p.sel != 1 {
+		t.Fatalf("j should scroll the preview, sel=%d", m.filesPreview.p.sel)
 	}
 	m, _ = feedFilesView(t, m, "esc")
 	if m.filesPreview != nil {
@@ -336,7 +336,7 @@ func TestFilePreviewMouseWheelScrolls(t *testing.T) {
 	if mm.filesPreview == nil {
 		t.Fatal("wheel must not close the preview")
 	}
-	if mm.filesPreview.sel == 0 {
+	if mm.filesPreview.p.sel == 0 {
 		t.Fatal("wheel over the preview should scroll it (sel advanced past 0)")
 	}
 	if mm.filesHash != hashBefore {

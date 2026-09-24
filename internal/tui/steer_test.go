@@ -218,7 +218,7 @@ func TestSteerRefusalRules(t *testing.T) {
 		{"panel @ highlight", func(m Model) Model { m.highlightTyping = true; return m }, "the user is typing"},
 		{"search-history dropdown", func(m Model) Model { m.recallOpen = true; return m }, "the user is typing"},
 		{"files-view filter", func(m Model) Model { m.filesView = &contentPopup{typing: true}; return m }, "the user is typing"},
-		{"files-preview filter", func(m Model) Model { m.filesPreview = &contentPopup{typing: true}; return m }, "the user is typing"},
+		{"files-preview filter", func(m Model) Model { m.filesPreview = &openFile{p: &contentPopup{typing: true}}; return m }, "the user is typing"},
 		{"stash-view filter", func(m Model) Model { m.stashView = &stashView{typing: true}; return m }, "the user is typing"},
 		{"content popup filter", func(m Model) Model { return m.pushLayer(&contentPopup{typing: true}) }, "the user is typing"},
 		{"hunk picker", func(m Model) Model { return m.pushLayer(&hunkPicker{}) }, "a window is open that owns the keyboard"},

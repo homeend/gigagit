@@ -390,7 +390,7 @@ func TestTooltipSuppressedByFilePreview(t *testing.T) {
 	// so the tree-path reveal branch is skipped too).
 	m := base
 	m.filesView = &contentPopup{lines: []contentLine{{text: "M  mod_devicetable.h", path: "mod_devicetable.h"}}, mode: modeCutoff}
-	m.filesPreview = &contentPopup{title: "mod_devicetable.h", lines: []contentLine{{text: "..."}}}
+	m.filesPreview = &openFile{p: &contentPopup{title: "mod_devicetable.h", lines: []contentLine{{text: "..."}}}}
 	m.filesTreeFocused = false
 	if _, _, _, ok := m.tooltip(); ok {
 		t.Fatal("the commit reveal must be suppressed while the file preview owns the right column")

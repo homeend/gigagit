@@ -130,8 +130,8 @@ func (m Model) liveDoc(tag string) (d *openFile, rows, innerW int, ok bool) {
 			}
 		}
 	}
-	if m.filesPreview != nil && m.filesPreviewTag == tag {
-		return nil, 0, 0, false // Task 3 moves the preview onto a document
+	if d := m.filesPreview; d != nil && d.tag == tag {
+		return d, m.filePreviewRowsCap(), m.filePreviewInnerW(), true
 	}
 	return nil, 0, 0, false
 }

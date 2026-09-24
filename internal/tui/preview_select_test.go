@@ -30,7 +30,7 @@ func previewTabModel(t *testing.T) Model {
 func TestPreviewAltDownMovesCursorNotViewport(t *testing.T) {
 	t.Parallel()
 	m := previewTabModel(t)
-	p := m.filesPreview
+	p := m.filesPreview.p
 	if p.cur != 0 || p.sel != 0 {
 		t.Fatalf("a fresh preview starts at cursor 0 / top 0, got cur=%d sel=%d", p.cur, p.sel)
 	}
@@ -61,7 +61,7 @@ func TestPreviewAltDownMovesCursorNotViewport(t *testing.T) {
 func TestPreviewDownScrollsNotCursor(t *testing.T) {
 	t.Parallel()
 	m := previewTabModel(t)
-	p := m.filesPreview
+	p := m.filesPreview.p
 	m = feedPreview(m, "down", "down")
 	if p.sel != 2 {
 		t.Fatalf("↓ must scroll the pager, sel = %d want 2", p.sel)
@@ -75,7 +75,7 @@ func TestPreviewDownScrollsNotCursor(t *testing.T) {
 func TestPreviewSelectionCopiesRawText(t *testing.T) {
 	t.Parallel()
 	m := previewTabModel(t)
-	p := m.filesPreview
+	p := m.filesPreview.p
 	if p.lines[0].raw != "\tindented" {
 		t.Fatalf("raw = %q, want the source line with its tab", p.lines[0].raw)
 	}
@@ -103,7 +103,7 @@ func TestPreviewSelectionCopiesRawText(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("enter with a selection on must issue the clipboard command")
 	}
-	if m.filesPreview.lsel.on {
+	if m.filesPreview.p.lsel.on {
 		t.Fatal("enter must clear the selection")
 	}
 	if m.filesTreeFocused {
@@ -133,14 +133,14 @@ func TestPreviewCopyLineRow(t *testing.T) {
 func TestPreviewCopyLineAbsentOnPlaceholder(t *testing.T) {
 	t.Parallel()
 	m := previewTabModel(t)
-	p := m.filesPreview
+	p := m.filesPreview.p
 	p.lines = []contentLine{{text: "(loading…)"}}
 	p.cur, p.sel = 0, 0
 	if _, ok := rowByID(m.contextCopyRows(), "copy-line"); ok {
 		t.Fatal("a placeholder line must not offer Copy line")
 	}
 	m = feedPreview(m, "space")
-	if m.filesPreview.lsel.on {
+	if m.filesPreview.p.lsel.on {
 		t.Fatal("space on a placeholder must not start a selection")
 	}
 }
@@ -163,7 +163,7 @@ func TestPreviewEscClearsSelectionBeforeClosing(t *testing.T) {
 	if m.filesPreview == nil {
 		t.Fatal("the first esc must clear the selection, not close the preview")
 	}
-	if m.filesPreview.lsel.on {
+	if m.filesPreview.p.lsel.on {
 		t.Fatal("the first esc must clear the selection")
 	}
 	m = feedPreview(m, "esc")
@@ -177,7 +177,7 @@ func TestPreviewSearchHitLandsCursor(t *testing.T) {
 	t.Parallel()
 	m := previewSearchModel(t) // 60 "line%03d alpha" rows + a "tail beta" row
 	m = feedPreview(m, "/", "b", "e", "t", "a")
-	p := m.filesPreview
+	p := m.filesPreview.p
 	if p.search.cur < 0 {
 		t.Fatal("the incremental search must have found the tail")
 	}
@@ -202,8 +202,8 @@ func TestPreviewSearchHitLandsCursor(t *testing.T) {
 
 	// esc cancels the live search and restores the cursor as well as the pager.
 	m = feedPreview(m, "esc")
-	if m.filesPreview.cur != 0 {
-		t.Fatalf("esc must restore the cursor to where the search started, cur = %d", m.filesPreview.cur)
+	if m.filesPreview.p.cur != 0 {
+		t.Fatalf("esc must restore the cursor to where the search started, cur = %d", m.filesPreview.p.cur)
 	}
 }
 
@@ -217,7 +217,7 @@ func TestPreviewSearchAfterFreeScrollStartsFromTheWindow(t *testing.T) {
 	for i := 0; i < scrolled; i++ {
 		m = feedPreview(m, "down")
 	}
-	p := m.filesPreview
+	p := m.filesPreview.p
 	if p.sel != scrolled || p.cur != 0 {
 		t.Fatalf("↓ must scroll the pager alone: sel = %d (want %d), cur = %d (want 0)", p.sel, scrolled, p.cur)
 	}
@@ -240,7 +240,7 @@ func TestPreviewStepHitFollowsTheCursor(t *testing.T) {
 	t.Parallel()
 	m := previewSearchModel(t)
 	m = feedPreview(m, "/", "a", "l", "p", "h", "a", "enter")
-	p := m.filesPreview
+	p := m.filesPreview.p
 	if p.search.hits[p.search.cur].row != 0 {
 		t.Fatalf("the committed search must sit on the first hit, row = %d", p.search.hits[p.search.cur].row)
 	}
@@ -263,12 +263,12 @@ func TestPreviewLoadArrivalResetsCursorAndSelection(t *testing.T) {
 	t.Parallel()
 	m := previewTabModel(t)
 	m = feedPreview(m, "alt+down", "alt+down", "space")
-	u, _ := m.Update(fileContentMsg{tag: m.filesPreviewTag, lines: fileContentLines([]byte("a\nb\n"))})
+	u, _ := m.Update(fileContentMsg{tag: m.filesPreview.tag, lines: fileContentLines([]byte("a\nb\n"))})
 	m = u.(Model)
-	if m.filesPreview.cur != 0 || m.filesPreview.sel != 0 {
-		t.Fatalf("a load must reset the cursor and the top line, cur=%d sel=%d", m.filesPreview.cur, m.filesPreview.sel)
+	if m.filesPreview.p.cur != 0 || m.filesPreview.p.sel != 0 {
+		t.Fatalf("a load must reset the cursor and the top line, cur=%d sel=%d", m.filesPreview.p.cur, m.filesPreview.p.sel)
 	}
-	if m.filesPreview.lsel.on {
+	if m.filesPreview.p.lsel.on {
 		t.Fatal("a load must clear the selection")
 	}
 }
@@ -368,7 +368,7 @@ func TestPreviewHintVariants(t *testing.T) {
 func TestPreviewAltDownSnapsToTheTopWhenTheCursorIsAbove(t *testing.T) {
 	t.Parallel()
 	m := previewTabModel(t)
-	p := m.filesPreview
+	p := m.filesPreview.p
 	m = feedPreview(m, "down", "down", "down", "down", "down") // cursor 0 is now above the window
 	if p.sel != 5 || p.cur != 0 {
 		t.Fatalf("setup: sel=%d cur=%d, want 5/0", p.sel, p.cur)
@@ -392,7 +392,7 @@ func TestPreviewAltUpSnapsToTheBottomWhenTheCursorIsBelow(t *testing.T) {
 	defer lipgloss.SetColorProfile(prev)
 
 	m := previewTabModel(t)
-	p := m.filesPreview
+	p := m.filesPreview.p
 	rows := m.filePreviewRowsCap()
 	for i := 0; i < rows+5; i++ {
 		m = feedPreview(m, "alt+down")

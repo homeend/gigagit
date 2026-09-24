@@ -138,7 +138,7 @@ func TestPreviewLexesKnownLanguage(t *testing.T) {
 	if m.filesPreview == nil {
 		t.Fatal("the preview should be open")
 	}
-	l := m.filesPreview.lines[0]
+	l := m.filesPreview.p.lines[0]
 	if l.text != "package main" {
 		t.Fatalf("first preview line = %q", l.text)
 	}
@@ -150,7 +150,7 @@ func TestPreviewLexesKnownLanguage(t *testing.T) {
 func TestPreviewSkipsUnknownLanguage(t *testing.T) {
 	t.Parallel()
 	m := previewOf(t, Model{}, "notes.txt", "package main\n")
-	for i, l := range m.filesPreview.lines {
+	for i, l := range m.filesPreview.p.lines {
 		if l.cls != nil {
 			t.Errorf("line %d of a .txt preview must not be masked: %v", i, l.cls)
 		}
@@ -161,7 +161,7 @@ func TestPreviewSkipsWhenSyntaxOff(t *testing.T) {
 	t.Parallel()
 	base := Model{cfg: config.Config{UI: config.UIConfig{DiffSyntax: "off"}}}
 	m := previewOf(t, base, "x.go", "package main\n")
-	for i, l := range m.filesPreview.lines {
+	for i, l := range m.filesPreview.p.lines {
 		if l.cls != nil {
 			t.Errorf("line %d must not be masked with diff_syntax=off: %v", i, l.cls)
 		}
@@ -173,14 +173,14 @@ func TestPreviewSkipsWhenSyntaxOff(t *testing.T) {
 func TestPreviewSkipsBareCarriageReturn(t *testing.T) {
 	t.Parallel()
 	m := previewOf(t, Model{}, "x.go", "package main\rvar x = 1\n")
-	for i, l := range m.filesPreview.lines {
+	for i, l := range m.filesPreview.p.lines {
 		if l.cls != nil {
 			t.Errorf("line %d must not be masked when the file holds a bare \\r: %v", i, l.cls)
 		}
 	}
 	// CRLF is fine: both sides count the same lines.
 	crlf := previewOf(t, Model{}, "x.go", "package main\r\nvar x = 1\r\n")
-	if crlf.filesPreview.lines[0].cls == nil {
+	if crlf.filesPreview.p.lines[0].cls == nil {
 		t.Error("a CRLF file should still be coloured")
 	}
 }
