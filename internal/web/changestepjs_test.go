@@ -100,3 +100,86 @@ func TestChangeStepKeysWired(t *testing.T) {
 		t.Error("stepChange does not go through changeStepTarget")
 	}
 }
+
+// In a stack the rendered rows are only the files read so far. A change step
+// opens, in order, every folded or unread file (hole) between where it starts
+// and the rendered change it would land on — or to the end of the stack when
+// none is left that way (to = null). withFrom: the viewport's top sits on an
+// unread file, so a step down reads that one first.
+const stackHuntHarness = `
+import { stackHuntSlots } from "./hunt.mjs";
+const h = [false, true, false, true, true, false, false, true];
+console.log(JSON.stringify({
+  downToTarget: stackHuntSlots(h, 0, 5, 1, false),
+  downNoTarget: stackHuntSlots(h, 5, null, 1, false),
+  upToTarget: stackHuntSlots(h, 7, 2, -1, false),
+  upNoTarget: stackHuntSlots(h, 2, null, -1, false),
+  targetNext: stackHuntSlots(h, 2, 3, 1, false),
+  sameFile: stackHuntSlots(h, 2, 2, 1, false),
+  withFrom: stackHuntSlots(h, 1, 2, 1, true),
+  withFromLoaded: stackHuntSlots(h, 0, 2, 1, true),
+  atEnd: stackHuntSlots(h, 7, null, 1, false),
+}));
+`
+
+func TestStackHuntSlotsOpensTheFilesOnTheWay(t *testing.T) {
+	t.Parallel()
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node not installed; the JS guard needs it")
+	}
+	mod := jsFunc(t, "files.js", "stackHuntSlots") + "\nexport { stackHuntSlots };\n"
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "hunt.mjs"), []byte(mod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "run.mjs"), []byte(stackHuntHarness), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command(node, filepath.Join(dir, "run.mjs")).CombinedOutput()
+	if err != nil {
+		t.Fatalf("node: %v\n%s", err, out)
+	}
+	var got map[string][]int
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &got); err != nil {
+		t.Fatalf("not the harness JSON: %v\n%s", err, out)
+	}
+	want := map[string][]int{
+		"downToTarget":   {1, 3, 4},
+		"downNoTarget":   {7},
+		"upToTarget":     {4, 3},
+		"upNoTarget":     {1},
+		"targetNext":     {},
+		"sameFile":       {},
+		"withFrom":       {1},
+		"withFromLoaded": {1},
+		"atEnd":          {},
+	}
+	for k, w := range want {
+		if fmtInts(got[k]) != fmtInts(w) {
+			t.Errorf("%s: got %v, want %v", k, got[k], w)
+		}
+	}
+}
+
+func fmtInts(v []int) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
+// A hunt (the change step, ]/[, a link landing) reads a slot's rows the moment
+// awaitSlot returns, so it must return only once the slot is PAINTED: load()
+// marks a slot ok before fetching its notes and repaints after them. Waking at
+// "ok" found the placeholder, no change rows, and the step skipped the file.
+func TestAwaitSlotWaitsForThePaint(t *testing.T) {
+	t.Parallel()
+	sv := readStatic(t, "stackview.js")
+	if !strings.Contains(sv, "const settled = () => !s.inLoad &&") {
+		t.Error("awaitSlot no longer waits for s.inLoad")
+	}
+	load := jsFunc(t, "stackview.js", "load")
+	set, clear, paint := strings.Index(load, "s.inLoad = true"), strings.Index(load, "s.inLoad = false"), strings.Index(load, "repaintSlot(st, k)")
+	if set < 0 || clear < 0 || paint < 0 || !(set < clear && clear < paint) {
+		t.Errorf("load() must hold s.inLoad from the start until just before its repaint (set %d, clear %d, repaint %d)", set, clear, paint)
+	}
+}

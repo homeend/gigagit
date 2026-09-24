@@ -1714,9 +1714,22 @@ reader could not see.
   diff layout (USER RULING: `p` is pull and `-` folds a stacked file, so not
   n/p or -/=) and a `. next change` footer chip. The web does not wrap, so
   where the TUI hands over to its wrap arm the web stays on the last / first
-  change; the conflict picker keeps stepping its regions by index. In a
-  stack the web steps only among rendered rows — a folded or not-yet-loaded
-  file is skipped (no `huntChange` equivalent; recorded gap).
+  change; the conflict picker keeps stepping its regions by index.
+  **In a stack** (`stackChangeStep`, stackview.js — the web's `huntChange`,
+  2026-09-24 after the user found `.` stalling at the last loaded file, and
+  `,` stranded after a click on a file low in the list): the rendered rows
+  decide first; a folded or never-read file between the start and that target
+  (pure `stackHuntSlots`, node-tested) is opened — unfold, scroll to it, wait
+  — and the step lands on its edge change; empty files are passed over. The
+  landed change is kept as its ROW (`st.changeRow`), never an ordinal: a file
+  loading above shifts ordinals, and a stack inherited the single-file open's
+  `diffBlockIdx = 0`, so the first `.` skipped the first change. Two
+  `awaitSlot` fixes shared with `]`/`[` and link landings: it returns only once
+  the slot is PAINTED (`s.inLoad` spans load() up to its repaint — `load` was
+  "ok" before the notes fetch, so a hunt read the placeholder, found no rows
+  and skipped the file), and its 8 s cap counts only unpicked time, never a
+  fetch in flight. Probe: `stack-probe/changehunt.mjs` (fixture on /mnt/t —
+  in /tmp everything loads in time and nothing reproduces).
 - **In a stack `n` stepped FILES** (plan 3 made `v.blocks` the header indices),
   so a one-file stack had nowhere to step: `n` primed a wrap and the second
   press landed on the file header at the top of the scroll, with no line cursor

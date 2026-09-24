@@ -17,7 +17,9 @@ import { focusPane } from "./keys.js";
 import { seedCollapsed } from "./notebox.js";
 import {
   activeFileList,
+  changeStepTarget,
   clearDiffHunks,
+  diffChangeBlocks,
   closeConflictPick,
   diffHTML,
   diffSearch,
@@ -36,7 +38,9 @@ import {
   openStatusDiff,
   renderFiles,
   hunkState,
+  landChange,
   setLayout,
+  stackHuntSlots,
   updateDiffNav,
 } from "./files.js";
 import { stepHit, stepHitStrict } from "./inviewsearch.js";
@@ -339,10 +343,17 @@ function stackSearchHere() {
 }
 
 // awaitSlot waits for one slot's fetch to settle, pumping the queue so it is
-// actually picked. Shared by landStackLine and the ]/[ step: both need rows
-// that do not exist yet.
+// actually picked. Shared by landStackLine, the ]/[ step and the change step:
+// all need rows that do not exist yet — so "settled" means PAINTED: load()
+// marks a slot ok before it fetches the file's notes, and repaints only after
+// them (s.inLoad spans the whole of it). Returning at "ok" handed the caller a
+// section still showing its placeholder, and a change step skipped the file.
+// The 8 s cap counts only the time the slot sits unpicked; a fetch in flight
+// is waited out, however slow the filesystem.
 async function awaitSlot(st, s) {
-  for (let i = 0; i < 80 && state.stack === st && s.load !== "ok" && s.load !== "error" && s.load !== "none"; i++) {
+  const settled = () => !s.inLoad && (s.load === "ok" || s.load === "error" || s.load === "none");
+  for (let idle = 0; idle < 80 && state.stack === st && !settled(); ) {
+    if (!s.inLoad) idle++;
     pump(st);
     await new Promise((r) => setTimeout(r, 100));
   }
@@ -397,6 +408,66 @@ async function stackHitStep(delta) {
   diffSearchBar.paint();
 }
 
+// stackChangeStep is , / . (and ‹ change / change ›) in a stack — the TUI's
+// huntChange. The rendered rows decide first, from the viewport
+// (changeStepTarget). But a folded or never-read file between the start and
+// that target holds changes the document does not have yet: the step opens
+// the nearest such file — unfold it, scroll to it so the loader picks it, wait
+// for its rows — and lands on its edge change (first going down, last going
+// up). One file per round trip, never a bulk load, like ]/[ (stackHitStep); a
+// file that turns out to hold no change is passed over. No wrap.
+//
+// The change last landed on is kept as its ROW (st.changeRow), not an
+// ordinal: every file that loads above it shifts the ordinals, and a slot
+// repaint replaces the row — then the step re-seats from the viewport.
+async function stackChangeStep(delta) {
+  const st = state.stack;
+  if (!st || st.changeHunting) return;
+  const blocks = diffChangeBlocks();
+  const pane = $("diff-pane").getBoundingClientRect();
+  const tops = blocks.map((tr) => tr.getBoundingClientRect().top);
+  const cur = st.changeRow ? blocks.indexOf(st.changeRow) : -1;
+  const onScreen = cur >= 0 && tops[cur] >= pane.top && tops[cur] < pane.bottom;
+  const slotOf = (tr) => Number(tr.closest(".stk-file").dataset.k);
+  const from = onScreen ? slotOf(blocks[cur]) : Math.floor(stackSearchHere().row / STACK_ROW_SPAN);
+  const t = changeStepTarget(tops, cur, pane.top, pane.bottom, delta);
+  // ahead: t is a change further on in the step's direction, not the clamp.
+  const ahead = t >= 0 && (onScreen ? t !== cur : delta > 0 ? tops[t] >= pane.top : tops[t] < pane.top);
+  const hole = st.slots.map((s) => searchableSlot(s) && (s.collapsed || s.load !== "ok"));
+  const holes = stackHuntSlots(hole, from, ahead ? slotOf(blocks[t]) : null, delta, !onScreen && delta > 0);
+  const land = (tr) => {
+    st.changeRow = tr;
+    landChange(tr);
+  };
+  if (!holes.length) {
+    if (t >= 0) land(blocks[t]);
+    return;
+  }
+  st.changeHunting = true;
+  try {
+    for (const k of holes) {
+      const s = st.slots[k];
+      if (s.collapsed) {
+        s.collapsed = false;
+        repaintSlot(st, k);
+      }
+      scrollToFile(st, s.idx);
+      if (s.load !== "ok" && !(await awaitSlot(st, s))) {
+        if (state.stack !== st) return;
+        continue;
+      }
+      if (state.stack !== st) return;
+      const sec = sectionEl(k);
+      const mine = sec ? diffChangeBlocks(sec) : [];
+      if (mine.length) return land(delta > 0 ? mine[0] : mine[mine.length - 1]);
+    }
+    // Every file on the way was empty: the rendered target stands.
+    if (ahead && blocks[t].isConnected) land(blocks[t]);
+  } finally {
+    st.changeHunting = false;
+  }
+}
+
 // --- loading --------------------------------------------------------------
 
 function pump(st) {
@@ -409,6 +480,7 @@ function pump(st) {
 
 async function load(st, s) {
   s.load = "loading";
+  s.inLoad = true; // until the repaint below: awaitSlot waits for the rows
   st.inFlight++;
   try {
     const d = await getJSON(fileDiffURL(s.f));
@@ -436,6 +508,7 @@ async function load(st, s) {
     s.error = e.message || String(e);
   }
   if (state.stack !== st) return; // the stack left the screen while this loaded
+  s.inLoad = false; // (set before the repaint: an awaiter resumes on a later tick)
   st.inFlight--;
   if (s.again) {
     s.again = false;
@@ -883,4 +956,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, stackChangeStep, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

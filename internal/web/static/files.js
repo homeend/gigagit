@@ -19,7 +19,7 @@ import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
-import { activeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
+import { activeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackChangeStep, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -3046,7 +3046,35 @@ function changeStepTarget(tops, cur, top, bottom, delta) {
 }
 
 
+// stackHuntSlots lists, in stepping order, the stack files a change step must
+// open before it may land on target file `to` (null: no change is left that
+// way in the rendered rows): those strictly between `from` and `to` whose
+// rows are not in the document — hole[k] is true for a folded or never-read
+// file that can hold changes. withFrom counts `from` itself: a step down from
+// the viewport whose top sits on an unread file must read that file first.
+function stackHuntSlots(hole, from, to, delta, withFrom) {
+  const step = delta > 0 ? 1 : -1;
+  const out = [];
+  for (let k = withFrom ? from : from + step; k >= 0 && k < hole.length; k += step) {
+    if (to !== null && (step > 0 ? k >= to : k <= to)) break;
+    if (hole[k]) out.push(k);
+  }
+  return out;
+}
+
+
+// landChange puts a change row in the middle of the pane and flashes it.
+function landChange(tr) {
+  tr.scrollIntoView({ block: "center" });
+  tr.classList.add("flash");
+  setTimeout(() => tr.classList.remove("flash"), 600);
+}
+
+
 function stepChange(delta) {
+  // A stack reads its files lazily: stackChangeStep opens the folded or unread
+  // files on the way (stackview.js).
+  if (state.stack && !conflictPick) return stackChangeStep(delta);
   const blocks = changeNavRows();
   if (!blocks.length) return;
   // The conflict picker steps its regions from its own index: its output
@@ -3061,9 +3089,7 @@ function stepChange(delta) {
   }
   state.diffBlockIdx = i;
   const tr = blocks[i];
-  tr.scrollIntoView({ block: "center" });
-  tr.classList.add("flash");
-  setTimeout(() => tr.classList.remove("flash"), 600);
+  landChange(tr);
   if (conflictPick && tr.dataset.b != null) {
     // The output pane follows: scroll the region's contribution (its own
     // scroll container, so the pick area is unaffected) and flash it too.
@@ -4235,4 +4261,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
+export { SECTION_LABELS, changeStepTarget, landChange, stackHuntSlots, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };
