@@ -505,8 +505,17 @@ func (m Model) renderInterface() string {
 		statusRow = st().statusErr.Render(statusRow)
 	}
 
+	// A maximised agent console owns the whole body.
+	if m.console != nil && m.console.maximized {
+		body := m.renderConsole(g.w, g.bodyH)
+		return strings.Join([]string{header, body, footer, statusRow}, "\n")
+	}
+
 	// Narrow terminals: a single commits column (two columns won't fit cleanly).
 	if g.w < 40 {
+		if m.console != nil {
+			return strings.Join([]string{header, m.renderConsole(g.w, g.boxH[panelCommits]), footer, statusRow}, "\n")
+		}
 		cmRows, _, decos := m.commitBody(g.w, g.boxH[panelCommits])
 		body := m.renderPanel(panelCommits, m.panelLabel(panelCommits, i18n.T("Commits (%s)", m.commitScopeLabel())), cmRows, decos, g.w, g.boxH[panelCommits])
 		return strings.Join([]string{header, body, footer, statusRow}, "\n")
@@ -539,6 +548,8 @@ func (m Model) renderInterface() string {
 	switch {
 	case g.boxH[panelCommits] <= 0:
 		// a fullscreen left panel owns the whole body — no right column at all
+	case m.console != nil:
+		right = m.renderConsole(g.rightW, g.boxH[panelCommits])
 	case m.filesPreview != nil:
 		right = m.renderFilePreview(g.rightW, g.boxH[panelCommits])
 	case m.stashView != nil:

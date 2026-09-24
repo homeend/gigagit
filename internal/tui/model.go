@@ -118,7 +118,8 @@ type Model struct {
 	previewCompareSet map[string]bool // Previews rows toggled into the ◉ compare selection (keyed by row id; preview_marks.go)
 	actionMenu        *actionMenu     // . action menu (list + run available actions); nil = closed
 
-	stashView *stashView // stash list in the right column (over Commits); nil = closed
+	stashView *stashView    // stash list in the right column (over Commits); nil = closed
+	console   *consoleState // agent console over the Commits column (or maximised); nil = closed
 
 	conflict          domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 	resumePromptShown bool                 // one-shot: the continue/abort prompt fired for the current paused-op instance; re-arms when the state clears (maybeResumePrompt)
@@ -447,7 +448,7 @@ func New(svc *domain.Service) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen))
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen), waitSessionsCmd())
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -500,6 +501,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m = m.syncConsoleSize() // the agent redraws for its box, not the old one
 		// A resize can flip fullMaxActive false→true without any surface
 		// closing (leftColumnPanels empties below 40 columns and refills on
 		// widen), so this is a pin-resume point like reRoot/closeStashView.
@@ -537,6 +539,17 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+	case consoleChangedMsg:
+		if m.console == nil || msg.id != m.console.id || msg.gen != m.console.gen {
+			return m, nil // a closed or replaced console's waiter dies here
+		}
+		s, ok := m.consoleSession()
+		if !ok {
+			return m, nil
+		}
+		return m, waitSessionCmd(s, msg.id, msg.gen)
+	case sessionsChangedMsg:
+		return m.onSessionsChanged()
 	case stackStatMsg:
 		// The stack's +/− counts, in one numstat (diff_stack.go).
 		return m.applyStackStats(msg), nil
@@ -4038,7 +4051,7 @@ func (m Model) canMaximizeLeft() bool {
 // suspended — layout ignores it and focusCommitsPanel must not transfer it,
 // because the surface's close path restores its own remembered focus.
 func (m Model) fullscreenYielded() bool {
-	return m.filesView != nil || m.stashView != nil || m.filesPreview != nil
+	return m.filesView != nil || m.stashView != nil || m.filesPreview != nil || m.console != nil
 }
 
 // canFullMaximize reports whether ctrl+t can pin the focused panel fullscreen:
