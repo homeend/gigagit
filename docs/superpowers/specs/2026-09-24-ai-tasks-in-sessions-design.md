@@ -54,6 +54,9 @@ shape of the `ctrl+\` popup).
    Shell: `$SHELL` (fallback `sh`) on Unix; on Windows `pwsh` → `powershell`
    → `cmd`; override `[console] shell`. Opens in the foreground. An ordinary
    session: sub-row, console, `ctrl+\`.
+8. **Popup layout** stays as open files built it (sessions group, then open
+   files); the Headless tab is added beside it. A layout rethink is a later
+   refactor, not this work.
 9. **Worktree mismatch asks, never switches silently** ("interactive but not
    intrusive"): a `gg session` command that depends on a worktree (a
    navigate to a file or diff, a highlight) arriving from a worktree other
@@ -64,9 +67,6 @@ shape of the `ctrl+\` popup).
    switch path) and then replays the navigate. Worktree-independent commands
    (status, focus, reload, a commit navigate within the same repo) apply as
    usual.
-8. **Popup layout** stays as open files built it (sessions group, then open
-   files); the Headless tab is added beside it. A layout rethink is a later
-   refactor, not this work.
 
 ## Architecture
 
