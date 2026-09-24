@@ -294,3 +294,25 @@ func TestContentLinkReplyFailsWhenTheLoadFails(t *testing.T) {
 		t.Fatalf("reply = %+v ok=%v, want a failure", r, ok)
 	}
 }
+
+// Two files opened in a row: the first viewer is covered by the second when
+// its load arrives, and must still be filled (not dropped as stale).
+func TestCoveredViewerStillFills(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	m, _ = m.openFileViewer("a.txt", 0)
+	a := layerOf[*fileViewer](m)
+	m, _ = m.openFileViewer("b.txt", 0)
+	b := layerOf[*fileViewer](m)
+	if a == b {
+		t.Fatal("the second open did not push a second viewer")
+	}
+	tm, _ := m.Update(fileContentMsg{tag: a.tag, lines: fileContentLinesTok([]byte("AAA\n"), nil)})
+	m = tm.(Model)
+	if len(a.p.lines) != 1 || a.p.lines[0].raw != "AAA" {
+		t.Errorf("covered viewer shows %+v, want its loaded line", a.p.lines)
+	}
+	if b.p.lines[0].src {
+		t.Errorf("the top viewer was filled with another file's lines: %+v", b.p.lines)
+	}
+}

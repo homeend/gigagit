@@ -892,22 +892,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, reply := m.navigateLanded(msg.cmd, contentLandedDetail(msg.cmd.File, msg.line, msg.load.lines))
 		return m, tea.Batch(fill, reply)
 	case fileContentMsg:
-		if fv := layerOf[*fileViewer](m); fv != nil && msg.tag == fv.tag {
-			// The full-screen viewer's load (a content link): same fill as the
-			// files view's preview below, over the viewer's own popup.
-			p := fv.p
-			if msg.err != nil {
-				p.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
-			} else {
-				p.lines = msg.lines
-			}
-			p.cur, p.sel = 0, 0
-			p.lsel.clear()
-			m = fv.landPendingLine(m)
-			if p.search.active() {
-				rows, inner := fv.geom(m)
-				p.search.refindFrom(previewSearchLines(p), p.searchPos(rows))
-				p.snapHit(rows, inner)
+		if d, rows, inner, ok := m.liveDoc(msg.tag); ok {
+			if n := d.fill(msg, rows, inner); n != "" {
+				m.statusMsg = n
 			}
 			return m, nil
 		}
