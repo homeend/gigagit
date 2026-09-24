@@ -62,6 +62,9 @@ func availableActions(m Model) []actionRow {
 		if r, ok := m.contextLinkRow(); ok {
 			rows = insertCopyLinkRow(rows, r)
 		}
+		if r, ok := m.contextFileLinkRow(); ok {
+			rows = insertAfterID(rows, "copy-link", r)
+		}
 		// A history/blame surface on top is a single file at a rev, not the files
 		// view underneath it. It owns the "Open in external editor" action
 		// (surfaceExternalRow); the files-view view/open rows and — below — the
@@ -180,6 +183,9 @@ func availableActions(m Model) []actionRow {
 	out := append(m.contextCopyRows(), row...)
 	if r, ok := m.contextLinkRow(); ok {
 		out = insertCopyLinkRow(out, r)
+	}
+	if r, ok := m.contextFileLinkRow(); ok {
+		out = insertAfterID(out, "copy-link", r)
 	}
 	out = append(out, m.comparisonLinkRows()...)
 	out = append(out, m.sessionMenuRows()...)
@@ -586,7 +592,7 @@ func rowByID(rows []actionRow, id string) (actionRow, bool) {
 // editor, hunk picker) are NOT content windows.
 func (m Model) inContentWindow() bool {
 	switch m.topLayer().(type) {
-	case *historyView, *blameView:
+	case *historyView, *blameView, *fileViewer:
 		return true
 	}
 	if m.diffLayer() != nil || m.filesView != nil {
@@ -607,6 +613,10 @@ func (m Model) contextCopyRows() []actionRow {
 	// the diff view (open a diff, then h/b, and both are live with the stack
 	// surface on top), which out-ranks the file tree.
 	switch s := m.topLayer().(type) {
+	case *fileViewer:
+		// The viewer's line rows lead, as in the files view's preview; the
+		// file's own rows follow (a working-tree file: no commit).
+		return append(m.previewCopyLineRows(), m.fileCopyRows(s.p.title, "")...)
 	case *historyView:
 		if s.sel >= 0 && s.sel < len(s.commits) {
 			fc := s.commits[s.sel]

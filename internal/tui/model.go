@@ -884,6 +884,24 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesCommit = msg.commit
 		return m, nil
 	case fileContentMsg:
+		if fv := layerOf[*fileViewer](m); fv != nil && msg.tag == fv.tag {
+			// The full-screen viewer's load (a content link): same fill as the
+			// files view's preview below, over the viewer's own popup.
+			p := fv.p
+			if msg.err != nil {
+				p.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
+			} else {
+				p.lines = msg.lines
+			}
+			p.cur, p.sel = 0, 0
+			p.lsel.clear()
+			if p.search.active() {
+				rows, inner := fv.geom(m)
+				p.search.refindFrom(previewSearchLines(p), p.searchPos(rows))
+				p.snapHit(rows, inner)
+			}
+			return m, nil
+		}
 		if m.filesPreview == nil || msg.tag != m.filesPreviewTag {
 			return m, nil // preview closed, or a stale load (another file opened)
 		}
@@ -3798,6 +3816,16 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.loadedLinkHist(msg)
 	case stashLinkMsg:
 		return m.resolvedStashLink(msg)
+	case fileLinkCheckedMsg:
+		switch {
+		case msg.err != nil:
+			m.statusMsg = i18n.T("error: %s", msg.err.Error())
+		case !msg.present:
+			m.statusMsg = i18n.T("%s is not in the working tree", msg.path)
+		default:
+			return m, m.copyToClipboardCmd(i18n.T("Copied link: %s", msg.text), msg.text)
+		}
+		return m, nil
 	case clipboardCopiedMsg:
 		if msg.err != nil {
 			m.statusMsg = i18n.T("copy failed: %s", msg.err.Error())

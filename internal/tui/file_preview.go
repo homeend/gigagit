@@ -373,7 +373,14 @@ func (p *contentPopup) snapHit(rowsCap, innerW int) {
 // Commits panel) while a preview is open. Window-then-build (a file can be large);
 // the border follows focus.
 func (m Model) renderFilePreview(boxW, boxH int) string {
-	p := m.filesPreview
+	return m.renderPreviewBox(m.filesPreview, i18n.T("View %s", m.filesPreview.title), boxW, boxH, !m.filesTreeFocused)
+}
+
+// renderPreviewBox draws one file preview as a bordered box: title, the
+// windowed lines (cursor band, selection stripe, search emphasis, syntax
+// classes) and the hint line. The files view's right column and the
+// full-screen fileViewer both draw through it, so they cannot drift apart.
+func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, focused bool) string {
 	contentH := boxH - 2 // top/bottom border
 	if contentH < 1 {
 		contentH = 1
@@ -432,7 +439,6 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 		}
 	}
 
-	title := i18n.T("View %s", p.title)
 	if bd := p.search.badge(); bd != "" { // right-aligned on the title line
 		avail := innerW - lipgloss.Width(bd) - 2
 		if avail < 1 {
@@ -462,7 +468,7 @@ func (m Model) renderFilePreview(boxW, boxH int) string {
 	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 
 	style := st().bluredPanel
-	if !m.filesTreeFocused {
+	if focused {
 		style = st().focusedPanel
 	}
 	return style.Render(strings.Join(lines, "\n"))

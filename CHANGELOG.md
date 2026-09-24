@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Content links: Copy file link
+
+### Added
+
+- **Copy file link** in the TUI `.` menu and the web file-row menu (right
+  after Copy link) copies `gg://<repo>/<path>?view=content` — the file as it is
+  ON DISK in this worktree, with no commit, even from a commit's file list.
+  gg checks the file exists first; when it does not, the bottom bar (the web's
+  status line) says `<path> is not in the working tree` and nothing is copied.
+- **`gg link --content <path>`** prints the same link (exit 1 when the file is
+  missing).
+- **`gg open` / `gg session navigate` land a content link in a full-screen
+  View-file viewer** — the files view's View file preview, over the file's
+  working-tree text: syntax colouring, the alt+↑/↓ line cursor,
+  space/space/enter select + copy, `/ @ ] [` search and the `.` menu's copy
+  rows — so an agent asked to "open" a file can do it. `gg web` refuses content links for now; `gg diff`,
+  `gg show`, `gg note` and `gg session highlight` refuse them (a content link
+  is not a diff). The `?view=content` hint also accepts a `:<line>`, reserved
+  for focusing a line in a later version.
+
 ## Agent sessions in the TUI
 
 ### Added

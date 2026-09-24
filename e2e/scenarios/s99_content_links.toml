@@ -1,0 +1,36 @@
+name = "content links: gg link --content prints ?view=content, refuses a missing file and a target, and non-navigate verbs refuse the link"
+
+# One tracked file with an uncommitted edit: a content link names the file ON
+# DISK, so it must be printable for a dirty file, and must name no commit.
+[input]
+steps = [
+  { write = "f1.txt", content = "v1\n" },
+  { commit = "c1" },
+  { write = "f1.txt", content = "dirty\n" },
+]
+
+[[run]]
+cmd             = ["link", "--content", "f1.txt"]
+exit            = 0
+stdout_contains = ["gg:///", "/f1.txt?view=content"]
+stdout_excludes = ["@"]
+
+# Not on disk: nothing to link to.
+[[run]]
+cmd  = ["link", "--content", "gone.txt"]
+exit = 1
+
+# A content link has no target.
+[[run]]
+cmd  = ["link", "--content", "--rev", "HEAD", "f1.txt"]
+exit = 2
+
+# gg diff takes a diff's address, not a file's content.
+[[run]]
+cmd  = ["diff", "gg://{{cwd}}/f1.txt?view=content"]
+exit = 2
+
+[[run]]
+cmd             = ["link", "resolve", "gg://{{cwd}}/f1.txt?view=content"]
+exit            = 0
+stdout_contains = ["f1.txt"]

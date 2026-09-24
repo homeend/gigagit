@@ -15,6 +15,8 @@ import (
 // excluded: its title is a composite "a ↔ b", not a path to address.
 func (m Model) focusedBookmark() (model.Bookmark, bool) {
 	switch s := m.topLayer().(type) {
+	case *fileViewer: // a working-tree file on disk
+		return model.Bookmark{State: model.StateUnstaged, Worktree: m.currentWorktree, Branch: m.status.Branch, Path: s.p.title}, true
 	case *historyView:
 		if s.sel < 0 || s.sel >= len(s.commits) {
 			return model.Bookmark{}, false

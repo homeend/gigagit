@@ -597,3 +597,13 @@ func TestSteerWireAcceptsAPreviewHint(t *testing.T) {
 		t.Errorf("wire hint = %s/%s, want preview/1a2b3c4d", w.HintKind, w.HintID)
 	}
 }
+
+// The page has no content viewer yet: a content link must be refused on the
+// wire, not landed on the working-tree diff.
+func TestSteerWireRefusesAContentLink(t *testing.T) {
+	t.Parallel()
+	_, err := toSteerWire(steer.Command{Cmd: "navigate", File: "a.txt", HintKind: "view", HintID: "content"})
+	if err == nil || err.Error() != "content links are not supported in gg web yet" {
+		t.Fatalf("toSteerWire = %v, want the web refusal", err)
+	}
+}

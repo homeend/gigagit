@@ -155,6 +155,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/bookmarks", writeGuard(s.handleBookmarkAdd))
 	mux.HandleFunc("DELETE /api/bookmarks", writeGuard(s.handleBookmarkRemove))
 	mux.HandleFunc("GET /api/linkhist", s.handleLinkHist)
+	mux.HandleFunc("GET /api/worktree-present", s.handleWorktreePresent)
 	mux.HandleFunc("POST /api/linkhist", writeGuard(s.handleLinkHistAdd))
 	mux.HandleFunc("GET /api/shelf", s.handleShelf)
 	mux.HandleFunc("POST /api/shelf", writeGuard(s.handleShelfAdd))

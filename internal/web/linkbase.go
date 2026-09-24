@@ -62,7 +62,9 @@ func (s *Server) handleLinkBase(w http.ResponseWriter, r *http.Request) {
 	// the field — and a typed or pasted link gets the same ones.
 	described := func(m map[string]string) map[string]string {
 		m["desc"] = svc.DescribeLink(r.Context(), l)
-		if l.Hint.Kind != "" {
+		// A view hint names where the link LANDS, not a saved surface it was
+		// copied from.
+		if l.Hint.Kind != "" && l.Hint.Kind != model.ContentHintKind {
 			m["origin"] = "copied from a saved " + l.Hint.Kind
 		}
 		return m

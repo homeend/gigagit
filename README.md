@@ -288,12 +288,20 @@ path or in a ref name carried by a link. `gg link`, the TUI and `gg web`'s
 copy-link buttons all refuse to print such a link rather than emit one that
 reparses as something else.
 
+**Copy file link** (the TUI `.` menu and the web file-row menu, next to Copy
+link) copies `gg://<repo>/<path>?view=content`: the file as it is on disk in
+this worktree, with no commit — from a commit's file list too. gg checks the
+file exists first and says `<path> is not in the working tree` when it does
+not. `gg open` on such a link (or an agent's `gg session navigate`) opens the
+file's content viewer in the TUI; `gg web` does not land content links yet.
+
 ```bash
 gg link internal/tui/steer.go:42        # print the link for a place here
 gg link --rev HEAD README.md            # …at a commit (always the full sha)
 gg link --ref main                      # …the branch tip, kept as a name
 gg link --pair HEAD~3..HEAD             # …the last 3 commits' change-set (both halves = full shas)
 gg link --ref main --bookmark b1        # …with a landing hint appended
+gg link --content README.md             # …the file's CONTENT on disk (?view=content), no commit
 gg link resolve gg://gigagit/a.go:3     # which checkout on this machine?
 gg links                                # the links copied here, newest first
 

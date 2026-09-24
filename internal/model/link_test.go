@@ -700,3 +700,51 @@ func TestParseLinkRefusesAColonInARepositoryName(t *testing.T) {
 		}
 	}
 }
+
+func TestContentLinkRoundTrips(t *testing.T) {
+	t.Parallel()
+	for _, in := range []string{
+		"gg://gigagit/a/b.go?view=content",
+		"gg://gigagit/a/b.go:12?view=content", // v2 shape: parsed now, landed later
+		"gg:///mnt/t/repo/a/b.go?view=content",
+	} {
+		l, err := ParseLink(in)
+		if err != nil {
+			t.Fatalf("ParseLink(%q) = %v", in, err)
+		}
+		if !l.IsContent() || l.Hint != ContentHint {
+			t.Errorf("ParseLink(%q).Hint = %+v, want the content hint", in, l.Hint)
+		}
+		if l.Target.State != StateUnstaged {
+			t.Errorf("ParseLink(%q) target = %v, want the working tree", in, l.Target.State)
+		}
+		if got := l.String(); got != in {
+			t.Errorf("String() = %q, want %q", got, in)
+		}
+	}
+}
+
+func TestContentLinkRefusals(t *testing.T) {
+	t.Parallel()
+	cases := []struct{ name, in, want string }{
+		{"commit target", "gg://gigagit/a.go@" + fullSHA + "?view=content", "working tree"},
+		{"staged target", "gg://gigagit/a.go@staged?view=content", "working tree"},
+		{"ref target", "gg://gigagit/a.go@ref:main?view=content", "working tree"},
+		{"pair target", "gg://gigagit/a.go@main..dev?view=content", "working tree"},
+		{"preview target", "gg://gigagit/a.go@main...dev?view=content", "working tree"},
+		{"old side", "gg://gigagit/a.go:old:3?view=content", "old"},
+		{"hunk", "gg://gigagit/a.go#2?view=content", "hunk"},
+		{"no path", "gg://gigagit?view=content", "file path"},
+		{"other id", "gg://gigagit/a.go?view=blame", "content"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ParseLink(tc.in)
+			if err == nil || !errors.Is(err, ErrLink) || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("ParseLink(%q) = %v, want an ErrLink mentioning %q", tc.in, err, tc.want)
+			}
+		})
+	}
+}

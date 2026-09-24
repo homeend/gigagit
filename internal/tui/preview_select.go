@@ -8,6 +8,22 @@ import (
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
+// activePreview is THE focused file preview and its on-screen size: the one
+// question every preview key, the line cursor and the . menu's line rows ask.
+// A fileViewer on top of the stack answers first; otherwise the files view's
+// right-column preview answers while it is focused (the tree side owns the
+// keys otherwise).
+func (m Model) activePreview() (p *contentPopup, rows, innerW int, ok bool) {
+	if fv, isViewer := m.topLayer().(*fileViewer); isViewer {
+		rows, innerW = fv.geom(m)
+		return fv.p, rows, innerW, true
+	}
+	if m.filesPreview != nil && !m.filesTreeFocused {
+		return m.filesPreview, m.filePreviewRowsCap(), m.filePreviewInnerW(), true
+	}
+	return nil, 0, 0, false
+}
+
 // ensureCursorVisible scrolls the pager's top line (sel) the minimum needed for
 // cur to sit inside a rowsCap-row window — the diff's j/k rule. In wrap mode a
 // row can occupy several display lines, so rowsCap is an upper bound there and
@@ -35,11 +51,10 @@ func (p *contentPopup) ensureCursorVisible(rowsCap int) {
 // Model is a value but filesPreview is a pointer, so the mutation is visible
 // to the caller.
 func (m Model) movePreviewCursor(delta int) {
-	p := m.filesPreview
-	if p == nil || len(p.lines) == 0 {
+	p, rowsCap, _, ok := m.activePreview()
+	if !ok || len(p.lines) == 0 {
 		return
 	}
-	rowsCap := m.filePreviewRowsCap()
 	if p.cur < p.sel {
 		p.cur = p.sel
 		return
@@ -93,8 +108,8 @@ func (p *contentPopup) selectedLines() []string {
 // preview. Copy line is offered only on a real source line; a placeholder
 // ("(loading…)") is not a line of the file and has nothing to copy.
 func (m Model) previewCopyLineRows() []actionRow {
-	p := m.filesPreview
-	if p == nil || m.filesTreeFocused {
+	p, _, _, ok := m.activePreview()
+	if !ok {
 		return nil
 	}
 	var rows []actionRow
@@ -107,7 +122,7 @@ func (m Model) previewCopyLineRows() []actionRow {
 			i18n.T("Copy selected lines (%d)", len(sel)),
 			i18n.T("Copied %d lines", len(sel)),
 			strings.Join(sel, "\n")), func(m Model) *lineSel {
-			if pp := m.filesPreview; pp != nil {
+			if pp, _, _, ok := m.activePreview(); ok {
 				return &pp.lsel
 			}
 			return nil
@@ -121,8 +136,8 @@ func (m Model) previewCopyLineRows() []actionRow {
 // WITHOUT a selection keeps its old meaning (focus moves to the tree), so the
 // hook declines it.
 func (m Model) previewSelectKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
-	p := m.filesPreview
-	if p == nil || m.filesTreeFocused || p.search.typing {
+	p, _, _, ok := m.activePreview()
+	if !ok || p.search.typing {
 		return m, nil, false
 	}
 	switch msg.String() {
