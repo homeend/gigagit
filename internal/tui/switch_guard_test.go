@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -224,5 +226,33 @@ func TestGoToWorktreeOffersRepairForForeignNotation(t *testing.T) {
 	}
 	if r.loading || r.switchTarget != "" {
 		t.Fatal("the offer itself must not switch")
+	}
+}
+
+// Serial: sets the guard seams. A worktree git recorded under the other
+// environment's notation (/mnt/t/… seen from Windows) is no working
+// directory here: starting an agent or a terminal there must refuse with a
+// reason instead of failing inside process creation.
+func TestSessionStartRefusesAForeignWorktree(t *testing.T) {
+	m := newTestModel(t)
+	m.loading = false
+	setGuardSeams(t, "windows", `T:\x`)
+	for name, start := range map[string]func(Model) (tea.Model, tea.Cmd){
+		"agent":    func(m Model) (tea.Model, tea.Cmd) { return m.startAgentFor("/mnt/t/x") },
+		"terminal": func(m Model) (tea.Model, tea.Cmd) { return m.openTerminal("/mnt/t/x") },
+	} {
+		u, cmd := start(m)
+		got := u.(Model)
+		if cmd != nil || got.topLayer() != nil {
+			t.Fatalf("%s: must not start anything", name)
+		}
+		if want := i18n.T("%s is linked for another environment — enter on its Worktrees row offers to repair it", "/mnt/t/x"); got.statusMsg != want {
+			t.Fatalf("%s: status %q", name, got.statusMsg)
+		}
+	}
+	setGuardSeams(t, "linux")
+	u, cmd := m.openTerminal("/gone")
+	if want := i18n.T("cannot start here: %s is not reachable from here", "/gone"); cmd != nil || u.(Model).statusMsg != want {
+		t.Fatalf("unreachable: status %q", u.(Model).statusMsg)
 	}
 }

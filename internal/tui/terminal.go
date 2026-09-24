@@ -31,6 +31,10 @@ func (m Model) childInboxDir() string {
 // the platform default) and opens its console focused — the same path an
 // agent start takes once its session exists.
 func (m Model) openTerminal(worktree string) (tea.Model, tea.Cmd) {
+	if why := sessionDirRefusal(worktree); why != "" {
+		m.statusMsg = why
+		return m, nil
+	}
 	g := m.layout()
 	cols, rows := consoleInner(g.rightW, g.boxH[panelCommits])
 	svc, shell, env, inbox := m.svc, m.cfg.Console.Shell, m.childEnv(), m.childInboxDir()

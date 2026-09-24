@@ -65,6 +65,10 @@ var (
 
 // startAgentFor opens the Start agent… flow for worktree.
 func (m Model) startAgentFor(worktree string) (Model, tea.Cmd) {
+	if why := sessionDirRefusal(worktree); why != "" {
+		m.statusMsg = why
+		return m, nil
+	}
 	cmds := domain.SessionCommands(m.cfg, "tui")
 	if len(cmds) == 0 {
 		m = m.pushLayer(&agentStartPopup{stage: stageDetecting, worktree: worktree})
