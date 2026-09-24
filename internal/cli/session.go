@@ -92,6 +92,7 @@ func routeFor(dir string) sessionRoute {
 // page gets a POST, a live TUI gets the inbox file, and when both are live the
 // TUI's reply decides the exit code.
 func sendSteer(dir string, c steer.Command, noWait bool, stdout, stderr io.Writer) int {
+	dir = preferredInbox(dir)
 	r := routeFor(dir)
 	if !r.tuiOK && !r.webOK {
 		fmt.Fprintln(stderr, "no gg session for this worktree")
@@ -146,6 +147,36 @@ func sendSteer(dir string, c steer.Command, noWait bool, stdout, stderr io.Write
 	return 1
 }
 
+// sessionGetenv reads GG_INBOX; a variable so tests stay off the process env.
+var sessionGetenv = os.Getenv
+
+// preferredInbox is the inbox a session verb talks to: the one the gg that
+// started this process named in $GG_INBOX, while a TUI or web page there is
+// live — so an agent in worktree B reaches the gg showing A that launched it
+// — else dir (this worktree's, or a link's checkout's).
+func preferredInbox(dir string) string {
+	if own := sessionGetenv("GG_INBOX"); own != "" {
+		if _, ok := steer.Live(own, steer.TUIPresence); ok {
+			return own
+		}
+		if _, ok := steer.Live(own, steer.WebPresence); ok {
+			return own
+		}
+	}
+	return dir
+}
+
+// callerWorktree is the checkout this process runs in, for a worktree-bound
+// command's Worktree ("" when it cannot be read: the consumer then applies
+// the command as it always has).
+func callerWorktree(svc *domain.Service) string {
+	top, err := svc.TopLevel(context.Background())
+	if err != nil {
+		return ""
+	}
+	return top
+}
+
 // postWebSteer hands the command to an open gg web page.
 func postWebSteer(base string, c steer.Command) error { return steer.PostHTTP(base, c) }
 
@@ -197,6 +228,7 @@ func sessionStatusAt(dir string, svc *domain.Service, args []string, stdout, std
 		fmt.Fprintf(stderr, "session status: unexpected argument %q (status takes only --json)\n", pos[0])
 		return 2
 	}
+	dir = preferredInbox(dir)
 	r := routeFor(dir)
 	view := sessionOpenViewAt(snapPath)
 	link := snapshotCursorLink(snapPath)
@@ -382,6 +414,9 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 		if err != nil {
 			return navExit("session navigate", err, stderr)
 		}
+		if c.File != "" || c.Target != nil {
+			c.Worktree = res.Checkout
+		}
 		return sendSteer(dir, c, *noWait, stdout, stderr)
 	}
 	if len(pos) != 0 {
@@ -508,10 +543,11 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 	}
 
 	return sendSteer(dir, steer.Command{
-		Cmd:    "navigate",
-		File:   addr.Path,
-		Target: targetOf(addr),
-		Line:   &line,
+		Cmd:      "navigate",
+		File:     addr.Path,
+		Target:   targetOf(addr),
+		Line:     &line,
+		Worktree: callerWorktree(svc),
 	}, *noWait, stdout, stderr)
 }
 
@@ -716,7 +752,7 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 		}
 		return sendSteer(dir, steer.Command{
 			Cmd: "highlight", File: res.Addr.Path, Target: targetOf(res.Addr),
-			Side: sideVal, Start: first, End: last, Tone: *tone,
+			Side: sideVal, Start: first, End: last, Tone: *tone, Worktree: res.Checkout,
 		}, *noWait, stdout, stderr)
 	}
 	if len(pos) != 0 {
@@ -742,7 +778,7 @@ func sessionHighlightAdd(dir string, svc *domain.Service, args []string, stdout,
 	}
 	return sendSteer(dir, steer.Command{
 		Cmd: "highlight", File: addr.Path, Target: targetOf(addr),
-		Side: *side, Start: *start, End: *end, Tone: *tone,
+		Side: *side, Start: *start, End: *end, Tone: *tone, Worktree: callerWorktree(svc),
 	}, *noWait, stdout, stderr)
 }
 
