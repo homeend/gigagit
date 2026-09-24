@@ -172,7 +172,31 @@ func (m Model) renderConsole(boxW, boxH int) string {
 // onSessionsChanged reacts to a session-list change (start, exit, remove):
 // the Worktrees sub-rows re-derive on render; re-arm the waiter.
 func (m Model) onSessionsChanged() (Model, tea.Cmd) {
+	prev := m.sessionStates
+	next := map[domain.SessionID]domain.SessionState{}
+	for _, info := range domain.Sessions().List() {
+		next[info.ID] = info.State
+		was, seen := prev[info.ID]
+		if !seen || was != domain.SessionRunning || info.State != domain.SessionExited {
+			continue
+		}
+		if m.console != nil && m.console.id == info.ID && m.console.focused {
+			continue // the focused console shows the exit in its own title
+		}
+		m.statusMsg = i18n.T("%s in %s exited (%d)", info.Label, shortWorktreeName(info.Dir), info.ExitCode)
+	}
+	m.sessionStates = next
 	return m, waitSessionsCmd()
+}
+
+// runningSessionIn reports a running agent session whose cwd is dir.
+func runningSessionIn(dir string) (domain.SessionInfo, bool) {
+	for _, info := range domain.Sessions().List() {
+		if info.State == domain.SessionRunning && filepath.Clean(info.Dir) == filepath.Clean(dir) {
+			return info, true
+		}
+	}
+	return domain.SessionInfo{}, false
 }
 
 // shortWorktreeName is the worktree's directory name, for titles and rows.

@@ -118,8 +118,10 @@ type Model struct {
 	previewCompareSet map[string]bool // Previews rows toggled into the ◉ compare selection (keyed by row id; preview_marks.go)
 	actionMenu        *actionMenu     // . action menu (list + run available actions); nil = closed
 
-	stashView *stashView    // stash list in the right column (over Commits); nil = closed
-	console   *consoleState // agent console over the Commits column (or maximised); nil = closed
+	stashView     *stashView                               // stash list in the right column (over Commits); nil = closed
+	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
+	quitConfirmed bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
+	sessionStates map[domain.SessionID]domain.SessionState // last seen state per session, for exit notices
 
 	conflict          domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 	resumePromptShown bool                 // one-shot: the continue/abort prompt fired for the current paused-op instance; re-arms when the state clears (maybeResumePrompt)
@@ -550,6 +552,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitSessionCmd(s, msg.id, msg.gen)
 	case sessionsChangedMsg:
 		return m.onSessionsChanged()
+	case quitHeldMsg:
+		return m.openSessionsPopup(true)
 	case agentEnsureMsg:
 		return m.applyAgentEnsure(msg)
 	case agentStartedMsg:
@@ -2464,6 +2468,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case panelWorktrees:
 				if m.canDeleteWorktree() {
 					wt, _ := m.selectedWorktree()
+					if info, busy := runningSessionIn(wt.Path); busy {
+						m.statusMsg = i18n.T("%s is running in this worktree — kill it first (ctrl+\\)", info.Label)
+						return m, nil
+					}
 					return m.startOp(engine.RemoveWorktree{Path: wt.Path, Branch: wt.Branch})
 				}
 			case panelBranches:

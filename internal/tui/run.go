@@ -80,7 +80,7 @@ func Run(svc *domain.Service, recordPath string, at model.Link) (string, error) 
 		}
 		m.recorder = rec
 	}
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithFilter(quitFilter))
 	// Wrap off for the TUI's lifetime (see autowrapOff): a glyph the terminal
 	// draws wider than gg measured must clip at the right edge, never wrap
 	// and scramble the frame. Stdout is the program's output.
@@ -90,6 +90,11 @@ func Run(svc *domain.Service, recordPath string, at model.Link) (string, error) 
 		final, rerr = p.Run()
 		return rerr
 	})
+	// Safety net: whatever ended the program (a confirmed quit, a panic
+	// recovered by Run, a killed terminal), no agent outlives gg.
+	killCtx, killCancel := context.WithTimeout(context.Background(), killAllGrace)
+	domain.Sessions().KillAll(killCtx)
+	killCancel()
 	if fm, ok := final.(Model); ok {
 		if fm.opCancel != nil {
 			fm.opCancel()

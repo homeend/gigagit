@@ -148,6 +148,13 @@ func (p *sessionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch key {
 	case "esc":
 		return m.popLayer(), nil
+	case "Q":
+		if p.quitMode {
+			m = m.popLayer()
+			m.quitConfirmed = true
+			m.statusMsg = i18n.T("ending agent sessions…")
+			return m, killAllAndQuitCmd()
+		}
 	case "z":
 		p.mode, p.hscroll = p.mode.next(), 0
 	case "shift+left":
