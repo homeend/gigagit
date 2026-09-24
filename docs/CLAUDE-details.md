@@ -1745,7 +1745,9 @@ at "what the user means" that a question would have avoided.
   `ls-files -s -z`, a `hash-object` per file, ONE `update-index`), and the
   batch answer is `{diffs: [{path, lane, diff}]}` built by
   `worktreeDiffPayload` from bytes in hand (the index is read back only when
-  the content has a `\r`, i.e. a clean filter may have rewritten it) — NO
+  the content has a `\r`, i.e. an eol filter may have rewritten it; any
+  OTHER clean filter — LFS, `filter.*.clean` — makes the answered hash
+  wrong, so the next action 409s and re-reads: safe, one extra trip) — NO
   status; the client lands the diffs, then `fetchStatus()` in the
   background. The single-file form still answers the status. `StageHunks`
   is `IndexOnly()`, so `Execute` skips the versions preflight probe;

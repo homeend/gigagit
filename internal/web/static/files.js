@@ -3369,7 +3369,14 @@ async function stageJobs(jobs) {
     return;
   }
   for (const { scope, v } of live) {
-    if (!fresh.has(key(v)) || !inLaneSection(v.path, v.lane)) await quietRefreshFile(scope, v.path, v.lane);
+    if (!fresh.has(key(v)) || !inLaneSection(v.path, v.lane)) {
+      await quietRefreshFile(scope, v.path, v.lane);
+      continue;
+    }
+    // the slot's status entry moved on (M → MM): keep it the fresh one
+    const section = v.lane === "staged" ? "staged" : "changes";
+    const f = state.statusEntries.find((x) => x.path === v.path && x.section === section);
+    if (scope.slot && f) scope.slot.f = f;
   }
 }
 
