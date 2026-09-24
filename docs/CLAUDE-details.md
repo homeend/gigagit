@@ -3240,3 +3240,17 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   `--gg` wrapper script that exports `XDG_CONFIG_HOME` and `exec`s the binary;
   a `[[tools.command]] category="session" command='bash --norc'` block makes a
   deterministic agent. The Worktrees tab is `C-Right C-Right` from Branches.
+
+### Agent console: UTF-8 in OSC payloads (fix, 2026-09-24)
+
+`x/ansi`'s transition table (`parser/transition_table.go`, Osc_string and
+Dcs_string) dispatches on 0x9C (C1 ST) even when that byte is a UTF-8
+continuation byte, so `ESC ] 0 ; ✳ Claude Code BEL` (✳ = E2 9C B3) ends at
+0x9C and " Claude Code" is PRINTED at the cursor. Claude Code retitles on
+every spinner frame, so the leak lands wherever the cursor is (the logo row,
+the input box). `agentsession.oscFilter` (pumpOut only, stateful across reads)
+drops bytes >= 0x80 inside OSC/DCS/APC/PM/SOS payloads. Found with
+`GG_SESSION_TRACE`; the user's ConPTY trace is the regression fixture
+`internal/agentsession/testdata/claude-conpty-title.raw`. Upstream fix would
+belong in charmbracelet/x/ansi — drop the filter once a released x/vt parses
+UTF-8 payloads correctly (the fixture test tells).

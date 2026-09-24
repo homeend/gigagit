@@ -41,6 +41,7 @@ type Session struct {
 	trace   *os.File                 // raw-output recording (StartSpec.TracePath); written by pumpOut only
 	traceEv *os.File                 // <trace>.events: "offset cols rows" at start and every resize (under ioMu)
 	traced  atomic.Int64             // bytes written to trace so far
+	osc     oscFilter                // pumpOut-only: keeps UTF-8 in OSC payloads away from x/ansi's C1 parsing
 	job     uintptr                  // Windows job object handle; 0 elsewhere
 }
 
@@ -137,7 +138,7 @@ func (s *Session) pumpOut() {
 				_, _ = s.trace.Write(buf[:n])
 				s.traced.Add(int64(n))
 			}
-			s.withEmu(func() { _, _ = s.emu.Write(buf[:n]) })
+			s.withEmu(func() { _, _ = s.emu.Write(s.osc.filter(buf[:n])) })
 			s.feedTaps(buf[:n])
 			s.signal()
 		}

@@ -159,3 +159,13 @@ func TestSessionTraceLogsResizes(t *testing.T) {
 		t.Fatalf("events = %q", got)
 	}
 }
+
+func TestSessionUTF8TitleDoesNotLeak(t *testing.T) {
+	t.Parallel()
+	needSh(t)
+	s := startSh(t, `printf '\033]0;\342\234\263 Claude Code\007READY'; sleep 0.3`)
+	waitDone(t, s)
+	if got := s.screenText(); !strings.HasPrefix(got, "READY") {
+		t.Fatalf("screen = %q", strings.SplitN(got, "\n", 2)[0])
+	}
+}
