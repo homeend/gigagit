@@ -68,6 +68,7 @@ feature; keep THIS file's map to one line per package.
 | `gitcmd`     | Fluent argv builder (`New("sub").Arg(...).ArgIf(cond, ...).ToArgv()`). |
 | `gitexec`    | `Runner` interface (`Run`/`Stream`), real `ExecRunner`, `FakeRunner` for tests. Cancellation sends SIGTERM (not SIGKILL) so git releases its lockfiles; `WaitDelay` bounds the grace; `LimitRunner` caps concurrent git subprocesses. |
 | `gitwatch`   | Pure fsnotify wrapper + `.git`-layout path→source map + debounced `Watcher`; backs event-driven auto-refresh. No git/TUI/domain imports. |
+| `filewatch` | Pure fsnotify watcher over a SET of files (dir watches, exact-path filter, per-path debounce) behind open-file reloads; the TUI's stat poll stays the source of truth. DAG leaf. |
 | `linknav`    | The one `gg://` link → navigate builder (`Resolve`, `Command`, `HunkLine`, `AtLink`, `RepoOnly`) shared by the CLI (`gg open`, `gg session navigate`) and the TUI's `#` paste prompt; carries the `?<kind>=<id>` landing hint and treats a hint as a place, so a hint-only link navigates; domain + steer + model, never a frontend. |
 | `linkhist`   | Per-repo 20-entry MRU of copied `gg://` links (records only, TOML + the shared file lock under XDG state); dedup-to-top on the link text. Owned by `domain`; frontends never import it. |
 | `filelock`   | The one cross-process `O_EXCL` lock file (owner token, stale-lock breaker, Windows `ErrPermission` retry) behind every per-repo state file — `notes`, `preview` and `linkhist` share it. Stdlib-only DAG leaf. |

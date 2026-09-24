@@ -61,8 +61,10 @@ func TestLayeringDAG(t *testing.T) {
 		// "steer" is forbidden to domain on purpose: the link resolver's
 		// ResolveOpts.LiveFn seam exists precisely so domain can ask "is a gg
 		// session live here?" without taking that dependency.
-		"domain":      {"tui", "cli", "mcp", "web", "app", "steer"},
-		"gitwatch":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"domain":   {"tui", "cli", "mcp", "web", "app", "steer"},
+		"gitwatch": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		// filewatch is a leaf: the open-file watcher knows no gigagit layer.
+		"filewatch":   {"config", "model", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "gitwatch", "i18n"},
 		"i18n":        {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"commitgraph": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"promptstate": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
