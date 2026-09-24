@@ -3153,3 +3153,49 @@ spike findings), plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-1-c
 - **Windows input (for the TUI stage):** Bubble Tea v1 turns a bare
   Ctrl/Alt/Win key-down into `KeyRunes{0}` (only Shift is filtered) — drop
   NUL-only rune messages; batched `KeyRunes` go through `SendText`.
+
+### Agent console in the TUI (plan 2, 2026-09-24)
+
+Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
+
+- **`m.console *consoleState`** is a right-column owner like `stashView` /
+  `filesPreview` (rendered first in `renderInterface`'s right-column switch;
+  maximised = the whole body). Opening the stash list or a file preview hides
+  it; it joins `fullscreenYielded`. `reRoot` never touches it — sessions and
+  their console outlive worktree/repo switches.
+- **Key routing** (`updateConsoleKey`) sits right after the decision modal and
+  BEFORE `ctrl+o`/`ctrl+p`/`proc`/the layer stack: a focused console must get
+  the chords agents use (Claude: ctrl+o, esc, ctrl+t…). Only `stepOutKey()` /
+  `sessionsKey()` are intercepted. Unfocused (its column focused), it claims
+  enter/ctrl+t/esc, lets `consolePassthrough` (focus moves, quit, help, menu,
+  palette, repo-wide globals) through, and swallows the rest so j/k, /, o…
+  never act on the hidden Commits list.
+- **Key encoding** (`encodeConsoleKey`): runes → `SendText` (batched typing is
+  one message), paste → `Paste`, specials → `uv.KeyPressEvent` so the emulator
+  honours DECCKM etc. A NUL-only `KeyRunes` is dropped (Windows bare-modifier
+  key-down). Bubble Tea v1 aliases: KeyEnter=ctrl+m, KeyTab=ctrl+i,
+  KeyEsc=ctrl+[, KeyBackspace=ctrl+? — one map entry each.
+- **Repaint**: `waitSessionCmd` blocks on the session's `Changed()` then sleeps
+  33 ms, so a chatty agent costs ≤30 frames/s; `gen` drops a replaced console's
+  waiter. `waitSessionsCmd` (armed in `Init`) carries list changes →
+  `onSessionsChanged` (exit notices via `m.sessionStates`).
+- **Size**: `consoleInner(boxW, boxH)` = `boxW-4 × boxH-3`; `syncConsoleSize`
+  runs on WindowSizeMsg, open, maximise and shrink (Resize is a no-op when
+  unchanged). The cursor is painted only for a focused, running console
+  (`ScreenWithCursor`).
+- **Worktrees list is entry-based** (`worktreeEntries`: a worktree, then its
+  sessions). A session row's Name/Date are its parent's (stable sort keeps it
+  under the parent), its Haystack includes the parent row (a / filter never
+  strands it), its Key is `path\x00id`; `backingIndex(panelWorktrees)` maps
+  entries to `m.worktrees` and returns ok=false on a session row — every
+  worktree action/copy row ignores it, the WIP pseudo-row precedent.
+- **Quit guard**: every quit path ends in `tea.QuitMsg`, so
+  `tea.WithFilter(quitFilter)` in `run.go` turns it into `quitHeldMsg` while
+  sessions live and `!m.quitConfirmed` → the quit-mode popup; `Q` sets
+  `quitConfirmed` and runs `killAllAndQuitCmd`. `Run()` kills whatever is left
+  after the program ends (safety net).
+- **Probe recipe**: `tui-capture.sh` sets only XDG_STATE_HOME and a tmux
+  server hands sessions its own env, so point gg at a scratch config with a
+  `--gg` wrapper script that exports `XDG_CONFIG_HOME` and `exec`s the binary;
+  a `[[tools.command]] category="session" command='bash --norc'` block makes a
+  deterministic agent. The Worktrees tab is `C-Right C-Right` from Branches.
