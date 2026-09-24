@@ -18,12 +18,12 @@ func TestSteerContentLinkOpensTheDiskContent(t *testing.T) {
 		Target: &steer.Target{State: "unstaged"}, HintKind: model.ContentHintKind, HintID: model.ContentHintID, Wait: true}
 	nm, cmd := m.applySteer(c)
 	nm = pumpAll(t, nm, cmd)
-	cp := layerOf[*contentPopup](nm)
-	if cp == nil {
-		t.Fatal("no content popup after a content-link navigate")
+	fv := layerOf[*fileViewer](nm)
+	if fv == nil {
+		t.Fatal("no file viewer after a content-link navigate")
 	}
 	var text []string
-	for _, l := range cp.lines {
+	for _, l := range fv.p.lines {
 		text = append(text, l.text)
 	}
 	if !strings.Contains(strings.Join(text, "\n"), "EDITED") {
@@ -45,8 +45,8 @@ func TestSteerContentLinkMissingFileFails(t *testing.T) {
 		Target: &steer.Target{State: "unstaged"}, HintKind: model.ContentHintKind, HintID: model.ContentHintID, Wait: true}
 	nm, cmd := m.applySteer(c)
 	runSteerCmd(t, cmd)
-	if layerOf[*contentPopup](nm) != nil {
-		t.Error("a missing file must not open a popup")
+	if layerOf[*fileViewer](nm) != nil {
+		t.Error("a missing file must not open the viewer")
 	}
 	r, ok := steer.AwaitReply(nm.steerDir, "c-2", time.Second)
 	if !ok || r.OK || r.Error != "gone.txt is not in the working tree" {

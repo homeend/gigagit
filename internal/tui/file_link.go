@@ -24,7 +24,9 @@ type fileLinkCheckedMsg struct {
 // "Copy file link" then says the file is not in the working tree, which is
 // the answer the user asked for.
 func (m Model) fileRowPath() (string, bool) {
-	switch m.topLayer().(type) {
+	switch s := m.topLayer().(type) {
+	case *fileViewer: // the viewed file itself (v2 adds the cursor line)
+		return s.p.title, true
 	case *historyView, *blameView:
 		return "", false
 	}

@@ -205,6 +205,12 @@ func (m Model) steerRefusal() string {
 	switch l := m.topLayer().(type) {
 	case nil, *diffView, *historyView, *blameView:
 		return ""
+	case *fileViewer:
+		// Poppable, unless its in-view search is being typed.
+		if l.p.search.typing {
+			return "the user is typing"
+		}
+		return ""
 	case *contentPopup:
 		// A content popup is poppable — unless its own / filter has focus, in
 		// which case popping it would throw away what the user is typing.

@@ -10,9 +10,14 @@ import (
 
 // activePreview is THE focused file preview and its on-screen size: the one
 // question every preview key, the line cursor and the . menu's line rows ask.
-// The files view's right-column preview answers while it is focused (the tree
-// side owns the keys otherwise).
+// A fileViewer on top of the stack answers first; otherwise the files view's
+// right-column preview answers while it is focused (the tree side owns the
+// keys otherwise).
 func (m Model) activePreview() (p *contentPopup, rows, innerW int, ok bool) {
+	if fv, isViewer := m.topLayer().(*fileViewer); isViewer {
+		rows, innerW = fv.geom(m)
+		return fv.p, rows, innerW, true
+	}
 	if m.filesPreview != nil && !m.filesTreeFocused {
 		return m.filesPreview, m.filePreviewRowsCap(), m.filePreviewInnerW(), true
 	}

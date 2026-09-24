@@ -324,7 +324,7 @@ func (m Model) revealSavedSet(c steer.Command) Model {
 }
 
 // steerNavigateContent lands a content link (?view=content): the file's
-// working-tree bytes in the content viewer, never its diff. Presence is a
+// working-tree bytes in the full-screen View-file viewer, never its diff. Presence is a
 // stat (no git), asked on the Update thread under the same deadline
 // steerNavigateRef uses, so a missing file is refused before anything moves.
 func (m Model) steerNavigateContent(c steer.Command) (Model, tea.Cmd) {
@@ -341,7 +341,7 @@ func (m Model) steerNavigateContent(c steer.Command) (Model, tea.Cmd) {
 		return m, m.answerSteer(c, steerFail(c, c.File+" is not in the working tree"))
 	}
 	m = m.steerToPanels()
-	m, load := m.openWorktreeContent(c.File)
+	m, load := m.openFileViewer(c.File)
 	m, reply := m.navigateLanded(c, "opened "+c.File)
 	return m, tea.Batch(load, reply)
 }

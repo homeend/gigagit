@@ -421,33 +421,6 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 	}
 }
 
-// openWorktreeContent pushes the "View <path>" content popup over the file's
-// WORKING-TREE bytes — what a content link (?view=content) lands on. The file
-// finder's "View content" shows HEAD; a content link names the file as it is
-// on disk, uncommitted edits included.
-func (m Model) openWorktreeContent(path string) (Model, tea.Cmd) {
-	cp := newContentPopup(i18n.T("View %s", path), []contentLine{{text: i18n.T("(loading…)")}})
-	cp.charWrap = true // a file's text: column-exact wrap
-	m = m.pushLayer(cp)
-	return m, m.loadWorktreeContentLayerCmd(path)
-}
-
-// loadWorktreeContentLayerCmd is loadFileContentLayerCmd over the disk bytes;
-// it delivers the same fileContentLayerMsg, so the same tag-gate fills it.
-func (m Model) loadWorktreeContentLayerCmd(path string) tea.Cmd {
-	svc := m.svc
-	return func() tea.Msg {
-		data, err := svc.WorktreeFile(context.Background(), path)
-		if err != nil {
-			return fileContentLayerMsg{path: path, err: err}
-		}
-		if len(data) > domain.MaxDiffBytes {
-			return fileContentLayerMsg{path: path, lines: []contentLine{{text: i18n.T("(file too large to preview)")}}}
-		}
-		return fileContentLayerMsg{path: path, lines: fileContentLines(data)}
-	}
-}
-
 // fileContentLayerMsg carries the async result of loadFileContentLayerCmd: the
 // content lines (or error) for the contentPopup pushed onto the layer stack by
 // the "View content" file-finder action. Tagged by path to gate stale loads.
