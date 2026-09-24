@@ -1933,6 +1933,38 @@ Known parity gap, pre-existing: the web has no inline UNSTAGE for the staged
 section (the TUI's `H` covers both lanes). Recorded in `docs/web-tui-parity.md`.
 
 
+### Line select / copy inside a stack (plan 4d, 2026-09-24)
+
+Plan `docs/superpowers/plans/2026-09-24-stacked-select-copy.md`. Premise
+checked first: `f` was ALREADY stack-wide (web `toggleDiffView` →
+`rerenderStack`; TUI `spliceStack` reads `v.partial`) and the TUI range
+already spanned files (header/gap/rule lines are skipped by `selectedLines`).
+
+- **TUI:** `rebuildLines()` used to clear `lsel` on every re-splice — a lazy
+  `stackFileMsg`, `-`/`_`, `stackNotesMsg`, a working-tree reconcile — so a
+  range scrolled across files vanished. The stack branch now wraps the splice
+  in `holdSel()` / `restoreSel()`: each end as a `stackAnchor` plus the file's
+  PATH (a reconcile renumbers files; the reconcile holds BEFORE swapping the
+  list, since the rebuild's own hold reads old indexes against the new list).
+  A folded end lands on its file's header. What changes a file's own lines
+  still clears, after the rebuild: `f`, and `expandFoldFor` (partial off for
+  a note). Tests: `diff_stack_select_test.go`.
+- **Web:** copy = the browser drag. `sideCopyText(cells, side)` (pure, guarded
+  by `sidecopyjs_test.go`) keeps one side: other-side cells drop, as does the
+  absent half of an add/del row; a side-less cell (unified context) is both.
+  A mousedown stamps `#diff-body[data-selside]`; style.css makes the other
+  side, `.stk-head` and `tr:not([data-i])` (folds, notes) `user-select: none`
+  so the highlight IS the copy. `diffSelectionText()` walks every
+  `tr[data-i] td.side` against ALL selection ranges (Firefox splits around
+  unselectable content), clipping to each range and dropping an edge cell with
+  nothing selected. A `document` `copy` listener and the diff ctx menu's
+  *copy* row both use it. The capture-phase outside-click listener ignores a
+  `detail <= 1` click with a non-collapsed selection inside `#diff-body` (a
+  drag's release); a double-click (detail 2) still clears.
+- **Probe gotcha:** Firefox ignores `clipboardData` passed to a synthetic
+  `new ClipboardEvent("copy", …)` — press a real `Control+c` and read the
+  payload in a window-level `copy` listener instead (`stack-probe/dragcopy.mjs`).
+
 ### Drag & drop compare in the `gg web` Previews section (2026-09-21)
 
 Spec `docs/superpowers/specs/2026-09-21-web-previews-dnd-compare-design.md`.
