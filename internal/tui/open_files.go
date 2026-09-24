@@ -1,9 +1,12 @@
 package tui
 
 import (
+	"context"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // maxOpenFiles is how many files one worktree keeps open (spec ruling 4).
@@ -163,4 +166,37 @@ func (m Model) backgroundRow() (actionRow, bool) {
 			return m.backgroundDoc(d), nil
 		},
 	}, true
+}
+
+// docLoader is how d's bytes are read again: the disk, the commit, the shelf.
+func (m Model) docLoader(d *openFile) func(context.Context) ([]byte, error) {
+	svc, src, path := m.svc, d.src, d.path
+	switch src.kind {
+	case srcCommit:
+		return func(ctx context.Context) ([]byte, error) { return svc.ShowFile(ctx, src.rev, path) }
+	case srcShelf:
+		ref := model.FileRef{Source: model.SourceShelf, Locator: src.rev, Path: path}
+		return func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, ref) }
+	}
+	return func(ctx context.Context) ([]byte, error) { return svc.WorktreeFile(ctx, path) }
+}
+
+// bringToFront shows open file d (the switcher's enter): the files view's
+// preview when it is the preview (focus moves there), else a full-screen
+// viewer on top — a covered viewer's frame is moved up, a background file
+// gets a new one (spec ruling 9). A working-tree file, or one whose load
+// never landed, is read again at the reader's place.
+func (m Model) bringToFront(d *openFile) (Model, tea.Cmd) {
+	if m.filesPreview == d && m.topLayer() == nil {
+		m.filesTreeFocused = false
+		return m.registerDoc(d), nil
+	}
+	m = m.detachDoc(d)
+	m = m.pushLayer(&fileViewer{d})
+	m = m.registerDoc(d)
+	if d.src.kind != srcWorktree && docLoaded(d) {
+		return m, nil
+	}
+	d.keepPlace()
+	return m, loadFileContentSrcCmd(d.tag, d.path, m.cfg.UI.SyntaxOn(), m.docLoader(d))
 }

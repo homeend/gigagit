@@ -259,3 +259,115 @@ func TestCommitViewerCopyFileLinkChecksTheDisk(t *testing.T) {
 		t.Fatalf("copied %q status %q, want nothing and the differs notice", copied, m.statusMsg)
 	}
 }
+
+// openSwitcher opens the ctrl+\ popup the way the key does.
+func openSwitcher(t *testing.T, m Model) (Model, *sessionsPopup) {
+	t.Helper()
+	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlBackslash})
+	m = pumpAll(t, tm.(Model), cmd)
+	p, ok := m.topLayer().(*sessionsPopup)
+	if !ok {
+		t.Fatalf("ctrl+\\ opened %T, want the sessions popup (status %q)", m.topLayer(), m.statusMsg)
+	}
+	return m, p
+}
+
+// selectFile puts the popup's cursor on path's row.
+func selectFile(t *testing.T, p *sessionsPopup, path string) {
+	t.Helper()
+	for i, d := range p.files {
+		if d != nil && d.path == path {
+			p.sel = i
+			return
+		}
+	}
+	t.Fatalf("no row for %s in %q", path, p.rows)
+}
+
+func TestSwitcherListsOpenFiles(t *testing.T) {
+	t.Parallel()
+	m, _ := viewerAt(t, "shown.txt", "a\nb\nc\n", 2)
+	m, cmd := m.openFileViewer("a.txt", 0)
+	m = pumpAll(t, m, cmd)
+	m = m.backgroundDoc(layerOf[*fileViewer](m).openFile)
+	m, p := openSwitcher(t, m)
+	joined := strings.Join(p.rows, "\n")
+	for _, want := range []string{"Open files", "● shown.txt  :2  working tree", "○ a.txt  :1  working tree"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("rows lack %q:\n%s", want, joined)
+		}
+	}
+	if !strings.Contains(m.View(), "Agents & open files") {
+		t.Error("the popup title does not name the open files")
+	}
+	p.query = "shown"
+	p.refresh(m)
+	if strings.Contains(strings.Join(p.rows, "\n"), "a.txt") {
+		t.Error("the / filter does not filter files")
+	}
+}
+
+func TestSwitcherEnterBringsAFileBack(t *testing.T) {
+	t.Parallel()
+	m, fv := viewerAt(t, "back.txt", "x\ny\n", 0)
+	m = m.backgroundDoc(fv.openFile)
+	m, p := openSwitcher(t, m)
+	selectFile(t, p, "back.txt")
+	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = pumpAll(t, tm.(Model), cmd)
+	top, ok := m.topLayer().(*fileViewer)
+	if !ok || top.openFile != fv.openFile {
+		t.Fatalf("top = %T, want the file's viewer", m.topLayer())
+	}
+}
+
+// A covered viewer's file comes to the top; the preview's file gets focus.
+func TestSwitcherEnterOnAShownFile(t *testing.T) {
+	t.Parallel()
+	m, a := viewerAt(t, "under.txt", "x\n", 0)
+	m, cmd := m.openFileViewer("a.txt", 0)
+	m = pumpAll(t, m, cmd)
+	m, p := openSwitcher(t, m)
+	selectFile(t, p, "under.txt")
+	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = tm.(Model)
+	if top, ok := m.topLayer().(*fileViewer); !ok || top.openFile != a.openFile || viewersOnStack(m) != 2 {
+		t.Fatalf("top=%T viewers=%d, want under.txt on top of 2", m.topLayer(), viewersOnStack(m))
+	}
+
+	pm := linkPreviewModel(t, "a\n", 0)
+	d := pm.filesPreview
+	pm = pm.registerDoc(d)
+	pm.filesTreeFocused = true
+	pm, p = openSwitcher(t, pm)
+	selectFile(t, p, "a.txt")
+	tm, _ = pm.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	pm = tm.(Model)
+	if pm.topLayer() != nil || pm.filesPreview != d || pm.filesTreeFocused {
+		t.Fatalf("top=%T preview same=%v treeFocused=%v, want the preview focused", pm.topLayer(), pm.filesPreview == d, pm.filesTreeFocused)
+	}
+}
+
+func TestSwitcherXClosesAFile(t *testing.T) {
+	t.Parallel()
+	m, fv := viewerAt(t, "bye.txt", "x\n", 0)
+	m, p := openSwitcher(t, m)
+	selectFile(t, p, "bye.txt")
+	tm, _ := m.Update(keyMsg("x"))
+	m = tm.(Model)
+	if m.openFiles.find(m.currentWorktree, fv.key()) != nil || viewersOnStack(m) != 0 {
+		t.Fatal("x must close the file: out of the list and off the screen")
+	}
+}
+
+func TestQuitModeListsNoFiles(t *testing.T) {
+	t.Parallel()
+	m, _ := viewerAt(t, "q.txt", "x\n", 0)
+	m, _ = m.openSessionsPopup(true)
+	p := m.topLayer().(*sessionsPopup)
+	for _, d := range p.files {
+		if d != nil {
+			t.Fatalf("quit mode lists the file %s", d.path)
+		}
+	}
+}
