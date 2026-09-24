@@ -165,6 +165,12 @@ table.diff { width: 100%; border-collapse: collapse; table-layout: fixed; }
    (break-all shattered code mid-word, e.g. import paths). */
 table.diff td { vertical-align: top; white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 6px; }
 td.no { width: 3.5em; text-align: right; color: var(--dim); user-select: none; }
+/* a drag copies ONE version (files.js, the mousedown stamp): the other side,
+   the file headers and the fold / note rows take no part in the highlight */
+#diff-body[data-selside="r"] td.side.l,
+#diff-body[data-selside="l"] td.side.r,
+#diff-body[data-selside] .stk-head,
+#diff-body[data-selside] tr:not([data-i]) td { user-select: none; }
 table.diff col.no { width: 3.5em; } /* the colgroup twin: fixed layout reads widths from here when a fold row comes first */
 /* Only the TEXT cells carry the red / green: the line-number columns stay
    the page's own dark on every row, so an added-only row's numbers look like

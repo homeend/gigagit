@@ -1422,6 +1422,26 @@ function hunkAttr(r, kctx) {
 }
 
 
+// --- side copy (pure; guarded against Go) ---
+// sideCopyText is what a drag over a diff copies: the lines of ONE version,
+// the side the drag started on ("l" old, "r" new) — the web twin of the TUI's
+// side-locked selection. `cells` are the selected td.side cells in document
+// order, { side: "l"|"r"|"", kind: the row class, text: clipped to the
+// selection }. A cell of the other side drops out, and so does the empty
+// half of a row with no line on this side; a cell with no side (a unified
+// context row) belongs to both versions.
+function sideCopyText(cells, side) {
+  const out = [];
+  for (const c of cells) {
+    if (c.side && c.side !== side) continue;
+    if (side === "l" && c.kind === "add") continue;
+    if (side === "r" && c.kind === "del") continue;
+    out.push(c.text);
+  }
+  return out.join("\n");
+}
+
+
 // --- diff collapse (pure; guarded against Go) ---
 // The "changed lines only" view — the TUI's f toggle. DIFF_CONTEXT is the
 // TUI's diffContext: the equal rows kept on each side of a change.
@@ -2671,7 +2691,9 @@ $("diff-body").addEventListener("contextmenu", (e) => {
     // The line-number gutter is `user-select: none` (style.css td.no), so
     // what comes back is the code, not code interleaved with line numbers.
     const sel = window.getSelection();
-    const text = sel && !sel.isCollapsed && $("diff-body").contains(sel.anchorNode) ? sel.toString() : "";
+    // One version's lines (diffSelectionText); a selection that touches no
+    // line cell (a header's text) copies what the browser selected.
+    const text = sel && !sel.isCollapsed && $("diff-body").contains(sel.anchorNode) ? diffSelectionText() || sel.toString() : "";
     if (text) {
       rows.push({ label: "copy", act: () => copyText(text, "selection") });
     } else {
@@ -3211,6 +3233,67 @@ function clickRow(tr, mods) {
 }
 
 
+// A drag over the diff copies ONE version: the side it started on (plan 4d).
+// The side is stamped on #diff-body at mousedown, before the browser starts
+// its selection, so style.css can make the other side, the file headers and
+// the fold / note rows unselectable — the highlight then shows exactly what
+// a copy will hold. A unified context cell has no side and counts as new.
+$("diff-body").addEventListener("mousedown", (e) => {
+  if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey) return;
+  const td = e.target.closest("td.side");
+  if (td) $("diff-body").dataset.selside = td.classList.contains("l") ? "l" : "r";
+  else delete $("diff-body").dataset.selside;
+});
+
+
+// diffSelectionText is the copy payload of the page's text selection over
+// #diff-body: every line cell the selection touches, clipped to it, handed to
+// sideCopyText. ALL ranges are read — Firefox splits a selection around
+// unselectable content. A cell only reached by a range's edge with nothing
+// selected in it (a drag that ends at column 0 of the next line) is not a
+// line of the copy.
+function diffSelectionText() {
+  const sel = getSelection();
+  if (!sel || sel.isCollapsed) return "";
+  const ranges = [];
+  for (let i = 0; i < sel.rangeCount; i++) ranges.push(sel.getRangeAt(i));
+  const cells = [];
+  for (const td of $("diff-body").querySelectorAll("tr[data-i]:not(.fold) td.side")) {
+    let text = "";
+    let hit = false;
+    for (const r of ranges) {
+      if (!r.intersectsNode(td)) continue;
+      const c = document.createRange();
+      c.selectNodeContents(td);
+      const edge = td.contains(r.startContainer) || td.contains(r.endContainer);
+      if (td.contains(r.startContainer)) c.setStart(r.startContainer, r.startOffset);
+      if (td.contains(r.endContainer)) c.setEnd(r.endContainer, r.endOffset);
+      const part = c.toString();
+      if (!part && edge) continue;
+      text += part;
+      hit = true;
+    }
+    if (!hit) continue;
+    const tr = td.parentElement;
+    const side = td.classList.contains("l") ? "l" : td.classList.contains("r") ? "r" : "";
+    const kind = ["add", "del", "change"].find((k) => tr.classList.contains(k)) || "same";
+    cells.push({ side, kind, text });
+  }
+  return sideCopyText(cells, $("diff-body").dataset.selside || "r");
+}
+
+
+// ctrl+c (and the browser's own Copy) over the diff copies one version too.
+document.addEventListener("copy", (e) => {
+  const sel = getSelection();
+  if (!sel || sel.isCollapsed || !$("diff-body").contains(sel.anchorNode)) return;
+  const text = diffSelectionText();
+  if (!text) return; // no line cell touched: the browser's own copy
+  e.clipboardData.setData("text/plain", text);
+  e.preventDefault();
+});
+
+
 // A shift / ctrl click selects ROWS, not text: the browser would otherwise
 // extend its own text selection from the previous click, and the plain-click
 // guard below would read that as a drag.
@@ -3244,6 +3327,10 @@ document.addEventListener(
   (e) => {
     if (e.button !== 0) return;
     if (e.target.closest && e.target.closest("tr[data-hunk][data-hr], #ctx-menu")) return;
+    // A text drag ends in a click wherever the pointer was released: that is
+    // a copy gesture, not a click outside (plan 4d, D4). A double-click's
+    // second click (detail 2) has selected a word and still clears.
+    if (e.detail <= 1 && !getSelection().isCollapsed && $("diff-body").contains(e.target)) return;
     clearRowSelection();
   },
   true
