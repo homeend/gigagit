@@ -254,7 +254,7 @@ func (m Model) footerOverride() (string, bool) {
 	// Commits panel (. menu + graph keys); the tree side is file-scoped.
 	if m.filesView != nil {
 		if m.filesPreview != nil && !m.filesTreeFocused {
-			if m.filesPreview.lsel.on {
+			if m.filesPreview.p.lsel.on {
 				return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 			}
 			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [ctrl+w] view  [←/tab] back to tree  [esc] close preview"), true

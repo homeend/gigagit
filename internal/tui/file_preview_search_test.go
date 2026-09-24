@@ -42,7 +42,7 @@ func TestPreviewSearchScrollsToTheHit(t *testing.T) {
 		t.Fatal("the preview must own the right column")
 	}
 	m = feedPreview(m, "/", "b", "e", "t", "a")
-	p := m.filesPreview
+	p := m.filesPreview.p
 	if p.search.query != "beta" {
 		t.Fatalf("query = %q", p.search.query)
 	}
@@ -79,8 +79,8 @@ func TestPreviewSearchEscIsTwoStageThenCloses(t *testing.T) {
 	if m.filesPreview == nil {
 		t.Fatal("the first esc must only clear the search")
 	}
-	if m.filesPreview.search.active() {
-		t.Fatalf("the first esc must clear the query: %+v", m.filesPreview.search)
+	if m.filesPreview.p.search.active() {
+		t.Fatalf("the first esc must clear the query: %+v", m.filesPreview.p.search)
 	}
 	m = feedPreview(m, "esc")
 	if m.filesPreview != nil {
@@ -91,17 +91,17 @@ func TestPreviewSearchEscIsTwoStageThenCloses(t *testing.T) {
 func TestPreviewSearchEscWhileTypingRestoresTheOrigin(t *testing.T) {
 	t.Parallel()
 	m := previewSearchModel(t)
-	m.filesPreview.sel = 12
+	m.filesPreview.p.sel = 12
 	m = feedPreview(m, "/", "t", "a", "i", "l")
-	if m.filesPreview.sel == 12 {
+	if m.filesPreview.p.sel == 12 {
 		t.Fatal("the incremental search must have scrolled")
 	}
 	m = feedPreview(m, "esc")
 	if m.filesPreview == nil {
 		t.Fatal("esc while typing must not close the preview")
 	}
-	if m.filesPreview.sel != 12 {
-		t.Fatalf("esc must restore the scroll: sel = %d, want 12", m.filesPreview.sel)
+	if m.filesPreview.p.sel != 12 {
+		t.Fatalf("esc must restore the scroll: sel = %d, want 12", m.filesPreview.p.sel)
 	}
 }
 
@@ -109,14 +109,14 @@ func TestPreviewSearchStepsAndBadges(t *testing.T) {
 	t.Parallel()
 	m := previewSearchModel(t)
 	m = feedPreview(m, "/", "a", "l", "p", "h", "a", "enter")
-	p := m.filesPreview
+	p := m.filesPreview.p
 	if len(p.search.hits) != 60 {
 		t.Fatalf("hits = %d, want 60", len(p.search.hits))
 	}
 	first := p.search.cur
 	m = feedPreview(m, "]")
-	if m.filesPreview.search.cur != first+1 {
-		t.Fatalf("] = %d, want %d", m.filesPreview.search.cur, first+1)
+	if m.filesPreview.p.search.cur != first+1 {
+		t.Fatalf("] = %d, want %d", m.filesPreview.p.search.cur, first+1)
 	}
 	out := m.renderFilePreview(m.layout().rightW, m.layout().boxH[panelCommits])
 	if !strings.Contains(out, "/alpha  2/60") {
@@ -144,16 +144,16 @@ func TestPreviewSearchStartedDuringLoadRefindsOnContentArrival(t *testing.T) {
 			m = updated.(Model)
 		}
 	}
-	if m.filesPreview == nil || m.filesPreview.lines[0].text != i18n.T("(loading…)") {
+	if m.filesPreview == nil || m.filesPreview.p.lines[0].text != i18n.T("(loading…)") {
 		t.Fatalf("expected the preview to still show the placeholder, got %+v", m.filesPreview)
 	}
-	tag := m.filesPreviewTag
+	tag := m.filesPreview.tag
 	rows := m.filePreviewRowsCap()
 
 	// Start a search for a needle that is not in the placeholder text.
 	m = feedPreview(m, "/", "n", "e", "e", "d", "l", "e")
-	if len(m.filesPreview.search.hits) != 0 {
-		t.Fatalf("the placeholder must not match: hits = %v", m.filesPreview.search.hits)
+	if len(m.filesPreview.p.search.hits) != 0 {
+		t.Fatalf("the placeholder must not match: hits = %v", m.filesPreview.p.search.hits)
 	}
 
 	// The needle lands well past the bottom of the window (rows+10), so a
@@ -167,7 +167,7 @@ func TestPreviewSearchStartedDuringLoadRefindsOnContentArrival(t *testing.T) {
 	u, _ := m.Update(fileContentMsg{tag: tag, lines: lines})
 	m = u.(Model)
 
-	p := m.filesPreview
+	p := m.filesPreview.p
 	if len(p.search.hits) != 1 || p.search.hits[0].row != needleRow {
 		t.Fatalf("hits = %v, want one hit on row %d", p.search.hits, needleRow)
 	}
@@ -211,7 +211,7 @@ func TestFilePreviewSearchPaintsTheHit(t *testing.T) {
 		{text: "plain line"},
 		{text: "alpha two"},
 	}}
-	m.filesPreview = p
+	m.filesPreview = &openFile{p: p}
 	boxW, boxH := m.layout().rightW, m.layout().boxH[panelCommits]
 
 	plain := m.renderFilePreview(boxW, boxH)

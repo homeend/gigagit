@@ -41,11 +41,12 @@ func (m Model) fileRowPath() (string, int, bool) {
 	if m.diffLayer() != nil {
 		return "", 0, false
 	}
-	if p, ok := m.focusedFilesPreview(); ok {
+	if d, ok := m.focusedFilesPreview(); ok {
+		p := d.p
 		if p.cur < 0 || p.cur >= len(p.lines) || !p.lines[p.cur].src {
 			return "", 0, false // still loading, or a placeholder: no line to name
 		}
-		return p.title, p.cur + 1, true
+		return d.path, p.cur + 1, true
 	}
 	path, ok := m.fileListRowPath()
 	return path, 0, ok
@@ -54,7 +55,7 @@ func (m Model) fileRowPath() (string, int, bool) {
 // focusedFilesPreview is the files view's View-file preview when it holds
 // the focus (and no full-screen viewer sits above it). It shows a version of
 // the file — a commit's, a shelf's — that the disk may no longer match.
-func (m Model) focusedFilesPreview() (*contentPopup, bool) {
+func (m Model) focusedFilesPreview() (*openFile, bool) {
 	if m.filesPreview == nil || m.filesTreeFocused || m.filesView == nil {
 		return nil, false
 	}
@@ -123,8 +124,8 @@ func (m Model) contextFileLinkRow() (actionRow, bool) {
 	// From a preview, the line is only right if the disk shows the same
 	// text: snapshot the shown lines now, compare off the UI thread.
 	var shown []contentLine
-	if p, ok := m.focusedFilesPreview(); ok {
-		shown = append([]contentLine(nil), p.lines...)
+	if d, ok := m.focusedFilesPreview(); ok {
+		shown = append([]contentLine(nil), d.p.lines...)
 	}
 	svc := m.svc
 	return actionRow{

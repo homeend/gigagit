@@ -1142,7 +1142,17 @@ the viewer answers a line (`cur+1`); the list rows go through
 `fileListRowPath` and stay line-less. `gg link --content <path>:<line>`
 checks the line against `contentLineCount`, which must split exactly like
 `fileContentLinesTok` (normalize CR/CRLF, THEN trim trailing newlines). Still
-deferred: a web content viewer + landing. **Preview + reply (follow-up):**
+deferred: a web content viewer + landing. **Open-file document (open files plan 1, 2026-09-24):** a viewed
+file is an `openFile` (`open_file.go`: source — working tree / commit sha /
+shelf id — path, the `contentPopup` viewing state, a tag unique per document
+from a process-global counter, `pendingLine`) with ONE `fill`. The files
+view's `m.filesPreview` and the full-screen `fileViewer` (which embeds
+`*openFile`) are two frames over it. `fileContentMsg` finds its document via
+`liveDoc(tag)` — EVERY `fileViewer` on the stack (a covered one too), then
+the preview — never "the topmost viewer" (that dropped the first of two
+files opened in a row). A document no frame shows is not found: its load is
+stale. `key()` (source + path) is the reuse key for the open-files list.
+**Preview + reply (follow-up):**
 the files view's focused preview answers `fileRowPath` with its cursor line
 (`focusedFilesPreview`); because it shows ANOTHER version, the row snapshots
 the shown lines and the off-thread check compares them to the disk

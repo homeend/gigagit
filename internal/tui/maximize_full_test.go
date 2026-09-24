@@ -104,7 +104,7 @@ func TestFullMaxActiveYieldsToSurfaces(t *testing.T) {
 		t.Error("stashView active: pin must yield")
 	}
 	pv := m
-	pv.filesPreview = &contentPopup{}
+	pv.filesPreview = &openFile{p: &contentPopup{}}
 	if pv.fullMaxActive() {
 		t.Error("filesPreview active: pin must yield")
 	}
@@ -389,7 +389,7 @@ func TestFocusCommitsPanelNoTransferWhileYielded(t *testing.T) {
 	m := maxModel()
 	m.focus = panelStaged
 	m = press(t, m, "ctrl+t") // pin Staged
-	m.filesPreview = &contentPopup{}
+	m.filesPreview = &openFile{p: &contentPopup{}}
 	m = m.focusCommitsPanel()
 	if m.focus != panelCommits {
 		t.Fatalf("focus = %v, want Commits", m.focus)

@@ -145,8 +145,7 @@ type Model struct {
 	filesReturnLayers []layer                // layer stack parked by a popup that handed off to the files view (handOffToFilesView); esc/l restore it, every other teardown drops it (closeFilesView zeroes it)
 	filesTreeFocused  bool                   // true = the tree side owns vertical movement (←/→/tab)
 	filesReadInflight bool                   // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
-	filesPreview      *contentPopup          // full-tree mode: read-only file content shown in the right column (nil = none)
-	filesPreviewTag   string                 // <path>@<hash>; gates stale ShowFile results for the preview
+	filesPreview      *openFile              // full-tree mode: the file shown in the right column (nil = none)
 
 	diffTag     string      // request key of the wanted diff; gates stale async results
 	diffNav     diffNavKind // which list the open diff was opened from (Home/End file-stepping)
@@ -892,51 +891,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m, reply := m.navigateLanded(msg.cmd, contentLandedDetail(msg.cmd.File, msg.line, msg.load.lines))
 		return m, tea.Batch(fill, reply)
 	case fileContentMsg:
-		if fv := layerOf[*fileViewer](m); fv != nil && msg.tag == fv.tag {
-			// The full-screen viewer's load (a content link): same fill as the
-			// files view's preview below, over the viewer's own popup.
-			p := fv.p
-			if msg.err != nil {
-				p.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
-			} else {
-				p.lines = msg.lines
-			}
-			p.cur, p.sel = 0, 0
-			p.lsel.clear()
-			m = fv.landPendingLine(m)
-			if p.search.active() {
-				rows, inner := fv.geom(m)
-				p.search.refindFrom(previewSearchLines(p), p.searchPos(rows))
-				p.snapHit(rows, inner)
+		if d, rows, inner, ok := m.liveDoc(msg.tag); ok {
+			if n := d.fill(msg, rows, inner); n != "" {
+				m.statusMsg = n
 			}
 			return m, nil
 		}
-		if m.filesPreview == nil || msg.tag != m.filesPreviewTag {
-			return m, nil // preview closed, or a stale load (another file opened)
-		}
-		if msg.err != nil {
-			m.filesPreview.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
-			m.filesPreview.cur, m.filesPreview.sel = 0, 0
-			m.filesPreview.lsel.clear()
-			return m, nil
-		}
-		p := m.filesPreview
-		p.lines = msg.lines
-		// The lines the cursor and the selection indexed are gone.
-		p.cur = 0
-		p.lsel.clear()
-		// A search started while the placeholder ("(loading…)") was still
-		// showing computed its hits against that single line; once the real
-		// content lands those hits (and any cur/badge derived from them) are
-		// stale. Re-run it over the loaded lines and re-snap the scroll — only
-		// the no-search path still resets to the top.
-		if p.search.active() {
-			p.search.refindFrom(previewSearchLines(p), p.searchPos(m.filePreviewRowsCap()))
-			p.snapHit(m.filePreviewRowsCap(), m.filePreviewInnerW())
-		} else {
-			p.sel = 0
-		}
-		return m, nil
+		return m, nil // no frame shows that document any more: a stale load
 	case fileContentLayerMsg:
 		cp := layerOf[*contentPopup](m)
 		// Tag-gate: only fill the contentPopup whose title matches this path load.

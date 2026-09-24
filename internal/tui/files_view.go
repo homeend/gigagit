@@ -62,7 +62,6 @@ func (m Model) closeFilesView() Model {
 	m.filesTreeFocused = false
 	m.filesReadInflight = false
 	m.filesPreview = nil
-	m.filesPreviewTag = ""
 	m.previewOpen = nil
 	// The popup that handed off to this view is dropped with it: only the
 	// view's own esc/l close (which reads the field BEFORE calling this)
@@ -195,7 +194,6 @@ func (m Model) toggleFullTree() (Model, tea.Cmd) {
 		m.filesMode = filesModeFullTree
 	}
 	m.filesPreview = nil
-	m.filesPreviewTag = ""
 	if p := m.filesView; p != nil {
 		p.lines = []contentLine{{text: i18n.T("(loading…)")}}
 		p.sel = 0
@@ -218,7 +216,6 @@ func (m Model) focusRight() Model {
 // closePreview drops the right-column file preview and returns focus to the tree.
 func (m Model) closePreview() Model {
 	m.filesPreview = nil
-	m.filesPreviewTag = ""
 	return m.focusTree()
 }
 
@@ -559,8 +556,8 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "ctrl+w":
 		if m.filesPreview != nil && !m.filesTreeFocused { // z cycles the focused preview
-			m.filesPreview.mode = m.filesPreview.mode.next()
-			m.filesPreview.hscroll = 0
+			m.filesPreview.p.mode = m.filesPreview.p.mode.next()
+			m.filesPreview.p.hscroll = 0
 			return m, nil
 		}
 		p.mode = p.mode.next()
@@ -895,7 +892,7 @@ func (m Model) moveListUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 		// a pager — move the top line directly (NOT contentPopup.move, which clamps
 		// to a cursor range and is shared with the tree/help window) so every press,
 		// keyboard or wheel, scrolls the viewport.
-		p := m.filesPreview
+		p := m.filesPreview.p
 		p.sel = previewClamp(p.sel+delta, len(p.lines), m.filePreviewRowsCap(), p.mode)
 		return m, nil
 	}

@@ -642,7 +642,7 @@ func (m Model) contextCopyRows() []actionRow {
 		// line under its cursor. The tree's own path/name/commit rows stay
 		// reachable underneath (and keep copy-file-path as the anchor
 		// insertCopyLinkRow looks for).
-		return append(m.previewCopyLineRows(), m.fileCopyRows(p.title, m.filesHash)...)
+		return append(m.previewCopyLineRows(), m.fileCopyRows(p.path, m.filesHash)...)
 	}
 	if v := m.filesView; v != nil {
 		var rows []actionRow

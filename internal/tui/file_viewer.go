@@ -16,22 +16,15 @@ import (
 // line cursor, the selection, the in-view search and the . menu's line rows
 // here), so the two viewers cannot drift apart.
 type fileViewer struct {
-	p   *contentPopup
-	tag string // "worktree:<path>" — gates a stale fileContentMsg
-	// pendingLine is the 1-based line a content link's :<line> asked for (0 =
-	// none), parked until the async load fills the lines it indexes.
-	pendingLine int
+	*openFile // the document shown: its lines, cursor, selection, search
 }
 
 // openFileViewer pushes the viewer for path and starts its load off the UI
 // thread. The bytes are the file ON DISK, uncommitted edits included. line
 // (1-based, 0 = none) is where the cursor lands once the load arrives.
 func (m Model) openFileViewer(path string, line int) (Model, tea.Cmd) {
-	fv := &fileViewer{
-		p:           &contentPopup{title: path, lines: []contentLine{{text: i18n.T("(loading…)")}}},
-		tag:         "worktree:" + path,
-		pendingLine: line,
-	}
+	fv := &fileViewer{newOpenFile(fileSource{kind: srcWorktree}, path)}
+	fv.pendingLine = line
 	m = m.pushLayer(fv)
 	svc := m.svc
 	return m, loadFileContentSrcCmd(fv.tag, path, m.cfg.UI.SyntaxOn(), func(ctx context.Context) ([]byte, error) {
@@ -109,28 +102,36 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // render owns the screen: one preview box the size of the terminal.
 func (fv *fileViewer) render(m Model, _ string) string {
 	w, h := m.overlayDims()
-	return m.renderPreviewBox(fv.p, i18n.T("View %s (working tree)", fv.p.title), w, h, true)
+	return m.renderPreviewBox(fv.p, fv.title(), w, h, true)
 }
 
-// landPendingLine puts the cursor on the line the link asked for, centred in
-// the window, once the lines exist — clamped to the last line (the file may
-// have shrunk since the link was copied), which it reports as a status. A
-// placeholder (empty, too large, load failed) is not a line of the file: the
-// request is dropped. Either way it is consumed.
-func (fv *fileViewer) landPendingLine(m Model) Model {
-	line := fv.pendingLine
-	fv.pendingLine = 0
-	p := fv.p
-	if line <= 0 || len(p.lines) == 0 || !p.lines[0].src {
-		return m
+// title names the version on screen: the working tree, a commit or a shelf.
+func (fv *fileViewer) title() string {
+	switch fv.src.kind {
+	case srcCommit:
+		return i18n.T("View %s @ %s", fv.path, shortHash(fv.src.rev))
+	case srcShelf:
+		return i18n.T("View %s (shelf)", fv.path)
 	}
-	n := len(p.lines)
-	if line > n {
-		m.statusMsg = i18n.T("line %d is past the end of %s (%d lines)", line, p.title, n)
-		line = n
+	return i18n.T("View %s (working tree)", fv.path)
+}
+
+// liveDoc finds the document a load result belongs to, and the content size
+// of the frame showing it: any full-screen viewer on the stack (covered ones
+// too — two files opened in a row must both fill), then the files view's
+// preview. A document no frame shows any more is not found: its result is
+// stale.
+func (m Model) liveDoc(tag string) (d *openFile, rows, innerW int, ok bool) {
+	if m.layers != nil {
+		for i := len(m.layers.entries) - 1; i >= 0; i-- {
+			if fv, isViewer := m.layers.entries[i].(*fileViewer); isViewer && fv.tag == tag {
+				rows, innerW = fv.geom(m)
+				return fv.openFile, rows, innerW, true
+			}
+		}
 	}
-	rows, _ := fv.geom(m)
-	p.cur = line - 1
-	p.sel = previewClamp(p.cur-rows/2, n, rows, p.mode)
-	return m
+	if d := m.filesPreview; d != nil && d.tag == tag {
+		return d, m.filePreviewRowsCap(), m.filePreviewInnerW(), true
+	}
+	return nil, 0, 0, false
 }
