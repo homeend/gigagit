@@ -87,15 +87,15 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 	case *shelf != "":
 		hint = model.LinkHint{Kind: "shelf", ID: *shelf}
 	}
-	// --content names the file ON DISK: no target, no other landing, and in
-	// v1 no line (a :<line> focus is the planned next step) or hunk.
+	// --content names the file ON DISK: no target, no other landing and no
+	// hunk (a hunk is a diff's). A :<line> is the viewer's cursor.
 	if *content {
 		if set > 0 || *bookmark != "" || *shelf != "" {
 			fmt.Fprintf(stderr, "link: --content names the file on disk; it takes no target or other hint\n%s\n", linkUsage)
 			return 2
 		}
-		if len(pos) != 1 || strings.Contains(pos[0], "#") || linkArgHasLine(pos[0]) {
-			fmt.Fprintf(stderr, "link: --content needs one file path, with no :<line> or #<hunk>\n%s\n", linkUsage)
+		if len(pos) != 1 || strings.Contains(pos[0], "#") {
+			fmt.Fprintf(stderr, "link: --content needs one file path, with no #<hunk>\n%s\n", linkUsage)
 			return 2
 		}
 		hint = model.ContentHint
@@ -158,6 +158,17 @@ func runLink(statePath string, svc *domain.Service, workdir string, args []strin
 		if !present[l.Path] {
 			fmt.Fprintf(stderr, "error: %s is not in the working tree\n", l.Path)
 			return 1
+		}
+		if l.Line > 0 {
+			data, rerr := svc.WorktreeFile(ctx, l.Path)
+			if rerr != nil {
+				fmt.Fprintln(stderr, "error:", rerr)
+				return 1
+			}
+			if n := contentLineCount(data); l.Line > n {
+				fmt.Fprintf(stderr, "error: %s has %d lines\n", l.Path, n)
+				return 1
+			}
 		}
 	}
 	// Best-effort, after the link is known good: a history that cannot be
@@ -555,16 +566,16 @@ func linkResolve(statePath string, svc *domain.Service, args []string, stdout, s
 // `gg show <commit>` and `gg diff <rev>` are untouched.
 func isLinkArg(s string) bool { return strings.HasPrefix(s, model.LinkScheme) }
 
-// linkArgHasLine reports whether a path argument ends in ":<n>" or
-// ":old:<n>" — the line suffix --content refuses in v1. A Windows drive
-// colon is not followed by digits alone, so it never matches.
-func linkArgHasLine(s string) bool {
-	i := strings.LastIndexByte(s, ':')
-	if i < 0 {
-		return false
+// contentLineCount is how many lines the viewer shows for data — the same
+// split fileContentLinesTok makes: CRLF and a lone CR are one break each and
+// trailing newlines are not lines. An empty file has none.
+func contentLineCount(data []byte) int {
+	s := strings.ReplaceAll(string(data), "\r\n", "\n")
+	s = strings.TrimRight(strings.ReplaceAll(s, "\r", "\n"), "\n")
+	if s == "" {
+		return 0
 	}
-	_, err := strconv.Atoi(s[i+1:])
-	return err == nil
+	return strings.Count(s, "\n") + 1
 }
 
 // linkShapes is what one verb accepts out of the shapes Task 2 taught

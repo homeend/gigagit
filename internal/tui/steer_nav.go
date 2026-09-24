@@ -341,7 +341,11 @@ func (m Model) steerNavigateContent(c steer.Command) (Model, tea.Cmd) {
 		return m, m.answerSteer(c, steerFail(c, c.File+" is not in the working tree"))
 	}
 	m = m.steerToPanels()
-	m, load := m.openFileViewer(c.File)
+	line := 0
+	if c.Line != nil {
+		line = c.Line.No // a content link has no old side (ParseLink refuses one)
+	}
+	m, load := m.openFileViewer(c.File, line)
 	m, reply := m.navigateLanded(c, "opened "+c.File)
 	return m, tea.Batch(load, reply)
 }

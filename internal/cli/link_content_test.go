@@ -44,9 +44,9 @@ func TestLinkContentUsageErrors(t *testing.T) {
 	t.Parallel()
 	dir := newCLIRepo(t)
 	for _, args := range [][]string{
-		{"--content"},                // no path
-		{"--content", "README.md:3"}, // a line is v2
-		{"--content", "README.md#1"}, // never a hunk
+		{"--content"},                    // no path
+		{"--content", "README.md:old:1"}, // a content link has no old side
+		{"--content", "README.md#1"},     // never a hunk
 		{"--content", "--cached", "README.md"},
 		{"--content", "--rev", "HEAD", "README.md"},
 		{"--content", "--ref", "main", "README.md"},
@@ -86,5 +86,52 @@ func TestOpenWebRefusesAContentLink(t *testing.T) {
 	code := cmdOpen(domain.Open(dir), []string{"--web", link}, &out, &errb)
 	if code != 2 || !strings.Contains(errb.String(), "content links are not supported in gg web yet") {
 		t.Fatalf("exit=%d stderr=%q, want 2 and the web refusal", code, errb.String())
+	}
+}
+
+func TestLinkContentWithLine(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	code, out, errb := runLinkCLI(t, dir, "--content", "README.md:1")
+	if code != 0 {
+		t.Fatalf("exit = %d (stderr %q)", code, errb)
+	}
+	got := strings.TrimSpace(out)
+	if !strings.HasSuffix(got, "/README.md:1?view=content") {
+		t.Fatalf("stdout = %q, want …/README.md:1?view=content", got)
+	}
+	l, err := model.ParseLink(got)
+	if err != nil || !l.IsContent() || l.Line != 1 {
+		t.Fatalf("ParseLink(%q) = %+v, %v — want a content link at line 1", got, l, err)
+	}
+}
+
+// The file may be read back by an agent: a line the file does not have is a
+// link to nowhere, refused before it is printed.
+func TestLinkContentLinePastEOFExits1(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "x.txt"), []byte("one\ntwo\n\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errb := runLinkCLI(t, dir, "--content", "x.txt:3")
+	if code != 1 || out != "" || !strings.Contains(errb, "x.txt has 2 lines") {
+		t.Fatalf("exit=%d stdout=%q stderr=%q, want 1 and \"x.txt has 2 lines\"", code, out, errb)
+	}
+	if code, _, errb := runLinkCLI(t, dir, "--content", "x.txt:2"); code != 0 {
+		t.Fatalf("x.txt:2 exit = %d (stderr %q), want 0", code, errb)
+	}
+}
+
+// contentLineCount counts the way the viewer splits: trailing newlines are
+// not lines, CRLF and a lone CR are one break each.
+func TestContentLineCount(t *testing.T) {
+	t.Parallel()
+	for in, want := range map[string]int{
+		"": 0, "a": 1, "a\n": 1, "a\n\n\n": 1, "a\r\nb\r\n": 2, "a\rb": 2, "a\n\nb": 3,
+	} {
+		if got := contentLineCount([]byte(in)); got != want {
+			t.Errorf("contentLineCount(%q) = %d, want %d", in, got, want)
+		}
 	}
 }

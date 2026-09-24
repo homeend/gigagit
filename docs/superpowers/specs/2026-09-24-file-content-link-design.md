@@ -199,3 +199,30 @@ chose B): the landing reuses that preview machinery.
   path added earlier is removed.
 - v2 unchanged in intent: `:<line>` sets the viewer's cursor; the viewer's
   Copy file link then carries the cursor line.
+
+## Addendum 2 (2026-09-24): v2 — line focus (agreed)
+
+Rulings (user, 2026-09-24): CLI refuses a line past EOF, the landing clamps;
+the web stays deferred (copies line-less links, still refuses to land);
+the mouse wheel scrolls `fileViewer`.
+
+- **Landing.** `steer.Command.Line` already carries a content link's
+  `:<line>` from both producers (`linknav.Command`, `steerCommandForLink`).
+  `steerNavigateContent` passes `c.Line.No` to `openFileViewer(path, line)`,
+  which parks it as `fileViewer.pendingLine` — the load is async and the
+  `fileContentMsg` fill would otherwise reset the cursor. The fill sets
+  `cur = min(line, len(lines)) - 1` and scrolls it into view (centred when
+  the file is longer than the window). A line past the end also sets the
+  status `line %d is past the end of %s (%d lines)`. A placeholder load
+  (empty, too large, failed — lines with `src` false) ignores the line.
+  The navigate reply stays `opened <path>` (it is sent before the load).
+- **Copy from the viewer.** `fileRowPath` returns `(path, line, ok)`; the
+  viewer answers `p.cur+1` (0 on a placeholder), every other surface 0 — the
+  file-list row link stays line-less. `contextFileLinkRow` builds
+  `…/<path>:<line>?view=content` via `buildLinkFor(…, line, 0, ContentHint)`.
+- **CLI.** `gg link --content <path>:<line>` is accepted (`#<hunk>` still
+  exit 2; `:old:<n>` is refused by `ParseLink`, exit 2). A line past the
+  file's last line exits 1: `<path> has <n> lines`. Lines are counted the
+  way the viewer splits (trailing newlines trimmed, CRLF/lone CR a break).
+- **Mouse.** The wheel over `fileViewer` scrolls `p.sel` (the pager), the
+  cursor stays — the preview's rule.

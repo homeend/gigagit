@@ -17,19 +17,31 @@ type fileLinkCheckedMsg struct {
 	err        error
 }
 
-// fileRowPath is the path of the file ROW under the cursor — a Files/Staged
+// fileRowPath is the path of the file ROW under the cursor, plus the line to
+// focus (1-based; 0 = the whole file — every surface but the viewer) — a Files/Staged
 // panel row or a files-view tree row (commit, stash, shelf) — or false on
 // anything else (a diff, history or blame on top, a directory heading, a
 // commit row). A files-view row deleted in its commit still counts: its
 // "Copy file link" then says the file is not in the working tree, which is
 // the answer the user asked for.
-func (m Model) fileRowPath() (string, bool) {
+func (m Model) fileRowPath() (string, int, bool) {
 	switch s := m.topLayer().(type) {
-	case *fileViewer: // the viewed file itself (v2 adds the cursor line)
-		return s.p.title, true
+	case *fileViewer: // the viewed file itself, at the cursor line
+		line := 0
+		if p := s.p; p.cur >= 0 && p.cur < len(p.lines) && p.lines[p.cur].src {
+			line = p.cur + 1
+		}
+		return s.p.title, line, true
 	case *historyView, *blameView:
-		return "", false
+		return "", 0, false
 	}
+	path, ok := m.fileListRowPath()
+	return path, 0, ok
+}
+
+// fileListRowPath is fileRowPath for the file LISTS (the files-view tree, the
+// Files/Staged panels): a row names a whole file, never a line.
+func (m Model) fileListRowPath() (string, bool) {
 	if m.diffLayer() != nil {
 		return "", false
 	}
@@ -59,11 +71,11 @@ func (m Model) fileRowPath() (string, bool) {
 // link (?view=content) — no commit, the file as it is on disk — copied only
 // after a stat proves the file is there.
 func (m Model) contextFileLinkRow() (actionRow, bool) {
-	path, ok := m.fileRowPath()
+	path, line, ok := m.fileRowPath()
 	if !ok {
 		return actionRow{}, false
 	}
-	text, ok := m.hintedLinkFor(model.FileAddress{State: model.StateUnstaged, Worktree: m.currentWorktree, Path: path}, model.ContentHint)
+	text, ok := m.buildLinkFor(model.FileAddress{State: model.StateUnstaged, Worktree: m.currentWorktree, Path: path}, model.NoteSideNew, line, 0, model.ContentHint)
 	if !ok {
 		return actionRow{}, false
 	}

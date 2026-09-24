@@ -1132,8 +1132,17 @@ focused right-column preview). A new preview feature must go through
 thread before copying), `linkFor` + `/api/worktree-present` (web),
 `gg link --content`. The web page refuses it in `toSteerWire`; `gg open --web`
 refuses before touching a page. `compare` ignores the hint (rule 1), so a
-content link compares as the working-tree file. v2: `:<line>` focus in the
-viewer + the viewer's own Copy file link row + a web viewer.
+content link compares as the working-tree file. **Line focus (v2):** the
+line rides `steer.Command.Line`; `openFileViewer(path, line)` parks it on
+`fileViewer.pendingLine` because the load is async and the `fileContentMsg`
+fill resets the cursor — `landPendingLine` applies it after the fill
+(centred, clamped to the last line with a status, dropped on a placeholder
+whose lines are not `src`). `fileRowPath` returns `(path, line, ok)`: only
+the viewer answers a line (`cur+1`); the list rows go through
+`fileListRowPath` and stay line-less. `gg link --content <path>:<line>`
+checks the line against `contentLineCount`, which must split exactly like
+`fileContentLinesTok` (normalize CR/CRLF, THEN trim trailing newlines). Still
+deferred: a web content viewer + landing.
 
 ### The compare algebra (`internal/domain`, plan 1b, 2026-09-17)
 

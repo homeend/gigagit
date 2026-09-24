@@ -145,6 +145,11 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		if cp, ok := l.(*contentPopup); ok && wheel != 0 {
 			cp.move(wheel)
 		}
+		if fv, ok := l.(*fileViewer); ok && wheel != 0 {
+			// The preview's rule: the wheel moves the pager, never the cursor.
+			rows, _ := fv.geom(m)
+			fv.p.sel = previewClamp(fv.p.sel+wheel, len(fv.p.lines), rows, fv.p.mode)
+		}
 		if te, ok := l.(*themeEditorPopup); ok && wheel != 0 && !te.editing && !te.confirming {
 			te.move(wheel)
 		}

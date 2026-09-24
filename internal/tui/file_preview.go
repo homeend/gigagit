@@ -201,7 +201,9 @@ func fileContentLines(data []byte) []contentLine {
 // fileContentLines produced before the mask existed
 // (TestFileContentLinesPlainPathUnchanged pins it).
 func fileContentLinesTok(data []byte, tok [][]syntax.Tok) []contentLine {
-	s := strings.TrimRight(string(data), "\n")
+	// Normalize FIRST, then trim: trimming "\n" off "b\r\n" leaves a "\r"
+	// that normalizes to a phantom blank last line.
+	s := strings.TrimRight(normalizeLineBreaks(string(data)), "\n")
 	if s == "" {
 		return []contentLine{{text: i18n.T("(empty file)")}}
 	}
@@ -212,7 +214,6 @@ func fileContentLinesTok(data []byte, tok [][]syntax.Tok) []contentLine {
 	// controls remain, so a \r can never reach the terminal, where it jumps
 	// to column 0 and overwrites the popup's own border (invisible to width
 	// math — the error_popup.go story).
-	s = normalizeLineBreaks(s)
 	// The RAW line (post-normalize, PRE-sanitize) is what Copy puts on the
 	// clipboard and what the class mask is derived from — token offsets are
 	// rune indices into it, and only it knows which runes the sweep expanded
