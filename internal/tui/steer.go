@@ -350,6 +350,9 @@ func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 	if why := steerEnumRefusal(c); why != "" {
 		return m, m.answerSteer(c, steerFail(c, why))
 	}
+	if c.Worktree != "" && steerWorktreeBound(c) && !samePathTUI(c.Worktree, m.snapshotWorktree) {
+		return m.askSteerSwitch(c)
+	}
 	// Only navigate parks a pendingSteer, and only one can be in flight: a
 	// second would either overwrite the first (leaving its CLI to hang out its
 	// wait) or land on the other's diff. reload/focus/highlight park nothing —

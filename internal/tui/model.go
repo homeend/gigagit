@@ -315,6 +315,12 @@ type Model struct {
 	// keptSteer are the inboxes other than steerDir whose presence gg holds
 	// for a running child (steer_kept.go).
 	keptSteer map[string]bool
+	// steerAsk is the pending "switch worktrees to show this?" question
+	// (steer_switch_ask.go); a pointer, nil when none.
+	steerAsk *steerSwitchAsk
+	// startAtCmd, when set, is the navigate consumeStartAt replays instead of
+	// startAt's link (an accepted steerAsk).
+	startAtCmd *steer.Command
 
 	// attention holds the bands `gg session highlight` painted, keyed by file
 	// address. A map, so it survives the Model value copy. Marks live until
@@ -4497,6 +4503,7 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.resumePromptShown = false // the new repo's paused state (if any) prompts fresh
 	m.notices = nil
 	m.driftNotices = nil // the old repo's drift findings are not this repo's business
+	m.steerAsk = nil     // a switch answers (or moots) the question
 	m.pendingDriftBranch = ""
 	m.pendingDriftPaused = false
 	m.noticesUnread = false
