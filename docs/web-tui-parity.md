@@ -127,6 +127,11 @@ Commit amend is TUI-only too (the web's commit op has no amend lane).
   change), and one selection spans every file of a stack (double-click
   stages it; a click elsewhere or esc clears it); the TUI's picker works one
   file at a time and can also take one side of a line.
+- **Line select / copy.** The TUI selects with space / space / enter over a
+  one-sided cursor (alt+←/→ picks the side, the range is locked to it). The
+  web keeps the browser's own mouse drag + ctrl+c / right-click *copy*, but
+  the copy is ONE side too — the side the drag started on — with no headers,
+  fold or note rows. Both span every file of a stack, lines back to back.
 
 - **Stash create.** The web stashes the whole tree with a message; the TUI
   popup offers a per-file checklist.

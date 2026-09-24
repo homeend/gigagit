@@ -97,8 +97,14 @@ func (v *diffView) noteRowIndex() (map[int][]noteLine, map[int]bool) {
 		if v.stk != nil {
 			lo, hi = v.fileLineRange(file)
 		}
+		// The box title names the note's file and reads its preview scope:
+		// stacked, that is the file's own view, not the stack's.
+		owner := v
+		if v.stk != nil && file >= 0 && file < len(v.stk.files) && v.stk.files[file].d != nil {
+			owner = v.stk.files[file].d
+		}
 		for _, r := range ns {
-			rows := v.noteBoxLines(r, innerW)
+			rows := v.noteBoxLines(r, innerW, owner)
 			if v.hideAgent {
 				rows = dropAgentRows(rows)
 			}
@@ -316,10 +322,11 @@ func hasNoteContent(rows []noteLine) bool {
 // noteBoxLines lays one thread out as a box: the title row, a blank, the
 // root's summary (bold, wrapped) and rationale (wrapped), each reply as a
 // "↳ author: summary" + rationale block, a blank and the bottom rule. innerW
-// is the wrap width (0 = no wrapping). Frame rows are agent-tagged only when
+// is the wrap width (0 = no wrapping); owner is the view of the note's FILE
+// (the view itself single-file), whose address the title names. Frame rows are agent-tagged only when
 // the whole thread is agent-written, so a user reply under an agent root
 // keeps its frame while the `a` layer is off.
-func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int) []noteLine {
+func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int, owner *diffView) []noteLine {
 	if v.collapsed[r.Note.ID] {
 		return []noteLine{v.collapsedNoteLine(r)}
 	}
@@ -333,7 +340,7 @@ func (v *diffView) noteBoxLines(r domain.ResolvedNote, innerW int) []noteLine {
 	frame := func(kind noteRowKind, text string) noteLine {
 		return noteLine{id: r.Note.ID, rootID: r.Note.ID, kind: kind, side: r.Note.Side, text: text, stale: stale, agent: allAgent}
 	}
-	rows := []noteLine{frame(noteRowTop, v.noteBoxTitle(r)), frame(noteRowBlank, "")}
+	rows := []noteLine{frame(noteRowTop, owner.noteBoxTitle(r)), frame(noteRowBlank, "")}
 	rows = append(rows, noteBodyLines(r, r.Note.ID, 0, innerW, stale)...)
 	for _, rep := range r.Replies {
 		rows = append(rows, noteBodyLines(rep, r.Note.ID, 1, innerW, stale)...)

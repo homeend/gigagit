@@ -251,6 +251,9 @@ Each is its own plan, attaching to the per-file slot / stackFile:
 3. **Working-tree hunk staging** per slot (`hunks`), inline pick/stage in the
    unstaged stack.
 4. **Line select / copy + `f` changes-only fold** per slot.
+   *(Plan 4d, 2026-09-24: `f` was already stack-wide in both frontends; the
+   work was the TUI selection surviving re-splices and the web drag copying
+   one side — `docs/superpowers/plans/2026-09-24-stacked-select-copy.md`.)*
 
 ## 12. Testing
 

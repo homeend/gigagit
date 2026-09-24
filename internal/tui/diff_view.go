@@ -87,6 +87,12 @@ type diffView struct {
 	// through holdStackAnchor.
 	stackHold stackAnchor
 	lsel      lineSel
+	// selKept is the stack's selection as last held, UNCLAMPED, and selKeptAt
+	// the lsel restoreSel made from it: while lsel is still that value, a
+	// re-splice holds selKept again instead of re-reading ends a fold parked
+	// on a header — so folding a file and unfolding it gives the range back.
+	selKept   selHold
+	selKeptAt lineSel
 	wrapArm   wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
 	fileArm   fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
 	// noteVisited: a }/{ jump (or a file step's landing) has put the cursor on
@@ -200,12 +206,20 @@ func (v *diffView) rebuild() {
 // to whatever hit is nearest the OLD cursor line.
 func (v *diffView) rebuildLines() {
 	v.sanLeft, v.sanRight = nil, nil // the line stream is about to change
-	v.lsel.clear()                   // …and so do the line indexes it holds
 	if v.stk != nil {
+		// A stack re-splices for things that leave every file's own lines
+		// alone — a file arriving, a fold, notes landing — so the selection
+		// follows its lines by (file, line in file), like the cursor. What
+		// DOES change a file's lines (f, a fold opened for a note) clears it
+		// itself after the rebuild.
+		held := v.holdSel()
+		v.lsel.clear()
 		v.spliceStack() // the stack builds its own lines/blocks from its files
 		v.relayout(v.width)
+		v.restoreSel(held)
 		return
 	}
+	v.lsel.clear() // …and so do the line indexes it holds
 	if v.partial {
 		lines, blocks := textdiff.Collapse(v.full, v.fullBlocks, diffContext)
 		v.lines, v.blocks = wrapLines(lines), blocks
@@ -1249,6 +1263,7 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		wasVisible := v.cursorVisible(body)
 		v.partial = !v.partial
 		v.rebuild()
+		v.lsel.clear() // folded runs appear or open: a stack's held ends mean other lines now
 		m.diffPartial = v.partial
 		if len(v.dispBlocks) > 0 {
 			v.focusBlock(ord, body) // re-anchor the same change (count is mode-invariant)

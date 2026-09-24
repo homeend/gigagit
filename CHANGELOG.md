@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Stacked diff: line select / copy (plan 4d)
+
+### Fixed
+
+- **TUI: a space/space/enter selection now survives scrolling a stack.** Files
+  in a stacked diff load as you scroll, and every load (and every `-`/`_`
+  fold, arriving review notes, a working-tree refresh) used to drop a live
+  selection. It now stays on its lines, across files; `f` still clears it, as
+  in the single-file view.
+- **Web: dragging over a diff copies one version.** A drag across a
+  side-by-side diff — or across files in a stack — copied the old and new text
+  glued with a tab, plus the file headers. Now ctrl+c and the right-click
+  *copy* both give the lines of the side the drag STARTED on (left = old,
+  right = new), with no header or fold text, and the highlight shows exactly
+  that. A copy that spans files gives their lines back to back.
+- **TUI: notes in a stacked merge preview.** Only the file you opened showed
+  its review notes; every other file of a merge preview (or a saved preview /
+  commit pair with notes) loaded with no note address and showed none. Each
+  file now carries its own. A note box's title in a stack also named no file
+  (`agent note · Junie ·  R75`) and lost the preview's `⊘ … (outdated)` mark.
+- **Web: a text drag keeps the rows marked for staging.** Releasing a drag
+  no longer counts as a click outside the selection.
+
+`f` (changes only) already folds the whole stack in both frontends and is
+remembered; `-` folds one file.
+
 ## Content links: Copy file link
 
 ### Added
