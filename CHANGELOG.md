@@ -17,9 +17,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   status line) says `<path> is not in the working tree` and nothing is copied.
 - **`gg link --content <path>`** prints the same link (exit 1 when the file is
   missing).
-- **`gg open` / `gg session navigate` land a content link in the TUI's content
-  viewer** showing the file's working-tree text, so an agent asked to "open"
-  a file can do it. `gg web` refuses content links for now; `gg diff`,
+- **`gg open` / `gg session navigate` land a content link in a full-screen
+  View-file viewer** — the files view's View file preview, over the file's
+  working-tree text: syntax colouring, the alt+↑/↓ line cursor,
+  space/space/enter select + copy, `/ @ ] [` search and the `.` menu's copy
+  rows — so an agent asked to "open" a file can do it. `gg web` refuses content links for now; `gg diff`,
   `gg show`, `gg note` and `gg session highlight` refuse them (a content link
   is not a diff). The `?view=content` hint also accepts a `:<line>`, reserved
   for focusing a line in a later version.

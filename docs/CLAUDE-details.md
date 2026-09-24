@@ -1121,8 +1121,13 @@ local form learns its path only in `ResolveLink`, which refuses an
 address-less one there. The CLI's one per-verb gate (`linkShapes.Content`)
 lets only `gg open` / `gg session navigate` take it. The TUI lands it in
 `steerNavigateContent`: a deadlined `WorktreeFilesPresent` stat on the Update
-thread, then `openWorktreeContent` (the `contentPopup` over `WorktreeFile`,
-disk bytes — the file finder's View content reads HEAD). Producers:
+thread, then `openFileViewer` — a full-screen layer (`fileViewer`) that is
+the files view's View-file preview lifted onto the stack: same loader
+(`loadFileContentSrcCmd`, syntax), same box (`renderPreviewBox`), same keys
+via `activePreview()` (the ONE accessor every preview key, the line cursor
+and the `.` menu's line rows ask — the viewer on top answers first, else the
+focused right-column preview). A new preview feature must go through
+`activePreview`, or it will work in one viewer only. Producers:
 `contextFileLinkRow` (TUI, spliced after `copy-link`, checks presence off
 thread before copying), `linkFor` + `/api/worktree-present` (web),
 `gg link --content`. The web page refuses it in `toSteerWire`; `gg open --web`
