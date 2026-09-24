@@ -360,6 +360,28 @@ function revealHint(s) {
   return s.hint_kind === "preview" ? revealSavedSet(s) : revealHintEntry(s.hint_kind, s.hint_id);
 }
 
+// navMiss says, on the page, that a navigate named something its target does
+// not have — a file outside the opened set, a line outside the file's diff.
+// The steer is fire-and-forget (the CLI printed "web: sent" long ago), so
+// this red line is the only report; returning in silence left an empty diff
+// pane that looked as though nothing had been asked (ruling S7). The wording
+// is the TUI's steerFail reasons.
+function navMiss(text) {
+  opLine("gg link: " + text, true);
+}
+
+// openNamedFile opens the navigate's file from `list` (the opened set's rows),
+// or says it is not in `where` and reports false.
+async function openNamedFile(list, s, where) {
+  const i = list.findIndex((f) => f.path === s.file);
+  if (i < 0) {
+    navMiss(s.file + " is not in " + where);
+    return false;
+  }
+  await openFile(i);
+  return true;
+}
+
 // steerNavigateLand opens what the command names and marks the landed row.
 // It reuses the very openers the .-menu rows use — openFile does the layout
 // switch and routes a working-tree entry to openStatusDiff itself — so a
@@ -377,9 +399,7 @@ async function steerNavigateLand(s) {
     // between post and apply is honoured (the TUI consumer does the same).
     await openPreviewForPair(s.source, s.target);
     if (!s.file) return; // a file-less preview navigate only reveals the stage
-    const i = state.files.findIndex((f) => f.path === s.file);
-    if (i < 0) return;
-    await openFile(i);
+    if (!(await openNamedFile(state.files, s, "preview " + s.target + "..." + s.source))) return;
   } else if (s.state === "ref") {
     // The NAME, never a sha: the tip is resolved here, so a branch that moved
     // between post and apply is honoured (the TUI consumer does the same).
@@ -395,9 +415,7 @@ async function steerNavigateLand(s) {
     }
     if (!(await openCommitByHash(sha, s.ref))) return;
     if (!s.file) return; // a file-less ref navigate only reveals the tree
-    const i = state.files.findIndex((f) => f.path === s.file);
-    if (i < 0) return;
-    await openFile(i);
+    if (!(await openNamedFile(state.files, s, s.ref))) return;
   } else if (s.state === "pair") {
     // A change-set is BOUNDED, so it is opened as a comparison — never as a
     // commit's tree, which is what the ref arm above opens instead.
@@ -408,25 +426,19 @@ async function steerNavigateLand(s) {
     if (isFullSha(s.a) && isFullSha(s.b)) await runLinkCompare(new URLSearchParams({ a: s.a, b: s.b }).toString());
     else await openCompareForPair(s.a, s.b);
     if (!s.file) return; // a file-less pair navigate only reveals the compare
-    const i = state.files.findIndex((f) => f.path === s.file);
-    if (i < 0) return;
-    await openFile(i);
+    if (!(await openNamedFile(state.files, s, s.a + ".." + s.b))) return;
   } else if (!s.file) {
     if (s.commit) await openCommitByHash(s.commit, s.commit.slice(0, 8));
     return;
   } else if (s.state === "commit") {
     if (!(await openCommitByHash(s.commit, s.commit.slice(0, 8)))) return;
-    const i = state.files.findIndex((f) => f.path === s.file);
-    if (i < 0) return;
-    await openFile(i);
+    if (!(await openNamedFile(state.files, s, "commit " + s.commit.slice(0, 8)))) return;
   } else {
     // The working-tree stage, entered the way the palette enters it (0 = the
     // WT row): it re-reads status — the agent may have written the file a
     // moment ago — and puts the file list on screen before the diff opens.
     await openWorkingTree(0);
-    const i = state.statusEntries.findIndex((f) => f.path === s.file);
-    if (i < 0) return;
-    await openFile(i);
+    if (!(await openNamedFile(state.statusEntries, s, "the working-tree diff"))) return;
   }
   if (!s.line) return;
   const side = s.side; // the server fills it whenever a line is present
@@ -435,12 +447,18 @@ async function steerNavigateLand(s) {
   // changes-only view folded away is unfolded first.
   // A stack holds many files: the row has to be found inside the TARGET
   // file's own section, which may still need unfolding or fetching.
+  const line = s.line;
+  const file = s.file;
   if (state.stack) {
-    await landStackLine(s.file, side, s.line);
+    const landed = await landStackLine(s.file, side, s.line);
+    if (!landed) navMiss("line " + line + " is not in " + file + "'s diff");
     return;
   }
-  const tr = revealDiffRow(side, s.line);
-  if (!tr) return;
+  const tr = revealDiffRow(side, line);
+  if (!tr) {
+    navMiss("line " + line + " is not in " + file + "'s diff");
+    return;
+  }
   markDiffRow(tr, side, s.line);
   tr.scrollIntoView({ block: "center" });
 }

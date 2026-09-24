@@ -1697,8 +1697,14 @@ had, and the lever is that a stack is ONE document:
   (`rev-list -1 --grep=^three$`). That it reproduced IDENTICALLY on the
   unchanged `main` is what proved it was the probe and not the feature — run
   the differential before debugging your own diff. A navigate naming a file the
-  target commit does not carry still lands on an empty pane with no notice,
-  which is a real (pre-existing) wart, not a 4b regression.
+  target commit does not carry used to land on an empty pane with no notice
+  (pre-existing, not 4b). FIXED 2026-09-24: `steerNavigateLand` (live.js)
+  opens the file through `openNamedFile`, which says `gg link: <file> is not
+  in <commit …|the working-tree diff|preview t...s|ref|a..b>` on a miss, and a
+  line the diff lacks says `line N is not in <file>'s diff` (single file and
+  stack) — the TUI's steerFail wording, as a red op-line, since the web steer
+  is fire-and-forget and the page is the only place to report it. Probe:
+  `stack-probe/navmiss.mjs`.
 
 
 ### Change navigation: from the viewport, and across a stack (2026-09-23)

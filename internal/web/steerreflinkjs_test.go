@@ -111,8 +111,10 @@ func TestSteerNavigateLineGuardCoversRefAndPair(t *testing.T) {
 	// return would make the guard unreachable for ref/pair and the line
 	// landing below it dead code for them. Checking that the branch merely
 	// PRECEDES the guard is not enough (an early `return;` right after
-	// `openFile(i)` would still pass that check), so this also asserts each
-	// branch's OWN body ends at `await openFile(i);` with nothing after it.
+	// opening the file would still pass that check), so this also asserts each
+	// branch's OWN body ends at its openNamedFile line with nothing after it.
+	// That line returns only on a MISS — the file is not in the set, it has
+	// said so (navMiss), and there is no line to land.
 	for _, st := range []string{"ref", "pair"} {
 		marker := `s.state === "` + st + `"`
 		bi := strings.Index(body, marker)
@@ -132,12 +134,18 @@ func TestSteerNavigateLineGuardCoversRefAndPair(t *testing.T) {
 			t.Fatalf("%s: could not find the branch's end", marker)
 		}
 		branchBody := body[start : start+end]
-		lastCall := strings.LastIndex(branchBody, "await openFile(i);")
+		const opens = "await openNamedFile(state.files, s, "
+		lastCall := strings.LastIndex(branchBody, opens)
 		if lastCall < 0 {
-			t.Fatalf("%s: branch never calls openFile", marker)
+			t.Fatalf("%s: branch never opens the named file", marker)
 		}
-		if trailing := strings.TrimSpace(branchBody[lastCall+len("await openFile(i);"):]); trailing != "" {
-			t.Errorf("%s: trailing code %q after openFile(i) would bypass the shared line guard", marker, trailing)
+		rest := branchBody[lastCall:]
+		eol := strings.Index(rest, "\n")
+		if eol < 0 || !strings.HasSuffix(strings.TrimSpace(rest[:eol]), ")) return;") {
+			t.Fatalf("%s: the open must return only on a miss: %q", marker, rest)
+		}
+		if trailing := strings.TrimSpace(rest[eol:]); trailing != "" {
+			t.Errorf("%s: trailing code %q after opening the file would bypass the shared line guard", marker, trailing)
 		}
 	}
 }

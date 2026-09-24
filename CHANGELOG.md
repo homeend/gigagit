@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## gg web: a navigate that misses says so
+
+- `gg session navigate` (and a `gg://` link) naming a file the commit, the
+  working tree, a comparison or a merge preview does not contain used to leave
+  the web page on an empty diff pane with no word of why. It now says so —
+  `gg link: a.txt is not in commit 1a2b3c4d` — and a line the file's diff does
+  not have says `line 999 is not in b.txt's diff`, in the TUI's words.
+
 ## Show a branch's worktree
 
 ### Added
