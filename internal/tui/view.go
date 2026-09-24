@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/pusherr"
@@ -1143,9 +1144,20 @@ func (m Model) remoteRows() []string {
 	return out
 }
 
-func (m Model) worktreeRows() []string {
-	out := make([]string, 0, len(m.worktrees))
-	for _, w := range m.worktrees {
+// worktreeRows renders one row per Worktrees entry: a worktree, or an agent
+// session sub-row under it.
+func (m Model) worktreeRows(ents []wtEntry) []string {
+	out := make([]string, 0, len(ents))
+	for _, e := range ents {
+		if e.sess != "" {
+			if s, ok := domain.Sessions().Get(e.sess); ok {
+				out = append(out, sessionRowText(s.Info()))
+			} else {
+				out = append(out, "  └ ?")
+			}
+			continue
+		}
+		w := m.worktrees[e.wt]
 		marker := "  "
 		if w.Path == m.currentWorktree {
 			marker = "* "

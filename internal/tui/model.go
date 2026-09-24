@@ -2533,6 +2533,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelTags {
 				return m.tagJumpToCommit()
 			}
+			if m.focus == panelWorktrees {
+				if info, ok := m.selectedSession(); ok {
+					return m.openConsole(info.ID)
+				}
+			}
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
 				wt, _ := m.selectedWorktree()
 				return m.guardedReRoot(wt.Path, true)
