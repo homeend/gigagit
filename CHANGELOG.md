@@ -18,6 +18,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   menu, or a confirmed `k` in the sessions popup (`ctrl+\`), showed nothing
   until the exit notice; the status line now reads "killing <agent> in
   <worktree>…" immediately.
+- **Windows: emoji typed or pasted into an agent console.** An emoji (any
+  character outside the Basic Multilingual Plane) reached the agent as two
+  `�` — Windows delivers it as two UTF-16 halves, one key event each. The
+  console now joins the halves before sending.
 - **Windows: agent sessions end promptly.** Every exit or kill on Windows
   waited out a 2 s drain, because the Windows pseudo console never closes
   its output on its own. The exit is now recorded once the output goes quiet

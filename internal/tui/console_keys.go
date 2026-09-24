@@ -2,6 +2,7 @@ package tui
 
 import (
 	"strings"
+	"unicode/utf16"
 
 	tea "github.com/charmbracelet/bubbletea"
 	uv "github.com/charmbracelet/ultraviolet"
@@ -83,4 +84,29 @@ func encodeConsoleKey(k tea.KeyMsg) consoleInput {
 		return consoleInput{key: ev}
 	}
 	return consoleInput{drop: true}
+}
+
+// joinSurrogates rebuilds characters outside the BMP from UTF-16 halves:
+// Bubble Tea's Windows console reader hands over one UTF-16 unit per rune,
+// so an emoji arrives as a high then a low surrogate, possibly in separate
+// messages. high is a half carried over from the previous message; the
+// returned rune is the half to carry into the next. A half with no partner
+// is dropped rather than sent as U+FFFD.
+func joinSurrogates(high rune, rs []rune) ([]rune, rune) {
+	out := make([]rune, 0, len(rs))
+	for _, r := range rs {
+		switch {
+		case r >= 0xD800 && r < 0xDC00:
+			high = r
+		case r >= 0xDC00 && r < 0xE000:
+			if high != 0 {
+				out = append(out, utf16.DecodeRune(high, r))
+			}
+			high = 0
+		default:
+			high = 0
+			out = append(out, r)
+		}
+	}
+	return out, high
 }

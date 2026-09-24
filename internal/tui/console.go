@@ -23,6 +23,7 @@ type consoleState struct {
 	focused   bool
 	maximized bool
 	gen       int
+	highHalf  rune // a UTF-16 high surrogate waiting for its low half (Windows input)
 }
 
 type consoleChangedMsg struct {
@@ -271,6 +272,14 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 				m = m.syncConsoleSize()
 			}
 			return m, nil, true
+		}
+		if msg.Type == tea.KeyRunes {
+			msg.Runes, m.console.highHalf = joinSurrogates(m.console.highHalf, msg.Runes)
+			if len(msg.Runes) == 0 {
+				return m, nil, true
+			}
+		} else {
+			m.console.highHalf = 0
 		}
 		if s, ok := m.consoleSession(); ok && s.Info().State == domain.SessionRunning {
 			in := encodeConsoleKey(msg)

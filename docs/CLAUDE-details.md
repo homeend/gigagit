@@ -3240,6 +3240,12 @@ spike findings), plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-1-c
   unexported and `Close` would close them again, so no early partial
   release) — the quiet rule is what keeps a Windows exit off the 2 s bound
   (`TestWindowsExitIsPrompt`).
+- **Surrogate halves (Windows).** Bubble Tea v1's console reader
+  (`coninput`) casts each UTF-16 unit to a rune, so an emoji arrives as a
+  high then a low surrogate, often in two `KeyMsg`s; `string(rune)` of a
+  half is U+FFFD. The focused console joins them (`joinSurrogates`, the
+  pending half in `consoleState.highHalf`). gg's own text inputs likely
+  share the bug.
 - **Cursor on a wide glyph.** `cursorLine` moves a cursor that sits on a
   wide glyph's right half (a zero cell) onto the glyph; reversing the zero
   cell as a space pushed the row one column wider.
