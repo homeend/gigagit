@@ -126,3 +126,5 @@ func TestStaleConsoleRepaintDropped(t *testing.T) {
 	}
 	_ = mm
 }
+
+func domainKill(s *domain.AgentSession) error { return domain.Sessions().Kill(s.Info().ID) }

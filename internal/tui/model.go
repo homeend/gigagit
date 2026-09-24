@@ -550,6 +550,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitSessionCmd(s, msg.id, msg.gen)
 	case sessionsChangedMsg:
 		return m.onSessionsChanged()
+	case agentEnsureMsg:
+		return m.applyAgentEnsure(msg)
+	case agentStartedMsg:
+		return m.applyAgentStarted(msg)
 	case stackStatMsg:
 		// The stack's +/− counts, in one numstat (diff_stack.go).
 		return m.applyStackStats(msg), nil
