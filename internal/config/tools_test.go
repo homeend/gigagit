@@ -250,3 +250,19 @@ func TestAppendToolCommandsWritesFrontends(t *testing.T) {
 		t.Fatalf("empty Frontends must not write frontends line:\n%s", raw2)
 	}
 }
+
+func TestValidateToolCommandSession(t *testing.T) {
+	ok := ToolCommand{Category: "session", Name: "Claude", Mode: "session", Command: "claude"}
+	if err := ValidateToolCommand(ok); err != nil {
+		t.Fatalf("session command must validate, got %v", err)
+	}
+	for i, tc := range []ToolCommand{
+		{Category: "session", Name: "C", Mode: "terminal", Command: "claude"}, // session needs session mode
+		{Category: "review", Name: "R", Mode: "session", Command: "x"},        // session mode only for sessions
+		{Category: "session", Name: "C", Mode: "session", PerFile: true, Command: "x"},
+	} {
+		if err := ValidateToolCommand(tc); err == nil {
+			t.Errorf("bad[%d] %+v: want error", i, tc)
+		}
+	}
+}

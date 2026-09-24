@@ -3100,3 +3100,56 @@ under it would otherwise block every later PR diff from fetching.
 - `forgeLabelText` translates the domain's label summaries in the note box and
   the collapsed row; it keys on `SummarySrc == ""`, so a reviewer who really
   wrote "quote" is left alone.
+
+### Agent sessions core (`internal/agentsession`, plan 1, 2026-09-24)
+
+Spec `docs/superpowers/specs/2026-09-24-agent-sessions-design.md` (incl. the
+spike findings), plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-1-core.md`.
+
+- **Three goroutines per session.** `pumpOut` PTY → emulator (+ taps +
+  `Changed`); `pumpIn` emulator → queue → a writer → PTY; `wait` records the
+  exit. `pumpIn` exists because the emulator answers the child's terminal
+  queries (DA, cursor-position report) through its output pipe — without it
+  Claude Code stalls at startup — and keys/pastes are encoded into that same
+  pipe.
+- **The emulator's output is a synchronous `io.Pipe` written under its own
+  lock** (inside `Write` for replies, inside `SendKey`/`Paste` for input), so
+  `pumpIn` drains into a 1024-chunk queue and never blocks; a child that
+  stops reading stdin would otherwise freeze `pumpOut` and the caller.
+  `TestPasteToNonReaderDoesNotBlock` runs the child in RAW mode — in
+  canonical mode Linux drops overflow input and the test cannot see a stall.
+- **Locking.** `SafeEmulator` locks each method, but `CellAt` returns a live
+  cell pointer and `Close` is unlocked. The session's `ioMu` serialises every
+  emulator mutation, `closeIO`, and the snapshot reads (`Screen`,
+  `screenText`). `closeIO` ends `pumpIn` by closing the emulator's
+  `InputPipe()` writer (an `*io.PipeWriter`), never `Emulator.Close`, whose
+  flag write races the blocked `Read`.
+- **Exit ordering.** `wait` lets `pumpOut` drain (bounded 2 s — a grandchild
+  holding the PTY keeps the master readable) before marking `Exited` and
+  closing, or the child's last output is lost. The parent closes its slave fd
+  after `Start`; Linux then reports EIO (= end of stream) on the master.
+- **Kill.** Unix: the child is a session leader (`Setsid`+`Setctty`);
+  SIGTERM to `-pid`, SIGKILL after 3 s or once the leader is reaped. The
+  process-group test's grandchild ignores SIGHUP: the kernel HUPs the
+  foreground group when the leader dies, which hides a leader-only kill.
+  Windows: a kill-on-close job object; `TerminateJobObject`.
+- **Child env** drops `TMUX`/`TMUX_PANE` (agents otherwise think they run in
+  a tmux pane) and sets `TERM=xterm-256color`, `GG_SESSION_ID`.
+- **domain.** `Sessions()` is the one process-global manager (repogate
+  precedent; test seam `UseSessionManager`), type aliases keep frontends off
+  `agentsession` (archtest). `StartSession` runs `$SHELL -c <line>` with NO
+  `exec` prefix (on a compound line it would run only the first command).
+  On Windows it passes a VERBATIM `"%COMSPEC%" /S /C "<line>"` via
+  `StartSpec.CmdLine` → `SysProcAttr.CmdLine`: `x/conpty` otherwise composes
+  the line from argv with `\"` escaping that cmd.exe cannot parse (a quoted
+  `"C:\Program Files\…\claude.exe"` would break); separate lines join with
+  ` & `. ConPTY is expected to keep its output pipe open until the pseudo
+  console closes (NOT yet verified on Windows), which would put every Windows
+  exit on the 2 s drain bound.
+  `EnsureSessionCommands` treats any existing `session` block, even an
+  invalid one, as configured.
+- **exttool/config.** `category = "session"` and `mode = "session"` only
+  come together (`ValidateToolCommand`, catalog invariant test).
+- **Windows input (for the TUI stage):** Bubble Tea v1 turns a bare
+  Ctrl/Alt/Win key-down into `KeyRunes{0}` (only Shift is filtered) — drop
+  NUL-only rune messages; batched `KeyRunes` go through `SendText`.

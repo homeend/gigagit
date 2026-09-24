@@ -22,6 +22,7 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 		"github.com/homeend/gigagit/internal/prefix":       "frontends must reach the prefix store through internal/domain",
 		"github.com/homeend/gigagit/internal/linkhist":     "frontends must reach the copied-link history store through internal/domain",
 		"github.com/homeend/gigagit/internal/savedcompare": "frontends must reach the saved-comparison store through internal/domain",
+		"github.com/homeend/gigagit/internal/agentsession": "frontends must reach agent sessions through internal/domain",
 	}
 	for _, pkg := range []string{
 		"github.com/homeend/gigagit/internal/tui",
@@ -49,12 +50,14 @@ func TestLayeringDAG(t *testing.T) {
 		"gitcmd":      {"gitexec", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"gitconfdocs": {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
 		"exttool":     {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
-		"forge":       {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
-		"gitexec":     {"gitcmd", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
-		"model":       {"repogate", "gitcmd", "gitexec", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
-		"notebatch":   {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
-		"repogate":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
-		"mcp":         {"tui", "cli", "app", "web"},
+		// agentsession is a leaf: the PTY/emulator core may reach no gigagit layer.
+		"agentsession": {"config", "model", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app", "exttool", "template", "i18n"},
+		"forge":        {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"gitexec":      {"gitcmd", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"model":        {"repogate", "gitcmd", "gitexec", "git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"notebatch":    {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"repogate":     {"git", "engine", "domain", "tui", "cli", "mcp", "web", "app"},
+		"mcp":          {"tui", "cli", "app", "web"},
 		// "steer" is forbidden to domain on purpose: the link resolver's
 		// ResolveOpts.LiveFn seam exists precisely so domain can ask "is a gg
 		// session live here?" without taking that dependency.
