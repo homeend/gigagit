@@ -190,3 +190,29 @@ func TestSessionShellLineWindowsMultiLine(t *testing.T) {
 		t.Fatalf("cmdline = %s, want %s", cmdline, want)
 	}
 }
+
+// GG_SESSION_TRACE=<dir> records every session's raw output there (serial:
+// env + the process-global manager).
+func TestStartSessionTraceEnv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based")
+	}
+	dir := t.TempDir()
+	t.Setenv("GG_SESSION_TRACE", dir)
+	restore := UseSessionManager(agentsession.NewManager())
+	defer restore()
+	wt := cleanDir(t)
+	s, err := Open(wt).StartSession(context.Background(), config.ToolCommand{Category: "session", Name: "Shell", Mode: "session", Command: `printf TRACED`}, wt, 80, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-s.Done()
+	files, _ := filepath.Glob(filepath.Join(dir, "*.raw"))
+	if len(files) != 1 {
+		t.Fatalf("trace files = %v", files)
+	}
+	b, _ := os.ReadFile(files[0])
+	if !strings.Contains(string(b), "TRACED") {
+		t.Fatalf("trace = %q", b)
+	}
+}

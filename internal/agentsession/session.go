@@ -3,6 +3,7 @@ package agentsession
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -36,8 +37,12 @@ type Session struct {
 	closeOnce    sync.Once
 	cursorHidden atomic.Bool // DECTCEM state, fed by the emulator callback
 
-	taps map[chan []byte]struct{} // raw-output subscribers (tap.go), under mu
-	job  uintptr                  // Windows job object handle; 0 elsewhere
+	taps    map[chan []byte]struct{} // raw-output subscribers (tap.go), under mu
+	trace   *os.File                 // raw-output recording (StartSpec.TracePath); written by pumpOut only
+	traceEv *os.File                 // <trace>.events: "offset cols rows" at start and every resize (under ioMu)
+	traced  atomic.Int64             // bytes written to trace so far
+	osc     oscFilter                // pumpOut-only: keeps UTF-8 in OSC payloads away from x/ansi's C1 parsing
+	job     uintptr                  // Windows job object handle; 0 elsewhere
 }
 
 func start(id ID, spec StartSpec) (*Session, error) {
@@ -56,9 +61,26 @@ func start(id ID, spec StartSpec) (*Session, error) {
 	cmd := exec.Command(bin, spec.Argv[1:]...)
 	cmd.Dir = spec.Dir
 	cmd.Env = append(append(childEnv(os.Environ()), spec.Env...), "GG_SESSION_ID="+string(id), "TERM=xterm-256color")
+	var trace, traceEv *os.File
+	if spec.TracePath != "" {
+		if trace, err = os.Create(spec.TracePath); err != nil {
+			_ = p.Close()
+			return nil, err
+		}
+		if traceEv, err = os.Create(spec.TracePath + ".events"); err != nil {
+			_ = trace.Close()
+			_ = p.Close()
+			return nil, err
+		}
+		fmt.Fprintf(traceEv, "0 %d %d\n", cols, rows)
+	}
 	prepareCmd(cmd, spec.CmdLine)
 	if err := p.Start(cmd); err != nil {
 		_ = p.Close()
+		if trace != nil {
+			_ = trace.Close()
+			_ = traceEv.Close()
+		}
 		return nil, err
 	}
 	if up, ok := p.(*xpty.UnixPty); ok {
@@ -69,7 +91,7 @@ func start(id ID, spec StartSpec) (*Session, error) {
 	s := &Session{
 		info: Info{ID: id, Label: spec.Label, AgentID: spec.AgentID, Repo: spec.Repo, Dir: spec.Dir,
 			Started: time.Now(), State: Running},
-		pty: p, emu: emu, cmd: cmd,
+		pty: p, emu: emu, cmd: cmd, trace: trace, traceEv: traceEv,
 		changed: make(chan struct{}, 1),
 		done:    make(chan struct{}),
 		outDone: make(chan struct{}),
@@ -104,11 +126,19 @@ func childEnv(env []string) []string {
 // failure — any read error ends the pump.
 func (s *Session) pumpOut() {
 	defer close(s.outDone)
+	if s.trace != nil {
+		defer s.trace.Close()
+		defer s.traceEv.Close()
+	}
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := s.pty.Read(buf)
 		if n > 0 {
-			s.withEmu(func() { _, _ = s.emu.Write(buf[:n]) })
+			if s.trace != nil {
+				_, _ = s.trace.Write(buf[:n])
+				s.traced.Add(int64(n))
+			}
+			s.withEmu(func() { _, _ = s.emu.Write(s.osc.filter(buf[:n])) })
 			s.feedTaps(buf[:n])
 			s.signal()
 		}

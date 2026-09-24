@@ -52,6 +52,23 @@ remembered; `-` folds one file.
   is not a diff). The `?view=content` hint also accepts a `:<line>`, reserved
   for focusing a line in a later version.
 
+## Agent console: Windows title leak fixed
+
+### Fixed
+
+- **Stray "Claude Code" text in the agent console** (seen on Windows): the
+  terminal emulator's parser read byte 0x9C inside a window-title sequence as
+  a C1 String Terminator even mid-UTF-8, so a title like `✳ Claude Code` ended
+  early and its tail was printed over the logo and into the input box. gg now
+  strips non-ASCII bytes from escape-sequence payloads (titles, hyperlink
+  targets) before they reach the emulator; screen text is untouched.
+
+### Added
+
+- **`GG_SESSION_TRACE=<dir>`** records every agent session's raw output
+  (`<time>-<label>.raw`) and its size changes (`.raw.events`) — the evidence
+  used to find the bug above, replayable offline.
+
 ## Agent sessions in the TUI
 
 ### Added

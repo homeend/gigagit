@@ -13,3 +13,6 @@
 # Windows batch scripts conventionally use CRLF.
 *.cmd   text eol=crlf
 *.bat   text eol=crlf
+
+# Raw terminal recordings (GG_SESSION_TRACE fixtures): byte-exact, CRLF included.
+*.raw   binary
