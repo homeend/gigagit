@@ -44,6 +44,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   processes less per action — on a WSL `/mnt` checkout a web stage / unstage
   went from ~190 ms to ~163 ms.
 
+## Web: change stepping follows the viewport, and has keys
+
+- gg web's **‹ change / change ›** used to step from the change they last
+  landed on, so after scrolling with the wheel or PgDn a press threw you back
+  up to where you had been. Like the TUI's `n`/`p`, they now step from what is
+  on screen: with the last change scrolled away, **change ›** lands on the
+  first change at or below the top of the diff and **‹ change** on the last
+  one above it. Single file and stacked (the stack is one document).
+- In a stack the step no longer stalls at the last file the page has loaded,
+  or skips files: a folded or not-yet-loaded file on the way is opened and
+  loaded, and the step lands on its first change (last, going up). The first
+  step in a new stack no longer skips the first change. The same load wait
+  also makes `]` / `[` search stepping and link landings reliable on a slow
+  disk (they could read a file before it was drawn).
+- New keys **`.`** / **`,`** (next / previous change) in the diff, plus a
+  `. next change` footer chip and a help row.
+
 ## Stacked diff: line select / copy (plan 4d)
 
 ### Fixed
