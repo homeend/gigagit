@@ -1176,6 +1176,13 @@ Opening a file that is already open reuses it; up to 20 stay open per
 worktree, and the 21st closes the one you looked at least recently (the
 bottom bar names it). The list lives as long as gg runs.
 
+An open **working-tree** file follows the disk: when it changes (an agent's
+edit, a save in your editor) it reloads by itself, keeping your cursor line,
+scroll and search — the file on screen within about a second, background
+files within five. A file deleted on disk shows `(file deleted on disk)` and
+returns, at your line, when the file does. Commit and shelf versions never
+change.
+
 ### Agent sessions (embedded consoles)
 
 On a **Worktrees** row, the `.` menu's **Start agent…** runs an interactive
