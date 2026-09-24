@@ -157,7 +157,7 @@ func (m Model) openPreviewSrc(src fileSource, path string, load func(context.Con
 	if reused {
 		d.keepPlace()
 	}
-	return m, loadFileContentSrcCmd(d.tag, path, m.cfg.UI.SyntaxOn(), load)
+	return m, m.loadDocWith(d, load)
 }
 
 // fileContentMsg carries a previewed file's content lines, tagged so a stale load
@@ -166,6 +166,11 @@ type fileContentMsg struct {
 	tag   string
 	lines []contentLine
 	err   error
+	// disk is the file's stat taken just before the read (a working-tree
+	// document's load only; zero otherwise).
+	disk diskStat
+	// reload marks a watch reload: the fill keeps the reader's place.
+	reload bool
 }
 
 // loadFileContentSrcCmd resolves a preview's bytes via load and splits them

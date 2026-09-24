@@ -64,6 +64,23 @@ func (r *openFilesReg) touch(wt string, d *openFile, shown func(*openFile) bool)
 	return evicted
 }
 
+// findTag is the open document tagged tag in any worktree's list, or nil.
+// Tags are unique, so a load result finds its document even after a
+// worktree switch (its loading flag must still clear).
+func (r *openFilesReg) findTag(tag string) *openFile {
+	if r == nil {
+		return nil
+	}
+	for _, l := range r.byWT {
+		for _, d := range l {
+			if d.tag == tag {
+				return d
+			}
+		}
+	}
+	return nil
+}
+
 // remove drops d from wt's list.
 func (r *openFilesReg) remove(wt string, d *openFile) {
 	if r == nil {
@@ -198,5 +215,5 @@ func (m Model) bringToFront(d *openFile) (Model, tea.Cmd) {
 		return m, nil
 	}
 	d.keepPlace()
-	return m, loadFileContentSrcCmd(d.tag, d.path, m.cfg.UI.SyntaxOn(), m.docLoader(d))
+	return m, m.loadDoc(d)
 }

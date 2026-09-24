@@ -120,6 +120,7 @@ type Model struct {
 
 	stashView     *stashView                               // stash list in the right column (over Commits); nil = closed
 	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
+	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
 	quitConfirmed bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
 	sessionStates map[domain.SessionID]domain.SessionState // last seen state per session, for exit notices
@@ -892,6 +893,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m, reply := m.navigateLanded(msg.cmd, contentLandedDetail(msg.cmd.File, msg.line, msg.load.lines))
 		return m, tea.Batch(fill, reply)
+	case openFilesStatMsg:
+		return m.applyDocStats(msg)
+	case docWatchReadyMsg:
+		return m.docWatchReady(msg)
+	case docWatchEventMsg:
+		return m.docWatchEvent(msg)
+	case docWatchClosedMsg:
+		return m, nil // the watcher was closed: its listen loop ends here
 	case fileContentMsg:
 		if d, rows, inner, ok := m.liveDoc(msg.tag); ok {
 			if n := d.fill(msg, rows, inner); n != "" {
@@ -900,19 +909,6 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, nil // no frame shows that document any more: a stale load
-	case fileContentLayerMsg:
-		cp := layerOf[*contentPopup](m)
-		// Tag-gate: only fill the contentPopup whose title matches this path load.
-		if cp == nil || cp.title != i18n.T("View %s", msg.path) {
-			return m, nil // layer closed, or a stale load from a different path
-		}
-		if msg.err != nil {
-			cp.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
-			return m, nil
-		}
-		cp.lines = msg.lines
-		cp.sel = 0
-		return m, nil
 	case commitMessageMsg:
 		cp := layerOf[*contentPopup](m)
 		// Tag-gate by short hash: only fill the popup this load was started for.
@@ -3073,9 +3069,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// REPO's filesystem while the inbox lives in the state dir.
 		var cmd tea.Cmd
 		m, cmd = m.refreshTick(time.Now())
-		var prcCmd tea.Cmd
+		var prcCmd, docCmd tea.Cmd
 		m, prcCmd = m.prCommentsTick(time.Now())
-		cmd = tea.Batch(cmd, prcCmd)
+		m, docCmd = m.openFilesTick(time.Now())
+		cmd = tea.Batch(cmd, prcCmd, docCmd)
 		m = m.maybeWriteSnapshot()
 		m.touchSteerPresence()
 		var scmd tea.Cmd
@@ -4426,6 +4423,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	}
 	m.watchGen++
 	m.watchSupported = false
+	closeDocWatch(m.docWatch.w)                         // the old tree's files are not the new one's
+	m.docWatch = docWatchState{gen: m.docWatch.gen + 1} // drops a stat round or a build in flight
 	m.svc = domain.OpenTUI(path)
 	// Disable the snapshot synchronously (no git subprocess here — reRoot runs
 	// on the Update goroutine); snapshotTargetCmd below re-resolves and

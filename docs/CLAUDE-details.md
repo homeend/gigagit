@@ -1150,8 +1150,8 @@ view's `m.filesPreview` and the full-screen `fileViewer` (which embeds
 `*openFile`) are two frames over it. `fileContentMsg` finds its document via
 `liveDoc(tag)` — EVERY `fileViewer` on the stack (a covered one too), then
 the preview — never "the topmost viewer" (that dropped the first of two
-files opened in a row). A document no frame shows is not found: its load is
-stale. `key()` (source + path) is the reuse key for the open-files list.
+files opened in a row), then (plan 3) the open-files list by tag; a closed
+document is not found: its load is stale. `key()` (source + path) is the reuse key for the open-files list.
 **Open-files list (plan 2):** `m.openFiles` (`open_files.go`) is
 per worktree (`m.currentWorktree`), most recently shown first, cap 20;
 `touch` evicts the least recently shown doc that `docShown` says is in no
@@ -1166,7 +1166,27 @@ The switcher is `sessionsPopup` with a parallel `files` slice (quit mode
 lists none); `bringToFront` focuses the preview when the doc IS the preview,
 else pushes a viewer frame. `focusedDoc` (viewer on top, else the focused
 preview) drives Copy file link: any non-working-tree doc gets the
-disk-match rule. **Preview + reply (follow-up):**
+disk-match rule. **Watching (plan 3, `open_files_watch.go`):** one path —
+stat → compare → reload. The heartbeat's `openFilesTick(now)` stats the
+current worktree's `srcWorktree` docs off-thread (shown: every tick;
+background: every `backgroundPollEvery` 5 s via `d.checked`) — plain
+`os.Stat`, never git; skipped while `m.loading` (svc already names the new
+tree) or a round is in flight (`docWatch.polling`); `docWatch.gen` (bumped
+by `reRoot`) + the msg's `wt` drop stale rounds. `loadDoc`/`loadDocWith` is
+the ONE load dispatch: it sets `d.loading` (a poll skips the doc — a second
+load would reset a `pendingLine` the first lands) and, for a working-tree
+doc, stats BEFORE reading and carries that stat (`fileContentMsg.disk`), so
+the baseline is never newer than the bytes; a missing file loads as the
+`(file deleted on disk)` placeholder. A watch reload sets `msg.reload`:
+`fill` takes `keepPlace()` at FILL time (a cursor moved during a slow read
+is not snapped back); `keepPlace` is a no-op on a placeholder and `fill`
+consumes `keep` only on real lines, so the place survives a deletion. A load
+for a doc in no frame routes via `openFiles.findTag` (every worktree — the
+`loading` flag must clear) and fills at `viewerGeom()`. fsnotify
+(`internal/filewatch`, dir watches + exact-path filter) is only a WAKE-UP —
+an event zeroes `d.checked` and polls; built lazily off-thread only when
+`watchSupported`, closed with the last watched doc and on `reRoot`.
+**Preview + reply (follow-up):**
 the files view's focused preview answers `fileRowPath` with its cursor line
 (`focusedFilesPreview`); because it shows ANOTHER version, the row snapshots
 the shown lines and the off-thread check compares them to the disk

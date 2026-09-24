@@ -23,6 +23,33 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   with the cursor on that worktree. A `/` filter on the Worktrees list that
   would hide it is cleared.
 
+## Open files: watching
+
+### Added
+
+- **An open working-tree file reloads when it changes on disk** — an agent's
+  edit, your editor's save, a `git checkout`. The cursor stays on the same
+  line number (clamped), the scroll top stays, a live search is re-run; a
+  line selection is dropped (its lines may have moved). The file on screen is
+  checked every second, background files every five; the check is a stat
+  (size + mtime), never a git process. Where the filesystem delivers change
+  events (not WSL's `/mnt` drives) fsnotify wakes the check at once.
+- **A deleted file stays open** as `(file deleted on disk)` and comes back —
+  at the line you were on — when the file does.
+- Commit and shelf versions never change and are never watched.
+
+### Changed
+
+- **`F` (find file) → View content** opens the file's **working-tree**
+  version in the full-screen viewer (cursor, selection, search, `ctrl+]`,
+  watched and reloaded) instead of the old read-only popup of the HEAD
+  version; `esc` returns to the finder.
+
+### Known limits
+
+- An edit that keeps the file's byte length within one mtime tick of the
+  filesystem is missed until the next edit.
+
 ## Open files: background file viewers
 
 ### Added
