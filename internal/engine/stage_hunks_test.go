@@ -97,3 +97,25 @@ func TestStageHunksPartialRoundTrip(t *testing.T) {
 		t.Fatalf("index = %q, want only the first hunk", idx)
 	}
 }
+
+// One op stages several files: the web stages a whole cross-file selection
+// in one request.
+func TestStageHunksStagesSeveralFiles(t *testing.T) {
+	t.Parallel()
+	dir, repo := newConflictRepo(t)
+	c := exec.Command("git", "-C", dir, "merge", "--abort")
+	_ = c.Run()
+	ctx := context.Background()
+	_, err := StageHunks{Files: []StagedFile{
+		{Path: "uu.txt", Content: []byte("ONE\n")},
+	}, Path: "", Content: nil}.Run(ctx, OpDeps{Repo: repo, Events: make(chan Event, 16)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, _ := exec.Command("git", "-C", dir, "show", ":uu.txt").CombinedOutput(); string(out) != "ONE\n" {
+		t.Fatalf("index = %q, want ONE", out)
+	}
+	if _, ok := any(StageHunks{}).(interface{ IndexOnly() }); !ok {
+		t.Fatal("StageHunks writes only the index: it must say so (IndexOnly), so Execute skips the branch-version probe")
+	}
+}

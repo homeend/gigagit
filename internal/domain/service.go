@@ -226,12 +226,16 @@ func OpenTUIWithRing(workdir string, ring *observ.Ring) *Service {
 }
 
 func openWith(workdir string, sshBatch bool, ring *observ.Ring) *Service {
-	workdir = resolveRoot(workdir, sshBatch, ring)
+	workdir, resolved := resolveRoot(workdir, sshBatch, ring)
 	er := gitexec.NewExecRunner("git", workdir, ring)
 	if sshBatch {
 		er = er.WithSSHBatchMode()
 	}
-	s := New(&git.Repo{Runner: gitexec.NewLimitRunner(er)})
+	repo := &git.Repo{Runner: gitexec.NewLimitRunner(er)}
+	if resolved {
+		repo.Root = workdir // known: working-tree reads skip the rev-parse
+	}
+	s := New(repo)
 	s.workdir = workdir
 	if ring != nil {
 		s.forgeRec = ring // guarded: a nil *Ring in the interface would not be a nil Recorder
@@ -251,7 +255,7 @@ func openWith(workdir string, sshBatch bool, ring *observ.Ring) *Service {
 // It costs one rev-parse. Anything that is not a worktree subdirectory — a
 // plain directory, a bare repo, a deleted cwd — keeps the given workdir, so
 // the existing friendly startup errors fire unchanged.
-func resolveRoot(workdir string, sshBatch bool, rec observ.Recorder) string {
+func resolveRoot(workdir string, sshBatch bool, rec observ.Recorder) (string, bool) {
 	er := gitexec.NewExecRunner("git", workdir, rec)
 	if sshBatch {
 		er = er.WithSSHBatchMode()
@@ -260,9 +264,9 @@ func resolveRoot(workdir string, sshBatch bool, rec observ.Recorder) string {
 	defer cancel()
 	top, err := (&git.Repo{Runner: er}).TopLevel(ctx)
 	if err != nil || top == "" {
-		return workdir
+		return workdir, false
 	}
-	return filepath.FromSlash(top)
+	return filepath.FromSlash(top), true
 }
 
 // New wraps an existing repo (tests, callers with their own runner wiring).
@@ -347,7 +351,14 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 	// extend an exclusive hold on the repo gate. The && also short-circuits,
 	// so a config-disabled policy probes nothing at all. Nothing inside
 	// op.Run calls Preflight, so the gate never sees a probe.
+	//
+	// An index-only op (staging) never moves a ref, so it never records a
+	// version: it skips the probe outright — on a slow filesystem that probe
+	// is a git process per staging action.
 	versions := s.currentVersionsPolicy()
+	if _, indexOnly := op.(interface{ IndexOnly() }); indexOnly {
+		versions.Enabled = false
+	}
 	versions.Enabled = versions.Enabled && s.FeatureEnabled(ctx, FeatureVersions)
 	versions.Format = VersionsFormat
 

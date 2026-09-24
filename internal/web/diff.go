@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
@@ -305,42 +306,87 @@ func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt s
 		writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
 		return
 	}
-	var oldSrc, newSrc domain.ByteSource
-	switch wt {
-	case "unstaged":
-		oldSrc = lenient(func(ctx context.Context) ([]byte, error) {
-			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: oldPath})
-		})
-		newSrc = lenient(func(ctx context.Context) ([]byte, error) {
-			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceUnstaged, Path: path})
-		})
-	case "staged":
-		oldSrc = lenient(func(ctx context.Context) ([]byte, error) {
-			return svc.ShowFile(ctx, "HEAD", oldPath)
-		})
-		newSrc = lenient(func(ctx context.Context) ([]byte, error) {
-			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: path})
-		})
-	default:
-		writeErr(w, http.StatusBadRequest, errors.New("wt must be unstaged or staged"))
-		return
-	}
-	d, err := svc.Differ().Diff(r.Context(), domain.Request{Key: "", Path: path, OldPath: oldPathFor(oldPath, path), Old: oldSrc, New: newSrc})
+	d, err := worktreeDiffPayload(r.Context(), svc, wt, path, oldPath, nil)
 	if err != nil {
+		var bad errBadLane
+		if errors.As(err, &bad) {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	// Inline-hunk tagging: only the unstaged form of an eligible file (no
-	// rename — the hunk doc is single-path) gets hunk ordinals + the
-	// freshness hash. Any refusal or a run/block count mismatch (e.g. a
+	writeJSON(w, d)
+}
+
+type errBadLane struct{}
+
+func (errBadLane) Error() string { return "wt must be unstaged or staged" }
+
+// heldSides are the two versions a working-tree diff compares when the
+// caller already holds them (a staging action knows what it just wrote).
+type heldSides struct{ old, nw []byte }
+
+// worktreeDiffPayload aligns one file's pending change in lane wt
+// ("unstaged": index → working tree, "staged": HEAD → index) into the
+// /api/diff JSON contract, tagging its rows for staging when eligible. With
+// pre, those bytes are the two sides; otherwise they are read here — ONCE,
+// for both the alignment and the staging doc.
+func worktreeDiffPayload(ctx context.Context, svc *domain.Service, wt, path, oldPath string, pre *heldSides) (map[string]any, error) {
+	var oldRead, newRead func(context.Context) ([]byte, error)
+	switch wt {
+	case "unstaged":
+		oldRead = func(ctx context.Context) ([]byte, error) {
+			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: oldPath})
+		}
+		newRead = func(ctx context.Context) ([]byte, error) {
+			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceUnstaged, Path: path})
+		}
+	case "staged":
+		oldRead = func(ctx context.Context) ([]byte, error) {
+			return svc.ShowFile(ctx, "HEAD", oldPath)
+		}
+		newRead = func(ctx context.Context) ([]byte, error) {
+			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: path})
+		}
+	default:
+		return nil, errBadLane{}
+	}
+	if pre != nil {
+		o, n := pre.old, pre.nw
+		oldRead = func(context.Context) ([]byte, error) { return o, nil }
+		newRead = func(context.Context) ([]byte, error) { return n, nil }
+	}
+	// Each side is read once and remembered with its STRICT error: the diff
+	// shows a missing side as empty (lenient), the staging doc refuses it
+	// (an untracked file has no index blob, a new file no HEAD version).
+	oldSide, newSide := &memoSide{read: oldRead}, &memoSide{read: newRead}
+	d, err := svc.Differ().Diff(ctx, domain.Request{Key: "", Path: path, OldPath: oldPathFor(oldPath, path), Old: lenient(oldSide.get), New: lenient(newSide.get)})
+	if err != nil {
+		return nil, err
+	}
+	// Inline-hunk tagging, both lanes (the unstaged diff stages rows, the
+	// staged diff unstages them), for an eligible file (no rename — the hunk
+	// doc is single-path). Any refusal or a run/block count mismatch (e.g. a
 	// truncated alignment) just yields an untagged diff — the client then
-	// simply offers no hunk staging for it.
-	// Both lanes are tagged now: the unstaged diff stages rows, the staged diff
-	// (HEAD → index) unstages them.
+	// simply offers no staging for it.
 	var hunks *diffHunksMeta
 	if oldPath == path && !d.Binary && !d.TooLarge && !d.Result.Truncated {
 		lane := hunkLane(wt)
-		if doc, brows, hash, ref := buildHunkDoc(r.Context(), svc, path, lane); ref == nil {
+		var doc *hunkpick.Doc
+		var brows [][]blockRow
+		var hash string
+		var ref *hunkRefusal
+		if oldSide.done && newSide.done {
+			if oldSide.err == nil && newSide.err == nil {
+				doc, brows, hash, ref = hunkDocFrom(oldSide.b, newSide.b, lane)
+			} else {
+				ref = &hunkRefusal{}
+			}
+		} else {
+			doc, brows, hash, ref = buildHunkDoc(ctx, svc, path, lane)
+		}
+		if ref == nil {
 			tags, n := diffHunkTags(d.Result.Rows)
 			// The latch: the rows the reader sees must be the rows the doc was
 			// built from, block for block and row for row — a row ordinal is
@@ -350,7 +396,23 @@ func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt s
 			}
 		}
 	}
-	writeDiffJSON(w, d, hunks)
+	return diffPayload(d, hunks), nil
+}
+
+// memoSide reads one side of a diff at most once.
+type memoSide struct {
+	read func(context.Context) ([]byte, error)
+	b    []byte
+	err  error
+	done bool
+}
+
+func (m *memoSide) get(ctx context.Context) ([]byte, error) {
+	if !m.done {
+		m.b, m.err = m.read(ctx)
+		m.done = m.err == nil || ctx.Err() == nil
+	}
+	return m.b, m.err
 }
 
 // lenient maps a byte-source error to an empty side. A missing side is
@@ -375,6 +437,11 @@ func lenient(src domain.ByteSource) domain.ByteSource {
 // Shared by the commit (sha=) and working-tree (wt=) branches; a non-nil
 // hunks adds inline hunk ordinals + the staging freshness hash.
 func writeDiffJSON(w http.ResponseWriter, d domain.Diff, hunks *diffHunksMeta) {
+	writeJSON(w, diffPayload(d, hunks))
+}
+
+// diffPayload is the /api/diff JSON body of an aligned diff.
+func diffPayload(d domain.Diff, hunks *diffHunksMeta) map[string]any {
 	rows := make([]diffRow, len(d.Result.Rows))
 	for i, row := range d.Result.Rows {
 		rows[i] = diffRow{
@@ -412,5 +479,5 @@ func writeDiffJSON(w http.ResponseWriter, d domain.Diff, hunks *diffHunksMeta) {
 	if hunks != nil {
 		payload["hunks"] = map[string]any{"count": hunks.count, "hash": hunks.hash, "lane": hunks.lane}
 	}
-	writeJSON(w, payload)
+	return payload
 }

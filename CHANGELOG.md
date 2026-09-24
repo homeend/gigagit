@@ -61,6 +61,15 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Changed
 
+- **Staging rows is much faster on slow filesystems** (a repo on a Windows
+  drive under WSL, where every git call costs 50–300 ms). A selection that
+  spans files is staged in one request with one index write; the answer
+  carries each file's fresh diff, so the rows are clickable again at once,
+  and the file list updates from a status read in the background. Staging
+  no longer pays the branch-version probe, and reading a working-tree file
+  no longer asks git where the worktree root is. One row on a `/mnt` drive
+  went from ~530 ms to ~120 ms before the rows are live again; two files
+  from ~1.1 s to ~0.2 s.
 - **One selection across the stacked view.** Rows marked in several files
   are one selection: the right-click menu counts them all ("Stage selected
   lines (5)") and stages them all, and a shift-click range runs across files

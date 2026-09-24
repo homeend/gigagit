@@ -11,6 +11,11 @@ import (
 // Repo provides read-only git operations through a Runner.
 type Repo struct {
 	Runner gitexec.Runner
+	// Root is the worktree's top level when the opener already resolved it
+	// (domain.Open does): TopLevel then answers without a git process — one
+	// per working-tree read otherwise, which is slow on WSL's /mnt drives.
+	// Empty means unknown.
+	Root string
 }
 
 // Status returns the working-tree status.

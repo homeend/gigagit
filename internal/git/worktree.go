@@ -9,8 +9,11 @@ import (
 )
 
 // TopLevel returns the absolute path of the current worktree's root
-// (`git rev-parse --show-toplevel`).
+// (`git rev-parse --show-toplevel`, or Root when known).
 func (r *Repo) TopLevel(ctx context.Context) (string, error) {
+	if r.Root != "" {
+		return filepath.Clean(r.Root), nil
+	}
 	argv := gitcmd.New("rev-parse").Arg("--show-toplevel").ToArgv()
 	res, err := r.Runner.Run(ctx, "git rev-parse (toplevel)", argv)
 	if err != nil {
