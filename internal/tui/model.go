@@ -895,6 +895,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			p.cur, p.sel = 0, 0
 			p.lsel.clear()
+			m = fv.landPendingLine(m)
 			if p.search.active() {
 				rows, inner := fv.geom(m)
 				p.search.refindFrom(previewSearchLines(p), p.searchPos(rows))

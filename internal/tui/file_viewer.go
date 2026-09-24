@@ -18,14 +18,19 @@ import (
 type fileViewer struct {
 	p   *contentPopup
 	tag string // "worktree:<path>" — gates a stale fileContentMsg
+	// pendingLine is the 1-based line a content link's :<line> asked for (0 =
+	// none), parked until the async load fills the lines it indexes.
+	pendingLine int
 }
 
 // openFileViewer pushes the viewer for path and starts its load off the UI
-// thread. The bytes are the file ON DISK, uncommitted edits included.
-func (m Model) openFileViewer(path string) (Model, tea.Cmd) {
+// thread. The bytes are the file ON DISK, uncommitted edits included. line
+// (1-based, 0 = none) is where the cursor lands once the load arrives.
+func (m Model) openFileViewer(path string, line int) (Model, tea.Cmd) {
 	fv := &fileViewer{
-		p:   &contentPopup{title: path, lines: []contentLine{{text: i18n.T("(loading…)")}}},
-		tag: "worktree:" + path,
+		p:           &contentPopup{title: path, lines: []contentLine{{text: i18n.T("(loading…)")}}},
+		tag:         "worktree:" + path,
+		pendingLine: line,
 	}
 	m = m.pushLayer(fv)
 	svc := m.svc
@@ -105,4 +110,27 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (fv *fileViewer) render(m Model, _ string) string {
 	w, h := m.overlayDims()
 	return m.renderPreviewBox(fv.p, i18n.T("View %s (working tree)", fv.p.title), w, h, true)
+}
+
+// landPendingLine puts the cursor on the line the link asked for, centred in
+// the window, once the lines exist — clamped to the last line (the file may
+// have shrunk since the link was copied), which it reports as a status. A
+// placeholder (empty, too large, load failed) is not a line of the file: the
+// request is dropped. Either way it is consumed.
+func (fv *fileViewer) landPendingLine(m Model) Model {
+	line := fv.pendingLine
+	fv.pendingLine = 0
+	p := fv.p
+	if line <= 0 || len(p.lines) == 0 || !p.lines[0].src {
+		return m
+	}
+	n := len(p.lines)
+	if line > n {
+		m.statusMsg = i18n.T("line %d is past the end of %s (%d lines)", line, p.title, n)
+		line = n
+	}
+	rows, _ := fv.geom(m)
+	p.cur = line - 1
+	p.sel = previewClamp(p.cur-rows/2, n, rows, p.mode)
+	return m
 }
