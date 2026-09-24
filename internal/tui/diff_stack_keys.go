@@ -433,9 +433,14 @@ func (m Model) reconcileStatusStack() Model {
 	// Where the cursor was, by path — the file's index may have moved.
 	curPath := v.stk.files[v.curFile()].path
 	cur := v.anchorAt(v.curLine)
+	// Held BEFORE the swap: the rebuild's own hold would read the old
+	// stream's file indexes against the new list. This one names files by
+	// path, and wins.
+	sel := v.holdSel()
 	m.stackSeq++
 	v.stk.gen, v.stk.files, v.stk.inflight = m.stackSeq, fresh, 0
 	v.rebuild()
+	v.restoreSel(sel)
 	cur.file = 0
 	for i := range fresh {
 		if fresh[i].path == curPath {

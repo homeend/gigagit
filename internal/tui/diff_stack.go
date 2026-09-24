@@ -414,6 +414,52 @@ func (v *diffView) lineAt(a stackAnchor) int {
 	return li
 }
 
+// selHold is a line selection that survives a re-splice: each end as a
+// (file, line in file) anchor, plus that file's PATH — a working-tree refresh
+// renumbers the files, and a selection whose file left the section goes too.
+type selHold struct {
+	on, fixed bool
+	a, e      stackAnchor
+	ap, ep    string
+}
+
+// holdSel captures the stack's selection before its stream is re-spliced.
+func (v *diffView) holdSel() selHold {
+	if v.stk == nil || !v.lsel.on {
+		return selHold{}
+	}
+	h := selHold{on: true, fixed: v.lsel.fixed, a: v.anchorAt(v.lsel.anchor), e: v.anchorAt(v.lsel.end)}
+	h.ap, h.ep = v.stackPathOf(h.a.file), v.stackPathOf(h.e.file)
+	return h
+}
+
+// restoreSel puts a held selection back onto the current stream, finding each
+// end's file by path. A file that folded meanwhile lands its end on its
+// header, so the range keeps covering the files after it and the folded lines
+// are skipped — a collapsed fold, as in the single-file view.
+func (v *diffView) restoreSel(h selHold) {
+	v.lsel.clear()
+	if !h.on || v.stk == nil {
+		return
+	}
+	var ok bool
+	if h.a.file, ok = v.stackFileIdx(h.ap); !ok {
+		return
+	}
+	if h.e.file, ok = v.stackFileIdx(h.ep); !ok {
+		return
+	}
+	v.lsel = lineSel{on: true, anchor: v.lineAt(h.a), end: v.lineAt(h.e), fixed: h.fixed}
+}
+
+// stackPathOf is file i's path, "" when i names no file.
+func (v *diffView) stackPathOf(i int) string {
+	if v.stk == nil || i < 0 || i >= len(v.stk.files) {
+		return ""
+	}
+	return v.stk.files[i].path
+}
+
 // wantLoads picks the files to request now: never folded, never a conflict,
 // idle (or stale after a refresh), with their header inside [lo, hi] — the
 // viewport widened by about two screens — nearest to `at` first, and only as

@@ -506,6 +506,7 @@ func (m Model) expandFoldFor(v *diffView, li int, find func() (int, bool)) (Mode
 	cr, hadRow := v.cursorRow()
 	v.partial = false
 	v.rebuild()
+	v.lsel.clear() // the folded runs opened: a stack's held ends mean other lines now
 	m.diffPartial = false
 	if hadRow {
 		v.reanchorCursor(cr.LeftNo, cr.RightNo)
