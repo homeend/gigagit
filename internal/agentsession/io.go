@@ -109,6 +109,11 @@ func (s *Session) cursorLine(w, x, y int) string {
 			row[i] = uv.EmptyCell
 		}
 	}
+	// A wide glyph's right half is a zero cell: paint the glyph it belongs
+	// to, or the reversed space would push the row a column wider.
+	if x > 0 && row[x].IsZero() && row[x-1].Width > 1 {
+		x--
+	}
 	cc := row[x]
 	if cc.IsZero() || cc.Content == "" {
 		cc = uv.EmptyCell

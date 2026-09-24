@@ -6,6 +6,7 @@ import (
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func eventually(t *testing.T, what string, f func() bool) {
@@ -121,5 +122,24 @@ func TestScreenWithCursorReversesCursorCell(t *testing.T) {
 	}
 	if plain := s.Screen(); strings.Contains(plain.Lines[0], "\x1b[7m") {
 		t.Fatalf("Screen() must not paint the cursor: %q", plain.Lines[0])
+	}
+}
+
+// A cursor parked on the right half of a wide glyph paints the whole glyph,
+// never a reversed space that pushes the row one column wider.
+func TestScreenWithCursorOnWideGlyphContinuation(t *testing.T) {
+	t.Parallel()
+	needSh(t)
+	s := startSh(t, `printf '\344\270\226\347\225\214\033[1D'; sleep 2`) // 世界, cursor back onto 界's right half
+	eventually(t, "text", func() bool { return strings.Contains(s.Screen().Lines[0], "世界") })
+	sc := s.ScreenWithCursor()
+	if sc.CursorX != 3 {
+		t.Fatalf("cursor x = %d, want 3", sc.CursorX)
+	}
+	if w, want := ansi.StringWidth(sc.Lines[0]), ansi.StringWidth(s.Screen().Lines[0]); w != want {
+		t.Fatalf("cursor row is %d cells wide, want %d: %q", w, want, sc.Lines[0])
+	}
+	if !strings.Contains(sc.Lines[0], "\x1b[7m界") {
+		t.Fatalf("cursor must reverse the whole glyph: %q", sc.Lines[0])
 	}
 }
