@@ -638,6 +638,7 @@ func SessionSteerDir(commonDir, worktree string) string {
 type ConsoleConfig struct {
 	StepOutKey  string `toml:"step_out_key"` // step out one level (focused → unfocused, maximised → docked)
 	SessionsKey string `toml:"sessions_key"` // the agent-sessions popup, from anywhere
+	Shell       string `toml:"shell"`        // Open terminal's shell; "" = $SHELL / pwsh → powershell → cmd
 }
 
 // overlayConsole copies the set (non-empty) [console] fields.
@@ -647,5 +648,8 @@ func overlayConsole(dst *ConsoleConfig, src ConsoleConfig) {
 	}
 	if src.SessionsKey != "" {
 		dst.SessionsKey = src.SessionsKey
+	}
+	if src.Shell != "" {
+		dst.Shell = src.Shell
 	}
 }
