@@ -210,7 +210,7 @@ func (p *sessionsPopup) render(m Model, below string) string {
 	textW := popupTextWidth(inner)
 	title := i18n.T("Agent sessions")
 	if p.quitMode {
-		title = i18n.T("%d agent sessions running — quit gg?", domain.Sessions().LiveCount())
+		title = i18n.T("agent sessions still running: %d — quit gg?", domain.Sessions().LiveCount())
 	}
 	if p.typing || p.query != "" {
 		title += "  /" + p.query
@@ -239,12 +239,11 @@ func (p *sessionsPopup) render(m Model, below string) string {
 		rowsH := min(len(wr), max(h-10, 3))
 		body = renderWindow(wr, winOpts{w: textW, h: rowsH, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 	}
-	hint := i18n.T("[enter] open  [k] kill  [x] remove  [/] filter  [z] mode  [esc] close")
-	if p.quitMode {
-		hint = i18n.T("[Q] kill all and quit  [esc] cancel") + "   " + hint
-	}
 	lines := append([]string{title, ""}, body...)
-	lines = append(lines, "", hint)
+	lines = append(lines, "", i18n.T("[enter] open  [k] kill  [x] remove  [/] filter  [z] mode  [esc] close"))
+	if p.quitMode {
+		lines = append(lines, i18n.T("[Q] kill all and quit  [esc] cancel"))
+	}
 	box := popupBox(inner, strings.Join(lines, "\n"))
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
