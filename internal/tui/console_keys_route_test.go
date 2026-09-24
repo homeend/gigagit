@@ -164,3 +164,19 @@ func TestFocusMovedOffConsoleStopsForwarding(t *testing.T) {
 		t.Fatal("a console whose column lost focus must not stay focused")
 	}
 }
+
+// Bubble Tea's Windows console reader hands over UTF-16 units: an emoji
+// arrives as two KeyRunes, a high then a low surrogate. The console must
+// join them, or each half reaches the agent as U+FFFD.
+func TestFocusedConsoleJoinsSurrogateHalves(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `stty raw -echo; printf READY; head -c 4 | od -An -tx1; sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "READY")
+	for _, r := range []rune{0xD83D, 0xDC4D} { // 👍
+		mm, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m = mm.(Model)
+	}
+	waitScreen(t, s, "f0 9f 91 8d")
+}

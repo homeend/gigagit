@@ -56,3 +56,25 @@ func TestEncodeConsoleKey(t *testing.T) {
 		}
 	}
 }
+
+func TestJoinSurrogates(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		high     rune
+		in       []rune
+		want     string
+		wantHigh rune
+	}{
+		{"pair in one message", 0, []rune{'a', 0xD83D, 0xDC4D, 'b'}, "a👍b", 0},
+		{"high carried in", 0xD83D, []rune{0xDC4D}, "👍", 0},
+		{"high carried out", 0, []rune{'x', 0xD83D}, "x", 0xD83D},
+		{"lone low dropped", 0, []rune{0xDC4D, 'y'}, "y", 0},
+		{"high then plain drops the half", 0xD83D, []rune{'z'}, "z", 0},
+		{"BMP untouched", 0, []rune("世界"), "世界", 0},
+	} {
+		got, high := joinSurrogates(c.high, c.in)
+		if string(got) != c.want || high != c.wantHigh {
+			t.Errorf("%s: got %q/%U, want %q/%U", c.name, string(got), high, c.want, c.wantHigh)
+		}
+	}
+}
