@@ -3411,3 +3411,9 @@ UTF-8 payloads correctly (the fixture test tells).
   `m.startAtCmd` (consumed by `consumeStartAt`, Wait/Worktree/From cleared so
   it cannot loop). The ask is rebuilt by `rebuildNotices`, NOT filtered by
   `noticeSessionDismissed` (every action sets that id); reRoot clears it.
+- **Foreign-notation worktree** (`sessionPlace`, switch_guard.go): Start
+  agent / Open terminal run the switch guard's probe. A worktree git recorded
+  under the other environment's notation (`/mnt/t/…` from Windows) runs in
+  its TRANSLATED path via `StartSpec.Cwd` (process cwd) while `Dir` stays the
+  identity (sub-rows, the delete guard group by it), with a status note that
+  git there fails until repaired; an unreachable one refuses.

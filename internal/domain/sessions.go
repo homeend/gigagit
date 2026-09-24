@@ -120,8 +120,11 @@ func EnsureSessionCommands(cfg config.Config, globalPath string, detect func() [
 // session is grouped under the repository NAME (RepoName), falling back to
 // the directory's base name.
 //
-// env is appended to the child's environment (the frontend's GG_INBOX).
-func (s *Service) StartSession(ctx context.Context, tc config.ToolCommand, worktreeDir string, cols, rows int, env []string) (*AgentSession, error) {
+// cwd, when not "", is where the process runs instead of worktreeDir (a
+// translated foreign-notation worktree path); worktreeDir stays the
+// session's identity. env is appended to the child's environment (the
+// frontend's GG_INBOX).
+func (s *Service) StartSession(ctx context.Context, tc config.ToolCommand, worktreeDir, cwd string, cols, rows int, env []string) (*AgentSession, error) {
 	resolved, err := template.ResolveCommand(tc.Command, nil, template.CmdCtx{Repo: worktreeDir})
 	if err != nil {
 		return nil, err
@@ -133,22 +136,22 @@ func (s *Service) StartSession(ctx context.Context, tc config.ToolCommand, workt
 	argv, cmdline := sessionShell(resolved, runtime.GOOS, os.Getenv)
 	return Sessions().Start(agentsession.StartSpec{
 		Label: tc.Name, AgentID: agentIDFor(tc), Repo: repo, Dir: worktreeDir,
-		Argv: argv, CmdLine: cmdline, Env: env, Cols: cols, Rows: rows,
+		Cwd: cwd, Argv: argv, CmdLine: cmdline, Env: env, Cols: cols, Rows: rows,
 		TracePath: sessionTracePath(os.Getenv("GG_SESSION_TRACE"), tc.Name, time.Now()),
 	})
 }
 
 // StartTerminal runs an interactive shell in worktreeDir as a session
 // labelled "Terminal" — argv directly, no `-c` wrapper: the shell IS the
-// program. shell is the [console] shell override ("" = pick one). env is
-// appended to the child's environment (the frontend's GG_INBOX).
-func (s *Service) StartTerminal(ctx context.Context, shell, worktreeDir string, cols, rows int, env []string) (*AgentSession, error) {
+// program. shell is the [console] shell override ("" = pick one); cwd and env
+// as for StartSession.
+func (s *Service) StartTerminal(ctx context.Context, shell, worktreeDir, cwd string, cols, rows int, env []string) (*AgentSession, error) {
 	repo, err := s.RepoName(ctx)
 	if err != nil || repo == "" {
 		repo = filepath.Base(worktreeDir)
 	}
 	return Sessions().Start(agentsession.StartSpec{
-		Label: "Terminal", Repo: repo, Dir: worktreeDir,
+		Label: "Terminal", Repo: repo, Dir: worktreeDir, Cwd: cwd,
 		Argv: terminalShell(runtime.GOOS, os.Getenv, exec.LookPath, shell), Env: env,
 		Cols: cols, Rows: rows,
 		TracePath: sessionTracePath(os.Getenv("GG_SESSION_TRACE"), "Terminal", time.Now()),

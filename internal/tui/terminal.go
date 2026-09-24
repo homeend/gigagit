@@ -31,7 +31,8 @@ func (m Model) childInboxDir() string {
 // the platform default) and opens its console focused — the same path an
 // agent start takes once its session exists.
 func (m Model) openTerminal(worktree string) (tea.Model, tea.Cmd) {
-	if why := sessionDirRefusal(worktree); why != "" {
+	cwd, note, why := sessionPlace(worktree)
+	if why != "" {
 		m.statusMsg = why
 		return m, nil
 	}
@@ -41,10 +42,10 @@ func (m Model) openTerminal(worktree string) (tea.Model, tea.Cmd) {
 	name := i18n.T("Terminal")
 	m.statusMsg = i18n.T("starting a terminal…")
 	return m, func() tea.Msg {
-		s, err := svc.StartTerminal(context.Background(), shell, worktree, cols, rows, env)
+		s, err := svc.StartTerminal(context.Background(), shell, worktree, cwd, cols, rows, env)
 		if err != nil {
 			return agentStartedMsg{name: name, err: err}
 		}
-		return agentStartedMsg{id: s.Info().ID, name: name, inbox: inbox}
+		return agentStartedMsg{id: s.Info().ID, name: name, inbox: inbox, note: note}
 	}
 }

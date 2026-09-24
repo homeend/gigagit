@@ -61,6 +61,9 @@ func start(id ID, spec StartSpec) (*Session, error) {
 	}
 	cmd := exec.Command(bin, spec.Argv[1:]...)
 	cmd.Dir = spec.Dir
+	if spec.Cwd != "" {
+		cmd.Dir = spec.Cwd
+	}
 	cmd.Env = append(append(childEnv(os.Environ()), spec.Env...), "GG_SESSION_ID="+string(id), "TERM=xterm-256color")
 	var trace, traceEv *os.File
 	if spec.TracePath != "" {

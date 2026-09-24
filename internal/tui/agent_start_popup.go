@@ -51,6 +51,7 @@ type agentStartedMsg struct {
 	id    domain.SessionID
 	name  string
 	inbox string // the GG_INBOX the child was given ("" = none)
+	note  string // a status line to show once the console opens (sessionPlace)
 	err   error
 }
 
@@ -65,7 +66,7 @@ var (
 
 // startAgentFor opens the Start agent… flow for worktree.
 func (m Model) startAgentFor(worktree string) (Model, tea.Cmd) {
-	if why := sessionDirRefusal(worktree); why != "" {
+	if _, _, why := sessionPlace(worktree); why != "" {
 		m.statusMsg = why
 		return m, nil
 	}
@@ -146,13 +147,14 @@ func (p *agentStartPopup) start(m Model) (tea.Model, tea.Cmd) {
 	g := m.layout()
 	cols, rows := consoleInner(g.rightW, g.boxH[panelCommits])
 	svc, tc, dir, env, inbox := m.svc, p.pick, p.worktree, m.childEnv(), m.childInboxDir()
+	cwd, note, _ := sessionPlace(dir)
 	m.statusMsg = i18n.T("starting %s…", tc.Name)
 	return m, func() tea.Msg {
-		s, err := svc.StartSession(context.Background(), tc, dir, cols, rows, env)
+		s, err := svc.StartSession(context.Background(), tc, dir, cwd, cols, rows, env)
 		if err != nil {
 			return agentStartedMsg{name: tc.Name, err: err}
 		}
-		return agentStartedMsg{id: s.Info().ID, name: tc.Name, inbox: inbox}
+		return agentStartedMsg{id: s.Info().ID, name: tc.Name, inbox: inbox, note: note}
 	}
 }
 
@@ -162,7 +164,7 @@ func (m Model) applyAgentStarted(msg agentStartedMsg) (tea.Model, tea.Cmd) {
 		m.statusMsg = i18n.T("could not start %s: %s", msg.name, msg.err.Error())
 		return m, nil
 	}
-	m.statusMsg = ""
+	m.statusMsg = msg.note
 	if msg.inbox != "" {
 		m.childInbox[msg.id] = msg.inbox
 	}

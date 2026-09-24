@@ -62,17 +62,18 @@ func (m Model) offerWorktreeRepair(translated string) Model {
 	return m
 }
 
-// sessionDirRefusal says why a session (agent or terminal) cannot start in
-// dir, or "" when it can. The same probe as guardedReRoot: a worktree git
-// recorded under the other environment's notation (/mnt/t/… seen from
-// Windows) is no working directory here, and process creation would fail
-// with a bare "directory name is invalid".
-func sessionDirRefusal(dir string) string {
-	switch verdict, _ := checkSwitchTarget(guardStat, guardGOOS, dir); verdict {
+// sessionPlace decides where a session (agent or terminal) for worktree dir
+// runs, by the same probe as guardedReRoot. Reachable: in dir (cwd ""). A
+// worktree git recorded under the other environment's notation (/mnt/t/…
+// seen from Windows): in its translated path, with a note — git inside
+// fails until the worktree is repaired, but the files are all there.
+// Unreachable: refusal names why.
+func sessionPlace(dir string) (cwd, note, refusal string) {
+	switch verdict, translated := checkSwitchTarget(guardStat, guardGOOS, dir); verdict {
 	case switchOK:
-		return ""
+		return "", "", ""
 	case switchRepairable:
-		return i18n.T("%s is linked for another environment — enter on its Worktrees row offers to repair it", dir)
+		return translated, i18n.T("started in %s — git there fails until the worktree is repaired (enter on its Worktrees row)", translated), ""
 	}
-	return i18n.T("cannot start here: %s is not reachable from here", dir)
+	return "", "", i18n.T("cannot start here: %s is not reachable from here", dir)
 }

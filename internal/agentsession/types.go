@@ -30,8 +30,12 @@ type Info struct {
 // StartSpec describes the program to run.
 type StartSpec struct {
 	Label, AgentID, Repo, Dir string
-	Argv                      []string // argv[0] is resolved via exec.LookPath inside Start
-	Env                       []string // extra KEY=VALUE, appended after os.Environ()
+	// Cwd is where the process runs when that differs from Dir — a worktree
+	// git recorded under the other environment's notation, reached through
+	// its translated path. Dir stays the identity frontends group by. "" = Dir.
+	Cwd  string
+	Argv []string // argv[0] is resolved via exec.LookPath inside Start
+	Env  []string // extra KEY=VALUE, appended after os.Environ()
 	// CmdLine, when set, is the raw Windows command line handed to the
 	// process verbatim (SysProcAttr.CmdLine) instead of one composed from
 	// Argv — cmd.exe does not parse the \" escaping that composition uses.

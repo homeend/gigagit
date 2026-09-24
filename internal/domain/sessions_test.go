@@ -104,7 +104,7 @@ func TestStartSessionRunsInWorktree(t *testing.T) {
 	dir := cleanDir(t)
 	svc := Open(dir)
 	tc := config.ToolCommand{Category: "session", Name: "Shell", Mode: "session", Command: `printf 'IN[%s]' "$(pwd)"; exit 7`}
-	s, err := svc.StartSession(context.Background(), tc, dir, 80, 10, nil)
+	s, err := svc.StartSession(context.Background(), tc, dir, "", 80, 10, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +203,7 @@ func TestStartSessionTraceEnv(t *testing.T) {
 	restore := UseSessionManager(agentsession.NewManager())
 	defer restore()
 	wt := cleanDir(t)
-	s, err := Open(wt).StartSession(context.Background(), config.ToolCommand{Category: "session", Name: "Shell", Mode: "session", Command: `printf TRACED`}, wt, 80, 10, nil)
+	s, err := Open(wt).StartSession(context.Background(), config.ToolCommand{Category: "session", Name: "Shell", Mode: "session", Command: `printf TRACED`}, wt, "", 80, 10, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestStartSessionPassesEnv(t *testing.T) {
 	defer Sessions().KillAll(context.Background())
 	dir := cleanDir(t)
 	tc := config.ToolCommand{Category: "session", Name: "Shell", Mode: "session", Command: `printf "INBOX=%s" "$GG_INBOX"; sleep 5`}
-	s, err := Open(dir).StartSession(context.Background(), tc, dir, 80, 10, []string{"GG_INBOX=/tmp/inbox-x"})
+	s, err := Open(dir).StartSession(context.Background(), tc, dir, "", 80, 10, []string{"GG_INBOX=/tmp/inbox-x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +292,7 @@ func TestStartTerminalRunsTheShell(t *testing.T) {
 	defer restore()
 	defer Sessions().KillAll(context.Background())
 	dir := cleanDir(t)
-	s, err := Open(dir).StartTerminal(context.Background(), "/bin/sh", dir, 80, 10, []string{"GG_INBOX=/tmp/inbox-t"})
+	s, err := Open(dir).StartTerminal(context.Background(), "/bin/sh", dir, "", 80, 10, []string{"GG_INBOX=/tmp/inbox-t"})
 	if err != nil {
 		t.Fatal(err)
 	}
