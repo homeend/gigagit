@@ -3384,3 +3384,30 @@ drops bytes >= 0x80 inside OSC/DCS/APC/PM/SOS payloads. Found with
 `internal/agentsession/testdata/claude-conpty-title.raw`. Upstream fix would
 belong in charmbracelet/x/ansi — drop the filter once a released x/vt parses
 UTF-8 payloads correctly (the fixture test tells).
+
+### Worktree terminal + GG_INBOX (AI tasks plan 1, 2026-09-25)
+
+- **Open terminal** (Worktrees `.`): `domain.StartTerminal` runs the shell as
+  argv (no `-c`): `[console] shell`, else `$SHELL`/`/bin/sh`, on Windows
+  `pwsh` → `powershell` → `%COMSPEC%`/`cmd.exe` (`terminalShell`). Label
+  `Terminal`; opens through `applyAgentStarted` like an agent.
+- **GG_INBOX.** `StartSession`/`StartTerminal` take `env`; the TUI passes
+  `GG_INBOX=<steerDir>` (`childEnv`, nil when steering is off) and records
+  `childInbox[id]`. `cli.preferredInbox` sends every `gg session` verb (and
+  `gg open`, which shares `sendSteer`) to a LIVE `$GG_INBOX` first; the seam
+  is `sessionGetenv`.
+- **Kept inboxes** (`steer_kept.go`): after a switch, gg keeps presence in
+  each inbox a running child holds, drains it on the 1 s heartbeat (no
+  watcher), never touches one another gg's live presence owns (PID check),
+  and releases it when the last such child ends; `closeSteerInbox` spares a
+  held inbox; exit releases all. `steer.Command.From` (json `-`, set by
+  `Drain`) routes each reply back to the sender's inbox.
+- **Worktree mismatch** (`steer_switch_ask.go`, spec ruling 9): commands carry
+  `Worktree` (only the worktree-bound ones: a file/diff navigate, highlight —
+  stamped where the CLI builds them). A bound command from another worktree
+  is not applied: one-slot `m.steerAsk` → notice `steer_switch` (Switch to
+  <b> and show / Ignore) and an immediate exit-1 reply. Accepting checks the
+  target (`checkSwitchTarget`), `reRoot`s and replays the navigate through
+  `m.startAtCmd` (consumed by `consumeStartAt`, Wait/Worktree/From cleared so
+  it cannot loop). The ask is rebuilt by `rebuildNotices`, NOT filtered by
+  `noticeSessionDismissed` (every action sets that id); reRoot clears it.
