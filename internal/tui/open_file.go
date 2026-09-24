@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -42,11 +43,27 @@ type openFile struct {
 	// keep is the reader's place (cursor line, 1-based, and window top) a
 	// reload restores; zero = none. Set by keepPlace, used by one fill.
 	keep struct{ line, top int }
+	// disk is the file's state on disk when its shown bytes were read (a
+	// working-tree document only; zero = never read). A poll that finds the
+	// disk different reloads the document.
+	disk diskStat
+	// checked is when a poll last looked at the disk (background documents
+	// are looked at every backgroundPollEvery).
+	checked time.Time
+	// loading is true while a load is in flight: a poll leaves the document
+	// alone, so a second load can never race the first (whose fill would
+	// land a link's line, the second's reset it).
+	loading bool
 }
 
 // keepPlace makes the next fill — a reload of a file the user is reading —
 // restore the cursor and the window top instead of starting at the top.
+// A placeholder is no place: the one saved before it (a file deleted on
+// disk) is kept for when the file comes back.
 func (d *openFile) keepPlace() {
+	if !docLoaded(d) {
+		return
+	}
 	d.keep.line, d.keep.top = d.p.cur+1, d.p.sel
 }
 
@@ -81,7 +98,19 @@ func docKey(src fileSource, path string) string {
 // while the placeholder showed — is re-run over the real lines and its hit
 // scrolled into view. rows × innerW is the frame's content size. notice is a
 // status line for the caller to show ("" = none).
+//
+// A reload (msg.reload) keeps the reader's place as it is NOW, when the new
+// lines arrive — not when the reload was sent, so a cursor moved during a
+// slow read is not snapped back. A placeholder does not use the saved place:
+// it waits for the next real fill.
 func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
+	d.loading = false
+	if msg.disk.known {
+		d.disk = msg.disk
+	}
+	if msg.reload && d.pendingLine == 0 {
+		d.keepPlace()
+	}
 	p := d.p
 	if msg.err != nil {
 		p.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
@@ -90,11 +119,13 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 	}
 	p.cur, p.sel = 0, 0
 	p.lsel.clear()
-	keep := d.keep
-	d.keep.line, d.keep.top = 0, 0
-	if keep.line > 0 && d.pendingLine == 0 && len(p.lines) > 0 && p.lines[0].src {
-		p.cur = min(keep.line, len(p.lines)) - 1
-		p.sel = previewClamp(keep.top, len(p.lines), rows, p.mode)
+	if docLoaded(d) {
+		keep := d.keep
+		d.keep.line, d.keep.top = 0, 0
+		if keep.line > 0 && d.pendingLine == 0 {
+			p.cur = min(keep.line, len(p.lines)) - 1
+			p.sel = previewClamp(keep.top, len(p.lines), rows, p.mode)
+		}
 	}
 	notice = d.landPendingLine(rows)
 	if p.search.active() {

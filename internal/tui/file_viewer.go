@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"context"
-
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/i18n"
@@ -39,15 +37,16 @@ func (m Model) openFileViewer(path string, line int) (Model, tea.Cmd) {
 	fv := &fileViewer{d}
 	m = m.pushLayer(fv)
 	m = m.registerDoc(d)
-	svc := m.svc
-	return m, loadFileContentSrcCmd(fv.tag, path, m.cfg.UI.SyntaxOn(), func(ctx context.Context) ([]byte, error) {
-		return svc.WorktreeFile(ctx, path)
-	})
+	return m, m.loadDoc(d)
 }
 
 // geom is the viewer's content size: the whole screen as one bordered box
 // (border 2) holding a title and a hint line (2) — renderPreviewBox's math.
-func (fv *fileViewer) geom(m Model) (rows, innerW int) {
+func (fv *fileViewer) geom(m Model) (rows, innerW int) { return m.viewerGeom() }
+
+// viewerGeom is a full-screen viewer's content size — also the size a
+// background document fills at, since it comes back in one.
+func (m Model) viewerGeom() (rows, innerW int) {
 	w, h := m.overlayDims()
 	rows, innerW = h-4, w-4
 	if rows < 1 {
@@ -134,8 +133,8 @@ func (fv *fileViewer) title() string {
 // liveDoc finds the document a load result belongs to, and the content size
 // of the frame showing it: any full-screen viewer on the stack (covered ones
 // too — two files opened in a row must both fill), then the files view's
-// preview. A document no frame shows any more is not found: its result is
-// stale.
+// preview, then the open-files list (a document in the background). A
+// document closed since is not found: its result is stale.
 func (m Model) liveDoc(tag string) (d *openFile, rows, innerW int, ok bool) {
 	if m.layers != nil {
 		for i := len(m.layers.entries) - 1; i >= 0; i-- {
@@ -147,6 +146,10 @@ func (m Model) liveDoc(tag string) (d *openFile, rows, innerW int, ok bool) {
 	}
 	if d := m.filesPreview; d != nil && d.tag == tag {
 		return d, m.filePreviewRowsCap(), m.filePreviewInnerW(), true
+	}
+	if d := m.openFiles.findTag(tag); d != nil {
+		rows, innerW = m.viewerGeom() // a background document returns in the viewer
+		return d, rows, innerW, true
 	}
 	return nil, 0, 0, false
 }
