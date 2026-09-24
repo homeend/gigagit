@@ -106,3 +106,20 @@ func TestInputAfterExitIsNoop(t *testing.T) {
 		t.Fatalf("resize after exit = %v, want nil no-op", err)
 	}
 }
+
+func TestScreenWithCursorReversesCursorCell(t *testing.T) {
+	t.Parallel()
+	needSh(t)
+	s := startSh(t, `printf 'ab'; sleep 2`)
+	eventually(t, "text", func() bool { return strings.Contains(s.screenText(), "ab") })
+	sc := s.ScreenWithCursor()
+	if sc.CursorX != 2 || sc.CursorY != 0 {
+		t.Fatalf("cursor = (%d,%d)", sc.CursorX, sc.CursorY)
+	}
+	if !strings.Contains(sc.Lines[0], "\x1b[7m") {
+		t.Fatalf("cursor row has no reverse-video cell: %q", sc.Lines[0])
+	}
+	if plain := s.Screen(); strings.Contains(plain.Lines[0], "\x1b[7m") {
+		t.Fatalf("Screen() must not paint the cursor: %q", plain.Lines[0])
+	}
+}
