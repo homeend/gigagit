@@ -244,3 +244,19 @@ func TestCommandJSONOmitsEmptyFields(t *testing.T) {
 		t.Errorf("Command JSON = %s, want %s (an agent reads these files)", got, want)
 	}
 }
+
+func TestDrainStampsFromAndKeepsWorktree(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if _, err := Post(dir, Command{Cmd: "reload", Worktree: "/w/b"}); err != nil {
+		t.Fatal(err)
+	}
+	got := Drain(dir)
+	if len(got) != 1 || got[0].From != dir || got[0].Worktree != "/w/b" {
+		t.Fatalf("drained %+v", got)
+	}
+	data, _ := json.Marshal(got[0])
+	if strings.Contains(string(data), dir) {
+		t.Fatalf("From must never reach the wire: %s", data)
+	}
+}
