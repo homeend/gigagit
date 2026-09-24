@@ -1,10 +1,10 @@
 package domain
 
 import (
-	"os"
-	"path/filepath"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
