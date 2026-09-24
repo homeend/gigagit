@@ -101,6 +101,7 @@ func Run(svc *domain.Service, recordPath string, at model.Link) (string, error) 
 		}
 		removeSnapshotFile(fm.snapshotPath)
 		fm = fm.closeSteerInbox()
+		fm = fm.releaseKeptInboxes()
 		fm.recorder.close()
 	}
 	if err != nil {

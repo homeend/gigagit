@@ -81,7 +81,13 @@ func (m Model) reconcileSteer() (Model, tea.Cmd) {
 // (rather than aging out over five seconds) and the watcher is stopped.
 // Called on clean exit and on every repo switch.
 func (m Model) closeSteerInbox() Model {
-	if m.steerDir != "" {
+	switch {
+	case m.steerDir == "":
+	case m.holdsInbox(m.steerDir):
+		// A running child was handed this inbox as GG_INBOX: keep answering it
+		// (steer_kept.go) instead of vanishing under the agent.
+		m.keptSteer[m.steerDir] = true
+	default:
 		steer.Remove(m.steerDir, steer.TUIPresence)
 	}
 	if m.steerWatch != nil {
@@ -163,11 +169,19 @@ func (m Model) drainSteer() (Model, tea.Cmd) {
 	if hexp != nil {
 		cmds = append(cmds, hexp)
 	}
-	for _, c := range steer.Drain(m.steerDir) {
-		var cmd tea.Cmd
-		m, cmd = m.applySteer(c)
-		if cmd != nil {
-			cmds = append(cmds, cmd)
+	dirs := []string{m.steerDir}
+	for dir := range m.keptSteer {
+		if dir != m.steerDir {
+			dirs = append(dirs, dir)
+		}
+	}
+	for _, dir := range dirs {
+		for _, c := range steer.Drain(dir) {
+			var cmd tea.Cmd
+			m, cmd = m.applySteer(c)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 	}
 	if len(cmds) == 0 {
@@ -252,10 +266,13 @@ func (m Model) answerSteer(c steer.Command, r steer.Reply) tea.Cmd {
 		}
 		return nil
 	}
-	if !c.Wait || m.steerDir == "" {
+	dir := m.steerDir
+	if c.From != "" {
+		dir = c.From // a kept inbox (steer_kept.go): answer where the sender waits
+	}
+	if !c.Wait || dir == "" {
 		return nil
 	}
-	dir := m.steerDir
 	return func() tea.Msg {
 		_ = steer.PostReply(dir, r)
 		return nil

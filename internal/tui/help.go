@@ -88,6 +88,7 @@ func helpContent() []contentLine {
 		r("ctrl+\\", i18n.T("the agents & open-files popup, from anywhere (even inside a console): every agent session this gg runs, grouped repo → worktree, then this worktree's open files (● on screen, ○ in the background); enter opens a session or brings a file back, k kills a session (asks once), x removes an exited session or closes a file, / filters. Quitting gg with sessions alive opens it in quit mode ([Q] kill all and quit)")),
 		r("ctrl+]", i18n.T("step out of a focused agent console (a maximised one shrinks back to the Commits column; every other key goes to the agent while its console is focused); in a file viewer or the View-file preview: send the file to the background — it stays open (up to 20 per worktree) and ctrl+\\ brings it back")),
 		r("", i18n.T("Start agent… (.-menu on a Worktrees row): run a configured agent in that worktree in a console over the Commits column; the first run detects installed agents and adds them to the global config. Unfocused console: enter types, ctrl+t maximises, esc closes (the agent keeps running). Keys: [console] step_out_key / sessions_key")),
+		r("", i18n.T("Open terminal (.-menu on a Worktrees row): an interactive shell in that worktree, in the same console ([console] shell picks it)")),
 		h(i18n.T("Worktrees panel")),
 		r("enter", i18n.T("switch into the selected worktree")),
 		r("f", i18n.T("find current: jump the cursor to the worktree gg is running in")),
