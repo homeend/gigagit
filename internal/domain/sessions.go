@@ -126,31 +126,38 @@ func (s *Service) StartSession(ctx context.Context, tc config.ToolCommand, workt
 	if err != nil || repo == "" {
 		repo = filepath.Base(worktreeDir)
 	}
+	argv, cmdline := sessionShell(resolved, runtime.GOOS, os.Getenv)
 	return Sessions().Start(agentsession.StartSpec{
 		Label: tc.Name, AgentID: agentIDFor(tc), Repo: repo, Dir: worktreeDir,
-		Argv: shellArgv(resolved), Cols: cols, Rows: rows,
+		Argv: argv, CmdLine: cmdline, Cols: cols, Rows: rows,
 	})
 }
 
-// shellArgv runs the resolved command line the way external tools run
-// (tui's toolExecCmd): $SHELL -c on POSIX — the shell exits with the last
-// command's status, and the session's process-group kill reaches the agent
-// under it; %COMSPEC% /C on Windows, with a multi-line template flattened
-// for cmd.exe. No `exec` prefix: on a compound line it would replace the
-// shell with the FIRST command and silently drop the rest.
-func shellArgv(cmdline string) []string {
-	if runtime.GOOS == "windows" {
-		comspec := os.Getenv("COMSPEC")
+// sessionShell builds how the resolved command line runs, the way external
+// tools run (tui's toolExecCmd). POSIX: $SHELL -c <line> — the shell exits
+// with the last command's status and the session's process-group kill
+// reaches the agent under it; no `exec` prefix, which on a compound line
+// would run only the FIRST command. Windows: a raw command line
+// `"%COMSPEC%" /S /C "<line>"` (returned as cmdline, argv only names the
+// program) — /S makes cmd strip exactly the outer quotes and run the rest
+// verbatim, so a quoted install path survives; composing it from argv would
+// escape its quotes as \" and cmd would not parse them.
+func sessionShell(line, goos string, getenv func(string) string) (argv []string, cmdline string) {
+	if goos == "windows" {
+		comspec := getenv("COMSPEC")
 		if comspec == "" {
-			comspec = "cmd"
+			comspec = "cmd.exe"
 		}
-		return []string{comspec, "/C", template.FlattenForCmd(cmdline)}
+		// One command line cannot carry a line break: the lines FlattenForCmd
+		// leaves separate (a genuine multi-line script) run in sequence via &.
+		flat := strings.ReplaceAll(strings.TrimRight(template.FlattenForCmd(line), "\r\n"), "\r\n", " & ")
+		return []string{comspec, "/S", "/C", flat}, `"` + comspec + `" /S /C "` + flat + `"`
 	}
-	sh := os.Getenv("SHELL")
+	sh := getenv("SHELL")
 	if sh == "" {
 		sh = "/bin/sh"
 	}
-	return []string{sh, "-c", cmdline}
+	return []string{sh, "-c", line}, ""
 }
 
 // agentIDFor maps a command to its catalog tool id by its program (the

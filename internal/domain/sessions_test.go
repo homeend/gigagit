@@ -151,3 +151,42 @@ func TestEnsureSessionCommandsRespectsExistingBlock(t *testing.T) {
 		t.Fatal("an existing session block must leave the config file untouched")
 	}
 }
+
+// cmd.exe does not understand the \" escaping Windows argv composition
+// applies, so a quoted install path must reach it verbatim: /S /C "<line>".
+func TestSessionShellLineWindows(t *testing.T) {
+	t.Parallel()
+	argv, cmdline := sessionShell(`"C:\Program Files\Claude\claude.exe" --dangerously-skip-permissions`, "windows", func(k string) string {
+		if k == "COMSPEC" {
+			return `C:\Windows\system32\cmd.exe`
+		}
+		return ""
+	})
+	if want := `"C:\Windows\system32\cmd.exe" /S /C ""C:\Program Files\Claude\claude.exe" --dangerously-skip-permissions"`; cmdline != want {
+		t.Fatalf("cmdline = %s\nwant      %s", cmdline, want)
+	}
+	if len(argv) == 0 || argv[0] != `C:\Windows\system32\cmd.exe` {
+		t.Fatalf("argv = %q", argv)
+	}
+}
+
+func TestSessionShellLinePOSIX(t *testing.T) {
+	t.Parallel()
+	argv, cmdline := sessionShell(`claude --x; echo done`, "linux", func(k string) string {
+		if k == "SHELL" {
+			return "/bin/zsh"
+		}
+		return ""
+	})
+	if cmdline != "" || strings.Join(argv, "|") != "/bin/zsh|-c|claude --x; echo done" {
+		t.Fatalf("argv=%q cmdline=%q", argv, cmdline)
+	}
+}
+
+func TestSessionShellLineWindowsMultiLine(t *testing.T) {
+	t.Parallel()
+	_, cmdline := sessionShell("set X=1\necho %X%", "windows", func(string) string { return "" })
+	if want := `"cmd.exe" /S /C "set X=1 & echo %X%"`; cmdline != want {
+		t.Fatalf("cmdline = %s, want %s", cmdline, want)
+	}
+}

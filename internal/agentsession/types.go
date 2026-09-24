@@ -32,7 +32,12 @@ type StartSpec struct {
 	Label, AgentID, Repo, Dir string
 	Argv                      []string // argv[0] is resolved via exec.LookPath inside Start
 	Env                       []string // extra KEY=VALUE, appended after os.Environ()
-	Cols, Rows                int
+	// CmdLine, when set, is the raw Windows command line handed to the
+	// process verbatim (SysProcAttr.CmdLine) instead of one composed from
+	// Argv — cmd.exe does not parse the \" escaping that composition uses.
+	// Ignored on other systems.
+	CmdLine    string
+	Cols, Rows int
 }
 
 // ScrollbackLines caps the emulator's scrollback per session.

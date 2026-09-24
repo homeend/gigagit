@@ -10,6 +10,6 @@ import (
 // prepareCmd makes the child a session leader with the PTY as its
 // controlling terminal, so job control works and a kill can target the
 // whole process group (-pid).
-func prepareCmd(cmd *exec.Cmd) {
+func prepareCmd(cmd *exec.Cmd, _ string) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true}
 }
