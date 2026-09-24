@@ -909,19 +909,6 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, nil // no frame shows that document any more: a stale load
-	case fileContentLayerMsg:
-		cp := layerOf[*contentPopup](m)
-		// Tag-gate: only fill the contentPopup whose title matches this path load.
-		if cp == nil || cp.title != i18n.T("View %s", msg.path) {
-			return m, nil // layer closed, or a stale load from a different path
-		}
-		if msg.err != nil {
-			cp.lines = []contentLine{{text: i18n.T("(load failed: %s)", msg.err.Error())}}
-			return m, nil
-		}
-		cp.lines = msg.lines
-		cp.sel = 0
-		return m, nil
 	case commitMessageMsg:
 		cp := layerOf[*contentPopup](m)
 		// Tag-gate by short hash: only fill the popup this load was started for.

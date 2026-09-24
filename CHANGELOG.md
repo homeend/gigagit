@@ -38,6 +38,13 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   at the line you were on — when the file does.
 - Commit and shelf versions never change and are never watched.
 
+### Changed
+
+- **`F` (find file) → View content** opens the file's **working-tree**
+  version in the full-screen viewer (cursor, selection, search, `ctrl+]`,
+  watched and reloaded) instead of the old read-only popup of the HEAD
+  version; `esc` returns to the finder.
+
 ### Known limits
 
 - An edit that keeps the file's byte length within one mtime tick of the

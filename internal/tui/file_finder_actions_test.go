@@ -142,16 +142,30 @@ func TestFileFinderBlameActionOpensBlameLayer(t *testing.T) {
 	}
 }
 
-func TestFileFinderViewActionOpensContentLayer(t *testing.T) {
+// View content opens the working-tree version in the full-screen viewer — an
+// open file, watched and reloaded — over the finder, so esc returns to it.
+func TestFileFinderViewActionOpensTheWorkingTreeViewer(t *testing.T) {
 	t.Parallel()
-	m, rows := finderSetup(t, "a/b.go")
-	nm, _ := finderRow(t, rows, "ff-view")(m)
+	m := loadedNavModel(t)
+	writeWT(t, m, "w.txt", "ON DISK\n")
+	m, _ = m.openFileFinder()
+	nm, _ := m.Update(lsFilesMsg{paths: []string{"w.txt"}})
 	m = nm.(Model)
-	if layerOf[*contentPopup](m) == nil {
-		t.Fatal("ff-view should push a contentPopup layer")
+	nm, cmd := finderRow(t, m.fileFinderActionRows("w.txt"), "ff-view")(m)
+	m = pumpAll(t, nm.(Model), cmd)
+	fv, ok := m.topLayer().(*fileViewer)
+	if !ok {
+		t.Fatalf("top layer = %T, want the file viewer", m.topLayer())
 	}
-	if layerOf[*fileFinderPopup](m) != nil {
-		t.Fatal("the finder must be popped when the view action runs")
+	if fv.src.kind != srcWorktree || fv.p.lines[0].raw != "ON DISK" {
+		t.Fatalf("viewer shows src %v line %+v, want the working-tree bytes", fv.src, fv.p.lines[0])
+	}
+	if m.openFiles.find(m.currentWorktree, fv.key()) == nil {
+		t.Fatal("the viewed file is not in the open-files list")
+	}
+	m = fvKeys(t, m, keyMsg("esc"))
+	if _, ok := m.topLayer().(*fileFinderPopup); !ok {
+		t.Fatalf("esc on the viewer returned to %T, want the finder", m.topLayer())
 	}
 }
 

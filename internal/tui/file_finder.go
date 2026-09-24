@@ -6,7 +6,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/fuzzy"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
@@ -303,12 +302,11 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 		{
 			id:    "ff-view",
 			label: i18n.T("View content"),
+			// The working-tree version in the full-screen viewer — an open
+			// file, reloaded when the disk changes. Pushed OVER the finder:
+			// esc (or ctrl+]) returns to it.
 			run: func(m Model) (tea.Model, tea.Cmd) {
-				m = m.popLayer()
-				cp := newContentPopup(i18n.T("View %s", path), []contentLine{{text: i18n.T("(loading…)")}})
-				cp.charWrap = true // a file's text: column-exact wrap
-				m = m.pushLayer(cp)
-				return m, m.loadFileContentLayerCmd(path)
+				return m.openFileViewer(path, 0)
 			},
 		},
 		{
@@ -418,31 +416,5 @@ func (m Model) fileFinderActionRows(path string) []actionRow {
 				return m.startFeedReload()
 			},
 		},
-	}
-}
-
-// fileContentLayerMsg carries the async result of loadFileContentLayerCmd: the
-// content lines (or error) for the contentPopup pushed onto the layer stack by
-// the "View content" file-finder action. Tagged by path to gate stale loads.
-type fileContentLayerMsg struct {
-	path  string
-	lines []contentLine
-	err   error
-}
-
-// loadFileContentLayerCmd reads path at HEAD off the UI thread and delivers
-// fileContentLayerMsg. Fills the contentPopup layer (title "View <path>"),
-// NOT m.filesPreview (the files-view right column).
-func (m Model) loadFileContentLayerCmd(path string) tea.Cmd {
-	svc := m.svc
-	return func() tea.Msg {
-		data, err := svc.ShowFile(context.Background(), "HEAD", path)
-		if err != nil {
-			return fileContentLayerMsg{path: path, err: err}
-		}
-		if len(data) > domain.MaxDiffBytes {
-			return fileContentLayerMsg{path: path, lines: []contentLine{{text: i18n.T("(file too large to preview)")}}}
-		}
-		return fileContentLayerMsg{path: path, lines: fileContentLines(data)}
 	}
 }
