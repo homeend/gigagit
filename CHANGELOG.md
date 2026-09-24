@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Faster whole-file stage / unstage
+
+- Staging or unstaging a whole file (TUI space, the web's stage / unstage,
+  `gg add`) no longer runs the branch-versions preflight probe first: it only
+  writes the index, so it can never record a version. That is three git
+  processes less per action — on a WSL `/mnt` checkout a web stage / unstage
+  went from ~190 ms to ~163 ms.
+
 ## Stacked diff: line select / copy (plan 4d)
 
 ### Fixed

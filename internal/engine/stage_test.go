@@ -150,3 +150,12 @@ func TestIgnoredPathsFrom(t *testing.T) {
 		t.Fatalf("paths = %v, want nil for an unrelated error", got)
 	}
 }
+
+// Stage only ever writes the index (add / add -A / add -f / restore --staged),
+// so it declares IndexOnly and Execute skips the branch-version probe.
+func TestStageIsIndexOnly(t *testing.T) {
+	t.Parallel()
+	if _, ok := any(Stage{}).(interface{ IndexOnly() }); !ok {
+		t.Fatal("Stage writes only the index: it must say so (IndexOnly)")
+	}
+}

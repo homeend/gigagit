@@ -1782,7 +1782,9 @@ at "what the user means" that a question would have avoided.
   wrong, so the next action 409s and re-reads: safe, one extra trip) — NO
   status; the client lands the diffs, then `fetchStatus()` in the
   background. The single-file form still answers the status. `StageHunks`
-  is `IndexOnly()`, so `Execute` skips the versions preflight probe;
+  is `IndexOnly()`, so `Execute` skips the versions preflight probe — and
+  so is whole-file `engine.Stage` (stage / unstage / all: TUI space, web
+  `/api/stage`, `gg add`), 3 git processes less per action (2026-09-24);
   `git.Repo.Root` (set by `domain.Open` once `resolveRoot` succeeds) makes
   `TopLevel` free, so a working-tree read is no longer a `rev-parse`; and
   `/api/diff`'s wt form reads each side once (`memoSide`) for both the
