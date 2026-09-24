@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
@@ -350,7 +351,7 @@ func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 	if why := steerEnumRefusal(c); why != "" {
 		return m, m.answerSteer(c, steerFail(c, why))
 	}
-	if c.Worktree != "" && steerWorktreeBound(c) && !samePathTUI(c.Worktree, m.snapshotWorktree) {
+	if c.Worktree != "" && steerWorktreeBound(c) && !domain.SameCheckout(c.Worktree, m.snapshotWorktree) {
 		return m.askSteerSwitch(c)
 	}
 	// Only navigate parks a pendingSteer, and only one can be in flight: a

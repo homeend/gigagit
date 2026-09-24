@@ -40,7 +40,8 @@ func TestMatchingOrUnboundCommandsApplyAsToday(t *testing.T) {
 	for _, c := range []steer.Command{
 		{ID: "f1", Cmd: "focus", Panel: "branches", Worktree: "/w/b"},
 		{ID: "n2", Cmd: "navigate", File: "x.go", Worktree: "/w/a/"},
-		{ID: "n3", Cmd: "navigate", File: "x.go"}, // no Worktree: an older CLI / --at
+		{ID: "n5", Cmd: "navigate", File: "x.go", Worktree: "/w/./a"}, // another spelling (Windows: C:/ vs C:\)
+		{ID: "n3", Cmd: "navigate", File: "x.go"},                     // no Worktree: an older CLI / --at
 		{ID: "n4", Cmd: "navigate", Commit: "abc1234", Worktree: "/w/b"},
 	} {
 		if m2, _ := m.applySteer(c); m2.steerAsk != nil {

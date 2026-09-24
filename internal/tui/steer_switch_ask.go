@@ -54,7 +54,7 @@ func (m Model) askSteerSwitch(c steer.Command) (Model, tea.Cmd) {
 // that runs in c's worktree, else a generic "an agent".
 func (m Model) steerSender(c steer.Command) string {
 	for _, info := range domain.Sessions().List() {
-		if m.childInbox[info.ID] == c.From && samePathTUI(info.Dir, c.Worktree) {
+		if m.childInbox[info.ID] == c.From && domain.SameCheckout(info.Dir, c.Worktree) {
 			return info.Label
 		}
 	}
