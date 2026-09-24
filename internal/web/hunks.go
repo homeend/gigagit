@@ -13,6 +13,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
+	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
@@ -87,6 +88,13 @@ func buildHunkDoc(ctx context.Context, svc *domain.Service, path string, lane hu
 	if ref != nil {
 		return nil, nil, "", ref
 	}
+	return hunkDocFrom(old, nw, lane)
+}
+
+// hunkDocFrom builds the doc, its row walk and its freshness hash from the
+// two versions a lane compares, already read — the diff endpoint reuses the
+// bytes it just aligned instead of reading them again.
+func hunkDocFrom(old, nw []byte, lane hunkLane) (*hunkpick.Doc, [][]blockRow, string, *hunkRefusal) {
 	if textdiff.IsBinary(old) || textdiff.IsBinary(nw) {
 		return nil, nil, "", &hunkRefusal{http.StatusUnprocessableEntity, errors.New("binary file — stage the whole file instead")}
 	}
@@ -188,7 +196,44 @@ func decodeStagePicks(req *stageHunksRequest, body []byte) error {
 		req.Blocks = append(req.Blocks, stageBlockPick{Block: n, Whole: true})
 	}
 	req.Blocks = append(req.Blocks, raw.Blocks...)
+	if len(req.Blocks) == 0 {
+		return errors.New("picks required")
+	}
 	return nil
+}
+
+// decodeStageBatch parses a /api/stage-hunks body: one file's selection (the
+// original shape) or {"files": [...]}, one entry per file — a selection that
+// spans files is staged in ONE request (one op, one status read).
+func decodeStageBatch(body []byte) ([]stageHunksRequest, bool, error) {
+	var batch struct {
+		Files []json.RawMessage `json:"files"`
+	}
+	if err := json.Unmarshal(body, &batch); err != nil {
+		return nil, false, fmt.Errorf("bad request body: %w", err)
+	}
+	if batch.Files == nil {
+		var req stageHunksRequest
+		if err := decodeStagePicks(&req, body); err != nil {
+			return nil, false, err
+		}
+		return []stageHunksRequest{req}, false, nil
+	}
+	if len(batch.Files) == 0 {
+		return nil, true, errors.New("files required")
+	}
+	out := make([]stageHunksRequest, len(batch.Files))
+	seen := map[string]bool{}
+	for i, f := range batch.Files {
+		if err := decodeStagePicks(&out[i], f); err != nil {
+			return nil, true, err
+		}
+		if seen[out[i].Path] {
+			return nil, true, fmt.Errorf("%s listed twice", out[i].Path)
+		}
+		seen[out[i].Path] = true
+	}
+	return out, true, nil
 }
 
 // blockRow is one row of a change block, in the order the reader sees it:
@@ -287,10 +332,14 @@ func applyRowSelection(doc *hunkpick.Doc, brows [][]blockRow, lane hunkLane, sel
 	return nil
 }
 
-// handleStageHunks stages a selection of a file's change blocks through
-// the TUI's own machinery: recompute the doc fresh, verify the freshness
-// hash (409 on drift), flip the picked blocks to the working-tree side,
-// and stage the resolved content via engine.StageHunks.
+// handleStageHunks stages a selection of one or more files' change rows
+// through the TUI's own machinery: per file, recompute the doc fresh, verify
+// the freshness hash (409 on drift — nothing is staged then), apply the
+// picks, and stage every resolved content in ONE engine.StageHunks. The batch
+// form ({"files": [...]}) answers each file's fresh diff in its lane, built
+// from bytes already in hand, and NO status — git status is the costliest
+// call on a slow filesystem, so the client reads it in the background once
+// the rows are live again. The original single-file form answers the status.
 func (s *Server) handleStageHunks(w http.ResponseWriter, r *http.Request) {
 	svc := s.service()
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
@@ -298,35 +347,78 @@ func (s *Server) handleStageHunks(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, fmt.Errorf("bad request body: %w", err))
 		return
 	}
-	var req stageHunksRequest
-	if err := decodeStagePicks(&req, body); err != nil {
+	reqs, batch, err := decodeStageBatch(body)
+	if err != nil {
 		writeErr(w, http.StatusBadRequest, err)
 		return
 	}
-	if len(req.Blocks) == 0 {
-		writeErr(w, http.StatusBadRequest, errors.New("picks required"))
-		return
+	type prepared struct {
+		req              stageHunksRequest
+		old, nw, content []byte
 	}
-	doc, brows, hash, ok := loadHunkDoc(w, r, svc, req.Path, req.Lane)
-	if !ok {
-		return
+	var todo []prepared
+	var blobs []git.Blob
+	for _, req := range reqs {
+		if !isGitArgSafe(req.Path) {
+			writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
+			return
+		}
+		old, nw, ref := hunkSides(r.Context(), svc, req.Path, req.Lane)
+		if ref != nil {
+			writeErr(w, ref.status, fmt.Errorf("%s: %w", req.Path, ref.err))
+			return
+		}
+		doc, brows, hash, ref := hunkDocFrom(old, nw, req.Lane)
+		if ref != nil {
+			writeErr(w, ref.status, fmt.Errorf("%s: %w", req.Path, ref.err))
+			return
+		}
+		if req.Hash != hash {
+			writeErr(w, http.StatusConflict, errors.New("file changed; refresh"))
+			return
+		}
+		if err := applyRowSelection(doc, brows, req.Lane, req.Blocks); err != nil {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
+		content, resolved := doc.Resolved()
+		if !resolved {
+			writeErr(w, http.StatusInternalServerError, errors.New("unresolved hunks"))
+			return
+		}
+		todo = append(todo, prepared{req, old, nw, content})
+		blobs = append(blobs, git.Blob{Path: req.Path, Content: content})
 	}
-	if req.Hash != hash {
-		writeErr(w, http.StatusConflict, errors.New("file changed; refresh"))
-		return
-	}
-	if err := applyRowSelection(doc, brows, req.Lane, req.Blocks); err != nil {
-		writeErr(w, http.StatusBadRequest, err)
-		return
-	}
-	content, resolved := doc.Resolved()
-	if !resolved {
-		writeErr(w, http.StatusInternalServerError, errors.New("unresolved hunks"))
-		return
-	}
-	if _, err := runOp(r.Context(), svc, engine.StageHunks{Path: req.Path, Content: content}); err != nil {
+	if _, err := runOp(r.Context(), svc, engine.StageHunks{Files: blobs}); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	s.writeStatus(w, r) // success response = fresh status (the /api/stage convention)
+	if !batch {
+		s.writeStatus(w, r) // the original single-file form answers the fresh status
+		return
+	}
+	// Each file's diff in the lane it was acted in, from the bytes in hand:
+	// the index now holds `content` — unless a clean filter (a CRLF file
+	// under autocrlf) rewrote it on the way in, and then the index is read
+	// back. Best-effort: a file whose diff fails is left for the client to
+	// re-read.
+	diffs := make([]map[string]any, 0, len(todo))
+	for _, t := range todo {
+		index := t.content
+		if bytes.IndexByte(index, '\r') >= 0 {
+			if b, err := svc.ShowFile(r.Context(), "", t.req.Path); err == nil {
+				index = b
+			}
+		}
+		pre := &heldSides{old: t.old, nw: index}
+		if t.req.Lane == laneUnstaged {
+			pre = &heldSides{old: index, nw: t.nw}
+		}
+		d, err := worktreeDiffPayload(r.Context(), svc, string(t.req.Lane), t.req.Path, t.req.Path, pre)
+		if err != nil {
+			continue
+		}
+		diffs = append(diffs, map[string]any{"path": t.req.Path, "lane": t.req.Lane, "diff": d})
+	}
+	writeJSON(w, map[string]any{"diffs": diffs})
 }

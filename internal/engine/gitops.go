@@ -166,7 +166,7 @@ type GitOps interface {
 	RemoveFile(ctx context.Context, path string) error
 	ReadWorktreeFile(ctx context.Context, path string) ([]byte, error)
 	WriteWorktreeFile(ctx context.Context, path string, content []byte) error
-	StageBlob(ctx context.Context, path string, content []byte) error
+	StageBlobs(ctx context.Context, blobs []git.Blob) error
 	ApplyPatch(ctx context.Context, path string, threeWay bool) error
 	PatchPaths(ctx context.Context, path string) ([]string, error)
 	AmMailbox(ctx context.Context, path string, threeWay bool) error

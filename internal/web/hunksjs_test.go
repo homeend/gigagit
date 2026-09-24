@@ -92,11 +92,11 @@ func TestRowSelectionAndItsMenu(t *testing.T) {
 	// quietly (the user found the wait-then-flicker round trip odd).
 	apply := jsFunc(t, "files.js", "stageJobs")
 	paint := strings.Index(apply, "showFileDiff(j.scope, predicted, null);")
-	post := strings.Index(apply, `postJSON("/api/stage-hunks", { path: v.path, lane: v.lane, blocks, hash: v.hash })`)
+	post := strings.Index(apply, `postJSON("/api/stage-hunks", {`)
 	if paint < 0 || post < 0 || paint > post {
 		t.Fatalf("files.js: stageJobs must paint the prediction BEFORE it posts:\n%s", apply)
 	}
-	for _, want := range []string{"showFileDiff(scope, before, v);", "await quietRefreshFile(j.scope, j.v.path, j.v.lane);"} {
+	for _, want := range []string{"showFileDiff(scope, before, v);", "files: live.map(", "showFileDiff(scope, d, d.hunks ? hunkState(v.path, d.hunks) : null);", "await fetchStatus();"} {
 		if !strings.Contains(apply, want) {
 			t.Fatalf("files.js: stageJobs lacks %q", want)
 		}

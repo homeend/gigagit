@@ -3306,14 +3306,15 @@ function selectionWire(v) {
 // stageJobs stages (or, in the staged diff, unstages) rows of one or more
 // files — one job per file ({scope, blocks, keys}: keys are the rows acted on,
 // "hunk:row", blocks the wire) — and the SCREEN moves first: every file's
-// predicted diff (optimisticRows) is painted at once, the POSTs follow one
-// file at a time, and
-//   - a file whose POST fails comes back exactly as it was, selection too;
-//   - on success the sidebar takes the fresh status and the files acted on
-//     are re-read quietly — no "loading…", no jump, the reader's scroll and
-//     folds kept — which re-tags them for the next action.
+// predicted diff (optimisticRows) is painted at once, then ONE request stages
+// them all (every git call is slow on a /mnt drive: the server stages the
+// batch in one index write), and
+//   - on an error every file comes back exactly as it was, selection too;
+//   - on success each file lands the fresh diff the answer carries — no
+//     second round trip, no "loading…", the reader's scroll and folds kept —
+//     and then the sidebar takes a fresh status, read in the background.
 // A file that left its section (fully staged / unstaged) takes the structural
-// path instead.
+// path once that status is in.
 async function stageJobs(jobs) {
   const live = [];
   for (const j of jobs) {
@@ -3326,34 +3327,50 @@ async function stageJobs(jobs) {
     showFileDiff(j.scope, predicted, null); // non-interactive until the answer: its tags are gone
     live.push({ ...j, v, before });
   }
-  let status = null;
-  const reread = [];
-  for (const j of live) {
-    const { scope, v, blocks, keys, before } = j;
-    try {
-      status = await postJSON("/api/stage-hunks", { path: v.path, lane: v.lane, blocks, hash: v.hash });
-      reread.push(j);
-    } catch (e) {
-      opLine("error: " + (e.message || e), true);
-      // 409: the file moved under the action — the truth is a fresh read.
-      if (/file changed/.test(e.message || "")) {
-        reread.push(j);
-        continue;
-      }
+  if (!live.length) return;
+  let resp;
+  try {
+    resp = await postJSON("/api/stage-hunks", {
+      files: live.map(({ v, blocks }) => ({ path: v.path, lane: v.lane, blocks, hash: v.hash })),
+    });
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    // 409: a file moved under the action (nothing was staged) — the truth
+    // is a fresh read.
+    if (/file changed/.test(e.message || "")) {
+      for (const j of live) await quietRefreshFile(j.scope, j.v.path, j.v.lane);
+      return;
+    }
+    for (const { scope, v, keys, before } of live) {
       v.sel = new Set(keys); // put back what the reader had chosen
       showFileDiff(scope, before, v);
     }
+    return;
   }
-  if (status) {
-    applyStatus(status); // the 200 body IS a fresh /api/status payload
-    renderFiles();
+  // The answer carries each file's fresh diff: land them now — the rows are
+  // live again — and read the status (the sidebar; a file that left its
+  // section) in the background, where git status's cost does not block.
+  const key = (v) => v.lane + "\u0000" + v.path;
+  const fresh = new Map((resp.diffs || []).map((x) => [x.lane + "\u0000" + x.path, x.diff]));
+  for (const { scope, v } of live) {
+    const d = fresh.get(key(v));
+    if (d) showFileDiff(scope, d, d.hunks ? hunkState(v.path, d.hunks) : null);
   }
+  try {
+    await fetchStatus();
+  } catch (e) {
+    opLine("error: " + (e.message || e), true);
+    return;
+  }
+  renderFiles();
   // One structural pass covers every file of a stack when any file left it.
-  if (state.stack && reread.some((j) => !inLaneSection(j.v.path, j.v.lane))) {
+  if (state.stack && live.some(({ v }) => !inLaneSection(v.path, v.lane))) {
     reconcileStack();
     return;
   }
-  for (const j of reread) await quietRefreshFile(j.scope, j.v.path, j.v.lane);
+  for (const { scope, v } of live) {
+    if (!fresh.has(key(v)) || !inLaneSection(v.path, v.lane)) await quietRefreshFile(scope, v.path, v.lane);
+  }
 }
 
 

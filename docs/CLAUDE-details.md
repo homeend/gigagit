@@ -1738,6 +1738,22 @@ at "what the user means" that a question would have avoided.
   file's prediction, then POSTs one file at a time (a failed file reverts
   alone), then one status + quiet per-file re-reads (one structural
   `reconcileStack` if any file left the stack).
+- **Speed = git process count** (WSL's /mnt drives: 50–300 ms per git
+  call, whatever it does). `/api/stage-hunks` takes a batch
+  (`{"files": [...]}`, one entry per file, a stale hash anywhere = 409 and
+  nothing staged): one `engine.StageHunks{Files}` → `git.StageBlobs` (one
+  `ls-files -s -z`, a `hash-object` per file, ONE `update-index`), and the
+  batch answer is `{diffs: [{path, lane, diff}]}` built by
+  `worktreeDiffPayload` from bytes in hand (the index is read back only when
+  the content has a `\r`, i.e. a clean filter may have rewritten it) — NO
+  status; the client lands the diffs, then `fetchStatus()` in the
+  background. The single-file form still answers the status. `StageHunks`
+  is `IndexOnly()`, so `Execute` skips the versions preflight probe;
+  `git.Repo.Root` (set by `domain.Open` once `resolveRoot` succeeds) makes
+  `TopLevel` free, so a working-tree read is no longer a `rev-parse`; and
+  `/api/diff`'s wt form reads each side once (`memoSide`) for both the
+  alignment and the staging doc. Pinned by `stagebatch_test.go` (git call
+  counts) and the domain/git counting tests.
 - **Deselect:** a left click on anything that is not a selectable row (or the
   ctx menu) clears the selection — a document-level listener; Esc clears it
   before a search or the diff itself (`keys.js`). **Double-click** on a row

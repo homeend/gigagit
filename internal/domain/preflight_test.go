@@ -1,11 +1,14 @@
 package domain
 
 import (
+	"os"
+	"path/filepath"
 	"context"
 	"errors"
 	"sync"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/gitexec"
 	"github.com/homeend/gigagit/internal/observ"
@@ -337,5 +340,46 @@ func TestPendingMigrationsListsRepairableFeaturesWithTheirRefs(t *testing.T) {
 	}
 	if len(left) != 0 {
 		t.Errorf("%d version refs survived RunMigration, want 0", len(left))
+	}
+}
+
+// An op that writes only the index never records a branch version, so
+// Execute must not pay the versions probe for it — on a slow filesystem each
+// git process is ~50–100 ms, and staging rows runs one op per action.
+func TestExecuteSkipsTheVersionsProbeForIndexOnlyOps(t *testing.T) {
+	t.Parallel()
+	dir := cleanDir(t)
+	cr := newCountingRunner(gitexec.NewExecRunner("git", dir, observ.NewRing(50)))
+	svc := New(&git.Repo{Runner: cr})
+	ctx := context.Background()
+	events := make(chan engine.Event, 16)
+	go func() {
+		for range events {
+		}
+	}()
+	defer close(events)
+	if _, err := svc.Execute(ctx, engine.StageHunks{Path: "f.txt", Content: []byte("staged\n")}, events, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n := cr.count("git for-each-ref (gg)") + cr.count("git version"); n != 0 {
+		t.Fatalf("staging paid %d preflight probes, want 0", n)
+	}
+}
+
+// Open resolves the worktree root once and hands it to the repo, so reads of
+// working-tree files never ask git for it again.
+func TestOpenGivesTheRepoItsRoot(t *testing.T) {
+	t.Parallel()
+	dir := cleanDir(t)
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s := Open(filepath.Join(dir, "sub"))
+	if s.repo.Root == "" || s.repo.Root != s.Root() {
+		t.Fatalf("repo.Root = %q, Service.Root = %q: want the resolved top level in both", s.repo.Root, s.Root())
+	}
+	plain := Open(t.TempDir()) // not a repository: nothing resolved, nothing assumed
+	if plain.repo.Root != "" {
+		t.Fatalf("an unresolved workdir must leave repo.Root empty, got %q", plain.repo.Root)
 	}
 }
