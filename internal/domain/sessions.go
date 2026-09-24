@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
@@ -118,7 +119,9 @@ func EnsureSessionCommands(cfg config.Config, globalPath string, detect func() [
 // worktreeDir through the user's shell, registered with Sessions(). The
 // session is grouped under the repository NAME (RepoName), falling back to
 // the directory's base name.
-func (s *Service) StartSession(ctx context.Context, tc config.ToolCommand, worktreeDir string, cols, rows int) (*AgentSession, error) {
+//
+// env is appended to the child's environment (the frontend's GG_INBOX).
+func (s *Service) StartSession(ctx context.Context, tc config.ToolCommand, worktreeDir string, cols, rows int, env []string) (*AgentSession, error) {
 	resolved, err := template.ResolveCommand(tc.Command, nil, template.CmdCtx{Repo: worktreeDir})
 	if err != nil {
 		return nil, err
@@ -130,9 +133,51 @@ func (s *Service) StartSession(ctx context.Context, tc config.ToolCommand, workt
 	argv, cmdline := sessionShell(resolved, runtime.GOOS, os.Getenv)
 	return Sessions().Start(agentsession.StartSpec{
 		Label: tc.Name, AgentID: agentIDFor(tc), Repo: repo, Dir: worktreeDir,
-		Argv: argv, CmdLine: cmdline, Cols: cols, Rows: rows,
+		Argv: argv, CmdLine: cmdline, Env: env, Cols: cols, Rows: rows,
 		TracePath: sessionTracePath(os.Getenv("GG_SESSION_TRACE"), tc.Name, time.Now()),
 	})
+}
+
+// StartTerminal runs an interactive shell in worktreeDir as a session
+// labelled "Terminal" — argv directly, no `-c` wrapper: the shell IS the
+// program. shell is the [console] shell override ("" = pick one). env is
+// appended to the child's environment (the frontend's GG_INBOX).
+func (s *Service) StartTerminal(ctx context.Context, shell, worktreeDir string, cols, rows int, env []string) (*AgentSession, error) {
+	repo, err := s.RepoName(ctx)
+	if err != nil || repo == "" {
+		repo = filepath.Base(worktreeDir)
+	}
+	return Sessions().Start(agentsession.StartSpec{
+		Label: "Terminal", Repo: repo, Dir: worktreeDir,
+		Argv: terminalShell(runtime.GOOS, os.Getenv, exec.LookPath, shell), Env: env,
+		Cols: cols, Rows: rows,
+		TracePath: sessionTracePath(os.Getenv("GG_SESSION_TRACE"), "Terminal", time.Now()),
+	})
+}
+
+// terminalShell picks Open terminal's shell: the configured override first
+// (run as given — a missing program fails at start with its own error),
+// then $SHELL (else /bin/sh) on Unix, and pwsh → powershell → %COMSPEC%
+// (else cmd.exe) on Windows.
+func terminalShell(goos string, getenv func(string) string, lookPath func(string) (string, error), override string) []string {
+	if override != "" {
+		return []string{override}
+	}
+	if goos != "windows" {
+		if sh := getenv("SHELL"); sh != "" {
+			return []string{sh}
+		}
+		return []string{"/bin/sh"}
+	}
+	for _, name := range []string{"pwsh", "powershell"} {
+		if p, err := lookPath(name); err == nil {
+			return []string{p}
+		}
+	}
+	if cs := getenv("COMSPEC"); cs != "" {
+		return []string{cs}
+	}
+	return []string{"cmd.exe"}
 }
 
 // sessionShell builds how the resolved command line runs, the way external

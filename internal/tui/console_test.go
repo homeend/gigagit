@@ -29,7 +29,7 @@ func startTestSession(t *testing.T, m Model, script string) *domain.AgentSession
 	if dir == "" {
 		dir = t.TempDir()
 	}
-	s, err := m.svc.StartSession(t.Context(), config.ToolCommand{Category: "session", Name: "Shell", Mode: "session", Command: script}, dir, 80, 20)
+	s, err := m.svc.StartSession(t.Context(), config.ToolCommand{Category: "session", Name: "Shell", Mode: "session", Command: script}, dir, 80, 20, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

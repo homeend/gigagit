@@ -143,7 +143,7 @@ func (p *agentStartPopup) start(m Model) (tea.Model, tea.Cmd) {
 	svc, tc, dir := m.svc, p.pick, p.worktree
 	m.statusMsg = i18n.T("starting %s…", tc.Name)
 	return m, func() tea.Msg {
-		s, err := svc.StartSession(context.Background(), tc, dir, cols, rows)
+		s, err := svc.StartSession(context.Background(), tc, dir, cols, rows, nil)
 		if err != nil {
 			return agentStartedMsg{name: tc.Name, err: err}
 		}
