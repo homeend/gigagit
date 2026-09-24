@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -145,5 +146,109 @@ func TestFileViewerFitsAndBacksAPopup(t *testing.T) {
 	v := m.View()
 	if !strings.Contains(v, "over the viewer") || !strings.Contains(v, "View main.go") {
 		t.Error("a popup over the viewer must composite onto it (isFullScreenLayer)")
+	}
+}
+
+// viewerAt lands a content link to a fresh file name/content at line (0 = no
+// line) — the navigate `gg open gg://…/<name>:<line>?view=content` sends.
+func viewerAt(t *testing.T, name, content string, line int) (Model, *fileViewer) {
+	t.Helper()
+	m := loadedNavModel(t)
+	if err := os.WriteFile(filepath.Join(m.currentWorktree, name), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := steer.Command{ID: "fvl", Cmd: "navigate", File: name,
+		Target: &steer.Target{State: "unstaged"}, HintKind: model.ContentHintKind, HintID: model.ContentHintID}
+	if line > 0 {
+		c.Line = &steer.Line{Side: "new", No: line}
+	}
+	nm, cmd := m.applySteer(c)
+	nm = pumpAll(t, nm, cmd)
+	fv := layerOf[*fileViewer](nm)
+	if fv == nil {
+		t.Fatal("no file viewer after a content-link navigate")
+	}
+	return nm, fv
+}
+
+func numberedLines(n int) string {
+	var b strings.Builder
+	for i := 1; i <= n; i++ {
+		fmt.Fprintf(&b, "line %d\n", i)
+	}
+	return b.String()
+}
+
+func TestContentLinkLineLandsTheCursor(t *testing.T) {
+	t.Parallel()
+	m, fv := viewerAt(t, "long.txt", numberedLines(60), 40)
+	rows, _ := fv.geom(m)
+	if fv.p.cur != 39 {
+		t.Fatalf("cursor = %d, want 39 (line 40)", fv.p.cur)
+	}
+	if fv.p.cur < fv.p.sel || fv.p.cur >= fv.p.sel+rows {
+		t.Errorf("cursor %d outside the window [%d,%d)", fv.p.cur, fv.p.sel, fv.p.sel+rows)
+	}
+	if !strings.Contains(m.View(), "line 40") {
+		t.Error("the screen does not show line 40")
+	}
+}
+
+// The file may have shrunk since the link was copied: land on its last line
+// and say so.
+func TestContentLinkLinePastEOFClamps(t *testing.T) {
+	t.Parallel()
+	m, fv := viewerAt(t, "short.txt", numberedLines(5), 99)
+	if fv.p.cur != 4 {
+		t.Fatalf("cursor = %d, want 4 (the last line)", fv.p.cur)
+	}
+	if !strings.Contains(m.statusMsg, "line 99 is past the end of short.txt (5 lines)") {
+		t.Errorf("statusMsg = %q, want the past-the-end notice", m.statusMsg)
+	}
+}
+
+// A placeholder ("(empty file)") is not a line of the file.
+func TestContentLinkLineOnEmptyFileIgnored(t *testing.T) {
+	t.Parallel()
+	m, fv := viewerAt(t, "empty.txt", "", 3)
+	if fv.p.cur != 0 || strings.Contains(m.statusMsg, "past the end") {
+		t.Fatalf("cursor=%d status=%q, want 0 and no notice", fv.p.cur, m.statusMsg)
+	}
+}
+
+// A CRLF file has no phantom blank last line: the viewer's count is the one
+// `gg link --content` checks a line against.
+func TestFileViewerCRLFHasNoPhantomLine(t *testing.T) {
+	t.Parallel()
+	_, fv := viewerAt(t, "dos.txt", "a\r\nb\r\n", 0)
+	if len(fv.p.lines) != 2 {
+		t.Fatalf("lines = %d (%+v), want 2", len(fv.p.lines), fv.p.lines)
+	}
+}
+
+// The viewer's own Copy file link points at the line under its cursor, so
+// the link an agent is handed opens where the user was looking.
+func TestFileViewerCopyFileLinkCarriesTheCursorLine(t *testing.T) {
+	t.Parallel()
+	m, _ := viewerModel(t)
+	m = fvKeys(t, m, altDown(), altDown())
+	m, copied := runFileLinkRow(t, m, true)
+	if !strings.HasSuffix(copied, "/main.go:3?view=content") {
+		t.Fatalf("copied %q, want …/main.go:3?view=content", copied)
+	}
+	if l, err := model.ParseLink(copied); err != nil || l.Line != 3 || !l.IsContent() {
+		t.Fatalf("ParseLink(%q) = %+v, %v", copied, l, err)
+	}
+	_ = m
+}
+
+// The wheel pages the viewer like ↑/↓: the window moves, the cursor stays.
+func TestFileViewerWheelScrolls(t *testing.T) {
+	t.Parallel()
+	m, fv := viewerAt(t, "long.txt", numberedLines(200), 0)
+	tm, _ := m.Update(mouseMsg(10, 5, tea.MouseButtonWheelDown))
+	m = tm.(Model)
+	if want := m.wheelStep(); fv.p.sel != want || fv.p.cur != 0 {
+		t.Fatalf("after one wheel-down sel=%d cur=%d, want sel=%d cur=0", fv.p.sel, fv.p.cur, want)
 	}
 }
