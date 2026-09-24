@@ -3223,10 +3223,19 @@ spike findings), plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-1-c
   `screenText`). `closeIO` ends `pumpIn` by closing the emulator's
   `InputPipe()` writer (an `*io.PipeWriter`), never `Emulator.Close`, whose
   flag write races the blocked `Read`.
-- **Exit ordering.** `wait` lets `pumpOut` drain (bounded 2 s — a grandchild
-  holding the PTY keeps the master readable) before marking `Exited` and
+- **Exit ordering.** `wait` lets `pumpOut` drain (`drainOutput`: until
+  end-of-stream, 150 ms of silence, or 2 s) before marking `Exited` and
   closing, or the child's last output is lost. The parent closes its slave fd
-  after `Start`; Linux then reports EIO (= end of stream) on the master.
+  after `Start`; Linux then reports EIO (= end of stream) on the master — the
+  kernel also hangs up the TTY when the leader exits, so Linux never needs
+  the quiet rule. ConPTY never ends the stream on its own: xpty keeps the
+  output pipe's WRITE end open in our process until `Close` (its handles are
+  unexported and `Close` would close them again, so no early partial
+  release) — the quiet rule is what keeps a Windows exit off the 2 s bound
+  (`TestWindowsExitIsPrompt`).
+- **Cursor on a wide glyph.** `cursorLine` moves a cursor that sits on a
+  wide glyph's right half (a zero cell) onto the glyph; reversing the zero
+  cell as a space pushed the row one column wider.
 - **Kill.** Unix: the child is a session leader (`Setsid`+`Setctty`);
   SIGTERM to `-pid`, SIGKILL after 3 s or once the leader is reaped. The
   process-group test's grandchild ignores SIGHUP: the kernel HUPs the
@@ -3242,9 +3251,7 @@ spike findings), plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-1-c
   `StartSpec.CmdLine` → `SysProcAttr.CmdLine`: `x/conpty` otherwise composes
   the line from argv with `\"` escaping that cmd.exe cannot parse (a quoted
   `"C:\Program Files\…\claude.exe"` would break); separate lines join with
-  ` & `. ConPTY is expected to keep its output pipe open until the pseudo
-  console closes (NOT yet verified on Windows), which would put every Windows
-  exit on the 2 s drain bound.
+  ` & `.
   `EnsureSessionCommands` treats any existing `session` block, even an
   invalid one, as configured.
 - **exttool/config.** `category = "session"` and `mode = "session"` only

@@ -127,8 +127,6 @@ func TestStaleConsoleRepaintDropped(t *testing.T) {
 	_ = mm
 }
 
-func domainKill(s *domain.AgentSession) error { return domain.Sessions().Kill(s.Info().ID) }
-
 func sessionSpecForTest(label, dir string) agentsession.StartSpec {
 	return agentsession.StartSpec{Label: label, Repo: "elsewhere", Dir: dir, Argv: []string{"sh", "-c", "sleep 5"}, Cols: 40, Rows: 10}
 }

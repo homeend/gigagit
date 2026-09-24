@@ -79,6 +79,9 @@ func TestSessionsPopupKillAsksThenKills(t *testing.T) {
 	}
 	mm, _ = m.Update(keyMsg("k"))
 	m = mm.(Model)
+	if !strings.Contains(m.statusMsg, "killing") {
+		t.Fatalf("the confirmed kill must say so at once, status = %q", m.statusMsg)
+	}
 	select {
 	case <-s.Done():
 	case <-time.After(5 * time.Second):
