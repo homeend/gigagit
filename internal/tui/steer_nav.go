@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -346,8 +347,31 @@ func (m Model) steerNavigateContent(c steer.Command) (Model, tea.Cmd) {
 		line = c.Line.No // a content link has no old side (ParseLink refuses one)
 	}
 	m, load := m.openFileViewer(c.File, line)
-	m, reply := m.navigateLanded(c, "opened "+c.File)
-	return m, tea.Batch(load, reply)
+	// The reply waits for the load: only the loaded lines say where the
+	// cursor landed (a link's line may be past the end of a file that shrank).
+	return m, func() tea.Msg { return contentLandedMsg{load: load().(fileContentMsg), cmd: c, line: line} }
+}
+
+// contentLandedMsg is a content-link landing's load, carrying the navigate
+// it answers: Update fills the viewer from load, then replies.
+type contentLandedMsg struct {
+	load fileContentMsg
+	cmd  steer.Command
+	line int
+}
+
+// contentLandedDetail is the navigate reply for a landed content link: the
+// line the cursor is on, and the clamp when the link named a line past the
+// end. A placeholder (empty, too large) has no line to report.
+func contentLandedDetail(path string, line int, lines []contentLine) string {
+	detail := "opened " + path
+	if line <= 0 || len(lines) == 0 || !lines[0].src {
+		return detail
+	}
+	if n := len(lines); line > n {
+		return fmt.Sprintf("%s at line %d (line %d is past the end, %d lines)", detail, n, line, n)
+	}
+	return fmt.Sprintf("%s at line %d", detail, line)
 }
 
 // steerNavigateHintOnly lands a hint-only navigate (S13): a link with no

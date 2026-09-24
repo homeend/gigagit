@@ -883,6 +883,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.filesContext = i18n.T("%s (all files) %s", shortHash(msg.hash), msg.subject)
 		m.filesCommit = msg.commit
 		return m, nil
+	case contentLandedMsg:
+		tm, fill := m.Update(msg.load)
+		m = tm.(Model)
+		if msg.load.err != nil {
+			return m, tea.Batch(fill, m.answerSteer(msg.cmd, steerFail(msg.cmd, "reading "+msg.cmd.File+": "+msg.load.err.Error())))
+		}
+		m, reply := m.navigateLanded(msg.cmd, contentLandedDetail(msg.cmd.File, msg.line, msg.load.lines))
+		return m, tea.Batch(fill, reply)
 	case fileContentMsg:
 		if fv := layerOf[*fileViewer](m); fv != nil && msg.tag == fv.tag {
 			// The full-screen viewer's load (a content link): same fill as the
@@ -3823,6 +3831,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("error: %s", msg.err.Error())
 		case !msg.present:
 			m.statusMsg = i18n.T("%s is not in the working tree", msg.path)
+		case msg.changed:
+			m.statusMsg = i18n.T("%s on disk differs from this version; no link copied", msg.path)
 		default:
 			return m, m.copyToClipboardCmd(i18n.T("Copied link: %s", msg.text), msg.text)
 		}

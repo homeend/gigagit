@@ -14,7 +14,10 @@ import (
 type fileLinkCheckedMsg struct {
 	path, text string
 	present    bool
-	err        error
+	// changed: the link came from a preview of ANOTHER version whose lines
+	// differ from the disk's, so its line would point at other text.
+	changed bool
+	err     error
 }
 
 // fileRowPath is the path of the file ROW under the cursor, plus the line to
@@ -35,8 +38,46 @@ func (m Model) fileRowPath() (string, int, bool) {
 	case *historyView, *blameView:
 		return "", 0, false
 	}
+	if m.diffLayer() != nil {
+		return "", 0, false
+	}
+	if p, ok := m.focusedFilesPreview(); ok {
+		if p.cur < 0 || p.cur >= len(p.lines) || !p.lines[p.cur].src {
+			return "", 0, false // still loading, or a placeholder: no line to name
+		}
+		return p.title, p.cur + 1, true
+	}
 	path, ok := m.fileListRowPath()
 	return path, 0, ok
+}
+
+// focusedFilesPreview is the files view's View-file preview when it holds
+// the focus (and no full-screen viewer sits above it). It shows a version of
+// the file — a commit's, a shelf's — that the disk may no longer match.
+func (m Model) focusedFilesPreview() (*contentPopup, bool) {
+	if m.filesPreview == nil || m.filesTreeFocused || m.filesView == nil {
+		return nil, false
+	}
+	if _, viewer := m.topLayer().(*fileViewer); viewer {
+		return nil, false
+	}
+	return m.filesPreview, true
+}
+
+// sameContentLines reports whether the disk's bytes split into exactly the
+// raw lines the preview shows — the one case where the preview's line
+// numbers are the disk file's.
+func sameContentLines(disk []byte, shown []contentLine) bool {
+	got := fileContentLinesTok(disk, nil)
+	if len(got) != len(shown) {
+		return false
+	}
+	for i := range got {
+		if got[i].src != shown[i].src || got[i].raw != shown[i].raw {
+			return false
+		}
+	}
+	return true
 }
 
 // fileListRowPath is fileRowPath for the file LISTS (the files-view tree, the
@@ -79,14 +120,30 @@ func (m Model) contextFileLinkRow() (actionRow, bool) {
 	if !ok {
 		return actionRow{}, false
 	}
+	// From a preview, the line is only right if the disk shows the same
+	// text: snapshot the shown lines now, compare off the UI thread.
+	var shown []contentLine
+	if p, ok := m.focusedFilesPreview(); ok {
+		shown = append([]contentLine(nil), p.lines...)
+	}
 	svc := m.svc
 	return actionRow{
 		id:    "copy-file-link",
 		label: i18n.T("Copy file link"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg {
-				present, err := svc.WorktreeFilesPresent(context.Background(), []string{path})
-				return fileLinkCheckedMsg{path: path, text: text, present: err == nil && present[path], err: err}
+				ctx := context.Background()
+				present, err := svc.WorktreeFilesPresent(ctx, []string{path})
+				msg := fileLinkCheckedMsg{path: path, text: text, present: err == nil && present[path], err: err}
+				if msg.present && shown != nil {
+					disk, rerr := svc.WorktreeFile(ctx, path)
+					if rerr != nil {
+						msg.err = rerr
+					} else {
+						msg.changed = !sameContentLines(disk, shown)
+					}
+				}
+				return msg
 			}
 		},
 	}, true

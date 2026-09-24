@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v93 -->
+<!-- gg:using-gg:v94 -->
 
 # Using gg (gigagit)
 
@@ -183,7 +183,9 @@ diff: `gg://<repo>/<path>?view=content`. `gg link --content <path>` prints
 one (exit 1 when the file is not in the working tree; `--content` takes no
 target flag, hint flag or `#<hunk>`). `gg link --content <path>:<line>`
 focuses a line — `gg open` puts the viewer's cursor on it (exit 1 when the
-file has fewer lines). `gg open` / `gg session navigate` show it in the TUI's
+file has fewer lines) and answers `opened <path> at line N`; when the file
+shrank since the link was made it lands on the last line and says `(line N is
+past the end, M lines)`. `gg open` / `gg session navigate` show it in the TUI's
 content viewer; `gg open --web` refuses it
 (exit 2) — the web page has no viewer yet. Every other link-taking verb
 (`gg diff`, `gg show`, `gg note …`, `gg session highlight add`) refuses it

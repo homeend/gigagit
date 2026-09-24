@@ -49,6 +49,14 @@ remembered; `-` folds one file.
   a line the file does not have exits 1 (`<path> has N lines`).
 - The mouse wheel scrolls the full-screen viewer (the cursor stays, as in the
   files view's preview).
+- **The files view's View-file preview has Copy file link too**, carrying its
+  cursor line — but only when the file on disk shows the same text as the
+  previewed version; otherwise nothing is copied and the bottom bar says
+  `<path> on disk differs from this version; no link copied`.
+- **`gg open` / `gg session navigate` report where the cursor landed**:
+  `opened <path> at line N`, or `… at line M (line N is past the end, M
+  lines)`. The answer now waits for the file to load, and a file that
+  cannot be read fails the navigate.
 
 ### Fixed
 
