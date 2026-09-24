@@ -135,9 +135,13 @@ func TestSessionMenuRows(t *testing.T) {
 	if got := ids(); got != "session-open,session-kill" {
 		t.Fatalf("running session row: %s", got)
 	}
-	_ = s.Info()
-	if err := domainKill(s); err != nil {
-		t.Fatal(err)
+	for _, r := range m.sessionMenuRows() {
+		if r.id == "session-kill" {
+			mm, _ := r.run(m)
+			if st := mm.(Model).statusMsg; !strings.Contains(st, "killing") || !strings.Contains(st, s.Info().Label) {
+				t.Fatalf("Kill session must say so at once, status = %q", st)
+			}
+		}
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for s.Info().State == 0 && time.Now().Before(deadline) {

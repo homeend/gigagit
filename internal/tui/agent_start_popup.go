@@ -254,8 +254,7 @@ func (m Model) sessionMenuRows() []actionRow {
 		}}}
 		if info.State == domain.SessionRunning {
 			rows = append(rows, actionRow{id: "session-kill", label: i18n.T("Kill session"), run: func(m Model) (tea.Model, tea.Cmd) {
-				_ = domain.Sessions().Kill(id)
-				return m, nil
+				return m.killSession(id), nil
 			}})
 		} else {
 			rows = append(rows, actionRow{id: "session-remove", label: i18n.T("Remove session"), run: func(m Model) (tea.Model, tea.Cmd) {

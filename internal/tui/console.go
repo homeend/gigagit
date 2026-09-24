@@ -305,3 +305,15 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	}
 	return m, nil, true
 }
+
+// killSession signals a session's process group and says so at once; the
+// exit notice follows when the process is gone.
+func (m Model) killSession(id domain.SessionID) Model {
+	s, ok := domain.Sessions().Get(id)
+	if !ok || domain.Sessions().Kill(id) != nil {
+		return m
+	}
+	info := s.Info()
+	m.statusMsg = i18n.T("killing %s in %s…", info.Label, shortWorktreeName(info.Dir))
+	return m
+}

@@ -191,7 +191,7 @@ func (p *sessionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		p.confirmKill = ""
-		_ = domain.Sessions().Kill(id)
+		m = m.killSession(id)
 	case "x":
 		if id, ok := p.current(); ok {
 			if err := domain.Sessions().Remove(id); err != nil {

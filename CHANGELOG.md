@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent console polish
+
+### Fixed
+
+- **Agent console: the cursor on a wide character.** With the cursor on the
+  right half of a CJK character or emoji, the console painted a reversed
+  space there and pushed the rest of the row one column right. It now
+  highlights the whole character.
+- **Kill session says so at once.** *Kill session* from the Worktrees `.`
+  menu, or a confirmed `k` in the sessions popup (`ctrl+\`), showed nothing
+  until the exit notice; the status line now reads "killing <agent> in
+  <worktree>…" immediately.
+- **Windows: agent sessions end promptly.** Every exit or kill on Windows
+  waited out a 2 s drain, because the Windows pseudo console never closes
+  its output on its own. The exit is now recorded once the output goes quiet
+  (150 ms), which also shortens quitting gg with live sessions.
+
 ## Stacked diff: line select / copy (plan 4d)
 
 ### Fixed
