@@ -13,7 +13,6 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
-	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
@@ -357,7 +356,7 @@ func (s *Server) handleStageHunks(w http.ResponseWriter, r *http.Request) {
 		old, nw, content []byte
 	}
 	var todo []prepared
-	var blobs []git.Blob
+	var blobs []engine.StagedFile
 	for _, req := range reqs {
 		if !isGitArgSafe(req.Path) {
 			writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
@@ -387,7 +386,7 @@ func (s *Server) handleStageHunks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		todo = append(todo, prepared{req, old, nw, content})
-		blobs = append(blobs, git.Blob{Path: req.Path, Content: content})
+		blobs = append(blobs, engine.StagedFile{Path: req.Path, Content: content})
 	}
 	if _, err := runOp(r.Context(), svc, engine.StageHunks{Files: blobs}); err != nil {
 		writeErr(w, http.StatusInternalServerError, err)

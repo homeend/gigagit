@@ -15,7 +15,13 @@ import (
 type StageHunks struct {
 	Path    string
 	Content []byte
-	Files   []git.Blob
+	Files   []StagedFile
+}
+
+// StagedFile is one file's new index content in a StageHunks batch.
+type StagedFile struct {
+	Path    string
+	Content []byte
 }
 
 // IndexOnly: staging never moves a ref, so it never records a branch version
@@ -23,9 +29,12 @@ type StageHunks struct {
 func (StageHunks) IndexOnly() {}
 
 func (op StageHunks) Run(ctx context.Context, deps OpDeps) (Result, error) {
-	blobs := op.Files
+	var blobs []git.Blob
 	if op.Path != "" {
-		blobs = append([]git.Blob{{Path: op.Path, Content: op.Content}}, blobs...)
+		blobs = append(blobs, git.Blob{Path: op.Path, Content: op.Content})
+	}
+	for _, f := range op.Files {
+		blobs = append(blobs, git.Blob{Path: f.Path, Content: f.Content})
 	}
 	paths := make([]string, len(blobs))
 	for i, b := range blobs {

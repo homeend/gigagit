@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/hunkpick"
 )
 
@@ -107,7 +106,7 @@ func TestStageHunksStagesSeveralFiles(t *testing.T) {
 	c := exec.Command("git", "-C", dir, "merge", "--abort")
 	_ = c.Run()
 	ctx := context.Background()
-	_, err := StageHunks{Files: []git.Blob{
+	_, err := StageHunks{Files: []StagedFile{
 		{Path: "uu.txt", Content: []byte("ONE\n")},
 	}, Path: "", Content: nil}.Run(ctx, OpDeps{Repo: repo, Events: make(chan Event, 16)})
 	if err != nil {
