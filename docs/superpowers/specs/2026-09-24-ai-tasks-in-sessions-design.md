@@ -54,6 +54,16 @@ shape of the `ctrl+\` popup).
    Shell: `$SHELL` (fallback `sh`) on Unix; on Windows `pwsh` → `powershell`
    → `cmd`; override `[console] shell`. Opens in the foreground. An ordinary
    session: sub-row, console, `ctrl+\`.
+9. **Worktree mismatch asks, never switches silently** ("interactive but not
+   intrusive"): a `gg session` command that depends on a worktree (a
+   navigate to a file or diff, a highlight) arriving from a worktree other
+   than the one gg shows is NOT applied to the wrong checkout. gg raises a
+   notice ("Claude (b) wants to show src/x.go:40" — *Switch to b and show* /
+   *Ignore*), and the agent gets an immediate exit 1: `gg is showing worktree
+   <a>; asked the user to switch to <b>`. Accepting switches (the guarded
+   switch path) and then replays the navigate. Worktree-independent commands
+   (status, focus, reload, a commit navigate within the same repo) apply as
+   usual.
 8. **Popup layout** stays as open files built it (sessions group, then open
    files); the Headless tab is added beside it. A layout rethink is a later
    refactor, not this work.
@@ -67,7 +77,9 @@ inbox>` (the inbox of the worktree the TUI was on when it started the
 child — the one its presence file is in). The `gg session …` verbs use
 `$GG_INBOX` before computing the inbox from the current directory; a
 `GG_INBOX` whose presence is not live falls back to the cwd inbox, with the
-usual "no live gg" error when neither is live. Today the TUI keeps presence
+usual "no live gg" error when neither is live. Every command also carries
+`Worktree` (the CLI's own checkout, or a link's checkout) so the TUI can
+apply ruling 9. Today the TUI keeps presence
 only in its current worktree's inbox, so after a `reRoot` a child's
 `GG_INBOX` would go stale: the TUI therefore keeps presence (and consumes
 commands) in every inbox it handed to a still-running child — a small set —
