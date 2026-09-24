@@ -1946,7 +1946,9 @@ already spanned files (header/gap/rule lines are skipped by `selectedLines`).
   in `holdSel()` / `restoreSel()`: each end as a `stackAnchor` plus the file's
   PATH (a reconcile renumbers files; the reconcile holds BEFORE swapping the
   list, since the rebuild's own hold reads old indexes against the new list).
-  A folded end lands on its file's header. What changes a file's own lines
+  A folded end lands on its file's header; `selKept`/`selKeptAt` remember the
+  UNCLAMPED hold while `lsel` is untouched, so fold + unfold gives the range
+  back (else `_`,`_` shrank it to the headers). What changes a file's own lines
   still clears, after the rebuild: `f`, and `expandFoldFor` (partial off for
   a note). Tests: `diff_stack_select_test.go`.
 - **Web:** copy = the browser drag. `sideCopyText(cells, side)` (pure, guarded
@@ -1961,6 +1963,12 @@ already spanned files (header/gap/rule lines are skipped by `selectedLines`).
   *copy* row both use it. The capture-phase outside-click listener ignores a
   `detail <= 1` click with a non-collapsed selection inside `#diff-body` (a
   drag's release); a double-click (detail 2) still clears.
+  Known edges (not fixed): a drag RELEASED over another pane clicks on the
+  common ancestor, outside `#diff-body`, so it still clears the marks; a
+  mousedown INSIDE an existing selection starts the browser's text
+  drag-and-drop, keeps the old selection, and the stamp re-labels its side.
+  The guard test pins the outside-click listener's text verbatim — put new
+  early returns ABOVE the `closest(...#ctx-menu)` line.
 - **Probe gotcha:** Firefox ignores `clipboardData` passed to a synthetic
   `new ClipboardEvent("copy", …)` — press a real `Control+c` and read the
   payload in a window-level `copy` listener instead (`stack-probe/dragcopy.mjs`).

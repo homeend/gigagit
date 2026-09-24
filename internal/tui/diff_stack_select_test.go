@@ -110,3 +110,20 @@ func TestStackFStillClearsTheSelection(t *testing.T) {
 		t.Fatal("f must clear a stacked selection")
 	}
 }
+
+// Folding a file that holds an end parks that end on the header; unfolding it
+// again must bring the range back whole, not leave it shrunk to the headers.
+func TestStackSelectionComesBackAfterFoldingItsOwnFiles(t *testing.T) {
+	t.Parallel()
+	m, want := stackSelModel(t)
+	u, _ := m.Update(keyMsg("_")) // fold everything
+	u, _ = u.(Model).Update(keyMsg("_"))
+	sameSel(t, u.(Model), want, "fold all + unfold all")
+
+	m, want = stackSelModel(t)
+	dv := m.diffLayer()
+	body := m.diffBodyRows()
+	m = m.foldFile(dv, 1, body)
+	m = m.foldFile(m.diffLayer(), 1, body)
+	sameSel(t, m, want, "folding and unfolding the anchor's file")
+}

@@ -87,6 +87,12 @@ type diffView struct {
 	// through holdStackAnchor.
 	stackHold stackAnchor
 	lsel      lineSel
+	// selKept is the stack's selection as last held, UNCLAMPED, and selKeptAt
+	// the lsel restoreSel made from it: while lsel is still that value, a
+	// re-splice holds selKept again instead of re-reading ends a fold parked
+	// on a header — so folding a file and unfolding it gives the range back.
+	selKept   selHold
+	selKeptAt lineSel
 	wrapArm   wrapDir    // boundary press primed a wrap-around (see wrapDir); cleared on any other key
 	fileArm   fileArmDir // top/bottom press primed a step to the prev/next file; cleared on any other key
 	// noteVisited: a }/{ jump (or a file step's landing) has put the cursor on

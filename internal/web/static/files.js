@@ -3248,8 +3248,8 @@ $("diff-body").addEventListener("mousedown", (e) => {
 
 // diffSelectionText is the copy payload of the page's text selection over
 // #diff-body: every line cell the selection touches, clipped to it, handed to
-// sideCopyText. ALL ranges are read — Firefox splits a selection around
-// unselectable content. A cell only reached by a range's edge with nothing
+// sideCopyText. ALL ranges are read — a browser may split a selection
+// around unselectable content. A cell only reached by a range's edge with nothing
 // selected in it (a drag that ends at column 0 of the next line) is not a
 // line of the copy.
 function diffSelectionText() {
@@ -3326,11 +3326,11 @@ document.addEventListener(
   "click",
   (e) => {
     if (e.button !== 0) return;
-    if (e.target.closest && e.target.closest("tr[data-hunk][data-hr], #ctx-menu")) return;
     // A text drag ends in a click wherever the pointer was released: that is
     // a copy gesture, not a click outside (plan 4d, D4). A double-click's
     // second click (detail 2) has selected a word and still clears.
     if (e.detail <= 1 && !getSelection().isCollapsed && $("diff-body").contains(e.target)) return;
+    if (e.target.closest && e.target.closest("tr[data-hunk][data-hr], #ctx-menu")) return;
     clearRowSelection();
   },
   true

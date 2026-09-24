@@ -428,6 +428,9 @@ func (v *diffView) holdSel() selHold {
 	if v.stk == nil || !v.lsel.on {
 		return selHold{}
 	}
+	if v.selKept.on && v.lsel == v.selKeptAt {
+		return v.selKept // untouched since the last restore: its ends may sit on a fold
+	}
 	h := selHold{on: true, fixed: v.lsel.fixed, a: v.anchorAt(v.lsel.anchor), e: v.anchorAt(v.lsel.end)}
 	h.ap, h.ep = v.stackPathOf(h.a.file), v.stackPathOf(h.e.file)
 	return h
@@ -450,6 +453,7 @@ func (v *diffView) restoreSel(h selHold) {
 		return
 	}
 	v.lsel = lineSel{on: true, anchor: v.lineAt(h.a), end: v.lineAt(h.e), fixed: h.fixed}
+	v.selKept, v.selKeptAt = h, v.lsel
 }
 
 // stackPathOf is file i's path, "" when i names no file.
