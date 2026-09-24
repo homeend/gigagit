@@ -1142,7 +1142,14 @@ the viewer answers a line (`cur+1`); the list rows go through
 `fileListRowPath` and stay line-less. `gg link --content <path>:<line>`
 checks the line against `contentLineCount`, which must split exactly like
 `fileContentLinesTok` (normalize CR/CRLF, THEN trim trailing newlines). Still
-deferred: a web content viewer + landing.
+deferred: a web content viewer + landing. **Preview + reply (follow-up):**
+the files view's focused preview answers `fileRowPath` with its cursor line
+(`focusedFilesPreview`); because it shows ANOTHER version, the row snapshots
+the shown lines and the off-thread check compares them to the disk
+(`sameContentLines`) — a mismatch copies nothing (`fileLinkCheckedMsg.changed`).
+The navigate reply rides the load (`contentLandedMsg` wraps the
+`fileContentMsg`), so it can say `at line N` / the clamp; a failed load
+fails the navigate.
 
 ### The compare algebra (`internal/domain`, plan 1b, 2026-09-17)
 

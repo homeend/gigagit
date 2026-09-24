@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -28,7 +29,7 @@ func viewerModel(t *testing.T) (Model, *string) {
 	copied := new(string)
 	m.clipWrite = func(_ io.Writer, s string) (string, error) { *copied = s; return "fake", nil }
 	c := steer.Command{ID: "fv", Cmd: "navigate", File: "main.go",
-		Target: &steer.Target{State: "unstaged"}, HintKind: model.ContentHintKind, HintID: model.ContentHintID}
+		Target: &steer.Target{State: "unstaged"}, HintKind: model.ContentHintKind, HintID: model.ContentHintID, Wait: true}
 	nm, cmd := m.applySteer(c)
 	return pumpAll(t, nm, cmd), copied
 }
@@ -158,7 +159,7 @@ func viewerAt(t *testing.T, name, content string, line int) (Model, *fileViewer)
 		t.Fatal(err)
 	}
 	c := steer.Command{ID: "fvl", Cmd: "navigate", File: name,
-		Target: &steer.Target{State: "unstaged"}, HintKind: model.ContentHintKind, HintID: model.ContentHintID}
+		Target: &steer.Target{State: "unstaged"}, HintKind: model.ContentHintKind, HintID: model.ContentHintID, Wait: true}
 	if line > 0 {
 		c.Line = &steer.Line{Side: "new", No: line}
 	}
@@ -250,5 +251,46 @@ func TestFileViewerWheelScrolls(t *testing.T) {
 	m = tm.(Model)
 	if want := m.wheelStep(); fv.p.sel != want || fv.p.cur != 0 {
 		t.Fatalf("after one wheel-down sel=%d cur=%d, want sel=%d cur=0", fv.p.sel, fv.p.cur, want)
+	}
+}
+
+// The agent that sent the link hears where the cursor landed — including
+// when the file had fewer lines than the link named.
+func TestContentLinkReplyReportsTheLandedLine(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		lines, line int
+		want        string
+	}{
+		{60, 40, "opened long.txt at line 40"},
+		{5, 99, "opened long.txt at line 5 (line 99 is past the end, 5 lines)"},
+		{5, 0, "opened long.txt"},
+	} {
+		m, _ := viewerAt(t, "long.txt", numberedLines(tc.lines), tc.line)
+		r, ok := steer.AwaitReply(m.steerDir, "fvl", time.Second)
+		if !ok || !r.OK || r.Detail != tc.want {
+			t.Errorf("line %d of %d: reply = %+v ok=%v, want detail %q", tc.line, tc.lines, r, ok, tc.want)
+		}
+	}
+}
+
+// A load that fails is a navigate that failed: the agent is told why.
+func TestContentLinkReplyFailsWhenTheLoadFails(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	dir := filepath.Join(m.currentWorktree, "adir")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "f"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := steer.Command{ID: "fvf", Cmd: "navigate", File: "adir",
+		Target: &steer.Target{State: "unstaged"}, HintKind: model.ContentHintKind, HintID: model.ContentHintID, Wait: true}
+	nm, cmd := m.applySteer(c)
+	nm = pumpAll(t, nm, cmd)
+	r, ok := steer.AwaitReply(nm.steerDir, "fvf", time.Second)
+	if !ok || r.OK {
+		t.Fatalf("reply = %+v ok=%v, want a failure", r, ok)
 	}
 }
