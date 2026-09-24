@@ -74,11 +74,13 @@ func TestFocusedConsoleForwardsGGShortcuts(t *testing.T) {
 }
 
 func TestCtrlBackslashFromPanels(t *testing.T) {
-	t.Skip("Task 7: sessionsPopup")
 	m := loadedModel(t)
+	startTestSession(t, m, `sleep 5`)
 	mm, _ := m.Update(ctrlBackslash())
 	m = mm.(Model)
-	_ = m // Task 7 asserts *sessionsPopup here
+	if _, ok := m.topLayer().(*sessionsPopup); !ok {
+		t.Fatalf("ctrl+\\ must open the sessions popup, top = %T", m.topLayer())
+	}
 }
 
 func TestUnfocusedConsoleSwallowsCommitsKeys(t *testing.T) {

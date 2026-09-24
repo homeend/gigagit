@@ -253,10 +253,3 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	}
 	return m, nil, true
 }
-
-// openSessionsPopup opens the ctrl+\ sessions popup (Task 7).
-func (m Model) openSessionsPopup(quitMode bool) (Model, tea.Cmd) {
-	_ = quitMode
-	m.statusMsg = i18n.T("no agent sessions — start one from a worktree's . menu")
-	return m, nil
-}
