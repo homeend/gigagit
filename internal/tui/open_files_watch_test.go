@@ -283,3 +283,90 @@ func TestPendingLineSurvivesAPoll(t *testing.T) {
 		t.Fatal("the link's line did not land")
 	}
 }
+
+// withDocWatch builds and stores the fsnotify watcher over m's open files, as
+// a tick on a supported filesystem would. The listen loop is NOT started (it
+// blocks); tests read the watcher's events directly.
+func withDocWatch(t *testing.T, m Model) Model {
+	t.Helper()
+	m.watchSupported = true
+	nm, cmd := m.syncDocWatch()
+	if cmd == nil {
+		t.Fatal("no watcher build on a supported filesystem")
+	}
+	tm, _ := nm.Update(cmd())
+	m = tm.(Model)
+	if m.docWatch.w == nil {
+		t.Fatal("the built watcher was not stored")
+	}
+	w := m.docWatch.w
+	t.Cleanup(func() { _ = w.Close() })
+	return m
+}
+
+func TestDocWatchBuildsOnSupportedFS(t *testing.T) {
+	t.Parallel()
+	m, d := watchModel(t, "w.txt", "a\n")
+	m = withDocWatch(t, m)
+	writeWT(t, m, "w.txt", "abc\n")
+	select {
+	case got := <-m.docWatch.w.Events():
+		if got != m.docAbs(d) {
+			t.Fatalf("event %q, want %q", got, m.docAbs(d))
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("no fsnotify event for the open file")
+	}
+}
+
+func TestDocWatchEventPollsABackgroundFileNow(t *testing.T) {
+	t.Parallel()
+	m, d := watchModel(t, "w.txt", "old\n")
+	m = tick(t, m, time.Now())
+	m = fvKeys(t, m, keyCtrlBracket())
+	writeWT(t, m, "w.txt", "newer\n")
+	tm, cmd := m.Update(docWatchEventMsg{gen: m.docWatch.gen, path: m.docAbs(d)})
+	pumpAll(t, tm.(Model), cmd)
+	if d.p.lines[0].raw != "newer" {
+		t.Fatalf("an fsnotify event did not poll the background file at once: %+v", d.p.lines[0])
+	}
+}
+
+func TestDocWatchOffWhenUnsupported(t *testing.T) {
+	t.Parallel()
+	m, _ := watchModel(t, "w.txt", "a\n")
+	if _, cmd := m.syncDocWatch(); cmd != nil {
+		t.Fatal("a watcher was built on an unsupported filesystem")
+	}
+}
+
+func TestDocWatchClosesWhenNoFilesLeft(t *testing.T) {
+	t.Parallel()
+	m, d := watchModel(t, "w.txt", "a\n")
+	m = withDocWatch(t, m)
+	w := m.docWatch.w
+	m = m.closeDoc(d)
+	m, _ = m.openFilesTick(time.Now())
+	if m.docWatch.w != nil {
+		t.Fatal("the watcher outlived the last open file")
+	}
+	select {
+	case _, ok := <-w.Events():
+		if ok {
+			t.Fatal("got an event, want the channel closed")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the watcher was not closed")
+	}
+}
+
+func TestReRootClosesDocWatch(t *testing.T) {
+	t.Parallel()
+	m, _ := watchModel(t, "w.txt", "a\n")
+	m = withDocWatch(t, m)
+	gen := m.docWatch.gen
+	tm, _ := m.reRoot(m.currentWorktree)
+	if nm := tm.(Model); nm.docWatch.w != nil || nm.docWatch.gen == gen {
+		t.Fatalf("reRoot left the watcher (w=%v, gen %d→%d)", nm.docWatch.w, gen, nm.docWatch.gen)
+	}
+}

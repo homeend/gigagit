@@ -895,6 +895,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(fill, reply)
 	case openFilesStatMsg:
 		return m.applyDocStats(msg)
+	case docWatchReadyMsg:
+		return m.docWatchReady(msg)
+	case docWatchEventMsg:
+		return m.docWatchEvent(msg)
+	case docWatchClosedMsg:
+		return m, nil // the watcher was closed: its listen loop ends here
 	case fileContentMsg:
 		if d, rows, inner, ok := m.liveDoc(msg.tag); ok {
 			if n := d.fill(msg, rows, inner); n != "" {
@@ -4430,8 +4436,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	}
 	m.watchGen++
 	m.watchSupported = false
-	m.docWatch.gen++ // a stat round in flight named the old tree
-	m.docWatch.polling = false
+	closeDocWatch(m.docWatch.w)                         // the old tree's files are not the new one's
+	m.docWatch = docWatchState{gen: m.docWatch.gen + 1} // drops a stat round or a build in flight
 	m.svc = domain.OpenTUI(path)
 	// Disable the snapshot synchronously (no git subprocess here — reRoot runs
 	// on the Update goroutine); snapshotTargetCmd below re-resolves and
