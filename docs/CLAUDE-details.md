@@ -3130,8 +3130,9 @@ spike findings), plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-1-c
   `StartSpec.CmdLine` → `SysProcAttr.CmdLine`: `x/conpty` otherwise composes
   the line from argv with `\"` escaping that cmd.exe cannot parse (a quoted
   `"C:\Program Files\…\claude.exe"` would break); separate lines join with
-  ` & `. ConPTY keeps its output pipe open after the child exits, so on
-  Windows the exit is recorded after the 2 s drain bound.
+  ` & `. ConPTY is expected to keep its output pipe open until the pseudo
+  console closes (NOT yet verified on Windows), which would put every Windows
+  exit on the 2 s drain bound.
   `EnsureSessionCommands` treats any existing `session` block, even an
   invalid one, as configured.
 - **exttool/config.** `category = "session"` and `mode = "session"` only
