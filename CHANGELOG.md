@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent sessions — core (no UI yet)
+
+### Added
+
+- **gg can run interactive AI agents in its own embedded terminals.** A new
+  core (`internal/agentsession`) starts a program in a pseudo-terminal
+  (ConPTY on Windows) with an in-memory terminal emulator, so a frontend can
+  paint a live console and type into it. Sessions belong to the gg process,
+  not to a repository: switching worktree or repository keeps them running.
+  The TUI console that uses this arrives in the next stage.
+- **A `session` external-tool category.** Claude Code, Codex, Junie,
+  Antigravity and Kimi each get a plain interactive launch plus an opt-in
+  *(yolo)* variant (`--dangerously-skip-permissions`,
+  `--dangerously-bypass-approvals-and-sandbox`, `--brave`, `--yolo`); custom
+  entries are `[[tools.command]]` blocks with `category = "session"` and
+  `mode = "session"`. Settings → External tools lists them, yolo unticked.
+  The first time an agent is started with no session command configured, gg
+  detects the installed agents and writes their safe entries to the global
+  config.
+
+### Changed
+
+- **Charm libraries upgraded** for the terminal emulator (`x/ansi` 0.11.7,
+  `x/cellbuf` 0.0.15 and friends). The new width tables measure ☰ (U+2630)
+  as two cells, matching how terminals draw it, so gg no longer rewrites it
+  to `?` in commit rows.
+
 ## Line staging in gg web, the GitKraken way
 
 ### Changed
