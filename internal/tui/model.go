@@ -120,6 +120,7 @@ type Model struct {
 
 	stashView     *stashView                               // stash list in the right column (over Commits); nil = closed
 	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
+	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
 	quitConfirmed bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
 	sessionStates map[domain.SessionID]domain.SessionState // last seen state per session, for exit notices
@@ -892,6 +893,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m, reply := m.navigateLanded(msg.cmd, contentLandedDetail(msg.cmd.File, msg.line, msg.load.lines))
 		return m, tea.Batch(fill, reply)
+	case openFilesStatMsg:
+		return m.applyDocStats(msg)
 	case fileContentMsg:
 		if d, rows, inner, ok := m.liveDoc(msg.tag); ok {
 			if n := d.fill(msg, rows, inner); n != "" {
@@ -3073,9 +3076,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// REPO's filesystem while the inbox lives in the state dir.
 		var cmd tea.Cmd
 		m, cmd = m.refreshTick(time.Now())
-		var prcCmd tea.Cmd
+		var prcCmd, docCmd tea.Cmd
 		m, prcCmd = m.prCommentsTick(time.Now())
-		cmd = tea.Batch(cmd, prcCmd)
+		m, docCmd = m.openFilesTick(time.Now())
+		cmd = tea.Batch(cmd, prcCmd, docCmd)
 		m = m.maybeWriteSnapshot()
 		m.touchSteerPresence()
 		var scmd tea.Cmd
@@ -4426,6 +4430,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	}
 	m.watchGen++
 	m.watchSupported = false
+	m.docWatch.gen++ // a stat round in flight named the old tree
+	m.docWatch.polling = false
 	m.svc = domain.OpenTUI(path)
 	// Disable the snapshot synchronously (no git subprocess here — reRoot runs
 	// on the Update goroutine); snapshotTargetCmd below re-resolves and
