@@ -1152,7 +1152,21 @@ view's `m.filesPreview` and the full-screen `fileViewer` (which embeds
 the preview — never "the topmost viewer" (that dropped the first of two
 files opened in a row). A document no frame shows is not found: its load is
 stale. `key()` (source + path) is the reuse key for the open-files list.
-**Preview + reply (follow-up):**
+**Open-files list (plan 2):** `m.openFiles` (`open_files.go`) is
+per worktree (`m.currentWorktree`), most recently shown first, cap 20;
+`touch` evicts the least recently shown doc that `docShown` says is in no
+frame (a covered viewer counts as shown). A doc leaves the list ONLY via
+`closeDoc` (esc in the viewer, `closePreview`, `x` in the switcher) or
+eviction — every other teardown (files view closed, `clearLayers`, a new
+preview) leaves it in the background. A doc is in ONE frame: `detachDoc`
+before showing it elsewhere. `openFileViewer`/`openPreviewSrc` look the key
+up first (reuse; `keepPlace()` so the reload restores cursor+top — a
+`pendingLine` wins); commit/shelf docs that are loaded are never re-read.
+The switcher is `sessionsPopup` with a parallel `files` slice (quit mode
+lists none); `bringToFront` focuses the preview when the doc IS the preview,
+else pushes a viewer frame. `focusedDoc` (viewer on top, else the focused
+preview) drives Copy file link: any non-working-tree doc gets the
+disk-match rule. **Preview + reply (follow-up):**
 the files view's focused preview answers `fileRowPath` with its cursor line
 (`focusedFilesPreview`); because it shows ANOTHER version, the row snapshots
 the shown lines and the off-thread check compares them to the disk

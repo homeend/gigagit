@@ -200,7 +200,12 @@ func globalBindings() []footerBinding {
 		{"undo", "u", i18n.T("[u]ndo"), Model.opsIdle, scopeGlobal},
 		{"bookmarks", "g", i18n.T("[g] bookmarks"), Model.opsIdle, scopeGlobal},
 		{"shelf", "G", i18n.T("[G] shelf"), Model.opsIdle, scopeGlobal},
-		{"agent-sessions", "ctrl+\\", i18n.T("[ctrl+\\] agents"), func(m Model) bool { return len(domain.Sessions().List()) > 0 }, scopeGlobal},
+		{"agent-sessions", "ctrl+\\", i18n.T("[ctrl+\\] agents"), func(m Model) bool {
+			return len(domain.Sessions().List()) > 0 && len(m.openFiles.list(m.currentWorktree)) == 0
+		}, scopeGlobal},
+		{"agents-files", "ctrl+\\", i18n.T("[ctrl+\\] agents & files"), func(m Model) bool {
+			return len(m.openFiles.list(m.currentWorktree)) > 0
+		}, scopeGlobal},
 		{"notices", "!", i18n.T("[!] notices"), func(m Model) bool { return len(m.notices) > 0 }, scopeGlobal},
 		{"last-error", "E", i18n.T("[E] full message"), func(m Model) bool { return m.lastError != "" }, scopeGlobal},
 		{"find", "F", i18n.T("[F] find file"), Model.opsIdle, scopeGlobal},

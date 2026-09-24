@@ -1162,6 +1162,20 @@ likewise come back through `$GG_MESSAGE_FILE`, fed the diff via a new
 `$GG_REVIEW_DIFF` file (Junie's own `--review` flag can't take a range;
 Kimi's print-mode stdout is a report, not the review).
 
+### Open files (background file viewers)
+
+A file you view — **View file** in a commit's file tree, a pasted `gg://`
+content link (`#`), an agent's `gg open` — stays **open** when you step away
+from it: `ctrl+]` sends it to the background (the `.` menu's **Send to
+background** does the same), `esc` closes it. `ctrl+\` lists this
+worktree's open files under the agent sessions (`●` on screen, `○` in the
+background, with the cursor line and the version: `working tree`,
+`@ <sha>` or `shelf`); `enter` brings one back exactly as you left it
+(cursor, scroll, selection, search), full-screen, and `x` closes it.
+Opening a file that is already open reuses it; up to 20 stay open per
+worktree, and the 21st closes the one you looked at least recently (the
+bottom bar names it). The list lives as long as gg runs.
+
 ### Agent sessions (embedded consoles)
 
 On a **Worktrees** row, the `.` menu's **Start agent…** runs an interactive
