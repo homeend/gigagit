@@ -73,6 +73,9 @@ func TestTranslatePathTable(t *testing.T) {
 		ok             bool
 	}{
 		{"windows", "/mnt/t/others/repo", `T:\others\repo`, true},
+		// Windows filepath.Clean turns git's /mnt/t/… into \mnt\t\… before it gets here.
+		{"windows", `\mnt\t\others\repo`, `T:\others\repo`, true},
+		{"windows", `\mnt\t`, `T:\`, true},
 		{"windows", "/mnt/c", `C:\`, true},
 		{"windows", "/mnt/tt/x", "", false},
 		{"windows", "/home/u/repo", "", false},
