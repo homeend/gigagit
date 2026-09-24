@@ -1714,7 +1714,9 @@ reader could not see.
   diff layout (USER RULING: `p` is pull and `-` folds a stacked file, so not
   n/p or -/=) and a `. next change` footer chip. The web does not wrap, so
   where the TUI hands over to its wrap arm the web stays on the last / first
-  change; the conflict picker keeps stepping its regions by index.
+  change; the conflict picker keeps stepping its regions by index. In a
+  stack the web steps only among rendered rows — a folded or not-yet-loaded
+  file is skipped (no `huntChange` equivalent; recorded gap).
 - **In a stack `n` stepped FILES** (plan 3 made `v.blocks` the header indices),
   so a one-file stack had nowhere to step: `n` primed a wrap and the second
   press landed on the file header at the top of the scroll, with no line cursor
