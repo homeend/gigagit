@@ -423,7 +423,6 @@ async function load(st, s) {
     // the same rows, so staging one file does not wipe the selection in another.
     if (s.hunks && s.hunksPrev && s.hunksPrev.hash === s.hunks.hash) {
       s.hunks.sel = s.hunksPrev.sel;
-      s.hunks.anchor = s.hunksPrev.anchor;
     }
     s.hunksPrev = null;
     if (!s.counts) s.counts = countsFromDiff(d);
@@ -669,6 +668,7 @@ function toggleSlot(k) {
   const s = st && st.slots[k];
   if (!s) return;
   s.collapsed = !s.collapsed;
+  if (s.collapsed && s.hunks) s.hunks.sel = new Set(); // nothing hidden stays selected
   repaintSlot(st, k);
   pump(st);
 }
@@ -682,7 +682,10 @@ function toggleAllCollapsed() {
   const st = state.stack;
   if (!st) return;
   const expand = st.slots.every((s) => s.collapsed);
-  for (const s of st.slots) s.collapsed = !expand;
+  for (const s of st.slots) {
+    s.collapsed = !expand;
+    if (s.collapsed && s.hunks) s.hunks.sel = new Set(); // nothing hidden stays selected
+  }
   const at = st.slots[st.anchor] ? st.slots[st.anchor].idx : 0;
   paintStack(st);
   scrollToFile(st, at, false); // keep the reader's file at the top, folded or not
@@ -721,6 +724,19 @@ function hunkSlotAt(el) {
   const k = Number(sec.dataset.k);
   const s = st.slots[k];
   return s && s.hunks ? { k, slot: s, hunks: s.hunks, el: sec } : null;
+}
+
+
+// hunkSlots is every stacked file with selectable rows, in stack order —
+// the one selection spans them all.
+function hunkSlots() {
+  const st = state.stack;
+  if (!st) return [];
+  const out = [];
+  st.slots.forEach((s, k) => {
+    if (s.hunks && !s.collapsed) out.push({ k, slot: s, hunks: s.hunks, el: sectionEl(k) });
+  });
+  return out;
 }
 
 
@@ -805,7 +821,6 @@ async function quietReloadSlot(st, s) {
   const hunks = d.hunks && hunkEligible(s.f) ? hunkState(s.f.path, d.hunks) : null;
   if (hunks && s.hunks && s.hunks.hash === hunks.hash) {
     hunks.sel = s.hunks.sel;
-    hunks.anchor = s.hunks.anchor;
   }
   const same = s.diff && JSON.stringify(s.diff.rows) === JSON.stringify(d.rows);
   if (same) {
@@ -868,4 +883,4 @@ registerHelp({
     "header does the same for that file",
 });
 
-export { activeDiff, hunkSlotAt, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };
+export { activeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, refindStack, stackHitStep, stackSearchHere, unsearchedSlots, landStackLine, noteScope, refreshStackNotes, stackAllNotes, syncStackChrome, collapseCurrent, openStack, reconcileStack, rerenderStack, stackOn, teardownStack, toggleAllCollapsed, toggleStacked };

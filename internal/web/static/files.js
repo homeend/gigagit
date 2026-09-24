@@ -19,7 +19,7 @@ import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { noteTitle, seedCollapsed, setAllCollapsed, toggleCollapsed } from "./notebox.js";
 import { mdHTML, mdInlineHTML } from "./markdown.js";
-import { activeDiff, hunkSlotAt, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
+import { activeDiff, hunkSlotAt, hunkSlots, showSlotDiff, followInList, noteScope, openStack, reconcileStack, refindStack, refreshStackNotes, rerenderStack, stackAllNotes, stackHitStep, stackOn, stackSearchHere, teardownStack, unsearchedSlots } from "./stackview.js";
 
 // reconcileStatusView keeps an open status screen truthful after any
 // status re-read (op done, r, tab focus): the tree may have gone clean or
@@ -3056,7 +3056,7 @@ $("next-change").addEventListener("click", () => stepChange(1));
 // the staged diff (HEAD → index) unstages. Selections are positional against
 // the bytes the server hashed, so after every action the diff is re-read.
 
-let diffHunks = null; // {path, hash, lane, count, sel: Set<"hunk:row">, anchor} while an eligible diff is open
+let diffHunks = null; // {path, hash, lane, count, sel: Set<"hunk:row">} while an eligible diff is open
 
 
 // hunkEligible: a tracked file with an unstaged change (stage its rows) or a
@@ -3076,7 +3076,7 @@ function clearDiffHunks() {
 
 // hunkState builds the per-file state from a diff's tags.
 function hunkState(path, h) {
-  return { path, hash: h.hash, lane: h.lane || "unstaged", count: h.count, sel: new Set(), anchor: null };
+  return { path, hash: h.hash, lane: h.lane || "unstaged", count: h.count, sel: new Set() };
 }
 
 
@@ -3109,27 +3109,105 @@ function paintHunkSel(scope) {
 }
 
 
-// selectRow applies one click to a file's selection.
-function selectRow(scope, tr, e) {
-  const v = scope.hunks;
-  const key = rowKey(tr.dataset.hunk, tr.dataset.hr);
-  if (e.shiftKey && v.anchor) {
-    const rows = taggedRows(scope);
-    const a = rows.findIndex((x) => rowKey(x.dataset.hunk, x.dataset.hr) === v.anchor);
-    const b = rows.indexOf(tr);
-    if (a >= 0 && b >= 0) {
-      if (!(e.ctrlKey || e.metaKey)) v.sel = new Set();
-      for (let i = Math.min(a, b); i <= Math.max(a, b); i++) v.sel.add(rowKey(rows[i].dataset.hunk, rows[i].dataset.hr));
-      return;
-    }
+// ONE selection spans everything on screen — every file of a stack, which
+// reads as one document (user ruling 2026-09-24). Each file still keeps its
+// own share (scope.hunks.sel, positional against ITS bytes); the pieces below
+// treat the shares as one. A row's id is "<file>\u0001<hunk>:<row>".
+const ROW_SEP = "\u0001";
+let rowAnchor = null; // the row id a shift-click ranges from
+let preClickSel = null; // the selection as it stood before a click sequence's first click
+
+
+// scopeId names a file of the selection: its stack slot, or the single diff
+// by lane + path (a stale anchor from another file must not match here).
+function scopeId(scope) {
+  return scope.slot ? scope.slot.key : scope.hunks.lane + "\u0000" + scope.hunks.path;
+}
+
+
+// rowScopes is every file with selectable rows, in the order shown.
+function rowScopes() {
+  if (state.stack) return hunkSlots();
+  return diffHunks ? [{ hunks: diffHunks, el: $("diff-body") }] : [];
+}
+
+
+// selectionOrder is every selectable row on screen, in document order.
+function selectionOrder() {
+  const out = [];
+  for (const sc of rowScopes()) {
+    if (!sc.el) continue;
+    const id = scopeId(sc);
+    for (const tr of taggedRows(sc)) out.push({ id: id + ROW_SEP + rowKey(tr.dataset.hunk, tr.dataset.hr), lane: sc.hunks.lane, tr });
   }
-  if (e.ctrlKey || e.metaKey) {
-    if (v.sel.has(key)) v.sel.delete(key);
-    else v.sel.add(key);
+  return out;
+}
+
+
+function currentSelection() {
+  const sel = new Set();
+  for (const sc of rowScopes()) for (const key of sc.hunks.sel) sel.add(scopeId(sc) + ROW_SEP + key);
+  return { sel, anchor: rowAnchor };
+}
+
+
+// applySelection hands each file its share of a selection and repaints.
+function applySelection(s) {
+  for (const sc of rowScopes()) {
+    const pre = scopeId(sc) + ROW_SEP;
+    sc.hunks.sel = new Set([...s.sel].filter((id) => id.startsWith(pre)).map((id) => id.slice(pre.length)));
+    paintHunkSel(sc);
+  }
+  rowAnchor = s.anchor;
+}
+
+
+function selectionSize() {
+  return rowScopes().reduce((n, sc) => n + sc.hunks.sel.size, 0);
+}
+
+
+// clearRowSelection empties the selection; false when there was none (so Esc
+// falls through to what it does otherwise).
+function clearRowSelection() {
+  rowAnchor = null;
+  if (!selectionSize()) return false;
+  applySelection({ sel: new Set(), anchor: null });
+  return true;
+}
+
+
+// selectStep applies one click to the selection. order is every selectable
+// row in document order ({id, lane}), at the clicked one. Plain click: that
+// row alone; ctrl/cmd: toggle it; shift: the range from the anchor, across
+// files (ctrl+shift adds the range). A selection holds ONE lane: stage and
+// unstage never mix. Pure — the guard imports it.
+function selectStep(order, cur, at, mods) {
+  const hit = order[at];
+  const laneOf = new Map(order.map((r) => [r.id, r.lane]));
+  let sel = new Set([...cur.sel].filter((id) => laneOf.get(id) === hit.lane));
+  const a = cur.anchor == null ? -1 : order.findIndex((r) => r.id === cur.anchor);
+  if (mods.shift && a >= 0 && order[a].lane === hit.lane) {
+    if (!mods.ctrl) sel = new Set();
+    for (let i = Math.min(a, at); i <= Math.max(a, at); i++) if (order[i].lane === hit.lane) sel.add(order[i].id);
+    return { sel, anchor: cur.anchor };
+  }
+  if (mods.ctrl) {
+    if (sel.has(hit.id)) sel.delete(hit.id);
+    else sel.add(hit.id);
   } else {
-    v.sel = new Set([key]);
+    sel = new Set([hit.id]);
   }
-  v.anchor = key;
+  return { sel, anchor: hit.id };
+}
+
+
+// clickRow applies a click on a selectable row.
+function clickRow(tr, mods) {
+  const order = selectionOrder();
+  const at = order.findIndex((r) => r.tr === tr);
+  if (at < 0) return;
+  applySelection(selectStep(order, currentSelection(), at, mods));
 }
 
 
@@ -3145,15 +3223,31 @@ $("diff-body").addEventListener("mousedown", (e) => {
 $("diff-body").addEventListener("click", (e) => {
   const tr = e.target.closest("tr[data-hunk][data-hr]");
   if (!tr) return;
+  // a double-click's first click reselects; the double-click acts on what
+  // was selected BEFORE it
+  if (e.detail <= 1) preClickSel = currentSelection().sel;
   const modified = e.shiftKey || e.ctrlKey || e.metaKey;
   // a plain click that ends a text drag is a copy gesture, not a selection
   if (!modified && !getSelection().isCollapsed) return;
   if (modified) getSelection().removeAllRanges();
-  const scope = fileOf(tr);
-  if (!scope) return;
-  selectRow(scope, tr, e);
-  paintHunkSel(scope.el ? scope : null);
+  clickRow(tr, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey });
 });
+
+
+// A click anywhere that is not a selectable row clears the selection — the
+// context lines, the header, the file list, any other pane. The menu's own
+// rows are exempt (a staging row clears it itself, "copy line" must not).
+// CAPTURE phase: the menu empties itself in its own click handler, and a
+// detached button no longer finds #ctx-menu above it.
+document.addEventListener(
+  "click",
+  (e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest && e.target.closest("tr[data-hunk][data-hr], #ctx-menu")) return;
+    clearRowSelection();
+  },
+  true
+);
 
 
 // optimisticRows is what a working-tree diff WILL look like once the rows in
@@ -3209,40 +3303,76 @@ function selectionWire(v) {
 }
 
 
-// applyRowStage stages (or, in the staged diff, unstages) rows of one file,
-// and the SCREEN moves first: the predicted diff (optimisticRows) is painted
-// at once, the POST follows, and
-//   - on an error the previous diff comes back exactly as it was;
-//   - on success the sidebar takes the fresh status and THIS file alone is
-//     re-read quietly — no "loading…", no jump, the reader's scroll and folds
-//     kept — which re-tags it for the next action.
-// Only a file that left its section (fully staged / unstaged) takes the
-// structural path. keys are the rows acted on ("hunk:row"), blocks the wire.
-async function applyRowStage(scope, blocks, keys) {
-  const v = scope.hunks;
-  if (!v || !blocks.length) return;
-  const before = scope.slot ? scope.slot.diff : state.lastDiff;
-  if (!before) return;
-  const predicted = { ...before, rows: optimisticRows(before.rows || [], v.lane, keys) };
-  delete predicted.hunks;
-  showFileDiff(scope, predicted, null); // non-interactive until the answer: its tags are gone
-  let resp;
-  try {
-    resp = await postJSON("/api/stage-hunks", { path: v.path, lane: v.lane, blocks, hash: v.hash });
-  } catch (e) {
-    opLine("error: " + (e.message || e), true);
-    // 409: the file moved under the action — the truth is a fresh read.
-    if (/file changed/.test(e.message || "")) {
-      await quietRefreshFile(scope, v.path, v.lane);
-      return;
+// stageJobs stages (or, in the staged diff, unstages) rows of one or more
+// files — one job per file ({scope, blocks, keys}: keys are the rows acted on,
+// "hunk:row", blocks the wire) — and the SCREEN moves first: every file's
+// predicted diff (optimisticRows) is painted at once, the POSTs follow one
+// file at a time, and
+//   - a file whose POST fails comes back exactly as it was, selection too;
+//   - on success the sidebar takes the fresh status and the files acted on
+//     are re-read quietly — no "loading…", no jump, the reader's scroll and
+//     folds kept — which re-tags them for the next action.
+// A file that left its section (fully staged / unstaged) takes the structural
+// path instead.
+async function stageJobs(jobs) {
+  const live = [];
+  for (const j of jobs) {
+    const v = j.scope.hunks;
+    if (!v || !j.blocks.length) continue;
+    const before = j.scope.slot ? j.scope.slot.diff : state.lastDiff;
+    if (!before) continue;
+    const predicted = { ...before, rows: optimisticRows(before.rows || [], v.lane, j.keys) };
+    delete predicted.hunks;
+    showFileDiff(j.scope, predicted, null); // non-interactive until the answer: its tags are gone
+    live.push({ ...j, v, before });
+  }
+  let status = null;
+  const reread = [];
+  for (const j of live) {
+    const { scope, v, blocks, keys, before } = j;
+    try {
+      status = await postJSON("/api/stage-hunks", { path: v.path, lane: v.lane, blocks, hash: v.hash });
+      reread.push(j);
+    } catch (e) {
+      opLine("error: " + (e.message || e), true);
+      // 409: the file moved under the action — the truth is a fresh read.
+      if (/file changed/.test(e.message || "")) {
+        reread.push(j);
+        continue;
+      }
+      v.sel = new Set(keys); // put back what the reader had chosen
+      showFileDiff(scope, before, v);
     }
-    v.sel = new Set(keys); // put back what the reader had chosen
-    showFileDiff(scope, before, v);
+  }
+  if (status) {
+    applyStatus(status); // the 200 body IS a fresh /api/status payload
+    renderFiles();
+  }
+  // One structural pass covers every file of a stack when any file left it.
+  if (state.stack && reread.some((j) => !inLaneSection(j.v.path, j.v.lane))) {
+    reconcileStack();
     return;
   }
-  applyStatus(resp); // the 200 body IS a fresh /api/status payload
-  renderFiles();
-  await quietRefreshFile(scope, v.path, v.lane);
+  for (const j of reread) await quietRefreshFile(j.scope, j.v.path, j.v.lane);
+}
+
+
+// stageSelection acts on the whole selection, every file of it.
+function stageSelection() {
+  const jobs = rowScopes()
+    .filter((sc) => sc.hunks.sel.size)
+    .map((sc) => {
+      const keys = new Set(sc.hunks.sel);
+      return { scope: sc, keys, blocks: selectionWire({ sel: keys }) };
+    });
+  clearRowSelection();
+  void stageJobs(jobs);
+}
+
+
+function inLaneSection(path, lane) {
+  const section = lane === "staged" ? "staged" : "changes";
+  return state.statusEntries.some((x) => x.path === path && x.section === section);
 }
 
 
@@ -3292,14 +3422,18 @@ async function quietRefreshFile(scope, path, lane) {
 }
 
 
-// actOnRow is the double-click: stage (or unstage) that ONE row, now — the
-// quick path beside select + right-click.
+// actOnRow is the double-click. On a row that WAS selected it stages the
+// whole selection (as it stood before the double-click's own clicks
+// reselected); on any other row it drops the selection and stages that row.
 function actOnRow(tr) {
   const scope = fileOf(tr);
   if (!scope) return;
-  const key = rowKey(tr.dataset.hunk, tr.dataset.hr);
-  scope.hunks.sel = new Set();
-  void applyRowStage(scope, [{ block: Number(tr.dataset.hunk), rows: [Number(tr.dataset.hr)] }], new Set([key]));
+  const id = scopeId(scope) + ROW_SEP + rowKey(tr.dataset.hunk, tr.dataset.hr);
+  const pre = preClickSel || new Set();
+  preClickSel = null;
+  if (pre.has(id)) applySelection({ sel: pre, anchor: rowAnchor });
+  else applySelection({ sel: new Set([id]), anchor: id });
+  stageSelection();
 }
 
 
@@ -3345,33 +3479,27 @@ function hunkMenuRows(tr) {
   const v = scope.hunks;
   const key = rowKey(tr.dataset.hunk, tr.dataset.hr);
   if (!v.sel.has(key)) {
-    v.sel = new Set([key]);
-    v.anchor = key;
-    paintHunkSel(scope.el ? scope : null);
+    clickRow(tr, { shift: false, ctrl: false });
   }
   const verb = v.lane === "staged" ? "Unstage" : "Stage";
-  const n = v.sel.size;
+  const n = selectionSize();
   const block = Number(tr.dataset.hunk);
   // "Stage hunk" predicts every row of the hunk: the ones this file shows.
   const hunkKeys = new Set(
-    taggedRows(scope.el ? scope : null)
+    taggedRows(scope)
       .filter((x) => Number(x.dataset.hunk) === block)
       .map((x) => rowKey(x.dataset.hunk, x.dataset.hr))
   );
   return [
     {
       label: `${verb} selected line${n === 1 ? "" : "s"}${n > 1 ? ` (${n})` : ""}`,
-      act: () => {
-        const keys = new Set(v.sel);
-        v.sel = new Set();
-        void applyRowStage(scope, selectionWire({ sel: keys }), keys);
-      },
+      act: () => stageSelection(),
     },
     {
       label: `${verb} hunk`,
       act: () => {
-        v.sel = new Set();
-        void applyRowStage(scope, [{ block, whole: true }], hunkKeys);
+        clearRowSelection();
+        void stageJobs([{ scope, blocks: [{ block, whole: true }], keys: hunkKeys }]);
       },
     },
   ];
@@ -3967,4 +4095,4 @@ $("hist-btn").addEventListener("click", () => {
 $("blame-btn").addEventListener("click", () => {
   if (state.diffCtx) openFileBlame(state.diffCtx.path, state.diffCtx.rev);
 });
-export { SECTION_LABELS, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState };
+export { SECTION_LABELS, diffSearch, goToDiffHit, rowNoteCtx, notesFor, globalNoteCtx, noteCollapseKey, closeConflictPick, fileDiffURL, setDiffTitle, updateLinkCompareFiles, activeFileList, diffScrollKey, diffSearchKey, diffSearchBar, scrollKey, applyFilesHidden, applyTextMode, cycleTextMode, mountPanBars, toggleFilesHidden, setCommitTitle, setFilesDesc, commitBody, commitMetaParts, addNotePrompt, noteBadgeHTML, applyCompareFilter, cfSideCount, clearDiffHunks, commitMetaLine, conflictPick, cycleFilesSort, diffChangeBlocks, toggleMark, diffHTML, diffHunks, drillOut, editNotePrompt, enterFilesStage, fetchNotes, exitStatusToList, hunkAttr, hunkCls, hunkEligible, markDiffRow, renderCell, openCompare, openConflictPicker, openEntryCompare, openLinkCompare, openEntryFileDiff, notesArmed, openFile, openStatusDiff, openWorkingTree, paintConflictPicks, reconcileStatusView, renderCompareBar, renderDiff, renderFiles, refreshNoteCounts, renderResolveBar, reopenAfterHunkStage, replyNotePrompt, resolveConflictPicked, setAllConflictPicks, setFilesMeta, setLayout, stage, stepChange, stepFile, stepNote, stepToNextConflict, toggleDiffView, toggleNoteCollapsed, collapseNearestNote, applyDiffView, revealDiffRow, toggleNotesAgent, updateDiffNav, paintHunkSel, hunkState, clearRowSelection };

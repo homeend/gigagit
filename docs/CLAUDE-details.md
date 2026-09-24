@@ -1725,13 +1725,26 @@ at "what the user means" that a question would have avoided.
   options, what `FromDiff` uses) to split into the same blocks of the same
   row counts — a row ordinal is meaningless otherwise, so the diff simply goes
   untagged.
-- **Client:** `selectRow` (click / shift / ctrl-cmd), `hunkMenuRows` (a
-  right-click on an unselected row selects it alone first, then offers
-  *Stage/Unstage selected lines* and *Stage/Unstage hunk*), `applyRowStage`
-  (POST in the diff's lane, then the status re-read reconciles a stack in
-  place or re-opens the single file in its lane). Per-file state is
-  `{path, hash, lane, sel, anchor}`, per slot in a stack, and a re-fetch keeps
-  the selection only while the file's freshness hash is unchanged.
+- **Client:** ONE selection spans everything on screen — every file of a
+  stack, which reads as one document (user ruling 2026-09-24, after live use:
+  per-file selections miscounted across files, a shift range could not cross
+  files, and nothing deselected). Each file keeps its share
+  (`scope.hunks.sel`, positional against ITS bytes); `selectionOrder` /
+  `currentSelection` / `applySelection` treat the shares as one, with one
+  global `rowAnchor`. `selectStep` (pure, node-tested) applies a click: plain
+  = that row alone, ctrl/cmd toggles, shift = the range in document order
+  across files; a selection holds ONE lane. `hunkMenuRows` counts the whole
+  selection (`selectionSize`); `stageSelection` → `stageJobs` paints every
+  file's prediction, then POSTs one file at a time (a failed file reverts
+  alone), then one status + quiet per-file re-reads (one structural
+  `reconcileStack` if any file left the stack).
+- **Deselect:** a left click on anything that is not a selectable row (or the
+  ctx menu) clears the selection — a document-level listener; Esc clears it
+  before a search or the diff itself (`keys.js`). **Double-click** on a row
+  that was selected stages the whole selection — `preClickSel` is taken at the
+  sequence's FIRST click (`e.detail <= 1`), because that click has already
+  collapsed the selection to one row by the time `dblclick` fires; on an
+  unselected row it clears and stages that one row.
 - **Gotcha — a modifier-click is a TEXT gesture to the browser.** Shift-click
   extends the page's text selection from the previous click, and the plain-
   click guard ("don't act mid text-selection") then swallowed it. A mousedown
