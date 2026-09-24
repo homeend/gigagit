@@ -1,6 +1,7 @@
 package agentsession
 
 import (
+	"fmt"
 	"strings"
 
 	uv "github.com/charmbracelet/ultraviolet"
@@ -56,6 +57,9 @@ func (s *Session) Resize(cols, rows int) error {
 		}
 		s.emu.Resize(cols, rows)
 		err = s.pty.Resize(cols, rows)
+		if s.traceEv != nil {
+			fmt.Fprintf(s.traceEv, "%d %d %d\n", s.traced.Load(), cols, rows)
+		}
 	})
 	s.signal()
 	return err

@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/homeend/gigagit/internal/agentsession"
 	"github.com/homeend/gigagit/internal/config"
@@ -130,6 +131,7 @@ func (s *Service) StartSession(ctx context.Context, tc config.ToolCommand, workt
 	return Sessions().Start(agentsession.StartSpec{
 		Label: tc.Name, AgentID: agentIDFor(tc), Repo: repo, Dir: worktreeDir,
 		Argv: argv, CmdLine: cmdline, Cols: cols, Rows: rows,
+		TracePath: sessionTracePath(os.Getenv("GG_SESSION_TRACE"), tc.Name, time.Now()),
 	})
 }
 
@@ -184,4 +186,21 @@ func agentIDFor(tc config.ToolCommand) string {
 		}
 	}
 	return ""
+}
+
+// sessionTracePath is where a session's raw output is recorded when
+// GG_SESSION_TRACE names a directory ("" = no recording): one
+// <time>-<label>.raw file per session, the evidence for replaying a
+// terminal-emulation mismatch (e.g. a ConPTY repaint) offline.
+func sessionTracePath(dir, label string, now time.Time) string {
+	if dir == "" {
+		return ""
+	}
+	safe := strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' {
+			return r
+		}
+		return '_'
+	}, label)
+	return filepath.Join(dir, now.Format("20060102-150405.000")+"-"+safe+".raw")
 }

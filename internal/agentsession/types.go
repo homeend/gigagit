@@ -38,6 +38,9 @@ type StartSpec struct {
 	// Ignored on other systems.
 	CmdLine    string
 	Cols, Rows int
+	// TracePath, when set, receives the child's raw output bytes from the
+	// first one on — evidence for replaying an emulator mismatch offline.
+	TracePath string
 }
 
 // ScrollbackLines caps the emulator's scrollback per session.

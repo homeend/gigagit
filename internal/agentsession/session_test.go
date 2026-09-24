@@ -1,6 +1,7 @@
 package agentsession
 
 import (
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -108,5 +109,53 @@ func TestEmulatorRepliesReachChild(t *testing.T) {
 	waitDone(t, s)
 	if got := s.screenText(); !strings.Contains(got, "GOT[033[1;1R") {
 		t.Fatalf("cursor-position reply not delivered; screen = %q", got)
+	}
+}
+
+// TracePath records the child's raw output from the very first byte — the
+// evidence for emulator mismatches (e.g. ConPTY repaints) replayed offline.
+func TestSessionTraceRecordsRawOutput(t *testing.T) {
+	t.Parallel()
+	needSh(t)
+	trace := t.TempDir() + "/s.raw"
+	s, err := start("tr", StartSpec{Dir: t.TempDir(), Argv: []string{"sh", "-c", `printf '\033[1mFIRST\033[0m'; printf LAST`}, Cols: 40, Rows: 5, TracePath: trace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s)
+	b, err := os.ReadFile(trace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(b), "\x1b[1mFIRST") || !strings.HasSuffix(string(b), "LAST") {
+		t.Fatalf("trace = %q", b)
+	}
+}
+
+// The .events sidecar logs the size at every byte offset where it changed,
+// so a replay resizes at the same points the live emulator did.
+func TestSessionTraceLogsResizes(t *testing.T) {
+	t.Parallel()
+	needSh(t)
+	trace := t.TempDir() + "/s.raw"
+	s, err := start("tr", StartSpec{Dir: t.TempDir(), Argv: []string{"sh", "-c", `printf AB; read _; printf CD`}, Cols: 40, Rows: 5, TracePath: trace})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(s.screenText(), "AB") && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := s.Resize(50, 7); err != nil {
+		t.Fatal(err)
+	}
+	s.SendText("\r")
+	waitDone(t, s)
+	ev, err := os.ReadFile(trace + ".events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(ev); got != "0 40 5\n2 50 7\n" {
+		t.Fatalf("events = %q", got)
 	}
 }
