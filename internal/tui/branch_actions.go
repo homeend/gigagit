@@ -77,6 +77,58 @@ func (m Model) branchVersionsRow() (actionRow, bool) {
 	}, true
 }
 
+// showInWorktreesRow offers "Show in Worktrees" on a branch that is checked
+// out in some worktree — the current one included, as the copy-path row. It
+// is navigation, not an op (no opsIdle gate, no re-root: "Switch to branch"
+// already offers to GO to that worktree).
+func (m Model) showInWorktreesRow() (actionRow, bool) {
+	b, ok := m.selectedBranch()
+	if m.focus != panelBranches || !ok {
+		return actionRow{}, false
+	}
+	if _, has := m.worktreeAbsPathForBranch(b.Name); !has {
+		return actionRow{}, false
+	}
+	name := b.Name
+	return actionRow{
+		id:    "show-in-worktrees",
+		label: i18n.T("Show in Worktrees"),
+		run:   func(m Model) (tea.Model, tea.Cmd) { return m.showBranchWorktree(name), nil },
+	}, true
+}
+
+// showBranchWorktree switches to the Worktrees tab with the cursor on the
+// worktree that has branch checked out. A `/` filter on that list is cleared
+// so the row can be selected; a filter bound to another panel is left alone.
+// The worktree is looked up at RUN time — the list may have refreshed since
+// the menu was built — and a vanished one is a notice, not a tab switch.
+func (m Model) showBranchWorktree(branch string) Model {
+	wi := -1
+	for i, w := range m.worktrees {
+		if w.Branch == branch {
+			wi = i
+			break
+		}
+	}
+	if wi < 0 {
+		m.statusMsg = i18n.T("%s is no longer checked out in a worktree", branch)
+		return m
+	}
+	if m.filterPanel == panelWorktrees {
+		m.filterTyping = false
+		m.filterQuery = ""
+	}
+	m = m.activateTab(panelWorktrees)
+	ents := m.worktreeEntries()
+	for di, u := range m.displayIndices(panelWorktrees) {
+		if u < len(ents) && ents[u].wt == wi && ents[u].sess == "" {
+			m.sel[panelWorktrees] = di
+			break
+		}
+	}
+	return m
+}
+
 // browseRemoteBranchesRow offers the browse-remote-branches picker from the
 // Remotes panel menu. Panel-scoped, not row-scoped: no selection required.
 func (m Model) browseRemoteBranchesRow() (actionRow, bool) {
