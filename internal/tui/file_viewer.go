@@ -23,9 +23,22 @@ type fileViewer struct {
 // thread. The bytes are the file ON DISK, uncommitted edits included. line
 // (1-based, 0 = none) is where the cursor lands once the load arrives.
 func (m Model) openFileViewer(path string, line int) (Model, tea.Cmd) {
-	fv := &fileViewer{newOpenFile(fileSource{kind: srcWorktree}, path)}
-	fv.pendingLine = line
+	src := fileSource{kind: srcWorktree}
+	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
+	if d == nil {
+		d = newOpenFile(src, path)
+	} else {
+		// Already open: this is the same document, brought to the front and
+		// reloaded (the disk may have moved on) at the reader's place.
+		m = m.detachDoc(d)
+		if line == 0 {
+			d.keepPlace()
+		}
+	}
+	d.pendingLine = line
+	fv := &fileViewer{d}
 	m = m.pushLayer(fv)
+	m = m.registerDoc(d)
 	svc := m.svc
 	return m, loadFileContentSrcCmd(fv.tag, path, m.cfg.UI.SyntaxOn(), func(ctx context.Context) ([]byte, error) {
 		return svc.WorktreeFile(ctx, path)
@@ -63,7 +76,9 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	scroll := func(delta int) { p.sel = previewClamp(p.sel+delta, len(p.lines), rows, p.mode) }
 	switch msg.String() {
 	case "esc":
-		return m.popLayer(), nil
+		return m.closeDoc(fv.openFile), nil
+	case "ctrl+]":
+		return m.backgroundDoc(fv.openFile), nil
 	case ".":
 		return m.openActionMenu(), nil
 	case "alt+up":
@@ -102,7 +117,7 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 // render owns the screen: one preview box the size of the terminal.
 func (fv *fileViewer) render(m Model, _ string) string {
 	w, h := m.overlayDims()
-	return m.renderPreviewBox(fv.p, fv.title(), w, h, true)
+	return m.renderPreviewBox(fv.p, fv.title(), w, h, true, true)
 }
 
 // title names the version on screen: the working tree, a commit or a shelf.

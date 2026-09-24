@@ -141,9 +141,22 @@ func (m Model) openPreview(hash, path string) (Model, tea.Cmd) {
 // shelf-member preview (ResolveBytes).
 func (m Model) openPreviewSrc(src fileSource, path string, load func(context.Context) ([]byte, error)) (Model, tea.Cmd) {
 	m.console = nil // one right-column owner at a time; the session keeps running
-	d := newOpenFile(src, path)
+	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
+	reused := d != nil
+	if reused {
+		m = m.detachDoc(d)
+	} else {
+		d = newOpenFile(src, path)
+	}
 	m.filesPreview = d
 	m.filesTreeFocused = false // land in the preview to scroll
+	m = m.registerDoc(d)
+	if reused && src.kind != srcWorktree && docLoaded(d) {
+		return m, nil // a commit's or a shelf's bytes never change: nothing to load
+	}
+	if reused {
+		d.keepPlace()
+	}
 	return m, loadFileContentSrcCmd(d.tag, path, m.cfg.UI.SyntaxOn(), load)
 }
 
@@ -375,14 +388,14 @@ func (p *contentPopup) snapHit(rowsCap, innerW int) {
 // Commits panel) while a preview is open. Window-then-build (a file can be large);
 // the border follows focus.
 func (m Model) renderFilePreview(boxW, boxH int) string {
-	return m.renderPreviewBox(m.filesPreview.p, i18n.T("View %s", m.filesPreview.path), boxW, boxH, !m.filesTreeFocused)
+	return m.renderPreviewBox(m.filesPreview.p, i18n.T("View %s", m.filesPreview.path), boxW, boxH, !m.filesTreeFocused, false)
 }
 
 // renderPreviewBox draws one file preview as a bordered box: title, the
 // windowed lines (cursor band, selection stripe, search emphasis, syntax
 // classes) and the hint line. The files view's right column and the
 // full-screen fileViewer both draw through it, so they cannot drift apart.
-func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, focused bool) string {
+func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, focused, viewer bool) string {
 	contentH := boxH - 2 // top/bottom border
 	if contentH < 1 {
 		contentH = 1
@@ -464,6 +477,9 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	// so [/] find and [esc] close have to come before the scroll/view keys the
 	// arrow keys already teach by doing.
 	hint := i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] close  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+	if viewer { // the full-screen viewer can also step aside, keeping the file open
+		hint = i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] close  [ctrl+]] background  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+	}
 	if p.lsel.on {
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))
 	}

@@ -39,6 +39,15 @@ type openFile struct {
 	// pendingLine is the 1-based line a link asked for (0 = none), parked
 	// until the async load fills the lines it indexes.
 	pendingLine int
+	// keep is the reader's place (cursor line, 1-based, and window top) a
+	// reload restores; zero = none. Set by keepPlace, used by one fill.
+	keep struct{ line, top int }
+}
+
+// keepPlace makes the next fill — a reload of a file the user is reading —
+// restore the cursor and the window top instead of starting at the top.
+func (d *openFile) keepPlace() {
+	d.keep.line, d.keep.top = d.p.cur+1, d.p.sel
 }
 
 // openFileSeq numbers documents for their tags. Process-global: a tag only
@@ -59,8 +68,11 @@ func newOpenFile(src fileSource, path string) *openFile {
 
 // key is the document's identity without its instance number: the same
 // version of the same file has the same key.
-func (d *openFile) key() string {
-	return fmt.Sprintf("%d:%s:%s", d.src.kind, d.src.rev, d.path)
+func (d *openFile) key() string { return docKey(d.src, d.path) }
+
+// docKey is the key of path at src — what an open looks an open file up by.
+func docKey(src fileSource, path string) string {
+	return fmt.Sprintf("%d:%s:%s", src.kind, src.rev, path)
 }
 
 // fill puts a load's lines into the document. The lines the cursor and the
@@ -78,6 +90,12 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 	}
 	p.cur, p.sel = 0, 0
 	p.lsel.clear()
+	keep := d.keep
+	d.keep.line, d.keep.top = 0, 0
+	if keep.line > 0 && d.pendingLine == 0 && len(p.lines) > 0 && p.lines[0].src {
+		p.cur = min(keep.line, len(p.lines)) - 1
+		p.sel = previewClamp(keep.top, len(p.lines), rows, p.mode)
+	}
 	notice = d.landPendingLine(rows)
 	if p.search.active() {
 		p.search.refindFrom(previewSearchLines(p), p.searchPos(rows))

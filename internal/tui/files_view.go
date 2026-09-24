@@ -215,6 +215,9 @@ func (m Model) focusRight() Model {
 
 // closePreview drops the right-column file preview and returns focus to the tree.
 func (m Model) closePreview() Model {
+	if d := m.filesPreview; d != nil {
+		m.openFiles.remove(m.currentWorktree, d) // closed on purpose: out of the open files
+	}
 	m.filesPreview = nil
 	return m.focusTree()
 }
@@ -610,6 +613,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
+	case "ctrl+]":
+		if m.filesPreview != nil { // step the preview aside; the file stays open
+			return m.backgroundDoc(m.filesPreview), nil
+		}
+		return m, nil
 	case "esc":
 		if m.filesPreview != nil { // the preview is the topmost surface — close it first
 			m = m.closePreview() // returns focus to the tree (the source of View file)

@@ -104,7 +104,7 @@ func linkPreviewModel(t *testing.T, text string, cur int) Model {
 	m := loadedNavModel(t)
 	m.filesView = &contentPopup{lines: []contentLine{{text: "a.txt", path: "a.txt"}}}
 	m.filesHash = strings.Repeat("ab", 20)
-	m.filesPreview = &openFile{path: "a.txt", p: &contentPopup{title: "a.txt", lines: fileContentLinesTok([]byte(text), nil), cur: cur}}
+	m.filesPreview = &openFile{src: fileSource{kind: srcCommit, rev: m.filesHash}, path: "a.txt", p: &contentPopup{title: "a.txt", lines: fileContentLinesTok([]byte(text), nil), cur: cur}}
 	m.filesPreview.tag = "a.txt@" + m.filesHash
 	m.filesTreeFocused = false
 	return m

@@ -23,6 +23,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   with the cursor on that worktree. A `/` filter on the Worktrees list that
   would hide it is cleared.
 
+## Open files: background file viewers
+
+### Added
+
+- **`ctrl+]` sends a file to the background**, in the full-screen viewer and
+  the files view's View-file preview (also the `.` menu's **Send to
+  background**); `esc` still closes it. The file stays open with its cursor,
+  scroll, selection and search.
+- **`ctrl+\` lists the open files** under the agent sessions (`● path  :line
+  version`); `enter` brings one back (full-screen, or focuses the preview it
+  is in), `x` closes it, `/` filters both groups. The footer reads
+  `[ctrl+\] agents & files` while files are open.
+- Up to **20 open files per worktree**; the 21st closes the least recently
+  shown one (named in the bottom bar). Opening an open file reuses it — a
+  working-tree file is re-read at your place, a commit's is not re-read.
+- A commit or shelf version shown full-screen follows the preview's Copy
+  file link rule (copied only when the disk still shows that text).
+
 ## Open files: the file document
 
 ### Fixed

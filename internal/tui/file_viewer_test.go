@@ -102,7 +102,7 @@ func TestFileViewerActionMenuIsTheViewersOwn(t *testing.T) {
 		// The viewer's menu is about the file and its lines: copy rows and the
 		// file's bookmark/shelf rows. A panel's rows (the Commits panel's
 		// "Show as list", a Files row's stage) must not leak in from beneath.
-		if !strings.HasPrefix(r.id, "copy-") && !strings.HasPrefix(r.id, "bookmark-") && !strings.HasPrefix(r.id, "shelf-") {
+		if !strings.HasPrefix(r.id, "copy-") && !strings.HasPrefix(r.id, "bookmark-") && !strings.HasPrefix(r.id, "shelf-") && r.id != "file-background" {
 			t.Errorf("row %q (%s) leaked into the viewer's . menu", r.id, r.label)
 		}
 	}

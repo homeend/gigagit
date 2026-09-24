@@ -121,3 +121,34 @@ func TestStalePreviewLoadIsDropped(t *testing.T) {
 		t.Fatalf("the preview's own load did not fill it: %+v", l)
 	}
 }
+
+// A reload of a file the user is reading keeps their place.
+func TestOpenFileReloadKeepsPlace(t *testing.T) {
+	t.Parallel()
+	d := newOpenFile(fileSource{kind: srcWorktree}, "f")
+	d.fill(fileContentMsg{tag: d.tag, lines: docLines(60)}, 10, 40)
+	d.p.cur, d.p.sel = 33, 28
+	d.keepPlace()
+	if n := d.fill(fileContentMsg{tag: d.tag, lines: docLines(60)}, 10, 40); n != "" || d.p.cur != 33 || d.p.sel != 28 {
+		t.Fatalf("cur=%d sel=%d notice=%q, want 33/28 and none", d.p.cur, d.p.sel, n)
+	}
+	// The file shrank: the place clamps into it.
+	d.keepPlace()
+	d.fill(fileContentMsg{tag: d.tag, lines: docLines(20)}, 10, 40)
+	if d.p.cur != 19 || d.p.sel != 10 {
+		t.Fatalf("after shrink cur=%d sel=%d, want 19/10", d.p.cur, d.p.sel)
+	}
+	// A line the link asks for wins over the kept place.
+	d.keepPlace()
+	d.pendingLine = 5
+	d.fill(fileContentMsg{tag: d.tag, lines: docLines(20)}, 10, 40)
+	if d.p.cur != 4 {
+		t.Fatalf("cur=%d, want 4 (the asked line)", d.p.cur)
+	}
+	// A kept place is used once.
+	d.p.cur = 7
+	d.fill(fileContentMsg{tag: d.tag, lines: docLines(20)}, 10, 40)
+	if d.p.cur != 0 {
+		t.Fatalf("cur=%d, want 0 (no place kept)", d.p.cur)
+	}
+}
