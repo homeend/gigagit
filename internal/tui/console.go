@@ -177,3 +177,86 @@ func (m Model) onSessionsChanged() (Model, tea.Cmd) {
 
 // shortWorktreeName is the worktree's directory name, for titles and rows.
 func shortWorktreeName(path string) string { return filepath.Base(path) }
+
+// Default reserved keys; Task 9's [console] config overrides them.
+const (
+	defaultStepOutKey  = "ctrl+]"
+	defaultSessionsKey = "ctrl+\\"
+)
+
+func (m Model) stepOutKey() string  { return defaultStepOutKey }
+func (m Model) sessionsKey() string { return defaultSessionsKey }
+
+// consolePassthrough is what an UNFOCUSED docked console lets through to
+// gg while its column has focus: moving focus away, quitting, and the
+// repo-wide globals. Every other key is swallowed — the Commits panel it
+// covers would otherwise act on a list the user cannot see (j/k, /, o,
+// ctrl+w, ctrl+f, ctrl+r, space…).
+var consolePassthrough = map[string]bool{
+	"tab": true, "shift+tab": true, "left": true, "h": true, "ctrl+left": true, "ctrl+right": true,
+	"q": true, "ctrl+c": true, "?": true, ".": true, "ctrl+p": true, "ctrl+o": true,
+	"R": true, ",": true, "!": true, "E": true, "F": true, "r": true,
+	"c": true, "C": true, "p": true, "P": true, "S": true, "u": true, "g": true, "G": true,
+}
+
+// updateConsoleKey routes a key to/around the console per the state table
+// (spec). handled=false lets the key continue down gg's normal dispatch.
+func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
+	key := msg.String()
+	if key == m.sessionsKey() && m.proc == nil {
+		nm, cmd := m.openSessionsPopup(false)
+		return nm, cmd, true
+	}
+	if m.console == nil {
+		return m, nil, false
+	}
+	if m.console.focused {
+		if key == m.stepOutKey() {
+			m.console.focused = false
+			if m.console.maximized {
+				m.console.maximized = false
+				m = m.syncConsoleSize()
+			}
+			return m, nil, true
+		}
+		if s, ok := m.consoleSession(); ok && s.Info().State == domain.SessionRunning {
+			in := encodeConsoleKey(msg)
+			switch {
+			case in.drop:
+			case in.paste != "":
+				s.Paste(in.paste)
+			case in.text != "":
+				s.SendText(in.text)
+			case in.key != nil:
+				s.SendKey(in.key)
+			}
+		}
+		return m, nil, true // an exited console swallows keys; ctrl+] still steps out
+	}
+	// Unfocused: the console answers only while its column has focus and
+	// nothing is layered above it.
+	if m.focus != panelCommits || m.topLayer() != nil || m.actionMenu != nil {
+		return m, nil, false
+	}
+	switch key {
+	case "enter":
+		m.console.focused = true
+		return m, nil, true
+	case "ctrl+t":
+		m.console.maximized, m.console.focused = true, true
+		return m.syncConsoleSize(), nil, true
+	case "esc":
+		return m.closeConsole(), nil, true
+	}
+	if consolePassthrough[key] {
+		return m, nil, false
+	}
+	return m, nil, true
+}
+
+// openSessionsPopup opens the ctrl+\ sessions popup (Task 7).
+func (m Model) openSessionsPopup(quitMode bool) (Model, tea.Cmd) {
+	_ = quitMode
+	m.statusMsg = i18n.T("no agent sessions — start one from a worktree's . menu")
+	return m, nil
+}

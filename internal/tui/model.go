@@ -1922,6 +1922,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// The agent console: a FOCUSED console owns every key except the two
+		// reserved ones (spec), ahead of ctrl+o / ctrl+p / the layer stack —
+		// agents use those chords themselves. An unfocused console only
+		// claims enter / ctrl+t / esc (and swallows Commits-scoped keys)
+		// while its column has focus.
+		if nm, cmd, handled := m.updateConsoleKey(msg); handled {
+			return nm, cmd
+		}
 		// ctrl+o — the shell escape hatch. Handled ABOVE the process/layer
 		// routing (unlike ctrl+p) so it works from ANY surface, including
 		// the conflict process and its message screens — the motivating
