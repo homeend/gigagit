@@ -36,6 +36,14 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   its output on its own. The exit is now recorded once the output goes quiet
   (150 ms), which also shortens quitting gg with live sessions.
 
+## Faster whole-file stage / unstage
+
+- Staging or unstaging a whole file (TUI space, the web's stage / unstage,
+  `gg add`) no longer runs the branch-versions preflight probe first: it only
+  writes the index, so it can never record a version. That is three git
+  processes less per action — on a WSL `/mnt` checkout a web stage / unstage
+  went from ~190 ms to ~163 ms.
+
 ## Stacked diff: line select / copy (plan 4d)
 
 ### Fixed

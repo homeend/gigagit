@@ -23,6 +23,11 @@ type Stage struct {
 
 var _ Operation = Stage{}
 
+// IndexOnly: add, add -A, add -f and restore --staged only write the index —
+// never a ref — so no branch version is recorded and Execute skips the
+// versions probe (three git processes per stage / unstage).
+func (Stage) IndexOnly() {}
+
 func (op Stage) Run(ctx context.Context, deps OpDeps) (Result, error) {
 	if op.All {
 		if op.Unstage {

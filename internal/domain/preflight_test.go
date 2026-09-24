@@ -366,6 +366,37 @@ func TestExecuteSkipsTheVersionsProbeForIndexOnlyOps(t *testing.T) {
 	}
 }
 
+// Whole-file stage / unstage (TUI space, web /api/stage, gg add) is index-only
+// too: it must not pay the versions probe either.
+func TestExecuteSkipsTheVersionsProbeForWholeFileStaging(t *testing.T) {
+	t.Parallel()
+	for name, op := range map[string]engine.Stage{
+		"stage":   {Paths: []string{"f.txt"}},
+		"unstage": {Paths: []string{"f.txt"}, Unstage: true},
+		"all":     {All: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := cleanDir(t)
+			writeFile(t, dir, "f.txt", "changed\n")
+			cr := newCountingRunner(gitexec.NewExecRunner("git", dir, observ.NewRing(50)))
+			svc := New(&git.Repo{Runner: cr})
+			events := make(chan engine.Event, 16)
+			go func() {
+				for range events {
+				}
+			}()
+			defer close(events)
+			if _, err := svc.Execute(context.Background(), op, events, nil); err != nil {
+				t.Fatal(err)
+			}
+			if n := cr.count("git for-each-ref (gg)") + cr.count("git version"); n != 0 {
+				t.Fatalf("%s paid %d preflight probes, want 0", name, n)
+			}
+		})
+	}
+}
+
 // Open resolves the worktree root once and hands it to the repo, so reads of
 // working-tree files never ask git for it again.
 func TestOpenGivesTheRepoItsRoot(t *testing.T) {
