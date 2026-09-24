@@ -120,3 +120,47 @@ func TestConsoleKeysFromConfig(t *testing.T) {
 		t.Fatal("the configured step-out key must step out")
 	}
 }
+
+// ctrl+\ from a FOCUSED console opens the popup — which must then own the
+// keyboard: the console intercept runs before the layer stack.
+func TestPopupOverFocusedConsoleGetsKeys(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	mm, _ := m.Update(ctrlBackslash())
+	m = mm.(Model)
+	if _, ok := m.topLayer().(*sessionsPopup); !ok {
+		t.Fatalf("top = %T", m.topLayer())
+	}
+	mm, _ = m.Update(keyMsg("esc"))
+	m = mm.(Model)
+	if m.topLayer() != nil {
+		t.Fatal("esc must reach the popup, not the agent")
+	}
+	if m.console == nil || !m.console.focused {
+		t.Fatal("closing the popup returns to the focused console")
+	}
+	mm, _ = m.Update(ctrlBackslash())
+	m = mm.(Model)
+	mm, _ = m.Update(ctrlBackslash())
+	m = mm.(Model)
+	if m.topLayer() != nil {
+		t.Fatal("ctrl+\\ on the open popup closes it (toggle), never stacks a second one")
+	}
+}
+
+// Focus moved off the console's column (a mouse click on a left panel) means
+// keys no longer belong to the agent.
+func TestFocusMovedOffConsoleStopsForwarding(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	m.focus = panelBranches // what a click on Branches does
+	mm, _ := m.Update(keyMsg("j"))
+	m = mm.(Model)
+	if m.console.focused {
+		t.Fatal("a console whose column lost focus must not stay focused")
+	}
+}

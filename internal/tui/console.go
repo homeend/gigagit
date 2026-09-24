@@ -240,11 +240,28 @@ var consolePassthrough = map[string]bool{
 func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	key := msg.String()
 	if key == m.sessionsKey() && m.proc == nil {
+		if _, open := m.topLayer().(*sessionsPopup); open {
+			return m.popLayer(), nil, true // toggle: never stack a second popup
+		}
 		nm, cmd := m.openSessionsPopup(false)
 		return nm, cmd, true
 	}
 	if m.console == nil {
 		return m, nil, false
+	}
+	// Anything layered above the console (the sessions popup opened from it,
+	// the . menu) owns the keyboard; closing it returns to the console.
+	if m.topLayer() != nil || m.actionMenu != nil {
+		return m, nil, false
+	}
+	// Focus left the console's column (a mouse click on another panel): the
+	// keyboard is gg's again.
+	if m.console.focused && m.focus != panelCommits {
+		m.console.focused = false
+		if m.console.maximized {
+			m.console.maximized = false
+			m = m.syncConsoleSize()
+		}
 	}
 	if m.console.focused {
 		if key == m.stepOutKey() {
@@ -269,9 +286,8 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 		return m, nil, true // an exited console swallows keys; ctrl+] still steps out
 	}
-	// Unfocused: the console answers only while its column has focus and
-	// nothing is layered above it.
-	if m.focus != panelCommits || m.topLayer() != nil || m.actionMenu != nil {
+	// Unfocused: the console answers only while its column has focus.
+	if m.focus != panelCommits {
 		return m, nil, false
 	}
 	switch key {
