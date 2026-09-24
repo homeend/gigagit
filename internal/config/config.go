@@ -216,6 +216,7 @@ type Config struct {
 	Notes    NotesConfig    `toml:"notes"`
 	Tools    ToolsConfig    `toml:"tools"`
 	Branches BranchesConfig `toml:"branches"`
+	Console  ConsoleConfig  `toml:"console"`
 
 	// Themes holds per-theme colour overrides, one [themes.<name>] table per
 	// built-in theme name (terminal/dark/light). Unknown names are kept and
@@ -236,6 +237,7 @@ func Defaults() Config {
 			CommitInitialCount: 300, CommitBatchSize: 300, CommitSearchMaxPages: 50, CommitSort: "date-order", DiffSyntax: "auto", DiffCursor: "row", ShowGraph: "on", Theme: "terminal", AgentSteering: "on"},
 		Versions: VersionsConfig{MaxAgeDays: 90},
 		Notes:    NotesConfig{MaxAgeDays: 30, MaxEntries: 2000},
+		Console:  ConsoleConfig{StepOutKey: "ctrl+]", SessionsKey: "ctrl+\\"},
 	}
 }
 
@@ -260,6 +262,7 @@ func Load(globalPath, repoPath string) (Config, error) {
 			overlayTools(&cfg.Tools, layer.Tools)
 			overlayBranchFilters(&cfg.Branches, layer.Branches)
 			overlayThemes(&cfg.Themes, layer.Themes)
+			overlayConsole(&cfg.Console, layer.Console)
 		}
 	}
 	return cfg, nil
@@ -627,4 +630,22 @@ func SessionSteerDir(commonDir, worktree string) string {
 		return ""
 	}
 	return filepath.Join(root, "gg", "sessions", EncodeRepoKey(commonDir), "steer", EncodeRepoKey(worktree))
+}
+
+// ConsoleConfig is the [console] section: the agent console's two reserved
+// keys (Bubble Tea key names, e.g. "ctrl+]"). Every other key goes to the
+// agent while its console is focused.
+type ConsoleConfig struct {
+	StepOutKey  string `toml:"step_out_key"` // step out one level (focused → unfocused, maximised → docked)
+	SessionsKey string `toml:"sessions_key"` // the agent-sessions popup, from anywhere
+}
+
+// overlayConsole copies the set (non-empty) [console] fields.
+func overlayConsole(dst *ConsoleConfig, src ConsoleConfig) {
+	if src.StepOutKey != "" {
+		dst.StepOutKey = src.StepOutKey
+	}
+	if src.SessionsKey != "" {
+		dst.SessionsKey = src.SessionsKey
+	}
 }

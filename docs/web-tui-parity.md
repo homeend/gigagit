@@ -117,11 +117,16 @@ Commit amend is TUI-only too (the web's commit op has no amend lane).
   search. In a STACKED diff BOTH search every file at once, and `]`/`[` unfold
   and load a file to reach a hit (the counter's `+` means files are still
   unsearched).
-- **Hunk staging from the diff.** The TUI's `H` opens the region/line picker
-  for the file being read — single-file or stacked, staging in the Files
-  section and UNSTAGING in the Staged one. The web picks hunks inline in the
-  unstaged diff (click a block, then "stage selected"); it has no inline
-  unstage for the staged section at all, which predates the stacked view.
+- **Line / hunk staging from the diff.** Both stage and unstage part of a
+  file, single-file or stacked, through the same `hunkpick` engine, but with
+  each frontend's own gesture. The TUI's `H` opens the region/line PICKER
+  (select, then `ctrl+s`). The web follows GitKraken: select ROWS in the
+  diff (click, shift-click, ctrl-click), right-click → *Stage selected lines*
+  / *Stage hunk*, applied at once; the Staged diff offers *Unstage selected
+  lines* / *Unstage hunk*. The web's unit is the row (a modified row is one
+  change), and one selection spans every file of a stack (double-click
+  stages it; a click elsewhere or esc clears it); the TUI's picker works one
+  file at a time and can also take one side of a line.
 
 - **Stash create.** The web stashes the whole tree with a message; the TUI
   popup offers a per-file checklist.

@@ -1721,6 +1721,109 @@ reader could not see.
   140-column budget); `J` keeps its `.` menu row and its help row. The stacked
   header shows `change X/N  file Y/M`.
 
+### Line staging in gg web — GitKraken's model (2026-09-23)
+
+User ruling, reached over three rounds of live feedback, with GitKraken's own
+help page as the reference: select ROWS, then right-click to act, at once. It
+replaced, in turn, a block pick (a click took the whole hunk) and a per-cell
+pick (a click took one side of one line) — both pick-then-apply with a
+`stage selected (n)` bar. Neither round had been asked for; each was a guess
+at "what the user means" that a question would have avoided.
+
+- **The unit is the ROW.** A modified row is ONE change (its old line replaced
+  by its new one) whichever cell is clicked; a removed-only row is its old
+  line, an added-only row its new line. Staging half a modified row would
+  leave both lines, or neither, in the index — so it is not offered.
+- **Server: `applyRowSelection` (hunks.go)** builds the new index content row
+  by row, git add -p style: a selected row contributes its TARGET version, an
+  unselected row keeps its current one. Two lanes, both oriented the way the
+  reader sees them: `unstaged` (index → working tree, target = the working
+  tree) and `staged` (HEAD → index, target = HEAD — which is how a row is
+  unstaged). Whole hunks ride the same door (`whole: true`). The original
+  `{picks: [ordinals]}` request still decodes, as whole hunks.
+- **Row identity on the wire:** `/api/diff` tags rows with `hunk` and `hr`
+  (the row's ordinal inside its hunk) in BOTH lanes, and `hunks.lane`. The
+  latch is stricter than before: `sameBlockShape` requires the displayed rows
+  (the Differ's alignment) and the doc's rows (`textdiff.Compare` with zero
+  options, what `FromDiff` uses) to split into the same blocks of the same
+  row counts — a row ordinal is meaningless otherwise, so the diff simply goes
+  untagged.
+- **Client:** ONE selection spans everything on screen — every file of a
+  stack, which reads as one document (user ruling 2026-09-24, after live use:
+  per-file selections miscounted across files, a shift range could not cross
+  files, and nothing deselected). Each file keeps its share
+  (`scope.hunks.sel`, positional against ITS bytes); `selectionOrder` /
+  `currentSelection` / `applySelection` treat the shares as one, with one
+  global `rowAnchor`. `selectStep` (pure, node-tested) applies a click: plain
+  = that row alone, ctrl/cmd toggles, shift = the range in document order
+  across files; a selection holds ONE lane. `hunkMenuRows` counts the whole
+  selection (`selectionSize`); `stageSelection` → `stageJobs` paints every
+  file's prediction, then POSTs one file at a time (a failed file reverts
+  alone), then one status + quiet per-file re-reads (one structural
+  `reconcileStack` if any file left the stack).
+- **Speed = git process count** (WSL's /mnt drives: 50–300 ms per git
+  call, whatever it does). `/api/stage-hunks` takes a batch
+  (`{"files": [...]}`, one entry per file, a stale hash anywhere = 409 and
+  nothing staged): one `engine.StageHunks{Files}` → `git.StageBlobs` (one
+  `ls-files -s -z`, a `hash-object` per file, ONE `update-index`), and the
+  batch answer is `{diffs: [{path, lane, diff}]}` built by
+  `worktreeDiffPayload` from bytes in hand (the index is read back only when
+  the content has a `\r`, i.e. an eol filter may have rewritten it; any
+  OTHER clean filter — LFS, `filter.*.clean` — makes the answered hash
+  wrong, so the next action 409s and re-reads: safe, one extra trip) — NO
+  status; the client lands the diffs, then `fetchStatus()` in the
+  background. The single-file form still answers the status. `StageHunks`
+  is `IndexOnly()`, so `Execute` skips the versions preflight probe;
+  `git.Repo.Root` (set by `domain.Open` once `resolveRoot` succeeds) makes
+  `TopLevel` free, so a working-tree read is no longer a `rev-parse`; and
+  `/api/diff`'s wt form reads each side once (`memoSide`) for both the
+  alignment and the staging doc. Pinned by `stagebatch_test.go` (git call
+  counts) and the domain/git counting tests.
+- **Deselect:** a left click on anything that is not a selectable row (or the
+  ctx menu) clears the selection — a document-level listener; Esc clears it
+  before a search or the diff itself (`keys.js`). **Double-click** on a row
+  that was selected stages the whole selection — `preClickSel` is taken at the
+  sequence's FIRST click (`e.detail <= 1`), because that click has already
+  collapsed the selection to one row by the time `dblclick` fires; on an
+  unselected row it clears and stages that one row.
+- **Gotcha — a modifier-click is a TEXT gesture to the browser.** Shift-click
+  extends the page's text selection from the previous click, and the plain-
+  click guard ("don't act mid text-selection") then swallowed it. A mousedown
+  with shift/ctrl/cmd on a selectable row is `preventDefault`ed, and a
+  modified click clears the text selection itself.
+- **Gotcha — CSS rounds must REPLACE, not add.** Round two's rules were
+  written beside round one's, so round one's whole-row box and the ✓ in both
+  gutters kept painting over a model that no longer had them. The guard
+  `TestSelectionMarksTheWholeRow` now fails if any earlier round's selector
+  (`pick-l`, `pick-w`, `tr.hk.picked`, `#hunk-bar`, the ✓) reappears.
+- **The screen moves first (user request: "change the UI, send, revert on
+  error, else update selectively").** `optimisticRows` predicts the diff after
+  the action — staging turns a modified/added row into context and drops a
+  removed one, renumbering the index side (left); unstaging is the mirror on
+  the right — and `applyRowStage` paints it BEFORE the POST, with the file's
+  tags stripped (they name the old bytes) so nothing can act on stale
+  ordinals meanwhile. An error restores the previous diff and selection; a
+  409 re-reads instead. Success re-reads ONE file quietly (`quietRefreshFile`:
+  no placeholder, scroll and folds kept) — the old path re-opened it through
+  `openStatusDiff`, which is where the "loading…" flash, the fold reset and
+  the jump to the first change came from.
+- **The stack's live refresh was the other flicker.** Every index change
+  fires the watcher, and `reconcileStack` repainted EVERY file. With the same
+  files in the same order and status it now re-reads each loaded slot
+  quietly (`quietReloadSlot`) and repaints one only when its rows changed;
+  the full repaint stays for a file entering or leaving the section. The
+  probe proves it with a control: the previous build replaces an untouched
+  file's table on a stage elsewhere, this one does not.
+- Double-click acts on the one row under it (`actOnRow`), in either lane.
+- **Probes:** `stack-probe/gkoptimistic.mjs` holds and fails the POST with
+  request interception, so "painted before the answer", "no loading flash"
+  and "reverted on error" are measured, not assumed.
+- **Probes:** `stack-probe/gkstage.mjs` (single file, both lanes; reads the
+  index with real git after every action) and `gkstack.mjs` (per-file
+  selections in a stack), red on the installed build at the first assert,
+  green in chromium and firefox; `commitbox.mjs` for the sidebar. The older
+  `hunks.mjs` / `hunkline.mjs` / `hunkux.mjs` test models that no longer exist.
+
 ### Working-tree hunk staging inside a stack (plan 4c, 2026-09-23)
 
 Spec §11 item 3, plan `docs/superpowers/plans/2026-09-23-stacked-hunks.md`.
@@ -3038,3 +3141,102 @@ under it would otherwise block every later PR diff from fetching.
 - `forgeLabelText` translates the domain's label summaries in the note box and
   the collapsed row; it keys on `SummarySrc == ""`, so a reviewer who really
   wrote "quote" is left alone.
+
+### Agent sessions core (`internal/agentsession`, plan 1, 2026-09-24)
+
+Spec `docs/superpowers/specs/2026-09-24-agent-sessions-design.md` (incl. the
+spike findings), plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-1-core.md`.
+
+- **Three goroutines per session.** `pumpOut` PTY → emulator (+ taps +
+  `Changed`); `pumpIn` emulator → queue → a writer → PTY; `wait` records the
+  exit. `pumpIn` exists because the emulator answers the child's terminal
+  queries (DA, cursor-position report) through its output pipe — without it
+  Claude Code stalls at startup — and keys/pastes are encoded into that same
+  pipe.
+- **The emulator's output is a synchronous `io.Pipe` written under its own
+  lock** (inside `Write` for replies, inside `SendKey`/`Paste` for input), so
+  `pumpIn` drains into a 1024-chunk queue and never blocks; a child that
+  stops reading stdin would otherwise freeze `pumpOut` and the caller.
+  `TestPasteToNonReaderDoesNotBlock` runs the child in RAW mode — in
+  canonical mode Linux drops overflow input and the test cannot see a stall.
+- **Locking.** `SafeEmulator` locks each method, but `CellAt` returns a live
+  cell pointer and `Close` is unlocked. The session's `ioMu` serialises every
+  emulator mutation, `closeIO`, and the snapshot reads (`Screen`,
+  `screenText`). `closeIO` ends `pumpIn` by closing the emulator's
+  `InputPipe()` writer (an `*io.PipeWriter`), never `Emulator.Close`, whose
+  flag write races the blocked `Read`.
+- **Exit ordering.** `wait` lets `pumpOut` drain (bounded 2 s — a grandchild
+  holding the PTY keeps the master readable) before marking `Exited` and
+  closing, or the child's last output is lost. The parent closes its slave fd
+  after `Start`; Linux then reports EIO (= end of stream) on the master.
+- **Kill.** Unix: the child is a session leader (`Setsid`+`Setctty`);
+  SIGTERM to `-pid`, SIGKILL after 3 s or once the leader is reaped. The
+  process-group test's grandchild ignores SIGHUP: the kernel HUPs the
+  foreground group when the leader dies, which hides a leader-only kill.
+  Windows: a kill-on-close job object; `TerminateJobObject`.
+- **Child env** drops `TMUX`/`TMUX_PANE` (agents otherwise think they run in
+  a tmux pane) and sets `TERM=xterm-256color`, `GG_SESSION_ID`.
+- **domain.** `Sessions()` is the one process-global manager (repogate
+  precedent; test seam `UseSessionManager`), type aliases keep frontends off
+  `agentsession` (archtest). `StartSession` runs `$SHELL -c <line>` with NO
+  `exec` prefix (on a compound line it would run only the first command).
+  On Windows it passes a VERBATIM `"%COMSPEC%" /S /C "<line>"` via
+  `StartSpec.CmdLine` → `SysProcAttr.CmdLine`: `x/conpty` otherwise composes
+  the line from argv with `\"` escaping that cmd.exe cannot parse (a quoted
+  `"C:\Program Files\…\claude.exe"` would break); separate lines join with
+  ` & `. ConPTY is expected to keep its output pipe open until the pseudo
+  console closes (NOT yet verified on Windows), which would put every Windows
+  exit on the 2 s drain bound.
+  `EnsureSessionCommands` treats any existing `session` block, even an
+  invalid one, as configured.
+- **exttool/config.** `category = "session"` and `mode = "session"` only
+  come together (`ValidateToolCommand`, catalog invariant test).
+- **Windows input (for the TUI stage):** Bubble Tea v1 turns a bare
+  Ctrl/Alt/Win key-down into `KeyRunes{0}` (only Shift is filtered) — drop
+  NUL-only rune messages; batched `KeyRunes` go through `SendText`.
+
+### Agent console in the TUI (plan 2, 2026-09-24)
+
+Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
+
+- **`m.console *consoleState`** is a right-column owner like `stashView` /
+  `filesPreview` (rendered first in `renderInterface`'s right-column switch;
+  maximised = the whole body). Opening the stash list or a file preview hides
+  it; it joins `fullscreenYielded`. `reRoot` never touches it — sessions and
+  their console outlive worktree/repo switches.
+- **Key routing** (`updateConsoleKey`) sits right after the decision modal and
+  BEFORE `ctrl+o`/`ctrl+p`/`proc`/the layer stack: a focused console must get
+  the chords agents use (Claude: ctrl+o, esc, ctrl+t…). Only `stepOutKey()` /
+  `sessionsKey()` are intercepted. Unfocused (its column focused), it claims
+  enter/ctrl+t/esc, lets `consolePassthrough` (focus moves, quit, help, menu,
+  palette, repo-wide globals) through, and swallows the rest so j/k, /, o…
+  never act on the hidden Commits list.
+- **Key encoding** (`encodeConsoleKey`): runes → `SendText` (batched typing is
+  one message), paste → `Paste`, specials → `uv.KeyPressEvent` so the emulator
+  honours DECCKM etc. A NUL-only `KeyRunes` is dropped (Windows bare-modifier
+  key-down). Bubble Tea v1 aliases: KeyEnter=ctrl+m, KeyTab=ctrl+i,
+  KeyEsc=ctrl+[, KeyBackspace=ctrl+? — one map entry each.
+- **Repaint**: `waitSessionCmd` blocks on the session's `Changed()` then sleeps
+  33 ms, so a chatty agent costs ≤30 frames/s; `gen` drops a replaced console's
+  waiter. `waitSessionsCmd` (armed in `Init`) carries list changes →
+  `onSessionsChanged` (exit notices via `m.sessionStates`).
+- **Size**: `consoleInner(boxW, boxH)` = `boxW-4 × boxH-3`; `syncConsoleSize`
+  runs on WindowSizeMsg, open, maximise and shrink (Resize is a no-op when
+  unchanged). The cursor is painted only for a focused, running console
+  (`ScreenWithCursor`).
+- **Worktrees list is entry-based** (`worktreeEntries`: a worktree, then its
+  sessions). A session row's Name/Date are its parent's (stable sort keeps it
+  under the parent), its Haystack includes the parent row (a / filter never
+  strands it), its Key is `path\x00id`; `backingIndex(panelWorktrees)` maps
+  entries to `m.worktrees` and returns ok=false on a session row — every
+  worktree action/copy row ignores it, the WIP pseudo-row precedent.
+- **Quit guard**: every quit path ends in `tea.QuitMsg`, so
+  `tea.WithFilter(quitFilter)` in `run.go` turns it into `quitHeldMsg` while
+  sessions live and `!m.quitConfirmed` → the quit-mode popup; `Q` sets
+  `quitConfirmed` and runs `killAllAndQuitCmd`. `Run()` kills whatever is left
+  after the program ends (safety net).
+- **Probe recipe**: `tui-capture.sh` sets only XDG_STATE_HOME and a tmux
+  server hands sessions its own env, so point gg at a scratch config with a
+  `--gg` wrapper script that exports `XDG_CONFIG_HOME` and `exec`s the binary;
+  a `[[tools.command]] category="session" command='bash --norc'` block makes a
+  deterministic agent. The Worktrees tab is `C-Right C-Right` from Branches.

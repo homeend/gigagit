@@ -23,11 +23,21 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 // stage handler, whose success response is a fresh status read (one
 // round-trip for the SPA).
 func (s *Server) writeStatus(w http.ResponseWriter, r *http.Request) {
-	svc := s.service()
-	st, err := svc.Status(readCtx(r))
+	resp, err := s.statusPayload(r)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err)
 		return
+	}
+	writeJSON(w, resp)
+}
+
+// statusPayload is the /api/status body — also the answer of every action
+// that changes it.
+func (s *Server) statusPayload(r *http.Request) (map[string]any, error) {
+	svc := s.service()
+	st, err := svc.Status(readCtx(r))
+	if err != nil {
+		return nil, err
 	}
 	files := make([]statusFile, 0, len(st.Files))
 	for _, f := range st.Files {
@@ -67,7 +77,7 @@ func (s *Server) writeStatus(w http.ResponseWriter, r *http.Request) {
 			Conflicted: c.Conflicted, Standalone: true,
 		}
 	}
-	writeJSON(w, resp)
+	return resp, nil
 }
 
 // statusByte renders a porcelain XY byte as a 1-char string; a zero byte

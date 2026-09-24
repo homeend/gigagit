@@ -188,6 +188,7 @@ func availableActions(m Model) []actionRow {
 		out = insertAfterID(out, "copy-link", r)
 	}
 	out = append(out, m.comparisonLinkRows()...)
+	out = append(out, m.sessionMenuRows()...)
 	out = append(out, m.previewSymmetricSideRows()...)
 	out = append(out, window...)
 	if r, ok := m.fileEditRow(); ok {

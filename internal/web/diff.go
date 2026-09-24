@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/hunkpick"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
@@ -22,6 +23,12 @@ type diffRow struct {
 	LeftTok    []tokTriple `json:"left_tok,omitempty"`
 	RightTok   []tokTriple `json:"right_tok,omitempty"`
 	Hunk       *int        `json:"hunk,omitempty"`
+	// HunkIndexLine / HunkWorkLine are this row's line WITHIN its hunk, on the
+	// index and working-tree sides — what a per-line pick names.
+	HunkIndexLine *int `json:"hl,omitempty"`
+	HunkWorkLine  *int `json:"hw,omitempty"`
+	// HunkRow is the row's ordinal within its hunk: what a row selection sends.
+	HunkRow *int `json:"hr,omitempty"`
 }
 
 // tokTriple is one syntax run on the wire: [start, end, class-suffix].
@@ -65,26 +72,90 @@ func tokTriples(side [][]syntax.Tok, no int) []tokTriple {
 type diffHunksMeta struct {
 	count   int
 	hash    string
-	rowTags []int // per aligned row; -1 = context
+	lane    hunkLane
+	rowTags hunkRowTags
+}
+
+// sameBlockShape checks that the displayed rows split into the same blocks of
+// the same row counts as the doc's own alignment. The displayed diff comes
+// from the Differ, the doc from hunkpick.FromDiff; if they ever disagree, no
+// row can be staged safely, so the diff simply goes untagged.
+func sameBlockShape(tags hunkRowTags, brows [][]blockRow) bool {
+	counts := make([]int, len(brows))
+	for i, h := range tags.hunk {
+		if h < 0 {
+			continue
+		}
+		if h >= len(brows) {
+			return false
+		}
+		counts[h]++
+		if tags.row[i] != counts[h]-1 {
+			return false
+		}
+	}
+	for b := range brows {
+		if counts[b] != len(brows[b]) {
+			return false
+		}
+	}
+	return true
+}
+
+// hunkRowTags is, per aligned row, which hunk it belongs to and which line of
+// that hunk it is on each side. -1 means "none": a context row has no hunk, a
+// deletion has no working-side line, an addition no index-side line. The line
+// indexes are what let the client pick a block LINE BY LINE, the way the TUI's
+// picker does — without them a row can only say "I belong to block 3".
+type hunkRowTags struct {
+	hunk  []int
+	row   []int // the row's ordinal within its block — the unit a selection names
+	index []int // line within the block's Current (left) side
+	work  []int // line within the block's Incoming (right) side
 }
 
 // diffHunkTags numbers each aligned row's hunk: contiguous non-Same runs
 // in order, -1 for context rows — the same segmentation hunkpick's
-// Doc.Blocks() yields from the same alignment.
-func diffHunkTags(rows []textdiff.Row) (tags []int, count int) {
-	tags = make([]int, len(rows))
+// Doc.Blocks() yields from the same alignment — and numbers each row's line
+// within its block per side, mirroring hunkpick.FromDiff exactly (Current
+// takes the LEFT of Changed/Del rows in order, Incoming the RIGHT of
+// Changed/Add rows). The two walks live in ONE function so they cannot drift.
+func diffHunkTags(rows []textdiff.Row) (tags hunkRowTags, count int) {
+	tags = hunkRowTags{
+		hunk:  make([]int, len(rows)),
+		row:   make([]int, len(rows)),
+		index: make([]int, len(rows)),
+		work:  make([]int, len(rows)),
+	}
 	in := false
+	cur, inc, nrow := 0, 0, 0 // lines used so far on each side, rows so far, in the CURRENT block
 	for i, r := range rows {
+		tags.index[i], tags.work[i], tags.row[i] = -1, -1, -1
 		if r.Kind == textdiff.Same {
-			tags[i] = -1
+			tags.hunk[i] = -1
 			in = false
 			continue
 		}
 		if !in {
 			count++
 			in = true
+			cur, inc, nrow = 0, 0, 0
 		}
-		tags[i] = count - 1
+		tags.hunk[i] = count - 1
+		tags.row[i] = nrow
+		nrow++
+		switch r.Kind {
+		case textdiff.Changed:
+			tags.index[i], tags.work[i] = cur, inc
+			cur++
+			inc++
+		case textdiff.Del:
+			tags.index[i] = cur
+			cur++
+		case textdiff.Add:
+			tags.work[i] = inc
+			inc++
+		}
 	}
 	return tags, count
 }
@@ -235,46 +306,113 @@ func (s *Server) handleWorktreeDiff(w http.ResponseWriter, r *http.Request, wt s
 		writeErr(w, http.StatusBadRequest, errors.New("invalid path"))
 		return
 	}
-	var oldSrc, newSrc domain.ByteSource
-	switch wt {
-	case "unstaged":
-		oldSrc = lenient(func(ctx context.Context) ([]byte, error) {
-			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: oldPath})
-		})
-		newSrc = lenient(func(ctx context.Context) ([]byte, error) {
-			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceUnstaged, Path: path})
-		})
-	case "staged":
-		oldSrc = lenient(func(ctx context.Context) ([]byte, error) {
-			return svc.ShowFile(ctx, "HEAD", oldPath)
-		})
-		newSrc = lenient(func(ctx context.Context) ([]byte, error) {
-			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: path})
-		})
-	default:
-		writeErr(w, http.StatusBadRequest, errors.New("wt must be unstaged or staged"))
-		return
-	}
-	d, err := svc.Differ().Diff(r.Context(), domain.Request{Key: "", Path: path, OldPath: oldPathFor(oldPath, path), Old: oldSrc, New: newSrc})
+	d, err := worktreeDiffPayload(r.Context(), svc, wt, path, oldPath, nil)
 	if err != nil {
+		var bad errBadLane
+		if errors.As(err, &bad) {
+			writeErr(w, http.StatusBadRequest, err)
+			return
+		}
 		writeErr(w, http.StatusInternalServerError, err)
 		return
 	}
-	// Inline-hunk tagging: only the unstaged form of an eligible file (no
-	// rename — the hunk doc is single-path) gets hunk ordinals + the
-	// freshness hash. Any refusal or a run/block count mismatch (e.g. a
+	writeJSON(w, d)
+}
+
+type errBadLane struct{}
+
+func (errBadLane) Error() string { return "wt must be unstaged or staged" }
+
+// heldSides are the two versions a working-tree diff compares when the
+// caller already holds them (a staging action knows what it just wrote).
+type heldSides struct{ old, nw []byte }
+
+// worktreeDiffPayload aligns one file's pending change in lane wt
+// ("unstaged": index → working tree, "staged": HEAD → index) into the
+// /api/diff JSON contract, tagging its rows for staging when eligible. With
+// pre, those bytes are the two sides; otherwise they are read here — ONCE,
+// for both the alignment and the staging doc.
+func worktreeDiffPayload(ctx context.Context, svc *domain.Service, wt, path, oldPath string, pre *heldSides) (map[string]any, error) {
+	var oldRead, newRead func(context.Context) ([]byte, error)
+	switch wt {
+	case "unstaged":
+		oldRead = func(ctx context.Context) ([]byte, error) {
+			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: oldPath})
+		}
+		newRead = func(ctx context.Context) ([]byte, error) {
+			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceUnstaged, Path: path})
+		}
+	case "staged":
+		oldRead = func(ctx context.Context) ([]byte, error) {
+			return svc.ShowFile(ctx, "HEAD", oldPath)
+		}
+		newRead = func(ctx context.Context) ([]byte, error) {
+			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceStaged, Path: path})
+		}
+	default:
+		return nil, errBadLane{}
+	}
+	if pre != nil {
+		o, n := pre.old, pre.nw
+		oldRead = func(context.Context) ([]byte, error) { return o, nil }
+		newRead = func(context.Context) ([]byte, error) { return n, nil }
+	}
+	// Each side is read once and remembered with its STRICT error: the diff
+	// shows a missing side as empty (lenient), the staging doc refuses it
+	// (an untracked file has no index blob, a new file no HEAD version).
+	oldSide, newSide := &memoSide{read: oldRead}, &memoSide{read: newRead}
+	d, err := svc.Differ().Diff(ctx, domain.Request{Key: "", Path: path, OldPath: oldPathFor(oldPath, path), Old: lenient(oldSide.get), New: lenient(newSide.get)})
+	if err != nil {
+		return nil, err
+	}
+	// Inline-hunk tagging, both lanes (the unstaged diff stages rows, the
+	// staged diff unstages them), for an eligible file (no rename — the hunk
+	// doc is single-path). Any refusal or a run/block count mismatch (e.g. a
 	// truncated alignment) just yields an untagged diff — the client then
-	// simply offers no hunk staging for it.
+	// simply offers no staging for it.
 	var hunks *diffHunksMeta
-	if wt == "unstaged" && oldPath == path && !d.Binary && !d.TooLarge && !d.Result.Truncated {
-		if doc, hash, ref := buildHunkDoc(r.Context(), svc, path); ref == nil {
+	if oldPath == path && !d.Binary && !d.TooLarge && !d.Result.Truncated {
+		lane := hunkLane(wt)
+		var doc *hunkpick.Doc
+		var brows [][]blockRow
+		var hash string
+		var ref *hunkRefusal
+		if oldSide.done && newSide.done {
+			if oldSide.err == nil && newSide.err == nil {
+				doc, brows, hash, ref = hunkDocFrom(oldSide.b, newSide.b, lane)
+			} else {
+				ref = &hunkRefusal{}
+			}
+		} else {
+			doc, brows, hash, ref = buildHunkDoc(ctx, svc, path, lane)
+		}
+		if ref == nil {
 			tags, n := diffHunkTags(d.Result.Rows)
-			if n > 0 && n == len(doc.Blocks()) {
-				hunks = &diffHunksMeta{count: n, hash: hash, rowTags: tags}
+			// The latch: the rows the reader sees must be the rows the doc was
+			// built from, block for block and row for row — a row ordinal is
+			// only meaningful if both sides number the same rows.
+			if n > 0 && n == len(doc.Blocks()) && sameBlockShape(tags, brows) {
+				hunks = &diffHunksMeta{count: n, hash: hash, lane: lane, rowTags: tags}
 			}
 		}
 	}
-	writeDiffJSON(w, d, hunks)
+	return diffPayload(d, hunks), nil
+}
+
+// memoSide reads one side of a diff at most once.
+type memoSide struct {
+	read func(context.Context) ([]byte, error)
+	b    []byte
+	err  error
+	done bool
+}
+
+func (m *memoSide) get(ctx context.Context) ([]byte, error) {
+	if !m.done {
+		m.b, m.err = m.read(ctx)
+		m.done = m.err == nil || ctx.Err() == nil
+	}
+	return m.b, m.err
 }
 
 // lenient maps a byte-source error to an empty side. A missing side is
@@ -299,6 +437,11 @@ func lenient(src domain.ByteSource) domain.ByteSource {
 // Shared by the commit (sha=) and working-tree (wt=) branches; a non-nil
 // hunks adds inline hunk ordinals + the staging freshness hash.
 func writeDiffJSON(w http.ResponseWriter, d domain.Diff, hunks *diffHunksMeta) {
+	writeJSON(w, diffPayload(d, hunks))
+}
+
+// diffPayload is the /api/diff JSON body of an aligned diff.
+func diffPayload(d domain.Diff, hunks *diffHunksMeta) map[string]any {
 	rows := make([]diffRow, len(d.Result.Rows))
 	for i, row := range d.Result.Rows {
 		rows[i] = diffRow{
@@ -312,9 +455,19 @@ func writeDiffJSON(w http.ResponseWriter, d domain.Diff, hunks *diffHunksMeta) {
 			LeftTok:    tokTriples(d.OldTok, row.LeftNo),
 			RightTok:   tokTriples(d.NewTok, row.RightNo),
 		}
-		if hunks != nil && hunks.rowTags[i] >= 0 {
-			tag := hunks.rowTags[i]
+		if hunks != nil && hunks.rowTags.hunk[i] >= 0 {
+			tag := hunks.rowTags.hunk[i]
 			rows[i].Hunk = &tag
+			if li := hunks.rowTags.index[i]; li >= 0 {
+				l := li
+				rows[i].HunkIndexLine = &l
+			}
+			if wi := hunks.rowTags.work[i]; wi >= 0 {
+				wl := wi
+				rows[i].HunkWorkLine = &wl
+			}
+			hr := hunks.rowTags.row[i]
+			rows[i].HunkRow = &hr
 		}
 	}
 	payload := map[string]any{
@@ -324,7 +477,7 @@ func writeDiffJSON(w http.ResponseWriter, d domain.Diff, hunks *diffHunksMeta) {
 		"truncated": d.Result.Truncated,
 	}
 	if hunks != nil {
-		payload["hunks"] = map[string]any{"count": hunks.count, "hash": hunks.hash}
+		payload["hunks"] = map[string]any{"count": hunks.count, "hash": hunks.hash, "lane": hunks.lane}
 	}
-	writeJSON(w, payload)
+	return payload
 }

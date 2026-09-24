@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
@@ -198,6 +200,7 @@ func globalBindings() []footerBinding {
 		{"undo", "u", i18n.T("[u]ndo"), Model.opsIdle, scopeGlobal},
 		{"bookmarks", "g", i18n.T("[g] bookmarks"), Model.opsIdle, scopeGlobal},
 		{"shelf", "G", i18n.T("[G] shelf"), Model.opsIdle, scopeGlobal},
+		{"agent-sessions", "ctrl+\\", i18n.T("[ctrl+\\] agents"), func(m Model) bool { return len(domain.Sessions().List()) > 0 }, scopeGlobal},
 		{"notices", "!", i18n.T("[!] notices"), func(m Model) bool { return len(m.notices) > 0 }, scopeGlobal},
 		{"last-error", "E", i18n.T("[E] full message"), func(m Model) bool { return m.lastError != "" }, scopeGlobal},
 		{"find", "F", i18n.T("[F] find file"), Model.opsIdle, scopeGlobal},
@@ -229,6 +232,16 @@ func (m Model) footerOverride() (string, bool) {
 	// nothing, so show the process's own indicator instead.
 	if m.proc != nil {
 		return m.proc.indicator(m), true
+	}
+	// A focused agent console gets every key but the two reserved ones; an
+	// unfocused one answers only its own three while its column has focus.
+	if m.console != nil && m.topLayer() == nil && m.actionMenu == nil {
+		if m.console.focused {
+			return i18n.T("agent console: every key goes to the agent  [%s] step out  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
+		}
+		if m.focus == panelCommits {
+			return i18n.T("agent console: [enter] type  [ctrl+t] maximise  [esc] close  [%s] sessions  [tab] panels", m.sessionsKey()), true
+		}
 	}
 	if m.filterTyping || m.stashFilterTyping() {
 		return i18n.T("filter: type to search  [↑↓] move  [enter] keep  [esc] cancel"), true

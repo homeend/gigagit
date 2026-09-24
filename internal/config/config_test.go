@@ -720,3 +720,29 @@ func TestUIAgentSteeringLayers(t *testing.T) {
 		t.Error("an empty agent_steering must be ignored, leaving the global off")
 	}
 }
+
+func TestConsoleKeysLayers(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.toml")
+	cfg, err := Load(missing, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Console.StepOutKey != "ctrl+]" || cfg.Console.SessionsKey != "ctrl+\\" {
+		t.Fatalf("defaults = %+v", cfg.Console)
+	}
+	g := filepath.Join(dir, "global.toml")
+	writeFile(t, g, "[console]\nstep_out_key = \"ctrl+q\"\n")
+	r := filepath.Join(dir, "repo.toml")
+	writeFile(t, r, "[console]\nsessions_key = \"ctrl+g\"\nstep_out_key = \"\"\n")
+	cfg, err = Load(g, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Console.StepOutKey != "ctrl+q" { // the repo's empty value is ignored
+		t.Fatalf("step_out_key = %q", cfg.Console.StepOutKey)
+	}
+	if cfg.Console.SessionsKey != "ctrl+g" {
+		t.Fatalf("sessions_key = %q", cfg.Console.SessionsKey)
+	}
+}

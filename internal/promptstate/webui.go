@@ -21,6 +21,10 @@ type WebUI struct {
 	// StackedDiff is gg web's stacked diff view: every file of the open change
 	// set in one scroll (header + diff per file) instead of one file at a time.
 	StackedDiff bool `toml:"stacked_diff,omitempty"`
+	// CommitTall is gg web's commit message box size: the ⤢ control swaps the
+	// everyday three lines for a tall box, and the choice is remembered here
+	// (a random port makes browser storage useless).
+	CommitTall bool `toml:"commit_tall,omitempty"`
 	// SidebarWidth / FilesWidth are the dragged pane widths in CSS pixels;
 	// 0 means "never dragged, use the default".
 	SidebarWidth int `toml:"sidebar_width"`

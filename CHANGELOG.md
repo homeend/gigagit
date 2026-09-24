@@ -26,6 +26,105 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   is not a diff). The `?view=content` hint also accepts a `:<line>`, reserved
   for focusing a line in a later version.
 
+## Agent sessions in the TUI
+
+### Added
+
+- **Run AI agents inside gg.** On a Worktrees row, `.` → **Start agent…**
+  starts Claude Code, Codex, Junie, Antigravity, Kimi Code (or any configured
+  command) in that worktree, in a live console over the Commits column. A
+  focused console gets every key except `ctrl+]` (step out) and `ctrl+\`
+  (sessions popup); unfocused, `enter` types again, `ctrl+t` maximises it over
+  the whole body and `esc` closes it while the agent keeps running.
+- **Session sub-rows** under each worktree (`└ ● Claude  running 12m`,
+  `└ ○ Codex  exited (0)`), with Open / Kill / Remove in the `.` menu.
+- **`ctrl+\` agent-sessions popup** — every session this gg runs, grouped
+  repo → worktree; switching worktree or repository keeps sessions running.
+- **Quit guard**: quitting with live sessions opens the popup in quit mode
+  (`Q` kills them all and quits). A worktree with a running agent is not
+  deleted until the agent is killed; an agent that exits while its console is
+  not focused raises a status notice.
+- **First run auto-configures**: with no `session` command set up, Start
+  agent… detects the installed agents (with a "Detecting installed agents…"
+  notice) and writes their safe commands to the global config.
+- **`[console] step_out_key` / `sessions_key`** make the two reserved keys
+  configurable.
+
+## Agent sessions — core (no UI yet)
+
+### Added
+
+- **gg can run interactive AI agents in its own embedded terminals.** A new
+  core (`internal/agentsession`) starts a program in a pseudo-terminal
+  (ConPTY on Windows) with an in-memory terminal emulator, so a frontend can
+  paint a live console and type into it. Sessions belong to the gg process,
+  not to a repository: switching worktree or repository keeps them running.
+  The TUI console that uses this arrives in the next stage.
+- **A `session` external-tool category.** Claude Code, Codex, Junie,
+  Antigravity and Kimi each get a plain interactive launch plus an opt-in
+  *(yolo)* variant (`--dangerously-skip-permissions`,
+  `--dangerously-bypass-approvals-and-sandbox`, `--brave`, `--yolo`); custom
+  entries are `[[tools.command]]` blocks with `category = "session"` and
+  `mode = "session"`. Settings → External tools lists them, yolo unticked.
+  The first time an agent is started with no session command configured, gg
+  detects the installed agents and writes their safe entries to the global
+  config.
+
+### Changed
+
+- **Charm libraries upgraded** for the terminal emulator (`x/ansi` 0.11.7,
+  `x/cellbuf` 0.0.15 and friends). The new width tables measure ☰ (U+2630)
+  as two cells, matching how terminals draw it, so gg no longer rewrites it
+  to `?` in commit rows.
+
+## Line staging in gg web, the GitKraken way
+
+### Changed
+
+- **Staging rows is much faster on slow filesystems** (a repo on a Windows
+  drive under WSL, where every git call costs 50–300 ms). A selection that
+  spans files is staged in one request with one index write; the answer
+  carries each file's fresh diff, so the rows are clickable again at once,
+  and the file list updates from a status read in the background. Staging
+  no longer pays the branch-version probe, and reading a working-tree file
+  no longer asks git where the worktree root is. One row on a `/mnt` drive
+  went from ~530 ms to ~120 ms before the rows are live again; two files
+  from ~1.1 s to ~0.2 s.
+- **One selection across the stacked view.** Rows marked in several files
+  are one selection: the right-click menu counts them all ("Stage selected
+  lines (5)") and stages them all, and a shift-click range runs across files
+  in the order shown. A plain click in another file starts a new selection.
+- **Deselecting works.** Click anywhere that is not a changed row — a context
+  line, the header, the file list — or press Esc to clear the selection.
+- **Double-click stages the selection.** Double-clicking a selected row
+  stages every selected row; double-clicking any other row clears the
+  selection and stages just that row (it used to wipe the selection first).
+- **Staging part of a file works like GitKraken.** In a working-tree diff,
+  click a row to select it, shift-click to select a range, ctrl/cmd-click to
+  add or remove one; then right-click → **Stage selected lines**, or
+  **Stage hunk** for the block under the pointer. Both act immediately — the
+  staged rows leave the diff and the file shows up (partially) under Staged.
+  A modified row is one change, whichever side you click. This replaces the
+  earlier pick-then-stage bar (`stage selected (n)`, `all`, `none`).
+- **Staging feels instant.** The diff shows the result the moment you act
+  and the request runs behind it; if the server refuses, the diff goes back
+  exactly as it was. Afterwards only the file you staged in is re-read, in
+  place — no "loading…" flash, no jump to the top, and in the stacked view
+  the other files are not repainted.
+- **Double-click a row to stage it** (in the Staged diff: to unstage it).
+- **The line-number columns are no longer tinted** on added or removed rows,
+  so both number columns read alike.
+- **The commit message box takes the whole sidebar width**, with its
+  buttons underneath and a ⤢ control to switch between three and twelve
+  lines; the size is remembered.
+
+### Added
+
+- **Unstaging part of a file in gg web.** Open the file from the Staged
+  section, select rows, right-click → **Unstage selected lines** or
+  **Unstage hunk**: the index gets HEAD's version of those rows back.
+  Until now the web could only unstage whole files.
+
 ## Change navigation in the diff view
 
 ### Changed

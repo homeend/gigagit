@@ -55,6 +55,7 @@ this session is also kept in Settings `,` → Session errors.
 | `w` | create a worktree **for the selected branch** (popup); `W` opens the same popup with **create & switch** as enter's default — one flow onto the branch's own clean directory (`<repo>.worktrees/<branch>`). The branch name starts as the selection (never templated); `e` edits it — confirming a **different** name creates a **new** branch cut from the selection — and `p` seeds it from a saved **branch prefix** (fills any `<user:…>` labels, then edit). Inside the popup: `enter` runs the popup's default, `w` create only, `W` create **and** switch |
 | `enter` | on the Branches panel: jump to the selected branch's **tip commit** in the Commits panel (deep-searching unloaded history if needed — the same machinery as `ctrl+f`); on the Worktrees panel: switch into the selected worktree; on the Files panel: full-screen side-by-side diff of the unstaged change (index → working tree) — on a **conflicted** row it instead opens the **hunk picker** for that file directly (the same region/line resolver `x` reaches; `esc`/`ctrl+s` return to the panel; a modify-delete conflict has no regions, so the status line points at `x`); on the Staged panel: the staged diff (HEAD → index); on the files-view tree: diff of the file in the viewed commit. Inside the diff: `↑`/`↓` scroll, `pgup`/`pgdn` page, `n`/`p` (or `ctrl+↑`/`ctrl+↓`) jump between changes, `home`/`end` jump to the top/bottom of the file, then at the edge prime a step to the previous/next file in the list — a bottom-left cue appears and the next press moves to that file, announced by a bottom-left notice naming it (the tree or Status/Staged panel selection follows), `f` toggles full file ↔ changed-lines-only, `ctrl+w` cycles the text display mode (scroll/wrap/truncate), `←`/`→`/`0` pan in scroll mode, `j`/`k` (or `alt+↑/↓`) move the **line cursor** (`↑`/`↓` scroll without moving it; `z` cycles its position center/top/bottom; a click places it), `alt+←`/`alt+→` move it to the **other pane of the same row** — the cursor sits on ONE side, only that side's cell is marked (a `·` gap cell included, so you can see where you are even where the side has no line), the header names it (`old line N` on the left), and the copy, the review-note anchor and the `gg://` link all follow it — `space` starts a **line selection** at the cursor and a second `space` freezes its end (the cursor is then free; a third starts a new range), `enter` copies the selected lines — the cursor side's source text, skipping cells that side hasn't got and collapsed folds — and `esc` unmarks (the side is locked while a selection is live), `e` opens the file in your editor at that line, `c` adds a **review note** at the cursor line, `E`/`R` edit or reply to the nearest one, `a` hides agent notes, `}`/`{` jump between annotated lines, and the `.` menu carries **List notes…** (every thread on the file, type to filter, `enter` jumps to one) and **Remove all notes…** (a typed `remove all` clears this file's notes and their replies) wherever the cursor sits (notes belong to the diff that created them — unstaged, staged, untracked or commit — so a two-sided comparison, or a diff against a shelf entry or bookmark, carries none), `/` searches the text in view (`@` searches backwards) — type to search incrementally from the cursor line, `enter` keeps the query, `esc` cancels it, `]`/`[` step to the next/previous hit (wrapping), `alt+↑`/`alt+↓` recall previous searches; hits are highlighted like word differences and the current one is painted with the `search_current_bg` theme role (a background patch; the `terminal` theme leaves it unset and inverts the hit against its row instead), while a line selection paints its lines with the `selection_bg` role the same two ways, with a hit on an unchanged line lighting up in both columns, `esc` closes. Changed lines highlight the exact words that differ; commit diffs are cached for instant re-open. Code is syntax-coloured by file type (see `[ui] diff_syntax`) |
 | `ctrl+g` | on the Branches panel: **Solo this branch + go to its tip** — scopes the Commits feed to the branch (same toggle as the `.`-menu Solo: press again to un-solo) and lands the cursor on the tip once the reload finishes; on the **Commits panel**: **Solo from the selected commit** — scopes the feed to the history reachable from the commit under the cursor, the commit tree that starts there (press again on the same commit to un-solo; also a `.`-menu row, **Solo from this commit**), with the cursor landing back on the commit after the reload and the header showing `Commits (solo: <short-sha>)`; in the **commit popup** (`c`/`C`): **generate a commit message** from the staged diff using a configured `commit_message` external agent (Settings → External tools), run headless — fills the title/description fields for you to review, nothing commits until `ctrl+s`. More than one tool configured shows a numbered chooser; an unapproved command shows a first-run approval (remembered per repo); existing title/description text asks before being replaced; `esc` cancels an in-flight run |
+| `ctrl+\` | the **agent-sessions** popup, from anywhere — even inside a focused agent console: every agent this gg runs, grouped repo → worktree (`enter` opens one, `k` kills, `x` removes an exited one, `/` filters). See [Agent sessions](#agent-sessions-embedded-consoles) |
 | `ctrl+w` | cycle the focused window's **text display mode** — cutoff (truncate, default) → wrap (on words; blame and file previews wrap column-exact) → scroll — for any list/tree/text window (panels, stash list, files tree, history, blame) and every list popup (repo switcher, help, conflict resolver, settings, pair-op); `shift+←/→` pans horizontally in scroll mode |
 | `space` | on the **Files** panel: stage the selected working-tree file (`git add`); on the **Staged** panel: unstage it (`git restore --staged`); conflicted files are skipped; the `.` menu on either file panel also offers **Stage all files** (right after Stage file) — every working-tree change into the index in one op, untracked files included — and **Unstage all** — every staged file back out of the index in one op (both hidden while the repo is conflicted or a merge/rebase sits paused); on the **Commits** panel: mark/unmark the selected commit for compare (same ◉ set as `m`, max 2) — marking the second commit opens the two-commit comparison immediately; `esc` clears all marks; on the **Staged** panel, `H` opens the region/line **unstage picker** over the staged change (staged ↔ HEAD, the same picker surface as staging) — taking the HEAD side reverts that region of the index, the working tree is untouched (`git reset -p` style); a newly added file is refused (`space` unstages it whole) |
 | `H` | on the **Files** panel: open the region/line **staging picker** for the selected tracked file (the same surface as the conflict resolver) (on the **Staged** panel, `H` opens the mirror **unstage picker**, staged ↔ HEAD) — `←`/`→` switch side (index ↔ working), `↑`/`↓` move the line cursor, `space` stages a line (result follows pick order), `c`/`i` toggle a whole side of the hunk (index/working — left, right, or both can be on; toggle order = result order), `C`/`I` toggle a side across all hunks, `s` resets the hunk to its default and steps on, `n`/`p` jump (wrapping; `enter` = next hunk), `ctrl+s` applies (only the index changes — the working tree is untouched), `esc` cancels. Long lines are readable: `ctrl+w` cycles the display mode (**scroll** default / wrap / cutoff) and `shift+←/→` pans in scroll mode; the picker scrolls vertically to keep the cursor in view, and `alt+↑/↓` scrolls the view freely without moving the cursor (the first plain `↑`/`↓` snaps back); `pgup`/`pgdn` page the cursor / the output pane; `tab` focuses the bottom **output** pane so `↑`/`↓` scroll the assembled result (`tab` again returns to the grid); `ctrl+t` zooms the focused half (grid or output) to the whole box — Tab swaps which half is zoomed, `ctrl+t`/`esc` restores the split |
@@ -1155,6 +1156,54 @@ scriptable as `gg review`
 likewise come back through `$GG_MESSAGE_FILE`, fed the diff via a new
 `$GG_REVIEW_DIFF` file (Junie's own `--review` flag can't take a range;
 Kimi's print-mode stdout is a report, not the review).
+
+### Agent sessions (embedded consoles)
+
+On a **Worktrees** row, the `.` menu's **Start agent…** runs an interactive
+agent (Claude Code, Codex, Junie, Antigravity, Kimi Code — or any command you
+configure) **inside gg**, in that worktree, in a live console that takes the
+Commits column. Type to it as in any terminal: while the console is
+**focused, every key goes to the agent** — `esc`, `ctrl+t`, `ctrl+o`, `q`
+included — except two:
+
+| Key | Focused console | Unfocused console (its column focused) |
+|-----|-----------------|-----------------------------------------|
+| `ctrl+]` | step out (a maximised console shrinks back to the Commits column) | — |
+| `ctrl+\` | the agent-sessions popup | the agent-sessions popup |
+| `enter` | → agent | focus the console (type again) |
+| `ctrl+t` | → agent | maximise over the whole body, focused |
+| `esc` | → agent | close the console — **the agent keeps running** |
+
+A running or exited session shows as a sub-row under its worktree
+(`└ ● Claude  running 12m` / `└ ○ Codex  exited (0)`); `enter` on it (or its
+`.` menu **Open session**) brings the console back, and the menu also offers
+**Kill session** / **Remove session**. Sessions belong to the gg process, not
+to a repository: switching worktree or repository (`R`) keeps them running,
+and `ctrl+\` reaches every one. Quitting gg with live sessions opens that
+popup in quit mode — `Q` kills them all and quits, `esc` cancels. A worktree
+with a running agent cannot be deleted until the agent is killed.
+
+The commands come from the `session` external-tool category. The first
+**Start agent…** with none configured detects the installed agents and writes
+their plain interactive commands to the global config (yolo variants stay
+opt-in in Settings → External tools); a custom one is
+
+```toml
+[[tools.command]]
+category = "session"
+name = "Claude (opus)"
+mode = "session"
+command = '''claude --model opus'''
+```
+
+and runs through the usual first-run approval. The two reserved keys are
+configurable:
+
+```toml
+[console]
+step_out_key = "ctrl+]"   # a Bubble Tea key name
+sessions_key = "ctrl+\\"
+```
 
 ### Environment
 

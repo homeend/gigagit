@@ -672,6 +672,29 @@ $("modal-options").addEventListener("click", (e) => {
   if (btn) answerModal(btn.dataset.o);
 });
 
+// --- the message box's size ---------------------------------------------
+// Three rows is the everyday size; a longer message gets the whole box in
+// one press. The choice is remembered in /api/uistate, NOT in browser
+// storage: gg web binds a random port each run, so localStorage starts empty
+// every time.
+const COMMIT_ROWS_TALL = 12;
+
+function applyCommitRows() {
+  const tall = !!(state.ui && state.ui.commit_tall);
+  $("commit-msg").rows = tall ? COMMIT_ROWS_TALL : 3;
+  const b = $("commit-grow");
+  b.textContent = tall ? "⤡" : "⤢";
+  b.setAttribute("aria-expanded", tall ? "true" : "false");
+  b.title = tall ? "back to three lines" : "write a longer message (the size is remembered)";
+}
+
+$("commit-grow").addEventListener("click", () => {
+  const tall = !(state.ui && state.ui.commit_tall);
+  saveUI({ commit_tall: tall });
+  applyCommitRows();
+  $("commit-msg").focus();
+});
+
 $("commit-btn").addEventListener("click", doCommit);
 
 $("pull-btn").addEventListener("click", doPull);
@@ -762,4 +785,4 @@ function openCreateBranchPrompt(start, seed, label) {
 }
 
 
-export { applySidebarHidden, answerModal, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar };
+export { applySidebarHidden, answerModal, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar, applyCommitRows };

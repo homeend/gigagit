@@ -329,6 +329,7 @@ func (m Model) stashFilterTyping() bool {
 func (m Model) openStashView() (Model, tea.Cmd) {
 	m = m.rememberLeftFocus()
 	m.focus = panelCommits
+	m.console = nil // one right-column owner at a time; the session keeps running
 	m.stashView = &stashView{loading: true, tag: "stash"}
 	return m, m.loadStashListCmd(m.stashView.tag)
 }

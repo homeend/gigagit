@@ -159,7 +159,7 @@ func TestApplyToolsWizardWritesMissingOnly(t *testing.T) {
 		if tc.Category == "conflict" && tc.Name == "Claude" {
 			t.Error("existing (conflict, Claude) block must be skipped, not rewritten")
 		}
-		if tc.Command == "" || (tc.Category != "conflict" && tc.Category != "commit_message" && tc.Category != "review") {
+		if tc.Command == "" || (tc.Category != "conflict" && tc.Category != "commit_message" && tc.Category != "review" && tc.Category != "session") {
 			t.Errorf("generated block malformed: %+v", tc)
 		}
 		if tc.Category == "commit_message" {
@@ -391,5 +391,17 @@ func TestDimSpanRunesCJKColumns(t *testing.T) {
 	from, to = dimSpanRunes(vis, 2, 4, 13)
 	if from != 1 || to != len(vis) {
 		t.Fatalf("scrolled: got [%d,%d), want [1,%d)", from, to, len(vis))
+	}
+}
+
+func TestToolsWizardSessionRowsDefaults(t *testing.T) {
+	t.Parallel()
+	rows := []toolWizardRow{
+		{tmpl: exttool.CommandTemplate{Category: exttool.CatSession, Name: "Claude", Mode: exttool.ModeSession}},
+		{tmpl: exttool.CommandTemplate{Category: exttool.CatSession, Name: "Claude (yolo)", Mode: exttool.ModeSession, OptIn: true}},
+	}
+	got := defaultToolChecked(rows)
+	if !got[0] || got[1] {
+		t.Fatalf("checked = %v, want [true false]", got)
 	}
 }

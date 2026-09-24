@@ -118,7 +118,10 @@ type Model struct {
 	previewCompareSet map[string]bool // Previews rows toggled into the ◉ compare selection (keyed by row id; preview_marks.go)
 	actionMenu        *actionMenu     // . action menu (list + run available actions); nil = closed
 
-	stashView *stashView // stash list in the right column (over Commits); nil = closed
+	stashView     *stashView                               // stash list in the right column (over Commits); nil = closed
+	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
+	quitConfirmed bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
+	sessionStates map[domain.SessionID]domain.SessionState // last seen state per session, for exit notices
 
 	conflict          domain.ConflictState // source of the current conflict (merge/rebase parties), for the notice
 	resumePromptShown bool                 // one-shot: the continue/abort prompt fired for the current paused-op instance; re-arms when the state clears (maybeResumePrompt)
@@ -447,7 +450,7 @@ func New(svc *domain.Service) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen))
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen), waitSessionsCmd())
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -500,6 +503,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m = m.syncConsoleSize() // the agent redraws for its box, not the old one
 		// A resize can flip fullMaxActive false→true without any surface
 		// closing (leftColumnPanels empties below 40 columns and refills on
 		// widen), so this is a pin-resume point like reRoot/closeStashView.
@@ -537,6 +541,23 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+	case consoleChangedMsg:
+		if m.console == nil || msg.id != m.console.id || msg.gen != m.console.gen {
+			return m, nil // a closed or replaced console's waiter dies here
+		}
+		s, ok := m.consoleSession()
+		if !ok {
+			return m, nil
+		}
+		return m, waitSessionCmd(s, msg.id, msg.gen)
+	case sessionsChangedMsg:
+		return m.onSessionsChanged()
+	case quitHeldMsg:
+		return m.openSessionsPopup(true)
+	case agentEnsureMsg:
+		return m.applyAgentEnsure(msg)
+	case agentStartedMsg:
+		return m.applyAgentStarted(msg)
 	case stackStatMsg:
 		// The stack's +/− counts, in one numstat (diff_stack.go).
 		return m.applyStackStats(msg), nil
@@ -1927,6 +1948,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// The agent console: a FOCUSED console owns every key except the two
+		// reserved ones (spec), ahead of ctrl+o / ctrl+p / the layer stack —
+		// agents use those chords themselves. An unfocused console only
+		// claims enter / ctrl+t / esc (and swallows Commits-scoped keys)
+		// while its column has focus.
+		if nm, cmd, handled := m.updateConsoleKey(msg); handled {
+			return nm, cmd
+		}
 		// ctrl+o — the shell escape hatch. Handled ABOVE the process/layer
 		// routing (unlike ctrl+p) so it works from ANY surface, including
 		// the conflict process and its message screens — the motivating
@@ -2457,6 +2486,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case panelWorktrees:
 				if m.canDeleteWorktree() {
 					wt, _ := m.selectedWorktree()
+					if info, busy := runningSessionIn(wt.Path); busy {
+						m.statusMsg = i18n.T("%s is running in this worktree — kill it first (ctrl+\\)", info.Label)
+						return m, nil
+					}
 					return m.startOp(engine.RemoveWorktree{Path: wt.Path, Branch: wt.Branch})
 				}
 			case panelBranches:
@@ -2529,6 +2562,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.focus == panelTags {
 				return m.tagJumpToCommit()
+			}
+			if m.focus == panelWorktrees {
+				if info, ok := m.selectedSession(); ok {
+					return m.openConsole(info.ID)
+				}
 			}
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
 				wt, _ := m.selectedWorktree()
@@ -4066,7 +4104,7 @@ func (m Model) canMaximizeLeft() bool {
 // suspended — layout ignores it and focusCommitsPanel must not transfer it,
 // because the surface's close path restores its own remembered focus.
 func (m Model) fullscreenYielded() bool {
-	return m.filesView != nil || m.stashView != nil || m.filesPreview != nil
+	return m.filesView != nil || m.stashView != nil || m.filesPreview != nil || m.console != nil
 }
 
 // canFullMaximize reports whether ctrl+t can pin the focused panel fullscreen:
