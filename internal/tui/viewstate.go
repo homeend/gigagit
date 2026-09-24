@@ -230,22 +230,48 @@ func (l remoteBranchList) Name(i int) string { return l.items[i].Name }
 func (l remoteBranchList) Date(i int) int64  { return l.items[i].UnixTime }
 func (l remoteBranchList) Key(i int) string  { return l.items[i].Name }
 
+// worktreeList is entry-based: each worktree row is followed by one row per
+// agent session running in it (worktreeEntries). A session row's Name and
+// Date are its worktree's, so the stable sort keeps it directly under its
+// parent; backingIndex maps entries back to m.worktrees and refuses session
+// rows, the Commits WIP pseudo-row precedent.
 type worktreeList struct {
 	items []model.Worktree
-	rows  []string
+	ents  []wtEntry
+	rows  []string         // one per entry
 	times map[string]int64 // HEAD sha -> committer time
 }
 
-func (l worktreeList) Len() int         { return len(l.items) }
+func (l worktreeList) Len() int         { return len(l.ents) }
 func (l worktreeList) Row(i int) string { return l.rows[i] }
 func (l worktreeList) Name(i int) string {
-	if b := l.items[i].Branch; b != "" {
+	w := l.items[l.ents[i].wt]
+	if b := w.Branch; b != "" {
 		return b
 	}
-	return l.items[i].Path // detached/bare fall back to the path
+	return w.Path // detached/bare fall back to the path
 }
-func (l worktreeList) Date(i int) int64 { return l.times[l.items[i].Head] }
-func (l worktreeList) Key(i int) string { return l.items[i].Path }
+func (l worktreeList) Date(i int) int64 { return l.times[l.items[l.ents[i].wt].Head] }
+func (l worktreeList) Key(i int) string {
+	k := l.items[l.ents[i].wt].Path
+	if s := l.ents[i].sess; s != "" {
+		k += "\x00" + string(s)
+	}
+	return k
+}
+
+// Haystack: a session row matches whatever its worktree row matches (plus
+// its own label), so a / filter never strands a sub-row without its parent.
+func (l worktreeList) Haystack(i int) string {
+	if l.ents[i].sess == "" {
+		return l.rows[i]
+	}
+	p := i
+	for p > 0 && (l.ents[p].sess != "" || l.ents[p].wt != l.ents[i].wt) {
+		p--
+	}
+	return l.rows[p] + " " + l.rows[i]
+}
 
 type tagList struct {
 	items []model.Tag
@@ -438,7 +464,8 @@ func (m Model) listFor(p panel) panelList {
 	case panelRemotes:
 		return remoteBranchList{items: m.remoteBranches, rows: m.remoteRows()}
 	case panelWorktrees:
-		return worktreeList{items: m.worktrees, rows: m.worktreeRows(), times: m.headTimes}
+		ents := m.worktreeEntries()
+		return worktreeList{items: m.worktrees, ents: ents, rows: m.worktreeRows(ents), times: m.headTimes}
 	case panelTags:
 		return tagList{items: m.tags, rows: m.tagRows()}
 	case panelReflog:
@@ -659,6 +686,16 @@ func (m Model) backingIndex(p panel) (int, bool) {
 			return 0, false
 		}
 		return u - m.wipCount(), true
+	}
+	if p == panelWorktrees {
+		// Entries interleave agent-session sub-rows; a session row is not a
+		// worktree (refused like a WIP pseudo-row), a worktree row maps back
+		// to its m.worktrees index.
+		ents := m.worktreeEntries()
+		if u >= len(ents) || ents[u].sess != "" {
+			return 0, false
+		}
+		return ents[u].wt, true
 	}
 	return u, true
 }

@@ -47,7 +47,7 @@ func (m Model) rowKeyAt(p panel, i int) string {
 	case panelRemotes:
 		return m.remoteBranches[u].Name
 	case panelWorktrees:
-		return m.worktrees[u].Path
+		return m.listFor(p).Key(u) // entry-aware: a session sub-row keys as path\x00id
 	case panelTags:
 		return m.tags[u].Name
 	case panelFiles, panelStaged:

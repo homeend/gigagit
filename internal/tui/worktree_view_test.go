@@ -46,7 +46,7 @@ func TestWorktreeRowsFormatAndCurrentMarker(t *testing.T) {
 		currentWorktree: "/repo",
 		sel:             map[panel]int{},
 	}
-	rows := m.worktreeRows()
+	rows := m.worktreeRows(m.worktreeEntries())
 	if len(rows) != 2 {
 		t.Fatalf("want 2 worktree rows, got %d: %v", len(rows), rows)
 	}
@@ -76,13 +76,13 @@ func TestWorktreeMarkersFireOnRealRepo(t *testing.T) {
 	t.Parallel()
 	m := loadedModel(t)
 	marked := false
-	for _, row := range m.worktreeRows() {
+	for _, row := range m.worktreeRows(m.worktreeEntries()) {
 		if strings.HasPrefix(row, "* ") {
 			marked = true
 		}
 	}
 	if !marked {
-		t.Errorf("no worktree row marked current; rows=%v current=%q", m.worktreeRows(), m.currentWorktree)
+		t.Errorf("no worktree row marked current; rows=%v current=%q", m.worktreeRows(m.worktreeEntries()), m.currentWorktree)
 	}
 	// The checked-out branch (main) is in a worktree, so its row shows the path.
 	foundPath := false

@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent sessions in the TUI
+
+### Added
+
+- **Run AI agents inside gg.** On a Worktrees row, `.` → **Start agent…**
+  starts Claude Code, Codex, Junie, Antigravity, Kimi Code (or any configured
+  command) in that worktree, in a live console over the Commits column. A
+  focused console gets every key except `ctrl+]` (step out) and `ctrl+\`
+  (sessions popup); unfocused, `enter` types again, `ctrl+t` maximises it over
+  the whole body and `esc` closes it while the agent keeps running.
+- **Session sub-rows** under each worktree (`└ ● Claude  running 12m`,
+  `└ ○ Codex  exited (0)`), with Open / Kill / Remove in the `.` menu.
+- **`ctrl+\` agent-sessions popup** — every session this gg runs, grouped
+  repo → worktree; switching worktree or repository keeps sessions running.
+- **Quit guard**: quitting with live sessions opens the popup in quit mode
+  (`Q` kills them all and quits). A worktree with a running agent is not
+  deleted until the agent is killed; an agent that exits while its console is
+  not focused raises a status notice.
+- **First run auto-configures**: with no `session` command set up, Start
+  agent… detects the installed agents (with a "Detecting installed agents…"
+  notice) and writes their safe commands to the global config.
+- **`[console] step_out_key` / `sessions_key`** make the two reserved keys
+  configurable.
+
 ## Agent sessions — core (no UI yet)
 
 ### Added

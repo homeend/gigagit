@@ -82,6 +82,9 @@ var settingDocs = []settingDoc{
 	{"notes", "max_age_days", 30, "prune review notes older than this many days (the sweep at every gg start also drops notes whose anchor is gone); -1 = keep forever"},
 	{"notes", "max_entries", 2000, "cap on stored review notes, enforced on every write (oldest thread dropped first); -1 = uncapped"},
 
+	{"console", "step_out_key", "ctrl+]", "agent console: step out one level (focused → unfocused, maximised → docked); a Bubble Tea key name"},
+	{"console", "sessions_key", "ctrl+\\", "agent console: open the agent-sessions popup from anywhere; a Bubble Tea key name"},
+
 	{"branches", "filter", nil, "branch filters as [[branches.filter]] blocks (alt+1…5 in the Branches/Remotes lists): slot (1..5), name, mode (hide | show = show only matching), older_than / younger_than (tip age: 90d 12w 6m 1y), prefix, suffix, contains, regex (Go RE2); set clauses AND together; a repo block REPLACES the global block for the same slot; invalid blocks are inert with a reason; edit from Settings → Branch filters… (TUI) or the web settings view"},
 
 	{"tools", "command", nil, "external-tool commands as [[tools.command]] blocks: category (conflict|commit_message|review|conflict_complete), name, mode (terminal|capture), per_file, when_op, command (multi-line '''…''' literal; tokens: <op> <source> <target> <conflicted-files> <repo> <file> <local> <base> <remote> <merged> <context-file> <user:LABEL>); global + repo lists CONCATENATE, repo wins a (category,name) collision; generate defaults via Settings → External tools; values substitute literally — prefer \"$GG_*\" env vars or <context-file> when values may contain shell metacharacters. A commit_message command normally uses mode=\"capture\" (runs headless, its stdout is captured and parsed into a commit subject+body for the commit popup's ctrl+g) and reads the staged diff via two env vars instead of a token: $GG_CONTEXT_FILE (a labeled summary — files changed, recent-commit style) and $GG_STAGED_DIFF (the full `git diff --cached`, truncated past a size cap)"},
@@ -176,7 +179,7 @@ func Template() string {
 	b.WriteString("# gg configuration — every setting with its default.\n")
 	b.WriteString("# Uncomment a line to override the default. Values shown are gg's built-in\n")
 	b.WriteString("# defaults; leaving a line commented keeps tracking the default across versions.\n")
-	for _, section := range []string{"worktree", "ui", "debug", "refresh", "versions", "notes", "branches", "tools"} {
+	for _, section := range []string{"worktree", "ui", "debug", "refresh", "versions", "notes", "branches", "tools", "console"} {
 		b.WriteString("\n[" + section + "]\n")
 		for _, d := range settingDocs {
 			if d.section != section {

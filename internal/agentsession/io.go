@@ -62,7 +62,13 @@ func (s *Session) Resize(cols, rows int) error {
 }
 
 // Screen snapshots the visible grid.
-func (s *Session) Screen() Screen {
+func (s *Session) Screen() Screen { return s.screen(false) }
+
+// ScreenWithCursor is Screen with the cursor cell painted reversed when the
+// child shows its cursor — for a console that has keyboard focus.
+func (s *Session) ScreenWithCursor() Screen { return s.screen(true) }
+
+func (s *Session) screen(cursor bool) Screen {
 	s.ioMu.Lock() // one consistent snapshot: no write or resize in between
 	defer s.ioMu.Unlock()
 	w, h := s.emu.Width(), s.emu.Height()
@@ -71,6 +77,9 @@ func (s *Session) Screen() Screen {
 		lines = append(lines, "")
 	}
 	pos := s.emu.CursorPosition()
+	if cursor && !s.cursorHidden.Load() && pos.Y >= 0 && pos.Y < h && pos.X >= 0 && pos.X < w && pos.Y < len(lines) {
+		lines[pos.Y] = s.cursorLine(w, pos.X, pos.Y)
+	}
 	return Screen{
 		Lines: lines[:h], Cols: w, Rows: h,
 		CursorX: pos.X, CursorY: pos.Y,
@@ -84,3 +93,23 @@ func (s *Session) Screen() Screen {
 // ScrollbackLen is the number of lines scrolled off the top (capped at
 // ScrollbackLines).
 func (s *Session) ScrollbackLen() int { return s.emu.ScrollbackLen() }
+
+// cursorLine re-renders row y from its cells with the cell at x reversed.
+// An empty cell becomes a reversed space, which Render then emits.
+func (s *Session) cursorLine(w, x, y int) string {
+	row := make(uv.Line, w)
+	for i := range w {
+		if c := s.emu.CellAt(i, y); c != nil {
+			row[i] = *c
+		} else {
+			row[i] = uv.EmptyCell
+		}
+	}
+	cc := row[x]
+	if cc.IsZero() || cc.Content == "" {
+		cc = uv.EmptyCell
+	}
+	cc.Style.Attrs ^= uv.AttrReverse
+	row[x] = cc
+	return row.Render()
+}
