@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Web: change stepping follows the viewport, and has keys
+
+- gg web's **‹ change / change ›** used to step from the change they last
+  landed on, so after scrolling with the wheel or PgDn a press threw you back
+  up to where you had been. Like the TUI's `n`/`p`, they now step from what is
+  on screen: with the last change scrolled away, **change ›** lands on the
+  first change at or below the top of the diff and **‹ change** on the last
+  one above it. Single file and stacked (the stack is one document).
+- New keys **`.`** / **`,`** (next / previous change) in the diff, plus a
+  `. next change` footer chip and a help row.
 ## Stacked diff: line select / copy (plan 4d)
 
 ### Fixed

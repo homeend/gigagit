@@ -51,8 +51,11 @@ flippable direction arrow, differ / all / one side / same filters; and drag a
 Previews row onto another to start the comparison — the TUI's twin is space /
 `m` marks on two Previews rows; and the **stacked diff** (`S`) — every file
 of a change set in one scroll, header + diff per file, the symmetric
-comparison included — which the TUI now has too, with its own keys: `n`/`p`
-step file to file where the web uses `j`/`k`, home/end are the whole stack's
+comparison included — which the TUI now has too, with its own keys: `N`/`P`
+step file to file where the web uses `j`/`k`, `n`/`p` step change to change
+across the whole stack as one document where the web uses `.`/`,` (or the
+‹ change / change › buttons) — both step from the viewport after a free
+scroll, the web without the TUI's wrap — home/end are the whole stack's
 ends, `J` lists the files, and `-`/`_` fold, as on the web; review notes work per file
 inside a stack in BOTH: `c`/`E`/`R` act on the file under the cursor (the
 clicked row, on the web), `}`/`{` walk note to note across the whole stack

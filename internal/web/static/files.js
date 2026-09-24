@@ -3026,10 +3026,39 @@ function diffChangeBlocks(root = null) {
 }
 
 
+// changeStepTarget is the change a ‹/› step lands on — the TUI's
+// reseatFromViewport. tops are the changes' first-row tops, [top, bottom) the
+// pane. With the change last stepped to (cur) on screen it is the plain ±1;
+// once a free scroll left it off screen (or nothing was stepped yet), › takes
+// the first change at or below the pane's top and ‹ the last one above it, so
+// the step never jumps back to where the reader was. No wrap: past the ends
+// it stays on the last / first change. -1 = no changes.
+function changeStepTarget(tops, cur, top, bottom, delta) {
+  const n = tops.length;
+  if (!n) return -1;
+  if (cur >= 0 && cur < n && tops[cur] >= top && tops[cur] < bottom) {
+    return Math.max(0, Math.min(n - 1, cur + delta));
+  }
+  let seat = tops.findIndex((t) => t >= top);
+  if (seat < 0) seat = n;
+  if (delta > 0) return seat < n ? seat : n - 1;
+  return seat > 0 ? seat - 1 : 0;
+}
+
+
 function stepChange(delta) {
   const blocks = changeNavRows();
   if (!blocks.length) return;
-  const i = Math.max(0, Math.min(blocks.length - 1, state.diffBlockIdx + delta));
+  // The conflict picker steps its regions from its own index: its output
+  // pane scrolls apart from them, so the viewport names no single place.
+  let i;
+  if (conflictPick) {
+    i = Math.max(0, Math.min(blocks.length - 1, state.diffBlockIdx + delta));
+  } else {
+    const pane = $("diff-pane").getBoundingClientRect();
+    const tops = blocks.map((tr) => tr.getBoundingClientRect().top);
+    i = changeStepTarget(tops, state.diffBlockIdx, pane.top, pane.bottom, delta);
+  }
   state.diffBlockIdx = i;
   const tr = blocks[i];
   tr.scrollIntoView({ block: "center" });

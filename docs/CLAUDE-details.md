@@ -1707,9 +1707,14 @@ reader could not see.
   (`n`) or the last one above it (`p`) whenever the focused block is outside
   `[offset, offset+body)`, and that re-seat IS the step. On screen, the shipped
   stepping and its wrap arm are untouched. The web has had this rule since the
-  in-view search work (`visibleChangeBlock`) — but only on re-render, so its own
-  `stepChange` still steps from a stale index; that parity gap is recorded, not
-  fixed here.
+  in-view search work (`visibleChangeBlock`) — but only on re-render; its own
+  `stepChange` stepped from a stale index until 2026-09-24, when it gained the
+  same rule as the pure `changeStepTarget(tops, cur, top, bottom, delta)`
+  (files.js, node-tested in `changestepjs_test.go`) plus keys: `.`/`,` in the
+  diff layout (USER RULING: `p` is pull and `-` folds a stacked file, so not
+  n/p or -/=) and a `. next change` footer chip. The web does not wrap, so
+  where the TUI hands over to its wrap arm the web stays on the last / first
+  change; the conflict picker keeps stepping its regions by index.
 - **In a stack `n` stepped FILES** (plan 3 made `v.blocks` the header indices),
   so a one-file stack had nowhere to step: `n` primed a wrap and the second
   press landed on the file header at the top of the scroll, with no line cursor
