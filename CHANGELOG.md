@@ -21,6 +21,11 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   *copy* both give the lines of the side the drag STARTED on (left = old,
   right = new), with no header or fold text, and the highlight shows exactly
   that. A copy that spans files gives their lines back to back.
+- **TUI: notes in a stacked merge preview.** Only the file you opened showed
+  its review notes; every other file of a merge preview (or a saved preview /
+  commit pair with notes) loaded with no note address and showed none. Each
+  file now carries its own. A note box's title in a stack also named no file
+  (`agent note · Junie ·  R75`) and lost the preview's `⊘ … (outdated)` mark.
 - **Web: a text drag keeps the rows marked for staging.** Releasing a drag
   no longer counts as a click outside the selection.
 

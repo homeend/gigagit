@@ -827,21 +827,27 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	} else {
 		m = m.pushLayer(newV)
 	}
-	if m.inCompareMode() {
-		dv := m.diffLayer()
-		// A merge preview is a compare whose NEW side is the source tip, so
-		// its rows ARE note-addressable at that commit — unlike every other
-		// compare, whose old side no stored address names. Stamp the address
-		// and the set here, where the opener knows which compare this is.
-		if set := m.filesPreviewSet; set != nil {
-			dv.previewSet = set
-			dv.noteAddr = model.FileAddress{State: model.StateCommitted, Commit: set.Tip, Path: l.path}
-		}
-	}
+	m.stampPreviewNotes(m.diffLayer(), l.path)
 	cmd, tag, context := m.treeFileLoad(l)
 	m.diffLayer().context = context
 	m.diffTag = tag
 	return m, cmd
+}
+
+// stampPreviewNotes gives a merge preview's file view its note address. A
+// merge preview is a compare whose NEW side is the source tip, so its rows ARE
+// note-addressable at that commit — unlike every other compare, whose old side
+// no stored address names (a no-op there). Both openers call it: the
+// single-file view before its loader runs (the loader inherits it from the
+// layer), and the stack as each file lands — its loader inherits from the
+// STACK view, which names no file.
+func (m Model) stampPreviewNotes(dv *diffView, path string) {
+	set := m.filesPreviewSet
+	if dv == nil || !m.inCompareMode() || set == nil {
+		return
+	}
+	dv.previewSet = set
+	dv.noteAddr = model.FileAddress{State: model.StateCommitted, Commit: set.Tip, Path: path}
 }
 
 // treeFileLoad picks the loader for ONE files-view row: the Cmd (which yields

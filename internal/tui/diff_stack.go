@@ -597,6 +597,9 @@ func (m Model) applyStackFile(msg stackFileMsg) (Model, tea.Cmd) {
 		v.stk.inflight--
 	}
 	f.d, f.load = msg.view, stackLoaded
+	if v.stk.src == diffNavTree {
+		m.stampPreviewNotes(f.d, f.path) // the loader inherited the STACK's (empty) address
+	}
 	if !f.counted && msg.view != nil {
 		f.add, f.del = countRows(msg.view.full)
 		f.counted = true

@@ -1969,6 +1969,15 @@ already spanned files (header/gap/rule lines are skipped by `selectedLines`).
   drag-and-drop, keeps the old selection, and the stamp re-labels its side.
   The guard test pins the outside-click listener's text verbatim — put new
   early returns ABOVE the `closest(...#ctx-menu)` line.
+- **Found during 4d — notes in a stacked merge preview (TUI):** the compare
+  loader INHERITS the note address from the layer on top (`inheritIdentity`),
+  and in a stack that layer is the stack view, which names no file — only the
+  seed file (its view copied in) kept notes. `stampPreviewNotes(dv, path)` is
+  now shared by the single-file opener and `applyStackFile`. Same root for the
+  box title: `noteBoxLines(r, innerW, owner)` reads the title's path and
+  preview scope from the note's FILE view. Rule: any render/load path that
+  reads `v.noteAddr` / `v.previewSet` must go through the file's own view in
+  a stack.
 - **Probe gotcha:** Firefox ignores `clipboardData` passed to a synthetic
   `new ClipboardEvent("copy", …)` — press a real `Control+c` and read the
   payload in a window-level `copy` listener instead (`stack-probe/dragcopy.mjs`).
