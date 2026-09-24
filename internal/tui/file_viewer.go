@@ -23,9 +23,22 @@ type fileViewer struct {
 // thread. The bytes are the file ON DISK, uncommitted edits included. line
 // (1-based, 0 = none) is where the cursor lands once the load arrives.
 func (m Model) openFileViewer(path string, line int) (Model, tea.Cmd) {
-	fv := &fileViewer{newOpenFile(fileSource{kind: srcWorktree}, path)}
-	fv.pendingLine = line
+	src := fileSource{kind: srcWorktree}
+	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
+	if d == nil {
+		d = newOpenFile(src, path)
+	} else {
+		// Already open: this is the same document, brought to the front and
+		// reloaded (the disk may have moved on) at the reader's place.
+		m = m.detachDoc(d)
+		if line == 0 {
+			d.keepPlace()
+		}
+	}
+	d.pendingLine = line
+	fv := &fileViewer{d}
 	m = m.pushLayer(fv)
+	m = m.registerDoc(d)
 	svc := m.svc
 	return m, loadFileContentSrcCmd(fv.tag, path, m.cfg.UI.SyntaxOn(), func(ctx context.Context) ([]byte, error) {
 		return svc.WorktreeFile(ctx, path)

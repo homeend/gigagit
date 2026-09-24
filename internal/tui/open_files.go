@@ -1,5 +1,7 @@
 package tui
 
+import "github.com/homeend/gigagit/internal/i18n"
+
 // maxOpenFiles is how many files one worktree keeps open (spec ruling 4).
 const maxOpenFiles = 20
 
@@ -68,3 +70,52 @@ func (r *openFilesReg) remove(wt string, d *openFile) {
 	}
 	r.byWT[wt] = l
 }
+
+// docShown reports whether d is in a frame: the files view's preview or a
+// full-screen viewer anywhere on the stack (a covered one is still shown —
+// it comes back when the window above it closes).
+func (m Model) docShown(d *openFile) bool {
+	if m.filesPreview == d {
+		return true
+	}
+	if m.layers != nil {
+		for _, l := range m.layers.entries {
+			if fv, ok := l.(*fileViewer); ok && fv.openFile == d {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// detachDoc takes d out of whatever frame shows it, so it can be shown in
+// another: a document is in one frame at a time.
+func (m Model) detachDoc(d *openFile) Model {
+	if m.filesPreview == d {
+		m.filesPreview = nil
+		m = m.focusTree()
+	}
+	if m.layers != nil {
+		for _, l := range m.layers.entries {
+			if fv, ok := l.(*fileViewer); ok && fv.openFile == d {
+				return m.removeLayer(fv)
+			}
+		}
+	}
+	return m
+}
+
+// registerDoc puts d first in the current worktree's open files — call it
+// once d is in its frame. A file dropped over the cap is named in the status.
+func (m Model) registerDoc(d *openFile) Model {
+	if m.openFiles == nil {
+		return m
+	}
+	if ev := m.openFiles.touch(m.currentWorktree, d, m.docShown); ev != nil {
+		m.statusMsg = i18n.T("closed %s (%d files open)", ev.path, maxOpenFiles)
+	}
+	return m
+}
+
+// docLoaded reports whether d holds its file's lines (not a placeholder).
+func docLoaded(d *openFile) bool { return len(d.p.lines) > 0 && d.p.lines[0].src }

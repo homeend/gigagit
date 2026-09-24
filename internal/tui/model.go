@@ -119,6 +119,7 @@ type Model struct {
 	actionMenu        *actionMenu     // . action menu (list + run available actions); nil = closed
 
 	stashView     *stashView                               // stash list in the right column (over Commits); nil = closed
+	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
 	quitConfirmed bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
 	sessionStates map[domain.SessionID]domain.SessionState // last seen state per session, for exit notices
@@ -438,6 +439,7 @@ func New(svc *domain.Service) Model {
 		filterMemo:             &commitFilterMemo{},
 		branchFilterSlot:       map[panel]int{},
 		bfMemo:                 &branchFilterMemos{},
+		openFiles:              &openFilesReg{},
 	}
 	// The stacked-diff pref is machine-global, so it is read once here rather
 	// than per repo (no state dir → nil store → the single-file default).

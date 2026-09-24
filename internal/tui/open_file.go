@@ -68,8 +68,11 @@ func newOpenFile(src fileSource, path string) *openFile {
 
 // key is the document's identity without its instance number: the same
 // version of the same file has the same key.
-func (d *openFile) key() string {
-	return fmt.Sprintf("%d:%s:%s", d.src.kind, d.src.rev, d.path)
+func (d *openFile) key() string { return docKey(d.src, d.path) }
+
+// docKey is the key of path at src — what an open looks an open file up by.
+func docKey(src fileSource, path string) string {
+	return fmt.Sprintf("%d:%s:%s", src.kind, src.rev, path)
 }
 
 // fill puts a load's lines into the document. The lines the cursor and the

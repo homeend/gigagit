@@ -141,9 +141,22 @@ func (m Model) openPreview(hash, path string) (Model, tea.Cmd) {
 // shelf-member preview (ResolveBytes).
 func (m Model) openPreviewSrc(src fileSource, path string, load func(context.Context) ([]byte, error)) (Model, tea.Cmd) {
 	m.console = nil // one right-column owner at a time; the session keeps running
-	d := newOpenFile(src, path)
+	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
+	reused := d != nil
+	if reused {
+		m = m.detachDoc(d)
+	} else {
+		d = newOpenFile(src, path)
+	}
 	m.filesPreview = d
 	m.filesTreeFocused = false // land in the preview to scroll
+	m = m.registerDoc(d)
+	if reused && src.kind != srcWorktree && docLoaded(d) {
+		return m, nil // a commit's or a shelf's bytes never change: nothing to load
+	}
+	if reused {
+		d.keepPlace()
+	}
 	return m, loadFileContentSrcCmd(d.tag, path, m.cfg.UI.SyntaxOn(), load)
 }
 
