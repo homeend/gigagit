@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Content links: line focus
+
+### Added
+
+- **A content link's `:<line>` lands the viewer's cursor on that line**:
+  `gg open gg://<repo>/<path>:<line>?view=content` (or an agent's
+  `gg session navigate`) opens the full-screen viewer with the line cursor on
+  that line, centred. A line past the end (the file shrank since the link was
+  copied) lands on the last line and the bottom bar says
+  `line N is past the end of <path> (M lines)`.
+- **The viewer's own `.` menu Copy file link carries the cursor line**
+  (`…/<path>:<line>?view=content`); the file-list rows still copy a line-less
+  link.
+- **`gg link --content <path>:<line>`** prints a line-focused content link;
+  a line the file does not have exits 1 (`<path> has N lines`).
+- The mouse wheel scrolls the full-screen viewer (the cursor stays, as in the
+  files view's preview).
+
+### Fixed
+
+- The View-file preview no longer shows a blank phantom last line for a file
+  with CRLF line endings.
+
 ## Content links: Copy file link
 
 ### Added
@@ -23,8 +46,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   space/space/enter select + copy, `/ @ ] [` search and the `.` menu's copy
   rows — so an agent asked to "open" a file can do it. `gg web` refuses content links for now; `gg diff`,
   `gg show`, `gg note` and `gg session highlight` refuse them (a content link
-  is not a diff). The `?view=content` hint also accepts a `:<line>`, reserved
-  for focusing a line in a later version.
+  is not a diff).
 
 ## Agent sessions in the TUI
 

@@ -174,12 +174,14 @@ TUI's `#` prompt.)
 A **content link** names a file as it is ON DISK in the worktree, not a
 diff: `gg://<repo>/<path>?view=content`. `gg link --content <path>` prints
 one (exit 1 when the file is not in the working tree; `--content` takes no
-target flag, hint flag, `:<line>` or `#<hunk>`). `gg open` / `gg session
-navigate` show it in the TUI's content viewer; `gg open --web` refuses it
+target flag, hint flag or `#<hunk>`). `gg link --content <path>:<line>`
+focuses a line — `gg open` puts the viewer's cursor on it (exit 1 when the
+file has fewer lines). `gg open` / `gg session navigate` show it in the TUI's
+content viewer; `gg open --web` refuses it
 (exit 2) — the web page has no viewer yet. Every other link-taking verb
 (`gg diff`, `gg show`, `gg note …`, `gg session highlight add`) refuses it
 (exit 2). When the user asks you to "open" a file for them, this is the link
-to build: `gg link --content <path>` → `gg open <link>`.
+to build: `gg link --content <path>[:<line>]` → `gg open <link>`.
 
 `<repo>` is the repository name of the repo's remote (`gigagit`), resolved
 through gg's machine-local repository history — so a link made on one checkout

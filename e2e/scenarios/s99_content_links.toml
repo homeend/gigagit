@@ -1,4 +1,4 @@
-name = "content links: gg link --content prints ?view=content, refuses a missing file and a target, and non-navigate verbs refuse the link"
+name = "content links: gg link --content prints ?view=content (with an optional :<line>), refuses a line past EOF, a missing file and a target, and non-navigate verbs refuse the link"
 
 # One tracked file with an uncommitted edit: a content link names the file ON
 # DISK, so it must be printable for a dirty file, and must name no commit.
@@ -14,6 +14,17 @@ cmd             = ["link", "--content", "f1.txt"]
 exit            = 0
 stdout_contains = ["gg:///", "/f1.txt?view=content"]
 stdout_excludes = ["@"]
+
+# A :<line> focuses the viewer's cursor; the file has one line.
+[[run]]
+cmd             = ["link", "--content", "f1.txt:1"]
+exit            = 0
+stdout_contains = ["/f1.txt:1?view=content"]
+
+# A line the file does not have is a link to nowhere.
+[[run]]
+cmd  = ["link", "--content", "f1.txt:9"]
+exit = 1
 
 # Not on disk: nothing to link to.
 [[run]]

@@ -294,6 +294,10 @@ this worktree, with no commit — from a commit's file list too. gg checks the
 file exists first and says `<path> is not in the working tree` when it does
 not. `gg open` on such a link (or an agent's `gg session navigate`) opens the
 file's content viewer in the TUI; `gg web` does not land content links yet.
+Inside that viewer, Copy file link carries the cursor line
+(`…/<path>:<line>?view=content`), and opening such a link lands the cursor on
+that line. `gg link --content <path>:<line>` prints one (exit 1 when the file
+has fewer lines).
 
 ```bash
 gg link internal/tui/steer.go:42        # print the link for a place here
