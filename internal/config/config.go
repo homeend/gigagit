@@ -217,6 +217,7 @@ type Config struct {
 	Tools    ToolsConfig    `toml:"tools"`
 	Branches BranchesConfig `toml:"branches"`
 	Console  ConsoleConfig  `toml:"console"`
+	Tasks    TasksConfig    `toml:"tasks"`
 
 	// Themes holds per-theme colour overrides, one [themes.<name>] table per
 	// built-in theme name (terminal/dark/light). Unknown names are kept and
@@ -238,6 +239,7 @@ func Defaults() Config {
 		Versions: VersionsConfig{MaxAgeDays: 90},
 		Notes:    NotesConfig{MaxAgeDays: 30, MaxEntries: 2000},
 		Console:  ConsoleConfig{StepOutKey: "ctrl+]", SessionsKey: "ctrl+\\"},
+		Tasks:    TasksConfig{MaxParallel: 3},
 	}
 }
 
@@ -263,6 +265,7 @@ func Load(globalPath, repoPath string) (Config, error) {
 			overlayBranchFilters(&cfg.Branches, layer.Branches)
 			overlayThemes(&cfg.Themes, layer.Themes)
 			overlayConsole(&cfg.Console, layer.Console)
+			overlayTasks(&cfg.Tasks, layer.Tasks)
 		}
 	}
 	return cfg, nil
@@ -651,5 +654,35 @@ func overlayConsole(dst *ConsoleConfig, src ConsoleConfig) {
 	}
 	if src.Shell != "" {
 		dst.Shell = src.Shell
+	}
+}
+
+// MaxParallelCap is the hard ceiling on AI tasks running at once, whatever
+// the config says (ruling 5: clamped in code to 1..10).
+const MaxParallelCap = 10
+
+// TasksConfig is the [tasks] section: AI tasks (commit message, review,
+// conflict agents) in every mode. User-started agent sessions and
+// terminals are never counted.
+type TasksConfig struct {
+	MaxParallel int `toml:"max_parallel"` // tasks running at once; clamped 1..MaxParallelCap
+}
+
+// Parallel is the effective cap and, when the configured value was out of
+// range, the warning to show once.
+func (t TasksConfig) Parallel() (int, string) {
+	switch {
+	case t.MaxParallel < 1:
+		return 1, fmt.Sprintf("[tasks] max_parallel = %d is below 1; using 1", t.MaxParallel)
+	case t.MaxParallel > MaxParallelCap:
+		return MaxParallelCap, fmt.Sprintf("[tasks] max_parallel = %d is above %d; using %d", t.MaxParallel, MaxParallelCap, MaxParallelCap)
+	}
+	return t.MaxParallel, ""
+}
+
+// overlayTasks copies the set (non-zero) [tasks] fields.
+func overlayTasks(dst *TasksConfig, src TasksConfig) {
+	if src.MaxParallel != 0 {
+		dst.MaxParallel = src.MaxParallel
 	}
 }

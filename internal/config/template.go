@@ -86,6 +86,8 @@ var settingDocs = []settingDoc{
 	{"console", "sessions_key", "ctrl+\\", "agent console: open the agent-sessions popup from anywhere; a Bubble Tea key name"},
 	{"console", "shell", "", "Open terminal (Worktrees . menu): the shell to run; empty = $SHELL (else sh) on Unix, pwsh → powershell → cmd on Windows"},
 
+	{"tasks", "max_parallel", 3, "AI tasks (commit message, review, conflict agents) running at once, headless and interactive counted together; clamped to 1..10; agent sessions you start yourself and terminals are not counted"},
+
 	{"branches", "filter", nil, "branch filters as [[branches.filter]] blocks (alt+1…5 in the Branches/Remotes lists): slot (1..5), name, mode (hide | show = show only matching), older_than / younger_than (tip age: 90d 12w 6m 1y), prefix, suffix, contains, regex (Go RE2); set clauses AND together; a repo block REPLACES the global block for the same slot; invalid blocks are inert with a reason; edit from Settings → Branch filters… (TUI) or the web settings view"},
 
 	{"tools", "command", nil, "external-tool commands as [[tools.command]] blocks: category (conflict|commit_message|review|conflict_complete), name, mode (terminal|capture), per_file, when_op, command (multi-line '''…''' literal; tokens: <op> <source> <target> <conflicted-files> <repo> <file> <local> <base> <remote> <merged> <context-file> <user:LABEL>); global + repo lists CONCATENATE, repo wins a (category,name) collision; generate defaults via Settings → External tools; values substitute literally — prefer \"$GG_*\" env vars or <context-file> when values may contain shell metacharacters. A commit_message command normally uses mode=\"capture\" (runs headless, its stdout is captured and parsed into a commit subject+body for the commit popup's ctrl+g) and reads the staged diff via two env vars instead of a token: $GG_CONTEXT_FILE (a labeled summary — files changed, recent-commit style) and $GG_STAGED_DIFF (the full `git diff --cached`, truncated past a size cap)"},
@@ -180,7 +182,7 @@ func Template() string {
 	b.WriteString("# gg configuration — every setting with its default.\n")
 	b.WriteString("# Uncomment a line to override the default. Values shown are gg's built-in\n")
 	b.WriteString("# defaults; leaving a line commented keeps tracking the default across versions.\n")
-	for _, section := range []string{"worktree", "ui", "debug", "refresh", "versions", "notes", "branches", "tools", "console"} {
+	for _, section := range []string{"worktree", "ui", "debug", "refresh", "versions", "notes", "branches", "tools", "console", "tasks"} {
 		b.WriteString("\n[" + section + "]\n")
 		for _, d := range settingDocs {
 			if d.section != section {

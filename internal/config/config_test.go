@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -763,5 +764,33 @@ func TestConsoleShellOverlay(t *testing.T) {
 	}
 	if def := Defaults().Console.Shell; def != "" {
 		t.Fatalf("default shell = %q, want empty (auto-detect)", def)
+	}
+}
+
+func TestTasksMaxParallel(t *testing.T) {
+	t.Parallel()
+	if n, w := Defaults().Tasks.Parallel(); n != 3 || w != "" {
+		t.Fatalf("default = %d %q, want 3 and no warning", n, w)
+	}
+	dir := t.TempDir()
+	global := filepath.Join(dir, "global.toml")
+	if err := os.WriteFile(global, []byte("[tasks]\nmax_parallel = 5\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n, w := cfg.Tasks.Parallel(); n != 5 || w != "" {
+		t.Fatalf("configured = %d %q, want 5", n, w)
+	}
+	for _, tc := range []struct{ in, want int }{{-2, 1}, {11, 10}, {99, 10}} {
+		n, w := TasksConfig{MaxParallel: tc.in}.Parallel()
+		if n != tc.want || w == "" {
+			t.Errorf("Parallel(%d) = %d %q, want %d with a warning", tc.in, n, w, tc.want)
+		}
+	}
+	if !strings.Contains(Template(), "max_parallel") {
+		t.Error("the config template does not document [tasks] max_parallel")
 	}
 }
