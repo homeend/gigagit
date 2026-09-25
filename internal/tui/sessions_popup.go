@@ -303,7 +303,9 @@ func (p *sessionsPopup) render(m Model, below string) string {
 			default:
 				r = "  " + r
 			}
-			wr[i] = winRow{text: r, style: style}
+			// An open-file row keeps its file name: "> ● " is the lead-in,
+			// the path loses its middle.
+			wr[i] = winRow{text: r, style: style, elide: i < len(p.files) && p.files[i] != nil, elideHead: 4}
 		}
 		rowsH := min(len(wr), max(h-10, 3))
 		body = renderWindow(wr, winOpts{w: textW, h: rowsH, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})

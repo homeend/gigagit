@@ -464,10 +464,10 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		if avail < 1 {
 			avail = 1
 		}
-		title = padRight(truncate(title, avail), avail) + "  " + bd
+		title = padRight(elidePath(title, avail), avail) + "  " + bd
 	}
 	lines := make([]string, 0, contentH)
-	lines = append(lines, padRight(truncate(title, innerW), innerW))
+	lines = append(lines, padRight(elidePath(title, innerW), innerW)) // keep the file name
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate(i18n.T("  (empty)"), innerW), innerW))
 	} else {

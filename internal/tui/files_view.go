@@ -1059,7 +1059,9 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		if m.filesPreviewSet != nil && l.path != "" {
 			text += noteBadge(m.filesPreviewCounts[l.path])
 		}
-		wr[i] = winRow{text: prefix + text, style: st}
+		// A file row cuts the middle of its path, never the name (headings
+		// were pre-elided above).
+		wr[i] = winRow{text: prefix + text, style: st, elide: l.path != "" && !l.heading, elideHead: len([]rune(prefix))}
 	}
 
 	lines := make([]string, 0, contentH)

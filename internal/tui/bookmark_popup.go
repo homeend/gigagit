@@ -157,7 +157,8 @@ func (m Model) renderBookmarkPopupBox(p *bookmarkPopup) string {
 			if p.items[i].ID == p.markID {
 				mark = "•"
 			}
-			wr[n] = winRow{text: prefix + mark + " " + p.rows[i], style: st}
+			// A file bookmark keeps its file name: the path loses its middle.
+			wr[n] = winRow{text: prefix + mark + " " + p.rows[i], style: st, elide: p.items[i].Path != "", elideHead: 4}
 		}
 		capRows := popupResolveRowCap(p.maximized, termH, 12)
 		// Wrap mode: hang-indent continuations at the row text (intrinsic to wrap mode).

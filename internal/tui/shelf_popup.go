@@ -133,7 +133,8 @@ func (m Model) renderShelfPopupBox(p *shelfPopup) string {
 			if p.items[i].ID == p.markID {
 				mark = "•"
 			}
-			wr[n] = winRow{text: prefix + mark + " " + p.rows[i], style: st}
+			// A file entry keeps its file name: the path loses its middle.
+			wr[n] = winRow{text: prefix + mark + " " + p.rows[i], style: st, elide: p.items[i].Origin.Path != "", elideHead: 4}
 		}
 		// Wrap mode: hang-indent continuations at the row text (intrinsic to wrap
 		// the height budget counts display lines, not rows.
