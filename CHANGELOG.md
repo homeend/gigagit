@@ -66,6 +66,16 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   notice offers *Switch to <worktree> and show* or *Ignore*, and the agent is
   told it asked you.
 
+### Fixed
+
+- **Windows: switching to a worktree created under WSL works again.** Since
+  2026-08-25 a Windows gg reported every WSL-created worktree (`\mnt\t\…`)
+  as "not reachable" instead of offering to repair it: the path translator
+  only knew the `/mnt/t/…` spelling.
+- **Windows: Start agent / Open terminal in a WSL-created worktree** start in
+  its translated folder (`T:\…`) instead of failing with "The directory name
+  is invalid"; the status line notes that git there needs the repair.
+
 ## Agent console polish
 
 ### Fixed
