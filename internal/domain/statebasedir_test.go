@@ -23,6 +23,7 @@ func TestStateBaseDirKinds(t *testing.T) {
 		"search",
 		"shelf",
 		"linkhist",
+		"tasks",
 	}
 	for _, kind := range kinds {
 		want := filepath.Join(stateHome, "gg", kind)

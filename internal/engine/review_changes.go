@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -34,59 +33,52 @@ var _ Operation = ReviewChanges{}
 
 func (op ReviewChanges) LockMode() repogate.Mode { return repogate.Read }
 
-func (op ReviewChanges) Run(ctx context.Context, deps OpDeps) (Result, error) {
+func (op ReviewChanges) Prepare(ctx context.Context, deps OpDeps) (TaskInputs, error) {
 	diff, err := deps.Repo.DiffPatch(ctx, op.Diff)
 	if err != nil {
-		return Result{}, err
+		return TaskInputs{}, err
 	}
 	stat, _ := deps.Repo.DiffNumstat(ctx, op.Diff)
-
 	truncated := len(diff) > MaxDiffBytes
 	diffBody := diff
 	if truncated {
 		diffBody = fmt.Sprintf("(diff truncated: %d bytes exceeds the %d KiB cap — inspect specific files with git)\n",
 			len(diff), MaxDiffBytes>>10)
 	}
-	diffPath, err := writeTempFile("gg-review-*.diff", diffBody)
+	tmp := &tempSet{}
+	fail := func(err error) (TaskInputs, error) { tmp.cleanup(); return TaskInputs{}, err }
+	diffPath, err := tmp.write("gg-review-*.diff", diffBody)
 	if err != nil {
-		return Result{}, err
+		return fail(err)
 	}
-	defer os.Remove(diffPath)
-	ctxPath, err := writeTempFile("gg-review-ctx-*.txt", op.reviewSummary(diffPath, stat, truncated))
+	ctxPath, err := tmp.write("gg-review-ctx-*.txt", op.reviewSummary(diffPath, stat, truncated))
 	if err != nil {
-		return Result{}, err
+		return fail(err)
 	}
-	defer os.Remove(ctxPath)
-	msgPath, err := writeTempFile("gg-review-msg-*.md", "")
+	msgPath, err := tmp.write("gg-review-msg-*.md", "")
 	if err != nil {
-		return Result{}, err
+		return fail(err)
 	}
-	defer os.Remove(msgPath)
-
-	env := append(append([]string{}, os.Environ()...), op.Env...)
-	env = append(env,
+	env := append(append([]string{}, op.Env...),
 		"GG_CONTEXT_FILE="+ctxPath,
 		"GG_REVIEW_DIFF="+diffPath,
 		"GG_MESSAGE_FILE="+msgPath,
 		"GG_REPO="+op.Dir,
 	)
 	if op.NotesFile != "" {
-		// The CALLER owns this file: ReviewChanges removes only the temp files
-		// it created, and the caller must still be able to read the notes after
-		// the op returns.
+		// The CALLER owns this file: Cleanup removes only what Prepare made,
+		// and the caller must still read the notes after the run.
 		env = append(env, "GG_NOTES_FILE="+op.NotesFile)
 	}
-	stdout, runErr := deps.captureRunner().Capture(ctx,
-		CaptureSpec{Dir: op.Dir, Env: env, Command: op.Command},
-		func(line string) { deps.emit(ctx, GitLine{Raw: line}) })
-	captured := string(stdout)
-	if fileMsg, rerr := os.ReadFile(msgPath); rerr == nil && strings.TrimSpace(string(fileMsg)) != "" {
-		captured = string(fileMsg)
-	}
-	if runErr != nil {
-		return Result{Captured: captured}, runErr
-	}
-	return Result{Captured: captured}.WithSummary("reviewed %s", op.RangeLabel), nil
+	return TaskInputs{Command: op.Command, Dir: op.Dir, Env: env, MessageFile: msgPath, Cleanup: tmp.cleanup}, nil
+}
+
+func (op ReviewChanges) Collect(in TaskInputs, stdout []byte) (Result, error) {
+	return Result{Captured: collectCaptured(in.MessageFile, stdout)}.WithSummary("reviewed %s", op.RangeLabel), nil
+}
+
+func (op ReviewChanges) Run(ctx context.Context, deps OpDeps) (Result, error) {
+	return runCaptureTask(ctx, deps, op)
 }
 
 func (op ReviewChanges) reviewSummary(diffPath, stat string, truncated bool) string {

@@ -105,7 +105,7 @@ func TestBuiltinsCatalogInvariants(t *testing.T) {
 				t.Errorf("%s/%s: bad category %q", tl.ID, ct.Name, ct.Category)
 			}
 			switch ct.Mode {
-			case ModeTerminal, ModeCapture, ModeSession:
+			case ModeTerminal, ModeCapture, ModeSession, ModeInteractive:
 			default:
 				t.Errorf("%s/%s: bad mode %q", tl.ID, ct.Name, ct.Mode)
 			}
@@ -303,8 +303,8 @@ func TestBuiltinsCommitMessageTemplates(t *testing.T) {
 	for _, tl := range Builtins() {
 		for i := range tl.Commands {
 			c := &tl.Commands[i]
-			if c.Category != CatCommitMessage {
-				continue
+			if c.Category != CatCommitMessage || c.Mode == ModeInteractive {
+				continue // interactive rows are the task path's (plan 2), not the headless lane
 			}
 			if c.Mode != ModeCapture {
 				t.Fatalf("%s: commit_message must be capture", c.Name)
@@ -355,8 +355,8 @@ func TestBuiltinsReviewTemplates(t *testing.T) {
 	for _, tl := range Builtins() {
 		for i := range tl.Commands {
 			c := &tl.Commands[i]
-			if c.Category != CatReview {
-				continue
+			if c.Category != CatReview || c.Mode == ModeInteractive {
+				continue // interactive rows are the task path's (plan 2), not the headless lane
 			}
 			if c.Mode != ModeCapture {
 				t.Fatalf("%s: review must be capture (verified 2026-07-07)", c.Name)

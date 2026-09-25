@@ -120,3 +120,21 @@ func TestCompleteToolChoices(t *testing.T) {
 		t.Fatalf("rebase: want both rows, got %v", got)
 	}
 }
+
+func TestLaneToolCommandsSkipInteractive(t *testing.T) {
+	t.Parallel()
+	m := toolCfg(
+		config.ToolCommand{Category: "commit_message", Name: "Claude", Mode: "capture", Command: "claude -p x"},
+		config.ToolCommand{Category: "commit_message", Name: "Claude (interactive)", Mode: "interactive", Command: "claude x"},
+		config.ToolCommand{Category: "review", Name: "Claude (interactive)", Mode: "interactive", Command: "claude x"},
+	)
+	if got := m.laneToolCommands("commit_message"); len(got) != 1 || got[0].Name != "Claude" {
+		t.Fatalf("commit lane = %+v, want only the capture row", got)
+	}
+	if got := m.laneToolCommands("review"); len(got) != 0 {
+		t.Fatalf("review lane = %+v, want none (the only row is interactive)", got)
+	}
+	if m.hasReviewTool() {
+		t.Fatal("hasReviewTool must not count an interactive row")
+	}
+}

@@ -3451,3 +3451,58 @@ UTF-8 payloads correctly (the fixture test tells).
   its TRANSLATED path via `StartSpec.Cwd` (process cwd) while `Dir` stays the
   identity (sub-rows, the delete guard group by it), with a status note that
   git there fails until repaired; an unreachable one refuses.
+
+### AI tasks — the task core (AI tasks plan 2, 2026-09-25)
+
+No UI yet; plan 3 adds the launch dialog, the Headless tab and ◆ rows.
+
+- **Engine split.** `GenerateMessage`, `ReviewChanges`, `CompleteConflict` and
+  the new `ConflictAgent` (whole-operation `conflict` agent; the name
+  `ResolveConflict` was taken by the per-file resolve op) are
+  `engine.CaptureTask`s: `Prepare(ctx, deps) (TaskInputs, error)` →
+  run → `Collect(in, stdout) (Result, error)`; `Run` is that chain, so web
+  and CLI are unchanged. `TaskInputs.Env` is a DELTA (op.Env + `GG_*`):
+  `Run` prepends `os.Environ()`, and a session builds its own env and
+  filters gg's host-terminal vars (`TMUX`) — a full env would re-add them.
+  `Collect` = non-empty `$GG_MESSAGE_FILE` wins over stdout, CRLF → LF (now
+  for every op). `Cleanup` is idempotent; a failing Prepare cleans up.
+- **Keys** (`task_kinds.go`): `commit message — <wt> @ <HEAD7>`,
+  `review — <a7>..<b7>` (hex runs ≥8 shortened; working changes →
+  `review — <wt> working changes`), `resolve conflict — <wt> <op> <HEAD7>`,
+  `resolve & complete — <wt> <op> <HEAD7>`; `<wt>` = the directory's base
+  name in either notation. Builders: `CommitMessageTask`, `ReviewTask`,
+  `ConflictTask(complete)`; they set `Parse` (commit →
+  `ParseCaptureMessage` → "subject\n\nbody"; review/conflict →
+  `ParseCaptureReport`) and `ResultOptional` for the conflict kinds.
+- **What is a task** (`TaskModeOf`): `capture` → headless; `interactive`,
+  or `terminal` with `per_file = false` → interactive; per-file terminal =
+  mergetool (handover, not a task). `interactive` + `per_file` is invalid.
+  `TaskChoices` groups a kind's commands by agent (`agentIDFor`, label from
+  the catalogue; a custom command is its own agent).
+  `EnsureInteractiveCommands` appends the safe interactive commit/review
+  rows only when a category has no interactive row at all.
+- **Until plan 3** the headless lanes skip interactive rows: TUI
+  `laneToolCommands` (commit chooser, review lane, `hasReviewTool`) and
+  `gg review`; the web lanes were already capture-only.
+- **Scheduler** (`domain.Tasks()`, process-global like `Sessions()`, holds
+  the submitting `*Service` per task): FIFO per key (a queued task blocks
+  later same-key tasks), global cap over running tasks of every mode,
+  `SetMaxParallel` clamps 1..10 (`config.TasksConfig.Parallel()` gives the
+  warning). Headless = `svc.Execute(op)` with an events channel feeding the
+  tail (stderr lines + stdout, `taskhist.TrimTail`). Interactive =
+  `svc.PrepareTask` (op's reservation) → `startLine` session (label
+  `<agent> · <kind>`) → `resultWatcher` (filewatch wake + poll, a result
+  must read identically twice 100 ms apart, sha256 dedup, one last read on
+  exit). `Cancel`: queued → cancelled at once; running → ctx cancel
+  (interactive kills the session). End table: ≥1 result → done; killed
+  before one → cancelled; exit 0 without one → done only if
+  `ResultOptional`, else failed.
+- **History** (`taskhist`, `stateBaseDir("tasks")`, all repos): written
+  when a task ENDS, before its end state is visible via `Get`/`List`
+  (no orphaned "running" rows after a crash). `<id>.result` / `<id>.tail`
+  beside `tasks.toml`; pruning at 50 deletes the files. A failed write
+  switches the process to a `MemStore`; `TakeStoreProblem` reports it once.
+- **Frontend hooks for plan 3:** `Changed()` (coalesced), `List`/`Get`
+  (`Results` counts results — apply each once), `Live()` (quit guard),
+  `Load(key)` (the dialog's wait line), `History`/`HistoryResult`/
+  `HistoryTail`/`RemoveHistory`.

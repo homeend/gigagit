@@ -41,10 +41,10 @@ var _ Operation = GenerateMessage{}
 
 func (op GenerateMessage) LockMode() repogate.Mode { return repogate.Read }
 
-func (op GenerateMessage) Run(ctx context.Context, deps OpDeps) (Result, error) {
+func (op GenerateMessage) Prepare(ctx context.Context, deps OpDeps) (TaskInputs, error) {
 	diff, err := deps.Repo.DiffPatch(ctx, model.DiffSpec{Cached: true})
 	if err != nil {
-		return Result{}, err
+		return TaskInputs{}, err
 	}
 	stat, _ := deps.Repo.DiffNumstat(ctx, model.DiffSpec{Cached: true})
 	log, _ := deps.Repo.LogLines(ctx, "HEAD", 20)
@@ -55,47 +55,38 @@ func (op GenerateMessage) Run(ctx context.Context, deps OpDeps) (Result, error) 
 		diffBody = fmt.Sprintf("(diff truncated: %d bytes exceeds the %d KiB cap — inspect specific files with git)\n",
 			len(diff), MaxDiffBytes>>10)
 	}
-	diffPath, err := writeTempFile("gg-staged-*.diff", diffBody)
+	tmp := &tempSet{}
+	fail := func(err error) (TaskInputs, error) { tmp.cleanup(); return TaskInputs{}, err }
+	diffPath, err := tmp.write("gg-staged-*.diff", diffBody)
 	if err != nil {
-		return Result{}, err
+		return fail(err)
 	}
-	defer os.Remove(diffPath)
-	ctxPath, err := writeTempFile("gg-ctx-*.txt", buildSummary(diffPath, stat, log, truncated))
+	ctxPath, err := tmp.write("gg-ctx-*.txt", buildSummary(diffPath, stat, log, truncated))
 	if err != nil {
-		return Result{}, err
+		return fail(err)
 	}
-	defer os.Remove(ctxPath)
 	// Empty output file: a task-agent tool writes the message here (see the
 	// contract on GenerateMessage); a stdout tool leaves it empty. Lives in the
 	// OS temp dir, outside the repo, so it never pollutes the working tree.
-	msgPath, err := writeTempFile("gg-msg-*.txt", "")
+	msgPath, err := tmp.write("gg-msg-*.txt", "")
 	if err != nil {
-		return Result{}, err
+		return fail(err)
 	}
-	defer os.Remove(msgPath)
-
-	env := append(append([]string{}, os.Environ()...), op.Env...)
-	env = append(env,
+	env := append(append([]string{}, op.Env...),
 		"GG_CONTEXT_FILE="+ctxPath,
 		"GG_STAGED_DIFF="+diffPath,
 		"GG_MESSAGE_FILE="+msgPath,
 		"GG_REPO="+op.Dir,
 	)
-	stdout, runErr := deps.captureRunner().Capture(ctx,
-		CaptureSpec{Dir: op.Dir, Env: env, Command: op.Command},
-		func(line string) { deps.emit(ctx, GitLine{Raw: line}) })
-	// Non-empty file content wins over stdout (the output-channel contract).
-	captured := string(stdout)
-	if fileMsg, rerr := os.ReadFile(msgPath); rerr == nil && strings.TrimSpace(string(fileMsg)) != "" {
-		captured = string(fileMsg)
-	}
-	// A Windows agent (cmd.exe echo, a CRLF-writing editor) emits \r\n; the
-	// subject/body split downstream is \n-based, so normalize here.
-	captured = strings.ReplaceAll(captured, "\r\n", "\n")
-	if runErr != nil {
-		return Result{Captured: captured}, runErr
-	}
-	return Result{Captured: captured}.WithSummary("generated commit message"), nil
+	return TaskInputs{Command: op.Command, Dir: op.Dir, Env: env, MessageFile: msgPath, Cleanup: tmp.cleanup}, nil
+}
+
+func (op GenerateMessage) Collect(in TaskInputs, stdout []byte) (Result, error) {
+	return Result{Captured: collectCaptured(in.MessageFile, stdout)}.WithSummary("generated commit message"), nil
+}
+
+func (op GenerateMessage) Run(ctx context.Context, deps OpDeps) (Result, error) {
+	return runCaptureTask(ctx, deps, op)
 }
 
 func buildSummary(diffPath, stat string, log []model.LogLine, truncated bool) string {

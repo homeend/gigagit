@@ -13,7 +13,7 @@ import (
 type ToolCommand struct {
 	Category  string   `toml:"category"`  // conflict | commit_message | review | conflict_complete | session
 	Name      string   `toml:"name"`      // menu label; unique per category
-	Mode      string   `toml:"mode"`      // terminal | capture | session (session: category = "session" only)
+	Mode      string   `toml:"mode"`      // terminal | capture | interactive | session (session: category = "session" only)
 	PerFile   bool     `toml:"per_file"`  // conflict only: run once per conflicted file
 	WhenOp    string   `toml:"when_op"`   // "" = any paused op; else merge|rebase|cherry-pick|revert
 	Frontends []string `toml:"frontends"` // limits which frontends offer this command: any of "tui", "web", "cli". Empty = everywhere.
@@ -62,9 +62,9 @@ func ValidateToolCommand(tc ToolCommand) error {
 		return fmt.Errorf("tools: a command needs a name")
 	}
 	switch tc.Mode {
-	case "terminal", "capture", "session":
+	case "terminal", "capture", "session", "interactive":
 	default:
-		return fmt.Errorf("tools: %s: unknown mode %q (want terminal|capture|session)", tc.Name, tc.Mode)
+		return fmt.Errorf("tools: %s: unknown mode %q (want terminal|capture|interactive|session)", tc.Name, tc.Mode)
 	}
 	if (tc.Category == "session") != (tc.Mode == "session") {
 		return fmt.Errorf("tools: %s: category \"session\" requires mode = \"session\" (and that mode is only for sessions)", tc.Name)
@@ -74,6 +74,9 @@ func ValidateToolCommand(tc ToolCommand) error {
 	}
 	if tc.PerFile && tc.Category != "conflict" {
 		return fmt.Errorf("tools: %s: per_file is only valid for category = \"conflict\"", tc.Name)
+	}
+	if tc.PerFile && tc.Mode == "interactive" {
+		return fmt.Errorf("tools: %s: per_file commands are mergetools (mode = \"terminal\"); interactive is whole-operation only", tc.Name)
 	}
 	switch tc.WhenOp {
 	case "", "merge", "rebase", "cherry-pick", "revert":

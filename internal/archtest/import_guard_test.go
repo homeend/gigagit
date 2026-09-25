@@ -23,6 +23,7 @@ func TestFrontendsDoNotImportGit(t *testing.T) {
 		"github.com/homeend/gigagit/internal/linkhist":     "frontends must reach the copied-link history store through internal/domain",
 		"github.com/homeend/gigagit/internal/savedcompare": "frontends must reach the saved-comparison store through internal/domain",
 		"github.com/homeend/gigagit/internal/agentsession": "frontends must reach agent sessions through internal/domain",
+		"github.com/homeend/gigagit/internal/taskhist":     "frontends must reach the AI-task history through internal/domain",
 	}
 	for _, pkg := range []string{
 		"github.com/homeend/gigagit/internal/tui",
@@ -240,6 +241,24 @@ func TestLinkhistIsALeaf(t *testing.T) {
 		}
 		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
 			t.Errorf("internal/linkhist imports %s — only stdlib, internal/filelock and go-toml are allowed", imp)
+		}
+	}
+}
+
+// TestTaskhistIsALeaf pins internal/taskhist's budget: records + text files
+// under an explicit root, stdlib, the shared file lock and go-toml only.
+func TestTaskhistIsALeaf(t *testing.T) {
+	t.Parallel()
+	allowed := map[string]bool{
+		"github.com/homeend/gigagit/internal/filelock": true,
+		"github.com/pelletier/go-toml/v2":              true,
+	}
+	for _, imp := range directImports(t, "github.com/homeend/gigagit/internal/taskhist") {
+		if allowed[imp] {
+			continue
+		}
+		if first := strings.SplitN(imp, "/", 2)[0]; strings.Contains(first, ".") {
+			t.Errorf("internal/taskhist imports %s — only stdlib, internal/filelock and go-toml are allowed", imp)
 		}
 	}
 }

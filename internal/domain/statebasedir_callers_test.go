@@ -29,6 +29,7 @@ var stateBaseDirKinds = []string{
 	"reviews",
 	"search",
 	"shelf",
+	"tasks",
 }
 
 // TestStateBaseDirCallersPassKnownKinds walks this package's own source and

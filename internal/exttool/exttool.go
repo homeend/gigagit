@@ -51,6 +51,12 @@ const (
 	ModeCapture  Mode = "capture"
 	// ModeSession runs the command in an embedded console (CatSession only).
 	ModeSession Mode = "session"
+	// ModeInteractive runs an AI task as an agent session that starts with
+	// the task prompt and stays open (commit_message, review, conflict,
+	// conflict_complete; never per-file). Its prompt writes the result to
+	// $GG_MESSAGE_FILE — each write is the task's latest result — then
+	// waits for further instructions.
+	ModeInteractive Mode = "interactive"
 )
 
 // CommandTemplate is one catalog default command. Command contains <bin>
@@ -370,6 +376,21 @@ const kimiCompletePrompt = junieCompletePrompt
 
 const kimiCompleteCommand = `<bin> -p ` + kimiCompletePrompt
 
+// Interactive task prompts: the capture contract's file channel (an
+// interactive session has no captured stdout), rewritten on every
+// revision, then the agent waits — the user keeps talking to it in gg's
+// console. <range> is the injection-safe hex range (see ReviewTarget).
+//
+// Probed 2026-09-25 (--help of the installed binaries): claude 2.1.282 and
+// codex 0.153.4 take a positional prompt and stay interactive; junie
+// 26.9.7 `--prompt=<text>` "Start interactive mode with an initial prompt
+// already submitted"; agy 1.1.28 `--prompt-interactive` "Run an initial
+// prompt interactively and continue the session". kimi 0.41.0 has only
+// `-p` (non-interactive) — no interactive rows for it.
+const interactiveCommitPrompt = `"Write a git commit message for the staged changes. The change summary is at <env:GG_CONTEXT_FILE> (files changed, recent-commit style) and the full diff at <env:GG_STAGED_DIFF>. Write ONLY the commit message - a concise imperative subject line (max ~72 chars), a blank line, then a short body explaining what changed and why - into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository), overwriting it each time you revise the message. Do not run git commit and do not modify any other files. Then wait for further instructions."`
+
+const interactiveReviewPrompt = `"You are reviewing a code change. The summary is at <env:GG_CONTEXT_FILE> and the full diff at <env:GG_REVIEW_DIFF> (range <range>). Write a concise code review - findings with severity and a short summary - into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository), overwriting it each time you revise the review. Do NOT modify any repository files and do NOT run git commit. Then wait for further instructions."`
+
 // Headless (capture) resolve-and-complete variants — the web frontend's rows
 // (a browser has no terminal to hand over). Same prompts, same contract; the
 // permission-bypass flags make them OptIn like their terminal siblings.
@@ -402,6 +423,10 @@ func Builtins() []Tool {
 				{Category: CatConflictComplete, Name: "Claude — resolve & complete (yolo, headless)", Mode: ModeCapture, OptIn: true, Frontends: []string{"web"}, Command: claudeCompleteHeadlessCommand},
 				{Category: CatCommitMessage, Name: "Claude", Mode: ModeCapture, Command: claudeCommitCommand},
 				{Category: CatReview, Name: "Claude", Mode: ModeCapture, Command: claudeReviewCommand},
+				{Category: CatCommitMessage, Name: "Claude (interactive)", Mode: ModeInteractive, Command: `<bin> ` + interactiveCommitPrompt},
+				{Category: CatCommitMessage, Name: "Claude (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> ` + interactiveCommitPrompt + ` --dangerously-skip-permissions`},
+				{Category: CatReview, Name: "Claude (interactive)", Mode: ModeInteractive, Command: `<bin> ` + interactiveReviewPrompt},
+				{Category: CatReview, Name: "Claude (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> ` + interactiveReviewPrompt + ` --dangerously-skip-permissions`},
 				{Category: CatSession, Name: "Claude", Mode: ModeSession, Command: "<bin>"},
 				{Category: CatSession, Name: "Claude (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --dangerously-skip-permissions"},
 			},
@@ -429,6 +454,10 @@ func Builtins() []Tool {
 				{Category: CatConflictComplete, Name: "Junie — resolve & complete (yolo)", Mode: ModeTerminal, OptIn: true, Frontends: []string{"tui"}, Command: junieCompleteCommand},
 				{Category: CatCommitMessage, Name: "Junie", Mode: ModeCapture, Command: junieCommitCommand},
 				{Category: CatReview, Name: "Junie", Mode: ModeCapture, Command: junieReviewCommand},
+				{Category: CatCommitMessage, Name: "Junie (interactive)", Mode: ModeInteractive, Command: `<bin> --prompt ` + interactiveCommitPrompt},
+				{Category: CatCommitMessage, Name: "Junie (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> --prompt ` + interactiveCommitPrompt + ` --brave`},
+				{Category: CatReview, Name: "Junie (interactive)", Mode: ModeInteractive, Command: `<bin> --prompt ` + interactiveReviewPrompt},
+				{Category: CatReview, Name: "Junie (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> --prompt ` + interactiveReviewPrompt + ` --brave`},
 				{Category: CatSession, Name: "Junie", Mode: ModeSession, Command: "<bin>"},
 				{Category: CatSession, Name: "Junie (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --brave"},
 			},
@@ -442,6 +471,10 @@ func Builtins() []Tool {
 				{Category: CatConflictComplete, Name: "Codex — resolve & complete (yolo, headless)", Mode: ModeCapture, OptIn: true, Frontends: []string{"web"}, Command: codexCompleteHeadlessCommand},
 				{Category: CatCommitMessage, Name: "Codex", Mode: ModeCapture, Command: codexCommitCommand},
 				{Category: CatReview, Name: "Codex", Mode: ModeCapture, Command: codexReviewCommand},
+				{Category: CatCommitMessage, Name: "Codex (interactive)", Mode: ModeInteractive, Command: `<bin> ` + interactiveCommitPrompt},
+				{Category: CatCommitMessage, Name: "Codex (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> ` + interactiveCommitPrompt + ` --dangerously-bypass-approvals-and-sandbox`},
+				{Category: CatReview, Name: "Codex (interactive)", Mode: ModeInteractive, Command: `<bin> ` + interactiveReviewPrompt},
+				{Category: CatReview, Name: "Codex (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> ` + interactiveReviewPrompt + ` --dangerously-bypass-approvals-and-sandbox`},
 				{Category: CatSession, Name: "Codex", Mode: ModeSession, Command: "<bin>"},
 				{Category: CatSession, Name: "Codex (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --dangerously-bypass-approvals-and-sandbox"},
 			},
@@ -455,6 +488,10 @@ func Builtins() []Tool {
 				{Category: CatConflictComplete, Name: "Antigravity — resolve & complete (yolo, headless)", Mode: ModeCapture, OptIn: true, Frontends: []string{"web"}, Command: agyCompleteHeadlessCommand},
 				{Category: CatCommitMessage, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyCommitCommand},
 				{Category: CatReview, Name: "Antigravity", Mode: ModeCapture, OptIn: true, Command: agyReviewCommand},
+				{Category: CatCommitMessage, Name: "Antigravity (interactive)", Mode: ModeInteractive, Command: `<bin> --prompt-interactive ` + interactiveCommitPrompt},
+				{Category: CatCommitMessage, Name: "Antigravity (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> --prompt-interactive ` + interactiveCommitPrompt + ` --dangerously-skip-permissions`},
+				{Category: CatReview, Name: "Antigravity (interactive)", Mode: ModeInteractive, Command: `<bin> --prompt-interactive ` + interactiveReviewPrompt},
+				{Category: CatReview, Name: "Antigravity (interactive, yolo)", Mode: ModeInteractive, OptIn: true, Command: `<bin> --prompt-interactive ` + interactiveReviewPrompt + ` --dangerously-skip-permissions`},
 				{Category: CatSession, Name: "Antigravity", Mode: ModeSession, Command: "<bin>"},
 				{Category: CatSession, Name: "Antigravity (yolo)", Mode: ModeSession, OptIn: true, Command: "<bin> --dangerously-skip-permissions"},
 			},
