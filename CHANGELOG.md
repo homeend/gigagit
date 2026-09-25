@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Open files: agent verbs
+
+### Added
+
+- **`gg open <content-link> --background`** (and `gg session navigate …
+  --background`): load a file into the live TUI's open files without touching
+  the screen; answers `opened <path> in the background [at line N]`, or
+  `<path> is already open on screen` (nothing moves). Needs a live TUI — never
+  launches one (exit 1); exit 2 for a link that is not a content link or with
+  `--web`.
+- **`gg session files [--json]`** — the TUI's open files for the worktree it
+  shows: id (`f<n>`), path, source (worktree / commit / shelf), cursor line,
+  shown or background. Also in the session snapshot as `open_files` (MCP
+  `gg_ui_state`).
+- **`gg session files focus <id|path>[:<line>]`** — bring an open file to the
+  front, optionally at a line; exit 1 `no open file <x>`.
+- A content-link reply names a file closed over the 20-file cap
+  (`…; closed <path> (20 files open)`).
+- e2e runs can assert stderr (`stderr_contains`).
+
+### Changed
+
+- Steering: a malformed command is now refused for its shape even while the
+  user is typing (validation runs before the busy check). `gg web` refuses
+  the open-files commands by name.
+
 ## TUI: ctrl+t maximizes the Resolve conflicts list to fit its paths
 
 - `ctrl+t` in the Resolve conflicts list widens the box to the longest full

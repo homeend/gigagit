@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v95 -->
+<!-- gg:using-gg:v96 -->
 
 # Using gg (gigagit)
 
@@ -198,6 +198,28 @@ content viewer; `gg open --web` refuses it
 (`gg diff`, `gg show`, `gg note …`, `gg session highlight add`) refuses it
 (exit 2). When the user asks you to "open" a file for them, this is the link
 to build: `gg link --content <path>[:<line>]` → `gg open <link>`.
+
+**Open files — let the user read along.** The TUI keeps up to 20 files open
+per worktree (its ctrl+\ switcher lists them). You can use that list:
+
+- `gg open <content-link> --background` (or `gg session navigate <link>
+  --background`) loads the file WITHOUT touching the screen and answers
+  `opened <path> in the background [at line N]`; a file already on screen is
+  left alone (`<path> is already open on screen`). Needs a live TUI (exit 1
+  otherwise — it never launches one); exit 2 for a link that is not a content
+  link. When a 21st file pushes one out, the answer ends
+  `; closed <path> (20 files open)`.
+- `gg session files [--json]` — the open files, one per line:
+  `<id>\t<path>\t<source>\t<:line|->\t<shown|background>` (`--json`: `id,
+  path, source, rev, line, state`). Also in `gg_ui_state` as `open_files`.
+- `gg session files focus <id|path>[:<line>]` — bring one to the front,
+  optionally at a line; exit 1 `no open file <x>`. A foreground `gg open` of
+  a working-tree file already reuses its open copy; `files focus` is how you
+  reach the commit/shelf versions the user opened.
+
+Walking the user through several files: open A, B and C with `--background`
+first (they load while you think), then `gg session files focus <id>:<line>`
+each one in turn as you explain it.
 
 `<repo>` is the repository name of the repo's remote (`gigagit`), resolved
 through gg's machine-local repository history — so a link made on one checkout
