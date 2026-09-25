@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: ctrl+t maximizes the Resolve conflicts list to fit its paths
+
+- `ctrl+t` in the Resolve conflicts list widens the box to the longest full
+  path (every path shows uncut, up to the terminal's width) and shows as many
+  files as the terminal height allows. Unlike other popups' `ctrl+t` it fits
+  the content rather than always taking the whole screen, and it never shrinks
+  below the normal width. `ctrl+t` or `esc` restores; a second `esc` leaves.
+
 ## AI tasks: the task core
 
 ### Added
