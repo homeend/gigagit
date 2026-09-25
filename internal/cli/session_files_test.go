@@ -3,9 +3,12 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -142,5 +145,46 @@ func TestSessionFilesOldTUIUnknownCommandExitsOne(t *testing.T) {
 	var out, errb bytes.Buffer
 	if code := runSession(dir, nil, []string{"files"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), `unknown command "files"`) {
 		t.Fatalf("exit=%d stderr=%q", code, errb.String())
+	}
+}
+
+func TestSessionNavigateBackgroundPostsToTheTUI(t *testing.T) {
+	t.Parallel()
+	repo := newCLIRepo(t)
+	dir := t.TempDir()
+	livePresence(t, dir)
+	seen := answer(t, dir, func(c steer.Command) steer.Reply {
+		return steer.Reply{ID: c.ID, OK: true, Detail: "opened README.md in the background"}
+	})
+	link := "gg://" + filepath.ToSlash(repo) + "/README.md?view=content"
+	var out, errb bytes.Buffer
+	code := runSession(dir, domain.Open(repo), []string{"navigate", "--background", link}, &out, &errb)
+	if code != 0 || !strings.Contains(out.String(), "opened README.md in the background") {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, out.String(), errb.String())
+	}
+	if c := <-seen; !c.Background || c.File != "README.md" || c.HintKind != model.ContentHintKind {
+		t.Errorf("posted %+v", c)
+	}
+}
+
+func TestSessionNavigateBackgroundRefusals(t *testing.T) {
+	t.Parallel()
+	repo := newCLIRepo(t)
+	svc := domain.Open(repo)
+	diffLink := "gg://" + filepath.ToSlash(repo) + "/README.md"
+	for _, args := range [][]string{
+		{"navigate", "--background", diffLink},
+		{"navigate", "--background", "--file", "README.md", "--new-line", "1"},
+	} {
+		var out, errb bytes.Buffer
+		if code := runSession(t.TempDir(), svc, args, &out, &errb); code != 2 {
+			t.Errorf("%v: exit=%d stderr=%q, want 2", args, code, errb.String())
+		}
+	}
+	content := "gg://" + filepath.ToSlash(repo) + "/README.md?view=content"
+	var out, errb bytes.Buffer
+	if code := runSession(t.TempDir(), svc, []string{"navigate", "--background", content}, &out, &errb); code != 1 ||
+		!strings.Contains(errb.String(), "no gg TUI session for this worktree") {
+		t.Fatalf("no TUI: exit=%d stderr=%q", code, errb.String())
 	}
 }

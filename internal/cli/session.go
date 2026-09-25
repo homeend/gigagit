@@ -142,6 +142,22 @@ func sendSteer(dir string, c steer.Command, noWait bool, stdout, stderr io.Write
 	return printSteerReply(rep, stdout, stderr)
 }
 
+// backgroundNeedsContent is --background's refusal for anything but a
+// content link.
+const backgroundNeedsContent = "--background needs a content link (gg link --content <path>)"
+
+// sendBackground posts a background open to the live TUI only: it loads the
+// file into the open-files list without touching the screen. With no TUI
+// live it never launches one — a launch IS the screen.
+func sendBackground(dir string, c steer.Command, noWait bool, stdout, stderr io.Writer) int {
+	c.Background = true
+	rep, code, ok := steerTUI(dir, c, noWait, stdout, stderr)
+	if !ok {
+		return code
+	}
+	return printSteerReply(rep, stdout, stderr)
+}
+
 // printSteerReply prints a session's answer: the detail on stdout (exit 0)
 // or the refusal on stderr (exit 1).
 func printSteerReply(rep steer.Reply, stdout, stderr io.Writer) int {
@@ -429,8 +445,13 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 	next := fs.Bool("next-comment", false, "step the open diff to the next note")
 	prev := fs.Bool("prev-comment", false, "step the open diff to the previous note")
 	noWait := fs.Bool("no-wait", false, "post the command and exit without waiting for an answer")
+	background := fs.Bool("background", false, "load a content link into the open-files list without showing it")
 	pos, err := parseSteerFlags(fs, args)
 	if err != nil {
+		return 2
+	}
+	if *background && !(len(pos) == 1 && isLinkArg(pos[0])) {
+		fmt.Fprintln(stderr, "session navigate: "+backgroundNeedsContent)
 		return 2
 	}
 	if len(pos) == 1 && isLinkArg(pos[0]) {
@@ -447,6 +468,10 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 		if err != nil {
 			return linkExit("session navigate", err, stderr)
 		}
+		if *background && res.Hint.Kind != model.ContentHintKind {
+			fmt.Fprintln(stderr, "session navigate: "+backgroundNeedsContent)
+			return 2
+		}
 		dir, target, err := linkSteerDir(ctx, dir, svc, res)
 		if err != nil {
 			fmt.Fprintln(stderr, "error:", err)
@@ -458,6 +483,9 @@ func sessionNavigate(dir string, svc *domain.Service, args []string, stdout, std
 		}
 		if c.File != "" || c.Target != nil {
 			c.Worktree = res.Checkout
+		}
+		if *background {
+			return sendBackground(dir, c, *noWait, stdout, stderr)
 		}
 		return sendSteer(dir, c, *noWait, stdout, stderr)
 	}
