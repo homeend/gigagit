@@ -129,15 +129,22 @@ func (s *Service) StartSession(ctx context.Context, tc config.ToolCommand, workt
 	if err != nil {
 		return nil, err
 	}
+	return s.startLine(ctx, Sessions(), tc.Name, agentIDFor(tc), resolved, worktreeDir, cwd, cols, rows, env)
+}
+
+// startLine runs an already-resolved command line as a session on mgr (the
+// AI-task path hands it a line Prepare resolved against its temp files —
+// resolving it again would misread any <…> in a path).
+func (s *Service) startLine(ctx context.Context, mgr *agentsession.Manager, label, agentID, line, worktreeDir, cwd string, cols, rows int, env []string) (*AgentSession, error) {
 	repo, err := s.RepoName(ctx)
 	if err != nil || repo == "" {
 		repo = filepath.Base(worktreeDir)
 	}
-	argv, cmdline := sessionShell(resolved, runtime.GOOS, os.Getenv)
-	return Sessions().Start(agentsession.StartSpec{
-		Label: tc.Name, AgentID: agentIDFor(tc), Repo: repo, Dir: worktreeDir,
+	argv, cmdline := sessionShell(line, runtime.GOOS, os.Getenv)
+	return mgr.Start(agentsession.StartSpec{
+		Label: label, AgentID: agentID, Repo: repo, Dir: worktreeDir,
 		Cwd: cwd, Argv: argv, CmdLine: cmdline, Env: env, Cols: cols, Rows: rows,
-		TracePath: sessionTracePath(os.Getenv("GG_SESSION_TRACE"), tc.Name, time.Now()),
+		TracePath: sessionTracePath(os.Getenv("GG_SESSION_TRACE"), label, time.Now()),
 	})
 }
 
