@@ -545,8 +545,8 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openBookmarkSwitcher()
 	case "G": // global shelf quick-switcher
 		return m.openShelfSwitcher()
-	case "F": // global fuzzy file finder
-		return m.openFileFinder()
+	case "F": // the working-tree files window (F)
+		return m.openWorktreeFilesHere()
 	case "r": // a PR's file list: re-read its review comments (inert elsewhere)
 		if m.openPRNumber() > 0 {
 			return m.prCommentsCmd(true)

@@ -70,6 +70,16 @@ func (m Model) openWorktreeFiles() (Model, tea.Cmd) {
 	return m, m.loadLsFilesCmd()
 }
 
+// openWorktreeFilesHere opens F's window from wherever the keyboard is: over
+// a window on the stack (a diff, history, blame), that window is parked and
+// esc brings it back (handOffToFilesView).
+func (m Model) openWorktreeFilesHere() (Model, tea.Cmd) {
+	if m.topLayer() != nil {
+		return m.handOffToFilesView(Model.openWorktreeFiles)
+	}
+	return m.openWorktreeFiles()
+}
+
 // wtLoaded fills the window from ls-files and the status's untracked files.
 func (m Model) wtLoaded(msg lsFilesMsg) (Model, tea.Cmd) {
 	w := m.wtFiles
@@ -246,6 +256,8 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if p.mode == modeScroll {
 			p.hscroll += m.hscrollStep()
 		}
+	case "ctrl+t": // the list over the whole body, and back
+		m.filesFull = !m.filesFull
 	case "g":
 		return m.openBookmarkSwitcher()
 	case "G":

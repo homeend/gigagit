@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/homeend/gigagit/internal/model"
@@ -62,8 +63,8 @@ func TestFOpensTheWorktreeFilesWindow(t *testing.T) {
 	if m.filesView == nil || !m.inWorktreeFiles() {
 		t.Fatal("F did not open the working-tree files window")
 	}
-	if layerOf[*fileFinderPopup](m) != nil {
-		t.Fatal("F still opened the popup")
+	if m.topLayer() != nil {
+		t.Fatalf("F opened a %T over the window", m.topLayer())
 	}
 	if got := fmt.Sprint(wtRows(m)); got != "[a.go b.go]" {
 		t.Fatalf("rows = %s, want [a.go b.go]", got)
@@ -203,5 +204,80 @@ func TestWorktreeRightFocusesPreview(t *testing.T) {
 	m = fvKeys(t, m, keyMsg("esc"), keyMsg("esc"), keyMsg("left"))
 	if !m.filesTreeFocused {
 		t.Fatal("left did not hand the keys back to the list")
+	}
+}
+
+func TestWorktreeFilesCtrlTFullScreen(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "a.go")
+	m.width, m.height = 120, 30
+	if !strings.Contains(m.View(), "Commits (") {
+		t.Fatal("the split view shows no Commits column")
+	}
+	m = fvKeys(t, m, tea.KeyMsg{Type: tea.KeyCtrlT})
+	out := m.View()
+	if strings.Contains(out, "Commits (") {
+		t.Fatal("ctrl+t left the Commits column on screen")
+	}
+	if w := lipgloss.Width(strings.Split(out, "\n")[1]); w != 120 {
+		t.Fatalf("the full-screen box is %d wide, want 120", w)
+	}
+	m = fvKeys(t, m, tea.KeyMsg{Type: tea.KeyCtrlT})
+	if !strings.Contains(m.View(), "Commits (") {
+		t.Fatal("a second ctrl+t did not restore the split")
+	}
+}
+
+func TestFFromDiffReturnsToDiff(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	dv := &diffView{title: "x.go"}
+	m = m.pushLayer(dv)
+	tm, cmd := m.Update(keyMsg("F"))
+	m = tm.(Model)
+	if !m.inWorktreeFiles() || m.topLayer() != nil {
+		t.Fatalf("F over the diff: window %v, top %T — want the window with the diff parked", m.inWorktreeFiles(), m.topLayer())
+	}
+	tm, _ = m.Update(lsFilesMsg{paths: []string{"a.go"}})
+	m = fvKeys(t, tm.(Model), keyMsg("esc"))
+	if m.topLayer() != dv {
+		t.Fatalf("esc returned to %T, want the diff", m.topLayer())
+	}
+	_ = cmd
+}
+
+func TestPaletteFindOpensTheWindow(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	for _, e := range paletteCommands() {
+		if e.keyHint == "F" {
+			m = m.pushLayer(&commandPalette{})
+			nm, _ := e.run(m)
+			if !nm.inWorktreeFiles() || nm.topLayer() != nil {
+				t.Fatalf("palette Find: window %v, top %T", nm.inWorktreeFiles(), nm.topLayer())
+			}
+			return
+		}
+	}
+	t.Fatal("no palette entry for F")
+}
+
+func TestWorktreeJKAreQueryTextWhileTyping(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "jk.go", "a.go")
+	m = fvKeys(t, m, keyMsg("/"), keyMsg("j"), keyMsg("k"))
+	if m.wtFiles.query != "jk" {
+		t.Fatalf("query = %q, want jk", m.wtFiles.query)
+	}
+}
+
+func TestWorktreeLsFilesIgnoredWhenClosed(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	m, _ = m.openWorktreeFiles()
+	m = fvKeys(t, m, keyMsg("esc"))
+	tm, _ := m.Update(lsFilesMsg{paths: []string{"a.go"}})
+	if tm.(Model).filesView != nil {
+		t.Fatal("a late load reopened the window")
 	}
 }

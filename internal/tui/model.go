@@ -1385,19 +1385,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.inWorktreeFiles() && m.wtFiles.loading {
 			return m.wtLoaded(msg)
 		}
-		p := layerOf[*fileFinderPopup](m)
-		if p == nil {
-			return m, nil // user closed before load returned
-		}
-		if msg.err != nil {
-			m.statusMsg = i18n.T("file finder: %s", msg.err.Error())
-			m = m.popLayer()
-			return m, nil
-		}
-		p.all = msg.paths
-		p.loading = false
-		p.rerank()
-		return m, nil
+		return m, nil // the window closed before the list arrived
 	case remoteHeadNamesMsg:
 		p := layerOf[*remoteHeadsPopup](m)
 		if p == nil || msg.gen != m.loadGen {

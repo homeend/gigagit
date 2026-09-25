@@ -129,6 +129,13 @@ func (m Model) layout() layoutGeom {
 			g.leftW, g.rightW = w, 0
 		}
 	}
+	// ctrl+t in F's window: the files view spans the whole body (no Commits
+	// column; the render skips a right column whose box is gone).
+	if m.filesView != nil && m.filesFull {
+		delete(g.boxH, panelCommits)
+		delete(g.pos, panelCommits)
+		g.leftW, g.rightW = w, 0
+	}
 
 	return g
 }
