@@ -47,7 +47,7 @@ func (m Model) startGenerate(p *commitPopup) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("nothing staged to describe")
 		return m, nil
 	}
-	cmds := m.toolCommands(string(exttool.CatCommitMessage))
+	cmds := m.laneToolCommands(string(exttool.CatCommitMessage))
 	if len(cmds) == 0 {
 		m.statusMsg = i18n.T("no commit-message tool configured (Settings → External tools)")
 		return m, nil

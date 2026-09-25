@@ -382,3 +382,18 @@ func TestReviewNotesStoringNothingPostsNoReload(t *testing.T) {
 		t.Fatalf("posted %+v, want nothing — no note was imported", got)
 	}
 }
+
+func TestReviewSkipsInteractiveRows(t *testing.T) {
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	// An interactive row waits for a human: gg review (headless) must not
+	// run it, so with only that row configured there is no review tool.
+	block := "\n[[tools.command]]\ncategory = \"review\"\nname = \"Claude (interactive)\"\nmode = \"interactive\"\ncommand = \"true\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".gg.toml"), []byte(block), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errb := runCLI(t, dir, "review", "--working")
+	if code != 1 || !strings.Contains(errb, "no review tool configured") {
+		t.Fatalf("exit=%d out=%s stderr=%s, want 1 + no review tool", code, out, errb)
+	}
+}

@@ -100,7 +100,7 @@ func reviewTargetForCommit(c model.Commit) domain.ReviewTarget {
 
 // hasReviewTool reports whether at least one valid review command is configured.
 func (m Model) hasReviewTool() bool {
-	return len(m.toolCommands(string(exttool.CatReview))) > 0
+	return len(m.laneToolCommands(string(exttool.CatReview))) > 0
 }
 
 // focusedCommitReviewRow offers "Review this commit" on the Commits panel.
@@ -236,7 +236,7 @@ func (m Model) reviewBranchTargetCmd(tip string, gen int) tea.Cmd {
 // sub-state: a chooser when >1 tool is configured, else the approval gate (or
 // straight to dispatch when the sole tool is already approved).
 func (m Model) startReviewLane(target domain.ReviewTarget) (Model, tea.Cmd) {
-	cmds := m.toolCommands(string(exttool.CatReview))
+	cmds := m.laneToolCommands(string(exttool.CatReview))
 	if len(cmds) == 0 {
 		m.statusMsg = i18n.T("no review tool configured (Settings → External tools)")
 		return m, nil

@@ -266,3 +266,21 @@ func TestValidateToolCommandSession(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateInteractiveMode(t *testing.T) {
+	t.Parallel()
+	ok := func(cat string, perFile bool) ToolCommand {
+		return ToolCommand{Category: cat, Name: "A", Mode: "interactive", PerFile: perFile, Command: "agent"}
+	}
+	for _, cat := range []string{"commit_message", "review", "conflict", "conflict_complete"} {
+		if err := ValidateToolCommand(ok(cat, false)); err != nil {
+			t.Errorf("%s interactive: %v", cat, err)
+		}
+	}
+	if err := ValidateToolCommand(ok("session", false)); err == nil {
+		t.Error("a session command cannot be interactive-mode")
+	}
+	if err := ValidateToolCommand(ok("conflict", true)); err == nil {
+		t.Error("per_file + interactive must be rejected (per-file commands are mergetools)")
+	}
+}

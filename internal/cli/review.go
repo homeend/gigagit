@@ -263,6 +263,9 @@ func selectReviewCommand(svc *domain.Service, name string, stderr io.Writer) (co
 		if !config.ToolVisibleIn(tc, "cli") {
 			continue
 		}
+		if tc.Mode == string(exttool.ModeInteractive) {
+			continue // waits for a human; gg review runs headless
+		}
 		if config.ValidateToolCommand(tc) != nil || template.ValidateCommandTokens(tc.Command, tc.PerFile) != nil {
 			continue
 		}
