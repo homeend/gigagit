@@ -73,6 +73,37 @@ func (m Model) steerNavigateBackground(c steer.Command) (Model, tea.Cmd) {
 	}
 }
 
+// steerFileFocus brings an open file to the front (gg session files focus):
+// the switcher's enter, optionally at a line. A load it starts carries the
+// reply; a loaded commit/shelf version lands the line at once.
 func (m Model) steerFileFocus(c steer.Command) (Model, tea.Cmd) {
-	return m, m.answerSteer(c, steerFail(c, "not implemented"))
+	d := m.findOpenFile(c.FileID, c.File)
+	if d == nil {
+		name := c.FileID
+		if name == "" {
+			name = c.File
+		}
+		return m, m.answerSteer(c, steerFail(c, "no open file "+name))
+	}
+	m = m.steerToPanels()
+	line := 0
+	if c.Line != nil {
+		line = c.Line.No
+	}
+	d.pendingLine = line
+	m, load := m.bringToFront(d)
+	lead := "focused " + d.path
+	if load == nil {
+		rows, _ := m.viewerGeom()
+		if m.filesPreview == d {
+			rows = m.filePreviewRowsCap()
+		}
+		if n := d.landPendingLine(rows); n != "" {
+			m.statusMsg = n
+		}
+		return m, m.answerSteer(c, steerOK(c, landedDetail(lead, line, d.p.lines, "")))
+	}
+	return m, func() tea.Msg {
+		return contentLandedMsg{load: load().(fileContentMsg), cmd: c, line: line, lead: lead}
+	}
 }

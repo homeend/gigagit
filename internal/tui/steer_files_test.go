@@ -145,3 +145,54 @@ func TestBackgroundNavigateRefusals(t *testing.T) {
 		}
 	}
 }
+
+func TestFileFocusBringsACommitVersionToTheFrontAtALine(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	d := bgDoc(m, fileSource{kind: srcCommit, rev: "abc"}, "b.txt", 10)
+	nm, cmd := m.applySteer(steer.Command{ID: "ff-1", Cmd: "file_focus", FileID: d.id(), Line: &steer.Line{No: 7}, Wait: true})
+	nm = pumpAll(t, nm, cmd)
+	fv, ok := nm.topLayer().(*fileViewer)
+	if !ok || fv.openFile != d || d.p.cur != 6 {
+		t.Fatalf("top = %T cur=%d, want b.txt's viewer on line 7", nm.topLayer(), d.p.cur+1)
+	}
+	r, ok := steer.AwaitReply(nm.steerDir, "ff-1", time.Second)
+	if !ok || !r.OK || r.Detail != "focused b.txt at line 7" {
+		t.Fatalf("reply = %+v ok=%v", r, ok)
+	}
+}
+
+func TestFileFocusWorktreeFileReloadsAndLandsTheLine(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	nm, cmd := m.applySteer(bgNav("b-5", "a.txt", 0))
+	nm = pumpAll(t, nm, cmd)
+	steer.AwaitReply(nm.steerDir, "b-5", time.Second)
+	nm, cmd = nm.applySteer(steer.Command{ID: "ff-2", Cmd: "file_focus", File: "a.txt", Line: &steer.Line{No: 12}, Wait: true})
+	nm = pumpAll(t, nm, cmd)
+	fv, ok := nm.topLayer().(*fileViewer)
+	if !ok || fv.p.cur != 11 {
+		t.Fatalf("top = %T, want a.txt's viewer on line 12", nm.topLayer())
+	}
+	r, ok := steer.AwaitReply(nm.steerDir, "ff-2", time.Second)
+	if !ok || !r.OK || r.Detail != "focused a.txt at line 12" {
+		t.Fatalf("reply = %+v ok=%v", r, ok)
+	}
+}
+
+func TestFileFocusUnknownAndRefused(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	nm, cmd := m.applySteer(steer.Command{ID: "ff-3", Cmd: "file_focus", FileID: "f424242", Wait: true})
+	runSteerCmd(t, cmd)
+	if r, ok := steer.AwaitReply(nm.steerDir, "ff-3", time.Second); !ok || r.OK || r.Error != "no open file f424242" {
+		t.Fatalf("reply = %+v ok=%v", r, ok)
+	}
+	bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 3)
+	m.filterTyping = true
+	nm, cmd = m.applySteer(steer.Command{ID: "ff-4", Cmd: "file_focus", File: "a.txt", Wait: true})
+	runSteerCmd(t, cmd)
+	if r, ok := steer.AwaitReply(nm.steerDir, "ff-4", time.Second); !ok || r.OK || r.Error != "the user is typing" {
+		t.Fatalf("reply = %+v ok=%v, want the typing refusal", r, ok)
+	}
+}
