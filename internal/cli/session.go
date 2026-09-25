@@ -53,7 +53,7 @@ func sessionInboxDir(svc *domain.Service) (string, error) {
 // The dir is a parameter so tests can point it at t.TempDir() and stay parallel.
 func runSession(dir string, svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg session <status|navigate|reload|focus|highlight> [flags]")
+		fmt.Fprintln(stderr, "usage: gg session <status|navigate|reload|focus|highlight|files> [flags]")
 		return 2
 	}
 	switch args[0] {
@@ -67,6 +67,8 @@ func runSession(dir string, svc *domain.Service, args []string, stdout, stderr i
 		return sessionFocus(dir, args[1:], stdout, stderr)
 	case "highlight":
 		return sessionHighlight(dir, svc, args[1:], stdout, stderr)
+	case "files":
+		return sessionFiles(dir, args[1:], stdout, stderr)
 	}
 	fmt.Fprintf(stderr, "session: unknown subcommand %q\n", args[0])
 	return 2
@@ -137,6 +139,12 @@ func sendSteer(dir string, c steer.Command, noWait bool, stdout, stderr io.Write
 		fmt.Fprintln(stdout, "queued: no answer from the TUI within 2s")
 		return 0
 	}
+	return printSteerReply(rep, stdout, stderr)
+}
+
+// printSteerReply prints a session's answer: the detail on stdout (exit 0)
+// or the refusal on stderr (exit 1).
+func printSteerReply(rep steer.Reply, stdout, stderr io.Writer) int {
 	if rep.OK {
 		if rep.Detail != "" {
 			fmt.Fprintln(stdout, rep.Detail)
@@ -145,6 +153,40 @@ func sendSteer(dir string, c steer.Command, noWait bool, stdout, stderr io.Write
 	}
 	fmt.Fprintln(stderr, rep.Error)
 	return 1
+}
+
+// steerTUI posts c to the live TUI ONLY — never a web page, which keeps no
+// open files yet — and waits for its answer. ok is true when a reply came;
+// otherwise code is the exit status, the reason already printed (no TUI
+// live, --no-wait's id, a timeout's "queued", which is exit 0 as in
+// sendSteer).
+func steerTUI(dir string, c steer.Command, noWait bool, stdout, stderr io.Writer) (rep steer.Reply, code int, ok bool) {
+	dir = preferredInbox(dir)
+	r := routeFor(dir)
+	if !r.tuiOK {
+		if r.webOK {
+			fmt.Fprintln(stderr, "gg web does not keep open files yet")
+		} else {
+			fmt.Fprintln(stderr, "no gg TUI session for this worktree")
+		}
+		return rep, 1, false
+	}
+	c.Wait = !noWait
+	id, err := steer.Post(dir, c)
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return rep, 1, false
+	}
+	if noWait {
+		fmt.Fprintln(stdout, id)
+		return rep, 0, false
+	}
+	rep, got := steer.AwaitReply(dir, id, steerReplyWaitForTest)
+	if !got {
+		fmt.Fprintln(stdout, "queued: no answer from the TUI within 2s")
+		return rep, 0, false
+	}
+	return rep, 0, true
 }
 
 // sessionGetenv reads GG_INBOX; a variable so tests stay off the process env.
