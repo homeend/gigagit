@@ -260,3 +260,27 @@ func TestDrainStampsFromAndKeepsWorktree(t *testing.T) {
 		t.Fatalf("From must never reach the wire: %s", data)
 	}
 }
+
+func TestOpenFilesVerbsRoundTrip(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	id, err := Post(dir, Command{ID: "1-a", Cmd: "file_focus", FileID: "f3", Line: &Line{No: 12}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Post(dir, Command{ID: "2-b", Cmd: "navigate", File: "a.txt", Background: true}); err != nil {
+		t.Fatal(err)
+	}
+	cmds := Drain(dir)
+	if len(cmds) != 2 || cmds[0].ID != id || cmds[0].FileID != "f3" || cmds[0].Line.No != 12 || !cmds[1].Background {
+		t.Fatalf("drained %+v", cmds)
+	}
+	want := []OpenFile{{ID: "f1", Path: "a.txt", Source: "worktree", Line: 3, State: "shown"}}
+	if err := PostReply(dir, Reply{ID: id, OK: true, Files: want}); err != nil {
+		t.Fatal(err)
+	}
+	r, ok := AwaitReply(dir, id, time.Second)
+	if !ok || len(r.Files) != 1 || r.Files[0] != want[0] {
+		t.Fatalf("reply = %+v ok=%v, want the list back", r, ok)
+	}
+}

@@ -15,6 +15,7 @@ import (
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // sessionSnapshot is the agent-facing session state contract (schema v1) the
@@ -37,8 +38,11 @@ type sessionSnapshot struct {
 	Filter        *snapFilter    `json:"filter,omitempty"`
 	CommitScope   []string       `json:"commit_scope,omitempty"`
 	Conflict      *snapConflict  `json:"conflict,omitempty"`
-	RunningOp     string         `json:"running_op,omitempty"`
-	Status        string         `json:"status,omitempty"`
+	// OpenFiles is the current worktree's open files (open_files.go), most
+	// recently shown first — what `gg session files` answers.
+	OpenFiles []steer.OpenFile `json:"open_files,omitempty"`
+	RunningOp string           `json:"running_op,omitempty"`
+	Status    string           `json:"status,omitempty"`
 }
 
 type snapRepo struct {
@@ -309,6 +313,7 @@ func buildSessionSnapshot(m Model) sessionSnapshot {
 	if m.running {
 		s.RunningOp = m.opName
 	}
+	s.OpenFiles = m.openFilesProto()
 	// Rides the same write-on-change heartbeat as everything else here (no
 	// extra debounce): contextLinkText is pure Model reads.
 	if link, ok := m.contextLinkText(); ok {

@@ -135,3 +135,21 @@ func TestContentLineCount(t *testing.T) {
 		}
 	}
 }
+
+func TestOpenBackgroundRefusals(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	content := "gg://" + filepath.ToSlash(dir) + "/README.md?view=content"
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--background", "gg://" + filepath.ToSlash(dir) + "/README.md"}, "--background needs a content link"},
+		{[]string{"--background", "--web", content}, "--background and --web do not mix"},
+	} {
+		var out, errb bytes.Buffer
+		if code := cmdOpen(domain.Open(dir), tc.args, &out, &errb); code != 2 || !strings.Contains(errb.String(), tc.want) {
+			t.Errorf("%v: exit=%d stderr=%q, want 2 and %q", tc.args, code, errb.String(), tc.want)
+		}
+	}
+}

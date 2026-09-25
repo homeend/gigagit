@@ -110,6 +110,8 @@ do not cross-fill.
 
 ### Stage 4 — agent verbs
 
+DONE (plan: `docs/superpowers/plans/2026-09-25-open-files-plan-4-agent-verbs.md`).
+
 - `gg open <content-link> --background` / `gg session navigate … --background`:
   load the file into the list without touching the screen; reply
   `opened <path> in the background [at line N]`. Refused (exit 2) for a link

@@ -27,7 +27,7 @@ var LaunchTUI func(checkout string, at model.Link) int
 // internal/cli must not import internal/web either; nil = unavailable.
 var LaunchWeb func(checkout string, at steer.Command) int
 
-const openUsage = "usage: gg open <gg://…> [--web] [--no-wait]\n" +
+const openUsage = "usage: gg open <gg://…> [--web | --background] [--no-wait]\n" +
 	"quote links that carry #<hunk> — an unquoted # starts a shell comment"
 
 // cmdOpen is `gg open <link>`: show the link to the USER. A live gg session in
@@ -42,8 +42,13 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	noWait := fs.Bool("no-wait", false, "steer without waiting for the session's answer")
 	web := fs.Bool("web", false, "show it in the browser: steer a live gg web page or start one")
+	background := fs.Bool("background", false, "load a content link into the live TUI's open files without showing it")
 	pos, err := parseSteerFlags(fs, args)
 	if err != nil {
+		return 2
+	}
+	if *background && *web {
+		fmt.Fprintln(stderr, "open: --background and --web do not mix (gg web keeps no open files yet)")
 		return 2
 	}
 	if len(pos) != 1 {
@@ -62,6 +67,10 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	res, err := resolveLinkArg(ctx, svc, pos[0], linkShapes{Ref: true, Pair: true, Content: true}, "open")
 	if err != nil {
 		return linkExit("open", err, stderr)
+	}
+	if *background && res.Hint.Kind != model.ContentHintKind {
+		fmt.Fprintln(stderr, "open: "+backgroundNeedsContent)
+		return 2
 	}
 	// The page has no content viewer yet: refuse before touching any page or
 	// starting a server (a steered page refuses the same link on its own).
@@ -103,6 +112,9 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 	}
 	if c.File != "" || c.Target != nil {
 		c.Worktree = res.Checkout
+	}
+	if *background {
+		return sendBackground(dir, c, *noWait, stdout, stderr)
 	}
 	if r := routeFor(preferredInbox(dir)); r.tuiOK || r.webOK {
 		// sendSteer is the whole routing table — a live web page is reached over

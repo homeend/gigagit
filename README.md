@@ -1184,6 +1184,17 @@ files within five. A file deleted on disk shows `(file deleted on disk)` and
 returns, at your line, when the file does. Commit and shelf versions never
 change.
 
+An **agent** can use the list too, without touching your screen: `gg open
+<content-link> --background` loads a file into it (answering `opened <path>
+in the background [at line N]`; a file you are looking at is left alone),
+`gg session files [--json]` lists the open files (id, path, version, cursor
+line, on screen or in the background — also `open_files` in the MCP
+`gg_ui_state`), and `gg session files focus <id|path>[:<line>]` brings one to
+the front. So an agent walking you through a change can open A, B and C in
+the background first, then bring each up in turn as it explains it. These
+need a running TUI (they never start one); `gg web` does not keep open files
+yet.
+
 ### Agent sessions (embedded consoles)
 
 On a **Worktrees** row, the `.` menu's **Start agent…** runs an interactive

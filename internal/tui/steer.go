@@ -320,6 +320,20 @@ func steerEnumRefusal(c steer.Command) string {
 			return "unknown target state " + strconv.Quote(c.Target.State)
 		}
 	}
+	if c.Background {
+		if c.Cmd != "navigate" {
+			return "background applies to navigate only"
+		}
+		if c.HintKind != model.ContentHintKind {
+			return "background needs a content link"
+		}
+	}
+	if c.Cmd == "file_focus" && c.FileID == "" && c.File == "" {
+		return "file_focus needs an id or a path"
+	}
+	if c.Line != nil && c.Line.No < 0 {
+		return "a line number is 1-based"
+	}
 	if c.Line != nil {
 		switch c.Line.Side {
 		case "", "new", "old":
@@ -345,10 +359,18 @@ func steerEnumRefusal(c steer.Command) string {
 // applySteer runs one command. Refusals are checked once, before dispatch, so
 // every verb inherits them.
 func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
-	if why := m.steerRefusal(); why != "" {
+	if why := steerEnumRefusal(c); why != "" {
 		return m, m.answerSteer(c, steerFail(c, why))
 	}
-	if why := steerEnumRefusal(c); why != "" {
+	// The open-files list verbs never move the screen, so nothing the user
+	// is doing refuses them (steer_files.go).
+	switch {
+	case c.Cmd == "files":
+		return m.steerFiles(c)
+	case c.Cmd == "navigate" && c.Background:
+		return m.steerNavigateBackground(c)
+	}
+	if why := m.steerRefusal(); why != "" {
 		return m, m.answerSteer(c, steerFail(c, why))
 	}
 	if c.Worktree != "" && steerWorktreeBound(c) && !domain.SameCheckout(c.Worktree, m.snapshotWorktree) {
@@ -373,6 +395,8 @@ func (m Model) applySteer(c steer.Command) (Model, tea.Cmd) {
 		return m.steerHighlight(c)
 	case "highlight_clear":
 		return m.steerHighlightClear(c)
+	case "file_focus":
+		return m.steerFileFocus(c)
 	default:
 		return m, m.answerSteer(c, steerFail(c, "unknown command "+strconv.Quote(c.Cmd)))
 	}

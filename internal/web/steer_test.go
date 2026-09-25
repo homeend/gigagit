@@ -607,3 +607,19 @@ func TestSteerWireRefusesAContentLink(t *testing.T) {
 		t.Fatalf("toSteerWire = %v, want the web refusal", err)
 	}
 }
+
+func TestToSteerWireRefusesOpenFilesVerbs(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		c    steer.Command
+		want string
+	}{
+		{steer.Command{Cmd: "files"}, "open files are not supported in gg web yet"},
+		{steer.Command{Cmd: "file_focus", FileID: "f1"}, "open files are not supported in gg web yet"},
+		{steer.Command{Cmd: "navigate", File: "a.txt", Background: true}, "background opens are not supported in gg web yet"},
+	} {
+		if _, err := toSteerWire(tc.c); err == nil || err.Error() != tc.want {
+			t.Errorf("toSteerWire(%+v) = %v, want %q", tc.c, err, tc.want)
+		}
+	}
+}

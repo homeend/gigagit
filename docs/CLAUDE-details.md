@@ -1208,6 +1208,26 @@ the shown lines and the off-thread check compares them to the disk
 The navigate reply rides the load (`contentLandedMsg` wraps the
 `fileContentMsg`), so it can say `at line N` / the clamp; a failed load
 fails the navigate.
+**Agent verbs (plan 4, 2026-09-25):** steer additions `Command.Background`,
+`Command.FileID` (NOT `ID` — that is the command's id), `Reply.Files` and the
+wire row `steer.OpenFile` (id `f<seq>` = `openFile.seq`, the tag's suffix;
+source/rev/line/state), which is also the snapshot's `open_files`
+(`openFilesProto`). `applySteer` now validates (`steerEnumRefusal`) FIRST,
+then routes `files` and a background navigate PAST `steerRefusal` — they
+never move the screen — while `file_focus` keeps every refusal. A background
+navigate (`steer_files.go`) never parks a `pendingSteer`, refuses another
+worktree outright (the switch notice would be a screen change), leaves a
+file already on screen untouched (no line applied), else find-or-new +
+`registerDocEv` + `loadDoc`, the reply riding the load. `contentLandedMsg`
+carries `lead` ("opened X", "opened X in the background", "focused X") and
+`evicted`; `landedDetail` builds every such reply, and every content-link
+reply names a file closed over the cap (`registerDocEv` returns it — never
+scrape `statusMsg`, it is i18n). `file_focus` = `findOpenFile` (id, else the
+id tried as a path, else the path — most recently shown version) +
+`bringToFront`; a loaded commit/shelf doc lands its line synchronously. CLI:
+`steerTUI` posts to the TUI inbox ONLY (a web page gets nothing; web-only →
+exit 1), `--background` never launches a TUI; `gg web`'s `toSteerWire`
+refuses `Background`, `files` and `file_focus` by name until stage 5.
 
 ### The compare algebra (`internal/domain`, plan 1b, 2026-09-17)
 

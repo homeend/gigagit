@@ -143,6 +143,11 @@ func (s *Server) freezePair(ctx context.Context, w *steerWire) {
 func toSteerWire(c steer.Command) (steerWire, error) {
 	w := steerWire{Cmd: c.Cmd, File: c.File, Commit: c.Commit, Step: c.Step,
 		Sources: c.Sources, Panel: c.Panel}
+	// The open-files verbs (gg session files, --background) are the TUI's
+	// until the web stage: refused by name, never run as a plain navigate.
+	if c.Background {
+		return w, errors.New("background opens are not supported in gg web yet")
+	}
 	if c.File != "" && !isGitArgSafe(c.File) {
 		return w, errors.New("unsafe file")
 	}
@@ -306,6 +311,8 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 			w.End = w.Start
 		}
 	case "highlight_clear":
+	case "files", "file_focus":
+		return w, errors.New("open files are not supported in gg web yet")
 	default:
 		return w, fmt.Errorf("unknown command %q", c.Cmd)
 	}

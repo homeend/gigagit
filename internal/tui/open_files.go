@@ -7,6 +7,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // maxOpenFiles is how many files one worktree keeps open (spec ruling 4).
@@ -132,13 +133,29 @@ func (m Model) detachDoc(d *openFile) Model {
 // registerDoc puts d first in the current worktree's open files — call it
 // once d is in its frame. A file dropped over the cap is named in the status.
 func (m Model) registerDoc(d *openFile) Model {
+	m, _ = m.registerDocEv(d)
+	return m
+}
+
+// registerDocEv is registerDoc that also returns the file dropped over the
+// cap (nil when none), so a steer reply can name it.
+func (m Model) registerDocEv(d *openFile) (Model, *openFile) {
 	if m.openFiles == nil {
-		return m
+		return m, nil
 	}
-	if ev := m.openFiles.touch(m.currentWorktree, d, m.docShown); ev != nil {
+	ev := m.openFiles.touch(m.currentWorktree, d, m.docShown)
+	if ev != nil {
 		m.statusMsg = i18n.T("closed %s (%d files open)", ev.path, maxOpenFiles)
 	}
-	return m
+	return m, ev
+}
+
+// evictedPath is ev's path, or "" when nothing was dropped.
+func evictedPath(ev *openFile) string {
+	if ev == nil {
+		return ""
+	}
+	return ev.path
 }
 
 // docLoaded reports whether d holds its file's lines (not a placeholder).
@@ -216,4 +233,47 @@ func (m Model) bringToFront(d *openFile) (Model, tea.Cmd) {
 	}
 	d.keepPlace()
 	return m, m.loadDoc(d)
+}
+
+// openFilesProto is the current worktree's open files in their wire form,
+// most recently shown first — `gg session files` and the snapshot.
+func (m Model) openFilesProto() []steer.OpenFile {
+	var out []steer.OpenFile
+	for _, d := range m.openFiles.list(m.currentWorktree) {
+		f := steer.OpenFile{ID: d.id(), Path: d.path, Source: "worktree", State: "background"}
+		switch d.src.kind {
+		case srcCommit:
+			f.Source, f.Rev = "commit", d.src.rev
+		case srcShelf:
+			f.Source, f.Rev = "shelf", d.src.rev
+		}
+		if docLoaded(d) {
+			f.Line = d.p.cur + 1
+		}
+		if m.docShown(d) {
+			f.State = "shown"
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// findOpenFile is the current worktree's open file an agent named: by id,
+// else — or when no id matches — by path, the most recently shown version.
+func (m Model) findOpenFile(id, path string) *openFile {
+	l := m.openFiles.list(m.currentWorktree)
+	if id != "" {
+		for _, d := range l {
+			if d.id() == id {
+				return d
+			}
+		}
+		path = id
+	}
+	for _, d := range l {
+		if d.path == path {
+			return d
+		}
+	}
+	return nil
 }

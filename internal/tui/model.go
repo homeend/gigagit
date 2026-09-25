@@ -910,7 +910,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.load.err != nil {
 			return m, tea.Batch(fill, m.answerSteer(msg.cmd, steerFail(msg.cmd, "reading "+msg.cmd.File+": "+msg.load.err.Error())))
 		}
-		m, reply := m.navigateLanded(msg.cmd, contentLandedDetail(msg.cmd.File, msg.line, msg.load.lines))
+		m, reply := m.navigateLanded(msg.cmd, landedDetail(msg.lead, msg.line, msg.load.lines, msg.evicted))
 		return m, tea.Batch(fill, reply)
 	case wtPreviewMsg:
 		return m.wtPreviewSettled(msg)
