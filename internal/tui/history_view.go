@@ -196,7 +196,7 @@ func (h *historyView) render(m Model, _ string) string {
 	w, scrH := m.overlayDims()
 	body := m.historyBodyRows()
 
-	header := truncate(i18n.T("history: %s", h.ctx.path), w)
+	header := elidePath(i18n.T("history: %s", h.ctx.path), w) // keep the file name
 	hint := truncate(i18n.T("[↑↓] commit  [enter] diff  [e] editor  [esc] back"), w)
 
 	// Left list. Right pane shown only when wide enough (>=60); else list-only.

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -286,10 +287,11 @@ func normalizeLineBreaks(s string) string {
 }
 
 // filePreviewRowsCap is how many content lines the preview window shows right
-// now; it mirrors renderFilePreview's math (border 2 + title + hint = 4) so the
-// pager clamp in the move handler agrees with what is actually rendered.
+// now; it mirrors renderFilePreview's math (border 2 + title = 3 — the keys
+// are the bottom bar's) so the pager clamp in the move handler agrees with
+// what is actually rendered.
 func (m Model) filePreviewRowsCap() int {
-	rowsCap := m.layout().boxH[panelCommits] - 4
+	rowsCap := m.layout().boxH[panelCommits] - 3
 	if rowsCap < 1 {
 		rowsCap = 1
 	}
@@ -409,7 +411,13 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	if innerW < 1 {
 		innerW = 1
 	}
-	rowsCap := contentH - 2 // title + hint lines
+	// The title line, and — in the full-screen viewer only, which has no
+	// bottom bar under it — a hint line. In the files view the keys are the
+	// app's bottom bar's (footerOverride).
+	rowsCap := contentH - 1
+	if viewer {
+		rowsCap--
+	}
 	if rowsCap < 1 {
 		rowsCap = 1
 	}
@@ -459,20 +467,29 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		}
 	}
 
-	if bd := p.search.badge(); bd != "" { // right-aligned on the title line
-		avail := innerW - lipgloss.Width(bd) - 2
-		if avail < 1 {
-			avail = 1
-		}
-		title = padRight(truncate(title, avail), avail) + "  " + bd
+	// Right-aligned on the title line: the search badge, and — with no hint
+	// line to carry it — where the window is in the file.
+	right := p.search.badge()
+	if !viewer && len(vis) > rowsCap {
+		right = strings.TrimSpace(right + "  " + fmt.Sprintf("%d/%d", start+1, len(vis)))
 	}
 	lines := make([]string, 0, contentH)
-	lines = append(lines, padRight(truncate(title, innerW), innerW))
+	lines = append(lines, titleWithRight(title, right, innerW, true))
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate(i18n.T("  (empty)"), innerW), innerW))
 	} else {
 		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: 0, hscroll: p.hscroll, charWrap: true})
 		lines = append(lines, win...)
+	}
+	if !viewer {
+		for len(lines) < contentH {
+			lines = append(lines, padRight("", innerW))
+		}
+		style := st().bluredPanel
+		if focused {
+			style = st().focusedPanel
+		}
+		return style.Render(strings.Join(lines, "\n"))
 	}
 	for len(lines) < contentH-1 {
 		lines = append(lines, padRight("", innerW))
@@ -495,4 +512,22 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 		style = st().focusedPanel
 	}
 	return style.Render(strings.Join(lines, "\n"))
+}
+
+// titleWithRight is a box's title line with right right-aligned after it.
+// A title naming a file (isPath) loses its middle, never the file name; any
+// other title (a commit subject, a count) is cut at its end.
+func titleWithRight(title, right string, innerW int, isPath bool) string {
+	cut := truncate
+	if isPath {
+		cut = elidePath
+	}
+	if right == "" {
+		return padRight(cut(title, innerW), innerW)
+	}
+	avail := innerW - lipgloss.Width(right) - 2
+	if avail < 1 {
+		return padRight(truncate(right, innerW), innerW)
+	}
+	return padRight(padRight(cut(title, avail), avail)+"  "+right, innerW)
 }

@@ -52,6 +52,27 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   with the cursor on that worktree. A `/` filter on the Worktrees list that
   would hide it is cleared.
 
+## File lists: names first, keys in the bottom bar
+
+### Changed
+
+- **A long path loses its middle, never its file name** — in F's list, the
+  commit file tree, the `ctrl+\` open files, bookmarks, shelf entries, and
+  the preview, history and blame titles (`internal/…/file.go`). Only when the
+  name alone is too wide is the name itself shortened, keeping its end.
+- **`ctrl+t` on a focused file preview** (F's, or the commit file tree's)
+  fills the whole screen; again, or `←`/`tab` back to the list, restores the
+  split.
+- **`ctrl+]` in F's window** — on a row of the list or on the focused
+  preview — keeps that file open in the background (the `ctrl+\` list,
+  loaded off-thread; one already open is reused); the preview goes on
+  following the cursor.
+- **No hint line inside F's list, the commit file tree or their preview:**
+  the app's bottom bar shows the focused box's keys (now with `[ctrl+t] full`
+  and `[ctrl+]] background` for a preview), and the freed row shows the file.
+  The cursor position (`12/40`) moves to the box's title. The full-screen
+  viewer keeps its own hint line — there is no bottom bar under it.
+
 ## F: the working-tree files window
 
 ### Changed

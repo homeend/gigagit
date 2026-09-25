@@ -41,10 +41,19 @@ type rowDecorator func(visible string, hscroll, visualLine int) string
 // wraps/scrolls within the remaining width (winOpts.prefixW) so the gutter never
 // moves. prefix "" (with prefixW 0) is the plain whole-row path.
 type winRow struct {
-	text     string
-	prefix   string
-	style    lipgloss.Style // zero value renders the text unchanged
-	decorate rowDecorator   // optional; applied post-slice, post-pad
+	text string
+	// elide marks a row whose text is a file path (with any short lead-in —
+	// a cursor mark, a status letter): a cutoff drops the MIDDLE of the path
+	// (elidePath), never the file name, which is the part the reader needs.
+	// Wrap and scroll show the whole row anyway. Ignored on a painted row
+	// (cls/emph), whose masks index the uncut text. elideHead is how many
+	// leading runes are a lead-in (the cursor mark, a glyph) kept verbatim;
+	// the path is the rest.
+	elide     bool
+	elideHead int
+	prefix    string
+	style     lipgloss.Style // zero value renders the text unchanged
+	decorate  rowDecorator   // optional; applied post-slice, post-pad
 	// cls is an optional syntax class per DISPLAY RUNE of text (so
 	// len(cls) == len([]rune(text)); nil = the plain path every other caller
 	// takes). The window slices it alongside the text in all three modes, so a
@@ -246,6 +255,10 @@ func renderWindow(rows []winRow, o winOpts) []string {
 				segEmph = [][]emphLevel{sliceMask(remph, hscrollRuneOff(r.text, o.hscroll), len([]rune(segs[0])))}
 			}
 		default:
+			if r.elide && rcls == nil && remph == nil && lipgloss.Width(r.text) > bodyW {
+				segs = []string{elideRowPath(r.text, r.elideHead, bodyW)}
+				break
+			}
 			segs = []string{truncate(r.text, bodyW)}
 			if remph != nil {
 				em := sliceMask(remph, 0, len([]rune(segs[0])))
@@ -680,4 +693,18 @@ func wrapContentLines(rows []winRow, o winOpts, max int) int {
 		}
 	}
 	return n
+}
+
+// elideRowPath fits a path row into n columns: the first head runes (a
+// lead-in) stay, and the path after them loses its middle (elidePath).
+func elideRowPath(text string, head, n int) string {
+	r := []rune(text)
+	if head <= 0 || head >= len(r) {
+		return elidePath(text, n)
+	}
+	lead := string(r[:head])
+	if lw := lipgloss.Width(lead); lw < n {
+		return lead + elidePath(string(r[head:]), n-lw)
+	}
+	return truncate(text, n)
 }

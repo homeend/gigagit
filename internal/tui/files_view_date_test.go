@@ -195,8 +195,7 @@ func TestFilesViewCompareModeHasNoDateLine(t *testing.T) {
 }
 
 // The extra line must come out of the tree's budget, not out of the box: the
-// rendered panel still fits the height it was given, and the hint line (the
-// bottom row) survives.
+// rendered panel still fits the height it was given, and the title survives.
 func TestFilesViewWithDateStillFitsItsBox(t *testing.T) {
 	t.Parallel()
 	m := openFilesView(t, datedFilesModel())
@@ -205,8 +204,8 @@ func TestFilesViewWithDateStillFitsItsBox(t *testing.T) {
 		if n := len(strings.Split(out, "\n")); n != h {
 			t.Errorf("renderFilesView(60, %d) drew %d lines, want %d", h, n, h)
 		}
-		if !strings.Contains(out, "[esc]") {
-			t.Errorf("height %d: the hint line was pushed out by the date line:\n%s", h, out)
+		if !strings.Contains(out, m.filesTitle) {
+			t.Errorf("height %d: the title was pushed out by the date line:\n%s", h, out)
 		}
 	}
 }

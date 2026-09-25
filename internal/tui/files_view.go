@@ -66,6 +66,7 @@ func (m Model) closeFilesView() Model {
 	m.previewOpen = nil
 	m.wtFiles = nil
 	m.filesFull = false
+	m.previewFull = false
 	// The popup that handed off to this view is dropped with it: only the
 	// view's own esc/l close (which reads the field BEFORE calling this)
 	// returns to it. A repo switch, a steer navigation, a narrow terminal or
@@ -208,7 +209,7 @@ func (m Model) toggleFullTree() (Model, tea.Cmd) {
 
 // focusTree / focusRight move focus within an open files view. focusRight is
 // inert in compare and shelf modes (no commit-list side to focus).
-func (m Model) focusTree() Model { m.filesTreeFocused = true; return m }
+func (m Model) focusTree() Model { m.filesTreeFocused, m.previewFull = true, false; return m }
 func (m Model) focusRight() Model {
 	if !m.inCompareMode() && !m.inShelfFiles() {
 		m.filesTreeFocused = false
@@ -477,7 +478,7 @@ func shortHash(h string) string {
 // single-commit modes — the date line (1). It must track renderFilesView's
 // rowsCap, or pgup/pgdn oversteps the window it draws.
 func (m Model) filesPageRows() int {
-	n := m.layout().bodyH - 4
+	n := m.layout().bodyH - 3
 	if m.filesMetaLineFor() != "" {
 		n--
 	}
@@ -619,6 +620,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
+	case "ctrl+t": // a focused preview fills the screen, and back
+		if m.filesPreview != nil && !m.filesTreeFocused {
+			m.previewFull = !m.previewFull
+		}
+		return m, nil
 	case "ctrl+]":
 		if m.filesPreview != nil { // step the preview aside; the file stays open
 			return m.backgroundDoc(m.filesPreview), nil
@@ -997,7 +1003,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	if m.inWorktreeFiles() {
 		search, meta, title = m.wtSearchLine(), "", m.wtTitle()
 	}
-	rowsCap := contentH - 2 // title + hint lines
+	rowsCap := contentH - 1 // the title line (the keys are the bottom bar's)
 	if meta != "" {
 		rowsCap-- // the date line claims one more row
 	}
@@ -1059,11 +1065,17 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		if m.filesPreviewSet != nil && l.path != "" {
 			text += noteBadge(m.filesPreviewCounts[l.path])
 		}
-		wr[i] = winRow{text: prefix + text, style: st}
+		// A file row cuts the middle of its path, never the name (headings
+		// were pre-elided above).
+		wr[i] = winRow{text: prefix + text, style: st, elide: l.path != "" && !l.heading, elideHead: len([]rune(prefix))}
 	}
 
 	lines := make([]string, 0, contentH)
-	lines = append(lines, padRight(truncate(title, innerW), innerW))
+	pos := ""
+	if len(vis) > rowsCap { // no hint line to carry it: where the cursor is
+		pos = fmt.Sprintf("%d/%d", p.sel+1, len(vis))
+	}
+	lines = append(lines, titleWithRight(title, pos, innerW, false))
 	if meta != "" {
 		// Its own line, directly under the title: a long subject truncates the
 		// title, and the date must not be the casualty of that.
@@ -1078,20 +1090,9 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: anchor, hscroll: p.hscroll})
 		lines = append(lines, win...)
 	}
-	for len(lines) < contentH-1 {
+	for len(lines) < contentH {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := i18n.T("[enter] diff  [h] history  [b] blame  [/] search  [esc] close")
-	if m.comparePair != nil {
-		hint = i18n.T("[enter] diff  [f] filter  [h] history  [b] blame  [/] search  [esc] close")
-	}
-	if m.inWorktreeFiles() {
-		hint = i18n.T("[.] actions  [/] filter  [→] preview  [ctrl+t] full  [esc] close")
-	}
-	if len(vis) > rowsCap {
-		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
-	}
-	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 
 	style := s.bluredPanel
 	if m.filesTreeFocused {

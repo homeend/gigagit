@@ -122,6 +122,7 @@ type Model struct {
 	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
 	wtFiles       *worktreeFiles                           // F's working-tree mode of the files view (nil otherwise)
 	filesFull     bool                                     // ctrl+t: the files view spans the whole body
+	previewFull   bool                                     // ctrl+t on a focused preview: it spans the whole body
 	wtPreviewGen  int                                      // bumped per cursor move in F's window: drops a superseded preview settle
 	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed

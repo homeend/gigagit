@@ -332,32 +332,24 @@ func previewRowWith(t *testing.T, out, needle string) string {
 	return ""
 }
 
-// The hint line advertises the new keys and swaps to the selection variant.
+// The preview's keys are the bottom bar's (the box draws none), and the bar
+// swaps to the selection variant.
 func TestPreviewHintVariants(t *testing.T) {
 	t.Parallel()
 	m := previewTabModel(t)
-	// Rendered at the fixture's own 100 columns: renderFilePreview truncates
-	// the hint to innerW (63 there), so the ORDER is the whole point — the new
-	// keys and both exits have to survive the cut on an ordinary terminal.
 	boxW, boxH := m.layout().rightW, m.layout().boxH[panelCommits]
-	out := m.renderFilePreview(boxW, boxH)
-	for _, want := range []string{"[alt+↑↓] line", "[spc] mark", "[/] find", "[esc] close"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("the preview hint must still carry %q at 100 columns:\n%s", want, out)
-		}
+	if out := m.renderFilePreview(boxW, boxH); strings.Contains(out, "[alt+↑↓] line") {
+		t.Fatalf("the preview box draws its own hint line:\n%s", out)
 	}
-	if f, _ := m.footerOverride(); !strings.Contains(f, "[spc] mark") {
-		t.Fatalf("the status bar must advertise the mark key: %q", f)
+	f, _ := m.footerOverride()
+	for _, want := range []string{"[alt+↑↓] line", "[spc] mark", "[/] find", "[esc] close"} {
+		if !strings.Contains(f, want) {
+			t.Fatalf("the bottom bar must carry %q: %q", want, f)
+		}
 	}
 
 	m = feedPreview(m, "space")
-	out = m.renderFilePreview(boxW, boxH)
-	for _, want := range []string{"[space] mark end", "[enter] copy", "[esc] unmark"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("the selection hint lacks %q:\n%s", want, out)
-		}
-	}
-	if f, _ := m.footerOverride(); !strings.Contains(f, "[enter] copy") {
+	if f, _ := m.footerOverride(); !strings.Contains(f, "[space] mark end") || !strings.Contains(f, "[esc] unmark") {
 		t.Fatalf("the status bar must switch to the selection variant: %q", f)
 	}
 }
@@ -421,8 +413,9 @@ func TestPreviewAltUpSnapsToTheBottomWhenTheCursorIsBelow(t *testing.T) {
 		t.Errorf("the bottom visible row must wear the band, params %v: %q", got, row)
 	}
 	lines := strings.Split(out, "\n")
-	// title, rows..., hint, then the bottom border: the band row is the last body row.
-	if want := lines[len(lines)-3]; want != row {
+	// title, rows..., then the bottom border (the keys are the bottom bar's):
+	// the band row is the last body row.
+	if want := lines[len(lines)-2]; want != row {
 		t.Errorf("the snapped cursor is not on the last body row:\nlast body: %q\ncursor:    %q", want, row)
 	}
 	m = feedPreview(m, "alt+down") // the cursor is visible: it steps and the pager follows by one

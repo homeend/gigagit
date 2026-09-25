@@ -266,7 +266,7 @@ func (b *blameView) render(m Model, _ string) string {
 	body := m.blameBodyRows()
 
 	title := i18n.T("blame: %s", b.ctx.path+revSuffix(b.ctx.rev))
-	header := truncate(title, w)
+	header := elidePath(title, w) // keep the file name
 	// Right-aligned badges, like the diff's: the age-filter badge (-7d, +30d,
 	// +1d -7d) and the search badge share the slot as "-7d · /q  1/3".
 	bd := b.search.badge()
@@ -283,7 +283,7 @@ func (b *blameView) render(m Model, _ string) string {
 		if avail < 1 {
 			avail = 1
 		}
-		header = truncate(padRight(truncate(title, avail), avail)+"  "+bd, w)
+		header = truncate(padRight(elidePath(title, avail), avail)+"  "+bd, w)
 	}
 	hint := truncate(i18n.T("[↑↓] line  [pgup/pgdn] page  [spc] mark  [/] find  [enter] history  [e] editor  [esc/b] back  [d] age"), w)
 	if b.lsel.on {

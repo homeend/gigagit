@@ -136,6 +136,12 @@ func (m Model) layout() layoutGeom {
 		delete(g.pos, panelCommits)
 		g.leftW, g.rightW = w, 0
 	}
+	// ctrl+t on a focused file preview: the preview (the right column) spans
+	// the whole body and the file list hides.
+	if m.previewMaximized() {
+		g.leftW, g.rightW = 0, w
+		g.pos[panelCommits] = point{0, 1}
+	}
 
 	return g
 }
