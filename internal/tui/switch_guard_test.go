@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -224,5 +226,46 @@ func TestGoToWorktreeOffersRepairForForeignNotation(t *testing.T) {
 	}
 	if r.loading || r.switchTarget != "" {
 		t.Fatal("the offer itself must not switch")
+	}
+}
+
+// Serial: sets the guard seams. A worktree git recorded under the other
+// environment's notation (/mnt/t/… seen from Windows) is no working
+// directory as written: a session runs in its translated path, with a note
+// that git there needs the repair; an unreachable one refuses.
+func TestSessionPlace(t *testing.T) {
+	setGuardSeams(t, "windows", `T:\x`, `C:\ok`)
+	if cwd, note, why := sessionPlace(`C:\ok`); cwd != "" || note != "" || why != "" {
+		t.Fatalf("reachable: %q %q %q", cwd, note, why)
+	}
+	cwd, note, why := sessionPlace("/mnt/t/x")
+	if cwd != `T:\x` || why != "" {
+		t.Fatalf("foreign notation: cwd=%q why=%q", cwd, why)
+	}
+	if want := i18n.T("started in %s — git there fails until the worktree is repaired (enter on its Worktrees row)", `T:\x`); note != want {
+		t.Fatalf("note %q", note)
+	}
+	if _, _, why := sessionPlace("/gone"); why != i18n.T("cannot start here: %s is not reachable from here", "/gone") {
+		t.Fatalf("unreachable: %q", why)
+	}
+}
+
+// Serial: sets the guard seams.
+func TestSessionStartRefusesAnUnreachableWorktree(t *testing.T) {
+	m := newTestModel(t)
+	m.loading = false
+	setGuardSeams(t, "linux")
+	for name, start := range map[string]func(Model) (tea.Model, tea.Cmd){
+		"agent":    func(m Model) (tea.Model, tea.Cmd) { return m.startAgentFor("/gone") },
+		"terminal": func(m Model) (tea.Model, tea.Cmd) { return m.openTerminal("/gone") },
+	} {
+		u, cmd := start(m)
+		got := u.(Model)
+		if cmd != nil || got.topLayer() != nil {
+			t.Fatalf("%s: must not start anything", name)
+		}
+		if want := i18n.T("cannot start here: %s is not reachable from here", "/gone"); got.statusMsg != want {
+			t.Fatalf("%s: status %q", name, got.statusMsg)
+		}
 	}
 }

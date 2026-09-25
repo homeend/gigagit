@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -103,7 +104,7 @@ func TestStartSessionRunsInWorktree(t *testing.T) {
 	dir := cleanDir(t)
 	svc := Open(dir)
 	tc := config.ToolCommand{Category: "session", Name: "Shell", Mode: "session", Command: `printf 'IN[%s]' "$(pwd)"; exit 7`}
-	s, err := svc.StartSession(context.Background(), tc, dir, 80, 10)
+	s, err := svc.StartSession(context.Background(), tc, dir, "", 80, 10, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +203,7 @@ func TestStartSessionTraceEnv(t *testing.T) {
 	restore := UseSessionManager(agentsession.NewManager())
 	defer restore()
 	wt := cleanDir(t)
-	s, err := Open(wt).StartSession(context.Background(), config.ToolCommand{Category: "session", Name: "Shell", Mode: "session", Command: `printf TRACED`}, wt, 80, 10)
+	s, err := Open(wt).StartSession(context.Background(), config.ToolCommand{Category: "session", Name: "Shell", Mode: "session", Command: `printf TRACED`}, wt, "", 80, 10, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,4 +216,89 @@ func TestStartSessionTraceEnv(t *testing.T) {
 	if !strings.Contains(string(b), "TRACED") {
 		t.Fatalf("trace = %q", b)
 	}
+}
+
+func TestTerminalShell(t *testing.T) {
+	t.Parallel()
+	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	have := func(names ...string) func(string) (string, error) {
+		return func(n string) (string, error) {
+			for _, h := range names {
+				if h == n {
+					return `C:\bin\` + n + ".exe", nil
+				}
+			}
+			return "", errors.New("not found")
+		}
+	}
+	for _, c := range []struct {
+		name, goos, override string
+		env                  map[string]string
+		path                 []string
+		want                 string
+	}{
+		{"unix SHELL", "linux", "", map[string]string{"SHELL": "/bin/zsh"}, nil, "/bin/zsh"},
+		{"unix fallback", "linux", "", nil, nil, "/bin/sh"},
+		{"override wins", "linux", "/usr/bin/fish", map[string]string{"SHELL": "/bin/zsh"}, nil, "/usr/bin/fish"},
+		{"win pwsh", "windows", "", nil, []string{"pwsh", "powershell", "cmd"}, `C:\bin\pwsh.exe`},
+		{"win powershell", "windows", "", nil, []string{"powershell", "cmd"}, `C:\bin\powershell.exe`},
+		{"win cmd via COMSPEC", "windows", "", map[string]string{"COMSPEC": `C:\Windows\system32\cmd.exe`}, nil, `C:\Windows\system32\cmd.exe`},
+		{"win cmd fallback", "windows", "", nil, nil, "cmd.exe"},
+		{"win override", "windows", "nu", nil, []string{"pwsh"}, "nu"},
+	} {
+		if got := terminalShell(c.goos, env(c.env), have(c.path...), c.override); len(got) != 1 || got[0] != c.want {
+			t.Errorf("%s: %v, want [%s]", c.name, got, c.want)
+		}
+	}
+}
+
+func waitSessionText(t *testing.T, s *AgentSession, want string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		for _, l := range s.Screen().Lines {
+			if strings.Contains(l, want) {
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("screen never showed %q", want)
+}
+
+// Serial: installs a process-global manager.
+func TestStartSessionPassesEnv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based")
+	}
+	restore := UseSessionManager(agentsession.NewManager())
+	defer restore()
+	defer Sessions().KillAll(context.Background())
+	dir := cleanDir(t)
+	tc := config.ToolCommand{Category: "session", Name: "Shell", Mode: "session", Command: `printf "INBOX=%s" "$GG_INBOX"; sleep 5`}
+	s, err := Open(dir).StartSession(context.Background(), tc, dir, "", 80, 10, []string{"GG_INBOX=/tmp/inbox-x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitSessionText(t, s, "INBOX=/tmp/inbox-x")
+}
+
+// Serial: installs a process-global manager.
+func TestStartTerminalRunsTheShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh-based")
+	}
+	restore := UseSessionManager(agentsession.NewManager())
+	defer restore()
+	defer Sessions().KillAll(context.Background())
+	dir := cleanDir(t)
+	s, err := Open(dir).StartTerminal(context.Background(), "/bin/sh", dir, "", 80, 10, []string{"GG_INBOX=/tmp/inbox-t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Info().Label; got != "Terminal" {
+		t.Fatalf("label = %q", got)
+	}
+	s.SendText("echo \"T-$GG_INBOX\"\r")
+	waitSessionText(t, s, "T-/tmp/inbox-t")
 }

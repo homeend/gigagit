@@ -107,6 +107,14 @@ type Command struct {
 	// landing IS the reveal.
 	HintKind string `json:"hint_kind,omitempty"`
 	HintID   string `json:"hint_id,omitempty"`
+	// Worktree is the checkout the sender runs in (or a link's checkout).
+	// A consumer showing another worktree must not apply a worktree-bound
+	// command (a file navigate, a highlight) to its own checkout. "" = an
+	// older sender, or a local landing: applied as always.
+	Worktree string `json:"worktree,omitempty"`
+	// From is the inbox Drain read this command from — where its reply goes.
+	// Never on the wire: a consumer may drain more than one inbox.
+	From string `json:"-"`
 }
 
 // Reply is the consumer's answer to one command. Detail and Error are English
@@ -175,6 +183,7 @@ func Drain(dir string) []Command {
 		if json.Unmarshal(data, &c) != nil || c.ID == "" || c.ID != filepath.Base(c.ID) {
 			continue
 		}
+		c.From = dir
 		out = append(out, c)
 	}
 	return out

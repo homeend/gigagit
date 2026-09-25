@@ -746,3 +746,22 @@ func TestConsoleKeysLayers(t *testing.T) {
 		t.Fatalf("sessions_key = %q", cfg.Console.SessionsKey)
 	}
 }
+
+func TestConsoleShellOverlay(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	global := filepath.Join(dir, "global.toml")
+	if err := os.WriteFile(global, []byte("[console]\nshell = \"/bin/zsh\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(global, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Console.Shell != "/bin/zsh" {
+		t.Fatalf("shell = %q", cfg.Console.Shell)
+	}
+	if def := Defaults().Console.Shell; def != "" {
+		t.Fatalf("default shell = %q, want empty (auto-detect)", def)
+	}
+}

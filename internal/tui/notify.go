@@ -167,6 +167,9 @@ func (m Model) rebuildNotices() Model {
 			next = append(next, *n)
 		}
 	}
+	if n := steerAskNotice(m.steerAsk, m.repoHealth.GitCommonDir); n != nil {
+		next = append(next, *n)
+	}
 	m.notices = next
 	return m
 }

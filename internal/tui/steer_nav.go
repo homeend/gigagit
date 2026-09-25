@@ -1111,6 +1111,11 @@ func (m Model) startAtReady() bool {
 // startAtPending is cleared, so this fires exactly once.
 func (m Model) consumeStartAt() (Model, tea.Cmd) {
 	m.startAtPending = false
+	if m.startAtCmd != nil {
+		c := *m.startAtCmd
+		m.startAtCmd = nil
+		return m, func() tea.Msg { return startAtMsg{cmd: c} }
+	}
 	c, ok := steerCommandForLink(m.startAt)
 	if !ok {
 		m.statusMsg = i18n.T("that gg link names no place gg can open")

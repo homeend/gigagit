@@ -93,6 +93,13 @@ checkout's own working-tree notes plus EVERY commit note in the store
   `gg session highlight add|clear` — refresh, switch panel, or paint an
   attention band. See the `reviewing-with-gg` skill for when to use them.
 
+Inside a console gg started (an agent or an Open terminal), `$GG_INBOX` names
+THAT gg, and every `gg session` verb talks to it first — even when gg now
+shows another worktree. A navigate to a file or a highlight sent from a
+worktree gg is not showing is NOT applied: exit 1 `gg is showing worktree <a>;
+asked the user to switch to <b>`. gg raised a notice; tell the user and wait —
+do not retry in a loop.
+
 ### gg links
 
 A `gg://` link names one place in one repository — a file, a line on one side

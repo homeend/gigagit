@@ -169,3 +169,21 @@ func TestSessionUTF8TitleDoesNotLeak(t *testing.T) {
 		t.Fatalf("screen = %q", strings.SplitN(got, "\n", 2)[0])
 	}
 }
+
+// Cwd runs the process somewhere else than the worktree it belongs to (a
+// worktree git recorded under the other environment's notation, reached via
+// its translated path); Dir stays the identity every frontend groups by.
+func TestStartCwdOverridesTheProcessDirOnly(t *testing.T) {
+	t.Parallel()
+	needSh(t)
+	cwd := t.TempDir()
+	s, err := start("t-cwd", StartSpec{Label: "sh", Dir: "/w/identity", Cwd: cwd, Argv: []string{"sh", "-c", `printf 'AT[%s]' "$(pwd)"; sleep 2`}, Cols: 80, Rows: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.kill(); <-s.Done() })
+	eventually(t, "pwd", func() bool { return strings.Contains(s.screenText(), "AT["+cwd+"]") })
+	if got := s.Info().Dir; got != "/w/identity" {
+		t.Fatalf("Info.Dir = %q, want the worktree identity", got)
+	}
+}

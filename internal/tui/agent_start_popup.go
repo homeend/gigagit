@@ -48,9 +48,11 @@ type agentEnsureMsg struct {
 
 // agentStartedMsg carries a started (or failed) session.
 type agentStartedMsg struct {
-	id   domain.SessionID
-	name string
-	err  error
+	id    domain.SessionID
+	name  string
+	inbox string // the GG_INBOX the child was given ("" = none)
+	note  string // a status line to show once the console opens (sessionPlace)
+	err   error
 }
 
 // Test seams: the machine's agents and the global config file.
@@ -64,6 +66,10 @@ var (
 
 // startAgentFor opens the Start agent… flow for worktree.
 func (m Model) startAgentFor(worktree string) (Model, tea.Cmd) {
+	if _, _, why := sessionPlace(worktree); why != "" {
+		m.statusMsg = why
+		return m, nil
+	}
 	cmds := domain.SessionCommands(m.cfg, "tui")
 	if len(cmds) == 0 {
 		m = m.pushLayer(&agentStartPopup{stage: stageDetecting, worktree: worktree})
@@ -140,14 +146,15 @@ func (p *agentStartPopup) start(m Model) (tea.Model, tea.Cmd) {
 	m = m.popLayer()
 	g := m.layout()
 	cols, rows := consoleInner(g.rightW, g.boxH[panelCommits])
-	svc, tc, dir := m.svc, p.pick, p.worktree
+	svc, tc, dir, env, inbox := m.svc, p.pick, p.worktree, m.childEnv(), m.childInboxDir()
+	cwd, note, _ := sessionPlace(dir)
 	m.statusMsg = i18n.T("starting %s…", tc.Name)
 	return m, func() tea.Msg {
-		s, err := svc.StartSession(context.Background(), tc, dir, cols, rows)
+		s, err := svc.StartSession(context.Background(), tc, dir, cwd, cols, rows, env)
 		if err != nil {
 			return agentStartedMsg{name: tc.Name, err: err}
 		}
-		return agentStartedMsg{id: s.Info().ID, name: tc.Name}
+		return agentStartedMsg{id: s.Info().ID, name: tc.Name, inbox: inbox, note: note}
 	}
 }
 
@@ -157,7 +164,10 @@ func (m Model) applyAgentStarted(msg agentStartedMsg) (tea.Model, tea.Cmd) {
 		m.statusMsg = i18n.T("could not start %s: %s", msg.name, msg.err.Error())
 		return m, nil
 	}
-	m.statusMsg = ""
+	m.statusMsg = msg.note
+	if msg.inbox != "" {
+		m.childInbox[msg.id] = msg.inbox
+	}
 	return m.openConsole(msg.id)
 }
 
@@ -266,9 +276,14 @@ func (m Model) sessionMenuRows() []actionRow {
 	}
 	if wt, ok := m.selectedWorktree(); ok && wt.Path != "" {
 		path := wt.Path
-		return []actionRow{{id: "start-agent", label: i18n.T("Start agent…"), run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.startAgentFor(path)
-		}}}
+		return []actionRow{
+			{id: "start-agent", label: i18n.T("Start agent…"), run: func(m Model) (tea.Model, tea.Cmd) {
+				return m.startAgentFor(path)
+			}},
+			{id: "open-terminal", label: i18n.T("Open terminal"), run: func(m Model) (tea.Model, tea.Cmd) {
+				return m.openTerminal(path)
+			}},
+		}
 	}
 	return nil
 }

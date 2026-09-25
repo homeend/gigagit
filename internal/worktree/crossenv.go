@@ -30,6 +30,11 @@ const (
 func TranslatePath(goos, path string) (string, bool) {
 	switch goos {
 	case "windows":
+		// A Windows gg has usually filepath.Clean-ed git's /mnt/t/… into
+		// \mnt\t\… already: both spellings name the same WSL path.
+		if strings.HasPrefix(path, `\mnt\`) {
+			path = strings.ReplaceAll(path, `\`, "/")
+		}
 		if len(path) >= 6 && strings.HasPrefix(path, "/mnt/") {
 			d := path[5]
 			if d < 'a' || d > 'z' {

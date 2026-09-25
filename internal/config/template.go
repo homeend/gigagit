@@ -84,6 +84,7 @@ var settingDocs = []settingDoc{
 
 	{"console", "step_out_key", "ctrl+]", "agent console: step out one level (focused → unfocused, maximised → docked); a Bubble Tea key name"},
 	{"console", "sessions_key", "ctrl+\\", "agent console: open the agent-sessions popup from anywhere; a Bubble Tea key name"},
+	{"console", "shell", "", "Open terminal (Worktrees . menu): the shell to run; empty = $SHELL (else sh) on Unix, pwsh → powershell → cmd on Windows"},
 
 	{"branches", "filter", nil, "branch filters as [[branches.filter]] blocks (alt+1…5 in the Branches/Remotes lists): slot (1..5), name, mode (hide | show = show only matching), older_than / younger_than (tip age: 90d 12w 6m 1y), prefix, suffix, contains, regex (Go RE2); set clauses AND together; a repo block REPLACES the global block for the same slot; invalid blocks are inert with a reason; edit from Settings → Branch filters… (TUI) or the web settings view"},
 

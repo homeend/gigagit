@@ -77,6 +77,32 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - The full-screen viewer's title names the version it shows: `(working
   tree)`, `@ <sha>` or `(shelf)`.
 
+## AI tasks — plan 1: worktree terminal + GG_INBOX
+
+### Added
+
+- **Open terminal.** The Worktrees `.` menu now also offers *Open terminal*:
+  an interactive shell in that worktree, in the same console as agent
+  sessions (sub-row, `ctrl+\`, `ctrl+]`). `$SHELL` on Linux/macOS; `pwsh`,
+  then `powershell`, then `cmd` on Windows; `[console] shell` overrides.
+- **Agents reach the gg that started them.** Every session gg starts gets
+  `GG_INBOX`, and `gg session …` inside it talks to that gg first — even after
+  you switch gg to another worktree.
+- **gg asks before following an agent to another worktree.** When an agent
+  asks gg to show a file in a worktree gg is not showing, nothing moves: a
+  notice offers *Switch to <worktree> and show* or *Ignore*, and the agent is
+  told it asked you.
+
+### Fixed
+
+- **Windows: switching to a worktree created under WSL works again.** Since
+  2026-08-25 a Windows gg reported every WSL-created worktree (`\mnt\t\…`)
+  as "not reachable" instead of offering to repair it: the path translator
+  only knew the `/mnt/t/…` spelling.
+- **Windows: Start agent / Open terminal in a WSL-created worktree** start in
+  its translated folder (`T:\…`) instead of failing with "The directory name
+  is invalid"; the status line notes that git there needs the repair.
+
 ## Agent console polish
 
 ### Fixed

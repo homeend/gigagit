@@ -1203,11 +1203,19 @@ included — except two:
 A running or exited session shows as a sub-row under its worktree
 (`└ ● Claude  running 12m` / `└ ○ Codex  exited (0)`); `enter` on it (or its
 `.` menu **Open session**) brings the console back, and the menu also offers
-**Kill session** / **Remove session**. Sessions belong to the gg process, not
+**Kill session** / **Remove session**. The same menu's **Open terminal** starts
+an interactive shell in that worktree in the same console (`$SHELL`, or
+pwsh → powershell → cmd on Windows; `[console] shell` overrides). Sessions belong to the gg process, not
 to a repository: switching worktree or repository (`R`) keeps them running,
 and `ctrl+\` reaches every one. Quitting gg with live sessions opens that
 popup in quit mode — `Q` kills them all and quits, `esc` cancels. A worktree
 with a running agent cannot be deleted until the agent is killed.
+
+Every session gg starts gets `GG_INBOX` (gg's steering inbox), so
+`gg session …` run inside it reaches the gg that started it, whichever
+worktree gg shows by then. When an agent asks gg to show a file in a worktree
+gg is not showing, gg does not move: a notice (`!`) offers **Switch to <b> and
+show** or **Ignore**, and the agent is told it asked you.
 
 The commands come from the `session` external-tool category. The first
 **Start agent…** with none configured detects the installed agents and writes
