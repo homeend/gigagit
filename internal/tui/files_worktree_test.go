@@ -2,8 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -116,5 +118,90 @@ func TestWorktreeFilesRenderFits(t *testing.T) {
 				t.Fatalf("%v: line width %d > %d: %q", sz, w, m.width, l)
 			}
 		}
+	}
+}
+
+// wtDiskWindow opens F's window over real files written to the worktree.
+func wtDiskWindow(t *testing.T, files map[string]string) Model {
+	t.Helper()
+	m := loadedNavModel(t)
+	var paths []string
+	for name, body := range files {
+		writeWT(t, m, name, body)
+		paths = append(paths, name)
+	}
+	m, _ = m.openWorktreeFiles()
+	tm, _ := m.Update(lsFilesMsg{paths: paths})
+	return tm.(Model)
+}
+
+// settle delivers the preview's settle message for the current cursor.
+func settle(t *testing.T, m Model) Model {
+	t.Helper()
+	tm, cmd := m.Update(wtPreviewMsg{gen: m.wtPreviewGen, path: m.wtSelected()})
+	return pumpAll(t, tm.(Model), cmd)
+}
+
+func TestWorktreePreviewFollowsTheSettledCursor(t *testing.T) {
+	t.Parallel()
+	m := wtDiskWindow(t, map[string]string{"a.txt": "AAA\n", "b.txt": "BBB\n", "c.txt": "CCC\n"})
+	tm, cmd := m.Update(keyMsg("down"))
+	m = tm.(Model)
+	if cmd == nil {
+		t.Fatal("a cursor move scheduled no preview")
+	}
+	stale := wtPreviewMsg{gen: m.wtPreviewGen, path: m.wtSelected()}
+	m = fvKeys(t, m, keyMsg("down"))
+	tm, cmd = m.Update(stale)
+	if cmd != nil || tm.(Model).filesPreview != nil && tm.(Model).filesPreview.path == "b.txt" {
+		t.Fatal("a superseded settle loaded its file")
+	}
+	m = settle(t, tm.(Model))
+	d := m.filesPreview
+	if d == nil || d.path != "c.txt" || d.p.lines[0].raw != "CCC" {
+		t.Fatalf("preview = %+v, want c.txt's disk bytes", d)
+	}
+	if !m.filesTreeFocused {
+		t.Fatal("the preview took the focus from the list")
+	}
+}
+
+func TestWorktreePreviewIsNotAnOpenFile(t *testing.T) {
+	t.Parallel()
+	m := settle(t, wtDiskWindow(t, map[string]string{"a.txt": "AAA\n"}))
+	if m.filesPreview == nil {
+		t.Fatal("no preview")
+	}
+	if n := len(m.openFiles.list(m.currentWorktree)); n != 0 {
+		t.Fatalf("the live preview joined the open files (%d)", n)
+	}
+}
+
+func TestWorktreePreviewIsWatched(t *testing.T) {
+	t.Parallel()
+	m := settle(t, wtDiskWindow(t, map[string]string{"a.txt": "AAA\n"}))
+	if !slices.Contains(m.watchedDocs(), m.filesPreview) {
+		t.Fatal("the live preview is not watched")
+	}
+	writeWT(t, m, "a.txt", "CHANGED\n")
+	m = tick(t, m, time.Now())
+	if m.filesPreview.p.lines[0].raw != "CHANGED" {
+		t.Fatalf("the preview did not reload: %+v", m.filesPreview.p.lines[0])
+	}
+}
+
+func TestWorktreeRightFocusesPreview(t *testing.T) {
+	t.Parallel()
+	m := settle(t, wtDiskWindow(t, map[string]string{"a.txt": "AAA\n"}))
+	m = fvKeys(t, m, keyMsg("right"), keyMsg("/"), keyMsg("x"))
+	if m.filesTreeFocused || !m.filesPreview.p.search.typing {
+		t.Fatal("right + / did not start the preview's own search")
+	}
+	if m.wtFiles.query != "" || m.wtFiles.typing {
+		t.Fatal("the preview's search typed into the file filter")
+	}
+	m = fvKeys(t, m, keyMsg("esc"), keyMsg("esc"), keyMsg("left"))
+	if !m.filesTreeFocused {
+		t.Fatal("left did not hand the keys back to the list")
 	}
 }

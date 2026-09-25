@@ -2,6 +2,7 @@ package tui
 
 import (
 	"slices"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -70,19 +71,19 @@ func (m Model) openWorktreeFiles() (Model, tea.Cmd) {
 }
 
 // wtLoaded fills the window from ls-files and the status's untracked files.
-func (m Model) wtLoaded(msg lsFilesMsg) Model {
+func (m Model) wtLoaded(msg lsFilesMsg) (Model, tea.Cmd) {
 	w := m.wtFiles
 	if msg.err != nil {
 		m.statusMsg = i18n.T("file finder: %s", msg.err.Error())
 		ret, parked := m.filesReturnFocus, m.filesReturnLayers
 		m = m.closeFilesView()
 		m.focus = ret
-		return m.restoreParkedLayers(parked)
+		return m.restoreParkedLayers(parked), nil
 	}
 	w.all, w.untracked = worktreeFileList(msg.paths, m.status)
 	w.loading = false
 	m.wtSetQuery(w.query)
-	return m
+	return m.wtCursorMoved()
 }
 
 // wtSetQuery is the one chokepoint for the filter: it sets the query and
@@ -148,10 +149,10 @@ func (m Model) wtSearchLine() string {
 	return ""
 }
 
-// wtMove moves the cursor by delta.
+// wtMove moves the cursor by delta; the preview follows once it settles.
 func (m Model) wtMove(delta int) (Model, tea.Cmd) {
 	m.filesView.move(delta)
-	return m, nil
+	return m.wtCursorMoved()
 }
 
 // updateWorktreeFilesKey routes a key in F's window. The preview's own
@@ -163,16 +164,20 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if nm, nq, handled, commit := m.recallUpdate(scopeFiletree, msg, w.query); handled {
 			m = nm
 			m.wtSetQuery(nq)
+			var cmd tea.Cmd
+			m, cmd = m.wtCursorMoved()
 			if commit {
 				w.typing = false
-				return m.recordSearch(scopeFiletree, w.query)
+				var rec tea.Cmd
+				m, rec = m.recordSearch(scopeFiletree, w.query)
+				return m, tea.Batch(cmd, rec)
 			}
-			return m, nil
+			return m, cmd
 		} else {
 			m = nm
 		}
 		if filterMotion(msg, p.move, m.filesPageRows()) {
-			return m, nil
+			return m.wtCursorMoved()
 		}
 		switch msg.Type {
 		case tea.KeyEsc:
@@ -189,8 +194,10 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.wtSetQuery(w.query + " ")
 		case tea.KeyRunes:
 			m.wtSetQuery(w.query + string(msg.Runes))
+		default:
+			return m, nil
 		}
-		return m, nil
+		return m.wtCursorMoved()
 	}
 	if !m.filesTreeFocused { // the preview holds the keys: scroll it, or come back
 		return m.updateWorktreePreviewKey(msg)
@@ -202,7 +209,7 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		if w.query != "" {
 			m.wtSetQuery("")
-			return m, nil
+			return m.wtCursorMoved()
 		}
 		ret, parked := m.filesReturnFocus, m.filesReturnLayers
 		m = m.closeFilesView()
@@ -282,4 +289,45 @@ func (m Model) updateWorktreePreviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		p.hscroll = 0
 	}
 	return m, nil
+}
+
+// wtPreviewSettle is how long the cursor must rest before the live preview
+// reads the file: a held arrow over a slow mount reads only where it stops.
+const wtPreviewSettle = 150 * time.Millisecond
+
+// wtPreviewMsg is the settle tick for the row at path; gen drops every tick
+// a later cursor move superseded.
+type wtPreviewMsg struct {
+	gen  int
+	path string
+}
+
+// wtCursorMoved schedules the live preview for the row now under the
+// cursor (none on a placeholder or an empty match).
+func (m Model) wtCursorMoved() (Model, tea.Cmd) {
+	m.wtPreviewGen++
+	path := m.wtSelected()
+	if path == "" {
+		m.filesPreview = nil
+		m.filesTreeFocused = true
+		return m, nil
+	}
+	gen := m.wtPreviewGen
+	return m, tea.Tick(wtPreviewSettle, func(time.Time) tea.Msg { return wtPreviewMsg{gen: gen, path: path} })
+}
+
+// wtPreviewSettled shows the settled row's working-tree file in the right
+// column. The document is NOT an open file: scrolling past files must not
+// fill the ctrl+\ list (View file content opens one). The list keeps the
+// keys; → moves them to the preview.
+func (m Model) wtPreviewSettled(msg wtPreviewMsg) (Model, tea.Cmd) {
+	if !m.inWorktreeFiles() || msg.gen != m.wtPreviewGen || m.wtSelected() != msg.path {
+		return m, nil
+	}
+	if d := m.filesPreview; d != nil && d.path == msg.path {
+		return m, nil
+	}
+	d := newOpenFile(fileSource{kind: srcWorktree}, msg.path)
+	m.filesPreview = d
+	return m, m.loadDoc(d)
 }
