@@ -531,7 +531,7 @@ type taskTrack struct {
 
 func newTaskTrack() *taskTrack {
 	return &taskTrack{seen: map[domain.TaskID]int{}, ended: map[domain.TaskID]bool{},
-		inbox: map[domain.TaskID]string{}, fg: map[domain.TaskID]bool{}}
+		inbox: map[domain.TaskID]string{}, fg: map[domain.TaskID]bool{}, removed: map[domain.TaskID]bool{}}
 }
 
 // tasksChangedMsg: something in Tasks() changed. waitTasksCmd is the ONE
@@ -641,10 +641,8 @@ func taskKindLabel(k exttool.Category) string {
 	return string(k)
 }
 
-var _ = config.MaxParallelCap // keeps the import honest if unused after edits
 ```
 
-(Drop the last line if `config` is otherwise unused. It is only there so the file compiles if the executor trims code.)
 
 Wiring:
 - `New`: `taskTrack: newTaskTrack(),`.
