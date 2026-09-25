@@ -3,6 +3,8 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -22,8 +24,53 @@ func (m Model) steerFiles(c steer.Command) (Model, tea.Cmd) {
 	return m, m.answerSteer(c, r)
 }
 
+// steerNavigateBackground loads a content link into the open-files list
+// without showing it (gg open --background): no frame, no panel move, no
+// parked navigate — so a navigate still loading never refuses it. The reply
+// rides the load: only the lines say where the cursor landed. A file already
+// on screen is left exactly as the user has it.
 func (m Model) steerNavigateBackground(c steer.Command) (Model, tea.Cmd) {
-	return m, m.answerSteer(c, steerFail(c, "not implemented"))
+	// Another worktree is refused, not asked about: the switch notice would
+	// be the very screen change a background open promises not to make.
+	if c.Worktree != "" && !domain.SameCheckout(c.Worktree, m.snapshotWorktree) {
+		return m, m.answerSteer(c, steerFail(c, "gg is showing worktree "+m.snapshotWorktree+", not "+c.Worktree))
+	}
+	ctx, cancel := updateThreadCtx(updateThreadGitTimeout)
+	defer cancel()
+	present, err := m.svc.WorktreeFilesPresent(ctx, []string{c.File})
+	if err := busyOr(err); err != nil {
+		return m, m.answerSteer(c, steerFail(c, "checking "+c.File+": "+err.Error()))
+	}
+	if !present[c.File] {
+		return m, m.answerSteer(c, steerFail(c, c.File+" is not in the working tree"))
+	}
+	src := fileSource{kind: srcWorktree}
+	d := m.openFiles.find(m.currentWorktree, docKey(src, c.File))
+	onScreen := d != nil && m.docShown(d) ||
+		d == nil && m.filesPreview != nil && m.filesPreview.src == src && m.filesPreview.path == c.File
+	if onScreen {
+		return m, m.answerSteer(c, steerOK(c, c.File+" is already open on screen"))
+	}
+	line := 0
+	if c.Line != nil {
+		line = c.Line.No
+	}
+	if d == nil {
+		d = newOpenFile(src, c.File)
+	} else if line == 0 {
+		d.keepPlace()
+	}
+	d.pendingLine = line
+	m.statusMsg = ""
+	m, ev := m.registerDocEv(d)
+	if m.statusMsg == "" {
+		m.statusMsg = i18n.T("%s is in the background — ctrl+\\ lists open files", d.path)
+	}
+	load := m.loadDoc(d)
+	lead, evicted := "opened "+c.File+" in the background", evictedPath(ev)
+	return m, func() tea.Msg {
+		return contentLandedMsg{load: load().(fileContentMsg), cmd: c, line: line, lead: lead, evicted: evicted}
+	}
 }
 
 func (m Model) steerFileFocus(c steer.Command) (Model, tea.Cmd) {

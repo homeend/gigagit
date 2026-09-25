@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -44,6 +45,103 @@ func TestSteerOpenFilesMalformedCommandsAreRefused(t *testing.T) {
 	} {
 		if got := steerEnumRefusal(tc.c); got != tc.want {
 			t.Errorf("steerEnumRefusal(%+v) = %q, want %q", tc.c, got, tc.want)
+		}
+	}
+}
+
+func bgNav(id, file string, line int) steer.Command {
+	c := steer.Command{ID: id, Cmd: "navigate", File: file, Background: true,
+		Target: &steer.Target{State: "unstaged"}, HintKind: model.ContentHintKind, HintID: model.ContentHintID, Wait: true}
+	if line > 0 {
+		c.Line = &steer.Line{Side: "new", No: line}
+	}
+	return c
+}
+
+func TestBackgroundNavigateLoadsWithoutAFrame(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	m.filterTyping = true // not refused: nothing on screen moves
+	nm, cmd := m.applySteer(bgNav("b-1", "a.txt", 30))
+	nm = pumpAll(t, nm, cmd)
+	if layerOf[*fileViewer](nm) != nil || nm.filesPreview != nil {
+		t.Fatal("a background open put the file on screen")
+	}
+	d := nm.openFiles.find(nm.currentWorktree, docKey(fileSource{kind: srcWorktree}, "a.txt"))
+	if d == nil || !docLoaded(d) || d.p.cur != 29 {
+		t.Fatalf("doc = %+v, want a.txt loaded with the cursor on line 30", d)
+	}
+	r, ok := steer.AwaitReply(nm.steerDir, "b-1", time.Second)
+	if !ok || !r.OK || r.Detail != "opened a.txt in the background at line 30" {
+		t.Fatalf("reply = %+v ok=%v", r, ok)
+	}
+}
+
+func TestBackgroundNavigateClampsAndNamesTheEviction(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	fill20(m)
+	nm, cmd := m.applySteer(bgNav("b-2", "a.txt", 99))
+	nm = pumpAll(t, nm, cmd)
+	r, ok := steer.AwaitReply(nm.steerDir, "b-2", time.Second)
+	want := "opened a.txt in the background at line 40 (line 99 is past the end, 40 lines); closed f0.txt (20 files open)"
+	if !ok || !r.OK || r.Detail != want {
+		t.Fatalf("reply = %+v ok=%v, want %q", r, ok, want)
+	}
+}
+
+func TestBackgroundNavigateIsNotBlockedByAParkedNavigate(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	m.pendingSteer = &pendingSteer{cmd: steer.Command{ID: "other"}, stage: steerStageDiff, at: time.Now()}
+	nm, cmd := m.applySteer(bgNav("b-3", "a.txt", 0))
+	nm = pumpAll(t, nm, cmd)
+	r, ok := steer.AwaitReply(nm.steerDir, "b-3", time.Second)
+	if !ok || !r.OK || r.Detail != "opened a.txt in the background" {
+		t.Fatalf("reply = %+v ok=%v", r, ok)
+	}
+}
+
+func TestBackgroundNavigateOfAShownFileMovesNothing(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	d := bgDoc(m, fileSource{kind: srcWorktree}, "a.txt", 40)
+	d.p.cur = 2
+	m = m.pushLayer(&fileViewer{d})
+	nm, cmd := m.applySteer(bgNav("b-4", "a.txt", 30))
+	nm = pumpAll(t, nm, cmd)
+	if d.p.cur != 2 {
+		t.Errorf("cursor moved to %d on a file the user is reading", d.p.cur+1)
+	}
+	r, ok := steer.AwaitReply(nm.steerDir, "b-4", time.Second)
+	if !ok || !r.OK || r.Detail != "a.txt is already open on screen" {
+		t.Fatalf("reply = %+v ok=%v", r, ok)
+	}
+}
+
+func TestBackgroundNavigateRefusals(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	if m.snapshotWorktree == "" {
+		m.snapshotWorktree = m.currentWorktree
+	}
+	other := bgNav("r-2", "a.txt", 0)
+	other.Worktree = "/elsewhere"
+	for _, tc := range []struct {
+		c    steer.Command
+		want string
+	}{
+		{bgNav("r-1", "gone.txt", 0), "gone.txt is not in the working tree"},
+		{other, "gg is showing worktree " + m.snapshotWorktree + ", not /elsewhere"},
+	} {
+		nm, cmd := m.applySteer(tc.c)
+		runSteerCmd(t, cmd)
+		r, ok := steer.AwaitReply(nm.steerDir, tc.c.ID, time.Second)
+		if !ok || r.OK || r.Error != tc.want {
+			t.Errorf("%s: reply = %+v ok=%v, want %q", tc.c.ID, r, ok, tc.want)
+		}
+		if nm.steerAsk != nil {
+			t.Errorf("%s: a background open asked the user to switch", tc.c.ID)
 		}
 	}
 }
