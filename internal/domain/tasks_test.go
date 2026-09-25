@@ -249,3 +249,67 @@ func TestTasksChangedSignals(t *testing.T) {
 		t.Fatalf("List = %+v", l)
 	}
 }
+
+func TestTasksLiveAndLoad(t *testing.T) {
+	t.Parallel()
+	m, svc := newTestTasks(t)
+	m.SetMaxParallel(1)
+	started := make(chan string, 4)
+	rel := make(chan struct{})
+	defer close(rel)
+	m.Submit(headlessSpec(svc, "k", blockOp{started: started, release: rel, key: "1"}))
+	m.Submit(headlessSpec(svc, "k", blockOp{started: started, release: rel, key: "2"}))
+	recv(t, started)
+	if m.Live() != 2 {
+		t.Fatalf("Live = %d, want 2", m.Live())
+	}
+	if l := m.Load("k"); l.SameKey != 2 || l.Running != 1 || l.Max != 1 {
+		t.Fatalf("Load(k) = %+v", l)
+	}
+	if l := m.Load("other"); l.SameKey != 0 || l.Running != 1 {
+		t.Fatalf("Load(other) = %+v", l)
+	}
+}
+
+func TestTasksHistoryFallsBackToMemory(t *testing.T) {
+	t.Parallel()
+	file := filepath.Join(t.TempDir(), "plain")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, svc := newRealRepo(t)
+	m := NewTaskManager(taskhist.NewFileStore(filepath.Join(file, "sub"))) // unwritable
+	started := make(chan string, 2)
+	rel := make(chan struct{})
+	close(rel)
+	id := m.Submit(headlessSpec(svc, "k", blockOp{started: started, release: rel, key: "x", out: "r"}))
+	waitInfo(t, m, id, "done", stateIs(TaskDone))
+	deadline := time.Now().Add(5 * time.Second)
+	for len(m.History()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if h := m.History(); len(h) != 1 || h[0].ID != string(id) {
+		t.Fatalf("history = %+v", h)
+	}
+	if r, _ := m.HistoryResult(string(id)); r != "r" {
+		t.Fatalf("result = %q", r)
+	}
+	if m.TakeStoreProblem() == nil {
+		t.Fatal("the failed store must be reported once")
+	}
+	if m.TakeStoreProblem() != nil {
+		t.Fatal("…and only once")
+	}
+}
+
+func TestTasksGlobalManager(t *testing.T) {
+	m := NewTaskManager(taskhist.NewMemStore())
+	restore := UseTaskManager(m)
+	if Tasks() != m {
+		t.Fatal("UseTaskManager did not install m")
+	}
+	restore()
+	if Tasks() == m {
+		t.Fatal("restore did not put the previous manager back")
+	}
+}

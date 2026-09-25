@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## AI tasks: the task core
+
+### Added
+
+- **AI task scheduler (no UI yet).** Commit-message, review and conflict
+  agents can run as tasks: headless (queued; `[tasks] max_parallel`,
+  default 3, clamped to 1..10, counting every mode) or interactive (an agent
+  session whose every `$GG_MESSAGE_FILE` write is the task's latest result).
+  Tasks with the same key run one after another.
+- **Task history:** the last 50 AI tasks across all repositories, with their
+  results and output tails, under gg's state directory.
+- **`mode = "interactive"`** for `commit_message`, `review`, `conflict` and
+  `conflict_complete` tool commands, with catalogue rows for Claude, Codex,
+  Junie and Antigravity (Kimi has no interactive-with-prompt mode). The
+  headless commit-message chooser, review lane and `gg review` ignore
+  interactive rows.
+
 ## gg web: a navigate that misses says so
 
 - `gg session navigate` (and a `gg://` link) naming a file the commit, the

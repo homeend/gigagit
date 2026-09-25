@@ -62,9 +62,9 @@ type TaskInfo struct {
 }
 
 type task struct {
-	info      TaskInfo
-	spec      TaskSpec
-	cancel    context.CancelFunc
+	info   TaskInfo
+	spec   TaskSpec
+	cancel context.CancelFunc
 }
 
 type taskEnd struct {
@@ -551,4 +551,86 @@ func (m *TaskManager) runInteractive(ctx context.Context, t *task) taskEnd {
 			return taskEnd{state: TaskFailed, exit: info.ExitCode, err: "the agent ended without a result"}
 		}
 	}
+}
+
+var (
+	tasksMu  sync.Mutex
+	tasksMgr *TaskManager
+)
+
+// Tasks is the process-global AI-task manager. Like Sessions() it lives
+// outside every Service: the TUI reopens its Service on each worktree/repo
+// switch while tasks keep running.
+func Tasks() *TaskManager {
+	tasksMu.Lock()
+	defer tasksMu.Unlock()
+	if tasksMgr == nil {
+		var hist taskhist.Store
+		if root := stateBaseDir("tasks"); root != "" {
+			hist = taskhist.NewFileStore(root)
+		}
+		tasksMgr = NewTaskManager(hist)
+	}
+	return tasksMgr
+}
+
+// UseTaskManager installs m as the global manager (tests) and returns a
+// func restoring the previous one.
+func UseTaskManager(m *TaskManager) func() {
+	tasksMu.Lock()
+	prev := tasksMgr
+	tasksMgr = m
+	tasksMu.Unlock()
+	return func() {
+		tasksMu.Lock()
+		tasksMgr = prev
+		tasksMu.Unlock()
+	}
+}
+
+// Live counts queued and running tasks (the quit guard's count).
+func (m *TaskManager) Live() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, t := range m.tasks {
+		if t.info.State.Live() {
+			n++
+		}
+	}
+	return n
+}
+
+// TaskLoad is what a new task with a key would wait for: SameKey live
+// tasks with that key ahead of it, Running tasks holding slots, of Max.
+type TaskLoad struct {
+	SameKey int
+	Running int
+	Max     int
+}
+
+// Load backs the launch dialog's wait line.
+func (m *TaskManager) Load(key string) TaskLoad {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	l := TaskLoad{Max: m.max}
+	for _, t := range m.tasks {
+		if t.info.State.running() {
+			l.Running++
+		}
+		if t.info.State.Live() && t.spec.Key == key {
+			l.SameKey++
+		}
+	}
+	return l
+}
+
+// TakeStoreProblem returns the history store's failure once (the frontend
+// shows one notice), nil afterwards or when there was none.
+func (m *TaskManager) TakeStoreProblem() error {
+	m.histMu.Lock()
+	defer m.histMu.Unlock()
+	err := m.problem
+	m.problem = nil
+	return err
 }
