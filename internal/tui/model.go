@@ -120,6 +120,8 @@ type Model struct {
 
 	stashView     *stashView                               // stash list in the right column (over Commits); nil = closed
 	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
+	wtFiles       *worktreeFiles                           // F's working-tree mode of the files view (nil otherwise)
+	filesFull     bool                                     // ctrl+t: the files view spans the whole body
 	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
 	quitConfirmed bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
@@ -1377,6 +1379,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case lsFilesMsg:
+		if m.inWorktreeFiles() && m.wtFiles.loading {
+			return m.wtLoaded(msg), nil
+		}
 		p := layerOf[*fileFinderPopup](m)
 		if p == nil {
 			return m, nil // user closed before load returned
@@ -2333,8 +2338,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openNoticeCenter()
 		case "E": // show the last failure in full (global; see openErrorPopup)
 			return m.openErrorPopup()
-		case "F": // open the fuzzy file finder (global; see openFileFinder)
-			return m.openFileFinder()
+		case "F": // the working-tree files window (global; see openWorktreeFiles)
+			return m.openWorktreeFiles()
 		case "ctrl+w": // cycle the focused panel's text display mode
 			m.dispModes[m.focus] = m.dispModes[m.focus].next()
 			m.hscroll[m.focus] = 0
