@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"os"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/repogate"
@@ -37,52 +36,86 @@ type CompleteConflict struct {
 	ConflictedFiles []string // repo-relative conflicted paths
 }
 
-var _ Operation = CompleteConflict{}
+// ConflictAgent runs a whole-operation conflict agent under the
+// CatConflict contract — resolve and stage, never --continue (gg's
+// ContinueOp owns the sequencer). Inputs and LockMode as CompleteConflict;
+// GG_TASK=conflict. Its result (a summary the agent may write to
+// $GG_MESSAGE_FILE) is informational: the outcome is the repository state.
+type ConflictAgent struct {
+	Command         string   // command TEMPLATE text (config); resolved by Prepare
+	Dir             string   // worktree root the agent runs in
+	Env             []string // caller env additions
+	Op              string   // paused op: merge|rebase|cherry-pick|revert
+	Source          string
+	Target          string
+	ConflictedFiles []string
+}
+
+var (
+	_ CaptureTask = CompleteConflict{}
+	_ CaptureTask = ConflictAgent{}
+)
 
 func (op CompleteConflict) LockMode() repogate.Mode { return repogate.Read }
+func (op ConflictAgent) LockMode() repogate.Mode    { return repogate.Read }
+
+func (op CompleteConflict) Prepare(_ context.Context, _ OpDeps) (TaskInputs, error) {
+	return prepareConflictAgent(op.Command, op.Dir, op.Env, op.Op, op.Source, op.Target, op.ConflictedFiles, "conflict_complete")
+}
+
+func (op ConflictAgent) Prepare(_ context.Context, _ OpDeps) (TaskInputs, error) {
+	return prepareConflictAgent(op.Command, op.Dir, op.Env, op.Op, op.Source, op.Target, op.ConflictedFiles, "conflict")
+}
+
+func (op CompleteConflict) Collect(in TaskInputs, stdout []byte) (Result, error) {
+	return Result{Captured: collectCaptured(in.MessageFile, stdout)}.WithSummary("conflict agent finished (%s)", op.Op), nil
+}
+
+func (op ConflictAgent) Collect(in TaskInputs, stdout []byte) (Result, error) {
+	return Result{Captured: collectCaptured(in.MessageFile, stdout)}.WithSummary("conflict agent finished (%s)", op.Op), nil
+}
 
 func (op CompleteConflict) Run(ctx context.Context, deps OpDeps) (Result, error) {
-	ctxPath, err := writeTempFile("gg-context-*.txt",
-		template.ConflictContextDoc(op.Op, op.Source, op.Target, op.ConflictedFiles))
-	if err != nil {
-		return Result{}, err
-	}
-	defer os.Remove(ctxPath)
-	msgPath, err := writeTempFile("gg-overview-*.md", "")
-	if err != nil {
-		return Result{}, err
-	}
-	defer os.Remove(msgPath)
+	return runCaptureTask(ctx, deps, op)
+}
 
-	resolved, err := template.ResolveCommand(op.Command, nil, template.CmdCtx{
-		Op: op.Op, Source: op.Source, Target: op.Target,
-		ConflictedFiles: op.ConflictedFiles, Repo: op.Dir, ContextFile: ctxPath,
+func (op ConflictAgent) Run(ctx context.Context, deps OpDeps) (Result, error) {
+	return runCaptureTask(ctx, deps, op)
+}
+
+// prepareConflictAgent writes the context doc (op/source/target + the
+// C-quoted conflicted paths — the bytes the TUI's tool runs write) and an
+// empty $GG_MESSAGE_FILE, then resolves the command template against them:
+// a custom <context-file> token needs the real temp path, which exists only
+// here.
+func prepareConflictAgent(command, dir string, extra []string, opName, source, target string, files []string, task string) (TaskInputs, error) {
+	tmp := &tempSet{}
+	fail := func(err error) (TaskInputs, error) { tmp.cleanup(); return TaskInputs{}, err }
+	ctxPath, err := tmp.write("gg-context-*.txt", template.ConflictContextDoc(opName, source, target, files))
+	if err != nil {
+		return fail(err)
+	}
+	msgPath, err := tmp.write("gg-overview-*.md", "")
+	if err != nil {
+		return fail(err)
+	}
+	resolved, err := template.ResolveCommand(command, nil, template.CmdCtx{
+		Op: opName, Source: source, Target: target,
+		ConflictedFiles: files, Repo: dir, ContextFile: ctxPath,
 	})
 	if err != nil {
-		return Result{}, err
+		return fail(err)
 	}
-
-	env := append(append([]string{}, os.Environ()...), op.Env...)
-	env = append(env,
-		"GG_OP="+op.Op,
-		"GG_SOURCE="+op.Source,
-		"GG_TARGET="+op.Target,
-		"GG_CONFLICTED_FILES="+strings.Join(op.ConflictedFiles, " "),
-		"GG_REPO="+op.Dir,
+	env := append(append([]string{}, extra...),
+		"GG_OP="+opName,
+		"GG_SOURCE="+source,
+		"GG_TARGET="+target,
+		"GG_CONFLICTED_FILES="+strings.Join(files, " "),
+		"GG_REPO="+dir,
 		"GG_FILE=", "GG_LOCAL=", "GG_BASE=", "GG_REMOTE=", "GG_MERGED=",
 		"GG_CONTEXT_FILE="+ctxPath,
 		"GG_MESSAGE_FILE="+msgPath,
-		"GG_TASK=conflict_complete",
+		"GG_TASK="+task,
 	)
-	stdout, runErr := deps.captureRunner().Capture(ctx,
-		CaptureSpec{Dir: op.Dir, Env: env, Command: resolved},
-		func(line string) { deps.emit(ctx, GitLine{Raw: line}) })
-	captured := string(stdout)
-	if fileMsg, rerr := os.ReadFile(msgPath); rerr == nil && strings.TrimSpace(string(fileMsg)) != "" {
-		captured = string(fileMsg)
-	}
-	if runErr != nil {
-		return Result{Captured: captured}, runErr
-	}
-	return Result{Captured: captured}.WithSummary("conflict agent finished (%s)", op.Op), nil
+	return TaskInputs{Command: resolved, Dir: dir, Env: env, MessageFile: msgPath, Cleanup: tmp.cleanup}, nil
 }
