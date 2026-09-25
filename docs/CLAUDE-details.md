@@ -1186,6 +1186,20 @@ for a doc in no frame routes via `openFiles.findTag` (every worktree — the
 (`internal/filewatch`, dir watches + exact-path filter) is only a WAKE-UP —
 an event zeroes `d.checked` and polls; built lazily off-thread only when
 `watchSupported`, closed with the last watched doc and on `reRoot`.
+**F = the working-tree files window (2026-09-25):** a files-view mode,
+`filesModeWorktree`, not a slot: it rides the left-column render, the
+right-column `m.filesPreview`, `closeFilesView` and the esc/`handOffToFilesView`
+return. Its state is `m.wtFiles` (all paths, the untracked set, the query,
+typing); the fuzzy query stays OUT of `filesView.query` (whose substring
+`visible()` would drop fuzzy matches) — `wtSetQuery` rebuilds flat rows
+(no headings) from `fuzzy.Rank`, cap 200. `updateWorktreeFilesKey` is taken
+right after the preview's select/search hooks, so the commit-list side's key
+logic never sees this mode. The list = `LsFiles` minus the status's `'D'`
+entries plus its `KindUntracked` ones (`worktreeFileList`). The live preview
+is an UNREGISTERED `srcWorktree` doc (scrolling must not fill or evict the
+open-files list); it loads on `wtPreviewMsg` after a 150 ms settle (gen +
+selected-path gate); `watchedDocs`/`watchedDoc` include it. `ctrl+t` sets
+`m.filesFull` → `layout()` gives the files view the whole body.
 **Preview + reply (follow-up):**
 the files view's focused preview answers `fileRowPath` with its cursor line
 (`focusedFilesPreview`); because it shows ANOTHER version, the row snapshots
