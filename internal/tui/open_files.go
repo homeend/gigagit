@@ -133,13 +133,29 @@ func (m Model) detachDoc(d *openFile) Model {
 // registerDoc puts d first in the current worktree's open files — call it
 // once d is in its frame. A file dropped over the cap is named in the status.
 func (m Model) registerDoc(d *openFile) Model {
+	m, _ = m.registerDocEv(d)
+	return m
+}
+
+// registerDocEv is registerDoc that also returns the file dropped over the
+// cap (nil when none), so a steer reply can name it.
+func (m Model) registerDocEv(d *openFile) (Model, *openFile) {
 	if m.openFiles == nil {
-		return m
+		return m, nil
 	}
-	if ev := m.openFiles.touch(m.currentWorktree, d, m.docShown); ev != nil {
+	ev := m.openFiles.touch(m.currentWorktree, d, m.docShown)
+	if ev != nil {
 		m.statusMsg = i18n.T("closed %s (%d files open)", ev.path, maxOpenFiles)
 	}
-	return m
+	return m, ev
+}
+
+// evictedPath is ev's path, or "" when nothing was dropped.
+func evictedPath(ev *openFile) string {
+	if ev == nil {
+		return ""
+	}
+	return ev.path
 }
 
 // docLoaded reports whether d holds its file's lines (not a placeholder).

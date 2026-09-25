@@ -21,6 +21,13 @@ type fileViewer struct {
 // thread. The bytes are the file ON DISK, uncommitted edits included. line
 // (1-based, 0 = none) is where the cursor lands once the load arrives.
 func (m Model) openFileViewer(path string, line int) (Model, tea.Cmd) {
+	m, cmd, _ := m.openFileViewerEv(path, line)
+	return m, cmd
+}
+
+// openFileViewerEv is openFileViewer that also returns the file dropped over
+// the open-files cap (nil when none).
+func (m Model) openFileViewerEv(path string, line int) (Model, tea.Cmd, *openFile) {
 	src := fileSource{kind: srcWorktree}
 	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
 	if d == nil {
@@ -36,8 +43,8 @@ func (m Model) openFileViewer(path string, line int) (Model, tea.Cmd) {
 	d.pendingLine = line
 	fv := &fileViewer{d}
 	m = m.pushLayer(fv)
-	m = m.registerDoc(d)
-	return m, m.loadDoc(d)
+	m, ev := m.registerDocEv(d)
+	return m, m.loadDoc(d), ev
 }
 
 // geom is the viewer's content size: the whole screen as one bordered box

@@ -2,8 +2,11 @@ package tui
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
 )
 
@@ -74,5 +77,46 @@ func TestSnapshotPublishesOpenFiles(t *testing.T) {
 	}
 	if s.Version != 1 || len(s.OpenFiles) != 1 || s.OpenFiles[0].Path != "a.txt" || s.OpenFiles[0].State != "background" {
 		t.Fatalf("snapshot = %s", data)
+	}
+}
+
+func TestLandedDetailNamesTheLineClampAndEviction(t *testing.T) {
+	t.Parallel()
+	lines := []contentLine{{text: "a", src: true}, {text: "b", src: true}}
+	for _, tc := range []struct {
+		lead    string
+		line    int
+		evicted string
+		want    string
+	}{
+		{"opened a.txt", 0, "", "opened a.txt"},
+		{"opened a.txt in the background", 2, "", "opened a.txt in the background at line 2"},
+		{"focused a.txt", 9, "", "focused a.txt at line 2 (line 9 is past the end, 2 lines)"},
+		{"opened a.txt", 1, "old.go", "opened a.txt at line 1; closed old.go (20 files open)"},
+	} {
+		if got := landedDetail(tc.lead, tc.line, lines, tc.evicted); got != tc.want {
+			t.Errorf("landedDetail(%q,%d,%q) = %q, want %q", tc.lead, tc.line, tc.evicted, got, tc.want)
+		}
+	}
+}
+
+// fill20 registers 20 background documents f0.txt … f19.txt (f0 oldest).
+func fill20(m Model) {
+	for i := 0; i < maxOpenFiles; i++ {
+		bgDoc(m, fileSource{kind: srcWorktree}, fmt.Sprintf("f%d.txt", i), 1)
+	}
+}
+
+func TestForegroundContentNavigateNamesTheEvictedFile(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	fill20(m)
+	c := steer.Command{ID: "c-ev", Cmd: "navigate", File: "a.txt",
+		Target: &steer.Target{State: "unstaged"}, HintKind: model.ContentHintKind, HintID: model.ContentHintID, Wait: true}
+	nm, cmd := m.applySteer(c)
+	nm = pumpAll(t, nm, cmd)
+	r, ok := steer.AwaitReply(nm.steerDir, "c-ev", time.Second)
+	if !ok || !r.OK || r.Detail != "opened a.txt; closed f0.txt (20 files open)" {
+		t.Fatalf("reply = %+v ok=%v", r, ok)
 	}
 }
