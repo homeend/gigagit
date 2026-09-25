@@ -81,3 +81,40 @@ branch = "main"
 
 [expect.status]
 unstaged = ["a.txt"]
+
+# Open files (open-files plan 4): with no live TUI every open-files verb says
+# so — and a background open never launches one.
+[[run]]
+cmd             = ["session", "files"]
+exit            = 1
+stderr_contains = ["no gg TUI session for this worktree"]
+
+[[run]]
+cmd             = ["session", "files", "--json"]
+exit            = 1
+stderr_contains = ["no gg TUI session for this worktree"]
+
+[[run]]
+cmd             = ["session", "files", "focus", "f1", "--no-wait"]
+exit            = 1
+stderr_contains = ["no gg TUI session for this worktree"]
+
+[[run]]
+cmd             = ["open", "--background", "gg://{{cwd}}/a.txt?view=content"]
+exit            = 1
+stderr_contains = ["no gg TUI session for this worktree"]
+
+# Usage errors come first (exit 2).
+[[run]]
+cmd  = ["session", "files", "focus"]
+exit = 2
+
+[[run]]
+cmd             = ["session", "navigate", "--background", "--file", "a.txt", "--new-line", "1"]
+exit            = 2
+stderr_contains = ["--background needs a content link"]
+
+[[run]]
+cmd             = ["open", "--background", "gg://{{cwd}}/a.txt"]
+exit            = 2
+stderr_contains = ["--background needs a content link"]

@@ -231,3 +231,13 @@ stdout_excludes = ["origin/foo"]
 		t.Fatalf("StdoutExcludes not parsed: %+v", sc.Runs)
 	}
 }
+
+func TestRunMissingStderr(t *testing.T) {
+	r := Run{StderrContains: []string{"no gg TUI session"}}
+	if miss := r.MissingStderr("no gg TUI session for this worktree\n"); len(miss) != 0 {
+		t.Fatalf("present, got missing %v", miss)
+	}
+	if miss := r.MissingStderr(""); len(miss) != 1 {
+		t.Fatalf("missing = %v, want the one substring", miss)
+	}
+}

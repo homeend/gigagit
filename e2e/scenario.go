@@ -115,6 +115,18 @@ type Run struct {
 	Exit           *int     `toml:"exit"`
 	StdoutContains []string `toml:"stdout_contains"` // substrings the run's stdout must contain
 	StdoutExcludes []string `toml:"stdout_excludes"` // substrings the run's stdout must NOT contain
+	StderrContains []string `toml:"stderr_contains"` // substrings the run's stderr must contain
+}
+
+// MissingStderr returns the StderrContains substrings absent from errOut.
+func (r Run) MissingStderr(errOut string) []string {
+	var miss []string
+	for _, want := range r.StderrContains {
+		if !strings.Contains(errOut, want) {
+			miss = append(miss, want)
+		}
+	}
+	return miss
 }
 
 // MissingStdout returns the StdoutContains substrings absent from out.
