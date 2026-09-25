@@ -559,6 +559,9 @@ func (m Model) renderInterface() string {
 		cmRows, _, cmDecos := m.commitBody(g.rightW, g.boxH[panelCommits])
 		right = m.renderPanel(panelCommits, m.panelLabel(panelCommits, i18n.T("Commits (%s)", m.commitScopeLabel())), cmRows, cmDecos, g.rightW, g.boxH[panelCommits])
 	}
+	if g.leftW <= 0 {
+		left = "" // a maximized preview owns the body
+	}
 	// One side can be empty (a ctrl+t fullscreen hides the other column entirely);
 	// join only when both exist so no zero-width block leaks artifacts.
 	var body string

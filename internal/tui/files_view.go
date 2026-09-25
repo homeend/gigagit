@@ -66,6 +66,7 @@ func (m Model) closeFilesView() Model {
 	m.previewOpen = nil
 	m.wtFiles = nil
 	m.filesFull = false
+	m.previewFull = false
 	// The popup that handed off to this view is dropped with it: only the
 	// view's own esc/l close (which reads the field BEFORE calling this)
 	// returns to it. A repo switch, a steer navigation, a narrow terminal or
@@ -208,7 +209,7 @@ func (m Model) toggleFullTree() (Model, tea.Cmd) {
 
 // focusTree / focusRight move focus within an open files view. focusRight is
 // inert in compare and shelf modes (no commit-list side to focus).
-func (m Model) focusTree() Model { m.filesTreeFocused = true; return m }
+func (m Model) focusTree() Model { m.filesTreeFocused, m.previewFull = true, false; return m }
 func (m Model) focusRight() Model {
 	if !m.inCompareMode() && !m.inShelfFiles() {
 		m.filesTreeFocused = false
@@ -619,6 +620,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
+	case "ctrl+t": // a focused preview fills the screen, and back
+		if m.filesPreview != nil && !m.filesTreeFocused {
+			m.previewFull = !m.previewFull
+		}
+		return m, nil
 	case "ctrl+]":
 		if m.filesPreview != nil { // step the preview aside; the file stays open
 			return m.backgroundDoc(m.filesPreview), nil

@@ -279,7 +279,9 @@ func (m Model) updateWorktreePreviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	scroll := func(delta int) { p.sel = previewClamp(p.sel+delta, len(p.lines), rows, p.mode) }
 	switch msg.String() {
 	case "left", "tab", "shift+tab", "esc":
-		m.filesTreeFocused = true
+		m = m.focusTree()
+	case "ctrl+t":
+		m.previewFull = !m.previewFull
 	case "alt+up":
 		m.movePreviewCursor(-1)
 	case "alt+down":
@@ -342,4 +344,10 @@ func (m Model) wtPreviewSettled(msg wtPreviewMsg) (Model, tea.Cmd) {
 	d := newOpenFile(fileSource{kind: srcWorktree}, msg.path)
 	m.filesPreview = d
 	return m, m.loadDoc(d)
+}
+
+// previewMaximized reports whether a focused file preview fills the body
+// (ctrl+t on it). Handing the keys back to the list ends it (focusTree).
+func (m Model) previewMaximized() bool {
+	return m.previewFull && m.filesView != nil && m.filesPreview != nil && !m.filesTreeFocused
 }
