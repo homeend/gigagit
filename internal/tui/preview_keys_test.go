@@ -122,3 +122,27 @@ func TestViewerKeepsItsHintLine(t *testing.T) {
 		t.Fatal("the full-screen viewer lost its hint line")
 	}
 }
+
+// ctrl+] on a row of F's list opens that file in the background — loaded,
+// in the ctrl+\ list, off screen — whether or not the preview shows it yet.
+func TestCtrlBracketOnFsListRowBackgroundsTheFile(t *testing.T) {
+	t.Parallel()
+	m := wtDiskWindow(t, map[string]string{"a.txt": "AAA\n", "b.txt": "BBB\n"})
+	tm, _ := m.Update(keyMsg("down")) // on b.txt; its preview has not settled
+	m = tm.(Model)
+	tm, cmd := m.Update(keyCtrlBracket())
+	m = pumpAll(t, tm.(Model), cmd)
+	l := m.openFiles.list(m.currentWorktree)
+	if len(l) != 1 || l[0].path != "b.txt" {
+		t.Fatalf("open files = %v, want [b.txt]", regPaths(m.openFiles, m.currentWorktree))
+	}
+	if l[0].p.lines[0].raw != "BBB" || m.docShown(l[0]) {
+		t.Fatalf("b.txt: loaded %q, shown %v — want loaded and off screen", l[0].p.lines[0].raw, m.docShown(l[0]))
+	}
+	if !strings.Contains(m.statusMsg, "b.txt is in the background") || !m.inWorktreeFiles() {
+		t.Fatalf("status %q, window open %v", m.statusMsg, m.inWorktreeFiles())
+	}
+	if f, _ := m.footerOverride(); !strings.Contains(f, "[ctrl+]] background") {
+		t.Fatalf("the list's bottom bar does not offer it: %q", f)
+	}
+}

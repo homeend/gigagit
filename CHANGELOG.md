@@ -46,8 +46,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 - **`ctrl+t` on a focused file preview** (F's, or the commit file tree's)
   fills the whole screen; again, or `←`/`tab` back to the list, restores the
   split.
-- **`ctrl+]` on F's preview** keeps the file open in the background (the
-  `ctrl+\` list); the preview goes on following the cursor.
+- **`ctrl+]` in F's window** — on a row of the list or on the focused
+  preview — keeps that file open in the background (the `ctrl+\` list,
+  loaded off-thread; one already open is reused); the preview goes on
+  following the cursor.
 - **No hint line inside F's list, the commit file tree or their preview:**
   the app's bottom bar shows the focused box's keys (now with `[ctrl+t] full`
   and `[ctrl+]] background` for a preview), and the freed row shows the file.

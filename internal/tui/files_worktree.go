@@ -258,6 +258,8 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "ctrl+t": // the list over the whole body, and back
 		m.filesFull = !m.filesFull
+	case "ctrl+]": // the file under the cursor, open in the background
+		return m.wtBackgroundRow()
 	case "g":
 		return m.openBookmarkSwitcher()
 	case "G":
@@ -369,4 +371,31 @@ func (m Model) wtBackgroundPreview() Model {
 		m.statusMsg = i18n.T("%s is in the background — ctrl+\\ lists open files", d.path)
 	}
 	return m.focusTree()
+}
+
+// wtBackgroundRow is ctrl+] on a row of F's list: that file joins the open
+// files (ctrl+\) in the background, loaded off-thread. The preview's own
+// document is used when it shows the file, one already open is reused; the
+// keys stay on the list.
+func (m Model) wtBackgroundRow() (Model, tea.Cmd) {
+	path := m.wtSelected()
+	if path == "" {
+		return m, nil
+	}
+	if d := m.filesPreview; d != nil && d.path == path {
+		return m.wtBackgroundPreview(), nil
+	}
+	src := fileSource{kind: srcWorktree}
+	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
+	var load tea.Cmd
+	if d == nil {
+		d = newOpenFile(src, path)
+		load = m.loadDoc(d)
+	}
+	m.statusMsg = ""
+	m = m.registerDoc(d)
+	if m.statusMsg == "" {
+		m.statusMsg = i18n.T("%s is in the background — ctrl+\\ lists open files", d.path)
+	}
+	return m, load
 }
