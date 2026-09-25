@@ -23,6 +23,28 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   with the cursor on that worktree. A `/` filter on the Worktrees list that
   would hide it is cleared.
 
+## F: the working-tree files window
+
+### Changed
+
+- **`F` opens a window over the whole left column** instead of the centred
+  finder popup: every file on disk (tracked files minus deleted ones, plus
+  the untracked files the Status panel already lists — no extra git scan),
+  filtered with `/` and the same fuzzy matching (`fvgo` → `files_view.go`,
+  200 best matches). The right column previews the file under the cursor —
+  its working-tree bytes, loaded once the cursor rests (150 ms, so holding an
+  arrow on a slow mount reads nothing in between) and reloaded when the file
+  changes; the preview does not join the open-files list. `→` scrolls it.
+- `enter` or `.` opens the file's actions: **View file content** (the
+  full-screen viewer, an open file), **Diff (HEAD ↔ working tree)**,
+  **History**, **Blame**, **Edit in editor** (the file itself, not a
+  read-only copy of HEAD), **Copy file name** (new), **Copy path**, **Copy
+  absolute path**, **Copy file link**, **Commits touching this**. An
+  untracked file has no git history, so it offers only the first and the
+  copy/editor rows.
+- `ctrl+t` spreads the list over the whole screen; `esc` returns to where F
+  was pressed — from a diff, history, blame or the stash list, back to it.
+
 ## Open files: watching
 
 ### Added

@@ -116,7 +116,24 @@ func (m Model) watchedDocs() []*openFile {
 			out = append(out, d)
 		}
 	}
+	// F's live preview is on screen but not an open file (see
+	// wtPreviewSettled): it is watched all the same.
+	if d := m.filesPreview; d != nil && d.src.kind == srcWorktree && !slices.Contains(out, d) {
+		out = append(out, d)
+	}
 	return out
+}
+
+// watchedDoc is the watched document tagged tag, or nil — the registry, or
+// F's live preview, which is watched without being an open file.
+func (m Model) watchedDoc(tag string) *openFile {
+	if d := m.openFiles.findTag(tag); d != nil {
+		return d
+	}
+	if d := m.filesPreview; d != nil && d.tag == tag {
+		return d
+	}
+	return nil
 }
 
 // openFilesTick starts a stat round (off the UI thread) over the watched
@@ -166,7 +183,7 @@ func (m Model) applyDocStats(msg openFilesStatMsg) (Model, tea.Cmd) {
 	}
 	var cmds []tea.Cmd
 	for _, r := range msg.stats {
-		d := m.openFiles.findTag(r.tag)
+		d := m.watchedDoc(r.tag)
 		if d == nil || d.loading || d.src.kind != srcWorktree || !r.disk.known {
 			continue
 		}

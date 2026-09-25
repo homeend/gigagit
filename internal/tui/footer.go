@@ -257,6 +257,17 @@ func (m Model) footerOverride() (string, bool) {
 	// The files view owns the keyboard while open, so the registry footer would
 	// lie; show the view's own keys instead. The commit-list side mirrors the
 	// Commits panel (. menu + graph keys); the tree side is file-scoped.
+	if m.inWorktreeFiles() { // F's window: no commit list, no diff on enter
+		switch {
+		case m.wtFiles.typing:
+			return i18n.T("filter: type a fuzzy query  [↑↓] move  [enter] keep  [esc] clear"), true
+		case m.filesPreview != nil && !m.filesTreeFocused && m.filesPreview.p.lsel.on:
+			return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
+		case m.filesPreview != nil && !m.filesTreeFocused:
+			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+w] view  [←/tab/esc] back to list"), true
+		}
+		return i18n.T("files: [↑/↓] move  [enter/.] actions  [/] filter  [→] preview  [ctrl+t] full  [ctrl+w] view  [esc] close"), true
+	}
 	if m.filesView != nil {
 		if m.filesPreview != nil && !m.filesTreeFocused {
 			if m.filesPreview.p.lsel.on {

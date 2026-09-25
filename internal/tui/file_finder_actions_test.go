@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"io"
+	"sort"
 	"strings"
 	"testing"
 
@@ -9,30 +11,16 @@ import (
 	"github.com/homeend/gigagit/internal/model"
 )
 
-func TestFileFinderEnterOpensActionMenu(t *testing.T) {
-	t.Parallel()
-	m := loadedModel(t)
-	m, _ = m.openFileFinder()
-	nm, _ := m.Update(lsFilesMsg{paths: []string{"a/b.go"}})
-	m = nm.(Model)
-	nm, _ = m.Update(keyMsg("enter"))
-	m = nm.(Model)
-	if m.actionMenu == nil {
-		t.Fatal("enter should open the file-action menu")
+func actionIDs(rows []actionRow) []string {
+	var out []string
+	for _, r := range rows {
+		out = append(out, r.id)
 	}
-	got := map[string]bool{}
-	for _, r := range m.actionMenu.rows {
-		got[r.id] = true
-	}
-	for _, id := range []string{"ff-view", "ff-diff", "ff-history", "ff-blame", "ff-editor", "ff-copy-path", "ff-copy-abspath", "ff-commits-touching"} {
-		if !got[id] {
-			t.Fatalf("missing %s; rows=%v", id, got)
-		}
-	}
+	sort.Strings(out)
+	return out
 }
 
-// finderRow is a small helper that returns the run func for the given row id
-// from fileFinderActionRows, or fails the test if the id is absent.
+// finderRow returns the run func of the row id, or fails the test.
 func finderRow(t *testing.T, rows []actionRow, id string) func(Model) (tea.Model, tea.Cmd) {
 	t.Helper()
 	for _, r := range rows {
@@ -40,119 +28,70 @@ func finderRow(t *testing.T, rows []actionRow, id string) func(Model) (tea.Model
 			return r.run
 		}
 	}
-	t.Fatalf("fileFinderActionRows missing row %q", id)
+	t.Fatalf("no action row %q in %v", id, actionIDs(rows))
 	return nil
 }
 
-// finderSetup opens the file finder in a 2-commit model, delivers the
-// lsFilesMsg for path, and returns the model + action rows for path.
+// finderSetup opens F's window over path in a 2-commit model and returns it
+// with path's action rows.
 func finderSetup(t *testing.T, path string) (Model, []actionRow) {
 	t.Helper()
 	m := loadedModelLinearCommits(t, 2)
-	m, _ = m.openFileFinder()
-	nm, _ := m.Update(lsFilesMsg{paths: []string{path}})
-	m = nm.(Model)
-	return m, m.fileFinderActionRows(path)
+	m, _ = m.openWorktreeFiles()
+	tm, _ := m.Update(lsFilesMsg{paths: []string{path}})
+	m = tm.(Model)
+	return m, m.worktreeFileRows(path, false)
 }
 
-func TestFileFinderHistoryActionOpensHistoryLayer(t *testing.T) {
+func TestWorktreeEnterAndDotOpenTheActions(t *testing.T) {
 	t.Parallel()
-	m, rows := finderSetup(t, "a/b.go")
-	nm, _ := finderRow(t, rows, "ff-history")(m)
-	m = nm.(Model)
-	if layerOf[*historyView](m) == nil {
-		t.Fatal("history action should push a historyView layer")
-	}
-	if layerOf[*fileFinderPopup](m) != nil {
-		t.Fatal("the finder must be popped when an action opens a surface")
-	}
-}
-
-func TestFileFinderDiffActionOpensDiffLayer(t *testing.T) {
-	t.Parallel()
-	// file0.txt is a real tracked file in loadedModelLinearCommits's fixture
-	// (finderSetup(t, path) only injects the lsFilesMsg — it does not make
-	// path exist in the repo — and the diff action now does a real HEAD
-	// resolve + git show, which needs a real path).
-	const path = "file0.txt"
-	m, rows := finderSetup(t, path)
-	nm, cmd := finderRow(t, rows, "ff-diff")(m)
-	m = nm.(Model)
-
-	if layerOf[*diffView](m) == nil {
-		t.Fatal("ff-diff should push a diffView layer")
-	}
-	if layerOf[*fileFinderPopup](m) != nil {
-		t.Fatal("the finder must be popped when the diff action runs")
-	}
-
-	// THE PIN for site 2: ff-diff must resolve HEAD to a sha before it
-	// builds the left Endpoint, so m.diffTag — which is built from
-	// left.CacheTag(), i.e. Endpoint.Hash verbatim — must carry that sha and
-	// NOT the rev-spec "HEAD". The expected sha is taken from m.commits[0],
-	// which the commit feed loaded through a DIFFERENT git call (git log
-	// --format=%H), so this oracle is independent of the resolver under
-	// test. Reverting file_finder.go to a raw
-	// model.Endpoint{Kind: model.EndpointCommit, Hash: "HEAD"} literal makes
-	// the tag "cmp:HEAD:…" and fails here.
-	if len(m.commits) == 0 {
-		t.Fatal("fixture must have commits to name the expected HEAD sha")
-	}
-	head := m.commits[0].Hash
-	right := model.WorkTreeEndpoint()
-	wantTag := "cmp:" + head + ":" + right.CacheTag() + ":" + path
-	if m.diffTag == "" {
-		t.Fatal("ff-diff should set m.diffTag")
-	}
-	if strings.Contains(m.diffTag, "HEAD") {
-		t.Fatalf("diffTag must carry the RESOLVED sha, not the rev-spec \"HEAD\": %q", m.diffTag)
-	}
-	if m.diffTag != wantTag {
-		t.Fatalf("diffTag mismatch\n got:  %q\nwant: %q", m.diffTag, wantTag)
-	}
-
-	// Drive the async resolve+load: the returned diffMsg must carry the SAME
-	// tag (or it would be dropped as stale by the handler's gate) and a real
-	// resolved-HEAD diff, not an error.
-	if cmd == nil {
-		t.Fatal("ff-diff should return a load command")
-	}
-	dmsg, ok := cmd().(diffMsg)
-	if !ok {
-		t.Fatalf("expected a diffMsg, got %T", cmd())
-	}
-	if dmsg.tag != m.diffTag {
-		t.Fatalf("diffMsg.tag = %q, want %q (the pending gate value)", dmsg.tag, m.diffTag)
-	}
-	if dmsg.view.err != nil {
-		t.Fatalf("HEAD resolve/diff load failed: %v", dmsg.view.err)
+	for _, key := range []string{"enter", "."} {
+		m := wtWindow(t, "a.go")
+		m = fvKeys(t, m, keyMsg(key))
+		if m.actionMenu == nil {
+			t.Fatalf("%s did not open the file's actions", key)
+		}
+		got := strings.Join(actionIDs(m.actionMenu.rows), " ")
+		if !strings.Contains(got, "ff-view") || !strings.Contains(got, "copy-file-link") {
+			t.Fatalf("%s: rows = %s", key, got)
+		}
 	}
 }
 
-func TestFileFinderBlameActionOpensBlameLayer(t *testing.T) {
+func TestWorktreeActionsTrackedVsUntracked(t *testing.T) {
 	t.Parallel()
-	m, rows := finderSetup(t, "a/b.go")
-	nm, _ := finderRow(t, rows, "ff-blame")(m)
-	m = nm.(Model)
-	if layerOf[*blameView](m) == nil {
-		t.Fatal("ff-blame should push a blameView layer")
+	m := wtWindow(t, "a.go")
+	common := []string{"ff-copy-abspath", "ff-copy-name", "ff-copy-path", "ff-editor", "ff-view"}
+	tracked := strings.Join(actionIDs(m.worktreeFileRows("a.go", false)), " ")
+	for _, id := range append(common, "ff-diff", "ff-history", "ff-blame", "ff-commits-touching") {
+		if !strings.Contains(tracked, id) {
+			t.Fatalf("tracked rows %s miss %s", tracked, id)
+		}
 	}
-	if layerOf[*fileFinderPopup](m) != nil {
-		t.Fatal("the finder must be popped when the blame action runs")
+	untracked := strings.Join(actionIDs(m.worktreeFileRows("n.txt", true)), " ")
+	for _, id := range common {
+		if !strings.Contains(untracked, id) {
+			t.Fatalf("untracked rows %s miss %s", untracked, id)
+		}
+	}
+	for _, id := range []string{"ff-diff", "ff-history", "ff-blame", "ff-commits-touching"} {
+		if strings.Contains(untracked, id) {
+			t.Fatalf("an untracked file offers %s", id)
+		}
 	}
 }
 
 // View content opens the working-tree version in the full-screen viewer — an
-// open file, watched and reloaded — over the finder, so esc returns to it.
-func TestFileFinderViewActionOpensTheWorkingTreeViewer(t *testing.T) {
+// open file, watched and reloaded — over the window, so esc returns to it.
+func TestWorktreeViewContentOpensTheViewer(t *testing.T) {
 	t.Parallel()
 	m := loadedNavModel(t)
 	writeWT(t, m, "w.txt", "ON DISK\n")
-	m, _ = m.openFileFinder()
-	nm, _ := m.Update(lsFilesMsg{paths: []string{"w.txt"}})
-	m = nm.(Model)
-	nm, cmd := finderRow(t, m.fileFinderActionRows("w.txt"), "ff-view")(m)
-	m = pumpAll(t, nm.(Model), cmd)
+	m, _ = m.openWorktreeFiles()
+	tm, _ := m.Update(lsFilesMsg{paths: []string{"w.txt"}})
+	m = tm.(Model)
+	tm, cmd := finderRow(t, m.worktreeFileRows("w.txt", false), "ff-view")(m)
+	m = pumpAll(t, tm.(Model), cmd)
 	fv, ok := m.topLayer().(*fileViewer)
 	if !ok {
 		t.Fatalf("top layer = %T, want the file viewer", m.topLayer())
@@ -164,71 +103,118 @@ func TestFileFinderViewActionOpensTheWorkingTreeViewer(t *testing.T) {
 		t.Fatal("the viewed file is not in the open-files list")
 	}
 	m = fvKeys(t, m, keyMsg("esc"))
-	if _, ok := m.topLayer().(*fileFinderPopup); !ok {
-		t.Fatalf("esc on the viewer returned to %T, want the finder", m.topLayer())
+	if m.topLayer() != nil || !m.inWorktreeFiles() {
+		t.Fatalf("esc on the viewer: top %T, window open %v — want back in the window", m.topLayer(), m.inWorktreeFiles())
+	}
+}
+
+// The file is on disk, so the editor edits it — the live "Edit in editor"
+// path, not a read-only temp copy of HEAD.
+func TestWorktreeEditorEditsTheFile(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	for _, r := range m.worktreeFileRows("w.txt", false) {
+		if r.id == "ff-editor" {
+			if r.label != "Edit in editor" {
+				t.Fatalf("ff-editor label = %q, want the live edit", r.label)
+			}
+			if _, cmd := r.run(m); cmd == nil {
+				t.Fatal("ff-editor returned no command")
+			}
+			return
+		}
+	}
+	t.Fatal("no ff-editor row")
+}
+
+func TestCopyFileNameIsTheBaseName(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	copied := ""
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "fake", nil }
+	_, cmd := finderRow(t, m.worktreeFileRows("dir/sub/name.go", false), "ff-copy-name")(m)
+	pumpAll(t, m, cmd)
+	if copied != "name.go" {
+		t.Fatalf("copied %q, want name.go", copied)
+	}
+}
+
+func TestFileFinderHistoryActionOpensHistoryLayer(t *testing.T) {
+	t.Parallel()
+	m, rows := finderSetup(t, "a/b.go")
+	nm, _ := finderRow(t, rows, "ff-history")(m)
+	m = nm.(Model)
+	if layerOf[*historyView](m) == nil {
+		t.Fatal("history action should push a historyView layer")
+	}
+	if !m.inWorktreeFiles() {
+		t.Fatal("the window must stay under history (esc returns to it)")
+	}
+}
+
+func TestFileFinderDiffActionOpensDiffLayer(t *testing.T) {
+	t.Parallel()
+	// file0.txt is a real tracked file in loadedModelLinearCommits's fixture:
+	// the diff action does a real HEAD resolve + git show.
+	const path = "file0.txt"
+	m, rows := finderSetup(t, path)
+	nm, cmd := finderRow(t, rows, "ff-diff")(m)
+	m = nm.(Model)
+	if layerOf[*diffView](m) == nil {
+		t.Fatal("ff-diff should push a diffView layer")
+	}
+	// ff-diff resolves HEAD to a sha before it builds the left Endpoint, so
+	// m.diffTag (built from Endpoint.Hash verbatim) carries the sha, never
+	// the rev-spec "HEAD". The oracle, m.commits[0], came from a different
+	// git call (the feed's git log).
+	if len(m.commits) == 0 {
+		t.Fatal("fixture must have commits to name the expected HEAD sha")
+	}
+	wantTag := "cmp:" + m.commits[0].Hash + ":" + model.WorkTreeEndpoint().CacheTag() + ":" + path
+	if m.diffTag != wantTag {
+		t.Fatalf("diffTag mismatch\n got:  %q\nwant: %q", m.diffTag, wantTag)
+	}
+	if cmd == nil {
+		t.Fatal("ff-diff should return a load command")
+	}
+	dmsg, ok := cmd().(diffMsg)
+	if !ok {
+		t.Fatalf("expected a diffMsg, got %T", cmd())
+	}
+	if dmsg.tag != m.diffTag || dmsg.view.err != nil {
+		t.Fatalf("diffMsg tag %q err %v, want tag %q and no error", dmsg.tag, dmsg.view.err, m.diffTag)
+	}
+}
+
+func TestFileFinderBlameActionOpensBlameLayer(t *testing.T) {
+	t.Parallel()
+	m, rows := finderSetup(t, "a/b.go")
+	nm, _ := finderRow(t, rows, "ff-blame")(m)
+	m = nm.(Model)
+	if layerOf[*blameView](m) == nil {
+		t.Fatal("ff-blame should push a blameView layer")
 	}
 }
 
 func TestFileFinderCommitsTouchingSeedsPathFilter(t *testing.T) {
 	t.Parallel()
-	m := loadedModel(t)
-	rows := m.fileFinderActionRows("internal/engine/ops_basic.go")
-	var run func(Model) (tea.Model, tea.Cmd)
-	for _, r := range rows {
-		if r.id == "ff-commits-touching" {
-			run = r.run
-		}
-	}
-	if run == nil {
-		t.Fatal("fuzzy finder missing 'Commits touching this' row")
-	}
-	mm, _ := run(m)
+	m, rows := finderSetup(t, "internal/engine/ops_basic.go")
+	mm, _ := finderRow(t, rows, "ff-commits-touching")(m)
 	got := mm.(Model)
 	if len(got.commitFilter.Paths) != 1 || got.commitFilter.Paths[0] != "internal/engine/ops_basic.go" {
 		t.Fatalf("path not seeded: %+v", got.commitFilter.Paths)
 	}
-	if got.commitFilter.Author != "" || got.commitFilter.Grep != "" {
-		t.Fatal("seeding a path should clear the other axes")
-	}
-	if got.focus != panelCommits {
-		t.Fatal("should focus Commits after seeding")
+	if got.focus != panelCommits || got.filesView != nil {
+		t.Fatal("should close the window and focus Commits after seeding")
 	}
 }
 
-func TestFileFinderEditorAndCopyReturnCmds(t *testing.T) {
+func TestFileFinderCopyRowsReturnCmds(t *testing.T) {
 	t.Parallel()
 	m, rows := finderSetup(t, "a/b.go")
-
-	editorRun := finderRow(t, rows, "ff-editor")
-	nm, cmd := editorRun(m)
-	m2 := nm.(Model)
-	if cmd == nil {
-		t.Fatal("ff-editor should return a non-nil tea.Cmd")
-	}
-	if layerOf[*fileFinderPopup](m2) != nil {
-		t.Fatal("the finder must be popped by ff-editor")
-	}
-
-	copyRun := finderRow(t, rows, "ff-copy-path")
-	nm, cmd = copyRun(m)
-	m3 := nm.(Model)
-	if cmd == nil {
-		t.Fatal("ff-copy-path should return a non-nil tea.Cmd")
-	}
-	if layerOf[*fileFinderPopup](m3) != nil {
-		t.Fatal("the finder must be popped by ff-copy-path")
-	}
-}
-
-func TestFileFinderCopyAbsPathRow(t *testing.T) {
-	t.Parallel()
-	m, rows := finderSetup(t, "a/b.go")
-	run := finderRow(t, rows, "ff-copy-abspath")
-	nm, cmd := run(m)
-	if cmd == nil {
-		t.Fatal("ff-copy-abspath should return a non-nil tea.Cmd")
-	}
-	if layerOf[*fileFinderPopup](nm.(Model)) != nil {
-		t.Fatal("the finder must be popped by ff-copy-abspath")
+	for _, id := range []string{"ff-copy-path", "ff-copy-abspath", "ff-copy-name"} {
+		if _, cmd := finderRow(t, rows, id)(m); cmd == nil {
+			t.Fatalf("%s returned no command", id)
+		}
 	}
 }

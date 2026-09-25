@@ -202,8 +202,8 @@ func TestPaletteFindOpensFinder(t *testing.T) {
 	t.Parallel()
 	m := gotoModel(t, gotoFullHash)
 	m, _ = palettePick(t, m, "Find")
-	if layerOf[*fileFinderPopup](m) == nil {
-		t.Fatal("Find should open the fuzzy file finder")
+	if !m.inWorktreeFiles() {
+		t.Fatal("Find should open the working-tree files window")
 	}
 	if layerOf[*commandPalette](m) != nil {
 		t.Fatal("Find replaces the palette (it does not stay beneath)")

@@ -97,8 +97,8 @@ func TestPaletteRendersOverFilesView(t *testing.T) {
 }
 
 // Running a command from the palette while a browse window (diff) is beneath
-// works end-to-end: it renders, "Find" pops the palette and opens the finder,
-// and the diff window remains beneath it. Guards the run+render path that
+// works end-to-end: it renders, "Find" pops the palette and opens the
+// working-tree files window, with the diff parked for esc to bring back. Guards the run+render path that
 // layer-presence assertions alone don't cover.
 func TestPaletteRunsAndRendersOverDiff(t *testing.T) {
 	t.Parallel()
@@ -108,13 +108,13 @@ func TestPaletteRunsAndRendersOverDiff(t *testing.T) {
 		t.Fatal("palette should render over the diff window")
 	}
 	m, _ := palettePick(t, base, "Find")
-	if layerOf[*fileFinderPopup](m) == nil {
-		t.Fatal("running Find over a diff should open the finder")
+	if !m.inWorktreeFiles() {
+		t.Fatal("running Find over a diff should open the files window")
 	}
-	if layerOf[*diffView](m) == nil {
-		t.Fatal("the diff window should remain beneath the finder")
+	if len(m.filesReturnLayers) == 0 {
+		t.Fatal("the diff window should be parked for esc to return to")
 	}
-	_ = m.View() // finder-over-diff must render without panicking
+	_ = m.View() // the window over a parked diff must render without panicking
 }
 
 // TestHelpCtrlPRowMatchesPaletteReachability pins help-vs-availability

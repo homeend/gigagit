@@ -27,6 +27,7 @@ const (
 	filesModeCompare                   // two endpoints (filesLeft/filesRight)
 	filesModeStash                     // a stash's files (filesStashTag)
 	filesModeShelf                     // a shelved commit's frozen files (filesShelfID)
+	filesModeWorktree                  // every file on disk, fuzzy-filtered (F; wtFiles)
 )
 
 func (m Model) inCompareMode() bool { return m.filesMode == filesModeCompare }
@@ -63,6 +64,8 @@ func (m Model) closeFilesView() Model {
 	m.filesReadInflight = false
 	m.filesPreview = nil
 	m.previewOpen = nil
+	m.wtFiles = nil
+	m.filesFull = false
 	// The popup that handed off to this view is dropped with it: only the
 	// view's own esc/l close (which reads the field BEFORE calling this)
 	// returns to it. A repo switch, a steer navigation, a narrow terminal or
@@ -505,6 +508,9 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if nm, cmd, handled := m.previewSearchKey(msg); handled {
 		return nm, cmd
 	}
+	if m.inWorktreeFiles() {
+		return m.updateWorktreeFilesKey(msg)
+	}
 	if p.typing { // /-input mode captures every key (same as the help window)
 		// Arrows/pages move the tree selection live while typing (no cursor reset),
 		// like the commit filter; j/k stay query text.
@@ -539,8 +545,8 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.openBookmarkSwitcher()
 	case "G": // global shelf quick-switcher
 		return m.openShelfSwitcher()
-	case "F": // global fuzzy file finder
-		return m.openFileFinder()
+	case "F": // the working-tree files window (F)
+		return m.openWorktreeFilesHere()
 	case "r": // a PR's file list: re-read its review comments (inert elsewhere)
 		if m.openPRNumber() > 0 {
 			return m.prCommentsCmd(true)
@@ -987,6 +993,10 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	// it) so a long commit subject can't truncate the query out of view.
 	search := p.searchLine()
 	meta := m.filesMetaLineFor()
+	title := m.filesTitle
+	if m.inWorktreeFiles() {
+		search, meta, title = m.wtSearchLine(), "", m.wtTitle()
+	}
 	rowsCap := contentH - 2 // title + hint lines
 	if meta != "" {
 		rowsCap-- // the date line claims one more row
@@ -1053,7 +1063,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	}
 
 	lines := make([]string, 0, contentH)
-	lines = append(lines, padRight(truncate(m.filesTitle, innerW), innerW))
+	lines = append(lines, padRight(truncate(title, innerW), innerW))
 	if meta != "" {
 		// Its own line, directly under the title: a long subject truncates the
 		// title, and the date must not be the casualty of that.
@@ -1074,6 +1084,9 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	hint := i18n.T("[enter] diff  [h] history  [b] blame  [/] search  [esc] close")
 	if m.comparePair != nil {
 		hint = i18n.T("[enter] diff  [f] filter  [h] history  [b] blame  [/] search  [esc] close")
+	}
+	if m.inWorktreeFiles() {
+		hint = i18n.T("[.] actions  [/] filter  [→] preview  [ctrl+t] full  [esc] close")
 	}
 	if len(vis) > rowsCap {
 		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)

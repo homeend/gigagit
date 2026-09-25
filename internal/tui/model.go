@@ -120,6 +120,9 @@ type Model struct {
 
 	stashView     *stashView                               // stash list in the right column (over Commits); nil = closed
 	openFiles     *openFilesReg                            // the open-files list, per worktree (a pointer: survives the value copy)
+	wtFiles       *worktreeFiles                           // F's working-tree mode of the files view (nil otherwise)
+	filesFull     bool                                     // ctrl+t: the files view spans the whole body
+	wtPreviewGen  int                                      // bumped per cursor move in F's window: drops a superseded preview settle
 	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
 	quitConfirmed bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
@@ -908,6 +911,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m, reply := m.navigateLanded(msg.cmd, contentLandedDetail(msg.cmd.File, msg.line, msg.load.lines))
 		return m, tea.Batch(fill, reply)
+	case wtPreviewMsg:
+		return m.wtPreviewSettled(msg)
 	case openFilesStatMsg:
 		return m.applyDocStats(msg)
 	case docWatchReadyMsg:
@@ -1392,19 +1397,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case lsFilesMsg:
-		p := layerOf[*fileFinderPopup](m)
-		if p == nil {
-			return m, nil // user closed before load returned
+		if m.inWorktreeFiles() && m.wtFiles.loading {
+			return m.wtLoaded(msg)
 		}
-		if msg.err != nil {
-			m.statusMsg = i18n.T("file finder: %s", msg.err.Error())
-			m = m.popLayer()
-			return m, nil
-		}
-		p.all = msg.paths
-		p.loading = false
-		p.rerank()
-		return m, nil
+		return m, nil // the window closed before the list arrived
 	case remoteHeadNamesMsg:
 		p := layerOf[*remoteHeadsPopup](m)
 		if p == nil || msg.gen != m.loadGen {
@@ -2348,8 +2344,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openNoticeCenter()
 		case "E": // show the last failure in full (global; see openErrorPopup)
 			return m.openErrorPopup()
-		case "F": // open the fuzzy file finder (global; see openFileFinder)
-			return m.openFileFinder()
+		case "F": // the working-tree files window (global; see openWorktreeFiles)
+			return m.openWorktreeFiles()
 		case "ctrl+w": // cycle the focused panel's text display mode
 			m.dispModes[m.focus] = m.dispModes[m.focus].next()
 			m.hscroll[m.focus] = 0
