@@ -55,7 +55,7 @@ func TestConflictPopupNoWrap(t *testing.T) {
 	m := Model{width: 80, height: 30}
 	render := func(path string) string {
 		files := []model.FileStatus{{Path: path, Kind: model.KindUnmerged, Staged: 'U', Unstaged: 'U'}}
-		return conflictListBox(m, files, 0, domain.ConflictState{}, "", 0, 0)
+		return conflictListBox(m, files, 0, domain.ConflictState{}, "", 0, 0, false)
 	}
 	assertSameHeight(t, "conflict body", render("a.go"), render(strings.Repeat("z", 300)+".go"))
 }

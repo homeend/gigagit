@@ -51,6 +51,7 @@ type conflictProcess struct {
 	picker     *hunkPicker          // the line editor, while confPicking (owned here, not on the surface stack)
 	pickPath   string               // the file the picker is editing (refresh keeps the session while it stays conflicted)
 	mode       dispMode             // text display mode; z cycles
+	popupMax                        // ctrl+t maximizes the file list (fitted to its paths)
 	hscroll    int                  // modeScroll horizontal offset
 
 	toolChoices []config.ToolCommand // picker rows while confToolPick
@@ -139,7 +140,14 @@ func (p *conflictProcess) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 
 func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	switch msg.String() {
+	case "ctrl+t": // maximize: the box fits the full paths (conflictListMaxInner)
+		p.toggleMaximize()
+		return m, nil
 	case "L", "esc": // Leave — step out, repo as-is; resume from the notice ([x])
+		if msg.String() == "esc" && p.maxed() { // esc restores a maximized list first, like every popup
+			p.toggleMaximize()
+			return m, nil
+		}
 		m.proc = nil
 		return m, nil
 	case "ctrl+w":
@@ -547,7 +555,7 @@ func (p *conflictProcess) render(m Model, below string) string {
 	bg := clipToHeight(below, h)
 	switch p.st {
 	case confListing:
-		return overlayCenter(bg, conflictListBox(m, p.files, p.sel, p.src, p.inProgress, p.mode, p.hscroll), w, h)
+		return overlayCenter(bg, conflictListBox(m, p.files, p.sel, p.src, p.inProgress, p.mode, p.hscroll, p.maxed()), w, h)
 	case confPicking:
 		if p.picker != nil {
 			return p.picker.render(m, below) // the line editor owns the full screen
@@ -680,11 +688,14 @@ func keepModifiedAction(f model.FileStatus) engine.ConflictAction {
 // conflictListBox draws the conflicted-file list window (popup-free; the process
 // owns the state). Ported from the old renderConflictPopup so the two can
 // coexist until the popup is removed.
-func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.ConflictState, inProgress string, mode dispMode, hscroll int) string {
-	w, _ := m.overlayDims()
+func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.ConflictState, inProgress string, mode dispMode, hscroll int, maxed bool) string {
+	w, h := m.overlayDims()
 	// The wide path-list width (like the bookmark/shelf switchers): the rows
 	// are long repo paths, which the 56-column prose popup cut to nothing.
 	inner := popupWideInnerWidth(w)
+	if maxed {
+		inner = conflictListMaxInner(w, files)
+	}
 	textW := popupTextWidth(inner)
 	var b strings.Builder
 	title := i18n.T("Resolve conflicts")
@@ -728,15 +739,32 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 		}
 		// Wrap mode: hang-indent continuations at the row text (intrinsic to wrap mode).
 		o := winOpts{w: textW, mode: mode, anchor: sel, hscroll: hscroll}
-		o.h = wrapContentLines(wr, o, 12)
+		o.h = wrapContentLines(wr, o, popupResolveRowCap(maxed, h, 12))
 		for _, line := range renderWindow(wr, o) {
 			b.WriteString(line + "\n")
 		}
 	}
 	nTools := len(m.toolCommands("conflict")) + len(m.toolCommands(string(exttool.CatConflictComplete)))
-	hintParts := append(conflictHints(files, sel, inProgress, nTools), i18n.T("[L] leave"), i18n.T("[ctrl+w] mode"))
+	hintParts := append(conflictHints(files, sel, inProgress, nTools), i18n.T("[L] leave"), i18n.T("[ctrl+w] mode"), i18n.T("[ctrl+t] full"))
 	b.WriteString("\n" + strings.Join(wrapParts(hintParts, textW, "  "), "\n"))
 	return popupBox(inner, b.String())
+}
+
+// conflictListMaxInner is the maximized list's inner width: fitted to the
+// longest FULL row (marker + whole path + gap + kind column) so every path
+// shows uncut, but never wider than the terminal's popup limit and never
+// narrower than the normal width — unlike other popups' ctrl+t, which always
+// takes the near-fullscreen width.
+func conflictListMaxInner(w int, files []model.FileStatus) int {
+	pathW, labelW := 0, 0
+	for _, f := range files {
+		pathW = max(pathW, lipgloss.Width(f.Path))
+		labelW = max(labelW, lipgloss.Width(conflictKindLabel(f)))
+	}
+	const prefixW, gap = 2, 2
+	pad := popupWideInnerWidth(w) - popupTextWidth(popupWideInnerWidth(w))
+	need := prefixW + pathW + gap + labelW + pad
+	return max(popupWideInnerWidth(w), min(need, popupFullInnerWidth(w)))
 }
 
 // conflictKindLabel is the list's short conflict kind, in git status's own
