@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: the Resolve conflicts list keeps every filename
+
+- A long list of long paths used to be unreadable: the box was a fixed 56
+  columns and each row was cut at its end, so every row lost its filename and
+  its conflict kind and looked like its neighbours. The box is now the wide
+  path-list width (up to 96 columns, like the bookmark/shelf switchers), each
+  path is cut in the middle (filename and the path's beginning survive), and
+  the conflict kind sits whole in a right-hand column in git status's short
+  words (`both modified`, `deleted by us`, `deleted by them`, `both deleted`).
+  The title counts where you are (`Resolve conflicts  4/10`). `ctrl+w` still
+  switches to wrap/scroll to read a full path.
+
 ## gg web: a navigate that misses says so
 
 - `gg session navigate` (and a `gg://` link) naming a file the commit, the

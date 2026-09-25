@@ -682,10 +682,16 @@ func keepModifiedAction(f model.FileStatus) engine.ConflictAction {
 // coexist until the popup is removed.
 func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.ConflictState, inProgress string, mode dispMode, hscroll int) string {
 	w, _ := m.overlayDims()
-	inner := popupInnerWidth(w)
+	// The wide path-list width (like the bookmark/shelf switchers): the rows
+	// are long repo paths, which the 56-column prose popup cut to nothing.
+	inner := popupWideInnerWidth(w)
 	textW := popupTextWidth(inner)
 	var b strings.Builder
-	b.WriteString(i18n.T("Resolve conflicts") + "\n")
+	title := i18n.T("Resolve conflicts")
+	if len(files) > 1 && sel >= 0 && sel < len(files) {
+		title += "  " + st().dim.Render(fmt.Sprintf("%d/%d", sel+1, len(files)))
+	}
+	b.WriteString(title + "\n")
 	if s := describeConflict(src); s != "" {
 		b.WriteString(st().dim.Render(s) + "\n")
 	}
@@ -693,6 +699,15 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 	if len(files) == 0 {
 		b.WriteString("  " + i18n.T("(all resolved)") + "\n")
 	} else {
+		// The conflict label is a right-hand column as wide as the widest
+		// label, capped at a third of the row so the path keeps most of it.
+		labelW := 0
+		for _, f := range files {
+			labelW = max(labelW, lipgloss.Width(conflictKindLabel(f)))
+		}
+		labelW = min(labelW, textW/3)
+		const prefixW, gap = 2, 2
+		pathW := textW - prefixW - gap - labelW
 		wr := make([]winRow, len(files))
 		sty := st()
 		for i, f := range files {
@@ -701,7 +716,15 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 			if i == sel {
 				prefix, st = "> ", sty.selectedRow
 			}
-			wr[i] = winRow{text: fmt.Sprintf("%s%s  — %s", prefix, f.Path, f.ConflictLabel()), style: st}
+			text := fmt.Sprintf("%s%s  — %s", prefix, f.Path, conflictKindLabel(f))
+			// Cutoff mode: middle-elide the path (a tail cut drops the
+			// filename, the part that tells the rows apart) and keep the
+			// label whole in its column. Wrap/scroll show the full row.
+			if mode == modeCutoff {
+				text = prefix + padRight(elidePath(f.Path, pathW), pathW) +
+					strings.Repeat(" ", gap) + truncate(conflictKindLabel(f), labelW)
+			}
+			wr[i] = winRow{text: text, style: st}
 		}
 		// Wrap mode: hang-indent continuations at the row text (intrinsic to wrap mode).
 		o := winOpts{w: textW, mode: mode, anchor: sel, hscroll: hscroll}
@@ -714,6 +737,22 @@ func conflictListBox(m Model, files []model.FileStatus, sel int, src domain.Conf
 	hintParts := append(conflictHints(files, sel, inProgress, nTools), i18n.T("[L] leave"), i18n.T("[ctrl+w] mode"))
 	b.WriteString("\n" + strings.Join(wrapParts(hintParts, textW, "  "), "\n"))
 	return popupBox(inner, b.String())
+}
+
+// conflictKindLabel is the list's short conflict kind, in git status's own
+// words ("both modified", "deleted by us", …) — short enough to keep whole in
+// the row's label column, where model's prose label would be cut.
+func conflictKindLabel(f model.FileStatus) string {
+	switch {
+	case f.ConflictClass() == model.ConflictBothSides:
+		return i18n.T("both modified")
+	case f.ConflictHasTheirs() && !f.ConflictHasOurs():
+		return i18n.T("deleted by us")
+	case f.ConflictHasOurs() && !f.ConflictHasTheirs():
+		return i18n.T("deleted by them")
+	default:
+		return i18n.T("both deleted")
+	}
 }
 
 // conflictHints lists the live keys for the current selection: navigation plus
