@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -37,6 +38,9 @@ type openFile struct {
 	// — so a load result finds exactly the document that asked for it, and a
 	// result for a document no frame shows any more finds nothing.
 	tag string
+	// seq is the document's instance number: its tag's suffix and, as
+	// f<seq>, the id an agent names it by (gg session files).
+	seq int64
 	// pendingLine is the 1-based line a link asked for (0 = none), parked
 	// until the async load fills the lines it indexes.
 	pendingLine int
@@ -79,9 +83,13 @@ func newOpenFile(src fileSource, path string) *openFile {
 		path: path,
 		p:    &contentPopup{title: path, lines: []contentLine{{text: i18n.T("(loading…)")}}},
 	}
-	d.tag = fmt.Sprintf("%s#%d", d.key(), openFileSeq.Add(1))
+	d.seq = openFileSeq.Add(1)
+	d.tag = fmt.Sprintf("%s#%d", d.key(), d.seq)
 	return d
 }
+
+// id is the document's agent-facing id (gg session files focus <id>).
+func (d *openFile) id() string { return "f" + strconv.FormatInt(d.seq, 10) }
 
 // key is the document's identity without its instance number: the same
 // version of the same file has the same key.
