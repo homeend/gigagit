@@ -281,3 +281,17 @@ func TestWorktreeLsFilesIgnoredWhenClosed(t *testing.T) {
 		t.Fatal("a late load reopened the window")
 	}
 }
+
+func TestWorktreeFooterShowsItsOwnKeys(t *testing.T) {
+	t.Parallel()
+	m := settle(t, wtDiskWindow(t, map[string]string{"a.txt": "AAA\n"}))
+	got, ok := m.footerOverride()
+	if !ok || !strings.Contains(got, "[enter/.] actions") || strings.Contains(got, "[h] hist") || strings.Contains(got, "diff") {
+		t.Fatalf("list footer = %q", got)
+	}
+	m = fvKeys(t, m, keyMsg("right"))
+	got, _ = m.footerOverride()
+	if !strings.Contains(got, "back to list") {
+		t.Fatalf("preview footer = %q", got)
+	}
+}
