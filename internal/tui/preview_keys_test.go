@@ -40,3 +40,39 @@ func TestCtrlTMaximizesTheCommitTreePreview(t *testing.T) {
 		t.Fatalf("ctrl+t on the commit tree's preview did not fill the screen:\n%s", m.View())
 	}
 }
+
+// ctrl+] on F's live preview keeps the file open in the background; the
+// preview goes on following the cursor.
+func TestCtrlBracketOnFsPreviewBackgroundsTheFile(t *testing.T) {
+	t.Parallel()
+	m := settle(t, wtDiskWindow(t, map[string]string{"a.txt": "AAA\n", "b.txt": "BBB\n"}))
+	m = fvKeys(t, m, keyMsg("right"), keyCtrlBracket())
+	l := m.openFiles.list(m.currentWorktree)
+	if len(l) != 1 || l[0].path != "a.txt" {
+		t.Fatalf("open files = %v, want [a.txt]", regPaths(m.openFiles, m.currentWorktree))
+	}
+	if !m.filesTreeFocused || !strings.Contains(m.statusMsg, "a.txt is in the background") {
+		t.Fatalf("focus on list %v, status %q", m.filesTreeFocused, m.statusMsg)
+	}
+	m = settle(t, fvKeys(t, m, keyMsg("down")))
+	if m.filesPreview == nil || m.filesPreview.path != "b.txt" {
+		t.Fatal("the preview stopped following the cursor")
+	}
+	if len(m.openFiles.list(m.currentWorktree)) != 1 || m.docShown(l[0]) {
+		t.Fatal("the backgrounded file must stay open, off screen")
+	}
+}
+
+// A file already open is not opened twice: ctrl+] on its preview brings the
+// open one up the list.
+func TestCtrlBracketOnFsPreviewReusesAnOpenFile(t *testing.T) {
+	t.Parallel()
+	m := wtDiskWindow(t, map[string]string{"a.txt": "AAA\n"})
+	open := wtDoc("a.txt")
+	m.openFiles.touch(m.currentWorktree, open, noneShown)
+	m = settle(t, m)
+	m = fvKeys(t, m, keyMsg("right"), keyCtrlBracket())
+	if l := m.openFiles.list(m.currentWorktree); len(l) != 1 || l[0] != open {
+		t.Fatalf("open files = %v, want the one already open", regPaths(m.openFiles, m.currentWorktree))
+	}
+}

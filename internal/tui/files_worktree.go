@@ -282,6 +282,8 @@ func (m Model) updateWorktreePreviewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m = m.focusTree()
 	case "ctrl+t":
 		m.previewFull = !m.previewFull
+	case "ctrl+]":
+		m = m.wtBackgroundPreview()
 	case "alt+up":
 		m.movePreviewCursor(-1)
 	case "alt+down":
@@ -350,4 +352,21 @@ func (m Model) wtPreviewSettled(msg wtPreviewMsg) (Model, tea.Cmd) {
 // (ctrl+t on it). Handing the keys back to the list ends it (focusTree).
 func (m Model) previewMaximized() bool {
 	return m.previewFull && m.filesView != nil && m.filesPreview != nil && !m.filesTreeFocused
+}
+
+// wtBackgroundPreview is ctrl+] on F's live preview: the file joins the open
+// files (ctrl+\) in the background — the one already open, if it is — and
+// the keys go back to the list, where the preview goes on following the
+// cursor. A file dropped over the cap is what the status names instead.
+func (m Model) wtBackgroundPreview() Model {
+	d := m.filesPreview
+	if open := m.openFiles.find(m.currentWorktree, d.key()); open != nil {
+		d = open
+	}
+	m.statusMsg = ""
+	m = m.registerDoc(d)
+	if m.statusMsg == "" {
+		m.statusMsg = i18n.T("%s is in the background — ctrl+\\ lists open files", d.path)
+	}
+	return m.focusTree()
 }
