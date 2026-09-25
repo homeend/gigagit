@@ -65,7 +65,6 @@ type task struct {
 	info      TaskInfo
 	spec      TaskSpec
 	cancel    context.CancelFunc
-	cancelled bool
 }
 
 type taskEnd struct {
@@ -362,7 +361,6 @@ func (m *TaskManager) Cancel(id TaskID) error {
 		m.signal()
 		return nil
 	case t.info.State.running():
-		t.cancelled = true
 		cancel := t.cancel
 		m.mu.Unlock()
 		cancel()
@@ -480,6 +478,77 @@ func (m *TaskManager) RemoveHistory(id string) error {
 	return m.hist.Remove(id)
 }
 
+// kindLabel names a kind in a session label ("Claude Code · commit message").
+func kindLabel(k exttool.Category) string {
+	switch k {
+	case exttool.CatCommitMessage:
+		return "commit message"
+	case exttool.CatConflict:
+		return "resolve conflict"
+	case exttool.CatConflictComplete:
+		return "resolve & complete"
+	}
+	return string(k)
+}
+
+// runInteractive prepares the inputs, starts the agent session and turns
+// every distinct write of $GG_MESSAGE_FILE into a result until the session
+// ends. Cancel kills the session. End: ≥1 result → done; killed before a
+// result → cancelled; exit 0 without a result → done only when
+// ResultOptional, else failed.
 func (m *TaskManager) runInteractive(ctx context.Context, t *task) taskEnd {
-	return taskEnd{state: TaskFailed, exit: -1, err: "interactive tasks are not implemented yet"}
+	in, err := t.spec.Svc.PrepareTask(ctx, t.spec.Op)
+	if err != nil {
+		return taskEnd{state: TaskFailed, exit: -1, err: err.Error()}
+	}
+	defer in.Cleanup()
+	env := append(append([]string{}, t.spec.Env...), in.Env...)
+	label := t.spec.Agent + " · " + kindLabel(t.spec.Kind)
+	sess, err := t.spec.Svc.startLine(ctx, m.sessionMgr(), label, t.spec.AgentID, in.Command,
+		t.spec.Worktree, t.spec.Cwd, t.spec.Cols, t.spec.Rows, env)
+	if err != nil {
+		return taskEnd{state: TaskFailed, exit: -1, err: err.Error()}
+	}
+	m.mu.Lock()
+	t.info.Session = sess.Info().ID
+	m.mu.Unlock()
+	m.signal()
+
+	w := newResultWatcher(in.MessageFile)
+	defer w.close()
+	results := 0
+	check := func() {
+		if !w.changed() {
+			return
+		}
+		res, _ := t.spec.Op.Collect(in, nil)
+		out, perr := t.parse(res.Captured)
+		if perr != nil || strings.TrimSpace(out) == "" {
+			return
+		}
+		results++
+		m.setResult(t, out)
+	}
+	stop := ctx.Done()
+	for {
+		select {
+		case <-w.wake():
+			check()
+		case <-stop:
+			stop = nil
+			_ = m.sessionMgr().Kill(sess.Info().ID)
+		case <-sess.Done():
+			check() // a write just before exit
+			info := sess.Info()
+			switch {
+			case results > 0:
+				return taskEnd{state: TaskDone, exit: info.ExitCode}
+			case ctx.Err() != nil:
+				return taskEnd{state: TaskCancelled, exit: info.ExitCode}
+			case t.spec.ResultOptional && info.ExitCode == 0:
+				return taskEnd{state: TaskDone}
+			}
+			return taskEnd{state: TaskFailed, exit: info.ExitCode, err: "the agent ended without a result"}
+		}
+	}
 }
