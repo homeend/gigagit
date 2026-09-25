@@ -76,3 +76,49 @@ func TestCtrlBracketOnFsPreviewReusesAnOpenFile(t *testing.T) {
 		t.Fatalf("open files = %v, want the one already open", regPaths(m.openFiles, m.currentWorktree))
 	}
 }
+
+// The list and preview boxes carry no hint line of their own: the app's
+// bottom bar shows the focused box's keys.
+func TestFilesBoxesHaveNoHintLine(t *testing.T) {
+	t.Parallel()
+	m := settle(t, wtDiskWindow(t, map[string]string{"a.txt": "AAA\n"}))
+	m.width, m.height = 160, 30
+	out := m.View()
+	for _, boxHint := range []string{"[→] preview  [ctrl+t] full  [esc] close", "[spc] mark  [/] find  [esc] close"} {
+		if strings.Contains(out, boxHint) {
+			t.Fatalf("a box still draws its hint line %q:\n%s", boxHint, out)
+		}
+	}
+	if !strings.Contains(out, "[enter/.] actions") {
+		t.Fatalf("the bottom bar lost the list's keys:\n%s", out)
+	}
+	if got, want := m.filePreviewRowsCap(), m.layout().boxH[panelCommits]-3; got != want {
+		t.Fatalf("preview rows = %d, want %d (the hint row is the file's now)", got, want)
+	}
+	tree := linkPreviewModel(t, "one\n", 0)
+	tree.width, tree.height = 160, 30
+	tree.filesTreeFocused = true
+	if strings.Contains(tree.View(), "[h] history  [b] blame  [/] search  [esc] close") {
+		t.Fatal("the commit file tree still draws its hint line")
+	}
+}
+
+func TestPreviewFootersOfferFullAndBackground(t *testing.T) {
+	t.Parallel()
+	f := fvKeys(t, settle(t, wtDiskWindow(t, map[string]string{"a.txt": "AAA\n"})), keyMsg("right"))
+	tree := linkPreviewModel(t, "one\n", 0)
+	for name, m := range map[string]Model{"F": f, "tree": tree} {
+		got, _ := m.footerOverride()
+		if !strings.Contains(got, "[ctrl+t] full") || !strings.Contains(got, "[ctrl+]] background") {
+			t.Fatalf("%s preview footer = %q", name, got)
+		}
+	}
+}
+
+func TestViewerKeepsItsHintLine(t *testing.T) {
+	t.Parallel()
+	m, _ := viewerModel(t)
+	if !strings.Contains(m.View(), "[ctrl+]] background") {
+		t.Fatal("the full-screen viewer lost its hint line")
+	}
+}

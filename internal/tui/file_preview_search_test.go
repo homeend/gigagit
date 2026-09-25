@@ -122,8 +122,8 @@ func TestPreviewSearchStepsAndBadges(t *testing.T) {
 	if !strings.Contains(out, "/alpha  2/60") {
 		t.Fatalf("the title line must carry the badge:\n%s", strings.Split(out, "\n")[1])
 	}
-	if !strings.Contains(out, "[/] find") {
-		t.Fatalf("the hint must advertise the search:\n%s", out)
+	if f, _ := m.footerOverride(); !strings.Contains(f, "[/] find") {
+		t.Fatalf("the bottom bar must advertise the search: %q", f)
 	}
 }
 

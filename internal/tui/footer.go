@@ -264,7 +264,7 @@ func (m Model) footerOverride() (string, bool) {
 		case m.filesPreview != nil && !m.filesTreeFocused && m.filesPreview.p.lsel.on:
 			return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 		case m.filesPreview != nil && !m.filesTreeFocused:
-			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+w] view  [←/tab/esc] back to list"), true
+			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [←/tab/esc] back to list"), true
 		}
 		return i18n.T("files: [↑/↓] move  [enter/.] actions  [/] filter  [→] preview  [ctrl+t] full  [ctrl+w] view  [esc] close"), true
 	}
@@ -273,7 +273,7 @@ func (m Model) footerOverride() (string, bool) {
 			if m.filesPreview.p.lsel.on {
 				return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 			}
-			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [ctrl+w] view  [←/tab] back to tree  [esc] close preview"), true
+			return i18n.T("file: [↑/↓] scroll  [alt+↑↓] line  [spc] mark  [/] find  [ctrl+t] full  [ctrl+]] background  [ctrl+w] view  [←/tab] back to tree  [esc] close preview"), true
 		}
 		// i shows the displayed commit's message — only when canShowFilesViewMessage
 		// holds (same gate as the handler, so the footer never advertises a dead i).
@@ -287,6 +287,9 @@ func (m Model) footerOverride() (string, bool) {
 			aHint := ""
 			if m.stashView == nil && !m.inCompareMode() && m.filesHash != "" {
 				aHint = i18n.T("  [a] all files")
+			}
+			if m.comparePair != nil { // a branch pair: f cycles the origin filter
+				aHint = i18n.T("  [f] filter")
 			}
 			return i18n.T("tree: [↑/↓] move  [enter] diff") + aHint + i18n.T("  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view") + msgHint + i18n.T("  [esc/l] close"), true
 		}

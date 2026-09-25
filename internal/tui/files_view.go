@@ -478,7 +478,7 @@ func shortHash(h string) string {
 // single-commit modes — the date line (1). It must track renderFilesView's
 // rowsCap, or pgup/pgdn oversteps the window it draws.
 func (m Model) filesPageRows() int {
-	n := m.layout().bodyH - 4
+	n := m.layout().bodyH - 3
 	if m.filesMetaLineFor() != "" {
 		n--
 	}
@@ -1003,7 +1003,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	if m.inWorktreeFiles() {
 		search, meta, title = m.wtSearchLine(), "", m.wtTitle()
 	}
-	rowsCap := contentH - 2 // title + hint lines
+	rowsCap := contentH - 1 // the title line (the keys are the bottom bar's)
 	if meta != "" {
 		rowsCap-- // the date line claims one more row
 	}
@@ -1071,7 +1071,11 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	}
 
 	lines := make([]string, 0, contentH)
-	lines = append(lines, padRight(truncate(title, innerW), innerW))
+	pos := ""
+	if len(vis) > rowsCap { // no hint line to carry it: where the cursor is
+		pos = fmt.Sprintf("%d/%d", p.sel+1, len(vis))
+	}
+	lines = append(lines, titleWithRight(title, pos, innerW, false))
 	if meta != "" {
 		// Its own line, directly under the title: a long subject truncates the
 		// title, and the date must not be the casualty of that.
@@ -1086,20 +1090,9 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: anchor, hscroll: p.hscroll})
 		lines = append(lines, win...)
 	}
-	for len(lines) < contentH-1 {
+	for len(lines) < contentH {
 		lines = append(lines, padRight("", innerW))
 	}
-	hint := i18n.T("[enter] diff  [h] history  [b] blame  [/] search  [esc] close")
-	if m.comparePair != nil {
-		hint = i18n.T("[enter] diff  [f] filter  [h] history  [b] blame  [/] search  [esc] close")
-	}
-	if m.inWorktreeFiles() {
-		hint = i18n.T("[.] actions  [/] filter  [→] preview  [ctrl+t] full  [esc] close")
-	}
-	if len(vis) > rowsCap {
-		hint = fmt.Sprintf("%d/%d  %s", p.sel+1, len(vis), hint)
-	}
-	lines = append(lines, padRight(truncate(hint, innerW), innerW))
 
 	style := s.bluredPanel
 	if m.filesTreeFocused {
