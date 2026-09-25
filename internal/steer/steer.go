@@ -78,7 +78,7 @@ type Line struct {
 // there is exactly one landing path.
 type Command struct {
 	ID     string  `json:"id"`
-	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear"
+	Cmd    string  `json:"cmd"`            // "navigate" | "reload" | "focus" | "highlight" | "highlight_clear" | "files" | "file_focus"
 	File   string  `json:"file,omitempty"` // repo-relative, git slash form
 	Target *Target `json:"target,omitempty"`
 	Commit string  `json:"commit,omitempty"` // navigate: reveal this commit, no file
@@ -96,6 +96,13 @@ type Command struct {
 	End     int      `json:"end,omitempty"`
 	Tone    string   `json:"tone,omitempty"` // "info" | "warn" | "error"
 	Wait    bool     `json:"wait,omitempty"`
+	// Background (navigate, a content link only): load the file into the
+	// TUI's open-files list without showing it — nothing on screen moves.
+	Background bool `json:"background,omitempty"`
+	// FileID names an open file for file_focus by its id ("f<n>", as
+	// `gg session files` lists it); File names one by path instead. Not
+	// ID: that is the command's own id.
+	FileID string `json:"file_id,omitempty"`
 	// HintKind/HintID name the UI surface a navigate's link was copied from
 	// ("bookmark", "shelf" or "stash" — model.LinkHint's closed set, spec
 	// §3.3/§3.4). They never change WHERE a navigate lands — only which
@@ -124,6 +131,20 @@ type Reply struct {
 	OK     bool   `json:"ok"`
 	Detail string `json:"detail,omitempty"`
 	Error  string `json:"error,omitempty"`
+	// Files is the files command's answer: the TUI's open files, most
+	// recently shown first.
+	Files []OpenFile `json:"files,omitempty"`
+}
+
+// OpenFile is one file open in a live TUI: a row of `gg session files` and of
+// the session snapshot's open_files. Protocol data, never display text.
+type OpenFile struct {
+	ID     string `json:"id"`             // "f<n>" — what `gg session files focus` takes
+	Path   string `json:"path"`           // repo-relative, git slash form
+	Source string `json:"source"`         // "worktree" | "commit" | "shelf"
+	Rev    string `json:"rev,omitempty"`  // the commit sha / the shelf entry id
+	Line   int    `json:"line,omitempty"` // the cursor, 1-based; 0 = not loaded
+	State  string `json:"state"`          // "shown" | "background"
 }
 
 // Presence records a live session. PID is display-only: liveness is decided by
