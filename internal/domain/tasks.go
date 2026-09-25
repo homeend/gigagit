@@ -232,6 +232,9 @@ func (m *TaskManager) runHeadless(ctx context.Context, t *task) taskEnd {
 	if err != nil {
 		return taskEnd{state: TaskFailed, exit: exitCodeOf(err), err: err.Error(), tail: out}
 	}
+	if t.spec.ResultOptional && strings.TrimSpace(res.Captured) == "" {
+		return taskEnd{state: TaskDone} // nothing reported: the outcome is the repository state
+	}
 	result, perr := t.parse(res.Captured)
 	if perr == nil && strings.TrimSpace(result) != "" {
 		m.setResult(t, result)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/homeend/gigagit/internal/agentsession"
+	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/repogate"
@@ -311,5 +312,25 @@ func TestTasksGlobalManager(t *testing.T) {
 	restore()
 	if Tasks() == m {
 		t.Fatal("restore did not put the previous manager back")
+	}
+}
+
+func TestTasksHeadlessConflictWithoutOverviewIsDone(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX shell command")
+	}
+	m, _ := newTestTasks(t)
+	_, svc := conflictedMergeRepo(t)
+	// A conflict agent that exits 0 and reports nothing: the outcome is the
+	// repository state, so the task is done (ResultOptional), not failed.
+	tc := config.ToolCommand{Category: "conflict", Name: "Quiet", Mode: "capture", Command: "true"}
+	spec, err := svc.ConflictTask(context.Background(), tc, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := waitInfo(t, m, m.Submit(spec), "ended", func(i TaskInfo) bool { return !i.State.Live() })
+	if info.State != TaskDone {
+		t.Fatalf("state = %s (%s), want done", info.State, info.Err)
 	}
 }
