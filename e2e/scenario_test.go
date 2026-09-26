@@ -233,8 +233,8 @@ stdout_excludes = ["origin/foo"]
 }
 
 func TestRunMissingStderr(t *testing.T) {
-	r := Run{StderrContains: []string{"no gg TUI session"}}
-	if miss := r.MissingStderr("no gg TUI session for this worktree\n"); len(miss) != 0 {
+	r := Run{StderrContains: []string{"no gg session"}}
+	if miss := r.MissingStderr("no gg session for this worktree\n"); len(miss) != 0 {
 		t.Fatalf("present, got missing %v", miss)
 	}
 	if miss := r.MissingStderr(""); len(miss) != 1 {

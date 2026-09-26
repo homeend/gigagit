@@ -82,27 +82,27 @@ branch = "main"
 [expect.status]
 unstaged = ["a.txt"]
 
-# Open files (open-files plan 4): with no live TUI every open-files verb says
-# so — and a background open never launches one.
+# Open files (open-files plans 4, 5c): with nothing live every open-files verb says
+# so — and a background open never launches a session.
 [[run]]
 cmd             = ["session", "files"]
 exit            = 1
-stderr_contains = ["no gg TUI session for this worktree"]
+stderr_contains = ["no gg session for this worktree"]
 
 [[run]]
 cmd             = ["session", "files", "--json"]
 exit            = 1
-stderr_contains = ["no gg TUI session for this worktree"]
+stderr_contains = ["no gg session for this worktree"]
 
 [[run]]
 cmd             = ["session", "files", "focus", "f1", "--no-wait"]
 exit            = 1
-stderr_contains = ["no gg TUI session for this worktree"]
+stderr_contains = ["no gg session for this worktree"]
 
 [[run]]
 cmd             = ["open", "--background", "gg://{{cwd}}/a.txt?view=content"]
 exit            = 1
-stderr_contains = ["no gg TUI session for this worktree"]
+stderr_contains = ["no gg session for this worktree"]
 
 # Usage errors come first (exit 2).
 [[run]]

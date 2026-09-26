@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -109,5 +110,45 @@ func TestPostHTTPMapsTheGateConflict(t *testing.T) {
 	}
 	if err.Error() != "operation in flight" {
 		t.Errorf("err = %q, want \"operation in flight\"", err)
+	}
+}
+
+func TestPostHTTPReplyDecodesTheAnswer(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		status  int
+		body    string
+		wantErr string
+		want    Reply
+	}{
+		{200, `{"id":"1-1","ok":true,"detail":"focused a.txt","files":[{"id":"f1","path":"a.txt","source":"worktree","state":"shown"}]}`, "",
+			Reply{ID: "1-1", OK: true, Detail: "focused a.txt", Files: []OpenFile{{ID: "f1", Path: "a.txt", Source: "worktree", State: "shown"}}}},
+		{200, `{"id":"1-1","ok":false,"error":"no open file f9"}`, "", Reply{ID: "1-1", Error: "no open file f9"}},
+		{400, `{"error":"unknown file id \"x\""}`, `unknown file id "x"`, Reply{}},
+		{409, `{"error":"operation in flight"}`, "operation in flight", Reply{}},
+		{500, `oops`, "gg web answered 500 Internal Server Error", Reply{}},
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/session/steer" || r.Header.Get("Content-Type") != "application/json" {
+				http.Error(w, "bad request shape", http.StatusTeapot)
+				return
+			}
+			w.WriteHeader(tc.status)
+			_, _ = w.Write([]byte(tc.body))
+		}))
+		got, err := PostHTTPReply(srv.URL, Command{ID: "1-1", Cmd: "files"})
+		srv.Close()
+		if tc.wantErr != "" {
+			if err == nil || err.Error() != tc.wantErr {
+				t.Errorf("%d: err = %v, want %q", tc.status, err, tc.wantErr)
+			}
+			continue
+		}
+		if err != nil || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%d: got %+v, %v; want %+v", tc.status, got, err, tc.want)
+		}
+	}
+	if _, err := PostHTTPReply("", Command{Cmd: "files"}); err == nil {
+		t.Error("an empty base must be refused")
 	}
 }

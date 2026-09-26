@@ -1238,8 +1238,9 @@ line, on screen or in the background — also `open_files` in the MCP
 `gg_ui_state`), and `gg session files focus <id|path>[:<line>]` brings one to
 the front. So an agent walking you through a change can open A, B and C in
 the background first, then bring each up in turn as it explains it. These
-need a running TUI (they never start one); `gg web` does not keep open files
-yet.
+work against a running TUI or `gg web` (they never start one): the web page's
+server answers from its shared list, and a focus brings the file up in every
+open tab.
 
 ### Agent sessions (embedded consoles)
 

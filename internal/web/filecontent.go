@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"net/http"
@@ -47,7 +48,7 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 		// The domain read refuses a path escaping the checkout; only a file
 		// that is simply not there reads as missing (the viewer's "(file
 		// deleted on disk)"), never an error.
-		data, err = svc.WorktreeFile(ctx, path)
+		data, err = readVersion(ctx, svc, "worktree", "", path)
 		if errors.Is(err, fs.ErrNotExist) {
 			writeJSON(w, fileContentBody{Lines: []contentRow{}, Missing: true})
 			return
@@ -57,13 +58,13 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, errors.New("a commit version needs rev"))
 			return
 		}
-		data, err = svc.ShowFile(ctx, rev, path)
+		data, err = readVersion(ctx, svc, src, rev, path)
 	case "shelf":
 		if rev == "" {
 			writeErr(w, http.StatusBadRequest, errors.New("a shelf version needs rev (the entry id)"))
 			return
 		}
-		data, err = svc.ShelfBlob(ctx, rev)
+		data, err = readVersion(ctx, svc, src, rev, path)
 	default:
 		writeErr(w, http.StatusBadRequest, errors.New("unknown src "+src))
 		return
@@ -77,6 +78,19 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, fileContentBody{Lines: contentRows(path, data, svc.SyntaxHighlighting())})
+}
+
+// readVersion reads path at one version: the bytes ON DISK (a missing file is
+// fs.ErrNotExist, passed through), a commit's blob, or a shelf entry's. src
+// and rev are the caller's to validate.
+func readVersion(ctx context.Context, svc *domain.Service, src, rev, path string) ([]byte, error) {
+	switch src {
+	case "commit":
+		return svc.ShowFile(ctx, rev, path)
+	case "shelf":
+		return svc.ShelfBlob(ctx, rev)
+	}
+	return svc.WorktreeFile(ctx, path)
 }
 
 // contentRows splits data into lines — "\n"-terminated, a trailing "\r"

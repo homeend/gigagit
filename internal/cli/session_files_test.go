@@ -103,21 +103,89 @@ func TestSessionFilesFocusUnknownExitsOne(t *testing.T) {
 	}
 }
 
-func TestSessionFilesNeedsALiveTUI(t *testing.T) {
+func TestSessionFilesNeedsALiveSession(t *testing.T) {
 	t.Parallel()
 	var out, errb bytes.Buffer
-	if code := runSession(t.TempDir(), nil, []string{"files"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "no gg TUI session for this worktree") {
+	if code := runSession(t.TempDir(), nil, []string{"files"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "no gg session for this worktree") {
 		t.Fatalf("exit=%d stderr=%q", code, errb.String())
 	}
+}
+
+// Web only: the page's server answers from its own list.
+func TestSessionFilesAnswersFromTheWeb(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	web, srv := newSteerServer(t, 202, "")
+	web, srv := newSteerServer(t, 200, `{"id":"x","ok":true,"files":[{"id":"f1","path":"a.txt","source":"worktree","line":3,"state":"background"}]}`)
 	liveWebPresence(t, dir, srv.URL)
-	errb.Reset()
-	if code := runSession(dir, nil, []string{"files"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "gg web does not keep open files yet") {
-		t.Fatalf("web only: exit=%d stderr=%q", code, errb.String())
+	var out, errb bytes.Buffer
+	if code := runSession(dir, nil, []string{"files"}, &out, &errb); code != 0 || out.String() != "f1\ta.txt\tworktree\t:3\tbackground\n" {
+		t.Fatalf("exit=%d out=%q err=%q", code, out.String(), errb.String())
+	}
+	if got := web.commands(); len(got) != 1 || got[0].Cmd != "files" {
+		t.Fatalf("posted %+v", got)
+	}
+}
+
+// TUI and web both live: files answers from the TUI alone.
+func TestSessionFilesPrefersTheTUI(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	livePresence(t, dir)
+	web, srv := newSteerServer(t, 200, `{"ok":true}`)
+	liveWebPresence(t, dir, srv.URL)
+	answer(t, dir, func(c steer.Command) steer.Reply {
+		return steer.Reply{ID: c.ID, OK: true, Files: []steer.OpenFile{{ID: "f4", Path: "t.txt", Source: "worktree", State: "shown"}}}
+	})
+	var out, errb bytes.Buffer
+	if code := runSession(dir, nil, []string{"files"}, &out, &errb); code != 0 || !strings.HasPrefix(out.String(), "f4\tt.txt") {
+		t.Fatalf("exit=%d out=%q err=%q", code, out.String(), errb.String())
 	}
 	if len(web.commands()) != 0 {
-		t.Error("files was posted to the web page")
+		t.Error("files was posted to the web page while a TUI was live")
+	}
+}
+
+func TestSessionFilesFocusWebOnly(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	_, srv := newSteerServer(t, 200, `{"ok":false,"error":"no open file f9"}`)
+	liveWebPresence(t, dir, srv.URL)
+	var out, errb bytes.Buffer
+	if code := runSession(dir, nil, []string{"files", "focus", "f9"}, &out, &errb); code != 1 || errb.String() != "no open file f9\n" {
+		t.Fatalf("exit=%d out=%q err=%q", code, out.String(), errb.String())
+	}
+}
+
+// Both live: the focus reaches both; the web's answer is labelled, the
+// TUI's reply decides the exit code.
+func TestSessionFilesFocusGoesToBoth(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	livePresence(t, dir)
+	web, srv := newSteerServer(t, 200, `{"ok":false,"error":"no open file f2"}`)
+	liveWebPresence(t, dir, srv.URL)
+	answer(t, dir, func(c steer.Command) steer.Reply {
+		return steer.Reply{ID: c.ID, OK: true, Detail: "focused a.txt at line 2"}
+	})
+	var out, errb bytes.Buffer
+	code := runSession(dir, nil, []string{"files", "focus", "f2:2"}, &out, &errb)
+	if code != 0 || out.String() != "focused a.txt at line 2\n" || errb.String() != "web: no open file f2\n" {
+		t.Fatalf("exit=%d out=%q err=%q", code, out.String(), errb.String())
+	}
+	if got := web.commands(); len(got) != 1 || got[0].Cmd != "file_focus" || got[0].FileID != "f2" || got[0].Line == nil || got[0].Line.No != 2 {
+		t.Fatalf("web got %+v", got)
+	}
+}
+
+// A web that cannot be reached, alone: exit 1 with its error.
+func TestSessionFilesWebErrorExitsOne(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	_, srv := newSteerServer(t, 409, `{"error":"operation in flight"}`)
+	liveWebPresence(t, dir, srv.URL)
+	var out, errb bytes.Buffer
+	if code := runSession(dir, nil, []string{"files", "focus", "f1"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "web: operation in flight") {
+		t.Fatalf("exit=%d err=%q", code, errb.String())
 	}
 }
 
@@ -184,7 +252,7 @@ func TestSessionNavigateBackgroundRefusals(t *testing.T) {
 	content := "gg://" + filepath.ToSlash(repo) + "/README.md?view=content"
 	var out, errb bytes.Buffer
 	if code := runSession(t.TempDir(), svc, []string{"navigate", "--background", content}, &out, &errb); code != 1 ||
-		!strings.Contains(errb.String(), "no gg TUI session for this worktree") {
+		!strings.Contains(errb.String(), "no gg session for this worktree") {
 		t.Fatalf("no TUI: exit=%d stderr=%q", code, errb.String())
 	}
 }

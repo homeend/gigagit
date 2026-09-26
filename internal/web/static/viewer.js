@@ -352,7 +352,7 @@ function viewerSearchKey(e) {
 // viewer is open #foot shows them, and gets its own chips back on close.
 const VIEWER_FOOT =
   `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` +
-  `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="files">ctrl+\ open files</button><button data-vact="close">esc close</button>`;
+  `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="files">ctrl+\\ open files</button><button data-vact="close">esc close</button>`;
 
 function swapFoot(on) {
   if (on) pushFoot("viewer", VIEWER_FOOT);

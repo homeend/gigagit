@@ -33,8 +33,8 @@ func parseFileTarget(s string) (id, path string, line int) {
 	return "", s, line
 }
 
-// sessionFiles is `gg session files [--json]` — the live TUI's open files for
-// the worktree it shows — and `gg session files focus`.
+// sessionFiles is `gg session files [--json]` — the live session's open files
+// (the TUI's, else gg web's) for the worktree it shows — and `gg session files focus`.
 func sessionFiles(dir string, args []string, stdout, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "focus" {
 		return sessionFilesFocus(dir, args[1:], stdout, stderr)
@@ -50,7 +50,7 @@ func sessionFiles(dir string, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, filesUsage)
 		return 2
 	}
-	r, code, ok := steerTUI(dir, steer.Command{Cmd: "files"}, false, stdout, stderr)
+	r, code, ok := steerLive(dir, steer.Command{Cmd: "files"}, false, false, stdout, stderr)
 	if !ok {
 		return code
 	}
@@ -107,7 +107,7 @@ func sessionFilesFocus(dir string, args []string, stdout, stderr io.Writer) int 
 	if line > 0 {
 		c.Line = &steer.Line{No: line}
 	}
-	r, code, ok := steerTUI(dir, c, *noWait, stdout, stderr)
+	r, code, ok := steerLive(dir, c, true, *noWait, stdout, stderr)
 	if !ok {
 		return code
 	}

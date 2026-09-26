@@ -1,0 +1,50 @@
+name = "session files with only gg web live: the web server answers from its list"
+
+[input]
+web = true
+steps = [
+  { write = "a.txt", content = "alpha\nbravo\ncharlie\n" },
+  { commit = "seed" },
+]
+
+[[run]]
+cmd             = ["session", "files"]
+exit            = 0
+stdout_excludes = ["a.txt"]
+
+[[run]]
+cmd             = ["open", "--background", "gg://{{cwd}}/a.txt?view=content"]
+exit            = 0
+stdout_contains = ["opened a.txt in the background"]
+
+[[run]]
+cmd             = ["session", "files"]
+exit            = 0
+stdout_contains = ["f1\ta.txt\tworktree\t-\tbackground"]
+
+[[run]]
+cmd             = ["session", "files", "--json"]
+exit            = 0
+stdout_contains = ['"id": "f1"', '"path": "a.txt"']
+
+[[run]]
+cmd             = ["session", "files", "focus", "f1:2"]
+exit            = 0
+stdout_contains = ["focused a.txt at line 2; no gg web tab is open to show it"]
+
+[[run]]
+cmd             = ["session", "files"]
+exit            = 0
+stdout_contains = ["f1\ta.txt\tworktree\t:2\tbackground"]
+
+[[run]]
+cmd             = ["session", "files", "focus", "f9"]
+exit            = 1
+stderr_contains = ["no open file f9"]
+
+[[run]]
+cmd             = ["open", "--background", "gg://{{cwd}}/nope.txt?view=content"]
+exit            = 1
+
+[expect]
+branch = "main"

@@ -5,33 +5,40 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 )
 
-// httpTimeout bounds a POST to an open gg web page. The endpoint answers 202
-// immediately, so anything slower is a page that is already gone.
+// httpTimeout bounds a POST to an open gg web page. The endpoint answers at
+// once — 202, or the open-files verbs' reply — so anything slower is a page
+// that is already gone.
 const httpTimeout = 2 * time.Second
+
+// postSteerHTTP sends c to an open gg web page's steer endpoint.
+func postSteerHTTP(base string, c Command) (*http.Response, error) {
+	if base == "" {
+		return nil, errors.New("the gg web presence carries no URL")
+	}
+	body, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(base, "/")+"/api/session/steer", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return (&http.Client{Timeout: httpTimeout}).Do(req)
+}
 
 // PostHTTP hands one command to an open gg web page. Content-Type is JSON and
 // no Origin header is sent, which the server's writeGuard accepts from a
 // non-browser client. A 409 means an operation is in flight and the page
 // refused the command outright.
 func PostHTTP(base string, c Command) error {
-	if base == "" {
-		return errors.New("the gg web presence carries no URL")
-	}
-	body, err := json.Marshal(c)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequest(http.MethodPost, strings.TrimRight(base, "/")+"/api/session/steer", bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: httpTimeout}).Do(req)
+	resp, err := postSteerHTTP(base, c)
 	if err != nil {
 		return err
 	}
@@ -43,6 +50,36 @@ func PostHTTP(base string, c Command) error {
 		return fmt.Errorf("gg web answered %s", resp.Status)
 	}
 	return nil
+}
+
+// PostHTTPReply is PostHTTP for the verbs the gg web SERVER answers itself
+// (files, file_focus, a background open — it owns the open-files list): the
+// 2xx's body is the Reply. A refusal the endpoint validated comes back as an
+// error carrying the endpoint's own words.
+func PostHTTPReply(base string, c Command) (Reply, error) {
+	var rep Reply
+	resp, err := postSteerHTTP(base, c)
+	if err != nil {
+		return rep, err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode == http.StatusConflict {
+		return rep, errors.New("operation in flight")
+	}
+	if resp.StatusCode/100 != 2 {
+		var e struct {
+			Error string `json:"error"`
+		}
+		if json.Unmarshal(data, &e) == nil && e.Error != "" {
+			return rep, errors.New(e.Error)
+		}
+		return rep, fmt.Errorf("gg web answered %s", resp.Status)
+	}
+	if err := json.Unmarshal(data, &rep); err != nil {
+		return rep, fmt.Errorf("gg web's answer: %w", err)
+	}
+	return rep, nil
 }
 
 // NotifyReload tells whatever sessions are live for this inbox that the named

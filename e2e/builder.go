@@ -75,6 +75,9 @@ func buildSandbox(t *testing.T, sc *Scenario) *Sandbox {
 		sb.runSteps(t, sc.Input.Origin.After, sb.OriginDir)
 	}
 	sb.snapshotInput(t)
+	if sc.Input.Web {
+		startWeb(t, sb)
+	}
 	return sb
 }
 

@@ -608,15 +608,28 @@ func TestToSteerWireCarriesAContentHint(t *testing.T) {
 	}
 }
 
-func TestToSteerWireRefusesOpenFilesVerbs(t *testing.T) {
+// The open-files verbs reach the web (plan 5c): the stage-4 refusals are gone,
+// and what is left is the verbs' own shape rules.
+func TestToSteerWireAcceptsOpenFilesVerbs(t *testing.T) {
 	t.Parallel()
+	for _, c := range []steer.Command{
+		{Cmd: "files"},
+		{Cmd: "file_focus", FileID: "f1"},
+		{Cmd: "file_focus", File: "a.txt", Line: &steer.Line{No: 3}},
+		{Cmd: "navigate", File: "a.txt", Background: true, HintKind: "view", HintID: "content"},
+	} {
+		if _, err := toSteerWire(c); err != nil {
+			t.Errorf("toSteerWire(%+v) = %v, want accepted", c, err)
+		}
+	}
 	for _, tc := range []struct {
 		c    steer.Command
 		want string
 	}{
-		{steer.Command{Cmd: "files"}, "open files are not supported in gg web yet"},
-		{steer.Command{Cmd: "file_focus", FileID: "f1"}, "open files are not supported in gg web yet"},
-		{steer.Command{Cmd: "navigate", File: "a.txt", Background: true}, "background opens are not supported in gg web yet"},
+		{steer.Command{Cmd: "file_focus"}, "file_focus needs a file id or a path"},
+		{steer.Command{Cmd: "file_focus", FileID: "x1"}, `unknown file id "x1"`},
+		{steer.Command{Cmd: "navigate", File: "a.txt", Background: true}, "a background open needs a content link"},
+		{steer.Command{Cmd: "navigate", Commit: "HEAD", Background: true, HintKind: "view", HintID: "content"}, "a background open needs a content link"},
 	} {
 		if _, err := toSteerWire(tc.c); err == nil || err.Error() != tc.want {
 			t.Errorf("toSteerWire(%+v) = %v, want %q", tc.c, err, tc.want)

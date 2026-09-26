@@ -1242,6 +1242,23 @@ via `fanOut` (the gate never drops them). Page: `viewer.js` `closeViewer(how)`
 — esc = close, ctrl+] and the `.` menu's hand-offs = background; a load-seq
 token lets a link landing beat a reload; `layers.js` `pushFoot`/`popFoot` is a
 chip stack so the switcher (`openfiles.js`) nests over the viewer.
+**Web agent verbs (5c, 2026-09-26):** `POST /api/session/steer` answers
+`files`, a background navigate and `file_focus` ITSELF — 200 + a
+`steer.Reply` (`steer_files.go`); every other verb keeps its 202. `files` and
+a background open are answered BEFORE the op-in-flight 409 (neither rides the
+hub's steer lane: a background open only `fanOut`s `open_files`, now carrying
+`opened` for the page's toast); `file_focus` keeps the 409 and emits a steer
+whose wire carries `file_id`, NEVER a path (a path may name two versions —
+`ofs.resolve` tries id, then an id-as-path, then path, like the TUI's
+`findOpenFile`). Reply words are the TUI's (`steerLanded` = `landedDetail`),
+the line count from the server's own read (`readVersion`, shared with
+`/api/file-content`); a focus with no live tab stream says `; no gg web tab
+is open to show it`. `toSteerWire`: a background open needs a content link;
+`file_id` must be `f<n>`. CLI: `steerLive(both)` replaces `steerTUI` — the
+TUI when live (its reply decides), else the web (`steer.PostHTTPReply`); a
+focus/background open with both live goes to both, the web's answer printed
+`web: …`. e2e: `[input] web = true` (`e2e/web.go`) serves the sandbox with an
+in-process `web.Serve` and waits for its presence.
 **Agent verbs (plan 4, 2026-09-25):** steer additions `Command.Background`,
 `Command.FileID` (NOT `ID` — that is the command's id), `Reply.Files` and the
 wire row `steer.OpenFile` (id `f<seq>` = `openFile.seq`, the tag's suffix;

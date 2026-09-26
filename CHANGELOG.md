@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Open files on the web: agent verbs (5c)
+
+### Added
+
+- **`gg open --background`, `gg session files [--json]` and `gg session files
+  focus` work with `gg web`**: the page's server answers from its shared
+  open-files list, in the TUI's words. A background open loads the file
+  without moving any tab (every tab says `<path> opened in the background`);
+  a focus brings the file up in every open tab, at the line when one is
+  given. With a TUI and a `gg web` both live, a background open and a focus go
+  to both — the TUI's answer decides, the page's is printed `web: …`; `files`
+  answers from the TUI.
+- e2e scenarios can serve their repo with a real `gg web` (`[input] web =
+  true`).
+
+### Changed
+
+- With nothing live, the open-files verbs say `no gg session for this
+  worktree` (was `no gg TUI session …` / `gg web does not keep open files
+  yet`).
+
 ## TUI: the AI tasks tab as a table; consoles step out when their agent exits
 
 ### Changed
