@@ -187,3 +187,66 @@ func TestResultViewerCopiesWholeResult(t *testing.T) {
 		t.Fatalf("copied %q", copied)
 	}
 }
+
+func TestTaskTabHintFollowsTheRow(t *testing.T) {
+	m := launchTestModel(t)
+	done := submitReview(t, m, "echo fine")
+	waitTaskState(t, done, taskEndedFn)
+	running := submitReview(t, m, "sleep 5") // same key: queued, then running — headless either way
+	m, _ = m.openSessionsPopupOn(tabTasks, running)
+	p := layerOf[*sessionsPopup](m)
+	hint := p.taskHint()
+	if strings.Contains(hint, "[enter]") || !strings.Contains(hint, "[k k] cancel") || strings.Contains(hint, "[x]") {
+		t.Fatalf("a live headless task: no enter, cancel, no remove — got %q", hint)
+	}
+	for i, r := range p.taskRows {
+		if r.id() == done {
+			p.taskSel = i
+		}
+	}
+	hint = p.taskHint()
+	if !strings.Contains(hint, "[enter] result") || strings.Contains(hint, "[k k]") || !strings.Contains(hint, "[x] remove") {
+		t.Fatalf("a finished task with a result: got %q", hint)
+	}
+}
+
+func TestTaskTabIsATable(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	list := []domain.TaskInfo{
+		{ID: "a", Key: "review — a1b2c3d..9f8e7d6", Agent: "Claude Code", State: domain.TaskRunning, Started: now.Add(-5 * time.Second)},
+		{ID: "b", Key: "commit message — main @ 1234567", Agent: "Kimi", State: domain.TaskQueued, Submitted: now},
+	}
+	p := &sessionsPopup{tab: tabTasks}
+	p.taskRows = taskRows(list, nil, "", nil)
+	out := p.renderTaskRows(Model{}, 90, 5)
+	if !strings.Contains(out[0], "Task") || !strings.Contains(out[0], "Agent") || !strings.Contains(out[0], "State") {
+		t.Fatalf("no header row: %q", out[0])
+	}
+	col := func(line, cell string) int { return strings.Index(ansi.Strip(line), cell) }
+	if a, b := col(out[1], "Claude Code"), col(out[2], "Kimi"); a != b || a < 0 {
+		t.Fatalf("agent column not aligned: %d vs %d\n%s\n%s", a, b, out[1], out[2])
+	}
+	if a, b := col(out[1], "running"), col(out[2], "queued"); a != b || a < 0 {
+		t.Fatalf("state column not aligned: %d vs %d", a, b)
+	}
+}
+
+func TestAgentsPopupOpensOnTheFreshestTab(t *testing.T) {
+	m := launchTestModel(t)
+	id := submitReview(t, m, "echo ok")
+	waitTaskState(t, id, taskEndedFn)
+	time.Sleep(20 * time.Millisecond)
+	startTestSession(t, m, "sleep 5") // newer than the task
+	m2, _ := m.openSessionsPopup(false)
+	if p := layerOf[*sessionsPopup](m2); p == nil || p.tab != tabSessions {
+		t.Fatalf("the newest is a console: want the agents tab, got %+v", p)
+	}
+	time.Sleep(20 * time.Millisecond)
+	id2 := submitReview(t, m, "echo again") // now a task is the newest
+	waitTaskState(t, id2, taskEndedFn)
+	m3, _ := m.openSessionsPopup(false)
+	if p := layerOf[*sessionsPopup](m3); p == nil || p.tab != tabTasks {
+		t.Fatalf("the newest is a task: want the AI tasks tab, got %+v", p)
+	}
+}
