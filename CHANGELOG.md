@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Web: the file viewer (open files, stage 5a)
+
+### Added
+
+- **view file** in `gg web`'s file menus (working tree, a commit's files, a
+  shelved file): the file full-page with line numbers, syntax colour, a line
+  cursor, `/` find, and a `.` menu — copy file link at the cursor line, copy
+  line, diff, file history, blame. Its keys show in the bottom bar.
+- Content links land in the page: `gg session navigate`, `gg open --web`
+  (no longer refused), and the `#` prompt, which now also takes any `gg://`
+  link (`GET /api/link-command`).
+- `GET /api/file-content` — a file at a version (working tree, commit, shelf).
+
+### Fixed
+
+- `gg web`: the `#` keystroke no longer types itself into the goto prompt it
+  opens.
+
 ## Open files: agent verbs
 
 ### Added

@@ -294,7 +294,8 @@ link) copies `gg://<repo>/<path>?view=content`: the file as it is on disk in
 this worktree, with no commit — from a commit's file list too. gg checks the
 file exists first and says `<path> is not in the working tree` when it does
 not. `gg open` on such a link (or an agent's `gg session navigate`) opens the
-file's content viewer in the TUI; `gg web` does not land content links yet.
+file's content viewer in the TUI — and, with `gg web` running (`gg open
+--web`, or a link pasted into its `#` prompt), in the page's viewer.
 Inside that viewer (and in the files view's View-file preview, when the disk
 still shows the previewed text), Copy file link carries the cursor line
 (`…/<path>:<line>?view=content`), and opening such a link lands the cursor on
@@ -1162,6 +1163,22 @@ scriptable as `gg review`
 likewise come back through `$GG_MESSAGE_FILE`, fed the diff via a new
 `$GG_REVIEW_DIFF` file (Junie's own `--review` flag can't take a range;
 Kimi's print-mode stdout is a report, not the review).
+
+### The file viewer in `gg web`
+
+Right-click (or `.`) a file in the browser's working-tree list, a commit's
+file list or a shelved file and pick **view file**: the file opens full-page —
+the bytes on disk for a working-tree row, that commit's version for a commit
+row, the frozen bytes for a shelved file — with line numbers and syntax
+colour. `↑↓` / `j k` move a line cursor (click a line too), `/` finds (`]` `[`
+step), `w` cycles long lines, and `.` (or right-click) offers **copy file
+link** at the cursor line, **copy line**, the file's **diff**, **file
+history** and **blame**; `esc` closes. The keys show in the page's bottom bar
+while the viewer is open. A content link lands here too — an agent's `gg
+session navigate`, `gg open --web`, or a link pasted into the `#` prompt
+(which now takes any `gg://` link as well as a commit). A commit or shelf
+version copies a content link only while the file on disk still holds the
+lines shown.
 
 ### Open files (background file viewers)
 

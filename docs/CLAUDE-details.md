@@ -1208,6 +1208,21 @@ the shown lines and the off-thread check compares them to the disk
 The navigate reply rides the load (`contentLandedMsg` wraps the
 `fileContentMsg`), so it can say `at line N` / the clamp; a failed load
 fails the navigate.
+**Web viewer (open files 5a, 2026-09-26):** `GET /api/file-content`
+(`filecontent.go`: src worktree|commit|shelf — shelf bytes via `ShelfBlob` —
+lines split on `\n` with a trailing `\r` trimmed, `tokTriples` runs under the
+TUI's lex rule, `too_large` over `MaxDiffBytes`, `missing` for a working-tree
+file gone from disk) feeds `static/viewer.js`, a `mountOverlay("viewer")`
+layer whose markup is built at IMPORT (bindSearchBar needs its bar in the DOM).
+The overlay stops above `#foot` and swaps the footer's chips while open (hints
+live in the bottom bar). *view file* rows come in through a dedicated
+`"fileview"` menu key that files.js splices beside history/blame (a plain
+`registerRows("file")` appends after the discard rows; files.js must not
+import viewer.js). Content links land via live.js's `steerNavigateContent`
+(a `view` hint is a LANDING kind, never revealed — it returns before the
+land-then-reveal pair); `#` takes a `gg://` link through
+`GET /api/link-command` (linknav → `toSteerWire`, or `{checkout}` for another
+checkout). The `toSteerWire` and `gg open --web` content refusals are gone.
 **Agent verbs (plan 4, 2026-09-25):** steer additions `Command.Background`,
 `Command.FileID` (NOT `ID` — that is the command's id), `Reply.Files` and the
 wire row `steer.OpenFile` (id `f<seq>` = `openFile.seq`, the tag's suffix;
