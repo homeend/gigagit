@@ -84,6 +84,7 @@ function connectLive() {
     // Open files (plan 5b): the shared list changed, or a file on disk did.
     // Neither is a refresh source — they never join the coalescing set.
     if (msg.reason === "open_files") {
+      if (msg.opened) opLine(msg.opened + " opened in the background", false);
       viewerOpenFiles(msg.files || []);
       switcherOpenFiles(msg.files || []);
       return;
@@ -216,6 +217,8 @@ async function applySteer(s) {
         return steerHighlightClear(s);
       case "navigate":
         return await steerNavigate(s);
+      case "file_focus":
+        return await steerFileFocus(s);
     }
   } catch {
     // a page that moved on under us is not an error worth surfacing
@@ -382,6 +385,13 @@ async function steerNavigateContent(s) {
   }
   if (!present) return navMiss(s.file + " is not in the working tree");
   await openViewer({ src: "worktree", path: s.file, line: s.line || 0 });
+}
+
+// steerFileFocus brings an open file up in THIS tab — every tab gets the
+// command (gg session files focus): the switcher's enter, at the agent's
+// line when it named one. The server resolved a path to the id.
+async function steerFileFocus(s) {
+  await openViewer({ id: s.file_id, line: s.line || 0 });
 }
 
 // gotoLink lands a gg:// link pasted into # (the TUI's # paste): the server

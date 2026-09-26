@@ -3,6 +3,9 @@ package web
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/steer"
@@ -183,5 +186,27 @@ func TestSteerFileFocusIs409WhileAnOpIsInFlight(t *testing.T) {
 	s.cur = &opRun{}
 	if code := steerPost(t, s, `{"id":"1","cmd":"file_focus","file_id":"f1"}`, "application/json"); code != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", code)
+	}
+}
+
+func TestLiveJSRoutesTheOpenFilesVerbs(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "live.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	for _, want := range []string{
+		`case "file_focus":`,
+		`openViewer({ id: s.file_id, line: s.line || 0 })`,
+		`if (msg.opened) opLine(msg.opened + " opened in the background", false);`,
+	} {
+		if !strings.Contains(src, want) {
+			t.Errorf("live.js: missing %q", want)
+		}
+	}
+	// Key hints live in the footer only (ruling): the toast names no key.
+	if strings.Contains(src, `opened in the background — ctrl`) {
+		t.Error("live.js: the background toast advertises a key")
 	}
 }
