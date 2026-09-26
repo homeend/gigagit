@@ -19,6 +19,7 @@ import { fetchPRs, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { loadRepo, opLine } from "./ops.js";
+import { openViewer } from "./viewer.js";
 
 const COALESCE_MS = 150; // one burst of watcher events → one refresh
 const RETRY_MS = 500; // a refresh is already running → try again after it
@@ -349,8 +350,39 @@ async function openCompareForPair(a, b) {
 // silently skip every other shape (the same trap ruling S2 named one file
 // over, in finishLink's arms).
 async function steerNavigate(s) {
+  if (s.hint_kind === "view" && s.hint_id === "content") return steerNavigateContent(s);
   await steerNavigateLand(s);
   if (s.hint_kind) await revealHint(s);
+}
+
+// steerNavigateContent lands a content link: the file ON DISK in the viewer,
+// at the link's line — refused, on the page, when the file is not in the
+// working tree (the TUI's words). A line past the end lands on the last line
+// and the viewer says so.
+async function steerNavigateContent(s) {
+  let present = false;
+  try {
+    present = (await getJSON("/api/worktree-present?path=" + encodeURIComponent(s.file))).present;
+  } catch {
+    // the viewer's own load reports a dead server
+    present = true;
+  }
+  if (!present) return navMiss(s.file + " is not in the working tree");
+  await openViewer({ src: "worktree", path: s.file, line: s.line || 0 });
+}
+
+// gotoLink lands a gg:// link pasted into # (the TUI's # paste): the server
+// resolves it (linknav) and hands back the steer command this page lands with
+// — the very path an agent's navigate takes — or the other checkout it names.
+async function gotoLink(link) {
+  let body;
+  try {
+    body = await getJSON("/api/link-command?link=" + encodeURIComponent(link));
+  } catch (e) {
+    return opLine("cannot open link: " + (e.message || e), true);
+  }
+  if (body.checkout) return opLine("that link is in " + body.checkout + " — open gg web there", true);
+  await steerNavigate(body.steer);
 }
 
 // revealHint routes a landed navigate's hint to its surface. A preview hint
@@ -480,4 +512,4 @@ async function applyStartAt() {
   if (body && body.steer) await applySteer(body.steer);
 }
 
-export { applyStartAt, connectLive, refreshSources };
+export { applyStartAt, connectLive, gotoLink, refreshSources };

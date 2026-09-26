@@ -11,6 +11,7 @@ import { commitMetaLine, commitMetaParts, drillOut, enterFilesStage, openCompare
 import { focusPane, moveCursor } from "./keys.js";
 import { extraRows } from "./menus.js";
 import { entryGone } from "./toast.js";
+import { gotoLink } from "./live.js";
 
 // Feed-scoped state that lives on the shared object so search.js (which owns
 // the filter bar) can set it without this module importing that one — the
@@ -558,11 +559,13 @@ async function openCommitByHash(hash, title) {
 // the moment a page adds nothing (feed exhausted — e.g. a solo scope that
 // excludes the commit), then falls back to opening the detail directly so the
 // user always lands on the commit.
+// gotoCommitPrompt is #: a revision to reveal, or a pasted gg:// link to
+// land on (live.js's gotoLink — the TUI's # takes both too).
 function gotoCommitPrompt() {
   openPrompt({
-    title: "Goto commit — sha, branch, tag, or any rev",
-    placeholder: "e.g. a1b2c3d or main~3",
-    onSubmit: (rev) => gotoCommit(rev),
+    title: "Goto — a commit (sha, branch, tag, any rev) or a gg:// link",
+    placeholder: "e.g. a1b2c3d, main~3 or gg://…",
+    onSubmit: (text) => (text.trim().startsWith("gg://") ? gotoLink(text.trim()) : gotoCommit(text)),
   });
 }
 

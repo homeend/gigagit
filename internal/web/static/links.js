@@ -352,4 +352,4 @@ registerRows("shelf", (e) => {
   return link ? [copyLinkRow(link, entryDesc("shelf", e))] : [];
 });
 
-export { copyLink, linkDesc, linkFor, previewRowLink };
+export { copyFileLink, copyLink, linkDesc, linkFor, previewRowLink };

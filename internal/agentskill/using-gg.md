@@ -186,8 +186,8 @@ focuses a line — `gg open` puts the viewer's cursor on it (exit 1 when the
 file has fewer lines) and answers `opened <path> at line N`; when the file
 shrank since the link was made it lands on the last line and says `(line N is
 past the end, M lines)`. `gg open` / `gg session navigate` show it in the TUI's
-content viewer; `gg open --web` refuses it
-(exit 2) — the web page has no viewer yet. Every other link-taking verb
+content viewer; `gg open --web` shows it in the browser's viewer (a live
+`gg web` page is steered, else one is started). Every other link-taking verb
 (`gg diff`, `gg show`, `gg note …`, `gg session highlight add`) refuses it
 (exit 2). When the user asks you to "open" a file for them, this is the link
 to build: `gg link --content <path>[:<line>]` → `gg open <link>`.

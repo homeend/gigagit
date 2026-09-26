@@ -598,13 +598,13 @@ func TestSteerWireAcceptsAPreviewHint(t *testing.T) {
 	}
 }
 
-// The page has no content viewer yet: a content link must be refused on the
-// wire, not landed on the working-tree diff.
-func TestSteerWireRefusesAContentLink(t *testing.T) {
+// A content link rides the wire with its hint and line: the page's viewer
+// lands it (open files on the web, plan 5a).
+func TestToSteerWireCarriesAContentHint(t *testing.T) {
 	t.Parallel()
-	_, err := toSteerWire(steer.Command{Cmd: "navigate", File: "a.txt", HintKind: "view", HintID: "content"})
-	if err == nil || err.Error() != "content links are not supported in gg web yet" {
-		t.Fatalf("toSteerWire = %v, want the web refusal", err)
+	w, err := toSteerWire(steer.Command{Cmd: "navigate", File: "a.txt", HintKind: "view", HintID: "content", Line: &steer.Line{No: 3}})
+	if err != nil || w.HintKind != "view" || w.HintID != "content" || w.Line != 3 {
+		t.Fatalf("toSteerWire = %+v, %v — want the content hint and line 3", w, err)
 	}
 }
 
@@ -621,5 +621,15 @@ func TestToSteerWireRefusesOpenFilesVerbs(t *testing.T) {
 		if _, err := toSteerWire(tc.c); err == nil || err.Error() != tc.want {
 			t.Errorf("toSteerWire(%+v) = %v, want %q", tc.c, err, tc.want)
 		}
+	}
+}
+
+// gg open --web <content link> starts the page at the viewer: the start-at
+// takes the content wire (plan 5a lifted the refusal).
+func TestStartAtCarriesAContentLink(t *testing.T) {
+	t.Parallel()
+	s := New(domain.Open(newRepoDir(t, 1)))
+	if err := s.setStartAt(steer.Command{Cmd: "navigate", File: "f.txt", HintKind: "view", HintID: "content", Line: &steer.Line{No: 2}}); err != nil {
+		t.Fatalf("setStartAt refused a content link: %v", err)
 	}
 }

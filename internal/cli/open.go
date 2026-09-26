@@ -72,12 +72,6 @@ func cmdOpen(svc *domain.Service, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "open: "+backgroundNeedsContent)
 		return 2
 	}
-	// The page has no content viewer yet: refuse before touching any page or
-	// starting a server (a steered page refuses the same link on its own).
-	if *web && res.Hint.Kind == model.ContentHintKind {
-		fmt.Fprintln(stderr, "open: content links are not supported in gg web yet")
-		return 2
-	}
 	if linknav.RepoOnly(res) {
 		// A bare repository link names no place to steer a session to; showing
 		// it to the user means opening gg in that checkout. (`gg session

@@ -224,6 +224,7 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault(); // the browser's quick-find would grab it
     openCommitFilter();
   } else if (e.key === "#") {
+    e.preventDefault(); // the keystroke must not type itself into the prompt it opens
     gotoCommitPrompt();
   }
 });
