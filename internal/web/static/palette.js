@@ -20,7 +20,8 @@ import { openStashPick } from "./conflicts.js";
 import { startAmend } from "./commitai.js";
 import { openGitConfig } from "./gitconfig.js";
 import { openAgentSetup } from "./agentsetup.js";
-import { openFeedFilter, openFinder } from "./search.js";
+import { openFeedFilter } from "./search.js";
+import { openFinder } from "./wtfinder.js";
 import { openRemoteHeads } from "./remoteheads.js";
 import { openLinkCompareDialog } from "./linkcompare.js";
 import { locateCurrentBranch } from "./sidebar.js";
@@ -394,7 +395,7 @@ function openGlobalMenu() {
     { label: "prune remotes (drop deleted branches)", act: () => startOp({ op: "prune" }, "pruning remotes") },
     { header: "Search" },
     { label: "filter the commit list… (\\)", act: () => openFeedFilter() },
-    { label: "find a file… (F)", act: () => openFinder() },
+    { label: "files in the working tree… (F)", act: () => openFinder() },
     { header: "Repositories" },
     { label: "switch repo…", act: () => openPalette("repo") },
     { header: "UI" },
