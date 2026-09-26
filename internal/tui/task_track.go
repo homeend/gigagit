@@ -111,6 +111,8 @@ func (m Model) applyTaskResult(info domain.TaskInfo) (Model, tea.Cmd) {
 	switch info.Kind {
 	case exttool.CatCommitMessage:
 		return m.applyCommitMessage(info)
+	case exttool.CatReview:
+		return m.applyReviewResult(info)
 	}
 	return m.stickyNotice(i18n.T("%s ready — ctrl+\\", info.Key))
 }

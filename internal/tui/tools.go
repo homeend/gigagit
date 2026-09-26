@@ -2,7 +2,6 @@ package tui
 
 import (
 	"github.com/homeend/gigagit/internal/config"
-	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/observ"
 	"github.com/homeend/gigagit/internal/template"
@@ -31,19 +30,6 @@ func (m Model) toolCommands(category string) []config.ToolCommand {
 			continue
 		}
 		out = append(out, tc)
-	}
-	return out
-}
-
-// laneToolCommands is toolCommands minus interactive rows: the headless
-// commit-message and review lanes cannot run a command that waits for a
-// human. Plan 3 routes interactive rows through the task launch dialog.
-func (m Model) laneToolCommands(category string) []config.ToolCommand {
-	var out []config.ToolCommand
-	for _, tc := range m.toolCommands(category) {
-		if tc.Mode != string(exttool.ModeInteractive) {
-			out = append(out, tc)
-		}
 	}
 	return out
 }

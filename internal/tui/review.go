@@ -2,79 +2,29 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
-	"github.com/homeend/gigagit/internal/template"
 )
 
-// review.go wires the . -menu "Review …" entries to the stage-3 capture lane.
-// Unlike the commit-message generate lane (commit_generate.go), which lives ON
-// the commit popup as sub-state fields, a review has no host popup — so the
-// lane IS its own layer (reviewLane) pushed on the stack, mirroring the
-// commitNamePopup layer pattern (embed popupMax, own update/render).
-//
-// The lane runs two FOREGROUND sub-states in order (chooser → approval), each
-// rendered as a centered box; esc in either pops the lane (there is nothing
-// behind it to return to). Dispatch then BACKGROUNDS the run: the lane is
-// popped, m.reviewRunning goes true, and the TUI stays fully usable while the
-// agent works — a blinking status segment marks it in flight, other
-// external-LLM actions are refused, and the report viewer auto-pops when it
-// lands. The gen lives on the Model (not the lane) so it stays monotonic across
-// a lane being cancelled/popped and a new run started: a stale/ctx-killed
-// result carrying an older gen (an *exec.ExitError, not context.Canceled) is
-// dropped by the gen guard rather than surfaced.
-
-// reviewLane is the review capture lane: a foreground layer whose sub-state
-// picks and approves a review tool, then backgrounds the headless run (via
-// domain.ReviewReport) and pops itself.
-type reviewLane struct {
-	popupMax
-	target    domain.ReviewTarget  // fully resolved before the lane opens (branch target resolves in an async hop first)
-	cmds      []config.ToolCommand // review commands (>1 → chooser)
-	choosing  bool                 // true while the numbered tool chooser is shown
-	approving string               // non-empty: the resolved command awaiting first-run approval
-	genCmd    config.ToolCommand   // the chosen command (approval is keyed on its CONFIG text)
-}
-
-// reviewDoneMsg carries the result of a headless review run. gen is the
-// Model.reviewGen at dispatch time; applyReviewDone drops a result whose gen no
-// longer matches (a cancelled, superseded, or repo-switched run).
-type reviewDoneMsg struct {
-	gen int
-	res domain.ReviewResult
-	err error
-}
-
-// reviewBlinkMsg flips the running-review status indicator's blink phase. gen
-// ties the tick to the run that armed it; a stale gen (a later cancel/reRoot
-// bump, or the run finishing) drops it so no second parallel lane arms.
-// Modeled on noticeBlinkMsg.
-type reviewBlinkMsg struct{ gen int }
-
-// reviewBlinkCmd schedules the next blink flip (~800ms; only re-armed while the
-// run's gen still matches, so the tick self-stops). Modeled on noticeBlinkCmd.
-func reviewBlinkCmd(gen int) tea.Cmd {
-	return tea.Tick(800*time.Millisecond, func(time.Time) tea.Msg { return reviewBlinkMsg{gen: gen} })
-}
+// review.go wires the . -menu "Review …" entries to review AI tasks: each
+// row resolves its target, then opens the task launch dialog
+// (task_launch_popup.go). A result lands in applyReviewResult: saved in the
+// reviews dir and shown in the report viewer, or announced by a notice when
+// the viewer would get in the way.
 
 // reviewTargetReadyMsg carries a BranchReviewTarget resolved off the UI thread
 // (a branch review needs a ctx to find its merge-base); the Update handler
-// opens the lane with the resolved target. gen is the reviewGen captured when
-// the branch row dispatched — a repo switch (reRoot bumps reviewGen) during the
-// merge-base resolution drops the stale target rather than opening a lane for
-// the old repo's branch in the new one (the same gen-guard discipline the run
-// itself uses).
+// opens the dialog with the resolved target. svc is the Service it was
+// resolved against: a repo switch meanwhile (a new Service) drops it.
 type reviewTargetReadyMsg struct {
-	gen    int
+	svc    *domain.Service
 	target domain.ReviewTarget
 	err    error
 }
@@ -100,12 +50,12 @@ func reviewTargetForCommit(c model.Commit) domain.ReviewTarget {
 
 // hasReviewTool reports whether at least one valid review command is configured.
 func (m Model) hasReviewTool() bool {
-	return len(m.laneToolCommands(string(exttool.CatReview))) > 0
+	return len(domain.TaskChoices(m.cfg, exttool.CatReview, "tui")) > 0
 }
 
 // focusedCommitReviewRow offers "Review this commit" on the Commits panel.
 func (m Model) focusedCommitReviewRow() (actionRow, bool) {
-	if m.focus != panelCommits || !m.opsIdle() || !m.hasReviewTool() || m.reviewRunning {
+	if m.focus != panelCommits || !m.opsIdle() || !m.hasReviewTool() {
 		return actionRow{}, false
 	}
 	bi, ok := m.backingIndex(panelCommits)
@@ -117,7 +67,7 @@ func (m Model) focusedCommitReviewRow() (actionRow, bool) {
 		id:    "review-commit",
 		label: i18n.T("Review this commit"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.startReviewLane(target)
+			return m.startReview(target)
 		},
 	}, true
 }
@@ -128,7 +78,7 @@ func (m Model) focusedCommitReviewRow() (actionRow, bool) {
 // target is known.
 func (m Model) branchReviewRow() (actionRow, bool) {
 	b, ok := m.selectedBranch()
-	if m.focus != panelBranches || !m.opsIdle() || !ok || !m.hasReviewTool() || m.reviewRunning {
+	if m.focus != panelBranches || !m.opsIdle() || !ok || !m.hasReviewTool() {
 		return actionRow{}, false
 	}
 	name := b.Name
@@ -136,7 +86,7 @@ func (m Model) branchReviewRow() (actionRow, bool) {
 		id:    "review-branch",
 		label: i18n.T("Review branch %s", name),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m, m.reviewBranchTargetCmd(name, m.reviewGen)
+			return m, m.reviewBranchTargetCmd(name)
 		},
 	}, true
 }
@@ -144,14 +94,14 @@ func (m Model) branchReviewRow() (actionRow, bool) {
 // workingReviewRow offers "Review working changes" on the Files panel — the
 // full working tree + staged diff vs HEAD (domain.WorkingReviewTarget).
 func (m Model) workingReviewRow() (actionRow, bool) {
-	if m.focus != panelFiles || !m.opsIdle() || !m.hasReviewTool() || m.reviewRunning {
+	if m.focus != panelFiles || !m.opsIdle() || !m.hasReviewTool() {
 		return actionRow{}, false
 	}
 	return actionRow{
 		id:    "review-working",
 		label: i18n.T("Review working changes"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.startReviewLane(domain.WorkingReviewTarget())
+			return m.startReview(domain.WorkingReviewTarget())
 		},
 	}, true
 }
@@ -164,7 +114,7 @@ func (m Model) workingReviewRow() (actionRow, bool) {
 // review needs a commit-to-commit range, and the endpoint hashes are feed
 // commit shas (pure hex) so Range stays injection-safe without ResolveCommit.
 func (m Model) markedRangeReviewRow() (actionRow, bool) {
-	if m.focus != panelCommits || !m.opsIdle() || !m.hasReviewTool() || m.reviewRunning {
+	if m.focus != panelCommits || !m.opsIdle() || !m.hasReviewTool() {
 		return actionRow{}, false
 	}
 	if len(m.validCompareKeys()) < 2 {
@@ -185,7 +135,7 @@ func (m Model) markedRangeReviewRow() (actionRow, bool) {
 		id:    "review-marked-range",
 		label: i18n.T("Review marked range (AI)"),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m.startReviewLane(target)
+			return m.startReview(target)
 		},
 	}, true
 }
@@ -220,226 +170,50 @@ func (m Model) markedRangeLabel() string {
 	return lbl
 }
 
-// reviewBranchTargetCmd resolves a branch's review scope off the UI thread. gen
-// is echoed back so a repo switch during resolution drops the stale target.
-func (m Model) reviewBranchTargetCmd(tip string, gen int) tea.Cmd {
+// reviewBranchTargetCmd resolves a branch's review scope off the UI thread.
+func (m Model) reviewBranchTargetCmd(tip string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
 		tgt, err := svc.BranchReviewTarget(context.Background(), tip)
-		return reviewTargetReadyMsg{gen: gen, target: tgt, err: err}
+		return reviewTargetReadyMsg{svc: svc, target: tgt, err: err}
 	}
 }
 
-// --- lane lifecycle ---
-
-// startReviewLane pushes the lane for target and enters the first applicable
-// sub-state: a chooser when >1 tool is configured, else the approval gate (or
-// straight to dispatch when the sole tool is already approved).
-func (m Model) startReviewLane(target domain.ReviewTarget) (Model, tea.Cmd) {
-	cmds := m.laneToolCommands(string(exttool.CatReview))
-	if len(cmds) == 0 {
-		m.statusMsg = i18n.T("no review tool configured (Settings → External tools)")
-		return m, nil
-	}
-	lane := &reviewLane{target: target, cmds: cmds}
-	m = m.pushLayer(lane)
-	if len(cmds) > 1 {
-		lane.choosing = true
-		return m, nil
-	}
-	return m.reviewGate(lane, cmds[0])
+// startReview opens the task launch dialog for a review of target.
+func (m Model) startReview(target domain.ReviewTarget) (Model, tea.Cmd) {
+	return m.openTaskLaunch(taskLaunch{kind: exttool.CatReview, review: target})
 }
 
-// reviewGate resolves chosen against the target and applies the first-run
-// approval gate (keyed on the CONFIG command text, like the commit lane's
-// gateGenerate). An already-approved command dispatches straight through.
-func (m Model) reviewGate(lane *reviewLane, chosen config.ToolCommand) (Model, tea.Cmd) {
-	resolved, err := template.ResolveCommand(chosen.Command, nil, template.CmdCtx{Range: lane.target.Range, Repo: m.currentWorktree})
+// applyReviewResult saves a review result where review reports live and
+// opens it in the report viewer — or, when the viewer would get in the way
+// (another checkout, a focused console, the conflict window), announces it.
+func (m Model) applyReviewResult(info domain.TaskInfo) (Model, tea.Cmd) {
+	if !m.canShowResult(info) {
+		return m.stickyNotice(i18n.T("%s ready — ctrl+\\", info.Key))
+	}
+	label := strings.TrimPrefix(info.Key, "review — ")
+	path, err := m.svc.SaveReviewReport(context.Background(), label, info.Result, time.Now())
 	if err != nil {
 		m.statusMsg = i18n.T("review: %s", err.Error())
-		return m.popLayer(), nil
 	}
-	lane.genCmd = chosen
-	if !m.toolCommandApproved(chosen.Command) {
-		lane.approving = resolved
-		return m, nil
-	}
-	return m.reviewDispatch(lane, resolved)
+	return m.pushLayer(newReviewView(reviewTitle(label), path, info.Result)), nil
 }
 
-// reviewDispatch BACKGROUNDS the run: it pops the lane (so the TUI stays
-// usable), flags m.reviewRunning with the scope label for the blinking status
-// indicator, then batches the headless review with the blink tick. reviewGen is
-// bumped here (and read into the run/blink) so a later cancel that re-bumps it
-// drops this run's result AND stops the blink.
-func (m Model) reviewDispatch(lane *reviewLane, resolved string) (Model, tea.Cmd) {
-	target := lane.target
-	m = m.removeLayer(lane) // the run moves to the background; the lane closes
-	m.reviewRunning = true
-	m.reviewRunningLabel = reviewScopeLabel(target)
-	m.reviewBlink = false
-	m.reviewGen++
-	gen := m.reviewGen
-	ctx, cancel := context.WithCancel(context.Background())
-	m.reviewCancel = cancel
-	return m, tea.Batch(m.reviewRunCmd(resolved, target, gen, ctx), reviewBlinkCmd(gen))
-}
-
-// reviewRunCmd runs the resolved command headless via domain.ReviewReport
-// (which persists the report and returns its path/content), synchronously
-// inside the returned tea.Cmd (the stageCmd pattern). The lane goes through
-// svc, never engine.OpDeps — no internal/engine import here.
-func (m Model) reviewRunCmd(resolved string, target domain.ReviewTarget, gen int, ctx context.Context) tea.Cmd {
-	svc := m.svc
-	return func() tea.Msg {
-		res, err := svc.ReviewReport(ctx, target, resolved, []string{"GG_TASK=review"}, time.Now())
-		return reviewDoneMsg{gen: gen, res: res, err: err}
-	}
-}
-
-// applyReviewDone handles the finished background run: gen-guarded, it clears
-// the running flag and, on success, auto-pops the report viewer over whatever
-// the user was doing (the lane is already gone). A result whose gen no longer
-// matches m.reviewGen (cancelled/superseded/repo-switched) is dropped silently
-// — essential because a ctx-killed agent returns *exec.ExitError, not
-// context.Canceled, so only the gen check tells a deliberate cancel from a real
-// failure.
-func (m Model) applyReviewDone(msg reviewDoneMsg) (Model, tea.Cmd) {
-	if msg.gen != m.reviewGen {
-		return m, nil // stale / cancelled / superseded / repo switched
-	}
-	m.reviewRunning = false
-	m.reviewCancel = nil
-	if msg.err != nil {
-		m.statusMsg = i18n.T("review: %s", msg.err.Error())
-		return m, nil
-	}
-	return m.pushLayer(newReviewView(reviewTitle(msg.res.Label), msg.res.Path, msg.res.Content)), nil
+// canShowResult: a result may open its viewer now — it belongs to the
+// checkout on screen and nothing owns the keyboard.
+func (m Model) canShowResult(info domain.TaskInfo) bool {
+	return m.taskHere(info) && m.proc == nil && !(m.console != nil && m.console.focused) && m.modal == nil
 }
 
 // reviewTitle names the report viewer from the human label (branch name /
 // "<short> <subject>" / range / "working changes"). An empty label (a target
 // that set neither Label nor Range) falls back to "working changes", and so
 // does the literal "working changes" label itself (domain's untranslated
-// fallback — see reviewScopeLabel) — both take the translated sibling key
+// fallback) — both take the translated sibling key
 // instead of running it through the generic "Review: %s" format.
 func reviewTitle(label string) string {
 	if strings.TrimSpace(label) == "" || label == "working changes" {
 		return i18n.T("Review: working changes")
 	}
 	return i18n.T("Review: %s", label)
-}
-
-// cancelReview cancels an in-flight background run, clears the running flag
-// (killing the blink), and bumps reviewGen so the late, ctx-killed result is
-// dropped. Reachable via reRoot (a repo switch); mirrors escGenerate's gen
-// bump.
-func (m Model) cancelReview() Model {
-	if m.reviewCancel != nil {
-		m.reviewCancel()
-		m.reviewCancel = nil
-	}
-	m.reviewRunning = false
-	m.reviewGen++
-	return m
-}
-
-// --- layer interface ---
-
-func (lane *reviewLane) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
-	if msg.Type == tea.KeyCtrlC {
-		return m, tea.Quit
-	}
-	// esc pops the lane (nothing sits behind it). The lane only ever holds the
-	// foreground chooser/approval now — a dispatched run has already backgrounded
-	// and popped the lane — so there is nothing to cancel here.
-	if msg.Type == tea.KeyEsc {
-		return m.popLayer(), nil
-	}
-	switch {
-	case lane.approving != "":
-		return lane.updateApproving(m, msg)
-	case lane.choosing:
-		return lane.updateChoosing(m, msg)
-	}
-	return m, nil
-}
-
-// updateChoosing drives the numbered tool chooser: a digit 1-9 picks that row,
-// enter picks the first. (esc is handled in update.)
-func (lane *reviewLane) updateChoosing(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
-		return lane.selectChosen(m, 0)
-	case tea.KeyRunes:
-		for _, r := range msg.Runes {
-			if r >= '1' && r <= '9' {
-				return lane.selectChosen(m, int(r-'1'))
-			}
-		}
-	}
-	return m, nil
-}
-
-// selectChosen picks cmds[idx] (a no-op on an out-of-range index) and continues
-// at the approval gate.
-func (lane *reviewLane) selectChosen(m Model, idx int) (Model, tea.Cmd) {
-	if idx < 0 || idx >= len(lane.cmds) {
-		return m, nil
-	}
-	lane.choosing = false
-	return m.reviewGate(lane, lane.cmds[idx])
-}
-
-// updateApproving drives the first-run approval box: y/enter records the
-// approval (on the CONFIG command text) and dispatches; n cancels (esc, handled
-// in update, does the same). Mirrors the commit lane's updateApproving.
-func (lane *reviewLane) updateApproving(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
-	switch msg.Type {
-	case tea.KeyEnter:
-		return lane.approveAndRun(m)
-	case tea.KeyRunes:
-		switch string(msg.Runes) {
-		case "y":
-			return lane.approveAndRun(m)
-		case "n":
-			return m.popLayer(), nil
-		}
-	}
-	return m, nil
-}
-
-func (lane *reviewLane) approveAndRun(m Model) (Model, tea.Cmd) {
-	resolved := lane.approving
-	m.rememberToolApproval(lane.genCmd.Command)
-	return m.reviewDispatch(lane, resolved)
-}
-
-func (lane *reviewLane) render(m Model, below string) string {
-	w, h := m.overlayDims()
-	var b strings.Builder
-	switch {
-	case lane.approving != "":
-		b.WriteString(i18n.T("Run this command?  (%s)", lane.genCmd.Name) + "\n\n")
-		b.WriteString(approvalBoxView(lane.approving, w))
-	case lane.choosing:
-		b.WriteString(i18n.T("Choose a review tool") + "\n\n")
-		for i, tc := range lane.cmds {
-			b.WriteString(fmt.Sprintf("[%d] %s\n", i+1, tc.Name))
-		}
-		b.WriteString("\n" + i18n.T("[1-9] choose  [enter] first  [esc] cancel"))
-	}
-	box := st().modalStyle.Width(popupResolveWidth(w, lane.maximized, popupInnerWidth(w))).Render(b.String()) + "\n"
-	return overlayCenter(clipToHeight(below, h), box, w, h)
-}
-
-// reviewScopeLabel names the review scope for the running-review status label
-// (the blinking "⟳ reviewing <label>…" segment) — the human DisplayLabel, so
-// the bottom bar shows a branch name / commit title / range, never a raw SHA.
-func reviewScopeLabel(t domain.ReviewTarget) string {
-	l := t.DisplayLabel()
-	if l == "working changes" { // domain's untranslated fallback — domain can't import i18n
-		return i18n.T("working changes")
-	}
-	return l
 }

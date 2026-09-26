@@ -266,11 +266,7 @@ type Model struct {
 	watchGen            int                                              // bumped per (re)build; stale watch msgs are dropped
 	bgCtx               context.Context                                  // context for in-flight background (auto) reads; cancelled when a user op starts
 	bgCancel            context.CancelFunc                               // cancels bgCtx; nil when no background batch is active
-	reviewGen           int                                              // monotonic guard for the review capture lane; bumped on dispatch, cancel, reRoot — a stale/killed result carrying an older gen is dropped (survives a lane being popped and re-pushed, unlike a per-lane counter)
 	reviewCancel        context.CancelFunc                               // cancels an in-flight review run; nil when none is active
-	reviewRunning       bool                                             // a review runs in the background (lane already popped); blocks other external-LLM actions and drives the blinking status indicator
-	reviewRunningLabel  string                                           // scope label for the running-review status segment (e.g. "main..HEAD" / "working changes")
-	reviewBlink         bool                                             // blink phase for the running-review status segment (style alternation, never terminal blink)
 	refreshLastRun      map[refreshItem]time.Time                        // last time each scheduled item fired (background scheduler)
 	refreshDur          map[refreshItem][]time.Duration                  // rolling ring (≤10) of measured read durations per item (Phase C)
 	bgQueue             []refreshItem                                    // FIFO of pending background reads; one drains per tick
@@ -3566,23 +3562,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.tickGenSpinner(msg)
 
 	case reviewTargetReadyMsg:
-		if msg.gen != m.reviewGen { // a repo switch (reRoot) during merge-base resolution
+		if msg.svc != m.svc { // a repo switch during merge-base resolution
 			return m, nil
 		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("review: %s", msg.err.Error())
 			return m, nil
 		}
-		return m.startReviewLane(msg.target)
-	case reviewDoneMsg:
-		return m.applyReviewDone(msg)
-	case reviewBlinkMsg:
-		if !m.reviewRunning || msg.gen != m.reviewGen {
-			return m, nil // run finished / cancelled / superseded: stop re-arming
-		}
-		m.reviewBlink = !m.reviewBlink
-		return m, reviewBlinkCmd(msg.gen)
-
+		return m.startReview(msg.target)
 	case inProgressMsg:
 		if cp, ok := m.proc.(*conflictProcess); ok {
 			cp.inProgress = msg.op
@@ -4499,7 +4486,6 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.attention = map[attentionKey][]steerMark{} // the marks referred to the old repo's files
 	m.pendingCheckout = pendingCheckout{}        // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil
-	m = m.cancelReview() // drop any in-flight review run + bump reviewGen so its late result is ignored in the new repo
 	// genGen is intentionally NOT bumped here (unlike pushCheckGen/noticeGen/
 	// gitConfigGen above): a commit popup can't be open across a repo switch
 	// today — while generating it swallows every key but esc, and reRoot's
