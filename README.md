@@ -223,7 +223,7 @@ gg worktree move [--force] <worktree> <new-path>
                                       # moving the worktree your shell sits in updates the cd-on-switch handoff
 gg worktree prune                     # drop stale worktree administrative entries
 gg repo list
-gg repo switch <query>
+gg repo switch [--exact] <query>     # --exact: whole name or path, not a substring
 gg init [--all | --update | --agents <ids> | --list | --to <path>]
                                       # installs BOTH embedded skills (using-gg, reviewing-with-gg) per agent
                                       # --to: install both at a custom path for an unsupported agent

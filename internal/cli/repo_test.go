@@ -124,3 +124,49 @@ func TestRepoUnknownSubcommand(t *testing.T) {
 		t.Fatal("unknown repo subcommand should exit 2")
 	}
 }
+
+// --exact matches the whole name or path, so a query that is a prefix of
+// sibling checkouts (gigagit vs gigagit.page, gigagit.worktrees/…) still
+// resolves to the one entry the user named.
+func TestRepoSwitchExactPicksWholeMatch(t *testing.T) {
+	state := withState(t)
+	root := t.TempDir()
+	main := filepath.Join(root, "gigagit")
+	for _, p := range []string{main, filepath.Join(root, "gigagit.page"), filepath.Join(root, "gigagit.media")} {
+		if err := os.Mkdir(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		_ = repos.Touch(state, p, "", time.Unix(1000, 0))
+	}
+	dir := newCLIRepo(t)
+	for _, args := range [][]string{
+		{"repo", "switch", "--exact", main},
+		{"repo", "switch", main + string(filepath.Separator), "--exact"},
+		{"repo", "switch", "--exact", "GIGAGIT"},
+	} {
+		var out, errb bytes.Buffer
+		if code := Run(dir, args, strings.NewReader(""), &out, &errb, ""); code != 0 {
+			t.Fatalf("%v: exit = %d, stderr=%s", args, code, errb.String())
+		}
+		if strings.TrimSpace(out.String()) != main {
+			t.Fatalf("%v: stdout = %q, want %q", args, out.String(), main)
+		}
+	}
+}
+
+func TestRepoSwitchExactRejectsSubstring(t *testing.T) {
+	state := withState(t)
+	target := filepath.Join(t.TempDir(), "unique-zebra")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = repos.Touch(state, target, "", time.Unix(1000, 0))
+	dir := newCLIRepo(t)
+	var out, errb bytes.Buffer
+	if code := Run(dir, []string{"repo", "switch", "--exact", "zebra"}, strings.NewReader(""), &out, &errb, ""); code == 0 {
+		t.Fatalf("a substring must not match under --exact, stdout=%q", out.String())
+	}
+	if !strings.Contains(errb.String(), "no known repository") {
+		t.Fatalf("stderr should explain, got %q", errb.String())
+	}
+}

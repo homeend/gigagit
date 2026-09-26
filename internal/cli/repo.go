@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/repos"
@@ -36,21 +37,29 @@ func cmdRepoList(stdout io.Writer) int {
 }
 
 func cmdRepoSwitch(args []string, stdout, stderr io.Writer, cwdFile string) int {
-	if len(args) < 1 || args[0] == "" {
-		fmt.Fprintln(stderr, "repo switch: a query is required")
+	exact := false
+	var rest []string
+	for _, a := range args {
+		if a == "--exact" {
+			exact = true
+			continue
+		}
+		rest = append(rest, a)
+	}
+	if len(rest) != 1 || rest[0] == "" {
+		fmt.Fprintln(stderr, "usage: gg repo switch [--exact] <query>")
 		return 2
 	}
-	q := strings.ToLower(args[0])
+	query := rest[0]
 	var matches []repos.Entry
 	for _, e := range repos.Load(RepoStatePath) {
-		if strings.Contains(strings.ToLower(repos.Name(e)), q) ||
-			strings.Contains(strings.ToLower(e.Path), q) {
+		if repoMatches(e, query, exact) {
 			matches = append(matches, e)
 		}
 	}
 	switch len(matches) {
 	case 0:
-		fmt.Fprintf(stderr, "repo switch: no known repository matches %q\n", args[0])
+		fmt.Fprintf(stderr, "repo switch: no known repository matches %q\n", query)
 		return 1
 	case 1:
 		fmt.Fprintln(stdout, matches[0].Path)
@@ -59,10 +68,25 @@ func cmdRepoSwitch(args []string, stdout, stderr io.Writer, cwdFile string) int 
 		}
 		return 0
 	default:
-		fmt.Fprintf(stderr, "repo switch: %q is ambiguous:\n", args[0])
+		fmt.Fprintf(stderr, "repo switch: %q is ambiguous:\n", query)
 		for _, e := range matches {
 			fmt.Fprintf(stderr, "  %s\t%s\n", repos.Name(e), e.Path)
 		}
 		return 1
 	}
+}
+
+// repoMatches reports whether registry entry e answers query: a
+// case-insensitive substring of its name or path, or — under exact — the
+// whole name or the whole (cleaned) path, so a query that prefixes sibling
+// checkouts still names exactly one of them.
+func repoMatches(e repos.Entry, query string, exact bool) bool {
+	name, path := repos.Name(e), e.Path
+	if exact {
+		return strings.EqualFold(name, query) ||
+			strings.EqualFold(filepath.Clean(path), filepath.Clean(query))
+	}
+	q := strings.ToLower(query)
+	return strings.Contains(strings.ToLower(name), q) ||
+		strings.Contains(strings.ToLower(path), q)
 }
