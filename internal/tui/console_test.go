@@ -154,3 +154,23 @@ func TestConsoleFooterAndHelp(t *testing.T) {
 		t.Fatal("help must document ctrl+]")
 	}
 }
+
+func TestFocusedConsoleStepsOutWhenItsAgentExits(t *testing.T) {
+	m := newTestModel(t)
+	s := startTestSession(t, m, "sleep 0.3")
+	m, _ = m.openConsole(s.Info().ID)
+	m.console.maximized = true
+	m, _ = m.onSessionsChanged() // seen running
+	select {
+	case <-s.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("session did not exit")
+	}
+	m, _ = m.onSessionsChanged()
+	if m.console == nil || m.console.focused || m.console.maximized {
+		t.Fatalf("an exited agent leaves nothing to type into: console %+v", m.console)
+	}
+	if !strings.Contains(m.statusMsg, "exited") {
+		t.Fatalf("status %q", m.statusMsg)
+	}
+}

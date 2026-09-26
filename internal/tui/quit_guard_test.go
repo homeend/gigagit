@@ -79,20 +79,6 @@ func TestExitNoticeWhenUnfocused(t *testing.T) {
 	}
 }
 
-func TestNoExitNoticeForFocusedConsole(t *testing.T) {
-	m := loadedModel(t)
-	m.width, m.height = 120, 40
-	s := startTestSession(t, m, `sleep 0.3; exit 3`)
-	m, _ = m.openConsole(s.Info().ID)
-	m, _ = m.onSessionsChanged()
-	<-s.Done()
-	m.statusMsg = ""
-	m, _ = m.onSessionsChanged()
-	if m.statusMsg != "" {
-		t.Fatalf("a focused console shows the exit itself; status = %q", m.statusMsg)
-	}
-}
-
 func TestDeleteWorktreeWithRunningSessionRefused(t *testing.T) {
 	m := loadedModel(t)
 	startTestSession(t, m, `sleep 5`) // fresh manager
