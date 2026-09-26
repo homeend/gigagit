@@ -1152,6 +1152,14 @@ func (m Model) remoteRows() []string {
 func (m Model) worktreeRows(ents []wtEntry) []string {
 	out := make([]string, 0, len(ents))
 	for _, e := range ents {
+		if e.task != "" {
+			if info, ok := domain.Tasks().Get(e.task); ok {
+				out = append(out, taskSubRowText(info))
+			} else {
+				out = append(out, "  └ ?")
+			}
+			continue
+		}
 		if e.sess != "" {
 			if s, ok := domain.Sessions().Get(e.sess); ok {
 				out = append(out, sessionRowText(s.Info()))

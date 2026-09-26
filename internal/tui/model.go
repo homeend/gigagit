@@ -2561,6 +2561,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if info, ok := m.selectedSession(); ok {
 					return m.openConsole(info.ID)
 				}
+				if info, ok := m.selectedTask(); ok {
+					return m.openSessionsPopupOn(tabTasks, info.ID)
+				}
 			}
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
 				wt, _ := m.selectedWorktree()

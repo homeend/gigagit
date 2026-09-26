@@ -274,6 +274,21 @@ func (m Model) sessionMenuRows() []actionRow {
 		}
 		return rows
 	}
+	if info, ok := m.selectedTask(); ok {
+		id, key := info.ID, info.Key
+		var rows []actionRow
+		if info.State.Live() {
+			rows = append(rows, actionRow{id: "task-cancel", label: i18n.T("Cancel task"), run: func(m Model) (tea.Model, tea.Cmd) {
+				_ = domain.Tasks().Cancel(id)
+				m.statusMsg = i18n.T("cancelled %s", key)
+				return m, nil
+			}})
+		}
+		rows = append(rows, actionRow{id: "task-result", label: i18n.T("Show result"), run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openSessionsPopupOn(tabTasks, id)
+		}})
+		return rows
+	}
 	if wt, ok := m.selectedWorktree(); ok && wt.Path != "" {
 		path := wt.Path
 		return []actionRow{

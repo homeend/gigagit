@@ -276,11 +276,11 @@ func (l worktreeList) Key(i int) string {
 // Haystack: a session row matches whatever its worktree row matches (plus
 // its own label), so a / filter never strands a sub-row without its parent.
 func (l worktreeList) Haystack(i int) string {
-	if l.ents[i].sess == "" {
+	if !l.ents[i].sub() {
 		return l.rows[i]
 	}
 	p := i
-	for p > 0 && (l.ents[p].sess != "" || l.ents[p].wt != l.ents[i].wt) {
+	for p > 0 && (l.ents[p].sub() || l.ents[p].wt != l.ents[i].wt) {
 		p--
 	}
 	return l.rows[p] + " " + l.rows[i]
@@ -705,7 +705,7 @@ func (m Model) backingIndex(p panel) (int, bool) {
 		// worktree (refused like a WIP pseudo-row), a worktree row maps back
 		// to its m.worktrees index.
 		ents := m.worktreeEntries()
-		if u >= len(ents) || ents[u].sess != "" {
+		if u >= len(ents) || ents[u].sub() {
 			return 0, false
 		}
 		return ents[u].wt, true

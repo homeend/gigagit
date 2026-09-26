@@ -121,7 +121,7 @@ func (m Model) showBranchWorktree(branch string) Model {
 	m = m.activateTab(panelWorktrees)
 	ents := m.worktreeEntries()
 	for di, u := range m.displayIndices(panelWorktrees) {
-		if u < len(ents) && ents[u].wt == wi && ents[u].sess == "" {
+		if u < len(ents) && ents[u].wt == wi && !ents[u].sub() {
 			m.sel[panelWorktrees] = di
 			break
 		}
