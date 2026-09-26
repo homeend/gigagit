@@ -95,3 +95,16 @@ func TestFileContentShelfEntry(t *testing.T) {
 		t.Fatalf("shelf: code=%d body=%+v", code, b)
 	}
 }
+
+// A path escaping the checkout is never looked at: not stat'ed (which would
+// answer missing:true for anything outside), refused by the domain read.
+func TestFileContentRefusesAnEscapingPath(t *testing.T) {
+	t.Parallel()
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	for _, p := range []string{"../gg-no-such-file-xyz", "../../etc/hostname"} {
+		var b fcBody
+		if code := getAny(t, ts, "/api/file-content?path="+p, &b); code == http.StatusOK {
+			t.Errorf("%s: code 200 (body %+v), want a refusal", p, b)
+		}
+	}
+}

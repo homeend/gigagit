@@ -2,9 +2,8 @@ package web
 
 import (
 	"errors"
+	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -45,14 +44,14 @@ func (s *Server) handleFileContent(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch src {
 	case "", "worktree":
-		top, terr := svc.TopLevel(ctx)
-		if terr == nil {
-			if _, serr := os.Stat(filepath.Join(top, filepath.FromSlash(path))); errors.Is(serr, os.ErrNotExist) {
-				writeJSON(w, fileContentBody{Lines: []contentRow{}, Missing: true})
-				return
-			}
-		}
+		// The domain read refuses a path escaping the checkout; only a file
+		// that is simply not there reads as missing (the viewer's "(file
+		// deleted on disk)"), never an error.
 		data, err = svc.WorktreeFile(ctx, path)
+		if errors.Is(err, fs.ErrNotExist) {
+			writeJSON(w, fileContentBody{Lines: []contentRow{}, Missing: true})
+			return
+		}
 	case "commit":
 		if rev == "" {
 			writeErr(w, http.StatusBadRequest, errors.New("a commit version needs rev"))
