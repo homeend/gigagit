@@ -45,6 +45,9 @@ func (st diskStat) same(o diskStat) bool {
 // docAbs is where a working-tree document lives on disk; "" for a commit or
 // shelf version, or before the worktree is known.
 func (m Model) docAbs(d *openFile) string {
+	if d.src.kind == srcExternal {
+		return d.path
+	}
 	if d.src.kind != srcWorktree || m.currentWorktree == "" {
 		return ""
 	}

@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: the agents popup's tabs, AI results in the file viewer
+
+### Changed
+
+- **`ctrl+\` popup:** its two tabs show as a strip — `[Agents 2]  AI tasks 5`,
+  the panels' convention (the active tab bracketed and bold, the other dim,
+  each with its count) with a rule under it. The box keeps one height (the
+  taller tab's), so `tab` never resizes it; `tab` also works in quit mode.
+- **AI task results open in the file viewer** — the one View file content
+  uses: line cursor, selection copy, `/` search, `ctrl+]` keeps a result open
+  in the background (listed under the open files in `ctrl+\`). A review opens
+  its saved report file; every other result (a conflict overview, a result
+  reopened from the AI tasks tab, a failed task's output) is written under
+  gg's state dir (the newest 50 are kept) and opened the same way. `y` copies
+  the whole result; `a` uses a commit message. The old report viewer is gone.
+
 ## Repo switch: exact match
 
 ### Added

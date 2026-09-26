@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"github.com/charmbracelet/x/ansi"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -56,8 +58,8 @@ func TestTaskTabEnterShowsResultAndCopy(t *testing.T) {
 	waitTaskState(t, id, taskEndedFn)
 	m, _ = m.openSessionsPopupOn(tabTasks, id)
 	m, _ = updateKey(m, "enter")
-	v := layerOf[*reviewView](m)
-	if v == nil || v.copyText != "fine" || v.apply != nil {
+	v := layerOf[*fileViewer](m)
+	if v == nil || v.src.kind != srcExternal || !v.result || v.apply != nil {
 		t.Fatalf("viewer %+v", v)
 	}
 }
@@ -73,7 +75,7 @@ func TestTaskTabApplyCommitMessage(t *testing.T) {
 	waitTaskState(t, id, taskEndedFn)
 	m, _ = m.openSessionsPopupOn(tabTasks, id)
 	m, _ = updateKey(m, "enter")
-	v := layerOf[*reviewView](m)
+	v := layerOf[*fileViewer](m)
 	if v == nil || v.apply == nil {
 		t.Fatalf("a commit message offers apply: %+v", v)
 	}
@@ -139,5 +141,49 @@ func TestTaskTabTabSwitches(t *testing.T) {
 	m, _ = updateKey(m, "tab")
 	if p.tab != tabTasks {
 		t.Fatal("tab back → tasks")
+	}
+}
+
+func TestAgentsPopupFixedHeightAndTabStrip(t *testing.T) {
+	m := launchTestModel(t)
+	for i := 0; i < 3; i++ {
+		id := submitReview(t, m, "echo ok")
+		waitTaskState(t, id, taskEndedFn)
+	}
+	m, _ = m.openSessionsPopup(false)
+	p := layerOf[*sessionsPopup](m)
+	if p == nil {
+		t.Fatal("popup did not open")
+	}
+	lines := func() int { return strings.Count(ansi.Strip(p.render(m, "")), "\n") }
+	tasksOut := ansi.Strip(p.render(m, ""))
+	if !strings.Contains(tasksOut, "[AI tasks 3]") || !strings.Contains(tasksOut, "Agents 0") {
+		t.Fatalf("tab strip missing:\n%s", tasksOut)
+	}
+	tasksH := lines()
+	m, _ = updateKey(m, "tab")
+	sessOut := ansi.Strip(p.render(m, ""))
+	if !strings.Contains(sessOut, "[Agents 0]") {
+		t.Fatalf("active tab not bracketed:\n%s", sessOut)
+	}
+	if got := lines(); got != tasksH {
+		t.Fatalf("height changed with the tab: tasks %d, agents %d", tasksH, got)
+	}
+}
+
+func TestResultViewerCopiesWholeResult(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	m := launchTestModel(t)
+	var copied string
+	m.clipWrite = func(_ io.Writer, s string) (string, error) { copied = s; return "test", nil }
+	m, cmd := m.openResultViewer(domain.TaskID("r1"), ".md", "Review: x", "line one\nline two\n", nil)
+	m = deliver(t, m, cmd) // the load
+	m, cmd = updateKey(m, "y")
+	if cmd == nil {
+		t.Fatal("y must copy")
+	}
+	cmd()
+	if copied != "line one\nline two\n" {
+		t.Fatalf("copied %q", copied)
 	}
 }

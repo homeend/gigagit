@@ -249,8 +249,8 @@ func TestReviewResultOpensViewerAndSavesReport(t *testing.T) {
 	id := domain.Tasks().Submit(spec)
 	waitTaskState(t, id, taskEndedFn)
 	m, _ = m.onTasksChanged()
-	v := layerOf[*reviewView](m)
-	if v == nil || v.path == "" || !strings.Contains(strings.Join(v.lines, "\n"), "LGTM") {
+	v := layerOf[*fileViewer](m)
+	if v == nil || v.src.kind != srcExternal || !strings.HasSuffix(v.path, ".md") || !strings.HasPrefix(v.title(), "Review: ") {
 		t.Fatalf("viewer %+v (status %q)", v, m.statusMsg)
 	}
 }
@@ -260,7 +260,7 @@ func TestReviewResultWhileConsoleFocusedIsANotice(t *testing.T) {
 	m.console = &consoleState{focused: true}
 	info := domain.TaskInfo{ID: "x", Key: "review — a..b", Kind: exttool.CatReview, Worktree: m.currentWorktree, Result: "ok", Results: 1}
 	m, _ = m.applyTaskResult(info)
-	if layerOf[*reviewView](m) != nil || !strings.Contains(m.statusMsg, "ready") {
+	if layerOf[*fileViewer](m) != nil || !strings.Contains(m.statusMsg, "ready") {
 		t.Fatalf("status %q", m.statusMsg)
 	}
 }

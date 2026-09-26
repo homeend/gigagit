@@ -87,6 +87,14 @@ func (fv *fileViewer) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return m.backgroundDoc(fv.openFile), nil
 	case ".":
 		return m.openActionMenu(), nil
+	case "y":
+		if fv.result {
+			return m, m.copyToClipboardCmd(i18n.T("copied"), docText(fv.openFile))
+		}
+	case "a":
+		if fv.apply != nil {
+			return fv.apply(m)
+		}
 	case "alt+up":
 		m.movePreviewCursor(-1)
 	case "alt+down":
@@ -133,6 +141,11 @@ func (fv *fileViewer) title() string {
 		return i18n.T("View %s @ %s", fv.path, shortHash(fv.src.rev))
 	case srcShelf:
 		return i18n.T("View %s (shelf)", fv.path)
+	case srcExternal:
+		if fv.openFile.title != "" {
+			return fv.openFile.title
+		}
+		return fv.path
 	}
 	return i18n.T("View %s (working tree)", fv.path)
 }

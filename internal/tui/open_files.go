@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -211,6 +212,8 @@ func (m Model) docLoader(d *openFile) func(context.Context) ([]byte, error) {
 	case srcShelf:
 		ref := model.FileRef{Source: model.SourceShelf, Locator: src.rev, Path: path}
 		return func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, ref) }
+	case srcExternal:
+		return func(context.Context) ([]byte, error) { return os.ReadFile(path) }
 	}
 	return func(ctx context.Context) ([]byte, error) { return svc.WorktreeFile(ctx, path) }
 }
@@ -228,7 +231,7 @@ func (m Model) bringToFront(d *openFile) (Model, tea.Cmd) {
 	m = m.detachDoc(d)
 	m = m.pushLayer(&fileViewer{d})
 	m = m.registerDoc(d)
-	if d.src.kind != srcWorktree && docLoaded(d) {
+	if !d.onDisk() && docLoaded(d) {
 		return m, nil
 	}
 	d.keepPlace()
@@ -246,6 +249,8 @@ func (m Model) openFilesProto() []steer.OpenFile {
 			f.Source, f.Rev = "commit", d.src.rev
 		case srcShelf:
 			f.Source, f.Rev = "shelf", d.src.rev
+		case srcExternal:
+			f.Source = "result"
 		}
 		if docLoaded(d) {
 			f.Line = d.p.cur + 1
@@ -277,3 +282,7 @@ func (m Model) findOpenFile(id, path string) *openFile {
 	}
 	return nil
 }
+
+// onDisk reports a document read from a file on disk (a working-tree file,
+// an AI task's result): a reload rereads it.
+func (d *openFile) onDisk() bool { return d.src.kind == srcWorktree || d.src.kind == srcExternal }

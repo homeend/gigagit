@@ -297,7 +297,7 @@ func TestSwitcherListsOpenFiles(t *testing.T) {
 			t.Errorf("rows lack %q:\n%s", want, joined)
 		}
 	}
-	if !strings.Contains(m.View(), "Agents & open files") {
+	if !strings.Contains(m.View(), "Agents & files") {
 		t.Error("the popup title does not name the open files")
 	}
 	p.query = "shown"

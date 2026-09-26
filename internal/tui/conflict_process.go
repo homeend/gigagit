@@ -543,8 +543,8 @@ func (p *conflictProcess) toolFinished(m Model, msg toolFinishedMsg) (Model, tea
 		if strings.TrimSpace(string(data)) != "" {
 			m.proc = nil
 			title := i18n.T("Resolution overview — %s", msg.pending.tc.Name)
-			m = m.pushLayer(newReviewView(title, msg.pending.messageFile, string(data)))
-			return m, m.loadCmd()
+			m, open := m.openResultFile(msg.pending.messageFile, title, nil)
+			return m, tea.Batch(open, m.loadCmd())
 		}
 		removeOverviewFile(msg.pending)
 		m.statusMsg = i18n.T("%s reported no overview", msg.pending.tc.Name)

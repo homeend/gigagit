@@ -123,8 +123,8 @@ func TestToolFinishedCompleteOpensOverviewViewer(t *testing.T) {
 	if m2.proc != nil {
 		t.Fatal("process must close so the viewer gets keys (proc preempts layers)")
 	}
-	if layerOf[*reviewView](m2) == nil {
-		t.Fatal("want the overview open in a reviewView layer")
+	if layerOf[*fileViewer](m2) == nil {
+		t.Fatal("want the overview open in the file viewer")
 	}
 	if cmd == nil {
 		t.Fatal("want a reload cmd (state must re-derive)")
@@ -175,7 +175,7 @@ func TestToolFinishedCompleteFailureDiscardsOverview(t *testing.T) {
 	if p.st != confReporting {
 		t.Fatalf("failure must report, st = %v", p.st)
 	}
-	if layerOf[*reviewView](m2) != nil {
+	if layerOf[*fileViewer](m2) != nil {
 		t.Fatal("a failed run must not open the viewer")
 	}
 	if _, err := os.Stat(mf.Name()); !os.IsNotExist(err) {

@@ -51,10 +51,13 @@ type contentLine struct {
 // help window is its first consumer.
 type contentPopup struct {
 	popupMax
-	title  string
-	lines  []contentLine // full, unfiltered content
-	query  string        // case-insensitive substring over non-heading lines
-	typing bool          // true while /-input mode is capturing keys
+	title string
+	// extraHint leads the full-screen viewer's hint line (an AI result's
+	// "[y] copy  [a] apply").
+	extraHint string
+	lines     []contentLine // full, unfiltered content
+	query     string        // case-insensitive substring over non-heading lines
+	typing    bool          // true while /-input mode is capturing keys
 	// charWrap: the content is CODE (a file's text), so wrap mode breaks at the
 	// last column instead of at spaces — see winOpts.charWrap.
 	charWrap bool
