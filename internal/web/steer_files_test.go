@@ -130,3 +130,58 @@ func TestSteerLandedWords(t *testing.T) {
 		}
 	}
 }
+
+func TestSteerFileFocusBroadcastsTheIDToEveryTab(t *testing.T) {
+	isolateGlobal(t)
+	s := newSteerServer(t)
+	s.startLive(context.Background())
+	t.Cleanup(s.Close)
+	ts := serve(t, s)
+	wt := s.service().Root()
+	s.ofs.open(wt, ofKey{Src: "worktree", Path: "f.txt"}, "", 0)
+	next, stop := eventsFor(t, ts, "t1")
+	defer stop()
+	next() // hello
+	var rep steer.Reply
+	code := postJSON(t, ts, "/api/session/steer", `{"id":"1-1","cmd":"file_focus","file":"f.txt","line":{"no":1}}`, "application/json", "", &rep)
+	if code != http.StatusOK || !rep.OK || rep.Detail != "focused f.txt at line 1" {
+		t.Fatalf("code=%d rep=%+v", code, rep)
+	}
+	var sawList, sawSteer bool
+	for i := 0; i < 2; i++ {
+		m := next()
+		switch m.Reason {
+		case "open_files":
+			sawList = len(m.Files) == 1 && m.Files[0].Line == 1
+		case "steer":
+			sawSteer = m.Steer != nil && m.Steer.Cmd == "file_focus" && m.Steer.FileID == "f1" && m.Steer.File == "" && m.Steer.Line == 1
+		}
+	}
+	if !sawList || !sawSteer {
+		t.Fatalf("list=%v steer=%v — the tabs need the id, never a path", sawList, sawSteer)
+	}
+}
+
+func TestSteerFileFocusUnknownAndNoTab(t *testing.T) {
+	t.Parallel()
+	s := newSteerServer(t)
+	s.ofs.open(s.service().Root(), ofKey{Src: "worktree", Path: "f.txt"}, "", 0)
+	if code, rep := steerAsk(t, s, `{"id":"1","cmd":"file_focus","file_id":"f9"}`); code != http.StatusOK || rep.OK || rep.Error != "no open file f9" {
+		t.Fatalf("unknown: code=%d rep=%+v", code, rep)
+	}
+	// No browser tab streams: the agent must not be told it is on screen.
+	if _, rep := steerAsk(t, s, `{"id":"2","cmd":"file_focus","file_id":"f1"}`); !rep.OK || rep.Detail != "focused f.txt; no gg web tab is open to show it" {
+		t.Fatalf("no tab: %+v", rep)
+	}
+}
+
+// A focus DOES ride the hub's steer lane, so it keeps the 409 while an op runs.
+func TestSteerFileFocusIs409WhileAnOpIsInFlight(t *testing.T) {
+	t.Parallel()
+	s := newSteerServer(t)
+	s.ofs.open(s.service().Root(), ofKey{Src: "worktree", Path: "f.txt"}, "", 0)
+	s.cur = &opRun{}
+	if code := steerPost(t, s, `{"id":"1","cmd":"file_focus","file_id":"f1"}`, "application/json"); code != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", code)
+	}
+}

@@ -92,3 +92,38 @@ func (s *Server) steerBackground(ctx context.Context, c steer.Command) steer.Rep
 	n, known := s.versionLines(ctx, k)
 	return steerOK(c, steerLanded("opened "+c.File+" in the background", line, n, known, ev))
 }
+
+// steerFileFocus brings an open file to the front (gg session files focus):
+// every tab brings it up, as the switcher's enter would, at the agent's line
+// when it named one. The reply's line is counted from the server's own read.
+func (s *Server) steerFileFocus(ctx context.Context, c steer.Command, wire steerWire) steer.Reply {
+	wt := s.service().Root()
+	f, ok := s.ofs.resolve(wt, c.FileID, c.File)
+	if !ok {
+		name := c.FileID
+		if name == "" {
+			name = c.File
+		}
+		return steerFail(c, "no open file "+name)
+	}
+	line := 0
+	if c.Line != nil {
+		line = c.Line.No
+	}
+	s.ofs.cursor(wt, f.ID, line) // a line > 0 becomes the server's line
+	s.ofs.focus(wt, f.ID, "")
+	s.broadcastOpenFiles(wt, "")
+	// The tabs get the ID: a path may name two versions (working tree and a
+	// commit), and the page brings files back by id.
+	wire.FileID, wire.File = f.ID, ""
+	if h := s.liveHubRef(); h != nil {
+		h.emitSteer(liveMsg{Changed: []string{}, Reason: "steer", Steer: &wire})
+	}
+	k, _ := s.ofs.entryKey(wt, f.ID)
+	n, known := s.versionLines(ctx, k)
+	detail := steerLanded("focused "+f.Path, line, n, known, "")
+	if s.ofs.liveTabs() == 0 {
+		detail += "; no gg web tab is open to show it"
+	}
+	return steerOK(c, detail)
+}

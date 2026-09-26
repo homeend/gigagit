@@ -329,7 +329,8 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 
 // handleSteer takes one command from `gg session` and hands it to every open
 // page. It answers 202 at once — there is no page acknowledgement, and the CLI
-// prints "web: sent".
+// prints "web: sent" — except the open-files verbs, which the server answers
+// itself with a 200 and a steer.Reply (steer_files.go).
 func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 	if s.steerInbox() == "" {
 		http.NotFound(w, r) // steering is off: the CLI must see no session here
@@ -362,6 +363,10 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 	// "operation in flight" and exits 1.
 	if s.opInFlight() {
 		writeErr(w, http.StatusConflict, errors.New("operation in flight"))
+		return
+	}
+	if c.Cmd == "file_focus" {
+		writeJSON(w, s.steerFileFocus(readCtx(r), c, wire))
 		return
 	}
 	if h := s.liveHubRef(); h != nil {

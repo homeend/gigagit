@@ -216,3 +216,25 @@ func TestOpenFilesLookup(t *testing.T) {
 		t.Fatal("another version of the path matched")
 	}
 }
+
+func TestOpenFilesResolveAndLiveTabs(t *testing.T) {
+	t.Parallel()
+	r := newOpenFiles()
+	r.open("/w", ofKey{Src: "worktree", Path: "a.txt"}, "", 0)
+	r.open("/w", ofKey{Src: "worktree", Path: "b.txt"}, "", 0)
+	for _, tc := range []struct{ id, path, want string }{
+		{"f1", "", "f1"}, {"", "b.txt", "f2"}, {"b.txt", "", "f2"}, {"f9", "", ""},
+	} {
+		f, ok := r.resolve("/w", tc.id, tc.path)
+		if ok != (tc.want != "") || f.ID != tc.want {
+			t.Errorf("resolve(%q,%q) = %+v,%v; want %q", tc.id, tc.path, f, ok, tc.want)
+		}
+	}
+	if r.liveTabs() != 0 {
+		t.Fatal("no stream is open")
+	}
+	r.streamOpened("t1")
+	if r.liveTabs() != 1 {
+		t.Fatal("liveTabs misses t1")
+	}
+}
