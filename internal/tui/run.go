@@ -94,6 +94,7 @@ func Run(svc *domain.Service, recordPath string, at model.Link) (string, error) 
 	// Safety net: whatever ended the program (a confirmed quit, a panic
 	// recovered by Run, a killed terminal), no agent outlives gg.
 	killCtx, killCancel := context.WithTimeout(context.Background(), killAllGrace)
+	domain.Tasks().KillAll(killCtx)
 	domain.Sessions().KillAll(killCtx)
 	killCancel()
 	if fm, ok := final.(Model); ok {

@@ -117,3 +117,35 @@ func TestDeleteWorktreeWithRunningSessionRefused(t *testing.T) {
 	}
 	_ = time.Second
 }
+
+func TestQuitGuardHoldsForHeadlessTask(t *testing.T) {
+	m := launchTestModel(t)
+	id := submitReview(t, m, "sleep 5")
+	if _, held := quitFilter(m, tea.QuitMsg{}).(quitHeldMsg); !held {
+		t.Fatal("quit must be held while a task runs")
+	}
+	if got := liveWork(); got != 1 {
+		t.Fatalf("liveWork = %d, want 1", got)
+	}
+	msg := killAllAndQuitCmd()()
+	if _, ok := msg.(tea.QuitMsg); !ok {
+		t.Fatalf("got %T", msg)
+	}
+	if info, _ := domain.Tasks().Get(id); info.State != domain.TaskCancelled {
+		t.Fatalf("state %s", info.State)
+	}
+}
+
+func TestQuitPopupListsTasksWhenOnlyTasksAreAlive(t *testing.T) {
+	m := launchTestModel(t)
+	submitReview(t, m, "sleep 5")
+	m, _ = m.openSessionsPopup(true)
+	p := layerOf[*sessionsPopup](m)
+	if p == nil || p.tab != tabTasks {
+		t.Fatalf("quit popup: %+v", p)
+	}
+	out := p.render(m, "")
+	if !strings.Contains(out, "review — ") || !strings.Contains(out, "[Q]") {
+		t.Fatalf("quit popup must list the task and offer Q:\n%s", out)
+	}
+}

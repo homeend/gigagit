@@ -97,8 +97,9 @@ func (m Model) openSessionsPopup(quitMode bool) (Model, tea.Cmd) {
 		return m, nil
 	}
 	p := &sessionsPopup{quitMode: quitMode, hist: hist}
-	if !quitMode && len(domain.Sessions().List()) == 0 && len(m.openFiles.list(m.currentWorktree)) == 0 {
-		p.tab = tabTasks // only tasks to show
+	if domain.Sessions().LiveCount() == 0 && (quitMode || len(m.openFiles.list(m.currentWorktree)) == 0) &&
+		(quitMode || len(domain.Sessions().List()) == 0) {
+		p.tab = tabTasks // only tasks to show (or, quitting, only tasks alive)
 	}
 	p.refresh(m)
 	p.sel = p.nextSelectable(-1, +1)
@@ -319,7 +320,7 @@ func (p *sessionsPopup) render(m Model, below string) string {
 		}
 	}
 	if p.quitMode {
-		title = i18n.T("agent sessions still running: %d — quit gg?", domain.Sessions().LiveCount())
+		title = i18n.T("agents and AI tasks still running: %d — quit gg?", liveWork())
 	} else if p.tab == tabTasks {
 		title = i18n.T("AI tasks") + "  " + i18n.T("[tab] sessions")
 	} else {
@@ -333,10 +334,14 @@ func (p *sessionsPopup) render(m Model, below string) string {
 	}
 	s := st()
 	var body []string
-	if p.tab == tabTasks && !p.quitMode {
+	if p.tab == tabTasks {
 		body = p.renderTaskRows(m, textW, h)
 		lines := append([]string{title, ""}, body...)
-		lines = append(lines, "", i18n.T("[enter] result/console  [k k] cancel  [x] remove  [/] filter  [tab] sessions  [esc] close"))
+		if p.quitMode {
+			lines = append(lines, "", i18n.T("[Q] kill all and quit  [esc] cancel"))
+		} else {
+			lines = append(lines, "", i18n.T("[enter] result/console  [k k] cancel  [x] remove  [/] filter  [tab] sessions  [esc] close"))
+		}
 		return overlayCenter(clipToHeight(below, h), popupBox(inner, strings.Join(lines, "\n")), w, h)
 	}
 	if len(p.rows) == 0 {
