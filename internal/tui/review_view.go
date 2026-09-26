@@ -187,6 +187,9 @@ func (r *reviewView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "esc":
 		return m.popLayer(), nil
 	case "e": // open the report file in $EDITOR (read-only view, like history/blame)
+		if r.path == "" {
+			return m, nil // a result shown from memory has no file
+		}
 		return m, m.openInEditorCmd(filepath.Base(r.path), func(ctx context.Context) ([]byte, error) {
 			return os.ReadFile(r.path)
 		})

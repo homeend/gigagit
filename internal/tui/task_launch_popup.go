@@ -153,8 +153,8 @@ func (m Model) launchChoices(l taskLaunch) []domain.TaskChoice {
 	keep := func(cmds []config.ToolCommand) []config.ToolCommand {
 		var out []config.ToolCommand
 		for _, tc := range cmds {
-			if f := newTemplateFill(tc.Command); f.needsInput() {
-				continue
+			if f := newTemplateFill(tc.Command); f.needsInput() || tc.PerFile {
+				continue // <user:…> input and per-file runs stay in the conflict window's picker
 			}
 			if tc.WhenOp != "" && tc.WhenOp != l.whenOp {
 				continue

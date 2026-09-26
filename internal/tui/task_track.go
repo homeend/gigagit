@@ -113,6 +113,8 @@ func (m Model) applyTaskResult(info domain.TaskInfo) (Model, tea.Cmd) {
 		return m.applyCommitMessage(info)
 	case exttool.CatReview:
 		return m.applyReviewResult(info)
+	case exttool.CatConflict, exttool.CatConflictComplete:
+		return m.applyConflictResult(info)
 	}
 	return m.stickyNotice(i18n.T("%s ready — ctrl+\\", info.Key))
 }
@@ -152,4 +154,18 @@ func taskKindLabel(k exttool.Category) string {
 		return i18n.T("resolve & complete")
 	}
 	return string(k)
+}
+
+// applyConflictResult shows a conflict agent's overview (when nothing owns
+// the screen) and reloads the status: the outcome is the repository state.
+func (m Model) applyConflictResult(info domain.TaskInfo) (Model, tea.Cmd) {
+	if !m.canShowResult(info) {
+		m, c := m.stickyNotice(i18n.T("%s ready — ctrl+\\", info.Key))
+		if m.taskHere(info) {
+			return m, tea.Batch(c, m.loadCmd())
+		}
+		return m, c
+	}
+	m = m.pushLayer(newReviewView(i18n.T("Resolution overview — %s", info.Agent), "", info.Result))
+	return m, m.loadCmd()
 }
