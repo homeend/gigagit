@@ -19,7 +19,7 @@ import { fetchPRs, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { loadRepo, opLine } from "./ops.js";
-import { openViewer } from "./viewer.js";
+import { openViewer, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
 
 const COALESCE_MS = 150; // one burst of watcher events → one refresh
 const RETRY_MS = 500; // a refresh is already running → try again after it
@@ -71,12 +71,23 @@ function connectLive() {
       state.attention.clear();
       if (connected) scheduleFull(); // reconnect: events were missed meanwhile
       connected = true;
+      viewerHello(); // the server dropped this tab's file when the old stream ended
       return;
     }
     // A steer is a one-off instruction an agent posted, not a change
     // notification: it is applied AT ONCE and never joins the coalescing set.
     if (msg.reason === "steer" && msg.steer) {
       applySteer(msg.steer);
+      return;
+    }
+    // Open files (plan 5b): the shared list changed, or a file on disk did.
+    // Neither is a refresh source — they never join the coalescing set.
+    if (msg.reason === "open_files") {
+      viewerOpenFiles(msg.files || []);
+      return;
+    }
+    if (msg.reason === "file_changed") {
+      viewerFileChanged(msg.file_id);
       return;
     }
     for (const src of msg.changed || []) pending.add(src);

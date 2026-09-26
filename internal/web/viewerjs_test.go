@@ -129,4 +129,10 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", "closed in another tab", "x in another tab closes this viewer"},
 	{"viewer.js", "files open)", "an eviction names the file (the TUI's words)"},
 	{"viewer.js", "is in the background — ctrl+\\\\ lists open files", "ctrl+] says where the file went"},
+	// Plan 5b Task 5: events.
+	{"live.js", `msg.reason === "open_files"`, "the list's broadcast reaches the page"},
+	{"live.js", "viewerOpenFiles(msg.files || [])", "an empty list arrives as no files (omitempty)"},
+	{"live.js", `msg.reason === "file_changed"`, "a disk change reaches the viewer"},
+	{"live.js", "viewerFileChanged(msg.file_id)", "the viewer reloads the changed file"},
+	{"live.js", "viewerHello()", "every hello re-reports what this tab shows"},
 }
