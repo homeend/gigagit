@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 	"time"
@@ -139,5 +140,32 @@ func TestTaskTabTabSwitches(t *testing.T) {
 	m, _ = updateKey(m, "tab")
 	if p.tab != tabTasks {
 		t.Fatal("tab back → tasks")
+	}
+}
+
+func TestAgentsPopupFixedHeightAndTabStrip(t *testing.T) {
+	m := launchTestModel(t)
+	for i := 0; i < 3; i++ {
+		id := submitReview(t, m, "echo ok")
+		waitTaskState(t, id, taskEndedFn)
+	}
+	m, _ = m.openSessionsPopup(false)
+	p := layerOf[*sessionsPopup](m)
+	if p == nil {
+		t.Fatal("popup did not open")
+	}
+	lines := func() int { return strings.Count(ansi.Strip(p.render(m, "")), "\n") }
+	tasksOut := ansi.Strip(p.render(m, ""))
+	if !strings.Contains(tasksOut, "[AI tasks 3]") || !strings.Contains(tasksOut, "Agents 0") {
+		t.Fatalf("tab strip missing:\n%s", tasksOut)
+	}
+	tasksH := lines()
+	m, _ = updateKey(m, "tab")
+	sessOut := ansi.Strip(p.render(m, ""))
+	if !strings.Contains(sessOut, "[Agents 0]") {
+		t.Fatalf("active tab not bracketed:\n%s", sessOut)
+	}
+	if got := lines(); got != tasksH {
+		t.Fatalf("height changed with the tab: tasks %d, agents %d", tasksH, got)
 	}
 }

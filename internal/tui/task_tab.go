@@ -259,8 +259,8 @@ func (p *sessionsPopup) openTask(m Model, r taskRow) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderTaskRows lays out the tab's rows.
-func (p *sessionsPopup) renderTaskRows(m Model, textW, h int) []string {
+// renderTaskRows lays out the tab's rows in rowsH lines.
+func (p *sessionsPopup) renderTaskRows(m Model, textW, rowsH int) []string {
 	if len(p.taskRows) == 0 {
 		return []string{padRight(i18n.T("  (no AI tasks)"), textW)}
 	}
@@ -275,6 +275,5 @@ func (p *sessionsPopup) renderTaskRows(m Model, textW, h int) []string {
 		}
 		wr[i] = winRow{text: text, style: style}
 	}
-	rowsH := min(len(wr), max(h-10, 3))
 	return renderWindow(wr, winOpts{w: textW, h: rowsH, mode: p.mode, anchor: p.taskSel, hscroll: p.hscroll})
 }

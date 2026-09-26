@@ -219,7 +219,7 @@ func (p *sessionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		p.refresh(m)
 		return m, nil
 	}
-	if key == "tab" && !p.quitMode {
+	if key == "tab" {
 		p.tab = 1 - p.tab
 		p.confirmKill, p.confirmCancel = "", ""
 		return m, nil
@@ -312,64 +312,103 @@ func (p *sessionsPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
 	inner := popupWideInnerWidth(w)
 	textW := popupTextWidth(inner)
-	title := i18n.T("Agent sessions")
+	s := st()
+
+	// The header: the quit question (quit mode), then the tab strip — the
+	// panels' tab convention (the active tab bracketed), the active one bold
+	// and the other dim, each with its row count — and a rule under it.
+	var head []string
+	if p.quitMode {
+		head = append(head, i18n.T("agents and AI tasks still running: %d — quit gg?", liveWork()), "")
+	}
+	strip := p.tabStrip(s)
+	if p.typing || p.query != "" {
+		q := "  /" + p.query
+		if p.typing {
+			q += "█"
+		}
+		strip += q
+	}
+	head = append(head, strip, s.dim.Render(strings.Repeat("─", textW)))
+
+	// Fixed height: both tabs get the taller tab's row count, so switching
+	// never resizes the box.
+	rowsH := min(max(p.sessionRowCount(), p.taskRowCount(), 1), max(h-10, 3))
+	var body, hints []string
+	if p.tab == tabTasks {
+		body = p.renderTaskRows(m, textW, rowsH)
+		hints = []string{i18n.T("[enter] result/console  [k k] cancel  [x] remove  [/] filter  [tab] sessions  [esc] close")}
+	} else {
+		body = p.renderSessionRows(textW, rowsH)
+		hints = []string{i18n.T("[enter] open  [k] kill  [x] remove/close  [/] filter  [z] mode  [tab] AI tasks  [esc] close")}
+	}
+	if p.quitMode {
+		hints = append(hints, i18n.T("[Q] kill all and quit  [esc] cancel"))
+	}
+	for len(body) < rowsH {
+		body = append(body, padRight("", textW))
+	}
+	lines := append(append(head, body...), "")
+	lines = append(lines, hints...)
+	box := popupBox(inner, strings.Join(lines, "\n"))
+	return overlayCenter(clipToHeight(below, h), box, w, h)
+}
+
+// tabStrip is "[Agents 2]  AI tasks 5" with the active tab bold and the
+// other dim ("Agents & files" once this worktree has open files).
+func (p *sessionsPopup) tabStrip(s *styles) string {
+	agents := i18n.T("Agents %d", p.sessionCount())
 	for _, d := range p.files {
 		if d != nil {
-			title = i18n.T("Agents & open files")
+			agents = i18n.T("Agents & files %d", p.sessionCount())
 			break
 		}
 	}
-	if p.quitMode {
-		title = i18n.T("agents and AI tasks still running: %d — quit gg?", liveWork())
-	} else if p.tab == tabTasks {
-		title = i18n.T("AI tasks") + "  " + i18n.T("[tab] sessions")
-	} else {
-		title += "  " + i18n.T("[tab] AI tasks")
+	tasks := i18n.T("AI tasks %d", len(p.taskRows))
+	bold := lipgloss.NewStyle().Bold(true)
+	if p.tab == tabTasks {
+		return s.dim.Render(" "+agents+" ") + " " + bold.Render("["+tasks+"]")
 	}
-	if p.typing || p.query != "" {
-		title += "  /" + p.query
-		if p.typing {
-			title += "█"
+	return bold.Render("["+agents+"]") + " " + s.dim.Render(" "+tasks+" ")
+}
+
+// sessionCount counts the sessions tab's selectable rows (sessions and open
+// files, not headers).
+func (p *sessionsPopup) sessionCount() int {
+	n := 0
+	for i := range p.rows {
+		if p.selectable(i) {
+			n++
 		}
+	}
+	return n
+}
+
+// sessionRowCount / taskRowCount are each tab's body height (1 for the
+// empty-state line).
+func (p *sessionsPopup) sessionRowCount() int { return max(len(p.rows), 1) }
+func (p *sessionsPopup) taskRowCount() int    { return max(len(p.taskRows), 1) }
+
+// renderSessionRows lays out the sessions tab's rows in rowsH lines.
+func (p *sessionsPopup) renderSessionRows(textW, rowsH int) []string {
+	if len(p.rows) == 0 {
+		return []string{padRight(i18n.T("  (no agent sessions)"), textW)}
 	}
 	s := st()
-	var body []string
-	if p.tab == tabTasks {
-		body = p.renderTaskRows(m, textW, h)
-		lines := append([]string{title, ""}, body...)
-		if p.quitMode {
-			lines = append(lines, "", i18n.T("[Q] kill all and quit  [esc] cancel"))
-		} else {
-			lines = append(lines, "", i18n.T("[enter] result/console  [k k] cancel  [x] remove  [/] filter  [tab] sessions  [esc] close"))
+	wr := make([]winRow, len(p.rows))
+	for i, r := range p.rows {
+		var style lipgloss.Style
+		switch {
+		case i == p.sel && p.selectable(i):
+			r, style = "> "+r, s.selectedRow
+		case !p.selectable(i) && !strings.HasPrefix(r, " "):
+			r, style = "  "+r, lipgloss.NewStyle().Bold(true)
+		default:
+			r = "  " + r
 		}
-		return overlayCenter(clipToHeight(below, h), popupBox(inner, strings.Join(lines, "\n")), w, h)
+		// An open-file row keeps its file name: "> ● " is the lead-in,
+		// the path loses its middle.
+		wr[i] = winRow{text: r, style: style, elide: i < len(p.files) && p.files[i] != nil, elideHead: 4}
 	}
-	if len(p.rows) == 0 {
-		body = []string{padRight(i18n.T("  (no agent sessions)"), textW)}
-	} else {
-		wr := make([]winRow, len(p.rows))
-		for i, r := range p.rows {
-			var style lipgloss.Style
-			switch {
-			case i == p.sel && p.selectable(i):
-				r, style = "> "+r, s.selectedRow
-			case !p.selectable(i) && !strings.HasPrefix(r, " "):
-				r, style = "  "+r, lipgloss.NewStyle().Bold(true)
-			default:
-				r = "  " + r
-			}
-			// An open-file row keeps its file name: "> ● " is the lead-in,
-			// the path loses its middle.
-			wr[i] = winRow{text: r, style: style, elide: i < len(p.files) && p.files[i] != nil, elideHead: 4}
-		}
-		rowsH := min(len(wr), max(h-10, 3))
-		body = renderWindow(wr, winOpts{w: textW, h: rowsH, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
-	}
-	lines := append([]string{title, ""}, body...)
-	lines = append(lines, "", i18n.T("[enter] open  [k] kill  [x] remove/close  [/] filter  [z] mode  [esc] close"))
-	if p.quitMode {
-		lines = append(lines, i18n.T("[Q] kill all and quit  [esc] cancel"))
-	}
-	box := popupBox(inner, strings.Join(lines, "\n"))
-	return overlayCenter(clipToHeight(below, h), box, w, h)
+	return renderWindow(wr, winOpts{w: textW, h: rowsH, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
 }
