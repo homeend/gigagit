@@ -317,6 +317,8 @@ type Model struct {
 	// GG_INBOX (steer_kept.go keeps those inboxes answered). A map, so it
 	// survives the Model value copy.
 	childInbox map[domain.SessionID]string
+	// taskTrack is what this TUI applied/reported of domain.Tasks() (task_track.go).
+	taskTrack *taskTrack
 	// keptSteer are the inboxes other than steerDir whose presence gg holds
 	// for a running child (steer_kept.go).
 	keptSteer map[string]bool
@@ -459,6 +461,7 @@ func New(svc *domain.Service) Model {
 		bfMemo:                 &branchFilterMemos{},
 		openFiles:              &openFilesReg{},
 		childInbox:             map[domain.SessionID]string{},
+		taskTrack:              newTaskTrack(),
 		keptSteer:              map[string]bool{},
 	}
 	// The stacked-diff pref is machine-global, so it is read once here rather
@@ -471,7 +474,7 @@ func New(svc *domain.Service) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen), waitSessionsCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen), waitSessionsCmd(), waitTasksCmd())
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -573,6 +576,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitSessionCmd(s, msg.id, msg.gen)
 	case sessionsChangedMsg:
 		return m.onSessionsChanged()
+	case tasksChangedMsg:
+		return m.onTasksChanged()
+	case taskLaunchReadyMsg:
+		return m.applyTaskLaunchReady(msg)
+	case taskSubmittedMsg:
+		return m.applyTaskSubmitted(msg)
 	case quitHeldMsg:
 		return m.openSessionsPopup(true)
 	case agentEnsureMsg:
@@ -1476,6 +1485,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// snapshotTargetMsg resolved before this config arrived.
 		var steerCmd tea.Cmd
 		m, steerCmd = m.reconcileSteer()
+		var tasksCmd tea.Cmd
+		m, tasksCmd = m.applyTasksConfig()
+		steerCmd = tea.Batch(steerCmd, tasksCmd)
 		m.repoConfigPath = msg.repoTOML
 		// Apply the persisted Commits render mode ([ui] show_graph): "off" starts
 		// in the flat list, exactly like the . menu's "Show as list".
@@ -1558,6 +1570,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// leftovers replay and the session runs watcher-less.
 			var steerCmd tea.Cmd
 			m, steerCmd = m.reconcileSteer()
+			var tasksCmd tea.Cmd
+			m, tasksCmd = m.applyTasksConfig()
+			steerCmd = tea.Batch(steerCmd, tasksCmd)
 			// Rebind the per-repo Settings write target on the legacy load path —
 			// configReadyMsg only covers app startup. Without this, every Settings
 			// write after a repo switch ("Show graph", "Commit sort", refresh

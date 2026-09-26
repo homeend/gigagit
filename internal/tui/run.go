@@ -64,6 +64,7 @@ func Run(svc *domain.Service, recordPath string, at model.Link) (string, error) 
 	// dir); loadBranchFilterSlots is a no-op until it does, and notify.go's
 	// applyRepoHealth runs it then.
 	m = m.applyBranchFilterConfig()
+	m, _ = m.applyTasksConfig() // a warning comes back with configReadyMsg
 	m = m.initSnapshotTarget()
 	// The inbox is keyed by worktree under the session dir the snapshot just
 	// resolved; the watcher itself starts from Init().
