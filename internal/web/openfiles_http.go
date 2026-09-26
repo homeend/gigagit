@@ -136,9 +136,13 @@ func (s *Server) baseline(wt, id string, k ofKey) {
 
 // broadcastOpenFiles sends wt's list to every tab — never dropped by the op
 // gate (ruling L6): it answers something a tab or agent just did.
-func (s *Server) broadcastOpenFiles(wt, evicted string) {
+func (s *Server) broadcastOpenFiles(wt, evicted string) { s.broadcastOpened(wt, evicted, "") }
+
+// broadcastOpened is broadcastOpenFiles naming the file an agent's background
+// open just added, so every tab can say so.
+func (s *Server) broadcastOpened(wt, evicted, opened string) {
 	if h := s.liveHubRef(); h != nil {
-		h.fanOut(liveMsg{Changed: []string{}, Reason: "open_files", Files: s.ofs.list(wt), Evicted: evicted})
+		h.fanOut(liveMsg{Changed: []string{}, Reason: "open_files", Files: s.ofs.list(wt), Evicted: evicted, Opened: opened})
 	}
 }
 

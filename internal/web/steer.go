@@ -353,6 +353,10 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, s.steerFiles(c))
 		return
 	}
+	if c.Background {
+		writeJSON(w, s.steerBackground(readCtx(r), c))
+		return
+	}
 	// The hub drops everything while an op is in flight. A steer must not
 	// vanish that way, so refuse it out loud instead — the CLI prints
 	// "operation in flight" and exits 1.

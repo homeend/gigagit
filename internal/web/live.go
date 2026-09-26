@@ -66,6 +66,9 @@ type liveMsg struct {
 	Files   []steer.OpenFile `json:"files,omitempty"`
 	Evicted string           `json:"evicted,omitempty"`
 	FileID  string           `json:"file_id,omitempty"`
+	// Opened names the file an agent just opened in the background
+	// ("open_files"): every tab says so.
+	Opened string `json:"opened,omitempty"`
 }
 
 type liveHub struct {

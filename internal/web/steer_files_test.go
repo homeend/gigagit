@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -40,5 +41,92 @@ func TestSteerFilesAnswersWhileAnOpIsInFlight(t *testing.T) {
 	s.cur = &opRun{} // opInFlight() is true
 	if code, rep := steerAsk(t, s, `{"id":"1-1","cmd":"files"}`); code != http.StatusOK || !rep.OK {
 		t.Fatalf("code=%d rep=%+v", code, rep)
+	}
+}
+
+func TestSteerBackgroundOpensIntoTheList(t *testing.T) {
+	isolateGlobal(t)
+	s := newSteerServer(t)
+	s.startLive(context.Background())
+	t.Cleanup(s.Close)
+	ts := serve(t, s)
+	next, stop := eventsFor(t, ts, "t1")
+	defer stop()
+	next() // hello
+	var rep steer.Reply
+	code := postJSON(t, ts, "/api/session/steer",
+		`{"id":"1-1","cmd":"navigate","file":"f.txt","hint_kind":"view","hint_id":"content","background":true,"line":{"no":1}}`,
+		"application/json", "", &rep)
+	if code != http.StatusOK || !rep.OK || rep.Detail != "opened f.txt in the background at line 1" {
+		t.Fatalf("code=%d rep=%+v", code, rep)
+	}
+	m := next()
+	if m.Reason != "open_files" || m.Opened != "f.txt" || len(m.Files) != 1 || m.Files[0].State != "background" || m.Files[0].Line != 1 {
+		t.Fatalf("event = %+v", m)
+	}
+	// Past the end: the server's own read says so, in the TUI's words.
+	_ = postJSON(t, ts, "/api/session/steer",
+		`{"id":"1-2","cmd":"navigate","file":"f.txt","hint_kind":"view","hint_id":"content","background":true,"line":{"no":9}}`,
+		"application/json", "", &rep)
+	if rep.Detail != "opened f.txt in the background at line 1 (line 9 is past the end, 1 lines)" {
+		t.Fatalf("past the end: %+v", rep)
+	}
+}
+
+func TestSteerBackgroundRefusals(t *testing.T) {
+	t.Parallel()
+	s := newSteerServer(t)
+	s.steerWorktree = s.service().Root()
+	for _, tc := range []struct{ body, want string }{
+		{`{"id":"1","cmd":"navigate","file":"nope.txt","hint_kind":"view","hint_id":"content","background":true}`, "nope.txt is not in the working tree"},
+		{`{"id":"2","cmd":"navigate","file":"f.txt","hint_kind":"view","hint_id":"content","background":true,"worktree":"/elsewhere"}`, "gg web is showing worktree " + s.service().Root() + ", not /elsewhere"},
+	} {
+		code, rep := steerAsk(t, s, tc.body)
+		if code != http.StatusOK || rep.OK || rep.Error != tc.want {
+			t.Errorf("%s: code=%d rep=%+v, want error %q", tc.body, code, rep, tc.want)
+		}
+	}
+}
+
+// A file a tab is looking at is left exactly as the user has it.
+func TestSteerBackgroundLeavesAShownFileAlone(t *testing.T) {
+	t.Parallel()
+	s := newSteerServer(t)
+	wt := s.service().Root()
+	s.ofs.open(wt, ofKey{Src: "worktree", Path: "f.txt"}, "t1", 1)
+	code, rep := steerAsk(t, s, `{"id":"1","cmd":"navigate","file":"f.txt","hint_kind":"view","hint_id":"content","background":true,"line":{"no":1}}`)
+	if code != http.StatusOK || !rep.OK || rep.Detail != "f.txt is already open on screen" {
+		t.Fatalf("code=%d rep=%+v", code, rep)
+	}
+}
+
+// A background open touches no screen: an op in flight does not stop it.
+func TestSteerBackgroundAnswersWhileAnOpIsInFlight(t *testing.T) {
+	t.Parallel()
+	s := newSteerServer(t)
+	s.cur = &opRun{}
+	code, rep := steerAsk(t, s, `{"id":"1","cmd":"navigate","file":"f.txt","hint_kind":"view","hint_id":"content","background":true}`)
+	if code != http.StatusOK || !rep.OK || rep.Detail != "opened f.txt in the background" {
+		t.Fatalf("code=%d rep=%+v", code, rep)
+	}
+}
+
+func TestSteerLandedWords(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		line, n int
+		known   bool
+		ev      string
+		want    string
+	}{
+		{0, 5, true, "", "focused a"},
+		{3, 5, true, "", "focused a at line 3"},
+		{9, 5, true, "", "focused a at line 5 (line 9 is past the end, 5 lines)"},
+		{3, 0, false, "", "focused a"},
+		{0, 5, true, "b.txt", "focused a; closed b.txt (20 files open)"},
+	} {
+		if got := steerLanded("focused a", tc.line, tc.n, tc.known, tc.ev); got != tc.want {
+			t.Errorf("steerLanded(%d,%d,%v,%q) = %q, want %q", tc.line, tc.n, tc.known, tc.ev, got, tc.want)
+		}
 	}
 }

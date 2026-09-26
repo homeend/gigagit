@@ -257,6 +257,18 @@ func (r *openFiles) streamClosed(tab string) bool {
 	return had
 }
 
+// lookup is the entry for version k, if one is open.
+func (r *openFiles) lookup(wt string, k ofKey) (steer.OpenFile, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, e := range r.byWT[wt] {
+		if e.key == k {
+			return r.wireLocked(e), true
+		}
+	}
+	return steer.OpenFile{}, false
+}
+
 // list is wt's open files, most recently shown first, in the wire form.
 func (r *openFiles) list(wt string) []steer.OpenFile {
 	r.mu.Lock()

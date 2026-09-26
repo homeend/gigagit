@@ -199,3 +199,20 @@ func TestStatDisk(t *testing.T) {
 		t.Fatal("same")
 	}
 }
+
+func TestOpenFilesLookup(t *testing.T) {
+	t.Parallel()
+	r := newOpenFiles()
+	k := ofKey{Src: "worktree", Path: "a.txt"}
+	if _, ok := r.lookup("/w", k); ok {
+		t.Fatal("lookup found a file never opened")
+	}
+	r.open("/w", k, "t1", 0)
+	f, ok := r.lookup("/w", k)
+	if !ok || f.ID != "f1" || f.State != "shown" {
+		t.Fatalf("lookup = %+v, %v", f, ok)
+	}
+	if _, ok := r.lookup("/w", ofKey{Src: "commit", Rev: "abc", Path: "a.txt"}); ok {
+		t.Fatal("another version of the path matched")
+	}
+}
