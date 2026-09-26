@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/homeend/gigagit/internal/config"
@@ -99,6 +100,9 @@ type steerWire struct {
 	// as steer.Command carries it.
 	HintKind string `json:"hint_kind,omitempty"`
 	HintID   string `json:"hint_id,omitempty"`
+	// FileID is the open file a file_focus brings up (the server resolves a
+	// path to it).
+	FileID string `json:"file_id,omitempty"`
 }
 
 // steerPanels is the protocol's panel vocabulary — internal/tui's
@@ -110,6 +114,9 @@ var steerPanels = map[string]bool{
 	"branches": true, "worktrees": true, "remotes": true, "files": true,
 	"staged": true, "commits": true, "tags": true, "reflog": true, "previews": true,
 }
+
+// openFileID is an open file's id — the registry's "f<n>".
+var openFileID = regexp.MustCompile(`^f[0-9]+$`)
 
 // freezePair turns a pair target's halves into FULL commit ids wherever they
 // resolve. The link resolver already sends ids (ruling R2), but a hand-written
@@ -142,17 +149,15 @@ func (s *Server) freezePair(ctx context.Context, w *steerWire) {
 // be handed a band to paint by a navigate.
 func toSteerWire(c steer.Command) (steerWire, error) {
 	w := steerWire{Cmd: c.Cmd, File: c.File, Commit: c.Commit, Step: c.Step,
-		Sources: c.Sources, Panel: c.Panel}
-	// The open-files verbs (gg session files, --background) are the TUI's
-	// until the web stage: refused by name, never run as a plain navigate.
-	if c.Background {
-		return w, errors.New("background opens are not supported in gg web yet")
-	}
+		Sources: c.Sources, Panel: c.Panel, FileID: c.FileID}
 	if c.File != "" && !isGitArgSafe(c.File) {
 		return w, errors.New("unsafe file")
 	}
 	if c.Commit != "" && !isGitArgSafe(c.Commit) {
 		return w, errors.New("unsafe commit")
+	}
+	if c.FileID != "" && !openFileID.MatchString(c.FileID) {
+		return w, fmt.Errorf("unknown file id %q", c.FileID)
 	}
 	if c.Target != nil {
 		switch c.Target.State {
@@ -235,6 +240,11 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 	}
 	switch c.Cmd {
 	case "navigate":
+		// A background open loads a WORKING-TREE file into the list (the
+		// TUI's rule): only a content link names one.
+		if c.Background && (c.File == "" || c.Commit != "" || c.HintKind != model.ContentHintKind || c.HintID != model.ContentHintID) {
+			return w, errors.New("a background open needs a content link")
+		}
 		switch c.Step {
 		case "", "next_note", "prev_note":
 		default:
@@ -306,8 +316,11 @@ func toSteerWire(c steer.Command) (steerWire, error) {
 			w.End = w.Start
 		}
 	case "highlight_clear":
-	case "files", "file_focus":
-		return w, errors.New("open files are not supported in gg web yet")
+	case "files":
+	case "file_focus":
+		if c.FileID == "" && c.File == "" {
+			return w, errors.New("file_focus needs a file id or a path")
+		}
 	default:
 		return w, fmt.Errorf("unknown command %q", c.Cmd)
 	}
@@ -333,6 +346,13 @@ func (s *Server) handleSteer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.freezePair(readCtx(r), &wire)
+	// The open-files verbs are answered HERE, synchronously (plan 5c): the
+	// server owns the list. files and a background open touch no screen and
+	// never ride the hub's steer lane, so an op in flight does not stop them.
+	if c.Cmd == "files" {
+		writeJSON(w, s.steerFiles(c))
+		return
+	}
 	// The hub drops everything while an op is in flight. A steer must not
 	// vanish that way, so refuse it out loud instead — the CLI prints
 	// "operation in flight" and exits 1.
