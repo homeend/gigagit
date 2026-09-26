@@ -192,14 +192,16 @@ content viewer; `gg open --web` shows it in the browser's viewer (a live
 (exit 2). When the user asks you to "open" a file for them, this is the link
 to build: `gg link --content <path>[:<line>]` → `gg open <link>`.
 
-**Open files — let the user read along.** The TUI keeps up to 20 files open
-per worktree (its ctrl+\ switcher lists them). You can use that list:
+**Open files — let the user read along.** The TUI and `gg web` each keep up
+to 20 files open per worktree (the ctrl+\ switcher lists them). You can use
+that list:
 
 - `gg open <content-link> --background` (or `gg session navigate <link>
   --background`) loads the file WITHOUT touching the screen and answers
   `opened <path> in the background [at line N]`; a file already on screen is
-  left alone (`<path> is already open on screen`). Needs a live TUI (exit 1
-  otherwise — it never launches one); exit 2 for a link that is not a content
+  left alone (`<path> is already open on screen`). Needs a live TUI or `gg web`
+  page (exit 1 otherwise — it never launches one); with both live it goes to
+  both and the TUI's answer decides (the page's is printed `web: …`); exit 2 for a link that is not a content
   link. When a 21st file pushes one out, the answer ends
   `; closed <path> (20 files open)`.
 - `gg session files [--json]` — the open files, one per line:
@@ -209,6 +211,9 @@ per worktree (its ctrl+\ switcher lists them). You can use that list:
   optionally at a line; exit 1 `no open file <x>`. A foreground `gg open` of
   a working-tree file already reuses its open copy; `files focus` is how you
   reach the commit/shelf versions the user opened.
+- With only `gg web` live, the page's server answers from its own list; a
+  focus brings the file up in every open tab (`; no gg web tab is open to
+  show it` when none is).
 
 Walking the user through several files: open A, B and C with `--background`
 first (they load while you think), then `gg session files focus <id>:<line>`
