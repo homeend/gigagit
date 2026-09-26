@@ -26,6 +26,7 @@ type Scenario struct {
 type Input struct {
 	Steps  []Step  `toml:"steps"`
 	Origin *Origin `toml:"origin"`
+	Web    bool    `toml:"web"` // serve local with an in-process gg web (live steering presence) before the runs
 }
 
 // Origin declares upstream history for clone/pull/push scenarios.
