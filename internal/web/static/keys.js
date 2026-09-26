@@ -10,6 +10,7 @@ import { addNotePrompt, clearRowSelection, cycleFilesSort, cycleTextMode, diffSc
 import { activeDiff, collapseCurrent, toggleAllCollapsed, toggleStacked } from "./stackview.js";
 import { toast } from "./toast.js";
 import { openPalette } from "./palette.js";
+import { isSwitcherKey, openSwitcher } from "./openfiles.js";
 import { branchFilterKey } from "./branchfilter.js";
 
 // --- focus + keyboard ---
@@ -104,6 +105,13 @@ document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "p")) {
     e.preventDefault(); // ctrl+p would open the browser print dialog
     openPalette("cmd");
+    return;
+  }
+  // ctrl+\: the open-files switcher, from anywhere a layer does not own the
+  // keyboard (the viewer handles its own) — even from the commit box.
+  if (isSwitcherKey(e)) {
+    e.preventDefault();
+    openSwitcher();
     return;
   }
   // alt+1…5 / alt+shift+1…5: branch-filter slots. Not inside inputs — a
@@ -251,6 +259,7 @@ $("foot").addEventListener("click", (e) => {
     case "refresh": manualRefresh(); break;
     case "help": openHelp(); break;
     case "palette": openPalette("cmd"); break;
+    case "openfiles": openSwitcher(); break;
   }
 });
 

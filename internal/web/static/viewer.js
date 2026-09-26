@@ -11,6 +11,7 @@ import { copyFileLink, copyLink, linkDesc, linkFor } from "./links.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openCommitByHash } from "./commits.js";
 import { registerHelp, registerRows } from "./menus.js";
+import { isSwitcherKey, openSwitcher } from "./openfiles.js";
 
 // --- viewer model (pure; guarded against Go) ---
 function clampLine(n, count) {
@@ -261,6 +262,11 @@ function viewerKey(e) {
     backgroundViewer();
     return true;
   }
+  if (isSwitcherKey(e)) {
+    e.preventDefault();
+    openSwitcher();
+    return true;
+  }
   if (e.ctrlKey || e.metaKey || e.altKey) return false;
   if (viewerSearchKey(e)) return true;
   switch (e.key) {
@@ -346,7 +352,7 @@ function viewerSearchKey(e) {
 // viewer is open #foot shows them, and gets its own chips back on close.
 const VIEWER_FOOT =
   `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` +
-  `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="close">esc close</button>`;
+  `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="bg">ctrl+] background</button><button data-vact="files">ctrl+\ open files</button><button data-vact="close">esc close</button>`;
 
 function swapFoot(on) {
   if (on) pushFoot("viewer", VIEWER_FOOT);
@@ -361,6 +367,7 @@ $("foot").addEventListener("click", (e) => {
     case "wrap": cycleTextMode(); break;
     case "menu": menuAtCursor(); break;
     case "bg": backgroundViewer(); break;
+    case "files": openSwitcher(); break;
     case "close": closeViewer(); break;
   }
 });

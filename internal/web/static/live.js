@@ -19,6 +19,7 @@ import { fetchPRs, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { loadRepo, opLine } from "./ops.js";
+import { switcherOpenFiles } from "./openfiles.js";
 import { openViewer, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
 
 const COALESCE_MS = 150; // one burst of watcher events → one refresh
@@ -84,6 +85,7 @@ function connectLive() {
     // Neither is a refresh source — they never join the coalescing set.
     if (msg.reason === "open_files") {
       viewerOpenFiles(msg.files || []);
+      switcherOpenFiles(msg.files || []);
       return;
     }
     if (msg.reason === "file_changed") {

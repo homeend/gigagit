@@ -135,4 +135,17 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"live.js", `msg.reason === "file_changed"`, "a disk change reaches the viewer"},
 	{"live.js", "viewerFileChanged(msg.file_id)", "the viewer reloads the changed file"},
 	{"live.js", "viewerHello()", "every hello re-reports what this tab shows"},
+	// Plan 5b Task 6: the switcher.
+	{"app.js", "./openfiles.js", "the switcher module is imported at boot"},
+	{"openfiles.js", `mountOverlay("openfiles")`, "the switcher is a mounted layer"},
+	{"openfiles.js", `pushFoot("openfiles"`, "its keys go in the bottom bar"},
+	{"openfiles.js", "elidePath(", "rows cut the path in the middle"},
+	{"openfiles.js", "everywhere: true", "x closes the file in every tab"},
+	{"openfiles.js", "no open files", "an empty list says so"},
+	{"keys.js", "isSwitcherKey(e)", "ctrl+\\ works from the main page"},
+	{"keys.js", `case "openfiles":`, "the footer chip opens the switcher"},
+	{"index.html", `data-act="openfiles"`, "the main footer advertises ctrl+\\"},
+	{"viewer.js", "isSwitcherKey(e)", "ctrl+\\ works from the viewer"},
+	{"live.js", "switcherOpenFiles(", "an open switcher follows the list"},
+	{"style.css", "#openfiles.hidden", "the overlay hides by id (a global .hidden does not exist)"},
 }
