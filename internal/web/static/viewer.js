@@ -1,6 +1,12 @@
 // viewer.js — the file viewer overlay (open files on the web, plan 5a): one
 // file at one version — the working tree, a commit, a shelf entry — with a
 // line cursor, the in-view search and a . menu. Content links land here.
+import { $, charWidth, elidePath, esc, getJSON } from "./core.js";
+import { closeLayer, mountOverlay, pushLayer, showCtxMenu, topLayer } from "./layers.js";
+import { Search } from "./inviewsearch.js";
+import { bindSearchBar } from "./searchbar.js";
+import { cycleTextMode, renderCell } from "./files.js";
+import { opLine } from "./ops.js";
 
 // --- viewer model (pure; guarded against Go) ---
 function clampLine(n, count) {
@@ -31,3 +37,253 @@ function versionLabel(src, rev) {
   return "working tree";
 }
 // --- end viewer model ---
+
+// --- the overlay -------------------------------------------------------------
+// view is the ONE file on screen: its version, its lines, the cursor (1-based,
+// 0 = no line) and the placeholder shown instead of lines ("" = none).
+const view = { src: "worktree", rev: "", path: "", lines: [], cur: 0, placeholder: "" };
+const viewerSearch = new Search();
+
+// The markup is built at import: bindSearchBar needs its bar in the DOM.
+const viewerRoot = mountOverlay("viewer");
+viewerRoot.innerHTML =
+  `<div id="viewer-box"><div id="viewer-title"></div>` +
+  `<div id="viewer-search" class="hidden search-bar"><span id="viewer-search-lead">/</span>` +
+  `<input id="viewer-search-input" type="text" autocomplete="off" spellcheck="false" placeholder="find in this file — enter keeps it, ] [ step, esc clears">` +
+  `<span id="viewer-search-count"></span></div>` +
+  `<div id="viewer-body" tabindex="-1"></div></div>`;
+
+viewerRoot.addEventListener("click", (e) => {
+  if (e.target.id === "viewer") closeViewer(); // backdrop closes, box does not
+});
+$("viewer-body").addEventListener("click", (e) => {
+  const row = e.target.closest(".vline[data-i]");
+  if (!row) return;
+  view.cur = Number(row.dataset.i) + 1;
+  paintCursor();
+});
+$("viewer-body").addEventListener("contextmenu", (e) => {
+  const row = e.target.closest(".vline[data-i]");
+  if (row) view.cur = Number(row.dataset.i) + 1;
+  e.preventDefault();
+  paintCursor();
+  openViewerMenu(e.clientX, e.clientY);
+});
+
+// openViewer shows path at one version, the cursor on line (0 = the first).
+// A second call while it is open replaces the file (one viewer, one file).
+async function openViewer({ src = "worktree", rev = "", path, line = 0 }) {
+  let body;
+  try {
+    body = await getJSON("/api/file-content?src=" + encodeURIComponent(src) + "&rev=" + encodeURIComponent(rev) + "&path=" + encodeURIComponent(path));
+  } catch (e) {
+    opLine("view failed: " + (e.message || e), true);
+    return { ok: false, notice: "" };
+  }
+  Object.assign(view, { src, rev, path, lines: body.lines || [] });
+  view.placeholder = body.missing ? "(file deleted on disk)" : body.too_large ? "(file too large to preview)" : view.lines.length ? "" : "(empty file)";
+  const landed = landLine(line, view.lines.length, path);
+  view.cur = landed.line;
+  viewerSearchBar.reset(); // a new file is a new search
+  viewerRoot.style.bottom = $("foot").offsetHeight + "px"; // the bar stays in sight
+  pushLayer("viewer", viewerRoot, { onKey: viewerKey });
+  swapFoot(true);
+  paintTitle();
+  renderViewer();
+  centerCursor();
+  $("viewer-body").focus({ preventScroll: true });
+  if (landed.notice) opLine(landed.notice, false);
+  return { ok: true, notice: landed.notice };
+}
+
+function closeViewer() {
+  closeLayer("viewer");
+  swapFoot(false);
+}
+
+// paintTitle cuts the PATH in the middle, never the file name, to fit.
+function paintTitle() {
+  const el = $("viewer-title");
+  const lead = "View ", tail = " (" + versionLabel(view.src, view.rev) + ")";
+  const cols = Math.floor((el.clientWidth - 28) / charWidth()) - lead.length - tail.length;
+  el.title = view.path;
+  el.textContent = lead + (cols > 0 ? elidePath(view.path, cols) : view.path) + tail;
+}
+
+function renderViewer() {
+  if (viewerSearch.query) viewerSearch.refind(view.lines.map((l, i) => ({ row: i, side: 0, text: l.text || "" })));
+  const body = $("viewer-body");
+  if (view.placeholder) {
+    body.innerHTML = `<div class="notice">${esc(view.placeholder)}</div>`;
+  } else {
+    let html = "";
+    view.lines.forEach((l, i) => {
+      html +=
+        `<div class="vline${i + 1 === view.cur ? " vcur" : ""}" data-i="${i}"><span class="vno">${i + 1}</span>` +
+        `<span class="vtext">${renderCell(l.text, null, l.tok, "", viewerSearch.query ? viewerSearch.hitsOn(i, 0) : null) || " "}</span></div>`;
+    });
+    body.innerHTML = html;
+  }
+  viewerSearchBar.paint();
+}
+
+function cursorRow() {
+  return $("viewer-body").querySelector(`.vline[data-i="${view.cur - 1}"]`);
+}
+
+function paintCursor() {
+  for (const el of $("viewer-body").querySelectorAll(".vcur")) el.classList.remove("vcur");
+  const row = cursorRow();
+  if (row) {
+    row.classList.add("vcur");
+    row.scrollIntoView({ block: "nearest" });
+  }
+}
+
+function centerCursor() {
+  const row = cursorRow();
+  if (row) row.scrollIntoView({ block: "center" });
+  else $("viewer-body").scrollTop = 0;
+}
+
+function pageRows() {
+  const row = $("viewer-body").querySelector(".vline");
+  return row ? Math.max(1, Math.floor($("viewer-body").clientHeight / row.offsetHeight) - 1) : 10;
+}
+
+function moveCursor(delta) {
+  view.cur = clampLine(view.cur + delta, view.lines.length);
+  paintCursor();
+}
+
+function menuAtCursor() {
+  const r = cursorRow()?.getBoundingClientRect();
+  openViewerMenu(r ? r.left + 40 : 80, r ? r.bottom : 80);
+}
+
+function viewerKey(e) {
+  // A key typed into the search bar is the query's (its own listener takes
+  // enter and esc).
+  if (e.target === $("viewer-search-input")) return true;
+  if (e.ctrlKey || e.metaKey || e.altKey) return false;
+  if (viewerSearchKey(e)) return true;
+  switch (e.key) {
+    case "ArrowDown": case "j": moveCursor(1); break;
+    case "ArrowUp": case "k": moveCursor(-1); break;
+    case "PageDown": case " ": moveCursor(pageRows()); break;
+    case "PageUp": moveCursor(-pageRows()); break;
+    case "Home": case "g": view.cur = clampLine(1, view.lines.length); paintCursor(); break;
+    case "End": case "G": view.cur = view.lines.length; paintCursor(); break;
+    case "w": cycleTextMode(); break;
+    case ".": menuAtCursor(); break;
+    case "Escape": closeViewer(); break;
+    default: return false;
+  }
+  e.preventDefault();
+  return true;
+}
+
+// ---- in-view search (the blame overlay's, over the viewer's lines) ----------
+function viewerHitEls(i) {
+  return $("viewer-body").querySelectorAll(`.hit[data-h="${i}"]`);
+}
+
+function goToViewerHit(i) {
+  if (i < 0 || i >= viewerSearch.hits.length) return;
+  if (viewerSearch.cur !== i) {
+    for (const el of viewerHitEls(viewerSearch.cur)) el.classList.remove("cur");
+    viewerSearch.cur = i;
+    for (const el of viewerHitEls(i)) el.classList.add("cur");
+  }
+  const el = viewerHitEls(i)[0];
+  if (el) el.scrollIntoView({ block: "center", inline: "nearest" });
+  // The cursor follows the hit: the . menu then acts on the line found.
+  const h = viewerSearch.hits[i];
+  if (h) {
+    view.cur = h.row + 1;
+    paintCursor();
+  }
+}
+
+const viewerSearchBar = bindSearchBar("viewer-search", {
+  search: viewerSearch,
+  here: () => ({ row: Math.max(0, view.cur - 1), side: 0, col: -1 }),
+  origin: () => ({ top: $("viewer-body").scrollTop, left: $("viewer-body").scrollLeft, cur: view.cur }),
+  restore: (o) => {
+    $("viewer-body").scrollTop = o.top;
+    $("viewer-body").scrollLeft = o.left;
+    view.cur = o.cur;
+    paintCursor();
+  },
+  render: () => {
+    const body = $("viewer-body");
+    const top = body.scrollTop, left = body.scrollLeft;
+    renderViewer();
+    body.scrollTop = top;
+    body.scrollLeft = left;
+  },
+  goTo: goToViewerHit,
+  focus: () => $("viewer-body").focus({ preventScroll: true }),
+});
+
+function viewerSearchKey(e) {
+  if (e.key === "/" || e.key === "@") {
+    e.preventDefault();
+    viewerSearchBar.open(e.key === "@");
+    return true;
+  }
+  if (e.key === "]" || e.key === "[") {
+    if (!viewerSearch.query) return false;
+    e.preventDefault();
+    viewerSearchBar.step(e.key === "]" ? 1 : -1);
+    return true;
+  }
+  if (e.key === "Escape" && viewerSearch.active()) {
+    viewerSearchBar.clear();
+    return true;
+  }
+  return false;
+}
+
+// ---- the bottom bar -------------------------------------------------------
+// The viewer's keys go in the app's footer, not inside the box: while the
+// viewer is open #foot shows them, and gets its own chips back on close.
+let savedFoot = null;
+const VIEWER_FOOT =
+  `<span>↑↓ j k line</span><button data-vact="find">/ find</button><span>] [ next / prev</span>` +
+  `<button data-vact="wrap">w long lines</button><button data-vact="menu">. menu</button><button data-vact="close">esc close</button>`;
+
+function swapFoot(on) {
+  const foot = $("foot");
+  if (on && savedFoot === null) {
+    savedFoot = foot.innerHTML;
+    foot.innerHTML = VIEWER_FOOT;
+  } else if (!on && savedFoot !== null) {
+    foot.innerHTML = savedFoot;
+    savedFoot = null;
+  }
+}
+
+$("foot").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-vact]");
+  if (!b) return;
+  switch (b.dataset.vact) {
+    case "find": viewerSearchBar.open(false); break;
+    case "wrap": cycleTextMode(); break;
+    case "menu": menuAtCursor(); break;
+    case "close": closeViewer(); break;
+  }
+});
+
+// A layer closed from outside (another surface clearing the stack) must not
+// leave the viewer's chips behind: the footer follows the stack on every key.
+document.addEventListener("keyup", () => {
+  if (savedFoot !== null && !(topLayer() && topLayer().id === "viewer") && viewerRoot.classList.contains("hidden")) swapFoot(false);
+});
+
+// openViewerMenu is the viewer's . menu (Task 5 fills it).
+function openViewerMenu(x, y) {
+  showCtxMenu([], x, y);
+}
+
+export { closeViewer, openViewer };

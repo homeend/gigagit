@@ -15,6 +15,7 @@ import { loadUIState, uiState } from "./uistate.js";
 import "./versions.js";
 import "./rebase.js";
 import "./filehist.js";
+import "./viewer.js";
 import "./review.js";
 import { syncStackChrome } from "./stackview.js";
 import { applyStoredWidths } from "./resize.js";

@@ -53,3 +53,33 @@ console.log(r.join("|"));
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }
+
+func TestViewerJSIsWired(t *testing.T) {
+	t.Parallel()
+	read := func(n string) string {
+		b, err := os.ReadFile(filepath.Join("static", n))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	for _, c := range viewerWiring {
+		if !strings.Contains(read(c.file), c.want) {
+			t.Errorf("%s lacks %q: %s", c.file, c.want, c.why)
+		}
+	}
+}
+
+// viewerWiring grows task by task: each entry pins code that exists only once
+// the step it names is done.
+var viewerWiring = []struct{ file, want, why string }{
+	{"app.js", "./viewer.js", "the module must be imported at boot"},
+	{"viewer.js", `mountOverlay("viewer")`, "the overlay is a mounted layer"},
+	{"viewer.js", `pushLayer("viewer"`, "it rides the layer stack"},
+	{"viewer.js", "/api/file-content", "it reads through the content endpoint"},
+	{"viewer.js", "bindSearchBar(", "it has the in-view search"},
+	{"viewer.js", "renderCell(", "lines paint through the shared cell renderer"},
+	{"viewer.js", `$("foot")`, "the keys go in the bottom bar"},
+	{"viewer.js", "elidePath(", "the title cuts the path in the middle"},
+	{"style.css", "#viewer", "the overlay is styled"},
+}

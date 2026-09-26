@@ -68,7 +68,7 @@ body.resizing { cursor: col-resize; user-select: none; }
    click inside), so the wheel, space and the page keys scroll the content the
    reader is looking at — never the file row or the button the mouse left the
    focus on. No ring: the .focused inset bar / the overlay border say enough. */
-#diff-pane:focus, #blame-body:focus { outline: none; }
+#diff-pane:focus, #blame-body:focus, #viewer-body:focus { outline: none; }
 /* flex column so the quick-filter bar SHRINKS the scroll area instead of
    pushing its last row under the pane edge (the load-more hint was clipped) */
 #commits-pane { overflow: hidden; display: flex; flex-direction: column; }
@@ -221,24 +221,28 @@ body.lm-scroll .bgut { position: sticky; left: 0; width: 300px; background: var(
 body.lm-scroll .bno { position: sticky; left: 300px; background: var(--bg-alt); }
 body.lm-cut .bline { white-space: pre; }
 body.lm-cut .btext { overflow: hidden; text-overflow: ellipsis; }
+body.lm-scroll .vline { white-space: pre; width: max-content; min-width: 100%; }
+body.lm-scroll .vno { position: sticky; left: 0; background: var(--bg-alt); }
+body.lm-cut .vline { white-space: pre; }
+body.lm-cut .vtext { overflow: hidden; text-overflow: ellipsis; }
 /* syntax classes (see internal/syntax Class.String); same hues as the TUI palette */
-table.diff .tk-kw, #blame-body .tk-kw, #prdetails .tk-kw  { color: #b48bff; }
-table.diff .tk-ty, #blame-body .tk-ty, #prdetails .tk-ty  { color: #5fd7af; }
-table.diff .tk-fn, #blame-body .tk-fn, #prdetails .tk-fn  { color: #ffd787; }
-table.diff .tk-str, #blame-body .tk-str, #prdetails .tk-str { color: #afd787; }
-table.diff .tk-num, #blame-body .tk-num, #prdetails .tk-num { color: #ffaf5f; }
-table.diff .tk-cmt, #blame-body .tk-cmt, #prdetails .tk-cmt { color: #8a8a8a; font-style: italic; }
-table.diff .tk-op, #blame-body .tk-op, #prdetails .tk-op  { color: #d0d0d0; }
-table.diff .tk-pn, #blame-body .tk-pn, #prdetails .tk-pn  { color: #bcbcbc; }
-table.diff .tk-at, #blame-body .tk-at, #prdetails .tk-at  { color: #d7af87; }
+table.diff .tk-kw, #blame-body .tk-kw, #viewer-body .tk-kw, #prdetails .tk-kw  { color: #b48bff; }
+table.diff .tk-ty, #blame-body .tk-ty, #viewer-body .tk-ty, #prdetails .tk-ty  { color: #5fd7af; }
+table.diff .tk-fn, #blame-body .tk-fn, #viewer-body .tk-fn, #prdetails .tk-fn  { color: #ffd787; }
+table.diff .tk-str, #blame-body .tk-str, #viewer-body .tk-str, #prdetails .tk-str { color: #afd787; }
+table.diff .tk-num, #blame-body .tk-num, #viewer-body .tk-num, #prdetails .tk-num { color: #ffaf5f; }
+table.diff .tk-cmt, #blame-body .tk-cmt, #viewer-body .tk-cmt, #prdetails .tk-cmt { color: #8a8a8a; font-style: italic; }
+table.diff .tk-op, #blame-body .tk-op, #viewer-body .tk-op, #prdetails .tk-op  { color: #d0d0d0; }
+table.diff .tk-pn, #blame-body .tk-pn, #viewer-body .tk-pn, #prdetails .tk-pn  { color: #bcbcbc; }
+table.diff .tk-at, #blame-body .tk-at, #viewer-body .tk-at, #prdetails .tk-at  { color: #d7af87; }
 mark.l { background: var(--span-del); color: inherit; }
 mark.r { background: var(--span-add); color: inherit; }
 /* In-view search hits, scoped to BOTH hosts like the .tk-* classes above: a
    rule on table.diff alone paints nothing in blame. A hit wins over the
    intraline mark and the token colour it rides on; the current one is
    brighter and outlined so it reads at a glance among many. */
-table.diff .hit, #blame-body .hit, #help-body .hit { background: var(--hit-bg); color: inherit; }
-table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
+table.diff .hit, #blame-body .hit, #viewer-body .hit, #help-body .hit { background: var(--hit-bg); color: inherit; }
+table.diff .hit.cur, #blame-body .hit.cur, #viewer-body .hit.cur, #help-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
 .notice { padding: 12px; color: var(--dim); }
 #foot { display: flex; gap: 14px; padding: 4px 12px; color: var(--dim); border-top: 1px solid var(--border); background: var(--bg-alt); white-space: nowrap; overflow: hidden; }
 #foot button { background: none; border: none; color: inherit; font: inherit; padding: 0; cursor: pointer; }
@@ -1367,6 +1371,7 @@ body.lm-scroll #blame-body .bline.brecent .bgut, body.lm-scroll #blame-body .bli
 #diff-search { flex: 1 0 100%; }
 #diff-search.hidden { display: none; }
 #blame-search.hidden { display: none; }
+#viewer-search.hidden { display: none; }
 #cfilter input { flex: 1; background: var(--bg-alt); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; font: inherit; }
 #cfilter input:focus { border-color: var(--accent); outline: none; }
 #cfilter-count { color: var(--dim); font-size: 11px; white-space: nowrap; }
@@ -1599,3 +1604,17 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 .stk-ph { color: var(--dim); padding: 8px; }
 #stack-btn.on, #foot button[data-act="stacked"].on { color: var(--accent); }
 #stack-fold-all.hidden { display: none; }
+
+/* The file viewer (viewer.js, open files on the web): blame's overlay with a
+   line cursor. It stops above #foot — the app's bottom bar carries the
+   viewer's keys while it is open (the viewer draws no hint line of its own). */
+#viewer { position: fixed; top: 0; left: 0; right: 0; bottom: var(--foot-h, 25px); background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; z-index: 21; }
+#viewer.hidden { display: none; }
+#viewer-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: 94vw; height: 92%; display: flex; flex-direction: column; }
+#viewer-title { padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
+#viewer-body { flex: 1; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
+.vline { display: flex; white-space: pre-wrap; cursor: default; }
+.vline.vcur { background: var(--sel); }
+body.lm-scroll .vline.vcur .vno { background: var(--sel); }
+.vno { flex: none; width: 4em; text-align: right; color: var(--dim); padding-right: 10px; }
+.vtext { flex: 1; min-width: 0; overflow-wrap: anywhere; }
