@@ -90,4 +90,11 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", "openFileBlame(", "the menu opens blame"},
 	{"viewer.js", "openCommitByHash(", "a commit version's diff is that commit's change"},
 	{"links.js", "copyFileLink,", "the working-tree presence check is shared, not copied"},
+	// Task 6: entry points.
+	{"viewer.js", `registerRows("fileview"`, "file rows offer view file"},
+	{"files.js", `extraRows("fileview"`, "view file sits with history and blame, not after the discard rows"},
+	{"viewer.js", `registerRows("shelf"`, "shelved files offer view file"},
+	{"viewer.js", `label: "view file"`, "the row is named view file"},
+	{"viewer.js", "registerHelp(", "the ? overlay lists the viewer"},
+	{"files.js", "deleted: ", "a file with no bytes offers no view file row"},
 }

@@ -4100,6 +4100,8 @@ $("files-list").addEventListener("contextmenu", (e) => {
     const hereRev = rev || (pc && !f.right_spec ? pc.b : "");
     const revRows = hereRev
       ? [
+          // The viewer's row (viewer.js); deleted: the version here has no bytes.
+          ...extraRows("fileview", { path: f.path, sha: hereRev, section: "commit", deleted: f.status === "D" }),
           { label: "file history", act: () => openFileHistory(f.path, hereRev) },
           { label: "blame at this commit", act: () => openFileBlame(f.path, hereRev) },
           // gg's own stores, addressed at the commit being viewed: a bookmark
@@ -4153,6 +4155,8 @@ $("files-list").addEventListener("contextmenu", (e) => {
   // both — blame works on unmerged paths (markers blame as uncommitted).
   // A staged rename's history lives under the OLD name (--follow can only
   // follow from a committed path), so the row queries orig_path.
+  // The viewer's row (viewer.js) sits with the other read-only views.
+  items.push(...extraRows("fileview", { path: f.path, sha: "", section: f.section, deleted: f.unstaged === "D" || (f.section === "staged" && f.staged === "D") }));
   if (f.section !== "untracked" && !(f.section === "staged" && f.staged === "A")) {
     items.push({ label: "file history", act: () => openFileHistory(f.orig_path || f.path, "") });
     items.push({ label: "blame (working tree)", act: () => openFileBlame(f.path, "") });

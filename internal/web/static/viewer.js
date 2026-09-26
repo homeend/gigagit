@@ -10,6 +10,7 @@ import { opLine } from "./ops.js";
 import { copyFileLink, copyLink, linkDesc, linkFor } from "./links.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openCommitByHash } from "./commits.js";
+import { registerHelp, registerRows } from "./menus.js";
 
 // --- viewer model (pure; guarded against Go) ---
 function clampLine(n, count) {
@@ -341,5 +342,28 @@ async function viewerDiffCommit(rev, path) {
   if (i < 0) return opLine(path + " is not changed in " + rev.slice(0, 8), false);
   await openFile(i);
 }
+
+// ---- entry points ---------------------------------------------------------
+// view file: the version the row shows — a commit row at its own revision, a
+// working-tree row the bytes on disk. A row with no bytes (deleted there)
+// offers none.
+registerRows("fileview", (ctx) => {
+  if (!ctx.path || ctx.deleted) return [];
+  if (ctx.section === "commit") {
+    return ctx.sha ? [{ label: "view file", act: () => openViewer({ src: "commit", rev: ctx.sha, path: ctx.path }) }] : [];
+  }
+  return [{ label: "view file", act: () => openViewer({ src: "worktree", path: ctx.path }) }];
+});
+
+registerRows("shelf", (e) =>
+  e.kind !== "commit" && e.path ? [{ label: "view file", act: () => openViewer({ src: "shelf", rev: e.id, path: e.path }) }] : []
+);
+
+registerHelp({
+  key: "view file",
+  html:
+    "a file row's or a shelved file's <b>view file</b> (right-click / <b>.</b>), or a pasted content link, opens the file full-page: " +
+    "<b>↑↓ j k</b> line, <b>/ ] [</b> find, <b>w</b> long lines, <b>.</b> menu (copy file link at the line, copy line, diff, history, blame), <b>esc</b> close",
+});
 
 export { closeViewer, openViewer };
