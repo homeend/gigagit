@@ -266,7 +266,6 @@ type Model struct {
 	watchGen            int                                              // bumped per (re)build; stale watch msgs are dropped
 	bgCtx               context.Context                                  // context for in-flight background (auto) reads; cancelled when a user op starts
 	bgCancel            context.CancelFunc                               // cancels bgCtx; nil when no background batch is active
-	genCancel           context.CancelFunc                               // cancels an in-flight commit-popup ctrl+g generate run; nil when none is active
 	reviewGen           int                                              // monotonic guard for the review capture lane; bumped on dispatch, cancel, reRoot — a stale/killed result carrying an older gen is dropped (survives a lane being popped and re-pushed, unlike a per-lane counter)
 	reviewCancel        context.CancelFunc                               // cancels an in-flight review run; nil when none is active
 	reviewRunning       bool                                             // a review runs in the background (lane already popped); blocks other external-LLM actions and drives the blinking status indicator
@@ -319,6 +318,9 @@ type Model struct {
 	childInbox map[domain.SessionID]string
 	// taskTrack is what this TUI applied/reported of domain.Tasks() (task_track.go).
 	taskTrack *taskTrack
+	// pendingCommitMsg is a commit-message result per worktree that arrived
+	// with no commit box open; the next c opens the box with it.
+	pendingCommitMsg map[string]pendingMessage
 	// keptSteer are the inboxes other than steerDir whose presence gg holds
 	// for a running child (steer_kept.go).
 	keptSteer map[string]bool
@@ -462,6 +464,7 @@ func New(svc *domain.Service) Model {
 		openFiles:              &openFilesReg{},
 		childInbox:             map[domain.SessionID]string{},
 		taskTrack:              newTaskTrack(),
+		pendingCommitMsg:       map[string]pendingMessage{},
 		keptSteer:              map[string]bool{},
 	}
 	// The stacked-diff pref is machine-global, so it is read once here rather
@@ -2232,7 +2235,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutStay}, i18n.T("Check out %s?", rb.Branch))
 			}
 			if m.canCommit() {
-				m = m.pushLayer(&commitPopup{})
+				m = m.openCommitBox()
 			}
 		case "C":
 			if m.canAmend() {
@@ -3559,8 +3562,6 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.pushLayer(&commitPopup{title: newTextField(title), desc: newTextField(desc), amend: true})
 		return m, nil
 
-	case genMessageMsg:
-		return m.applyGeneratedMessage(msg), nil
 	case genSpinMsg:
 		return m.tickGenSpinner(msg)
 
@@ -4498,10 +4499,6 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.attention = map[attentionKey][]steerMark{} // the marks referred to the old repo's files
 	m.pendingCheckout = pendingCheckout{}        // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil
-	if m.genCancel != nil { // a stale generate run from the old repo must not fill the new repo's popup
-		m.genCancel()
-		m.genCancel = nil
-	}
 	m = m.cancelReview() // drop any in-flight review run + bump reviewGen so its late result is ignored in the new repo
 	// genGen is intentionally NOT bumped here (unlike pushCheckGen/noticeGen/
 	// gitConfigGen above): a commit popup can't be open across a repo switch

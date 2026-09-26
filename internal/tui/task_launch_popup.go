@@ -424,6 +424,9 @@ func (m Model) applyTaskSubmitted(msg taskSubmittedMsg) (Model, tea.Cmd) {
 	if info, ok := domain.Tasks().Get(msg.id); ok && info.State == domain.TaskQueued {
 		m.statusMsg = i18n.T("queued %s", msg.key)
 	}
+	if msg.mode == launchHeadless && msg.launch.commitBox {
+		return m.commitBoxWaitOn(msg.id)
+	}
 	return m, nil
 }
 

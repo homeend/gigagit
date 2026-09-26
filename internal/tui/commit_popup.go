@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/homeend/gigagit/internal/config"
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/i18n"
@@ -29,19 +29,16 @@ type commitPopup struct {
 	// scrolls INSIDE the field instead of growing the box past the terminal.
 	descScroll int
 
-	generating bool               // a ctrl+g generate run (commit_generate.go) is in flight
-	genGen     int                // generation guard: bumped on every dispatch AND every esc-cancel
-	genCmd     config.ToolCommand // the commit_message tool the last/current generate run used
-	spinFrame  int                // animated-spinner frame while generating (advanced by genSpinMsg)
-	genStart   time.Time          // when the current generate run began, for the elapsed counter
+	generating bool          // the box waits on its own headless task (commit_generate.go)
+	genTask    domain.TaskID // that task
+	genGen     int           // spinner guard: bumped on every start, cancel and result
+	spinFrame  int           // animated-spinner frame while generating (advanced by genSpinMsg)
+	genStart   time.Time     // when the current run began, for the elapsed counter
 
-	// Task 7 gates, run in order ahead of dispatch (see commit_generate.go's
-	// startGenerate). Each is a commitPopup sub-state (it owns keys while
-	// open, NOT a pushed layer) and is mutually exclusive with the others —
-	// at most one is non-empty/non-nil at a time.
-	choosing   []config.ToolCommand // >1 commit_message tool: numbered picker
-	approving  string               // first-run approval: the resolved command awaiting Run/Cancel
-	confirming string               // existing title/desc text: the resolved command awaiting Replace/Cancel
+	// offer is a commit-message result that arrived while the box had text:
+	// the box asks before replacing it (offerFrom = the agent's name).
+	offer     string
+	offerFrom string
 }
 
 // message assembles the git commit message: subject alone, or subject + blank
@@ -111,23 +108,18 @@ func (p *commitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	}
 	// ctrl+t (fullscreen) is handled centrally on the layer stack via popupMax
 	// (this popup embeds it), so it never reaches update — do NOT handle it here.
-	// Task 7 gates: each is a commitPopup sub-state that owns keys while
-	// open. Checked before generating/edit keys so a digit/y/esc typed here
-	// never falls through to field editing.
-	if p.choosing != nil {
-		return p.updateChoosing(m, msg)
-	}
-	if p.approving != "" {
-		return p.updateApproving(m, msg)
-	}
-	if p.confirming != "" {
-		return p.updateConfirming(m, msg)
+	// A result waiting to replace the box's text owns the keys until answered.
+	if p.offer != "" {
+		return p.updateOffer(m, msg)
 	}
 	if p.generating {
-		if msg.Type == tea.KeyEsc {
+		switch msg.Type {
+		case tea.KeyEsc:
 			return m.escGenerate(p), nil
+		case tea.KeyCtrlB:
+			return m.backgroundGenerate(p), nil
 		}
-		return m, nil // swallow every other key while a generate run is in flight
+		return m, nil // swallow every other key while the box waits on its task
 	}
 	if msg.Type == tea.KeyCtrlG {
 		return m.startGenerate(p)
@@ -158,14 +150,8 @@ func (p *commitPopup) render(m Model, below string) string {
 // gate is open, it takes over the whole box (a distinct sub-screen, like the
 // generate run itself) rather than being appended below the fields.
 func (p *commitPopup) box(m Model) string {
-	if p.choosing != nil {
-		return p.chooseBox(m)
-	}
-	if p.approving != "" {
-		return p.approveBox(m)
-	}
-	if p.confirming != "" {
-		return p.confirmBox(m)
+	if p.offer != "" {
+		return p.offerBox(m)
 	}
 	var b strings.Builder
 	heading := i18n.T("Commit")
@@ -190,7 +176,10 @@ func (p *commitPopup) box(m Model) string {
 		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		frame := frames[p.spinFrame%len(frames)]
 		elapsed := int(time.Since(p.genStart).Seconds())
-		footer = i18n.T("%c generating message… %ds  ([esc] to cancel)", frame, elapsed)
+		footer = i18n.T("%c generating message… %ds  ([esc] cancel  [ctrl+b] background)", frame, elapsed)
+		if info, ok := domain.Tasks().Get(p.genTask); ok && info.State == domain.TaskQueued {
+			footer = i18n.T("%c queued…  ([esc] cancel  [ctrl+b] background)", frame)
+		}
 	} else {
 		footer = packHints([]string{
 			i18n.T("[tab] switch field"),

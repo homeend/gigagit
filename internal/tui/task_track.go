@@ -108,6 +108,10 @@ func (m Model) taskEnded(info domain.TaskInfo) (Model, tea.Cmd) {
 
 // applyTaskResult routes a new result to its kind.
 func (m Model) applyTaskResult(info domain.TaskInfo) (Model, tea.Cmd) {
+	switch info.Kind {
+	case exttool.CatCommitMessage:
+		return m.applyCommitMessage(info)
+	}
 	return m.stickyNotice(i18n.T("%s ready — ctrl+\\", info.Key))
 }
 

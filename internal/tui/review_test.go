@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -394,25 +395,6 @@ func TestReviewRowsGateOffWhileRunning(t *testing.T) {
 }
 
 // The commit-message generate lane refuses to start while a review runs.
-func TestStartGenerateRefusesWhileReviewing(t *testing.T) {
-	m := reviewTestModel(t)
-	m.status = model.WorkingTreeStatus{Files: []model.FileStatus{{Path: "a.go", Staged: 'M', Unstaged: '.'}}}
-	m.cfg.Tools.Command = append(m.cfg.Tools.Command,
-		config.ToolCommand{Category: "commit_message", Name: "Claude", Mode: "capture", Command: "echo hi"})
-	m.rememberToolApproval("echo hi")
-	m.reviewRunning = true
-	p := &commitPopup{}
-	m = m.pushLayer(p)
-	m, cmd := m.startGenerate(p)
-	if cmd != nil {
-		t.Fatal("startGenerate must not dispatch while a review runs")
-	}
-	if m.statusMsg == "" {
-		t.Fatal("startGenerate must surface a status message when refusing")
-	}
-}
-
-// reviewSegment blinks (alternates style) while running, and is empty otherwise.
 func TestReviewSegmentBlinks(t *testing.T) {
 	// Force TrueColor so lipgloss emits ANSI escapes in the non-TTY test env
 	// (the SetColorProfile idiom the diff-render tests use); otherwise both blink
@@ -494,3 +476,6 @@ func TestReviewScopeLabelTranslatesWorkingChanges(t *testing.T) {
 		t.Fatalf("reviewTitle(\"working changes\") = %q, want the translated sibling key", title)
 	}
 }
+
+// errKilled stands in for the *exec.ExitError a ctx-cancelled subprocess returns.
+var errKilled = errors.New("signal: killed")
