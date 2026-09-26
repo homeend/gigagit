@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"io"
 	"strings"
@@ -248,5 +249,64 @@ func TestAgentsPopupOpensOnTheFreshestTab(t *testing.T) {
 	m3, _ := m.openSessionsPopup(false)
 	if p := layerOf[*sessionsPopup](m3); p == nil || p.tab != tabTasks {
 		t.Fatalf("the newest is a task: want the AI tasks tab, got %+v", p)
+	}
+}
+
+func TestCoarseAgoKeepsTheLargestUnit(t *testing.T) {
+	t.Parallel()
+	for d, want := range map[time.Duration]string{
+		3*time.Hour + 15*time.Minute + 3*time.Second: "3h",
+		3*time.Minute + 15*time.Second:               "3m",
+		55 * time.Second:                             "55s",
+		49 * time.Hour:                               "2d",
+		0:                                            "0s",
+	} {
+		if got := coarseAgo(d); got != want {
+			t.Errorf("coarseAgo(%v) = %q, want %q", d, got, want)
+		}
+	}
+}
+
+func TestFinishedTaskShowsDateAndCoarseAge(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 26, 18, 0, 0, 0, time.Local)
+	ended := now.Add(-(3*time.Hour + 15*time.Minute + 3*time.Second))
+	done := taskRow{live: &domain.TaskInfo{State: domain.TaskDone, Ended: ended}}
+	if got := taskRowCells(done, now)[3]; got != "09-26 14:44 · 3h ago" {
+		t.Fatalf("finished: %q", got)
+	}
+	run := taskRow{live: &domain.TaskInfo{State: domain.TaskRunning, Started: now.Add(-75 * time.Second)}}
+	if got := taskRowCells(run, now)[3]; got != formatElapsed(75*time.Second) {
+		t.Fatalf("running keeps the precise count-up: %q", got)
+	}
+}
+
+func TestAgentsPopupCtrlTFillsTheScreen(t *testing.T) {
+	m := launchTestModel(t)
+	m.width, m.height = 140, 40
+	id := submitReview(t, m, "echo ok")
+	waitTaskState(t, id, taskEndedFn)
+	m, _ = m.openSessionsPopup(false)
+	p := layerOf[*sessionsPopup](m)
+	size := func() (w, h int) {
+		out := ansi.Strip(p.render(m, ""))
+		lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+		n := 0
+		for _, l := range lines {
+			if strings.Contains(l, "║") || strings.Contains(l, "╔") || strings.Contains(l, "╚") {
+				n++
+				w = max(w, lipgloss.Width(strings.TrimSpace(l)))
+			}
+		}
+		return w, n
+	}
+	w0, h0 := size()
+	m, _ = updateKey(m, "ctrl+t")
+	if !p.maxed() {
+		t.Fatal("ctrl+t must maximise the popup")
+	}
+	w1, h1 := size()
+	if w1 <= w0 || h1 <= h0 {
+		t.Fatalf("maximised %dx%d, normal %dx%d", w1, h1, w0, h0)
 	}
 }

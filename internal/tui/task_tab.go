@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -130,11 +131,30 @@ func taskRowCells(r taskRow, now time.Time) [4]string {
 		}
 		age = formatElapsed(now.Sub(since))
 	case r.live != nil:
-		age = i18n.T("%s ago", formatElapsed(now.Sub(r.live.Ended)))
+		age = finishedAt(r.live.Ended, now)
 	default:
-		age = i18n.T("%s ago", formatElapsed(now.Sub(r.record.Ended)))
+		age = finishedAt(r.record.Ended, now)
 	}
 	return [4]string{r.key(), r.agent(), taskStateLabel(r.state()), age}
+}
+
+// finishedAt is a finished task's time: its local date and time, then how
+// long ago in its largest unit only — a settled row does not tick.
+func finishedAt(ended, now time.Time) string {
+	return ended.Local().Format("01-02 15:04") + " · " + i18n.T("%s ago", coarseAgo(now.Sub(ended)))
+}
+
+// coarseAgo is d in its largest whole unit: 3h15m3s → 3h, 3m15s → 3m, 55s.
+func coarseAgo(d time.Duration) string {
+	switch {
+	case d >= 24*time.Hour:
+		return strconv.Itoa(int(d/(24*time.Hour))) + "d"
+	case d >= time.Hour:
+		return strconv.Itoa(int(d/time.Hour)) + "h"
+	case d >= time.Minute:
+		return strconv.Itoa(int(d/time.Minute)) + "m"
+	}
+	return strconv.Itoa(max(int(d/time.Second), 0)) + "s"
 }
 
 // taskRowText is "key · agent · state · age" (the quit popup and tests).
@@ -327,7 +347,7 @@ func (p *sessionsPopup) taskHint() string {
 			parts = append(parts, i18n.T("[x] remove"))
 		}
 	}
-	parts = append(parts, i18n.T("[/] filter  [tab] sessions  [esc] close"))
+	parts = append(parts, i18n.T("[/] filter  [tab] sessions  [ctrl+t] full  [esc] close"))
 	return strings.Join(parts, "  ")
 }
 

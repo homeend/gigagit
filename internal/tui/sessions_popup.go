@@ -18,6 +18,7 @@ import (
 // owns, grouped repo → worktree. In quit mode it is what quitting with live
 // sessions opens (Task 8's quit guard).
 type sessionsPopup struct {
+	popupMax    // ctrl+t fills the screen (width and rows)
 	quitMode    bool
 	sel         int
 	query       string
@@ -323,7 +324,7 @@ func (p *sessionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *sessionsPopup) render(m Model, below string) string {
 	p.refresh(m)
 	w, h := m.overlayDims()
-	inner := popupWideInnerWidth(w)
+	inner := popupResolveWidth(w, p.maxed(), popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 	s := st()
 
@@ -347,13 +348,19 @@ func (p *sessionsPopup) render(m Model, below string) string {
 	// Fixed height: both tabs get the taller tab's row count, so switching
 	// never resizes the box.
 	rowsH := min(max(p.sessionRowCount(), p.taskRowCount(), 1), max(h-10, 3))
+	if p.maxed() { // maximised: every row the screen holds
+		rowsH = max(h-11, 3)
+		if p.quitMode {
+			rowsH = max(rowsH-2, 3)
+		}
+	}
 	var body, hints []string
 	if p.tab == tabTasks {
 		body = p.renderTaskRows(m, textW, rowsH)
 		hints = []string{p.taskHint()}
 	} else {
 		body = p.renderSessionRows(textW, rowsH)
-		hints = []string{i18n.T("[enter] open  [k] kill  [x] remove/close  [/] filter  [z] mode  [tab] AI tasks  [esc] close")}
+		hints = []string{i18n.T("[enter] open  [k] kill  [x] remove/close  [/] filter  [z] mode  [tab] AI tasks  [ctrl+t] full  [esc] close")}
 	}
 	if p.quitMode {
 		hints = append(hints, i18n.T("[Q] kill all and quit  [esc] cancel"))
