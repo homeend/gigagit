@@ -85,6 +85,12 @@ type Server struct {
 	// writes (subscribers are closed and reconnect).
 	liveMu sync.Mutex
 	live   *liveHub
+	// ofs is the open-files list (openfiles.go): per worktree, shared by
+	// every tab; it outlives the hub, which is replaced on re-root.
+	ofs *openFiles
+	// ofStop ends the open files' stat poll (openfiles_watch.go).
+	ofStop     chan struct{}
+	ofStopOnce sync.Once
 
 	// rt is the last remote tag listing (remotetags.go): the ▲ on the tags
 	// sidebar and the gate on "delete from remote".
@@ -101,7 +107,7 @@ type Server struct {
 }
 
 func New(svc *domain.Service) *Server {
-	s := &Server{closing: make(chan struct{})}
+	s := &Server{closing: make(chan struct{}), ofs: newOpenFiles()}
 	s.svc.Store(svc)
 	return s
 }

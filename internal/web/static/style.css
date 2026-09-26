@@ -1621,3 +1621,11 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 .vtext { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 #viewer-body .hit { background: var(--hit-bg); color: inherit; }
 #viewer-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
+#openfiles { position: fixed; top: 0; left: 0; right: 0; bottom: var(--foot-h, 25px); background: rgba(0,0,0,.45); display: flex; align-items: flex-start; justify-content: center; padding-top: 12vh; z-index: 22; }
+#openfiles.hidden { display: none; }
+#openfiles-box { background: var(--bg-alt); border: 1px solid var(--accent); border-radius: 6px; width: min(760px, 92vw); max-height: 60vh; display: flex; flex-direction: column; }
+#openfiles-title { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+#openfiles-list { overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 4px 0; }
+#openfiles-list .ofrow { padding: 2px 12px; white-space: nowrap; cursor: pointer; }
+#openfiles-list .ofrow.sel { background: var(--sel); }
+#openfiles-list .ofmeta { color: var(--dim); margin-left: 1ch; }

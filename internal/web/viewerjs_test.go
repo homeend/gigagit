@@ -54,6 +54,19 @@ console.log(r.join("|"));
 	}
 }
 
+func TestViewerPlaceJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", viewerPureStart, viewerPureEnd, `
+const r = [];
+r.push(pickLine(7, {cur: 3}, 5), pickLine(0, {cur: 3}, 5), pickLine(0, null, 5), pickLine(0, null, 0), pickLine(0, {cur: 0}, 4));
+r.push(keepLine(9, 4, false), keepLine(9, 0, true), keepLine(0, 4, false), keepLine(2, 4, false));
+console.log(r.join("|"));
+`)
+	if want := "7|3|5|0|4|4|9|1|2"; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
 func TestViewerJSIsWired(t *testing.T) {
 	t.Parallel()
 	read := func(n string) string {
@@ -105,4 +118,34 @@ var viewerWiring = []struct{ file, want, why string }{
 	// The # keystroke itself must not land in the prompt it opens: the field
 	// read "#gg://…" and a pasted link went to the rev resolver (a 404).
 	{"keys.js", "} else if (e.key === \"#\") {\n    e.preventDefault();", "# must not type itself into the goto prompt"},
+	// Plan 5b Task 4: the list.
+	{"core.js", "tabId", "a page load names itself to the server"},
+	{"live.js", `"/api/events?tab="`, "the event stream carries the tab id"},
+	{"layers.js", "function pushFoot(", "the footer chips stack (viewer + switcher)"},
+	{"viewer.js", `pushFoot("viewer"`, "the viewer's chips ride the footer stack"},
+	{"viewer.js", `"/api/open-files"`, "the viewer registers what it shows"},
+	{"viewer.js", `op: "background"`, "ctrl+] and the menu hand-offs background the file"},
+	{"viewer.js", `op: "cursor"`, "the cursor line is reported"},
+	{"viewer.js", "closed in another tab", "x in another tab closes this viewer"},
+	{"viewer.js", "files open)", "an eviction names the file (the TUI's words)"},
+	{"viewer.js", "is in the background — ctrl+\\\\ lists open files", "ctrl+] says where the file went"},
+	// Plan 5b Task 5: events.
+	{"live.js", `msg.reason === "open_files"`, "the list's broadcast reaches the page"},
+	{"live.js", "viewerOpenFiles(msg.files || [])", "an empty list arrives as no files (omitempty)"},
+	{"live.js", `msg.reason === "file_changed"`, "a disk change reaches the viewer"},
+	{"live.js", "viewerFileChanged(msg.file_id)", "the viewer reloads the changed file"},
+	{"live.js", "viewerHello()", "every hello re-reports what this tab shows"},
+	// Plan 5b Task 6: the switcher.
+	{"app.js", "./openfiles.js", "the switcher module is imported at boot"},
+	{"openfiles.js", `mountOverlay("openfiles")`, "the switcher is a mounted layer"},
+	{"openfiles.js", `pushFoot("openfiles"`, "its keys go in the bottom bar"},
+	{"openfiles.js", "elidePath(", "rows cut the path in the middle"},
+	{"openfiles.js", "everywhere: true", "x closes the file in every tab"},
+	{"openfiles.js", "no open files", "an empty list says so"},
+	{"keys.js", "isSwitcherKey(e)", "ctrl+\\ works from the main page"},
+	{"keys.js", `case "openfiles":`, "the footer chip opens the switcher"},
+	{"index.html", `data-act="openfiles"`, "the main footer advertises ctrl+\\"},
+	{"viewer.js", "isSwitcherKey(e)", "ctrl+\\ works from the viewer"},
+	{"live.js", "switcherOpenFiles(", "an open switcher follows the list"},
+	{"style.css", "#openfiles.hidden", "the overlay hides by id (a global .hidden does not exist)"},
 }

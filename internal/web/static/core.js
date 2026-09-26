@@ -6,6 +6,14 @@ import { suspectServerDown } from "./serverdown.js";
 const ROW_H = 22;
 
 
+// tabId names this page LOAD to the server (open files: which tab shows
+// which file). Never stored: a duplicated tab copies sessionStorage and must
+// still be a tab of its own.
+const tabId =
+  globalThis.crypto && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+
 const state = {
   rows: [],
   canLoadMore: false,
@@ -386,4 +394,4 @@ function runOnce(type, fn, opts = {}) {
 // --- end single-flight task gate ---
 
 
-export { $, DANGER_OPTIONS, ROW_H, SECTIONS, attnKey, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runOnce, runes, splitPathSegs, ssGet, ssSet, state };
+export { $, DANGER_OPTIONS, ROW_H, SECTIONS, attnKey, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, runOnce, runes, splitPathSegs, ssGet, ssSet, state, tabId };
