@@ -193,10 +193,10 @@ func (m Model) applyReviewResult(info domain.TaskInfo) (Model, tea.Cmd) {
 	}
 	label := strings.TrimPrefix(info.Key, "review — ")
 	path, err := m.svc.SaveReviewReport(context.Background(), label, info.Result, time.Now())
-	if err != nil {
-		m.statusMsg = i18n.T("review: %s", err.Error())
+	if err != nil { // the reviews dir failed: still show it, from the task's result file
+		return m.openResultViewer(info.ID, ".md", reviewTitle(label), info.Result, nil)
 	}
-	return m.pushLayer(newReviewView(reviewTitle(label), path, info.Result)), nil
+	return m.openResultFile(path, reviewTitle(label), nil)
 }
 
 // canShowResult: a result may open its viewer now — it belongs to the

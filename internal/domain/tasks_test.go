@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -363,5 +364,26 @@ func TestTasksCancelDuringStartIsCancelled(t *testing.T) {
 	info := waitInfo(t, m, id, "ended", func(i TaskInfo) bool { return !i.State.Live() })
 	if info.State != TaskCancelled {
 		t.Fatalf("state = %s, want cancelled (err %q)", info.State, info.Err)
+	}
+}
+
+func TestSaveTaskResultWritesAndPrunes(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	p, err := SaveTaskResult("t1", ".md", "# hi\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(p); string(b) != "# hi\n" || filepath.Base(p) != "t1.md" {
+		t.Fatalf("path %q content %q", p, b)
+	}
+	for i := 0; i < taskResultKeep+5; i++ {
+		if _, err := SaveTaskResult(TaskID(fmt.Sprintf("n%03d", i)), ".txt", "x"); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(time.Millisecond) // distinct mtimes
+	}
+	entries, _ := os.ReadDir(filepath.Dir(p))
+	if len(entries) != taskResultKeep {
+		t.Fatalf("kept %d files, want %d", len(entries), taskResultKeep)
 	}
 }

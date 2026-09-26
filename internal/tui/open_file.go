@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,7 @@ const (
 	srcWorktree fileSourceKind = iota // the file ON DISK in the current worktree
 	srcCommit                         // the file at a commit (rev = sha)
 	srcShelf                          // a shelf member's frozen bytes (rev = entry id)
+	srcExternal                       // a file outside the repository (an AI task's result); path is absolute
 )
 
 // fileSource names one version of a file: the working tree, a commit or a
@@ -34,6 +36,12 @@ type openFile struct {
 	src  fileSource
 	path string
 	p    *contentPopup
+	// An AI task's result (srcExternal): title names it in the viewer and
+	// the switcher; result adds y (copy it all); apply, when set, adds a
+	// (use it — a commit message fills the commit box).
+	title  string
+	result bool
+	apply  func(Model) (Model, tea.Cmd)
 	// tag is unique per document — two documents of one file never share it
 	// — so a load result finds exactly the document that asked for it, and a
 	// result for a document no frame shows any more finds nothing.

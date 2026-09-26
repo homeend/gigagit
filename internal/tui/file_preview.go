@@ -501,6 +501,9 @@ func (m Model) renderPreviewBox(p *contentPopup, title string, boxW, boxH int, f
 	hint := i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] close  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
 	if viewer { // the full-screen viewer can also step aside, keeping the file open
 		hint = i18n.T("%d/%d  [alt+↑↓] line  [spc] mark  [/] find  [esc] close  [ctrl+]] background  [↑/↓] scroll  [ctrl+w] view", start+1, len(vis))
+		if p.extraHint != "" {
+			hint = p.extraHint + "  " + hint
+		}
 	}
 	if p.lsel.on {
 		hint = i18n.T("%d/%d  [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend", start+1, len(vis))

@@ -149,6 +149,13 @@ func openFileRowText(d *openFile, shown bool) string {
 	if shown {
 		mark = "● "
 	}
+	if d.src.kind == srcExternal {
+		name := d.title
+		if name == "" {
+			name = d.path
+		}
+		return mark + name + "  " + i18n.T("AI result")
+	}
 	row := mark + d.path
 	if docLoaded(d) {
 		row += fmt.Sprintf("  :%d", d.p.cur+1)

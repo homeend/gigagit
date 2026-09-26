@@ -73,7 +73,7 @@ func TestConflictResultOpensOverview(t *testing.T) {
 	info := domain.TaskInfo{ID: "c", Key: "resolve & complete — x merge 1234567", Kind: exttool.CatConflictComplete,
 		Agent: "Claude Code", Worktree: m.currentWorktree, Result: "resolved 2 files", Results: 1}
 	m, cmd := m.applyTaskResult(info)
-	if v := layerOf[*reviewView](m); v == nil || cmd == nil {
+	if v := layerOf[*fileViewer](m); v == nil || v.src.kind != srcExternal || cmd == nil {
 		t.Fatal("overview viewer + status reload expected")
 	}
 }
@@ -84,7 +84,7 @@ func TestConflictResultWhileProcessOpenIsANotice(t *testing.T) {
 	info := domain.TaskInfo{ID: "c", Key: "resolve conflict — x merge 1234567", Kind: exttool.CatConflict,
 		Agent: "Claude Code", Worktree: m.currentWorktree, Result: "done", Results: 1}
 	m, cmd := m.applyTaskResult(info)
-	if layerOf[*reviewView](m) != nil || cmd == nil {
+	if layerOf[*fileViewer](m) != nil || cmd == nil {
 		t.Fatal("the conflict window owns the screen: notice + reload, no viewer")
 	}
 }

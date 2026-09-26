@@ -221,17 +221,20 @@ func (p *sessionsPopup) openTask(m Model, r taskRow) (Model, tea.Cmd) {
 		result, _ = domain.Tasks().HistoryResult(string(r.id()))
 	}
 	if strings.TrimSpace(result) != "" {
-		v := newReviewView(r.key(), "", result)
-		v.copyText = result
-		if r.kind() == exttool.CatCommitMessage && domain.SameCheckout(r.worktree(), m.currentWorktree) {
-			text, from := result, r.agent()
-			v.apply = func(m Model) (Model, tea.Cmd) {
-				m = m.clearLayers()
-				m.pendingCommitMsg[pendingKey(m.currentWorktree)] = pendingMessage{text: text, from: from}
-				return m.openCommitBox(), nil
+		ext := ".md"
+		var apply func(Model) (Model, tea.Cmd)
+		if r.kind() == exttool.CatCommitMessage {
+			ext = ".txt"
+			if domain.SameCheckout(r.worktree(), m.currentWorktree) {
+				text, from := result, r.agent()
+				apply = func(m Model) (Model, tea.Cmd) {
+					m = m.clearLayers()
+					m.pendingCommitMsg[pendingKey(m.currentWorktree)] = pendingMessage{text: text, from: from}
+					return m.openCommitBox(), nil
+				}
 			}
 		}
-		return m.pushLayer(v), nil
+		return m.openResultViewer(r.id(), ext, r.key(), result, apply)
 	}
 	if r.live != nil && r.live.Session != "" && r.live.State.Live() {
 		m = m.popLayer()
@@ -251,9 +254,7 @@ func (p *sessionsPopup) openTask(m Model, r taskRow) (Model, tea.Cmd) {
 		if strings.TrimSpace(tail) == "" && r.record != nil {
 			tail = r.record.Err
 		}
-		v := newReviewView(i18n.T("%s — output", r.key()), "", tail)
-		v.copyText = tail
-		return m.pushLayer(v), nil
+		return m.openResultViewer(r.id()+"-output", ".log", i18n.T("%s — output", r.key()), tail, nil)
 	}
 	m.statusMsg = i18n.T("no result yet")
 	return m, nil

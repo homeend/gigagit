@@ -169,6 +169,6 @@ func (m Model) applyConflictResult(info domain.TaskInfo) (Model, tea.Cmd) {
 		}
 		return m, c
 	}
-	m = m.pushLayer(newReviewView(i18n.T("Resolution overview — %s", info.Agent), "", info.Result))
-	return m, m.loadCmd()
+	m, open := m.openResultViewer(info.ID, ".md", i18n.T("Resolution overview — %s", info.Agent), info.Result, nil)
+	return m, tea.Batch(open, m.loadCmd())
 }

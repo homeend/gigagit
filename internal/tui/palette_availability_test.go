@@ -39,7 +39,6 @@ func TestPaletteNotReachableOverPopupsEditorsModalsBusy(t *testing.T) {
 	}{
 		{"goto-commit popup", func(m Model) Model { return m.pushLayer(&gotoCommitPopup{input: newTextField("")}) }},
 		{"command palette itself", func(m Model) Model { return m.pushLayer(&commandPalette{cmds: paletteCommands()}) }},
-		{"review viewer (matches g/G/F, which it lacks)", func(m Model) Model { return m.pushLayer(newReviewView("t", "/p", "body")) }},
 		{"interactive rebase", func(m Model) Model { return m.pushLayer(&irebaseEditor{}) }},
 		{"hunk picker", func(m Model) Model { return m.pushLayer(&hunkPicker{}) }},
 		{"decision modal", func(m Model) Model { m.modal = &decisionState{}; return m }},
@@ -115,28 +114,4 @@ func TestPaletteRunsAndRendersOverDiff(t *testing.T) {
 		t.Fatal("the diff window should be parked for esc to return to")
 	}
 	_ = m.View() // the window over a parked diff must render without panicking
-}
-
-// TestHelpCtrlPRowMatchesPaletteReachability pins help-vs-availability
-// agreement: the review viewer is outside paletteReachable (it stays in
-// lock-step with g/G/F), so the ctrl+p help row must not advertise the palette
-// as opening over it.
-func TestHelpCtrlPRowMatchesPaletteReachability(t *testing.T) {
-	t.Parallel()
-	if footerModel().pushLayer(newReviewView("t", "/p", "body")).paletteReachable() {
-		t.Fatal("precondition: the review viewer is outside paletteReachable")
-	}
-	var row string
-	for _, l := range helpContent() {
-		if strings.HasPrefix(l.text, "ctrl+p ") {
-			row = l.text
-			break
-		}
-	}
-	if row == "" {
-		t.Fatal("help has no ctrl+p row")
-	}
-	if strings.Contains(row, "review") {
-		t.Errorf("ctrl+p help advertises the review viewer, which paletteReachable excludes:\n%s", row)
-	}
 }
