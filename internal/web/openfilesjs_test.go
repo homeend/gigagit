@@ -1,6 +1,11 @@
 package web
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
 
 const ofPureStart = "// --- switcher model (pure; guarded against Go) ---"
 const ofPureEnd = "// --- end switcher model ---"
@@ -17,5 +22,20 @@ console.log(JSON.stringify(rows) + "|" + [clampSel(5, 2), clampSel(-1, 2), clamp
 	want := `[{"id":"f2","mark":"●","path":"a/b.go","line":":12","source":"worktree","rev":""},{"id":"f1","mark":"○","path":"c.txt","line":"","source":"commit","rev":"0123456789"}]|1,0,0`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
+// The viewer's footer is built in a template literal, where "\ " is an escape
+// for a plain space: the chip must write "\\" or the page shows "ctrl+ open
+// files" (found by the 5c browser check).
+func TestViewerFootChipKeepsTheBackslash(t *testing.T) {
+	t.Parallel()
+	b, err := os.ReadFile(filepath.Join("static", "viewer.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	if strings.Contains(src, `>ctrl+\ open files<`) || !strings.Contains(src, `>ctrl+\\ open files<`) {
+		t.Error(`viewer.js: the "ctrl+\ open files" chip loses its backslash in the template literal`)
 	}
 }
