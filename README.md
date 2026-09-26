@@ -1202,6 +1202,13 @@ session navigate`, `gg open --web`, or a link pasted into the `#` prompt
 version copies a content link only while the file on disk still holds the
 lines shown.
 
+Viewed files stay open, one list per worktree shared by every tab of that
+`gg web`: `ctrl+]` sends the viewer to the background and `ctrl+\` lists the
+open files (`●` the one this tab shows) — `enter` brings one back where this
+tab left it, `x` closes it in every tab. A working-tree file follows the disk:
+an edit reloads it in place, a deleted file shows `(file deleted on disk)`
+until it comes back.
+
 ### Open files (background file viewers)
 
 A file you view — **View file** in a commit's file tree, a pasted `gg://`

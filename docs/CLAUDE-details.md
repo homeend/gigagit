@@ -1223,6 +1223,25 @@ import viewer.js). Content links land via live.js's `steerNavigateContent`
 land-then-reveal pair); `#` takes a `gg://` link through
 `GET /api/link-command` (linknav → `toSteerWire`, or `{checkout}` for another
 checkout). The `toSteerWire` and `gg open --web` content refusals are gone.
+**Web open files (5b, 2026-09-26):** the list lives on the `Server`
+(`ofs`, `openfiles.go`, pure core + mutex), keyed by `svc.Root()` — NOT on the
+live hub, which `startLive` replaces on every re-root and settings write. A
+tab is a page LOAD (`core.js` `tabId`, never stored) sent as
+`/api/events?tab=` and in every POST; `handleEvents` counts the tab's streams
+BEFORE the hello and drops what it showed when the last one ends, so the page
+re-reports `shown` on EVERY hello (a hub swap reads background → shown after
+Chrome's ~3 s EventSource retry). Ops: open (reuse by src+rev+path; tab ""
+= background open) / focus / background / close (esc: removed unless another
+tab shows it; `everywhere` = the switcher's x) / cursor (never broadcast) /
+shown. `open`/`focus` stat a working-tree entry BEFORE the page's content GET
+(stat-before-read); the path must be `filepath.IsLocal` (the poller stats
+it). `openfiles_watch.go` polls (shown 1 s, background 5 s, filewatch only
+wakes, never on 9p) and SKIPS the whole round while an op runs — advancing the
+baseline there would lose the op's edit. `open_files`/`file_changed` go out
+via `fanOut` (the gate never drops them). Page: `viewer.js` `closeViewer(how)`
+— esc = close, ctrl+] and the `.` menu's hand-offs = background; a load-seq
+token lets a link landing beat a reload; `layers.js` `pushFoot`/`popFoot` is a
+chip stack so the switcher (`openfiles.js`) nests over the viewer.
 **Agent verbs (plan 4, 2026-09-25):** steer additions `Command.Background`,
 `Command.FileID` (NOT `ID` — that is the command's id), `Reply.Files` and the
 wire row `steer.OpenFile` (id `f<seq>` = `openFile.seq`, the tag's suffix;

@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Open files on the web: the shared list (5b)
+
+### Added
+
+- **Files opened in `gg web`'s viewer stay open** in one list per worktree,
+  shared by every tab of that `gg web`: `ctrl+]` sends the viewer to the
+  background, `ctrl+\` lists the open files (`●` the one this tab shows,
+  `:line`, the version) — `enter` brings one back where this tab left it, `x`
+  closes it in every tab; `esc` in the viewer lets go of the file (it stays
+  while another tab shows it). Up to 20 per worktree; the 21st closes the
+  least recently shown file no tab shows and names it.
+- **Working-tree files follow the disk**: the server stat-polls them (shown
+  every second, background every 5 s; a file watch wakes it early where the
+  filesystem supports one) and the viewer reloads keeping its line; a deleted
+  file shows `(file deleted on disk)` until it returns.
+- `GET/POST /api/open-files` and the `open_files` / `file_changed` events on
+  `/api/events` (a tab names itself with `?tab=`).
+
 ## Repo switch: exact match
 
 ### Added
