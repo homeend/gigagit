@@ -78,14 +78,16 @@ func TestContentLinkRefusedByNonNavigateVerbs(t *testing.T) {
 	}
 }
 
-func TestOpenWebRefusesAContentLink(t *testing.T) {
+// gg web has a viewer now: --web no longer refuses a content link. With no
+// live page and no launcher the open says so instead.
+func TestOpenWebAcceptsAContentLink(t *testing.T) {
 	t.Parallel()
 	dir := newCLIRepo(t)
 	var out, errb bytes.Buffer
 	link := "gg://" + filepath.ToSlash(dir) + "/README.md?view=content"
 	code := cmdOpen(domain.Open(dir), []string{"--web", link}, &out, &errb)
-	if code != 2 || !strings.Contains(errb.String(), "content links are not supported in gg web yet") {
-		t.Fatalf("exit=%d stderr=%q, want 2 and the web refusal", code, errb.String())
+	if code != 1 || strings.Contains(errb.String(), "not supported in gg web") || !strings.Contains(errb.String(), "no live gg web page") {
+		t.Fatalf("exit=%d stderr=%q, want 1 and no refusal", code, errb.String())
 	}
 }
 
