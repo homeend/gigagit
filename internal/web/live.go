@@ -400,7 +400,7 @@ func (s *Server) restartLive(ctx context.Context) { s.startLive(ctx) }
 
 // Close releases background resources (the live hub). Serve calls it after
 // the HTTP server has shut down.
-func (s *Server) Close() { s.stopLive() }
+func (s *Server) Close() { s.stopLive(); s.stopOpenFilesWatch() }
 
 // announceShutdown tells every open /api/events stream the server is going
 // away, so a tab paints its server-down bar at once instead of probing a

@@ -68,7 +68,8 @@ func Serve(ctx context.Context, workdir, addr string, launch bool, startAt *stee
 	if err != nil {
 		return err
 	}
-	srv.startLive(ctx) // watcher + interval ticker behind GET /api/events
+	srv.startLive(ctx)        // watcher + interval ticker behind GET /api/events
+	srv.startOpenFilesWatch() // the open files follow the disk (openfiles_watch.go)
 	defer srv.Close()
 	// The live-steering claim: web.json carries THIS run's URL, so a
 	// `gg session …` in any shell on this worktree can reach the page.

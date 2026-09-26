@@ -88,6 +88,9 @@ type Server struct {
 	// ofs is the open-files list (openfiles.go): per worktree, shared by
 	// every tab; it outlives the hub, which is replaced on re-root.
 	ofs *openFiles
+	// ofStop ends the open files' stat poll (openfiles_watch.go).
+	ofStop     chan struct{}
+	ofStopOnce sync.Once
 
 	// rt is the last remote tag listing (remotetags.go): the ▲ on the tags
 	// sidebar and the gate on "delete from remote".
