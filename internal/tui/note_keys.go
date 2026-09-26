@@ -547,6 +547,7 @@ func (m Model) stepNotedFile(dir int) (tea.Model, tea.Cmd) {
 // file it opened has told us where its notes are.
 type noteLanding struct {
 	dir int    // >0 = land on the file's first note, <0 = on its last
+	id  string // set: land on THIS thread (the all-notes popup's enter); dir is ignored
 	tag string // the diffTag the step opened; a mismatch drops the landing
 }
 

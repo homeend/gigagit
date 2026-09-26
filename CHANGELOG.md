@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## View all notes
+
+### Added
+
+- **View all notes…** in the command palette: every review note this checkout
+  can see, as a tree — working tree (unstaged / staged / untracked), commits
+  (newest first; a commit that no longer exists is listed last, marked
+  missing), shelf entries — each down to its directory and file. Note rows
+  share fixed columns: status (active / stale / orphaned / missing), who,
+  where, when, the summary and a reply count. Type to filter (a match keeps
+  its headings), `enter` or `←`/`→` fold a heading, `enter` on a note opens
+  its diff over the list and lands on it — `esc` comes back — and a note that
+  cannot be opened any more says why. `ctrl+t` maximizes.
+
 ## Open files on the web: agent verbs (5c)
 
 ### Added
