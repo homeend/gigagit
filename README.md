@@ -1,5 +1,7 @@
 # gigagit (`gg`)
 
+[https://gigagit.code-drill.eu/](https://gigagit.code-drill.eu/)
+
 A fast terminal git client for very large monorepos — GitKraken's one-key smart
 operations with lazygit's keyboard-driven TUI. Cross-platform, shells out to the
 system `git`.
