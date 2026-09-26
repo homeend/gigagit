@@ -146,12 +146,12 @@ func sendSteer(dir string, c steer.Command, noWait bool, stdout, stderr io.Write
 // content link.
 const backgroundNeedsContent = "--background needs a content link (gg link --content <path>)"
 
-// sendBackground posts a background open to the live TUI only: it loads the
-// file into the open-files list without touching the screen. With no TUI
+// sendBackground posts a background open to the live session(s): it loads
+// the file into the open-files list without touching the screen. With nothing
 // live it never launches one — a launch IS the screen.
 func sendBackground(dir string, c steer.Command, noWait bool, stdout, stderr io.Writer) int {
 	c.Background = true
-	rep, code, ok := steerTUI(dir, c, noWait, stdout, stderr)
+	rep, code, ok := steerLive(dir, c, true, noWait, stdout, stderr)
 	if !ok {
 		return code
 	}
@@ -171,21 +171,41 @@ func printSteerReply(rep steer.Reply, stdout, stderr io.Writer) int {
 	return 1
 }
 
-// steerTUI posts c to the live TUI ONLY — never a web page, which keeps no
-// open files yet — and waits for its answer. ok is true when a reply came;
-// otherwise code is the exit status, the reason already printed (no TUI
-// live, --no-wait's id, a timeout's "queued", which is exit 0 as in
-// sendSteer).
-func steerTUI(dir string, c steer.Command, noWait bool, stdout, stderr io.Writer) (rep steer.Reply, code int, ok bool) {
+// steerLive posts c to the live session and waits for its answer: the TUI
+// when it is live (its reply decides), else the gg web page's server, which
+// answers the open-files verbs itself. With both set (a background open, a
+// focus) a live page gets it TOO — as navigate does — and its answer is
+// printed labelled "web:". ok is true when a reply came; otherwise code is
+// the exit status, the reason already printed (nothing live, --no-wait's id,
+// a timeout's "queued", which is exit 0 as in sendSteer).
+func steerLive(dir string, c steer.Command, both, noWait bool, stdout, stderr io.Writer) (rep steer.Reply, code int, ok bool) {
 	dir = preferredInbox(dir)
 	r := routeFor(dir)
-	if !r.tuiOK {
-		if r.webOK {
-			fmt.Fprintln(stderr, "gg web does not keep open files yet")
-		} else {
-			fmt.Fprintln(stderr, "no gg TUI session for this worktree")
-		}
+	if !r.tuiOK && !r.webOK {
+		fmt.Fprintln(stderr, "no gg session for this worktree")
 		return rep, 1, false
+	}
+	if c.ID == "" {
+		c.ID = steer.NewID() // one id for both deliveries, as sendSteer
+	}
+	if r.webOK && (both || !r.tuiOK) {
+		// The web answers synchronously, so even --no-wait gets its reply.
+		wrep, err := steer.PostHTTPReply(r.web.URL, c)
+		if !r.tuiOK {
+			if err != nil {
+				fmt.Fprintln(stderr, "web:", err)
+				return rep, 1, false
+			}
+			return wrep, 0, true
+		}
+		switch {
+		case err != nil:
+			fmt.Fprintln(stderr, "web:", err)
+		case !wrep.OK:
+			fmt.Fprintln(stderr, "web:", wrep.Error)
+		case wrep.Detail != "":
+			fmt.Fprintln(stdout, "web:", wrep.Detail)
+		}
 	}
 	c.Wait = !noWait
 	id, err := steer.Post(dir, c)
