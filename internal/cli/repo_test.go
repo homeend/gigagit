@@ -38,8 +38,39 @@ func TestRepoListMRUFirst(t *testing.T) {
 	if len(lines) < 2 || !strings.Contains(lines[0], b) || !strings.Contains(lines[1], a) {
 		t.Fatalf("list not MRU-first:\n%s", out.String())
 	}
-	if !strings.Contains(lines[0], filepath.Base(b)+"\t") {
-		t.Fatalf("expected <name>\\t<path> format: %q", lines[0])
+	if !strings.HasPrefix(lines[0], filepath.Base(b)+" ") {
+		t.Fatalf("expected <name> <path> format: %q", lines[0])
+	}
+}
+
+// The path column starts at the same offset on every row, whatever the
+// name lengths, so the list reads as a table.
+func TestRepoListAlignsPaths(t *testing.T) {
+	state := withState(t)
+	short := filepath.Join(t.TempDir(), "a")
+	long := filepath.Join(t.TempDir(), "a-much-longer-repository-name")
+	for i, p := range []string{short, long} {
+		if err := os.Mkdir(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		_ = repos.Touch(state, p, "", time.Unix(int64(1000+i), 0))
+	}
+	dir := newCLIRepo(t)
+	var out, errb bytes.Buffer
+	if code := Run(dir, []string{"repo", "list"}, strings.NewReader(""), &out, &errb, ""); code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+	col := -1
+	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+		if strings.Contains(line, "\t") {
+			t.Fatalf("row should be space-padded, not tab-separated: %q", line)
+		}
+		i := strings.Index(line, string(filepath.Separator))
+		if col == -1 {
+			col = i
+		} else if i != col {
+			t.Fatalf("paths start at different columns (%d vs %d):\n%s", col, i, out.String())
+		}
 	}
 }
 

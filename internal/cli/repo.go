@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/homeend/gigagit/internal/repos"
 )
@@ -30,9 +31,7 @@ func cmdRepo(args []string, stdout, stderr io.Writer, cwdFile string) int {
 }
 
 func cmdRepoList(stdout io.Writer) int {
-	for _, e := range repos.Load(RepoStatePath) {
-		fmt.Fprintf(stdout, "%s\t%s\n", repos.Name(e), e.Path)
-	}
+	writeRepoTable(stdout, "", repos.Load(RepoStatePath))
 	return 0
 }
 
@@ -69,9 +68,7 @@ func cmdRepoSwitch(args []string, stdout, stderr io.Writer, cwdFile string) int 
 		return 0
 	default:
 		fmt.Fprintf(stderr, "repo switch: %q is ambiguous:\n", query)
-		for _, e := range matches {
-			fmt.Fprintf(stderr, "  %s\t%s\n", repos.Name(e), e.Path)
-		}
+		writeRepoTable(stderr, "  ", matches)
 		return 1
 	}
 }
@@ -89,4 +86,14 @@ func repoMatches(e repos.Entry, query string, exact bool) bool {
 	q := strings.ToLower(query)
 	return strings.Contains(strings.ToLower(name), q) ||
 		strings.Contains(strings.ToLower(path), q)
+}
+
+// writeRepoTable prints one "<name>  <path>" row per entry, space-padding the
+// names so every path starts in the same column.
+func writeRepoTable(w io.Writer, indent string, entries []repos.Entry) {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	for _, e := range entries {
+		fmt.Fprintf(tw, "%s%s\t%s\n", indent, repos.Name(e), e.Path)
+	}
+	_ = tw.Flush()
 }
