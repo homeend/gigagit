@@ -502,7 +502,7 @@ func kindLabel(k exttool.Category) string {
 func (m *TaskManager) runInteractive(ctx context.Context, t *task) taskEnd {
 	in, err := t.spec.Svc.PrepareTask(ctx, t.spec.Op)
 	if err != nil {
-		return taskEnd{state: TaskFailed, exit: -1, err: err.Error()}
+		return startFailed(ctx, err)
 	}
 	defer in.Cleanup()
 	env := append(append([]string{}, t.spec.Env...), in.Env...)
@@ -510,7 +510,7 @@ func (m *TaskManager) runInteractive(ctx context.Context, t *task) taskEnd {
 	sess, err := t.spec.Svc.startLine(ctx, m.sessionMgr(), label, t.spec.AgentID, in.Command,
 		t.spec.Worktree, t.spec.Cwd, t.spec.Cols, t.spec.Rows, env)
 	if err != nil {
-		return taskEnd{state: TaskFailed, exit: -1, err: err.Error()}
+		return startFailed(ctx, err)
 	}
 	m.mu.Lock()
 	t.info.Session = sess.Info().ID
@@ -554,6 +554,15 @@ func (m *TaskManager) runInteractive(ctx context.Context, t *task) taskEnd {
 			return taskEnd{state: TaskFailed, exit: info.ExitCode, err: "the agent ended without a result"}
 		}
 	}
+}
+
+// startFailed ends a task whose session never started: cancelled when the
+// failure is the task's own cancel, failed otherwise.
+func startFailed(ctx context.Context, err error) taskEnd {
+	if ctx.Err() != nil {
+		return taskEnd{state: TaskCancelled, exit: -1}
+	}
+	return taskEnd{state: TaskFailed, exit: -1, err: err.Error()}
 }
 
 var (

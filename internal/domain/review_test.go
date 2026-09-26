@@ -328,3 +328,15 @@ func TestReviewReportFolderedByDate(t *testing.T) {
 		t.Fatalf("path %q should be <HH-MM>-<sanitized-label>.md (branch name, not the SHA range)", res.Path)
 	}
 }
+
+func TestSaveReviewReportWritesUnderReviews(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	_, svc := newRealRepo(t)
+	p, err := svc.SaveReviewReport(context.Background(), "working changes", "# ok\n", time.Date(2026, 9, 25, 10, 4, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(p); string(b) != "# ok\n" || !strings.Contains(p, "reviews") || !strings.HasSuffix(p, "10-04-working-changes.md") {
+		t.Fatalf("path %q content %q", p, b)
+	}
+}
