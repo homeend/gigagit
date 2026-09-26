@@ -3454,7 +3454,7 @@ UTF-8 payloads correctly (the fixture test tells).
 
 ### AI tasks — the task core (AI tasks plan 2, 2026-09-25)
 
-No UI yet; plan 3 adds the launch dialog, the Headless tab and ◆ rows.
+No UI in plan 2; see "AI tasks — the TUI" below.
 
 - **Engine split.** `GenerateMessage`, `ReviewChanges`, `CompleteConflict` and
   the new `ConflictAgent` (whole-operation `conflict` agent; the name
@@ -3481,9 +3481,8 @@ No UI yet; plan 3 adds the launch dialog, the Headless tab and ◆ rows.
   the catalogue; a custom command is its own agent).
   `EnsureInteractiveCommands` appends the safe interactive commit/review
   rows only when a category has no interactive row at all.
-- **Until plan 3** the headless lanes skip interactive rows: TUI
-  `laneToolCommands` (commit chooser, review lane, `hasReviewTool`) and
-  `gg review`; the web lanes were already capture-only.
+- `gg review` skips interactive rows; the web lanes are capture-only. (The
+  TUI's `laneToolCommands` filter was retired in plan 3.)
 - **Scheduler** (`domain.Tasks()`, process-global like `Sessions()`, holds
   the submitting `*Service` per task): FIFO per key (a queued task blocks
   later same-key tasks), global cap over running tasks of every mode,
@@ -3506,3 +3505,51 @@ No UI yet; plan 3 adds the launch dialog, the Headless tab and ◆ rows.
   (`Results` counts results — apply each once), `Live()` (quit guard),
   `Load(key)` (the dialog's wait line), `History`/`HistoryResult`/
   `HistoryTail`/`RemoveHistory`.
+
+### AI tasks — the TUI (AI tasks plan 3, 2026-09-26)
+
+- **One consumer of `Tasks().Changed()`:** `waitTasksCmd` (in `Init`) →
+  `tasksChangedMsg` → `onTasksChanged`, which re-arms it. `Model.taskTrack`
+  (maps, shared across value copies; `ensureTaskTrack` for literal Models)
+  remembers per task: results applied (`seen` vs `TaskInfo.Results`), end
+  reported, the `GG_INBOX` handed over (copied into `childInbox` once the
+  session exists, so `steer_kept` answers it), foreground (open the console
+  once `Session` is set), ids `x`'d from the tab.
+- **Launch dialog** (`task_launch_popup.go`): `openTaskLaunch(taskLaunch)`
+  pushes the layer, then one async hop computes `svc.TaskKey` and (commit /
+  review) runs `EnsureInteractiveCommands`. Rows = mode × command of the
+  chosen `TaskChoice`; `launchChoices` drops `<user:…>` and `per_file`
+  commands and mismatched `when_op`. `taskLookPath(commandProgram(cmd))`
+  marks "not found". Choice memory: `promptstate.TaskLaunch` per kind
+  (agent identity `id:<tool>` / `name:<cmd>`, mode, command name). Approval
+  hashes `tc.Command`; conflict kinds show the template (the op resolves it
+  after writing its context file). Submit builds the spec off-thread and
+  sets `Env` (GG_INBOX), `Cwd` (`sessionPlace`), console size.
+- **Result application:** `applyTaskResult` switches on kind.
+  `canShowResult` = same checkout (`domain.SameCheckout`) + no proc + no
+  focused console + no modal; otherwise a sticky `… ready — ctrl+\`.
+  Commit message: open box → fill (empty) or `offer` (ask-before-replace
+  sub-screen); else `pendingCommitMsg[worktree]`, consumed by
+  `openCommitBox` (`c`). Review: `svc.SaveReviewReport` + viewer. Conflict:
+  overview viewer (path "" — `e` is inert) + `loadCmd`; a conflict task
+  ending done without a result also reloads.
+- **Commit box:** foreground from the box closes it (the docked console
+  gets keys only with no layer on top). Headless from the box waits on
+  `genTask` (spinner; `esc` = `Tasks().Cancel`, `ctrl+b` = close, result
+  becomes pending).
+- **Conflict window `t`:** `conflictPickerRows` → in-place rows (per-file
+  mergetools and whole-op commands needing `<user:…>` input, which keep the
+  old handover/overview path) + agent rows (`toolAgents`) that set
+  `m.proc = nil` (the process preempts layer keys) and open the dialog;
+  `cancelTaskLaunch` reopens the window for conflict kinds.
+- **Headless tab** (`task_tab.go`, `sessionsPopup.tab`): rows =
+  `List()` then history records not in it; history is cached on the popup
+  (read on open and in `onTasksChanged`, never per frame). Opens on the
+  tab when only tasks exist (also in quit mode).
+- **◆ rows:** `wtEntry.task` (live headless only, `SameCheckout`);
+  `wtEntry.sub()` replaces every "is a session row" check.
+- **Quit:** `liveWork()` = live sessions + live tasks without a running
+  session; `killAllAndQuitCmd` and the `run.go` safety net run
+  `Tasks().KillAll` before `Sessions().KillAll`.
+- **Tests** swap the global manager with `useTestTasks` (serial tests only;
+  `NewTaskManager(nil)` keeps records in memory).
