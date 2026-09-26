@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -8,10 +9,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/theme"
 )
 
 const (
@@ -319,4 +322,52 @@ func TestAllNotesFitsASmallTerminal(t *testing.T) {
 			t.Fatalf("line %q is %d wide on a %d-column terminal", l, w, m.width)
 		}
 	}
+}
+
+// Nested directories: each directory heading appears once and a root file is
+// never drawn under one (the domain hands files over dir-major).
+func TestAllNotesDirectoryHeadingsAppearOnce(t *testing.T) {
+	t.Parallel()
+	var fs []domain.NoteFileNotes
+	for i, p := range []string{"z.go", "a/m.go", "a/p.go", "a/n/o.go"} {
+		fs = append(fs, domain.NoteFileNotes{
+			Addr:  model.FileAddress{State: model.StateUnstaged, Worktree: "/repo", Path: p},
+			Notes: []domain.ResolvedNote{rootNote("n"+strconv.Itoa(i), 1, "note on "+p, "", model.NoteSourceUser, model.NoteActive)},
+		})
+	}
+	rows := buildAllNotesRows(domain.NotesOverview{Unstaged: fs}, "repo")
+	var order []string
+	for _, r := range rows {
+		if r.kind == anDir || r.kind == anFile {
+			order = append(order, r.text)
+		}
+	}
+	want := "z.go a/ m.go p.go a/n/ o.go"
+	if got := strings.Join(order, " "); got != want {
+		t.Fatalf("tree = %q, want %q", got, want)
+	}
+}
+
+// An agent's WHO cell is painted in the agent frame colour. Sets the colour
+// profile and theme (process-global), so it does NOT call t.Parallel().
+func TestAllNotesPaintsAgentWho(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+	prevTheme := activeTheme()
+	defer setTheme(prevTheme)
+	setTheme(theme.Dark)
+
+	m, p := allNotesModel(t)
+	p.sel = 0 // keep the agent rows unselected (reverse video paints no colour)
+	agent := st().noteFrameAgent.Render("ada")
+	for _, line := range strings.Split(m.View(), "\n") {
+		if strings.Contains(line, "width cut too early") {
+			if !strings.Contains(line, agent) {
+				t.Fatalf("the agent row's WHO must be painted: %q", line)
+			}
+			return
+		}
+	}
+	t.Fatal("no agent row on screen")
 }

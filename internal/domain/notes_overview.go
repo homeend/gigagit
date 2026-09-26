@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"sort"
+	"strings"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -228,6 +229,23 @@ func (s *Service) fillCommitFileStatus(ctx context.Context, c *NoteCommitNotes) 
 	}
 }
 
+// sortNoteFiles orders files dir-major — root files first, then each
+// directory's own files together, by directory then name — so a frontend that
+// draws one heading per directory never draws the same heading twice (a plain
+// path sort interleaves a/p.go after a/n/o.go; see commitFileLines).
 func sortNoteFiles(fs []NoteFileNotes) {
-	sort.SliceStable(fs, func(i, j int) bool { return fs[i].Addr.Path < fs[j].Addr.Path })
+	split := func(p string) (string, string) {
+		if i := strings.LastIndex(p, "/"); i >= 0 {
+			return p[:i], p[i+1:]
+		}
+		return "", p
+	}
+	sort.SliceStable(fs, func(i, j int) bool {
+		di, ni := split(fs[i].Addr.Path)
+		dj, nj := split(fs[j].Addr.Path)
+		if di != dj {
+			return di < dj
+		}
+		return ni < nj
+	})
 }

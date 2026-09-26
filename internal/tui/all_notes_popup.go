@@ -517,6 +517,11 @@ func (p *allNotesPopup) box(m Model) string {
 				style = lipgloss.NewStyle().Bold(true)
 			}
 			rows[i] = winRow{text: prefix + p.anRowText(r, textW-2, now), style: style}
+			// The selected row is reverse video: a foreground there would
+			// paint a per-glyph background, so it stays plain.
+			if i != p.sel && r.kind == anNote {
+				rows[i].decorate = anNoteDecorator(r)
+			}
 		}
 		// The chrome is the header pair, the column row, the blank + hints
 		// and the box border; the list gets what is left of the terminal.
@@ -531,6 +536,45 @@ func (p *allNotesPopup) box(m Model) string {
 	parts = append(parts, "")
 	parts = append(parts, hints...)
 	return popupBox(inner, strings.Join(parts, "\n"))
+}
+
+// anNoteDecorator paints a note row's WHO cell in its author's frame colour
+// (agent violet, user blue) and dims the STATUS cell of a note that is not
+// active. It paints only when the cell text sits where the layout put it, so
+// a panned or clipped row is left alone.
+func anNoteDecorator(r anRow) rowDecorator {
+	s := st()
+	who := s.noteFrameUser
+	if r.note.Note.Source == model.NoteSourceAgent {
+		who = s.noteFrameAgent
+	}
+	dimStatus := r.status != string(model.NoteActive)
+	const statusAt = 2 + anNoteIndent // the cursor prefix, then the indent
+	return func(visible string, hscroll, visualLine int) string {
+		if hscroll != 0 || visualLine != 0 {
+			return visible
+		}
+		rs := []rune(visible)
+		paint := func(at, w int, style lipgloss.Style) {
+			if at+w > len(rs) {
+				return
+			}
+			cell := strings.TrimRight(string(rs[at:at+w]), " ")
+			if cell == "" {
+				return
+			}
+			n := len([]rune(cell))
+			painted := []rune(style.Render(cell))
+			out := append(append(append([]rune{}, rs[:at]...), painted...), rs[at+n:]...)
+			rs = out
+		}
+		// Right to left, so the earlier cell's offsets stay valid.
+		paint(statusAt+anStatusW, anWhoW, who)
+		if dimStatus {
+			paint(statusAt, anStatusW, s.dim)
+		}
+		return string(rs)
+	}
 }
 
 // count is the number of threads the popup lists.

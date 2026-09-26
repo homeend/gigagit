@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/homeend/gigagit/internal/gittest"
@@ -141,5 +142,24 @@ func TestNotesOverviewEmpty(t *testing.T) {
 	ov, err := svc.NotesOverview(context.Background())
 	if err != nil || ov.Count() != 0 {
 		t.Fatalf("empty store: %+v, %v", ov, err)
+	}
+}
+
+// Files are dir-major: root files first, then each directory's files together,
+// so a frontend drawing one heading per directory never draws one twice.
+func TestSortNoteFilesIsDirMajor(t *testing.T) {
+	t.Parallel()
+	var fs []NoteFileNotes
+	for _, p := range []string{"a/p.go", "z.go", "a/n/o.go", "a/m.go", "b.go"} {
+		fs = append(fs, NoteFileNotes{Addr: model.FileAddress{Path: p}})
+	}
+	sortNoteFiles(fs)
+	var got []string
+	for _, f := range fs {
+		got = append(got, f.Addr.Path)
+	}
+	want := []string{"b.go", "z.go", "a/m.go", "a/p.go", "a/n/o.go"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("order = %v, want %v", got, want)
 	}
 }
