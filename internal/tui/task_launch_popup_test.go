@@ -215,3 +215,13 @@ func TestCommandProgram(t *testing.T) {
 		}
 	}
 }
+
+func TestLaunchApprovalShowsOneHint(t *testing.T) {
+	m := launchTestModel(t)
+	m, _ = readyLaunch(t, m, reviewLaunch())
+	m, _ = updateKey(m, "enter")
+	p := layerOf[*taskLaunchPopup](m)
+	if got := strings.Count(p.render(m, ""), "[esc]"); got != 1 {
+		t.Fatalf("approval box shows %d esc hints, want 1", got)
+	}
+}

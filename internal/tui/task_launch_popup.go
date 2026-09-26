@@ -468,8 +468,8 @@ func (p *taskLaunchPopup) render(m Model, below string) string {
 				shown = r
 			}
 		}
-		lines = []string{truncate(i18n.T("Run this command?  (%s)", row.tc.Name), textW), "", approvalBoxView(shown, textW),
-			"", i18n.T("[enter] approve and run  [esc] back")}
+		// approvalBoxView carries its own [enter] run / [esc] hint (esc goes back to the rows).
+		lines = []string{truncate(i18n.T("Run this command?  (%s)", row.tc.Name), textW), "", approvalBoxView(shown, textW)}
 	default:
 		lines = p.chooseLines(textW, s)
 	}
