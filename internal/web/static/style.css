@@ -68,7 +68,8 @@ body.resizing { cursor: col-resize; user-select: none; }
    click inside), so the wheel, space and the page keys scroll the content the
    reader is looking at — never the file row or the button the mouse left the
    focus on. No ring: the .focused inset bar / the overlay border say enough. */
-#diff-pane:focus, #blame-body:focus, #viewer-body:focus { outline: none; }
+#diff-pane:focus, #blame-body:focus { outline: none; }
+#viewer-body:focus { outline: none; }
 /* flex column so the quick-filter bar SHRINKS the scroll area instead of
    pushing its last row under the pane edge (the load-more hint was clipped) */
 #commits-pane { overflow: hidden; display: flex; flex-direction: column; }
@@ -241,8 +242,8 @@ mark.r { background: var(--span-add); color: inherit; }
    rule on table.diff alone paints nothing in blame. A hit wins over the
    intraline mark and the token colour it rides on; the current one is
    brighter and outlined so it reads at a glance among many. */
-table.diff .hit, #blame-body .hit, #viewer-body .hit, #help-body .hit { background: var(--hit-bg); color: inherit; }
-table.diff .hit.cur, #blame-body .hit.cur, #viewer-body .hit.cur, #help-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
+table.diff .hit, #blame-body .hit, #help-body .hit { background: var(--hit-bg); color: inherit; }
+table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }
 .notice { padding: 12px; color: var(--dim); }
 #foot { display: flex; gap: 14px; padding: 4px 12px; color: var(--dim); border-top: 1px solid var(--border); background: var(--bg-alt); white-space: nowrap; overflow: hidden; }
 #foot button { background: none; border: none; color: inherit; font: inherit; padding: 0; cursor: pointer; }
@@ -1618,3 +1619,5 @@ li.symhead b { color: var(--fg); font-weight: normal; overflow: hidden; text-ove
 body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 .vno { flex: none; width: 4em; text-align: right; color: var(--dim); padding-right: 10px; }
 .vtext { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+#viewer-body .hit { background: var(--hit-bg); color: inherit; }
+#viewer-body .hit.cur { background: var(--hit-cur-bg); outline: 1px solid var(--accent); outline-offset: -1px; }

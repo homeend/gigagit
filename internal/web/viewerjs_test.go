@@ -97,4 +97,12 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", `label: "view file"`, "the row is named view file"},
 	{"viewer.js", "registerHelp(", "the ? overlay lists the viewer"},
 	{"files.js", "deleted: ", "a file with no bytes offers no view file row"},
+	// Task 7: landing.
+	{"live.js", `s.hint_kind === "view"`, "a content navigate lands in the viewer"},
+	{"live.js", "openViewer(", "the steered landing opens the viewer"},
+	{"live.js", "/api/link-command", "a pasted gg:// link resolves on the server"},
+	{"commits.js", "gotoLink(", "# accepts a pasted gg:// link"},
+	// The # keystroke itself must not land in the prompt it opens: the field
+	// read "#gg://…" and a pasted link went to the rev resolver (a 404).
+	{"keys.js", "} else if (e.key === \"#\") {\n    e.preventDefault();", "# must not type itself into the goto prompt"},
 }

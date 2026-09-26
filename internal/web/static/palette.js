@@ -57,7 +57,7 @@ function paletteCommands() {
     { label: "review working changes (AI)…", detail: "", run: () => startReview("working", "") },
     { label: "review this branch (AI)…", detail: "", run: () => startReview("branch", "") },
     { label: "undo last commit", detail: "", run: () => undoLastCommit() },
-    { label: "goto commit…", detail: "#", run: () => gotoCommitPrompt() },
+    { label: "goto commit or link…", detail: "#", run: () => gotoCommitPrompt() },
     { label: "filter commits…", detail: "/", run: () => openCommitFilter() },
     { label: "refresh", detail: "r", run: () => manualRefresh() },
     { label: "switch repo…", detail: "", run: null }, // drills into repo mode (runPaletteRow)

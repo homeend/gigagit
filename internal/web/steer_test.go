@@ -623,3 +623,13 @@ func TestToSteerWireRefusesOpenFilesVerbs(t *testing.T) {
 		}
 	}
 }
+
+// gg open --web <content link> starts the page at the viewer: the start-at
+// takes the content wire (plan 5a lifted the refusal).
+func TestStartAtCarriesAContentLink(t *testing.T) {
+	t.Parallel()
+	s := New(domain.Open(newRepoDir(t, 1)))
+	if err := s.setStartAt(steer.Command{Cmd: "navigate", File: "f.txt", HintKind: "view", HintID: "content", Line: &steer.Line{No: 2}}); err != nil {
+		t.Fatalf("setStartAt refused a content link: %v", err)
+	}
+}
