@@ -82,6 +82,9 @@ func (m Model) onTasksChanged() (Model, tea.Cmd) {
 			cmds = append(cmds, c)
 		}
 	}
+	if p := layerOf[*sessionsPopup](m); p != nil && !p.quitMode {
+		p.hist = domain.Tasks().History() // read here, never per frame
+	}
 	if err := domain.Tasks().TakeStoreProblem(); err != nil {
 		var c tea.Cmd
 		m, c = m.stickyNotice(i18n.T("AI task history could not be saved (%s) — this session keeps it in memory", err.Error()))

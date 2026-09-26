@@ -124,15 +124,18 @@ func (m Model) applyCommitMessage(info domain.TaskInfo) (Model, tea.Cmd) {
 		p.offer, p.offerFrom = info.Result, info.Agent
 		return m, nil
 	}
-	m.pendingCommitMsg[filepath.Clean(info.Worktree)] = pendingMessage{text: info.Result, from: info.Agent}
+	m.pendingCommitMsg[pendingKey(info.Worktree)] = pendingMessage{text: info.Result, from: info.Agent}
 	return m.stickyNotice(i18n.T("commit message from %s ready — press c", info.Agent))
 }
+
+// pendingKey is a worktree's key in Model.pendingCommitMsg.
+func pendingKey(worktree string) string { return filepath.Clean(worktree) }
 
 // openCommitBox opens the commit popup, filled from this worktree's pending
 // message when one waits.
 func (m Model) openCommitBox() Model {
 	p := &commitPopup{}
-	key := filepath.Clean(m.currentWorktree)
+	key := pendingKey(m.currentWorktree)
 	if pm, ok := m.pendingCommitMsg[key]; ok && m.currentWorktree != "" {
 		delete(m.pendingCommitMsg, key)
 		p.fill(pm.text)
