@@ -54,7 +54,8 @@ type conflictProcess struct {
 	popupMax                        // ctrl+t maximizes the file list (fitted to its paths)
 	hscroll    int                  // modeScroll horizontal offset
 
-	toolChoices []config.ToolCommand // picker rows while confToolPick
+	toolChoices []config.ToolCommand // picker rows run in place (mergetools; whole-op commands asking <user:…> input)
+	toolAgents  []exttool.Category   // picker rows after toolChoices: an AI task kind, through the launch dialog
 	toolSel     int
 	toolFill    *templateFill   // <user:…> collection while confToolFill
 	pending     *pendingToolRun // resolved run while confToolApprove/executing (Task 7)
@@ -198,21 +199,16 @@ func (p *conflictProcess) updateListing(m Model, msg tea.KeyMsg) (Model, tea.Cmd
 		p.st = confWorking // loading the file; the picker shows when it arrives
 		return m, m.loadConflictFileCmd(f.Path)
 	case "t": // run an external tool on the conflicts
-		if m.reviewRunning {
-			m.statusMsg = i18n.T("a review is in progress — wait for it to finish")
-			return m, nil
-		}
 		var focused *model.FileStatus
 		if p.sel >= 0 && p.sel < len(p.files) {
 			focused = &p.files[p.sel]
 		}
-		choices := conflictToolChoices(m.toolCommands("conflict"), p.src.Op, focused)
-		choices = append(choices, completeToolChoices(m.toolCommands(string(exttool.CatConflictComplete)), p.src.Op)...)
-		if len(choices) == 0 {
+		choices, agents := m.conflictPickerRows(p.src.Op, focused)
+		if len(choices)+len(agents) == 0 {
 			m.statusMsg = i18n.T("no external tools configured — Settings (,) → External tools")
 			return m, nil
 		}
-		p.toolChoices, p.toolSel = choices, 0
+		p.toolChoices, p.toolAgents, p.toolSel = choices, agents, 0
 		p.st = confToolPick
 		return m, nil
 	}
@@ -275,7 +271,7 @@ func (p *conflictProcess) updateToolPick(m Model, msg tea.KeyMsg) (Model, tea.Cm
 			p.toolSel--
 		}
 	case "down", "j":
-		if p.toolSel < len(p.toolChoices)-1 {
+		if p.toolSel < len(p.toolChoices)+len(p.toolAgents)-1 {
 			p.toolSel++
 		}
 	case "enter":
@@ -288,6 +284,13 @@ func (p *conflictProcess) updateToolPick(m Model, msg tea.KeyMsg) (Model, tea.Cm
 // tokens collects them first; a per-file command materializes the quartet
 // asynchronously; everything else goes straight to the approval gate.
 func (p *conflictProcess) startToolRun(m Model) (Model, tea.Cmd) {
+	if a := p.toolSel - len(p.toolChoices); a >= 0 && a < len(p.toolAgents) {
+		// The process preempts the layer stack for keys: leave it first; esc
+		// in the dialog comes back (cancelTaskLaunch).
+		op := p.src.Op
+		m.proc = nil
+		return m.openTaskLaunch(taskLaunch{kind: p.toolAgents[a], whenOp: op})
+	}
 	if p.toolSel < 0 || p.toolSel >= len(p.toolChoices) {
 		return m, nil
 	}
@@ -570,7 +573,7 @@ func (p *conflictProcess) render(m Model, below string) string {
 	case confReporting:
 		return overlayCenter(bg, conflictMsgBox(m, i18n.T("Resolve failed:")+"\n\n"+p.errMsg+"\n\n"+i18n.T("[any key] back to the list")), w, h)
 	case confToolPick:
-		return overlayCenter(bg, conflictToolPickBox(m, p.toolChoices, p.toolSel), w, h)
+		return overlayCenter(bg, conflictToolPickBox(m, p.toolChoices, p.toolAgents, p.toolSel), w, h)
 	case confToolFill:
 		var b strings.Builder
 		b.WriteString(i18n.T("Tool inputs") + "\n\n")
@@ -822,7 +825,7 @@ func conflictHints(files []model.FileStatus, sel int, inProgress string, nTools 
 
 // conflictToolPickBox draws the external-tool picker: one row per command,
 // the command's first line dimmed beneath the selection hints.
-func conflictToolPickBox(m Model, choices []config.ToolCommand, sel int) string {
+func conflictToolPickBox(m Model, choices []config.ToolCommand, agents []exttool.Category, sel int) string {
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
 	textW := popupTextWidth(inner)
@@ -839,6 +842,17 @@ func conflictToolPickBox(m Model, choices []config.ToolCommand, sel int) string 
 			label += "  " + i18n.T("(this file)")
 		}
 		b.WriteString(st.Render(truncate(prefix+label, textW)) + "\n")
+	}
+	for i, k := range agents {
+		prefix, rowSt := "  ", lipgloss.NewStyle()
+		if len(choices)+i == sel {
+			prefix, rowSt = "> ", sty.selectedRow
+		}
+		label := i18n.T("Resolve with an agent…")
+		if k == exttool.CatConflictComplete {
+			label = i18n.T("Resolve & complete with an agent…")
+		}
+		b.WriteString(rowSt.Render(truncate(prefix+label, textW)) + "\n")
 	}
 	b.WriteString("\n" + i18n.T("[↑/↓] select  [enter] run  [esc] back"))
 	return popupBox(inner, b.String())

@@ -64,6 +64,7 @@ func Run(svc *domain.Service, recordPath string, at model.Link) (string, error) 
 	// dir); loadBranchFilterSlots is a no-op until it does, and notify.go's
 	// applyRepoHealth runs it then.
 	m = m.applyBranchFilterConfig()
+	m, _ = m.applyTasksConfig() // a warning comes back with configReadyMsg
 	m = m.initSnapshotTarget()
 	// The inbox is keyed by worktree under the session dir the snapshot just
 	// resolved; the watcher itself starts from Init().
@@ -93,6 +94,7 @@ func Run(svc *domain.Service, recordPath string, at model.Link) (string, error) 
 	// Safety net: whatever ended the program (a confirmed quit, a panic
 	// recovered by Run, a killed terminal), no agent outlives gg.
 	killCtx, killCancel := context.WithTimeout(context.Background(), killAllGrace)
+	domain.Tasks().KillAll(killCtx)
 	domain.Sessions().KillAll(killCtx)
 	killCancel()
 	if fm, ok := final.(Model); ok {

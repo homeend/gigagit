@@ -217,3 +217,38 @@ func (s *Service) PrepareTask(ctx context.Context, op engine.CaptureTask) (engin
 	defer res.Release()
 	return op.Prepare(ctx, engine.OpDeps{Repo: s.repo})
 }
+
+// TaskKey is the key a task of kind would get now (the launch dialog's
+// title and wait line) — the same computation the kind builders use.
+// target is read only for a review.
+func (s *Service) TaskKey(ctx context.Context, kind exttool.Category, target ReviewTarget) (string, error) {
+	top, err := s.TopLevel(ctx)
+	if err != nil {
+		return "", err
+	}
+	if kind == exttool.CatReview {
+		return ReviewKey(top, target), nil
+	}
+	head, err := s.RevParse(ctx, "HEAD")
+	if err != nil {
+		return "", err
+	}
+	switch kind {
+	case exttool.CatCommitMessage:
+		return CommitMessageKey(top, head), nil
+	case exttool.CatConflict, exttool.CatConflictComplete:
+		st, err := s.Status(ctx)
+		if err != nil {
+			return "", err
+		}
+		cs := s.Conflict(ctx, st)
+		if cs.Op == "" {
+			return "", errors.New("no paused operation to resolve")
+		}
+		if kind == exttool.CatConflictComplete {
+			return CompleteKey(top, cs.Op, head), nil
+		}
+		return ConflictKey(top, cs.Op, head), nil
+	}
+	return "", fmt.Errorf("no task kind %q", kind)
+}

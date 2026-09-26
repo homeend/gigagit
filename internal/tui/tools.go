@@ -35,19 +35,6 @@ func (m Model) toolCommands(category string) []config.ToolCommand {
 	return out
 }
 
-// laneToolCommands is toolCommands minus interactive rows: the headless
-// commit-message and review lanes cannot run a command that waits for a
-// human. Plan 3 routes interactive rows through the task launch dialog.
-func (m Model) laneToolCommands(category string) []config.ToolCommand {
-	var out []config.ToolCommand
-	for _, tc := range m.toolCommands(category) {
-		if tc.Mode != string(exttool.ModeInteractive) {
-			out = append(out, tc)
-		}
-	}
-	return out
-}
-
 // toolUsable is the full usability check for one block.
 func (m Model) toolUsable(tc config.ToolCommand) error {
 	if err := config.ValidateToolCommand(tc); err != nil {
@@ -111,4 +98,36 @@ type pendingToolRun struct {
 	merged   string   // per-file: absolute worktree path of the file
 
 	messageFile string // conflict_complete: the overview file ($GG_MESSAGE_FILE); kept out of cleanup — on success it backs the report viewer
+}
+
+// conflictPickerRows splits the conflict window's t picker: commands run in
+// place (per-file mergetools, and whole-operation commands that ask for
+// <user:…> input, which the launch dialog cannot collect) and the AI task
+// kinds offered through the launch dialog — one row per kind that has a
+// runnable agent for the paused op. A kind needs a paused op.
+func (m Model) conflictPickerRows(op string, focused *model.FileStatus) ([]config.ToolCommand, []exttool.Category) {
+	inPlace := func(tc config.ToolCommand) bool {
+		f := newTemplateFill(tc.Command)
+		return tc.PerFile || f.needsInput()
+	}
+	var rows []config.ToolCommand
+	for _, tc := range conflictToolChoices(m.toolCommands(string(exttool.CatConflict)), op, focused) {
+		if inPlace(tc) {
+			rows = append(rows, tc)
+		}
+	}
+	for _, tc := range completeToolChoices(m.toolCommands(string(exttool.CatConflictComplete)), op) {
+		if inPlace(tc) {
+			rows = append(rows, tc)
+		}
+	}
+	var agents []exttool.Category
+	if op != "" {
+		for _, k := range []exttool.Category{exttool.CatConflict, exttool.CatConflictComplete} {
+			if len(m.launchChoices(taskLaunch{kind: k, whenOp: op})) > 0 {
+				agents = append(agents, k)
+			}
+		}
+	}
+	return rows, agents
 }

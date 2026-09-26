@@ -25,6 +25,9 @@ type reviewView struct {
 	mode    dispMode // long-line layout: cutoff / wrap / scroll (z cycles)
 	hscroll int      // modeScroll horizontal offset (columns); meaningful only in modeScroll
 
+	copyText string                       // non-empty: y copies it (an AI task's result)
+	apply    func(Model) (Model, tea.Cmd) // non-nil: a applies it (a commit message)
+
 	typing bool   // true while a '/' search query is being typed
 	query  string // last committed search substring (case-insensitive)
 }
@@ -124,7 +127,17 @@ func (r *reviewView) render(m Model, _ string) string {
 	r.clampScroll(body, len(dl))
 
 	header := truncate(r.title, w)
-	hint := truncate(i18n.T("[↑↓] scroll  [pgup/pgdn] page  [ctrl+w] wrap  [e] edit  [/] search  [esc] close"), w)
+	hintText := i18n.T("[↑↓] scroll  [pgup/pgdn] page  [ctrl+w] wrap  [e] edit  [/] search  [esc] close")
+	if r.path == "" {
+		hintText = i18n.T("[↑↓] scroll  [pgup/pgdn] page  [ctrl+w] wrap  [/] search  [esc] close")
+	}
+	if r.copyText != "" {
+		hintText = i18n.T("[y] copy") + "  " + hintText
+	}
+	if r.apply != nil {
+		hintText = i18n.T("[a] apply") + "  " + hintText
+	}
+	hint := truncate(hintText, w)
 	if r.typing {
 		hint = truncate("/"+r.query+"█", w)
 	} else if r.query != "" {
@@ -187,9 +200,20 @@ func (r *reviewView) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "esc":
 		return m.popLayer(), nil
 	case "e": // open the report file in $EDITOR (read-only view, like history/blame)
+		if r.path == "" {
+			return m, nil // a result shown from memory has no file
+		}
 		return m, m.openInEditorCmd(filepath.Base(r.path), func(ctx context.Context) ([]byte, error) {
 			return os.ReadFile(r.path)
 		})
+	case "y":
+		if r.copyText != "" {
+			return m, m.copyToClipboardCmd(i18n.T("copied"), r.copyText)
+		}
+	case "a":
+		if r.apply != nil {
+			return r.apply(m)
+		}
 	case "/":
 		r.typing = true
 		r.query = ""

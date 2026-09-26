@@ -131,6 +131,12 @@ func (s *Service) ReviewReportNotes(ctx context.Context, target ReviewTarget, re
 	return ReviewResult{Path: path, Content: report, Range: target.Range, Label: label}, nil
 }
 
+// SaveReviewReport persists a review produced outside ReviewReport (an AI
+// task's result) where ReviewReport keeps its reports, and returns the path.
+func (s *Service) SaveReviewReport(ctx context.Context, label, content string, now time.Time) (string, error) {
+	return s.writeReviewReport(ctx, label, content, now)
+}
+
 // writeReviewReport persists a report under a date-foldered, human-readable
 // path: <state>/gg/reviews/<repoKey>/<YYYY-MM-DD>/<HH-MM>-<label>.md, where
 // label is the target's DisplayLabel (branch name / "<short> <subject>" / range

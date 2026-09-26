@@ -73,7 +73,7 @@ func TestBuildToolRunCompleteCreatesOverviewFile(t *testing.T) {
 	cleanupToolTemp(t)
 	tc := config.ToolCommand{Category: "conflict_complete", Name: "Agent (yolo)", Mode: "terminal", Command: "agent"}
 	m, p := conflictModelWithTools(t, tc)
-	m, _ = p.update(m, keyRunes("t"))
+	m = seedToolPick(m, p)
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter}) // pick the only row
 	if p.pending == nil {
 		t.Fatal("want a pending run")
@@ -191,8 +191,8 @@ func TestConflictTKeyOpensPicker(t *testing.T) {
 	if p.st != confToolPick {
 		t.Fatalf("state = %v, want confToolPick", p.st)
 	}
-	if len(p.toolChoices) != 1 || p.toolChoices[0].Name != "Agent" {
-		t.Errorf("choices = %+v", p.toolChoices)
+	if len(p.toolChoices) != 0 || len(p.toolAgents) != 1 {
+		t.Errorf("a whole-op agent is a launch-dialog row: choices=%+v agents=%v", p.toolChoices, p.toolAgents)
 	}
 	// esc returns to the list.
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEsc})
@@ -239,7 +239,7 @@ func TestToolPickEnterResolvesAndAsksApproval(t *testing.T) {
 	m, p := conflictModelWithTools(t,
 		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: `agent "<op> <conflicted-files>"`})
 	m.currentWorktree = "/work/repo"
-	m, _ = p.update(m, keyRunes("t"))
+	m = seedToolPick(m, p)
 	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if p.st != confToolApprove {
 		t.Fatalf("state = %v, want confToolApprove (repo-level command needs no quartet)", p.st)
@@ -278,7 +278,7 @@ func TestToolApproveEnterReturnsExecCmd(t *testing.T) {
 	m, p := conflictModelWithTools(t,
 		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "true"})
 	cleanupToolTemp(t) // the approve-enter below eagerly writes a real gg-context-* file and a gg-tool-* script
-	m, _ = p.update(m, keyRunes("t"))
+	m = seedToolPick(m, p)
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter}) // → approve
 	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
@@ -300,7 +300,7 @@ func TestToolApprovedFastPathSkipsGate(t *testing.T) {
 	if err := m.promptStore.ApproveToolCommand(m.toolRepoKey(), toolCommandHash(tc.Command)); err != nil {
 		t.Fatal(err)
 	}
-	m, _ = p.update(m, keyRunes("t"))
+	m = seedToolPick(m, p)
 	m, cmd := p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if p.st == confToolApprove {
 		t.Fatalf("pre-approved command must skip the gate, got state %v", p.st)
@@ -316,7 +316,7 @@ func TestToolUserFillStepPrecedesApproval(t *testing.T) {
 	m, p := conflictModelWithTools(t,
 		config.ToolCommand{Category: "conflict", Name: "Agent", Mode: "terminal", Command: "agent <user:hint>"})
 	cleanupToolTemp(t) // buildToolRun (after the fill below) eagerly writes a real gg-context-* file (and, once approved, a gg-tool-* script)
-	m, _ = p.update(m, keyRunes("t"))
+	m = seedToolPick(m, p)
 	m, _ = p.update(m, tea.KeyMsg{Type: tea.KeyEnter})
 	if p.st != confToolFill || p.toolFill == nil {
 		t.Fatalf("state = %v, want confToolFill", p.st)
@@ -452,32 +452,12 @@ func TestToolFinishedErrorNamesTheTool(t *testing.T) {
 	}
 }
 
-func TestConflictTKeyIncludesCompleteRows(t *testing.T) {
-	t.Parallel()
-	cmds := []config.ToolCommand{
-		{Category: "conflict", Name: "Fix", Mode: "terminal", Command: "helper"},
-		{Category: "conflict_complete", Name: "Finish (yolo)", Mode: "terminal", Command: "agent"},
-	}
-	m, p := conflictModelWithTools(t, cmds...)
-	m, _ = p.update(m, keyRunes("t"))
-	if p.st != confToolPick {
-		t.Fatalf("st = %v, want confToolPick", p.st)
-	}
-	if len(p.toolChoices) != 2 || p.toolChoices[1].Name != "Finish (yolo)" {
-		t.Fatalf("want [Fix, Finish (yolo)], got %v", p.toolChoices)
-	}
-}
-
-func TestConflictTKeyCompleteRowsNeedPausedOp(t *testing.T) {
-	t.Parallel()
-	cmds := []config.ToolCommand{
-		{Category: "conflict", Name: "Fix", Mode: "terminal", Command: "helper"},
-		{Category: "conflict_complete", Name: "Finish (yolo)", Mode: "terminal", Command: "agent"},
-	}
-	m, p := conflictModelWithTools(t, cmds...)
-	p.src.Op = "" // conflicts exist but no paused sequencer op — nothing to complete
-	m, _ = p.update(m, keyRunes("t"))
-	if len(p.toolChoices) != 1 || p.toolChoices[0].Name != "Fix" {
-		t.Fatalf("no paused op: want only the conflict row, got %v", p.toolChoices)
-	}
+// seedToolPick opens the t picker on every configured conflict and
+// conflict_complete command as an in-place row — the path whole-operation
+// commands asking <user:…> input still take — so the fill / approval / run
+// machinery is testable with plain commands.
+func seedToolPick(m Model, p *conflictProcess) Model {
+	p.toolChoices, p.toolAgents, p.toolSel = m.cfg.Tools.Command, nil, 0
+	p.st = confToolPick
+	return m
 }

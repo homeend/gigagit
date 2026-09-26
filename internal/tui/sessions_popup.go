@@ -26,6 +26,12 @@ type sessionsPopup struct {
 	hscroll     int
 	confirmKill domain.SessionID // a running session asks once before k kills it
 
+	tab           int                 // tabSessions | tabTasks (task_tab.go)
+	taskRows      []taskRow           // the Headless tab's rows
+	taskSel       int                 // its cursor
+	hist          []domain.TaskRecord // the task history, read on open and on each task change (disk I/O: never per frame)
+	confirmCancel domain.TaskID       // a live task asks once before k cancels it
+
 	rows  []string           // rendered rows, headers included
 	ids   []domain.SessionID // parallel to rows; "" = not a session row
 	files []*openFile        // parallel to rows; nil = not an open-file row
@@ -81,11 +87,20 @@ func sessionStateText(info domain.SessionInfo) string {
 // openSessionsPopup opens the ctrl+\ popup; with no sessions (and not in
 // quit mode) it only explains how to start one.
 func (m Model) openSessionsPopup(quitMode bool) (Model, tea.Cmd) {
-	if len(domain.Sessions().List()) == 0 && !quitMode && len(m.openFiles.list(m.currentWorktree)) == 0 {
+	var hist []domain.TaskRecord
+	if !quitMode {
+		hist = domain.Tasks().History()
+	}
+	if len(domain.Sessions().List()) == 0 && !quitMode && len(m.openFiles.list(m.currentWorktree)) == 0 &&
+		len(domain.Tasks().List()) == 0 && len(hist) == 0 {
 		m.statusMsg = i18n.T("no agent sessions — start one from a worktree's . menu")
 		return m, nil
 	}
-	p := &sessionsPopup{quitMode: quitMode}
+	p := &sessionsPopup{quitMode: quitMode, hist: hist}
+	if domain.Sessions().LiveCount() == 0 && (quitMode || len(m.openFiles.list(m.currentWorktree)) == 0) &&
+		(quitMode || len(domain.Sessions().List()) == 0) {
+		p.tab = tabTasks // only tasks to show (or, quitting, only tasks alive)
+	}
 	p.refresh(m)
 	p.sel = p.nextSelectable(-1, +1)
 	return m.pushLayer(p), nil
@@ -94,6 +109,14 @@ func (m Model) openSessionsPopup(quitMode bool) (Model, tea.Cmd) {
 // refresh re-derives the rows from the live session list and — outside quit
 // mode, which is only about ending sessions — the worktree's open files.
 func (p *sessionsPopup) refresh(m Model) {
+	var removed map[domain.TaskID]bool
+	if m.taskTrack != nil {
+		removed = m.taskTrack.removed
+	}
+	p.taskRows = taskRows(domain.Tasks().List(), p.hist, p.query, removed)
+	if p.taskSel >= len(p.taskRows) {
+		p.taskSel = max(len(p.taskRows)-1, 0)
+	}
 	p.rows, p.ids = sessionsPopupRows(domain.Sessions().List(), p.query)
 	p.files = make([]*openFile, len(p.rows))
 	if !p.quitMode {
@@ -196,6 +219,24 @@ func (p *sessionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		p.refresh(m)
 		return m, nil
 	}
+	if key == "tab" && !p.quitMode {
+		p.tab = 1 - p.tab
+		p.confirmKill, p.confirmCancel = "", ""
+		return m, nil
+	}
+	if p.tab == tabTasks && !p.quitMode {
+		switch key {
+		case "esc":
+			return m.popLayer(), nil
+		case "/":
+			p.typing = true
+			return m, nil
+		case "z", "shift+left", "shift+right":
+			// shared with the sessions tab below
+		default:
+			return p.updateTasks(m, key)
+		}
+	}
 	if key != "k" && key != "y" {
 		p.confirmKill = ""
 	}
@@ -279,7 +320,11 @@ func (p *sessionsPopup) render(m Model, below string) string {
 		}
 	}
 	if p.quitMode {
-		title = i18n.T("agent sessions still running: %d — quit gg?", domain.Sessions().LiveCount())
+		title = i18n.T("agents and AI tasks still running: %d — quit gg?", liveWork())
+	} else if p.tab == tabTasks {
+		title = i18n.T("AI tasks") + "  " + i18n.T("[tab] sessions")
+	} else {
+		title += "  " + i18n.T("[tab] AI tasks")
 	}
 	if p.typing || p.query != "" {
 		title += "  /" + p.query
@@ -289,6 +334,16 @@ func (p *sessionsPopup) render(m Model, below string) string {
 	}
 	s := st()
 	var body []string
+	if p.tab == tabTasks {
+		body = p.renderTaskRows(m, textW, h)
+		lines := append([]string{title, ""}, body...)
+		if p.quitMode {
+			lines = append(lines, "", i18n.T("[Q] kill all and quit  [esc] cancel"))
+		} else {
+			lines = append(lines, "", i18n.T("[enter] result/console  [k k] cancel  [x] remove  [/] filter  [tab] sessions  [esc] close"))
+		}
+		return overlayCenter(clipToHeight(below, h), popupBox(inner, strings.Join(lines, "\n")), w, h)
+	}
 	if len(p.rows) == 0 {
 		body = []string{padRight(i18n.T("  (no agent sessions)"), textW)}
 	} else {

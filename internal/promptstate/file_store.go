@@ -26,6 +26,8 @@ type records struct {
 	BranchFilter map[string]branchFilterRecord `toml:"branch_filter,omitempty"`
 	// StackedDiff is the TUI diff view's stacked mode (see stacked.go).
 	StackedDiff bool `toml:"tui_stacked_diff,omitempty"`
+	// TaskLaunch is the AI-task launch dialog's last choice per kind.
+	TaskLaunch map[string]TaskLaunch `toml:"task_launch,omitempty"`
 }
 
 // read loads the file; a missing or malformed file reads as empty (UX memory

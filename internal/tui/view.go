@@ -459,11 +459,11 @@ func (m Model) renderInterface() string {
 		add(m.statusMsg)
 		add(notice)
 		add(m.noticeSegment())
-		add(m.reviewSegment())
+		add(m.taskSegment())
 		add(markHint)
 	} else {
 		add(m.noticeSegment())
-		add(m.reviewSegment())
+		add(m.taskSegment())
 		add(markHint)
 		add(notice)
 		add(m.commitBranchHint())
@@ -1152,6 +1152,14 @@ func (m Model) remoteRows() []string {
 func (m Model) worktreeRows(ents []wtEntry) []string {
 	out := make([]string, 0, len(ents))
 	for _, e := range ents {
+		if e.task != "" {
+			if info, ok := domain.Tasks().Get(e.task); ok {
+				out = append(out, taskSubRowText(info))
+			} else {
+				out = append(out, "  └ ?")
+			}
+			continue
+		}
 		if e.sess != "" {
 			if s, ok := domain.Sessions().Get(e.sess); ok {
 				out = append(out, sessionRowText(s.Info()))
@@ -1243,21 +1251,15 @@ func fileGlyph(p panel, f model.FileStatus) byte {
 // commitBranchHint returns "⎇ <branch> · # <id>" for the selected commit when
 // the Commits panel is focused, else "". The branch is the ref the commit was
 // reached from in the feed walk (model.Commit.Source, via `git log --source`/%S);
-// Blink = style alternation between these two on m.reviewBlink (the review runs
-// in the background, not an error — a neutral cyan, not the notice red).
-// reviewSegment renders the blinking "a review is running" status indicator
-// while a background review is in flight. Style alternation on m.reviewBlink
-// (the noticeSegment idiom), never terminal-native blink. "" when no review is
-// running (or the conflict process owns the screen).
-func (m Model) reviewSegment() string {
-	if !m.reviewRunning || m.proc != nil {
+// taskSegment is the status bar's "AI tasks are running" indicator: live
+// (queued or running) tasks of every mode, ctrl+\ lists them. "" when none
+// (or the conflict process owns the screen).
+func (m Model) taskSegment() string {
+	n := domain.Tasks().Live()
+	if n == 0 || m.proc != nil {
 		return ""
 	}
-	seg := i18n.T("⟳ reviewing %s…", m.reviewRunningLabel)
-	if m.reviewBlink {
-		return st().reviewHot.Render(seg)
-	}
-	return st().reviewDim.Render(seg)
+	return st().reviewDim.Render(i18n.T("⟳ %d AI task(s)", n))
 }
 
 // commitBranchHint names the selected commit: its branch, short id and author.

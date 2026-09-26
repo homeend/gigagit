@@ -6,6 +6,49 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## AI tasks in the TUI: launch dialog, Headless tab, ◆ rows
+
+### Added
+
+- **Launch dialog for every AI action.** `ctrl+g` in the commit box, the
+  Review … rows and the conflict window's new "Resolve with an agent…" /
+  "Resolve & complete with an agent…" rows open one dialog, titled with the
+  task key (`review — a1b2c3d..9f8e7d6`). `←/→` picks the agent; `↑/↓` picks
+  the mode and variant: interactive in the background (an agent session, no
+  console), interactive in the foreground (its console opens) or headless
+  (queued, captured). Modes an agent has no command for are greyed; a program
+  not on `PATH` is marked "not found". A wait line says when the task will
+  queue. The last choice per kind is preselected (`enter` repeats it); a new
+  command still asks for approval first. The first open writes the detected
+  agents' safe interactive rows to the global config.
+- **Results as they arrive.** Every result — each `$GG_MESSAGE_FILE` write of
+  an interactive agent, or a headless run's output — is applied once: a
+  commit message fills the open commit box (asking before it replaces text)
+  or waits for the next `c`; a review is saved with the other reports and
+  opens in the viewer; a conflict agent's overview opens and the status
+  reloads. When the target would get in the way (a focused console, the
+  conflict window, another worktree) a notice says `… ready — ctrl+\`.
+- **Headless tab in `ctrl+\`** (`tab` switches): live tasks, then the last
+  50 finished ones with state and age. `enter` shows a result (`y` copies,
+  `a` applies a commit message) or a running agent's console or a failed
+  task's output; `k k` cancels; `x` removes a finished record.
+- **◆ rows under Worktrees** for queued and running headless tasks; `enter`
+  opens the tab on it, `.` cancels it or shows its result. A `⟳ N AI task(s)`
+  status segment replaces the old "reviewing …" blink.
+- **Commit box:** a headless run shows its spinner (`queued…` /
+  `generating…`); `esc` cancels it, `ctrl+b` sends it to the background.
+- `[tasks] max_parallel` is applied (with a one-time warning when out of
+  range), a history-store failure raises one notice, and the quit guard
+  counts AI tasks — `Q` cancels them before ending the sessions.
+
+### Changed
+
+- Reviews and generated commit messages are AI tasks: queued per key and
+  kept running across a repo switch. The numbered tool choosers, the review
+  lane and its "a review is in progress" lock are gone.
+- A cancel while an interactive task is still starting ends it cancelled,
+  not failed.
+
 ## Open files: agent verbs
 
 ### Added

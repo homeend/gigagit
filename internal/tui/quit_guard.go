@@ -24,7 +24,7 @@ func quitFilter(m tea.Model, msg tea.Msg) tea.Msg {
 	if _, ok := msg.(tea.QuitMsg); !ok {
 		return msg
 	}
-	if mm, ok := m.(Model); ok && !mm.quitConfirmed && domain.Sessions().LiveCount() > 0 {
+	if mm, ok := m.(Model); ok && !mm.quitConfirmed && liveWork() > 0 {
 		return quitHeldMsg{}
 	}
 	return msg
@@ -35,7 +35,27 @@ func killAllAndQuitCmd() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), killAllGrace)
 		defer cancel()
+		domain.Tasks().KillAll(ctx) // first: the records say cancelled
 		domain.Sessions().KillAll(ctx)
 		return tea.QuitMsg{}
 	}
+}
+
+// liveWork is what quitting would end: live agent sessions plus live AI
+// tasks without a running session of their own (queued ones, headless ones —
+// an interactive task's session is already counted as a session).
+func liveWork() int {
+	n := domain.Sessions().LiveCount()
+	for _, info := range domain.Tasks().List() {
+		if !info.State.Live() {
+			continue
+		}
+		if info.Session != "" {
+			if s, ok := domain.Sessions().Get(info.Session); ok && s.Info().State == domain.SessionRunning {
+				continue
+			}
+		}
+		n++
+	}
+	return n
 }

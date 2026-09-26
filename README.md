@@ -1163,6 +1163,28 @@ likewise come back through `$GG_MESSAGE_FILE`, fed the diff via a new
 `$GG_REVIEW_DIFF` file (Junie's own `--review` flag can't take a range;
 Kimi's print-mode stdout is a report, not the review).
 
+### AI tasks (launch dialog, Headless tab)
+
+Every AI action — `ctrl+g` in the commit box, the Review … rows, the conflict
+window's "Resolve with an agent…" / "Resolve & complete with an agent…" —
+opens a launch dialog titled with the task key. Pick the agent (`←/→`) and
+how it runs (`↑/↓`): **interactive in the background** (an agent session you
+can open later), **interactive in the foreground** (its console opens), or
+**headless** (queued and captured). An interactive agent keeps running after
+it writes a result, so you can ask for changes: each write of
+`$GG_MESSAGE_FILE` is applied again.
+
+Tasks with the same key run one after another; at most `[tasks]
+max_parallel` (default 3, clamped to 1..10) run at once. `ctrl+\` → `tab`
+lists them — live ones first, then the last 50 finished ones across all
+repos — and ◆ rows under Worktrees show a worktree's queued and running
+headless tasks.
+
+```toml
+[tasks]
+max_parallel = 3
+```
+
 ### Open files (background file viewers)
 
 A file you view — **View file** in a commit's file tree, a pasted `gg://`

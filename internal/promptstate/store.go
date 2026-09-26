@@ -37,4 +37,8 @@ type Store interface {
 	StackedDiff() bool
 	// SetStackedDiff persists it.
 	SetStackedDiff(on bool) error
+	// TaskLaunchChoice returns the AI-task launch dialog's last choice for kind.
+	TaskLaunchChoice(kind string) (TaskLaunch, bool)
+	// SetTaskLaunchChoice persists it.
+	SetTaskLaunchChoice(kind string, c TaskLaunch) error
 }

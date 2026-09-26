@@ -334,3 +334,34 @@ func TestTasksHeadlessConflictWithoutOverviewIsDone(t *testing.T) {
 		t.Fatalf("state = %s (%s), want done", info.State, info.Err)
 	}
 }
+
+// prepBlockOp's Prepare waits for its ctx: a cancel that lands while an
+// interactive task is still preparing.
+type prepBlockOp struct{ entered chan struct{} }
+
+func (prepBlockOp) LockMode() repogate.Mode { return repogate.Read }
+func (o prepBlockOp) Prepare(ctx context.Context, _ engine.OpDeps) (engine.TaskInputs, error) {
+	close(o.entered)
+	<-ctx.Done()
+	return engine.TaskInputs{}, ctx.Err()
+}
+func (prepBlockOp) Collect(engine.TaskInputs, []byte) (engine.Result, error) {
+	return engine.Result{}, nil
+}
+func (prepBlockOp) Run(context.Context, engine.OpDeps) (engine.Result, error) {
+	return engine.Result{}, nil
+}
+
+func TestTasksCancelDuringStartIsCancelled(t *testing.T) {
+	m, svc := newTestTasks(t)
+	op := prepBlockOp{entered: make(chan struct{})}
+	id := m.Submit(TaskSpec{Key: "k", Kind: exttool.CatCommitMessage, Mode: TaskInteractive, Svc: svc, Op: op})
+	<-op.entered
+	if err := m.Cancel(id); err != nil {
+		t.Fatal(err)
+	}
+	info := waitInfo(t, m, id, "ended", func(i TaskInfo) bool { return !i.State.Live() })
+	if info.State != TaskCancelled {
+		t.Fatalf("state = %s, want cancelled (err %q)", info.State, info.Err)
+	}
+}

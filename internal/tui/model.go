@@ -266,12 +266,7 @@ type Model struct {
 	watchGen            int                                              // bumped per (re)build; stale watch msgs are dropped
 	bgCtx               context.Context                                  // context for in-flight background (auto) reads; cancelled when a user op starts
 	bgCancel            context.CancelFunc                               // cancels bgCtx; nil when no background batch is active
-	genCancel           context.CancelFunc                               // cancels an in-flight commit-popup ctrl+g generate run; nil when none is active
-	reviewGen           int                                              // monotonic guard for the review capture lane; bumped on dispatch, cancel, reRoot — a stale/killed result carrying an older gen is dropped (survives a lane being popped and re-pushed, unlike a per-lane counter)
 	reviewCancel        context.CancelFunc                               // cancels an in-flight review run; nil when none is active
-	reviewRunning       bool                                             // a review runs in the background (lane already popped); blocks other external-LLM actions and drives the blinking status indicator
-	reviewRunningLabel  string                                           // scope label for the running-review status segment (e.g. "main..HEAD" / "working changes")
-	reviewBlink         bool                                             // blink phase for the running-review status segment (style alternation, never terminal blink)
 	refreshLastRun      map[refreshItem]time.Time                        // last time each scheduled item fired (background scheduler)
 	refreshDur          map[refreshItem][]time.Duration                  // rolling ring (≤10) of measured read durations per item (Phase C)
 	bgQueue             []refreshItem                                    // FIFO of pending background reads; one drains per tick
@@ -317,6 +312,11 @@ type Model struct {
 	// GG_INBOX (steer_kept.go keeps those inboxes answered). A map, so it
 	// survives the Model value copy.
 	childInbox map[domain.SessionID]string
+	// taskTrack is what this TUI applied/reported of domain.Tasks() (task_track.go).
+	taskTrack *taskTrack
+	// pendingCommitMsg is a commit-message result per worktree that arrived
+	// with no commit box open; the next c opens the box with it.
+	pendingCommitMsg map[string]pendingMessage
 	// keptSteer are the inboxes other than steerDir whose presence gg holds
 	// for a running child (steer_kept.go).
 	keptSteer map[string]bool
@@ -459,6 +459,8 @@ func New(svc *domain.Service) Model {
 		bfMemo:                 &branchFilterMemos{},
 		openFiles:              &openFilesReg{},
 		childInbox:             map[domain.SessionID]string{},
+		taskTrack:              newTaskTrack(),
+		pendingCommitMsg:       map[string]pendingMessage{},
 		keptSteer:              map[string]bool{},
 	}
 	// The stacked-diff pref is machine-global, so it is read once here rather
@@ -471,7 +473,7 @@ func New(svc *domain.Service) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen), waitSessionsCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen), waitSessionsCmd(), waitTasksCmd())
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -573,6 +575,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitSessionCmd(s, msg.id, msg.gen)
 	case sessionsChangedMsg:
 		return m.onSessionsChanged()
+	case tasksChangedMsg:
+		return m.onTasksChanged()
+	case taskLaunchReadyMsg:
+		return m.applyTaskLaunchReady(msg)
+	case taskSubmittedMsg:
+		return m.applyTaskSubmitted(msg)
 	case quitHeldMsg:
 		return m.openSessionsPopup(true)
 	case agentEnsureMsg:
@@ -1476,6 +1484,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// snapshotTargetMsg resolved before this config arrived.
 		var steerCmd tea.Cmd
 		m, steerCmd = m.reconcileSteer()
+		var tasksCmd tea.Cmd
+		m, tasksCmd = m.applyTasksConfig()
+		steerCmd = tea.Batch(steerCmd, tasksCmd)
 		m.repoConfigPath = msg.repoTOML
 		// Apply the persisted Commits render mode ([ui] show_graph): "off" starts
 		// in the flat list, exactly like the . menu's "Show as list".
@@ -1558,6 +1569,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// leftovers replay and the session runs watcher-less.
 			var steerCmd tea.Cmd
 			m, steerCmd = m.reconcileSteer()
+			var tasksCmd tea.Cmd
+			m, tasksCmd = m.applyTasksConfig()
+			steerCmd = tea.Batch(steerCmd, tasksCmd)
 			// Rebind the per-repo Settings write target on the legacy load path —
 			// configReadyMsg only covers app startup. Without this, every Settings
 			// write after a repo switch ("Show graph", "Commit sort", refresh
@@ -2217,7 +2231,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.confirmOp(engine.SmartCheckout{RemoteRef: rb.Name, Local: rb.Branch, Intent: engine.CheckoutStay}, i18n.T("Check out %s?", rb.Branch))
 			}
 			if m.canCommit() {
-				m = m.pushLayer(&commitPopup{})
+				m = m.openCommitBox()
 			}
 		case "C":
 			if m.canAmend() {
@@ -2546,6 +2560,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelWorktrees {
 				if info, ok := m.selectedSession(); ok {
 					return m.openConsole(info.ID)
+				}
+				if info, ok := m.selectedTask(); ok {
+					return m.openSessionsPopupOn(tabTasks, info.ID)
 				}
 			}
 			if m.focus == panelWorktrees && m.canEnterWorktree() {
@@ -3544,29 +3561,18 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m = m.pushLayer(&commitPopup{title: newTextField(title), desc: newTextField(desc), amend: true})
 		return m, nil
 
-	case genMessageMsg:
-		return m.applyGeneratedMessage(msg), nil
 	case genSpinMsg:
 		return m.tickGenSpinner(msg)
 
 	case reviewTargetReadyMsg:
-		if msg.gen != m.reviewGen { // a repo switch (reRoot) during merge-base resolution
+		if msg.svc != m.svc { // a repo switch during merge-base resolution
 			return m, nil
 		}
 		if msg.err != nil {
 			m.statusMsg = i18n.T("review: %s", msg.err.Error())
 			return m, nil
 		}
-		return m.startReviewLane(msg.target)
-	case reviewDoneMsg:
-		return m.applyReviewDone(msg)
-	case reviewBlinkMsg:
-		if !m.reviewRunning || msg.gen != m.reviewGen {
-			return m, nil // run finished / cancelled / superseded: stop re-arming
-		}
-		m.reviewBlink = !m.reviewBlink
-		return m, reviewBlinkCmd(msg.gen)
-
+		return m.startReview(msg.target)
 	case inProgressMsg:
 		if cp, ok := m.proc.(*conflictProcess); ok {
 			cp.inProgress = msg.op
@@ -4483,11 +4489,6 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	m.attention = map[attentionKey][]steerMark{} // the marks referred to the old repo's files
 	m.pendingCheckout = pendingCheckout{}        // a diverged checkout from the old repo must not prompt in the new one
 	m.pendingRemoteTagAdds = nil
-	if m.genCancel != nil { // a stale generate run from the old repo must not fill the new repo's popup
-		m.genCancel()
-		m.genCancel = nil
-	}
-	m = m.cancelReview() // drop any in-flight review run + bump reviewGen so its late result is ignored in the new repo
 	// genGen is intentionally NOT bumped here (unlike pushCheckGen/noticeGen/
 	// gitConfigGen above): a commit popup can't be open across a repo switch
 	// today — while generating it swallows every key but esc, and reRoot's

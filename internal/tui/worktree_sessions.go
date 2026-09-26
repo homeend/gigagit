@@ -2,6 +2,7 @@ package tui
 
 import (
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
@@ -11,7 +12,11 @@ import (
 type wtEntry struct {
 	wt   int
 	sess domain.SessionID
+	task domain.TaskID // a live headless AI task (a ◆ row)
 }
+
+// sub reports a sub-row (an agent session or a ◆ task), not a worktree.
+func (e wtEntry) sub() bool { return e.sess != "" || e.task != "" }
 
 // worktreeEntries is the Worktrees list in display order: each worktree
 // followed by its agent sessions (this repo's only — other repos' sessions
@@ -21,11 +26,17 @@ func (m Model) worktreeEntries() []wtEntry {
 	for _, info := range domain.Sessions().List() {
 		byDir[filepath.Clean(info.Dir)] = append(byDir[filepath.Clean(info.Dir)], info)
 	}
+	tasks := domain.Tasks().List()
 	out := make([]wtEntry, 0, len(m.worktrees))
 	for i, w := range m.worktrees {
 		out = append(out, wtEntry{wt: i})
 		for _, info := range byDir[filepath.Clean(w.Path)] {
 			out = append(out, wtEntry{wt: i, sess: info.ID})
+		}
+		for _, info := range tasks {
+			if info.Mode == domain.TaskHeadless && info.State.Live() && domain.SameCheckout(info.Worktree, w.Path) {
+				out = append(out, wtEntry{wt: i, task: info.ID})
+			}
 		}
 	}
 	return out
@@ -62,4 +73,27 @@ func (m Model) selectedWorktreeEntry() (wtEntry, bool) {
 		return wtEntry{}, false
 	}
 	return ents[idx[sel]], true
+}
+
+// taskSubRowText is "  └ ◆ review a1b2c3d..9f8e7d6  queued": the kind,
+// then the key's target.
+func taskSubRowText(info domain.TaskInfo) string {
+	target := info.Key
+	if _, t, ok := strings.Cut(info.Key, " — "); ok {
+		target = t
+	}
+	state := taskStateLabel(info.State)
+	if info.State != domain.TaskQueued && !info.Started.IsZero() {
+		state += " " + formatElapsed(time.Since(info.Started))
+	}
+	return "  └ ◆ " + taskKindLabel(info.Kind) + " " + target + "  " + state
+}
+
+// selectedTask resolves a ◆ row under the Worktrees cursor.
+func (m Model) selectedTask() (domain.TaskInfo, bool) {
+	e, ok := m.selectedWorktreeEntry()
+	if !ok || e.task == "" {
+		return domain.TaskInfo{}, false
+	}
+	return domain.Tasks().Get(e.task)
 }

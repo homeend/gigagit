@@ -132,3 +132,22 @@ func TestPrepareTaskUnderTheGate(t *testing.T) {
 		t.Fatalf("message file: %v", err)
 	}
 }
+
+func TestTaskKeyMatchesBuilders(t *testing.T) {
+	t.Parallel()
+	_, svc := newRealRepo(t)
+	ctx := context.Background()
+	top, _ := svc.TopLevel(ctx)
+	head, _ := svc.RevParse(ctx, "HEAD")
+	got, err := svc.TaskKey(ctx, exttool.CatCommitMessage, ReviewTarget{})
+	if err != nil || got != CommitMessageKey(top, head) {
+		t.Fatalf("commit key = %q, %v", got, err)
+	}
+	rt := WorkingReviewTarget()
+	if got, _ := svc.TaskKey(ctx, exttool.CatReview, rt); got != ReviewKey(top, rt) {
+		t.Fatalf("review key = %q", got)
+	}
+	if _, err := svc.TaskKey(ctx, exttool.CatConflict, ReviewTarget{}); err == nil {
+		t.Fatal("conflict key without a paused op must fail")
+	}
+}
