@@ -1,12 +1,15 @@
 // viewer.js — the file viewer overlay (open files on the web, plan 5a): one
 // file at one version — the working tree, a commit, a shelf entry — with a
 // line cursor, the in-view search and a . menu. Content links land here.
-import { $, charWidth, elidePath, esc, getJSON } from "./core.js";
-import { closeLayer, mountOverlay, pushLayer, showCtxMenu, topLayer } from "./layers.js";
+import { $, charWidth, elidePath, esc, getJSON, state } from "./core.js";
+import { closeLayer, copyText, mountOverlay, pushLayer, showCtxMenu, topLayer } from "./layers.js";
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
-import { cycleTextMode, renderCell } from "./files.js";
+import { cycleTextMode, openFile, openWorkingTree, renderCell } from "./files.js";
 import { opLine } from "./ops.js";
+import { copyFileLink, copyLink, linkDesc, linkFor } from "./links.js";
+import { openFileBlame, openFileHistory } from "./filehist.js";
+import { openCommitByHash } from "./commits.js";
 
 // --- viewer model (pure; guarded against Go) ---
 function clampLine(n, count) {
@@ -281,9 +284,62 @@ document.addEventListener("keyup", () => {
   if (savedFoot !== null && !(topLayer() && topLayer().id === "viewer") && viewerRoot.classList.contains("hidden")) swapFoot(false);
 });
 
-// openViewerMenu is the viewer's . menu (Task 5 fills it).
+// openViewerMenu is the viewer's . menu (and right-click): the content link
+// and the text of the cursor line, then the file's diff, history and blame at
+// this version. The surfaces it opens replace the viewer — one full-page
+// overlay at a time.
 function openViewerMenu(x, y) {
-  showCtxMenu([], x, y);
+  const line = view.placeholder ? 0 : view.cur;
+  const items = [];
+  const flink = linkFor(state.repo, state.worktree, { path: view.path, state: "unstaged", hint: { kind: "view", id: "content" } }, "new", line);
+  if (flink) items.push({ label: "copy file link" + (line ? " (line " + line + ")" : ""), act: () => copyViewerLink(flink) });
+  if (line && view.lines[line - 1]) items.push({ label: "copy line", act: () => copyText(view.lines[line - 1].text, "line " + line) });
+  items.push({ sep: true });
+  if (view.src === "worktree") items.push({ label: "diff (HEAD ↔ working tree)", act: () => viewerDiffWorktree(view.path) });
+  if (view.src === "commit") items.push({ label: "diff (this commit's change)", act: () => viewerDiffCommit(view.rev, view.path) });
+  if (view.src !== "shelf") {
+    const rev = view.src === "commit" ? view.rev : "";
+    const path = view.path;
+    items.push({ label: "file history", act: () => { closeViewer(); openFileHistory(path, rev); } });
+    items.push({ label: "blame", act: () => { closeViewer(); openFileBlame(path, rev); } });
+  }
+  showCtxMenu(items, x, y);
+}
+
+// copyViewerLink copies the content link: a working-tree version after the
+// shared presence check; a commit or shelf version only when the file on disk
+// holds exactly the lines shown — a content link names the disk.
+async function copyViewerLink(flink) {
+  if (view.src === "worktree") return copyFileLink(view.path, flink);
+  let disk;
+  try {
+    disk = await getJSON("/api/file-content?path=" + encodeURIComponent(view.path));
+  } catch (e) {
+    return opLine("copy failed: " + (e.message || e), true);
+  }
+  if (disk.missing || disk.too_large || !sameLines(disk.lines || [], view.lines)) {
+    return opLine("the file on disk differs from this version — no content link", true);
+  }
+  copyLink(flink, linkDesc("file", view.path, ""));
+}
+
+// viewerDiffWorktree opens the file's working-tree diff the way a click on its
+// row does; a file with no change says so.
+async function viewerDiffWorktree(path) {
+  closeViewer();
+  await openWorkingTree(0);
+  const i = state.statusEntries.findIndex((f) => f.path === path && f.section !== "staged");
+  if (i < 0) return opLine(path + " has no changes in the working tree", false);
+  await openFile(i);
+}
+
+// viewerDiffCommit opens the commit and the file's row in it.
+async function viewerDiffCommit(rev, path) {
+  closeViewer();
+  if (!(await openCommitByHash(rev, rev.slice(0, 8)))) return;
+  const i = state.files.findIndex((f) => f.path === path);
+  if (i < 0) return opLine(path + " is not changed in " + rev.slice(0, 8), false);
+  await openFile(i);
 }
 
 export { closeViewer, openViewer };

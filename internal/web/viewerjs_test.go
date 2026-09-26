@@ -82,4 +82,12 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", `$("foot")`, "the keys go in the bottom bar"},
 	{"viewer.js", "elidePath(", "the title cuts the path in the middle"},
 	{"style.css", "#viewer", "the overlay is styled"},
+	// Task 5: the . menu.
+	{"viewer.js", "copy file link", "the menu copies the content link at the cursor line"},
+	{"viewer.js", "copy line", "the menu copies the cursor line's text"},
+	{"viewer.js", "sameLines(disk", "a commit/shelf version copies a content link only when the disk matches"},
+	{"viewer.js", "openFileHistory(", "the menu opens the file's history"},
+	{"viewer.js", "openFileBlame(", "the menu opens blame"},
+	{"viewer.js", "openCommitByHash(", "a commit version's diff is that commit's change"},
+	{"links.js", "copyFileLink,", "the working-tree presence check is shared, not copied"},
 }
