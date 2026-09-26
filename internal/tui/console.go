@@ -182,7 +182,13 @@ func (m Model) onSessionsChanged() (Model, tea.Cmd) {
 			continue
 		}
 		if m.console != nil && m.console.id == info.ID && m.console.focused {
-			continue // the focused console shows the exit in its own title
+			// Nothing is left to type into: step out as ctrl+] would, so
+			// gg's keys work again without the user asking.
+			m.console.focused = false
+			if m.console.maximized {
+				m.console.maximized = false
+				m = m.syncConsoleSize()
+			}
 		}
 		m.statusMsg = i18n.T("%s in %s exited (%d)", info.Label, shortWorktreeName(info.Dir), info.ExitCode)
 	}

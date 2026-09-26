@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## TUI: the AI tasks tab as a table; consoles step out when their agent exits
+
+### Changed
+
+- **AI tasks tab** is a table — Task · Agent · State · Age under a dim
+  header. A running or queued task counts up (`1m05s`); a finished one shows
+  its date and time and how long ago in its largest unit only
+  (`09-26 14:44 · 3h ago`), so settled rows do not tick.
+- The tab's hint follows the selected row: `[enter]` only when it opens
+  something (a result, a running agent's console, a failure's output — a
+  queued or running headless task has nothing to open), `[k k] cancel` only
+  for a live task, `[x] remove` only for a finished one.
+- `ctrl+\` opens on the tab with the freshest item (the newest session start
+  vs the newest task event).
+- `ctrl+t` in the `ctrl+\` popup fills the screen.
+- A focused agent console steps out by itself when its agent exits (nothing
+  is left to type into) — no `ctrl+]` needed.
+
 ## Open files on the web: the shared list (5b)
 
 ### Added

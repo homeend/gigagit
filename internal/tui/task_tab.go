@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -119,8 +120,8 @@ func taskStateLabel(s domain.TaskState) string {
 	return string(s)
 }
 
-// taskRowText is "key · agent · state · age".
-func taskRowText(r taskRow, now time.Time) string {
+// taskRowCells is a row's table cells: key, agent, state, age.
+func taskRowCells(r taskRow, now time.Time) [4]string {
 	var age string
 	switch {
 	case r.live != nil && r.live.State.Live():
@@ -130,11 +131,36 @@ func taskRowText(r taskRow, now time.Time) string {
 		}
 		age = formatElapsed(now.Sub(since))
 	case r.live != nil:
-		age = i18n.T("%s ago", formatElapsed(now.Sub(r.live.Ended)))
+		age = finishedAt(r.live.Ended, now)
 	default:
-		age = i18n.T("%s ago", formatElapsed(now.Sub(r.record.Ended)))
+		age = finishedAt(r.record.Ended, now)
 	}
-	return r.key() + " · " + r.agent() + " · " + taskStateLabel(r.state()) + " · " + age
+	return [4]string{r.key(), r.agent(), taskStateLabel(r.state()), age}
+}
+
+// finishedAt is a finished task's time: its local date and time, then how
+// long ago in its largest unit only — a settled row does not tick.
+func finishedAt(ended, now time.Time) string {
+	return ended.Local().Format("01-02 15:04") + " · " + i18n.T("%s ago", coarseAgo(now.Sub(ended)))
+}
+
+// coarseAgo is d in its largest whole unit: 3h15m3s → 3h, 3m15s → 3m, 55s.
+func coarseAgo(d time.Duration) string {
+	switch {
+	case d >= 24*time.Hour:
+		return strconv.Itoa(int(d/(24*time.Hour))) + "d"
+	case d >= time.Hour:
+		return strconv.Itoa(int(d/time.Hour)) + "h"
+	case d >= time.Minute:
+		return strconv.Itoa(int(d/time.Minute)) + "m"
+	}
+	return strconv.Itoa(max(int(d/time.Second), 0)) + "s"
+}
+
+// taskRowText is "key · agent · state · age" (the quit popup and tests).
+func taskRowText(r taskRow, now time.Time) string {
+	c := taskRowCells(r, now)
+	return strings.Join(c[:], " · ")
 }
 
 // openSessionsPopupOn opens the ctrl+\ popup on tab with the cursor on task
@@ -260,21 +286,76 @@ func (p *sessionsPopup) openTask(m Model, r taskRow) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// renderTaskRows lays out the tab's rows in rowsH lines.
+// renderTaskRows lays the tab out as a table — a dim header, then one row
+// per task in rowsH lines: task · agent · state · age, the columns sized to
+// their widest cell over every row (so scrolling never shifts them) and the
+// task key taking what is left.
 func (p *sessionsPopup) renderTaskRows(m Model, textW, rowsH int) []string {
-	if len(p.taskRows) == 0 {
-		return []string{padRight(i18n.T("  (no AI tasks)"), textW)}
-	}
 	s := st()
+	head := []string{i18n.T("Task"), i18n.T("Agent"), i18n.T("State"), i18n.T("Age")}
 	now := time.Now()
-	wr := make([]winRow, len(p.taskRows))
+	cells := make([][4]string, len(p.taskRows))
+	ws := [4]int{}
+	for c := 1; c < 4; c++ {
+		ws[c] = lipgloss.Width(head[c])
+	}
 	for i, r := range p.taskRows {
-		text := "  " + taskRowText(r, now)
-		var style lipgloss.Style
+		cells[i] = taskRowCells(r, now)
+		for c := 1; c < 4; c++ {
+			ws[c] = max(ws[c], lipgloss.Width(cells[i][c]))
+		}
+	}
+	const gap = "  "
+	ws[0] = max(textW-2-ws[1]-ws[2]-ws[3]-3*len(gap), 8)
+	line := func(c [4]string) string {
+		return padRight(truncate(c[0], ws[0]), ws[0]) + gap + padRight(truncate(c[1], ws[1]), ws[1]) + gap +
+			padRight(c[2], ws[2]) + gap + c[3]
+	}
+	out := []string{s.dim.Render(padRight("  "+line([4]string{head[0], head[1], head[2], head[3]}), textW))}
+	if len(p.taskRows) == 0 {
+		return append(out, padRight(i18n.T("  (no AI tasks)"), textW))
+	}
+	wr := make([]winRow, len(p.taskRows))
+	for i := range p.taskRows {
+		text, style := "  "+line(cells[i]), lipgloss.Style{}
 		if i == p.taskSel {
-			text, style = "> "+taskRowText(r, now), s.selectedRow
+			text, style = "> "+line(cells[i]), s.selectedRow
 		}
 		wr[i] = winRow{text: text, style: style}
 	}
-	return renderWindow(wr, winOpts{w: textW, h: rowsH, mode: p.mode, anchor: p.taskSel, hscroll: p.hscroll})
+	return append(out, renderWindow(wr, winOpts{w: textW, h: rowsH, mode: p.mode, anchor: p.taskSel, hscroll: p.hscroll})...)
+}
+
+// taskHint is the tab's key line for the row under the cursor: enter only
+// when it opens something (a result, a running agent's console, a failure's
+// output — a queued or running headless task has none), k k only for a live
+// task, x only for a finished one.
+func (p *sessionsPopup) taskHint() string {
+	var parts []string
+	if r, ok := p.currentTask(); ok {
+		switch {
+		case r.hasResult():
+			parts = append(parts, i18n.T("[enter] result"))
+		case r.live != nil && r.live.State.Live() && r.live.Session != "":
+			parts = append(parts, i18n.T("[enter] console"))
+		case r.state() == domain.TaskFailed:
+			parts = append(parts, i18n.T("[enter] output"))
+		}
+		if r.state().Live() {
+			parts = append(parts, i18n.T("[k k] cancel"))
+		} else {
+			parts = append(parts, i18n.T("[x] remove"))
+		}
+	}
+	parts = append(parts, i18n.T("[/] filter  [tab] sessions  [ctrl+t] full  [esc] close"))
+	return strings.Join(parts, "  ")
+}
+
+// hasResult reports a row enter shows a result for — without reading the
+// history's files (the hint is drawn every frame).
+func (r taskRow) hasResult() bool {
+	if r.live != nil {
+		return r.live.Results > 0
+	}
+	return r.record.ResultFile != ""
 }

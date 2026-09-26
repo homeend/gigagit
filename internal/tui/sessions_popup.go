@@ -18,6 +18,7 @@ import (
 // owns, grouped repo → worktree. In quit mode it is what quitting with live
 // sessions opens (Task 8's quit guard).
 type sessionsPopup struct {
+	popupMax    // ctrl+t fills the screen (width and rows)
 	quitMode    bool
 	sel         int
 	query       string
@@ -97,9 +98,15 @@ func (m Model) openSessionsPopup(quitMode bool) (Model, tea.Cmd) {
 		return m, nil
 	}
 	p := &sessionsPopup{quitMode: quitMode, hist: hist}
-	if domain.Sessions().LiveCount() == 0 && (quitMode || len(m.openFiles.list(m.currentWorktree)) == 0) &&
-		(quitMode || len(domain.Sessions().List()) == 0) {
-		p.tab = tabTasks // only tasks to show (or, quitting, only tasks alive)
+	switch {
+	case quitMode:
+		if domain.Sessions().LiveCount() == 0 {
+			p.tab = tabTasks // quitting with only tasks alive
+		}
+	case len(domain.Sessions().List()) == 0 && len(m.openFiles.list(m.currentWorktree)) == 0:
+		p.tab = tabTasks // only tasks to show
+	case newestTaskTime(hist).After(newestSessionTime()):
+		p.tab = tabTasks // the freshest thing is a task
 	}
 	p.refresh(m)
 	p.sel = p.nextSelectable(-1, +1)
@@ -317,7 +324,7 @@ func (p *sessionsPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 func (p *sessionsPopup) render(m Model, below string) string {
 	p.refresh(m)
 	w, h := m.overlayDims()
-	inner := popupWideInnerWidth(w)
+	inner := popupResolveWidth(w, p.maxed(), popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 	s := st()
 
@@ -341,18 +348,24 @@ func (p *sessionsPopup) render(m Model, below string) string {
 	// Fixed height: both tabs get the taller tab's row count, so switching
 	// never resizes the box.
 	rowsH := min(max(p.sessionRowCount(), p.taskRowCount(), 1), max(h-10, 3))
+	if p.maxed() { // maximised: every row the screen holds
+		rowsH = max(h-11, 3)
+		if p.quitMode {
+			rowsH = max(rowsH-2, 3)
+		}
+	}
 	var body, hints []string
 	if p.tab == tabTasks {
 		body = p.renderTaskRows(m, textW, rowsH)
-		hints = []string{i18n.T("[enter] result/console  [k k] cancel  [x] remove  [/] filter  [tab] sessions  [esc] close")}
+		hints = []string{p.taskHint()}
 	} else {
 		body = p.renderSessionRows(textW, rowsH)
-		hints = []string{i18n.T("[enter] open  [k] kill  [x] remove/close  [/] filter  [z] mode  [tab] AI tasks  [esc] close")}
+		hints = []string{i18n.T("[enter] open  [k] kill  [x] remove/close  [/] filter  [z] mode  [tab] AI tasks  [ctrl+t] full  [esc] close")}
 	}
 	if p.quitMode {
 		hints = append(hints, i18n.T("[Q] kill all and quit  [esc] cancel"))
 	}
-	for len(body) < rowsH {
+	for len(body) < rowsH+1 { // +1: the tasks tab's table header
 		body = append(body, padRight("", textW))
 	}
 	lines := append(append(head, body...), "")
@@ -418,4 +431,36 @@ func (p *sessionsPopup) renderSessionRows(textW, rowsH int) []string {
 		wr[i] = winRow{text: r, style: style, elide: i < len(p.files) && p.files[i] != nil, elideHead: 4}
 	}
 	return renderWindow(wr, winOpts{w: textW, h: rowsH, mode: p.mode, anchor: p.sel, hscroll: p.hscroll})
+}
+
+// newestSessionTime is when the newest agent session started (zero: none).
+func newestSessionTime() time.Time {
+	var t time.Time
+	for _, info := range domain.Sessions().List() {
+		if info.Started.After(t) {
+			t = info.Started
+		}
+	}
+	return t
+}
+
+// newestTaskTime is the newest AI-task event — submitted, started or ended —
+// over the live tasks and the history (zero: none).
+func newestTaskTime(hist []domain.TaskRecord) time.Time {
+	var t time.Time
+	later := func(c time.Time) {
+		if c.After(t) {
+			t = c
+		}
+	}
+	for _, info := range domain.Tasks().List() {
+		later(info.Submitted)
+		later(info.Started)
+		later(info.Ended)
+	}
+	for _, r := range hist {
+		later(r.Started)
+		later(r.Ended)
+	}
+	return t
 }

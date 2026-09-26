@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"io"
 	"strings"
@@ -185,5 +186,127 @@ func TestResultViewerCopiesWholeResult(t *testing.T) {
 	cmd()
 	if copied != "line one\nline two\n" {
 		t.Fatalf("copied %q", copied)
+	}
+}
+
+func TestTaskTabHintFollowsTheRow(t *testing.T) {
+	m := launchTestModel(t)
+	done := submitReview(t, m, "echo fine")
+	waitTaskState(t, done, taskEndedFn)
+	running := submitReview(t, m, "sleep 5") // same key: queued, then running — headless either way
+	m, _ = m.openSessionsPopupOn(tabTasks, running)
+	p := layerOf[*sessionsPopup](m)
+	hint := p.taskHint()
+	if strings.Contains(hint, "[enter]") || !strings.Contains(hint, "[k k] cancel") || strings.Contains(hint, "[x]") {
+		t.Fatalf("a live headless task: no enter, cancel, no remove — got %q", hint)
+	}
+	for i, r := range p.taskRows {
+		if r.id() == done {
+			p.taskSel = i
+		}
+	}
+	hint = p.taskHint()
+	if !strings.Contains(hint, "[enter] result") || strings.Contains(hint, "[k k]") || !strings.Contains(hint, "[x] remove") {
+		t.Fatalf("a finished task with a result: got %q", hint)
+	}
+}
+
+func TestTaskTabIsATable(t *testing.T) {
+	t.Parallel()
+	now := time.Now()
+	list := []domain.TaskInfo{
+		{ID: "a", Key: "review — a1b2c3d..9f8e7d6", Agent: "Claude Code", State: domain.TaskRunning, Started: now.Add(-5 * time.Second)},
+		{ID: "b", Key: "commit message — main @ 1234567", Agent: "Kimi", State: domain.TaskQueued, Submitted: now},
+	}
+	p := &sessionsPopup{tab: tabTasks}
+	p.taskRows = taskRows(list, nil, "", nil)
+	out := p.renderTaskRows(Model{}, 90, 5)
+	if !strings.Contains(out[0], "Task") || !strings.Contains(out[0], "Agent") || !strings.Contains(out[0], "State") {
+		t.Fatalf("no header row: %q", out[0])
+	}
+	col := func(line, cell string) int { return strings.Index(ansi.Strip(line), cell) }
+	if a, b := col(out[1], "Claude Code"), col(out[2], "Kimi"); a != b || a < 0 {
+		t.Fatalf("agent column not aligned: %d vs %d\n%s\n%s", a, b, out[1], out[2])
+	}
+	if a, b := col(out[1], "running"), col(out[2], "queued"); a != b || a < 0 {
+		t.Fatalf("state column not aligned: %d vs %d", a, b)
+	}
+}
+
+func TestAgentsPopupOpensOnTheFreshestTab(t *testing.T) {
+	m := launchTestModel(t)
+	id := submitReview(t, m, "echo ok")
+	waitTaskState(t, id, taskEndedFn)
+	time.Sleep(20 * time.Millisecond)
+	startTestSession(t, m, "sleep 5") // newer than the task
+	m2, _ := m.openSessionsPopup(false)
+	if p := layerOf[*sessionsPopup](m2); p == nil || p.tab != tabSessions {
+		t.Fatalf("the newest is a console: want the agents tab, got %+v", p)
+	}
+	time.Sleep(20 * time.Millisecond)
+	id2 := submitReview(t, m, "echo again") // now a task is the newest
+	waitTaskState(t, id2, taskEndedFn)
+	m3, _ := m.openSessionsPopup(false)
+	if p := layerOf[*sessionsPopup](m3); p == nil || p.tab != tabTasks {
+		t.Fatalf("the newest is a task: want the AI tasks tab, got %+v", p)
+	}
+}
+
+func TestCoarseAgoKeepsTheLargestUnit(t *testing.T) {
+	t.Parallel()
+	for d, want := range map[time.Duration]string{
+		3*time.Hour + 15*time.Minute + 3*time.Second: "3h",
+		3*time.Minute + 15*time.Second:               "3m",
+		55 * time.Second:                             "55s",
+		49 * time.Hour:                               "2d",
+		0:                                            "0s",
+	} {
+		if got := coarseAgo(d); got != want {
+			t.Errorf("coarseAgo(%v) = %q, want %q", d, got, want)
+		}
+	}
+}
+
+func TestFinishedTaskShowsDateAndCoarseAge(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 26, 18, 0, 0, 0, time.Local)
+	ended := now.Add(-(3*time.Hour + 15*time.Minute + 3*time.Second))
+	done := taskRow{live: &domain.TaskInfo{State: domain.TaskDone, Ended: ended}}
+	if got := taskRowCells(done, now)[3]; got != "09-26 14:44 · 3h ago" {
+		t.Fatalf("finished: %q", got)
+	}
+	run := taskRow{live: &domain.TaskInfo{State: domain.TaskRunning, Started: now.Add(-75 * time.Second)}}
+	if got := taskRowCells(run, now)[3]; got != formatElapsed(75*time.Second) {
+		t.Fatalf("running keeps the precise count-up: %q", got)
+	}
+}
+
+func TestAgentsPopupCtrlTFillsTheScreen(t *testing.T) {
+	m := launchTestModel(t)
+	m.width, m.height = 140, 40
+	id := submitReview(t, m, "echo ok")
+	waitTaskState(t, id, taskEndedFn)
+	m, _ = m.openSessionsPopup(false)
+	p := layerOf[*sessionsPopup](m)
+	size := func() (w, h int) {
+		out := ansi.Strip(p.render(m, ""))
+		lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+		n := 0
+		for _, l := range lines {
+			if strings.Contains(l, "║") || strings.Contains(l, "╔") || strings.Contains(l, "╚") {
+				n++
+				w = max(w, lipgloss.Width(strings.TrimSpace(l)))
+			}
+		}
+		return w, n
+	}
+	w0, h0 := size()
+	m, _ = updateKey(m, "ctrl+t")
+	if !p.maxed() {
+		t.Fatal("ctrl+t must maximise the popup")
+	}
+	w1, h1 := size()
+	if w1 <= w0 || h1 <= h0 {
+		t.Fatalf("maximised %dx%d, normal %dx%d", w1, h1, w0, h0)
 	}
 }
