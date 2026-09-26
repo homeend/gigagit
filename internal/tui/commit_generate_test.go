@@ -208,13 +208,13 @@ func TestCommitBoxEscCancelsItsTask(t *testing.T) {
 	}
 }
 
-func TestCommitBoxCtrlBSendsToBackground(t *testing.T) {
+func TestCommitBoxBSendsToBackground(t *testing.T) {
 	m := commitBoxModel(t, "sleep 0.3; echo \"feat: bg\"")
 	m = startBoxGenerate(t, m)
 	id := m.topCommitPopup().genTask
-	m, _ = updateKey(m, "ctrl+b")
+	m, _ = updateKey(m, "b")
 	if m.topCommitPopup() != nil {
-		t.Fatal("ctrl+b closes the box")
+		t.Fatal("b closes the box")
 	}
 	waitTaskState(t, id, taskEndedFn)
 	m, _ = m.onTasksChanged()

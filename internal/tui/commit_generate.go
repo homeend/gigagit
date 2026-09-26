@@ -15,7 +15,7 @@ import (
 // commit_generate.go is the commit box's ctrl+g: a commit-message AI task
 // launched through the task launch dialog (task_launch_popup.go). A
 // headless run started from the box keeps the box waiting on it (spinner,
-// esc cancels, ctrl+b sends it to the background); every commit-message
+// esc cancels, b sends it to the background); every commit-message
 // result — any mode, any launch — lands through applyCommitMessage: into the
 // open box (asking before it replaces text), else as the worktree's pending
 // message the next c opens with.

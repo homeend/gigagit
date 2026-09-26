@@ -51,7 +51,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   opens the tab on it, `.` cancels it or shows its result. A `⟳ N AI task(s)`
   status segment replaces the old "reviewing …" blink.
 - **Commit box:** a headless run shows its spinner (`queued…` /
-  `generating…`); `esc` cancels it, `ctrl+b` sends it to the background.
+  `generating…`); `esc` cancels it, `b` sends it to the background.
 - `[tasks] max_parallel` is applied (with a one-time warning when out of
   range), a history-store failure raises one notice, and the quit guard
   counts AI tasks — `Q` cancels them before ending the sessions.

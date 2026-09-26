@@ -243,7 +243,7 @@ func helpContent() []contentLine {
 		h(i18n.T("Commit popup (c/C)")),
 		r("tab", i18n.T("switch field (title / description)")),
 		r("enter", i18n.T("title: move to the description field; description: insert a newline")),
-		r("ctrl+g", i18n.T("generate a commit message with an AI agent: the launch dialog picks the agent and how it runs (interactive in the background or the foreground, or headless); a result fills the box, asking first when it has text, or waits for the next c; esc cancels a headless run, ctrl+b sends it to the background")),
+		r("ctrl+g", i18n.T("generate a commit message with an AI agent: the launch dialog picks the agent and how it runs (interactive in the background or the foreground, or headless); a result fills the box, asking first when it has text, or waits for the next c; esc cancels a headless run, b sends it to the background")),
 		r("ctrl+t", i18n.T("toggle a wider / fullscreen commit box (easier to read a long generated message); ctrl+t again restores")),
 		r("ctrl+s", i18n.T("commit (or amend, when opened with C)")),
 		r("esc", i18n.T("cancel")),

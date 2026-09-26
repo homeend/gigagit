@@ -113,10 +113,10 @@ func (p *commitPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		return p.updateOffer(m, msg)
 	}
 	if p.generating {
-		switch msg.Type {
-		case tea.KeyEsc:
+		switch msg.String() {
+		case "esc":
 			return m.escGenerate(p), nil
-		case tea.KeyCtrlB:
+		case "b": // a plain key: typing is blocked during a run, and ctrl+b is tmux's prefix
 			return m.backgroundGenerate(p), nil
 		}
 		return m, nil // swallow every other key while the box waits on its task
@@ -176,9 +176,9 @@ func (p *commitPopup) box(m Model) string {
 		frames := []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 		frame := frames[p.spinFrame%len(frames)]
 		elapsed := int(time.Since(p.genStart).Seconds())
-		footer = i18n.T("%c generating message… %ds  ([esc] cancel  [ctrl+b] background)", frame, elapsed)
+		footer = i18n.T("%c generating message… %ds  ([esc] cancel  [b] background)", frame, elapsed)
 		if info, ok := domain.Tasks().Get(p.genTask); ok && info.State == domain.TaskQueued {
-			footer = i18n.T("%c queued…  ([esc] cancel  [ctrl+b] background)", frame)
+			footer = i18n.T("%c queued…  ([esc] cancel  [b] background)", frame)
 		}
 	} else {
 		footer = packHints([]string{

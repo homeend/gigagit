@@ -3570,7 +3570,7 @@ No UI in plan 2; see "AI tasks — the TUI" below.
   ending done without a result also reloads.
 - **Commit box:** foreground from the box closes it (the docked console
   gets keys only with no layer on top). Headless from the box waits on
-  `genTask` (spinner; `esc` = `Tasks().Cancel`, `ctrl+b` = close, result
+  `genTask` (spinner; `esc` = `Tasks().Cancel`, `b` = close (not ctrl+b: tmux's prefix), result
   becomes pending).
 - **Conflict window `t`:** `conflictPickerRows` → in-place rows (per-file
   mergetools and whole-op commands needing `<user:…>` input, which keep the
