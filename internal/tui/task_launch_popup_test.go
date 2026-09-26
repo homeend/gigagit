@@ -20,8 +20,8 @@ func updateKey(m Model, s string) (Model, tea.Cmd) {
 	switch s {
 	case "ctrl+g":
 		k = tea.KeyMsg{Type: tea.KeyCtrlG}
-	case "ctrl+b":
-		k = tea.KeyMsg{Type: tea.KeyCtrlB}
+	case "b", "y", "k", "x", "a":
+		k = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 	default:
 		k = keyMsg(s)
 	}
