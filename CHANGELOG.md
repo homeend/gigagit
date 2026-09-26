@@ -15,6 +15,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   substring, so `gg repo switch --exact /mnt/t/others/gigagit` resolves even
   when `gigagit.page`, `gigagit.media` or `gigagit.worktrees/…` are also known.
 
+### Changed
+
+- **`gg repo list`** prints an aligned table: names are space-padded so every
+  path starts in the same column (it used to be one tab per row, so paths
+  zig-zagged). `repo switch`'s ambiguity list is aligned the same way.
+
 ## AI tasks in the TUI: launch dialog, Headless tab, ◆ rows
 
 ### Added
