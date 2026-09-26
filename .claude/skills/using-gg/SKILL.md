@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v96 -->
+<!-- gg:using-gg:v97 -->
 
 # Using gg (gigagit)
 
@@ -761,8 +761,10 @@ finds the right one here.
   leaves the tree before the git call (required on Windows, which cannot
   rename a directory a process holds as cwd) and updates the shell-init
   cwd-handoff file so a wrapped shell's `cd` follows to the new path.
-- `gg repo list` / `gg repo switch <query>` — the known-repository registry
-  (MRU); `switch` prints the path of the unique match.
+- `gg repo list` / `gg repo switch [--exact] <query>` — the known-repository
+  registry (MRU); `switch` prints the path of the unique match (a
+  case-insensitive substring of the name or path; `--exact` requires the whole
+  name or path, for a query that prefixes sibling checkouts).
 - `gg inspect` — one-shot repo summary (scriptable health check).
 - `gg init` — install/refresh this skill for detected AI agents. An agent gg
 doesn't know can still get it: `gg init --to <path>` installs at a custom

@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Repo switch: exact match
+
+### Added
+
+- **`gg repo switch --exact <query>`** matches the whole repository name or
+  the whole path (case-insensitive, trailing separator ignored) instead of a
+  substring, so `gg repo switch --exact /mnt/t/others/gigagit` resolves even
+  when `gigagit.page`, `gigagit.media` or `gigagit.worktrees/…` are also known.
+
 ## Open files: agent verbs
 
 ### Added
