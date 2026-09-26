@@ -504,4 +504,33 @@ $("prompt-extra").addEventListener("click", () => {
 $("help").addEventListener("click", () => closeLayer("help"));
 
 $("help-box").addEventListener("click", (e) => e.stopPropagation()); // allow selecting/copying text
-export { closeLayer, closePrompt, copyText, hideCtxMenu, layers, mountOverlay, openPrompt, promptCb, promptKey, pushLayer, showCtxMenu, submitPrompt, topLayer };
+// --- the footer chip stack ---
+// A surface on top swaps #foot's chips for its own keys and gets the ones
+// beneath back when it goes — nested surfaces (the open-files switcher over
+// the viewer) each pop only their own entry, wherever it sits.
+const footStack = [];
+let footBase = null;
+
+function pushFoot(owner, html) {
+  const foot = $("foot");
+  if (footBase === null) footBase = foot.innerHTML;
+  const i = footStack.findIndex((f) => f.owner === owner);
+  if (i >= 0) footStack.splice(i, 1);
+  footStack.push({ owner, html });
+  foot.innerHTML = html;
+}
+
+function popFoot(owner) {
+  const i = footStack.findIndex((f) => f.owner === owner);
+  if (i < 0) return;
+  footStack.splice(i, 1);
+  $("foot").innerHTML = footStack.length ? footStack[footStack.length - 1].html : footBase;
+  if (!footStack.length) footBase = null;
+}
+
+function footOwned(owner) {
+  return footStack.some((f) => f.owner === owner);
+}
+
+
+export { closeLayer, footOwned, popFoot, pushFoot, closePrompt, copyText, hideCtxMenu, layers, mountOverlay, openPrompt, promptCb, promptKey, pushLayer, showCtxMenu, submitPrompt, topLayer };

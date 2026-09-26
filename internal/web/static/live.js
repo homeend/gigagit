@@ -7,7 +7,7 @@
 // everything); never two refreshes at once (the runOnce("refresh") gate
 // manualRefresh uses too — an `r` press and a push coalesce); a reconnect
 // after a dropped stream reloads everything, since events were missed.
-import { attnKey, getJSON, runOnce, state } from "./core.js";
+import { attnKey, getJSON, runOnce, state, tabId } from "./core.js";
 import { isServerDown, onServerUp, serverSeen, serverShutdown, suspectServerDown } from "./serverdown.js";
 import { fetchStatus, wtCount } from "./status.js";
 import { refreshLinkCompare, runLinkCompare } from "./linkcompare.js";
@@ -41,7 +41,7 @@ let connected = false; // a second hello is a RECONNECT → full refresh
 let liveES = null;
 
 function connectLive() {
-  const es = new EventSource("/api/events");
+  const es = new EventSource("/api/events?tab=" + encodeURIComponent(tabId));
   liveES = es;
   es.onmessage = (m) => {
     let msg;

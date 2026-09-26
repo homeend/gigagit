@@ -54,6 +54,19 @@ console.log(r.join("|"));
 	}
 }
 
+func TestViewerPlaceJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "viewer.js", viewerPureStart, viewerPureEnd, `
+const r = [];
+r.push(pickLine(7, {cur: 3}, 5), pickLine(0, {cur: 3}, 5), pickLine(0, null, 5), pickLine(0, null, 0), pickLine(0, {cur: 0}, 4));
+r.push(keepLine(9, 4, false), keepLine(9, 0, true), keepLine(0, 4, false), keepLine(2, 4, false));
+console.log(r.join("|"));
+`)
+	if want := "7|3|5|0|4|4|9|1|2"; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
 func TestViewerJSIsWired(t *testing.T) {
 	t.Parallel()
 	read := func(n string) string {
@@ -105,4 +118,15 @@ var viewerWiring = []struct{ file, want, why string }{
 	// The # keystroke itself must not land in the prompt it opens: the field
 	// read "#gg://…" and a pasted link went to the rev resolver (a 404).
 	{"keys.js", "} else if (e.key === \"#\") {\n    e.preventDefault();", "# must not type itself into the goto prompt"},
+	// Plan 5b Task 4: the list.
+	{"core.js", "tabId", "a page load names itself to the server"},
+	{"live.js", `"/api/events?tab="`, "the event stream carries the tab id"},
+	{"layers.js", "function pushFoot(", "the footer chips stack (viewer + switcher)"},
+	{"viewer.js", `pushFoot("viewer"`, "the viewer's chips ride the footer stack"},
+	{"viewer.js", `"/api/open-files"`, "the viewer registers what it shows"},
+	{"viewer.js", `op: "background"`, "ctrl+] and the menu hand-offs background the file"},
+	{"viewer.js", `op: "cursor"`, "the cursor line is reported"},
+	{"viewer.js", "closed in another tab", "x in another tab closes this viewer"},
+	{"viewer.js", "files open)", "an eviction names the file (the TUI's words)"},
+	{"viewer.js", "is in the background — ctrl+\\\\ lists open files", "ctrl+] says where the file went"},
 }
