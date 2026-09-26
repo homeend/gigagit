@@ -13,6 +13,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/gitwatch"
+	"github.com/homeend/gigagit/internal/steer"
 )
 
 // Live refresh — the web analog of the TUI's refresh registry.
@@ -59,6 +60,12 @@ type liveMsg struct {
 	// Steer carries one validated `gg session` command (steer.go); it rides
 	// only on Reason "steer" and never alongside a Changed list.
 	Steer *steerWire `json:"steer,omitempty"`
+	// Open files (openfiles_http.go): Files is the whole list on Reason
+	// "open_files" (Evicted names a file dropped over the cap); FileID the
+	// changed file on Reason "file_changed".
+	Files   []steer.OpenFile `json:"files,omitempty"`
+	Evicted string           `json:"evicted,omitempty"`
+	FileID  string           `json:"file_id,omitempty"`
 }
 
 type liveHub struct {
@@ -540,6 +547,17 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		ch, cancel = h.subscribe()
 	}
 	defer cancel()
+	// The tab behind this stream (open files): counted BEFORE the hello, so
+	// the page's post-hello "shown" always lands on a counted tab (ruling
+	// L2); its last stream ending drops what it showed.
+	if tab := r.URL.Query().Get("tab"); validTab(tab) {
+		s.ofs.streamOpened(tab)
+		defer func() {
+			if s.ofs.streamClosed(tab) {
+				s.broadcastOpenFiles(s.service().Root(), "")
+			}
+		}()
+	}
 	writeLiveSSE(w, liveMsg{Changed: []string{}, Reason: "hello", Live: &live, Watch: &watch})
 	fl.Flush()
 
