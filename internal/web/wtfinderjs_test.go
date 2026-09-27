@@ -48,6 +48,20 @@ func TestFinderFootChipKeepsTheBackslash(t *testing.T) {
 		t.Fatal(`wtfinder.js: the foot chip must spell ctrl+\\ (escaped) — "\ " is an escaped space`)
 	}
 }
+func TestFinderPreviewModelJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "wtfinder.js", wtfPureStart, wtfPureEnd, `
+const r = [];
+r.push(WT_SETTLE_MS);
+r.push(wtPreviewFresh(3, 3, "a", "a"), wtPreviewFresh(2, 3, "a", "a"), wtPreviewFresh(3, 3, "a", "b"));
+r.push(wtPlaceholder({missing: true}, 0), wtPlaceholder({too_large: true}, 0), wtPlaceholder({}, 0), wtPlaceholder({}, 4) === "");
+console.log(r.join("|"));
+`)
+	want := "150|true|false|false|(file deleted on disk)|(file too large to preview)|(empty file)|true"
+	if out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
 
 // finderWiring grows task by task: each entry pins code that exists only once
 // the step it names is done.
@@ -67,6 +81,11 @@ var finderWiring = []struct{ file, want, why string }{
 	{"style.css", "#panes.wtf.wtf.wtf", "F's grid outranks every layout rule"},
 	{"style.css", "#wtf.hidden", "the list hides by id (no global .hidden)"},
 	{"style.css", "#wtf-preview.hidden", "the preview hides by id"},
+	// Task 3: the preview.
+	{"wtfinder.js", "src=worktree&path=", "the preview reads the file on disk"},
+	{"wtfinder.js", "renderCell(", "lines paint through the shared cell renderer (syntax colour)"},
+	{"wtfinder.js", "setTimeout(() => showPreview(", "the preview waits for the cursor to settle"},
+	{"style.css", "#wtf-body .tk-kw", "the preview is syntax-coloured"},
 }
 
 // finderGone pins what 5d removes.

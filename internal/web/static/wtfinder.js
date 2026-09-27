@@ -13,6 +13,7 @@
 import { $, charWidth, elidePath, esc, getJSON } from "./core.js";
 import { closeLayer, footOwned, popFoot, pushFoot, pushLayer, topLayer } from "./layers.js";
 import { opLine } from "./ops.js";
+import { renderCell } from "./files.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
 import { registerHelp } from "./menus.js";
 
@@ -46,6 +47,23 @@ function wtPathCols(cols, untracked) {
 
 function wtEmpty(query) {
   return query ? "(no match)" : "(no files)";
+}
+
+// The cursor rests this long before the preview reads the file (the TUI's
+// wtPreviewSettle): a held arrow over a slow mount reads only where it stops.
+const WT_SETTLE_MS = 150;
+
+// wtPreviewFresh: an answer paints only when no later move superseded it and
+// the cursor still sits on its file.
+function wtPreviewFresh(gen, curGen, path, curPath) {
+  return gen === curGen && path === curPath;
+}
+
+// wtPlaceholder is what the preview shows instead of lines ("" = the lines).
+function wtPlaceholder(body, n) {
+  if (body.missing) return "(file deleted on disk)";
+  if (body.too_large) return "(file too large to preview)";
+  return n ? "" : "(empty file)";
 }
 // --- end finder model ---
 
@@ -220,9 +238,63 @@ function move(delta) {
   cursorMoved();
 }
 
-// Task 3 fills these: the preview follows the cursor; closing drops it.
-function cursorMoved() {}
-function closedHook() {}
+// The preview: the file under the cursor, read from disk once the cursor
+// rests. NOT an open file (the TUI's rule): it never touches /api/open-files,
+// so browsing never fills the ctrl+\ list.
+let previewGen = 0;
+let previewTimer = null;
+let previewPath = ""; // the file the preview shows ("" = none)
+
+function cursorMoved() {
+  const gen = ++previewGen;
+  clearTimeout(previewTimer);
+  const f = selected();
+  if (!f) {
+    paintPreview("", [], "");
+    return;
+  }
+  if (f.path === previewPath) return;
+  previewTimer = setTimeout(() => showPreview(gen, f.path), WT_SETTLE_MS);
+}
+
+function closedHook() {
+  previewGen++;
+  clearTimeout(previewTimer);
+  paintPreview("", [], "");
+}
+
+async function showPreview(gen, path) {
+  let body;
+  try {
+    body = await getJSON("/api/file-content?src=worktree&path=" + encodeURIComponent(path));
+  } catch (e) {
+    if (wtf.on && wtPreviewFresh(gen, previewGen, path, (selected() || {}).path)) paintPreview(path, [], "(load failed: " + (e.message || e) + ")");
+    return;
+  }
+  if (!wtf.on || !wtPreviewFresh(gen, previewGen, path, (selected() || {}).path)) return;
+  const lines = body.lines || [];
+  paintPreview(path, lines, wtPlaceholder(body, lines.length));
+}
+
+// paintPreview draws path's lines (or the placeholder) at the top; path ""
+// empties the pane. The title cuts the PATH in the middle, never the name.
+function paintPreview(path, lines, placeholder) {
+  previewPath = path;
+  const title = $("wtf-ptitle");
+  const tail = " (working tree)";
+  const cols = Math.floor((title.clientWidth - 16) / charWidth()) - tail.length;
+  title.title = path;
+  title.textContent = path ? (cols > 3 ? elidePath(path, cols) : path) + tail : "";
+  const body = $("wtf-body");
+  if (!path) body.innerHTML = "";
+  else if (placeholder) body.innerHTML = `<div class="notice">${esc(placeholder)}</div>`;
+  else
+    body.innerHTML = lines
+      .map((l, i) => `<div class="vline"><span class="vno">${i + 1}</span><span class="vtext">${renderCell(l.text, null, l.tok, "", null) || " "}</span></div>`)
+      .join("");
+  body.scrollTop = 0;
+  body.scrollLeft = 0;
+}
 // Task 4 fills these: the actions and the background open.
 function menuAtCursor() {}
 function backgroundRow() {}

@@ -227,15 +227,15 @@ body.lm-scroll .vno { position: sticky; left: 0; background: var(--bg-alt); }
 body.lm-cut .vline { white-space: pre; }
 body.lm-cut .vtext { overflow: hidden; text-overflow: ellipsis; }
 /* syntax classes (see internal/syntax Class.String); same hues as the TUI palette */
-table.diff .tk-kw, #blame-body .tk-kw, #viewer-body .tk-kw, #prdetails .tk-kw  { color: #b48bff; }
-table.diff .tk-ty, #blame-body .tk-ty, #viewer-body .tk-ty, #prdetails .tk-ty  { color: #5fd7af; }
-table.diff .tk-fn, #blame-body .tk-fn, #viewer-body .tk-fn, #prdetails .tk-fn  { color: #ffd787; }
-table.diff .tk-str, #blame-body .tk-str, #viewer-body .tk-str, #prdetails .tk-str { color: #afd787; }
-table.diff .tk-num, #blame-body .tk-num, #viewer-body .tk-num, #prdetails .tk-num { color: #ffaf5f; }
-table.diff .tk-cmt, #blame-body .tk-cmt, #viewer-body .tk-cmt, #prdetails .tk-cmt { color: #8a8a8a; font-style: italic; }
-table.diff .tk-op, #blame-body .tk-op, #viewer-body .tk-op, #prdetails .tk-op  { color: #d0d0d0; }
-table.diff .tk-pn, #blame-body .tk-pn, #viewer-body .tk-pn, #prdetails .tk-pn  { color: #bcbcbc; }
-table.diff .tk-at, #blame-body .tk-at, #viewer-body .tk-at, #prdetails .tk-at  { color: #d7af87; }
+table.diff .tk-kw, #blame-body .tk-kw, #viewer-body .tk-kw, #wtf-body .tk-kw, #prdetails .tk-kw  { color: #b48bff; }
+table.diff .tk-ty, #blame-body .tk-ty, #viewer-body .tk-ty, #wtf-body .tk-ty, #prdetails .tk-ty  { color: #5fd7af; }
+table.diff .tk-fn, #blame-body .tk-fn, #viewer-body .tk-fn, #wtf-body .tk-fn, #prdetails .tk-fn  { color: #ffd787; }
+table.diff .tk-str, #blame-body .tk-str, #viewer-body .tk-str, #wtf-body .tk-str, #prdetails .tk-str { color: #afd787; }
+table.diff .tk-num, #blame-body .tk-num, #viewer-body .tk-num, #wtf-body .tk-num, #prdetails .tk-num { color: #ffaf5f; }
+table.diff .tk-cmt, #blame-body .tk-cmt, #viewer-body .tk-cmt, #wtf-body .tk-cmt, #prdetails .tk-cmt { color: #8a8a8a; font-style: italic; }
+table.diff .tk-op, #blame-body .tk-op, #viewer-body .tk-op, #wtf-body .tk-op, #prdetails .tk-op  { color: #d0d0d0; }
+table.diff .tk-pn, #blame-body .tk-pn, #viewer-body .tk-pn, #wtf-body .tk-pn, #prdetails .tk-pn  { color: #bcbcbc; }
+table.diff .tk-at, #blame-body .tk-at, #viewer-body .tk-at, #wtf-body .tk-at, #prdetails .tk-at  { color: #d7af87; }
 mark.l { background: var(--span-del); color: inherit; }
 mark.r { background: var(--span-add); color: inherit; }
 /* In-view search hits, scoped to BOTH hosts like the .tk-* classes above: a
