@@ -418,7 +418,9 @@ func (p *allNotesPopup) render(m Model, below string) string {
 		// The selected row was cut: its full text takes the bottom bar, which
 		// the popup never covers, instead of an overlay on the row itself.
 		text := " " + p.tipFull
-		out = overlayAt(out, st().tooltip.Render(padRight(truncate(text, w), w)), 0, h-1, w, h)
+		// Plain text in the terminal's own colours: a highlighted bar flashing
+		// up on every cut row was painful in low light (user report).
+		out = overlayAt(out, padRight(truncate(text, w), w), 0, h-1, w, h)
 	}
 	return out
 }

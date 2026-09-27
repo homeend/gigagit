@@ -462,3 +462,34 @@ func TestAllNotesTooltipRevealsCutText(t *testing.T) {
 	}
 	_ = subject
 }
+
+// The bottom bar is quiet: the terminal's own colours, never the tooltip's
+// black-on-yellow (painful in low light — user report). Sets the colour
+// profile and theme (process-global), so it does NOT call t.Parallel().
+func TestAllNotesBottomBarIsNotHighlighted(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+	prevTheme := activeTheme()
+	defer setTheme(prevTheme)
+	setTheme(theme.Dark)
+
+	m, p, _, _, summary := longNotesModel(t)
+	for i, r := range p.visible() {
+		if r.note != nil {
+			p.sel = i
+		}
+	}
+	lines := strings.Split(m.View(), "\n")
+	for len(lines) > 0 && strings.TrimSpace(ansi.Strip(lines[len(lines)-1])) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	last := lines[len(lines)-1]
+	if !strings.Contains(ansi.Strip(last), summary) {
+		t.Fatalf("precondition: the bar shows the cut note, got %q", ansi.Strip(last))
+	}
+	tip := st().tooltip.Render("x")
+	if sgr := tip[:strings.Index(tip, "x")]; sgr != "" && strings.Contains(last, sgr) {
+		t.Fatalf("the bottom bar must not wear the tooltip highlight: %q", last)
+	}
+}
