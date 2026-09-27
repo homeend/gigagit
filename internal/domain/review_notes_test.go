@@ -272,3 +272,36 @@ func TestRenameBranchRenamesItsReviews(t *testing.T) {
 		t.Fatalf("after the rename: %+v", r)
 	}
 }
+
+func TestNotesOverviewListsReviewsUnderTheirCommit(t *testing.T) {
+	t.Parallel()
+	_, svc, tip := reviewRepo(t)
+	ctx := context.Background()
+	tg, _ := svc.BranchReviewTarget(ctx, "feature")
+	if _, _, err := svc.SaveReview(ctx, SaveReview{Target: tg, Text: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	gone := strings.Repeat("d", 40)
+	if err := svc.notesStore(ctx).Put(model.Note{ID: "old1", Source: model.NoteSourceAgent,
+		Address: model.FileAddress{State: model.StateCommitted, Commit: gone},
+		Tags:    []string{model.ReviewTag}, Summary: "Review: gone", Created: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	ov, err := svc.NotesOverview(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ov.Count() != 2 {
+		t.Fatalf("Count = %d, want 2", ov.Count())
+	}
+	byHash := map[string]NoteCommitNotes{}
+	for _, c := range ov.Commits {
+		byHash[c.Hash] = c
+	}
+	if c := byHash[tip]; len(c.Reviews) != 1 || len(c.Files) != 0 || c.Reviews[0].Kind != ReviewOnBranch {
+		t.Fatalf("tip entry = %+v", c)
+	}
+	if c := byHash[gone]; !c.Missing || len(c.Reviews) != 1 {
+		t.Fatalf("missing-commit entry = %+v", c)
+	}
+}

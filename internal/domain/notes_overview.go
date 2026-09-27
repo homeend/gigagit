@@ -30,6 +30,7 @@ type NoteCommitNotes struct {
 	UnixTime int64
 	Missing  bool
 	Files    []NoteFileNotes
+	Reviews  []Review // AI reviews stored on the commit (newest first)
 }
 
 // NoteShelfNotes is one shelf entry's files with notes. Missing: the entry
@@ -66,6 +67,7 @@ func (o NotesOverview) Count() int {
 	count(o.Untracked)
 	for _, c := range o.Commits {
 		count(c.Files)
+		n += len(c.Reviews)
 	}
 	for _, s := range o.Shelves {
 		count(s.Files)
@@ -97,12 +99,19 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 	var buckets []*bucket
 	byKey := map[string]*bucket{}
 	rootAddr := map[string]model.FileAddress{}
+	review := map[string]bool{} // review roots: listed as Reviews, not files
 	for _, n := range all {
 		if !n.IsReply() {
 			rootAddr[n.ID] = n.Address
+			if n.IsReviewNote() {
+				review[n.ID] = true
+			}
 		}
 	}
 	for _, n := range all {
+		if review[n.ID] || review[n.ParentID] {
+			continue
+		}
 		a := n.Address
 		if n.IsReply() {
 			ra, ok := rootAddr[n.ParentID]
@@ -168,6 +177,15 @@ func (s *Service) NotesOverview(ctx context.Context) (NotesOverview, error) {
 		}
 	}
 
+	revs, _ := s.Reviews(ctx) // newest first
+	for _, r := range revs {
+		c := commits[r.Commit]
+		if c == nil {
+			c = s.overviewCommit(ctx, r.Commit)
+			commits[r.Commit] = c
+		}
+		c.Reviews = append(c.Reviews, r)
+	}
 	for _, c := range commits {
 		s.fillCommitFileStatus(ctx, c)
 		sortNoteFiles(c.Files)

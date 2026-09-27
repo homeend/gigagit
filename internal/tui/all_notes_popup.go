@@ -44,6 +44,7 @@ const (
 	anDir                    // a directory heading
 	anFile                   // a file
 	anNote                   // one thread
+	anReview                 // one AI review stored on a commit (under @notes/)
 )
 
 // anTarget is where a file or note row opens.
@@ -64,6 +65,7 @@ type anRow struct {
 	key    string // fold key (groups and subs)
 	span   int    // index one past the row's last descendant
 	note   *domain.ResolvedNote
+	review *domain.Review // anReview rows
 	status string // a note's display status
 	target anTarget
 	filter string // lowercased text a query matches (notes only)
@@ -191,6 +193,14 @@ func buildAllNotesRows(ov domain.NotesOverview, worktree string) []anRow {
 				}
 			}
 			sub("c:"+c.Hash, label)
+			if len(c.Reviews) > 0 {
+				rows = append(rows, anRow{kind: anDir, depth: 2, text: reviewsDir + "/"})
+				for i := range c.Reviews {
+					r := &c.Reviews[i]
+					rows = append(rows, anRow{kind: anReview, depth: 3, review: r,
+						filter: strings.ToLower(r.Summary + "\x00" + r.Agent + "\x00" + r.Branch)})
+				}
+			}
 			files(2, c.Files, anTarget{commit: c.Hash, subject: shortHash(c.Hash) + " " + sanitizeLine(c.Subject), missing: c.Missing})
 		}
 	}
@@ -240,11 +250,11 @@ func (p *allNotesPopup) visible() []anRow {
 		q := strings.ToLower(p.query)
 		match := make([]bool, len(p.rows))
 		for i, r := range p.rows {
-			match[i] = r.kind == anNote && strings.Contains(r.filter, q)
+			match[i] = (r.kind == anNote || r.kind == anReview) && strings.Contains(r.filter, q)
 		}
 		for i, r := range p.rows {
 			keep := match[i]
-			if r.kind != anNote {
+			if r.kind != anNote && r.kind != anReview {
 				for j := i + 1; j < r.span && !keep; j++ {
 					keep = match[j]
 				}
@@ -337,6 +347,9 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 			return m.openAllNotesTarget(p, r.target, "")
 		case anNote:
 			return m.openAllNotesTarget(p, r.target, r.note.Note.ID)
+		case anReview:
+			// The text lives in the note: it opens even when the commit is gone.
+			return m.openReviewNote(r.review.ID, r.review.Summary)
 		}
 	case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 		if rs := []rune(p.query); len(rs) > 0 {
@@ -459,6 +472,43 @@ func anNoteParts(r anRow, now time.Time) (head, summary, tail string) {
 	return head, sanitizeLine(n.Summary), tail
 }
 
+// anReviewParts is a review row's columns, laid out like a note's: STATUS
+// "review", WHO the agent, WHERE its branch relation, WHEN its age.
+func anReviewParts(r anRow, now time.Time) (head, summary string) {
+	status, who, where, when := anReviewCells(r, now)
+	head = padRight(truncate(status, anStatusW-1), anStatusW) +
+		padRight(truncate(who, anWhoW-1), anWhoW) +
+		padRight(truncate(where, anWhereW-1), anWhereW) +
+		padRight(truncate(when, anWhenW-1), anWhenW)
+	return head, sanitizeLine(r.review.Summary)
+}
+
+// anReviewFull is a review row's cells uncut: the bottom bar's text.
+func anReviewFull(r anRow, now time.Time) string {
+	status, who, where, when := anReviewCells(r, now)
+	return strings.Join([]string{status, who, where, when, sanitizeLine(r.review.Summary)}, " · ")
+}
+
+// anReviewCells is a review row's column values.
+func anReviewCells(r anRow, now time.Time) (status, who, where, when string) {
+	v := r.review
+	where = i18n.T("commit")
+	switch v.Kind {
+	case domain.ReviewOnBranch:
+		where = i18n.T("branch %s", v.Branch)
+	case domain.ReviewWasTip:
+		where = i18n.T("was tip %s", v.Branch)
+	}
+	who = v.Agent
+	if who == "" {
+		who = i18n.T("agent")
+	}
+	if !v.Created.IsZero() {
+		when = coarseAgo(now.Sub(v.Created))
+	}
+	return i18n.T("review"), sanitizeLine(who), where, when
+}
+
 // anNoteColumns renders a note row's columns (after its indent) to w: the
 // summary is the elastic part, so the reply count survives a narrow popup.
 func anNoteColumns(r anRow, w int, now time.Time) string {
@@ -475,6 +525,13 @@ func (p *allNotesPopup) anRowText(r anRow, w int, now time.Time) string {
 	switch r.kind {
 	case anNote:
 		return strings.Repeat(" ", anNoteIndent) + anNoteColumns(r, w-anNoteIndent, now)
+	case anReview:
+		head, summary := anReviewParts(r, now)
+		budget := w - anNoteIndent - lipgloss.Width(head)
+		if budget < 1 {
+			return strings.Repeat(" ", anNoteIndent) + truncate(head, w-anNoteIndent)
+		}
+		return strings.Repeat(" ", anNoteIndent) + head + truncate(summary, budget)
 	case anGroup, anSub:
 		mark := "▾ "
 		if p.folded[r.key] && p.query == "" {
@@ -494,6 +551,9 @@ func anBarText(r anRow, now time.Time) string {
 		head, summary, tail := anNoteParts(r, now)
 		return head + summary + tail
 	}
+	if r.kind == anReview {
+		return anReviewFull(r, now)
+	}
 	return r.text
 }
 
@@ -504,6 +564,8 @@ func (p *allNotesPopup) anRowFull(r anRow, now time.Time) string {
 	case anNote:
 		head, summary, tail := anNoteParts(r, now)
 		return strings.Repeat(" ", anNoteIndent) + head + summary + tail
+	case anReview:
+		return strings.Repeat(" ", anNoteIndent) + anReviewFull(r, now)
 	case anGroup, anSub:
 		mark := "▾ "
 		if p.folded[r.key] && p.query == "" {
@@ -572,6 +634,9 @@ func (p *allNotesPopup) box(m Model) string {
 			if i != p.sel && r.kind == anNote {
 				rows[i].decorate = anNoteDecorator(r)
 			}
+			if i != p.sel && r.kind == anReview {
+				rows[i].decorate = anColumnsDecorator(st().noteFrameAgent, false)
+			}
 		}
 		// The chrome is the header pair, the column row, the blank + hints
 		// and the box border; the list gets what is left of the terminal.
@@ -604,7 +669,13 @@ func anNoteDecorator(r anRow) rowDecorator {
 	if r.note.Note.Source == model.NoteSourceAgent {
 		who = s.noteFrameAgent
 	}
-	dimStatus := r.status != string(model.NoteActive)
+	return anColumnsDecorator(who, r.status != string(model.NoteActive))
+}
+
+// anColumnsDecorator paints the WHO cell in who and, when dimStatus, dims the
+// STATUS cell — shared by note and review rows, which lay out the same columns.
+func anColumnsDecorator(who lipgloss.Style, dimStatus bool) rowDecorator {
+	s := st()
 	const statusAt = 2 + anNoteIndent // the cursor prefix, then the indent
 	return func(visible string, hscroll, visualLine int) string {
 		if hscroll != 0 || visualLine != 0 {
@@ -637,7 +708,7 @@ func anNoteDecorator(r anRow) rowDecorator {
 func (p *allNotesPopup) count() int {
 	n := 0
 	for _, r := range p.rows {
-		if r.kind == anNote {
+		if r.kind == anNote || r.kind == anReview {
 			n++
 		}
 	}
