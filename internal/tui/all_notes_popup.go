@@ -78,12 +78,9 @@ type allNotesPopup struct {
 	query   string
 	sel     int
 	notice  string // why the last enter could not open anything
-	// Set by box() for render's tooltip: the selected row's uncut text when
-	// it was cut ("" = shown in full), its line in the box content and the
-	// width the row had.
+	// Set by box() for render's bottom bar: the selected row's uncut text
+	// when it was cut ("" = shown in full).
 	tipFull string
-	tipLine int
-	tipW    int
 }
 
 // allNotesMsg carries the overview, tagged with the loadGen it was asked
@@ -416,33 +413,14 @@ func (m Model) openAllNotesTarget(p *allNotesPopup, t anTarget, id string) (Mode
 
 func (p *allNotesPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
-	box := p.box(m)
-	out := overlayCenter(clipToHeight(below, h), box, w, h)
-	if line, x, y, ok := p.tooltip(box, w, h); ok {
-		out = overlayAt(out, line, x, y, w, h)
+	out := overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+	if p.tipFull != "" {
+		// The selected row was cut: its full text takes the bottom bar, which
+		// the popup never covers, instead of an overlay on the row itself.
+		text := " " + strings.TrimLeft(p.tipFull, " ")
+		out = overlayAt(out, st().tooltip.Render(padRight(truncate(text, w), w)), 0, h-1, w, h)
 	}
 	return out
-}
-
-// tooltip is the full-text reveal over the selected row when box() had to cut
-// it — the panels' reveal (revealLine), drawn on the row's own line. box()
-// records where the row landed and what its uncut text is.
-func (p *allNotesPopup) tooltip(box string, termW, termH int) (line string, x, y int, ok bool) {
-	if p.tipFull == "" {
-		return "", 0, 0, false
-	}
-	lines := strings.Split(strings.TrimSuffix(box, "\n"), "\n")
-	boxW := 0
-	for _, l := range lines {
-		boxW = max(boxW, lipgloss.Width(l))
-	}
-	left := (termW - boxW) / 2 // mirrors overlayCenter
-	top := (termH - len(strings.Split(box, "\n"))) / 2
-	ms := st().modalStyle
-	y = top + ms.GetBorderTopSize() + ms.GetPaddingTop() + p.tipLine
-	edge := left + ms.GetBorderLeftSize() + ms.GetPaddingLeft() + 2 // past the "> " prefix
-	line, x = revealLine(p.tipFull, edge, p.tipW, termW)
-	return line, x, y, true
 }
 
 // anNoteParts is a note row's fixed columns (head), its summary and its
@@ -508,7 +486,7 @@ func (p *allNotesPopup) anRowText(r anRow, w int, now time.Time) string {
 }
 
 // anRowFull is a row's uncut text (without the cursor prefix): what the
-// tooltip shows when anRowText had to cut it.
+// bottom bar shows when anRowText had to cut it.
 func (p *allNotesPopup) anRowFull(r anRow, now time.Time) string {
 	switch r.kind {
 	case anNote:
@@ -591,8 +569,7 @@ func (p *allNotesPopup) box(m Model) string {
 		body = renderWindow(rows, winOpts{w: textW, anchor: p.sel, h: winH})
 		if p.sel >= 0 && p.sel < len(vis) {
 			if full := p.anRowFull(vis[p.sel], now); rowTruncated(full, textW-2) {
-				p.tipFull, p.tipW = full, textW-2
-				p.tipLine = len(parts) + p.sel - windowStart(len(rows), winH, p.sel)
+				p.tipFull = full
 			}
 		}
 	}

@@ -18,7 +18,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   where, when, the summary and a reply count. Type to filter (a match keeps
   its headings), `enter` or `←`/`→` fold a heading, `enter` on a note opens
   its diff over the list and lands on it — `esc` comes back — and a note that
-  cannot be opened any more says why. `ctrl+t` maximizes.
+  cannot be opened any more says why. Paths are cut in the middle; a
+  selected row that had to be cut shows in full in the bottom bar. `ctrl+t`
+  maximizes.
 
 ## Open files on the web: agent verbs (5c)
 

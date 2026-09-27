@@ -417,8 +417,8 @@ func TestAllNotesElidesALongDirectoryInTheMiddle(t *testing.T) {
 	t.Fatal("no directory row on screen")
 }
 
-// A selected row whose text is cut shows its full text in a tooltip; an
-// unselected one does not.
+// A selected row whose text is cut shows its full text in the bottom bar;
+// an unselected one does not.
 func TestAllNotesTooltipRevealsCutText(t *testing.T) {
 	t.Parallel()
 	m, p, dir, subject, summary := longNotesModel(t)
@@ -445,8 +445,15 @@ func TestAllNotesTooltipRevealsCutText(t *testing.T) {
 		if p.sel < 0 {
 			t.Fatalf("%s: no such row", tc.name)
 		}
-		if joined := strings.Join(allNotesScreen(m), "\n"); !strings.Contains(joined, tc.full) {
-			t.Fatalf("%s: the tooltip must show %q:\n%s", tc.name, tc.full, joined)
+		screen := allNotesScreen(m)
+		for len(screen) > 0 && strings.TrimSpace(screen[len(screen)-1]) == "" {
+			screen = screen[:len(screen)-1]
+		}
+		if last := screen[len(screen)-1]; !strings.Contains(last, tc.full) {
+			t.Fatalf("%s: the bottom bar must show %q, got %q", tc.name, tc.full, last)
+		}
+		if n := strings.Count(strings.Join(screen, "\n"), tc.full); n != 1 {
+			t.Fatalf("%s: the full text must show once (the bottom bar, not over the row), got %d", tc.name, n)
 		}
 		p.sel = 0
 	}
