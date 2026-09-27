@@ -24,6 +24,12 @@ function hideOpLine() {
   $("op-line").classList.add("hidden");
 }
 
+// clearOpLine takes the line down only while it still says text: a notice
+// that stopped being true goes, a newer one stays.
+function clearOpLine(text) {
+  if (!$("op-line").classList.contains("hidden") && $("op-text").textContent === text) hideOpLine();
+}
+
 
 let taskRestoreTimer = null;
 
@@ -785,4 +791,4 @@ function openCreateBranchPrompt(start, seed, label) {
 }
 
 
-export { applySidebarHidden, answerModal, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar, applyCommitRows };
+export { applySidebarHidden, answerModal, clearOpLine, manualRefresh, doCommit, doFetch, doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, doStash, followOp, handleOpEvent, hideModal, hideOpLine, lastFocusRefresh, loadRepo, modalLocalCb, opBusy, opLine, opLineTimer, openCreateBranchPrompt, openHelp, parkedRunning, parkedTaskText, refreshAfterOp, showLocalConfirm, showModal, stageFocused, startOp, startSwitch, taskLine, taskRestoreTimer, toggleSidebar, applyCommitRows };

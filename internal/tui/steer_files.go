@@ -60,7 +60,9 @@ func (m Model) steerNavigateBackground(c steer.Command) (Model, tea.Cmd) {
 	} else if line == 0 {
 		d.keepPlace()
 	}
-	d.pendingLine = line
+	if line > 0 || !d.loading {
+		d.pendingLine = line // a line-less open never cancels one still loading
+	}
 	m.statusMsg = ""
 	m, ev := m.registerDocEv(d)
 	if m.statusMsg == "" {
@@ -69,7 +71,7 @@ func (m Model) steerNavigateBackground(c steer.Command) (Model, tea.Cmd) {
 	load := m.loadDoc(d)
 	lead, evicted := "opened "+c.File+" in the background", evictedPath(ev)
 	return m, func() tea.Msg {
-		return contentLandedMsg{load: load().(fileContentMsg), cmd: c, line: line, lead: lead, evicted: evicted}
+		return contentLandedMsg{load: load().(fileContentMsg), cmd: c, path: c.File, line: line, lead: lead, evicted: evicted}
 	}
 }
 
@@ -104,6 +106,6 @@ func (m Model) steerFileFocus(c steer.Command) (Model, tea.Cmd) {
 		return m, m.answerSteer(c, steerOK(c, landedDetail(lead, line, d.p.lines, "")))
 	}
 	return m, func() tea.Msg {
-		return contentLandedMsg{load: load().(fileContentMsg), cmd: c, line: line, lead: lead}
+		return contentLandedMsg{load: load().(fileContentMsg), cmd: c, path: d.path, line: line, lead: lead}
 	}
 }

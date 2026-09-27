@@ -6,7 +6,7 @@ import { closeLayer, copyText, footOwned, mountOverlay, popFoot, pushFoot, pushL
 import { Search } from "./inviewsearch.js";
 import { bindSearchBar } from "./searchbar.js";
 import { cycleTextMode, openFile, openWorkingTree, renderCell } from "./files.js";
-import { opLine } from "./ops.js";
+import { clearOpLine, opLine } from "./ops.js";
 import { copyFileLink, copyLink, linkDesc, linkFor } from "./links.js";
 import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openCommitByHash } from "./commits.js";
@@ -159,6 +159,10 @@ async function openViewer({ src = "worktree", rev = "", path = "", line = 0, id 
   centerCursor();
   if (place) $("viewer-body").scrollTop = place.top;
   $("viewer-body").focus({ preventScroll: true });
+  // A reopen lands where THIS tab left the file; the server (every tab's
+  // switcher) still has the line it last heard.
+  if (landed.line !== (f.line || 0)) reportCursor();
+  clearOpLine(f.path + " opened in the background"); // it is in front now
   if (landed.notice) opLine(landed.notice, false);
   if (reg.evicted) opLine("closed " + reg.evicted + " (20 files open)", false);
   return { ok: true, notice: landed.notice };
@@ -190,7 +194,7 @@ function dropViewer() {
 function backgroundViewer() {
   const path = view.path;
   closeViewer("background");
-  opLine(path + " is in the background — ctrl+\\ lists open files", false);
+  opLine(path + " is in the background", false);
 }
 
 // paintTitle cuts the PATH in the middle, never the file name, to fit.

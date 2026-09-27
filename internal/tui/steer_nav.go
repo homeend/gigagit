@@ -351,7 +351,7 @@ func (m Model) steerNavigateContent(c steer.Command) (Model, tea.Cmd) {
 	// cursor landed (a link's line may be past the end of a file that shrank).
 	lead, evicted := "opened "+c.File, evictedPath(ev)
 	return m, func() tea.Msg {
-		return contentLandedMsg{load: load().(fileContentMsg), cmd: c, line: line, lead: lead, evicted: evicted}
+		return contentLandedMsg{load: load().(fileContentMsg), cmd: c, path: c.File, line: line, lead: lead, evicted: evicted}
 	}
 }
 
@@ -362,6 +362,7 @@ func (m Model) steerNavigateContent(c steer.Command) (Model, tea.Cmd) {
 type contentLandedMsg struct {
 	load    fileContentMsg
 	cmd     steer.Command
+	path    string // the file loaded: a file_focus by id names no File
 	line    int
 	lead    string
 	evicted string

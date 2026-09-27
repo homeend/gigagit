@@ -361,6 +361,10 @@ table.diff .hit.cur, #blame-body .hit.cur, #help-body .hit.cur { background: var
 #op-line.task:hover { background: var(--sel); }
 #op-head { display: none; justify-content: space-between; color: var(--dim); font-size: 11px; margin-bottom: 2px; }
 #op-line.err #op-head { display: flex; }
+/* The head's words are CSS content, not text: a notice's textContent is its
+   message alone (the hidden head used to ride along in every one). */
+#op-line.err #op-head::before { content: "Problem"; }
+#op-line.err #op-head::after { content: "(double-click anywhere to hide)"; }
 #op-line.err { color: #f27a6a; }
 /* The post-op drift summary: a branch's newest recorded version no longer
    matches what it contributes now (see internal/changeset). Sits below
