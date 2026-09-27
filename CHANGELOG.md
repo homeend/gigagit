@@ -6,6 +6,38 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## AI reviews are notes on the commit or branch they review
+
+### Changed
+
+- A commit, range or branch AI review — from the TUI, `gg web` or `gg review`
+  — is stored as ONE note on the reviewed commit (a range's last commit; a
+  branch review's tip, with the branch name). The `reviews/` report files and
+  the per-review `task-results/` and history `.result` copies are gone; old
+  runs' files are left as they are. A review of uncommitted changes has no
+  commit and stays in the AI-tasks history.
+- `gg review` prints `note: <id>` on stderr instead of `report: <path>`; the
+  web report dialog shows the note id.
+
+### Added
+
+- A commit's reviews show as an `@notes/` directory at the top of its file
+  list; in the stacked diff they read above the first file.
+- Branches tab: a `◆n` marker and one row per review (of the branch's current
+  tip) under the branch; enter opens it, `.` → **Show review** opens the newest.
+- **View all notes…** lists reviews under their commit (a review of a commit
+  that no longer exists still opens).
+- The AI-tasks tab opens a review from its note; a save that failed is retried
+  with `s`.
+- Deleting or renaming a branch in gg deletes or renames its reviews.
+
+### Details
+
+- Review notes are never swept, never expire and never count toward the note
+  cap. A held note lock is retried for up to 15 s at random 500 ms–2 s
+  intervals; an unreadable `notes.toml` is moved aside to
+  `notes.toml.corrupt-<time>` and the review saved into a fresh store.
+
 ## Fix: a removed agent session closes its console
 
 ### Fixed
