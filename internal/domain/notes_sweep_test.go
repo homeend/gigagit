@@ -681,3 +681,26 @@ func TestSweepAndExplicitRefreshInvalidateTheBadgeCounts(t *testing.T) {
 		t.Fatalf("an explicit refresh must re-read the store, got %d", c.ByPath["a.go"])
 	}
 }
+
+// A commit-level note (an AI review) is never swept: not by age, and not
+// because its commit is gone — a missing commit shows it as missing instead.
+func TestSweepKeepsPathlessNoteOnMissingCommit(t *testing.T) {
+	t.Parallel()
+	_, svc := newRealRepo(t)
+	store := notes.NewFileStore(t.TempDir())
+	svc.SetNotesStore(store)
+	gone := strings.Repeat("d", 40) // never existed: a gc'd commit
+	old := time.Now().UTC().AddDate(-5, 0, 0)
+	if err := store.Put(model.Note{ID: "rev1", Source: model.NoteSourceAgent,
+		Address: model.FileAddress{State: model.StateCommitted, Commit: gone},
+		Tags:    []string{model.ReviewTag}, Summary: "Review", Created: old, Updated: old}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.sweepNotes(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := store.Load()
+	if len(all) != 1 || all[0].ID != "rev1" {
+		t.Fatalf("sweep dropped the review note: %v", all)
+	}
+}

@@ -151,6 +151,13 @@ func (s *Service) sweepNotes(ctx context.Context) (int, error) {
 	cache := map[string]noteSide{}
 	drop := map[string]bool{}
 	for _, n := range all {
+		// A commit-level note (an AI review) has no line to re-anchor and never
+		// expires: a missing commit shows it as missing, it is not deleted
+		// behind the user's back. Its replies copy its address, so they are
+		// skipped here too.
+		if n.IsCommitLevel() {
+			continue
+		}
 		if !cutoff.IsZero() && n.Created.Before(cutoff) {
 			drop[n.ID] = true
 			continue
