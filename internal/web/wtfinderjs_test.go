@@ -111,6 +111,8 @@ var finderWiring = []struct{ file, want, why string }{
 	{"viewer.js", "async function openWorktreeFileDiff(", "the diff lookup is shared by the viewer and F"},
 	{"viewer.js", "diff (working tree changes)", "the row says what it opens"},
 	{"live.js", "closeFinder();", "a steered navigate onto the panes closes F first"},
+	// Browser check: hiding a pane's children resets its scroll — esc must put it back.
+	{"wtfinder.js", "restorePanes(", "esc gives the panes back at the scroll they had"},
 }
 
 // finderGone pins what 5d removes.

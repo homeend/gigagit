@@ -110,12 +110,32 @@ function openFinder() {
   Object.assign(wtf, { on: true, loading: true, rows: [], sel: 0, query: "", next: 0, gen: 0, total: 0, paging: false });
   $("wtf-input").value = "";
   $("wtf-search").classList.add("hidden");
+  savePanes();
   $("panes").classList.add("wtf");
   preview.classList.remove("hidden");
   pushLayer("wtf", root, { onKey: finderKey });
   pushFoot("wtf", WTF_FOOT);
   render();
   load({ fresh: true });
+}
+
+// Hiding a pane's children (or the pane) drops its scroll: the panes F
+// covers are read before and put back after, so esc lands where you were.
+const PANES = ["commits-pane", "files-pane", "diff-pane"];
+let paneScroll = {};
+
+function savePanes() {
+  paneScroll = {};
+  for (const id of PANES) paneScroll[id] = { top: $(id).scrollTop, left: $(id).scrollLeft };
+}
+
+function restorePanes() {
+  for (const id of PANES) {
+    const s = paneScroll[id];
+    if (!s) continue;
+    $(id).scrollTop = s.top;
+    $(id).scrollLeft = s.left;
+  }
 }
 
 // closeFinder gives the panes back: dropping the class is the whole restore.
@@ -126,6 +146,7 @@ function closeFinder() {
   clearTimeout(queryTimer);
   $("wtf-input").blur();
   $("panes").classList.remove("wtf");
+  restorePanes();
   preview.classList.add("hidden");
   closeLayer("wtf");
   popFoot("wtf");
