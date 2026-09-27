@@ -174,3 +174,33 @@ func TestFocusedConsoleStepsOutWhenItsAgentExits(t *testing.T) {
 		t.Fatalf("status %q", m.statusMsg)
 	}
 }
+
+// A removed session takes its console with it: the Commits column comes back
+// instead of a box saying "(agent session gone)" — in every worktree, since
+// the console is not per-worktree. Focus stays where the user left it.
+func TestConsoleClosesWhenItsSessionIsRemoved(t *testing.T) {
+	m := newTestModel(t)
+	s := startTestSession(t, m, "sleep 0.3")
+	m, _ = m.openConsole(s.Info().ID)
+	m, _ = m.onSessionsChanged() // seen running
+	select {
+	case <-s.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("session did not exit")
+	}
+	m, _ = m.onSessionsChanged() // exited: steps out, stays docked
+	m.focus = panelWorktrees
+	if m.console == nil || m.console.focused {
+		t.Fatalf("precondition: an exited session stays docked, unfocused: %+v", m.console)
+	}
+	if err := domain.Sessions().Remove(s.Info().ID); err != nil {
+		t.Fatal(err)
+	}
+	m, _ = m.onSessionsChanged()
+	if m.console != nil {
+		t.Fatalf("a removed session's console must close, got %+v", m.console)
+	}
+	if m.focus != panelWorktrees {
+		t.Fatalf("focus moved to %v; closing an unfocused console must leave it alone", m.focus)
+	}
+}
