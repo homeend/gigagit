@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Fix: a removed agent session closes its console
+
+### Fixed
+
+- Removing an exited agent session (or terminal) from the `ctrl+\` popup left
+  its console docked in the Commits column as an empty "(agent session gone)"
+  box — in every worktree. The console now closes with its session and the
+  Commits panel comes back; focus moves only if the console had it.
+
 ## Agent console: no commit tooltip, no hidden-list wheel
 
 ### Fixed

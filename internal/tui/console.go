@@ -193,6 +193,19 @@ func (m Model) onSessionsChanged() (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("%s in %s exited (%d)", info.Label, shortWorktreeName(info.Dir), info.ExitCode)
 	}
 	m.sessionStates = next
+	if m.console != nil {
+		if _, ok := next[m.console.id]; !ok {
+			// Its session was removed: give the Commits column back rather
+			// than dock a box with nothing in it. Focus moves only when the
+			// console held it.
+			if m.console.focused {
+				m = m.closeConsole()
+			} else {
+				m.console = nil
+				m = m.reconcileFullscreenFocus()
+			}
+		}
+	}
 	return m, waitSessionsCmd()
 }
 
