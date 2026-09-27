@@ -371,3 +371,84 @@ func TestAllNotesPaintsAgentWho(t *testing.T) {
 	}
 	t.Fatal("no agent row on screen")
 }
+
+// longNotesModel is the popup over one untracked file deep in a long path and
+// one commit whose subject and note summary run past the popup's width.
+func longNotesModel(t *testing.T) (Model, *allNotesPopup, string, string, string) {
+	t.Helper()
+	dir := "src/dddd/gggg/qqqqqqqqqqqqqqq/ggggg/hhhhhhhhhhh/dsdsd/sdfsdfsdfsdf/sdsdsdsad/kkkkkkkkkkkk/mmmmmmmmm/werwer"
+	subject := "variant B: v2 profile endpoint, shorter LegacyAuth TTL, add CacheConfig, tighten the retry budget END"
+	summary := "Live steering demo: this line was annotated by an agent while the user watched the diff END"
+	ov := domain.NotesOverview{
+		Untracked: []domain.NoteFileNotes{{
+			Addr:  model.FileAddress{State: model.StateUntracked, Worktree: "/repo", Path: dir + "/Main2.kt"},
+			Notes: []domain.ResolvedNote{rootNote("u1", 3, "test note", "", model.NoteSourceUser, model.NoteActive)},
+		}},
+		Commits: []domain.NoteCommitNotes{{
+			Hash: anLiveSHA, Subject: subject, UnixTime: time.Now().Unix(),
+			Files: []domain.NoteFileNotes{{
+				Addr:  model.FileAddress{State: model.StateCommitted, Commit: anLiveSHA, Path: "src/PipelineConfig.kt"},
+				Notes: []domain.ResolvedNote{rootNote("c1", 42, summary, "", model.NoteSourceAgent, model.NoteActive)},
+			}},
+		}},
+	}
+	m := footerModel()
+	m.width, m.height = 140, 40 // wider than the popup, so a tooltip has room
+	m.currentWorktree = "/repo"
+	m, _ = m.openAllNotes()
+	u, _ := m.Update(allNotesMsg{ov: ov, gen: m.loadGen})
+	m = u.(Model)
+	return m, layerOf[*allNotesPopup](m), dir, subject, summary
+}
+
+// A long directory heading is cut in the MIDDLE: its head and its last
+// segment stay readable.
+func TestAllNotesElidesALongDirectoryInTheMiddle(t *testing.T) {
+	t.Parallel()
+	m, _, _, _, _ := longNotesModel(t)
+	for _, line := range allNotesScreen(m) {
+		if strings.Contains(line, "src/dddd") {
+			if !strings.Contains(line, "…") || !strings.Contains(line, "/werwer/") {
+				t.Fatalf("directory row %q must be elided in the middle, keeping /werwer/", line)
+			}
+			return
+		}
+	}
+	t.Fatal("no directory row on screen")
+}
+
+// A selected row whose text is cut shows its full text in a tooltip; an
+// unselected one does not.
+func TestAllNotesTooltipRevealsCutText(t *testing.T) {
+	t.Parallel()
+	m, p, dir, subject, summary := longNotesModel(t)
+	for _, tc := range []struct {
+		name string
+		pick func(r anRow) bool
+		full string
+	}{
+		{"directory", func(r anRow) bool { return r.kind == anDir }, dir + "/"},
+		{"commit heading", func(r anRow) bool { return r.kind == anSub && strings.Contains(r.text, "variant B") }, "tighten the retry budget END"},
+		{"note", func(r anRow) bool { return r.note != nil && r.note.Note.ID == "c1" }, summary},
+	} {
+		joined := strings.Join(allNotesScreen(m), "\n")
+		if strings.Contains(joined, tc.full) {
+			t.Fatalf("%s: the full text must not show before the row is selected", tc.name)
+		}
+		p.sel = -1
+		for i, r := range p.visible() {
+			if tc.pick(r) {
+				p.sel = i
+				break
+			}
+		}
+		if p.sel < 0 {
+			t.Fatalf("%s: no such row", tc.name)
+		}
+		if joined := strings.Join(allNotesScreen(m), "\n"); !strings.Contains(joined, tc.full) {
+			t.Fatalf("%s: the tooltip must show %q:\n%s", tc.name, tc.full, joined)
+		}
+		p.sel = 0
+	}
+	_ = subject
+}

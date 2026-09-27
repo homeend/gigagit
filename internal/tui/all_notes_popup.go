@@ -78,6 +78,12 @@ type allNotesPopup struct {
 	query   string
 	sel     int
 	notice  string // why the last enter could not open anything
+	// Set by box() for render's tooltip: the selected row's uncut text when
+	// it was cut ("" = shown in full), its line in the box content and the
+	// width the row had.
+	tipFull string
+	tipLine int
+	tipW    int
 }
 
 // allNotesMsg carries the overview, tagged with the loadGen it was asked
@@ -410,11 +416,39 @@ func (m Model) openAllNotesTarget(p *allNotesPopup, t anTarget, id string) (Mode
 
 func (p *allNotesPopup) render(m Model, below string) string {
 	w, h := m.overlayDims()
-	return overlayCenter(clipToHeight(below, h), p.box(m), w, h)
+	box := p.box(m)
+	out := overlayCenter(clipToHeight(below, h), box, w, h)
+	if line, x, y, ok := p.tooltip(box, w, h); ok {
+		out = overlayAt(out, line, x, y, w, h)
+	}
+	return out
 }
 
-// anNoteColumns renders a note row's columns (after its indent) to w.
-func anNoteColumns(r anRow, w int, now time.Time) string {
+// tooltip is the full-text reveal over the selected row when box() had to cut
+// it — the panels' reveal (revealLine), drawn on the row's own line. box()
+// records where the row landed and what its uncut text is.
+func (p *allNotesPopup) tooltip(box string, termW, termH int) (line string, x, y int, ok bool) {
+	if p.tipFull == "" {
+		return "", 0, 0, false
+	}
+	lines := strings.Split(strings.TrimSuffix(box, "\n"), "\n")
+	boxW := 0
+	for _, l := range lines {
+		boxW = max(boxW, lipgloss.Width(l))
+	}
+	left := (termW - boxW) / 2 // mirrors overlayCenter
+	top := (termH - len(strings.Split(box, "\n"))) / 2
+	ms := st().modalStyle
+	y = top + ms.GetBorderTopSize() + ms.GetPaddingTop() + p.tipLine
+	edge := left + ms.GetBorderLeftSize() + ms.GetPaddingLeft() + 2 // past the "> " prefix
+	line, x = revealLine(p.tipFull, edge, p.tipW, termW)
+	return line, x, y, true
+}
+
+// anNoteParts is a note row's fixed columns (head), its summary and its
+// reply count (tail); anNoteColumns lays them out to a width, the tooltip
+// joins them uncut.
+func anNoteParts(r anRow, now time.Time) (head, summary, tail string) {
 	n := r.note.Note
 	who := n.Author
 	if who == "" {
@@ -435,19 +469,25 @@ func anNoteColumns(r anRow, w int, now time.Time) string {
 	if !n.Created.IsZero() {
 		when = coarseAgo(now.Sub(n.Created))
 	}
-	head := padRight(truncate(anStatusLabel(r.status), anStatusW-1), anStatusW) +
+	head = padRight(truncate(anStatusLabel(r.status), anStatusW-1), anStatusW) +
 		padRight(truncate(sanitizeLine(who), anWhoW-1), anWhoW) +
 		padRight(truncate(where, anWhereW-1), anWhereW) +
 		padRight(truncate(when, anWhenW-1), anWhenW)
-	tail := ""
 	if len(r.note.Replies) > 0 {
 		tail = "  ↩" + strconv.Itoa(len(r.note.Replies))
 	}
+	return head, sanitizeLine(n.Summary), tail
+}
+
+// anNoteColumns renders a note row's columns (after its indent) to w: the
+// summary is the elastic part, so the reply count survives a narrow popup.
+func anNoteColumns(r anRow, w int, now time.Time) string {
+	head, summary, tail := anNoteParts(r, now)
 	budget := w - lipgloss.Width(head) - lipgloss.Width(tail)
 	if budget < 1 {
 		return truncate(head+tail, w)
 	}
-	return head + truncate(sanitizeLine(n.Summary), budget) + tail
+	return head + truncate(summary, budget) + tail
 }
 
 // anRowText renders one row (without the cursor prefix) to w columns.
@@ -462,7 +502,26 @@ func (p *allNotesPopup) anRowText(r anRow, w int, now time.Time) string {
 		}
 		return truncate(strings.Repeat("  ", r.depth)+mark+r.text, w)
 	}
-	return truncate(strings.Repeat("  ", r.depth+1)+r.text, w)
+	// Directories and files are paths: cut in the middle, keeping the name.
+	indent := strings.Repeat("  ", r.depth+1)
+	return indent + elidePath(r.text, w-len(indent))
+}
+
+// anRowFull is a row's uncut text (without the cursor prefix): what the
+// tooltip shows when anRowText had to cut it.
+func (p *allNotesPopup) anRowFull(r anRow, now time.Time) string {
+	switch r.kind {
+	case anNote:
+		head, summary, tail := anNoteParts(r, now)
+		return strings.Repeat(" ", anNoteIndent) + head + summary + tail
+	case anGroup, anSub:
+		mark := "▾ "
+		if p.folded[r.key] && p.query == "" {
+			mark = "▸ "
+		}
+		return strings.Repeat("  ", r.depth) + mark + r.text
+	}
+	return strings.Repeat("  ", r.depth+1) + r.text
 }
 
 func (p *allNotesPopup) box(m Model) string {
@@ -470,6 +529,7 @@ func (p *allNotesPopup) box(m Model) string {
 	inner := popupResolveWidth(w, p.maximized, popupWideInnerWidth(w))
 	textW := popupTextWidth(inner)
 	now := time.Now()
+	p.tipFull = ""
 
 	hints := wrapParts([]string{
 		i18n.T("[↑/↓] move"),
@@ -527,7 +587,14 @@ func (p *allNotesPopup) box(m Model) string {
 		// and the box border; the list gets what is left of the terminal.
 		room := h - (len(parts) + 1 + 1 + len(hints) + 2)
 		cap := min(popupResolveRowCap(p.maximized, h, allNotesRows), max(room, 3))
-		body = renderWindow(rows, winOpts{w: textW, anchor: p.sel, h: min(len(rows), cap)})
+		winH := min(len(rows), cap)
+		body = renderWindow(rows, winOpts{w: textW, anchor: p.sel, h: winH})
+		if p.sel >= 0 && p.sel < len(vis) {
+			if full := p.anRowFull(vis[p.sel], now); rowTruncated(full, textW-2) {
+				p.tipFull, p.tipW = full, textW-2
+				p.tipLine = len(parts) + p.sel - windowStart(len(rows), winH, p.sel)
+			}
+		}
 	}
 	parts = append(parts, body...)
 	if p.notice != "" {
