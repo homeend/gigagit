@@ -197,9 +197,11 @@ the directory is gone), row = glyph (● running, ○ exited; a task-backed
 session is ● in the task colour), label, worktree, age or exit code; plan 3
 appends the state. Keys: `enter` open, `k` kill (asks once for a running
 one), `x` remove (exited only, else a notice), `/` filter, `tab` next tab,
-`esc` close. AI tasks: the existing headless list, read-only, `enter` on a
-finished task opens its result as today; a running interactive task opens
-its console. Open files: unchanged.
+`esc` close. AI tasks: a read-only list from a new `GET /api/tasks`
+(`domain.Tasks().List()`: key · agent · state · age — the web's own AI
+lanes are operations, not tasks, so nothing existed to reuse); `enter` on a
+running interactive task opens its console; a finished task's result opens
+in the viewer from plan 2. Open files: unchanged.
 
 ### Sidebar
 
