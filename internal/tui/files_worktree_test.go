@@ -9,6 +9,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // wtWindow opens F's working-tree files window over paths.
@@ -25,7 +27,9 @@ func wtWindow(t *testing.T, paths ...string) Model {
 func wtRows(m Model) []string {
 	var out []string
 	for _, l := range m.filesView.visible() {
-		out = append(out, l.path)
+		if l.path != "" {
+			out = append(out, l.path)
+		}
 	}
 	return out
 }
@@ -266,5 +270,106 @@ func TestWorktreeFooterShowsItsOwnKeys(t *testing.T) {
 	got, _ = m.footerOverride()
 	if !strings.Contains(got, "back to list") {
 		t.Fatalf("preview footer = %q", got)
+	}
+}
+
+// wtWindowWith opens F's window over paths with st as the working-tree status.
+func wtWindowWith(t *testing.T, st model.WorkingTreeStatus, paths ...string) Model {
+	t.Helper()
+	m := loadedNavModel(t)
+	m.focus = panelBranches
+	m.status = st
+	tm, _ := m.Update(keyMsg("F"))
+	m = tm.(Model)
+	tm, _ = m.Update(lsFilesMsg{paths: paths})
+	return tm.(Model)
+}
+
+// wtTexts is every visible row's text, a heading marked with a trailing "#".
+func wtTexts(m Model) []string {
+	var out []string
+	for _, l := range m.filesView.visible() {
+		if l.heading {
+			out = append(out, l.text+"#")
+			continue
+		}
+		out = append(out, l.text)
+	}
+	return out
+}
+
+func TestWorktreeFilesGroupUnderDirectoryHeadings(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "src/b.go", "README.md", "src/a.go", "docs/x.md")
+	got := fmt.Sprint(wtTexts(m))
+	if got != "[   README.md docs/#      x.md src/#      a.go      b.go]" {
+		t.Fatalf("rows = %q, want root files first, then one heading per directory with its files indented", got)
+	}
+	if got := fmt.Sprint(wtRows(m)); got != "[README.md docs/x.md src/a.go src/b.go]" {
+		t.Fatalf("paths = %s", got)
+	}
+}
+
+func TestWorktreeFilesShowStatusLetters(t *testing.T) {
+	t.Parallel()
+	st := model.WorkingTreeStatus{Files: []model.FileStatus{
+		{Path: "m.go", Kind: model.KindTracked, Staged: '.', Unstaged: 'M'},
+		{Path: "s.go", Kind: model.KindTracked, Staged: 'A', Unstaged: '.'},
+		{Path: "n.txt", Kind: model.KindUntracked},
+	}}
+	m := wtWindowWith(t, st, "c.go", "m.go", "s.go")
+	if got := fmt.Sprint(wtTexts(m)); got != "[   c.go M  m.go ?  n.txt A  s.go]" {
+		t.Fatalf("rows = %q, want a status letter column: blank for a clean file, ? for untracked", got)
+	}
+}
+
+func TestWorktreeCursorSkipsALeadingHeading(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "src/a.go", "src/b.go")
+	if got := m.wtSelected(); got != "src/a.go" {
+		t.Fatalf("cursor on %q, want the first file, not the src/ heading", got)
+	}
+}
+
+func TestWorktreeFilterCursorLandsOnBestMatch(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "zz/view.go", "aa/viewer_helper.go", "c.txt")
+	m = fvKeys(t, m, keyMsg("/"), keyMsg("v"), keyMsg("i"), keyMsg("e"), keyMsg("w"), keyMsg("."), keyMsg("g"), keyMsg("o"))
+	if got := fmt.Sprint(wtRows(m)); got != "[aa/viewer_helper.go zz/view.go]" {
+		t.Fatalf("filtered rows = %s, want both matches grouped in tree order", got)
+	}
+	if got := m.wtSelected(); got != "zz/view.go" {
+		t.Fatalf("cursor on %q, want the best-ranked match", got)
+	}
+}
+
+func TestWorktreeTitleCountsFilesNotHeadings(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "src/a.go", "b.txt")
+	m = fvKeys(t, m, keyMsg("/"), keyMsg("a"), keyMsg(".")) // only src/a.go matches
+	if got := m.wtTitle(); !strings.Contains(got, "1/2") {
+		t.Fatalf("title = %q, want 1/2 (the src/ heading is not a file)", got)
+	}
+}
+
+func TestWorktreeCursorOpensOnTheFirstRow(t *testing.T) {
+	t.Parallel()
+	// ".a/x.go" sorts before "b.txt", but the tree lists root files first.
+	m := wtWindow(t, ".a/x.go", "b.txt")
+	if got := m.wtSelected(); got != "b.txt" {
+		t.Fatalf("cursor on %q, want the first row of the tree (the root file)", got)
+	}
+}
+
+func TestWorktreeEnterOnAHeadingIsInert(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "src/a.go")
+	m = fvKeys(t, m, keyMsg("up")) // onto the src/ heading
+	if m.wtSelected() != "" {
+		t.Fatalf("cursor on %q, want the heading", m.wtSelected())
+	}
+	m = fvKeys(t, m, keyMsg("enter"))
+	if m.actionMenu != nil || m.topLayer() != nil || !m.inWorktreeFiles() {
+		t.Fatal("enter on a heading must not open the file actions")
 	}
 }

@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## The working-tree files window (`F`) is a tree
+
+### Changed
+
+- `F` lists the working tree the way a commit's files view does: root files
+  first, then one bold `dir/` heading per directory with its files indented
+  beneath, so a file's full path reads off the heading instead of a cut row.
+  Each row leads with its status letter (`M`, `A`, … from the Status panel,
+  `?` for an untracked file — replacing the `(untracked)` suffix — blank when
+  clean). A `/` fuzzy filter keeps its matches grouped under their
+  directories; the cursor lands on the best-ranked match (the first file with
+  no query), never on a heading, and the title counts files, not headings.
+
 ## Fix: a removed agent session closes its console
 
 ### Fixed
