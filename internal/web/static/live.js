@@ -21,6 +21,7 @@ import { focusPane } from "./keys.js";
 import { loadRepo, opLine } from "./ops.js";
 import { switcherOpenFiles } from "./openfiles.js";
 import { openViewer, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
+import { closeFinder } from "./wtfinder.js";
 
 const COALESCE_MS = 150; // one burst of watcher events → one refresh
 const RETRY_MS = 500; // a refresh is already running → try again after it
@@ -367,6 +368,7 @@ async function openCompareForPair(a, b) {
 // over, in finishLink's arms).
 async function steerNavigate(s) {
   if (s.hint_kind === "view" && s.hint_id === "content") return steerNavigateContent(s);
+  closeFinder(); // the landing is on the panes F covers (the TUI's steerToPanels closes its files view)
   await steerNavigateLand(s);
   if (s.hint_kind) await revealHint(s);
 }

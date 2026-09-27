@@ -62,6 +62,15 @@ console.log(r.join("|"));
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }
+func TestFinderActionsJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "wtfinder.js", wtfPureStart, wtfPureEnd, `
+console.log(wtActions(false).join(",") + "|" + wtActions(true).join(","));
+`)
+	if want := "view,diff,history,blame,copy|view,copy"; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
 
 // finderWiring grows task by task: each entry pins code that exists only once
 // the step it names is done.
@@ -86,6 +95,22 @@ var finderWiring = []struct{ file, want, why string }{
 	{"wtfinder.js", "renderCell(", "lines paint through the shared cell renderer (syntax colour)"},
 	{"wtfinder.js", "setTimeout(() => showPreview(", "the preview waits for the cursor to settle"},
 	{"style.css", "#wtf-body .tk-kw", "the preview is syntax-coloured"},
+	// Task 4: the actions.
+	{"wtfinder.js", "showCtxMenu(", "enter / . / right-click open the actions menu"},
+	{"wtfinder.js", `label: "view file"`, "view file opens the viewer over F"},
+	{"wtfinder.js", "openFileHistory(f.path", "history opens over F"},
+	{"wtfinder.js", "openFileBlame(f.path", "blame opens over F"},
+	{"wtfinder.js", "openWorktreeFileDiff(", "diff shares the viewer's helper"},
+	{"wtfinder.js", "copyPathRows(", "the copy rows are the file rows' own"},
+	{"wtfinder.js", "copyFileLink(", "copy file link goes through the shared presence check"},
+	{"wtfinder.js", `tab: ""`, "ctrl+] opens the row in the background (no tab shows it)"},
+	{"wtfinder.js", "opened in the background", "ctrl+] says so in 5c's words"},
+	{"wtfinder.js", `addEventListener("dblclick"`, "a double-click views the file"},
+	{"wtfinder.js", `addEventListener("contextmenu"`, "right-click opens the actions"},
+	{"files.js", "copyPathRows,", "the copy rows are shared, not copied"},
+	{"viewer.js", "async function openWorktreeFileDiff(", "the diff lookup is shared by the viewer and F"},
+	{"viewer.js", "diff (working tree changes)", "the row says what it opens"},
+	{"live.js", "closeFinder();", "a steered navigate onto the panes closes F first"},
 }
 
 // finderGone pins what 5d removes.
@@ -94,4 +119,5 @@ var finderGone = []struct{ file, want, why string }{
 	{"search.js", "/api/files", "the endpoint is gone"},
 	{"search.js", `e.key === "F"`, "F belongs to wtfinder.js"},
 	{"palette.js", "openFeedFilter, openFinder", "openFinder no longer comes from search.js"},
+	{"viewer.js", "diff (HEAD ↔ working tree)", "no /api/diff lane opens HEAD ↔ working tree"},
 }

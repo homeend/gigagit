@@ -10,10 +10,13 @@
 // files pane and #wtf-preview in the diff pane over whatever stage is up, and
 // hides the panes' own children without touching them — esc restores the
 // stage exactly as it was.
-import { $, charWidth, elidePath, esc, getJSON } from "./core.js";
-import { closeLayer, footOwned, popFoot, pushFoot, pushLayer, topLayer } from "./layers.js";
+import { $, charWidth, elidePath, esc, getJSON, postJSON, state } from "./core.js";
+import { closeLayer, footOwned, popFoot, pushFoot, pushLayer, showCtxMenu, topLayer } from "./layers.js";
+import { copyPathRows, renderCell } from "./files.js";
+import { copyFileLink, linkFor } from "./links.js";
+import { openFileBlame, openFileHistory } from "./filehist.js";
+import { openViewer, openWorktreeFileDiff } from "./viewer.js";
 import { opLine } from "./ops.js";
-import { renderCell } from "./files.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
 import { registerHelp } from "./menus.js";
 
@@ -64,6 +67,13 @@ function wtPlaceholder(body, n) {
   if (body.missing) return "(file deleted on disk)";
   if (body.too_large) return "(file too large to preview)";
   return n ? "" : "(empty file)";
+}
+
+// wtActions is the action list of a row (enter / . / right-click): the git
+// rows only for a tracked file — an untracked one has no history (the TUI's
+// worktreeFileRows).
+function wtActions(untracked) {
+  return untracked ? ["view", "copy"] : ["view", "diff", "history", "blame", "copy"];
 }
 // --- end finder model ---
 
@@ -295,9 +305,47 @@ function paintPreview(path, lines, placeholder) {
   body.scrollTop = 0;
   body.scrollLeft = 0;
 }
-// Task 4 fills these: the actions and the background open.
-function menuAtCursor() {}
-function backgroundRow() {}
+// menuRows is a row's actions. view file, history and blame open OVER F (esc
+// returns here); diff closes F — the page's diff lives in the diff stage.
+function menuRows(f) {
+  const rows = [];
+  for (const a of wtActions(!!f.untracked)) {
+    if (a === "view") rows.push({ label: "view file", act: () => openViewer({ src: "worktree", path: f.path }) });
+    if (a === "diff") rows.push({ label: "diff (working tree changes)", act: () => { closeFinder(); openWorktreeFileDiff(f.path); } });
+    if (a === "history") rows.push({ label: "file history", act: () => openFileHistory(f.path, "") });
+    if (a === "blame") rows.push({ label: "blame", act: () => openFileBlame(f.path, "") });
+    if (a === "copy") {
+      rows.push({ sep: true }, ...copyPathRows(f.path));
+      const flink = linkFor(state.repo, state.worktree, { path: f.path, state: "unstaged", hint: { kind: "view", id: "content" } }, "new", 0);
+      if (flink) rows.push({ label: "copy file link", act: () => copyFileLink(f.path, flink) });
+    }
+  }
+  return rows;
+}
+
+function menuAtCursor() {
+  const f = selected();
+  if (!f) return;
+  const el = $("wtf-list").querySelector(`li[data-i="${wtf.sel}"]`);
+  const r = el ? el.getBoundingClientRect() : null;
+  showCtxMenu(menuRows(f), r ? r.left + 24 : 80, r ? r.bottom : 80);
+}
+
+// backgroundRow opens the row's file in the background (5b's open with no
+// tab — the op 5c's agent verb uses): it joins the ctrl+\ list, no tab shows
+// it, F stays up.
+async function backgroundRow() {
+  const f = selected();
+  if (!f) return;
+  let ans;
+  try {
+    ans = await postJSON("/api/open-files", { op: "open", src: "worktree", rev: "", path: f.path, line: 0, tab: "" });
+  } catch (e) {
+    opLine("background failed: " + (e.message || e), true);
+    return;
+  }
+  opLine(f.path + " opened in the background" + (ans.evicted ? " — closed " + ans.evicted + " (20 files open)" : ""), false);
+}
 
 function openSearch() {
   $("wtf-search").classList.remove("hidden");
@@ -380,6 +428,33 @@ $("wtf-input").addEventListener("blur", paintSearch);
 $("wtf-list").addEventListener("scroll", () => {
   const l = $("wtf-list");
   if (l.scrollTop + l.clientHeight >= l.scrollHeight - 40) loadMore();
+});
+
+function rowAt(e) {
+  const li = e.target.closest("li[data-i]");
+  if (!li) return null;
+  const i = Number(li.dataset.i);
+  if (i !== wtf.sel) {
+    wtf.sel = i;
+    paintSel();
+    cursorMoved();
+  }
+  return wtf.rows[i] || null;
+}
+
+$("wtf-list").addEventListener("click", (e) => {
+  leaveSearch();
+  rowAt(e);
+});
+$("wtf-list").addEventListener("dblclick", (e) => {
+  const f = rowAt(e);
+  if (f) openViewer({ src: "worktree", path: f.path });
+});
+$("wtf-list").addEventListener("contextmenu", (e) => {
+  const f = rowAt(e);
+  if (!f) return;
+  e.preventDefault();
+  showCtxMenu(menuRows(f), e.clientX, e.clientY);
 });
 
 // The bottom bar while F is up. ctrl+\\ is escaped: "\ " is a space.
