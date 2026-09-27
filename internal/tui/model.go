@@ -692,10 +692,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// it must land on only exist now. It supersedes the re-anchor above —
 		// the cursor it restored is the loader's, not one the user placed.
 		if m.noteLand != nil && m.noteLand.tag == msg.tag {
-			dir := m.noteLand.dir
+			land := *m.noteLand
 			m.noteLand = nil
 			var landed bool
-			if m, landed = m.landOnNote(dir); landed {
+			if land.id != "" {
+				m, landed = m.gotoNote(land.id)
+			} else {
+				m, landed = m.landOnNote(land.dir)
+			}
+			if landed {
 				return m, nil
 			}
 		}
@@ -1410,6 +1415,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.wtLoaded(msg)
 		}
 		return m, nil // the window closed before the list arrived
+	case allNotesMsg:
+		return m.onAllNotes(msg)
 	case remoteHeadNamesMsg:
 		p := layerOf[*remoteHeadsPopup](m)
 		if p == nil || msg.gen != m.loadGen {

@@ -246,7 +246,12 @@ first argument: a file link for `add`/`list`/`clear`, the repository's link
 and the link picks the checkout whose store holds them. `gg diff --hunks` numbers each file's `@@` hunks
 so `--hunk N` can address one. Notes are machine-local and expire (see
 `[notes]` under Configuration); they render inline in the TUI diff view and in
-`gg web`. `gg review --notes` does not replace the text report — it still
+`gg web`. In the TUI, **View all notes…** (command palette) lists every note
+this checkout can see as one tree — working tree (unstaged / staged /
+untracked), then commits newest first, then shelf entries, each down to its
+directory and file — with a status column (active, stale, orphaned, or missing
+when the commit is gone); type to filter, `enter` on a note opens its diff on
+that line and `esc` comes back to the list. `gg review --notes` does not replace the text report — it still
 prints and saves that — but ALSO asks the tool for anchored notes and imports
 them. `--preview <id|label|<target>...<source>>` targets a saved merge
 preview instead of a single commit (on `gg diff --hunks`, `gg note

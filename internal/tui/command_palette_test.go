@@ -104,6 +104,7 @@ func TestPaletteRegistryOrder(t *testing.T) {
 		{"Search pull requests…", "A"},
 		{"Set up agent skills (using-gg)", ""},
 		{"Show commit", "#"},
+		{"View all notes…", ""},
 	}
 	cmds := paletteCommands()
 	if len(cmds) != len(want) {

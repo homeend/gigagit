@@ -80,6 +80,7 @@ func paletteCommands() []paletteCommand {
 			return m, cmd
 		}},
 		{label: i18n.T("Show commit"), keyHint: "#", run: Model.openGotoCommitPopup},
+		{label: i18n.T("View all notes…"), run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openAllNotes() }},
 	}
 }
 
