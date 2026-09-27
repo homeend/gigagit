@@ -1340,8 +1340,17 @@ commands, and the expected user-visible outcome (files, branches, stashes, sync
 state, history shape). Scenarios are run as standard Go tests and cover
 SmartSwitch, SmartPull, stash, commit+push, undo, and worktree add/remove.
 
-See [`CLAUDE.md`](CLAUDE.md) for architecture and contributor conventions.
+See [`CLAUDE.md`](CLAUDE.md) for the architecture and the conventions the
+code follows. The project does not take outside code — see
+[`CONTRIBUTING.md`](CONTRIBUTING.md) for what is welcome instead.
 
 ## License
 
-[MIT](LICENSE)
+gigagit is source-available under the
+[PolyForm Noncommercial License 1.0.0](LICENSE): free for personal, hobby,
+research, educational and non-profit use; **commercial use needs a license
+from the author** — see [`COMMERCIAL.md`](COMMERCIAL.md). Everything
+published before this change — the releases through v0.3.0 and the commits
+up to `0b844a31` — was under MIT and remains so. The bundled open-source Go
+modules keep their own licenses, listed in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
