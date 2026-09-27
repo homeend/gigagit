@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/filelock"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/notes"
@@ -305,4 +306,46 @@ func (s *Service) ReviewsForBranch(ctx context.Context, name string) ([]Review, 
 		}
 	}
 	return out, err
+}
+
+// reviewsFollowBranchOp keeps review notes in step with a branch op that
+// just succeeded: a deleted branch takes its reviews, a renamed one keeps
+// them under the new name. Only review notes are touched — a line note's
+// Address.Branch is left alone. Best-effort: the op already happened.
+func (s *Service) reviewsFollowBranchOp(ctx context.Context, op engine.Operation) {
+	var drop, from, to string
+	switch o := op.(type) {
+	case engine.DeleteBranch:
+		drop = o.Name
+	case engine.DeleteRemoteBranch:
+		drop = o.Remote + "/" + o.Branch
+	case engine.RenameBranch:
+		from, to = o.Old, o.New
+	default:
+		return
+	}
+	st := s.notesStore(ctx)
+	if st == nil {
+		return
+	}
+	all, err := st.Load()
+	if err != nil {
+		return
+	}
+	changed := false
+	for _, n := range all {
+		if n.IsReply() || !n.IsReviewNote() {
+			continue
+		}
+		switch {
+		case drop != "" && n.Address.Branch == drop:
+			changed = st.Remove(n.ID) == nil || changed
+		case from != "" && n.Address.Branch == from:
+			n.Address.Branch = to
+			changed = st.Put(n) == nil || changed
+		}
+	}
+	if changed {
+		s.invalidateNoteCounts()
+	}
 }

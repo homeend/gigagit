@@ -394,5 +394,8 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 	}
 	observ.EmitSpan(span)
 	observ.NoteFailure(label, opErr)
+	if opErr == nil && out.Changed {
+		s.reviewsFollowBranchOp(ctx, op)
+	}
 	return out, opErr
 }

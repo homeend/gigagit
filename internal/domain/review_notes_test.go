@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/filelock"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // reviewRepo is a real repo on branch "feature" (one commit past main) with
@@ -211,5 +213,62 @@ func TestNoteCountsListsReviewHeads(t *testing.T) {
 	}
 	if c.ByCommit[tip] != 1 {
 		t.Fatalf("ByCommit[tip] = %d, want 1 (the ◆ badge counts reviews)", c.ByCommit[tip])
+	}
+}
+
+var deleteAnyway = engine.MapDecider{"delete-branch": "delete", "branch-unmerged": "force-delete"}
+
+func TestDeleteBranchDeletesItsReviews(t *testing.T) {
+	t.Parallel()
+	dir, svc, _ := reviewRepo(t)
+	ctx := context.Background()
+	tg, _ := svc.BranchReviewTarget(ctx, "feature")
+	if _, _, err := svc.SaveReview(ctx, SaveReview{Target: tg, Text: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	runGitIn(t, dir, "checkout", "main")
+	if _, err := svc.Execute(ctx, engine.DeleteBranch{Name: "feature"}, nil, deleteAnyway); err != nil {
+		t.Fatal(err)
+	}
+	if all, _ := svc.Reviews(ctx); len(all) != 0 {
+		t.Fatalf("reviews after the delete = %+v", all)
+	}
+}
+
+// The TUI fills Address.Branch on working-tree line notes too: deleting the
+// branch must take its REVIEWS only.
+func TestDeleteBranchKeepsLineNotes(t *testing.T) {
+	t.Parallel()
+	dir, svc, _ := reviewRepo(t)
+	ctx := context.Background()
+	st := svc.notesStore(ctx)
+	line := model.Note{ID: "line1", Address: model.FileAddress{State: model.StateUnstaged, Worktree: dir, Branch: "feature", Path: "f.txt"},
+		Summary: "keep me", Created: time.Now(), ContextHash: "h"}
+	if err := st.Put(line); err != nil {
+		t.Fatal(err)
+	}
+	runGitIn(t, dir, "checkout", "main")
+	if _, err := svc.Execute(ctx, engine.DeleteBranch{Name: "feature"}, nil, deleteAnyway); err != nil {
+		t.Fatal(err)
+	}
+	all, _ := st.Load()
+	if len(all) != 1 || all[0].ID != "line1" {
+		t.Fatalf("the line note went with the branch: %v", all)
+	}
+}
+
+func TestRenameBranchRenamesItsReviews(t *testing.T) {
+	t.Parallel()
+	dir, svc, _ := reviewRepo(t)
+	ctx := context.Background()
+	tg, _ := svc.BranchReviewTarget(ctx, "feature")
+	id, _, _ := svc.SaveReview(ctx, SaveReview{Target: tg, Text: "x"})
+	runGitIn(t, dir, "checkout", "main")
+	if _, err := svc.Execute(ctx, engine.RenameBranch{Old: "feature", New: "feat2"}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	r, _ := svc.Review(ctx, id)
+	if r.Branch != "feat2" || r.Kind != ReviewOnBranch {
+		t.Fatalf("after the rename: %+v", r)
 	}
 }
