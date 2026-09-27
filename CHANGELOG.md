@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Open files on the web: the F finder (5d)
+
+### Added
+
+- **`F` in `gg web` lists every file in the working tree** in the file list —
+  tracked files minus deleted ones, plus untracked ones marked `(untracked)` —
+  over whatever screen is up. `/` filters fuzzily (the best 200 matches;
+  without a query the list pages in as you scroll), the diff pane previews
+  the file under the cursor once it rests, and `enter` / `.` / right-click
+  open its actions: **view file**, **diff**, **file history**, **blame** and
+  the copy rows (path, absolute path, file name, file link); a double-click
+  views the file. `ctrl+]` opens a row in the background (`ctrl+\` lists
+  it), and `esc` gives the panes back exactly as they were. The footer's
+  `F files` chip opens it too.
+
+### Changed
+
+- F replaces the page's old overlay finder (tracked files only, `enter`
+  opened the file's history); `GET /api/files` is gone, `GET
+  /api/worktree-files` serves the new list.
+- The viewer's diff row is **diff (working tree changes)** and opens the
+  staged change when the file has no unstaged one (it said "no changes").
+
 ## Open files on the web: agent verbs (5c)
 
 ### Added

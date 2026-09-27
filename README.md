@@ -1211,6 +1211,13 @@ tab left it, `x` closes it in every tab. A working-tree file follows the disk:
 an edit reloads it in place, a deleted file shows `(file deleted on disk)`
 until it comes back.
 
+`F` turns the file list into every file in the working tree (untracked ones
+marked `(untracked)`), over whatever screen you are on: `/` filters fuzzily,
+the diff pane previews the file under the cursor, and `enter` / `.` (or
+right-click) offers **view file**, **diff**, **file history**, **blame** and
+the copy rows — a double-click views the file. `ctrl+]` opens the row in the
+background; `esc` gives the panes back as they were.
+
 ### Open files (background file viewers)
 
 A file you view — **View file** in a commit's file tree, a pasted `gg://`
