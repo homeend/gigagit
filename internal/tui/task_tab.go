@@ -219,6 +219,17 @@ func (p *sessionsPopup) updateTasks(m Model, key string) (Model, tea.Cmd) {
 		p.confirmCancel = ""
 		_ = domain.Tasks().Cancel(r.id())
 		m.statusMsg = i18n.T("cancelled %s", r.key())
+	case "s":
+		r, ok := p.currentTask()
+		if !ok || !r.saveFailed() {
+			return m, nil
+		}
+		if err := domain.Tasks().RetrySave(r.id()); err != nil {
+			m.statusMsg = err.Error()
+		} else {
+			m.statusMsg = i18n.T("review saved")
+		}
+		p.hist = domain.Tasks().History()
 	case "x":
 		r, ok := p.currentTask()
 		if !ok {
@@ -240,6 +251,17 @@ func (p *sessionsPopup) updateTasks(m Model, key string) (Model, tea.Cmd) {
 // openTask is enter on a task: its result, else a running agent's console,
 // else a failure's output.
 func (p *sessionsPopup) openTask(m Model, r taskRow) (Model, tea.Cmd) {
+	if r.kind() == exttool.CatReview {
+		// A commit/range/branch review lives in its note, never in a file.
+		if id := r.noteID(); id != "" {
+			label := strings.TrimPrefix(r.key(), "review — ")
+			return m.openReviewNote(id, reviewTitle(label))
+		}
+		if r.live != nil && r.live.SaveErr != "" {
+			m.statusMsg = i18n.T("%s — [s] retry save", r.live.SaveErr)
+			return m, nil
+		}
+	}
 	result := ""
 	if r.live != nil && r.live.Results > 0 {
 		result = r.live.Result
@@ -341,6 +363,9 @@ func (p *sessionsPopup) taskHint() string {
 		case r.state() == domain.TaskFailed:
 			parts = append(parts, i18n.T("[enter] output"))
 		}
+		if r.saveFailed() {
+			parts = append(parts, i18n.T("[s] retry save"))
+		}
 		if r.state().Live() {
 			parts = append(parts, i18n.T("[k k] cancel"))
 		} else {
@@ -351,9 +376,29 @@ func (p *sessionsPopup) taskHint() string {
 	return strings.Join(parts, "  ")
 }
 
+// noteID is the note a review run was stored as ("" = none).
+func (r taskRow) noteID() string {
+	if r.live != nil {
+		return r.live.NoteID
+	}
+	if r.record != nil {
+		return r.record.NoteID
+	}
+	return ""
+}
+
+// saveFailed reports a review run whose result could not be stored.
+func (r taskRow) saveFailed() bool { return r.live != nil && r.live.SaveErr != "" }
+
 // hasResult reports a row enter shows a result for — without reading the
 // history's files (the hint is drawn every frame).
 func (r taskRow) hasResult() bool {
+	if r.noteID() != "" {
+		return true
+	}
+	if r.saveFailed() {
+		return false
+	}
 	if r.live != nil {
 		return r.live.Results > 0
 	}

@@ -156,10 +156,13 @@ func openFileRowText(d *openFile, shown bool) string {
 	if shown {
 		mark = "● "
 	}
-	if d.src.kind == srcExternal {
+	if d.src.kind == srcExternal || d.src.kind == srcNote {
 		name := d.title
 		if name == "" {
 			name = d.path
+		}
+		if d.src.kind == srcNote {
+			return mark + name + "  " + i18n.T("AI review")
 		}
 		return mark + name + "  " + i18n.T("AI result")
 	}
