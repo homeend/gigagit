@@ -3541,7 +3541,26 @@ UTF-8 payloads correctly (the fixture test tells).
   `worktreePathOf` (the row's own worktree-marker lookup, current worktree
   included) resolves — so the rows exist exactly where the row shows a
   worktree path — and hands the path to the same `startAgentFor` /
-  `openTerminal`. Deferred v2: session sub-rows under branches.
+  `openTerminal`.
+- **Session sub-rows under branches (v2, 2026-09-28):** `branchEntries()`
+  (worktree_sessions.go) interleaves `brEntry{br, sess}` sub-rows after each
+  branch whose `worktreePathOf` matches a session's `Dir` (sessions only, no
+  ◆ tasks); `branchList` (viewstate.go) is entry-based like `worktreeList`
+  (Name/Date = the parent's, Key = `name\x00id`, `Haystack` = the branch row
+  + all its sub-rows so a `/` query naming a session keeps the branch) and
+  implements `parented` — `displayIndices` indexes the branch-filter slot's
+  per-BRANCH `hidden` verdicts through `Parent(i)`, never by row.
+  `backingIndex(panelBranches)` and `rowKeyAt` refuse/key sub-rows the
+  Worktrees way. `selectedSession` dispatches on `m.focus`
+  (Worktrees → `wtEntry`, Branches → `brEntry`), so the `x`/`enter`
+  handlers, `sessionMenuRows`, `canRemoveSessionRow` and the `[x] resolve`
+  yield need no per-panel gate; the Worktrees-only `Start agent` /
+  `Open terminal` rows inside `sessionMenuRows` are gated to `panelWorktrees`
+  explicitly because `selectedWorktree` reads the Worktrees cursor whatever
+  the focus. Rendering: `branchOnlyRows` returns the 1:1 branch rows plus
+  the indicator-gutter width; `branchRowsFor` indents `sessionRowBody` to it
+  so `└` sits under the name (`branchRows()` keeps its no-arg shape for the
+  tests that index it per branch).
 - **`x` on a session sub-row (Worktrees tab, 2026-09-27):** `removeSessionRow`
   removes an exited session / refuses a running one; the key handler checks
   `selectedSession` BEFORE `canEnterConflict`, and the global `[x] resolve`

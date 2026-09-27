@@ -221,16 +221,52 @@ type textRevealer interface{ TextReveal(i int) string }
 // fully un-elided, shown by the reveal tooltip when it differs from Row(i).
 type fullRower interface{ Full(i int) string }
 
+// parented is an optional panelList capability: the backing index of row i's
+// parent element for lookups that are per PARENT, not per row — the branch
+// filter slots' hidden verdicts are per branch, and a session sub-row shares
+// its branch's verdict.
+type parented interface{ Parent(i int) int }
+
+// branchList is entry-based like worktreeList: each branch row is followed by
+// one row per agent session running in the worktree it is checked out in
+// (branchEntries). A session row's Name and Date are its branch's, so the
+// stable sort keeps it directly under its parent; backingIndex refuses it.
 type branchList struct {
 	items []model.Branch
-	rows  []string
+	ents  []brEntry
+	rows  []string // one per entry
 }
 
-func (l branchList) Len() int          { return len(l.items) }
+func (l branchList) Len() int          { return len(l.ents) }
 func (l branchList) Row(i int) string  { return l.rows[i] }
-func (l branchList) Name(i int) string { return l.items[i].Name }
-func (l branchList) Date(i int) int64  { return l.items[i].UnixTime }
-func (l branchList) Key(i int) string  { return l.items[i].Name }
+func (l branchList) Name(i int) string { return l.items[l.ents[i].br].Name }
+func (l branchList) Date(i int) int64  { return l.items[l.ents[i].br].UnixTime }
+func (l branchList) Parent(i int) int  { return l.ents[i].br }
+func (l branchList) Key(i int) string {
+	k := l.items[l.ents[i].br].Name
+	if s := l.ents[i].sess; s != "" {
+		k += "\x00" + string(s)
+	}
+	return k
+}
+
+// Haystack: a branch and its session sub-rows match as one unit — the branch
+// row plus every sub-row's text — so a / filter never strands a sub-row
+// without its parent, and a query naming a session keeps the branch it runs
+// under in view.
+func (l branchList) Haystack(i int) string {
+	p := i
+	for p > 0 && l.ents[p].sub() {
+		p--
+	}
+	var sb strings.Builder
+	sb.WriteString(l.rows[p])
+	for q := p + 1; q < len(l.ents) && l.ents[q].sub(); q++ {
+		sb.WriteByte(' ')
+		sb.WriteString(l.rows[q])
+	}
+	return sb.String()
+}
 
 type remoteBranchList struct {
 	items []model.RemoteBranch
@@ -473,7 +509,8 @@ func (m Model) fileMembership(p panel) []int {
 func (m Model) listFor(p panel) panelList {
 	switch p {
 	case panelBranches:
-		return branchList{items: m.branches, rows: m.branchRows()}
+		ents := m.branchEntries()
+		return branchList{items: m.branches, ents: ents, rows: m.branchRowsFor(ents)}
 	case panelRemotes:
 		return remoteBranchList{items: m.remoteBranches, rows: m.remoteRows()}
 	case panelWorktrees:
@@ -599,8 +636,16 @@ func (m Model) displayIndices(p panel) (idx []int) {
 		if !m.memberOf(p, i) {
 			continue // Files/Staged split: each panel shows only its subset
 		}
-		if bfHidden != nil && i < len(bfHidden) && bfHidden[i] {
-			continue
+		if bfHidden != nil {
+			// The verdicts are per branch; a session sub-row takes its
+			// parent's.
+			pi := i
+			if pp, ok := l.(parented); ok {
+				pi = pp.Parent(i)
+			}
+			if pi < len(bfHidden) && bfHidden[pi] {
+				continue
+			}
 		}
 		if q != "" {
 			// Prefer the cheap haystack; only fall back to Row(i) for panels that
@@ -709,6 +754,14 @@ func (m Model) backingIndex(p panel) (int, bool) {
 			return 0, false
 		}
 		return ents[u].wt, true
+	}
+	if p == panelBranches {
+		// The same interleave: a session sub-row is not a branch.
+		ents := m.branchEntries()
+		if u >= len(ents) || ents[u].sub() {
+			return 0, false
+		}
+		return ents[u].br, true
 	}
 	return u, true
 }

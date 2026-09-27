@@ -254,7 +254,7 @@ func (p *agentStartPopup) render(m Model, below string) string {
 // sessionMenuRows are the Worktrees `.` menu's agent rows: Start agent on a
 // worktree row; Open / Kill / Remove on a session sub-row.
 func (m Model) sessionMenuRows() []actionRow {
-	if m.focus != panelWorktrees {
+	if m.focus != panelWorktrees && m.focus != panelBranches {
 		return nil
 	}
 	if info, ok := m.selectedSession(); ok {
@@ -289,6 +289,9 @@ func (m Model) sessionMenuRows() []actionRow {
 		}})
 		return rows
 	}
+	if m.focus != panelWorktrees {
+		return nil // a Branches row has its own, worktree-qualified rows (branchSessionRows)
+	}
 	if wt, ok := m.selectedWorktree(); ok && wt.Path != "" {
 		path := wt.Path
 		return []actionRow{
@@ -303,12 +306,9 @@ func (m Model) sessionMenuRows() []actionRow {
 	return nil
 }
 
-// canRemoveSessionRow gates the Worktrees tab's x: an exited session sub-row
-// is selected.
+// canRemoveSessionRow gates x on the Worktrees and Branches tabs: an exited
+// session sub-row is selected.
 func (m Model) canRemoveSessionRow() bool {
-	if m.focus != panelWorktrees {
-		return false
-	}
 	info, ok := m.selectedSession()
 	return ok && info.State != domain.SessionRunning
 }

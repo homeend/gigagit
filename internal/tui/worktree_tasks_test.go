@@ -93,3 +93,32 @@ func TestTaskRowEnterOpensTasksTab(t *testing.T) {
 		t.Fatal("cursor on the task")
 	}
 }
+
+// A ◆ row parked under the Worktrees cursor must not act from the Branches
+// tab: the Branches . menu (which also serves session sub-rows) offers no
+// task rows there, and enter does not open the task.
+func TestTaskRowsStayOffBranchesTab(t *testing.T) {
+	m := withOneWorktree(launchTestModel(t))
+	id := submitReview(t, m, "sleep 5")
+	m = selectWorktreeTask(t, m, id)
+	m.focus, m.activeLeftTab = panelBranches, panelBranches
+	m.sel[panelBranches] = 0
+	if _, ok := m.selectedTask(); ok {
+		t.Fatal("selectedTask resolved the Worktrees cursor from the Branches tab")
+	}
+	got := ids(availableActions(m))
+	if got["task-cancel"] || got["task-result"] || (got["start-agent"] && !strings.Contains(labelOf(availableActions(m), "start-agent"), " in ")) {
+		t.Fatalf("Worktrees-cursor rows leaked onto the Branches menu: %v", got)
+	}
+	_ = domain.Tasks().Cancel(id)
+	waitTaskState(t, id, taskEndedFn)
+}
+
+func labelOf(rows []actionRow, id string) string {
+	for _, r := range rows {
+		if r.id == id {
+			return r.label
+		}
+	}
+	return ""
+}

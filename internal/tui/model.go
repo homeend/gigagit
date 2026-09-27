@@ -2245,14 +2245,12 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.amendPrefillCmd()
 			}
 		case "x":
-			// A session sub-row on the Worktrees tab owns x: remove an exited
-			// session in place (the . menu's Remove session / the ctrl+\
-			// popup's x), refuse a running one. It never falls through to
-			// [x] resolve — the row is a session, not a conflict.
-			if m.focus == panelWorktrees {
-				if info, ok := m.selectedSession(); ok {
-					return m.removeSessionRow(info), nil
-				}
+			// A session sub-row (Worktrees or Branches tab) owns x: remove an
+			// exited session in place (the . menu's Remove session / the
+			// ctrl+\ popup's x), refuse a running one. It never falls
+			// through to [x] resolve — the row is a session, not a conflict.
+			if info, ok := m.selectedSession(); ok {
+				return m.removeSessionRow(info), nil
 			}
 			if m.canEnterConflict() {
 				return startConflictProcess(m) // enter / resume from the notice
@@ -2562,6 +2560,11 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "enter":
+			// A session sub-row (Worktrees or Branches tab): enter opens its
+			// console, never the parent row's own enter action.
+			if info, ok := m.selectedSession(); ok {
+				return m.openConsole(info.ID)
+			}
 			// Branches: enter = the .-menu "Go to tip in commits" row (shared
 			// code path, so the key and the menu can never drift apart).
 			if m.focus == panelBranches {
@@ -2574,9 +2577,6 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.tagJumpToCommit()
 			}
 			if m.focus == panelWorktrees {
-				if info, ok := m.selectedSession(); ok {
-					return m.openConsole(info.ID)
-				}
 				if info, ok := m.selectedTask(); ok {
 					return m.openSessionsPopupOn(tabTasks, info.ID)
 				}

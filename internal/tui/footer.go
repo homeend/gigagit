@@ -193,12 +193,10 @@ func contextBindings() []footerBinding {
 func globalBindings() []footerBinding {
 	return []footerBinding{
 		{"resolve", "x", i18n.T("[x] resolve"), func(m Model) bool {
-			// A Worktrees session sub-row owns x (remove / refuse), so the
-			// conflict hint steps back there.
-			if m.focus == panelWorktrees {
-				if _, ok := m.selectedSession(); ok {
-					return false
-				}
+			// A session sub-row (Worktrees or Branches) owns x (remove /
+			// refuse), so the conflict hint steps back there.
+			if _, ok := m.selectedSession(); ok {
+				return false
 			}
 			return m.canEnterConflict()
 		}, scopeGlobal},
