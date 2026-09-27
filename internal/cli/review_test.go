@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 

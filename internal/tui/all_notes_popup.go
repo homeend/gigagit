@@ -39,12 +39,12 @@ const (
 type anRowKind int
 
 const (
-	anGroup anRowKind = iota // Working tree / Commits / Other (foldable)
-	anSub                    // Unstaged/Staged/Untracked, a commit, a shelf entry (foldable)
-	anDir                    // a directory heading
-	anFile                   // a file
-	anNote                   // one thread
-	anReview                 // one AI review stored on a commit (under @notes/)
+	anGroup  anRowKind = iota // Working tree / Commits / Other (foldable)
+	anSub                     // Unstaged/Staged/Untracked, a commit, a shelf entry (foldable)
+	anDir                     // a directory heading
+	anFile                    // a file
+	anNote                    // one thread
+	anReview                  // one AI review stored on a commit (under @notes/)
 )
 
 // anTarget is where a file or note row opens.
@@ -66,7 +66,7 @@ type anRow struct {
 	span   int    // index one past the row's last descendant
 	note   *domain.ResolvedNote
 	review *domain.Review // anReview rows
-	status string // a note's display status
+	status string         // a note's display status
 	target anTarget
 	filter string // lowercased text a query matches (notes only)
 }
