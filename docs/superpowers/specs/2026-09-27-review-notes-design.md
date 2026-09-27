@@ -27,7 +27,7 @@ and the AI-tasks tab.
    the current tip.
 4. Deleting a branch in gg deletes every note carrying that branch name.
 5. Review notes never expire: no stale sweep, no age limit, no entry cap.
-6. One store, one writer, one reader. Nothing else holds a review's text: the
+6. One store, one writer, one reader, no fallback to the old files. Nothing else holds a review's text: the
    `reviews/<repo>/` reports, the `task-results/` viewer copies and the
    history's `.result` file stop being written for reviews.
 7. Migration is by typed write/read models with a notes implementation; callers
@@ -166,11 +166,20 @@ the closure carries the repo.
   interactive review is saved as soon as it lands. The first call creates the
   note; later results of the same task update it (same id). `TaskInfo` and
   `taskhist.Record` gain `NoteID`.
-- For a task with a `Store` hook, the history writes **no** `.result` file.
-- If `Store` fails, the task ends failed with the error, and the review text is
-  written to the history's `.result` file (today's path; the tail is capped at
-  `taskhist.MaxTail` and would cut a review). This is the only case in which a
-  commit/range/branch review is written outside notes.
+- For a task with a `Store` hook, the history writes **no** `.result` file,
+  ever.
+- **No fallback to files.** A review is written to notes or not at all. The
+  write is designed not to fail short of a full or read-only disk:
+  - **Lock contention** (another gg process holding `notes.toml.lock` longer
+    than `filelock.Wait`, 2 s): `SaveReview` retries with backoff for up to
+    10 s before giving up.
+  - **Corrupt `notes.toml`**: `SaveReview` does NOT refuse like other note
+    writes. It moves the file aside to `notes.toml.corrupt-<unix time>`
+    (nothing is deleted), starts a fresh store, writes the review, and reports
+    the move as a warning.
+  - **Disk full / read-only / no state dir**: the task ends failed with the
+    error. The review text stays in the running gg's memory (`TaskInfo.Result`)
+    and the AI-tasks row offers "Retry save"; quitting gg loses it.
 - `tui/review.go` stops calling `SaveReviewReport`; it opens the review by note
   id.
 
@@ -271,7 +280,9 @@ Every new string goes through `i18n.T` in all four bundles.
   tip only; working target refused; branch delete/rename/remote-delete
   follow-ups through `Execute` on a real repo.
 - Task manager: interactive review saved on first result and updated on the
-  second (same id); `Store` failure → failed task, text in tail, no `.result`.
+  second (same id); a held lock released within the retry window → saved;
+  a corrupt `notes.toml` → moved aside, review saved, warning; an unwritable
+  state dir → failed task, no `.result`, "Retry save" succeeds once writable.
 - CLI: `gg review` prints `note: <id>`, writes no `reviews/` file (state dir
   in `t.TempDir()`).
 - Web: the review op returns `noteId`, no `path`.
