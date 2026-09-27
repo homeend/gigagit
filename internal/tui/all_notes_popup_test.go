@@ -452,6 +452,9 @@ func TestAllNotesTooltipRevealsCutText(t *testing.T) {
 		if last := screen[len(screen)-1]; !strings.Contains(last, tc.full) {
 			t.Fatalf("%s: the bottom bar must show %q, got %q", tc.name, tc.full, last)
 		}
+		if last := screen[len(screen)-1]; strings.ContainsAny(last, "▾▸") {
+			t.Fatalf("%s: the bottom bar must not carry the fold marker: %q", tc.name, last)
+		}
 		if n := strings.Count(strings.Join(screen, "\n"), tc.full); n != 1 {
 			t.Fatalf("%s: the full text must show once (the bottom bar, not over the row), got %d", tc.name, n)
 		}

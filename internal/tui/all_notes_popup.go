@@ -417,7 +417,7 @@ func (p *allNotesPopup) render(m Model, below string) string {
 	if p.tipFull != "" {
 		// The selected row was cut: its full text takes the bottom bar, which
 		// the popup never covers, instead of an overlay on the row itself.
-		text := " " + strings.TrimLeft(p.tipFull, " ")
+		text := " " + p.tipFull
 		out = overlayAt(out, st().tooltip.Render(padRight(truncate(text, w), w)), 0, h-1, w, h)
 	}
 	return out
@@ -483,6 +483,16 @@ func (p *allNotesPopup) anRowText(r anRow, w int, now time.Time) string {
 	// Directories and files are paths: cut in the middle, keeping the name.
 	indent := strings.Repeat("  ", r.depth+1)
 	return indent + elidePath(r.text, w-len(indent))
+}
+
+// anBarText is what the bottom bar shows for a cut row: the row's own text,
+// without the tree's indent or its fold marker.
+func anBarText(r anRow, now time.Time) string {
+	if r.kind == anNote {
+		head, summary, tail := anNoteParts(r, now)
+		return head + summary + tail
+	}
+	return r.text
 }
 
 // anRowFull is a row's uncut text (without the cursor prefix): what the
@@ -568,8 +578,8 @@ func (p *allNotesPopup) box(m Model) string {
 		winH := min(len(rows), cap)
 		body = renderWindow(rows, winOpts{w: textW, anchor: p.sel, h: winH})
 		if p.sel >= 0 && p.sel < len(vis) {
-			if full := p.anRowFull(vis[p.sel], now); rowTruncated(full, textW-2) {
-				p.tipFull = full
+			if r := vis[p.sel]; rowTruncated(p.anRowFull(r, now), textW-2) {
+				p.tipFull = anBarText(r, now)
 			}
 		}
 	}
