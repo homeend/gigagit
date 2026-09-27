@@ -42,6 +42,11 @@ type ReviewTarget struct {
 	Range string // injection-safe: hex SHA range / user-typed rev. "" for working changes.
 	Label string // human display: branch name / "<short> <subject>" / typed range / "working changes"
 	Diff  model.DiffSpec
+	// Commit is the full sha a review NOTE anchors to: the range's last
+	// commit (a branch review's tip). Branch is set only when the target was
+	// named by a branch ref. Both are data, never spliced into a command.
+	Commit string
+	Branch string
 }
 
 // DisplayLabel is the human string shown for this target (status bar, viewer
@@ -214,6 +219,7 @@ func (s *Service) BranchReviewTarget(ctx context.Context, tip string) (ReviewTar
 	if err != nil {
 		return ReviewTarget{}, err
 	}
+	branch := s.reviewBranchName(ctx, tip, tipSHA)
 	base, err := s.repo.MergeBase(ctx, "main", tip)
 	if err != nil || strings.TrimSpace(base) == "" {
 		if up, uerr := s.repo.UpstreamRef(ctx, tip); uerr == nil && strings.TrimSpace(up) != "" {
@@ -221,7 +227,7 @@ func (s *Service) BranchReviewTarget(ctx context.Context, tip string) (ReviewTar
 		} else {
 			// no base found: review just the tip commit's own change (vs its parent)
 			rng := tipSHA + "^.." + tipSHA
-			return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: model.DiffSpec{Rev: rng}}, nil
+			return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: model.DiffSpec{Rev: rng}, Commit: tipSHA, Branch: branch}, nil
 		}
 	}
 	baseSHA, err := s.repo.ResolveCommit(ctx, strings.TrimSpace(base))
@@ -230,5 +236,5 @@ func (s *Service) BranchReviewTarget(ctx context.Context, tip string) (ReviewTar
 	}
 	rng := baseSHA + ".." + tipSHA
 	// Range is the hex range (executed); Label is the branch NAME (display only).
-	return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: model.DiffSpec{Rev: rng}}, nil
+	return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: model.DiffSpec{Rev: rng}, Commit: tipSHA, Branch: branch}, nil
 }

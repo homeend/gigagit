@@ -1,0 +1,308 @@
+package domain
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math/rand/v2"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/homeend/gigagit/internal/filelock"
+	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notes"
+)
+
+// AI reviews live in the note store as commit-level notes tagged "review"
+// (docs/superpowers/specs/2026-09-27-review-notes-design.md). This file is
+// the ONE writer and the read model every frontend uses; nothing outside
+// domain knows a review is a note.
+
+// ReviewNoteKind is how a stored review relates to its commit and branch.
+// It is computed on every read, never stored.
+type ReviewNoteKind int
+
+const (
+	ReviewOnCommit ReviewNoteKind = iota // a commit or range review
+	ReviewOnBranch                       // a branch review whose commit is still the branch's tip
+	ReviewWasTip                         // a branch review whose branch moved on or is gone
+)
+
+var (
+	ErrNoReviewCommit = errors.New("review: working changes have no commit to attach a review to")
+	ErrReviewNotFound = errors.New("review not found")
+)
+
+// SaveReview is the one command every review path issues.
+type SaveReview struct {
+	Target ReviewTarget
+	Agent  string // the tool's name → Note.Author
+	Text   string // the review, markdown
+	NoteID string // non-empty: rewrite this review in place
+}
+
+// Review is one stored AI review, as every frontend sees it.
+type Review struct {
+	ID               string
+	Kind             ReviewNoteKind
+	Commit, Branch   string
+	Scope            string // the reviewed hex range
+	Agent, Summary   string
+	Text             string
+	Created, Updated time.Time
+}
+
+// ReviewHead is a review without its text: what a list row needs.
+type ReviewHead struct {
+	ID, Commit, Branch, Agent, Summary string
+	Created                            time.Time
+}
+
+// A held lock is retried within reviewRetryBudget, sleeping a random
+// 500 ms–2 s between attempts so two gg processes retrying at once drift
+// apart instead of colliding again.
+const reviewRetryBudget = 15 * time.Second
+
+// Retry seams. Tests that swap them run serially.
+var (
+	reviewSleep   = time.Sleep
+	reviewJitter  = func() time.Duration { return 500*time.Millisecond + rand.N(1500*time.Millisecond+1) }
+	reviewClock   func() time.Duration // time since the save began; nil = the real clock
+	reviewPutHook func() error         // fails an attempt before the store is touched
+)
+
+// setReviewRetrySeams swaps the sleep for a test and returns the restore
+// func, which also resets the clock and the put hook.
+func setReviewRetrySeams(sleep func(time.Duration)) func() {
+	s := reviewSleep
+	reviewSleep = sleep
+	return func() { reviewSleep, reviewClock, reviewPutHook = s, nil, nil }
+}
+
+// FillReviewCommit resolves t.Commit from the right side of t.Range when a
+// constructor left it empty (a typed range, a commit's sha^..sha).
+func (s *Service) FillReviewCommit(ctx context.Context, t ReviewTarget) ReviewTarget {
+	if t.Commit != "" || t.Kind == ReviewWorking || strings.TrimSpace(t.Range) == "" {
+		return t
+	}
+	right := strings.TrimSpace(t.Range)
+	if _, r, ok := strings.Cut(right, ".."); ok {
+		right = strings.TrimPrefix(r, ".")
+	}
+	if sha, found, err := s.ResolveRev(ctx, right); err == nil && found {
+		t.Commit = strings.TrimSpace(sha)
+	}
+	return t
+}
+
+// reviewBranchName is tip when it names a local or remote-tracking branch
+// (not a sha, not a tag): the branch a branch review's note carries.
+func (s *Service) reviewBranchName(ctx context.Context, tip, tipSHA string) string {
+	tip = strings.TrimSpace(tip)
+	if tip == "" || tip == tipSHA || strings.HasPrefix(tipSHA, tip) {
+		return ""
+	}
+	if s.branchTip(ctx, tip) == "" {
+		return ""
+	}
+	return tip
+}
+
+// SaveReview writes (or, with NoteID, rewrites) a review note and returns its
+// id. warn is set when a corrupt store had to be moved aside first. A held
+// lock is retried within reviewRetryBudget; nothing is ever written to a
+// file outside the note store.
+func (s *Service) SaveReview(ctx context.Context, cmd SaveReview) (string, string, error) {
+	t := s.FillReviewCommit(ctx, cmd.Target)
+	if t.Kind == ReviewWorking || t.Commit == "" {
+		return "", "", ErrNoReviewCommit
+	}
+	st := s.notesStore(ctx)
+	if st == nil {
+		return "", "", ErrNotesDisabled
+	}
+	start := time.Now()
+	elapsed := func() time.Duration {
+		if reviewClock != nil {
+			return reviewClock()
+		}
+		return time.Since(start)
+	}
+	warn := ""
+	for {
+		id, err := s.putReview(st, t, cmd)
+		if err == nil {
+			s.invalidateNoteCounts()
+			return id, warn, nil
+		}
+		switch {
+		case errors.Is(err, notes.ErrCorrupt) && warn == "":
+			q, ok := st.(interface{ Quarantine() (string, error) })
+			if !ok {
+				return "", "", err
+			}
+			moved, qerr := q.Quarantine()
+			if qerr != nil {
+				return "", "", errors.Join(err, qerr)
+			}
+			warn = fmt.Sprintf("the note store was unreadable and was moved to %s", moved)
+			continue
+		case errors.Is(err, filelock.ErrHeld):
+			d := reviewJitter()
+			if elapsed()+d > reviewRetryBudget {
+				return "", "", err
+			}
+			if cerr := ctx.Err(); cerr != nil {
+				return "", "", cerr
+			}
+			reviewSleep(d)
+			continue
+		}
+		return "", "", err
+	}
+}
+
+// putReview is one save attempt: read, build the note, Put.
+func (s *Service) putReview(st notes.Store, t ReviewTarget, cmd SaveReview) (string, error) {
+	if reviewPutHook != nil {
+		if err := reviewPutHook(); err != nil {
+			return "", err
+		}
+	}
+	all, err := st.Load()
+	if err != nil {
+		return "", err
+	}
+	now := notes.Now().UTC()
+	n := model.Note{ID: cmd.NoteID, Source: model.NoteSourceAgent, Author: cmd.Agent,
+		Address: model.FileAddress{State: model.StateCommitted, Commit: t.Commit, Branch: t.Branch},
+		Side:    model.NoteSideNew, Tags: []string{model.ReviewTag}, Scope: t.Range,
+		Summary: reviewSummary(t), Rationale: cmd.Text, Created: now, Updated: now}
+	if n.ID == "" {
+		n.ID = notes.NewID(all)
+	} else {
+		for _, old := range all {
+			if old.ID == n.ID {
+				n.Created = old.Created
+			}
+		}
+	}
+	return n.ID, st.Put(n)
+}
+
+// reviewSummary is "Review: <branch or label> (<a7>..<b7>)".
+func reviewSummary(t ReviewTarget) string {
+	label := strings.TrimSpace(t.Branch)
+	if label == "" {
+		label = t.DisplayLabel()
+	}
+	if r := longHex.ReplaceAllStringFunc(t.Range, sha7); r != "" && r != label {
+		return "Review: " + label + " (" + r + ")"
+	}
+	return "Review: " + label
+}
+
+// ReviewKindOf computes a review's kind from its stored branch and commit and
+// the branch's current tip ("" = the branch is gone).
+func ReviewKindOf(branch, commit, branchTip string) ReviewNoteKind {
+	switch {
+	case branch == "":
+		return ReviewOnCommit
+	case branchTip == commit:
+		return ReviewOnBranch
+	}
+	return ReviewWasTip
+}
+
+// branchTip is a local or remote-tracking branch's full sha; "" when gone.
+func (s *Service) branchTip(ctx context.Context, name string) string {
+	for _, ref := range []string{"refs/heads/" + name, "refs/remotes/" + name} {
+		if sha, found, err := s.ResolveRev(ctx, ref); err == nil && found {
+			return strings.TrimSpace(sha)
+		}
+	}
+	return ""
+}
+
+func (s *Service) reviewOf(ctx context.Context, n model.Note, tips map[string]string) Review {
+	b := n.Address.Branch
+	tip, ok := tips[b]
+	if !ok && b != "" {
+		tip = s.branchTip(ctx, b)
+		tips[b] = tip
+	}
+	return Review{ID: n.ID, Kind: ReviewKindOf(b, n.Address.Commit, tip),
+		Commit: n.Address.Commit, Branch: b, Scope: n.Scope, Agent: n.Author,
+		Summary: n.Summary, Text: n.Rationale, Created: n.Created, Updated: n.Updated}
+}
+
+// reviewNotes is every review note (roots only), newest first.
+func (s *Service) reviewNotes(ctx context.Context) ([]model.Note, error) {
+	st := s.notesStore(ctx)
+	if st == nil {
+		return nil, ErrNotesDisabled
+	}
+	all, err := st.Load()
+	if err != nil {
+		return nil, err
+	}
+	var out []model.Note
+	for _, n := range all {
+		if !n.IsReply() && n.IsReviewNote() {
+			out = append(out, n)
+		}
+	}
+	sort.SliceStable(out, func(a, b int) bool { return out[a].Created.After(out[b].Created) })
+	return out, nil
+}
+
+// Reviews is every stored review, newest first.
+func (s *Service) Reviews(ctx context.Context) ([]Review, error) {
+	ns, err := s.reviewNotes(ctx)
+	tips := map[string]string{}
+	out := make([]Review, 0, len(ns))
+	for _, n := range ns {
+		out = append(out, s.reviewOf(ctx, n, tips))
+	}
+	return out, err
+}
+
+// Review is one stored review by note id; ErrReviewNotFound when gone.
+func (s *Service) Review(ctx context.Context, id string) (Review, error) {
+	ns, err := s.reviewNotes(ctx)
+	if err != nil {
+		return Review{}, err
+	}
+	for _, n := range ns {
+		if n.ID == id {
+			return s.reviewOf(ctx, n, map[string]string{}), nil
+		}
+	}
+	return Review{}, ErrReviewNotFound
+}
+
+// ReviewsForCommit is every review stored on commit sha, newest first.
+func (s *Service) ReviewsForCommit(ctx context.Context, sha string) ([]Review, error) {
+	all, err := s.Reviews(ctx)
+	var out []Review
+	for _, r := range all {
+		if r.Commit == sha {
+			out = append(out, r)
+		}
+	}
+	return out, err
+}
+
+// ReviewsForBranch is the reviews of the branch's CURRENT tip; older ones
+// stay on their commits as ReviewWasTip.
+func (s *Service) ReviewsForBranch(ctx context.Context, name string) ([]Review, error) {
+	all, err := s.Reviews(ctx)
+	var out []Review
+	for _, r := range all {
+		if r.Branch == name && r.Kind == ReviewOnBranch {
+			out = append(out, r)
+		}
+	}
+	return out, err
+}

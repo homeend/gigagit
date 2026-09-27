@@ -54,6 +54,7 @@ type ResolvedNote struct {
 type NoteCounts struct {
 	ByPath       map[string]int // working-tree notes, by repo-relative path
 	ByCommit     map[string]int // commit notes, by sha
+	Reviews      []ReviewHead   // every AI review note, newest first (Branches tab, @notes)
 	ByCommitPath map[string]int // commit notes, by "<sha>:<path>"
 }
 
@@ -414,6 +415,10 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		if n.IsReply() { // a badge counts THREADS
 			continue
 		}
+		if n.IsReviewNote() {
+			c.Reviews = append(c.Reviews, ReviewHead{ID: n.ID, Commit: n.Address.Commit, Branch: n.Address.Branch,
+				Agent: n.Author, Summary: n.Summary, Created: n.Created})
+		}
 		if n.Address.State == model.StateCommitted && n.Address.Commit != "" {
 			c.ByCommit[n.Address.Commit]++
 			if n.Address.Path != "" {
@@ -431,6 +436,7 @@ func (s *Service) NoteCounts(ctx context.Context) (NoteCounts, error) {
 		}
 		c.ByPath[n.Address.Path]++
 	}
+	sort.SliceStable(c.Reviews, func(a, b int) bool { return c.Reviews[a].Created.After(c.Reviews[b].Created) })
 	s.mu.Lock()
 	if s.notesGen == gen { // a mutation raced this computation: drop it
 		s.noteCounts = &c

@@ -1,0 +1,215 @@
+package domain
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/homeend/gigagit/internal/filelock"
+)
+
+// reviewRepo is a real repo on branch "feature" (one commit past main) with
+// its own note store; it returns the dir, the service and the feature tip.
+func reviewRepo(t *testing.T) (string, *Service, string) {
+	t.Helper()
+	dir, svc := newRealRepo(t)
+	svc.UseNotesDir(t.TempDir())
+	runGitIn(t, dir, "checkout", "-b", "feature")
+	commitFile(t, dir, "f.txt", "x\n", "feature commit")
+	return dir, svc, revParse(t, dir, "feature")
+}
+
+func TestBranchReviewTargetFillsCommitAndBranch(t *testing.T) {
+	t.Parallel()
+	_, svc, tip := reviewRepo(t)
+	tg, err := svc.BranchReviewTarget(context.Background(), "feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tg.Commit != tip || tg.Branch != "feature" {
+		t.Fatalf("Commit=%q Branch=%q, want %q feature", tg.Commit, tg.Branch, tip)
+	}
+}
+
+func TestBranchReviewTargetShaHasNoBranch(t *testing.T) {
+	t.Parallel()
+	_, svc, tip := reviewRepo(t)
+	tg, err := svc.BranchReviewTarget(context.Background(), tip)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tg.Branch != "" || tg.Commit != tip {
+		t.Fatalf("Branch=%q Commit=%q, want an empty branch for a sha", tg.Branch, tg.Commit)
+	}
+}
+
+func TestSaveReviewBranchNoteAndKinds(t *testing.T) {
+	t.Parallel()
+	dir, svc, tip := reviewRepo(t)
+	ctx := context.Background()
+	tg, _ := svc.BranchReviewTarget(ctx, "feature")
+	id, warn, err := svc.SaveReview(ctx, SaveReview{Target: tg, Agent: "Claude Code", Text: "# Looks good\nbody"})
+	if err != nil || warn != "" {
+		t.Fatalf("SaveReview: %v %q", err, warn)
+	}
+	r, err := svc.Review(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Kind != ReviewOnBranch || r.Commit != tip || r.Branch != "feature" || r.Text != "# Looks good\nbody" ||
+		r.Scope != tg.Range || r.Agent != "Claude Code" || !strings.HasPrefix(r.Summary, "Review: feature") {
+		t.Fatalf("review = %+v", r)
+	}
+	if got, _ := svc.ReviewsForBranch(ctx, "feature"); len(got) != 1 {
+		t.Fatalf("ReviewsForBranch = %d, want 1", len(got))
+	}
+	// The branch moves on: the review stays on its commit as "was the tip".
+	commitFile(t, dir, "g.txt", "y\n", "second")
+	r, _ = svc.Review(ctx, id)
+	if r.Kind != ReviewWasTip {
+		t.Fatalf("after the branch moved: kind %v, want ReviewWasTip", r.Kind)
+	}
+	if got, _ := svc.ReviewsForBranch(ctx, "feature"); len(got) != 0 {
+		t.Fatalf("ReviewsForBranch after the move = %d, want 0 (current tip only)", len(got))
+	}
+	if got, _ := svc.ReviewsForCommit(ctx, tip); len(got) != 1 {
+		t.Fatalf("ReviewsForCommit = %d, want 1", len(got))
+	}
+}
+
+func TestSaveReviewCommitRangeAnchorsOnTheLastCommit(t *testing.T) {
+	t.Parallel()
+	dir, svc, tip := reviewRepo(t)
+	base := revParse(t, dir, "main")
+	tg := ReviewTarget{Kind: ReviewRange, Range: base + ".." + tip, Label: "range"}
+	id, _, err := svc.SaveReview(context.Background(), SaveReview{Target: tg, Text: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, _ := svc.Review(context.Background(), id)
+	if r.Commit != tip || r.Branch != "" || r.Kind != ReviewOnCommit {
+		t.Fatalf("review = %+v, want a commit review on %s", r, tip)
+	}
+}
+
+func TestSaveReviewRefusesWorkingChanges(t *testing.T) {
+	t.Parallel()
+	_, svc, _ := reviewRepo(t)
+	_, _, err := svc.SaveReview(context.Background(), SaveReview{Target: WorkingReviewTarget(), Text: "x"})
+	if !errors.Is(err, ErrNoReviewCommit) {
+		t.Fatalf("err = %v, want ErrNoReviewCommit", err)
+	}
+}
+
+func TestSaveReviewUpdatesInPlace(t *testing.T) {
+	t.Parallel()
+	_, svc, _ := reviewRepo(t)
+	ctx := context.Background()
+	tg, _ := svc.BranchReviewTarget(ctx, "feature")
+	id, _, _ := svc.SaveReview(ctx, SaveReview{Target: tg, Text: "one"})
+	id2, _, err := svc.SaveReview(ctx, SaveReview{Target: tg, Text: "two", NoteID: id})
+	if err != nil || id2 != id {
+		t.Fatalf("update: id %q→%q err %v", id, id2, err)
+	}
+	all, _ := svc.Reviews(ctx)
+	if len(all) != 1 || all[0].Text != "two" {
+		t.Fatalf("reviews = %+v, want one with text two", all)
+	}
+}
+
+// Serial: swaps the package's retry seams.
+func TestSaveReviewRetriesAHeldLock(t *testing.T) {
+	_, svc, _ := reviewRepo(t)
+	ctx := context.Background()
+	tg, _ := svc.BranchReviewTarget(ctx, "feature")
+	var sleeps []time.Duration
+	restore := setReviewRetrySeams(func(d time.Duration) { sleeps = append(sleeps, d) })
+	defer restore()
+	fails := 2
+	reviewPutHook = func() error {
+		if fails > 0 {
+			fails--
+			return filelock.ErrHeld
+		}
+		return nil
+	}
+	if _, _, err := svc.SaveReview(ctx, SaveReview{Target: tg, Text: "x"}); err != nil {
+		t.Fatalf("SaveReview: %v", err)
+	}
+	if len(sleeps) != 2 {
+		t.Fatalf("slept %d times, want 2", len(sleeps))
+	}
+	for _, d := range sleeps {
+		if d < 500*time.Millisecond || d > 2*time.Second {
+			t.Fatalf("sleep %v outside 500ms–2s", d)
+		}
+	}
+}
+
+// Serial: swaps the package's retry seams.
+func TestSaveReviewGivesUpAfterTheBudget(t *testing.T) {
+	_, svc, _ := reviewRepo(t)
+	ctx := context.Background()
+	tg, _ := svc.BranchReviewTarget(ctx, "feature")
+	var total time.Duration
+	restore := setReviewRetrySeams(func(d time.Duration) { total += d })
+	defer restore()
+	reviewClock = func() time.Duration { return total } // elapsed = time slept
+	reviewPutHook = func() error { return filelock.ErrHeld }
+	_, _, err := svc.SaveReview(ctx, SaveReview{Target: tg, Text: "x"})
+	if !errors.Is(err, filelock.ErrHeld) {
+		t.Fatalf("err = %v, want ErrHeld", err)
+	}
+	if total > reviewRetryBudget || total < reviewRetryBudget-2*time.Second {
+		t.Fatalf("slept %v, want just under the %v budget", total, reviewRetryBudget)
+	}
+}
+
+func TestSaveReviewQuarantinesACorruptStore(t *testing.T) {
+	t.Parallel()
+	dir, svc := newRealRepo(t)
+	notesDir := t.TempDir()
+	svc.UseNotesDir(notesDir)
+	runGitIn(t, dir, "checkout", "-b", "feature")
+	commitFile(t, dir, "f.txt", "x\n", "c")
+	if err := os.WriteFile(filepath.Join(notesDir, "notes.toml"), []byte("[[[ broken"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tg, _ := svc.BranchReviewTarget(context.Background(), "feature")
+	id, warn, err := svc.SaveReview(context.Background(), SaveReview{Target: tg, Text: "x"})
+	if err != nil || id == "" {
+		t.Fatalf("SaveReview: %q %v", id, err)
+	}
+	if !strings.Contains(warn, "notes.toml.corrupt-") {
+		t.Fatalf("warn = %q, want the quarantine path", warn)
+	}
+	m, _ := filepath.Glob(filepath.Join(notesDir, "notes.toml.corrupt-*"))
+	if len(m) != 1 {
+		t.Fatalf("quarantined files = %v", m)
+	}
+	if r, err := svc.Review(context.Background(), id); err != nil || r.Text != "x" {
+		t.Fatalf("review after quarantine: %+v %v", r, err)
+	}
+}
+
+func TestNoteCountsListsReviewHeads(t *testing.T) {
+	t.Parallel()
+	_, svc, tip := reviewRepo(t)
+	ctx := context.Background()
+	tg, _ := svc.BranchReviewTarget(ctx, "feature")
+	id, _, _ := svc.SaveReview(ctx, SaveReview{Target: tg, Agent: "A", Text: "x"})
+	c, err := svc.NoteCounts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Reviews) != 1 || c.Reviews[0].ID != id || c.Reviews[0].Branch != "feature" || c.Reviews[0].Commit != tip {
+		t.Fatalf("Reviews = %+v", c.Reviews)
+	}
+	if c.ByCommit[tip] != 1 {
+		t.Fatalf("ByCommit[tip] = %d, want 1 (the ◆ badge counts reviews)", c.ByCommit[tip])
+	}
+}
