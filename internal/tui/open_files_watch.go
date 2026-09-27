@@ -66,17 +66,22 @@ func (m Model) loadDocWith(d *openFile, load func(context.Context) ([]byte, erro
 	d.loading = true
 	read := loadFileContentSrcCmd(d.tag, d.path, m.cfg.UI.SyntaxOn(), load)
 	abs := m.docAbs(d)
+	tag, loadNo := d.tag, d.fills+1
 	if abs == "" {
-		return read
+		return func() tea.Msg {
+			msg := read().(fileContentMsg)
+			msg.loadNo = loadNo
+			return msg
+		}
 	}
-	tag := d.tag
 	return func() tea.Msg {
 		st := statDisk(abs)
 		if st.missing {
-			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(file deleted on disk)")}}, disk: st}
+			return fileContentMsg{tag: tag, lines: []contentLine{{text: i18n.T("(file deleted on disk)")}}, disk: st, loadNo: loadNo}
 		}
 		msg := read().(fileContentMsg)
 		msg.disk = st
+		msg.loadNo = loadNo
 		return msg
 	}
 }

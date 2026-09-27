@@ -66,6 +66,8 @@ type openFile struct {
 	// alone, so a second load can never race the first (whose fill would
 	// land a link's line, the second's reset it).
 	loading bool
+	// fills counts the loads that landed (see fileContentMsg.fillsAt).
+	fills int
 }
 
 // keepPlace makes the next fill — a reload of a file the user is reading —
@@ -124,7 +126,12 @@ func (d *openFile) fill(msg fileContentMsg, rows, innerW int) (notice string) {
 	if msg.disk.known {
 		d.disk = msg.disk
 	}
-	if msg.reload && d.pendingLine == 0 {
+	// Two loads out at once (a second open before the first landed): the
+	// one landing after the other keeps the place the other landed — in
+	// either order.
+	overtaken := msg.loadNo > 0 && d.fills >= msg.loadNo && docLoaded(d)
+	d.fills++
+	if (msg.reload || overtaken) && d.pendingLine == 0 {
 		d.keepPlace()
 	}
 	p := d.p

@@ -172,6 +172,10 @@ type fileContentMsg struct {
 	disk diskStat
 	// reload marks a watch reload: the fill keeps the reader's place.
 	reload bool
+	// loadNo is the document's fill count when this load started, plus one
+	// (0 = not a document load): a fill that finds another one landed since
+	// keeps its place.
+	loadNo int
 }
 
 // loadFileContentSrcCmd resolves a preview's bytes via load and splits them

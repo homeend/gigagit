@@ -921,7 +921,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		tm, fill := m.Update(msg.load)
 		m = tm.(Model)
 		if msg.load.err != nil {
-			return m, tea.Batch(fill, m.answerSteer(msg.cmd, steerFail(msg.cmd, "reading "+msg.cmd.File+": "+msg.load.err.Error())))
+			return m, tea.Batch(fill, m.answerSteer(msg.cmd, steerFail(msg.cmd, "reading "+msg.path+": "+msg.load.err.Error())))
 		}
 		m, reply := m.navigateLanded(msg.cmd, landedDetail(msg.lead, msg.line, msg.load.lines, msg.evicted))
 		return m, tea.Batch(fill, reply)

@@ -15,6 +15,27 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   box — in every worktree. The console now closes with its session and the
   Commits panel comes back; focus moves only if the console had it.
 
+## Open files: the deferred minors
+
+### Fixed
+
+- **Two background opens of one file while the first is still loading keep
+  the line that landed** (TUI, `gg open --background`): the later load no
+  longer resets the cursor to the top, in either arrival order, and an open
+  without a line no longer cancels the line the first one asked for.
+- **`gg session files focus <id>` names the file when its load fails** — the
+  reply read `reading : <err>`.
+- **gg web: reopening a file lands where this tab left it AND tells the
+  server**, so every tab's `ctrl+\` switcher shows that line (it kept the old
+  one until the cursor moved).
+- **gg web: focusing a file opened in the background takes down its
+  "… opened in the background" notice.**
+- **gg web: `ctrl+]` in the viewer says "… is in the background"** — the key
+  hint stays in the bottom bar.
+- **gg web: a notice's text is its message alone** — the error head's
+  "Problem (double-click anywhere to hide)" is drawn by CSS, so it no longer
+  rides along (hidden) in every notice.
+
 ## Agent console: no commit tooltip, no hidden-list wheel
 
 ### Fixed

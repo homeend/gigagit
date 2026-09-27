@@ -128,7 +128,7 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", `op: "cursor"`, "the cursor line is reported"},
 	{"viewer.js", "closed in another tab", "x in another tab closes this viewer"},
 	{"viewer.js", "files open)", "an eviction names the file (the TUI's words)"},
-	{"viewer.js", "is in the background — ctrl+\\\\ lists open files", "ctrl+] says where the file went"},
+	{"viewer.js", `opLine(path + " is in the background", false)`, "ctrl+] says where the file went (the key hint lives in #foot)"},
 	// Plan 5b Task 5: events.
 	{"live.js", `msg.reason === "open_files"`, "the list's broadcast reaches the page"},
 	{"live.js", "viewerOpenFiles(msg.files || [])", "an empty list arrives as no files (omitempty)"},
@@ -148,4 +148,24 @@ var viewerWiring = []struct{ file, want, why string }{
 	{"viewer.js", "isSwitcherKey(e)", "ctrl+\\ works from the viewer"},
 	{"live.js", "switcherOpenFiles(", "an open switcher follows the list"},
 	{"style.css", "#openfiles.hidden", "the overlay hides by id (a global .hidden does not exist)"},
+	// Open-files minors.
+	{"viewer.js", "if (landed.line !== (f.line || 0)) reportCursor();", "a reopen by place reports the line it landed on"},
+	{"ops.js", "function clearOpLine(", "a notice can be taken down when it no longer holds"},
+	{"viewer.js", `clearOpLine(f.path + " opened in the background")`, "focusing a background-opened file drops its notice"},
+	{"style.css", `#op-line.err #op-head::before { content: "Problem"; }`, "the error head's words are CSS, not text a notice carries"},
+}
+
+// viewerGone pins what the open-files minors removed.
+var viewerGone = []struct{ file, want, why string }{
+	{"viewer.js", "lists open files", "key hints live in #foot, never in a notice"},
+	{"index.html", "<span>Problem</span>", "the hidden head's words leaked into every notice's text"},
+}
+
+func TestViewerJSDroppedLeaks(t *testing.T) {
+	t.Parallel()
+	for _, c := range viewerGone {
+		if strings.Contains(readStatic(t, c.file), c.want) {
+			t.Errorf("%s still has %q: %s", c.file, c.want, c.why)
+		}
+	}
 }

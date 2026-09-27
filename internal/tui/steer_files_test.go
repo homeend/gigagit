@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -194,5 +197,56 @@ func TestFileFocusUnknownAndRefused(t *testing.T) {
 	runSteerCmd(t, cmd)
 	if r, ok := steer.AwaitReply(nm.steerDir, "ff-4", time.Second); !ok || r.OK || r.Error != "the user is typing" {
 		t.Fatalf("reply = %+v ok=%v, want the typing refusal", r, ok)
+	}
+}
+
+// Two background opens of one file while the first load is still out: the
+// second fill must not reset the line the first landed, and a line-less
+// second open must not cancel the first's line.
+func TestBackgroundNavigateTwiceInFlightKeepsTheLandedLine(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name          string
+		first, second int
+		reversed      bool // the second load lands first
+		want          int  // 1-based
+	}{
+		{"line-less second", 30, 0, false, 30},
+		{"second with a line", 30, 12, false, 12},
+		{"line-less second lands first", 30, 0, true, 30},
+		{"second with a line lands first", 30, 12, true, 12},
+	} {
+		m := loadedNavModel(t)
+		nm, cmd1 := m.applySteer(bgNav("d-1", "a.txt", tc.first))
+		nm, cmd2 := nm.applySteer(bgNav("d-2", "a.txt", tc.second))
+		if tc.reversed {
+			cmd1, cmd2 = cmd2, cmd1
+		}
+		nm = pumpAll(t, nm, cmd1)
+		nm = pumpAll(t, nm, cmd2)
+		d := nm.openFiles.find(nm.currentWorktree, docKey(fileSource{kind: srcWorktree}, "a.txt"))
+		if d == nil || !docLoaded(d) || d.p.cur != tc.want-1 {
+			cur := -1
+			if d != nil {
+				cur = d.p.cur
+			}
+			t.Errorf("%s: cursor on line %d, want %d", tc.name, cur+1, tc.want)
+		}
+	}
+}
+
+// A focus by id names the file when its load fails (cmd.File is empty then).
+func TestFileFocusByIDLoadErrorNamesThePath(t *testing.T) {
+	t.Parallel()
+	m := loadedNavModel(t)
+	if err := os.Mkdir(filepath.Join(m.currentWorktree, "adir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	d := bgDoc(m, fileSource{kind: srcWorktree}, "adir", 3)
+	nm, cmd := m.applySteer(steer.Command{ID: "ff-5", Cmd: "file_focus", FileID: d.id(), Wait: true})
+	nm = pumpAll(t, nm, cmd)
+	r, ok := steer.AwaitReply(nm.steerDir, "ff-5", time.Second)
+	if !ok || r.OK || !strings.HasPrefix(r.Error, "reading adir: ") {
+		t.Fatalf("reply = %+v ok=%v, want an error naming adir", r, ok)
 	}
 }
