@@ -29,11 +29,17 @@ func (e brEntry) sub() bool { return e.review != "" }
 func (m Model) branchReviewHeads(b model.Branch) []domain.ReviewHead {
 	var out []domain.ReviewHead
 	for _, r := range m.noteCounts.Reviews {
-		if r.Branch == b.Name && r.Commit == b.Hash {
+		if r.Branch == b.Name && sameCommit(r.Commit, b.Hash) {
 			out = append(out, r)
 		}
 	}
 	return out
+}
+
+// sameCommit matches a review's full sha against the branch list's hash,
+// which git hands out short (%(objectname:short)).
+func sameCommit(full, h string) bool {
+	return h != "" && len(h) >= 7 && strings.HasPrefix(full, h)
 }
 
 // branchEntries is the Branches list in backing order: each branch followed

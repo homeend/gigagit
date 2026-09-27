@@ -98,3 +98,14 @@ func TestBranchMenuShowReview(t *testing.T) {
 		t.Fatal("a branch without reviews offers Show review")
 	}
 }
+
+// The Branches list carries %(objectname:short); a review stores the full sha.
+func TestBranchReviewMatchesAShortBranchHash(t *testing.T) {
+	t.Parallel()
+	m := reviewBranchesModel(t)
+	m.branches[1].Hash = strings.Repeat("b", 7)
+	rows, _ := m.panelView(panelBranches)
+	if len(rows) != 3 || !strings.Contains(rows[1], "◆1") {
+		t.Fatalf("rows %q, want the review under feature", rows)
+	}
+}
