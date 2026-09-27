@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## The working-tree files window (`F`) is a tree
+
+### Changed
+
+- `F` lists the working tree the way a commit's files view does: root files
+  first, then one bold `dir/` heading per directory with its files indented
+  beneath, so a file's full path reads off the heading instead of a cut row.
+  Each row leads with its status letter (`M`, `A`, … from the Status panel,
+  `?` for an untracked file — replacing the `(untracked)` suffix — blank when
+  clean). A `/` fuzzy filter keeps its matches grouped under their
+  directories; the cursor lands on the best-ranked match (the first file with
+  no query), never on a heading, and the title counts files, not headings.
+- The files view's first line is a sticky heading: it always names the
+  directory of the row beneath it (`.` for root files), so a directory
+  scrolled past its own heading still says where its files are. When the
+  heading itself is the top row it takes that line, never showing twice. The
+  same tree renderer serves a commit's, a stash's and a comparison's files,
+  so they gain it too; the cut-row reveal follows the shared row geometry.
+
 ## Branches menu: Start agent / Open terminal on a checked-out branch
 
 ### Added

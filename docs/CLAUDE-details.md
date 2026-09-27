@@ -1191,8 +1191,21 @@ an event zeroes `d.checked` and polls; built lazily off-thread only when
 right-column `m.filesPreview`, `closeFilesView` and the esc/`handOffToFilesView`
 return. Its state is `m.wtFiles` (all paths, the untracked set, the query,
 typing); the fuzzy query stays OUT of `filesView.query` (whose substring
-`visible()` would drop fuzzy matches) — `wtSetQuery` rebuilds flat rows
-(no headings) from `fuzzy.Rank`, cap 200. `updateWorktreeFilesKey` is taken
+`visible()` would drop fuzzy matches) — `wtSetQuery` rebuilds the rows
+from `fuzzy.Rank` (cap 200) through `commitFileLines`, so F shows the commit
+view's tree (root files, then one heading per directory; a query's matches
+stay grouped) with a status column — `?` untracked, else the unstaged letter,
+else the staged one, blank when clean (`statusLetters`, built once at load) —
+and the cursor on the best-ranked match (the first file row with no query),
+never on a heading; `wtTitle` counts file rows only. **Sticky heading:**
+`renderFilesView` hands the built window to `renderFileRows`, whose first
+line always names the directory of the row beneath it (`.` at the root; the
+heading itself when it is the top row, so it never shows twice) —
+`renderWindowTop` (window.go) is `renderWindow` reporting its first row.
+The row geometry (`filesGeometry`/`filesGeom.cursorLine`, `filesRowsCap`,
+`filesChromeLines`) is SHARED with the reveal tooltip (`filesTreeReveal`),
+which used to mirror the math by hand and landed one line off once the
+sticky line existed. `updateWorktreeFilesKey` is taken
 right after the preview's select/search hooks, so the commit-list side's key
 logic never sees this mode. The list = `LsFiles` minus the status's `'D'`
 entries plus its `KindUntracked` ones (`worktreeFileList`). The live preview

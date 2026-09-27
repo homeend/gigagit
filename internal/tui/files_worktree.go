@@ -8,6 +8,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/fuzzy"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // worktreeFiles is the files view's working-tree mode (F): every file on
@@ -17,6 +18,7 @@ import (
 type worktreeFiles struct {
 	all       []string
 	untracked map[string]bool
+	letters   map[string]string // path → its status letter ("" = clean)
 	query     string
 	typing    bool
 	loading   bool
@@ -62,6 +64,7 @@ func (m Model) wtLoaded(msg lsFilesMsg) (Model, tea.Cmd) {
 		return m.restoreParkedLayers(parked), nil
 	}
 	w.all, w.untracked = domain.WorktreeFileList(msg.paths, m.status)
+	w.letters = statusLetters(m.status)
 	w.loading = false
 	m.wtSetQuery(w.query)
 	return m.wtCursorMoved()
@@ -69,7 +72,9 @@ func (m Model) wtLoaded(msg lsFilesMsg) (Model, tea.Cmd) {
 
 // wtSetQuery is the one chokepoint for the filter: it sets the query and
 // rebuilds the rows — every file with no query, else the fuzzy-ranked best
-// fileFinderLimit — with the cursor back on the first.
+// fileFinderLimit — as the commit view's tree (commitFileLines: root files,
+// then one heading per directory), with the cursor on the best-ranked file
+// (the first with no query), never on a heading.
 func (m Model) wtSetQuery(q string) {
 	w, p := m.wtFiles, m.filesView
 	w.query = q
@@ -80,21 +85,57 @@ func (m Model) wtSetQuery(q string) {
 			paths = append(paths, r.S)
 		}
 	}
-	lines := make([]contentLine, 0, len(paths))
+	if len(paths) == 0 {
+		p.lines, p.sel = nil, 0 // the render says (no match)
+		if q == "" {
+			p.lines = []contentLine{{text: i18n.T("(no files)")}}
+		}
+		return
+	}
+	files := make([]model.CommitFile, 0, len(paths))
 	for _, path := range paths {
-		text := path
-		if w.untracked[path] {
-			text += "  " + i18n.T("(untracked)")
-		}
-		lines = append(lines, contentLine{text: text, path: path})
+		files = append(files, model.CommitFile{Path: path, Status: w.letter(path)})
 	}
-	if len(lines) == 0 {
-		lines = []contentLine{{text: i18n.T("(no files)")}}
-		if q != "" {
-			lines = nil // the render says (no match)
+	p.lines, p.sel = commitFileLines(files), 0
+	want := "" // no query: the tree's first file row
+	if q != "" {
+		want = paths[0] // the best-ranked match
+	}
+	for i, l := range p.lines {
+		if l.path != "" && (want == "" || l.path == want) {
+			p.sel = i
+			break
 		}
 	}
-	p.lines, p.sel = lines, 0
+}
+
+// letter is a file row's status column: "?" for an untracked file, else its
+// status letter; a clean file's is blank so the names stay in one column.
+func (w *worktreeFiles) letter(path string) string {
+	if w.untracked[path] {
+		return "?"
+	}
+	if l := w.letters[path]; l != "" {
+		return l
+	}
+	return " "
+}
+
+// statusLetters maps each changed path to the one letter F's rows show: the
+// unstaged letter when there is one, else the staged one.
+func statusLetters(st model.WorkingTreeStatus) map[string]string {
+	out := make(map[string]string, len(st.Files))
+	for _, f := range st.Files {
+		switch {
+		case f.Kind == model.KindUntracked:
+			continue
+		case f.Unstaged != '.' && f.Unstaged != 0 && f.Unstaged != ' ':
+			out[f.Path] = string(f.Unstaged)
+		case f.Staged != '.' && f.Staged != 0 && f.Staged != ' ':
+			out[f.Path] = string(f.Staged)
+		}
+	}
+	return out
 }
 
 // wtSelected is the path under the cursor ("" on a placeholder).
@@ -114,7 +155,12 @@ func (m Model) wtTitle() string {
 	}
 	n := len(w.all)
 	if w.query != "" {
-		n = len(m.filesView.visible())
+		n = 0
+		for _, l := range m.filesView.visible() {
+			if l.path != "" {
+				n++
+			}
+		}
 	}
 	return i18n.T("Files (working tree)  %d/%d", n, len(w.all))
 }
