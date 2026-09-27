@@ -311,14 +311,14 @@ function closedHook() {
 }
 
 // showPreview reads path and paints it; keep (a reload of the file already
-// shown) holds the preview's scroll where it was.
-async function showPreview(gen, path, keep) {
+// shown, at stamp) holds the preview's scroll where it was.
+async function showPreview(gen, path, keep, stamp) {
   let body;
   try {
     body = await getJSON("/api/file-content?src=worktree&path=" + encodeURIComponent(path));
   } catch (e) {
     if (!wtf.on || !wtPreviewFresh(gen, previewGen, path, (selected() || {}).path)) return;
-    if (!keep) previewStamp = ""; // a reload keeps the stamp it saw: no retry per tick
+    previewStamp = keep ? stamp : ""; // a failed reload takes the stamp it saw: no retry per tick
     paintPreview(path, [], "(load failed: " + (e.message || e) + ")", keep);
     return;
   }
@@ -346,8 +346,9 @@ async function checkStamp() {
     }
     if (!wtf.on || gen !== previewGen || path !== previewPath) return;
     if (!wtStampChanged(previewStamp, now)) return;
-    previewStamp = now;
-    await showPreview(gen, path, true);
+    // The stamp moves only with a paint: a reload dropped because the cursor
+    // stepped off and back leaves the old one, so the next tick retries.
+    await showPreview(gen, path, true, now);
   } finally {
     stampBusy = false;
   }

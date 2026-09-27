@@ -1213,7 +1213,7 @@ until it comes back.
 
 `F` turns the file list into every file in the working tree (untracked ones
 marked `(untracked)`), over whatever screen you are on: `/` filters fuzzily,
-the diff pane previews the file under the cursor, and `enter` / `.` (or
+the diff pane previews the file under the cursor (following it on disk), and `enter` / `.` (or
 right-click) offers **view file**, **diff**, **file history**, **blame** and
 the copy rows — a double-click views the file. `ctrl+]` opens the row in the
 background; `esc` gives the panes back as they were.

@@ -62,6 +62,7 @@ console.log(r.join("|"));
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }
+
 // The preview follows the disk: a stamp that moved reloads it; an unknown
 // stamp ("" — a failed stat, or none yet) never does.
 func TestFinderStampModelJS(t *testing.T) {
@@ -138,6 +139,7 @@ var finderWiring = []struct{ file, want, why string }{
 	{"wtfinder.js", "paintPreview(path, lines, wtPlaceholder(body, lines.length), keep)", "a reload keeps the preview's place"},
 	{"wtfinder.js", "new ResizeObserver(", "a width change re-cuts F's rows and title"},
 	{"wtfinder.js", "paintPTitle(previewPath)", "a resize re-cuts the preview title from the path"},
+	{"wtfinder.js", "await showPreview(gen, path, true, now)", "a reload's stamp lands only with its paint (a dropped reload retries)"},
 }
 
 // finderGone pins what 5d removes.
