@@ -12,8 +12,9 @@ import (
 // An AI task's result opens in the file viewer (file_viewer.go) like any
 // file: line cursor, selection copy, / search, ctrl+] keeps it open in the
 // background and ctrl+\ lists it under the open files. The bytes are a file
-// on disk — a review's saved report, else the result written by
-// domain.SaveTaskResult — so the viewer reloads it when it changes.
+// on disk, written by domain.SaveTaskResult, so the viewer reloads it when it
+// changes. A commit/range/branch review is the exception: it lives in its
+// note and opens through openReviewNote (srcNote), never as a file.
 
 // openResultViewer writes text as task id's result file (ext names its
 // kind: .md, .txt, .log) and opens it. apply, when set, is the viewer's a.

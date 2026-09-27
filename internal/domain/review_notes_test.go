@@ -305,3 +305,25 @@ func TestNotesOverviewListsReviewsUnderTheirCommit(t *testing.T) {
 		t.Fatalf("missing-commit entry = %+v", c)
 	}
 }
+
+// TestNoReviewReportFilesAnywhere pins the removal: no domain source asks for
+// the old "reviews" state dir — a review lives in its note only.
+func TestNoReviewReportFilesAnywhere(t *testing.T) {
+	t.Parallel()
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(src), `stateBaseDir("reviews")`) {
+			t.Fatalf("%s still writes <state>/gg/reviews", f)
+		}
+	}
+}
