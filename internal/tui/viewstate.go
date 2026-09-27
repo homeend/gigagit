@@ -221,16 +221,39 @@ type textRevealer interface{ TextReveal(i int) string }
 // fully un-elided, shown by the reveal tooltip when it differs from Row(i).
 type fullRower interface{ Full(i int) string }
 
+// branchList is entry-based: each branch row is followed by one row per AI
+// review of its current tip (branchEntries). A review row's Name and Date are
+// its branch's, so the stable sort keeps it under its parent.
 type branchList struct {
 	items []model.Branch
-	rows  []string
+	ents  []brEntry
+	rows  []string // one per entry
 }
 
-func (l branchList) Len() int          { return len(l.items) }
+func (l branchList) Len() int          { return len(l.ents) }
 func (l branchList) Row(i int) string  { return l.rows[i] }
-func (l branchList) Name(i int) string { return l.items[i].Name }
-func (l branchList) Date(i int) int64  { return l.items[i].UnixTime }
-func (l branchList) Key(i int) string  { return l.items[i].Name }
+func (l branchList) Name(i int) string { return l.items[l.ents[i].b].Name }
+func (l branchList) Date(i int) int64  { return l.items[l.ents[i].b].UnixTime }
+func (l branchList) Key(i int) string {
+	k := l.items[l.ents[i].b].Name
+	if r := l.ents[i].review; r != "" {
+		k += "\x00" + r
+	}
+	return k
+}
+
+// Haystack: a review row matches whatever its branch row matches (plus its
+// own text), so a / filter never strands a review without its branch.
+func (l branchList) Haystack(i int) string {
+	if !l.ents[i].sub() {
+		return l.rows[i]
+	}
+	p := i
+	for p > 0 && l.ents[p].sub() {
+		p--
+	}
+	return l.rows[p] + " " + l.rows[i]
+}
 
 type remoteBranchList struct {
 	items []model.RemoteBranch
@@ -473,7 +496,8 @@ func (m Model) fileMembership(p panel) []int {
 func (m Model) listFor(p panel) panelList {
 	switch p {
 	case panelBranches:
-		return branchList{items: m.branches, rows: m.branchRows()}
+		ents := m.branchEntries()
+		return branchList{items: m.branches, ents: ents, rows: m.branchRowsFor(ents)}
 	case panelRemotes:
 		return remoteBranchList{items: m.remoteBranches, rows: m.remoteRows()}
 	case panelWorktrees:
@@ -599,7 +623,11 @@ func (m Model) displayIndices(p panel) (idx []int) {
 		if !m.memberOf(p, i) {
 			continue // Files/Staged split: each panel shows only its subset
 		}
-		if bfHidden != nil && i < len(bfHidden) && bfHidden[i] {
+		hi := i // the branch filter's verdicts are per BRANCH, not per row
+		if bl, ok := l.(branchList); ok {
+			hi = bl.ents[i].b
+		}
+		if bfHidden != nil && hi < len(bfHidden) && bfHidden[hi] {
 			continue
 		}
 		if q != "" {
@@ -699,6 +727,14 @@ func (m Model) backingIndex(p panel) (int, bool) {
 			return 0, false
 		}
 		return u - m.wipCount(), true
+	}
+	if p == panelBranches {
+		// Entries interleave review sub-rows; a review row is not a branch.
+		ents := m.branchEntries()
+		if u >= len(ents) || ents[u].sub() {
+			return 0, false
+		}
+		return ents[u].b, true
 	}
 	if p == panelWorktrees {
 		// Entries interleave agent-session sub-rows; a session row is not a

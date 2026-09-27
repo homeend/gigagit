@@ -386,7 +386,9 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		// every branch delete/rename, a needless network round-trip. NOT
 		// worktrees either: git refuses to delete a branch checked out in any
 		// worktree, so a delete can never change the worktree list.
-		return []sourceKey{srcBranches, srcFeed}
+		// srcNotes: gg deletes/renames the branch's AI reviews with it
+		// (domain reviewsFollowBranchOp) — the ◆ counts and review rows move.
+		return []sourceKey{srcBranches, srcFeed, srcNotes}
 	case engine.RenameBranch:
 		// Same Branches+feed+no-tags rationale as DeleteBranch, but a rename
 		// reaches further: `git branch -m` follows the branch into any worktree
@@ -396,14 +398,18 @@ func opAffectedSources(op engine.Operation) []sourceKey {
 		// refresh. Renaming the CURRENT branch also changes the header's
 		// "branch <name>" segment, which renders from srcStatus. One op covers
 		// both, so refresh the union.
-		return []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees}
+		// srcNotes: gg deletes/renames the branch's AI reviews with it
+		// (domain reviewsFollowBranchOp) — the ◆ counts and review rows move.
+		return []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees, srcNotes}
 	case engine.DeleteRemoteBranch:
 		// The remote-tracking ref vanishes (Remotes panel + the feed's %D
 		// decorations/tip markers), and a local branch tracking it loses its
 		// upstream/ahead-behind (Branches). Same no-tags rationale as
 		// DeleteBranch: unmapped, this fell through to "all sources" and
 		// auto-fired the remote-tags ls-remote probe after every delete.
-		return []sourceKey{srcBranches, srcRemotes, srcFeed}
+		// srcNotes: gg deletes/renames the branch's AI reviews with it
+		// (domain reviewsFollowBranchOp) — the ◆ counts and review rows move.
+		return []sourceKey{srcBranches, srcRemotes, srcFeed, srcNotes}
 	case engine.RestoreBranchVersion:
 		// Moves a branch tip (current branch: a hard reset that also touches
 		// the working tree; another branch: update-ref) and may recreate a

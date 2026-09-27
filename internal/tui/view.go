@@ -1073,7 +1073,10 @@ func (m Model) worktreePathOf(branch string) (string, bool) {
 	return "", false
 }
 
-func (m Model) branchRows() []string {
+func (m Model) branchRows() []string { return m.branchRowsFor(m.branchEntries()) }
+
+// branchRowsFor renders one row per entry: a branch, or a review under it.
+func (m Model) branchRowsFor(ents []brEntry) []string {
 	inScope := func(b model.Branch) bool { return slices.Contains(m.commitScopeBranches, b.Name) }
 	// Ordered left-to-right; each maps a branch to its glyph or ' '. Indicators
 	// live in a left gutter so the set marker is never truncated in a narrow
@@ -1105,8 +1108,18 @@ func (m Model) branchRows() []string {
 	// A branch the active filter WOULD hide but may not (HEAD, or checked out
 	// in a worktree) is marked so the row's presence is explained.
 	_, exempt, _ := m.branchFilterHidden(panelBranches)
-	out := make([]string, 0, len(m.branches))
-	for i, b := range m.branches {
+	now := time.Now()
+	out := make([]string, 0, len(ents))
+	for _, e := range ents {
+		if e.sub() {
+			if h, ok := m.reviewHead(e.review); ok {
+				out = append(out, branchReviewRowText(h, now))
+			} else {
+				out = append(out, "  └ ?")
+			}
+			continue
+		}
+		i, b := e.b, m.branches[e.b]
 		gutter := make([]rune, 0, len(indicators)+1)
 		for i, ind := range indicators {
 			if active[i] {
@@ -1117,6 +1130,9 @@ func (m Model) branchRows() []string {
 			gutter = append(gutter, ' ') // one separator before the name
 		}
 		row := string(gutter) + b.Name
+		if n := len(m.branchReviewHeads(b)); n > 0 {
+			row += " ◆" + strconv.Itoa(n)
+		}
 		if b.Behind > 0 {
 			row += " (↓" + strconv.Itoa(b.Behind) + ")"
 		}

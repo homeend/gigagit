@@ -2556,6 +2556,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Branches: enter = the .-menu "Go to tip in commits" row (shared
 			// code path, so the key and the menu can never drift apart).
 			if m.focus == panelBranches {
+				// A review row under a branch opens the review.
+				if h, ok := m.selectedBranchReview(); ok {
+					return m.openReviewNote(h.ID, h.Summary)
+				}
 				if r, ok := m.commitGotoTipRow(); ok {
 					return r.run(m)
 				}
