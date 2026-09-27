@@ -36,9 +36,10 @@ and the AI-tasks tab.
 8. Commit diff: stacked layout shows the reviews inline above the files;
    non-stacked layout shows an `@notes` entry at the top of the file list whose
    pane shows the review text.
-9. Branches tab: a marker on a branch with reviews; review sub-rows under the
-   branch, folded by default, →/← to unfold/fold, enter opens; the `.` menu
-   gets "Show review" (newest).
+9. Branches tab: a marker on a branch with reviews; review sub-rows ALWAYS
+   shown under the branch (no fold — → already moves focus to Commits and
+   enter already goes to the tip; user ruling 2026-09-27); enter on a review
+   row opens it; the `.` menu gets "Show review" (newest).
 10. Web display of reviews in its commit/branch views is the NEXT spec. In this
     one the web writes and reads through notes and shows the review in the op
     result only.
@@ -221,24 +222,28 @@ Branches deleted outside gg leave their notes, which then read as
 ## 5. Display (TUI)
 
 **Viewer.** A review opens in the existing file viewer through a new
-`fileSource` kind, `srcNote` (key: note id). `loadDoc` reads `s.Review(id)`;
-the doc reloads when `notes.toml` changes (the file-watch set gains that
-path). Title: the summary. Copy and search work as for any file. A deleted
-note shows "review deleted".
+`fileSource` kind, `srcNote` (key: note id). `loadDoc` reads `s.Review(id)`.
+Title: the summary. Copy and search work as for any file. A deleted
+note shows "review deleted". An interactive review's later result re-opens
+the same document, which reloads it; there is no store watch.
 
-**Commit diff, stacked.** A "Reviews" block above the first file: one row per
-review, `when · agent · summary` (+ "was the tip of `<b>`" / "branch `<b>`"),
-enter expands the text inline; the block counts as a stack slot for n/p/N/P.
+**Commit diff — one mechanism for both layouts.** A commit's file list gets a
+virtual `@notes/` directory first, one entry per review
+(`R  review-<yyyy-mm-dd>-<id>.md`). An entry's "diff" is the review text as an
+all-added file (no old side), loaded from the note, never cached. So:
+- non-stacked: selecting the entry shows the review in the diff pane;
+- stacked: the stack is built from the file list, so the reviews appear
+  inline above the first real file, with n/p/N/P, search and copy for free.
+Line notes cannot be added on these entries (no note address). The files
+view's right-column preview of an entry shows the review text too.
 
-**Commit diff, non-stacked.** An `@notes` entry at the top of the file list
-(dir row, one child per review). Selecting a child shows the review text in
-the diff pane, rendered as the viewer renders it (read-only, cursor + copy).
-
-**Branches tab.** A branch with current-tip reviews shows `◆<n>` (from
-`ReviewCounts`). →/← unfolds/folds review sub-rows under it
-(`when · agent · summary`); folded by default; enter on a sub-row opens the
-viewer. The `.` menu on a branch with reviews gets "Show review", which opens
-the newest.
+**Branches tab.** A branch with current-tip reviews shows `◆<n>` after its
+name, and one sub-row per review under it (`  └ ◆ <when> · <agent> ·
+<summary>`), always shown. Sub-rows move with their branch under sorting and
+filtering (the Worktrees session sub-row pattern); a branch action on a
+sub-row is refused like on a Worktrees session row. Enter on a sub-row opens
+the viewer. The `.` menu on a branch with reviews gets "Show review", which
+opens the newest.
 
 **Commit list.** No change: `NoteCounts.ByCommit` already counts path-less
 notes, so the ◆ badge includes reviews.
