@@ -12,6 +12,7 @@ import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openCommitByHash } from "./commits.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
+import { closeFinder } from "./wtfinder.js";
 
 // --- viewer model (pure; guarded against Go) ---
 function clampLine(n, count) {
@@ -394,7 +395,7 @@ function openViewerMenu(x, y) {
   if (flink) items.push({ label: "copy file link" + (line ? " (line " + line + ")" : ""), act: () => copyViewerLink(flink) });
   if (line && view.lines[line - 1]) items.push({ label: "copy line", act: () => copyText(view.lines[line - 1].text, "line " + line) });
   items.push({ sep: true });
-  if (view.src === "worktree") items.push({ label: "diff (HEAD ↔ working tree)", act: () => viewerDiffWorktree(view.path) });
+  if (view.src === "worktree") items.push({ label: "diff (working tree changes)", act: () => viewerDiffWorktree(view.path) });
   if (view.src === "commit") items.push({ label: "diff (this commit's change)", act: () => viewerDiffCommit(view.rev, view.path) });
   if (view.src !== "shelf") {
     const rev = view.src === "commit" ? view.rev : "";
@@ -422,19 +423,30 @@ async function copyViewerLink(flink) {
   copyLink(flink, linkDesc("file", view.path, ""));
 }
 
-// viewerDiffWorktree opens the file's working-tree diff the way a click on its
-// row does; a file with no change says so.
-async function viewerDiffWorktree(path) {
-  closeViewer("background");
+// openWorktreeFileDiff opens a working-tree file's pending change the way a
+// click on its row does: the unstaged change (index → disk), else the staged
+// one (HEAD → index) — /api/diff has no HEAD ↔ working tree lane. A file
+// with neither says so. Shared by the viewer's menu and F's (plan 5d).
+async function openWorktreeFileDiff(path) {
   await openWorkingTree(0);
-  const i = state.statusEntries.findIndex((f) => f.path === path && f.section !== "staged");
+  let i = state.statusEntries.findIndex((f) => f.path === path && f.section !== "staged");
+  if (i < 0) i = state.statusEntries.findIndex((f) => f.path === path && f.section === "staged");
   if (i < 0) return opLine(path + " has no changes in the working tree", false);
   await openFile(i);
+}
+
+// viewerDiffWorktree: the viewer steps back to the background first — and F,
+// when the viewer was opened over it, steps aside so the stage shows.
+async function viewerDiffWorktree(path) {
+  closeViewer("background");
+  closeFinder();
+  await openWorktreeFileDiff(path);
 }
 
 // viewerDiffCommit opens the commit and the file's row in it.
 async function viewerDiffCommit(rev, path) {
   closeViewer("background");
+  closeFinder();
   if (!(await openCommitByHash(rev, rev.slice(0, 8)))) return;
   const i = state.files.findIndex((f) => f.path === path);
   if (i < 0) return opLine(path + " is not changed in " + rev.slice(0, 8), false);
@@ -503,4 +515,4 @@ registerHelp({
     "<b>↑↓ j k</b> line, <b>/ ] [</b> find, <b>w</b> long lines, <b>.</b> menu (copy file link at the line, copy line, diff, history, blame), <b>esc</b> close",
 });
 
-export { closeViewer, dropViewer, openViewer, versionLabel, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };
+export { closeViewer, dropViewer, openViewer, openWorktreeFileDiff, versionLabel, viewerFileChanged, viewerFileId, viewerHello, viewerOpenFiles };

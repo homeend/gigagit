@@ -1,7 +1,6 @@
 package web
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -351,115 +350,6 @@ func TestSoloGuards(t *testing.T) {
 		if code := postJSON(t, ts, "/api/solo", tc.body, "application/json", "", nil); code != tc.want {
 			t.Errorf("solo %s = %d, want %d", tc.body, code, tc.want)
 		}
-	}
-}
-
-// --- the fuzzy file finder --------------------------------------------------
-
-type filesResp struct {
-	Files   []string `json:"files"`
-	Total   int      `json:"total"`
-	Limited bool     `json:"limited"`
-}
-
-func TestFilesEndpointRanks(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	gitRun(t, dir, "init", "-b", "main")
-	for _, p := range []string{"cmd/gg/main.go", "internal/web/search.go", "docs/readme.md"} {
-		if err := os.MkdirAll(filepath.Join(dir, filepath.Dir(p)), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, p), []byte("x\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	gitRun(t, dir, "add", "-A")
-	gitRun(t, dir, "commit", "-m", "c1")
-	ts := serve(t, New(domain.Open(dir)))
-
-	var all filesResp
-	if code := getJSON(t, ts, "/api/files", &all); code != http.StatusOK {
-		t.Fatalf("status = %d, want 200", code)
-	}
-	if all.Total != 3 || len(all.Files) != 3 {
-		t.Fatalf("files = %v (total %d), want 3", all.Files, all.Total)
-	}
-
-	var ranked filesResp
-	getJSON(t, ts, "/api/files?q=search", &ranked)
-	if len(ranked.Files) != 1 || ranked.Files[0] != "internal/web/search.go" {
-		t.Fatalf("ranked = %v, want [internal/web/search.go]", ranked.Files)
-	}
-	if ranked.Total != 3 {
-		t.Errorf("total = %d, want the whole tracked count 3", ranked.Total)
-	}
-
-	// A subsequence match, not a substring one: the finder's whole point.
-	var fuzzyGot filesResp
-	getJSON(t, ts, "/api/files?q=cgmain", &fuzzyGot)
-	if len(fuzzyGot.Files) != 1 || fuzzyGot.Files[0] != "cmd/gg/main.go" {
-		t.Fatalf("fuzzy = %v, want [cmd/gg/main.go]", fuzzyGot.Files)
-	}
-
-	var none filesResp
-	getJSON(t, ts, "/api/files?q=zzzznope", &none)
-	if len(none.Files) != 0 {
-		t.Fatalf("files = %v, want none", none.Files)
-	}
-}
-
-func TestFilesEndpointLimits(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	gitRun(t, dir, "init", "-b", "main")
-	for i := 0; i < 60; i++ {
-		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%02d.txt", i)), []byte("x\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	gitRun(t, dir, "add", "-A")
-	gitRun(t, dir, "commit", "-m", "c1")
-	ts := serve(t, New(domain.Open(dir)))
-
-	var got filesResp
-	getJSON(t, ts, "/api/files?q=f", &got)
-	if len(got.Files) != fileFinderLimit || !got.Limited {
-		t.Fatalf("files = %d (limited %v), want %d and limited", len(got.Files), got.Limited, fileFinderLimit)
-	}
-	if got.Total != 60 {
-		t.Errorf("total = %d, want 60", got.Total)
-	}
-}
-
-// The path list is read once per HEAD: a new commit invalidates it, so a file
-// added by that commit shows up without restarting anything.
-func TestFilesCacheFollowsHead(t *testing.T) {
-	t.Parallel()
-	dir := newRepoDir(t, 1)
-	srv := New(domain.Open(dir))
-	ts := serve(t, srv)
-
-	var before filesResp
-	getJSON(t, ts, "/api/files", &before)
-	if before.Total != 1 {
-		t.Fatalf("total = %d, want 1", before.Total)
-	}
-	st := srv.searchState()
-	if st.filesHead == "" || len(st.files) != 1 {
-		t.Fatalf("cache = %q/%v, want the HEAD read", st.filesHead, st.files)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("n\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	gitRun(t, dir, "add", "-A")
-	gitRun(t, dir, "commit", "-m", "c2")
-
-	var after filesResp
-	getJSON(t, ts, "/api/files", &after)
-	if after.Total != 2 {
-		t.Fatalf("total = %d after a commit, want 2 (the cache did not follow HEAD)", after.Total)
 	}
 }
 

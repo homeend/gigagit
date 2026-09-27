@@ -227,15 +227,15 @@ body.lm-scroll .vno { position: sticky; left: 0; background: var(--bg-alt); }
 body.lm-cut .vline { white-space: pre; }
 body.lm-cut .vtext { overflow: hidden; text-overflow: ellipsis; }
 /* syntax classes (see internal/syntax Class.String); same hues as the TUI palette */
-table.diff .tk-kw, #blame-body .tk-kw, #viewer-body .tk-kw, #prdetails .tk-kw  { color: #b48bff; }
-table.diff .tk-ty, #blame-body .tk-ty, #viewer-body .tk-ty, #prdetails .tk-ty  { color: #5fd7af; }
-table.diff .tk-fn, #blame-body .tk-fn, #viewer-body .tk-fn, #prdetails .tk-fn  { color: #ffd787; }
-table.diff .tk-str, #blame-body .tk-str, #viewer-body .tk-str, #prdetails .tk-str { color: #afd787; }
-table.diff .tk-num, #blame-body .tk-num, #viewer-body .tk-num, #prdetails .tk-num { color: #ffaf5f; }
-table.diff .tk-cmt, #blame-body .tk-cmt, #viewer-body .tk-cmt, #prdetails .tk-cmt { color: #8a8a8a; font-style: italic; }
-table.diff .tk-op, #blame-body .tk-op, #viewer-body .tk-op, #prdetails .tk-op  { color: #d0d0d0; }
-table.diff .tk-pn, #blame-body .tk-pn, #viewer-body .tk-pn, #prdetails .tk-pn  { color: #bcbcbc; }
-table.diff .tk-at, #blame-body .tk-at, #viewer-body .tk-at, #prdetails .tk-at  { color: #d7af87; }
+table.diff .tk-kw, #blame-body .tk-kw, #viewer-body .tk-kw, #wtf-body .tk-kw, #prdetails .tk-kw  { color: #b48bff; }
+table.diff .tk-ty, #blame-body .tk-ty, #viewer-body .tk-ty, #wtf-body .tk-ty, #prdetails .tk-ty  { color: #5fd7af; }
+table.diff .tk-fn, #blame-body .tk-fn, #viewer-body .tk-fn, #wtf-body .tk-fn, #prdetails .tk-fn  { color: #ffd787; }
+table.diff .tk-str, #blame-body .tk-str, #viewer-body .tk-str, #wtf-body .tk-str, #prdetails .tk-str { color: #afd787; }
+table.diff .tk-num, #blame-body .tk-num, #viewer-body .tk-num, #wtf-body .tk-num, #prdetails .tk-num { color: #ffaf5f; }
+table.diff .tk-cmt, #blame-body .tk-cmt, #viewer-body .tk-cmt, #wtf-body .tk-cmt, #prdetails .tk-cmt { color: #8a8a8a; font-style: italic; }
+table.diff .tk-op, #blame-body .tk-op, #viewer-body .tk-op, #wtf-body .tk-op, #prdetails .tk-op  { color: #d0d0d0; }
+table.diff .tk-pn, #blame-body .tk-pn, #viewer-body .tk-pn, #wtf-body .tk-pn, #prdetails .tk-pn  { color: #bcbcbc; }
+table.diff .tk-at, #blame-body .tk-at, #viewer-body .tk-at, #wtf-body .tk-at, #prdetails .tk-at  { color: #d7af87; }
 mark.l { background: var(--span-del); color: inherit; }
 mark.r { background: var(--span-add); color: inherit; }
 /* In-view search hits, scoped to BOTH hosts like the .tk-* classes above: a
@@ -1629,3 +1629,32 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #openfiles-list .ofrow { padding: 2px 12px; white-space: nowrap; cursor: pointer; }
 #openfiles-list .ofrow.sel { background: var(--sel); }
 #openfiles-list .ofmeta { color: var(--dim); margin-left: 1ch; }
+/* F (wtfinder.js): the files pane lists every file in the working tree and
+   the diff pane previews the one under the cursor — over whatever stage is
+   up (list / files / diff, sidebar or not, file list folded or not), which
+   stays as it was and comes back on esc. Three classes outrank every layout
+   rule above ((2,3,0) over #panes.solo #files-pane's (2,1,0)); the panes'
+   own children hide by (3,1,0)+ so none of their display rules can win. */
+#wtf.hidden, #wtf-preview.hidden { display: none; }
+#panes.wtf.wtf.wtf { grid-template-columns: 1fr var(--rs-w) var(--files-w); }
+#panes.wtf.wtf.wtf #branches-pane, #panes.wtf.wtf.wtf #rs-sidebar,
+#panes.wtf.wtf.wtf #commits-pane, #panes.wtf.wtf.wtf #symleft-pane { display: none; }
+#panes.wtf.wtf.wtf #diff-pane { display: block; order: 1; overflow: hidden; }
+#panes.wtf.wtf.wtf #rs-detail { display: block; order: 2; }
+#panes.wtf.wtf.wtf #files-pane { display: block; order: 3; overflow: hidden; border-left: 1px solid #3a4150; }
+#panes.wtf.wtf.wtf #files-pane > :not(#wtf), #panes.wtf.wtf.wtf #diff-pane > :not(#wtf-preview) { display: none; }
+#panes.wtf.wtf.wtf #files-pane > #wtf:not(.hidden), #panes.wtf.wtf.wtf #diff-pane > #wtf-preview:not(.hidden) {
+  display: flex; flex-direction: column; height: 100%; min-height: 0;
+}
+#wtf-title, #wtf-ptitle { padding: 4px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; }
+#wtf-search { display: flex; gap: 4px; padding: 2px 8px; border-bottom: 1px solid var(--border); }
+#wtf-search.hidden { display: none; }
+#wtf-input { flex: 1; min-width: 0; background: var(--bg); color: var(--fg); border: none; outline: none; font: inherit; }
+#wtf-list { list-style: none; flex: 1; min-height: 0; overflow: auto; }
+#wtf-list li { padding: 2px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; }
+#wtf-list li.sel { background: var(--sel); }
+#wtf-list li.empty { color: var(--dim); cursor: default; }
+#wtf-list .wtf-un { color: var(--dim); white-space: pre; }
+#wtf-body { flex: 1; min-height: 0; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
+#wtf-body:focus { outline: none; }
+#wtf-body .notice { color: var(--dim); padding: 6px 12px; }

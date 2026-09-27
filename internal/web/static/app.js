@@ -17,6 +17,7 @@ import "./rebase.js";
 import "./filehist.js";
 import "./viewer.js";
 import "./openfiles.js";
+import "./wtfinder.js";
 import "./review.js";
 import { syncStackChrome } from "./stackview.js";
 import { applyStoredWidths } from "./resize.js";

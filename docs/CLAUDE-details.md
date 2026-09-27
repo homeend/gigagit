@@ -1279,6 +1279,21 @@ id tried as a path, else the path — most recently shown version) +
 `steerTUI` posts to the TUI inbox ONLY (a web page gets nothing; web-only →
 exit 1), `--background` never launches a TUI; `gg web`'s `toSteerWire`
 refuses `Background`, `files` and `file_focus` by name until stage 5.
+**Web F finder (5d, 2026-09-27):** `GET /api/worktree-files` (`worktreefiles.go`) serves
+F's list — `domain.WorktreeFileList` (moved from the TUI, which calls it too: ls-files minus
+status `D` plus the status's untracked), read once per F open (`fresh=1`) and cached per
+Server with a build number `gen`; a query ranks with `fuzzy.Rank` (cap 200, `limited`), no
+query pages the sorted list 200 at a time (`offset`/`next`; a page whose `gen` moved restarts
+the list). `/api/files` and its per-HEAD cache are gone. Page: `static/wtfinder.js` is a LAYER
+(so the viewer, history, blame, the `.` menu and the switcher open over it and esc returns)
+drawn IN the panes — `#panes.wtf` shows `#wtf` in the files pane and `#wtf-preview` in the
+diff pane over any layout (three classes outrank the layout rules; the panes' own children
+hide at (3,1,0)+) and touches nothing underneath, so esc restores the stage (the three panes' scroll is saved on open and put back on close — hiding a pane's children resets it). The preview is
+NOT an open file (it reads `/api/file-content` directly, 150 ms settle, gen + path drop stale
+answers); `ctrl+]` = `/api/open-files` `open` with `tab ""`. diff closes F and opens
+`openWorktreeFileDiff` (viewer.js — unstaged, else staged: `/api/diff` has no HEAD ↔ working
+tree lane). A steered navigate onto the panes closes F (`live.js`); a content navigate opens
+the viewer over it.
 
 ### The compare algebra (`internal/domain`, plan 1b, 2026-09-17)
 
