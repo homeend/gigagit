@@ -113,6 +113,8 @@ var finderWiring = []struct{ file, want, why string }{
 	{"live.js", "closeFinder();", "a steered navigate onto the panes closes F first"},
 	// Browser check: hiding a pane's children resets its scroll — esc must put it back.
 	{"wtfinder.js", "restorePanes(", "esc gives the panes back at the scroll they had"},
+	// Final review: a viewer opened over F that hands off to the diff stage must not leave F covering it.
+	{"viewer.js", "closeViewer(\"background\");\n  closeFinder();", "the viewer's diff rows step F aside"},
 }
 
 // finderGone pins what 5d removes.

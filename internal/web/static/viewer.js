@@ -12,6 +12,7 @@ import { openFileBlame, openFileHistory } from "./filehist.js";
 import { openCommitByHash } from "./commits.js";
 import { registerHelp, registerRows } from "./menus.js";
 import { isSwitcherKey, openSwitcher } from "./openfiles.js";
+import { closeFinder } from "./wtfinder.js";
 
 // --- viewer model (pure; guarded against Go) ---
 function clampLine(n, count) {
@@ -434,15 +435,18 @@ async function openWorktreeFileDiff(path) {
   await openFile(i);
 }
 
-// viewerDiffWorktree: the viewer steps back to the background first.
+// viewerDiffWorktree: the viewer steps back to the background first — and F,
+// when the viewer was opened over it, steps aside so the stage shows.
 async function viewerDiffWorktree(path) {
   closeViewer("background");
+  closeFinder();
   await openWorktreeFileDiff(path);
 }
 
 // viewerDiffCommit opens the commit and the file's row in it.
 async function viewerDiffCommit(rev, path) {
   closeViewer("background");
+  closeFinder();
   if (!(await openCommitByHash(rev, rev.slice(0, 8)))) return;
   const i = state.files.findIndex((f) => f.path === path);
   if (i < 0) return opLine(path + " is not changed in " + rev.slice(0, 8), false);
