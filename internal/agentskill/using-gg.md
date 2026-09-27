@@ -45,8 +45,11 @@ guards against removing the worktree you are standing in.
   header plus the commit's terse stat block (default) or full patch
   (`--patch`).
 - `gg review [--tool <name>] [--working] [<rev>|<A..B>]` — runs a configured
-  AI review agent headless and prints its report to stdout (also persisted
-  under the gg state dir). Flags must precede the positional (like `gg log
+  AI review agent headless and prints its report to stdout. The review is
+  stored as a note on the reviewed commit (a range's last commit; a branch
+  review's tip, carrying the branch name) and `note: <id>` is printed on
+  stderr; a `--working` review has no commit and is printed only. There is
+  no report file. Flags must precede the positional (like `gg log
   -n`). No positional reviews the current branch's work; a single `<rev>`
   reviews just that commit's own change (`rev^..rev`); an `A..B` positional
   is used as a range; `--working` reviews uncommitted changes. `--tool`

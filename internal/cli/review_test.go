@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -193,8 +194,25 @@ func TestReviewRangePositionalPrintsAndPersists(t *testing.T) {
 	if !strings.Contains(out, "FAKE REVIEW of HEAD~1..HEAD") {
 		t.Fatalf("stdout = %q", out)
 	}
-	if !strings.Contains(errb, "report:") {
-		t.Fatalf("stderr missing persisted report path: %q", errb)
+	if !regexp.MustCompile(`(?m)^note: [0-9a-f]{8}$`).MatchString(errb) {
+		t.Fatalf("stderr missing the stored note id: %q", errb)
+	}
+	if strings.Contains(errb, "report:") {
+		t.Fatalf("stderr still names a report file: %q", errb)
+	}
+}
+
+// A review of working changes has no commit to attach to: printed, not stored.
+func TestReviewWorkingPrintsWithoutANote(t *testing.T) {
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	writeReviewTool(t, dir, "Echo", `printf "FAKE WORKING REVIEW\n"`)
+	code, out, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "FAKE WORKING REVIEW") || strings.Contains(errb, "note:") {
+		t.Fatalf("stdout=%q stderr=%q, want the review printed and no note", out, errb)
 	}
 }
 
