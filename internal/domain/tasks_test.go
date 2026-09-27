@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -385,5 +386,82 @@ func TestSaveTaskResultWritesAndPrunes(t *testing.T) {
 	entries, _ := os.ReadDir(filepath.Dir(p))
 	if len(entries) != taskResultKeep {
 		t.Fatalf("kept %d files, want %d", len(entries), taskResultKeep)
+	}
+}
+
+// storedReviewSpec is a headless review whose result goes through store.
+func storedReviewSpec(svc *Service, key, out string, store func(context.Context, string, string) (string, string, error)) TaskSpec {
+	rel := make(chan struct{})
+	close(rel)
+	spec := headlessSpec(svc, key, blockOp{started: make(chan string, 1), release: rel, key: key, out: out})
+	spec.Store = store
+	return spec
+}
+
+func TestHeadlessReviewIsStoredNotRecorded(t *testing.T) {
+	t.Parallel()
+	m, svc := newTestTasks(t)
+	var saved []string
+	spec := storedReviewSpec(svc, "review — stored", "the review", func(_ context.Context, id, text string) (string, string, error) {
+		saved = append(saved, id+"|"+text)
+		return "n1", "", nil
+	})
+	info := waitInfo(t, m, m.Submit(spec), "ended", func(i TaskInfo) bool { return !i.State.Live() })
+	if info.State != TaskDone || info.NoteID != "n1" {
+		t.Fatalf("state %v (%s) note %q", info.State, info.Err, info.NoteID)
+	}
+	if len(saved) != 1 || saved[0] != "|the review" {
+		t.Fatalf("Store calls = %v", saved)
+	}
+	rec := m.History()[0]
+	if rec.NoteID != "n1" || rec.ResultFile != "" {
+		t.Fatalf("record NoteID %q ResultFile %q; want n1 and no .result", rec.NoteID, rec.ResultFile)
+	}
+}
+
+func TestInteractiveReviewUpdatesOneNote(t *testing.T) {
+	t.Parallel()
+	m, _ := newTestTasks(t)
+	var ids []string
+	tk := &task{spec: TaskSpec{Kind: exttool.CatReview, Mode: TaskInteractive,
+		Store: func(_ context.Context, id, _ string) (string, string, error) {
+			ids = append(ids, id)
+			return "n1", "", nil
+		}}}
+	m.setResult(tk, "first")
+	m.setResult(tk, "second")
+	if len(ids) != 2 || ids[0] != "" || ids[1] != "n1" {
+		t.Fatalf("Store ids = %q, want [\"\" n1] (create, then update in place)", ids)
+	}
+}
+
+func TestStoreFailureFailsTheTaskAndRetrySaveRecovers(t *testing.T) {
+	t.Parallel()
+	m, svc := newTestTasks(t)
+	var fail atomic.Bool
+	fail.Store(true)
+	spec := storedReviewSpec(svc, "review — failing", "the review", func(context.Context, string, string) (string, string, error) {
+		if fail.Load() {
+			return "", "", errors.New("disk full")
+		}
+		return "n9", "", nil
+	})
+	info := waitInfo(t, m, m.Submit(spec), "ended", func(i TaskInfo) bool { return !i.State.Live() })
+	if info.State != TaskFailed || !strings.Contains(info.SaveErr, "disk full") || info.NoteID != "" {
+		t.Fatalf("state %v SaveErr %q note %q", info.State, info.SaveErr, info.NoteID)
+	}
+	if rec := m.History()[0]; rec.ResultFile != "" {
+		t.Fatalf("a failed save wrote a .result: %q", rec.ResultFile)
+	}
+	fail.Store(false)
+	if err := m.RetrySave(info.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := m.Get(info.ID)
+	if got.NoteID != "n9" || got.State != TaskDone || got.SaveErr != "" {
+		t.Fatalf("after retry: %+v", got)
+	}
+	if rec := m.History()[0]; rec.NoteID != "n9" || rec.State != string(TaskDone) {
+		t.Fatalf("history after retry: %+v", rec)
 	}
 }

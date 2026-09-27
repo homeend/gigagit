@@ -42,6 +42,10 @@ type TaskSpec struct {
 	// ResultOptional: a run that exits 0 without a result is done, not
 	// failed — a conflict run's outcome is the repository state.
 	ResultOptional bool
+	// Store, when set, persists each result (a review → a note) INSTEAD of
+	// the history's .result file. noteID is "" on the first call and the id
+	// it returned afterwards, so later results rewrite the same note.
+	Store func(ctx context.Context, noteID, text string) (id, warn string, err error)
 }
 
 var longHex = regexp.MustCompile(`\b[0-9a-f]{8,40}\b`)
@@ -150,6 +154,12 @@ func (s *Service) ReviewTask(ctx context.Context, tc config.ToolCommand, target 
 		Diff: target.Diff, RangeLabel: target.DisplayLabel(), NotesFile: notesFile,
 	}
 	spec.Parse = parseReport
+	if target.Kind != ReviewWorking { // working changes have no commit: no note (spec ruling 1)
+		agent := spec.Agent
+		spec.Store = func(ctx context.Context, noteID, text string) (string, string, error) {
+			return s.SaveReview(ctx, SaveReview{Target: target, Agent: agent, Text: text, NoteID: noteID})
+		}
+	}
 	return spec, nil
 }
 

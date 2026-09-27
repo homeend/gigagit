@@ -59,6 +59,8 @@ type TaskInfo struct {
 	ExitCode  int
 	Err       string
 	Tail      string // headless output tail (≤ taskhist.MaxTail)
+	NoteID    string // the note a review's result is stored as
+	SaveErr   string // why storing the result failed ("" = saved, or nothing to store)
 }
 
 type task struct {
@@ -203,8 +205,58 @@ func (m *TaskManager) setResult(t *task, result string) {
 	if t.spec.Mode == TaskInteractive && t.info.State == TaskRunning {
 		t.info.State = TaskResultReady
 	}
+	store, noteID := t.spec.Store, t.info.NoteID
 	m.mu.Unlock()
+	if store != nil {
+		m.storeResult(t, store, noteID, result)
+	}
 	m.signal()
+}
+
+// storeResult runs a Store hook OUTSIDE the lock (it may retry for 15 s) and
+// records the note id, or why the save failed.
+func (m *TaskManager) storeResult(t *task, store func(context.Context, string, string) (string, string, error), noteID, text string) {
+	id, _, err := store(context.Background(), noteID, text)
+	m.mu.Lock()
+	if err != nil {
+		t.info.SaveErr = "review not saved: " + err.Error()
+	} else {
+		t.info.NoteID, t.info.SaveErr = id, ""
+	}
+	m.mu.Unlock()
+}
+
+// RetrySave re-runs a failed save from the result still held in memory; a
+// run that failed only because of the save becomes done.
+func (m *TaskManager) RetrySave(id TaskID) error {
+	m.mu.Lock()
+	var t *task
+	for _, x := range m.tasks {
+		if x.info.ID == id {
+			t = x
+		}
+	}
+	if t == nil || t.spec.Store == nil || t.info.Result == "" {
+		m.mu.Unlock()
+		return errors.New("nothing to save")
+	}
+	store, noteID, text := t.spec.Store, t.info.NoteID, t.info.Result
+	m.mu.Unlock()
+	m.storeResult(t, store, noteID, text)
+	m.mu.Lock()
+	if t.info.SaveErr == "" && t.info.State == TaskFailed && t.info.Err != "" && strings.HasPrefix(t.info.Err, "review not saved: ") {
+		t.info.State, t.info.Err = TaskDone, ""
+	}
+	info := t.info
+	m.mu.Unlock()
+	if info.SaveErr != "" {
+		return errors.New(info.SaveErr)
+	}
+	if !info.State.Live() {
+		m.record(recordOf(info), "", info.Tail) // rewrite the record with its note id
+	}
+	m.signal()
+	return nil
 }
 
 func (m *TaskManager) runHeadless(ctx context.Context, t *task) taskEnd {
@@ -266,7 +318,14 @@ func (m *TaskManager) finish(t *task, end taskEnd) {
 	m.mu.Unlock()
 	info.State, info.Ended = end.state, time.Now()
 	info.ExitCode, info.Err, info.Tail = end.exit, end.err, end.tail
-	m.record(recordOf(info), info.Result, end.tail)
+	result := info.Result
+	if t.spec.Store != nil {
+		result = "" // stored as a note, or not at all: never a .result file
+		if info.SaveErr != "" && info.State == TaskDone {
+			info.State, info.Err = TaskFailed, info.SaveErr
+		}
+	}
+	m.record(recordOf(info), result, end.tail)
 	m.mu.Lock()
 	t.info = info
 	m.trimEndedLocked()
@@ -284,6 +343,7 @@ func recordOf(info TaskInfo) TaskRecord {
 		ID: string(info.ID), Key: info.Key, Kind: string(info.Kind), Agent: info.Agent,
 		Repo: info.Repo, Worktree: info.Worktree, Mode: string(info.Mode), State: string(info.State),
 		Started: started.UTC(), Ended: info.Ended.UTC(), ExitCode: info.ExitCode, Err: info.Err,
+		NoteID: info.NoteID,
 	}
 }
 
