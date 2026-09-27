@@ -33,7 +33,7 @@ func TestSteerHintJSIsWired(t *testing.T) {
 		// A content hint (?view=content) is a LANDING kind — it names the
 		// viewer, not a saved surface to reveal — so it returns before the
 		// land-then-reveal pair (open files on the web, plan 5a).
-		{"async function steerNavigate(s) {\n  if (s.hint_kind === \"view\" && s.hint_id === \"content\") return steerNavigateContent(s);\n  await steerNavigateLand(s);\n  if (s.hint_kind) await revealHint(s);\n}", "steerNavigate must land THEN reveal, unconditionally (a content link lands in the viewer instead)"},
+		{"async function steerNavigate(s) {\n  if (s.hint_kind === \"view\" && s.hint_id === \"content\") return steerNavigateContent(s);\n  closeFinder(); // the landing is on the panes F covers (the TUI's steerToPanels closes its files view)\n  await steerNavigateLand(s);\n  if (s.hint_kind) await revealHint(s);\n}", "steerNavigate must land THEN reveal, unconditionally (a content link lands in the viewer instead; F closes first, plan 5d)"},
 		{"return s.hint_kind === \"preview\" ? revealSavedSet(s) : revealHintEntry(s.hint_kind, s.hint_id);", "revealHint must route a preview hint to previews.js and every other kind to the sidebar"},
 		{"async function steerNavigateLand(s) {", "the old steerNavigate body must be renamed, not duplicated"},
 		{"revealHintEntry } from \"./sidebar.js\"", "live.js must import revealHintEntry from sidebar.js"},
