@@ -18,6 +18,12 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   clean). A `/` fuzzy filter keeps its matches grouped under their
   directories; the cursor lands on the best-ranked match (the first file with
   no query), never on a heading, and the title counts files, not headings.
+- The files view's first line is a sticky heading: it always names the
+  directory of the row beneath it (`.` for root files), so a directory
+  scrolled past its own heading still says where its files are. When the
+  heading itself is the top row it takes that line, never showing twice. The
+  same tree renderer serves a commit's, a stash's and a comparison's files,
+  so they gain it too; the cut-row reveal follows the shared row geometry.
 
 ## Fix: a removed agent session closes its console
 

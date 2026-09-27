@@ -161,6 +161,14 @@ func windowRowBounds(n, h, anchor int, mode dispMode) (lo, hi int) {
 // each padded to o.w columns. Row styling is applied only after truncation or
 // wrapping, so it can never corrupt the width-based slicing (ANSI-safety).
 func renderWindow(rows []winRow, o winOpts) []string {
+	out, _ := renderWindowTop(rows, o)
+	return out
+}
+
+// renderWindowTop is renderWindow that also reports which row its first
+// display line belongs to (an index into rows; 0 when there are none) — what
+// a sticky header over the window needs to name the row it sits above.
+func renderWindowTop(rows []winRow, o winOpts) ([]string, int) {
 	w, h := o.w, o.h
 	if w < 1 {
 		w = 1
@@ -168,6 +176,7 @@ func renderWindow(rows []winRow, o winOpts) []string {
 	if h < 1 {
 		h = 1
 	}
+	rowOff := 0
 
 	// Window BEFORE building any per-row state, making the whole call O(visible)
 	// instead of O(len(rows)). Without this a 40k-row panel rebuilds every row on
@@ -178,6 +187,7 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		lo, hi := windowRowBounds(len(rows), h, o.anchor, o.mode)
 		rows = rows[lo:hi]
 		o.anchor -= lo
+		rowOff = lo
 	}
 
 	// A frozen prefix column (o.prefixW>0) reserves the leftmost columns; the
@@ -314,6 +324,10 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		}
 	}
 	start := windowStart(len(dl), h, anchorLine)
+	top := 0
+	if start < len(dl) {
+		top = rowOff + dl[start].row
+	}
 
 	out := make([]string, 0, h)
 	for i := 0; i < h; i++ {
@@ -332,7 +346,7 @@ func renderWindow(rows []winRow, o winOpts) []string {
 		}
 		out = append(out, dl[idx].style.Render(line))
 	}
-	return out
+	return out, top
 }
 
 // colouredLine renders one display line of a class-masked row: the frozen

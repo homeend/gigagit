@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -371,5 +372,84 @@ func TestWorktreeEnterOnAHeadingIsInert(t *testing.T) {
 	m = fvKeys(t, m, keyMsg("enter"))
 	if m.actionMenu != nil || m.topLayer() != nil || !m.inWorktreeFiles() {
 		t.Fatal("enter on a heading must not open the file actions")
+	}
+}
+
+// wtListLines is the F window's left-column list: the text of each row line
+// under the title, trimmed, in order.
+func wtListLines(m Model) []string {
+	var out []string
+	seen := false
+	for _, l := range strings.Split(ansi.Strip(m.View()), "\n") {
+		if !seen {
+			seen = strings.Contains(l, "Files (working tree)")
+			continue
+		}
+		if !strings.HasPrefix(l, "│") {
+			break
+		}
+		cell := l[len("│"):]
+		if i := strings.Index(cell, "│"); i >= 0 {
+			cell = cell[:i]
+		}
+		out = append(out, strings.TrimSpace(cell))
+	}
+	return out
+}
+
+func TestWorktreeFirstRowNamesTheDirectoryBelow(t *testing.T) {
+	t.Parallel()
+	paths := []string{"a.go"}
+	for i := 0; i < 40; i++ {
+		paths = append(paths, fmt.Sprintf("src/f%02d.go", i))
+	}
+	m := wtWindow(t, paths...)
+	m.width, m.height = 120, 20
+	if rows := wtListLines(m); len(rows) == 0 || rows[0] != "." {
+		t.Fatalf("at the top the first row = %q, want . (the root)\n%s", rows, m.View())
+	}
+	for i := 0; i < 30; i++ {
+		m = fvKeys(t, m, keyMsg("down"))
+	}
+	if m.wtSelected() != "src/f28.go" { // a.go, the src/ heading, then f00…
+		t.Fatalf("cursor on %q", m.wtSelected())
+	}
+	rows := wtListLines(m)
+	if len(rows) == 0 || rows[0] != "src/" {
+		t.Fatalf("scrolled into src/: first row = %q, want the directory of the rows below\n%s", rows, m.View())
+	}
+	if n := strings.Count(strings.Join(rows, "\n"), "src/"); n != 1 {
+		t.Fatalf("src/ shown %d times, want once (the heading itself scrolled off)", n)
+	}
+}
+
+func TestWorktreeFirstRowIsTheHeadingWhenItIsAtTheTop(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "src/a.go", "src/b.go")
+	m.width, m.height = 120, 20
+	rows := wtListLines(m)
+	if len(rows) < 3 || rows[0] != "src/" || !strings.HasSuffix(rows[1], "a.go") {
+		t.Fatalf("rows = %q, want src/ once, then its files", rows)
+	}
+	if n := strings.Count(strings.Join(rows, "\n"), "src/"); n != 1 {
+		t.Fatalf("src/ shown %d times, want once", n)
+	}
+}
+
+func TestWorktreeRevealLandsOnTheCursorRowUnderTheStickyLine(t *testing.T) {
+	t.Parallel()
+	const long = "a-root-file-with-a-name-far-too-long-for-the-column.go"
+	m := wtWindow(t, long, "src/b.go")
+	m.width, m.height = 100, 20
+	lines, _, y, ok := m.filesTreeReveal()
+	if !ok || len(lines) != 1 {
+		t.Fatalf("no reveal for a cut cursor row (ok=%v lines=%q)", ok, lines)
+	}
+	view := strings.Split(ansi.Strip(m.View()), "\n")
+	if y < 1 || y >= len(view) || !strings.Contains(view[y], long) {
+		t.Fatalf("reveal at y=%d does not carry the cursor row's full name:\n%s", y, strings.Join(view, "\n"))
+	}
+	if got := strings.TrimSpace(strings.Trim(strings.SplitN(view[y-1], "│", 3)[1], " ")); got != "." {
+		t.Fatalf("the line above the reveal = %q, want the sticky . (the reveal must not cover it)", got)
 	}
 }

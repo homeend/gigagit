@@ -198,22 +198,11 @@ func (m Model) filesTreeReveal() (lines []string, x, y int, ok bool) {
 	if !rowTruncated("> "+content, innerW) {
 		return nil, 0, 0, false // the row is shown in full
 	}
-	// Row capacity mirrors renderFilesView: box height − borders (2) − title −
-	// hint, minus one more when the /-search line is showing.
-	rowsCap := g.bodyH - 4
-	if p.searchLine() != "" {
-		rowsCap--
-	}
-	if rowsCap < 1 {
-		rowsCap = 1
-	}
-	selInWin := p.sel - windowStart(len(vis), rowsCap, p.sel)
-	// Screen row: the left column starts at row 1 (header is row 0); inside it the
-	// border + title (+ search line) precede the first data row.
-	rowY := 1 + 2 + selInWin // box top (1) + border + title
-	if p.searchLine() != "" {
-		rowY++
-	}
+	// The same geometry renderFilesView paints with: the box top is screen row
+	// 1 (the header is row 0), then its border, the chrome lines (title, date,
+	// search) and the rows — the sticky heading line first.
+	geom := filesGeometry(vis, p.sel, m.filesRowsCap(g.bodyH))
+	rowY := 1 + 1 + m.filesChromeLines() + geom.cursorLine()
 	line, x := revealLine(content, 2, innerW, g.w) // left column content edge = 2
 	return []string{line}, x, rowY, true
 }
