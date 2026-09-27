@@ -1284,7 +1284,10 @@ pwsh → powershell → cmd on Windows; `[console] shell` overrides). Both rows
 also sit on a **Branches** row whose branch is checked out in a worktree (the
 rows that show a worktree path), as **Start agent in \<worktree\>** /
 **Open terminal in \<worktree\>** — they run in that worktree; a branch
-checked out nowhere has nothing on disk to run in and gets neither. Sessions belong to the gg process, not
+checked out nowhere has nothing on disk to run in and gets neither. Such a
+branch also lists its worktree's sessions as the same sub-rows, right under
+the branch (through any sort or filter), with the same `enter` / `x` / `.`
+menu. Sessions belong to the gg process, not
 to a repository: switching worktree or repository (`R`) keeps them running,
 and `ctrl+\` reaches every one. Quitting gg with live sessions opens that
 popup in quit mode — `Q` kills them all and quits, `esc` cancels. A worktree

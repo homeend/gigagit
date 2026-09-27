@@ -77,6 +77,7 @@ func helpContent() []contentLine {
 		r(".", i18n.T("rename branch / copy branch name / Pull <branch> (stay here) / Solo this branch / Add to commit view / Go to tip in commits (.-menu)")),
 		r("", i18n.T("Solo this branch (.-menu): scope the Commits panel to this branch (re-run to un-solo); Add/Remove from commit view builds a multi-branch set; Show all branches clears it; Go to tip in commits jumps the Commits cursor to this branch's tip (enter does the same; both deep-search unloaded history when needed)")),
 		r("f", i18n.T("find current: jump the cursor to the checked-out branch (the list scrolls to it; an active / filter that hides it is reported instead)")),
+		r("", i18n.T("a branch checked out in a worktree lists that worktree's agent/terminal sessions as sub-rows (└ ● running / └ ○ exited), as the Worktrees tab does: enter opens the console, x removes an exited one, the . menu offers Open / Kill / Remove session")),
 		h(i18n.T("Remotes panel")),
 		r("c", i18n.T("checkout: create or fast-forward a local tracking branch (stay on the current branch); on the current branch's own remote it prompts instead: pull now (when behind) / check out under a different name")),
 		r("s", i18n.T("checkout and switch to it — fast-forward-safe; a diverged local branch offers check-out-as-a-different-name")),

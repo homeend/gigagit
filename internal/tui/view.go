@@ -1073,7 +1073,33 @@ func (m Model) worktreePathOf(branch string) (string, bool) {
 	return "", false
 }
 
-func (m Model) branchRows() []string {
+// branchRows renders the Branches list: one row per branch, each followed by
+// the session sub-rows of its checkout (branchEntries).
+func (m Model) branchRows() []string { return m.branchRowsFor(m.branchEntries()) }
+
+// branchRowsFor renders one row per entry: a branch, or an agent session
+// sub-row under it, indented to the gutter so └ sits under the name.
+func (m Model) branchRowsFor(ents []brEntry) []string {
+	rows, gutterW := m.branchOnlyRows()
+	out := make([]string, 0, len(ents))
+	indent := strings.Repeat(" ", gutterW)
+	for _, e := range ents {
+		if e.sess != "" {
+			if s, ok := domain.Sessions().Get(e.sess); ok {
+				out = append(out, indent+sessionRowBody(s.Info()))
+			} else {
+				out = append(out, indent+"└ ?")
+			}
+			continue
+		}
+		out = append(out, rows[e.br])
+	}
+	return out
+}
+
+// branchOnlyRows renders one row per branch (1:1 with m.branches) and the
+// width of the indicator gutter before the name.
+func (m Model) branchOnlyRows() ([]string, int) {
 	inScope := func(b model.Branch) bool { return slices.Contains(m.commitScopeBranches, b.Name) }
 	// Ordered left-to-right; each maps a branch to its glyph or ' '. Indicators
 	// live in a left gutter so the set marker is never truncated in a narrow
@@ -1106,6 +1132,7 @@ func (m Model) branchRows() []string {
 	// in a worktree) is marked so the row's presence is explained.
 	_, exempt, _ := m.branchFilterHidden(panelBranches)
 	out := make([]string, 0, len(m.branches))
+	gutterW := 0
 	for i, b := range m.branches {
 		gutter := make([]rune, 0, len(indicators)+1)
 		for i, ind := range indicators {
@@ -1116,6 +1143,7 @@ func (m Model) branchRows() []string {
 		if len(gutter) > 0 {
 			gutter = append(gutter, ' ') // one separator before the name
 		}
+		gutterW = len(gutter)
 		row := string(gutter) + b.Name
 		if b.Behind > 0 {
 			row += " (↓" + strconv.Itoa(b.Behind) + ")"
@@ -1128,7 +1156,7 @@ func (m Model) branchRows() []string {
 		}
 		out = append(out, row)
 	}
-	return out
+	return out, gutterW
 }
 
 // remoteRows builds the Remotes tab rows: one short ref per line.

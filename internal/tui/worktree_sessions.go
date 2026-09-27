@@ -42,24 +42,94 @@ func (m Model) worktreeEntries() []wtEntry {
 	return out
 }
 
-func sessionRowText(info domain.SessionInfo) string {
+// sessionRowText is the Worktrees sub-row: indented under the worktree's
+// two-column marker.
+func sessionRowText(info domain.SessionInfo) string { return "  " + sessionRowBody(info) }
+
+// sessionRowBody is a session sub-row without its indent: "└ ● label  running
+// 12s" / "└ ○ label  exited (0)". The Branches tab indents it to its gutter.
+func sessionRowBody(info domain.SessionInfo) string {
 	if info.State == domain.SessionExited {
-		return "  └ ○ " + info.Label + "  " + i18n.T("exited (%d)", info.ExitCode)
+		return "└ ○ " + info.Label + "  " + i18n.T("exited (%d)", info.ExitCode)
 	}
-	return "  └ ● " + info.Label + "  " + i18n.T("running %s", formatElapsed(time.Since(info.Started)))
+	return "└ ● " + info.Label + "  " + i18n.T("running %s", formatElapsed(time.Since(info.Started)))
 }
 
-// selectedSession resolves a session sub-row under the Worktrees cursor.
+// brEntry is one Branches row: a branch, or an agent session running in the
+// worktree that branch is checked out in (a sub-row under it).
+type brEntry struct {
+	br   int
+	sess domain.SessionID
+}
+
+// sub reports a session sub-row, not a branch.
+func (e brEntry) sub() bool { return e.sess != "" }
+
+// branchEntries is the Branches list in display order: each branch followed
+// by the sessions of its worktree (worktreePathOf — the same lookup the row's
+// path marker uses, so a sub-row appears exactly under a row that names a
+// checkout). Sessions only: ◆ tasks stay on the Worktrees and Headless tabs.
+func (m Model) branchEntries() []brEntry {
+	byDir := map[string][]domain.SessionInfo{}
+	for _, info := range domain.Sessions().List() {
+		byDir[filepath.Clean(info.Dir)] = append(byDir[filepath.Clean(info.Dir)], info)
+	}
+	out := make([]brEntry, 0, len(m.branches))
+	for i, b := range m.branches {
+		out = append(out, brEntry{br: i})
+		if len(byDir) == 0 {
+			continue
+		}
+		path, ok := m.worktreePathOf(b.Name)
+		if !ok {
+			continue
+		}
+		for _, info := range byDir[filepath.Clean(path)] {
+			out = append(out, brEntry{br: i, sess: info.ID})
+		}
+	}
+	return out
+}
+
+// selectedSession resolves a session sub-row under the cursor of the focused
+// tab — Worktrees or Branches, which both interleave them.
 func (m Model) selectedSession() (domain.SessionInfo, bool) {
-	e, ok := m.selectedWorktreeEntry()
-	if !ok || e.sess == "" {
+	var id domain.SessionID
+	switch m.focus {
+	case panelWorktrees:
+		e, ok := m.selectedWorktreeEntry()
+		if !ok {
+			return domain.SessionInfo{}, false
+		}
+		id = e.sess
+	case panelBranches:
+		e, ok := m.selectedBranchEntry()
+		if !ok {
+			return domain.SessionInfo{}, false
+		}
+		id = e.sess
+	}
+	if id == "" {
 		return domain.SessionInfo{}, false
 	}
-	s, ok := domain.Sessions().Get(e.sess)
+	s, ok := domain.Sessions().Get(id)
 	if !ok {
 		return domain.SessionInfo{}, false
 	}
 	return s.Info(), true
+}
+
+func (m Model) selectedBranchEntry() (brEntry, bool) {
+	idx := m.displayIndices(panelBranches)
+	sel := m.sel[panelBranches]
+	if sel < 0 || sel >= len(idx) {
+		return brEntry{}, false
+	}
+	ents := m.branchEntries()
+	if idx[sel] >= len(ents) {
+		return brEntry{}, false
+	}
+	return ents[idx[sel]], true
 }
 
 func (m Model) selectedWorktreeEntry() (wtEntry, bool) {
@@ -89,8 +159,13 @@ func taskSubRowText(info domain.TaskInfo) string {
 	return "  └ ◆ " + taskKindLabel(info.Kind) + " " + target + "  " + state
 }
 
-// selectedTask resolves a ◆ row under the Worktrees cursor.
+// selectedTask resolves a ◆ row under the Worktrees cursor — only while that
+// tab is focused: the cursor is per tab, and a ◆ row parked under it must not
+// act from the Branches tab (which lists no tasks).
 func (m Model) selectedTask() (domain.TaskInfo, bool) {
+	if m.focus != panelWorktrees {
+		return domain.TaskInfo{}, false
+	}
 	e, ok := m.selectedWorktreeEntry()
 	if !ok || e.task == "" {
 		return domain.TaskInfo{}, false

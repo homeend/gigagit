@@ -20,6 +20,24 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `./build.sh notices`, and every release archive now carries the license,
   the commercial note and the notices.
 
+## Branches tab: agent/terminal sessions as sub-rows under their branch
+
+### Added
+
+- **Session sub-rows on the Branches tab.** A branch checked out in a
+  worktree now lists the agent and terminal sessions running there directly
+  beneath it — the Worktrees tab's `└ ● Claude  running 12m` /
+  `└ ○ Terminal  exited (0)` rows, indented to the branch name — so the
+  branch list says what is running where without switching tabs. The
+  sub-row behaves as it does on Worktrees: `enter` opens the console, `x`
+  removes an exited session (a running one is refused: kill it first, and
+  the footer shows `[x] remove`), the `.` menu offers *Open session* and
+  *Kill session* / *Remove session*. Every branch action refuses a sub-row.
+  Sub-rows stay glued under their branch through every sort order and the
+  alt+1…5 filter slots, and a `/` query matching a session's label keeps the
+  branch it runs under in view. ◆ headless tasks stay on the Worktrees and
+  Headless tabs.
+
 ## The working-tree files window (`F`) is a tree
 
 ### Changed
