@@ -62,6 +62,23 @@ console.log(r.join("|"));
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}
 }
+
+// The preview follows the disk: a stamp that moved reloads it; an unknown
+// stamp ("" — a failed stat, or none yet) never does.
+func TestFinderStampModelJS(t *testing.T) {
+	t.Parallel()
+	out := runPureJS(t, "wtfinder.js", wtfPureStart, wtfPureEnd, `
+const r = [];
+r.push(WT_STAMP_MS);
+r.push(wtStampChanged("1:2", "1:3"), wtStampChanged("1:2", "1:2"), wtStampChanged("1:2", "missing"), wtStampChanged("missing", "4:5"));
+r.push(wtStampChanged("", "1:2"), wtStampChanged("1:2", ""), wtStampChanged(undefined, "1:2"));
+console.log(r.join("|"));
+`)
+	if want := "1000|true|false|true|true|false|false|false"; out != want {
+		t.Fatalf("got  %s\nwant %s", out, want)
+	}
+}
+
 func TestFinderActionsJS(t *testing.T) {
 	t.Parallel()
 	out := runPureJS(t, "wtfinder.js", wtfPureStart, wtfPureEnd, `
@@ -115,6 +132,14 @@ var finderWiring = []struct{ file, want, why string }{
 	{"wtfinder.js", "restorePanes(", "esc gives the panes back at the scroll they had"},
 	// Final review: a viewer opened over F that hands off to the diff stage must not leave F covering it.
 	{"viewer.js", "closeViewer(\"background\");\n  closeFinder();", "the viewer's diff rows step F aside"},
+	// Minors: the preview follows the disk; a resize re-cuts the rows and the title.
+	{"wtfinder.js", "/api/file-stamp?path=", "the preview re-stats its file (one stat, no read) while F is up"},
+	{"wtfinder.js", "wtStampChanged(previewStamp,", "a moved stamp reloads the preview"},
+	{"wtfinder.js", "clearInterval(stampTimer)", "closing F stops the re-stat"},
+	{"wtfinder.js", "paintPreview(path, lines, wtPlaceholder(body, lines.length), keep)", "a reload keeps the preview's place"},
+	{"wtfinder.js", "new ResizeObserver(", "a width change re-cuts F's rows and title"},
+	{"wtfinder.js", "paintPTitle(previewPath)", "a resize re-cuts the preview title from the path"},
+	{"wtfinder.js", "await showPreview(gen, path, true, now)", "a reload's stamp lands only with its paint (a dropped reload retries)"},
 }
 
 // finderGone pins what 5d removes.

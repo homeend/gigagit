@@ -35,6 +35,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   selected row that had to be cut shows in full in the bottom bar. `ctrl+t`
   maximizes.
 
+## F in gg web follows the disk and the pane width (5d minors)
+
+### Fixed
+
+- **F's preview reloads when its file changes on disk**, as the TUI's does:
+  while F is up the previewed file is re-checked every second (a stat, never
+  a read), and a change re-reads it where you were scrolled; a deleted file
+  shows `(file deleted on disk)` and comes back when the file returns. The
+  preview is still not an open file — it never joins the `ctrl+\` list.
+- **F's rows and preview title re-cut when their width changes** — dragging
+  the file-list divider or resizing the window — keeping the cursor and the
+  list's scroll; paths are still cut in the middle, the file name kept.
+
 ## Open files on the web: the F finder (5d)
 
 ### Added
