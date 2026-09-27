@@ -171,8 +171,12 @@ the closure carries the repo.
 - **No fallback to files.** A review is written to notes or not at all. The
   write is designed not to fail short of a full or read-only disk:
   - **Lock contention** (another gg process holding `notes.toml.lock` longer
-    than `filelock.Wait`, 2 s): `SaveReview` retries with backoff for up to
-    10 s before giving up.
+    than `filelock.Wait`, 2 s): `SaveReview` retries within a 15 s budget.
+    Between attempts it sleeps a random 500 ms–2 s (uniform jitter, not a
+    fixed step), so two gg processes retrying at once drift apart instead of
+    colliding again. An attempt that would start past the budget is not made;
+    the last lock error is returned. The sleep and the clock are injected so
+    tests run without real waits.
   - **Corrupt `notes.toml`**: `SaveReview` does NOT refuse like other note
     writes. It moves the file aside to `notes.toml.corrupt-<unix time>`
     (nothing is deleted), starts a fresh store, writes the review, and reports
@@ -280,7 +284,9 @@ Every new string goes through `i18n.T` in all four bundles.
   tip only; working target refused; branch delete/rename/remote-delete
   follow-ups through `Execute` on a real repo.
 - Task manager: interactive review saved on first result and updated on the
-  second (same id); a held lock released within the retry window → saved;
+  second (same id); a held lock released within the retry budget → saved;
+  a lock held past the budget → error after ≤ 15 s (fake clock), every sleep
+  within 500 ms–2 s;
   a corrupt `notes.toml` → moved aside, review saved, warning; an unwritable
   state dir → failed task, no `.result`, "Retry save" succeeds once writable.
 - CLI: `gg review` prints `note: <id>`, writes no `reviews/` file (state dir
