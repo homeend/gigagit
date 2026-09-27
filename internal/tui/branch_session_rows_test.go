@@ -10,7 +10,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 )
 
-// The Branches `.` menu offers Start agent… / Open terminal on exactly the
+// The Branches `.` menu offers Start agent / Open terminal on exactly the
 // branches that are checked out in some worktree — the ones whose row carries
 // the worktree path — because only those exist on disk to run anything in.
 func TestBranchSessionRowsOfferedOnCheckedOutBranches(t *testing.T) {

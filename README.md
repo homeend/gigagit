@@ -1258,7 +1258,7 @@ open tab.
 
 ### Agent sessions (embedded consoles)
 
-On a **Worktrees** row, the `.` menu's **Start agent…** runs an interactive
+On a **Worktrees** row, the `.` menu's **Start agent** runs an interactive
 agent (Claude Code, Codex, Junie, Antigravity, Kimi Code — or any command you
 configure) **inside gg**, in that worktree, in a live console that takes the
 Commits column. Type to it as in any terminal: while the console is
@@ -1276,11 +1276,12 @@ included — except two:
 A running or exited session shows as a sub-row under its worktree
 (`└ ● Claude  running 12m` / `└ ○ Codex  exited (0)`); `enter` on it (or its
 `.` menu **Open session**) brings the console back, and the menu also offers
-**Kill session** / **Remove session**. The same menu's **Open terminal** starts
+**Kill session** / **Remove session**; on an exited session's sub-row, `x`
+removes it without opening the menu (a running one is refused: kill it first). The same menu's **Open terminal** starts
 an interactive shell in that worktree in the same console (`$SHELL`, or
 pwsh → powershell → cmd on Windows; `[console] shell` overrides). Both rows
 also sit on a **Branches** row whose branch is checked out in a worktree (the
-rows that show a worktree path), as **Start agent in \<worktree\>…** /
+rows that show a worktree path), as **Start agent in \<worktree\>** /
 **Open terminal in \<worktree\>** — they run in that worktree; a branch
 checked out nowhere has nothing on disk to run in and gets neither. Sessions belong to the gg process, not
 to a repository: switching worktree or repository (`R`) keeps them running,
@@ -1295,7 +1296,7 @@ gg is not showing, gg does not move: a notice (`!`) offers **Switch to <b> and
 show** or **Ignore**, and the agent is told it asked you.
 
 The commands come from the `session` external-tool category. The first
-**Start agent…** with none configured detects the installed agents and writes
+**Start agent** with none configured detects the installed agents and writes
 their plain interactive commands to the global config (yolo variants stay
 opt-in in Settings → External tools); a custom one is
 

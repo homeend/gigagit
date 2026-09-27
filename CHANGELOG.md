@@ -10,13 +10,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
-- **Start agent… / Open terminal from the Branches tab.** The `.` menu on a
+- **Start agent / Open terminal from the Branches tab.** The `.` menu on a
   branch that is checked out in a worktree (the rows that show a worktree
   path — the current worktree counts) now offers *Start agent in
-  \<worktree\>…* and *Open terminal in \<worktree\>*, the Worktrees tab's
+  \<worktree\>* and *Open terminal in \<worktree\>*, the Worktrees tab's
   own actions run in that worktree, so a console can be opened without first
   finding the worktree. A branch checked out nowhere has nothing on disk to
-  run in and gets neither row.
+  run in and gets neither row. The *Start agent* rows (here and on the
+  Worktrees tab) have dropped their trailing ellipsis.
+- **`x` removes an exited session in place.** On the Worktrees tab, `x` on an
+  exited agent/terminal session sub-row removes it (its docked console closes)
+  without opening the `.` menu; the footer shows `[x] remove` there. A running
+  session is refused with "kill it first" — `x` never falls through to the
+  conflict resolver on a session row.
 
 ## Fix: a removed agent session closes its console
 
