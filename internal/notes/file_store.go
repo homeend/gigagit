@@ -3,12 +3,14 @@ package notes
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"sort"
+	"strconv"
 	"sync"
 
 	"github.com/pelletier/go-toml/v2"
@@ -38,6 +40,9 @@ func (fs *FileStore) SetPolicy(p Policy) {
 	fs.mu.Unlock()
 }
 
+// ErrCorrupt is wrapped by a read of a notes.toml that is not valid TOML.
+var ErrCorrupt = errors.New("notes: store is corrupt")
+
 type index struct {
 	Notes []model.Note `toml:"notes"`
 }
@@ -60,7 +65,7 @@ func (fs *FileStore) read() ([]model.Note, error) {
 	}
 	var idx index
 	if err := toml.Unmarshal(data, &idx); err != nil {
-		return nil, fmt.Errorf("notes: %s is corrupt: %w", fs.path(), err)
+		return nil, fmt.Errorf("%w: %s: %v", ErrCorrupt, fs.path(), err)
 	}
 	return idx.Notes, nil
 }
@@ -241,19 +246,36 @@ func dropOrphanReplies(ns []model.Note) []model.Note {
 
 // capOldestFirst enforces max records by dropping whole threads, oldest root
 // (by Created) first. max <= 0 is uncapped.
+//
+// Commit-level notes (AI reviews) are exempt: they neither count toward max
+// nor are ever dropped, and neither are their replies.
 func capOldestFirst(ns []model.Note, max int) []model.Note {
-	if max <= 0 || len(ns) <= max {
+	if max <= 0 {
+		return ns
+	}
+	exempt := map[string]bool{}
+	for _, n := range ns {
+		if !n.IsReply() && n.IsCommitLevel() {
+			exempt[n.ID] = true
+		}
+	}
+	size := 0
+	for _, n := range ns {
+		if !exempt[n.ID] && !exempt[n.ParentID] {
+			size++
+		}
+	}
+	if size <= max {
 		return ns
 	}
 	roots := make([]model.Note, 0, len(ns))
 	for _, n := range ns {
-		if !n.IsReply() {
+		if !n.IsReply() && !exempt[n.ID] {
 			roots = append(roots, n)
 		}
 	}
 	sort.SliceStable(roots, func(a, b int) bool { return roots[a].Created.Before(roots[b].Created) })
 	doomed := map[string]bool{}
-	size := len(ns)
 	for _, r := range roots {
 		if size <= max {
 			break
@@ -274,6 +296,27 @@ func capOldestFirst(ns []model.Note, max int) []model.Note {
 		kept = append(kept, n)
 	}
 	return kept
+}
+
+// Quarantine moves notes.toml aside to notes.toml.corrupt-<unix> under the
+// store's locks and reports where it went ("" when there was no file). The
+// next write starts a fresh store; nothing is deleted.
+func (fs *FileStore) Quarantine() (string, error) {
+	fs.mu.Lock()
+	defer fs.mu.Unlock()
+	unlock, err := fs.lock()
+	if err != nil {
+		return "", err
+	}
+	defer unlock()
+	if _, err := os.Stat(fs.path()); os.IsNotExist(err) {
+		return "", nil
+	}
+	dst := fs.path() + ".corrupt-" + strconv.FormatInt(Now().Unix(), 10)
+	if err := os.Rename(fs.path(), dst); err != nil {
+		return "", err
+	}
+	return dst, nil
 }
 
 // NewID mints an 8-hex-char id not present in existing.
