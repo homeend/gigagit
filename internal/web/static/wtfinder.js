@@ -62,6 +62,16 @@ function wtPreviewFresh(gen, curGen, path, curPath) {
   return gen === curGen && path === curPath;
 }
 
+// The preview follows the disk while F is up: its file is re-stated this
+// often (the open-files poll's shown-file tick) — one stat, never a read.
+const WT_STAMP_MS = 1000;
+
+// wtStampChanged: the file moved since the preview read it. An unknown stamp
+// ("" — a failed stat, or no read yet) is never a change.
+function wtStampChanged(shown, now) {
+  return !!shown && !!now && shown !== now;
+}
+
 // wtPlaceholder is what the preview shows instead of lines ("" = the lines).
 function wtPlaceholder(body, n) {
   if (body.missing) return "(file deleted on disk)";
@@ -115,6 +125,8 @@ function openFinder() {
   preview.classList.remove("hidden");
   pushLayer("wtf", root, { onKey: finderKey });
   pushFoot("wtf", WTF_FOOT);
+  clearInterval(stampTimer);
+  stampTimer = setInterval(checkStamp, WT_STAMP_MS);
   render();
   load({ fresh: true });
 }
@@ -144,6 +156,7 @@ function closeFinder() {
   wtf.on = false;
   reqSeq++; // a list request in flight must not repaint
   clearTimeout(queryTimer);
+  clearInterval(stampTimer);
   $("wtf-input").blur();
   $("panes").classList.remove("wtf");
   restorePanes();
@@ -275,6 +288,9 @@ function move(delta) {
 let previewGen = 0;
 let previewTimer = null;
 let previewPath = ""; // the file the preview shows ("" = none)
+let previewStamp = ""; // its disk stamp when read ("" = unknown)
+let stampTimer = null;
+let stampBusy = false;
 
 function cursorMoved() {
   const gen = ++previewGen;
@@ -294,38 +310,98 @@ function closedHook() {
   paintPreview("", [], "");
 }
 
-async function showPreview(gen, path) {
+// showPreview reads path and paints it; keep (a reload of the file already
+// shown) holds the preview's scroll where it was.
+async function showPreview(gen, path, keep) {
   let body;
   try {
     body = await getJSON("/api/file-content?src=worktree&path=" + encodeURIComponent(path));
   } catch (e) {
-    if (wtf.on && wtPreviewFresh(gen, previewGen, path, (selected() || {}).path)) paintPreview(path, [], "(load failed: " + (e.message || e) + ")");
+    if (!wtf.on || !wtPreviewFresh(gen, previewGen, path, (selected() || {}).path)) return;
+    if (!keep) previewStamp = ""; // a reload keeps the stamp it saw: no retry per tick
+    paintPreview(path, [], "(load failed: " + (e.message || e) + ")", keep);
     return;
   }
   if (!wtf.on || !wtPreviewFresh(gen, previewGen, path, (selected() || {}).path)) return;
+  previewStamp = body.stamp || "";
   const lines = body.lines || [];
-  paintPreview(path, lines, wtPlaceholder(body, lines.length));
+  paintPreview(path, lines, wtPlaceholder(body, lines.length), keep);
 }
 
-// paintPreview draws path's lines (or the placeholder) at the top; path ""
-// empties the pane. The title cuts the PATH in the middle, never the name.
-function paintPreview(path, lines, placeholder) {
+// checkStamp re-stats the previewed file and reloads it when it moved (the
+// TUI's watchedDoc). Not while a surface covers F, a tab is hidden, or a
+// check is still out — over /mnt a stat can be slow.
+async function checkStamp() {
+  const top = topLayer();
+  if (!wtf.on || stampBusy || !previewPath || document.hidden || !top || top.id !== "wtf") return;
+  const gen = previewGen;
+  const path = previewPath;
+  stampBusy = true;
+  try {
+    let now = "";
+    try {
+      now = (await getJSON("/api/file-stamp?path=" + encodeURIComponent(path))).stamp || "";
+    } catch {
+      return;
+    }
+    if (!wtf.on || gen !== previewGen || path !== previewPath) return;
+    if (!wtStampChanged(previewStamp, now)) return;
+    previewStamp = now;
+    await showPreview(gen, path, true);
+  } finally {
+    stampBusy = false;
+  }
+}
+
+// paintPreview draws path's lines (or the placeholder) at the top — or, with
+// keep, where the preview was scrolled; path "" empties the pane.
+function paintPreview(path, lines, placeholder, keep) {
   previewPath = path;
-  const title = $("wtf-ptitle");
-  const tail = " (working tree)";
-  const cols = Math.floor((title.clientWidth - 16) / charWidth()) - tail.length;
-  title.title = path;
-  title.textContent = path ? (cols > 3 ? elidePath(path, cols) : path) + tail : "";
+  if (!path) previewStamp = "";
+  paintPTitle(path);
   const body = $("wtf-body");
+  const at = { top: body.scrollTop, left: body.scrollLeft };
   if (!path) body.innerHTML = "";
   else if (placeholder) body.innerHTML = `<div class="notice">${esc(placeholder)}</div>`;
   else
     body.innerHTML = lines
       .map((l, i) => `<div class="vline"><span class="vno">${i + 1}</span><span class="vtext">${renderCell(l.text, null, l.tok, "", null) || " "}</span></div>`)
       .join("");
-  body.scrollTop = 0;
-  body.scrollLeft = 0;
+  body.scrollTop = keep ? at.top : 0;
+  body.scrollLeft = keep ? at.left : 0;
 }
+
+// paintPTitle names the previewed file, the PATH cut in the middle to the
+// title's width (never the name).
+function paintPTitle(path) {
+  const title = $("wtf-ptitle");
+  const tail = " (working tree)";
+  const cols = Math.floor((title.clientWidth - 16) / charWidth()) - tail.length;
+  title.title = path;
+  title.textContent = path ? (cols > 3 ? elidePath(path, cols) : path) + tail : "";
+}
+
+// The row and title budgets are in COLUMNS, so a width change (a window
+// resize, the rs-detail drag, the sidebar) re-cuts them — files.js's rule.
+// rAF-coalesced (a drag fires per pixel); a hidden F has nothing to re-cut.
+let wtfResizePending = false;
+const wtfResize = new ResizeObserver(() => {
+  if (wtfResizePending) return;
+  wtfResizePending = true;
+  requestAnimationFrame(() => {
+    wtfResizePending = false;
+    if (!wtf.on) return;
+    const list = $("wtf-list");
+    if (list.clientWidth) {
+      const top = list.scrollTop;
+      render();
+      list.scrollTop = top;
+    }
+    if (previewPath) paintPTitle(previewPath);
+  });
+});
+wtfResize.observe($("wtf-list"));
+wtfResize.observe($("wtf-ptitle"));
 // menuRows is a row's actions. view file, history and blame open OVER F (esc
 // returns here); diff closes F — the page's diff lives in the diff stage.
 function menuRows(f) {

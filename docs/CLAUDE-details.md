@@ -1295,6 +1295,18 @@ answers); `ctrl+]` = `/api/open-files` `open` with `tab ""`. diff closes F and o
 tree lane). A steered navigate onto the panes closes F (`live.js`); a content navigate opens
 the viewer over it.
 
+**F follows the disk (5d minors, 2026-09-27):** the preview is still no open file (D9), so the
+server poller never sees it — the PAGE re-stats it instead: while F is up a 1 s timer
+(`WT_STAMP_MS`) asks `GET /api/file-stamp?path=` (one `statDisk`, no read; `"<size>:<mtime ns>"`,
+`"missing"`, `""` = stat failed, never a change) and re-reads through `showPreview(…, keep)`
+only when the stamp moved (`wtStampChanged`), keeping the scroll. `/api/file-content?src=worktree`
+returns the stamp taken BEFORE its read, so an edit mid-read still reloads. Skipped while a
+surface covers F (the top layer is not `wtf`), the tab is hidden, or a check is out; a failed
+reload keeps the new stamp (no retry per tick). Widths: one rAF-coalesced `ResizeObserver` on
+`#wtf-list` + `#wtf-ptitle` re-renders the rows (list scroll kept) and re-cuts the title from
+`previewPath` (`paintPTitle`). NB the list is `--files-w` px wide — only the `rs-detail` drag
+changes it, a window resize only the title.
+
 ### The compare algebra (`internal/domain`, plan 1b, 2026-09-17)
 
 **`FileSet` is the unit, not `Endpoint`** (`internal/domain/fileset.go`). A set
