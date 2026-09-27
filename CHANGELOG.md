@@ -18,6 +18,7 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   over the console box (or a maximised console) is swallowed the way its
   keyboard rule already swallowed Commits-scoped keys; the left panels keep
   their wheel and clicks.
+
 ## View all notes
 
 ### Added
