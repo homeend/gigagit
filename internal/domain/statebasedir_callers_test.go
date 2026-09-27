@@ -26,7 +26,6 @@ var stateBaseDirKinds = []string{
 	"prefix",
 	"previews",
 	"profile",
-	"reviews",
 	"search",
 	"shelf",
 	"tasks",

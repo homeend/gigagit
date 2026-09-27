@@ -178,7 +178,7 @@ function reviewDone(ev, kind) {
       label,
       status: ev.ok ? "done" : ev.cancelled ? "cancelled" : "failed",
       title,
-      path: ev.path,
+      noteId: ev.noteId,
       report: ev.report,
       error: ev.error,
     };
@@ -204,7 +204,7 @@ function reviewDone(ev, kind) {
       else if (!ev.still_paused) opLine((ev.op || "operation") + " completed — the agent reported no overview");
       return;
     }
-    openReport(title, ev.path, ev.report);
+    openReport(title, ev.noteId, ev.report);
     opLine(ev.summary || "review done");
     return;
   }
@@ -286,7 +286,7 @@ function collectTask() {
   const noun = t.kind === "conflict" ? "AI resolve" : "review";
   state.task = null;
   renderTaskChip(false);
-  if (t.status === "done") openReport(t.title || "Review", t.path, t.report);
+  if (t.status === "done") openReport(t.title || "Review", t.noteId, t.report);
   else opLine(noun + " failed: " + (t.error || "unknown error"), true);
 }
 
@@ -438,11 +438,13 @@ $("review").addEventListener("click", (e) => {
 // The report viewer: plain text, deliberately not rendered as markdown — a
 // review is prose to read, and a parser here would be a dependency and a
 // rendering bug surface for no gain.
-function openReport(title, path, content) {
+function openReport(title, noteId, content) {
   $("report-title").textContent = title;
   $("report-body").textContent = content || "";
-  $("report-path").textContent = path || "";
-  $("report-path").title = path || "";
+  // A commit/branch review is stored as a note; working changes are not.
+  const where = noteId ? "note " + noteId : "";
+  $("report-path").textContent = where;
+  $("report-path").title = where;
   $("report-body").scrollTop = 0;
   pushLayer("report", $("report"));
 }

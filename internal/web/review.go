@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
@@ -125,12 +124,16 @@ func (s *Server) handleReviewStart(w http.ResponseWriter, r *http.Request) {
 		// ReviewReport runs the tool and persists the report; it takes no
 		// events or decider (the TUI shows a bare spinner for the same
 		// reason), so this lane's only wire traffic is the terminal done.
-		res, rerr := svc.ReviewReport(ctx, target, resolved, []string{"GG_TASK=review"}, time.Now())
+		res, rerr := svc.ReviewReport(ctx, target, cmd.Name, resolved, []string{"GG_TASK=review"})
 		if rerr != nil {
 			return engine.Result{}, nil, rerr
 		}
-		return engine.Result{Summary: "review written to " + res.Path},
-			map[string]any{"report": res.Content, "path": res.Path, "label": res.Label},
+		summary := "review finished"
+		if res.NoteID != "" {
+			summary = "review saved as note " + res.NoteID
+		}
+		return engine.Result{Summary: summary},
+			map[string]any{"report": res.Content, "noteId": res.NoteID, "label": res.Label, "warn": res.Warn},
 			nil
 	})
 	if err != nil {

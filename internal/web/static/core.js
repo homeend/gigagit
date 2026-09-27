@@ -89,7 +89,7 @@ const state = {
   dragPreview: null, // {id, kind} of the Previews row being dragged, else null
   solo: "", // branch the commit list is narrowed to ("" = every branch)
   // A parked (backgrounded) long task, and then its result until collected:
-  // {label, status: running|done|failed|cancelled, title, path, report, error}
+  // {label, status: running|done|failed|cancelled, title, noteId, report, error}
   task: null,
   cfilter: null, // {q, matches: [feedIdx...]} while the commits quick filter (/) is active, else null
   gotoGen: 0, flashHash: "",
