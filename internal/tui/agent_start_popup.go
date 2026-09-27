@@ -302,3 +302,33 @@ func (m Model) sessionMenuRows() []actionRow {
 	}
 	return nil
 }
+
+// branchSessionRows are the Branches `.` menu's agent rows: Start agent… /
+// Open terminal on a branch that is checked out in some worktree — the rows
+// exist only where the row itself shows a worktree path (worktreePathOf, the
+// marker's own lookup), because only that branch exists on disk to run
+// anything in. The current worktree counts. The labels name the worktree,
+// which the Branches tab does not otherwise show; the actions are the
+// Worktrees tab's own.
+func (m Model) branchSessionRows() []actionRow {
+	if m.focus != panelBranches {
+		return nil
+	}
+	b, ok := m.selectedBranch()
+	if !ok {
+		return nil
+	}
+	path, ok := m.worktreePathOf(b.Name)
+	if !ok || path == "" {
+		return nil
+	}
+	name := shortWorktreeName(path)
+	return []actionRow{
+		{id: "start-agent", label: i18n.T("Start agent in %s…", name), run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.startAgentFor(path)
+		}},
+		{id: "open-terminal", label: i18n.T("Open terminal in %s", name), run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openTerminal(path)
+		}},
+	}
+}

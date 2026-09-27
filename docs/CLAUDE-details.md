@@ -3523,6 +3523,12 @@ UTF-8 payloads correctly (the fixture test tells).
   argv (no `-c`): `[console] shell`, else `$SHELL`/`/bin/sh`, on Windows
   `pwsh` → `powershell` → `%COMSPEC%`/`cmd.exe` (`terminalShell`). Label
   `Terminal`; opens through `applyAgentStarted` like an agent.
+- **Branches `.` too (2026-09-27):** `branchSessionRows` (agent_start_popup.go)
+  offers `Start agent in <wt>…` / `Open terminal in <wt>` on a branch that
+  `worktreePathOf` (the row's own worktree-marker lookup, current worktree
+  included) resolves — so the rows exist exactly where the row shows a
+  worktree path — and hands the path to the same `startAgentFor` /
+  `openTerminal`. Deferred v2: session sub-rows under branches.
 - **GG_INBOX.** `StartSession`/`StartTerminal` take `env`; the TUI passes
   `GG_INBOX=<steerDir>` (`childEnv`, nil when steering is off) and records
   `childInbox[id]`. `cli.preferredInbox` sends every `gg session` verb (and

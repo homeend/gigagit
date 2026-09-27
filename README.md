@@ -1278,7 +1278,11 @@ A running or exited session shows as a sub-row under its worktree
 `.` menu **Open session**) brings the console back, and the menu also offers
 **Kill session** / **Remove session**. The same menu's **Open terminal** starts
 an interactive shell in that worktree in the same console (`$SHELL`, or
-pwsh → powershell → cmd on Windows; `[console] shell` overrides). Sessions belong to the gg process, not
+pwsh → powershell → cmd on Windows; `[console] shell` overrides). Both rows
+also sit on a **Branches** row whose branch is checked out in a worktree (the
+rows that show a worktree path), as **Start agent in \<worktree\>…** /
+**Open terminal in \<worktree\>** — they run in that worktree; a branch
+checked out nowhere has nothing on disk to run in and gets neither. Sessions belong to the gg process, not
 to a repository: switching worktree or repository (`R`) keeps them running,
 and `ctrl+\` reaches every one. Quitting gg with live sessions opens that
 popup in quit mode — `Q` kills them all and quits, `esc` cancels. A worktree

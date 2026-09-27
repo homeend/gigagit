@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Branches menu: Start agent / Open terminal on a checked-out branch
+
+### Added
+
+- **Start agent… / Open terminal from the Branches tab.** The `.` menu on a
+  branch that is checked out in a worktree (the rows that show a worktree
+  path — the current worktree counts) now offers *Start agent in
+  \<worktree\>…* and *Open terminal in \<worktree\>*, the Worktrees tab's
+  own actions run in that worktree, so a console can be opened without first
+  finding the worktree. A branch checked out nowhere has nothing on disk to
+  run in and gets neither row.
+
 ## Fix: a removed agent session closes its console
 
 ### Fixed
