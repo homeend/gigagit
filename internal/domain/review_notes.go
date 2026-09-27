@@ -101,6 +101,14 @@ func (s *Service) FillReviewCommit(ctx context.Context, t ReviewTarget) ReviewTa
 // (not a sha, not a tag): the branch a branch review's note carries.
 func (s *Service) reviewBranchName(ctx context.Context, tip, tipSHA string) string {
 	tip = strings.TrimSpace(tip)
+	if tip == "HEAD" {
+		// "Review the current branch" is asked as HEAD: the note carries the
+		// checked-out branch's name (none when HEAD is detached).
+		if b, err := s.CurrentBranch(ctx); err == nil && strings.TrimSpace(b) != "" && s.branchTip(ctx, strings.TrimSpace(b)) == tipSHA {
+			return strings.TrimSpace(b)
+		}
+		return ""
+	}
 	if tip == "" || tip == tipSHA || strings.HasPrefix(tipSHA, tip) {
 		return ""
 	}

@@ -327,3 +327,50 @@ func TestNoReviewReportFilesAnywhere(t *testing.T) {
 		}
 	}
 }
+
+// "Review the current branch" is asked as HEAD; its note carries the branch.
+func TestBranchReviewTargetHeadNamesTheCheckedOutBranch(t *testing.T) {
+	t.Parallel()
+	_, svc, tip := reviewRepo(t)
+	tg, err := svc.BranchReviewTarget(context.Background(), "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tg.Branch != "feature" || tg.Commit != tip {
+		t.Fatalf("Branch=%q Commit=%q, want feature at %s", tg.Branch, tg.Commit, tip)
+	}
+}
+
+// With the DEFAULT store (resolved from the git common dir, which takes a
+// Read reservation) the follow-up must run after Execute releases the repo:
+// inside it, the delete deadlocked on its own reservation. Serial: Setenv.
+func TestDeleteBranchFollowUpRunsOutsideTheReservation(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir, svc := newRealRepo(t)
+	runGitIn(t, dir, "checkout", "-b", "feature")
+	commitFile(t, dir, "f.txt", "x\n", "feature commit")
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	tg, _ := svc.BranchReviewTarget(ctx, "feature")
+	if _, _, err := svc.SaveReview(ctx, SaveReview{Target: tg, Text: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	runGitIn(t, dir, "checkout", "main")
+	fresh := Open(dir) // a new Service resolves its store lazily, inside Execute
+	done := make(chan error, 1)
+	go func() {
+		_, err := fresh.Execute(ctx, engine.DeleteBranch{Name: "feature"}, nil, deleteAnyway)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("DeleteBranch deadlocked on its own reservation")
+	}
+	if all, _ := fresh.Reviews(ctx); len(all) != 0 {
+		t.Fatalf("reviews after the delete = %+v", all)
+	}
+}
