@@ -66,6 +66,7 @@ func contextBindings() []footerBinding {
 		}, scopeRow},
 		{"switch-worktree", "enter", i18n.T("[enter] switch"), func(m Model) bool { return m.focus == panelWorktrees && m.canEnterWorktree() }, scopeRow},
 		{"delete-worktree", "d", i18n.T("[d]elete"), func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }, scopeRow},
+		{"remove-session", "x", i18n.T("[x] remove"), Model.canRemoveSessionRow, scopeRow},
 		{"rename-worktree", "e", i18n.T("[e] rename"), func(m Model) bool {
 			return m.focus == panelWorktrees && m.canMoveWorktree()
 		}, scopeRow},
@@ -191,7 +192,16 @@ func contextBindings() []footerBinding {
 // contextBindings: labels must re-evaluate on a live language switch.
 func globalBindings() []footerBinding {
 	return []footerBinding{
-		{"resolve", "x", i18n.T("[x] resolve"), Model.canEnterConflict, scopeGlobal},
+		{"resolve", "x", i18n.T("[x] resolve"), func(m Model) bool {
+			// A Worktrees session sub-row owns x (remove / refuse), so the
+			// conflict hint steps back there.
+			if m.focus == panelWorktrees {
+				if _, ok := m.selectedSession(); ok {
+					return false
+				}
+			}
+			return m.canEnterConflict()
+		}, scopeGlobal},
 		{"commit", "c", i18n.T("[c] commit"), Model.canCommit, scopeGlobal},
 		{"amend", "C", i18n.T("[C] amend"), Model.canAmend, scopeGlobal},
 		{"pull", "p", i18n.T("[p]ull"), Model.opsIdle, scopeGlobal},

@@ -2245,6 +2245,15 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.amendPrefillCmd()
 			}
 		case "x":
+			// A session sub-row on the Worktrees tab owns x: remove an exited
+			// session in place (the . menu's Remove session / the ctrl+\
+			// popup's x), refuse a running one. It never falls through to
+			// [x] resolve — the row is a session, not a conflict.
+			if m.focus == panelWorktrees {
+				if info, ok := m.selectedSession(); ok {
+					return m.removeSessionRow(info), nil
+				}
+			}
 			if m.canEnterConflict() {
 				return startConflictProcess(m) // enter / resume from the notice
 			}
