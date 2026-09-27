@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent console: no commit tooltip, no hidden-list wheel
+
+### Fixed
+
+- **The commit reveal tooltip no longer draws over a docked agent console.**
+  The console hides the Commits panel, but the hidden commit row's full-text
+  reveal still rendered as a yellow strip across the terminal, and the mouse
+  wheel over the console scrolled the hidden commit list (dragging the strip
+  with it). The reveal is suppressed while a console is open, and mouse input
+  over the console box (or a maximised console) is swallowed the way its
+  keyboard rule already swallowed Commits-scoped keys; the left panels keep
+  their wheel and clicks.
 ## View all notes
 
 ### Added

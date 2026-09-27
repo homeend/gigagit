@@ -204,6 +204,19 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	// A docked agent console owns the Commits column (a maximised one the whole
+	// body): the mouse there is swallowed (v1) rather than hit-testing the
+	// HIDDEN commit list — the wheel scrolled it and dragged the reveal tooltip
+	// across the terminal. Ahead of the files view, whose commits side is the
+	// same hidden list. Mirrors the keyboard rule in updateConsoleKey.
+	if m.console != nil {
+		if m.console.maximized {
+			return m, nil
+		}
+		if p, ok := m.panelAt(msg.X, msg.Y); ok && p == panelCommits {
+			return m, nil
+		}
+	}
 	if m.filesView != nil {
 		return m.mouseInFilesView(msg, wheel)
 	}

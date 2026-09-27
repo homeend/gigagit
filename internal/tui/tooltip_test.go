@@ -538,3 +538,30 @@ func TestTooltipLeftPanelStillRevealsWhileStashOpen(t *testing.T) {
 		t.Fatal("a truncated left-panel row must still reveal while the stash window is open")
 	}
 }
+
+// An agent console docked in the Commits column hides the Commits panel the
+// same way the file preview does; the hidden commit row's reveal must not be
+// drawn over the console (it landed as a yellow strip across the terminal).
+// Same one-model pair as the preview test, so the precondition proves the
+// reveal machinery fires and only the console guard suppresses it.
+func TestTooltipSuppressedByConsole(t *testing.T) {
+	t.Parallel()
+	base := footerModel()
+	base.focus = panelCommits
+	if base.sel == nil {
+		base.sel = map[panel]int{}
+	}
+	const subj = "Merge tag 'firewire-updates-7.2' of git://git.kernel.org/pub/scm/linux/kernel/git/ieee1394/linux1394"
+	base.commits = []model.Commit{{Hash: "aff3ca3aaaa", Subject: subj}}
+	base.sel[panelCommits] = 0
+	if _, _, _, ok := base.tooltip(); !ok {
+		t.Fatal("precondition: the long commit row must reveal when no console is open")
+	}
+	for _, focused := range []bool{true, false} {
+		m := base
+		m.console = &consoleState{focused: focused}
+		if _, _, _, ok := m.tooltip(); ok {
+			t.Fatalf("focused=%v: the commit reveal must be suppressed while the console owns the Commits column", focused)
+		}
+	}
+}

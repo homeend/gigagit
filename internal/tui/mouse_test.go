@@ -328,3 +328,56 @@ func TestModalOutranksHelpWindowWheel(t *testing.T) {
 		t.Fatalf("help sel = %d, the modal must swallow the wheel", got)
 	}
 }
+
+// A docked console owns the Commits column: the wheel over it must not scroll
+// the HIDDEN commit list (the reveal tooltip drawn over the terminal moved with
+// every wheel notch), and a click/right-click there must not act on hidden rows.
+// Mirrors TestUnfocusedConsoleSwallowsCommitsKeys for the mouse.
+func TestMouseOverConsoleLeavesHiddenCommitsAlone(t *testing.T) {
+	t.Parallel()
+	for _, focused := range []bool{true, false} {
+		m := mouseModel() // focus Branches; 2 commits; commits column x>=26
+		m.console = &consoleState{focused: focused}
+		u, _ := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown))
+		mm := u.(Model)
+		if mm.sel[panelCommits] != 0 {
+			t.Fatalf("focused=%v: wheel over the console moved the hidden commit selection to %d", focused, mm.sel[panelCommits])
+		}
+		u, _ = mm.Update(mouseMsg(30, 5, tea.MouseButtonRight))
+		if mm = u.(Model); mm.actionMenu != nil {
+			t.Fatalf("focused=%v: right-click over the console opened the . menu on a hidden commit row", focused)
+		}
+		// The left panels stay live: the wheel over Branches still scrolls them.
+		u, _ = mm.Update(mouseMsg(5, 4, tea.MouseButtonWheelDown))
+		if got := u.(Model).sel[panelBranches]; got == 0 {
+			t.Fatalf("focused=%v: wheel over Branches must still scroll it", focused)
+		}
+	}
+}
+
+// The console can dock while the commit files view is open (the tree stays on
+// the left); the wheel over the console must not reach the files view's
+// commit-side follow-live path either. A maximised console owns the whole
+// body, so the wheel over where Branches was is swallowed too.
+func TestMouseOverConsoleInFilesViewAndMaximised(t *testing.T) {
+	t.Parallel()
+	m := openFilesView(t, filesModel())
+	m.console = &consoleState{focused: true}
+	u, cmd := m.Update(mouseMsg(30, 5, tea.MouseButtonWheelDown)) // over the console
+	mm := u.(Model)
+	if mm.sel[panelCommits] != 0 || cmd != nil {
+		t.Fatalf("wheel over the console in the files view moved the hidden commit selection (sel=%d, cmd=%v)", mm.sel[panelCommits], cmd != nil)
+	}
+	u, _ = mm.Update(mouseMsg(5, 5, tea.MouseButtonWheelDown)) // over the tree
+	if u.(Model).filesView.sel == 0 {
+		t.Fatal("wheel over the tree must still scroll it beside a docked console")
+	}
+
+	mx := mouseModel()
+	mx.console = &consoleState{focused: true, maximized: true}
+	u, _ = mx.Update(mouseMsg(5, 4, tea.MouseButtonWheelDown)) // where Branches was
+	mm = u.(Model)
+	if mm.sel[panelBranches] != 0 || mm.sel[panelCommits] != 0 {
+		t.Fatal("wheel over a maximised console must not scroll any hidden panel")
+	}
+}

@@ -32,6 +32,12 @@ func (m Model) tooltip() (lines []string, x, y int, ok bool) {
 	if m.filesPreview != nil {
 		return nil, 0, 0, false
 	}
+	// An agent console docked in the Commits column (or maximised) hides the
+	// Commits panel the same way; the hidden commit row's reveal would land as a
+	// strip across the terminal.
+	if m.console != nil {
+		return nil, 0, 0, false
+	}
 	// The stash list owns the right column the same way, hiding the Commits
 	// panel — but the left panels stay visible and focusable (← releases focus
 	// there), so only a panelCommits focus is suppressed: it would reveal the
