@@ -34,6 +34,14 @@ archives:
     format_overrides:
       - goos: windows
         formats: [zip]
+    # The license and the third-party notices travel with every binary (the
+    # PolyForm license and the bundled modules' licenses both require it).
+    files:
+      - LICENSE
+      - COMMERCIAL.md
+      - THIRD_PARTY_NOTICES.md
+      - README.md
+      - CHANGELOG.md
 
 checksum:
   name_template: checksums.txt
@@ -61,7 +69,7 @@ brews:
     directory: Formula
     homepage: https://github.com/homeend/gigagit
     description: Fast terminal git client for very large monorepos (TUI + scriptable CLI)
-    license: MIT
+    license: PolyForm-Noncommercial-1.0.0
     # The generated formula installs prebuilt release binaries (no Go needed),
     # replacing the hand-written build-from-source formula.
     test: |
