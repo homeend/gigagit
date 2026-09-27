@@ -44,6 +44,7 @@ type contentLine struct {
 	oldPath string // set only for renames/copies
 	status  string // model.CommitFile.Status letter ("A","M","D","R","C","T")
 	sha     string // per-line commit override (a -u stash's ^3 parent); "" = the view's hash
+	noteID  string // an @notes/ entry: the AI review (a note) it shows; "" = a real file
 }
 
 // contentPopup is a generic read-only viewer popup: any list of lines with

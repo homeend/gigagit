@@ -879,7 +879,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Only lines and cursor are replaced; the search query intentionally
 		// survives the commit change (track one file through history).
-		m.filesView.lines = commitFileLines(msg.files)
+		m.filesView.lines = withReviewLines(msg.reviews, commitFileLines(msg.files))
 		m.filesView.sel = 0
 		m.filesTitle = i18n.T("Files %s %s", shortHash(msg.hash), msg.subject)
 		m.filesContext = shortHash(msg.hash) + " " + msg.subject

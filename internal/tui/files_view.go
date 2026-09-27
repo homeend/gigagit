@@ -263,6 +263,28 @@ func commitFileLines(files []model.CommitFile) []contentLine {
 	return out
 }
 
+// reviewsDir is the virtual directory a commit's AI reviews are listed under.
+const reviewsDir = "@notes"
+
+// withReviewLines puts a commit's reviews in front of its file list as a
+// virtual @notes/ directory. The stack is built from this list, so the
+// reviews read above the first real file there too.
+func withReviewLines(reviews []domain.Review, lines []contentLine) []contentLine {
+	if len(reviews) == 0 {
+		return lines
+	}
+	out := make([]contentLine, 0, len(reviews)+1+len(lines))
+	out = append(out, contentLine{text: reviewsDir + "/", heading: true})
+	for _, r := range reviews {
+		name := "review-" + r.Created.Local().Format("2006-01-02") + "-" + r.ID + ".md"
+		out = append(out, contentLine{text: "  R  " + name, path: reviewsDir + "/" + name, status: "R", noteID: r.ID})
+	}
+	if len(lines) == 1 && lines[0].path == "" && !lines[0].heading {
+		return out // "(no files)": the reviews are the whole list
+	}
+	return append(out, lines...)
+}
+
 // fileLine renders one file row: "<letter>  <basename>"; renames show the
 // full old path and the new basename.
 func fileLine(f model.CommitFile) string {
@@ -280,6 +302,7 @@ type commitFilesMsg struct {
 	subject string
 	commit  model.Commit
 	files   []model.CommitFile
+	reviews []domain.Review // the commit's AI reviews (@notes/)
 	err     error
 }
 
@@ -289,7 +312,8 @@ func (m Model) loadCommitFilesCmd(c model.Commit) tea.Cmd {
 	return func() tea.Msg {
 		c = resolveCommitMeta(svc, c)
 		files, err := svc.CommitFiles(context.Background(), c.Hash)
-		return commitFilesMsg{hash: c.Hash, subject: c.Subject, commit: c, files: files, err: err}
+		reviews, _ := svc.ReviewsForCommit(context.Background(), c.Hash) // no store: no reviews
+		return commitFilesMsg{hash: c.Hash, subject: c.Subject, commit: c, files: files, reviews: reviews, err: err}
 	}
 }
 

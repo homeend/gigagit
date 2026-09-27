@@ -824,6 +824,29 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	v := &diffView{title: line.path, context: "@ " + m.filesContext, rev: hash, partial: m.diffPartial, long: m.diffLong, width: width,
 		// hash^ → hash is exactly StateCommitted's pair (noteSideLines).
 		noteAddr: model.FileAddress{State: model.StateCommitted, Commit: hash, Path: line.path}}
+	if line.noteID != "" {
+		// An AI review (@notes/) reads as an all-added file. It is not
+		// note-addressable (no line notes on a review) and never cached: an
+		// interactive review rewrites its note in place.
+		v.noteAddr = model.FileAddress{}
+		id := line.noteID
+		newSrc := func(ctx context.Context) ([]byte, error) {
+			r, err := svc.Review(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			return []byte(r.Text), nil
+		}
+		return func() tea.Msg {
+			out, err := differ.Diff(context.Background(), domain.Request{Path: line.path, New: newSrc})
+			if err != nil {
+				v.err = err
+				return diffMsg{tag: tag, view: v}
+			}
+			applyDiff(v, out, body)
+			return diffMsg{tag: tag, view: v}
+		}
+	}
 	// Immutable: parent(hash)→hash for a path always yields the same bytes.
 	key := hash + "^.." + hash + ":" + line.path
 

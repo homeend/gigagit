@@ -45,6 +45,16 @@ func (m Model) viewFileRow() (actionRow, bool) {
 		return actionRow{}, false
 	}
 	path, hash := l.path, m.lineHash(l)
+	if l.noteID != "" { // an @notes/ review: its text, from the note
+		id, load := l.noteID, m.reviewTextLoader(l.noteID)
+		return actionRow{
+			id:    "view-file",
+			label: i18n.T("View review"),
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				return m.openPreviewSrc(fileSource{kind: srcNote, rev: id}, path, load)
+			},
+		}, true
+	}
 	if m.inShelfFiles() {
 		// Shelf mode: the frozen member bytes, not ShowFile — filesHash is empty
 		// here and `git show :path` would silently preview the INDEX blob.
@@ -79,6 +89,16 @@ func (m Model) openExternalRow() (actionRow, bool) {
 		return actionRow{}, false
 	}
 	path, hash, svc := l.path, m.lineHash(l), m.svc
+	if l.noteID != "" { // an @notes/ review: its text, from the note
+		load := m.reviewTextLoader(l.noteID)
+		return actionRow{
+			id:    "open-external",
+			label: i18n.T("Open in external editor"),
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				return m, m.openInEditorCmd(path, load)
+			},
+		}, true
+	}
 	if m.inShelfFiles() {
 		// Shelf mode: same INDEX-blob trap as viewFileRow — resolve the member.
 		ref := model.FileRef{Source: model.SourceShelf, Locator: m.filesShelfID, Path: path}
@@ -110,7 +130,7 @@ func (m Model) openExternalRow() (actionRow, bool) {
 // the user wants to browse.
 func (m Model) commitsTouchingFileRow() (actionRow, bool) {
 	l, ok := m.filesViewSelectedLine()
-	if !ok {
+	if !ok || l.noteID != "" { // an @notes/ review has no history
 		return actionRow{}, false
 	}
 	filePath := l.path
@@ -537,4 +557,16 @@ func titleWithRight(title, right string, innerW int, isPath bool) string {
 		return padRight(truncate(right, innerW), innerW)
 	}
 	return padRight(padRight(cut(title, avail), avail)+"  "+right, innerW)
+}
+
+// reviewTextLoader reads an AI review's text from its note.
+func (m Model) reviewTextLoader(id string) func(context.Context) ([]byte, error) {
+	svc := m.svc
+	return func(ctx context.Context) ([]byte, error) {
+		r, err := svc.Review(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return []byte(r.Text), nil
+	}
 }
