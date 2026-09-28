@@ -26,6 +26,12 @@ type (
 	AgentSession  = agentsession.Session
 	SessionScreen = agentsession.Screen
 	SessionKey    = agentsession.Key
+	// The web console's frame (styled runs) and a start spec for callers
+	// that assemble one themselves (tests).
+	ScreenRuns       = agentsession.ScreenRuns
+	ScreenRun        = agentsession.Run
+	ScreenRunRow     = agentsession.RunRow
+	SessionStartSpec = agentsession.StartSpec
 )
 
 const (
