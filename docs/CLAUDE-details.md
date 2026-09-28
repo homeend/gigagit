@@ -2572,7 +2572,9 @@ and arms `startAt`/`startAtPending` (resetting `startAtPreviewsSeen`) so the
 landing rides the `--at` gate; a bare repository link only switches (or
 notices "this checkout"), and `gg open <bare link>` launches the TUI there.
 `gg open --web` is the browser arm: a live page is steered over HTTP alone
-(never the TUI inbox, so a TUI live beside it stays put), else the
+(never the TUI inbox, so a TUI live beside it stays put); a live TUI with NO
+page is asked to serve its own (`askTUIToServe`: the `serve` inbox command,
+`Reply.Detail` = the URL — see "The TUI serves its own web page"), else the
 `cli.LaunchWeb` seam (`cmd/gg`'s `runWeb`, shared with the `web` subcommand)
 starts `gg web` in the link's checkout with `web.Serve`'s `startAt` — validated
 through `toSteerWire` before the port is bound and handed to the page ONCE by
@@ -3615,6 +3617,72 @@ dedicated SSE stream per console, session states (erbrus port) = plan 3.
   holds until `GG_BROWSER_DONE` appears; playwright drives it. Gotcha: the
   steer-hint wiring pin expects the exact string `revealHintEntry } from
   "./sidebar.js"` in live.js — keep that import's last name.
+
+### The TUI serves its own web page (2026-09-28)
+
+Spec `docs/superpowers/specs/2026-09-28-web-hosted-in-tui-design.md`, plan
+`docs/superpowers/plans/2026-09-28-web-hosted-in-tui.md`. The stage between
+web attach plans 1 and 2.
+
+- **Why:** an agent session is process memory (`domain.Sessions()`), and
+  `gg web` was its own process, so the plan-1 browser console could only
+  ever show sessions of its own process. Now the TUI hosts the page.
+- **Composition (`cmd/gg/main.go`):** `tui.NewWebHost = func(svc) tui.WebHost
+  { return web.NewHost(svc, domain.OpenTUI, true) }` beside `cli.LaunchWeb`;
+  `internal/tui` and `internal/web` still never import each other. The
+  opener matters: a service the hosted server opens ITSELF
+  (`handleReroot`'s target) must take the TUI's ssh-batch runner, or an
+  ssh prompt could land on the raw-mode terminal. `extractWebFlags`
+  (`--web`, `--web-addr`, the `--cwd-file` pattern) → `tui.RunOptions`.
+- **`web.Host` (`host.go`):** `NewHost(svc, opener, hosted)` → `Start(ctx,
+  addr)` (refuses a FOREIGN live `web.json` when hosted — `ErrPageLive`
+  wraps the other URL; standalone keeps replacing it), `Reroot(svc)` =
+  `adoptService` (the post-swap tail lifted out of `handleReroot`: swap
+  under `opMu`, drop `cur`/`feed`, `restartLive`, `touchMRU`,
+  `rehomeSteerPresence`), `URL`, `OpenBrowser`, `Close` (announceShutdown →
+  `http.Server.Shutdown(shutdownGrace)` → `srv.Close` → presence removed →
+  the presence ticker's ctx cancelled). `Serve` builds its own server and
+  runs `newHostOver(srv, false)` — `serveURLHook` is its test seam. The
+  hosted server does NOT `applyUIPolicies` at start: the TUI already pushes
+  them onto the shared Service (`load.go`).
+- **Hosted rules:** `Server.hosted` → `/api/repo` `hosted:true`,
+  `POST /api/reroot` 409 "the terminal owns the current repository"; the
+  page gates four affordances on `state.hosted` (palette `switch repo…` and
+  `open repo (path)…`, ☰ Repositories, the worktree menu's `switch here`,
+  locks' `go to worktree`) — `hostedjs_test.go` pins the strings.
+- **TUI (`webhost.go`):** `Model.web *webHostState` (host, url, starting,
+  `pendingServe`), `webOpts` (the flags); `openInBrowser` (palette entry
+  gated on `NewWebHost != nil`; first use starts, later uses reopen);
+  `startupWebCmd` in `Init` when `[web] serve` or `--web`; `webAddr()` =
+  flag > `[web] addr` > "" (random); `reRoot` batches `webRerootCmd`;
+  `Run`'s tail calls `closeWeb` after the KillAll. Settings → **Web page**
+  (`web_settings_popup.go`): URL, `Serve at startup` toggle
+  (`config.SetWebServe`, GLOBAL file), `Address` field (`SetWebAddr`; ""
+  = random), `Open in browser`. Steer `serve` (`steerServe`, before the
+  busy refusal like `files`): OK+URL, or parks the command until
+  `onWebStarted` answers it.
+- **The Broadcaster (`agentsession/broadcast.go`):** `Subscribe() (<-chan
+  struct{}, cancel)` — a 1-slot channel PER subscriber; `Signal` never
+  blocks. `Manager`, `Session` and `domain.TaskManager` expose `Subscribe`;
+  `Changed()` is GONE (a single shared channel let two readers in one
+  process steal each other's wakeups). Subscription lifetime rule: a
+  subscription lives on the owner's pointer state and is never re-made per
+  wakeup — the TUI's `sessionWatch`/`taskTrack.current()` re-subscribe only
+  when the process-global manager is swapped (tests), a console's `screen`
+  subscription is dropped by `dropConsole` (EVERY `m.console = nil` path
+  goes through it), the web producer cancels both of its subscriptions on
+  stop. The web producer's 1 s removal poll is gone (manager signal →
+  `Get(id)` → `gone`).
+- **Browser check recipe (own tmux session, isolated XDG dirs, port 0):**
+  `gg --web --web-addr 127.0.0.1:0` under tmux with `BROWSER=true`; read the
+  URL from `web.json` under `$XDG_STATE_HOME` (never a log); start a
+  terminal from the Branches `.` menu (`.`, type `term`, enter — the row is
+  "Open terminal in <wt>"); `ctrl+]` steps out; playwright asserts
+  visibility of the Agents row, the console prompt, typed output, the
+  palette without switch rows, the worktree menu without `switch here`;
+  quit = `q` then `Q` (the quit-mode popup's confirm key) → the page's
+  `#server-down` veil. Unfixed install: no "Open in browser" in `ctrl+p`
+  (tui-capture.sh), no `web.json`.
 
 ### Agent console: UTF-8 in OSC payloads (fix, 2026-09-24)
 
