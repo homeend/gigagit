@@ -1335,8 +1335,8 @@ sidebar, `esc` close — the session keeps running. Whichever viewer has the
 console focused — this tab, another tab, or the TUI — sets the session's
 size; the others scroll. Every worktree row in the sidebar lists its
 sessions beneath it (`└ ● claude running 12m`, `○` when exited); a click
-opens one, and an exit raises a toast. Sessions are started from the TUI;
-starting, killing and removing them from the web is next.
+opens one, and an exit raises a toast. Starting, killing and removing
+sessions from the web is not built yet.
 
 ### Environment
 

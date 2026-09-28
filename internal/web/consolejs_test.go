@@ -32,6 +32,7 @@ rows = applyFrame(rows, { full: false, rows: 3, lines: [{ y: 1, runs: [{ t: "TWO
 r.push(rows[0], rows[1], rows[2]);
 r.push(consoleTitle({ label: "claude", worktree: "/a/b/wt", state: "running", started: new Date(Date.now() - 125000).toISOString() }, Date.now(), (p) => p));
 r.push(consoleTitle({ label: "codex", worktree: "/a/b/wt", state: "exited", exit_code: 3 }, Date.now(), (p) => p));
+r.push(String(exitToast("running", false)), String(exitToast("running", true)), String(exitToast("exited", false)));
 console.log(r.join("|"));
 `)
 	want := `{"k":"char","mod":0,"text":"a"}|{"k":"enter","mod":0,"text":""}|{"k":"tab","mod":1,"text":""}|{"k":"char","mod":2,"text":"c"}|` +
@@ -39,7 +40,7 @@ console.log(r.join("|"));
 		`{"cols":111,"rows":25}|{"cols":1,"rows":1}|` +
 		`<span style="color:#ff0000" class="b">a&lt;b</span>|<span>x</span>||` +
 		`3|<span>one</span>|true|<span>three</span>|<span>one</span>|<span>TWO</span>|<span>three</span>|` +
-		`claude · /a/b/wt · running 2m|codex · /a/b/wt · exited (3)`
+		`claude · /a/b/wt · running 2m|codex · /a/b/wt · exited (3)|true|false|false`
 	if out != want {
 		t.Fatalf("got  %s\nwant %s", out, want)
 	}

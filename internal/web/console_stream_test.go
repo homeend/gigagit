@@ -168,3 +168,21 @@ func TestSessionScreenGoneAfterRemove(t *testing.T) {
 		t.Fatalf("events %+v", evs)
 	}
 }
+
+// An already-exited session reports its exit exactly once on attach, even
+// when a change signal is still pending from its last output.
+func TestSessionScreenExitedSessionReportsExitOnce(t *testing.T) {
+	s := testSession(t, `printf 'bye'; exit 3`)
+	<-s.Done()
+	ts := serve(t, New(domain.Open(newRepoDir(t, 1))))
+	evs := readConsoleSSE(t, ts, string(s.Info().ID), 20, 1500*time.Millisecond)
+	n := 0
+	for _, e := range evs {
+		if e.Name == "exited" {
+			n++
+		}
+	}
+	if n != 1 || evs[0].Name != "hello" || evs[1].Name != "exited" {
+		t.Fatalf("exited ×%d, events %+v", n, evs)
+	}
+}

@@ -1,7 +1,7 @@
 // openfiles.js — the ctrl+\ switcher: a tabbed popup like the TUI's.
 //   Agents     the agent sessions of this gg (every repo), grouped repo →
 //              worktree; enter opens one as a console (console.js).
-//   AI tasks   the AI-task list (read-only in plan 1); enter on a running
+//   AI tasks   the AI-task list (read-only for now); enter on a running
 //              interactive task opens its console.
 //   Open files the worktree's open files, shared by every tab of this gg web,
 //              most recently shown first (plan 5b). ● marks the file THIS
@@ -236,7 +236,7 @@ function renderSwitcher() {
         );
       })
       .join("");
-    if (!rows.length) html = `<div class="ofempty">${sw.query ? "no session matches" : "no agent sessions — start one from a worktree's menu in the TUI (the web starts them in plan 2)"}</div>`;
+    if (!rows.length) html = `<div class="ofempty">${sw.query ? "no session matches" : "no agent sessions"}</div>`;
   } else {
     const rows = taskRows(sw.tasks, Date.now());
     html = rows
@@ -272,7 +272,7 @@ function activate() {
     closeSwitcher();
     openConsole(t.session);
   } else {
-    opLine("a finished task's result opens in the viewer in the next plan", false);
+    opLine("a finished task has no console — its result is not shown here yet", false);
   }
 }
 

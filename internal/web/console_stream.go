@@ -191,7 +191,9 @@ func (f *screenFeeds) produce(sess *domain.AgentSession, stop <-chan struct{}) {
 	id := sess.Info().ID
 	var timer *time.Timer
 	var fire <-chan time.Time
-	exited := false
+	// The handler already reported an exit that happened before the attach;
+	// this producer reports only the one it witnesses.
+	exited := sess.Info().State == domain.SessionExited
 	gone := time.NewTicker(feedGonePoll)
 	defer gone.Stop()
 	for {

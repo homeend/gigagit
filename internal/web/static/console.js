@@ -73,6 +73,13 @@ function ageText(iso, now) {
   return Math.floor(s / 3600) + "h";
 }
 
+// exitToast: an exit is announced only when it was not on screen already —
+// an unfocused console (the user looked away) that was running until now.
+// A console opened on an exited session, or a focused one, says nothing.
+function exitToast(prevState, wasFocused) {
+  return prevState !== "exited" && !wasFocused;
+}
+
 function consoleTitle(s, now, elide) {
   const st = s.state === "exited" ? "exited (" + s.exit_code + ")" : "running " + ageText(s.started, now);
   return s.label + " · " + elide(s.worktree) + " · " + st;
@@ -172,12 +179,13 @@ function connect() {
   });
   es.addEventListener("exited", (ev) => {
     const wasFocused = con.focused;
+    const prev = con.info.state;
     con.info = Object.assign({}, con.info, { state: "exited", exit_code: JSON.parse(ev.data).code });
     con.focused = false;
     retitle();
     foot();
     paintCursor();
-    if (!wasFocused) toast(con.info.label + " in " + con.info.worktree.split("/").pop() + " exited (" + con.info.exit_code + ")");
+    if (exitToast(prev, wasFocused)) toast(con.info.label + " in " + con.info.worktree.split("/").pop() + " exited (" + con.info.exit_code + ")");
   });
   es.addEventListener("gone", () => {
     toast(con.info.label + " was removed");
