@@ -6,20 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
-## Add to shelf acts on the marked files
+## Shelve several marked files as ONE set
 
 ### Fixed
 
-- **`.` → Add to shelf on the Files/Staged tab with `m`-marked files** now
-  shelves every marked file shown in that panel (one shelf entry each,
-  addressed as the panel shows it: working-tree copy on Files, index copy on
-  Staged), not only the cursor row. The row reads **Add N marked files to
-  shelf** (**Add the marked file to shelf** when one file is marked away from
-  the cursor — like space, the marks win over the cursor), the status line reports `shelved N files` (or `shelved N of M
-  files: <first error>` — every file is attempted), and the marks stay put:
-  shelving is a snapshot, so the same set can be discarded or stashed right
-  after. A diff, viewer, blame or history layer keeps shelving its own single
-  file even while marks exist on the panel underneath.
+- **`.` → Add to shelf on the Files/Staged tab with `m`-marked files** shelved
+  only the cursor row. Now **Add N marked files to shelf…** asks for a name
+  (pre-filled `WIP on <branch>`, like a stash) and freezes every marked file
+  shown in that panel into **one shelf entry** — a file SET, the same tar
+  shape as a shelved commit — so related files stay together instead of
+  scattering into N rows. In the shelf switcher the set behaves like a
+  shelved commit: enter browses its files against the working tree, the
+  files view's Copy to working dir restores one, `t` copies them all to a
+  temp dir; `a` (cherry-pick) and the sha-based compares are refused, since
+  nothing in git stands behind the bytes. One marked file away from the
+  cursor stays a plain file entry (**Add the marked file to shelf**). Marks
+  stay put after shelving. A diff, viewer, blame or history layer keeps
+  shelving its own single file even while marks exist underneath. Shelving is
+  atomic: one unreadable file (a deleted row) fails the whole set naming the
+  path.
+- New shelf kind `files` (`model.ShelfKindFiles`, `ShelfEntry.IsArchive`,
+  `shelf.Store.PutFiles`, `domain.ShelfAddFiles`): member-wise reads, restore,
+  export and the `gg://` shelf endpoint accept it alongside commit entries in
+  the CLI, MCP (`kind: "files"`) and web (◈ badge, browse / restore a file).
+  An older `gg` reading the index treats such an entry as a plain file.
 
 ## Kill and remove an agent session with one key
 

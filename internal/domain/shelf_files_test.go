@@ -130,3 +130,81 @@ func TestResolveBytesShelfFileEntryUnchanged(t *testing.T) {
 		t.Fatalf("file entry = %q, want file-v1", got)
 	}
 }
+
+// A marked SET of working-tree files becomes ONE files entry: the tar lists
+// exactly the members, each resolves member-wise, and the entry is an archive
+// but not a commit (no sha, so no cherry-pick / commit compare).
+func TestShelfAddFilesFreezesTheSetAsOneEntry(t *testing.T) {
+	t.Parallel()
+	repoDir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+	for p, c := range map[string]string{"a.go": "package a\n", "sub/b.go": "package b\n"} {
+		full := filepath.Join(repoDir, p)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(c), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	addrs := []model.FileAddress{
+		{State: model.StateUntracked, Worktree: repoDir, Branch: "main", Path: "a.go"},
+		{State: model.StateUntracked, Worktree: repoDir, Branch: "main", Path: "sub/b.go"},
+	}
+	e, err := svc.ShelfAddFiles(ctx, addrs, "WIP on main")
+	if err != nil {
+		t.Fatalf("ShelfAddFiles: %v", err)
+	}
+	if e.Kind != model.ShelfKindFiles || !e.IsArchive() || e.IsCommit() {
+		t.Fatalf("entry kind = %v (archive=%v commit=%v), want a files archive that is not a commit", e.Kind, e.IsArchive(), e.IsCommit())
+	}
+	if e.Label != "WIP on main" || e.Origin.Path != "" || e.Origin.Worktree != repoDir || e.Origin.State != model.StateUntracked {
+		t.Fatalf("entry = %+v, want the label and a path-less untracked origin in the worktree", e)
+	}
+	if !strings.HasPrefix(e.ID, "files-unstaged-") {
+		t.Fatalf("id = %q, want the files-<source>-<sha8> scheme", e.ID)
+	}
+	files, err := svc.ShelfCommitFiles(ctx, e.ID)
+	if err != nil {
+		t.Fatalf("ShelfCommitFiles: %v", err)
+	}
+	if len(files) != 2 || files[0].Path != "a.go" || files[1].Path != "sub/b.go" {
+		t.Fatalf("members = %+v, want a.go + sub/b.go", files)
+	}
+	got, err := svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceShelf, Locator: e.ID, Path: "sub/b.go"})
+	if err != nil || string(got) != "package b\n" {
+		t.Fatalf("member bytes = %q err=%v", got, err)
+	}
+	exp, dir, err := svc.ExportShelfEntry(ctx, e)
+	if err != nil || len(exp) != 2 || dir == "" {
+		t.Fatalf("export = %v dir=%q err=%v", exp, dir, err)
+	}
+	// Only the ONE entry landed.
+	all, err := svc.ShelfList(ctx, "", 0, 0)
+	if err != nil || len(all) != 1 {
+		t.Fatalf("shelf lists %d entries (err=%v), want exactly 1", len(all), err)
+	}
+}
+
+// One unreadable member fails the whole set: nothing is stored.
+func TestShelfAddFilesIsAtomic(t *testing.T) {
+	t.Parallel()
+	repoDir, svc := newRealRepo(t)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	ctx := context.Background()
+	if err := os.WriteFile(filepath.Join(repoDir, "ok.go"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.ShelfAddFiles(ctx, []model.FileAddress{
+		{State: model.StateUntracked, Worktree: repoDir, Path: "ok.go"},
+		{State: model.StateUntracked, Worktree: repoDir, Path: "gone.go"},
+	}, "")
+	if err == nil || !strings.Contains(err.Error(), "gone.go") {
+		t.Fatalf("err = %v, want a failure naming gone.go", err)
+	}
+	all, _ := svc.ShelfList(ctx, "", 0, 0)
+	if len(all) != 0 {
+		t.Fatalf("a failed set must store nothing, shelf has %d entries", len(all))
+	}
+}

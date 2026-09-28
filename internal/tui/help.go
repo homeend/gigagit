@@ -133,7 +133,7 @@ func helpContent() []contentLine {
 		r(".", i18n.T("Delete tag (.-menu): delete the selected tag after a confirm")),
 		r(".", i18n.T("Refresh remote status (.-menu): one-shot git ls-remote --tags; updates the ▲ marker for every visible tag; errors shown on the status line; for background auto-refresh see [refresh] remote_tags")),
 		h(i18n.T("Shelf panel")),
-		r("", i18n.T("frozen, non-git per-file copies (the default bucket); add via the . menu anywhere a file is focused")),
+		r("", i18n.T("frozen, non-git per-file copies (the default bucket); add via the . menu anywhere a file is focused — with several files m-marked on the Files/Staged tab, Add N marked files to shelf… names and shelves them as ONE set (enter browses its files)")),
 		r("enter", i18n.T("diff the shelved copy against the current working-tree file")),
 		r("m", i18n.T("mark an entry; mark a second to compare the two shelved copies side-by-side")),
 		r(".", i18n.T("Restore to… (writes the copy to a path; prefilled with the original path, ctrl+r re-fills it) / Remove from shelf")),

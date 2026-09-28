@@ -111,7 +111,7 @@ func TestShelfAddTargetsMarkedFiles(t *testing.T) {
 		t.Fatalf("second target = %+v, want untracked c.txt", got[1])
 	}
 	r, ok := findRow(availableActions(m), "shelf-add")
-	if !ok || r.label != "Add 2 marked files to shelf" {
+	if !ok || r.label != "Add 2 marked files to shelf…" {
 		t.Fatalf("menu row = %+v ok=%v, want the count-aware label", r, ok)
 	}
 
@@ -166,11 +166,11 @@ func TestShelfAddTargetsIgnoreMarksUnderDiffView(t *testing.T) {
 	}
 }
 
-// End to end over a real repo: the many-file command shelves every marked
-// file (one entry each) and its message lands as a "shelved N files" status.
-// One unreadable path fails alone — the rest still land, and the status names
-// the partial count with the error.
-func TestShelfAddManyCmdShelvesEveryMarkedFile(t *testing.T) {
+// End to end over a real repo: the marked-set row opens the naming popup;
+// enter there shelves every marked file as ONE files entry (the tar's
+// members), never the unmarked cursor row, and the status says so. The popup
+// swallows keys and esc cancels without shelving.
+func TestShelfAddMarkedSetBecomesOneEntry(t *testing.T) {
 	t.Parallel()
 	dir := gittest.BasicRepo(t, "hi\n")
 	for _, f := range []string{"a.go", "b.go"} {
@@ -179,8 +179,7 @@ func TestShelfAddManyCmdShelvesEveryMarkedFile(t *testing.T) {
 		}
 	}
 	m := New(domain.New(testRepo(t, dir)))
-	st := shelf.NewFileStore(t.TempDir())
-	m.svc.SetShelfStore(st)
+	m.svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
 	m.currentWorktree = dir
 	m.focus = panelFiles
 	m = m.withStatus(model.WorkingTreeStatus{Branch: "main", Files: []model.FileStatus{
@@ -195,45 +194,73 @@ func TestShelfAddManyCmdShelvesEveryMarkedFile(t *testing.T) {
 	if !ok {
 		t.Fatal("Add to shelf row missing")
 	}
-	tm, cmd := r.run(m)
+	tm, _ := r.run(m)
 	m = tm.(Model)
-	if cmd == nil {
-		t.Fatal("run must return the shelving command")
+	p, ok := m.topLayer().(*shelfSetNamePopup)
+	if !ok {
+		t.Fatalf("run must open the naming popup, top layer = %T", m.topLayer())
+	}
+	if p.name.Value() != "WIP on main" || len(p.addrs) != 2 {
+		t.Fatalf("popup = name %q addrs %d, want the WIP prefill and 2 addresses", p.name.Value(), len(p.addrs))
+	}
+	// A global key is swallowed (no op starts, popup stays).
+	tm, _ = m.Update(keyMsg("p"))
+	m = tm.(Model)
+	if _, still := m.topLayer().(*shelfSetNamePopup); !still || m.running {
+		t.Fatalf("a global key must be swallowed by the popup (running=%v top=%T)", m.running, m.topLayer())
+	}
+	// esc cancels: nothing shelved.
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = tm.(Model)
+	if m.topLayer() != nil {
+		t.Fatalf("esc must close the popup, top = %T", m.topLayer())
+	}
+	if es, _ := m.svc.ShelfList(context.Background(), "", 0, 0); len(es) != 0 {
+		t.Fatalf("esc must shelve nothing, shelf has %d", len(es))
+	}
+
+	// Reopen, name it, enter.
+	tm, _ = r.run(m)
+	m = tm.(Model)
+	p = m.topLayer().(*shelfSetNamePopup)
+	p.name = newTextField("half-done feature")
+	tm, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = tm.(Model)
+	if cmd == nil || m.topLayer() != nil {
+		t.Fatalf("enter must close the popup and return the shelving command (cmd nil=%v top=%T)", cmd == nil, m.topLayer())
 	}
 	tm, _ = m.Update(cmd())
 	m = tm.(Model)
-	if want := i18n.T("shelved %d files", 2); m.statusMsg != want {
+	es, err := m.svc.ShelfList(context.Background(), "", 0, 0)
+	if err != nil || len(es) != 1 {
+		t.Fatalf("shelf holds %d entries (err=%v), want exactly ONE set", len(es), err)
+	}
+	e := es[0]
+	if want := i18n.T("shelved %d files as one set → %s", 2, e.ID); m.statusMsg != want {
 		t.Fatalf("statusMsg = %q, want %q", m.statusMsg, want)
+	}
+	if e.Kind != model.ShelfKindFiles || e.Label != "half-done feature" || e.Origin.State != model.StateUntracked || e.Origin.Worktree != dir || e.Origin.Path != "" {
+		t.Fatalf("entry = %+v, want a labelled files set with a path-less untracked origin", e)
+	}
+	files, err := m.svc.ShelfCommitFiles(context.Background(), e.ID)
+	if err != nil || len(files) != 2 || files[0].Path != "a.go" || files[1].Path != "b.go" {
+		t.Fatalf("members = %+v err=%v, want a.go + b.go (README.md was not marked)", files, err)
 	}
 	if len(m.fileMarks) != 2 {
 		t.Fatalf("marks must stay after shelving (a snapshot moves nothing), got %v", m.fileMarks)
 	}
-	es, err := m.svc.ShelfList(context.Background(), "", 0, 0)
-	if err != nil {
-		t.Fatal(err)
+	// The shelf switcher treats the set like a shelved commit: file-only keys
+	// are refused with the archive notice, and enter browses its members.
+	m.shelfEntries = es
+	sp := &shelfPopup{items: es, rows: []string{shelfEntryDisplay(e)}}
+	m = m.pushLayer(sp)
+	nm, blocked := m.commitShelfNotice(sp)
+	if !blocked || !strings.Contains(nm.statusMsg, "file set") {
+		t.Fatalf("file-only keys must be refused on a file set (blocked=%v msg=%q)", blocked, nm.statusMsg)
 	}
-	paths := map[string]bool{}
-	for _, e := range es {
-		paths[e.Origin.Path] = true
-		if e.Origin.State != model.StateUntracked || e.Origin.Worktree != dir {
-			t.Fatalf("entry %+v: want an untracked address in %s", e.Origin, dir)
-		}
-	}
-	if len(es) != 2 || !paths["a.go"] || !paths["b.go"] {
-		t.Fatalf("shelf holds %v, want exactly a.go and b.go", paths)
-	}
-
-	// A missing file fails alone: the other lands and the status says 1 of 2.
-	m.fileMarks = map[string]bool{"a.go": true, "gone.go": true}
-	m = m.withStatus(model.WorkingTreeStatus{Branch: "main", Files: []model.FileStatus{
-		{Path: "a.go", Kind: model.KindUntracked, Staged: '?', Unstaged: '?'},
-		{Path: "gone.go", Kind: model.KindUntracked, Staged: '?', Unstaged: '?'},
-	}})
-	r, _ = findRow(availableActions(m), "shelf-add")
-	tm, cmd = r.run(m)
-	tm, _ = tm.(Model).Update(cmd())
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = tm.(Model)
-	if !strings.HasPrefix(m.statusMsg, "shelved 1 of 2 files: ") {
-		t.Fatalf("partial statusMsg = %q, want the 1-of-2 form with the error", m.statusMsg)
+	if m.filesView == nil || !m.inShelfFiles() || m.filesShelfID != e.ID {
+		t.Fatalf("enter must open the files view in shelf mode on the set (view nil=%v mode shelf=%v id=%q)", m.filesView == nil, m.inShelfFiles(), m.filesShelfID)
 	}
 }

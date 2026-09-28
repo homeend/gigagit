@@ -462,7 +462,7 @@ func shelfEntrySide(ctx context.Context, svc *domain.Service, id string) (entryS
 	if label == "" {
 		label = e.Origin.Display()
 	}
-	if e.IsCommit() {
+	if e.IsArchive() { // a commit or a file set: member-wise through the shelf endpoint
 		return commitEntrySide(svc, mustShelfEndpoint(e.ID), label)
 	}
 	return entrySide{spec: "shelf:" + e.ID, label: label, tag: "shelf:" + e.ID,
@@ -744,7 +744,7 @@ func commitEntryAddress(ctx context.Context, svc *domain.Service, store, id stri
 			return "", "", "", http.StatusNotFound, ferr
 		}
 		if !e.IsCommit() {
-			return "", "", "", http.StatusUnprocessableEntity, errors.New("that shelf entry holds a file, not a commit")
+			return "", "", "", http.StatusUnprocessableEntity, errors.New("that shelf entry is not a shelved commit")
 		}
 		label = e.Label
 		if label == "" {

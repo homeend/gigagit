@@ -30,8 +30,11 @@ type shelfRow struct {
 }
 
 func shelfKindName(k model.ShelfKind) string {
-	if k == model.ShelfKindCommit {
+	switch k {
+	case model.ShelfKindCommit:
 		return "commit"
+	case model.ShelfKindFiles:
+		return "files"
 	}
 	return "file"
 }

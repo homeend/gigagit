@@ -540,12 +540,15 @@ func (e Endpoint) Bounded() bool {
 
 // ShelfKind distinguishes a shelf entry's blob payload. A file entry's blob is
 // raw file bytes; a commit entry's blob is a tar archive of the commit's
-// changed files (extracted on copy-out). The kind is stored, never inferred.
+// changed files; a files entry's blob is a tar archive of working-tree or
+// index files shelved together (both extracted on copy-out). The kind is
+// stored, never inferred.
 type ShelfKind int
 
 const (
 	ShelfKindFile   ShelfKind = iota // blob = raw file bytes (default)
 	ShelfKindCommit                  // blob = tar of the commit's changed files
+	ShelfKindFiles                   // blob = tar of several worktree/index files (no commit behind it)
 )
 
 // ShelfBucket is a named collection of shelf entries. The "default" bucket is
@@ -574,9 +577,18 @@ type ShelfEntry struct {
 	Created   time.Time
 }
 
-// IsCommit reports whether the entry is a shelved commit (tar payload) rather
-// than a single file (raw bytes).
+// IsCommit reports whether the entry is a shelved commit: a tar payload WITH a
+// commit sha behind it (Origin.Commit), so cherry-pick and commit compares
+// apply. A files set (IsArchive but not IsCommit) has no sha.
 func (e ShelfEntry) IsCommit() bool { return e.Kind == ShelfKindCommit }
+
+// IsArchive reports whether the entry's blob is a tar of members (a shelved
+// commit or a shelved file set) rather than one file's raw bytes. Every
+// member-wise path (list / read a member / restore one / browse) keys on
+// this; only sha-backed actions key on IsCommit.
+func (e ShelfEntry) IsArchive() bool {
+	return e.Kind == ShelfKindCommit || e.Kind == ShelfKindFiles
+}
 
 // ExportFile is one file to write during a copy-to-temp-dir export: a
 // repo-relative path plus its bytes. Produced by domain, consumed by

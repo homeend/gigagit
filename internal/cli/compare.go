@@ -246,7 +246,7 @@ func compareTokenLink(ctx context.Context, svc *domain.Service, tok string) (mod
 			return model.Link{}, fmt.Errorf("shelf %q: %w", id, err)
 		}
 		if !e.IsCommit() {
-			return model.Link{}, fmt.Errorf("shelf entry %q is a file entry, not a commit", id)
+			return model.Link{}, fmt.Errorf("shelf entry %q is not a commit entry", id)
 		}
 		return buildLink(ctx, svc, ".", "", linkOpts{Rev: e.Origin.Commit, Hint: model.LinkHint{Kind: "shelf", ID: id}})
 	default:
@@ -417,7 +417,7 @@ func resolveCompareSpec(statePath string, svc *domain.Service, tok string, stder
 			return domain.FileSet{}, 2
 		}
 		if !e.IsCommit() {
-			fmt.Fprintf(stderr, "compare: shelf entry %q is a file entry, not a commit\n", id)
+			fmt.Fprintf(stderr, "compare: shelf entry %q is not a commit entry\n", id)
 			return domain.FileSet{}, 2
 		}
 		ep, err := svc.ResolveCommitEntryEndpoint(ctx, e.Origin.Commit, e.ID)

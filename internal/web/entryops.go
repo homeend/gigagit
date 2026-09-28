@@ -63,8 +63,8 @@ func (s *Server) buildRestore(r *http.Request, req opStartRequest) (engine.Opera
 		if req.Path != "" {
 			// One member of a shelved commit's archive.
 			data, err = svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceShelf, Locator: e.ID, Path: req.Path})
-		} else if e.IsCommit() {
-			return nil, http.StatusUnprocessableEntity, errors.New("this entry holds a commit's files — name the file to restore")
+		} else if e.IsArchive() {
+			return nil, http.StatusUnprocessableEntity, errors.New("this entry holds several files — name the file to restore")
 		} else {
 			data, err = svc.ShelfBlob(ctx, e.ID)
 		}
@@ -95,7 +95,7 @@ func (s *Server) buildShelfCherryPick(r *http.Request, req opStartRequest) (engi
 		return nil, nil, http.StatusNotFound, err
 	}
 	if !e.IsCommit() {
-		return nil, nil, http.StatusUnprocessableEntity, errors.New("this is a shelved file, not a shelved commit")
+		return nil, nil, http.StatusUnprocessableEntity, errors.New("this is not a shelved commit (a file or a file set has no commit to apply)")
 	}
 	sha := e.Origin.Commit
 	if _, found, lerr := svc.CommitLookup(ctx, sha); lerr == nil && found {

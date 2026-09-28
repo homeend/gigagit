@@ -102,7 +102,7 @@ feature; keep THIS file's map to one line per package.
 | `cache`      | Generic injected in-memory LRU cache factory (entry-count + byte budget); first consumer is the commit-diff cache. |
 | `fsprobe`    | Pure per-OS probe classifying paths on slow "foreign" filesystem mounts (9p/WSL drvfs, cifs/smb, nfs, fuse; UNC on Windows) behind the repo-switcher slow-fs warning; fail-open, callers probe off-thread. DAG leaf. |
 | `clipboard`  | System-clipboard writer: native OS command first (WSL-interop-gated `clip.exe`, Wayland-socket-resolved `wl-copy`, …), OSC 52 fallback; `Probe()` backs the clipboard notices. |
-| `shelf`      | Non-git per-file/per-commit content store (blobs + TOML index under XDG state); shelved commits keep a tar + best-effort format-patch snapshot. Owned by `domain`; frontends never import it. |
+| `shelf`      | Non-git per-file/per-commit content store (blobs + TOML index under XDG state); shelved commits keep a tar + best-effort format-patch snapshot; shelved file SETS (several marked working files) keep a tar only. Owned by `domain`; frontends never import it. |
 | `bookmark`   | Persistent registry of richly-addressed file/commit references (records only, no blobs). Owned by `domain`. |
 | `notes`      | Machine-local review-note store (TOML + O_EXCL lock, write-time cap, `Sweep`); records only. Owned by `domain`; frontends never import it. |
 | `notebatch`  | Pure parser for the two agent JSON note-batch shapes (hunk agent-context v1, comment apply); shared by CLI, MCP and the review importer. DAG leaf. |

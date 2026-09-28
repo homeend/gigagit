@@ -1295,13 +1295,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("shelved %s → %s", msg.entry.Origin.Path, msg.entry.ID)
 		}
 		return m, nil
-	case shelfAddedManyMsg:
+	case shelfSetAddedMsg:
 		// Marks stay: shelving is a snapshot, the files never leave the panel,
 		// and the same set is often discarded or stashed right after.
 		if msg.err != nil {
-			m.statusMsg = i18n.T("shelved %d of %d files: %s", msg.ok, msg.total, msg.err.Error())
+			m.statusMsg = i18n.T("shelf add: %s", msg.err.Error())
 		} else {
-			m.statusMsg = i18n.T("shelved %d files", msg.ok)
+			m.statusMsg = i18n.T("shelved %d files as one set → %s", msg.n, msg.entry.ID)
 		}
 		return m, nil
 	case tempExportResolvedMsg:

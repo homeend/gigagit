@@ -36,6 +36,7 @@ var ErrNoPatch = errors.New("shelf: entry has no stored patch")
 type Store interface {
 	Put(bucket string, addr model.FileAddress, data []byte) (model.ShelfEntry, error)
 	PutCommit(bucket string, addr model.FileAddress, tar, patch []byte, label string) (model.ShelfEntry, error)
+	PutFiles(bucket string, addr model.FileAddress, tar []byte, label string) (model.ShelfEntry, error)
 	Get(entryID string) ([]byte, error)
 	GetPatch(entryID string) ([]byte, error)
 	Find(entryID string) (model.ShelfEntry, error)

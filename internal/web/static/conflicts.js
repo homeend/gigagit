@@ -439,7 +439,11 @@ async function pickEntry({ commits, onPick, exclude, title }) {
   const other = (store, e) => !(exclude && exclude.store === store && exclude.id === e.id);
   const rows = [];
   const bookmarks = ((bm && bm.entries) || []).filter((e) => !!e.is_commit === commits && other("bookmarks", e));
-  const shelf = ((sh && sh.entries) || []).filter((e) => (e.kind === "commit") === commits && other("shelf", e));
+  // A shelved file SET (kind "files") fits neither bucket: no sha for the
+  // commit lane, and its blob is a tar, not one file's bytes.
+  const shelf = ((sh && sh.entries) || []).filter(
+    (e) => e.kind !== "files" && (e.kind === "commit") === commits && other("shelf", e)
+  );
   if (title && (bookmarks.length || shelf.length)) rows.push({ header: title });
   if (bookmarks.length) {
     rows.push({ header: "bookmarks" });
@@ -632,7 +636,7 @@ function compareWithAnotherEntryRow(store, e) {
 
 
 registerRows("bookmark", (e) => (e && e.id ? [compareWithAnotherEntryRow("bookmarks", e)] : []));
-registerRows("shelf", (e) => (e && e.id ? [compareWithAnotherEntryRow("shelf", e)] : []));
+registerRows("shelf", (e) => (e && e.id && e.kind !== "files" ? [compareWithAnotherEntryRow("shelf", e)] : []));
 
 
 // The static help already has a "conflicts" row (the bar, the block picker),

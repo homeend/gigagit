@@ -93,30 +93,20 @@ func (m Model) shelfAddCmd(addr model.FileAddress) tea.Cmd {
 	}
 }
 
-// shelfAddedManyMsg reports a marked-set shelving: ok of total files landed;
-// err is the first failure (each file is attempted — one bad file never skips
-// the rest).
-type shelfAddedManyMsg struct {
-	ok, total int
-	err       error
+// shelfSetAddedMsg reports a marked SET shelved as one files entry.
+type shelfSetAddedMsg struct {
+	entry model.ShelfEntry
+	n     int
+	err   error
 }
 
-// shelfAddManyCmd freezes every address into the default bucket, one entry per
-// file, off the UI thread.
-func (m Model) shelfAddManyCmd(addrs []model.FileAddress) tea.Cmd {
+// shelfAddFilesCmd freezes the addresses into ONE files entry (a tar with one
+// member per file) off the UI thread — the set stays together on the shelf.
+func (m Model) shelfAddFilesCmd(addrs []model.FileAddress, label string) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
-		out := shelfAddedManyMsg{total: len(addrs)}
-		for _, a := range addrs {
-			if _, err := svc.ShelfAdd(context.Background(), a, ""); err != nil {
-				if out.err == nil {
-					out.err = err
-				}
-				continue
-			}
-			out.ok++
-		}
-		return out
+		e, err := svc.ShelfAddFiles(context.Background(), addrs, label)
+		return shelfSetAddedMsg{entry: e, n: len(addrs), err: err}
 	}
 }
 
@@ -157,8 +147,9 @@ func (m Model) shelfAddTargets() (addrs []model.FileAddress, marked bool) {
 
 // shelfAddRow is the menu-only "Add to shelf" action, present wherever a file
 // is focused. With several marked files on the Files/Staged panel it shelves
-// the whole set (one entry each) and says so in its label. Its run handler
-// captures the resolved addresses at build time.
+// the whole set as ONE named files entry (the … says it asks for the name)
+// and says so in its label. Its run handler captures the resolved addresses at
+// build time.
 func (m Model) shelfAddRow() (actionRow, bool) {
 	addrs, marked := m.shelfAddTargets()
 	if len(addrs) == 0 {
@@ -180,9 +171,11 @@ func (m Model) shelfAddRow() (actionRow, bool) {
 	}
 	return actionRow{
 		id:    "shelf-add",
-		label: i18n.T("Add %d marked files to shelf", len(addrs)),
+		label: i18n.T("Add %d marked files to shelf…", len(addrs)),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m, m.shelfAddManyCmd(addrs)
+			// The set gets a name first (what the shelf row will say), like a
+			// shelved commit; enter in the popup fires shelfAddFilesCmd.
+			return m.pushLayer(&shelfSetNamePopup{addrs: addrs, name: newTextField("WIP on " + m.status.Branch)}), nil
 		},
 	}, true
 }

@@ -77,7 +77,7 @@ func (s *Server) registerCherryPickTool(srv *sdk.Server) {
 				return nil, out, fmt.Errorf("shelf entry not found: %s", in.Source.Shelf)
 			}
 			if !entry.IsCommit() {
-				return nil, out, fmt.Errorf("shelf entry %s is a file entry — use gg_write_to_worktree to restore it", in.Source.Shelf)
+				return nil, out, fmt.Errorf("shelf entry %s is not a shelved commit — use gg_write_to_worktree to restore its content", in.Source.Shelf)
 			}
 			sha, label, hasPatch, shelfID = entry.Origin.Commit, entry.Label, entry.PatchSHA != "", entry.ID
 		} else {

@@ -230,7 +230,8 @@ func (s *Service) EvalEndpoint(ctx context.Context, e model.Endpoint) (FileSet, 
 		// A shelf entry is one of TWO things, and the entry kind is the only
 		// discriminator (shelfResolve makes the same split for bytes):
 		//
-		//   commit entry — a tar of the paths the shelved commit changed.
+		//   archive entry — a tar of the paths the shelved commit changed, or
+		//                   of the working files shelved together as a set.
 		//   FILE entry   — one blob captured from the working tree or index,
 		//                  whose bytes may correspond to nothing in git. This
 		//                  is spec §3.3's exception: the address-less shelf
@@ -243,7 +244,7 @@ func (s *Service) EvalEndpoint(ctx context.Context, e model.Endpoint) (FileSet, 
 		if err != nil {
 			return FileSet{}, err
 		}
-		if !entry.IsCommit() {
+		if !entry.IsArchive() {
 			// ONE member: the path the blob was captured from. Refused rather
 			// than guessed when the record carries none — a set whose single
 			// key is "" would compare the whole tree against one blob.
