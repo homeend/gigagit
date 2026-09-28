@@ -6,6 +6,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -326,10 +327,123 @@ type commitFilesMsg struct {
 	commit  model.Commit
 	files   []model.CommitFile
 	reviews []domain.Review // the commit's AI reviews (@notes/)
-	err     error
+	// noReviews marks a follow-live read of the list alone: the reviews
+	// follow once the cursor rests (reviewsFollowMsg).
+	noReviews bool
+	err       error
 }
 
-// loadCommitFilesCmd fetches the changed files of commit c off the UI thread.
+// loadFilesListCmd is loadFilesForCmd for a follow-live move: the file list
+// alone (a cache hit once prefetched — the step then shows at once), never
+// the commit's reviews, which cost a notes-store read and are read once the
+// cursor rests (reviewsFollowMsg).
+func (m Model) loadFilesListCmd(c model.Commit) tea.Cmd {
+	if m.inFullTree() {
+		return m.loadTreeFilesCmd(c)
+	}
+	svc := m.svc
+	return func() tea.Msg {
+		c = resolveCommitMeta(svc, c)
+		files, err := svc.CommitFiles(context.Background(), c.Hash)
+		return commitFilesMsg{hash: c.Hash, subject: c.Subject, commit: c, files: files, err: err, noReviews: true}
+	}
+}
+
+// filesPrefetchBelow / filesPrefetchAbove are how many commits around the
+// cursor a landed file list warms (PrefetchCommitFiles), in list order —
+// more below, the way a held arrow usually goes.
+const (
+	filesPrefetchBelow = 16
+	filesPrefetchAbove = 4
+)
+
+// prefetchFilesCmd warms the file lists of the commits around the Commits
+// cursor off the UI thread, so a held arrow's next steps are cache hits and
+// show at once instead of waiting a git call each on a slow disk. nil when
+// there is nothing to warm (a full tree is not cached).
+func (m Model) prefetchFilesCmd() tea.Cmd {
+	if m.svc == nil || m.inFullTree() {
+		return nil
+	}
+	idx := m.displayIndices(panelCommits)
+	s := m.sel[panelCommits]
+	var hashes []string
+	for r := s - filesPrefetchAbove; r <= s+filesPrefetchBelow; r++ {
+		if r == s || r < 0 || r >= len(idx) || m.isWipRow(idx[r]) {
+			continue
+		}
+		if bi := idx[r] - m.wipCount(); bi >= 0 && bi < len(m.commits) && !m.svc.CommitFilesCached(m.commits[bi].Hash) {
+			hashes = append(hashes, m.commits[bi].Hash)
+		}
+	}
+	if len(hashes) == 0 {
+		return nil
+	}
+	svc := m.svc
+	return func() tea.Msg {
+		svc.PrefetchCommitFiles(context.Background(), hashes, 4)
+		return nil
+	}
+}
+
+// reviewsFollowDelay is how long the commit cursor must rest before the files
+// view reads the commit's reviews.
+const reviewsFollowDelay = 150 * time.Millisecond
+
+// reviewsFollowMsg is the pause after a follow-live list landed: read the
+// commit's reviews unless a later landing (a newer gen) superseded it.
+type reviewsFollowMsg struct {
+	gen  int
+	hash string
+}
+
+// commitReviewsMsg carries a commit's reviews read after its file list.
+type commitReviewsMsg struct {
+	hash    string
+	reviews []domain.Review
+}
+
+// reviewsFollowCmd schedules the reviews read for the list just shown.
+func (m Model) reviewsFollowCmd(hash string) (Model, tea.Cmd) {
+	m.reviewsFollowGen++
+	gen := m.reviewsFollowGen
+	return m, tea.Tick(reviewsFollowDelay, func(time.Time) tea.Msg { return reviewsFollowMsg{gen: gen, hash: hash} })
+}
+
+// onReviewsFollow reads the rested cursor's reviews.
+func (m Model) onReviewsFollow(msg reviewsFollowMsg) (Model, tea.Cmd) {
+	if msg.gen != m.reviewsFollowGen || m.filesView == nil || msg.hash != m.filesHash || m.svc == nil {
+		return m, nil
+	}
+	svc, hash := m.svc, msg.hash
+	return m, func() tea.Msg {
+		reviews, _ := svc.ReviewsForCommit(context.Background(), hash) // no store: no reviews
+		return commitReviewsMsg{hash: hash, reviews: reviews}
+	}
+}
+
+// onCommitReviews puts the reviews on top of the list already shown, keeping
+// the tree cursor on the row it was on.
+func (m Model) onCommitReviews(msg commitReviewsMsg) (Model, tea.Cmd) {
+	p := m.filesView
+	if p == nil || msg.hash != m.filesHash || m.filesReview != nil || m.filesMode != filesModeChanged || len(msg.reviews) == 0 {
+		return m, nil
+	}
+	for _, l := range p.lines {
+		if l.noteID != "" {
+			return m, nil // already listed (the list was read with them)
+		}
+	}
+	before := len(p.lines)
+	p.lines = withReviewLines(msg.reviews, p.lines)
+	if p.sel > 0 {
+		p.sel += len(p.lines) - before
+	}
+	return m, nil
+}
+
+// loadCommitFilesCmd fetches the changed files of commit c, and its reviews,
+// off the UI thread.
 func (m Model) loadCommitFilesCmd(c model.Commit) tea.Cmd {
 	svc := m.svc
 	return func() tea.Msg {
@@ -1129,7 +1243,7 @@ func (m Model) moveCommitUnderFilesView(delta int) (tea.Model, tea.Cmd) {
 	}
 	m.filesHash = m.commits[bi].Hash
 	m.filesReadInflight = true
-	filesCmd := m.loadFilesForCmd(m.commits[bi])
+	filesCmd := m.loadFilesListCmd(m.commits[bi]) // the list alone; the reviews once the cursor rests
 	m, more := m.maybeLoadMoreCommits()
 	if more != nil {
 		return m, tea.Batch(filesCmd, more)

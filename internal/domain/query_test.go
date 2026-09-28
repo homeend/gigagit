@@ -207,6 +207,43 @@ func TestCommitFilesGatedQuery(t *testing.T) {
 	}
 }
 
+// A commit's file list never changes for its hash: the second read is served
+// from the cache, and Prefetch warms misses off the caller's path so the
+// files view's next steps are hits.
+func TestCommitFilesCachedAndPrefetched(t *testing.T) {
+	f := gitexec.NewFakeRunner()
+	var calls atomic.Int32
+	f.SetHandler("git log (commit files)", func(ctx context.Context, argv []string) (gitexec.Result, error) {
+		calls.Add(1)
+		return gitexec.Result{Stdout: "M\x00a.txt\x00"}, nil
+	})
+	svc := New(&git.Repo{Runner: f})
+	ctx := context.Background()
+	if _, err := svc.CommitFiles(ctx, "aaa"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CommitFiles(ctx, "aaa"); err != nil {
+		t.Fatal(err)
+	}
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("git ran %d times for one hash, want 1 (cached)", n)
+	}
+	if svc.CommitFilesCached("bbb") {
+		t.Fatal("bbb reported cached before any read")
+	}
+	svc.PrefetchCommitFiles(ctx, []string{"aaa", "bbb", "ccc"}, 2)
+	if n := calls.Load(); n != 3 {
+		t.Fatalf("git ran %d times after the prefetch, want 3 (aaa was cached)", n)
+	}
+	if !svc.CommitFilesCached("bbb") || !svc.CommitFilesCached("ccc") {
+		t.Fatal("prefetched hashes not cached")
+	}
+	svc.CommitFiles(ctx, "bbb")
+	if n := calls.Load(); n != 3 {
+		t.Fatalf("a prefetched hash hit git again (%d)", n)
+	}
+}
+
 func TestTreeFilesGatedQuery(t *testing.T) {
 	f := gitexec.NewFakeRunner()
 	f.SetResponse("git ls-tree (tree files)", gitexec.Result{Stdout: "README.md\x00pkg/sub/x.go\x00"})

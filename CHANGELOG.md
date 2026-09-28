@@ -73,6 +73,15 @@ branches, and the web UI.
 - **esc from a review opened from a commit's files** lands on that file tree,
   its cursor on the review's row, instead of on the commit list.
 
+- **Moving along commits with a commit's files open (`l`, then ↑/↓) is fast
+  again, reviews or not, slow disk or not.** A step reads the commit's file
+  list alone — its reviews (a notes-store read per step, the slowdown) are
+  read once the cursor rests for 150 ms and added on top. File lists are
+  cached for the session (a commit's never changes) and every landed list
+  prefetches the 16 commits below and 4 above the cursor, so a held arrow
+  hits the cache and each step shows its own commit's files at once — on a
+  `/mnt` repo, 20 presses a second now all land where one in three did.
+
 ### Fixed
 
 - `gg note list` printed a branch review as `review 49cd781: (branch)`.
