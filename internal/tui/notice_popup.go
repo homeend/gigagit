@@ -125,11 +125,14 @@ func (p *noticePopup) currentNotice(m Model) *notice {
 	return &m.notices[p.sel]
 }
 
-// applyNoticeAction removes the notice (acting or dismissing removes it),
-// records the dismissal kind, and runs the action's op if it has one.
+// applyNoticeAction removes the notice (acting or dismissing removes it —
+// unless the action says keep: a copy is not a dismissal), records the
+// dismissal kind, and runs the action's op if it has one.
 func (m Model) applyNoticeAction(n notice, act noticeAction) (Model, tea.Cmd) {
-	m = m.removeNotice(n.id)
-	m.noticeSessionDismissed[n.id] = true // a mid-session health re-read must not resurrect it
+	if !act.keep {
+		m = m.removeNotice(n.id)
+		m.noticeSessionDismissed[n.id] = true // a mid-session health re-read must not resurrect it
+	}
 	if act.never {
 		if m.promptStore == nil {
 			m.statusMsg = i18n.T("dismissed for this session (no state dir — can't persist)")

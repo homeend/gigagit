@@ -81,6 +81,8 @@ func linkOriginText(text string) string {
 		return i18n.T("copied from a saved shelf")
 	case "stash":
 		return i18n.T("copied from a saved stash")
+	case "version":
+		return i18n.T("copied from a recorded version")
 	}
 	return ""
 }
