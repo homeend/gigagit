@@ -19,7 +19,8 @@ type worktreeFiles struct {
 	all       []string
 	untracked map[string]bool
 	letters   map[string]string // path → its status letter ("" = clean)
-	query     string
+	query     string            // the filter in force (field.Value() while typing)
+	field     textfield         // the editor behind query while typing: cursor-aware
 	typing    bool
 	loading   bool
 }
@@ -169,7 +170,7 @@ func (m Model) wtTitle() string {
 func (m Model) wtSearchLine() string {
 	switch w := m.wtFiles; {
 	case w.typing:
-		return "/" + w.query + "█"
+		return "/" + w.field.View(true)
 	case w.query != "":
 		return "/" + w.query
 	}
@@ -190,6 +191,7 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if w.typing {
 		if nm, nq, handled, commit := m.recallUpdate(scopeFiletree, msg, w.query); handled {
 			m = nm
+			w.field = newTextField(nq)
 			m.wtSetQuery(nq)
 			var cmd tea.Cmd
 			m, cmd = m.wtCursorMoved()
@@ -213,16 +215,16 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case tea.KeyEnter:
 			w.typing = false
 			return m.recordSearch(scopeFiletree, w.query)
-		case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
-			if r := []rune(w.query); len(r) > 0 {
-				m.wtSetQuery(string(r[:len(r)-1]))
-			}
-		case tea.KeySpace:
-			m.wtSetQuery(w.query + " ")
-		case tea.KeyRunes:
-			m.wtSetQuery(w.query + string(msg.Runes))
 		default:
-			return m, nil
+			// The field edits at its cursor: runes, space, backspace/delete,
+			// ←/→ (ctrl or alt: by word), home/end, ctrl+w. Anything else
+			// is swallowed while typing.
+			if !w.field.HandleEditKey(msg) {
+				return m, nil
+			}
+			if v := w.field.Value(); v != w.query {
+				m.wtSetQuery(v)
+			}
 		}
 		return m.wtCursorMoved()
 	}
@@ -232,6 +234,7 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "/":
 		w.typing = true
+		w.field = newTextField(w.query) // edit the kept query, cursor at its end
 		m = m.recallReset()
 	case "esc":
 		if w.query != "" {

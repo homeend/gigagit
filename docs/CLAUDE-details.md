@@ -1192,7 +1192,9 @@ right-column `m.filesPreview`, `closeFilesView` and the esc/`handOffToFilesView`
 return. Its state is `m.wtFiles` (all paths, the untracked set, the query,
 typing); the fuzzy query stays OUT of `filesView.query` (whose substring
 `visible()` would drop fuzzy matches) — `wtSetQuery` rebuilds the rows
-from `fuzzy.Rank` (cap 200) through `commitFileLines`, so F shows the commit
+from `fuzzy.Rank` (cap 200; since 2026-09-28 `internal/fuzzy` = fzf's
+`src/algo` matcher in-process + a parser for fzf's `'exact ^prefix suffix$
+!not` syntax, smart case, path bonus scheme — every fuzzy surface shares it) through `commitFileLines`, so F shows the commit
 view's tree (root files, then one heading per directory; a query's matches
 stay grouped) with a status column — `?` untracked, else the unstaged letter,
 else the staged one, blank when clean (`statusLetters`, built once at load) —

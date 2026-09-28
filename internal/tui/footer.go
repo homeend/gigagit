@@ -270,7 +270,7 @@ func (m Model) footerOverride() (string, bool) {
 	if m.inWorktreeFiles() { // F's window: no commit list, no diff on enter
 		switch {
 		case m.wtFiles.typing:
-			return i18n.T("filter: type a fuzzy query  [↑↓] move  [enter] keep  [esc] clear"), true
+			return i18n.T("filter: fuzzy, 'exact, ^prefix, suffix$, !not  [↑↓] move  [enter] keep  [esc] clear"), true
 		case m.filesPreview != nil && !m.filesTreeFocused && m.filesPreview.p.lsel.on:
 			return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 		case m.filesPreview != nil && !m.filesTreeFocused:

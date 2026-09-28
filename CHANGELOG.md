@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Fuzzy filters use fzf's matcher and syntax
+
+### Changed
+
+- Every fuzzy filter — the working-tree files window's `/`, the file
+  path popup's suggestions, the branch-name suggestions (TUI and web), the
+  web's files finder — is now scored by fzf's own matcher, imported as a Go
+  package (no fzf binary involved, so every platform ranks alike), and reads
+  fzf's syntax: a plain term is fuzzy (`fvgo` → `files_view.go`), `'darwin`
+  needs the literal substring, `^docs` a prefix, `.md$` a suffix, `!test`
+  excludes, space-separated terms must all match, and a capital letter makes
+  a term case-sensitive. A literal hit outranks a scattered one, so `darwin`
+  no longer lists `arrow-focus-design.md` above `darwin.go`; `'darwin` drops
+  it altogether.
+- The working-tree files window's filter line is an editable field: `←`/`→`
+  move the cursor, `ctrl+←`/`ctrl+→` (or `alt+`) jump by word, `home`/`end`,
+  `backspace`/`delete` erase around the cursor and `ctrl+w` a word; typing
+  inserts at the cursor. `/` on a kept query reopens it with the cursor at
+  the end.
+
 ## License: PolyForm Noncommercial 1.0.0
 
 ### Changed
