@@ -292,17 +292,20 @@ func withReviewLines(reviews []domain.Review, lines []contentLine) []contentLine
 	return append(out, lines...)
 }
 
-// reviewRowText is a review's row: "◆ 2026-09-28 18:12 · Claude Code · Review: …".
+// reviewRowText is a review's row under the Reviews heading:
+// "└ 2026-09-28 18:12 Claude Code" (the heading already says it is a review).
 func reviewRowText(r domain.Review) string {
-	parts := []string{}
+	var parts []string
 	if !r.Created.IsZero() {
 		parts = append(parts, r.Created.Local().Format("2006-01-02 15:04"))
 	}
 	if a := strings.TrimSpace(r.Agent); a != "" {
 		parts = append(parts, sanitizeLine(a))
 	}
-	parts = append(parts, sanitizeLine(r.Summary))
-	return "◆ " + strings.Join(parts, " · ")
+	if len(parts) == 0 {
+		parts = append(parts, sanitizeLine(r.Summary))
+	}
+	return "└ " + strings.Join(parts, " ")
 }
 
 // fileLine renders one file row: "<letter>  <basename>"; renames show the

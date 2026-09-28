@@ -19,8 +19,8 @@ func TestWithReviewLinesPutsReviewsFirst(t *testing.T) {
 	if len(lines) != 4 || lines[0].text != "Reviews" || !lines[0].heading {
 		t.Fatalf("lines %+v, want the Reviews heading first", lines)
 	}
-	// A review reads as one — its date, agent and title — not as a file.
-	if lines[1].noteID != "ab12cd34" || lines[1].text != "  ◆ 2026-09-27 10:00 · Claude Code · Review: feature" {
+	// Under the Reviews heading a review is "└ <date> <agent>", not a file.
+	if lines[1].noteID != "ab12cd34" || lines[1].text != "  └ 2026-09-27 10:00 Claude Code" {
 		t.Fatalf("review line %+v", lines[1])
 	}
 	if got := withReviewLines(nil, files); len(got) != 2 {
@@ -122,14 +122,14 @@ func TestReviewRowCutsAtItsEnd(t *testing.T) {
 	m := reviewedStackModel(t, "# Verdict\nship it")
 	for i, l := range m.filesView.lines {
 		if l.noteID != "" {
-			m.filesView.lines[i].text = "  ◆ 2026-09-28 20:16 · Claude Code · Review: " + strings.Repeat("long title ", 20) + "END"
+			m.filesView.lines[i].text = "  └ 2026-09-28 20:16 Claude Code " + strings.Repeat("long agent ", 20) + "END"
 		}
 	}
 	m.filesTreeFocused = false // no reveal over the row
 	view := ansi.Strip(m.View())
 	for _, l := range strings.Split(view, "\n") {
-		if strings.Contains(l, "◆ 2026-09-28") {
-			if strings.Contains(l, "END") || !strings.Contains(l, "· Claude Code ·") {
+		if strings.Contains(l, "└ 2026-09-28") {
+			if strings.Contains(l, "END") || !strings.Contains(l, "20:16 Claude Code") {
 				t.Fatalf("review row cut in the middle: %q", l)
 			}
 			return

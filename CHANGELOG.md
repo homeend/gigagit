@@ -64,7 +64,7 @@ branches, and the web UI.
 ### Changed
 
 - **A commit's reviews** are listed under a `Reviews` heading as
-  `◆ 2026-09-28 18:12 · Claude Code · Review: …` instead of a fake
+  `└ 2026-09-28 18:12 Claude Code` instead of a fake
   `R  review-<date>-<id>.md` file under `@notes/` (View all notes too).
 - **A Branches review sub-row** reads `└ Review: 2026-09-28 18:12 Claude Code`,
   set in under the branch name (no age, no title).
