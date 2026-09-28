@@ -764,9 +764,11 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	// q is inert here: only the base layout quits on q. esc is the back key;
 	// ctrl+c (handled above) remains the universal quit.
-	case "ctrl+t": // a focused preview fills the screen, and back
+	case "ctrl+t": // a focused preview fills the screen, and back; the tree likewise
 		if m.filesPreview != nil && !m.filesTreeFocused {
 			m.previewFull = !m.previewFull
+		} else if m.filesTreeFocused {
+			m.filesFull = !m.filesFull // long paths show whole
 		}
 		return m, nil
 	case "ctrl+]":

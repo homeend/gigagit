@@ -432,3 +432,77 @@ func TestReviewOverviewNoOtherNotes(t *testing.T) {
 		t.Fatal("o opened an empty list")
 	}
 }
+
+// With an agent console docked (unfocused), the review view's tree keeps the
+// keyboard: enter on ≡ Overview opens the overview, not the console.
+func TestReviewTreeKeepsKeysWithConsoleDocked(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m.console = &consoleState{id: "s1"}
+	m.filesView.sel = 0
+	m, _ = updateKey(m, "enter")
+	if m.console.focused {
+		t.Fatal("enter on the tree focused the docked console")
+	}
+	if layerOf[*reviewOverviewPopup](m) == nil {
+		t.Fatalf("enter on Overview with a console docked: top %T", m.topLayer())
+	}
+}
+
+// ctrl+t on a commit's (and a review's) file tree spans the whole body, so
+// long paths show whole; again, and back.
+func TestFilesTreeCtrlTFullscreen(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m, _ = updateKey(m, "ctrl+t")
+	if !m.filesFull {
+		t.Fatal("ctrl+t on the tree did not fill the body")
+	}
+	if g := m.layout(); g.rightW != 0 {
+		t.Fatalf("the commit column still shows: rightW=%d", g.rightW)
+	}
+	m, _ = updateKey(m, "ctrl+t")
+	if m.filesFull {
+		t.Fatal("ctrl+t again did not restore the split")
+	}
+}
+
+// The overview's own keys sit with the window's key hints, one blank line
+// below the prose — not on the prose's indent right under its last line.
+func TestReviewOverviewKeysSitWithTheHints(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m.filesView.sel = 0
+	m, _ = updateKey(m, "enter")
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	ki, hi := -1, -1
+	for i, l := range lines {
+		if strings.Contains(l, "[y] copy") {
+			ki = i
+		}
+		if strings.Contains(l, "[/] search  [ctrl+w] mode") && hi < 0 {
+			hi = i
+		}
+	}
+	if ki < 0 || hi != ki+1 {
+		t.Fatalf("keys row %d, hints row %d: want the keys right above the hints", ki, hi)
+	}
+	if strings.Trim(lines[ki-1], "│║ ") != "" {
+		t.Fatalf("no blank line above the keys: %q", lines[ki-1])
+	}
+	if strings.Index(lines[ki], "[y]") != strings.Index(lines[hi], "[/]") {
+		t.Fatalf("keys not on the hints' margin:\n%s\n%s", lines[ki], lines[hi])
+	}
+}
+
+// Focus leaving a full-screen commit tree (the commit list, a preview) brings
+// the split back: nothing the keyboard is on may be hidden.
+func TestFilesTreeFullYieldsWhenFocusLeaves(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m, _ = updateKey(m, "ctrl+t")
+	m = m.focusRight()
+	if g := m.layout(); g.rightW == 0 {
+		t.Fatal("the commit list has focus but its column is hidden")
+	}
+}

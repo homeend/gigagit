@@ -95,7 +95,11 @@ type contentPopup struct {
 	mode    dispMode // text display mode; z cycles
 	hscroll int      // modeScroll horizontal offset
 	footer  string   // optional line above the hint (e.g. commit author · date); "" = none
-	danger  bool     // frame the box in red — a failure, not information (error_popup.go)
+	// keys are the window's own bindings ("[y] copy  [o] other notes"): a line
+	// on the hints' margin right above them, set off from the content by a
+	// blank line — actions, not one more line of the text. "" = none.
+	keys   string
+	danger bool // frame the box in red — a failure, not information (error_popup.go)
 	// noCursor drops the row cursor: no "> " marker and no reverse-video
 	// highlight. A viewer showing one prose message has nothing to select or
 	// act on, so the cursor is noise — the rows are text, not choices.
@@ -420,6 +424,12 @@ func (p *contentPopup) box(m Model) string {
 			extra++
 		}
 	}
+	if p.keys != "" {
+		extra++ // the keys line
+		if !p.block {
+			extra++ // and its blank above (block mode already drew one)
+		}
+	}
 	if p.saved != "" {
 		extra += 2
 	}
@@ -483,6 +493,12 @@ func (p *contentPopup) box(m Model) string {
 			noteW, notePad = bodyW, pad
 		}
 		b.WriteString(notePad + st().saveBanner.Width(noteW).Render(truncate(i18n.T("saved to %s", p.saved), noteW)) + "\n\n")
+	}
+	if p.keys != "" {
+		if !p.block && p.saved == "" {
+			b.WriteString("\n")
+		}
+		b.WriteString(pad + truncate(p.keys, textW-gutter) + "\n")
 	}
 	hint := i18n.T("[/] search  [ctrl+w] mode  [s] save  [ctrl+t] full  [q] close")
 	if len(vis) > capRows {

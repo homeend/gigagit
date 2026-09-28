@@ -129,9 +129,11 @@ func (m Model) layout() layoutGeom {
 			g.leftW, g.rightW = w, 0
 		}
 	}
-	// ctrl+t in F's window: the files view spans the whole body (no Commits
-	// column; the render skips a right column whose box is gone).
-	if m.filesView != nil && m.filesFull {
+	// ctrl+t in F's window, or on a focused commit tree: the files view spans
+	// the whole body (no Commits column; the render skips a right column whose
+	// box is gone). A commit tree yields it while focus is on the commit list
+	// or a preview — the keyboard is never on a hidden column.
+	if m.filesView != nil && m.filesFull && (m.inWorktreeFiles() || m.filesTreeFocused) {
 		delete(g.boxH, panelCommits)
 		delete(g.pos, panelCommits)
 		g.leftW, g.rightW = w, 0

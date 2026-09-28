@@ -301,7 +301,7 @@ func (m Model) footerOverride() (string, bool) {
 			if m.comparePair != nil { // a branch pair: f cycles the origin filter
 				aHint = i18n.T("  [f] filter")
 			}
-			return i18n.T("tree: [↑/↓] move  [enter] diff") + aHint + i18n.T("  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view") + msgHint + i18n.T("  [esc/l] close"), true
+			return i18n.T("tree: [↑/↓] move  [enter] diff") + aHint + i18n.T("  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view") + "  " + i18n.T("[ctrl+t] full") + msgHint + i18n.T("  [esc/l] close"), true
 		}
 		// The list side under an open tree can be the STASH list — its keys
 		// differ (enter is inert, the graph/all-files keys don't apply, "."
