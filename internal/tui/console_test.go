@@ -235,3 +235,77 @@ func TestConsolePushesItsSizeWhenItGainsFocus(t *testing.T) {
 		t.Fatalf("after focus: focused=%v emulator %dx%d, want %dx%d", m.console.focused, sc.Cols, sc.Rows, cols, rows)
 	}
 }
+
+// ctrl+t on a left panel fullscreens it even while an agent console is docked
+// in the Commits column: the console is a right-column occupant like the
+// commit list, not a surface the pin must yield to. The console hides with the
+// column and comes back, at its column size, when the pin drops.
+func TestFullscreenLeftPanelHidesDockedConsole(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `printf 'HELLO-CONSOLE'; sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	waitScreen(t, s, "HELLO-CONSOLE")
+	m = press(t, m, m.stepOutKey()) // keyboard back to gg
+	m = press(t, m, "tab")          // focus a left panel
+	if m.focus == panelCommits {
+		t.Fatalf("tab left focus on Commits")
+	}
+	left := m.focus
+
+	m = press(t, m, "ctrl+t")
+	if !m.fullMaxed || m.fullMax != left || !m.fullMaxActive() {
+		t.Fatalf("ctrl+t with a docked console: fullMaxed=%v fullMax=%v active=%v", m.fullMaxed, m.fullMax, m.fullMaxActive())
+	}
+	if m.console == nil {
+		t.Fatal("the pin must hide the console, not close it")
+	}
+	if g := m.layout(); g.boxH[panelCommits] != 0 || g.leftW != g.w {
+		t.Fatalf("pinned layout: commits box %d, leftW %d of %d", g.boxH[panelCommits], g.leftW, g.w)
+	}
+	if out := m.View(); strings.Contains(out, "HELLO-CONSOLE") {
+		t.Fatal("a fullscreen left panel still painted the console")
+	}
+	if !m.console.focused && m.focus != left {
+		t.Fatalf("focus drifted to %v", m.focus)
+	}
+
+	m = press(t, m, "ctrl+t")
+	if m.fullMaxed {
+		t.Fatal("second ctrl+t must drop the pin")
+	}
+	if out := m.View(); !strings.Contains(out, "HELLO-CONSOLE") {
+		t.Fatal("console missing after the pin dropped")
+	}
+	w, h := m.consoleBox()
+	cols, rows := consoleInner(w, h)
+	if sc := s.Screen(); sc.Cols != cols || sc.Rows != rows {
+		t.Fatalf("emulator %dx%d after the round trip, want the column size %dx%d", sc.Cols, sc.Rows, cols, rows)
+	}
+}
+
+// Opening a console while a left panel is fullscreen clears the pin: the user
+// asked to see the agent, and a pinned column would put the keyboard on a
+// hidden console and shrink its PTY to nothing.
+func TestOpenConsoleClearsFullscreenPin(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m.focus = panelBranches
+	m = press(t, m, "ctrl+t")
+	if !m.fullMaxActive() {
+		t.Fatal("baseline: Branches should be fullscreen")
+	}
+	m, _ = m.openConsole(s.Info().ID)
+	if m.fullMaxed || !m.console.focused || m.focus != panelCommits {
+		t.Fatalf("after open: fullMaxed=%v focused=%v focus=%v", m.fullMaxed, m.console.focused, m.focus)
+	}
+	w, h := m.consoleBox()
+	if w != m.layout().rightW || h != m.layout().bodyH {
+		t.Fatalf("console box %dx%d, want the Commits column %dx%d", w, h, m.layout().rightW, m.layout().bodyH)
+	}
+	cols, rows := consoleInner(w, h)
+	if sc := s.Screen(); sc.Cols != cols || sc.Rows != rows {
+		t.Fatalf("emulator %dx%d, want %dx%d", sc.Cols, sc.Rows, cols, rows)
+	}
+}

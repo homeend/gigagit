@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Fullscreen a left panel while an agent console is docked
+
+### Fixed
+
+- ctrl+t on Branches/Worktrees/Files/Staged now fullscreens the panel while
+  an agent console is shown in the Commits column. The console was wrongly
+  treated as a surface the pin must yield to (like the stash list), so the
+  key was inert; it now hides with the column and returns at its column size
+  when the pin drops. Opening a console while a panel is fullscreen (a left
+  panel or Commits) drops the pin so the agent is shown — closing the
+  console then returns to the normal split rather than resuming fullscreen.
+
 ## Kill and remove an agent session with one key
 
 ### Added

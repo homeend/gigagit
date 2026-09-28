@@ -3517,8 +3517,12 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
 - **`m.console *consoleState`** is a right-column owner like `stashView` /
   `filesPreview` (rendered first in `renderInterface`'s right-column switch;
   maximised = the whole body). Opening the stash list or a file preview hides
-  it; it joins `fullscreenYielded`. `reRoot` never touches it — sessions and
-  their console outlive worktree/repo switches.
+  it. It is NOT in `fullscreenYielded`: a ctrl+t fullscreen left panel simply
+  hides the console with the Commits column (the layout deletes the box, so
+  nothing can focus or resize it) and it returns when the pin drops;
+  `openConsole` clears an active pin so a freshly shown console is never born
+  hidden. `reRoot` never touches it — sessions and their console outlive
+  worktree/repo switches.
 - **Key routing** (`updateConsoleKey`) sits right after the decision modal and
   BEFORE `ctrl+o`/`ctrl+p`/`proc`/the layer stack: a focused console must get
   the chords agents use (Claude: ctrl+o, esc, ctrl+t…). Only `stepOutKey()` /

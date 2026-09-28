@@ -4120,9 +4120,14 @@ func (m Model) canMaximizeLeft() bool {
 // fullscreenYielded reports whether a surface that needs its own column is
 // up (files view, stash list, file preview). While one is, the T pin is
 // suspended — layout ignores it and focusCommitsPanel must not transfer it,
-// because the surface's close path restores its own remembered focus.
+// because the surface's close path restores its own remembered focus. A
+// docked agent console is NOT such a surface: it occupies the Commits column
+// like the commit list and simply hides with it while a left panel is
+// fullscreen (the layout deletes the Commits box, so nothing can focus or
+// resize it), then comes back when the pin drops. openConsole clears an
+// active pin so a freshly shown console is never born hidden.
 func (m Model) fullscreenYielded() bool {
-	return m.filesView != nil || m.stashView != nil || m.filesPreview != nil || m.console != nil
+	return m.filesView != nil || m.stashView != nil || m.filesPreview != nil
 }
 
 // canFullMaximize reports whether ctrl+t can pin the focused panel fullscreen:
