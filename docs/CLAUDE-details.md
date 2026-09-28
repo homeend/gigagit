@@ -3516,6 +3516,67 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   a `[[tools.command]] category="session" command='bash --norc'` block makes a
   deterministic agent. The Worktrees tab is `C-Right C-Right` from Branches.
 
+### Web attach — agent consoles in `gg web` (plan 1, 2026-09-28)
+
+Spec `docs/superpowers/specs/2026-09-28-web-attach-design.md`, plan
+`docs/superpowers/plans/2026-09-28-web-attach-plan-1-watch-and-type.md`.
+Rulings (do not re-ask): scope C (watch/type + lifecycle + task sessions;
+lifecycle is plan 2), rendering = the server's screen repainted (no
+xterm.js), input over POST (no WebSocket), the focused viewer owns the
+size, the TUI's two keys + one tabbed popup, a layer over the panes, a
+dedicated SSE stream per console, session states (erbrus port) = plan 3.
+
+- **Frame protocol** (`console_stream.go`): `GET /api/session-screen?id=`
+  → `hello {frame, palette}` (a full frame + the 16 basic colours), then
+  `frame`, `exited {code}`, `gone`. A frame is `{full, cols, rows, cx, cy,
+  cursor, alt, lines:[{y, runs:[{t, fg, bg, b,i,u,r,d,s}]}]}`; a partial
+  frame lists only the rows that changed since the frame THIS stream last
+  wrote, a full one every row (fresh attach, size change, or after the
+  stream was skipped). Runs come from `agentsession.ScreenRuns()` (cells
+  under `ioMu`, equal styles merged, a wide glyph's right half skipped,
+  trailing default blanks trimmed — a blank row has no runs; colours as
+  `#rrggbb`; the cursor is NOT painted into the runs, the page draws it).
+- **Producer** (`screenFeeds`): one goroutine per session while it has
+  streams; waits on the session's `Changed()`, coalesces 40 ms, snapshots
+  once and `publish`es to every subscriber (1-slot buffers: a full one is
+  skipped and its next screen is marked `Full`); `send` delivers exit/gone
+  with a bounded wait. Removal is POLLED once a second (`Get(id)`), because
+  **`domain.Sessions().Changed()` is ONE coalesced channel and
+  `watchSessions` (sessions_http.go) is its only web receiver** — a second
+  receiver steals signals. The TUI also waits on a session's own
+  `Changed()` while showing it; both repaint from a fresh snapshot, so a
+  stolen per-session signal costs one late frame at most.
+- **Input** (`console_input.go`): `POST /api/session-input {id, keys, paste}`
+  decodes every key BEFORE sending any (a bad key refuses the batch), 409
+  for an exited session; keys are `domain.ConsoleKey {k, mod, text}` —
+  allowlisted names, mod bits shift=1 ctrl=2 alt=4 — mapped by
+  `domain.ConsoleKeyEvent` to the SAME emulator events the TUI's
+  `consoleSpecial` sends; plain text (no ctrl/alt) goes through `SendText`
+  as one write (IME commits, bursts). `POST /api/session-size` clamps to
+  20..500 × 5..300.
+- **Page** (`static/console.js`): a fixed layer positioned over the panes
+  right of the sidebar (over everything when maximized or the sidebar is
+  hidden), a `<div>` per row / `<span>` per run, the cell measured from a
+  20-char probe, the cursor a positioned block (outline when unfocused).
+  Keys queue while a POST is in flight and flush as one batch; `paste`
+  rides the paste event. `keyToWire` returns null for the browser's own
+  keys (ctrl+w/t/n, ctrl+tab, ctrl+shift+letter, F5/F11/F12) so they keep
+  their default. `m` maximizes (Chrome owns ctrl+t). The console and the
+  switcher never import each other: the console asks for the switcher via
+  a `gg:switcher` document event.
+- **Live events:** `/api/events` carries Reason `sessions` (the whole list)
+  via `fanOut`, bypassing the op gate; `live.js` feeds it to the switcher,
+  the console (retitle / close on gone) and the sidebar (`takeSessions`).
+- **Size ownership on the TUI side:** `syncConsoleSizeIfFocused` on
+  `tea.WindowSizeMsg`; `enter` on an unfocused console calls
+  `syncConsoleSize` (focus gain takes the size back). Open, maximize and
+  the ctrl+] un-maximize keep pushing (the user's own actions).
+- **Browser check** (`attach_browser_test.go`, `GG_BROWSER_CHECK=1`): plan 1
+  has no web start path, so a test hosts a real `sh` session + page and
+  holds until `GG_BROWSER_DONE` appears; playwright drives it. Gotcha: the
+  steer-hint wiring pin expects the exact string `revealHintEntry } from
+  "./sidebar.js"` in live.js — keep that import's last name.
+
 ### Agent console: UTF-8 in OSC payloads (fix, 2026-09-24)
 
 `x/ansi`'s transition table (`parser/transition_table.go`, Osc_string and

@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Web attach, plan 1: agent consoles in `gg web` (watch and type)
+
+### Added
+
+- **`gg web` shows the agent sessions of its process.** `ctrl+\` is now a
+  tabbed switcher — **Agents** (every repo, grouped repo → worktree; `●`
+  running, `○` exited, a task-backed session in the task colour), **AI
+  tasks** (read-only in this plan) and **Open files** — opening on the
+  freshest tab. `enter` on a session opens it as a **live console over the
+  panes**: the server's screen painted as styled runs over the console's own
+  SSE stream (`GET /api/session-screen`), so every frame is the whole truth
+  and a slow tab can never show garbage. Typing and paste go to the agent
+  (`POST /api/session-input`, the same emulator key events the TUI sends);
+  a focused console sends every key except `ctrl+]` (step out) and
+  `ctrl+\`; ctrl+w, ctrl+t and ctrl+n stay with the browser (the foot says
+  so). Unfocused: `enter` focus, `m` maximize, `esc` close (the session
+  keeps running). **The viewer that has the console focused owns the
+  session's size** (`POST /api/session-size`); others scroll. The sidebar
+  shows one sub-row per session under its worktree (`└ ● claude running
+  12m`), a click opens it; a session exiting raises a toast. Sessions are
+  started from the TUI in this plan; starting, killing and removing from
+  the web is plan 2.
+- `GET /api/sessions`, `GET /api/tasks` (read-only) and a `sessions` live
+  event that bypasses the operation gate, so a session's exit shows mid-op.
+- `agentsession.Session.ScreenRuns()` (the grid as styled runs) and
+  `Text()`; `domain.ConsoleKeyEvent` (the browser key table) and
+  `ClampConsoleSize`.
+
+### Changed
+
+- **TUI console size ownership:** an unfocused docked console no longer
+  pushes its size on a window resize (it follows whichever viewer is
+  typing and clips); gaining focus (`enter`, opening, `ctrl+t`) pushes it.
+
 ## License: PolyForm Noncommercial 1.0.0
 
 ### Changed
