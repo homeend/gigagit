@@ -399,6 +399,8 @@ func (m Model) renderDiffView() string {
 		lines = append(lines, i18n.T("  (loading…)"))
 	case v.err != nil:
 		lines = append(lines, truncate(i18n.T("  error: %s", v.err.Error()), w))
+	case v.binary && v.hasImages():
+		lines = append(lines, v.imageLines(w, body)...)
 	case v.binary:
 		lines = append(lines, i18n.T("  (binary file)"))
 	case v.tooLarge:
@@ -413,6 +415,9 @@ func (m Model) renderDiffView() string {
 	hint := diffHintFor(v.long, v.stk != nil, m.hunkKeyApplies())
 	if v.lsel.on {
 		hint = diffSelectHint()
+	}
+	if v.stk == nil && v.hasImages() {
+		hint = v.imageHint()
 	}
 	lines = append(lines, truncate(hint, w))
 	return strings.Join(lines, "\n")

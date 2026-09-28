@@ -6,6 +6,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Image pairs in the diff view
+
+### Added
+
+- A diff whose sides are images (a modified, added or deleted PNG/JPEG/GIF
+  — from the Files and Staged tabs, a commit's files, or a comparison) now
+  draws both images instead of `(binary file)`, in one of three layouts
+  cycled by `ctrl+w` (the text display modes mean nothing on an image):
+  **side by side** (old left, new right), **stacked** (old above new, the
+  full width each) and **one at a time** (one image at the full pane; `tab`
+  flips between old and new in place — the quickest way to spot a change
+  between two small thumbnails). Each side has an info line with its format,
+  pixel size and byte size; the hint line names the layout; the choice lasts
+  for the session. A one-sided pair shows its one image whatever the layout.
+  The stacked all-files view (`H`) keeps the placeholder for now.
+
 ## Binary files are never previewed as text; images are previewed as cells
 
 ### Fixed

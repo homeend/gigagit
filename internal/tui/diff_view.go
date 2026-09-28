@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"image"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -62,10 +63,19 @@ type diffView struct {
 	truncated  bool           // alignment skipped (size guard)
 	binary     bool
 	tooLarge   bool
-	loading    bool
-	err        error
-	cur        int // focused change-block index (the "X" in change X/N); set only by n/p/wrap/mode-toggle
-	curLine    int // cursor: index into lines (never a display row; never a fold) — see diff_cursor.go
+	// A binary pair whose sides decode as images (diff_images.go): the
+	// shrunk images, their info lines, the layout and, one at a time, which
+	// side shows. imgKey/imgLines cache the painted lines for one box.
+	imgOld, imgNew         image.Image
+	imgOldInfo, imgNewInfo string
+	imgLayout              imgLayout
+	imgShowOld             bool
+	imgKey                 string
+	imgLines               []string
+	loading                bool
+	err                    error
+	cur                    int // focused change-block index (the "X" in change X/N); set only by n/p/wrap/mode-toggle
+	curLine                int // cursor: index into lines (never a display row; never a fold) — see diff_cursor.go
 	// onOld is the SIDE the line cursor sits on: false = the new (right) pane,
 	// which is where a view opens. alt+←/→ flip it (spec §4.7). It decides
 	// which cell wears the marker, which text Copy line / a selection copies,
@@ -691,7 +701,7 @@ func (m Model) openStatusDiff(f model.FileStatus, staged bool) (tea.Model, tea.C
 		}
 		return m.openStack(nav, f.Path, nil)
 	}
-	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, noteAddr: m.statusNoteAddress(f, staged)}
+	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", loading: true, partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, noteAddr: m.statusNoteAddress(f, staged)}
 	if dv := m.diffLayer(); dv != nil {
 		*dv = *v // stepping: reuse the entry already on the stack
 	} else {
@@ -717,7 +727,7 @@ func (m Model) loadStatusDiffCmd(f model.FileStatus, staged bool) tea.Cmd {
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
 	tag := statusDiffTag(f.Path, staged)
-	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", partial: m.diffPartial, long: m.diffLong, width: width, noteAddr: m.statusNoteAddress(f, staged)}
+	v := &diffView{title: f.Path, context: statusDiffContext(staged), rev: "", partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, width: width, noteAddr: m.statusNoteAddress(f, staged)}
 
 	// Staged (HEAD → index): old side is the HEAD blob, absent when the file
 	// isn't in HEAD (untracked, or staged-new 'A'); renames fetch the old name.
@@ -796,6 +806,7 @@ func applyDiff(v *diffView, out domain.Diff, body int) {
 		v.tooLarge = true
 	case out.Binary:
 		v.binary = true
+		v.setImages(out)
 	default:
 		v.full = out.Result.Rows
 		v.fullBlocks = out.Result.Blocks
@@ -821,7 +832,7 @@ func (m Model) loadCommitDiffCmd(hash string, line contentLine) tea.Cmd {
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
 	tag := "commit:" + hash + ":" + line.path
-	v := &diffView{title: line.path, context: "@ " + m.filesContext, rev: hash, partial: m.diffPartial, long: m.diffLong, width: width,
+	v := &diffView{title: line.path, context: "@ " + m.filesContext, rev: hash, partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, width: width,
 		// hash^ → hash is exactly StateCommitted's pair (noteSideLines).
 		noteAddr: model.FileAddress{State: model.StateCommitted, Commit: hash, Path: line.path}}
 	// Immutable: parent(hash)→hash for a path always yields the same bytes.
@@ -887,7 +898,7 @@ func (m Model) loadCompareDiffCmd(left, right model.Endpoint, line contentLine) 
 	body := m.diffBodyRows()
 	width, _ := m.overlayDims()
 	tag := "cmp:" + left.CacheTag() + ":" + right.CacheTag() + ":" + line.path
-	v := &diffView{title: line.path, partial: m.diffPartial, long: m.diffLong, width: width}
+	v := &diffView{title: line.path, partial: m.diffPartial, long: m.diffLong, imgLayout: m.diffImgLayout, width: width}
 	v.inheritIdentity(m.diffLayer())
 	key := compareDiffKey(left, right, line.path)
 
@@ -1018,6 +1029,21 @@ func (m Model) updateDiffViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// in a stack (diff_stack_keys.go). S itself is handled there for both.
 	if nm, cmd, handled := m.stackKey(v, msg, body); handled {
 		return nm, cmd
+	}
+	if v.hasImages() {
+		// An image pair has no text modes: ctrl+w cycles its layout instead
+		// (kept for the session), tab flips the side shown one at a time.
+		switch msg.String() {
+		case "ctrl+w":
+			v.imgLayout = (v.imgLayout + 1) % 3
+			m.diffImgLayout = v.imgLayout
+			return m, nil
+		case "tab":
+			if v.imgLayout == imgSingle {
+				v.imgShowOld = !v.imgShowOld
+			}
+			return m, nil
+		}
 	}
 	switch msg.String() {
 	case ".":

@@ -1186,6 +1186,17 @@ for a doc in no frame routes via `openFiles.findTag` (every worktree — the
 (`internal/filewatch`, dir watches + exact-path filter) is only a WAKE-UP —
 an event zeroes `d.checked` and polls; built lazily off-thread only when
 `watchSupported`, closed with the last watched doc and on `reRoot`.
+**Image pairs in the diff view (2026-09-28, `diff_images.go`):** the differ
+decodes a Binary pair's sides (`domain.Diff.OldImg/NewImg`, shrunk to
+`diffImagePx`, weighed by `Size`); `applyDiff` → `setImages` builds the info
+lines; `hasImages` = binary with ≥1 decoded side. `imageLines(w, h)` lays
+them out per `imgLayout` (side-by-side / stacked / single; a one-sided pair
+is always single), cached by layout+box+side in `imgKey/imgLines`;
+`paintImageRows` reuses `imageRowDecorator` (Ascii → `termimg.Ramp`). Keys
+are taken BEFORE the main switch in `updateDiffViewKey`: ctrl+w cycles the
+layout (session default `Model.diffImgLayout`, copied by every constructor),
+tab flips the side in single. The stacked view (`H`) keeps the per-file
+`(binary file)` placeholder.
 **Binary + image previews (2026-09-28):** `loadFileContentSrcCmd` (the ONE
 loader behind the F preview, the full-screen viewer and background docs)
 refuses binary content (`domain.IsBinary`: NUL or invalid UTF-8) — a JPEG
