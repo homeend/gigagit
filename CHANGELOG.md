@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Recycle a worktree
+
+### Added
+
+- **Branches `.` → "Recycle a worktree…"** on a local branch no worktree has
+  checked out: pick one of the repo's other worktrees and gg checks the
+  branch out THERE. A dirty target asks `commit` (everything, untracked
+  included, as `Committed changes due to worktree recycle <date>` on the
+  branch that is leaving) / `discard` (hard reset + clean: untracked files
+  deleted, ignored files kept) / `abort`. Paused ops, lock files and an
+  already-checked-out branch are refused up front. The worktree gg runs in
+  is never listed; one with a running agent session asks first.
+- **`gg worktree recycle [--on-dirty=commit|discard|abort] <path> <branch>`**
+  — the same from the CLI; a pipeline without the flag fails rather than
+  touch the tree. The path resolves like `worktree remove`'s (as given,
+  absolute, or relative to the main worktree root).
+- Engine: `RecycleWorktree{Dir, Branch}` and the `OpDeps.RepoAt` seam
+  (`git.Repo.InDir`, a `-C <dir>` view) — the first op that acts on a
+  worktree gg is not running in.
+
+Follow-ups: a `shelve` answer (after the multi-file shelf), remote-only
+branches, and the web UI.
+
 ## Kill and remove an agent session with one key
 
 ### Added
