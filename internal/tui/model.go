@@ -153,12 +153,13 @@ type Model struct {
 	filesReadInflight bool                   // a per-commit files-view CommitFiles read is outstanding; drop further nav reads until it lands (pure-drop pacing on large repos)
 	filesPreview      *openFile              // full-tree mode: the file shown in the right column (nil = none)
 
-	diffTag     string      // request key of the wanted diff; gates stale async results
-	diffNav     diffNavKind // which list the open diff was opened from (Home/End file-stepping)
-	diffNotice  string      // transient bottom-left diff-view notice (file arrival / no-file); cleared on the next key
-	diffPartial bool        // session default for new diffs (false = full); the f key toggles it
-	diffLong    longMode    // session: long-line mode for new diffs (0 = scroll); w cycles
-	diffCursor  string      // session override of [ui] diff_cursor ("" = follow config); the . menu's Cursor marker row cycles it
+	diffTag       string      // request key of the wanted diff; gates stale async results
+	diffNav       diffNavKind // which list the open diff was opened from (Home/End file-stepping)
+	diffNotice    string      // transient bottom-left diff-view notice (file arrival / no-file); cleared on the next key
+	diffPartial   bool        // session default for new diffs (false = full); the f key toggles it
+	diffLong      longMode    // session: long-line mode for new diffs (0 = scroll); w cycles
+	diffImgLayout imgLayout   // session: how an image pair is laid out in a diff; ctrl+w cycles
+	diffCursor    string      // session override of [ui] diff_cursor ("" = follow config); the . menu's Cursor marker row cycles it
 	// diffStacked is the S key's preference: a diff opened from a file list
 	// shows EVERY file of that list in one scroll (diff_stack.go). Read from
 	// promptstate at startup and written back on every flip — machine-local,

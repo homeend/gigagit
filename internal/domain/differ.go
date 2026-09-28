@@ -2,10 +2,12 @@ package domain
 
 import (
 	"context"
+	"image"
 	"sync"
 
 	"github.com/homeend/gigagit/internal/cache"
 	"github.com/homeend/gigagit/internal/syntax"
+	"github.com/homeend/gigagit/internal/termimg"
 	"github.com/homeend/gigagit/internal/textdiff"
 )
 
@@ -45,6 +47,14 @@ type Diff struct {
 	Result   textdiff.Result // valid unless Binary or TooLarge
 	Binary   bool
 	TooLarge bool
+	// A Binary pair's sides that decode as images (PNG/JPEG/GIF), shrunk to
+	// a bounded working copy (termimg.Shrink), with their format and byte
+	// size — nil/"" for an absent or undecodable side. A frontend draws an
+	// image pair instead of the binary placeholder.
+	OldImg, NewImg     image.Image
+	OldKind, NewKind   string
+	OldBytes, NewBytes int
+	OldDim, NewDim     image.Point // the ORIGINAL pixel size (the working copy is shrunk)
 	// OldTok/NewTok hold syntax runs per SOURCE line (index = line number − 1,
 	// the Row.LeftNo/RightNo numbering), so no row mapping is needed and the
 	// shared rows stay untouched. nil when highlighting is off, the language
@@ -63,6 +73,12 @@ type Diff struct {
 // all later opens.
 func (d Diff) Size() int {
 	n := 0
+	for _, img := range []image.Image{d.OldImg, d.NewImg} {
+		if img != nil {
+			b := img.Bounds()
+			n += 4 * b.Dx() * b.Dy() // the shrunk RGBA working copy
+		}
+	}
 	for _, r := range d.Result.Rows {
 		n += len(r.Left) + len(r.Right) + 48 // 48 ≈ Row + slice-header overhead
 	}
@@ -99,6 +115,25 @@ func NewDiffer(opts DifferOptions, c cache.Cache) Differ {
 	return d
 }
 
+// diffImagePx bounds a decoded side's working copy (each side): wider than
+// any terminal's cell count, and 1 MB of RGBA at most, so a run of image
+// commits cannot evict the text diffs from the 64 MiB diff cache.
+const diffImagePx = 512
+
+// decodeImage decodes one binary side as an image, shrunk to diffImagePx;
+// nil for an absent side or anything that is no PNG/JPEG/GIF.
+func decodeImage(data []byte) (image.Image, string, image.Point) {
+	if len(data) == 0 {
+		return nil, "", image.Point{}
+	}
+	img, kind, err := termimg.Decode(data)
+	if err != nil {
+		return nil, "", image.Point{}
+	}
+	b := img.Bounds()
+	return termimg.Shrink(img, diffImagePx, diffImagePx), kind, image.Point{X: b.Dx(), Y: b.Dy()}
+}
+
 type plainDiffer struct {
 	enhanced bool
 	syntax   func() bool
@@ -117,7 +152,10 @@ func (d plainDiffer) Diff(ctx context.Context, req Request) (Diff, error) {
 		return Diff{TooLarge: true}, nil
 	}
 	if textdiff.IsBinary(old) || textdiff.IsBinary(newB) {
-		return Diff{Binary: true}, nil
+		out := Diff{Binary: true, OldBytes: len(old), NewBytes: len(newB)}
+		out.OldImg, out.OldKind, out.OldDim = decodeImage(old)
+		out.NewImg, out.NewKind, out.NewDim = decodeImage(newB)
+		return out, nil
 	}
 	out := Diff{Result: textdiff.Compare(old, newB, textdiff.Options{Enhanced: d.enhanced})}
 	if d.syntax != nil && d.syntax() && ctx.Err() == nil {

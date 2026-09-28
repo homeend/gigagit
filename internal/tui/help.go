@@ -326,6 +326,7 @@ func helpContent() []contentLine {
 		r("] [", i18n.T("next / previous hit (wraps around)")),
 		r("?", i18n.T("this help, opened with the diff window's keys listed first (the footer truncates on a narrow terminal)")),
 		r("ctrl+w", i18n.T("cycle text display: cutoff / wrap / scroll")),
+		r("ctrl+w / tab", i18n.T("on an image pair (a changed PNG/JPEG/GIF): ctrl+w cycles the layout — side by side / stacked / one at a time — and tab flips old/new when showing one at a time")),
 		r("← → 0", i18n.T("scroll mode: pan left / right / reset")),
 		r("h", i18n.T("history of this file at the shown revision")),
 		r("b", i18n.T("blame of this file at the shown revision")),
