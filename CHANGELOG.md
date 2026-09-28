@@ -29,6 +29,19 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   reviewing-with-gg skill v10.
 - **`gg note list`** shows a review as `review <sha> (<branch>)` instead of a
   line anchor gone "stale".
+- **A window's own keys sit with its hints.** The review overview's `[y] copy
+  [o] other notes` and the PR hub's `[y] copy URL [r] reload` are on the
+  hint line's margin, one blank line below the text.
+- **ctrl+t on a file tree** (a commit's, a review's) spans the whole body, so
+  long paths show whole; moving focus to the commit list or a preview brings
+  the split back.
+
+### Fixed
+
+- **A docked agent console took the review tree's keys.** Opening a review
+  with a console docked and pressing enter on Overview focused the console;
+  a focused files tree now keeps the keyboard (and the bottom bar shows its
+  keys).
 
 ## Reviews open as a review view
 

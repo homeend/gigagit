@@ -506,3 +506,14 @@ func TestFilesTreeFullYieldsWhenFocusLeaves(t *testing.T) {
 		t.Fatal("the commit list has focus but its column is hidden")
 	}
 }
+
+// The bottom bar follows the keyboard: a focused files tree beside an
+// unfocused docked console shows the tree's keys, not the console's.
+func TestFooterFollowsTheTreeBesideADockedConsole(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m.console = &consoleState{id: "s1"}
+	if got := m.footerLine(); strings.Contains(got, "agent console") {
+		t.Fatalf("footer %q advertises the console while the tree has the keys", got)
+	}
+}
