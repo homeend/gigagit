@@ -46,8 +46,8 @@ shared state that does not.
    the TUI to start serving (a new inbox command), wait for `web.json`,
    then post the link to that page as today. A TUI already hosting skips
    to the post. No live TUI → standalone `gg web`, unchanged.
-7. **The hosted page hides its own repo switching** (sidebar repo rows,
-   the palette's "open repo (path)…" entry, the worktree "switch here"
+7. **The hosted page hides its own repo switching** (the palette's "switch
+   repo…" and "open repo (path)…" entries, the worktree menu's "switch here"
    row and the locks "go to worktree" arm). One process, one current
    repository, one switch point: the terminal. Standalone pages keep them.
 
@@ -156,10 +156,10 @@ any of that. Its `domain.Open(target)` becomes `s.opener(target)`.
 
 - `GET /api/repo` gains `"hosted": true|false`.
 - `POST /api/reroot` → 409 while hosted.
-- The page (`static/`): `core.js` state gains `hosted` from `/api/repo`;
-  `sidebar.js` skips the repo rows and the worktree "switch here" row,
-  `palette.js` skips "open repo (path)…", `locks.js` skips "go to
-  worktree" when `hosted`. Everything else (worktree files, sessions,
+- The page (`static/`): `state.hosted` is set from `/api/repo` in `loadRepo`;
+  `palette.js` drops "switch repo…" and "open repo (path)…", `sidebar.js`
+  drops the worktree "switch here" row, `locks.js` skips "go to worktree"
+  when `hosted`. Everything else (worktree files, sessions,
   consoles, ops) is unchanged.
 
 ## `internal/tui` — surface and lifecycle
