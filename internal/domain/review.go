@@ -8,6 +8,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notebatch"
 )
 
 // ReviewKind names the three review targets.
@@ -84,6 +85,9 @@ type ReviewResult struct {
 	Content string
 	Range   string
 	Label   string
+	// Structured: the reply was the review document (Content is then its
+	// canonical form); false = prose, kept as text.
+	Structured bool
 }
 
 // ReviewReport runs resolvedCommand over target via engine.ReviewChanges and
@@ -116,7 +120,9 @@ func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, 
 	if report == "" {
 		return ReviewResult{}, fmt.Errorf("review produced an empty report")
 	}
-	out := ReviewResult{Content: report, Range: target.Range, Label: label}
+	report = canonicalReview(report)
+	_, perr = notebatch.ParseReview([]byte(report))
+	out := ReviewResult{Content: report, Range: target.Range, Label: label, Structured: perr == nil}
 	if target.Kind == ReviewWorking {
 		return out, nil
 	}
