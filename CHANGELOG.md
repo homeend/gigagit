@@ -10,8 +10,9 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 
 ### Added
 
-- **`X` on a running session sub-row** (Worktrees and Branches tabs) kills the
-  agent or terminal session and removes its row once it has exited; `x` keeps
+- **`X` on a running session sub-row** (Worktrees and Branches tabs) asks
+  (Kill / Cancel, default Cancel), then kills the agent or terminal session
+  and removes its row once it has exited; `x` keeps
   removing an exited one only. The footer says `[X] kill+remove` on a running
   sub-row, the `.` menu gained **Kill and remove session**, and the refusal
   `x` gives on a running session now points at `X`. Any console docked on

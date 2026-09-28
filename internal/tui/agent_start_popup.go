@@ -12,6 +12,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
 	"github.com/homeend/gigagit/internal/i18n"
 )
@@ -338,17 +339,35 @@ func (m Model) removeSessionRow(info domain.SessionInfo) Model {
 	return m
 }
 
-// killRemoveSessionRow is X on a session sub-row: the session is killed and
-// its row disappears once the exit is recorded (the manager removes it; the
-// list change closes any console docked on it). On an exited row it is x.
+// killRemoveSessionRow is X on a session sub-row (and the . menu's Kill and
+// remove session): a running session is killed after a Kill/Cancel confirm
+// and its row disappears once the exit is recorded (the manager removes it;
+// the list change closes any console docked on it). On an exited row it is
+// x. Option VALUES stay English (optionDisplayName renders them); Cancel is
+// last so esc resolves to it.
 func (m Model) killRemoveSessionRow(info domain.SessionInfo) Model {
 	if info.State != domain.SessionRunning {
 		return m.removeSessionRow(info)
 	}
-	if err := domain.Sessions().KillAndRemove(info.ID); err != nil {
-		return m
+	id, label, dir := info.ID, info.Label, shortWorktreeName(info.Dir)
+	m.modal = &decisionState{
+		req: engine.DecisionRequest{
+			ID:      "session-kill-remove",
+			Prompt:  i18n.T("Kill %s in %s and remove it from the list?", label, dir),
+			Options: []string{"Kill", "Cancel"},
+		},
+		sel: 1, // default highlight = Cancel
+		onResolve: func(m Model, opt string) (tea.Model, tea.Cmd) {
+			if opt != "Kill" {
+				return m, nil
+			}
+			if err := domain.Sessions().KillAndRemove(id); err != nil {
+				return m, nil // already gone
+			}
+			m.statusMsg = i18n.T("killing and removing %s in %s…", label, dir)
+			return m, nil
+		},
 	}
-	m.statusMsg = i18n.T("killing and removing %s in %s…", info.Label, shortWorktreeName(info.Dir))
 	return m
 }
 

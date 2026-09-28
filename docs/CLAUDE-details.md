@@ -3669,13 +3669,14 @@ UTF-8 payloads correctly (the fixture test tells).
   removes an exited session / refuses a running one; the key handler checks
   `selectedSession` BEFORE `canEnterConflict`, and the global `[x] resolve`
   footer hint yields on such a row (`canRemoveSessionRow` gates `[x] remove`).
-- **`X` on a session sub-row (2026-09-28):** `killRemoveSessionRow` →
+- **`X` on a session sub-row (2026-09-28):** `killRemoveSessionRow` raises a
+  `session-kill-remove` Kill/Cancel modal (default Cancel), Kill →
   `agentsession.Manager.KillAndRemove`: kill, then `Remove` once `Done` closes
   (a goroutine; the session stays listed and live-counted while it dies, so
   `KillAll`/the quit guard still see it — never delete from the map early).
   The row and any console docked on it go away through the ordinary
-  `onSessionsChanged` removal path. On an exited row X is x. No double-press
-  confirm (the ctrl+\ popup's `k` has one); `canKillRemoveSessionRow` gates
+  `onSessionsChanged` removal path. On an exited row X is x. The `.` menu's
+  Kill and remove session confirms the same way; `canKillRemoveSessionRow` gates
   `[X] kill+remove`. The `.` menu row is `session-kill-remove`.
 - **GG_INBOX.** `StartSession`/`StartTerminal` take `env`; the TUI passes
   `GG_INBOX=<steerDir>` (`childEnv`, nil when steering is off) and records

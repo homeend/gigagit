@@ -231,9 +231,9 @@ func TestBranchSubRowsFollowParentUnderSortAndSlotFilter(t *testing.T) {
 
 // Serial: installs a process-global session manager.
 //
-// X on a RUNNING session sub-row (Branches or Worktrees tab) kills the
-// session and removes it from the list once it has exited — x only removes
-// an exited one. The footer advertises it, the . menu carries the same
+// X on a RUNNING session sub-row (Branches or Worktrees tab) confirms, then
+// kills the session and removes it from the list once it has exited — x only
+// removes an exited one. The footer advertises it, the . menu carries the same
 // action, and the console docked on that session closes with the row.
 func TestCapitalXKillsAndRemovesRunningSession(t *testing.T) {
 	m := loadedModel(t)
@@ -257,8 +257,25 @@ func TestCapitalXKillsAndRemovesRunningSession(t *testing.T) {
 
 	mm, _ = m.Update(keyMsg("X"))
 	m = mm.(Model)
+	if m.modal == nil || m.modal.req.ID != "session-kill-remove" {
+		t.Fatalf("X must confirm before killing, modal = %+v", m.modal)
+	}
+	if m.modal.req.Options[m.modal.sel] != "Cancel" {
+		t.Fatalf("the confirm must default to Cancel, sel = %d", m.modal.sel)
+	}
+	mm, _ = m.modal.onResolve(m, "Cancel")
+	m = mm.(Model)
+	m.modal = nil
+	if s.Info().State != domain.SessionRunning {
+		t.Fatal("Cancel killed the session")
+	}
+	mm, _ = m.Update(keyMsg("X"))
+	m = mm.(Model)
+	mm, _ = m.modal.onResolve(m, "Kill")
+	m = mm.(Model)
+	m.modal = nil
 	if !strings.Contains(m.statusMsg, "killing") {
-		t.Fatalf("X must announce the kill, status = %q", m.statusMsg)
+		t.Fatalf("Kill must announce the kill, status = %q", m.statusMsg)
 	}
 	select {
 	case <-s.Done():

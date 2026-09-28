@@ -192,6 +192,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("Drop")
 	case "New branch at version":
 		return i18n.T("New branch at version")
+	case "Kill":
+		return i18n.T("Kill")
 	case "No":
 		return i18n.T("No")
 	case "Push branch + tags":

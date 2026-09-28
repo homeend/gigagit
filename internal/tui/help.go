@@ -99,7 +99,7 @@ func helpContent() []contentLine {
 		r("f", i18n.T("find current: jump the cursor to the worktree gg is running in")),
 		r("d", i18n.T("remove the selected worktree")),
 		r("x", i18n.T("on an exited agent/terminal session sub-row: remove it (a running one is refused)")),
-		r("X", i18n.T("on a running agent/terminal session sub-row: kill it and remove it from the list once it has exited (on an exited one, x)")),
+		r("X", i18n.T("on a running agent/terminal session sub-row: kill it (confirms) and remove it from the list once it has exited (on an exited one, x)")),
 		r("e", i18n.T("rename the selected worktree directory (git worktree move; the current worktree follows the move)")),
 		r(".", i18n.T("Move worktree (.-menu): relocate the selected worktree to any path")),
 		h(i18n.T("Previews panel")),
