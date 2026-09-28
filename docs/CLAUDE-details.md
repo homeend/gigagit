@@ -3533,7 +3533,8 @@ Plan `docs/superpowers/plans/2026-09-24-agent-sessions-plan-2-tui.md`.
   honours DECCKM etc. A NUL-only `KeyRunes` is dropped (Windows bare-modifier
   key-down). Bubble Tea v1 aliases: KeyEnter=ctrl+m, KeyTab=ctrl+i,
   KeyEsc=ctrl+[, KeyBackspace=ctrl+? — one map entry each.
-- **Repaint**: `waitSessionCmd` blocks on the session's `Changed()` then sleeps
+- **Repaint**: `waitSessionCmd` blocks on the console's own `Subscribe()`
+  channel (since 2026-09-28; `Changed()` is gone) then sleeps
   33 ms, so a chatty agent costs ≤30 frames/s; `gen` drops a replaced console's
   waiter. `waitSessionsCmd` (armed in `Init`) carries list changes →
   `onSessionsChanged` (exit notices via `m.sessionStates`).
@@ -3812,14 +3813,16 @@ No UI in plan 2; see "AI tasks — the TUI" below.
   (no orphaned "running" rows after a crash). `<id>.result` / `<id>.tail`
   beside `tasks.toml`; pruning at 50 deletes the files. A failed write
   switches the process to a `MemStore`; `TakeStoreProblem` reports it once.
-- **Frontend hooks for plan 3:** `Changed()` (coalesced), `List`/`Get`
+- **Frontend hooks for plan 3:** `Subscribe()` (per-subscriber coalescing;
+  was the one-slot `Changed()` until 2026-09-28), `List`/`Get`
   (`Results` counts results — apply each once), `Live()` (quit guard),
   `Load(key)` (the dialog's wait line), `History`/`HistoryResult`/
   `HistoryTail`/`RemoveHistory`.
 
 ### AI tasks — the TUI (AI tasks plan 3, 2026-09-26)
 
-- **One consumer of `Tasks().Changed()`:** `waitTasksCmd` (in `Init`) →
+- **The TUI's `Tasks()` subscription** (`taskTrack.current()`; was the ONE
+  consumer of the one-slot `Tasks().Changed()` until 2026-09-28): `waitTasksCmd` (in `Init`) →
   `tasksChangedMsg` → `onTasksChanged`, which re-arms it. `Model.taskTrack`
   (maps, shared across value copies; `ensureTaskTrack` for literal Models)
   remembers per task: results applied (`seen` vs `TaskInfo.Results`), end

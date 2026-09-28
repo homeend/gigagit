@@ -169,6 +169,12 @@ func (s *Server) handleReroot(w http.ResponseWriter, r *http.Request) {
 	// TUI has already configured.
 	applyUIPolicies(r.Context(), cand, s.activeRepoConfigPathOr(r.Context(), cand))
 	if err := s.adoptService(r.Context(), cand); err != nil {
+		if errors.Is(err, ErrPageLive) {
+			// Unreachable for a standalone page (the refusal is hosted-only)
+			// and the swap already happened: report the repo, not a failure.
+			s.writeRepoInfo(w, r, cand)
+			return
+		}
 		writeErr(w, http.StatusConflict, err)
 		return
 	}
@@ -204,6 +210,8 @@ func (s *Server) adoptService(ctx context.Context, svc *domain.Service) error {
 	s.mu.Unlock()
 	s.restartLive(ctx)
 	touchMRU(ctx, svc, s.reposStatePath())
-	s.rehomeSteerPresence(ctx, svc)
-	return nil
+	// The swap is done whatever the presence says: a refused claim (a hosted
+	// page landing where another page serves) leaves the page serving the
+	// new repo with no web.json there, and the caller shows the other URL.
+	return s.rehomeSteerPresence(ctx, svc)
 }

@@ -172,7 +172,9 @@ is exactly this, so a link gg itself printed is always openable). It steers
 whatever gg session is live in the link's checkout (`--no-wait` skips waiting for that
 session's answer), or starts the TUI there positioned on the link; a bare
 repository link (`gg://<repo>`) just opens the TUI in that checkout. `--web`
-names the browser instead: a live `gg web` page is steered (only the page),
+names the browser instead: a live `gg web` page is steered (only the page);
+a live TUI with no page is asked to serve one from its own process (the
+page then shows the TUI's agent sessions) and the link goes to that page;
 otherwise `gg web` is started in that checkout with the browser opened,
 landing on the link — and like the TUI launch it then RUNS IN THE FOREGROUND
 until the user stops it, so do not wait on its exit (steer a page the user
@@ -190,7 +192,7 @@ file has fewer lines) and answers `opened <path> at line N`; when the file
 shrank since the link was made it lands on the last line and says `(line N is
 past the end, M lines)`. `gg open` / `gg session navigate` show it in the TUI's
 content viewer; `gg open --web` shows it in the browser's viewer (a live
-`gg web` page is steered, else one is started). Every other link-taking verb
+page is steered, a live TUI is asked to serve one, else one is started). Every other link-taking verb
 (`gg diff`, `gg show`, `gg note …`, `gg session highlight add`) refuses it
 (exit 2). When the user asks you to "open" a file for them, this is the link
 to build: `gg link --content <path>[:<line>]` → `gg open <link>`.
