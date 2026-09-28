@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -235,5 +237,45 @@ func TestReviewViewNPStepsFilesWithNotes(t *testing.T) {
 	m, _ = updateKey(m, "p")
 	if m.filesView.sel != ai {
 		t.Fatalf("p: sel %d, want %d", m.filesView.sel, ai)
+	}
+}
+
+// Stacked, the review's overview is the first element: its own header, then
+// the rendered markdown, then the files; N from it lands on the first file.
+func TestReviewStackPutsTheOverviewFirst(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m = m.setStackedPref(true)
+	l, _ := filesLine(t, m, "a.go")
+	u, cmd := m.openDiffForFileLine(l)
+	m = drainCmds(t, u.(Model), cmd)
+	v := m.diffLayer()
+	if v == nil || v.stk == nil || len(v.stk.files) == 0 || !v.stk.files[0].overview {
+		t.Fatalf("stack %+v, want the overview first", v)
+	}
+	w, _ := m.overlayDims()
+	hdr := ansi.Strip(m.stackRow(v, dRow{line: v.stk.files[0].hdr, kind: lineHeader}, w, false))
+	if !strings.Contains(hdr, "Overview") {
+		t.Fatalf("overview header %q", hdr)
+	}
+	var prose []string
+	for i, ln := range v.lines {
+		if ln.kind == lineProse {
+			prose = append(prose, ansi.Strip(m.stackRow(v, dRow{line: i, kind: lineProse}, w, false)))
+		}
+	}
+	text := strings.Join(prose, "\n")
+	if !strings.Contains(text, "Overview") || !strings.Contains(text, "Looks fine, see A.") || strings.Contains(text, "##") {
+		t.Fatalf("overview rows:\n%s", text)
+	}
+	for _, f := range v.stk.files[1:] {
+		if f.overview || f.path == "" {
+			t.Fatalf("only the first element is the overview: %+v", f)
+		}
+	}
+	v.goToStackFile(0, m.diffBodyRows())
+	m, _ = updateKey(m, "N")
+	if got := m.diffLayer().curFile(); got != 1 {
+		t.Fatalf("N from the overview: file %d, want 1", got)
 	}
 }

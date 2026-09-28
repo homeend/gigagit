@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/model"
 )
 
@@ -23,6 +24,16 @@ func (m Model) buildTreeStack() []stackFile {
 			continue
 		}
 		out = append(out, stackFile{path: l.path, oldPath: l.oldPath, status: l.status, line: l})
+	}
+	if st := m.filesReview; st != nil && st.review.Doc != nil && len(out) > 0 {
+		// The review view's overview reads first, above the files.
+		w, _ := m.overlayDims()
+		ov := stackFile{overview: true, load: stackLoaded,
+			prose: mdRows(markdown.Parse(st.review.Doc.Overview), w-4)}
+		if len(st.review.Doc.Meta) > 0 {
+			ov.prose = append(ov.prose, mdRow{}, mdRow{text: reviewMetaText(st.review.Doc.Meta)})
+		}
+		out = append([]stackFile{ov}, out...)
 	}
 	return out
 }
@@ -254,6 +265,9 @@ func (m Model) stackJumpMenu(v *diffView) Model {
 		f := v.stk.files[i]
 		idx := i
 		label := f.status + "  " + f.path
+		if f.overview {
+			label = "≡ " + i18n.T("Overview")
+		}
 		rows = append(rows, actionRow{
 			id:    "stack-file",
 			label: label,
