@@ -127,6 +127,8 @@ type Model struct {
 	docWatch      docWatchState                            // the open-files poll (and, on supported filesystems, fsnotify)
 	console       *consoleState                            // agent console over the Commits column (or maximised); nil = closed
 	sessWatch     *sessionWatch                            // the TUI's subscription to the session list (console.go)
+	web           *webHostState                            // the gg web page served from this process (webhost.go)
+	webOpts       webLaunchOptions                         // gg --web / --web-addr for this run
 	quitConfirmed bool                                     // the quit-mode sessions popup confirmed "kill all and quit"; quitFilter lets the QuitMsg through
 	sessionStates map[domain.SessionID]domain.SessionState // last seen state per session, for exit notices
 
@@ -439,6 +441,7 @@ func New(svc *domain.Service) Model {
 	m := Model{
 		svc:                    svc,
 		sessWatch:              &sessionWatch{},
+		web:                    &webHostState{},
 		clipWrite:              clipboard.Copy,
 		feed:                   svc.CommitFeed(),
 		loading:                true,
@@ -476,7 +479,7 @@ func New(svc *domain.Service) Model {
 
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd())
+	return tea.Batch(m.bootstrapCmd(), loadSearchHistCmd(m.svc), heartbeatCmd(), m.repoHealthCmd(m.noticeGen), m.startSteerCmd(m.steerGen), m.waitSessionsCmd(), m.waitTasksCmd(), m.startupWebCmd())
 }
 
 // Update wraps the real dispatcher with the one piece of bookkeeping every
@@ -577,6 +580,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitSessionCmd(m.console, msg.id, msg.gen)
 	case sessionsChangedMsg:
 		return m.onSessionsChanged()
+	case webStartedMsg:
+		return m.onWebStarted(msg)
+	case webRerootMsg:
+		if msg.err != nil {
+			m.statusMsg = i18n.T("web page: %s", msg.err.Error())
+		}
+		return m, nil
 	case tasksChangedMsg:
 		return m.onTasksChanged()
 	case taskLaunchReadyMsg:
@@ -4566,7 +4576,8 @@ func (m Model) reRoot(path string) (tea.Model, tea.Cmd) {
 	// started HERE would land before the snapshot and its arrival would clear
 	// the blank-screen gate set above. The dataLoadedMsg success arm chains it
 	// instead, so it can only run once this repo's snapshot is in the model.
-	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), snapshotTargetCmd(m.svc))
+	// The hosted web page follows the switch (nil when no page is served).
+	return m, tea.Batch(m.loadCmd(), m.startWatchCmd(m.watchGen), m.repoHealthCmd(m.noticeGen), snapshotTargetCmd(m.svc), m.webRerootCmd())
 }
 
 // View implements tea.Model.

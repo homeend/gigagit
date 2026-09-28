@@ -22,8 +22,18 @@ import (
 // has landed. It returns the directory the shell should switch to (the
 // worktree the user switched into during the session, or "" if none) so a
 // wrapper can cd there on exit.
-func Run(svc *domain.Service, recordPath string, at model.Link) (string, error) {
+// RunOptions is the launch configuration cmd/gg hands Run.
+type RunOptions struct {
+	RecordPath string     // --record: dump keystrokes to this file
+	At         model.Link // `gg open`'s landing link (zero = none)
+	Web        bool       // --web: serve the web page from this process at launch
+	WebAddr    string     // --web-addr: the page's listen address (beats [web] addr)
+}
+
+func Run(svc *domain.Service, opts RunOptions) (string, error) {
+	recordPath, at := opts.RecordPath, opts.At
 	m := New(svc)
+	m.webOpts = webLaunchOptions{Web: opts.Web, WebAddr: opts.WebAddr}
 	if at.Repo.Name != "" || at.Repo.Abs != "" {
 		m.startAt, m.startAtPending = at, true
 	}
@@ -105,6 +115,7 @@ func Run(svc *domain.Service, recordPath string, at model.Link) (string, error) 
 		fm = fm.closeSteerInbox()
 		fm = fm.releaseKeptInboxes()
 		fm.recorder.close()
+		fm.closeWeb() // the pages get their shutdown message; the port closes
 	}
 	if err != nil {
 		return "", err

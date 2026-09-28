@@ -21,6 +21,9 @@ type paletteCommand struct {
 	// in this repository — the registry itself stays static so it can be
 	// enumerated without a Service.
 	feature string
+	// web marks the entry that needs a web-page seam (NewWebHost); absent
+	// when cmd/gg did not wire one (tests, a stripped build).
+	web bool
 }
 
 // commandPalette is the generic command launcher (ctrl+p). It holds the palette
@@ -62,6 +65,7 @@ func paletteCommands() []paletteCommand {
 		{label: i18n.T("Find"), keyHint: "F", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openWorktreeFilesHere() }},
 		{label: i18n.T("Git config explorer"), run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openGitConfigExplorer() }},
 		{label: i18n.T("Open gg:// link…"), keyHint: "#", run: Model.openGotoCommitPopup},
+		{label: i18n.T("Open in browser"), web: true, run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openInBrowser() }},
 		{label: i18n.T("Open repo"), run: func(m Model) (Model, tea.Cmd) { return m.openRepoPathPopup() }},
 		{label: i18n.T("Open shell"), keyHint: "ctrl+o", run: func(m Model) (Model, tea.Cmd) { m = m.popLayer(); return m.openSubshell() }},
 		{label: i18n.T("Run shell command…"), run: func(m Model) (Model, tea.Cmd) { return m.openShellCmdPopup() }},
@@ -202,6 +206,9 @@ func (m Model) availablePaletteCommands() []paletteCommand {
 		}
 		if c.feature == domain.FeatureForge && !m.forgeShown {
 			continue // no usable forge CLI: no pull-request UI at all
+		}
+		if c.web && NewWebHost == nil {
+			continue // this gg cannot serve a web page
 		}
 		out = append(out, c)
 	}

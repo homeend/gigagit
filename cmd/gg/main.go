@@ -205,7 +205,7 @@ func launchTUI(dir string, at model.Link, recordPath, cwdFile string) int {
 			return 2
 		}
 	}
-	cwd, err := tui.Run(svc, recordPath, at)
+	cwd, err := tui.Run(svc, tui.RunOptions{RecordPath: recordPath, At: at})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, friendlyGitError(err))
 		return 1
