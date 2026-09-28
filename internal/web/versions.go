@@ -6,6 +6,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/changeset"
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // Frozen version previews + drift: the read side of Task 12. A version's
@@ -113,6 +114,11 @@ type versionRow struct {
 	// next to the diff.
 	Source string `json:"source"`
 	Target string `json:"target"`
+	// Link is the version's preview link (gg://<repo>@<base>..<ours>?version=<id>)
+	// and Desc what copying it records; both empty for a one-branch record
+	// or a checkout the grammar cannot spell (the menu row is then not offered).
+	Link string `json:"link,omitempty"`
+	Desc string `json:"desc,omitempty"`
 }
 
 func (s *Server) handleVersions(w http.ResponseWriter, r *http.Request) {
@@ -127,18 +133,72 @@ func (s *Server) handleVersions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows := make([]versionRow, 0, len(vs))
+	repo, repoErr := s.service().LinkRepo(r.Context())
 	for _, v := range vs {
 		short := v.Hash
 		if len(short) > 8 {
 			short = short[:8]
 		}
-		rows = append(rows, versionRow{
+		row := versionRow{
 			Ref: v.Ref, Hash: v.Hash, Short: short,
 			Subject: v.Subject, Op: v.Op, Unix: v.Unix,
 			Source: v.Source, Target: v.Target,
-		})
+		}
+		if link, ok := versionLink(repo, repoErr, v); ok {
+			row.Link, row.Desc = link.String(), s.service().DescribeLink(r.Context(), link)
+		}
+		rows = append(rows, row)
 	}
 	writeJSON(w, map[string]any{"branch": branch, "versions": rows})
+}
+
+// versionLink builds a version's preview link — the pair it froze plus the
+// ?version= hint — as a model.Link, never by concatenation. false for a
+// one-branch record, a trailer that does not hold two usable shas (it is
+// never sha-checked on write), or a checkout the grammar cannot spell.
+func versionLink(repo model.LinkRepo, repoErr error, v model.BranchVersion) (model.Link, bool) {
+	if repoErr != nil || v.Base == "" || v.Ours == "" {
+		return model.Link{}, false
+	}
+	if _, err := model.CommitEndpoint(v.Base); err != nil {
+		return model.Link{}, false
+	}
+	if _, err := model.CommitEndpoint(v.Ours); err != nil {
+		return model.Link{}, false
+	}
+	l := model.Link{
+		Repo:   repo,
+		Target: model.LinkTarget{State: model.StateCommitted, Pair: &model.LinkPair{A: v.Base, B: v.Ours}},
+		Side:   model.NoteSideNew,
+		Hint:   model.LinkHint{Kind: "version", ID: v.ID()},
+	}
+	if _, err := model.ParseLink(l.String()); err != nil {
+		return model.Link{}, false
+	}
+	return l, true
+}
+
+// handleVersionFind answers a landed ?version= hint for the page, which
+// holds no branch to ask /api/versions with: domain.FindVersion's ladder
+// (id tie-broken by the pair, else the pair). A miss is 200 found:false —
+// the hint degrades on the page, it never fails the landing.
+func (s *Server) handleVersionFind(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	id, a, b := q.Get("id"), q.Get("a"), q.Get("b")
+	if !model.LinkHintIDOK(id) || !isFullSha(a) || !isFullSha(b) {
+		writeErr(w, http.StatusBadRequest, errors.New("version-find needs id and two full shas"))
+		return
+	}
+	branch, v, ok, err := s.service().FindVersion(r.Context(), id, a, b)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !ok {
+		writeJSON(w, map[string]any{"found": false})
+		return
+	}
+	writeJSON(w, map[string]any{"found": true, "branch": branch, "ref": v.Ref})
 }
 
 // vbranchRow is one branch with recorded versions — the all-branches picker

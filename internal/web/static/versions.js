@@ -2,6 +2,7 @@
 // see app.js (the entry module) for the load order.
 import { $, esc, getJSON, state } from "./core.js";
 import { closeLayer, copyText, pushLayer, showCtxMenu } from "./layers.js";
+import { copyLink } from "./links.js";
 import { opLine, showLocalConfirm, startOp } from "./ops.js";
 import { openCompare } from "./files.js";
 import { openCommitByHash } from "./commits.js";
@@ -122,6 +123,9 @@ function showVersionMenu(branch, v, x, y) {
   const items = [
     { label: "open recorded preview", act: () => openVersionPreview(branch, v) },
   ];
+  // The preview's link (server-built, ?version=<id>): a one-branch record
+  // has none and gets no row.
+  if (v.link) items.push({ label: "copy gg link", act: () => copyLink(v.link, v.desc) });
   const tip = branchTipHash(branch);
   if (tip) {
     items.push({
@@ -319,6 +323,35 @@ async function checkDrift(branch, paused) {
 
 $("drift-dismiss").addEventListener("click", hideDrift);
 
+
+// revealVersion honours a landed ?version= hint: the server finds the
+// record (id tie-broken by the pair, else the pair), and the versions layer
+// for its branch opens ON TOP of the landed compare with the row flashed —
+// esc shows the diff. The web has no "under": openVersionPreview closes
+// this layer before opening a compare, so the order is the TUI's reversed.
+// A miss is one op line; the hint degrades, it never fails.
+export async function revealVersion(s) {
+  let body;
+  try {
+    const q = new URLSearchParams({ id: s.hint_id, a: s.a || "", b: s.b || "" });
+    body = await getJSON("/api/version-find?" + q.toString());
+  } catch (e) {
+    opLine("gg link: could not look up version " + s.hint_id + "; the link still landed", true);
+    return;
+  }
+  if (!body.found) {
+    opLine("gg link: version " + s.hint_id + " is not recorded here; the link still landed", true);
+    return;
+  }
+  await openVersions(body.branch);
+  const rows = $("versions-list")._rows || [];
+  const i = rows.findIndex((r) => r.ref === body.ref);
+  const li = i >= 0 ? $("versions-list").querySelector('li[data-i="' + i + '"]') : null;
+  if (!li) return;
+  li.scrollIntoView({ block: "center" });
+  li.classList.add("flash");
+  setTimeout(() => li.classList.remove("flash"), 900);
+}
 
 export { branchTipHash, checkDrift, closeVersionBranches, closeVersions, hideDrift, openVersionBranches, openVersionPreview, openVersions, showVersionMenu, versionRowMenu, versionWhen };
 

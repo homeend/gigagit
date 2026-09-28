@@ -15,6 +15,7 @@ import { landStackLine } from "./stackview.js";
 import { fetchNotes, markDiffRow, openCompare, openFile, openWorkingTree, reconcileStatusView, refreshNoteCounts, renderDiff, revealDiffRow, setLayout, stepNote } from "./files.js";
 import { fetchBranches, takeSessions, revealHintEntry } from "./sidebar.js";
 import { fetchPreviews, openPreviewForPair, reopenPreviewIfMoved, revealSavedSet } from "./previews.js";
+import { revealVersion } from "./versions.js";
 import { fetchPRs, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
@@ -424,6 +425,7 @@ async function gotoLink(link) {
 // is looked up against the landing's own set as well as its id, so it takes
 // the whole command; the entry kinds need only kind + id.
 function revealHint(s) {
+  if (s.hint_kind === "version") return revealVersion(s);
   return s.hint_kind === "preview" ? revealSavedSet(s) : revealHintEntry(s.hint_kind, s.hint_id);
 }
 
