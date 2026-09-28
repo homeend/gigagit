@@ -164,10 +164,10 @@ func ToolCommandsIn(path string) ([]ToolCommand, error) {
 
 // ReplaceToolCommandBodies rewrites, in place, the command body of each
 // [[tools.command]] block whose body replace accepts, and returns how many it
-// replaced. Only the ”' literal bodies gg writes (AppendToolCommands) are
+// replaced. Only the multi-line literal bodies gg writes (AppendToolCommands) are
 // seen; every other byte of the file is kept, and a file with no match is not
 // written at all. replace receives the body without its trailing newline; a
-// new body containing ”' is refused.
+// new body containing the literal's delimiter is refused.
 func ReplaceToolCommandBodies(path string, replace func(body string) (string, bool)) (int, error) {
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
