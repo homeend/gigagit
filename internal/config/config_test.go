@@ -794,3 +794,26 @@ func TestTasksMaxParallel(t *testing.T) {
 		t.Error("the config template does not document [tasks] max_parallel")
 	}
 }
+
+func TestWebLayers(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.toml")
+	cfg, err := Load(missing, missing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Web.Serve || cfg.Web.Addr != "" {
+		t.Fatalf("defaults = %+v, want off + random port", cfg.Web)
+	}
+	g := filepath.Join(dir, "global.toml")
+	writeFile(t, g, "[web]\nserve = true\naddr = \"127.0.0.1:7777\"\n")
+	r := filepath.Join(dir, "repo.toml")
+	writeFile(t, r, "[web]\naddr = \"127.0.0.1:8888\"\n")
+	cfg, err = Load(g, r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Web.Serve || cfg.Web.Addr != "127.0.0.1:8888" {
+		t.Fatalf("repo over global = %+v", cfg.Web)
+	}
+}

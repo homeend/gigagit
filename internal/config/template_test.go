@@ -35,6 +35,7 @@ func TestSettingDocsCoverAllFields(t *testing.T) {
 	check("notes", reflect.TypeOf(NotesConfig{}))
 	check("tools", reflect.TypeOf(ToolsConfig{}))
 	check("branches", reflect.TypeOf(BranchesConfig{}))
+	check("web", reflect.TypeOf(WebConfig{}))
 }
 
 // For settings whose default lives in Defaults(), the registry value must match

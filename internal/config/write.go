@@ -92,6 +92,18 @@ func SetWorktreePostCreateHook(path, script string) error {
 	return setMultilineLiteral(path, "worktree", "post_create_hook", script)
 }
 
+// SetWebServe persists `[web] serve` (the Settings "Web page" toggle; the
+// global file).
+func SetWebServe(path string, on bool) error {
+	return setScalarLine(path, "web", "serve", strconv.FormatBool(on))
+}
+
+// SetWebAddr persists `[web] addr`; "" writes an empty string, which the
+// overlay reads as unset (back to a random port).
+func SetWebAddr(path, addr string) error {
+	return setScalarLine(path, "web", "addr", strconv.Quote(addr))
+}
+
 // SetVersionsDisabled persists `[versions] disabled` to the given config file
 // (the repo .gg.toml), backing the Settings Operations history toggle.
 func SetVersionsDisabled(path string, disabled bool) error {

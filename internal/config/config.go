@@ -218,6 +218,7 @@ type Config struct {
 	Branches BranchesConfig `toml:"branches"`
 	Console  ConsoleConfig  `toml:"console"`
 	Tasks    TasksConfig    `toml:"tasks"`
+	Web      WebConfig      `toml:"web"`
 
 	// Themes holds per-theme colour overrides, one [themes.<name>] table per
 	// built-in theme name (terminal/dark/light). Unknown names are kept and
@@ -266,6 +267,7 @@ func Load(globalPath, repoPath string) (Config, error) {
 			overlayThemes(&cfg.Themes, layer.Themes)
 			overlayConsole(&cfg.Console, layer.Console)
 			overlayTasks(&cfg.Tasks, layer.Tasks)
+			overlayWeb(&cfg.Web, layer.Web)
 		}
 	}
 	return cfg, nil
@@ -684,5 +686,28 @@ func (t TasksConfig) Parallel() (int, string) {
 func overlayTasks(dst *TasksConfig, src TasksConfig) {
 	if src.MaxParallel != 0 {
 		dst.MaxParallel = src.MaxParallel
+	}
+}
+
+// WebConfig governs the gg web page the TUI can serve from its own process
+// (standalone `gg web` ignores it: its own flags rule there). Both keys are
+// meant for the GLOBAL file — the page is per human, like the theme — but
+// the overlay accepts a repo file like every other section.
+type WebConfig struct {
+	// Serve starts serving when the TUI launches (the browser is not opened).
+	// A bool is fine here: off is both the default and the zero value, so the
+	// zero-is-unset overlay rule never needs to turn it back off.
+	Serve bool `toml:"serve"`
+	// Addr is the listen address, loopback only; "" = 127.0.0.1:0 (a random
+	// port each run). `gg --web-addr` overrides it for one run.
+	Addr string `toml:"addr"`
+}
+
+func overlayWeb(dst *WebConfig, src WebConfig) {
+	if src.Serve {
+		dst.Serve = true
+	}
+	if src.Addr != "" {
+		dst.Addr = src.Addr
 	}
 }
