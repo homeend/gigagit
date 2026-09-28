@@ -596,7 +596,7 @@ registerHelp({
   key: "F",
   html:
     "<b>files in the working tree</b> — the file list shows every file on disk (untracked ones marked); " +
-    "<b>/</b> filters fuzzily, the diff pane previews the file under the cursor, <b>enter</b> / <b>.</b> its actions " +
+    "<b>/</b> filters (fuzzy; <b>'exact</b> <b>^prefix</b> <b>suffix$</b> <b>!not</b>, space-separated terms all apply), the diff pane previews the file under the cursor, <b>enter</b> / <b>.</b> its actions " +
     "(view file, diff, history, blame, copy), <b>ctrl+]</b> opens it in the background, <b>esc</b> gives the panes back",
 });
 

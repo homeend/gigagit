@@ -453,3 +453,54 @@ func TestWorktreeRevealLandsOnTheCursorRowUnderTheStickyLine(t *testing.T) {
 		t.Fatalf("the line above the reveal = %q, want the sticky . (the reveal must not cover it)", got)
 	}
 }
+
+func TestWorktreeFilterEditsAtTheCursor(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "ac.go", "b.go") // only ac.go matches the final "ac"
+	m = fvKeys(t, m, keyMsg("/"), keyMsg("a"), keyMsg("b"), keyMsg("c"),
+		tea.KeyMsg{Type: tea.KeyLeft}, tea.KeyMsg{Type: tea.KeyLeft}, keyMsg("X"))
+	if m.wtFiles.query != "aXbc" {
+		t.Fatalf("query = %q, want aXbc (typed at the cursor)", m.wtFiles.query)
+	}
+	m = fvKeys(t, m, tea.KeyMsg{Type: tea.KeyBackspace})
+	if m.wtFiles.query != "abc" {
+		t.Fatalf("query = %q, want abc (backspace erases before the cursor)", m.wtFiles.query)
+	}
+	m = fvKeys(t, m, tea.KeyMsg{Type: tea.KeyDelete})
+	if m.wtFiles.query != "ac" {
+		t.Fatalf("query = %q, want ac (delete erases under the cursor)", m.wtFiles.query)
+	}
+	if got := ansi.Strip(m.wtSearchLine()); got != "/ac" {
+		t.Fatalf("search line = %q, want /ac (the cursor is a painted cell, not a glyph)", got)
+	}
+	if !m.wtFiles.typing || len(wtRows(m)) != 1 {
+		t.Fatalf("typing=%v rows=%v: editing must keep the filter live", m.wtFiles.typing, wtRows(m))
+	}
+}
+
+func TestWorktreeFilterMovesByWord(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "a.go")
+	m = fvKeys(t, m, keyMsg("/"), keyMsg("f"), keyMsg("o"), keyMsg("o"), tea.KeyMsg{Type: tea.KeySpace}, keyMsg("b"), keyMsg("a"), keyMsg("r"),
+		tea.KeyMsg{Type: tea.KeyCtrlLeft}, keyMsg("X"))
+	if m.wtFiles.query != "foo Xbar" {
+		t.Fatalf("query = %q, want foo Xbar (ctrl+← to the word start)", m.wtFiles.query)
+	}
+	m = fvKeys(t, m, tea.KeyMsg{Type: tea.KeyCtrlRight}, keyMsg("Y"))
+	if m.wtFiles.query != "foo XbarY" {
+		t.Fatalf("query = %q, want foo XbarY (ctrl+→ to the word end)", m.wtFiles.query)
+	}
+	m = fvKeys(t, m, tea.KeyMsg{Type: tea.KeyHome}, keyMsg("Z"), tea.KeyMsg{Type: tea.KeyEnd}, keyMsg("W"))
+	if m.wtFiles.query != "Zfoo XbarYW" {
+		t.Fatalf("query = %q, want Zfoo XbarYW (home/end)", m.wtFiles.query)
+	}
+}
+
+func TestWorktreeFilterReopensWithTheCursorAtTheEnd(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "a.go")
+	m = fvKeys(t, m, keyMsg("/"), keyMsg("a"), keyMsg("enter"), keyMsg("/"), keyMsg("b"))
+	if m.wtFiles.query != "ab" {
+		t.Fatalf("query = %q, want ab (/ again edits the kept query at its end)", m.wtFiles.query)
+	}
+}
