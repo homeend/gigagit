@@ -368,3 +368,152 @@ func TestOpenReviewSaysItIsOpening(t *testing.T) {
 		t.Fatalf("status still %q after it opened", m.statusMsg)
 	}
 }
+
+// The overview is prose to read, not rows to pick: no "> " cursor and no
+// reverse-video band over its first paragraph.
+func TestReviewOverviewHasNoCursor(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m.filesView.sel = 0
+	m, _ = updateKey(m, "enter")
+	view := ansi.Strip(m.View())
+	if !strings.Contains(view, "Looks fine, see A.") {
+		t.Fatalf("overview not shown:\n%s", view)
+	}
+	for _, l := range strings.Split(view, "\n") {
+		if strings.Contains(l, "> Overview") || strings.Contains(l, "> Looks fine") {
+			t.Fatalf("a row cursor sits in the overview: %q", l)
+		}
+	}
+	if !strings.Contains(view, "[o] other notes (1)") {
+		t.Fatalf("footer lacks the other-notes key:\n%s", view)
+	}
+}
+
+// o lists the notes the tree cannot place; enter on one opens its file at the
+// reviewed commit, esc goes back to the overview.
+func TestReviewOverviewOtherNotesKey(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m.filesView.sel = 0
+	m, _ = updateKey(m, "enter")
+	m, _ = updateKey(m, "o")
+	p := layerOf[*reviewOtherNotesPopup](m)
+	if p == nil {
+		t.Fatalf("o: top %T, want the other-notes list", m.topLayer())
+	}
+	if view := ansi.Strip(m.View()); !strings.Contains(view, "> zzz.go:1 — not in this commit") {
+		t.Fatalf("other-notes list lacks the selected note:\n%s", view)
+	}
+	m, _ = updateKey(m, "esc")
+	if _, ok := m.topLayer().(*reviewOverviewPopup); !ok {
+		t.Fatalf("esc from the list: top %T, want the overview", m.topLayer())
+	}
+	m, _ = updateKey(m, "o")
+	m, _ = updateKey(m, "enter")
+	if fv, ok := m.topLayer().(*fileViewer); !ok || fv.path != "zzz.go" {
+		t.Fatalf("enter on the note: top %T, want zzz.go's viewer", m.topLayer())
+	}
+}
+
+// With nothing the tree cannot place, o does nothing and the footer offers it not.
+func TestReviewOverviewNoOtherNotes(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, `{"version":1,"summary":"All good.","files":[]}`)
+	m, cmd := m.openReview(id, "Review")
+	m = drainCmds(t, m, cmd)
+	m.filesView.sel = 0
+	m, _ = updateKey(m, "enter")
+	if strings.Contains(ansi.Strip(m.View()), "[o]") {
+		t.Fatal("footer offers [o] with no other notes")
+	}
+	m, _ = updateKey(m, "o")
+	if layerOf[*reviewOtherNotesPopup](m) != nil {
+		t.Fatal("o opened an empty list")
+	}
+}
+
+// With an agent console docked (unfocused), the review view's tree keeps the
+// keyboard: enter on ≡ Overview opens the overview, not the console.
+func TestReviewTreeKeepsKeysWithConsoleDocked(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m.console = &consoleState{id: "s1"}
+	m.filesView.sel = 0
+	m, _ = updateKey(m, "enter")
+	if m.console.focused {
+		t.Fatal("enter on the tree focused the docked console")
+	}
+	if layerOf[*reviewOverviewPopup](m) == nil {
+		t.Fatalf("enter on Overview with a console docked: top %T", m.topLayer())
+	}
+}
+
+// ctrl+t on a commit's (and a review's) file tree spans the whole body, so
+// long paths show whole; again, and back.
+func TestFilesTreeCtrlTFullscreen(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m, _ = updateKey(m, "ctrl+t")
+	if !m.filesFull {
+		t.Fatal("ctrl+t on the tree did not fill the body")
+	}
+	if g := m.layout(); g.rightW != 0 {
+		t.Fatalf("the commit column still shows: rightW=%d", g.rightW)
+	}
+	m, _ = updateKey(m, "ctrl+t")
+	if m.filesFull {
+		t.Fatal("ctrl+t again did not restore the split")
+	}
+}
+
+// The overview's own keys sit with the window's key hints, one blank line
+// below the prose — not on the prose's indent right under its last line.
+func TestReviewOverviewKeysSitWithTheHints(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m.filesView.sel = 0
+	m, _ = updateKey(m, "enter")
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	ki, hi := -1, -1
+	for i, l := range lines {
+		if strings.Contains(l, "[y] copy") {
+			ki = i
+		}
+		if strings.Contains(l, "[/] search  [ctrl+w] mode") && hi < 0 {
+			hi = i
+		}
+	}
+	if ki < 0 || hi != ki+1 {
+		t.Fatalf("keys row %d, hints row %d: want the keys right above the hints", ki, hi)
+	}
+	if strings.Trim(lines[ki-1], "│║ ") != "" {
+		t.Fatalf("no blank line above the keys: %q", lines[ki-1])
+	}
+	if strings.Index(lines[ki], "[y]") != strings.Index(lines[hi], "[/]") {
+		t.Fatalf("keys not on the hints' margin:\n%s\n%s", lines[ki], lines[hi])
+	}
+}
+
+// Focus leaving a full-screen commit tree (the commit list, a preview) brings
+// the split back: nothing the keyboard is on may be hidden.
+func TestFilesTreeFullYieldsWhenFocusLeaves(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m, _ = updateKey(m, "ctrl+t")
+	m = m.focusRight()
+	if g := m.layout(); g.rightW == 0 {
+		t.Fatal("the commit list has focus but its column is hidden")
+	}
+}
+
+// The bottom bar follows the keyboard: a focused files tree beside an
+// unfocused docked console shows the tree's keys, not the console's.
+func TestFooterFollowsTheTreeBesideADockedConsole(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m.console = &consoleState{id: "s1"}
+	if got := m.footerLine(); strings.Contains(got, "agent console") {
+		t.Fatalf("footer %q advertises the console while the tree has the keys", got)
+	}
+}

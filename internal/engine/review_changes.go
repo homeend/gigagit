@@ -114,6 +114,14 @@ func ReviewOutputInstruction() string {
 		"          \"rationale\": \"<why it matters / how it fails>\",\n" +
 		"          \"meta\": { \"severity\": \"bug | risk | design | nit\", \"confidence\": \"low | medium | high\" } }\n" +
 		"      ] }\n  ]\n}\n\n" +
+		"\"summary\" is rendered as markdown in the review's overview, so structure it:\n" +
+		"  ## Summary   — 1-3 sentences: what the change does.\n" +
+		"  ## Findings  — one bullet (\"- \") per finding, most important first, naming\n" +
+		"                 files and symbols as `code` spans (e.g. `src/app.go:42`);\n" +
+		"                 write \"- None.\" when there is nothing to report.\n" +
+		"  ## Verdict   — approve, comment or request changes, with a one-line reason.\n" +
+		"Short paragraphs, no walls of text. It is a JSON string: write each line\n" +
+		"break as \\n.\n\n" +
 		"Rules: line numbers are 1-based and inclusive; use \"newRange\" for a line in the\n" +
 		"new version of the file and \"oldRange\" for a removed line. \"meta\" is optional\n" +
 		"and free-form (string values). Annotate what a reader would not spot; leave\n" +

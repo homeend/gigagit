@@ -488,3 +488,28 @@ func TestReviewWarnsAboutAProseReview(t *testing.T) {
 		t.Fatalf("stderr = %q", errb)
 	}
 }
+
+// A stored review listed by `gg note list` names itself as a review of its
+// commit — never as a line note on "new:1-1" gone stale.
+func TestNoteListLabelsAReview(t *testing.T) {
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	runGit(t, dir, "commit", "--allow-empty", "-m", "second")
+	writeReviewTool(t, dir, "Echo", `printf "FAKE REVIEW\n"`)
+	if code, _, errb := runCLI(t, dir, "review", "--tool", "Echo", "HEAD~1..HEAD"); code != 0 {
+		t.Fatalf("review exit=%d stderr=%s", code, errb)
+	}
+	code, out, errb := runCLI(t, dir, "note", "list")
+	if code != 0 {
+		t.Fatalf("note list exit=%d stderr=%s", code, errb)
+	}
+	head := strings.TrimSpace(runGit(t, dir, "rev-parse", "--short=7", "HEAD"))
+	if !strings.Contains(out, "] review "+head) {
+		t.Errorf("note list = %q, want the row to say \"review %s\"", out, head)
+	}
+	for _, bad := range []string{"new:1-1", "stale"} {
+		if strings.Contains(out, bad) {
+			t.Errorf("note list = %q, must not show %q for a review", out, bad)
+		}
+	}
+}

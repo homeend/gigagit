@@ -330,8 +330,10 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		}
 		return m, nil, true // an exited console swallows keys; ctrl+] still steps out
 	}
-	// Unfocused: the console answers only while its column has focus.
-	if m.focus != panelCommits {
+	// Unfocused: the console answers only while its column has focus — and a
+	// files view's focused tree (a commit's or a review's files, which keep
+	// focus on the Commits column) owns the keyboard, not the console.
+	if m.focus != panelCommits || (m.filesView != nil && m.filesTreeFocused) {
 		return m, nil, false
 	}
 	switch key {

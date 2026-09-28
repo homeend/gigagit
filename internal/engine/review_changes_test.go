@@ -113,3 +113,15 @@ func readFile(t *testing.T, path string) string {
 	}
 	return string(b)
 }
+
+// The brief asks for the overview as structured markdown — headings a reader
+// can scan, bullets for findings, code spans for paths — and says how a
+// newline travels inside the JSON string.
+func TestReviewOutputInstructionAsksForStructuredMarkdown(t *testing.T) {
+	got := ReviewOutputInstruction()
+	for _, want := range []string{"## Summary", "## Findings", "## Verdict", "bullet", "`code`", `\n`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("ReviewOutputInstruction() lacks %q:\n%s", want, got)
+		}
+	}
+}

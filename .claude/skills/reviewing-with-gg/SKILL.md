@@ -3,7 +3,7 @@ name: reviewing-with-gg
 description: Use when reviewing code changes in a repository where the gg CLI is available — inspect diffs and leave anchored review notes with gg note.
 ---
 
-<!-- gg:reviewing-with-gg:v9 -->
+<!-- gg:reviewing-with-gg:v10 -->
 
 # Reviewing with gg
 
@@ -220,6 +220,13 @@ section. Reply with ONLY this JSON document, written to the file named by
   ]
 }
 ```
+
+`"summary"` is shown as rendered markdown in the review's overview, so give it
+structure: `## Summary` (1–3 sentences on what the change does), `## Findings`
+(one `- ` bullet per finding, most important first, with files and symbols in
+`code` spans such as `src/app.go:42`; `- None.` when there is nothing), and
+`## Verdict` (approve, comment or request changes, with a one-line reason).
+It is a JSON string, so every line break is written as `\n`.
 
 Lines are 1-based and inclusive; `"newRange"` names lines of the new version,
 `"oldRange"` a removed line. `"meta"` is optional and free-form (string

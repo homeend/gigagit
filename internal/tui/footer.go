@@ -254,7 +254,7 @@ func (m Model) footerOverride() (string, bool) {
 		if m.console.focused {
 			return i18n.T("agent console: every key goes to the agent  [%s] step out  [%s] sessions", m.stepOutKey(), m.sessionsKey()), true
 		}
-		if m.focus == panelCommits {
+		if m.focus == panelCommits && !(m.filesView != nil && m.filesTreeFocused) { // a focused tree keeps the keys (updateConsoleKey)
 			return i18n.T("agent console: [enter] type  [ctrl+t] maximise  [esc] close  [%s] sessions  [tab] panels", m.sessionsKey()), true
 		}
 	}
@@ -301,7 +301,7 @@ func (m Model) footerOverride() (string, bool) {
 			if m.comparePair != nil { // a branch pair: f cycles the origin filter
 				aHint = i18n.T("  [f] filter")
 			}
-			return i18n.T("tree: [↑/↓] move  [enter] diff") + aHint + i18n.T("  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view") + msgHint + i18n.T("  [esc/l] close"), true
+			return i18n.T("tree: [↑/↓] move  [enter] diff") + aHint + i18n.T("  [.] view file/copy  [/] search  [h] hist  [b] blame  [ctrl+w] view") + "  " + i18n.T("[ctrl+t] full") + msgHint + i18n.T("  [esc/l] close"), true
 		}
 		// The list side under an open tree can be the STASH list — its keys
 		// differ (enter is inert, the graph/all-files keys don't apply, "."

@@ -46,7 +46,7 @@ func (m Model) openPRHub(p model.PullRequest) (Model, tea.Cmd) {
 	cp := newContentPopup(prHubTitle(p.Number), prHubLoading(p))
 	cp.mode = modeWrap // descriptions and comments are prose
 	cp.noCursor = true
-	cp.footer = i18n.T("[y] copy URL  [r] reload")
+	cp.keys = i18n.T("[y] copy URL  [r] reload")
 	m = m.pushLayer(&prHubPopup{contentPopup: cp, pr: p})
 	return m, m.loadPRHubCmd(p.Number)
 }

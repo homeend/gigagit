@@ -23,7 +23,7 @@ const Version = 101
 
 // ReviewVersion is the same counter for reviewing-with-gg, which starts at 1
 // and moves independently of Version.
-const ReviewVersion = 9
+const ReviewVersion = 10
 
 // Skill is one embedded skill: its identity, its own version counter, and the
 // rendered forms init installs. Markers are per-skill ("gg:<name>:v<N>"), so

@@ -59,6 +59,43 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
 Follow-ups: a `shelve` answer (after the multi-file shelf), remote-only
 branches, and the web UI.
 
+## Review view polish: delete a review, a calmer overview
+
+### Added
+
+- **Delete a review (TUI).** "Delete review" in the `.` menu on a Branches
+  review sub-row and in the review view, and `ctrl+d` on a View all notes
+  row (a review or a note thread), delete it after a confirmation that
+  defaults to Cancel. A review view showing it closes as esc would; an open
+  View all notes list re-reads.
+
+### Changed
+
+- **The review overview reads as prose.** No `> ` cursor and no bright band
+  over its first paragraph; ↑/↓ scroll. The notes on files the commit does
+  not change stay listed at its foot, and `o` opens them as a list where
+  enter opens the file at the reviewed commit.
+- **A structured overview.** The review brief now asks for the document's
+  `summary` as markdown with `## Summary`, `## Findings` (bullets, paths and
+  symbols in `code` spans) and `## Verdict`. Every review template already
+  defers to the brief, so stored commands need no upgrade.
+  reviewing-with-gg skill v10.
+- **`gg note list`** shows a review as `review <sha> (<branch>)` instead of a
+  line anchor gone "stale".
+- **A window's own keys sit with its hints.** The review overview's `[y] copy
+  [o] other notes` and the PR hub's `[y] copy URL [r] reload` are on the
+  hint line's margin, one blank line below the text.
+- **ctrl+t on a file tree** (a commit's, a review's) spans the whole body, so
+  long paths show whole; moving focus to the commit list or a preview brings
+  the split back.
+
+### Fixed
+
+- **A docked agent console took the review tree's keys.** Opening a review
+  with a console docked and pressing enter on Overview focused the console;
+  a focused files tree now keeps the keyboard (and the bottom bar shows its
+  keys).
+
 ## Reviews open as a review view
 
 ### Added
