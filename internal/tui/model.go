@@ -526,7 +526,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m = m.syncConsoleSize() // the agent redraws for its box, not the old one
+		m = m.syncConsoleSizeIfFocused() // a focused console owns the size; an unfocused one follows the viewer typing
 		// A resize can flip fullMaxActive false→true without any surface
 		// closing (leftColumnPanels empties below 40 columns and refills on
 		// widen), so this is a pin-resume point like reRoot/closeStashView.
