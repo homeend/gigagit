@@ -412,10 +412,17 @@ func TestRecycleWorktreeDirtyCommit(t *testing.T) {
 	}
 }
 
+// Discard must drop STAGED changes too (a plain `restore --worktree` keeps
+// them, and `git switch` would carry them onto the target branch), plus
+// unstaged edits and untracked files.
 func TestRecycleWorktreeDirtyDiscard(t *testing.T) {
 	t.Parallel()
 	_, deps, wt := recycleFixture(t)
-	os.WriteFile(filepath.Join(wt, "README.md"), []byte("edited\n"), 0o644)
+	os.WriteFile(filepath.Join(wt, "README.md"), []byte("staged edit\n"), 0o644)
+	gitIn(t, wt, "add", "README.md")
+	os.WriteFile(filepath.Join(wt, "README.md"), []byte("staged edit + unstaged edit\n"), 0o644)
+	os.WriteFile(filepath.Join(wt, "staged-new.txt"), []byte("s\n"), 0o644)
+	gitIn(t, wt, "add", "staged-new.txt")
 	os.WriteFile(filepath.Join(wt, "new.txt"), []byte("n\n"), 0o644)
 	deps.Decider = MapDecider{RecycleDirtyDecisionID: "discard"}
 	res, err := RecycleWorktree{Dir: wt, Branch: "target", Now: fixedNow}.Run(context.Background(), deps)
@@ -425,8 +432,16 @@ func TestRecycleWorktreeDirtyDiscard(t *testing.T) {
 	if !strings.Contains(res.Summary, "; changes discarded") {
 		t.Fatalf("summary = %q", res.Summary)
 	}
-	if _, err := os.Stat(filepath.Join(wt, "new.txt")); !os.IsNotExist(err) {
-		t.Fatal("untracked new.txt must be deleted by discard")
+	for _, f := range []string{"new.txt", "staged-new.txt"} {
+		if _, err := os.Stat(filepath.Join(wt, f)); !os.IsNotExist(err) {
+			t.Fatalf("%s must be gone after discard", f)
+		}
+	}
+	if got := gitOut(t, wt, "status", "--porcelain"); got != "" {
+		t.Fatalf("worktree not clean after discard:\n%s", got)
+	}
+	if b, _ := os.ReadFile(filepath.Join(wt, "README.md")); string(b) != "hi\n" {
+		t.Fatalf("README.md = %q, want the committed content", b)
 	}
 	if got := wtHead(t, wt); got != "target" {
 		t.Fatalf("worktree HEAD = %q, want target", got)
@@ -543,6 +558,14 @@ func TestRecycleWorktreeRefusals(t *testing.T) {
 			t.Fatalf("err = %v", err)
 		}
 	})
+	t.Run("the worktree gg runs in", func(t *testing.T) {
+		t.Parallel()
+		dir, deps, _ := recycleFixture(t)
+		_, err := RecycleWorktree{Dir: dir, Branch: "target"}.Run(context.Background(), deps)
+		if err == nil || !strings.Contains(err.Error(), "worktree you are in") {
+			t.Fatalf("err = %v", err)
+		}
+	})
 	t.Run("no RepoAt seam", func(t *testing.T) {
 		t.Parallel()
 		_, deps, wt := recycleFixture(t)
@@ -606,13 +629,14 @@ Expected: build failure `undefined: RecycleWorktree`.
 package engine
 
 import (
-	"errors"
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
 
 	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // RecycleDirtyDecisionID is raised when the target worktree has staged,
@@ -651,20 +675,27 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	if err != nil {
 		return Result{}, err
 	}
-	var target string
-	for _, w := range wts {
+	var entry *model.Worktree
+	for i := range wts {
+		w := &wts[i]
 		if w.Bare {
 			continue
 		}
 		if samePath(w.Path, op.Dir) {
-			target = w.Path
+			entry = w
 		}
 		if w.Branch == op.Branch {
 			return Result{}, fmt.Errorf("%s is already checked out in %s", op.Branch, w.Path)
 		}
 	}
-	if target == "" {
+	if entry == nil {
 		return Result{}, fmt.Errorf("%s is not a worktree of this repository", filepath.Clean(op.Dir))
+	}
+	target := entry.Path
+	// The worktree gg runs in is "Switch to branch" territory; a CLI caller
+	// can still name it, so refuse here (style of RemoveWorktree).
+	if top, err := deps.Repo.TopLevel(ctx); err == nil && samePath(target, top) {
+		return Result{}, fmt.Errorf("cannot recycle the worktree you are in (%s)", target)
 	}
 
 	wt, err := deps.repoAt(target)
@@ -678,14 +709,15 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	if paused := git.PausedOpIn(gitDir); paused != "" {
 		return Result{}, fmt.Errorf("%s has a %s in progress", target, paused)
 	}
+	// Per-worktree locks (index.lock, HEAD.lock) are what block a switch
+	// there; common-dir locks belong to whoever holds the reservation now.
 	if locks := git.LockFiles(gitDir); len(locks) > 0 {
 		return Result{}, fmt.Errorf("%s is locked (%s)", target, locks[0].Name)
 	}
 
-	old, err := wt.CurrentBranch(ctx)
-	if err != nil {
-		return Result{}, err
-	}
+	// The leaving branch comes from the worktree list (no extra git call;
+	// "" = detached HEAD).
+	old := entry.Branch
 	if old == "" {
 		old = "detached"
 	}
@@ -721,11 +753,14 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 			tail = "; committed " + sha
 		case "discard":
 			deps.emit(ctx, Progress{Step: "discarding", Detail: target})
-			// Same repo-root pathspec Discard{All} uses; clean without -x
-			// keeps ignored files. Both run even if the first fails.
+			// NOT Discard{All}: its `restore --worktree` deliberately keeps
+			// staged hunks, which `git switch` would then carry onto the
+			// target branch. A hard reset drops index AND tree; clean on the
+			// repo-root pathspec (without -x) then removes untracked files
+			// and keeps ignored ones. Both run even if the first fails.
 			var errs []error
-			if err := wt.RestoreWorktree(ctx, []string{":/"}); err != nil {
-				errs = append(errs, fmt.Errorf("restore: %w", err))
+			if err := wt.Reset(ctx, "hard", "HEAD"); err != nil {
+				errs = append(errs, fmt.Errorf("reset: %w", err))
 			}
 			if err := wt.CleanUntracked(ctx, []string{":/"}); err != nil {
 				errs = append(errs, fmt.Errorf("clean: %w", err))
@@ -752,7 +787,7 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 }
 ```
 
-Check that `GitOps` already lists `Worktrees`, `GitDir`, `CurrentBranch`, `Status`, `StageAll`, `Commit`, `CommitLine`, `RestoreWorktree`, `CleanUntracked`, `Switch` (`grep -n 'StageAll\|CommitLine\|RestoreWorktree\|CleanUntracked\|Switch(' internal/engine/gitops.go`). If `StageAll` is missing, add `StageAll(ctx context.Context) error` to the interface next to the other stage verbs.
+`GitOps` already lists every verb used (`Worktrees`, `TopLevel`, `GitDir`, `Status`, `StageAll`, `Commit`, `CommitLine`, `Reset`, `CleanUntracked`, `Switch`) — verified while planning; nothing to add to the interface. `engine.OpName` is `%T`-based, so no registry case is needed.
 
 - [ ] **Step 3b: Add the engine prose keys to the four bundles**
 
@@ -1237,6 +1272,23 @@ func TestWorktreeRecycleOnDirtyCommit(t *testing.T) {
 	}
 }
 
+// A relative path resolves against the main worktree root, not the process
+// cwd (the e2e harness and shell wrappers rely on this).
+func TestWorktreeRecycleRelativePath(t *testing.T) {
+	t.Parallel()
+	dir := newCLIRepo(t)
+	exec.Command("git", "-C", dir, "branch", "loose").Run()
+	wt := cliWorktree(t, dir, "a", "wt-a")
+	var out, errb bytes.Buffer
+	code := Run(dir, []string{"worktree", "recycle", "../wt-a", "loose"}, strings.NewReader(""), &out, &errb, "")
+	if code != 0 {
+		t.Fatalf("exit = %d, stderr=%s", code, errb.String())
+	}
+	if got := headOf(t, wt); got != "loose" {
+		t.Fatalf("worktree HEAD = %q, want loose", got)
+	}
+}
+
 func TestWorktreeRecycleDirtyWithoutFlagIsRefusedInAPipeline(t *testing.T) {
 	t.Parallel()
 	dir := newCLIRepo(t)
@@ -1327,15 +1379,42 @@ func cmdWorktreeRecycle(svc *domain.Service, args []string, stdin io.Reader, std
 		fmt.Fprintf(stderr, "worktree recycle: --on-dirty must be commit, discard, or abort (got %q)\n", *onDirty)
 		return 2
 	}
-	target := fs.Arg(0)
-	if abs, err := filepath.Abs(target); err == nil {
-		target = abs
+	wts, err := svc.Worktrees(context.Background())
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	match := matchWorktreeArg(wts, fs.Arg(0))
+	if match == nil {
+		fmt.Fprintf(stderr, "worktree recycle: no worktree at %q\n", fs.Arg(0))
+		return 1
 	}
 	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
-	res, err := runOperation(context.Background(), svc, engine.RecycleWorktree{Dir: target, Branch: fs.Arg(1)}, dec, stderr)
+	res, err := runOperation(context.Background(), svc, engine.RecycleWorktree{Dir: match.Path, Branch: fs.Arg(1)}, dec, stderr)
 	return finish(res, err, stdout, stderr)
 }
+
+// matchWorktreeArg resolves a worktree argument the way `worktree remove`
+// does: as given, as an absolute path, or relative to the MAIN worktree root
+// (git lists it first) — so `../wt-x` works regardless of the process cwd
+// (the e2e harness runs the CLI in-process with its own cwd).
+func matchWorktreeArg(wts []model.Worktree, target string) *model.Worktree {
+	absTarget, _ := filepath.Abs(target)
+	fromTop := ""
+	if !filepath.IsAbs(target) && len(wts) > 0 && wts[0].Path != "" {
+		fromTop = filepath.Clean(filepath.Join(wts[0].Path, target))
+	}
+	for i := range wts {
+		if wts[i].Path == target || wts[i].Path == absTarget ||
+			(fromTop != "" && wts[i].Path == fromTop) {
+			return &wts[i]
+		}
+	}
+	return nil
+}
 ```
+
+Then replace the inline matching block in `cmdWorktreeRemove` (`worktree.go:309-329`, from `absTarget, _ :=` through the `for` loop) with `match := matchWorktreeArg(wts, target)`, keeping its `if match == nil` error unchanged. Run `go test ./internal/cli -run 'TestWorktree' ` and `go test ./e2e -run 'TestScenarios/s17'` to prove remove still behaves.
 
 Note Go's `flag` stops at the first positional, so the flag must come BEFORE `<path>` — the usage line says so, and the e2e scenario in Task 7 follows it. (`TestWorktreeRecycleOnDirtyCommit` above already places it first.)
 

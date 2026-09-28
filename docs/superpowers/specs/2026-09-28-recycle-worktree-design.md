@@ -52,7 +52,8 @@ touched:
 - the target holds a git lock file;
 - the branch is already checked out in some worktree (a background refresh
   raced the menu);
-- the target is bare or does not exist.
+- the target is bare, does not exist, or is the worktree gg runs in (a CLI
+  caller can name it).
 
 ### CLI
 
@@ -136,10 +137,11 @@ Run:
      a `Now func() time.Time` field on the op (nil = `time.Now`; tests set a
      fixed one). A detached target commits onto the detached HEAD; the
      summary then names the commit sha so it is findable in the reflog.
-   - `discard`: `Progress{discarding}`, `wt.RestoreWorktree([":/"])` then
-     `wt.CleanUntracked([":/"])` (the same repo-root pathspec `Discard{All}`
-     uses; ignored files untouched because `clean` runs without `-x`). Both
-     run even if the first fails; errors are joined.
+   - `discard`: `Progress{discarding}`, `wt.Reset("hard", "HEAD")` then
+     `wt.CleanUntracked([":/"])`. Not `Discard{All}`: its `restore --worktree`
+     keeps staged hunks, which the switch would carry onto the new branch.
+     Ignored files untouched because `clean` runs without `-x`. Both run even
+     if the first fails; errors are joined.
    - `abort` (or any other answer, or a decider error): return
      `Result{}.WithSummary("recycle cancelled")`, nil. Nothing changed.
 5. `Progress{switching}`, `wt.Switch(op.Branch)`. On failure after a commit
