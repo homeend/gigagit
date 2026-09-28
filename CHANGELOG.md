@@ -44,6 +44,10 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   deleted, ignored files kept) / `abort`. Paused ops, lock files and an
   already-checked-out branch are refused up front. The worktree gg runs in
   is never listed; one with a running agent session asks first.
+- **The `.` action menu sizes itself to its content**: a long row (a worktree
+  path, a copy-path row) widens the box up to the full popup width instead
+  of being cut at 56 columns; the recycle picker shows whole paths whenever
+  the terminal has room and aligns the branch column.
 - **`gg worktree recycle [--on-dirty=commit|discard|abort] <path> <branch>`**
   — the same from the CLI; a pipeline without the flag fails rather than
   touch the tree. The path resolves like `worktree remove`'s (as given,

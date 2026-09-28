@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -84,9 +86,9 @@ func TestRecyclePickerListsOtherWorktreesOnly(t *testing.T) {
 	}
 }
 
-// A long worktree path is elided in the MIDDLE to fit the menu's text width
-// with the branch name still visible at the end of the row (the menu box is
-// narrower than the screen, so the budget is the menu's, not the screen's).
+// A long worktree path is elided in the MIDDLE to fit the text width of the
+// box the menu actually renders (content-sized, capped at the full popup
+// width) with the branch name still visible at the end of the row.
 func TestRecyclePickerRowFitsTheMenuWidth(t *testing.T) {
 	t.Parallel()
 	m := recycleModel()
@@ -100,8 +102,7 @@ func TestRecyclePickerRowFitsTheMenuWidth(t *testing.T) {
 	if !ok {
 		t.Fatal("picker row missing")
 	}
-	w, _ := m.overlayDims()
-	textW := popupTextWidth(popupInnerWidth(w))
+	textW := popupTextWidth(m.actionMenuInnerWidth())
 	if got := len([]rune(pick.label)) + 2; got > textW { // "> " prefix
 		t.Fatalf("row is %d cols, menu text width is %d: %q", got, textW, pick.label)
 	}
@@ -209,5 +210,60 @@ func TestRecycleRowLabelHasNoEllipsis(t *testing.T) {
 	row, _ := rowByID(availableActions(m), "recycle-worktree")
 	if strings.Contains(row.label, "…") {
 		t.Fatalf("label %q must not end in an ellipsis", row.label)
+	}
+}
+
+// The action menu sizes itself to its content: a long row widens the box
+// past the 56-column default, capped at the full popup width; a menu of
+// short rows keeps the default.
+func TestActionMenuWidthFollowsContent(t *testing.T) {
+	t.Parallel()
+	m := recycleModel()
+	m.width, m.height = 120, 40
+	short := m
+	short.actionMenu = &actionMenu{rows: []actionRow{{id: "a", label: "Copy branch name"}}}
+	long := m
+	long.actionMenu = &actionMenu{rows: []actionRow{{id: "b", label: strings.Repeat("x", 90)}}}
+	huge := m
+	huge.actionMenu = &actionMenu{rows: []actionRow{{id: "c", label: strings.Repeat("x", 300)}}}
+	if got := short.actionMenuInnerWidth(); got != popupInnerWidth(120) {
+		t.Fatalf("short menu inner width = %d, want the default %d", got, popupInnerWidth(120))
+	}
+	if got := long.actionMenuInnerWidth(); got <= popupInnerWidth(120) || got > popupFullInnerWidth(120) {
+		t.Fatalf("long menu inner width = %d, want between the default and the full width %d", got, popupFullInnerWidth(120))
+	}
+	if got := huge.actionMenuInnerWidth(); got != popupFullInnerWidth(120) {
+		t.Fatalf("huge menu inner width = %d, want the full width %d", got, popupFullInnerWidth(120))
+	}
+	// The rendered box really is that wide.
+	first := strings.Split(long.renderActionMenu(), "\n")[0]
+	if w := lipgloss.Width(first); w <= popupInnerWidth(120)+2 {
+		t.Fatalf("rendered long menu is %d cols wide, want wider than the default box", w)
+	}
+}
+
+// The recycle picker elides paths against the FULL popup width, so a path
+// that fits a wide terminal shows whole; at a narrow one it still elides
+// in the middle.
+func TestRecyclePickerShowsFullPathWhenItFits(t *testing.T) {
+	t.Parallel()
+	long := "/tmp/claude-1000/-mnt-t-others-gigagit/22501cfc-34d0-48fe-8b7d-ff6528344fbf/scratchpad/rc/wt"
+	for _, tc := range []struct {
+		width int
+		whole bool
+	}{{160, true}, {60, false}} {
+		m := recycleModel()
+		m.width, m.height = tc.width, 40
+		m.worktrees = append(m.worktrees, model.Worktree{Path: long, Branch: "wt-branch"})
+		row, _ := rowByID(availableActions(m), "recycle-worktree")
+		nm, _ := row.run(m)
+		m = nm.(Model)
+		pick, _ := rowByID(m.actionMenu.rows, "recycle-into:"+long)
+		if got := strings.Contains(pick.label, long); got != tc.whole {
+			t.Errorf("width %d: label %q shows the whole path = %v, want %v", tc.width, pick.label, got, tc.whole)
+		}
+		if !tc.whole && !strings.Contains(pick.label, "…") {
+			t.Errorf("width %d: label %q must elide in the middle", tc.width, pick.label)
+		}
 	}
 }

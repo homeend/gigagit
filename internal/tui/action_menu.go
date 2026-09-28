@@ -969,10 +969,26 @@ func (m Model) actionMenuRowAt(y int) (int, bool) {
 	return 0, false
 }
 
-func (m Model) renderActionMenu() string {
-	a := m.actionMenu
+// actionMenuInnerWidth sizes the menu box to its content: the widest row (plus
+// the "> " prefix and the modal padding), never narrower than the standard
+// popup width and never wider than the full popup width. A row longer than
+// the screen still falls back to ctrl+w wrap/scroll.
+func (m Model) actionMenuInnerWidth() int {
 	w, _ := m.overlayDims()
 	inner := popupInnerWidth(w)
+	full := popupFullInnerWidth(w)
+	pad := inner - popupTextWidth(inner)
+	for _, r := range m.actionMenu.rows {
+		if need := lipgloss.Width(r.label) + 2 + pad; need > inner {
+			inner = need
+		}
+	}
+	return min(inner, full)
+}
+
+func (m Model) renderActionMenu() string {
+	a := m.actionMenu
+	inner := m.actionMenuInnerWidth()
 	textW := popupTextWidth(inner)
 	vis := a.visible()
 	var bodyLines []string

@@ -63,12 +63,14 @@ func (m Model) openRecyclePicker(branch string) Model {
 	for _, info := range domain.Sessions().List() {
 		live[filepath.Clean(info.Dir)] = true
 	}
-	// Budget = the menu's own text width minus the "> " prefix. The branch
-	// (and a live marker) keeps its columns, the PATH is what elides — to ONE
-	// shared budget (the widest suffix decides), and every elided path is then
-	// padded to the widest one so the branch column lines up like a table.
+	// Budget = the FULL popup text width minus the "> " prefix (the action menu
+	// sizes itself to its content, so a path shows whole whenever the terminal
+	// has room). The branch (and a live marker) keeps its columns, the PATH is
+	// what elides — to ONE shared budget (the widest suffix decides), and every
+	// elided path is then padded to the widest one so the branch column lines
+	// up like a table.
 	w, _ := m.overlayDims()
-	textW := popupTextWidth(popupInnerWidth(w)) - 2
+	textW := popupTextWidth(popupFullInnerWidth(w)) - 2
 	cands := m.recycleCandidates()
 	suffixes := make([]string, len(cands))
 	lives := make([]bool, len(cands))
