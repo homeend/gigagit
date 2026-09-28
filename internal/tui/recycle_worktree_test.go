@@ -166,7 +166,7 @@ func TestRecycleOptionLabelsTranslated(t *testing.T) {
 func TestRecycleOpRefreshesBranchesAndWorktrees(t *testing.T) {
 	t.Parallel()
 	got := opAffectedSources(engine.RecycleWorktree{})
-	want := map[sourceKey]bool{srcBranches: true, srcWorktrees: true}
+	want := map[sourceKey]bool{srcBranches: true, srcWorktrees: true, srcFeed: true} // a commit recycle adds a commit: the feed must reload too
 	for _, s := range got {
 		delete(want, s)
 	}

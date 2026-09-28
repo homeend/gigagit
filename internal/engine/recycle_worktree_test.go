@@ -34,8 +34,8 @@ func TestRecycleWorktreeCleanSwitches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if !res.Changed || !strings.Contains(res.Summary, "recycled") || !strings.Contains(res.Summary, "a → target") {
-		t.Fatalf("result = %+v", res)
+	if !res.Changed || !strings.HasPrefix(res.Summary, "recycled a → target in ") {
+		t.Fatalf("result = %+v; the branch pair leads so a status-bar cut loses the path, not the pair", res)
 	}
 	if got := wtHead(t, wt); got != "target" {
 		t.Fatalf("worktree HEAD = %q, want target", got)

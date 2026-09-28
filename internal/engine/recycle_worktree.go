@@ -150,7 +150,7 @@ func (op RecycleWorktree) Run(ctx context.Context, deps OpDeps) (Result, error) 
 	if err := wt.Switch(ctx, op.Branch); err != nil {
 		return Result{}, err
 	}
-	res := Result{Changed: true}.WithSummary("recycled %s: %s → %s", target, old, op.Branch)
+	res := Result{Changed: true}.WithSummary("recycled %s → %s in %s", old, op.Branch, target)
 	switch {
 	case committed != "":
 		res = res.AppendSummary("; committed %s", committed)
