@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Binary files are never previewed as text; images are previewed as cells
+
+### Fixed
+
+- Landing on a JPEG (or any binary file) in the working-tree files window
+  rendered its bytes as text: an 11 KB "line" cost ~600 ms per frame, so the
+  UI went unresponsive, and the C1 control bytes in it reached the terminal
+  and garbled the screen. The preview and the full-screen viewer now refuse
+  binary content (a NUL byte or invalid UTF-8, the compare's own rule) with a
+  one-line placeholder naming the size. The display sanitiser also drops C1
+  controls and bidi overrides, so a stray byte in a text file cannot draw
+  escape sequences either.
+
+### Added
+
+- **Image preview.** A PNG, JPEG or GIF under the cursor is decoded and drawn
+  in the preview (and the full-screen viewer) as half-block cells — the upper
+  pixel as the glyph's foreground, the lower as its background — scaled to
+  the pane and re-fitted on resize or `ctrl+t`, with an info line giving the
+  format, pixel size and byte size. A terminal with no colour gets a
+  luminance glyph ramp instead. Stdlib decoders only; no external tool.
+
 ## Fuzzy filters use fzf's matcher and syntax
 
 ### Changed

@@ -101,7 +101,7 @@ func (s *Service) patchPerMember(ctx context.Context, left, right FileSet) (stri
 		if err != nil {
 			return "", err
 		}
-		if isBinaryContent(lb) || isBinaryContent(rb) {
+		if IsBinary(lb) || IsBinary(rb) {
 			// git diff --no-index would print the temp paths on this line
 			// (no @@ hunk to flip RelabelNoIndexDiff's header latch), so a
 			// binary pair is rendered directly instead of ever being diffed.

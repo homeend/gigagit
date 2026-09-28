@@ -68,6 +68,17 @@ func newErrorPopup(msg string) *contentPopup {
 // run, including \r and \t, before it renders.
 //
 // Newlines survive — the caller splits on them to keep git's line structure.
+// dropForDisplay reports a rune the display must never carry: a C0 control
+// (\r, ESC, backspace, … — moves the cursor or starts an escape sequence),
+// DEL, a C1 control (U+0080–U+009F: U+009B is CSI on xterm-style terminals,
+// and a binary file is full of them), or a bidi override / isolate
+// (U+202A–U+202E, U+2066–U+2069: reverses the rest of the row). Width math
+// sees none of them, so the corruption would show only on a real terminal.
+func dropForDisplay(r rune) bool {
+	return r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) ||
+		(r >= 0x202a && r <= 0x202e) || (r >= 0x2066 && r <= 0x2069)
+}
+
 func sanitizeForDisplay(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
@@ -77,9 +88,7 @@ func sanitizeForDisplay(s string) string {
 			b.WriteRune(r)
 		case r == '\t':
 			b.WriteString("    ") // width-exact: measured after substitution
-		case r < 0x20 || r == 0x7f:
-			// Every other C0 control (\r, ESC, backspace, …) can move the cursor
-			// or start an escape sequence; drop it rather than let stderr draw.
+		case dropForDisplay(r):
 		default:
 			b.WriteRune(r)
 		}
