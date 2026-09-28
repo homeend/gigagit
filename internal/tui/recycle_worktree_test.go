@@ -167,7 +167,7 @@ func TestRecycleOptionLabelsTranslated(t *testing.T) {
 func TestRecycleOpRefreshesBranchesAndWorktrees(t *testing.T) {
 	t.Parallel()
 	got := opAffectedSources(engine.RecycleWorktree{})
-	want := map[sourceKey]bool{srcBranches: true, srcWorktrees: true, srcFeed: true} // a commit recycle adds a commit: the feed must reload too
+	want := map[sourceKey]bool{srcBranches: true, srcWorktrees: true, srcFeed: true, srcNotes: true} // a commit recycle adds a commit; a shelve may annotate the shelf entry (◆ badges)
 	for _, s := range got {
 		delete(want, s)
 	}

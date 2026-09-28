@@ -226,6 +226,8 @@ func optionDisplayName(value string) string {
 		return i18n.T("commits")
 	case "discard":
 		return i18n.T("discard")
+	case "shelve":
+		return i18n.T("shelve")
 	case "delete":
 		return i18n.T("delete")
 	case "force":
