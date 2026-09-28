@@ -222,7 +222,7 @@ func ReplaceToolCommandBodies(path string, replace func(body string) (string, bo
 	return n, atomicWriteFile(path, []byte(out.String()))
 }
 
-// isCommandLiteralOpen reports a `command = ”'` line that opens a multi-line
+// isCommandLiteralOpen reports a command key line that opens a multi-line
 // literal (the body starts on the next line).
 func isCommandLiteralOpen(trimmed string) bool {
 	k, v, ok := strings.Cut(trimmed, "=")
