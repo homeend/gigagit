@@ -161,9 +161,10 @@ all land via `linknav`, which already forwards the hint.
 
 `linkDescFields` gains `version`: when `FindVersion` hits, `version: <branch>
 · <op> · <YYYY-MM-DD HH:MM>`; on a miss it falls THROUGH to the pair arms
-(`link: gg://…`) rather than printing an id. `links.js`'s formatter twin gains
-the same kind; `TestLinkDescJSMatchesGo` pins it. So `gg links` and the
-history popup describe a copied version link by what it is.
+(`link: gg://…`) rather than printing an id. The web needs no formatter
+change: its versions row copies the SERVER-built `desc` (§2.6), and
+`links.js linkDesc`'s default arm already renders `<kind>: <id>`. So
+`gg links` and the history popup describe a copied version link by what it is.
 
 ### 2.6 Producers
 
