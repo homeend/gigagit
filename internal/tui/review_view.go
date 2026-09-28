@@ -109,7 +109,11 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 			m, cmd = m.openChangedFiles(model.Commit{Hash: msg.tip})
 		}
 		m.filesReview = st
-		m.filesTreeFocused = true // moving the commit list would leave the review
+		// The files view shows only with the Commits focus (the Tags / goto
+		// openers do the same); esc restores the panel it was opened from.
+		// The tree side: moving the commit list would leave the review.
+		m.focus = panelCommits
+		m = m.focusTree()
 		m.filesTitle = i18n.T("Review: %s", reviewLabel(msg.review))
 		return m, cmd
 	}

@@ -331,3 +331,25 @@ func TestReviewFromNotesEntryEscReturnsToTheCommitFiles(t *testing.T) {
 		t.Fatal("a second esc closes the commit's files")
 	}
 }
+
+// Opened from the Branches tab (or any panel but Commits) the review view must
+// be ON SCREEN: the files view shows only with the Commits focus — esc brings
+// the Branches focus back.
+func TestReviewViewOpensFromTheBranchesTab(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, reviewViewDoc)
+	m = m.closeFilesView()
+	m.focus = panelBranches
+	m, cmd := m.openReview(id, "Review")
+	m = drainCmds(t, m, cmd)
+	if m.filesReview == nil || m.focus != panelCommits || !m.filesTreeFocused {
+		t.Fatalf("review=%v focus=%v tree=%v", m.filesReview != nil, m.focus, m.filesTreeFocused)
+	}
+	if view := ansi.Strip(m.View()); !strings.Contains(view, "≡ Overview") {
+		t.Fatalf("the review view is not on screen:\n%s", view)
+	}
+	m, _ = updateKey(m, "esc")
+	if m.focus != panelBranches {
+		t.Fatalf("esc: focus %v, want Branches back", m.focus)
+	}
+}
