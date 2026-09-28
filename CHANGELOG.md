@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Kill and remove an agent session with one key
+
+### Added
+
+- **`X` on a running session sub-row** (Worktrees and Branches tabs) kills the
+  agent or terminal session and removes its row once it has exited; `x` keeps
+  removing an exited one only. The footer says `[X] kill+remove` on a running
+  sub-row, the `.` menu gained **Kill and remove session**, and the refusal
+  `x` gives on a running session now points at `X`. Any console docked on
+  that session closes with the row. (`agentsession.Manager.KillAndRemove`:
+  the session stays listed while it dies, so quitting still waits for it.)
+
 ## gg web: binary files and images in the finder preview and the viewer
 
 ### Fixed

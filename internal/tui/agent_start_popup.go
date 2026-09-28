@@ -265,6 +265,8 @@ func (m Model) sessionMenuRows() []actionRow {
 		if info.State == domain.SessionRunning {
 			rows = append(rows, actionRow{id: "session-kill", label: i18n.T("Kill session"), run: func(m Model) (tea.Model, tea.Cmd) {
 				return m.killSession(id), nil
+			}}, actionRow{id: "session-kill-remove", label: i18n.T("Kill and remove session"), run: func(m Model) (tea.Model, tea.Cmd) {
+				return m.killRemoveSessionRow(info), nil
 			}})
 		} else {
 			rows = append(rows, actionRow{id: "session-remove", label: i18n.T("Remove session"), run: func(m Model) (tea.Model, tea.Cmd) {
@@ -313,19 +315,40 @@ func (m Model) canRemoveSessionRow() bool {
 	return ok && info.State != domain.SessionRunning
 }
 
+// canKillRemoveSessionRow gates X on the Worktrees and Branches tabs: a
+// running session sub-row is selected (an exited one already shows x).
+func (m Model) canKillRemoveSessionRow() bool {
+	info, ok := m.selectedSession()
+	return ok && info.State == domain.SessionRunning
+}
+
 // removeSessionRow is x on a session sub-row: an exited session is removed
 // (its console closes through onSessionsChanged); a running one is refused
-// with the same notice the ctrl+\ popup gives.
+// and pointed at X.
 func (m Model) removeSessionRow(info domain.SessionInfo) Model {
 	if info.State == domain.SessionRunning {
-		m.statusMsg = i18n.T("only an exited session can be removed — kill it first (k)")
+		m.statusMsg = i18n.T("only an exited session can be removed — X kills and removes a running one")
 		return m
 	}
 	if err := domain.Sessions().Remove(info.ID); err != nil {
-		m.statusMsg = i18n.T("only an exited session can be removed — kill it first (k)")
+		m.statusMsg = i18n.T("only an exited session can be removed — X kills and removes a running one")
 		return m
 	}
 	m.statusMsg = i18n.T("removed %s", info.Label)
+	return m
+}
+
+// killRemoveSessionRow is X on a session sub-row: the session is killed and
+// its row disappears once the exit is recorded (the manager removes it; the
+// list change closes any console docked on it). On an exited row it is x.
+func (m Model) killRemoveSessionRow(info domain.SessionInfo) Model {
+	if info.State != domain.SessionRunning {
+		return m.removeSessionRow(info)
+	}
+	if err := domain.Sessions().KillAndRemove(info.ID); err != nil {
+		return m
+	}
+	m.statusMsg = i18n.T("killing and removing %s in %s…", info.Label, shortWorktreeName(info.Dir))
 	return m
 }
 

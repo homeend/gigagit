@@ -1283,9 +1283,11 @@ included — except two:
 A running or exited session shows as a sub-row under its worktree
 (`└ ● Claude  running 12m` / `└ ○ Codex  exited (0)`); `enter` on it (or its
 `.` menu **Open session**) brings the console back, and the menu also offers
-**Kill session** / **Remove session**; on an exited session's sub-row, `x`
-removes it without opening the menu (a running one is refused: kill it first);
-the footer says `[enter] open` / `[x] remove` there. A `/` filter matches a
+**Kill session** / **Kill and remove session** / **Remove session**; on an
+exited session's sub-row, `x` removes it without opening the menu (a running
+one is refused), and on a running one `X` kills it and drops the row once it
+has exited; the footer says `[enter] open` / `[x] remove` / `[X] kill+remove`
+there. A `/` filter matches a
 worktree together with its sub-rows, so typing a session's label keeps the
 worktree it runs in. The same menu's **Open terminal** starts
 an interactive shell in that worktree in the same console (`$SHELL`, or
