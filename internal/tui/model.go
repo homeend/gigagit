@@ -2256,6 +2256,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.canEnterConflict() {
 				return startConflictProcess(m) // enter / resume from the notice
 			}
+		case "X":
+			// A session sub-row owns X too: kill a running session and drop
+			// its row once it has exited (the . menu's Kill and remove
+			// session); on an exited row it is x.
+			if info, ok := m.selectedSession(); ok {
+				return m.killRemoveSessionRow(info), nil
+			}
 		case "H":
 			if m.canStageHunks() {
 				bi, _ := m.backingIndex(panelFiles)

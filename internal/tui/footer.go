@@ -68,6 +68,7 @@ func contextBindings() []footerBinding {
 		{"delete-worktree", "d", i18n.T("[d]elete"), func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }, scopeRow},
 		{"open-session", "enter", i18n.T("[enter] open"), func(m Model) bool { _, ok := m.selectedSession(); return ok }, scopeRow},
 		{"remove-session", "x", i18n.T("[x] remove"), Model.canRemoveSessionRow, scopeRow},
+		{"kill-remove-session", "X", i18n.T("[X] kill+remove"), Model.canKillRemoveSessionRow, scopeRow},
 		{"rename-worktree", "e", i18n.T("[e] rename"), func(m Model) bool {
 			return m.focus == panelWorktrees && m.canMoveWorktree()
 		}, scopeRow},

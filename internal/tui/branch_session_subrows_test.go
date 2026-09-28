@@ -228,3 +228,81 @@ func TestBranchSubRowsFollowParentUnderSortAndSlotFilter(t *testing.T) {
 		t.Fatalf("sub-row menu = %v, want the session rows only", got)
 	}
 }
+
+// Serial: installs a process-global session manager.
+//
+// X on a RUNNING session sub-row (Branches or Worktrees tab) confirms, then
+// kills the session and removes it from the list once it has exited — x only
+// removes an exited one. The footer advertises it, the . menu carries the same
+// action, and the console docked on that session closes with the row.
+func TestCapitalXKillsAndRemovesRunningSession(t *testing.T) {
+	m := loadedModel(t)
+	s := startTestSession(t, m, `sleep 30`)
+	m.focus, m.activeLeftTab = panelBranches, panelBranches
+	m.sel[panelBranches] = branchSubRowIndex(m, s.Info().ID)
+	m, _ = m.onSessionsChanged()
+
+	if !strings.Contains(m.footerLine(), "[X] kill+remove") {
+		t.Fatalf("footer must advertise [X] kill+remove on a running sub-row: %q", m.footerLine())
+	}
+	if got := ids(availableActions(m)); !got["session-kill-remove"] {
+		t.Fatalf("running sub-row menu = %v, want Kill and remove session", got)
+	}
+	mm, _ := m.Update(keyMsg("enter"))
+	m = mm.(Model)
+	if m.console == nil || m.console.id != s.Info().ID {
+		t.Fatalf("enter did not open the session's console: %+v", m.console)
+	}
+	m.focus = panelBranches
+
+	mm, _ = m.Update(keyMsg("X"))
+	m = mm.(Model)
+	if m.modal == nil || m.modal.req.ID != "session-kill-remove" {
+		t.Fatalf("X must confirm before killing, modal = %+v", m.modal)
+	}
+	if m.modal.req.Options[m.modal.sel] != "Cancel" {
+		t.Fatalf("the confirm must default to Cancel, sel = %d", m.modal.sel)
+	}
+	mm, _ = m.modal.onResolve(m, "Cancel")
+	m = mm.(Model)
+	m.modal = nil
+	if s.Info().State != domain.SessionRunning {
+		t.Fatal("Cancel killed the session")
+	}
+	mm, _ = m.Update(keyMsg("X"))
+	m = mm.(Model)
+	mm, _ = m.modal.onResolve(m, "Kill")
+	m = mm.(Model)
+	m.modal = nil
+	if !strings.Contains(m.statusMsg, "killing") {
+		t.Fatalf("Kill must announce the kill, status = %q", m.statusMsg)
+	}
+	select {
+	case <-s.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("X did not kill the session")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, ok := domain.Sessions().Get(s.Info().ID); !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("X did not remove the killed session")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	m, _ = m.onSessionsChanged()
+	if branchSubRowIndex(m, s.Info().ID) >= 0 {
+		t.Fatal("killed session still has a sub-row")
+	}
+	if m.console != nil {
+		t.Fatal("the removed session's console is still docked")
+	}
+	if m.focus != panelBranches {
+		t.Fatalf("focus left the Branches tab: %v", m.focus)
+	}
+	if strings.Contains(m.footerLine(), "kill+remove") {
+		t.Fatalf("footer still advertises X with no session row: %q", m.footerLine())
+	}
+}

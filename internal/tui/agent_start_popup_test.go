@@ -132,7 +132,7 @@ func TestSessionMenuRows(t *testing.T) {
 		t.Fatalf("worktree row: %s", got)
 	}
 	m.sel[panelWorktrees] = 1
-	if got := ids(); got != "session-open,session-kill" {
+	if got := ids(); got != "session-open,session-kill,session-kill-remove" {
 		t.Fatalf("running session row: %s", got)
 	}
 	for _, r := range m.sessionMenuRows() {
