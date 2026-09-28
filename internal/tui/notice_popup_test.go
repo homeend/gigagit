@@ -178,7 +178,7 @@ func TestDialogSwallowsGlobalKeys(t *testing.T) {
 	}
 }
 
-func TestNoticePopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
+func TestNoticePopupMaximizeLiftsRowCapNotWidth(t *testing.T) {
 	t.Parallel()
 	m := Model{}
 	m.width, m.height = 200, 50
@@ -191,8 +191,11 @@ func TestNoticePopupMaximizeWidensAndLiftsRowCap(t *testing.T) {
 	p.maximized = true
 	maxed := p.box(m)
 
-	if lipgloss.Width(maxed) <= lipgloss.Width(normal) {
-		t.Fatalf("maximized width %d must exceed normal %d", lipgloss.Width(maxed), lipgloss.Width(normal))
+	// Width follows the content (notice_popup_width_test.go): short titles
+	// need no more room, so maximizing keeps the box's width and only lifts
+	// the row cap.
+	if lipgloss.Width(maxed) != lipgloss.Width(normal) {
+		t.Fatalf("maximized width %d must equal normal %d for short content", lipgloss.Width(maxed), lipgloss.Width(normal))
 	}
 	if lipgloss.Height(maxed) <= lipgloss.Height(normal) {
 		t.Fatalf("maximized must show more rows: height %d vs %d", lipgloss.Height(maxed), lipgloss.Height(normal))

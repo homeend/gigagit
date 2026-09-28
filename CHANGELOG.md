@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Notice dialog follows its content
+
+### Fixed
+
+- **The `!` notice dialog cut its text and maximized to an empty screen.**
+  The open notice's title was never wrapped, so a drift notice ("`<branch>`'s
+  change set may have drifted…") lost its tail to `…`; a flagged path that
+  did not fit was word-wrapped, which dropped the indent, stranded the
+  status letter on its own line and chunked the path mid-name; and the box
+  was a fixed 96 columns however wide the terminal, while `ctrl+t` jumped
+  straight to the whole terminal even when the content needed two thirds of
+  it. Now the title wraps like the detail prose, a path row keeps its
+  indent and lead-in and is middle-elided so the file name survives, and the
+  width follows the content: the usual box for short notices, up to three
+  quarters of the terminal by default for long ones, and `ctrl+t` grows the
+  box only as far as the widest line needs (never narrower than the normal
+  box; the row cap still lifts). `popupFitWidth` (`popup_max.go`) is the
+  shared rule for any content-fit popup.
+
 ## Shelve several marked files as ONE set
 
 ### Fixed
