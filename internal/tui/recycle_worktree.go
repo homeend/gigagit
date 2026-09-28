@@ -34,7 +34,7 @@ func (m Model) recycleWorktreeRow() (actionRow, bool) {
 	name := b.Name
 	return actionRow{
 		id:    "recycle-worktree",
-		label: i18n.T("Recycle a worktree…"),
+		label: i18n.T("Recycle a worktree"),
 		run:   func(m Model) (tea.Model, tea.Cmd) { return m.openRecyclePicker(name), nil },
 	}, true
 }
@@ -63,26 +63,42 @@ func (m Model) openRecyclePicker(branch string) Model {
 	for _, info := range domain.Sessions().List() {
 		live[filepath.Clean(info.Dir)] = true
 	}
-	// Budget = the menu's own text width minus the "> " prefix; the branch
-	// (and a live marker) keeps its columns, the PATH is what elides.
+	// Budget = the FULL popup text width minus the "> " prefix (the action menu
+	// sizes itself to its content, so a path shows whole whenever the terminal
+	// has room). The branch (and a live marker) keeps its columns, the PATH is
+	// what elides — to ONE shared budget (the widest suffix decides), and every
+	// elided path is then padded to the widest one so the branch column lines
+	// up like a table.
 	w, _ := m.overlayDims()
-	textW := popupTextWidth(popupInnerWidth(w)) - 2
-	var rows []actionRow
-	for _, w := range m.recycleCandidates() {
-		dir := w.Path
+	textW := popupTextWidth(popupFullInnerWidth(w)) - 2
+	cands := m.recycleCandidates()
+	suffixes := make([]string, len(cands))
+	lives := make([]bool, len(cands))
+	maxSuffix := 0
+	for i, w := range cands {
 		cur := w.Branch
 		if cur == "" {
 			cur = i18n.T("detached")
 		}
-		suffix := "  " + cur
-		isLive := live[filepath.Clean(dir)]
-		if isLive {
-			suffix += "  " + i18n.T("(agent session running)")
+		suffixes[i] = "  " + cur
+		if lives[i] = live[filepath.Clean(w.Path)]; lives[i] {
+			suffixes[i] += "  " + i18n.T("(agent session running)")
 		}
-		label := elidePath(dir, max(12, textW-lipgloss.Width(suffix))) + suffix
+		maxSuffix = max(maxSuffix, lipgloss.Width(suffixes[i]))
+	}
+	pathW := max(12, textW-maxSuffix)
+	paths := make([]string, len(cands))
+	col := 0
+	for i, w := range cands {
+		paths[i] = elidePath(w.Path, pathW)
+		col = max(col, lipgloss.Width(paths[i]))
+	}
+	rows := make([]actionRow, 0, len(cands))
+	for i, w := range cands {
+		dir, isLive := w.Path, lives[i]
 		rows = append(rows, actionRow{
 			id:    "recycle-into:" + dir,
-			label: label,
+			label: padRight(paths[i], col) + suffixes[i],
 			run:   func(m Model) (tea.Model, tea.Cmd) { return m.recycleInto(dir, isLive) },
 		})
 	}
