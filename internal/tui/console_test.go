@@ -204,3 +204,34 @@ func TestConsoleClosesWhenItsSessionIsRemoved(t *testing.T) {
 		t.Fatalf("focus moved to %v; closing an unfocused console must leave it alone", m.focus)
 	}
 }
+
+func TestUnfocusedConsoleDoesNotPushItsSizeOnWindowResize(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	m.console.focused = false
+	_ = s.Resize(100, 30) // another viewer (the web) owns the size now
+	mm, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 50})
+	m = mm.(Model)
+	if sc := s.Screen(); sc.Cols != 100 || sc.Rows != 30 {
+		t.Fatalf("an unfocused console pushed %dx%d on window resize", sc.Cols, sc.Rows)
+	}
+}
+
+func TestConsolePushesItsSizeWhenItGainsFocus(t *testing.T) {
+	m := loadedModel(t)
+	m.width, m.height = 120, 40
+	s := startTestSession(t, m, `sleep 5`)
+	m, _ = m.openConsole(s.Info().ID)
+	m.console.focused = false
+	_ = s.Resize(100, 30)
+	m.focus = panelCommits
+	mm, _ := m.Update(keyMsg("enter"))
+	m = mm.(Model)
+	w, h := m.consoleBox()
+	cols, rows := consoleInner(w, h)
+	if sc := s.Screen(); !m.console.focused || sc.Cols != cols || sc.Rows != rows {
+		t.Fatalf("after focus: focused=%v emulator %dx%d, want %dx%d", m.console.focused, sc.Cols, sc.Rows, cols, rows)
+	}
+}

@@ -1,6 +1,6 @@
 // sidebar.js — part of gg's web client. Split from the original app.js;
 // see app.js (the entry module) for the load order.
-import { $, SECTIONS, charWidth, defaultWorktreePath, elidePath, esc, getJSON, lsGet, lsSet, postJSON, state } from "./core.js";
+import { $, SECTIONS, charWidth, defaultWorktreePath, elideNameMiddle, elidePath, esc, getJSON, lsGet, lsSet, postJSON, state } from "./core.js";
 import { saveUI } from "./uistate.js";
 import { closePrompt, copyText, openPrompt, showCtxMenu } from "./layers.js";
 import { doForcePush, doPull, doPullBranch, doPush, doPushBranch, doReroot, opLine, openCreateBranchPrompt, showLocalConfirm, startOp, startSwitch } from "./ops.js";
@@ -12,6 +12,7 @@ import { gotoBranchTip, openCommitByHash, openStashDetail, setSolo } from "./com
 import { openCompare, openEntryCompare } from "./files.js";
 import { openFileHistory } from "./filehist.js";
 import { extraRows } from "./menus.js";
+import { openConsole } from "./console.js";
 import { entryGone, toast } from "./toast.js";
 import { nextSortMode, setSortMode, sortChipHTML, sortMode, sortedBy } from "./sortlist.js";
 import { applyFilterHeader, filterChipHTML, openFilterMenu } from "./branchfilter.js";
@@ -23,8 +24,36 @@ function sortParam(list) {
   return "sort=" + encodeURIComponent(sortMode(list));
 }
 
+// --- sidebar model (pure; guarded against Go) ---
+function sessAge(iso, now) {
+  const s = Math.max(0, Math.floor((now - Date.parse(iso)) / 1000));
+  return s < 60 ? s + "s" : s < 3600 ? Math.floor(s / 60) + "m" : Math.floor(s / 3600) + "h";
+}
+
+// worktreeSessionRows: the sessions running in one worktree, in start order —
+// the TUI's Worktrees sub-rows (└ ● claude  running 12m).
+function worktreeSessionRows(sessions, path, now) {
+  return sessions
+    .filter((s) => s.worktree === path)
+    .map((s) => ({
+      id: s.id,
+      glyph: s.state === "exited" ? "○" : "●",
+      label: s.label,
+      meta: s.state === "exited" ? "exited (" + s.exit_code + ")" : "running " + sessAge(s.started, now),
+      task: !!s.task,
+    }));
+}
+// --- end sidebar model ---
+
+// takeSessions: the agent-session list (boot and every "sessions" live
+// event) — the sub-rows under the worktrees repaint from it.
+function takeSessions(list) {
+  state.sessions = list || [];
+  renderWorktrees();
+}
+
 async function fetchBranches() {
-  const [b, w, tg, st, rl, rm, bm, sh] = await Promise.all([
+  const [b, w, tg, st, rl, rm, bm, sh, ag] = await Promise.all([
     getJSON("/api/branches"),
     getJSON("/api/worktrees").catch(() => ({ worktrees: [] })),
     getJSON("/api/tags?" + sortParam("tags")).catch(() => ({ tags: [], truncated: false })),
@@ -33,7 +62,9 @@ async function fetchBranches() {
     getJSON("/api/remotes?" + sortParam("remotes")).catch(() => ({ remotes: [], truncated: false })),
     getJSON("/api/bookmarks").catch(() => ({ entries: [] })),
     getJSON("/api/shelf").catch(() => ({ entries: [] })),
+    getJSON("/api/sessions").catch(() => ({ sessions: [] })),
   ]);
+  state.sessions = ag.sessions || [];
   state.branches = b.branches || [];
   // The full array is kept, hidden rows and all: renderBranches drops them at
   // paint time, and the menus (and the drag-and-drop targets) look a branch up
@@ -180,14 +211,32 @@ function renderWorktrees() {
       // the row can hold, middle-elided, rather than a bare directory name.
       const budget = cols - 2 - Array.from(label).length - 1;
       const path = budget >= 4 ? elidePath(w.path, budget) : "";
+      // Session sub-rows (web attach): one per agent session in this
+      // worktree, a click opens its console. No data-p: the worktree menu
+      // and the drop targets skip them.
+      const subs = worktreeSessionRows(state.sessions || [], w.path, Date.now())
+        .map((r) => {
+          const room = cols - 6 - Array.from(r.meta).length;
+          return (
+            `<li class="wsess${r.task ? " task" : ""}" data-sid="${esc(r.id)}" title="${esc(r.label + " — " + r.meta)}">` +
+            `└ <span class="glyph ${r.glyph === "●" ? "run" : "ex"}">${r.glyph}</span> ${esc(room > 4 ? elideNameMiddle(r.label, room) : r.label)}` +
+            `<span class="wpath">${esc(r.meta)}</span></li>`
+          );
+        })
+        .join("");
       return (
         `<li class="${cur.trim()}" data-p="${esc(w.path)}" title="${esc(w.path)}">` +
         `${mark(!!cur)}${esc(label)}` +
-        (path ? `<span class="wpath">${esc(path)}</span>` : "") + `</li>`
+        (path ? `<span class="wpath">${esc(path)}</span>` : "") + `</li>` + subs
       );
     })
     .join("");
 }
+
+$("worktrees-list").addEventListener("click", (e) => {
+  const li = e.target.closest("li.wsess");
+  if (li && li.dataset.sid) openConsole(li.dataset.sid);
+});
 
 
 // remoteMark is the TUI's ▲ after a tag the default remote is known to have.
@@ -1437,4 +1486,4 @@ $("shelf-list").addEventListener("contextmenu", (e) => {
   if (s) showShelfMenu(s, e.clientX, e.clientY);
 });
 
-export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, isCollapsed, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, toggleSection, worktreePathForBranch };
+export { addCommitEntry, addFileEntry, applyStoredSections, branchesList, clearDropTargets, fetchBranches, isCollapsed, locateCurrentBranch, renderBranches, renderReflog, renderRemotes, renderStashes, renderTags, renderWorktrees, revealHintEntry, showBranchMenu, showBranchPairMenu, showReflogMenu, showRemoteMenu, showStashMenu, showTagMenu, showWorktreeMenu, takeSessions, toggleSection, worktreePathForBranch };

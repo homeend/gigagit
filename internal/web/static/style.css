@@ -1665,3 +1665,44 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 
 /* An image file in the viewer / F preview: scaled to the pane, never wider. */
 .vimg { display: block; max-width: 100%; height: auto; margin: 6px 0 0 0; }
+/* The agent console (console.js, web attach): a layer over the panes right
+   of the sidebar — the server's screen painted as styled runs. Hidden by id. */
+#console { position: fixed; background: var(--bg-alt); display: flex; flex-direction: column; z-index: 20; border-left: 1px solid var(--border); }
+#console.hidden { display: none; }
+#console-title { padding: 6px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; display: flex; }
+#console-label.exited { color: var(--dim); }
+#console-size { margin-left: auto; color: var(--dim); }
+#console-body { flex: 1; overflow: auto; position: relative; padding: 6px 8px; }
+#console-grid { font: 12px/16px ui-monospace, Menlo, Consolas, monospace; white-space: pre; display: inline-block; min-width: 100%; }
+#console-grid .crow { height: 16px; }
+#console-grid .b { font-weight: bold; }
+#console-grid .i { font-style: italic; }
+#console-grid .u { text-decoration: underline; }
+#console-grid .d { opacity: .6; }
+#console-grid .s { text-decoration: line-through; }
+#console-grid .r { filter: invert(1); }
+#console-cursor { position: absolute; margin: 6px 0 0 8px; background: var(--fg); mix-blend-mode: difference; pointer-events: none; }
+#console-cursor.outline { background: none; border: 1px solid var(--dim); mix-blend-mode: normal; box-sizing: border-box; }
+#console-cursor.hidden { display: none; }
+#foot .cwarn { margin-left: auto; color: #e0c06c; }
+
+/* The ctrl+\ switcher's tabs (Agents · AI tasks · Open files). */
+#openfiles-tabs { display: flex; gap: 18px; }
+#openfiles-tabs span { color: var(--dim); cursor: pointer; padding-bottom: 2px; }
+#openfiles-tabs span.on { color: var(--fg); border-bottom: 2px solid var(--accent); }
+#openfiles-tabs i { font-style: normal; font-size: 11px; margin-left: 4px; }
+#openfiles-query { margin: 6px 12px 2px; padding: 2px 6px; border: 1px solid var(--border); background: var(--bg); color: var(--dim); font-family: ui-monospace, monospace; font-size: 12px; }
+#openfiles-query.hidden { display: none; }
+#openfiles-list .grp { color: var(--dim); font-size: 11px; text-transform: uppercase; padding: 3px 12px; }
+#openfiles-list .grp2 { color: var(--dim); padding: 2px 20px; }
+#openfiles-list .ofempty { color: var(--dim); padding: 6px 12px; }
+#openfiles-list .ofrow .glyph.run { color: #7bd88f; }
+#openfiles-list .ofrow .glyph.ex { color: var(--dim); }
+#openfiles-list .ofrow.task .glyph.run { color: #f2a65a; }
+
+/* Session sub-rows under a worktree (web attach): └ ● claude  running 12m. */
+#worktrees-list li.wsess { padding-left: 22px; cursor: pointer; color: var(--fg); font-weight: normal; }
+#worktrees-list li.wsess .glyph.run { color: #7bd88f; }
+#worktrees-list li.wsess .glyph.ex { color: var(--dim); }
+#worktrees-list li.wsess.task .glyph.run { color: #f2a65a; }
+#worktrees-list li.wsess:hover { background: var(--sel); }

@@ -16,6 +16,7 @@ const tabId =
 
 const state = {
   rows: [],
+  sessions: [], // the agent sessions of this gg (sidebar sub-rows, web attach)
   canLoadMore: false,
   loadingMore: false,
   cursor: 0,

@@ -102,6 +102,16 @@ func (m Model) syncConsoleSize() Model {
 	return m
 }
 
+// syncConsoleSizeIfFocused is the window-resize rule: only a focused (or
+// maximised) console owns the session's size. An unfocused one follows
+// whatever viewer is typing — the web page, or another gg — and clips.
+func (m Model) syncConsoleSizeIfFocused() Model {
+	if m.console == nil || !m.console.focused {
+		return m
+	}
+	return m.syncConsoleSize()
+}
+
 // waitSessionCmd blocks until session s changes, then waits out the repaint
 // spacing (absorbing further changes) before asking for a frame.
 func waitSessionCmd(s *domain.AgentSession, id domain.SessionID, gen int) tea.Cmd {
@@ -321,7 +331,7 @@ func (m Model) updateConsoleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	switch key {
 	case "enter":
 		m.console.focused = true
-		return m, nil, true
+		return m.syncConsoleSize(), nil, true // gaining focus takes the size back
 	case "ctrl+t":
 		m.console.maximized, m.console.focused = true, true
 		return m.syncConsoleSize(), nil, true

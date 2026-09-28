@@ -69,6 +69,10 @@ type liveMsg struct {
 	// Opened names the file an agent just opened in the background
 	// ("open_files"): every tab says so.
 	Opened string `json:"opened,omitempty"`
+	// Sessions is the whole agent-session list on Reason "sessions" (start,
+	// exit, remove — and, from plan 3, an agent-state change). It bypasses
+	// the op gate: a session exiting mid-op must still show.
+	Sessions []sessionWire `json:"sessions,omitempty"`
 }
 
 type liveHub struct {
@@ -403,7 +407,11 @@ func (s *Server) restartLive(ctx context.Context) { s.startLive(ctx) }
 
 // Close releases background resources (the live hub). Serve calls it after
 // the HTTP server has shut down.
-func (s *Server) Close() { s.stopLive(); s.stopOpenFilesWatch() }
+func (s *Server) Close() {
+	s.stopLive()
+	s.stopOpenFilesWatch()
+	s.sessStopOnce.Do(func() { close(s.sessStop) })
+}
 
 // announceShutdown tells every open /api/events stream the server is going
 // away, so a tab paints its server-down bar at once instead of probing a

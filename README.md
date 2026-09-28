@@ -1330,6 +1330,23 @@ step_out_key = "ctrl+]"   # a Bubble Tea key name
 sessions_key = "ctrl+\\"
 ```
 
+### Agent consoles in `gg web`
+
+The web page shows the agent sessions of its `gg web` process. `ctrl+\` is
+a tabbed switcher — **Agents** (every repo, grouped repo → worktree), **AI
+tasks** (read-only for now) and **Open files** — and `enter` on a session
+opens it as a live console over the panes, painted from the server's screen
+(nothing to install in the browser, nothing can desync). Type as in the TUI:
+a focused console sends every key to the agent except `ctrl+]` (step out)
+and `ctrl+\`; the browser keeps `ctrl+w`, `ctrl+t`, `ctrl+n` and friends
+(the bottom bar says so). Unfocused: `enter` focus, `m` maximize over the
+sidebar, `esc` close — the session keeps running. Whichever viewer has the
+console focused — this tab, another tab, or the TUI — sets the session's
+size; the others scroll. Every worktree row in the sidebar lists its
+sessions beneath it (`└ ● claude running 12m`, `○` when exited); a click
+opens one, and an exit raises a toast. Starting, killing and removing
+sessions from the web is not built yet.
+
 ### Environment
 
 `GG_COMMIT_PAGER` selects the commit-feed loading strategy: `plain` (default) is
