@@ -173,20 +173,30 @@ const junieCommitPrompt = `"Your task is to write a git commit message for the s
 // Mode), useless on a headless capture run.
 const junieCommitCommand = `<bin> --task ` + junieCommitPrompt + ` --output-format json --skip-update-check`
 
-// claudeReviewCommand — verified 2026-07-07: `claude -p "/code-review <range>"`
-// runs headless and .result is a clean severity-structured markdown report.
-// <range> is a runtime token (resolved by template.ResolveCommand). For the
-// uncommitted target <range> resolves empty and /code-review reviews the tree.
-const claudeReviewCommand = `<bin> -p "/code-review <range>" \
+// structuredReviewTask is the one review instruction every built-in review
+// template carries: the review brief ($GG_CONTEXT_FILE, engine.ReviewChanges)
+// holds the "Review output" section that describes the JSON review document,
+// and the document goes to $GG_MESSAGE_FILE, which the engine prefers over
+// stdout. No double quotes inside: it is spliced into a double-quoted shell
+// argument. Not re-verified against the live tools: 2026-09-28 (the earlier
+// templates, kept in review_upgrade.go, were verified 2026-07-07..2026-09-25).
+const structuredReviewTask = `You are reviewing a code change. Read the review brief at <env:GG_CONTEXT_FILE> (the full diff is at <env:GG_REVIEW_DIFF>, range <range>) and follow its Review output section exactly: write ONLY the JSON review document it describes into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). Do NOT modify any repository files and do NOT run git commit.`
+
+// claudeReviewCommand — the capture review: Claude writes the document with
+// its Write tool (allowed below); its .result envelope on stdout is the
+// fallback channel, unwrapped by notebatch.ParseReview. <range> is a runtime
+// token (resolved by template.ResolveCommand), empty for the uncommitted
+// target.
+const claudeReviewCommand = `<bin> -p "` + structuredReviewTask + `" \
   --output-format json \
   --permission-mode acceptEdits \
-  --allowedTools "Read" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git status *)"`
+  --allowedTools "Read" "Write" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" "Bash(git status *)"`
 
 // junieReviewPrompt — Junie is a task-agent: its stdout is a report, so the
 // review comes back through $GG_MESSAGE_FILE (the Stage-2 channel). Junie's own
 // --review flag reviews only uncommitted working changes and can't take a
 // range, so we feed it the diff at $GG_REVIEW_DIFF instead (verified 2026-07-07).
-const junieReviewPrompt = `"You are reviewing a code change. The full diff to review is in the file at <env:GG_REVIEW_DIFF> (range <range>). Write a concise code review — findings with severity and a short summary — into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). Do NOT modify any repository files and do NOT run git commit."`
+const junieReviewPrompt = `"` + structuredReviewTask + `"`
 
 const junieReviewCommand = `<bin> --task ` + junieReviewPrompt + ` --output-format json --skip-update-check`
 
@@ -212,7 +222,7 @@ const kimiCommitCommand = `<bin> -p ` + kimiCommitPrompt
 // the review comes back through $GG_MESSAGE_FILE, fed the diff at
 // $GG_REVIEW_DIFF. <range> is a runtime token (resolved by
 // template.ResolveCommand), empty for the uncommitted target.
-const kimiReviewPrompt = `"You are reviewing a code change. The full diff to review is in the file at <env:GG_REVIEW_DIFF> (range <range>). Write a concise code review — findings with severity and a short summary — into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). Do NOT modify any repository files and do NOT run git commit."`
+const kimiReviewPrompt = `"` + structuredReviewTask + `"`
 
 const kimiReviewCommand = `<bin> -p ` + kimiReviewPrompt
 
@@ -261,7 +271,7 @@ const codexCommitPrompt = `"Write a git commit message for the staged changes. R
 
 const codexCommitCommand = `<bin> exec ` + codexCommitPrompt + ` --sandbox read-only --output-last-message "<env:GG_MESSAGE_FILE>"`
 
-const codexReviewPrompt = `"You are reviewing a code change. The full diff to review is in the file at <env:GG_REVIEW_DIFF> (range <range>). Your final message must be ONLY a concise code review - findings with severity and a short summary. Do NOT modify any repository files and do NOT run git commit."`
+const codexReviewPrompt = `"You are reviewing a code change. Read the review brief at <env:GG_CONTEXT_FILE> (the full diff is at <env:GG_REVIEW_DIFF>, range <range>) and follow its Review output section, except that your final message is the deliverable: your final message must be ONLY the JSON review document it describes - no prose, no code fences. Do NOT modify any repository files and do NOT run git commit."`
 
 const codexReviewCommand = `<bin> exec ` + codexReviewPrompt + ` --sandbox read-only --output-last-message "<env:GG_MESSAGE_FILE>"`
 
@@ -296,7 +306,7 @@ const agyCommitPrompt = `"Write a git commit message for the staged changes into
 
 const agyCommitCommand = `<bin> -p ` + agyCommitPrompt + ` --dangerously-skip-permissions`
 
-const agyReviewPrompt = `"You are reviewing a code change. The full diff to review is in the file at <env:GG_REVIEW_DIFF> (range <range>). Write a concise code review - findings with severity and a short summary - into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository). Do NOT modify any repository files and do NOT run git commit."`
+const agyReviewPrompt = `"` + structuredReviewTask + `"`
 
 const agyReviewCommand = `<bin> -p ` + agyReviewPrompt + ` --dangerously-skip-permissions`
 
@@ -389,7 +399,7 @@ const kimiCompleteCommand = `<bin> -p ` + kimiCompletePrompt
 // `-p` (non-interactive) — no interactive rows for it.
 const interactiveCommitPrompt = `"Write a git commit message for the staged changes. The change summary is at <env:GG_CONTEXT_FILE> (files changed, recent-commit style) and the full diff at <env:GG_STAGED_DIFF>. Write ONLY the commit message - a concise imperative subject line (max ~72 chars), a blank line, then a short body explaining what changed and why - into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository), overwriting it each time you revise the message. Do not run git commit and do not modify any other files. Then wait for further instructions."`
 
-const interactiveReviewPrompt = `"You are reviewing a code change. The summary is at <env:GG_CONTEXT_FILE> and the full diff at <env:GG_REVIEW_DIFF> (range <range>). Write a concise code review - findings with severity and a short summary - into the file at <env:GG_MESSAGE_FILE> (an absolute path outside the repository), overwriting it each time you revise the review. Do NOT modify any repository files and do NOT run git commit. Then wait for further instructions."`
+const interactiveReviewPrompt = `"` + structuredReviewTask + ` Overwrite the file each time you revise the review, then wait for further instructions."`
 
 // Headless (capture) resolve-and-complete variants — the web frontend's rows
 // (a browser has no terminal to hand over). Same prompts, same contract; the
