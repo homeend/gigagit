@@ -102,8 +102,11 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 			}
 		}
 	}
-	// A note on a whole shelf entry has no lines: no range, no fingerprint —
-	// only the entry has to exist.
+	// A note on a whole shelf entry anchors on no line — only the entry has
+	// to exist. It still gets a real fingerprint: an OLDER gg's sweep does
+	// not know shelf-level notes and resolves one against the entry's whole
+	// stored blob, deleting it unless line 1 of that blob (immutable) matches.
+	// This build ignores the range and hash (entryNotes).
 	if n.IsShelfLevel() {
 		if _, ferr := s.ShelfFind(ctx, n.Address.ShelfID); ferr != nil {
 			if errors.Is(ferr, shelf.ErrNotFound) {
@@ -111,7 +114,13 @@ func (s *Service) NoteAdd(ctx context.Context, n model.Note) (model.Note, error)
 			}
 			return model.Note{}, ferr
 		}
-		n.Range, n.ContextHash = [2]int{}, ""
+		n.Side, n.Range, n.ContextHash = model.NoteSideNew, [2]int{}, ""
+		if blob, berr := s.ShelfBlob(ctx, n.Address.ShelfID); berr == nil {
+			if lines := splitLines(blob); len(lines) > 0 {
+				n.Range = [2]int{1, 1}
+				n.ContextHash = model.NoteContextHash(anchorLines(lines, n.Range))
+			}
+		}
 	}
 	// Pin the checkout BEFORE the hash fill: noteSideLines reads the note's
 	// own worktree, and every later match is made against this value.

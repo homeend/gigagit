@@ -128,3 +128,22 @@ func TestOverviewListsShelfEntryNotes(t *testing.T) {
 		t.Fatalf("label %q count %d", ov.Shelves[0].Label, ov.Count())
 	}
 }
+
+// An OLDER gg does not know shelf-level notes: its sweep resolves one like any
+// shelf note — against the entry's whole stored blob — and drops it unless the
+// fingerprint matches. The note therefore carries a real one (line 1 of the
+// blob, which never changes), so a mixed-version machine keeps it.
+func TestShelfNoteSurvivesAnOlderSweep(t *testing.T) {
+	t.Parallel()
+	svc, e := shelfNoteFixture(t)
+	ctx := context.Background()
+	n := addShelfNote(t, svc, e.ID)
+	blob, err := svc.ShelfBlob(ctx, e.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// What the old sweep does: noteSideLines(StateShelf, new) = the blob's lines.
+	if status, _ := resolveOne(n, splitLines(blob)); status != model.NoteActive {
+		t.Fatalf("an older sweep would see %s (range %v, hash %q) and delete the note", status, n.Range, n.ContextHash)
+	}
+}
