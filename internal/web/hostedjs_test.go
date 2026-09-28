@@ -13,6 +13,7 @@ func TestHostedPageHidesRepoSwitching(t *testing.T) {
 		{"core.js", "hosted: false,"},
 		{"ops.js", "state.hosted = !!repo.hosted;"},
 		{"palette.js", `state.hosted && (r.label === "switch repo…" || r.label === "open repo (path)…")`},
+		{"palette.js", `...(state.hosted ? [] : [{ header: "Repositories" }, { label: "switch repo…", act: () => openPalette("repo") }]),`},
 		{"sidebar.js", "if (!state.hosted && !(state.worktree && w.path === state.worktree))"},
 		{"locks.js", "if (served && !state.hosted) doReroot(to);"},
 	}

@@ -399,8 +399,8 @@ function openGlobalMenu() {
     { header: "Search" },
     { label: "filter the commit list… (\\)", act: () => openFeedFilter() },
     { label: "files in the working tree… (F)", act: () => openFinder() },
-    { header: "Repositories" },
-    { label: "switch repo…", act: () => openPalette("repo") },
+    // A TUI-hosted page has no repo switch: the terminal owns the repo.
+    ...(state.hosted ? [] : [{ header: "Repositories" }, { label: "switch repo…", act: () => openPalette("repo") }]),
     { header: "UI" },
     { label: "command palette…", act: () => openPalette("cmd") },
     { label: "refresh", act: () => manualRefresh() },
