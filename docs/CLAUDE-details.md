@@ -3799,6 +3799,53 @@ No UI in plan 2; see "AI tasks — the TUI" below.
   `NewTaskManager(nil)` keeps records in memory).
 
 
+## Review view (structured reviews, 2026-09-28)
+
+Spec: `docs/superpowers/specs/2026-09-28-review-view-design.md`; plan
+`docs/superpowers/plans/2026-09-28-review-view.md`.
+
+- **The document:** `notebatch.ParseReview` (unwraps a ``` fence or Claude's
+  `{"result": …}` envelope; `version` 1, non-empty `summary`, exactly one
+  range per note with 1 <= a <= b; every failure wraps `ErrNotReviewDoc`) →
+  `ReviewDoc{Overview, Meta, Files[{Path, Summary, Meta, Notes}]}`; meta is
+  key-sorted `MetaKV` text; `Canonical()` is the stored form.
+  `engine.ReviewOutputInstruction()` is the brief's "Review output" section;
+  `exttool.structuredReviewTask` is the one prompt every built-in review
+  template carries (no double quotes inside — it sits in a quoted shell arg).
+- **Storage:** `SaveReview` canonicalises; `Review.Doc` is parsed on read
+  (nil = prose); `ReviewResult.Structured`.
+- **Read time:** `ReviewRevs` (single commit vs range: base..tip resolved;
+  a scope of `<commit>^..<commit>` is a single commit), `ReviewFiles`,
+  `ReviewNotesFor(ctx, id, path, diff)` (read-only `review:<id>:<n>` ids,
+  `<n>` = document order; a note fits when its range lies in the side's
+  lines — no context hash: the view IS the reviewed commit),
+  `ReviewFileCounts` / `ReviewOtherNotes` (`reviewSplit` reads each named
+  file's two sides once). `model.IsReadOnlyNoteID` guards every mutation.
+- **TUI:** `openReview(id, title)` is the ONE entry (async `reviewViewMsg`);
+  prose → `openReviewNote` (the `srcNote` viewer, `openFile.markdown` →
+  `loadMarkdownSrcCmd`). A single commit opens via `openChangedFiles`, a
+  range via `openCompareFiles`; then `m.filesReview` is set and the lines
+  are rebuilt by `reviewTreeLines` in the `commitFilesMsg` /
+  `compareFilesMsg` handlers (a commit-list move clears the mode).
+  `stampReviewNotes` (beside `stampPreviewNotes`, single file and stack)
+  sets `diffView.reviewID` (carried by `inheritIdentity` and the late-stamp
+  restore); `loadNotesCmd`/`stackNotesCmd` then read `ReviewNotesFor`;
+  `diffNoteAddress` is false there, so no note gesture writes. The stack's
+  first element is `stackFile{overview: true, prose: []mdRow}` spliced as
+  `lineProse` lines (`diffLine.prose` indexes the row); it is never loaded,
+  searched or counted.
+- **Migration:** feature `structured-reviews`, `LegacyStore{review-commands}`
+  probed by `legacyReviewCommandsPresent` (global + active repo config,
+  `exttool.UpgradeReviewCommand` over each `review` command), consent-only
+  action `upgrade-review-commands` → `config.ReplaceToolCommandBodies`.
+  `UpgradeReviewCommand` matches the GENERATED rendering (either OS, any
+  binary, quoted when it has a space) of every template in
+  `exttool.SupersededReviewCommands` — when a review template changes again,
+  move the old text into `review_upgrade.go` and add a pair.
+- **Test isolation:** domain, cli, mcp and web `TestMain`s pin
+  `XDG_CONFIG_HOME` — preflight reads the global config, and a
+  `gg migrate --yes` test once rewrote a developer's own.
+
 ## Review notes (AI reviews stored as notes, 2026-09-27)
 
 Spec: `docs/superpowers/specs/2026-09-27-review-notes-design.md`.

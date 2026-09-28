@@ -62,8 +62,13 @@ func TestReviewViewTree(t *testing.T) {
 	if !strings.Contains(a.text, "◆1") {
 		t.Fatalf("a.go row %q, want ◆1", a.text)
 	}
-	if !strings.Contains(vis[i+1].text, "adds A") || vis[i+1].path != "" {
-		t.Fatalf("row after a.go %+v, want its summary", vis[i+1])
+	if !strings.Contains(vis[i+1].text, "adds A") || vis[i+1].path != "" || !vis[i+1].dim || vis[i+1].heading {
+		t.Fatalf("row after a.go %+v, want its summary (dim, not a heading: the sticky line names directories)", vis[i+1])
+	}
+	// The Overview row leads the box itself: no "." directory line above it.
+	view := ansi.Strip(m.View())
+	if strings.Contains(view, "│ .  ") || strings.Contains(view, "│ . ") {
+		t.Fatalf("a root-dir sticky line sits above the Overview:\n%s", view)
 	}
 	for _, l := range vis {
 		if l.noteID != "" {
@@ -277,5 +282,52 @@ func TestReviewStackPutsTheOverviewFirst(t *testing.T) {
 	m, _ = updateKey(m, "N")
 	if got := m.diffLayer().curFile(); got != 1 {
 		t.Fatalf("N from the overview: file %d, want 1", got)
+	}
+}
+
+// Through the real key path: enter on ≡ Overview opens the overview.
+func TestReviewOverviewOpensOnEnterKey(t *testing.T) {
+	t.Parallel()
+	m, _ := openedReviewView(t)
+	m.filesView.sel = 0
+	m, _ = updateKey(m, "enter")
+	if layerOf[*reviewOverviewPopup](m) == nil {
+		t.Fatalf("enter on the Overview row: top %T", m.topLayer())
+	}
+}
+
+// Opened from a commit's @notes/ entry, esc goes back to that commit's files,
+// not past them.
+func TestReviewFromNotesEntryEscReturnsToTheCommitFiles(t *testing.T) {
+	t.Parallel()
+	m, id := reviewViewModel(t, reviewViewDoc)
+	m, cmd := m.openChangedFiles(m.commits[0])
+	m = drainCmds(t, m, cmd)
+	m.filesTreeFocused = true
+	for i, l := range m.filesView.visible() {
+		if l.noteID == id {
+			m.filesView.sel = i
+		}
+	}
+	m, cmd = updateKey(m, "enter")
+	m = drainCmds(t, m, cmd)
+	if m.filesReview == nil {
+		t.Fatal("setup: the review view did not open")
+	}
+	m, cmd = updateKey(m, "esc")
+	m = drainCmds(t, m, cmd)
+	if m.filesView == nil || m.filesReview != nil {
+		t.Fatalf("esc: files view open=%v review=%v, want the commit's files", m.filesView != nil, m.filesReview)
+	}
+	found := false
+	for _, l := range m.filesView.visible() {
+		found = found || l.noteID == id
+	}
+	if !found {
+		t.Fatal("esc did not return to the commit's file list (no @notes/ entry)")
+	}
+	m, _ = updateKey(m, "esc")
+	if m.filesView != nil {
+		t.Fatal("a second esc closes the commit's files")
 	}
 }

@@ -458,7 +458,7 @@ func filesGeometry(vis []contentLine, sel, rowsCap int) filesGeom {
 		body--
 	}
 	g.top = windowStart(g.s1-g.s0, body, g.anchor)
-	g.headTop = g.sticky && g.s0+g.top < len(vis) && vis[g.s0+g.top].heading
+	g.headTop = g.sticky && g.s0+g.top < len(vis) && (vis[g.s0+g.top].heading || vis[g.s0+g.top].overview)
 	return g
 }
 
@@ -486,7 +486,7 @@ func (m Model) renderFileRows(wr []winRow, vis []contentLine, g filesGeom, inner
 	}
 	body, top := renderWindowTop(wr, winOpts{w: innerW, h: rowsCap - 1, mode: p.mode, anchor: g.anchor, hscroll: p.hscroll})
 	sticky := wr[top]
-	if vis[g.s0+top].heading {
+	if vis[g.s0+top].heading || vis[g.s0+top].overview {
 		// The heading itself is the sticky line; its files fill the body.
 		body, _ = renderWindowTop(wr[top+1:], winOpts{w: innerW, h: rowsCap - 1, mode: p.mode, anchor: g.anchor - top - 1, hscroll: p.hscroll})
 	} else {
@@ -784,6 +784,9 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			p.sel = 0
 			return m, nil
 		}
+		if st := m.filesReview; st != nil && st.back.Hash != "" {
+			return m.openChangedFiles(st.back) // opened from this commit's @notes/: back to its files
+		}
 		ret, parked := m.filesReturnFocus, m.filesReturnLayers
 		m = m.closeFilesView()
 		m.focus = ret                             // return to the panel that opened the view (Tags/Reflog/Commits/…)
@@ -851,7 +854,7 @@ func (m Model) updateFilesViewKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.focusTree(), nil
 		}
 		vis := p.visible()
-		if p.sel < 0 || p.sel >= len(vis) || vis[p.sel].path == "" {
+		if p.sel < 0 || p.sel >= len(vis) || (vis[p.sel].path == "" && !vis[p.sel].overview) {
 			return m, nil // heading row, placeholder, or empty view
 		}
 		return m.openDiffForFileLine(vis[p.sel])
@@ -971,8 +974,12 @@ func (m Model) openDiffForFileLine(l contentLine) (tea.Model, tea.Cmd) {
 	if l.overview {
 		return m.openReviewOverview()
 	}
-	if l.noteID != "" { // an @notes/ entry: the review opens as the review view
-		return m.openReview(l.noteID, reviewTitle(shortHash(m.filesHash)))
+	if l.noteID != "" { // an @notes/ entry: the review opens as the review view, esc comes back here
+		back := m.filesCommit
+		if back.Hash == "" {
+			back.Hash = m.filesHash
+		}
+		return m.openReviewFrom(l.noteID, reviewTitle(shortHash(m.filesHash)), back)
 	}
 	m.diffNotice = "" // drop any stale notice; the stepper re-posts its arrival notice
 	m.diffNav = diffNavTree
@@ -1182,6 +1189,8 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 		case l.heading:
 			prefix = ""
 			st = s.titleStyle
+		case l.dim:
+			st = s.noteDim
 		}
 		text := l.text
 		// Directory headings carry the full path; a leaf dir (e.g. .../v3/ApiObject/)

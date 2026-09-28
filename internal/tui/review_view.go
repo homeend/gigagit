@@ -29,6 +29,9 @@ type reviewViewState struct {
 	counts map[string]int
 	other  []domain.ReviewOtherNote
 	tip    string
+	// back is the commit whose files view opened this review (its @notes/
+	// entry): esc returns to that list. Zero = esc closes the view.
+	back model.Commit
 }
 
 // reviewViewMsg is openReview's off-thread read.
@@ -39,6 +42,7 @@ type reviewViewMsg struct {
 	other     []domain.ReviewOtherNote
 	base, tip string
 	isRange   bool
+	back      model.Commit
 	err       error
 }
 
@@ -47,13 +51,19 @@ type reviewViewMsg struct {
 // Every entry point — @notes/, a Branches review row, View all notes, the
 // AI-tasks tab, a finished review run — comes through here.
 func (m Model) openReview(id, title string) (Model, tea.Cmd) {
+	return m.openReviewFrom(id, title, model.Commit{})
+}
+
+// openReviewFrom is openReview from a commit's files view: esc from the review
+// view returns to back's file list.
+func (m Model) openReviewFrom(id, title string, back model.Commit) (Model, tea.Cmd) {
 	svc := m.svc
 	if svc == nil {
 		return m, nil
 	}
 	return m, func() tea.Msg {
 		ctx := context.Background()
-		out := reviewViewMsg{id: id, title: title}
+		out := reviewViewMsg{id: id, title: title, back: back}
 		if out.review, out.err = svc.Review(ctx, id); out.err != nil || out.review.Doc == nil {
 			return out
 		}
@@ -83,7 +93,7 @@ func (m Model) handleReviewViewMsg(msg reviewViewMsg) (Model, tea.Cmd) {
 		m.statusMsg = i18n.T("not in gg review format — shown as text")
 		return m, cmd
 	}
-	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip}
+	st := &reviewViewState{id: msg.id, review: msg.review, counts: msg.counts, other: msg.other, tip: msg.tip, back: msg.back}
 	open := func(m Model) (Model, tea.Cmd) {
 		var cmd tea.Cmd
 		if msg.isRange {
@@ -159,7 +169,7 @@ func reviewTreeLines(st *reviewViewState, files []contentLine) []contentLine {
 		out = append(out, l)
 		if s := summaries[l.path]; s != "" {
 			indent := strings.Repeat(" ", len(l.text)-len(strings.TrimLeft(l.text, " "))+3)
-			out = append(out, contentLine{text: indent + s, heading: true})
+			out = append(out, contentLine{text: indent + s, dim: true})
 		}
 	}
 	return out

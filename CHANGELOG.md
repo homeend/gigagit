@@ -6,6 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Reviews open as a review view
+
+### Added
+
+- **One review document.** A review agent now replies with ONE JSON document
+  written to `$GG_MESSAGE_FILE`: agent-context v1 whose top-level `summary`
+  is the review's markdown overview, with a one-line `summary` per file,
+  line notes (`newRange` / `oldRange`, `summary`, `rationale`) and a free-form
+  `meta` object on the document, each file and each note (the prompt
+  suggests `verdict`, `severity` and `confidence`; the old `tags` and
+  `confidence` fields still parse and fold into `meta`). The review brief
+  (`$GG_CONTEXT_FILE`) ends in a "Review output" section describing it, and
+  every built-in review template asks for it — Claude no longer runs
+  `/code-review` and may `Write` the file. A fenced block or Claude's JSON
+  envelope is unwrapped; the document is stored canonical, still as ONE note
+  on the reviewed commit.
+- **The review view (TUI).** Opening a structured review — `@notes/` in a
+  commit's files, a Branches review row, View all notes, the AI-tasks tab, or
+  a finished run — shows the reviewed commit's files (a branch review: its
+  range's files) in a review mode: `≡ Overview` first, `◆n` and the file's
+  one-line summary on each file the review notes, `n` / `p` to step between
+  them, and the agent · age · note count under the title. Enter on the
+  Overview opens the overview rendered as markdown, its meta and **Other
+  notes** (notes on files the commit does not change, or past a file's end;
+  enter opens that file at the commit; `y` copies the markdown). Stacked, the
+  overview is the first element above the first file. A diff opened from the
+  view shows ONLY the review's notes at their lines, read-only, with their
+  meta in the box title; the normal commit view never shows them.
+- A review that is not the document opens in the viewer with its markdown
+  rendered (and a status note), not as a raw diff.
+- `gg review` prints the overview, its meta, then one `path:line — summary`
+  line per note (`-line` = a removed line); a prose reply prints as it came
+  with `warning: the review is not in gg review format`. `--notes` now keeps
+  the document's notes as ordinary notes.
+- `gg web`'s review dialog renders the overview (parsed server-side) and
+  lists the notes with their meta.
+- **Stored review commands are upgraded, with consent.** First-run detection
+  wrote the built-in review commands into your config, so a new preflight
+  migration (`structured-reviews`) finds commands identical to an old
+  built-in — in the global config or the repo's — and, once you agree (TUI
+  and web consent screens, `gg migrate --yes`), rewrites only those bodies to
+  the current templates, keeping the binary you had. Edited commands and the
+  rest of the file are left alone.
+
+### Changed
+
+- `$GG_NOTES_FILE` is gone: a review's notes are part of its document.
+- The migration consent screens say "discards N entries" only for a
+  migration that removes refs.
+- `ErrReadOnlyNote` covers review notes (`review:<id>:<n>` ids) as well as
+  forge comments; `c`, `E`, `R` and the `.` menu's note rows refuse them in
+  the review view.
+
 ## gg web: binary files and images in the finder preview and the viewer
 
 ### Fixed

@@ -56,6 +56,9 @@ type contentLine struct {
 	// overview is the review view's "≡ Overview" row: enter opens the
 	// review's overview, not a file.
 	overview bool
+	// dim draws the row faint: the review view's one-line file summary under
+	// its file (not a heading — the sticky line names directories only).
+	dim bool
 }
 
 // contentPopup is a generic read-only viewer popup: any list of lines with

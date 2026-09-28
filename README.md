@@ -1171,11 +1171,24 @@ from the run in the `ctrl+\` AI-tasks tab. Deleting or renaming a branch in gg
 takes its reviews along; review notes never expire. A review of uncommitted
 changes has no commit, so it stays in the AI-tasks history only. The same pipeline is
 scriptable as `gg review`
-(see the CLI section above). Catalog defaults ship for Claude Code
-(`/code-review <range>`), Junie, and Kimi Code — the Junie and Kimi reports
-likewise come back through `$GG_MESSAGE_FILE`, fed the diff via a new
-`$GG_REVIEW_DIFF` file (Junie's own `--review` flag can't take a range;
-Kimi's print-mode stdout is a report, not the review).
+(see the CLI section above).
+
+A review agent replies with ONE JSON document (the brief at
+`$GG_CONTEXT_FILE` ends in a "Review output" section describing it): a
+markdown overview, a one-line summary per file, line notes, and free-form
+`meta` (a verdict, a severity, a confidence) at every level. Opening such a
+review shows the **review view** — the reviewed commit's files (a branch
+review: its range's files) with `≡ Overview` first, `◆n` and the file's
+summary on each file the review notes (`n` / `p` step between them); enter on
+the Overview renders the overview as markdown with its meta and the notes on
+files the commit does not change; stacked, the overview is the first element.
+Its diffs show only the review's notes, read-only — `gg review --notes` keeps
+them as your own. A reply that is not the document is kept as text and opens
+rendered as markdown. Catalog defaults ship for Claude Code, Codex, Junie,
+Kimi Code and Antigravity; their documents come back through
+`$GG_MESSAGE_FILE`, fed the diff via `$GG_REVIEW_DIFF`. Review commands an
+older gg wrote into your config are upgraded by a one-time migration that
+asks first (edited commands are left alone).
 
 ### AI tasks (launch dialog, Headless tab)
 
