@@ -765,6 +765,15 @@ finds the right one here.
   busy log; a hook failure is reported but does not roll back the worktree.
 - `gg worktree prune` — drop stale worktree admin entries left behind by an
   interrupted or manually-deleted worktree (`git worktree prune`).
+- `gg worktree recycle [--on-dirty=commit|discard|abort] <path> <branch>` —
+  check an EXISTING local branch out in an existing worktree `<path>` (not
+  the one you are in), replacing what it has checked out. A dirty target
+  needs `--on-dirty`: `commit` commits everything there (untracked included,
+  subject `Committed changes due to worktree recycle <date>`) on the branch
+  that is leaving; `discard` deletes the changes (untracked files too,
+  ignored files kept); `abort` does nothing. Without the flag a pipeline
+  exits 1 naming `recycle.dirty`. Refused: a paused rebase/merge, a lock
+  file, a branch already checked out somewhere. Flags go BEFORE `<path>`.
 - `gg worktree rename [--force] <worktree> <new-name>` / `gg worktree move
   [--force] <worktree> <new-path>` — relocate a linked worktree's directory
   (`git worktree move`); `rename` is a same-parent move computed from just

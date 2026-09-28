@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 )
 
 // Result is the outcome of an operation.
@@ -35,6 +36,12 @@ type OpDeps struct {
 	// CaptureRunner runs a headless capture command. Nil ⇒ ShellCaptureRunner{}
 	// (production default); engine tests inject a fake.
 	CaptureRunner CaptureRunner
+	// RepoAt returns a GitOps view acting on ANOTHER worktree of this
+	// repository (git -C <dir>), for ops that recycle or inspect a worktree
+	// gg is not running in. Nil (direct engine use, fakes) makes repoAt
+	// return ErrNoRepoAt — an op that needs it fails cleanly instead of
+	// acting on the wrong tree. domain.Execute wires it to *git.Repo.InDir.
+	RepoAt func(dir string) GitOps
 	// Versions governs pre-operation branch-version snapshots (see
 	// snapshotBranchTip). Zero value = disabled.
 	Versions VersionsPolicy
@@ -54,6 +61,17 @@ func (d OpDeps) captureRunner() CaptureRunner {
 		return ShellCaptureRunner{}
 	}
 	return d.CaptureRunner
+}
+
+// ErrNoRepoAt is returned by repoAt when OpDeps carries no RepoAt seam.
+var ErrNoRepoAt = errors.New("this repository handle cannot act on another worktree")
+
+// repoAt is the nil-safe form of RepoAt (style of hookRunner).
+func (d OpDeps) repoAt(dir string) (GitOps, error) {
+	if d.RepoAt == nil {
+		return nil, ErrNoRepoAt
+	}
+	return d.RepoAt(dir), nil
 }
 
 // escalate is the nil-safe form of Escalate (style of emit/decide).

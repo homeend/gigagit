@@ -382,6 +382,7 @@ func (s *Service) Execute(ctx context.Context, op engine.Operation,
 	observ.EmitSpan(observ.Span{Name: label + " started", Start: opStart})
 	out, opErr := op.Run(ctx, engine.OpDeps{
 		Repo:     s.repo,
+		RepoAt:   func(dir string) engine.GitOps { return s.repo.InDir(dir) },
 		Events:   events,
 		Decider:  dec,
 		Escalate: res.Escalate,

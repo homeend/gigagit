@@ -77,6 +77,7 @@ type Model struct {
 	pickPatchTemp          string              // patch lane's temp file; removed when its op finishes
 	reflog                 []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree        string
+	recycleBranch          string // branch captured when the Recycle-a-worktree picker opened
 
 	notices                []notice               // session notice list (see notify.go)
 	driftNotices           []driftNoticeSource    // post-op drift/paused-resume findings; rebuildNotices re-renders these too

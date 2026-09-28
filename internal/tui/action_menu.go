@@ -299,6 +299,9 @@ func availableActions(m Model) []actionRow {
 	if r, ok := m.showInWorktreesRow(); ok {
 		out = append(out, r)
 	}
+	if r, ok := m.recycleWorktreeRow(); ok {
+		out = append(out, r)
+	}
 	if r, ok := m.pushBranchRow(); ok {
 		out = append(out, r)
 	}
