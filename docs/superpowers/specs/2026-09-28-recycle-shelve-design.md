@@ -134,8 +134,13 @@ Wired by `domain.Execute` (like `RepoAt`), implemented in domain as
   domain query**: queries take a Read reservation and the op already holds
   TreeWrite on the same gate — they would deadlock.
 - D: recorded, no content. R: new path shelved, `old → new` recorded.
-- Zero content paths (only deletions) → error `nothing to shelve in <dir>:
-  only deletions` — the op fails before anything is discarded.
+- Zero content paths (every change was a deletion) → the set gets ONE empty
+  placeholder member `delete.me` (a set cannot be empty — the `.gitkeep`
+  idea). No collision is possible: with zero content paths nothing else is
+  in the set. The note (always written in this case, since there are
+  deletions) starts its rationale with
+  `delete.me is an empty placeholder: every change in this worktree was a
+  deletion, and a shelf set cannot be empty.`
 - Stores one set via the same tar builder as `ShelfAddFiles` (refactored to
   take `(name, bytes)` members) → `shelf.Store.PutFiles("", origin, tar,
   label)`, origin `{Worktree: dir, Branch: branch, State: StateStaged}`,
@@ -151,7 +156,8 @@ Wired by `domain.Execute` (like `RepoAt`), implemented in domain as
     old.go → new.go
   ```
 
-  (only the sections that apply). The note store is a local file: no gate.
+  (only the sections that apply; the `delete.me` line first when the
+  placeholder was added). The note store is a local file: no gate.
 - Note failure → remove the just-stored entry and return the error.
 
 ### Atomicity
