@@ -104,7 +104,8 @@ type Command struct {
 	// ID: that is the command's own id.
 	FileID string `json:"file_id,omitempty"`
 	// HintKind/HintID name the UI surface a navigate's link was copied from
-	// ("bookmark", "shelf" or "stash" — model.LinkHint's closed set, spec
+	// ("bookmark", "shelf", "stash", "preview", "version" or "view" —
+	// model.LinkHint's closed set, spec
 	// §3.3/§3.4). They never change WHERE a navigate lands — only which
 	// surface a consumer reveals once it has landed — and a consumer that
 	// cannot show the kind (today: "stash", which has no producer) lands
