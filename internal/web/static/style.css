@@ -1683,3 +1683,17 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #console-cursor.outline { background: none; border: 1px solid var(--dim); mix-blend-mode: normal; box-sizing: border-box; }
 #console-cursor.hidden { display: none; }
 #foot .cwarn { margin-left: auto; color: #e0c06c; }
+
+/* The ctrl+\ switcher's tabs (Agents · AI tasks · Open files). */
+#openfiles-tabs { display: flex; gap: 18px; }
+#openfiles-tabs span { color: var(--dim); cursor: pointer; padding-bottom: 2px; }
+#openfiles-tabs span.on { color: var(--fg); border-bottom: 2px solid var(--accent); }
+#openfiles-tabs i { font-style: normal; font-size: 11px; margin-left: 4px; }
+#openfiles-query { margin: 6px 12px 2px; padding: 2px 6px; border: 1px solid var(--border); background: var(--bg); color: var(--dim); font-family: ui-monospace, monospace; font-size: 12px; }
+#openfiles-query.hidden { display: none; }
+#openfiles-list .grp { color: var(--dim); font-size: 11px; text-transform: uppercase; padding: 3px 12px; }
+#openfiles-list .grp2 { color: var(--dim); padding: 2px 20px; }
+#openfiles-list .ofempty { color: var(--dim); padding: 6px 12px; }
+#openfiles-list .ofrow .glyph.run { color: #7bd88f; }
+#openfiles-list .ofrow .glyph.ex { color: var(--dim); }
+#openfiles-list .ofrow.task .glyph.run { color: #f2a65a; }

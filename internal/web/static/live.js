@@ -19,7 +19,8 @@ import { fetchPRs, refreshPRComments } from "./prs.js";
 import { loadCommits, openCommitByHash, renderCommits } from "./commits.js";
 import { focusPane } from "./keys.js";
 import { loadRepo, opLine } from "./ops.js";
-import { switcherOpenFiles } from "./openfiles.js";
+import { switcherOpenFiles, switcherSessions } from "./openfiles.js";
+import { consoleSessions } from "./console.js";
 import { openViewer, viewerFileChanged, viewerHello, viewerOpenFiles } from "./viewer.js";
 import { closeFinder } from "./wtfinder.js";
 
@@ -92,6 +93,14 @@ function connectLive() {
     }
     if (msg.reason === "file_changed") {
       viewerFileChanged(msg.file_id);
+      return;
+    }
+    // Agent sessions (web attach): the process's session list changed. Not
+    // a refresh source either — the switcher, the console and the sidebar
+    // rows take the list as it is.
+    if (msg.reason === "sessions") {
+      switcherSessions(msg.sessions || []);
+      consoleSessions(msg.sessions || []);
       return;
     }
     for (const src of msg.changed || []) pending.add(src);
