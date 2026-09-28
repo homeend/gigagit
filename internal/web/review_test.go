@@ -336,3 +336,61 @@ func reviewSvc(t *testing.T, dir string) *domain.Service {
 	svc.UseNotesDir(t.TempDir())
 	return svc
 }
+
+const docReviewTool = `
+[[tools.command]]
+category = "review"
+name = "Doc"
+mode = "capture"
+command = '''
+printf '{"version":1,"summary":"## Verdict\\nship it","meta":{"verdict":"approve"},"files":[{"path":"f.txt","annotations":[{"newRange":[2,3],"summary":"S","meta":{"severity":"nit"}},{"oldRange":[4,4],"summary":"gone"}]}]}' > "$GG_MESSAGE_FILE"
+'''
+`
+
+// A structured review reaches the page parsed: the overview as a markdown
+// tree, the notes as rows; a prose one stays text with structured false.
+func TestReviewDonePayloadCarriesTheStructuredReview(t *testing.T) {
+	dir := reviewRepo(t, docReviewTool+echoReviewTool)
+	svc := reviewSvc(t, dir)
+	ts := serve(t, New(svc))
+	run := func(tool string) map[string]any {
+		t.Helper()
+		code, body := startReview(t, ts, `{"target":"branch","branch":"feature","tool":"`+tool+`","approve":true}`)
+		if code != http.StatusAccepted {
+			t.Fatalf("start %s = %d (%v)", tool, code, body)
+		}
+		opID, _ := body["op_id"].(string)
+		done := readSSE(t, ts, opID, 30*time.Second)
+		last := done[len(done)-1]
+		if last["ok"] != true {
+			t.Fatalf("done = %v", last)
+		}
+		return last
+	}
+	last := run("Doc")
+	if last["structured"] != true {
+		t.Fatalf("structured = %v", last["structured"])
+	}
+	md, _ := json.Marshal(last["overviewMd"])
+	if !strings.Contains(string(md), "Verdict") || !strings.Contains(string(md), "ship it") {
+		t.Fatalf("overviewMd = %s", md)
+	}
+	notes, _ := last["notes"].([]any)
+	if len(notes) != 2 {
+		t.Fatalf("notes = %v", last["notes"])
+	}
+	n0, _ := notes[0].(map[string]any)
+	if n0["path"] != "f.txt" || n0["line"] != "2-3" || n0["summary"] != "S" || n0["meta"] != "severity: nit" {
+		t.Fatalf("note 0 = %v", n0)
+	}
+	if n1, _ := notes[1].(map[string]any); n1["line"] != "-4" {
+		t.Fatalf("note 1 = %v", n1)
+	}
+	if last["docMeta"] != "verdict: approve" {
+		t.Fatalf("docMeta = %v", last["docMeta"])
+	}
+	prose := run("Echo")
+	if prose["structured"] != false || !strings.Contains(prose["report"].(string), "looks fine") {
+		t.Fatalf("prose done = %v", prose)
+	}
+}
