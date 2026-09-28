@@ -67,8 +67,9 @@ A shelf-level note is an ordinary `model.Note` whose address is
 
 - Shelf popup rows whose entry has `ByShelf > 0` show the note marker `◆`
   (the glyph the file badges use) after the label.
-- The shelf row's `.` action menu gets **"View note"** (only when the entry
-  has a note). It opens a read-only content popup: per note the summary line,
+- Key **`n`** on a shelf row (the `G` switcher is key-driven, it has no `.`
+  menu) opens the note viewer; the `[n] note` hint shows only when the
+  selected entry has a note. It opens a read-only content popup: per note the summary line,
   then author · date, then the text (`Rationale`) wrapped. Scrolls; `ctrl+t`
   maximizes (layer-stack popup); esc returns to the shelf popup.
 - The all-notes overview lists shelf-entry notes under their entry.
