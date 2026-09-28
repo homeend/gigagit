@@ -3855,6 +3855,17 @@ Spec: `docs/superpowers/specs/2026-09-28-review-view-design.md`; plan
   binary, quoted when it has a space) of every template in
   `exttool.SupersededReviewCommands` — when a review template changes again,
   move the old text into `review_upgrade.go` and add a pair.
+- **Polish (2026-09-28):** the overview popup is `noCursor` (a pager);
+  `o` pushes `reviewOtherNotesPopup` (enter → `openFileAtCommit`). Deleting
+  (`review_delete.go`): `deleteReviewRow` (Branches review sub-row, or the
+  review view when the files view is front) and View all notes' `ctrl+d`
+  (`allNotesDelete`, reviews and note threads) → `confirmStoredDelete`
+  (decision id `review-remove`, Cancel default) → `svc.NoteRemove` →
+  `storedDeletedMsg`: `leaveReviewView` (the view's esc, shared) when its
+  review went, re-read of an open All notes, `srcNotes` reload. The brief's
+  "Review output" asks for `## Summary / ## Findings / ## Verdict`; the
+  templates only point at the brief, so changing the brief needs no
+  `SupersededReviewCommands` entry — only a template text change does.
 - **Test isolation:** domain, cli, mcp and web `TestMain`s pin
   `XDG_CONFIG_HOME` — preflight reads the global config, and a
   `gg migrate --yes` test once rewrote a developer's own.

@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Review view polish: delete a review, a calmer overview
+
+### Added
+
+- **Delete a review (TUI).** "Delete review" in the `.` menu on a Branches
+  review sub-row and in the review view, and `ctrl+d` on a View all notes
+  row (a review or a note thread), delete it after a confirmation that
+  defaults to Cancel. A review view showing it closes as esc would; an open
+  View all notes list re-reads.
+
+### Changed
+
+- **The review overview reads as prose.** No `> ` cursor and no bright band
+  over its first paragraph; ↑/↓ scroll. The notes on files the commit does
+  not change stay listed at its foot, and `o` opens them as a list where
+  enter opens the file at the reviewed commit.
+- **A structured overview.** The review brief now asks for the document's
+  `summary` as markdown with `## Summary`, `## Findings` (bullets, paths and
+  symbols in `code` spans) and `## Verdict`. Every review template already
+  defers to the brief, so stored commands need no upgrade.
+  reviewing-with-gg skill v10.
+- **`gg note list`** shows a review as `review <sha> (<branch>)` instead of a
+  line anchor gone "stale".
+
 ## Reviews open as a review view
 
 ### Added

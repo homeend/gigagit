@@ -1182,8 +1182,10 @@ review: its range's files) with `≡ Overview` first, `◆n` and the file's
 summary on each file the review notes (`n` / `p` step between them); enter on
 the Overview renders the overview as markdown with its meta and the notes on
 files the commit does not change; stacked, the overview is the first element.
-Its diffs show only the review's notes, read-only — `gg review --notes` keeps
-them as your own. A reply that is not the document is kept as text and opens
+`o` in the overview lists those other notes to open one. Its diffs show only
+the review's notes, read-only — `gg review --notes` keeps them as your own.
+"Delete review" in the `.` menu (in the review view or on a Branches review
+row) or `ctrl+d` in View all notes deletes a review, after asking. A reply that is not the document is kept as text and opens
 rendered as markdown. Catalog defaults ship for Claude Code, Codex, Junie,
 Kimi Code and Antigravity; their documents come back through
 `$GG_MESSAGE_FILE`, fed the diff via `$GG_REVIEW_DIFF`. Review commands an
