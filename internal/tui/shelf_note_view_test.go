@@ -1,12 +1,17 @@
 package tui
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/shelf"
 )
 
 func shelfNoteModel() Model {
@@ -112,5 +117,43 @@ func TestShelfNoteViewElidesPathsInTheMiddle(t *testing.T) {
 	}
 	if !strings.Contains(file, "…") {
 		t.Fatalf("a long deleted path must be middle-elided and keep its file name, got %q\n%s", file, out)
+	}
+}
+
+// A shelved set's member diffs against the working tree. A member the tree
+// does not have is an absent side — never "open …: no such file" — and an
+// EMPTY member (the recycle's delete.me placeholder) says what it is instead
+// of an error or a blank body.
+func TestShelfMemberMissingFromTheWorktree(t *testing.T) {
+	t.Parallel()
+	dir := gittest.BasicRepo(t, "hi\n")
+	for name, body := range map[string]string{domain.RecyclePlaceholder: "", "gone.txt": "was here\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := New(domain.New(testRepo(t, dir)))
+	m.svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	e, err := m.svc.ShelfAddFiles(context.Background(), []model.FileAddress{
+		{State: model.StateUntracked, Worktree: dir, Path: domain.RecyclePlaceholder},
+		{State: model.StateUntracked, Worktree: dir, Path: "gone.txt"},
+	}, "WIP on main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{domain.RecyclePlaceholder, "gone.txt"} {
+		os.Remove(filepath.Join(dir, name))
+	}
+	load := func(path string) *diffView {
+		msg := m.loadShelfMemberDiffCmd(e.ID, path, "shelf → working tree", "t:"+path)()
+		return msg.(diffMsg).view
+	}
+	ph := load(domain.RecyclePlaceholder)
+	if ph.err != nil || !strings.Contains(ph.notice, "placeholder") {
+		t.Fatalf("delete.me: err=%v notice=%q, want no error and the placeholder notice", ph.err, ph.notice)
+	}
+	gone := load("gone.txt")
+	if gone.err != nil || len(gone.blocks) == 0 || gone.notice != "" {
+		t.Fatalf("gone.txt: err=%v blocks=%d notice=%q, want its removal diffed", gone.err, len(gone.blocks), gone.notice)
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // Notes on a whole shelf entry — gg writes them when a set cannot carry what
@@ -73,4 +74,45 @@ func shelfNoteLines(ns []domain.ResolvedNote) []contentLine {
 		}
 	}
 	return out
+}
+
+// loadShelfMemberDiffCmd diffs one member of a shelved set (old) against the
+// working file (new). A member the working tree does not have is an ABSENT new
+// side — the diff shows it removed — never an "open …: no such file" error. An
+// empty member has nothing to show, so the view says what it is instead: for
+// the recycle's placeholder, where to read what it stands for.
+func (m Model) loadShelfMemberDiffCmd(id, path, subtitle, tag string) tea.Cmd {
+	svc := m.svc
+	differ := m.diffDiffer()
+	body := m.diffBodyRows()
+	v := &diffView{title: path, context: subtitle, compare: true, partial: m.diffPartial, long: m.diffLong}
+	v.width, _ = m.overlayDims()
+	return func() tea.Msg {
+		ctx := context.Background()
+		old, err := svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceShelf, Locator: id, Path: path})
+		if err != nil {
+			v.err = err
+			return diffMsg{tag: tag, view: v}
+		}
+		oldSrc := func(context.Context) ([]byte, error) { return old, nil }
+		newSrc := domain.ByteSource(func(ctx context.Context) ([]byte, error) {
+			return svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceUnstaged, Path: path})
+		})
+		if present, perr := svc.WorktreeFilesPresent(ctx, []string{path}); perr == nil && !present[path] {
+			newSrc = nil
+		}
+		if len(old) == 0 {
+			v.notice = i18n.T("(empty file)")
+			if path == domain.RecyclePlaceholder {
+				v.notice = i18n.T("(an empty placeholder: every change in the recycled worktree was a deletion. Press n on this entry in the shelf to read which files were deleted.)")
+			}
+		}
+		out, err := differ.Diff(ctx, domain.Request{Key: "", Path: path, Old: oldSrc, New: newSrc})
+		if err != nil {
+			v.err = err
+			return diffMsg{tag: tag, view: v}
+		}
+		applyDiff(v, out, body)
+		return diffMsg{tag: tag, view: v}
+	}
 }

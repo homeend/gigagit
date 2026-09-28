@@ -306,7 +306,7 @@ func (m Model) renderDiffView() string {
 		note = i18n.T("  (alignment skipped: large file)")
 	// loading/err/binary/tooLarge render their own body state below; the
 	// guards here keep the note from doubling up with them.
-	case v.stk == nil && !v.loading && v.err == nil && !v.binary && !v.tooLarge && len(v.blocks) == 0:
+	case v.stk == nil && !v.loading && v.err == nil && !v.binary && !v.tooLarge && len(v.blocks) == 0 && v.notice == "":
 		note = i18n.T("  (no content difference)")
 	}
 	head := i18n.T("diff: %s", v.title) + "  " + v.context + note
@@ -405,6 +405,10 @@ func (m Model) renderDiffView() string {
 		lines = append(lines, i18n.T("  (binary file)"))
 	case v.tooLarge:
 		lines = append(lines, i18n.T("  (file too large)"))
+	case v.notice != "" && len(v.blocks) == 0:
+		for _, l := range wrapWords(v.notice, w-2) {
+			lines = append(lines, "  "+l)
+		}
 	default:
 		s, e := v.cursorDispRange()
 		lines = append(lines, m.diffPaneLines(v, w, body, s, e, m.cursorStyle())...)
