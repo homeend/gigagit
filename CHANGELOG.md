@@ -6,6 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Add to shelf acts on the marked files
+
+### Fixed
+
+- **`.` → Add to shelf on the Files/Staged tab with `m`-marked files** now
+  shelves every marked file shown in that panel (one shelf entry each,
+  addressed as the panel shows it: working-tree copy on Files, index copy on
+  Staged), not only the cursor row. The row reads **Add N marked files to
+  shelf** (**Add the marked file to shelf** when one file is marked away from
+  the cursor — like space, the marks win over the cursor), the status line reports `shelved N files` (or `shelved N of M
+  files: <first error>` — every file is attempted), and the marks stay put:
+  shelving is a snapshot, so the same set can be discarded or stashed right
+  after. A diff, viewer, blame or history layer keeps shelving its own single
+  file even while marks exist on the panel underneath.
+
 ## Kill and remove an agent session with one key
 
 ### Added

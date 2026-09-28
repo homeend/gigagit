@@ -147,7 +147,7 @@ func helpContent() []contentLine {
 		r(".", i18n.T("Stage all files (.-menu on either file panel): stage every working-tree change, untracked files included — git add (hidden while conflicted or a merge/rebase is paused)")),
 		r("H", i18n.T("stage hunks: open the region/line staging picker")),
 		r("s", i18n.T("stash changes: popup to name + pick files (ctrl+s confirms)")),
-		r("m", i18n.T("mark / unmark a file (multi-select for staging, stashing, discarding)")),
+		r("m", i18n.T("mark / unmark a file (multi-select for staging, stashing, discarding, adding to the shelf)")),
 		r("enter", i18n.T("side-by-side diff of the unstaged change (index → working tree)")),
 		r("enter", i18n.T("on a conflicted file: open the region picker (current / incoming) directly — ctrl+s applies (writes and stages the file); esc returns here")),
 		r("h", i18n.T("file history: commits that touched it (left) + per-commit diff (right)")),

@@ -93,18 +93,96 @@ func (m Model) shelfAddCmd(addr model.FileAddress) tea.Cmd {
 	}
 }
 
-// shelfAddRow is the menu-only "Add to shelf" action, present wherever a single
-// file is focused. Its run handler captures the resolved address at build time.
+// shelfAddedManyMsg reports a marked-set shelving: ok of total files landed;
+// err is the first failure (each file is attempted — one bad file never skips
+// the rest).
+type shelfAddedManyMsg struct {
+	ok, total int
+	err       error
+}
+
+// shelfAddManyCmd freezes every address into the default bucket, one entry per
+// file, off the UI thread.
+func (m Model) shelfAddManyCmd(addrs []model.FileAddress) tea.Cmd {
+	svc := m.svc
+	return func() tea.Msg {
+		out := shelfAddedManyMsg{total: len(addrs)}
+		for _, a := range addrs {
+			if _, err := svc.ShelfAdd(context.Background(), a, ""); err != nil {
+				if out.err == nil {
+					out.err = err
+				}
+				continue
+			}
+			out.ok++
+		}
+		return out
+	}
+}
+
+// onBareFilesPanel reports whether the file under focus is a Files/Staged
+// panel row itself — no viewer, blame, history, diff or files-view layer is
+// showing a file of its own. Mirrors focusedBookmark's precedence: only then
+// does the panel's marked set (m) apply.
+func (m Model) onBareFilesPanel() bool {
+	switch m.topLayer().(type) {
+	case *fileViewer, *historyView, *blameView:
+		return false
+	}
+	return m.diffLayer() == nil && m.filesView == nil && m.isFilesPanel(m.focus)
+}
+
+// shelfAddTargets resolves what "Add to shelf" freezes: the marked file set
+// restricted to the focused panel's members when any marks exist on a bare
+// Files/Staged panel (like space/stage), otherwise the single focused file.
+// Reads m.status.Files directly so an active text filter never narrows the set.
+// marked reports whether the set came from marks (the label says so: a single
+// marked file away from the cursor would otherwise read like the cursor row).
+func (m Model) shelfAddTargets() (addrs []model.FileAddress, marked bool) {
+	if len(m.fileMarks) > 0 && m.onBareFilesPanel() {
+		for i, f := range m.status.Files {
+			if m.fileMarks[f.Path] && m.memberOf(m.focus, i) {
+				addrs = append(addrs, m.panelFileBookmark(m.focus, f).Address())
+			}
+		}
+		if len(addrs) > 0 {
+			return addrs, true
+		}
+	}
+	if addr, ok := m.focusedShelfAddress(); ok {
+		return []model.FileAddress{addr}, false
+	}
+	return nil, false
+}
+
+// shelfAddRow is the menu-only "Add to shelf" action, present wherever a file
+// is focused. With several marked files on the Files/Staged panel it shelves
+// the whole set (one entry each) and says so in its label. Its run handler
+// captures the resolved addresses at build time.
 func (m Model) shelfAddRow() (actionRow, bool) {
-	addr, ok := m.focusedShelfAddress()
-	if !ok {
+	addrs, marked := m.shelfAddTargets()
+	if len(addrs) == 0 {
 		return actionRow{}, false
+	}
+	if len(addrs) == 1 {
+		addr := addrs[0]
+		label := i18n.T("Add to shelf")
+		if marked {
+			label = i18n.T("Add the marked file to shelf")
+		}
+		return actionRow{
+			id:    "shelf-add",
+			label: label,
+			run: func(m Model) (tea.Model, tea.Cmd) {
+				return m, m.shelfAddCmd(addr)
+			},
+		}, true
 	}
 	return actionRow{
 		id:    "shelf-add",
-		label: i18n.T("Add to shelf"),
+		label: i18n.T("Add %d marked files to shelf", len(addrs)),
 		run: func(m Model) (tea.Model, tea.Cmd) {
-			return m, m.shelfAddCmd(addr)
+			return m, m.shelfAddManyCmd(addrs)
 		},
 	}, true
 }
