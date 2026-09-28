@@ -258,6 +258,8 @@ func TestActionMenuLabelCoverage(t *testing.T) {
 	footerOnly := map[string]bool{
 		"commit-message": true, // commitViewMessageRow / commitEditMessageRow
 		"graph-window":   true, // graphWindowRows
+		"remove-session": true, // sessionMenuRows' session-remove (the . menu row)
+		"open-session":   true, // sessionMenuRows' session-open (the . menu row)
 	}
 	for _, b := range contextBindings() {
 		if b.id == "" || b.scope == scopeGlobal {

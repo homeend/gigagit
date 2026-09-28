@@ -94,7 +94,7 @@ func (m Model) openSessionsPopup(quitMode bool) (Model, tea.Cmd) {
 	}
 	if len(domain.Sessions().List()) == 0 && !quitMode && len(m.openFiles.list(m.currentWorktree)) == 0 &&
 		len(domain.Tasks().List()) == 0 && len(hist) == 0 {
-		m.statusMsg = i18n.T("no agent sessions — start one from a worktree's . menu")
+		m.statusMsg = i18n.T("no agent sessions — start one from the . menu of a worktree or a checked-out branch")
 		return m, nil
 	}
 	p := &sessionsPopup{quitMode: quitMode, hist: hist}

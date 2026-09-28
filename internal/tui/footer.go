@@ -66,6 +66,8 @@ func contextBindings() []footerBinding {
 		}, scopeRow},
 		{"switch-worktree", "enter", i18n.T("[enter] switch"), func(m Model) bool { return m.focus == panelWorktrees && m.canEnterWorktree() }, scopeRow},
 		{"delete-worktree", "d", i18n.T("[d]elete"), func(m Model) bool { return m.focus == panelWorktrees && m.canDeleteWorktree() }, scopeRow},
+		{"open-session", "enter", i18n.T("[enter] open"), func(m Model) bool { _, ok := m.selectedSession(); return ok }, scopeRow},
+		{"remove-session", "x", i18n.T("[x] remove"), Model.canRemoveSessionRow, scopeRow},
 		{"rename-worktree", "e", i18n.T("[e] rename"), func(m Model) bool {
 			return m.focus == panelWorktrees && m.canMoveWorktree()
 		}, scopeRow},
@@ -191,7 +193,14 @@ func contextBindings() []footerBinding {
 // contextBindings: labels must re-evaluate on a live language switch.
 func globalBindings() []footerBinding {
 	return []footerBinding{
-		{"resolve", "x", i18n.T("[x] resolve"), Model.canEnterConflict, scopeGlobal},
+		{"resolve", "x", i18n.T("[x] resolve"), func(m Model) bool {
+			// A session sub-row (Worktrees or Branches) owns x (remove /
+			// refuse), so the conflict hint steps back there.
+			if _, ok := m.selectedSession(); ok {
+				return false
+			}
+			return m.canEnterConflict()
+		}, scopeGlobal},
 		{"commit", "c", i18n.T("[c] commit"), Model.canCommit, scopeGlobal},
 		{"amend", "C", i18n.T("[C] amend"), Model.canAmend, scopeGlobal},
 		{"pull", "p", i18n.T("[p]ull"), Model.opsIdle, scopeGlobal},
@@ -260,7 +269,7 @@ func (m Model) footerOverride() (string, bool) {
 	if m.inWorktreeFiles() { // F's window: no commit list, no diff on enter
 		switch {
 		case m.wtFiles.typing:
-			return i18n.T("filter: type a fuzzy query  [↑↓] move  [enter] keep  [esc] clear"), true
+			return i18n.T("filter: fuzzy, 'exact, ^prefix, suffix$, !not  [↑↓] move  [enter] keep  [esc] clear"), true
 		case m.filesPreview != nil && !m.filesTreeFocused && m.filesPreview.p.lsel.on:
 			return i18n.T("file: [space] mark end  [enter] copy  [esc] unmark  [alt+↑↓] extend"), true
 		case m.filesPreview != nil && !m.filesTreeFocused:

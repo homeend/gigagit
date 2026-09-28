@@ -38,9 +38,13 @@ func TestRenderWindowElideIsCutoffOnly(t *testing.T) {
 func TestFWindowKeepsTheFileName(t *testing.T) {
 	t.Parallel()
 	m := wtWindow(t, "a.go", elideLongPath) // a.go is selected; the long row is not
-	m.width, m.height = 100, 24             // room for the name, not the whole path
-	if !strings.Contains(m.View(), "file_with_a_long_name.go") {
-		t.Fatalf("the F window cut the file name off:\n%s", m.View())
+	m.width, m.height = 110, 24             // room for the indented name, not the whole path
+	view := m.View()
+	if !strings.Contains(view, "file_with_a_long_name.go") {
+		t.Fatalf("the F window cut the file name off:\n%s", view)
+	}
+	if !strings.Contains(view, "/some/") {
+		t.Fatalf("the directory heading lost its leaf:\n%s", view)
 	}
 }
 

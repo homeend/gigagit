@@ -208,8 +208,8 @@ func TestFilesTreeRevealsTruncatedRow(t *testing.T) {
 	if x != 2 {
 		t.Errorf("reveal x = %d, want 2 (the left column's content edge)", x)
 	}
-	if y != 4 { // box top (1) + border + title = 3, plus selInWin (1)
-		t.Errorf("reveal y = %d, want 4 (the heading's own line)", y)
+	if y != 5 { // box top (1) + border + title = 3, then the sticky line and the root row
+		t.Errorf("reveal y = %d, want 5 (the heading's own line)", y)
 	}
 }
 

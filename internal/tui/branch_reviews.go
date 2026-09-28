@@ -12,18 +12,9 @@ import (
 )
 
 // The Branches tab lists a branch's AI reviews (of its CURRENT tip) as
-// sub-rows under it, always shown — the Worktrees session sub-row pattern:
-// the list is entry-based, a sub-row's Name and Date are its branch's so the
-// stable sort keeps it underneath, and backingIndex refuses a sub-row so no
-// branch action ever lands on the wrong branch.
-
-// brEntry is one Branches row: a branch, or one review under it.
-type brEntry struct {
-	b      int    // index into m.branches
-	review string // a review sub-row: its note id; "" = the branch itself
-}
-
-func (e brEntry) sub() bool { return e.review != "" }
+// sub-rows under it, always shown, after its session sub-rows: they are
+// brEntry rows (worktree_sessions.go), so sorting, filtering and
+// backingIndex treat them exactly like a session row.
 
 // branchReviewHeads is b's reviews on its current tip, newest first.
 func (m Model) branchReviewHeads(b model.Branch) []domain.ReviewHead {
@@ -42,21 +33,9 @@ func sameCommit(full, h string) bool {
 	return h != "" && len(h) >= 7 && strings.HasPrefix(full, h)
 }
 
-// branchEntries is the Branches list in backing order: each branch followed
-// by its reviews.
-func (m Model) branchEntries() []brEntry {
-	out := make([]brEntry, 0, len(m.branches))
-	for i, b := range m.branches {
-		out = append(out, brEntry{b: i})
-		for _, r := range m.branchReviewHeads(b) {
-			out = append(out, brEntry{b: i, review: r.ID})
-		}
-	}
-	return out
-}
-
-// branchReviewRowText is "  └ ◆ 2h · Claude Code · Review: feature".
-func branchReviewRowText(r domain.ReviewHead, now time.Time) string {
+// branchReviewRowBody is "└ ◆ 2h · Claude Code · Review: feature"; the
+// Branches tab indents it to its gutter, like a session sub-row.
+func branchReviewRowBody(r domain.ReviewHead, now time.Time) string {
 	var parts []string
 	if !r.Created.IsZero() {
 		parts = append(parts, coarseAgo(now.Sub(r.Created)))
@@ -65,7 +44,7 @@ func branchReviewRowText(r domain.ReviewHead, now time.Time) string {
 		parts = append(parts, sanitizeLine(a))
 	}
 	parts = append(parts, sanitizeLine(r.Summary))
-	return "  └ ◆ " + strings.Join(parts, " · ")
+	return "└ ◆ " + strings.Join(parts, " · ")
 }
 
 func (m Model) reviewHead(id string) (domain.ReviewHead, bool) {
@@ -79,16 +58,11 @@ func (m Model) reviewHead(id string) (domain.ReviewHead, bool) {
 
 // selectedBranchReview resolves a review sub-row under the Branches cursor.
 func (m Model) selectedBranchReview() (domain.ReviewHead, bool) {
-	idx := m.displayIndices(panelBranches)
-	sel := m.sel[panelBranches]
-	if sel < 0 || sel >= len(idx) {
+	e, ok := m.selectedBranchEntry()
+	if !ok || e.review == "" {
 		return domain.ReviewHead{}, false
 	}
-	ents := m.branchEntries()
-	if idx[sel] >= len(ents) || !ents[idx[sel]].sub() {
-		return domain.ReviewHead{}, false
-	}
-	return m.reviewHead(ents[idx[sel]].review)
+	return m.reviewHead(e.review)
 }
 
 // showBranchReviewRow is the branch .-menu's "Show review": the newest review

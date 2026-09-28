@@ -55,6 +55,32 @@ install() {
 		go install -trimpath -ldflags "${LDFLAGS}" "${PKG}"
 }
 
+# notices regenerates THIRD_PARTY_NOTICES.md from the modules linked into gg
+# (go-licenses: `go install github.com/google/go-licenses@latest`). Run it
+# after any go.mod change and commit the result — the file ships in every
+# release archive.
+notices() {
+	command -v go-licenses >/dev/null || { echo "go-licenses not installed: go install github.com/google/go-licenses@latest" >&2; exit 2; }
+	local tpl
+	tpl="$(mktemp)"
+	printf '{{range .}}## {{.Name}}\n\nLicense: {{.LicenseName}} — {{.LicenseURL}}\n\n```\n{{.LicenseText}}```\n\n{{end}}' > "${tpl}"
+	{
+		cat <<'HEAD'
+# Third-party notices
+
+gigagit (`gg`) is distributed under the PolyForm Noncommercial License 1.0.0
+(see `LICENSE`). The binaries additionally contain the open-source Go modules
+listed below, each under its own license, reproduced here as those licenses
+require. This file is generated — do not edit by hand; regenerate with
+`./build.sh notices` (needs `go install github.com/google/go-licenses@latest`).
+
+HEAD
+		go-licenses report ./cmd/gg --ignore github.com/homeend/gigagit --template "${tpl}" 2>/dev/null
+	} > THIRD_PARTY_NOTICES.md
+	rm -f "${tpl}"
+	echo "wrote THIRD_PARTY_NOTICES.md ($(grep -c '^## ' THIRD_PARTY_NOTICES.md) modules)"
+}
+
 target="${1:-linux}"
 case "${target}" in
 	linux)   build linux   ./gg ;;
@@ -65,7 +91,8 @@ case "${target}" in
 		build windows ./gg-web-new.exe
 		echo "wrote $(pwd)/gg-web-new.exe — run-win.cmd swaps it in on next launch"
 		;;
-	*) echo "usage: $0 [linux|windows|all|install|web]" >&2; exit 2 ;;
+	notices) notices ;;
+	*) echo "usage: $0 [linux|windows|all|install|web|notices]" >&2; exit 2 ;;
 esac
 
 echo "done: ${VERSION} (${COMMIT})"

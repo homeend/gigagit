@@ -43,7 +43,7 @@ func (m Model) rowKeyAt(p panel, i int) string {
 	u := idx[i] // backing (or unified-commits) index
 	switch p {
 	case panelBranches:
-		return m.listFor(p).Key(u) // entry-aware: a review row keys as name\x00id
+		return m.listFor(p).Key(u) // entry-aware: a session sub-row keys as name\x00id
 	case panelRemotes:
 		return m.remoteBranches[u].Name
 	case panelWorktrees:

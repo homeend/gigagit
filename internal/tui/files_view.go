@@ -389,6 +389,117 @@ func (m Model) filesViewCommit() model.Commit {
 	return model.Commit{Hash: m.filesHash}
 }
 
+// filesSearchLine is the /-search line under the title ("" = none): the
+// working-tree window keeps its fuzzy query apart from filesView.query.
+func (m Model) filesSearchLine() string {
+	if m.inWorktreeFiles() {
+		return m.wtSearchLine()
+	}
+	return m.filesView.searchLine()
+}
+
+// filesChromeLines counts the lines above the rows inside the box: the title,
+// the date line (commit modes) and the /-search line. The one source for the
+// renderer and the reveal tooltip, so they can never disagree on where a row
+// sits on screen.
+func (m Model) filesChromeLines() int {
+	n := 1
+	if m.filesMetaLineFor() != "" {
+		n++
+	}
+	if m.filesSearchLine() != "" {
+		n++
+	}
+	return n
+}
+
+// filesRowsCap is how many lines the box gives the rows (sticky line
+// included): its height minus the borders and the chrome, floored at one.
+func (m Model) filesRowsCap(boxH int) int {
+	n := boxH - 2 - m.filesChromeLines()
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// filesGeom is the files view's row-window geometry: the slice of vis the
+// frame builds (window-then-build keeps a 10^5-row tree O(visible)), the
+// cursor within it, and — in the single-line modes, where every row is one
+// line — the first row shown. The renderer and the reveal tooltip both read
+// it, so the tooltip lands on the row the renderer painted.
+type filesGeom struct {
+	s0, s1, anchor int  // vis[s0:s1] is the window; anchor the cursor within it
+	sticky         bool // a sticky heading line leads the rows (rowsCap ≥ 2)
+	top            int  // the first row shown, an index into the window
+	headTop        bool // the top row is a heading: it IS the sticky line
+}
+
+// filesGeometry lays vis out in rowsCap lines around sel. With a sticky line
+// the rows get rowsCap-1 lines; when the first of them is a heading it moves
+// up into the sticky line and the rows start beneath it (no heading twice).
+func filesGeometry(vis []contentLine, sel, rowsCap int) filesGeom {
+	g := filesGeom{s1: len(vis), anchor: sel, sticky: rowsCap >= 2}
+	if len(vis) > 2*rowsCap+1 {
+		if g.s0 = sel - rowsCap; g.s0 < 0 {
+			g.s0 = 0
+		}
+		if g.s1 = sel + rowsCap + 1; g.s1 > len(vis) {
+			g.s1 = len(vis)
+		}
+		g.anchor = sel - g.s0
+	}
+	body := rowsCap
+	if g.sticky {
+		body--
+	}
+	g.top = windowStart(g.s1-g.s0, body, g.anchor)
+	g.headTop = g.sticky && g.s0+g.top < len(vis) && vis[g.s0+g.top].heading
+	return g
+}
+
+// cursorLine is the cursor's line within the rows area (0 = the first line,
+// the sticky one when there is one) in the single-line modes.
+func (g filesGeom) cursorLine() int {
+	if !g.sticky || g.headTop { // the heading moved up: its rows start on line 1
+		return g.anchor - g.top
+	}
+	return 1 + g.anchor - g.top
+}
+
+// renderFileRows lays the tree's rows out in rowsCap lines, the first of which
+// always names the directory of the row beneath it — a sticky heading, so a
+// long directory scrolled past its own heading still says where its files
+// are ("." for root files). When the window's first row IS a heading it takes
+// that place itself and the rows start beneath it, so no heading shows twice.
+// wr is the built window vis[g.s0:g.s1]; the heading scan runs over vis so a
+// heading before the window is still found. In wrap mode the first row is
+// only known after the layout, so it comes from renderWindowTop rather than g.
+func (m Model) renderFileRows(wr []winRow, vis []contentLine, g filesGeom, innerW, rowsCap int) []string {
+	p := m.filesView
+	if !g.sticky {
+		return renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: g.anchor, hscroll: p.hscroll})
+	}
+	body, top := renderWindowTop(wr, winOpts{w: innerW, h: rowsCap - 1, mode: p.mode, anchor: g.anchor, hscroll: p.hscroll})
+	sticky := wr[top]
+	if vis[g.s0+top].heading {
+		// The heading itself is the sticky line; its files fill the body.
+		body, _ = renderWindowTop(wr[top+1:], winOpts{w: innerW, h: rowsCap - 1, mode: p.mode, anchor: g.anchor - top - 1, hscroll: p.hscroll})
+	} else {
+		text := "."
+		for i := g.s0 + top - 1; i >= 0; i-- {
+			if vis[i].heading {
+				text = vis[i].text
+				break
+			}
+		}
+		sticky = winRow{text: text, style: st().titleStyle}
+	}
+	sticky.text = elidePath(sticky.text, innerW) // one line whatever the mode
+	head := renderWindow([]winRow{sticky}, winOpts{w: innerW, h: 1, mode: modeCutoff})
+	return append(head, body...)
+}
+
 // lineHash resolves the commit a tree line's content lives in: a per-line
 // sha (a -u stash's untracked ^3 parent) wins over the view-wide hash.
 func (m Model) lineHash(l contentLine) string {
@@ -1021,42 +1132,26 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	}
 	// The /-search input rides its own line beneath the title (not appended to
 	// it) so a long commit subject can't truncate the query out of view.
-	search := p.searchLine()
+	search := m.filesSearchLine()
 	meta := m.filesMetaLineFor()
 	title := m.filesTitle
 	if m.inWorktreeFiles() {
-		search, meta, title = m.wtSearchLine(), "", m.wtTitle()
+		title = m.wtTitle()
 	}
-	rowsCap := contentH - 1 // the title line (the keys are the bottom bar's)
-	if meta != "" {
-		rowsCap-- // the date line claims one more row
-	}
-	if search != "" {
-		rowsCap-- // the search line claims one more row
-	}
-	if rowsCap < 1 {
-		rowsCap = 1
-	}
+	rowsCap := m.filesRowsCap(boxH)
 
 	vis := p.visible()
-	// Window-then-build: on a full tree the list is 10^4–10^5 rows, and building a
-	// winRow for every row each frame is O(n) (≈0.5s at 40k rows). Only the slice
-	// the window can show is built. In cutoff/scroll (one line per row) the math
-	// is byte-identical to building all rows (windowStart clamps the same window
-	// either way); in wrap mode a row is ≥1 lines, so the rowsCap-line window can
-	// never show rows outside [sel-rowsCap, sel+rowsCap] and renderWindow's wrap
-	// windowing re-derives the same span (see its output-identity argument).
-	s0, s1, anchor := 0, len(vis), p.sel
-	if len(vis) > 2*rowsCap+1 {
-		if s0 = p.sel - rowsCap; s0 < 0 {
-			s0 = 0
-		}
-		if s1 = p.sel + rowsCap + 1; s1 > len(vis) {
-			s1 = len(vis)
-		}
-		anchor = p.sel - s0
-	}
-	window := vis[s0:s1]
+	// Window-then-build (filesGeometry): on a full tree the list is 10^4–10^5
+	// rows, and building a winRow for every row each frame is O(n) (≈0.5s at
+	// 40k rows). Only the slice the window can show is built. In cutoff/scroll
+	// (one line per row) the math is byte-identical to building all rows
+	// (windowStart clamps the same window either way); in wrap mode a row is
+	// ≥1 lines, so the rowsCap-line window can never show rows outside
+	// [sel-rowsCap, sel+rowsCap] and renderWindow's wrap windowing re-derives
+	// the same span (see its output-identity argument).
+	g := filesGeometry(vis, p.sel, rowsCap)
+	anchor := g.anchor
+	window := vis[g.s0:g.s1]
 	wr := make([]winRow, len(window))
 	s := st()
 	for i, l := range window {
@@ -1111,8 +1206,7 @@ func (m Model) renderFilesView(boxW, boxH int) string {
 	if len(vis) == 0 {
 		lines = append(lines, padRight(truncate(i18n.T("  (no match)"), innerW), innerW))
 	} else {
-		win := renderWindow(wr, winOpts{w: innerW, h: rowsCap, mode: p.mode, anchor: anchor, hscroll: p.hscroll})
-		lines = append(lines, win...)
+		lines = append(lines, m.renderFileRows(wr, vis, g, innerW, rowsCap)...)
 	}
 	for len(lines) < contentH {
 		lines = append(lines, padRight("", innerW))

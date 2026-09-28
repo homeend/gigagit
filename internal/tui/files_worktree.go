@@ -8,6 +8,7 @@ import (
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/fuzzy"
 	"github.com/homeend/gigagit/internal/i18n"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // worktreeFiles is the files view's working-tree mode (F): every file on
@@ -17,7 +18,9 @@ import (
 type worktreeFiles struct {
 	all       []string
 	untracked map[string]bool
-	query     string
+	letters   map[string]string // path → its status letter ("" = clean)
+	query     string            // the filter in force (field.Value() while typing)
+	field     textfield         // the editor behind query while typing: cursor-aware
 	typing    bool
 	loading   bool
 }
@@ -62,6 +65,7 @@ func (m Model) wtLoaded(msg lsFilesMsg) (Model, tea.Cmd) {
 		return m.restoreParkedLayers(parked), nil
 	}
 	w.all, w.untracked = domain.WorktreeFileList(msg.paths, m.status)
+	w.letters = statusLetters(m.status)
 	w.loading = false
 	m.wtSetQuery(w.query)
 	return m.wtCursorMoved()
@@ -69,7 +73,9 @@ func (m Model) wtLoaded(msg lsFilesMsg) (Model, tea.Cmd) {
 
 // wtSetQuery is the one chokepoint for the filter: it sets the query and
 // rebuilds the rows — every file with no query, else the fuzzy-ranked best
-// fileFinderLimit — with the cursor back on the first.
+// fileFinderLimit — as the commit view's tree (commitFileLines: root files,
+// then one heading per directory), with the cursor on the best-ranked file
+// (the first with no query), never on a heading.
 func (m Model) wtSetQuery(q string) {
 	w, p := m.wtFiles, m.filesView
 	w.query = q
@@ -80,21 +86,57 @@ func (m Model) wtSetQuery(q string) {
 			paths = append(paths, r.S)
 		}
 	}
-	lines := make([]contentLine, 0, len(paths))
+	if len(paths) == 0 {
+		p.lines, p.sel = nil, 0 // the render says (no match)
+		if q == "" {
+			p.lines = []contentLine{{text: i18n.T("(no files)")}}
+		}
+		return
+	}
+	files := make([]model.CommitFile, 0, len(paths))
 	for _, path := range paths {
-		text := path
-		if w.untracked[path] {
-			text += "  " + i18n.T("(untracked)")
-		}
-		lines = append(lines, contentLine{text: text, path: path})
+		files = append(files, model.CommitFile{Path: path, Status: w.letter(path)})
 	}
-	if len(lines) == 0 {
-		lines = []contentLine{{text: i18n.T("(no files)")}}
-		if q != "" {
-			lines = nil // the render says (no match)
+	p.lines, p.sel = commitFileLines(files), 0
+	want := "" // no query: the tree's first file row
+	if q != "" {
+		want = paths[0] // the best-ranked match
+	}
+	for i, l := range p.lines {
+		if l.path != "" && (want == "" || l.path == want) {
+			p.sel = i
+			break
 		}
 	}
-	p.lines, p.sel = lines, 0
+}
+
+// letter is a file row's status column: "?" for an untracked file, else its
+// status letter; a clean file's is blank so the names stay in one column.
+func (w *worktreeFiles) letter(path string) string {
+	if w.untracked[path] {
+		return "?"
+	}
+	if l := w.letters[path]; l != "" {
+		return l
+	}
+	return " "
+}
+
+// statusLetters maps each changed path to the one letter F's rows show: the
+// unstaged letter when there is one, else the staged one.
+func statusLetters(st model.WorkingTreeStatus) map[string]string {
+	out := make(map[string]string, len(st.Files))
+	for _, f := range st.Files {
+		switch {
+		case f.Kind == model.KindUntracked:
+			continue
+		case f.Unstaged != '.' && f.Unstaged != 0 && f.Unstaged != ' ':
+			out[f.Path] = string(f.Unstaged)
+		case f.Staged != '.' && f.Staged != 0 && f.Staged != ' ':
+			out[f.Path] = string(f.Staged)
+		}
+	}
+	return out
 }
 
 // wtSelected is the path under the cursor ("" on a placeholder).
@@ -114,7 +156,12 @@ func (m Model) wtTitle() string {
 	}
 	n := len(w.all)
 	if w.query != "" {
-		n = len(m.filesView.visible())
+		n = 0
+		for _, l := range m.filesView.visible() {
+			if l.path != "" {
+				n++
+			}
+		}
 	}
 	return i18n.T("Files (working tree)  %d/%d", n, len(w.all))
 }
@@ -123,7 +170,7 @@ func (m Model) wtTitle() string {
 func (m Model) wtSearchLine() string {
 	switch w := m.wtFiles; {
 	case w.typing:
-		return "/" + w.query + "█"
+		return "/" + w.field.View(true)
 	case w.query != "":
 		return "/" + w.query
 	}
@@ -144,6 +191,7 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if w.typing {
 		if nm, nq, handled, commit := m.recallUpdate(scopeFiletree, msg, w.query); handled {
 			m = nm
+			w.field = newTextField(nq)
 			m.wtSetQuery(nq)
 			var cmd tea.Cmd
 			m, cmd = m.wtCursorMoved()
@@ -167,16 +215,16 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case tea.KeyEnter:
 			w.typing = false
 			return m.recordSearch(scopeFiletree, w.query)
-		case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
-			if r := []rune(w.query); len(r) > 0 {
-				m.wtSetQuery(string(r[:len(r)-1]))
-			}
-		case tea.KeySpace:
-			m.wtSetQuery(w.query + " ")
-		case tea.KeyRunes:
-			m.wtSetQuery(w.query + string(msg.Runes))
 		default:
-			return m, nil
+			// The field edits at its cursor: runes, space, backspace/delete,
+			// ←/→ (ctrl or alt: by word), home/end, ctrl+w. Anything else
+			// is swallowed while typing.
+			if !w.field.HandleEditKey(msg) {
+				return m, nil
+			}
+			if v := w.field.Value(); v != w.query {
+				m.wtSetQuery(v)
+			}
 		}
 		return m.wtCursorMoved()
 	}
@@ -186,6 +234,7 @@ func (m Model) updateWorktreeFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "/":
 		w.typing = true
+		w.field = newTextField(w.query) // edit the kept query, cursor at its end
 		m = m.recallReset()
 	case "esc":
 		if w.query != "" {

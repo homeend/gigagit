@@ -1,12 +1,30 @@
-// Package fuzzy provides a pure file-path subsequence matcher with ranked results.
-// It has no project imports (stdlib only), in the family of internal/textdiff and
-// internal/commitgraph.
+// Package fuzzy ranks candidate strings (file paths, branch names) against a
+// query written in fzf's extended-search syntax, scored by fzf's own matcher
+// (github.com/junegunn/fzf/src/algo, imported in-process — no fzf binary is
+// involved, so every platform ranks the same way). Stdlib + fzf only.
+//
+// Query syntax (space-separated terms, ALL must match):
+//
+//	darwin     fuzzy: the letters in order, any distance apart (a subsequence)
+//	'darwin    exact: the literal substring
+//	^docs      prefix
+//	.md$       suffix
+//	^name$     the whole string
+//	!term      NOT: reject candidates containing the literal term
+//	           (!^pre, !suf$ likewise)
+//
+// A term with only an upper-case letter or more is matched case-sensitively
+// (fzf's smart case); lower-case terms match either case.
 package fuzzy
 
 import (
 	"container/heap"
 	"sort"
 	"strings"
+	"unicode"
+
+	"github.com/junegunn/fzf/src/algo"
+	"github.com/junegunn/fzf/src/util"
 )
 
 // Match pairs a candidate string with its score (higher = better match).
@@ -15,65 +33,153 @@ type Match struct {
 	Score int
 }
 
-// isBoundary reports whether b is a path/word separator character.
-func isBoundary(b byte) bool {
-	return b == '/' || b == '_' || b == '-' || b == '.' || b == ' '
+// Kind is how a term matches.
+type Kind int
+
+const (
+	Fuzzy  Kind = iota // a subsequence
+	Exact              // a literal substring ('term)
+	Prefix             // ^term
+	Suffix             // term$
+	Equal              // ^term$
+)
+
+func (k Kind) String() string {
+	return [...]string{"fuzzy", "exact", "prefix", "suffix", "equal"}[k]
 }
 
-// Score reports whether query is a case-insensitive subsequence of candidate and
-// returns a rank score (higher = better). Bonuses: a match at a path/word boundary,
-// a contiguous run, and a match in the basename (after the last '/'); mild length
-// penalty so tighter/shorter paths win ties.
-//
-// ok=false means query is not a subsequence of candidate (no match).
-func Score(query, candidate string) (int, bool) {
-	if query == "" {
-		return 0, true
+// Term is one space-separated unit of a query.
+type Term struct {
+	Text   string
+	Kind   Kind
+	Negate bool // !term: the term must NOT match
+
+	caseSensitive bool
+	pattern       []rune
+}
+
+func (t Term) String() string {
+	s := t.Kind.String() + ":" + t.Text
+	if t.Negate {
+		s = "!" + s
 	}
-	q := strings.ToLower(query)
-	c := strings.ToLower(candidate)
-	lastSlash := strings.LastIndexByte(c, '/')
-	score, qi, prev := 0, 0, -2
-	for ci := 0; ci < len(c) && qi < len(q); ci++ {
-		if q[qi] != c[ci] {
+	return s
+}
+
+// Query is a parsed query: the terms a candidate must satisfy, all of them.
+type Query struct {
+	Terms []Term
+}
+
+// Parse splits query into terms on spaces and reads each term's markers. A
+// marker with nothing behind it (a query still being typed) yields no term.
+func Parse(query string) Query {
+	var q Query
+	for _, word := range strings.Fields(query) {
+		t := Term{Kind: Fuzzy}
+		if strings.HasPrefix(word, "!") {
+			t.Negate = true
+			word = word[1:]
+		}
+		switch {
+		case strings.HasPrefix(word, "'"):
+			t.Kind, word = Exact, word[1:]
+		case strings.HasPrefix(word, "^") && strings.HasSuffix(word, "$") && len(word) > 1:
+			t.Kind, word = Equal, word[1:len(word)-1]
+		case strings.HasPrefix(word, "^"):
+			t.Kind, word = Prefix, word[1:]
+		case strings.HasSuffix(word, "$"):
+			t.Kind, word = Suffix, word[:len(word)-1]
+		}
+		if word == "" {
 			continue
 		}
-		b := 1
-		if ci == prev+1 {
-			b += 3 // contiguous run bonus
+		if t.Negate && t.Kind == Fuzzy {
+			t.Kind = Exact // fzf: !term rejects the literal, not a subsequence
 		}
-		if ci == 0 || isBoundary(c[ci-1]) {
-			b += 5 // word/path boundary bonus
+		t.Text = word
+		t.caseSensitive = strings.IndexFunc(word, unicode.IsUpper) >= 0
+		t.pattern = []rune(word)
+		if !t.caseSensitive {
+			t.pattern = []rune(strings.ToLower(word))
 		}
-		if ci > lastSlash {
-			b += 2 // basename bonus
-		}
-		score += b
-		prev = ci
-		qi++
+		q.Terms = append(q.Terms, t)
 	}
-	if qi != len(q) {
-		return 0, false
+	return q
+}
+
+// bonus scheme: path separators are word boundaries.
+var _ = algo.Init("path")
+
+// matcher scores candidates against one query, reusing fzf's scratch slab
+// across calls (the slab is what keeps FuzzyMatchV2 allocation-free).
+type matcher struct {
+	q    Query
+	slab *util.Slab
+}
+
+func newMatcher(q Query) *matcher {
+	return &matcher{q: q, slab: util.MakeSlab(100*1024, 2048)}
+}
+
+// score reports whether candidate satisfies every term and the sum of the
+// terms' scores (a negated term contributes nothing).
+func (m *matcher) score(candidate string) (int, bool) {
+	chars := util.ToChars([]byte(candidate))
+	total := 0
+	for i := range m.q.Terms {
+		t := &m.q.Terms[i]
+		var fn algo.Algo
+		switch t.Kind {
+		case Fuzzy:
+			fn = algo.FuzzyMatchV2
+		case Exact:
+			fn = algo.ExactMatchNaive
+		case Prefix:
+			fn = algo.PrefixMatch
+		case Suffix:
+			fn = algo.SuffixMatch
+		case Equal:
+			fn = algo.EqualMatch
+		}
+		res, _ := fn(t.caseSensitive, false, true, &chars, t.pattern, false, m.slab)
+		matched := res.Start >= 0
+		if matched == t.Negate {
+			return 0, false
+		}
+		if matched {
+			total += res.Score
+		}
 	}
-	score -= len(c) / 64 // mild length penalty
-	return score, true
+	return total, true
+}
+
+// Score reports whether candidate matches query and its score (higher =
+// better). ok=false means no match. Rank is the bulk form.
+func Score(query, candidate string) (int, bool) {
+	return newMatcher(Parse(query)).score(candidate)
+}
+
+// better orders matches best-first: score descending, then the shorter
+// candidate (a tighter hit), then the path for determinism.
+func better(a, b Match) bool {
+	if a.Score != b.Score {
+		return a.Score > b.Score
+	}
+	if len(a.S) != len(b.S) {
+		return len(a.S) < len(b.S)
+	}
+	return a.S < b.S
 }
 
 // matchHeap is a min-heap of Match values where h[0] is always the element
-// that would be evicted first: lowest score, and for equal scores, the
-// lexicographically largest path (since path-asc is the tiebreak, a larger
-// path is the "worst" and should leave first).
+// that would be evicted first: the worst under better.
 type matchHeap []Match
 
-func (h matchHeap) Len() int { return len(h) }
-func (h matchHeap) Less(i, j int) bool {
-	if h[i].Score != h[j].Score {
-		return h[i].Score < h[j].Score // lower score floats to root (evicted first)
-	}
-	return h[i].S > h[j].S // equal score: larger path is "worse" → root
-}
-func (h matchHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
-func (h *matchHeap) Push(x any)   { *h = append(*h, x.(Match)) }
+func (h matchHeap) Len() int           { return len(h) }
+func (h matchHeap) Less(i, j int) bool { return better(h[j], h[i]) }
+func (h matchHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *matchHeap) Push(x any)        { *h = append(*h, x.(Match)) }
 func (h *matchHeap) Pop() any {
 	old := *h
 	n := len(old)
@@ -82,18 +188,18 @@ func (h *matchHeap) Pop() any {
 	return x
 }
 
-// Rank filters candidates to those matching query and sorts best-first (ties
-// broken by path for determinism), keeping at most limit results (limit<=0 = all).
+// Rank filters candidates to those matching query and sorts best-first,
+// keeping at most limit results (limit<=0 = all).
 //
-// When query is empty, all candidates match with score 0 and original order is
-// preserved (no sort), capped to limit.
+// When query is empty (or only markers), all candidates match with score 0
+// and original order is preserved (no sort), capped to limit.
 //
-// When limit > 0 and query is non-empty, Rank uses a bounded top-N heap selection
-// (O(n log limit)) rather than sorting the full match set (O(n log n)), so that
-// large candidate sets (100k+ paths) complete well within the 30ms budget.
+// When limit > 0, Rank uses a bounded top-N heap selection (O(n log limit))
+// rather than sorting the full match set, so that large candidate sets
+// (100k+ paths) stay cheap.
 func Rank(query string, candidates []string, limit int) []Match {
-	if query == "" {
-		// Empty query: all candidates match, preserve original order, cap.
+	q := Parse(query)
+	if len(q.Terms) == 0 {
 		out := make([]Match, 0, len(candidates))
 		for _, c := range candidates {
 			out = append(out, Match{S: c, Score: 0})
@@ -103,49 +209,37 @@ func Rank(query string, candidates []string, limit int) []Match {
 		}
 		return out
 	}
+	m := newMatcher(q)
 
 	if limit <= 0 {
-		// No limit: collect all matches then sort.
 		out := make([]Match, 0, len(candidates))
 		for _, c := range candidates {
-			if s, ok := Score(query, c); ok {
+			if s, ok := m.score(c); ok {
 				out = append(out, Match{S: c, Score: s})
 			}
 		}
-		sort.SliceStable(out, func(i, j int) bool {
-			if out[i].Score != out[j].Score {
-				return out[i].Score > out[j].Score
-			}
-			return out[i].S < out[j].S
-		})
+		sort.SliceStable(out, func(i, j int) bool { return better(out[i], out[j]) })
 		return out
 	}
 
-	// Bounded top-N: maintain a min-heap of size limit.
-	// When the heap is full, only insert if the new score exceeds the minimum.
 	h := make(matchHeap, 0, limit+1)
 	heap.Init(&h)
 	for _, c := range candidates {
-		s, ok := Score(query, c)
+		s, ok := m.score(c)
 		if !ok {
 			continue
 		}
-		m := Match{S: c, Score: s}
+		mt := Match{S: c, Score: s}
 		if h.Len() < limit {
-			heap.Push(&h, m)
-		} else if s > h[0].Score || (s == h[0].Score && c < h[0].S) {
-			// Replace the weakest entry.
+			heap.Push(&h, mt)
+		} else if better(mt, h[0]) {
 			heap.Pop(&h)
-			heap.Push(&h, m)
+			heap.Push(&h, mt)
 		}
 	}
-	// Extract and sort best-first.
-	out := []Match(h)
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].Score != out[j].Score {
-			return out[i].Score > out[j].Score
-		}
-		return out[i].S < out[j].S
-	})
+	out := make([]Match, len(h))
+	for i := len(out) - 1; i >= 0; i-- {
+		out[i] = heap.Pop(&h).(Match)
+	}
 	return out
 }

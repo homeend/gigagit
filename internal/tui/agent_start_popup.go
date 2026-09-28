@@ -16,7 +16,7 @@ import (
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
-// agentStage is where the Start agent… popup is.
+// agentStage is where the Start agent popup is.
 type agentStage int
 
 const (
@@ -64,7 +64,7 @@ var (
 	agentGlobalConfigPath = config.DefaultGlobalPath
 )
 
-// startAgentFor opens the Start agent… flow for worktree.
+// startAgentFor opens the Start agent flow for worktree.
 func (m Model) startAgentFor(worktree string) (Model, tea.Cmd) {
 	if _, _, why := sessionPlace(worktree); why != "" {
 		m.statusMsg = why
@@ -251,10 +251,10 @@ func (p *agentStartPopup) render(m Model, below string) string {
 	return overlayCenter(clipToHeight(below, h), box, w, h)
 }
 
-// sessionMenuRows are the Worktrees `.` menu's agent rows: Start agent… on a
+// sessionMenuRows are the Worktrees `.` menu's agent rows: Start agent on a
 // worktree row; Open / Kill / Remove on a session sub-row.
 func (m Model) sessionMenuRows() []actionRow {
-	if m.focus != panelWorktrees {
+	if m.focus != panelWorktrees && m.focus != panelBranches {
 		return nil
 	}
 	if info, ok := m.selectedSession(); ok {
@@ -289,10 +289,13 @@ func (m Model) sessionMenuRows() []actionRow {
 		}})
 		return rows
 	}
+	if m.focus != panelWorktrees {
+		return nil // a Branches row has its own, worktree-qualified rows (branchSessionRows)
+	}
 	if wt, ok := m.selectedWorktree(); ok && wt.Path != "" {
 		path := wt.Path
 		return []actionRow{
-			{id: "start-agent", label: i18n.T("Start agent…"), run: func(m Model) (tea.Model, tea.Cmd) {
+			{id: "start-agent", label: i18n.T("Start agent"), run: func(m Model) (tea.Model, tea.Cmd) {
 				return m.startAgentFor(path)
 			}},
 			{id: "open-terminal", label: i18n.T("Open terminal"), run: func(m Model) (tea.Model, tea.Cmd) {
@@ -301,4 +304,57 @@ func (m Model) sessionMenuRows() []actionRow {
 		}
 	}
 	return nil
+}
+
+// canRemoveSessionRow gates x on the Worktrees and Branches tabs: an exited
+// session sub-row is selected.
+func (m Model) canRemoveSessionRow() bool {
+	info, ok := m.selectedSession()
+	return ok && info.State != domain.SessionRunning
+}
+
+// removeSessionRow is x on a session sub-row: an exited session is removed
+// (its console closes through onSessionsChanged); a running one is refused
+// with the same notice the ctrl+\ popup gives.
+func (m Model) removeSessionRow(info domain.SessionInfo) Model {
+	if info.State == domain.SessionRunning {
+		m.statusMsg = i18n.T("only an exited session can be removed — kill it first (k)")
+		return m
+	}
+	if err := domain.Sessions().Remove(info.ID); err != nil {
+		m.statusMsg = i18n.T("only an exited session can be removed — kill it first (k)")
+		return m
+	}
+	m.statusMsg = i18n.T("removed %s", info.Label)
+	return m
+}
+
+// branchSessionRows are the Branches `.` menu's agent rows: Start agent /
+// Open terminal on a branch that is checked out in some worktree — the rows
+// exist only where the row itself shows a worktree path (worktreePathOf, the
+// marker's own lookup), because only that branch exists on disk to run
+// anything in. The current worktree counts. The labels name the worktree,
+// which the Branches tab does not otherwise show; the actions are the
+// Worktrees tab's own.
+func (m Model) branchSessionRows() []actionRow {
+	if m.focus != panelBranches {
+		return nil
+	}
+	b, ok := m.selectedBranch()
+	if !ok {
+		return nil
+	}
+	path, ok := m.worktreePathOf(b.Name)
+	if !ok || path == "" {
+		return nil
+	}
+	name := shortWorktreeName(path)
+	return []actionRow{
+		{id: "start-agent", label: i18n.T("Start agent in %s", name), run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.startAgentFor(path)
+		}},
+		{id: "open-terminal", label: i18n.T("Open terminal in %s", name), run: func(m Model) (tea.Model, tea.Cmd) {
+			return m.openTerminal(path)
+		}},
+	}
 }

@@ -9,6 +9,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // wtWindow opens F's working-tree files window over paths.
@@ -25,7 +28,9 @@ func wtWindow(t *testing.T, paths ...string) Model {
 func wtRows(m Model) []string {
 	var out []string
 	for _, l := range m.filesView.visible() {
-		out = append(out, l.path)
+		if l.path != "" {
+			out = append(out, l.path)
+		}
 	}
 	return out
 }
@@ -266,5 +271,236 @@ func TestWorktreeFooterShowsItsOwnKeys(t *testing.T) {
 	got, _ = m.footerOverride()
 	if !strings.Contains(got, "back to list") {
 		t.Fatalf("preview footer = %q", got)
+	}
+}
+
+// wtWindowWith opens F's window over paths with st as the working-tree status.
+func wtWindowWith(t *testing.T, st model.WorkingTreeStatus, paths ...string) Model {
+	t.Helper()
+	m := loadedNavModel(t)
+	m.focus = panelBranches
+	m.status = st
+	tm, _ := m.Update(keyMsg("F"))
+	m = tm.(Model)
+	tm, _ = m.Update(lsFilesMsg{paths: paths})
+	return tm.(Model)
+}
+
+// wtTexts is every visible row's text, a heading marked with a trailing "#".
+func wtTexts(m Model) []string {
+	var out []string
+	for _, l := range m.filesView.visible() {
+		if l.heading {
+			out = append(out, l.text+"#")
+			continue
+		}
+		out = append(out, l.text)
+	}
+	return out
+}
+
+func TestWorktreeFilesGroupUnderDirectoryHeadings(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "src/b.go", "README.md", "src/a.go", "docs/x.md")
+	got := fmt.Sprint(wtTexts(m))
+	if got != "[   README.md docs/#      x.md src/#      a.go      b.go]" {
+		t.Fatalf("rows = %q, want root files first, then one heading per directory with its files indented", got)
+	}
+	if got := fmt.Sprint(wtRows(m)); got != "[README.md docs/x.md src/a.go src/b.go]" {
+		t.Fatalf("paths = %s", got)
+	}
+}
+
+func TestWorktreeFilesShowStatusLetters(t *testing.T) {
+	t.Parallel()
+	st := model.WorkingTreeStatus{Files: []model.FileStatus{
+		{Path: "m.go", Kind: model.KindTracked, Staged: '.', Unstaged: 'M'},
+		{Path: "s.go", Kind: model.KindTracked, Staged: 'A', Unstaged: '.'},
+		{Path: "n.txt", Kind: model.KindUntracked},
+	}}
+	m := wtWindowWith(t, st, "c.go", "m.go", "s.go")
+	if got := fmt.Sprint(wtTexts(m)); got != "[   c.go M  m.go ?  n.txt A  s.go]" {
+		t.Fatalf("rows = %q, want a status letter column: blank for a clean file, ? for untracked", got)
+	}
+}
+
+func TestWorktreeCursorSkipsALeadingHeading(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "src/a.go", "src/b.go")
+	if got := m.wtSelected(); got != "src/a.go" {
+		t.Fatalf("cursor on %q, want the first file, not the src/ heading", got)
+	}
+}
+
+func TestWorktreeFilterCursorLandsOnBestMatch(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "zz/view.go", "aa/viewer_helper.go", "c.txt")
+	m = fvKeys(t, m, keyMsg("/"), keyMsg("v"), keyMsg("i"), keyMsg("e"), keyMsg("w"), keyMsg("."), keyMsg("g"), keyMsg("o"))
+	if got := fmt.Sprint(wtRows(m)); got != "[aa/viewer_helper.go zz/view.go]" {
+		t.Fatalf("filtered rows = %s, want both matches grouped in tree order", got)
+	}
+	if got := m.wtSelected(); got != "zz/view.go" {
+		t.Fatalf("cursor on %q, want the best-ranked match", got)
+	}
+}
+
+func TestWorktreeTitleCountsFilesNotHeadings(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "src/a.go", "b.txt")
+	m = fvKeys(t, m, keyMsg("/"), keyMsg("a"), keyMsg(".")) // only src/a.go matches
+	if got := m.wtTitle(); !strings.Contains(got, "1/2") {
+		t.Fatalf("title = %q, want 1/2 (the src/ heading is not a file)", got)
+	}
+}
+
+func TestWorktreeCursorOpensOnTheFirstRow(t *testing.T) {
+	t.Parallel()
+	// ".a/x.go" sorts before "b.txt", but the tree lists root files first.
+	m := wtWindow(t, ".a/x.go", "b.txt")
+	if got := m.wtSelected(); got != "b.txt" {
+		t.Fatalf("cursor on %q, want the first row of the tree (the root file)", got)
+	}
+}
+
+func TestWorktreeEnterOnAHeadingIsInert(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "src/a.go")
+	m = fvKeys(t, m, keyMsg("up")) // onto the src/ heading
+	if m.wtSelected() != "" {
+		t.Fatalf("cursor on %q, want the heading", m.wtSelected())
+	}
+	m = fvKeys(t, m, keyMsg("enter"))
+	if m.actionMenu != nil || m.topLayer() != nil || !m.inWorktreeFiles() {
+		t.Fatal("enter on a heading must not open the file actions")
+	}
+}
+
+// wtListLines is the F window's left-column list: the text of each row line
+// under the title, trimmed, in order.
+func wtListLines(m Model) []string {
+	var out []string
+	seen := false
+	for _, l := range strings.Split(ansi.Strip(m.View()), "\n") {
+		if !seen {
+			seen = strings.Contains(l, "Files (working tree)")
+			continue
+		}
+		if !strings.HasPrefix(l, "│") {
+			break
+		}
+		cell := l[len("│"):]
+		if i := strings.Index(cell, "│"); i >= 0 {
+			cell = cell[:i]
+		}
+		out = append(out, strings.TrimSpace(cell))
+	}
+	return out
+}
+
+func TestWorktreeFirstRowNamesTheDirectoryBelow(t *testing.T) {
+	t.Parallel()
+	paths := []string{"a.go"}
+	for i := 0; i < 40; i++ {
+		paths = append(paths, fmt.Sprintf("src/f%02d.go", i))
+	}
+	m := wtWindow(t, paths...)
+	m.width, m.height = 120, 20
+	if rows := wtListLines(m); len(rows) == 0 || rows[0] != "." {
+		t.Fatalf("at the top the first row = %q, want . (the root)\n%s", rows, m.View())
+	}
+	for i := 0; i < 30; i++ {
+		m = fvKeys(t, m, keyMsg("down"))
+	}
+	if m.wtSelected() != "src/f28.go" { // a.go, the src/ heading, then f00…
+		t.Fatalf("cursor on %q", m.wtSelected())
+	}
+	rows := wtListLines(m)
+	if len(rows) == 0 || rows[0] != "src/" {
+		t.Fatalf("scrolled into src/: first row = %q, want the directory of the rows below\n%s", rows, m.View())
+	}
+	if n := strings.Count(strings.Join(rows, "\n"), "src/"); n != 1 {
+		t.Fatalf("src/ shown %d times, want once (the heading itself scrolled off)", n)
+	}
+}
+
+func TestWorktreeFirstRowIsTheHeadingWhenItIsAtTheTop(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "src/a.go", "src/b.go")
+	m.width, m.height = 120, 20
+	rows := wtListLines(m)
+	if len(rows) < 3 || rows[0] != "src/" || !strings.HasSuffix(rows[1], "a.go") {
+		t.Fatalf("rows = %q, want src/ once, then its files", rows)
+	}
+	if n := strings.Count(strings.Join(rows, "\n"), "src/"); n != 1 {
+		t.Fatalf("src/ shown %d times, want once", n)
+	}
+}
+
+func TestWorktreeRevealLandsOnTheCursorRowUnderTheStickyLine(t *testing.T) {
+	t.Parallel()
+	const long = "a-root-file-with-a-name-far-too-long-for-the-column.go"
+	m := wtWindow(t, long, "src/b.go")
+	m.width, m.height = 100, 20
+	lines, _, y, ok := m.filesTreeReveal()
+	if !ok || len(lines) != 1 {
+		t.Fatalf("no reveal for a cut cursor row (ok=%v lines=%q)", ok, lines)
+	}
+	view := strings.Split(ansi.Strip(m.View()), "\n")
+	if y < 1 || y >= len(view) || !strings.Contains(view[y], long) {
+		t.Fatalf("reveal at y=%d does not carry the cursor row's full name:\n%s", y, strings.Join(view, "\n"))
+	}
+	if got := strings.TrimSpace(strings.Trim(strings.SplitN(view[y-1], "│", 3)[1], " ")); got != "." {
+		t.Fatalf("the line above the reveal = %q, want the sticky . (the reveal must not cover it)", got)
+	}
+}
+
+func TestWorktreeFilterEditsAtTheCursor(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "ac.go", "b.go") // only ac.go matches the final "ac"
+	m = fvKeys(t, m, keyMsg("/"), keyMsg("a"), keyMsg("b"), keyMsg("c"),
+		tea.KeyMsg{Type: tea.KeyLeft}, tea.KeyMsg{Type: tea.KeyLeft}, keyMsg("X"))
+	if m.wtFiles.query != "aXbc" {
+		t.Fatalf("query = %q, want aXbc (typed at the cursor)", m.wtFiles.query)
+	}
+	m = fvKeys(t, m, tea.KeyMsg{Type: tea.KeyBackspace})
+	if m.wtFiles.query != "abc" {
+		t.Fatalf("query = %q, want abc (backspace erases before the cursor)", m.wtFiles.query)
+	}
+	m = fvKeys(t, m, tea.KeyMsg{Type: tea.KeyDelete})
+	if m.wtFiles.query != "ac" {
+		t.Fatalf("query = %q, want ac (delete erases under the cursor)", m.wtFiles.query)
+	}
+	if got := ansi.Strip(m.wtSearchLine()); got != "/ac" {
+		t.Fatalf("search line = %q, want /ac (the cursor is a painted cell, not a glyph)", got)
+	}
+	if !m.wtFiles.typing || len(wtRows(m)) != 1 {
+		t.Fatalf("typing=%v rows=%v: editing must keep the filter live", m.wtFiles.typing, wtRows(m))
+	}
+}
+
+func TestWorktreeFilterMovesByWord(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "a.go")
+	m = fvKeys(t, m, keyMsg("/"), keyMsg("f"), keyMsg("o"), keyMsg("o"), tea.KeyMsg{Type: tea.KeySpace}, keyMsg("b"), keyMsg("a"), keyMsg("r"),
+		tea.KeyMsg{Type: tea.KeyCtrlLeft}, keyMsg("X"))
+	if m.wtFiles.query != "foo Xbar" {
+		t.Fatalf("query = %q, want foo Xbar (ctrl+← to the word start)", m.wtFiles.query)
+	}
+	m = fvKeys(t, m, tea.KeyMsg{Type: tea.KeyCtrlRight}, keyMsg("Y"))
+	if m.wtFiles.query != "foo XbarY" {
+		t.Fatalf("query = %q, want foo XbarY (ctrl+→ to the word end)", m.wtFiles.query)
+	}
+	m = fvKeys(t, m, tea.KeyMsg{Type: tea.KeyHome}, keyMsg("Z"), tea.KeyMsg{Type: tea.KeyEnd}, keyMsg("W"))
+	if m.wtFiles.query != "Zfoo XbarYW" {
+		t.Fatalf("query = %q, want Zfoo XbarYW (home/end)", m.wtFiles.query)
+	}
+}
+
+func TestWorktreeFilterReopensWithTheCursorAtTheEnd(t *testing.T) {
+	t.Parallel()
+	m := wtWindow(t, "a.go")
+	m = fvKeys(t, m, keyMsg("/"), keyMsg("a"), keyMsg("enter"), keyMsg("/"), keyMsg("b"))
+	if m.wtFiles.query != "ab" {
+		t.Fatalf("query = %q, want ab (/ again edits the kept query at its end)", m.wtFiles.query)
 	}
 }

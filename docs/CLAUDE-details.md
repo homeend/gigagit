@@ -1191,8 +1191,23 @@ an event zeroes `d.checked` and polls; built lazily off-thread only when
 right-column `m.filesPreview`, `closeFilesView` and the esc/`handOffToFilesView`
 return. Its state is `m.wtFiles` (all paths, the untracked set, the query,
 typing); the fuzzy query stays OUT of `filesView.query` (whose substring
-`visible()` would drop fuzzy matches) — `wtSetQuery` rebuilds flat rows
-(no headings) from `fuzzy.Rank`, cap 200. `updateWorktreeFilesKey` is taken
+`visible()` would drop fuzzy matches) — `wtSetQuery` rebuilds the rows
+from `fuzzy.Rank` (cap 200; since 2026-09-28 `internal/fuzzy` = fzf's
+`src/algo` matcher in-process + a parser for fzf's `'exact ^prefix suffix$
+!not` syntax, smart case, path bonus scheme — every fuzzy surface shares it) through `commitFileLines`, so F shows the commit
+view's tree (root files, then one heading per directory; a query's matches
+stay grouped) with a status column — `?` untracked, else the unstaged letter,
+else the staged one, blank when clean (`statusLetters`, built once at load) —
+and the cursor on the best-ranked match (the first file row with no query),
+never on a heading; `wtTitle` counts file rows only. **Sticky heading:**
+`renderFilesView` hands the built window to `renderFileRows`, whose first
+line always names the directory of the row beneath it (`.` at the root; the
+heading itself when it is the top row, so it never shows twice) —
+`renderWindowTop` (window.go) is `renderWindow` reporting its first row.
+The row geometry (`filesGeometry`/`filesGeom.cursorLine`, `filesRowsCap`,
+`filesChromeLines`) is SHARED with the reveal tooltip (`filesTreeReveal`),
+which used to mirror the math by hand and landed one line off once the
+sticky line existed. `updateWorktreeFilesKey` is taken
 right after the preview's select/search hooks, so the commit-list side's key
 logic never sees this mode. The list = `LsFiles` minus the status's `'D'`
 entries plus its `KindUntracked` ones (`worktreeFileList`). The live preview
@@ -3523,6 +3538,38 @@ UTF-8 payloads correctly (the fixture test tells).
   argv (no `-c`): `[console] shell`, else `$SHELL`/`/bin/sh`, on Windows
   `pwsh` → `powershell` → `%COMSPEC%`/`cmd.exe` (`terminalShell`). Label
   `Terminal`; opens through `applyAgentStarted` like an agent.
+- **Branches `.` too (2026-09-27):** `branchSessionRows` (agent_start_popup.go)
+  offers `Start agent in <wt>` / `Open terminal in <wt>` on a branch that
+  `worktreePathOf` (the row's own worktree-marker lookup, current worktree
+  included) resolves — so the rows exist exactly where the row shows a
+  worktree path — and hands the path to the same `startAgentFor` /
+  `openTerminal`.
+- **Session sub-rows under branches (v2, 2026-09-28):** `branchEntries()`
+  (worktree_sessions.go) interleaves `brEntry{br, sess}` sub-rows after each
+  branch whose `worktreePathOf` matches a session's `Dir` (sessions only, no
+  ◆ tasks); `branchList` (viewstate.go) is entry-based like `worktreeList`
+  (Name/Date = the parent's, Key = `name\x00id`, `Haystack` = the branch row
+  + all its sub-rows so a `/` query naming a session keeps the branch —
+  `worktreeList.Haystack` follows the same unit rule since the follow-up; the
+  footer's `open-session` `[enter] open` binding is footer-only in the
+  label-coverage gate like `remove-session`) and
+  implements `parented` — `displayIndices` indexes the branch-filter slot's
+  per-BRANCH `hidden` verdicts through `Parent(i)`, never by row.
+  `backingIndex(panelBranches)` and `rowKeyAt` refuse/key sub-rows the
+  Worktrees way. `selectedSession` dispatches on `m.focus`
+  (Worktrees → `wtEntry`, Branches → `brEntry`), so the `x`/`enter`
+  handlers, `sessionMenuRows`, `canRemoveSessionRow` and the `[x] resolve`
+  yield need no per-panel gate; the Worktrees-only `Start agent` /
+  `Open terminal` rows inside `sessionMenuRows` are gated to `panelWorktrees`
+  explicitly because `selectedWorktree` reads the Worktrees cursor whatever
+  the focus. Rendering: `branchOnlyRows` returns the 1:1 branch rows plus
+  the indicator-gutter width; `branchRowsFor` indents `sessionRowBody` to it
+  so `└` sits under the name (`branchRows()` keeps its no-arg shape for the
+  tests that index it per branch).
+- **`x` on a session sub-row (Worktrees tab, 2026-09-27):** `removeSessionRow`
+  removes an exited session / refuses a running one; the key handler checks
+  `selectedSession` BEFORE `canEnterConflict`, and the global `[x] resolve`
+  footer hint yields on such a row (`canRemoveSessionRow` gates `[x] remove`).
 - **GG_INBOX.** `StartSession`/`StartTerminal` take `env`; the TUI passes
   `GG_INBOX=<steerDir>` (`childEnv`, nil when steering is off) and records
   `childInbox[id]`. `cli.preferredInbox` sends every `gg session` verb (and
