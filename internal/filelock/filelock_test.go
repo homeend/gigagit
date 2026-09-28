@@ -1,6 +1,7 @@
 package filelock
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -85,5 +86,19 @@ func TestLockRetriesAPermissionRefusal(t *testing.T) {
 	}
 	if release != nil {
 		release()
+	}
+}
+
+func TestAcquireHeldLockWrapsErrHeld(t *testing.T) {
+	t.Parallel()
+	p := filepath.Join(t.TempDir(), "x.lock")
+	release, err := Acquire(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	_, err = Acquire(p) // waits Wait, then gives up
+	if !errors.Is(err, ErrHeld) {
+		t.Fatalf("err = %v, want errors.Is(err, ErrHeld)", err)
 	}
 }

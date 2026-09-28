@@ -372,8 +372,8 @@ func TestOpAffectedSources(t *testing.T) {
 		{engine.SmartRebase{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
 		{engine.CherryPick{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
 		{engine.ApplyPatch{}, []sourceKey{srcStatus, srcFeed, srcBranches}},
-		{engine.DeleteBranch{}, []sourceKey{srcBranches, srcFeed}},
-		{engine.RenameBranch{}, []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees}},
+		{engine.DeleteBranch{}, []sourceKey{srcBranches, srcFeed, srcNotes}},
+		{engine.RenameBranch{}, []sourceKey{srcStatus, srcBranches, srcFeed, srcWorktrees, srcNotes}},
 		{engine.Stash{}, nil}, // unmapped → all (safe default)
 	}
 	for _, tc := range cases {
@@ -535,7 +535,7 @@ func TestOpAffectedSourcesDeleteRemoteBranch(t *testing.T) {
 	// Push mappings; srcRemotes because the remote-tracking ref list changed,
 	// srcBranches/srcFeed for upstream info and %D decorations / tip markers.
 	got := opAffectedSources(engine.DeleteRemoteBranch{})
-	want := []sourceKey{srcBranches, srcRemotes, srcFeed}
+	want := []sourceKey{srcBranches, srcRemotes, srcFeed, srcNotes}
 	if len(got) != len(want) {
 		t.Fatalf("opAffectedSources(DeleteRemoteBranch) = %v, want %v", got, want)
 	}

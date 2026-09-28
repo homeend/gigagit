@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -188,15 +187,17 @@ func (m Model) startReview(target domain.ReviewTarget) (Model, tea.Cmd) {
 // opens it in the report viewer — or, when the viewer would get in the way
 // (another checkout, a focused console, the conflict window), announces it.
 func (m Model) applyReviewResult(info domain.TaskInfo) (Model, tea.Cmd) {
+	label := strings.TrimPrefix(info.Key, "review — ")
+	if info.SaveErr != "" {
+		return m.stickyNotice(i18n.T("%s: %s — ctrl+\\ to retry", info.Key, info.SaveErr))
+	}
 	if !m.canShowResult(info) {
 		return m.stickyNotice(i18n.T("%s ready — ctrl+\\", info.Key))
 	}
-	label := strings.TrimPrefix(info.Key, "review — ")
-	path, err := m.svc.SaveReviewReport(context.Background(), label, info.Result, time.Now())
-	if err != nil { // the reviews dir failed: still show it, from the task's result file
+	if info.NoteID == "" { // a working-changes review: not a note (spec ruling 1)
 		return m.openResultViewer(info.ID, ".md", reviewTitle(label), info.Result, nil)
 	}
-	return m.openResultFile(path, reviewTitle(label), nil)
+	return m.openReviewNote(info.NoteID, reviewTitle(label))
 }
 
 // canShowResult: a result may open its viewer now — it belongs to the

@@ -1,6 +1,9 @@
 package model
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestNoteContextHashTrimsAndJoins(t *testing.T) {
 	t.Parallel()
@@ -32,5 +35,24 @@ func TestNoteIsReply(t *testing.T) {
 	}
 	if !(Note{ParentID: "abc"}).IsReply() {
 		t.Fatal("a note with a ParentID is a reply")
+	}
+}
+
+func TestIsReviewNote(t *testing.T) {
+	t.Parallel()
+	c := FileAddress{State: StateCommitted, Commit: strings.Repeat("a", 40)}
+	cases := []struct {
+		n    Note
+		want bool
+	}{
+		{Note{Address: c, Tags: []string{ReviewTag}}, true},
+		{Note{Address: c}, false}, // commit-level, not a review
+		{Note{Address: FileAddress{State: StateCommitted, Commit: c.Commit, Path: "x"}, Tags: []string{ReviewTag}}, false},
+		{Note{Address: FileAddress{State: StateUnstaged, Branch: "main", Path: "x"}, Tags: []string{ReviewTag}}, false},
+	}
+	for i, tc := range cases {
+		if got := tc.n.IsReviewNote(); got != tc.want {
+			t.Errorf("case %d: IsReviewNote = %v, want %v", i, got, tc.want)
+		}
 	}
 }

@@ -58,12 +58,13 @@ func sessionRowBody(info domain.SessionInfo) string {
 // brEntry is one Branches row: a branch, or an agent session running in the
 // worktree that branch is checked out in (a sub-row under it).
 type brEntry struct {
-	br   int
-	sess domain.SessionID
+	br     int
+	sess   domain.SessionID
+	review string // an AI review of the branch's current tip: its note id
 }
 
-// sub reports a session sub-row, not a branch.
-func (e brEntry) sub() bool { return e.sess != "" }
+// sub reports a sub-row (a session or a review), not a branch.
+func (e brEntry) sub() bool { return e.sess != "" || e.review != "" }
 
 // branchEntries is the Branches list in display order: each branch followed
 // by the sessions of its worktree (worktreePathOf — the same lookup the row's
@@ -77,15 +78,16 @@ func (m Model) branchEntries() []brEntry {
 	out := make([]brEntry, 0, len(m.branches))
 	for i, b := range m.branches {
 		out = append(out, brEntry{br: i})
-		if len(byDir) == 0 {
-			continue
+		if len(byDir) > 0 {
+			if path, ok := m.worktreePathOf(b.Name); ok {
+				for _, info := range byDir[filepath.Clean(path)] {
+					out = append(out, brEntry{br: i, sess: info.ID})
+				}
+			}
 		}
-		path, ok := m.worktreePathOf(b.Name)
-		if !ok {
-			continue
-		}
-		for _, info := range byDir[filepath.Clean(path)] {
-			out = append(out, brEntry{br: i, sess: info.ID})
+		// The AI reviews of the branch's current tip (branch_reviews.go).
+		for _, r := range m.branchReviewHeads(b) {
+			out = append(out, brEntry{br: i, review: r.ID})
 		}
 	}
 	return out

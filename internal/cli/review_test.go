@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -193,8 +195,25 @@ func TestReviewRangePositionalPrintsAndPersists(t *testing.T) {
 	if !strings.Contains(out, "FAKE REVIEW of HEAD~1..HEAD") {
 		t.Fatalf("stdout = %q", out)
 	}
-	if !strings.Contains(errb, "report:") {
-		t.Fatalf("stderr missing persisted report path: %q", errb)
+	if !regexp.MustCompile(`(?m)^note: [0-9a-f]{8}$`).MatchString(errb) {
+		t.Fatalf("stderr missing the stored note id: %q", errb)
+	}
+	if strings.Contains(errb, "report:") {
+		t.Fatalf("stderr still names a report file: %q", errb)
+	}
+}
+
+// A review of working changes has no commit to attach to: printed, not stored.
+func TestReviewWorkingPrintsWithoutANote(t *testing.T) {
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	writeReviewTool(t, dir, "Echo", `printf "FAKE WORKING REVIEW\n"`)
+	code, out, errb := runCLI(t, dir, "review", "--tool", "Echo", "--working")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	if !strings.Contains(out, "FAKE WORKING REVIEW") || strings.Contains(errb, "note:") {
+		t.Fatalf("stdout=%q stderr=%q, want the review printed and no note", out, errb)
 	}
 }
 
@@ -395,5 +414,35 @@ func TestReviewSkipsInteractiveRows(t *testing.T) {
 	code, out, errb := runCLI(t, dir, "review", "--working")
 	if code != 1 || !strings.Contains(errb, "no review tool configured") {
 		t.Fatalf("exit=%d out=%s stderr=%s, want 1 + no review tool", code, out, errb)
+	}
+}
+
+// The whole lane from the CLI: a branch review becomes a note on the branch's
+// tip, and deleting the branch in gg takes the review with it.
+func TestReviewBranchNoteGoesWithTheBranch(t *testing.T) {
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	writeReviewTool(t, dir, "Echo", `printf "BRANCH REVIEW\n"`)
+	runGit(t, dir, "add", ".gg.toml")
+	runGit(t, dir, "commit", "-m", "tool")
+	runGit(t, dir, "checkout", "-b", "feature")
+	runGit(t, dir, "commit", "--allow-empty", "-m", "feature work")
+
+	code, _, errb := runCLI(t, dir, "review", "--tool", "Echo")
+	if code != 0 {
+		t.Fatalf("review: exit=%d stderr=%s", code, errb)
+	}
+	ctx := context.Background()
+	revs, err := domain.Open(dir).Reviews(ctx)
+	if err != nil || len(revs) != 1 || revs[0].Branch != "feature" || revs[0].Kind != domain.ReviewOnBranch {
+		t.Fatalf("reviews after the run = %+v (%v)", revs, err)
+	}
+
+	runGit(t, dir, "checkout", "-")
+	if code, _, errb := runCLI(t, dir, "branch", "delete", "--force", "feature"); code != 0 {
+		t.Fatalf("branch delete: exit=%d stderr=%s", code, errb)
+	}
+	if revs, _ := domain.Open(dir).Reviews(ctx); len(revs) != 0 {
+		t.Fatalf("the review outlived its branch: %+v", revs)
 	}
 }

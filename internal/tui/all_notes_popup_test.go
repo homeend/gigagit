@@ -493,3 +493,63 @@ func TestAllNotesBottomBarIsNotHighlighted(t *testing.T) {
 		t.Fatalf("the bottom bar must not wear the tooltip highlight: %q", last)
 	}
 }
+
+func reviewsFixture() domain.NotesOverview {
+	ov := allNotesFixture()
+	at := time.Now().Add(-3 * time.Hour)
+	ov.Commits[1].Reviews = []domain.Review{{ID: "rev1", Kind: domain.ReviewWasTip, Commit: anMissingSHA,
+		Branch: "feature", Agent: "Claude Code", Summary: "Review: feature (1a2b3c4..5d6e7f8)", Created: at}}
+	return ov
+}
+
+func TestAllNotesListsAReviewUnderItsCommit(t *testing.T) {
+	t.Parallel()
+	rows := buildAllNotesRows(reviewsFixture(), "repo")
+	var at int = -1
+	for i, r := range rows {
+		if r.kind == anReview {
+			at = i
+		}
+	}
+	if at < 1 || rows[at-1].text != "@notes/" {
+		t.Fatalf("no review row under an @notes/ heading: %+v", rows)
+	}
+	p := &allNotesPopup{rows: rows, folded: map[string]bool{}}
+	text := p.anRowText(rows[at], 120, time.Now())
+	for _, want := range []string{"review", "Claude C", "was tip", "Review: feature"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("review row %q lacks %q", text, want)
+		}
+	}
+	// The fixed columns cut long values; the bottom bar carries them whole.
+	bar := anBarText(rows[at], time.Now())
+	for _, want := range []string{"Claude Code", "was tip feature"} {
+		if !strings.Contains(bar, want) {
+			t.Errorf("bar text %q lacks %q", bar, want)
+		}
+	}
+	if p.count() != 6 {
+		t.Errorf("count = %d, want 6 (5 threads + 1 review)", p.count())
+	}
+}
+
+func TestAllNotesOpensReviewOfMissingCommit(t *testing.T) {
+	t.Parallel()
+	m := footerModel()
+	m.currentWorktree = "/repo"
+	m, _ = m.openAllNotes()
+	u, _ := m.Update(allNotesMsg{ov: reviewsFixture(), gen: m.loadGen})
+	m = u.(Model)
+	p := layerOf[*allNotesPopup](m)
+	for i, r := range p.visible() {
+		if r.kind == anReview {
+			p.sel = i
+		}
+	}
+	u, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = u.(Model)
+	v, ok := m.topLayer().(*fileViewer)
+	if !ok || v.src.kind != srcNote || v.src.rev != "rev1" {
+		t.Fatalf("enter on a review must open it, top = %T (notice %q)", m.topLayer(), p.notice)
+	}
+}

@@ -247,6 +247,9 @@ func (l branchList) Key(i int) string {
 	if s := l.ents[i].sess; s != "" {
 		k += "\x00" + string(s)
 	}
+	if r := l.ents[i].review; r != "" {
+		k += "\x00" + r
+	}
 	return k
 }
 

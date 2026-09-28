@@ -4,11 +4,11 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -37,9 +37,11 @@ func commitFile(t *testing.T, dir, name, content, msg string) {
 	runGitIn(t, dir, "commit", "-m", msg)
 }
 
-func TestReviewReportPersistsAndReturns(t *testing.T) {
+func TestReviewReportSavesANote(t *testing.T) {
 	dir, svc := newRealRepo(t) // domain test helper (compare_test.go)
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	stateDir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", stateDir)
+	svc.UseNotesDir(t.TempDir())
 
 	commitFile(t, dir, "a.txt", "one\n", "c1")
 	commitFile(t, dir, "a.txt", "one\ntwo\n", "c2")
@@ -47,31 +49,40 @@ func TestReviewReportPersistsAndReturns(t *testing.T) {
 	target := ReviewTarget{Kind: ReviewRange, Range: "HEAD~1..HEAD", Diff: model.DiffSpec{Rev: "HEAD~1..HEAD"}}
 	// A resolved command that just echoes a fixed report to stdout.
 	cmd := `printf 'REPORT: one finding\n'`
-	when := time.Date(2026, 7, 7, 1, 30, 0, 0, time.UTC)
-	res, err := svc.ReviewReport(context.Background(), target, cmd, []string{"GG_TASK=review"}, when)
+	res, err := svc.ReviewReport(context.Background(), target, "Fake", cmd, []string{"GG_TASK=review"})
 	if err != nil {
 		t.Fatalf("review: %v", err)
 	}
 	if !strings.Contains(res.Content, "REPORT: one finding") {
 		t.Fatalf("content=%q", res.Content)
 	}
-	if !strings.Contains(res.Path, "reviews") || !strings.HasSuffix(res.Path, ".md") {
-		t.Fatalf("path=%q, want a reviews/*.md file", res.Path)
-	}
-	persisted, err := os.ReadFile(res.Path)
+	r, err := svc.Review(context.Background(), res.NoteID)
 	if err != nil {
-		t.Fatalf("read persisted report: %v", err)
+		t.Fatalf("the review was not stored as a note: %v", err)
 	}
-	if got := string(persisted); !strings.Contains(got, "REPORT: one finding") {
-		t.Fatalf("persisted file content=%q", got)
+	if r.Text != res.Content || r.Agent != "Fake" || r.Commit != revParse(t, dir, "HEAD") {
+		t.Fatalf("stored review = %+v", r)
 	}
-	// New layout: a per-day folder (YYYY-MM-DD) holding <HH-MM>-<label>.md.
-	// Label is unset here, so DisplayLabel falls back to the Range.
-	if !strings.Contains(res.Path, "2026-07-07") || !strings.Contains(res.Path, "01-30-HEAD~1..HEAD.md") {
-		t.Fatalf("path should be <date>/<HH-MM>-<label>.md: %q", res.Path)
+	if _, err := os.Stat(filepath.Join(stateDir, "gg", "reviews")); !os.IsNotExist(err) {
+		t.Fatalf("a reviews/ report dir was written (stat err %v)", err)
 	}
 	if res.Label != "HEAD~1..HEAD" {
 		t.Fatalf("Label = %q, want the range fallback HEAD~1..HEAD", res.Label)
+	}
+}
+
+func TestReviewReportWorkingChangesSavesNoNote(t *testing.T) {
+	_, svc := newRealRepo(t)
+	svc.UseNotesDir(t.TempDir())
+	res, err := svc.ReviewReport(context.Background(), WorkingReviewTarget(), "Fake", `printf 'ok\n'`, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.NoteID != "" || res.Content != "ok" {
+		t.Fatalf("res = %+v, want the text and no note", res)
+	}
+	if all, _ := svc.Reviews(context.Background()); len(all) != 0 {
+		t.Fatalf("a working-changes review was stored: %+v", all)
 	}
 }
 
@@ -113,7 +124,7 @@ func TestWorkingReviewReportIncludesStagedChanges(t *testing.T) {
 	if runtime.GOOS == "windows" { // the capture runs as a .bat via cmd.exe
 		cmd = `@type "%GG_REVIEW_DIFF%"`
 	}
-	res, err := svc.ReviewReport(context.Background(), target, cmd, nil, time.Now())
+	res, err := svc.ReviewReport(context.Background(), target, "Fake", cmd, nil)
 	if err != nil {
 		t.Fatalf("review: %v", err)
 	}
@@ -122,20 +133,6 @@ func TestWorkingReviewReportIncludesStagedChanges(t *testing.T) {
 	}
 	if !strings.Contains(res.Content, "staged.txt") {
 		t.Fatalf("review content = %q, want it to mention staged.txt", res.Content)
-	}
-}
-
-func TestSanitizeRangeForFilename(t *testing.T) {
-	cases := map[string]string{
-		"main..HEAD":      "main..HEAD",
-		"feature/x..main": "feature-x..main",
-		"":                "working-changes",
-		"a b:c":           "a-b-c",
-	}
-	for in, want := range cases {
-		if got := sanitizeRangeForFilename(in); got != want {
-			t.Fatalf("sanitize(%q)=%q, want %q", in, got, want)
-		}
 	}
 }
 
@@ -282,7 +279,7 @@ func TestReviewReportEmptyReportErrors(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		empty = "@rem" // exit 0, no output — cmd.exe's "true"
 	}
-	_, err := svc.ReviewReport(context.Background(), target, empty, nil, time.Now())
+	_, err := svc.ReviewReport(context.Background(), target, "Fake", empty, nil)
 	if err == nil {
 		t.Fatal("ReviewReport: want error for an empty report, got nil")
 	}
@@ -306,37 +303,5 @@ func TestReviewDisplayLabelFallback(t *testing.T) {
 	}
 	if got := (ReviewTarget{}).DisplayLabel(); got != "working changes" {
 		t.Fatalf("DisplayLabel = %q, want \"working changes\"", got)
-	}
-}
-
-// TestReviewReportFolderedByDate proves the persisted path is
-// <repoKey>/<YYYY-MM-DD>/<HH-MM>-<label>.md and that the human Label (not the
-// hex Range) names the file.
-func TestReviewReportFolderedByDate(t *testing.T) {
-	_, svc := newRealRepo(t)
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	target := ReviewTarget{Kind: ReviewBranch, Range: "aaaaaaa..bbbbbbb", Label: "feat/my-branch", Diff: model.DiffSpec{Rev: "HEAD"}}
-	when := time.Date(2026, 7, 7, 14, 5, 0, 0, time.UTC)
-	res, err := svc.ReviewReport(context.Background(), target, `printf 'ok\n'`, nil, when)
-	if err != nil {
-		t.Fatalf("review: %v", err)
-	}
-	if !strings.Contains(res.Path, "2026-07-07") {
-		t.Fatalf("path %q should be under a YYYY-MM-DD folder", res.Path)
-	}
-	if !strings.Contains(res.Path, "14-05-feat-my-branch.md") {
-		t.Fatalf("path %q should be <HH-MM>-<sanitized-label>.md (branch name, not the SHA range)", res.Path)
-	}
-}
-
-func TestSaveReviewReportWritesUnderReviews(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	_, svc := newRealRepo(t)
-	p, err := svc.SaveReviewReport(context.Background(), "working changes", "# ok\n", time.Date(2026, 9, 25, 10, 4, 0, 0, time.UTC))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if b, _ := os.ReadFile(p); string(b) != "# ok\n" || !strings.Contains(p, "reviews") || !strings.HasSuffix(p, "10-04-working-changes.md") {
-		t.Fatalf("path %q content %q", p, b)
 	}
 }

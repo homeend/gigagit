@@ -35,6 +35,8 @@ type Record struct {
 	Err        string    `toml:"err"`
 	ResultFile string    `toml:"result_file"`
 	TailFile   string    `toml:"tail_file"`
+	// NoteID is the note a review's result was stored as (no ResultFile then).
+	NoteID string `toml:"note_id,omitempty"`
 }
 
 // Store persists records newest first.

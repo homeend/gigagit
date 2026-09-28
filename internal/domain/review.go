@@ -3,10 +3,7 @@ package domain
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
@@ -42,6 +39,11 @@ type ReviewTarget struct {
 	Range string // injection-safe: hex SHA range / user-typed rev. "" for working changes.
 	Label string // human display: branch name / "<short> <subject>" / typed range / "working changes"
 	Diff  model.DiffSpec
+	// Commit is the full sha a review NOTE anchors to: the range's last
+	// commit (a branch review's tip). Branch is set only when the target was
+	// named by a branch ref. Both are data, never spliced into a command.
+	Commit string
+	Branch string
 }
 
 // DisplayLabel is the human string shown for this target (status bar, viewer
@@ -73,20 +75,22 @@ func WorkingReviewTarget() ReviewTarget {
 	return ReviewTarget{Kind: ReviewWorking, Range: "", Label: "working changes", Diff: model.DiffSpec{Rev: "HEAD"}}
 }
 
-// ReviewResult is a produced review: the durable report path, its content, the
-// injection-safe range, and the human Label used for the title/filename.
+// ReviewResult is a produced review: its text, the note it was stored as
+// ("" for working changes, which have no commit to attach to), the
+// injection-safe range, and the human Label used for titles.
 type ReviewResult struct {
-	Path    string
+	NoteID  string
+	Warn    string // the note store had to be moved aside first
 	Content string
 	Range   string
 	Label   string
 }
 
-// ReviewReport runs resolvedCommand over target and persists the captured
-// report. The three-frontend entry point; ReviewReportNotes adds the optional
-// notes sidecar.
-func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, resolvedCommand string, env []string, now time.Time) (ReviewResult, error) {
-	return s.ReviewReportNotes(ctx, target, resolvedCommand, env, now, "")
+// ReviewReport runs resolvedCommand over target and stores the captured
+// review as a note. The three-frontend entry point; ReviewReportNotes adds
+// the optional notes sidecar. agent names the tool (the note's author).
+func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, agent, resolvedCommand string, env []string) (ReviewResult, error) {
+	return s.ReviewReportNotes(ctx, target, agent, resolvedCommand, env, "")
 }
 
 // ReviewReportNotes is ReviewReport plus a caller-owned notes file: when
@@ -95,10 +99,10 @@ func (s *Service) ReviewReport(ctx context.Context, target ReviewTarget, resolve
 // FILE belongs to the caller — the op never creates or removes it — because the
 // caller reads it after the op returns.
 //
-// It runs resolvedCommand over target via engine.ReviewChanges, then persists
-// the captured report under <state>/gg/reviews/<repoKey>/. now is injected so
-// the filename timestamp is testable.
-func (s *Service) ReviewReportNotes(ctx context.Context, target ReviewTarget, resolvedCommand string, env []string, now time.Time, notesFile string) (ReviewResult, error) {
+// It runs resolvedCommand over target via engine.ReviewChanges, then stores
+// the captured review as a note on the reviewed commit (SaveReview). A
+// working-changes review is returned but not stored: it has no commit.
+func (s *Service) ReviewReportNotes(ctx context.Context, target ReviewTarget, agent, resolvedCommand string, env []string, notesFile string) (ReviewResult, error) {
 	label := target.DisplayLabel()
 	op := engine.ReviewChanges{
 		Command:    resolvedCommand,
@@ -113,84 +117,28 @@ func (s *Service) ReviewReportNotes(ctx context.Context, target ReviewTarget, re
 		return ReviewResult{}, err
 	}
 	// Claude's --output-format json wraps the markdown report in a JSON
-	// envelope ({"result":"<markdown>",...}); unwrap it here so both the
-	// persisted file and the returned Content are the markdown report, not
-	// the raw JSON blob. Junie's raw-text $GG_MESSAGE_FILE path (and any
-	// plain-text tool) passes through unchanged.
+	// envelope ({"result":"<markdown>",...}); unwrap it here so the stored
+	// note and the returned Content are the markdown report, not the raw
+	// JSON blob. Junie's raw-text $GG_MESSAGE_FILE path (and any plain-text
+	// tool) passes through unchanged.
 	report, perr := exttool.ParseCaptureReport(res.Captured)
 	if perr != nil {
 		return ReviewResult{}, perr
 	}
-	if strings.TrimSpace(report) == "" {
+	report = strings.TrimSpace(report)
+	if report == "" {
 		return ReviewResult{}, fmt.Errorf("review produced an empty report")
 	}
-	path, werr := s.writeReviewReport(ctx, label, report, now)
-	if werr != nil {
-		return ReviewResult{}, werr
+	out := ReviewResult{Content: report, Range: target.Range, Label: label}
+	if target.Kind == ReviewWorking {
+		return out, nil
 	}
-	return ReviewResult{Path: path, Content: report, Range: target.Range, Label: label}, nil
-}
-
-// SaveReviewReport persists a review produced outside ReviewReport (an AI
-// task's result) where ReviewReport keeps its reports, and returns the path.
-func (s *Service) SaveReviewReport(ctx context.Context, label, content string, now time.Time) (string, error) {
-	return s.writeReviewReport(ctx, label, content, now)
-}
-
-// writeReviewReport persists a report under a date-foldered, human-readable
-// path: <state>/gg/reviews/<repoKey>/<YYYY-MM-DD>/<HH-MM>-<label>.md, where
-// label is the target's DisplayLabel (branch name / "<short> <subject>" / range
-// / "working changes"), truncated and filename-sanitized. Grouping by day keeps
-// the archive browsable; the label in the name says what each report is at a
-// glance.
-func (s *Service) writeReviewReport(ctx context.Context, label, content string, now time.Time) (string, error) {
-	base := stateBaseDir("reviews")
-	if base == "" {
-		return "", fmt.Errorf("review: no state dir available")
+	id, warn, serr := s.SaveReview(ctx, SaveReview{Target: target, Agent: agent, Text: report})
+	if serr != nil {
+		return ReviewResult{}, fmt.Errorf("review not saved: %w", serr)
 	}
-	common, err := s.GitCommonDir(ctx)
-	if err != nil {
-		return "", err
-	}
-	dir := filepath.Join(base, repoKey(strings.TrimSpace(common)), now.Format("2006-01-02"))
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
-	name := now.Format("15-04") + "-" + sanitizeRangeForFilename(truncateLabel(label, 60)) + ".md"
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		return "", err
-	}
-	return path, nil
-}
-
-// truncateLabel bounds a display label to n runes (subjects are unbounded) so a
-// report filename stays a reasonable length. Rune-safe; trims trailing space.
-func truncateLabel(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return strings.TrimRight(string(r[:n]), " ")
-}
-
-// sanitizeRangeForFilename replaces bytes unsafe inside one filename segment
-// (/, whitespace, control bytes, ':') with '-'; '..' is kept. "" -> a stable label.
-func sanitizeRangeForFilename(rng string) string {
-	rng = strings.TrimSpace(rng)
-	if rng == "" {
-		return "working-changes"
-	}
-	var b strings.Builder
-	for _, r := range rng {
-		switch {
-		case r == '/' || r == ':' || r <= ' ':
-			b.WriteByte('-')
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
+	out.NoteID, out.Warn = id, warn
+	return out, nil
 }
 
 // BranchReviewTarget resolves <base>..<tip>: base = merge-base with main, then
@@ -214,6 +162,7 @@ func (s *Service) BranchReviewTarget(ctx context.Context, tip string) (ReviewTar
 	if err != nil {
 		return ReviewTarget{}, err
 	}
+	branch := s.reviewBranchName(ctx, tip, tipSHA)
 	base, err := s.repo.MergeBase(ctx, "main", tip)
 	if err != nil || strings.TrimSpace(base) == "" {
 		if up, uerr := s.repo.UpstreamRef(ctx, tip); uerr == nil && strings.TrimSpace(up) != "" {
@@ -221,7 +170,7 @@ func (s *Service) BranchReviewTarget(ctx context.Context, tip string) (ReviewTar
 		} else {
 			// no base found: review just the tip commit's own change (vs its parent)
 			rng := tipSHA + "^.." + tipSHA
-			return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: model.DiffSpec{Rev: rng}}, nil
+			return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: model.DiffSpec{Rev: rng}, Commit: tipSHA, Branch: branch}, nil
 		}
 	}
 	baseSHA, err := s.repo.ResolveCommit(ctx, strings.TrimSpace(base))
@@ -230,5 +179,5 @@ func (s *Service) BranchReviewTarget(ctx context.Context, tip string) (ReviewTar
 	}
 	rng := baseSHA + ".." + tipSHA
 	// Range is the hex range (executed); Label is the branch NAME (display only).
-	return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: model.DiffSpec{Rev: rng}}, nil
+	return ReviewTarget{Kind: ReviewBranch, Range: rng, Label: tip, Diff: model.DiffSpec{Rev: rng}, Commit: tipSHA, Branch: branch}, nil
 }

@@ -1,9 +1,12 @@
 package notes
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -454,5 +457,61 @@ func TestLockReleaseOnlyRemovesItsOwn(t *testing.T) {
 	b, err := os.ReadFile(taken.lockPath())
 	if err != nil || string(b) != "another-gg" {
 		t.Fatalf("release must leave a lock it no longer owns alone: %q err %v", b, err)
+	}
+}
+
+func TestReadCorruptWrapsErrCorrupt(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "notes.toml"), []byte("notes = [[["), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := NewFileStore(dir).Load()
+	if !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("err = %v, want ErrCorrupt", err)
+	}
+}
+
+func TestCapNeverDropsCommitLevelNotes(t *testing.T) {
+	t.Parallel()
+	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	review := model.Note{ID: "r1", Address: model.FileAddress{State: model.StateCommitted, Commit: strings.Repeat("a", 40)},
+		Tags: []string{model.ReviewTag}, Created: old}
+	line := func(id string, h int) model.Note {
+		return model.Note{ID: id, Address: model.FileAddress{State: model.StateCommitted, Commit: strings.Repeat("b", 40), Path: "f.go"},
+			Created: old.Add(time.Duration(h) * time.Hour)}
+	}
+	got := capOldestFirst([]model.Note{review, line("l1", 1), line("l2", 2), line("l3", 3)}, 2)
+	var ids []string
+	for _, n := range got {
+		ids = append(ids, n.ID)
+	}
+	if !slices.Contains(ids, "r1") {
+		t.Fatalf("cap dropped the review note: kept %v", ids)
+	}
+	if len(ids) != 3 || slices.Contains(ids, "l1") {
+		t.Fatalf("kept %v, want r1 + the two newest line notes", ids)
+	}
+}
+
+func TestQuarantineMovesTheFileAside(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "notes.toml"), []byte("garbage [[["), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fs := NewFileStore(dir)
+	moved, err := fs.Quarantine()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(filepath.Base(moved), "notes.toml.corrupt-") {
+		t.Fatalf("moved to %q", moved)
+	}
+	if b, _ := os.ReadFile(moved); string(b) != "garbage [[[" {
+		t.Fatalf("moved file content = %q", b)
+	}
+	if ns, err := fs.Load(); err != nil || len(ns) != 0 {
+		t.Fatalf("after quarantine Load = %v, %v; want empty, nil", ns, err)
 	}
 }

@@ -29,6 +29,10 @@ const (
 	Stale = 30 * time.Second
 )
 
+// ErrHeld is wrapped by Acquire's give-up error: another holder kept the
+// lock past Wait. A caller with a longer budget of its own retries on it.
+var ErrHeld = errors.New("filelock: lock is held")
+
 // Acquire takes the cross-process lock at path — an O_EXCL lock file,
 // creating path's parent directory if it does not exist yet. It breaks a
 // lock older than Stale (a crashed writer), retries for up to Wait, and
@@ -89,7 +93,7 @@ func Acquire(path string) (release func(), err error) {
 			}
 		}
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("filelock: %s is held; try again (last: %v)", path, last)
+			return nil, fmt.Errorf("%w: %s; try again (last: %v)", ErrHeld, path, last)
 		}
 		time.Sleep(Poll)
 	}

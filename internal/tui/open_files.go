@@ -2,10 +2,12 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/steer"
@@ -214,6 +216,17 @@ func (m Model) docLoader(d *openFile) func(context.Context) ([]byte, error) {
 		return func(ctx context.Context) ([]byte, error) { return svc.ResolveBytes(ctx, ref) }
 	case srcExternal:
 		return func(context.Context) ([]byte, error) { return os.ReadFile(path) }
+	case srcNote:
+		return func(ctx context.Context) ([]byte, error) {
+			r, err := svc.Review(ctx, src.rev)
+			if errors.Is(err, domain.ErrReviewNotFound) {
+				return []byte(i18n.T("review deleted") + "\n"), nil
+			}
+			if err != nil {
+				return nil, err
+			}
+			return []byte(r.Text), nil
+		}
 	}
 	return func(ctx context.Context) ([]byte, error) { return svc.WorktreeFile(ctx, path) }
 }
@@ -251,6 +264,8 @@ func (m Model) openFilesProto() []steer.OpenFile {
 			f.Source, f.Rev = "shelf", d.src.rev
 		case srcExternal:
 			f.Source = "result"
+		case srcNote:
+			f.Source, f.Rev = "review", d.src.rev
 		}
 		if docLoaded(d) {
 			f.Line = d.p.cur + 1

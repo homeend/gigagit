@@ -12,8 +12,9 @@ import (
 // An AI task's result opens in the file viewer (file_viewer.go) like any
 // file: line cursor, selection copy, / search, ctrl+] keeps it open in the
 // background and ctrl+\ lists it under the open files. The bytes are a file
-// on disk — a review's saved report, else the result written by
-// domain.SaveTaskResult — so the viewer reloads it when it changes.
+// on disk, written by domain.SaveTaskResult, so the viewer reloads it when it
+// changes. A commit/range/branch review is the exception: it lives in its
+// note and opens through openReviewNote (srcNote), never as a file.
 
 // openResultViewer writes text as task id's result file (ext names its
 // kind: .md, .txt, .log) and opens it. apply, when set, is the viewer's a.
@@ -24,6 +25,24 @@ func (m Model) openResultViewer(id domain.TaskID, ext, title, text string, apply
 		return m, nil
 	}
 	return m.openResultFile(path, title, apply)
+}
+
+// openReviewNote opens an AI review, stored as a note, in the viewer (y
+// copies it all). The text is read from the note on every load.
+func (m Model) openReviewNote(id, title string) (Model, tea.Cmd) {
+	src := fileSource{kind: srcNote, rev: id}
+	path := "review-" + id + ".md"
+	d := m.openFiles.find(m.currentWorktree, docKey(src, path))
+	if d == nil {
+		d = newOpenFile(src, path)
+	} else {
+		m = m.detachDoc(d)
+	}
+	d.title, d.result = title, true
+	d.p.extraHint = i18n.T("[y] copy")
+	m = m.pushLayer(&fileViewer{d})
+	m = m.registerDoc(d)
+	return m, m.loadDoc(d)
 }
 
 // openResultFile opens the result file at path (absolute) in the viewer.

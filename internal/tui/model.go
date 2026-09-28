@@ -880,7 +880,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Only lines and cursor are replaced; the search query intentionally
 		// survives the commit change (track one file through history).
-		m.filesView.lines = commitFileLines(msg.files)
+		m.filesView.lines = withReviewLines(msg.reviews, commitFileLines(msg.files))
 		m.filesView.sel = 0
 		m.filesTitle = i18n.T("Files %s %s", shortHash(msg.hash), msg.subject)
 		m.filesContext = shortHash(msg.hash) + " " + msg.subject
@@ -2569,6 +2569,10 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Branches: enter = the .-menu "Go to tip in commits" row (shared
 			// code path, so the key and the menu can never drift apart).
 			if m.focus == panelBranches {
+				// A review row under a branch opens the review.
+				if h, ok := m.selectedBranchReview(); ok {
+					return m.openReviewNote(h.ID, h.Summary)
+				}
 				if r, ok := m.commitGotoTipRow(); ok {
 					return r.run(m)
 				}

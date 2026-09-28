@@ -1083,7 +1083,16 @@ func (m Model) branchRowsFor(ents []brEntry) []string {
 	rows, gutterW := m.branchOnlyRows()
 	out := make([]string, 0, len(ents))
 	indent := strings.Repeat(" ", gutterW)
+	now := time.Now()
 	for _, e := range ents {
+		if e.review != "" {
+			if h, ok := m.reviewHead(e.review); ok {
+				out = append(out, indent+branchReviewRowBody(h, now))
+			} else {
+				out = append(out, indent+"└ ?")
+			}
+			continue
+		}
 		if e.sess != "" {
 			if s, ok := domain.Sessions().Get(e.sess); ok {
 				out = append(out, indent+sessionRowBody(s.Info()))
@@ -1145,6 +1154,9 @@ func (m Model) branchOnlyRows() ([]string, int) {
 		}
 		gutterW = len(gutter)
 		row := string(gutter) + b.Name
+		if n := len(m.branchReviewHeads(b)); n > 0 {
+			row += " ◆" + strconv.Itoa(n)
+		}
 		if b.Behind > 0 {
 			row += " (↓" + strconv.Itoa(b.Behind) + ")"
 		}

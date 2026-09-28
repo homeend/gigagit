@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
@@ -119,7 +118,7 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 		}
 	}
 
-	res, err := svc.ReviewReportNotes(ctx, target, resolved, []string{"GG_TASK=review"}, time.Now(), notesPath)
+	res, err := svc.ReviewReportNotes(ctx, target, cmd.Name, resolved, []string{"GG_TASK=review"}, notesPath)
 	if err != nil {
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
@@ -128,7 +127,12 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 	if !strings.HasSuffix(res.Content, "\n") {
 		io.WriteString(stdout, "\n")
 	}
-	fmt.Fprintln(stderr, "report:", res.Path)
+	if res.Warn != "" {
+		fmt.Fprintln(stderr, "warning:", res.Warn)
+	}
+	if res.NoteID != "" {
+		fmt.Fprintln(stderr, "note:", res.NoteID)
+	}
 	if !*wantNotes {
 		return 0
 	}

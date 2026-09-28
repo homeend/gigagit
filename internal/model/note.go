@@ -79,12 +79,27 @@ type Note struct {
 	Rationale   string      `toml:"rationale,omitempty"`
 	Tags        []string    `toml:"tags,omitempty"`
 	Confidence  float64     `toml:"confidence,omitempty"`
-	Created     time.Time   `toml:"created"`
-	Updated     time.Time   `toml:"updated"`
+	// Scope is the reviewed range (hex "a..b") of a review note; "" otherwise.
+	Scope   string    `toml:"scope,omitempty"`
+	Created time.Time `toml:"created"`
+	Updated time.Time `toml:"updated"`
 }
 
 // IsReply reports whether n hangs off another note.
 func (n Note) IsReply() bool { return n.ParentID != "" }
+
+// ReviewTag marks a commit-level note that holds an AI review.
+const ReviewTag = "review"
+
+// IsCommitLevel reports a note about a whole commit: a commit and no path.
+func (n Note) IsCommitLevel() bool {
+	return n.Address.State == StateCommitted && n.Address.Commit != "" && n.Address.Path == ""
+}
+
+// IsReviewNote reports a commit-level note tagged ReviewTag. It is the ONLY
+// test for "this is an AI review": Address.Branch alone proves nothing (the
+// TUI fills it on working-tree line notes too).
+func (n Note) IsReviewNote() bool { return n.IsCommitLevel() && NoteHasTag(n, ReviewTag) }
 
 // NoteContextHash fingerprints the anchored lines: each line trimmed of
 // leading/trailing whitespace, joined with "\n" (no trailing newline), hex

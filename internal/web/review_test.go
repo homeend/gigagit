@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -83,7 +84,7 @@ func startReview(t *testing.T, ts *httptest.Server, body string) (int, map[strin
 
 func TestReviewToolsListsConfigured(t *testing.T) {
 	dir := reviewRepo(t, echoReviewTool)
-	ts := serve(t, New(domain.Open(dir)))
+	ts := serve(t, New(reviewSvc(t, dir)))
 
 	got := reviewTools(t, ts, "?target=branch&branch=feature")
 	if len(got.Tools) != 1 || got.Tools[0].Name != "Echo" {
@@ -110,7 +111,7 @@ func TestReviewToolsListsConfigured(t *testing.T) {
 // $GG_REVIEW_DIFF instead, so <range> resolves empty.
 func TestReviewToolsWorkingTarget(t *testing.T) {
 	dir := reviewRepo(t, echoReviewTool)
-	ts := serve(t, New(domain.Open(dir)))
+	ts := serve(t, New(reviewSvc(t, dir)))
 
 	got := reviewTools(t, ts, "?target=working")
 	if got.Label != "working changes" {
@@ -136,7 +137,7 @@ printf '# review of <range>\nlooks fine\n'
 // tools listing — it stays hidden alongside the one web-visible tool.
 func TestReviewToolsHidesTuiOnlyFrontend(t *testing.T) {
 	dir := reviewRepo(t, echoReviewTool+tuiOnlyReviewTool)
-	ts := serve(t, New(domain.Open(dir)))
+	ts := serve(t, New(reviewSvc(t, dir)))
 
 	got := reviewTools(t, ts, "?target=branch&branch=feature")
 	if len(got.Tools) != 1 || got.Tools[0].Name != "Echo" {
@@ -146,7 +147,7 @@ func TestReviewToolsHidesTuiOnlyFrontend(t *testing.T) {
 
 func TestReviewToolsEmptyWithoutConfig(t *testing.T) {
 	dir := reviewRepo(t, "")
-	ts := serve(t, New(domain.Open(dir)))
+	ts := serve(t, New(reviewSvc(t, dir)))
 
 	if got := reviewTools(t, ts, "?target=branch&branch=feature"); len(got.Tools) != 0 {
 		t.Errorf("tools = %+v, want none", got.Tools)
@@ -165,7 +166,8 @@ func TestReviewToolsEmptyWithoutConfig(t *testing.T) {
 // run needs no approve flag.
 func TestReviewApprovalGateThenRun(t *testing.T) {
 	dir := reviewRepo(t, echoReviewTool)
-	ts := serve(t, New(domain.Open(dir)))
+	svc := reviewSvc(t, dir)
+	ts := serve(t, New(svc))
 
 	code, body := startReview(t, ts, `{"target":"branch","branch":"feature","tool":"Echo"}`)
 	if code != http.StatusForbidden {
@@ -196,16 +198,15 @@ func TestReviewApprovalGateThenRun(t *testing.T) {
 	if last["changed"] != false {
 		t.Errorf("changed = %v, want false", last["changed"])
 	}
-	path, _ := last["path"].(string)
-	if path == "" {
-		t.Fatal("done carries no report path")
+	if _, has := last["path"]; has {
+		t.Errorf("done still carries a report file path: %v", last["path"])
 	}
-	onDisk, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("persisted report: %v", err)
+	noteID, _ := last["noteId"].(string)
+	if noteID == "" {
+		t.Fatal("done carries no note id")
 	}
-	if string(onDisk) != report {
-		t.Errorf("persisted %q != streamed %q", onDisk, report)
+	if r, err := svc.Review(context.Background(), noteID); err != nil || r.Text != report {
+		t.Errorf("stored review = %q (%v), want the streamed report %q", r.Text, err, report)
 	}
 
 	if got := reviewTools(t, ts, "?target=branch&branch=feature"); !got.Tools[0].Approved {
@@ -221,7 +222,7 @@ func TestReviewApprovalGateThenRun(t *testing.T) {
 // approval no longer covers it.
 func TestReviewApprovalKeyedOnCommandText(t *testing.T) {
 	dir := reviewRepo(t, echoReviewTool)
-	ts := serve(t, New(domain.Open(dir)))
+	ts := serve(t, New(reviewSvc(t, dir)))
 	if code, _ := startReview(t, ts, `{"target":"branch","branch":"feature","tool":"Echo","approve":true}`); code != http.StatusAccepted {
 		t.Fatal("approved start failed")
 	}
@@ -238,7 +239,7 @@ func TestReviewApprovalKeyedOnCommandText(t *testing.T) {
 
 func TestReviewRejectsUnknownToolAndBranch(t *testing.T) {
 	dir := reviewRepo(t, echoReviewTool)
-	ts := serve(t, New(domain.Open(dir)))
+	ts := serve(t, New(reviewSvc(t, dir)))
 
 	if code, _ := startReview(t, ts, `{"target":"branch","branch":"feature","tool":"Nope"}`); code != http.StatusBadRequest {
 		t.Errorf("unknown tool = %d, want 400", code)
@@ -265,7 +266,7 @@ command = '''
 true
 '''
 `)
-	ts := serve(t, New(domain.Open(dir)))
+	ts := serve(t, New(reviewSvc(t, dir)))
 	code, body := startReview(t, ts, `{"target":"branch","branch":"feature","tool":"Silent","approve":true}`)
 	if code != http.StatusAccepted {
 		t.Fatalf("start = %d (%v)", code, body)
@@ -292,7 +293,7 @@ command = '''
 sleep 30
 '''
 `)
-	ts := serve(t, New(domain.Open(dir)))
+	ts := serve(t, New(reviewSvc(t, dir)))
 	code, body := startReview(t, ts, `{"target":"branch","branch":"feature","tool":"Slow","approve":true}`)
 	if code != http.StatusAccepted {
 		t.Fatalf("start = %d (%v)", code, body)
@@ -316,7 +317,7 @@ sleep 30
 // is a different question, so the endpoint refuses an ordinary op.
 func TestCancelRefusesOrdinaryOp(t *testing.T) {
 	dir := divergedRepo(t)
-	ts := serve(t, New(domain.Open(dir)))
+	ts := serve(t, New(reviewSvc(t, dir)))
 	opID := startOpJSON(t, ts, `{"op":"merge","branch":"feature","onto":"main"}`)
 	var out struct{}
 	// The lane check runs before the liveness check, so this is deterministic
@@ -325,4 +326,13 @@ func TestCancelRefusesOrdinaryOp(t *testing.T) {
 		t.Fatalf("cancel of an ordinary op = %d, want 409", code)
 	}
 	readSSE(t, ts, opID, 30*time.Second)
+}
+
+// reviewSvc opens dir with its own note store: the suite runs with notes
+// disabled, and a finished commit/branch review is stored as a note.
+func reviewSvc(t *testing.T, dir string) *domain.Service {
+	t.Helper()
+	svc := domain.Open(dir)
+	svc.UseNotesDir(t.TempDir())
+	return svc
 }
