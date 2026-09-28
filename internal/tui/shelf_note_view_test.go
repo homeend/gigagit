@@ -185,3 +185,53 @@ func TestShelfNoteViewMaximizeFollowsContent(t *testing.T) {
 		t.Fatalf("ctrl+t on a long note: %d columns, want wider than %d yet fitted to the line", lm, short)
 	}
 }
+
+// Key hints stand apart from the content: a blank line above them.
+func TestShelfNoteViewBlankLineAboveKeyHints(t *testing.T) {
+	t.Parallel()
+	m := shelfNoteModel()
+	note := model.Note{ID: "n1", Author: "gg", Summary: "Recycled from /x (main)", Rationale: "Deleted (not in this set):\n  gone.go",
+		Created: time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC)}
+	mm, _ := m.Update(shelfNotesMsg{id: "b", label: "y.go", notes: []domain.ResolvedNote{{Note: note, Status: model.NoteActive}}})
+	m = mm.(Model)
+	lines := strings.Split(m.topLayer().(*contentPopup).box(m), "\n")
+	for i, l := range lines {
+		if strings.Contains(l, "[q] close") {
+			above := strings.Trim(lines[i-1], " ║│")
+			if above != "" {
+				t.Fatalf("the line above the key hints must be blank, got %q", lines[i-1])
+			}
+			return
+		}
+	}
+	t.Fatal("no key-hint line found")
+}
+
+// The blank line above the key hints is drawn once, centrally: no popup built
+// on contentPopup ends up with TWO blank lines there (a producer that already
+// ended its lines with one, or wrote its own, would double it).
+func TestContentPopupsHaveExactlyOneBlankAboveHints(t *testing.T) {
+	t.Parallel()
+	m := shelfNoteModel()
+	popups := map[string]*contentPopup{
+		"shelf help":    newContentPopup(shelfSwitcherHelpTitle(), shelfSwitcherHelp(false)),
+		"bookmark help": newContentPopup(bookmarkSwitcherHelpTitle(), bookmarkSwitcherHelp(false)),
+		"prefix help":   newContentPopup(prefixTokensHelpTitle(), prefixTokensHelp(time.Now())),
+		"keys help":     newContentPopup("Help — keys", helpWithHidden(nil)),
+		"error":         newErrorPopup("fatal: something broke\nhint: try again"),
+		"shelf notes": newContentPopup("Notes", shelfNoteLines([]domain.ResolvedNote{{Note: model.Note{
+			Summary: "Recycled from /x (main)", Rationale: "Deleted (not in this set):\n  gone.go"}}})),
+	}
+	for name, p := range popups {
+		lines := strings.Split(p.box(m), "\n")
+		for i, l := range lines {
+			if !strings.Contains(l, "[q] close") {
+				continue
+			}
+			blank := func(s string) bool { return strings.Trim(s, " ║│") == "" }
+			if !blank(lines[i-1]) || blank(lines[i-2]) {
+				t.Errorf("%s: want exactly one blank line above the hints:\n%s", name, strings.Join(lines[max(0, i-3):i+1], "\n"))
+			}
+		}
+	}
+}

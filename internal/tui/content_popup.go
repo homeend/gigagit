@@ -447,6 +447,9 @@ func (p *contentPopup) box(m Model) string {
 	if p.saved != "" {
 		extra += 2
 	}
+	if p.hintGap() {
+		extra++ // the blank line above the key hints
+	}
 	if capRows-extra >= 3 {
 		capRows -= extra
 	}
@@ -513,6 +516,9 @@ func (p *contentPopup) box(m Model) string {
 			b.WriteString("\n")
 		}
 		b.WriteString(pad + truncate(p.keys, textW-gutter) + "\n")
+	}
+	if p.hintGap() {
+		b.WriteString("\n")
 	}
 	hint := i18n.T("[/] search  [ctrl+w] mode  [s] save  [ctrl+t] full  [q] close")
 	if len(vis) > capRows {
@@ -602,4 +608,12 @@ func (p *contentPopup) widestLine() int {
 		}
 	}
 	return n
+}
+
+// hintGap reports whether box must write a blank line of its own above the
+// key hints: hints always stand apart from the content. The keys line already
+// has one above it (and the hint rides directly under it), the saved-to note
+// ends with one, and block mode writes one below its band.
+func (p *contentPopup) hintGap() bool {
+	return p.keys == "" && p.saved == "" && !(p.block && p.footer == "")
 }
