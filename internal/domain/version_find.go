@@ -4,10 +4,19 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/homeend/gigagit/internal/git"
 	"github.com/homeend/gigagit/internal/model"
 )
+
+// VersionLinkDesc is the ONE description of a version link — what
+// DescribeLink returns on a hit and what the web's row desc carries: the
+// branch, the op token and the record's local time. It needs no store
+// lookup, so a row list spells it without a git call per row.
+func VersionLinkDesc(branch string, v model.BranchVersion) string {
+	return LinkDesc("version", branch+" · "+v.Op+" · "+time.Unix(v.Unix, 0).Format("2006-01-02 15:04"), "")
+}
 
 // FindVersion answers a ?version=<id> hint. An id (<unix>-<op>) is unique
 // only per branch — a pull records both of its branches in the same second

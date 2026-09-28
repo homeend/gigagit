@@ -66,6 +66,7 @@ func cmdVersions(svc *domain.Service, args []string, stdin io.Reader, stdout, st
 		fmt.Fprintln(stdout, "(no versions)")
 		return 0
 	}
+	repo, repoErr := svc.LinkRepo(ctx) // once: it asks git for the remote
 	for _, v := range rows {
 		short := v.Hash
 		if len(short) > 8 {
@@ -75,7 +76,7 @@ func cmdVersions(svc *domain.Service, args []string, stdin io.Reader, stdout, st
 		fmt.Fprintf(stdout, "%s %s %s %s\n", v.ID(), short, when, v.Subject)
 		// A two-branch row's preview link, indented under it: <id> stays
 		// the first column and <subject> the tail for existing parsers.
-		if link, ok := versionLinkText(ctx, svc, v); ok {
+		if link, ok := versionLinkText(repo, repoErr, v); ok {
 			fmt.Fprintf(stdout, "  %s\n", link)
 		}
 	}

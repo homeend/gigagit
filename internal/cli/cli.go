@@ -321,7 +321,8 @@ func printDrift(ctx context.Context, svc *domain.Service, branch string, stdout 
 	}
 	// The recorded version's preview link — what the branch contributed
 	// BEFORE the operation — for `gg diff <link>` or a chat.
-	if link, ok := versionLinkText(ctx, svc, drift.Version); ok {
+	repo, repoErr := svc.LinkRepo(ctx)
+	if link, ok := versionLinkText(repo, repoErr, drift.Version); ok {
 		fmt.Fprintf(stdout, "  recorded version: %s\n", link)
 	}
 }

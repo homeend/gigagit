@@ -3,7 +3,6 @@ package domain
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/homeend/gigagit/internal/model"
 )
@@ -132,7 +131,7 @@ func (s *Service) linkDescFields(ctx context.Context, l model.Link) (kind, id, s
 		// another machine) falls THROUGH to the pair arms below.
 		if l.Target.Pair != nil {
 			if branch, v, ok, err := s.FindVersion(ctx, l.Hint.ID, l.Target.Pair.A, l.Target.Pair.B); err == nil && ok {
-				return "version", branch + " · " + v.Op + " · " + time.Unix(v.Unix, 0).Format("2006-01-02 15:04"), ""
+				return "version", strings.TrimPrefix(VersionLinkDesc(branch, v), "version: "), ""
 			}
 		}
 	}

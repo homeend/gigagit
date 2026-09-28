@@ -248,6 +248,22 @@ allows it; nothing produces it) · any MCP surface change · blessing
 producers (`L`, notice action, hint line) → 5. TUI consumer (arm, park) →
 6. web (door, reveal, row link, gates, probe) → 7. docs + skill bump.
 
+## As built (2026-09-29)
+
+- §2.6 popup: the versions popup's fixed 56-column box cut the new key hint
+  after `[y]`; it now sizes to its widest fixed line via `popupFitWidth`
+  (the notice dialog's rule), so the `L` it advertises is visible.
+- §2.6 notice: the copy action keeps the DIALOG open as well as the notice
+  (the popup used to close on any action); Dismiss still closes both.
+- §2.5: `domain.VersionLinkDesc(branch, v)` is the one spelling of
+  `version: <branch> · <op> · <date>`; `DescribeLink` uses it on a hit and
+  the web row carries it directly — no store lookup per row.
+- §2.6 CLI: `gg versions` resolves the repo half (`LinkRepo`, a git remote
+  query) once per command, not once per row.
+- §2.4 TUI: the live check ran under a private tmux session rather than
+  `tui-capture.sh` (its keyscript would read the link's first `:` as a
+  label).
+
 ## 6. Decisions made here (tell me if any is wrong)
 
 1. Parse-time acceptance is broad (any address may carry `?version=`); only

@@ -3,8 +3,10 @@ package domain
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/homeend/gigagit/internal/git"
+	"github.com/homeend/gigagit/internal/model"
 )
 
 // recordVersion writes one version record the way the engine does (synthetic
@@ -89,5 +91,17 @@ func TestFindVersionDisabledStoreIsAMiss(t *testing.T) {
 	// No stampVersionsFormat: the versions feature resolves OFF.
 	if _, _, ok, err := svc.FindVersion(context.Background(), "1700002000-rebase", c1, c1); err != nil || ok {
 		t.Fatalf("disabled store: ok=%v err=%v, want a plain miss", ok, err)
+	}
+}
+
+// VersionLinkDesc is the ONE description of a version link — the web's row
+// desc and DescribeLink's hit arm must not drift apart, and the web must
+// not need a store lookup per row to spell it.
+func TestVersionLinkDescIsBranchOpAndDate(t *testing.T) {
+	t.Parallel()
+	v := model.BranchVersion{Op: "rebase", Unix: 1753100000}
+	want := "version: main · rebase · " + time.Unix(1753100000, 0).Format("2006-01-02 15:04")
+	if got := VersionLinkDesc("main", v); got != want {
+		t.Fatalf("VersionLinkDesc = %q, want %q", got, want)
 	}
 }

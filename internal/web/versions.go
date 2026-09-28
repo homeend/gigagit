@@ -145,7 +145,9 @@ func (s *Server) handleVersions(w http.ResponseWriter, r *http.Request) {
 			Source: v.Source, Target: v.Target,
 		}
 		if link, ok := versionLink(repo, repoErr, v); ok {
-			row.Link, row.Desc = link.String(), s.service().DescribeLink(r.Context(), link)
+			// The desc is spelled locally: DescribeLink would run one
+			// for-each-ref per row to look up what this row already is.
+			row.Link, row.Desc = link.String(), domain.VersionLinkDesc(branch, v)
 		}
 		rows = append(rows, row)
 	}
