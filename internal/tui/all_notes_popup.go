@@ -348,8 +348,9 @@ func (p *allNotesPopup) update(m Model, msg tea.KeyMsg) (Model, tea.Cmd) {
 		case anNote:
 			return m.openAllNotesTarget(p, r.target, r.note.Note.ID)
 		case anReview:
-			// The text lives in the note: it opens even when the commit is gone.
-			return m.openReviewNote(r.review.ID, r.review.Summary)
+			// The review lives in the note: it opens (as text) even when the
+			// commit is gone.
+			return m.openReview(r.review.ID, r.review.Summary)
 		}
 	case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 		if rs := []rune(p.query); len(rs) > 0 {

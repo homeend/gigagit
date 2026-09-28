@@ -10,8 +10,11 @@ const (
 	FeaturePreviews = "previews"
 	FeatureForge    = "forge"
 
-	StoreVersions = "versions"
-	StorePreviews = "previews"
+	FeatureStructuredReviews = "structured-reviews"
+
+	StoreVersions       = "versions"
+	StorePreviews       = "previews"
+	StoreReviewCommands = "review-commands"
 )
 
 // VersionsFormat is the branch-version layout this build writes. Format 1 was
@@ -79,6 +82,27 @@ func Features() []preflight.Feature {
 				Describe: func() preflight.Text {
 					return preflight.Text{
 						Format: "Folds your saved merge previews into the saved-comparison store. Nothing is lost: ids, labels and creation times are kept, and preview notes are unaffected.",
+					}
+				},
+			},
+		},
+		{
+			ID:          FeatureStructuredReviews,
+			Criticality: preflight.Optional,
+			Requires: []preflight.Requirement{
+				preflight.LegacyStore{Store: StoreReviewCommands},
+			},
+			// First-run detection wrote the built-in review commands INTO the
+			// user's config, so a machine that ran an older gg still asks its
+			// agents for a free-form report. Rewriting the user's config asks
+			// first: NOT lossless. Only a command byte-identical to an old
+			// built-in rendering is touched (exttool.UpgradeReviewCommand).
+			Migrate: &preflight.Migration{
+				Store: StoreReviewCommands, From: 1, To: 2,
+				Action: "upgrade-review-commands",
+				Describe: func() preflight.Text {
+					return preflight.Text{
+						Format: "Updates the review commands gg once wrote into your config to the structured-review prompt, so reviews open as a rendered review view. Only commands identical to an old built-in are changed; commands you edited are left alone.",
 					}
 				},
 			},

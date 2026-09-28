@@ -40,8 +40,11 @@ type shelfRow struct {
 
 func shelfRowFrom(e model.ShelfEntry) shelfRow {
 	kind := "file"
-	if e.IsCommit() {
+	switch {
+	case e.IsCommit():
 		kind = "commit"
+	case e.IsArchive():
+		kind = "files"
 	}
 	r := shelfRow{
 		ID: e.ID, Kind: kind, OriginDisplay: e.Origin.Display(), Label: e.Label,
@@ -131,7 +134,7 @@ func (s *Server) registerShelfTools(srv *sdk.Server) {
 
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_shelf_commit_files",
-		Description: "List the member files of a shelved COMMIT entry (path, status letter, old_path for renames).",
+		Description: "List the member files of a shelved COMMIT entry or a shelved FILE SET (kind \"files\": several working files shelved together): path, status letter, old_path for renames.",
 		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in shelfIDIn) (*sdk.CallToolResult, shelfCommitFilesOut, error) {
 		out := shelfCommitFilesOut{Repo: s.repoInfo(), Files: []commitFileRow{}}
@@ -145,7 +148,7 @@ func (s *Server) registerShelfTools(srv *sdk.Server) {
 		if err != nil {
 			return nil, out, fmt.Errorf("shelf entry not found: %s", in.ID)
 		}
-		if !entry.IsCommit() {
+		if !entry.IsArchive() {
 			return nil, out, fmt.Errorf("shelf entry %s is a file entry — use gg_shelf_read without member", in.ID)
 		}
 		files, err := s.svc.ShelfCommitFiles(ctx, in.ID)
@@ -160,7 +163,7 @@ func (s *Server) registerShelfTools(srv *sdk.Server) {
 
 	sdk.AddTool(srv, &sdk.Tool{
 		Name:        "gg_shelf_read",
-		Description: "Read a shelf entry's content: a file entry's bytes, or ONE member of a commit entry (member = repo-relative path from gg_shelf_commit_files). Text only; binary is flagged. max_bytes caps the text, default 262144.",
+		Description: "Read a shelf entry's content: a file entry's bytes, or ONE member of a commit entry or a file-set entry (member = repo-relative path from gg_shelf_commit_files). Text only; binary is flagged. max_bytes caps the text, default 262144.",
 		Annotations: readOnlyAnnotations(),
 	}, func(ctx context.Context, _ *sdk.CallToolRequest, in shelfReadIn) (*sdk.CallToolResult, shelfReadOut, error) {
 		out := shelfReadOut{Repo: s.repoInfo()}
@@ -176,11 +179,11 @@ func (s *Server) registerShelfTools(srv *sdk.Server) {
 		}
 		var data []byte
 		switch {
-		case entry.IsCommit() && in.Member == "":
-			return nil, out, fmt.Errorf("shelf entry %s is a commit — pass member (list members with gg_shelf_commit_files)", in.ID)
-		case !entry.IsCommit() && in.Member != "":
+		case entry.IsArchive() && in.Member == "":
+			return nil, out, fmt.Errorf("shelf entry %s holds several files — pass member (list members with gg_shelf_commit_files)", in.ID)
+		case !entry.IsArchive() && in.Member != "":
 			return nil, out, fmt.Errorf("shelf entry %s is a file entry — omit member", in.ID)
-		case entry.IsCommit():
+		case entry.IsArchive():
 			data, err = s.svc.ResolveBytes(ctx, model.FileRef{Source: model.SourceShelf, Locator: in.ID, Path: in.Member})
 			if err != nil {
 				return nil, out, fmt.Errorf("reading member %q of %s: %v", in.Member, in.ID, err)

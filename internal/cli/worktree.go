@@ -23,7 +23,7 @@ import (
 // cmdWorktree dispatches `gg worktree <sub>`.
 func cmdWorktree(svc *domain.Service, workdir string, args []string, stdin io.Reader, stdout, stderr io.Writer, cwdFile string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove|move|rename|prune> [args]")
+		fmt.Fprintln(stderr, "usage: gg worktree <list|add|remove|move|rename|prune|recycle> [args]")
 		return 2
 	}
 	switch args[0] {
@@ -40,8 +40,10 @@ func cmdWorktree(svc *domain.Service, workdir string, args []string, stdin io.Re
 	case "prune":
 		res, err := runOperation(context.Background(), svc, engine.PruneWorktrees{}, cliDecider{}, stderr)
 		return finish(res, err, stdout, stderr)
+	case "recycle":
+		return cmdWorktreeRecycle(svc, args[1:], stdin, stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list, add, remove, move, rename, or prune)\n", args[0])
+		fmt.Fprintf(stderr, "worktree: unknown subcommand %q (use list, add, remove, move, rename, prune, or recycle)\n", args[0])
 		return 2
 	}
 }
@@ -306,24 +308,7 @@ func cmdWorktreeRemove(svc *domain.Service, args []string, stdin io.Reader, stdo
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	absTarget, _ := filepath.Abs(target)
-	// A relative target is resolved against the MAIN worktree root — the same
-	// base CreateWorktree resolves its repo-relative path template against (git
-	// lists the main worktree first) — so the template-form path
-	// (e.g. "../wt/wt-main") round-trips regardless of the process working
-	// directory or which linked worktree gg runs from.
-	fromTop := ""
-	if !filepath.IsAbs(target) && len(wts) > 0 && wts[0].Path != "" {
-		fromTop = filepath.Clean(filepath.Join(wts[0].Path, target))
-	}
-	var match *model.Worktree
-	for i := range wts {
-		if wts[i].Path == target || wts[i].Path == absTarget ||
-			(fromTop != "" && wts[i].Path == fromTop) {
-			match = &wts[i]
-			break
-		}
-	}
+	match := matchWorktreeArg(wts, target)
 	if match == nil {
 		fmt.Fprintf(stderr, "worktree remove: no worktree at %q\n", target)
 		return 1
@@ -434,4 +419,66 @@ func cmdWorktreeMove(svc *domain.Service, workdir string, args []string, stdin i
 		_ = os.WriteFile(cwdFile, []byte(filepath.Join(dest, movedCwdRel)), 0o644)
 	}
 	return finish(res, err, stdout, stderr)
+}
+
+// cmdWorktreeRecycle checks <branch> out in the existing worktree <path>
+// (which gg is not running in), committing or discarding that worktree's
+// uncommitted work first as --on-dirty says. Without the flag an interactive
+// terminal is asked on stdin; a pipeline fails with the decision id so
+// nothing is destroyed unseen.
+func cmdWorktreeRecycle(svc *domain.Service, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("worktree recycle", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	onDirty := fs.String("on-dirty", "", "what to do with the target's uncommitted changes: commit, discard, or abort")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 2 || fs.Arg(0) == "" || fs.Arg(1) == "" {
+		fmt.Fprintln(stderr, "usage: gg worktree recycle [--on-dirty=commit|discard|abort] <path> <branch>")
+		return 2
+	}
+	policy := map[string]string{}
+	switch *onDirty {
+	case "":
+	case "commit", "discard", "abort":
+		policy[engine.RecycleDirtyDecisionID] = *onDirty
+	default:
+		fmt.Fprintf(stderr, "worktree recycle: --on-dirty must be commit, discard, or abort (got %q)\n", *onDirty)
+		return 2
+	}
+	wts, err := svc.Worktrees(context.Background())
+	if err != nil {
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
+	}
+	match := matchWorktreeArg(wts, fs.Arg(0))
+	if match == nil {
+		fmt.Fprintf(stderr, "worktree recycle: no worktree at %q\n", fs.Arg(0))
+		return 1
+	}
+	dec := cliDecider{policy: policy, in: stdin, out: stderr, interactive: stdinIsTerminal()}
+	res, err := runOperation(context.Background(), svc, engine.RecycleWorktree{Dir: match.Path, Branch: fs.Arg(1)}, dec, stderr)
+	return finish(res, err, stdout, stderr)
+}
+
+// matchWorktreeArg resolves a worktree argument the way `worktree remove`
+// always has: as given, as an absolute path, or relative to the MAIN
+// worktree root (git lists it first — the same base CreateWorktree resolves
+// its repo-relative path template against), so the template-form path
+// (e.g. "../wt/wt-main") round-trips regardless of the process working
+// directory or which linked worktree gg runs from (the e2e harness runs the
+// CLI in-process with its own cwd).
+func matchWorktreeArg(wts []model.Worktree, target string) *model.Worktree {
+	absTarget, _ := filepath.Abs(target)
+	fromTop := ""
+	if !filepath.IsAbs(target) && len(wts) > 0 && wts[0].Path != "" {
+		fromTop = filepath.Clean(filepath.Join(wts[0].Path, target))
+	}
+	for i := range wts {
+		if wts[i].Path == target || wts[i].Path == absTarget ||
+			(fromTop != "" && wts[i].Path == fromTop) {
+			return &wts[i]
+		}
+	}
+	return nil
 }

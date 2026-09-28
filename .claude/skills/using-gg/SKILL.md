@@ -3,7 +3,7 @@ name: using-gg
 description: Use when performing git operations (status, commit, pull, push, branch switch, stash, worktrees) in a repository where the gg CLI is available.
 ---
 
-<!-- gg:using-gg:v101 -->
+<!-- gg:using-gg:v102 -->
 
 # Using gg (gigagit)
 
@@ -52,11 +52,15 @@ guards against removing the worktree you are standing in.
   header plus the commit's terse stat block (default) or full patch
   (`--patch`).
 - `gg review [--tool <name>] [--working] [<rev>|<A..B>]` — runs a configured
-  AI review agent headless and prints its report to stdout. The review is
-  stored as a note on the reviewed commit (a range's last commit; a branch
-  review's tip, carrying the branch name) and `note: <id>` is printed on
-  stderr; a `--working` review has no commit and is printed only. There is
-  no report file. Flags must precede the positional (like `gg log
+  AI review agent headless. The agent replies with the gg review document
+  (JSON: a markdown overview plus per-file line notes); stdout is the
+  overview, its meta, then one `path:line — summary` line per note (`-line`
+  = a removed line). A reply that is not the document prints as it came,
+  with `warning: the review is not in gg review format` on stderr. The
+  review is stored as a note on the reviewed commit (a range's last commit;
+  a branch review's tip, carrying the branch name) and `note: <id>` is
+  printed on stderr; a `--working` review has no commit and is printed only.
+  There is no report file. Flags must precede the positional (like `gg log
   -n`). No positional reviews the current branch's work; a single `<rev>`
   reviews just that commit's own change (`rev^..rev`); an `A..B` positional
   is used as a range; `--working` reviews uncommitted changes. `--tool`
@@ -75,7 +79,7 @@ gg note apply [<repo-link>] --stdin [--cached | --rev <c>] [--author <name>] [--
 gg note list  [<link> | --file <path>] [--type user|agent|all] [--cached | --rev <c>] [--json]
 gg note rm    [<repo-link>] <note-id>
 gg note clear [<link>] (--file <path> | --all) [--type user|agent|all] --yes
-gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]     # also import the tool's anchored notes
+gg review --notes [--tool <name>] [--working] [<rev>|<A..B>]     # also keep the review's notes as permanent notes
 gg skill path [review|using-gg]                                  # print the bundled skill's path
 ```
 
@@ -609,14 +613,20 @@ finds the right one here.
   thrown away. A repo that still holds format-1 data **records no new
   versions at all** until it runs — rebases/merges/pulls there proceed with
   no safety net rather than mixing formats.
-- `gg merge [--into <target>] [--on-conflict=keep|abort] <source>` — merge one
-  branch into another (default target: the current branch; worktree-aware —
-  merges in the worktree that has the target checked out, autostashes when it
-  must switch). `--on-conflict=keep` leaves conflicts in the tree (exit 1),
-  `--on-conflict=abort` restores the tree (exit 0); with neither and no TTY, a
-  conflict exits 1 with the options on stderr. A successful merge prints the
-  same change-set-drift summary as `gg pull` (see above) for the branch it
-  moved.
+- `gg merge [--into <target>] [--on-conflict=keep|abort] [--no-ff] [-m <msg> | -F <file>] <source>`
+  — merge one branch into another (default target: the current branch;
+  worktree-aware — merges in the worktree that has the target checked out,
+  autostashes when it must switch). `--on-conflict=keep` leaves conflicts in
+  the tree (exit 1), `--on-conflict=abort` restores the tree (exit 0); with
+  neither and no TTY, a conflict exits 1 with the options on stderr. `-m <msg>`
+  or `-F <file>` (`-` = stdin) sets the merge commit's message — a multi-line
+  message with trailers goes through `-F -` — and **implies `--no-ff`** (a
+  message is written for a merge commit; a silent fast-forward would drop it);
+  `--no-ff` alone forces a merge commit with git's own message. Flags precede
+  the positional; `-m` and `-F` together, or an empty message, exit 2 (inside
+  `gg batch` stdin is empty, so use `-m` or `-F <path>` there, not `-F -`). A
+  successful merge prints the same change-set-drift summary as `gg pull` (see
+  above) for the branch it moved.
 - `gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>` — replay a
   branch's commits onto `<newbase>` (default branch: the current one; `--branch`
   rebases another branch, switching to it). Worktree-aware — rebases in place,
@@ -757,6 +767,15 @@ finds the right one here.
   busy log; a hook failure is reported but does not roll back the worktree.
 - `gg worktree prune` — drop stale worktree admin entries left behind by an
   interrupted or manually-deleted worktree (`git worktree prune`).
+- `gg worktree recycle [--on-dirty=commit|discard|abort] <path> <branch>` —
+  check an EXISTING local branch out in an existing worktree `<path>` (not
+  the one you are in), replacing what it has checked out. A dirty target
+  needs `--on-dirty`: `commit` commits everything there (untracked included,
+  subject `Committed changes due to worktree recycle <date>`) on the branch
+  that is leaving; `discard` deletes the changes (untracked files too,
+  ignored files kept); `abort` does nothing. Without the flag a pipeline
+  exits 1 naming `recycle.dirty`. Refused: a paused rebase/merge, a lock
+  file, a branch already checked out somewhere. Flags go BEFORE `<path>`.
 - `gg worktree rename [--force] <worktree> <new-name>` / `gg worktree move
   [--force] <worktree> <new-path>` — relocate a linked worktree's directory
   (`git worktree move`); `rename` is a same-parent move computed from just

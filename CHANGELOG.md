@@ -44,6 +44,149 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   `Changed()` channels — which let two readers in one process steal each
   other's signals — are gone, and the web console's one-second removal poll
   went with them (removal now rides the manager signal).
+## Shelve several marked files as ONE set
+
+### Fixed
+
+- **`.` → Add to shelf on the Files/Staged tab with `m`-marked files** shelved
+  only the cursor row. Now **Add N marked files to shelf…** asks for a name
+  (pre-filled `WIP on <branch>`, like a stash) and freezes every marked file
+  shown in that panel into **one shelf entry** — a file SET, the same tar
+  shape as a shelved commit — so related files stay together instead of
+  scattering into N rows. In the shelf switcher the set behaves like a
+  shelved commit: enter browses its files against the working tree, the
+  files view's Copy to working dir restores one, `t` copies them all to a
+  temp dir; `a` (cherry-pick) and the sha-based compares are refused, since
+  nothing in git stands behind the bytes. One marked file away from the
+  cursor stays a plain file entry (**Add the marked file to shelf**). The
+  shelved files are unmarked once the entry lands (like stashed ones); a
+  failed shelving keeps them marked. A diff, viewer, blame or history layer keeps
+  shelving its own single file even while marks exist underneath. Shelving is
+  atomic: one unreadable file (a deleted row) fails the whole set naming the
+  path.
+- New shelf kind `files` (`model.ShelfKindFiles`, `ShelfEntry.IsArchive`,
+  `shelf.Store.PutFiles`, `domain.ShelfAddFiles`): member-wise reads, restore,
+  export and the `gg://` shelf endpoint accept it alongside commit entries in
+  the CLI, MCP (`kind: "files"`) and web (◈ badge, browse / restore a file).
+  An older `gg` reading the index treats such an entry as a plain file.
+
+## Recycle a worktree
+
+### Added
+
+- **Branches `.` → "Recycle a worktree…"** on a local branch no worktree has
+  checked out: pick one of the repo's other worktrees and gg checks the
+  branch out THERE. A dirty target asks `commit` (everything, untracked
+  included, as `Committed changes due to worktree recycle <date>` on the
+  branch that is leaving) / `discard` (hard reset + clean: untracked files
+  deleted, ignored files kept) / `abort`. Paused ops, lock files and an
+  already-checked-out branch are refused up front. The worktree gg runs in
+  is never listed; one with a running agent session asks first.
+- **`gg worktree recycle [--on-dirty=commit|discard|abort] <path> <branch>`**
+  — the same from the CLI; a pipeline without the flag fails rather than
+  touch the tree. The path resolves like `worktree remove`'s (as given,
+  absolute, or relative to the main worktree root).
+- Engine: `RecycleWorktree{Dir, Branch}` and the `OpDeps.RepoAt` seam
+  (`git.Repo.InDir`, a `-C <dir>` view) — the first op that acts on a
+  worktree gg is not running in.
+
+Follow-ups: a `shelve` answer (after the multi-file shelf), remote-only
+branches, and the web UI.
+
+## Reviews open as a review view
+
+### Added
+
+- **One review document.** A review agent now replies with ONE JSON document
+  written to `$GG_MESSAGE_FILE`: agent-context v1 whose top-level `summary`
+  is the review's markdown overview, with a one-line `summary` per file,
+  line notes (`newRange` / `oldRange`, `summary`, `rationale`) and a free-form
+  `meta` object on the document, each file and each note (the prompt
+  suggests `verdict`, `severity` and `confidence`; the old `tags` and
+  `confidence` fields still parse and fold into `meta`). The review brief
+  (`$GG_CONTEXT_FILE`) ends in a "Review output" section describing it, and
+  every built-in review template asks for it — Claude no longer runs
+  `/code-review` and may `Write` the file. A fenced block or Claude's JSON
+  envelope is unwrapped; the document is stored canonical, still as ONE note
+  on the reviewed commit.
+- **The review view (TUI).** Opening a structured review — `@notes/` in a
+  commit's files, a Branches review row, View all notes, the AI-tasks tab, or
+  a finished run — shows the reviewed commit's files (a branch review: its
+  range's files) in a review mode: `≡ Overview` first, `◆n` and the file's
+  one-line summary on each file the review notes, `n` / `p` to step between
+  them, and the agent · age · note count under the title. Enter on the
+  Overview opens the overview rendered as markdown, its meta and **Other
+  notes** (notes on files the commit does not change, or past a file's end;
+  enter opens that file at the commit; `y` copies the markdown). Stacked, the
+  overview is the first element above the first file. A diff opened from the
+  view shows ONLY the review's notes at their lines, read-only, with their
+  meta in the box title; the normal commit view never shows them.
+- A review that is not the document opens in the viewer with its markdown
+  rendered (and a status note), not as a raw diff.
+- `gg review` prints the overview, its meta, then one `path:line — summary`
+  line per note (`-line` = a removed line); a prose reply prints as it came
+  with `warning: the review is not in gg review format`. `--notes` now keeps
+  the document's notes as ordinary notes.
+- `gg web`'s review dialog renders the overview (parsed server-side) and
+  lists the notes with their meta.
+- **Stored review commands are upgraded, with consent.** First-run detection
+  wrote the built-in review commands into your config, so a new preflight
+  migration (`structured-reviews`) finds commands identical to an old
+  built-in — in the global config or the repo's — and, once you agree (TUI
+  and web consent screens, `gg migrate --yes`), rewrites only those bodies to
+  the current templates, keeping the binary you had. Edited commands and the
+  rest of the file are left alone.
+
+### Changed
+
+- `$GG_NOTES_FILE` is gone: a review's notes are part of its document.
+- The migration consent screens say "discards N entries" only for a
+  migration that removes refs.
+- `ErrReadOnlyNote` covers review notes (`review:<id>:<n>` ids) as well as
+  forge comments; `c`, `E`, `R` and the `.` menu's note rows refuse them in
+  the review view.
+
+## Fullscreen a left panel while an agent console is docked
+
+### Fixed
+
+- ctrl+t on Branches/Worktrees/Files/Staged now fullscreens the panel while
+  an agent console is shown in the Commits column. The console was wrongly
+  treated as a surface the pin must yield to (like the stash list), so the
+  key was inert; it now hides with the column and returns at its column size
+  when the pin drops. Opening a console while a panel is fullscreen (a left
+  panel or Commits) drops the pin so the agent is shown — closing the
+  console then returns to the normal split rather than resuming fullscreen.
+
+## Kill and remove an agent session with one key
+
+### Added
+
+- **`X` on a running session sub-row** (Worktrees and Branches tabs) asks
+  (Kill / Cancel, default Cancel), then kills the agent or terminal session
+  and removes its row once it has exited; `x` keeps
+  removing an exited one only. The footer says `[X] kill+remove` on a running
+  sub-row, the `.` menu gained **Kill and remove session**, and the refusal
+  `x` gives on a running session now points at `X`. Any console docked on
+  that session closes with the row. (`agentsession.Manager.KillAndRemove`:
+  the session stays listed while it dies, so quitting still waits for it.)
+
+## gg merge: a merge message (-m / -F) and --no-ff
+
+### Added
+
+- `gg merge [--no-ff] [-m <msg> | -F <file>] <source>`: `-m` or `-F` (`-` =
+  stdin, so a multi-line message with trailers pipes straight in) sets the
+  merge commit's message and implies `--no-ff` — a message is written for a
+  merge commit, and a silent fast-forward would drop it. `--no-ff` alone
+  forces a merge commit with git's own message. `-m` with `-F`, an empty
+  message, or an unreadable file exit 2 before anything runs. The engine's
+  `SmartMerge` carries `Message`/`NoFF` (zero values = today's behaviour) and
+  the `Merge` git verb takes them; git keeps `-m` in `MERGE_MSG` across a kept
+  conflict, so the eventual resolution commit still carries the message.
+  Until now a custom merge message meant leaving gg for raw `git merge` (the
+  one sanctioned exception to dogfooding); the `using-gg` skill is bumped to
+  101.
 
 ## Agent consoles: ctrl+arrows and every other modified special key reach the agent
 

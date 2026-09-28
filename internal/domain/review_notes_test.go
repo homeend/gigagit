@@ -374,3 +374,17 @@ func TestDeleteBranchFollowUpRunsOutsideTheReservation(t *testing.T) {
 		t.Fatalf("reviews after the delete = %+v", all)
 	}
 }
+
+func TestReviewNoteIsReadOnly(t *testing.T) {
+	_, svc, _ := reviewRepo(t)
+	ctx := context.Background()
+	if err := svc.NoteEdit(ctx, "review:abc:0", "x", ""); !errors.Is(err, ErrReadOnlyNote) {
+		t.Fatalf("edit: %v", err)
+	}
+	if _, err := svc.NoteReply(ctx, "review:abc:0", model.Note{Summary: "r"}); !errors.Is(err, ErrReadOnlyNote) {
+		t.Fatalf("reply: %v", err)
+	}
+	if err := svc.NoteRemove(ctx, "review:abc:0"); !errors.Is(err, ErrReadOnlyNote) {
+		t.Fatalf("remove: %v", err)
+	}
+}

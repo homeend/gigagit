@@ -203,3 +203,17 @@ func TestRenderedFrontmatterIsPlainScalarSafe(t *testing.T) {
 		}
 	}
 }
+
+// The review document is the one shape a gg review agent replies in: the
+// skill teaches it (the engine's context document asks for the same).
+func TestReviewSkillTeachesTheReviewDocument(t *testing.T) {
+	b := ReviewingWithGG.Body()
+	for _, want := range []string{"## Review document", `"summary"`, `"annotations"`, `"meta"`, `"oldRange"`, "$GG_MESSAGE_FILE"} {
+		if !strings.Contains(b, want) {
+			t.Errorf("review skill body missing %q", want)
+		}
+	}
+	if strings.Contains(b, "sidecar") || strings.Contains(b, "GG_NOTES_FILE") {
+		t.Error("the notes sidecar is gone")
+	}
+}

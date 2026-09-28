@@ -98,6 +98,29 @@ func (m *Manager) Kill(id ID) error {
 	return nil
 }
 
+// KillAndRemove ends a running session and forgets it once its exit is
+// recorded; an exited session is removed at once. The session stays listed
+// (and live-counted) while it dies, so KillAll and a quit guard still see it;
+// the removal then arrives through Changed like any exit. The wait always
+// ends: kill escalates to SIGKILL on its own.
+func (m *Manager) KillAndRemove(id ID) error {
+	s, ok := m.Get(id)
+	if !ok {
+		return ErrNoSession
+	}
+	s.kill()
+	select {
+	case <-s.Done():
+		return m.Remove(id)
+	default:
+	}
+	go func() {
+		<-s.Done()
+		_ = m.Remove(id) // ErrNoSession when something removed it first
+	}()
+	return nil
+}
+
 // Remove forgets an exited session.
 func (m *Manager) Remove(id ID) error {
 	m.mu.Lock()

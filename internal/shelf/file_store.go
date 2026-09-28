@@ -209,6 +209,32 @@ func (fs *FileStore) PutCommit(bucket string, addr model.FileAddress, tar, patch
 	})
 }
 
+// PutFiles stores a tar of several working-tree / index files as ONE durable
+// ShelfKindFiles entry (id: files-<source>-<blobsha8>). addr is the set's
+// shared origin (state + worktree + branch, no path); label names the set.
+// No patch: nothing in git stands behind these bytes.
+func (fs *FileStore) PutFiles(bucket string, addr model.FileAddress, tar []byte, label string) (model.ShelfEntry, error) {
+	if len(tar) > MaxCommitArchiveBytes {
+		return model.ShelfEntry{}, ErrTooLarge
+	}
+	bucket = normalizeBucket(bucket)
+	sha, err := fs.writeBlob(tar)
+	if err != nil {
+		return model.ShelfEntry{}, err
+	}
+	addr.Path = ""
+	return fs.putEntry(model.ShelfEntry{
+		ID:      fmt.Sprintf("files-%s-%s", idSource(addr), sha[:8]),
+		Bucket:  bucket,
+		Kind:    model.ShelfKindFiles,
+		Origin:  addr,
+		Label:   label,
+		SHA:     sha,
+		Size:    int64(len(tar)),
+		Created: time.Now(),
+	})
+}
+
 func (fs *FileStore) ensureBucket(idx *index, name string) {
 	for _, b := range idx.Buckets {
 		if b.Name == name {

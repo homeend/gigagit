@@ -197,7 +197,7 @@ func (m Model) applyReviewResult(info domain.TaskInfo) (Model, tea.Cmd) {
 	if info.NoteID == "" { // a working-changes review: not a note (spec ruling 1)
 		return m.openResultViewer(info.ID, ".md", reviewTitle(label), info.Result, nil)
 	}
-	return m.openReviewNote(info.NoteID, reviewTitle(label))
+	return m.openReview(info.NoteID, reviewTitle(label))
 }
 
 // canShowResult: a result may open its viewer now — it belongs to the

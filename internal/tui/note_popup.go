@@ -49,6 +49,11 @@ type notePopup struct {
 // the note nearest the cursor (edit/reply). Inert when the surface carries no
 // address, or when edit/reply have no note to act on.
 func (m Model) openNotePopup(mode noteFormMode) (tea.Model, tea.Cmd) {
+	if v := m.diffLayer().curNoteView(); v != nil && v.reviewID != "" {
+		m.statusMsg = reviewReadOnlyNotice()
+		m.diffNotice = m.statusMsg // the full-screen diff has no status bar
+		return m, nil
+	}
 	addr, ok := m.diffNoteAddress()
 	if !ok {
 		return m, nil

@@ -156,3 +156,48 @@ func TestSessionSubscribeWakesTwoSubscribersOnOutput(t *testing.T) {
 	}
 	waitDone(t, s)
 }
+
+// KillAndRemove ends a running session and forgets it once the exit is
+// recorded — the session stays listed (and counted live) until then, so a
+// quit guard or KillAll still sees the dying process. On an exited session it
+// is a plain Remove; on an unknown id it says so.
+func TestKillAndRemove(t *testing.T) {
+	t.Parallel()
+	needSh(t)
+	m := NewManager()
+	if err := m.KillAndRemove("nope"); !errors.Is(err, ErrNoSession) {
+		t.Fatalf("KillAndRemove(unknown) = %v, want ErrNoSession", err)
+	}
+	a, err := m.Start(StartSpec{Label: "a", Dir: t.TempDir(), Argv: []string{"sh", "-c", "sleep 30"}, Cols: 40, Rows: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.KillAndRemove(a.Info().ID); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, a)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, ok := m.Get(a.Info().ID); !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("killed session was never removed")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if m.LiveCount() != 0 {
+		t.Fatal("LiveCount after KillAndRemove")
+	}
+	b, err := m.Start(StartSpec{Label: "b", Dir: t.TempDir(), Argv: []string{"sh", "-c", "exit 0"}, Cols: 40, Rows: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, b)
+	if err := m.KillAndRemove(b.Info().ID); err != nil {
+		t.Fatalf("KillAndRemove(exited) = %v", err)
+	}
+	if _, ok := m.Get(b.Info().ID); ok {
+		t.Fatal("exited session still listed after KillAndRemove")
+	}
+}

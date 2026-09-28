@@ -7,13 +7,16 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/homeend/gigagit/internal/config"
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/exttool"
+	"github.com/homeend/gigagit/internal/markdown"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notebatch"
 	"github.com/homeend/gigagit/internal/promptstate"
 	"github.com/homeend/gigagit/internal/template"
 )
@@ -132,9 +135,11 @@ func (s *Server) handleReviewStart(w http.ResponseWriter, r *http.Request) {
 		if res.NoteID != "" {
 			summary = "review saved as note " + res.NoteID
 		}
-		return engine.Result{Summary: summary},
-			map[string]any{"report": res.Content, "noteId": res.NoteID, "label": res.Label, "warn": res.Warn},
-			nil
+		out := map[string]any{"report": res.Content, "noteId": res.NoteID, "label": res.Label, "warn": res.Warn, "structured": false}
+		if doc, perr := notebatch.ParseReview([]byte(res.Content)); perr == nil {
+			addReviewDoc(out, doc)
+		}
+		return engine.Result{Summary: summary}, out, nil
 	})
 	if err != nil {
 		writeErr(w, http.StatusConflict, err)
@@ -346,4 +351,36 @@ func (s *Server) toolRepoKey(ctx context.Context, svc *domain.Service) string {
 	}
 	top, _ := svc.TopLevel(ctx)
 	return top
+}
+
+// addReviewDoc puts a structured review on the done payload the way the page
+// paints it: the overview as a parsed markdown tree (the page never parses
+// markdown), the document meta and one row per note — "2-3" / "-4" (an
+// old-side line) as the CLI prints them.
+func addReviewDoc(out map[string]any, doc notebatch.ReviewDoc) {
+	out["structured"] = true
+	out["overviewMd"] = markdown.Parse(doc.Overview)
+	out["docMeta"] = reviewMetaText(doc.Meta)
+	notes := []map[string]string{}
+	for _, f := range doc.Files {
+		for _, n := range f.Notes {
+			line := strconv.Itoa(n.Range[0])
+			if n.Range[1] != n.Range[0] {
+				line += "-" + strconv.Itoa(n.Range[1])
+			}
+			if n.Side == "old" {
+				line = "-" + line
+			}
+			notes = append(notes, map[string]string{"path": f.Path, "line": line, "summary": n.Summary, "meta": reviewMetaText(n.Meta)})
+		}
+	}
+	out["notes"] = notes
+}
+
+func reviewMetaText(meta []notebatch.MetaKV) string {
+	parts := make([]string, len(meta))
+	for i, kv := range meta {
+		parts[i] = kv.Key + ": " + kv.Value
+	}
+	return strings.Join(parts, ", ")
 }

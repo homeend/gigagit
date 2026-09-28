@@ -12,6 +12,7 @@ import (
 	"github.com/homeend/gigagit/internal/engine"
 	"github.com/homeend/gigagit/internal/filelock"
 	"github.com/homeend/gigagit/internal/model"
+	"github.com/homeend/gigagit/internal/notebatch"
 	"github.com/homeend/gigagit/internal/notes"
 )
 
@@ -52,6 +53,9 @@ type Review struct {
 	Agent, Summary   string
 	Text             string
 	Created, Updated time.Time
+	// Doc is Text parsed as a review document; nil when the review is prose
+	// (a reply that was not the document is kept as text).
+	Doc *notebatch.ReviewDoc
 }
 
 // ReviewHead is a review without its text: what a list row needs.
@@ -127,6 +131,9 @@ func (s *Service) SaveReview(ctx context.Context, cmd SaveReview) (string, strin
 	if t.Kind == ReviewWorking || t.Commit == "" {
 		return "", "", ErrNoReviewCommit
 	}
+	// A review document is stored canonical — unwrapped from any fence or
+	// envelope, in its documented shape — so every reader parses one form.
+	cmd.Text = canonicalReview(cmd.Text)
 	st := s.notesStore(ctx)
 	if st == nil {
 		return "", "", ErrNotesDisabled
@@ -241,9 +248,13 @@ func (s *Service) reviewOf(ctx context.Context, n model.Note, tips map[string]st
 		tip = s.branchTip(ctx, b)
 		tips[b] = tip
 	}
-	return Review{ID: n.ID, Kind: ReviewKindOf(b, n.Address.Commit, tip),
+	r := Review{ID: n.ID, Kind: ReviewKindOf(b, n.Address.Commit, tip),
 		Commit: n.Address.Commit, Branch: b, Scope: n.Scope, Agent: n.Author,
 		Summary: n.Summary, Text: n.Rationale, Created: n.Created, Updated: n.Updated}
+	if doc, err := notebatch.ParseReview([]byte(n.Rationale)); err == nil {
+		r.Doc = &doc
+	}
+	return r
 }
 
 // reviewNotes is every review note (roots only), newest first.

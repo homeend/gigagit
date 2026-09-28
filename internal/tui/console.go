@@ -81,6 +81,12 @@ func (m Model) openConsole(id domain.SessionID) (Model, tea.Cmd) {
 	}
 	m.stashView = nil
 	m.filesPreview = nil
+	// A fullscreen left panel would hide the column the console docks in
+	// (and shrink its PTY to nothing); showing the agent is what was asked
+	// for, so the pin drops. Unlike the stash list, this is a clear, not a
+	// suspend — the console is a peer of the commit list, not a surface the
+	// pin yields to (fullscreenYielded).
+	m.fullMaxed = false
 	m = m.dropConsole()
 	screen, cancel := s.Subscribe()
 	m.console = &consoleState{id: id, focused: true, gen: gen, screen: screen, cancel: cancel}

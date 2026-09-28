@@ -109,3 +109,18 @@ func TestBranchReviewMatchesAShortBranchHash(t *testing.T) {
 		t.Fatalf("rows %q, want the review under feature", rows)
 	}
 }
+
+// enter on a review sub-row reads the review (openReview's command); nothing
+// else — not the branch's own enter action.
+func TestBranchReviewRowEnterOpensTheReview(t *testing.T) {
+	t.Parallel()
+	m := reviewBranchesModel(t)
+	m.sel[panelBranches] = 2
+	nm, cmd := updateKey(m, "enter")
+	if cmd == nil {
+		t.Fatal("enter on a review row started nothing")
+	}
+	if _, ok := cmd().(reviewViewMsg); !ok {
+		t.Fatalf("enter on a review row did not read the review (focus %v)", nm.focus)
+	}
+}

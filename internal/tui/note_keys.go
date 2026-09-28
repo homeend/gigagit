@@ -35,7 +35,7 @@ type noteMutatedMsg struct{ err error }
 // are inert there.
 func (m Model) diffNoteAddress() (model.FileAddress, bool) {
 	v := m.diffLayer().curNoteView()
-	if v == nil || v.noteAddr.Path == "" {
+	if v == nil || v.noteAddr.Path == "" || v.reviewID != "" { // the review view writes no notes
 		return model.FileAddress{}, false
 	}
 	return v.noteAddr, true
@@ -132,9 +132,13 @@ func (m Model) loadNotesCmd() tea.Cmd {
 	svc, tag, rows := m.svc, m.diffTag, v.full
 	// A preview gathers its notes along the branch and resolves them against
 	// the tip's content; every other view reads the address's own notes.
-	set := v.previewSet
+	set, rid := v.previewSet, v.reviewID
 	return func() tea.Msg {
 		d := domain.Diff{Result: textdiff.Result{Rows: rows}}
+		if rid != "" {
+			ns, err := svc.ReviewNotesFor(context.Background(), rid, addr.Path, d)
+			return notesLoadedMsg{tag: tag, notes: ns, err: err}
+		}
 		if set != nil {
 			ns, err := svc.PreviewNotesFor(context.Background(), *set, addr.Path, d)
 			return notesLoadedMsg{tag: tag, notes: ns, err: err}
@@ -339,17 +343,21 @@ func (m Model) withEditableNoteTarget(act func(Model, noteTarget) (tea.Model, te
 	ts := editableNoteTargets(all)
 	if len(ts) == 0 && len(all) > 0 {
 		m.statusMsg = i18n.T("forge comments are read-only")
+		if model.IsReviewNoteID(all[0].note.ID) {
+			m.statusMsg = reviewReadOnlyNotice()
+		}
 		m.diffNotice = m.statusMsg // the full-screen diff has no status bar: its own notice box says it
 		return m, nil
 	}
 	return m.withNoteTargetIn(ts, act)
 }
 
-// editableNoteTargets drops the forge threads from a target set.
+// editableNoteTargets drops the read-only threads (forge comments, a
+// review's notes) from a target set.
 func editableNoteTargets(ts []noteTarget) []noteTarget {
 	out := ts[:0:0]
 	for _, t := range ts {
-		if t.note.Source != model.NoteSourceForge {
+		if t.note.Source != model.NoteSourceForge && !model.IsReadOnlyNoteID(t.note.ID) {
 			out = append(out, t)
 		}
 	}

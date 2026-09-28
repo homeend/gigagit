@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/homeend/gigagit/internal/domain"
+	"github.com/homeend/gigagit/internal/i18n"
 	"github.com/homeend/gigagit/internal/model"
 	"github.com/homeend/gigagit/internal/syntax"
 	"github.com/homeend/gigagit/internal/textdiff"
@@ -35,6 +36,7 @@ const (
 	linePlace                  // a stacked file's one-line state: loading / binary / too large / error / no difference / conflict
 	lineGap                    // the blank line that opens a stacked file
 	lineRule                   // the rule under a stacked file's header
+	lineProse                  // one rendered row of the review view's overview (diffLine.prose indexes it)
 )
 
 // diffLine is one logical line of the diff stream. It embeds textdiff.Line, so
@@ -43,8 +45,9 @@ const (
 // view is stacked (file is the index into diffStack.files).
 type diffLine struct {
 	textdiff.Line
-	file int
-	kind lineKind
+	file  int
+	kind  lineKind
+	prose int // lineProse: the row of stackFile.prose it shows
 }
 
 // isBody reports whether this line carries a real aligned row — the lines the
@@ -55,7 +58,7 @@ func (l diffLine) isBody() bool { return l.kind == lineBody && l.Fold == 0 }
 // never a fold separator or a placeholder. A header is a stop deliberately —
 // a FOLDED file has nothing but its header, and `-` unfolds the cursor's file.
 func (l diffLine) isStop() bool {
-	return (l.kind == lineBody && l.Fold == 0) || l.kind == lineHeader
+	return (l.kind == lineBody && l.Fold == 0) || l.kind == lineHeader || l.kind == lineProse
 }
 
 // wrapLines lifts a pure textdiff stream into the view's stream (one file,
@@ -103,6 +106,11 @@ type stackFile struct {
 	bin                   bool // numstat says binary
 	start                 int  // index of this file's FIRST line in v.lines (its blank line; the header on the first file)
 	hdr                   int  // index of this file's header line (stamped by spliceStack)
+	// overview is the review view's overview, the stack's first element: no
+	// file and no diff — prose is its markdown, rendered once when the stack
+	// is built. Never loaded (load stays stackLoaded with a nil d).
+	overview bool
+	prose    []mdRow
 }
 
 // diffStack is the open stack: which list it came from and its files.
@@ -197,6 +205,12 @@ func (v *diffView) spliceStack() {
 		v.lines = append(v.lines, diffLine{file: i, kind: lineHeader})
 		v.lines = append(v.lines, diffLine{file: i, kind: lineRule})
 		if f.collapsed {
+			continue
+		}
+		if f.overview {
+			for j := range f.prose {
+				v.lines = append(v.lines, diffLine{file: i, kind: lineProse, prose: j})
+			}
 			continue
 		}
 		var body []textdiff.Line
@@ -355,9 +369,13 @@ func (m Model) stackNotesCmd(gen, idx int, d *diffView) tea.Cmd {
 	if m.svc == nil || d == nil || d.noteAddr.Path == "" {
 		return nil
 	}
-	svc, addr, set, rows := m.svc, d.noteAddr, d.previewSet, d.full
+	svc, addr, set, rows, rid := m.svc, d.noteAddr, d.previewSet, d.full, d.reviewID
 	return func() tea.Msg {
 		dd := domain.Diff{Result: textdiff.Result{Rows: rows}}
+		if rid != "" {
+			ns, err := svc.ReviewNotesFor(context.Background(), rid, addr.Path, dd)
+			return stackNotesMsg{gen: gen, idx: idx, notes: ns, err: err}
+		}
 		if set != nil {
 			ns, err := svc.PreviewNotesFor(context.Background(), *set, addr.Path, dd)
 			return stackNotesMsg{gen: gen, idx: idx, notes: ns, err: err}
@@ -599,6 +617,7 @@ func (m Model) applyStackFile(msg stackFileMsg) (Model, tea.Cmd) {
 	f.d, f.load = msg.view, stackLoaded
 	if v.stk.src == diffNavTree {
 		m.stampPreviewNotes(f.d, f.path) // the loader inherited the STACK's (empty) address
+		m.stampReviewNotes(f.d, f.path)
 	}
 	if !f.counted && msg.view != nil {
 		f.add, f.del = countRows(msg.view.full)
@@ -655,7 +674,11 @@ func (v *diffView) syncStackTitle() {
 	if v.stk == nil || len(v.stk.files) == 0 {
 		return
 	}
-	v.title = v.stk.files[v.curFile()].path
+	f := v.stk.files[v.curFile()]
+	v.title = f.path
+	if f.overview {
+		v.title = i18n.T("Overview")
+	}
 }
 
 // stackStatMsg carries one numstat read for the stack that asked for it.

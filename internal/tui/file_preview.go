@@ -235,6 +235,18 @@ func loadFileContentSrcCmd(tag, path string, syntaxOn bool, load func(context.Co
 	}
 }
 
+// loadMarkdownSrcCmd reads a markdown document via load and lays it out as
+// rendered rows (the PR body renderer) off the UI thread.
+func loadMarkdownSrcCmd(tag string, load func(context.Context) ([]byte, error)) tea.Cmd {
+	return func() tea.Msg {
+		data, err := load(context.Background())
+		if err != nil {
+			return fileContentMsg{tag: tag, err: err}
+		}
+		return fileContentMsg{tag: tag, lines: prMarkdownLines(string(data), "")}
+	}
+}
+
 // previewImagePx bounds the working copy of a previewed image (each side):
 // wider than any terminal's cell count, small enough that a fit is cheap.
 const previewImagePx = 1024

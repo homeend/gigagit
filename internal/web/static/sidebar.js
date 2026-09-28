@@ -1227,7 +1227,7 @@ function renderShelf() {
     .map(
       (e) =>
         `<li data-id="${esc(e.id)}" title="${esc(e.display)}">${mark(false)}` +
-        `<span class="ekind">${e.kind === "commit" ? "◆" : "▪"}</span>` +
+        `<span class="ekind">${e.kind === "commit" ? "◆" : e.kind === "files" ? "◈" : "▪"}</span>` +
         `${esc(entryLabel(e))}</li>`
     )
     .join("");
@@ -1338,7 +1338,9 @@ async function openBookmark(b) {
 // entry compare uses, so each file diffs via /api/entry-diff. The live commit
 // stays one menu row away ("show the original commit").
 async function openShelfEntry(e) {
-  if (e.kind !== "commit") return openEntry(e);
+  // A shelved commit and a shelved file SET are both tars of members: enter
+  // browses them against the working tree. A single file opens its history.
+  if (e.kind !== "commit" && e.kind !== "files") return openEntry(e);
   let got;
   try {
     got = await getJSON("/api/shelf/files?id=" + encodeURIComponent(e.id));
@@ -1419,7 +1421,13 @@ function showBookmarkMenu(e, x, y) {
 
 function showShelfMenu(e, x, y) {
   const items = [];
-  if (e.kind === "commit") {
+  if (e.kind === "files") {
+    // A file set: the members are the content; nothing in git stands behind
+    // them, so there is no original commit and nothing to cherry-pick.
+    items.push({ label: "browse the frozen files", act: () => openShelfEntry(e) });
+    items.push({ sep: true });
+    items.push({ label: "restore a file…", act: () => pickShelfFile(e, x, y) });
+  } else if (e.kind === "commit") {
     items.push({ label: "browse the frozen files", act: () => openShelfEntry(e) });
     if (e.commit) items.push({ label: "show the original commit", act: () => openEntry(e) });
     items.push({ sep: true });

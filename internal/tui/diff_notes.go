@@ -500,6 +500,9 @@ func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
 	if r.Note.Source == model.NoteSourceAgent {
 		kind = i18n.T("agent note")
 	}
+	if model.IsReviewNoteID(r.Note.ID) {
+		kind = i18n.T("review")
+	}
 	t := kind
 	if r.Note.Author != "" {
 		t += " · " + r.Note.Author
@@ -517,6 +520,9 @@ func (v *diffView) noteBoxTitle(r domain.ResolvedNote) string {
 			return "⊘ " + t + " " + i18n.T("(outdated)")
 		}
 		t += " " + i18n.T("(stale)")
+	}
+	if model.IsReviewNoteID(r.Note.ID) && len(r.Note.Tags) > 0 {
+		t += " · " + sanitizeLine(strings.Join(r.Note.Tags, " · ")) // the review's meta
 	}
 	return t
 }

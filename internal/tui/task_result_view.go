@@ -27,8 +27,10 @@ func (m Model) openResultViewer(id domain.TaskID, ext, title, text string, apply
 	return m.openResultFile(path, title, apply)
 }
 
-// openReviewNote opens an AI review, stored as a note, in the viewer (y
-// copies it all). The text is read from the note on every load.
+// openReviewNote opens an AI review, stored as a note, in the viewer with its
+// markdown rendered (y copies it all) — the view of a PROSE review; a
+// structured one opens as the review view (openReview). The text is read from
+// the note on every load.
 func (m Model) openReviewNote(id, title string) (Model, tea.Cmd) {
 	src := fileSource{kind: srcNote, rev: id}
 	path := "review-" + id + ".md"
@@ -38,7 +40,8 @@ func (m Model) openReviewNote(id, title string) (Model, tea.Cmd) {
 	} else {
 		m = m.detachDoc(d)
 	}
-	d.title, d.result = title, true
+	d.title, d.result, d.markdown = title, true, true
+	d.p.mode = modeWrap // prose
 	d.p.extraHint = i18n.T("[y] copy")
 	m = m.pushLayer(&fileViewer{d})
 	m = m.registerDoc(d)

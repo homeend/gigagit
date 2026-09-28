@@ -65,6 +65,9 @@ func (m Model) loadDoc(d *openFile) tea.Cmd { return m.loadDocWith(d, m.docLoade
 func (m Model) loadDocWith(d *openFile, load func(context.Context) ([]byte, error)) tea.Cmd {
 	d.loading = true
 	read := loadFileContentSrcCmd(d.tag, d.path, m.cfg.UI.SyntaxOn(), load)
+	if d.markdown {
+		read = loadMarkdownSrcCmd(d.tag, load)
+	}
 	abs := m.docAbs(d)
 	tag, loadNo := d.tag, d.fills+1
 	if abs == "" {

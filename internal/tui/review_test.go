@@ -242,7 +242,7 @@ func TestReviewResultOpensViewerAndSavesReport(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	m := launchTestModel(t)
 	m.cfg.Tools.Command = []config.ToolCommand{captureCmd(exttool.CatReview, "echo LGTM")}
-	spec, err := m.svc.ReviewTask(context.Background(), m.cfg.Tools.Command[0], domain.WorkingReviewTarget(), "")
+	spec, err := m.svc.ReviewTask(context.Background(), m.cfg.Tools.Command[0], domain.WorkingReviewTarget())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestTaskSegmentCountsLiveTasks(t *testing.T) {
 		t.Fatalf("idle segment %q", seg)
 	}
 	m.cfg.Tools.Command = []config.ToolCommand{captureCmd(exttool.CatReview, "sleep 5")}
-	spec, _ := m.svc.ReviewTask(context.Background(), m.cfg.Tools.Command[0], domain.WorkingReviewTarget(), "")
+	spec, _ := m.svc.ReviewTask(context.Background(), m.cfg.Tools.Command[0], domain.WorkingReviewTarget())
 	domain.Tasks().Submit(spec)
 	if seg := m.taskSegment(); !strings.Contains(seg, "1") {
 		t.Fatalf("segment %q", seg)

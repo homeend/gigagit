@@ -77,6 +77,7 @@ type Model struct {
 	pickPatchTemp          string              // patch lane's temp file; removed when its op finishes
 	reflog                 []model.ReflogEntry // HEAD reflog; shown by the Reflog tab in the bottom slot
 	currentWorktree        string
+	recycleBranch          string // branch captured when the Recycle-a-worktree picker opened
 
 	notices                []notice               // session notice list (see notify.go)
 	driftNotices           []driftNoticeSource    // post-op drift/paused-resume findings; rebuildNotices re-renders these too
@@ -192,6 +193,9 @@ type Model struct {
 	// showing a preview. Stamped onto each diff the view opens.
 	filesPreviewSet    *domain.PreviewNoteSet
 	filesPreviewCounts map[string]int
+	// filesReview is the files view's REVIEW mode (review_view.go): set
+	// after the view opens on a structured review; nil otherwise.
+	filesReview *reviewViewState
 
 	previews []previewRow // saved merge previews + live summaries (srcPreviews)
 
@@ -658,10 +662,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A note stamp that landed on the LIVE view while this load was in
 		// flight (a commit pair's scope arrives by its own message) is newer
 		// than the identity the loader snapshotted at dispatch: keep it.
-		lateAddr, lateSet := dv.noteAddr, dv.previewSet
+		lateAddr, lateSet, lateReview := dv.noteAddr, dv.previewSet, dv.reviewID
 		*dv = *msg.view
 		if dv.noteAddr.Path == "" && lateAddr.Path != "" {
 			dv.noteAddr, dv.previewSet = lateAddr, lateSet
+		}
+		if dv.reviewID == "" {
+			dv.reviewID = lateReview
 		}
 		dv.loading = false
 		dv.compare = dv.compare || compare
@@ -872,6 +879,8 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.blinkOn = !m.blinkOn
 		return m, noticeBlinkCmd(msg.gen)
+	case reviewViewMsg:
+		return m.handleReviewViewMsg(msg)
 	case commitFilesMsg:
 		m.filesReadInflight = false // the outstanding per-commit read has landed; nav may issue again
 		if m.filesView == nil || msg.hash != m.filesHash {
@@ -891,6 +900,14 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Only lines and cursor are replaced; the search query intentionally
 		// survives the commit change (track one file through history).
+		if st := m.filesReview; st != nil && st.tip == msg.hash {
+			m.filesView.lines = reviewTreeLines(st, commitFileLines(msg.files))
+			m.filesView.sel = 0
+			m.filesContext = shortHash(msg.hash) + " " + msg.subject
+			m.filesCommit = msg.commit
+			return m.drainPendingFiles()
+		}
+		m.filesReview = nil // the commit list moved on: a plain commit view now
 		m.filesView.lines = withReviewLines(msg.reviews, commitFileLines(msg.files))
 		m.filesView.sel = 0
 		m.filesTitle = i18n.T("Files %s %s", shortHash(msg.hash), msg.subject)
@@ -1021,6 +1038,9 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.filesView.lines = commitFileLines(filterCompareFiles(msg.files, m.comparePair.pathSet()))
 		} else {
 			m.filesView.lines = commitFileLines(msg.files)
+		}
+		if st := m.filesReview; st != nil {
+			m.filesView.lines = reviewTreeLines(st, m.filesView.lines)
 		}
 		m.filesView.sel = 0
 		// A re-armed merge preview keeps the file the cursor was on when its
@@ -1304,6 +1324,21 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.statusMsg = i18n.T("shelf add: %s", msg.err.Error())
 		} else {
 			m.statusMsg = i18n.T("shelved %s → %s", msg.entry.Origin.Path, msg.entry.ID)
+			if msg.unmark != "" {
+				delete(m.fileMarks, msg.unmark) // the shelved mark is consumed (user ruling)
+			}
+		}
+		return m, nil
+	case shelfSetAddedMsg:
+		if msg.err != nil {
+			m.statusMsg = i18n.T("shelf add: %s", msg.err.Error())
+		} else {
+			m.statusMsg = i18n.T("shelved %d files as one set → %s", len(msg.paths), msg.entry.ID)
+			// The shelved marks are consumed, like stashed ones (user ruling);
+			// a mark on a file that was not part of the set stays.
+			for _, p := range msg.paths {
+				delete(m.fileMarks, p)
+			}
 		}
 		return m, nil
 	case tempExportResolvedMsg:
@@ -2267,6 +2302,13 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.canEnterConflict() {
 				return startConflictProcess(m) // enter / resume from the notice
 			}
+		case "X":
+			// A session sub-row owns X too: kill a running session and drop
+			// its row once it has exited (the . menu's Kill and remove
+			// session); on an exited row it is x.
+			if info, ok := m.selectedSession(); ok {
+				return m.killRemoveSessionRow(info), nil
+			}
 		case "H":
 			if m.canStageHunks() {
 				bi, _ := m.backingIndex(panelFiles)
@@ -2582,7 +2624,7 @@ func (m Model) dispatch(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.focus == panelBranches {
 				// A review row under a branch opens the review.
 				if h, ok := m.selectedBranchReview(); ok {
-					return m.openReviewNote(h.ID, h.Summary)
+					return m.openReview(h.ID, h.Summary)
 				}
 				if r, ok := m.commitGotoTipRow(); ok {
 					return r.run(m)
@@ -4124,9 +4166,14 @@ func (m Model) canMaximizeLeft() bool {
 // fullscreenYielded reports whether a surface that needs its own column is
 // up (files view, stash list, file preview). While one is, the T pin is
 // suspended — layout ignores it and focusCommitsPanel must not transfer it,
-// because the surface's close path restores its own remembered focus.
+// because the surface's close path restores its own remembered focus. A
+// docked agent console is NOT such a surface: it occupies the Commits column
+// like the commit list and simply hides with it while a left panel is
+// fullscreen (the layout deletes the Commits box, so nothing can focus or
+// resize it), then comes back when the pin drops. openConsole clears an
+// active pin so a freshly shown console is never born hidden.
 func (m Model) fullscreenYielded() bool {
-	return m.filesView != nil || m.stashView != nil || m.filesPreview != nil || m.console != nil
+	return m.filesView != nil || m.stashView != nil || m.filesPreview != nil
 }
 
 // canFullMaximize reports whether ctrl+t can pin the focused panel fullscreen:

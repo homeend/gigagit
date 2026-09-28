@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/i18n"
 )
 
@@ -25,6 +27,16 @@ func (m Model) stackRow(v *diffView, dr dRow, w int, onCursor bool) string {
 		return ""
 	case lineRule: // the rule under it, the full width of the screen
 		return s.diffFold.Render(strings.Repeat("─", w))
+	case lineProse: // a row of the review's overview, rendered markdown
+		if j := v.lines[dr.line].prose; j >= 0 && j < len(f.prose) {
+			row := f.prose[j]
+			style := lipgloss.NewStyle()
+			if onCursor {
+				style = s.diffCursorRow
+			}
+			return colouredLine("  ", row.text, row.cls, nil, style, nil, w)
+		}
+		return ""
 	}
 	if dr.kind == linePlace {
 		return truncate(s.diffFold.Render(placeText(f)), w)
@@ -38,6 +50,9 @@ func (m Model) stackRow(v *diffView, dr dRow, w int, onCursor bool) string {
 		name = f.oldPath + " → " + f.path
 	}
 	text := mark + " " + f.status + "  " + name
+	if f.overview {
+		text = mark + " ≡ " + i18n.T("Overview")
+	}
 	switch {
 	case f.conflict:
 		// A conflicted file's body is the resolver line, not a diff: a numstat

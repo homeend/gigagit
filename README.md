@@ -54,7 +54,7 @@ this session is also kept in Settings `,` → Session errors.
 | `b` | create a branch off the selected one (popup); `B` create **and** switch to it. Inside the popup, `ctrl+p` picks a saved **branch prefix** (Settings → Branch prefixes) and seeds the name |
 | `S` | open the stash window (lists all stashes in the right column): `↑`/`↓` move, `enter` drills into the selected stash's file tree with focus on the tree (`l` opens it focused on the list side; diff / `h` history / `b` blame, like commit files), `.` opens the stash actions menu (apply / pop / drop — drop confirms — plus Copy stash ref), `/` filters the list as you type (ref + subject, case-insensitive; `enter` keeps the filter, `esc` clears it, `ctrl+r` clears a kept one — the same gesture as the Commits panel), `tab`/`←` move focus to the left panels and back (the window stays open), `esc`/`S` close |
 | `u` | undo last commit (ref-only, soft reset) |
-| `w` | create a worktree **for the selected branch** (popup); `W` opens the same popup with **create & switch** as enter's default — one flow onto the branch's own clean directory (`<repo>.worktrees/<branch>`). The branch name starts as the selection (never templated); `e` edits it — confirming a **different** name creates a **new** branch cut from the selection — and `p` seeds it from a saved **branch prefix** (fills any `<user:…>` labels, then edit). Inside the popup: `enter` runs the popup's default, `w` create only, `W` create **and** switch |
+| `w` | create a worktree **for the selected branch** (popup); `W` opens the same popup with **create & switch** as enter's default — one flow onto the branch's own clean directory (`<repo>.worktrees/<branch>`). The branch name starts as the selection (never templated); `e` edits it — confirming a **different** name creates a **new** branch cut from the selection — and `p` seeds it from a saved **branch prefix** (fills any `<user:…>` labels, then edit). Inside the popup: `enter` runs the popup's default, `w` create only, `W` create **and** switch. `.` on a branch that is checked out nowhere offers **Recycle a worktree…**: check it out in an existing worktree, committing or discarding that worktree's changes first (`gg worktree recycle` from the CLI) |
 | `enter` | on the Branches panel: jump to the selected branch's **tip commit** in the Commits panel (deep-searching unloaded history if needed — the same machinery as `ctrl+f`); on the Worktrees panel: switch into the selected worktree; on the Files panel: full-screen side-by-side diff of the unstaged change (index → working tree) — on a **conflicted** row it instead opens the **hunk picker** for that file directly (the same region/line resolver `x` reaches; `esc`/`ctrl+s` return to the panel; a modify-delete conflict has no regions, so the status line points at `x`); on the Staged panel: the staged diff (HEAD → index); on the files-view tree: diff of the file in the viewed commit. Inside the diff: `↑`/`↓` scroll, `pgup`/`pgdn` page, `n`/`p` (or `ctrl+↑`/`ctrl+↓`) jump between changes, `home`/`end` jump to the top/bottom of the file, then at the edge prime a step to the previous/next file in the list — a bottom-left cue appears and the next press moves to that file, announced by a bottom-left notice naming it (the tree or Status/Staged panel selection follows), `f` toggles full file ↔ changed-lines-only, `ctrl+w` cycles the text display mode (scroll/wrap/truncate), `←`/`→`/`0` pan in scroll mode, `j`/`k` (or `alt+↑/↓`) move the **line cursor** (`↑`/`↓` scroll without moving it; `z` cycles its position center/top/bottom; a click places it), `alt+←`/`alt+→` move it to the **other pane of the same row** — the cursor sits on ONE side, only that side's cell is marked (a `·` gap cell included, so you can see where you are even where the side has no line), the header names it (`old line N` on the left), and the copy, the review-note anchor and the `gg://` link all follow it — `space` starts a **line selection** at the cursor and a second `space` freezes its end (the cursor is then free; a third starts a new range), `enter` copies the selected lines — the cursor side's source text, skipping cells that side hasn't got and collapsed folds — and `esc` unmarks (the side is locked while a selection is live), `e` opens the file in your editor at that line, `c` adds a **review note** at the cursor line, `E`/`R` edit or reply to the nearest one, `a` hides agent notes, `}`/`{` jump between annotated lines, and the `.` menu carries **List notes…** (every thread on the file, type to filter, `enter` jumps to one) and **Remove all notes…** (a typed `remove all` clears this file's notes and their replies) wherever the cursor sits (notes belong to the diff that created them — unstaged, staged, untracked or commit — so a two-sided comparison, or a diff against a shelf entry or bookmark, carries none), `/` searches the text in view (`@` searches backwards) — type to search incrementally from the cursor line, `enter` keeps the query, `esc` cancels it, `]`/`[` step to the next/previous hit (wrapping), `alt+↑`/`alt+↓` recall previous searches; hits are highlighted like word differences and the current one is painted with the `search_current_bg` theme role (a background patch; the `terminal` theme leaves it unset and inverts the hit against its row instead), while a line selection paints its lines with the `selection_bg` role the same two ways, with a hit on an unchanged line lighting up in both columns, `esc` closes. Changed lines highlight the exact words that differ; commit diffs are cached for instant re-open. A diff of **images** (a modified, added or deleted PNG/JPEG/GIF) draws the two thumbnails instead of `(binary file)`: `ctrl+w` cycles side by side → stacked (old above new) → one at a time, where `tab` flips old/new in place; each side has an info line with its format, pixel and byte size. Code is syntax-coloured by file type (see `[ui] diff_syntax`) |
 | `ctrl+g` | on the Branches panel: **Solo this branch + go to its tip** — scopes the Commits feed to the branch (same toggle as the `.`-menu Solo: press again to un-solo) and lands the cursor on the tip once the reload finishes; on the **Commits panel**: **Solo from the selected commit** — scopes the feed to the history reachable from the commit under the cursor, the commit tree that starts there (press again on the same commit to un-solo; also a `.`-menu row, **Solo from this commit**), with the cursor landing back on the commit after the reload and the header showing `Commits (solo: <short-sha>)`; in the **commit popup** (`c`/`C`): **generate a commit message** from the staged diff using a configured `commit_message` external agent (Settings → External tools), run headless — fills the title/description fields for you to review, nothing commits until `ctrl+s`. More than one tool configured shows a numbered chooser; an unapproved command shows a first-run approval (remembered per repo); existing title/description text asks before being replaced; `esc` cancels an in-flight run |
 | `ctrl+\` | the **agent-sessions** popup, from anywhere — even inside a focused agent console: every agent this gg runs, grouped repo → worktree (`enter` opens one, `k` kills, `x` removes an exited one, `/` filters). See [Agent sessions](#agent-sessions-embedded-consoles) |
@@ -188,7 +188,7 @@ gg versions show <branch> <id|latest>  # print the frozen change set a two-branc
 gg versions restore [--discard] <branch> <id|latest>  # restore a branch to a recorded version; --discard answers the dirty-tree prompt
 gg unlock [--yes]                      # list (or with --yes remove) stranded .git/*.lock files; exit 1 while locks are present
 gg migrate [--yes]                     # list pending store migrations and what they'd discard; changes nothing without --yes
-gg merge [--into <target>] [--on-conflict=keep|abort] <source>
+gg merge [--into <target>] [--on-conflict=keep|abort] [--no-ff] [-m <msg> | -F <file>] <source>  # -m/-F (- = stdin) set the merge commit message and imply --no-ff
 gg fast-forward <commit>               # advance the current branch to a descendant commit (no merge commit)
 gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>
 gg rebase -i --plan <file> <newbase>   # interactive rebase from a plan (pick/reword/squash/drop)
@@ -1171,11 +1171,24 @@ from the run in the `ctrl+\` AI-tasks tab. Deleting or renaming a branch in gg
 takes its reviews along; review notes never expire. A review of uncommitted
 changes has no commit, so it stays in the AI-tasks history only. The same pipeline is
 scriptable as `gg review`
-(see the CLI section above). Catalog defaults ship for Claude Code
-(`/code-review <range>`), Junie, and Kimi Code — the Junie and Kimi reports
-likewise come back through `$GG_MESSAGE_FILE`, fed the diff via a new
-`$GG_REVIEW_DIFF` file (Junie's own `--review` flag can't take a range;
-Kimi's print-mode stdout is a report, not the review).
+(see the CLI section above).
+
+A review agent replies with ONE JSON document (the brief at
+`$GG_CONTEXT_FILE` ends in a "Review output" section describing it): a
+markdown overview, a one-line summary per file, line notes, and free-form
+`meta` (a verdict, a severity, a confidence) at every level. Opening such a
+review shows the **review view** — the reviewed commit's files (a branch
+review: its range's files) with `≡ Overview` first, `◆n` and the file's
+summary on each file the review notes (`n` / `p` step between them); enter on
+the Overview renders the overview as markdown with its meta and the notes on
+files the commit does not change; stacked, the overview is the first element.
+Its diffs show only the review's notes, read-only — `gg review --notes` keeps
+them as your own. A reply that is not the document is kept as text and opens
+rendered as markdown. Catalog defaults ship for Claude Code, Codex, Junie,
+Kimi Code and Antigravity; their documents come back through
+`$GG_MESSAGE_FILE`, fed the diff via `$GG_REVIEW_DIFF`. Review commands an
+older gg wrote into your config are upgraded by a one-time migration that
+asks first (edited commands are left alone).
 
 ### AI tasks (launch dialog, Headless tab)
 
@@ -1283,9 +1296,11 @@ included — except two:
 A running or exited session shows as a sub-row under its worktree
 (`└ ● Claude  running 12m` / `└ ○ Codex  exited (0)`); `enter` on it (or its
 `.` menu **Open session**) brings the console back, and the menu also offers
-**Kill session** / **Remove session**; on an exited session's sub-row, `x`
-removes it without opening the menu (a running one is refused: kill it first);
-the footer says `[enter] open` / `[x] remove` there. A `/` filter matches a
+**Kill session** / **Kill and remove session** / **Remove session**; on an
+exited session's sub-row, `x` removes it without opening the menu (a running
+one is refused), and on a running one `X` kills it (after a Kill / Cancel
+confirm) and drops the row once it has exited; the footer says `[enter] open` / `[x] remove` / `[X] kill+remove`
+there. A `/` filter matches a
 worktree together with its sub-rows, so typing a session's label keeps the
 worktree it runs in. The same menu's **Open terminal** starts
 an interactive shell in that worktree in the same console (`$SHELL`, or

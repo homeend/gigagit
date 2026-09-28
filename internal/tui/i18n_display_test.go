@@ -77,7 +77,7 @@ func TestOptionDisplayNameEnglishPassthrough(t *testing.T) {
 	// English is the key: with no language set, every value maps to itself.
 	for _, v := range []string{
 		"Apply patch", "Cancel", "Cherry-pick", "Create branch…",
-		"Create worktree…", "Delete", "Detached", "Discard", "No",
+		"Create worktree…", "Delete", "Detached", "Discard", "Kill", "No",
 		"Push branch + tags", "Push branch only", "Remove",
 		"Reorder & squash", "Yes", "abort", "cancel",
 		"check out as different name…", "checkout-and-resolve", "commits",

@@ -65,18 +65,9 @@ func (m Model) focusedBookmark() (model.Bookmark, bool) {
 		return model.Bookmark{}, false
 	}
 	switch m.focus {
-	case panelFiles:
-		if bi, ok := m.backingIndex(panelFiles); ok {
-			f := m.status.Files[bi]
-			st := model.StateUnstaged
-			if f.Kind == model.KindUntracked {
-				st = model.StateUntracked
-			}
-			return model.Bookmark{State: st, Worktree: m.currentWorktree, Branch: m.status.Branch, Path: f.Path}, true
-		}
-	case panelStaged:
-		if bi, ok := m.backingIndex(panelStaged); ok {
-			return model.Bookmark{State: model.StateStaged, Worktree: m.currentWorktree, Branch: m.status.Branch, Path: m.status.Files[bi].Path}, true
+	case panelFiles, panelStaged:
+		if bi, ok := m.backingIndex(m.focus); ok {
+			return m.panelFileBookmark(m.focus, m.status.Files[bi]), true
 		}
 	}
 	return model.Bookmark{}, false
@@ -85,6 +76,20 @@ func (m Model) focusedBookmark() (model.Bookmark, bool) {
 // bookmarkToFileRef maps a bookmark's address to a FileRef so the focused
 // (left) compare side resolves via domain.ResolveBytes — by address, with no
 // pre-resolved blob SHA. A committed bookmark's Commit may be a stash commit.
+
+// panelFileBookmark addresses one Status row as the Files/Staged panel p shows
+// it: Files → the working-tree copy (untracked or unstaged), Staged → the index
+// copy. The one mapping behind the cursor capture and the marked-set capture.
+func (m Model) panelFileBookmark(p panel, f model.FileStatus) model.Bookmark {
+	st := model.StateUnstaged
+	switch {
+	case p == panelStaged:
+		st = model.StateStaged
+	case f.Kind == model.KindUntracked:
+		st = model.StateUntracked
+	}
+	return model.Bookmark{State: st, Worktree: m.currentWorktree, Branch: m.status.Branch, Path: f.Path}
+}
 func bookmarkToFileRef(b model.Bookmark) model.FileRef {
 	switch b.State {
 	case model.StateShelf:

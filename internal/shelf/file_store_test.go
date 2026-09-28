@@ -337,3 +337,26 @@ func TestRemoveKeepsFileBlobSharedWithSurvivorPatch(t *testing.T) {
 		t.Fatalf("survivor's patch was reclaimed via a removed FILE entry's SHA: %v", err)
 	}
 }
+
+func TestPutFilesStoresFilesKind(t *testing.T) {
+	t.Parallel()
+	st := NewFileStore(t.TempDir())
+	addr := model.FileAddress{State: model.StateStaged, Worktree: "/wt", Branch: "main", Path: "ignored.go"}
+	e, err := st.PutFiles("", addr, []byte("tarbytes"), "set one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.Kind != model.ShelfKindFiles || !e.IsArchive() || e.IsCommit() {
+		t.Fatalf("kind = %v, want a files archive", e.Kind)
+	}
+	if e.Origin.Path != "" || e.Label != "set one" || e.PatchSHA != "" {
+		t.Fatalf("entry = %+v: path must be dropped, label kept, no patch", e)
+	}
+	if !strings.HasPrefix(e.ID, "files-staged-") {
+		t.Fatalf("id = %q", e.ID)
+	}
+	got, err := st.Find(e.ID)
+	if err != nil || got.Kind != model.ShelfKindFiles {
+		t.Fatalf("Find = %+v err=%v: the kind must round-trip through the index", got, err)
+	}
+}

@@ -49,20 +49,18 @@ func TestCommitFilesListTheReview(t *testing.T) {
 	}
 }
 
-func TestReviewEntryOpensAsAnAddedFile(t *testing.T) {
+// enter on an @notes/ entry opens the review, not a diff: a prose review in
+// the markdown viewer (a structured one as the review view, review_view_test).
+func TestReviewEntryOpensTheReview(t *testing.T) {
 	t.Parallel()
 	m := reviewedStackModel(t, "# Verdict\nship it")
 	u, cmd := m.openDiffForFileLine(m.filesView.visible()[1])
 	m = drainCmds(t, u.(Model), cmd)
-	v := m.diffLayer()
-	if v == nil || v.err != nil {
-		t.Fatalf("diff %+v", v)
+	if m.diffLayer() != nil {
+		t.Fatal("an @notes/ entry opens no diff")
 	}
-	if out := strings.Join(diffRowTexts(v), "\n"); !strings.Contains(out, "ship it") {
-		t.Fatalf("the review text is not in the diff:\n%s", out)
-	}
-	if v.noteAddr.Commit != "" || v.noteAddr.Path != "" {
-		t.Fatalf("a review must not be note-addressable: %+v", v.noteAddr)
+	if got := viewerText(m); !strings.Contains(got, "ship it") || strings.Contains(got, "# Verdict") {
+		t.Fatalf("viewer text:\n%s", got)
 	}
 }
 
@@ -70,7 +68,7 @@ func TestStackShowsTheReviewAboveTheFiles(t *testing.T) {
 	t.Parallel()
 	m := reviewedStackModel(t, "# Verdict\nship it")
 	m = m.setStackedPref(true)
-	u, cmd := m.openDiffForFileLine(m.filesView.visible()[1])
+	u, cmd := m.openDiffForFileLine(m.filesView.visible()[2]) // a.go: the stack still starts with the review
 	m = drainCmds(t, u.(Model), cmd)
 	v := m.diffLayer()
 	if v == nil || v.stk == nil || len(v.stk.files) != 4 {
