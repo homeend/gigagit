@@ -3577,15 +3577,14 @@ dedicated SSE stream per console, session states (erbrus port) = plan 3.
   trailing default blanks trimmed — a blank row has no runs; colours as
   `#rrggbb`; the cursor is NOT painted into the runs, the page draws it).
 - **Producer** (`screenFeeds`): one goroutine per session while it has
-  streams; waits on the session's `Changed()`, coalesces 40 ms, snapshots
-  once and `publish`es to every subscriber (1-slot buffers: a full one is
+  streams; holds its OWN subscriptions (`sess.Subscribe()` for the screen,
+  `domain.Sessions().Subscribe()` for removal — the `agentsession.Broadcaster`
+  gives every subscriber its own coalescing slot, so the TUI's console in the
+  same process never steals a wakeup), coalesces 40 ms, snapshots once and
+  `publish`es to every stream subscriber (1-slot buffers: a full one is
   skipped and its next screen is marked `Full`); `send` delivers exit/gone
-  with a bounded wait. Removal is POLLED once a second (`Get(id)`), because
-  **`domain.Sessions().Changed()` is ONE coalesced channel and
-  `watchSessions` (sessions_http.go) is its only web receiver** — a second
-  receiver steals signals. The TUI also waits on a session's own
-  `Changed()` while showing it; both repaint from a fresh snapshot, so a
-  stolen per-session signal costs one late frame at most.
+  with a bounded wait. Removal arrives on the manager signal (`Get(id)`
+  re-checked; no poll).
 - **Input** (`console_input.go`): `POST /api/session-input {id, keys, paste}`
   decodes every key BEFORE sending any (a bad key refuses the batch), 409
   for an exited session; keys are `domain.ConsoleKey {k, mod, text}` —

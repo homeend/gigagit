@@ -29,11 +29,6 @@ func init() {
 // feedCoalesce bounds how often a session's screen is snapshotted.
 const feedCoalesce = 40 * time.Millisecond
 
-// feedGonePoll is how often a producer checks that its session is still
-// listed. (The manager's Changed() is one coalesced channel with one web
-// receiver, watchSessions; a second receiver would steal its signals.)
-const feedGonePoll = time.Second
-
 // --- wire ---------------------------------------------------------------------
 
 type frameLine struct {
@@ -187,20 +182,24 @@ func (f *screenFeeds) attach(sess *domain.AgentSession) (<-chan feedMsg, func())
 
 // produce snapshots the session on every change, coalesced, until stop; it
 // reports the exit once and the removal (the manager no longer lists it).
+// Both wakeups are this producer's own subscriptions, so the TUI's console
+// and the list watcher in the same process never steal them.
 func (f *screenFeeds) produce(sess *domain.AgentSession, stop <-chan struct{}) {
 	id := sess.Info().ID
+	screen, cancelScreen := sess.Subscribe()
+	defer cancelScreen()
+	list, cancelList := domain.Sessions().Subscribe()
+	defer cancelList()
 	var timer *time.Timer
 	var fire <-chan time.Time
 	// The handler already reported an exit that happened before the attach;
 	// this producer reports only the one it witnesses.
 	exited := sess.Info().State == domain.SessionExited
-	gone := time.NewTicker(feedGonePoll)
-	defer gone.Stop()
 	for {
 		select {
 		case <-stop:
 			return
-		case <-sess.Changed():
+		case <-screen:
 			if timer == nil {
 				timer = time.NewTimer(feedCoalesce)
 				fire = timer.C
@@ -213,7 +212,7 @@ func (f *screenFeeds) produce(sess *domain.AgentSession, stop <-chan struct{}) {
 				code := info.ExitCode
 				f.send(id, feedMsg{Exited: &code})
 			}
-		case <-gone.C:
+		case <-list:
 			if _, ok := domain.Sessions().Get(id); !ok {
 				f.send(id, feedMsg{Gone: true})
 				return
