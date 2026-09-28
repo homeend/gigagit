@@ -20,24 +20,27 @@ type Manager struct {
 	mu       sync.Mutex
 	next     int
 	sessions map[ID]*Session
-	changed  chan struct{}
+	bc       Broadcaster
+	changed  <-chan struct{} // Changed()'s own subscription (transitional; see Changed)
 }
 
 // NewManager returns an empty Manager.
 func NewManager() *Manager {
-	return &Manager{sessions: map[ID]*Session{}, changed: make(chan struct{}, 1)}
+	m := &Manager{sessions: map[ID]*Session{}}
+	m.changed, _ = m.bc.Subscribe()
+	return m
 }
 
-func (m *Manager) signal() {
-	select {
-	case m.changed <- struct{}{}:
-	default:
-	}
-}
+func (m *Manager) signal() { m.bc.Signal() }
 
-// Changed receives a value when the session LIST changed (start, exit,
-// remove); bursts coalesce.
+// Changed is the single-reader form: ONE subscription made at construction,
+// so two readers steal each other's wakeups. Kept only until every consumer
+// calls Subscribe; then it goes.
 func (m *Manager) Changed() <-chan struct{} { return m.changed }
+
+// Subscribe wakes the returned channel on every list change (start, exit,
+// remove); bursts coalesce per subscriber. cancel drops the subscription.
+func (m *Manager) Subscribe() (<-chan struct{}, func()) { return m.bc.Subscribe() }
 
 // Start runs spec and registers the session under a fresh id.
 func (m *Manager) Start(spec StartSpec) (*Session, error) {

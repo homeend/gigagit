@@ -113,3 +113,44 @@ func TestStartMissingBinary(t *testing.T) {
 		t.Fatal("a failed start must not register a session")
 	}
 }
+
+func TestManagerSubscribeWakesTwoSubscribersOnStart(t *testing.T) {
+	t.Parallel()
+	needSh(t)
+	m := NewManager()
+	a, cancelA := m.Subscribe()
+	defer cancelA()
+	b, cancelB := m.Subscribe()
+	defer cancelB()
+	s, err := m.Start(StartSpec{Dir: t.TempDir(), Argv: []string{"sh", "-c", "exit 0"}, Cols: 40, Rows: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !recv(t, a) || !recv(t, b) {
+		t.Fatal("both subscribers must see the start")
+	}
+	waitDone(t, s)
+}
+
+func TestSessionSubscribeWakesTwoSubscribersOnOutput(t *testing.T) {
+	t.Parallel()
+	needSh(t)
+	s := startSh(t, "sleep 0.2; echo hi; sleep 0.2")
+	a, cancelA := s.Subscribe()
+	defer cancelA()
+	b, cancelB := s.Subscribe()
+	defer cancelB()
+	deadline := time.After(3 * time.Second)
+	gotA, gotB := false, false
+	for !(gotA && gotB) {
+		select {
+		case <-a:
+			gotA = true
+		case <-b:
+			gotB = true
+		case <-deadline:
+			t.Fatalf("subscribers woke: a=%v b=%v — both must see the screen change", gotA, gotB)
+		}
+	}
+	waitDone(t, s)
+}

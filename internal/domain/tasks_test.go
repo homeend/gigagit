@@ -253,6 +253,26 @@ func TestTasksChangedSignals(t *testing.T) {
 	}
 }
 
+func TestTasksSubscribeWakesTwoSubscribers(t *testing.T) {
+	t.Parallel()
+	m, svc := newTestTasks(t)
+	a, cancelA := m.Subscribe()
+	defer cancelA()
+	b, cancelB := m.Subscribe()
+	defer cancelB()
+	rel := make(chan struct{})
+	close(rel)
+	id := m.Submit(headlessSpec(svc, "k", blockOp{started: make(chan string, 1), release: rel, key: "x", out: "r"}))
+	for _, ch := range []<-chan struct{}{a, b} {
+		select {
+		case <-ch:
+		case <-time.After(5 * time.Second):
+			t.Fatal("Submit must wake every subscriber")
+		}
+	}
+	waitInfo(t, m, id, "done", stateIs(TaskDone))
+}
+
 func TestTasksLiveAndLoad(t *testing.T) {
 	t.Parallel()
 	m, svc := newTestTasks(t)
