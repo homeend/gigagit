@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/homeend/gigagit/internal/domain"
 	"github.com/homeend/gigagit/internal/gittest"
 	"github.com/homeend/gigagit/internal/model"
@@ -155,5 +157,31 @@ func TestShelfMemberMissingFromTheWorktree(t *testing.T) {
 	gone := load("gone.txt")
 	if gone.err != nil || len(gone.blocks) == 0 || gone.notice != "" {
 		t.Fatalf("gone.txt: err=%v blocks=%d notice=%q, want its removal diffed", gone.err, len(gone.blocks), gone.notice)
+	}
+}
+
+// ctrl+t on the note viewer grows the box only as far as its content needs:
+// a short note stays its normal width, a long line may widen it — but never
+// to the whole terminal with the rest of the box empty.
+func TestShelfNoteViewMaximizeFollowsContent(t *testing.T) {
+	t.Parallel()
+	width := func(summary string, maxed bool) int {
+		m := shelfNoteModel()
+		m.width, m.height = 200, 40
+		note := model.Note{ID: "n1", Author: "gg", Summary: summary, Rationale: "Deleted (not in this set):\n  gone.go",
+			Created: time.Date(2026, 9, 28, 10, 0, 0, 0, time.UTC)}
+		mm, _ := m.Update(shelfNotesMsg{id: "b", label: "y.go", notes: []domain.ResolvedNote{{Note: note, Status: model.NoteActive}}})
+		m = mm.(Model)
+		cp := m.topLayer().(*contentPopup)
+		cp.maximized = maxed
+		return lipgloss.Width(strings.Split(cp.box(m), "\n")[0])
+	}
+	short, shortMax := width("Recycled from /x (main)", false), width("Recycled from /x (main)", true)
+	if shortMax != short {
+		t.Fatalf("ctrl+t on a short note: %d columns, want the unmaximized %d (nothing wider to show)", shortMax, short)
+	}
+	long := "Recycled from /" + strings.Repeat("deep/", 30) + "wt (main)"
+	if lm := width(long, true); lm <= short || lm >= popupFullInnerWidth(200)+2 {
+		t.Fatalf("ctrl+t on a long note: %d columns, want wider than %d yet fitted to the line", lm, short)
 	}
 }

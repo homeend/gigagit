@@ -74,6 +74,9 @@ type contentPopup struct {
 	lines     []contentLine // full, unfiltered content
 	query     string        // case-insensitive substring over non-heading lines
 	typing    bool          // true while /-input mode is capturing keys
+	// fitContent sizes the box by its widest line (popupFitWidth): ctrl+t then
+	// grows it only as far as the content needs, never to an empty full width.
+	fitContent bool
 	// charWrap: the content is CODE (a file's text), so wrap mode breaks at the
 	// last column instead of at spaces — see winOpts.charWrap.
 	charWrap bool
@@ -366,6 +369,9 @@ func (p *contentPopup) render(m Model, below string) string {
 func (p *contentPopup) box(m Model) string {
 	w, _ := m.overlayDims()
 	inner := popupResolveWidth(w, p.maximized, contentPopupWidth(w))
+	if p.fitContent {
+		inner = popupFitWidth(w, p.maximized, contentPopupWidth(w), p.widestLine())
+	}
 	s := st()
 	// lipgloss wraps text at Width minus the horizontal padding; truncate to
 	// that true text width so a full-width row can never spill onto a wrap line.
@@ -584,4 +590,16 @@ func imageRowDecorator(cells []termimg.Cell) rowDecorator {
 // hexColor is c as "#rrggbb".
 func hexColor(c color.RGBA) string {
 	return fmt.Sprintf("#%02x%02x%02x", c.R, c.G, c.B)
+}
+
+// widestLine is the widest row the viewer draws, its two-column lead-in
+// included, or the title when that is wider (fitContent's measure).
+func (p *contentPopup) widestLine() int {
+	n := lipgloss.Width(p.title)
+	for _, l := range p.lines {
+		if lw := lipgloss.Width(l.text) + 2; lw > n {
+			n = lw
+		}
+	}
+	return n
 }

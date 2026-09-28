@@ -49,7 +49,9 @@ func (m Model) openShelfNotes(msg shelfNotesMsg) Model {
 		m.statusMsg = i18n.T("This shelf entry has no notes")
 		return m
 	}
-	return m.pushLayer(newContentPopup(i18n.T("Notes on %s", msg.label), shelfNoteLines(msg.notes)))
+	cp := newContentPopup(i18n.T("Notes on %s", msg.label), shelfNoteLines(msg.notes))
+	cp.fitContent = true
+	return m.pushLayer(cp)
 }
 
 // shelfNoteLines renders each note: its summary as a heading, "author · date",
