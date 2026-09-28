@@ -23,6 +23,16 @@ import (
 // changes, then the whole tree is staged as the recycle op does (add -A).
 func recycleFixture(t *testing.T, edit func(wt string)) (*Service, string) {
 	t.Helper()
+	dir, wt := recycleRepo(t, edit)
+	svc := svcIn(t, dir)
+	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
+	svc.UseNotesDir(t.TempDir())
+	return svc, wt
+}
+
+// recycleRepo builds recycleFixture's repo without a Service.
+func recycleRepo(t *testing.T, edit func(wt string)) (string, string) {
+	t.Helper()
 	dir := t.TempDir()
 	write := func(root, name, body string) {
 		t.Helper()
@@ -41,10 +51,7 @@ func recycleFixture(t *testing.T, edit func(wt string)) (*Service, string) {
 	gittest.Run(t, dir, "worktree", "add", wt, "feat")
 	edit(wt)
 	gittest.Run(t, wt, "add", "-A")
-	svc := svcIn(t, dir)
-	svc.SetShelfStore(shelf.NewFileStore(t.TempDir()))
-	svc.UseNotesDir(t.TempDir())
-	return svc, wt
+	return dir, wt
 }
 
 // tarMembers reads a stored set back: name → content.
@@ -186,5 +193,28 @@ func TestShelveStagedThroughExecuteDoesNotDeadlock(t *testing.T) {
 	}
 	if es, _ := svc.ShelfList(context.Background(), "", 0, 0); len(es) != 1 {
 		t.Fatalf("want the set stored, got %d entries", len(es))
+	}
+}
+
+// The production stores resolve lazily — their directory is keyed by the git
+// common dir, read through a (gated) query. Inside the op that read would wait
+// on the op's own reservation, so the seam must resolve them without the gate.
+func TestShelveStagedResolvesLazyStoresUnderTheOp(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir, wt := recycleRepo(t, func(wt string) {
+		os.Remove(filepath.Join(wt, "gone.txt"))
+	})
+	svc := svcIn(t, dir) // no injected stores: the real lazy resolution
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if _, err := svc.Execute(ctx, shelveOp{dir: wt}, nil, nil); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	es, _ := svc.ShelfList(context.Background(), "", 0, 0)
+	if len(es) != 1 {
+		t.Fatalf("want the set stored, got %d entries", len(es))
+	}
+	if ns, _ := svc.ShelfNotes(context.Background(), es[0].ID); len(ns) != 1 {
+		t.Fatalf("want the deletion note, got %d", len(ns))
 	}
 }

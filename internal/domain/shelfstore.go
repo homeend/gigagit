@@ -25,6 +25,13 @@ func (s *Service) SetShelfStore(st shelf.Store) {
 // dir under the XDG state dir. Returns nil (shelf disabled) when no state dir
 // is resolvable — mirroring repos.toml's best-effort posture.
 func (s *Service) shelfStore(ctx context.Context) shelf.Store {
+	return s.shelfStoreKeyed(func() (string, error) { return s.GitCommonDir(ctx) })
+}
+
+// shelfStoreKeyed is shelfStore with the common-dir read supplied: an op that
+// already holds this repo's reservation passes an UNGATED read (heldCommonDir),
+// since the gated query would wait on the op's own reservation.
+func (s *Service) shelfStoreKeyed(commonDir func() (string, error)) shelf.Store {
 	s.mu.Lock()
 	if s.shelf != nil {
 		st := s.shelf
@@ -40,7 +47,7 @@ func (s *Service) shelfStore(ctx context.Context) shelf.Store {
 			return nil
 		}
 		key := "unknown"
-		if cd, err := s.GitCommonDir(ctx); err == nil {
+		if cd, err := commonDir(); err == nil {
 			key = repoKey(strings.TrimSpace(cd))
 		}
 		root = filepath.Join(base, key)

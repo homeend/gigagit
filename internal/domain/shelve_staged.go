@@ -31,10 +31,15 @@ func RecycleShelfLabel(branch string) string { return "WIP on " + branch }
 // the entry back out: the caller discards the worktree next, and must not do
 // so with the record half-written.
 func (s *Service) shelveStagedIn(ctx context.Context, dir, branch string) (model.ShelfEntry, error) {
-	st := s.shelfStore(ctx)
+	// Both stores resolve lazily, keyed by the common dir. The op holds the
+	// reservation, so that read goes straight to git here; once resolved the
+	// stores are cached, and NoteAdd/ShelfFind below find them without it.
+	held := func() (string, error) { return s.repo.GitCommonDir(ctx) }
+	st := s.shelfStoreKeyed(held)
 	if st == nil {
 		return model.ShelfEntry{}, ErrShelfDisabled
 	}
+	s.notesStoreKeyed(held)
 	wt := s.repo.InDir(dir)
 	head, err := wt.RevParse(ctx, "HEAD")
 	if err != nil {
