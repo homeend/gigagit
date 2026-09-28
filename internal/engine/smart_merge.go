@@ -11,9 +11,17 @@ import (
 // switch + merge, ending on Target. A conflicted merge forks via the
 // "merge-conflict" decision: keep-conflicts leaves the tree for manual
 // resolution (the op returns an error), abort runs `git merge --abort`.
+//
+// Message, when set, is the merge commit's message (git keeps it in
+// MERGE_MSG across a conflict, so a kept-then-resolved merge still carries
+// it) and implies NoFF: a message was written for a merge COMMIT, and a
+// silent fast-forward would drop it. NoFF alone forces a merge commit with
+// git's own message. Zero values = today's behaviour (ff when possible).
 type SmartMerge struct {
-	Source string
-	Target string
+	Source  string
+	Target  string
+	Message string
+	NoFF    bool
 }
 
 var _ Operation = SmartMerge{}
@@ -130,7 +138,7 @@ func (op SmartMerge) mergeAt(ctx context.Context, deps OpDeps, dir, target strin
 	} else {
 		deps.emit(ctx, Progressf("merging", "%s into %s in worktree %s", op.Source, target, dir))
 	}
-	mergeErr := deps.Repo.Merge(ctx, dir, op.Source)
+	mergeErr := deps.Repo.Merge(ctx, dir, op.Source, op.Message, op.NoFF || op.Message != "")
 	if mergeErr == nil {
 		res := Result{Changed: true}.WithSummary("merged %s into %s", op.Source, target)
 		if dir != "" {

@@ -19,6 +19,23 @@ No tagged release has been cut yet; everything lives under **Unreleased**.
   that session closes with the row. (`agentsession.Manager.KillAndRemove`:
   the session stays listed while it dies, so quitting still waits for it.)
 
+## gg merge: a merge message (-m / -F) and --no-ff
+
+### Added
+
+- `gg merge [--no-ff] [-m <msg> | -F <file>] <source>`: `-m` or `-F` (`-` =
+  stdin, so a multi-line message with trailers pipes straight in) sets the
+  merge commit's message and implies `--no-ff` — a message is written for a
+  merge commit, and a silent fast-forward would drop it. `--no-ff` alone
+  forces a merge commit with git's own message. `-m` with `-F`, an empty
+  message, or an unreadable file exit 2 before anything runs. The engine's
+  `SmartMerge` carries `Message`/`NoFF` (zero values = today's behaviour) and
+  the `Merge` git verb takes them; git keeps `-m` in `MERGE_MSG` across a kept
+  conflict, so the eventual resolution commit still carries the message.
+  Until now a custom merge message meant leaving gg for raw `git merge` (the
+  one sanctioned exception to dogfooding); the `using-gg` skill is bumped to
+  101.
+
 ## Agent consoles: ctrl+arrows and every other modified special key reach the agent
 
 ### Fixed

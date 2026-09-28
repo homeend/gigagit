@@ -239,3 +239,57 @@ func TestSmartMergeSourceTag(t *testing.T) {
 		t.Fatalf("feat.txt missing after merging tag v1: %v", err)
 	}
 }
+
+// A Message becomes the merge commit's message and implies --no-ff: the
+// fixture fast-forwards without it (see TestSmartMergeIntoCurrentBranch),
+// yet a real merge commit carrying the message must exist afterwards.
+func TestSmartMergeMessageForcesMergeCommit(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepo(t)
+	branchWithCommit(t, dir, "feat", "feat.txt")
+
+	msg := "Merge feat: the feature\n\nBody line.\n\nTrailer: yes"
+	res, err := SmartMerge{Source: "feat", Message: msg}.Run(context.Background(), OpDeps{Repo: repo})
+	if err != nil || !res.Changed {
+		t.Fatalf("merge: %v, %+v", err, res)
+	}
+	if got := gitOut(t, dir, "log", "-1", "--format=%P"); len(strings.Fields(got)) != 2 {
+		t.Fatalf("HEAD parents = %q, want a two-parent merge commit", got)
+	}
+	if got := gitOut(t, dir, "log", "-1", "--format=%B"); got != msg {
+		t.Fatalf("merge message = %q, want %q", got, msg)
+	}
+}
+
+// NoFF alone forces a merge commit with git's own message.
+func TestSmartMergeNoFFKeepsGitsMessage(t *testing.T) {
+	t.Parallel()
+	dir, repo := newRepo(t)
+	branchWithCommit(t, dir, "feat", "feat.txt")
+
+	if _, err := (SmartMerge{Source: "feat", NoFF: true}).Run(context.Background(), OpDeps{Repo: repo}); err != nil {
+		t.Fatalf("merge: %v", err)
+	}
+	if got := gitOut(t, dir, "log", "-1", "--format=%P"); len(strings.Fields(got)) != 2 {
+		t.Fatalf("HEAD parents = %q, want a two-parent merge commit", got)
+	}
+	if got := gitOut(t, dir, "log", "-1", "--format=%s"); !strings.HasPrefix(got, "Merge branch 'feat'") {
+		t.Fatalf("subject = %q, want git's default", got)
+	}
+}
+
+// git keeps -m in MERGE_MSG across a conflict, so a kept-then-resolved
+// merge still commits with the caller's message.
+func TestSmartMergeMessageSurvivesKeptConflict(t *testing.T) {
+	t.Parallel()
+	dir, repo := conflictRepo(t)
+	_, err := SmartMerge{Source: "feat", Message: "Merge feat: resolved by hand"}.Run(context.Background(),
+		OpDeps{Repo: repo, Decider: MapDecider{"merge-conflict": "keep-conflicts"}})
+	if err == nil {
+		t.Fatal("kept conflict must return an error")
+	}
+	b, rerr := os.ReadFile(filepath.Join(dir, ".git", "MERGE_MSG"))
+	if rerr != nil || !strings.HasPrefix(string(b), "Merge feat: resolved by hand") {
+		t.Fatalf("MERGE_MSG = %q, %v", b, rerr)
+	}
+}

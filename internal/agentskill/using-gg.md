@@ -600,14 +600,20 @@ finds the right one here.
   thrown away. A repo that still holds format-1 data **records no new
   versions at all** until it runs — rebases/merges/pulls there proceed with
   no safety net rather than mixing formats.
-- `gg merge [--into <target>] [--on-conflict=keep|abort] <source>` — merge one
-  branch into another (default target: the current branch; worktree-aware —
-  merges in the worktree that has the target checked out, autostashes when it
-  must switch). `--on-conflict=keep` leaves conflicts in the tree (exit 1),
-  `--on-conflict=abort` restores the tree (exit 0); with neither and no TTY, a
-  conflict exits 1 with the options on stderr. A successful merge prints the
-  same change-set-drift summary as `gg pull` (see above) for the branch it
-  moved.
+- `gg merge [--into <target>] [--on-conflict=keep|abort] [--no-ff] [-m <msg> | -F <file>] <source>`
+  — merge one branch into another (default target: the current branch;
+  worktree-aware — merges in the worktree that has the target checked out,
+  autostashes when it must switch). `--on-conflict=keep` leaves conflicts in
+  the tree (exit 1), `--on-conflict=abort` restores the tree (exit 0); with
+  neither and no TTY, a conflict exits 1 with the options on stderr. `-m <msg>`
+  or `-F <file>` (`-` = stdin) sets the merge commit's message — a multi-line
+  message with trailers goes through `-F -` — and **implies `--no-ff`** (a
+  message is written for a merge commit; a silent fast-forward would drop it);
+  `--no-ff` alone forces a merge commit with git's own message. Flags precede
+  the positional; `-m` and `-F` together, or an empty message, exit 2 (inside
+  `gg batch` stdin is empty, so use `-m` or `-F <path>` there, not `-F -`). A
+  successful merge prints the same change-set-drift summary as `gg pull` (see
+  above) for the branch it moved.
 - `gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>` — replay a
   branch's commits onto `<newbase>` (default branch: the current one; `--branch`
   rebases another branch, switching to it). Worktree-aware — rebases in place,
