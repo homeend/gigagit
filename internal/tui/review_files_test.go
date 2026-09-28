@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/homeend/gigagit/internal/domain"
 )
 
@@ -112,4 +114,26 @@ func TestReviewEntryActions(t *testing.T) {
 	if !strings.Contains(b.String(), "ship it") {
 		t.Fatalf("preview text:\n%s", b.String())
 	}
+}
+
+// A review row is prose, not a path: cut at its end, never in the middle.
+func TestReviewRowCutsAtItsEnd(t *testing.T) {
+	t.Parallel()
+	m := reviewedStackModel(t, "# Verdict\nship it")
+	for i, l := range m.filesView.lines {
+		if l.noteID != "" {
+			m.filesView.lines[i].text = "  ◆ 2026-09-28 20:16 · Claude Code · Review: " + strings.Repeat("long title ", 20) + "END"
+		}
+	}
+	m.filesTreeFocused = false // no reveal over the row
+	view := ansi.Strip(m.View())
+	for _, l := range strings.Split(view, "\n") {
+		if strings.Contains(l, "◆ 2026-09-28") {
+			if strings.Contains(l, "END") || !strings.Contains(l, "· Claude Code ·") {
+				t.Fatalf("review row cut in the middle: %q", l)
+			}
+			return
+		}
+	}
+	t.Fatalf("no review row on screen:\n%s", view)
 }
