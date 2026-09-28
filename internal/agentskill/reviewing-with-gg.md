@@ -192,6 +192,35 @@ gg session highlight clear --file src/search.ts
 - NEVER launch the TUI or `gg web` yourself. Steering drives a window the human
   chose to open; if none is open, your notes are still waiting for them.
 
+## Review document
+
+When gg runs you as a review agent (`gg review`, the TUI's or the browser's
+review lane), its brief at `$GG_CONTEXT_FILE` ends in a "Review output"
+section. Reply with ONLY this JSON document, written to the file named by
+`$GG_MESSAGE_FILE` (a fenced block or Claude's JSON envelope is unwrapped):
+
+```json
+{
+  "version": 1,
+  "summary": "<markdown: the overall review — what changed, what matters, the verdict>",
+  "meta": { "verdict": "approve | comment | request changes" },
+  "files": [
+    { "path": "<repo-relative path>", "summary": "<optional one line about this file>",
+      "annotations": [
+        { "newRange": [12, 14], "summary": "<one line>", "rationale": "<why it matters>",
+          "meta": { "severity": "bug | risk | design | nit", "confidence": "low | medium | high" } }
+      ] }
+  ]
+}
+```
+
+Lines are 1-based and inclusive; `"newRange"` names lines of the new version,
+`"oldRange"` a removed line. `"meta"` is optional and free-form (string
+values) on the document, a file and a note; gg shows every key as `key: value`.
+gg stores the document as ONE review note on the reviewed commit and opens it
+as a review view (the overview, the files, your notes at their lines). A reply
+that is not the document is stored as text with a warning.
+
 ## Caveats
 
 - If the same path carries both a STAGED and an UNSTAGED note, a bare
@@ -221,5 +250,5 @@ gg session highlight clear --file src/search.ts
 - `note reply: no note <id> in the store of <checkout>` — note ids are per
   repository: you are in the wrong checkout (put its repository link first),
   or the note is gone — removed, swept, or mistyped; list again.
-- `review tool wrote no notes` — `gg review --notes` found neither a sidecar
-  file nor a JSON report.
+- `the review is not a gg review document, so it has no notes to import` —
+  `gg review --notes` got prose, not the review document.

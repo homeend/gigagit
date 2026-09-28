@@ -111,12 +111,16 @@ func cmdReview(svc *domain.Service, workdir string, rest []string, stdout, stder
 		fmt.Fprintln(stderr, "error:", err)
 		return 1
 	}
-	io.WriteString(stdout, res.Content)
-	if !strings.HasSuffix(res.Content, "\n") {
-		io.WriteString(stdout, "\n")
-	}
+	printReview(stdout, res.Content)
 	if res.Warn != "" {
 		fmt.Fprintln(stderr, "warning:", res.Warn)
+	}
+	if !res.Structured {
+		if res.NoteID != "" {
+			fmt.Fprintln(stderr, "warning: the review is not in gg review format; stored as text")
+		} else {
+			fmt.Fprintln(stderr, "warning: the review is not in gg review format")
+		}
 	}
 	if res.NoteID != "" {
 		fmt.Fprintln(stderr, "note:", res.NoteID)
@@ -290,4 +294,51 @@ func selectReviewCommand(svc *domain.Service, name string, stderr io.Writer) (co
 // MCP frontend, which cannot import internal/cli, shares it.
 func loadConfigFor(svc *domain.Service) (config.Config, error) {
 	return svc.EffectiveConfig(context.Background())
+}
+
+// printReview writes a review for a terminal or a pipe: a review document as
+// its overview, its meta, then one "path:line — summary" line per note (an
+// old-side line is "-line", as in a diff); prose as it came.
+func printReview(w io.Writer, content string) {
+	doc, err := notebatch.ParseReview([]byte(content))
+	if err != nil {
+		io.WriteString(w, content)
+		if !strings.HasSuffix(content, "\n") {
+			io.WriteString(w, "\n")
+		}
+		return
+	}
+	fmt.Fprintln(w, strings.TrimRight(doc.Overview, "\n"))
+	if len(doc.Meta) > 0 {
+		fmt.Fprintf(w, "\n%s\n", metaText(doc.Meta))
+	}
+	first := true
+	for _, f := range doc.Files {
+		for _, n := range f.Notes {
+			if first {
+				fmt.Fprintln(w)
+				first = false
+			}
+			line := fmt.Sprint(n.Range[0])
+			if n.Range[1] != n.Range[0] {
+				line += fmt.Sprintf("-%d", n.Range[1])
+			}
+			if n.Side == "old" {
+				line = "-" + line
+			}
+			fmt.Fprintf(w, "%s:%s — %s", f.Path, line, n.Summary)
+			if len(n.Meta) > 0 {
+				fmt.Fprintf(w, " (%s)", metaText(n.Meta))
+			}
+			fmt.Fprintln(w)
+		}
+	}
+}
+
+func metaText(meta []notebatch.MetaKV) string {
+	parts := make([]string, len(meta))
+	for i, kv := range meta {
+		parts[i] = kv.Key + ": " + kv.Value
+	}
+	return strings.Join(parts, ", ")
 }

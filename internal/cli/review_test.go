@@ -445,3 +445,46 @@ func TestReviewBranchNoteGoesWithTheBranch(t *testing.T) {
 		t.Fatalf("the review outlived its branch: %+v", revs)
 	}
 }
+
+// A structured review prints as its overview, then one line per note —
+// never as the JSON document.
+func TestReviewPrintsTheStructuredReview(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	runGit(t, dir, "commit", "--allow-empty", "-m", "second")
+	writeReviewTool(t, dir, "Echo",
+		`printf '{"version":1,"summary":"## Overview\\nall good","meta":{"verdict":"approve"},"files":[{"path":"f.go","annotations":[{"newRange":[3,4],"summary":"S","meta":{"severity":"bug"}},{"oldRange":[7,7],"summary":"gone"}]}]}' > "$GG_MESSAGE_FILE"`)
+	code, out, errb := runCLI(t, dir, "review", "--tool", "Echo", "HEAD")
+	if code != 0 {
+		t.Fatalf("exit=%d stderr=%s", code, errb)
+	}
+	want := "## Overview\nall good\n\nverdict: approve\n\nf.go:3-4 — S (severity: bug)\nf.go:-7 — gone\n"
+	if out != want {
+		t.Fatalf("stdout:\n%q\nwant\n%q", out, want)
+	}
+	if !strings.Contains(errb, "note: ") || strings.Contains(errb, "warning") {
+		t.Fatalf("stderr = %q", errb)
+	}
+}
+
+// A prose review prints as it came, with a warning that it is not the
+// document.
+func TestReviewWarnsAboutAProseReview(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses sh/printf")
+	}
+	isolateReviewEnv(t)
+	dir := newRepoDir(t)
+	runGit(t, dir, "commit", "--allow-empty", "-m", "second")
+	writeReviewTool(t, dir, "Echo", `printf 'The advisor confirms four findings.\n'`)
+	code, out, errb := runCLI(t, dir, "review", "--tool", "Echo", "HEAD")
+	if code != 0 || out != "The advisor confirms four findings.\n" {
+		t.Fatalf("exit=%d stdout=%q", code, out)
+	}
+	if !strings.Contains(errb, "warning: the review is not in gg review format; stored as text") {
+		t.Fatalf("stderr = %q", errb)
+	}
+}
