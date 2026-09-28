@@ -1662,3 +1662,24 @@ body.lm-scroll .vline.vcur .vno { background: var(--sel); }
 #wtf-body { flex: 1; min-height: 0; overflow: auto; font-family: ui-monospace, monospace; font-size: 12px; padding: 6px 0; }
 #wtf-body:focus { outline: none; }
 #wtf-body .notice { color: var(--dim); padding: 6px 12px; }
+
+/* The agent console (console.js, web attach): a layer over the panes right
+   of the sidebar — the server's screen painted as styled runs. Hidden by id. */
+#console { position: fixed; background: var(--bg-alt); display: flex; flex-direction: column; z-index: 20; border-left: 1px solid var(--border); }
+#console.hidden { display: none; }
+#console-title { padding: 6px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; display: flex; }
+#console-label.exited { color: var(--dim); }
+#console-size { margin-left: auto; color: var(--dim); }
+#console-body { flex: 1; overflow: auto; position: relative; padding: 6px 8px; }
+#console-grid { font: 12px/16px ui-monospace, Menlo, Consolas, monospace; white-space: pre; display: inline-block; min-width: 100%; }
+#console-grid .crow { height: 16px; }
+#console-grid .b { font-weight: bold; }
+#console-grid .i { font-style: italic; }
+#console-grid .u { text-decoration: underline; }
+#console-grid .d { opacity: .6; }
+#console-grid .s { text-decoration: line-through; }
+#console-grid .r { filter: invert(1); }
+#console-cursor { position: absolute; margin: 6px 0 0 8px; background: var(--fg); mix-blend-mode: difference; pointer-events: none; }
+#console-cursor.outline { background: none; border: 1px solid var(--dim); mix-blend-mode: normal; box-sizing: border-box; }
+#console-cursor.hidden { display: none; }
+#foot .cwarn { margin-left: auto; color: #e0c06c; }
