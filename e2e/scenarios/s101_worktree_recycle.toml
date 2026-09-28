@@ -1,0 +1,25 @@
+name = "worktree recycle --on-dirty=commit: commits the target's work, then checks the branch out there"
+
+[input]
+steps = [
+  { write = "README.md", content = "hello\n" },
+  { commit = "initial" },
+  { branch = "loose" },
+  { branch = "feature/x" },
+  { worktree = "wt-x", branch = "feature/x" },
+  { write = "work.txt", content = "in progress\n", cwd = "wt-x" },
+]
+
+[[run]]
+cmd  = ["worktree", "recycle", "--on-dirty=commit", "../wt-x", "loose"]
+exit = 0
+stdout_contains = ["recycled", "feature/x → loose", "committed"]
+
+[expect]
+branch    = "main"
+worktrees = ["wt-x"]
+
+[expect.worktree."wt-x".status]
+untracked = []
+unstaged  = []
+staged    = []
