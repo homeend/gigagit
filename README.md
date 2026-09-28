@@ -188,7 +188,7 @@ gg versions show <branch> <id|latest>  # print the frozen change set a two-branc
 gg versions restore [--discard] <branch> <id|latest>  # restore a branch to a recorded version; --discard answers the dirty-tree prompt
 gg unlock [--yes]                      # list (or with --yes remove) stranded .git/*.lock files; exit 1 while locks are present
 gg migrate [--yes]                     # list pending store migrations and what they'd discard; changes nothing without --yes
-gg merge [--into <target>] [--on-conflict=keep|abort] <source>
+gg merge [--into <target>] [--on-conflict=keep|abort] [--no-ff] [-m <msg> | -F <file>] <source>  # -m/-F (- = stdin) set the merge commit message and imply --no-ff
 gg fast-forward <commit>               # advance the current branch to a descendant commit (no merge commit)
 gg rebase [--branch <b>] [--on-conflict=keep|abort] <newbase>
 gg rebase -i --plan <file> <newbase>   # interactive rebase from a plan (pick/reword/squash/drop)

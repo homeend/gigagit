@@ -8,8 +8,11 @@ import (
 
 // Merge merges branch into the branch checked out at dir ("" = this repo's
 // own worktree). --no-edit keeps the merge-commit message non-interactive.
-func (r *Repo) Merge(ctx context.Context, dir, branch string) error {
-	b := gitcmd.New("merge").Arg("--no-edit", branch)
+// A non-empty message replaces git's auto-generated one (`-m`; git keeps it
+// in MERGE_MSG across a conflict, so the eventual commit still carries it);
+// noFF forces a merge commit even when a fast-forward is possible.
+func (r *Repo) Merge(ctx context.Context, dir, branch, message string, noFF bool) error {
+	b := gitcmd.New("merge").Arg("--no-edit").ArgIf(noFF, "--no-ff").ArgIf(message != "", "-m", message).Arg(branch)
 	if dir != "" {
 		b = b.Dir(dir)
 	}

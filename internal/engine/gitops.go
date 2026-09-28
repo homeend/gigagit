@@ -119,7 +119,7 @@ type GitOps interface {
 	// ResetInDir resets another worktree's checkout (git -C dir reset).
 	ResetInDir(ctx context.Context, dir, ref string, soft bool) error
 
-	Merge(ctx context.Context, dir, branch string) error
+	Merge(ctx context.Context, dir, branch, message string, noFF bool) error
 	MergeFFOnly(ctx context.Context, dir, commit string) error
 	MergeAbort(ctx context.Context, dir string) error
 	MergeInProgress(ctx context.Context, dir string) (bool, error)

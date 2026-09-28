@@ -1,0 +1,29 @@
+name = "merge: -F - reads the merge message from stdin and forces a merge commit"
+
+[input]
+steps = [
+  { write = "base.txt", content = "base\n" },
+  { commit = "base" },
+  { branch = "feat" },
+  { switch = "feat" },
+  { write = "feat.txt", content = "feat\n" },
+  { commit = "feat change" },
+  { switch = "main" },
+]
+
+# Same fixture as s26 (a fast-forward is possible); the message implies
+# --no-ff, so a merge commit carrying it exists afterwards.
+[[run]]
+cmd   = ["merge", "-F", "-", "feat"]
+stdin = "Merge feat: the feature\n\nWhy it shipped.\n\nCo-Authored-By: agent <a@x>\n"
+exit  = 0
+
+[expect]
+branch = "main"
+clean  = true
+
+[expect.files]
+"feat.txt" = "feat\n"
+
+[[expect.log]]
+subjects = ["Merge feat: the feature", "feat change", "base"]
