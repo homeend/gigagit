@@ -23,10 +23,18 @@ type Screen struct {
 func (s *Session) running() bool { return s.Info().State == Running }
 
 // SendKey encodes k for the child. A no-op once the session has exited.
+// Modified special keys (ctrl+arrow, shift+home, …) are encoded here —
+// the emulator drops them (see encodeModifiedKey); everything else takes
+// the emulator's mode-aware path.
 func (s *Session) SendKey(k Key) {
-	if s.running() {
-		s.withEmu(func() { s.emu.SendKey(k) })
+	if !s.running() {
+		return
 	}
+	if seq, ok := encodeModifiedKey(k); ok {
+		s.withEmu(func() { s.emu.SendText(seq) })
+		return
+	}
+	s.withEmu(func() { s.emu.SendKey(k) })
 }
 
 // SendText sends literal text (no paste bracketing).

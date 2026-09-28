@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 No tagged release has been cut yet; everything lives under **Unreleased**.
 
+## Agent consoles: ctrl+arrows and every other modified special key reach the agent
+
+### Fixed
+
+- In a TUI agent console (and the web console), ctrl+left / ctrl+right did
+  nothing — Claude Code's word-jump never fired — and so did every other
+  modified special key gg maps: shift+arrows, ctrl+up/down, ctrl+home/end,
+  ctrl+pgup/pgdn, ctrl+shift+arrows, modified F-keys. The console mapped
+  them correctly; the terminal emulator that encodes keys for the child
+  (`x/vt`) knows only unmodified specials and wrote an empty string for
+  anything carrying a modifier. `agentsession.Session.SendKey` now encodes
+  these itself in xterm's CSI form (`ESC [ 1 ; m D`, `ESC [ 5 ; m ~`, …;
+  `m = 1 + shift + 2·alt + 4·ctrl`), which is what the child expects
+  regardless of its cursor-key mode; unmodified keys, ctrl+letter, shift+tab
+  and alt+rune still take the emulator's mode-aware path. Both frontends go
+  through that one seam, so the web console is fixed by the same change.
+
 ## gg web: binary files and images in the finder preview and the viewer
 
 ### Fixed
