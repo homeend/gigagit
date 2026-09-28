@@ -81,6 +81,25 @@ func TestNoticeDetailPathLineKeepsIndentAndElidesMiddle(t *testing.T) {
 	}
 }
 
+func TestNoticeRootLevelPathIsMiddleElidedNotEndCut(t *testing.T) {
+	t.Parallel()
+	m := Model{}
+	m.width, m.height = 80, 40
+	name := "A-really-long-root-level-generated-file-name-with-no-directory-at-all.snapshot.tsx"
+	m.notices = []notice{{id: "n", title: "t", detail: []string{"  A " + name}, actions: []noticeAction{{label: "Dismiss"}}}}
+	p := &noticePopup{showActions: true}
+	var row string
+	for _, l := range noticeBoxLines(plain(p.box(m))) {
+		if strings.HasPrefix(l, "A ") {
+			row = l
+		}
+	}
+	// elideNameMiddle keeps the beginning and the (last) extension.
+	if row == "" || !strings.HasPrefix(row, "A A-really-long") || !strings.Contains(row, "…") || !strings.HasSuffix(row, ".tsx") {
+		t.Fatalf("a bare name keeps its beginning and extension, never end-cut: %q", row)
+	}
+}
+
 func TestNoticeNormalWidthGrowsWithContentUpToThreeQuarters(t *testing.T) {
 	t.Parallel()
 	const termW = 200

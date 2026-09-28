@@ -154,15 +154,17 @@ func (p *noticePopup) render(m Model, below string) string {
 // its path — the indent and a lead-in such as the drift row's status letter
 // ("  A <path>") — stays as written, and the path loses its middle so the
 // file name survives (elideRowPath, the elidePath rule). The path is the
-// first word holding a path separator; a row without one is plainly
-// truncated like any other over-long line. A row that fits is untouched.
+// first word holding a path separator; a row without one (a root-level
+// file) treats its LAST word as the path, so a bare name still keeps its
+// beginning and extension instead of being end-cut. A row that fits is
+// untouched.
 func elideNoticeRow(line string, w int) string {
 	if lipgloss.Width(line) <= w {
 		return line
 	}
 	at := strings.IndexFunc(line, func(r rune) bool { return r == '/' || r == '\\' })
 	if at < 0 {
-		return truncate(line, w)
+		at = len(strings.TrimRight(line, " \t"))
 	}
 	head := strings.LastIndexAny(line[:at], " \t") + 1 // the path word starts after the last gap
 	return elideRowPath(line, len([]rune(line[:head])), w)

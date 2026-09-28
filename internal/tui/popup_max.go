@@ -39,14 +39,14 @@ func popupResolveWidth(w int, maximized bool, normal int) int {
 func popupFitWidth(w int, maximized bool, normal, contentW int) int {
 	want := contentW + st().modalStyle.GetHorizontalPadding()
 	full := popupFullInnerWidth(w)
-	cap := w * 3 / 4
-	if cap > full {
-		cap = full
+	wide := w * 3 / 4
+	if wide > full {
+		wide = full
 	}
-	if cap < normal {
-		cap = normal
+	if wide < normal {
+		wide = normal
 	}
-	inner := clampInt(want, normal, cap)
+	inner := clampInt(want, normal, wide)
 	if !maximized {
 		return inner
 	}
