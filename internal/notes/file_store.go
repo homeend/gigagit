@@ -247,7 +247,7 @@ func dropOrphanReplies(ns []model.Note) []model.Note {
 // capOldestFirst enforces max records by dropping whole threads, oldest root
 // (by Created) first. max <= 0 is uncapped.
 //
-// Commit-level notes (AI reviews) are exempt: they neither count toward max
+// Entry-level notes (AI reviews, shelf-entry annotations) are exempt: they neither count toward max
 // nor are ever dropped, and neither are their replies.
 func capOldestFirst(ns []model.Note, max int) []model.Note {
 	if max <= 0 {
@@ -255,7 +255,7 @@ func capOldestFirst(ns []model.Note, max int) []model.Note {
 	}
 	exempt := map[string]bool{}
 	for _, n := range ns {
-		if !n.IsReply() && n.IsCommitLevel() {
+		if !n.IsReply() && n.IsEntryLevel() {
 			exempt[n.ID] = true
 		}
 	}

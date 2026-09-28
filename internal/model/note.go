@@ -108,6 +108,17 @@ func (n Note) IsCommitLevel() bool {
 	return n.Address.State == StateCommitted && n.Address.Commit != "" && n.Address.Path == ""
 }
 
+// IsShelfLevel reports a note about a whole shelf entry: an entry id and no
+// path. gg writes one when a set cannot carry what it annotates (the
+// deletions and renames of a recycled worktree).
+func (n Note) IsShelfLevel() bool {
+	return n.Address.State == StateShelf && n.Address.ShelfID != "" && n.Address.Path == ""
+}
+
+// IsEntryLevel reports a note about a whole object — a commit or a shelf
+// entry. It has no line to re-anchor.
+func (n Note) IsEntryLevel() bool { return n.IsCommitLevel() || n.IsShelfLevel() }
+
 // IsReviewNote reports a commit-level note tagged ReviewTag. It is the ONLY
 // test for "this is an AI review": Address.Branch alone proves nothing (the
 // TUI fills it on working-tree line notes too).
