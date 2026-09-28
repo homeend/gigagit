@@ -174,3 +174,40 @@ func TestRecycleOpRefreshesBranchesAndWorktrees(t *testing.T) {
 		t.Fatalf("opAffectedSources(RecycleWorktree) = %v, missing %v", got, want)
 	}
 }
+
+// The branch column is aligned: every row's branch name starts at the same
+// column whatever its path's elided width, so the picker reads as a table.
+func TestRecyclePickerBranchColumnAligned(t *testing.T) {
+	t.Parallel()
+	m := recycleModel()
+	m.width, m.height = 120, 40
+	m.worktrees = []model.Worktree{
+		{Path: "/repo", Branch: "main"},
+		{Path: "/a", Branch: "short"},
+		{Path: "/tmp/claude-1000/-mnt-t-others-gigagit/22501cfc-34d0-48fe-8b7d-ff6528344fbf/scratchpad/rc/wt", Branch: "wt-branch"},
+		{Path: "/repo-wt/det", Detached: true},
+	}
+	row, _ := rowByID(availableActions(m), "recycle-worktree")
+	nm, _ := row.run(m)
+	m = nm.(Model)
+	cols := map[int]bool{}
+	for _, r := range m.actionMenu.rows {
+		i := strings.LastIndex(r.label, "  ")
+		if i < 0 {
+			t.Fatalf("row %q has no column gap", r.label)
+		}
+		cols[len([]rune(r.label[:i+2]))] = true
+	}
+	if len(cols) != 1 {
+		t.Fatalf("branch names start at %d different columns: %v", len(cols), cols)
+	}
+}
+
+func TestRecycleRowLabelHasNoEllipsis(t *testing.T) {
+	t.Parallel()
+	m := recycleModel()
+	row, _ := rowByID(availableActions(m), "recycle-worktree")
+	if strings.Contains(row.label, "…") {
+		t.Fatalf("label %q must not end in an ellipsis", row.label)
+	}
+}
